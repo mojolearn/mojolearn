@@ -137,7 +137,7 @@ def activity_door(ml):
     the runtime's activity record, or None when this install has none (an
     older binary set). Found once per package."""
     key = id(ml)
-    if key in _DOORS:
+    if key in _DOORS and _DOORS[key][2] is ml:
         return _DOORS[key][0]
     door, opened_here = None, False
     own = getattr(ml, "activity_door", None)       # a stub install hands its own
@@ -152,14 +152,16 @@ def activity_door(ml):
         door = None
     if not (callable(getattr(door, "activity_begin", None)) and callable(getattr(door, "activity_end", None))):
         door = None
-    _DOORS[key] = (door, opened_here and door is not None)
+    # the package is held beside its door, so an id is never read for another
+    _DOORS[key] = (door, opened_here and door is not None, ml)
     return door
 
 
 def door_opened_here(ml):
     """True when `activity_door` itself loaded the binding that holds the
     door: that load says nothing about which binary answered a side."""
-    return _DOORS.get(id(ml), (None, False))[1]
+    entry = _DOORS.get(id(ml))
+    return bool(entry and entry[2] is ml and entry[1])
 
 
 def activity_begin(ml):
