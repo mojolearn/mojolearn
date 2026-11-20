@@ -269,14 +269,14 @@ def _fhi(w: Int64) -> Float32:
 # read per launch (MOE_TILED, VAR_BLOCK) or per executor construction (POOL).
 # ROUTE-DEFAULT-SUSPECT, no A/B on record: B arms RUN OWED in
 # bench/results/paper_compare/owed-pre0867.json ("seq-moe-tiled-off",
-# "seq-var-block-off", "seq-pool-off").
+# "seq-var-block-off"; "seq-pool-off" is decided, below).
 #: the tiled MoE kernel; `-D MOJOLEARN_SEQ_MOE_TILED_OFF` keeps the untiled one
 comptime SEQ_MOE_TILED = not is_defined["MOJOLEARN_SEQ_MOE_TILED_OFF"]()
 #: VAR's Cholesky solve and forecast on one threadgroup
 #: (sequence/vecar_block.mojo, lane gap-prep2); `-D MOJOLEARN_SEQ_VAR_BLOCK_OFF`
 #: keeps the one-thread ops (the A/B arm)
 comptime SEQ_VAR_BLOCK = not is_defined["MOJOLEARN_SEQ_VAR_BLOCK_OFF"]()
-#: the executor's device buffer pool; `-D MOJOLEARN_SEQ_POOL_OFF` allocates fresh
+#: the executor's device buffer pool (always on for a shared executor; an owned executor keeps its own storage)
 # A/B round 2, 2026-11-19 (lane fx-verdicts4; NVIDIA L40S host bd9c355c19c0, wheel 0c68d6cd27 and its B set, base and
 # arm in one pod job, tag nvc-ab-20261119T154232Z-0642a5; digests and quality equal). Pool (default) -> no pool, ms:
 # sequential-fit 279.9 -> 274.5 (0.98), sequential-predict 2.893 -> 2.751 (0.95, medians of 20; no NUMA record and no
@@ -285,7 +285,14 @@ comptime SEQ_VAR_BLOCK = not is_defined["MOJOLEARN_SEQ_VAR_BLOCK_OFF"]()
 # allocation of that size costs tens of ms on CUDA, the layernorm cell 99.7 ms against a 1 ms kernel) and no such row
 # was in the pair. Neither side is deleted on two small-buffer cells: the switch stays, owed RUN on the layer rows
 # with large inputs beside these two (owed-pre0867.json seq-pool-off-envgate).
-comptime SEQ_POOL = not is_defined["MOJOLEARN_SEQ_POOL_OFF"]()
+# A/B round 3, 2026-11-20 (lane fx-verdicts5; NVIDIA L40S host 2ef132a6de04, wheel 28a780604c and its B set, base and
+# arm back to back in one pod job, tag nvc-ab-20261120T063324Z-c630ad; digests and quality equal). Pool -> no pool, ms:
+# sequential-fit 272.7 -> 270.3 (0.991), sequential-predict 2.585 -> 2.644 (1.023, medians of 20, spreads 2.55..2.90
+# / 2.61..2.93). NOISE a second time on the same two rows (round 2: 0.98, 0.95); the large-stage rows were again not
+# in the pair, and the pool's own record stands for them (a 64 MB pinned allocation a call, the layernorm cell
+# 99.7 ms against a 1 ms kernel). The pool stays; the build switch is deleted.
+# TOMBSTONE: MOJOLEARN_SEQ_POOL_OFF (NOISE, A/B rounds 2 and 3 NVIDIA L40S, wheels 0c68d6cd27 and 28a780604c, one run per arm, digests equal: sequential-fit 0.98 / 0.991, sequential-predict 0.95 / 1.023) deleted 2026-11-20 by lane/fx-verdicts5; code recoverable at e25e35dab8.
+# Restore: git apply experiments/removed/MOJOLEARN_SEQ_POOL_OFF.patch; record in docs/TOMBSTONES.md.
 
 
 @always_inline
@@ -427,8 +434,7 @@ def coop_kernel[OP: Int](
 #: pinned stages across calls, handed out by exact count (device) or
 #: capacity (pinned) and returned when the executor syncs (stages) or ends
 #: (device buffers); the words are copied exactly as before, so no bit
-#: moves. MOJOLEARN_SEQ_POOL=0 restores the per-call allocations;
-#: SEQ_POOL_BYTES bounds what is kept (the oldest free entries go first).
+#: moves. SEQ_POOL_BYTES bounds what is kept (the oldest free entries go first).
 comptime SEQ_POOL_BYTES = 3 << 30
 #: The bound of one owned executor's kept storage (DeviceExec.idle_*,
 #: fable-perf-neural-0855): device memory, not a model or board dimension.
@@ -458,11 +464,6 @@ struct _SeqPool(Defaultable, Movable):
 
 comptime _POOL_NAME = "MojolearnXSequencePoolIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXSequencePoolFastV1"
 comptime X_SEQUENCE_POOL = SharedSlot[_SeqPool, _POOL_NAME]
-
-
-@always_inline
-def seq_pool_on() -> Bool:
-    return SEQ_POOL
 
 
 def _pool_trim(ctx: DeviceContext, pool: UnsafePointer[_SeqPool, MutUntrackedOrigin], need: Int) raises:
@@ -638,7 +639,7 @@ struct DeviceExec(Exec, Movable):
         self.pend_host = List[HostBuffer[DType.float32]]()
         self.pend_dst = List[Int]()
         self.pend_n = List[Int]()
-        self.pooled = seq_pool_on()
+        self.pooled = True
         self.pdev = List[Int]()
         self.pstaged = List[Int]()
         self.ppend_host = List[Int]()
