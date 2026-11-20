@@ -15,6 +15,53 @@ SPEC = importlib.util.spec_from_file_location(
 )
 diagnostics = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(diagnostics)
+LAYOUT_SPEC = importlib.util.spec_from_file_location(
+    "merged_layout", Path(__file__).resolve().parents[1] / "packaging/linux/merged_layout.py"
+)
+merged_layout = importlib.util.module_from_spec(LAYOUT_SPEC)
+LAYOUT_SPEC.loader.exec_module(merged_layout)
+
+
+def _installed_layout(root, sets):
+    """Write a wheel install under `root` from the REAL merged-group tables
+    (bindings/merged_groups.json through packaging/linux/merged_layout.plan):
+    `sets` is {distribution: [(directory, plan_key, platform, byte_lm)]}.
+    Returns the distribution() stand-in reading its RECORD-style file list."""
+    members = {}
+    for dist, rows in sets.items():
+        files = members.setdefault(dist, [])
+        for directory, plan_key, plat, byte_lm in rows:
+            plan = merged_layout.plan(plan_key, byte_lm, plat)
+            assert plan, (plan_key, plat)
+            base = root / directory
+            base.mkdir(parents=True, exist_ok=True)
+            for name in plan:
+                (base / name).write_bytes(b"fixture native payload")
+                files.append(f"{directory}/{name}")
+            (base / merged_layout.INDEX).write_text(
+                json.dumps({"format": merged_layout.INDEX_FORMAT, "files": plan}))
+            files.append(f"{directory}/{merged_layout.INDEX}")
+
+    def distribution(name):
+        if name not in members:
+            raise diagnostics.importlib.metadata.PackageNotFoundError(name)
+        return SimpleNamespace(files=members[name], locate_file=lambda p: root / p)
+    return distribution
+
+
+LINUX_NVIDIA = {
+    "mojolearn-core": [("mojolearn/host", "host", "linux", False)],
+    "mojolearn-nvidia": [("mojolearn/cuda_native/sm_89/identical", "identical", "linux", False),
+                         ("mojolearn/cuda_ptx/sm_80/identical", "identical", "linux", True)],
+}
+LINUX_AMD = {
+    "mojolearn-core": [("mojolearn/host", "host", "linux", False)],
+    "mojolearn-amd": [("mojolearn/hip_native/gfx942/identical", "identical", "linux", False)],
+}
+LINUX_CPU = {"mojolearn-core": [("mojolearn/host", "host", "linux", False)]}
+MACOS_FLAT = {"mojolearn": [("mojolearn", "fast", "darwin", True),
+                            ("mojolearn/identical", "identical", "darwin", True),
+                            ("mojolearn/host", "host", "darwin", False)]}
 
 
 class DoctorTests(unittest.TestCase):
@@ -106,6 +153,90 @@ class DoctorTests(unittest.TestCase):
                 self.assertIn("mojolearn-nvidia: 1.2.3", output.getvalue())
                 self.assertIn("GPU architecture sets installed: cuda_native/sm_89", output.getvalue())
                 self.assertNotIn("no Linux wheel", output.getvalue())
+
+    def _tiers(self, sets, system, remove=(), drop_indexes=False):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            distribution = _installed_layout(root, sets)
+            for rel in remove:
+                (root / rel).unlink()
+            with patch.object(diagnostics.importlib.metadata, "distribution", side_effect=distribution), \
+                    patch.object(diagnostics.platform, "system", return_value=system):
+                records = diagnostics._native_files()
+                indexes = [] if drop_indexes else diagnostics._binding_indexes()
+                return diagnostics._installed_tiers(records, indexes)
+
+    def test_complete_merged_layouts_raise_no_warning(self):
+        # The 2026-11 report: a healthy NVIDIA install read "numeric tiers
+        # INCOMPLETE: identical" because 4 merged identical files < 15.
+        for label, sets, system, present, answered in [
+            ("linux nvidia", LINUX_NVIDIA, "Linux", ["identical"], {"fast": "identical"}),
+            ("linux amd", LINUX_AMD, "Linux", ["identical"], {"fast": "identical"}),
+            ("linux cpu only", LINUX_CPU, "Linux", ["identical"], {"fast": "identical"}),
+            # A measurement wheel's fast-rows set is built into the identical
+            # tier directory with the identical plan: the same files.
+            ("fast-rows set", {"mojolearn-nvidia": [
+                ("mojolearn/cuda_native/sm_89/identical", "identical", "linux", False)]},
+             "Linux", ["identical"], {"fast": "identical"}),
+            ("macos flat", MACOS_FLAT, "Darwin", ["fast", "identical"], {}),
+        ]:
+            with self.subTest(label):
+                tiers = self._tiers(sets, system)
+                self.assertEqual(tiers["incomplete"], [])
+                self.assertEqual(tiers["missing_files"], [])
+                self.assertEqual(tiers["cannot_tell"], [])
+                self.assertEqual(tiers["present"], present)
+                self.assertEqual(tiers["absent"], [])
+                self.assertEqual(tiers["answered_by"], answered)
+                self.assertTrue(tiers["sets"])
+                self.assertTrue(all(s["status"] == "complete" for s in tiers["sets"]))
+        # mojolearn/host/ is the CPU set, never counted as the fast tier.
+        tiers = self._tiers(LINUX_NVIDIA, "Linux")
+        self.assertEqual(tiers["extensions_by_tier"]["fast"], 0)
+        self.assertEqual({s["directory"]: s["set"] for s in tiers["sets"]}["mojolearn/host"], "host")
+
+    def test_one_missing_file_is_incomplete_and_named(self):
+        gone_dir = "mojolearn/cuda_native/sm_89/identical"
+        gone = f"{gone_dir}/{sorted(merged_layout.plan('identical', False, 'linux'))[0]}"
+        tiers = self._tiers(LINUX_NVIDIA, "Linux", remove=[gone])
+        self.assertEqual(tiers["incomplete"], ["identical"])
+        self.assertEqual(tiers["missing_files"], [gone])
+        statuses = {s["directory"]: s["status"] for s in tiers["sets"]}
+        self.assertEqual(statuses[gone_dir], "incomplete")
+        self.assertEqual(statuses["mojolearn/cuda_ptx/sm_80/identical"], "complete")
+        # The text names the file.
+        summary = self._summary(tiers)
+        self.assertIn("numeric tiers INCOMPLETE: identical", summary)
+        self.assertIn(f"missing: {gone}", summary)
+
+    def test_missing_index_names_it(self):
+        index = f"mojolearn/host/{merged_layout.INDEX}"
+        tiers = self._tiers(LINUX_CPU, "Linux", remove=[index])
+        self.assertEqual(tiers["incomplete"], ["identical"])
+        self.assertEqual(len(tiers["missing_files"]), 1)
+        self.assertTrue(tiers["missing_files"][0].startswith(index))
+
+    def test_no_manifest_cannot_tell_never_incomplete(self):
+        tiers = self._tiers(LINUX_NVIDIA, "Linux", drop_indexes=True)
+        self.assertEqual(tiers["incomplete"], [])
+        self.assertEqual(sorted(tiers["cannot_tell"]), sorted(
+            d for rows in LINUX_NVIDIA.values() for d, *_ in rows))
+        summary = self._summary(tiers)
+        self.assertNotIn("INCOMPLETE", summary)
+        self.assertIn("cannot tell", summary)
+
+    def _summary(self, tiers):
+        report = {
+            "distributions": {}, "support": {"level": "x", "reason": "y"},
+            "import_probe": {"returncode": 1, "result": {"ok": False}},
+            "recorded_at_utc": "t", "environment": {}, "gpu_sets": [],
+            "platform": {"system": "Linux", "release": "r", "machine": "x86_64",
+                         "python_version": "3.12"},
+            "numeric_tiers": tiers,
+        }
+        text = diagnostics._summary(report)
+        self.assertTrue(text.startswith("Mojolearn doctor\n"))
+        return text
 
 
 if __name__ == "__main__":
