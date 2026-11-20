@@ -10,6 +10,7 @@ from providers.python.autograd_program_pyapi_door import _integer
 from providers.python.autograd_pyapi_door import program_info
 from autograd.control_checkpoint import control_save, control_load
 from bindings.native_json_door import native_path
+from bindings.autograd_keys_unpack import autograd_keys
 
 
 def control_save_py[E: Exec & Movable & Deinitable, KIND: Int](
@@ -41,11 +42,12 @@ def control_load_py[E: Exec & Movable & Deinitable, KIND: Int](
     var r = control_load[E, KIND](Int(py=sid), String(py=normalized))
     var s = ops_session[E, KIND](Int(py=sid))
     var out = native_loaded_module("builtins").dict()
-    py_setitem(out, "kind", "while" if r.kind == 1 else "if")
-    py_setitem(out, "max_iterations", PythonObject(r.limit) if r.kind == 1 else PythonObject(None))
-    py_setitem(out, "body", program_info(r.ids[0], s[].program(r.ids[0])))
-    py_setitem(out, "condition", program_info(r.ids[1], s[].program(r.ids[1])))
-    py_setitem(out, "otherwise", program_info(r.ids[2], s[].program(r.ids[2])) if r.kind == 0 else PythonObject(None))
-    py_setitem(out, "optimizer", PythonObject(r.optimizer) if r.training else PythonObject(None))
-    py_setitem(out, "seed", PythonObject(Int(r.seed >> 32)).__lshift__(32).__or__(Int(r.seed & 0xffffffff)))
+    var nk = autograd_keys()
+    py_setitem(out, nk[].k_kind, "while" if r.kind == 1 else "if")
+    py_setitem(out, nk[].k_max_iterations, PythonObject(r.limit) if r.kind == 1 else PythonObject(None))
+    py_setitem(out, nk[].k_body, program_info(r.ids[0], s[].program(r.ids[0])))
+    py_setitem(out, nk[].k_condition, program_info(r.ids[1], s[].program(r.ids[1])))
+    py_setitem(out, nk[].k_otherwise, program_info(r.ids[2], s[].program(r.ids[2])) if r.kind == 0 else PythonObject(None))
+    py_setitem(out, nk[].k_optimizer, PythonObject(r.optimizer) if r.training else PythonObject(None))
+    py_setitem(out, nk[].k_seed, PythonObject(Int(r.seed >> 32)).__lshift__(32).__or__(Int(r.seed & 0xffffffff)))
     return out

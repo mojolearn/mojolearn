@@ -7,6 +7,17 @@ from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorErr
 from core.native_descriptor_call import native_descriptor_report, native_descriptor_words
 from sequence.exec_trait import Exec
 from providers.python.autograd_owned_program_public_pyapi_door import NativeOwnedProgramRequest, OWNED_PROGRAM_ABI_NAME
+from bindings.autograd_keys_unpack import (
+    autograd_keys,
+    AUTOGRAD_OPN_FIT,
+    AUTOGRAD_OPN_RUN,
+    AUTOGRAD_OPN_SAVE,
+    AUTOGRAD_OPN_STATE,
+    AUTOGRAD_OPN_RESIDENCY,
+    AUTOGRAD_OPN_PROFILE,
+    AUTOGRAD_OPN_ENTER,
+)
+from bindings.py_keys import py_op_code
 from providers.python.autograd_distributed_pyapi_unpack import (
     distributed_fit_py,
     distributed_enter_py,
@@ -35,37 +46,38 @@ from providers.python.autograd_partition_pyapi_pack import (
 def _owned_program_dispatch[E: Exec & Movable & Deinitable, KIND: Int](
     mut request: NativeOwnedProgramRequest, partitioned: Bool,
 ) raises:
-    var op = String(py=request.operation)
+    var nk = autograd_keys()
+    var op = py_op_code(nk[].ops, request.operation)
     var args = request.args
     var id = PythonObject(request.handle)
-    if op == "fit" and len(args) == 7:
+    if op == AUTOGRAD_OPN_FIT and len(args) == 7:
         if partitioned:
             request.result = partition_fit_py[E, KIND](id, args[0], args[1], args[2], args[3], args[4], args[5], args[6])
         else:
             request.result = distributed_fit_py[E, KIND](id, args[0], args[1], args[2], args[3], args[4], args[5], args[6])
-    elif op == "run" and len(args) == 1:
+    elif op == AUTOGRAD_OPN_RUN and len(args) == 1:
         if partitioned:
             request.result = partition_run_py[E, KIND](id, args[0])
         else:
             request.result = distributed_run_py[E, KIND](id, args[0])
-    elif op == "save" and len(args) == 1:
+    elif op == AUTOGRAD_OPN_SAVE and len(args) == 1:
         if partitioned:
             request.result = partition_save_py[E, KIND](id, args[0])
         else:
             request.result = distributed_save_py[E, KIND](id, args[0])
-    elif op == "state" and len(args) == 0:
+    elif op == AUTOGRAD_OPN_STATE and len(args) == 0:
         if partitioned:
             request.result = partition_state_py[E, KIND](id)
         else:
             request.result = distributed_state_py[E, KIND](id)
-    elif op == "residency" and len(args) == 0:
+    elif op == AUTOGRAD_OPN_RESIDENCY and len(args) == 0:
         if partitioned:
             request.result = partition_residency_py[E, KIND](id)
         else:
             request.result = distributed_residency_py[E, KIND](id)
-    elif op == "profile" and len(args) == 0 and partitioned:
+    elif op == AUTOGRAD_OPN_PROFILE and len(args) == 0 and partitioned:
         request.result = partition_profile_py[E, KIND](id)
-    elif op == "enter" and len(args) == 0:
+    elif op == AUTOGRAD_OPN_ENTER and len(args) == 0:
         if partitioned:
             request.result = partition_enter_py[E, KIND](id, request.owner)
         else:

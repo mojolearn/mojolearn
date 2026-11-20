@@ -14,6 +14,9 @@ from providers.python.neural_descriptor_pyapi_door import (
 )
 from core.shared_slot import SharedSlot
 from bindings.py_optional import py_or_none, py_present
+from bindings.autograd_keys_unpack import autograd_keys, AUTOGRAD_OPN_INITIALIZE, AUTOGRAD_OPN_CLOSE, AUTOGRAD_OPN_EXIT
+from bindings.py_keys import py_op_code
+from bindings.py_balanced import py_item
 
 comptime OWNED_PROGRAM_ABI_NAME = "mojolearn.owned_program.public.v1"
 
@@ -87,12 +90,13 @@ def _owned_program_layout(cls: PythonObject) raises -> PythonObject:
     var b = native_loaded_module("builtins")
     if py_type(cls) is not b.type:
         raise Error("TypeError: captured program class requires the native type metaclass")
-    var bases = py_call(b.type.__dict__["__bases__"].__get__, cls)
+    var nk = autograd_keys()
+    var bases = py_call(py_item(b.type.__dict__, nk[].k___bases__).__get__, cls)
     if len(bases) != 1 or bases[0] is not b.object:
         raise Error("TypeError: captured program class requires direct object ancestry")
-    var namespace = py_call(b.type.__dict__["__dict__"].__get__, cls)
-    var dictionary = py_get(namespace, "__dict__")
-    if (py_type(dictionary) is not py_type(b.type.__dict__["__dict__"])
+    var namespace = py_call(py_item(b.type.__dict__, nk[].k___dict__).__get__, cls)
+    var dictionary = py_get(namespace, nk[].k___dict__)
+    if (py_type(dictionary) is not py_type(py_item(b.type.__dict__, nk[].k___dict__))
             or dictionary.__objclass__ is not cls):
         raise Error("TypeError: captured program requires its native instance dictionary descriptor")
     var forbidden: List[String] = ["__getattribute__", "__getattr__", "__setattr__", "__delattr__", "__del__", "_b", "_id", "_lifetime"]
@@ -142,10 +146,11 @@ def _owned_program_class(cls: PythonObject) raises -> Int:
     if record is not None and Int(py=record) == Int(layout._obj_ptr):
         return kind
     var b = native_loaded_module("builtins")
-    var bases = py_call(b.type.__dict__["__bases__"].__get__, cls)
+    var nk = autograd_keys()
+    var bases = py_call(py_item(b.type.__dict__, nk[].k___bases__).__get__, cls)
     if len(bases) != 1 or bases[0] is not b.object:
         raise Error("TypeError: captured program ancestry changed after connection")
-    var namespace = py_call(b.type.__dict__["__dict__"].__get__, cls)
+    var namespace = py_call(py_item(b.type.__dict__, nk[].k___dict__).__get__, cls)
     for i in range(len(layout)):  # driver-loop: over connected native owner storage and lifecycle identities
         if py_get(namespace, layout[i][0]) is not layout[i][1]:
             raise Error("TypeError: captured program storage or attribute hook changed after connection")
@@ -184,16 +189,17 @@ def _connection(binding: PythonObject) raises -> Int:
 def _release_previous(fields: PythonObject, binding: PythonObject, kind: Int, retained: PythonObject) raises:
     var context = program_admission_context()
     var state = _OWNED_PROGRAMS.get_or_create_ptr()
-    if py_contains(fields, "_b") and fields["_b"] is not binding:
+    var nk = autograd_keys()
+    if py_contains(fields, nk[].k__b) and py_item(fields, nk[].k__b) is not binding:
         var pinned = False
         for i in range(len(state[].rows)):  # driver-loop: over independently retained native connection owners
-            if fields["_b"] is state[].rows[i].binding:
+            if py_item(fields, nk[].k__b) is state[].rows[i].binding:
                 pinned = True
         if not pinned:
-            native_release_admit(fields["_b"], context)
-    if py_contains(fields, "_id"):
-        native_release_admit(fields["_id"], context)
-    var previous = py_get(fields, "_lifetime")
+            native_release_admit(py_item(fields, nk[].k__b), context)
+    if py_contains(fields, nk[].k__id):
+        native_release_admit(py_item(fields, nk[].k__id), context)
+    var previous = py_get(fields, nk[].k__lifetime)
     if previous is not None and previous is not retained:
         native_release_weakrefs(previous, context)
         var resource = previous.downcast_value_ptr[NativeDescriptorResource]()
@@ -214,7 +220,8 @@ def owned_program_initialize_py(owner: PythonObject, binding: PythonObject, hand
         raise Error("TypeError: captured program handle requires a positive native integer")
     var state = _OWNED_PROGRAMS.get_or_create_ptr()
     ref row = state[].rows[_connection(binding)]
-    var previous = py_get(fields, "_lifetime")
+    var nk = autograd_keys()
+    var previous = py_get(fields, nk[].k__lifetime)
     # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
     var retained = Optional[PythonObject]()
     if previous is not None:
@@ -225,17 +232,17 @@ def owned_program_initialize_py(owner: PythonObject, binding: PythonObject, hand
             retained = py_present(previous)
     _release_previous(fields, binding, admitted[1], py_or_none(retained))
     if Bool(retained):
-        py_setitem(fields, "_b", binding)
-        py_setitem(fields, "_id", handle)
+        py_setitem(fields, nk[].k__b, binding)
+        py_setitem(fields, nk[].k__id, handle)
         return PythonObject(None)
     var requests = List[NativeOwnedProgramRequest]()
     requests.append(NativeOwnedProgramRequest(owner, PythonObject("enter"), Python.tuple(), Int(py=handle)))
     _ = neural_descriptor_execute(row.provider, 0, [Int(MutPointer(to=requests[0]))],
                                   [admitted[1], row.executor], List[Float64](), False)
     var resource = neural_descriptor_adopt(row.provider, Int(py=handle), 1, [admitted[1], row.executor])
-    py_setitem(fields, "_b", binding)
-    py_setitem(fields, "_id", handle)
-    py_setitem(fields, "_lifetime", resource)
+    py_setitem(fields, nk[].k__b, binding)
+    py_setitem(fields, nk[].k__id, handle)
+    py_setitem(fields, nk[].k__lifetime, resource)
     return PythonObject(None)
 
 
@@ -251,9 +258,10 @@ def owned_program_object_py(cls: PythonObject, binding: PythonObject, handle: Py
     var b = native_loaded_module("builtins")
     var owner = py_call(b.object.__new__, cls)
     var fields = _owned_program_fields(owner)[0]
-    py_setitem(fields, "_b", binding)
-    py_setitem(fields, "_id", handle)
-    py_setitem(fields, "_lifetime", resource)
+    var nk = autograd_keys()
+    py_setitem(fields, nk[].k__b, binding)
+    py_setitem(fields, nk[].k__id, handle)
+    py_setitem(fields, nk[].k__lifetime, resource)
     return owner
 
 
@@ -261,10 +269,11 @@ def ops_owned_program_create_request_py(state: PythonObject, pid: Int, operation
                                         args: PythonObject) raises -> PythonObject:
     # Called only after the Session/Program public owner admitted its storage.
     # Provider selection uses the native Session lifetime, never _b or a callable.
-    var lifetime = state["_lifetime"]
+    var nk = autograd_keys()
+    var lifetime = py_item(state, nk[].k__lifetime)
     var source = lifetime.downcast_value_ptr[NativeDescriptorResource]()
     var model = source[].provider.downcast_value_ptr[NeuralDescriptorProvider]()
-    if source[].handle == 0 or source[].handle != Int(py=state["_id"]):
+    if source[].handle == 0 or source[].handle != Int(py=py_item(state, nk[].k__id)):
         raise Error("ValueError: this Session is closed or its handle changed")
     var connections = _OWNED_PROGRAMS.get_or_create_ptr()
     var kind = 1 if operation == "partition" or operation == "load_partitioned" else 0
@@ -285,26 +294,27 @@ def ops_owned_program_create_request_py(state: PythonObject, pid: Int, operation
 def ops_owned_program_call_py(owner: PythonObject, operation: PythonObject, args: PythonObject) raises -> PythonObject:
     if py_type(operation) is not py_type(PythonObject("")) or py_type(args) is not py_type(Python.tuple()):
         raise Error("TypeError: captured program requires an exact operation string and argument tuple")
-    var name = String(py=operation)
-    if name == "initialize":
+    var nk = autograd_keys()
+    var name = py_op_code(nk[].ops, operation)
+    if name == AUTOGRAD_OPN_INITIALIZE:
         if len(args) != 2:
             raise Error("TypeError: captured program initialization requires binding and handle")
         return owned_program_initialize_py(owner, args[0], args[1])
     var admitted = _owned_program_fields(owner)
-    var lifetime = admitted[0]["_lifetime"]
+    var lifetime = py_item(admitted[0], nk[].k__lifetime)
     var resource = lifetime.downcast_value_ptr[NativeDescriptorResource]()
     var provider = resource[].provider
     var descriptor = provider.downcast_value_ptr[NeuralDescriptorProvider]()
     if descriptor[].record[0].name != OWNED_PROGRAM_ABI_NAME or len(resource[].context) != 2 or resource[].context[0] != admitted[1]:
         raise Error("TypeError: captured program resource belongs to another native owner")
-    var handle = admitted[0]["_id"]
+    var handle = py_item(admitted[0], nk[].k__id)
     if py_type(handle) is not py_type(PythonObject(0)) or Int(py=handle) != resource[].handle or resource[].handle == 0:
         raise Error("TypeError: captured program handle is closed or differs from its native owner")
-    if name == "close" or name == "exit":
+    if name == AUTOGRAD_OPN_CLOSE or name == AUTOGRAD_OPN_EXIT:
         if len(args) != 0:
             raise Error("TypeError: captured program close accepts no arguments")
         resource[].close()
-        if name == "exit":
+        if name == AUTOGRAD_OPN_EXIT:
             return PythonObject(None)
         return PythonObject(0)
     var requests = List[NativeOwnedProgramRequest]()

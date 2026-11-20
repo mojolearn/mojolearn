@@ -1,6 +1,10 @@
 """Source-only Session registry/provider contracts; no runtime qualification."""
 import ast
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from boundary_keys_plain import plain  # noqa: E402
 
 from check_neural_native_boundary import audit
 
@@ -57,7 +61,8 @@ def test_public_probe_has_cleanup_poisoned_entry_and_owner_checks():
 
 def test_imported_constructor_shares_public_session_connection_and_owner():
     bridge = (ROOT / 'python/mojolearn/importers/_native_import_bridge.py').read_text()
-    native = (ROOT / 'providers/python/autograd_import_frontend_pyapi_door.mojo').read_text()
+    native = plain('providers/python/autograd_import_frontend_pyapi_door.mojo',
+                   (ROOT / 'providers/python/autograd_import_frontend_pyapi_door.mojo').read_text())
     assert 'connections=ops._SESSION_CONNECTIONS' in bridge
     assert 'session=session, program=program' in bridge
     assert 'ops_session_initialize_py(session, PythonObject(False), mode, context["connections"], context["backend"], context["program"])' in native

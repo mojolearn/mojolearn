@@ -28,6 +28,7 @@ from providers.python.autograd_distributed_pyapi_unpack import (
     owned_program_array_admission,
     owned_program_id_admission,
 )
+from bindings.autograd_keys_unpack import autograd_keys
 
 
 def distributed_open[E: Exec & Movable & Deinitable, KIND: Int](
@@ -76,13 +77,14 @@ def distributed_state_py[E: Exec & Movable & Deinitable, KIND: Int](id: PythonOb
     owned_program_id_admission(id)
     var r = distributed_state_native[E, KIND](Int(py=id))
     var result = Python.dict()
-    py_setitem(result, "parameters", host_arrays_py(r.parameters))
-    py_setitem(result, "first_moments", host_arrays_py(r.first_moments))
-    py_setitem(result, "second_moments", host_arrays_py(r.second_moments))
-    py_setitem(result, "epoch", PythonObject(r.epoch))
-    py_setitem(result, "step", PythonObject(r.step))
-    py_setitem(result, "seed", PythonObject(r.seed))
-    py_setitem(result, "logical_shards", PythonObject(r.logical_shards))
+    var nk = autograd_keys()
+    py_setitem(result, nk[].k_parameters, host_arrays_py(r.parameters))
+    py_setitem(result, nk[].k_first_moments, host_arrays_py(r.first_moments))
+    py_setitem(result, nk[].k_second_moments, host_arrays_py(r.second_moments))
+    py_setitem(result, nk[].k_epoch, PythonObject(r.epoch))
+    py_setitem(result, nk[].k_step, PythonObject(r.step))
+    py_setitem(result, nk[].k_seed, PythonObject(r.seed))
+    py_setitem(result, nk[].k_logical_shards, PythonObject(r.logical_shards))
     return result
 
 
@@ -103,13 +105,14 @@ def distributed_residency_py[E: Exec & Movable & Deinitable, KIND: Int](id: Pyth
             _ = py_call(row.append, pair)
         _ = py_call(owned.append, PythonObject(r.owned[rank]))
         _ = py_call(ranges.append, row)
-    py_setitem(result, "devices", devices)
-    py_setitem(result, "optimizer_elements_per_rank", owned)
-    py_setitem(result, "optimizer_ranges", ranges)
-    py_setitem(result, "parameter_residency", PythonObject("replicated"))
-    py_setitem(result, "optimizer_residency", PythonObject("disjoint contiguous ranges"))
-    py_setitem(result, "logical_shards", PythonObject(r.logical_shards))
-    py_setitem(result, "transport", PythonObject("native host staging"))
+    var nk = autograd_keys()
+    py_setitem(result, nk[].k_devices, devices)
+    py_setitem(result, nk[].k_optimizer_elements_per_rank, owned)
+    py_setitem(result, nk[].k_optimizer_ranges, ranges)
+    py_setitem(result, nk[].k_parameter_residency, PythonObject("replicated"))
+    py_setitem(result, nk[].k_optimizer_residency, PythonObject("disjoint contiguous ranges"))
+    py_setitem(result, nk[].k_logical_shards, PythonObject(r.logical_shards))
+    py_setitem(result, nk[].k_transport, PythonObject("native host staging"))
     return result
 
 

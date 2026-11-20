@@ -12,18 +12,21 @@ from providers.python.autograd_import_metadata_pyapi_door import _fields
 from providers.python.autograd_session_frontend_pyapi_door import ops_session_fields
 from providers.python.autograd_program_arrays_pyapi_door import program_admission_context
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_resource_handle
+from bindings.autograd_keys_unpack import autograd_keys
+from bindings.py_balanced import py_item
 
 
 def _save_fields(program: PythonObject, context: PythonObject) raises -> PythonObject:
     var b = native_loaded_module("builtins")
-    var layouts = context["layouts"]
+    var nk = autograd_keys()
+    var layouts = py_item(context, nk[].k_layouts)
     if py_type(layouts) is not b.tuple:
         raise Error("TypeError: Program save requires its connected native layouts")
     for i in range(len(layouts)):  # small-loop(layouts: connected Program classes): exact owner metadata only
         var layout = layouts[i]
         if py_type(layout) is not b.dict:
             raise Error("TypeError: Program save requires a native layout dictionary")
-        if py_type(program) is layout["cls"]:
+        if py_type(program) is py_item(layout, nk[].k_cls):
             return _fields(program, layout)
     raise Error("TypeError: save requires an exact Program or ImportedProgram")
 
@@ -52,8 +55,9 @@ def _names(fields: PythonObject, attribute: String, count: Int) raises -> List[S
 
 def _save_provenance(context: PythonObject) raises -> Tuple[String, String]:
     var b = native_loaded_module("builtins")
-    var version = context["version"]
-    var platform = context["platform"]
+    var nk = autograd_keys()
+    var version = py_item(context, nk[].k_version)
+    var platform = py_item(context, nk[].k_platform)
     if py_type(version) is not b.str or py_type(platform) is not b.str:
         raise Error("TypeError: checkpoint provenance requires exact native strings")
     return (String(py=version), String(py=platform))
@@ -63,11 +67,12 @@ def ops_program_save_native_py[E: Exec & Movable & Deinitable, KIND: Int](
     program: PythonObject, path: PythonObject,
 ) raises -> PythonObject:
     var b = native_loaded_module("builtins")
-    var context = program_admission_context()["program_save_context"]
+    var nk = autograd_keys()
+    var context = py_item(program_admission_context(), nk[].k_program_save_context)
     if py_type(context) is not b.dict:
         raise Error("TypeError: Program save requires its native admission context")
     var fields = _save_fields(program, context)
-    var state = ops_session_fields(fields["_s"])
+    var state = ops_session_fields(py_item(fields, nk[].k__s))
     return ops_program_save_fields_py[E, KIND](fields, state, path, fields, True)
 
 
@@ -76,15 +81,16 @@ def ops_program_save_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
     replay: Bool,
 ) raises -> PythonObject:
     var b = native_loaded_module("builtins")
-    var context = program_admission_context()["program_save_context"]
-    if state["_id"] is None:
+    var nk = autograd_keys()
+    var context = py_item(program_admission_context(), nk[].k_program_save_context)
+    if py_item(state, nk[].k__id) is None:
         raise Error("ValueError: this session is closed")
-    if py_type(state["_id"]) is not b.int or py_type(fields["_id"]) is not b.int:
+    if py_type(py_item(state, nk[].k__id)) is not b.int or py_type(py_item(fields, nk[].k__id)) is not b.int:
         raise Error("TypeError: program and Session handles require exact native integers")
-    var sid = Int(py=state["_id"])
-    var pid = Int(py=fields["_id"])
+    var sid = Int(py=py_item(state, nk[].k__id))
+    var pid = Int(py=py_item(fields, nk[].k__id))
     var scope: List[Int] = [ops_session_registry_token(), KIND]
-    if neural_descriptor_resource_handle(state["_lifetime"], scope) != sid:
+    if neural_descriptor_resource_handle(py_item(state, nk[].k__lifetime), scope) != sid:
         raise Error("TypeError: Program save belongs to another native Session owner")
     var s = ops_session[E, KIND](sid)
     var p = s[].program(pid)
