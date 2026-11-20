@@ -70,7 +70,8 @@ NUMPY_ORACLES = {
     # differing element) and load the user's rows file; NumPy is imported
     # lazily inside those functions. Product paths never call them; the public
     # `mojolearn.check` (2026-11-20) is this same testing tool under a short
-    # name, routed lazily, so `import mojolearn` still loads neither file.
+    # name, routed lazily, and `estimator.check(X)` (_mode.CheckMixin) imports
+    # it inside the method, so `import mojolearn` still loads neither file.
     "mojolearn/_check_both.py", "mojolearn/_verify_check.py",
 }
 
