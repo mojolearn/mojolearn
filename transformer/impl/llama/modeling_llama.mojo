@@ -4172,8 +4172,8 @@ in the same order, so the refusal raised is the one the separate scans
 raised. No float is produced: no bit moves on any column. FAST builds keep the separate scans."""
 
 # MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK: PROMOTED 2026-11-19 (lane fx-verdicts3). The appended-row scan on a granted
-# cache is the IDENTICAL default; `-D MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK_OFF` restores the whole-cache scans on
-# per-call scratch at every step (the old opt-in name is refused, core/experiment_guards_neural.mojo; the constant
+# cache is the IDENTICAL default (confirmed and its _OFF switch deleted 2026-11-20, round 3 below; the old opt-in
+# name and _OFF are refused, core/experiment_guards_neural.mojo; the constant
 # keeps its experiment name). Evidence: A/B round 1, NVIDIA L40S (host bd9c355c19c0, 14-core cgroup), wheel
 # 0c68d6cd27 and its B set, base and arm back to back in ONE pod job (nvc1-0006, tag nvc-ab-20261119T125554Z-6f7afc),
 # one scored run per arm; digests and quality equal on all 4 cells. Base -> arm ms: causal-lm-generate
@@ -4191,9 +4191,16 @@ raised. No float is produced: no bit moves on any column. FAST builds keep the s
 # General mechanism: the scan lengths come from the cache geometry (one row of every run), no shape key.
 # Limits: NVIDIA only (AGENTS.md part 8). OWED (does not hold the flip): a 4096-token decode at n_kv 2 and a
 # 12-layer llama configuration against the _OFF arm.
-comptime LLAMA_FAST_REFUSE_WATERMARK = (
-    not is_defined["MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK_OFF"]() and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-)
+# A/B round 3, 2026-11-20 (lane fx-verdicts5; NVIDIA L40S host 2ef132a6de04, wheel 28a780604c and its _OFF set, base
+# and arm back to back in one pod job, tag nvc-ab-20261120T063324Z-c630ad; digests and quality equal on all 4 cells).
+# Row scan (default) -> whole scans ms: transformer-decode 1,086.8 -> 1,118.2 (1.029; the row's three bases in the job
+# 1,086.0 to 1,086.8), causal-lm-generate-smollm2 1,504.9 -> 1,549.6 (1.030), causal-lm-generate (162M) 864.4 -> 880.6
+# (1.019), samba-decode 1,302.9 -> 1,319.7 (1.013; its other base 1,312.8). CONFIRMED a second time, four rows of
+# four in the same direction (2 to 3 % here against round 1's 4 to 6 %): the row scan stands and its switch is
+# deleted. The whole scans themselves stay: FAST builds run them, and so does a cache that is not granted.
+# TOMBSTONE: MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK_OFF (old path's switch; the promotion confirmed by A/B rounds 1 and 3, numbers above) deleted 2026-11-20 by lane/fx-verdicts5; code recoverable at e25e35dab8.
+# Restore: git apply experiments/removed/MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK_OFF.patch; record in docs/TOMBSTONES.md.
+comptime LLAMA_FAST_REFUSE_WATERMARK = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 """lane/fx-llama-refuse-watermark (2026-11-18), the IDENTICAL default since
 2026-11-19 (A/B numbers in the comment above; `_OFF` restores the whole
 scans; docs/apple-fast/EXPERIMENTS.md). A decode step

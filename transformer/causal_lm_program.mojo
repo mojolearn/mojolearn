@@ -185,7 +185,7 @@ struct CausalLMProgram(Movable):
             # word and of the floats), which resets the attention entries'
             # refusal watermark, and a decode loop that ran bodies past its
             # stop drops the entries (autograd/program_control.mojo). Read
-            # on every IDENTICAL build but MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK_OFF.
+            # on every IDENTICAL build.
             s[].steps.attn_cache_private = True
             self.embed = s[].upload(CastIn.f32_c(pe, v, d), False)
             if pn != 0:

@@ -264,7 +264,7 @@ struct SambaStackProgram(Movable, Writable):
         # is written by `zero_state` (a fill, then the position word through
         # `load_block`) and `load_state` (`load_block` of the floats and the
         # word), which reset the attention entries' refusal watermark. Read
-        # on every IDENTICAL build but MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK_OFF.
+        # on every IDENTICAL build.
         s.steps.attn_cache_private = True
         self.s = s^
         self.vocab = vocab
