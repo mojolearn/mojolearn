@@ -21,20 +21,22 @@ from bindings.host_iforest_native_door import host_iforest_alias_types
 from bindings.host_kde_native_pack import (
     _kde_option_value,
 )
+from bindings.host_rest_keys_unpack import host_rest_keys
 
 
 def host_kde_admit_state(fields: PythonObject, context: PythonObject) raises:
+    var nk = host_rest_keys()
     var names = Python.tuple("kernel", "metric")
     for i in range(len(names)):  # driver-loop: fixed KDE kernel/metric names
         if py_contains(fields, names[i]):
             _ = _kde_option_value(fields[names[i]], context)
-    var bandwidth = py_get(fields, "bandwidth")
+    var bandwidth = py_get(fields, nk[].k_bandwidth)
     if bandwidth is not None and kde_bandwidth_code(bandwidth, context) == "":
         _ = _kde_option_value(host_inference_primitive_number(bandwidth, context), context, True)
     var buffers = Python.tuple("_x", "_w")
     for i in range(len(buffers)):  # driver-loop: fixed saved KDE buffers
         var value = py_get(fields, buffers[i])
-        if py_type(value) is py_get(context, "ndarray") and classical_kind(value, context) == "O":
+        if py_type(value) is py_get(context, nk[].k_ndarray) and classical_kind(value, context) == "O":
             raise Error("TypeError: KDE saved buffers require native numeric storage")
     # An exact string was accepted by the old score's float(bandwidth).
     # Its native float conversion happens below; custom conversion hooks

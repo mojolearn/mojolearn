@@ -22,20 +22,23 @@ from bindings.scaler_lifecycle_native_door import _outside
 from core.host_archive_impl import host_archive_support_bound
 from core.host_sparse_impl import host_sparse_uint64_bound
 from core.host_svr_impl import host_svr_bias, host_svr_indices
+from bindings.host_rest_keys_unpack import host_rest_keys
+from bindings.py_balanced import py_item
 
 
 def host_svr_admit_state(fields: PythonObject, context: PythonObject) raises:
+    var nk = host_rest_keys()
     var buffers = Python.tuple("dual_coef_", "support_vectors_")
     for i in range(len(buffers)):  # driver-loop: refuse callback-bearing storage before numeric shape validation
         var value = py_get(fields, buffers[i])
-        if py_get(context, "ndarray") is not None and py_type(value) is context["ndarray"]:
+        if py_get(context, nk[].k_ndarray) is not None and py_type(value) is py_item(context, nk[].k_ndarray):
             if classical_kind(value, context) == "O":
                 raise Error("TypeError: saved SVR coefficients and support vectors require native numeric storage, not Python objects")
     var names = Python.tuple("n_features_in_", "n_support_", "_gamma", "_hp_cache_size", "_hp_degree", "_hp_coef0")
     for i in range(len(names)):  # driver-loop: fixed scalar fields consumed by the SVM ABI
         if py_contains(fields, names[i]):
             host_inference_scalar(fields[names[i]], context)
-    if py_contains(fields, "_hp_kernel") and py_type(fields["_hp_kernel"]) is not native_loaded_module("builtins").str:
+    if py_contains(fields, nk[].k__hp_kernel) and py_type(py_item(fields, nk[].k__hp_kernel)) is not native_loaded_module("builtins").str:
         raise Error("TypeError: saved SVR kernel must be an exact native string")
 
 
@@ -55,6 +58,7 @@ def _svr_matrix(value: PythonObject, rows: Int, columns: Int, context: PythonObj
 
 
 def _svr_support(value: PythonObject, count: Int, columns: Int, context: PythonObject) raises -> PythonObject:
+    var nk = host_rest_keys()
     var array = classical_input(value, context, "support_")
     if Int(py=array.ndim) != 1 or Int(py=array.size) != count:
         raise Error("SVR support index shape differs from n_support_")
@@ -67,7 +71,7 @@ def _svr_support(value: PythonObject, count: Int, columns: Int, context: PythonO
         return array
     var width = Int(py=array.itemsize)
     var kind = classical_cast_kind(array, width, "support_", context)
-    var out = host_archive_typed(Python.tuple(count), "<i4", context["output_context"])
+    var out = host_archive_typed(Python.tuple(count), "<i4", py_item(context, nk[].k_output_context))
     host_svr_indices(Int(py=classical_address(array)), Int(py=array.strides[0]), count,
         width, kind, classical_is_array(array, context) or Bool(py=array.dtype.isnative), columns, Int(py=classical_address(out)))
     _ = array^
@@ -87,7 +91,8 @@ def _svr_bias(value: PythonObject, context: PythonObject) raises -> Float64:
 
 
 def host_svr_predict(model: PythonObject, fields: PythonObject, source: PythonObject, context: PythonObject, public: Bool) raises -> PythonObject:
-    var fitting = Bool(py=py_get(fields, "_mojolearn_fitting", False))
+    var nk = host_rest_keys()
+    var fitting = Bool(py=py_get(fields, nk[].k__mojolearn_fitting, False))
     var format = host_sparse_format(source)
     var x = PythonObject(None)
     if format.byte_length() > 0:
@@ -114,15 +119,15 @@ def host_svr_predict(model: PythonObject, fields: PythonObject, source: PythonOb
         _ = tree_source^
         _ = prepared^
     var rows = Int(py=x.shape[0])
-    var features = Int(py=fields["n_features_in_"])
-    var count = Int(py=fields["n_support_"])
+    var features = Int(py=py_item(fields, nk[].k_n_features_in_))
+    var count = Int(py=py_item(fields, nk[].k_n_support_))
     if Int(py=x.shape[1]) != features:
         raise Error("SVR input width differs from fitted dimensions")
     if count < 0 or count > 2147483647 // features or rows > 2147483647 // max(count, 1):
         raise Error("SVR support dimensions exceed native indexing")
     if not fitting:
         host_inference_feature_names(model, fields, context)
-    var kernel = String(fields["_hp_kernel"])
+    var kernel = String(py_item(fields, nk[].k__hp_kernel))
     var code = 0 if kernel == "linear" else (1 if kernel == "poly" else (2 if kernel == "rbf" else (3 if kernel == "sigmoid" else (4 if kernel == "precomputed" else -1))))
     if code < 0:
         raise Error("SVR kernel name is not recognized")
@@ -130,10 +135,10 @@ def host_svr_predict(model: PythonObject, fields: PythonObject, source: PythonOb
     var support = PythonObject(None)
     var columns = PythonObject(None)
     if count > 0:
-        dual = _kernel_buffer(fields["dual_coef_"], count, "<f4", context)
+        dual = _kernel_buffer(py_item(fields, nk[].k_dual_coef_), count, "<f4", context)
         if code == 4:
-            columns = _svr_support(fields["support_"], count, features, context)
-            var gathered = host_archive_typed(Python.tuple(rows, count), "<f4", context["output_context"])
+            columns = _svr_support(py_item(fields, nk[].k_support_), count, features, context)
+            var gathered = host_archive_typed(Python.tuple(rows, count), "<f4", py_item(context, nk[].k_output_context))
             _ = py_call(_kernel_entry("svc_pair_epilogue", context), classical_address(x), 0,
                 classical_address(columns), classical_address(gathered), Python.list(6, rows, features, rows, count))
             _ = x^
@@ -141,13 +146,13 @@ def host_svr_predict(model: PythonObject, fields: PythonObject, source: PythonOb
             features = count
             support = dual
         else:
-            support = _svr_matrix(fields["support_vectors_"], count, features, context)
-    var params = Python.list(rows, features, count, _svr_bias(fields["intercept_"], context), code,
-        fields["_gamma"], fields["_hp_cache_size"])
+            support = _svr_matrix(py_item(fields, nk[].k_support_vectors_), count, features, context)
+    var params = Python.list(rows, features, count, _svr_bias(py_item(fields, nk[].k_intercept_), context), code,
+        py_item(fields, nk[].k__gamma), py_item(fields, nk[].k__hp_cache_size))
     if code == 1 or code == 3:
-        _ = py_call(params.append, py_call(native_loaded_module("builtins").int, fields["_hp_degree"]))
-        _ = py_call(params.append, Float64(py=fields["_hp_coef0"]))
-    var out = host_archive_typed(Python.tuple(rows), "<f4", context["output_context"])
+        _ = py_call(params.append, py_call(native_loaded_module("builtins").int, py_item(fields, nk[].k__hp_degree)))
+        _ = py_call(params.append, Float64(py=py_item(fields, nk[].k__hp_coef0)))
+    var out = host_archive_typed(Python.tuple(rows), "<f4", py_item(context, nk[].k_output_context))
     _ = py_call(_kernel_entry("svr_predict", context), classical_address(x),
         classical_address(dual) if count > 0 else PythonObject(0),
         classical_address(support) if count > 0 else PythonObject(0), classical_address(out), params)
@@ -155,39 +160,41 @@ def host_svr_predict(model: PythonObject, fields: PythonObject, source: PythonOb
     _ = dual^
     _ = support^
     _ = columns^
-    return classical_input(host_tree_wide(out, context), context, "prediction") if public and py_get(context, "ndarray") is not None else out
+    return classical_input(host_tree_wide(out, context), context, "prediction") if public and py_get(context, nk[].k_ndarray) is not None else out
 
 
 def _svr_coefficients(model: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = host_rest_keys()
     var fields = host_tree_constructor_fields(model, context)
-    if not py_contains(fields, "dual_coef_"):
+    if not py_contains(fields, nk[].k_dual_coef_):
         raise Error("AttributeError: SVR coef_ requires a fitted model")
     var keys = py_call(native_loaded_module("builtins").list, fields.keys())
     for i in range(len(keys)):  # driver-loop: native stored state admission before computed attribute work
         classical_admit_value(fields[keys[i]], context)
     host_svr_admit_state(fields, context)
-    if String(fields["_hp_kernel"]) != "linear":
+    if String(py_item(fields, nk[].k__hp_kernel)) != "linear":
         raise Error("AttributeError: SVR coef_ is available only for kernel='linear'")
-    var features = Int(py=fields["n_features_in_"])
-    var count = Int(py=fields["n_support_"])
+    var features = Int(py=py_item(fields, nk[].k_n_features_in_))
+    var count = Int(py=py_item(fields, nk[].k_n_support_))
     if features < 1 or count < 0 or count > 2147483647 // features:
         raise Error("SVR support dimensions exceed native indexing")
-    var out = host_archive_typed(Python.tuple(1, features), "<f4", context["output_context"])
+    var out = host_archive_typed(Python.tuple(1, features), "<f4", py_item(context, nk[].k_output_context))
     if count > 0:
-        var mode = py_get(fields, "numeric_mode")
+        var mode = py_get(fields, nk[].k_numeric_mode)
         if mode is not None and (py_type(mode) is not native_loaded_module("builtins").str or String(mode) != "identical"):
             raise Error("explicit host models run identical mode only")
-        var dual = _kernel_buffer(fields["dual_coef_"], count, "<f4", context)
-        var support = _svr_matrix(fields["support_vectors_"], count, features, context)
+        var dual = _kernel_buffer(py_item(fields, nk[].k_dual_coef_), count, "<f4", context)
+        var support = _svr_matrix(py_item(fields, nk[].k_support_vectors_), count, features, context)
         _ = py_call(_kernel_entry("svc_dual_gemv", context), classical_address(dual), classical_address(support),
             Python.list(count, features, 0), classical_address(out))
         _ = dual^
         _ = support^
-    return classical_input(out, context, "coef_") if _outside(context, 0) and py_get(context, "ndarray") is not None else out
+    return classical_input(out, context, "coef_") if _outside(context, 0) and py_get(context, nk[].k_ndarray) is not None else out
 
 
 def host_svr_attribute_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
     try:
+        var nk = host_rest_keys()
         var args = PythonObject(from_borrowed=args_ptr)
         var context = args[0]
         var model = args[1]
@@ -198,11 +205,11 @@ def host_svr_attribute_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -
         if py_type(name) is not b.str:
             raise Error("TypeError: native SVR attribute names must be exact strings")
         if String(name) == "coef_":
-            var mro = py_call(b.type.__dict__["__mro__"].__get__, py_type(model))
+            var mro = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, py_type(model))
             for i in range(len(mro)):  # driver-loop: fixed computed-property identity and normal MRO precedence
                 var fields = _pd_type_fields(mro[i])
-                if py_contains(fields, "coef_"):
-                    if fields["coef_"] is context["host_svr_coefficient_property"]:
+                if py_contains(fields, nk[].k_coef_):
+                    if py_item(fields, nk[].k_coef_) is py_item(context, nk[].k_host_svr_coefficient_property):
                         var coefficients = _svr_coefficients(model, context)
                         return coefficients.steal_data()
                     break

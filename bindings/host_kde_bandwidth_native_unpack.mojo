@@ -11,11 +11,14 @@ from bindings.native_scalar_decode_unpack import native_scalar_buffer
 from bindings.classical_warnings_unpack import classical_warning
 from bindings.native_caller_frame_pack import native_frame_globals
 from core.host_kde_bandwidth_run import kde_temporal_unit_run, kde_temporal_decode_run
+from bindings.host_rest_keys_unpack import host_rest_keys
+from bindings.py_balanced import py_item
 
 
 def kde_bandwidth_code(value: PythonObject, context: PythonObject) raises -> String:
+    var nk = host_rest_keys()
     var cls = py_type(value)
-    if py_get(context, "ndarray") is None:
+    if py_get(context, nk[].k_ndarray) is None:
         return String("")
     # p3-neighbors-cluster: an exact builtin float, int, bool or str is never
     # a NumPy scalar or array, so no code matches; answered before the dtypes.
@@ -25,15 +28,15 @@ def kde_bandwidth_code(value: PythonObject, context: PythonObject) raises -> Str
     var codes = Python.tuple("?", "b", "B", "h", "H", "i", "I", "l", "L", "q", "Q", "e", "f", "d", "g", "F", "D", "G", "M", "m")
     # The twenty dtype objects are built once per connected context (they are
     # NumPy's own singletons for these codes) instead of on every call.
-    var dtypes = py_get(context, "p3nc_kde_bandwidth_dtypes")
+    var dtypes = py_get(context, nk[].k_p3nc_kde_bandwidth_dtypes)
     if dtypes is None:
         var constructor = native_numpy_dtype(context)
         var built = Python.list()
         for i in range(len(codes)):  # driver-loop: the fixed dtype codes, once per context
             _ = py_call(built.append, py_call(constructor, codes[i]))
         dtypes = py_call(py_type(Python.tuple()), built)
-        py_setitem(context, "p3nc_kde_bandwidth_dtypes", dtypes)
-    var array = cls is context["ndarray"]
+        py_setitem(context, nk[].k_p3nc_kde_bandwidth_dtypes, dtypes)
+    var array = cls is py_item(context, nk[].k_ndarray)
     for i in range(len(codes)):  # driver-loop: exact built-in numeric and temporal scalar/dtype identities
         var dtype = dtypes[i]
         if cls is dtype.type or (array and py_type(value.dtype) is py_type(dtype)):
@@ -42,6 +45,7 @@ def kde_bandwidth_code(value: PythonObject, context: PythonObject) raises -> Str
 
 
 def kde_bandwidth_warning(message: String, category: PythonObject, context: PythonObject) raises:
+    var nk = host_rest_keys()
     # Match the existing _getframe(1) warning location without sys._getframe
     # or frame.f_code access: their audit events run application Python.
     # This is the same public CPython path as host feature-name warnings.
@@ -64,7 +68,7 @@ def kde_bandwidth_warning(message: String, category: PythonObject, context: Pyth
         raise failure^
     var code = PythonObject(from_owned=pointer)
     var line = cpy.lib.get_function[Int32]("PyFrame_GetLineNumber")(frame._obj_ptr)
-    var module = py_get(native_frame_globals(frame), "__name__", "")
+    var module = py_get(native_frame_globals(frame), nk[].k___name__, "")
     if py_type(module) is not py_type(PythonObject("")):
         module = PythonObject("")
     classical_warning(message, category, context,
@@ -72,10 +76,11 @@ def kde_bandwidth_warning(message: String, category: PythonObject, context: Pyth
 
 
 def kde_numpy_release(context: PythonObject) raises -> Int:
-    var numpy = py_get(context["modules"], "numpy")
-    if numpy is None or py_type(numpy) is not context["native_module_type"]:
+    var nk = host_rest_keys()
+    var numpy = py_get(py_item(context, nk[].k_modules), nk[].k_numpy)
+    if numpy is None or py_type(numpy) is not py_item(context, nk[].k_native_module_type):
         raise Error("TypeError: KDE scalar conversion requires native NumPy metadata")
-    var version = py_get(native_numpy_module_fields(numpy), "__version__")
+    var version = py_get(native_numpy_module_fields(numpy), nk[].k___version__)
     if py_type(version) is not py_type(PythonObject("")):
         raise Error("TypeError: KDE scalar conversion requires native NumPy version text")
     var parts = String(version).split(".")
@@ -85,7 +90,8 @@ def kde_numpy_release(context: PythonObject) raises -> Int:
 
 
 def kde_bandwidth_array_policy(value: PythonObject, context: PythonObject) raises:
-    if py_type(value) is context["ndarray"]:
+    var nk = host_rest_keys()
+    if py_type(value) is py_item(context, nk[].k_ndarray):
         var ndim = Int(py=value.ndim)
         if ndim > 0:
             if kde_numpy_release(context) >= 204:
@@ -94,7 +100,7 @@ def kde_bandwidth_array_policy(value: PythonObject, context: PythonObject) raise
             raise Error("TypeError: only length-1 arrays can be converted to Python scalars")
         if ndim > 0:
             kde_bandwidth_warning("Conversion of an array with ndim > 0 to a scalar is deprecated, and will error in future. Ensure you extract a single element from your array before performing this operation. (Deprecated NumPy 1.25.)",
-                context["warning_deprecation_type"], context)
+                py_item(context, nk[].k_warning_deprecation_type), context)
 
 
 def kde_temporal_bandwidth(value: PythonObject, code: String, context: PythonObject) raises -> PythonObject:
@@ -140,20 +146,21 @@ def kde_temporal_bandwidth(value: PythonObject, code: String, context: PythonObj
 
 
 def kde_native_bandwidth(value: PythonObject, code: String, context: PythonObject) raises -> PythonObject:
+    var nk = host_rest_keys()
     kde_bandwidth_array_policy(value, context)
     if code == "M" or code == "m":
         return kde_temporal_bandwidth(value, code, context)
     if code != "F" and code != "D" and code != "G":
         return native_scalar_buffer(value).to_python_number(False)
-    if py_type(value) is context["ndarray"]:
+    if py_type(value) is py_item(context, nk[].k_ndarray):
         # NumPy boxes F/D ndarray elements as builtin complex, whose float
         # conversion refuses them. G retains an extended complex scalar even
         # on ABIs where its component width happens to equal double.
         if code != "G":
             raise Error("TypeError: float() argument must be a string or a real number, not 'complex'")
-    var exceptions = py_get(context["modules"], "numpy.exceptions")
-    if exceptions is None or py_type(exceptions) is not context["native_module_type"]:
+    var exceptions = py_get(py_item(context, nk[].k_modules), "numpy.exceptions")
+    if exceptions is None or py_type(exceptions) is not py_item(context, nk[].k_native_module_type):
         raise Error("TypeError: complex scalar warnings require NumPy's native exception metadata")
-    var category = py_get(native_numpy_module_fields(exceptions), "ComplexWarning")
+    var category = py_get(native_numpy_module_fields(exceptions), nk[].k_ComplexWarning)
     kde_bandwidth_warning("Casting complex values to real discards the imaginary part", category, context)
     return native_scalar_buffer(value).to_python_number(False)

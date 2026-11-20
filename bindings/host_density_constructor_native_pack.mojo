@@ -17,10 +17,13 @@ from bindings.host_density_constructor_native_unpack import (
     _density_descriptor,
     _density_option,
 )
+from bindings.host_rest_keys_unpack import host_rest_keys
+from bindings.py_balanced import py_item
 
 
 def _density_member(name: PythonObject, plan: PythonObject) raises -> PythonObject:
-    var mro = plan["mro"]
+    var nk = host_rest_keys()
+    var mro = py_item(plan, nk[].k_mro)
     for i in range(len(mro)):  # driver-loop: native class assignment precedence
         var fields = _pd_type_fields(mro[i])
         if py_contains(fields, name):
@@ -29,10 +32,11 @@ def _density_member(name: PythonObject, plan: PythonObject) raises -> PythonObje
 
 
 def _density_get_slot(model: PythonObject, name: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = host_rest_keys()
     # p3-neighbors-cluster: the process-wide resolved CPython tables, not a
     # by-name symbol lookup per slot read (PyErr_Clear only on a miss).
     ref cpy = Python().cpython()
-    var attribute_error = context["host_density_attribute_error"]
+    var attribute_error = py_item(context, nk[].k_host_density_attribute_error)
     var result = cpython_table()[].PyObject_GenericGetAttr(model._obj_ptr, name._obj_ptr)
     if result:
         return Python.tuple(PythonObject(from_owned=result), True)
@@ -43,21 +47,22 @@ def _density_get_slot(model: PythonObject, name: PythonObject, context: PythonOb
 
 
 def host_density_initialize(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = host_rest_keys()
     classical_connect_numpy(context)
     classical_check_layout(model, context)
     var cls = py_type(model)
-    var plan = context["classical_public_layouts"][cls]
-    var fields = py_call(plan["fields_get"], model, cls)
+    var plan = py_item(context, nk[].k_classical_public_layouts)[cls]
+    var fields = py_call(py_item(plan, nk[].k_fields_get), model, cls)
     var family = String(args[0])
-    var mro = plan["mro"]
+    var mro = py_item(plan, nk[].k_mro)
     var known = False
     # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
     var found_setter = Optional[PythonObject]()
     for i in range(len(mro)):  # driver-loop: connected constructor ancestry and native assignment slot
-        var kind = py_get(context["host_inference_kinds"], mro[i])
+        var kind = py_get(py_item(context, nk[].k_host_inference_kinds), mro[i])
         known = known or (kind is not None and String(kind) == family)
         if not found_setter:
-            var candidate = py_get(_pd_type_fields(mro[i]), "__setattr__")
+            var candidate = py_get(_pd_type_fields(mro[i]), nk[].k___setattr__)
             if candidate is not None:
                 found_setter = candidate
     var setter = PythonObject(None)
@@ -65,7 +70,7 @@ def host_density_initialize(model: PythonObject, args: PythonObject, context: Py
         setter = found_setter.value()
     if not known or (family != "kde" and family != "iforest"):
         raise Error("TypeError: density constructor requires its connected native host class")
-    if setter is not context["host_density_object_setattr"]:
+    if setter is not py_item(context, nk[].k_host_density_object_setattr):
         raise Error("TypeError: density constructors do not invoke Python attribute assignment hooks")
     var names = Python.tuple("bandwidth", "kernel", "metric", "algorithm", "atol", "rtol", "breadth_first", "leaf_size", "metric_params", "numeric_mode") if family == "kde" else Python.tuple("n_estimators", "max_samples", "max_depth", "max_features", "bootstrap", "contamination", "random_state", "warm_start", "n_jobs", "verbose", "output_type", "numeric_mode")
     if len(args) != len(names) + 1:

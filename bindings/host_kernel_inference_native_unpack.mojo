@@ -17,6 +17,8 @@ from bindings.host_inference_preparation_unpack import host_inference_pandas_fin
 from bindings.host_inference_scalars_door import host_inference_scalar
 from core.host_inference_impl import host_inference_raw_finite
 from core.host_sparse_impl import host_sparse_uint64_bound
+from bindings.host_rest_keys_unpack import host_rest_keys
+from bindings.py_balanced import py_item
 
 
 def _kernel_buffer(value: PythonObject, count: Int, dtype: String, context: PythonObject) raises -> PythonObject:
@@ -28,15 +30,17 @@ def _kernel_buffer(value: PythonObject, count: Int, dtype: String, context: Pyth
 
 
 def _kernel_entry(name: String, context: PythonObject) raises -> PythonObject:
-    var entry = py_get(context["host_inference_entries"], name)
+    var nk = host_rest_keys()
+    var entry = py_get(py_item(context, nk[].k_host_inference_entries), name)
     if entry is None:
         raise Error("ImportError: explicit CPU inference entry " + name + " is unavailable")
-    if py_type(entry) is not context["host_tree_entry_type"]:
+    if py_type(entry) is not py_item(context, nk[].k_host_tree_entry_type):
         raise Error("TypeError: explicit CPU inference requires a fixed native entry")
     return entry
 
 
 def host_kernel_admit_state(fields: PythonObject, kind: String, context: PythonObject) raises:
+    var nk = host_rest_keys()
     var b = native_loaded_module("builtins")
     var name = "_params" if kind == "rbf_sampler" else "_kernel_params"
     if py_contains(fields, name):
@@ -49,13 +53,14 @@ def host_kernel_admit_state(fields: PythonObject, kind: String, context: PythonO
     for i in range(len(names)):  # driver-loop: per-model native scalar metadata
         if py_contains(fields, names[i]):
             host_inference_scalar(fields[names[i]], context)
-    if kind == "kernel_ridge" and py_contains(fields, "_squeeze"):
-        host_inference_scalar(fields["_squeeze"], context, True)
+    if kind == "kernel_ridge" and py_contains(fields, nk[].k__squeeze):
+        host_inference_scalar(py_item(fields, nk[].k__squeeze), context, True)
 
 
 def host_kernel_inference(model: PythonObject, fields: PythonObject, kind: String, source: PythonObject, context: PythonObject, public: Bool) raises -> PythonObject:
+    var nk = host_rest_keys()
     var b = native_loaded_module("builtins")
-    var fitting = Bool(py=py_get(fields, "_mojolearn_fitting", False))
+    var fitting = Bool(py=py_get(fields, nk[].k__mojolearn_fitting, False))
     var format = host_sparse_format(source)
     var x = PythonObject(None)
     if format.byte_length() > 0:
@@ -90,53 +95,53 @@ def host_kernel_inference(model: PythonObject, fields: PythonObject, kind: Strin
         _ = prepared^
     var rows = Int(py=x.shape[0])
     var features = Int(py=x.shape[1])
-    if features != Int(py=fields["n_features_in_"]):
+    if features != Int(py=py_item(fields, nk[].k_n_features_in_)):
         raise Error("X feature count differs from the fitted kernel model")
     if not fitting:
         host_inference_feature_names(model, fields, context)
     var out = PythonObject(None)
     if kind == "kernel_ridge":
-        var train = classical_input(fields["X_fit_"], context, "X_fit_")
+        var train = classical_input(py_item(fields, nk[].k_X_fit_), context, "X_fit_")
         if Int(py=train.ndim) != 2 or Int(py=train.shape[1]) != features:
             raise Error("stored kernel training matrix has the wrong shape")
         var count = Int(py=train.shape[0])
-        var targets = Int(py=fields["n_targets_"])
+        var targets = Int(py=py_item(fields, nk[].k_n_targets_))
         if count < 1 or targets < 1 or rows > 2147483647 // targets:
             raise Error("kernel model dimensions must be positive and fit native indexing")
         train = _kernel_buffer(train, count * features, "<f4", context)
-        var dual = _kernel_buffer(fields["dual_coef_"], count * targets, "<f4", context)
-        var params = fields["_kernel_params"]
+        var dual = _kernel_buffer(py_item(fields, nk[].k_dual_coef_), count * targets, "<f4", context)
+        var params = py_item(fields, nk[].k__kernel_params)
         if py_type(params) is not b.tuple or len(params) != 5:
             raise Error("stored KernelRidge parameters must contain five native values")
-        out = host_archive_typed(Python.tuple(rows) if Bool(py=fields["_squeeze"]) else Python.tuple(rows, targets), "<f4", context["output_context"])
+        out = host_archive_typed(Python.tuple(rows) if Bool(py=py_item(fields, nk[].k__squeeze)) else Python.tuple(rows, targets), "<f4", py_item(context, nk[].k_output_context))
         if Int(py=out.size) != rows * targets:
             raise Error("squeezed kernel predictions require one target")
         _ = py_call(_kernel_entry("kernel_ridge_predict", context),
             Python.list(classical_address(train), classical_address(dual), classical_address(x), classical_address(out)),
-            Python.list(count, features, targets, params[0], params[1], params[2], params[3], params[4], fields["info_"], rows))
+            Python.list(count, features, targets, params[0], params[1], params[2], params[3], params[4], py_item(fields, nk[].k_info_), rows))
         _ = train^
         _ = dual^
         _ = params^
     elif kind == "nystroem":
-        var components = classical_input(fields["components_"], context, "components_")
+        var components = classical_input(py_item(fields, nk[].k_components_), context, "components_")
         if Int(py=components.ndim) != 2 or Int(py=components.shape[1]) != features:
             raise Error("stored Nystroem components have the wrong shape")
         var count = Int(py=components.shape[0])
         if count < 1 or rows > 2147483647 // count or count > 2147483647 // count:
             raise Error("Nystroem dimensions must be positive and fit native indexing")
         components = _kernel_buffer(components, count * features, "<f4", context)
-        var indices = _kernel_buffer(fields["component_indices_"], count, "<i4", context)
-        var normalization = _kernel_buffer(fields["normalization_"], count * count, "<f4", context)
-        var eigenvalues = _kernel_buffer(fields["eigenvalues_"], count, "<f4", context)
-        var eigenvectors = _kernel_buffer(fields["eigenvectors_"], count * count, "<f4", context)
-        var params = fields["_kernel_params"]
+        var indices = _kernel_buffer(py_item(fields, nk[].k_component_indices_), count, "<i4", context)
+        var normalization = _kernel_buffer(py_item(fields, nk[].k_normalization_), count * count, "<f4", context)
+        var eigenvalues = _kernel_buffer(py_item(fields, nk[].k_eigenvalues_), count, "<f4", context)
+        var eigenvectors = _kernel_buffer(py_item(fields, nk[].k_eigenvectors_), count * count, "<f4", context)
+        var params = py_item(fields, nk[].k__kernel_params)
         if py_type(params) is not b.tuple or len(params) != 5:
             raise Error("stored Nystroem parameters must contain five native values")
-        out = host_archive_typed(Python.tuple(rows, count), "<f4", context["output_context"])
+        out = host_archive_typed(Python.tuple(rows, count), "<f4", py_item(context, nk[].k_output_context))
         _ = py_call(_kernel_entry("nystroem_transform", context),
             Python.list(classical_address(components), classical_address(indices), classical_address(normalization), classical_address(eigenvalues),
                 classical_address(eigenvectors), classical_address(x), classical_address(out)),
-            Python.list(count, features, params[0], params[1], params[2], params[3], params[4], fields["sweeps_"], rows))
+            Python.list(count, features, params[0], params[1], params[2], params[3], params[4], py_item(fields, nk[].k_sweeps_), rows))
         _ = components^
         _ = indices^
         _ = normalization^
@@ -144,25 +149,25 @@ def host_kernel_inference(model: PythonObject, fields: PythonObject, kind: Strin
         _ = eigenvectors^
         _ = params^
     else:
-        var weights = classical_input(fields["random_weights_"], context, "random_weights_")
+        var weights = classical_input(py_item(fields, nk[].k_random_weights_), context, "random_weights_")
         if Int(py=weights.ndim) != 2 or Int(py=weights.shape[0]) != features:
             raise Error("stored RBF weights have the wrong shape")
         var count = Int(py=weights.shape[1])
         if count < 1 or rows > 2147483647 // count:
             raise Error("RBF dimensions must be positive and fit native indexing")
         weights = _kernel_buffer(weights, features * count, "<f4", context)
-        var offset = _kernel_buffer(fields["random_offset_"], count, "<f4", context)
-        var params = fields["_params"]
+        var offset = _kernel_buffer(py_item(fields, nk[].k_random_offset_), count, "<f4", context)
+        var params = py_item(fields, nk[].k__params)
         if py_type(params) is not b.tuple or len(params) != 2:
             raise Error("stored RBF parameters must contain two native values")
-        out = host_archive_typed(Python.tuple(rows, count), "<f4", context["output_context"])
+        out = host_archive_typed(Python.tuple(rows, count), "<f4", py_item(context, nk[].k_output_context))
         _ = py_call(_kernel_entry("rbf_sampler_transform", context),
             Python.list(classical_address(weights), classical_address(offset), classical_address(x), classical_address(out)),
-            Python.list(features, count, params[0], params[1], fields["sigma_"], fields["scale_"], rows))
+            Python.list(features, count, params[0], params[1], py_item(fields, nk[].k_sigma_), py_item(fields, nk[].k_scale_), rows))
         _ = weights^
         _ = offset^
         _ = params^
     _ = x^
-    if public and py_get(context, "ndarray") is not None:
+    if public and py_get(context, nk[].k_ndarray) is not None:
         return classical_input(host_tree_wide(out, context) if kind == "kernel_ridge" else out, context, "prediction")
     return out

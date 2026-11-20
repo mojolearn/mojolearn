@@ -9,10 +9,12 @@ from bindings.py_cpython_table import cpython_table
 from bindings.py_balanced import py_call, py_type, py_get
 from bindings.classical_warnings_unpack import classical_warning
 from bindings.native_caller_frame_pack import native_frame_globals
+from bindings.host_rest_keys_unpack import host_rest_keys
 
 
 def host_inference_feature_names(model: PythonObject, fields: PythonObject, context: PythonObject) raises:
-    if py_get(fields, "feature_names_in_") is None:
+    var nk = host_rest_keys()
+    if py_get(fields, nk[].k_feature_names_in_) is None:
         return
     var b = native_loaded_module("builtins")
     var name = String(py_call(b.type.__getattribute__, py_type(model), "__name__"))
@@ -37,7 +39,7 @@ def host_inference_feature_names(model: PythonObject, fields: PythonObject, cont
         raise cpy.unsafe_get_error()
     var code = PythonObject(from_owned=pointer)
     var line = cpy.lib.get_function[Int32]("PyFrame_GetLineNumber")(frame._obj_ptr)
-    var module = py_get(native_frame_globals(frame), "__name__", "")
+    var module = py_get(native_frame_globals(frame), nk[].k___name__, "")
     if py_type(module) is not b.str:
         module = PythonObject("")
     classical_warning(message, b.UserWarning, context, Python.tuple(code.co_filename, Int(line), module), "HostInferenceWarning")
