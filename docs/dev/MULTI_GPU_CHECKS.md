@@ -32,10 +32,10 @@ The fault arm is one of two kinds:
 
 - `shift`: the drivers' own native negative control. With `MOJOLEARN_PAR_DRIVER_SABOTAGE=1` and
   `MOJOLEARN_HOST_ALLOW_SABOTAGE=1` every shard on an owner above rank 0 reads one position early. It does nothing on
-  one device, so a differing digest also proves that a second owner did work. Used by the 13 units whose entries
+  one device, so a differing digest also proves that a second owner did work. Used by the 15 units whose entries
   honour it (scalers, RBF sampler, forest fits, `ParallelQueries`, `ReferenceShardedNeighbors`, ARIMA and
   Holt-Winters fits).
-- `input`: the other 41 units have no device-level fault switch in a shipped binary. Their fault arm runs the multi
+- `input`: the other 39 units have no device-level fault switch in a shipped binary. Their fault arm runs the multi
   arm on a perturbed fixture. That shows the digest covers a computed result and that the verdict can read differ. It
   does not show that a device-level defect would be caught. A device-level fault for those drivers needs a native
   switch, which does not exist.
