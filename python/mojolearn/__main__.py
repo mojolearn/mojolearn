@@ -351,7 +351,7 @@ def build_parser():
     v.add_argument("--fit-both", dest="fit_both", action="store_true",
                    help="CHECK A FIT ON THE GPU AND ON THE CPU of this machine, for an "
                         "estimator whose fitted model cannot be loaded on the CPU: "
-                        "--estimator CLASS (built with --params, a JSON object of constructor "
+                        "--estimator CLASS (built with --fit-params, a JSON object of constructor "
                         "arguments) is fitted on --fit-inputs (and --fit-targets) once on each "
                         "side, the CPU side in a child process that selects the CPU binaries, "
                         "and each fitted model answers --method for --inputs. Same report and "
@@ -362,7 +362,9 @@ def build_parser():
                    help="with --fit-both: the training rows, a .npy or .npz file")
     v.add_argument("--fit-targets", dest="fit_targets", metavar="FILE", default=None,
                    help="with --fit-both: the training targets, when the estimator takes them")
-    v.add_argument("--params", metavar="JSON", default=None,
+    # `--fit-params`, not `--params`: argparse accepts unique prefixes, so `--params` made the retired `--par X` parse
+    # as `--params X` instead of a usage error (verify smoke 44831067327, test_retired_two_device_flags_are_usage_errors).
+    v.add_argument("--fit-params", dest="params", metavar="JSON", default=None,
                    help="with --fit-both: the constructor arguments as a JSON object")
     v.add_argument("--fit-rows", dest="fit_rows", type=int, default=None, metavar="N",
                    help="with --fit-both: fit both sides on the first N training rows only")

@@ -100,7 +100,7 @@ def _load_inputs(path):
 def cmd_check(args):
     """`verify --check MODEL --estimator CLASS --inputs FILE [--method NAME]`,
     and the fit-on-both-sides form `verify --fit-both --estimator CLASS
-    --inputs FILE --fit-inputs FILE [--fit-targets FILE] [--params JSON]
+    --inputs FILE --fit-inputs FILE [--fit-targets FILE] [--fit-params JSON]
     [--fit-rows N] [--method NAME]`."""
     json_out = getattr(args, "json", False)
     fit_both = bool(getattr(args, "fit_both", False))
