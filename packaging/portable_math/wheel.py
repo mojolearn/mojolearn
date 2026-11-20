@@ -64,6 +64,12 @@ NUMPY_ORACLES = {
     # install hint) so that verify does not reach into the product's
     # _optional_numpy guard. Product paths never call it.
     "mojolearn/_verify_model.py",
+    # The GPU/CPU check: the one module `verify --cross-check` and
+    # `verify --check` both run, and the `--check` controller. They describe and
+    # compare outputs the product already returned (shape, dtype, SHA-256, first
+    # differing element) and load the user's rows file; NumPy is imported
+    # lazily inside those functions. Product paths never call them.
+    "mojolearn/_check_both.py", "mojolearn/_verify_check.py",
 }
 
 

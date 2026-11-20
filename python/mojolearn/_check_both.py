@@ -408,7 +408,8 @@ def sides_lines(sides):
 
 def format_check(result):
     """The report of `check_estimator`: the two sides, then one verdict line."""
-    title = f"# mojolearn check: {result.get('estimator')}.{result.get('method')} on the GPU and on the CPU"
+    what = ".".join(str(x) for x in (result.get("estimator"), result.get("method")) if x)
+    title = f"# mojolearn check: {what} on the GPU and on the CPU"
     if not result.get("ran"):
         head = "REFUSED" if result.get("refused") else "NOT RUN"
         return "\n".join([title, "", f"{head}: {result.get('reason')}"])
