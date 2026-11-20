@@ -431,11 +431,19 @@ def shape_unit[I: GbdtImage](unit: Int) raises:
 def _run_cpu(mut report: Report) raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     var cases = report.cases(SHAPE_UNITS)
+    # A host fit that TRAPS (CPU box cpc1-0010: rc 132 inside the border
+    # grid's parallel range, no case printed) ends the process, so no
+    # `except` and no report can name its unit. Each unit therefore prints a
+    # line when it starts and one when it returns or raises; after a trap the
+    # units with a start line and no done line are the ones that were in
+    # flight (at most one per core), and the trapping unit is among them.
     def task(unit: Int) {imm cases}:
+        print("gbdt_shape_sweep unit", unit, "start")
         try:
             shape_unit[_HostFit](unit)
         except error:
             cases.fail(unit, error)
+        print("gbdt_shape_sweep unit", unit, "done")
     report.parallel(task, SHAPE_UNITS)
 
 
