@@ -31,6 +31,10 @@ from bindings.trees_public_auxiliary_door import forest_auxiliary, forest_shape
 from bindings.trees_public_state_pack import forest_restore_state, tree_is_fitted
 from bindings.trees_side_records_unpack import trees_admit_parameters, trees_finite_mark, trees_finite_clear
 from bindings.trees_keys_unpack import trees_keys
+from bindings.native_operation_codes import OP_LEAF_NONE
+from bindings.operation_names_trees import (
+    TREES_OPN_TREES_PUBLIC_FOREST_APPLY, TREES_OPN_TREES_PUBLIC_FOREST_CAPTURE_MODE, TREES_OPN_TREES_PUBLIC_FOREST_DEPTH, TREES_OPN_TREES_PUBLIC_FOREST_EFFECTIVE_MODE, TREES_OPN_TREES_PUBLIC_FOREST_FIT, TREES_OPN_TREES_PUBLIC_FOREST_IS_FITTED, TREES_OPN_TREES_PUBLIC_FOREST_N_LEAVES, TREES_OPN_TREES_PUBLIC_FOREST_ORDERED_RESIDENT_AUTO, TREES_OPN_TREES_PUBLIC_FOREST_PREDICT, TREES_OPN_TREES_PUBLIC_FOREST_PREDICTION_ENGINE, TREES_OPN_TREES_PUBLIC_FOREST_PREDICT_WITH_LEAVES, TREES_OPN_TREES_PUBLIC_FOREST_PROBA, TREES_OPN_TREES_PUBLIC_FOREST_REFRESH, TREES_OPN_TREES_PUBLIC_FOREST_SCORE, TREES_OPN_TREES_PUBLIC_FOREST_SETSTATE, TREES_OPN_TREES_PUBLIC_FOREST_SET_PARAMS, TREES_OPN_TREES_PUBLIC_FOREST_STAGED_PREDICT, TREES_OPN_TREES_PUBLIC_FOREST_VALIDATE_PARAMS,
+)
 from bindings.py_balanced import py_item
 
 
@@ -61,37 +65,43 @@ def _set_params(model: PythonObject, values: PythonObject, context: PythonObject
     return model
 
 
-def forest_public_operation(model: PythonObject, operation: String, args: PythonObject,
+def forest_public_operation(model: PythonObject, operation: Int, opname: String, args: PythonObject,
                             context: PythonObject) raises -> PythonObject:
+    """One `trees_public_forest_*` method by its leaf code
+    (bindings/operation_names_trees.mojo; lane bw3-trees: 18 String tests ->
+    integer compares). `opname` is the table's String, borrowed: the shape
+    owner takes it and the unknown-operation text prints it. OP_LEAF_NONE is
+    a name the table does not hold: it takes the same steps and raises the
+    same text as before."""
     classical_check_layout(model, context)
-    if operation == "trees_public_forest_setstate":
+    if operation == TREES_OPN_TREES_PUBLIC_FOREST_SETSTATE:
         return forest_restore_state(model, args[0], context)
-    if operation == "trees_public_forest_is_fitted":
+    if operation == TREES_OPN_TREES_PUBLIC_FOREST_IS_FITTED:
         return tree_is_fitted(model, True)
-    if operation == "trees_public_forest_depth" or operation == "trees_public_forest_n_leaves":
-        return forest_shape(model, operation, context)
-    if operation == "trees_public_forest_set_params":
+    if operation == TREES_OPN_TREES_PUBLIC_FOREST_DEPTH or operation == TREES_OPN_TREES_PUBLIC_FOREST_N_LEAVES:
+        return forest_shape(model, opname, context)
+    if operation == TREES_OPN_TREES_PUBLIC_FOREST_SET_PARAMS:
         return _set_params(model, args[0], context)
     # The ForestProtocol parameter and mode methods, one call each (lane
     # py-trees, 2026-11-14: their Python bodies moved here). None of them
     # admits X or touches fitted state beyond what the method did.
-    if operation == "trees_public_forest_refresh":
+    if operation == TREES_OPN_TREES_PUBLIC_FOREST_REFRESH:
         _ = forest_refresh(model, forest_kind(model, context), context)
         return PythonObject(None)
-    if operation == "trees_public_forest_validate_params":
+    if operation == TREES_OPN_TREES_PUBLIC_FOREST_VALIDATE_PARAMS:
         forest_validate_stored(model, context)
         return PythonObject(None)
-    if operation == "trees_public_forest_capture_mode":
+    if operation == TREES_OPN_TREES_PUBLIC_FOREST_CAPTURE_MODE:
         _ = forest_capture_mode(py_fields(model), context)
         return PythonObject(None)
-    if operation == "trees_public_forest_effective_mode":
+    if operation == TREES_OPN_TREES_PUBLIC_FOREST_EFFECTIVE_MODE:
         return PythonObject(forest_effective_mode(py_fields(model), context))
-    if operation == "trees_public_forest_prediction_engine":
+    if operation == TREES_OPN_TREES_PUBLIC_FOREST_PREDICTION_ENGINE:
         return PythonObject(forest_prediction_engine(py_fields(model), context))
-    if operation == "trees_public_forest_ordered_resident_auto":
+    if operation == TREES_OPN_TREES_PUBLIC_FOREST_ORDERED_RESIDENT_AUTO:
         return PythonObject(forest_ordered_resident_auto(model, py_fields(model), context))
-    if operation == "trees_public_forest_apply" or operation == "trees_public_forest_predict_with_leaves" or operation == "trees_public_forest_staged_predict":
-        var method = String(operation[byte=String("trees_public_forest_").byte_length():])
+    if operation == TREES_OPN_TREES_PUBLIC_FOREST_APPLY or operation == TREES_OPN_TREES_PUBLIC_FOREST_PREDICT_WITH_LEAVES or operation == TREES_OPN_TREES_PUBLIC_FOREST_STAGED_PREDICT:
+        var method = String(opname[byte=String("trees_public_forest_").byte_length():])
         # Retained e087692fd public baseline: these auxiliary APIs return
         # Array/tuple-of-Arrays even externally with NumPy loaded. Preserve
         # that boundary and Float32 means, including regressors.
@@ -102,14 +112,15 @@ def forest_public_operation(model: PythonObject, operation: String, args: Python
     # identity record of the stored constructor arguments lives in the
     # native side table (bindings/trees_side_records.mojo).
     trees_admit_parameters(model, fields, py_type(model)._parameter_names, context)
-    var fitting = operation == "trees_public_forest_fit"
+    var fitting = operation == TREES_OPN_TREES_PUBLIC_FOREST_FIT
     if fitting:
         # Parameter validation precedes input admission and conversion.
         forest_check_fit_device(model, context)
     classical_admit_value(args, context)
     var name = classical_estimator_name(model)
     if not fitting:
-        classical_require_fitted(model, False, "score" if operation.endswith("score") else "predict", context)
+        var scoring = operation == TREES_OPN_TREES_PUBLIC_FOREST_SCORE or (operation == OP_LEAF_NONE and opname.endswith("score"))
+        classical_require_fitted(model, False, "score" if scoring else "predict", context)
     # `args` (X among them) was admitted just above: the X check reuses that
     # admission instead of walking X again (perf3-nbr-msel-trees).
     # The one admission of X (bindings/admitted_input_unpack.mojo): refused with
@@ -139,16 +150,16 @@ def forest_public_operation(model: PythonObject, operation: String, args: Python
         var matrix = admitted.copy()
         classical_check_width(matrix.cols, Int(py=py_item(fields, nk[].k_n_features_in_)), name)
         _feature_check(model, fields, args[0], context)
-        if operation == "trees_public_forest_predict":
+        if operation == TREES_OPN_TREES_PUBLIC_FOREST_PREDICT:
             result = forest_public_predict(model, kind, matrix, False, False, context)
-        elif operation == "trees_public_forest_proba":
+        elif operation == TREES_OPN_TREES_PUBLIC_FOREST_PROBA:
             result = forest_public_predict(model, kind, matrix, True, False, context)
-        elif operation == "trees_public_forest_score":
+        elif operation == TREES_OPN_TREES_PUBLIC_FOREST_SCORE:
             return forest_score_public(model, kind, matrix, args[1], args[2], context)
         else:
-            raise Error("unknown native public forest operation " + operation)
+            raise Error("unknown native public forest operation " + opname)
         _ = matrix^
-        return _public_result(result, operation, classifier, context)
+        return _public_result(result, operation == TREES_OPN_TREES_PUBLIC_FOREST_PREDICT, classifier, context)
     var rows = admitted.rows
     if fitting:
         var y = args[1]
@@ -187,7 +198,7 @@ def forest_public_operation(model: PythonObject, operation: String, args: Python
                 py_setitem(fields, nk[].k_feature_names_in_, feature_names)
             py_setitem(fields, nk[].k__mojolearn_fitted, PythonObject(True))
         return result
-    raise Error("unknown native public forest operation " + operation)
+    raise Error("unknown native public forest operation " + opname)
 
 
 def _forest_fit_guarded(model: PythonObject, fit_args: PythonObject, depth: Int, finite: Bool, name: String,
@@ -216,11 +227,11 @@ def _forest_fit_restore(model: PythonObject, depth: Int) raises:
         _ = py_call(fields.pop, "_mojolearn_fitting", PythonObject(None))
 
 
-def _public_result(var result: PythonObject, operation: String, classifier: Bool,
+def _public_result(var result: PythonObject, predict: Bool, classifier: Bool,
                    context: PythonObject) raises -> PythonObject:
     var nk = trees_keys()
     if classical_is_array(result, context) and py_get(context, nk[].k_ndarray) is not None and _outside():
-        if operation == "trees_public_forest_predict" and not classifier and String(result.dtype) == "<f4":
+        if predict and not classifier and String(result.dtype) == "<f4":
             var wide = admitted_array(result.shape, "<f8", context)
             trees_cast(trees_address(result), "<f4", trees_address(wide), "<f8", Int(py=result.size), context)
             _ = result

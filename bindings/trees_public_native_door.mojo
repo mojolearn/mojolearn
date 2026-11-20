@@ -99,7 +99,7 @@ def trees_public_operation(model: PythonObject, operation: Int, name: String, ar
         if operation < TREES_END_PUBLIC_IFOREST:
             return iforest_public_operation(model, name, args, context)
         if operation < TREES_END_PUBLIC_FOREST:
-            return forest_public_operation(model, name, args, context)
+            return forest_public_operation(model, operation, name, args, context)
         if operation < TREES_END_PUBLIC_GBDT_ADAPTER:
             return gbdt_adapter_public_operation(model, name, args, context)
         if operation < TREES_END_PUBLIC_GBDT_MODEL:
@@ -161,7 +161,7 @@ def _trees_prefixed(model: PythonObject, operation: String, args: PythonObject,
     if operation.startswith("trees_public_iforest_"):
         return iforest_public_operation(model, operation, args, context)
     if operation.startswith("trees_public_forest_"):
-        return forest_public_operation(model, operation, args, context)
+        return forest_public_operation(model, OP_LEAF_NONE, operation, args, context)
     if operation.startswith("trees_public_gbdt_adapter_"):
         return gbdt_adapter_public_operation(model, operation, args, context)
     if operation.startswith("trees_public_gbdt_model_"):
