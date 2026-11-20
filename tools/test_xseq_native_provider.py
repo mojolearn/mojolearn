@@ -52,7 +52,7 @@ def test_public_candidate_probe_has_all_recurrent_cells_and_two_label_shapes():
 
 def test_builtin_schedule_reuses_native_spec_and_kernel_directly():
     source = (ROOT / 'bindings/optimizer_schedule_native_door.mojo').read_text()
-    operation = source.split('def schedule_operation(', 1)[1]
+    operation = source.split('def schedule_run(', 1)[1]
     assert 'entries["lr_schedule_series"]' not in operation
     assert 'entries["lr_schedule_at"]' not in operation
     # One typed evaluation plan (89f667f395) serves the series and the single rate; its fill
