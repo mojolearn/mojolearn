@@ -3419,7 +3419,22 @@ def _quantize_training_columns(
             # the column decides its own NaN mode, and a column that has
             # NaNs spends ONE of `border_count` on the sentinel. The grid
             # was built on the device above (`device_float_borders`).
-            column_nan_treatment[f] = nan_value_treatment(dev_modes[dev_k])
+            # A float column records the treatment of the nan_mode the fit was
+            # GIVEN, not only of the mode its own rows needed. A column with a
+            # NaN in the learn rows has `dev_modes[dev_k] == option`, so its
+            # code is what it was. A column with none used to record AsIs, and
+            # a later predict refused its first missing value ("There are NaNs
+            # in feature number N but there were no NaNs in the learn
+            # dataset"). The rule is the algorithm's own: under Min a missing
+            # value is below every observed value (AsFalse, -inf, bin 0, the
+            # `value > border` false side of every split on the column), under
+            # Max above every one (AsTrue, +inf, the last bin). The column
+            # still gets no NaN border (its mode stays Forbidden for the border
+            # budget), so no bin of a row without a NaN moves. Forbidden keeps
+            # AsIs and the refusal: there the caller said a NaN is an error.
+            # One-hot and CTR columns keep AsIs: a code has no order to be
+            # below or above.
+            column_nan_treatment[f] = nan_value_treatment(nan_mode_opt_early)
             fold_counts.append(len(dev_borders[dev_k]))
             borders.append(dev_borders[dev_k].copy())
             dev_k += 1
