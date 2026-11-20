@@ -12,7 +12,7 @@ resident operations with it held, see the table's module note); nothing
 here touches Python.
 """
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from core.hostptr import read_f32, read_i32
+from core.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot
@@ -30,7 +30,7 @@ from x_ann.tsne_device import tsne_fit_device
 from x_ann.ivf_pq_core import pq_len_of
 from x_ann.cagra_device import cagra_search_on
 from x_ann.device_ctx import x_ann_ctx
-from x_ann.io import upload_f32, upload_i32
+from x_ann.io import upload_f32_ptr, upload_i32_ptr
 from x_ann.ivf_pq_device import ivf_pq_search_device, ivf_sq_search_device, ivf_rabitq_search_device
 from x_ann.resident import x_ann_index_export_codes, x_ann_index_prepare, x_ann_index_release, x_ann_index_search
 
@@ -157,22 +157,23 @@ def ann_cagra_search_device_run(a: List[Int], p: List[Int]) raises -> Int:
         raise Error("CAGRA search: rs must be >= 0")
     if m <= 0 or k <= 0 or L < k or width < 1 or max_iter < 1 or n_seeds < 1 or n_seeds > n:
         raise Error("CAGRA search: need k >= 1, itopk_size >= k, search_width >= 1, max_iterations >= 1, 1 <= n_seeds <= n")
-    var x = read_f32(a[0], n * d)
-    var g = read_i32(a[1], n * deg)
-    var q = read_f32(a[2], m * d)
     var od = List[Float32]()
     var oi = List[Int32]()
     # cpu3-bindings: `cagra_search_device`'s uploads, then the graph's
     # row-id range refusal as one device pass over the uploaded graph
-    # (one Int32 back) instead of a host walk over n * deg ids
+    # (one Int32 back) instead of a host walk over n * deg ids.
+    # Lane fx-board-1p2 (2026-11-20): the dataset, the graph and the queries
+    # are uploaded from the caller's arrays (kept alive by the door for the
+    # whole call; each upload is drained before it returns); the three list
+    # copies of them per call are gone.
     var ctx = x_ann_ctx()
-    var dx = upload_f32(ctx, x)
-    var dg = upload_i32(ctx, g)
+    var dx = upload_f32_ptr(ctx, f32_ptr(a[0]), n * d)
+    var dg = upload_i32_ptr(ctx, i32_ptr(a[1]), n * deg)
     if device_any_index_out_of_range(ctx, dg, n * deg, n):
         raise Error("CAGRA search: the graph names a row outside the dataset")
     cagra_search_on(
         ctx, dx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), n, d,
-        dg.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), deg, q, m, k, L, width,
+        dg.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), deg, f32_ptr(a[2]), m, k, L, width,
         max_iter, n_seeds, od, oi, rs, status,
     )
     _ = dg^
