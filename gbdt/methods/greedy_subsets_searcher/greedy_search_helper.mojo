@@ -2964,6 +2964,18 @@ def feature_groups_for(policy: Int, n_features: Int) -> Int:
 
 
 
+def cell_grid_blocks(items: Int, block: Int) -> Int:
+    """Grid x of a launch with one thread per histogram cell (or per group
+    of cells): `ceil(items / block)`, at least one block. A layout whose
+    features all have zero folds has no cells, and a grid of zero blocks is
+    not a launch the device accepts; the kernels launched through here test
+    their index against the cell count, so the one block does nothing."""
+    var b = (items + block - 1) // block
+    if b < 1:
+        b = 1
+    return b
+
+
 def sym_argmax_blocks_for(hist_cells_per_leaf: Int) -> Int:
     """The symmetric score launch's grid (and the `out_score`/`out_bin`
     partials it writes): `min(64, ceil(cells / 256))`, at least 1, the
@@ -4556,7 +4568,7 @@ def enqueue_symmetric_parent_histogram_copy(
             dense_ids.unsafe_ptr(), right_leaf_ids.unsafe_ptr(),
             Int32(stat_count), Int32(hist_cells_per_leaf), hist.unsafe_ptr(),
             grid_dim=(
-                (hist_cells_per_leaf * stat_count // 4 + 255) // 256,
+                cell_grid_blocks(hist_cells_per_leaf * stat_count // 4, 256),
                 n_live, 1,
             ),
             block_dim=(256, 1, 1),
@@ -4566,7 +4578,7 @@ def enqueue_symmetric_parent_histogram_copy(
             dense_ids.unsafe_ptr(), right_leaf_ids.unsafe_ptr(),
             Int32(stat_count), Int32(hist_cells_per_leaf), hist.unsafe_ptr(),
             grid_dim=(
-                (hist_cells_per_leaf * stat_count + 255) // 256,
+                cell_grid_blocks(hist_cells_per_leaf * stat_count, 256),
                 n_live, 1,
             ),
             block_dim=(256, 1, 1),
@@ -6275,7 +6287,7 @@ def run_tree_layout_traced[
                         sub_from.unsafe_ptr(), sub_what.unsafe_ptr(),
                         Int32(hist_cells_per_leaf), hist.unsafe_ptr(),
                         grid_dim=(
-                            (hist_cells_per_leaf // 4 + 255) // 256,
+                            cell_grid_blocks(hist_cells_per_leaf // 4, 256),
                             half, stat_count
                         ),
                         block_dim=(256, 1, 1),
@@ -6285,7 +6297,7 @@ def run_tree_layout_traced[
                         sub_from.unsafe_ptr(), sub_what.unsafe_ptr(),
                         Int32(hist_cells_per_leaf), hist.unsafe_ptr(),
                         grid_dim=(
-                            (hist_cells_per_leaf + 255) // 256,
+                            cell_grid_blocks(hist_cells_per_leaf, 256),
                             half, stat_count
                         ),
                         block_dim=(256, 1, 1),
