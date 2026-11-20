@@ -377,7 +377,10 @@ def full_reset_params_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") ->
     except error:
         if String(error) == PYTHON_ERROR_PENDING:
             return optimizer_python_error(error)
-        if String(error).startswith("RecursionError:"):
+        # Python 3.10 counts C-level calls against the recursion limit, so a deep
+        # cyclic chain can fail inside a std PythonObject call, whose Error keeps
+        # only the message: it is still a RecursionError.
+        if String(error).startswith("RecursionError:") or String(error).startswith("maximum recursion depth exceeded"):
             return raise_python_exception(error_without_class(error, "RecursionError"), ExceptionType("PyExc_RecursionError"))
         if String(error).startswith("RuntimeError:"):
             return raise_python_exception(error_without_class(error, "RuntimeError"), ExceptionType("PyExc_RuntimeError"))
