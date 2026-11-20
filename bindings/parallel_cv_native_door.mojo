@@ -37,14 +37,17 @@ from bindings.msel_parallel_wire_pack import (
 )
 from bindings.msel_parallel_witness_pack import msel_parallel_capture
 from bindings.optimizer_public_words_unpack import PENDING_PYTHON_ERROR, PYTHON_ERROR_PENDING
+from bindings.parallel_keys_unpack import parallel_keys
+from bindings.py_balanced import py_item
 
 
 def msel_parallel_initialize(context: PythonObject) raises:
-    var metadata = context["family_msel_parallel"]
+    var nk = parallel_keys()
+    var metadata = py_item(context, nk[].k_family_msel_parallel)
     # These globals belong to this physical DSO. The tokenizer owner's
     # import-time initialization does not initialize a separate dev CV owner.
-    process_initialize(String(metadata["executable"]), metadata["environ"], String(metadata["vendor"]))
-    codec_initialize(context["array_class"], PythonObject(None), PythonObject(None))
+    process_initialize(String(py_item(metadata, nk[].k_executable)), py_item(metadata, nk[].k_environ), String(py_item(metadata, nk[].k_vendor)))
+    codec_initialize(py_item(context, nk[].k_array_class), PythonObject(None), PythonObject(None))
 
 
 def _devices(value: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -61,11 +64,12 @@ def _devices(value: PythonObject, context: PythonObject) raises -> PythonObject:
         if selected[i] in seen:
             raise Error("ValueError: devices must not repeat a worker index")
         _ = py_call(seen.append, selected[i])
-    var metadata = context["family_msel_parallel"]
-    var vendor = String(metadata["vendor"])
+    var nk = parallel_keys()
+    var metadata = py_item(context, nk[].k_family_msel_parallel)
+    var vendor = String(py_item(metadata, nk[].k_vendor))
     if vendor == "metal" and (len(selected) != 1 or Int(py=selected[0]) != 0):
         raise Error("NotImplementedError: Metal cross-validation supports devices=(0,) only")
-    if vendor != "cuda" and vendor != "hip" and vendor != "metal" and not (vendor == "cpu" and Bool(py=metadata["cpu_only"])):
+    if vendor != "cuda" and vendor != "hip" and vendor != "metal" and not (vendor == "cpu" and Bool(py=py_item(metadata, nk[].k_cpu_only))):
         raise Error("NotImplementedError: parallel cross-validation requires CUDA, HIP, Metal device zero or a CPU-only install")
     return selected
 
@@ -94,13 +98,14 @@ def _worker_error(error: Error, context: PythonObject) raises -> String:
                 cpy.lib.get_function[NoneType]("Py_DecRef")(words[i])
     var b = native_loaded_module("builtins")
     var name = String("native worker exception")
+    var nk = parallel_keys()
     if owned[0] is not None and py_type(owned[0]) is b.type:
-        name = String(py_call(b.type.__dict__["__name__"].__get__, owned[0]))
+        name = String(py_call(py_item(b.type.__dict__, nk[].k___name__).__get__, owned[0]))
     var value = owned[1]
     if py_type(value) is b.str:
         return name + ": " + String(value)
     if value is not None:
-        var args = py_call(context["family_msel_parallel"]["exception_args"], value, py_type(value))
+        var args = py_call(py_item(py_item(context, nk[].k_family_msel_parallel), nk[].k_exception_args), value, py_type(value))
         if py_type(args) is b.tuple and len(args) > 0 and py_type(args[0]) is b.str:
             return name + ": " + String(args[0])
     return name + ": native fold failed (non-string exception payload retained by its native boundary)"
@@ -171,7 +176,8 @@ def _worker_request(socket: PythonObject, envelope: PythonObject, mut inventory:
     # worker and is updated in place, including before a result-send failure.
     # The pinned parser rejects this handler as the final nested statement of
     # the worker's try/finally (https://github.com/modular/modular/issues/6718).
-    var sequence = Int(py=py_get(envelope[0], "sequence", -1))
+    var nk = parallel_keys()
+    var sequence = Int(py=py_get(envelope[0], nk[].k_sequence, -1))
     try:
         var request = envelope[1]
         var b = native_loaded_module("builtins")
@@ -180,7 +186,7 @@ def _worker_request(socket: PythonObject, envelope: PythonObject, mut inventory:
         var result = PythonObject(None)
         if String(request[0]) == "identity" and len(request) == 1:
             if inventory is None:
-                inventory = native_worker_inventory(String(metadata["vendor"]), metadata["environ"])
+                inventory = native_worker_inventory(String(py_item(metadata, nk[].k_vendor)), py_item(metadata, nk[].k_environ))
             result = inventory
         elif String(request[0]) == "fold":
             if inventory is None:
@@ -203,7 +209,8 @@ def _worker_request(socket: PythonObject, envelope: PythonObject, mut inventory:
 
 def msel_parallel_worker(argv: PythonObject, context: PythonObject) raises:
     classical_connect_numpy(context)
-    var metadata = context["family_msel_parallel"]
+    var nk = parallel_keys()
+    var metadata = py_item(context, nk[].k_family_msel_parallel)
     var socket = process_worker_connect(argv)
     var inventory = PythonObject(None)
     # The run's X and y once a "data" request arrives (none until then).
@@ -238,45 +245,46 @@ def msel_parallel_require_batch(result: PythonObject, start: Int, count: Int) ra
 def msel_parallel_score(args: PythonObject, capture: Bool, context: PythonObject) raises -> PythonObject:
     # All configuration, callback refusal and fold validation precede spawn.
     var trace = Python.dict()
-    py_setitem(trace, "stages", Python.list("validate"))
-    py_setitem(trace, "workers", Python.list())
-    py_setitem(trace, "waves", Python.list())
-    py_setitem(trace, "assignments", Python.list())
-    py_setitem(trace, "status", "VALIDATING")
-    py_setitem(trace, "closed", True)
-    py_setitem(context["family_msel_parallel"], "last_run", trace)
+    var nk = parallel_keys()
+    py_setitem(trace, nk[].k_stages, Python.list("validate"))
+    py_setitem(trace, nk[].k_workers, Python.list())
+    py_setitem(trace, nk[].k_waves, Python.list())
+    py_setitem(trace, nk[].k_assignments, Python.list())
+    py_setitem(trace, nk[].k_status, "VALIDATING")
+    py_setitem(trace, nk[].k_closed, True)
+    py_setitem(py_item(context, nk[].k_family_msel_parallel), nk[].k_last_run, trace)
     var devices = _devices(args[3], context)
     var prepared = msel_prepare_folds(args[0], args[1], args[2], args[4], args[5], args[6], args[7], context)
     var model = msel_parallel_model_pack(args[0], context)
     var scorer = msel_parallel_scorer_pack(prepared[3], context)
-    _ = py_call(trace["stages"].append, "validated")
+    _ = py_call(py_item(trace, nk[].k_stages).append, "validated")
     if capture:
         var cls = py_type(args[0])
-        var accepted = context["family_msel_parallel"]["capture_classes"]
+        var accepted = py_item(py_item(context, nk[].k_family_msel_parallel), nk[].k_capture_classes)
         if cls is not accepted[0] and cls is not accepted[1]:
             raise Error("TypeError: native CV model captures require the connected boosting classifier or regressor")
     var pool = process_pool_create(devices, False, "mojolearn._native_parallel_cv_worker")
     var environment = Python.dict()
-    py_setitem(environment, "MOJOLEARN_NATIVE_CV_NUMPY", "1" if msel_wire_needs_numpy(model) or msel_wire_needs_numpy(scorer) else "0")
-    py_setitem(pool, "environment", environment)
+    py_setitem(environment, nk[].k_MOJOLEARN_NATIVE_CV_NUMPY, "1" if msel_wire_needs_numpy(model) or msel_wire_needs_numpy(scorer) else "0")
+    py_setitem(pool, nk[].k_environment, environment)
     var scores = List[Float64]()
     var captures = Python.list()
     try:
-        py_setitem(trace, "closed", False)
-        py_setitem(trace, "status", "RUNNING")
-        _ = py_call(trace["stages"].append, "start")
+        py_setitem(trace, nk[].k_closed, False)
+        py_setitem(trace, nk[].k_status, "RUNNING")
+        _ = py_call(py_item(trace, nk[].k_stages).append, "start")
         var requests = Python.list()
         for i in range(len(devices)):  # driver-loop: one pre-fit identity request per selected worker
             _ = py_call(requests.append, Python.tuple("identity"))
         var identities = process_pool_map(pool, requests)
         var pids = Python.list()
-        for i in range(len(pool["workers"])):  # driver-loop: authenticate inventory against actual spawned PIDs
-            _ = py_call(pids.append, pool["workers"][i]["pid"])
-        py_setitem(trace, "workers", pids)
-        native_require_worker_inventory(identities, String(context["family_msel_parallel"]["vendor"]), pids,
+        for i in range(len(py_item(pool, nk[].k_workers))):  # driver-loop: authenticate inventory against actual spawned PIDs
+            _ = py_call(pids.append, py_item(py_item(pool, nk[].k_workers)[i], nk[].k_pid))
+        py_setitem(trace, nk[].k_workers, pids)
+        native_require_worker_inventory(identities, String(py_item(py_item(context, nk[].k_family_msel_parallel), nk[].k_vendor)), pids,
                                         Int(external_call["getpid", Int32]()))
-        py_setitem(trace, "identities", identities)
-        _ = py_call(trace["stages"].append, "identity")
+        py_setitem(trace, nk[].k_identities, identities)
+        _ = py_call(py_item(trace, nk[].k_stages).append, "identity")
         # X and y go to every worker once (N057); the fold requests below
         # carry only index arrays.
         requests = Python.list()
@@ -285,17 +293,17 @@ def msel_parallel_score(args: PythonObject, capture: Bool, context: PythonObject
         var loaded = process_pool_map(pool, requests)
         if py_type(loaded) is not native_loaded_module("builtins").list or len(loaded) != len(devices):
             raise Error("ValueError: cross-validation workers did not all receive the run's X and y")
-        _ = py_call(trace["stages"].append, "data")
+        _ = py_call(py_item(trace, nk[].k_stages).append, "data")
         var folds = prepared[2]
         var width = len(devices)
         for start in range(0, len(folds), width):  # driver-loop: bounded whole-fold waves
             requests = Python.list()
-            _ = py_call(trace["waves"].append, min(width, len(folds) - start))
+            _ = py_call(py_item(trace, nk[].k_waves).append, min(width, len(folds) - start))
             for i in range(start, min(start + width, len(folds))):  # driver-loop: independent fresh estimator per fold
                 var pair = folds[i]
-                _ = py_call(trace["assignments"].append, Python.tuple(i, devices[i - start], pids[i - start]))
+                _ = py_call(py_item(trace, nk[].k_assignments).append, Python.tuple(i, devices[i - start], pids[i - start]))
                 _ = py_call(requests.append, Python.tuple("fold_rows", i, model, scorer, pair[0], pair[1], capture))
-            _ = py_call(trace["stages"].append, "wave")
+            _ = py_call(py_item(trace, nk[].k_stages).append, "wave")
             var result = process_pool_map(pool, requests)
             msel_parallel_require_batch(result, start, len(requests))
             for i in range(len(result)):  # driver-loop: consume in logical fold order, never completion order
@@ -309,20 +317,21 @@ def msel_parallel_score(args: PythonObject, capture: Bool, context: PythonObject
             process_pool_close(pool)
         except cleanup_error:
             cleanup += "; process cleanup also failed: " + _worker_error(cleanup_error, context)
-        py_setitem(trace, "closed", len(pool["workers"]) == 0)
-        py_setitem(trace, "status", "FAILED")
-        py_setitem(trace, "error", failure + cleanup)
-        _ = py_call(trace["stages"].append, "close")
+        py_setitem(trace, nk[].k_closed, len(py_item(pool, nk[].k_workers)) == 0)
+        py_setitem(trace, nk[].k_status, "FAILED")
+        py_setitem(trace, nk[].k_error, failure + cleanup)
+        _ = py_call(py_item(trace, nk[].k_stages).append, "close")
         raise Error(failure + cleanup)
     process_pool_close(pool)
-    py_setitem(trace, "closed", len(pool["workers"]) == 0)
-    py_setitem(trace, "status", "COMPLETE")
-    _ = py_call(trace["stages"].append, "close")
+    py_setitem(trace, nk[].k_closed, len(py_item(pool, nk[].k_workers)) == 0)
+    py_setitem(trace, nk[].k_status, "COMPLETE")
+    _ = py_call(py_item(trace, nk[].k_stages).append, "close")
     var result = msel_f64_list(scores, context)
     return Python.tuple(result, captures) if capture else result
 
 
 def msel_parallel_operation(operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = parallel_keys()
     if operation == "family_msel_parallel_initialize":
         msel_parallel_initialize(context)
     elif operation == "family_msel_parallel_worker":
@@ -330,8 +339,8 @@ def msel_parallel_operation(operation: String, args: PythonObject, context: Pyth
     elif operation == "family_msel_parallel_score" or operation == "family_msel_parallel_capture":
         return msel_parallel_score(args, operation == "family_msel_parallel_capture", context)
     elif operation == "family_msel_parallel_inventory":
-        var metadata = context["family_msel_parallel"]
-        return native_worker_inventory(String(metadata["vendor"]), metadata["environ"])
+        var metadata = py_item(context, nk[].k_family_msel_parallel)
+        return native_worker_inventory(String(py_item(metadata, nk[].k_vendor)), py_item(metadata, nk[].k_environ))
     elif operation == "family_msel_parallel_require_inventory":
         if py_type(args[1]) is not py_type(PythonObject("")) or py_type(args[3]) is not py_type(PythonObject(0)):
             raise Error("TypeError: inventory route and parent PID require exact native metadata")
@@ -341,7 +350,7 @@ def msel_parallel_operation(operation: String, args: PythonObject, context: Pyth
     elif operation == "family_msel_parallel_model_pack":
         return msel_parallel_model_pack(args[0], context)
     elif operation == "family_msel_parallel_last_run":
-        return context["family_msel_parallel"]["last_run"]
+        return py_item(py_item(context, nk[].k_family_msel_parallel), nk[].k_last_run)
     elif operation == "family_msel_parallel_require_batch":
         if py_type(args[1]) is not py_type(PythonObject(0)) or py_type(args[2]) is not py_type(PythonObject(0)):
             raise Error("TypeError: native batch bounds must be integers")

@@ -24,6 +24,8 @@ from core.sha256 import Sha256
 from bindings.py_cpython_table import cpython_table
 from bindings.sha256_door import sha256_update, sha256_update_text
 from core.shared_slot import SharedSlot
+from bindings.parallel_keys_unpack import parallel_keys
+from bindings.py_balanced import py_item
 
 
 struct ParallelNeuralBoundary(Defaultable, Movable):
@@ -102,26 +104,27 @@ def _neural_init(owner: PythonObject, model: PythonObject, devices: PythonObject
     var b = PARALLEL_NEURAL_BOUNDARY.get_or_create_ptr()
     var shards = _parallel_int(logical, 1, 1024, "logical_shards")
     var operation = String()
+    var nk = parallel_keys()
     if py_type(model) is b[].mlp_cls:
         operation = "mlp_gradient"
         _ = mlp_snapshot(model)
     elif py_type(model) is b[].samba_cls:
         operation = "samba_gradient"
         var fields = py_call(b[].bi.object.__getattribute__, model, "__dict__")
-        var optimizer = py_call(b[].bi.object.__getattribute__, fields["optimizer"], "__dict__")
-        if Int(py=optimizer["accumulation_steps"]) != 1:
+        var optimizer = py_call(b[].bi.object.__getattribute__, py_item(fields, nk[].k_optimizer), "__dict__")
+        if Int(py=py_item(optimizer, nk[].k_accumulation_steps)) != 1:
             raise Error("parallel Samba requires accumulation_steps=1; logical_shards owns accumulation")
-        if fields["numeric_mode"] is not None and String(fields["numeric_mode"]) != "identical":
+        if py_item(fields, nk[].k_numeric_mode) is not None and String(py_item(fields, nk[].k_numeric_mode)) != "identical":
             raise Error("parallel training requires identical numeric mode")
         var values = _neural_values(model)
         _ = py_call(values.append, True)
         var snapshot = _neural_samba("snapshot", values)
-        if String(snapshot["numeric_mode"]) != "identical":
+        if String(py_item(snapshot, nk[].k_numeric_mode)) != "identical":
             raise Error("parallel training requires an identical model")
     else:
         raise Error("TypeError: ParallelNeuralTrainer supports SmallMLPTrainer and SambaStack")
     var pool = process_pool_create(devices, False, child_module)
-    if len(pool["devices"]) > shards:
+    if len(py_item(pool, nk[].k_devices)) > shards:
         raise Error("physical device count exceeds logical shard count")
     # One device (lane perf-trees-misc, 2026-11-05): the cooperative update
     # group IS the gradient worker's group (the same device, the same worker
@@ -132,8 +135,8 @@ def _neural_init(owner: PythonObject, model: PythonObject, devices: PythonObject
     # worker dispatch takes gradient and update requests alike; the update
     # reads only the request's state, never the worker's resident cache.
     var update_pool = pool
-    if len(pool["devices"]) != 1:
-        update_pool = process_pool_create(pool["devices"], True, child_module)
+    if len(py_item(pool, nk[].k_devices)) != 1:
+        update_pool = process_pool_create(py_item(pool, nk[].k_devices), True, child_module)
     py_setattr(owner, "_operation", operation)
     py_setattr(owner, "_pool", pool)
     py_setattr(owner, "_update_pool", update_pool)
@@ -283,10 +286,11 @@ def _cache_header(owner: PythonObject, snapshot: PythonObject, full: Bool) raise
     the version by applying them)."""
     var b = PARALLEL_NEURAL_BOUNDARY.get_or_create_ptr()
     var header = b[].bi.dict()
-    py_setitem(header, "epoch", owner._cache_epoch)
-    py_setitem(header, "version", owner._cache_version)
-    py_setitem(header, "full", snapshot if full else PythonObject(None))
-    py_setitem(header, "history", b[].bi.list() if full else owner._cache_history)
+    var nk = parallel_keys()
+    py_setitem(header, nk[].k_epoch, owner._cache_epoch)
+    py_setitem(header, nk[].k_version, owner._cache_version)
+    py_setitem(header, nk[].k_full, snapshot if full else PythonObject(None))
+    py_setitem(header, nk[].k_history, b[].bi.list() if full else owner._cache_history)
     return header
 
 
@@ -299,20 +303,21 @@ def _worker_model(header: PythonObject, samba: Bool) raises -> PythonObject:
     if b[].cache is None:
         b[].cache = b[].bi.dict()
     var cache = b[].cache
-    var full = header["full"]
+    var nk = parallel_keys()
+    var full = py_item(header, nk[].k_full)
     if full is not None:
-        py_setitem(cache, "epoch", header["epoch"])
-        py_setitem(cache, "version", header["version"])
-        py_setitem(cache, "state", full)
-        py_setitem(cache, "model", _neural_samba("from_state", _neural_values(full)) if samba else PythonObject(None))
+        py_setitem(cache, nk[].k_epoch, py_item(header, nk[].k_epoch))
+        py_setitem(cache, nk[].k_version, py_item(header, nk[].k_version))
+        py_setitem(cache, nk[].k_state, full)
+        py_setitem(cache, nk[].k_model, _neural_samba("from_state", _neural_values(full)) if samba else PythonObject(None))
         return cache
-    if py_get(cache, "state") is None or not Bool(py=cache["epoch"] == header["epoch"]):
+    if py_get(cache, nk[].k_state) is None or not Bool(py=py_item(cache, nk[].k_epoch) == py_item(header, nk[].k_epoch)):
         raise Error(_CACHE_MISS)
-    var have = Int(py=cache["version"])
-    var want = Int(py=header["version"])
+    var have = Int(py=py_item(cache, nk[].k_version))
+    var want = Int(py=py_item(header, nk[].k_version))
     if have > want:
         raise Error(_CACHE_MISS)
-    var history = header["history"]
+    var history = py_item(header, nk[].k_history)
     for i in range(len(history)):  # driver-loop: over committed step deltas in version order
         var entry = history[i]
         var version = Int(py=entry[0])
@@ -320,24 +325,24 @@ def _worker_model(header: PythonObject, samba: Bool) raises -> PythonObject:
             continue
         if version != have + 1:
             raise Error(_CACHE_MISS)
-        var state = cache["state"]
+        var state = py_item(cache, nk[].k_state)
         var updated = PythonObject(None)
         if samba:
             var update_state = state
             if entry[2] is not None:
                 update_state = py_call(b[].bi.dict, state)
-                py_setitem(update_state, "rng", entry[2])
+                py_setitem(update_state, nk[].k_rng, entry[2])
             var values = _neural_values(update_state)
             _ = py_call(values.append, entry[1])
             updated = _neural_samba("apply", values)
-            var publish = _neural_values(cache["model"])
+            var publish = _neural_values(py_item(cache, nk[].k_model))
             _ = py_call(publish.append, updated)
             _ = _neural_samba("publish", publish)
         else:
             updated = mlp_apply_from_state(state, entry[1])
-        py_setitem(cache, "state", updated)
+        py_setitem(cache, nk[].k_state, updated)
         have = version
-        py_setitem(cache, "version", have)
+        py_setitem(cache, nk[].k_version, have)
     if have != want:
         raise Error(_CACHE_MISS)
     return cache
@@ -360,18 +365,19 @@ def _neural_train(owner: PythonObject, supplied: PythonObject) raises -> PythonO
         raise Error("logical shard count mismatch")
     var snapshot = _neural_snapshot(owner)
     py_setattr(owner, "_gradients", PythonObject(None))
+    var nk = parallel_keys()
     try:
         var shard_args = b[].bi.list()
         var stream = PythonObject(None)
         var next_rng = PythonObject(None)
         var samba = String(owner._operation) == "samba_gradient"
-        if samba and Float64(py=snapshot["config"]["dropout"]) > 0:
-            var counter = Int(py=snapshot["rng"]["counter"])
+        if samba and Float64(py=py_item(py_item(snapshot, nk[].k_config), nk[].k_dropout)) > 0:
+            var counter = Int(py=py_item(py_item(snapshot, nk[].k_rng), nk[].k_counter))
             if counter > 0xFFFFFFFF:
                 raise Error("RuntimeError: mojolearn.Generator stream counter exhausted")
             stream = counter
-            next_rng = py_call(b[].bi.dict, snapshot["rng"])
-            py_setitem(next_rng, "counter", counter + 1)
+            next_rng = py_call(b[].bi.dict, py_item(snapshot, nk[].k_rng))
+            py_setitem(next_rng, nk[].k_counter, counter + 1)
         var offset = 0
         for i in range(len(shards)):  # driver-loop: over logical training shards in immutable reduction order
             var shard = py_call(b[].bi.tuple, shards[i])
@@ -414,7 +420,7 @@ def _neural_train(owner: PythonObject, supplied: PythonObject) raises -> PythonO
         var update_state = snapshot
         if next_rng is not None:
             update_state = py_call(b[].bi.dict, snapshot)
-            py_setitem(update_state, "rng", next_rng)
+            py_setitem(update_state, nk[].k_rng, next_rng)
         var update_requests = b[].bi.list()
         _ = py_call(update_requests.append, _neural_request("samba_update" if samba else "mlp_update", update_state, parts))
         var updated = process_pool_map(owner._update_pool, update_requests)[0]
@@ -431,10 +437,10 @@ def _neural_train(owner: PythonObject, supplied: PythonObject) raises -> PythonO
         py_setattr(owner, "_cache_version", version)
         py_setattr(owner, "_cache_digest", PythonObject(_state_digest(_neural_snapshot(owner))))
         var result = b[].bi.dict()
-        py_setitem(result, "losses", py_call(b[].bi.tuple, losses))
-        py_setitem(result, "completed_steps", updated[2])
-        py_setitem(result, "logical_shards", owner.logical_shards)
-        py_setitem(result, "reduction", "ordered_sum")
+        py_setitem(result, nk[].k_losses, py_call(b[].bi.tuple, losses))
+        py_setitem(result, nk[].k_completed_steps, updated[2])
+        py_setitem(result, nk[].k_logical_shards, owner.logical_shards)
+        py_setitem(result, nk[].k_reduction, "ordered_sum")
         return result
     except error:
         # Keep the same complete-model rollback contract, including RNG and
@@ -448,28 +454,30 @@ def _neural_train(owner: PythonObject, supplied: PythonObject) raises -> PythonO
 
 def _neural_checkpoint(owner: PythonObject) raises -> PythonObject:
     var result = PARALLEL_NEURAL_BOUNDARY.get_or_create_ptr()[].bi.dict()
-    py_setitem(result, "schema", "mojolearn.parallel-neural.v1")
-    py_setitem(result, "operation", owner._operation)
-    py_setitem(result, "logical_shards", owner.logical_shards)
-    py_setitem(result, "reduction", "ordered_sum")
-    py_setitem(result, "state", _neural_snapshot(owner))
+    var nk = parallel_keys()
+    py_setitem(result, nk[].k_schema, "mojolearn.parallel-neural.v1")
+    py_setitem(result, nk[].k_operation, owner._operation)
+    py_setitem(result, nk[].k_logical_shards, owner.logical_shards)
+    py_setitem(result, nk[].k_reduction, "ordered_sum")
+    py_setitem(result, nk[].k_state, _neural_snapshot(owner))
     return result
 
 
 def _neural_restore(cls: PythonObject, checkpoint: PythonObject, devices: PythonObject, child_module: String) raises -> PythonObject:
     var b = PARALLEL_NEURAL_BOUNDARY.get_or_create_ptr()
-    if String(py_get(checkpoint, "schema", "")) != "mojolearn.parallel-neural.v1" or String(py_get(checkpoint, "reduction", "")) != "ordered_sum":
+    var nk = parallel_keys()
+    if String(py_get(checkpoint, nk[].k_schema, "")) != "mojolearn.parallel-neural.v1" or String(py_get(checkpoint, nk[].k_reduction, "")) != "ordered_sum":
         raise Error("unsupported parallel neural checkpoint contract")
-    var operation = String(py_get(checkpoint, "operation", ""))
+    var operation = String(py_get(checkpoint, nk[].k_operation, ""))
     var model = PythonObject(None)
     if operation == "mlp_gradient":
-        model = mlp_from_state(checkpoint["state"])
+        model = mlp_from_state(py_item(checkpoint, nk[].k_state))
     elif operation == "samba_gradient":
-        model = _neural_samba("from_state", _neural_values(checkpoint["state"]))
+        model = _neural_samba("from_state", _neural_values(py_item(checkpoint, nk[].k_state)))
     else:
         raise Error("unsupported parallel neural checkpoint operation")
     var owner = py_call(b[].bi.object.__new__, cls)
-    _neural_init(owner, model, devices, checkpoint["logical_shards"], child_module)
+    _neural_init(owner, model, devices, py_item(checkpoint, nk[].k_logical_shards), child_module)
     return owner
 
 
@@ -497,26 +505,27 @@ def neural_worker_dispatch(request: PythonObject) raises -> PythonObject:
     var operation = String(request[0])
     var state = request[1]
     var args = request[2]
+    var nk = parallel_keys()
     if operation == "mlp_gradient_cached":
         # The worker's resident state is replaced (never edited in place) when
         # a full state or a committed delta arrives: validate each resident
         # state object once and open ONE gradient slot over it (the
         # SmallMLPTrainer program, weights uploaded once) for every shard.
         var cache = _worker_model(state, False)
-        var resident = cache["state"]
-        var slot = py_get(cache, "mlp_slot")
-        if slot is None or py_get(cache, "checked_of") is not resident:
+        var resident = py_item(cache, nk[].k_state)
+        var slot = py_get(cache, nk[].k_mlp_slot)
+        if slot is None or py_get(cache, nk[].k_checked_of) is not resident:
             if slot is not None:
-                py_setitem(cache, "mlp_slot", PythonObject(None))
+                py_setitem(cache, nk[].k_mlp_slot, PythonObject(None))
                 mlp_gradients_close(Int(py=slot))
             var opened = mlp_gradients_open(mlp_validate_state(resident))
             slot = PythonObject(opened)
-            py_setitem(cache, "mlp_slot", slot)
-            py_setitem(cache, "checked_of", resident)
+            py_setitem(cache, nk[].k_mlp_slot, slot)
+            py_setitem(cache, nk[].k_checked_of, resident)
         return mlp_gradients_on(Int(py=slot), args[0], args[1])
     if operation == "samba_gradient_cached":
         var cache = _worker_model(state, True)
-        var values = _neural_values(cache["model"])
+        var values = _neural_values(py_item(cache, nk[].k_model))
         _ = py_call(values.append, args[0])
         _ = py_call(values.append, args[1])
         _ = py_call(values.append, PythonObject(None))
@@ -538,12 +547,12 @@ def neural_worker_dispatch(request: PythonObject) raises -> PythonObject:
     var step = 0
     if operation == "mlp_update":
         updated = mlp_apply_from_state(state, grads)
-        step = Int(py=updated["optimizer"]["step"])
+        step = Int(py=py_item(py_item(updated, nk[].k_optimizer), nk[].k_step))
     else:
         var values = _neural_values(state)
         _ = py_call(values.append, grads)
         updated = _neural_samba("apply", values)
-        step = Int(py=updated["t"])
+        step = Int(py=py_item(updated, nk[].k_t))
     var result = b[].bi.list()
     _ = py_call(result.append, updated)
     _ = py_call(result.append, grads)
@@ -553,12 +562,13 @@ def neural_worker_dispatch(request: PythonObject) raises -> PythonObject:
 
 def neural_worker(argv: PythonObject) raises:
     var socket = process_worker_connect(argv)
+    var nk = parallel_keys()
     try:
         while True:  # driver-loop: over complete native local model training requests
             var request = process_worker_next(socket)
             if request is None:
                 break
-            var sequence = Int(py=py_get(request[0], "sequence", -1))
+            var sequence = Int(py=py_get(request[0], nk[].k_sequence, -1))
             try:
                 var result = neural_worker_dispatch(request[1])
                 process_send(socket, "result", sequence, result)

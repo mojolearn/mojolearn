@@ -96,6 +96,8 @@ from bindings.trees_public_forest_door import forest_shard_prepare, forest_shard
 from core.parallel_forecast_impl import forecast_gather_cols, forecast_scatter_cols
 from core.hotpath_impl import cast_elements, HP_I32, HP_I64, HP_U32
 from core.shared_slot import SharedSlot
+from bindings.parallel_keys_unpack import parallel_keys
+from bindings.py_balanced import py_item
 
 comptime _CHILD = "mojolearn._native_parallel_shard_worker"
 
@@ -177,8 +179,9 @@ def _transform_rbf_sampler(args: PythonObject) raises -> PythonObject:
     var x_meta = admit_family_meta(args[1], 2, "X", context, x_pin, True)
     var x = x_pin.keep
     var d = Int(py=x.shape[1])
-    if d != Int(py=fields["n_features_in_"]):
-        raise Error("ValueError: X has " + String(d) + " features, the fit had " + String(Int(py=fields["n_features_in_"])))
+    var nk = parallel_keys()
+    if d != Int(py=py_item(fields, nk[].k_n_features_in_)):
+        raise Error("ValueError: X has " + String(d) + " features, the fit had " + String(Int(py=py_item(fields, nk[].k_n_features_in_))))
     var rows = Int(py=x.shape[0])
     if rows == 0:
         return _rbf_transform(estimator, Python.tuple(args[4], x), context, x_meta, x_pin)
@@ -192,7 +195,7 @@ def _transform_rbf_sampler(args: PythonObject) raises -> PythonObject:
         var shift = shard_read_shift(r, lo, n_devices)
         _ = py_call(requests.append, Python.tuple("rbf_rows", state, Python.tuple(shard_rows(x, lo - shift, hi - shift, context))))
     var parts = shard_run(requests, args[2], _CHILD)
-    var q = Int(py=fields["random_weights_"].shape[1])
+    var q = Int(py=py_item(fields, nk[].k_random_weights_).shape[1])
     for r in range(len(parts)):  # driver-loop: checks one result block per row shard
         var part = parts[r]
         if Int(py=part.ndim) != 2 or Int(py=part.shape[1]) != q:
@@ -276,10 +279,11 @@ def _fit_scaler(args: PythonObject) raises -> PythonObject:
     var ranges = shard_ranges(d, args[3], "columns_per_shard", "")
     # `estimator.get_params()` with numeric_mode='identical'
     var init = b.list()
+    var nk = parallel_keys()
     if kind == "minmax":
-        init = Python.list(fields["feature_range"], fields["copy"], fields["clip"], "identical")
+        init = Python.list(py_item(fields, nk[].k_feature_range), py_item(fields, nk[].k_copy), py_item(fields, nk[].k_clip), "identical")
     else:
-        init = Python.list(fields["copy"], fields["with_mean"], fields["with_std"], "identical")
+        init = Python.list(py_item(fields, nk[].k_copy), py_item(fields, nk[].k_with_mean), py_item(fields, nk[].k_with_std), "identical")
     var n_devices = shard_devices(args[2])
     var requests = b.list()
     for r in range(len(ranges) // 2):  # driver-loop: one worker request per column block
@@ -310,8 +314,8 @@ def _fit_scaler(args: PythonObject) raises -> PythonObject:
     _ = py_call(fields.clear)
     _ = py_call(fields.update, parts[0])
     _ = py_call(fields.update, merged)
-    py_setitem(fields, "n_features_in_", d)
-    py_setitem(fields, "n_samples_seen_", n)
+    py_setitem(fields, nk[].k_n_features_in_, d)
+    py_setitem(fields, nk[].k_n_samples_seen_, n)
     return estimator
 
 
@@ -339,7 +343,8 @@ def _transform_scaler(args: PythonObject) raises -> PythonObject:
     var data = _scaler_input(args[1], context)
     var n = Int(py=data.shape[0])
     var d = Int(py=data.shape[1])
-    if d != Int(py=fields["n_features_in_"]):
+    var nk = parallel_keys()
+    if d != Int(py=py_item(fields, nk[].k_n_features_in_)):
         raise Error("ValueError: input feature count differs from fit")
     var ranges = shard_ranges(d, args[3], "columns_per_shard", "")
     var base = shard_state(fields, b.frozenset(), context)
@@ -349,7 +354,7 @@ def _transform_scaler(args: PythonObject) raises -> PythonObject:
         var lo = ranges[2 * r]
         var hi = ranges[2 * r + 1]
         var part = py_call(b.dict, base)
-        py_setitem(part, "n_features_in_", hi - lo)
+        py_setitem(part, nk[].k_n_features_in_, hi - lo)
         for k in range(len(names)):  # small-loop(the scaler's per-column statistics)
             var value = fields[names[k]]
             py_setitem(part, names[k], PythonObject(None) if value is None else shard_rows(value, lo, hi, context))
@@ -387,7 +392,8 @@ def _gpc_admit(estimator: PythonObject, context: PythonObject) raises -> PythonO
     if mode is not None and py_type(mode) is not b.str:
         raise Error("ValueError: parallel GPC requires IDENTICAL numeric mode")
     if mode is None or String(mode) == "":
-        mode = context["backend_fields"]["_DEFAULT_MODE"]
+        var nk = parallel_keys()
+        mode = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
     if py_type(mode) is not b.str or String(mode) != "identical":
         raise Error("ValueError: parallel GPC requires IDENTICAL numeric mode")
     var work = shard_model(py_type(estimator), py_call(b.dict, fields))
@@ -420,11 +426,12 @@ def _fit_gpc(args: PythonObject) raises -> PythonObject:
     else:
         for k in range(len(classes)):  # driver-loop: over the one-vs-rest classes
             _ = py_call(columns.append, PythonObject(k))
-    var arrays = gp_kernel_arrays_transport(work["_kernel"], context)
+    var nk = parallel_keys()
+    var arrays = gp_kernel_arrays_transport(py_item(work, nk[].k__kernel), context)
     var carried = b.list()
     for i in range(len(arrays)):  # small-loop(the kernel's five packed arrays and words)
         _ = py_call(carried.append, arrays[i])
-    var max_iter = work["_max_iter_predict"]
+    var max_iter = py_item(work, nk[].k__max_iter_predict)
     var n_devices = shard_devices(args[3])
     # N452 (lane ne2-i-j): with more class columns than workers, X and the
     # codes go to each worker once (`shard_run_stored`), not once per column
@@ -444,13 +451,13 @@ def _fit_gpc(args: PythonObject) raises -> PythonObject:
     var fits = GPCFitPublication(len(parts))
     for i in range(len(parts)):  # driver-loop: UNPACK one transported binary fit per class column
         var f = parts[i]
-        var member = _gpc_binary_result(context, f["y_train_"], f["L_"], f["pi_"], f["W_sr_"],
-            Float64(py=f["log_marginal_likelihood_value_"]), Int(py=f["n_iter_"]), Int(py=f["nb_"]))
+        var member = _gpc_binary_result(context, py_item(f, nk[].k_y_train_), py_item(f, nk[].k_L_), py_item(f, nk[].k_pi_), py_item(f, nk[].k_W_sr_),
+            Float64(py=py_item(f, nk[].k_log_marginal_likelihood_value_)), Int(py=py_item(f, nk[].k_n_iter_)), Int(py=py_item(f, nk[].k_nb_)))
         fits.append(member)
     # published only now that every class fitted: `_fresh(estimator)` carried
     # the validated kernel, max_iter_predict and IDENTICAL
-    py_setitem(work, "numeric_mode", "identical")
-    py_setitem(work, "input_copied_", copied)
+    py_setitem(work, nk[].k_numeric_mode, "identical")
+    py_setitem(work, nk[].k_input_copied_, copied)
     _gpc_set_fitted(work, x, classes, fits, context)
     _ = py_call(fields.update, work)
     return estimator
@@ -472,20 +479,21 @@ def _predict_gpc(args: PythonObject) raises -> PythonObject:
     if not py_contains(fields, PythonObject("estimators_")):
         raise Error("ValueError: GaussianProcessClassifier: call fit() or load() first")
     var q = admit_family(args[1], 2, "X", context).array
-    if Int(py=q.shape[1]) != Int(py=fields["n_features_in_"]):
+    var nk = parallel_keys()
+    if Int(py=q.shape[1]) != Int(py=py_item(fields, nk[].k_n_features_in_)):
         raise Error("ValueError: GaussianProcessClassifier: X has " + String(Int(py=q.shape[1])) + " features, fit saw "
-                    + String(Int(py=fields["n_features_in_"])))
+                    + String(Int(py=py_item(fields, nk[].k_n_features_in_))))
     var proba_method = String(method) == "predict_proba"
-    var n_classes = Int(py=fields["n_classes_"])
+    var n_classes = Int(py=py_item(fields, nk[].k_n_classes_))
     var want_proba = proba_method or n_classes > 2
     var out_kind = 0
     if n_classes == 2:
         out_kind = 2 if proba_method else 1
-    var arrays = gp_kernel_arrays_transport(work["_kernel"], context)
+    var arrays = gp_kernel_arrays_transport(py_item(work, nk[].k__kernel), context)
     var carried = b.list()
     for i in range(len(arrays)):  # small-loop(the kernel's five packed arrays and words)
         _ = py_call(carried.append, arrays[i])
-    var fits = fields["estimators_"]
+    var fits = py_item(fields, nk[].k_estimators_)
     var n_devices = shard_devices(args[2])
     # N452 (lane ne2-i-j): with more fitted classes than workers, X_train_
     # and the query rows go to each worker once (`shard_run_stored`)
@@ -499,9 +507,9 @@ def _predict_gpc(args: PythonObject) raises -> PythonObject:
                                                       Python.tuple(carried, shard_stored_ref(token, 0), fit_state),
                                                       Python.tuple(shard_stored_ref(token, 1), want_proba, out_kind)))
         else:
-            _ = py_call(requests.append, Python.tuple("gpc_class_predict", Python.tuple(carried, fields["X_train_"], fit_state),
+            _ = py_call(requests.append, Python.tuple("gpc_class_predict", Python.tuple(carried, py_item(fields, nk[].k_X_train_), fit_state),
                                                       Python.tuple(q, want_proba, out_kind)))
-    var columns = (shard_run_stored(Python.tuple(fields["X_train_"], q), token, requests, args[2], _CHILD) if stored
+    var columns = (shard_run_stored(Python.tuple(py_item(fields, nk[].k_X_train_), q), token, requests, args[2], _CHILD) if stored
                    else shard_run(requests, args[2], _CHILD))
     var n_star = Int(py=q.shape[0])
     for i in range(len(columns)):  # driver-loop: checks one result column per class
@@ -510,7 +518,7 @@ def _predict_gpc(args: PythonObject) raises -> PythonObject:
     if n_classes == 2:
         if proba_method:
             return columns[0]
-        return gp_decode_labels(fields["classes_"], columns[0], _worker_binding("_mojolearn"), context)
+        return gp_decode_labels(py_item(fields, nk[].k_classes_), columns[0], _worker_binding("_mojolearn"), context)
     var retained_columns = List[PythonObject]()
     for i in range(len(columns)):  # driver-loop: unpack one returned worker column owner per class
         retained_columns.append(columns[i])
@@ -524,7 +532,7 @@ def _predict_gpc(args: PythonObject) raises -> PythonObject:
     _ = cast_elements(codes32.address(), HP_I32, Int(codes.unsafe_ptr()), HP_I64, n_star)
     _ = codes32  # keep the Python object alive through the native call above
     _ = codes  # keep the Python object alive through the native call above
-    return gp_decode_labels(fields["classes_"], codes, _worker_binding("_mojolearn"), context)
+    return gp_decode_labels(py_item(fields, nk[].k_classes_), codes, _worker_binding("_mojolearn"), context)
 
 
 # ---------------------------------------------------------------- forests
@@ -568,7 +576,8 @@ def _fit_forest(args: PythonObject) raises -> PythonObject:
     var x_admitted = admit_family(args[1], 2, "X", context)
     var x = x_admitted.array
     var plan = forest_shard_prepare(estimator, x_admitted.rows, x_admitted.cols, args[2], trees_context)
-    var count = Int(py=plan.fields["n_estimators"])
+    var nk = parallel_keys()
+    var count = Int(py=py_item(plan.fields, nk[].k_n_estimators))
     if count < 1:
         raise Error("ValueError: n_estimators must be positive")
     var ranges = shard_ranges(count, tps, "trees_per_shard", "")
@@ -598,8 +607,8 @@ def _fit_forest(args: PythonObject) raises -> PythonObject:
     # node offsets: one rebased table over every shard's trees
     var offsets = b.list()
     for r in range(len(parts)):  # driver-loop: one offset table per tree range
-        _ = py_call(offsets.append, parts[r]["_offsets"])
-    py_setitem(merged, "_offsets", _rebase_offsets(offsets, _table_key("base"), context))
+        _ = py_call(offsets.append, py_item(parts[r], nk[].k__offsets))
+    py_setitem(merged, nk[].k__offsets, _rebase_offsets(offsets, _table_key("base"), context))
     var node_names = Python.list("_colid", "_quesval", "_left_child", "_leaves")
     for k in range(len(node_names)):  # small-loop(the four flat node arrays)
         var name = String(node_names[k])
@@ -614,7 +623,7 @@ def _fit_forest(args: PythonObject) raises -> PythonObject:
         # labels, and `feature_names_in_` from this caller's X.
         classifier_after_fit(fields, args[1], trees_context)
     else:
-        py_setitem(fields, "_mojolearn_fitted", True)
+        py_setitem(fields, nk[].k__mojolearn_fitted, True)
     _ = x_admitted^
     return estimator
 
@@ -693,8 +702,9 @@ def _holder_init(args: PythonObject, reference: Bool) raises -> PythonObject:
     elif len(py_get(_t("query_methods"), cls, Python.tuple())) == 0:
         raise Error("TypeError: parallel queries require an exact neighbors or KernelDensity estimator")
     var fields = py_fields(estimator)
+    var nk = parallel_keys()
     if reference:
-        var algorithm = py_get(fields, "algorithm")
+        var algorithm = py_get(fields, nk[].k_algorithm)
         if py_type(algorithm) is not b.str or (String(algorithm) != "auto" and String(algorithm) != "brute"):
             raise Error("ValueError: reference sharding requires the IDENTICAL brute-force arm")
     if not _identical(fields):
@@ -702,14 +712,14 @@ def _holder_init(args: PythonObject, reference: Bool) raises -> PythonObject:
     if reference and args[3] is not None:
         _ = shard_ranges(0, args[3], "reference_rows_per_shard", "")
     _ = shard_ranges(0, args[4] if reference else args[3], "query_rows_per_shard" if reference else "rows_per_shard", "")
-    py_setitem(own, "estimator", estimator)
+    py_setitem(own, nk[].k_estimator, estimator)
     if reference:
-        py_setitem(own, "reference_rows_per_shard", args[3])
-        py_setitem(own, "query_rows_per_shard", args[4])
+        py_setitem(own, nk[].k_reference_rows_per_shard, args[3])
+        py_setitem(own, nk[].k_query_rows_per_shard, args[4])
     else:
-        py_setitem(own, "rows_per_shard", args[3])
-    py_setitem(own, "_pool", _pool_open(args[2]))
-    py_setitem(own, "last_shards_", Python.list())
+        py_setitem(own, nk[].k_rows_per_shard, args[3])
+    py_setitem(own, nk[].k__pool, _pool_open(args[2]))
+    py_setitem(own, nk[].k_last_shards_, Python.list())
     return PythonObject(None)
 
 
@@ -756,8 +766,9 @@ def _reference_query(args: PythonObject) raises -> PythonObject:
     var b = shard_b()
     var context = _ctx()
     var holder = _driver_fields(args[0], "reference_driver_class")
-    var model = holder["estimator"]
-    var pool = holder["_pool"]
+    var nk = parallel_keys()
+    var model = py_item(holder, nk[].k_estimator)
+    var pool = py_item(holder, nk[].k__pool)
     var method = String(args[2])
     var cls = py_type(model)
     if cls is not _t("nearest_class") and cls is not _t("knc_class") and cls is not _t("knr_class"):
@@ -780,11 +791,11 @@ def _reference_query(args: PythonObject) raises -> PythonObject:
         if py_get(fields, PythonObject("_y_cols"), PythonObject(None)) is None:
             raise Error("ValueError: fit the estimator before prediction")
     var data = admit_family(args[1], 2, "X", context).array
-    var d = Int(py=fields["n_features_in_"])
+    var d = Int(py=py_item(fields, nk[].k_n_features_in_))
     if Int(py=data.shape[1]) != d:
         raise Error("ValueError: input feature count differs from fit")
-    var n = Int(py=fields["n_samples_fit_"])
-    var k_obj = fields["n_neighbors"] if args[3] is None else args[3]
+    var n = Int(py=py_item(fields, nk[].k_n_samples_fit_))
+    var k_obj = py_item(fields, nk[].k_n_neighbors) if args[3] is None else args[3]
     if py_type(k_obj) is not b.int or Int(py=k_obj) < 1 or Int(py=k_obj) > n:
         raise Error("ValueError: n_neighbors must be an integer in [1, reference rows]")
     var k = Int(py=k_obj)
@@ -795,9 +806,9 @@ def _reference_query(args: PythonObject) raises -> PythonObject:
     var cell_limit = 2147483647 // d
     if cell_limit < 1:
         raise Error("ValueError: feature count exceeds the native signed-int32 shape contract")
-    var devices = pool["devices"]
+    var devices = py_item(pool, nk[].k_devices)
     var n_devices = len(devices)
-    var width_obj = holder["reference_rows_per_shard"]
+    var width_obj = py_item(holder, nk[].k_reference_rows_per_shard)
     if width_obj is not None and (py_type(width_obj) is not b.int or Int(py=width_obj) < 1):
         raise Error("ValueError: reference_rows_per_shard must be a positive integer")
     var width = min(cell_limit, (n + n_devices - 1) // n_devices) if width_obj is None else Int(py=width_obj)
@@ -805,20 +816,20 @@ def _reference_query(args: PythonObject) raises -> PythonObject:
         raise Error("ValueError: reference shard exceeds the native signed-int32 cell-count contract")
     var ranges = shard_ranges(n, PythonObject(width), "reference_rows_per_shard", "")
     var params = b.dict()
-    py_setitem(params, "n_neighbors", k)
-    py_setitem(params, "query_tile", fields["query_tile"])
-    py_setitem(params, "metric", fields["metric"])
-    py_setitem(params, "algorithm", "brute")
-    py_setitem(params, "p", fields["p"])
-    py_setitem(params, "numeric_mode", "identical")
+    py_setitem(params, nk[].k_n_neighbors, k)
+    py_setitem(params, nk[].k_query_tile, py_item(fields, nk[].k_query_tile))
+    py_setitem(params, nk[].k_metric, py_item(fields, nk[].k_metric))
+    py_setitem(params, nk[].k_algorithm, "brute")
+    py_setitem(params, nk[].k_p, py_item(fields, nk[].k_p))
+    py_setitem(params, nk[].k_numeric_mode, "identical")
     var vote_state = PythonObject(None)
     if method != "kneighbors":
         vote_state = shard_state(fields, b.frozenset(Python.list("_index", "_resident", "_resident_holder")), context)
-        py_setitem(vote_state, "_index", PythonObject(None))
-        py_setitem(vote_state, "numeric_mode", "identical")
+        py_setitem(vote_state, nk[].k__index, PythonObject(None))
+        py_setitem(vote_state, nk[].k_numeric_mode, "identical")
     var rows = Int(py=data.shape[0])
-    _ = shard_ranges(0, holder["query_rows_per_shard"], "query_rows_per_shard", "")
-    var step = Int(py=holder["query_rows_per_shard"])
+    _ = shard_ranges(0, py_item(holder, nk[].k_query_rows_per_shard), "query_rows_per_shard", "")
+    var step = Int(py=py_item(holder, nk[].k_query_rows_per_shard))
     var n_ranges = len(ranges) // 2
     # Each reference block is cut from the fitted rows once for the whole
     # query, not once per query row block (the same bytes every time).
@@ -885,18 +896,18 @@ def _reference_query(args: PythonObject) raises -> PythonObject:
             _ = py_call(outputs.append, output)
             for r in range(n_ranges):  # driver-loop: one diagnostic record per reference block
                 var record = b.dict()
-                py_setitem(record, "query_start", first)
-                py_setitem(record, "query_end", end)
-                py_setitem(record, "reference_start", ranges[2 * r])
-                py_setitem(record, "reference_end", ranges[2 * r + 1])
-                py_setitem(record, "reference_bytes", (ranges[2 * r + 1] - ranges[2 * r]) * d * 4)
-                py_setitem(record, "device", devices[r % n_devices])
+                py_setitem(record, nk[].k_query_start, first)
+                py_setitem(record, nk[].k_query_end, end)
+                py_setitem(record, nk[].k_reference_start, ranges[2 * r])
+                py_setitem(record, nk[].k_reference_end, ranges[2 * r + 1])
+                py_setitem(record, nk[].k_reference_bytes, (ranges[2 * r + 1] - ranges[2 * r]) * d * 4)
+                py_setitem(record, nk[].k_device, devices[r % n_devices])
                 _ = py_call(diagnostics.append, record)
             first = end
     finally:
         _release_reference(pool, tokens, n_devices)
     var result = _join(outputs, False, context)
-    py_setitem(holder, "last_shards_", diagnostics)
+    py_setitem(holder, nk[].k_last_shards_, diagnostics)
     var kind = PythonObject("regressor") if cls is _t("knr_class") else PythonObject(None)
     return parallel_public_result(result, method, kind, context)
 
@@ -957,7 +968,8 @@ def _release_reference(pool: PythonObject, tokens: PythonObject, workers: Int) r
     """Best-effort release of a call's stored reference blocks (token r on
     worker r % workers, where it was stored); a failed release closes the
     pool, as `_release_query_state` does."""
-    if Bool(py=pool["closed"]):
+    var nk = parallel_keys()
+    if Bool(py=py_item(pool, nk[].k_closed)):
         return
     var b = shard_b()
     try:
@@ -975,18 +987,20 @@ def _release_reference(pool: PythonObject, tokens: PythonObject, workers: Int) r
 def _pool_pids(pool: PythonObject) raises -> PythonObject:
     var b = shard_b()
     var pids = b.list()
-    var workers = pool["workers"]
+    var nk = parallel_keys()
+    var workers = py_item(pool, nk[].k_workers)
     for i in range(len(workers)):  # driver-loop: over the pool's worker processes
-        _ = py_call(pids.append, workers[i]["pid"])
+        _ = py_call(pids.append, py_item(workers[i], nk[].k_pid))
     return pids
 
 
 def _pool_pids_same(recorded: PythonObject, pool: PythonObject) raises -> Bool:
-    var workers = pool["workers"]
+    var nk = parallel_keys()
+    var workers = py_item(pool, nk[].k_workers)
     if len(workers) != len(recorded) or len(workers) == 0:
         return False
     for i in range(len(workers)):  # driver-loop: over the pool's worker processes
-        if Int(py=workers[i]["pid"]) != Int(py=recorded[i]):
+        if Int(py=py_item(workers[i], nk[].k_pid)) != Int(py=recorded[i]):
             return False
     return True
 
@@ -994,7 +1008,8 @@ def _pool_pids_same(recorded: PythonObject, pool: PythonObject) raises -> Bool:
 def _release_query_state(pool: PythonObject, token: String, name: PythonObject, workers: Int) raises:
     # Best-effort release of a stored query snapshot on every worker; a
     # failed release closes the pool, exactly as the per-query release did.
-    if Bool(py=pool["closed"]):
+    var nk = parallel_keys()
+    if Bool(py=py_item(pool, nk[].k_closed)):
         return
     var b = shard_b()
     var releases = b.list()
@@ -1020,7 +1035,8 @@ def _freeze_carried(value: PythonObject, context: PythonObject, depth: Int) rais
     if depth > 8:
         return
     var cls = py_type(value)
-    if cls is context["array_class"]:
+    var nk = parallel_keys()
+    if cls is py_item(context, nk[].k_array_class):
         py_setattr(value, "_readonly", PythonObject(True))
     elif cls is b.tuple or cls is b.list:
         for i in range(len(value)):  # driver-loop: over a carried field's entries
@@ -1041,8 +1057,9 @@ def _parallel_queries(args: PythonObject) raises -> PythonObject:
     var b = shard_b()
     var context = _ctx()
     var holder = _driver_fields(args[0], "query_driver_class")
-    var model = holder["estimator"]
-    var pool = holder["_pool"]
+    var nk = parallel_keys()
+    var model = py_item(holder, nk[].k_estimator)
+    var pool = py_item(holder, nk[].k__pool)
     var methods = py_get(_t("query_methods"), py_type(model), Python.tuple())
     if len(methods) == 0:
         raise Error("TypeError: parallel queries require an exact neighbors or KernelDensity estimator")
@@ -1057,7 +1074,7 @@ def _parallel_queries(args: PythonObject) raises -> PythonObject:
     # `getattr(estimator, '_index', getattr(estimator, '_x', None))`
     var index = PythonObject(None)
     if py_contains(fields, PythonObject("_index")):
-        index = fields["_index"]
+        index = py_item(fields, nk[].k__index)
     else:
         index = py_get(fields, PythonObject("_x"), PythonObject(None))
     if index is None:
@@ -1066,10 +1083,10 @@ def _parallel_queries(args: PythonObject) raises -> PythonObject:
     if source is None and String(method) == "radius_neighbors":
         source = index
     var data = admit_family(source, 2, "X", context).array
-    if Int(py=data.shape[1]) != Int(py=fields["n_features_in_"]):
+    if Int(py=data.shape[1]) != Int(py=py_item(fields, nk[].k_n_features_in_)):
         raise Error("ValueError: input feature count differs from fit")
     var n = Int(py=data.shape[0])
-    var ranges = shard_ranges(n, holder["rows_per_shard"], "rows_per_shard", "")
+    var ranges = shard_ranges(n, py_item(holder, nk[].k_rows_per_shard), "rows_per_shard", "")
     if len(ranges) == 0:
         ranges.append(0)
         ranges.append(0)
@@ -1082,7 +1099,7 @@ def _parallel_queries(args: PythonObject) raises -> PythonObject:
     var index_object = PythonObject(None)
     if index is not None and py_contains(fields, PythonObject("_index")) and not py_contains(state, PythonObject("_index")):
         index_object = index
-    var devices = pool["devices"]
+    var devices = py_item(pool, nk[].k_devices)
     var workers = len(devices)
     var name = py_type(model).__name__
     # Resident fitted state: the workers keep the snapshot stored under the
@@ -1103,14 +1120,14 @@ def _parallel_queries(args: PythonObject) raises -> PythonObject:
     if index_object is not None:
         _ = py_call(key.append, "_index")
         _ = py_call(key.append, index_object)
-    py_setitem(state, "numeric_mode", "identical")
+    py_setitem(state, nk[].k_numeric_mode, "identical")
     # The resident claim and the token counter live in the native prepared
     # registry, weakly keyed by the driver object (outside its `__dict__`;
     # never pickled or copied).
     var driver = args[0]
     var resident = prepared_get(mods, _QUERY_RESIDENT_SLOT, driver)
     var token = String()
-    if (resident is not None and resident[1] is pool and not Bool(py=pool["closed"])
+    if (resident is not None and resident[1] is pool and not Bool(py=py_item(pool, nk[].k_closed))
             and _pool_pids_same(resident[2], pool) and prepared_key_same(resident[3], key)):
         token = String(resident[0])
     else:
@@ -1128,7 +1145,7 @@ def _parallel_queries(args: PythonObject) raises -> PythonObject:
         # refit is noticed and re-sent. No per-call content hash.
         _freeze_carried(state, context, 0)
         if index_object is not None:
-            py_setitem(state, "_index", shard_rows(index_object, 0, Int(py=index_object.shape[0]), context))
+            py_setitem(state, nk[].k__index, shard_rows(index_object, 0, Int(py=index_object.shape[0]), context))
         var stores = b.list()
         for i in range(workers):  # driver-loop: one snapshot request per worker
             _ = py_call(stores.append, _native_request("query_state", Python.tuple(token, name, state)))
@@ -1162,13 +1179,13 @@ def _parallel_queries(args: PythonObject) raises -> PythonObject:
         else:
             _ = py_call(outputs.append, results[r][0])
         var record = b.dict()
-        py_setitem(record, "start", ranges[2 * r])
-        py_setitem(record, "end", ranges[2 * r + 1])
-        py_setitem(record, "device", devices[r % workers])
+        py_setitem(record, nk[].k_start, ranges[2 * r])
+        py_setitem(record, nk[].k_end, ranges[2 * r + 1])
+        py_setitem(record, nk[].k_device, devices[r % workers])
         _ = py_call(record.update, results[r][1])
         _ = py_call(diagnostics.append, record)
     var output = _join(outputs, String(method) == "radius_neighbors", context)
-    py_setitem(holder, "last_shards_", diagnostics)
+    py_setitem(holder, nk[].k_last_shards_, diagnostics)
     if String(method) == "radius_neighbors":
         return output  # The plain ragged API is not an _mode public-output method.
     var kind = PythonObject("regressor") if py_type(model) is _t("knr_class") else PythonObject(None)
@@ -1187,8 +1204,9 @@ def _ivf_from_index(args: PythonObject) raises -> PythonObject:
         raise Error("TypeError: distributed IVF requires its exact connected class")
     var admitted = parallel_ivf_admit(index, PARALLEL_SHARD_BOUNDARY.get_or_create_ptr()[].tables, context)
     var fields = py_fields(index)
-    var n = Int(py=fields["n_rows_"])
-    var n_lists = Int(py=fields["n_lists_"])
+    var nk = parallel_keys()
+    var n = Int(py=py_item(fields, nk[].k_n_rows_))
+    var n_lists = Int(py=py_item(fields, nk[].k_n_lists_))
     var ind = admitted[1]
     var offs = admitted[2]
     _ = shard_devices(args[2])
@@ -1226,31 +1244,31 @@ def _ivf_from_index(args: PythonObject) raises -> PythonObject:
     var pool = shard_open(devices, _CHILD)
     var obj = py_call(b.object.__new__, args[0])
     var own = py_fields(obj)
-    py_setitem(own, "_pool", pool)
-    py_setitem(own, "_closed", False)
-    py_setitem(own, "n_features_in_", fields["n_features_in_"])
-    py_setitem(own, "n_neighbors", fields["n_neighbors"])
-    py_setitem(own, "metric_code_", fields["metric_code_"])
-    py_setitem(own, "devices", devices)
-    py_setitem(own, "n_candidates_", PythonObject(None))
+    py_setitem(own, nk[].k__pool, pool)
+    py_setitem(own, nk[].k__closed, False)
+    py_setitem(own, nk[].k_n_features_in_, py_item(fields, nk[].k_n_features_in_))
+    py_setitem(own, nk[].k_n_neighbors, py_item(fields, nk[].k_n_neighbors))
+    py_setitem(own, nk[].k_metric_code_, py_item(fields, nk[].k_metric_code_))
+    py_setitem(own, nk[].k_devices, devices)
+    py_setitem(own, nk[].k_n_candidates_, PythonObject(None))
     var token = String("ivf-") + String(external_call["getpid", Int32]()) + "-" + String(Int(py=py_call(b.id, obj)))
-    py_setitem(own, "_token", token)
+    py_setitem(own, nk[].k__token, token)
     var maps = b.list()
     var requests = b.list()
     var base = shard_state(fields, b.frozenset(Python.list("_resident", "_resident_holder", "list_data_",
                                                            "list_indices_", "list_offsets_", "n_rows_")), context)
-    py_setitem(base, "numeric_mode", "identical")
+    py_setitem(base, nk[].k_numeric_mode, "identical")
     for part in range(parts_count):  # driver-loop: one stored shard per device
         var lo = part * n // parts_count
         var hi = (part + 1) * n // parts_count
         var state = py_call(b.dict, base)
-        py_setitem(state, "n_rows_", hi - lo)
-        py_setitem(state, "list_offsets_", shard_row_vector(soff, part, context))
-        py_setitem(state, "list_indices_", shard_rows(local_all, lo, hi, context))
-        py_setitem(state, "list_data_", shard_rows(fields["list_data_"], lo, hi, context))
+        py_setitem(state, nk[].k_n_rows_, hi - lo)
+        py_setitem(state, nk[].k_list_offsets_, shard_row_vector(soff, part, context))
+        py_setitem(state, nk[].k_list_indices_, shard_rows(local_all, lo, hi, context))
+        py_setitem(state, nk[].k_list_data_, shard_rows(py_item(fields, nk[].k_list_data_), lo, hi, context))
         _ = py_call(maps.append, shard_rows(map_all, lo, hi, context))
         _ = py_call(requests.append, _native_request("ivf_store", Python.tuple(token, state)))
-    py_setitem(own, "_id_maps", maps)
+    py_setitem(own, nk[].k__id_maps, maps)
     try:
         var receipts = _map(pool, requests)
         for part in range(parts_count):  # driver-loop: one storage receipt per shard
@@ -1258,7 +1276,7 @@ def _ivf_from_index(args: PythonObject) raises -> PythonObject:
                 raise Error("ValueError: IVF storage receipts differ from shard sizes")
     except error:
         process_pool_close(pool)
-        py_setitem(own, "_closed", True)
+        py_setitem(own, nk[].k__closed, True)
         raise error^
     return obj
 
@@ -1270,24 +1288,25 @@ def _ivf_search(args: PythonObject) raises -> PythonObject:
     var b = shard_b()
     var context = _ctx()
     var own = _driver_fields(args[0], "distributed_ivf_class")
-    if Bool(py=own["_closed"]):
+    var nk = parallel_keys()
+    if Bool(py=py_item(own, nk[].k__closed)):
         raise Error("RuntimeError: distributed IVF index is closed")
     var q = admit_family(args[1], 2, "queries", context).array
     if Int(py=q.shape[0]) < 1:
         raise Error("ValueError: at least one query is required")
-    if Int(py=q.shape[1]) != Int(py=own["n_features_in_"]):
+    if Int(py=q.shape[1]) != Int(py=py_item(own, nk[].k_n_features_in_)):
         raise Error("ValueError: query features differ from index")
-    var pool = own["_pool"]
-    var maps = own["_id_maps"]
+    var pool = py_item(own, nk[].k__pool)
+    var maps = py_item(own, nk[].k__id_maps)
     try:
         var requests = b.list()
-        for i in range(len(own["devices"])):  # driver-loop: one search request per stored shard
-            _ = py_call(requests.append, _native_request("ivf_search", Python.tuple(own["_token"], q)))
+        for i in range(len(py_item(own, nk[].k_devices))):  # driver-loop: one search request per stored shard
+            _ = py_call(requests.append, _native_request("ivf_search", Python.tuple(py_item(own, nk[].k__token), q)))
         var parts = _map(pool, requests)
         if len(parts) != len(maps):
             raise Error("ValueError: incomplete IVF result shards")
         var m = Int(py=q.shape[0])
-        var k = Int(py=own["n_neighbors"])
+        var k = Int(py=py_item(own, nk[].k_n_neighbors))
         for i in range(len(parts)):  # driver-loop: checks one result shard
             var p = parts[i]
             if (Int(py=p[0].shape[0]) != m or Int(py=p[0].shape[1]) != k or Int(py=p[1].shape[0]) != m
@@ -1325,13 +1344,13 @@ def _ivf_search(args: PythonObject) raises -> PythonObject:
             if status == 4:
                 raise Error("ValueError: NaN distance in an IVF shard result")
             raise Error("ValueError: IVF shard merge failed")
-        if Int(py=own["metric_code_"]) == 1:
+        if Int(py=py_item(own, nk[].k_metric_code_)) == 1:
             var result_addr = Int(py=classical_address(result))
-            var metric = Int(py=own["metric_code_"])
+            var metric = Int(py=py_item(own, nk[].k_metric_code_))
             with GILReleased(Python()):
                 _ = parallel_ivf_finalize(ivf_key, result_addr, m * k, metric)
             _ = result  # keep the Python object alive through the native call above
-        py_setitem(own, "n_candidates_", counts)
+        py_setitem(own, nk[].k_n_candidates_, counts)
         return Python.tuple(result, ids)
     except error:
         _ivf_close(args[0])
@@ -1340,9 +1359,10 @@ def _ivf_search(args: PythonObject) raises -> PythonObject:
 
 def _ivf_close(obj: PythonObject) raises:
     var own = _driver_fields(obj, "distributed_ivf_class")
-    py_setitem(own, "_closed", True)
+    var nk = parallel_keys()
+    py_setitem(own, nk[].k__closed, True)
     var pool = py_get(own, PythonObject("_pool"), PythonObject(None))
-    if pool is not None and not Bool(py=pool["closed"]):
+    if pool is not None and not Bool(py=py_item(pool, nk[].k_closed)):
         process_pool_close(pool)
 
 
@@ -1395,15 +1415,16 @@ def _scaler_worker(operation: String, state: PythonObject, args: PythonObject, c
     var inverse = Bool(py=args[1])
     var rows = List[Float32]()
     var spec = ScalerTransformSpec(False, inverse, True, True, False, 0, 0)
+    var nk = parallel_keys()
     if kind == "standard":
-        var with_mean = _scaler_bool(fitted["with_mean_"], owner_context)
-        var with_std = _scaler_bool(fitted["with_std_"], owner_context)
-        rows = scaler_standard_rows(calls, fitted["mean_"], fitted["scale_"], w, with_mean, with_std, owner_context)
+        var with_mean = _scaler_bool(py_item(fitted, nk[].k_with_mean_), owner_context)
+        var with_std = _scaler_bool(py_item(fitted, nk[].k_with_std_), owner_context)
+        rows = scaler_standard_rows(calls, py_item(fitted, nk[].k_mean_), py_item(fitted, nk[].k_scale_), w, with_mean, with_std, owner_context)
         spec = ScalerTransformSpec(False, inverse, with_mean, with_std, False, 0, 0)
     else:
-        var bounds = minmax_range_pair(fitted["feature_range_"], owner_context)
-        var clip = _minmax_flag(fitted["clip_"], "clip_", owner_context)
-        rows = minmax_rows(calls, fitted["min_"], fitted["scale_"], w, owner_context)
+        var bounds = minmax_range_pair(py_item(fitted, nk[].k_feature_range_), owner_context)
+        var clip = _minmax_flag(py_item(fitted, nk[].k_clip_), "clip_", owner_context)
+        rows = minmax_rows(calls, py_item(fitted, nk[].k_min_), py_item(fitted, nk[].k_scale_), w, owner_context)
         spec = ScalerTransformSpec(True, inverse, True, True, clip, Float32(Float64(py=bounds[0])), Float32(Float64(py=bounds[1])))
     var out = shard_array("<f4", Python.tuple(n, w), n * w, context)
     scaler_transform_core(calls, spec, MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(rows.unsafe_ptr())),
@@ -1466,12 +1487,13 @@ def shard_worker_dispatch(request: PythonObject) raises -> PythonObject:
 
 def shard_worker(argv: PythonObject) raises:
     var socket = process_worker_connect(argv)
+    var nk = parallel_keys()
     try:
         while True:  # driver-loop: over native local shard requests
             var request = process_worker_next(socket)
             if request is None:
                 break
-            var sequence = Int(py=py_get(request[0], "sequence", -1))
+            var sequence = Int(py=py_get(request[0], nk[].k_sequence, -1))
             try:
                 process_send(socket, "result", sequence, shard_worker_dispatch(request[1]))
             except error:
@@ -1484,6 +1506,7 @@ def shard_worker(argv: PythonObject) raises:
 
 def parallel_shard_call(operation: String, args: PythonObject) raises -> PythonObject:
     var s = PARALLEL_SHARD_BOUNDARY.get_or_create_ptr()
+    var nk = parallel_keys()
     if operation == "register":
         # A driver module's fixed classes, entries and contexts, at its import.
         if s[].tables is None:
@@ -1491,7 +1514,7 @@ def parallel_shard_call(operation: String, args: PythonObject) raises -> PythonO
         _ = py_call(s[].tables.update, args)
         var context = py_get(s[].tables, PythonObject("context"), PythonObject(None))
         if context is not None:
-            codec_initialize(context["array_class"], PythonObject(None), PythonObject(None))
+            codec_initialize(py_item(context, nk[].k_array_class), PythonObject(None), PythonObject(None))
         return PythonObject(None)
     if operation == "transform_rbf_sampler":
         return _transform_rbf_sampler(args)
@@ -1537,13 +1560,13 @@ def parallel_shard_call(operation: String, args: PythonObject) raises -> PythonO
         # no pool: close is safe and idempotent there, as _ivf_close is
         # (cpu-surface-defects, 2026-11-16).
         var pool = py_get(py_fields(args[0]), PythonObject("_pool"), PythonObject(None))
-        if pool is not None and not Bool(py=pool["closed"]):
+        if pool is not None and not Bool(py=py_item(pool, nk[].k_closed)):
             process_pool_close(pool)
         return PythonObject(None)
     if operation == "ivf_init":
         raise Error("TypeError: use DistributedIVFIndex.from_index(index, devices=...)")
     if operation == "ivf_enter":
-        if Bool(py=_driver_fields(args[0], "distributed_ivf_class")["_closed"]):
+        if Bool(py=py_item(_driver_fields(args[0], "distributed_ivf_class"), nk[].k__closed)):
             raise Error("RuntimeError: distributed IVF index is closed")
         return args[0]
     if operation == "reference_query":

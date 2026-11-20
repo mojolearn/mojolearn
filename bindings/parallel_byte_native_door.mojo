@@ -36,6 +36,8 @@ from training.byte_lm_glue_abi import (
     BYTE_LM_GLUE_ABI, BG_OP_COUNT, BG_NUMERIC_MODE, BG_VENDOR, BG_PROFILE, BG_SUFFIX, BG_CONFIG_PROFILE,
     byte_lm_glue_ref, byte_lm_glue_read_text, byte_lm_glue_read_int,
 )
+from bindings.parallel_keys_unpack import parallel_keys
+from bindings.py_balanced import py_item
 
 
 # The byte-LM schedule descriptor ABI (bindings/_mojolearn_byte_lm.mojo).
@@ -119,9 +121,10 @@ struct ParallelByteOwner(Movable, Writable):
                  shape: PythonObject, state: PythonObject) raises:
         self.owner_id = owner_id
         self.schedule = schedule
-        self.provider = table["provider"]
-        self.create = table["create"]
-        self.handle_entry = table["handle"]
+        var nk = parallel_keys()
+        self.provider = py_item(table, nk[].k_provider)
+        self.create = py_item(table, nk[].k_create)
+        self.handle_entry = py_item(table, nk[].k_handle)
         self.session = PythonObject(None)
         self.handle = 0
         self.closed = False
@@ -131,11 +134,11 @@ struct ParallelByteOwner(Movable, Writable):
         self.device_objects = device_objects
         self.logical_shards = logical_shards
         self.dims = List[Int]()
-        var dims = shape["dims"]
+        var dims = py_item(shape, nk[].k_dims)
         for i in range(len(dims)):  # driver-loop: over dims: nine or ten admitted shape words
             self.dims.append(Int(py=dims[i]))
-        self.n_total = Int(py=shape["n_total"])
-        self.n_tensors = Int(py=shape["n_tensors"])
+        self.n_total = Int(py=py_item(shape, nk[].k_n_total))
+        self.n_tensors = Int(py=py_item(shape, nk[].k_n_tensors))
         self.state = state
         # Captured once from the freshly admitted native copies.
         self.state_addresses = List[Int]()
@@ -207,6 +210,7 @@ def parallel_byte_initialize(array_cls: PythonObject, shape_cls: PythonObject, m
     arrays[].arrays = Python.import_module("array").array
     arrays[].array_cls = array_cls
     var mode_keys = py_call(p[].bi.list, modes)
+    var nk = parallel_keys()
     for k in range(len(mode_keys)):  # driver-loop: over installed numerical-mode ABI tables
         var mode = mode_keys[k]
         if py_type(mode) is not p[].bi.str:
@@ -222,7 +226,7 @@ def parallel_byte_initialize(array_cls: PythonObject, shape_cls: PythonObject, m
         # GPU import ("parallel: binding has no native arithmetic profile").
         var gl = _parallel_glue(String(mode), expected_vendor)
         var suffix = _parallel_glue_text(gl, BG_SUFFIX, List[Int]())
-        py_setitem(table, "suffix", PythonObject(suffix))
+        py_setitem(table, nk[].k_suffix, PythonObject(suffix))
         if byte_lm_glue_read_int(gl, BG_NUMERIC_MODE, List[Int]()) != (1 if String(mode) == "identical" else 0) or _parallel_glue_text(gl, BG_VENDOR, List[Int]()) != expected_vendor:
             raise Error("parallel: native mode/vendor mismatch")
         if _parallel_glue_text(gl, BG_PROFILE, List[Int]()) != "mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1" + suffix:
@@ -241,9 +245,9 @@ def parallel_byte_initialize(array_cls: PythonObject, shape_cls: PythonObject, m
         else:
             create = PythonObject(None)
             handle = PythonObject(None)
-        py_setitem(table, "provider", provider)
-        py_setitem(table, "create", create)
-        py_setitem(table, "handle", handle)
+        py_setitem(table, nk[].k_provider, provider)
+        py_setitem(table, nk[].k_create, create)
+        py_setitem(table, nk[].k_handle, handle)
         py_setitem(p[].modes, mode, table)
 
 
@@ -302,7 +306,8 @@ def _parallel_record(owner: PythonObject) raises -> PythonObject:
     """The exact native owner record of an admitted trainer instance."""
     var p = PARALLEL_BYTE_BOUNDARY.get_or_create_ptr()
     var schedule = _parallel_class_schedule(py_type(owner))
-    var record = py_get(py_fields(owner), "_native")
+    var nk = parallel_keys()
+    var record = py_get(py_fields(owner), nk[].k__native)
     if record is None:
         raise Error("RuntimeError: parallel trainer is not initialized")
     var owner_id = Int(py=py_call(p[].bi.id, owner))
@@ -556,7 +561,8 @@ def _parallel_shape(state: PythonObject) raises -> PythonObject:
     var names = [String("batch"), String("length"), String("d_model"), String("n_heads"),
                  String("n_kv"), String("head_dim"), String("intermediate"), String("n_layers"), String("vocab_size")]
     var defaults: List[Int] = [2, 32, 32, 4, 2, 8, 64, 2, 256]
-    var shape = py_get(state, "model_shape", PythonObject(None))
+    var nk = parallel_keys()
+    var shape = py_get(state, nk[].k_model_shape, PythonObject(None))
     if shape is not None:
         if py_type(shape) is not p[].bi.dict:
             raise Error("Byte-LM model_shape must be a dict")
@@ -568,7 +574,7 @@ def _parallel_shape(state: PythonObject) raises -> PythonObject:
         for i in range(7):  # driver-loop: over names: seven required dimension names
             if not py_contains(shape, PythonObject(names[i])):
                 raise Error("Byte-LM model_shape has missing dimensions")
-        if py_contains(shape, "n_layers") != py_contains(shape, "vocab_size"):
+        if py_contains(shape, nk[].k_n_layers) != py_contains(shape, nk[].k_vocab_size):
             raise Error("Byte-LM model_shape must specify both layers and vocabulary")
     var dims = p[].bi.list()
     var normalized = p[].bi.dict()
@@ -577,10 +583,10 @@ def _parallel_shape(state: PythonObject) raises -> PythonObject:
         var n = _parallel_int(value, 1, 1048576, names[i], False)
         _ = py_call(dims.append, n)
         py_setitem(normalized, names[i], PythonObject(n))
-    var chunked = PythonObject(False) if shape is None else py_get(shape, "chunked_lm_head_v2", PythonObject(False))
+    var chunked = PythonObject(False) if shape is None else py_get(shape, nk[].k_chunked_lm_head_v2, PythonObject(False))
     if py_type(chunked) is not p[].bi.bool:
         raise Error("chunked_lm_head_v2 must be bool")
-    py_setitem(normalized, "chunked_lm_head_v2", chunked)
+    py_setitem(normalized, nk[].k_chunked_lm_head_v2, chunked)
     var b = Int(py=dims[0])
     var l = Int(py=dims[1])
     var dm = Int(py=dims[2])
@@ -638,14 +644,14 @@ def _parallel_shape(state: PythonObject) raises -> PythonObject:
     if Bool(py=chunked):
         _ = py_call(dims.append, 1)
     var result = p[].bi.dict()
-    py_setitem(result, "dims", dims)
-    py_setitem(result, "model_shape", normalized)
-    py_setitem(result, "names", names_out)
-    py_setitem(result, "shapes", shapes_out)
-    py_setitem(result, "offsets", offsets)
-    py_setitem(result, "n_total", PythonObject(total))
-    py_setitem(result, "n_tensors", PythonObject(2 + layers * 9))
-    py_setitem(result, "profile_base", PythonObject(base))
+    py_setitem(result, nk[].k_dims, dims)
+    py_setitem(result, nk[].k_model_shape, normalized)
+    py_setitem(result, nk[].k_names, names_out)
+    py_setitem(result, nk[].k_shapes, shapes_out)
+    py_setitem(result, nk[].k_offsets, offsets)
+    py_setitem(result, nk[].k_n_total, PythonObject(total))
+    py_setitem(result, nk[].k_n_tensors, PythonObject(2 + layers * 9))
+    py_setitem(result, nk[].k_profile_base, PythonObject(base))
     return result
 
 
@@ -660,30 +666,31 @@ def _parallel_validate_state(value: PythonObject, shape: PythonObject, exported:
                  String("parameter_shapes"), String("parameter_offsets"), String("parameters"), String("m"),
                  String("v"), String("flags"), String("completed_steps"), String("next_batch_index"),
                  String("config"), String("data_schedule")]
-    var has_shape = py_contains(value, "model_shape")
+    var nk = parallel_keys()
+    var has_shape = py_contains(value, nk[].k_model_shape)
     if len(value) != len(names) + Int(has_shape):
         raise Error("Byte-LM state has missing or unknown fields")
     for name in names:  # driver-loop: over names: fourteen state field names
         if not py_contains(value, PythonObject(name)):
             raise Error("Byte-LM state is missing " + name)
-    var mode = String(value["numeric_mode"])
+    var mode = String(py_item(value, nk[].k_numeric_mode))
     if not py_contains(p[].modes, PythonObject(mode)):
         raise Error("Byte-LM numeric mode is not installed")
     var table = p[].modes[mode]
     var shape_words = List[Int]()
-    var dims = shape["dims"]
+    var dims = py_item(shape, nk[].k_dims)
     for i in range(len(dims)):  # small-loop(dims: nine or ten admitted shape words)
         shape_words.append(Int(py=dims[i]))
     if len(shape_words) == 9:
         shape_words.append(0)  # the glue's tenth word: chunked head off
     var gl = _parallel_glue(mode, p[].vendor)
-    if _parallel_glue_text(gl, BG_CONFIG_PROFILE, shape_words^) != String(shape["profile_base"]) + String(table["suffix"]):
+    if _parallel_glue_text(gl, BG_CONFIG_PROFILE, shape_words^) != String(py_item(shape, nk[].k_profile_base)) + String(py_item(table, nk[].k_suffix)):
         raise Error("Byte-LM native runtime shape/profile mismatch")
-    if String(value["schema"]) != "mojolearn.small-byte-lm-state.v1" or String(value["profile"]) != String(shape["profile_base"]) + String(table["suffix"]):
+    if String(py_item(value, nk[].k_schema)) != "mojolearn.small-byte-lm-state.v1" or String(py_item(value, nk[].k_profile)) != String(py_item(shape, nk[].k_profile_base)) + String(py_item(table, nk[].k_suffix)):
         raise Error("Byte-LM state profile/registry/mode mismatch")
-    if not Bool(py=value["parameter_names"] == shape["names"]) or not Bool(py=value["parameter_shapes"] == shape["shapes"]) or not Bool(py=value["parameter_offsets"] == shape["offsets"]):
+    if not Bool(py=py_item(value, nk[].k_parameter_names) == py_item(shape, nk[].k_names)) or not Bool(py=py_item(value, nk[].k_parameter_shapes) == py_item(shape, nk[].k_shapes)) or not Bool(py=py_item(value, nk[].k_parameter_offsets) == py_item(shape, nk[].k_offsets)):
         raise Error("Byte-LM state parameter registry mismatch")
-    var cfg = value["config"]
+    var cfg = py_item(value, nk[].k_config)
     var cfg_names = [String("kind"), String("lr"), String("beta1"), String("beta2"), String("eps"),
                      String("weight_decay"), String("momentum"), String("dampening"), String("nesterov"), String("max_norm")]
     if py_type(cfg) is not p[].bi.dict or len(cfg) != len(cfg_names):
@@ -691,11 +698,11 @@ def _parallel_validate_state(value: PythonObject, shape: PythonObject, exported:
     for name in cfg_names:  # driver-loop: over cfg_names: ten optimizer field names
         if not py_contains(cfg, PythonObject(name)):
             raise Error("Byte-LM optimizer configuration is missing " + name)
-    if _parallel_int(cfg["kind"], 2, 2, "optimizer kind") != 2 or py_type(cfg["nesterov"]) is not p[].bi.bool or Bool(py=cfg["nesterov"]):
+    if _parallel_int(py_item(cfg, nk[].k_kind), 2, 2, "optimizer kind") != 2 or py_type(py_item(cfg, nk[].k_nesterov)) is not p[].bi.bool or Bool(py=py_item(cfg, nk[].k_nesterov)):
         raise Error("Byte-LM first profile requires AdamW without Nesterov")
     var config = p[].bi.dict()
-    py_setitem(config, "kind", PythonObject(2))
-    py_setitem(config, "nesterov", PythonObject(False))
+    py_setitem(config, nk[].k_kind, PythonObject(2))
+    py_setitem(config, nk[].k_nesterov, PythonObject(False))
     for name in [String("lr"), String("beta1"), String("beta2"), String("eps"), String("weight_decay"),  # driver-loop: over names: eight optimizer scalars
                  String("momentum"), String("dampening"), String("max_norm")]:
         var number = _parallel_float(cfg[name], name)
@@ -706,39 +713,39 @@ def _parallel_validate_state(value: PythonObject, shape: PythonObject, exported:
         if (name == "momentum" or name == "dampening" or name == "max_norm") and number != 0:
             raise Error("Byte-LM first profile requires AdamW without clipping or SGD options")
         py_setitem(config, name, PythonObject(Float64(number)))
-    var completed = _parallel_int(value["completed_steps"], 0, 999999, "completed_steps", False)
-    if _parallel_int(value["next_batch_index"], 0, 999999, "next_batch_index", False) != completed:
+    var completed = _parallel_int(py_item(value, nk[].k_completed_steps), 0, 999999, "completed_steps", False)
+    if _parallel_int(py_item(value, nk[].k_next_batch_index), 0, 999999, "next_batch_index", False) != completed:
         raise Error("Byte-LM schedule cursor must match completed_steps")
     var result = py_call(p[].bi.dict, value)
-    var n = Int(py=shape["n_total"])
+    var n = Int(py=py_item(shape, nk[].k_n_total))
     var flags = PythonObject(None)
     if exported:
         for name in [String("parameters"), String("m"), String("v")]:  # driver-loop: over names: three state arrays
             parallel_require_finite_f32(Int(py=value[name]._addr), n)
             py_setitem(result, name, value[name])
-        flags = value["flags"]
+        flags = py_item(value, nk[].k_flags)
     else:
         for name in [String("parameters"), String("m"), String("v")]:  # small-loop(names: three state arrays)
             py_setitem(result, name, _parallel_array(value[name], [n]))
-        flags = _parallel_array(value["flags"], [Int(py=shape["n_tensors"])], True)
-    parallel_require_nonnegative_f32(Int(py=result["v"]._addr), n)
-    parallel_require_binary_i32(Int(py=flags._addr), Int(py=shape["n_tensors"]))
-    py_setitem(result, "flags", flags)
-    py_setitem(result, "config", config)
-    py_setitem(result, "completed_steps", PythonObject(completed))
-    py_setitem(result, "next_batch_index", PythonObject(completed))
-    py_setitem(result, "data_schedule", _parallel_schedule(value["data_schedule"]))
-    var vocabulary = py_get(result["data_schedule"], "vocabulary", PythonObject(None))
+        flags = _parallel_array(py_item(value, nk[].k_flags), [Int(py=py_item(shape, nk[].k_n_tensors))], True)
+    parallel_require_nonnegative_f32(Int(py=py_item(result, nk[].k_v)._addr), n)
+    parallel_require_binary_i32(Int(py=flags._addr), Int(py=py_item(shape, nk[].k_n_tensors)))
+    py_setitem(result, nk[].k_flags, flags)
+    py_setitem(result, nk[].k_config, config)
+    py_setitem(result, nk[].k_completed_steps, PythonObject(completed))
+    py_setitem(result, nk[].k_next_batch_index, PythonObject(completed))
+    py_setitem(result, nk[].k_data_schedule, _parallel_schedule(py_item(value, nk[].k_data_schedule)))
+    var vocabulary = py_get(py_item(result, nk[].k_data_schedule), nk[].k_vocabulary, PythonObject(None))
     if vocabulary is not None:
-        if py_type(vocabulary) is not p[].bi.dict or py_type(py_get(vocabulary, "n_vocab")) is not p[].bi.int or py_type(py_get(vocabulary, "sha256")) is not p[].bi.str:
+        if py_type(vocabulary) is not p[].bi.dict or py_type(py_get(vocabulary, nk[].k_n_vocab)) is not p[].bi.int or py_type(py_get(vocabulary, nk[].k_sha256)) is not p[].bi.str:
             raise Error("Byte-LM data schedule vocabulary descriptor is invalid")
-        if Int(py=vocabulary["n_vocab"]) != Int(py=shape["dims"][8]):
+        if Int(py=py_item(vocabulary, nk[].k_n_vocab)) != Int(py=py_item(shape, nk[].k_dims)[8]):
             raise Error("Byte-LM data schedule vocabulary does not match model")
-    py_setitem(result, "parameter_names", py_call(p[].bi.list, shape["names"]))
-    py_setitem(result, "parameter_shapes", native_json_parse(PythonObject(_transport_json(shape["shapes"]))))
-    py_setitem(result, "parameter_offsets", py_call(p[].bi.list, shape["offsets"]))
+    py_setitem(result, nk[].k_parameter_names, py_call(p[].bi.list, py_item(shape, nk[].k_names)))
+    py_setitem(result, nk[].k_parameter_shapes, native_json_parse(PythonObject(_transport_json(py_item(shape, nk[].k_shapes)))))
+    py_setitem(result, nk[].k_parameter_offsets, py_call(p[].bi.list, py_item(shape, nk[].k_offsets)))
     if has_shape:
-        py_setitem(result, "model_shape", py_call(p[].bi.dict, shape["model_shape"]))
+        py_setitem(result, nk[].k_model_shape, py_call(p[].bi.dict, py_item(shape, nk[].k_model_shape)))
     return result
 
 
@@ -775,34 +782,36 @@ def parallel_byte_init(owner: PythonObject, state: PythonObject, devices: Python
         raise Error("Byte-LM state must be a dict")
     var shape = _parallel_shape(state)
     var admitted = _parallel_validate_state(state, shape)
+    var nk = parallel_keys()
     if schedule == PARALLEL_MODEL_POOL:
         # Each decoder layer has one owner and the embedding/head share
         # devices[0], so more than n_layers + 1 devices would leave one empty.
-        var owners = min(64, Int(py=shape["dims"][7]) + 1)
+        var owners = min(64, Int(py=py_item(shape, nk[].k_dims)[7]) + 1)
         if len(ids) < 1 or len(ids) > owners:
             raise Error("require 1 <= device count <= min(64, n_layers + 1)")
-    var table = p[].modes[admitted["numeric_mode"]]
+    var table = p[].modes[py_item(admitted, nk[].k_numeric_mode)]
     var owner_id = Int(py=py_call(p[].bi.id, owner))
     var record = PythonObject(alloc=ParallelByteOwner(owner_id, schedule, table, pooled, device_ids^, ids,
                                                       count, shape, admitted))
     var shape_object = py_call(p[].bi.object.__new__, p[].shape_cls)
     # Initialize frozen dataclass storage directly, without invoking the
     # Python-generated __setattr__ or colliding with PythonObject's setter.
-    _ = py_call(py_fields(shape_object).update, shape["model_shape"])
+    _ = py_call(py_fields(shape_object).update, py_item(shape, nk[].k_model_shape))
     var fields = py_fields(owner)
     # Replacing a previous record releases its session through the native
     # session value's deallocation, as reinitialization always did.
-    py_setitem(fields, "_native", record)
-    py_setitem(fields, "pool_optimizer", pool_optimizer)
-    py_setitem(fields, "devices", ids)
-    py_setitem(fields, "logical_shards", PythonObject(count))
-    py_setitem(fields, "_shape", shape_object)
-    py_setitem(fields, "_session", PythonObject(None))
+    py_setitem(fields, nk[].k__native, record)
+    py_setitem(fields, nk[].k_pool_optimizer, pool_optimizer)
+    py_setitem(fields, nk[].k_devices, ids)
+    py_setitem(fields, nk[].k_logical_shards, PythonObject(count))
+    py_setitem(fields, nk[].k__shape, shape_object)
+    py_setitem(fields, nk[].k__session, PythonObject(None))
     return PythonObject(None)
 
 
 def _parallel_mirror_session(owner: PythonObject, session: PythonObject) raises:
-    py_setitem(py_fields(owner), "_session", session)
+    var nk = parallel_keys()
+    py_setitem(py_fields(owner), nk[].k__session, session)
 
 
 def _parallel_execute(record: PythonObject, op: Int, var addresses: List[Int], ints: List[Int],
@@ -839,9 +848,10 @@ def parallel_byte_open(owner: PythonObject) raises:
                         + "which no host binding restates")
         raise Error("NotImplementedError: installed binding has no cooperative GPU byte-LM session")
     var state = rec[].state
-    var config = state["config"]
-    var completed = Int(py=state["completed_steps"])
-    var ints: List[Int] = [completed, Int(py=config["kind"]), 1 if Bool(py=config["nesterov"]) else 0,
+    var nk = parallel_keys()
+    var config = py_item(state, nk[].k_config)
+    var completed = Int(py=py_item(state, nk[].k_completed_steps))
+    var ints: List[Int] = [completed, Int(py=py_item(config, nk[].k_kind)), 1 if Bool(py=py_item(config, nk[].k_nesterov)) else 0,
                            1 if rec[].pool_optimizer else 0, len(rec[].dims)]
     for value in rec[].dims:  # driver-loop: over dims: nine or ten admitted shape words
         ints.append(value)
@@ -873,9 +883,9 @@ def parallel_byte_open(owner: PythonObject) raises:
         raise error
     _parallel_mirror_session(owner, session)
     var retained = py_call(p[].bi.dict, state)
-    py_setitem(retained, "parameters", PythonObject(None))
-    py_setitem(retained, "m", PythonObject(None))
-    py_setitem(retained, "v", PythonObject(None))
+    py_setitem(retained, nk[].k_parameters, PythonObject(None))
+    py_setitem(retained, nk[].k_m, PythonObject(None))
+    py_setitem(retained, nk[].k_v, PythonObject(None))
     rec[].state = retained
     rec[].state_addresses = List[Int]()
 
@@ -891,13 +901,15 @@ def _parallel_require_split(record: PythonObject, entry: String) raises:
 
 
 def _parallel_completed(record: PythonObject) raises -> Int:
-    return Int(py=record.downcast_value_ptr[ParallelByteOwner]()[].state["completed_steps"])
+    var nk = parallel_keys()
+    return Int(py=py_item(record.downcast_value_ptr[ParallelByteOwner]()[].state, nk[].k_completed_steps))
 
 
 def _parallel_commit(record: PythonObject, completed: Int) raises:
     var state = record.downcast_value_ptr[ParallelByteOwner]()[].state
-    py_setitem(state, "completed_steps", PythonObject(completed))
-    py_setitem(state, "next_batch_index", PythonObject(completed))
+    var nk = parallel_keys()
+    py_setitem(state, nk[].k_completed_steps, PythonObject(completed))
+    py_setitem(state, nk[].k_next_batch_index, PythonObject(completed))
 
 
 def _parallel_export(owner: PythonObject, rank: PythonObject, into: PythonObject, gradients: Bool = False) raises -> PythonObject:
@@ -975,16 +987,17 @@ def parallel_byte_step_shards(owner: PythonObject, shard_addresses: List[Int]) r
     var ints: List[Int] = [before, count]
     var written = _parallel_execute(record, PARALLEL_OP_STEP, addresses^, ints, List[Float64]())
     var result = p[].bi.dict()
+    var nk = parallel_keys()
     try:
         if written != count:
             raise Error("RuntimeError: parallel step returned wrong loss count")
         var values = p[].bi.list()
         for i in range(count):  # driver-loop: over count: one loss per logical shard
             _ = py_call(values.append, PythonObject(losses[i]))
-        py_setitem(result, "losses", py_call(p[].bi.tuple, values))
-        py_setitem(result, "completed_steps", PythonObject(before + 1))
-        py_setitem(result, "logical_shards", PythonObject(count))
-        py_setitem(result, "reduction", PythonObject("ordered_sum"))
+        py_setitem(result, nk[].k_losses, py_call(p[].bi.tuple, values))
+        py_setitem(result, nk[].k_completed_steps, PythonObject(before + 1))
+        py_setitem(result, nk[].k_logical_shards, PythonObject(count))
+        py_setitem(result, nk[].k_reduction, PythonObject("ordered_sum"))
     except error:
         try:
             if _parallel_execute(record, PARALLEL_OP_ROLLBACK, List[Int](), List[Int](), List[Float64]()) != before:
@@ -1047,6 +1060,7 @@ def _parallel_ownership(owner: PythonObject) raises -> PythonObject:
         raise Error("RuntimeError: native ownership returned a malformed record")
     var rows = written // width
     var result = p[].bi.list()
+    var nk = parallel_keys()
     if rec[].schedule == PARALLEL_MODEL_POOL:
         # Rows are [owner index, first, count, parameter, moment, rollback,
         # gradient bytes] (byte_lm_model_pool ownership).
@@ -1057,7 +1071,7 @@ def _parallel_ownership(owner: PythonObject) raises -> PythonObject:
             if device < 0 or device >= len(rec[].devices):
                 raise Error("RuntimeError: native ownership names an unknown device owner")
             var row = p[].bi.dict()
-            py_setitem(row, "device", rec[].device_objects[device])
+            py_setitem(row, nk[].k_device, rec[].device_objects[device])
             for j in range(len(pool_fields)):  # driver-loop: over pool_fields: six ownership record words
                 py_setitem(row, pool_fields[j], PythonObject(words[i * width + j + 1]))
             _ = py_call(result.append, row)
@@ -1068,7 +1082,7 @@ def _parallel_ownership(owner: PythonObject) raises -> PythonObject:
         raise Error("RuntimeError: native ownership row count differs from devices")
     for i in range(rows):  # driver-loop: over actual physical device ownership records
         var row = p[].bi.dict()
-        py_setitem(row, "device", rec[].device_objects[i])
+        py_setitem(row, nk[].k_device, rec[].device_objects[i])
         for j in range(len(fields)):  # driver-loop: over fields: five ownership record words
             py_setitem(row, fields[j], PythonObject(words[i * width + j]))
         _ = py_call(result.append, row)
@@ -1083,16 +1097,17 @@ def _parallel_state_snapshot(record: PythonObject) raises -> PythonObject:
     var rec = record.downcast_value_ptr[ParallelByteOwner]()
     var state = rec[].state
     var result = py_call(p[].bi.dict, state)
-    py_setitem(result, "config", py_call(p[].bi.dict, state["config"]))
-    py_setitem(result, "data_schedule", native_json_parse(PythonObject(_transport_json(state["data_schedule"]))))
-    py_setitem(result, "parameter_names", py_call(p[].bi.list, state["parameter_names"]))
-    py_setitem(result, "parameter_shapes", native_json_parse(PythonObject(_transport_json(state["parameter_shapes"]))))
-    py_setitem(result, "parameter_offsets", py_call(p[].bi.list, state["parameter_offsets"]))
+    var nk = parallel_keys()
+    py_setitem(result, nk[].k_config, py_call(p[].bi.dict, py_item(state, nk[].k_config)))
+    py_setitem(result, nk[].k_data_schedule, native_json_parse(PythonObject(_transport_json(py_item(state, nk[].k_data_schedule)))))
+    py_setitem(result, nk[].k_parameter_names, py_call(p[].bi.list, py_item(state, nk[].k_parameter_names)))
+    py_setitem(result, nk[].k_parameter_shapes, native_json_parse(PythonObject(_transport_json(py_item(state, nk[].k_parameter_shapes)))))
+    py_setitem(result, nk[].k_parameter_offsets, py_call(p[].bi.list, py_item(state, nk[].k_parameter_offsets)))
     for key in [String("parameters"), String("m"), String("v")]:  # small-loop(keys: three state arrays)
         if state[key] is not None:
             py_setitem(result, key, _parallel_array(state[key], [rec[].n_total]))
-    if state["flags"] is not None:
-        py_setitem(result, "flags", _parallel_array(state["flags"], [rec[].n_tensors], True))
+    if py_item(state, nk[].k_flags) is not None:
+        py_setitem(result, nk[].k_flags, _parallel_array(py_item(state, nk[].k_flags), [rec[].n_tensors], True))
     return result
 
 
@@ -1108,6 +1123,7 @@ def parallel_byte_call(operation: String, args: PythonObject) raises -> PythonOb
         if len(args) != 5:
             raise Error("TypeError: parallel init takes owner, state, devices, logical_shards, pool_optimizer")
         return parallel_byte_init(args[0], args[1], args[2], args[3], args[4])
+    var nk = parallel_keys()
     if operation == "from_checkpoint":
         if len(args) != 4:
             raise Error("TypeError: parallel from_checkpoint takes cls, checkpoint, devices, pool_optimizer")
@@ -1116,10 +1132,10 @@ def parallel_byte_call(operation: String, args: PythonObject) raises -> PythonOb
         var checkpoint = args[1]
         if py_type(checkpoint) is not p[].bi.dict:
             raise Error("unsupported parallel checkpoint contract")
-        if String(py_get(checkpoint, "schema")) != "mojolearn.parallel-byte-lm.v1" or String(py_get(checkpoint, "reduction")) != "ordered_sum":
+        if String(py_get(checkpoint, nk[].k_schema)) != "mojolearn.parallel-byte-lm.v1" or String(py_get(checkpoint, nk[].k_reduction)) != "ordered_sum":
             raise Error("unsupported parallel checkpoint contract")
         var restored = py_call(p[].bi.object.__new__, cls)
-        _ = parallel_byte_init(restored, checkpoint["state"], args[2], checkpoint["logical_shards"], args[3])
+        _ = parallel_byte_init(restored, py_item(checkpoint, nk[].k_state), args[2], py_item(checkpoint, nk[].k_logical_shards), args[3])
         return restored
     var owner = args[0]
     var record = _parallel_record(owner)
@@ -1157,10 +1173,10 @@ def parallel_byte_call(operation: String, args: PythonObject) raises -> PythonOb
         return _parallel_export(owner, args[1], args[2], True)
     if operation == "checkpoint":
         var result = p[].bi.dict()
-        py_setitem(result, "schema", PythonObject("mojolearn.parallel-byte-lm.v1"))
-        py_setitem(result, "logical_shards", PythonObject(rec[].logical_shards))
-        py_setitem(result, "reduction", PythonObject("ordered_sum"))
-        py_setitem(result, "state", parallel_byte_state(owner, PythonObject(0)))
+        py_setitem(result, nk[].k_schema, PythonObject("mojolearn.parallel-byte-lm.v1"))
+        py_setitem(result, nk[].k_logical_shards, PythonObject(rec[].logical_shards))
+        py_setitem(result, nk[].k_reduction, PythonObject("ordered_sum"))
+        py_setitem(result, nk[].k_state, parallel_byte_state(owner, PythonObject(0)))
         return result
     if operation == "set_lr":
         var lr = _parallel_float(args[1], "lr")
@@ -1173,9 +1189,9 @@ def parallel_byte_call(operation: String, args: PythonObject) raises -> PythonOb
             var stored = _parallel_execute(record, PARALLEL_OP_SET_LR, List[Int](), List[Int](), floats)
             if UInt32(stored) != bitcast[DType.uint32](lr):
                 raise Error("RuntimeError: native set_lr stored different float32 bits")
-        var config = py_call(p[].bi.dict, rec[].state["config"])
-        py_setitem(config, "lr", PythonObject(Float64(lr)))
-        py_setitem(rec[].state, "config", config)
+        var config = py_call(p[].bi.dict, py_item(rec[].state, nk[].k_config))
+        py_setitem(config, nk[].k_lr, PythonObject(Float64(lr)))
+        py_setitem(rec[].state, nk[].k_config, config)
         return PythonObject(Float64(lr))
     if operation == "require_fold":
         _parallel_require_split(record, "shard_gradient")

@@ -4,6 +4,8 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.samba_admission_door import samba_admit, samba_admit_value, _samba_metadata
 from bindings.py_balanced import py_call, py_type
+from bindings.parallel_keys_unpack import parallel_keys
+from bindings.py_balanced import py_item
 
 
 def _neural_container(value: PythonObject, label: String, range_ok: Bool = False) raises:
@@ -16,7 +18,8 @@ def _neural_container(value: PythonObject, label: String, range_ok: Bool = False
 def neural_admit(operation: String, args: PythonObject, owner_cls: PythonObject,
                  mlp_cls: PythonObject, samba_cls: PythonObject, context: PythonObject) raises:
     var bi = native_loaded_module("builtins")
-    var admission = context["admission"]
+    var nk = parallel_keys()
+    var admission = py_item(context, nk[].k_admission)
     # Validate cached class descriptors before reading even an exact owner.
     samba_admit("parallel_layout", bi.tuple(), context)
     _neural_container(args, "argument envelope")
@@ -60,7 +63,7 @@ def neural_admit(operation: String, args: PythonObject, owner_cls: PythonObject,
         return
     # Cleanup must remain available after rejecting invalid model metadata.
     # These operations never read the model, so validate only their own fields.
-    var fields = py_call(admission["owner_fields"], owner)
+    var fields = py_call(py_item(admission, nk[].k_owner_fields), owner)
     var keys = py_call(bi.list, fields)
     for i in range(len(keys)):  # driver-loop: over native owner keys before dictionary lookup
         if py_type(keys[i]) is not bi.str:
@@ -68,4 +71,4 @@ def neural_admit(operation: String, args: PythonObject, owner_cls: PythonObject,
     for key in [String("_lock"), String("_pool"), String("_update_pool")]:  # small-loop(the three fixed owner field names)
         samba_admit_value(fields[key], admission)
     if operation == "export_gradients":
-        samba_admit_value(fields["_gradients"], admission)
+        samba_admit_value(py_item(fields, nk[].k__gradients), admission)
