@@ -46,6 +46,7 @@ from x_cnn.door_run import (
     XCNN_F2_ALL_OFF, xcnn_run_call, xcnn_size, xcnn_shape_text, xcnn_run_reshape_check,
     xcnn_run_copy_f32,
 )
+from bindings.xcnn_keys_unpack import xcnn_keys
 
 
 # ---------------------------------------------------------------- held names and exact types
@@ -318,21 +319,22 @@ def xcnn_connect_numpy(context: PythonObject) raises:
         if connected is None or xcnn_get(connected, XK_NDARRAY) is not None:
             return
     classical_connect_numpy(context)
-    if py_get(context, "ndarray") is None and py_get(context, "xcnn_numpy_import_tried") is None:
+    var nk = xcnn_keys()
+    if py_get(context, nk[].k_ndarray) is None and py_get(context, nk[].k_xcnn_numpy_import_tried) is None:
         # The CNN host buffers are ndarrays. Importing the package never loads
         # NumPy (NUMPY_FREE_CONTRACT.md; the former import-time `import numpy`
         # in _native_xcnn_bridge.connect is gone), so the first CNN operation
         # of a process imports an installed NumPy here, once, and connects it.
         # A NumPy-free install records the attempt and keeps running
         # scalar-only metadata operations; host arrays refuse in xcnn_numpy.
-        py_setitem(context, "xcnn_numpy_import_tried", PythonObject(True))
+        py_setitem(context, nk[].k_xcnn_numpy_import_tried, PythonObject(True))
         try:
             # import-time: one-time cold connection of optional NumPy (xcnn_numpy_import_tried guards every later call)
             _ = Python.import_module("numpy")
         except:
             pass  # NumPy is optional; xcnn_numpy raises the ImportError when arrays are needed
         classical_connect_numpy(context)
-    var admission = py_get(context, "admission_context")
+    var admission = py_get(context, nk[].k_admission_context)
     if admission is not None:
         classical_connect_numpy(admission)
 
@@ -340,7 +342,8 @@ def xcnn_connect_numpy(context: PythonObject) raises:
 def xcnn_numpy(context: PythonObject) raises:
     """Host-array creation and readback require the optional NumPy dependency."""
     xcnn_connect_numpy(context)
-    if py_get(context, "ndarray") is None:
+    var nk = xcnn_keys()
+    if py_get(context, nk[].k_ndarray) is None:
         raise Error("ImportError: CNN host arrays require NumPy; install NumPy to use this operation")
 
 
@@ -519,11 +522,12 @@ def xcnn_shape(value: PythonObject) raises -> List[Int]:
             t0[].PyErr_Clear()
     if not read:
         var namespace = _class_fields(cls)
-        var descriptor = py_get(namespace, "shape")
+        var nk = xcnn_keys()
+        var descriptor = py_get(namespace, nk[].k_shape)
         if class_record(mods, _XCNN_SHAPE_SLOT, cls) is None:
             var types = native_loaded_module("types")
             if (py_type(descriptor) is not types.MemberDescriptorType
-                    and py_type(descriptor) is not py_type(xcnn_builtins().type.__dict__["__dict__"])):
+                    and py_type(descriptor) is not py_type(py_item(xcnn_builtins().type.__dict__, nk[].k___dict__))):
                 raise Error("TypeError: CNN shape requires native storage metadata")
             if descriptor.__objclass__ is not cls:
                 raise Error("TypeError: CNN shape refuses subclasses")
@@ -594,19 +598,20 @@ def xcnn_tensor_layout(context: PythonObject) raises:
     var b = xcnn_builtins()
     if py_type(cls) is not b.type:
         raise Error("TypeError: CNN tensor refuses Python metaclass hooks")
-    var ancestry = py_call(b.type.__dict__["__mro__"].__get__, cls)
+    var nk = xcnn_keys()
+    var ancestry = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, cls)
     for i in range(len(ancestry)):  # driver-loop: fixed tensor storage access ancestry
         var namespace = _class_fields(ancestry[i])
-        if py_contains(namespace, "__getattr__"):
+        if py_contains(namespace, nk[].k___getattr__):
             raise Error("TypeError: CNN tensor refuses Python attribute hooks")
         for name in ["__getattribute__", "__setattr__"]:  # driver-loop: native slot access protocols
             var own = py_get(namespace, PythonObject(name))
             if own is not None and own is not b.object.__dict__[name]:
                 raise Error("TypeError: CNN tensor refuses Python attribute hooks")
-    var slots = context["xcnn_tensor_slots"]
+    var slots = py_item(context, nk[].k_xcnn_tensor_slots)
     var namespace = _class_fields(cls)
-    var finalizer = py_get(context, "xcnn_tensor_finalizer")
-    if finalizer is not None and py_get(namespace, "__del__") is not finalizer:
+    var finalizer = py_get(context, nk[].k_xcnn_tensor_finalizer)
+    if finalizer is not None and py_get(namespace, nk[].k___del__) is not finalizer:
         raise Error("TypeError: CNN tensor requires its native lifetime descriptor")
     for name in ["b", "shape", "h", "_host", "_base"]:  # driver-loop: native connected tensor member descriptors
         if py_get(namespace, PythonObject(name)) is not slots[PythonObject(name)]:
@@ -653,7 +658,8 @@ def _xcnn_slot_raw(value: PythonObject, name: String, context: PythonObject) rai
         # An unset slot (a partially initialized tensor): the descriptor call
         # raises its AttributeError through the same path as before.
         t[].PyErr_Clear()
-        return py_call(context["xcnn_tensor_slots"][PythonObject(name)].__get__, value, cls)
+        var nk = xcnn_keys()
+        return py_call(py_item(context, nk[].k_xcnn_tensor_slots)[PythonObject(name)].__get__, value, cls)
     return PythonObject(from_owned=raw)
 
 
@@ -670,7 +676,8 @@ def _xcnn_set_raw(value: PythonObject, name: String, item: PythonObject, context
         # The setter refused: the descriptor call raises it through the same
         # path as before.
         t[].PyErr_Clear()
-        _ = py_call(context["xcnn_tensor_slots"][PythonObject(name)].__set__, value, item)
+        var nk = xcnn_keys()
+        _ = py_call(py_item(context, nk[].k_xcnn_tensor_slots)[PythonObject(name)].__set__, value, item)
 
 
 def _xcnn_slot_at(g: UnsafePointer[_XcnnNames, MutAnyOrigin], t: UnsafePointer[CPythonTable, MutAnyOrigin],
@@ -686,7 +693,8 @@ def _xcnn_slot_at(g: UnsafePointer[_XcnnNames, MutAnyOrigin], t: UnsafePointer[C
     var raw = t[].PyObject_GenericGetAttr(value._obj_ptr, g[].keys[which]._obj_ptr)
     if not raw:
         t[].PyErr_Clear()
-        return py_call(context["xcnn_tensor_slots"][g[].keys[which]].__get__, value, cls)
+        var nk = xcnn_keys()
+        return py_call(py_item(context, nk[].k_xcnn_tensor_slots)[g[].keys[which]].__get__, value, cls)
     return PythonObject(from_owned=raw)
 
 
@@ -697,15 +705,17 @@ def _xcnn_set_at(g: UnsafePointer[_XcnnNames, MutAnyOrigin], t: UnsafePointer[CP
     `_xcnn_slot_at`)."""
     if t[].PyObject_GenericSetAttr(value._obj_ptr, g[].keys[which]._obj_ptr, item._obj_ptr) != 0:
         t[].PyErr_Clear()
-        _ = py_call(context["xcnn_tensor_slots"][g[].keys[which]].__set__, value, item)
+        var nk = xcnn_keys()
+        _ = py_call(py_item(context, nk[].k_xcnn_tensor_slots)[g[].keys[which]].__set__, value, item)
 
 
 def xcnn_tensor_slot(value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
     xcnn_tensor_layout(context)
-    var cls = context["xcnn_tensor_class"]
+    var nk = xcnn_keys()
+    var cls = py_item(context, nk[].k_xcnn_tensor_class)
     if py_type(value) is not cls:
         raise Error("TypeError: CNN tensor requires the connected native storage class")
-    var slots = context["xcnn_tensor_slots"]
+    var slots = py_item(context, nk[].k_xcnn_tensor_slots)
     var slot = slots[PythonObject(name)]
     if py_get(_class_fields(cls), PythonObject(name)) is not slot:
         raise Error("TypeError: CNN tensor storage descriptors changed")
@@ -714,10 +724,11 @@ def xcnn_tensor_slot(value: PythonObject, name: String, context: PythonObject) r
 
 def xcnn_tensor_set(value: PythonObject, name: String, item: PythonObject, context: PythonObject) raises:
     xcnn_tensor_layout(context)
-    var cls = context["xcnn_tensor_class"]
+    var nk = xcnn_keys()
+    var cls = py_item(context, nk[].k_xcnn_tensor_class)
     if py_type(value) is not cls:
         raise Error("TypeError: CNN tensor requires the connected native storage class")
-    var slot = context["xcnn_tensor_slots"][PythonObject(name)]
+    var slot = py_item(context, nk[].k_xcnn_tensor_slots)[PythonObject(name)]
     if py_get(_class_fields(cls), PythonObject(name)) is not slot:
         raise Error("TypeError: CNN tensor storage descriptors changed")
     _ = py_call(slot.__set__, value, item)
@@ -936,7 +947,8 @@ def xcnn_wrap(entries: PythonObject, array: PythonObject, context: PythonObject)
     sequential_admit_value(array, context)
     var a = admit_nd_f32(sequential_input(array, context), "x", False, context)
     if not xcnn_mixed(entries):
-        return xcnn_tensor(entries["module"], a.shape, PythonObject(None), a, PythonObject(None), context)
+        var nk = xcnn_keys()
+        return xcnn_tensor(py_item(entries, nk[].k_module), a.shape, PythonObject(None), a, PythonObject(None), context)
     var shape = xcnn_shape(a)
     var t = xcnn_new(entries, shape, False, context)
     var size = xcnn_size(shape)
@@ -1000,12 +1012,14 @@ def xcnn_host_of(value: PythonObject, context: PythonObject) raises -> PythonObj
 def xcnn_host_f32(shape: List[Int], context: PythonObject) raises -> PythonObject:
     """A new float32 ndarray of `shape`."""
     xcnn_numpy(context)
-    return sequential_array(xcnn_tuple(shape), context["float32"], context)
+    var nk = xcnn_keys()
+    return sequential_array(xcnn_tuple(shape), py_item(context, nk[].k_float32), context)
 
 
 def xcnn_host_i32(shape: List[Int], context: PythonObject) raises -> PythonObject:
     xcnn_numpy(context)
-    return sequential_array(xcnn_tuple(shape), context["int32"], context)
+    var nk = xcnn_keys()
+    return sequential_array(xcnn_tuple(shape), py_item(context, nk[].k_int32), context)
 
 
 def xcnn_f32(value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
@@ -1023,7 +1037,8 @@ def xcnn_f32(value: PythonObject, name: String, context: PythonObject) raises ->
     # The original exporter metadata is captured once. The internal view has
     # private shape metadata and retains the source owner for the operation.
     if layout.contiguous():
-        return py_call(context["ndarray"], xcnn_tuple(layout.shape), dtype=context["float32"], buffer=a)
+        var nk = xcnn_keys()
+        return py_call(py_item(context, nk[].k_ndarray), xcnn_tuple(layout.shape), dtype=py_item(context, nk[].k_float32), buffer=a)
     var out = xcnn_host_f32(layout.shape, context)
     layout.copy_to(native_buffer_address(out))
     _ = a
@@ -1053,14 +1068,15 @@ def xcnn_readonly(value: PythonObject, original: PythonObject, context: PythonOb
     never silently diverge from the host words. `original` (the array the
     layer held, which other references may share) is marked read-only too.
     Replacing the attribute stays allowed; callers key on its identity."""
-    if py_type(original) is context["ndarray"]:
+    var nk = xcnn_keys()
+    if py_type(original) is py_item(context, nk[].k_ndarray):
         py_setattr(original.flags, "writeable", PythonObject(False))
-    if py_type(value) is not context["ndarray"]:
+    if py_type(value) is not py_item(context, nk[].k_ndarray):
         raise Error("TypeError: CNN resident weights require an exact native ndarray")
     py_setattr(value.flags, "writeable", PythonObject(False))
     # memoryview of a non-writeable ndarray is itself read-only
     var view = native_buffer_view(value)
-    return py_call(context["ndarray"], xcnn_tuple(xcnn_shape(value)), dtype=context["float32"], buffer=view)
+    return py_call(py_item(context, nk[].k_ndarray), xcnn_tuple(xcnn_shape(value)), dtype=py_item(context, nk[].k_float32), buffer=view)
 
 
 def xcnn_writable_copy(value: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -1078,7 +1094,8 @@ def xcnn_reshape(value: PythonObject, shape: List[Int], context: PythonObject) r
     """`xcnn_reshape` with the operation's connected `context["ndarray"]`
     (p3-cnn-sequence-tsa: the two-argument form builds a fresh module dict
     and resolves the ndarray type again on every call)."""
-    var cls = py_get(context, "ndarray")
+    var nk = xcnn_keys()
+    var cls = py_get(context, nk[].k_ndarray)
     if cls is None:
         return xcnn_reshape(value, shape)
     if py_type(value) is not cls:
@@ -1148,27 +1165,28 @@ def _xcnn_settle_old_dev(fields: PythonObject, dev: PythonObject, context: Pytho
     cleared."""
     var b = xcnn_builtins()
     var names = Python.tuple("_gw_dev", "_gb_dev")
+    var nk = xcnn_keys()
     for i in range(2):  # small-loop(the two pending gradient fields)
         var pending = py_get(fields, names[i])
         if pending is None or py_type(pending) is not b.tuple or len(pending) != 2 or pending[0] is not dev:
             continue
         var weight = i == 0
-        var shape = xcnn_shape(fields["weight_"]) if weight else [Int(py=fields["out_channels"])]
+        var shape = xcnn_shape(py_item(fields, nk[].k_weight_)) if weight else [Int(py=py_item(fields, nk[].k_out_channels))]
         var value = xcnn_download(dev, pending[1], xcnn_size(shape), context)
-        if weight and Bool(py=py_get(fields, "_gw_1d")):
+        if weight and Bool(py=py_get(fields, nk[].k__gw_1d)):
             shape = [shape[0], shape[1], shape[3]]
         py_setitem(fields, "grad_weight_" if weight else "grad_bias_", xcnn_reshape(value, shape, context))
         py_setitem(fields, names[i], PythonObject(None))
         if weight:
-            py_setitem(fields, "_gw_1d", PythonObject(False))
-    var mask = py_get(fields, "_mask_dev")
-    if mask is not None and py_get(fields, "_mask_host") is None and py_get(fields, "_mask_shape") is not None:
+            py_setitem(fields, nk[].k__gw_1d, PythonObject(False))
+    var mask = py_get(fields, nk[].k__mask_dev)
+    if mask is not None and py_get(fields, nk[].k__mask_host) is None and py_get(fields, nk[].k__mask_shape) is not None:
         var mshape = List[Int]()
-        var words = fields["_mask_shape"]
+        var words = py_item(fields, nk[].k__mask_shape)
         for i in range(len(words)):  # small-loop(mask shape words)
             mshape.append(Int(py=words[i]))
         var host = xcnn_download(dev, PythonObject(Int(py=mask)), xcnn_size(mshape), context)
-        py_setitem(fields, "_mask_host", xcnn_reshape(host, mshape, context))
+        py_setitem(fields, nk[].k__mask_host, xcnn_reshape(host, mshape, context))
     for name in ["_idx_dev", "_mask_dev", "_chain", "_gdev_for", "_gdev_g"]:  # small-loop(fields naming old handles)
         if py_contains(fields, PythonObject(name)):
             py_setitem(fields, PythonObject(name), PythonObject(None))
@@ -1181,6 +1199,7 @@ def _xcnn_dev_admitted(mut mods: NativeModules, fields: PythonObject, entries: P
     (an existing owner's by `xcnn_dev_fields`, a fresh owner's empty one).
     `mods`: the caller's module connections (see `xcnn_dev_fields`)."""
     var dev = xcnn_get(fields, XK_DEV)
+    var nk = xcnn_keys()
     if dev is not None:
         var state = xcnn_dev_fields(mods, dev, context)
         if xcnn_item(state, XK_B) is xcnn_item(entries, XK_MODULE):
@@ -1194,20 +1213,20 @@ def _xcnn_dev_admitted(mut mods: NativeModules, fields: PythonObject, entries: P
         _xcnn_settle_old_dev(fields, dev, context)
         # `_Dev.free()`: every handle of the old binding released, the table emptied
         var old = xcnn_dev_fields(dev, context)
-        var old_table = old["h"]
-        var owner = xcnn_module_entries(old["b"], context)
+        var old_table = py_item(old, nk[].k_h)
+        var owner = xcnn_module_entries(py_item(old, nk[].k_b), context)
         var xco = xcnn_ref(owner)
         var handles = py_call(b.list, py_call(py_call(b.getattr, old_table, "values")))
-        py_setitem(old, "h", Python.dict())
+        py_setitem(old, nk[].k_h, Python.dict())
         for i in range(len(handles)):  # driver-loop: over the layer's resident array table
             _ = xcnn_call(xco, XC_RES_FREE, [xcnn_word(handles[i][0])], List[Int]())
     var bi = xcnn_builtins()
-    dev = py_call(py_call(bi.getattr, bi.object, "__new__"), context["xcnn_dev_class"])
+    dev = py_call(py_call(bi.getattr, bi.object, "__new__"), py_item(context, nk[].k_xcnn_dev_class))
     var fresh = Python.dict()
     var made = _fields(dev)
-    py_setitem(made, "b", xcnn_item(entries, XK_MODULE))
-    py_setitem(made, "h", fresh)
-    py_setitem(fields, "_dev", dev)
+    py_setitem(made, nk[].k_b, xcnn_item(entries, XK_MODULE))
+    py_setitem(made, nk[].k_h, fresh)
+    py_setitem(fields, nk[].k__dev, dev)
     table = fresh
     return dev
 
@@ -1279,19 +1298,22 @@ def xcnn_dev_upload(layer: PythonObject, entries: PythonObject, name: String, ar
 
 def xcnn_dev_has(dev: PythonObject, name: String) raises -> Bool:
     """`name in dev.h`."""
-    return py_contains(_fields(dev)["h"], PythonObject(name))
+    var nk = xcnn_keys()
+    return py_contains(py_item(_fields(dev), nk[].k_h), PythonObject(name))
 
 
 def xcnn_dev_handle(dev: PythonObject, name: String) raises -> PythonObject:
     """`dev.h[name][0]`."""
-    return _fields(dev)["h"][PythonObject(name)][0]
+    var nk = xcnn_keys()
+    return py_item(_fields(dev), nk[].k_h)[PythonObject(name)][0]
 
 
 def xcnn_download(dev: PythonObject, h: PythonObject, count: Int, context: PythonObject) raises -> PythonObject:
     """`dev.download(h, np.empty(count, np.float32))`."""
     var out = xcnn_host_f32([count], context)
     if count:
-        var owner = xcnn_module_entries(xcnn_dev_fields(dev, context)["b"], context)
+        var nk = xcnn_keys()
+        var owner = xcnn_module_entries(py_item(xcnn_dev_fields(dev, context), nk[].k_b), context)
         var xco = xcnn_ref(owner)
         _ = xcnn_call(xco, XC_RES_DOWNLOAD, [xcnn_word(h), xcnn_ptr(out)], [count])
         _ = out  # keep the Python object alive through the native call above

@@ -34,6 +34,15 @@ from x_cnn.conv_run import (
 )
 from bindings.sequential_inputs_door import sequential_input
 from bindings.py_optional import py_present
+from bindings.xcnn_keys_unpack import (
+    xcnn_keys, XCNN_OPN_BN_INIT, XCNN_OPN_BN_TRAIN, XCNN_OPN_BLOCK_BACKWARD, XCNN_OPN_BLOCK_FIT, XCNN_OPN_BLOCK_FORWARD, XCNN_OPN_BLOCK_INIT,
+    XCNN_OPN_BLOCK_PARAMETERS, XCNN_OPN_BLOCK_TRAIN, XCNN_OPN_BLOCK_TRANSFORM, XCNN_OPN_CONV_BACKWARD,
+    XCNN_OPN_CONV_FIT, XCNN_OPN_CONV_FORWARD, XCNN_OPN_CONV_GRAD_BIAS, XCNN_OPN_CONV_GRAD_BIAS_SET,
+    XCNN_OPN_CONV_GRAD_WEIGHT, XCNN_OPN_CONV_GRAD_WEIGHT_SET, XCNN_OPN_CONV_INIT, XCNN_OPN_CONV_INIT1D,
+    XCNN_OPN_CONV_PIN, XCNN_OPN_CONV_SET_WEIGHTS, XCNN_OPN_CONV_SET_WEIGHTS1D, XCNN_OPN_CONV_TRANSFORM,
+    XCNN_OPN_CONV_UNPIN, XCNN_OPN_CONV_WEIGHT1D,
+)
+from bindings.py_balanced import py_item
 
 
 def _set(fields: PythonObject, name: String, value: PythonObject) raises:
@@ -64,12 +73,13 @@ def _snapshot(value: PythonObject, name: String, context: PythonObject) raises -
 
 
 def _weight_pair(fields: PythonObject, context: PythonObject) raises -> PythonObject:
-    var w = _snapshot(fields["weight_"], "weight_", context)
-    var b = _snapshot(fields["bias_"], "bias_", context)
+    var nk = xcnn_keys()
+    var w = _snapshot(py_item(fields, nk[].k_weight_), "weight_", context)
+    var b = _snapshot(py_item(fields, nk[].k_bias_), "bias_", context)
     var k = _pair(fields, "kernel_size")
-    var groups = Int(py=fields["groups"])
-    var inc = Int(py=fields["in_channels"])
-    var outc = Int(py=fields["out_channels"])
+    var groups = Int(py=py_item(fields, nk[].k_groups))
+    var inc = Int(py=py_item(fields, nk[].k_in_channels))
+    var outc = Int(py=py_item(fields, nk[].k_out_channels))
     if not conv_run_same_shape(xcnn_shape(w), [outc, inc // groups, k[0], k[1]]) or not conv_run_same_shape(xcnn_shape(b), [outc]):
         raise Error("mojolearn: convolution weight or bias shape differs from configured channels and kernel")
     return Python.tuple(w, b)
@@ -93,7 +103,8 @@ def _dimension(value: PythonObject, name: String, context: PythonObject) raises 
     neural_plain_value(value, 0, Python.dict(admission_context=context))
     var b = xcnn_builtins()
     var cls = py_type(value)
-    if cls is not b.int and cls is not b.float and cls is not b.bool and cls is not b.str and not _one_of(cls, context["scalar_types"]):
+    var nk = xcnn_keys()
+    if cls is not b.int and cls is not b.float and cls is not b.bool and cls is not b.str and not _one_of(cls, py_item(context, nk[].k_scalar_types)):
         raise Error("TypeError: " + name + " requires a native numeric value")
     return Int(py=py_call(b.int, value))
 
@@ -204,8 +215,9 @@ def _conv_set_weights(layer: PythonObject, fields: PythonObject, args: PythonObj
                       context: PythonObject) raises -> PythonObject:
     # `fields`: the layer's fields, already admitted once by `xcnn_conv_layers`.
     var k = _pair(fields, "kernel_size")
-    var outc = Int(py=fields["out_channels"])
-    var inc = Int(py=fields["in_channels"]) // Int(py=fields["groups"])
+    var nk = xcnn_keys()
+    var outc = Int(py=py_item(fields, nk[].k_out_channels))
+    var inc = Int(py=py_item(fields, nk[].k_in_channels)) // Int(py=py_item(fields, nk[].k_groups))
     var expected: List[Int] = [outc, inc, k[0], k[1]]
     var w = xcnn_f32(args[0], "weight", context)
     if one:
@@ -214,17 +226,17 @@ def _conv_set_weights(layer: PythonObject, fields: PythonObject, args: PythonObj
         raise Error("mojolearn: weight shape differs from the configured convolution shape")
     var new_w = xcnn_reshape(xcnn_slice_f32(w, 0, xcnn_size(expected), context), expected, context)
     var bias = args[1]
-    var new_b = py_get(fields, "bias_")
+    var new_b = py_get(fields, nk[].k_bias_)
     if bias is not None:
         var b = xcnn_f32(bias, "bias", context)
         if xcnn_size(xcnn_shape(b)) != outc:
             raise Error("mojolearn: bias must contain out_channels values")
         new_b = xcnn_slice_f32(b, 0, outc, context)
-    elif not _truth(fields["bias"]):
+    elif not _truth(py_item(fields, nk[].k_bias)):
         new_b = _zeros([outc], context)
     _set(fields, "weight_", new_w)
     _set(fields, "bias_", new_b)
-    if py_get(fields, "_pins") is not None:
+    if py_get(fields, nk[].k__pins) is not None:
         _pin_weights(layer, fields, xcnn_entries(fields, context), context)
     return layer
 
@@ -236,11 +248,12 @@ def _conv_gradient(fields: PythonObject, weight: Bool, context: PythonObject) ra
     var pending = py_get(fields, PythonObject(pending_key))
     if pending is not None:
         var b = xcnn_builtins()
-        if py_type(pending) is not b.tuple or len(pending) != 2 or py_type(pending[0]) is not context["xcnn_dev_class"] or py_type(pending[1]) is not b.int:
+        var nk = xcnn_keys()
+        if py_type(pending) is not b.tuple or len(pending) != 2 or py_type(pending[0]) is not py_item(context, nk[].k_xcnn_dev_class) or py_type(pending[1]) is not b.int:
             raise Error("TypeError: convolution gradient storage requires native metadata")
-        var shape = xcnn_shape(xcnn_f32(fields["weight_"], "weight_", context)) if weight else [Int(py=fields["out_channels"])]
+        var shape = xcnn_shape(xcnn_f32(py_item(fields, nk[].k_weight_), "weight_", context)) if weight else [Int(py=py_item(fields, nk[].k_out_channels))]
         var value = xcnn_download(pending[0], pending[1], xcnn_size(shape), context)
-        if weight and _truth(py_get(fields, "_gw_1d")):
+        if weight and _truth(py_get(fields, nk[].k__gw_1d)):
             shape = [shape[0], shape[1], shape[3]]
         value = xcnn_reshape(value, shape, context)
         _set(fields, key, value)
@@ -254,7 +267,8 @@ def _save_gradients(fields: PythonObject, dw: PythonObject, db: PythonObject, co
     _set(fields, "grad_weight_", dw)
     _set(fields, "_gw_dev", PythonObject(None))
     _set(fields, "_gw_1d", PythonObject(False))
-    _set(fields, "grad_bias_", db if _truth(fields["bias"]) else _zeros([Int(py=fields["out_channels"])], context))
+    var nk = xcnn_keys()
+    _set(fields, "grad_bias_", db if _truth(py_item(fields, nk[].k_bias)) else _zeros([Int(py=py_item(fields, nk[].k_out_channels))], context))
     _set(fields, "_gb_dev", PythonObject(None))
 
 
@@ -282,10 +296,11 @@ def _conv_backward_host(layer: PythonObject, fields: PythonObject, entries: Pyth
             conv_run_pad_forward(pad_key, pad_addrs[0], pad_addrs[1], pad_words)
     var ps = xcnn_shape(xp)
     var prm = _conv_params(fields, ps)
-    var groups = Int(py=fields["groups"])
-    var cg = Int(py=fields["in_channels"]) // groups
-    var og = Int(py=fields["out_channels"]) // groups
-    var w = _snapshot(fields["weight_"], "weight_", context)
+    var nk = xcnn_keys()
+    var groups = Int(py=py_item(fields, nk[].k_groups))
+    var cg = Int(py=py_item(fields, nk[].k_in_channels)) // groups
+    var og = Int(py=py_item(fields, nk[].k_out_channels)) // groups
+    var w = _snapshot(py_item(fields, nk[].k_weight_), "weight_", context)
     var ws = xcnn_shape(w)
     var k = _pair(fields, "kernel_size")
     conv_run_check_weight(ws, og * groups, cg, k)
@@ -350,9 +365,10 @@ def _conv_backward_tensor(layer: PythonObject, fields: PythonObject, entries: Py
     var values = _weight_pair(fields, context)
     var w = values[0]
     var ws = xcnn_shape(w)
-    var groups = Int(py=fields["groups"])
-    var inc = Int(py=fields["in_channels"])
-    var outc = Int(py=fields["out_channels"])
+    var nk = xcnn_keys()
+    var groups = Int(py=py_item(fields, nk[].k_groups))
+    var inc = Int(py=py_item(fields, nk[].k_in_channels))
+    var outc = Int(py=py_item(fields, nk[].k_out_channels))
     var k = _pair(fields, "kernel_size")
     conv_run_check_weight(ws, outc, inc // groups, k)
     var dw = xcnn_host_f32(ws, context)
@@ -372,8 +388,8 @@ def _conv_backward_tensor(layer: PythonObject, fields: PythonObject, entries: Py
         var dev = xcnn_dev(layer, entries, context)
         _set(fields, "_gw_dev", Python.tuple(dev, gwh))
         _set(fields, "_gw_1d", PythonObject(False))
-        _set(fields, "_gb_dev", Python.tuple(dev, gbh) if _truth(fields["bias"]) else PythonObject(None))
-        if not _truth(fields["bias"]):
+        _set(fields, "_gb_dev", Python.tuple(dev, gbh) if _truth(py_item(fields, nk[].k_bias)) else PythonObject(None))
+        if not _truth(py_item(fields, nk[].k_bias)):
             _set(fields, "grad_bias_", _zeros([outc], context))
     elif groups == 1:
         var pw = _pinned(fields, entries, "weight_", xcnn_size(ws))
@@ -446,12 +462,13 @@ def _conv_backward(layer: PythonObject, args: PythonObject, context: PythonObjec
 
 def _conv_backward_fields(layer: PythonObject, fields: PythonObject, args: PythonObject,
                           context: PythonObject) raises -> PythonObject:
+    var nk = xcnn_keys()
     # `fields`: the layer's fields, admitted exactly once by the caller; the
     # host and resident routes below reuse them (they re-admitted before).
-    var source = args[1] if args[1] is not None else py_get(fields, "_x")
+    var source = args[1] if args[1] is not None else py_get(fields, nk[].k__x)
     if source is None:
         raise Error("RuntimeError: convolution backward needs a prior forward or an explicit x")
-    var one = py_type(layer) is context["xcnn_conv1d_class"]
+    var one = py_type(layer) is py_item(context, nk[].k_xcnn_conv1d_class)
     var grad = args[0] if xcnn_is_t(args[0], context) else _snapshot(args[0], "grad_out", context)
     source = source if xcnn_is_t(source, context) else _snapshot(source, "x", context)
     if one:
@@ -472,10 +489,10 @@ def _conv_backward_fields(layer: PythonObject, fields: PythonObject, args: Pytho
     else:
         out = _conv_backward_host(layer, fields, entries, grad, source, context)
     if one:
-        if py_get(fields, "_gw_dev") is not None:
+        if py_get(fields, nk[].k__gw_dev) is not None:
             _set(fields, "_gw_1d", PythonObject(True))
         else:
-            var dw = fields["grad_weight_"]
+            var dw = py_item(fields, nk[].k_grad_weight_)
             _set(fields, "grad_weight_", xcnn_reshape(dw, conv_run_three(xcnn_shape(dw)), context))
         var shape = conv_run_three(xcnn_shape(out))
         return xcnn_reshape_t(out, shape, context) if xcnn_is_t(out, context) else xcnn_reshape(out, shape, context)
@@ -486,13 +503,14 @@ def _conv_backward_fields(layer: PythonObject, fields: PythonObject, args: Pytho
 
 def _geom(fields: PythonObject) raises -> ConvGeom:
     """The fields `Conv2d._params` reads, in its read order (UNPACK)."""
-    var groups = Int(py=fields["groups"])
+    var nk = xcnn_keys()
+    var groups = Int(py=py_item(fields, nk[].k_groups))
     var k = _pair(fields, "kernel_size")
     var s = _pair(fields, "stride")
     var p = _pair(fields, "_conv_pad")
     var d = _pair(fields, "dilation")
-    return ConvGeom(groups, k[0], k[1], s[0], s[1], p[0], p[1], d[0], d[1], Int(py=fields["out_channels"]),
-                    _truth(fields["bias"]))
+    return ConvGeom(groups, k[0], k[1], s[0], s[1], p[0], p[1], d[0], d[1], Int(py=py_item(fields, nk[].k_out_channels)),
+                    _truth(py_item(fields, nk[].k_bias)))
 
 
 def _conv_params(fields: PythonObject, shape: List[Int]) raises -> List[Int]:
@@ -501,19 +519,22 @@ def _conv_params(fields: PythonObject, shape: List[Int]) raises -> List[Int]:
 
 
 def _pads(fields: PythonObject) raises -> List[Int]:
-    var v = fields["_pads"]
+    var nk = xcnn_keys()
+    var v = py_item(fields, nk[].k__pads)
     return [Int(py=v[0]), Int(py=v[1]), Int(py=v[2]), Int(py=v[3])]
 
 
 def _pad_params(layer: PythonObject, fields: PythonObject, shape: List[Int], last: Int) raises -> List[Int]:
     """`Conv2d._pad_params(shape) + [last]` (`last` < 0: none)."""
     var p = _pads(fields)
-    var code = conv_run_pad_code(String(fields["padding_mode"]))
+    var nk = xcnn_keys()
+    var code = conv_run_pad_code(String(py_item(fields, nk[].k_padding_mode)))
     return conv_run_pad_params(shape, p, code, last)
 
 
 def _explicit(fields: PythonObject) raises -> Bool:
-    return _truth(fields["_explicit"])
+    var nk = xcnn_keys()
+    return _truth(py_item(fields, nk[].k__explicit))
 
 
 def _padded(fields: PythonObject, shape: List[Int]) raises -> List[Int]:
@@ -533,7 +554,8 @@ def _conv_out(fields: PythonObject, shape: List[Int]) raises -> List[Int]:
 
 def _check_x(fields: PythonObject, shape: List[Int]) raises:
     conv_run_check_rank(shape)
-    conv_run_check_channels(shape[1], Int(py=fields["in_channels"]))
+    var nk = xcnn_keys()
+    conv_run_check_channels(shape[1], Int(py=py_item(fields, nk[].k_in_channels)))
 
 
 def _host_rows(source: PythonObject, start: Int, stop: Int, context: PythonObject) raises -> PythonObject:
@@ -560,15 +582,16 @@ def _pin_values(layer: PythonObject, fields: PythonObject, entries: PythonObject
         var a = values[i]
         var h = xcnn_dev_upload(layer, entries, "pin_" + String(py=names[i]), a, context)
         py_setitem(handles, names[i], Python.tuple(h, xcnn_size(xcnn_shape(a))))
-    _set(fields, "_pins", Python.tuple(entries["module"], handles))
+    var nk = xcnn_keys()
+    _set(fields, "_pins", Python.tuple(py_item(entries, nk[].k_module), handles))
     # p3-cnn-sequence-tsa (hazard A): the host words just uploaded become the
     # layer's `weight_` / `bias_` as read-only arrays (`xcnn_readonly`), so an
     # in-place edit (`weight_ -= lr * g`, `weight_[:] = W`) raises NumPy's
     # read-only error instead of running on the stale device copy. Assigning
     # a new array (or `set_weights`) is the way to change weights; it is
     # noticed by identity below and uploaded again. No per-call host hash.
-    var ro_w = xcnn_readonly(values[0], py_get(fields, "weight_"), context)
-    var ro_b = xcnn_readonly(values[1], py_get(fields, "bias_"), context)
+    var ro_w = xcnn_readonly(values[0], py_get(fields, nk[].k_weight_), context)
+    var ro_b = xcnn_readonly(values[1], py_get(fields, nk[].k_bias_), context)
     _set(fields, "weight_", ro_w)
     _set(fields, "bias_", ro_b)
     # the arrays pinned, so a reassigned `weight_` / `bias_` is uploaded again
@@ -581,8 +604,9 @@ def _pin_weights(layer: PythonObject, fields: PythonObject, entries: PythonObjec
 
 def _pin_metadata(fields: PythonObject) raises:
     var b = xcnn_builtins()
-    var p = py_get(fields, "_pins")
-    var src = py_get(fields, "_pin_src")
+    var nk = xcnn_keys()
+    var p = py_get(fields, nk[].k__pins)
+    var src = py_get(fields, nk[].k__pin_src)
     if src is not None and (py_type(src) is not b.tuple or len(src) != 2):
         raise Error("TypeError: pinned sources require a native pair")
     if p is None:
@@ -603,20 +627,22 @@ def _auto_pin(layer: PythonObject, fields: PythonObject, entries: PythonObject, 
     if not (xcnn_resident(entries, context) and xcnn_idn(entries, XCNN_F_PIN)):
         return False
     _pin_metadata(fields)
-    var p = py_get(fields, "_pins")
-    var src = py_get(fields, "_pin_src")
-    if p is not None and _truth(p) and p[0] is entries["module"] and src is not None and len(src) == 2:
-        if src[0] is py_get(fields, "weight_") and src[1] is py_get(fields, "bias_"):
+    var nk = xcnn_keys()
+    var p = py_get(fields, nk[].k__pins)
+    var src = py_get(fields, nk[].k__pin_src)
+    if p is not None and _truth(p) and p[0] is py_item(entries, nk[].k_module) and src is not None and len(src) == 2:
+        if src[0] is py_get(fields, nk[].k_weight_) and src[1] is py_get(fields, nk[].k_bias_):
             return True
     _pin_values(layer, fields, entries, values, context)
-    return _truth(py_get(fields, "_pins"))
+    return _truth(py_get(fields, nk[].k__pins))
 
 
 def _pinned(fields: PythonObject, entries: PythonObject, name: String, size: Int) raises -> PythonObject:
     """`_pinned(layer, b, name, size)`: the handle, or None."""
     _pin_metadata(fields)
-    var p = py_get(fields, "_pins")
-    if p is None or not _truth(p) or p[0] is not entries["module"]:
+    var nk = xcnn_keys()
+    var p = py_get(fields, nk[].k__pins)
+    if p is None or not _truth(p) or p[0] is not py_item(entries, nk[].k_module):
         return PythonObject(None)
     var hit = py_get(p[1], PythonObject(name))
     if hit is None or Int(py=hit[1]) != size:
@@ -626,7 +652,8 @@ def _pinned(fields: PythonObject, entries: PythonObject, name: String, size: Int
 
 def _res_w_values(layer: PythonObject, fields: PythonObject, entries: PythonObject, values: PythonObject, context: PythonObject) raises -> PythonObject:
     """`Conv2d._res_w(b)`: (weight handle, bias handle) or (None, None)."""
-    if Int(py=fields["groups"]) != 1 or not _auto_pin(layer, fields, entries, values, context):
+    var nk = xcnn_keys()
+    if Int(py=py_item(fields, nk[].k_groups)) != 1 or not _auto_pin(layer, fields, entries, values, context):
         return Python.tuple(PythonObject(None), PythonObject(None))
     return Python.tuple(_pinned(fields, entries, "weight_", xcnn_size(xcnn_shape(values[0]))),
                         _pinned(fields, entries, "bias_", xcnn_size(xcnn_shape(values[1]))))
@@ -641,7 +668,8 @@ def _res_w(layer: PythonObject, fields: PythonObject, entries: PythonObject, con
 def _res_ok(fields: PythonObject, entries: PythonObject, x: PythonObject, context: PythonObject) raises -> Bool:
     if not xcnn_on_dev(entries, x, context):
         return False
-    if Int(py=fields["groups"]) != 1 and not xcnn_idn(entries, XCNN_F_GROUP):
+    var nk = xcnn_keys()
+    if Int(py=py_item(fields, nk[].k_groups)) != 1 and not xcnn_idn(entries, XCNN_F_GROUP):
         return False
     if _explicit(fields) and not xcnn_idn(entries, XCNN_F_PAD):
         return False
@@ -680,7 +708,8 @@ def _conv_forward_t(layer: PythonObject, fields: PythonObject, entries: PythonOb
     var xp = _pad_t(layer, fields, entries, x, context)
     var ps = xcnn_shape(xp)
     var prm = _conv_params(fields, ps)
-    var groups = Int(py=fields["groups"])
+    var nk = xcnn_keys()
+    var groups = Int(py=py_item(fields, nk[].k_groups))
     var py = Python()
     if groups == 1:
         # G3: pins on first use (a no-op with the switch off). The auto-pinned
@@ -710,11 +739,11 @@ def _conv_forward_t(layer: PythonObject, fields: PythonObject, entries: PythonOb
             _ = w  # keep the Python object alive through the native call above
     else:
         # each group's channels sliced, convolved and placed on the device
-        var og = Int(py=fields["out_channels"]) // groups
+        var og = Int(py=py_item(fields, nk[].k_out_channels)) // groups
         var xg = xcnn_dev_get(layer, entries, "xg", xcnn_size(ps) // groups, context)
         var yg = xcnn_dev_get(layer, entries, "yg", xcnn_size(oshape) // groups, context)
-        var inc = Int(py=fields["in_channels"])
-        var outc = Int(py=fields["out_channels"])
+        var inc = Int(py=py_item(fields, nk[].k_in_channels))
+        var outc = Int(py=py_item(fields, nk[].k_out_channels))
         # the handle words are the same for every group
         var xw = xcnn_word(xp.h)
         var xgw = xcnn_word(xg)
@@ -740,7 +769,8 @@ def _conv_forward_t(layer: PythonObject, fields: PythonObject, entries: PythonOb
 
 def _group_dev(fields: PythonObject, entries: PythonObject) raises -> Bool:
     """`Conv2d._group_dev(b)`: a grouped conv of host arrays on the `_m` forms."""
-    return (Int(py=fields["groups"]) > 1 and xcnn_mixed(entries) and xcnn_idn(entries, XCNN_F_GROUP)
+    var nk = xcnn_keys()
+    return (Int(py=py_item(fields, nk[].k_groups)) > 1 and xcnn_mixed(entries) and xcnn_idn(entries, XCNN_F_GROUP)
             and (not _explicit(fields) or xcnn_idn(entries, XCNN_F_PAD)))
 
 
@@ -783,9 +813,10 @@ def xcnn_conv2d_forward_fields(layer: PythonObject, fields: PythonObject, x: Pyt
     var prm = _conv_params(fields, ps)
     var oshape = _conv_out(fields, xs)   # native shape rule (N149)
     var out = xcnn_host_f32(oshape, context)
-    var groups = Int(py=fields["groups"])
-    var cg = Int(py=fields["in_channels"]) // groups
-    var og = Int(py=fields["out_channels"]) // groups
+    var nk = xcnn_keys()
+    var groups = Int(py=py_item(fields, nk[].k_groups))
+    var cg = Int(py=py_item(fields, nk[].k_in_channels)) // groups
+    var og = Int(py=py_item(fields, nk[].k_out_channels)) // groups
     var key = xcnn_ref(entries)
     for g in range(groups):  # driver-loop: over convolution groups
         var xg = xp
@@ -813,7 +844,8 @@ def xcnn_conv_forward(layer: PythonObject, fields: PythonObject, x: PythonObject
     # `fields`: admitted once by `xcnn_conv_layers` before any input is read,
     # so the first error for a bad layer or bad x is the one raised before.
     var b = xcnn_builtins()
-    if py_type(layer) is not context["xcnn_conv1d_class"]:
+    var nk = xcnn_keys()
+    if py_type(layer) is not py_item(context, nk[].k_xcnn_conv1d_class):
         var value = x if xcnn_is_t(x, context) else _snapshot(x, "x", context)
         return xcnn_conv2d_forward_fields(layer, fields, value, context)
     if xcnn_is_t(x, context):
@@ -898,7 +930,7 @@ def _block_conv(inc: PythonObject, outc: PythonObject, kernel: Int, stride: Pyth
 
 def _block_bn(channels: PythonObject, mode: PythonObject, context: PythonObject) raises -> PythonObject:
     var layer = _block_new("xcnn_bn_class", context)
-    _ = xcnn_bn_layers(layer, "bn_init", Python.tuple(channels, 1e-5, 0.1, True, True, PythonObject(None), mode), context)
+    _ = xcnn_bn_layers(layer, XCNN_OPN_BN_INIT, Python.tuple(channels, 1e-5, 0.1, True, True, PythonObject(None), mode), context)
     return layer
 
 
@@ -945,12 +977,13 @@ def _block_fields(block: PythonObject, context: PythonObject) raises -> PythonOb
         var expected = "xcnn_conv2d_class" if name.startswith("conv") else ("xcnn_bn_class" if name.startswith("bn") else "xcnn_relu_class")
         if py_type(fields[PythonObject(name)]) is not context[PythonObject(expected)]:
             raise Error("TypeError: BasicBlock requires native convolution, batch normalization and ReLU layers")
-    var ds = fields["downsample"]
+    var nk = xcnn_keys()
+    var ds = py_item(fields, nk[].k_downsample)
     if ds is not None:
         var b = xcnn_builtins()
         if (py_type(ds) is not b.list and py_type(ds) is not b.tuple) or len(ds) != 2:
             raise Error("TypeError: BasicBlock downsample requires a native convolution/batch-normalization pair")
-        if py_type(ds[0]) is not context["xcnn_conv2d_class"] or py_type(ds[1]) is not context["xcnn_bn_class"]:
+        if py_type(ds[0]) is not py_item(context, nk[].k_xcnn_conv2d_class) or py_type(ds[1]) is not py_item(context, nk[].k_xcnn_bn_class):
             raise Error("TypeError: BasicBlock downsample cannot invoke Python layer hooks")
     return fields
 
@@ -960,16 +993,18 @@ def _block_train(block: PythonObject, value: PythonObject, context: PythonObject
     var fields = _block_fields(block, context)
     var mode = PythonObject(Bool(py=py_call(xcnn_builtins().bool, value)))
     _set(fields, "training", mode)
-    _ = xcnn_bn_layers(fields["bn1"], "bn_train", Python.tuple(mode), context)
-    _ = xcnn_bn_layers(fields["bn2"], "bn_train", Python.tuple(mode), context)
-    if fields["downsample"] is not None:
-        _ = xcnn_bn_layers(fields["downsample"][1], "bn_train", Python.tuple(mode), context)
+    var nk = xcnn_keys()
+    _ = xcnn_bn_layers(py_item(fields, nk[].k_bn1), XCNN_OPN_BN_TRAIN, Python.tuple(mode), context)
+    _ = xcnn_bn_layers(py_item(fields, nk[].k_bn2), XCNN_OPN_BN_TRAIN, Python.tuple(mode), context)
+    if py_item(fields, nk[].k_downsample) is not None:
+        _ = xcnn_bn_layers(py_item(fields, nk[].k_downsample)[1], XCNN_OPN_BN_TRAIN, Python.tuple(mode), context)
     return block
 
 
 def _relu_backward(layer: PythonObject, gradient: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = _fields(layer)
-    var stored = py_get(fields, "_x")
+    var nk = xcnn_keys()
+    var stored = py_get(fields, nk[].k__x)
     if stored is None:
         raise Error("RuntimeError: ReLU backward requires a prior forward")
     var entries = xcnn_entries(fields, context)
@@ -1005,7 +1040,8 @@ def _block_conv_backward(block: PythonObject, conv: PythonObject, entries: Pytho
     var values = _weight_pair(fields, context)
     var w = values[0]
     var ws = xcnn_shape(w)
-    var outc = Int(py=fields["out_channels"])
+    var nk = xcnn_keys()
+    var outc = Int(py=py_item(fields, nk[].k_out_channels))
     var dxh = xcnn_dev_get(block, entries, name, xcnn_size(shape), context)
     var py = Python()
     if xcnn_resident(entries, context):
@@ -1022,8 +1058,8 @@ def _block_conv_backward(block: PythonObject, conv: PythonObject, entries: Pytho
         var dev = xcnn_dev(conv, entries, context)
         _set(fields, "_gw_dev", Python.tuple(dev, gwh))
         _set(fields, "_gw_1d", PythonObject(False))
-        _set(fields, "_gb_dev", Python.tuple(dev, gbh) if _truth(fields["bias"]) else PythonObject(None))
-        if not _truth(fields["bias"]):
+        _set(fields, "_gb_dev", Python.tuple(dev, gbh) if _truth(py_item(fields, nk[].k_bias)) else PythonObject(None))
+        if not _truth(py_item(fields, nk[].k_bias)):
             _set(fields, "grad_bias_", _zeros([outc], context))
     else:
         var dw = xcnn_host_f32(ws, context)
@@ -1040,15 +1076,16 @@ def _block_conv_backward(block: PythonObject, conv: PythonObject, entries: Pytho
 
 def _block_backward_chain(block: PythonObject, fields: PythonObject, entries: PythonObject,
                           gradient: PythonObject, context: PythonObject) raises -> PythonObject:
-    var chain = fields["_chain"]
+    var nk = xcnn_keys()
+    var chain = py_item(fields, nk[].k__chain)
     neural_string_keys(chain)
     # small-loop(fixed residual chain metadata)
     for name in ["x", "s1", "s2", "xh", "c1", "b1", "r1", "c2", "s", "d1", "sd"]:
         # small-loop(fixed residual chain metadata)
         neural_plain_value(chain[PythonObject(name)], 0, PythonObject(None))
-    var shape = _as_list(chain["x"])
-    var s1 = _as_list(chain["s1"])
-    var s2 = _as_list(chain["s2"])
+    var shape = _as_list(py_item(chain, nk[].k_x))
+    var s1 = _as_list(py_item(chain, nk[].k_s1))
+    var s2 = _as_list(py_item(chain, nk[].k_s2))
     var gt = xcnn_is_t(gradient, context)
     if gt and not xcnn_on_dev(entries, gradient, context):
         return xcnn_wrap(entries, _block_backward_chain(block, fields, entries, xcnn_host_of(gradient, context), context), context)
@@ -1059,26 +1096,26 @@ def _block_backward_chain(block: PythonObject, fields: PythonObject, entries: Py
     var gh = g.h if gt else xcnn_dev_upload(block, entries, "g", g, context)
     var gs = xcnn_dev_get(block, entries, "gs", n2, context)
     var py = Python()
-    var s_words: List[Int] = [xcnn_word(chain["s"]), xcnn_word(gh), xcnn_word(gs)]
+    var s_words: List[Int] = [xcnn_word(py_item(chain, nk[].k_s)), xcnn_word(gh), xcnn_word(gs)]
     var key = xcnn_ref(entries)
     with GILReleased(py):
         conv_run_map2_m(key, s_words[0], s_words[1], s_words[2], 7, 1, n2)
     var gb2 = xcnn_dev_get(block, entries, "gb2", n2, context)
-    xcnn_bn_backward_dev(fields["bn2"], entries, chain["c2"], gs, gb2, True, context)
-    var gr1 = _block_conv_backward(block, fields["conv2"], entries, chain["r1"], s1, gb2, "gr1", context)
+    xcnn_bn_backward_dev(py_item(fields, nk[].k_bn2), entries, py_item(chain, nk[].k_c2), gs, gb2, True, context)
+    var gr1 = _block_conv_backward(block, py_item(fields, nk[].k_conv2), entries, py_item(chain, nk[].k_r1), s1, gb2, "gr1", context)
     var gc1 = xcnn_dev_get(block, entries, "gc1", n1, context)
     var gb1 = xcnn_dev_get(block, entries, "gb1", n1, context)
-    var r_words: List[Int] = [xcnn_word(chain["b1"]), xcnn_word(gr1), xcnn_word(gb1)]
+    var r_words: List[Int] = [xcnn_word(py_item(chain, nk[].k_b1)), xcnn_word(gr1), xcnn_word(gb1)]
     with GILReleased(py):
         conv_run_map2_m(key, r_words[0], r_words[1], r_words[2], 7, 1, n1)
-    xcnn_bn_backward_dev(fields["bn1"], entries, chain["c1"], gb1, gc1, True, context)
-    var gx1 = _block_conv_backward(block, fields["conv1"], entries, chain["xh"], shape, gc1, "gx1", context)
+    xcnn_bn_backward_dev(py_item(fields, nk[].k_bn1), entries, py_item(chain, nk[].k_c1), gb1, gc1, True, context)
+    var gx1 = _block_conv_backward(block, py_item(fields, nk[].k_conv1), entries, py_item(chain, nk[].k_xh), shape, gc1, "gx1", context)
     var gi = gs
-    var ds = fields["downsample"]
+    var ds = py_item(fields, nk[].k_downsample)
     if ds is not None:
         var gd = xcnn_dev_get(block, entries, "gd", n2, context)
-        xcnn_bn_backward_dev(ds[1], entries, chain["d1"], gs, gd, True, context)
-        gi = _block_conv_backward(block, ds[0], entries, chain["xh"], shape, gd, "gdx", context)
+        xcnn_bn_backward_dev(ds[1], entries, py_item(chain, nk[].k_d1), gs, gd, True, context)
+        gi = _block_conv_backward(block, ds[0], entries, py_item(chain, nk[].k_xh), shape, gd, "gdx", context)
     var dx = xcnn_out_new(entries, shape, context) if gt else xcnn_host_f32(shape, context)
     var d_words: List[Int] = [xcnn_word(gx1), xcnn_word(gi), xcnn_word(dx.h) if gt else xcnn_ptr(dx)]
     with GILReleased(py):
@@ -1091,22 +1128,23 @@ def _block_backward_chain(block: PythonObject, fields: PythonObject, entries: Py
 def _block_backward(block: PythonObject, gradient: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = _block_fields(block, context)
     var entries = xcnn_entries(fields, context)
-    var dev = py_get(fields, "_dev")
-    if py_get(fields, "_chain") is not None and dev is not None:
-        if py_type(dev) is not context["xcnn_dev_class"]:
+    var nk = xcnn_keys()
+    var dev = py_get(fields, nk[].k__dev)
+    if py_get(fields, nk[].k__chain) is not None and dev is not None:
+        if py_type(dev) is not py_item(context, nk[].k_xcnn_dev_class):
             raise Error("TypeError: BasicBlock requires native resident storage")
-        if _fields(dev)["b"] is entries["module"]:
+        if py_item(_fields(dev), nk[].k_b) is py_item(entries, nk[].k_module):
             return _block_backward_chain(block, fields, entries, gradient, context)
     if xcnn_is_t(gradient, context):
         return xcnn_wrap(entries, _block_backward(block, xcnn_host_of(gradient, context), context), context)
-    var g = _relu_backward(fields["relu2"], gradient, context)
-    var gm = xcnn_bn_backward(fields["bn2"], g, context)
-    gm = _conv_backward(fields["conv2"], Python.tuple(gm, PythonObject(None)), context)
-    gm = _relu_backward(fields["relu1"], gm, context)
-    gm = xcnn_bn_backward(fields["bn1"], gm, context)
-    gm = _conv_backward(fields["conv1"], Python.tuple(gm, PythonObject(None)), context)
+    var g = _relu_backward(py_item(fields, nk[].k_relu2), gradient, context)
+    var gm = xcnn_bn_backward(py_item(fields, nk[].k_bn2), g, context)
+    gm = _conv_backward(py_item(fields, nk[].k_conv2), Python.tuple(gm, PythonObject(None)), context)
+    gm = _relu_backward(py_item(fields, nk[].k_relu1), gm, context)
+    gm = xcnn_bn_backward(py_item(fields, nk[].k_bn1), gm, context)
+    gm = _conv_backward(py_item(fields, nk[].k_conv1), Python.tuple(gm, PythonObject(None)), context)
     var gi = g
-    var ds = fields["downsample"]
+    var ds = py_item(fields, nk[].k_downsample)
     if ds is not None:
         gi = _conv_backward(ds[0], Python.tuple(xcnn_bn_backward(ds[1], g, context), PythonObject(None)), context)
     return _add(entries, gm, gi, context)
@@ -1114,8 +1152,9 @@ def _block_backward(block: PythonObject, gradient: PythonObject, context: Python
 
 def _block_parameters(block: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = _block_fields(block, context)
-    var layers = Python.list(fields["conv1"], fields["bn1"], fields["conv2"], fields["bn2"])
-    var ds = fields["downsample"]
+    var nk = xcnn_keys()
+    var layers = Python.list(py_item(fields, nk[].k_conv1), py_item(fields, nk[].k_bn1), py_item(fields, nk[].k_conv2), py_item(fields, nk[].k_bn2))
+    var ds = py_item(fields, nk[].k_downsample)
     var b = xcnn_builtins()
     if ds is not None:
         _ = py_call(layers.append, ds[0])
@@ -1124,7 +1163,7 @@ def _block_parameters(block: PythonObject, context: PythonObject) raises -> Pyth
     for i in range(len(layers)):  # driver-loop: block parameter ownership descriptors
         var layer = layers[i]
         _ = py_call(out.append, Python.tuple(layer, "weight_", "grad_weight_"))
-        if py_type(layer) is context["xcnn_bn_class"]:
+        if py_type(layer) is py_item(context, nk[].k_xcnn_bn_class):
             _ = py_call(out.append, Python.tuple(layer, "bias_", "grad_bias_"))
     return out
 
@@ -1132,8 +1171,9 @@ def _block_parameters(block: PythonObject, context: PythonObject) raises -> Pyth
 # ---------------------------------------------------------------- BasicBlock forward
 
 def _block_convs(fields: PythonObject) raises -> PythonObject:
-    var convs = Python.list(fields["conv1"], fields["conv2"])
-    var ds = fields["downsample"]
+    var nk = xcnn_keys()
+    var convs = Python.list(py_item(fields, nk[].k_conv1), py_item(fields, nk[].k_conv2))
+    var ds = py_item(fields, nk[].k_downsample)
     if ds is not None and _truth(ds):
         _ = py_call(py_call(xcnn_builtins().getattr, convs, "append"), ds[0])
     return convs
@@ -1150,9 +1190,10 @@ def _chain_fields(fields: PythonObject, entries: PythonObject, context: PythonOb
         return PythonObject(None)
     var convs = _block_convs(fields)
     var admitted = Python.list()
+    var nk = xcnn_keys()
     for i in range(len(convs)):  # driver-loop: over the block's conv layers
         var f = _conv_admit(convs[i], context)
-        if Int(py=f["groups"]) != 1 or _explicit(f):
+        if Int(py=py_item(f, nk[].k_groups)) != 1 or _explicit(f):
             return PythonObject(None)
         _ = py_call(admitted.append, f)
     return admitted
@@ -1198,7 +1239,8 @@ def _bn_dev(block: PythonObject, entries: PythonObject, bn: PythonObject, xh: Py
     var n = shape[0]
     var c = shape[1]
     var hw = conv_run_spatial(shape)
-    conv_run_check_channels(c, Int(py=bf["num_features"]))
+    var nk = xcnn_keys()
+    conv_run_check_channels(c, Int(py=py_item(bf, nk[].k_num_features)))
     var yh = xcnn_dev_get(block, entries, name, n * c * hw, context)
     _ = xcnn_bn_forward_dev(bn, bf, entries, xh, yh, n, c, hw, True, context)
     _set(bf, "_xdev", xh)
@@ -1222,27 +1264,28 @@ def _forward_chain(block: PythonObject, fields: PythonObject, entries: PythonObj
     var dev = xcnn_dev(block, entries, context)
     var xs = xcnn_shape(x)
     conv_run_check_rank(xs)
-    var conv1 = fields["conv1"]
-    conv_run_check_channels(xs[1], Int(py=convf[0]["in_channels"]))
+    var nk = xcnn_keys()
+    var conv1 = py_item(fields, nk[].k_conv1)
+    conv_run_check_channels(xs[1], Int(py=py_item(convf[0], nk[].k_in_channels)))
     var xt = xcnn_is_t(x, context)
     var xh = x.h if xt else xcnn_dev_upload(block, entries, "x", x, context)
     var c1 = _conv_dev(block, entries, conv1, convf[0], xh, xs, "c1", context)
     var s1 = _as_list(c1[1])
     var n1 = xcnn_size(s1)
     var r1 = xcnn_dev_get(block, entries, "r1", n1, context)
-    var b1 = _bn_dev(block, entries, fields["bn1"], c1[0], s1, "b1", context)
+    var b1 = _bn_dev(block, entries, py_item(fields, nk[].k_bn1), c1[0], s1, "b1", context)
     var py = Python()
     var b1w = xcnn_word(b1)
     var r1w = xcnn_word(r1)
     var key = xcnn_ref(entries)
     with GILReleased(py):
         conv_run_map2_m(key, b1w, b1w, r1w, 7, 0, n1)
-    var c2 = _conv_dev(block, entries, fields["conv2"], convf[1], r1, s1, "c2", context)
+    var c2 = _conv_dev(block, entries, py_item(fields, nk[].k_conv2), convf[1], r1, s1, "c2", context)
     var s2 = _as_list(c2[1])
     var n2 = xcnn_size(s2)
-    var b2 = _bn_dev(block, entries, fields["bn2"], c2[0], s2, "b2", context)
+    var b2 = _bn_dev(block, entries, py_item(fields, nk[].k_bn2), c2[0], s2, "b2", context)
     var idh = xh
-    var ds = fields["downsample"]
+    var ds = py_item(fields, nk[].k_downsample)
     var downsampled = ds is not None and _truth(ds)
     var d1 = PythonObject(None)
     var sd = PythonObject(None)
@@ -1271,18 +1314,18 @@ def _forward_chain(block: PythonObject, fields: PythonObject, entries: PythonObj
             conv_run_map2_m(key, shw, shw, yp, 3, 0, n2)
         _ = y  # keep the Python object alive through the native call above
     var chain = Python.dict()
-    py_setitem(chain, "x", xcnn_tuple(xs))
-    py_setitem(chain, "xt", x if xt else PythonObject(None))
-    py_setitem(chain, "s1", c1[1])
-    py_setitem(chain, "s2", c2[1])
-    py_setitem(chain, "xh", xh)
-    py_setitem(chain, "c1", c1[0])
-    py_setitem(chain, "b1", b1)
-    py_setitem(chain, "r1", r1)
-    py_setitem(chain, "c2", c2[0])
-    py_setitem(chain, "s", sh)
-    py_setitem(chain, "d1", d1 if downsampled else ds)
-    py_setitem(chain, "sd", sd if downsampled else ds)
+    py_setitem(chain, nk[].k_x, xcnn_tuple(xs))
+    py_setitem(chain, nk[].k_xt, x if xt else PythonObject(None))
+    py_setitem(chain, nk[].k_s1, c1[1])
+    py_setitem(chain, nk[].k_s2, c2[1])
+    py_setitem(chain, nk[].k_xh, xh)
+    py_setitem(chain, nk[].k_c1, c1[0])
+    py_setitem(chain, nk[].k_b1, b1)
+    py_setitem(chain, nk[].k_r1, r1)
+    py_setitem(chain, nk[].k_c2, c2[0])
+    py_setitem(chain, nk[].k_s, sh)
+    py_setitem(chain, nk[].k_d1, d1 if downsampled else ds)
+    py_setitem(chain, nk[].k_sd, sd if downsampled else ds)
     _set(fields, "_chain", chain)
     var c1f = convf[0]
     _set(c1f, "_x", x)
@@ -1304,13 +1347,14 @@ def xcnn_block_forward(block: PythonObject, x: PythonObject, context: PythonObje
     if convf is not None:
         return _forward_chain(block, fields, entries, convf, a, context)
     _set(fields, "_chain", PythonObject(None))
-    var out = xcnn_relu_forward(fields["relu1"], xcnn_bn_forward(fields["bn1"], xcnn_conv2d_forward(fields["conv1"], a, context), context), context)
-    out = xcnn_bn_forward(fields["bn2"], xcnn_conv2d_forward(fields["conv2"], out, context), context)
+    var nk = xcnn_keys()
+    var out = xcnn_relu_forward(py_item(fields, nk[].k_relu1), xcnn_bn_forward(py_item(fields, nk[].k_bn1), xcnn_conv2d_forward(py_item(fields, nk[].k_conv1), a, context), context), context)
+    out = xcnn_bn_forward(py_item(fields, nk[].k_bn2), xcnn_conv2d_forward(py_item(fields, nk[].k_conv2), out, context), context)
     var identity = a
-    var ds = fields["downsample"]
+    var ds = py_item(fields, nk[].k_downsample)
     if ds is not None and _truth(ds):
         identity = xcnn_bn_forward(ds[1], xcnn_conv2d_forward(ds[0], a, context), context)
-    return xcnn_relu_forward(fields["relu2"], _add(entries, out, identity, context), context)
+    return xcnn_relu_forward(py_item(fields, nk[].k_relu2), _add(entries, out, identity, context), context)
 
 
 # ---------------------------------------------------------------- dispatch
@@ -1327,7 +1371,8 @@ def _rows(fields: PythonObject, source: PythonObject, required: Bool, context: P
     # `fields`: the layer's `_fields` dict the dispatcher already read.
     var a = xcnn_f32(source, "X", context)
     var s = xcnn_shape(a)
-    var declared = py_get(fields, "input_shape")
+    var nk = xcnn_keys()
+    var declared = py_get(fields, nk[].k_input_shape)
     if len(s) == 2:
         if declared is None:
             if required:
@@ -1343,40 +1388,41 @@ def _rows(fields: PythonObject, source: PythonObject, required: Bool, context: P
     return a
 
 
-def xcnn_conv_layers(layer: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    if operation == "block_init":
+def xcnn_conv_layers(layer: PythonObject, operation: Int, name: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    if operation == XCNN_OPN_BLOCK_INIT:
         return _block_init(layer, args, context)
-    if operation == "block_train":
+    if operation == XCNN_OPN_BLOCK_TRAIN:
         return _block_train(layer, args[0], context)
-    if operation == "block_backward":
+    if operation == XCNN_OPN_BLOCK_BACKWARD:
         return _block_backward(layer, args[0], context)
-    if operation == "block_parameters":
+    if operation == XCNN_OPN_BLOCK_PARAMETERS:
         return _block_parameters(layer, context)
-    if operation == "block_fit":
+    if operation == XCNN_OPN_BLOCK_FIT:
         _ = _block_fields(layer, context)
         return layer
-    if operation == "conv_init" or operation == "conv_init1d":
-        return _conv_init(layer, args, operation == "conv_init1d", context)
+    if operation == XCNN_OPN_CONV_INIT or operation == XCNN_OPN_CONV_INIT1D:
+        return _conv_init(layer, args, operation == XCNN_OPN_CONV_INIT1D, context)
     # p3-cnn-sequence-tsa: the BasicBlock operations come before the Conv2d
     # field admission (it admitted 15 conv fields of the block object, which
     # `_block_fields` then admitted again as a block)
-    if operation == "block_forward":
+    if operation == XCNN_OPN_BLOCK_FORWARD:
         return xcnn_block_forward(layer, args[0], context)
-    if operation == "block_transform":
+    if operation == XCNN_OPN_BLOCK_TRANSFORM:
         return _flat_rows(xcnn_block_forward(layer, _rows(_fields(layer), args[0], False, context), context), context)
     # One admission per call: every conv handler below takes these fields
     # (they re-admitted the same layer 2-4 times per call before). This line
     # stays first, so the first error a bad layer raises is unchanged.
     var fields = _conv_admit(layer, context)
-    if operation == "conv_backward":
+    if operation == XCNN_OPN_CONV_BACKWARD:
         return _conv_backward_fields(layer, fields, args, context)
-    if operation == "conv_set_weights" or operation == "conv_set_weights1d":
-        return _conv_set_weights(layer, fields, args, operation == "conv_set_weights1d", context)
-    if operation == "conv_pin":
+    if operation == XCNN_OPN_CONV_SET_WEIGHTS or operation == XCNN_OPN_CONV_SET_WEIGHTS1D:
+        return _conv_set_weights(layer, fields, args, operation == XCNN_OPN_CONV_SET_WEIGHTS1D, context)
+    if operation == XCNN_OPN_CONV_PIN:
         _pin_weights(layer, fields, xcnn_entries(fields, context), context)
         return layer
-    if operation == "conv_unpin":
-        if py_get(fields, "_pins") is not None:
+    var nk = xcnn_keys()
+    if operation == XCNN_OPN_CONV_UNPIN:
+        if py_get(fields, nk[].k__pins) is not None:
             # p3-cnn-sequence-tsa: no resident copy any more, so the host
             # weights are handed back writeable (fresh copies of the words).
             var values = _weight_pair(fields, context)
@@ -1385,25 +1431,25 @@ def xcnn_conv_layers(layer: PythonObject, operation: String, args: PythonObject,
         _set(fields, "_pins", PythonObject(None))
         _set(fields, "_pin_src", PythonObject(None))
         return layer
-    if operation == "conv_grad_weight" or operation == "conv_grad_bias":
-        return _conv_gradient(fields, operation == "conv_grad_weight", context)
-    if operation == "conv_grad_weight_set" or operation == "conv_grad_bias_set":
-        var weight = operation == "conv_grad_weight_set"
+    if operation == XCNN_OPN_CONV_GRAD_WEIGHT or operation == XCNN_OPN_CONV_GRAD_BIAS:
+        return _conv_gradient(fields, operation == XCNN_OPN_CONV_GRAD_WEIGHT, context)
+    if operation == XCNN_OPN_CONV_GRAD_WEIGHT_SET or operation == XCNN_OPN_CONV_GRAD_BIAS_SET:
+        var weight = operation == XCNN_OPN_CONV_GRAD_WEIGHT_SET
         _set(fields, "grad_weight_" if weight else "grad_bias_", args[0])
         _set(fields, "_gw_dev" if weight else "_gb_dev", PythonObject(None))
         if weight:
             _set(fields, "_gw_1d", PythonObject(False))
         return PythonObject(None)
-    if operation == "conv_weight1d":
-        var w = xcnn_f32(fields["weight_"], "weight_", context)
+    if operation == XCNN_OPN_CONV_WEIGHT1D:
+        var w = xcnn_f32(py_item(fields, nk[].k_weight_), "weight_", context)
         var s = xcnn_shape(w)
         return xcnn_reshape(w, [s[0], s[1], s[3]], context)
-    if operation == "conv_fit":
+    if operation == XCNN_OPN_CONV_FIT:
         var a = _rows(fields, args[0], True, context)
         _set(fields, "n_features_in_", PythonObject(conv_run_tail_size(xcnn_shape(a))))
         return layer
-    if operation == "conv_forward":
+    if operation == XCNN_OPN_CONV_FORWARD:
         return xcnn_conv_forward(layer, fields, args[0], context)
-    if operation == "conv_transform":
+    if operation == XCNN_OPN_CONV_TRANSFORM:
         return _flat_rows(xcnn_conv_forward(layer, fields, _rows(fields, args[0], True, context), context), context)
-    raise Error("RuntimeError: unknown CNN layer operation " + operation)
+    raise Error("RuntimeError: unknown CNN layer operation " + String(py=name))

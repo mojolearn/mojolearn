@@ -12,7 +12,7 @@ from bindings.xcnn_common_door import xcnn_at, xcnn_exact, XT_TUPLE
 from std.python._cpython import GILReleased
 from x_cnn.tensor_run import xcnn_tensor_run_free
 from bindings.native_loaded_module_door import native_interpreter_finalizing
-from bindings.py_balanced import py_type, py_call, py_setitem
+from bindings.py_balanced import py_type, py_call, py_setitem, py_item
 from bindings.xcnn_tensor_native_pack import xcnn_tensor_operation
 from bindings.xcnn_pool_native_door import xcnn_pool_layers
 # TOMBSTONE: MOJOLEARN_XCNN_FAST_TYPED_DOOR (NOISE, A/B round 1 NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T125554Z-6f7afc, one run per arm, digests equal on 12 cells, 0.92-1.08, ten cells within 1 %) deleted 2026-11-19 by lane/fx-verdicts3; code recoverable at f96f23b7fb.
@@ -21,9 +21,16 @@ from bindings.xcnn_bn_native_door import xcnn_bn_layers
 from bindings.xcnn_conv_native_door import xcnn_conv_layers
 from bindings.xcnn_graph_native_door import xcnn_graph_layers
 from bindings.xcnn_classifier_native_door import cnnclf_fit, cnnclf_predict, cnnclf_predict_proba, cnnclf_initialize, cnnclf_weights
+from bindings.xcnn_keys_unpack import (
+    xcnn_keys, XCNN_OPN_TENSOR_FINALIZE, XCNN_OPN_TENSOR_RESHAPE, XCNN_OPN_DEV_FINALIZE, XCNN_OPN_BLOCK_INIT,
+    XCNN_OPN_CONV_TRANSFORM, XCNN_OPN_GCN_INIT, XCNN_OPN_RELU_BACKWARD, XCNN_OPN_BN_INIT, XCNN_OPN_BN_FIT,
+    XCNN_OPN_CNNCLF_INIT, XCNN_OPN_CNNCLF_WEIGHTS, XCNN_OPN_CNNCLF_FIT, XCNN_OPN_CNNCLF_PREDICT,
+    XCNN_OPN_CNNCLF_PREDICT_PROBA,
+)
+from bindings.py_keys import py_op_code
 
 
-def _xcnn_finalize(owner: PythonObject, operation: String, context: PythonObject) -> PythonObject:
+def _xcnn_finalize(owner: PythonObject, name: PythonObject, context: PythonObject) -> PythonObject:
     try:
         # A DeviceTensor or resident-handle owner collected during interpreter
         # teardown (a tensor held in `__main__` or a closure at exit) releases
@@ -39,15 +46,21 @@ def _xcnn_finalize(owner: PythonObject, operation: String, context: PythonObject
         # embedding_layer_native.mojo.
         if native_interpreter_finalizing():
             return PythonObject(None)
-        if operation == "tensor_finalize":
+        # bw1-xcnn (2026-11-19): the bound name is resolved to its code by one
+        # lookup of the caller's own str (it was copied into a String and
+        # compared); a name that is not an operation is -1 and releases
+        # nothing, as before.
+        var nk = xcnn_keys()
+        var operation = py_op_code(nk[].ops, name)
+        if operation == XCNN_OPN_TENSOR_FINALIZE:
             return xcnn_tensor_operation(owner, operation, Python.tuple(), context)
-        if operation == "dev_finalize":
+        if operation == XCNN_OPN_DEV_FINALIZE:
             var fields = xcnn_dev_fields(owner, context)
-            var entries = xcnn_module_entries(fields["b"], context)
+            var entries = xcnn_module_entries(py_item(fields, nk[].k_b), context)
             var key = xcnn_ref(entries)
-            var table = fields["h"]
+            var table = py_item(fields, nk[].k_h)
             var names = py_call(xcnn_builtins().list, table.keys())
-            py_setitem(fields, "h", Python.dict())
+            py_setitem(fields, nk[].k_h, Python.dict())
             for i in range(len(names)):  # driver-loop: release the owner's native allocation handles
                 var word = xcnn_word(table[names[i]][0])
                 var py = Python()
@@ -56,6 +69,40 @@ def _xcnn_finalize(owner: PythonObject, operation: String, context: PythonObject
     except:
         pass  # partially initialized owner or interpreter shutdown
     return PythonObject(None)
+
+
+comptime _XCNN_TENSOR = 0
+comptime _XCNN_CONV = 1
+comptime _XCNN_GRAPH = 2
+comptime _XCNN_BN = 3
+comptime _XCNN_OTHER = 4
+
+
+def _xcnn_owner(operation: Int, name: PythonObject) raises -> Int:
+    """The owner of an operation code: a range test, the codes being numbered
+    by owner (bindings/xcnn_keys_unpack.mojo). Only a name that is not an
+    operation (-1) builds its String, for the prefix route it took before
+    (a name that is not a str raises here, where its String copy raised)."""
+    if operation >= XCNN_OPN_TENSOR_FINALIZE and operation <= XCNN_OPN_TENSOR_RESHAPE:
+        return _XCNN_TENSOR
+    if operation >= XCNN_OPN_BLOCK_INIT and operation <= XCNN_OPN_CONV_TRANSFORM:
+        return _XCNN_CONV
+    if operation >= XCNN_OPN_GCN_INIT and operation <= XCNN_OPN_RELU_BACKWARD:
+        return _XCNN_GRAPH
+    if operation >= XCNN_OPN_BN_INIT and operation <= XCNN_OPN_BN_FIT:
+        return _XCNN_BN
+    if operation >= 0:
+        return _XCNN_OTHER
+    var text = String(py=name)
+    if text.startswith("tensor_"):
+        return _XCNN_TENSOR
+    if text.startswith("conv_") or text.startswith("block_"):
+        return _XCNN_CONV
+    if text.startswith("gcn_") or text.startswith("sage_") or text.startswith("linear_") or text.startswith("relu_"):
+        return _XCNN_GRAPH
+    if text.startswith("bn_"):
+        return _XCNN_BN
+    return _XCNN_OTHER
 
 
 def xcnn_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
@@ -75,32 +122,41 @@ def xcnn_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
             var bound = xcnn_at(call, 0)
             if not xcnn_exact(bound, XT_TUPLE) or len(bound) != 2:
                 raise Error("TypeError: CNN finalizer requires its native bound context")
-            return _xcnn_finalize(xcnn_at(call, 1), String(xcnn_at(bound, 1)), xcnn_at(bound, 0)).steal_data()
+            return _xcnn_finalize(xcnn_at(call, 1), xcnn_at(bound, 1), xcnn_at(bound, 0)).steal_data()
+        # bw1-xcnn (2026-11-19): the operation is one lookup of the caller's
+        # str in the held operation table (it was copied into a String and
+        # routed by up to eleven prefix tests and compares). Codes are
+        # numbered by owner, so the owner is a range test; a name that is not
+        # an operation (-1) is routed by its prefix, as before, to the owner
+        # whose unchanged "unknown operation" error it raised.
         var context = xcnn_at(call, 3)
-        var operation = String(py=xcnn_at(call, 1))
-        if operation != "tensor_finalize":
+        var nk = xcnn_keys()
+        var name = xcnn_at(call, 1)
+        var operation = py_op_code(nk[].ops, name)
+        var owner_group = _xcnn_owner(operation, name)
+        if operation != XCNN_OPN_TENSOR_FINALIZE:
             xcnn_connect_numpy(context)
         var owner = xcnn_at(call, 0)
         var args = xcnn_at(call, 2)
-        if operation.startswith("tensor_"):
+        if owner_group == _XCNN_TENSOR:
             return xcnn_tensor_operation(owner, operation, args, context).steal_data()
-        if operation.startswith("conv_") or operation.startswith("block_"):
-            return xcnn_conv_layers(owner, operation, args, context).steal_data()
-        if operation == "cnnclf_init":
+        if owner_group == _XCNN_CONV:
+            return xcnn_conv_layers(owner, operation, name, args, context).steal_data()
+        if operation == XCNN_OPN_CNNCLF_INIT:
             return cnnclf_initialize(owner, args, context).steal_data()
-        if operation == "cnnclf_weights":
+        if operation == XCNN_OPN_CNNCLF_WEIGHTS:
             return cnnclf_weights(owner, context).steal_data()
-        if operation == "cnnclf_fit":
+        if operation == XCNN_OPN_CNNCLF_FIT:
             return cnnclf_fit(owner, args, context).steal_data()
-        if operation == "cnnclf_predict":
+        if operation == XCNN_OPN_CNNCLF_PREDICT:
             return cnnclf_predict(owner, args, context).steal_data()
-        if operation == "cnnclf_predict_proba":
+        if operation == XCNN_OPN_CNNCLF_PREDICT_PROBA:
             return cnnclf_predict_proba(owner, args, context).steal_data()
-        if operation.startswith("gcn_") or operation.startswith("sage_") or operation.startswith("linear_") or operation.startswith("relu_"):
-            return xcnn_graph_layers(owner, operation, args, context).steal_data()
-        if operation.startswith("bn_"):
+        if owner_group == _XCNN_GRAPH:
+            return xcnn_graph_layers(owner, operation, name, args, context).steal_data()
+        if owner_group == _XCNN_BN:
             return xcnn_bn_layers(owner, operation, args, context).steal_data()
-        return xcnn_pool_layers(owner, operation, args, context).steal_data()
+        return xcnn_pool_layers(owner, operation, name, args, context).steal_data()
     except error:
         var text = String(error)
         if text.startswith("TypeError:"):

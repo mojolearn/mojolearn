@@ -62,6 +62,13 @@ from x_cnn.graph_run import (
     graph_run_gcn_norm, graph_run_gemm_m, graph_run_spmm_m, graph_run_bias_m, graph_run_add_m, graph_run_graph_op,
     graph_run_graph_op_m, graph_run_gcn_backward, graph_run_sage_backward,
 )
+from bindings.xcnn_keys_unpack import (
+    xcnn_keys, XCNN_OPN_GCN_BACKWARD, XCNN_OPN_GCN_CACHED, XCNN_OPN_GCN_CACHED_SET, XCNN_OPN_GCN_FORWARD,
+    XCNN_OPN_GCN_INIT, XCNN_OPN_LINEAR_BACKWARD, XCNN_OPN_LINEAR_FORWARD, XCNN_OPN_LINEAR_INIT,
+    XCNN_OPN_RELU_BACKWARD, XCNN_OPN_RELU_FORWARD, XCNN_OPN_RELU_INIT, XCNN_OPN_SAGE_BACKWARD, XCNN_OPN_SAGE_CACHED,
+    XCNN_OPN_SAGE_CACHED_SET, XCNN_OPN_SAGE_FORWARD, XCNN_OPN_SAGE_INIT,
+)
+from bindings.py_balanced import py_item
 
 
 def _ones(count: Int, context: PythonObject) raises -> PythonObject:
@@ -109,7 +116,8 @@ def _graph_cached(fields: PythonObject) raises -> Bool:
     """The layer's `cached` word, read at a cache miss only (the hit reads
     it from the key). A layer made before `cached` existed (a loaded
     pickle) has no field: False."""
-    var word = py_get(fields, "cached", PythonObject(False))
+    var nk = xcnn_keys()
+    var word = py_get(fields, nk[].k_cached, PythonObject(False))
     neural_plain_value(word, 0, PythonObject(None))
     return word is not None and Bool(py=word)
 
@@ -119,8 +127,9 @@ def _graph_cached_set(layer: PythonObject, value: PythonObject, context: PythonO
     the next forward misses and keys the graph under the new setting (the
     forward never reads the attribute on a hit)."""
     var fields = _fields(layer)
-    py_setitem(fields, "cached", Bool(py=py_call(xcnn_builtins().bool, value)))
-    py_setitem(fields, "_gcache", PythonObject(None))
+    var nk = xcnn_keys()
+    py_setitem(fields, nk[].k_cached, Bool(py=py_call(xcnn_builtins().bool, value)))
+    py_setitem(fields, nk[].k__gcache, PythonObject(None))
     return PythonObject(None)
 
 
@@ -338,14 +347,15 @@ def _graph_pack(calls: GraphDoorCalls, v: GraphViews) raises -> PythonObject:
 
 def _graph_admit(g: PythonObject, context: PythonObject) raises:
     neural_string_keys(g)
-    neural_plain_value(g["n"], 0, PythonObject(None))
-    neural_plain_value(g["nnz"], 0, PythonObject(None))
-    var n = Int(py=g["n"])
-    var count = Int(py=g["nnz"])
+    var nk = xcnn_keys()
+    neural_plain_value(py_item(g, nk[].k_n), 0, PythonObject(None))
+    neural_plain_value(py_item(g, nk[].k_nnz), 0, PythonObject(None))
+    var n = Int(py=py_item(g, nk[].k_n))
+    var count = Int(py=py_item(g, nk[].k_nnz))
     graph_run_check_cache_dims(n, count)
     for name in ["src", "dst", "csr_f", "csr_t", "order_f", "order_t"]:  # small-loop(cached CSR buffer metadata)
         var array = g[PythonObject(name)]
-        if py_type(array) is not context["ndarray"]:
+        if py_type(array) is not py_item(context, nk[].k_ndarray):
             raise Error("TypeError: cached graph storage requires exact native arrays")
         var dtype = array.dtype
         if Int(py=dtype.num) != 5 or not Bool(py=dtype.isnative):
@@ -356,11 +366,12 @@ def _graph_admit(g: PythonObject, context: PythonObject) raises:
 
 
 def _vals_t(entries: PythonObject, g: PythonObject, vals_f: PythonObject, context: PythonObject) raises -> PythonObject:
-    var nnz = Int(py=g["nnz"])
+    var nk = xcnn_keys()
+    var nnz = Int(py=py_item(g, nk[].k_nnz))
     var out = xcnn_host_f32([nnz], context)
     var a_vals = xcnn_ptr(vals_f)
-    var a_order_f = xcnn_ptr(g["order_f"])
-    var a_order_t = xcnn_ptr(g["order_t"])
+    var a_order_f = xcnn_ptr(py_item(g, nk[].k_order_f))
+    var a_order_t = xcnn_ptr(py_item(g, nk[].k_order_t))
     var a_out = xcnn_ptr(out)
     var key = xcnn_ref(entries)
     var py = Python()
@@ -403,10 +414,11 @@ def _spmm(entries: PythonObject, g: PythonObject, vals: PythonObject, h: PythonO
     var a_v = xcnn_ptr(v)
     var a_h = xcnn_ptr(hh)
     var a_out = xcnn_ptr(out)
-    var a_csr = xcnn_ptr(g["csr_t"] if transposed else g["csr_f"])
-    var n = Int(py=g["n"])
+    var nk = xcnn_keys()
+    var a_csr = xcnn_ptr(py_item(g, nk[].k_csr_t) if transposed else py_item(g, nk[].k_csr_f))
+    var n = Int(py=py_item(g, nk[].k_n))
     var cols = Int(py=hh.shape[1])
-    var nnz = Int(py=g["nnz"])
+    var nnz = Int(py=py_item(g, nk[].k_nnz))
     var key = xcnn_ref(entries)
     var py = Python()
     with GILReleased(py):
@@ -453,30 +465,32 @@ def _linear_forward(lin: PythonObject, x: PythonObject, context: PythonObject) r
     var entries = xcnn_entries(fields, context)
     var fx = _snapshot(x, "x", context)
     var shape = xcnn_shape(fx)
-    graph_run_check_linear_input(shape, Int(py=fields["in_features"]))
+    var nk = xcnn_keys()
+    graph_run_check_linear_input(shape, Int(py=py_item(fields, nk[].k_in_features)))
     var values = _linear_weights(fields, context)
     var rows = shape[0]
-    var out = xcnn_host_f32([rows, Int(py=fields["out_features"])], context)
+    var out = xcnn_host_f32([rows, Int(py=py_item(fields, nk[].k_out_features))], context)
     var a_x = xcnn_ptr(fx)
     var a_w = xcnn_ptr(values[0])
     var a_b = xcnn_ptr(values[1])
     var a_out = xcnn_ptr(out)
-    var d = Int(py=fields["in_features"])
-    var f = Int(py=fields["out_features"])
+    var d = Int(py=py_item(fields, nk[].k_in_features))
+    var f = Int(py=py_item(fields, nk[].k_out_features))
     var key = xcnn_ref(entries)
     var py = Python()
     with GILReleased(py):
         graph_run_linear_forward(key, a_x, a_w, a_b, a_out, rows, d, f)
     _ = fx  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
-    py_setitem(fields, "_x", fx)
+    py_setitem(fields, nk[].k__x, fx)
     _ = values
     return out
 
 
 def _relu_forward(relu: PythonObject, x: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_ReLU.forward(x)` of a host array."""
-    if py_type(relu) is not context["xcnn_relu_class"]:
+    var nk = xcnn_keys()
+    if py_type(relu) is not py_item(context, nk[].k_xcnn_relu_class):
         raise Error("TypeError: graph projection requires a native ReLU layer")
     var fields = _fields(relu)
     var entries = xcnn_entries(fields, context)
@@ -491,7 +505,7 @@ def _relu_forward(relu: PythonObject, x: PythonObject, context: PythonObject) ra
         graph_run_relu_forward(key, a_x, a_out, count)
     _ = out  # keep the Python object alive through the native call above
     _ = fx  # keep the Python object alive through the native call above
-    py_setitem(fields, "_x", fx)
+    py_setitem(fields, nk[].k__x, fx)
     return out
 
 
@@ -499,7 +513,8 @@ def _relu_forward(relu: PythonObject, x: PythonObject, context: PythonObject) ra
 
 def _adopt(dev: PythonObject, entries: PythonObject, name: String, h: Int, n: Int, context: PythonObject) raises:
     """`_Dev.adopt(name, h, n)`."""
-    var table = xcnn_dev_fields(dev, context)["h"]
+    var nk = xcnn_keys()
+    var table = py_item(xcnn_dev_fields(dev, context), nk[].k_h)
     var cur = py_call(table.pop, name, PythonObject(None))
     if cur is not None:
         var old = xcnn_word(cur[0])
@@ -526,30 +541,33 @@ def _graph_dev(layer: PythonObject, fields: PythonObject, entries: PythonObject,
     """`_graph_dev(layer, b, dev, g, vals_f, vals_t)`: the resident CSR views
     and values of graph `g`, uploaded once per graph."""
     var b = xcnn_builtins()
-    neural_plain_value(py_get(fields, "_gdev_for"), 0, PythonObject(None))
+    var nk = xcnn_keys()
+    neural_plain_value(py_get(fields, nk[].k__gdev_for), 0, PythonObject(None))
     var tag = Python.tuple(py_call(b.id, g), py_call(b.id, dev))
-    if Bool(py=py_get(fields, "_gdev_for") == tag) and py_get(fields, "_gdev_g") is g:
+    if Bool(py=py_get(fields, nk[].k__gdev_for) == tag) and py_get(fields, nk[].k__gdev_g) is g:
         return
-    var n = Int(py=g["n"])
-    var nnz = Int(py=g["nnz"])
-    _adopt(dev, entries, "csr_f", _csr_upload(entries, g["csr_f"], n, nnz), Int(py=g["csr_f"].size), context)
-    _adopt(dev, entries, "csr_t", _csr_upload(entries, g["csr_t"], n, nnz), Int(py=g["csr_t"].size), context)
+    var n = Int(py=py_item(g, nk[].k_n))
+    var nnz = Int(py=py_item(g, nk[].k_nnz))
+    _adopt(dev, entries, "csr_f", _csr_upload(entries, py_item(g, nk[].k_csr_f), n, nnz), Int(py=py_item(g, nk[].k_csr_f).size), context)
+    _adopt(dev, entries, "csr_t", _csr_upload(entries, py_item(g, nk[].k_csr_t), n, nnz), Int(py=py_item(g, nk[].k_csr_t).size), context)
     var vf = xcnn_f32(vals_f, "values", context)
     var vt = _vals_t(entries, g, vf, context) if vals_t is None else xcnn_f32(vals_t, "values", context)
     _ = xcnn_dev_upload(layer, entries, "vals_f", vf if Int(py=vf.size) else xcnn_host_f32([1], context), context)
     _ = xcnn_dev_upload(layer, entries, "vals_t", vt if Int(py=vt.size) else xcnn_host_f32([1], context), context)
-    py_setitem(fields, "_gdev_for", tag)
-    py_setitem(fields, "_gdev_g", g)
+    py_setitem(fields, nk[].k__gdev_for, tag)
+    py_setitem(fields, nk[].k__gdev_g, g)
 
 
 def _dev_h(dev: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
-    return xcnn_dev_fields(dev, context)["h"][PythonObject(name)][0]
+    var nk = xcnn_keys()
+    return py_item(xcnn_dev_fields(dev, context), nk[].k_h)[PythonObject(name)][0]
 
 
 def _dev_pair(dev: PythonObject, first: String, second: String, context: PythonObject) raises -> PythonObject:
     """(`_dev_h(dev, first)`, `_dev_h(dev, second)`) with the owner and its
     handle table admitted once for the launch, not once per handle."""
-    var table = xcnn_dev_fields(dev, context)["h"]
+    var nk = xcnn_keys()
+    var table = py_item(xcnn_dev_fields(dev, context), nk[].k_h)
     return Python.tuple(table[PythonObject(first)][0], table[PythonObject(second)][0])
 
 
@@ -626,8 +644,9 @@ def _gcn_graph(fields: PythonObject, entries: PythonObject, n: Int, edge_index: 
     if edge_weight is not None:
         weight_count = xcnn_size(xcnn_shape(edge_weight))
         weight = xcnn_ptr(edge_weight)
-    var gv = gcn_graph_run(calls, edges, n, weight, weight_count, Bool(py=fields["normalize"]),
-                           Bool(py=fields["add_self_loops"]), Bool(py=fields["improved"]),
+    var nk = xcnn_keys()
+    var gv = gcn_graph_run(calls, edges, n, weight, weight_count, Bool(py=py_item(fields, nk[].k_normalize)),
+                           Bool(py=py_item(fields, nk[].k_add_self_loops)), Bool(py=py_item(fields, nk[].k_improved)),
                            xcnn_idn(entries, XCNN_F_GRAPH))
     _ = edge_weight  # keep the Python object alive through the copy above
     return Python.tuple(_graph_pack(calls, gv.views), calls.item(gv.vals))
@@ -636,19 +655,20 @@ def _gcn_graph(fields: PythonObject, entries: PythonObject, n: Int, edge_index: 
 def _gcn_forward_dev(layer: PythonObject, fields: PythonObject, entries: PythonObject, x: PythonObject, g: PythonObject,
                      vals: PythonObject, context: PythonObject) raises -> PythonObject:
     var n = Int(py=x.shape[0])
-    var f_out = Int(py=fields["out_channels"])
-    var d_in = Int(py=fields["in_channels"])
+    var nk = xcnn_keys()
+    var f_out = Int(py=py_item(fields, nk[].k_out_channels))
+    var d_in = Int(py=py_item(fields, nk[].k_in_channels))
     graph_run_check_x(xcnn_shape(x), d_in)
     var dev = xcnn_dev(layer, entries, context)
     _graph_dev(layer, fields, entries, dev, g, vals, PythonObject(None), context)
-    var w = _snapshot(fields["weight_"], "weight_", context)
+    var w = _snapshot(py_item(fields, nk[].k_weight_), "weight_", context)
     graph_run_check_gcn_weight(xcnn_shape(w), f_out, d_in)
     var xt = xcnn_is_t(x, context)
     var xh = x.h if xt else xcnn_dev_upload(layer, entries, "x", x, context)
     var hh = xcnn_dev_get_f(fields, entries, "h", n * f_out, context)
     _gemm_m(entries, xcnn_word(xh), xcnn_ptr(w), xcnn_word(hh), 0b101, n, f_out, d_in, 1)
     _ = w  # keep the Python object alive through the native call above
-    var bias = Bool(py=fields["bias"])
+    var bias = Bool(py=py_item(fields, nk[].k_bias))
     # fx-cnn-layers (2026-11-18): the resident output takes the unfilled
     # allocation under the resident glue (`xcnn_out_new`, as the pools, the
     # convolutions and batch norm take it). Every word of it is stored below:
@@ -662,9 +682,9 @@ def _gcn_forward_dev(layer: PythonObject, fields: PythonObject, entries: PythonO
     var oh = out.h if (xt and not bias) else xcnn_dev_get_f(fields, entries, "o", n * f_out, context)
     var _hv1 = _dev_pair(dev, "vals_f", "csr_f", context)   # one owner admission for both handles
     _spmm_m(entries, xcnn_word(_hv1[0]), xcnn_word(hh), xcnn_word(_hv1[1]), xcnn_word(oh), 0b1111, n, f_out,
-            Int(py=g["nnz"]), 0)
+            Int(py=py_item(g, nk[].k_nnz)), 0)
     if bias:
-        var bv = _snapshot(fields["bias_"], "bias_", context)
+        var bv = _snapshot(py_item(fields, nk[].k_bias_), "bias_", context)
         graph_run_check_bias(Int(py=bv.size), f_out)
         if xt:
             _bias_m(entries, xcnn_word(oh), xcnn_ptr(bv), xcnn_word(out.h), 0b101, n * f_out, f_out)
@@ -675,10 +695,10 @@ def _gcn_forward_dev(layer: PythonObject, fields: PythonObject, entries: PythonO
             _ = out  # keep the Python object alive through the native call above
     elif not xt:
         _download(entries, oh, out)
-    py_setitem(fields, "_x", x)
-    py_setitem(fields, "_g", g)
-    py_setitem(fields, "_vals", vals)
-    py_setitem(fields, "_xdev", Python.tuple(dev, xh))
+    py_setitem(fields, nk[].k__x, x)
+    py_setitem(fields, nk[].k__g, g)
+    py_setitem(fields, nk[].k__vals, vals)
+    py_setitem(fields, nk[].k__xdev, Python.tuple(dev, xh))
     return out
 
 
@@ -695,13 +715,14 @@ def xcnn_gcn_forward(layer: PythonObject, args: PythonObject, context: PythonObj
     else:
         x = _snapshot(x, "x", context)
     var shape = xcnn_shape(x)
-    graph_run_check_graph_x(shape, Int(py=fields["in_channels"]))
+    var nk = xcnn_keys()
+    graph_run_check_graph_x(shape, Int(py=py_item(fields, nk[].k_in_channels)))
     if xcnn_is_t(x, context):
         x = xcnn_reshape_t(x, shape, context)
     var n = shape[0]
     var arrays = Python.tuple(args[1], args[2])
     var views = Python.tuple(edge_index, edge_weight)
-    var hit = py_get(fields, "_gcache")
+    var hit = py_get(fields, nk[].k__gcache)
     if hit is not None and (py_type(hit) is not xcnn_builtins().tuple or len(hit) != 2):
         raise Error("TypeError: graph cache requires a native pair")
     var g = PythonObject(None)
@@ -711,8 +732,8 @@ def xcnn_gcn_forward(layer: PythonObject, args: PythonObject, context: PythonObj
             raise Error("TypeError: GCN cache requires native graph metadata")
         for i in range(1, 4):  # small-loop(three cached graph normalization flags)
             neural_plain_value(hit[0][i], 0, PythonObject(None))
-    if (hit is not None and Bool(py=hit[0][1] == fields["improved"]) and Bool(py=hit[0][2] == fields["add_self_loops"])
-            and Bool(py=hit[0][3] == fields["normalize"]) and _key_matches(hit[0][0], n, arrays, views, context)):
+    if (hit is not None and Bool(py=hit[0][1] == py_item(fields, nk[].k_improved)) and Bool(py=hit[0][2] == py_item(fields, nk[].k_add_self_loops))
+            and Bool(py=hit[0][3] == py_item(fields, nk[].k_normalize)) and _key_matches(hit[0][0], n, arrays, views, context)):
         g = hit[1][0]
         vals = hit[1][1]
     else:
@@ -720,22 +741,22 @@ def xcnn_gcn_forward(layer: PythonObject, args: PythonObject, context: PythonObj
         g = gv[0]
         vals = gv[1]
         # the key (and its owned snapshot) is built at the miss only
-        var key = Python.tuple(_graph_key(n, arrays, views, _graph_cached(fields), context), fields["improved"],
-                               fields["add_self_loops"], fields["normalize"])
-        py_setitem(fields, "_gcache", Python.tuple(key, Python.tuple(g, vals)))
+        var key = Python.tuple(_graph_key(n, arrays, views, _graph_cached(fields), context), py_item(fields, nk[].k_improved),
+                               py_item(fields, nk[].k_add_self_loops), py_item(fields, nk[].k_normalize))
+        py_setitem(fields, nk[].k__gcache, Python.tuple(key, Python.tuple(g, vals)))
     _graph_admit(g, context)
     if xcnn_mixed(entries):
         return _gcn_forward_dev(layer, fields, entries, x, g, vals, context)
-    py_setitem(fields, "_xdev", PythonObject(None))
-    var f_out = Int(py=fields["out_channels"])
-    var d_in = Int(py=fields["in_channels"])
-    var h = _gemm(entries, x, fields["weight_"], n, f_out, d_in, 1, context)
+    py_setitem(fields, nk[].k__xdev, PythonObject(None))
+    var f_out = Int(py=py_item(fields, nk[].k_out_channels))
+    var d_in = Int(py=py_item(fields, nk[].k_in_channels))
+    var h = _gemm(entries, x, py_item(fields, nk[].k_weight_), n, f_out, d_in, 1, context)
     var out = _spmm(entries, g, vals, h, 0, context)
-    if Bool(py=fields["bias"]):
-        out = _add(entries, out, _bias_rows(fields["bias_"], Int(py=out.shape[0]), Int(py=out.shape[1]), context), context)
-    py_setitem(fields, "_x", x)
-    py_setitem(fields, "_g", g)
-    py_setitem(fields, "_vals", vals)
+    if Bool(py=py_item(fields, nk[].k_bias)):
+        out = _add(entries, out, _bias_rows(py_item(fields, nk[].k_bias_), Int(py=out.shape[0]), Int(py=out.shape[1]), context), context)
+    py_setitem(fields, nk[].k__x, x)
+    py_setitem(fields, nk[].k__g, g)
+    py_setitem(fields, nk[].k__vals, vals)
     return out
 
 
@@ -745,34 +766,36 @@ def _sage_res_form(fields: PythonObject, entries: PythonObject) raises -> Bool:
     """`SAGEConv._res_form(b)` (RUN `graph_run_sage_res_form`): the
     configuration words are read only when the decision needs them."""
     var mixed = xcnn_mixed(entries)
-    var project = Bool(py=fields["project"]) if mixed else False
+    var nk = xcnn_keys()
+    var project = Bool(py=py_item(fields, nk[].k_project)) if mixed else False
     if not mixed or project:
         return False
     var graph_route = xcnn_idn(entries, XCNN_F_GRAPH)
     if graph_route:
         return True
-    return graph_run_sage_res_form(mixed, project, graph_route, Bool(py=fields["normalize"]), String(py=fields["aggr"]))
+    return graph_run_sage_res_form(mixed, project, graph_route, Bool(py=py_item(fields, nk[].k_normalize)), String(py=py_item(fields, nk[].k_aggr)))
 
 
 def _sage_forward_dev(layer: PythonObject, fields: PythonObject, entries: PythonObject, x: PythonObject, g: PythonObject,
                       context: PythonObject) raises -> PythonObject:
     var b = xcnn_builtins()
     var n = Int(py=x.shape[0])
-    var d_in = Int(py=fields["in_channels"])
-    var f_out = Int(py=fields["out_channels"])
+    var nk = xcnn_keys()
+    var d_in = Int(py=py_item(fields, nk[].k_in_channels))
+    var f_out = Int(py=py_item(fields, nk[].k_out_channels))
     graph_run_check_x(xcnn_shape(x), d_in)
     var dev = xcnn_dev(layer, entries, context)
-    var aggr = String(py=fields["aggr"])
+    var aggr = String(py=py_item(fields, nk[].k_aggr))
     var mean = aggr == "mean"
-    neural_plain_value(py_get(fields, "_gdev_for"), 0, PythonObject(None))
+    neural_plain_value(py_get(fields, nk[].k__gdev_for), 0, PythonObject(None))
     var tag = Python.tuple(py_call(b.id, g), py_call(b.id, dev))
-    if py_get(fields, "_gdev_g") is not g or not Bool(py=py_get(fields, "_gdev_for") == tag):
-        var ones = _ones(Int(py=g["nnz"]), context)
+    if py_get(fields, nk[].k__gdev_g) is not g or not Bool(py=py_get(fields, nk[].k__gdev_for) == tag):
+        var ones = _ones(Int(py=py_item(g, nk[].k_nnz)), context)
         _graph_dev(layer, fields, entries, dev, g, ones, ones, context)
     var xt = xcnn_is_t(x, context)
     var xh = x.h if xt else xcnn_dev_upload(layer, entries, "x", x, context)
     var aggh = xcnn_dev_get_f(fields, entries, "agg", n * d_in, context)
-    var nnz = Int(py=g["nnz"])
+    var nnz = Int(py=py_item(g, nk[].k_nnz))
     if aggr == "max":
         var auxh = xcnn_dev_get_f(fields, entries, "maxaux", 2 * n * d_in, context)
         _graph_op_m(entries, xcnn_word(xh), xcnn_word(xh), xcnn_word(auxh), xcnn_word(aggh),
@@ -781,11 +804,11 @@ def _sage_forward_dev(layer: PythonObject, fields: PythonObject, entries: Python
         var _hv2 = _dev_pair(dev, "vals_f", "csr_f", context)   # one owner admission for both handles
         _spmm_m(entries, xcnn_word(_hv2[0]), xcnn_word(xh), xcnn_word(_hv2[1]), xcnn_word(aggh), 0b1111, n, d_in, nnz,
                 1 if mean else 0)
-    var lin = fields["lin_l"]
+    var lin = py_item(fields, nk[].k_lin_l)
     var lin_fields = _linear_fields(lin, context)
     var lin_values = _linear_weights(lin_fields, context)
-    var norm = Bool(py=fields["normalize"])
-    var root = Bool(py=fields["root_weight"])
+    var norm = Bool(py=py_item(fields, nk[].k_normalize))
+    var root = Bool(py=py_item(fields, nk[].k_root_weight))
     # fx-cnn-layers (2026-11-18): unfilled under the resident glue, as in
     # `_gcn_forward_dev`. Every word of the resident output is stored below
     # by exactly one of: the row normalization (`l2norm_fwd_at` stores each
@@ -809,7 +832,7 @@ def _sage_forward_dev(layer: PythonObject, fields: PythonObject, entries: Python
         graph_run_linear_forward_m(key, a_agg, a_w, a_b, a_ol, 0b1001, n, d_in, f_out)
     _ = lin_values
     if root:
-        var wr = _snapshot(fields["weight_r_"], "weight_r_", context)
+        var wr = _snapshot(py_item(fields, nk[].k_weight_r_), "weight_r_", context)
         graph_run_check_root_weight(xcnn_shape(wr), f_out, d_in)
         var rh = xcnn_dev_get_f(fields, entries, "r", n * f_out, context)
         _gemm_m(entries, xcnn_word(xh), xcnn_ptr(wr), xcnn_word(rh), 0b101, n, f_out, d_in, 1)
@@ -823,18 +846,18 @@ def _sage_forward_dev(layer: PythonObject, fields: PythonObject, entries: Python
             _ = out  # keep the Python object alive through the native call above
     elif not xt and not norm:
         _download(entries, olh, out)
-    py_setitem(fields, "_ydev", PythonObject(None))
+    py_setitem(fields, nk[].k__ydev, PythonObject(None))
     if norm:
         var denh = xcnn_dev_get_f(fields, entries, "den", n, context)
         var yh = out.h if xt else xcnn_dev_get_f(fields, entries, "y", n * f_out, context)
         _graph_op_m(entries, xcnn_word(preh), xcnn_word(preh), xcnn_word(denh), xcnn_word(yh), 0, 0b01111, n, f_out, 0, 2)
         if not xt:
             _download(entries, yh, out)
-        py_setitem(fields, "_ydev", Python.tuple(yh, denh, out if xt else PythonObject(None)))
-    py_setitem(fields, "_x", x)
-    py_setitem(fields, "_g", g)
-    py_setitem(fields, "_xs", x)
-    py_setitem(fields, "_xdev", Python.tuple(dev, xh, aggh))
+        py_setitem(fields, nk[].k__ydev, Python.tuple(yh, denh, out if xt else PythonObject(None)))
+    py_setitem(fields, nk[].k__x, x)
+    py_setitem(fields, nk[].k__g, g)
+    py_setitem(fields, nk[].k__xs, x)
+    py_setitem(fields, nk[].k__xdev, Python.tuple(dev, xh, aggh))
     _ = lin_values
     return out
 
@@ -851,13 +874,14 @@ def xcnn_sage_forward(layer: PythonObject, args: PythonObject, context: PythonOb
     else:
         x = _snapshot(x, "x", context)
     var shape = xcnn_shape(x)
-    graph_run_check_graph_x(shape, Int(py=fields["in_channels"]))
+    var nk = xcnn_keys()
+    graph_run_check_graph_x(shape, Int(py=py_item(fields, nk[].k_in_channels)))
     if xcnn_is_t(x, context):
         x = xcnn_reshape_t(x, shape, context)
     var n = shape[0]
     var arrays = Python.tuple(args[1])
     var views = Python.tuple(edge_index)
-    var hit = py_get(fields, "_gcache")
+    var hit = py_get(fields, nk[].k__gcache)
     if hit is not None and (py_type(hit) is not xcnn_builtins().tuple or len(hit) != 2):
         raise Error("TypeError: graph cache requires a native pair")
     var g = PythonObject(None)
@@ -869,49 +893,49 @@ def xcnn_sage_forward(layer: PythonObject, args: PythonObject, context: PythonOb
         var gviews = graph_views_run(calls, edges.src, edges.dst, n, edges.count)
         g = _graph_pack(calls, gviews)
         # the key (and its owned snapshot) is built at the miss only
-        py_setitem(fields, "_gcache", Python.tuple(_graph_key(n, arrays, views, _graph_cached(fields), context), g))
+        py_setitem(fields, nk[].k__gcache, Python.tuple(_graph_key(n, arrays, views, _graph_cached(fields), context), g))
     _graph_admit(g, context)
     if _sage_res_form(fields, entries):
         return _sage_forward_dev(layer, fields, entries, x, g, context)
-    py_setitem(fields, "_xdev", PythonObject(None))
+    py_setitem(fields, nk[].k__xdev, PythonObject(None))
     var xs = x
-    if Bool(py=fields["project"]):
-        xs = _relu_forward(fields["_relu_p"], _linear_forward(fields["lin"], x, context), context)
-    py_setitem(fields, "_xs", xs)
-    var aggr = String(py=fields["aggr"])
+    if Bool(py=py_item(fields, nk[].k_project)):
+        xs = _relu_forward(py_item(fields, nk[].k__relu_p), _linear_forward(py_item(fields, nk[].k_lin), x, context), context)
+    py_setitem(fields, nk[].k__xs, xs)
+    var aggr = String(py=py_item(fields, nk[].k_aggr))
     var agg = PythonObject(None)
-    var nnz = Int(py=g["nnz"])
+    var nnz = Int(py=py_item(g, nk[].k_nnz))
     if aggr == "max":
         agg = xcnn_host_f32(xcnn_shape(xs), context)
         var aux = xcnn_host_f32([2 * xcnn_size(xcnn_shape(xs))], context)
-        py_setitem(fields, "_max_aux", aux)
-        _graph_op(entries, xcnn_ptr(xs), xcnn_ptr(xs), xcnn_ptr(aux), xcnn_ptr(agg), xcnn_ptr(g["csr_f"]), n,
+        py_setitem(fields, nk[].k__max_aux, aux)
+        _graph_op(entries, xcnn_ptr(xs), xcnn_ptr(xs), xcnn_ptr(aux), xcnn_ptr(agg), xcnn_ptr(py_item(g, nk[].k_csr_f)), n,
                   Int(py=xs.shape[1]), nnz, 0)
         _ = aux  # keep the Python object alive through the native call above
         _ = agg  # keep the Python object alive through the native call above
         _ = xs  # keep the Python object alive through the native call above
     else:
         agg = _spmm(entries, g, _ones(nnz, context), xs, 1 if aggr == "mean" else 0, context)
-    var out = _linear_forward(fields["lin_l"], agg, context)
-    if Bool(py=fields["root_weight"]):
-        out = _add(entries, out, _gemm(entries, x, fields["weight_r_"], n, Int(py=fields["out_channels"]),
-                                       Int(py=fields["in_channels"]), 1, context), context)
-    py_setitem(fields, "_x", x)
-    py_setitem(fields, "_g", g)
-    if Bool(py=fields["normalize"]):
-        py_setitem(fields, "_pre", out)
+    var out = _linear_forward(py_item(fields, nk[].k_lin_l), agg, context)
+    if Bool(py=py_item(fields, nk[].k_root_weight)):
+        out = _add(entries, out, _gemm(entries, x, py_item(fields, nk[].k_weight_r_), n, Int(py=py_item(fields, nk[].k_out_channels)),
+                                       Int(py=py_item(fields, nk[].k_in_channels)), 1, context), context)
+    py_setitem(fields, nk[].k__x, x)
+    py_setitem(fields, nk[].k__g, g)
+    if Bool(py=py_item(fields, nk[].k_normalize)):
+        py_setitem(fields, nk[].k__pre, out)
         var y = xcnn_host_f32(xcnn_shape(out), context)
         var den = xcnn_host_f32([n], context)
         var nograph = xcnn_host_i32([n + 1], context)
-        py_setitem(fields, "_den", den)
-        py_setitem(fields, "_nograph", nograph)
+        py_setitem(fields, nk[].k__den, den)
+        py_setitem(fields, nk[].k__nograph, nograph)
         _graph_op(entries, xcnn_ptr(out), xcnn_ptr(out), xcnn_ptr(den), xcnn_ptr(y), xcnn_ptr(nograph), n,
                   Int(py=out.shape[1]), 0, 2)
         _ = nograph  # keep the Python object alive through the native call above
         _ = den  # keep the Python object alive through the native call above
         _ = y  # keep the Python object alive through the native call above
         _ = out  # keep the Python object alive through the native call above
-        py_setitem(fields, "_y", y)
+        py_setitem(fields, nk[].k__y, y)
         out = y
     return out
 # ---------------------------------------------------------------- lifecycle and backward owners
@@ -931,7 +955,8 @@ def _graph_layer_fields(layer: PythonObject, context: PythonObject) raises -> Py
 
 
 def _linear_fields(layer: PythonObject, context: PythonObject) raises -> PythonObject:
-    if py_type(layer) is not context["xcnn_linear_class"]:
+    var nk = xcnn_keys()
+    if py_type(layer) is not py_item(context, nk[].k_xcnn_linear_class):
         raise Error("TypeError: graph projection requires a native linear layer")
     var fields = _fields(layer)
     var mods = NativeModules()
@@ -947,9 +972,10 @@ def _linear_init(layer: PythonObject, args: PythonObject, context: PythonObject)
     var d = _dimension(args[0], "in_features", context)
     var f = _dimension(args[1], "out_features", context)
     graph_run_check_features(d, f)
-    py_setitem(fields, "in_features", d)
-    py_setitem(fields, "out_features", f)
-    py_setitem(fields, "numeric_mode", args[3])
+    var nk = xcnn_keys()
+    py_setitem(fields, nk[].k_in_features, d)
+    py_setitem(fields, nk[].k_out_features, f)
+    py_setitem(fields, nk[].k_numeric_mode, args[3])
     var seed = PythonObject(None) if args[2] is None else py_call(xcnn_builtins().int, args[2])
     var stream = XseqStream(seed, context)
     var bound = graph_run_fan_in_bound(d)
@@ -957,34 +983,37 @@ def _linear_init(layer: PythonObject, args: PythonObject, context: PythonObject)
     var bias = xcnn_host_f32([f], context)
     stream.fill_uniform(context, xcnn_addr(w), f * d, -bound, bound)
     stream.fill_uniform(context, xcnn_addr(bias), f, -bound, bound)
-    py_setitem(fields, "weight_", w)
-    py_setitem(fields, "bias_", bias)
+    py_setitem(fields, nk[].k_weight_, w)
+    py_setitem(fields, nk[].k_bias_, bias)
     return PythonObject(None)
 
 
 def _linear_new(d: Int, f: Int, seed: PythonObject, mode: PythonObject, context: PythonObject) raises -> PythonObject:
-    var layer = py_call(xcnn_builtins().object.__new__, context["xcnn_linear_class"])
+    var nk = xcnn_keys()
+    var layer = py_call(xcnn_builtins().object.__new__, py_item(context, nk[].k_xcnn_linear_class))
     _ = _linear_init(layer, Python.tuple(d, f, seed, mode), context)
     return layer
 
 
 def _linear_weights(fields: PythonObject, context: PythonObject) raises -> PythonObject:
-    var d = Int(py=fields["in_features"])
-    var f = Int(py=fields["out_features"])
-    var w = _snapshot(fields["weight_"], "weight_", context)
-    var bias = _snapshot(fields["bias_"], "bias_", context)
+    var nk = xcnn_keys()
+    var d = Int(py=py_item(fields, nk[].k_in_features))
+    var f = Int(py=py_item(fields, nk[].k_out_features))
+    var w = _snapshot(py_item(fields, nk[].k_weight_), "weight_", context)
+    var bias = _snapshot(py_item(fields, nk[].k_bias_), "bias_", context)
     graph_run_check_linear_weights(xcnn_shape(w), xcnn_shape(bias), f, d)
     return Python.tuple(w, bias)
 
 
 def _linear_backward(lin: PythonObject, gradient: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = _linear_fields(lin, context)
-    if py_get(fields, "_x") is None:
+    var nk = xcnn_keys()
+    if py_get(fields, nk[].k__x) is None:
         raise Error("RuntimeError: linear backward requires a prior forward")
-    var x = _snapshot(fields["_x"], "x", context)
+    var x = _snapshot(py_item(fields, nk[].k__x), "x", context)
     var g = _snapshot(gradient, "grad_out", context)
-    var d = Int(py=fields["in_features"])
-    var f = Int(py=fields["out_features"])
+    var d = Int(py=py_item(fields, nk[].k_in_features))
+    var f = Int(py=py_item(fields, nk[].k_out_features))
     var shape = xcnn_shape(x)
     graph_run_check_linear_gradient(shape, xcnn_shape(g), d, f)
     var values = _linear_weights(fields, context)
@@ -1004,8 +1033,8 @@ def _linear_backward(lin: PythonObject, gradient: PythonObject, context: PythonO
     var py = Python()
     with GILReleased(py):
         graph_run_linear_backward(key, a_x, a_w, a_g, a_dx, a_dw, a_db, rows, d, f)
-    py_setitem(fields, "grad_weight_", dw)
-    py_setitem(fields, "grad_bias_", db)
+    py_setitem(fields, nk[].k_grad_weight_, dw)
+    py_setitem(fields, nk[].k_grad_bias_, db)
     _ = x
     _ = w
     _ = g
@@ -1023,72 +1052,75 @@ def _graph_init(layer: PythonObject, args: PythonObject, sage: Bool, context: Py
     var seed0 = args[7] if sage else args[6]
     var seed = PythonObject(None) if seed0 is None else py_call(b.int, seed0)
     var stream = XseqStream(seed, context)
-    py_setitem(fields, "in_channels", d)
-    py_setitem(fields, "out_channels", f)
-    py_setitem(fields, "numeric_mode", mode)
-    py_setitem(fields, "bias", Bool(py=py_call(b.bool, args[5])))
+    var nk = xcnn_keys()
+    py_setitem(fields, nk[].k_in_channels, d)
+    py_setitem(fields, nk[].k_out_channels, f)
+    py_setitem(fields, nk[].k_numeric_mode, mode)
+    py_setitem(fields, nk[].k_bias, Bool(py=py_call(b.bool, args[5])))
     # fx-rows (2026-11-18): `cached=True` (the PyG name) keys the graph cache
     # by array identity and layout only; the default False keeps the content
     # compare (`_key_matches`). The word is the last init argument.
-    py_setitem(fields, "cached", Bool(py=py_call(b.bool, args[9] if sage else args[8])))
+    py_setitem(fields, nk[].k_cached, Bool(py=py_call(b.bool, args[9] if sage else args[8])))
     if not sage:
-        py_setitem(fields, "improved", Bool(py=py_call(b.bool, args[2])))
-        py_setitem(fields, "add_self_loops", Bool(py=py_call(b.bool, args[3])))
-        py_setitem(fields, "normalize", Bool(py=py_call(b.bool, args[4])))
+        py_setitem(fields, nk[].k_improved, Bool(py=py_call(b.bool, args[2])))
+        py_setitem(fields, nk[].k_add_self_loops, Bool(py=py_call(b.bool, args[3])))
+        py_setitem(fields, nk[].k_normalize, Bool(py=py_call(b.bool, args[4])))
         var bound = graph_run_gcn_bound(d, f)
         var w = xcnn_host_f32([f, d], context)
         stream.fill_uniform(context, xcnn_addr(w), d * f, -bound, bound)
-        py_setitem(fields, "weight_", w)
-        py_setitem(fields, "bias_", xcnn_host_f32([f], context))
+        py_setitem(fields, nk[].k_weight_, w)
+        py_setitem(fields, nk[].k_bias_, xcnn_host_f32([f], context))
         return PythonObject(None)
     if py_type(args[2]) is not b.str:
         raise Error("TypeError: SAGE aggregation requires a native string")
     var aggr = String(args[2])
     graph_run_check_aggr(aggr)
-    py_setitem(fields, "aggr", args[2])
-    py_setitem(fields, "normalize", Bool(py=py_call(b.bool, args[3])))
-    py_setitem(fields, "root_weight", Bool(py=py_call(b.bool, args[4])))
+    py_setitem(fields, nk[].k_aggr, args[2])
+    py_setitem(fields, nk[].k_normalize, Bool(py=py_call(b.bool, args[3])))
+    py_setitem(fields, nk[].k_root_weight, Bool(py=py_call(b.bool, args[4])))
     var lin_l = _linear_new(d, f, PythonObject(Int(stream.child_seed())), mode, context)
-    if not Bool(py=fields["bias"]):
-        py_setitem(_fields(lin_l), "bias_", xcnn_host_f32([f], context))
-    py_setitem(fields, "lin_l", lin_l)
+    if not Bool(py=py_item(fields, nk[].k_bias)):
+        py_setitem(_fields(lin_l), nk[].k_bias_, xcnn_host_f32([f], context))
+    py_setitem(fields, nk[].k_lin_l, lin_l)
     var wr = xcnn_host_f32([f, d], context)
     var bound = graph_run_fan_in_bound(d)
     stream.fill_uniform(context, xcnn_addr(wr), d * f, -bound, bound)
-    py_setitem(fields, "weight_r_", wr)
+    py_setitem(fields, nk[].k_weight_r_, wr)
     var project = Bool(py=py_call(b.bool, args[6]))
-    py_setitem(fields, "project", project)
-    py_setitem(fields, "lin", PythonObject(None))
+    py_setitem(fields, nk[].k_project, project)
+    py_setitem(fields, nk[].k_lin, PythonObject(None))
     if project:
-        py_setitem(fields, "lin", _linear_new(d, d, PythonObject(Int(stream.child_seed())), mode, context))
-        var relu = py_call(b.object.__new__, context["xcnn_relu_class"])
-        py_setitem(_fields(relu), "numeric_mode", mode)
-        py_setitem(fields, "_relu_p", relu)
+        py_setitem(fields, nk[].k_lin, _linear_new(d, d, PythonObject(Int(stream.child_seed())), mode, context))
+        var relu = py_call(b.object.__new__, py_item(context, nk[].k_xcnn_relu_class))
+        py_setitem(_fields(relu), nk[].k_numeric_mode, mode)
+        py_setitem(fields, nk[].k__relu_p, relu)
     return PythonObject(None)
 
 
 def _graph_gradient(layer: PythonObject, gradient: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = _graph_layer_fields(layer, context)
-    if py_get(fields, "_x") is None or py_get(fields, "_g") is None:
+    var nk = xcnn_keys()
+    if py_get(fields, nk[].k__x) is None or py_get(fields, nk[].k__g) is None:
         raise Error("RuntimeError: graph backward requires a prior forward")
-    _graph_admit(fields["_g"], context)
+    _graph_admit(py_item(fields, nk[].k__g), context)
     var g = gradient if xcnn_is_t(gradient, context) else _snapshot(gradient, "grad_out", context)
-    var xs = xcnn_shape(fields["_x"])
-    graph_run_check_gradient(xs, xcnn_shape(g), Int(py=fields["out_channels"]))
+    var xs = xcnn_shape(py_item(fields, nk[].k__x))
+    graph_run_check_gradient(xs, xcnn_shape(g), Int(py=py_item(fields, nk[].k_out_channels)))
     return g
 
 
 def _resident_saved(fields: PythonObject, entries: PythonObject, context: PythonObject) raises -> Bool:
-    var saved = py_get(fields, "_xdev")
+    var nk = xcnn_keys()
+    var saved = py_get(fields, nk[].k__xdev)
     if saved is None:
         return False
     var b = xcnn_builtins()
-    if py_type(saved) is not b.tuple or len(saved) < 2 or py_type(saved[0]) is not context["xcnn_dev_class"]:
+    if py_type(saved) is not b.tuple or len(saved) < 2 or py_type(saved[0]) is not py_item(context, nk[].k_xcnn_dev_class):
         raise Error("TypeError: graph resident state requires native storage metadata")
     for i in range(1, len(saved)):  # small-loop(saved native buffer handles)
         if py_type(saved[i]) is not b.int:
             raise Error("TypeError: graph resident state requires native handle words")
-    return _fields(saved[0])["b"] is entries["module"]
+    return py_item(_fields(saved[0]), nk[].k_b) is py_item(entries, nk[].k_module)
 
 
 def _resident_ones(layer: PythonObject, entries: PythonObject, count: Int, context: PythonObject) raises -> PythonObject:
@@ -1096,7 +1128,8 @@ def _resident_ones(layer: PythonObject, entries: PythonObject, count: Int, conte
     # its allocation size changes, rather than adding an upload per backward.
     var n = max(count, 1)
     var dev = xcnn_dev(layer, entries, context)
-    var cached = py_get(xcnn_dev_fields(dev, context)["h"], "ones")
+    var nk = xcnn_keys()
+    var cached = py_get(py_item(xcnn_dev_fields(dev, context), nk[].k_h), nk[].k_ones)
     if cached is not None and Int(py=cached[1]) == n:
         return cached[0]
     return xcnn_dev_upload(layer, entries, "ones", _ones(n, context), context)
@@ -1110,16 +1143,17 @@ def _gcn_backward_dev(layer: PythonObject, fields: PythonObject, entries: Python
     """The resident backward as one native call: the tape over the forward's
     resident buffers (autograd/rules_graph.mojo `gcn_backward_autograd`),
     the same entries' bodies on the same arguments."""
-    var saved = fields["_xdev"]
+    var nk = xcnn_keys()
+    var saved = py_item(fields, nk[].k__xdev)
     var dev = saved[0]
     var xh = saved[1]
-    var graph = fields["_g"]
+    var graph = py_item(fields, nk[].k__g)
     var n = xcnn_shape(grad)[0]
-    var d = Int(py=fields["in_channels"])
-    var f = Int(py=fields["out_channels"])
+    var d = Int(py=py_item(fields, nk[].k_in_channels))
+    var f = Int(py=py_item(fields, nk[].k_out_channels))
     var gt = xcnn_is_t(grad, context)
     var gh = grad.h if gt else xcnn_dev_upload(layer, entries, "G", grad, context)
-    var bias = Bool(py=fields["bias"])
+    var bias = Bool(py=py_item(fields, nk[].k_bias))
     var gb = xcnn_host_f32([f], context)
     var ones = PythonObject(None)
     var ones_addr = PythonObject(0)
@@ -1135,11 +1169,11 @@ def _gcn_backward_dev(layer: PythonObject, fields: PythonObject, entries: Python
         else:
             ones = _ones(n, context)
             ones_addr = xcnn_addr(ones)
-        bv = _snapshot(fields["bias_"], "bias_", context)
+        bv = _snapshot(py_item(fields, nk[].k_bias_), "bias_", context)
         graph_run_check_bias(Int(py=bv.size), f)
         b_addr = xcnn_addr(bv)
         gb_addr = xcnn_addr(gb)
-    var w = _snapshot(fields["weight_"], "weight_", context)
+    var w = _snapshot(py_item(fields, nk[].k_weight_), "weight_", context)
     graph_run_check_gcn_weight(xcnn_shape(w), f, d)
     var gw = xcnn_host_f32([f, d], context)
     # the forward's h and output arrays (the same sizes: no reallocation;
@@ -1154,7 +1188,7 @@ def _gcn_backward_dev(layer: PythonObject, fields: PythonObject, entries: Python
         xcnn_word(dx.h) if gt else xcnn_ptr(dx), xcnn_word(dh), xcnn_word(_hv[0]), xcnn_word(_hv[1]),
         xcnn_word(b_addr), xcnn_word(gb_addr), xcnn_word(ones_addr),
     ]
-    var nnz = Int(py=graph["nnz"])
+    var nnz = Int(py=py_item(graph, nk[].k_nnz))
     var key = xcnn_ref(entries)
     var py = Python()
     with GILReleased(py):
@@ -1162,8 +1196,8 @@ def _gcn_backward_dev(layer: PythonObject, fields: PythonObject, entries: Python
     _ = gw
     _ = gb
     _ = dx
-    py_setitem(fields, "grad_bias_", gb)
-    py_setitem(fields, "grad_weight_", gw)
+    py_setitem(fields, nk[].k_grad_bias_, gb)
+    py_setitem(fields, nk[].k_grad_weight_, gw)
     _ = ones
     _ = bv
     _ = w
@@ -1196,13 +1230,14 @@ def _gcn_backward_host(fields: PythonObject, entries: PythonObject, g: PythonObj
     the GPU binding, autograd/rules_graph_host.mojo on the CPU binding), PACK
     the gradients."""
     var n = xcnn_shape(g)[0]
-    var d = Int(py=fields["in_channels"])
-    var f = Int(py=fields["out_channels"])
-    var graph = fields["_g"]
-    var bias = Bool(py=fields["bias"])
-    var vals = fields["_vals"]
-    var x = xcnn_f32(fields["_x"], "x", context)
-    var w = _snapshot(fields["weight_"], "weight_", context)
+    var nk = xcnn_keys()
+    var d = Int(py=py_item(fields, nk[].k_in_channels))
+    var f = Int(py=py_item(fields, nk[].k_out_channels))
+    var graph = py_item(fields, nk[].k__g)
+    var bias = Bool(py=py_item(fields, nk[].k_bias))
+    var vals = py_item(fields, nk[].k__vals)
+    var x = xcnn_f32(py_item(fields, nk[].k__x), "x", context)
+    var w = _snapshot(py_item(fields, nk[].k_weight_), "weight_", context)
     graph_run_check_gcn_weight(xcnn_shape(w), f, d)
     var gw = xcnn_host_f32([f, d], context)
     var gb = xcnn_host_f32([f], context)
@@ -1210,12 +1245,12 @@ def _gcn_backward_host(fields: PythonObject, entries: PythonObject, g: PythonObj
     var bv = PythonObject(None)
     var b_addr = 0
     if bias:
-        bv = _snapshot(fields["bias_"], "bias_", context)
+        bv = _snapshot(py_item(fields, nk[].k_bias_), "bias_", context)
         graph_run_check_bias(Int(py=bv.size), f)
         b_addr = xcnn_ptr(bv)
     var calls = GraphDoorCalls(entries, context)
-    gcn_backward_host_run(calls, xcnn_ptr(graph["csr_t"]), xcnn_ptr(graph["order_f"]), xcnn_ptr(graph["order_t"]),
-                          xcnn_ptr(vals), Int(py=graph["nnz"]), n, d, f, xcnn_ptr(g), xcnn_ptr(x), xcnn_ptr(w),
+    gcn_backward_host_run(calls, xcnn_ptr(py_item(graph, nk[].k_csr_t)), xcnn_ptr(py_item(graph, nk[].k_order_f)), xcnn_ptr(py_item(graph, nk[].k_order_t)),
+                          xcnn_ptr(vals), Int(py=py_item(graph, nk[].k_nnz)), n, d, f, xcnn_ptr(g), xcnn_ptr(x), xcnn_ptr(w),
                           bias, b_addr, xcnn_ptr(gw), xcnn_ptr(gb), xcnn_ptr(dx))
     _ = graph
     _ = vals
@@ -1223,8 +1258,8 @@ def _gcn_backward_host(fields: PythonObject, entries: PythonObject, g: PythonObj
     _ = w
     _ = bv
     _ = g
-    py_setitem(fields, "grad_bias_", gb)
-    py_setitem(fields, "grad_weight_", gw)
+    py_setitem(fields, nk[].k_grad_bias_, gb)
+    py_setitem(fields, nk[].k_grad_weight_, gw)
     return dx
 
 
@@ -1238,26 +1273,27 @@ def _sage_backward_dev(layer: PythonObject, fields: PythonObject, entries: Pytho
     over the forward's resident buffers (autograd/rules_graph.mojo
     `sage_backward_autograd`), the same entries' bodies on the same
     arguments."""
-    var saved = fields["_xdev"]
+    var nk = xcnn_keys()
+    var saved = py_item(fields, nk[].k__xdev)
     var dev = saved[0]
     var xh = saved[1]
     var aggh = saved[2]
-    var graph = fields["_g"]
+    var graph = py_item(fields, nk[].k__g)
     var n = xcnn_shape(grad)[0]
-    var d = Int(py=fields["in_channels"])
-    var f = Int(py=fields["out_channels"])
+    var d = Int(py=py_item(fields, nk[].k_in_channels))
+    var f = Int(py=py_item(fields, nk[].k_out_channels))
     var gt = xcnn_is_t(grad, context)
     var gh = grad.h if gt else xcnn_dev_upload(layer, entries, "G", grad, context)
-    var norm = Bool(py=fields["normalize"])
-    var root = Bool(py=fields["root_weight"])
-    var aggr = String(fields["aggr"])
+    var norm = Bool(py=py_item(fields, nk[].k_normalize))
+    var root = Bool(py=py_item(fields, nk[].k_root_weight))
+    var aggr = String(py_item(fields, nk[].k_aggr))
     var kind = graph_run_aggr_kind(aggr)
     var outh = PythonObject(0)
     var preh = PythonObject(0)
     var gpre = PythonObject(0)
     var denh = PythonObject(0)
     if norm:
-        var yd = fields["_ydev"]
+        var yd = py_item(fields, nk[].k__ydev)
         var b = xcnn_builtins()
         if py_type(yd) is not b.tuple or len(yd) != 3 or py_type(yd[0]) is not b.int or py_type(yd[1]) is not b.int:
             raise Error("TypeError: SAGE normalization requires native saved handle metadata")
@@ -1270,7 +1306,7 @@ def _sage_backward_dev(layer: PythonObject, fields: PythonObject, entries: Pytho
     else:
         # the forward's lin_l output array (recorded as the tape's value, never read)
         outh = xcnn_dev_get_f(fields, entries, "ol", n * f, context)
-    var lin = _linear_fields(fields["lin_l"], context)
+    var lin = _linear_fields(py_item(fields, nk[].k_lin_l), context)
     var values = _linear_weights(lin, context)
     var dagg = xcnn_dev_get_f(fields, entries, "dagg", n * d, context)
     var dw = xcnn_host_f32([f, d], context)
@@ -1288,7 +1324,7 @@ def _sage_backward_dev(layer: PythonObject, fields: PythonObject, entries: Pytho
     var gwr_addr = PythonObject(0)
     var grh = PythonObject(0)
     if root:
-        wr = _snapshot(fields["weight_r_"], "weight_r_", context)
+        wr = _snapshot(py_item(fields, nk[].k_weight_r_), "weight_r_", context)
         graph_run_check_root_weight(xcnn_shape(wr), f, d)
         wr_addr = xcnn_addr(wr)
         gwr = xcnn_host_f32([f, d], context)
@@ -1301,7 +1337,7 @@ def _sage_backward_dev(layer: PythonObject, fields: PythonObject, entries: Pytho
         xcnn_word(dsc), xcnn_word(wr_addr), xcnn_word(gwr_addr), xcnn_word(grh), xcnn_word(preh),
         xcnn_word(gpre), xcnn_word(denh),
     ]
-    var nnz = Int(py=graph["nnz"])
+    var nnz = Int(py=py_item(graph, nk[].k_nnz))
     var key = xcnn_ref(entries)
     var py = Python()
     with GILReleased(py):
@@ -1310,10 +1346,10 @@ def _sage_backward_dev(layer: PythonObject, fields: PythonObject, entries: Pytho
     _ = dx
     _ = wr
     _ = gwr
-    py_setitem(lin, "grad_weight_", dw)
-    py_setitem(lin, "grad_bias_", db if Bool(py=fields["bias"]) else xcnn_host_f32([f], context))
+    py_setitem(lin, nk[].k_grad_weight_, dw)
+    py_setitem(lin, nk[].k_grad_bias_, db if Bool(py=py_item(fields, nk[].k_bias)) else xcnn_host_f32([f], context))
     if root:
-        py_setitem(fields, "grad_weight_r_", gwr)
+        py_setitem(fields, nk[].k_grad_weight_r_, gwr)
     _ = values
     _ = wr
     _ = grad
@@ -1346,22 +1382,23 @@ def _sage_backward_host(fields: PythonObject, entries: PythonObject, g: PythonOb
     tape over host arrays, autograd/graph_tape.mojo `sage_cfg`, its scratch
     native); PACK the gradients."""
     var n = xcnn_shape(g)[0]
-    var d = Int(py=fields["in_channels"])
-    var f = Int(py=fields["out_channels"])
-    var graph = fields["_g"]
-    var nnz = Int(py=graph["nnz"])
-    var norm = Bool(py=fields["normalize"])
-    var root = Bool(py=fields["root_weight"])
-    var project = Bool(py=fields["project"])
-    var aggr = String(fields["aggr"])
+    var nk = xcnn_keys()
+    var d = Int(py=py_item(fields, nk[].k_in_channels))
+    var f = Int(py=py_item(fields, nk[].k_out_channels))
+    var graph = py_item(fields, nk[].k__g)
+    var nnz = Int(py=py_item(graph, nk[].k_nnz))
+    var norm = Bool(py=py_item(fields, nk[].k_normalize))
+    var root = Bool(py=py_item(fields, nk[].k_root_weight))
+    var project = Bool(py=py_item(fields, nk[].k_project))
+    var aggr = String(py_item(fields, nk[].k_aggr))
     var kind = graph_run_aggr_kind(aggr)
     var keep = Python.list()   # every array an address below points into, alive through the call
-    var x = xcnn_f32(fields["_x"], "x", context)
+    var x = xcnn_f32(py_item(fields, nk[].k__x), "x", context)
     keep.append(x)
-    var lin = _linear_fields(fields["lin_l"], context)
-    if py_get(lin, "_x") is None:
+    var lin = _linear_fields(py_item(fields, nk[].k_lin_l), context)
+    if py_get(lin, nk[].k__x) is None:
         raise Error("RuntimeError: linear backward requires a prior forward")
-    var agg = xcnn_f32(lin["_x"], "x", context)
+    var agg = xcnn_f32(py_item(lin, nk[].k__x), "x", context)
     keep.append(agg)
     var values = _linear_weights(lin, context)
     keep.append(values)
@@ -1373,25 +1410,25 @@ def _sage_backward_host(fields: PythonObject, entries: PythonObject, g: PythonOb
     var den = 0
     var nograph = 0
     if norm:
-        var yv = xcnn_f32(fields["_y"], "y", context)
-        var pv = xcnn_f32(fields["_pre"], "pre", context)
+        var yv = xcnn_f32(py_item(fields, nk[].k__y), "y", context)
+        var pv = xcnn_f32(py_item(fields, nk[].k__pre), "pre", context)
         keep.append(yv)
         keep.append(pv)
-        keep.append(fields["_den"])
-        keep.append(fields["_nograph"])
+        keep.append(py_item(fields, nk[].k__den))
+        keep.append(py_item(fields, nk[].k__nograph))
         y = xcnn_ptr(yv)
         pre = xcnn_ptr(pv)
-        den = xcnn_ptr(fields["_den"])
-        nograph = xcnn_ptr(fields["_nograph"])
+        den = xcnn_ptr(py_item(fields, nk[].k__den))
+        nograph = xcnn_ptr(py_item(fields, nk[].k__nograph))
     var max_aux = 0
     if kind == 2:
-        keep.append(fields["_max_aux"])
-        max_aux = xcnn_ptr(fields["_max_aux"])
+        keep.append(py_item(fields, nk[].k__max_aux))
+        max_aux = xcnn_ptr(py_item(fields, nk[].k__max_aux))
     var wr_addr = 0
     var gwr = PythonObject(None)
     var gwr_addr = 0
     if root:
-        var wr = _snapshot(fields["weight_r_"], "weight_r_", context)
+        var wr = _snapshot(py_item(fields, nk[].k_weight_r_), "weight_r_", context)
         graph_run_check_root_weight(xcnn_shape(wr), f, d)
         keep.append(wr)
         wr_addr = xcnn_ptr(wr)
@@ -1407,14 +1444,14 @@ def _sage_backward_host(fields: PythonObject, entries: PythonObject, g: PythonOb
     var dwp_addr = 0
     var dbp_addr = 0
     if project:
-        if py_type(fields["_relu_p"]) is not context["xcnn_relu_class"]:
+        if py_type(py_item(fields, nk[].k__relu_p)) is not py_item(context, nk[].k_xcnn_relu_class):
             raise Error("TypeError: graph projection requires a native ReLU layer")
-        var relu_x = py_get(_fields(fields["_relu_p"]), "_x")
+        var relu_x = py_get(_fields(py_item(fields, nk[].k__relu_p)), nk[].k__x)
         if relu_x is None:
             raise Error("RuntimeError: ReLU backward requires a prior forward")
-        plin = _linear_fields(fields["lin"], context)
+        plin = _linear_fields(py_item(fields, nk[].k_lin), context)
         var pvalues = _linear_weights(plin, context)
-        var sv = xcnn_f32(fields["_xs"], "x", context)
+        var sv = xcnn_f32(py_item(fields, nk[].k__xs), "x", context)
         var rv = xcnn_f32(relu_x, "x", context)
         dwp = xcnn_host_f32([d, d], context)
         dbp = xcnn_host_f32([d], context)
@@ -1432,51 +1469,52 @@ def _sage_backward_host(fields: PythonObject, entries: PythonObject, g: PythonOb
         xcnn_ptr(db), xcnn_ptr(dx), y, pre, den, nograph, max_aux, wr_addr, gwr_addr, s_addr, relu_addr, wp, bp,
         dwp_addr, dbp_addr)
     var calls = GraphDoorCalls(entries, context)
-    sage_backward_host_run(calls, xcnn_ptr(graph["csr_f"]), xcnn_ptr(graph["csr_t"]), nnz, n, d, f, kind, norm,
+    sage_backward_host_run(calls, xcnn_ptr(py_item(graph, nk[].k_csr_f)), xcnn_ptr(py_item(graph, nk[].k_csr_t)), nnz, n, d, f, kind, norm,
                            root, project, io)
     _ = graph
     _ = values
     _ = dwp
     _ = dbp
-    py_setitem(lin, "grad_weight_", dw)
-    py_setitem(lin, "grad_bias_", db if Bool(py=fields["bias"]) else xcnn_host_f32([f], context))
+    py_setitem(lin, nk[].k_grad_weight_, dw)
+    py_setitem(lin, nk[].k_grad_bias_, db if Bool(py=py_item(fields, nk[].k_bias)) else xcnn_host_f32([f], context))
     if project:
-        py_setitem(plin, "grad_weight_", dwp)
-        py_setitem(plin, "grad_bias_", dbp)
+        py_setitem(plin, nk[].k_grad_weight_, dwp)
+        py_setitem(plin, nk[].k_grad_bias_, dbp)
     if root:
-        py_setitem(fields, "grad_weight_r_", gwr)
+        py_setitem(fields, nk[].k_grad_weight_r_, gwr)
     _ = keep
     _ = g
     return dx
 
 
-def xcnn_graph_layers(layer: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    if operation == "gcn_init" or operation == "sage_init":
-        return _graph_init(layer, args, operation == "sage_init", context)
-    if operation == "gcn_cached" or operation == "sage_cached":
+def xcnn_graph_layers(layer: PythonObject, operation: Int, name: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    if operation == XCNN_OPN_GCN_INIT or operation == XCNN_OPN_SAGE_INIT:
+        return _graph_init(layer, args, operation == XCNN_OPN_SAGE_INIT, context)
+    if operation == XCNN_OPN_GCN_CACHED or operation == XCNN_OPN_SAGE_CACHED:
         return PythonObject(_graph_cached(_fields(layer)))
-    if operation == "gcn_cached_set" or operation == "sage_cached_set":
+    if operation == XCNN_OPN_GCN_CACHED_SET or operation == XCNN_OPN_SAGE_CACHED_SET:
         return _graph_cached_set(layer, args[0], context)
-    if operation == "gcn_forward":
+    if operation == XCNN_OPN_GCN_FORWARD:
         return xcnn_gcn_forward(layer, args, context)
-    if operation == "sage_forward":
+    if operation == XCNN_OPN_SAGE_FORWARD:
         return xcnn_sage_forward(layer, args, context)
-    if operation == "gcn_backward":
+    if operation == XCNN_OPN_GCN_BACKWARD:
         return _gcn_backward(layer, args[0], context)
-    if operation == "sage_backward":
+    if operation == XCNN_OPN_SAGE_BACKWARD:
         return _sage_backward(layer, args[0], context)
-    if operation == "linear_init":
+    if operation == XCNN_OPN_LINEAR_INIT:
         return _linear_init(layer, args, context)
-    if operation == "linear_forward":
+    if operation == XCNN_OPN_LINEAR_FORWARD:
         return _linear_forward(layer, args[0], context)
-    if operation == "linear_backward":
+    if operation == XCNN_OPN_LINEAR_BACKWARD:
         return _linear_backward(layer, args[0], context)
-    if operation == "relu_init":
+    if operation == XCNN_OPN_RELU_INIT:
         neural_plain_value(args, 0, Python.dict(admission_context=context))
-        py_setitem(_fields(layer), "numeric_mode", args[0])
+        var nk = xcnn_keys()
+        py_setitem(_fields(layer), nk[].k_numeric_mode, args[0])
         return PythonObject(None)
-    if operation == "relu_forward":
+    if operation == XCNN_OPN_RELU_FORWARD:
         return xcnn_relu_forward(layer, args[0], context)
-    if operation == "relu_backward":
+    if operation == XCNN_OPN_RELU_BACKWARD:
         return _relu_backward(layer, args[0], context)
-    raise Error("RuntimeError: unknown native graph layer operation " + operation)
+    raise Error("RuntimeError: unknown native graph layer operation " + String(py=name))
