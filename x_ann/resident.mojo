@@ -44,10 +44,10 @@ THE ADDRESSES (mirrored in python/mojolearn/_expansion_ann.py):
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from core.hostptr import read_f32, read_i32
+from core.hostptr import f32_ptr, i32_ptr, read_i32
 from x_ann.abi import check_search, out_f32_to, out_i32_to
 from x_ann.device_ctx import x_ann_ctx
-from x_ann.io import upload_f32, upload_i32
+from x_ann.io import upload_f32, upload_i32, upload_f32_ptr, upload_i32_ptr
 from core.abs_sum_blocked import device_any_index_out_of_range
 from x_ann.ivf_pq_core import F32P, I32P, IvfPqIndex, pq_len_of
 from x_ann.ivf_rabitq_core import rq_pow2
@@ -63,11 +63,26 @@ comptime KIND_RABITQ = 2
 comptime KIND_CAGRA = 3
 
 
-def _in_f32(addrs: List[Int], i: Int, n: Int) raises -> List[Float32]:
-    return read_f32(addrs[i], n)
+# The fitted arrays and the queries are uploaded from where the caller holds
+# them (lane fx-board-1p2, 2026-11-20). Before, `prepare` copied every fitted
+# array into a new host list first (one thread, into fresh pages) and then
+# uploaded the list: for IVF-SQ at 400,000 x 220 that is a 352 MB copy of the
+# codes inside the first search after a fit, for CAGRA the dataset and the
+# 51 MB graph; whether those pages came warm from the allocator or took a
+# fault each (28,288 faults against 105 for the same code in two builds of
+# one L40S job) moved that search by 20 percent. The door keeps every array
+# alive for the whole call and each upload is drained before it returns
+# (`x_ann/io.mojo upload_f32_ptr`). The same words reach the same buffers.
+def _up_f32(ctx: DeviceContext, addrs: List[Int], i: Int, n: Int) raises -> DeviceBuffer[DType.float32]:
+    return upload_f32_ptr(ctx, f32_ptr(addrs[i]), n)
+
+
+def _up_i32(ctx: DeviceContext, addrs: List[Int], i: Int, n: Int) raises -> DeviceBuffer[DType.int32]:
+    return upload_i32_ptr(ctx, i32_ptr(addrs[i]), n)
 
 
 def _in_i32(addrs: List[Int], i: Int, n: Int) raises -> List[Int32]:
+    # the n_lists + 1 offsets only: the entry keeps them as a host list
     return read_i32(addrs[i], n)
 
 
@@ -119,13 +134,12 @@ struct AnnResident(Movable):
             if self.n < 2 or self.dim <= 0 or deg < 1:
                 raise Error("CAGRA: need at least two rows, d >= 1 and graph_degree >= 1")
             self.a = deg
-            var g = _in_i32(addrs, 1, self.n * deg)
             # cpu3-neighbors: the graph's row-id refusal is one device pass
             # over the uploaded graph (one word back), not a host walk
-            self.i0 = upload_i32(ctx, g)
+            self.i0 = _up_i32(ctx, addrs, 1, self.n * deg)
             if device_any_index_out_of_range(ctx, self.i0, self.n * deg, self.n):
                 raise Error("CAGRA search: the graph names a row outside the dataset")
-            self.f0 = upload_f32(ctx, _in_f32(addrs, 0, self.n * self.dim))
+            self.f0 = _up_f32(ctx, addrs, 0, self.n * self.dim)
             self.f1 = upload_f32(ctx, empty_f)
             self.f2 = upload_f32(ctx, empty_f)
             self.i1 = upload_i32(ctx, empty_i)
@@ -144,11 +158,11 @@ struct AnnResident(Movable):
         if n < 1 or dim < 1 or n_lists < 1:
             raise Error("x_ann: an index needs n, dim and n_lists of at least 1")
         self.offsets = _in_i32(addrs, 1, n_lists + 1)
-        self.f0 = upload_f32(ctx, _in_f32(addrs, 0, n_lists * dim))
+        self.f0 = _up_f32(ctx, addrs, 0, n_lists * dim)
         self.i0 = upload_i32(ctx, self.offsets)
         # lane ann-apple3: the ids and the codes are held in locals until the
         # list-order gathers are enqueued, then moved into the entry
-        var ids = upload_i32(ctx, _in_i32(addrs, 2, n))
+        var ids = _up_i32(ctx, addrs, 2, n)
         var n_slots = Int(self.offsets[n_lists])
         var pre = n_slots == n
         var gs = n_slots if pre else 0
@@ -159,18 +173,18 @@ struct AnnResident(Movable):
             self.a = pq_dim
             self.b = pq_bits
             var pq_len = pq_len_of(dim, pq_dim)
-            self.f1 = upload_f32(ctx, _in_f32(addrs, 3, pq_dim * (1 << pq_bits) * pq_len))
+            self.f1 = _up_f32(ctx, addrs, 3, pq_dim * (1 << pq_bits) * pq_len)
             self.f2 = upload_f32(ctx, empty_f)
-            var codes = upload_i32(ctx, _in_i32(addrs, 4, n * pq_dim))
+            var codes = _up_i32(ctx, addrs, 4, n * pq_dim)
             self.g_codes = scan_gather_i32(ctx, _p(codes), _p(ids), gs, pq_dim)
             self.g_a = upload_f32(ctx, empty_f)
             self.g_b = upload_f32(ctx, empty_f)
             self.i2 = codes^
             self.i1 = ids^
         elif kind == KIND_SQ:
-            self.f1 = upload_f32(ctx, _in_f32(addrs, 3, dim))
-            self.f2 = upload_f32(ctx, _in_f32(addrs, 4, dim))
-            var codes = upload_i32(ctx, _in_i32(addrs, 5, n * dim))
+            self.f1 = _up_f32(ctx, addrs, 3, dim)
+            self.f2 = _up_f32(ctx, addrs, 4, dim)
+            var codes = _up_i32(ctx, addrs, 5, n * dim)
             self.g_codes = scan_gather_i32(ctx, _p(codes), _p(ids), gs, dim)
             self.g_a = upload_f32(ctx, empty_f)
             self.g_b = upload_f32(ctx, empty_f)
@@ -179,9 +193,9 @@ struct AnnResident(Movable):
         elif kind == KIND_RABITQ:
             self.a = params[3]
             var words = (rq_pow2(dim) + 31) // 32
-            var codes = upload_i32(ctx, _in_i32(addrs, 3, n * words))
-            var norms = upload_f32(ctx, _in_f32(addrs, 4, n))
-            var ips = upload_f32(ctx, _in_f32(addrs, 5, n))
+            var codes = _up_i32(ctx, addrs, 3, n * words)
+            var norms = _up_f32(ctx, addrs, 4, n)
+            var ips = _up_f32(ctx, addrs, 5, n)
             self.g_codes = scan_gather_i32(ctx, _p(codes), _p(ids), gs, words)
             self.g_a = scan_gather_f32(ctx, _p(norms), _p(ids), gs)
             self.g_b = scan_gather_f32(ctx, _p(ips), _p(ids), gs)
@@ -326,7 +340,7 @@ def x_ann_index_search(h: Int, addrs: List[Int], params: List[Int]) raises -> In
             raise Error("CAGRA search: rs must be >= 0")
         if m <= 0 or k <= 0 or L < k or width < 1 or max_iter < 1 or n_seeds < 1 or n_seeds > e.n:
             raise Error("CAGRA search: need k >= 1, itopk_size >= k, search_width >= 1, max_iterations >= 1, 1 <= n_seeds <= n")
-        var q = _in_f32(addrs, 0, m * e.dim)
+        var q = f32_ptr(addrs[0])
         cagra_search_on(ctx, _p(e.f0), e.n, e.dim, _p(e.i0), e.a, q, m, k, L, width, max_iter, n_seeds, od, oi, rs,
                         cstatus)
         out_f32_to(od, addrs[1])
@@ -336,10 +350,12 @@ def x_ann_index_search(h: Int, addrs: List[Int], params: List[Int]) raises -> In
     var n_probes = params[2]
     var status = params[3] if len(params) > 3 else 0
     check_search(e.n_lists, m, k, n_probes)
-    var q = _in_f32(addrs, 0, m * e.dim)
+    var q = f32_ptr(addrs[0])
     var on = List[Int32]()
     var filtered = len(addrs) > 4
-    var dmask = upload_i32(ctx, _in_i32(addrs, 4, e.n) if filtered else List[Int32]())
+    # A caller's filter is uploaded from its own n words; without one this is
+    # the one-word placeholder (zero words are read from the address given).
+    var dmask = upload_i32_ptr(ctx, i32_ptr(addrs[4] if filtered else addrs[0]), e.n if filtered else 0)
     var mask = _p(dmask) if filtered else _p(e.ones)
     # the prepared list-order arrays; an unfiltered search's mask is the
     # all-ones filter, which is its own list-order copy
