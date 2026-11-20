@@ -379,6 +379,20 @@ MEASUREMENT_TOOLING_PREFIXES = (
 #: Tools whose text is not evidence that a lane reaches a path.
 _NOT_CORPUS = SELECTION_MACHINERY + HARNESS_RUNTIME_IMPORTS
 
+#: VERIFICATION DOORS ON PRODUCT CLASSES (2026-11-20). `estimator.check(X)` (`CheckMixin.check` in
+#: `_mode.py`, a base of every estimator) imports `_verify_check` inside its body, and through it
+#: `_check_both`, `_verify` and `_verify_all`: the verifier and its harness. Classes enter a lane's
+#: region whole, so that one function-local import put the whole verifier in every lane's map, every
+#: binding the harness names in every lane, and `_verify_graph.py` in the package import closure
+#: (check of 2874db9898: five tools/test_lane_select.py failures). No lane runs `check`: an identity
+#: record or a race runs the lane's fit/predict cells, and `python -m mojolearn verify` has its own rules
+#: (VERIFY_HARNESS_WHY). So the import of exactly these modules inside exactly these defs is not a lane
+#: edge. Any OTHER import added to the def still counts, and a renamed def or module simply widens again.
+#: {file: {(class or "", def): (dotted modules, package-relative)}}
+VERIFICATION_DOORS = {
+    os.path.join(PKG, "_mode.py"): {("CheckMixin", "check"): ("_verify_check",)},
+}
+
 _BINDING_RE = re.compile(r"_mojolearn[a-z0-9_]*")
 _MOJO_IMPORT_RE = re.compile(r"^\s*(?:from\s+([a-zA-Z0-9_.]+)\s+import|import\s+([a-zA-Z0-9_.]+))")
 
@@ -946,6 +960,26 @@ def _import_dotted(rel, node):
 
 
 @_by_path
+def _verification_door_imports(rel, tree):
+    """ids of the import nodes of `rel` that are VERIFICATION_DOORS edges (never a lane edge)."""
+    doors = VERIFICATION_DOORS.get(rel)
+    if not doors or tree is None:
+        return frozenset()
+    found = set()
+    for top in tree.body:
+        scopes = [("", top)] if isinstance(top, (ast.FunctionDef, ast.AsyncFunctionDef)) else []
+        if isinstance(top, ast.ClassDef):
+            scopes = [(top.name, n) for n in top.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
+        for owner, fn in scopes:
+            allowed = doors.get((owner, fn.name))
+            if not allowed:
+                continue
+            for sub in ast.walk(fn):
+                if isinstance(sub, ast.ImportFrom) and _import_dotted(rel, sub) in allowed:
+                    found.add(id(sub))
+    return frozenset(found)
+
+
 def _import_edges(rel):
     """file -> the NAMES `rel` imports from it, or None for the whole module,
     over the whole file (`_region_import_edges` with `wanted` None).
@@ -1116,7 +1150,10 @@ def _region_import_edges(rel, wanted, narrow_unused=True):
                 elif isinstance(sub, ast.Constant) and isinstance(sub.value, str) and sub.value.isidentifier():
                     used.add(sub.value)
     module_level = {id(top) for top in region if isinstance(top, ast.ImportFrom)}
+    doors = _verification_door_imports(rel, _parse(rel))
     for node in (sub for top in region for sub in ast.walk(top)):
+        if id(node) in doors:
+            continue
         if isinstance(node, ast.Import):
             for alias in node.names:
                 if alias.name.startswith("mojolearn."):
@@ -1938,7 +1975,10 @@ def _python_imports(rel):
     # every file of models/ (see `_python_files`). Function-local imports
     # count like module-level ones: they run when the function does.
     listing = set(_python_files())
+    doors = _verification_door_imports(rel, tree)
     for node in ast.walk(tree):
+        if id(node) in doors:
+            continue
         if isinstance(node, (ast.ImportFrom, ast.Import)):
             out |= _resolve_python_import(rel, node, listing)
         elif isinstance(node, ast.Call):
