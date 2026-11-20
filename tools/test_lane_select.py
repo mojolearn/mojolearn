@@ -1429,6 +1429,36 @@ def test_package_modules_the_verifier_alone_uses_are_unreachable():
         assert lane_select.unreachable(rel) is None, f"{rel} runs at `import mojolearn` and was called unreachable"
 
 
+def test_the_check_method_is_a_verification_door_and_nothing_else():
+    """`estimator.check(X)` (`CheckMixin.check`, a base of every estimator) imports the verifier
+    (`_verify_check` -> `_check_both` -> `_verify_all`) in its body. No lane runs it, so that one
+    import is not a lane edge (lane_select.VERIFICATION_DOORS); before the rule every lane reached the
+    verifier and the harness, and five tests of this file failed on 2874db9898.
+    THE ARM THAT MUST WIDEN: any other import added to the same def is still an edge."""
+    mode = os.path.join(lane_select.PKG, "_mode.py")
+    door = os.path.join(lane_select.PKG, "_verify_check.py")
+    harness = os.path.join(lane_select.PKG, "_verify_all.py")
+    text = lane_select._read(mode)
+    anchor = "        from ._verify_check import check, format_check\n"
+    assert text.count(anchor) == 1, "CheckMixin.check no longer imports the door this rule names; update it"
+    lane_select.reset_caches()
+    try:
+        assert door not in lane_select._python_imports(mode)
+        assert door not in lane_select._region_import_edges(mode, {"CheckMixin"}, narrow_unused=False)
+        lane_select.reset_caches()
+        lane_select._read.cache[mode] = text.replace(anchor, anchor + "        from ._verify_all import load_harness\n")
+        assert harness in lane_select._python_imports(mode), "another import in the door was dropped"
+        assert harness in lane_select._region_import_edges(mode, {"CheckMixin"}, narrow_unused=False)
+        lane_select.reset_caches()
+        saved = lane_select.VERIFICATION_DOORS.pop(mode)
+        try:
+            assert door in lane_select._python_imports(mode), "the rule is not what removed the edge"
+        finally:
+            lane_select.VERIFICATION_DOORS[mode] = saved
+    finally:
+        lane_select.reset_caches()
+
+
 def test_a_package_module_named_by_a_lane_file_stays_reachable():
     """THE ARM THAT MUST WIDEN for the package rule: a dynamic import string in
     a file every lane reaches."""
