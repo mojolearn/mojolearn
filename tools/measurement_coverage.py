@@ -149,9 +149,10 @@ NOT_MEASURED = (
     ("mojolearn.training.accumulation_is_aligned", "a boolean check of two sizes; no compute"),
     ("mojolearn.training.numeric_mode_used", "getter; no compute"),
     ("mojolearn.training.vendor_used", "getter; no compute"),
-    ("mojolearn.runtime_report", "getter: reports vendor, modes, arch and loaded bindings (3eeb4874a3); no compute"),
-    ("mojolearn.check", "verification tool: runs a fitted estimator's own method on the GPU and the CPU and "
-                        "compares the bytes; its compute is the estimator lanes'"),
+    # `mojolearn.runtime_report` and `mojolearn.check` are `not_algorithm` rows of
+    # packaging/native_only/manifest.json (like `vendor`, `gpu_arch`, `numeric_mode`), so the public inventory
+    # leaves them out and they need no n/a row here; a row for them would be dead
+    # (test_not_measured_and_indirect_rows_are_live).
     ("mojolearn.ensemble.catboost_auto_learning_rate", "a scalar formula of the row count; no array compute"),
     ("mojolearn.models.plan_for", "returns an import plan record; no compute"),
     ("mojolearn.import_model", "one-time model import (parse and weight load, disk-bound); the imported "
