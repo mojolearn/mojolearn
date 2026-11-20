@@ -120,7 +120,7 @@ if [ "$DO_PARSE" = 1 ]; then
     done < <(python3 -c 'import json;[print(e["key"]) for e in json.load(open("host.json"))]')
 fi
 TT_PEAK=$(peak_of tool-test-file $(( GIB / 2 )))
-[ "$DO_TOOLS" = 1 ] && QUEUE+=("tools	tools	$(( TT_PEAK * CORES ))")
+[ "$DO_TOOLS" = 1 ] && QUEUE+=("tools	tool-test-file	$(( TT_PEAK * CORES ))")
 
 matrix_field() {  # <host|device> <key> <field>
     python3 -c 'import json,sys;print(next(e[sys.argv[3]] for e in json.load(open(sys.argv[1] + ".json")) if e["key"] == sys.argv[2]))' "$@"
