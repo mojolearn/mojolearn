@@ -5563,6 +5563,7 @@ def worker(args):
     # whose call advances its state or consumes the next input (SMALL_ROW_STATEFUL_LANES) always makes one
     # call: a repeat would not be the same operation on the same inputs.
     small = _load("bench_board_small_rows")
+    numa = _load("numa_place")
     small_ok = (runner.info or {}).get("library") == "mojolearn" and (
         args.lane not in SMALL_ROW_STATEFUL_LANES or attribution_train_calls(args.lane, small) is not None)
     for line in sys.stdin:
@@ -5579,10 +5580,17 @@ def worker(args):
                 # identical round-0 step and a compile in a scored step is recorded and flagged.
                 guard = _load("bench_board_compile_guard")
                 c0 = guard.read()
+                # HOST USAGE (lane fx-board-1p2, 2026-11-20): getrusage just outside each scored call's clock, as
+                # tools/bench_board_algos.py records it (system time, user time, minor and major faults). The
+                # neural cells carried none, so a call that spends its wall first-touching a fresh output store
+                # (gemm-int8: 64 MB back per call) could only read REGRESSION, never HOST-STALL
+                # (tools/numa_place.py summarize; tools/paper_compare.py).
+                u0 = numa.usage()
                 t0 = time.perf_counter()
                 runner.call()
                 runner.sync()
                 ms = (time.perf_counter() - t0) * 1000.0
+                host_use = [numa.delta(u0, numa.usage(), ms)]
                 compiles_now = guard.compiles(c0, guard.read())
                 outputs = runner.outputs()
                 runner.sync()
@@ -5602,10 +5610,12 @@ def worker(args):
                 calls = [ms]
                 small.range_open(n_calls, "fit")       # attribution profile runs only (no-op otherwise)
                 for _ in range(1, n_calls):
+                    u1 = numa.usage()
                     t1 = time.perf_counter()
                     runner.call()
                     runner.sync()
                     call_ms = (time.perf_counter() - t1) * 1000.0
+                    host_use.append(numa.delta(u1, numa.usage(), call_ms))
                     if extra and extra.get("clock_ms") is not None:
                         call_ms = float((runner.round_extra() or {}).get("clock_ms", call_ms))
                     calls.append(call_ms)
@@ -5645,6 +5655,7 @@ def worker(args):
                         route = {"error": "neural_route failed: %r" % (exc,)}
                 round_message = {"event": "round", "round": r, "ms": ms, "digest": digest, "mem": m,
                     "scored_calls": calls_rec, "neural_route": route,
+                    "host_usage": {"fit": host_use, "infer": None},
                     "extra": extra, "device_memory": device_memory,
                     "mamba3_session_info": session_counters,
                     "state_receipt": state_receipt, "compiles": compiles_now,
@@ -6526,6 +6537,9 @@ def race(args):
                 # SMALL ROWS (2026-11-15): the calls of the scored run and their spread (ms is their median)
                 if msg.get("scored_calls") is not None:
                     result["arms"][arm].setdefault("scored_calls", []).append(dict(msg["scored_calls"], round=r))
+                # HOST USAGE: the scored calls' getrusage deltas, read by tools/bench_board.py host_fields
+                if msg.get("host_usage") is not None:
+                    result["arms"][arm].setdefault("host_usage", []).append(dict(msg["host_usage"], round=r))
                 # COMPILE-IN-CLOCK (Andrew 2026-10-14): compiles inside the scored rounds, summed
                 rounds_c = result["arms"][arm].setdefault("compile_rounds", [])
                 rounds_c.append(msg.get("compiles"))
