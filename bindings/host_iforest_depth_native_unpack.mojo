@@ -18,10 +18,13 @@ from bindings.host_iforest_depth_native_pack import (
     _depth_box,
     _depth_dtype,
 )
+from bindings.host_tree_archive_keys_unpack import host_tree_archive_keys
+from bindings.py_balanced import py_item
 
 
 def _depth_builtin_admit(value: PythonObject, context: PythonObject) raises:
-    var types = context["host_depth_primitive_types"]
+    var nk = host_tree_archive_keys()
+    var types = py_item(context, nk[].k_host_depth_primitive_types)
     for i in range(len(types)):  # driver-loop: exact retained builtin primitives have no application number slots
         if py_type(value) is types[i]:
             return
@@ -41,25 +44,27 @@ def host_iforest_depth_truth(value: PythonObject, context: PythonObject) raises 
 
 
 def _depth_release(context: PythonObject) raises -> Int:
-    var module = py_get(context["modules"],"numpy")
-    if module is None or py_type(module) is not context["host_iforest_module_type"]:
+    var nk = host_tree_archive_keys()
+    var module = py_get(py_item(context, nk[].k_modules),nk[].k_numpy)
+    if module is None or py_type(module) is not py_item(context, nk[].k_host_iforest_module_type):
         raise Error("TypeError: fit depth requires native NumPy version metadata")
-    var version = py_get(native_numpy_module_fields(module),"__version__")
+    var version = py_get(native_numpy_module_fields(module),nk[].k___version__)
     if py_type(version) is not py_type(PythonObject("")):
         raise Error("TypeError: fit depth requires native NumPy version text")
     return Int(String(String(version).split(".")[0]))
 
 
 def _depth_warning_guard(context: PythonObject) raises:
+    var nk = host_tree_archive_keys()
     # The shared native warning owner still reads these builtin module
     # fields. Refuse replacement hooks before reaching any of its calls.
     # Fixed identities are retained at package connection, never inferred
     # from a callable's spelling or native-looking type.
-    var module = context["host_depth_builtins"]
-    if py_get(context["modules"],"builtins") is not module:
+    var module = py_item(context, nk[].k_host_depth_builtins)
+    if py_get(py_item(context, nk[].k_modules),nk[].k_builtins) is not module:
         raise Error("TypeError: fit-depth warnings require the connected native builtin module")
     var fields = native_numpy_module_fields(module)
-    var expected = context["host_depth_builtin_types"]
+    var expected = py_item(context, nk[].k_host_depth_builtin_types)
     for name in ["dict","int","list","object","str","tuple","type"]:  # driver-loop: fixed transitive warning implementation dependencies
         if py_get(fields,PythonObject(name)) is not expected[PythonObject(name)]:
             raise Error("TypeError: fit-depth warnings cannot invoke replaced builtin hooks")
@@ -67,16 +72,18 @@ def _depth_warning_guard(context: PythonObject) raises:
 
 def _depth_report(status: Int, operation: String, scalar: Bool, context: PythonObject,
                   reported_operation: String = "") raises:
+    var nk = host_tree_archive_keys()
     if status == 0:
         return
     _depth_warning_guard(context)
-    var local = context["host_depth_warning_contexts"][PythonObject(operation)]
+    var local = py_item(context, nk[].k_host_depth_warning_contexts)[PythonObject(operation)]
     var settings = sequence_array_errstate(local)
     var name = reported_operation if reported_operation.byte_length() > 0 else (String("scalar ") if scalar else String(""))+operation
     sequence_array_report(status,settings,local,name)
 
 
 def host_iforest_depth_step(value: PythonObject, subtract: Bool, context: PythonObject) raises -> PythonObject:
+    var nk = host_tree_archive_keys()
     var dtype = _depth_dtype(value,context)
     if dtype is None:
         # Exact builtin scalar admission precedes this native CPython
@@ -90,7 +97,7 @@ def host_iforest_depth_step(value: PythonObject, subtract: Bool, context: Python
             var failure = stash_python_error()
             raise failure^
         return PythonObject(from_owned=pointer)
-    var ndarray = py_type(value) is context["ndarray"]
+    var ndarray = py_type(value) is py_item(context, nk[].k_ndarray)
     var scalar_result = not ndarray or Int(py=value.ndim) == 0
     var shape = Python.tuple() if scalar_result else value.shape
     var code = String(dtype.char)
@@ -136,6 +143,7 @@ def host_iforest_depth_step(value: PythonObject, subtract: Bool, context: Python
 
 
 def host_iforest_depth_positive(value: PythonObject, context: PythonObject) raises -> Bool:
+    var nk = host_tree_archive_keys()
     if _depth_dtype(value,context) is None:
         _depth_builtin_admit(value,context)
         ref cpy = Python().cpython()
@@ -147,7 +155,7 @@ def host_iforest_depth_positive(value: PythonObject, context: PythonObject) rais
             raise failure^
         return result != 0
     var source = native_scalar_buffer(value)
-    var array = py_type(value) is context["ndarray"]
+    var array = py_type(value) is py_item(context, nk[].k_ndarray)
     if source.real.special == 2:
         if source.complex and array and _depth_release(context) >= 2:
             _depth_report(SEQ_CAST_INVALID,"greater",False,context)

@@ -14,15 +14,18 @@ from bindings.sequence_array_warnings_unpack import sequence_array_report
 from bindings.sequence_array_warnings_pack import sequence_array_errstate
 from core.sequence_array_cast import SEQ_CAST_INVALID
 from core.host_iforest_depth_run import host_iforest_depth_step_run
+from bindings.host_tree_archive_keys_unpack import host_tree_archive_keys
+from bindings.py_balanced import py_item
 
 
 def _depth_dtype(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = host_tree_archive_keys()
     var cls = py_type(value)
     if cls is py_type(PythonObject(0)) or cls is py_type(PythonObject(0.0)) or cls is py_type(PythonObject(True)):
         return PythonObject(None)
-    if py_get(context,"ndarray") is None:
+    if py_get(context,nk[].k_ndarray) is None:
         return PythonObject(None)
-    var array = cls is context["ndarray"]
+    var array = cls is py_item(context, nk[].k_ndarray)
     if array and Int(py=value.size) != 1:
         raise Error("TypeError: scalar model state requires a scalar or zero-dimensional numeric array")
     var held = _depth_dtypes(context)
@@ -43,8 +46,9 @@ def _depth_dtypes(context: PythonObject) raises -> PythonObject:
     built once per connected NumPy dtype constructor and kept in the context
     (p3-trees: up to 18 np.dtype() calls ran 4-5 times per fit). NumPy
     dtype objects of these primitive codes are immutable singletons."""
+    var nk = host_tree_archive_keys()
     var constructor = native_numpy_dtype(context)
-    var held = py_get(context, "_host_depth_dtypes")
+    var held = py_get(context, nk[].k__host_depth_dtypes)
     if held is not None and held[0] is constructor:
         return held
     var dtypes = Python.list()
@@ -54,7 +58,7 @@ def _depth_dtypes(context: PythonObject) raises -> PythonObject:
         _ = py_call(dtypes.append, dtype)
         _ = py_call(types.append, dtype.type)
     var record = Python.tuple(constructor, dtypes, types)
-    py_setitem(context, "_host_depth_dtypes", record)
+    py_setitem(context, nk[].k__host_depth_dtypes, record)
     return record
 
 

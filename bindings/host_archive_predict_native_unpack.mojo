@@ -13,6 +13,8 @@ from bindings.host_archive_native_door import host_archive_build
 from bindings.host_svc_native_door import host_svc_probability
 from bindings.native_loaded_module_door import NativeModules
 from bindings.native_class_admission_door import class_record, class_admit
+from bindings.host_tree_archive_keys_unpack import host_tree_archive_keys
+from bindings.py_balanced import py_item
 
 def _class_name(record: PythonObject) raises -> String:
     return String(record[2])
@@ -24,10 +26,11 @@ def _unavailable(record: PythonObject, name: String) raises -> Error:
 
 
 def _check_module(module: PythonObject, context: PythonObject) raises:
+    var nk = host_tree_archive_keys()
     # A native entry pointer alone does not authorize a module __getattr__
     # hook or a replaced helper export: the owner looks its kernels up by
     # name in this module, so its retained exports must be unchanged.
-    var exports = py_get(context["host_archive_predict_modules"], module)
+    var exports = py_get(py_item(context, nk[].k_host_archive_predict_modules), module)
     if exports is None:
         raise Error("TypeError: saved host prediction binding was not connected at import")
     var namespace = _loaded_fields(module)

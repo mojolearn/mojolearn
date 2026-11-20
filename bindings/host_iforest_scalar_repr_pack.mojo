@@ -7,22 +7,25 @@ from std.python._cpython import PyObjectPtr
 from std.math import isfinite, isnan
 from bindings.py_balanced import py_call, py_type, py_get
 from bindings.native_numpy_metadata_unpack import native_numpy_dtype
+from bindings.host_tree_archive_keys_unpack import host_tree_archive_keys
+from bindings.py_balanced import py_item
 
 
 def _if_repr_options(context: PythonObject) raises -> PythonObject:
-    var modules = context["modules"]
+    var nk = host_tree_archive_keys()
+    var modules = py_item(context, nk[].k_modules)
     var module = py_get(modules, "numpy._core.arrayprint")
     if module is None:
         module = py_get(modules, "numpy.core.arrayprint")
-    if py_type(module) is not context["host_iforest_module_type"]:
+    if py_type(module) is not py_item(context, nk[].k_host_iforest_module_type):
         raise Error("TypeError: IsolationForest parameter text requires native NumPy print metadata")
-    var fields = py_call(context["host_iforest_module_dict"], module)
-    var options = py_get(fields, "_format_options")
+    var fields = py_call(py_item(context, nk[].k_host_iforest_module_dict), module)
+    var options = py_get(fields, nk[].k__format_options)
     if options is None:
-        var variable = py_get(fields, "format_options")
-        if py_type(variable) is not context["host_iforest_context_type"]:
+        var variable = py_get(fields, nk[].k_format_options)
+        if py_type(variable) is not py_item(context, nk[].k_host_iforest_context_type):
             raise Error("TypeError: IsolationForest parameter text requires a native print ContextVar")
-        options = py_call(context["host_iforest_context_get"], variable)
+        options = py_call(py_item(context, nk[].k_host_iforest_context_get), variable)
     if py_type(options) is not py_type(Python.dict()):
         raise Error("TypeError: IsolationForest parameter text requires native print option data")
     var keys = py_call(py_type(Python.list()), options)
@@ -37,8 +40,8 @@ def _if_repr_options(context: PythonObject) raises -> PythonObject:
     for i in range(len(strings)):  # driver-loop: exact text print options
         if py_type(options[strings[i]]) is not py_type(PythonObject("")):
             raise Error("TypeError: IsolationForest print options require native strings")
-    if py_type(options["suppress"]) is not py_type(PythonObject(True)) or (options["precision"] is not None and py_type(options["precision"]) is not py_type(PythonObject(0))):
+    if py_type(py_item(options, nk[].k_suppress)) is not py_type(PythonObject(True)) or (py_item(options, nk[].k_precision) is not None and py_type(py_item(options, nk[].k_precision)) is not py_type(PythonObject(0))):
         raise Error("TypeError: IsolationForest print precision requires native scalar metadata")
-    if py_get(options, "override_repr") is not None:
+    if py_get(options, nk[].k_override_repr) is not None:
         raise Error("TypeError: IsolationForest parameter errors cannot invoke Python print overrides; use native print options")
     return options
