@@ -68,7 +68,9 @@ NUMPY_ORACLES = {
     # `verify --check` both run, and the `--check` controller. They describe and
     # compare outputs the product already returned (shape, dtype, SHA-256, first
     # differing element) and load the user's rows file; NumPy is imported
-    # lazily inside those functions. Product paths never call them.
+    # lazily inside those functions. Product paths never call them; the public
+    # `mojolearn.check` (2026-11-20) is this same testing tool under a short
+    # name, routed lazily, so `import mojolearn` still loads neither file.
     "mojolearn/_check_both.py", "mojolearn/_verify_check.py",
 }
 
