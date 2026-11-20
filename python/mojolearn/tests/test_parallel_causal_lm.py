@@ -96,7 +96,7 @@ def actual_owner(tmp_path, monkeypatch, checkpoint, *, profile='fp32_v1', weight
         assert model._native_vendor == _backend.vendor()
         yield model
     finally:
-        primary = sys.exception()
+        primary = sys.exc_info()[1]
         cleanup = None
         if model is not None:
             try:

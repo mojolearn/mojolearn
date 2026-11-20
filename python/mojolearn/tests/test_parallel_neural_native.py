@@ -10,6 +10,14 @@ import mojolearn
 from mojolearn import ParallelNeuralTrainer, _backend
 from mojolearn._parallel_mlp import _native_parallel_mlp as mlp
 from mojolearn._parallel_neural import _native_parallel_neural as native
+
+try:
+    ExceptionGroup
+except NameError:  # Python 3.10: the builtin is 3.11+; keep every cleanup failure
+    class ExceptionGroup(Exception):
+        def __init__(self, message, exceptions):
+            super().__init__(message, list(exceptions))
+            self.exceptions = list(exceptions)
 from mojolearn._verify_native_runtime import audit_native_call
 from mojolearn.tests.test_parallel_mlp_native import model_fixture
 
@@ -131,7 +139,7 @@ def test_complete_training_oracle_checkpoint_replay_and_child_audit(tmp_path, mo
         # one device: the update runs on the gradient worker (one pool)
         assert len(set(pids)) == len(devices) + (0 if len(devices) == 1 else 1)
     finally:
-        primary = sys.exception()
+        primary = sys.exc_info()[1]
         cleanup_errors = []
         # Capture identities even when training or the independent oracle
         # fails, then give every child time to retain its complete audit.
@@ -261,7 +269,7 @@ def test_samba_parallel_dropout_clipping_schedule_and_checkpoint_replay(tmp_path
         assert owner._update_pool is owner._pool
         pids = sorted({row['pid'] for row in owner._pool['workers'] + owner._update_pool['workers']})
     finally:
-        primary = sys.exception()
+        primary = sys.exc_info()[1]
         cleanup_errors = []
         for active in (owner, replay):
             if active is not None:
@@ -311,7 +319,7 @@ def test_samba_last_dropout_stream_commits_and_restores_exhausted_checkpoint():
                 assert not failed.report()[key], failed.report()
             _assert_state_equal(audit_native_call(active.checkpoint).assert_native()['state'], before['state'])
     finally:
-        primary = sys.exception()
+        primary = sys.exc_info()[1]
         failures = []
         for active in (owner, replay):
             if active is not None:

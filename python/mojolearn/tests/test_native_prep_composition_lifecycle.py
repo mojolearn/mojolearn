@@ -45,7 +45,7 @@ def test_composition_runs_without_inherited_python_lifecycle(owner):
     def record(frame, event, arg):
         if event == 'call' and frame.f_code.co_filename.endswith('/mojolearn/_mode.py'):
             if frame.f_code.co_name in ('tracked', 'guarded', 'public'):
-                calls.append(frame.f_code.co_qualname)
+                calls.append(getattr(frame.f_code, "co_qualname", frame.f_code.co_name))
 
     previous = sys.getprofile()
     sys.setprofile(record)

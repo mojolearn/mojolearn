@@ -100,9 +100,9 @@ def _frames_between(call, method):
                 if frame.f_code is code:
                     state["top"] = frame
                 else:
-                    extra.append(frame.f_code.co_qualname)
+                    extra.append(getattr(frame.f_code, "co_qualname", frame.f_code.co_name))
             elif frame.f_back is state["top"] and state["c"] == 0:
-                extra.append(frame.f_code.co_qualname)
+                extra.append(getattr(frame.f_code, "co_qualname", frame.f_code.co_name))
         elif event == "c_call" and frame is state["top"]:
             state["c"] += 1
         elif event in ("c_return", "c_exception") and frame is state["top"]:

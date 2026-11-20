@@ -308,7 +308,7 @@ def _audit_call(operation, args, kwargs, approved_callbacks):
                     threading.get_ident() == caller_thread):
                 audit.wrapper_entries += 1
             else:
-                key = (code.co_filename, code.co_firstlineno, code.co_qualname)
+                key = (code.co_filename, code.co_firstlineno, getattr(code, "co_qualname", code.co_name))  # co_qualname is 3.11+
                 audit.frames[key] += 1
                 if code in audit.approved_callbacks:
                     audit.approved_frames[key] += 1

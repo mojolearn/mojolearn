@@ -95,9 +95,9 @@ def test_native_finalizer_preserves_pending_python_exception(cls):
         try:
             raise pending
         finally:
-            assert sys.exception() is pending
+            assert sys.exc_info()[1] is pending
             audit_native_call(T._Optimizer.__del__, owner).assert_native()
-            assert sys.exception() is pending
+            assert sys.exc_info()[1] is pending
     assert caught.value is pending
     assert not owner.resident_
     audit_native_call(T._Optimizer.__del__, owner).assert_native()

@@ -39,7 +39,11 @@ def both(name, fname, *args, rtol=RTOL, **kw):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         ours = call(name, getattr(mt, fname), *args, **kw)
-        theirs = getattr(sk, fname)(*args, **kw)
+        reference = getattr(sk, fname, None)
+        if reference is None:  # d2_brier_score is newer than scikit-learn 1.7, the newest on Python 3.10
+            print("skip", name, "the reference scikit-learn has no", fname)
+            return
+        theirs = reference(*args, **kw)
     if ours is not None:
         if isinstance(theirs, tuple):
             for i, (a, b) in enumerate(zip(ours, theirs)):
@@ -173,7 +177,12 @@ import mojolearn.model_selection as ms
 from sklearn import model_selection as skms
 g = (np.arange(n) // 7) % 23
 Xs = X
+from mojolearn.tests._sklearn_oracle import older_reference
 for name in ("KFold", "StratifiedKFold", "GroupKFold", "TimeSeriesSplit", "LeaveOneGroupOut"):
+    if name == "GroupKFold" and older_reference():
+        # the reference GroupKFold assigns groups to folds differently before 1.9 (ours: 1.9's)
+        print("skip split GroupKFold: reference scikit-learn predates 1.9")
+        continue
     ours = [(np.asarray(a).tolist(), np.asarray(b).tolist()) for a, b in getattr(ms, name)().split(Xs, yt, g)]
     theirs = [(a.tolist(), b.tolist()) for a, b in getattr(skms, name)().split(Xs, yt, g)]
     ok = ours == theirs

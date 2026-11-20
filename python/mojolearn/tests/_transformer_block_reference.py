@@ -29,7 +29,10 @@ def _batch_tokens(x, what, d_model, step):
 
 def _state_buf(a, name, n):
     """The caller's own buffer (never a copy: the kernel updates it in place)."""
-    view = memoryview(a)
+    # An Array exports its buffer through `__buffer__`, which CPython consults
+    # only from 3.12; read it through its storage view on 3.10 and 3.11 too.
+    from mojolearn._bufcheck import _storage_view
+    view = _storage_view(a)
     if view.readonly or not view.c_contiguous or view.nbytes != 4 * n:
         raise ValueError(f"state buffer {name} must be a writable C-contiguous float32 buffer of {n} values")
     return a
