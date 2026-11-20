@@ -156,6 +156,17 @@ comptime _NEURAL_GEMM_LEAF256 = GEMM_LEAF_ARM == GEMM_LEAF_ARM_ALL256
 # reader table is gemm/IDENTICAL_FP32_CONTRACT.md section 14). The small MLP
 # op keeps its measured leaf 128 explicitly (autograd/small_mlp_op.mojo).
 # No stored reference word is re-recorded while this is an arm.
+# A/B round 3, 2026-11-20 (lane fx-verdicts5; NVIDIA L40S host 2ef132a6de04, wheel 28a780604c and its B set, base and
+# arm back to back in one pod job, tag nvc-ab-20261120T063324Z-c630ad; the words differ by design). Base -> arm ms:
+# lm-train-step 36.41 -> 36.04 (0.990; the row's three bases 36.30 to 36.41; loss after 2 steps 8.436234 -> 8.436235),
+# lm-forward 20.36 -> 20.85 (1.024; the row's bases 20.36 and 22.48, so noise; mean NLL equal to 9 digits),
+# mlp-train-step 0.717 -> 0.804 (1.12, ONE call each; that op keeps leaf 128, so this is the row's noise).
+# NOT DECIDED: the rows that decide it did not run. neural/gemm (4096^3) and the four linalg.matmul driver cases were
+# REFUSED on the arm's wheel by mojolearn.linalg's profile admission, a defect of the arm, not of the kernels: profile
+# version 4 was missing from `_EXPERIMENT_PROFILES` (python/mojolearn/_linalg_impl.py) and the job gave the arm's venv
+# no MOJOLEARN_EXPERIMENT_GEMM_PROFILE. Both fixed 2026-11-20 (the table entry; tools/ops/paper_compare_job.sh takes a
+# 4th field `env:...` on a wheel arm's line). Stays opt-in, owed RUN: stage the arm with
+# env:MOJOLEARN_EXPERIMENT_GEMM_PROFILE=mojolearn.identical.gemm.fp32.v2-leaf512. On the one clean row it is 1 %.
 comptime GEMM_LEAF512 = (
     identical_mode_enabled() and is_defined["MOJOLEARN_GEMM_FAST_LEAF512"]()
 )
