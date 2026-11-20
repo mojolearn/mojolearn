@@ -166,6 +166,25 @@ class SameHostFlags(unittest.TestCase):
             if key != KM:
                 self.assertNotIn("SCORING-MIXED", r["flags"], key)   # one call against one call
         self.assertIn("SCORING-MIXED", PC.render_summary(res))
+        # lane fx-metrics-ranking (2026-11-19): a median of calls against one call makes no REGRESSION / FASTER
+        self.assertNotIn("REGRESSION", km["flags"])
+        self.assertIn("REGRESSION", km["scoring_mixed_replaced"])
+
+    def test_scoring_mixed_replaces_the_verdict_and_shows_both_first_calls(self):
+        """The 2026-11-19 pair job's row: the prior a median of 20 calls (first call 9.74 ms), the new one call
+        (16.27 ms) on a byte-identical path. The ratio's verdict is replaced; both first scored calls are shown."""
+        prior = {"calls": 20, "host_usage": {"per_call": [{"wall_ms": 9.74}, {"wall_ms": 9.92}]}}
+        self.assertEqual(PC.first_call_ms(prior), 9.74)
+        self.assertIsNone(PC.first_call_ms({"median_ms": 16.27}))
+        row = {"new_scoring": "one-call", "new_first_ms": 16.27, "flags": ["REGRESSION"]}
+        PC.flag_scoring_mixed(row, "baseline", "median-of-calls", replaces=PC.SCORING_MIXED_REPLACES,
+                              other_first_ms=PC.first_call_ms(prior))
+        self.assertEqual(row["flags"], ["SCORING-MIXED"])
+        self.assertEqual(row["scoring_mixed_replaced"], ["REGRESSION"])
+        self.assertIn("first scored calls: new 16.27 ms, baseline 9.74 ms (1.67)", row["scoring_mixed"][0])
+        same = {"new_scoring": "one-call", "flags": ["REGRESSION"]}
+        PC.flag_scoring_mixed(same, "baseline", "one-call", replaces=PC.SCORING_MIXED_REPLACES)
+        self.assertEqual(same["flags"], ["REGRESSION"])                 # one call against one call: the verdict stays
 
     def test_a_row_the_prior_wheel_does_not_run_is_not_run_never_a_regression(self):
         base = ours_board({}, HOST_A, "0.8.55")

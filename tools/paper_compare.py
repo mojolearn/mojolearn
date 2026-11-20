@@ -101,8 +101,14 @@ FLAGS (per recipe; a recipe can carry several)
                  one such cell as a 2.54x regression). REGRESSION and FASTER are replaced by it (shown, not counted)
   SCORING-MIXED  the new time and an on-box column it is divided by were taken under different small-row rules
                  (tools/bench_board_small_rows.py: one is the median of 20 calls, the other one call, because their
-                 first scored calls fell on either side of 10 ms); scoring_mixed names the columns. Shown, the ratio
-                 kept
+                 first scored calls fell on either side of 10 ms); scoring_mixed names the columns and, when both
+                 cells recorded per-call times, the two FIRST scored calls (the same quantity on both arms). The
+                 ratio is kept and shown; REGRESSION / FASTER of the baseline column and REGRESSION-VS-PRIOR /
+                 FASTER-VS-PRIOR of the prior column are replaced by it (scoring_mixed_replaced; shown, not
+                 counted): a median of 20 calls against one call is biased, because the first scored call carries
+                 the first-touch page faults (lane fx-metrics-ranking 2026-11-19: metric-coverage-error istella,
+                 byte-identical path and hash, prior median of 20 calls 9.83 ms with calls of 8.06..15.97 ms, new
+                 one call 16.27 ms, read as a 1.65x regression)
 With more --prior-board versions (the default job times one, 0.8.55: Andrew, 2026-11-16; an explicit extra prior or
 last release gets one each), each other version gets a column (ms, new / prior); the last one is the prior release:
   REGRESSION-VS-PRIOR / FASTER-VS-PRIOR   new / prior median ms above 1.10 / below 0.90
@@ -854,6 +860,7 @@ def compare_one(rec, races, not_run_why, hw_diff, base=None, same_host_opponents
                new_quality=shown_quality(cell.get("quality")))
     if new_t:
         row.update(calls_fields("new", cell))
+        row["new_first_ms"] = first_call_ms(cell)
     missing = quality_missing(old["quality"], cell.get("quality")) if new_t else []   # untimed: BROKEN says it
     if missing:
         # QUALITY-MISSING (2026-11-13): the 0.8.55 record holds a judged metric the new cell lacks; the row cannot be
@@ -872,7 +879,8 @@ def compare_one(rec, races, not_run_why, hw_diff, base=None, same_host_opponents
         r = row["ratio"]
         row["flags"].append("REGRESSION" if r is not None and r > SLOWER else
                             "FASTER" if r is not None and r < FASTER else "SAME")
-        flag_scoring_mixed(row, "baseline", row.get("old_scoring"))
+        flag_scoring_mixed(row, "baseline", row.get("old_scoring"), replaces=SCORING_MIXED_REPLACES,
+                           other_first_ms=first_call_ms(bcell))
     elif row["old_status"] == "not run on this box":
         # the prior wheel has no cell for this row (its smoke failed, it refused at plan, the job did not reach it):
         # NOT-RUN for that column, never a regression (brief same-box-compare, 2026-11-14)
@@ -961,16 +969,20 @@ def attach_prior_board(row, version, races, flagged):
     r = (row["new_ms"] / ms) if number(row.get("new_ms")) and ms else None
     row.setdefault("priors", {})[version] = dict({"ms": ms, "status": status, "ratio": r},
                                                  **(calls_fields("prior", c) if ms is not None else {}))
+    mixed = r is not None and scoring_differs(row, row["priors"][version].get("prior_scoring"))
     if r is not None:
-        flag_scoring_mixed(row, version, row["priors"][version].get("prior_scoring"))
+        flag_scoring_mixed(row, version, row["priors"][version].get("prior_scoring"),
+                           other_first_ms=first_call_ms(c))
     if not flagged:
         return row
     row["prior_ms"], row["prior_status"], row["ratio_vs_prior"] = ms, status, r
     if r is not None:
-        if r > SLOWER:
-            row["flags"].append("REGRESSION-VS-PRIOR")
-        elif r < FASTER:
-            row["flags"].append("FASTER-VS-PRIOR")
+        verdict = "REGRESSION-VS-PRIOR" if r > SLOWER else "FASTER-VS-PRIOR" if r < FASTER else None
+        if verdict and mixed:
+            # SCORING-MIXED replaces the prior column's verdict (a median of calls against one call)
+            row.setdefault("scoring_mixed_replaced", []).append(verdict)
+        elif verdict:
+            row["flags"].append(verdict)
     if ms and number(row.get("old_ms")) and ms / row["old_ms"] > SLOWER:
         if "SAME" in row["flags"] or "FASTER" in row["flags"]:
             row["flags"].append("RECOVERED")
@@ -1441,16 +1453,25 @@ def attach_extra_priors(row, base, others, flagged, verified):
     FASTER vs the on-box baseline and the flagged prior when their host is verified (the same rule as a recipe)."""
     for p in ([base] if base else []) + others:
         attach_prior_board(row, p["version"], p["races"], False)
+    # SCORING-MIXED replaces a column's REGRESSION / FASTER (flag_scoring_mixed; lane fx-metrics-ranking 2026-11-19)
     if verified(base):
-        r = row["priors"][base["version"]]["ratio"]
+        p = row["priors"][base["version"]]
+        r = p["ratio"]
         if r is not None:
-            row["flags"].append("REGRESSION" if r > SLOWER else "FASTER" if r < FASTER else "SAME")
+            verdict = "REGRESSION" if r > SLOWER else "FASTER" if r < FASTER else "SAME"
+            if verdict != "SAME" and scoring_differs(row, p.get("prior_scoring")):
+                row.setdefault("scoring_mixed_replaced", []).append(verdict)
+            else:
+                row["flags"].append(verdict)
     if verified(flagged):
-        r = row["priors"][flagged["version"]]["ratio"]
-        if r is not None and r > SLOWER:
-            row["flags"].append("REGRESSION-VS-PRIOR")
-        elif r is not None and r < FASTER:
-            row["flags"].append("FASTER-VS-PRIOR")
+        p = row["priors"][flagged["version"]]
+        r = p["ratio"]
+        verdict = None if r is None else ("REGRESSION-VS-PRIOR" if r > SLOWER else
+                                          "FASTER-VS-PRIOR" if r < FASTER else None)
+        if verdict and scoring_differs(row, p.get("prior_scoring")):
+            row.setdefault("scoring_mixed_replaced", []).append(verdict)
+        elif verdict:
+            row["flags"].append(verdict)
     return row
 
 
@@ -1483,16 +1504,50 @@ def calls_fields(prefix, cell):
                         prefix + "_max_ms": cell.get("max_ms")})
 
 
-def flag_scoring_mixed(row, column, other_scoring):
+#: the baseline column's verdicts SCORING-MIXED replaces (the prior column's are replaced in attach_prior_board)
+SCORING_MIXED_REPLACES = ("REGRESSION", "FASTER")
+
+
+def first_call_ms(cell):
+    """The wall time of a cell's FIRST scored call (host_usage.per_call, tools/numa_place.py), or None when the cell
+    recorded no per-call times. For a one-call cell it is its time; for a median of calls it is the call the
+    small-row rule decided on, which is the same quantity."""
+    use = (cell or {}).get("host_usage")
+    per = use.get("per_call") if isinstance(use, dict) else None
+    if isinstance(per, list) and per and isinstance(per[0], dict) and number(per[0].get("wall_ms")):
+        return per[0]["wall_ms"]
+    return None
+
+
+def scoring_differs(row, other_scoring):
+    """Whether the new time and another column's time were taken under different small-row rules."""
+    new = row.get("new_scoring")
+    return new is not None and other_scoring is not None and new != other_scoring
+
+
+def flag_scoring_mixed(row, column, other_scoring, replaces=(), other_first_ms=None):
     """SCORING-MIXED (harness-small-row, 2026-11-16): the new time and the time of `column` it is divided by were
     taken under different small-row rules (one a median of calls, the other one call: their first scored calls
-    fell on either side of 10 ms). The ratio is still shown; the flag says it compares a median with one call."""
-    new = row.get("new_scoring")
-    if new is None or other_scoring is None or new == other_scoring:
+    fell on either side of 10 ms). The ratio is still shown; the flag says it compares a median with one call.
+    Lane fx-metrics-ranking (2026-11-19): the verdicts in `replaces` are removed from the row's flags and recorded
+    in scoring_mixed_replaced (the first scored call carries the first-touch page faults, so the arm that fell on
+    one call reads slower than the arm that fell on the median, on unchanged code), and the note carries both arms'
+    first scored calls when both cells recorded them (`other_first_ms`, row["new_first_ms"]): one sample each,
+    shown, never a flag."""
+    if not scoring_differs(row, other_scoring):
         return row
-    row.setdefault("scoring_mixed", []).append("%s: new %s, %s %s" % (column, new, column, other_scoring))
+    note = "%s: new %s, %s %s" % (column, row.get("new_scoring"), column, other_scoring)
+    first = row.get("new_first_ms")
+    if number(first) and number(other_first_ms) and other_first_ms:
+        note += "; first scored calls: new %s ms, %s %s ms (%.2f)" % (fmt_ms(first), column, fmt_ms(other_first_ms),
+                                                                    first / other_first_ms)
+    row.setdefault("scoring_mixed", []).append(note)
     if "SCORING-MIXED" not in row["flags"]:
         row["flags"].append("SCORING-MIXED")
+    replaced = [f for f in row["flags"] if f in replaces]
+    if replaced:
+        row["flags"] = [f for f in row["flags"] if f not in replaces]
+        row.setdefault("scoring_mixed_replaced", []).extend(replaced)
     return row
 
 
