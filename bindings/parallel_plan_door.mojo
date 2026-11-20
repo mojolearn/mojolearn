@@ -18,6 +18,7 @@ from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_fields
 from bindings.family_common_pack import family_call
 from core.device_plan import DEVICE_PLAN_WORKER, DEVICE_PLAN_CHOLESKY, device_plan_logical
+from core.mode_answer import fast_is_answered_by_identical
 
 
 def plan_devices(value: PythonObject, operation: String, cooperative: Bool,
@@ -92,14 +93,24 @@ def plan_field(model: PythonObject, name: String) raises -> PythonObject:
     return py_get(py_fields(model), PythonObject(name), PythonObject(None))
 
 
-def plan_require_identical(model: PythonObject, message: String) raises:
-    """The drivers' `numeric_mode not in (None, 'identical')` refusal."""
+def plan_require_identical(model: PythonObject, message: String, family: Int) raises:
+    """The drivers' `numeric_mode not in (None, 'identical')` refusal. The
+    word `fast` passes where the identical set answers it for the driver's
+    door `family` (core/mode_answer.mojo; lane fx-fast-mask): the driver then
+    runs the identical kernels, as the estimator's own fit does. Once per
+    driver call, no loop; an `identical` word pays nothing more."""
     var mode = plan_field(model, "numeric_mode")
     if mode is None:
         return
     var b = native_loaded_module("builtins")
-    if py_type(mode) is not b.str or String(mode) != "identical":
+    if py_type(mode) is not b.str:
         raise Error("ValueError: " + message)
+    var word = String(mode)
+    if word == "identical":
+        return
+    if word == "fast" and fast_is_answered_by_identical(family):
+        return
+    raise Error("ValueError: " + message)
 
 
 def plan_enter_all(bindings: PythonObject, devices: PythonObject, rebuild: String,

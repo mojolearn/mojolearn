@@ -35,6 +35,8 @@ from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entr
 from bindings.native_owner_lifetime_door import native_release_admit
 from bindings.linalg_keys_unpack import linalg_keys, LinalgKeys
 from bindings.py_balanced import py_item
+from bindings.mode_answer_door import fast_answers_compiled_code
+from core.mode_answer import MODE_FAMILY_LINALG
 from bindings.operation_names_chol import (
     CHOL_OPN_FAMILY_CHOL_INITIALIZE, CHOL_OPN_FAMILY_CHOL_LOGDET, CHOL_OPN_FAMILY_CHOL_BINDING,
     CHOL_OPN_FAMILY_CHOL_DOOR, CHOL_OPN_FAMILY_CHOL_VENDOR, CHOL_OPN_FAMILY_CHOL_PROFILE_JITTER,
@@ -187,9 +189,13 @@ def _chol_extension(model: PythonObject, binding: PythonObject, context: PythonO
     var getter = neural_descriptor_entry(binding, reader, False)
     if getter is not None:
         var got = Int(py=family_call(getter))
-        var wanted = py_get(py_item(context, nk[].k_family_chol_mode_codes), want, PythonObject(None))
+        var codes = py_item(context, nk[].k_family_chol_mode_codes)
+        var wanted = py_get(codes, want, PythonObject(None))
         if wanted is None or Int(py=wanted) != got:
-            raise Error("RuntimeError: mojolearn Cholesky: requested numeric mode differs from the compiled binding")
+            # lane fx-fast-mask: `fast` answered by the identical set (LINALG)
+            # passes on the mismatch branch only; a matching call pays nothing.
+            if not fast_answers_compiled_code(want, codes, got, MODE_FAMILY_LINALG):
+                raise Error("RuntimeError: mojolearn Cholesky: requested numeric mode differs from the compiled binding")
     return binding
 
 
@@ -301,7 +307,7 @@ def _chol_par_admit(model: PythonObject, context: PythonObject) raises:
     var nk = linalg_keys()
     if py_type(model) is not py_item(context, nk[].k_family_chol_par_class):
         raise Error("TypeError: requires mojolearn.Cholesky")
-    plan_require_identical(model, "parallel Cholesky requires IDENTICAL numeric mode")
+    plan_require_identical(model, "parallel Cholesky requires IDENTICAL numeric mode", MODE_FAMILY_LINALG)
 
 
 def _chol_par(model: PythonObject, args: PythonObject, solve: Bool, context: PythonObject) raises -> PythonObject:
