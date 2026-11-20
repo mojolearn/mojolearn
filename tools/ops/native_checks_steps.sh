@@ -314,5 +314,5 @@ case "$step" in
     shard) step_shard ;;
     summary) step_summary ;;
     verdict) step_verdict ;;
-    *) sed -n 2,24p "$0"; exit 2 ;;
+    *) sed -n 2,36p "$0"; exit 2 ;;
 esac
