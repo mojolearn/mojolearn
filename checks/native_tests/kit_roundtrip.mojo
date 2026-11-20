@@ -13,8 +13,15 @@ Host column: the comparisons. A planted difference (+0.0 against -0.0 at
 index 3) must be refused by `same_words` with the index and both words in
 hex; `allclose` must refuse a value outside the caller's tolerance and a
 NaN; `all_finite` must name the first non-finite index.
+
+Planted run: `-D KIT_ROUNDTRIP_PLANT=1` flips the low bit of word 3 of the
+float32 words read back (device column) and of the second list compared
+(host column), so case 0 of each column MUST fail with `at 3`, the word it
+got and the word it wanted (`pixi run check-kit-planted-gpu` and
+`check-kit-planted-cpu`). A check that cannot fail proves nothing.
 """
 from std.memory import bitcast
+from std.sys.compile import is_defined
 
 from max.gpu.host import DeviceContext
 
@@ -29,6 +36,7 @@ from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, 
 comptime KIT_WORDS = 1031
 comptime KIT_GPU_CASES = 12
 comptime KIT_CPU_CASES = 6
+comptime KIT_PLANT = is_defined["KIT_ROUNDTRIP_PLANT"]()
 
 
 def _mix(x: UInt64) -> UInt64:
@@ -225,9 +233,22 @@ def _buffer_forms(ctx: DeviceContext) raises:
     _ = second^
 
 
+def _planted_device(ctx: DeviceContext) raises:
+    """The planted run's device case: the float32 words up and down with the
+    low bit of word 3 flipped on the way back; `same_words` must refuse it."""
+    var values = _f32_words()
+    var device = upload[DType.float32](ctx, values)
+    var back = download[DType.float32](ctx, device, KIT_WORDS)
+    back[3] = bitcast[DType.float32](bitcast[DType.uint32](back[3]) ^ UInt32(1))
+    same_words[DType.float32](back, values, "planted device roundtrip")
+    _ = device^
+
+
 def _gpu_case(ctx: DeviceContext, which: Int) raises:
     if which == 0:
         _roundtrip[DType.float32](ctx, _f32_words())
+        comptime if KIT_PLANT:
+            _planted_device(ctx)
     elif which == 1:
         _roundtrip[DType.float64](ctx, _f64_words())
     elif which == 2:
@@ -254,6 +275,8 @@ def _gpu_case(ctx: DeviceContext, which: Int) raises:
 
 def _run_gpu(mut report: Report) raises:
     var ctx = DeviceContext()
+    comptime if KIT_PLANT:
+        print("PLANT    KIT_ROUNDTRIP_PLANT is set: device case 0 MUST fail with at 3, got and want")
     var cases = report.cases(KIT_GPU_CASES)
     for which in range(KIT_GPU_CASES):  # driver-loop: over the kit's transfer cases, one device queue
         try:
@@ -276,6 +299,8 @@ def _cpu_case(which: Int) raises:
         # the same NaN bits are the same words
         var a = _f32_words()
         var b = _f32_words()
+        comptime if KIT_PLANT:
+            b[3] = bitcast[DType.float32](bitcast[DType.uint32](b[3]) ^ UInt32(1))
         same_words[DType.float32](a, b, "equal words")
         require(_refusal(a, b) == "", "equal words are accepted")
     elif which == 1:
@@ -327,6 +352,8 @@ def _cpu_case(which: Int) raises:
 
 
 def _run_cpu(mut report: Report) raises:
+    comptime if KIT_PLANT:
+        print("PLANT    KIT_ROUNDTRIP_PLANT is set: host case 0 MUST fail with at 3, got and want")
     var cases = report.cases(KIT_CPU_CASES)
     def task(which: Int) {imm cases}:
         try:
