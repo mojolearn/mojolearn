@@ -80,7 +80,14 @@ def _payload(kind):
 
 def _native_error(audit, expected):
     assert type(audit.exception) is type(expected), audit.report()
-    assert str(audit.exception) == str(expected)
+    # Python 3.10's builtin getattr() checks the name itself with its own
+    # wording; 3.11+ (and the native attribute read on every version) raise
+    # CPython's PyObject_GetAttr message.
+    legacy = str(expected)
+    if legacy == "getattr(): attribute name must be string":
+        assert str(audit.exception).startswith("attribute name must be string"), str(audit.exception)
+    else:
+        assert str(audit.exception) == legacy
     report = audit.report()
     assert not any(report[key] for key in ("python_frames", "forbidden_native_calls", "wrapper_work", "unobserved_existing_threads")), report
 
