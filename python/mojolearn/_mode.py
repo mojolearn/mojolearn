@@ -457,13 +457,87 @@ def install_public_outputs(cls, own_only=False):
             setattr(cls, name, _public_output(raw, name))
 
 
-class PublicOutputsMixin:
+class CheckMixin:
+    """`estimator.check(X)`: the GPU-versus-CPU check as a call (Andrew,
+    2026-11-20), on every estimator through `PublicOutputsMixin` and mixed into
+    the estimator families with a base of their own (`CNNClassifier`). A door
+    onto `mojolearn.check` (`_verify_check.check`), the function `python -m
+    mojolearn verify --check` runs: no second implementation. The check
+    modules load inside the method, so `import mojolearn` and every fit,
+    predict and transform path are unchanged. Not a constructor parameter,
+    so `get_params` and the scikit-learn tags never see it."""
+
+    # No instance state: an empty slot list keeps the instance layout (and the
+    # native attribute layouts that read the first `__dict__` descriptor in
+    # the MRO) exactly what it was before this base was added.
+    __slots__ = ()
+
+    def check(self, X, *, method=None, fit=None):
+        """Run this fitted model on the GPU and on the CPU, print both sides'
+        reports and whether their answers are the same bits.
+
+        In `identical` mode, Mojolearn returns the same bits on Apple, NVIDIA
+        and AMD GPUs, and the CPU binaries are held to the same bits. This
+        answers `X` with this model twice on this machine: on the GPU, and on
+        the CPU from the same fitted model, saved and loaded with
+        `mojolearn.host_model`. It runs in `identical` mode only.
+
+        It prints, for each side, the device and the binaries that answered,
+        what the runtime counted while the side ran (launches, uploads,
+        downloads), the wall time, and the shape, dtype, SHA-256 and first
+        values of each output; then one line: MATCH, or MISMATCH with the
+        index and the two values of the first differing element. When nothing
+        could be compared (the estimator is not in `identical` mode, the
+        installation has no GPU, or the model cannot be loaded on the CPU) it
+        prints why.
+
+        Parameters
+        ----------
+        X : array-like
+            The rows to answer for.
+        method : str, optional
+            The method to check, for example `'predict'`, `'predict_proba'`
+            or `'transform'`. Default: `predict` when the estimator has it,
+            else `transform`.
+        fit : tuple, optional
+            Arguments for `fit`. When given, the estimator is fitted on the
+            GPU first, then the fitted model is checked on both sides. Fitting
+            is never done unless asked for.
+
+        Returns
+        -------
+        dict
+            The same result as `mojolearn.check(estimator, X)`: `ran`,
+            `sides` (one record per side) and `verdict["verdict"]`, which is
+            `'MATCH'` or `'MISMATCH'`; `ran` is False, with a `reason`, when
+            nothing was compared.
+
+        Examples
+        --------
+        >>> import numpy as np, mojolearn
+        >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+        >>> model = mojolearn.RandomForestRegressor(n_estimators=20).fit(X, X[:, 0])
+        >>> result = model.check(X)    # doctest: +SKIP
+        >>> result["verdict"]["verdict"]    # doctest: +SKIP
+        'MATCH'
+        """
+        # Loaded here, on the first call only: nothing of the check is
+        # imported with the package or touched by fit/predict/transform.
+        from ._verify_check import check, format_check
+        result = check(self, X, method=method, fit=fit)
+        print(format_check(result))
+        return result
+
+
+class PublicOutputsMixin(CheckMixin):
     """NumPy results for callers outside the package: the public result
     methods (`install_public_outputs`) and the fitted attributes. A public
     attribute ending in an underscore (`coef_`, `labels_`,
     `cluster_centers_`) that holds an `Array` reads as a `numpy.ndarray`
     view of the same memory when NumPy is loaded and the reader is not
-    mojolearn's own code; the instance keeps the `Array`."""
+    mojolearn's own code; the instance keeps the `Array`.
+
+    Every estimator also gets `check(X)` from here (`CheckMixin`)."""
 
     def __init_subclass__(cls, **kw):
         super().__init_subclass__(**kw)
