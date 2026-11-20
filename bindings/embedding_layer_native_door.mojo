@@ -42,6 +42,17 @@ from bindings.optimizer_device_native_door import shape_count, device_shape
 from bindings.training_embedding_native_door import embedding_indices, embedding_leaves, embedding_leaf_store, embedding_int_list
 from bindings.sequence_device_native_unpack import seq_device_make
 from bindings.sequence_device_native_pack import sequence_device_operation
+from bindings.optimizer_keys_unpack import (
+    OPTIMIZER_OPN_EMBLAYER_BACKWARD,
+    OPTIMIZER_OPN_EMBLAYER_FORWARD,
+    OPTIMIZER_OPN_EMBLAYER_INIT,
+    OPTIMIZER_OPN_EMBLAYER_LOAD,
+    OPTIMIZER_OPN_EMBLAYER_PRETRAINED,
+    OPTIMIZER_OPN_EMBLAYER_SET_PARAMS,
+    OPTIMIZER_OPN_EMBLAYER_STATE,
+    OPTIMIZER_OPN_EMBLAYER_TO_DEVICE,
+    OPTIMIZER_OPN_SEQDEV_HOST,
+)
 from bindings.sequence_optimizer_native_door import seq_device_get
 from bindings.optimizer_admission_door import opt_value, opt_scalar, opt_guards, opt_exact, opt_numpy
 from bindings.mode_metadata_native_door import _fields, _class_fields
@@ -122,11 +133,11 @@ def _emb_ref(entries: PythonObject) raises -> EntryRef:
     return neural_ref[NEURAL_TABLE_EMBEDDING](key)
 
 
-def _emb_call(emb: EntryRef, operation: Int, addresses: List[Int], ints: List[Int]) raises -> Int:
+def _emb_call(emb: EntryRef, entry_op: Int, addresses: List[Int], ints: List[Int]) raises -> Int:
     """One call through the resolved Embedding entry: plain words, no CPython
     call; the entry releases the GIL inside its numerical work exactly as the
     former Python entry did."""
-    var result = entry_ref_call(emb, operation, Int(addresses.unsafe_ptr()), len(addresses),
+    var result = entry_ref_call(emb, entry_op, Int(addresses.unsafe_ptr()), len(addresses),
                                 Int(ints.unsafe_ptr()), len(ints), 0, 0)
     _ = addresses
     _ = ints
@@ -791,7 +802,7 @@ def _backward(model: PythonObject, ids: PythonObject, dy: PythonObject, grad: Py
         dy_address = Int(py=gradient._addr)
     var previous = grad
     if _is_device(previous, context):
-        previous = sequence_device_operation("seqdev_host", previous, Python.tuple(), PythonObject(None), context)
+        previous = sequence_device_operation(OPTIMIZER_OPN_SEQDEV_HOST, previous, Python.tuple(), PythonObject(None), context)
     var out = new_array([v, d], "<f4") if previous is None else _float_owned(previous, "grad", context)
     _require_shape(out, [v, d], "grad", context)
     if plan == 2 and not py_contains(entries, "embedding_table_release"):
@@ -891,23 +902,23 @@ def _load(cls: PythonObject, path: PythonObject, context: PythonObject) raises -
     return model
 
 
-def emblayer_operation(operation: String, owner: PythonObject, values: PythonObject,
+def emblayer_operation(operation: Int, owner: PythonObject, values: PythonObject,
                        context: PythonObject) raises -> PythonObject:
-    if operation == "emblayer_init":
+    if operation == OPTIMIZER_OPN_EMBLAYER_INIT:
         return _initialize(owner, values, context, PythonObject(None))
-    if operation == "emblayer_pretrained":
+    if operation == OPTIMIZER_OPN_EMBLAYER_PRETRAINED:
         return _pretrained(owner, values, context)
-    if operation == "emblayer_to_device":
+    if operation == OPTIMIZER_OPN_EMBLAYER_TO_DEVICE:
         return _to_device(owner, values[0], context)
-    if operation == "emblayer_backward":
+    if operation == OPTIMIZER_OPN_EMBLAYER_BACKWARD:
         return _backward(owner, values[0], values[1], values[2], context)
-    if operation == "emblayer_state":
+    if operation == OPTIMIZER_OPN_EMBLAYER_STATE:
         var fields = _metadata(owner, context)
         var state = py_call(_b().dict, fields)
         _ = py_call(state.pop, "_table_tok", PythonObject(None))
         _ = py_call(state.pop, "_table_owner", PythonObject(None))
         return state
-    if operation == "emblayer_set_params":
+    if operation == OPTIMIZER_OPN_EMBLAYER_SET_PARAMS:
         var fields = _metadata(owner, context)
         var options = values[0]
         if py_type(options) is not _b().dict:
@@ -924,10 +935,17 @@ def emblayer_operation(operation: String, owner: PythonObject, values: PythonObj
             _ = py_call(args.append, options[names[i]] if py_contains(options, names[i]) else fields[names[i]])
         _ = _initialize(owner, py_call(_b().tuple, args), context, PythonObject(None))
         return owner
-    if operation == "emblayer_forward":
+    if operation == OPTIMIZER_OPN_EMBLAYER_FORWARD:
         return _forward(owner, values[0], values[1], context)
-    if operation == "emblayer_load":
+    if operation == OPTIMIZER_OPN_EMBLAYER_LOAD:
         return _load(owner, values[0], context)
+    raise Error("RuntimeError: unknown Embedding operation " + String(operation))
+
+
+def emblayer_unknown_operation(operation: String) raises:
+    """The refusal of an `emblayer_*` name the router's table lacks (code -1):
+    the text `emblayer_operation` raised for it when it took the name (it ran
+    nothing before that raise). The router calls this on that branch only."""
     raise Error("RuntimeError: unknown Embedding operation " + operation)
 
 

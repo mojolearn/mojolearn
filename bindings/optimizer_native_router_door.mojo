@@ -1,11 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native public-operation routing, constructors, state preparation and resident IO.
-from bindings.embedding_layer_native_door import emblayer_operation
+from bindings.embedding_layer_native_door import emblayer_operation, emblayer_unknown_operation
 from std.os import getenv
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased, PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
-from bindings.sequence_layers_native_door import sequence_layers_operation
+from bindings.sequence_layers_native_door import sequence_layer_norm
+from bindings.sequence_moe_native_door import sequence_moe_operation
 from bindings.training_extra_native_door import training_chunked_lm_head, training_mlp_sessions, training_residual_dropout
 from bindings.samba_head_native_unpack import training_samba_head_loss
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
@@ -49,7 +50,7 @@ from bindings.optimizer_keys_unpack import (
     OPTIMIZER_OPN_TRAINING_NUMERIC_MODE, OPTIMIZER_OPN_TRAINING_VENDOR, OPTIMIZER_OPN_SEQDEV_FINALIZE,
     OPTIMIZER_OPN_SEQDEV_ARRAY, OPTIMIZER_OPN_SEQDEV_WRAP, OPTIMIZER_OPN_RESIDUAL_DROPOUT,
     OPTIMIZER_OPN_RESIDUAL_DROPOUT_BACKWARD, OPTIMIZER_OPN_EMBLAYER_INIT, OPTIMIZER_OPN_EMBLAYER_LOAD,
-    OPTIMIZER_OPN_SEQLN_INITIALIZE, OPTIMIZER_OPN_SEQMOE_TO_DEVICE, OPTIMIZER_OPN_SEQ_CONSTRUCT,
+    OPTIMIZER_OPN_SEQLN_INITIALIZE, OPTIMIZER_OPN_SEQLN_LAYER_BACKWARD, OPTIMIZER_OPN_SEQMOE_INITIALIZE, OPTIMIZER_OPN_SEQMOE_TO_DEVICE, OPTIMIZER_OPN_SEQ_CONSTRUCT,
     OPTIMIZER_OPN_SEQ_FINALIZE, OPTIMIZER_OPN_DEVICE_CONSTRUCT, OPTIMIZER_OPN_DEVICE_UPLOAD,
     OPTIMIZER_OPN_DEVICE_HOST, OPTIMIZER_OPN_SCHEDULE_CONSTRUCT, OPTIMIZER_OPN_SCHEDULE_SETATTR,
     OPTIMIZER_OPN_SCHEDULE_DELATTR, OPTIMIZER_OPN_SCHEDULE_BITS, OPTIMIZER_OPN_RESTORE_OWNER,
@@ -338,10 +339,11 @@ def optimizer_set_params(owner: PythonObject, updates: PythonObject, context: Py
 comptime OPTIMIZER_ROUTE_NONE = 0
 comptime OPTIMIZER_ROUTE_SEQDEV = 1
 comptime OPTIMIZER_ROUTE_EMBLAYER = 2
-comptime OPTIMIZER_ROUTE_SEQ_LAYERS = 3
-comptime OPTIMIZER_ROUTE_SEQ = 4
-comptime OPTIMIZER_ROUTE_DEVICE = 5
-comptime OPTIMIZER_ROUTE_SCHEDULE = 6
+comptime OPTIMIZER_ROUTE_SEQLN = 3
+comptime OPTIMIZER_ROUTE_SEQMOE = 4
+comptime OPTIMIZER_ROUTE_SEQ = 5
+comptime OPTIMIZER_ROUTE_DEVICE = 6
+comptime OPTIMIZER_ROUTE_SCHEDULE = 7
 
 
 def optimizer_route(operation: Int, name: PythonObject) raises -> Int:
@@ -354,8 +356,10 @@ def optimizer_route(operation: Int, name: PythonObject) raises -> Int:
             return OPTIMIZER_ROUTE_SEQDEV
         if operation >= OPTIMIZER_OPN_EMBLAYER_INIT and operation <= OPTIMIZER_OPN_EMBLAYER_LOAD:
             return OPTIMIZER_ROUTE_EMBLAYER
-        if operation >= OPTIMIZER_OPN_SEQLN_INITIALIZE and operation <= OPTIMIZER_OPN_SEQMOE_TO_DEVICE:
-            return OPTIMIZER_ROUTE_SEQ_LAYERS
+        if operation >= OPTIMIZER_OPN_SEQLN_INITIALIZE and operation <= OPTIMIZER_OPN_SEQLN_LAYER_BACKWARD:
+            return OPTIMIZER_ROUTE_SEQLN
+        if operation >= OPTIMIZER_OPN_SEQMOE_INITIALIZE and operation <= OPTIMIZER_OPN_SEQMOE_TO_DEVICE:
+            return OPTIMIZER_ROUTE_SEQMOE
         if operation >= OPTIMIZER_OPN_SEQ_CONSTRUCT and operation <= OPTIMIZER_OPN_SEQ_FINALIZE:
             return OPTIMIZER_ROUTE_SEQ
         if operation >= OPTIMIZER_OPN_DEVICE_CONSTRUCT and operation <= OPTIMIZER_OPN_DEVICE_HOST:
@@ -368,8 +372,10 @@ def optimizer_route(operation: Int, name: PythonObject) raises -> Int:
         return OPTIMIZER_ROUTE_SEQDEV
     if text.startswith("emblayer_"):
         return OPTIMIZER_ROUTE_EMBLAYER
-    if text.startswith("seqln_") or text.startswith("seqmoe_"):
-        return OPTIMIZER_ROUTE_SEQ_LAYERS
+    if text.startswith("seqln_"):
+        return OPTIMIZER_ROUTE_SEQLN
+    if text.startswith("seqmoe_"):
+        return OPTIMIZER_ROUTE_SEQMOE
     if text.startswith("seq_"):
         return OPTIMIZER_ROUTE_SEQ
     if text.startswith("device_"):
@@ -382,11 +388,14 @@ def optimizer_route(operation: Int, name: PythonObject) raises -> Int:
 def optimizer_native(operation: Int, name: PythonObject, owner: PythonObject, values: PythonObject, mode: PythonObject, context: PythonObject) raises -> PythonObject:
     # bw2-optim-training (2026-11-20): `operation` is the code of
     # bindings/optimizer_keys_unpack.mojo (-1 for a name the table lacks) and
-    # `name` the caller's own str: the owners outside this family take it as
-    # their String (built on their branch only, as before), the training
-    # owners read their compiled entry with it and build their refusal text
-    # from it. The old String copy and its chain of prefix tests and compares
-    # are gone; `optimizer_route` is a few integer compares.
+    # `name` the caller's own str: the training owners read their compiled
+    # entry with it and build their refusal text from it. The old String copy
+    # and its chain of prefix tests and compares are gone; `optimizer_route` is
+    # a few integer compares. bw2-router-seq (2026-11-20): the sequence device,
+    # Embedding, LayerNorm, MoE and sequence optimizer owners take the code too
+    # (no String per call); a name the table lacks (-1) runs each owner's chain
+    # to its unchanged unknown-operation error (Embedding's text names the
+    # operation, so its refusal is raised here from the name).
     var route = optimizer_route(operation, name)
     if operation == OPTIMIZER_OPN_TRAINING_NUMERIC_MODE or operation == OPTIMIZER_OPN_TRAINING_VENDOR:
         # Metadata needs only its connected native entries, not optimizer
@@ -406,17 +415,21 @@ def optimizer_native(operation: Int, name: PythonObject, owner: PythonObject, va
     if py_type(values) is not py_item(context, nk[].k_container_types)[1]:
         raise Error("TypeError: optimizer requires native argument tuples")
     if route == OPTIMIZER_ROUTE_SEQDEV:
-        return sequence_device_operation(String(py=name), owner, values, mode, context)
+        return sequence_device_operation(operation, owner, values, mode, context)
     if operation == OPTIMIZER_OPN_RESIDUAL_DROPOUT or operation == OPTIMIZER_OPN_RESIDUAL_DROPOUT_BACKWARD:
         # the explicit residual layer runs in identical mode only
         return training_residual_dropout(operation, values, optimizer_entries(PythonObject("identical"), context), context)
     if route == OPTIMIZER_ROUTE_EMBLAYER:
         # mojolearn.Embedding's forward and load (bindings/embedding_layer_native.mojo)
-        return emblayer_operation(String(py=name), owner, values, context)
-    if route == OPTIMIZER_ROUTE_SEQ_LAYERS:
-        return sequence_layers_operation(String(py=name), owner, values, mode, context)
+        if operation < 0:
+            emblayer_unknown_operation(String(py=name))
+        return emblayer_operation(operation, owner, values, context)
+    if route == OPTIMIZER_ROUTE_SEQLN:
+        return sequence_layer_norm(operation, owner, values, mode, context)
+    if route == OPTIMIZER_ROUTE_SEQMOE:
+        return sequence_moe_operation(operation, owner, values, mode, context)
     if route == OPTIMIZER_ROUTE_SEQ:
-        return sequence_optimizer_operation(String(py=name), owner, values, mode, context)
+        return sequence_optimizer_operation(operation, owner, values, mode, context)
     if route == OPTIMIZER_ROUTE_DEVICE:
         var selected = optimizer_entries(mode, context) if operation == OPTIMIZER_OPN_DEVICE_UPLOAD and py_type(values[0]) is not py_item(context, nk[].k_device_class) else PythonObject(None)
         return device_operation(operation, owner, values, context, selected)

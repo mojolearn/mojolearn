@@ -28,6 +28,20 @@ from bindings.sequence_device_native_unpack import (
     seq_device_set,
 )
 from bindings.sequence_keys_unpack import sequence_keys
+from bindings.optimizer_keys_unpack import (
+    OPTIMIZER_OPN_SEQDEV_ARRAY,
+    OPTIMIZER_OPN_SEQDEV_CONSTRUCT,
+    OPTIMIZER_OPN_SEQDEV_COPY,
+    OPTIMIZER_OPN_SEQDEV_HOST,
+    OPTIMIZER_OPN_SEQDEV_NDIM,
+    OPTIMIZER_OPN_SEQDEV_NEW,
+    OPTIMIZER_OPN_SEQDEV_RESHAPE,
+    OPTIMIZER_OPN_SEQDEV_SIZE,
+    OPTIMIZER_OPN_SEQDEV_SIZE_OF,
+    OPTIMIZER_OPN_SEQDEV_TO,
+    OPTIMIZER_OPN_SEQDEV_UPLOAD,
+    OPTIMIZER_OPN_SEQDEV_WRAP,
+)
 from bindings.py_balanced import py_item
 
 
@@ -116,15 +130,15 @@ def sequence_tensor_finalize_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi(
         return optimizer_python_error(error)
 
 
-def sequence_device_operation(operation: String, owner: PythonObject, values: PythonObject,
+def sequence_device_operation(operation: Int, owner: PythonObject, values: PythonObject,
                               mode: PythonObject, context: PythonObject) raises -> PythonObject:
     var buffer_pins = OptimizerInputOwners()
     try:
         var b = native_loaded_module("builtins")
-        if operation == "seqdev_size_of":
+        if operation == OPTIMIZER_OPN_SEQDEV_SIZE_OF:
             return PythonObject(shape_count(device_shape(values[0], context)))
         var nk = sequence_keys()
-        if operation == "seqdev_construct":
+        if operation == OPTIMIZER_OPN_SEQDEV_CONSTRUCT:
             if py_type(owner) is not py_item(context, nk[].k_sequence_device_class):
                 raise Error("TypeError: sequence device constructor requires its exact owner")
             var entries = seq_device_entries(values[0], context)
@@ -137,7 +151,7 @@ def sequence_device_operation(operation: String, owner: PythonObject, values: Py
                     raise Error("TypeError: sequence tensor view must retain its native binding owner")
             seq_device_set(owner, py_item(entries, nk[].k_module), shape, py_call(b.int, values[2]), base, context)
             return PythonObject(None)
-        if operation == "seqdev_new":
+        if operation == OPTIMIZER_OPN_SEQDEV_NEW:
             if owner is not py_item(context, nk[].k_sequence_device_class):
                 raise Error("TypeError: sequence tensor allocation requires its exact native class")
             var entries = seq_device_entries(values[0], context)
@@ -145,15 +159,15 @@ def sequence_device_operation(operation: String, owner: PythonObject, values: Py
             opt_scalar(values[2], context)
             var handle = py_call_typed(py_item(entries, nk[].k_seq_tensor_alloc), max(1, shape_count(shape)), Int(Bool(py=values[2])))
             return seq_device_make(py_item(entries, nk[].k_module), shape, handle, PythonObject(None), context)
-        if operation == "seqdev_to" or operation == "seqdev_wrap":
-            var source = values[0] if operation == "seqdev_to" else values[1]
-            if operation == "seqdev_to" and seq_device(source, context):
+        if operation == OPTIMIZER_OPN_SEQDEV_TO or operation == OPTIMIZER_OPN_SEQDEV_WRAP:
+            var source = values[0] if operation == OPTIMIZER_OPN_SEQDEV_TO else values[1]
+            if operation == OPTIMIZER_OPN_SEQDEV_TO and seq_device(source, context):
                 return source
-            var input = seq_device_input(source, operation == "seqdev_to", context, buffer_pins)
-            if operation == "seqdev_to" and Bool(py=py_item(context, nk[].k_sequence_device_io_off)):
+            var input = seq_device_input(source, operation == OPTIMIZER_OPN_SEQDEV_TO, context, buffer_pins)
+            if operation == OPTIMIZER_OPN_SEQDEV_TO and Bool(py=py_item(context, nk[].k_sequence_device_io_off)):
                 return input
-            var selected = seq_binding(mode, context, PythonObject(None)) if operation == "seqdev_to" else seq_binding(mode, context, values[0])
-            var entries = seq_device_entries(py_item(selected, nk[].k_module), context, operation != "seqdev_to")
+            var selected = seq_binding(mode, context, PythonObject(None)) if operation == OPTIMIZER_OPN_SEQDEV_TO else seq_binding(mode, context, values[0])
+            var entries = seq_device_entries(py_item(selected, nk[].k_module), context, operation != OPTIMIZER_OPN_SEQDEV_TO)
             if entries is None:
                 return input
             var shape = device_shape(input.shape, context)
@@ -175,12 +189,12 @@ def sequence_device_operation(operation: String, owner: PythonObject, values: Py
         var shape = device_shape(seq_device_get(owner, "shape", context), context)
         var n = shape_count(shape)
         var handle = seq_device_get(owner, "h", context)
-        if operation == "seqdev_size":
+        if operation == OPTIMIZER_OPN_SEQDEV_SIZE:
             return PythonObject(n)
-        if operation == "seqdev_ndim":
+        if operation == OPTIMIZER_OPN_SEQDEV_NDIM:
             return PythonObject(len(shape))
-        if operation == "seqdev_host" or operation == "seqdev_array":
-            if operation == "seqdev_array":
+        if operation == OPTIMIZER_OPN_SEQDEV_HOST or operation == OPTIMIZER_OPN_SEQDEV_ARRAY:
+            if operation == OPTIMIZER_OPN_SEQDEV_ARRAY:
                 # Validate before classical_connect_numpy's first-call setup can
                 # touch the live numpy.dtype field, including late NumPy import.
                 _ = native_numpy_dtype(context)
@@ -189,8 +203,8 @@ def sequence_device_operation(operation: String, owner: PythonObject, values: Py
             var result = classical_typed(native_shape_pack(shape), "<f4", input)
             if n > 0:
                 _ = py_call_typed(py_item(entries, nk[].k_seq_tensor_download), handle, classical_address(result), n)
-            return result if operation == "seqdev_host" else sequence_array_cast(result, values[0], context)
-        if operation == "seqdev_upload":
+            return result if operation == OPTIMIZER_OPN_SEQDEV_HOST else sequence_array_cast(result, values[0], context)
+        if operation == OPTIMIZER_OPN_SEQDEV_UPLOAD:
             var input = seq_device_input(values[0], False, context, buffer_pins)
             if not same_shape(device_shape(input.shape, context), shape):
                 raise Error("ValueError: uploaded array shape does not match the device tensor")
@@ -198,7 +212,7 @@ def sequence_device_operation(operation: String, owner: PythonObject, values: Py
                 _ = py_call_typed(py_item(entries, nk[].k_seq_tensor_upload), handle, classical_address(input), n)
             _ = input^
             return owner
-        if operation == "seqdev_copy":
+        if operation == OPTIMIZER_OPN_SEQDEV_COPY:
             if py_get(entries, nk[].k_seq_tensor_copy) is None:
                 raise Error("RuntimeError: native binding has no device-to-device tensor copy")
             var result_handle = py_call_typed(py_item(entries, nk[].k_seq_tensor_alloc), max(n, 1), 0)
@@ -209,7 +223,7 @@ def sequence_device_operation(operation: String, owner: PythonObject, values: Py
                 _ = py_call_typed(py_item(entries, nk[].k_seq_tensor_free), result_handle)
                 raise error^
             return seq_device_make(binding, shape, result_handle, PythonObject(None), context)
-        if operation == "seqdev_reshape":
+        if operation == OPTIMIZER_OPN_SEQDEV_RESHAPE:
             var requested = values[0]
             opt_scalar(requested, context)
             if len(requested) == 1 and (py_type(requested[0]) is b.list or py_type(requested[0]) is b.tuple):
