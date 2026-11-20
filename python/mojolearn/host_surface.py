@@ -3918,11 +3918,12 @@ PUBLIC_INAPPLICABLE_PREFIXES = ("par-",)
 # this sentence; without the sentence `inapplicable_prefix_reason` raises for
 # every such lane and tools/lane_accounting.py refuses the table.
 PUBLIC_INAPPLICABLE_PREFIX_REASONS = {
-    # The shipped table keeps the retired par-* cells as history (TOMBSTONE
-    # MOJOLEARN_PAR_VERIFY above); this sentence is what a user reads for them.
+    # The shipped table carries no par-* cell since lane fx-multigpu-optional
+    # (2026-11-20) moved the retired ones to the repo (TOMBSTONE
+    # MOJOLEARN_PAR_VERIFY above); this sentence is what a user reads for a
+    # par-* name in an older record or a --lanes argument.
     "par-": ("multi-GPU verification is retired: these lanes compared a two-device run with one "
-             "device, and `verify` no longer runs them; their cells in the reference table are "
-             "kept as history only"),
+             "device, and `verify` no longer runs them; the reference table carries no cell for them"),
 }
 
 #: THE STATUS EVERY HARNESS LANE GETS IN `lane_exposure()`, and the whole
