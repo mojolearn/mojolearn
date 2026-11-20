@@ -11,7 +11,7 @@ from bindings.linalg_ops_decomp_door import lin_decomp_operation
 def linalg_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
     try:
         var args = PythonObject(from_borrowed=packed)
-        return lin_decomp_operation(String(args[1]), args[2], args[3]).steal_data()
+        return lin_decomp_operation(Int(py=args[1]), args[2], args[3]).steal_data()
     except problem:
         return raise_python_exception(problem)
 
