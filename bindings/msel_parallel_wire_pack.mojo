@@ -15,6 +15,7 @@ from bindings.msel_estimator_native_door import msel_native_clone, msel_estimato
 from bindings.msel_scorer_native_door import msel_scorer_fields, msel_metric_plan
 from bindings.family_common_pack import family_call
 from core.msel_parallel_wire_run import _depth
+from core.mode_answer import fast_is_answered_by_identical, MODE_FAMILY_MSEL
 
 from bindings.msel_parallel_wire_unpack import (
     _record_size,
@@ -279,7 +280,13 @@ def msel_parallel_model_pack(model: PythonObject, context: PythonObject, depth: 
         var name = names[i]
         var value = fields[name]
         if String(name) == "numeric_mode" and value is not None:
-            if py_type(value) is not py_type(PythonObject("")) or String(value) != "identical":
+            if py_type(value) is not py_type(PythonObject("")):
+                raise Error("ValueError: parallel cross-validation requires IDENTICAL estimator numeric modes")
+            var word = String(value)
+            # `fast` where the identical set answers it (core/mode_answer.mojo,
+            # family MSEL) is the identical set: it crosses as the user's word
+            # and the worker's doors answer it the same way.
+            if word != "identical" and not (word == "fast" and fast_is_answered_by_identical(MODE_FAMILY_MSEL)):
                 raise Error("ValueError: parallel cross-validation requires IDENTICAL estimator numeric modes")
         py_setitem(parameters, name, msel_wire_pack(value, context, depth + 1))
     return Python.tuple(MSEL_WIRE_VERSION, context["family_msel_parallel"]["class_ids"][py_type(clone)], names, parameters)

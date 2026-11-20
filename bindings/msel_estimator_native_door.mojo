@@ -17,6 +17,8 @@ from bindings.family_common_pack import family_call
 from bindings.sequential_admission_door import sequential_admit_value
 from bindings.py_model_records import bump_model_generation
 from bindings.mode_metadata_native_door import instance_protocol_override
+from bindings.mode_answer_door import answer_mode_python
+from core.mode_answer import MODE_FAMILY_MSEL
 
 
 def msel_estimator_plan(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -192,6 +194,10 @@ def _msel_admitted_dispatch(model: PythonObject, method: String, args: PythonObj
                     stored = context["family_msel_backend_fields"]["_DEFAULT_MODE"]
                 if py_type(stored) is not b.str:
                     raise Error("TypeError: native estimator numeric_mode must be an exact string or None")
+                # Read once per call (the flag above): the word `fast`, where
+                # the identical set answers it (core/mode_answer.mojo, family
+                # MSEL), picks the identical row of the binding table.
+                answer_mode_python(stored, MODE_FAMILY_MSEL)
                 read_mode = stored
             var mode = read_mode.value()
             var modes = context["family_msel_bindings"][item[1]]

@@ -3,7 +3,7 @@
 """The per-estimator `fast` trial on a BUILT install (.github/workflows/fast-trial.yml).
 
     fast_trial.py run --python VPY --tests-root SOURCE/python/mojolearn/tests --out OUT
-                      --families 0x7ffffff [--exact MASK] [--shard I --shards N] [--workers W]
+                      --families 0xfffffff [--exact MASK] [--shard I --shards N] [--workers W]
     fast_trial.py summary --out OUT [--out OUT2 ...] --ledger fast_ledger.json --md SUMMARY.md
 
 WHAT IT RUNS. `test_fast_selector.py -k BuiltInstallFamilies` against the installed wheel (through
@@ -40,7 +40,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 TEST_FILE = "test_fast_selector.py"
 TEST_SELECT = "BuiltInstallFamilies"
-MASK_ALL = (1 << 27) - 1  # core/mode_answer.mojo MODE_FAMILIES_ALL
+MASK_ALL = (1 << 28) - 1  # core/mode_answer.mojo MODE_FAMILIES_ALL
 UNIT_TIMEOUT = 1900  # the test's own child timeout is 1800 s
 STATUSES = ("answered", "mixed", "refused", "unavailable", "no_parameter", "crashed")
 

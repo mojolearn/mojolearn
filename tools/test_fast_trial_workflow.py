@@ -33,7 +33,7 @@ def test_workflow_shape():
     assert set(on) == {"workflow_dispatch"}  # manual only (light-checks.yml refuses push/schedule)
     inputs = on["workflow_dispatch"]["inputs"]
     assert {"ref", "wheel_url", "wheel_name", "wheel_sha256"} <= set(inputs)  # verify-smoke.yml's wheel inputs
-    assert inputs["families"]["default"] == "0x7ffffff"
+    assert inputs["families"]["default"] == "0xfffffff"
     assert inputs["exact_families"]["default"] == "" and inputs["shards"]["default"] == "1"
     assert set(wf["jobs"]) == {"plan", "trial", "summary"}
     trial = wf["jobs"]["trial"]
@@ -70,16 +70,16 @@ def test_units_cover_every_estimator_once_across_shards():
     names = [row[0] for row in module.FAMILIES + module.WALK]
     assert len(names) == len(set(names))
     assert set(names) == set(module.ESTIMATOR_FAMILY)  # every estimator has a family label
-    trial_list = ft.trials("0x7ffffff", "0x88")
+    trial_list = ft.trials("0xfffffff", "0x88")
     every = [u for k in range(3) for u in ft.units(names, trial_list, k, 3)]
     assert sorted(every) == sorted((t, m, n) for t, m in trial_list for n in names)
-    assert ft.trials("0x7ffffff", "") == [("families", "0x7ffffff")]
+    assert ft.trials("0xfffffff", "") == [("families", "0xfffffff")]
 
 
 def test_mask_range():
-    assert ft.mask("0x7ffffff") == "0x7ffffff" and ft.mask("136") == "0x88"
+    assert ft.mask("0xfffffff") == "0xfffffff" and ft.mask("136") == "0x88"
     try:
-        ft.mask("0x8000000")
+        ft.mask("0x10000000")
     except Exception as error:  # argparse.ArgumentTypeError
         assert "outside" in str(error)
     else:
@@ -102,8 +102,8 @@ def test_selected_families_switch(monkeypatch):
 def test_summary_rolls_rows_up_by_family(tmp_path):
     out = tmp_path / "shard-0"
     (out / "units").mkdir(parents=True)
-    rows = [("families", "0x7ffffff", "PCA", "0"), ("families", "0x7ffffff", "Ridge", "1"),
-            ("families", "0x7ffffff", "Lasso", "-11")]
+    rows = [("families", "0xfffffff", "PCA", "0"), ("families", "0xfffffff", "Ridge", "1"),
+            ("families", "0xfffffff", "Lasso", "-11")]
     (out / "units.tsv").write_text("trial\tmask\testimator\trc\ttimed_out\tseconds\tmaxrss_kb\tledger\n"
                                    + "".join(f"{t}\t{m}\t{e}\t{rc}\tFalse\t3.0\t1000\tTrue\n" for t, m, e, rc in rows))
     (out / "units" / "families-PCA.json").write_text(json.dumps(dict(answer="identical", vendor="cpu", rows={

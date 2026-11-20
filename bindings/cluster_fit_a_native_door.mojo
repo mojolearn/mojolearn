@@ -64,6 +64,8 @@ from bindings.kmeans_variants_boundary_door import (
     variants_connection, variants_span, VariantsAuxiliaryPins, VariantsPackedResult,
 )
 from providers.python.estimator_binding_pyapi_door import _estimator_mode_word
+from bindings.mode_answer_door import fast_answers_compiled_code
+from core.mode_answer import MODE_FAMILY_CLUSTER
 from bindings.py_optional import py_or_none, py_present
 
 # x_cluster/entries.mojo: the entry numbers of `x_cluster_call`
@@ -716,8 +718,13 @@ def _hdbscan_mode(model: PythonObject, binding: PythonObject, context: PythonObj
         # the process, as GaussianMixture's _check_mode reads it
         # (bindings/mixture_native_door.mojo), not called on every fit and query.
         var got = _estimator_mode_word(binding, getter)
-        var wanted = py_get(context["family_cfa_hdbscan_mode_codes"], want, PythonObject(None))
-        if wanted is None or Int(py=wanted) != got:
+        var codes = context["family_cfa_hdbscan_mode_codes"]
+        var wanted = py_get(codes, want, PythonObject(None))
+        # The word `fast` answered by the identical set (core/mode_answer.mojo,
+        # family CLUSTER) matches the identical binary: tested on the
+        # mismatch branch only, so a matching call pays nothing.
+        if (wanted is None or Int(py=wanted) != got) and not fast_answers_compiled_code(
+                want, codes, got, MODE_FAMILY_CLUSTER):
             raise Error("RuntimeError: mojolearn HDBSCAN: numeric_mode=" + family_repr(want) + " was requested but "
                         + String(py_fields(binding)["__name__"]) + " reports compile-time "
                         + "mode code " + String(got) + "; rebuild it with bash bindings/build_hdbscan.sh")

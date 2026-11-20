@@ -126,6 +126,18 @@ class _BinaryLaplace:
         self.n_iter_ = n_iter
         self.nb_ = nb
 
+    # Pickle and copy take object.__reduce_ex__'s C path, which asks
+    # copyreg._slotnames for the class's slot names and, when the class does
+    # not hold `__slotnames__`, STORES them on the class. That store changed
+    # this namespace after import, so the native snapshot of it
+    # (`family_gp_binary_namespace`, bindings/gp_state_admission_native_unpack.mojo
+    # `_gp_admit_binary_class`) no longer matched and every GPC fit after a
+    # pickled GPC refused with "GP binary state class changed after
+    # connection" (the fast trial of b59aff2e57 pickles the identical arm
+    # first). Held here, as ClassLabels does (_labels.py), so nothing writes
+    # the class after import.
+    __slotnames__ = []
+
 
 # Maintainer notes: reference is scikit-learn 1.9.0 `_gpc.py` (binary
 # Laplace `_gpc.py:36-513`, R&W Algorithms 3.1/3.2, logistic likelihood;

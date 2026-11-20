@@ -118,6 +118,13 @@ def test_invalid_device_lists_refused(data, devices):
 
 def test_fast_mode_refused_before_workers(data):
     model = GradientBoostingRegressor(n_estimators=3, numeric_mode='fast')
+    if _backend.fast_answer() == 'identical':
+        # Off Apple with no fast set the identical set answers `fast` (core/mode_answer.mojo, families MSEL and
+        # GBDT): parallel CV admits the word and scores exactly as the identical model does.
+        twin = GradientBoostingRegressor(n_estimators=3, numeric_mode='identical')
+        expected = clean(parallel.cross_val_score, twin, *data, devices=(0,))
+        assert clean(parallel.cross_val_score, model, *data, devices=(0,)).tobytes() == expected.tobytes()
+        return
     error = clean(parallel.cross_val_score, model, *data, devices=(0,), error=ValueError)
     assert 'IDENTICAL' in str(error)
     assert trace()['workers'] == []

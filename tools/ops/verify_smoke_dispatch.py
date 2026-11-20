@@ -3,7 +3,7 @@
 """Start .github/workflows/verify-smoke.yml on one measurement build's packed core wheel.
 
     python3 tools/ops/verify_smoke_dispatch.py --wheel-dir <work dir>/<commit12>/linux/final [--ref BRANCH] [--dry-run]
-    python3 tools/ops/verify_smoke_dispatch.py --workflow fast-trial --wheel-dir ... [--families 0x7ffffff]
+    python3 tools/ops/verify_smoke_dispatch.py --workflow fast-trial --wheel-dir ... [--families 0xfffffff]
         [--exact-families MASK] [--shards N]     (the per-estimator fast trial, .github/workflows/fast-trial.yml)
 
 The wheels are packed on this Mac (tools/release.py candidate, linux-pack); release-linux-build.yml uploads no wheel.
@@ -137,7 +137,7 @@ def fast_trial_argv(ref, commit, wheel_name, url, digest, token, families, exact
             "-f", f"tests_from={tests_from}", "-f", f"token={token}"]
 
 
-def dispatch_fast_trial(wheel_dir, ref="", commit="", families="0x7ffffff", exact="", shards=1, dry=False, days=2,
+def dispatch_fast_trial(wheel_dir, ref="", commit="", families="0xfffffff", exact="", shards=1, dry=False, days=2,
                         tests_from="source"):
     """Dispatch .github/workflows/fast-trial.yml on the core wheel (same upload and key as the smoke)."""
     wheel = core_wheel(wheel_dir)
@@ -212,7 +212,7 @@ def main(argv=None):
     g.add_argument("--no-census", dest="census", action="store_false", help="skip the frames census")
     ap.add_argument("--workflow", choices=("verify-smoke", "fast-trial"), default="verify-smoke",
                     help="fast-trial: the per-estimator fast trial (.github/workflows/fast-trial.yml) on the same wheel")
-    ap.add_argument("--families", default="0x7ffffff", help="fast-trial: trial mask of door families")
+    ap.add_argument("--families", default="0xfffffff", help="fast-trial: trial mask of door families")
     ap.add_argument("--exact-families", default="", help="fast-trial: a second trial with exactly this set")
     ap.add_argument("--shards", type=int, default=1, help="fast-trial: matrix runners")
     ap.add_argument("--python", default=None, help="verify-smoke only: the Python version to install the wheel under (e.g. 3.10)")

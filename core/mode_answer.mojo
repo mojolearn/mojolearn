@@ -90,7 +90,8 @@ comptime MODE_FAMILY_PROGRAM = 1 << 23      # arena_prog_native_door (the shared
 comptime MODE_FAMILY_MIXTURE = 1 << 24      # mixture_native_door, svm_mixture_native_door (GaussianMixture's compiled-mode check)
 comptime MODE_FAMILY_GP = 1 << 25           # gp_common_native_pack (the GP estimators' compiled-mode check)
 comptime MODE_FAMILY_PREP = 1 << 26         # prep_classify_common_door (cls_requested_mode: the x_prep classifiers that take numeric_mode)
-comptime MODE_FAMILIES_ALL = (1 << 27) - 1
+comptime MODE_FAMILY_CLUSTER = 1 << 27      # cluster_fit_a_native_door `_hdbscan_mode` (HDBSCAN's compiled-mode check)
+comptime MODE_FAMILIES_ALL = (1 << 28) - 1
 
 # THE ONE DECISION of which families answer `fast` by the identical set where
 # the selector decided so. Every family not named here refuses `fast` in all
@@ -110,14 +111,31 @@ comptime MODE_FAMILIES_ALL = (1 << 27) - 1
 #   (the archive save compared the raw word with the fitted one; the mode
 #   metadata door compares them too), MIXTURE (GaussianMixture's
 #   compiled-mode check) and PREP (GaussianNB's new parameter).
-# Off: SPECTRAL, TSA, NEURAL, XCNN, XSEQ, MSEL, LINALG, GP (no trial row, or
-# doors that still read the raw word; lists in the lane's RESULT file).
+# - lane fx-fast-rest, 2026-11-20 (the every-family and exact 0x5983fff
+#   trials on the CPU wheel of b59aff2e57, under
+#   ~/mojolearn-evidence/measure-candidate/build-b59aff2e57/fast-trial/):
+#   every estimator answered except four, each closed in its door:
+#   GP (GaussianProcessRegressor answered under the every-family mask;
+#   GaussianProcessClassifier refused only because the trial's earlier
+#   pickle wrote `__slotnames__` into _BinaryLaplace's snapshotted namespace,
+#   python/mojolearn/_gpc_impl.py), SPECTRAL (TSNE answered; UMAP's
+#   `_umap_check_mode` compared the raw word with the binary's key and now
+#   answers it, bindings/mani_umap_native_door.mojo), CLUSTER (HDBSCAN's
+#   compiled-mode check, the MIXTURE form) and MSEL (the estimator-call
+#   binding table and the parallel-CV identical-only check now answer the
+#   word, as the scorer door did). These four are on from that trial plus the
+#   edits; the next built wheel's exact trial with this mask (0xfb87fff)
+#   confirms them, and a family that shows one `mixed` row there is taken
+#   out here (one line).
+# Off: TSA, NEURAL, XCNN, XSEQ, LINALG (doors that still read the raw word;
+# lists in the lanes' RESULT files).
 # A family is added only from a trial run with no `mixed` row.
 comptime MODE_FAMILIES_ANSWERED = (
     MODE_FAMILY_FOREST | MODE_FAMILY_IFOREST | MODE_FAMILY_GBDT | MODE_FAMILY_SCALER | MODE_FAMILY_PCA
     | MODE_FAMILY_IPCA | MODE_FAMILY_NMF | MODE_FAMILY_TSVD | MODE_FAMILY_KPCA | MODE_FAMILY_PLS
     | MODE_FAMILY_DECOMP_KIT | MODE_FAMILY_LINEAR | MODE_FAMILY_KERNEL | MODE_FAMILY_NEIGHBORS
     | MODE_FAMILY_RESOLVER | MODE_FAMILY_METADATA | MODE_FAMILY_PROGRAM | MODE_FAMILY_MIXTURE | MODE_FAMILY_PREP
+    | MODE_FAMILY_GP | MODE_FAMILY_SPECTRAL | MODE_FAMILY_MSEL | MODE_FAMILY_CLUSTER
 )
 
 
