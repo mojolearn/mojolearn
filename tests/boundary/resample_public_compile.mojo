@@ -5,7 +5,7 @@ from std.python.bindings import PythonModuleBuilder
 from bindings.linalg_ops_resample_door import rs_operation
 
 def resample_public_compile(operation: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    return rs_operation(String(operation), args, context)
+    return rs_operation(Int(py=operation), args, context)
 
 @export
 def PyInit__mojolearn_resample_public_compile() abi("C") -> PythonObject:

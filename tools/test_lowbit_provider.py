@@ -1,7 +1,10 @@
 """Public lowbit frontdoor and operation-local admission source guards."""
 import ast
+import sys
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'tools'))
+from boundary_keys_plain import plain  # noqa: E402
 
 
 def test_all_public_lowbit_bodies_enter_native_once():
@@ -19,7 +22,9 @@ def test_all_public_lowbit_bodies_enter_native_once():
 
 
 def test_lowbit_uses_existing_numerical_provider_not_public_python_wrappers():
-    source=(ROOT/'providers/python/lowbit_weight_pyapi_door.mojo').read_text()
+    # bw2-linalg: the door reads held keys and leaf codes; plain() gives the by-name form.
+    rel='providers/python/lowbit_weight_pyapi_door.mojo'
+    source=plain(rel, (ROOT/rel).read_text())
     assert 'lin_connected_binding(context)' in source and 'lin_call(' in source
     assert 'neural_descriptor_connect' not in source and 'struct ' not in source
     assert 'linalg_ops_operation(' not in source
@@ -29,9 +34,11 @@ def test_lowbit_uses_existing_numerical_provider_not_public_python_wrappers():
     assert 'if binding is None:' in source
     assert 'low_admit(native_instance_item(fields' in source
     assert 'native_storage_allocate(context[' in source
-    # 83f9f8918f: family_low_* resolve to FR_LOW in the one operation table; the family door routes FR_LOW here.
+    # 83f9f8918f: family_low_* resolve to FR_LOW in the one operation table; the family door routes FR_LOW here
+    # (bw2-linalg: by its leaf code; a name the table lacks gets the owner's unknown-operation text).
     assert 'elif operation.startswith("family_low_"):\n        owner = FR_LOW' in (ROOT/'bindings/native_operation_codes.mojo').read_text()
-    assert 'if owner == FR_LOW:\n        return lowbit_weight_operation(model, operation, args, context)' in (ROOT/'bindings/family_native_door.mojo').read_text()
+    assert ('if owner == FR_LOW:\n        if leaf == OP_LEAF_NONE:\n            lowbit_weight_unknown_operation(operation)\n'
+            '        return lowbit_weight_operation(model, leaf, args, context)') in (ROOT/'bindings/family_native_door.mojo').read_text()
 
 
 def test_once_captured_foreign_metadata_retains_zero_copy_owner():

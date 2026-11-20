@@ -12,7 +12,7 @@ def cholesky_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPt
     try:
         var args = PythonObject(from_borrowed=packed)
         _ = classical_family_admit(args[0])
-        return linalg_operation(args[0], String(args[1]), args[2], args[3]).steal_data()
+        return linalg_operation(args[0], Int(py=args[1]), args[2], args[3]).steal_data()
     except problem:
         return raise_python_exception(problem)
 

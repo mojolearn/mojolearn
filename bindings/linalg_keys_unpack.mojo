@@ -26,6 +26,8 @@ struct LinalgKeys(Defaultable, Movable):
     var k_L_: PythonObject
     var k_PROFILE: PythonObject
     var k_PROFILE_VERSION: PythonObject
+    var k_PROFILE_INT15: PythonObject
+    var k__BUILD_SCRIPT: PythonObject
     var k__CODE_MODE: PythonObject
     var k__CPU_ONLY: PythonObject
     var k__DEFAULT_MODE: PythonObject
@@ -100,6 +102,8 @@ struct LinalgKeys(Defaultable, Movable):
         self.k_L_ = PythonObject(None)
         self.k_PROFILE = PythonObject(None)
         self.k_PROFILE_VERSION = PythonObject(None)
+        self.k_PROFILE_INT15 = PythonObject(None)
+        self.k__BUILD_SCRIPT = PythonObject(None)
         self.k__CODE_MODE = PythonObject(None)
         self.k__CPU_ONLY = PythonObject(None)
         self.k__DEFAULT_MODE = PythonObject(None)
@@ -178,6 +182,8 @@ def _linalg_keys_fill(nk: UnsafePointer[LinalgKeys, MutUntrackedOrigin]) raises:
     nk[].k_L_ = py_key("L_")
     nk[].k_PROFILE = py_key("PROFILE")
     nk[].k_PROFILE_VERSION = py_key("PROFILE_VERSION")
+    nk[].k_PROFILE_INT15 = py_key("PROFILE_INT15")
+    nk[].k__BUILD_SCRIPT = py_key("_BUILD_SCRIPT")
     nk[].k__CODE_MODE = py_key("_CODE_MODE")
     nk[].k__CPU_ONLY = py_key("_CPU_ONLY")
     nk[].k__DEFAULT_MODE = py_key("_DEFAULT_MODE")

@@ -39,6 +39,8 @@ from bindings.linalg_ops_kit_run import LinKit, KIT_F32P, lin_svd_tall_run, lin_
 from bindings.linalg_ops_decomp_run import _lin_tsqr_on
 from bindings.linalg_keys_unpack import linalg_keys
 from bindings.py_balanced import py_item
+from bindings.operation_names_linops import (
+    LINOPS_OPN_FAMILY_LIN_QR, LINOPS_OPN_FAMILY_LIN_EIGH, LINOPS_OPN_FAMILY_LIN_SVDVALS, LINOPS_OPN_FAMILY_LIN_SVD)
 
 
 def _lin_door(context: PythonObject) raises -> PythonObject:
@@ -456,7 +458,8 @@ def _lin_svd(args: PythonObject, context: PythonObject) raises -> PythonObject:
         kit.close()
 
 
-def lin_decomp_operation(operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def lin_decomp_operation(operation: Int, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    # bw2-linalg: `operation` is a leaf code of bindings/operation_names_linops.mojo.
     # Admit public scalar controls before equality/truth conversion; input
     # exporters are captured by the shared native linalg buffer boundary.
     # The one admission of the operand: every _lin_* below passes
@@ -464,12 +467,12 @@ def lin_decomp_operation(operation: String, args: PythonObject, context: PythonO
     classical_admit_value(args[0], context)
     for i in range(1, len(args)):  # small-loop(public decomposition option metadata)
         host_inference_scalar(args[i], context, True)
-    if operation == "family_lin_qr":
+    if operation == LINOPS_OPN_FAMILY_LIN_QR:
         return _lin_qr(args, context)
-    if operation == "family_lin_eigh":
+    if operation == LINOPS_OPN_FAMILY_LIN_EIGH:
         return _lin_eigh(args, context)
-    if operation == "family_lin_svdvals":
+    if operation == LINOPS_OPN_FAMILY_LIN_SVDVALS:
         return _lin_svdvals(args, context)
-    if operation == "family_lin_svd":
+    if operation == LINOPS_OPN_FAMILY_LIN_SVD:
         return _lin_svd(args, context)
-    raise Error("RuntimeError: unknown linalg operation " + operation)
+    raise Error("RuntimeError: unknown linalg operation " + String(operation))

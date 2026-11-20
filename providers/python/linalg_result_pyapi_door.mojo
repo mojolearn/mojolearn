@@ -11,6 +11,7 @@ from bindings.native_class_admission_door import class_record, class_admit
 from bindings.py_cpython_table import cpython_table
 from bindings.linalg_keys_unpack import linalg_keys
 from bindings.py_balanced import py_item
+from bindings.operation_names_linops import LINOPS_OPN_FAMILY_LIN_RESULT_NEW, LINOPS_OPN_FAMILY_LIN_RESULT_ITEM
 
 # Per class state: the MRO row of the connected result owner (an int, so the
 # record never retains the class). A type watcher drops it when the class or
@@ -80,13 +81,14 @@ def linalg_result_new(cls: PythonObject, values: PythonObject, context: PythonOb
     return py_call(b.tuple.__new__, cls, values)
 
 
-def linalg_result_operation(operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def linalg_result_operation(operation: Int, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    # bw2-linalg: `operation` is a leaf code of bindings/operation_names_linops.mojo.
     var b = native_loaded_module("builtins")
     if py_type(args) is not b.tuple or len(args) != 2:
         raise Error("TypeError: linalg result metadata requires its native argument tuple")
-    if operation == "family_lin_result_new":
+    if operation == LINOPS_OPN_FAMILY_LIN_RESULT_NEW:
         return linalg_result_new(args[0], args[1], context)
-    if operation != "family_lin_result_item":
+    if operation != LINOPS_OPN_FAMILY_LIN_RESULT_ITEM:
         raise Error("RuntimeError: unknown linalg result operation")
     var value = args[0]
     _ = _result_owner(py_type(value), context)
