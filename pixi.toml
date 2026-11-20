@@ -242,6 +242,9 @@ soak-determinism = "mojo run -I . checks/determinism_soak.mojo"
 check-fixture-rng = "python3 tools/fixture_rng_census.py --self-test && python3 tools/fixture_rng_census.py"
 # The same gate with the planted variant standing in for splitmix64: MUST fail.
 check-fixture-rng-planted = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D FIXTURE_RNG_PLANT=1 -I . checks/native_tests/run_gpu.mojo fixture_rng_gate"
+# The transfer kit's own check with a planted word: both MUST fail (case 0, "at 3", got and want in hex).
+check-kit-planted-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -D KIT_ROUNDTRIP_PLANT=1 -I . checks/native_tests/run_cpu.mojo kit_roundtrip"
+check-kit-planted-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D KIT_ROUNDTRIP_PLANT=1 -I . checks/native_tests/run_gpu.mojo kit_roundtrip"
 check-sub-byte-layout = "tools/with_build_lock.sh pixi run mojo run -I . gbdt/methods/greedy_subsets_searcher/kernel/sub_byte_layout_gate.mojo"
 check-min-child-hessian = "sh tools/check_min_child_hessian.sh"
 check-searcher-parity-covtype = "mojo run -I . checks/searcher_parity_covtype_check.mojo"
