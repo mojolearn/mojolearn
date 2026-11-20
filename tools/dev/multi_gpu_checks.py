@@ -485,9 +485,12 @@ def _mlp(ml, np, fx, devices):
     X = fx["X"]
     Xm = np.ascontiguousarray(X[:576, :8])
     t = ((X[:576, 3] > 0).astype(np.int32) + (X[:576, 4] > 0).astype(np.int32)).astype(np.int32)
-    steps = [[(Xm[192 * s + 64 * k: 192 * s + 64 * (k + 1)], t[192 * s + 64 * k: 192 * s + 64 * (k + 1)])
-              for k in range(3)] for s in range(3)]
-    with ParallelNeuralTrainer(m, devices=devices, logical_shards=max(3, len(devices))) as tr:
+    # three steps of 192 rows; each step is cut into one shard per logical shard (three, or one per device)
+    logical = max(3, len(devices))
+    per = 192 // logical
+    steps = [[(Xm[192 * s + per * k: 192 * s + per * (k + 1)], t[192 * s + per * k: 192 * s + per * (k + 1)])
+              for k in range(logical)] for s in range(3)]
+    with ParallelNeuralTrainer(m, devices=devices, logical_shards=logical) as tr:
         for shards in steps:
             tr.train_step(shards)
     return [("weights_[%s]" % k, m.weights_[k]) for k in sorted(m.weights_)] \
