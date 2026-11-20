@@ -18,9 +18,12 @@ def ivf_pq_build_run(
     x: List[Float32], n: Int, dim: Int, n_lists: Int, iters: Int, seed: Int,
     pq_dim: Int, pq_bits: Int, pq_iters: Int, codes_addr: Int, x_addr: Int,
     mut bst: AnnStages, centers_out: Int, offsets_out: Int, indices_out: Int,
-    codebooks_out: Int, codes_out: Int,
+    codebooks_out: Int,
 ) raises:
-    """The GIL-released block of `ivf_pq_build_binding`."""
+    """The GIL-released block of `ivf_pq_build_binding`. `codes_addr`: the
+    caller's n x pq_dim int32 array, which the build downloads the codes
+    into (x_ann/ivf_pq_device.mojo `ivf_pq_build_device`); the returned
+    index carries no codes."""
     var index = ivf_pq_build_device(
         x, n, dim, n_lists, iters, seed, pq_dim, pq_bits, pq_iters, codes_addr, x_addr
     )
@@ -29,7 +32,6 @@ def ivf_pq_build_run(
     out_i32_to(index.offsets, offsets_out)
     out_i32_to(index.list_indices, indices_out)
     out_f32_to(index.codebooks, codebooks_out)
-    out_i32_to(index.codes, codes_out)
     bst.host("copy_out")
 
 
