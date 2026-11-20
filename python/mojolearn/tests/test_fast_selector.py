@@ -351,6 +351,11 @@ def run(name, kind, extra, mode):
     # Construction is inside the report too: a class with no `numeric_mode` parameter (ElasticNet, GaussianNB,
     # MaxAbsScaler, RobustScaler) raises TypeError for the word, which is its refusal; its `identical` arm is
     # built without the keyword. Before this, the TypeError escaped the child and the whole unit was skipped.
+    # A model-selection row is named "<function>(<Estimator>)": the function (family MSEL) runs over an estimator
+    # built with the word, and its one result is the row's one operation.
+    call = None
+    if name.endswith(")") and "(" in name:
+        call, name = name[:-1].split("(", 1)
     cls = getattr(mojolearn, name)
     try:
         model = cls(numeric_mode=mode, **extra)
@@ -360,6 +365,11 @@ def run(name, kind, extra, mode):
         model = cls(**extra)
     except Exception as error:
         return f"{type(error).__name__}: {error}"[:300], {}, None
+    if call is not None:
+        try:
+            return None, {call: digest(getattr(mojolearn, call)(model, X, *target(kind), cv=3))}, model
+        except Exception as error:
+            return f"{type(error).__name__}: {error}"[:300], {}, model
     try:
         model.fit(X, *target(kind))
     except Exception as error:
@@ -505,6 +515,14 @@ WALK = [
     ["TSNE", "unsup", {"random_state": 0}],
     ["KNNImputer", "unsup", {}],
     ["RandomTreesEmbedding", "unsup", {"n_estimators": 4, "random_state": 0}],
+    # lane fx-fast-rest, 2026-11-20: the families the trial did not cover. MSEL: model selection over an
+    # answered estimator; XSEQ: the sequence-model MLPs (off: expected refused, never mixed).
+    ["cross_val_score(Ridge)", "reg", {}],
+    ["cross_val_score(LogisticRegression)", "cls", {}],
+    ["cross_val_score(KNeighborsClassifier)", "cls", {}],
+    ["cross_val_score(GaussianProcessRegressor)", "reg", {}],
+    ["MLPClassifier", "cls", {"random_state": 0, "max_iter": 20}],
+    ["MLPRegressor", "reg", {"random_state": 0, "max_iter": 20}],
 ]
 
 #: The door family (core/mode_answer.mojo MODE_FAMILY_<name>) whose answer step each estimator's doors hold;
@@ -531,8 +549,11 @@ ESTIMATOR_FAMILY = {
     "EllipticEnvelope": "DECOMP_KIT", "Nystroem": "KERNEL", "RBFSampler": "KERNEL", "UMAP": "SPECTRAL", "TSNE": "SPECTRAL",
     "LinearSVC": "none", "NearestCentroid": "none", "LabelPropagation": "none", "LabelSpreading": "none", "SVR": "none",
     "LinearSVR": "none", "MiniBatchKMeans": "none", "BisectingKMeans": "none", "MeanShift": "none", "AffinityPropagation": "none",
-    "OPTICS": "none", "DBSCAN": "none", "HDBSCAN": "none", "KernelDensity": "none", "LocalOutlierFactor": "none",
+    "OPTICS": "none", "DBSCAN": "none", "HDBSCAN": "CLUSTER", "KernelDensity": "none", "LocalOutlierFactor": "none",
     "OneClassSVM": "none", "KNNImputer": "none",
+    "cross_val_score(Ridge)": "MSEL", "cross_val_score(LogisticRegression)": "MSEL",
+    "cross_val_score(KNeighborsClassifier)": "MSEL", "cross_val_score(GaussianProcessRegressor)": "MSEL",
+    "MLPClassifier": "XSEQ", "MLPRegressor": "XSEQ",
 }
 
 
@@ -560,7 +581,7 @@ class BuiltInstallFamilies(unittest.TestCase):
     under `fast` and then refuses or differs in another call fails here.
 
     `MOJOLEARN_FAST_ANSWER_TRIAL_FAMILIES=<mask>` (a switch of this test, not
-    of the package; `0x7ffffff` is every door family, bits in
+    of the package; `0xfffffff` is every door family, bits in
     core/mode_answer.mojo) answers `fast` for that set of families, so the run
     lists which are whole under it; `MOJOLEARN_FAST_LEDGER=<path>` keeps the
     report. A family is added to MODE_FAMILIES_ANSWERED only when a run with
