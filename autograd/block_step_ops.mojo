@@ -101,7 +101,6 @@ from mamba.impl.modules.mamba3 import (
 from transformer.impl.llama.modeling_llama import (
     LlamaDims, LlamaDeviceWeights, LlamaKVCache, LlamaRopeTable, LlamaDeviceStages, llama_decoder_layer_forward,
     residual_next_norm_fusion_enabled, LLAMA_FAST_REFUSE_WATERMARK, llama_kv_cache_rewind,
-    LLAMA_FAST_STAGE_KEEP,
 )
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_APPLE
 from transformer.block_options import BlockOptions, BLOCK_OPTION_PARAMS
@@ -1721,8 +1720,7 @@ struct AttnPrefill(Movable):
         the same shape get their host flags back
         (`LlamaDeviceStages.reset_flags`) and keep their bytes; the forward
         writes each stage whole before reading it (modeling_llama
-        `LLAMA_FAST_STAGE_KEEP`). False, or a build with
-        -D MOJOLEARN_LLAMA_FAST_STAGE_KEEP_OFF: the constructor's zeros again
+        `LLAMA_FAST_STAGE_KEEP`). False: the constructor's zeros again
         (`reset`: thirty fills and a wait)."""
         var reused = False
         self.ahead_used = False
@@ -1737,12 +1735,9 @@ struct AttnPrefill(Movable):
             # norm1 into them behind the reset (same stream).
             self.ahead_used = True
         elif reused:
-            var kept_bytes = False
-            comptime if LLAMA_FAST_STAGE_KEEP:
-                if keep_bytes:
-                    self.stages.value().reset_flags()
-                    kept_bytes = True
-            if not kept_bytes:
+            if keep_bytes:
+                self.stages.value().reset_flags()
+            else:
                 # Every constructor zero and route flag back before the next run.
                 self.stages.value().reset(ctx)
             self.stages.value().int15_on = False
@@ -2220,8 +2215,7 @@ def attn_step_fresh_prefill(
         # The L-shaped stages (0.8.66: the session workspace's), reset to the
         # constructor's zeros when reused, as `_stage_reset_on()` did by default.
         # This run is forward-only (below), so `prepare` keeps the stage bytes
-        # (LLAMA_FAST_STAGE_KEEP, the default since 2026-11-19; `reset` under
-        # -D MOJOLEARN_LLAMA_FAST_STAGE_KEEP_OFF).
+        # (LLAMA_FAST_STAGE_KEEP, the default since 2026-11-19, confirmed 2026-11-20).
         pre.prepare(ctx, b, l, ints[6], dims, ints[7], blk.lean, True)
         # The bytes a fresh `LlamaKVCache` holds, on the device, no upload.
         # TOMBSTONE: MOJOLEARN_IDN_TF_SESSION_LEAN (loser: transformer-forward 1.350) deleted 2026-10-11 by 68d9654bb; code recoverable at 68d9654bb^.
