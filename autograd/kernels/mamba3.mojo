@@ -1977,8 +1977,8 @@ def mamba3_backward_s17_state_into(
 #: lane/fx-mamba3-s17-fold (2026-11-18): MOJOLEARN_MAMBA3_FAST_S17_TAIL_TREE,
 #: PROMOTED 2026-11-19 (lane fx-verdicts3): the lane chains and the tree are
 #: the default on every column and the host column together;
-#: `-D MOJOLEARN_MAMBA3_FAST_S17_TAIL_TREE_OFF` restores the serial chain (the
-#: old opt-in name is refused, core/experiment_guards_neural.mojo).
+#: the old opt-in name and its _OFF are refused
+#: (core/experiment_guards_neural.mojo).
 #: Evidence: A/B round 1, NVIDIA L40S (host bd9c355c19c0, 14-core cgroup),
 #: wheel 0c68d6cd27 and its B set, base and arm back to back in ONE pod job
 #: (nvc1-0006, tag nvc-ab-20261119T125554Z-6f7afc), one scored run per arm:
@@ -1992,7 +1992,7 @@ def mamba3_backward_s17_state_into(
 #: The chunk-end `add` term of `d_dacs_rec` was ONE serial chain per
 #: (batch, chunk, head): (qs + 1) x M3_HEADDIM x M3_D_STATE fused steps on
 #: thread 0 (532,480 at qs = 64), whatever stages its operands (the shared
-#: and pipe kernels below re-stage the same chain, now only under _OFF). The
+#: and pipe kernels below re-staged the same chain; nothing launches them now). The
 #: default is M3_D_STATE independent lane chains and one tree:
 #:   lane n (`_m3_s17_tail_lane`), from +0.0, with the chain's own step
 #:     `acc = ftz(identical_mul_add(carry[p][n], term, acc))`: the token
@@ -2009,7 +2009,18 @@ def mamba3_backward_s17_state_into(
 #: below, so there is one spelling of the order and no vendor branch. A
 #: single-chunk pass (l <= qs) carries zeros, so its words do not move.
 #: mamba/IDENTICAL_MAMBA3_CONTRACT.md "Backward S17 chunk-end tail".
-comptime M3_S17_TAIL_TREE = not is_defined["MOJOLEARN_MAMBA3_FAST_S17_TAIL_TREE_OFF"]()
+#: A/B round 3, 2026-11-20 (lane fx-verdicts5; NVIDIA L40S host 2ef132a6de04, wheel
+#: 28a780604c and its _OFF set, one pod job, tag nvc-ab-20261120T063324Z-c630ad),
+#: driver SambaStack.train_step, tree (default) -> serial chain ms: Mamba-3 only,
+#: 4 x 300 d256 2 layers (a partial last chunk) 23.68 -> 34.96 (1.48); 4 x 64 (one
+#: chunk) 11.89 -> 22.46 (1.89); Samba 6 layers 2 x 512 d384 54.02 -> 71.14 (1.32);
+#: losses equal to one float32 step. CONFIRMED a second time, on sizes the board
+#: does not hold: the tree stands, its switch and the serial order are deleted.
+# TOMBSTONE: MOJOLEARN_MAMBA3_FAST_S17_TAIL_TREE_OFF (old path: the serial S17 chunk-end chain in the host column's operands kernel and the launch of the shared / pipe tail kernels; the promotion confirmed by A/B rounds 1 and 3, numbers above) deleted 2026-11-20 by lane/fx-verdicts5; code recoverable at e25e35dab8.
+# Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_FAST_S17_TAIL_TREE_OFF.patch; record in docs/TOMBSTONES.md.
+# OWED DELETION left by it: `mamba3_s17_tail_shared_kernel`, `mamba3_s17_tail_pipe_kernel` and M3_S17_TAIL_PIPE are
+# launched by nothing now; they are stubs in the generated host twin, whose stub list and launch numbering
+# tools/mamba_host_gen.py writes, so they go with a regeneration (a lane may not run the generator).
 
 
 @always_inline
@@ -2103,31 +2114,12 @@ def mamba3_s17_operands_kernel(
         rec_scalar=ftz(identical_mul_add(outv,ftz(v.unsafe_load(th*M3_HEADDIM+p)),rec_scalar))
     var dr=ftz(-rec_scalar)
     if (inner==qs-1 or token==l-1) and not M3_S17_TAIL_SHARED:
-        comptime if M3_S17_TAIL_TREE:
-            # the host column's form of `mamba3_s17_tail_tree_kernel`: the same
-            # lane chains and the same tree, through the same two helpers
-            var lanes=Array[Float32,M3_D_STATE](fill=Float32(0))
-            for n in range(M3_D_STATE):
-                lanes[n]=_m3_s17_tail_lane(k,v,dacs,states,d_states,bb,c,h,n,l,nh,qs,nc)
-            dr=ftz(dr+_m3_s17_tail_tree(lanes))
-        else:
-            var add=Float32(0.0)
-            for j in range(qs):
-                var tj=c*qs+j
-                if tj<l:
-                    var idx=((bb*nh+h)*nc+c)*qs+j;var de=ftz(identical_exp(ftz(last-ftz(dacs.unsafe_load(idx)))))
-                    for p in range(M3_HEADDIM):
-                        for n in range(M3_D_STATE):
-                            var carry=Float32(0.0)
-                            if c+1<nc:carry=ftz(d_states.unsafe_load((((bb*nc+c+1)*nh+h)*M3_HEADDIM+p)*M3_D_STATE+n))
-                            add=ftz(identical_mul_add(carry,ftz(identical_mul(ftz(identical_mul(ftz(v.unsafe_load(((bb*l+tj)*nh+h)*M3_HEADDIM+p)),ftz(k.unsafe_load(((bb*l+tj)*nh+h)*M3_D_STATE+n)))),de)),add))
-            for p in range(M3_HEADDIM):
-                for n in range(M3_D_STATE):
-                    var carry=Float32(0.0)
-                    if c+1<nc:carry=ftz(d_states.unsafe_load((((bb*nc+c+1)*nh+h)*M3_HEADDIM+p)*M3_D_STATE+n))
-                    var hs=ftz(states.unsafe_load((((bb*nc+c)*nh+h)*M3_HEADDIM+p)*M3_D_STATE+n))
-                    add=ftz(identical_mul_add(carry,ftz(identical_mul(hs,ftz(identical_exp(last)))),add))
-            dr=ftz(dr+add)
+        # the host column's form of `mamba3_s17_tail_tree_kernel`: the same
+        # lane chains and the same tree, through the same two helpers
+        var lanes=Array[Float32,M3_D_STATE](fill=Float32(0))
+        for n in range(M3_D_STATE):
+            lanes[n]=_m3_s17_tail_lane(k,v,dacs,states,d_states,bb,c,h,n,l,nh,qs,nc)
+        dr=ftz(dr+_m3_s17_tail_tree(lanes))
     d_dacs_rec.unsafe_store(th,dr)
 
 
@@ -2560,14 +2552,8 @@ def mamba3_backward_s17_operands_into(ctx:DeviceContext,mut dq:DeviceBuffer[DTyp
         var nc=(l+qs-1)//qs
         # TOMBSTONE: MOJOLEARN_IDN_M3_S17_TAIL_DBUF launch (LOSER avg 1.33x) deleted 2026-10-11 by b9e2282b2; code recoverable at b9e2282b2^.
         # Restore: git apply experiments/removed/MOJOLEARN_IDN_M3_S17_TAIL_DBUF.patch
-        comptime if M3_S17_TAIL_TREE:
-            # the default since 2026-11-19 (MOJOLEARN_MAMBA3_FAST_S17_TAIL_TREE promoted; _OFF: the serial chain below): per-lane folds and the 7.2 tree, every column together
-            ctx.enqueue_function[mamba3_s17_tail_tree_kernel](ddc.unsafe_ptr(),k.unsafe_ptr(),v.unsafe_ptr(),dacs.unsafe_ptr(),states.unsafe_ptr(),dstates.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),Int32(qs),grid_dim=(b*nc*dims.nheads,1,1),block_dim=(M3_D_STATE,1,1))
-        else:
-            comptime if M3_S17_TAIL_PIPE:
-                ctx.enqueue_function[mamba3_s17_tail_pipe_kernel](ddc.unsafe_ptr(),k.unsafe_ptr(),v.unsafe_ptr(),dacs.unsafe_ptr(),states.unsafe_ptr(),dstates.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),Int32(qs),grid_dim=(b*nc*dims.nheads,1,1),block_dim=(M3_D_STATE,1,1))
-            else:
-                ctx.enqueue_function[mamba3_s17_tail_shared_kernel](ddc.unsafe_ptr(),k.unsafe_ptr(),v.unsafe_ptr(),dacs.unsafe_ptr(),states.unsafe_ptr(),dstates.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),Int32(qs),grid_dim=(b*nc*dims.nheads,1,1),block_dim=(M3_D_STATE,1,1))
+        # the default since 2026-11-19 (MOJOLEARN_MAMBA3_FAST_S17_TAIL_TREE promoted, confirmed 2026-11-20): per-lane folds and the 7.2 tree, every column together
+        ctx.enqueue_function[mamba3_s17_tail_tree_kernel](ddc.unsafe_ptr(),k.unsafe_ptr(),v.unsafe_ptr(),dacs.unsafe_ptr(),states.unsafe_ptr(),dstates.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),Int32(qs),grid_dim=(b*nc*dims.nheads,1,1),block_dim=(M3_D_STATE,1,1))
 
 
 def mamba3_join_two_kernel(dst:MutPointer[Float32,MutAnyOrigin],a:MutPointer[Float32,MutAnyOrigin],b:MutPointer[Float32,MutAnyOrigin],n_in:Int32):
