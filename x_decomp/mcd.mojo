@@ -32,6 +32,7 @@ from std.memory import bitcast
 from std.builtin.sort import sort
 from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.exec_trait import Exec
@@ -87,7 +88,7 @@ from x_decomp.kit import Kit, Mat, OP_ABS, OP_LOGS, OP_MUL, OP_RECIP, OP_SCALE, 
 # promotes B only with Jaccard not lower, and AGENTS.md never trades quality for speed; a decision for Andrew.
 comptime IDN_MCD_CHOL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_MCD_CHOL"]()
 
-# Experiment MOJOLEARN_MCD_FAST_LOCKSTEP (lane fx-board-covariance-nb, 2026-11-19; default OFF, A/B owed: owed row
+# Experiment MOJOLEARN_MCD_FAST_LOCKSTEP (lane fx-board-covariance-nb, 2026-11-19; decided by A/B round 3, below: owed row
 # mcd-lockstep in bench/results/paper_compare/owed-pre0867.json, docs/apple-fast/EXPERIMENTS.md). IDENTICAL, GPU
 # columns only; the host column and every word are unchanged (no bit change on any column).
 # Cause it addresses: the resident search (x_decomp/kit_device.mojo `DMcd.select_random` / `select_init`) runs its
@@ -109,8 +110,23 @@ comptime IDN_MCD_CHOL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined[
 # a neighbouring shape (300,000 x 16 rows of random float32 with 5 percent outliers) and a non-board dataset
 # (covtype's 10 continuous columns). Apple: a round enqueues up to trials x about 60 launches before its wait; the
 # Apple column is not timed (AGENTS.md part 8) and must be smoke-run before any promotion.
+# A/B round 3, 2026-11-20 (lane fx-verdicts5; NVIDIA L40S host 2ef132a6de04, wheel 28a780604c and its B set, base and
+# arm back to back in one pod job, tag nvc-ab-20261120T063324Z-c630ad, workers bound to the GPU's NUMA node 0; one
+# scored run per arm; digests and quality equal on all 6 cells). Base -> arm ms:
+# min-cov-det taxi fit 6,009.9 -> 4,269.0 (0.710), elliptic-envelope taxi fit 6,015 -> 4,299 (0.715; Jaccard vs
+# scikit-learn 0.9636 both, unlike the Cholesky arm), taxi infer 0.863 -> 0.896 (1.04, median of 20, spread
+# 0.85..1.78 / 0.84..2.65: noise, the arm does not touch predict); istella (d = 220, above the one-block bound, so
+# the serial loop on both arms) fit 122,670 -> 122,650 (1.000) and 122,770 -> 122,910 (1.001), infer 1.006.
+# PROMOTED on the NVIDIA and AMD columns: DEFAULT ON there since 2026-11-20 (-D MOJOLEARN_MCD_FAST_LOCKSTEP_OFF
+# builds the serial candidate loop). The Apple column keeps the serial loop (a round enqueues up to trials x about
+# 60 launches before its wait and was never run on Metal); there the old name MOJOLEARN_MCD_FAST_LOCKSTEP still
+# opts in, for the owed smoke. The words are the same in either order, so the columns agree whichever runs.
+# Not timed: the neighbouring shape and the non-board dataset named above.
 comptime MCD_LOCKSTEP = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_MCD_FAST_LOCKSTEP"]() and not IDN_MCD_CHOL
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not is_defined["MOJOLEARN_MCD_FAST_LOCKSTEP_OFF"]()
+    and (not TARGET_HAS_APPLE_GPU or is_defined["MOJOLEARN_MCD_FAST_LOCKSTEP"]())
+    and not IDN_MCD_CHOL
 )
 
 #: `_expansion_decomp._F32_EPS` and the `logs` floor `_slogdet` passes
