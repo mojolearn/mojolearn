@@ -9,7 +9,7 @@ def shape_call(model: PythonObject, operation: PythonObject,
     return forest_shape(model, String(operation), context)
 
 def state_call(model: PythonObject, operation: PythonObject) raises -> PythonObject:
-    return tree_export_state(model, String(operation))
+    return tree_export_state(model, String(operation) == "trees_forest_getstate")
 
 @export
 def PyInit__mojolearn_tree_auxiliary_owner_compile() abi("C") -> PythonObject:

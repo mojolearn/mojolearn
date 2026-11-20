@@ -21,6 +21,7 @@ from bindings.operation_names_mani import operation_names_mani
 from bindings.operation_names_low import operation_names_low
 from bindings.operation_names_linops import operation_names_linops
 from bindings.operation_names_classical import operation_names_classical
+from bindings.operation_names_trees import operation_names_trees
 # SPDX-License-Identifier: Apache-2.0
 # The one table of integer operation codes for the classical owner's door
 # (lane ne1-h-labels, plan NATIVE_ENTRY_POINTS_AFTER_0866 section H, lesson
@@ -55,8 +56,8 @@ from bindings.operation_names_classical import operation_names_classical
 # Codes are the index in `names` (registration order: the trees names, then
 # each family owner's file); they hold within one build only, and Python
 # never hard-codes them. Every `family_*` name a caller can pass belongs in
-# its owner's file; `trees_*` and `host_tree_*` names passed by code are in
-# `_operation_names` below.
+# its owner's file; `trees_*` names are in bindings/operation_names_trees.mojo
+# and the `host_tree_*` names passed by code in `_operation_names` below.
 
 #: The leaf of a name whose owner still matches the name.
 comptime OP_LEAF_NONE = -1
@@ -184,9 +185,10 @@ def family_route(operation: String) -> Int:
     return owner + FR_PRE_SCALE * pre + (FR_CLUSTER_FLAG if cluster else 0)
 
 
-def _operation_names(mut names: List[String]):
-    """The `host_tree_*` and `trees_*` operations a shell passes by code.
-    Straight-line appends (no branch per name)."""
+def _operation_names(mut names: List[String], mut leaves: List[Int]):
+    """The `host_tree_*` operations a shell passes by code, then every
+    `trees_*` name with its leaf (bindings/operation_names_trees.mojo, lane
+    bw3-trees). Straight-line appends (no branch per name)."""
     names.append("host_tree_count")
     names.append("host_tree_ctr_dim")
     names.append("host_tree_ctr_predict")
@@ -200,35 +202,8 @@ def _operation_names(mut names: List[String]):
     names.append("host_tree_proba")
     names.append("host_tree_setstate")
     names.append("host_tree_vote")
-    names.append("trees_agnostic_kernel_init")
-    names.append("trees_agnostic_kernel_values")
-    names.append("trees_agnostic_permutation_init")
-    names.append("trees_agnostic_permutation_values")
-    names.append("trees_bagging_members")
-    names.append("trees_bagging_members_set")
-    names.append("trees_dart_construct")
-    names.append("trees_explainer_close")
-    names.append("trees_explainer_init")
-    names.append("trees_explainer_values")
-    names.append("trees_public_boost_apply")
-    names.append("trees_public_boost_decision_function")
-    names.append("trees_public_boost_fit")
-    names.append("trees_public_boost_fit_transform")
-    names.append("trees_public_boost_predict")
-    names.append("trees_public_boost_predict_proba")
-    names.append("trees_public_boost_score")
-    names.append("trees_public_boost_transform")
-    names.append("trees_public_forest_depth")
-    names.append("trees_public_forest_fit")
-    names.append("trees_public_forest_n_leaves")
-    names.append("trees_public_forest_predict")
-    names.append("trees_public_forest_proba")
-    names.append("trees_public_meta_fit")
-    names.append("trees_public_meta_fit_transform")
-    names.append("trees_public_meta_predict")
-    names.append("trees_public_meta_predict_proba")
-    names.append("trees_public_meta_score")
-    names.append("trees_public_meta_transform")
+    _leaves_pad(names, leaves)
+    operation_names_trees(names, leaves)
 
 
 def _family_names(mut names: List[String], mut leaves: List[Int]):
@@ -297,7 +272,7 @@ struct OperationTable(Defaultable, Movable):
     def __init__(out self):
         var names = List[String]()
         var leaves = List[Int]()
-        _operation_names(names)
+        _operation_names(names, leaves)
         _leaves_pad(names, leaves)
         _family_names(names, leaves)
         var first_classical = len(names)

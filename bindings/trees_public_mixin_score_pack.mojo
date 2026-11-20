@@ -28,6 +28,7 @@ from bindings.trees_public_score_door import (
 from bindings.classical_labels_door import classical_score_from_codes, _classification_encoded as labels_classification_encoded
 from bindings.trees_public_gbdt_door import _adapter_fitted, adapter_codes, adapter_decision_function
 from bindings.trees_public_boost_door import boost_operation, boost_kind, boost_predict_codes
+from bindings.trees_keys_unpack import trees_keys
 
 
 def boost_score(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -36,7 +37,8 @@ def boost_score(model: PythonObject, args: PythonObject, context: PythonObject) 
     var y = args[1]
     var sample_weight = args[2]
     # The mixins pass the estimator's own numeric_mode (None: the default).
-    var mode = py_get(py_fields(model), "numeric_mode")
+    var nk = trees_keys()
+    var mode = py_get(py_fields(model), nk[].k_numeric_mode)
     var kind = boost_kind(model, context)
     if kind.endswith("_classifier"):
         # Scored from the predicted class codes (N043, ne1-a-trees): classes

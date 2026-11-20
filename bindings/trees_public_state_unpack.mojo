@@ -10,6 +10,8 @@ from bindings.classical_attributes_door import classical_check_layout
 from bindings.classifier_public_lifecycle_door import classifier_label_list
 from bindings.trees_lifetime_door import TreesResident
 from bindings.py_model_records import bump_model_generation
+from bindings.trees_keys_unpack import trees_keys
+from bindings.py_balanced import py_item
 
 
 def _release_tree_values(values: PythonObject, retained: PythonObject,
@@ -21,6 +23,7 @@ def _release_tree_values(values: PythonObject, retained: PythonObject,
     # Python subclasses before the supported checked Mojo downcast below.
     var prototype = PythonObject(alloc=TreesResident(PythonObject(None), 0))
     var cursor = 0
+    var nk = trees_keys()
     while cursor < len(todo):  # driver-loop: cycle-safe ownership traversal before state replacement
         var item = todo[cursor]
         cursor += 1
@@ -31,7 +34,7 @@ def _release_tree_values(values: PythonObject, retained: PythonObject,
         var kept = False
         for i in range(len(retained)):  # driver-loop: identical retained fields cannot destroy these owners
             kept = kept or item is retained[i]
-        var pinned = context["trees_state_retained"]
+        var pinned = py_item(context, nk[].k_trees_state_retained)
         for i in range(len(pinned)):  # driver-loop: connected native binding tables have independent owners
             kept = kept or item is pinned[i]
         if kept:
@@ -49,30 +52,30 @@ def _release_tree_values(values: PythonObject, retained: PythonObject,
             for i in range(len(pairs)):  # driver-loop: follow retained dictionary owners without hashing caller keys
                 _ = py_call(todo.append, pairs[i][0])
                 _ = py_call(todo.append, pairs[i][1])
-        elif cls is context["classifier_labels_class"]:
+        elif cls is py_item(context, nk[].k_classifier_labels_class):
             # Validates the connected namespace/MRO; copies list storage via
             # native list.copy, without ClassLabels iteration or properties.
             _ = py_call(todo.append, classifier_label_list(item, context))
         elif cls is py_type(prototype):
-            var ancestry = py_call(b.type.__dict__["__mro__"].__get__, cls)
+            var ancestry = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, cls)
             for i in range(len(ancestry)):  # driver-loop: reject injected Python finalizers before native owner release
-                if py_contains(_class_fields(ancestry[i]), "__del__"):
+                if py_contains(_class_fields(ancestry[i]), nk[].k___del__):
                     raise Error("TypeError: forest restoration cannot release Python finalizers")
             # Documented std.python API validates the stored Mojo value type:
             # https://mojolang.org/docs/std/python/python_object/PythonObject/#downcast_value_ptr
             var owner = item.downcast_value_ptr[TreesResident]()
             if owner[].release is not None or owner[].handle > 0:
-                var releases = context["trees_state_releases"]
+                var releases = py_item(context, nk[].k_trees_state_releases)
                 var connected = False
                 for i in range(len(releases)):  # driver-loop: only the connected compiled forest release ABI
                     connected = connected or owner[].release is releases[i]
                 if not connected or py_type(owner[].release) is not py_type(b.len):
                     raise Error("TypeError: forest restoration requires its connected native release entry")
-        elif py_type(cls) is b.type and py_contains(context["trees_constructors"], cls):
+        elif py_type(cls) is b.type and py_contains(py_item(context, nk[].k_trees_constructors), cls):
             classical_check_layout(item, context)
             _ = py_call(todo.append, _fields(item))
-        elif py_type(cls) is b.type and py_contains(context["trees_state_layouts"], cls):
-            classical_check_layout(item, context["trees_state_layouts"][cls])
+        elif py_type(cls) is b.type and py_contains(py_item(context, nk[].k_trees_state_layouts), cls):
+            classical_check_layout(item, py_item(context, nk[].k_trees_state_layouts)[cls])
             _ = py_call(todo.append, _fields(item))
         else:
             native_release_admit(item, context)

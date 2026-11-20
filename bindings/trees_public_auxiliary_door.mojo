@@ -14,6 +14,8 @@ from bindings.trees_public_inputs_door import (
 )
 from bindings.admitted_input_unpack import admit_f32, admitted_array, classical_view, admitted_dtype
 from bindings.classical_arrays_door import classical_address, classical_c_order
+from bindings.trees_keys_unpack import trees_keys
+from bindings.py_balanced import py_item
 # TOMBSTONE: trees_f32 / trees_view / trees_empty uses (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
 
@@ -24,13 +26,15 @@ def _field(fields: PythonObject, name: String) raises -> PythonObject:
     return native_instance_item(fields, PythonObject(name))
 
 
-def tree_export_state(model: PythonObject, operation: String) raises -> PythonObject:
+def tree_export_state(model: PythonObject, forest: Bool) raises -> PythonObject:
+    """`trees_forest_getstate` (`forest`) or `trees_gbdt_getstate`: the
+    dispatcher passes the test of its leaf code (lane bw3-trees)."""
     # Shallow copies keep arbitrary application metadata by identity. Reading
     # actual dictionary storage avoids __dict__/copy hooks, and the original
     # dictionary retains removed resident owners throughout this operation.
     var fields = _fields(model)
     var state = py_call(trees_builtins().dict, fields)
-    if operation == "trees_forest_getstate":
+    if forest:
         _ = py_call(state.pop, "_resident_holder", PythonObject(None))
         _ = py_call(state.pop, "_resident_forest", PythonObject(None))
     else:
@@ -85,21 +89,22 @@ def forest_shape(model: PythonObject, operation: String,
                  context: PythonObject) raises -> PythonObject:
     """Finished scalar depth/leaf count from the existing native tree walk."""
     var fields = _fields(model)
-    if not py_contains(fields, "_offsets"):
+    var nk = trees_keys()
+    if not py_contains(fields, nk[].k__offsets):
         raise Error("RuntimeError: this estimator is not fitted yet")
-    classical_admit_value(py_get(fields, "numeric_mode"), context)
+    classical_admit_value(py_get(fields, nk[].k_numeric_mode), context)
     # Shape metadata historically selects the requested/default tier, without
     # imposing prediction's fitted-tier mismatch check on this integer walk.
-    var requested = _check_mode(py_get(fields, "numeric_mode"))
+    var requested = _check_mode(py_get(fields, nk[].k_numeric_mode))
     if requested is None:
-        requested = context["backend_fields"]["_DEFAULT_MODE"]
+        requested = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
         classical_admit_value(requested, context)
         requested = _check_mode(requested)
     var mode = String(requested)
     # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
     var shape_entry = Optional[PythonObject]()
     try:
-        var got = py_get(trees_table(context, mode, "_mojolearn_x_trees"), "x_trees_tree_shape")
+        var got = py_get(trees_table(context, mode, "_mojolearn_x_trees"), nk[].k_x_trees_tree_shape)
         if got is not None:
             shape_entry = got
     except error:
@@ -143,18 +148,19 @@ def embedding_apply(model: PythonObject, args: PythonObject,
     var cls = py_type(model)
     if py_type(cls) is not b.type:
         raise Error("TypeError: tree embedding requires ordinary class metadata")
-    var ancestry = py_call(b.type.__dict__["__mro__"].__get__, cls)
+    var nk = trees_keys()
+    var ancestry = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, cls)
     # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
     var kind = Optional[PythonObject]()
     for i in range(len(ancestry)):  # driver-loop: passive class ancestry preserves inherited embedding interfaces
-        var got = py_get(context["trees_boost_classes"], ancestry[i])
+        var got = py_get(py_item(context, nk[].k_trees_boost_classes), ancestry[i])
         if got is not None:
             kind = got
             break
     if not kind or String(kind.value()) != "rte":
         raise Error("TypeError: tree embedding requires its connected class")
     var fields = _fields(model)
-    if not py_contains(fields, "forest_"):
+    if not py_contains(fields, nk[].k_forest_):
         raise Error("RuntimeError: this estimator is not fitted yet")
     classical_admit_value(args, context)
     var x = admit_f32(args[0], 2, "X", context, finite=False)
@@ -170,11 +176,11 @@ def embedding_apply(model: PythonObject, args: PythonObject,
     classical_check_layout(forest, context)
     var forest_fields = _fields(forest)
     var buffers = _model_buffers(forest_fields, trees, 1, context)
-    classical_admit_value(py_get(fields, "numeric_mode"), context)
+    classical_admit_value(py_get(fields, nk[].k_numeric_mode), context)
     # The embedding's former _bind selected its requested/default mode.
-    var mode = py_get(fields, "numeric_mode")
+    var mode = py_get(fields, nk[].k_numeric_mode)
     if mode is None:
-        mode = context["backend_fields"]["_DEFAULT_MODE"]
+        mode = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
     classical_admit_value(mode, context)
     var native = trees_table(context, String(_check_mode(mode)), "_mojolearn_x_trees")
     var entry = trees_need(native, "x_trees_apply", "mojolearn: the x_trees binding has no x_trees_apply", "ImportError")
@@ -192,7 +198,8 @@ def forest_auxiliary(model: PythonObject, operation: String, args: PythonObject,
     var fields = _fields(model)
     # The old auxiliary APIs were not predict decorators: retain their own
     # fitted refusal and as_f32_c rank/empty/width validation contract.
-    if not py_contains(fields, "_offsets"):
+    var nk = trees_keys()
+    if not py_contains(fields, nk[].k__offsets):
         raise Error("RuntimeError: this estimator is not fitted yet")
     classical_admit_value(args, context)
     var x = admit_f32(args[0], 2, "X", context, finite=False)
@@ -216,8 +223,8 @@ def forest_auxiliary(model: PythonObject, operation: String, args: PythonObject,
     var leaf = admitted_array(Python.tuple(rows, trees), "<i4", context) if leaf_requested else PythonObject(None)
     var prefix = admitted_array(Python.tuple(rows, trees, outputs), "<f4", context) if prefix_requested else PythonObject(None)
     var prediction = admitted_array(Python.tuple(rows, outputs), "<f4", context) if prediction_requested else PythonObject(None)
-    classical_admit_value(py_get(fields, "numeric_mode"), context)
-    classical_admit_value(py_get(fields, "_fit_numeric_mode"), context)
+    classical_admit_value(py_get(fields, nk[].k_numeric_mode), context)
+    classical_admit_value(py_get(fields, nk[].k__fit_numeric_mode), context)
     var mode = forest_effective_mode(fields, context)
     var native = trees_table(context, mode, "_mojolearn_x_trees")
     var entry = trees_need(native, "x_trees_forest_auxiliary",

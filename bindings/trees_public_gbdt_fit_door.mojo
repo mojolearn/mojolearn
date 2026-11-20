@@ -66,6 +66,9 @@ from gbdt.trees_gbdt_fit_run import (
     GbdtOrderedFacts, GbdtSearchFacts, GBDT_F32_MAX, gbdt_nan, gbdt_auto_rate, gbdt_check_ordered_options,
     gbdt_validate_search_options, gbdt_id_code, gbdt_id_typestr_supported, gbdt_check_group_rows, gbdt_bias_of,
 )
+from bindings.trees_keys_unpack import trees_keys
+from bindings.operation_names_trees import TREES_OPN_TREES_GBDT_BOOSTING_TYPE, TREES_OPN_TREES_GBDT_LEARNING_RATE
+from bindings.py_balanced import py_item
 
 comptime _UNSET = -1.0
 
@@ -100,7 +103,8 @@ def _float(value: PythonObject) raises -> Float64:
 
 
 def _tables(context: PythonObject) raises -> PythonObject:
-    return context["trees_gbdt_tables"]
+    var nk = trees_keys()
+    return py_item(context, nk[].k_trees_gbdt_tables)
 
 
 # ------------------------------------------------------------ resolution
@@ -117,7 +121,8 @@ def gbdt_auto_learning_rate(loss: PythonObject, n_rows: Float64, iterations: Flo
         target = String(loss)
     if target == "":
         return PythonObject(None)
-    var source = table if table is not None else _tables(context)["gpu_auto_learning_rate"]
+    var nk = trees_keys()
+    var source = table if table is not None else py_item(_tables(context), nk[].k_gpu_auto_learning_rate)
     var coeffs = py_get(source, Python.tuple(PythonObject(target), PythonObject(use_best), PythonObject(bfa)))
     if coeffs is None:
         return PythonObject(None)
@@ -139,40 +144,42 @@ def _resolved_learning_rate(fields: PythonObject, model: PythonObject, n_rows: I
                             eval_constant: Bool, context: PythonObject) raises -> Float64:
     """`GradientBoosting._resolved_learning_rate`."""
     var t = _tables(context)
-    var lr = _field(fields, model, "learning_rate")
+    var nk = trees_keys()
+    var lr = _field(fields, model, nk[].k_learning_rate, "learning_rate")
     if lr is not None:
         return _float(lr)
-    if not _eq(_field(fields, model, "grow_policy"), "SymmetricTree"):
-        return _float(t["legacy_learning_rate"])
-    if (_field(fields, model, "l2_leaf_reg") is not None or _field(fields, model, "leaf_estimation_method") is not None
-            or _field(fields, model, "leaf_estimation_iterations") is not None):
-        return _float(t["catboost_learning_rate"])
-    var use_best_obj = _field(fields, model, "use_best_model")
+    if not _eq(_field(fields, model, nk[].k_grow_policy, "grow_policy"), "SymmetricTree"):
+        return _float(py_item(t, nk[].k_legacy_learning_rate))
+    if (_field(fields, model, nk[].k_l2_leaf_reg, "l2_leaf_reg") is not None or _field(fields, model, nk[].k_leaf_estimation_method, "leaf_estimation_method") is not None
+            or _field(fields, model, nk[].k_leaf_estimation_iterations, "leaf_estimation_iterations") is not None):
+        return _float(py_item(t, nk[].k_catboost_learning_rate))
+    var use_best_obj = _field(fields, model, nk[].k_use_best_model, "use_best_model")
     var use_best = (n_eval_rows > 0 and not eval_constant) if use_best_obj is None else _truthy(use_best_obj)
-    var bfa_obj = _field(fields, model, "boost_from_average")
-    var bfa = _in(_field(fields, model, "loss"), t["boost_from_average_losses"]) if bfa_obj is None else _truthy(bfa_obj)
-    var table = t["cpu_auto_learning_rate"] if _sabotaged() else PythonObject(None)
-    var rate = gbdt_auto_learning_rate(_field(fields, model, "loss"), Float64(n_rows),
-                                       Float64(Int(py=py_call_typed(_b().int, _field(fields, model, "n_estimators")))),
+    var bfa_obj = _field(fields, model, nk[].k_boost_from_average, "boost_from_average")
+    var bfa = _in(_field(fields, model, nk[].k_loss, "loss"), py_item(t, nk[].k_boost_from_average_losses)) if bfa_obj is None else _truthy(bfa_obj)
+    var table = py_item(t, nk[].k_cpu_auto_learning_rate) if _sabotaged() else PythonObject(None)
+    var rate = gbdt_auto_learning_rate(_field(fields, model, nk[].k_loss, "loss"), Float64(n_rows),
+                                       Float64(Int(py=py_call_typed(_b().int, _field(fields, model, nk[].k_n_estimators, "n_estimators")))),
                                        use_best, bfa, table, context)
-    return _float(t["catboost_learning_rate"]) if rate is None else _float(rate)
+    return _float(py_item(t, nk[].k_catboost_learning_rate)) if rate is None else _float(rate)
 
 
 def _resolved_boosting_type(fields: PythonObject, model: PythonObject, n_rows: Int, context: PythonObject) raises -> String:
     """`GradientBoosting._resolved_boosting_type`."""
     var t = _tables(context)
-    var explicit = _field(fields, model, "boosting_type")
+    var nk = trees_keys()
+    var explicit = _field(fields, model, nk[].k_boosting_type, "boosting_type")
     if explicit is not None:
         return _str(explicit)
-    var loss = _field(fields, model, "loss")
-    var fraction = py_get(fields, "feature_fraction", PythonObject(1.0))
-    var score = _field(fields, model, "score_function")
-    if (not _eq(_field(fields, model, "grow_policy"), "SymmetricTree") or _in(loss, t["multi_output_losses"])
-            or _in(loss, t["multi_regression_losses"])
+    var loss = _field(fields, model, nk[].k_loss, "loss")
+    var fraction = py_get(fields, nk[].k_feature_fraction, PythonObject(1.0))
+    var score = _field(fields, model, nk[].k_score_function, "score_function")
+    if (not _eq(_field(fields, model, nk[].k_grow_policy, "grow_policy"), "SymmetricTree") or _in(loss, py_item(t, nk[].k_multi_output_losses))
+            or _in(loss, py_item(t, nk[].k_multi_regression_losses))
             or not (_eq(score, "Cosine") or _eq(score, "NewtonCosine"))
-            or _truthy(_field(fields, model, "use_pointwise_searcher")) or Bool(py=fraction < PythonObject(1.0))):
+            or _truthy(_field(fields, model, nk[].k_use_pointwise_searcher, "use_pointwise_searcher")) or Bool(py=fraction < PythonObject(1.0))):
         return "Plain"
-    if n_rows >= Int(py=t["ordered_max_rows"]) or Int(py=py_call_typed(_b().int, _field(fields, model, "n_estimators"))) < Int(py=t["ordered_min_iterations"]):
+    if n_rows >= Int(py=py_item(t, nk[].k_ordered_max_rows)) or Int(py=py_call_typed(_b().int, _field(fields, model, nk[].k_n_estimators, "n_estimators"))) < Int(py=py_item(t, nk[].k_ordered_min_iterations)):
         return "Plain"
     return "Ordered"
 
@@ -184,17 +191,18 @@ def _check_ordered_options(boosting: String, fields: PythonObject, model: Python
     if boosting != "Ordered":
         return
     var t = _tables(context)
-    var loss = _field(fields, model, "loss")
-    var score = _field(fields, model, "score_function")
+    var nk = trees_keys()
+    var loss = _field(fields, model, nk[].k_loss, "loss")
+    var score = _field(fields, model, nk[].k_score_function, "score_function")
     var facts = GbdtOrderedFacts(
-        _eq(_field(fields, model, "grow_policy"), "SymmetricTree"),
-        _in(loss, t["multi_output_losses"]),
-        _in(loss, t["multi_regression_losses"]),
-        _in(loss, t["querywise_losses"]),
+        _eq(_field(fields, model, nk[].k_grow_policy, "grow_policy"), "SymmetricTree"),
+        _in(loss, py_item(t, nk[].k_multi_output_losses)),
+        _in(loss, py_item(t, nk[].k_multi_regression_losses)),
+        _in(loss, py_item(t, nk[].k_querywise_losses)),
         _eq(score, "Cosine") or _eq(score, "NewtonCosine"),
-        _eq(_field(fields, model, "leaf_estimation_method"), "Exact"),
-        _truthy(_field(fields, model, "use_pointwise_searcher")),
-        Bool(py=py_get(fields, "feature_fraction", PythonObject(1.0)) < PythonObject(1.0)),
+        _eq(_field(fields, model, nk[].k_leaf_estimation_method, "leaf_estimation_method"), "Exact"),
+        _truthy(_field(fields, model, nk[].k_use_pointwise_searcher, "use_pointwise_searcher")),
+        Bool(py=py_get(fields, nk[].k_feature_fraction, PythonObject(1.0)) < PythonObject(1.0)),
         _str(loss), _repr(loss), _str(score))
     gbdt_check_ordered_options(boosting, facts)
 
@@ -204,12 +212,13 @@ def _validate_search_options(fields: PythonObject, model: PythonObject, context:
     RUN check (gbdt/trees_gbdt_fit_run.mojo) that returns the strength the
     fit uses."""
     var t = _tables(context)
-    var grow = _field(fields, model, "grow_policy")
-    var score = _field(fields, model, "score_function")
-    var rs = _field(fields, model, "random_strength")
+    var nk = trees_keys()
+    var grow = _field(fields, model, nk[].k_grow_policy, "grow_policy")
+    var score = _field(fields, model, nk[].k_score_function, "score_function")
+    var rs = _field(fields, model, nk[].k_random_strength, "random_strength")
     var strength = gbdt_nan()
     var real = False
-    if rs is not None and not _is_bool(rs) and Bool(py=py_call(_b().isinstance, rs, context["trees_real_type"])):
+    if rs is not None and not _is_bool(rs) and Bool(py=py_call(_b().isinstance, rs, py_item(context, nk[].k_trees_real_type))):
         real = True
         try:
             strength = _float(rs)
@@ -220,11 +229,11 @@ def _validate_search_options(fields: PythonObject, model: PythonObject, context:
     # sentence (round2-fixes; perf audit 2 A pattern 9: the door split built
     # them on every fit, the old code only on the refusing branch).
     var facts = GbdtSearchFacts(
-        _truthy(_field(fields, model, "use_pointwise_searcher")),
+        _truthy(_field(fields, model, nk[].k_use_pointwise_searcher, "use_pointwise_searcher")),
         _eq(grow, "SymmetricTree"), String(""),
         _eq(score, "L2") or _eq(score, "NewtonL2"), String(""),
         rs is None, strength, String(""),
-        _float(t["catboost_random_strength"]), _float(t["legacy_random_strength"]))
+        _float(py_item(t, nk[].k_catboost_random_strength)), _float(py_item(t, nk[].k_legacy_random_strength)))
     try:
         return gbdt_validate_search_options(facts)
     except:
@@ -263,19 +272,20 @@ def _params(fields: PythonObject, model: PythonObject, n_rows: Int, n_features: 
     var b = _b()
     var t = _tables(context)
     var strength = _validate_search_options(fields, model, context)
-    var cw = _field(fields, model, "class_weights")
+    var nk = trees_keys()
+    var cw = _field(fields, model, nk[].k_class_weights, "class_weights")
     var weights = Python.list() if cw is None or not _truthy(cw) else py_call(b.list, cw)
-    var method = _field(fields, model, "leaf_estimation_method")
-    var method_code = PythonObject(-1) if method is None else t["leaf_estimation_names"][method]
-    var iters = _field(fields, model, "leaf_estimation_iterations")
-    if (iters is None and _eq(_field(fields, model, "grow_policy"), "SymmetricTree")
-            and Int(py=py_call_typed(b.int, _field(fields, model, "n_estimators"))) < 200 and n_features < 20):
+    var method = _field(fields, model, nk[].k_leaf_estimation_method, "leaf_estimation_method")
+    var method_code = PythonObject(-1) if method is None else py_item(t, nk[].k_leaf_estimation_names)[method]
+    var iters = _field(fields, model, nk[].k_leaf_estimation_iterations, "leaf_estimation_iterations")
+    if (iters is None and _eq(_field(fields, model, nk[].k_grow_policy, "grow_policy"), "SymmetricTree")
+            and Int(py=py_call_typed(b.int, _field(fields, model, nk[].k_n_estimators, "n_estimators"))) < 200 and n_features < 20):
         iters = PythonObject(1)
     var rate = _resolved_learning_rate(fields, model, n_rows, n_eval_rows, eval_constant, context)
     var tail = Python.list()
-    var fraction = py_get(fields, "feature_fraction", PythonObject(1.0))
-    var gain = _field(fields, model, "min_split_gain")
-    var hessian = _field(fields, model, "min_child_hessian")
+    var fraction = py_get(fields, nk[].k_feature_fraction, PythonObject(1.0))
+    var gain = _field(fields, model, nk[].k_min_split_gain, "min_split_gain")
+    var hessian = _field(fields, model, nk[].k_min_child_hessian, "min_child_hessian")
     if not Bool(py=fraction == PythonObject(1.0)):
         _ = py_call(tail.append, PythonObject(-1.0) if gain is None else py_call_typed(b.float, gain))
         _ = py_call(tail.append, PythonObject(-1.0) if hessian is None else py_call_typed(b.float, hessian))
@@ -285,38 +295,38 @@ def _params(fields: PythonObject, model: PythonObject, n_rows: Int, n_features: 
         _ = py_call(tail.append, py_call_typed(b.float, hessian))
     elif gain is not None:
         _ = py_call(tail.append, py_call_typed(b.float, gain))
-    var l2 = _field(fields, model, "l2_leaf_reg")
-    var l2_value = PythonObject(0.0 if _eq(_field(fields, model, "loss"), "YetiRank") else 3.0) if l2 is None else l2
+    var l2 = _field(fields, model, nk[].k_l2_leaf_reg, "l2_leaf_reg")
+    var l2_value = PythonObject(0.0 if _eq(_field(fields, model, nk[].k_loss, "loss"), "YetiRank") else 3.0) if l2 is None else l2
     var params = Python.list(
         PythonObject(n_rows), PythonObject(n_features), PythonObject(n_weights), PythonObject(n_flags),
-        py_call_typed(b.int, _field(fields, model, "border_count")),
-        py_call_typed(b.int, _field(fields, model, "n_estimators")),
-        py_call_typed(b.int, _field(fields, model, "max_depth")),
+        py_call_typed(b.int, _field(fields, model, nk[].k_border_count, "border_count")),
+        py_call_typed(b.int, _field(fields, model, nk[].k_n_estimators, "n_estimators")),
+        py_call_typed(b.int, _field(fields, model, nk[].k_max_depth, "max_depth")),
         PythonObject(rate),
         py_call_typed(b.float, l2_value),
-        py_call_typed(b.int, _field(fields, model, "random_state")),
-        t["score_function_names"][_field(fields, model, "score_function")],
-        _f(_field(fields, model, "loss_alpha")), _f(_field(fields, model, "loss_q")),
-        _f(_field(fields, model, "loss_delta")), _f(_field(fields, model, "loss_variance_power")),
-        _f(_field(fields, model, "loss_border")),
+        py_call_typed(b.int, _field(fields, model, nk[].k_random_state, "random_state")),
+        py_item(t, nk[].k_score_function_names)[_field(fields, model, nk[].k_score_function, "score_function")],
+        _f(_field(fields, model, nk[].k_loss_alpha, "loss_alpha")), _f(_field(fields, model, nk[].k_loss_q, "loss_q")),
+        _f(_field(fields, model, nk[].k_loss_delta, "loss_delta")), _f(_field(fields, model, nk[].k_loss_variance_power, "loss_variance_power")),
+        _f(_field(fields, model, nk[].k_loss_border, "loss_border")),
         PythonObject(-1) if iters is None else py_call_typed(b.int, iters),
         method_code,
-        py_call_typed(b.float, _field(fields, model, "bagging_temperature")),
-        _f(_field(fields, model, "subsample")),
+        py_call_typed(b.float, _field(fields, model, nk[].k_bagging_temperature, "bagging_temperature")),
+        _f(_field(fields, model, nk[].k_subsample, "subsample")),
         PythonObject(n_eval_rows),
-        _f(_field(fields, model, "od_pvalue")),
-        _int_or(_field(fields, model, "od_wait"), -1),
-        _tri(_field(fields, model, "use_best_model")),
-        py_call_typed(b.int, _field(fields, model, "best_model_min_trees")),
+        _f(_field(fields, model, nk[].k_od_pvalue, "od_pvalue")),
+        _int_or(_field(fields, model, nk[].k_od_wait, "od_wait"), -1),
+        _tri(_field(fields, model, nk[].k_use_best_model, "use_best_model")),
+        py_call_typed(b.int, _field(fields, model, nk[].k_best_model_min_trees, "best_model_min_trees")),
         PythonObject(strength),
-        PythonObject(1 if _truthy(_field(fields, model, "use_pointwise_searcher")) else 0),
-        py_call_typed(b.int, _field(fields, model, "border_build_max_samples")),
-        _int_or(_field(fields, model, "permutation_count"), -1),
-        _int_or(_field(fields, model, "ctr_estimation_permutation_id"), -1),
-        _tri(_field(fields, model, "boost_from_average")),
-        t["grow_policy_codes"][_field(fields, model, "grow_policy")],
-        _int_or(_field(fields, model, "max_leaves"), -1),
-        py_call_typed(b.int, _field(fields, model, "min_data_in_leaf")),
+        PythonObject(1 if _truthy(_field(fields, model, nk[].k_use_pointwise_searcher, "use_pointwise_searcher")) else 0),
+        py_call_typed(b.int, _field(fields, model, nk[].k_border_build_max_samples, "border_build_max_samples")),
+        _int_or(_field(fields, model, nk[].k_permutation_count, "permutation_count"), -1),
+        _int_or(_field(fields, model, nk[].k_ctr_estimation_permutation_id, "ctr_estimation_permutation_id"), -1),
+        _tri(_field(fields, model, nk[].k_boost_from_average, "boost_from_average")),
+        py_item(t, nk[].k_grow_policy_codes)[_field(fields, model, nk[].k_grow_policy, "grow_policy")],
+        _int_or(_field(fields, model, nk[].k_max_leaves, "max_leaves"), -1),
+        py_call_typed(b.int, _field(fields, model, nk[].k_min_data_in_leaf, "min_data_in_leaf")),
         PythonObject(len(weights)),
     )
     _ = py_call(params.extend, weights)
@@ -394,8 +404,9 @@ def _group_key(value: PythonObject, index: Int, context: PythonObject) raises ->
         return value
     if cls is b.str:
         return py_call(b.str.encode, value, "utf-8")
+    var nk = trees_keys()
     var numpy_int = (cls is not b.bool and String(py_call(b.getattr, cls, "__module__", "")) == "numpy"
-                     and Bool(py=py_call(b.isinstance, value, context["trees_integral_type"])))
+                     and Bool(py=py_call(b.isinstance, value, py_item(context, nk[].k_trees_integral_type))))
     if cls is b.int or numpy_int:
         return py_call(b.str.encode, py_call(b.str, py_call_typed(b.int, value)), "ascii")
     raise Error("mojolearn: group_id[" + String(index) + "] object (" + _repr(value) + ") is unsuitable "
@@ -407,11 +418,12 @@ def _listed(value: PythonObject, context: PythonObject) raises -> PythonObject:
     is, else `list(value)`."""
     var b = _b()
     var cls = py_type(value)
-    var ndarray = py_get(context, "ndarray")
+    var nk = trees_keys()
+    var ndarray = py_get(context, nk[].k_ndarray)
     if ndarray is not None and cls is ndarray:
         return py_call(ndarray.tolist, value)
-    if cls is context["array_type"]:
-        return py_call(context["array_type"].tolist, value)
+    if cls is py_item(context, nk[].k_array_type):
+        return py_call(py_item(context, nk[].k_array_type).tolist, value)
     if cls is b.list:
         return value
     if cls is b.tuple:
@@ -436,8 +448,9 @@ def _group_sizes_native(group_id: PythonObject, n_rows: Int, context: PythonObje
     exactly when their values are equal, so the runs and the refusal are the
     same. None when the ids are not such a vector (the general path below)."""
     var cls = py_type(group_id)
-    var ndarray = py_get(context, "ndarray")
-    if not ((ndarray is not None and cls is ndarray) or cls is context["array_class"]):
+    var nk = trees_keys()
+    var ndarray = py_get(context, nk[].k_ndarray)
+    if not ((ndarray is not None and cls is ndarray) or cls is py_item(context, nk[].k_array_class)):
         return PythonObject(None)
     var view = PythonObject(None)
     var t = String("")
@@ -584,8 +597,9 @@ struct _PairAdmit(Movable):
     def __init__(out self, context: PythonObject) raises:
         var b = _b()
         self.isinstance_ = b.isinstance
-        self.integral_t = context["trees_integral_type"]
-        self.real_t = context["trees_real_type"]
+        var nk = trees_keys()
+        self.integral_t = py_item(context, nk[].k_trees_integral_type)
+        self.real_t = py_item(context, nk[].k_trees_real_type)
         self.bool_t = b.bool
         self.int_t = b.int
         self.float_t = b.float
@@ -643,7 +657,8 @@ def _pairs_arrays(pairs: PythonObject, pairs_weight: PythonObject, n_rows: Int,
     no Python-level call); only a non-exact element takes the old
     admission. Any other ndarray (bool, float or object pairs, other
     shapes) keeps the `tolist()` route, so its refusal is unchanged."""
-    var ndarray = py_get(context, "ndarray")
+    var nk = trees_keys()
+    var ndarray = py_get(context, nk[].k_ndarray)
     var pair_view = exact_ndarray_view(pairs, ndarray)
     var fast_pairs = False
     if pair_view:
@@ -734,8 +749,9 @@ def _flags(fields: PythonObject, model: PythonObject, n_features: Int, context: 
     """`GradientBoosting._flags`: one packed word per feature (bit 0
     categorical, bit 1 one-hot), or None."""
     var b = _b()
-    var cat = _field(fields, model, "cat_features")
-    var hot = _field(fields, model, "one_hot_features")
+    var nk = trees_keys()
+    var cat = _field(fields, model, nk[].k_cat_features, "cat_features")
+    var hot = _field(fields, model, nk[].k_one_hot_features, "one_hot_features")
     if not _truthy(cat) and not _truthy(hot):
         return PythonObject(None)
     var out = admitted_vector(n_features, "<u4", context)
@@ -793,7 +809,8 @@ def _eval_set(eval_set: PythonObject, fields: PythonObject, model: PythonObject,
         raise Error("mojolearn: eval_set y has " + String(ye.rows) + " values for "
                     + String(xe.rows) + " rows")
     if not trees_finite_f32(ye.address, ye.rows):
-        var multi = _in(_field(fields, model, "loss"), _tables(context)["multi_output_losses"])
+        var nk = trees_keys()
+        var multi = _in(_field(fields, model, nk[].k_loss, "loss"), py_item(_tables(context), nk[].k_multi_output_losses))
         raise Error("mojolearn: " + ("eval_set y (the eval_set labels)" if multi else "eval_set y")
                     + " must be finite (no NaN or infinity)")
     _ = ye  # keep the Python object alive through the native calls above
@@ -827,7 +844,8 @@ def _has_nan(x: AdmittedXView, context: PythonObject) raises -> Bool:
 
 def _f64_array(values: PythonObject, context: PythonObject) raises -> PythonObject:
     """`Array.from_list(values, "<f8")` of a binding's list of floats."""
-    var store = py_call(context["array_type"], "d", values)
+    var nk = trees_keys()
+    var store = py_call(py_item(context, nk[].k_array_type), "d", values)
     return classical_wrap_array(store, Python.tuple(len(store)), "<f8", "C", context)
 
 
@@ -874,8 +892,9 @@ def gbdt_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     # releases it), not at the next call.
     _ = py_call(fields.pop, "_resident", PythonObject(None))
     var table = gbdt_table(fields, context)
-    var cat = _field(fields, model, "cat_features")
-    var hot = _field(fields, model, "one_hot_features")
+    var nk = trees_keys()
+    var cat = _field(fields, model, nk[].k_cat_features, "cat_features")
+    var hot = _field(fields, model, nk[].k_one_hot_features, "one_hot_features")
     var gkey = _gk(table)
     var row_major_ok = False
     try:
@@ -894,10 +913,10 @@ def gbdt_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     var n_features = x.cols
     if n_rows == 0 or n_features == 0:
         raise Error("mojolearn: fit requires at least one row and one feature")
-    var loss = _field(fields, model, "loss")
+    var loss = _field(fields, model, nk[].k_loss, "loss")
     var target_dim = 1
     var ya: AdmittedX
-    if _in(loss, t["multi_regression_losses"]):
+    if _in(loss, py_item(t, nk[].k_multi_regression_losses)):
         ya = admit_f32(y, 2, "y", context, order="F", finite=False)
         target_dim = ya.cols
         if target_dim < 2:
@@ -911,13 +930,13 @@ def gbdt_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
         if group_id is not None or pairs is not None:
             raise Error("mojolearn: loss=" + _repr(loss) + " does not read group_id "
                         + "or pairs")
-        if _field(fields, model, "class_weights") is not None:
+        if _field(fields, model, nk[].k_class_weights, "class_weights") is not None:
             raise Error("mojolearn: class_weights do not apply to loss=" + _repr(loss))
         if _truthy(cat) or _truthy(hot):
             raise Error("NotImplementedError: mojolearn: loss=" + _repr(loss) + " with cat_features or "
                         + "one_hot_features is not carried: the CTR target "
                         + "binarization reads one target per row")
-        if _truthy(_field(fields, model, "boost_from_average")):
+        if _truthy(_field(fields, model, nk[].k_boost_from_average, "boost_from_average")):
             raise Error("NotImplementedError: mojolearn: boost_from_average=True with loss="
                         + _repr(loss) + " is not carried: its StartingPoint is "
                         + "per-dimension (optimal_const_for_loss.h:230-239) and "
@@ -926,13 +945,13 @@ def gbdt_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
         ya = admit_f32(y, 1, "y", context, finite=False)
     if ya.rows != n_rows:
         raise Error("mojolearn: y has " + String(ya.rows) + " values for " + String(n_rows) + " rows")
-    var multi_output = _in(loss, t["multi_output_losses"])
+    var multi_output = _in(loss, py_item(t, nk[].k_multi_output_losses))
     if not trees_finite_f32(ya.address, ya.rows * ya.cols):
         # scikit-learn's wording, as the former fit and the other families
         # raise it (bindings/classical_validate.mojo).
         raise Error("Input y contains NaN or infinity" + (" (the class labels)" if multi_output else "")
                     + " (GradientBoosting).")
-    if _eq(_field(fields, model, "nan_mode"), "Forbidden") and not trees_finite_f32(x.address, n_rows * n_features):
+    if _eq(_field(fields, model, nk[].k_nan_mode, "nan_mode"), "Forbidden") and not trees_finite_f32(x.address, n_rows * n_features):
         if _has_nan(x.view(), context):
             raise Error("mojolearn: nan_mode='Forbidden' but X contains NaN. "
                         + "CatBoost refuses this pair; this implementation would otherwise "
@@ -950,7 +969,7 @@ def gbdt_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
         if not Bool(py=found[1]):
             raise Error("mojolearn: " + _str(loss) + " labels must be dense class "
                         + "codes 0..k-1; encode labels before fitting")
-        var cw = _field(fields, model, "class_weights")
+        var cw = _field(fields, model, nk[].k_class_weights, "class_weights")
         if cw is not None and len(cw) != n_classes:
             raise Error("mojolearn: class_weights needs " + String(n_classes) + " entries "
                         + "for " + _str(loss))
@@ -979,7 +998,7 @@ def gbdt_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
         var hi = py_call_typed(helper, held[3], PythonObject(0), PythonObject(n_eval_rows), PythonObject(1))
         eval_constant = Bool(py=lo == hi)
     var params = _params(fields, model, n_rows, n_features, n_flags, n_weights, n_eval_rows, eval_constant, context)
-    py_setitem(fields, "learning_rate_", py_call_typed(b.float, params[7]))
+    py_setitem(fields, nk[].k_learning_rate_, py_call_typed(b.float, params[7]))
     if target_dim != 1:
         params = _padded_tail(params)
         _ = py_call(params.append, PythonObject(target_dim))
@@ -1022,25 +1041,25 @@ def gbdt_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
                 _ = group_holder  # keep the Python object alive through the native call above
                 _ = py_call(params.append, PythonObject(trees_address(pair_holders[1])))
                 _ = group_holder  # keep the Python object alive through the native call above
-    var od = _field(fields, model, "od_type")
-    if od is not None and not _in(od, t["od_types"]):
-        raise Error("mojolearn: od_type must be one of " + _repr(t["od_types"]) + ", got " + _repr(od))
-    var bootstrap = _field(fields, model, "bootstrap_type")
+    var od = _field(fields, model, nk[].k_od_type, "od_type")
+    if od is not None and not _in(od, py_item(t, nk[].k_od_types)):
+        raise Error("mojolearn: od_type must be one of " + _repr(py_item(t, nk[].k_od_types)) + ", got " + _repr(od))
+    var bootstrap = _field(fields, model, nk[].k_bootstrap_type, "bootstrap_type")
     var strs = Python.list(loss, PythonObject("") if not _truthy(bootstrap) else bootstrap,
-                           PythonObject("") if not _truthy(od) else od, _field(fields, model, "nan_mode"))
-    var border = py_get(fields, "feature_border_type", PythonObject("GreedyLogSum"))
-    if not _in(border, t["border_types"]):
-        raise Error("mojolearn: feature_border_type must be one of " + _repr(t["border_types"]) + ", got " + _repr(border))
+                           PythonObject("") if not _truthy(od) else od, _field(fields, model, nk[].k_nan_mode, "nan_mode"))
+    var border = py_get(fields, nk[].k_feature_border_type, PythonObject("GreedyLogSum"))
+    if not _in(border, py_item(t, nk[].k_border_types)):
+        raise Error("mojolearn: feature_border_type must be one of " + _repr(py_item(t, nk[].k_border_types)) + ", got " + _repr(border))
     var boosting = _resolved_boosting_type(fields, model, n_rows, context)
     _check_ordered_options(boosting, fields, model, context)
-    var fold_len = _float(py_get(fields, "fold_len_multiplier", PythonObject(2.0)))
-    var fold_block = py_get(fields, "fold_permutation_block", PythonObject(None))
+    var fold_len = _float(py_get(fields, nk[].k_fold_len_multiplier, PythonObject(2.0)))
+    var fold_block = py_get(fields, nk[].k_fold_permutation_block, PythonObject(None))
     if boosting == "Plain":
         if fold_len != 2.0 or fold_block is not None:
             raise Error("mojolearn: fold_len_multiplier and fold_permutation_block "
                         + "are read only by Ordered boosting, and this fit resolved "
                         + "to Plain; they would be accepted and ignored")
-        if _field(fields, model, "permutation_count") is not None and not _truthy(cat):
+        if _field(fields, model, nk[].k_permutation_count, "permutation_count") is not None and not _truthy(cat):
             raise Error("mojolearn: permutation_count is read only by the "
                         + "categorical path and by Ordered boosting, and this fit "
                         + "resolved to Plain with no cat_features; it would be "
@@ -1051,7 +1070,7 @@ def gbdt_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
         _ = py_call(strs.append, PythonObject("Ordered"))
         _ = py_call(strs.append, PythonObject(String(bitcast[DType.uint64](fold_len))))
         _ = py_call(strs.append, PythonObject(String(0 if fold_block is None else Int(py=py_call_typed(b.int, fold_block)))))
-    py_setitem(fields, "boosting_type_", PythonObject(boosting))
+    py_setitem(fields, nk[].k_boosting_type_, PythonObject(boosting))
     var ex_addr = x.address if held is None else Int(py=held[1])
     var ey_addr = ya.address if held is None else Int(py=held[3])
     # UNPACK of the params and strs lists once; the fit runs natively in the
@@ -1073,38 +1092,39 @@ def gbdt_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     _ = pair_holders^
     # PACK of the native outcome
     var text = PythonObject(outcome.text)
-    py_setitem(fields, "model_", text)
-    py_setitem(fields, "bias_", PythonObject(gbdt_bias_of(outcome.text)))
-    py_setitem(fields, "best_iteration_", PythonObject(outcome.best_iteration))
-    py_setitem(fields, "stopped_early_", PythonObject(outcome.stopped_early))
-    py_setitem(fields, "loss_curve_", _f64_curve(outcome.learn, context))
-    py_setitem(fields, "test_loss_curve_", _f64_curve(outcome.test, context) if n_eval_rows else PythonObject(None))
-    py_setitem(fields, "n_features_in_", PythonObject(n_features))
+    py_setitem(fields, nk[].k_model_, text)
+    py_setitem(fields, nk[].k_bias_, PythonObject(gbdt_bias_of(outcome.text)))
+    py_setitem(fields, nk[].k_best_iteration_, PythonObject(outcome.best_iteration))
+    py_setitem(fields, nk[].k_stopped_early_, PythonObject(outcome.stopped_early))
+    py_setitem(fields, nk[].k_loss_curve_, _f64_curve(outcome.learn, context))
+    py_setitem(fields, nk[].k_test_loss_curve_, _f64_curve(outcome.test, context) if n_eval_rows else PythonObject(None))
+    py_setitem(fields, nk[].k_n_features_in_, PythonObject(n_features))
     var dim = PythonObject(None)
     if entry_ref_vendor(gkey) == 0 and gbdt_has_ctr(text):
         # the host image (vendor word 0 is "cpu", core/gbdt_entry_table.mojo)
-        dim = py_call_typed(b.int, host_archive_gbdt_state(text, context)["dim"])
+        dim = py_call_typed(b.int, py_item(host_archive_gbdt_state(text, context), nk[].k_dim))
     else:
         dim = PythonObject(xg_model_dim(gkey, outcome.text))
-    py_setitem(fields, "approx_dim_", dim)
+    py_setitem(fields, nk[].k_approx_dim_, dim)
     if _eq(loss, "MultiClass"):
-        py_setitem(fields, "n_classes_", dim + PythonObject(1))
+        py_setitem(fields, nk[].k_n_classes_, dim + PythonObject(1))
     elif _eq(loss, "MultiClassOneVsAll"):
-        py_setitem(fields, "n_classes_", dim)
+        py_setitem(fields, nk[].k_n_classes_, dim)
     else:
-        py_setitem(fields, "n_classes_", PythonObject(None))
+        py_setitem(fields, nk[].k_n_classes_, PythonObject(None))
     _ = x^
     _ = ya^
     return model
 
 
-def gbdt_inspect(model: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def gbdt_inspect(model: PythonObject, operation: Int, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """The fit's resolved settings, for inspection: `_params(...)`,
-    `_resolved_learning_rate(...)`, `_resolved_boosting_type(n_rows)`."""
+    `_resolved_learning_rate(...)`, `_resolved_boosting_type(n_rows)`, by
+    the leaf code of `trees_gbdt_params` / `_learning_rate` / `_boosting_type`."""
     var fields = py_fields(model)
-    if operation == "trees_gbdt_boosting_type":
+    if operation == TREES_OPN_TREES_GBDT_BOOSTING_TYPE:
         return PythonObject(_resolved_boosting_type(fields, model, _int(args[0]), context))
-    if operation == "trees_gbdt_learning_rate":
+    if operation == TREES_OPN_TREES_GBDT_LEARNING_RATE:
         return PythonObject(_resolved_learning_rate(fields, model, _int(args[0]), _int(args[1]), _truthy(args[2]), context))
     return _params(fields, model, _int(args[0]), _int(args[1]), _int(args[2]), _int(args[3]), _int(args[4]),
                    _truthy(args[5]), context)
@@ -1114,7 +1134,8 @@ def gbdt_inspect(model: PythonObject, operation: String, args: PythonObject, con
 
 
 def _real(value: PythonObject, context: PythonObject) raises -> Bool:
-    return not _is_bool(value) and Bool(py=py_call(_b().isinstance, value, context["trees_real_type"]))
+    var nk = trees_keys()
+    return not _is_bool(value) and Bool(py=py_call(_b().isinstance, value, py_item(context, nk[].k_trees_real_type)))
 
 
 def _parsed_real(value: PythonObject, context: PythonObject) raises -> Float64:
@@ -1134,30 +1155,31 @@ def gbdt_initialize(model: PythonObject, args: PythonObject, context: PythonObje
     normalized them) and the unfitted state."""
     var b = _b()
     var t = _tables(context)
-    var names = t["init_names"]
+    var nk = trees_keys()
+    var names = py_item(t, nk[].k_init_names)
     var kw = Python.dict()
     for i in range(len(names)):  # driver-loop: over the constructor parameter names
         py_setitem(kw, names[i], args[i])
-    var loss = kw["loss"]
-    if not _in(loss, t["losses"]):
-        raise Error("mojolearn: loss must be one of " + _repr(t["losses"]) + ", got " + _repr(loss))
-    var required = py_get(t["required_param"], loss)
+    var loss = py_item(kw, nk[].k_loss)
+    if not _in(loss, py_item(t, nk[].k_losses)):
+        raise Error("mojolearn: loss must be one of " + _repr(py_item(t, nk[].k_losses)) + ", got " + _repr(loss))
+    var required = py_get(py_item(t, nk[].k_required_param), loss)
     if required is not None:
         if kw[required[1]] is None:
             raise Error("mojolearn: " + _str(loss) + " requires " + _str(required[1]) + "= "
                         + "(CatBoost's " + _repr(required[0]) + ", which it makes mandatory)")
-    var grow = kw["grow_policy"]
+    var grow = py_item(kw, nk[].k_grow_policy)
     var symmetric = _eq(grow, "SymmetricTree")
-    var bootstrap = kw["bootstrap_type"]
+    var bootstrap = py_item(kw, nk[].k_bootstrap_type)
     var bootstrap_defaulted = bootstrap is None and symmetric
-    var n_estimators = kw["n_estimators"]
+    var n_estimators = py_item(kw, nk[].k_n_estimators)
     if n_estimators is None:
-        n_estimators = t["catboost_iterations"] if symmetric else t["legacy_iterations"]
+        n_estimators = py_item(t, nk[].k_catboost_iterations) if symmetric else py_item(t, nk[].k_legacy_iterations)
     if bootstrap is None and symmetric:
-        bootstrap = t["catboost_bootstrap"]
-    if bootstrap is not None and not _in(bootstrap, t["bootstrap_types"]):
-        raise Error("mojolearn: bootstrap_type must be one of " + _repr(t["bootstrap_types"]) + ", got " + _repr(bootstrap))
-    var subsample = kw["subsample"]
+        bootstrap = py_item(t, nk[].k_catboost_bootstrap)
+    if bootstrap is not None and not _in(bootstrap, py_item(t, nk[].k_bootstrap_types)):
+        raise Error("mojolearn: bootstrap_type must be one of " + _repr(py_item(t, nk[].k_bootstrap_types)) + ", got " + _repr(bootstrap))
+    var subsample = py_item(kw, nk[].k_subsample)
     if _eq(bootstrap, "Bayesian") and subsample is not None:
         if bootstrap_defaulted:
             raise Error("mojolearn: the default bootstrap_type='Bayesian' "
@@ -1166,7 +1188,7 @@ def gbdt_initialize(model: PythonObject, args: PythonObject, context: PythonObje
                         + "or 'Poisson' with it")
         raise Error("mojolearn: bootstrap_type='Bayesian' does not support "
                     + "subsample; it takes bagging_temperature")
-    if not Bool(py=kw["bagging_temperature"] == PythonObject(1.0)) and not _eq(bootstrap, "Bayesian"):
+    if not Bool(py=py_item(kw, nk[].k_bagging_temperature) == PythonObject(1.0)) and not _eq(bootstrap, "Bayesian"):
         raise Error("mojolearn: bagging_temperature is read only by "
                     + "bootstrap_type='Bayesian'; with bootstrap_type="
                     + _repr(bootstrap) + " it would be ignored, so it is refused")
@@ -1174,26 +1196,26 @@ def gbdt_initialize(model: PythonObject, args: PythonObject, context: PythonObje
         raise Error("mojolearn: subsample is read only by bootstrap_type="
                     + "'Bernoulli' or 'Poisson'; with bootstrap_type="
                     + _repr(bootstrap) + " it would be ignored, so it is refused")
-    var method = kw["leaf_estimation_method"]
-    if method is not None and not _in(method, t["leaf_estimation_names"]):
+    var method = py_item(kw, nk[].k_leaf_estimation_method)
+    if method is not None and not _in(method, py_item(t, nk[].k_leaf_estimation_names)):
         raise Error("mojolearn: leaf_estimation_method must be one of "
-                    + _repr(py_call(b.tuple, t["leaf_estimation_names"])) + ", got " + _repr(method))
+                    + _repr(py_call(b.tuple, py_item(t, nk[].k_leaf_estimation_names))) + ", got " + _repr(method))
     if _eq(grow, "Region"):
         raise Error("NotImplementedError: mojolearn: grow_policy='Region' is EGrowPolicy::Region, "
                     + "which no lane implements (greedy_search_helper.cpp:325-350); "
-                    + "reachable values are " + _repr(t["grow_policies"]))
-    if not _in(grow, t["grow_policy_codes"]):
-        raise Error("mojolearn: grow_policy must be one of " + _repr(t["grow_policies"]) + ", "
+                    + "reachable values are " + _repr(py_item(t, nk[].k_grow_policies)))
+    if not _in(grow, py_item(t, nk[].k_grow_policy_codes)):
+        raise Error("mojolearn: grow_policy must be one of " + _repr(py_item(t, nk[].k_grow_policies)) + ", "
                     + "got " + _repr(grow))
-    var fraction = _parsed_real(kw["feature_fraction"], context)
+    var fraction = _parsed_real(py_item(kw, nk[].k_feature_fraction), context)
     if not isfinite(fraction) or not (fraction > 0.0 and fraction <= 1.0):
         raise Error("mojolearn: feature_fraction must be finite and in (0, 1]")
-    var cat = kw["cat_features"]
-    var hot = kw["one_hot_features"]
+    var cat = py_item(kw, nk[].k_cat_features)
+    var hot = py_item(kw, nk[].k_one_hot_features)
     if fraction < 1.0 and ((cat is not None and len(cat) > 0) or (hot is not None and len(hot) > 0)):
         raise Error("NotImplementedError: mojolearn: feature_fraction < 1 requires numeric features; "
                     + "categorical, one-hot and CTR features are unsupported")
-    var gain_obj = kw["min_split_gain"]
+    var gain_obj = py_item(kw, nk[].k_min_split_gain)
     var gain = PythonObject(None)
     if gain_obj is not None:
         var parsed = _parsed_real(gain_obj, context)
@@ -1203,14 +1225,14 @@ def gbdt_initialize(model: PythonObject, args: PythonObject, context: PythonObje
             raise Error("mojolearn: min_split_gain is only supported for Depthwise and Lossguide")
         gain = PythonObject(parsed)
     var non_symmetric = not symmetric
-    if non_symmetric and not _in(loss, t["non_symmetric_losses"]):
+    if non_symmetric and not _in(loss, py_item(t, nk[].k_non_symmetric_losses)):
         raise Error("NotImplementedError: mojolearn: Error: optimization scheme is not supported for "
                     + "GPU learning Loss=" + _str(loss) + ";OptimizationScheme=" + _str(grow) + " "
                     + "-- CatBoost's GPU registers a non-symmetric trainer for "
                     + "exactly eleven losses (pointwise_non_symmetric.cpp:7-29; "
-                    + "train.cpp:279 is the refusal): " + _repr(py_call(b.sorted, t["non_symmetric_losses"])))
-    var max_leaves = kw["max_leaves"]
-    var depth = kw["max_depth"]
+                    + "train.cpp:279 is the refusal): " + _repr(py_call(b.sorted, py_item(t, nk[].k_non_symmetric_losses))))
+    var max_leaves = py_item(kw, nk[].k_max_leaves)
+    var depth = py_item(kw, nk[].k_max_depth)
     if depth is not None:
         # The device trainer sizes its leaf tables from 2 ** max_depth and
         # reads a negative depth out of bounds (a segfault on CUDA); CatBoost
@@ -1232,7 +1254,7 @@ def gbdt_initialize(model: PythonObject, args: PythonObject, context: PythonObje
         if _eq(grow, "Lossguide") and leaves > 65536:
             raise Error("mojolearn: Maximum leaves count for Lossguide grow "
                         + "policy is 65536, got " + _str(max_leaves))
-    var min_data = kw["min_data_in_leaf"]
+    var min_data = py_item(kw, nk[].k_min_data_in_leaf)
     var min_data_int = Int(py=py_call_typed(b.int, min_data))
     if min_data_int < 0:
         raise Error("mojolearn: min_data_in_leaf must be >= 0, got " + _str(min_data))
@@ -1243,16 +1265,16 @@ def gbdt_initialize(model: PythonObject, args: PythonObject, context: PythonObje
                     + "Lossguide (greedy_search_helper.cpp:685) and discards the "
                     + "value on oblivious trees. Use a non-symmetric grow_policy "
                     + "or leave it at 1.")
-    var score = kw["score_function"]
+    var score = py_item(kw, nk[].k_score_function)
     if score is None:
         score = PythonObject("NewtonL2") if _eq(grow, "Lossguide") else PythonObject("Cosine")
-    var unsupported = py_get(t["unsupported_score_functions"], score)
+    var unsupported = py_get(py_item(t, nk[].k_unsupported_score_functions), score)
     if unsupported is not None:
         raise Error("NotImplementedError: mojolearn: score_function=" + _repr(score) + " is not "
-                    + "honored here -- " + _str(unsupported) + ". Reachable values are " + _repr(t["score_functions"]) + ".")
-    if not _in(score, t["score_function_names"]):
-        raise Error("mojolearn: score_function must be one of " + _repr(t["score_functions"]) + ", got " + _repr(score))
-    var hessian_obj = kw["min_child_hessian"]
+                    + "honored here -- " + _str(unsupported) + ". Reachable values are " + _repr(py_item(t, nk[].k_score_functions)) + ".")
+    if not _in(score, py_item(t, nk[].k_score_function_names)):
+        raise Error("mojolearn: score_function must be one of " + _repr(py_item(t, nk[].k_score_functions)) + ", got " + _repr(score))
+    var hessian_obj = py_item(kw, nk[].k_min_child_hessian)
     var hessian = PythonObject(None)
     if hessian_obj is not None:
         var parsed = _parsed_real(hessian_obj, context)
@@ -1265,25 +1287,25 @@ def gbdt_initialize(model: PythonObject, args: PythonObject, context: PythonObje
         if not (_eq(loss, "RMSE") or _eq(loss, "Logloss") or _eq(loss, "CrossEntropy")):
             raise Error("mojolearn: min_child_hessian supports RMSE, Logloss and CrossEntropy only")
         hessian = PythonObject(parsed)
-    var nan_mode = kw["nan_mode"]
-    if not _in(nan_mode, t["nan_modes"]):
-        raise Error("mojolearn: nan_mode must be one of " + _repr(t["nan_modes"]) + ", got " + _repr(nan_mode))
-    var border = kw["feature_border_type"]
-    if not _in(border, t["border_types"]):
-        raise Error("mojolearn: feature_border_type must be one of " + _repr(t["border_types"]) + ", got " + _repr(border))
+    var nan_mode = py_item(kw, nk[].k_nan_mode)
+    if not _in(nan_mode, py_item(t, nk[].k_nan_modes)):
+        raise Error("mojolearn: nan_mode must be one of " + _repr(py_item(t, nk[].k_nan_modes)) + ", got " + _repr(nan_mode))
+    var border = py_item(kw, nk[].k_feature_border_type)
+    if not _in(border, py_item(t, nk[].k_border_types)):
+        raise Error("mojolearn: feature_border_type must be one of " + _repr(py_item(t, nk[].k_border_types)) + ", got " + _repr(border))
     # `_validate_search_options` over the arguments.
     var probe = Python.dict()
-    py_setitem(probe, "grow_policy", grow)
-    py_setitem(probe, "score_function", score)
-    py_setitem(probe, "use_pointwise_searcher", kw["use_pointwise_searcher"])
-    py_setitem(probe, "random_strength", kw["random_strength"])
+    py_setitem(probe, nk[].k_grow_policy, grow)
+    py_setitem(probe, nk[].k_score_function, score)
+    py_setitem(probe, nk[].k_use_pointwise_searcher, py_item(kw, nk[].k_use_pointwise_searcher))
+    py_setitem(probe, nk[].k_random_strength, py_item(kw, nk[].k_random_strength))
     var strength = _validate_search_options(probe, model, context)
-    var random_strength = PythonObject(None) if kw["random_strength"] is None else PythonObject(strength)
-    var border_rows = kw["border_build_max_samples"]
+    var random_strength = PythonObject(None) if py_item(kw, nk[].k_random_strength) is None else PythonObject(strength)
+    var border_rows = py_item(kw, nk[].k_border_build_max_samples)
     if Bool(py=border_rows < PythonObject(0)):
         raise Error("mojolearn: border_build_max_samples must be >= 0 (0 means "
                     + "every row), got " + _str(border_rows))
-    var class_weights = kw["class_weights"]
+    var class_weights = py_item(kw, nk[].k_class_weights)
     var stored_weights = PythonObject(None)
     if class_weights is not None:
         if len(class_weights) == 0:
@@ -1299,28 +1321,28 @@ def gbdt_initialize(model: PythonObject, args: PythonObject, context: PythonObje
                         + "loss='RMSE', which has no class structure to weight")
         for i in range(len(listed)):  # driver-loop: over the class_weights argument
             _ = py_call(stored_weights.append, py_call_typed(b.float, listed[i]))
-    var boosting = kw["boosting_type"]
-    if boosting is not None and not _in(boosting, t["boosting_types"]):
-        raise Error("mojolearn: boosting_type must be one of " + _repr(t["boosting_types"]) + " or "
+    var boosting = py_item(kw, nk[].k_boosting_type)
+    if boosting is not None and not _in(boosting, py_item(t, nk[].k_boosting_types)):
+        raise Error("mojolearn: boosting_type must be one of " + _repr(py_item(t, nk[].k_boosting_types)) + " or "
                     + "None, got " + _repr(boosting))
     var ordered_probe = Python.dict()
-    py_setitem(ordered_probe, "loss", loss)
-    py_setitem(ordered_probe, "grow_policy", grow)
-    py_setitem(ordered_probe, "score_function", score)
-    py_setitem(ordered_probe, "leaf_estimation_method", method)
-    py_setitem(ordered_probe, "use_pointwise_searcher", kw["use_pointwise_searcher"])
-    py_setitem(ordered_probe, "feature_fraction", PythonObject(fraction))
+    py_setitem(ordered_probe, nk[].k_loss, loss)
+    py_setitem(ordered_probe, nk[].k_grow_policy, grow)
+    py_setitem(ordered_probe, nk[].k_score_function, score)
+    py_setitem(ordered_probe, nk[].k_leaf_estimation_method, method)
+    py_setitem(ordered_probe, nk[].k_use_pointwise_searcher, py_item(kw, nk[].k_use_pointwise_searcher))
+    py_setitem(ordered_probe, nk[].k_feature_fraction, PythonObject(fraction))
     _check_ordered_options(_str(boosting) if boosting is not None else String(""), ordered_probe, model, context)
-    var fold_len = kw["fold_len_multiplier"]
+    var fold_len = py_item(kw, nk[].k_fold_len_multiplier)
     var fold_ok = _real(fold_len, context)
     if fold_ok:
         var f = _float(fold_len)
         fold_ok = isfinite(f) and f > 1.0
     if not fold_ok:
         raise Error("mojolearn: fold len multiplier should be greater than 1, got " + _repr(fold_len))
-    var block = kw["fold_permutation_block"]
+    var block = py_item(kw, nk[].k_fold_permutation_block)
     if block is not None:
-        var ok = not _is_bool(block) and Bool(py=py_call(b.isinstance, block, context["trees_integral_type"]))
+        var ok = not _is_bool(block) and Bool(py=py_call(b.isinstance, block, py_item(context, nk[].k_trees_integral_type)))
         if ok:
             var v = Int(py=py_call_typed(b.int, block))
             ok = 0 <= v and v <= 256
@@ -1348,30 +1370,30 @@ def gbdt_initialize(model: PythonObject, args: PythonObject, context: PythonObje
     var fields = py_fields(model)
     var stored = Python.list(
         Python.tuple("loss", loss), Python.tuple("n_estimators", n_estimators), Python.tuple("max_depth", depth),
-        Python.tuple("learning_rate", kw["learning_rate"]), Python.tuple("l2_leaf_reg", kw["l2_leaf_reg"]),
-        Python.tuple("border_count", kw["border_count"]), Python.tuple("random_state", kw["random_state"]),
-        Python.tuple("loss_alpha", kw["loss_alpha"]), Python.tuple("loss_q", kw["loss_q"]),
-        Python.tuple("loss_delta", kw["loss_delta"]), Python.tuple("loss_variance_power", kw["loss_variance_power"]),
-        Python.tuple("loss_border", kw["loss_border"]), Python.tuple("leaf_estimation_method", method),
-        Python.tuple("leaf_estimation_iterations", kw["leaf_estimation_iterations"]),
-        Python.tuple("bootstrap_type", bootstrap), Python.tuple("bagging_temperature", kw["bagging_temperature"]),
+        Python.tuple("learning_rate", py_item(kw, nk[].k_learning_rate)), Python.tuple("l2_leaf_reg", py_item(kw, nk[].k_l2_leaf_reg)),
+        Python.tuple("border_count", py_item(kw, nk[].k_border_count)), Python.tuple("random_state", py_item(kw, nk[].k_random_state)),
+        Python.tuple("loss_alpha", py_item(kw, nk[].k_loss_alpha)), Python.tuple("loss_q", py_item(kw, nk[].k_loss_q)),
+        Python.tuple("loss_delta", py_item(kw, nk[].k_loss_delta)), Python.tuple("loss_variance_power", py_item(kw, nk[].k_loss_variance_power)),
+        Python.tuple("loss_border", py_item(kw, nk[].k_loss_border)), Python.tuple("leaf_estimation_method", method),
+        Python.tuple("leaf_estimation_iterations", py_item(kw, nk[].k_leaf_estimation_iterations)),
+        Python.tuple("bootstrap_type", bootstrap), Python.tuple("bagging_temperature", py_item(kw, nk[].k_bagging_temperature)),
         Python.tuple("subsample", subsample), Python.tuple("cat_features", cat), Python.tuple("one_hot_features", hot),
-        Python.tuple("od_type", kw["od_type"]), Python.tuple("od_pvalue", kw["od_pvalue"]),
-        Python.tuple("od_wait", kw["od_wait"]), Python.tuple("use_best_model", kw["use_best_model"]),
-        Python.tuple("best_model_min_trees", py_call_typed(b.int, kw["best_model_min_trees"])),
+        Python.tuple("od_type", py_item(kw, nk[].k_od_type)), Python.tuple("od_pvalue", py_item(kw, nk[].k_od_pvalue)),
+        Python.tuple("od_wait", py_item(kw, nk[].k_od_wait)), Python.tuple("use_best_model", py_item(kw, nk[].k_use_best_model)),
+        Python.tuple("best_model_min_trees", py_call_typed(b.int, py_item(kw, nk[].k_best_model_min_trees))),
         Python.tuple("score_function", score), Python.tuple("nan_mode", nan_mode),
         Python.tuple("random_strength", random_strength),
-        Python.tuple("use_pointwise_searcher", PythonObject(_truthy(kw["use_pointwise_searcher"]))),
-        Python.tuple("boost_from_average", kw["boost_from_average"]),
+        Python.tuple("use_pointwise_searcher", PythonObject(_truthy(py_item(kw, nk[].k_use_pointwise_searcher)))),
+        Python.tuple("boost_from_average", py_item(kw, nk[].k_boost_from_average)),
         Python.tuple("border_build_max_samples", py_call_typed(b.int, border_rows)),
         Python.tuple("class_weights", stored_weights),
-        Python.tuple("permutation_count", kw["permutation_count"]),
-        Python.tuple("ctr_estimation_permutation_id", kw["ctr_estimation_permutation_id"]),
+        Python.tuple("permutation_count", py_item(kw, nk[].k_permutation_count)),
+        Python.tuple("ctr_estimation_permutation_id", py_item(kw, nk[].k_ctr_estimation_permutation_id)),
         Python.tuple("grow_policy", grow),
         Python.tuple("max_leaves", PythonObject(None) if max_leaves is None else py_call_typed(b.int, max_leaves)),
         Python.tuple("min_data_in_leaf", PythonObject(min_data_int)),
         Python.tuple("min_split_gain", gain), Python.tuple("min_child_hessian", hessian),
-        Python.tuple("feature_fraction", kw["feature_fraction"]), Python.tuple("feature_border_type", border),
+        Python.tuple("feature_fraction", py_item(kw, nk[].k_feature_fraction)), Python.tuple("feature_border_type", border),
         Python.tuple("boosting_type", boosting), Python.tuple("fold_len_multiplier", py_call_typed(b.float, fold_len)),
         Python.tuple("fold_permutation_block", PythonObject(None) if block is None else py_call_typed(b.int, block)),
         Python.tuple("model_", PythonObject(None)), Python.tuple("loss_curve_", PythonObject(None)),
@@ -1397,21 +1419,22 @@ def _gbdt_base_args(model: PythonObject, overrides: PythonObject, context: Pytho
     `GradientBoosting.__init__`: the connected base's defaults, with
     `overrides` for the parameters the subclass passes."""
     var b = _b()
-    var classes = context["trees_classes"]
-    var ancestry = py_call(b.type.__dict__["__mro__"].__get__, py_type(model))
+    var nk = trees_keys()
+    var classes = py_item(context, nk[].k_trees_classes)
+    var ancestry = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, py_type(model))
     # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
     var found = Optional[PythonObject]()
     for i in range(len(ancestry)):  # driver-loop: over the model's class ancestry, to its connected GBDT base
         if not found:
             var kind = py_get(classes, ancestry[i])
             if kind is not None and String(kind) == "gbdt":
-                var candidate = context["trees_defaults"][ancestry[i]]
+                var candidate = py_item(context, nk[].k_trees_defaults)[ancestry[i]]
                 if candidate is not None:
                     found = candidate
     if not found:
         raise Error("TypeError: native GBDT constructors require the connected GradientBoosting base")
     var defaults = found.value()
-    var names = _tables(context)["init_names"]
+    var names = py_item(_tables(context), nk[].k_init_names)
     var args = Python.list()
     for i in range(len(names)):  # driver-loop: over the constructor parameter names
         _ = py_call(args.append, py_get(overrides, names[i], defaults[names[i]]))
@@ -1420,7 +1443,8 @@ def _gbdt_base_args(model: PythonObject, overrides: PythonObject, context: Pytho
 
 def _gbdt_subclass_storage(model: PythonObject, extra: PythonObject, context: PythonObject) raises:
     """Storage admission before the subclass constructor writes any field."""
-    var names = py_call(_b().list, _tables(context)["init_names"])
+    var nk = trees_keys()
+    var names = py_call(_b().list, py_item(_tables(context), nk[].k_init_names))
     _ = py_call(names.extend, extra)
     tree_constructor_storage(model, names)
 
@@ -1430,15 +1454,17 @@ def _gbdt_default_mode(model: PythonObject) raises:
     constructor: `numeric_mode = None` unless the model already has one."""
     var missing = Python.tuple()
     var fields = py_fields(model)
-    if not py_contains(fields, "numeric_mode") and _resolved(py_type(model), "numeric_mode", missing) is missing:
-        py_setitem(fields, "numeric_mode", PythonObject(None))
+    var nk = trees_keys()
+    if not py_contains(fields, nk[].k_numeric_mode) and _resolved(py_type(model), "numeric_mode", missing) is missing:
+        py_setitem(fields, nk[].k_numeric_mode, PythonObject(None))
 
 
 def _gbdt_store_mode(model: PythonObject, mode: PythonObject) raises:
     """The former numeric-mode wrapper's rule: a given mode is stored; None
     stores None unless the model already has a numeric_mode."""
     if mode is not None:
-        py_setitem(py_fields(model), "numeric_mode", mode)
+        var nk = trees_keys()
+        py_setitem(py_fields(model), nk[].k_numeric_mode, mode)
     else:
         _gbdt_default_mode(model)
 
@@ -1453,14 +1479,15 @@ def gbdt_ordered_construct(model: PythonObject, args: PythonObject, context: Pyt
     ordered_option_values(Python.tuple(args[0], args[1], args[4], args[2], args[3]), context)
     _gbdt_subclass_storage(model, Python.tuple("numeric_mode"), context)
     var overrides = Python.dict()
-    py_setitem(overrides, "loss", PythonObject("RMSE"))
-    py_setitem(overrides, "n_estimators", args[0])
-    py_setitem(overrides, "max_depth", args[1])
-    py_setitem(overrides, "learning_rate", args[2])
-    py_setitem(overrides, "l2_leaf_reg", args[3])
-    py_setitem(overrides, "border_count", args[4])
-    py_setitem(overrides, "boost_from_average", PythonObject(False))
-    py_setitem(overrides, "nan_mode", PythonObject("Forbidden"))
+    var nk = trees_keys()
+    py_setitem(overrides, nk[].k_loss, PythonObject("RMSE"))
+    py_setitem(overrides, nk[].k_n_estimators, args[0])
+    py_setitem(overrides, nk[].k_max_depth, args[1])
+    py_setitem(overrides, nk[].k_learning_rate, args[2])
+    py_setitem(overrides, nk[].k_l2_leaf_reg, args[3])
+    py_setitem(overrides, nk[].k_border_count, args[4])
+    py_setitem(overrides, nk[].k_boost_from_average, PythonObject(False))
+    py_setitem(overrides, nk[].k_nan_mode, PythonObject("Forbidden"))
     _ = gbdt_initialize(model, _gbdt_base_args(model, overrides, context), context)
     _gbdt_store_mode(model, args[5] if len(args) == 6 else PythonObject(None))
     return PythonObject(None)
@@ -1475,12 +1502,13 @@ def gbdt_feature_freq_construct(model: PythonObject, args: PythonObject, context
         raise Error("TypeError: the FeatureFreq constructor takes its four parameters and numeric_mode")
     _gbdt_subclass_storage(model, Python.tuple("numeric_mode", "sources"), context)
     var overrides = Python.dict()
-    py_setitem(overrides, "loss", PythonObject("RMSE"))
-    py_setitem(overrides, "n_estimators", PythonObject(1))
-    py_setitem(overrides, "max_depth", PythonObject(2))
-    py_setitem(overrides, "learning_rate", args[1])
-    py_setitem(overrides, "l2_leaf_reg", args[2])
-    py_setitem(overrides, "random_state", args[3])
+    var nk = trees_keys()
+    py_setitem(overrides, nk[].k_loss, PythonObject("RMSE"))
+    py_setitem(overrides, nk[].k_n_estimators, PythonObject(1))
+    py_setitem(overrides, nk[].k_max_depth, PythonObject(2))
+    py_setitem(overrides, nk[].k_learning_rate, args[1])
+    py_setitem(overrides, nk[].k_l2_leaf_reg, args[2])
+    py_setitem(overrides, nk[].k_random_state, args[3])
     _ = gbdt_initialize(model, _gbdt_base_args(model, overrides, context), context)
     _gbdt_store_mode(model, args[4] if len(args) == 5 else PythonObject(None))
     var parsed = Python.list()
@@ -1495,7 +1523,7 @@ def gbdt_feature_freq_construct(model: PythonObject, args: PythonObject, context
         raise error^
     if len(parsed) < 2 or len(py_call(b.set, parsed)) != len(parsed):
         raise Error("mojolearn: sources need at least two unique indices")
-    py_setitem(py_fields(model), "sources", py_call(b.tuple, parsed))
+    py_setitem(py_fields(model), nk[].k_sources, py_call(b.tuple, parsed))
     return PythonObject(None)
 
 
@@ -1503,12 +1531,14 @@ def gbdt_feature_freq_construct(model: PythonObject, args: PythonObject, context
 
 
 def _adapter_tables(context: PythonObject) raises -> PythonObject:
-    return context["trees_gbdt_adapter_tables"]
+    var nk = trees_keys()
+    return py_item(context, nk[].k_trees_gbdt_adapter_tables)
 
 
 def _adapter_params(model: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_GBDTAdapter.get_params()`."""
-    return _read(model, False, context["trees_gbdt_parameter_metadata"], Python.list())
+    var nk = trees_keys()
+    return _read(model, False, py_item(context, nk[].k_trees_gbdt_parameter_metadata), Python.list())
 
 
 def _check_learner_mode(mode: PythonObject) raises:
@@ -1531,13 +1561,14 @@ def _new_learner(model: PythonObject, mode: PythonObject, context: PythonObject)
     _check_learner_mode(mode)
     var loss = _resolved(py_type(model), "_loss", PythonObject(None))
     classical_admit_value(loss, context)
-    if _eq(loss, "RMSE") and _field(py_fields(model), model, "class_weights") is not None:
+    var nk = trees_keys()
+    if _eq(loss, "RMSE") and _field(py_fields(model), model, nk[].k_class_weights, "class_weights") is not None:
         raise Error("NotImplementedError: GradientBoostingRegressor does not support class_weights")
     var params = _adapter_params(model, context)
-    py_setitem(params, "numeric_mode", mode)
+    py_setitem(params, nk[].k_numeric_mode, mode)
     var t = _tables(context)
-    var names = t["init_names"]
-    var learner_cls = _adapter_tables(context)["learner"]
+    var names = py_item(t, nk[].k_init_names)
+    var learner_cls = py_item(_adapter_tables(context), nk[].k_learner)
     var learner = py_call(b.object.__new__, learner_cls)
     var args = Python.list()
     for i in range(len(names)):  # driver-loop: over the learner's constructor parameter names
@@ -1545,9 +1576,9 @@ def _new_learner(model: PythonObject, mode: PythonObject, context: PythonObject)
         if String(name) == "loss":
             _ = py_call(args.append, loss)
         else:
-            _ = py_call(args.append, py_get(params, name, context["trees_defaults"][learner_cls][name]))
+            _ = py_call(args.append, py_get(params, name, py_item(context, nk[].k_trees_defaults)[learner_cls][name]))
     _ = gbdt_initialize(learner, py_call(b.tuple, args), context)
-    py_setitem(py_fields(learner), "numeric_mode", mode)
+    py_setitem(py_fields(learner), nk[].k_numeric_mode, mode)
     return learner
 
 
@@ -1561,7 +1592,8 @@ def adapter_new_learner(model: PythonObject, mode: PythonObject, context: Python
 
 def adapter_validate_params(model: PythonObject, context: PythonObject) raises:
     """`_GBDTAdapter._validate_params()`: `_new_learner(self.numeric_mode)`."""
-    _ = _new_learner(model, _field(py_fields(model), model, "numeric_mode"), context)
+    var nk = trees_keys()
+    _ = _new_learner(model, _field(py_fields(model), model, nk[].k_numeric_mode, "numeric_mode"), context)
 
 
 def _clear_fit(fields: PythonObject, context: PythonObject) raises:
@@ -1587,9 +1619,10 @@ def _label_kind(labels: TreesLabels, values: PythonObject, name: String, context
     var b = _b()
     var shape_ok = True
     var cls = py_type(values)
+    var nk = trees_keys()
     if cls is b.list or cls is b.tuple:
         shape_ok = not (len(values) > 0 and Bool(py=py_call(b.isinstance, values[0], Python.tuple(b.list, b.tuple))))
-    elif cls is context["array_class"]:
+    elif cls is py_item(context, nk[].k_array_class):
         shape_ok = Int(py=values.ndim) == 1
     else:
         try:
@@ -1605,7 +1638,7 @@ def _label_kind(labels: TreesLabels, values: PythonObject, name: String, context
     for i in range(k):  # driver-loop: over the distinct class labels
         var c = classes[i]
         all_str = all_str and Bool(py=py_call(b.isinstance, c, b.str))
-        all_int = all_int and (Bool(py=py_call(b.isinstance, c, context["trees_integral_type"])) or _is_bool(c))
+        all_int = all_int and (Bool(py=py_call(b.isinstance, c, py_item(context, nk[].k_trees_integral_type))) or _is_bool(c))
     if all_str and k > 0:
         var out = Python.list()
         for i in range(k):  # driver-loop: over the distinct class labels
@@ -1660,25 +1693,26 @@ def _fit_native(model: PythonObject, validated: PythonObject, X: PythonObject, y
     (lane perf2-trees, 2026-11-06). The resolved mode keeps its refusal."""
     var b = _b()
     var fields = py_fields(model)
-    var raw = _field(fields, model, "numeric_mode")
+    var nk = trees_keys()
+    var raw = _field(fields, model, nk[].k_numeric_mode, "numeric_mode")
     if raw is None:
-        raw = context["backend_fields"]["_DEFAULT_MODE"]
+        raw = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
     _check_learner_mode(raw)
     var learner = validated
     var mode = String(py_call(py_call(raw.strip).lower))
     answer_mode_word(mode, MODE_FAMILY_GBDT)
     var learner_fields = py_fields(learner)
-    py_setitem(learner_fields, "numeric_mode", PythonObject(mode))
+    py_setitem(learner_fields, nk[].k_numeric_mode, PythonObject(mode))
     var table = gbdt_table(learner_fields, context)
     var code = xg_numeric_mode(_gk(table))
     if code != (0 if mode == "fast" else 1):
         raise Error("RuntimeError: GBDT adapter native numeric mode disagrees with requested mode")
     _ = gbdt_fit(learner, Python.tuple(X, y, sample_weight, eval_set, PythonObject(None), PythonObject(None),
                                        PythonObject(None), PythonObject(None)), context)
-    py_setitem(fields, "_learner_", learner)
-    py_setitem(fields, "numeric_mode_", PythonObject(mode))
-    py_setitem(fields, "n_features_in_", learner_fields["n_features_in_"])
-    py_setitem(fields, "model_", learner_fields["model_"])
+    py_setitem(fields, nk[].k__learner_, learner)
+    py_setitem(fields, nk[].k_numeric_mode_, PythonObject(mode))
+    py_setitem(fields, nk[].k_n_features_in_, py_item(learner_fields, nk[].k_n_features_in_))
+    py_setitem(fields, nk[].k_model_, py_item(learner_fields, nk[].k_model_))
     var copied = Python.tuple("loss_curve_", "test_loss_curve_", "best_iteration_", "stopped_early_", "learning_rate_")
     for i in range(len(copied)):  # driver-loop: over fixed call structure, small-loop(copied): the five learner attributes
         py_setitem(fields, copied[i], learner_fields[copied[i]])
@@ -1688,7 +1722,8 @@ def _fit_native(model: PythonObject, validated: PythonObject, X: PythonObject, y
 def adapter_classifier_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`GradientBoostingClassifier.fit(X, y, sample_weight, eval_set)`."""
     var fields = py_fields(model)
-    var learner = _new_learner(model, _field(fields, model, "numeric_mode"), context)
+    var nk = trees_keys()
+    var learner = _new_learner(model, _field(fields, model, nk[].k_numeric_mode, "numeric_mode"), context)
     _clear_fit(fields, context)
     var y = args[1]
     var labels = trees_encode_labels(y, context)
@@ -1735,9 +1770,9 @@ def adapter_classifier_fit(model: PythonObject, args: PythonObject, context: Pyt
         _ = eval_y  # keep the Python object alive through the native call above
         eval_set = Python.tuple(pair[0], eval_y)
     _ = _fit_native(model, learner, args[0], encoded, args[2], eval_set, context)
-    py_setitem(fields, "classes_", classes)
-    py_setitem(fields, "n_classes_", PythonObject(2))
-    py_setitem(fields, "_label_kind_", kind[0])
+    py_setitem(fields, nk[].k_classes_, classes)
+    py_setitem(fields, nk[].k_n_classes_, PythonObject(2))
+    py_setitem(fields, nk[].k__label_kind_, kind[0])
     return model
 
 
@@ -1757,7 +1792,8 @@ def _regression_target(source: PythonObject, name: String, context: PythonObject
 def adapter_regressor_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`GradientBoostingRegressor.fit(X, y, sample_weight, eval_set)`."""
     var fields = py_fields(model)
-    var learner = _new_learner(model, _field(fields, model, "numeric_mode"), context)
+    var nk = trees_keys()
+    var learner = _new_learner(model, _field(fields, model, nk[].k_numeric_mode, "numeric_mode"), context)
     _clear_fit(fields, context)
     var target = _regression_target(args[1], "y", context)
     var eval_set = args[3]

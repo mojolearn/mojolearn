@@ -24,15 +24,18 @@ from bindings.trees_boost_admission_unpack import (
     _scalar_storage,
     boost_tree_admit,
 )
+from bindings.trees_keys_unpack import trees_keys
+from bindings.py_balanced import py_item
 
 
 comptime _FITTED_SLOT = "trees_boost_fitted_v1"
 def boost_admit(model: PythonObject, context: PythonObject, fitting: Bool = False) raises -> PythonObject:
     var fields = classical_family_admit(model)
     var b = native_loaded_module("builtins")
-    if py_contains(fields, "_mojolearn_after_fit"):
+    var nk = trees_keys()
+    if py_contains(fields, nk[].k__mojolearn_after_fit):
         raise Error("TypeError: native boosting refuses Python fit callbacks")
-    if py_contains(fields, "_mojolearn_fitting") and py_type(fields["_mojolearn_fitting"]) is not b.int:
+    if py_contains(fields, nk[].k__mojolearn_fitting) and py_type(py_item(fields, nk[].k__mojolearn_fitting)) is not b.int:
         raise Error("TypeError: native boosting fit depth must be an exact integer")
     for name in ["numeric_mode", "_mojolearn_fitted"]:  # small-loop(public lifecycle scalar metadata)
         if py_contains(fields, name):
@@ -41,7 +44,7 @@ def boost_admit(model: PythonObject, context: PythonObject, fitting: Bool = Fals
         for name in ["algorithm", "bagging_seed", "bootstrap", "bootstrap_features", "colsample_bytree", "drop_rate", "drop_seed", "feature_fraction_seed", "learning_rate", "loss", "max_bin", "max_delta_step", "max_depth", "max_drop", "max_features", "max_leaf_nodes", "max_samples", "min_child_samples", "min_impurity_decrease", "min_samples_leaf", "min_samples_split", "n_estimators", "n_jobs", "num_leaves", "oob_score", "random_state", "reg_alpha", "reg_lambda", "skip_drop", "sparse_output", "subsample", "subsample_freq", "uniform_drop", "verbose", "warm_start", "xgboost_dart_mode"]:  # small-loop(fixed consumed scalar fields)
             if py_contains(fields, name):
                 host_inference_scalar(fields[name], context, True)
-        var estimator = py_get(fields, "estimator")
+        var estimator = py_get(fields, nk[].k_estimator)
         if estimator is not None:
             _require_connected_member(model, estimator, context)
             boost_tree_admit(estimator, context, True)
@@ -95,8 +98,8 @@ def boost_admit(model: PythonObject, context: PythonObject, fitting: Bool = Fals
     for name in ["_node_col", "_oob_rows", "_tree_base", "estimator_weights_", "estimators_features_", "init_score_", "tree_coefs_", "tree_values_"]:  # small-loop(fixed fitted numeric arrays and lists)
         if py_contains(fields, name):
             classical_admit_value(fields[name], context)
-    if py_contains(fields, "classes_"):
-        classical_admit_value(classifier_label_list(fields["classes_"], context), context)
+    if py_contains(fields, nk[].k_classes_):
+        classical_admit_value(classifier_label_list(py_item(fields, nk[].k_classes_), context), context)
     for name in ["init_score_", "tree_coefs_"]:  # small-loop(fitted scalar sequences)
         if py_contains(fields, name):
             _scalar_storage(fields[name], context)
@@ -124,7 +127,8 @@ def boost_fitted_stamp(model: PythonObject) raises:
     var b = native_loaded_module("builtins")
     var classes = Python.list()
     var reps = Python.list()
-    var forest = py_get(fields, "forest_")
+    var nk = trees_keys()
+    var forest = py_get(fields, nk[].k_forest_)
     if forest is not None:
         _ = py_call(classes.append, py_type(forest))
         _ = py_call(reps.append, forest)
