@@ -31,6 +31,7 @@ from providers.python.array_metadata_pyapi_door import ArrayMetadata, ArrayPin
 from bindings.admitted_input_unpack import admit_x
 from bindings.admitted_input_unpack import admit_f32
 from bindings.metrics_cls_native_unpack import metrics_cls_operation
+from bindings.operation_names_mcls import MCLS_OPN_FAMILY_MCLS_R2
 from providers.python.estimator_binding_pyapi_door import estimator_binding_mode
 from providers.python.classical_family_admission_pyapi_unpack import classical_family_admit
 from bindings.native_scalar_decode_unpack import native_scalar_buffer
@@ -470,7 +471,7 @@ def pls_operation(model: PythonObject, operation: Int, args: PythonObject, conte
         var prediction = pls_operation(model, PLS_OPN_PREDICT, Python.tuple(args[0]), context, fields, state, captured_x,
                                        None, x_deferred, x_pin)
         var mode = py_get(fields, nk[].k_numeric_mode)
-        var r2 = metrics_cls_operation(PythonObject(None), "family_mcls_r2",
+        var r2 = metrics_cls_operation(PythonObject(None), MCLS_OPN_FAMILY_MCLS_R2,
                          Python.tuple(binding, truth.array, prediction, args[2], PythonObject("uniform_average"),
                                       PythonObject(True), mode), owner[1])
         _ = truth^

@@ -10,6 +10,14 @@
 # into the score with the same binary64 operations in the same order. The
 # micro-average precision no longer runs the one-vs-rest curve program
 # whose results it never read. Same kernels: the bits do not move.
+from bindings.operation_names_mexp import (
+    MEXP_OPN_FAMILY_MEXP_CURVE_AUC,
+    MEXP_OPN_FAMILY_MEXP_CURVE_AVERAGE_PRECISION,
+    MEXP_OPN_FAMILY_MEXP_CURVE_DET,
+    MEXP_OPN_FAMILY_MEXP_CURVE_RANKING_REPORT,
+    MEXP_OPN_FAMILY_MEXP_CURVE_ROC,
+    MEXP_OPN_FAMILY_MEXP_CURVE_TOP_K,
+)
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.admitted_family_door import admit_family_f64
@@ -531,19 +539,19 @@ def _ranking_report(args: PythonObject, context: PythonObject) raises -> PythonO
     return result
 
 
-def metrics_exp_curve_operation(operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def metrics_exp_curve_operation(operation: Int, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """The curve metrics; each shell passes its arguments in the order its
     docstring's owner function names (see python/mojolearn/_expansion_metrics.py)."""
-    if operation == "family_mexp_curve_ranking_report":
+    if operation == MEXP_OPN_FAMILY_MEXP_CURVE_RANKING_REPORT:
         return _ranking_report(args, context)
-    if operation == "family_mexp_curve_roc":
+    if operation == MEXP_OPN_FAMILY_MEXP_CURVE_ROC:
         return _roc_curve(args, context)
-    if operation == "family_mexp_curve_det":
+    if operation == MEXP_OPN_FAMILY_MEXP_CURVE_DET:
         return _det_curve(args, context)
-    if operation == "family_mexp_curve_auc":
+    if operation == MEXP_OPN_FAMILY_MEXP_CURVE_AUC:
         return _auc(args, context)
-    if operation == "family_mexp_curve_average_precision":
+    if operation == MEXP_OPN_FAMILY_MEXP_CURVE_AVERAGE_PRECISION:
         return _average_precision(args, context)
-    if operation == "family_mexp_curve_top_k":
+    if operation == MEXP_OPN_FAMILY_MEXP_CURVE_TOP_K:
         return _top_k(args, context)
-    raise Error("RuntimeError: unknown curve metric " + operation)
+    raise Error("RuntimeError: unknown curve metric " + String(operation))

@@ -46,6 +46,7 @@ from providers.python.neural_descriptor_pyapi_door import (
 )
 from core.scale_gamma_exact import scale_gamma_from_limbs, SGX_BAD
 from bindings.mcls_cluster_door import mcls_cluster_operation
+from bindings.operation_names_mcls import MCLS_OPN_FAMILY_MCLS_R2
 from bindings.operation_names_km import (
     KM_OPN_FAMILY_KM_GETSTATE, KM_OPN_FAMILY_KM_SETSTATE, KM_OPN_FAMILY_KM_PAR_FIT, KM_OPN_FAMILY_KM_PAR_APPLY,
     KM_OPN_FAMILY_KM_KRR_FIT, KM_OPN_FAMILY_KM_KRR_PREDICT, KM_OPN_FAMILY_KM_KRR_SCORE, KM_OPN_FAMILY_KM_NYS_FIT,
@@ -1349,7 +1350,7 @@ def _kernel_methods_operation(model: PythonObject, operation: Int, args: PythonO
         var nk = svm_keys()
         var mode = py_get(py_fields(model), nk[].k_numeric_mode, PythonObject(None))
         var metrics = estimator_binding(model, "_mojolearn_metrics", context)
-        return mcls_cluster_operation("family_mcls_r2", Python.tuple(metrics, truth, prediction, args[3],
+        return mcls_cluster_operation(MCLS_OPN_FAMILY_MCLS_R2, Python.tuple(metrics, truth, prediction, args[3],
                                       PythonObject("uniform_average"), PythonObject(True), mode), context)
     if operation == KM_OPN_FAMILY_KM_NYS_FIT:
         _ = _nys_fit(model, args, context, x, x_pin)

@@ -15,6 +15,10 @@
 # fold words become the score with the same handful of binary64 operations
 # `_FoldCurve.auc` made, every product pinned (checks/numerics.mojo
 # `pinned_mul_f64`: Python never fuses). Same kernels: the bits do not move.
+from bindings.operation_names_mcls import (
+    MCLS_OPN_FAMILY_MCLS_PR_CURVE,
+    MCLS_OPN_FAMILY_MCLS_ROC_AUC,
+)
 from std.memory import bitcast
 from std.python import Python, PythonObject
 from bindings.admitted_family_door import admit_family
@@ -563,9 +567,9 @@ def _pr_curve(args: PythonObject, context: PythonObject) raises -> PythonObject:
     return Python.tuple(p_out, r_out, t_out)
 
 
-def mcls_ranking_operation(operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    if operation == "family_mcls_roc_auc":
+def mcls_ranking_operation(operation: Int, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    if operation == MCLS_OPN_FAMILY_MCLS_ROC_AUC:
         return _roc_auc(args, context)
-    if operation == "family_mcls_pr_curve":
+    if operation == MCLS_OPN_FAMILY_MCLS_PR_CURVE:
         return _pr_curve(args, context)
-    raise Error("RuntimeError: unknown family operation " + operation)
+    raise Error("RuntimeError: unknown family operation " + String(operation))

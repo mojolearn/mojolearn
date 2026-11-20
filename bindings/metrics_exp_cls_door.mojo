@@ -13,6 +13,19 @@
 # builds the one program (the sums and the four set-wise epilogues) its
 # Python memo made, and the support total's program. Same programs, same
 # kernels: the bits do not move.
+from bindings.operation_names_mexp import (
+    MEXP_OPN_FAMILY_MEXP_CLS_BALANCED_ACCURACY,
+    MEXP_OPN_FAMILY_MEXP_CLS_FBETA,
+    MEXP_OPN_FAMILY_MEXP_CLS_HAMMING,
+    MEXP_OPN_FAMILY_MEXP_CLS_JACCARD,
+    MEXP_OPN_FAMILY_MEXP_CLS_KAPPA,
+    MEXP_OPN_FAMILY_MEXP_CLS_LIKELIHOOD_RATIOS,
+    MEXP_OPN_FAMILY_MEXP_CLS_MATTHEWS,
+    MEXP_OPN_FAMILY_MEXP_CLS_MLCM,
+    MEXP_OPN_FAMILY_MEXP_CLS_PRFS,
+    MEXP_OPN_FAMILY_MEXP_CLS_REPORT,
+    MEXP_OPN_FAMILY_MEXP_CLS_ZERO_ONE,
+)
 from std.python import Python, PythonObject
 from bindings.metrics_native_inputs_door import metric_flatten
 from bindings.py_balanced import py_call, py_contains, py_setitem
@@ -641,29 +654,29 @@ def _fmt_kw(width: PythonObject, digits: PythonObject) raises -> PythonObject:
     return keywords
 
 
-def metrics_exp_cls_operation(operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def metrics_exp_cls_operation(operation: Int, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """The classification metrics; each shell passes its arguments in its
     signature's order (see python/mojolearn/_expansion_metrics.py)."""
-    if operation == "family_mexp_cls_prfs":
+    if operation == MEXP_OPN_FAMILY_MEXP_CLS_PRFS:
         return _prfs(args, context)
-    if operation == "family_mexp_cls_fbeta":
+    if operation == MEXP_OPN_FAMILY_MEXP_CLS_FBETA:
         return _fbeta(args, context)
-    if operation == "family_mexp_cls_jaccard":
+    if operation == MEXP_OPN_FAMILY_MEXP_CLS_JACCARD:
         return _jaccard(args, context)
-    if operation == "family_mexp_cls_balanced_accuracy":
+    if operation == MEXP_OPN_FAMILY_MEXP_CLS_BALANCED_ACCURACY:
         return _balanced_accuracy(args, context)
-    if operation == "family_mexp_cls_matthews":
+    if operation == MEXP_OPN_FAMILY_MEXP_CLS_MATTHEWS:
         return _matthews(args, context)
-    if operation == "family_mexp_cls_mlcm":
+    if operation == MEXP_OPN_FAMILY_MEXP_CLS_MLCM:
         return _mlcm(args, context)
-    if operation == "family_mexp_cls_hamming":
+    if operation == MEXP_OPN_FAMILY_MEXP_CLS_HAMMING:
         return _hamming(args, context)
-    if operation == "family_mexp_cls_zero_one":
+    if operation == MEXP_OPN_FAMILY_MEXP_CLS_ZERO_ONE:
         return _zero_one(args, context)
-    if operation == "family_mexp_cls_kappa":
+    if operation == MEXP_OPN_FAMILY_MEXP_CLS_KAPPA:
         return _kappa(args, context)
-    if operation == "family_mexp_cls_likelihood_ratios":
+    if operation == MEXP_OPN_FAMILY_MEXP_CLS_LIKELIHOOD_RATIOS:
         return _likelihood_ratios(args, context)
-    if operation == "family_mexp_cls_report":
+    if operation == MEXP_OPN_FAMILY_MEXP_CLS_REPORT:
         return _report(args, context)
-    raise Error("RuntimeError: unknown classification metric " + operation)
+    raise Error("RuntimeError: unknown classification metric " + String(operation))

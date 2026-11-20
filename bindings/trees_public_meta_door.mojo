@@ -86,6 +86,7 @@ from bindings.prep_native_estimator_door import (
 from bindings.classical_labels_door import _label_list, classical_score_from_codes
 from bindings.p3_labels_metrics_native_door import p3_interleave_columns
 from bindings.metrics_cls_native_unpack import metrics_cls_operation
+from bindings.operation_names_mcls import MCLS_OPN_FAMILY_MCLS_R2
 from bindings.classifier_public_lifecycle_door import classifier_label_list
 from bindings.classical_pandas_door import native_pandas_exact
 from bindings.native_unit_threads_unpack import (
@@ -2396,7 +2397,7 @@ def _regressor_score(model: PythonObject, prediction: PythonObject, y: PythonObj
             raise Error(String(binding))
         # pyout-metrics-cnn (2026-11-11): the metrics owner's body, called natively (no CPython call of
         # its family door through `prep_entry_call`); metrics[0] is the family context that door received.
-        var result = metrics_cls_operation(PythonObject(None), "family_mcls_r2",
+        var result = metrics_cls_operation(PythonObject(None), MCLS_OPN_FAMILY_MCLS_R2,
                                            Python.tuple(binding, truth.array, pred.array, sample_weight,
                                                         "uniform_average", True, mode), metrics[0])
         _ = truth^
