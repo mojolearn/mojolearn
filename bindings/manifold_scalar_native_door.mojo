@@ -311,6 +311,7 @@ def manifold_number(value: PythonObject, integer: Bool, context: PythonObject,
                 var name = String("int") if integer else String("float")
                 var bytes = String(", a bytes-like object") if integer else String("")
                 raise Error("TypeError: " + name + "() argument must be a string" + bytes + " or a real number, not 'complex'")
+            var nk = mani_keys()
             var exceptions = py_get(py_item(context, nk[].k_modules), "numpy.exceptions")
             if exceptions is None or py_type(exceptions) is not py_item(context, nk[].k_module_type):
                 raise Error("TypeError: complex scalar settings require native NumPy exception metadata")
