@@ -1,7 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 """Source connection and ownership invariants; native lifetime probes are separate."""
 from pathlib import Path
+import sys
 import unittest
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from boundary_keys_plain import plain  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -17,7 +21,7 @@ class NativeArrayViewOwnership(unittest.TestCase):
         self.assertNotIn('def _array_view(', public)
 
     def test_retained_owner_and_mapped_slice_checks_precede_export(self):
-        source = (ROOT / 'bindings/native_array_view_pack.mojo').read_text()
+        source = plain('bindings/native_array_view_pack.mojo', (ROOT / 'bindings/native_array_view_pack.mojo').read_text())
         self.assertIn('var store = values["_store"]', source)
         self.assertIn('store = values["_mv"]', source)
         self.assertIn('store.obj is None', source)

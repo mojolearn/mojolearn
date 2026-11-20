@@ -36,6 +36,10 @@ from bindings.py_balanced import py_call, py_get, py_setitem, py_type
 from core.shared_slot import SharedSlot
 from bindings.native_process_pool_run import ReapOutcome
 from bindings.native_keys_unpack import native_keys
+from bindings.native_keys_unpack import (
+    NATIVE_PROCESS_OPN_INITIALIZE, NATIVE_PROCESS_OPN_CREATE, NATIVE_PROCESS_OPN_MAP, NATIVE_PROCESS_OPN_CLOSE, NATIVE_PROCESS_OPN_WORKER_ECHO, NATIVE_PROCESS_OPN_ENVIRONMENT,
+)
+from bindings.py_keys import py_op_code
 from bindings.py_balanced import py_item
 
 
@@ -86,13 +90,13 @@ def _process_environment(devices: PythonObject, group: PythonObject) raises -> L
 
 
 def _process_environment(devices: PythonObject, group: PythonObject, overrides: PythonObject) raises -> List[String]:
-    var nk = native_keys()
     var p = PROCESS_BOUNDARY.get_or_create_ptr()
     var bi = p[].bi
     var env = bi.dict()
     var keys = py_call(bi.list, p[].environ)
     for i in range(len(keys)):  # driver-loop: over process environment records
         py_setitem(env, py_call(keys[i].decode, "utf-8", "surrogateescape"), py_call(p[].environ[keys[i]].decode, "utf-8", "surrogateescape"))
+    var nk = native_keys()
     py_setitem(env, nk[].k_MOJOLEARN_NUMERIC_MODE, "identical")
     # The parent selected its installed route at connection time. Later
     # visibility-mask edits still apply, but a changed process environment
@@ -158,7 +162,6 @@ def _process_environment(devices: PythonObject, group: PythonObject, overrides: 
 
 
 def process_pool_create(devices: PythonObject, cooperative: Bool, child_module: String) raises -> PythonObject:
-    var nk = native_keys()
     var p = PROCESS_BOUNDARY.get_or_create_ptr()
     var bi = p[].bi
     var selected = py_call(bi.tuple, devices)
@@ -170,6 +173,7 @@ def process_pool_create(devices: PythonObject, cooperative: Bool, child_module: 
             raise Error("process: devices must be distinct nonnegative integer indices")
         _ = py_call(seen.add, selected[i])
     var result = bi.dict()
+    var nk = native_keys()
     py_setitem(result, nk[].k_devices, selected)
     py_setitem(result, nk[].k_cooperative, cooperative)
     py_setitem(result, nk[].k_module, child_module)
@@ -180,11 +184,11 @@ def process_pool_create(devices: PythonObject, cooperative: Bool, child_module: 
 
 
 def process_send(socket: PythonObject, kind: String, sequence: Int, value: PythonObject) raises:
-    var nk = native_keys()
     var p = PROCESS_BOUNDARY.get_or_create_ptr()
     var packed = codec_pack_owned(value, PROCESS_MAX_BYTES)
     var description = py_call(PythonObject(_transport_json(packed[0])).encode, "ascii")
     var header = p[].bi.dict()
+    var nk = native_keys()
     py_setitem(header, nk[].k_kind, kind)
     py_setitem(header, nk[].k_sequence, sequence)
     py_setitem(header, nk[].k_description_bytes, len(description))
@@ -196,11 +200,11 @@ def process_send(socket: PythonObject, kind: String, sequence: Int, value: Pytho
 
 
 def process_receive(socket: PythonObject) raises -> PythonObject:
-    var nk = native_keys()
     var p = PROCESS_BOUNDARY.get_or_create_ptr()
     var frame = transport_receive_owned(socket, PROCESS_MAX_BYTES)
     var header = frame[0]
     var body = frame[1]
+    var nk = native_keys()
     var raw = py_get(header, nk[].k_description_bytes)
     if py_type(raw) is not p[].bi.int:
         raise Error("process: missing structural descriptor length")
@@ -360,9 +364,9 @@ def _process_pool_close(pool: PythonObject, abort: Bool) raises:
 
 
 def process_pool_start(pool: PythonObject) raises:
-    var nk = native_keys()
     var p = PROCESS_BOUNDARY.get_or_create_ptr()
     var bi = p[].bi
+    var nk = native_keys()
     if Bool(py=py_item(pool, nk[].k_closed)):
         raise Error("process: pool is closed")
     if len(py_item(pool, nk[].k_workers)) != 0:
@@ -457,11 +461,11 @@ def process_pool_start(pool: PythonObject) raises:
 
 
 def process_pool_map(pool: PythonObject, requests: PythonObject) raises -> PythonObject:
-    var nk = native_keys()
     var p = PROCESS_BOUNDARY.get_or_create_ptr()
     var bi = p[].bi
     var inputs = py_call(bi.list, requests)
     process_pool_start(pool)
+    var nk = native_keys()
     var workers = py_item(pool, nk[].k_workers)
     var result = bi.list()
     var sequence = Int(py=py_item(pool, nk[].k_sequence))
@@ -503,7 +507,6 @@ def process_pool_map(pool: PythonObject, requests: PythonObject) raises -> Pytho
 
 
 def process_pool_request(pool: PythonObject, worker_index: Int, request: List[Int64], outgoing: WireOutgoing) raises -> PythonObject:
-    var nk = native_keys()
     # One addressed typed request (lane parallel-payload-transport): the
     # request's words and its record travel as one typed frame, the reply
     # comes back as one (bindings/native_process_wire.mojo); no codec, no
@@ -513,6 +516,7 @@ def process_pool_request(pool: PythonObject, worker_index: Int, request: List[In
     # because remote state ownership can no longer be trusted.
     # REMOVED: process_pool_call (the codec-framed addressed call; its one
     # product caller was ParallelCausalLM) and its "call" operation.
+    var nk = native_keys()
     if not Bool(py=py_get(pool, nk[].k_typed, PythonObject(False))):
         raise Error("process: typed requests require a typed worker pool")
     var count = 1 if Bool(py=py_item(pool, nk[].k_cooperative)) else len(py_item(pool, nk[].k_devices))
@@ -548,7 +552,6 @@ def process_pool_request(pool: PythonObject, worker_index: Int, request: List[In
 
 
 def process_worker_connect(argv: PythonObject) raises -> PythonObject:
-    var nk = native_keys()
     var p = PROCESS_BOUNDARY.get_or_create_ptr()
     if len(argv) != 3:
         raise Error("process: worker requires the private port and authentication token")
@@ -558,6 +561,7 @@ def process_worker_connect(argv: PythonObject) raises -> PythonObject:
         raise Error("process: invalid worker connection envelope")
     var socket = transport_connect("127.0.0.1", port, 120.0)
     var hello = p[].bi.dict()
+    var nk = native_keys()
     py_setitem(hello, nk[].k_kind, "hello")
     py_setitem(hello, nk[].k_token, token)
     py_setitem(hello, nk[].k_pid, p[].pid())
@@ -568,10 +572,10 @@ def process_worker_connect(argv: PythonObject) raises -> PythonObject:
 
 
 def process_echo_worker(argv: PythonObject) raises:
-    var nk = native_keys()
     # Native protocol probe used by the installed verifier. Model workers use
     # the same framing helpers with their compiled model dispatch table.
     var socket = process_worker_connect(argv)
+    var nk = native_keys()
     try:
         while True:  # driver-loop: over authenticated local protocol-verifier requests
             var request = process_worker_next(socket)
@@ -586,8 +590,8 @@ def process_echo_worker(argv: PythonObject) raises:
 
 
 def process_worker_next(socket: PythonObject) raises -> PythonObject:
-    var nk = native_keys()
     var request = process_receive(socket)
+    var nk = native_keys()
     var kind = String(py_get(request[0], nk[].k_kind, ""))
     if kind == "close":
         return PythonObject(None)
@@ -596,32 +600,35 @@ def process_worker_next(socket: PythonObject) raises -> PythonObject:
     return request
 
 
-def process_call(operation: String, args: PythonObject) raises -> PythonObject:
-    if operation == "initialize":
+def process_call(operation: Int, name: PythonObject, args: PythonObject) raises -> PythonObject:
+    # `operation`: a NATIVE_PROCESS_OPN_* code; `name` is the caller's str, read
+    # only for the unknown-operation text.
+    if operation == NATIVE_PROCESS_OPN_INITIALIZE:
         process_initialize(String(args[0]), args[1], String(args[2]))
-    elif operation == "create":
+    elif operation == NATIVE_PROCESS_OPN_CREATE:
         return process_pool_create(args[0], Bool(py=args[1]), String(args[2]))
-    elif operation == "map":
+    elif operation == NATIVE_PROCESS_OPN_MAP:
         return process_pool_map(args[0], args[1])
-    elif operation == "close":
+    elif operation == NATIVE_PROCESS_OPN_CLOSE:
         process_pool_close(args[0])
-    elif operation == "worker_echo":
+    elif operation == NATIVE_PROCESS_OPN_WORKER_ECHO:
         process_echo_worker(args)
-    elif operation == "environment":
+    elif operation == NATIVE_PROCESS_OPN_ENVIRONMENT:
         var env = _process_environment(args[0], args[1], args[2] if len(args) > 2 else PythonObject(None))
         var out = PROCESS_BOUNDARY.get_or_create_ptr()[].bi.list()
         for i in range(len(env)):  # driver-loop: over verifier-visible process environment entries
             _ = py_call(out.append, env[i])
         return out
     else:
-        raise Error("process: unknown operation " + operation)
+        raise Error("process: unknown operation " + String(name))
     return PythonObject(None)
 
 
 def process_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
     var args = PythonObject(from_borrowed=args_ptr)
     try:
-        var result = process_call(String(args[0]), args[1])
+        var nk = native_keys()
+        var result = process_call(py_op_code(nk[].ops_process, args[0]), args[0], args[1])
         return result.steal_data()
     except error:
         if String(error).startswith("InterruptedError:"):

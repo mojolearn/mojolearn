@@ -21,6 +21,10 @@ from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_ty
 from std.math import isfinite
 from core.shared_slot import SharedSlot
 from bindings.native_keys_unpack import native_keys
+from bindings.native_keys_unpack import (
+    NATIVE_CODEC_OPN_INITIALIZE, NATIVE_CODEC_OPN_PACK, NATIVE_CODEC_OPN_UNPACK,
+)
+from bindings.py_keys import py_op_code
 from bindings.py_balanced import py_item
 
 
@@ -86,10 +90,10 @@ def _codec_keys(value: PythonObject, strings_only: Bool = False) raises -> Pytho
 
 
 def _codec_packed_class(cls: PythonObject, names: PythonObject) raises:
-    var nk = native_keys()
     var bi = native_loaded_module("builtins")
     if py_type(cls) is not bi.type:
         raise Error("codec: packed weights require ordinary connected class metadata")
+    var nk = native_keys()
     var bases = py_call(py_item(bi.type.__dict__, nk[].k___bases__).__get__, cls)
     if len(bases) != 1 or bases[0] is not bi.object:
         raise Error("codec: packed weight class ancestry changed")
@@ -139,7 +143,6 @@ def _codec_append_captured(pin: AdmittedBorrowedBuffer, payload: PythonObject, m
     the tensor's size and the admitted layout writes its logical C-order
     bytes straight into the new tail (it went through a List, then a bytes
     object, then extend)."""
-    var nk = native_keys()
     var layout = pin.layout.value().copy()
     var begin = len(payload)
     var count = layout.count * layout.itemsize
@@ -154,6 +157,7 @@ def _codec_append_captured(pin: AdmittedBorrowedBuffer, payload: PythonObject, m
             raise cpy.unsafe_get_error()
         layout.copy_to(base + begin)
     var item = CODEC_BOUNDARY.get_or_create_ptr()[].bi.dict()
+    var nk = native_keys()
     py_setitem(item, nk[].k_kind, PythonObject("array"))
     py_setitem(item, nk[].k_begin, PythonObject(begin))
     py_setitem(item, nk[].k_size, PythonObject(count))
@@ -222,13 +226,13 @@ def _codec_node(depth: Int, mut budget: Int) raises:
 
 
 def _codec_buffer(raw: PythonObject, payload: PythonObject, kind: String, maximum: Int) raises -> PythonObject:
-    var nk = native_keys()
     var bi = CODEC_BOUNDARY.get_or_create_ptr()[].bi
     var begin = len(payload)
     var count = len(raw)
     if count > maximum - begin:
         raise Error("codec: payload exceeds its byte limit")
     var item = bi.dict()
+    var nk = native_keys()
     py_setitem(item, nk[].k_kind, PythonObject(kind))
     py_setitem(item, nk[].k_begin, PythonObject(begin))
     py_setitem(item, nk[].k_size, PythonObject(count))
@@ -238,7 +242,6 @@ def _codec_buffer(raw: PythonObject, payload: PythonObject, kind: String, maximu
 
 def _codec_encode(value: PythonObject, payload: PythonObject, maximum: Int,
                   depth: Int, mut budget: Int) raises -> PythonObject:
-    var nk = native_keys()
     _codec_node(depth, budget)
     var c = CODEC_BOUNDARY.get_or_create_ptr()
     var bi = c[].bi
@@ -247,6 +250,7 @@ def _codec_encode(value: PythonObject, payload: PythonObject, maximum: Int,
         return value
     if cls is bi.float:
         if not isfinite(Float64(py=value)):
+            var nk = native_keys()
             var tagged = bi.dict()
             py_setitem(tagged, nk[].k_kind, PythonObject("float"))
             py_setitem(tagged, nk[].k_value, py_call(bi.str, value))
@@ -254,6 +258,7 @@ def _codec_encode(value: PythonObject, payload: PythonObject, maximum: Int,
         return value
     if cls is bi.bytes or cls is bi.bytearray:
         return _codec_buffer(value, payload, "bytes" if cls is bi.bytes else "bytearray", maximum)
+    var nk = native_keys()
     var result = bi.dict()
     if cls is bi.list or cls is bi.tuple or cls is bi.dict:
         py_setitem(result, nk[].k_kind, PythonObject("dict" if cls is bi.dict else ("tuple" if cls is bi.tuple else "list")))
@@ -273,14 +278,14 @@ def _codec_encode(value: PythonObject, payload: PythonObject, maximum: Int,
         return result
     if c[].bf16_cls is not None and cls is c[].bf16_cls:
         var fields = _codec_packed_fields(value, c[].bf16_cls, Python.tuple("bits", "shape"))
-        var bits = native_instance_item(fields, PythonObject("bits"))
+        var bits = native_instance_item(fields, nk[].k_bits)
         py_setitem(result, nk[].k_kind, PythonObject("bf16"))
         py_setitem(result, nk[].k_bits, _codec_encode(bits, payload, maximum, depth + 1, budget))
         return result
     if c[].int8_cls is not None and cls is c[].int8_cls:
         var fields = _codec_packed_fields(value, c[].int8_cls, Python.tuple("codes", "exponents", "shape"))
-        var codes = native_instance_item(fields, PythonObject("codes"))
-        var exponents = native_instance_item(fields, PythonObject("exponents"))
+        var codes = native_instance_item(fields, nk[].k_codes)
+        var exponents = native_instance_item(fields, nk[].k_exponents)
         py_setitem(result, nk[].k_kind, PythonObject("int8"))
         py_setitem(result, nk[].k_codes, _codec_encode(codes, payload, maximum, depth + 1, budget))
         py_setitem(result, nk[].k_exponents, _codec_encode(exponents, payload, maximum, depth + 1, budget))
@@ -325,8 +330,8 @@ def _codec_encode(value: PythonObject, payload: PythonObject, maximum: Int,
 
 def _codec_slice(item: PythonObject, payload: PythonObject, maximum: Int,
                  mut cursor: Int) raises -> PythonObject:
-    var nk = native_keys()
     var c = CODEC_BOUNDARY.get_or_create_ptr()
+    var nk = native_keys()
     var begin = _codec_integer(py_item(item, nk[].k_begin), maximum)
     var size = _codec_integer(py_item(item, nk[].k_size), maximum)
     if begin != cursor or size > len(payload) - begin:
@@ -338,9 +343,9 @@ def _codec_slice(item: PythonObject, payload: PythonObject, maximum: Int,
 
 
 def _codec_array(item: PythonObject, raw: PythonObject, maximum: Int) raises -> PythonObject:
-    var nk = native_keys()
     var c = CODEC_BOUNDARY.get_or_create_ptr()
     var bi = c[].bi
+    var nk = native_keys()
     var dtype = _codec_text(py_item(item, nk[].k_dtype))
     var code = _codec_code(dtype)
     var store = native_array_empty(String(code))
@@ -391,7 +396,6 @@ def _codec_array(item: PythonObject, raw: PythonObject, maximum: Int) raises -> 
 
 def _codec_decode(item: PythonObject, payload: PythonObject, maximum: Int,
                   depth: Int, mut budget: Int, mut cursor: Int) raises -> PythonObject:
-    var nk = native_keys()
     _codec_node(depth, budget)
     var c = CODEC_BOUNDARY.get_or_create_ptr()
     var bi = c[].bi
@@ -405,6 +409,7 @@ def _codec_decode(item: PythonObject, payload: PythonObject, maximum: Int,
     if cls is not bi.dict:
         raise Error("codec: invalid structural descriptor")
     _ = _codec_keys(item, True)
+    var nk = native_keys()
     var kind = _codec_text(py_get(item, nk[].k_kind))
     if kind == "float":
         var text = _codec_text(py_item(item, nk[].k_value))
@@ -520,25 +525,30 @@ def codec_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr
         var bi = native_loaded_module("builtins")
         if py_type(args) is not bi.tuple or len(args) != 2:
             raise Error("codec: operation requires a name and native argument sequence")
-        var operation = _codec_text(args[0])
+        # The exact-str refusal of _codec_text, then one lookup of the
+        # caller's own str (no String copy, no compare chain).
+        if py_type(args[0]) is not bi.str:
+            raise Error("codec: metadata tags require exact strings")
+        var nk = native_keys()
+        var operation = py_op_code(nk[].ops_codec, args[0])
         var values = args[1]
         if py_type(values) is not bi.tuple and py_type(values) is not bi.list:
             raise Error("codec: arguments require an exact tuple or list")
         var result = PythonObject(None)
-        if operation == "initialize":
+        if operation == NATIVE_CODEC_OPN_INITIALIZE:
             if len(values) != 3:
                 raise Error("codec: initialize requires three storage classes")
             codec_initialize(values[0], values[1], values[2])
-        elif operation == "pack":
+        elif operation == NATIVE_CODEC_OPN_PACK:
             if len(values) != 2:
                 raise Error("codec: pack requires state and a byte limit")
             result = codec_pack(values[0], _codec_integer(values[1], 9223372036854775807))
-        elif operation == "unpack":
+        elif operation == NATIVE_CODEC_OPN_UNPACK:
             if len(values) != 3:
                 raise Error("codec: unpack requires metadata, payload and a byte limit")
             result = codec_unpack(values[0], values[1], _codec_integer(values[2], 9223372036854775807))
         else:
-            raise Error("codec: unknown operation " + operation)
+            raise Error("codec: unknown operation " + String(args[0]))
         return result.steal_data()
     except error:
         return raise_python_exception(error_without_class(error, "ValueError"), ExceptionType.ValueError)

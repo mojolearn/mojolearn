@@ -21,10 +21,10 @@ def _resolved(cls: PythonObject, name: PythonObject, missing: PythonObject) rais
 
 
 def _resolved(mut mods: NativeModules, cls: PythonObject, name: PythonObject, missing: PythonObject) raises -> PythonObject:
-    var nk = params_keys()
     # `mods`: one module admission per parameter read instead of one per
     # ancestry row; _class_fields reuses its per-class key admission.
     var b = mods.module("builtins")
+    var nk = params_keys()
     var ancestry = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, cls)
     for i in range(len(ancestry)):  # driver-loop: raw class namespaces, without descriptor calls
         var fields = _class_fields(mods, ancestry[i])
@@ -54,8 +54,8 @@ def _connected_plan(cls: PythonObject, context: PythonObject) raises -> PythonOb
 
 
 def _connected_plan(mut mods: NativeModules, cls: PythonObject, context: PythonObject) raises -> PythonObject:
-    var nk = params_keys()
     var b = mods.module("builtins")
+    var nk = params_keys()
     var ancestry = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, cls)
     for i in range(len(ancestry)):  # driver-loop: find the connected base without calling a Python subclass protocol
         var plan = py_get(py_item(context, nk[].k_plans), ancestry[i])
@@ -84,7 +84,6 @@ def _loaded_data_class(module_name: String, name: String) raises -> PythonObject
 
 
 def _plan_reused(mut mods: NativeModules, cls: PythonObject, context: PythonObject) raises -> PythonObject:
-    var nk = params_keys()
     # The class part of _plan (connected plan and pinned descriptor
     # identities) reads only the class rows, watched through
     # native_class_admission, plus the plan's own pinned table. Reuse it
@@ -93,6 +92,7 @@ def _plan_reused(mut mods: NativeModules, cls: PythonObject, context: PythonObje
     var record = class_record(mods, _PARAMS_CLASS_SLOT, cls)
     if record is None:
         return PythonObject(None)
+    var nk = params_keys()
     if record[1] is not py_item(context, nk[].k_plans) or record[2] is not py_item(context, nk[].k_missing):
         return PythonObject(None)
     var plan = _connected_plan(mods, cls, context)
@@ -107,7 +107,6 @@ def _plan(model: PythonObject, fields: PythonObject, context: PythonObject) rais
 
 
 def _plan(mut mods: NativeModules, model: PythonObject, fields: PythonObject, context: PythonObject) raises -> PythonObject:
-    var nk = params_keys()
     # `mods`: the get_params read's admitted module view (no GIL release
     # window inside a parameter read), shared by every helper below.
     var b = mods.module("builtins")
@@ -115,6 +114,7 @@ def _plan(mut mods: NativeModules, model: PythonObject, fields: PythonObject, co
     if py_type(cls) is not b.type:
         raise Error("TypeError: native parameters refuse Python metaclass protocols")
     var plan = _plan_reused(mods, cls, context)
+    var nk = params_keys()
     if plan is None:
         plan = _connected_plan(mods, cls, context)
         if plan is None:
@@ -128,9 +128,11 @@ def _plan(mut mods: NativeModules, model: PythonObject, fields: PythonObject, co
         if class_watch_ready():  # no payload where no record can be kept (3.10/3.11)
             class_admit(mods, _PARAMS_CLASS_SLOT, cls,
                         Python.tuple(plan, py_item(context, nk[].k_plans), py_item(context, nk[].k_missing), pinned, PythonObject(len(pinned))))
-    for name in ["get_params", "_get_param_names", "__getattribute__", "__getattr__"]:  # driver-loop: refuse instance protocol overrides before lookup
-        if py_contains(fields, PythonObject(name)):
-            raise Error("TypeError: native parameters cannot invoke instance protocol overrides")
+    # Refuse instance protocol overrides before lookup (held keys; was a loop
+    # building each str per get_params call).
+    if (py_contains(fields, nk[].k_get_params) or py_contains(fields, nk[].k__get_param_names)
+            or py_contains(fields, nk[].k___getattribute__) or py_contains(fields, nk[].k___getattr__)):
+        raise Error("TypeError: native parameters cannot invoke instance protocol overrides")
     return plan
 
 
@@ -142,8 +144,8 @@ def _value(model: PythonObject, fields: PythonObject, name: PythonObject,
 
 def _value(mut mods: NativeModules, model: PythonObject, fields: PythonObject, name: PythonObject,
            context: PythonObject, missing_error: String) raises -> PythonObject:
-    var nk = params_keys()
     var cls = py_type(model)
+    var nk = params_keys()
     var value = _resolved(mods, cls, name, py_item(context, nk[].k_missing))
     if value is not py_item(context, nk[].k_missing):
         var kind = py_type(value)
@@ -173,7 +175,6 @@ def _nested(value: PythonObject, context: PythonObject) raises -> Bool:
 
 
 def _nested(mut mods: NativeModules, value: PythonObject, context: PythonObject) raises -> Bool:
-    var nk = params_keys()
     # One admitted module view and the process-wide C-API table for the whole
     # test (it used five fresh module views and two dlsym lookups per value).
     var b = mods.module("builtins")
@@ -183,6 +184,7 @@ def _nested(mut mods: NativeModules, value: PythonObject, context: PythonObject)
     if t[].PyType_IsSubtype(kind._obj_ptr, b.type._obj_ptr) != 0:
         return False
     var connected = _connected_plan(mods, kind, context) is not None
+    var nk = params_keys()
     var getter = _resolved(mods, kind, PythonObject("get_params"), py_item(context, nk[].k_missing))
     if (getter is not py_item(context, nk[].k_missing) and not connected
             and _resolved(mods, py_type(getter), "__get__", py_item(context, nk[].k_missing)) is not py_item(context, nk[].k_missing)):
@@ -218,7 +220,6 @@ def _nested(mut mods: NativeModules, value: PythonObject, context: PythonObject)
 
 def _read_inner(model: PythonObject, deep: Bool, context: PythonObject,
           ancestors: PythonObject) raises -> PythonObject:
-    var nk = params_keys()
     # One admitted module view for this estimator's whole parameter read: no
     # GIL release window runs inside it (member descriptors are C slots).
     var mods = NativeModules()
@@ -230,6 +231,7 @@ def _read_inner(model: PythonObject, deep: Bool, context: PythonObject,
     _ = py_call(path.append, model)
     var fields = _fields(mods, model)
     var plan = _plan(mods, model, fields, context)
+    var nk = params_keys()
     var kind = String(py_item(plan, nk[].k_kind))
     var out = Python.dict()
     if kind == "splitter":

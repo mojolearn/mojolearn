@@ -35,9 +35,9 @@ def native_numpy_module_fields(module: PythonObject) raises -> PythonObject:
 
 
 def native_numpy_type(name: String, context: PythonObject) raises -> PythonObject:
-    var nk = native_keys()
     # Obtain type from a C-created scalar, independent of builtins.type.
     var type_class = py_type(py_type(PythonObject(0)))
+    var nk = native_keys()
     var modules = py_item(context, nk[].k_modules)
     var module_type = py_type(native_loaded_module("sys"))
     var numpy = py_get(modules, nk[].k_numpy)

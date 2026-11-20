@@ -16,8 +16,8 @@ comptime _VIEW_CLASS_SLOT = "array_view_class_keys_v1"
 
 
 def _namespace(cls: PythonObject) raises -> PythonObject:
-    var nk = native_keys()
     var b = native_loaded_module("builtins")
+    var nk = native_keys()
     var fields = py_call(py_item(b.type.__dict__, nk[].k___dict__).__get__, cls)
     # The exact-string key scan of the Array class namespace runs once per
     # class state (native_class_admission), not once per fitted-output view.
@@ -33,10 +33,10 @@ def _namespace(cls: PythonObject) raises -> PythonObject:
 
 
 def native_array_ndarray_view(value: PythonObject, context: PythonObject) raises -> PythonObject:
-    var nk = native_keys()
     # A raw Array._mv may be an ownerless memory_at view. Build the ndarray
     # from its admitted backing store and offset instead, retaining that store
     # through the native memoryview after the model/Array has been released.
+    var nk = native_keys()
     var cls = py_item(context, nk[].k_array_class)
     var slots = py_item(context, nk[].k_array_storage_slots)
     var namespace = _namespace(cls)

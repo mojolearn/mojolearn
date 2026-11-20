@@ -18,16 +18,16 @@ def native_array_slots(context: PythonObject) raises -> PythonObject:
 
 
 def native_array_slots(mut mods: NativeModules, context: PythonObject) raises -> PythonObject:
-    var nk = native_keys()
     # `mods`: the operation's admitted module connections (one check per GIL
     # release window instead of one per Array).
     var b = mods.module("builtins")
+    var nk = native_keys()
     var cls = py_item(context, nk[].k_array_class)
     if py_type(cls) is not b.type:
         raise Error("TypeError: neural arrays require their native storage class")
     var namespace = _class_fields(mods, cls)
-    var names = Python.tuple("_store", "_base", "_pin", "_mv", "_addr", "_readonly",
-        "shape", "dtype", "ndim", "size", "nbytes", "itemsize", "strides", "order")
+    var names = Python.tuple(nk[].k__store, nk[].k__base, nk[].k__pin, nk[].k__mv, nk[].k__addr, nk[].k__readonly,
+        nk[].k_shape, nk[].k_dtype, nk[].k_ndim, nk[].k_size, nk[].k_nbytes, nk[].k_itemsize, nk[].k_strides, nk[].k_order)
     var slots = Python.dict()
     var types = mods.module("types")
     for i in range(len(names)):  # small-loop(names: native Array slots): fixed storage descriptor schema only
@@ -41,10 +41,14 @@ def native_array_slots(mut mods: NativeModules, context: PythonObject) raises ->
         var row = _class_fields(mods, mro[i])
         if py_contains(row, nk[].k___getattr__) or py_contains(row, nk[].k___del__):
             raise Error("TypeError: neural Array metadata hooks are not supported")
-        for name in ["__getattribute__", "__setattr__"]:  # driver-loop: native admission metadata and retained owner registry
-            var own = py_get(row, PythonObject(name))
-            if own is not None and own is not b.object.__dict__[name]:
-                raise Error("TypeError: neural Array metadata hooks are not supported")
+        # Native admission metadata and retained owner registry: the two
+        # protocol names, held keys (was a loop building each str per class).
+        var own = py_get(row, nk[].k___getattribute__)
+        if own is not None and own is not py_item(b.object.__dict__, nk[].k___getattribute__):
+            raise Error("TypeError: neural Array metadata hooks are not supported")
+        own = py_get(row, nk[].k___setattr__)
+        if own is not None and own is not py_item(b.object.__dict__, nk[].k___setattr__):
+            raise Error("TypeError: neural Array metadata hooks are not supported")
     return slots
 
 
@@ -55,11 +59,11 @@ def native_array_snapshot(value: PythonObject, context: PythonObject, all_dtypes
 
 
 def native_array_snapshot(mut mods: NativeModules, value: PythonObject, context: PythonObject, all_dtypes: Bool = False) raises -> PythonObject:
-    var nk = native_keys()
     # Capture every Array metadata word once through native member descriptors.
     # The returned passive view retains both the original owner and a real
     # buffer export; execution never consults mutable caller shape/stride slots.
     var b = mods.module("builtins")
+    var nk = native_keys()
     var cls = py_item(context, nk[].k_array_class)
     if py_type(value) is not cls:
         raise Error("TypeError: neural Array input requires its exact native class")
@@ -68,9 +72,11 @@ def native_array_snapshot(mut mods: NativeModules, value: PythonObject, context:
     var names = py_call(b.list, slots.keys())
     for i in range(len(names)):  # driver-loop: over the native Array metadata names, captured once
         py_setitem(values, names[i], py_call(slots[names[i]].__get__, value, cls))
-    for name in ["_addr", "ndim", "size", "nbytes", "itemsize"]:  # small-loop(native size and address words)
-        if py_type(values[name]) is not b.int:
-            raise Error("TypeError: neural Array dimensions and addresses require native integers")
+    # Native size and address words (held keys; was a loop building each str).
+    if (py_type(py_item(values, nk[].k__addr)) is not b.int or py_type(py_item(values, nk[].k_ndim)) is not b.int
+            or py_type(py_item(values, nk[].k_size)) is not b.int or py_type(py_item(values, nk[].k_nbytes)) is not b.int
+            or py_type(py_item(values, nk[].k_itemsize)) is not b.int):
+        raise Error("TypeError: neural Array dimensions and addresses require native integers")
     if (py_type(py_item(values, nk[].k_shape)) is not b.tuple or py_type(py_item(values, nk[].k_strides)) is not b.tuple
             or py_type(py_item(values, nk[].k_dtype)) is not b.str or py_type(py_item(values, nk[].k_order)) is not b.str
             or py_type(py_item(values, nk[].k__readonly)) is not b.bool):
@@ -194,9 +200,9 @@ struct NativeArrayAdmission(Copyable, Movable):
     var object_setattr: PythonObject
 
     def __init__(out self, context: PythonObject) raises:
-        var nk = native_keys()
         self.slots = native_array_slots(context)
         var b = native_loaded_module("builtins")
+        var nk = native_keys()
         self.cls = py_item(context, nk[].k_array_class)
         self.type_cls = b.type
         self.str_cls = b.str

@@ -22,9 +22,8 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.native_keys_unpack import native_keys
 from bindings.py_balanced import py_item
 
-comptime _KEY_LABELS = "_mojolearn_typed_context_labels"
-comptime _KEY_TREES = "_mojolearn_typed_context_trees"
-comptime _KEY_BOTH = "_mojolearn_typed_context_both"
+# The cache keys (`_mojolearn_typed_context_{labels,trees,both}`) are held keys
+# of bindings/native_keys_unpack.mojo.
 
 
 def native_typed_context(context: PythonObject, labels: Bool, trees: Bool) raises -> PythonObject:
@@ -32,9 +31,9 @@ def native_typed_context(context: PythonObject, labels: Bool, trees: Bool) raise
     `labels`) and `trees_real_type`/`trees_integral_type` (when `trees`):
     tuples of the concrete native int/float/bool and connected NumPy scalar
     classes, so isinstance tests never run numbers.Real/Integral ABC hooks."""
-    var nk = native_keys()
     var b = native_loaded_module("builtins")
-    var key = PythonObject(_KEY_BOTH if (labels and trees) else (_KEY_LABELS if labels else _KEY_TREES))
+    var nk = native_keys()
+    var key = nk[].k__mojolearn_typed_context_both if (labels and trees) else (nk[].k__mojolearn_typed_context_labels if labels else nk[].k__mojolearn_typed_context_trees)
     if py_type(context) is b.dict:
         var cached = py_get(context, key)
         if cached is not None and py_type(cached) is b.tuple and len(cached) == 5:
@@ -49,9 +48,9 @@ def native_typed_context(context: PythonObject, labels: Bool, trees: Bool) raise
                     and (epoch < 0 or epoch == shared_dict_epoch(Int(context._obj_ptr)))):
                 return cached[0]
     var result = py_call(b.dict, context)
-    _ = py_call(result.pop, PythonObject(_KEY_LABELS), PythonObject(None))
-    _ = py_call(result.pop, PythonObject(_KEY_TREES), PythonObject(None))
-    _ = py_call(result.pop, PythonObject(_KEY_BOTH), PythonObject(None))
+    _ = py_call(result.pop, nk[].k__mojolearn_typed_context_labels, PythonObject(None))
+    _ = py_call(result.pop, nk[].k__mojolearn_typed_context_trees, PythonObject(None))
+    _ = py_call(result.pop, nk[].k__mojolearn_typed_context_both, PythonObject(None))
     var types = Python.list()
     _ = py_call(types.extend, Python.tuple(b.int, b.float, b.bool))
     _ = py_call(types.extend, py_item(context, nk[].k_scalar_types))

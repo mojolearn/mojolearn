@@ -12,7 +12,8 @@ from bindings.native_error_class import error_without_class
 from bindings.native_class_admission_door import class_record, class_admit, class_watch_ready
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, _is_exact_dict
 from bindings.optimizer_public_words_unpack import stash_python_error, optimizer_python_error, PYTHON_ERROR_PENDING
-from bindings.mode_keys_unpack import mode_keys
+from bindings.mode_keys_unpack import mode_keys, MODE_OPN_IS_FITTED, MODE_OPN_NUMERIC_MODE_USED, MODE_OPN_VENDOR_USED
+from bindings.py_keys import py_op_code
 from bindings.py_balanced import py_item
 
 
@@ -35,7 +36,6 @@ def _fields(model: PythonObject) raises -> PythonObject:
 
 
 def _fields(mut mods: NativeModules, model: PythonObject) raises -> PythonObject:
-    var nk = mode_keys()
     # `mods`: the operation's admitted module connections (one check per GIL
     # release window instead of one per field read).
     var b = mods.module("builtins")
@@ -47,6 +47,7 @@ def _fields(mut mods: NativeModules, model: PythonObject) raises -> PythonObject
         return _instance_fields(b, model)
     # Native type descriptors read actual MRO/storage, including buffers with
     # native metaclasses. They do not consult a metaclass's Python hooks.
+    var nk = mode_keys()
     var ancestry = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, cls)
     for i in range(len(ancestry)):  # driver-loop: over class ancestry to reject storage protocol overrides
         var namespace = _class_fields(mods, ancestry[i])
@@ -65,11 +66,11 @@ comptime _STORAGE_CLASS_SLOT = "class_instance_storage_v1"
 
 def _fields_from_admitted_rows(mut mods: NativeModules, model: PythonObject,
                               ancestry: PythonObject, rows: List[PythonObject]) raises -> PythonObject:
-    var nk = mode_keys()
     # Native public-attribute admission already checked these live class rows
     # while holding the GIL. Reuse them for storage precedence without creating
     # another MRO/proxy inventory or repeating each namespace key scan.
     var b = mods.module("builtins")
+    var nk = mode_keys()
     for i in range(len(ancestry)):  # driver-loop: over already admitted class rows in storage precedence order
         var namespace = rows[i]
         if py_contains(namespace, nk[].k___dict__):
@@ -128,12 +129,12 @@ def _truth(mut mods: NativeModules, value: PythonObject) raises -> Bool:
 
 
 def _fitted(model: PythonObject) raises -> PythonObject:
-    var nk = mode_keys()
     # One admitted module view for the whole check (no GIL release inside):
     # the field read, both flag tests and the name scans share it instead of
     # re-stamping builtins four times per guarded predict/transform.
     var mods = NativeModules()
     var fields = _fields(mods, model)
+    var nk = mode_keys()
     if _truth(mods, py_get(fields, nk[].k__mojolearn_fitted)) or _truth(mods, py_get(fields, nk[].k__mojolearn_fitting)):
         return PythonObject(True)
     var reset = py_get(fields, nk[].k__mojolearn_params_reset)
@@ -190,8 +191,8 @@ comptime _CLASS_KEYS_SLOT = "class_string_keys_v1"
 
 
 def _class_fields(mut mods: NativeModules, cls: PythonObject) raises -> PythonObject:
-    var nk = mode_keys()
     var b = mods.module("builtins")
+    var nk = mode_keys()
     var fields = py_call(py_item(b.type.__dict__, nk[].k___dict__).__get__, cls)
     # The exact-string key scan walks the whole class namespace. A class's
     # keys change only through a type modification, which bumps its watched
@@ -212,11 +213,11 @@ def _plan(model: PythonObject, state: PythonObject, context: PythonObject) raise
 
 
 def _plan(mut mods: NativeModules, model: PythonObject, state: PythonObject, context: PythonObject) raises -> PythonObject:
-    var nk = mode_keys()
     var b = mods.module("builtins")
     var cls = py_type(model)
     if py_type(cls) is not b.type:
         raise Error("TypeError: native metadata refuses Python metaclass protocols")
+    var nk = mode_keys()
     if py_contains(state, nk[].k__bind) or py_contains(state, nk[].k__BINDING):
         raise Error("TypeError: native binary metadata requires its import-connected class binding; Python binding overrides are not accepted")
     var ancestry = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, cls)
@@ -305,23 +306,25 @@ def _mode(mut mods: NativeModules, value: PythonObject) raises -> String:
 
 def _configuration_value(model: PythonObject, fields: PythonObject,
                          name: String) raises -> PythonObject:
-    # Old-arity caller (gp_public_lifecycle_pyapi).
+    # Old-arity caller (gp_public_lifecycle_pyapi): builds its key once here.
     var mods = NativeModules()
-    return _configuration_value(mods, model, fields, name)
+    return _configuration_value(mods, model, fields, PythonObject(name), name)
 
 
 def _configuration_value(mut mods: NativeModules, model: PythonObject, fields: PythonObject,
-                         name: String) raises -> PythonObject:
-    var nk = mode_keys()
+                         key: PythonObject, name: String) raises -> PythonObject:
+    # `key`: the held str of `name` (bindings/mode_keys_unpack.mojo); `name`
+    # is the text of the slot check and the refusal only.
     var b = mods.module("builtins")
     var cls = py_type(model)
+    var nk = mode_keys()
     var ancestry = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, cls)
     # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
     var inherited = Optional[PythonObject]()
     for i in range(len(ancestry)):  # driver-loop: over class ancestry for plain metadata defaults
         var namespace = _class_fields(mods, ancestry[i])
-        if py_contains(namespace, PythonObject(name)):
-            var member = namespace[name]
+        if py_contains(namespace, key):
+            var member = py_item(namespace, key)
             inherited = member
             var kind = py_type(member)
             if kind is mods.module("types").MemberDescriptorType:
@@ -343,22 +346,22 @@ def _configuration_value(mut mods: NativeModules, model: PythonObject, fields: P
                 if py_contains(_class_fields(mods, value_ancestry[j]), nk[].k___get__):
                     raise Error("TypeError: native mode metadata cannot invoke Python properties; store " + name + " as a native value")
             break
-    if py_contains(fields, PythonObject(name)):
-        return fields[name]
+    if py_contains(fields, key):
+        return py_item(fields, key)
     if inherited:
         return inherited.value()
     return PythonObject(None)
 
 
-def _readback(model: PythonObject, operation: String, context: PythonObject) raises -> PythonObject:
-    var nk = mode_keys()
+def _readback(model: PythonObject, operation: Int, context: PythonObject) raises -> PythonObject:
     # One admitted module view for the metadata reads below (no GIL release
     # until the route's read-back entry is called).
     var mods = NativeModules()
     var b = mods.module("builtins")
     var fields = _fields(mods, model)
     var plan = _plan(mods, model, fields, context)
-    var requested = _configuration_value(mods, model, fields, "numeric_mode")
+    var nk = mode_keys()
+    var requested = _configuration_value(mods, model, fields, nk[].k_numeric_mode, "numeric_mode")
     var route = String(py_item(plan, nk[].k_route))
     var selected = String()
     if route == "host" or route == "host_gp":
@@ -378,7 +381,7 @@ def _readback(model: PythonObject, operation: String, context: PythonObject) rai
         else:
             selected = _mode(mods, requested)
         if route == "forest":
-            var captured = _configuration_value(mods, model, fields, "_fit_numeric_mode")
+            var captured = _configuration_value(mods, model, fields, nk[].k__fit_numeric_mode, "_fit_numeric_mode")
             if captured is not None:
                 var locked = _mode(mods, captured)
                 if requested is not None and selected != locked:
@@ -405,7 +408,7 @@ def _readback(model: PythonObject, operation: String, context: PythonObject) rai
         mode_value = py_item(context, nk[].k_mode_codes)[code]
         if String(mode_value) != selected:
             raise Error("RuntimeError: compiled binary numeric mode does not match the selected mode")
-    if operation == "numeric_mode_used":
+    if operation == MODE_OPN_NUMERIC_MODE_USED:
         if mode_value is None:
             raise Error("IndexError: legacy binary has no numeric-mode path component")
         return mode_value
@@ -426,11 +429,12 @@ def mode_metadata_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyO
         var args = PythonObject(from_borrowed=args_ptr)
         if len(args) != 3 or py_type(args[1]) is not py_type(PythonObject("")):
             raise Error("TypeError: mode metadata expects model, operation and native context")
-        var operation = String(args[1])
+        var nk = mode_keys()
+        var operation = py_op_code(nk[].ops, args[1])
         var result = PythonObject(None)
-        if operation == "is_fitted":
+        if operation == MODE_OPN_IS_FITTED:
             result = _fitted(args[0])
-        elif operation == "numeric_mode_used" or operation == "vendor_used":
+        elif operation == MODE_OPN_NUMERIC_MODE_USED or operation == MODE_OPN_VENDOR_USED:
             result = _readback(args[0], operation, args[2])
         else:
             raise Error("ValueError: unknown native mode metadata operation")

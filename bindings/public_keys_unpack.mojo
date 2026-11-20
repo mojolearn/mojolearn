@@ -8,6 +8,7 @@
 from std.python import Python, PythonObject
 from core.shared_slot import SharedSlot
 from bindings.py_keys import py_key, py_op_add
+from bindings.native_loaded_module_door import native_interpreter_finalizing
 
 
 
@@ -48,6 +49,7 @@ struct PublicKeys(Defaultable, Movable):
     var k_plans: PythonObject
     var k_properties: PythonObject
     var k_svm_owner: PythonObject
+    var k_attributes: PythonObject
 
     def __init__(out self):
         self.ready = False
@@ -85,6 +87,7 @@ struct PublicKeys(Defaultable, Movable):
         self.k_plans = PythonObject(None)
         self.k_properties = PythonObject(None)
         self.k_svm_owner = PythonObject(None)
+        self.k_attributes = PythonObject(None)
 
 
 comptime _PUBLIC_KEYS = SharedSlot[PublicKeys, "MojolearnPublicKeysV1"]
@@ -126,6 +129,7 @@ def _public_keys_fill(nk: UnsafePointer[PublicKeys, MutUntrackedOrigin]) raises:
     nk[].k_plans = py_key("plans")
     nk[].k_properties = py_key("properties")
     nk[].k_svm_owner = py_key("svm_owner")
+    nk[].k_attributes = py_key("attributes")
     var ops = Python.dict()
     nk[].ops = ops
     nk[].ready = True
@@ -137,5 +141,19 @@ def public_keys() raises -> UnsafePointer[PublicKeys, MutUntrackedOrigin]:
     function, outside loops."""
     var nk = _PUBLIC_KEYS.get_or_create_ptr()
     if not nk[].ready:
+        _public_keys_fill(nk)
+    return nk
+
+
+def public_keys_in_finalizer() raises -> UnsafePointer[PublicKeys, MutUntrackedOrigin]:
+    """The keys for the generic attribute slot, which a Python `__del__` can
+    reach during interpreter teardown. The first fill interns names through
+    `sys` (py_key -> native_loaded_module), a fatal read once the interpreter
+    tears its modules down (fx-smoke-b59, rc -6). So during finalization an
+    unfilled table is returned unfilled (`ready` False) and the caller returns
+    the value as read. A filled table costs what `public_keys()` costs: one
+    slot fetch and one flag test."""
+    var nk = _PUBLIC_KEYS.get_or_create_ptr()
+    if not nk[].ready and not native_interpreter_finalizing():
         _public_keys_fill(nk)
     return nk

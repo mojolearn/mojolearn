@@ -29,11 +29,11 @@ from bindings.native_posix_transport_run import PosixBytes
 from providers.python.borrowed_buffer_pyapi_unpack import admit_native_buffer_exporter, AdmittedBorrowedBuffer
 from core.parallel_worker_frame import (
     WireRecord, WireTensor, WireFrame, wire_frame_words, wire_frame_header, wire_frame_body,
-from bindings.native_keys_unpack import native_keys
     wire_dtype_word, wire_dtype_name, WIRE_FRAME_HEADER_WORDS, WIRE_RECORD_MAX_DEPTH,
     WIRE_NONE, WIRE_BOOL, WIRE_INT, WIRE_FLOAT, WIRE_TEXT, WIRE_TENSOR, WIRE_BF16, WIRE_INT8,
     WIRE_LIST, WIRE_TUPLE, WIRE_MAP,
 )
+from bindings.native_keys_unpack import native_keys
 
 
 comptime WIRE_MAX_TENSOR_BYTES = (1 << 62)
@@ -248,7 +248,6 @@ def _wire_array(fd: Int, timeout: Float64, tensor: WireTensor) raises -> PythonO
 
 def _wire_pack(record: WireRecord, mut cursor: Int, tensors: List[PythonObject], mut next_tensor: Int,
                depth: Int) raises -> PythonObject:
-    var nk = native_keys()
     if cursor >= record.node_count() or depth > WIRE_RECORD_MAX_DEPTH:
         raise Error("parallel wire: record tree exceeds its nodes or depth")
     var c = CODEC_BOUNDARY.get_or_create_ptr()
@@ -275,6 +274,7 @@ def _wire_pack(record: WireRecord, mut cursor: Int, tensors: List[PythonObject],
         next_tensor += width
         if tag == WIRE_TENSOR:
             return tensors[word]
+        var nk = native_keys()
         if tag == WIRE_BF16:
             if c[].bf16_cls is None:
                 raise Error("parallel wire: bfloat16 weight class is not connected")

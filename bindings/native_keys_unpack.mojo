@@ -9,12 +9,47 @@ from std.python import Python, PythonObject
 from core.shared_slot import SharedSlot
 from bindings.py_keys import py_key, py_op_add
 
+# Three dispatchers share this table and their names collide ("initialize",
+# "close"), so each has its own `ops_<door>` dictionary and
+# `NATIVE_<DOOR>_OPN_*` codes (the bw2-parallel form): codec_c
+# (native_codec_door), process_c (native_process_pool_door) and
+# transport_c (native_transport_door).
+# `codec` dispatcher codes (`ops_codec`).
+comptime NATIVE_CODEC_OPN_INITIALIZE = 0
+comptime NATIVE_CODEC_OPN_PACK = 1
+comptime NATIVE_CODEC_OPN_UNPACK = 2
+# `process` dispatcher codes (`ops_process`).
+comptime NATIVE_PROCESS_OPN_INITIALIZE = 0
+comptime NATIVE_PROCESS_OPN_CREATE = 1
+comptime NATIVE_PROCESS_OPN_MAP = 2
+comptime NATIVE_PROCESS_OPN_CLOSE = 3
+comptime NATIVE_PROCESS_OPN_WORKER_ECHO = 4
+comptime NATIVE_PROCESS_OPN_ENVIRONMENT = 5
+# `transport` dispatcher codes (`ops_transport`).
+comptime NATIVE_TRANSPORT_OPN_INITIALIZE = 0
+comptime NATIVE_TRANSPORT_OPN_IDNA = 1
+comptime NATIVE_TRANSPORT_OPN_LISTEN = 2
+comptime NATIVE_TRANSPORT_OPN_ACCEPT = 3
+comptime NATIVE_TRANSPORT_OPN_CONNECT = 4
+comptime NATIVE_TRANSPORT_OPN_ADDRESS = 5
+comptime NATIVE_TRANSPORT_OPN_PORT = 6
+comptime NATIVE_TRANSPORT_OPN_TIMEOUT = 7
+comptime NATIVE_TRANSPORT_OPN_SEND = 8
+comptime NATIVE_TRANSPORT_OPN_RECEIVE = 9
+comptime NATIVE_TRANSPORT_OPN_CLOSE = 10
+comptime NATIVE_TRANSPORT_OPN_SLEEP = 11
+comptime NATIVE_TRANSPORT_OPN_SPAWN = 12
+comptime NATIVE_TRANSPORT_OPN_WAIT = 13
+comptime NATIVE_TRANSPORT_OPN_TERMINATE = 14
+
 
 
 struct NativeKeys(Defaultable, Movable):
     # Immutable interface names only: no model, state or user data.
     var ready: Bool
-    var ops: PythonObject
+    var ops_codec: PythonObject
+    var ops_process: PythonObject
+    var ops_transport: PythonObject
     var k_ARRAY_TYPE: PythonObject
     var k_ClassLabels: PythonObject
     var k_DispatchKey: PythonObject
@@ -147,10 +182,17 @@ struct NativeKeys(Defaultable, Movable):
     var k_vendor: PythonObject
     var k_visibility: PythonObject
     var k_workers: PythonObject
+    var k__mojolearn_typed_context_labels: PythonObject
+    var k__mojolearn_typed_context_trees: PythonObject
+    var k__mojolearn_typed_context_both: PythonObject
+    var k___new__: PythonObject
+    var k__pin: PythonObject
 
     def __init__(out self):
         self.ready = False
-        self.ops = PythonObject(None)
+        self.ops_codec = PythonObject(None)
+        self.ops_process = PythonObject(None)
+        self.ops_transport = PythonObject(None)
         self.k_ARRAY_TYPE = PythonObject(None)
         self.k_ClassLabels = PythonObject(None)
         self.k_DispatchKey = PythonObject(None)
@@ -283,6 +325,11 @@ struct NativeKeys(Defaultable, Movable):
         self.k_vendor = PythonObject(None)
         self.k_visibility = PythonObject(None)
         self.k_workers = PythonObject(None)
+        self.k__mojolearn_typed_context_labels = PythonObject(None)
+        self.k__mojolearn_typed_context_trees = PythonObject(None)
+        self.k__mojolearn_typed_context_both = PythonObject(None)
+        self.k___new__ = PythonObject(None)
+        self.k__pin = PythonObject(None)
 
 
 comptime _NATIVE_KEYS = SharedSlot[NativeKeys, "MojolearnNativeKeysV1"]
@@ -423,8 +470,41 @@ def _native_keys_fill(nk: UnsafePointer[NativeKeys, MutUntrackedOrigin]) raises:
     nk[].k_vendor = py_key("vendor")
     nk[].k_visibility = py_key("visibility")
     nk[].k_workers = py_key("workers")
-    var ops = Python.dict()
-    nk[].ops = ops
+    nk[].k__mojolearn_typed_context_labels = py_key("_mojolearn_typed_context_labels")
+    nk[].k__mojolearn_typed_context_trees = py_key("_mojolearn_typed_context_trees")
+    nk[].k__mojolearn_typed_context_both = py_key("_mojolearn_typed_context_both")
+    nk[].k___new__ = py_key("__new__")
+    nk[].k__pin = py_key("_pin")
+    var ops_codec = Python.dict()
+    py_op_add(ops_codec, "initialize", NATIVE_CODEC_OPN_INITIALIZE)
+    py_op_add(ops_codec, "pack", NATIVE_CODEC_OPN_PACK)
+    py_op_add(ops_codec, "unpack", NATIVE_CODEC_OPN_UNPACK)
+    nk[].ops_codec = ops_codec
+    var ops_process = Python.dict()
+    py_op_add(ops_process, "initialize", NATIVE_PROCESS_OPN_INITIALIZE)
+    py_op_add(ops_process, "create", NATIVE_PROCESS_OPN_CREATE)
+    py_op_add(ops_process, "map", NATIVE_PROCESS_OPN_MAP)
+    py_op_add(ops_process, "close", NATIVE_PROCESS_OPN_CLOSE)
+    py_op_add(ops_process, "worker_echo", NATIVE_PROCESS_OPN_WORKER_ECHO)
+    py_op_add(ops_process, "environment", NATIVE_PROCESS_OPN_ENVIRONMENT)
+    nk[].ops_process = ops_process
+    var ops_transport = Python.dict()
+    py_op_add(ops_transport, "initialize", NATIVE_TRANSPORT_OPN_INITIALIZE)
+    py_op_add(ops_transport, "idna", NATIVE_TRANSPORT_OPN_IDNA)
+    py_op_add(ops_transport, "listen", NATIVE_TRANSPORT_OPN_LISTEN)
+    py_op_add(ops_transport, "accept", NATIVE_TRANSPORT_OPN_ACCEPT)
+    py_op_add(ops_transport, "connect", NATIVE_TRANSPORT_OPN_CONNECT)
+    py_op_add(ops_transport, "address", NATIVE_TRANSPORT_OPN_ADDRESS)
+    py_op_add(ops_transport, "port", NATIVE_TRANSPORT_OPN_PORT)
+    py_op_add(ops_transport, "timeout", NATIVE_TRANSPORT_OPN_TIMEOUT)
+    py_op_add(ops_transport, "send", NATIVE_TRANSPORT_OPN_SEND)
+    py_op_add(ops_transport, "receive", NATIVE_TRANSPORT_OPN_RECEIVE)
+    py_op_add(ops_transport, "close", NATIVE_TRANSPORT_OPN_CLOSE)
+    py_op_add(ops_transport, "sleep", NATIVE_TRANSPORT_OPN_SLEEP)
+    py_op_add(ops_transport, "spawn", NATIVE_TRANSPORT_OPN_SPAWN)
+    py_op_add(ops_transport, "wait", NATIVE_TRANSPORT_OPN_WAIT)
+    py_op_add(ops_transport, "terminate", NATIVE_TRANSPORT_OPN_TERMINATE)
+    nk[].ops_transport = ops_transport
     nk[].ready = True
 
 

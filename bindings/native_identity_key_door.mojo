@@ -205,9 +205,9 @@ struct NativeIdentityKey(Movable, Writable):
         return offset == len(self.objects)
 
     def watch_arrays(mut self, mut mods: NativeModules, context: PythonObject) raises:
-        var nk = native_keys()
         # Array slots are public writable storage. Object identity alone cannot
         # establish that a retained view still describes the caller's Array.
+        var nk = native_keys()
         var cls = py_item(context, nk[].k_array_class)
         for i in range(len(self.objects)):  # driver-loop: over retained input identities
             var value = self.objects[i]
@@ -262,9 +262,9 @@ struct NativeIdentityKey(Movable, Writable):
             self.array_row_values.append(native_values^)
 
     def arrays_match(self, mut mods: NativeModules, context: PythonObject) raises -> Bool:
-        var nk = native_keys()
         if len(self.array_owners) == 0:
             return True
+        var nk = native_keys()
         if py_item(context, nk[].k_array_class) is not self.array_class or py_call(self.array_mro_getter, self.array_class) is not self.array_mro:
             return False
         ref cpy = Python().cpython()

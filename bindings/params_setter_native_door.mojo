@@ -20,11 +20,11 @@ from bindings.py_balanced import py_item
 
 
 def _constructor_layout(model: PythonObject, fields: PythonObject, plan: PythonObject) raises:
-    var nk = params_keys()
     var b = native_loaded_module("builtins")
     var cls = py_type(model)
     if py_type(cls) is not b.type:
         raise Error("TypeError: native parameter setters cannot invoke Python metaclass hooks")
+    var nk = params_keys()
     var hooks = py_item(plan, nk[].k_hooks)
     for i in range(len(hooks)):  # driver-loop: exact connected constructor/method/storage identities
         if py_get(_class_fields(hooks[i][0]), hooks[i][1]) is not hooks[i][2]:
@@ -46,10 +46,10 @@ def _constructor_layout(model: PythonObject, fields: PythonObject, plan: PythonO
 
 
 def _setter_plan(model: PythonObject, fields: PythonObject, context: PythonObject) raises -> PythonObject:
-    var nk = params_keys()
     var cls = py_type(model)
     if py_type(cls) is not native_loaded_module("builtins").type:
         raise Error("TypeError: native parameter setters cannot invoke Python metaclass hooks")
+    var nk = params_keys()
     var owner = py_get(py_item(context, nk[].k_plans), cls)
     if owner is None:
         var setter = _resolved(cls, "set_params", py_item(context, nk[].k_missing))
@@ -61,11 +61,11 @@ def _setter_plan(model: PythonObject, fields: PythonObject, context: PythonObjec
 
 
 def _release_admit(value: PythonObject, context: PythonObject, seen: PythonObject) raises:
-    var nk = params_keys()
     var b = native_loaded_module("builtins")
     var todo = Python.list()
     _ = py_call(todo.append, value)
     var cursor = 0
+    var nk = params_keys()
     while cursor < len(todo):  # driver-loop: iterative ownership walk, including deeply nested/cyclic native data
         var item = todo[cursor]
         cursor += 1
@@ -121,13 +121,13 @@ def _release_admit(value: PythonObject, context: PythonObject, seen: PythonObjec
 
 
 def _set_inner(model: PythonObject, params: PythonObject, context: PythonObject) raises -> PythonObject:
-    var nk = params_keys()
     var b = native_loaded_module("builtins")
     if py_type(params) is not b.dict:
         raise Error("TypeError: native parameter keywords require an ordinary dict")
     # The established empty-update contract is an exact identity/no-op.
     if len(params) == 0:
         return model
+    var nk = params_keys()
     if not Bool(py=py_item(context, nk[].k_ready)):
         raise Error("RuntimeError: native parameter constructor plans are not connected")
     var fields = _fields(model)

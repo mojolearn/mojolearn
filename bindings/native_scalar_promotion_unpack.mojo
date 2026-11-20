@@ -16,8 +16,8 @@ from bindings.py_balanced import py_item
 
 
 def native_scalar_weak_promotion(admission: PythonObject, label: String) raises -> Bool:
-    var nk = native_keys()
     var module_type = py_type(native_loaded_module("sys"))
+    var nk = native_keys()
     var numpy = py_get(py_item(admission, nk[].k_modules), nk[].k_numpy)
     if numpy is None or py_type(numpy) is not module_type:
         raise Error("TypeError: " + label + " requires native NumPy version metadata")

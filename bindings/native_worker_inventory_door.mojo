@@ -47,11 +47,11 @@ def _inventory_utf8(pointer: MutPointer[Int8, MutUntrackedOrigin], maximum: Int)
 
 
 def native_worker_inventory(vendor: String, environ: PythonObject) raises -> PythonObject:
-    var nk = native_keys()
     var bi = TRANSPORT_BOUNDARY.get_or_create_ptr()[].bi
     if vendor != "cuda" and vendor != "hip" and vendor != "cpu" and vendor != "metal":
         raise Error("worker inventory: unsupported vendor")
     var result = bi.dict()
+    var nk = native_keys()
     py_setitem(result, nk[].k_vendor, vendor)
     py_setitem(result, nk[].k_pid, Int(external_call["getpid", c_int]()))
     py_setitem(result, nk[].k_ppid, Int(external_call["getppid", c_int]()))
@@ -159,7 +159,6 @@ def _inventory_pci(text: String) raises -> Bool:
 
 
 def native_require_worker_inventory(records: PythonObject, vendor: String, expected_pids: PythonObject, parent_pid: Int) raises:
-    var nk = native_keys()
     var bi = TRANSPORT_BOUNDARY.get_or_create_ptr()[].bi
     if vendor != "cpu" and vendor != "metal" and vendor != "cuda" and vendor != "hip":
         raise Error("worker inventory: unsupported vendor")
@@ -172,6 +171,7 @@ def native_require_worker_inventory(records: PythonObject, vendor: String, expec
     var pids = bi.set()
     var uuids = bi.set()
     var buses = bi.set()
+    var nk = native_keys()
     for i in range(len(records)):  # driver-loop: bind each ordered reply to its authenticated process
         var record = records[i]
         _inventory_dict(record)

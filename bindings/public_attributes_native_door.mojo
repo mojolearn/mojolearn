@@ -20,7 +20,7 @@ from bindings.native_mode_recipe_pack import mode_recipe_call
 from bindings.optimizer_public_words_unpack import optimizer_python_error, stash_python_error, PYTHON_ERROR_PENDING
 from bindings.host_inference_scalars_door import host_inference_scalar
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entry
-from bindings.public_keys_unpack import public_keys
+from bindings.public_keys_unpack import public_keys, public_keys_in_finalizer
 
 
 def _string_keys(fields: PythonObject) raises:
@@ -31,7 +31,6 @@ def _string_keys(fields: PythonObject) raises:
 
 
 def _outside() raises -> Bool:
-    var nk = public_keys()
     ref cpy = Python().cpython()
     var table = cpython_table()
     var pointer = table[].PyEval_GetFrame()
@@ -39,6 +38,7 @@ def _outside() raises -> Bool:
         return True
     # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
     var walked = Optional[PythonObject](PythonObject(from_borrowed=pointer))
+    var nk = public_keys()
     while True:  # driver-loop: skip only the old public wrapper frames
         var frame = walked.value()
         var fields = native_frame_globals(frame)
@@ -104,14 +104,13 @@ comptime _DESCRIPTOR_KIND_SLOT = "public_attribute_descriptor_kind_v1"
 
 
 def _namespace(mut mods: NativeModules, cls: PythonObject) raises -> PythonObject:
-    var nk = public_keys()
     # Raw class namespace of an ancestry row whose keys were admitted with
     # the reused class record.
+    var nk = public_keys()
     return py_call(py_item(mods.module("builtins").type.__dict__, nk[].k___dict__).__get__, cls)
 
 
 def _plan_reused(mut mods: NativeModules, cls: PythonObject, mro: PythonObject, context: PythonObject) raises -> PythonObject:
-    var nk = public_keys()
     # The full admission in _plan reads only the class rows (watched through
     # native_class_admission) and three import-connected context objects.
     # Reuse its record while the class state and those identities are
@@ -121,6 +120,7 @@ def _plan_reused(mut mods: NativeModules, cls: PythonObject, mro: PythonObject, 
     var record = class_record(mods, _ATTRIBUTE_CLASS_SLOT, cls)
     if record is None:
         return PythonObject(None)
+    var nk = public_keys()
     var plans = py_item(context, nk[].k_plans)
     if record[1] is not py_item(context, nk[].k_missing) or record[2] is not py_item(context, nk[].k_descriptor) or record[3] is not plans:
         return PythonObject(None)
@@ -136,13 +136,13 @@ def _plan_reused(mut mods: NativeModules, cls: PythonObject, mro: PythonObject, 
 
 
 def _plan(mut mods: NativeModules, model: PythonObject, context: PythonObject) raises -> _AttributeAdmission:
-    var nk = public_keys()
     var b = mods.module("builtins")
     var cls = py_type(model)
     if py_type(cls) is not b.type:
         raise Error("TypeError: native attributes refuse Python metaclass protocols")
     var mro = _type_mro(cls)
     var reused = _plan_reused(mods, cls, mro, context)
+    var nk = public_keys()
     if reused is not None:
         var admitted_rows = List[PythonObject](capacity=len(mro))
         # The type.__dict__ getter is read once per admission, not three
@@ -182,7 +182,6 @@ def _plan(mut mods: NativeModules, model: PythonObject, context: PythonObject) r
 
 def _plan_admit(mut mods: NativeModules, model: PythonObject, admission: _AttributeAdmission,
                 context: PythonObject) raises:
-    var nk = public_keys()
     # Called after the full class admission and the storage-descriptor check
     # both passed. The record holds the plan and the context objects, never
     # the class itself; a connected class reachable through context["plans"]
@@ -192,6 +191,7 @@ def _plan_admit(mut mods: NativeModules, model: PythonObject, admission: _Attrib
     # Not built where no record can be kept (Python 3.10/3.11).
     if not class_watch_ready():
         return
+    var nk = public_keys()
     class_admit(mods, _ATTRIBUTE_CLASS_SLOT, py_type(model),
                 Python.tuple(admission.plan, py_item(context, nk[].k_missing), py_item(context, nk[].k_descriptor), py_item(context, nk[].k_plans),
                              PythonObject(admission.plan_row)))
@@ -253,12 +253,12 @@ def _availability_member(mut mods: NativeModules, cls: PythonObject, name: Pytho
 
 def _available(mut mods: NativeModules, model: PythonObject, member: PythonObject, schema: PythonObject,
                fields: PythonObject, admission: _AttributeAdmission, context: PythonObject) raises -> PythonObject:
-    var nk = public_keys()
     # `mods`: the operation's module view (the door's AdmittedCall.modules),
     # never a fresh one per availability read (row N265).
     # Admitted rules are presence of transform and LOF's novelty word. Never
     # call the Python available_if descriptor, its check, or its wrapped body.
     var ancestry = _type_mro(py_type(member))
+    var nk = public_keys()
     if len(ancestry) != len(py_item(schema, nk[].k_mro)):
         raise Error("TypeError: native availability descriptor ancestry changed")
     for i in range(len(ancestry)):  # driver-loop: frozen descriptor class identities
@@ -346,8 +346,8 @@ def _available(mut mods: NativeModules, model: PythonObject, member: PythonObjec
 
 def _property(mut mods: NativeModules, model: PythonObject, name: PythonObject, kind: String, fields: PythonObject,
               admission: _AttributeAdmission, context: PythonObject) raises -> PythonObject:
-    var nk = public_keys()
     # `mods`: the operation's module view, shared with _lookup_impl (row N265).
+    var nk = public_keys()
     if kind == "svm_svc_coef" or kind == "svm_svr_coef":
         var owner = py_item(context, nk[].k_svm_owner)
         var entry = owner[0]
@@ -400,7 +400,6 @@ def _property(mut mods: NativeModules, model: PythonObject, name: PythonObject, 
 def _lookup_impl[allow_special: Bool](mut mods: NativeModules, model: PythonObject, name: PythonObject,
                                     fields: PythonObject, admission: _AttributeAdmission,
                                     context: PythonObject) raises -> PythonObject:
-    var nk = public_keys()
     var plan = admission.plan
     var found = _member(admission, name)
     var present = Bool(py=found[0])
@@ -412,6 +411,7 @@ def _lookup_impl[allow_special: Bool](mut mods: NativeModules, model: PythonObje
         descriptor_kind = _descriptor_kind(mods, member_type)
     var descriptor = descriptor_kind != 0
     var data = descriptor_kind == 3
+    var nk = public_keys()
     var binding = py_get(py_item(plan, nk[].k_bindings), name)
     var known = binding is not None and member is binding[0]
     if data:
@@ -481,11 +481,14 @@ def public_attribute_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
             _plan_admit(call.modules, model, admission, context)
         var result = _lookup(call.modules, model, name, call.fields, admission, context)
         var text = String(name)
-        if (text.byte_length() > 0 and text.endswith("_") and not text.startswith("_")
-                and py_type(result) is context["array_class"]):
-            classical_connect_numpy(context)
-            if py_get(context, "ndarray") is not None and _outside():
-                result = _array_view(result, context)
+        if text.byte_length() > 0 and text.endswith("_") and not text.startswith("_"):
+            # The keys are fetched only on the fitted-output branch, where the
+            # old code built its two key strs.
+            var nk = public_keys()
+            if py_type(result) is py_item(context, nk[].k_array_class):
+                classical_connect_numpy(context)
+                if py_get(context, nk[].k_ndarray) is not None and _outside():
+                    result = _array_view(result, context)
         return result.steal_data()
     except error:
         if String(error) == PYTHON_ERROR_PENDING:
@@ -552,13 +555,20 @@ def _public_attribute_generic_entry[slot: Bool](args_ptr: PyObjectPtr) -> PyObje
         var context = PythonObject(from_borrowed=cpy.PyTuple_GetItem(args_ptr, 0 if slot else 2))
         if py_type(name) is not py_type(PythonObject("")):
             return result.steal_data()
-        var attributes = py_get(context, "attributes")
-        if attributes is None or py_type(result) is not attributes["array_class"]:
+        # The finalizer form of the keys: an attribute read can be a Python
+        # `__del__`'s during interpreter teardown, when the first fill (it
+        # interns through `sys`) is fatal. A process that never filled the
+        # table at teardown returns the value as read.
+        var nk = public_keys_in_finalizer()
+        if not nk[].ready:
+            return result.steal_data()
+        var attributes = py_get(context, nk[].k_attributes)
+        if attributes is None or py_type(result) is not py_item(attributes, nk[].k_array_class):
             return result.steal_data()
         var text = String(name)
         if text.byte_length() > 0 and text.endswith("_") and not text.startswith("_"):
             classical_connect_numpy(attributes)
-            if py_get(attributes, "ndarray") is not None and _outside():
+            if py_get(attributes, nk[].k_ndarray) is not None and _outside():
                 result = _array_view(result, attributes)
         return result.steal_data()
     except error:

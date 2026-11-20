@@ -43,6 +43,8 @@ struct ParamsKeys(Defaultable, Movable):
     var k_ready: PythonObject
     var k_recurse: PythonObject
     var k_splitter_plans: PythonObject
+    var k__get_param_names: PythonObject
+    var k___getattr__: PythonObject
 
     def __init__(out self):
         self.ready = False
@@ -75,6 +77,8 @@ struct ParamsKeys(Defaultable, Movable):
         self.k_ready = PythonObject(None)
         self.k_recurse = PythonObject(None)
         self.k_splitter_plans = PythonObject(None)
+        self.k__get_param_names = PythonObject(None)
+        self.k___getattr__ = PythonObject(None)
 
 
 comptime _PARAMS_KEYS = SharedSlot[ParamsKeys, "MojolearnParamsKeysV1"]
@@ -111,6 +115,8 @@ def _params_keys_fill(nk: UnsafePointer[ParamsKeys, MutUntrackedOrigin]) raises:
     nk[].k_ready = py_key("ready")
     nk[].k_recurse = py_key("recurse")
     nk[].k_splitter_plans = py_key("splitter_plans")
+    nk[].k__get_param_names = py_key("_get_param_names")
+    nk[].k___getattr__ = py_key("__getattr__")
     var ops = Python.dict()
     nk[].ops = ops
     nk[].ready = True

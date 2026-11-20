@@ -152,10 +152,10 @@ comptime _PY_TPFLAGS_HAVE_GC = 1 << 14
 
 
 def _native_owner_pins(cls: PythonObject, b: PythonObject) raises -> Optional[NativeOwnerPins]:
-    var nk = native_keys()
     # Identity is necessary, but a registered native type may not acquire
     # Python lifecycle/attribute hooks after registration. Preserve the
     # existing direct-object, no-dictionary/weakref/GC layout policy as well.
+    var nk = native_keys()
     if py_type(cls) is not py_item(b, nk[].k_type):
         return None
     var pins = registered_native_owner_pins(cls)
@@ -181,9 +181,9 @@ def _native_owner_pins(cls: PythonObject, b: PythonObject) raises -> Optional[Na
 
 
 def _owner_string_dictionary(fields: PythonObject, b: PythonObject) raises -> Bool:
-    var nk = native_keys()
     # Provider pins reach module/entry admission too. A foreign key in a
     # module namespace or sys.modules must not run equality during lookup.
+    var nk = native_keys()
     if py_type(fields) is not py_item(b, nk[].k_dict):
         return False
     if not dict_keys_admitted(fields):
@@ -230,10 +230,10 @@ def _retained_entry(value: PythonObject, cls: PythonObject, b: PythonObject, con
 
 
 def native_release_admit(value: PythonObject, context: PythonObject, depth: Int = 0) raises:
-    var nk = native_keys()
     # Reinitialization decrements the previous fields' references. Admit the
     # complete owners that could be destroyed before replacing any field.
     # Keeping an identical value is handled by the caller and drops no owner.
+    var nk = native_keys()
     var b = py_item(context, nk[].k_owner_native_types)
     var cls = py_type(value)
     if value is None or cls is py_item(b, nk[].k_str) or cls is py_item(b, nk[].k_bytes) or cls is py_item(b, nk[].k_bytearray) or cls is py_item(b, nk[].k_bool) or cls is py_item(b, nk[].k_int) or cls is py_item(b, nk[].k_float) or cls is py_item(b, nk[].k_complex):

@@ -109,10 +109,10 @@ def prepared_class_stamp(mut mods: NativeModules, cls: PythonObject, extras: Pyt
     inputs), the ancestry tuple, and every key and value of each mutable
     ancestry row (immutable builtin rows cannot change). A namespace edit,
     insertion or removal on any mutable row changes it."""
-    var nk = native_keys()
     var bi = mods.module("builtins")
     ref cpy = Python().cpython()
     var stamp = py_call(bi.list, extras)
+    var nk = native_keys()
     var ancestry = py_call(py_item(bi.type.__dict__, nk[].k___mro__).__get__, cls)
     records_key_append(stamp, ancestry)
     var dict_get = py_item(bi.type.__dict__, nk[].k___dict__).__get__
@@ -153,7 +153,6 @@ def _class_stamp_identity(stamp: PythonObject, value: PythonObject, mut offset: 
 
 
 def prepared_class_matches(mut mods: NativeModules, cls: PythonObject, extras: List[PythonObject], stamp: PythonObject) raises -> Bool:
-    var nk = native_keys()
     # Compare the retained admission directly. No new identity list, items
     # list or per-field tuple is built on the reuse path. Python >=3.10 uses
     # its supported mappingproxy iterator; PyType_GetDict requires >=3.12,
@@ -163,6 +162,7 @@ def prepared_class_matches(mut mods: NativeModules, cls: PythonObject, extras: L
         if not _class_stamp_identity(stamp, extras[i], offset):
             return False
     var bi = mods.module("builtins")
+    var nk = native_keys()
     var ancestry = py_call(py_item(bi.type.__dict__, nk[].k___mro__).__get__, cls)
     if not _class_stamp_identity(stamp, ancestry, offset):
         return False

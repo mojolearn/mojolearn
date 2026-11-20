@@ -7,6 +7,8 @@ from types import ModuleType
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from boundary_keys_plain import plain  # noqa: E402
 CONNECTOR = ROOT / 'python/mojolearn/_native_params_setter.py'
 
 
@@ -141,7 +143,7 @@ def test_public_setter_is_one_binding_call_and_registration_has_correct_indent()
 
 
 def test_setter_preserves_references_and_never_invokes_python_estimator_protocols():
-    source = (ROOT / 'bindings/params_setter_native_door.mojo').read_text()
+    source = plain('bindings/params_setter_native_door.mojo', (ROOT / 'bindings/params_setter_native_door.mojo').read_text())
     for forbidden in ('Python.import_module', 'msel_clone_parameter', '.get_params(', '.set_params(', '.__init__(', 'fields.clear'):
         assert forbidden not in source
     assert 'py_setitem(fresh, parameters[i], values[parameters[i]])' in source
@@ -163,7 +165,7 @@ def test_native_slots_setter_and_getter_connection_order_preserves_snapshots():
 
 
 def test_reset_marker_preserves_legacy_user_fields_but_new_fit_wins():
-    source = (ROOT / 'bindings/mode_metadata_native_door.mojo').read_text()
+    source = plain('bindings/mode_metadata_native_door.mojo', (ROOT / 'bindings/mode_metadata_native_door.mojo').read_text())
     start = source.index('def _fitted(')
     end = source.index('\ndef _class_fields', start)
     body = source[start:end]

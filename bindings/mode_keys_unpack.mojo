@@ -38,6 +38,8 @@ struct ModeKeys(Defaultable, Movable):
     var k_plans: PythonObject
     var k_route: PythonObject
     var k_vendor: PythonObject
+    var k_numeric_mode: PythonObject
+    var k__fit_numeric_mode: PythonObject
 
     def __init__(out self):
         self.ready = False
@@ -62,6 +64,8 @@ struct ModeKeys(Defaultable, Movable):
         self.k_plans = PythonObject(None)
         self.k_route = PythonObject(None)
         self.k_vendor = PythonObject(None)
+        self.k_numeric_mode = PythonObject(None)
+        self.k__fit_numeric_mode = PythonObject(None)
 
 
 comptime _MODE_KEYS = SharedSlot[ModeKeys, "MojolearnModeKeysV1"]
@@ -90,6 +94,8 @@ def _mode_keys_fill(nk: UnsafePointer[ModeKeys, MutUntrackedOrigin]) raises:
     nk[].k_plans = py_key("plans")
     nk[].k_route = py_key("route")
     nk[].k_vendor = py_key("vendor")
+    nk[].k_numeric_mode = py_key("numeric_mode")
+    nk[].k__fit_numeric_mode = py_key("_fit_numeric_mode")
     var ops = Python.dict()
     py_op_add(ops, "is_fitted", MODE_OPN_IS_FITTED)
     py_op_add(ops, "numeric_mode_used", MODE_OPN_NUMERIC_MODE_USED)

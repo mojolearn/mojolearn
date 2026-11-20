@@ -7,15 +7,15 @@ from bindings.native_class_admission_door import dict_keys_admitted, dict_keys_a
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields
 from bindings.p3_array_arena_records_unpack import (
     P3_NATIVE_ARRAY_STORAGE_LAYOUT, P3_DICT_ARRAY_STORAGE,
-from bindings.native_keys_unpack import native_keys
-from bindings.py_balanced import py_item
     p3_layout_admitted, p3_layout_admit, p3_dict_admitted, p3_dict_admit,
 )
+from bindings.native_keys_unpack import native_keys
+from bindings.py_balanced import py_item
 
 
 def array_storage_namespace(cls: PythonObject) raises -> PythonObject:
-    var nk = native_keys()
     var b = native_loaded_module("builtins")
+    var nk = native_keys()
     var fields = py_call(py_item(b.type.__dict__, nk[].k___dict__).__get__, cls)
     if not native_mapping_string_keys(fields, b.str):
         raise Error("TypeError: Array storage classes require native string keys")
@@ -23,10 +23,10 @@ def array_storage_namespace(cls: PythonObject) raises -> PythonObject:
 
 
 def array_storage_class(cls: PythonObject, base: PythonObject) raises -> Bool:
-    var nk = native_keys()
     var b = native_loaded_module("builtins")
     if py_type(cls) is not b.type:
         return False
+    var nk = native_keys()
     var ancestry = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, cls)
     for i in range(len(ancestry)):  # driver-loop: native Array class ancestry
         if ancestry[i] is base:
@@ -36,7 +36,6 @@ def array_storage_class(cls: PythonObject, base: PythonObject) raises -> Bool:
 
 def array_storage_admit(cls: PythonObject, base: PythonObject, slots: PythonObject,
                         who: String = "Array.from_buffer") raises -> PythonObject:
-    var nk = native_keys()
     var b = native_loaded_module("builtins")
     if py_type(slots) is not b.dict:
         raise Error("TypeError: Array storage descriptors require a native dictionary")
@@ -66,6 +65,7 @@ def array_storage_admit(cls: PythonObject, base: PythonObject, slots: PythonObje
         if (py_type(descriptor) is not member_type or descriptor.__objclass__ is not base
                 or descriptor.__name__ != key or py_get(base_fields, key) is not descriptor):
             raise Error("TypeError: Array native storage descriptors changed")
+    var nk = native_keys()
     var ancestry = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, cls)
     for i in range(len(ancestry)):  # driver-loop: passive subclass storage and lifetime
         var fields = array_storage_namespace(ancestry[i])
@@ -88,8 +88,8 @@ def array_storage_admit(cls: PythonObject, base: PythonObject, slots: PythonObje
 def array_storage_address(value: PythonObject, base: PythonObject, slots: PythonObject) raises -> PythonObject:
     _ = array_storage_admit(py_type(value), base, slots, "Array native address")
     ref cpy = Python().cpython()
-    var name = PythonObject("_addr")
-    var raw = cpython_table()[].PyObject_GenericGetAttr(value._obj_ptr, name._obj_ptr)
+    var nk = native_keys()
+    var raw = cpython_table()[].PyObject_GenericGetAttr(value._obj_ptr, nk[].k__addr._obj_ptr)
     if not raw:
         raise cpy.unsafe_get_error()
     var address = PythonObject(from_owned=raw)
@@ -100,10 +100,10 @@ def array_storage_address(value: PythonObject, base: PythonObject, slots: Python
 
 
 def array_storage_context() raises -> PythonObject:
-    var nk = native_keys()
     # Only exact Array callers reach this overload. Keep the import-connected
     # full slot inventory, independent of mutable Python class attributes.
     var module = native_loaded_module("mojolearn._array")
+    var nk = native_keys()
     var context = py_get(py_fields(module), nk[].k__ARRAY_CONTEXT)
     # Module admission pins the context object, not the keys inside its
     # mutable dictionary. Admit those before a keyed read can compare a
@@ -119,6 +119,6 @@ def array_storage_context() raises -> PythonObject:
 
 
 def array_storage_address(value: PythonObject) raises -> PythonObject:
-    var nk = native_keys()
     var context = array_storage_context()
+    var nk = native_keys()
     return array_storage_address(value, py_item(context, nk[].k_array_class), py_item(context, nk[].k_from_buffer_slots))

@@ -72,10 +72,10 @@ def _check_x_values(model: PythonObject, source: PythonObject, sparse_ok: Bool,
     """`lifecycle_check_x`'s refusals; returns X's shape (None when X is not
     an exact ndarray or Array) so the width check reuses it. The estimator
     name is built only for a refusal, never on the accepted path."""
-    var nk = public_keys()
     var cls = py_type(source)
     var shape: PythonObject
     var kind: String
+    var nk = public_keys()
     if cls is py_get(context, nk[].k_ndarray):
         # An exact ndarray is never scipy.sparse: no module lookup.
         shape = source.shape
@@ -153,8 +153,8 @@ def lifecycle_admit_fields(fields: PythonObject) raises:
 
 def lifecycle_depth_value(fields: PythonObject) raises -> PythonObject:
     """Read and admit the public fit depth before any numeric conversion."""
-    var nk = public_keys()
     lifecycle_admit_fields(fields)
+    var nk = public_keys()
     var value = py_get(fields, nk[].k__mojolearn_fitting, PythonObject(0))
     if py_type(value) is not native_loaded_module("builtins").int:
         raise Error("TypeError: native fitting depth requires an exact integer")
@@ -162,8 +162,8 @@ def lifecycle_depth_value(fields: PythonObject) raises -> PythonObject:
 
 
 def lifecycle_admit_state(model: PythonObject, fields: PythonObject) raises:
-    var nk = public_keys()
     _ = lifecycle_depth_value(fields)
+    var nk = public_keys()
     if py_contains(fields, nk[].k__mojolearn_after_fit):
         raise Error("TypeError: native fitting cannot invoke Python completion callbacks")
 
@@ -175,11 +175,11 @@ def lifecycle_begin(model: PythonObject, method: String, source: PythonObject, x
     whose X is not a numeric table (labels, raw documents); `requires_fit`
     False for a stateless transformer. Returns the fit depth to hand back to
     `lifecycle_end` (0 for a method that does not fit)."""
-    var nk = public_keys()
     var fields = py_fields(model)
     # lifecycle_admit_state's checks, in its order, with the fitting depth
     # read once (it was read again right after the admission).
     var depth_value = lifecycle_depth_value(fields)
+    var nk = public_keys()
     if py_contains(fields, nk[].k__mojolearn_after_fit):
         raise Error("TypeError: native fitting cannot invoke Python completion callbacks")
     var nested = Int(py=depth_value) > 0
@@ -211,10 +211,10 @@ def lifecycle_complete(model: PythonObject, method: String, source: PythonObject
                        context: PythonObject) raises:
     """After a successful fit: `_mojolearn_fitted`, `feature_names_in_` and,
     for a classifier, the public ClassLabels `classes_`."""
-    var nk = public_keys()
     if not lifecycle_fitting(method):
         return
     lifecycle_admit_fields(py_fields(model))
+    var nk = public_keys()
     if classifier and not py_contains(py_fields(model), nk[].k_classes_):
         estimator_fit_complete(model, source, False, context)
         return

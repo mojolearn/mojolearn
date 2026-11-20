@@ -65,9 +65,9 @@ def _zero_seed(code: String) raises -> PythonObject:
     """The fixed one-item zero store of `code` (import-time metadata),
     refused unless it is still an exact one-item array of that code whose
     raw bytes are all zero."""
-    var nk = native_keys()
     var metadata = _storage_metadata()
     var cls = _storage_type(metadata)
+    var nk = native_keys()
     var seeds = py_get(metadata, nk[].k_ZERO_STORES)
     if py_type(seeds) is not py_type(Python.dict()):
         raise Error("TypeError: native array storage metadata is unavailable")

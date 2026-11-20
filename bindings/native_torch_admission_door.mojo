@@ -38,21 +38,21 @@ comptime NATIVE_TORCH = SharedSlot[NativeTorchBoundary, "MojolearnNativeTorchAdm
 
 
 def _torch_type_fields(cls: PythonObject) raises -> PythonObject:
-    var nk = native_keys()
     var bi = native_loaded_module("builtins")
     # Use type's native dictionary descriptor, bypassing a custom metaclass's
     # __getattribute__ and any user property named __dict__.
+    var nk = native_keys()
     return py_call(py_item(bi.type.__dict__, nk[].k___dict__).__get__, cls)
 
 
 def native_torch_exact(cls: PythonObject) raises -> Bool:
-    var nk = native_keys()
     var bi = native_loaded_module("builtins")
     var sys = native_loaded_module("sys")
     var module = py_get(sys.modules, "torch._tensor")
     if module is None or py_type(module) is not py_type(sys):
         return False
     var fields = py_fields(module)
+    var nk = native_keys()
     if cls is py_get(fields, nk[].k_Tensor):
         return True
     var parameter = py_get(sys.modules, "torch.nn.parameter")
@@ -62,7 +62,6 @@ def native_torch_exact(cls: PythonObject) raises -> Bool:
 
 
 def _torch_connect() raises:
-    var nk = native_keys()
     var cache = NATIVE_TORCH.get_or_create_ptr()
     var bi = native_loaded_module("builtins")
     var sys = native_loaded_module("sys")
@@ -82,6 +81,7 @@ def _torch_connect() raises:
         if String(entry.__module__) != "torch._C" or String(entry.__name__) != name:
             raise Error("TypeError: Torch mode metadata entry provenance differs: " + name)
         py_setitem(entries, name, entry)
+    var nk = native_keys()
     var base = py_get(fields, nk[].k_TensorBase)
     if base is None:
         # Torch 2.1 registers the same native tensor descriptor family only
@@ -159,7 +159,6 @@ comptime _TORCH_BASE_SLOT = "native_torch_tensor_base_v1"
 
 
 def native_torch_admit(value: PythonObject) raises:
-    var nk = native_keys()
     _torch_connect()
     var cache = NATIVE_TORCH.get_or_create_ptr()
     var cls = py_type(value)
@@ -171,6 +170,7 @@ def native_torch_admit(value: PythonObject) raises:
     # The thread-local mode checks below stay per call.
     var mods = NativeModules()
     if class_record(mods, _TORCH_BASE_SLOT, cls) is None:
+        var nk = native_keys()
         var bi = native_loaded_module("builtins")
         var hierarchy = py_call(py_item(bi.type.__dict__, nk[].k___mro__).__get__, cls)
         var has_base = False
@@ -183,9 +183,9 @@ def native_torch_admit(value: PythonObject) raises:
 
 
 def native_torch_modes_admit() raises:
-    var nk = native_keys()
     _torch_connect()
     var cache = NATIVE_TORCH.get_or_create_ptr()
+    var nk = native_keys()
     if Int(py=py_item(cache[].entries, nk[].k__len_torch_function_stack)()) != 0:
         raise Error("TypeError: Torch buffers cannot be used while a Python TorchFunctionMode is active")
     if Int(py=py_item(cache[].entries, nk[].k__len_torch_dispatch_stack)()) != 0:
@@ -200,10 +200,10 @@ def native_torch_modes_admit() raises:
 
 
 def _torch_storage_metadata_admitted(value: PythonObject) raises -> PythonObject:
-    var nk = native_keys()
     # Called only after native_torch_admit. Device was captured separately by
     # callers that choose a transfer route; do not read that metadata twice.
     var methods = NATIVE_TORCH.get_or_create_ptr()[].methods
+    var nk = native_keys()
     var dtype = py_call(py_item(methods, nk[].k_dtype).__get__, value)
     var shape = py_call(py_item(methods, nk[].k_shape).__get__, value)
     var address = py_call(py_item(methods, nk[].k_data_ptr), value)
@@ -217,20 +217,20 @@ def native_torch_storage_metadata(value: PythonObject) raises -> PythonObject:
 
 
 def native_torch_metadata(value: PythonObject) raises -> PythonObject:
-    var nk = native_keys()
     native_torch_admit(value)
     var cache = NATIVE_TORCH.get_or_create_ptr()
     # Invoke native base descriptors directly: an instance can shadow a
     # non-data Tensor method with a Python callable despite having exact type.
+    var nk = native_keys()
     var device = py_call(py_item(cache[].methods, nk[].k_device).__get__, value)
     var info = _torch_storage_metadata_admitted(value)
     return Python.tuple(info[0], device.type, info[1], info[2], info[3])
 
 
 def native_torch_numpy(value: PythonObject) raises -> PythonObject:
-    var nk = native_keys()
     native_torch_admit(value)
     var cache = NATIVE_TORCH.get_or_create_ptr()
+    var nk = native_keys()
     var device = py_call(py_item(cache[].methods, nk[].k_device).__get__, value)
     if String(device.type) != "cpu":
         raise Error("TypeError: Torch input must be a host buffer; copy device tensors to CPU explicitly")
@@ -248,9 +248,9 @@ def native_torch_scalar(value: PythonObject) raises -> Tuple[PythonObject, Strin
     the synchronization already required by the previous truth conversion.
     No tensor comparison, elementwise allocation or Python operator runs.
     """
-    var nk = native_keys()
     native_torch_admit(value)
     var methods = NATIVE_TORCH.get_or_create_ptr()[].methods
+    var nk = native_keys()
     var count = Int(py=py_call(py_item(methods, nk[].k_numel), value))
     if count == 0:
         raise Error("RuntimeError: Boolean value of Tensor with no values is ambiguous")
@@ -265,16 +265,16 @@ def native_torch_scalar(value: PythonObject) raises -> Tuple[PythonObject, Strin
 
 
 def native_torch_device(value: PythonObject) raises -> PythonObject:
-    var nk = native_keys()
     native_torch_admit(value)
+    var nk = native_keys()
     return py_call(py_item(NATIVE_TORCH.get_or_create_ptr()[].methods, nk[].k_device).__get__, value)
 
 
 def native_torch_contiguous(value: PythonObject, host: Bool) raises -> PythonObject:
     """Detach and prepare a Tensor using only admitted native base entries."""
-    var nk = native_keys()
     native_torch_admit(value)
     var methods = NATIVE_TORCH.get_or_create_ptr()[].methods
+    var nk = native_keys()
     var tensor = py_call(py_item(methods, nk[].k_detach), value)
     if host:
         tensor = py_call(py_item(methods, nk[].k_cpu), tensor)
@@ -282,6 +282,6 @@ def native_torch_contiguous(value: PythonObject, host: Bool) raises -> PythonObj
 
 
 def native_torch_to(value: PythonObject, device: PythonObject) raises -> PythonObject:
-    var nk = native_keys()
     native_torch_admit(value)
+    var nk = native_keys()
     return py_call(py_item(NATIVE_TORCH.get_or_create_ptr()[].methods, nk[].k_to), value, device)
