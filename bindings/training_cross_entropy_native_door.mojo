@@ -15,6 +15,8 @@ from bindings.training_scalar_native_door import training_scalar_number, trainin
 from bindings.training_loss_options_unpack import loss_truth, loss_reduction
 from bindings.native_numpy_metadata_pack import native_numpy_type
 from bindings.sequence_dtype_native_door import sequence_dtype_classes, sequence_dtype_instance, sequence_dtype_create
+from bindings.optimizer_keys_unpack import optimizer_keys
+from bindings.py_balanced import py_item
 
 
 def loss_buffer_dtype(value: PythonObject, context: PythonObject) raises:
@@ -66,7 +68,8 @@ def loss_targets(value: PythonObject, device: Bool, context: PythonObject, mut b
                 raise Error("TypeError: cross_entropy target lists require native scalar leaves")
         # array('q', ...) preserves integer-only list construction, including
         # NumPy integer scalars, and its old TypeError for floats/overflow.
-        input = embedding_native_call(context["buffer_types"][2], Python.tuple("q", leaves), True)
+        var nk = optimizer_keys()
+        input = embedding_native_call(py_item(context, nk[].k_buffer_types)[2], Python.tuple("q", leaves), True)
         _ = leaves^
         _ = tensor_view(input, view, buffer_pins)
     var format = base_format(view.fmt)
@@ -93,22 +96,23 @@ def training_cross_entropy(values: PythonObject, entries: PythonObject, context:
         if want_grad and reduction == 0:
             raise Error("NotImplementedError: cross_entropy reduction='none' has no backward")
         var logits = values[0]
-        var device = py_type(logits) is context["device_class"]
+        var nk = optimizer_keys()
+        var device = py_type(logits) is py_item(context, nk[].k_device_class)
         var native = entries
-        var entry = entries["ce_loss"]
+        var entry = py_item(entries, nk[].k_ce_loss)
         var fields = Python.dict()
         var shape = List[Int]()
         var view = TensorView()
         if device:
             opt_value(logits, context)
-            native = device_entries(entries["module"], context)
+            native = device_entries(py_item(entries, nk[].k_module), context)
             fields = py_fields(logits)
-            if fields["_b"] is not entries["module"]:
+            if py_item(fields, nk[].k__b) is not py_item(entries, nk[].k_module):
                 raise Error("ValueError: cross_entropy device logits must belong to the selected native binding")
-            shape = device_shape(fields["shape"], context)
-            if shape_count(shape) != Int(py=fields["size"]):
+            shape = device_shape(py_item(fields, nk[].k_shape), context)
+            if shape_count(shape) != Int(py=py_item(fields, nk[].k_size)):
                 raise Error("ValueError: cross_entropy device shape does not match its stored element count")
-            entry = py_get(native, "ce_loss_dev")
+            entry = py_get(native, nk[].k_ce_loss_dev)
             if entry is None:
                 raise Error("RuntimeError: this build has no native device cross_entropy entry")
         else:
@@ -127,7 +131,7 @@ def training_cross_entropy(values: PythonObject, entries: PythonObject, context:
                 raise Error("ValueError: cross_entropy logits must be nonempty")
         if len(shape) != 2:
             raise Error("ValueError: cross_entropy logits must be 2-D (N,V)")
-        if py_type(entry) is not context["device_finalizer_types"][2]:
+        if py_type(entry) is not py_item(context, nk[].k_device_finalizer_types)[2]:
             raise Error("TypeError: cross_entropy requires its connected compiled entry")
         var rows = shape[0]
         var vocab = shape[1]
@@ -136,7 +140,7 @@ def training_cross_entropy(values: PythonObject, entries: PythonObject, context:
             raise Error("ValueError: cross_entropy logits and targets row counts differ")
         var smoothing = PythonObject(None)
         if not device:
-            smoothing = training_scalar_float(values[4], "cross_entropy", context)
+            smoothing = training_scalar_float(values[4], nk[].k_cross_entropy, context)
         var loss = new_array([1], "<f4")
         # Row N118 (lane ne3-c-blocks-embedding): the per-row losses are an
         # output only under reduction='none'; for 'sum' and 'mean' no rows-long
@@ -155,16 +159,16 @@ def training_cross_entropy(values: PythonObject, entries: PythonObject, context:
             gradient = new_array(shape, "<f4")
         else:
             gradient = new_array([1], "<f4")
-        var ignored = training_scalar_number(values[2], "cross_entropy", context, True)
-        var divisor = training_scalar_number(PythonObject(0) if values[5] is None else values[5], "cross_entropy", context, True)
+        var ignored = training_scalar_number(values[2], nk[].k_cross_entropy, context, True)
+        var divisor = training_scalar_number(PythonObject(0) if values[5] is None else values[5], nk[].k_cross_entropy, context, True)
         var params = Python.list(rows, vocab, ignored, reduction, divisor, 1 if want_grad else 0)
         if device:
-            smoothing = training_scalar_float(values[4], "cross_entropy", context)
+            smoothing = training_scalar_float(values[4], nk[].k_cross_entropy, context)
         py_call(params.append, smoothing)
         var keep = List[List[Float32]]()
         if device:
-            var output_handle = fields["h"] if not gradient else py_fields(gradient.value())["h"]
-            _ = py_call(entry, loss._addr, row_address, targets[1], Python.list(output_handle, fields["h"]), params)
+            var output_handle = py_item(fields, nk[].k_h) if not gradient else py_item(py_fields(gradient.value()), nk[].k_h)
+            _ = py_call(entry, loss._addr, row_address, targets[1], Python.list(output_handle, py_item(fields, nk[].k_h)), params)
         else:
             var address = 0
             with GILReleased(Python()):

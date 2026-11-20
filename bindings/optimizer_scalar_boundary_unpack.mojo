@@ -6,10 +6,13 @@ from bindings.optimizer_admission_door import opt_scalar
 from bindings.optimizer_public_words_unpack import stash_python_error
 from bindings.py_balanced import py_type
 from bindings.optimizer_real_unpack import optimizer_real
+from bindings.optimizer_keys_unpack import optimizer_keys
+from bindings.py_balanced import py_item
 
 
 def optimizer_float(value: PythonObject, context: PythonObject) raises -> Float64:
-    if py_type(value) is context["scalar_types"][3]:
+    var nk = optimizer_keys()
+    if py_type(value) is py_item(context, nk[].k_scalar_types)[3]:
         return Float64(py=value)
     opt_scalar(value, context)
     # Admission permits only fixed native builtin/NumPy scalar identities and
@@ -26,7 +29,8 @@ def optimizer_float(value: PythonObject, context: PythonObject) raises -> Float6
 
 def optimizer_integer(value: PythonObject, context: PythonObject) raises -> Int:
     opt_scalar(value, context)
-    if py_type(value) is context["scalar_types"][2]:
+    var nk = optimizer_keys()
+    if py_type(value) is py_item(context, nk[].k_scalar_types)[2]:
         return Int(py=value)
     var pointer = cpython_table()[].PyNumber_Long(value._obj_ptr)
     if not pointer:

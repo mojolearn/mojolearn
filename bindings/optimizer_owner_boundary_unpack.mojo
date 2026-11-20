@@ -7,6 +7,8 @@ from bindings.optimizer_admission_door import opt_value, opt_schedule
 from bindings.py_balanced import py_fields, py_get, py_type
 from training.optimizer_owner_control import OptimizerOwnerControl
 from training.optimizer_native_api import OptimizerNativeDriver
+from bindings.optimizer_keys_unpack import optimizer_keys, optimizer_keys_in_finalizer
+from bindings.py_balanced import py_item
 
 
 struct OptimizerOwner(Movable, Writable):
@@ -78,7 +80,8 @@ struct OptimizerOwner(Movable, Writable):
 
 
 def optimizer_owner_idle(owner: PythonObject) raises:
-    var value = py_get(py_fields(owner), "_native_optimizer_owner")
+    var nk = optimizer_keys()
+    var value = py_get(py_fields(owner), nk[].k__native_optimizer_owner)
     if value is not None:
         var retained = optimizer_owner_retained(value, owner)
         if retained.downcast_value_ptr[OptimizerOwner]()[].control.busy:
@@ -93,7 +96,8 @@ def optimizer_owner_retained(value: PythonObject, owner: PythonObject) raises ->
 
 
 def optimizer_owner_value(owner: PythonObject) raises -> PythonObject:
-    var value = py_get(py_fields(owner), "_native_optimizer_owner")
+    var nk = optimizer_keys()
+    var value = py_get(py_fields(owner), nk[].k__native_optimizer_owner)
     if value is None:
         raise Error("RuntimeError: optimizer native state is not initialized")
     return optimizer_owner_retained(value, owner)
@@ -130,7 +134,12 @@ def optimizer_owner_close(value: PythonObject, owner: PythonObject) raises:
 
 
 def optimizer_owner_finalize(owner: PythonObject) raises:
-    var value = py_get(py_fields(owner), "_native_optimizer_owner")
+    # An optimizer collected during interpreter teardown before any call
+    # filled the key table releases nothing (optimizer_keys_in_finalizer).
+    var nk = optimizer_keys_in_finalizer()
+    if not nk[].ready:
+        return
+    var value = py_get(py_fields(owner), nk[].k__native_optimizer_owner)
     if value is None:
         return
     var retained = optimizer_owner_retained(value, owner)
@@ -151,11 +160,12 @@ def optimizer_owner_admit_replacement(owner: PythonObject, fields: PythonObject,
     var table = cpython_table()
     var position = List[Int](length=1, fill=0)
     var pair = List[PyObjectPtr](length=2, fill=PyObjectPtr())
+    var nk = optimizer_keys()
     while table[].PyDict_Next(fields._obj_ptr, Int(position.unsafe_ptr()),
             Int(pair.unsafe_ptr()), Int(pair.unsafe_ptr() + 1)):  # driver-loop: public fields retained for rollback
         var key = PythonObject(from_borrowed=pair[0])
         var value = PythonObject(from_borrowed=pair[1])
-        if py_type(key) is not context["scalar_types"][5]:
+        if py_type(key) is not py_item(context, nk[].k_scalar_types)[5]:
             raise Error("TypeError: optimizer metadata requires native string keys")
         var name = String(key)
         if name == "lr_schedule":

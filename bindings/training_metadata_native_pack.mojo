@@ -5,24 +5,28 @@ from bindings.mode_answer_door import answer_mode_object
 from std.python import PythonObject
 from bindings.py_balanced import py_call, py_type
 from bindings.py_typed_call import py_call_typed
+from bindings.optimizer_keys_unpack import optimizer_keys
+from bindings.optimizer_keys_unpack import OPTIMIZER_OPN_TRAINING_NUMERIC_MODE
+from bindings.py_balanced import py_item
 
 
-def training_metadata(operation: String, mode: PythonObject, context: PythonObject) raises -> PythonObject:
-    var types = context["training_metadata_types"]
+def training_metadata(operation: Int, mode: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = optimizer_keys()
+    var types = py_item(context, nk[].k_training_metadata_types)
     var selected = mode
     # The former public wrapper treated an empty string as the default too.
     # Check its exact native type before truth/strip/lower can reach a hook.
     if selected is None or (py_type(selected) is types[0] and len(selected) == 0):
-        selected = context["backend"]["_DEFAULT_MODE"]
+        selected = py_item(py_item(context, nk[].k_backend), nk[].k__DEFAULT_MODE)
     if py_type(selected) is not types[0]:
         raise Error("ValueError: numeric_mode requires None or a native str ('fast' or 'identical'); Python conversion hooks cannot execute")
-    selected = py_call(context["training_metadata_lower"], py_call(context["training_metadata_strip"], selected))
+    selected = py_call(py_item(context, nk[].k_training_metadata_lower), py_call(py_item(context, nk[].k_training_metadata_strip), selected))
     var requested = String(selected)
     if requested != "identical" and requested != "fast":
         raise Error("ValueError: numeric_mode must be fast, identical or None")
     answer_mode_object(selected, requested, MODE_FAMILY_NEURAL)
     answer_mode_word(requested, MODE_FAMILY_NEURAL)
-    var entries = context["training_metadata_bindings"][selected]
+    var entries = py_item(context, nk[].k_training_metadata_bindings)[selected]
     if py_type(entries) is types[0]:
         # Import-time binding failures retain their original category/message.
         raise Error(String(entries))
@@ -38,10 +42,10 @@ def training_metadata(operation: String, mode: PythonObject, context: PythonObje
     var numeric = Int(py=code)
     var compiled = String("identical") if numeric == 1 else String("fast") if numeric == 0 else String("unknown")
     if compiled != requested:
-        if context["backend"]["_CPU_ONLY"] is not None:
+        if py_item(py_item(context, nk[].k_backend), nk[].k__CPU_ONLY) is not None:
             raise Error("ImportError: mojolearn: _mojolearn_training was compiled " + compiled + " but numeric_mode asked for " + requested + " -- a binary is in the wrong directory; rebuild the sets with\n    bash bindings/build_training.sh\n    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_training.sh")
         raise Error("RuntimeError: mojolearn: _mojolearn_training was compiled for " + compiled + ", but this call requested " + requested + "; rebuild the " + requested + " binding")
-    if operation == "training_numeric_mode":
+    if operation == OPTIMIZER_OPN_TRAINING_NUMERIC_MODE:
         return PythonObject(compiled)
     var vendor = py_call_typed(entries[1])
     if py_type(vendor) is not types[0]:

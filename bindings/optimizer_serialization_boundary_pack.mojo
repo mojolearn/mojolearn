@@ -12,16 +12,19 @@ from bindings.optimizer_public_words_unpack import stash_python_error
 from bindings.optimizer_scalar_boundary_unpack import optimizer_truth
 from training.optimizer_owner_control import optimizer_restored_pristine
 from training.optimizer_serialization_run import optimizer_serialized_field
+from bindings.optimizer_keys_unpack import optimizer_keys
+from bindings.py_balanced import py_item
 
 
 def optimizer_restore_state(owner: PythonObject, state: PythonObject, context: PythonObject) raises -> PythonObject:
     opt_owner(owner, context)
     opt_value(state, context)
-    if py_type(state) is not context["container_types"][2]:
+    var nk = optimizer_keys()
+    if py_type(state) is not py_item(context, nk[].k_container_types)[2]:
         raise Error("TypeError: optimizer serialized state requires a native dictionary")
-    var pristine_value = py_get(state, "_native_optimizer_pristine", py_get(state, "_pristine", False))
+    var pristine_value = py_get(state, nk[].k__native_optimizer_pristine, py_get(state, nk[].k__pristine, False))
     var pristine = optimizer_restored_pristine(optimizer_truth(pristine_value, context),
-        py_get(state, "_m") is not None, py_get(state, "_v") is not None)
+        py_get(state, nk[].k__m) is not None, py_get(state, nk[].k__v) is not None)
     var fields = py_fields(owner)
     optimizer_owner_admit_replacement(owner, fields, context)
     var table = cpython_table()
@@ -33,7 +36,7 @@ def optimizer_restore_state(owner: PythonObject, state: PythonObject, context: P
     var saved = PythonObject(from_owned=saved_pointer)
     var replacement = optimizer_owner_new(owner, owner_kind(owner), pristine)
     var publication = OptimizerOwnerLease(owner, replacement)
-    var old = py_get(fields, "_native_optimizer_owner")
+    var old = py_get(fields, nk[].k__native_optimizer_owner)
     if old is not None:
         _ = optimizer_owner_retained(old, owner)
         old.downcast_value_ptr[OptimizerOwner]()[].control.begin()
@@ -46,7 +49,7 @@ def optimizer_restore_state(owner: PythonObject, state: PythonObject, context: P
             var key = PythonObject(from_borrowed=pair[0])
             if optimizer_serialized_field(String(key)):
                 py_setitem(fields, key, PythonObject(from_borrowed=pair[1]))
-        py_setitem(fields, "_native_optimizer_owner", replacement)
+        py_setitem(fields, nk[].k__native_optimizer_owner, replacement)
         opt_owner(owner, context)
         if old is not None:
             optimizer_owner_close(old, owner)

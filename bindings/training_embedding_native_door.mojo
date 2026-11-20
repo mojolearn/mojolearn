@@ -20,6 +20,9 @@ from bindings.sequence_dtype_native_door import sequence_dtype_classes, sequence
 from gemm.f16_widen import f16_bits_to_f32
 from core.training_embedding_inputs import embedding_pack, embedding_cast_refusal
 from bindings.py_cpython_table import cpython_table
+from bindings.optimizer_keys_unpack import optimizer_keys
+from bindings.optimizer_keys_unpack import OPTIMIZER_OPN_EMBEDDING_BACKWARD
+from bindings.py_balanced import py_item
 
 
 def embedding_native_call(entry: PythonObject, args: PythonObject, list_store: Bool = False) raises -> PythonObject:
@@ -111,7 +114,8 @@ def embedding_array_leaves(value: PythonObject, mut dims: List[Int], depth: Int,
 def embedding_leaves(value: PythonObject, mut dims: List[Int], depth: Int,
                      mut leaf_depth: Int, leaves: PythonObject, context: PythonObject) raises:
     var cls = py_type(value)
-    if cls is context["array_class"]:
+    var nk = optimizer_keys()
+    if cls is py_item(context, nk[].k_array_class):
         embedding_array_leaves(value, dims, depth, leaf_depth, leaves)
         return
     var native_array = False
@@ -119,7 +123,7 @@ def embedding_leaves(value: PythonObject, mut dims: List[Int], depth: Int,
         # Only exact ndarray has a nonempty native shape; NumPy scalar shape
         # is empty and its scalar class is retained as a leaf below.
         native_array = cls is native_numpy_type("ndarray", context)
-    if cls is context["container_types"][0] or cls is context["container_types"][1] or native_array:
+    if cls is py_item(context, nk[].k_container_types)[0] or cls is py_item(context, nk[].k_container_types)[1] or native_array:
         if native_array and Int(py=value.ndim) == 0:
             raise Error("TypeError: iteration over a 0-d array")
         if native_array:
@@ -261,8 +265,9 @@ def embedding_leaf_store(leaves: PythonObject, object_array: Bool, context: Pyth
             var cls = py_type(leaves[i])
             if cls is not b.int and cls is not b.bool:
                 raise Error("TypeError: embedding index lists require native Python integers or a floating-point leaf")
-    var constructor = context["array_type"]
-    if constructor is not context["buffer_types"][2]:
+    var nk = optimizer_keys()
+    var constructor = py_item(context, nk[].k_array_type)
+    if constructor is not py_item(context, nk[].k_buffer_types)[2]:
         raise Error("TypeError: embedding index storage requires the connected native array constructor")
     var store = embedding_native_call(constructor, Python.tuple("d" if floating else "q", leaves), True)
     return Python.tuple(store, 1 if floating else 3)
@@ -273,13 +278,14 @@ def embedding_indices(value: PythonObject, context: PythonObject, mut buffer_pin
     if fast is not None:
         return Python.tuple(fast[0], fast[1], fast[2])
     var value_owner = value
-    var numpy = py_get(context["modules"], "numpy")
+    var nk = optimizer_keys()
+    var numpy = py_get(py_item(context, nk[].k_modules), nk[].k_numpy)
     # The complex-scalar refusal reads NumPy scalar classes only: an exact
     # ndarray or Array is neither, so it skips the class loop (lane
     # p3-neural-blocks; it was two boxed reads per scalar class per call).
     var value_cls = py_type(value)
-    var container = value_cls is context["array_class"] or (numpy is not None and value_cls is native_numpy_type("ndarray", context))
-    if not container and numpy is not None and py_type(numpy) is context["module_type"]:
+    var container = value_cls is py_item(context, nk[].k_array_class) or (numpy is not None and value_cls is native_numpy_type("ndarray", context))
+    if not container and numpy is not None and py_type(numpy) is py_item(context, nk[].k_module_type):
         var classes = sequence_dtype_classes(context)
         for i in range(len(classes)):  # driver-loop: preserve native complex-scalar refusal before general admission
             if py_type(value) is classes[i][1] and String(value.dtype.kind) == "c":
@@ -385,8 +391,8 @@ def embedding_indices(value: PythonObject, context: PythonObject, mut buffer_pin
         source_addr = Int(py=py_call(storage.buffer_info)[0])
         _ = leaves^
     var result = new_array([count], "<i4")
-    var entry = context["embedding_index_cast"]
-    if py_type(entry) is not context["device_finalizer_types"][2]:
+    var entry = py_item(context, nk[].k_embedding_index_cast)
+    if py_type(entry) is not py_item(context, nk[].k_device_finalizer_types)[2]:
         raise Error("TypeError: embedding requires its connected compiled index cast")
     if Int(py=py_call(entry, source_addr, source_code, result._addr, 2, count)) != 0:
         embedding_cast_refusal(source_addr, source_code, count)
@@ -396,28 +402,29 @@ def embedding_indices(value: PythonObject, context: PythonObject, mut buffer_pin
     return Python.tuple(result, result._addr, count)
 
 
-def training_embedding_operation(operation: String, values: PythonObject, entries: PythonObject,
+def training_embedding_operation(operation: Int, where: PythonObject, values: PythonObject, entries: PythonObject,
                                  context: PythonObject) raises -> PythonObject:
     var buffer_pins = OptimizerInputOwners()
     try:
-        var backward = operation == "embedding_backward"
+        var backward = operation == OPTIMIZER_OPN_EMBEDDING_BACKWARD
         if len(values) != (3 if backward else 2):
             raise Error("TypeError: invalid embedding argument envelope")
-        var entry = entries[PythonObject(operation)]
-        if py_type(entry) is not context["device_finalizer_types"][2]:
+        var entry = py_item(entries, where)
+        var nk = optimizer_keys()
+        if py_type(entry) is not py_item(context, nk[].k_device_finalizer_types)[2]:
             raise Error("TypeError: embedding requires its connected compiled entry")
         var input = values[0]
         var view = TensorView()
-        rms_host_view(input, "dy" if backward else "weight", operation, view, buffer_pins)
+        rms_host_view(input, "dy" if backward else "weight", where, view, buffer_pins)
         if len(view.shape) != 2:
-            raise Error("ValueError: mojolearn." + operation + ": " + ("dy must be (N, D)" if backward else "weight must be (V, D)"))
+            raise Error("ValueError: mojolearn." + String(py=where) + ": " + ("dy must be (N, D)" if backward else "weight must be (V, D)"))
         var ids = embedding_indices(values[1], context, buffer_pins)
         var count = Int(py=ids[2])
         if backward and count != view.shape[0]:
             raise Error("ValueError: mojolearn.embedding_backward: ids and dy row counts differ")
         var vocab = view.shape[0]
         if backward:
-            vocab = Int(py=training_scalar_number(values[2], operation, context, True))
+            vocab = Int(py=training_scalar_number(values[2], where, context, True))
             if vocab < 0:
                 raise Error("ValueError: negative embedding vocabulary size")
         _ = shape_count([vocab, view.shape[1]])
@@ -429,7 +436,7 @@ def training_embedding_operation(operation: String, values: PythonObject, entrie
         if backward:
             # The public contract converted vocab for allocation and again for
             # launch metadata; preserve native scalar warnings from both calls.
-            vocab = Int(py=training_scalar_number(values[2], operation, context, True))
+            vocab = Int(py=training_scalar_number(values[2], where, context, True))
         _ = py_call(entry, Python.list(result._addr, address, ids[1]), Python.list(count, vocab, view.shape[1]))
         _ = keep^
         _ = input^

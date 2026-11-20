@@ -9,27 +9,31 @@ from bindings.tensor_view import TensorView, base_format
 from training.optimizer_input_plan import optimizer_contiguous_address
 from bindings.optimizer_device_native_door import shape_count
 from bindings.training_scalar_native_door import training_scalar_float
+from bindings.optimizer_keys_unpack import optimizer_keys
+from bindings.optimizer_keys_unpack import OPTIMIZER_OPN_RMS_NORM_BACKWARD
+from bindings.py_balanced import py_item
 
 
-def rms_host_view(value: PythonObject, name: String, operation: String, mut view: TensorView, mut buffer_pins: OptimizerInputOwners) raises:
+def rms_host_view(value: PythonObject, name: String, where: PythonObject, mut view: TensorView, mut buffer_pins: OptimizerInputOwners) raises:
     if not tensor_view(value, view, buffer_pins) or base_format(view.fmt) != "f" or view.itemsize != 4:
-        raise Error("TypeError: mojolearn." + operation + ": " + name + " must be float32")
+        raise Error("TypeError: mojolearn." + String(py=where) + ": " + name + " must be float32")
     if shape_count(view.shape) == 0:
-        raise Error("ValueError: mojolearn." + operation + ": " + name + " must be nonempty")
+        raise Error("ValueError: mojolearn." + String(py=where) + ": " + name + " must be nonempty")
     if len(view.shape) == 0 and not view.is_array:
         view.shape.append(1)
         view.strides.append(4)
 
 
-def training_rms_operation(operation: String, values: PythonObject, entries: PythonObject,
+def training_rms_operation(operation: Int, where: PythonObject, values: PythonObject, entries: PythonObject,
                            context: PythonObject) raises -> PythonObject:
     var buffer_pins = OptimizerInputOwners()
     try:
-        var backward = operation == "rms_norm_backward"
+        var backward = operation == OPTIMIZER_OPN_RMS_NORM_BACKWARD
         if len(values) != (4 if backward else 3):
             raise Error("TypeError: invalid RMS-normalization argument envelope")
-        var entry = entries[PythonObject(operation)]
-        if py_type(entry) is not context["device_finalizer_types"][2]:
+        var entry = py_item(entries, where)
+        var nk = optimizer_keys()
+        if py_type(entry) is not py_item(context, nk[].k_device_finalizer_types)[2]:
             raise Error("TypeError: RMS normalization requires its connected compiled entry")
         var x = values[1] if backward else values[0]
         var weight = values[2] if backward else values[1]
@@ -37,10 +41,10 @@ def training_rms_operation(operation: String, values: PythonObject, entries: Pyt
         var xv = TensorView()
         var wv = TensorView()
         var gv = TensorView()
-        rms_host_view(x, "x", operation, xv, buffer_pins)
+        rms_host_view(x, "x", where, xv, buffer_pins)
         if backward:
-            rms_host_view(gradient, "dy", operation, gv, buffer_pins)
-        rms_host_view(weight, "weight", operation, wv, buffer_pins)
+            rms_host_view(gradient, "dy", where, gv, buffer_pins)
+        rms_host_view(weight, "weight", where, wv, buffer_pins)
         if backward:
             var same = len(xv.shape) == len(gv.shape)
             if same:
@@ -58,7 +62,7 @@ def training_rms_operation(operation: String, values: PythonObject, entries: Pyt
             raise Error("ValueError: RMS backward weight buffer is shorter than D")
         # Backward historically consumes the first D contiguous weight values;
         # preserve safe wider/rank-zero buffers and the returned(D,) gradient.
-        var epsilon = training_scalar_float(values[3] if backward else values[2], operation, context)
+        var epsilon = training_scalar_float(values[3] if backward else values[2], where, context)
         var keep = List[List[Float32]]()
         var xa = 0
         var wa = 0

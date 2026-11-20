@@ -6,6 +6,8 @@ from std.python import Python, PythonObject
 from bindings.py_cpython_table import cpython_table, _PyBuffer_Release
 from bindings.optimizer_admission_door import opt_value
 from bindings.py_balanced import py_type
+from bindings.optimizer_keys_unpack import optimizer_keys
+from bindings.py_balanced import py_item
 
 
 
@@ -14,9 +16,10 @@ def optimizer_sequence_items(value: PythonObject, context: PythonObject) raises 
     var cls = py_type(value)
     var table = cpython_table()
     ref cpy = Python().cpython()
-    if cls is context["container_types"][0] or cls is context["container_types"][1]:
+    var nk = optimizer_keys()
+    if cls is py_item(context, nk[].k_container_types)[0] or cls is py_item(context, nk[].k_container_types)[1]:
         # Exact native sequences: no iterator object, Python list or hook.
-        var is_list = cls is context["container_types"][0]
+        var is_list = cls is py_item(context, nk[].k_container_types)[0]
         for i in range(len(value)):  # driver-loop: over external parameter/microbatch owners
             var pointer = table[].PyList_GetItem(value._obj_ptr, i) if is_list else table[].PyTuple_GetItem(value._obj_ptr, i)
             if not pointer:

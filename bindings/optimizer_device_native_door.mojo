@@ -19,13 +19,17 @@ from training.optimizer_device_storage_plan import (
     optimizer_device_extent, optimizer_device_count as shape_count, optimizer_device_reshape, optimizer_device_upload,
     optimizer_device_output,
 )
+from bindings.optimizer_keys_unpack import optimizer_keys, optimizer_keys_in_finalizer
+from bindings.optimizer_keys_unpack import OPTIMIZER_OPN_DEVICE_CONSTRUCT, OPTIMIZER_OPN_DEVICE_HOST, OPTIMIZER_OPN_DEVICE_NEW, OPTIMIZER_OPN_DEVICE_RESHAPE, OPTIMIZER_OPN_DEVICE_UPLOAD
+from bindings.py_balanced import py_item
 
 
 def device_entries(binding: PythonObject, context: PythonObject) raises -> PythonObject:
-    var bindings = context["bindings"]
+    var nk = optimizer_keys()
+    var bindings = py_item(context, nk[].k_bindings)
     for mode in ["identical", "fast"]:  # driver-loop: retained native numeric-mode owners
         var entries = bindings[PythonObject(mode)]
-        if py_type(entries) is context["container_types"][2] and binding is entries["module"]:
+        if py_type(entries) is py_item(context, nk[].k_container_types)[2] and binding is py_item(entries, nk[].k_module):
             var provider = optimizer_provider_entries(entries)
             if not optimizer_device_available(provider):
                 raise Error("RuntimeError: this build has no training device arrays (identical GPU builds only)")
@@ -35,7 +39,8 @@ def device_entries(binding: PythonObject, context: PythonObject) raises -> Pytho
 
 def device_shape(shape: PythonObject, context: PythonObject) raises -> List[Int]:
     opt_scalar(shape, context)
-    if py_type(shape) is not context["container_types"][1] and py_type(shape) is not context["container_types"][0]:
+    var nk = optimizer_keys()
+    if py_type(shape) is not py_item(context, nk[].k_container_types)[1] and py_type(shape) is not py_item(context, nk[].k_container_types)[0]:
         raise Error("TypeError: training device shape requires a native tuple or list")
     var dims = List[Int]()
     for i in range(len(shape)):  # driver-loop: decode external scalar shape words under the GIL
@@ -55,15 +60,17 @@ def device_set(owner: PythonObject, binding: PythonObject, handle: PythonObject,
         var extent = PythonObject(dims[i])
         if cpy.PyTuple_SetItem(shape._obj_ptr, i, extent.steal_data()) != 0:
             raise cpy.unsafe_get_error()
-    py_setitem(fields, "h", handle)
-    py_setitem(fields, "shape", shape)
-    py_setitem(fields, "size", PythonObject(shape_count(dims)))
-    py_setitem(fields, "_base", base)
-    py_setitem(fields, "_b", binding)
+    var nk = optimizer_keys()
+    py_setitem(fields, nk[].k_h, handle)
+    py_setitem(fields, nk[].k_shape, shape)
+    py_setitem(fields, nk[].k_size, PythonObject(shape_count(dims)))
+    py_setitem(fields, nk[].k__base, base)
+    py_setitem(fields, nk[].k__b, binding)
 
 
 def device_new(binding: PythonObject, handle: PythonObject, dims: List[Int], base: PythonObject, context: PythonObject) raises -> PythonObject:
-    var result = native_storage_allocate(context["device_class"])
+    var nk = optimizer_keys()
+    var result = native_storage_allocate(py_item(context, nk[].k_device_class))
     device_set(result, binding, handle, dims, base)
     return result
 
@@ -92,8 +99,9 @@ def device_adopt(result: PythonObject, binding: PythonObject, handle: Int,
     var lease = DeviceHandleLease(driver, handle)
     var fields = py_fields(result)
     # Until the final field is published only the native lease owns the handle.
-    py_setitem(fields, "h", PythonObject(handle))
-    py_setitem(fields, "_b", binding)
+    var nk = optimizer_keys()
+    py_setitem(fields, nk[].k_h, PythonObject(handle))
+    py_setitem(fields, nk[].k__b, binding)
     _ = lease.control.detach()
     return result
 
@@ -109,7 +117,8 @@ def _device_allocate(entries: PythonObject, dims: List[Int], context: PythonObje
     var result = device_new(PythonObject(None), PythonObject(None), dims, PythonObject(None), context)
     var provider = optimizer_provider_entries(entries)
     var driver = optimizer_driver(provider)
-    var binding = entries["module"]
+    var nk = optimizer_keys()
+    var binding = py_item(entries, nk[].k_module)
     var count = shape_count(dims)
     var handle = -1
     with GILReleased(Python()):
@@ -125,8 +134,9 @@ def device_allocate(entries: PythonObject, dims: List[Int], context: PythonObjec
 
 
 def _device_fields(owner: PythonObject, context: PythonObject, cleanup: Bool) raises -> PythonObject:
-    var fields = py_call(context["device_fields_getter"], owner, context["device_class"]) if cleanup else py_fields(owner)
-    if py_type(fields) is not context["container_types"][2]:
+    var nk = optimizer_keys()
+    var fields = py_call(py_item(context, nk[].k_device_fields_getter), owner, py_item(context, nk[].k_device_class)) if cleanup else py_fields(owner)
+    if py_type(fields) is not py_item(context, nk[].k_container_types)[2]:
         raise Error("TypeError: training device cleanup requires native metadata")
     if not dict_keys_admitted(fields):
         var table = cpython_table()
@@ -134,21 +144,26 @@ def _device_fields(owner: PythonObject, context: PythonObject, cleanup: Bool) ra
         var pair = List[PyObjectPtr](length=2, fill=PyObjectPtr())
         while table[].PyDict_Next(fields._obj_ptr, Int(position.unsafe_ptr()),
                 Int(pair.unsafe_ptr()), Int(pair.unsafe_ptr() + 1)):  # driver-loop: exact external owner field names
-            if py_type(PythonObject(from_borrowed=pair[0])) is not context["scalar_types"][5]:
+            if py_type(PythonObject(from_borrowed=pair[0])) is not py_item(context, nk[].k_scalar_types)[5]:
                 raise Error("TypeError: training device " + (String("cleanup requires") if cleanup else String("owner metadata requires")) + " native string keys")
         dict_keys_admit(fields)
     return fields
 
 
 def device_finalize(owner: PythonObject, context: PythonObject) raises -> PythonObject:
-    if py_type(owner) is not context["device_class"]:
+    # A device array collected during interpreter teardown before any call
+    # filled the key table releases nothing (optimizer_keys_in_finalizer).
+    var nk = optimizer_keys_in_finalizer()
+    if not nk[].ready:
+        return PythonObject(None)
+    if py_type(owner) is not py_item(context, nk[].k_device_class):
         raise Error("TypeError: training device cleanup requires its exact native owner")
     var fields = _device_fields(owner, context, True)
-    var binding = py_get(fields, "_b")
-    if binding is None or py_get(fields, "_base") is not None:
+    var binding = py_get(fields, nk[].k__b)
+    if binding is None or py_get(fields, nk[].k__base) is not None:
         return PythonObject(None)
-    var handle = py_get(fields, "h")
-    if py_type(handle) is not context["scalar_types"][2]:
+    var handle = py_get(fields, nk[].k_h)
+    if py_type(handle) is not py_item(context, nk[].k_scalar_types)[2]:
         raise Error("TypeError: training device cleanup requires its native integer handle")
     var entries = device_entries(binding, context)
     var provider = optimizer_provider_entries(entries)
@@ -161,7 +176,7 @@ def device_finalize(owner: PythonObject, context: PythonObject) raises -> Python
         # Failed frees keep ownership fields for the existing explicit retry.
         return PythonObject(None)
     _ = provider
-    py_setitem(fields, "_b", PythonObject(None))
+    py_setitem(fields, nk[].k__b, PythonObject(None))
     return PythonObject(None)
 
 
@@ -178,29 +193,30 @@ def device_finalize_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> P
     return PythonObject(None).steal_data()
 
 
-def device_operation(operation: String, owner: PythonObject, values: PythonObject, context: PythonObject,
+def device_operation(operation: Int, owner: PythonObject, values: PythonObject, context: PythonObject,
     selected: PythonObject) raises -> PythonObject:
-    if operation == "device_construct" or operation == "device_new":
+    var nk = optimizer_keys()
+    if operation == OPTIMIZER_OPN_DEVICE_CONSTRUCT or operation == OPTIMIZER_OPN_DEVICE_NEW:
         var binding = values[0]
         var entries = device_entries(binding, context)
-        var dims = device_shape(values[2] if operation == "device_construct" else values[1], context)
+        var dims = device_shape(values[2] if operation == OPTIMIZER_OPN_DEVICE_CONSTRUCT else values[1], context)
         _ = shape_count(dims)
-        if operation == "device_construct":
-            if py_type(owner) is not context["device_class"]:
+        if operation == OPTIMIZER_OPN_DEVICE_CONSTRUCT:
+            if py_type(owner) is not py_item(context, nk[].k_device_class):
                 raise Error("TypeError: training device array requires the exact native owner")
             opt_scalar(values[1], context)
             var base = values[3]
-            if base is not None and py_type(base) is not context["device_class"]:
+            if base is not None and py_type(base) is not py_item(context, nk[].k_device_class):
                 raise Error("TypeError: training device array base must retain a native device-array owner")
             device_set(owner, binding, PythonObject(optimizer_integer(values[1], context)), dims, base)
             return PythonObject(None)
         return device_allocate(entries, dims, context)
-    if operation == "device_upload":
+    if operation == OPTIMIZER_OPN_DEVICE_UPLOAD:
         var source = values[0]
-        if py_type(source) is context["device_class"]:
+        if py_type(source) is py_item(context, nk[].k_device_class):
             opt_value(source, context)
             return source
-        var entries = device_entries(selected["module"], context)
+        var entries = device_entries(py_item(selected, nk[].k_module), context)
         var view = TensorView()
         var buffer_pins = OptimizerInputOwners()
         if not tensor_view(source, view, buffer_pins):
@@ -217,19 +233,19 @@ def device_operation(operation: String, owner: PythonObject, values: PythonObjec
         _ = keep^
         _ = source^
         return allocation.owner
-    if py_type(owner) is not context["device_class"]:
+    if py_type(owner) is not py_item(context, nk[].k_device_class):
         raise Error("TypeError: training device operation requires its exact native owner")
     var fields = _device_fields(owner, context, False)
     opt_value(owner, context)
-    var entries = device_entries(fields["_b"], context)
-    if operation == "device_reshape":
+    var entries = device_entries(py_item(fields, nk[].k__b), context)
+    if operation == OPTIMIZER_OPN_DEVICE_RESHAPE:
         var dims = device_shape(values[0], context)
-        optimizer_device_reshape(dims, Int(py=fields["size"]))
-        var base = fields["_base"]
-        return device_new(fields["_b"], fields["h"], dims, owner if base is None else base, context)
-    if operation == "device_host":
-        var dims = device_shape(fields["shape"], context)
-        var count = Int(py=fields["size"])
+        optimizer_device_reshape(dims, Int(py=py_item(fields, nk[].k_size)))
+        var base = py_item(fields, nk[].k__base)
+        return device_new(py_item(fields, nk[].k__b), py_item(fields, nk[].k_h), dims, owner if base is None else base, context)
+    if operation == OPTIMIZER_OPN_DEVICE_HOST:
+        var dims = device_shape(py_item(fields, nk[].k_shape), context)
+        var count = Int(py=py_item(fields, nk[].k_size))
         optimizer_device_output(dims, count)
         # lane unfilled-storage-audit (2026-11-15): new_array is unfilled
         # (1bcfa0d69b). A rebound public size may download only a prefix of
@@ -239,7 +255,7 @@ def device_operation(operation: String, owner: PythonObject, values: PythonObjec
         var result = new_array(dims, "<f4") if count == shape_count(dims) else new_zeros(dims, "<f4")
         var provider = optimizer_provider_entries(entries)
         var driver = optimizer_driver(provider)
-        var handle = Int(py=fields["h"])
+        var handle = Int(py=py_item(fields, nk[].k_h))
         var address = Int(py=result._addr)
         with GILReleased(Python()):
             _ = driver.download_device(handle, address, count)
