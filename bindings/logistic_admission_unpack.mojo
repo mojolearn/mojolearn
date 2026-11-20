@@ -14,7 +14,6 @@ from bindings.py_balanced import py_item
 
 
 def _parameter(name: PythonObject, value: PythonObject, context: PythonObject, configure: Bool = False) raises:
-    var nk = logistic_keys()
     classical_admit_value(value, context)
     if configure:
         # Constructor, get_params and set_params store and return values
@@ -24,6 +23,7 @@ def _parameter(name: PythonObject, value: PythonObject, context: PythonObject, c
         # consumed (fit, predict, ...).
         return
     var b = native_loaded_module("builtins")
+    var nk = logistic_keys()
     if String(name) == "class_weight" and _one_of(py_type(value), py_item(context, nk[].k_mapping_types)):
         var keys = py_call(b.list, value)
         for i in range(len(keys)):  # driver-loop: native scalar class labels and scalar weights only
@@ -36,8 +36,8 @@ def _parameter(name: PythonObject, value: PythonObject, context: PythonObject, c
 
 
 def logistic_storage(model: PythonObject, context: PythonObject) raises -> PythonObject:
-    var nk = logistic_keys()
     classical_check_layout(model, context)
+    var nk = logistic_keys()
     var layout = py_get(py_item(context, nk[].k_classical_public_layouts), py_type(model))
     if layout is None:
         raise Error("TypeError: LogisticRegression requires its connected native class")
@@ -45,8 +45,8 @@ def logistic_storage(model: PythonObject, context: PythonObject) raises -> Pytho
 
 
 def logistic_fields(model: PythonObject, context: PythonObject, configure: Bool = False) raises -> PythonObject:
-    var nk = logistic_keys()
     var fields = logistic_storage(model, context)
+    var nk = logistic_keys()
     var names = py_item(context, nk[].k_lr_parameters)
     for i in range(len(names)):  # driver-loop: fixed constructor parameter values before comparisons/conversion
         if not py_contains(fields, names[i]):

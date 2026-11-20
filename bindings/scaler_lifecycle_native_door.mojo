@@ -52,10 +52,10 @@ comptime I64P = MutPointer[Int64, MutUntrackedOrigin]
 
 
 def _entries(mode: PythonObject, context: PythonObject) raises -> PythonObject:
-    var nk = scaler_keys()
     var b = native_loaded_module("builtins")
     if py_type(mode) is not b.str or (String(mode) != "fast" and String(mode) != "identical"):
         raise Error("numeric_mode must be fast, identical or None")
+    var nk = scaler_keys()
     if Bool(py=py_get(context,nk[].k_scaler_explicit_host,False)) and String(mode) != "identical":
         raise Error("HostStandardScaler runs identical only on the host")
     var entries = py_item(context, nk[].k_scaler_bindings)[mode]
@@ -226,8 +226,8 @@ def scaler_transform(model: PythonObject, source: PythonObject, inverse: Bool, c
 
 def scaler_transform(model: PythonObject, source: PythonObject, inverse: Bool, copy_option: PythonObject, context: PythonObject,
                      input_cache: PythonObject) raises -> PythonObject:
-    var nk = scaler_keys()
     var fields = py_fields(model)
+    var nk = scaler_keys()
     var copy = _bool(py_item(fields, nk[].k_copy) if copy_option is None else copy_option, context)
     if not _fitted(fields):
         _ = classical_not_fitted_class(context)
@@ -317,13 +317,13 @@ def _seen_view(value: PythonObject, d: Int, context: PythonObject) raises -> Sca
 def _seen_pack(merged: ScalerStandardMerged, d: Int, context: PythonObject) raises -> PythonObject:
     """PACK the merged n_samples_seen_: one native number when every feature
     saw the same count, else the per-feature row."""
-    var nk = scaler_keys()
     if merged.seen_kind == SCALER_SEEN_INT:
         return PythonObject(Int(merged.seen_integer))
     if merged.seen_kind == SCALER_SEEN_FLOAT:
         return PythonObject(merged.seen_scalar)
     if merged.seen_kind == SCALER_SEEN_FLOAT_ROW:
         return _copy_row(F32P(unsafe_from_address=Int(merged.seen_f32.unsafe_ptr())), d, context)
+    var nk = scaler_keys()
     var count = classical_typed(Python.tuple(d), "<i8", py_item(context, nk[].k_output_context))
     unsafe_memcpy(dest=I64P(unsafe_from_address=Int(py=classical_address(count))),
                   src=I64P(unsafe_from_address=Int(merged.seen_i64.unsafe_ptr())), count=d)
@@ -336,11 +336,11 @@ def scaler_partial_fit(model: PythonObject, source: PythonObject, weights: Pytho
     merge (bindings/scaler_lifecycle_run.mojo; lane py-msel-prep-cnn: the
     batch was a second Python StandardScaler fitted through the door and the
     merge program was composed here), PACK the merged fields."""
-    var nk = scaler_keys()
     var fields = py_fields(model)
     if not _fitted(fields):
         return scaler_fit(model, source, weights, context)
     _ = _mode(fields, context)
+    var nk = scaler_keys()
     if _bool(py_item(fields, nk[].k_with_mean), context) != _bool(py_item(fields, nk[].k_with_mean_), context) or _bool(py_item(fields, nk[].k_with_std), context) != _bool(py_item(fields, nk[].k_with_std_), context):
         raise Error("StandardScaler partial_fit: with_mean / with_std changed since the first batch")
     var b = native_loaded_module("builtins")
@@ -419,7 +419,6 @@ def scaler_fit_transform(model: PythonObject, source: PythonObject, options: Pyt
 
 def scaler_fit_transform(model: PythonObject, source: PythonObject, options: PythonObject, context: PythonObject,
                          var input_cache: PythonObject) raises -> PythonObject:
-    var nk = scaler_keys()
     if input_cache is None:
         input_cache = Python.list()
     var b = native_loaded_module("builtins")
@@ -427,6 +426,7 @@ def scaler_fit_transform(model: PythonObject, source: PythonObject, options: Pyt
     for k in range(len(names)):  # driver-loop: fit's keyword names, not data
         if py_type(names[k]) is not b.str or String(names[k]) != "sample_weight":
             raise Error("TypeError: StandardScaler.fit got an unexpected keyword argument")
+    var nk = scaler_keys()
     if len(options) == 0:
         var fields = py_fields(model)
         var mode = _mode(fields, context)
@@ -487,12 +487,12 @@ def scaler_fit_transform(model: PythonObject, source: PythonObject, options: Pyt
 
 
 def scaler_archive_save(model: PythonObject, path: PythonObject, context: PythonObject) raises -> PythonObject:
-    var nk = scaler_keys()
     # UNPACK: public slots and optional owner pins only. Native archive code
     # owns metadata bytes, scalar count narrowing, member order and ZIP/NPY.
     var fields = py_fields(model)
     if not _fitted(fields):
         raise Error("RuntimeError: this estimator is not fitted yet")
+    var nk = scaler_keys()
     var seen = py_item(fields, nk[].k_n_samples_seen_)
     var integer = py_type(seen) is py_type(PythonObject(0))
     var features = _features(fields)
@@ -523,12 +523,12 @@ def scaler_archive_save(model: PythonObject, path: PythonObject, context: Python
 
 
 def _outside(context: PythonObject, depth: Int) raises -> Bool:
-    var nk = scaler_keys()
     var outside = True
     try:
         var globals = native_caller_globals(depth)
         if globals is None:
             return True
+        var nk = scaler_keys()
         var name = py_get(globals,nk[].k___name__)
         if py_type(name) is py_type(PythonObject("")):
             var module = String(name)

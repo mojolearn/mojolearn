@@ -13,8 +13,8 @@ from bindings.minmax_keys_unpack import minmax_keys
 from bindings.py_balanced import py_item
 
 def _flag(value: PythonObject, name: String, context: PythonObject) raises -> Bool:
-    var nk = minmax_keys()
     var b = native_loaded_module("builtins")
+    var nk = minmax_keys()
     var types = py_get(context,nk[].k_bool_types)
     if py_type(value) is not b.bool and (types is None or py_type(value) is not types[1]):
         raise Error(name + " must be a bool")
@@ -22,9 +22,9 @@ def _flag(value: PythonObject, name: String, context: PythonObject) raises -> Bo
 
 
 def _endpoint(value: PythonObject, context: PythonObject) raises -> Float64:
-    var nk = minmax_keys()
     var b = native_loaded_module("builtins")
     var cls = py_type(value)
+    var nk = minmax_keys()
     var bools = py_get(context,nk[].k_bool_types)
     if cls is b.bool or (bools is not None and cls is bools[1]):
         raise Error("feature_range must contain two numeric endpoints")

@@ -26,12 +26,12 @@ from bindings.py_balanced import py_item
 
 def _logistic_width_numpy_dtype(value: PythonObject, context: PythonObject,
                                 array: Bool) raises -> PythonObject:
-    var nk = logistic_keys()
     # Descriptor identities, not user dtype attributes, admit the storage.
     # Ordinary fitted integer fields never enter this exceptional metadata
     # path. The existing native dtype constructor supplies immutable types.
     var cls = py_type(value)
     var scalar = False
+    var nk = logistic_keys()
     var classes = py_item(context, nk[].k_scalar_types)
     for i in range(len(classes)):  # driver-loop: fixed connected primitive scalar classes
         scalar = scalar or cls is classes[i]

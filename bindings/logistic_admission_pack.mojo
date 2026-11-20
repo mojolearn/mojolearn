@@ -24,8 +24,8 @@ from bindings.py_balanced import py_item
 
 
 def logistic_initialize(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    var nk = logistic_keys()
     var fields = logistic_storage(model, context)
+    var nk = logistic_keys()
     var names = py_item(context, nk[].k_lr_parameters)
     if len(args) != len(names):
         raise Error("TypeError: native LogisticRegression requires its full constructor configuration")
@@ -43,9 +43,9 @@ def logistic_initialize(model: PythonObject, args: PythonObject, context: Python
 
 
 def logistic_get_params(model: PythonObject, context: PythonObject) raises -> PythonObject:
-    var nk = logistic_keys()
     var fields = logistic_fields(model, context, True)
     var out = Python.dict()
+    var nk = logistic_keys()
     var names = py_item(context, nk[].k_lr_sorted_parameters)
     for i in range(len(names)):  # driver-loop: ParamsMixin's sorted parameter names
         py_setitem(out, names[i], fields[names[i]])
@@ -53,7 +53,6 @@ def logistic_get_params(model: PythonObject, context: PythonObject) raises -> Py
 
 
 def logistic_set_params(model: PythonObject, values: PythonObject, context: PythonObject) raises -> PythonObject:
-    var nk = logistic_keys()
     var b = native_loaded_module("builtins")
     if py_type(values) is not b.dict:
         raise Error("TypeError: native LogisticRegression updates require ordinary keyword storage")
@@ -64,6 +63,7 @@ def logistic_set_params(model: PythonObject, values: PythonObject, context: Pyth
     for i in range(len(names)):  # driver-loop: names before key comparison or formatting
         if py_type(names[i]) is not b.str:
             raise Error("TypeError: native LogisticRegression parameter names must be strings")
+    var nk = logistic_keys()
     for i in range(len(names)):  # driver-loop: ordered scalar/native-container parameter updates
         var key = names[i]
         var parts = py_call(key.partition, "__")

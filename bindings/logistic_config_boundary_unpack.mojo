@@ -176,9 +176,9 @@ def _logistic_report(event: LogisticArithmetic, context: PythonObject) raises:
 
 def logistic_configuration_strengths(fields: PythonObject, penalty: Int,
         mut policy: LogisticPromotion, context: PythonObject) raises -> Tuple[Float64, Float64]:
-    var nk = logistic_keys()
     if penalty == LOGISTIC_NO_PENALTY:
         return (0.0, 0.0)
+    var nk = logistic_keys()
     var c = _logistic_number(py_item(fields, nk[].k_C))
     _logistic_promotion(policy, c, context)
     var ratio = LogisticScalar(0.0, 0, 8)

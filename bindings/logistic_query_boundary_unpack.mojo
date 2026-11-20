@@ -48,7 +48,6 @@ comptime LOGISTIC_WIDTH_API = SharedSlot[LogisticWidthApi, "MojolearnLogisticWid
 
 
 def _logistic_width_builtin(value: PythonObject, context: PythonObject) raises -> LogisticQueryWidth:
-    var nk = logistic_keys()
     # Only exact builtin scalar classes reach their C conversion slots.
     var cls = py_type(value)
     if cls is py_type(PythonObject(0)) or cls is py_type(PythonObject(True)):
@@ -65,6 +64,7 @@ def _logistic_width_builtin(value: PythonObject, context: PythonObject) raises -
         return LogisticQueryWidth(logistic_width_integer(Int(number)), kind=3, integer_value=Int(number))
     if cls is py_type(PythonObject(0.0)):
         return LogisticQueryWidth(_scalar_ieee(bitcast[DType.uint64](Float64(py=value)), 0, 52, 11))
+    var nk = logistic_keys()
     if cls is py_item(context, nk[].k_lr_complex_type):
         var api = LOGISTIC_WIDTH_API.get_or_create_ptr()
         var real = api[].real(value._obj_ptr)
@@ -99,8 +99,8 @@ def _logistic_width_array(value: PythonObject, context: PythonObject) raises -> 
 
 
 def logistic_query_width(value: PythonObject, context: PythonObject) raises -> LogisticQueryWidth:
-    var nk = logistic_keys()
     var current = value
+    var nk = logistic_keys()
     for depth in range(65):  # driver-loop: bounded object-array metadata unboxing, no row traversal
         var cls = py_type(current)
         if (cls is py_type(PythonObject(0)) or cls is py_type(PythonObject(True)) or

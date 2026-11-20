@@ -41,9 +41,9 @@ comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 
 
 def _configuration_mode(var mode: PythonObject, context: PythonObject) raises -> PythonObject:
-    var nk = minmax_keys()
     var b = native_loaded_module("builtins")
     if mode is None:
+        var nk = minmax_keys()
         mode = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
     if py_type(mode) is not b.str:
         raise Error("numeric_mode must be fast, identical or None")
@@ -110,8 +110,8 @@ def minmax_fit_publish(fields: PythonObject, rows: List[Float32], n: Int, d: Int
                        context: PythonObject) raises:
     """PACK: a MinMaxScaler fit's fitted fields; shared by the public fit and
     the shard worker."""
-    var nk = minmax_keys()
     _publish_extrema(fields, rows, d, context)
+    var nk = minmax_keys()
     py_setitem(fields,nk[].k_n_features_in_,d)
     py_setitem(fields,nk[].k_n_samples_seen_,n)
     py_setitem(fields,nk[].k_numeric_mode_,configuration[0])
@@ -120,9 +120,9 @@ def minmax_fit_publish(fields: PythonObject, rows: List[Float32], n: Int, d: Int
 
 
 def _minmax_entries(mode: PythonObject, context: PythonObject) raises -> PythonObject:
-    var nk = minmax_keys()
     if py_type(mode) is not native_loaded_module("builtins").str:
         raise Error("TypeError: MinMaxScaler numeric_mode_ must remain a native string")
+    var nk = minmax_keys()
     if Bool(py=py_get(context,nk[].k_scaler_explicit_host,False)) and String(mode) != "identical":
         raise Error("HostMinMaxScaler runs identical only on the host")
     return _entries(mode,context)
@@ -170,7 +170,6 @@ def minmax_fit(model: PythonObject, source: PythonObject, context: PythonObject,
 def minmax_fit(model: PythonObject, source: PythonObject, context: PythonObject,
                   input_cache: PythonObject,
                   var configuration: PythonObject) raises -> PythonObject:
-    var nk = minmax_keys()
     var fields = _fields(model)
     if configuration is None:
         configuration = _configuration(fields,context)
@@ -180,6 +179,7 @@ def minmax_fit(model: PythonObject, source: PythonObject, context: PythonObject,
         if String(names[k]).endswith("_"):
             _ = py_call(fields.pop,names[k])
     var entries = _minmax_entries(mode,context)
+    var nk = minmax_keys()
     if py_get(entries,nk[].k_minmax_fit) is None:
         raise Error("ImportError: HostMinMaxScaler training requires _mojolearn_preprocessing_host: " + String(py_get(entries,nk[].k_scaler_training_error,"minmax_fit is unavailable")))
     var calls = scaler_door_calls(entries)
@@ -217,13 +217,13 @@ def minmax_fit_transform(model: PythonObject, source: PythonObject, context: Pyt
     route cannot run (no combined export: the host column or
     MOJOLEARN_SCALER_DIRECT=0; or X holds a NaN or an infinity: the two-step
     NaN route), and the caller runs fit then transform."""
-    var nk = minmax_keys()
     var fields = _fields(model)
     if configuration is None:
         configuration = _configuration(fields,context)
     var mode = configuration[0]
     var entries = _minmax_entries(mode,context)
     var entry = _direct(entries,"minmax_fit_transform")
+    var nk = minmax_keys()
     if entry is None or py_get(entries,nk[].k_minmax_fit) is None:
         return PythonObject(None)
     # minmax_fit's refit invalidation comes before X is read.
@@ -264,11 +264,11 @@ def minmax_fit_transform(model: PythonObject, source: PythonObject, context: Pyt
 
 
 def minmax_partial_fit(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
-    var nk = minmax_keys()
     var fields = _fields(model)
     if not _fitted(fields):
         return minmax_fit(model,source,context)
     var configuration = _configuration(fields,context)
+    var nk = minmax_keys()
     var old_range = minmax_range_pair(py_item(fields, nk[].k_feature_range_),context)
     if old_range != Python.tuple(configuration[1],configuration[2]):
         raise Error("MinMaxScaler partial_fit: feature_range changed since the first batch")
@@ -321,8 +321,8 @@ def minmax_transform(model: PythonObject, source: PythonObject, inverse: Bool, c
 def minmax_transform(model: PythonObject, source: PythonObject, inverse: Bool, context: PythonObject,
                   input_cache: PythonObject,
                   configuration: PythonObject) raises -> PythonObject:
-    var nk = minmax_keys()
     var fields = _fields(model)
+    var nk = minmax_keys()
     var copy = _flag(py_item(fields, nk[].k_copy),"copy",context) if configuration is None else Bool(py=configuration[3])
     if not _fitted(fields):
         _ = classical_not_fitted_class(context)

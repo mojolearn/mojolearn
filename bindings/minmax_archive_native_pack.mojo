@@ -29,9 +29,9 @@ from bindings.minmax_keys_unpack import minmax_keys
 def _minmax_archive_pack(cls: PythonObject, plan: NativeMinMaxArchivePlan,
                          members: List[NativeArchiveDecoded], context: PythonObject,
                          generic: Bool = False) raises -> PythonObject:
-    var nk = minmax_keys()
     var model = native_storage_allocate(cls)
     var fields = py_fields(model)
+    var nk = minmax_keys()
     py_setitem(fields, nk[].k_copy, True)
     py_setitem(fields, nk[].k_numeric_mode, PythonObject(None))
     py_setitem(fields, nk[].k_clip, plan.clip)

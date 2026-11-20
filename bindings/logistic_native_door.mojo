@@ -87,8 +87,8 @@ def _mode(fields: PythonObject, context: PythonObject) raises -> String:
 def _mode_value(var mode: PythonObject, context: PythonObject) raises -> String:
     """`_backend.binding(name, self.numeric_mode)`'s mode: the instance's,
     or the process default."""
-    var nk = logistic_keys()
     if mode is None:
+        var nk = logistic_keys()
         mode = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
     if py_type(mode) is not py_type(PythonObject("")):
         raise Error("numeric_mode must be fast, identical or None")
@@ -156,7 +156,6 @@ def _row_weights(model: PythonObject, fields: PythonObject, sample_weight: Pytho
     """`linear_model._qn_row_weights`: no weights (address 0) for an
     unweighted fit, else the checked float32 sample weights times each row's
     class weight (their owner kept alive with the address)."""
-    var nk = logistic_keys()
     var b = _builtins()
     if sample_weight is None and class_weight is None:
         return admitted_words(PythonObject(None), 0, 0, 0)
@@ -172,6 +171,7 @@ def _row_weights(model: PythonObject, fields: PythonObject, sample_weight: Pytho
         raise Error("The 'class_weight' parameter of " + _name(model) + " must be an "
                     + "instance of 'dict', a str among {'balanced'} or None. "
                     + "Got " + _repr(class_weight) + " instead.")
+    var nk = logistic_keys()
     var host = py_get(context, nk[].k_lr_host_model)
     # The mode from the fit's admitted fields snapshot (numeric_mode is a
     # constructor parameter the fit already admitted), not a third admission.
@@ -200,10 +200,10 @@ def _logistic_buffer_column(y: PythonObject, shape: List[Int], context: PythonOb
     fit door keeps such a column (after its column warning) instead of
     flattening it into a Python list, and the label encoder reads it in C
     order, which for one column is the flattened order (perf3-label-doors)."""
-    var nk = logistic_keys()
     if len(shape) != 2 or shape[1] != 1:
         return False
     var cls = py_type(y)
+    var nk = logistic_keys()
     var ndarray = py_get(context, nk[].k_ndarray)
     if ndarray is not None and cls is ndarray:
         return True
@@ -213,7 +213,6 @@ def _logistic_buffer_column(y: PythonObject, shape: List[Int], context: PythonOb
 
 def logistic_fit(model: PythonObject, source_x: PythonObject, source_y: PythonObject,
                  sample_weight: PythonObject, context: PythonObject, fields: PythonObject) raises -> PythonObject:
-    var nk = logistic_keys()
     # The public door admitted this live field storage once for fit.
     logistic_fit_replacements_admit(fields, context)
     var penalty = logistic_validate_configuration(fields)
@@ -224,6 +223,7 @@ def logistic_fit(model: PythonObject, source_x: PythonObject, source_y: PythonOb
     # fit is gathered on the device out of model selection's resident base
     # by the base binding's `qn_fit_fold` (no host gather, no upload of X);
     # without it (the CPU column, FAST) the door gets the host rows.
+    var nk = logistic_keys()
     var fold_entry = py_get(context, nk[].k_logistic_fold_native_api_v1)
     var store = QnFoldStore()
     var x = PythonObject(None)
@@ -419,10 +419,10 @@ def _infer_fold(model: PythonObject, state: LogisticQueryOwners, q: _QueryX, dst
                 n_classes: Int, log_out: Bool, context: PythonObject) raises:
     """One `qn_infer_fold` call over the fold `q` names into `dst`, refused
     through door_rows_refuse on its words."""
-    var nk = logistic_keys()
     var operation = QN_NATIVE_DECISION if mode == _FOLD_DECISION else (QN_NATIVE_BINARY if mode == _FOLD_CODES else QN_NATIVE_PROBA)
     var request = QnQueryRequest(0, Int(py=classical_address(state.weights)),
         labels_address(dst), 0, q.rows, q.cols, n_classes, Bool(py=state.intercept_owner), log_out)
+    var nk = logistic_keys()
     var result = logistic_run_fold_query(py_item(context, nk[].k_logistic_fold_native_api_v1), operation, q.store, request)
     _ = dst
     door_rows_refuse(result.finite, result.range_error, _name(model), q.store.base_rows)
@@ -569,8 +569,8 @@ def logistic_log_proba(model: PythonObject, state: LogisticQueryOwners, source: 
 def logistic_score(model: PythonObject, state: LogisticQueryOwners, source: PythonObject, target: PythonObject, context: PythonObject) raises -> PythonObject:
     """`score`: the mean accuracy of predict(X) against y, the prediction
     handed straight to the native accuracy program (`_accuracy_host`)."""
-    var nk = logistic_keys()
     var prediction = PythonObject(None)
+    var nk = logistic_keys()
     var host_context = py_get(context, nk[].k_lr_host_score_context)
     if host_context is not None:
         # The explicit host class predicts through its own native host

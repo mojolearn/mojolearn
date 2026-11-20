@@ -43,7 +43,6 @@ def _ptr(value: PythonObject) raises -> F32P:
 
 
 def _input(source: PythonObject, ndim: Int, strict: Bool, context: PythonObject) raises -> PythonObject:
-    var nk = scaler_keys()
     classical_admit_value(source, context)
     var b = native_loaded_module("builtins")
     var prepared = source
@@ -69,6 +68,7 @@ def _input(source: PythonObject, ndim: Int, strict: Bool, context: PythonObject)
     var native = classical_is_array(value, context) or Bool(py=value.dtype.isnative)
     if classical_is_f32(value, context) and classical_c_order(value, context) and native:
         return value
+    var nk = scaler_keys()
     var output = classical_typed(Python.tuple(rows, cols) if rank == 2 else Python.tuple(rows), "<f4", py_item(context, nk[].k_output_context))
     var dest = _ptr(output)
     var item = Int(py=value.itemsize)
@@ -135,12 +135,12 @@ struct ScalerDoorCalls(ScalerCalls, Movable):
         return got
 
     def standard_transform(self, r: ScalerTransformRequest) raises -> Int:
-        var nk = scaler_keys()
         if self.has_table:
             var got = 0
             with GILReleased(Python()):
                 got = self.table.standard_transform(r)
             return got
+        var nk = scaler_keys()
         _ = py_call_typed(py_get(self.entries, nk[].k_standard_transform), r.source, r.mean, r.scale, r.dst,
                           Python.list(r.rows, r.features, Int(r.inverse), Int(r.with_mean), Int(r.with_std)))
         return 1
@@ -152,12 +152,12 @@ struct ScalerDoorCalls(ScalerCalls, Movable):
         return got
 
     def minmax_transform(self, r: MinMaxTransformRequest) raises -> Int:
-        var nk = scaler_keys()
         if self.has_table:
             var got = 0
             with GILReleased(Python()):
                 got = self.table.minmax_transform(r)
             return got
+        var nk = scaler_keys()
         _ = py_call_typed(py_get(self.entries, nk[].k_minmax_transform), r.source, r.scale, r.offset, r.dst,
                           Python.list(r.rows, r.features, Int(r.inverse), Int(r.clip), Float64(r.lower), Float64(r.upper)))
         return 1
@@ -182,9 +182,9 @@ def scaler_transform_calls(entries: PythonObject, context: PythonObject) raises 
 def scaler_standard_publish(fields: PythonObject, fit: ScalerStandardFit, d: Int, with_mean: Bool, with_std: Bool,
                             mode: PythonObject, context: PythonObject) raises:
     """PACK: a StandardScaler fit's fitted fields, one Array per row."""
-    var nk = scaler_keys()
     var stats = F32P(unsafe_from_address=Int(fit.stats.unsafe_ptr()))
     var seen = PythonObject(None)
+    var nk = scaler_keys()
     if fit.seen_kind == SCALER_SEEN_INT:
         seen = PythonObject(Int(fit.seen_scalar))
     elif fit.seen_kind == SCALER_SEEN_FLOAT:
@@ -207,9 +207,9 @@ def scaler_standard_publish(fields: PythonObject, fit: ScalerStandardFit, d: Int
 
 
 def _bool(value: PythonObject, context: PythonObject) raises -> Bool:
-    var nk = scaler_keys()
     var b = native_loaded_module("builtins")
     if py_type(value) is not b.bool:
+        var nk = scaler_keys()
         var numpy = py_get(context, nk[].k_bool_types)
         if numpy is None or py_type(value) is not numpy[1]:
             raise Error("copy, with_mean and with_std must be bools")
@@ -241,8 +241,8 @@ struct ScalerFitInput(Movable):
 def scaler_fit_entries(mode: PythonObject, context: PythonObject) raises -> PythonObject:
     """UNPACK: the mode's connected preprocessing entries for a fit, with the
     training-entry and mode-probe refusals."""
-    var nk = scaler_keys()
     var b = native_loaded_module("builtins")
+    var nk = scaler_keys()
     var entries = py_item(context, nk[].k_scaler_bindings)[mode]
     if py_type(entries) is b.str:
         raise Error("ImportError: " + String(entries))
@@ -259,7 +259,6 @@ def scaler_fit_input(source: PythonObject, weight_source: PythonObject, context:
                      input_cache: PythonObject) raises -> ScalerFitInput:
     """UNPACK: X's snapshot and the admitted weights (refusals in the order
     the fit made them)."""
-    var nk = scaler_keys()
     var b = native_loaded_module("builtins")
     var snapshot = scaler_operation_input(source, context, input_cache)
     var captured = snapshot.downcast_value_ptr[ScalerInputSnapshot]()
@@ -276,6 +275,7 @@ def scaler_fit_input(source: PythonObject, weight_source: PythonObject, context:
         if weight_type is b.bool:
             raise Error("sample_weight must be one-dimensional")
         var scalar = weight_type is b.int or weight_type is b.float
+        var nk = scaler_keys()
         var scalar_types = py_get(context, nk[].k_scalar_types)
         var bool_types = py_get(context, nk[].k_bool_types)
         if scalar_types is not None and bool_types is not None:
@@ -303,10 +303,10 @@ def scaler_fit(model: PythonObject, source: PythonObject, weight_source: PythonO
 
 def scaler_fit(model: PythonObject, source: PythonObject, weight_source: PythonObject, context: PythonObject,
                input_cache: PythonObject) raises -> PythonObject:
-    var nk = scaler_keys()
     classical_connect_numpy(context)
     var b = native_loaded_module("builtins")
     var fields = py_fields(model)
+    var nk = scaler_keys()
     _ = _bool(py_item(fields, nk[].k_copy), context)
     var with_mean = _bool(py_item(fields, nk[].k_with_mean), context)
     var with_std = _bool(py_item(fields, nk[].k_with_std), context)

@@ -32,13 +32,13 @@ from bindings.py_balanced import py_item
 
 def _minmax_archive_class_unpack(cls: PythonObject, context: PythonObject,
                                  generic: Bool = False) raises -> NativeMinMaxArchiveClass:
-    var nk = minmax_keys()
     var result = NativeMinMaxArchiveClass()
     var native_type = py_type(py_type(PythonObject("")))
     if py_type(cls) is not native_type:
         result.layout_error = 1
         return result^
     var type_fields = native_type.__dict__
+    var nk = minmax_keys()
     var mro = py_call(py_item(type_fields, nk[].k___mro__).__get__, cls)
     var descriptor_type = py_type(py_item(context, nk[].k_archive_memoryview_type).obj)
     if generic:
@@ -64,8 +64,8 @@ def _minmax_archive_class_unpack(cls: PythonObject, context: PythonObject,
 
 
 def minmax_archive_save(model: PythonObject, path: PythonObject, context: PythonObject) raises -> PythonObject:
-    var nk = minmax_keys()
     var fields = py_fields(model)
+    var nk = minmax_keys()
     if py_get(fields, nk[].k_numeric_mode_) is None or py_get(fields, nk[].k_scale_) is None:
         raise Error("RuntimeError: this estimator is not fitted yet")
     var integers = py_type(PythonObject(0))
@@ -118,8 +118,8 @@ def minmax_archive_decoded(cls: PythonObject, members: List[NativeArchiveDecoded
 
 
 def minmax_archive_load(cls: PythonObject, path: PythonObject, context: PythonObject) raises -> PythonObject:
-    var nk = minmax_keys()
     var admitted = _archive_read_input(path, context)
+    var nk = minmax_keys()
     var minor = Int(py=py_item(context, nk[].k_archive_python_minor))
     var micro = Int(py=py_item(context, nk[].k_archive_python_micro))
     try:
