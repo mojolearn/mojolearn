@@ -18,9 +18,15 @@ CLASSES = [RandomForestClassifier, RandomForestRegressor, ExtraTreesClassifier, 
 
 @pytest.mark.parametrize('cls', CLASSES)
 def test_auto_engine_is_fast_only(cls):
+    from mojolearn import _backend
+
     fast = cls(numeric_mode='fast')
     assert fast.inference_engine == 'auto'
-    assert fast._prediction_engine() == 'parallel_groves'
+    # Off Apple with no fast set, the identical set answers `fast` for FOREST
+    # (core/mode_answer.mojo MODE_FAMILIES_ANSWERED): auto is then the
+    # identical engine. Where fast names its own set, auto is parallel groves.
+    answered = _backend.fast_answer() == 'identical'
+    assert fast._prediction_engine() == ('sequential' if answered else 'parallel_groves')
     model = cls(numeric_mode='identical')
     assert model.inference_engine == 'auto'
     assert model._prediction_engine() == 'sequential'
