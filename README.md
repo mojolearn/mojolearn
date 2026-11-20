@@ -263,8 +263,7 @@ license; see [NOTICE](NOTICE).
 
 ## Citation
 
-To cite mojolearn, cite the paper: Andrew Hendel, *Bitwise-Identical Machine Learning
+To cite Mojolearn, cite the paper: Andrew Hendel, *Bitwise-Identical Machine Learning
 Across GPUs and CPUs*, 2026, [10.5281/zenodo.23829035](https://doi.org/10.5281/zenodo.23829035)
-([CITATION.cff](CITATION.cff)). To refer to the exact code of a release, use its
-software DOI; the concept DOI [10.5281/zenodo.22068632](https://doi.org/10.5281/zenodo.22068632)
-resolves to the newest release.
+([CITATION.cff](CITATION.cff)). To refer to the software, use the concept DOI
+[10.5281/zenodo.22068632](https://doi.org/10.5281/zenodo.22068632), which resolves to the newest release.

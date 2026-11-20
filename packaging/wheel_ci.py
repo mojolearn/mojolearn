@@ -24,10 +24,11 @@ worth more than one that pretends to build a GPU wheel and never can.
         downstream could have noticed. This walks the import graph instead.
 
     versions <repo-root>
-        python/pyproject.toml, python/mojolearn/_version.py and CITATION.cff
-        must agree. The release workflow's "Version agreement" step reads the
-        first two only, and a wrong CITATION.cff `version` is minted
-        permanently into a DOI.
+        python/pyproject.toml and python/mojolearn/_version.py must agree.
+        CITATION.cff names what to cite (the paper, `preferred-citation`) and
+        carries no release `version` or `date-released` (Andrew, 2026-11-17):
+        this fails if either top-level field comes back, since a version
+        there goes stale and is minted permanently into a DOI.
 
     pins <repo-root>
         Every bindings/build_*.sh must pin BOTH cpu baselines, and MACOS_FLOOR
@@ -46,7 +47,6 @@ import ast
 import pathlib
 import re
 import sys
-import subprocess
 
 
 # --------------------------------------------------------------------------
@@ -263,21 +263,21 @@ def versions(argv):
             r'^version = "([^"]+)"', root / "python/pyproject.toml"),
         "python/mojolearn/_version.py": _one(
             r'^__version__ = "([^"]+)"', root / "python/mojolearn/_version.py"),
-        "CITATION.cff": _one(
-            r'^version: *"?([^"\s]+)"?', root / "CITATION.cff"),
     }
     if len(set(found.values())) != 1:
-        print("FAIL the version is written in three places and they disagree:",
+        print("FAIL the version is written in two places and they disagree:",
               file=sys.stderr)
         for k, v in found.items():
             print(f"    {v:<12} {k}", file=sys.stderr)
-        print("  A wrong CITATION.cff version is minted permanently into a DOI.",
+        return 1
+    cff = (root / "CITATION.cff").read_text(encoding="utf-8")
+    stale = re.findall(r"^(version|date-released):", cff, re.M)
+    if stale or not re.search(r"^preferred-citation:", cff, re.M):
+        print("FAIL CITATION.cff must carry preferred-citation and no top-level "
+              f"version or date-released (found: {', '.join(stale) or 'no preferred-citation'})",
               file=sys.stderr)
         return 1
-    if subprocess.call([sys.executable, str(root / "tools/citation_metadata.py"),
-                        "--root", str(root)]):
-        return 1
-    print(f"  versions: {next(iter(found.values()))} in all three places")
+    print(f"  versions: {next(iter(found.values()))} in both places; CITATION.cff cites the paper")
     return 0
 
 

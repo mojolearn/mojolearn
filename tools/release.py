@@ -96,7 +96,7 @@ THE STEPS
   freeze-version     _version.py and pyproject.toml say <version> (edited if not)
   freeze-changelog   CHANGELOG.md has `## <version> (published YYYY-MM-DD)`; the
                      prose is the releaser's, so a missing entry stops here
-  freeze-docs-facts  pixi run write-docs-facts (CITATION and marked spans)
+  freeze-docs-facts  pixi run write-docs-facts (marked spans)
   freeze-commit      commit exactly those files if they changed, push, and
                      freeze HEAD (the tree must be clean and pushed). Once
                      frozen, the four freeze steps only check the frozen source
@@ -442,8 +442,8 @@ def file_at(commit, rel):
 
 
 def release_files():
-    """What a version bump edits by hand or by write-docs-facts' citation sync."""
-    return ["python/mojolearn/_version.py", "python/pyproject.toml", "CHANGELOG.md", "CITATION.cff"]
+    """What a version bump edits by hand (CITATION.cff carries no version)."""
+    return ["python/mojolearn/_version.py", "python/pyproject.toml", "CHANGELOG.md"]
 
 
 def docs_fact_files():
