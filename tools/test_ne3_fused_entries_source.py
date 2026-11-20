@@ -3,6 +3,7 @@ operations and fused doors; source-only, no runtime claim."""
 import re
 from pathlib import Path
 from gen_x_neighbors_provider import EXTRA, generated
+from boundary_keys_plain import plain  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 NEW = [('ocsvm_labels', (4, 6, 5), 5, 'x_neighbors_ocsvm_labels', 4),
@@ -79,7 +80,8 @@ def test_v_measure_has_one_composer():
 
 
 def test_svc_score_compares_codes():
-    svc = _read('bindings/svc_kernel_native_door.mojo')
+    # The door switches on leaf codes (lane bw2-svm): read its by-name form.
+    svc = plain('bindings/svc_kernel_native_door.mojo', _read('bindings/svc_kernel_native_door.mojo'))
     body = svc[svc.index('if operation == "family_svc_svc_score":'):]
     body = body[:body.index('if operation == "family_svc_svr_fit":')]
     assert '_svc_predict_codes(' in body and 'svc_decode' not in body
