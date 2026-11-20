@@ -156,8 +156,8 @@ def samba_resident_native_step(fields: PythonObject, config: PythonObject, provi
     # The written registry's own epoch (core/weight_epoch.mojo), stamped from
     # the address this step already passed (hot-path audit 2026-11-13: the
     # public door no longer reads `flat` per call to stamp it)
-    # -D MOJOLEARN_SAMBA_FAST_STEP_REGISTRY_RESIDENT (lane fx-samba-step-resident,
-    # default off): the step stamped the registry itself, after its download,
+    # SAMBA_STEP_REGISTRY_RESIDENT (lane fx-samba-step-resident; default on
+    # since 2026-11-20): the step stamped the registry itself, after its download,
     # and kept the key of that stamp for its own device copy
     # (training/samba_resident.mojo `_step_registry_out`); a second stamp here
     # would make that copy reload. A step that raised reaches neither stamp:

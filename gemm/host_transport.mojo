@@ -3,7 +3,7 @@
 """Transport for the host-pointer GEMM surfaces (lane/gap-neural-models, 2026-10-02).
 
 NO ARITHMETIC. Copies, pooled allocations and waits only, so nothing here can
-move a bit of any GEMM profile. One exception, off by default: with
+move a bit of any GEMM profile. One exception, on by default: with
 NAN_CANON_ON (the default; core/nan_canon.mojo) `gemm_down_f32` rewrites the NaN words of
 the downloaded product to the one canonical word (core/nan_canon.mojo).
 
