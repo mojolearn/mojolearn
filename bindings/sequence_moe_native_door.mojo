@@ -20,6 +20,8 @@ from core.hotpath_impl_rows import normal_init_f32
 from core.sequence_array_cast import sequence_cast_leaf
 from bindings.sequence_array_warnings_unpack import sequence_array_report
 from bindings.sequence_array_warnings_pack import sequence_array_errstate
+from bindings.sequence_keys_unpack import sequence_keys
+from bindings.py_balanced import py_item
 
 
 def _b() raises -> PythonObject:
@@ -39,11 +41,12 @@ def _owner(owner: PythonObject, context: PythonObject) raises -> PythonObject:
     var mods = NativeModules()
     if class_record(mods, _MOE_CLASS_SLOT, cls) is not None:
         return _fields(mods, owner)
-    var layout = context["seqmoe_layout"]
+    var nk = sequence_keys()
+    var layout = py_item(context, nk[].k_seqmoe_layout)
     var b = _b()
     if py_type(cls) is not b.type:
         raise Error("TypeError: MoEBlock refuses Python metaclass protocols")
-    var ancestry = py_call(b.type.__dict__["__mro__"].__get__, cls)
+    var ancestry = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, cls)
     var found = False
     for i in range(len(ancestry)):  # driver-loop: over passive native owner ancestry
         if ancestry[i] is layout[0]:
@@ -53,7 +56,7 @@ def _owner(owner: PythonObject, context: PythonObject) raises -> PythonObject:
         for name in ["__getattribute__", "__getattr__", "__setattr__"]:  # driver-loop: over storage-hook overrides
             if py_contains(namespace, name):
                 raise Error("TypeError: MoEBlock subclasses cannot replace native storage hooks")
-    if not found or py_call(b.type.__dict__["__mro__"].__get__, layout[0]) is not layout[1]:
+    if not found or py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, layout[0]) is not layout[1]:
         raise Error("TypeError: MoEBlock requires its connected native class ancestry")
     var hooks = layout[2]
     for i in range(len(hooks)):  # driver-loop: over connected native storage hooks
@@ -74,7 +77,8 @@ def _integer(value: PythonObject, context: PythonObject) raises -> Int:
 
 
 def _version(fields: PythonObject) raises -> Int:
-    var value = py_get(fields, "_wver", PythonObject(0))
+    var nk = sequence_keys()
+    var value = py_get(fields, nk[].k__wver, PythonObject(0))
     if py_type(value) is not _b().int:
         raise Error("TypeError: MoEBlock weight version requires an ordinary integer")
     return Int(py=value)
@@ -97,10 +101,11 @@ def _words(fields: PythonObject, context: PythonObject) raises -> List[Int]:
         if total > 2147483647 // size:
             raise Error("ValueError: MoEBlock weights exceed signed 32-bit indexing")
         total *= size
-    var norm = fields["norm_topk_prob"]
+    var nk = sequence_keys()
+    var norm = py_item(fields, nk[].k_norm_topk_prob)
     opt_scalar(norm, context)
     words.append(1 if Bool(py=norm) else 0)
-    opt_scalar(py_get(fields, "numeric_mode"), context)
+    opt_scalar(py_get(fields, nk[].k_numeric_mode), context)
     return words^
 
 
@@ -141,7 +146,8 @@ def _owner_word(fields: PythonObject) -> Int:
 
 
 def _cached(fields: PythonObject, context: PythonObject) raises -> PythonObject:
-    var cur = py_get(fields, "_wdev")
+    var nk = sequence_keys()
+    var cur = py_get(fields, nk[].k__wdev)
     if cur is None:
         return cur
     if (py_type(cur) is not _b().tuple or len(cur) != 4 or py_type(cur[1]) is not _b().int
@@ -150,7 +156,7 @@ def _cached(fields: PythonObject, context: PythonObject) raises -> PythonObject:
     if Int(py=cur[3]) != _owner_word(fields):
         # Another block's handle, copied in by copy.copy: forget it here
         # without freeing it (its own block releases it).
-        py_setitem(fields, "_wdev", PythonObject(None))
+        py_setitem(fields, nk[].k__wdev, PythonObject(None))
         return PythonObject(None)
     _ = seq_binding(PythonObject(None), context, cur[0])
     return cur
@@ -158,22 +164,24 @@ def _cached(fields: PythonObject, context: PythonObject) raises -> PythonObject:
 
 def _release(fields: PythonObject, context: PythonObject) raises:
     var cur = _cached(fields, context)
+    var nk = sequence_keys()
     if cur is not None:
         var entries = seq_binding(PythonObject(None), context, cur[0])
-        _ = py_call_typed(entries["moe_weights_free"], cur[2])
-    py_setitem(fields, "_wdev", PythonObject(None))
+        _ = py_call_typed(py_item(entries, nk[].k_moe_weights_free), cur[2])
+    py_setitem(fields, nk[].k__wdev, PythonObject(None))
 
 
 def _weights(fields: PythonObject, entries: PythonObject, words: List[Int],
              r: MoEBuffer, gu: MoEBuffer, dn: MoEBuffer, context: PythonObject) raises -> PythonObject:
     var version = _version(fields)
     var cur = _cached(fields, context)
-    if cur is not None and cur[0] is entries["module"] and Int(py=cur[1]) == version:
+    var nk = sequence_keys()
+    if cur is not None and cur[0] is py_item(entries, nk[].k_module) and Int(py=cur[1]) == version:
         return cur[2]
     _release(fields, context)
-    var handle = py_call_typed(entries["moe_weights_put"], Python.list(r.address, gu.address, dn.address),
+    var handle = py_call_typed(py_item(entries, nk[].k_moe_weights_put), Python.list(r.address, gu.address, dn.address),
                                Python.list(words[2], words[0], words[1]))
-    py_setitem(fields, "_wdev", Python.tuple(entries["module"], version, handle, _owner_word(fields)))
+    py_setitem(fields, nk[].k__wdev, Python.tuple(py_item(entries, nk[].k_module), version, handle, _owner_word(fields)))
     return handle
 
 
@@ -186,17 +194,20 @@ def _check(r: MoEBuffer, gu: MoEBuffer, dn: MoEBuffer, words: List[Int]) raises:
 
 
 def _new(entries: PythonObject, shape: List[Int], context: PythonObject) raises -> PythonObject:
-    var handle = py_call_typed(entries["seq_tensor_alloc"], PythonObject(max(1, shape_count(shape))), PythonObject(0))
-    return seq_device_make(entries["module"], shape, handle, PythonObject(None), context)
+    var nk = sequence_keys()
+    var handle = py_call_typed(py_item(entries, nk[].k_seq_tensor_alloc), PythonObject(max(1, shape_count(shape))), PythonObject(0))
+    return seq_device_make(py_item(entries, nk[].k_module), shape, handle, PythonObject(None), context)
 
 
 def _handle(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = sequence_keys()
     # Only freshly-created native outputs reach here.
-    return py_call(context["sequence_device_getters"]["h"], value)
+    return py_call(py_item(py_item(context, nk[].k_sequence_device_getters), nk[].k_h), value)
 
 
 def _host_input(value: PythonObject, context: PythonObject) raises -> PythonObject:
-    if py_type(value) is context["sequence_device_class"]:
+    var nk = sequence_keys()
+    if py_type(value) is py_item(context, nk[].k_sequence_device_class):
         var snapshot = MoEDevice(value, context)
         return snapshot.host(context)
     return value
@@ -217,16 +228,17 @@ def _initialize(fields: PythonObject, values: PythonObject, mode: PythonObject, 
     var names = Python.tuple("D", "F", "E", "k")
     for i in range(4):  # driver-loop: over constructor dimensions
         py_setitem(fresh, names[i], PythonObject(_integer(values[i], context)))
-    py_setitem(fresh, "norm_topk_prob", PythonObject(Bool(py=values[4])))
-    py_setitem(fresh, "numeric_mode", mode)
+    var nk = sequence_keys()
+    py_setitem(fresh, nk[].k_norm_topk_prob, PythonObject(Bool(py=values[4])))
+    py_setitem(fresh, nk[].k_numeric_mode, mode)
     var words = _words(fresh, context)
     var seed = values[6]
     if seed is None:
-        seed = py_call(_b().int.from_bytes, py_call_typed(context["seqmoe_urandom"], PythonObject(8)), "little")
+        seed = py_call(_b().int.from_bytes, py_call_typed(py_item(context, nk[].k_seqmoe_urandom), PythonObject(8)), "little")
     else:
         seed = py_call(_b().int, seed)
-    var low = py_call(_b().int.__dict__["__and__"], seed, PythonObject(4294967295))
-    var high = py_call(_b().int.__dict__["__and__"], py_call(_b().int.__dict__["__rshift__"], seed, PythonObject(32)), PythonObject(4294967295))
+    var low = py_call(py_item(_b().int.__dict__, nk[].k___and__), seed, PythonObject(4294967295))
+    var high = py_call(py_item(_b().int.__dict__, nk[].k___and__), py_call(py_item(_b().int.__dict__, nk[].k___rshift__), seed, PythonObject(32)), PythonObject(4294967295))
     var word = (UInt64(Int(py=high)) << 32) | UInt64(Int(py=low))
     var offset = UInt64(0)
     var names_w = Python.tuple("router", "gate_up_proj", "down_proj")
@@ -240,7 +252,7 @@ def _initialize(fields: PythonObject, values: PythonObject, mode: PythonObject, 
         py_setitem(fresh, names_w[i], _sealed(a))
     var version = _version(fields)
     _release(fields, context)
-    py_setitem(fresh, "_wver", PythonObject(version + 3))
+    py_setitem(fresh, nk[].k__wver, PythonObject(version + 3))
     _ = py_call(fields.update, fresh)
     return PythonObject(None)
 
@@ -264,7 +276,8 @@ def _load(owner: PythonObject, fields: PythonObject, state: PythonObject, contex
     var version = _version(fields)
     for i in range(3):  # driver-loop: over publish only after complete admission
         py_setitem(fields, names[i], pending[i])
-    py_setitem(fields, "_wver", PythonObject(version + 3))
+    var nk = sequence_keys()
+    py_setitem(fields, nk[].k__wver, PythonObject(version + 3))
     return owner
 
 
@@ -274,16 +287,17 @@ def _run(fields: PythonObject, values: PythonObject, context: PythonObject, back
     var f = words[1]
     var e = words[2]
     var k = words[3]
-    var r = MoEBuffer(fields["router"], context)
-    var gu = MoEBuffer(fields["gate_up_proj"], context)
-    var dn = MoEBuffer(fields["down_proj"], context)
+    var nk = sequence_keys()
+    var r = MoEBuffer(py_item(fields, nk[].k_router), context)
+    var gu = MoEBuffer(py_item(fields, nk[].k_gate_up_proj), context)
+    var dn = MoEBuffer(py_item(fields, nk[].k_down_proj), context)
     _check(r, gu, dn, words)
     var x = values[0]
-    if not backward and py_type(x) is context["sequence_device_class"]:
+    if not backward and py_type(x) is py_item(context, nk[].k_sequence_device_class):
         var snapshot = MoEDevice(x, context)
         _input_shape(snapshot.shape, snapshot.count, d)
         var entries = snapshot.entries
-        if py_get(entries, "moe_forward_dev") is not None and py_get(entries, "moe_weights_put") is not None:
+        if py_get(entries, nk[].k_moe_forward_dev) is not None and py_get(entries, nk[].k_moe_weights_put) is not None:
             var t = snapshot.count // d
             if t > 2147483647 // e or t > 2147483647 // k:
                 raise Error("ValueError: MoEBlock routing output exceeds signed 32-bit indexing")
@@ -292,7 +306,7 @@ def _run(fields: PythonObject, values: PythonObject, context: PythonObject, back
             var logits = PythonObject(None)
             var sel = PythonObject(None)
             var w = PythonObject(None)
-            var fused = py_get(entries, "moe_forward_dev_alloc")
+            var fused = py_get(entries, nk[].k_moe_forward_dev_alloc)
             if fused is not None:
                 # Lane ne3-c-blocks-embedding (row N163): the four outputs are
                 # allocated inside the forward's one crossing instead of four
@@ -301,7 +315,7 @@ def _run(fields: PythonObject, values: PythonObject, context: PythonObject, back
                 var sizes = Python.list(0, max(1, shape_count(snapshot.shape)), max(1, t * e), max(1, t * k), max(1, t * k))
                 var made = py_call_typed(fused, Python.list(snapshot.handle, 0, 0, 0, 0),
                     Python.list(t, d, f, e, k, words[4], h), sizes)
-                var module = entries["module"]
+                var module = py_item(entries, nk[].k_module)
                 y = seq_device_make(module, snapshot.shape, made[1], PythonObject(None), context)
                 logits = seq_device_make(module, [t, e], made[2], PythonObject(None), context)
                 sel = seq_device_make(module, [t, k], made[3], PythonObject(None), context)
@@ -311,9 +325,9 @@ def _run(fields: PythonObject, values: PythonObject, context: PythonObject, back
                 logits = _new(entries, [t, e], context)
                 sel = _new(entries, [t, k], context)
                 w = _new(entries, [t, k], context)
-                _ = py_call_typed(entries["moe_forward_dev"], Python.list(snapshot.handle, _handle(y, context),
+                _ = py_call_typed(py_item(entries, nk[].k_moe_forward_dev), Python.list(snapshot.handle, _handle(y, context),
                     _handle(logits, context), _handle(sel, context), _handle(w, context)), Python.list(t, d, f, e, k, words[4], h))
-            py_setitem(fields, "_routing", Python.list(logits, sel, w, PythonObject(None)))
+            py_setitem(fields, nk[].k__routing, Python.list(logits, sel, w, PythonObject(None)))
             _ = snapshot^
             _ = r^
             _ = gu^
@@ -327,9 +341,9 @@ def _run(fields: PythonObject, values: PythonObject, context: PythonObject, back
     var t = input.count // d
     if t > 2147483647 // e or t > 2147483647 // k:
         raise Error("ValueError: MoEBlock routing output exceeds signed 32-bit indexing")
-    var entries = seq_binding(py_get(fields, "numeric_mode"), context, PythonObject(None))
+    var entries = seq_binding(py_get(fields, nk[].k_numeric_mode), context, PythonObject(None))
     var ip = Python.list(t, d, f, e, k, words[4])
-    if py_get(entries, "moe_weights_put") is not None:
+    if py_get(entries, nk[].k_moe_weights_put) is not None:
         _ = py_call(ip.append, _weights(fields, entries, words, r, gu, dn, context))
     var y = _array(input.shape, context)
     var logits = _array([t, e], context)
@@ -337,7 +351,7 @@ def _run(fields: PythonObject, values: PythonObject, context: PythonObject, back
     var w = _array([t, k], context)
     var result = y
     if backward:
-        if py_get(entries, "moe_backward") is None:
+        if py_get(entries, nk[].k_moe_backward) is None:
             raise Error("NotImplementedError: MoEBlock: this install has no backward pass")
         var gradient = MoEBuffer(_host_input(values[1], context), context)
         if not same_shape(gradient.shape, input.shape):
@@ -346,7 +360,7 @@ def _run(fields: PythonObject, values: PythonObject, context: PythonObject, back
         var dr = _array(_shapes(words, 0), context)
         var dgu = _array(_shapes(words, 1), context)
         var ddn = _array(_shapes(words, 2), context)
-        _ = py_call_typed(entries["moe_backward"], Python.list(input.address, r.address, gu.address, dn.address,
+        _ = py_call_typed(py_item(entries, nk[].k_moe_backward), Python.list(input.address, r.address, gu.address, dn.address,
             gradient.address, classical_address(dx), classical_address(dr), classical_address(dgu), classical_address(ddn),
             classical_address(y), classical_address(logits), classical_address(sel), classical_address(w)), ip)
         # The native backward call also writes its forward output. Its raw
@@ -354,23 +368,24 @@ def _run(fields: PythonObject, values: PythonObject, context: PythonObject, back
         # Keep this otherwise unused output alive through the native download.
         _ = y
         _ = gradient^
-        py_setitem(fields, "router_grad_", dr)
-        py_setitem(fields, "gate_up_proj_grad_", dgu)
-        py_setitem(fields, "down_proj_grad_", ddn)
+        py_setitem(fields, nk[].k_router_grad_, dr)
+        py_setitem(fields, nk[].k_gate_up_proj_grad_, dgu)
+        py_setitem(fields, nk[].k_down_proj_grad_, ddn)
         result = dx
     else:
-        _ = py_call_typed(entries["moe_forward"], Python.list(input.address, r.address, gu.address, dn.address,
+        _ = py_call_typed(py_item(entries, nk[].k_moe_forward), Python.list(input.address, r.address, gu.address, dn.address,
             classical_address(y), classical_address(logits), classical_address(sel), classical_address(w)), ip)
     _ = input^
     _ = r^
     _ = gu^
     _ = dn^
-    py_setitem(fields, "_routing", Python.list(logits, sel, w, PythonObject(None)))
+    py_setitem(fields, nk[].k__routing, Python.list(logits, sel, w, PythonObject(None)))
     return result
 
 
 def _routing(fields: PythonObject, index: Int, context: PythonObject) raises -> PythonObject:
-    var routing = py_get(fields, "_routing")
+    var nk = sequence_keys()
+    var routing = py_get(fields, nk[].k__routing)
     if routing is None:
         raise Error("AttributeError: MoEBlock: call forward first")
     if py_type(routing) is not _b().list or len(routing) != 4 or index < 0 or index > 3:
@@ -381,7 +396,7 @@ def _routing(fields: PythonObject, index: Int, context: PythonObject) raises -> 
         opt_value(routing[3], context)
         return routing[3]
     var value = routing[slot]
-    if py_type(value) is context["sequence_device_class"]:
+    if py_type(value) is py_item(context, nk[].k_sequence_device_class):
         value = _host_input(value, context)
         py_setitem(routing, slot, value)
     if index != 3:
@@ -402,6 +417,7 @@ def sequence_moe_operation(operation: String, owner: PythonObject, values: Pytho
     var fields = _owner(owner, context)
     if operation == "seqmoe_initialize":
         return _initialize(fields, values, mode, context)
+    var nk = sequence_keys()
     if operation == "seqmoe_setattr":
         var name = values[0]
         if py_type(name) is not _b().str:
@@ -412,19 +428,19 @@ def sequence_moe_operation(operation: String, owner: PythonObject, values: Pytho
             var version = _version(fields)
             _readonly(buffer.array)
             py_setitem(fields, name, _sealed(buffer.array))
-            py_setitem(fields, "_wver", PythonObject(version + 1))
+            py_setitem(fields, nk[].k__wver, PythonObject(version + 1))
         else:
             # Ordinary instance fields retain Python assignment semantics. A
             # data descriptor is refused before its setter could invoke Python.
-            var lineage = py_call(_b().type.__dict__["__mro__"].__get__, py_type(owner))
+            var lineage = py_call(py_item(_b().type.__dict__, nk[].k___mro__).__get__, py_type(owner))
             for base in range(len(lineage)):  # driver-loop: over effective class descriptor lookup
                 var namespace = _class_fields(lineage[base])
                 if not py_contains(namespace, name):
                     continue
                 var member = namespace[name]
-                var ancestry = py_call(_b().type.__dict__["__mro__"].__get__, py_type(member))
+                var ancestry = py_call(py_item(_b().type.__dict__, nk[].k___mro__).__get__, py_type(member))
                 for i in range(len(ancestry)):  # driver-loop: over native descriptor metadata
-                    if py_contains(_class_fields(ancestry[i]), "__set__") or py_contains(_class_fields(ancestry[i]), "__delete__"):
+                    if py_contains(_class_fields(ancestry[i]), nk[].k___set__) or py_contains(_class_fields(ancestry[i]), nk[].k___delete__):
                         raise Error("AttributeError: MoEBlock attribute has no native writable storage")
                 break
             py_setitem(fields, name, values[1])
@@ -444,20 +460,20 @@ def sequence_moe_operation(operation: String, owner: PythonObject, values: Pytho
     if operation == "seqmoe_selected":
         return _routing(fields, 3, context)
     if operation == "seqmoe_to_device":
-        opt_scalar(py_get(fields, "numeric_mode"), context)
-        var entries = seq_binding(py_get(fields, "numeric_mode"), context, PythonObject(None))
+        opt_scalar(py_get(fields, nk[].k_numeric_mode), context)
+        var entries = seq_binding(py_get(fields, nk[].k_numeric_mode), context, PythonObject(None))
         var value = values[0]
-        if py_type(value) is context["sequence_device_class"]:
+        if py_type(value) is py_item(context, nk[].k_sequence_device_class):
             var snapshot = MoEDevice(value, context)
-            if py_get(entries, "moe_forward_dev") is not None:
+            if py_get(entries, nk[].k_moe_forward_dev) is not None:
                 return value
             value = snapshot.host(context)
         var input = MoEBuffer(value, context, False, False, True)
-        if py_get(entries, "moe_forward_dev") is None or Bool(py=context["sequence_device_io_off"]):
+        if py_get(entries, nk[].k_moe_forward_dev) is None or Bool(py=py_item(context, nk[].k_sequence_device_io_off)):
             return input.array
         var result = _new(entries, input.shape, context)
         if input.count > 0:
-            _ = py_call_typed(entries["seq_tensor_upload"], _handle(result, context), PythonObject(input.address), PythonObject(input.count))
+            _ = py_call_typed(py_item(entries, nk[].k_seq_tensor_upload), _handle(result, context), PythonObject(input.address), PythonObject(input.count))
         _ = input^
         return result
     raise Error("ValueError: unknown MoEBlock public operation")

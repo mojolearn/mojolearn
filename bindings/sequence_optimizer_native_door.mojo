@@ -28,6 +28,8 @@ from core.entry_table import EntryRef
 from sequence.opt_entry_abi import (
     seq_opt_ref, seq_opt_call, SO_INIT, SO_STEP, SO_LAMB_STEP, SO_ADAFACTOR_STEP, SO_STATE, SO_EXPORT, SO_IMPORT, SO_CLOSE,
 )
+from bindings.sequence_keys_unpack import sequence_keys
+from bindings.py_balanced import py_item
 
 
 def seq_key(entries: PythonObject) raises -> EntryRef:
@@ -38,14 +40,16 @@ def seq_key(entries: PythonObject) raises -> EntryRef:
     The optimizer operations run through that image's published native
     entry (sequence/opt_entry_abi.mojo), not through its Python entries
     (lane calltable-byte-lm)."""
-    var key = py_get(entries, "native_key")
+    var nk = sequence_keys()
+    var key = py_get(entries, nk[].k_native_key)
     if key is None:
         raise Error("ImportError: the sequence optimizer binding publishes no native entry table")
     return seq_opt_ref(ByteLmEntryKey(Int(py=key[0]), Int(py=key[1])))
 
 
 def seq_class(owner: PythonObject, context: PythonObject) raises -> Int:
-    var classes = context["sequence_owners"]
+    var nk = sequence_keys()
+    var classes = py_item(context, nk[].k_sequence_owners)
     for i in range(len(classes)):  # driver-loop: over exact public sequence optimizer classes
         if py_type(owner) is classes[i]:
             return i
@@ -54,18 +58,19 @@ def seq_class(owner: PythonObject, context: PythonObject) raises -> Int:
 
 def seq_binding(mode: PythonObject, context: PythonObject, binding: PythonObject) raises -> PythonObject:
     var b = native_loaded_module("builtins")
-    var bindings = context["sequence_bindings"]
+    var nk = sequence_keys()
+    var bindings = py_item(context, nk[].k_sequence_bindings)
     if binding is not None:
         for name in ["identical", "fast"]:  # driver-loop: over two compiled numeric-mode owners
             var entry = bindings[PythonObject(name)]
-            if py_type(entry) is b.dict and binding is entry["module"]:
+            if py_type(entry) is b.dict and binding is py_item(entry, nk[].k_module):
                 return entry
-        var extra = py_get(context, "sequence_extra_bindings", Python.tuple())
+        var extra = py_get(context, nk[].k_sequence_extra_bindings, Python.tuple())
         for i in range(len(extra)):  # driver-loop: fixed connected native buffer owners
-            if py_type(extra[i]) is b.dict and binding is extra[i]["module"]:
+            if py_type(extra[i]) is b.dict and binding is py_item(extra[i], nk[].k_module):
                 return extra[i]
         raise Error("TypeError: sequence device/state requires its connected native binding")
-    var selected = context["backend"]["_DEFAULT_MODE"] if mode is None else mode
+    var selected = py_item(py_item(context, nk[].k_backend), nk[].k__DEFAULT_MODE) if mode is None else mode
     opt_scalar(selected, context)
     if py_type(selected) is not b.str:
         raise Error("ValueError: numeric_mode must be fast, identical or None")
@@ -81,13 +86,15 @@ def seq_binding(mode: PythonObject, context: PythonObject, binding: PythonObject
 
 
 def seq_device_get(value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
-    if py_type(value) is not context["sequence_device_class"]:
+    var nk = sequence_keys()
+    if py_type(value) is not py_item(context, nk[].k_sequence_device_class):
         raise Error("TypeError: sequence device tensor requires its exact native owner")
-    return py_call(context["sequence_device_getters"][PythonObject(name)], value)
+    return py_call(py_item(context, nk[].k_sequence_device_getters)[PythonObject(name)], value)
 
 
 def seq_device(value: PythonObject, context: PythonObject) raises -> Bool:
-    if py_type(value) is not context["sequence_device_class"]:
+    var nk = sequence_keys()
+    if py_type(value) is not py_item(context, nk[].k_sequence_device_class):
         return False
     opt_scalar(seq_device_get(value, "h", context), context)
     _ = shape_count(device_shape(seq_device_get(value, "shape", context), context))
@@ -143,7 +150,8 @@ comptime _SEQ_LAZY_ZERO_BYTES = 1 << 20
 def seq_array(n: Int, context: PythonObject, fill: Float32 = 0.0, wide: Bool = False) raises -> PythonObject:
     if n < 0 or n > 9223372036854775807 // 8:
         raise Error("OverflowError: sequence optimizer buffer size is invalid")
-    var input = context["input_context"]
+    var nk = sequence_keys()
+    var input = py_item(context, nk[].k_input_context)
     classical_connect_numpy(input)
     var result: PythonObject
     var nbytes = n * (8 if wide else 4)
@@ -162,9 +170,9 @@ def seq_array(n: Int, context: PythonObject, fill: Float32 = 0.0, wide: Bool = F
         # granularity), so small buffers keep `classical_typed`. Size
         # reasoning only: neighbors (any parameter count above 256 Ki
         # floats, any optimizer kind) take the same route.
-        var storage = py_call(input["native_mmap_type"], PythonObject(-1), PythonObject(nbytes),
-                              input["native_mmap_private"])
-        result = py_call(input["ndarray"], Python.tuple(n), dtype=input["int64" if wide else "float32"],
+        var storage = py_call(py_item(input, nk[].k_native_mmap_type), PythonObject(-1), PythonObject(nbytes),
+                              py_item(input, nk[].k_native_mmap_private))
+        result = py_call(py_item(input, nk[].k_ndarray), Python.tuple(n), dtype=input["int64" if wide else "float32"],
                          buffer=storage)
     else:
         result = classical_typed(Python.tuple(n), "<i8" if wide else "<f4", input)
@@ -175,7 +183,8 @@ def seq_array(n: Int, context: PythonObject, fill: Float32 = 0.0, wide: Bool = F
 
 def seq_cast(value: PythonObject, context: PythonObject, target: Int = -1) raises -> PythonObject:
     opt_value(value, context)
-    var input = context["input_context"]
+    var nk = sequence_keys()
+    var input = py_item(context, nk[].k_input_context)
     classical_connect_numpy(input)
     var source = classical_input(value, input)
     var n = Int(py=source.size)
@@ -204,7 +213,8 @@ def seq_pair(value: PythonObject, context: PythonObject) raises -> PythonObject:
         if len(value) != 2:
             raise Error("ValueError: optimizer configuration requires two values")
         return Python.tuple(value[0], value[1])
-    var input = context["input_context"]
+    var nk = sequence_keys()
+    var input = py_item(context, nk[].k_input_context)
     classical_connect_numpy(input)
     var source = classical_input(value, input)
     if Int(py=source.ndim) != 1 or Int(py=source.size) != 2:
@@ -231,7 +241,8 @@ def seq_fields(owner: PythonObject, context: PythonObject) raises -> PythonObjec
             dict_keys_admit(fields)
     for name in ["numeric_mode", "lr", "n_total", "_kind", "_flags", "_fp", "beta2_decay", "d", "weight_decay", "eps", "betas", "max_grad_norm"]:  # driver-loop: over fixed native optimizer configuration fields
         opt_scalar(py_get(fields, PythonObject(name)), context)
-    opt_schedule(py_get(fields, "lr_schedule"), context)
+    var nk = sequence_keys()
+    opt_schedule(py_get(fields, nk[].k_lr_schedule), context)
     for name in ["_words", "_handles", "_state", "_af_state", "_sc", "options"]:  # driver-loop: over stored native optimizer buffer containers
         opt_value(py_get(fields, PythonObject(name)), context)
     return fields
@@ -240,29 +251,30 @@ def seq_fields(owner: PythonObject, context: PythonObject) raises -> PythonObjec
 def seq_slots(fields: PythonObject, kind: Int, context: PythonObject, mut buffer_pins: OptimizerInputOwners, padded: Bool = False) raises -> PythonObject:
     var result = Python.list()
     var b = native_loaded_module("builtins")
+    var nk = sequence_keys()
     if kind == 5:
-        var states = fields["_af_state"]
-        var params = fields["params"]
+        var states = py_item(fields, nk[].k__af_state)
+        var params = py_item(fields, nk[].k_params)
         if (py_type(states) is not b.list and py_type(states) is not b.tuple) or len(states) != len(params):
             raise Error("ValueError: Adafactor state must have one native dictionary per parameter")
         for i in range(len(states)):  # driver-loop: over factored state slots per parameter tensor
             var state = states[i]
-            if not opt_exact(py_type(state), context["mapping_types"]):
+            if not opt_exact(py_type(state), py_item(context, nk[].k_mapping_types)):
                 raise Error("TypeError: Adafactor state requires native dictionaries")
             var shape = seq_shape(params[i], context)
             var first = seq_addr(state["row_var" if len(shape) == 2 else "variance"], shape[0], context, buffer_pins)
-            var second = seq_addr(state["col_var"], shape[1], context, buffer_pins) if len(shape) == 2 else 0
+            var second = seq_addr(py_item(state, nk[].k_col_var), shape[1], context, buffer_pins) if len(shape) == 2 else 0
             _ = py_call(result.append, first)
             _ = py_call(result.append, second)
             if padded:
                 _ = py_call(result.append, 0)
     else:
-        var states = fields["_state"]
+        var states = py_item(fields, nk[].k__state)
         var expected = 2 if kind == 6 else 3
         if (py_type(states) is not b.list and py_type(states) is not b.tuple) or len(states) != expected:
             raise Error("ValueError: sequence optimizer state slot count changed")
         for i in range(expected):  # driver-loop: over two or three optimizer state slots
-            _ = py_call(result.append, seq_addr(states[i], Int(py=fields["n_total"]), context, buffer_pins))
+            _ = py_call(result.append, seq_addr(states[i], Int(py=py_item(fields, nk[].k_n_total)), context, buffer_pins))
         if padded and expected == 2:
             _ = py_call(result.append, 0)
     return result
@@ -312,13 +324,14 @@ def seq_construct(owner: PythonObject, values: PythonObject, mode: PythonObject,
         var device = False
         var sizes = List[Int]()
         var shapes = Python.list()
+        var nk = sequence_keys()
         for i in range(len(params)):  # driver-loop: over public parameter buffer owners
             var dev = seq_device(params[i], context)
             if i == 0:
                 device = dev
                 if dev:
                     selected = seq_binding(mode, context, seq_device_get(params[i], "b", context))
-            if dev != device or (dev and seq_device_get(params[i], "b", context) is not selected["module"]):
+            if dev != device or (dev and seq_device_get(params[i], "b", context) is not py_item(selected, nk[].k_module)):
                 raise Error("TypeError: sequence params must all use host buffers or one native device binding")
             var shape = seq_shape(params[i], context)
             var n = shape_count(shape)
@@ -338,83 +351,83 @@ def seq_construct(owner: PythonObject, values: PythonObject, mode: PythonObject,
             for suffix in ["_resident_open", "_resident_step", "_resident_step_dev"]:  # driver-loop: over required resident optimizer entries
                 if py_get(selected, PythonObject(prefix + suffix)) is None:
                     raise Error("RuntimeError: this binding does not support resident optimizer parameters")
-        py_setitem(fields, "params", params)
-        py_setitem(fields, "numeric_mode", mode)
-        py_setitem(fields, "_dev_b", selected["module"] if device else PythonObject(None))
-        py_setitem(fields, "_res_b", PythonObject(None))
-        py_setitem(fields, "lr", _seq_real(values[1], "lr"))
+        py_setitem(fields, nk[].k_params, params)
+        py_setitem(fields, nk[].k_numeric_mode, mode)
+        py_setitem(fields, nk[].k__dev_b, py_item(selected, nk[].k_module) if device else PythonObject(None))
+        py_setitem(fields, nk[].k__res_b, PythonObject(None))
+        py_setitem(fields, nk[].k_lr, _seq_real(values[1], "lr"))
         var extra = List[Int]()
         var fp = Python.list(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
         var flags = 0
         if kind < 5:
-            py_setitem(fields, "options", py_call(b.dict, options))
-            opt_scalar(options["weight_decay"], context)
-            py_setitem(fp, PythonObject(3), _seq_real(options["weight_decay"], "weight_decay"))
+            py_setitem(fields, nk[].k_options, py_call(b.dict, options))
+            opt_scalar(py_item(options, nk[].k_weight_decay), context)
+            py_setitem(fp, PythonObject(3), _seq_real(py_item(options, nk[].k_weight_decay), "weight_decay"))
             if kind == 0 or kind == 1:
                 for name in ["eps", "alpha" if kind == 0 else "lr_decay", "momentum" if kind == 0 else "initial_accumulator_value"]:  # driver-loop: over RMSprop or Adagrad scalar options
                     opt_scalar(options[PythonObject(name)], context)
-                py_setitem(fp, PythonObject(2), _seq_real(options["eps"], "eps"))
+                py_setitem(fp, PythonObject(2), _seq_real(py_item(options, nk[].k_eps), "eps"))
                 py_setitem(fp, PythonObject(1 if kind == 0 else 0), _seq_real(options["alpha" if kind == 0 else "lr_decay"], String("alpha" if kind == 0 else "lr_decay")))
                 py_setitem(fp, PythonObject(4 if kind == 0 else 5), _seq_real(options["momentum" if kind == 0 else "initial_accumulator_value"], String("momentum" if kind == 0 else "initial_accumulator_value")))
                 if kind == 0:
-                    opt_scalar(options["centered"], context)
-                    flags = Int(Bool(py=options["centered"]))
+                    opt_scalar(py_item(options, nk[].k_centered), context)
+                    flags = Int(Bool(py=py_item(options, nk[].k_centered)))
             else:
-                var betas = seq_pair(options["betas"], context)
+                var betas = seq_pair(py_item(options, nk[].k_betas), context)
                 py_setitem(fp, PythonObject(0), _seq_real(betas[0], "betas"))
                 py_setitem(fp, PythonObject(1), _seq_real(betas[1], "betas"))
                 if kind == 3 and not (0.0 <= Float64(py=fp[0]) < 1.0 and 0.0 <= Float64(py=fp[1]) < 1.0):
                     raise Error("ValueError: Adamax betas must lie in [0, 1)")
                 if kind != 2:
-                    opt_scalar(options["eps"], context)
-                    py_setitem(fp, PythonObject(2), _seq_real(options["eps"], "eps"))
+                    opt_scalar(py_item(options, nk[].k_eps), context)
+                    py_setitem(fp, PythonObject(2), _seq_real(py_item(options, nk[].k_eps), "eps"))
                 if kind == 4:
-                    opt_scalar(options["momentum_decay"], context)
-                    opt_scalar(options["decoupled_weight_decay"], context)
-                    py_setitem(fp, PythonObject(4), _seq_real(options["momentum_decay"], "momentum_decay"))
+                    opt_scalar(py_item(options, nk[].k_momentum_decay), context)
+                    opt_scalar(py_item(options, nk[].k_decoupled_weight_decay), context)
+                    py_setitem(fp, PythonObject(4), _seq_real(py_item(options, nk[].k_momentum_decay), "momentum_decay"))
                     if Float64(py=fp[4]) < 0:
                         raise Error("ValueError: NAdam momentum_decay must be >= 0")
-                    flags = Int(Bool(py=options["decoupled_weight_decay"]))
-            py_setitem(fields, "_kind", PythonObject(3 if kind == 0 else (4 if kind == 1 else kind + 5)))
-            py_setitem(fields, "_flags", PythonObject(flags))
-            py_setitem(fields, "_fp", fp)
+                    flags = Int(Bool(py=py_item(options, nk[].k_decoupled_weight_decay)))
+            py_setitem(fields, nk[].k__kind, PythonObject(3 if kind == 0 else (4 if kind == 1 else kind + 5)))
+            py_setitem(fields, nk[].k__flags, PythonObject(flags))
+            py_setitem(fields, nk[].k__fp, fp)
         elif kind == 5:
             for name in ["beta2_decay", "d", "weight_decay", "maximize"]:  # driver-loop: over Adafactor scalar options
                 opt_scalar(options[PythonObject(name)], context)
-            if Bool(py=options["maximize"]):
+            if Bool(py=py_item(options, nk[].k_maximize)):
                 raise Error("NotImplementedError: Adafactor maximize is not implemented")
-            var beta2_decay = Float64(py=_seq_real(options["beta2_decay"], "beta2_decay"))
-            var d = Float64(py=_seq_real(options["d"], "d"))
-            var decay = Float64(py=_seq_real(options["weight_decay"], "weight_decay"))
-            if beta2_decay > 0 or d < 1 or Float64(py=fields["lr"]) < 0 or decay < 0:
+            var beta2_decay = Float64(py=_seq_real(py_item(options, nk[].k_beta2_decay), "beta2_decay"))
+            var d = Float64(py=_seq_real(py_item(options, nk[].k_d), "d"))
+            var decay = Float64(py=_seq_real(py_item(options, nk[].k_weight_decay), "weight_decay"))
+            if beta2_decay > 0 or d < 1 or Float64(py=py_item(fields, nk[].k_lr)) < 0 or decay < 0:
                 raise Error("ValueError: Adafactor requires beta2_decay <= 0, d >= 1 and nonnegative lr/weight_decay")
             for name in ["beta2_decay", "d", "weight_decay"]:  # driver-loop: over stored Adafactor scalar options
                 py_setitem(fields, PythonObject(name), _seq_real(options[PythonObject(name)], String(name)))
-            var eps = seq_pair(options["eps"], context)
-            py_setitem(fields, "eps", Python.tuple(1.1920928955078125e-7 if eps[0] is None else Float64(py=_seq_real(eps[0], "eps")), _seq_real(eps[1], "eps")))
+            var eps = seq_pair(py_item(options, nk[].k_eps), context)
+            py_setitem(fields, nk[].k_eps, Python.tuple(1.1920928955078125e-7 if eps[0] is None else Float64(py=_seq_real(eps[0], "eps")), _seq_real(eps[1], "eps")))
         else:
             for name in ["eps", "weight_decay", "max_grad_norm", "trust_clip", "always_adapt", "grad_averaging", "bias_correction"]:  # driver-loop: over LAMB scalar options
                 opt_scalar(options[PythonObject(name)], context)
-            var betas = seq_pair(options["betas"], context)
+            var betas = seq_pair(py_item(options, nk[].k_betas), context)
             var first = Float64(py=_seq_real(betas[0], "betas"))
             var second = Float64(py=_seq_real(betas[1], "betas"))
             if not (0.0 <= first < 1.0 and 0.0 <= second < 1.0):
                 raise Error("ValueError: LAMB betas must lie in [0, 1)")
-            py_setitem(fields, "betas", Python.tuple(first, second))
+            py_setitem(fields, nk[].k_betas, Python.tuple(first, second))
             for name in ["eps", "weight_decay"]:  # driver-loop: over LAMB floating-point configuration
                 py_setitem(fields, PythonObject(name), _seq_real(options[PythonObject(name)], String(name)))
-            py_setitem(fields, "max_grad_norm", PythonObject(None) if options["max_grad_norm"] is None else _seq_real(options["max_grad_norm"], "max_grad_norm"))
+            py_setitem(fields, nk[].k_max_grad_norm, PythonObject(None) if py_item(options, nk[].k_max_grad_norm) is None else _seq_real(py_item(options, nk[].k_max_grad_norm), "max_grad_norm"))
             for name in ["trust_clip", "always_adapt", "grad_averaging", "bias_correction"]:  # driver-loop: over LAMB native flag words
                 extra.append(Int(Bool(py=options[PythonObject(name)])))
-            extra.append(Int(options["max_grad_norm"] is not None))
+            extra.append(Int(py_item(options, nk[].k_max_grad_norm) is not None))
         var words = seq_array(9, context, wide=True)
         var nh = len(params) if kind == 5 else 1
         var handles = seq_array(nh, context, wide=True)
         var hp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(handles)))
         for i in range(nh):  # driver-loop: over per-parameter resident handle metadata
             hp[i] = -1
-        py_setitem(fields, "_words", words)
-        py_setitem(fields, "_handles", handles)
+        py_setitem(fields, nk[].k__words, words)
+        py_setitem(fields, nk[].k__handles, handles)
         # p = [words, ip...] (seq_optimizer_init's words and ip)
         var init: List[Int] = [Int(py=classical_address(words)), 2 if kind == 5 else (1 if kind == 6 else 0), len(params)]
         init.extend(sizes^)
@@ -422,14 +435,14 @@ def seq_construct(owner: PythonObject, values: PythonObject, mode: PythonObject,
         var n = seq_opt_call(seq_key(selected), SO_INIT, List[Int](), init, List[Float64]())
         if kind < 5 and n < 1:
             raise Error("ValueError: sequence optimizer has no parameters")
-        py_setitem(fields, "n_total", PythonObject(n))
+        py_setitem(fields, nk[].k_n_total, PythonObject(n))
         var states = Python.list()
         if kind == 5:
             for i in range(len(params)):  # driver-loop: over Adafactor moment buffer owners per parameter
                 var shape = shapes[i]
                 var state = Python.dict(row_var=seq_array(Int(py=shape[0]), context), col_var=seq_array(Int(py=shape[1]), context)) if len(shape) == 2 else Python.dict(variance=seq_array(Int(py=shape[0]), context))
                 _ = py_call(states.append, state)
-            py_setitem(fields, "_af_state", states)
+            py_setitem(fields, nk[].k__af_state, states)
         else:
             for i in range(2 if kind == 6 else 3):  # driver-loop: over optimizer moment buffer owners
                 # lane fb-optim (2026-11-17): Adagrad's accumulator is its
@@ -441,8 +454,8 @@ def seq_construct(owner: PythonObject, values: PythonObject, mode: PythonObject,
                 # memset array. The value 0 (the default) keeps the untouched
                 # zero slot, as 0.8.55 (`if init: fill`).
                 _ = py_call(states.append, seq_array(n, context, Float32(Float64(py=fp[5]))) if kind == 1 and i == 1 else seq_array(n, context))
-            py_setitem(fields, "_state", states)
-            py_setitem(fields, "_sc", seq_array(2 if kind == 6 else 3, context, 1.0))
+            py_setitem(fields, nk[].k__state, states)
+            py_setitem(fields, nk[].k__sc, seq_array(2 if kind == 6 else 3, context, 1.0))
         return PythonObject(None)
     finally:
         _ = buffer_pins^
@@ -458,7 +471,8 @@ def seq_step(owner: PythonObject, fields: PythonObject, params: PythonObject, gr
         var grads = seq_list(gradients, context)
         if len(grads) != len(params):
             raise Error("ValueError: sequence optimizer needs one gradient per parameter")
-        var dev = py_get(fields, "_dev_b") is not None
+        var nk = sequence_keys()
+        var dev = py_get(fields, nk[].k__dev_b) is not None
         # Every request List is sized once for the step from the parameter
         # count J (no growth reallocation per appended word): addrs holds the
         # J parameters, J gradients and up to 2J + 1 slot words; ip holds the
@@ -472,7 +486,7 @@ def seq_step(owner: PythonObject, fields: PythonObject, params: PythonObject, gr
         var cols = List[Int](capacity=count if kind == 5 else 0)
         var keep = Python.list()
         var total = 0
-        var input = context["input_context"]
+        var input = py_item(context, nk[].k_input_context)
         classical_connect_numpy(input)
         for i in range(len(params)):  # driver-loop: over parameter/gradient buffer owners
             var parameter = params[i]
@@ -491,14 +505,14 @@ def seq_step(owner: PythonObject, fields: PythonObject, params: PythonObject, gr
             if parameter_device != dev:
                 raise Error("TypeError: sequence parameter host/device ownership changed")
             if dev:
-                if seq_device_get(parameter, "b", context) is not entries["module"]:
+                if seq_device_get(parameter, "b", context) is not py_item(entries, nk[].k_module):
                     raise Error("TypeError: sequence parameter binding ownership changed")
                 addrs.append(Int(py=seq_device_get(parameter, "h", context)))
             else:
                 addrs.append(seq_addr(parameter, n, context, buffer_pins))
             var grad = grads[i]
             if seq_device(grad, context):
-                if not dev or seq_device_get(grad, "b", context) is not entries["module"] or not same_shape(seq_shape_known(grad, True, context), shape):
+                if not dev or seq_device_get(grad, "b", context) is not py_item(entries, nk[].k_module) or not same_shape(seq_shape_known(grad, True, context), shape):
                     raise Error("ValueError: device gradient must match its parameter shape and binding")
                 ga.append(Int(py=seq_device_get(grad, "h", context)))
                 kinds.append(0)
@@ -516,7 +530,7 @@ def seq_step(owner: PythonObject, fields: PythonObject, params: PythonObject, gr
                 ga.append(Int(py=classical_address(prepared)))
                 kinds.append(1 if dev else 0)
                 _ = py_call(keep.append, prepared)
-        if total != Int(py=fields["n_total"]):
+        if total != Int(py=py_item(fields, nk[].k_n_total)):
             raise Error("ValueError: sequence parameter size changed after construction")
         addrs.extend(ga^)
         # p = [words, handles, ip...] with ip = [J, dev, kinds.., sizes.., (rows.., cols.. | kind, flags)]
@@ -538,34 +552,34 @@ def seq_step(owner: PythonObject, fields: PythonObject, params: PythonObject, gr
         else:
             for i in range(len(slots)):  # driver-loop: over two or three optimizer state slot addresses
                 addrs.append(Int(py=slots[i]))
-            addrs.append(seq_addr(fields["_sc"], 2 if kind == 6 else 3, context, buffer_pins))
+            addrs.append(seq_addr(py_item(fields, nk[].k__sc), 2 if kind == 6 else 3, context, buffer_pins))
             if kind < 5:
-                ip.append(Int(py=fields["_kind"]))
-                ip.append(Int(py=fields["_flags"]))
-        var schedule = py_get(fields, "lr_schedule")
+                ip.append(Int(py=py_item(fields, nk[].k__kind)))
+                ip.append(Int(py=py_item(fields, nk[].k__flags)))
+        var schedule = py_get(fields, nk[].k_lr_schedule)
         if schedule is not None:
             var t = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=words)[0]
-            py_setitem(fields, "lr", schedule_operation("schedule_at", schedule, Python.tuple(Int(t) + 1), context))
+            py_setitem(fields, nk[].k_lr, schedule_operation("schedule_at", schedule, Python.tuple(Int(t) + 1), context))
         # fp: the same Float64 conversion of each value the Python entry made
         var fp = List[Float64](capacity=7)  # lr and at most six optimizer scalars
-        fp.append(Float64(py=fields["lr"]))
+        fp.append(Float64(py=py_item(fields, nk[].k_lr)))
         if kind < 5:
-            var stored = fields["_fp"]
+            var stored = py_item(fields, nk[].k__fp)
             for i in range(len(stored)):  # small-loop(the six element-wise optimizer scalars)
                 fp.append(Float64(py=stored[i]))
         elif kind == 5:
-            fp.append(Float64(py=fields["beta2_decay"]))
-            fp.append(Float64(py=fields["eps"][0]))
-            fp.append(Float64(py=fields["eps"][1]))
-            fp.append(Float64(py=fields["d"]))
-            fp.append(Float64(py=fields["weight_decay"]))
+            fp.append(Float64(py=py_item(fields, nk[].k_beta2_decay)))
+            fp.append(Float64(py=py_item(fields, nk[].k_eps)[0]))
+            fp.append(Float64(py=py_item(fields, nk[].k_eps)[1]))
+            fp.append(Float64(py=py_item(fields, nk[].k_d)))
+            fp.append(Float64(py=py_item(fields, nk[].k_weight_decay)))
         else:
-            fp.append(Float64(py=fields["betas"][0]))
-            fp.append(Float64(py=fields["betas"][1]))
-            fp.append(Float64(py=fields["eps"]))
-            fp.append(Float64(py=fields["weight_decay"]))
-            fp.append(Float64(1.0) if fields["max_grad_norm"] is None else Float64(py=fields["max_grad_norm"]))
-        py_setitem(fields, "_res_b", entries["module"])
+            fp.append(Float64(py=py_item(fields, nk[].k_betas)[0]))
+            fp.append(Float64(py=py_item(fields, nk[].k_betas)[1]))
+            fp.append(Float64(py=py_item(fields, nk[].k_eps)))
+            fp.append(Float64(py=py_item(fields, nk[].k_weight_decay)))
+            fp.append(Float64(1.0) if py_item(fields, nk[].k_max_grad_norm) is None else Float64(py=py_item(fields, nk[].k_max_grad_norm)))
+        py_setitem(fields, nk[].k__res_b, py_item(entries, nk[].k_module))
         _ = seq_opt_call(seq_key(entries), SO_ADAFACTOR_STEP if kind == 5 else (SO_LAMB_STEP if kind == 6 else SO_STEP),
                          addrs, ip, fp)
         _ = keep^
@@ -583,6 +597,7 @@ def sequence_optimizer_operation(operation: String, owner: PythonObject, values:
             return seq_construct(owner, values, mode, context)
         var kind = seq_class(owner, context)
         var b = native_loaded_module("builtins")
+        var nk = sequence_keys()
         if operation == "seq_word" or operation == "seq_word_set":
             # One state word reads or writes only the `_words` buffer: admit the
             # owner class, its string keys and that buffer (seq_addr runs the same
@@ -596,7 +611,7 @@ def sequence_optimizer_operation(operation: String, owner: PythonObject, values:
                         raise Error("TypeError: sequence optimizer metadata requires native string keys")
                 if py_type(word_fields) is b.dict:
                     dict_keys_admit(word_fields)
-            var word_ptr = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=seq_addr(word_fields["_words"], 9, context, buffer_pins, True))
+            var word_ptr = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=seq_addr(py_item(word_fields, nk[].k__words), 9, context, buffer_pins, True))
             opt_scalar(values, context)
             var word_index = Int(py=values[0])
             if word_index < 0 or word_index >= 9:
@@ -606,15 +621,15 @@ def sequence_optimizer_operation(operation: String, owner: PythonObject, values:
                 return PythonObject(None)
             return PythonObject(word_ptr[word_index] != 0) if Bool(py=values[1]) else PythonObject(Int(word_ptr[word_index]))
         var fields = py_fields(owner) if operation == "seq_finalize" else seq_fields(owner, context)
-        if operation == "seq_finalize" and py_get(fields, "_res_b") is None:
+        if operation == "seq_finalize" and py_get(fields, nk[].k__res_b) is None:
             return PythonObject(None)
-        var entries = seq_binding(fields["numeric_mode"], context, py_get(fields, "_res_b") if py_get(fields, "_res_b") is not None else py_get(fields, "_dev_b"))
+        var entries = seq_binding(py_item(fields, nk[].k_numeric_mode), context, py_get(fields, nk[].k__res_b) if py_get(fields, nk[].k__res_b) is not None else py_get(fields, nk[].k__dev_b))
         if operation == "seq_binding":
-            return seq_binding(fields["numeric_mode"], context, py_get(fields, "_dev_b"))["module"]
-        var params = seq_list(fields["params"], context)
+            return py_item(seq_binding(py_item(fields, nk[].k_numeric_mode), context, py_get(fields, nk[].k__dev_b)), nk[].k_module)
+        var params = seq_list(py_item(fields, nk[].k_params), context)
         var nh = len(params) if kind == 5 else 1
-        var words = seq_addr(fields["_words"], 9, context, buffer_pins, True)
-        var handles = seq_addr(fields["_handles"], nh, context, buffer_pins, True)
+        var words = seq_addr(py_item(fields, nk[].k__words), 9, context, buffer_pins, True)
+        var handles = seq_addr(py_item(fields, nk[].k__handles), nh, context, buffer_pins, True)
         var w = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=words)
         if operation == "seq_word" or operation == "seq_word_set":
             opt_scalar(values, context)
@@ -631,7 +646,7 @@ def sequence_optimizer_operation(operation: String, owner: PythonObject, values:
                 _ = seq_opt_call(seq_key(entries), SO_CLOSE, List[Int](), close, List[Float64]())
             except:
                 return PythonObject(None)
-            py_setitem(fields, "_res_b", PythonObject(None))
+            py_setitem(fields, nk[].k__res_b, PythonObject(None))
             return PythonObject(None)
         if operation == "seq_resident":
             return PythonObject(w[2] >= 0)
@@ -651,8 +666,8 @@ def sequence_optimizer_operation(operation: String, owner: PythonObject, values:
             w[6] = 0
             return PythonObject(None)
         if operation == "seq_step":
-            var selected = seq_binding(fields["numeric_mode"], context, py_get(fields, "_dev_b"))
-            if w[2] >= 0 and selected["module"] is not entries["module"]:
+            var selected = seq_binding(py_item(fields, nk[].k_numeric_mode), context, py_get(fields, nk[].k__dev_b))
+            if w[2] >= 0 and py_item(selected, nk[].k_module) is not py_item(entries, nk[].k_module):
                 raise Error("ValueError: resident optimizer state must keep its owning numeric-mode binding")
             return seq_step(owner, fields, params, values[0], kind, selected, words, handles, context)
         if operation == "seq_state" or operation == "seq_slot":
@@ -672,9 +687,9 @@ def sequence_optimizer_operation(operation: String, owner: PythonObject, values:
                 raise Error("TypeError: Adafactor exposes state, without an optimizer checkpoint method")
             var slots = seq_slots(fields, kind, context, buffer_pins)
             var k = len(slots)
-            var n = Int(py=fields["n_total"])
+            var n = Int(py=py_item(fields, nk[].k_n_total))
             var sc_len = 2 if kind == 6 else 3
-            var sc_addr = seq_addr(fields["_sc"], sc_len, context, buffer_pins)
+            var sc_addr = seq_addr(py_item(fields, nk[].k__sc), sc_len, context, buffer_pins)
             var out = Python.list()
             var sc = PythonObject(None)
             var t = Int(w[0])
@@ -687,17 +702,17 @@ def sequence_optimizer_operation(operation: String, owner: PythonObject, values:
             else:
                 var state = values[0]
                 opt_value(state, context)
-                if not opt_exact(py_type(state), context["mapping_types"]):
+                if not opt_exact(py_type(state), py_item(context, nk[].k_mapping_types)):
                     raise Error("TypeError: optimizer checkpoint requires a native dictionary")
-                opt_scalar(state["t"], context)
-                opt_scalar(state["lr"], context)
-                var saved = state["state"]
+                opt_scalar(py_item(state, nk[].k_t), context)
+                opt_scalar(py_item(state, nk[].k_lr), context)
+                var saved = py_item(state, nk[].k_state)
                 if py_type(saved) is not b.list and py_type(saved) is not b.tuple:
                     raise Error("TypeError: checkpoint state requires a native list or tuple")
                 for i in range(min(k, len(saved))):  # driver-loop: over checkpoint source buffer owners
                     _ = py_call(out.append, seq_cast(saved[i], context, n))
-                t = Int(py=py_call(b.int, state["t"]))
-                var scalar_state = py_get(state, "scalars")
+                t = Int(py=py_call(b.int, py_item(state, nk[].k_t)))
+                var scalar_state = py_get(state, nk[].k_scalars)
                 sc_given = scalar_state is not None
                 if sc_given:
                     if (py_type(scalar_state) is not b.list and py_type(scalar_state) is not b.tuple) or len(scalar_state) != 2:
@@ -706,8 +721,8 @@ def sequence_optimizer_operation(operation: String, owner: PythonObject, values:
                     sc_t = Int(py=py_call(b.int, scalar_state[0]))
                     sc = seq_cast(scalar_state[1], context, sc_len)
                 else:
-                    sc = fields["_sc"]
-                py_setitem(fields, "lr", py_call(b.float, state["lr"]))
+                    sc = py_item(fields, nk[].k__sc)
+                py_setitem(fields, nk[].k_lr, py_call(b.float, py_item(state, nk[].k_lr)))
             var addrs = List[Int]()
             for i in range(len(slots)):  # driver-loop: over optimizer state slot addresses
                 addrs.append(Int(py=slots[i]))
@@ -722,7 +737,7 @@ def sequence_optimizer_operation(operation: String, owner: PythonObject, values:
             _ = sc
             if operation == "seq_import":
                 return owner
-            return Python.dict(t=Int(w[0]), lr=fields["lr"], state=out, options=py_call(b.dict, py_get(fields, "options", Python.dict())), scalars=Python.tuple(Int(w[1]), sc))
+            return Python.dict(t=Int(w[0]), lr=py_item(fields, nk[].k_lr), state=out, options=py_call(b.dict, py_get(fields, nk[].k_options, Python.dict())), scalars=Python.tuple(Int(w[1]), sc))
         raise Error("TypeError: unknown sequence optimizer native operation")
     finally:
         _ = buffer_pins^

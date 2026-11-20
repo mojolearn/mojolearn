@@ -28,6 +28,8 @@ from providers.python.prophet_lifecycle_pyapi_pack import prophet_fields
 from providers.python.prophet_buffers_pyapi_door import prophet_source, prophet_contiguous, prophet_nanoseconds
 from providers.python.forecast_owner_pyapi_unpack import forecast_commit
 from bindings.native_owner_lifetime_door import native_release_admit
+from bindings.xseq_keys_unpack import xseq_keys
+from bindings.py_balanced import py_item
 
 comptime _P = "ProphetForecaster: "
 
@@ -46,7 +48,8 @@ def _state(original: PythonObject, context: PythonObject) raises -> PythonObject
     for i in range(len(scalars)):  # driver-loop: model scalar settings before native comparisons/conversions
         if py_contains(fields, scalars[i]):
             prophet_scalar(fields[scalars[i]], context)
-    var seasons = fields["seasonalities"]
+    var nk = xseq_keys()
+    var seasons = py_item(fields, nk[].k_seasonalities)
     if py_type(seasons) is not b.dict:
         raise Error("TypeError: seasonalities require a native dictionary")
     var keys = py_call(b.list, seasons)
@@ -68,30 +71,32 @@ def _state(original: PythonObject, context: PythonObject) raises -> PythonObject
             prophet_scalar(value, context)
             py_setitem(row, required[j], value)
         py_setitem(captured, keys[i], row)
-    py_setitem(fields, "seasonalities", captured)
+    py_setitem(fields, nk[].k_seasonalities, captured)
     return fields
 
 
 def _commit(original: PythonObject, fields: PythonObject, context: PythonObject) raises:
     var b = _b()
-    var seasons = original["seasonalities"]
-    var captured = fields["seasonalities"]
+    var nk = xseq_keys()
+    var seasons = py_item(original, nk[].k_seasonalities)
+    var captured = py_item(fields, nk[].k_seasonalities)
     # Admit every replaced owner before the first mutation. Keep both old
     # seasonality dictionaries and their existing records' public identities.
     var names = py_call(b.list, fields)
     for i in range(len(names)):  # driver-loop: preflight public fitted-state replacement
         if names[i] != "seasonalities" and py_get(original, names[i]) is not fields[names[i]]:
-            native_release_admit(py_get(original, names[i]), context["xseq_forecast_ownership"])
+            native_release_admit(py_get(original, names[i]), py_item(context, nk[].k_xseq_forecast_ownership))
     var keys = py_call(b.list, captured)
     for i in range(len(keys)):  # driver-loop: publish only automatic seasonality additions
         if not py_contains(seasons, keys[i]):
             py_setitem(seasons, keys[i], captured[keys[i]])
-    py_setitem(fields, "seasonalities", seasons)
-    forecast_commit(original, fields, context["xseq_forecast_ownership"])
+    py_setitem(fields, nk[].k_seasonalities, seasons)
+    forecast_commit(original, fields, py_item(context, nk[].k_xseq_forecast_ownership))
 
 
 def _contig(value: PythonObject, dtype: PythonObject, context: PythonObject) raises -> PythonObject:
-    return prophet_contiguous(prophet_source(value, context), dtype is context["float64"], context)
+    var nk = xseq_keys()
+    return prophet_contiguous(prophet_source(value, context), dtype is py_item(context, nk[].k_float64), context)
 
 
 def _times(source: PythonObject, context: PythonObject, mut owner: PythonObject) raises -> ProphetTimes:
@@ -114,8 +119,9 @@ def _days(source: PythonObject, key: EntryRef, context: PythonObject) raises -> 
     var src = PythonObject(None)
     var times = _times(source, context, src)
     var n = times.n
-    var days = sequential_array(Python.tuple(n), context["float64"], context)
-    var info = sequential_array(Python.tuple(3), context["float64"], context)
+    var nk = xseq_keys()
+    var days = sequential_array(Python.tuple(n), py_item(context, nk[].k_float64), context)
+    var info = sequential_array(Python.tuple(3), py_item(context, nk[].k_float64), context)
     if n:
         var days_addr = Int(py=xseq_addr(days))
         var info_addr = Int(py=xseq_addr(info))
@@ -129,18 +135,20 @@ def _days(source: PythonObject, key: EntryRef, context: PythonObject) raises -> 
 
 
 def _seasonal_rows(fields: PythonObject) raises -> PythonObject:
-    return py_call(_b().list, py_call(fields["seasonalities"].values))
+    var nk = xseq_keys()
+    return py_call(_b().list, py_call(py_item(fields, nk[].k_seasonalities).values))
 
 
 def _periods(fields: PythonObject, context: PythonObject) raises -> PythonObject:
     """The seasonal periods, float64 (max(ns, 1),) (a 1.0 when none)."""
     var rows = _seasonal_rows(fields)
     var periods = Python.list()
+    var nk = xseq_keys()
     for i in range(len(rows)):  # driver-loop: over the user seasonalities (one period each)
-        _ = py_call(periods.append, rows[i]["period"])
+        _ = py_call(periods.append, py_item(rows[i], nk[].k_period))
     if len(periods) == 0:
         _ = py_call(periods.append, 1.0)
-    return _contig(periods, context["float64"], context)
+    return _contig(periods, py_item(context, nk[].k_float64), context)
 
 
 def _features(fields: PythonObject, days: PythonObject, key: EntryRef, context: PythonObject) raises -> PythonObject:
@@ -149,14 +157,15 @@ def _features(fields: PythonObject, days: PythonObject, key: EntryRef, context: 
     var periods_a = _periods(fields, context)
     var ns = len(rows)
     var n = len(days)
-    var tsc = sequential_array(Python.tuple(n), context["float32"], context)
-    var frac = sequential_array(Python.tuple(n, max(ns, 1)), context["float32"], context)
+    var nk = xseq_keys()
+    var tsc = sequential_array(Python.tuple(n), py_item(context, nk[].k_float32), context)
+    var frac = sequential_array(Python.tuple(n, max(ns, 1)), py_item(context, nk[].k_float32), context)
     var days_addr = Int(py=xseq_addr(days))
     var periods_addr = Int(py=xseq_addr(periods_a))
     var tsc_addr = Int(py=xseq_addr(tsc))
     var frac_addr = Int(py=xseq_addr(frac))
-    var start = Float64(py=py_call(_b().float, fields["start_"]))
-    var t_scale = Float64(py=py_call(_b().float, fields["t_scale_"]))
+    var start = Float64(py=py_call(_b().float, py_item(fields, nk[].k_start_)))
+    var t_scale = Float64(py=py_call(_b().float, py_item(fields, nk[].k_t_scale_)))
     var py = Python()
     with GILReleased(py):
         prophet_run_features(key, days_addr, periods_addr, tsc_addr, frac_addr, n, ns, start, t_scale)
@@ -172,7 +181,8 @@ def _auto_setting(fields: PythonObject, name: String, arg: PythonObject) raises 
     A season the model already has is never read (the former `_auto`
     returned before decoding its setting)."""
     var b = _b()
-    if py_contains(fields["seasonalities"], name):
+    var nk = xseq_keys()
+    if py_contains(py_item(fields, nk[].k_seasonalities), name):
         return ProphetAuto(PROPHET_AUTO_OFF, 0)
     if Bool(py=py_call(b.isinstance, arg, b.str)) and String(py=arg) == "auto":
         return ProphetAuto(PROPHET_AUTO_AUTO, 0)
@@ -186,14 +196,15 @@ def _auto_setting(fields: PythonObject, name: String, arg: PythonObject) raises 
 def _seasons(fields: PythonObject) raises -> List[ProphetSeason]:
     """UNPACK of the snapshotted seasonality records, in dictionary order."""
     var b = _b()
-    var seasons = fields["seasonalities"]
+    var nk = xseq_keys()
+    var seasons = py_item(fields, nk[].k_seasonalities)
     var keys = py_call(b.list, seasons)
     var result = List[ProphetSeason]()
     for i in range(len(keys)):  # driver-loop: over the model's seasonalities (one record each)
         var spec = seasons[keys[i]]
-        result.append(ProphetSeason(String(py=keys[i]), Float64(py=py_call(b.float, spec["period"])),
-                                    Int(py=py_call(b.int, spec["fourier_order"])),
-                                    Float64(py=py_call(b.float, spec["prior_scale"]))))
+        result.append(ProphetSeason(String(py=keys[i]), Float64(py=py_call(b.float, py_item(spec, nk[].k_period))),
+                                    Int(py=py_call(b.int, py_item(spec, nk[].k_fourier_order))),
+                                    Float64(py=py_call(b.float, py_item(spec, nk[].k_prior_scale)))))
     return result^
 
 
@@ -215,11 +226,12 @@ def _orders(fields: PythonObject, context: PythonObject) raises -> PythonObject:
     none): (orders_, count)."""
     var rows = _seasonal_rows(fields)
     var orders = Python.list()
+    var nk = xseq_keys()
     for i in range(len(rows)):  # driver-loop: over the user seasonalities (one order each)
-        _ = py_call(orders.append, rows[i]["fourier_order"])
+        _ = py_call(orders.append, py_item(rows[i], nk[].k_fourier_order))
     if len(orders) == 0:
-        return Python.tuple(sequential_array(Python.tuple(1), context["float32"], context), 0)
-    return Python.tuple(_contig(orders, context["float32"], context), len(orders))
+        return Python.tuple(sequential_array(Python.tuple(1), py_item(context, nk[].k_float32), context), 0)
+    return Python.tuple(_contig(orders, py_item(context, nk[].k_float32), context), len(orders))
 
 
 def prophet_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -233,7 +245,8 @@ def prophet_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
     var t_owner = PythonObject(None)
     var t = _times(args[0], context, t_owner)
     var y = prophet_source(args[1], context)
-    var y_float64 = Bool(py=y.dtype == context["float64"])
+    var nk = xseq_keys()
+    var y_float64 = Bool(py=y.dtype == py_item(context, nk[].k_float64))
     var rank = Int(py=y.ndim)
     var one = rank == 1
     var Y = PythonObject(None)
@@ -250,68 +263,68 @@ def prophet_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
             # call-table: base helper
             finite = Int(py=py_call(xseq_base(context, "all_finite_f32"), xseq_addr(Y), Y.size)) == 1
     var cp_owner = PythonObject(None)
-    var has_cp = fields["changepoints"] is not None
+    var has_cp = py_item(fields, nk[].k_changepoints) is not None
     var cp_times = ProphetTimes(0, 0, False)
     var changepoint_range = 0.0
     var n_changepoints = 0
     if has_cp:
-        cp_times = _times(fields["changepoints"], context, cp_owner)
+        cp_times = _times(py_item(fields, nk[].k_changepoints), context, cp_owner)
     else:
-        changepoint_range = Float64(py=fields["changepoint_range"])
-        n_changepoints = Int(py=fields["n_changepoints"])
+        changepoint_range = Float64(py=py_item(fields, nk[].k_changepoint_range))
+        n_changepoints = Int(py=py_item(fields, nk[].k_n_changepoints))
     var fit_input = ProphetFitInput(
         t.copy(), y_float64, rank, N, finite, _seasons(fields),
-        _auto_setting(fields, "yearly", fields["yearly_seasonality"]),
-        _auto_setting(fields, "weekly", fields["weekly_seasonality"]),
-        _auto_setting(fields, "daily", fields["daily_seasonality"]),
-        Float64(py=py_call(b.float, fields["seasonality_prior_scale"])), has_cp, cp_times.copy(), changepoint_range,
+        _auto_setting(fields, "yearly", py_item(fields, nk[].k_yearly_seasonality)),
+        _auto_setting(fields, "weekly", py_item(fields, nk[].k_weekly_seasonality)),
+        _auto_setting(fields, "daily", py_item(fields, nk[].k_daily_seasonality)),
+        Float64(py=py_call(b.float, py_item(fields, nk[].k_seasonality_prior_scale))), has_cp, cp_times.copy(), changepoint_range,
         n_changepoints)
     var plan = _prepare(key, fit_input)
     _ = t_owner  # keep the Python objects alive through the native call above
     _ = cp_owner
     _ = Y
-    py_setitem(fields, "_one", one)
+    py_setitem(fields, nk[].k__one, one)
     # PACK: the automatic seasonalities this fit added (published by _commit)
-    var seasons = fields["seasonalities"]
+    var seasons = py_item(fields, nk[].k_seasonalities)
     for i in range(len(plan.seasons) - plan.n_added, len(plan.seasons)):  # driver-loop: over the automatic seasonality additions (at most three)
         var spec = b.dict()
-        py_setitem(spec, "period", plan.seasons[i].period)
-        py_setitem(spec, "fourier_order", plan.seasons[i].fourier_order)
-        py_setitem(spec, "prior_scale", fields["seasonality_prior_scale"])
+        py_setitem(spec, nk[].k_period, plan.seasons[i].period)
+        py_setitem(spec, nk[].k_fourier_order, plan.seasons[i].fourier_order)
+        py_setitem(spec, nk[].k_prior_scale, py_item(fields, nk[].k_seasonality_prior_scale))
         py_setitem(seasons, plan.seasons[i].name, spec)
-    py_setitem(fields, "start_", plan.start)
-    py_setitem(fields, "t_scale_", plan.t_scale)
-    var cpts = sequential_array(Python.tuple(plan.s), context["float32"], context)
+    py_setitem(fields, nk[].k_start_, plan.start)
+    py_setitem(fields, nk[].k_t_scale_, plan.t_scale)
+    var cpts = sequential_array(Python.tuple(plan.s), py_item(context, nk[].k_float32), context)
     prophet_run_copy_changepoints(plan, Int(py=xseq_addr(cpts)) if plan.s else 0)
-    py_setitem(fields, "changepoints_t_", cpts)
+    py_setitem(fields, nk[].k_changepoints_t_, cpts)
     var nh = 0
-    var H = sequential_array(Python.tuple(N, 1), context["float32"], context)
+    var H = sequential_array(Python.tuple(N, 1), py_item(context, nk[].k_float32), context)
     if args[2] is not None:
         var holidays = prophet_source(args[2], context)
         H = py_call(prophet_contiguous(holidays, False, context).reshape, N, -1)
         nh = Int(py=H.shape[1])
-    py_setitem(fields, "_nh", nh)
+    py_setitem(fields, nk[].k__nh, nh)
     var K = prophet_run_prior_count(plan, nh)
-    py_setitem(fields, "_K", K)
+    py_setitem(fields, nk[].k__K, K)
     var P = prophet_run_parameter_count(plan.s, K)
-    var params = sequential_array(Python.tuple(B, P), context["float32"], context)
-    var info_out = sequential_array(Python.tuple(B, 4), context["float32"], context)
-    var multiplicative = String(py=fields["seasonality_mode"]) == "multiplicative"
-    var holidays_prior_scale = Float64(py=py_call(b.float, fields["holidays_prior_scale"])) if nh > 0 else 0.0
+    var params = sequential_array(Python.tuple(B, P), py_item(context, nk[].k_float32), context)
+    var info_out = sequential_array(Python.tuple(B, 4), py_item(context, nk[].k_float32), context)
+    var multiplicative = String(py=py_item(fields, nk[].k_seasonality_mode)) == "multiplicative"
+    var holidays_prior_scale = Float64(py=py_call(b.float, py_item(fields, nk[].k_holidays_prior_scale))) if nh > 0 else 0.0
     _fit_plan(key, plan, Int(py=xseq_addr(Y)), B, Int(py=xseq_addr(H)), nh, holidays_prior_scale,
-              Int(py=xseq_addr(params)), Int(py=xseq_addr(info_out)), multiplicative, Int(py=fields["max_iter"]),
-              Float64(py=fields["changepoint_prior_scale"]))
+              Int(py=xseq_addr(params)), Int(py=xseq_addr(info_out)), multiplicative, Int(py=py_item(fields, nk[].k_max_iter)),
+              Float64(py=py_item(fields, nk[].k_changepoint_prior_scale)))
     _ = H  # keep the Python objects alive through the native call above
     _ = Y
     _ = info_out
     _ = params
-    py_setitem(fields, "params_", params)
-    py_setitem(fields, "info_", info_out)
+    py_setitem(fields, nk[].k_params_, params)
+    py_setitem(fields, nk[].k_info_, info_out)
     # diagnostics from info_ (y_scale, objective, iterations, 0): views only
-    py_setitem(fields, "objective_", info_out.__getitem__(Python.tuple(py_call(b.slice, PythonObject(None)), 1)))
-    py_setitem(fields, "n_iter_", xseq_column_i64(info_out, B, 4, 2, context))
+    py_setitem(fields, nk[].k_objective_, info_out.__getitem__(Python.tuple(py_call(b.slice, PythonObject(None)), 1)))
+    py_setitem(fields, nk[].k_n_iter_, xseq_column_i64(info_out, B, 4, 2, context))
     # fit bookkeeping of the former `_mode` fit wrapper, committed with the state
-    py_setitem(fields, "_mojolearn_fitted", PythonObject(True))
+    py_setitem(fields, nk[].k__mojolearn_fitted, PythonObject(True))
     _commit(original, fields, context)
     return model
 
@@ -319,10 +332,11 @@ def prophet_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
 def prophet_predict(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     var b = _b()
     # NotFittedError, as the former `_mode` predict guard raised it
-    classical_require_fitted(model, False, "predict", context["xseq_lifecycle_context"])
+    var nk = xseq_keys()
+    classical_require_fitted(model, False, "predict", py_item(context, nk[].k_xseq_lifecycle_context))
     var original = prophet_fields(model, context)
     var fields = _state(original, context)
-    if not py_contains(fields, "params_") or not py_contains(fields, "info_"):
+    if not py_contains(fields, nk[].k_params_) or not py_contains(fields, nk[].k_info_):
         raise Error("NotFittedError: This " + String(py_type(model).__name__)
                     + " instance is not fitted yet. Call 'fit' with appropriate arguments before using predict.")
     var stored = Python.tuple("params_", "info_", "changepoints_t_")
@@ -330,8 +344,8 @@ def prophet_predict(model: PythonObject, args: PythonObject, context: PythonObje
         var value = prophet_source(fields[stored[i]], context)
         prophet_run_check_stored_dtype(Int(py=value.dtype.num))
         py_setitem(fields, stored[i], prophet_contiguous(value, False, context))
-    prophet_run_check_ranks(Int(py=fields["params_"].ndim), Int(py=fields["info_"].ndim),
-                            Int(py=fields["changepoints_t_"].ndim))
+    prophet_run_check_ranks(Int(py=py_item(fields, nk[].k_params_).ndim), Int(py=py_item(fields, nk[].k_info_).ndim),
+                            Int(py=py_item(fields, nk[].k_changepoints_t_).ndim))
     var key = xseq_key(fields, context)
     var days = _days(args[0], key, context)[0]
     var M = len(days)
@@ -351,32 +365,32 @@ def prophet_predict(model: PythonObject, args: PythonObject, context: PythonObje
         periods_a = _periods(fields, context)
     else:
         ft = _features(fields, days, key, context)
-    var nh = Int(py=fields["_nh"])
+    var nh = Int(py=py_item(fields, nk[].k__nh))
     var H = PythonObject(None)
     if nh:
         prophet_run_check_holidays_given(nh, args[1] is not None)
-        H = py_call(_contig(args[1], context["float32"], context).reshape, M, -1)
+        H = py_call(_contig(args[1], py_item(context, nk[].k_float32), context).reshape, M, -1)
     else:
-        H = sequential_array(Python.tuple(M, 1), context["float32"], context)
+        H = sequential_array(Python.tuple(M, 1), py_item(context, nk[].k_float32), context)
     var od = _orders(fields, context)
     var feature_count = 0
     var rows = _seasonal_rows(fields)
     for i in range(len(rows)):  # driver-loop: fitted feature-schema bounds before the native feature writer
-        var order = Int(py=py_call(b.int, rows[i]["fourier_order"]))
+        var order = Int(py=py_call(b.int, py_item(rows[i], nk[].k_fourier_order)))
         prophet_run_check_order(order)
         feature_count += 2 * order
     # `_K` is read only when `nh` is not negative, as the short-circuit
     # check read it before the split.
-    prophet_run_check_schema(nh, Int(py=fields["_K"]) if nh >= 0 else 0, feature_count)
-    var params = fields["params_"]
+    prophet_run_check_schema(nh, Int(py=py_item(fields, nk[].k__K)) if nh >= 0 else 0, feature_count)
+    var params = py_item(fields, nk[].k_params_)
     var B = Int(py=params.shape[0])
-    prophet_run_check_info_shape(Int(py=fields["info_"].shape[0]), Int(py=fields["info_"].shape[1]), B)
-    prophet_run_check_params_shape(Int(py=params.shape[1]), len(fields["changepoints_t_"]), Int(py=fields["_K"]))
+    prophet_run_check_info_shape(Int(py=py_item(fields, nk[].k_info_).shape[0]), Int(py=py_item(fields, nk[].k_info_).shape[1]), B)
+    prophet_run_check_params_shape(Int(py=params.shape[1]), len(py_item(fields, nk[].k_changepoints_t_)), Int(py=py_item(fields, nk[].k__K)))
     prophet_run_check_holiday_columns(nh, Int(py=H.shape[1]) if nh != 0 else 0)
-    var yhat = sequential_array(Python.tuple(B, M), context["float32"], context)
-    var trend = sequential_array(Python.tuple(B, M), context["float32"], context)
-    var cpts = fields["changepoints_t_"]
-    var multiplicative = String(py=fields["seasonality_mode"]) == "multiplicative"
+    var yhat = sequential_array(Python.tuple(B, M), py_item(context, nk[].k_float32), context)
+    var trend = sequential_array(Python.tuple(B, M), py_item(context, nk[].k_float32), context)
+    var cpts = py_item(fields, nk[].k_changepoints_t_)
+    var multiplicative = String(py=py_item(fields, nk[].k_seasonality_mode)) == "multiplicative"
     # The feature words of the route not taken stay 0: the fused entry reads
     # days, periods, start and scale; the plain one the feature call's
     # scaled times and phases.
@@ -386,10 +400,10 @@ def prophet_predict(model: PythonObject, args: PythonObject, context: PythonObje
     var frac_addr = 0 if fused else Int(py=xseq_addr(ft[1]))
     var request = ProphetPredictRequest(
         fused, days_addr, periods_addr, tsc_addr, frac_addr, Int(py=xseq_addr(params)),
-        Int(py=xseq_addr(fields["info_"])), Int(py=xseq_addr(od[0])), Int(py=xseq_addr(H)), Int(py=xseq_addr(cpts)),
-        Int(py=xseq_addr(yhat)), Int(py=xseq_addr(trend)), B, M, Int(py=od[1]), nh, Int(py=fields["_K"]), len(cpts),
-        multiplicative, Float64(py=py_call(b.float, fields["start_"])) if fused else 0.0,
-        Float64(py=py_call(b.float, fields["t_scale_"])) if fused else 0.0)
+        Int(py=xseq_addr(py_item(fields, nk[].k_info_))), Int(py=xseq_addr(od[0])), Int(py=xseq_addr(H)), Int(py=xseq_addr(cpts)),
+        Int(py=xseq_addr(yhat)), Int(py=xseq_addr(trend)), B, M, Int(py=od[1]), nh, Int(py=py_item(fields, nk[].k__K)), len(cpts),
+        multiplicative, Float64(py=py_call(b.float, py_item(fields, nk[].k_start_))) if fused else 0.0,
+        Float64(py=py_call(b.float, py_item(fields, nk[].k_t_scale_))) if fused else 0.0)
     var py = Python()
     with GILReleased(py):
         prophet_run_predict(key, request)
@@ -403,11 +417,11 @@ def prophet_predict(model: PythonObject, args: PythonObject, context: PythonObje
     _ = trend  # keep the Python object alive through the native call above
     _ = yhat  # keep the Python object alive through the native call above
     _ = H  # keep the Python object alive through the native call above
-    var one = Bool(py=fields["_one"])
-    py_setitem(fields, "trend_", trend[0] if one else trend)
+    var one = Bool(py=py_item(fields, nk[].k__one))
+    py_setitem(fields, nk[].k_trend_, trend[0] if one else trend)
     # Snapshot copies are private to this prediction; preserve the fitted
     # parameter owners when publishing only the newly computed trend.
     var updates = Python.dict()
-    py_setitem(updates, "trend_", fields["trend_"])
-    forecast_commit(original, updates, context["xseq_forecast_ownership"])
+    py_setitem(updates, nk[].k_trend_, py_item(fields, nk[].k_trend_))
+    forecast_commit(original, updates, py_item(context, nk[].k_xseq_forecast_ownership))
     return yhat[0] if one else yhat

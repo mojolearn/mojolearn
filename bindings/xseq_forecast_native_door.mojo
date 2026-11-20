@@ -56,6 +56,8 @@ from core.admitted_input_nd import admitted_cast_nd_f32
 from bindings.admitted_sequence_door import admitted_ndarray_f32
 from bindings.native_loaded_module_door import NativeModules
 from bindings.native_prepared_owner_unpack import prepared_get, prepared_put
+from bindings.xseq_keys_unpack import xseq_keys
+from bindings.py_balanced import py_item
 
 # Theta's fitted info per model (lane ne1-a-decomp-tsa, plan section A, row
 # N031): one prepared-owner record, outside the model's __dict__ and dropped
@@ -76,7 +78,8 @@ def _series(source: PythonObject, label: String, copy: Bool, context: PythonObje
     """`(one, Y)`: `y = np.asarray(source)`, float64 refused, and `Y` the
     C-ordered float32 (batch, n_obs) view of it (one series reshaped to one
     row); `copy` keeps a private copy."""
-    var lifecycle = context["xseq_lifecycle_context"]
+    var nk = xseq_keys()
+    var lifecycle = py_item(context, nk[].k_xseq_lifecycle_context)
     classical_admit_value(source, lifecycle)
     var prepared = source
     if native_pandas_exact(source):
@@ -96,7 +99,7 @@ def _series(source: PythonObject, label: String, copy: Bool, context: PythonObje
     var cols = metadata.shape[0] if one else metadata.shape[1]
     var arr = y
     var address = metadata.source.addr
-    if not copy and metadata.f32_c() and py_type(y) is context["ndarray"]:
+    if not copy and metadata.f32_c() and py_type(y) is py_item(context, nk[].k_ndarray):
         if one:
             arr = xseq_reshape(y, Python.tuple(1, cols))
     else:
@@ -132,9 +135,10 @@ def _float_or_zero(value: PythonObject) raises -> Float64:
 
 
 def _stored_buffer(value: PythonObject, name: String, rank: Int, context: PythonObject) raises -> ArimaBuffer:
-    if py_type(value) is not context["ndarray"]:
+    var nk = xseq_keys()
+    if py_type(value) is not py_item(context, nk[].k_ndarray):
         raise Error("TypeError: stored forecast buffers require exact native ndarrays")
-    var captured = arima_buffer(value, name, context["xseq_lifecycle_context"], True)
+    var captured = arima_buffer(value, name, py_item(context, nk[].k_xseq_lifecycle_context), True)
     if len(captured.shape) != rank:
         raise Error("ValueError: stored forecast buffer has the wrong rank")
     return captured^
@@ -143,13 +147,14 @@ def _stored_buffer(value: PythonObject, name: String, rank: Int, context: Python
 def _cache_key(value: PythonObject, context: PythonObject) raises:
     var pending = Python.list(value)
     var tuple_type = py_type(Python.tuple())
+    var nk = xseq_keys()
     while len(pending):  # driver-loop: finite tuple/scalar cache configuration metadata
         var item = py_call(pending.pop)
         if py_type(item) is tuple_type:
             for i in range(len(item)):  # driver-loop: fixed cache key metadata words
                 _ = py_call(pending.append, item[i])
         else:
-            _setting(item, context["xseq_lifecycle_context"])
+            _setting(item, py_item(context, nk[].k_xseq_lifecycle_context))
 
 
 def _cache_record(value: PythonObject, context: PythonObject) raises:
@@ -187,18 +192,19 @@ def _theta_predict(model: PythonObject, fields: PythonObject, args: PythonObject
         raise Error("NotImplementedError: Theta: prediction intervals (level) are not implemented")
     var b = native_loaded_module("builtins")
     var h = xseq_int(args[0])
-    var models = context["xseq_theta_models"]
-    var chosen = py_get(fields, "model")
+    var nk = xseq_keys()
+    var models = py_item(context, nk[].k_xseq_theta_models)
+    var chosen = py_get(fields, nk[].k_model)
     # the fit runs inside the forecast call; a repeat of the same call on
     # the same fitted series returns the stored answer. p3-cnn-sequence-tsa:
     # the key holds the RESOLVED mode (which also names the binding), so a
     # change of the process default between two predicts recomputes.
-    var key = Python.tuple(h, fields["season_length"], fields["decomposition_type"], chosen,
-                           fields["initial_smoothed"], fields["alpha"], fields["theta"], xseq_mode(fields, context))
-    var cached = py_get(fields, "_fitted_h")
+    var key = Python.tuple(h, py_item(fields, nk[].k_season_length), py_item(fields, nk[].k_decomposition_type), chosen,
+                           py_item(fields, nk[].k_initial_smoothed), py_item(fields, nk[].k_alpha), py_item(fields, nk[].k_theta), xseq_mode(fields, context))
+    var cached = py_get(fields, nk[].k__fitted_h)
     _cache_record(cached, context)
-    var fit_key = Python.tuple(fields["season_length"], fields["decomposition_type"], chosen,
-                               fields["initial_smoothed"], fields["alpha"], fields["theta"], xseq_mode(fields, context))
+    var fit_key = Python.tuple(py_item(fields, nk[].k_season_length), py_item(fields, nk[].k_decomposition_type), chosen,
+                               py_item(fields, nk[].k_initial_smoothed), py_item(fields, nk[].k_alpha), py_item(fields, nk[].k_theta), xseq_mode(fields, context))
     var mods = NativeModules()
     var fitted = prepared_get(mods, _THETA_FIT_SLOT, model)
     var forecast: PythonObject
@@ -211,7 +217,7 @@ def _theta_predict(model: PythonObject, fields: PythonObject, args: PythonObject
         _store(fields, "info_", _cache_copy(cached[2], context))
         _store(fields, "model_", py_call(b.list, cached[3]))
         forecast = _cache_copy(cached[1], context)
-    elif (fitted is not None and py_contains(fields, "_y") and fitted[0] is fields["_y"]
+    elif (fitted is not None and py_contains(fields, nk[].k__y) and fitted[0] is py_item(fields, nk[].k__y)
           and Bool(py=fitted[1] == fit_key)):
         # The same fitted series and settings at another horizon: the fit's
         # own info rows drive the forecast-only tail (no Nelder-Mead); the
@@ -222,7 +228,7 @@ def _theta_predict(model: PythonObject, fields: PythonObject, args: PythonObject
         # key stored in `_fitted_h` below (the former inner `var key` of the
         # table key shadowed it there).
         var entry_key = xseq_key(fields, context)
-        var captured = _stored_buffer(fields["_y"], "Theta observations", 2, context)
+        var captured = _stored_buffer(py_item(fields, nk[].k__y), "Theta observations", 2, context)
         var y = captured.keep
         var batch = captured.shape[0]
         var n = captured.shape[1]
@@ -231,7 +237,7 @@ def _theta_predict(model: PythonObject, fields: PythonObject, args: PythonObject
         var y_addr = captured.address
         var info_addr = Int(py=xseq_addr(info))
         var forecast_addr = Int(py=xseq_addr(forecast))
-        var season = Int(py=fields["season_length"])
+        var season = Int(py=py_item(fields, nk[].k_season_length))
         var py = Python()
         with GILReleased(py):
             forecast_run_theta_forecast(entry_key, y_addr, info_addr, forecast_addr, batch, n, h, season)
@@ -245,24 +251,24 @@ def _theta_predict(model: PythonObject, fields: PythonObject, args: PythonObject
     else:
         # `entry_key`, not `key`: see the forecast-only branch above.
         var entry_key = xseq_key(fields, context)
-        if not py_contains(fields, "_y"):
+        if not py_contains(fields, nk[].k__y):
             raise Error("AttributeError: Theta: call fit before predict")
-        var captured = _stored_buffer(fields["_y"], "Theta observations", 2, context)
+        var captured = _stored_buffer(py_item(fields, nk[].k__y), "Theta observations", 2, context)
         var y = captured.keep
         var batch = captured.shape[0]
         var n = captured.shape[1]
         forecast = xseq_zeros(Python.tuple(batch, h), context)
         var info = xseq_zeros(Python.tuple(batch, 8), context)
-        var mask = forecast_run_theta_mask(_set(fields["initial_smoothed"]), _set(fields["alpha"]),
-                                           _set(fields["theta"]))
-        var fp: List[Float64] = [_float_or_zero(fields["initial_smoothed"]), _float_or_zero(fields["alpha"]),
-                                 _float_or_zero(fields["theta"])]
-        var code = -1 if chosen is None else Int(py=context["xseq_theta_codes"][chosen])
-        var additive = not Bool(py=fields["decomposition_type"] == PythonObject("multiplicative"))
+        var mask = forecast_run_theta_mask(_set(py_item(fields, nk[].k_initial_smoothed)), _set(py_item(fields, nk[].k_alpha)),
+                                           _set(py_item(fields, nk[].k_theta)))
+        var fp: List[Float64] = [_float_or_zero(py_item(fields, nk[].k_initial_smoothed)), _float_or_zero(py_item(fields, nk[].k_alpha)),
+                                 _float_or_zero(py_item(fields, nk[].k_theta))]
+        var code = -1 if chosen is None else Int(py=py_item(context, nk[].k_xseq_theta_codes)[chosen])
+        var additive = not Bool(py=py_item(fields, nk[].k_decomposition_type) == PythonObject("multiplicative"))
         var y_addr = captured.address
         var forecast_addr = Int(py=xseq_addr(forecast))
         var info_addr = Int(py=xseq_addr(info))
-        var season = Int(py=fields["season_length"])
+        var season = Int(py=py_item(fields, nk[].k_season_length))
         var py = Python()
         with GILReleased(py):
             forecast_run_theta(entry_key, y_addr, forecast_addr, info_addr, batch, n, h, season, code, additive,
@@ -275,9 +281,9 @@ def _theta_predict(model: PythonObject, fields: PythonObject, args: PythonObject
         var names = _theta_model_names(models, info, batch)
         _store(fields, "model_", names)
         _store(fields, "_fitted_h", Python.tuple(key, xseq_copy(forecast), xseq_copy(info), py_call(b.list, names)))
-        prepared_put(mods, _THETA_FIT_SLOT, model, Python.tuple(fields["_y"], fit_key, xseq_copy(info),
+        prepared_put(mods, _THETA_FIT_SLOT, model, Python.tuple(py_item(fields, nk[].k__y), fit_key, xseq_copy(info),
                                                                  py_call(b.list, names)))
-    return xseq_mean_dict(xseq_first(forecast, xseq_truth(fields["_one"])))
+    return xseq_mean_dict(xseq_first(forecast, xseq_truth(py_item(fields, nk[].k__one))))
 
 
 def _theta_model_names(models: PythonObject, info: PythonObject, batch: Int) raises -> PythonObject:
@@ -344,9 +350,10 @@ def _croston_predict(model: PythonObject, fields: PythonObject, args: PythonObje
         raise Error("NotImplementedError: Croston: prediction intervals are not implemented")
     var h = xseq_int(args[0])
     forecast_run_croston_check_h(h)
-    if not py_contains(fields, "mean_"):
+    var nk = xseq_keys()
+    if not py_contains(fields, nk[].k_mean_):
         raise Error("AttributeError: Croston: call fit before predict")
-    var captured = _stored_buffer(fields["mean_"], "Croston means", 1, context)
+    var captured = _stored_buffer(py_item(fields, nk[].k_mean_), "Croston means", 1, context)
     var mean = captured.keep
     var batch = captured.shape[0]
     var forecast = xseq_zeros(Python.tuple(batch, h), context)
@@ -360,7 +367,7 @@ def _croston_predict(model: PythonObject, fields: PythonObject, args: PythonObje
             forecast_run_croston_forecast(key, mean_addr, forecast_addr, batch, h)
         _ = forecast  # keep the Python object alive through the native call above
         _ = mean  # keep the Python object alive through the native call above
-    return xseq_mean_dict(xseq_first(forecast, xseq_truth(fields["_one"])))
+    return xseq_mean_dict(xseq_first(forecast, xseq_truth(py_item(fields, nk[].k__one))))
 
 
 # ---------------------------------------------------------------- ETS
@@ -372,9 +379,10 @@ def _ets_fit(model: PythonObject, fields: PythonObject, args: PythonObject, cont
     _store(fields, "_y", series[1])
     var y = series[1]
     forecast_run_ets_check_n(Int(py=series[3]))
-    var spec = String(py=fields["model"])
+    var nk = xseq_keys()
+    var spec = String(py=py_item(fields, nk[].k_model))
     var n = Int(py=series[3])
-    var m = xseq_int(fields["season_length"])
+    var m = xseq_int(py_item(fields, nk[].k_season_length))
     var s = forecast_run_ets_season(spec, n, m)
     if forecast_run_ets_needs_positive(spec, s):
         # every value > 0: finite (`all_finite_f32`) and a first-wins minimum above zero (`reduce_stat` 0)
@@ -386,21 +394,21 @@ def _ets_fit(model: PythonObject, fields: PythonObject, args: PythonObject, cont
             # The data-sized reduce_stat runs with the GIL released, as the
             # released base helper (bindings/base_helpers_released.mojo) did
             # before the door split moved the call into RUN.
-            var base_ref = base_helpers_key(context["xseq_base"])
+            var base_ref = base_helpers_key(py_item(context, nk[].k_xseq_base))
             var y_addr = Int(py=series[4])
             var ets_py = Python()
             with GILReleased(ets_py):
                 positive = forecast_run_min_above_zero(base_ref, y_addr, size)
             _ = y  # keep the Python object alive through the native call above
         forecast_run_ets_check_positive(positive)
-    var damped = xseq_truth(fields["damped"])
+    var damped = xseq_truth(py_item(fields, nk[].k_damped))
     forecast_run_ets_check_tiny(spec, s, n, damped)
     # The free settings, read in the reference's order (a setting the model
     # does not use is not read).
-    var alpha_free = fields["alpha"] is None
-    var beta_free = forecast_run_letter(spec, 1) != "N" and fields["beta"] is None
-    var gamma_free = s != "N" and fields["gamma"] is None
-    var phi_free = damped and fields["phi"] is None
+    var alpha_free = py_item(fields, nk[].k_alpha) is None
+    var beta_free = forecast_run_letter(spec, 1) != "N" and py_item(fields, nk[].k_beta) is None
+    var gamma_free = s != "N" and py_item(fields, nk[].k_gamma) is None
+    var phi_free = damped and py_item(fields, nk[].k_phi) is None
     forecast_run_ets_check_counts(spec, s, n, m, damped, alpha_free, beta_free, gamma_free, phi_free)
     _store(fields, "_season", PythonObject(s))
     _store(fields, "_last", PythonObject(None))
@@ -411,25 +419,26 @@ def _ets_predict(model: PythonObject, fields: PythonObject, args: PythonObject, 
     if args[2] is not None:
         raise Error("NotImplementedError: ETS: prediction intervals are not implemented")
     var b = native_loaded_module("builtins")
-    if not py_contains(fields, "_y"):
+    var nk = xseq_keys()
+    if not py_contains(fields, nk[].k__y):
         raise Error("AttributeError: ETS: call fit before predict")
-    var captured = _stored_buffer(fields["_y"], "ETS observations", 2, context)
+    var captured = _stored_buffer(py_item(fields, nk[].k__y), "ETS observations", 2, context)
     var y = captured.keep
     var batch = captured.shape[0]
     var n = captured.shape[1]
-    var s = String(py=fields["_season"])
-    var m = xseq_int(fields["season_length"]) if s != "N" else 1
+    var s = String(py=py_item(fields, nk[].k__season))
+    var m = xseq_int(py_item(fields, nk[].k_season_length)) if s != "N" else 1
     var h = xseq_int(args[0])
-    var spec = String(py=fields["model"])
-    var mask = forecast_run_ets_mask(_set(fields["alpha"]), _set(fields["beta"]), _set(fields["phi"]),
-                                     _set(fields["gamma"]))
-    var fp = Python.list(_float_or_zero(fields["alpha"]), _float_or_zero(fields["beta"]),
-                         _float_or_zero(fields["phi"]), _float_or_zero(fields["gamma"]))
-    var words = forecast_run_ets_words(batch, n, h, spec, xseq_truth(fields["damped"]), mask, s, m)
-    var floats: List[Float64] = [_float_or_zero(fields["alpha"]), _float_or_zero(fields["beta"]),
-                                 _float_or_zero(fields["phi"]), _float_or_zero(fields["gamma"])]
+    var spec = String(py=py_item(fields, nk[].k_model))
+    var mask = forecast_run_ets_mask(_set(py_item(fields, nk[].k_alpha)), _set(py_item(fields, nk[].k_beta)), _set(py_item(fields, nk[].k_phi)),
+                                     _set(py_item(fields, nk[].k_gamma)))
+    var fp = Python.list(_float_or_zero(py_item(fields, nk[].k_alpha)), _float_or_zero(py_item(fields, nk[].k_beta)),
+                         _float_or_zero(py_item(fields, nk[].k_phi)), _float_or_zero(py_item(fields, nk[].k_gamma)))
+    var words = forecast_run_ets_words(batch, n, h, spec, xseq_truth(py_item(fields, nk[].k_damped)), mask, s, m)
+    var floats: List[Float64] = [_float_or_zero(py_item(fields, nk[].k_alpha)), _float_or_zero(py_item(fields, nk[].k_beta)),
+                                 _float_or_zero(py_item(fields, nk[].k_phi)), _float_or_zero(py_item(fields, nk[].k_gamma))]
     var ip = Python.list(batch, n, h, words[3], words[4], words[5], mask, words[7], m)
-    var stall = py_get(fields, "_fast_stall")  # (iterations, relative drop): the FAST stop's quality sweep
+    var stall = py_get(fields, nk[].k__fast_stall)  # (iterations, relative drop): the FAST stop's quality sweep
     if stall is not None:
         var iterations = xseq_int(stall[0])
         var drop = xseq_float(stall[1])
@@ -442,7 +451,7 @@ def _ets_predict(model: PythonObject, fields: PythonObject, args: PythonObject, 
     # the same fitted series returns the stored answer (key: the resolved
     # mode, which also names the binding; p3-cnn-sequence-tsa)
     var key = Python.tuple(py_call(b.tuple, ip), py_call(b.tuple, fp), xseq_mode(fields, context))
-    var last = py_get(fields, "_last")
+    var last = py_get(fields, nk[].k__last)
     _cache_record(last, context)
     var forecast: PythonObject
     var info: PythonObject
@@ -469,7 +478,7 @@ def _ets_predict(model: PythonObject, fields: PythonObject, args: PythonObject, 
         _ = y  # keep the Python object alive through the native call above
         _store(fields, "_last", Python.tuple(key, xseq_copy(forecast), xseq_copy(info), xseq_copy(states)))
     _store(fields, "info_", info)
-    var one = xseq_truth(fields["_one"])
+    var one = xseq_truth(py_item(fields, nk[].k__one))
     if s != "N":
         _store(fields, "seasonal_states_", xseq_first(states, one))
     return xseq_mean_dict(xseq_first(forecast, one))
@@ -491,16 +500,17 @@ def _garch_fit(model: PythonObject, fields: PythonObject, args: PythonObject, co
     var batch = Int(py=series[2])
     var n = Int(py=series[3])
     var h = forecast_run_garch_horizon(xseq_int(args[1]))
-    var p = Int(py=fields["p"])
-    var o = Int(py=fields["o"])
-    var q = Int(py=fields["q"])
+    var nk = xseq_keys()
+    var p = Int(py=py_item(fields, nk[].k_p))
+    var o = Int(py=py_item(fields, nk[].k_o))
+    var q = Int(py=py_item(fields, nk[].k_q))
     var k = 1 + p + o + q
     var params = xseq_zeros(Python.tuple(batch, 1 + k), context)
     var info = xseq_zeros(Python.tuple(batch, 4), context)
     var sigma = xseq_zeros(Python.tuple(batch, n), context)
     var forecast = xseq_zeros(Python.tuple(batch, h), context)
-    var words = forecast_run_garch_words(batch, n, h, p, o, q, Bool(py=fields["mean"] == PythonObject("Constant")))
-    var stall = py_get(fields, "_fast_stall")  # (iterations, relative drop): the FAST stop's quality sweep
+    var words = forecast_run_garch_words(batch, n, h, p, o, q, Bool(py=py_item(fields, nk[].k_mean) == PythonObject("Constant")))
+    var stall = py_get(fields, nk[].k__fast_stall)  # (iterations, relative drop): the FAST stop's quality sweep
     if stall is not None:
         # Python's round() of the drop in parts per 1e9: its exact integer
         # (ties to even), as `forecast_run_round_half_even` (the former b.round call).
@@ -529,7 +539,8 @@ def _garch_fit(model: PythonObject, fields: PythonObject, args: PythonObject, co
 
 
 def _croston_variant(model: PythonObject, context: PythonObject) raises -> PythonObject:
-    var records = context["xseq_croston_classes"]
+    var nk = xseq_keys()
+    var records = py_item(context, nk[].k_xseq_croston_classes)
     for i in range(len(records)):  # driver-loop: over connected Croston class metadata
         if py_type(model) is records[i][0]:
             return records[i][1]
@@ -538,7 +549,8 @@ def _croston_variant(model: PythonObject, context: PythonObject) raises -> Pytho
 
 def _setting(value: PythonObject, context: PythonObject) raises:
     var cls = py_type(value)
-    if value is None or cls is py_type(PythonObject("")) or cls is py_type(PythonObject(True)) or cls is py_type(PythonObject(0)) or cls is py_type(PythonObject(0.0)) or _one_of(cls, context["scalar_types"]):
+    var nk = xseq_keys()
+    if value is None or cls is py_type(PythonObject("")) or cls is py_type(PythonObject(True)) or cls is py_type(PythonObject(0)) or cls is py_type(PythonObject(0.0)) or _one_of(cls, py_item(context, nk[].k_scalar_types)):
         return
     raise Error("TypeError: forecast settings require native scalar metadata")
 
@@ -559,10 +571,11 @@ def _forecast_fields(model: PythonObject, kind: String, context: PythonObject) r
         names = Python.tuple("numeric_mode", "_one", "_season", "season_length", "model", "damped", "alpha", "beta", "phi", "gamma")
     elif kind == "garch":
         names = Python.tuple("numeric_mode", "p", "o", "q", "mean", "dist", "power", "_one")
-    var lifecycle = context["xseq_lifecycle_context"]
+    var nk = xseq_keys()
+    var lifecycle = py_item(context, nk[].k_xseq_lifecycle_context)
     for i in range(len(names)):  # driver-loop: over consumed forecast scalar settings
         _setting(py_get(fields, names[i]), lifecycle)
-    var stall = py_get(fields, "_fast_stall")
+    var stall = py_get(fields, nk[].k__fast_stall)
     if stall is not None:
         if py_type(stall) is not py_type(Python.tuple()) or len(stall) != 2:
             raise Error("TypeError: forecast stopping metadata requires a native pair")
@@ -576,35 +589,36 @@ def _forecast_operation(model: PythonObject, kind: String, args: PythonObject, c
     # Fit/predict owners stage state in an exact dictionary. Commit only after
     # every replaced original owner has passed release admission.
     var fields = py_call(native_loaded_module("builtins").dict, target)
-    var lifecycle = context["xseq_lifecycle_context"]
+    var nk = xseq_keys()
+    var lifecycle = py_item(context, nk[].k_xseq_lifecycle_context)
     if kind == "garch":
         _setting(args[0], lifecycle)
         var h = xseq_int(args[0])
-        var forecast = py_get(fields, "_fc")
+        var forecast = py_get(fields, nk[].k__fc)
         if forecast is None:
             raise Error("AttributeError: GARCH: call fit() before forecast()")
         classical_admit_value(forecast, lifecycle)
-        if py_type(forecast) is not context["ndarray"]:
+        if py_type(forecast) is not py_item(context, nk[].k_ndarray):
             raise Error("TypeError: GARCH forecast storage requires its native ndarray")
         var pin = ArrayPin()
         var metadata = array_metadata_once(forecast, array_shape_once(forecast, lifecycle), "forecast", lifecycle, pin)
         if len(metadata.shape) != 2 or not metadata.f32_c():
             raise Error("TypeError: GARCH forecast storage requires a contiguous float32 matrix")
         if h > metadata.shape[1]:
-            var y = fields["_y"]
+            var y = py_item(fields, nk[].k__y)
             classical_admit_value(y, lifecycle)
-            if py_type(y) is not context["ndarray"]:
+            if py_type(y) is not py_item(context, nk[].k_ndarray):
                 raise Error("TypeError: GARCH stored observations require a native ndarray")
-            _ = _garch_fit(model, fields, Python.tuple(xseq_first(y, xseq_truth(fields["_one"])), h), context)
-            forecast = fields["_fc"]
+            _ = _garch_fit(model, fields, Python.tuple(xseq_first(y, xseq_truth(py_item(fields, nk[].k__one))), h), context)
+            forecast = py_item(fields, nk[].k__fc)
         var b = native_loaded_module("builtins")
         # Exact ndarray native slicing preserves the original view semantics,
         # including zero/negative horizons and the one-series output rank.
         var result = forecast[Python.tuple(py_call(b.slice, PythonObject(None)), py_call(b.slice, PythonObject(None), h))]
         _ = metadata
         _ = pin^
-        var finished = xseq_first(result, xseq_truth(fields["_one"]))
-        forecast_commit(target, fields, context["xseq_forecast_ownership"])
+        var finished = xseq_first(result, xseq_truth(py_item(fields, nk[].k__one)))
+        forecast_commit(target, fields, py_item(context, nk[].k_xseq_forecast_ownership))
         return finished
     _setting(args[1], lifecycle)
     _setting(args[5], lifecycle)
@@ -624,15 +638,16 @@ def _forecast_operation(model: PythonObject, kind: String, args: PythonObject, c
     else:
         _ = _theta_fit(model, fields, fit_args, context)
         result = _theta_predict(model, fields, predict_args, context)
-    forecast_commit(target, fields, context["xseq_forecast_ownership"])
+    forecast_commit(target, fields, py_item(context, nk[].k_xseq_forecast_ownership))
     return result
 
 
 
 def xseq_forecast(model: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = xseq_keys()
     # Admission and release ownership use distinct contexts. Connect this one
     # on entry; another public operation need not have initialized it.
-    classical_connect_numpy(context["xseq_lifecycle_context"])
+    classical_connect_numpy(py_item(context, nk[].k_xseq_lifecycle_context))
     if operation.startswith("var_") or operation.startswith("stl_") or operation == "decompose_initialize":
         return forecast_matrix(model, operation, args, context)
     if operation == "croston_initialize" or operation == "ets_initialize" or operation == "theta_initialize" or operation == "garch_initialize":
@@ -652,11 +667,11 @@ def xseq_forecast(model: PythonObject, operation: String, args: PythonObject, co
         # before the horizon is read, as that guard ran before the method
         # body: an unfitted predict raises NotFittedError whatever h is. It
         # reads only the model's own fields, never the arguments.
-        classical_require_fitted(model, False, "predict", context["xseq_lifecycle_context"])
+        classical_require_fitted(model, False, "predict", py_item(context, nk[].k_xseq_lifecycle_context))
     if operation.endswith("predict"):
-        _setting(args[0], context["xseq_lifecycle_context"])
+        _setting(args[0], py_item(context, nk[].k_xseq_lifecycle_context))
     elif operation == "garch_fit":
-        _setting(args[1], context["xseq_lifecycle_context"])
+        _setting(args[1], py_item(context, nk[].k_xseq_lifecycle_context))
     var result = PythonObject(None)
     if operation == "theta_fit":
         result = _theta_fit(model, fields, args, context)
@@ -678,5 +693,5 @@ def xseq_forecast(model: PythonObject, operation: String, args: PythonObject, co
         # Fit bookkeeping of the former `_mode` fit wrapper: a completed fit
         # marks the instance fitted (staged, committed with the fitted state).
         _store(fields, "_mojolearn_fitted", PythonObject(True))
-    forecast_commit(target, fields, context["xseq_forecast_ownership"])
+    forecast_commit(target, fields, py_item(context, nk[].k_xseq_forecast_ownership))
     return result

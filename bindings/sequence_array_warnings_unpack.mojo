@@ -11,11 +11,14 @@ from core.sequence_array_cast import SEQ_CAST_OVERFLOW, SEQ_CAST_UNDERFLOW, SEQ_
 from bindings.sequence_array_warnings_pack import (
     sequence_array_category,
 )
+from bindings.sequence_keys_unpack import sequence_keys
+from bindings.py_balanced import py_item
 
 
 def sequence_array_report(status: Int, settings: PythonObject, context: PythonObject,
                           operation: String = "cast", suppress_error: Bool = False) raises:
-    var warning = context["sequence_array_warnings"]
+    var nk = sequence_keys()
+    var warning = py_item(context, nk[].k_sequence_array_warnings)
     var b = native_loaded_module("builtins")
     # NumPy reports flags in this order and only once per completed cast,
     # regardless of how many individual elements or fields set the flag.
@@ -43,9 +46,9 @@ def sequence_array_report(status: Int, settings: PythonObject, context: PythonOb
             # Native text streams remain supported. The shared writer checks
             # exact native IO/codec identities before reaching their methods.
             var local = py_call(b.dict, warning)
-            var fields = py_call(b.dict, warning["warning_sys_fields"])
-            py_setitem(fields, "stderr", settings["call"])
-            py_setitem(local, "warning_sys_fields", fields)
+            var fields = py_call(b.dict, py_item(warning, nk[].k_warning_sys_fields))
+            py_setitem(fields, nk[].k_stderr, py_item(settings, nk[].k_call))
+            py_setitem(local, nk[].k_warning_sys_fields, fields)
             _warning_write("Warning: " + message + "\n", local)
         else:
             raise Error("TypeError: Python NumPy error callbacks cannot execute in array output; use native errstate ignore, warn or raise")
@@ -62,39 +65,40 @@ def sequence_array_exception(kind: String, var message: String) raises:
 def sequence_array_warn(message: String, context: PythonObject, kind: String = "RuntimeWarning",
                         suppress_error: Bool = False) raises:
     var b = native_loaded_module("builtins")
-    var fields = _warning_fields(context["warning_fields"])
+    var nk = sequence_keys()
+    var fields = _warning_fields(py_item(context, nk[].k_warning_fields))
     var category = sequence_array_category(kind)
     # The existing warning originated at the __array__ public method. Its
     # native metadata retains that location for filtering and repetition.
-    var filename = context["warning_filename"]
-    var lineno = Int(py=context["warning_lineno"])
-    var module = context["warning_module"]
-    var filters = py_get(fields, "filters")
+    var filename = py_item(context, nk[].k_warning_filename)
+    var lineno = Int(py=py_item(context, nk[].k_warning_lineno))
+    var module = py_item(context, nk[].k_warning_module)
+    var filters = py_get(fields, nk[].k_filters)
     # Optional, not a PythonObject(None) sentinel: a context's `log` of None is absent (modular/modular#7546).
     var log = Optional[PythonObject]()
-    if Bool(py=context["warning_context_enabled"]):
-        var active = py_get(context["warning_context_var"], context["warning_global_context"])
-        if active is not context["warning_global_context"]:
-            if py_type(active) is not context["warning_context_class"]:
+    if Bool(py=py_item(context, nk[].k_warning_context_enabled)):
+        var active = py_get(py_item(context, nk[].k_warning_context_var), py_item(context, nk[].k_warning_global_context))
+        if active is not py_item(context, nk[].k_warning_global_context):
+            if py_type(active) is not py_item(context, nk[].k_warning_context_class):
                 raise Error("TypeError: custom warning contexts are not native")
-            var stored = _warning_fields(py_call(context["warning_context_fields"].__get__, active))
-            filters = py_get(stored, "_filters")
-            var recorded = py_get(stored, "log")
+            var stored = _warning_fields(py_call(py_item(context, nk[].k_warning_context_fields).__get__, active))
+            filters = py_get(stored, nk[].k__filters)
+            var recorded = py_get(stored, nk[].k_log)
             if recorded is not None:
                 log = recorded
     if py_type(filters) is not b.list or (Bool(log) and py_type(log.value()) is not b.list):
         raise Error("TypeError: warning filters and recording require native lists")
-    var old = context["warning_filter_rows"]
-    var changed = filters is not context["warning_filter_owner"] or len(old) != len(filters)
+    var old = py_item(context, nk[].k_warning_filter_rows)
+    var changed = filters is not py_item(context, nk[].k_warning_filter_owner) or len(old) != len(filters)
     if not changed:
         for k in range(len(filters)):  # driver-loop: over filter row identities for normal filter mutation
             changed = changed or old[k] is not filters[k]
     if changed:
-        py_setitem(context, "warning_seen", b.dict())
-        py_setitem(context, "warning_filter_owner", filters)
-        py_setitem(context, "warning_filter_rows", py_call(b.tuple, filters))
-    var action = py_get(fields, "defaultaction", "default")
-    var mro = py_call(b.type.__dict__["__mro__"].__get__, category)
+        py_setitem(context, nk[].k_warning_seen, b.dict())
+        py_setitem(context, nk[].k_warning_filter_owner, filters)
+        py_setitem(context, nk[].k_warning_filter_rows, py_call(b.tuple, filters))
+    var action = py_get(fields, nk[].k_defaultaction, "default")
+    var mro = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, category)
     for k in range(len(filters)):  # driver-loop: over configured warning filters in their declared order
         var row = filters[k]
         if py_type(row) is not b.tuple or len(row) != 5 or py_type(row[0]) is not b.str or py_type(row[4]) is not b.int:
@@ -119,45 +123,45 @@ def sequence_array_warn(message: String, context: PythonObject, kind: String = "
         raise Error("RuntimeError: unrecognized warning filter action")
     var key = Python.tuple(message, category, PythonObject(None) if mode == "once" else module, PythonObject(lineno if mode == "default" else 0))
     if mode != "always" and mode != "all":
-        if Bool(py=py_get(context["warning_seen"], key, False)):
+        if Bool(py=py_get(py_item(context, nk[].k_warning_seen), key, False)):
             return
-    if not Bool(py=context["warning_standard_hooks"]):
+    if not Bool(py=py_item(context, nk[].k_warning_standard_hooks)):
         raise Error("TypeError: custom Python warning hooks are not native")
-    var hooks = context["warning_functions"]
+    var hooks = py_item(context, nk[].k_warning_functions)
     var names = Python.tuple("showwarning", "formatwarning", "_showwarnmsg", "_formatwarnmsg", "_formatwarnmsg_impl")
     for k in range(len(names)):  # driver-loop: over standard warning display hooks before any output
         if py_get(fields, names[k]) is not hooks[names[k]]:
             raise Error("TypeError: custom Python warning hooks are not native")
-    var display = py_get(fields, "_showwarnmsg_impl")
-    if py_type(display) is context["warning_native_function"] and String(display.__name__) == "append" and py_type(display.__self__) is b.list:
+    var display = py_get(fields, nk[].k__showwarnmsg_impl)
+    if py_type(display) is py_item(context, nk[].k_warning_native_function) and String(display.__name__) == "append" and py_type(display.__self__) is b.list:
         log = display.__self__
-    elif py_type(display) is context["warning_python_function"] and String(display.__name__) == "_showwarnmsg_impl" and display.__code__.co_filename == context["warning_stdlib_file"]:
+    elif py_type(display) is py_item(context, nk[].k_warning_python_function) and String(display.__name__) == "_showwarnmsg_impl" and display.__code__.co_filename == py_item(context, nk[].k_warning_stdlib_file):
         pass
     else:
         raise Error("TypeError: custom warning recording callbacks are not native")
     if log:
-        var record_class = context["warning_record"]
-        var ancestry = py_call(b.type.__dict__["__mro__"].__get__, record_class)
-        if len(ancestry) != 2 or ancestry[1] is not b.object or py_get(_warning_class_fields(record_class), "__del__") is not None:
+        var record_class = py_item(context, nk[].k_warning_record)
+        var ancestry = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, record_class)
+        if len(ancestry) != 2 or ancestry[1] is not b.object or py_get(_warning_class_fields(record_class), nk[].k___del__) is not None:
             raise Error("TypeError: custom warning record finalizers are not native")
         var record = py_call(b.object.__new__, record_class)
-        var stored = py_call(context["warning_record_fields"].__get__, record)
-        py_setitem(stored, "message", py_call(category, message))
-        py_setitem(stored, "category", category)
-        py_setitem(stored, "filename", filename)
-        py_setitem(stored, "lineno", lineno)
-        py_setitem(stored, "file", PythonObject(None))
-        py_setitem(stored, "line", PythonObject(None))
-        py_setitem(stored, "source", PythonObject(None))
-        py_setitem(stored, "_category_name", PythonObject(kind))
+        var stored = py_call(py_item(context, nk[].k_warning_record_fields).__get__, record)
+        py_setitem(stored, nk[].k_message, py_call(category, message))
+        py_setitem(stored, nk[].k_category, category)
+        py_setitem(stored, nk[].k_filename, filename)
+        py_setitem(stored, nk[].k_lineno, lineno)
+        py_setitem(stored, nk[].k_file, PythonObject(None))
+        py_setitem(stored, nk[].k_line, PythonObject(None))
+        py_setitem(stored, nk[].k_source, PythonObject(None))
+        py_setitem(stored, nk[].k__category_name, PythonObject(kind))
         py_call(log.value().append, record)
         if mode != "always" and mode != "all":
-            py_setitem(context["warning_seen"], key, True)
+            py_setitem(py_item(context, nk[].k_warning_seen), key, True)
         return
     var text = String(filename) + ":" + String(lineno) + ": " + kind + ": " + message + "\n"
-    var line = String(context["warning_source_line"])
+    var line = String(py_item(context, nk[].k_warning_source_line))
     if line.byte_length() > 0:
         text += "  " + line + "\n"
     _warning_write(text, context)
     if mode != "always" and mode != "all":
-        py_setitem(context["warning_seen"], key, True)
+        py_setitem(py_item(context, nk[].k_warning_seen), key, True)

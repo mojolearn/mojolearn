@@ -15,6 +15,8 @@ from bindings.py_cpython_table import cpython_table
 from sequence.sequence_string_storage_run import (
     StringStoragePointer, SEQUENCE_STRING_TABLE, sequence_storage_image, sequence_string_nan_word, sequence_string_nan_raw,
 )
+from bindings.sequence_keys_unpack import sequence_keys
+from bindings.py_balanced import py_item
 
 
 comptime StringStorageVersion = def() thin abi("C") -> c_uint
@@ -24,12 +26,13 @@ comptime StringStoragePack = def(StringStoragePointer, StringStoragePointer, Str
 
 
 def sequence_string_class(context: PythonObject) raises -> PythonObject:
-    var module = py_get(context["modules"], "numpy.dtypes")
+    var nk = sequence_keys()
+    var module = py_get(py_item(context, nk[].k_modules), "numpy.dtypes")
     if module is None:
         return PythonObject(None)
-    if py_type(module) is not context["module_type"]:
+    if py_type(module) is not py_item(context, nk[].k_module_type):
         raise Error("TypeError: string dtype metadata requires NumPy's native module")
-    var result = py_get(py_fields(module), "StringDType")
+    var result = py_get(py_fields(module), nk[].k_StringDType)
     if result is None:
         return result
     var dtype = py_call(native_numpy_dtype(context), "T")
@@ -39,8 +42,9 @@ def sequence_string_class(context: PythonObject) raises -> PythonObject:
 
 
 def sequence_string_na_value(value: PythonObject, classes: PythonObject, seen: PythonObject, context: PythonObject) raises:
-    var scalars = context["scalar_types"]
-    var containers = context["container_types"]
+    var nk = sequence_keys()
+    var scalars = py_item(context, nk[].k_scalar_types)
+    var containers = py_item(context, nk[].k_container_types)
     var kind = py_type(value)
     if value is None or kind is scalars[5] or kind is scalars[6] or kind is scalars[1] or kind is scalars[2] or kind is scalars[3] or kind is scalars[4]:
         return
@@ -75,7 +79,8 @@ def sequence_string_missing(dtype: PythonObject, context: PythonObject) raises -
     var result = cpy.lib.get_function[PyObjectPtr]("PyObject_GenericGetAttr")(dtype._obj_ptr, name._obj_ptr)
     if result:
         return PythonObject(from_owned=result)
-    if cpy.lib.get_function[c_int]("PyErr_ExceptionMatches")(context["sequence_attribute_error"]._obj_ptr) != 0:
+    var nk = sequence_keys()
+    if cpy.lib.get_function[c_int]("PyErr_ExceptionMatches")(py_item(context, nk[].k_sequence_attribute_error)._obj_ptr) != 0:
         cpython_table()[].PyErr_Clear()
         return PythonObject(None)
     raise cpy.unsafe_get_error()
@@ -103,13 +108,14 @@ struct SequenceStringStorage(Movable):
             raise Error("TypeError: native string storage requires its exact StringDType descriptor")
         ref cpy = Python().cpython()
         var numpy_dtype = native_numpy_dtype(context)
-        var module = py_get(context["modules"], "numpy._core._multiarray_umath")
+        var nk = sequence_keys()
+        var module = py_get(py_item(context, nk[].k_modules), "numpy._core._multiarray_umath")
         if module is None:
-            module = py_get(context["modules"], "numpy.core._multiarray_umath")
-        if module is None or py_type(module) is not context["module_type"]:
+            module = py_get(py_item(context, nk[].k_modules), "numpy.core._multiarray_umath")
+        if module is None or py_type(module) is not py_item(context, nk[].k_module_type):
             raise Error("TypeError: native StringDType storage requires NumPy's extension module")
-        var capsule = py_get(py_fields(module), "_ARRAY_API")
-        var retained = py_get(context, "sequence_string_capsule")
+        var capsule = py_get(py_fields(module), nk[].k__ARRAY_API)
+        var retained = py_get(context, nk[].k_sequence_string_capsule)
         if retained is not None and retained is not capsule:
             raise Error("TypeError: NumPy's native storage capsule has been replaced")
         var null_name = Optional[StringStoragePointer](None)
@@ -145,7 +151,7 @@ struct SequenceStringStorage(Movable):
         var pack = MutPointer[StringStoragePack, MutUntrackedOrigin](unsafe_from_address=address + 314 * size_of[Int]())[0]
         # Publish retained metadata before locking, so no raising operation
         # can strand an acquired allocator during construction.
-        py_setitem(context, "sequence_string_capsule", capsule)
+        py_setitem(context, nk[].k_sequence_string_capsule, capsule)
         var allocator = acquire(StringStoragePointer(unsafe_from_address=Int(dtype._obj_ptr)))
         if not allocator:
             sequence_array_exception("MemoryError", "native string output could not acquire its allocator")
@@ -171,7 +177,8 @@ struct SequenceStringStorage(Movable):
         _ = text^
 
 def sequence_string_nan_info(dtype: PythonObject, classes: PythonObject, context: PythonObject) raises -> Int:
-    var scalars = context["scalar_types"]
+    var nk = sequence_keys()
+    var scalars = py_item(context, nk[].k_scalar_types)
     var missing = sequence_string_missing(dtype, context)
     var kind = py_type(missing)
     if kind is scalars[3] or kind is scalars[4]:

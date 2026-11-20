@@ -11,6 +11,8 @@ from bindings.sequence_array_warnings_pack import sequence_array_category
 from bindings.optimizer_public_words_unpack import stash_python_error
 from bindings.py_optional import py_or_none, py_present
 from sequence.sequence_dtype_run import sequence_dtype_syntax_offset
+from bindings.sequence_keys_unpack import sequence_keys
+from bindings.py_balanced import py_item
 
 
 def sequence_dtype_create(value: PythonObject, context: PythonObject, aligned: Bool,
@@ -23,7 +25,8 @@ def sequence_dtype_create(value: PythonObject, context: PythonObject, aligned: B
     var arguments = Python.tuple(value)
     var keywords = Python.dict(align=PythonObject(aligned))
     if metadata is not None:
-        py_setitem(keywords, "metadata", metadata)
+        var nk = sequence_keys()
+        py_setitem(keywords, nk[].k_metadata, metadata)
     var result = cpy.PyObject_Call(constructor._obj_ptr, arguments._obj_ptr, keywords._obj_ptr)
     _ = arguments^
     _ = keywords^
@@ -54,7 +57,8 @@ def sequence_dtype_syntax(repeats: PythonObject) raises:
 
 def sequence_dtype_classes(context: PythonObject) raises -> PythonObject:
     var dtype = native_numpy_dtype(context)
-    var stored = py_get(context, "sequence_dtype_classes")
+    var nk = sequence_keys()
+    var stored = py_get(context, nk[].k_sequence_dtype_classes)
     if stored is not None:
         return stored
     var result = Python.list()
@@ -65,7 +69,7 @@ def sequence_dtype_classes(context: PythonObject) raises -> PythonObject:
     if strings is not None:
         var item = sequence_dtype_create(PythonObject("T"), context)
         py_call(result.append, Python.tuple(strings, item.type))
-    py_setitem(context, "sequence_dtype_classes", result)
+    py_setitem(context, nk[].k_sequence_dtype_classes, result)
     return result
 
 
@@ -116,14 +120,15 @@ def sequence_dtype_shape(value: PythonObject, classes: PythonObject, context: Py
 
 
 def sequence_dtype_version(context: PythonObject) raises -> Int:
-    var module = py_get(context["modules"], "numpy._core._multiarray_umath")
+    var nk = sequence_keys()
+    var module = py_get(py_item(context, nk[].k_modules), "numpy._core._multiarray_umath")
     if module is None:
-        module = py_get(context["modules"], "numpy.core._multiarray_umath")
-    if module is None or py_type(module) is not context["module_type"]:
+        module = py_get(py_item(context, nk[].k_modules), "numpy.core._multiarray_umath")
+    if module is None or py_type(module) is not py_item(context, nk[].k_module_type):
         raise Error("TypeError: dtype compatibility requires NumPy's native version metadata")
-    var entry = py_get(py_fields(module), "_get_ndarray_c_version")
-    var warning = context["sequence_array_warnings"]
-    if entry is None or py_type(entry) is not warning["warning_native_function"] or String(entry.__name__) != "_get_ndarray_c_version" or entry.__self__ is not module:
+    var entry = py_get(py_fields(module), nk[].k__get_ndarray_c_version)
+    var warning = py_item(context, nk[].k_sequence_array_warnings)
+    if entry is None or py_type(entry) is not py_item(warning, nk[].k_warning_native_function) or String(entry.__name__) != "_get_ndarray_c_version" or entry.__self__ is not module:
         raise Error("TypeError: dtype compatibility requires NumPy's native version entry")
     return Int(py=py_call(entry))
 
@@ -138,13 +143,14 @@ def sequence_dtype_allocation_shape(shape: PythonObject, dtype: PythonObject, co
     # This rejects impossible storage before asking the ndarray allocator.
     var b = native_loaded_module("builtins")
     var base = sequence_array_category("MemoryError")
-    var module = py_get(context["modules"], "numpy.core._exceptions")
-    if module is None or py_type(module) is not context["module_type"]:
+    var nk = sequence_keys()
+    var module = py_get(py_item(context, nk[].k_modules), "numpy.core._exceptions")
+    if module is None or py_type(module) is not py_item(context, nk[].k_module_type):
         raise Error("TypeError: negative dtype storage requires NumPy's native exception metadata")
-    var category = py_get(py_fields(module), "_ArrayMemoryError")
+    var category = py_get(py_fields(module), nk[].k__ArrayMemoryError)
     if category is None or py_type(category) is not b.type:
         raise Error("TypeError: array allocation exceptions require an ordinary native class layout")
-    var fields = py_call(b.type.__dict__["__dict__"].__get__, category)
+    var fields = py_call(py_item(b.type.__dict__, nk[].k___dict__).__get__, category)
     var keys = py_call(b.list, fields)
     for i in range(len(keys)):  # driver-loop: refuse foreign class keys before any class dictionary lookup
         if py_type(keys[i]) is not b.str:
@@ -152,7 +158,7 @@ def sequence_dtype_allocation_shape(shape: PythonObject, dtype: PythonObject, co
     var bases = py_call(b.type.__getattribute__, category, "__bases__")
     if len(bases) != 1 or bases[0] is not base:
         raise Error("TypeError: array allocation exceptions require the native MemoryError base")
-    var module_name = py_get(fields, "__module__")
+    var module_name = py_get(fields, nk[].k___module__)
     if py_type(module_name) is not b.str:
         raise Error("TypeError: array allocation exceptions require native module-name metadata")
     var qualified_name = py_call(b.type.__getattribute__, category, "__qualname__")
@@ -165,8 +171,8 @@ def sequence_dtype_allocation_shape(shape: PythonObject, dtype: PythonObject, co
             raise Error("TypeError: array allocation exception hooks cannot execute; use NumPy's ordinary exception metadata")
     var exception = py_call(base.__new__, category, shape, dtype)
     var stored = py_fields(exception)
-    py_setitem(stored, "shape", shape)
-    py_setitem(stored, "dtype", dtype)
+    py_setitem(stored, nk[].k_shape, shape)
+    py_setitem(stored, nk[].k_dtype, dtype)
     ref cpy = Python().cpython()
     cpy.lib.get_function[NoneType]("PyErr_SetObject")(category._obj_ptr, exception._obj_ptr)
     var failure = stash_python_error()
@@ -197,7 +203,8 @@ def sequence_dtype_pair(base: PythonObject, shape: PythonObject, classes: Python
             return sequence_dtype_create(PythonObject(spelling), context, aligned)
         if py_type(shape) is not b.bool and shape == PythonObject(1):
             if sequence_dtype_version(context) < 0x02000000:
-                var warning = context["sequence_array_warnings"]
+                var nk = sequence_keys()
+                var warning = py_item(context, nk[].k_sequence_array_warnings)
                 # NumPy 1.26 preserves its deprecated scalar-size-one alias;
                 # explicit tuple (1,) already means a one-element subarray.
                 sequence_array_warn("Passing (type, 1) or '1type' as a synonym of type is deprecated; in a future version of numpy, it will be understood as (type, (1,)) / '(1,)type'.", warning, "FutureWarning")
@@ -221,7 +228,8 @@ def sequence_dtype_text(value: PythonObject, classes: PythonObject, context: Pyt
     var b = native_loaded_module("builtins")
     var dtype = native_numpy_dtype(context)
     var text = value if py_type(value) is b.str else py_call(b.bytes.decode, value, "ascii", "strict")
-    var aliases = py_fields(context["modules"]["numpy"])["sctypeDict"]
+    var nk = sequence_keys()
+    var aliases = py_item(py_fields(py_item(py_item(context, nk[].k_modules), nk[].k_numpy)), nk[].k_sctypeDict)
     if py_type(aliases) is not b.dict:
         raise Error("TypeError: dtype aliases require native dictionary metadata")
     # p3-array-arena: the alias keys are walked once per dictionary state
@@ -239,7 +247,7 @@ def sequence_dtype_text(value: PythonObject, classes: PythonObject, context: Pyt
     var mapped = py_get(aliases, text)
     if mapped is not None:
         return sequence_dtype_normalize(mapped, classes, context, depth + 1, aligned)
-    if py_call(context["sequence_dtype_fullmatch"], context["sequence_dtype_pattern"], text) is not None:
+    if py_call(py_item(context, nk[].k_sequence_dtype_fullmatch), py_item(context, nk[].k_sequence_dtype_pattern), text) is not None:
         return sequence_dtype_create(text, context, aligned)
 
     var spelling = String(text)
@@ -258,16 +266,16 @@ def sequence_dtype_text(value: PythonObject, classes: PythonObject, context: Pyt
     var formats = Python.list()
     var record = False
     while position < len(text):  # driver-loop: parse each compact dtype field in Mojo
-        var matched = py_call(context["sequence_dtype_match"], context["sequence_dtype_compact"], text, position)
+        var matched = py_call(py_item(context, nk[].k_sequence_dtype_match), py_item(context, nk[].k_sequence_dtype_compact), text, position)
         if matched is None or Int(py=py_call(matched.end)) <= position:
             raise Error("ValueError: dtype format is not recognized")
         var groups = py_call(matched.groups)
         position = Int(py=py_call(matched.end))
         if position < len(text):
-            if py_call(context["sequence_dtype_match"], context["sequence_dtype_space"], text, position) is not None:
+            if py_call(py_item(context, nk[].k_sequence_dtype_match), py_item(context, nk[].k_sequence_dtype_space), text, position) is not None:
                 position = len(text)
             else:
-                var separator = py_call(context["sequence_dtype_match"], context["sequence_dtype_separator"], text, position)
+                var separator = py_call(py_item(context, nk[].k_sequence_dtype_match), py_item(context, nk[].k_sequence_dtype_separator), text, position)
                 if separator is None:
                     raise Error("ValueError: dtype format is not recognized")
                 position = Int(py=py_call(separator.end))
@@ -332,21 +340,22 @@ def sequence_dtype_dict(value: PythonObject, classes: PythonObject, context: Pyt
     var offsets = Python.list()
     var titles = Python.list()
     var ordered = py_get(value, PythonObject(-1))
-    var native_fields = py_contains(value, "names") and py_contains(value, "formats")
+    var nk = sequence_keys()
+    var native_fields = py_contains(value, nk[].k_names) and py_contains(value, nk[].k_formats)
     var alignment = aligned
     if native_fields:
-        var requested_align = py_get(value, "aligned")
+        var requested_align = py_get(value, nk[].k_aligned)
         if requested_align is not None:
             if py_type(requested_align) is not b.bool and py_type(requested_align) is not b.int:
                 raise Error("TypeError: dtype alignment requires a native boolean")
             alignment = Bool(py=requested_align)
-        ordered = value["names"]
+        ordered = py_item(value, nk[].k_names)
     if ordered is None:
         ordered = keys
     if py_type(ordered) is not b.list and py_type(ordered) is not b.tuple:
         raise Error("TypeError: dtype names require a native sequence")
     if native_fields:
-        var specs = value["formats"]
+        var specs = py_item(value, nk[].k_formats)
         if (py_type(specs) is not b.list and py_type(specs) is not b.tuple) or len(specs) != len(ordered):
             raise Error("ValueError: dtype names and formats must have equal lengths")
         for field in ["offsets", "titles"]:  # driver-loop: validate optional native field metadata lengths
@@ -363,17 +372,17 @@ def sequence_dtype_dict(value: PythonObject, classes: PythonObject, context: Pyt
         var offset = Optional[PythonObject]()
         var title = PythonObject(None)
         if native_fields:
-            var specs = value["formats"]
+            var specs = py_item(value, nk[].k_formats)
             if py_type(specs) is not b.list and py_type(specs) is not b.tuple:
                 raise Error("TypeError: dtype formats require a native sequence")
             format = specs[i]
-            if py_contains(value, "offsets"):
-                var explicit_offsets = value["offsets"]
+            if py_contains(value, nk[].k_offsets):
+                var explicit_offsets = py_item(value, nk[].k_offsets)
                 if py_type(explicit_offsets) is not b.list and py_type(explicit_offsets) is not b.tuple:
                     raise Error("TypeError: dtype offsets require a native sequence")
                 offset = py_present(explicit_offsets[i])
-            if py_contains(value, "titles"):
-                var explicit_titles = value["titles"]
+            if py_contains(value, nk[].k_titles):
+                var explicit_titles = py_item(value, nk[].k_titles)
                 if py_type(explicit_titles) is not b.list and py_type(explicit_titles) is not b.tuple:
                     raise Error("TypeError: dtype titles require a native sequence")
                 title = explicit_titles[i]
@@ -398,14 +407,14 @@ def sequence_dtype_dict(value: PythonObject, classes: PythonObject, context: Pyt
         py_call(formats.insert, position, sequence_dtype_normalize(format, classes, context, depth + 1, alignment))
         py_call(offsets.insert, position, py_or_none(offset))
         py_call(titles.insert, position, title)
-    py_setitem(result, "names", names)
-    py_setitem(result, "formats", formats)
-    py_setitem(result, "titles", titles)
-    if not native_fields or py_contains(value, "offsets"):
-        py_setitem(result, "offsets", offsets)
-    if native_fields and py_contains(value, "itemsize"):
-        sequence_dtype_integer(value["itemsize"], classes, context)
-        py_setitem(result, "itemsize", value["itemsize"])
+    py_setitem(result, nk[].k_names, names)
+    py_setitem(result, nk[].k_formats, formats)
+    py_setitem(result, nk[].k_titles, titles)
+    if not native_fields or py_contains(value, nk[].k_offsets):
+        py_setitem(result, nk[].k_offsets, offsets)
+    if native_fields and py_contains(value, nk[].k_itemsize):
+        sequence_dtype_integer(py_item(value, nk[].k_itemsize), classes, context)
+        py_setitem(result, nk[].k_itemsize, py_item(value, nk[].k_itemsize))
     return sequence_dtype_create(result, context, alignment)
 
 
