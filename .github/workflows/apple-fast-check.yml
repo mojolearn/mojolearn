@@ -67,9 +67,9 @@ on:
         required: false
         default: "apple-m2"
       units_per_job:
-        description: "parse only: most units of one merged file per runner (0 = whole files; the 7 GB runner pages on a whole file)"
+        description: "parse only: most units of one merged file per runner (0 = whole files). The Linux cross parse of a whole file peaked at 5 to 16.7 GiB (run 44768664420); the standard Mac runner has 7 GB"
         required: false
-        default: "3"
+        default: "2"
 
 run-name: "apple-fast-check ${{ inputs.ref }} ${{ inputs.step }} ${{ inputs.runner }} ${{ inputs.accel }}"
 
@@ -113,7 +113,7 @@ jobs:
         env:
           IN_STEP: ${{ inputs.step }}
           IN_SETS: ${{ inputs.sets || 'fast,identical' }}
-          IN_UNITS: ${{ inputs.units_per_job || '3' }}
+          IN_UNITS: ${{ inputs.units_per_job || '2' }}
         run: |
           set -euo pipefail
           echo '[]' > parse.json; echo '[]' > build.json
