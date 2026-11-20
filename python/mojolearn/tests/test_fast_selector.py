@@ -313,6 +313,8 @@ READ = ("predict", "predict_proba", "predict_log_proba", "decision_function", "t
 def digest(value):
     if isinstance(value, tuple):
         return "+".join(digest(part) for part in value)
+    if isinstance(value, dict):
+        return "+".join(k + "=" + digest(value[k]) for k in sorted(value))
     if hasattr(value, "toarray"):
         value = value.toarray()
     value = np.ascontiguousarray(np.asarray(value))
@@ -346,8 +348,90 @@ def operations(model, kind):
                 return after(type(model).load(path))
         ops["save_load"] = round_trip
     return ops
+# lane fx-fast-mask, 2026-11-20: the neural, sequence, CNN, TSA and LINALG rows. Their public calls are not the
+# estimator fit(X, y) form, so each is a recipe: build(word) -> (model, fit, {operation: call}, read), where `read`
+# is the call a pickled or loaded copy answers. Same report and the same comparison as every other row.
+S = np.ascontiguousarray(np.float32(10.0) + np.sin(np.arange(48, dtype=np.float32) * np.float32(0.4)) * np.float32(3.0)
+                         + np.arange(48, dtype=np.float32) * np.float32(0.05), dtype=np.float32)
+SEQ = np.ascontiguousarray(X.reshape(48, 2, 2))
+IMG = np.ascontiguousarray(np.tile(X, (1, 16)).reshape(48, 1, 8, 8))
+SPD = np.ascontiguousarray(X[:4].T @ X[:4] + np.eye(4, dtype=np.float32) * np.float32(4.0), dtype=np.float32)
+IDS = np.ascontiguousarray((np.arange(64, dtype=np.int32) * 7) % 16, dtype=np.int32).reshape(4, 16)
+def recipe(name, mode, extra):
+    kw = dict(extra) if mode is None else dict(extra, numeric_mode=mode)
+    M = mojolearn
+    if name in ("ETS", "Theta", "CrostonClassic"):
+        m = getattr(M, name)(**kw)
+        return m, lambda: m.fit(S), {"predict": lambda: m.predict(4)}, lambda r: r.predict(4)
+    if name == "ARIMA":
+        m = M.ARIMA((1, 0, 0), **kw)
+        return m, lambda: m.fit(S), {"predict": lambda: m.predict(), "forecast": lambda: m.forecast(4)}, lambda r: r.forecast(4)
+    if name == "GARCH":
+        m = M.GARCH(**kw)
+        return m, lambda: m.fit(S), {"forecast": lambda: m.forecast(2)}, lambda r: r.forecast(2)
+    if name == "Cholesky":
+        m = M.Cholesky(**kw)
+        return m, lambda: m.fit(SPD), {"solve": lambda: m.solve(SPD[:, :2].copy()), "logdet_": lambda: np.float64(m.logdet_)}, lambda r: r.solve(SPD[:, :2].copy())
+    if name == "bootstrap":
+        import importlib
+        R = importlib.import_module("mojolearn.resample")
+        return None, lambda: None, {"bootstrap": lambda: R.bootstrap(S, n_resamples=64, **kw).confidence_interval}, None
+    if name in ("GRUClassifier", "RNNClassifier", "LSTMClassifier"):
+        m = getattr(M, name)(**kw)
+        return m, lambda: m.fit(SEQ, y_cls), {"predict": lambda: m.predict(SEQ), "predict_proba": lambda: m.predict_proba(SEQ)}, lambda r: r.predict(SEQ)
+    if name in ("GRURegressor", "RNNRegressor", "LSTMRegressor"):
+        m = getattr(M, name)(**kw)
+        return m, lambda: m.fit(SEQ, y_reg), {"predict": lambda: m.predict(SEQ)}, lambda r: r.predict(SEQ)
+    if name == "Sequential":
+        m = M.Sequential(**kw).linear(4).relu().linear(1).compile(loss="mse", optimizer="sgd", lr=0.01)
+        return m, lambda: m.fit(X, y_reg, epochs=2), {"predict": lambda: m.predict(X)}, lambda r: r.predict(X)
+    if name == "CNNClassifier":
+        m = M.CNNClassifier((1, 8, 8), **kw)
+        return m, lambda: m.fit(IMG, y_cls), {"predict": lambda: m.predict(IMG), "predict_proba": lambda: m.predict_proba(IMG)}, lambda r: r.predict(IMG)
+    if name == "Conv2d":
+        m = M.Conv2d(1, 2, 3, **kw)
+        return m, lambda: None, {"forward": lambda: m.forward(IMG[:4].copy())}, lambda r: r.forward(IMG[:4].copy())
+    if name == "LayerNorm":
+        m = M.LayerNorm(4, **kw)
+        return m, lambda: None, {"forward": lambda: m.forward(X)}, lambda r: r.forward(X)
+    if name == "Embedding":
+        m = M.Embedding(16, 4, **kw)
+        return m, lambda: None, {"forward": lambda: m.forward(IDS)}, lambda r: r.forward(IDS)
+    if name == "SambaStack":
+        from mojolearn.training import Generator
+        m = M.SambaStack(M.SambaConfig(vocab=16, d_model=16, layers=("mamba3",)), generator=Generator(7), **kw)
+        return m, lambda: None, {"train_step": lambda: m.train_step(IDS[:, :-1].copy(), IDS[:, 1:].copy()),
+                                 "forward": lambda: m.forward(IDS)}, None
+    raise KeyError(name)
+def run_recipe(name, extra, mode):
+    try:
+        model, fit, ops, read = recipe(name, mode, extra)
+    except Exception as error:
+        return f"{type(error).__name__}: {error}"[:300], {}, None
+    try:
+        fit()
+    except Exception as error:
+        return f"{type(error).__name__}: {error}"[:300], {}, model
+    if read is not None:
+        ops["pickle"] = lambda: read(pickle.loads(pickle.dumps(model)))
+        if hasattr(model, "save") and hasattr(type(model), "load"):
+            def round_trip():
+                with tempfile.TemporaryDirectory() as folder:
+                    path = os.path.join(folder, "model.npz")
+                    model.save(path)
+                    return read(type(model).load(path))
+            ops["save_load"] = round_trip
+    done = {}
+    for op, call in ops.items():
+        try:
+            done[op] = digest(call())
+        except Exception as error:
+            done[op] = "refused: " + f"{type(error).__name__}: {error}"[:300]
+    return None, done, model if model is not None else type("Call", (), dict(numeric_mode=mode, get_params=lambda self: dict(numeric_mode=mode)))()
 def run(name, kind, extra, mode):
     # (fit error or None, {operation: digest or "refused: ..."}, model)
+    if kind == "recipe":
+        return run_recipe(name, extra, mode)
     # Construction is inside the report too: a class with no `numeric_mode` parameter (ElasticNet, GaussianNB,
     # MaxAbsScaler, RobustScaler) raises TypeError for the word, which is its refusal; its `identical` arm is
     # built without the keyword. Before this, the TypeError escaped the child and the whole unit was skipped.
@@ -406,8 +490,9 @@ for name, kind, extra in FAMILIES:
         if ops[op] != "same":
             ops[op] += " " + value[:200]
     whole = all(value == "same" for value in ops.values())
+    params = model.get_params() if hasattr(model, "get_params") else dict(numeric_mode=getattr(model, "numeric_mode", None))
     rows[name] = dict(status="answered" if whole else "mixed", ops=ops, attribute=getattr(model, "numeric_mode", None),
-                      param=model.get_params().get("numeric_mode"))
+                      param=params.get("numeric_mode"))
 print(json.dumps(dict(answer=mojolearn._backend._FAST_ANSWER, vendor=mojolearn.vendor(), rows=rows)))
 """
 
@@ -523,6 +608,25 @@ WALK = [
     ["cross_val_score(GaussianProcessRegressor)", "reg", {}],
     ["MLPClassifier", "cls", {"random_state": 0, "max_iter": 20}],
     ["MLPRegressor", "reg", {"random_state": 0, "max_iter": 20}],
+    # lane fx-fast-mask, 2026-11-20: the families that were off (TSA, NEURAL, XCNN, XSEQ, LINALG), one recipe per
+    # public form (the `recipe` function of the child): forecasters, recurrent nets, Sequential, the CNN classifier
+    # and layers, the embedding, the Samba stack, ARIMA, Cholesky and the resampling functions.
+    ["ARIMA", "recipe", {}],
+    ["Cholesky", "recipe", {}],
+    ["bootstrap", "recipe", {}],
+    ["ETS", "recipe", {}],
+    ["Theta", "recipe", {}],
+    ["CrostonClassic", "recipe", {}],
+    ["GARCH", "recipe", {}],
+    ["GRUClassifier", "recipe", {"random_state": 0, "max_epochs": 2}],
+    ["LSTMRegressor", "recipe", {"random_state": 0, "max_epochs": 2}],
+    ["RNNClassifier", "recipe", {"random_state": 0, "max_epochs": 2}],
+    ["Sequential", "recipe", {}],
+    ["CNNClassifier", "recipe", {"max_iter": 2}],
+    ["Conv2d", "recipe", {}],
+    ["LayerNorm", "recipe", {}],
+    ["Embedding", "recipe", {}],
+    ["SambaStack", "recipe", {}],
 ]
 
 #: The door family (core/mode_answer.mojo MODE_FAMILY_<name>) whose answer step each estimator's doors hold;
@@ -554,6 +658,10 @@ ESTIMATOR_FAMILY = {
     "cross_val_score(Ridge)": "MSEL", "cross_val_score(LogisticRegression)": "MSEL",
     "cross_val_score(KNeighborsClassifier)": "MSEL", "cross_val_score(GaussianProcessRegressor)": "MSEL",
     "MLPClassifier": "XSEQ", "MLPRegressor": "XSEQ",
+    "ARIMA": "TSA", "Cholesky": "LINALG", "bootstrap": "LINALG", "ETS": "XSEQ", "Theta": "XSEQ",
+    "CrostonClassic": "XSEQ", "GARCH": "XSEQ", "GRUClassifier": "XSEQ", "LSTMRegressor": "XSEQ",
+    "RNNClassifier": "XSEQ", "Sequential": "NEURAL", "CNNClassifier": "XCNN", "Conv2d": "XCNN",
+    "LayerNorm": "NEURAL", "Embedding": "NEURAL", "SambaStack": "NEURAL",
 }
 
 
