@@ -11,8 +11,8 @@ EXPERIMENT `-D MOJOLEARN_GEMM_FAST_MATRIX_UNITS=<kind>`, default OFF, A/B owed w
                   result file): it is the kernel `_fast_vendor_gemm` (gemm/checks/gemm_identical.mojo) calls in
                   the old non-identical builds, and its precision class is recorded in
                   checks/kernel_matrix.mojo::column_vendor_fp32_matmul_is_tf32.
-  kind 2 = bf16   REFUSED at compile time: no BF16 tensor-core kernel exists in the tree. The BF16 entries of
-                  gemm/checks/gemm_lowbit.mojo widen BF16 weights to FP32 and run the pinned FP32 kernel.
+  kind 2 = bf16   REFUSED at compile time: the bf16 matrix-unit route is its own define and policy row,
+                  `-D MOJOLEARN_GEMM_FAST_BF16_UNITS=1` (gemm/fast_bf16_units.mojo, row BF16_UNITS).
   kind 3 = tf32, every neural-dispatch caller: kind 1, and also the callers that closed the vendor route
                   (`allow_vendor=False` through gemm/neural_dispatch.mojo: the Llama stage projections, the
                   CNN linear products, the MoE grouped products). They closed it against the old unbounded
@@ -110,8 +110,8 @@ def _matrix_units_checked() -> Bool:
         or MATRIX_UNITS_KIND == MATRIX_UNITS_KIND_TF32_ALL
     ), "MOJOLEARN_GEMM_FAST_MATRIX_UNITS takes 1 (tf32), 2 (bf16) or 3 (tf32, closed callers too)"
     comptime assert MATRIX_UNITS_KIND != MATRIX_UNITS_KIND_BF16, (
-        "MOJOLEARN_GEMM_FAST_MATRIX_UNITS=2 (bf16): no BF16 tensor-core kernel exists in this tree; the only"
-        " floating matrix-unit product is linalg.matmul's TF32 (value 1)"
+        "MOJOLEARN_GEMM_FAST_MATRIX_UNITS=2 (bf16): the bf16 matrix-unit route is its own define,"
+        " -D MOJOLEARN_GEMM_FAST_BF16_UNITS=1 (gemm/fast_bf16_units.mojo)"
     )
     # The mode policy table is the single source (checks/mode_policy.mojo): the arm is a term of its
     # matrix-units row, which that module resolves from this same define and refuses in an identical build. The
