@@ -153,7 +153,6 @@ struct SequenceKeys(Defaultable, Movable):
     var k_sequence_dtype_separator: PythonObject
     var k_sequence_dtype_space: PythonObject
     var k_sequence_extra_bindings: PythonObject
-    var k_sequence_finalizer_types: PythonObject
     var k_sequence_owners: PythonObject
     var k_sequence_print_context_get: PythonObject
     var k_sequence_print_context_type: PythonObject
@@ -330,7 +329,6 @@ struct SequenceKeys(Defaultable, Movable):
         self.k_sequence_dtype_separator = PythonObject(None)
         self.k_sequence_dtype_space = PythonObject(None)
         self.k_sequence_extra_bindings = PythonObject(None)
-        self.k_sequence_finalizer_types = PythonObject(None)
         self.k_sequence_owners = PythonObject(None)
         self.k_sequence_print_context_get = PythonObject(None)
         self.k_sequence_print_context_type = PythonObject(None)
@@ -511,7 +509,6 @@ def _sequence_keys_fill(nk: UnsafePointer[SequenceKeys, MutUntrackedOrigin]) rai
     nk[].k_sequence_dtype_separator = py_key("sequence_dtype_separator")
     nk[].k_sequence_dtype_space = py_key("sequence_dtype_space")
     nk[].k_sequence_extra_bindings = py_key("sequence_extra_bindings")
-    nk[].k_sequence_finalizer_types = py_key("sequence_finalizer_types")
     nk[].k_sequence_owners = py_key("sequence_owners")
     nk[].k_sequence_print_context_get = py_key("sequence_print_context_get")
     nk[].k_sequence_print_context_type = py_key("sequence_print_context_type")

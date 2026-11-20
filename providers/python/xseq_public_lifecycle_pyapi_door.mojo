@@ -29,7 +29,11 @@ from bindings.py_model_records import (
     RECORDS_PREPARED, ContentRecord, content_value, records_drop, records_stampable, records_stamped_get,
     records_stamped_put,
 )
-from bindings.xseq_keys_unpack import xseq_keys
+from bindings.xseq_keys_unpack import (
+    xseq_keys, XSEQ_OPN_RNN_FIT, XSEQ_OPN_RNN_PREDICT_PROBA, XSEQ_OPN_RNN_HIDDEN_SEQUENCE, XSEQ_OPN_RNN_SCORE,
+    XSEQ_OPN_RNN_CLASSIFIER_SCORE, XSEQ_OPN_MLP_FIT, XSEQ_OPN_MLP_PREDICT_PROBA, XSEQ_OPN_MLP_SCORE,
+    XSEQ_OPN_MLP_CLASSIFIER_SCORE,
+)
 from bindings.py_balanced import py_item
 
 
@@ -229,6 +233,30 @@ def _finite(view: PythonObject, name: String, model_name: String, context: Pytho
     _ = view
 
 
+def _xseq_method(operation: Int, name: PythonObject, fitting: Bool) raises -> String:
+    """The public method an operation runs, for the fitted check's message and
+    the output rule of `finish`."""
+    if fitting:
+        return "fit"
+    if operation >= 0:
+        if (operation == XSEQ_OPN_RNN_SCORE or operation == XSEQ_OPN_RNN_CLASSIFIER_SCORE
+                or operation == XSEQ_OPN_MLP_SCORE or operation == XSEQ_OPN_MLP_CLASSIFIER_SCORE):
+            return "score"
+        if operation == XSEQ_OPN_RNN_PREDICT_PROBA or operation == XSEQ_OPN_MLP_PREDICT_PROBA:
+            return "predict_proba"
+        if operation == XSEQ_OPN_RNN_HIDDEN_SEQUENCE:
+            return "hidden_sequence"
+        return "predict"
+    # A name that is not an operation: the suffix rule of the former name test.
+    var text = String(py=name)
+    if text.endswith("score"):
+        return "score"
+    if text.endswith("predict_proba"):
+        return "predict_proba"
+    if text.endswith("hidden_sequence"):
+        return "hidden_sequence"
+    return "predict"
+
 
 struct XseqPublicLifecycle(Movable):
     var source: PythonObject
@@ -243,18 +271,27 @@ struct XseqPublicLifecycle(Movable):
     var method: String
     var shape: List[Int]
 
-    def __init__(out self, model: PythonObject, operation: String, args: PythonObject,
+    def __init__(out self, model: PythonObject, operation: Int, name: PythonObject, args: PythonObject,
                  context: PythonObject) raises:
-        var fields = xseq_public_owner(model, context, operation.endswith("_fit"))
+        # bw2-sequence (2026-11-20): `operation` is the xseq code
+        # (bindings/xseq_keys_unpack.mojo). The fit test, the method name and
+        # the perceptron test were suffix and prefix tests of the name String
+        # on every call; only a name that is not an operation (-1) still
+        # reads them from its String, as before.
+        var fitting = operation == XSEQ_OPN_RNN_FIT or operation == XSEQ_OPN_MLP_FIT
+        var perceptron = operation >= XSEQ_OPN_MLP_FIT and operation <= XSEQ_OPN_MLP_CLASSIFIER_SCORE
+        if operation < 0:
+            var text = String(py=name)
+            fitting = text.endswith("_fit")
+            perceptron = text.startswith("mlp_")
+        var fields = xseq_public_owner(model, context, fitting)
         self.source = args[0]
         self.original_arguments = args  # retain every original owner through finish
         self.arguments = args
         var nk = xseq_keys()
         self.lifecycle = py_item(context, nk[].k_xseq_lifecycle_context)
-        self.fitting = operation.endswith("_fit")
-        self.method = String("fit" if self.fitting else ("score" if operation.endswith("score") else
-            ("predict_proba" if operation.endswith("predict_proba") else
-             ("hidden_sequence" if operation.endswith("hidden_sequence") else "predict"))))
+        self.fitting = fitting
+        self.method = _xseq_method(operation, name, fitting)
         self.outside = estimator_outside()
         self.name = classical_estimator_name(model)
         self.shape = List[Int]()
@@ -296,7 +333,7 @@ struct XseqPublicLifecycle(Movable):
             if rank == 2 and (self.shape[0] == 0 or self.shape[1] == 0):
                 raise Error("Found array with 0 " + String("sample(s)" if self.shape[0] == 0 else "feature(s)")
                     + " (shape=" + String(py=py_call(b.repr, dimensions)) + ") while a minimum of 1 is required by " + self.name + ".")
-        if operation.startswith("mlp_"):
+        if perceptron:
             _finite(x, "X", self.name, context)
         if not self.fitting and rank == 2:
             var columns = py_get(fields, nk[].k_n_features_in_)

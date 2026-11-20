@@ -49,7 +49,10 @@ from sequence.xseq_neural_run import (
     xseq_run_mlp_layers_check, xseq_run_mlp_layer_check, xseq_run_mlp_pack, xseq_run_mlp_output_check,
     xseq_run_mlp_predict,
 )
-from bindings.xseq_keys_unpack import xseq_keys
+from bindings.xseq_keys_unpack import (
+    xseq_keys, XSEQ_OPN_RNN_FIT, XSEQ_OPN_RNN_HIDDEN_SEQUENCE, XSEQ_OPN_RNN_PREDICT_PROBA, XSEQ_OPN_MLP_FIT,
+    XSEQ_OPN_MLP_PREDICT_PROBA,
+)
 from bindings.py_balanced import py_item
 
 
@@ -531,10 +534,13 @@ def _rnn_run(model: PythonObject, fields: PythonObject, source: PythonObject, wa
     return Python.tuple(out, seq)
 
 
-def xseq_rnn(model: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def xseq_rnn(model: PythonObject, operation: Int, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    # bw2-sequence (2026-11-20): `operation` is the xseq code (bindings/xseq_keys_unpack.mojo); it was
+    # the name String, compared per call. A code that is not one of these (an unknown `rnn_` name
+    # is -1) predicts, as the name chain did.
     var fields = py_fields(model)
-    var nk = xseq_keys()
-    if operation == "rnn_fit":
+    if operation == XSEQ_OPN_RNN_FIT:
+        var nk = xseq_keys()
         var task = Int(py=_attr(py_type(model), "_TASK"))
         if task == 0:
             var y = xseq_input(args[1], context)
@@ -560,11 +566,12 @@ def xseq_rnn(model: PythonObject, operation: String, args: PythonObject, context
         _ = target  # keep the Python object alive through the native call above
         _ = codes  # keep the Python object alive through the native call above
         return _rnn_fit(model, fields, args[0], target, entries, context)
-    if operation == "rnn_hidden_sequence":
+    if operation == XSEQ_OPN_RNN_HIDDEN_SEQUENCE:
         return _rnn_run(model, fields, args[0], True, context)[1]
+    var nk = xseq_keys()
     var result = _rnn_run(model, fields, args[0], False, context)
     var out = result[0]
-    if operation == "rnn_predict_proba":
+    if operation == XSEQ_OPN_RNN_PREDICT_PROBA:
         return out
     if Int(py=_attr(py_type(model), "_TASK")) == 0:
         if xseq_truth(py_get(fields, nk[].k__y_1d, PythonObject(False))):
@@ -841,11 +848,12 @@ def _mlp_forward(model: PythonObject, fields: PythonObject, source: PythonObject
     return out
 
 
-def xseq_mlp(model: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def xseq_mlp(model: PythonObject, operation: Int, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    # bw2-sequence (2026-11-20): the xseq code, as `xseq_rnn`.
     var fields = py_fields(model)
     var classifier = String(py=_attr(py_type(model), "_estimator_type")) == "classifier"
     var nk = xseq_keys()
-    if operation == "mlp_fit":
+    if operation == XSEQ_OPN_MLP_FIT:
         if not classifier:
             var y = xseq_as_f32_c(args[1], 0, "y", context)
             py_setitem(fields, nk[].k__y_1d, Int(py=y.ndim) == 1)
@@ -869,7 +877,7 @@ def xseq_mlp(model: PythonObject, operation: String, args: PythonObject, context
             return _mlp_fit(model, fields, args[0], codes, 1, 1, context)
         py_setitem(fields, nk[].k__LOSS_CODE, 2)
         return _mlp_fit(model, fields, args[0], codes, 4, k, context)
-    if operation == "mlp_predict_proba":
+    if operation == XSEQ_OPN_MLP_PREDICT_PROBA:
         return _mlp_forward(model, fields, args[0], Int(py=py_item(fields, nk[].k_n_outputs_)) == 1, context)
     var out = _mlp_forward(model, fields, args[0], False, context)
     var rows = Int(py=out.shape[0])

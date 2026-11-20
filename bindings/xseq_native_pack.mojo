@@ -25,6 +25,13 @@ from bindings.py_balanced import py_fields
 from providers.python.xseq_public_lifecycle_pyapi_door import XseqPublicLifecycle
 from providers.python.recurrent_state_pyapi_door import recurrent_state
 from providers.python.estimator_lifecycle_pyapi_unpack import estimator_fit_begin, estimator_fit_end
+from bindings.py_keys import py_op_code
+from bindings.xseq_keys_unpack import (
+    xseq_keys, XSEQ_OPN_RNN_STATE_DICT, XSEQ_OPN_RNN_LOAD_STATE_DICT, XSEQ_OPN_RNN_FIT, XSEQ_OPN_RNN_PREDICT,
+    XSEQ_OPN_RNN_SCORE, XSEQ_OPN_RNN_CLASSIFIER_SCORE, XSEQ_OPN_MLP_FIT, XSEQ_OPN_MLP_PREDICT, XSEQ_OPN_MLP_SCORE,
+    XSEQ_OPN_MLP_CLASSIFIER_SCORE, XSEQ_OPN_PROPHET_INITIALIZE, XSEQ_OPN_PROPHET_ADD_SEASONALITY,
+    XSEQ_OPN_PROPHET_FIT, XSEQ_OPN_PROPHET_PREDICT,
+)
 
 
 def _xseq_raise(error: Error, args_ptr: PyObjectPtr) -> PyObjectPtr:
@@ -69,35 +76,69 @@ def _xseq_raise(error: Error, args_ptr: PyObjectPtr) -> PyObjectPtr:
     return raise_python_exception(error_without_class(error, "ValueError"), ExceptionType.ValueError)
 
 
-def _xseq_execute(model: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
+# bw2-sequence (2026-11-20): the owner of an operation code is a range test
+# (codes are numbered by owner: bindings/xseq_keys_unpack.mojo).
+comptime _XSEQ_STATE = 0
+comptime _XSEQ_RNN = 1
+comptime _XSEQ_MLP = 2
+comptime _XSEQ_PROPHET = 3
+comptime _XSEQ_FORECAST = 4
+
+
+def _xseq_owner(operation: Int, name: PythonObject) raises -> Int:
+    """The owner of an operation code. Only a name that is not an operation
+    (-1) builds its String, for the prefix route it took before: an unknown
+    `rnn_`/`mlp_` name runs that owner's public lifecycle, any other goes to
+    the forecasters' unknown-operation path (a name that is not a str raises
+    here, where its String copy raised)."""
+    if operation >= XSEQ_OPN_RNN_STATE_DICT and operation <= XSEQ_OPN_RNN_LOAD_STATE_DICT:
+        return _XSEQ_STATE
+    if operation >= XSEQ_OPN_RNN_FIT and operation <= XSEQ_OPN_RNN_CLASSIFIER_SCORE:
+        return _XSEQ_RNN
+    if operation >= XSEQ_OPN_MLP_FIT and operation <= XSEQ_OPN_MLP_CLASSIFIER_SCORE:
+        return _XSEQ_MLP
+    if operation >= XSEQ_OPN_PROPHET_INITIALIZE and operation <= XSEQ_OPN_PROPHET_PREDICT:
+        return _XSEQ_PROPHET
+    if operation >= 0:
+        return _XSEQ_FORECAST
+    var text = String(py=name)
+    if text.startswith("rnn_"):
+        return _XSEQ_RNN
+    if text.startswith("mlp_"):
+        return _XSEQ_MLP
+    return _XSEQ_FORECAST
+
+
+def _xseq_execute(model: PythonObject, operation: Int, owner: Int, name: PythonObject, args: PythonObject,
+                  context: PythonObject) raises -> PythonObject:
     var result: PythonObject
-    if operation == "rnn_score" or operation == "mlp_score":
+    if operation == XSEQ_OPN_RNN_SCORE or operation == XSEQ_OPN_MLP_SCORE:
         # predict, then R^2 against y, in this one call
         var predict_args = Python.tuple(args[0])
-        var prediction = (xseq_rnn(model, "rnn_predict", predict_args, context) if operation == "rnn_score"
-                          else xseq_mlp(model, "mlp_predict", predict_args, context))
+        var prediction = (xseq_rnn(model, XSEQ_OPN_RNN_PREDICT, predict_args, context) if operation == XSEQ_OPN_RNN_SCORE
+                          else xseq_mlp(model, XSEQ_OPN_MLP_PREDICT, predict_args, context))
         result = xseq_regressor_score(model, prediction, args, context)
-    elif operation == "rnn_classifier_score" or operation == "mlp_classifier_score":
+    elif operation == XSEQ_OPN_RNN_CLASSIFIER_SCORE or operation == XSEQ_OPN_MLP_CLASSIFIER_SCORE:
         # `ClassifierScoreMixin.score`: predict, then the accuracy of it
         # against y, in this one call
         var predict_args = Python.tuple(args[0])
-        var prediction = (xseq_rnn(model, "rnn_predict", predict_args, context) if operation == "rnn_classifier_score"
-                          else xseq_mlp(model, "mlp_predict", predict_args, context))
+        var prediction = (xseq_rnn(model, XSEQ_OPN_RNN_PREDICT, predict_args, context) if operation == XSEQ_OPN_RNN_CLASSIFIER_SCORE
+                          else xseq_mlp(model, XSEQ_OPN_MLP_PREDICT, predict_args, context))
         result = xseq_classifier_score(model, prediction, args, context)
-    elif operation == "prophet_initialize":
+    elif operation == XSEQ_OPN_PROPHET_INITIALIZE:
         result = prophet_initialize(model, args, context)
-    elif operation == "prophet_add_seasonality":
+    elif operation == XSEQ_OPN_PROPHET_ADD_SEASONALITY:
         result = prophet_add_seasonality(model, args, context)
-    elif operation == "prophet_fit":
+    elif operation == XSEQ_OPN_PROPHET_FIT:
         result = prophet_fit(model, args, context)
-    elif operation == "prophet_predict":
+    elif operation == XSEQ_OPN_PROPHET_PREDICT:
         result = prophet_predict(model, args, context)
-    elif operation.startswith("rnn_"):
+    elif owner == _XSEQ_RNN:
         result = xseq_rnn(model, operation, args, context)
-    elif operation.startswith("mlp_"):
+    elif owner == _XSEQ_MLP:
         result = xseq_mlp(model, operation, args, context)
     else:
-        result = xseq_forecast(model, operation, args, context)
+        result = xseq_forecast(model, operation, name, args, context)
     return result
 
 
@@ -105,27 +146,36 @@ def xseq_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
     try:
         var call = PythonObject(from_borrowed=args_ptr)
         var model = call[0]
-        var operation = String(py=call[1])
+        # bw2-sequence (2026-11-20): the operation is one lookup of the
+        # caller's str in the held operation table (it was copied into a
+        # String and routed by up to sixteen compares and prefix tests per
+        # call, then compared again by each owner's chain). Owners take the
+        # code; only a name that is not an operation builds its String.
+        var name = call[1]
+        var nk = xseq_keys()
+        var operation = py_op_code(nk[].ops, name)
+        var owner = _xseq_owner(operation, name)
         var args = call[2]
         var context = call[3]
         var result = PythonObject(None)
-        if operation == "rnn_state_dict" or operation == "rnn_load_state_dict":
-            result = recurrent_state(model, operation, args, context)
-        elif operation.startswith("rnn_") or operation.startswith("mlp_"):
-            var lifecycle = XseqPublicLifecycle(model, operation, args, context)
+        if owner == _XSEQ_STATE:
+            # providers/python/recurrent_state_pyapi_door.mojo (another family) takes the name.
+            result = recurrent_state(model, String(py=name), args, context)
+        elif owner == _XSEQ_RNN or owner == _XSEQ_MLP:
+            var lifecycle = XseqPublicLifecycle(model, operation, name, args, context)
             if lifecycle.fitting:
                 var depth = estimator_fit_begin(py_fields(model))
                 try:
-                    result = _xseq_execute(model, operation, lifecycle.arguments, context)
+                    result = _xseq_execute(model, operation, owner, name, lifecycle.arguments, context)
                 except problem:
                     raise lifecycle.refusal(problem)
                 finally:
                     estimator_fit_end(model, depth)
             else:
-                result = _xseq_execute(model, operation, lifecycle.arguments, context)
+                result = _xseq_execute(model, operation, owner, name, lifecycle.arguments, context)
             result = lifecycle.finish(model, result, context)
         else:
-            result = _xseq_execute(model, operation, args, context)
+            result = _xseq_execute(model, operation, owner, name, args, context)
         return result.steal_data()
     except error:
         return _xseq_raise(error, args_ptr)

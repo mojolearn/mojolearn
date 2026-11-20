@@ -9,6 +9,12 @@ from std.python import Python, PythonObject
 from core.shared_slot import SharedSlot
 from bindings.py_keys import py_key, py_op_add
 
+# bw2-sequence (2026-11-20): codes are numbered by owner, so `xseq_c` routes
+# by range tests: recurrent state 0-1, recurrent models 2-7, perceptrons 8-12,
+# Prophet 13-16, the VAR/STL matrix owner 17-24, then one block of four per
+# forecaster kind (theta, croston, ets, garch: initialize, forecast, fit,
+# predict; garch has no predict), so kind = (code - 25) // 4 and the step is
+# (code - 25) % 4 (bindings/xseq_forecast_native_door.mojo).
 comptime XSEQ_OPN_RNN_STATE_DICT = 0
 comptime XSEQ_OPN_RNN_LOAD_STATE_DICT = 1
 comptime XSEQ_OPN_RNN_FIT = 2
@@ -189,6 +195,12 @@ struct XseqKeys(Defaultable, Movable):
     var k_xseq_theta_codes: PythonObject
     var k_xseq_theta_models: PythonObject
     var k_yearly_seasonality: PythonObject
+    var k_conditional_volatility_: PythonObject
+    var k_dist: PythonObject
+    var k_loglikelihood_: PythonObject
+    var k_model_: PythonObject
+    var k_power: PythonObject
+    var k_seasonal_states_: PythonObject
 
     def __init__(out self):
         self.ready = False
@@ -327,6 +339,12 @@ struct XseqKeys(Defaultable, Movable):
         self.k_xseq_theta_codes = PythonObject(None)
         self.k_xseq_theta_models = PythonObject(None)
         self.k_yearly_seasonality = PythonObject(None)
+        self.k_conditional_volatility_ = PythonObject(None)
+        self.k_dist = PythonObject(None)
+        self.k_loglikelihood_ = PythonObject(None)
+        self.k_model_ = PythonObject(None)
+        self.k_power = PythonObject(None)
+        self.k_seasonal_states_ = PythonObject(None)
 
 
 comptime _XSEQ_KEYS = SharedSlot[XseqKeys, "MojolearnXseqKeysV1"]
@@ -469,6 +487,12 @@ def _xseq_keys_fill(nk: UnsafePointer[XseqKeys, MutUntrackedOrigin]) raises:
     nk[].k_xseq_theta_codes = py_key("xseq_theta_codes")
     nk[].k_xseq_theta_models = py_key("xseq_theta_models")
     nk[].k_yearly_seasonality = py_key("yearly_seasonality")
+    nk[].k_conditional_volatility_ = py_key("conditional_volatility_")
+    nk[].k_dist = py_key("dist")
+    nk[].k_loglikelihood_ = py_key("loglikelihood_")
+    nk[].k_model_ = py_key("model_")
+    nk[].k_power = py_key("power")
+    nk[].k_seasonal_states_ = py_key("seasonal_states_")
     var ops = Python.dict()
     py_op_add(ops, "rnn_state_dict", XSEQ_OPN_RNN_STATE_DICT)
     py_op_add(ops, "rnn_load_state_dict", XSEQ_OPN_RNN_LOAD_STATE_DICT)
