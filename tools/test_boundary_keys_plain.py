@@ -52,6 +52,10 @@ def test_line_count_and_untouched_text():
     keys = 'nk[].k_alpha = py_key("alpha")\npy_op_add(ops, "hw_fit", TSA_OPN_HW_FIT)'
     assert is_keys_file("bindings/tsa_keys_unpack.mojo")
     assert plain("bindings/tsa_keys_unpack.mojo", keys) == keys
+    names = 'comptime GP_OPN_FAMILY_GP_GPR_FIT = 7\n    leaves.append(GP_OPN_FAMILY_GP_GPR_FIT)'
+    assert is_keys_file("bindings/operation_names_gp.mojo")
+    assert plain("bindings/operation_names_gp.mojo", names) == names
+    assert plain(DOOR, "if operation == GP_OPN_FAMILY_GP_GPR_FIT:") == 'if operation == "family_gp_gpr_fit":'
     long = "\n".join(["    x = py_item(a, nk[].k_b)"] * 7)
     assert plain(DOOR, long).count("\n") == long.count("\n")
     assert plain(DOOR, None) is None
