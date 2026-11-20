@@ -298,8 +298,10 @@ def retired_lane_prefixes(path=VERIFY_REFERENCE):
 
 def table_lanes(path=TABLE, table=None):
     """Every lane the SHIPPED table carries at least one cell for, minus the
-    retired lanes (RETIRED_LANE_PREFIXES): the table keeps their cells as
-    history, admission ignores them, and no harness lane is left to read."""
+    retired lanes (RETIRED_LANE_PREFIXES): the table carried their cells as
+    history until lane fx-multigpu-optional (2026-11-20) moved them to
+    tools/dev/multi_gpu_retired_par_cells.json; the filter stays for a table
+    built from an older record."""
     if table is None:
         with open(path, "r", encoding="utf-8") as fh:
             table = json.load(fh)
