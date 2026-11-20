@@ -50,8 +50,8 @@ export NVC_CAP_MIN=${CPC_CAP_MIN:-180}                # a check job's default an
 # shellcheck source=tools/nvidia_central.sh
 . "$_CPC_ROOT/tools/nvidia_central.sh"
 ROOT=$_CPC_ROOT
-# a CPU pod's v1 status endpoint answered 403 for a live pod (tools/runpod_cpu_leg.sh, 2026-10-29): reconcile and the
-# Mac watcher read and delete through v2 (the DELETE still falls back to v1)
+# every RunPod call for the CPU box is API v2 (api.runpod.io/v2): dev_pod.sh creates through it, and reconcile and the
+# Mac watcher read and delete through it (v1's host rest.runpod.io stopped resolving 2026-11-20, lane fx-cpu-pod-v2)
 rp_select_api 2
 die() { echo "cpu_central: $*" >&2; exit 1; }
 say() { echo "cpu_central: $*"; }

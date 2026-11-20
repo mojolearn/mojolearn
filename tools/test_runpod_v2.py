@@ -108,12 +108,14 @@ def test_v2_complete_listing_and_v1_legacy_shape(tmp_path):
     assert parsed(tmp_path, old, 'status', version=1) == 'RUNNING'
 
 
+# kind 0 is the NVIDIA pod, cpu the CPU check box (tools/cpu_central.sh): both create through v2 (fx-cpu-pod-v2)
+@pytest.mark.parametrize('kind, types', [('0', 'NVIDIA L4,NVIDIA L40S'), ('cpu', 'cpu5c,cpu3c')])
 @pytest.mark.parametrize('case, retained_guard, expected_code', [
     ('stock', False, 1), ('schema', False, 42),
-    ('uncertain', True, 42), ('partial-after', True, 42),
+    ('uncertain', True, 42), ('partial-after', True, 42), ('queued', True, 42),
 ])
 def test_create_recovery_retains_full_errors_and_never_retries_uncertainty(
-        tmp_path, case, retained_guard, expected_code):
+        tmp_path, case, retained_guard, expected_code, kind, types):
     # Execute only the isolated controller function against an in-memory API
     # fixture. No real curl, lease process, SSH, keys or provider calls exist.
     root = Path(__file__).resolve().parents[1]
@@ -131,6 +133,7 @@ rp_call() {
         printf 'POST\n' >> "$TMPD/calls"
         RP_CODE=400
         [ "$CASE" != uncertain ] || RP_CODE=503
+        if [ "$CASE" = queued ]; then RP_CODE=202; printf '{"id":"queued1","status":"QUEUED"}' > "$TMPD/rp.body"; return; fi
         python3 - "$TMPD/rp.body" "$CASE" <<'PY'
 import json, sys
 message = 'out of stock' if sys.argv[2] in ('stock', 'partial-after') else 'schema rejected'
@@ -149,7 +152,7 @@ PY
 }
 mkdir -p "$D"
 code=0
-runpod_create 0 'NVIDIA L4,NVIDIA L40S' image 0 || code=$?
+runpod_create 0 "$TYPES" image "$KIND" || code=$?
 exit "$code"
 '''
     script = 'source "$ROOT/tools/runpod_pod_lib.sh"\n' + function + fake
@@ -159,7 +162,8 @@ exit "$code"
     state.mkdir()
     lane = state/'fixture'
     env = {**os.environ, 'ROOT': str(root), 'TMPD': str(temp), 'STATE_ROOT': str(state),
-           'D': str(lane), 'KEY': 'fixture', 'CASE': case, 'DISK_GB': '80',
+           'D': str(lane), 'KEY': 'fixture', 'CASE': case, 'DISK_GB': '80', 'KIND': kind, 'TYPES': types,
+           'CPU_VCPU': '32',
            'NV_GPU_COUNT': '1', 'READY_TIMEOUT': '1', 'minutes': '1',
            # rent_guard.sh counts live pods through the RunPod API before each create; the fixture's count stands
            # in, so no key is needed (a CI runner has none) and no provider call is made from a test
@@ -173,8 +177,16 @@ exit "$code"
     assert (lane/'deadman.pid').exists() is retained_guard
     evidence, = state.glob('fixture.requests-*')
     response = json.loads((evidence/'response-1.json').read_text())
-    assert response['error'].endswith('retained-detail-' * 80)
-    assert json.loads((evidence/'request-1.json').read_text())['gpu']['minCudaVersion'] == '13.0'
+    if case == 'queued':
+        assert response['status'] == 'QUEUED' and 'HTTP 202 (queued)' in result.stderr
+    else:
+        assert response['error'].endswith('retained-detail-' * 80)
+    request = json.loads((evidence/'request-1.json').read_text())
+    if kind == 'cpu':
+        # the v2 CPU body (runpod/docs api-reference-v2/openapi.json CreatePodRequest, CreateCpuConfig): first flavor
+        assert request['cpu'] == {'id': 'cpu5c', 'vcpuCount': 32} and 'gpu' not in request and request['image'] == 'image'
+    else:
+        assert request['gpu']['minCudaVersion'] == '13.0'
 
 
 def test_slow_readiness_preserves_status_and_ssh_errors_without_restarting(tmp_path):

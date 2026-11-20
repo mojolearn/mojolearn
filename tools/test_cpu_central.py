@@ -123,8 +123,10 @@ def test_up_prints_the_picked_request_without_renting(tmp_path):
     assert got.returncode == 0, got.stderr
     assert "64 vCPU of flavors cpu3g" in got.stdout and "RunPod's CPU catalog" in got.stdout
     req = json.loads(got.stdout.split("request: ", 1)[1].strip())
-    assert req["computeType"] == "CPU" and req["vcpuCount"] == 64 and req["cpuFlavorIds"] == ["cpu3g"]
-    assert "gpuTypeIds" not in req and "gpu" not in req
+    # the RunPod API v2 CreatePodRequest (runpod/docs api-reference-v2/openapi.json): one flavor, a vCPU count
+    assert req["cpu"] == {"id": "cpu3g", "vcpuCount": 64} and req["image"] and req["startSsh"] is True
+    assert req["ports"] == ["22/tcp"] and req["cloud"] == "SECURE" and isinstance(req["disk"], int)
+    assert not {"gpu", "gpuTypeIds", "imageName", "computeType", "cpuFlavorIds", "vcpuCount", "queue"} & set(req)
     assert no_box_rented(tmp_path)
     # no catalog: the fallback order at the minimum vCPUs
     got = run(tmp_path, "up", MOJOLEARN_ORCHESTRATOR="1", MOJOLEARN_RENT_GUARD_TEST_PODS="1 0",
@@ -143,11 +145,27 @@ def test_cpu_pick_rules():
     assert all(f[-1] in "gm" for f in rgr.pick_cpu_instance([], 48, 4)[0])
     with pytest.raises(ValueError):
         rgr.pick_cpu_instance(None, 32, 16)
+    # v2 takes only a power-of-two vCPU count: a 48-vCPU flavor offers 32; the fallback rounds the minimum up
+    assert rgr.pick_cpu_instance([{"id": "cpu5c", "maxVcpu": 48, "ramMultiplier": 2}], 32, 2) == (["cpu5c"], 32)
+    assert rgr.pick_cpu_instance(None, 48, 2)[1] == 64
+    with pytest.raises(ValueError):
+        rgr.pick_cpu_instance([{"id": "cpu5c", "maxVcpu": 48, "ramMultiplier": 2}], 48, 2)
 
 
 def test_cpu_request_refusals():
     good = rgr.build_cpu_request("n", "runpod/base:1.3.1-ubuntu2204", "cpu5c,cpu3c", 32, 100, env={})
-    assert good["computeType"] == "CPU" and good["cpuFlavorPriority"] == "custom" and good["ports"] == ["22/tcp"]
+    assert good == {"name": "n", "image": "runpod/base:1.3.1-ubuntu2204", "cloud": "SECURE", "disk": 100,
+                    "startSsh": True, "ports": ["22/tcp"], "cpu": {"id": "cpu5c", "vcpuCount": 32}}
+    # one flavor per create attempt, in our order, wrapping
+    assert [rgr.build_cpu_request("n", "runpod/base:1", "cpu5c,cpu3c", 32, 100, a, env={})["cpu"]["id"]
+            for a in range(3)] == ["cpu5c", "cpu3c", "cpu5c"]
+    assert rgr.build_cpu_request("n", "runpod/base:1", "cpu5c", 32, 100,
+                                 env={"MOJOLEARN_DEVPOD_CLOUD_TYPE": "COMMUNITY"})["cloud"] == "COMMUNITY"
+    for vcpu in (24, 48, 1024):
+        with pytest.raises(ValueError):
+            rgr.build_cpu_request("n", "runpod/base:1", "cpu5c", vcpu, 100, env={})
+    with pytest.raises(ValueError):
+        rgr.build_cpu_request("n", "runpod/base:1", "cpu5c", 32, 100, -1, env={})
     for flavors in ("m2pro", "applem2", "cpu4c", ""):
         with pytest.raises(ValueError):
             rgr.build_cpu_request("n", "runpod/base:1", flavors, 32, 100, env={})
@@ -155,6 +173,26 @@ def test_cpu_request_refusals():
         rgr.build_cpu_request("n", "ghcr.io/x/macos-runner:1", "cpu5c", 32, 100, env={})
     with pytest.raises(ValueError):
         rgr.build_cpu_request("n", "runpod/base:1", "cpu5c", 1, 100, env={})
+
+
+def test_cpu_request_cli_attempt(tmp_path):
+    out = tmp_path / "req.json"
+    for args, want in (([], "cpu5c"), (["1"], "cpu3c")):
+        got = subprocess.run([sys.executable, str(ROOT / "tools/runpod_gpu_request.py"), "cpu", str(out), "n",
+                              "runpod/base:1", "cpu5c,cpu3c", "32", "100", *args], capture_output=True, text=True)
+        assert got.returncode == 0, got.stderr
+        assert json.loads(out.read_text())["cpu"]["id"] == want
+    got = subprocess.run([sys.executable, str(ROOT / "tools/runpod_gpu_request.py"), "cpu", str(out), "n",
+                          "runpod/base:1", "cpu5c", "48", "100"], capture_output=True, text=True)
+    assert got.returncode != 0 and "power of two" in got.stderr
+
+
+def test_dev_pod_cpu_create_is_v2():
+    """The CPU create, readiness and delete use v2: the v1 host rest.runpod.io stopped resolving (2026-11-20)."""
+    src = DEVPOD.read_text()
+    assert 'if [ "$4" = 1 ]; then rp_select_api 1; else rp_select_api 2; fi' in src
+    assert '"$CPU_VCPU" "$DISK_GB" "$((attempt - 1))"' in src
+    assert "create HTTP 202 (queued)" in src
 
 
 def test_dev_pod_cpu_refusals(tmp_path):
