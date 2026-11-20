@@ -335,9 +335,11 @@ def cmd_summary(args):
         bad = [r for r in mine if r.get("kind") != "pass"]
         lines += [f"## {step}: {len(mine) - len(bad)} of {len(mine)} passed", ""]
         if step == "parse":
-            lines += ["| file | result | rc | seconds | RAM peak GiB | swap peak GiB |", "|---|---|---|---|---|---|"]
+            lines += ["| file | result | rc | seconds | RAM peak GiB | swap peak GiB | Apple GPU target selected |",
+                      "|---|---|---|---|---|---|---|"]
             lines += [f"| {r.get('key')} | {r.get('kind')} | {r.get('rc')} | {r.get('seconds')} | "
-                      f"{gib(r.get('host_used_peak_bytes'))} | {gib(r.get('swap_used_peak_bytes'))} |" for r in mine]
+                      f"{gib(r.get('host_used_peak_bytes'))} | {gib(r.get('swap_used_peak_bytes'))} | "
+                      f"{r.get('apple_target', '-')} |" for r in mine]
         else:
             lines += ["| file | result | rc | seconds | bytes | Metal kernels in the file | -j |",
                       "|---|---|---|---|---|---|---|"]

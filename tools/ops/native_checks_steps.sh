@@ -132,8 +132,8 @@ step_parse_group() {
     limit=${PARSE_LIMIT_SECONDS:-1320}
     start=$(date +%s)
     result() {  # kind rc: the line device-parse-triage and device-parse-verdict read
-        printf 'key=%s stem=%s kind=%s rc=%s seconds=%s %s\n' "$KEY" "$STEM" "$1" "$2" "$(( $(date +%s) - start ))" \
-            "$(cat "$out/memory-$KEY.txt" 2>/dev/null)" > "$out/result-$KEY.txt"
+        printf 'key=%s stem=%s kind=%s rc=%s seconds=%s %s%s\n' "$KEY" "$STEM" "$1" "$2" "$(( $(date +%s) - start ))" \
+            "$(cat "$out/memory-$KEY.txt" 2>/dev/null)" "${probe:-}" > "$out/result-$KEY.txt"
     }
     python3 tools/generated_sources.py prepare --repo "$PWD" < /dev/null > "$out/generated-sources.log" 2>&1 \
         || { tail -n 20 "$out/generated-sources.log"; result setup 1; exit 1; }
@@ -183,6 +183,33 @@ except subprocess.TimeoutExpired:
     sys.exit(124)' "$@"
         fi
     }
+    # THE TARGET PROBE (Apple device kinds): which column and which kind of build did these flags select? A few
+    # lines compiled with the file's own flags: `comptime assert` on the Apple GPU target and on the policy build
+    # (2 = the legacy fast set, 0 = identical; checks/mode_policy.mojo). Recorded in the result line as
+    # apple_target=yes|no, never a failure by itself: `metal:1` is the flag the metal1 files have always passed,
+    # and whether the compiler reads it as an Apple GPU is exactly what this line tells.
+    probe=""
+    if [ "$KIND" = apple-fast ] || [ "$KIND" = apple-identical ]; then
+        want=2; [ "$KIND" = apple-fast ] || want=0
+        cat > "$out/probe-$KEY.mojo" <<PROBE
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
+from checks.mode_policy import POLICY_BUILD
+
+
+def main():
+    comptime assert TARGET_HAS_APPLE_GPU, "apple target probe: these flags do not select an Apple GPU target"
+    comptime assert POLICY_BUILD == $want, "apple target probe: not the expected kind of build"
+    print("apple target probe")
+PROBE
+        if limited 600 pixi run mojo build --emit llvm --no-optimization $flags $target -I . -I bindings \
+            "$out/probe-$KEY.mojo" -o "$out/probe-$KEY.ll" > "$out/probe-$KEY.log" 2>&1; then
+            probe=" apple_target=yes"
+        else
+            probe=" apple_target=no"; grep -m 3 'error' "$out/probe-$KEY.log"
+        fi
+        rm -f "$out/probe-$KEY.ll"
+        echo "$label:$probe"
+    fi
     echo "$label: mojo build -j $cores --emit llvm --no-optimization $flags $target" | tee "$out/flags-$KEY.txt"
     limited "$limit" pixi run mojo build -j "$cores" --emit llvm --no-optimization $flags \
         $target -I . -I bindings "$out/$KEY.mojo" -o "$out/$KEY.ll" > "$out/$KEY.log" 2>&1
