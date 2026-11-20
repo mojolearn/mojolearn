@@ -54,6 +54,25 @@ def answer_mode_object(mut mode: PythonObject, word: String, family: Int) raises
                 mode = held[].words[0]
 
 
+@always_inline
+def answer_mode_python(mut mode: PythonObject, family: Int) raises:
+    """`mode` is an admitted exact Python str mode word of a door of `family`
+    whose text the door has not built. Replace `fast` by the retained
+    `identical` object where the identical set answers it for that family.
+    The retained object is tested by identity first (the interned word the
+    package and a user's literal pass), so an `identical` call builds no
+    String; only another word is read as text."""
+    comptime if CompilationTarget.is_macos():
+        return
+    if not fast_is_answered_by_identical(family):
+        return
+    var held = MODE_ANSWER_WORDS.get_or_create_ptr()
+    if len(held[].words) == 0 or mode is held[].words[0]:
+        return
+    if String(py=mode) == "fast":
+        mode = held[].words[0]
+
+
 def fast_answers_compiled_code(want: PythonObject, codes: PythonObject, got: Int, family: Int) raises -> Bool:
     """The MISMATCH branch of a door's "requested word against the binary's
     compiled mode code" check, for a door of `family` whose check reads the
