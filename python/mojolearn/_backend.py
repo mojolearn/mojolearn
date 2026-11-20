@@ -447,12 +447,19 @@ _CODE_MODE = {v: k for k, v in _MODE_CODE.items()}
 # and the mode-keyed tables are untouched: their 'fast' entries still hold
 # this install's refusal, which a door that is not converted yet raises.
 #
-# THE SECOND STEP (inert today). When a relaxation is measured on a vendor, a
-# second set is built for it with `-D MOJOLEARN_MODE_FAST_ROWS`
-# (`core/package_profile.mojo`) into the fast tier directory `tier_dir("fast")`
-# of that vendor. `_fast_set_present()` then finds it and `fast_answer()`
-# returns None, so the name `fast` selects that set through the unchanged
-# two-set code below. Nothing else in this file moves.
+# THE FAST-ROWS SET (`core/package_profile.mojo`, MODE_FAST_ROWS). A fast set
+# off Apple is the identical build with the contract off
+# (`-D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_MODE_FAST_ROWS` plus the row
+# defines). It is built as a measurement wheel's one set, in the identical
+# tier directory, and reports mode code 1, so everything above holds for it
+# unchanged: `_fast_set_present()` is False, the identical-named set (which
+# in that wheel IS the fast-rows set) answers the name `fast`, and the doors
+# answer a per-estimator `fast` the same way. Nothing in this file reads
+# whether the set is a fast-rows build; `python -m mojolearn verify` does
+# (the exported mode policy mask) and refuses to label it identical when a
+# row is on. `tier_dir("fast")` stays the legacy fast tier (Apple's fast set
+# and the historical 'fast identical' layout): a fast-rows binary there is
+# refused by `_check_tier_mode`, because its mode code is the identical one.
 
 #: The set that answers the NAME 'fast' when it is not its own set:
 #: 'identical' off Apple on an install with no fast binaries, else None.
