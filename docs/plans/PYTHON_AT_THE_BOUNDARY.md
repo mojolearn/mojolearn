@@ -329,3 +329,37 @@ Python workaround. Record unbuilt targets and unmeasured performance separately 
    Python lists.
 7. **Fitted attributes.** Preserve each public attribute's mutability, replacement and ownership behavior.
    Internal typed state and optional lazy materialization must respect that boundary contract.
+
+## 10. The device is a parameter of the estimator (Andrew, 2026-11-20)
+
+Decided: `device="gpu"` (default) or `device="cpu"` is a constructor parameter of every estimator, built as part of
+this rollout and not before it, because the door split rewrites the same entry functions.
+
+**Today.** The device is chosen once per process, at `import mojolearn` (a CPU-only install, or `MOJOLEARN_VENDOR=cpu`
+before the import). About 97 Python sites and 21 Mojo sites ask "is this process CPU?", and 27 more pin a module at
+import. The host bindings already ship in every GPU wheel and load beside the GPU set in one process; only inference
+through `mojolearn.host_model` is exercised that way (source counts and evidence: lane `ideas-device-param`,
+2026-11-20).
+
+**Form.** It follows the contract of sections 2 and 3, with no second path:
+
+1. UNPACK reads `device` once at construction into the typed request, exactly as it reads `numeric_mode`. It is a
+   field of the native owner, never a dictionary read per call ("No refactor adds cost on a hot path": the default
+   `device="gpu"` call costs nothing it does not cost today).
+2. The owner holds a pointer to its family's entry table (decision 6 of section 9), resolved once at construction: the
+   GPU table or the host table. RUN calls through that pointer. No public call tests the device.
+3. The process-wide "is this process CPU?" questions are deleted family by family as each family's doors are split
+   ("remove what a change made unnecessary"). A CPU-only install is then the case where only host tables exist and
+   `device="gpu"` is refused in words.
+4. `device="cpu"` in `identical` mode returns the host column's bits, which the contract already requires to match the
+   GPU columns. `fast` stays Apple GPU only.
+
+**What it replaces.** `model.check(X)` and `verify --cross-check` reach their CPU side today through a saved model
+reloaded by `host_model` (62 fitted model types have that route) or a child process under `MOJOLEARN_VENDOR=cpu`
+(`--fit-both`). When a family has `device=`, its check is the same estimator constructed twice, `device="gpu"` and
+`device="cpu"`, fitted and compared in one process, and those two routes are deleted for that family. Verify keeps
+working throughout: each family's change updates verify to the new form in the same commit.
+
+**Order.** The pilot family of section 6 carries `device=` from the start. A family is done when its doors are split,
+it takes `device=`, its process-wide device questions are gone, and its verify lanes and `check` run both devices in
+one process on NVIDIA.
