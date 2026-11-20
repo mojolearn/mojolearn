@@ -26,6 +26,7 @@ from bindings.trees_public_boost_door import _seed
 from bindings.trees_explainer_native_door import _get, _int, _entry, _snapshot, _replace, _tree_mode
 from xtrees.trees_agnostic_native_run import _name, _SWITCH_FACTS, _chunk
 from bindings.trees_keys_unpack import trees_keys
+from bindings.operation_names_trees import TREES_OPN_TREES_AGNOSTIC_KERNEL_INIT, TREES_OPN_TREES_AGNOSTIC_PERMUTATION_INIT, TREES_OPN_TREES_AGNOSTIC_KERNEL_VALUES, TREES_OPN_TREES_AGNOSTIC_PERMUTATION_VALUES
 from bindings.py_balanced import py_item
 
 comptime _I64 = MutPointer[Int64, MutUntrackedOrigin]
@@ -664,18 +665,21 @@ def _permutation_values(fields: PythonObject, args: PythonObject, context: Pytho
     return _shape(phi, n, d, k, context)
 
 
-def trees_agnostic_operation(model: PythonObject, operation: String, args: PythonObject,
+def trees_agnostic_operation(model: PythonObject, operation: Int, opname: String, args: PythonObject,
                              context: PythonObject) raises -> PythonObject:
+    """One `trees_agnostic_*` method by its leaf code
+    (bindings/operation_names_trees.mojo; lane bw3-trees); `opname` (the
+    table's String, borrowed) is for the unknown-operation text only."""
     classical_check_layout(model, context)
     var fields = _fields(model)
-    if operation == "trees_agnostic_kernel_init":
+    if operation == TREES_OPN_TREES_AGNOSTIC_KERNEL_INIT:
         _construct(fields, args, False, context)
         return PythonObject(None)
-    if operation == "trees_agnostic_permutation_init":
+    if operation == TREES_OPN_TREES_AGNOSTIC_PERMUTATION_INIT:
         _construct(fields, args, True, context)
         return PythonObject(None)
-    if operation == "trees_agnostic_kernel_values":
+    if operation == TREES_OPN_TREES_AGNOSTIC_KERNEL_VALUES:
         return _kernel_values(fields, args, context)
-    if operation == "trees_agnostic_permutation_values":
+    if operation == TREES_OPN_TREES_AGNOSTIC_PERMUTATION_VALUES:
         return _permutation_values(fields, args, context)
-    raise Error("unknown model-agnostic explainer operation " + operation)
+    raise Error("unknown model-agnostic explainer operation " + opname)

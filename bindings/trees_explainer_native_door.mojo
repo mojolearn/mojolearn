@@ -26,6 +26,7 @@ def _check_rank(view: PythonObject, rank: Int, name: String) raises:
 from providers.python.array_metadata_pyapi_door import array_owner_once
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entry
 from bindings.trees_keys_unpack import trees_keys
+from bindings.operation_names_trees import TREES_OPN_TREES_EXPLAINER_INIT, TREES_OPN_TREES_EXPLAINER_CLOSE, TREES_OPN_TREES_EXPLAINER_VALUES
 from bindings.py_balanced import py_item
 
 comptime _I32 = MutPointer[Int32, MutUntrackedOrigin]
@@ -511,18 +512,21 @@ def _construct(fields: PythonObject, args: PythonObject, context: PythonObject) 
     return PythonObject(None)
 
 
-def trees_explainer_operation(model: PythonObject, operation: String, args: PythonObject,
+def trees_explainer_operation(model: PythonObject, operation: Int, args: PythonObject,
                               context: PythonObject) raises -> PythonObject:
+    """One `trees_explainer_*` method by its leaf code
+    (bindings/operation_names_trees.mojo; lane bw3-trees). OP_LEAF_NONE (a
+    name the table does not hold) reaches the same refusal as before."""
     classical_check_layout(model, context)
     var fields = _fields(model)
-    if operation == "trees_explainer_init":
+    if operation == TREES_OPN_TREES_EXPLAINER_INIT:
         return _construct(fields, args, context)
     var owner = _get(fields, "_shap_native")
     if owner is None:
         raise Error("RuntimeError: TreeExplainer has not been initialized by the native owner")
     _admit_owner(owner)
     var held = owner.downcast_value_ptr[TreeShapOwner]()
-    if operation == "trees_explainer_close":
+    if operation == TREES_OPN_TREES_EXPLAINER_CLOSE:
         var changes = Python.dict()
         var nk = trees_keys()
         py_setitem(changes, nk[].k__shap_cache, PythonObject(None))
@@ -530,7 +534,7 @@ def trees_explainer_operation(model: PythonObject, operation: String, args: Pyth
         _replace(fields, changes, context)
         held[].close()
         return PythonObject(None)
-    if operation != "trees_explainer_values":
+    if operation != TREES_OPN_TREES_EXPLAINER_VALUES:
         raise Error("unknown TreeExplainer operation")
     if held[].closed:
         raise Error("RuntimeError: this TreeExplainer has been closed")

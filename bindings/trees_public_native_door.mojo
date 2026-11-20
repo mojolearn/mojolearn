@@ -107,8 +107,8 @@ def trees_public_operation(model: PythonObject, operation: Int, name: String, ar
         if operation < TREES_END_PUBLIC_META:
             return meta_public_operation(model, name, args, context)
         if operation < TREES_END_EXPLAINER:
-            return trees_explainer_operation(model, name, args, context)
-        return trees_agnostic_operation(model, name, args, context)
+            return trees_explainer_operation(model, operation, args, context)
+        return trees_agnostic_operation(model, operation, name, args, context)
     var nk = trees_keys()
     if py_get(context, nk[].k_cv_fixed_owner) is not None:
         context = fixed_owner_context(context)
@@ -169,9 +169,9 @@ def _trees_prefixed(model: PythonObject, operation: String, args: PythonObject,
     if operation.startswith("trees_public_meta_"):
         return meta_public_operation(model, operation, args, context)
     if operation.startswith("trees_explainer_"):
-        return trees_explainer_operation(model, operation, args, context)
+        return trees_explainer_operation(model, OP_LEAF_NONE, args, context)
     if operation.startswith("trees_agnostic_"):
-        return trees_agnostic_operation(model, operation, args, context)
+        return trees_agnostic_operation(model, OP_LEAF_NONE, operation, args, context)
     var nk = trees_keys()
     if py_get(context, nk[].k_cv_fixed_owner) is not None:
         context = fixed_owner_context(context)
