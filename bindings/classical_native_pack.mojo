@@ -36,25 +36,28 @@ from core.linear_fit_types import LF_MODE, LF_VENDOR
 from core.linear_metadata import linear_mode_name, linear_vendor_code, linear_vendor_name
 from providers.python.linear_execution_boundary_unpack import linear_execution_word
 from providers.python.linear_entry_boundary_door import linear_entry_identity
+from bindings.classical_keys_unpack import classical_keys
+from bindings.py_balanced import py_item
 
 
 def classical_entries(mut call: AdmittedCall, model: PythonObject, context: PythonObject) raises -> PythonObject:
     # The door's admission record supplies the model fields and builtins it
     # already admitted (ne1-e-admitted-call); the resolved entry family is
     # kept on the record as this call's binding.
-    if Bool(py=py_get(context, "classical_explicit_cpu", False)):
+    var nk = classical_keys()
+    if Bool(py=py_get(context, nk[].k_classical_explicit_cpu, False)):
         return classical_host_entries(model, context)
     if not call.fields_admitted:
         call.admit_fields(sequential_fields(model))
-    var mode = py_get(call.fields, "numeric_mode")
+    var mode = py_get(call.fields, nk[].k_numeric_mode)
     if mode is None:
-        mode = context["backend_fields"]["_DEFAULT_MODE"]
+        mode = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
     var b = call.builtins()
     if py_type(mode) is not b.str:
         raise Error("numeric_mode must be fast, identical or None")
     var mode_name = linear_mode_name(String(mode))
     mode = PythonObject(mode_name)
-    var entries = context["classical_bindings"][mode]
+    var entries = py_item(context, nk[].k_classical_bindings)[mode]
     if py_type(entries) is b.str:
         raise Error("ImportError: " + String(entries))
     # The vendor and mode of a connected entry family are fixed when its
@@ -62,8 +65,8 @@ def classical_entries(mut call: AdmittedCall, model: PythonObject, context: Pyth
     # vendor) identity and keep the verdict in the long-lived connection
     # context; a reconnection installs new entry dictionaries (or a new
     # vendor object), so the identities differ and the check runs again.
-    var vendor = context["vendor"]
-    var verdicts = py_get(context, "classical_entries_admitted")
+    var vendor = py_item(context, nk[].k_vendor)
+    var verdicts = py_get(context, nk[].k_classical_entries_admitted)
     if verdicts is not None:
         var seen = py_get(verdicts, mode)
         # perf-audit-3 (pattern 1): the cached verdict compares the entry
@@ -72,7 +75,7 @@ def classical_entries(mut call: AdmittedCall, model: PythonObject, context: Pyth
         # `linear_entry_identity` (exact type, family) when it was recorded, so
         # the full admission runs only on a miss (it ran on every call).
         if (seen is not None and len(seen) == 3 and seen[0] is entries and seen[1] is vendor
-                and seen[2] is py_get(entries, "_native_entry_connection")):
+                and seen[2] is py_get(entries, nk[].k__native_entry_connection)):
             call.remember_binding("classical", mode_name, True, entries)
             return entries
     var connection_identity = linear_entry_identity(entries)
@@ -82,7 +85,7 @@ def classical_entries(mut call: AdmittedCall, model: PythonObject, context: Pyth
         raise Error("RuntimeError: classical native mode differs from selected execution")
     if verdicts is None:
         verdicts = Python.dict()
-        py_setitem(context, "classical_entries_admitted", verdicts)
+        py_setitem(context, nk[].k_classical_entries_admitted, verdicts)
     py_setitem(verdicts, mode, Python.tuple(entries, vendor, connection_identity))
     call.remember_binding("classical", mode_name, True, entries)
     return entries
@@ -94,6 +97,10 @@ def operation_code_names() raises -> PythonObject:
     var table = operation_table()
     var names = Python.list()
     for i in range(len(table[].names)):  # driver-loop: over the fixed operation names, once per process
+        if table[].routes[i] == OP_ROUTE_CLASSICAL:
+            # The classical door's own string operations are registered last
+            # and never passed by code: the codes Python maps end here.
+            break
         _ = py_call(names.append, PythonObject(table[].names[i]))
     return py_call(native_loaded_module("builtins").tuple, names)
 

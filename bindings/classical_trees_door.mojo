@@ -25,6 +25,8 @@ from bindings.host_density_hash_native_unpack import host_density_hash, host_bou
 from bindings.py_balanced import py_type, py_get
 from bindings.admitted_call_door import AdmittedCall
 from bindings.classical_door_routes import classical_trees_operation
+from bindings.classical_keys_unpack import classical_keys
+from bindings.py_balanced import py_item
 
 
 def _trees_coded(model: PythonObject, code: Int, args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -37,44 +39,46 @@ def _trees_coded(model: PythonObject, code: Int, args: PythonObject, context: Py
     if route == OP_ROUTE_TREES:
         return trees_public_operation(model, name, args, context)
     if route == OP_ROUTE_HOST_TREE:
-        return host_tree_operation(model, name, args, context["host_tree_context"])
+        var nk = classical_keys()
+        return host_tree_operation(model, name, args, py_item(context, nk[].k_host_tree_context))
     raise Error("TypeError: native operation code is not a tree operation")
 
 
 def _trees_named(model: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = classical_keys()
     if operation == "host_kde_fit":
-        return host_kde_fit(model, args, context["host_inference_context"])
+        return host_kde_fit(model, args, py_item(context, nk[].k_host_inference_context))
     if operation == "host_iforest_fit":
-        return host_iforest_fit(model, args, context["host_inference_context"])
+        return host_iforest_fit(model, args, py_item(context, nk[].k_host_inference_context))
     if operation == "host_density_save":
-        return host_density_save(model, args, context["host_inference_context"])
+        return host_density_save(model, args, py_item(context, nk[].k_host_inference_context))
     if operation == "host_density_hash":
-        return host_density_hash(model, args, context["host_inference_context"])
+        return host_density_hash(model, args, py_item(context, nk[].k_host_inference_context))
     if operation == "host_bound_hash":
-        return host_bound_hash(model, args, context["host_inference_context"])
+        return host_bound_hash(model, args, py_item(context, nk[].k_host_inference_context))
     if operation == "host_density_initialize":
-        return host_density_initialize(model, args, context["host_inference_context"])
+        return host_density_initialize(model, args, py_item(context, nk[].k_host_inference_context))
     if operation.startswith("host_infer_"):
-        return host_inference_operation(model, operation, args, context["host_inference_context"], context, classical_caller_outside(context))
+        return host_inference_operation(model, operation, args, py_item(context, nk[].k_host_inference_context), context, classical_caller_outside(context))
     if operation == "archive_infer_predict" or operation == "archive_infer_predict_proba":
         var route = "host_infer_predict" if operation == "archive_infer_predict" else "host_infer_predict_proba"
-        return host_inference_operation(model, route, args, context["host_inference_context"], context, False)
+        return host_inference_operation(model, route, args, py_item(context, nk[].k_host_inference_context), context, False)
     if operation == "archive_knn_classifier" or operation == "archive_knn_regressor":
         return host_knn_predict(model, args[0], operation == "archive_knn_classifier", Bool(py=args[1]),
-                                context["host_archive_predict_context"])
+                                py_item(context, nk[].k_host_archive_predict_context))
     if operation.startswith("trees_"):
         # The public tree ensembles' one-call methods
         # (bindings/trees_public_native.mojo).
         return trees_public_operation(model, operation, args, context)
     if operation.startswith("host_tree_"):
-        return host_tree_operation(model, operation, args, context["host_tree_context"])
+        return host_tree_operation(model, operation, args, py_item(context, nk[].k_host_tree_context))
     if operation == "host_archive_predict" or operation == "host_archive_predict_proba":
-        var predict_context = py_get(context, "host_archive_predict_context")
+        var predict_context = py_get(context, nk[].k_host_archive_predict_context)
         if predict_context is None:
             raise Error("RuntimeError: native host archive schemas are not connected")
         return host_archive_predict(args[0], args[1], operation == "host_archive_predict_proba", predict_context)
     if operation == "host_archive_model" or operation == "host_archive_load" or operation == "host_archive_classical_model":
-        var archive_context = py_get(context, "host_archive_context")
+        var archive_context = py_get(context, nk[].k_host_archive_context)
         if archive_context is None:
             raise Error("RuntimeError: native host archive schemas are not connected")
         # Checkpoint input admission belongs to the archive reader: its

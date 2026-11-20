@@ -14,16 +14,20 @@ from bindings.native_error_class import error_without_class
 from bindings.sequential_admission_door import sequential_admit_value
 from bindings.sequential_inputs_door import sequential_input
 from bindings.native_numpy_metadata_pack import native_numpy_type, native_numpy_module_fields
+from bindings.classical_keys_unpack import classical_keys
+from bindings.py_balanced import py_item
 
 
 def _type_fields(cls: PythonObject) raises -> PythonObject:
     var b = native_loaded_module("builtins")
-    return py_call(b.type.__dict__["__dict__"].__get__, cls)
+    var nk = classical_keys()
+    return py_call(py_item(b.type.__dict__, nk[].k___dict__).__get__, cls)
 
 
 def _type_mro(cls: PythonObject) raises -> PythonObject:
     var b = native_loaded_module("builtins")
-    return py_call(b.type.__dict__["__mro__"].__get__, cls)
+    var nk = classical_keys()
+    return py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, cls)
 
 
 def _descriptor_slot(cls: PythonObject, name: String) raises -> Bool:
@@ -39,7 +43,8 @@ def _public_plan(model: PythonObject, context: PythonObject) raises -> PythonObj
     var cls = model if py_type(model) is b.type else py_type(model)
     if py_type(cls) is not py_type(py_type(PythonObject(0))):
         raise Error("TypeError: native public attributes cannot invoke Python metaclass hooks")
-    var layouts = py_get(context, "classical_public_layouts")
+    var nk = classical_keys()
+    var layouts = py_get(context, nk[].k_classical_public_layouts)
     if layouts is None:
         raise Error("RuntimeError: native public model metadata was not connected")
     var plan = py_get(layouts, cls)
@@ -59,8 +64,9 @@ def classical_check_layout_plan(mut mods: NativeModules, model: PythonObject, co
     # metadata exists), so classical_getattribute does not resolve it again.
     # Existing private-owner callers have no installer metadata. Once public
     # installation is requested, the complete layout is mandatory and checked.
-    if py_get(context, "classical_public_layouts") is None:
-        if Bool(py=py_get(context, "classical_public_installed", False)):
+    var nk = classical_keys()
+    if py_get(context, nk[].k_classical_public_layouts) is None:
+        if Bool(py=py_get(context, nk[].k_classical_public_installed, False)):
             raise Error("RuntimeError: native public model metadata was removed")
         return PythonObject(None)
     var b = mods.module("builtins")
@@ -69,8 +75,8 @@ def classical_check_layout_plan(mut mods: NativeModules, model: PythonObject, co
     # Prepared class admission: the ancestry, hook, finalizer and dictionary
     # descriptor checks run on first use per class and again whenever the
     # class stamp changes; instance keys are admitted on every call.
-    var finalizer = py_get(context, "host_archive_finalizer_descriptor")
-    var peer_finalizer = py_get(context, "host_archive_peer_finalizer_descriptor")
+    var finalizer = py_get(context, nk[].k_host_archive_finalizer_descriptor)
+    var peer_finalizer = py_get(context, nk[].k_host_archive_peer_finalizer_descriptor)
     var admitted = prepared_get(mods, _LAYOUT_CLASS_SLOT, cls)
     # Python >= 3.12: the type watchers of native_class_admission report any
     # change of the class or an ancestor (every namespace edit goes through
@@ -139,7 +145,8 @@ def _layout_class_names(mut mods: NativeModules, cls: PythonObject, plan: Python
     var b = mods.module("builtins")
     var names = Python.dict()
     var usable = True
-    var mro = plan["mro"]
+    var nk = classical_keys()
+    var mro = py_item(plan, nk[].k_mro)
     for k in range(len(mro)):  # driver-loop: over connected class ancestry metadata
         var keys = py_call(b.list, py_call(_type_fields(mro[k]).keys))
         for j in range(len(keys)):  # small-loop(keys: one class namespace): exact string names only
@@ -163,17 +170,21 @@ def _instance_result(name: PythonObject, value: PythonObject, context: PythonObj
     # Python code. Without NumPy the Array itself is the fitted attribute.
     # `name` is an exact str (checked by the caller): native string tests.
     var text = String(name)
-    if (text.byte_length() > 0 and text.endswith("_") and not text.startswith("_")
-            and py_type(value) is context["array_class"] and py_get(context, "ndarray") is not None):
-        sequential_admit_value(value, context)
-        return sequential_input(value, context)
+    if text.byte_length() > 0 and text.endswith("_") and not text.startswith("_"):
+        # The key table is fetched only for a public fitted-field name (the
+        # old code built the two key strs only after the name tests passed).
+        var nk = classical_keys()
+        if py_type(value) is py_item(context, nk[].k_array_class) and py_get(context, nk[].k_ndarray) is not None:
+            sequential_admit_value(value, context)
+            return sequential_input(value, context)
     return value
 
 
 def _classical_check_class(model: PythonObject, context: PythonObject, cls: PythonObject, plan: PythonObject) raises:
     var b = native_loaded_module("builtins")
     var mro = _type_mro(cls)
-    var connected = plan["mro"]
+    var nk = classical_keys()
+    var connected = py_item(plan, nk[].k_mro)
     if len(mro) != len(connected):
         raise Error("TypeError: native public model class layout changed")
     var found_fields = False
@@ -181,11 +192,11 @@ def _classical_check_class(model: PythonObject, context: PythonObject, cls: Pyth
     for k in range(len(mro)):  # driver-loop: over exact connected class ancestry
         if mro[k] is not connected[k]:
             raise Error("TypeError: native public model class ancestry changed")
-        if py_contains(_type_fields(mro[k]), "__getattr__"):
+        if py_contains(_type_fields(mro[k]), nk[].k___getattr__):
             # CPython otherwise invokes this hook after AttributeError from
             # our native getter. Refuse while we still control the boundary.
             raise Error("TypeError: Python model __getattr__ hooks are not accepted")
-        if not found_finalizer and py_contains(_type_fields(mro[k]), "__del__"):
+        if not found_finalizer and py_contains(_type_fields(mro[k]), nk[].k___del__):
             # Explicit CPU archive classes replace device finalizers with a
             # connected native descriptor. Only the first resolved slot can
             # run; a shadowed GPU-base Python finalizer is never invoked.
@@ -193,18 +204,18 @@ def _classical_check_class(model: PythonObject, context: PythonObject, cls: Pyth
             # subclass (the neighbor queries) holds both connected native
             # descriptors: the public one, and the host archive's as its
             # peer, exactly as host_archive_check_layout admits them.
-            var member = _type_fields(mro[k])["__del__"]
-            var native_finalizer = py_get(context, "host_archive_finalizer_descriptor")
-            var peer_finalizer = py_get(context, "host_archive_peer_finalizer_descriptor")
+            var member = py_item(_type_fields(mro[k]), nk[].k___del__)
+            var native_finalizer = py_get(context, nk[].k_host_archive_finalizer_descriptor)
+            var peer_finalizer = py_get(context, nk[].k_host_archive_peer_finalizer_descriptor)
             var connected_finalizer = (native_finalizer is not None and member is native_finalizer) or (
                 peer_finalizer is not None and member is peer_finalizer)
             if not connected_finalizer:
                 raise Error("TypeError: Python model finalizer hooks are not accepted")
             found_finalizer = True
         if not found_fields:
-            var descriptor = py_get(_type_fields(mro[k]), "__dict__")
+            var descriptor = py_get(_type_fields(mro[k]), nk[].k___dict__)
             if descriptor is not None:
-                if descriptor is not plan["fields_descriptor"]:
+                if descriptor is not py_item(plan, nk[].k_fields_descriptor):
                     raise Error("TypeError: Python model dictionary descriptors are not accepted")
                 found_fields = True
     if not found_fields:
@@ -214,7 +225,8 @@ def _classical_check_class(model: PythonObject, context: PythonObject, cls: Pyth
 def _classical_check_instance(model: PythonObject, context: PythonObject, cls: PythonObject, plan: PythonObject) raises:
     var b = native_loaded_module("builtins")
     if py_type(model) is not b.type:
-        var fields = py_call(plan["fields_get"], model, cls)
+        var nk = classical_keys()
+        var fields = py_call(py_item(plan, nk[].k_fields_get), model, cls)
         if py_type(fields) is b.dict:
             # Native key walk of the exact instance dict: no key view, list
             # or per-key Python indexing. Same refusal.
@@ -237,7 +249,8 @@ def _classical_descriptor_get(binding: PythonObject, model: PythonObject, cls: P
     ref cpy = Python().cpython()
     var getter = binding[1]
     var envelope = Python.tuple(model, cls)
-    var attribute_error = plan["attribute_error"]
+    var nk = classical_keys()
+    var attribute_error = py_item(plan, nk[].k_attribute_error)
     var table = cpython_table()
     var result = cpy.PyObject_Call(getter._obj_ptr, envelope._obj_ptr, PyObjectPtr())
     if not result:
@@ -301,21 +314,22 @@ def _classical_getattribute_impl(mut mods: NativeModules, model: PythonObject, n
     # walk and the three descriptor-slot ancestry walks for every fitted
     # field and parameter read.
     var names = _layout_class_names(mods, cls, plan)
+    var nk = classical_keys()
     if names is not None and not py_contains(names, name):
-        var stored = py_call(plan["fields_get"], model, cls)
+        var stored = py_call(py_item(plan, nk[].k_fields_get), model, cls)
         if py_contains(stored, name):
             return _instance_result(name, stored[name], context)
         raise Error("AttributeError: native model has no attribute '" + String(name) + "'")
     # Optional, not a PythonObject(None) sentinel: its presence is the old `present` flag (modular/modular#7546).
     var member = Optional[PythonObject]()
-    var mro = plan["mro"]
+    var mro = py_item(plan, nk[].k_mro)
     for k in range(len(mro)):  # driver-loop: over native class attribute lookup order
         var fields = _type_fields(mro[k])
         if py_contains(fields, name):
             member = fields[name]
             break
     var present = Bool(member)
-    var binding = py_get(plan["bindings"], name)
+    var binding = py_get(py_item(plan, nk[].k_bindings), name)
     var known = binding is not None and present and member.value() is binding[0]
     var kind = _descriptor_kind(mods, py_type(member.value())) if present else 0
     var descriptor = kind != 0
@@ -324,7 +338,7 @@ def _classical_getattribute_impl(mut mods: NativeModules, model: PythonObject, n
         if not known:
             raise Error("TypeError: Python model property/descriptor hooks are not accepted")
         return _classical_descriptor_get(binding, model, cls, plan)
-    var fields = py_call(plan["fields_get"], model, cls)
+    var fields = py_call(py_item(plan, nk[].k_fields_get), model, cls)
     if py_contains(fields, name):
         return _instance_result(name, fields[name], context)
     if not present:
@@ -368,16 +382,17 @@ def classical_connect_numpy(context: PythonObject) raises:
     var connected = _connect_probe(context, "ndarray")
     if connected == 1:
         return
-    if connected == -1 and py_get(context, "ndarray") is not None:
+    var nk = classical_keys()
+    if connected == -1 and py_get(context, nk[].k_ndarray) is not None:
         return
     # NumPy not loaded: the modules table probe is also native when exact.
-    var modules = context["modules"]
+    var modules = py_item(context, nk[].k_modules)
     if _connect_probe(modules, "numpy") == 0:
         return
-    var numpy = py_get(modules, "numpy")
+    var numpy = py_get(modules, nk[].k_numpy)
     if numpy is None:
         return
-    if py_type(numpy) is not context["native_module_type"]:
+    if py_type(numpy) is not py_item(context, nk[].k_native_module_type):
         raise Error("TypeError: classical NumPy support requires the native NumPy module")
     # Read the loaded module dictionary directly; module __getattr__ is a
     # Python hook. All dtype construction below uses NumPy's C dtype type.
@@ -413,8 +428,8 @@ def classical_connect_numpy(context: PythonObject) raises:
             _ = py_call(scalars.append, dtype.type)
             if kind < 2:
                 _ = py_call(integers.append, dtype.type)
-    var values = py_call(list_type, context["native_value_types"])
-    var owners = py_call(list_type, context["buffer_owner_types"])
+    var values = py_call(list_type, py_item(context, nk[].k_native_value_types))
+    var owners = py_call(list_type, py_item(context, nk[].k_buffer_owner_types))
     _ = py_call(values.append, ndarray)
     # NumPy's text and byte scalars (numpy.str_, numpy.bytes_) are C types
     # with no Python protocol hooks; label lists built from a NumPy string
@@ -434,12 +449,12 @@ def classical_connect_numpy(context: PythonObject) raises:
         var dtype = py_call(dtype_class, "u1" if String(code) == "|b1" else String(code))
         py_setitem(archive, code, dtype)
     var update = Python.dict(
-        ndarray=ndarray, scalar_type=fields["generic"], integer=fields["integer"],
+        ndarray=ndarray, scalar_type=py_item(fields, nk[].k_generic), integer=py_item(fields, nk[].k_integer),
         scalar_types=py_call(tuple_type, scalars), integer_types=py_call(tuple_type, integers),
         native_value_types=py_call(tuple_type, values), buffer_owner_types=py_call(tuple_type, owners),
         numeric_dtypes=numeric, class_dtypes=classes, archive_npy_dtypes=archive,
-        float_types=Python.tuple(float_type, fields["floating"]),
-        int_types=Python.tuple(int_type, fields["integer"]), bool_types=Python.tuple(bool_type, fields["bool_"]),
+        float_types=Python.tuple(float_type, py_item(fields, nk[].k_floating)),
+        int_types=Python.tuple(int_type, py_item(fields, nk[].k_integer)), bool_types=Python.tuple(bool_type, py_item(fields, nk[].k_bool_)),
         float32=py_call(dtype_class, "f4"), float64=py_call(dtype_class, "f8"),
         int32=py_call(dtype_class, "i4"), int64=py_call(dtype_class, "i8"),
         uint64=py_call(dtype_class, "u8"), bool=py_call(dtype_class, "?"))
@@ -450,8 +465,9 @@ def classical_connect_numpy(context: PythonObject) raises:
 
 def _attribute_context(model: PythonObject, context: PythonObject) raises -> PythonObject:
     var b = native_loaded_module("builtins")
-    var host = py_get(context, "classical_host_context")
-    if host is not None and py_contains(host["classical_kinds"], py_type(model)):
+    var nk = classical_keys()
+    var host = py_get(context, nk[].k_classical_host_context)
+    if host is not None and py_contains(py_item(host, nk[].k_classical_kinds), py_type(model)):
         return host
     return context
 

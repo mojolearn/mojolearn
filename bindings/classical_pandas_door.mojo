@@ -20,6 +20,8 @@ from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_contain
 from std.python._cpython import PyObjectPtr, GILReleased
 from bindings.py_cpython_table import cpython_table
 from bindings.p3_labels_metrics_native_door import p3_type_word, p3_item
+from bindings.classical_keys_unpack import classical_keys
+from bindings.py_balanced import py_item
 
 
 def _pd_native_metaclass(cls: PythonObject) raises -> Bool:
@@ -30,10 +32,11 @@ def _pd_native_metaclass(cls: PythonObject) raises -> Bool:
     # Accept its exact loaded identity for native metadata reads only;
     # never invoke abstract checks, metaclass hooks or class constructors.
     var sys = native_loaded_module("sys")
-    var module = py_get(sys.modules, "abc")
+    var nk = classical_keys()
+    var module = py_get(sys.modules, nk[].k_abc)
     if module is None or py_type(module) is not py_type(sys):
         return False
-    var meta = py_get(py_fields(module), "ABCMeta")
+    var meta = py_get(py_fields(module), nk[].k_ABCMeta)
     return py_type(meta) is b.type and py_type(cls) is meta
 
 
@@ -252,7 +255,8 @@ def classical_admit_fields(mut mods: NativeModules, fields: PythonObject, names:
 
 
 def _pd_type_fields(cls: PythonObject) raises -> PythonObject:
-    return py_call(native_loaded_module("builtins").type.__dict__["__dict__"].__get__, cls)
+    var nk = classical_keys()
+    return py_call(py_item(native_loaded_module("builtins").type.__dict__, nk[].k___dict__).__get__, cls)
 
 
 def _pd_fields(value: PythonObject) raises -> PythonObject:
@@ -260,9 +264,10 @@ def _pd_fields(value: PythonObject) raises -> PythonObject:
     var cls = py_type(value)
     if not _pd_native_metaclass(cls):
         raise Error("TypeError: pandas storage requires ordinary native class metadata")
-    var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
+    var nk = classical_keys()
+    var mro = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, cls)
     for k in range(len(mro)):  # driver-loop: over the admitted class's native dictionary descriptors
-        var descriptor = py_get(_pd_type_fields(mro[k]), "__dict__")
+        var descriptor = py_get(_pd_type_fields(mro[k]), nk[].k___dict__)
         if descriptor is not None and py_type(descriptor) is py_type(b.memoryview.obj):
             var fields = py_call(descriptor.__get__, value)
             if py_type(fields) is not b.dict:
@@ -297,18 +302,22 @@ def _pd_object_number(value: PythonObject, context: PythonObject) raises -> Floa
     var number = Float64(0.0)
     if cls is b.int or cls is b.float or cls is b.bool:
         number = Float64(py=value)
-    elif _one_of(cls, context["scalar_types"]):
-        # Scalar buffer metadata is native. Never call an object's __float__
-        # or NumPy array/scalar conversion routine to obtain numeric storage.
-        var view = native_buffer_view(value)
-        var array = py_call(context["ndarray"], Python.tuple(), dtype=value.dtype, buffer=view)
-        var size = Int(py=array.dtype.itemsize)
-        var kind = cast_in_kind(Int(py=array.dtype.num), size, "pandas scalar")
-        number = _pd_double(_pd_raw(array, 0), kind, size)
-        _ = array^
-        _ = view^
     else:
-        raise Error("TypeError: pandas object storage must contain native numeric scalars without Python conversion hooks")
+        # The key table is fetched only off the exact int/float/bool path
+        # (a per-cell read: the old code built no key str there).
+        var nk = classical_keys()
+        if _one_of(cls, py_item(context, nk[].k_scalar_types)):
+            # Scalar buffer metadata is native. Never call an object's __float__
+            # or NumPy array/scalar conversion routine to obtain numeric storage.
+            var view = native_buffer_view(value)
+            var array = py_call(py_item(context, nk[].k_ndarray), Python.tuple(), dtype=value.dtype, buffer=view)
+            var size = Int(py=array.dtype.itemsize)
+            var kind = cast_in_kind(Int(py=array.dtype.num), size, "pandas scalar")
+            number = _pd_double(_pd_raw(array, 0), kind, size)
+            _ = array^
+            _ = view^
+        else:
+            raise Error("TypeError: pandas object storage must contain native numeric scalars without Python conversion hooks")
     return number
 
 
@@ -331,15 +340,16 @@ def _pd_cell_number(raw: PyObjectPtr, int_word: Int, float_word: Int, bool_word:
 
 
 def _pd_values_native(values: PythonObject, series: Bool, context: PythonObject) raises -> Tuple[PythonObject, Bool]:
-    if py_type(values) is context["ndarray"]:
+    var nk = classical_keys()
+    if py_type(values) is py_item(context, nk[].k_ndarray):
         return (values, False)
     var cls = py_type(values)
     if cls is not _pd_class("pandas.core.arrays.integer", "IntegerArray") and cls is not _pd_class("pandas.core.arrays.floating", "FloatingArray") and cls is not _pd_class("pandas.core.arrays.boolean", "BooleanArray"):
         raise Error("TypeError: pandas input requires ordinary numeric storage without extension callbacks")
     var fields = _pd_fields(values)
-    var data = py_get(fields, "_data")
-    var mask = py_get(fields, "_mask")
-    if py_type(data) is not context["ndarray"] or py_type(mask) is not context["ndarray"]:
+    var data = py_get(fields, nk[].k__data)
+    var mask = py_get(fields, nk[].k__mask)
+    if py_type(data) is not py_item(context, nk[].k_ndarray) or py_type(mask) is not py_item(context, nk[].k_ndarray):
         raise Error("TypeError: pandas nullable storage requires exact native arrays")
     var data_rank = Int(py=data.ndim)
     var mask_rank = Int(py=mask.ndim)
@@ -380,7 +390,8 @@ def _pd_locations_native(block: PythonObject, context: PythonObject) raises -> L
             raise Error("TypeError: pandas block placement slice is not native")
         return pandas_positions_slice(Int(py=indexer.start), Int(py=indexer.stop),
             1 if indexer.step is None else Int(py=indexer.step))
-    if py_type(indexer) is not context["ndarray"]:
+    var nk = classical_keys()
+    if py_type(indexer) is not py_item(context, nk[].k_ndarray):
         raise Error("TypeError: pandas block placement requires native integer storage")
     var rank = Int(py=indexer.ndim)
     var result = pandas_positions_array(rank, String(indexer.dtype.kind), Int(py=indexer.size),
@@ -419,12 +430,13 @@ def native_pandas_f32(value: PythonObject, context: PythonObject, strict_f32: Bo
     if not native_pandas_exact(value):
         raise Error("TypeError: pandas input requires an exact DataFrame or Series")
     var series = py_type(value) is _pd_class("pandas.core.series", "Series")
-    var manager = py_get(_pd_fields(value), "_mgr")
+    var nk = classical_keys()
+    var manager = py_get(_pd_fields(value), nk[].k__mgr)
     var blocks = PythonObject(None)
     if series:
         if py_type(manager) is not _pd_class("pandas.core.internals.managers", "SingleBlockManager"):
             raise Error("TypeError: pandas Series requires native single-block storage")
-        blocks = py_get(_pd_fields(manager), "blocks")
+        blocks = py_get(_pd_fields(manager), nk[].k_blocks)
     else:
         if py_type(manager) is not _pd_class("pandas.core.internals.managers", "BlockManager"):
             raise Error("TypeError: pandas DataFrame requires native block storage")
@@ -463,7 +475,7 @@ def native_pandas_f32(value: PythonObject, context: PythonObject, strict_f32: Bo
         plan.add_block(descriptor^, positions^, dtype, pair[1])
         owned.append(data)
     plan.finish(strict_f32, refuse_double)
-    var result = sequential_array_native(native_matrix_shape(plan.rows, 0 if series else plan.cols), context["float32"], context)
+    var result = sequential_array_native(native_matrix_shape(plan.rows, 0 if series else plan.cols), py_item(context, nk[].k_float32), context)
     var output = Int(py=sequential_address(result))
     var int_word = Int(b.int._obj_ptr)
     var float_word = Int(b.float._obj_ptr)

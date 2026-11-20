@@ -18,6 +18,7 @@ from bindings.classical_archive_door import _archive_class_name_unpack
 from providers.python.linear_state_boundary_door import linear_state_publish
 from core.native_archive_read import NativeArchiveDecoded
 from core.native_archive_linear import NativeLinearArchivePlan, native_archive_needs_float_text
+from bindings.classical_keys_unpack import classical_keys
 
 
 def archive_linear_pack(cls: PythonObject, plan: NativeLinearArchivePlan,
@@ -29,15 +30,16 @@ def archive_linear_pack(cls: PythonObject, plan: NativeLinearArchivePlan,
     if not raw:
         raise cpy.unsafe_get_error()
     var fields = PythonObject(from_owned=raw)
-    py_setitem(fields, "fit_intercept", plan.fit_intercept)
-    py_setitem(fields, "numeric_mode", PythonObject(plan.mode))
-    py_setitem(fields, "coef_", coefficients)
-    py_setitem(fields, "intercept_", plan.intercept)
-    py_setitem(fields, "n_features_in_", plan.features)
+    var nk = classical_keys()
+    py_setitem(fields, nk[].k_fit_intercept, plan.fit_intercept)
+    py_setitem(fields, nk[].k_numeric_mode, PythonObject(plan.mode))
+    py_setitem(fields, nk[].k_coef_, coefficients)
+    py_setitem(fields, nk[].k_intercept_, plan.intercept)
+    py_setitem(fields, nk[].k_n_features_in_, plan.features)
     if ridge:
-        py_setitem(fields, "alpha", plan.alpha)
-        py_setitem(fields, "solver", "auto")
-        py_setitem(fields, "normalize", False)
-        py_setitem(fields, "solver_", "eig")
+        py_setitem(fields, nk[].k_alpha, plan.alpha)
+        py_setitem(fields, nk[].k_solver, "auto")
+        py_setitem(fields, nk[].k_normalize, False)
+        py_setitem(fields, nk[].k_solver_, "eig")
     linear_state_publish(model, coefficients, PythonObject(None), plan.features, plan.intercept, 0.0, False)
     return model

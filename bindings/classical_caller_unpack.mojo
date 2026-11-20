@@ -8,6 +8,7 @@ from std.python import PythonObject
 from bindings.native_caller_frame_pack import native_caller_globals
 from bindings.py_balanced import py_get, py_type
 from bindings.py_optional import py_present
+from bindings.classical_keys_unpack import classical_keys
 
 
 def classical_caller_outside(context: PythonObject) raises -> Bool:
@@ -25,11 +26,12 @@ def classical_caller_outside(context: PythonObject) raises -> Bool:
         return True
     if not globs:
         return True
-    if py_get(globs.value(), "__mojolearn_user_boundary__") is PythonObject(True):
+    var nk = classical_keys()
+    if py_get(globs.value(), nk[].k___mojolearn_user_boundary__) is PythonObject(True):
         return True
-    if py_get(globs.value(), "__mojolearn_internal__") is PythonObject(True):
+    if py_get(globs.value(), nk[].k___mojolearn_internal__) is PythonObject(True):
         return False
-    var name = py_get(globs.value(), "__name__")
+    var name = py_get(globs.value(), nk[].k___name__)
     if py_type(name) is not py_type(PythonObject("")):
         return True
     var module = String(name)

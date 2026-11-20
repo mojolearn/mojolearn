@@ -9,12 +9,15 @@ from bindings.native_prepared_owner_unpack import prepared_get, prepared_put, pr
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields
 from bindings.classical_attributes_door import _type_mro
 from bindings.mode_metadata_native_door import _class_fields
+from bindings.classical_keys_unpack import classical_keys
+from bindings.py_balanced import py_item
 
 
 def _family_descriptor(value: PythonObject) raises -> Bool:
     var ancestry = _type_mro(py_type(value))
+    var nk = classical_keys()
     for i in range(len(ancestry)):  # driver-loop: descriptor slots through admitted native class namespaces
-        if py_contains(_class_fields(ancestry[i]), "__get__"):
+        if py_contains(_class_fields(ancestry[i]), nk[].k___get__):
             return True
     return False
 
@@ -36,7 +39,8 @@ def classical_family_admit(model: PythonObject) raises -> PythonObject:
     if py_type(cls) is not b.type:
         raise Error("TypeError: native family operations refuse Python metaclass hooks")
     var module = mods.module("mojolearn._native_family_layouts")
-    var layouts = py_fields(module)["LAYOUTS"]
+    var nk = classical_keys()
+    var layouts = py_item(py_fields(module), nk[].k_LAYOUTS)
     if py_type(layouts) is not b.dict:
         raise Error("TypeError: native family layouts require their connected dictionary")
     # Watched class record (Python 3.12+ type watchers, perf3-prep-shared):
@@ -50,7 +54,7 @@ def classical_family_admit(model: PythonObject) raises -> PythonObject:
     var watched = class_record(mods, _FAMILY_WATCH_SLOT, cls)
     if watched is not None and watched[0] is layouts:
         var known = watched[1]
-        if py_get(layouts, known["mro"][0]) is known:
+        if py_get(layouts, py_item(known, nk[].k_mro)[0]) is known:
             return _family_instance_fields(b, model, cls, known)
     var ancestry = _type_mro(cls)
     # Optional, not a PythonObject(None) sentinel read and reassigned in the
@@ -79,13 +83,13 @@ def classical_family_admit(model: PythonObject) raises -> PythonObject:
         if class_watch_ready():  # no payload where no record can be kept (3.10/3.11)
             class_admit(mods, _FAMILY_WATCH_SLOT, cls, Python.tuple(layouts, plan))
         return _family_instance_fields(b, model, cls, plan)
-    var connected = plan["mro"]
+    var connected = py_item(plan, nk[].k_mro)
     if len(ancestry) - start != len(connected):
         raise Error("TypeError: native family estimator ancestry changed after connection")
     for i in range(len(connected)):  # driver-loop: preserve the exact connected ancestry tail
         if ancestry[start + i] is not connected[i]:
             raise Error("TypeError: native family estimator ancestry changed after connection")
-    var names = plan["names"]
+    var names = py_item(plan, nk[].k_names)
     var missing = PythonObject(None)
     for hook in ["__getattribute__", "__getattr__", "__setattr__", "__delattr__", "__del__", "__class__", "__dict__"]:  # small-loop(fixed storage/lookup hooks)
         var current = missing
@@ -98,7 +102,7 @@ def classical_family_admit(model: PythonObject) raises -> PythonObject:
         if current is not py_get(names, hook):
             raise Error("TypeError: native family operation refuses changed Python storage hooks")
     var function_type = mods.module("types").FunctionType
-    var snapshots = plan["descriptors"]
+    var snapshots = py_item(plan, nk[].k_descriptors)
     for i in range(len(ancestry)):  # driver-loop: reject descriptor replacement before any instance field read
         var owner = ancestry[i]
         var row = _class_fields(mods, owner)
@@ -136,7 +140,8 @@ def classical_family_admit(model: PythonObject) raises -> PythonObject:
 
 
 def _family_instance_fields(b: PythonObject, model: PythonObject, cls: PythonObject, plan: PythonObject) raises -> PythonObject:
-    var fields = py_call(plan["fields_get"], model, cls)
+    var nk = classical_keys()
+    var fields = py_call(py_item(plan, nk[].k_fields_get), model, cls)
     if py_type(fields) is not b.dict:
         raise Error("TypeError: native family estimator requires an ordinary instance dictionary")
     # Exact keys before any owner dictionary lookup: one native dictionary

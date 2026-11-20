@@ -10,7 +10,7 @@ from std.python import PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.classical_error_boundary_pack import classical_python_error
 from bindings.family_native_door import family_operation, family_operation_routed
-from bindings.native_operation_codes import operation_table, OP_ROUTE_FAMILY, OP_ROUTE_TREES, OP_ROUTE_HOST_TREE
+from bindings.native_operation_codes import operation_table, OP_ROUTE_FAMILY
 from bindings.native_operation_names_unpack import operation_lookup, operation_code
 from bindings.py_balanced import py_type
 from bindings.admitted_call_door import AdmittedCall
@@ -25,7 +25,9 @@ def _family_coded(model: PythonObject, code: Int, args: PythonObject, context: P
     if code < 0 or code >= len(table[].names):
         raise Error("TypeError: unknown native operation code")
     var route = table[].routes[code]
-    if route == OP_ROUTE_TREES or route == OP_ROUTE_HOST_TREE:
+    if route != OP_ROUTE_FAMILY:
+        # A tree code, or a classical-door string operation's code
+        # (OP_ROUTE_CLASSICAL, lane bw2-classical): not a family operation.
         raise Error("TypeError: native operation code is not a family operation")
     _ = classical_family_admit(model)
     # bw2-core: the name is the table's own String, borrowed (it was copied

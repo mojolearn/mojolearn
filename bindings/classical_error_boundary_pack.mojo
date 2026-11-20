@@ -11,18 +11,21 @@ from bindings.causal_exception_unpack import causal_borrowed_item, causal_set_ex
 from bindings.py_balanced import py_type, py_get, py_contains
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.classical_exceptions_door import classical_not_fitted_class
+from bindings.classical_keys_unpack import classical_keys
+from bindings.py_balanced import py_item
 
 
 def _classical_error_class(args_ptr: PyObjectPtr, key: String) raises -> PyObjectPtr:
     ref cpy = Python().cpython()
     var root = cpy.PyTuple_GetItem(args_ptr, 3)
     var context = PythonObject(from_borrowed=root)
-    var host = py_get(context, "classical_host_context")
+    var nk = classical_keys()
+    var host = py_get(context, nk[].k_classical_host_context)
     if host is not None:
         var model = PythonObject(from_borrowed=cpy.PyTuple_GetItem(args_ptr, 0))
         var b = native_loaded_module("builtins")
         var cls = model if py_type(model) is b.type else py_type(model)
-        if py_contains(host["classical_kinds"], cls):
+        if py_contains(py_item(host, nk[].k_classical_kinds), cls):
             root = causal_borrowed_item(root, "classical_host_context")
     if key == "active_not_fitted_class":
         # Recheck at the exception construction boundary too: some owners

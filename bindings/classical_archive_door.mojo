@@ -25,6 +25,8 @@ from bindings.native_buffer_address_unpack import native_buffer_address
 from bindings.sequential_description_unpack import sequential_fields
 from core.host_archive_impl import host_archive_reorder_bytes
 from bindings.optimizer_public_words_unpack import stash_python_error
+from bindings.classical_keys_unpack import classical_keys
+from bindings.py_balanced import py_item
 
 
 def _archive_file_call(entry: PythonObject, *args: PythonObject) raises -> PythonObject:
@@ -46,13 +48,14 @@ def _archive_file_call(entry: PythonObject, *args: PythonObject) raises -> Pytho
 
 
 def _archive_methods(file: PythonObject, context: PythonObject) raises -> PythonObject:
-    var types = context["archive_file_types"]
+    var nk = classical_keys()
+    var types = py_item(context, nk[].k_archive_file_types)
     var cls = py_type(file)
     for k in range(len(types)):  # driver-loop: over connected native binary file types
         if cls is types[k]:
             if k >= 2 and py_type(file.raw) is not types[1]:
                 raise Error("TypeError: buffered checkpoints require a native FileIO owner, without Python raw-file callbacks")
-            return context["archive_file_methods"][k]
+            return py_item(context, nk[].k_archive_file_methods)[k]
     raise Error("TypeError: checkpoints require a native binary file or standard path; Python file protocols cannot execute")
 
 
@@ -80,7 +83,8 @@ def _archive_path(value: PythonObject, context: PythonObject, normalize: Bool = 
     var cls = py_type(value)
     if cls is native_str:
         return value
-    if cls is context["archive_bytes_type"]:
+    var nk = classical_keys()
+    if cls is py_item(context, nk[].k_archive_bytes_type):
         var address = cpython_table()[].PyBytes_AsString(value._obj_ptr)
         if address == 0:
             raise Python().cpython().unsafe_get_error()
@@ -88,12 +92,12 @@ def _archive_path(value: PythonObject, context: PythonObject, normalize: Bool = 
         var result = _archive_path_words_pack(points)
         _ = value
         return result^
-    var paths = context["archive_path_types"]
+    var paths = py_item(context, nk[].k_archive_path_types)
     if cls is not paths[0] and cls is not paths[1]:
         raise Error("TypeError: path requires str, bytes, PosixPath or PurePosixPath; Python path callbacks are unsupported")
     var native_type = py_type(native_str)
-    var mro = py_call(native_type.__dict__["__mro__"].__get__, cls)
-    var bases = context["archive_path_bases"]
+    var mro = py_call(py_item(native_type.__dict__, nk[].k___mro__).__get__, cls)
+    var bases = py_item(context, nk[].k_archive_path_bases)
     # Optional, not a PythonObject(None) sentinel read and reassigned in the
     # loop (the modular/modular#7546 pattern, suspected of a wrong reference
     # drop under Mojo 1.2.0; runtime-fix-save-forest).
@@ -106,10 +110,10 @@ def _archive_path(value: PythonObject, context: PythonObject, normalize: Bool = 
                 known = known or mro[i] is bases[j]
             if not known:
                 raise Error("TypeError: Python path inheritance callbacks are unsupported")
-            var fields = py_call(native_type.__dict__["__dict__"].__get__, mro[i])
+            var fields = py_call(py_item(native_type.__dict__, nk[].k___dict__).__get__, mro[i])
             if py_contains(fields, field):
                 var slot = fields[field]
-                if py_type(slot) is not context["archive_path_member_type"]:
+                if py_type(slot) is not py_item(context, nk[].k_archive_path_member_type):
                     raise Error("TypeError: Python path storage descriptors are unsupported")
                 var read = py_call(slot.__get__, value, cls)
                 if read is not None:
@@ -135,25 +139,27 @@ def _archive_path(value: PythonObject, context: PythonObject, normalize: Bool = 
 
 
 def _archive_open(path: PythonObject, context: PythonObject) raises -> PythonObject:
-    var types = context["archive_file_types"]
+    var nk = classical_keys()
+    var types = py_item(context, nk[].k_archive_file_types)
     for k in range(len(types)):  # driver-loop: over connected native binary file types
         if py_type(path) is types[k]:
             return Python.tuple(path, False)
-    var file = _archive_file_call(context["archive_open"], _archive_path(path, context), "wb")
+    var file = _archive_file_call(py_item(context, nk[].k_archive_open), _archive_path(path, context), "wb")
     return Python.tuple(file, True)
 
 
 def _archive_array(value: PythonObject, context: PythonObject) raises -> PythonObject:
     # Read retained native slot descriptors, not mutable Array properties.
-    var slots = context["array_fields"]
-    var cls = context["array_class"]
-    var shape = py_call(slots["shape"], value, cls)
-    var dtype = py_call(slots["dtype"], value, cls)
-    var order = py_call(slots["order"], value, cls)
-    var view = py_call(slots["_mv"], value, cls)
+    var nk = classical_keys()
+    var slots = py_item(context, nk[].k_array_fields)
+    var cls = py_item(context, nk[].k_array_class)
+    var shape = py_call(py_item(slots, nk[].k_shape), value, cls)
+    var dtype = py_call(py_item(slots, nk[].k_dtype), value, cls)
+    var order = py_call(py_item(slots, nk[].k_order), value, cls)
+    var view = py_call(py_item(slots, nk[].k__mv), value, cls)
     if py_type(shape) is not py_type(Python.tuple()) or py_type(dtype) is not py_type(PythonObject("")) or py_type(order) is not py_type(PythonObject("")):
         raise Error("TypeError: checkpoint Array metadata requires native shape, dtype and order storage")
-    if py_type(view) is not context["archive_memoryview_type"]:
+    if py_type(view) is not py_item(context, nk[].k_archive_memoryview_type):
         raise Error("TypeError: checkpoint Array storage requires a native memoryview")
     classical_admit_value(view, context)
     var descr = String(dtype)
@@ -188,13 +194,13 @@ def _archive_array(value: PythonObject, context: PythonObject) raises -> PythonO
         raise Error("ValueError: checkpoint Array storage does not match its shape")
     var raw = PythonObject(None)
     if count == 0:
-        raw = py_call(context["archive_bytes_type"])
+        raw = py_call(py_item(context, nk[].k_archive_bytes_type))
     elif String(order) == "C" or len(shape) < 2:
         raw = py_call(view.cast, "B")
     else:
         # Gather words unchanged, including signed zeros/NaN payloads, using
         # the buffer's actual address rather than mutable Array._addr metadata.
-        var store = py_call(context["array_type"], "B", py_call(context["archive_bytes_type"], count * width))
+        var store = py_call(py_item(context, nk[].k_array_type), "B", py_call(py_item(context, nk[].k_archive_bytes_type), count * width))
         host_archive_reorder_bytes(native_buffer_address(view), dimensions, strides,
             count, width, Int(py=py_call(store.buffer_info)[0]))
         raw = native_buffer_view(store)
@@ -219,7 +225,8 @@ def _archive_class_name_unpack(cls: PythonObject) raises -> String:
     # Read the immutable type descriptor directly, without a metaclass hook
     # or a mutable builtins.type/str module attribute.
     var native_type = py_type(py_type(PythonObject("")))
-    return String(py=py_call(native_type.__dict__["__name__"].__get__, cls))
+    var nk = classical_keys()
+    return String(py=py_call(py_item(native_type.__dict__, nk[].k___name__).__get__, cls))
 
 
 def _archive_unpack_unicode(value: PythonObject, context: PythonObject) raises -> List[UInt32]:
@@ -245,7 +252,8 @@ def _archive_unpack_member(name: String, value: PythonObject, context: PythonObj
                 strings.append(_archive_unpack_unicode(value[i], context))
         return archive_unicode(name, strings)
     classical_admit_value(value, context)
-    var array = value if classical_is_array(value, context) or py_type(value) is py_get(context, "ndarray") else classical_input(value, context)
+    var nk = classical_keys()
+    var array = value if classical_is_array(value, context) or py_type(value) is py_get(context, nk[].k_ndarray) else classical_input(value, context)
     pins.append(array)
     var shape = List[Int]()
     var strides = List[Int]()
@@ -254,15 +262,15 @@ def _archive_unpack_member(name: String, value: PythonObject, context: PythonObj
     var size = 0
     var address = 0
     if classical_is_array(array, context):
-        var slots = context["array_fields"]
-        var cls = context["array_class"]
-        var dimensions = py_call(slots["shape"], array, cls)
-        var format = py_call(slots["dtype"], array, cls)
-        var order = py_call(slots["order"], array, cls)
-        var view = py_call(slots["_mv"], array, cls)
+        var slots = py_item(context, nk[].k_array_fields)
+        var cls = py_item(context, nk[].k_array_class)
+        var dimensions = py_call(py_item(slots, nk[].k_shape), array, cls)
+        var format = py_call(py_item(slots, nk[].k_dtype), array, cls)
+        var order = py_call(py_item(slots, nk[].k_order), array, cls)
+        var view = py_call(py_item(slots, nk[].k__mv), array, cls)
         if py_type(dimensions) is not py_type(Python.tuple()) or py_type(format) is not py_type(PythonObject("")) or py_type(order) is not py_type(PythonObject("")):
             raise Error("TypeError: checkpoint Array metadata requires native shape, dtype and order storage")
-        if py_type(view) is not context["archive_memoryview_type"]:
+        if py_type(view) is not py_item(context, nk[].k_archive_memoryview_type):
             raise Error("TypeError: checkpoint Array storage requires a native memoryview")
         classical_admit_value(view, context)
         dtype = String(format)
@@ -341,28 +349,30 @@ def _archive_pack_bytes(file: PythonObject, methods: PythonObject, address: Int,
     if not pointer:
         raise cpy.unsafe_get_error()
     var view = PythonObject(from_owned=pointer)
-    _ = _archive_file_call(methods["write"], file, view)
+    var nk = classical_keys()
+    _ = _archive_file_call(py_item(methods, nk[].k_write), file, view)
     _ = view
 
 
 def _archive_pack_members(file: PythonObject, methods: PythonObject,
                           mut members: List[NativeArchiveMember]) raises:
     var records = archive_prepare(members)
+    var nk = classical_keys()
     for i in range(len(records)):  # driver-loop: over the archive members (model fields), dependent stream position and writes
-        var offset = Int(py=_archive_file_call(methods["tell"], file))
+        var offset = Int(py=_archive_file_call(py_item(methods, nk[].k_tell), file))
         var header = archive_local(records[i], offset)
         _archive_pack_bytes(file, methods, Int(header.unsafe_ptr()), len(header))
         _archive_pack_bytes(file, methods, members[i].source, members[i].size)
         _ = header
-    var directory = Int(py=_archive_file_call(methods["tell"], file))
+    var directory = Int(py=_archive_file_call(py_item(methods, nk[].k_tell), file))
     for i in range(len(records)):  # driver-loop: over the archive members (model fields), central directory output
         var header = archive_central(records[i])
         _archive_pack_bytes(file, methods, Int(header.unsafe_ptr()), len(header))
         _ = header
-    var end = Int(py=_archive_file_call(methods["tell"], file))
+    var end = Int(py=_archive_file_call(py_item(methods, nk[].k_tell), file))
     var footer = archive_footer(len(records), directory, end)
     _archive_pack_bytes(file, methods, Int(footer.unsafe_ptr()), len(footer))
-    _ = _archive_file_call(methods["flush"], file)
+    _ = _archive_file_call(py_item(methods, nk[].k_flush), file)
     _ = footer
     _ = records
     _ = members
@@ -390,7 +400,8 @@ def classical_archive_write(path: PythonObject, values: PythonObject, context: P
         _archive_pack_members(file, methods, members)
     finally:
         if close:
-            _ = _archive_file_call(methods["close"], file)
+            var nk = classical_keys()
+            _ = _archive_file_call(py_item(methods, nk[].k_close), file)
         _ = pins
         _ = members
     return path
@@ -399,11 +410,12 @@ def classical_archive_write(path: PythonObject, values: PythonObject, context: P
 def classical_archive_save(model: PythonObject, path: PythonObject, ridge: Bool,
                            context: PythonObject) raises -> PythonObject:
     var fields = sequential_fields(model)
-    if not py_contains(fields, "coef_"):
+    var nk = classical_keys()
+    if not py_contains(fields, nk[].k_coef_):
         raise Error("RuntimeError: this estimator is not fitted yet")
-    var mode = py_get(fields, "numeric_mode")
+    var mode = py_get(fields, nk[].k_numeric_mode)
     if mode is None or not Bool(py=mode):
-        mode = context["backend_fields"]["_DEFAULT_MODE"]
+        mode = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
     if py_type(mode) is not py_type(PythonObject("")):
         raise Error("cannot save invalid numeric_mode")
     var source = String(mode)
@@ -414,10 +426,10 @@ def classical_archive_save(model: PythonObject, path: PythonObject, ridge: Bool,
         raise Error("cannot save invalid numeric_mode")
     var pins = List[PythonObject]()
     # Every save reads the current writable/rebound public coefficient field.
-    var coef = _archive_unpack_member("coef", fields["coef_"], context, pins)
-    var alpha = Float64(py=fields["alpha"]) if ridge else Float64(0)
+    var coef = _archive_unpack_member("coef", py_item(fields, nk[].k_coef_), context, pins)
+    var alpha = Float64(py=py_item(fields, nk[].k_alpha)) if ridge else Float64(0)
     var members = archive_linear_members(coef^, _archive_class_name_unpack(py_type(model)), selected,
-        Int(py=fields["n_features_in_"]), Float64(py=fields["intercept_"]), Bool(py=fields["fit_intercept"]), ridge, alpha)
+        Int(py=py_item(fields, nk[].k_n_features_in_)), Float64(py=py_item(fields, nk[].k_intercept_)), Bool(py=py_item(fields, nk[].k_fit_intercept)), ridge, alpha)
     var opened = _archive_open(path, context)
     var file = opened[0]
     var methods = _archive_methods(file, context)
@@ -425,7 +437,7 @@ def classical_archive_save(model: PythonObject, path: PythonObject, ridge: Bool,
         _archive_pack_members(file, methods, members)
     finally:
         if Bool(py=opened[1]):
-            _ = _archive_file_call(methods["close"], file)
+            _ = _archive_file_call(py_item(methods, nk[].k_close), file)
         _ = pins
         _ = members
     return path
@@ -433,9 +445,10 @@ def classical_archive_save(model: PythonObject, path: PythonObject, ridge: Bool,
 
 def classical_archive_hash(model: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = sequential_fields(model)
-    if not py_contains(fields, "coef_"):
+    var nk = classical_keys()
+    if not py_contains(fields, nk[].k_coef_):
         raise Error("AttributeError: host linear model has no coef_")
-    var value = fields["coef_"]
+    var value = py_item(fields, nk[].k_coef_)
     if value is None:
         return PythonObject(sha256_hex(List[UInt8]()))
     sequential_admit_value(value, context)
