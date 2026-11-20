@@ -443,7 +443,8 @@ def _gpr_predict_result(model: PythonObject, fields: PythonObject,
     var gq = _gpr_query(fields, source, context, resident)
     var q = gq.q
     var n_star = gq.rows
-    var xt = gp_f32(fields, "X_train_", 2, context)
+    var nk = gp_keys()
+    var xt = gp_f32(fields, nk[].k_X_train_, "X_train_", 2, context)
     var n_train = Int(py=xt.shape[0])
     var arrays = gp_kernel_arrays_reused(model, gp_model_kernel(fields), context)  # packed once per kernel state
     var mean = GPRPredictionRoom(n_star, private_mean, context)
@@ -463,15 +464,14 @@ def _gpr_predict_result(model: PythonObject, fields: PythonObject,
         var_address = Int(variance.unsafe_ptr())
         std_address = Int(py=classical_address(std))
         clamped_address = Int(py=classical_address(clamped))
-    var lf = gp_f32(fields, "L_", -1, context)
-    var dual = gp_f32(fields, "alpha_", -1, context)
+    var lf = gp_f32(fields, nk[].k_L_, "L_", -1, context)
+    var dual = gp_f32(fields, nk[].k_alpha_, "alpha_", -1, context)
     var normalization = _gpr_normalization(fields)
     var route = 1 if (caps & 2) == 2 else 0
     var lease = 0
     if not resident:
         # These entries return no status word: the query is tested here.
         gp_query_scan(gq, "GaussianProcessRegressor", context)
-    var nk = gp_keys()
     if resident:
         # Device-resident fitted state (lane ne1-a-gp-svm): X_train_, alpha_
         # and L_ cross to the device once per fitted state; the lease word
@@ -537,7 +537,8 @@ def _gpr_predict_cov(model: PythonObject, args: GPArgumentPins, context: PythonO
     gp_query_scan(gq, "GaussianProcessRegressor", context)
     var q = gq.q
     var n_star = Int(py=q.shape[0])
-    var xt = gp_f32(fields, "X_train_", 2, context)
+    var nk = gp_keys()
+    var xt = gp_f32(fields, nk[].k_X_train_, "X_train_", 2, context)
     var n_train = Int(py=xt.shape[0])
     var arrays = gp_kernel_arrays_reused(model, gp_model_kernel(fields), context)  # packed once per kernel state
     var ext = _gpr_ext(model, args[0], context)
@@ -546,11 +547,10 @@ def _gpr_predict_cov(model: PythonObject, args: GPArgumentPins, context: PythonO
     # n_star >= 1 (as_f32_c refuses an empty X), so max(n, 1) is n.
     var mean = family_array(Python.tuple(n_star), "<f4", context)
     var cov = family_array(Python.tuple(n_star, n_star), "<f4", context)
-    var lf = gp_f32(fields, "L_", -1, context)
-    var dual = gp_f32(fields, "alpha_", -1, context)
+    var lf = gp_f32(fields, nk[].k_L_, "L_", -1, context)
+    var dual = gp_f32(fields, nk[].k_alpha_, "alpha_", -1, context)
     var normalization = _gpr_normalization(fields)
     var kernel = gp_kernel_view(arrays)
-    var nk = gp_keys()
     var request = GPRCovarianceRequest(Int(py=classical_address(xt)), Int(py=classical_address(lf)),
         Int(py=classical_address(dual)), Int(py=classical_address(q)), Int(py=classical_address(mean)),
         Int(py=classical_address(cov)), n_train, Int(py=py_item(fields, nk[].k_n_features_in_)), n_star,
@@ -597,14 +597,14 @@ def _gpr_sample_y(model: PythonObject, args: GPArgumentPins, context: PythonObje
     gp_query_scan(gq, "GaussianProcessRegressor", context)
     var q = gq.q
     var n_star = Int(py=q.shape[0])
-    var xt = gp_f32(fields, "X_train_", 2, context)
+    var xt = gp_f32(fields, nk[].k_X_train_, "X_train_", 2, context)
     var n_train = Int(py=xt.shape[0])
     var arrays = gp_kernel_arrays_reused(model, gp_model_kernel(fields), context)  # packed once per kernel state
     # Never a zero-length buffer: a refused n still addresses real memory
     # (the binding refuses n_samples < 1 by name).
     var out = family_array(Python.tuple(n_star, n) if n_star * n >= 1 else Python.tuple(1), "<f4", context)
-    var lf = gp_f32(fields, "L_", -1, context)
-    var dual = gp_f32(fields, "alpha_", -1, context)
+    var lf = gp_f32(fields, nk[].k_L_, "L_", -1, context)
+    var dual = gp_f32(fields, nk[].k_alpha_, "alpha_", -1, context)
     var ext = _gpr_ext(model, args[0], context)
     var seed_bits = gp_seed_word(seed)
     var normalization = _gpr_normalization(fields)
@@ -685,8 +685,8 @@ def _gpr_log_marginal_likelihood(model: PythonObject, args: GPArgumentPins, cont
         lifecycle_admit_fields(fields)
         _ = theta
         _ = params
-        var xt = gp_f32(fields, "X_train_", 2, context)
-        var yt = gp_f32(fields, "y_train_", 1, context)
+        var xt = gp_f32(fields, nk[].k_X_train_, "X_train_", 2, context)
+        var yt = gp_f32(fields, nk[].k_y_train_, "y_train_", 1, context)
         var at = gp_with_free_values(kern, params, List[Float64](), context)
         var result = _gpr_lml_grad(model, args[0], at, xt, yt, Int(py=xt.shape[0]), Int(py=xt.shape[1]), context)
         var lml = result.likelihood

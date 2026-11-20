@@ -450,16 +450,16 @@ def _gpc_latent(ext: PythonObject, fields: PythonObject, est: PythonObject, q: P
     """`_latent(ext, est, q, want_proba, out_kind)`: (mean, var, proba[, out]).
     `kernel_arrays`: the kernel's packed arrays when the caller already has
     them; else `gp_kernel_arrays(fields["_kernel"])`."""
-    var xt = gp_f32(fields, "X_train_", 2, context)
+    var nk = gp_keys()
+    var xt = gp_f32(fields, nk[].k_X_train_, "X_train_", 2, context)
     var arrays = kernel_arrays
     if arrays is None:
-        var nk = gp_keys()
         arrays = gp_kernel_arrays(py_item(fields, nk[].k__kernel), context)
     var own = py_fields(est)
-    var y01 = gp_f32(own, "y_train_", -1, context)
-    var pi = gp_f32(own, "pi_", -1, context)
-    var wsr = gp_f32(own, "W_sr_", -1, context)
-    var lf = gp_f32(own, "L_", -1, context)
+    var y01 = gp_f32(own, nk[].k_y_train_, "y_train_", -1, context)
+    var pi = gp_f32(own, nk[].k_pi_, "pi_", -1, context)
+    var wsr = gp_f32(own, nk[].k_W_sr_, "W_sr_", -1, context)
+    var lf = gp_f32(own, nk[].k_L_, "L_", -1, context)
     var connection = GPConnection(ext)
     var result = _gpc_latent_run(connection, xt, y01, pi, wsr, lf, q, want_proba, out_kind, arrays, pack,
                                  native_codes, context)
@@ -535,10 +535,11 @@ def gpc_worker_latent(binding: PythonObject, x_train: PythonObject, fit_fields: 
     or holder dict is built in the worker."""
     var connection = GPConnection(binding)
     var xt = admit_family(x_train, 2, "X_train_", context).array
-    var y01 = gp_f32(fit_fields, "y_train_", -1, context)
-    var pi = gp_f32(fit_fields, "pi_", -1, context)
-    var wsr = gp_f32(fit_fields, "W_sr_", -1, context)
-    var lf = gp_f32(fit_fields, "L_", -1, context)
+    var nk = gp_keys()
+    var y01 = gp_f32(fit_fields, nk[].k_y_train_, "y_train_", -1, context)
+    var pi = gp_f32(fit_fields, nk[].k_pi_, "pi_", -1, context)
+    var wsr = gp_f32(fit_fields, nk[].k_W_sr_, "W_sr_", -1, context)
+    var lf = gp_f32(fit_fields, nk[].k_L_, "L_", -1, context)
     var latent = _gpc_latent_run(connection, xt, y01, pi, wsr, lf, q, want_proba, out_kind, arrays,
                                  4 if want_proba else 1, False, context)
     _ = xt^
@@ -559,11 +560,11 @@ def _gpc_predict_all(model: PythonObject, ext: PythonObject, fields: PythonObjec
     is host words or a device fold; the entry returns its status words and
     a flagged query is refused here (lane a7a)."""
     var n_star = gq.rows
-    var xt = gp_f32(fields, "X_train_", 2, context)
+    var nk = gp_keys()
+    var xt = gp_f32(fields, nk[].k_X_train_, "X_train_", 2, context)
     var n_train = Int(py=xt.shape[0])
     var n_features = Int(py=xt.shape[1])
     var arrays = kernel_arrays
-    var nk = gp_keys()
     var fits = py_item(fields, nk[].k_estimators_)
     var k = len(fits)
     var probabilities = PythonObject(None)
@@ -585,10 +586,10 @@ def _gpc_predict_all(model: PythonObject, ext: PythonObject, fields: PythonObjec
     for i in range(k):  # driver-loop: four model buffers per fitted OVR member
         var own = py_fields(fits[i])
         var parts = List[PythonObject]()
-        parts.append(gp_f32(own, "y_train_", -1, context))
-        parts.append(gp_f32(own, "pi_", -1, context))
-        parts.append(gp_f32(own, "W_sr_", -1, context))
-        parts.append(gp_f32(own, "L_", -1, context))
+        parts.append(gp_f32(own, nk[].k_y_train_, "y_train_", -1, context))
+        parts.append(gp_f32(own, nk[].k_pi_, "pi_", -1, context))
+        parts.append(gp_f32(own, nk[].k_W_sr_, "W_sr_", -1, context))
+        parts.append(gp_f32(own, nk[].k_L_, "L_", -1, context))
         tables.targets[i] = Int(py=classical_address(parts[0]))
         tables.pis[i] = Int(py=classical_address(parts[1]))
         tables.wsrs[i] = Int(py=classical_address(parts[2]))
