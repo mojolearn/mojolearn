@@ -201,23 +201,23 @@ def _admit_replaced_state(model: PythonObject, fields: PythonObject, context: Py
             native_release_admit(fields[name], context)
 
 
-def cluster_public_operation(model: PythonObject, owner: Int, operation: Int, name: String, args: PythonObject,
+def cluster_public_operation(model: PythonObject, owner: Int, operation: Int, operation_name: String, args: PythonObject,
                              context: PythonObject) raises -> PythonObject:
     """The public lifecycle of the flagged cluster operations (the family
     door's FR_CFA, FR_XC and `family_mix_bgmm_*` names called with no
     binding). `owner` is the route owner and `operation` the name's leaf
     code in that owner's numbering (lane bw2-cluster: it was the name, with a
     method String built per call from suffix tests and two prefix tests to
-    pick the owner); `name` is read only for a name the table does not hold
+    pick the owner); `operation_name` is read only for a name the table does not hold
     (OP_LEAF_NONE), whose owner's unknown-operation text is raised."""
     if operation == OP_LEAF_NONE:
         if owner == FR_CFA:
-            cluster_fit_a_unknown_operation(name)
+            cluster_fit_a_unknown_operation(operation_name)
         elif owner == FR_XC:
-            cluster_unknown_operation(name)
+            cluster_unknown_operation(operation_name)
         else:
             classical_connect_numpy(context)
-            mixture_unknown_operation(name)
+            mixture_unknown_operation(operation_name)
     if owner == FR_XC and operation == XC_OPN_FAMILY_XC_INITIALIZE:
         return cluster_initialize_py(model, args[1], context)
     classical_connect_numpy(context)
