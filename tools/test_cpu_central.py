@@ -21,7 +21,10 @@ STEPS = ROOT / "tools/ops/native_checks_steps.sh"
 
 
 def env_for(tmp_path, **extra):
-    env = {k: v for k, v in os.environ.items() if not k.startswith(("MOJOLEARN_", "CPC_", "RUNPOD_"))}
+    # CPU_CHECK_*: a run inside a box check job inherits that job's CPU_CHECK_SHA / CPU_CHECK_SUITE (cpu_central.sh
+    # check --env), and the job script under test took them as its arguments: no usage, then "needs
+    # MOJOLEARN_RESULTS_DIR" (box job nvc-cpuchk-20261120T174232Z-018cbd)
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("MOJOLEARN_", "CPC_", "RUNPOD_", "CPU_CHECK", "NVC_"))}
     env.update(MOJOLEARN_CPC_HOME=str(tmp_path / "cpc"), MOJOLEARN_DEVPOD_STATE=str(tmp_path / "devpods"),
                MOJOLEARN_NVC_NO_API="1", MOJOLEARN_RUNPOD_KEY_FILE=str(tmp_path / "no-key"),
                MOJOLEARN_PERSIST_HOME=str(tmp_path / "persist"), MOJOLEARN_DEVPOD_DISK_GB="100",
