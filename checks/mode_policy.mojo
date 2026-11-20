@@ -38,7 +38,7 @@ The table (True = relaxed)
     VENDOR_MATH         False          False          False          True
     MATRIX_UNITS        False          False          False          False (its own gates)
     WAITS_ELIDED        False          False          False          False (its own gates)
-    BF16_UNITS          False          False          False          False (no seam yet)
+    BF16_UNITS          False          False          False          False (its own gates)
     TILE_FREE           False          False          False          True
 
 The host column reads the same rows as the device columns of its set, so a
@@ -61,6 +61,7 @@ Who reads the rows
     MATRIX_UNITS    gemm/fast_matrix_units.mojo: GEMM_FAST_MATRIX_UNITS (the NVIDIA TF32 arm,
                     `-D MOJOLEARN_GEMM_FAST_MATRIX_UNITS=<kind>`, a term of the row), and the
                     classical family routes below
+    BF16_UNITS      gemm/fast_bf16_units.mojo: GEMM_FAST_BF16_UNITS (`-D MOJOLEARN_GEMM_FAST_BF16_UNITS=1`)
     WAITS_ELIDED    no seam yet (only waits that can move a bit)
 
 `MODE_POLICY_MASK` has bit i set when row i is relaxed. Bindings export it so
@@ -79,7 +80,7 @@ is False, so a host binding of the same set compiles and stays exact.
     GEMM matrix units             MOJOLEARN_GEMM_FAST_MATRIX_UNITS=<kind>  MATRIX_UNITS  MAX matmul, TF32  MAX matmul, MFMA  afn route (AFN_GEMM_*)      exact
     ROUTE_DECOMP_MATRIX_UNITS     MOJOLEARN_DECOMP_FAST_MATRIX_UNITS       MATRIX_UNITS  MAX matmul, TF32  MAX matmul, MFMA  afn route (PCA Gram tile)   exact
     ROUTE_NEIGHBORS_MATRIX_UNITS  MOJOLEARN_NEIGHBORS_FAST_MATRIX_UNITS    MATRIX_UNITS  MAX matmul, TF32  MAX matmul, MFMA  Apple MMA distance kernels  exact
-    (none yet)                    MOJOLEARN_MODE_FAST_BF16_UNITS           BF16_UNITS    no kernel wired   no kernel wired   no kernel wired             exact
+    ROUTE_GEMM_BF16_UNITS         MOJOLEARN_GEMM_FAST_BF16_UNITS=1    BF16_UNITS    MAX matmul, bf16  MAX matmul, bf16  afn route (AFN_GEMM_BF16_MMA)  exact
 
   GEMM: gemm/fast_matrix_units.mojo (neural dispatch, sequence executor). DECOMP:
   decomposition/gram_matrix_units_route.mojo (PCA / truncated SVD: the Gram past the split-K width, the
@@ -87,14 +88,15 @@ is False, so a host binding of the same set compiles and stays exact.
   distance product at wide features). One source for NVIDIA and AMD; on AMD the fp32 MFMA keeps full fp32
   operands, so the relaxation there is the vendor's fold order and K grouping, not operand width.
 
-  BF16_UNITS is its own row because it is a different precision class (8 significant bits per operand, 4 times
-  the TF32 bound) with a different reference: its quality is compared against torch BF16, never against the
-  FP32 result. MAX documents half-precision matrix units on NVIDIA (16x8x16) and AMD (16x16x16, 32x32x8)
-  (api/mojo/layout/tensor_core/TensorCore) and bf16 / fp16 products on Apple M5 only; whether
-  `linalg.matmul` takes bf16 operands with fp32 accumulation on the pinned MAX 26.7.0 is not confirmed by a
-  page or by a compile, and the tree's BF16 entries (gemm/checks/gemm_lowbit.mojo) are BF16 STORAGE widened to
-  FP32 on the exact kernel. So the row exists, is refused under the contract like every row, and no seam reads
-  it yet: passing its define in a fast-rows build changes no kernel.
+  BF16_UNITS is its own row because it is a different precision class (8 significant bits per operand, twice
+  the TF32 truncation bound) and its second reference is torch BF16. Its route is gemm/fast_bf16_units.mojo
+  (lane fx-fast-bf16, 2026-11-20): the neural dispatch, the sequence executor and the public `linalg.matmul`
+  entry narrow both operands to bf16 in scratch and run one MAX `linalg.matmul` on the half-precision matrix
+  unit (NVIDIA 16x8x16, AMD 16x16x16 / 32x32x8; api/mojo/layout/tensor_core/TensorCore), FP32 accumulation and
+  FP32 output; the master weights, the loss, the normalisations and the optimizer stay FP32. MAX has bf16
+  products on Apple M5 only and the Apple set has its own bf16 simdgroup route, so the Apple column points at
+  that and the define relaxes nothing there. `MOJOLEARN_MODE_FAST_BF16_UNITS` alone sets the row's bit and
+  changes no kernel: the family define is what a route reads.
 
 Each route has a quality check (the route's result against the exact FP32
 result, within a bound derived from the unit's operand width) and an owed A/B
@@ -214,6 +216,9 @@ comptime _DECOMP_MATRIX_UNITS_DEFINED = is_defined["MOJOLEARN_DECOMP_FAST_MATRIX
 #   MOJOLEARN_NEIGHBORS_FAST_MATRIX_UNITS (neighbors/distance_matrix_units_route.mojo: the brute-force k-NN
 #   expanded-L2 distance product at wide features on the NVIDIA tensor cores).
 comptime _NEIGHBORS_MATRIX_UNITS_DEFINED = is_defined["MOJOLEARN_NEIGHBORS_FAST_MATRIX_UNITS"]()
+#   MOJOLEARN_GEMM_FAST_BF16_UNITS=1 (gemm/fast_bf16_units.mojo: the neural products on the bf16 matrix
+#   unit, FP32 accumulation): any non-zero kind relaxes BF16_UNITS.
+comptime _GEMM_BF16_UNITS_DEFINED = get_defined_int["MOJOLEARN_GEMM_FAST_BF16_UNITS", 0]() != 0
 # The matrix-units routes are vendor-neutral in source: one call of MAX `linalg.matmul`, whose GPU backends are
 # NVIDIA (sm80 / sm90 / sm100: TF32 operands for fp32 inputs unless `use_tf32=False`), AMD CDNA (MFMA 16x16x4 for
 # fp32) and Apple (the 8x8 simdgroup product on M1-M4, a structured kernel on M5); max.modular.com,
@@ -226,6 +231,9 @@ comptime _FAMILY_UNITS_COLUMN = (TARGET_HAS_NVIDIA_GPU or TARGET_HAS_AMD_GPU) an
 comptime _GEMM_MATRIX_UNITS_REQUESTED = _GEMM_MATRIX_UNITS_DEFINED and _FAMILY_UNITS_COLUMN
 comptime _DECOMP_MATRIX_UNITS_REQUESTED = _DECOMP_MATRIX_UNITS_DEFINED and _FAMILY_UNITS_COLUMN
 comptime _NEIGHBORS_MATRIX_UNITS_REQUESTED = _NEIGHBORS_MATRIX_UNITS_DEFINED and _FAMILY_UNITS_COLUMN
+# The bf16 route has the same columns: MAX's half-precision matrix-unit product on NVIDIA and AMD; Apple has its
+# own bf16 route (gemm/afn_apple_fast.mojo AFN_GEMM_BF16_MMA; MAX's is M5 only); the host has no unit.
+comptime _GEMM_BF16_UNITS_REQUESTED = _GEMM_BF16_UNITS_DEFINED and _FAMILY_UNITS_COLUMN
 
 # Any row define at all. Read by the compile error below, which must not
 # depend on the resolved rows.
@@ -233,6 +241,7 @@ comptime _ANY_ROW_DEFINE = (
     _GEMM_MATRIX_UNITS_DEFINED
     or _DECOMP_MATRIX_UNITS_DEFINED
     or _NEIGHBORS_MATRIX_UNITS_DEFINED
+    or _GEMM_BF16_UNITS_DEFINED
     or (
         is_defined["MOJOLEARN_MODE_FAST_FOLD_FREE"]()
         or is_defined["MOJOLEARN_MODE_FAST_CONTRACT_FREE"]()
@@ -249,7 +258,7 @@ comptime _ANY_ROW_DEFINE = (
 def _row(row: Int, requested: Bool) -> Bool:
     """Resolve one row for this build. Every row passes through here, so any
     module that reads a row also compiles the refusal."""
-    comptime assert not (CONTRACT_IDENTICAL and _ANY_ROW_DEFINE), "a MOJOLEARN_MODE_FAST_* relaxation (or a family arm of one: MOJOLEARN_GEMM_FAST_MATRIX_UNITS, MOJOLEARN_DECOMP_FAST_MATRIX_UNITS, MOJOLEARN_NEIGHBORS_FAST_MATRIX_UNITS) was requested in a build that promises identical bits; relaxations are effective only in a fast build (-D MOJOLEARN_MODE_FAST_ROWS)"
+    comptime assert not (CONTRACT_IDENTICAL and _ANY_ROW_DEFINE), "a MOJOLEARN_MODE_FAST_* relaxation (or a family arm of one: MOJOLEARN_GEMM_FAST_MATRIX_UNITS, MOJOLEARN_DECOMP_FAST_MATRIX_UNITS, MOJOLEARN_NEIGHBORS_FAST_MATRIX_UNITS, MOJOLEARN_GEMM_FAST_BF16_UNITS) was requested in a build that promises identical bits; relaxations are effective only in a fast build (-D MOJOLEARN_MODE_FAST_ROWS)"
     return policy_row_default(row, POLICY_BUILD, POLICY_COLUMN) or requested
 
 
@@ -288,9 +297,16 @@ comptime ROUTE_NEIGHBORS_MATRIX_UNITS = (
 comptime ROW_WAITS_ELIDED = _row(POLICY_ROW_WAITS_ELIDED, is_defined["MOJOLEARN_MODE_FAST_WAITS_ELIDED"]())
 # Tile and block shape: only the tiles that bound a float fold.
 comptime ROW_TILE_FREE = _row(POLICY_ROW_TILE_FREE, is_defined["MOJOLEARN_MODE_FAST_TILE_FREE"]())
-# BF16 matrix units: half-precision operands on the matrix unit, FP32 accumulation. No seam reads it yet (the
-# module docstring says what exists per vendor); quality reference is torch BF16.
-comptime ROW_BF16_UNITS = _row(POLICY_ROW_BF16_UNITS, is_defined["MOJOLEARN_MODE_FAST_BF16_UNITS"]())
+# BF16 matrix units: half-precision operands on the matrix unit, FP32 accumulation (gemm/fast_bf16_units.mojo).
+comptime ROW_BF16_UNITS = _row(
+    POLICY_ROW_BF16_UNITS,
+    is_defined["MOJOLEARN_MODE_FAST_BF16_UNITS"]() or _GEMM_BF16_UNITS_REQUESTED,
+)
+# The GEMM route of the bf16 row: True only in a fast-rows build on the NVIDIA or AMD column with the family
+# define passed. gemm/fast_bf16_units.mojo imports it; no other module reads the define.
+comptime ROUTE_GEMM_BF16_UNITS = (
+    POLICY_BUILD == POLICY_BUILD_FAST_ROWS and ROW_BF16_UNITS and _GEMM_BF16_UNITS_REQUESTED
+)
 
 comptime ANY_ROW_RELAXED = (
     ROW_FOLD_FREE or ROW_CONTRACT_FREE or ROW_FLUSH_OFF or ROW_VENDOR_MATH

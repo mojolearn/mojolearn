@@ -67,6 +67,10 @@ from sequence.gemm_split import GEMM_SPLITK, OP_GK_SPLIT, gemm_split_args, gemm_
 from sequence.gemm_packed_route import SEQ_GEMM_PACKED, SP_NONE, GR_PROF_PACKED, seq_gemm_packed_on, seq_gemm_packed_launch
 from sequence.gemm_packed_route import SEQ_GEMM_PACKED_EPI, seq_gemm_packed_epi_kind, seq_gemm_packed_epi_launch
 # lane fx-fast-matrix-units (2026-11-19): the matrix-units relaxation of an NVIDIA `fast` build (default OFF).
+from sequence.gemm_bf16_units_route import (
+    SEQ_GEMM_BF16_UNITS, SBU_NONE, seq_gemm_bf16_units_on, seq_gemm_bf16_units_launch,
+)
+from gemm.fast_bf16_units import bf16_units_workspace_floats
 from sequence.gemm_matrix_units_route import (
     SEQ_GEMM_MATRIX_UNITS, SMU_NONE, seq_gemm_matrix_units_on, seq_gemm_matrix_units_launch,
     seq_gemm_matrix_units_ta_on, seq_gemm_matrix_units_ta_launch,
@@ -1362,6 +1366,30 @@ struct DeviceExec(Exec, Movable):
                     block_dim=(TPB, 1, 1),
                 )
                 self.execution_profile.kernel()
+                return
+        # lane fx-fast-bf16 (-D MOJOLEARN_GEMM_FAST_BF16_UNITS=<kind>, default OFF, A/B owed with quality; legal only
+        # in a `fast` build): a large plain dense product runs on the bf16 matrix unit, FP32 accumulation and
+        # output (sequence/gemm_bf16_units_route.mojo: the addressings, what is not routed;
+        # gemm/fast_bf16_units.mojo: the bound, what stays FP32). Asked before the TF32 arm, so a build with both
+        # runs bf16 where its rule takes. The scratch for the two bf16 operand images is the executor's own
+        # allocation, freed here: `free` retires it until the next sync, after the launches that use it. An
+        # epilogue opcode runs its follower in FP32 as OP_GEMM_EPI_TAIL. Per call under the arm: eight integer
+        # tests, one take, one free, three launches; no wait. Off: not compiled.
+        comptime if SEQ_GEMM_BF16_UNITS and (
+                OP == OP_GEMM or OP == OP_AGK_GEMM_EPI or OP == OP_GEMM_EPI):
+            var bf16_form = seq_gemm_bf16_units_on[OP](a)
+            if bf16_form != SBU_NONE:
+                var bf16_scratch = self._alloc(bf16_units_workspace_floats(a.i0, a.i1, a.i2), False)
+                seq_gemm_bf16_units_launch(
+                    self.ctx, a, bf16_form, bf16_scratch.unsafe_origin_cast[MutAnyOrigin]()
+                )
+                self.execution_profile.kernel()
+                self.execution_profile.kernel()
+                self.execution_profile.kernel()
+                self.free(bf16_scratch)
+                comptime if OP != OP_GEMM:
+                    if seq_gemm_epi_kind(a.i9, a.i10) != GK_PLAIN:
+                        self._launch[OP_GEMM_EPI_TAIL](a, a.i0 * a.i1)
                 return
         # lane fx-fast-matrix-units (-D MOJOLEARN_GEMM_FAST_MATRIX_UNITS=1, default OFF, A/B owed with quality; legal
         # only in an NVIDIA `fast` build): a large plain dense product with row-major operands runs the TF32
