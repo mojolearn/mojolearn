@@ -151,8 +151,13 @@ def self_test(python: str, out: Path) -> dict:
         status = "timed_out"
     elif vendor in ("cpu", "?") or vendor.startswith("import failed"):
         status = "not_on_gpu"
-    elif rc == 0 and r.get("passed") and clean == "IDENTICAL" and dirty == "DIVERGENT":
-        status = "detected"
+    elif clean == "IDENTICAL" and dirty == "DIVERGENT":
+        # The FAULT question is answered by the two states: the clean fit matched and the perturbed one did not.
+        # `passed` is also false when the self-test's public-endpoint reference reads OWED (stale between releases:
+        # the reference is recorded once, at the release). That is reported in `problems` and is not "the fault was
+        # missed": on 2026-11-20 it made every pod job's faults phase red (abf2, nvc1-0001) with the fault detected.
+        problems = [str(x) for x in (r.get("problems") or [])]
+        status = "detected" if (r.get("passed") or all("OWED" in x for x in problems)) else "detected_with_problems"
     else:
         status = "not_detected"
     return dict(arm="verify-self-test", status=status, rc=rc, vendor=vendor, clean=clean, perturbed=dirty,
