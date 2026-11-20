@@ -1972,6 +1972,9 @@ FAMILIES = (
             "core_host_numeric_mode", "core_host_vendor", "core_host_column",
             "core_host_sabotage", "mojolearn_vendor", "mojolearn_numeric_mode",
             "mojolearn_mode_policy_mask",
+            # lane fx-verify-trace: the activity record's switch and read-back
+            # (verification tooling; core/activity_record.mojo)
+            "activity_begin", "activity_end",
             "knn_search", "knn_classify", "knn_regress", "kmeans_fit", "kmeans_predict", "kmeans_transform",
             "kmeans_native_api_v1",
             "knn_classify_neighbors", "knn_regress_neighbors",

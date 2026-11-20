@@ -154,6 +154,7 @@ from std.memory import bitcast
 from std.sys.compile import is_defined
 
 from core.host_parallel import host_parallelize
+from core.launch_log import activity_host
 
 from core.host_predict_threads import (
     HostF32Ptr,
@@ -880,6 +881,8 @@ def host_knn_search(
     vectors, every distance of every query row through
     `host_l2_expanded_cell`, the selection and the sort. `out_dist` and
     `out_idx` hold `n_queries * k` each."""
+    # lane fx-verify-trace: once per call, counted only for a verification
+    activity_host("host_knn_search")
     if n_index <= 0:
         raise Error("knn_search: n_index must be positive, got " + String(n_index))
     if n_queries <= 0:

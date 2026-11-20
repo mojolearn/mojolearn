@@ -27,8 +27,11 @@ already in the tree, unchanged:
 - upload into a buffer the caller already holds: `transfer_upload_into`, the
   same in-place copy as `transfer_upload_list` without the allocation.
 
-Nothing here allocates host memory besides the returned List, takes a lock or
-looks anything up; no helper waits more often than the one it replaced. Not
+Nothing here allocates host memory besides the returned List or takes a lock;
+each entry reads the activity record's switch once (`core/launch_log.mojo`
+`activity_uploaded` / `activity_downloaded`: one slot read and one Bool test
+beside a transfer that waits on the device, and a count only when a
+verification asked); no helper waits more often than the one it replaced. Not
 split over host tasks: the copy engine is the unit (one transfer per call),
 and the staged copy-out is `core/staged_download.mojo`'s. Copies only: no bit
 moves.

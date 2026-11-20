@@ -35,6 +35,7 @@ The restatement is a prediction until measured. tools/forest_host_gate.py is
 the measurement.
 """
 from core.host_parallel import host_parallelize
+from core.launch_log import activity_host
 from core.host_predict_threads import host_predict_workers
 from std.sys.compile import is_defined
 
@@ -204,6 +205,8 @@ def rf_host_predict(
     what `RandomForest.predict`'s REGRESSION branch does at `:1071-1074`).
     `workers` is the thread count, `host_worker_count`'s reading of zero.
     """
+    # lane fx-verify-trace: once per call, counted only for a verification
+    activity_host("rf_host_predict")
     if n_rows <= 0 or n_cols <= 0:
         raise Error("forest host: n_rows and n_cols must be positive")
     if n_trees <= 0 or len(trees) != n_trees:
@@ -317,6 +320,8 @@ def et_host_predict(
     once per row, into `output` as `et_predict_binding` writes it (`:528-532`).
     `workers` is the thread count, `host_worker_count`'s reading of zero
     (DEVIATION 2900, the same fan-output as `rf_host_predict`)."""
+    # lane fx-verify-trace: once per call, counted only for a verification
+    activity_host("et_host_predict")
     if n_rows <= 0 or n_cols <= 0:
         raise Error("forest host: n_rows and n_cols must be positive")
     if n_trees <= 0 or len(trees) != n_trees:
