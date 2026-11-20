@@ -85,6 +85,10 @@ on:
         description: "suite apple-parse: comma list of fast, identical, host"
         required: false
         default: "fast,identical"
+      apple_units_per_job:
+        description: "suite apple-parse: most units of one merged file per runner (0 = whole files); 4 deals the 8-unit trees file into two parts, as PARSE_SPLIT does for device-parse"
+        required: false
+        default: "4"
       apple_accel:
         description: "suite apple-parse: --target-accelerator of a default-class file (apple-m1 .. apple-m5)"
         required: false
@@ -138,6 +142,7 @@ jobs:
           IN_COLUMN: ${{ inputs.column }}
           IN_SUITE: ${{ inputs.suite || 'all' }}
           APPLE_SETS: ${{ inputs.apple_sets || 'fast,identical' }}
+          APPLE_UNITS_PER_JOB: ${{ inputs.apple_units_per_job || '4' }}
         run: bash .wf/tools/ops/native_checks_steps.sh plan
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
