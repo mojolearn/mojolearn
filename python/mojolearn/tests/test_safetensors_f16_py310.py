@@ -46,6 +46,13 @@ def test_f16_widens_bit_exactly():
 def test_f16_on_an_older_python_when_one_is_installed():
     """The same read under python3.10 or python3.11, where cast("e") refuses."""
     import shutil
+    if sys.version_info < (3, 12):
+        import pytest
+        # This interpreter already lacks cast("e"): test_f16_widens_bit_exactly
+        # ran the read on it, against the mojolearn under test. A child would
+        # import the source tree beside this file instead (no binaries in an
+        # installed-wheel run).
+        pytest.skip(f"running on Python {sys.version_info[0]}.{sys.version_info[1]}: covered in-process")
     old = shutil.which("python3.11") or shutil.which("python3.10")
     if not old:
         import pytest
