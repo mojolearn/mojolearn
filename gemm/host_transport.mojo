@@ -3,8 +3,8 @@
 """Transport for the host-pointer GEMM surfaces (lane/gap-neural-models, 2026-10-02).
 
 NO ARITHMETIC. Copies, pooled allocations and waits only, so nothing here can
-move a bit of any GEMM profile. One exception, off by default: with
--D MOJOLEARN_IDENTITY_FAST_NAN_CANON `gemm_down_f32` rewrites the NaN words of
+move a bit of any GEMM profile. One exception, on by default: with
+NAN_CANON_ON (the default; core/nan_canon.mojo) `gemm_down_f32` rewrites the NaN words of
 the downloaded product to the one canonical word (core/nan_canon.mojo).
 
 WHY. `linalg.matmul` at the board shape (4096^3, 64 MB per operand) paid, per
@@ -228,7 +228,7 @@ def gemm_up_u16(ctx: DeviceContext, lease: GemmHostLease, mut dst: DeviceBuffer[
 def _down_canon(dst: F32P, n: Int):
     """The NaN words of a downloaded GEMM result `dst[0, n)` made the one
     canonical word (core/nan_canon.mojo), across the host's cores. Compiles
-    to nothing unless -D MOJOLEARN_IDENTITY_FAST_NAN_CANON is set."""
+    to nothing under -D MOJOLEARN_IDENTITY_FAST_NAN_CANON_OFF."""
     comptime if NAN_CANON_ON:
         _ = nan_canon_f32(dst, n)
 
@@ -237,7 +237,7 @@ def gemm_down_f32(ctx: DeviceContext, lease: GemmHostLease, src: DeviceBuffer[DT
     """`src[0, n)` into host floats `dst[0, n)`, then waits.
     Every caller hands a float32 product C (fp32, fused, bf16, int8, int15),
     so this is where a GEMM result leaves the device: with
-    -D MOJOLEARN_IDENTITY_FAST_NAN_CANON (default off) each chunk's NaN
+    NAN_CANON_ON (default on) each chunk's NaN
     words become the one canonical word right after its host copy, while the
     copy engine fills the other half (`_down_canon`). No other word moves."""
     if n <= 0:

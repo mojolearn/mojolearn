@@ -21,7 +21,7 @@ from checks.numerics import (
     identical_mul_add,
 )
 from training.checks.loss_contract import CE_NEG_INF_BITS, neg_by_bits, refuse_nonfinite
-from training.chunked_lm_head_panel_math import LMHEAD_FAST_GEMM_PANEL, lmhead_gp_leaf_count
+from training.chunked_lm_head_panel_math import lmhead_gp_leaf_count
 from training.chunked_lm_head_profile import LM_HEAD_V2_CHUNK
 from training.chunked_lm_head_gemm_panel_host import (
     lmhead_gp_host_forward, lmhead_gp_host_backward,
@@ -158,55 +158,8 @@ def chunked_lm_head_v2_oracle_forward(
     exports as `chunked_lm_head_v2_loss`; `chunked_lm_head_v2_oracle` runs
     exactly this and then the two gradient folds, so the loss a caller gets
     from either is the same arithmetic in the same order."""
-    comptime if LMHEAD_FAST_GEMM_PANEL:
-        # The GEMM-panel profile (default since 2026-11-19; _OFF: the scalar folds below): the oracle moves with the device door.
-        return _gp_oracle(hidden, weight, targets, rows, vocab, width, False)
-    if rows < 1 or vocab < 2 or width < 1:
-        raise Error("chunked lm head v2: rows/width must be positive and vocab >= 2")
-    if len(hidden) != rows * width:
-        raise Error("chunked lm head v2: hidden shape mismatch")
-    if len(weight) != vocab * width:
-        raise Error("chunked lm head v2: weight shape mismatch")
-    if len(targets) != rows:
-        raise Error("chunked lm head v2: target shape mismatch")
-    refuse_nonfinite("chunked lm head hidden", hidden)
-    refuse_nonfinite("chunked lm head weight", weight)
-    for row in range(rows):
-        if targets[row] < 0 or Int(targets[row]) >= vocab:
-            raise Error("chunked lm head v2: target outside [0, vocab) at row " + String(row))
-
-    var maxima = List[Float32](length=rows, fill=Float32(0.0))
-    var denom = List[Float32](length=rows, fill=Float32(0.0))
-    var row_loss = List[Float32](length=rows, fill=Float32(0.0))
-
-    # Pass one: chunk boundaries do not reset the global serial maximum.
-    for row in range(rows):
-        var maximum = bitcast[DType.float32](CE_NEG_INF_BITS)
-        for chunk0 in range(0, vocab, LM_HEAD_V2_VOCAB_CHUNK):
-            var chunk1 = min(chunk0 + LM_HEAD_V2_VOCAB_CHUNK, vocab)
-            for token in range(chunk0, chunk1):
-                maximum = identical_fmax(maximum, _logit(hidden, weight, row, token, width))
-        maxima[row] = maximum
-
-    # Pass two: one serial global denominator, never a sum of chunk sums.
-    for row in range(rows):
-        var total = Float32(0.0)
-        var target_shift = Float32(0.0)
-        for chunk0 in range(0, vocab, LM_HEAD_V2_VOCAB_CHUNK):
-            var chunk1 = min(chunk0 + LM_HEAD_V2_VOCAB_CHUNK, vocab)
-            for token in range(chunk0, chunk1):
-                var shifted = ftz(ftz(_logit(hidden, weight, row, token, width)) - ftz(maxima[row]))
-                total = ftz(total + ftz(identical_exp(shifted)))
-                if token == Int(targets[row]):
-                    target_shift = shifted
-        denom[row] = total
-        var logdenom = ftz(identical_log(ftz(total)))
-        row_loss[row] = neg_by_bits(ftz(ftz(target_shift) - ftz(logdenom)))
-
-    var loss = lm_head_v2_loss_fold(row_loss, rows)
-    return ChunkedLMHeadV2Result(
-        loss, maxima^, denom^, List[Float32](), List[Float32]()
-    )
+    # The GEMM-panel profile (the only one since 2026-11-20): the oracle moves with the device door.
+    return _gp_oracle(hidden, weight, targets, rows, vocab, width, False)
 
 
 def chunked_lm_head_v2_oracle(
@@ -214,48 +167,5 @@ def chunked_lm_head_v2_oracle(
     rows: Int, vocab: Int, width: Int,
 ) raises -> ChunkedLMHeadV2Result:
     """Mean CE and LM-head gradients under the v2 serial chunk contract."""
-    comptime if LMHEAD_FAST_GEMM_PANEL:
-        # The GEMM-panel profile (default since 2026-11-19; _OFF: the scalar folds below): the oracle moves with the device door.
-        return _gp_oracle(hidden, weight, targets, rows, vocab, width, True)
-    var fwd = chunked_lm_head_v2_oracle_forward(
-        hidden, weight, targets, rows, vocab, width
-    )
-    var loss = fwd.loss
-    var maxima = fwd.row_max.copy()
-    var denom = fwd.row_denom.copy()
-    var divisor = Float32(rows)
-
-    # dHidden owns one cell and folds vocab ids globally in ascending order.
-    var d_hidden = List[Float32](length=rows * width, fill=Float32(0.0))
-    for row in range(rows):
-        for feature in range(width):
-            var acc = Float32(0.0)
-            for chunk0 in range(0, vocab, LM_HEAD_V2_VOCAB_CHUNK):
-                var chunk1 = min(chunk0 + LM_HEAD_V2_VOCAB_CHUNK, vocab)
-                for token in range(chunk0, chunk1):
-                    var shifted = ftz(ftz(_logit(hidden, weight, row, token, width)) - ftz(maxima[row]))
-                    var probability = ftz(identical_div(ftz(identical_exp(shifted)), ftz(denom[row])))
-                    var target = Float32(1.0) if token == Int(targets[row]) else Float32(0.0)
-                    var dlogit = ftz(identical_div(ftz(probability - target), divisor))
-                    acc = ftz(identical_mul_add(dlogit, ftz(weight[token * width + feature]), acc))
-            d_hidden[row * width + feature] = ftz(acc)
-
-    # dWeight chunks are independent storage owners; every cell folds rows
-    # ascending, so scheduling chunks cannot change a bit.
-    var d_weight = List[Float32](length=vocab * width, fill=Float32(0.0))
-    for chunk0 in range(0, vocab, LM_HEAD_V2_VOCAB_CHUNK):
-        var chunk1 = min(chunk0 + LM_HEAD_V2_VOCAB_CHUNK, vocab)
-        for token in range(chunk0, chunk1):
-            for feature in range(width):
-                var acc = Float32(0.0)
-                for r in range(rows):
-                    var row = r
-                    comptime if CHUNKED_LM_HEAD_HOST_SABOTAGE:
-                        row = rows - 1 - r
-                    var shifted = ftz(ftz(_logit(hidden, weight, row, token, width)) - ftz(maxima[row]))
-                    var probability = ftz(identical_div(ftz(identical_exp(shifted)), ftz(denom[row])))
-                    var target = Float32(1.0) if token == Int(targets[row]) else Float32(0.0)
-                    var dlogit = ftz(identical_div(ftz(probability - target), divisor))
-                    acc = ftz(identical_mul_add(dlogit, ftz(hidden[row * width + feature]), acc))
-                d_weight[token * width + feature] = ftz(acc)
-    return ChunkedLMHeadV2Result(loss, maxima^, denom^, d_hidden^, d_weight^)
+    # The GEMM-panel profile (the only one since 2026-11-20): the oracle moves with the device door.
+    return _gp_oracle(hidden, weight, targets, rows, vocab, width, True)

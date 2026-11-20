@@ -139,9 +139,9 @@ def seq_tensor_download(h: Int, a: Int, n: Int) raises -> Int:
     ctx.synchronize()
     _ = view^
     # A resident tensor holds float32 cells a model computed, and this is
-    # where they leave the device: -D MOJOLEARN_IDENTITY_FAST_NAN_CANON
-    # (default off; core/nan_canon.mojo) makes every NaN word the one
-    # canonical word, across the host's cores. Off, this is nothing.
+    # where they leave the device: NAN_CANON_ON
+    # (default on; core/nan_canon.mojo) makes every NaN word the one
+    # canonical word, across the host's cores. Under _OFF, this is nothing.
     comptime if NAN_CANON_ON:
         _ = nan_canon_f32(FP(unsafe_from_address=a), n)
     return n

@@ -906,17 +906,18 @@ def put_i[resident: Bool](ctx: DeviceContext, slot: Int, src: IP, n: Int) raises
 comptime PRM_CACHE_MAX = 32
 comptime PRM_CACHE_WORDS = 64
 
-# Experiment MOJOLEARN_CNN_FAST_OP_NOWAIT (lane fx-rnn-cnn-fit, 2026-11-19; default OFF, A/B owed on the NVIDIA L40S:
-# owed-pre0867.json "cnn-op-nowait"). Every entry ends in `ctx.synchronize()` so that its host uploads and
+# Resident entries return without their wait (lane fx-rnn-cnn-fit, 2026-11-19; the experiment
+# MOJOLEARN_CNN_FAST_OP_NOWAIT, DEFAULT ON since 2026-11-20, A/B round 3 below; -D MOJOLEARN_CNN_FAST_OP_NOWAIT_OFF
+# builds the old form, every entry waits). Every entry ends in `ctx.synchronize()` so that its host uploads and
 # downloads are finished and its host arrays may go. The CNN program's ops (autograd/cnn_block_op.mojo: the conv
 # block and the head, forward and backward) call the RESIDENT forms from a session that owns every argument as a
 # device buffer, shares this one in-order context and reads nothing on the host before its own wait (the fit's one
 # sync at the end, a predict's download). There the six waits a training step (2 blocks + head, forward and
 # backward; 1,884 in the board's 314-step fit) only stop the host from enqueuing the next launches while the device
-# works. Under the define such a caller passes `may_defer` and the entry returns after its last launch.
+# works. Such a caller passes `may_defer` and the entry returns after its last launch.
 # What still forces the wait (entry_end): a non-resident form (host arrays in flight), and a parameter block too
 # long for the cache (its upload reads the caller's list: prm_block_cached). The cache's own copy of a block is
-# read by a queued upload until that upload runs, so under the define a full cache waits before it rewrites a
+# read by a queued upload until that upload runs, so a full cache waits before it rewrites a
 # victim (_prm_cached). Workspace slots are safe without the wait: the context runs launches in order, so an
 # entry's kernels finish before the next entry's launches touch the slot, and `ws` waits before it replaces a
 # buffer. The same launches in the same order on the same words: no bit moves.
@@ -930,7 +931,13 @@ comptime PRM_CACHE_WORDS = 64
 # on different nodes (base node 1, arm node 0); the row's other base in the job (node 1) is 187.1, so the row's bases
 # are 12 % apart. Every reading is in the arm's favour and the size is the model's; stays opt-in, owed RUN: re-time
 # with both workers bound to the GPU's node (the harness fix of lane fx-cagra-taxi), then promote on a same-node pair.
-comptime CNN_OP_NOWAIT = is_defined["MOJOLEARN_CNN_FAST_OP_NOWAIT"]()
+# A/B round 3, 2026-11-20 (lane fx-verdicts5; NVIDIA L40S host 2ef132a6de04, wheel 28a780604c and its B set, base and
+# arm back to back in one pod job, tag nvc-ab-20261120T063324Z-c630ad, both workers bound to the GPU's NUMA node 0;
+# digests and quality equal). Base -> arm ms: cnn-clf fit 182.28 -> 162.95 (0.894), infer 10.40 -> 10.11 (0.972);
+# driver CNNClassifier.fit channels [16, 32] (neighbouring shape) 349.1 -> 309.6 (0.887), one block [24] (non-board
+# model) 230.3 -> 204.0 (0.886). PROMOTED: faster on every cell of both rounds, same launches, same bits.
+# The old path (every entry waits) stays behind _OFF until one more measurement confirms; then it is an owed deletion.
+comptime CNN_OP_NOWAIT = not is_defined["MOJOLEARN_CNN_FAST_OP_NOWAIT_OFF"]()
 
 
 @always_inline
@@ -941,9 +948,9 @@ def prm_block_cached(words: List[Int32]) -> Bool:
 
 
 def entry_end(ctx: DeviceContext, resident: Bool, may_defer: Bool, blocks_cached: Bool) raises:
-    """The wait that ends an entry. Skipped only under
-    MOJOLEARN_CNN_FAST_OP_NOWAIT, for a resident call whose caller allowed
-    it and whose parameter blocks all came from the cache (see above)."""
+    """The wait that ends an entry. Skipped for a resident call whose caller
+    allowed it and whose parameter blocks all came from the cache (see
+    above); MOJOLEARN_CNN_FAST_OP_NOWAIT_OFF keeps every wait."""
     comptime if CNN_OP_NOWAIT:
         if resident and may_defer and blocks_cached:
             return

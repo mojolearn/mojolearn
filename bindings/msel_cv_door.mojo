@@ -315,7 +315,7 @@ def _msel_hold_rows_of(x: PythonObject, rows: PythonObject) raises:
 
 
 #: `-D MOJOLEARN_MSEL_FAST_LC_TEST_REUSE` (lane fx-board-modelsel-metrics,
-#: 2026-11-19; default OFF, A/B OWED: bench/results/paper_compare/owed-pre0867.json
+#: 2026-11-19; decided by A/B round 3, below; bench/results/paper_compare/owed-pre0867.json
 #: `fx-lc-test-reuse`, docs/apple-fast/EXPERIMENTS.md). learning_curve's units are
 #: (train size, fold): every size of a fold scores on the SAME test rows, and since
 #: the units became independent (lane p3-msel-parallel-and-process-pool) those rows
@@ -328,7 +328,15 @@ def _msel_hold_rows_of(x: PythonObject, rows: PythonObject) raises:
 #: would be handed its own written rows again (as the serial loop before the
 #: units did), and units on several threads read one array; that is to be
 #: measured and reviewed with the A/B, not argued.
-comptime MSEL_LC_TEST_REUSE = is_defined["MOJOLEARN_MSEL_FAST_LC_TEST_REUSE"]()
+#: DEFAULT ON since 2026-11-20 (`-D MOJOLEARN_MSEL_FAST_LC_TEST_REUSE_OFF` gathers once per unit again).
+#: A/B round 3, 2026-11-20 (lane fx-verdicts5; NVIDIA L40S host 2ef132a6de04, wheel 28a780604c and its B set, base and
+#: arm back to back in one pod job, tag nvc-ab-20261120T063324Z-c630ad, workers bound to the GPU's NUMA node 0; one
+#: scored run per arm; scores, quality and digests equal). Base -> arm ms:
+#: learning-curve istella (1,000,000 x 220) 17,979 -> 15,332 (0.853), taxi (1,000,000 x 11) 700.4 -> 669.6 (0.956).
+#: PROMOTED: faster, the same scores. General: the saving is (sizes - 1) x folds test gathers at any shape. The
+#: in-place-transform case above is the pre-units behaviour restored and is not a board row; no member of the
+#: board's two rows writes its test rows (digests equal). Old path behind _OFF until one more measurement.
+comptime MSEL_LC_TEST_REUSE = not is_defined["MOJOLEARN_MSEL_FAST_LC_TEST_REUSE_OFF"]()
 
 
 struct MselFoldRows(Movable):

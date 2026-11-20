@@ -4,7 +4,7 @@ scan, and a non-finite value PRODUCED by a step.
 
 Part 1, kernel level (cases 0 to 3). `_kv_rows_scan_enqueue`
 (transformer/impl/llama/modeling_llama.mojo, the scan the default build
-runs on a granted cache; `-D MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK_OFF` is the whole scan at every step) reads row
+runs on a granted cache; a FAST build runs the whole scan at every step) reads row
 `s - 1` of every (batch, kv head) run of a key or value cache and reports a
 FLAT index of the buffer; the default refusal is `DeviceNonfiniteBatch`'s
 scan of the whole used prefix. On one device buffer laid out as the cache is,
@@ -44,9 +44,6 @@ element instead of the flat index, drops the strided pass or folds the
 partials wrongly (part 1); a watermark advanced past a row nobody scanned, a
 refusal naming the other cache or another index, or no refusal at all for a
 value a step computed (part 2).
-
-pixi: check-llama-refuse-row-scan-watermark-off builds this check with the
-whole scan at every step.
 """
 from std.memory import bitcast
 

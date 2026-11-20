@@ -1,0 +1,89 @@
+diff --git a/autograd/block_step_ops.mojo b/autograd/block_step_ops.mojo
+index 075afc7f22..eac9a77f70 100644
+--- a/autograd/block_step_ops.mojo
++++ b/autograd/block_step_ops.mojo
+@@ -101,6 +101,7 @@ from mamba.impl.modules.mamba3 import (
+ from transformer.impl.llama.modeling_llama import (
+     LlamaDims, LlamaDeviceWeights, LlamaKVCache, LlamaRopeTable, LlamaDeviceStages, llama_decoder_layer_forward,
+     residual_next_norm_fusion_enabled, LLAMA_FAST_REFUSE_WATERMARK, llama_kv_cache_rewind,
++    LLAMA_FAST_STAGE_KEEP,
+ )
+ from checks.kernel_matrix import TARGET_COLUMN, COLUMN_APPLE
+ from transformer.block_options import BlockOptions, BLOCK_OPTION_PARAMS
+@@ -1720,7 +1721,8 @@ struct AttnPrefill(Movable):
+         the same shape get their host flags back
+         (`LlamaDeviceStages.reset_flags`) and keep their bytes; the forward
+         writes each stage whole before reading it (modeling_llama
+-        `LLAMA_FAST_STAGE_KEEP`). False: the constructor's zeros again
++        `LLAMA_FAST_STAGE_KEEP`). False, or a build with
++        -D MOJOLEARN_LLAMA_FAST_STAGE_KEEP_OFF: the constructor's zeros again
+         (`reset`: thirty fills and a wait)."""
+         var reused = False
+         self.ahead_used = False
+@@ -1735,9 +1737,12 @@ struct AttnPrefill(Movable):
+             # norm1 into them behind the reset (same stream).
+             self.ahead_used = True
+         elif reused:
+-            if keep_bytes:
+-                self.stages.value().reset_flags()
+-            else:
++            var kept_bytes = False
++            comptime if LLAMA_FAST_STAGE_KEEP:
++                if keep_bytes:
++                    self.stages.value().reset_flags()
++                    kept_bytes = True
++            if not kept_bytes:
+                 # Every constructor zero and route flag back before the next run.
+                 self.stages.value().reset(ctx)
+             self.stages.value().int15_on = False
+@@ -2215,7 +2220,8 @@ def attn_step_fresh_prefill(
+         # The L-shaped stages (0.8.66: the session workspace's), reset to the
+         # constructor's zeros when reused, as `_stage_reset_on()` did by default.
+         # This run is forward-only (below), so `prepare` keeps the stage bytes
+-        # (LLAMA_FAST_STAGE_KEEP, the default since 2026-11-19, confirmed 2026-11-20).
++        # (LLAMA_FAST_STAGE_KEEP, the default since 2026-11-19; `reset` under
++        # -D MOJOLEARN_LLAMA_FAST_STAGE_KEEP_OFF).
+         pre.prepare(ctx, b, l, ints[6], dims, ints[7], blk.lean, True)
+         # The bytes a fresh `LlamaKVCache` holds, on the device, no upload.
+         # TOMBSTONE: MOJOLEARN_IDN_TF_SESSION_LEAN (loser: transformer-forward 1.350) deleted 2026-10-11 by 68d9654bb; code recoverable at 68d9654bb^.
+diff --git a/transformer/impl/llama/modeling_llama.mojo b/transformer/impl/llama/modeling_llama.mojo
+index 9184199fac..8a166ee0a1 100644
+--- a/transformer/impl/llama/modeling_llama.mojo
++++ b/transformer/impl/llama/modeling_llama.mojo
+@@ -1719,8 +1719,8 @@ struct LlamaKVCache(Movable):
+ 
+ 
+ # MOJOLEARN_LLAMA_FAST_STAGE_KEEP: PROMOTED 2026-11-19 (lane fx-verdicts4) for the stateless block forward, DELETED for
+-# the stack-layer run. Confirmed and its _OFF switch deleted 2026-11-20 (round 3 below; the
+-# old opt-in name and _OFF are refused, core/experiment_guards_neural.mojo). Evidence: A/B round 2, NVIDIA L40S (host
++# the stack-layer run. `-D MOJOLEARN_LLAMA_FAST_STAGE_KEEP_OFF` restores the reset before every stateless forward (the
++# old opt-in name is refused, core/experiment_guards_neural.mojo). Evidence: A/B round 2, NVIDIA L40S (host
+ # bd9c355c19c0), wheel 0c68d6cd27 and its B set, base and arm in ONE pod job (nvc1-0008, tag
+ # nvc-ab-20261119T154232Z-0642a5), small rows the median of 20 calls; every output digest equal (9 cells).
+ # The stateless forward (`attn_step_fresh_prefill`), base -> arm ms: transformer-forward 2.869 -> 2.734 (0.953; the
+@@ -1732,22 +1732,13 @@ struct LlamaKVCache(Movable):
+ # resets as before (TOMBSTONE in autograd/block_step_ops.mojo). Controls: lm-forward 0.98, lm-train-step 1.01,
+ # transformer-decode 1.03 (L = 1 steps and trained stages are never reset in either arm).
+ # Limits: NVIDIA only (AGENTS.md part 8). OWED (does not hold the flip): the _OFF arm on the same rows.
+-# A/B round 3, 2026-11-20 (lane fx-verdicts5; NVIDIA L40S host 2ef132a6de04, wheel 28a780604c and its _OFF set, base
+-# and arm back to back in one pod job, tag nvc-ab-20261120T063324Z-c630ad; every digest equal). Kept stages (default)
+-# -> reset before every stateless forward, ms: transformer-forward 2.617 -> 2.901 (1.108, medians of 20); driver
+-# TransformerBlock.forward, median of 20: 1 x 4096 d384 5.726 -> 5.715 (1.00), 1 x 2048 d512 3.490 -> 3.853 (1.10),
+-# non-board 3 x 700 d320 2.158 -> 2.287 (1.06), 4 x 128 d384 1.370 -> 1.430 (1.04). Rows the switch does not reach:
+-# lm-train-step 1.000, samba-forward 1.003, transformer-decode 1.003, lm-forward 0.911 (that row's two bases in the
+-# job are 20.36 and 22.48: its own spread). CONFIRMED a second time; the switch and the reset on this path are deleted.
+-# TOMBSTONE: MOJOLEARN_LLAMA_FAST_STAGE_KEEP_OFF (old path, the reset before a stateless forward on kept stages; the promotion confirmed by A/B rounds 2 and 3, numbers above) deleted 2026-11-20 by lane/fx-verdicts5; code recoverable at e25e35dab8.
+-# Restore: git apply experiments/removed/MOJOLEARN_LLAMA_FAST_STAGE_KEEP_OFF.patch; record in docs/TOMBSTONES.md.
+-# The constant is kept as the name the docstrings below and in autograd/block_step_ops.mojo refer to; nothing branches on it.
+-comptime LLAMA_FAST_STAGE_KEEP = True
++comptime LLAMA_FAST_STAGE_KEEP = not is_defined["MOJOLEARN_LLAMA_FAST_STAGE_KEEP_OFF"]()
+ """A forward-only attention step run of L > 1 tokens on kept stages of the
+ same shape that passes `AttnPrefill.prepare(..., keep_bytes=True)` (the
+ stateless `TransformerBlock.forward`) restores the stages' host flags
+ (`LlamaDeviceStages.reset_flags`) and does NOT zero-fill the stage buffers
+-again, where `LlamaDeviceStages.reset` (every other reused run) is thirty zero fills
++again, where `LlamaDeviceStages.reset` (every other reused run, and every
++run under `-D MOJOLEARN_LLAMA_FAST_STAGE_KEEP_OFF`) is thirty zero fills
+ and a wait before the call.
+ 
+ WHY THE OUTPUT IS THE SAME. A forward writes each stage it reads, whole,

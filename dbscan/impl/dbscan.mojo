@@ -339,7 +339,7 @@ def dbscan_fit_impl_weighted(
     # MOJOLEARN_DBSCAN_FAST_BRUTE_EDGE_FREE: the runner takes the brute
     # edge-free route on this same test (a subset of its own: the runner's
     # brute arm also covers the RBC downgrade) and reads no byte adjacency.
-    # Always False with the define off.
+    # Always False under MOJOLEARN_DBSCAN_FAST_BRUTE_EDGE_FREE_OFF.
     if brute_edge_free_applies(
         eps_nn_method != EPS_NN_RBC, metric, has_weights, n_rows, batch,
         min_pts,

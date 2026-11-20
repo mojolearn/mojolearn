@@ -268,7 +268,8 @@ class Arms(unittest.TestCase):
                 self.assertNotIn("--owed-arm=b-two", c[:-2])
 
     def test_the_dbscan_arm_is_owed(self):
-        self.assertEqual(RC.resolve_owed("", "dbscan-brute-edge-free", "")[1], "MOJOLEARN_DBSCAN_FAST_BRUTE_EDGE_FREE")
+        # the edge-free route was promoted on 2026-11-20 (lane fx-verdicts5): the owed arm is its old path
+        self.assertEqual(RC.resolve_owed("", "dbscan-brute-edge-free-off", "")[1], "MOJOLEARN_DBSCAN_FAST_BRUTE_EDGE_FREE_OFF")
 
 
 if __name__ == "__main__":

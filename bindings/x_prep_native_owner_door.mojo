@@ -2,7 +2,7 @@
 # Native owner for the established _Prog transport contract. Arithmetic and
 # stream synchronization remain in the same x_prep exported implementations.
 from std.sys.compile import is_defined
-from bindings.native_array_storage_door import native_array_empty, native_array_zeros, native_scratch_advise_huge
+from bindings.native_array_storage_door import native_array_empty, native_array_zeros
 from bindings.native_loaded_module_door import native_loaded_module
 from std.os import getenv
 from bindings.x_prep_native_owner_run import xprep_r3, XprepInput, XprepRunInput, XprepRoute, xprep_execute, xprep_release
@@ -83,27 +83,8 @@ def xprep_address(value: PythonObject) raises -> Int:
     return address
 
 
-#: EXPERIMENT `-D MOJOLEARN_XPREP_FAST_ARENA_HUGEPAGE` (lane fx-board-preprocess,
-#: 2026-11-19; default off, A/B owed: owed-pre0867.json "xprep-arena-hugepage",
-#: docs/apple-fast/EXPERIMENTS.md). A mapped arena or output store is new
-#: anonymous memory every call, and the download of the result is its first
-#: write: one page fault per 4 KiB of output, taken on the one thread inside
-#: the device copy. On the L40S board job of d3549c756b the fault count of
-#: each transform equals its output bytes / 4096 and the system time is
-#: 65-85 percent of the call (Normalizer 1,000,000 x 220: 214,868 faults,
-#: 1,011 of 1,337 ms; LabelBinarizer 1,000,000 x 259: 253,572 faults, 1,007 of
-#: 1,223 ms), about 4.7 us a fault on that host; the program's own kernels
-#: and the copy are the remainder. B advises the whole 2 MiB pages inside the
-#: mapping for transparent huge pages before anything touches it
-#: (`native_scratch_advise_huge`: one fault per 2 MiB where the system grants
-#: them, small pages exactly as today where it does not, nothing on Darwin).
-#: The cause is general (any output of at least 1 MiB on any shape); the
-#: mapping floor below is the existing one. Storage backing only: no word of
-#: the arena moves. Not the default until measured: with
-#: /sys/kernel/mm/transparent_hugepage/defrag = madvise or always a huge
-#: fault may compact memory synchronously, which can cost more than the small
-#: faults it replaces on a fragmented host.
-comptime XPREP_ARENA_HUGEPAGE = is_defined["MOJOLEARN_XPREP_FAST_ARENA_HUGEPAGE"]()
+# TOMBSTONE: MOJOLEARN_XPREP_FAST_ARENA_HUGEPAGE (NOISE, A/B round 3 NVIDIA L40S, wheel 28a780604c, job 2 of the round (ab3b), one run per arm, digests equal: 20 cells 0.952-1.092, geomean 1.012; normalizer istella fit 1.091, infer 1.092) deleted 2026-11-20 by lane/fx-verdicts5; code recoverable at e25e35dab8.
+# Restore: git apply experiments/removed/MOJOLEARN_XPREP_FAST_ARENA_HUGEPAGE.patch; record in docs/TOMBSTONES.md.
 
 
 def xprep_storage(words: Int, context: PythonObject) raises -> PythonObject:
@@ -118,9 +99,6 @@ def xprep_storage(words: Int, context: PythonObject) raises -> PythonObject:
     else:
         storage = native_array_zeros(String("f"), n)
     var address = xprep_address(storage)
-    comptime if XPREP_ARENA_HUGEPAGE:
-        if mapped:
-            native_scratch_advise_huge(address, 4*n)
     return Python.tuple(storage,address,Int(perf_counter_ns())-start if profile else 0)
 
 

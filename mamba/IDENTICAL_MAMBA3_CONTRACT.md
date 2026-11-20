@@ -483,7 +483,7 @@ with every product `ftz(identical_mul(...))` in the bracketing shown and every
 accumulation step `acc = ftz(identical_mul_add(carry[p][n], term, acc))`, then
 `d_dacs_rec = ftz(d_dacs_rec + tail)`.
 
-- **Serial order (`-D MOJOLEARN_MAMBA3_FAST_S17_TAIL_TREE_OFF`; the default before 2026-11-19).** ONE chain from `+0.0`: the token terms `j` ascending,
+- **Serial order (history: the default before 2026-11-19; its switch `MOJOLEARN_MAMBA3_FAST_S17_TAIL_TREE_OFF` and code were deleted on 2026-11-20).** ONE chain from `+0.0`: the token terms `j` ascending,
   then `p` ascending, then `n` ascending; then the state terms `p` ascending,
   `n` ascending. `(Q + 1) * P * N` serial steps (532,480 at `Q = 64`).
 - **Default order since 2026-11-19 (the arm `MOJOLEARN_MAMBA3_FAST_S17_TAIL_TREE`, promoted on the NVIDIA L40S A/B:

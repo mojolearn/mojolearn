@@ -208,8 +208,7 @@ struct AttnStepArm(Movable):
         # state buffer are its own; every write of `kv` outside a step run
         # is `_caches_in`, always followed by `attn_step_restart` or
         # `attn_step_adopt` before any run, or `_shape`'s reallocation
-        # (which clears the scratch). Read on every IDENTICAL build but
-        # MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK_OFF.
+        # (which clears the scratch). Read on every IDENTICAL build.
         self.sc.attn_cache_private = True
         self.ints = List[Int]()
         self.w = w
@@ -270,8 +269,7 @@ struct AttnStepArm(Movable):
         # state buffer are its own; every write of `kv` outside a step run
         # is `_caches_in`, always followed by `attn_step_restart` or
         # `attn_step_adopt` before any run, or `_shape`'s reallocation
-        # (which clears the scratch). Read on every IDENTICAL build but
-        # MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK_OFF.
+        # (which clears the scratch). Read on every IDENTICAL build.
         self.sc.attn_cache_private = True
         self.ints = List[Int]()
         self.w = w

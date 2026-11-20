@@ -245,41 +245,8 @@ def native_scratch_address(scratch: PythonObject) raises -> Int:
     return address
 
 
-#: The transparent huge page size the advice below is aligned to: 2 MiB, the
-#: PMD size of x86-64 and of arm64 with 4 KiB base pages (a property of the
-#: page table, not of any workload).
-comptime NATIVE_HUGE_PAGE_BYTES = 1 << 21
-#: Linux MADV_HUGEPAGE (include/uapi/asm-generic/mman-common.h).
-comptime NATIVE_MADV_HUGEPAGE = 14
-
-
-def native_scratch_advise_huge(address: Int, nbytes: Int):
-    """Advise the kernel to back the whole 2 MiB pages inside
-    `[address, address + nbytes)` with transparent huge pages (Linux
-    `madvise(MADV_HUGEPAGE)`), for a FRESH store that one native call is
-    about to write in full (lane fx-transformer-forward, 2026-11-19; called
-    only under an experiment arm).
-
-    Why: a fresh large store is untouched memory, and its first write takes
-    one page fault per 4 KiB page (256 a MiB), each of which enters the
-    kernel and zeroes a page. With the advice a fault maps and zeroes 2 MiB
-    at once (one fault per 2 MiB), where the system allows it
-    (/sys/kernel/mm/transparent_hugepage/enabled `madvise` or `always`; on
-    `never`, or when no huge page is free, the range is backed by small
-    pages exactly as without the call). Only whole huge pages inside the
-    store are named, so nothing outside the allocation is touched and no
-    memory is added; a store that holds no whole 2 MiB page gets no call.
-    The result is ignored: the advice changes how the pages are backed,
-    never what they hold. Not Linux: nothing (Darwin has no such advice)."""
-    comptime if not CompilationTarget.is_macos():
-        if address <= 0 or nbytes <= 0:
-            return
-        var lo = ((address + NATIVE_HUGE_PAGE_BYTES - 1) // NATIVE_HUGE_PAGE_BYTES) * NATIVE_HUGE_PAGE_BYTES
-        var hi = ((address + nbytes) // NATIVE_HUGE_PAGE_BYTES) * NATIVE_HUGE_PAGE_BYTES
-        if hi > lo:
-            _ = external_call["madvise", c_int](
-                MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=lo), c_size_t(hi - lo),
-                c_int(NATIVE_MADV_HUGEPAGE))
+# TOMBSTONE: native_scratch_advise_huge (the madvise(MADV_HUGEPAGE) helper; its two callers were the arms MOJOLEARN_BYTE_LM_FAST_LOGITS_HUGEPAGE, LOSS in A/B round 2, and MOJOLEARN_XPREP_FAST_ARENA_HUGEPAGE, NOISE in A/B round 3) deleted 2026-11-20 by lane/fx-verdicts5; code recoverable at e25e35dab8.
+# Restore: git apply experiments/removed/MOJOLEARN_XPREP_FAST_ARENA_HUGEPAGE.patch; record in docs/TOMBSTONES.md.
 
 
 def native_array_empty(code: String) raises -> PythonObject:

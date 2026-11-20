@@ -146,6 +146,10 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_C06_NORM_ROWS"](), "removed 2026-11-15 (lane/expdel2-07-base): CLASSICAL_C06_NORM_ROWS (Row norms (rows per norm block 2/4 for KNN / KDE / KMeans, IDENTICAL)) was opt-in arm; EXP:1519 RESTRUCTURED, A/B owed and never run; the opt-in arm is gone and the default path is unchanged; code recoverable at 526172a06e; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD.patch
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD"](), "removed 2026-11-15 (lane/expdel2-07-base): CLASSICAL_C06_SMALL_D_THREAD (Row norms (one thread per row at d <= 32, IDENTICAL)) was opt-in arm; EXP:1519 A/B owed and never run; the opt-in arm is gone and the default path is unchanged; code recoverable at 6a40fe1b92; see docs/TOMBSTONES.md"
+    # ---- lane fx-verdicts5 (2026-11-20): verdicts of A/B round 3 (NVIDIA L40S, wheel 28a780604c, job nvc-ab-20261120T063324Z-c630ad)
+    # MOJOLEARN_IDENTITY_FAST_NAN_CANON (core/nan_canon.mojo): promoted to the default; the old opt-in name is refused.
+    comptime assert not is_defined["MOJOLEARN_IDENTITY_FAST_NAN_CANON"](), "promoted 2026-11-20 (lane/fx-verdicts5, A/B round 3 NVIDIA L40S, wheel 28a780604c, job nvc-ab-20261120T063324Z-c630ad, one run per arm, a cross-vendor identity fix, cost: gemm 0.917 inside a 19 % base spread, transformer-decode 1.009): it is the default; drop the define, or build the old form with -D MOJOLEARN_IDENTITY_FAST_NAN_CANON_OFF"
+    # ---- end lane fx-verdicts5
     return True
 
 comptime SIX_LANE_CONFIGURATION_OK = _check_configuration()

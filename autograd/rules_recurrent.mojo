@@ -36,6 +36,7 @@ from sequence.exec_trait import Exec
 from sequence.ops import (
     FP,
     Args,
+    CELL_LSTM,
     OP_CELL_BWD,
     OP_CELL_BWD_H,
     OP_CELL_FWD,
@@ -55,7 +56,6 @@ from sequence.recurrent import (
 )
 from autograd.kernels.recurrent import colsum, wgrad_block, wgrad_blocked
 from sequence.mlp import EPI_BIAS_ACT
-from sequence.gemm_split import gemm_split_shape
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 # The recurrent trainer's backward runs on the tape (promoted 2026-10-19). One run per arm, HIGGS
@@ -100,8 +100,8 @@ comptime RNN_BIAS_EPI = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # (2026-09-28); and the two weight gradients of a layer are the blocked order of nr-small D3 (wgrad_blocked: two
 # launches each, sqrt(K) blocks, one thread a partial).
 #
-# 1. FORWARD STEP, the IDENTICAL default on every column (RNN_STEP_GEMM; `-D MOJOLEARN_SEQ_FAST_RNN_STEP_GEMM_OFF`
-#    restores the fused launch; the old opt-in name MOJOLEARN_SEQ_FAST_RNN_STEP_GEMM is refused,
+# 1. FORWARD STEP, the IDENTICAL default on every column (RNN_STEP_GEMM; confirmed twice, its _OFF switch deleted
+#    2026-11-20, round 3 below; the names MOJOLEARN_SEQ_FAST_RNN_STEP_GEMM and _OFF are refused,
 #    core/experiment_guards_neural.mojo):
 #      GH_s = h_{s-1} W_hh^T + b_hh   [B, G H] over K = H   (OP_GEMM_EPI, bias epilogue, on the route and in the fold
 #      the lane's launch rule gives the shape: sequence/gemm_split.mojo, sequence/gemm_tiled.mojo), then the
@@ -127,8 +127,8 @@ comptime RNN_BIAS_EPI = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 #    gru 3 times the cells and +1.15 ms; lstm 4 times and +1.38 ms) sites 1 and 2 together are 0 to -0.14 ms of a
 #    2 ms step. OWED: the _OFF arm on the fit and predict rows (owed-pre0867.json rnn-step-gemm-off).
 #
-# 2 and 3. BACKWARD STEP AND WEIGHT GRADIENTS, opt-in: `-D MOJOLEARN_SEQ_FAST_RNN_BPTT_GEMM` (RNN_BPTT_GEMM; default
-#    OFF, A/B owed: owed-pre0867.json rnn-bptt-gemm). BIT VERSION under the define, every column together.
+# 2 and 3. BACKWARD STEP AND WEIGHT GRADIENTS, the former arm MOJOLEARN_SEQ_FAST_RNN_BPTT_GEMM (decided by A/B
+#    round 3, below: site 2 is the default for the LSTM cell, the rest is deleted). As the arm had them:
 #      backward step s   dh += dGH_{s+1} W_hh   [B, H] over K = G H   (OP_GEMM, accumulate), then the elementwise
 #                        cell derivative OP_CELL_BWD (step T - 1 has no product: the fused launch); rule
 #                        rnn_bptt_gemm, the forward step's cost rule
@@ -155,11 +155,45 @@ comptime RNN_BIAS_EPI = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # TOMBSTONE: MOJOLEARN_SEQ_FAST_RNN_STEP_GEMM, its weight-gradient GEMM at split-K shapes (LOSS, numbers above) deleted
 # 2026-11-19 by lane/fx-verdicts4; code recoverable at 8f3f639b13.
 # Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_RNN_STEP_GEMM.patch; record in docs/TOMBSTONES.md.
-comptime RNN_STEP_GEMM = (
-    not is_defined["MOJOLEARN_SEQ_FAST_RNN_STEP_GEMM_OFF"]() and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-)
-comptime RNN_BPTT_GEMM = (
-    is_defined["MOJOLEARN_SEQ_FAST_RNN_BPTT_GEMM"]() and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+#
+# A/B ROUND 3, 2026-11-20 (lane fx-verdicts5; NVIDIA L40S host 2ef132a6de04, wheel 28a780604c and its B sets, base and
+# arm back to back in one pod job, tag nvc-ab-20261120T063324Z-c630ad, every algos worker on the GPU's NUMA node 0;
+# the row's two bases in the job agree to 0.6 % on every fit). Base -> arm ms.
+# rnn-step-gemm-off (B = the fused forward launch at every shape), digests and quality equal (H 64: the same-bits
+#   class): fit gru-clf 391.7 -> 466.0 and 392.4 -> 466.1 (1.19), gru-reg 388.4 -> 462.5 and 388.3 -> 462.7 (1.19),
+#   lstm-clf 446.8 -> 573.5 and 446.7 -> 570.9 (1.28), lstm-reg 442.2 -> 566.6 and 442.3 -> 566.9 (1.28), neural
+#   gru-fit 91.32 -> 118.56 (1.30), lstm-fit 109.96 -> 145.12 (1.32); predict gru 3.37-4.39, lstm 3.69-4.54; rnn rows
+#   (the scan) 0.99-1.02. Driver fit: lstm T 48 H 64 672.0 -> 876.5 (1.30), lstm H 128 728.6 -> 1163.4 (1.60), gru
+#   H 128 570.1 -> 906.5 (1.59), 2-layer gru H 96 1451.0 -> 1829.8 (1.26); controls rnn H 64 and lstm H 16 1.00.
+#   CONFIRMED a second time (round 2 was the predict rows; this round also times the forward step inside a fit):
+#   the forward step's GEMM stands and its switch is deleted.
+# TOMBSTONE: MOJOLEARN_SEQ_FAST_RNN_STEP_GEMM_OFF (old path's switch; the promotion confirmed by A/B rounds 2 and 3, numbers above) deleted 2026-11-20 by lane/fx-verdicts5; code recoverable at e25e35dab8.
+# Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_RNN_STEP_GEMM_OFF.patch; record in docs/TOMBSTONES.md.
+#   What stays of the old path: OP_CELL_FWD_H itself, for a step below the rule's floor and for fast mode.
+# rnn-bptt-gemm (B = sites 2 and 3 above), a bit version, quality equal to 1e-8 on every cell: fit lstm-clf 446.4 ->
+#   428.9 and 446.6 -> 426.8 (0.961, 0.956), lstm-reg 441.6 -> 420.6 and 441.7 -> 422.1 (0.952, 0.956); gru-clf
+#   393.7 -> 415.8 and 391.5 -> 417.8 (1.056, 1.067), gru-reg 387.9 -> 406.9 and 390.8 -> 409.5 (1.049, 1.048); rnn
+#   rows 1.000-1.004; neural gru-fit 0.985, lstm-fit 1.002, rnn-fit 0.991; predicts 1.00 (two single-call outliers,
+#   1.11 and 0.71, on rows whose bases differ as much). Driver fit: lstm T 48 H 64 672.0 -> 637.5 (0.949), lstm H 128
+#   728.6 -> 714.8 (0.981), gru H 128 570.1 -> 592.5 (1.039), 2-layer gru H 96 1451.0 -> 1509.5 (1.040); controls
+#   1.00. At H 64 both weight gradients are split shapes, so the board rows time SITE 2 ALONE: the backward step's
+#   GEMM is faster for the LSTM cell at every LSTM shape timed and slower for the GRU cell at every GRU shape timed
+#   (K = G H of 192, 288, 384 lose where the LSTM's 256 and 512 win, so it is the cell and not K; the fused GRU
+#   backward's own work a thread was not profiled). The arm's rule (no gru / lstm fit slower) is not met as written.
+#   DECIDED BY SITE AND CELL: site 2 is the default for the LSTM cell (RNN_BPTT_LSTM_GEMM below; its effect on the
+#   LSTM rows is what this A/B timed, the GRU and tanh cells keep the fused launch and are untouched); site 3 (a
+#   non-split weight gradient as one OP_GEMM) has no cell of its own in either round (active only at the two H 128 /
+#   H 96 driver cases, 0.981 and 1.04 together with site 2) and is deleted with the arm's name.
+#   BITS CHANGE, every column and the host column together (the same launches): an LSTM backward step that is a
+#   split-K shape (the fold of site 1 with c0 = the stored dh), from the floor up. Weight gradients: unchanged.
+# TOMBSTONE: MOJOLEARN_SEQ_FAST_RNN_BPTT_GEMM (SPLIT, A/B round 3 NVIDIA L40S, wheel 28a780604c, job nvc-ab-20261120T063324Z-c630ad: lstm fits 0.95-0.96, gru fits 1.05-1.07; the LSTM backward step promoted, the GRU backward step and the non-split weight-gradient GEMM deleted) deleted 2026-11-20 by lane/fx-verdicts5; code recoverable at e25e35dab8.
+# Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_RNN_BPTT_GEMM.patch; record in docs/TOMBSTONES.md.
+comptime RNN_STEP_GEMM = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+#: The LSTM backward step on the lane's GEMM (site 2 above; default since 2026-11-20). `-D
+#: MOJOLEARN_SEQ_FAST_RNN_BPTT_LSTM_GEMM_OFF` keeps the fused backward launch for every cell (the old form, until one
+#: more measurement confirms; then an owed deletion).
+comptime RNN_BPTT_LSTM_GEMM = (
+    not is_defined["MOJOLEARN_SEQ_FAST_RNN_BPTT_LSTM_GEMM_OFF"]() and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 )
 comptime RNN_STEP_GEMM_MIN_FMA = 1 << 20
 
@@ -181,27 +215,13 @@ def rnn_step_gemm(M: Int, N: Int, K: Int) -> Bool:
 
 
 @always_inline
-def rnn_bptt_gemm(M: Int, N: Int, K: Int) -> Bool:
+def rnn_bptt_gemm(cell: Int, M: Int, N: Int, K: Int) -> Bool:
     """Whether a backward time step's M x N x K product runs as its own GEMM
-    launch under MOJOLEARN_SEQ_FAST_RNN_BPTT_GEMM (the forward step's rule)."""
-    comptime if not RNN_BPTT_GEMM:
+    launch: the LSTM cell, at the forward step's cost rule
+    (RNN_BPTT_LSTM_GEMM, the round 3 note above)."""
+    comptime if not RNN_BPTT_LSTM_GEMM:
         return False
-    return M * N * K >= RNN_STEP_GEMM_MIN_FMA
-
-
-def _wgrad[E: Exec](
-    mut ex: E, A: FP, B: FP, C: FP, M: Int, N: Int, K: Int,
-    sam: Int, sak: Int, sbk: Int, sbn: Int, ldc: Int, scratch: FP,
-) raises:
-    """A recurrent weight gradient C [M, N] = A B over the K = T B stacked
-    rows: the blocked order (wgrad_blocked); under
-    MOJOLEARN_SEQ_FAST_RNN_BPTT_GEMM one OP_GEMM when the launch rule does
-    not split the product (the tile; `scratch` unused then)."""
-    comptime if RNN_BPTT_GEMM:
-        if not gemm_split_shape(M, N, K):
-            gemm(ex, A, B, C, M, N, K, sam, sak, sbk, sbn, False, ldc)
-            return
-    wgrad_blocked(ex, A, B, C, M, N, K, sam, sak, sbk, sbn, ldc, scratch)
+    return cell == CELL_LSTM and M * N * K >= RNN_STEP_GEMM_MIN_FMA
 
 
 def _gemm_bias[E: Exec](
@@ -424,7 +444,7 @@ def _linear_bwd[E: Exec](
     var done = False
     comptime if SEQ_WGRAD_BLOCKED:
         if saved.i1 != 0:
-            _wgrad(ex, up, xin, gradients[1], dout, din, R, 1, dout, din, 1, din, saved.p0)
+            wgrad_blocked(ex, up, xin, gradients[1], dout, din, R, 1, dout, din, 1, din, saved.p0)
             if wgrad_block(R) < R:
                 wgrad_blocked(ex, saved.p1, up, gradients[2], 1, dout, R, 0, 0, dout, 1, dout, saved.p0)
             else:
@@ -489,8 +509,8 @@ def _layer_bwd[E: Exec](
             fill(ex, dh, B * H, Float32(0.0))
             fill(ex, dc, B * H, Float32(0.0))
     var step_gemm = False
-    comptime if RNN_BPTT_GEMM:
-        step_gemm = (not scanned) and rnn_bptt_gemm(B, H, GH)
+    comptime if RNN_BPTT_LSTM_GEMM:
+        step_gemm = (not scanned) and rnn_bptt_gemm(cell, B, H, GH)
     var s = T - 1 if not scanned else -1
     while s >= 0:  # driver-loop: over time steps, T - 1 down (one launch per step)
         var a = Args()
@@ -537,7 +557,7 @@ def _layer_bwd[E: Exec](
         s -= 1
     var done = False
     comptime if SEQ_WGRAD_BLOCKED:
-        _wgrad(ex, dgh, hall, gradients[1], GH, H, T * B, 1, GH, H, 1, H, saved.p8)
+        wgrad_blocked(ex, dgh, hall, gradients[1], GH, H, T * B, 1, GH, H, 1, H, saved.p8)
         if wgrad_block(T * B) < T * B:
             wgrad_blocked(ex, saved.p9, dgh, gradients[2], 1, GH, T * B, 0, 0, GH, 1, GH, saved.p8)
         else:

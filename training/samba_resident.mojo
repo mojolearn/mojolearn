@@ -1053,7 +1053,8 @@ def _step_registry_in(
     whether the registry went up, i.e. whether the caller must admit it
     (`_admit_registry`).
 
-    Default: always (the copy and the scan every step, as before).
+    Under MOJOLEARN_SAMBA_FAST_STEP_REGISTRY_RESIDENT_OFF: always (the copy
+    and the scan every step, the default before 2026-11-20).
 
     SAMBA_STEP_REGISTRY_RESIDENT: only when the key is not current, the
     forward's own test (`samba_resident_forward`): one atomic load, no pass

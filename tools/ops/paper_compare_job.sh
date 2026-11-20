@@ -439,7 +439,8 @@ run_owed_drivers() {
         for arm in candidate ${LAST_PRIOR:+prior} ${B_NAMES[@]+"${B_NAMES[@]}"}; do
             va=$(venv_arm "$arm")
             [ -x "${ARM_PY[$va]:-/nonexistent}" ] || continue
-            "${ARM_PY[$va]}" tools/measure_owed_driver.py --owed "$OWED_FILE" --row "$row" --arm "$arm" \
+            local denv=(); [ -n "${ARM_XENV[$arm]:-}" ] && IFS=, read -r -a denv <<< "${ARM_XENV[$arm]}"   # a wheel arm's run variables
+            env ${denv[@]+"${denv[@]}"} "${ARM_PY[$va]}" tools/measure_owed_driver.py --owed "$OWED_FILE" --row "$row" --arm "$arm" \
                 --out "$RES/drivers/drivers.jsonl" >> "$RES/logs/drivers.log" 2>&1
             r=$?; [ $r -gt $rc ] && rc=$r
         done
@@ -454,8 +455,14 @@ OWED_PRIOR=(); [ -n "$LAST_PRIOR" ] && OWED_PRIOR=(--prior)   # measure_owed pla
 # <commit>` (an ENV-ONLY arm, no rebuild: the candidate's own venv run with those variables set, e.g.
 # MOJOLEARN_CPU_THREADS=@cgroup_cores (the box's allocation) or MOJOLEARN_XPREP_R3_OFF=view; the targeted job only).
 # ARM_ENV holds an env arm's variables.
+# A wheel-set line may carry a 4th field `env:VAR=VALUE[,VAR=VALUE]`: variables that arm's own venv needs to RUN (lane
+# fx-verdicts5, 2026-11-20: the gemm-leaf512 set reports GEMM profile version 4 and mojolearn.linalg admits an
+# experimental profile only under MOJOLEARN_EXPERIMENT_GEMM_PROFILE=<its name>; without it A/B round 3 refused the
+# arm's gemm row and its four matmul driver cases). ARM_XENV holds them; the board units and the driver rows of that
+# arm run with them set. It is still a wheel arm (installed, its own venv), unlike an ARM_ENV arm.
 B_NAMES=()
 declare -A ARM_ENV
+declare -A ARM_XENV
 # wheel_set_args <name> <wheel dir> <commit>: the install args of a wheel set built from COMMIT (one core and one $V
 # wheel in DIR), or a say line and rc 1. A B set and a prior wheel (PC_PRIOR_WHEELS, below) are installed the same way.
 wheel_set_args() {
@@ -469,7 +476,7 @@ wheel_set_args() {
 }
 if [ "$OWED" = 1 ] && [ -n "${PC_B_ARMS:-}" ]; then
     [ -s "$PC_B_ARMS" ] || say "PC_B_ARMS=$PC_B_ARMS: no such file on the box (or empty); no B arm runs"
-    while read -r name dir commit; do
+    while read -r name dir commit xenv; do
         [ -z "${name:-}" ] || [ "${name:0:1}" = "#" ] && continue
         [[ "$name" =~ ^[a-z0-9][a-z0-9.-]*$ ]] && [[ "${commit:-}" =~ ^[0-9a-f]{40}$ ]] || { say "bad PC_B_ARMS line: $name"; continue; }
         if [[ "$dir" == env:* ]]; then
@@ -486,8 +493,12 @@ if [ "$OWED" = 1 ] && [ -n "${PC_B_ARMS:-}" ]; then
             B_NAMES+=("$name")
             continue
         fi
+        if [ -n "${xenv:-}" ]; then
+            [[ "$xenv" == env:* ]] && [[ "${xenv#env:}" =~ ^[A-Z_][A-Z0-9_]*=[^,[:space:]]*(,[A-Z_][A-Z0-9_]*=[^,[:space:]]*)*$ ]] || { say "bad env field of wheel arm $name: $xenv"; continue; }
+        fi
         a=$(wheel_set_args "$name" "$dir" "$commit") || continue
         add_arm "$name" $a; B_NAMES+=("$name")
+        if [ -n "${xenv:-}" ]; then ARM_XENV[$name]=${xenv#env:}; say "wheel arm $name runs with ${ARM_XENV[$name]}"; fi
     done < "$PC_B_ARMS"
 fi
 B_CSV=$(IFS=,; echo "${B_NAMES[*]:-}")
@@ -942,7 +953,7 @@ if part tg-install || part tg-prep || part tg-smoke || part tg-board || part tg-
         # timed) is no board: bench_board starts the dir afresh
         grep -qs '"placeholder"' "$out/board.json" && rm -f "$out/board.json"
         CUR_IDS=$ids; CUR_BOARD=$out
-        local envs=(); [ -n "${ARM_ENV[$arm]:-}" ] && IFS=, read -r -a envs <<< "${ARM_ENV[$arm]}"
+        local envs=() ev=${ARM_ENV[$arm]:-${ARM_XENV[$arm]:-}}; [ -n "$ev" ] && IFS=, read -r -a envs <<< "$ev"
         # an env arm names the keys it sets on purpose, so tools/cpu_quota.py lets them through the race workers'
         # cap reset (lane fx-harness, 2026-11-18: cpu-threads-cgroup never took effect without this)
         if [ ${#envs[@]} -gt 0 ]; then

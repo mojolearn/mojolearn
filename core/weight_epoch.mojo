@@ -301,8 +301,8 @@ struct RegistryKey(Copyable, Movable):
         copy stays current. One lock and one table lookup, what the
         `registry_epoch_bump` it replaces took; the stamp and the key are
         the same word value read under that lock, so a later write by
-        anyone leaves the key not current. Only for
-        `-D MOJOLEARN_SAMBA_FAST_STEP_REGISTRY_RESIDENT` (below)."""
+        anyone leaves the key not current. Read by the resident train
+        step (SAMBA_STEP_REGISTRY_RESIDENT, below)."""
         if addr == 0:
             return RegistryKey()
         comptime if SAMBA_WEIGHT_EPOCH_GLOBAL:
@@ -327,18 +327,19 @@ struct RegistryKey(Copyable, Movable):
             return RegistryKey(addr, Int(stamp), word)
 
 
-# ---- lane fx-samba-step-resident (2026-11-18), EXPERIMENT, default off:
-# -D MOJOLEARN_SAMBA_FAST_STEP_REGISTRY_RESIDENT. A Samba resident train step
+# ---- lane fx-samba-step-resident (2026-11-18), the experiment
+# MOJOLEARN_SAMBA_FAST_STEP_REGISTRY_RESIDENT, DEFAULT ON since 2026-11-20
+# (-D MOJOLEARN_SAMBA_FAST_STEP_REGISTRY_RESIDENT_OFF builds the old form). A Samba resident train step
 # (training/samba_resident.mojo) uploaded the whole registry host -> device
 # and scanned it for a non-finite weight at every step, although the device
 # copy it wrote one step earlier holds exactly the bytes it downloaded to the
-# host. Under the define the step reuses the forward's mechanism (`wkey`,
+# host. Now the step reuses the forward's mechanism (`wkey`,
 # lane fix-samba-weight-upload): it uploads and admits only when its key is
 # not current, and after its own download it stamps the registry and keeps
 # the key (`RegistryKey.stamp_and_take`). The stamp moves from the provider
 # door (providers/python/samba_resident_pyapi_door.mojo) INTO the step, so
-# both files read this one constant: the define must reach every binding of
-# an arm build (a door without its stamp and a step without the arm would
+# both files read this one constant: an _OFF define must reach every binding of
+# its build (a door without its stamp and a step without the arm would
 # leave other copies stale; a step with the arm under a door that still
 # stamps only re-uploads, i.e. the default behaviour).
 # A/B round 2, 2026-11-19 (lane fx-verdicts4; NVIDIA L40S host bd9c355c19c0, wheel 0c68d6cd27 and its B set, base and
@@ -349,5 +350,13 @@ struct RegistryKey(Copyable, Movable):
 # 6.29 -> 5.04, 6.30 -> 5.26, 2.55 -> 2.46. NOT DECIDED: the row's rule lets one slower driver case block the
 # promotion, and the m/m case is one call with no spread (the same case on another arm's wheel in the job: 20.96).
 # Stays opt-in, owed RUN: re-time fx-samba-step-shapes with the median of 20 steps a case.
-comptime SAMBA_STEP_REGISTRY_RESIDENT = is_defined["MOJOLEARN_SAMBA_FAST_STEP_REGISTRY_RESIDENT"]()
+# A/B round 3, 2026-11-20 (lane fx-verdicts5; NVIDIA L40S host 2ef132a6de04, wheel 28a780604c and its B set, base and
+# arm back to back in one pod job, tag nvc-ab-20261120T063324Z-c630ad; digests and quality equal). Base -> arm ms:
+# samba-train-step 37.24 -> 35.95 (0.965), controls lm-train-step 36.29 -> 36.26 (1.00), samba-forward 4.561 -> 4.567
+# (1.00, median of 20). Driver SambaStack.train_step, median of 20 steps: 4 x 300 d256 m/a/m/a 31.07 -> 29.73
+# (0.957), 4 x 256 d256 six layers 40.83 -> 39.25 (0.961), 2 x 192 d128 m/m 11.48 -> 10.76 (0.937: round 2's 1.26
+# was one call); first forward after a step 5.155 -> 4.123 (0.80), 6.303 -> 4.973 (0.79), 2.644 -> 2.307 (0.87).
+# PROMOTED: faster on the board row and on every driver case in both the step and the forward after it, same bits.
+# The old form (upload and scan every step, the door stamps) stays behind _OFF until one more measurement.
+comptime SAMBA_STEP_REGISTRY_RESIDENT = not is_defined["MOJOLEARN_SAMBA_FAST_STEP_REGISTRY_RESIDENT_OFF"]()
 

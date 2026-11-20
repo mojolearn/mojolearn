@@ -5,8 +5,8 @@ bodies both columns run.
 THE DEFAULT since 2026-11-19 (the experiment `MOJOLEARN_LMHEAD_FAST_GEMM_PANEL`,
 promoted; numbers beside the switch below): `chunked_lm_head_v2_loss`,
 `chunked_lm_head_v2_train` and the executor op `lm_head_v2` run GEMM logits
-and balanced-tree folds. `-D MOJOLEARN_LMHEAD_FAST_GEMM_PANEL_OFF` restores
-the scalar serial profile on every column and in the oracle together. The device kernels
+and balanced-tree folds. The scalar serial profile it replaced was deleted on 2026-11-20
+(confirmed twice; TOMBSTONE below). The device kernels
 (training/chunked_lm_head_v2.mojo) and the host column
 (training/chunked_lm_head_gemm_panel_host.mojo, reached through the oracle)
 call the same @always_inline bodies below, one unit per thread or per host
@@ -20,11 +20,10 @@ from checks.numerics import ftz, identical_div, identical_exp, identical_log
 from training.checks.loss_contract import neg_by_bits
 from training.chunked_lm_head_profile import LM_HEAD_V2_CHUNK
 
-#: The profile switch. One build decision read by the device door, the executor op, the host column and
-#: the oracle together (the constant keeps its experiment name; every reader imports it from here).
+# The profile (was a build switch read by the device door, the executor op, the host column and the oracle
+# together; since 2026-11-20 the GEMM-panel profile is the only one).
 # MOJOLEARN_LMHEAD_FAST_GEMM_PANEL: PROMOTED 2026-11-19 (lane fx-verdicts3). GEMM panels and tree folds are the
-# profile on every vendor and the host column; `-D MOJOLEARN_LMHEAD_FAST_GEMM_PANEL_OFF` restores the scalar serial
-# profile (the old opt-in name is refused, core/experiment_guards_neural.mojo). Evidence: A/B round 1, NVIDIA L40S
+# profile on every vendor and the host column (the old opt-in name and its _OFF are refused, core/experiment_guards_neural.mojo). Evidence: A/B round 1, NVIDIA L40S
 # (host bd9c355c19c0, 14-core cgroup), wheel 0c68d6cd27 and its B set, base and arm back to back in ONE pod job
 # (nvc1-0006, tag nvc-ab-20261119T125554Z-6f7afc), one scored run per arm, train-chunked-lm-head-loss synthetic
 # (rows 8192, vocab 32768, width 1024): 33,016.9 -> 284.5 ms (0.0086; warm-up calls 33,161 -> 462 ms).
@@ -36,7 +35,12 @@ from training.chunked_lm_head_profile import LM_HEAD_V2_CHUNK
 # General mechanism: no rule reads a shape (panel 1024 and leaf 64 are profile constants at every size).
 # Limits: one row, NVIDIA only (AGENTS.md part 8). OWED (does not hold the flip): the neighbouring shape (rows
 # 4096, vocab 50257, width 768) and the non-board shape (rows 2048, vocab 49152, width 576) against the _OFF arm.
-comptime LMHEAD_FAST_GEMM_PANEL = not is_defined["MOJOLEARN_LMHEAD_FAST_GEMM_PANEL_OFF"]()
+# A/B round 3, 2026-11-20 (lane fx-verdicts5; NVIDIA L40S host 2ef132a6de04, wheel 28a780604c and its _OFF set, base
+# and arm back to back in one pod job, tag nvc-ab-20261120T063324Z-c630ad), the same row, panels (default) -> scalar
+# serial profile: 277.9 -> 33,009 ms (118.8; warm-up 429 -> 33,160). CONFIRMED a second time; the neighbouring and
+# non-board shapes named above were not timed and nothing argues for the scalar profile at any size.
+# TOMBSTONE: MOJOLEARN_LMHEAD_FAST_GEMM_PANEL_OFF (old path: the scalar serial LM-head profile, its device kernels, host arm, oracle folds and check clause; the promotion confirmed by A/B rounds 1 and 3, 33,017 -> 284.5 ms and 277.9 -> 33,009 ms) deleted 2026-11-20 by lane/fx-verdicts5; code recoverable at e25e35dab8.
+# Restore: git apply experiments/removed/MOJOLEARN_LMHEAD_FAST_GEMM_PANEL_OFF.patch; record in docs/TOMBSTONES.md.
 
 #: Vocabulary ids per denominator leaf. A leaf is the unit one device thread
 #: (or one host iteration) folds serially; the tree above the leaves is

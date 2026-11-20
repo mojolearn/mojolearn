@@ -1,0 +1,120 @@
+diff --git a/checks/native_tests/llama_refuse_row_scan.mojo b/checks/native_tests/llama_refuse_row_scan.mojo
+index 3c0e598b4e..60ae0091cb 100644
+--- a/checks/native_tests/llama_refuse_row_scan.mojo
++++ b/checks/native_tests/llama_refuse_row_scan.mojo
+@@ -4,7 +4,7 @@ scan, and a non-finite value PRODUCED by a step.
+ 
+ Part 1, kernel level (cases 0 to 3). `_kv_rows_scan_enqueue`
+ (transformer/impl/llama/modeling_llama.mojo, the scan the default build
+-runs on a granted cache; a FAST build runs the whole scan at every step) reads row
++runs on a granted cache; `-D MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK_OFF` is the whole scan at every step) reads row
+ `s - 1` of every (batch, kv head) run of a key or value cache and reports a
+ FLAT index of the buffer; the default refusal is `DeviceNonfiniteBatch`'s
+ scan of the whole used prefix. On one device buffer laid out as the cache is,
+@@ -44,6 +44,9 @@ element instead of the flat index, drops the strided pass or folds the
+ partials wrongly (part 1); a watermark advanced past a row nobody scanned, a
+ refusal naming the other cache or another index, or no refusal at all for a
+ value a step computed (part 2).
++
++pixi: check-llama-refuse-row-scan-watermark-off builds this check with the
++whole scan at every step.
+ """
+ from std.memory import bitcast
+ 
+diff --git a/pixi.toml b/pixi.toml
+index c46abceb06..3772f7b7cc 100644
+--- a/pixi.toml
++++ b/pixi.toml
+@@ -54,6 +54,7 @@ check-ops-lm-head-v2-scalar = "python3 tools/generated_sources.py prepare --repo
+ check-ops-lm-head-v2-scalar-cpu = "python3 tools/generated_sources.py prepare --repo . && mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -D MOJOLEARN_LMHEAD_FAST_GEMM_PANEL_OFF=1 -I . checks/native_tests/run_cpu.mojo ops_lm_head_v2"
+ check-nan-canon-off-cpu = "python3 tools/generated_sources.py prepare --repo . && mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -D MOJOLEARN_IDENTITY_FAST_NAN_CANON_OFF=1 -I . checks/native_tests/run_cpu.mojo nan_canon"
+ check-nan-canon-off-gpu = "python3 tools/generated_sources.py prepare --repo . && mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_IDENTITY_FAST_NAN_CANON_OFF=1 -I . checks/native_tests/run_gpu.mojo nan_canon"
++check-llama-refuse-row-scan-watermark-off = "python3 tools/generated_sources.py prepare --repo . && mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK_OFF=1 -I . checks/native_tests/run_gpu.mojo llama_refuse_row_scan"
+ check-native-optimizer-state-input = "mojo run -I . training/checks/optimizer_state_input_check.mojo"
+ check-native-optimizer-state-plan = "mojo run -I . training/checks/optimizer_state_plan_check.mojo"
+ check-native-optimizer-input-copy = "mojo run -I . training/checks/optimizer_input_copy_check.mojo"
+diff --git a/training/samba_program.mojo b/training/samba_program.mojo
+index 43f7654664..a6e5e85242 100644
+--- a/training/samba_program.mojo
++++ b/training/samba_program.mojo
+@@ -264,7 +264,7 @@ struct SambaStackProgram(Movable, Writable):
+         # is written by `zero_state` (a fill, then the position word through
+         # `load_block`) and `load_state` (`load_block` of the floats and the
+         # word), which reset the attention entries' refusal watermark. Read
+-        # on every IDENTICAL build.
++        # on every IDENTICAL build but MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK_OFF.
+         s.steps.attn_cache_private = True
+         self.s = s^
+         self.vocab = vocab
+diff --git a/transformer/attn_step_session.mojo b/transformer/attn_step_session.mojo
+index 645579eb4a..aef58079ea 100644
+--- a/transformer/attn_step_session.mojo
++++ b/transformer/attn_step_session.mojo
+@@ -208,7 +208,8 @@ struct AttnStepArm(Movable):
+         # state buffer are its own; every write of `kv` outside a step run
+         # is `_caches_in`, always followed by `attn_step_restart` or
+         # `attn_step_adopt` before any run, or `_shape`'s reallocation
+-        # (which clears the scratch). Read on every IDENTICAL build.
++        # (which clears the scratch). Read on every IDENTICAL build but
++        # MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK_OFF.
+         self.sc.attn_cache_private = True
+         self.ints = List[Int]()
+         self.w = w
+@@ -269,7 +270,8 @@ struct AttnStepArm(Movable):
+         # state buffer are its own; every write of `kv` outside a step run
+         # is `_caches_in`, always followed by `attn_step_restart` or
+         # `attn_step_adopt` before any run, or `_shape`'s reallocation
+-        # (which clears the scratch). Read on every IDENTICAL build.
++        # (which clears the scratch). Read on every IDENTICAL build but
++        # MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK_OFF.
+         self.sc.attn_cache_private = True
+         self.ints = List[Int]()
+         self.w = w
+diff --git a/transformer/causal_lm_program.mojo b/transformer/causal_lm_program.mojo
+index d6339c7e41..d47f7541dc 100644
+--- a/transformer/causal_lm_program.mojo
++++ b/transformer/causal_lm_program.mojo
+@@ -185,7 +185,7 @@ struct CausalLMProgram(Movable):
+             # word and of the floats), which resets the attention entries'
+             # refusal watermark, and a decode loop that ran bodies past its
+             # stop drops the entries (autograd/program_control.mojo). Read
+-            # on every IDENTICAL build.
++            # on every IDENTICAL build but MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK_OFF.
+             s[].steps.attn_cache_private = True
+             self.embed = s[].upload(CastIn.f32_c(pe, v, d), False)
+             if pn != 0:
+diff --git a/transformer/impl/llama/modeling_llama.mojo b/transformer/impl/llama/modeling_llama.mojo
+index 8a166ee0a1..4c49d2b8cb 100644
+--- a/transformer/impl/llama/modeling_llama.mojo
++++ b/transformer/impl/llama/modeling_llama.mojo
+@@ -4172,8 +4172,8 @@ in the same order, so the refusal raised is the one the separate scans
+ raised. No float is produced: no bit moves on any column. FAST builds keep the separate scans."""
+ 
+ # MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK: PROMOTED 2026-11-19 (lane fx-verdicts3). The appended-row scan on a granted
+-# cache is the IDENTICAL default (confirmed and its _OFF switch deleted 2026-11-20, round 3 below; the old opt-in
+-# name and _OFF are refused, core/experiment_guards_neural.mojo; the constant
++# cache is the IDENTICAL default; `-D MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK_OFF` restores the whole-cache scans on
++# per-call scratch at every step (the old opt-in name is refused, core/experiment_guards_neural.mojo; the constant
+ # keeps its experiment name). Evidence: A/B round 1, NVIDIA L40S (host bd9c355c19c0, 14-core cgroup), wheel
+ # 0c68d6cd27 and its B set, base and arm back to back in ONE pod job (nvc1-0006, tag nvc-ab-20261119T125554Z-6f7afc),
+ # one scored run per arm; digests and quality equal on all 4 cells. Base -> arm ms: causal-lm-generate
+@@ -4191,16 +4191,9 @@ raised. No float is produced: no bit moves on any column. FAST builds keep the s
+ # General mechanism: the scan lengths come from the cache geometry (one row of every run), no shape key.
+ # Limits: NVIDIA only (AGENTS.md part 8). OWED (does not hold the flip): a 4096-token decode at n_kv 2 and a
+ # 12-layer llama configuration against the _OFF arm.
+-# A/B round 3, 2026-11-20 (lane fx-verdicts5; NVIDIA L40S host 2ef132a6de04, wheel 28a780604c and its _OFF set, base
+-# and arm back to back in one pod job, tag nvc-ab-20261120T063324Z-c630ad; digests and quality equal on all 4 cells).
+-# Row scan (default) -> whole scans ms: transformer-decode 1,086.8 -> 1,118.2 (1.029; the row's three bases in the job
+-# 1,086.0 to 1,086.8), causal-lm-generate-smollm2 1,504.9 -> 1,549.6 (1.030), causal-lm-generate (162M) 864.4 -> 880.6
+-# (1.019), samba-decode 1,302.9 -> 1,319.7 (1.013; its other base 1,312.8). CONFIRMED a second time, four rows of
+-# four in the same direction (2 to 3 % here against round 1's 4 to 6 %): the row scan stands and its switch is
+-# deleted. The whole scans themselves stay: FAST builds run them, and so does a cache that is not granted.
+-# TOMBSTONE: MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK_OFF (old path's switch; the promotion confirmed by A/B rounds 1 and 3, numbers above) deleted 2026-11-20 by lane/fx-verdicts5; code recoverable at e25e35dab8.
+-# Restore: git apply experiments/removed/MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime LLAMA_FAST_REFUSE_WATERMARK = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++comptime LLAMA_FAST_REFUSE_WATERMARK = (
++    not is_defined["MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK_OFF"]() and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++)
+ """lane/fx-llama-refuse-watermark (2026-11-18), the IDENTICAL default since
+ 2026-11-19 (A/B numbers in the comment above; `_OFF` restores the whole
+ scans; docs/apple-fast/EXPERIMENTS.md). A decode step

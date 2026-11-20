@@ -5,9 +5,8 @@
 
 THE DEFAULT on the NVIDIA and AMD columns since 2026-11-19 (the experiment
 `MOJOLEARN_GEMM_FAST_SEQ_PACKED`, promoted; A/B numbers beside
-`SEQ_GEMM_PACKED` below; docs/apple-fast/EXPERIMENTS.md).
-`-D MOJOLEARN_GEMM_FAST_SEQ_PACKED_OFF` restores the 16 x 16 tile at every
-size: then nothing here is compiled into a launch.
+`SEQ_GEMM_PACKED` below; docs/apple-fast/EXPERIMENTS.md). On the Apple
+column nothing here is compiled into a launch.
 
 WHAT MOVES. The 16 x 16 sequence tile (sequence/gemm_tiled.mojo) gives every
 thread ONE cell and reads two threadgroup words per fused multiply-add, so it
@@ -140,8 +139,7 @@ from sequence.mlp import EPI_BIAS_ACT, EPI_ACT_BWD
 #: The route switch. IDENTICAL on the NVIDIA and AMD columns (`GEMM_LEAF_PTR_COLUMN`);
 #: never Apple, whose sequence GEMM is not tiled (SEQ_GEMM_TILED).
 # MOJOLEARN_GEMM_FAST_SEQ_PACKED: PROMOTED 2026-11-19 (lane fx-verdicts3). The packed route is the default;
-# `-D MOJOLEARN_GEMM_FAST_SEQ_PACKED_OFF` restores the 16 x 16 tile for the products the rule selects (the old
-# opt-in name is refused, core/experiment_guards_neural.mojo). Evidence: A/B round 1, NVIDIA L40S (host
+# (the old opt-in name and its _OFF are refused, core/experiment_guards_neural.mojo). Evidence: A/B round 1, NVIDIA L40S (host
 # bd9c355c19c0, 14-core cgroup), wheel 0c68d6cd27 and its B set, base and arm back to back in ONE pod job
 # (nvc1-0006, tag nvc-ab-20261119T125554Z-6f7afc), one scored run per arm; digests and quality equal on all 8
 # cells. Base -> arm ms: mlp-clf istella fit 1462.4 -> 868.3 (0.59), infer 52.80 -> 28.63 (0.54); mlp-clf taxi
@@ -153,9 +151,16 @@ from sequence.mlp import EPI_BIAS_ACT, EPI_ACT_BWD
 # Limits: NVIDIA only (AGENTS.md part 8); the AMD column takes the route only from 1024 wide tiles (about 16.7 M
 # cells), not timed. OWED (does not hold the flip): the driver row gemm-seq-packed-shapes (neighbour
 # 4096 x 256 x 128, non-board 2048 x 512 x 512 and 8192 x 192 x 96, control 1024 x 256) against the _OFF arm.
+# A/B round 3, 2026-11-20 (lane fx-verdicts5; NVIDIA L40S host 2ef132a6de04, wheel 28a780604c and its _OFF set, one pod
+# job, tag nvc-ab-20261120T063324Z-c630ad), that driver row, MLPClassifier.fit, packed (default) -> 16 x 16 tile ms:
+# 4096 x 256 over K 128 (neighbour) 70.99 -> 79.62 (1.12), 2048 x 512 x 512 (non-board) 303.2 -> 505.4 (1.67),
+# 8192 x 192 over K 96 249.4 -> 254.2 (1.02), control batch 1024 x 256 (below the rule) 89.58 -> 90.03 (1.005).
+# CONFIRMED a second time, on shapes the board does not hold: the route stands and its switch is deleted. The 16 x 16
+# tile itself stays: it serves every product the rule does not select, the Apple column and fast mode.
+# TOMBSTONE: MOJOLEARN_GEMM_FAST_SEQ_PACKED_OFF (old path's switch; the promotion confirmed by A/B rounds 1 and 3, numbers above) deleted 2026-11-20 by lane/fx-verdicts5; code recoverable at e25e35dab8.
+# Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_SEQ_PACKED_OFF.patch; record in docs/TOMBSTONES.md.
 comptime SEQ_GEMM_PACKED = (
-    not is_defined["MOJOLEARN_GEMM_FAST_SEQ_PACKED_OFF"]()
-    and GEMM_LEAF_PTR_COLUMN
+    GEMM_LEAF_PTR_COLUMN
     and not TARGET_HAS_APPLE_GPU
 )
 
@@ -228,6 +233,21 @@ def seq_gemm_packed_launch(ctx: DeviceContext, a: Args, geom: Int) raises:
 
 
 #: The fused store of a follower: this route (default) with the GEMM store-epilogue arm (default off).
+# A/B round 3, 2026-11-20 (lane fx-verdicts5; NVIDIA L40S host 2ef132a6de04, wheel 28a780604c and its B set, base and
+# arm back to back in one pod job, tag nvc-ab-20261120T063324Z-c630ad, workers on the GPU's NUMA node 0; digests and
+# quality equal on all 8 cells). Follower launch (default) -> fused store ms: fit mlp-clf istella 862.9 -> 850.5
+# (0.986), taxi 673.9 -> 665.4 (0.987), mlp-reg istella 855.5 -> 842.2 (0.984), taxi 662.5 -> 653.4 (0.986); infer
+# taxi 7.955 -> 7.722 (0.971) and 2.762 -> 2.694 (0.975), medians of 20; infer istella 24.17 -> 29.44 (1.218) and
+# 15.83 -> 16.59 (1.048), one call each, and their warm-up calls say the same (29.0 -> 33.2, 17.0 -> 17.8).
+# NOT PROMOTED: MIXED. The fits gain 1.3 to 1.6 % (the fit rows' bases agree to 0.6 % in this job) and the predict of
+# the wide input loses 5 to 22 %; the arm's rule wants every fit and infer faster. The neighbouring and non-board
+# shapes of its row were not timed. Default stays the follower launch. OWED DELETION (not done by lane fx-verdicts5:
+# the kernel family is in gemm/checks/gemm_identical.mojo and was already cut once without a compile): this
+# constant, seq_gemm_packed_epi_kind / _go / _launch below and the branch in sequence/exec_device.mojo _launch;
+# gemm/neural_dispatch.mojo GEMM_LEAF_PTR_EPI, GEMM_EPI_* and identical_gemm_leaf_ptr_epi_into;
+# identical_gemm_kpack_epi_ptr_kernel; the PACKED EPI clause of autograd/checks/gemm_cases.mojo;
+# checks/native_tests/transformer_backward_packed.mojo's epi build and its pixi task; then the refusal of
+# MOJOLEARN_GEMM_FAST_EPI.
 comptime SEQ_GEMM_PACKED_EPI = SEQ_GEMM_PACKED and GEMM_LEAF_PTR_EPI
 
 

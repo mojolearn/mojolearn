@@ -1719,8 +1719,8 @@ struct LlamaKVCache(Movable):
 
 
 # MOJOLEARN_LLAMA_FAST_STAGE_KEEP: PROMOTED 2026-11-19 (lane fx-verdicts4) for the stateless block forward, DELETED for
-# the stack-layer run. `-D MOJOLEARN_LLAMA_FAST_STAGE_KEEP_OFF` restores the reset before every stateless forward (the
-# old opt-in name is refused, core/experiment_guards_neural.mojo). Evidence: A/B round 2, NVIDIA L40S (host
+# the stack-layer run. Confirmed and its _OFF switch deleted 2026-11-20 (round 3 below; the
+# old opt-in name and _OFF are refused, core/experiment_guards_neural.mojo). Evidence: A/B round 2, NVIDIA L40S (host
 # bd9c355c19c0), wheel 0c68d6cd27 and its B set, base and arm in ONE pod job (nvc1-0008, tag
 # nvc-ab-20261119T154232Z-0642a5), small rows the median of 20 calls; every output digest equal (9 cells).
 # The stateless forward (`attn_step_fresh_prefill`), base -> arm ms: transformer-forward 2.869 -> 2.734 (0.953; the
@@ -1732,13 +1732,22 @@ struct LlamaKVCache(Movable):
 # resets as before (TOMBSTONE in autograd/block_step_ops.mojo). Controls: lm-forward 0.98, lm-train-step 1.01,
 # transformer-decode 1.03 (L = 1 steps and trained stages are never reset in either arm).
 # Limits: NVIDIA only (AGENTS.md part 8). OWED (does not hold the flip): the _OFF arm on the same rows.
-comptime LLAMA_FAST_STAGE_KEEP = not is_defined["MOJOLEARN_LLAMA_FAST_STAGE_KEEP_OFF"]()
+# A/B round 3, 2026-11-20 (lane fx-verdicts5; NVIDIA L40S host 2ef132a6de04, wheel 28a780604c and its _OFF set, base
+# and arm back to back in one pod job, tag nvc-ab-20261120T063324Z-c630ad; every digest equal). Kept stages (default)
+# -> reset before every stateless forward, ms: transformer-forward 2.617 -> 2.901 (1.108, medians of 20); driver
+# TransformerBlock.forward, median of 20: 1 x 4096 d384 5.726 -> 5.715 (1.00), 1 x 2048 d512 3.490 -> 3.853 (1.10),
+# non-board 3 x 700 d320 2.158 -> 2.287 (1.06), 4 x 128 d384 1.370 -> 1.430 (1.04). Rows the switch does not reach:
+# lm-train-step 1.000, samba-forward 1.003, transformer-decode 1.003, lm-forward 0.911 (that row's two bases in the
+# job are 20.36 and 22.48: its own spread). CONFIRMED a second time; the switch and the reset on this path are deleted.
+# TOMBSTONE: MOJOLEARN_LLAMA_FAST_STAGE_KEEP_OFF (old path, the reset before a stateless forward on kept stages; the promotion confirmed by A/B rounds 2 and 3, numbers above) deleted 2026-11-20 by lane/fx-verdicts5; code recoverable at e25e35dab8.
+# Restore: git apply experiments/removed/MOJOLEARN_LLAMA_FAST_STAGE_KEEP_OFF.patch; record in docs/TOMBSTONES.md.
+# The constant is kept as the name the docstrings below and in autograd/block_step_ops.mojo refer to; nothing branches on it.
+comptime LLAMA_FAST_STAGE_KEEP = True
 """A forward-only attention step run of L > 1 tokens on kept stages of the
 same shape that passes `AttnPrefill.prepare(..., keep_bytes=True)` (the
 stateless `TransformerBlock.forward`) restores the stages' host flags
 (`LlamaDeviceStages.reset_flags`) and does NOT zero-fill the stage buffers
-again, where `LlamaDeviceStages.reset` (every other reused run, and every
-run under `-D MOJOLEARN_LLAMA_FAST_STAGE_KEEP_OFF`) is thirty zero fills
+again, where `LlamaDeviceStages.reset` (every other reused run) is thirty zero fills
 and a wait before the call.
 
 WHY THE OUTPUT IS THE SAME. A forward writes each stage it reads, whole,
@@ -4172,8 +4181,8 @@ in the same order, so the refusal raised is the one the separate scans
 raised. No float is produced: no bit moves on any column. FAST builds keep the separate scans."""
 
 # MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK: PROMOTED 2026-11-19 (lane fx-verdicts3). The appended-row scan on a granted
-# cache is the IDENTICAL default; `-D MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK_OFF` restores the whole-cache scans on
-# per-call scratch at every step (the old opt-in name is refused, core/experiment_guards_neural.mojo; the constant
+# cache is the IDENTICAL default (confirmed and its _OFF switch deleted 2026-11-20, round 3 below; the old opt-in
+# name and _OFF are refused, core/experiment_guards_neural.mojo; the constant
 # keeps its experiment name). Evidence: A/B round 1, NVIDIA L40S (host bd9c355c19c0, 14-core cgroup), wheel
 # 0c68d6cd27 and its B set, base and arm back to back in ONE pod job (nvc1-0006, tag nvc-ab-20261119T125554Z-6f7afc),
 # one scored run per arm; digests and quality equal on all 4 cells. Base -> arm ms: causal-lm-generate
@@ -4191,9 +4200,16 @@ raised. No float is produced: no bit moves on any column. FAST builds keep the s
 # General mechanism: the scan lengths come from the cache geometry (one row of every run), no shape key.
 # Limits: NVIDIA only (AGENTS.md part 8). OWED (does not hold the flip): a 4096-token decode at n_kv 2 and a
 # 12-layer llama configuration against the _OFF arm.
-comptime LLAMA_FAST_REFUSE_WATERMARK = (
-    not is_defined["MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK_OFF"]() and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-)
+# A/B round 3, 2026-11-20 (lane fx-verdicts5; NVIDIA L40S host 2ef132a6de04, wheel 28a780604c and its _OFF set, base
+# and arm back to back in one pod job, tag nvc-ab-20261120T063324Z-c630ad; digests and quality equal on all 4 cells).
+# Row scan (default) -> whole scans ms: transformer-decode 1,086.8 -> 1,118.2 (1.029; the row's three bases in the job
+# 1,086.0 to 1,086.8), causal-lm-generate-smollm2 1,504.9 -> 1,549.6 (1.030), causal-lm-generate (162M) 864.4 -> 880.6
+# (1.019), samba-decode 1,302.9 -> 1,319.7 (1.013; its other base 1,312.8). CONFIRMED a second time, four rows of
+# four in the same direction (2 to 3 % here against round 1's 4 to 6 %): the row scan stands and its switch is
+# deleted. The whole scans themselves stay: FAST builds run them, and so does a cache that is not granted.
+# TOMBSTONE: MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK_OFF (old path's switch; the promotion confirmed by A/B rounds 1 and 3, numbers above) deleted 2026-11-20 by lane/fx-verdicts5; code recoverable at e25e35dab8.
+# Restore: git apply experiments/removed/MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK_OFF.patch; record in docs/TOMBSTONES.md.
+comptime LLAMA_FAST_REFUSE_WATERMARK = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 """lane/fx-llama-refuse-watermark (2026-11-18), the IDENTICAL default since
 2026-11-19 (A/B numbers in the comment above; `_OFF` restores the whole
 scans; docs/apple-fast/EXPERIMENTS.md). A decode step

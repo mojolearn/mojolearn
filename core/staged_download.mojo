@@ -91,7 +91,7 @@ def download_f32_into_canon[pool: StaticString = _STAGE_NAME](
 ) raises:
     """`download_f32_into` for a buffer that holds float32 RESULTS (never
     int32 words moved through a float32 buffer, as x_prep's outputs are):
-    with -D MOJOLEARN_IDENTITY_FAST_NAN_CANON (default off) every NaN word
+    with NAN_CANON_ON (default on) every NaN word
     of `dst[0:n]` is the one canonical quiet NaN (core/nan_canon.mojo), so a
     computed NaN is the same word on every vendor and on the host column.
     The pass is folded into the copy-out's spans (the words are read while
@@ -319,7 +319,7 @@ def _copy_out(dst: MutPointer[Float32, MutUntrackedOrigin], src: MutPointer[Floa
     With `scan`, the result is the first non-finite index of `dst[0:n]`
     (-1 when none). Copies only: no bit moves, unless `canon` (lane
     fx-nan-canon, 2026-11-19; only `download_f32_into_canon` passes it, and
-    only under -D MOJOLEARN_IDENTITY_FAST_NAN_CANON): each span's NaN words
+    only under NAN_CANON_ON, the default): each span's NaN words
     then become the canonical one in `dst` right after its memcpy.
     fx-leftovers-product (2026-11-19): the copy (and its scan) is split
     into contiguous spans across the host's cores, the form of

@@ -935,7 +935,7 @@ def mlp_predict[E: Exec](mut ex: E, net: MLPNet, X: FP, N: Int, Pin: FP, dst: FP
         ex.launch[OP_PROBA2](q, N * 2)
         ex.sync()
         ex.download(dst, two, N * 2)
-        # -D MOJOLEARN_IDENTITY_FAST_NAN_CANON (default off; core/nan_canon.mojo):
+        # NAN_CANON_ON (default on; core/nan_canon.mojo):
         # the returned predictions' NaN words become the one canonical word,
         # on the device executor and on the host one alike (this function is
         # generic over both, so every column takes the same pass).

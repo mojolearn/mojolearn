@@ -1,8 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """HOST CHECK: the Mamba-3 backward S17 chunk-end tail (`d_dacs_rec`) of the
 host column against a float64 restatement of the same sum, on a three-chunk
-row with a partial last chunk, and (in the default build; not under
--D MOJOLEARN_MAMBA3_FAST_S17_TAIL_TREE_OFF) the tail's tree against the GEMM
+row with a partial last chunk, and the tail's tree against the GEMM
 contract's own fold.
 
 Why it exists: the stored-word checks of the Mamba-3 backward
@@ -30,7 +29,6 @@ words can be read beside a device dump of the same operands. No GPU.
 Serial by nature: one row of 20 cells, under a second; nothing to split.
 
     mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings mamba/checks/mamba3_s17_tail_tree_check.mojo
-    mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -D MOJOLEARN_MAMBA3_FAST_S17_TAIL_TREE_OFF -I . -I bindings mamba/checks/mamba3_s17_tail_tree_check.mojo
 
 Exit 1 on any failure.
 """
@@ -41,7 +39,6 @@ from gemm.host.gemm_oracle import fold_balanced_tree
 from mamba.checks.mamba3_fixture import M3_D_STATE, M3_HEADDIM
 from mamba.host.device_shim import DeviceBuffer
 from mamba.host.gen.mamba3_backward import (
-    M3_S17_TAIL_TREE,
     _m3_s17_tail_tree,
     mamba3_s17_operands_kernel,
 )
@@ -190,25 +187,24 @@ def run_checks() raises:
         elif abs(got - want) > bound:
             print("FAIL cell", th, "token", token, "head", h, "got", got, "float64", want, "bound", bound)
             bad += 1
-    print("d_dacs_rec", "tree" if M3_S17_TAIL_TREE else "chain", "words", rows, "fnv1a64", _fnv(d_dacs_rec, rows))
+    print("d_dacs_rec", "tree", "words", rows, "fnv1a64", _fnv(d_dacs_rec, rows))
 
-    comptime if M3_S17_TAIL_TREE:
-        var tree_seed = UInt64(7)
-        for trial in range(8):
-            var lanes = Array[Float32, M3_D_STATE](fill=Float32(0))
-            var listed = List[Float32]()
-            for i in range(M3_D_STATE):
-                var value = _next(tree_seed)
-                # one trial in two spreads the magnitudes so the pairing matters
-                if (trial & 1) == 1 and (i % 5) == 0:
-                    value = value * Float32(4096.0)
-                lanes[i] = value
-                listed.append(value)
-            var mine = _m3_s17_tail_tree(lanes)
-            var theirs = fold_balanced_tree(listed)
-            if bitcast[DType.uint32](mine) != bitcast[DType.uint32](theirs):
-                print("FAIL tree trial", trial, "tail tree", mine, "contract 7.2 fold", theirs)
-                bad += 1
+    var tree_seed = UInt64(7)
+    for trial in range(8):
+        var lanes = Array[Float32, M3_D_STATE](fill=Float32(0))
+        var listed = List[Float32]()
+        for i in range(M3_D_STATE):
+            var value = _next(tree_seed)
+            # one trial in two spreads the magnitudes so the pairing matters
+            if (trial & 1) == 1 and (i % 5) == 0:
+                value = value * Float32(4096.0)
+            lanes[i] = value
+            listed.append(value)
+        var mine = _m3_s17_tail_tree(lanes)
+        var theirs = fold_balanced_tree(listed)
+        if bitcast[DType.uint32](mine) != bitcast[DType.uint32](theirs):
+            print("FAIL tree trial", trial, "tail tree", mine, "contract 7.2 fold", theirs)
+            bad += 1
 
     # the buffers the pointers above read stay alive to here
     _ = len(d_q_read) + len(d_dacs_read) + len(d_k_rec) + len(d_v_rec) + len(d_dacs_rec) + len(d_y)

@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Brute-force DBSCAN without a CSR (experiment MOJOLEARN_DBSCAN_FAST_BRUTE_EDGE_FREE).
+"""Brute-force DBSCAN without a CSR (the default brute route of identical mode since 2026-11-20; was the
+experiment MOJOLEARN_DBSCAN_FAST_BRUTE_EDGE_FREE; -D MOJOLEARN_DBSCAN_FAST_BRUTE_EDGE_FREE_OFF builds the old route).
 
 WHERE THE BRUTE TIME GOES (the reference route, `runner.mojo`, with
 `sparse_rbc_mode` off). `compute_batch_size` clamps the brute batch to
@@ -123,10 +124,18 @@ from dbscan.impl.neighbors.epsilon_neighborhood import (
 from neighbors.impl.ball_cover.scan import rbc_exclusive_scan_launch
 
 
-#: The experiment. Default off; when off nothing in this file is reached and
-#: the reference brute route is untouched.
+#: The switch. DEFAULT ON since 2026-11-20; under MOJOLEARN_DBSCAN_FAST_BRUTE_EDGE_FREE_OFF nothing in this file
+#: is reached and the reference brute route (byte adjacency, CSR, weak_cc, merge) runs.
+# A/B round 3, 2026-11-20 (lane fx-verdicts5; NVIDIA L40S host 2ef132a6de04, wheel 28a780604c and its B set, base and
+# arm back to back in one pod job, tag nvc-ab-20261120T063324Z-c630ad; one scored run per arm; labels, quality and
+# digests equal on every cell). Base -> arm ms, fit: classical/dbscan taxi 1,000,000 x 11 1,040,400 -> 351,860
+# (0.338; 36 clusters, noise 0.000174); taxi 250,000 rows (the neighbouring size) 37,950 -> 19,701 (0.519);
+# istella 1,000,000 x 220 597,190 -> 591,530 (0.991: no change on that row). PROMOTED.
+# The mechanism is general (per-batch label work and 2 GB adjacency compactions removed; range sized from free
+# memory), no shape or dataset key. Not timed: the non-board make_blobs 1,000,000 x 16 case of the EXPERIMENTS row.
+# The old route stays behind _OFF until one more measurement confirms; then it is an owed deletion.
 comptime DBSCAN_BRUTE_EDGE_FREE = (
-    is_defined["MOJOLEARN_DBSCAN_FAST_BRUTE_EDGE_FREE"]()
+    not is_defined["MOJOLEARN_DBSCAN_FAST_BRUTE_EDGE_FREE_OFF"]()
     and IDN_DBSCAN_EDGE_FREE
 )
 
