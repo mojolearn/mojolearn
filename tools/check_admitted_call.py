@@ -412,7 +412,7 @@ DEBT = {
     'bindings/py_lists.mojo': {'cpython': 8},
     'bindings/py_slice_native.mojo': {'cpython': 1},
     'bindings/py_typed_call.mojo': {'cpython': 3, 'native_loaded_module': 1},
-    'bindings/py_version_tags.mojo': {'cpython': 2},
+    'bindings/py_version_tags.mojo': {'cpython': 3},
     'bindings/qn_boundary_unpack.mojo': {'native_loaded_module': 4},
     'bindings/qn_native_door.mojo': {'cpython': 1, 'native_loaded_module': 6},
     'bindings/robust_native_pack.mojo': {'cpython': 1, 'native_loaded_module': 4},
