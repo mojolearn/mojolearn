@@ -16,6 +16,7 @@ class ReceiptOutputCap(unittest.TestCase):
     def run_one(self, n_floats):
         with tempfile.TemporaryDirectory() as d:
             env = {"MOJOLEARN_MEASUREMENT_RECEIPTS": str(Path(d) / "r.json"),
+                   "MOJOLEARN_MEASUREMENT_RETAIN_BYTES": "1",     # a job that scores an opponent
                    "MOJOLEARN_RECEIPT_OUTPUT_MAX_BYTES": str(1 << 20)}
             outputs = {"y": np.arange(n_floats, dtype=np.float64)}
             with mock.patch.dict(os.environ, env):

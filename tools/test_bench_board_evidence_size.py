@@ -47,7 +47,7 @@ class EvidenceSize(unittest.TestCase):
         self.so = site / "_mojolearn_native.cpython-312-x86_64-linux-gnu.so"
         self.so.write_bytes(SO_BYTES)
         self.so_sha = hashlib.sha256(SO_BYTES).hexdigest()
-        self.ctx = dict(out=str(self.out), measurement_inventory={}, measurement_source={"status": "local"},
+        self.ctx = dict(out=str(self.out), with_opponents=True, measurement_inventory={}, measurement_source={"status": "local"},
                         evidence_r2=False, artifact_identity={"wheel": "mojolearn_nvidia-0.8.67-candidate.whl"})
 
     def race(self, name):
