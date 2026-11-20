@@ -183,9 +183,23 @@ def test_timeout_kills_a_busy_compiler(tmp_path):
     assert v == "TIMEOUT" and time.monotonic() - t0 < 10
 
 
+def _wall_per_cpu_second():
+    """Wall seconds this machine takes now to give one spinning process one CPU second (1.0 when a core is free)."""
+    t0, c0 = time.monotonic(), time.process_time()
+    while time.process_time() - c0 < 1.0:
+        pass
+    return time.monotonic() - t0
+
+
 def test_a_busy_compiler_is_not_stalled(tmp_path):
+    # The probe reads `ps` TIME, whole seconds, and run_one wants it up by more than 0.5 within `stall`: a spinner
+    # must gain a whole CPU second, plus up to one more of rounding, inside the window. On an idle machine that is
+    # under 1.5 s of wall; with every core busy (box job on 9bdaeb6e48) a spinner got a fraction of a core and the
+    # fixed 1.5 s window called it STALLED. The window is two measured CPU seconds of wall plus margin: 2.5 s idle.
+    w = _wall_per_cpu_second()
+    stall = 2 * w + .5
     cmd, out = fake(tmp_path, "spin")
-    v, _, _ = xcc.run_one(cmd, out, timeout=2.5, stall=1.5, poll=0.1)
+    v, _, _ = xcc.run_one(cmd, out, timeout=stall + 1.0, stall=stall, poll=0.1)
     assert v == "TIMEOUT"
 
 
