@@ -75,8 +75,8 @@ def gemm_native(
             return m * n
     var wrote = 0
     wrote = gemm_host_run(cp, a_address, b_address, op, m, n, k)
-    # The CPU column's side of -D MOJOLEARN_IDENTITY_FAST_NAN_CANON (default
-    # off; core/nan_canon.mojo): the same pass gemm/host_transport.mojo
+    # The CPU column's side of NAN_CANON_ON (default
+    # on; core/nan_canon.mojo): the same pass gemm/host_transport.mojo
     # `gemm_down_f32` makes on the device columns, over the finished product.
     comptime if NAN_CANON_ON:
         _ = nan_canon_f32(cp, m * n)
@@ -107,8 +107,8 @@ def gemm_bf16_native(
         raise Error("gemm_bf16: m, n and k must each be at most 2^30")
     var wrote = 0
     wrote = gemm_bf16_host_run(cp, a_address, b_address, op, m, n, k, a_bf16)
-    # The CPU column's side of -D MOJOLEARN_IDENTITY_FAST_NAN_CANON (default
-    # off; core/nan_canon.mojo): the same pass gemm/host_transport.mojo
+    # The CPU column's side of NAN_CANON_ON (default
+    # on; core/nan_canon.mojo): the same pass gemm/host_transport.mojo
     # `gemm_down_f32` makes on the device columns, over the finished product.
     comptime if NAN_CANON_ON:
         _ = nan_canon_f32(cp, m * n)
@@ -141,8 +141,8 @@ def gemm_int8_native(
         raise Error("gemm_int8: m and n must each be at most 2^30")
     var wrote = 0
     wrote = gemm_int8_host_run(cp, qa_address, ea_address, qb_address, eb_address, m, n, k)
-    # The CPU column's side of -D MOJOLEARN_IDENTITY_FAST_NAN_CANON (default
-    # off; core/nan_canon.mojo): the same pass gemm/host_transport.mojo
+    # The CPU column's side of NAN_CANON_ON (default
+    # on; core/nan_canon.mojo): the same pass gemm/host_transport.mojo
     # `gemm_down_f32` makes on the device columns, over the finished product.
     comptime if NAN_CANON_ON:
         _ = nan_canon_f32(cp, m * n)
@@ -216,8 +216,8 @@ def gemm_int15_native(addrs: List[Int], params: List[Int]) raises -> Int:
         raise Error("gemm_int15: m and n must each be at most 2^30")
     var wrote = 0
     wrote = gemm_int15_host_run(cp, ah_address, al_address, ea_address, bh_address, bl_address, eb_address, m, n, k)
-    # The CPU column's side of -D MOJOLEARN_IDENTITY_FAST_NAN_CANON (default
-    # off; core/nan_canon.mojo): the same pass gemm/host_transport.mojo
+    # The CPU column's side of NAN_CANON_ON (default
+    # on; core/nan_canon.mojo): the same pass gemm/host_transport.mojo
     # `gemm_down_f32` makes on the device columns, over the finished product.
     comptime if NAN_CANON_ON:
         _ = nan_canon_f32(cp, m * n)

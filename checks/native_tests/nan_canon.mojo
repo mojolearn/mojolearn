@@ -2,8 +2,8 @@
 """A computed NaN is ONE word on every column (lane fx-nan-canon, 2026-11-19).
 
 IEEE 754 fixes when a NaN appears and not its word: NVIDIA writes 0x7fffffff,
-Apple and an ARM host 0x7fc00000, AMD and an x86 host 0xffc00000. With
-`-D MOJOLEARN_IDENTITY_FAST_NAN_CANON` a float32 result that leaves the device
+Apple and an ARM host 0x7fc00000, AMD and an x86 host 0xffc00000. By
+default (NAN_CANON_ON, since 2026-11-20) a float32 result that leaves the device
 (and the CPU column's finished result) carries the canonical quiet NaN
 0x7fc00000 instead (core/nan_canon.mojo). This check:
 
@@ -33,7 +33,8 @@ compares inside each case run across the cores.
 
     pixi run check-native-cpu nan_canon
     pixi run check-native-gpu nan_canon
-and both again from a build with -D MOJOLEARN_IDENTITY_FAST_NAN_CANON.
+and both again from a build with -D MOJOLEARN_IDENTITY_FAST_NAN_CANON_OFF
+(the arm-off clauses; `pixi run check-nan-canon-off-cpu` / `-gpu`).
 """
 from std.memory import bitcast
 from core.host_parallel import host_parallelize

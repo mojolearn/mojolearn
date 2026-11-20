@@ -14,8 +14,9 @@ bytes. A GEMM reaches one from finite inputs: two products overflow to
 +inf and -inf and the fold adds them
 (gemm/checks/gemm_rtf_boundary_check.mojo, the +-FLT_MAX draw at k = 300).
 
-WHAT. `-D MOJOLEARN_IDENTITY_FAST_NAN_CANON` (default off; A/B owed, row
-`identity-nan-canon` of bench/results/paper_compare/owed-pre0867.json):
+WHAT (the experiment MOJOLEARN_IDENTITY_FAST_NAN_CANON; DEFAULT ON since
+2026-11-20, row `identity-nan-canon` of
+bench/results/paper_compare/owed-pre0867.json; see NAN_CANON_ON below):
 every NaN word of a downloaded float32 result becomes NAN_CANON_BITS, the
 quiet NaN with a clear sign and an empty payload (the word
 `metrics/checks/pinned_sum.mojo` `canonicalize_nan` already writes for the
@@ -38,8 +39,8 @@ canonicalize: a door whose buffer holds float32 results asks for it
 (`download_f32_into_canon`, or `nan_canon_f32` after its own copy), and a
 door that moves words keeps the plain copy.
 
-With the define off every entry here compiles to nothing at its call sites
-(`comptime if NAN_CANON_ON`), so the default build is unchanged.
+Under `-D MOJOLEARN_IDENTITY_FAST_NAN_CANON_OFF` every entry here compiles to
+nothing at its call sites (`comptime if NAN_CANON_ON`).
 """
 from std.memory import bitcast
 from std.sys import is_defined
@@ -53,9 +54,25 @@ from core.host_predict_threads import host_predict_chunk, host_predict_task_coun
 #: IDENTITY_PATHS Clause B names.
 comptime NAN_CANON_BITS: UInt32 = 0x7FC00000
 
-#: The arm. `identical` only: `fast` promises no bits.
+#: The switch. `identical` only: `fast` promises no bits. DEFAULT ON since 2026-11-20.
+# This is a cross-vendor identity fix, not a speed arm: a computed NaN was three different words on the three
+# vendors. Its cost, A/B round 3, 2026-11-20 (lane fx-verdicts5; NVIDIA L40S host 2ef132a6de04, wheel 28a780604c and
+# its B set, base and arm back to back in one pod job, tag nvc-ab-20261120T063324Z-c630ad; one scored run per arm;
+# digests and quality equal on both cells, which hold no NaN). Base -> arm ms: neural/gemm 73.55 -> 67.42 (0.917;
+# the row's other base in the job is 61.74, so the row's own spread is 19 %: no cost readable), transformer-decode
+# 1,086.0 -> 1,095.6 (1.009; the row's three other bases 1,086.0 to 1,086.8, another arm that does not touch it
+# 1,089.4: at most 0.9 %, at the edge of the row's noise). Cost is noise: DEFAULT. BITS CHANGE on every column
+# together, only in results that hold a NaN: NVIDIA 0x7fffffff, AMD and x86 host 0xffc00000 -> 0x7fc00000.
+# -D MOJOLEARN_IDENTITY_FAST_NAN_CANON_OFF returns the vendor's word (kept until the release's one verification
+# has recorded the columns; then an owed deletion).
+# OWED, doors that still return the vendor's NaN word (lane fx-nan-canon's list, each needs its buffer confirmed to
+# hold floats): the dequantize and widening doors gemm/host/linalg_native.mojo (a passed-through input NaN); qr /
+# svdvals / eigen (decomposition/linalg_door_impl.mojo); estimator outputs that leave through a raw
+# `enqueue_copy(dst_ptr=...)` or a private `download_f32` (kernel_methods, mixture, gaussian_process, cholesky,
+# x_cnn, x_ann distances, resample statistics, embedding); the cross-entropy gradient training/estimator.mojo;
+# state exports through plain `download_f32_into` (byte-LM state and gradients).
 comptime NAN_CANON_ON = (
-    is_defined["MOJOLEARN_IDENTITY_FAST_NAN_CANON"]() and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    not is_defined["MOJOLEARN_IDENTITY_FAST_NAN_CANON_OFF"]() and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 )
 
 
