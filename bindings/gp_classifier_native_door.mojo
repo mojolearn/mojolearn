@@ -55,6 +55,9 @@ from bindings.gp_labels_native_door import gp_decode_score_labels
 from bindings.mcls_common_unpack import mc_shape_of
 from bindings.host_inference_scalars_door import host_inference_scalar
 from bindings.gp_keys_unpack import gp_keys
+from bindings.operation_names_gp import (
+    GP_OPN_FAMILY_GP_GPC_LML, GP_OPN_FAMILY_GP_GPC_FIT, GP_OPN_FAMILY_GP_GPC_PREDICT,
+    GP_OPN_FAMILY_GP_GPC_PREDICT_PROBA, GP_OPN_FAMILY_GP_GPC_LATENT, GP_OPN_FAMILY_GP_GPC_SCORE)
 from bindings.py_balanced import py_item
 
 comptime _NAME = "mojolearn GaussianProcessClassifier"
@@ -757,10 +760,10 @@ def _gpc_latent_mean_and_variance(model: PythonObject, args: GPArgumentPins, con
     return Python.tuple(latent.mean, latent.variance)
 
 
-def gp_classifier_operation(model: PythonObject, operation: String, args: GPArgumentPins,
+def gp_classifier_operation(model: PythonObject, operation: Int, args: GPArgumentPins,
                             context: PythonObject) raises -> PythonObject:
     """GaussianProcessClassifier's public operations: args[0] is the resolved binding."""
-    if operation == "family_gp_gpc_lml":
+    if operation == GP_OPN_FAMILY_GP_GPC_LML:
         # The complete public operation: refusal order, fitted state and final
         # scalar are native. Admit truth values before any boolean protocol.
         if args[0] is not None:
@@ -780,16 +783,16 @@ def gp_classifier_operation(model: PythonObject, operation: String, args: GPArgu
         var result = py_item(fields, nk[].k_log_marginal_likelihood_value_)
         host_inference_scalar(result, context)
         return result
-    if operation == "family_gp_gpc_fit":
+    if operation == GP_OPN_FAMILY_GP_GPC_FIT:
         _gpc_fit(model, args, context)
         return model
-    if operation == "family_gp_gpc_predict":
+    if operation == GP_OPN_FAMILY_GP_GPC_PREDICT:
         return _gpc_predict(model, args, context)
-    if operation == "family_gp_gpc_predict_proba":
+    if operation == GP_OPN_FAMILY_GP_GPC_PREDICT_PROBA:
         return _gpc_predict_proba(model, args, context)
-    if operation == "family_gp_gpc_latent":
+    if operation == GP_OPN_FAMILY_GP_GPC_LATENT:
         return _gpc_latent_mean_and_variance(model, args, context)
-    if operation == "family_gp_gpc_score":
+    if operation == GP_OPN_FAMILY_GP_GPC_SCORE:
         # `score(X, y)`: predict, the row-count refusal, then
         # `accuracy_fraction(y, pred)`; args = (binding, base binding, X, y).
         var prediction = _gpc_prediction_codes(model, args[0], args[2], context)
@@ -806,10 +809,10 @@ def gp_classifier_operation(model: PythonObject, operation: String, args: GPArgu
         _ = prediction
         _ = pred
         return PythonObject(result)
-    raise Error("RuntimeError: unknown gaussian process classifier operation " + operation)
+    raise Error("RuntimeError: unknown gaussian process classifier operation code " + String(operation))
 
 
-def gp_classifier_operation(model: PythonObject, operation: String, args: PythonObject,
+def gp_classifier_operation(model: PythonObject, operation: Int, args: PythonObject,
                             context: PythonObject) raises -> PythonObject:
     # Compatibility UNPACK for internal archive/model-selection callers.
     # Public GP lifecycle already owns these slots in its native call record.

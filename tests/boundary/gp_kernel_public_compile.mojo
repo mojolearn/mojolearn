@@ -7,7 +7,7 @@ from bindings.gp_kernel_public_native_door import gp_kernel_operation, gp_admit_
 
 def kernel_operation(kernel: PythonObject, operation: PythonObject, args: PythonObject,
                      context: PythonObject) raises -> PythonObject:
-    return gp_kernel_operation(kernel, String(operation), args, context)
+    return gp_kernel_operation(kernel, Int(py=operation), args, context)
 
 @export
 def PyInit__mojolearn_gp_kernel_compile() abi("C") -> PythonObject:

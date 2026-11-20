@@ -61,6 +61,9 @@ from bindings.gp_common_native_pack import (
 )
 from gaussian_process.gp_regressor_native_run import GPRNormalization
 from bindings.gp_keys_unpack import gp_keys
+from bindings.operation_names_gp import (
+    GP_OPN_FAMILY_GP_GPR_FIT, GP_OPN_FAMILY_GP_GPR_PREDICT, GP_OPN_FAMILY_GP_GPR_SAMPLE_Y,
+    GP_OPN_FAMILY_GP_GPR_LML, GP_OPN_FAMILY_GP_GPR_SCORE)
 from bindings.py_balanced import py_item
 
 comptime _GPR = "mojolearn GaussianProcessRegressor"
@@ -748,24 +751,24 @@ def _gpr_score(model: PythonObject, args: GPArgumentPins, context: PythonObject)
     return PythonObject(result)
 
 
-def gp_regressor_operation(model: PythonObject, operation: String, args: GPArgumentPins,
+def gp_regressor_operation(model: PythonObject, operation: Int, args: GPArgumentPins,
                            context: PythonObject) raises -> PythonObject:
     """GaussianProcessRegressor's public operations: args[0] is the resolved binding."""
-    if operation == "family_gp_gpr_fit":
+    if operation == GP_OPN_FAMILY_GP_GPR_FIT:
         _gpr_fit(model, args, context)
         return model
-    if operation == "family_gp_gpr_predict":
+    if operation == GP_OPN_FAMILY_GP_GPR_PREDICT:
         return _gpr_predict(model, args, context)
-    if operation == "family_gp_gpr_sample_y":
+    if operation == GP_OPN_FAMILY_GP_GPR_SAMPLE_Y:
         return _gpr_sample_y(model, args, context)
-    if operation == "family_gp_gpr_lml":
+    if operation == GP_OPN_FAMILY_GP_GPR_LML:
         return _gpr_log_marginal_likelihood(model, args, context)
-    if operation == "family_gp_gpr_score":
+    if operation == GP_OPN_FAMILY_GP_GPR_SCORE:
         return _gpr_score(model, args, context)
-    raise Error("RuntimeError: unknown gaussian process regressor operation " + operation)
+    raise Error("RuntimeError: unknown gaussian process regressor operation code " + String(operation))
 
 
-def gp_regressor_operation(model: PythonObject, operation: String, args: PythonObject,
+def gp_regressor_operation(model: PythonObject, operation: Int, args: PythonObject,
                             context: PythonObject) raises -> PythonObject:
     # Compatibility UNPACK for internal archive/model-selection callers.
     # Public GP lifecycle already owns these slots in its native call record.

@@ -43,6 +43,10 @@ from providers.python.estimator_lifecycle_pyapi_unpack import estimator_outside,
 from providers.python.cluster_public_lifecycle_pyapi_door import _refusal
 from bindings.py_optional import py_present
 from bindings.gp_keys_unpack import gp_keys
+from bindings.operation_names_gp import (
+    GP_OPN_FAMILY_GP_GPR_FIT, GP_OPN_FAMILY_GP_GPR_PREDICT, GP_OPN_FAMILY_GP_GPR_SAMPLE_Y,
+    GP_OPN_FAMILY_GP_GPR_LML, GP_OPN_FAMILY_GP_GPR_SCORE, GP_OPN_FAMILY_GP_GPC_LML, GP_OPN_FAMILY_GP_GPC_FIT,
+    GP_OPN_FAMILY_GP_GPC_PREDICT, GP_OPN_FAMILY_GP_GPC_PREDICT_PROBA, GP_OPN_FAMILY_GP_GPC_SCORE)
 from bindings.py_balanced import py_item
 
 
@@ -272,23 +276,30 @@ def _gp_public_arguments(mut call: AdmittedCall, model: PythonObject, fields: Py
     args.binding(live)
     return args^
 
-def _gp_query_operation(operation: String) -> Bool:
+def _gp_query_operation(operation: Int) -> Bool:
     """The public queries whose owner admits X through gp_query (lane a7a):
     their kernel entries test the query (or the owner does)."""
-    return (operation == "family_gp_gpr_predict" or operation == "family_gp_gpr_score"
-            or operation == "family_gp_gpc_predict" or operation == "family_gp_gpc_predict_proba"
-            or operation == "family_gp_gpc_score")
+    return (operation == GP_OPN_FAMILY_GP_GPR_PREDICT or operation == GP_OPN_FAMILY_GP_GPR_SCORE
+            or operation == GP_OPN_FAMILY_GP_GPC_PREDICT or operation == GP_OPN_FAMILY_GP_GPC_PREDICT_PROBA
+            or operation == GP_OPN_FAMILY_GP_GPC_SCORE)
 
 
-def gp_public_operation(model: PythonObject, operation: String, args: PythonObject,
+def gp_public_operation(model: PythonObject, operation: Int, args: PythonObject,
                         context: PythonObject) raises -> PythonObject:
+    # bw2-core: `operation` is the leaf code of bindings/operation_names_gp.mojo
+    # (a regressor or classifier code; the kernel codes never reach this
+    # door). The classifier test is a range test and the method tests are
+    # integer compares (they were a prefix test and four suffix tests on the
+    # name String per call).
     classical_connect_numpy(context)
-    var classifier = operation.startswith("family_gp_gpc_")
+    var classifier = operation >= GP_OPN_FAMILY_GP_GPC_LML
     var fields = _fields(model)
-    var fitting = operation.endswith("_fit")
-    var method = String("fit") if fitting else (String("predict_proba") if operation.endswith("_predict_proba") else (String("predict") if operation.endswith("_predict") else (String("score") if operation.endswith("_score") else String("other"))))
-    var guarded = method != "other"
-    var double_binding = classifier and (fitting or method == "predict" or method == "score")
+    var fitting = operation == GP_OPN_FAMILY_GP_GPR_FIT or operation == GP_OPN_FAMILY_GP_GPC_FIT
+    var predicting = operation == GP_OPN_FAMILY_GP_GPR_PREDICT or operation == GP_OPN_FAMILY_GP_GPC_PREDICT
+    var scoring = operation == GP_OPN_FAMILY_GP_GPR_SCORE or operation == GP_OPN_FAMILY_GP_GPC_SCORE
+    var proba = operation == GP_OPN_FAMILY_GP_GPC_PREDICT_PROBA
+    var guarded = fitting or proba or predicting or scoring
+    var double_binding = classifier and (fitting or predicting or scoring)
     var x_index = 2 if double_binding else 1
     var nk = gp_keys()
     var depth_value = py_get(fields, nk[].k__mojolearn_fitting, PythonObject(0))
@@ -296,6 +307,8 @@ def gp_public_operation(model: PythonObject, operation: String, args: PythonObje
         raise Error("TypeError: native GP fit depth must be an exact integer")
     var nested = Int(py=depth_value) > 0
     if guarded and not fitting:
+        # The method name is built only here, for the not-fitted refusal.
+        var method = String("predict_proba") if proba else (String("predict") if predicting else String("score"))
         classical_require_fitted(model, False, method, context)
     fields = _gp_admit_state(model, context, classifier, fitting)
     # One admission record for this public call (ne1-e-admitted-call): the
@@ -350,13 +363,13 @@ def gp_public_operation(model: PythonObject, operation: String, args: PythonObje
                 estimator_feature_check(model, fields, source, context)
     # Public option scalars must never reach Python truth/int protocols. Score
     # and fit y are separately admitted as labels/numeric buffers by owners.
-    if operation == "family_gp_gpr_predict" or operation == "family_gp_gpr_sample_y":
+    if operation == GP_OPN_FAMILY_GP_GPR_PREDICT or operation == GP_OPN_FAMILY_GP_GPR_SAMPLE_Y:
         host_inference_scalar(args[2], context, True)
         host_inference_scalar(args[3], context, True)
-    elif operation == "family_gp_gpr_lml":
+    elif operation == GP_OPN_FAMILY_GP_GPR_LML:
         host_inference_scalar(args[2], context, True)
         classical_admit_value(args[1], context)
-    if guarded and method == "score":
+    if guarded and scoring:
         classical_admit_value(args[x_index + 1], context)
     # The X / y admissions above may run in GIL release windows and take no
     # record: re-admit the record's modules before resolving the bindings.
@@ -395,10 +408,10 @@ def gp_public_operation(model: PythonObject, operation: String, args: PythonObje
         if input_copied:
             py_setitem(fields, nk[].k_input_copied_, PythonObject(True))
         estimator_fit_complete(model, source, classifier, context)
-    if outside and (method == "predict" or method == "predict_proba") and py_get(context, nk[].k_ndarray) is not None:
+    if outside and (predicting or proba) and py_get(context, nk[].k_ndarray) is not None:
         # Existing semantics widen only a standalone regressor prediction.
         # A (mean, std/cov) tuple keeps each kernel's float32 output dtype.
-        if not classifier and method == "predict" and py_type(result) is py_item(context, nk[].k_array_class):
+        if not classifier and predicting and py_type(result) is py_item(context, nk[].k_array_class):
             result = admit_family_f64(result, "prediction", context)
         return _gp_finished(result, context)
     return result
