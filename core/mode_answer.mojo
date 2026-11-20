@@ -177,3 +177,17 @@ def answer_mode_word(mut word: String, family: Int) raises:
     if word == "fast":
         if (MODE_ANSWER.get_or_create_ptr()[].families & family) != 0:
             word = "identical"
+
+
+@always_inline
+def word_runs_identical(word: String, family: Int) raises -> Bool:
+    """Whether an admitted mode word of a door of `family` runs the identical
+    set: `identical`, or `fast` where the identical set answers it for that
+    family (lane fx-fast-mask). For a door whose check or route is "the word
+    is `identical`" and that holds the word as text; an `identical` word pays
+    the one comparison it paid before."""
+    if word == "identical":
+        return True
+    comptime if CompilationTarget.is_macos():
+        return False
+    return word == "fast" and (MODE_ANSWER.get_or_create_ptr()[].families & family) != 0

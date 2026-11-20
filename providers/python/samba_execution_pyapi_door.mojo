@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Whole-operation Samba admission/publication over the common native provider.
 # The executor receives only native endpoints, pointers and stable metadata.
+from core.mode_answer import MODE_FAMILY_NEURAL, word_runs_identical
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from std.sys.compile import is_defined
@@ -503,7 +504,7 @@ def samba_provider_eligible(fields: PythonObject) raises -> Bool:
     var bi = native_loaded_module("builtins")
     for i in range(len(blocks)):  # driver-loop: route eligibility at the single operation boundary
         var block = _samba_native_fields(blocks[i])
-        if String(block["numeric_mode"]) != "identical":
+        if not word_runs_identical(String(block["numeric_mode"]), MODE_FAMILY_NEURAL):  # lane fx-fast-mask: an answered `fast` block is eligible
             return False
         if String(block["_native_kind"]) == "transformer":
             if String(block["_native_route"]) == "cpu" and block["_int15"] is not None:

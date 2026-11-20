@@ -29,6 +29,8 @@ from providers.python.neural_descriptor_pyapi_door import neural_descriptor_cach
 from core.hostptr import f32_ptr
 from transformer.causal_lm_construct_impl import causal_lm_gather_f32, causal_lm_check_finite
 from std.python._cpython import GILReleased
+from core.mode_answer import MODE_FAMILY_NEURAL
+from bindings.mode_answer_door import answer_mode_object
 from core.neural_entry_table import NeuralEntryKey, neural_ref, NEURAL_TABLE_BLOCK_FORWARD, NEURAL_TABLE_MAMBA_TRAIN, MAMBA3_CAP_SESSION_PREFILL
 from providers.python.mamba3_prefill_session_pyapi_door import mamba3_prefill_caps, mamba3_prefill_session_open
 from providers.python.transformer_block_session_pyapi_door import transformer_block_session_open
@@ -282,6 +284,10 @@ def _model_bindings(mut mods: NativeModules, route: PythonObject, kind: String, 
     var mode = PythonObject("identical") if String(route) == "cpu" else (_native_entry_fields(mods, context["backend"])["_DEFAULT_MODE"] if requested_mode is None else requested_mode.strip().lower())
     if py_type(mode) is not bi.str:
         raise Error("TypeError: CausalLM connected numeric mode requires an ordinary string")
+    # lane fx-fast-mask: a requested `fast` that the identical set answers
+    # (NEURAL) selects the identical binding; the mode check below then
+    # compares that set with its binary.
+    answer_mode_object(mode, String(py=mode), MODE_FAMILY_NEURAL)
     var key = route + PythonObject(":") + mode
     var entries = py_get(context["bindings"], key)
     if entries is None:

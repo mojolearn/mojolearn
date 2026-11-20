@@ -19,6 +19,7 @@ the temporary tuple is released.
 """
 from bindings.native_class_admission_door import dict_keys_admitted, dict_keys_admit, class_record, class_admit
 from std.python import Python, PythonObject
+from core.mode_answer import MODE_FAMILY_NEURAL, word_runs_identical
 from std.python._cpython import PyObjectPtr
 from bindings.py_cpython_table import cpython_table
 from std.python.bindings import ExceptionType, raise_python_exception
@@ -523,7 +524,7 @@ def mamba3_setstate(mut mods: NativeModules, block: PythonObject, state: PythonO
     py_setitem(fields, "_prefill_session", PythonObject(None))
     py_setitem(fields, "_owned_generation", PythonObject(None))
     py_setitem(fields, "_native_mamba_block_provider_cache", PythonObject(None))
-    if String(fields["_native_route"]) == "gpu" and String(fields["numeric_mode"]) == "identical" and NEURAL_NATIVE_DISPATCH:
+    if String(fields["_native_route"]) == "gpu" and word_runs_identical(String(fields["numeric_mode"]), MODE_FAMILY_NEURAL) and NEURAL_NATIVE_DISPATCH:  # lane fx-fast-mask
         # A native registry handle of the block's training image (the former
         # Python entry mamba3_prefill_session_create and its binding field).
         var route = Mamba3StateRoute(1, 0, False)
@@ -736,7 +737,7 @@ def mamba_session_init(mut mods: NativeModules, session: PythonObject, block: Py
             _ = py_call(params.append, 1 if handle.plan.pending else 0)
         handle.device = _native_function(mods, binding, kind_name + "_session_create")()
         mods.released()
-        if NEURAL_NATIVE_DISPATCH and String(fields["numeric_mode"]) == "identical":
+        if NEURAL_NATIVE_DISPATCH and word_runs_identical(String(fields["numeric_mode"]), MODE_FAMILY_NEURAL):  # lane fx-fast-mask
             handle.provider = neural_descriptor_reuse(py_get(fields, "_native_mamba_block_provider_cache"),
                 _native_function(mods, binding, "mamba_block_api_v1"), String(MAMBA_BLOCK_ABI_NAME), 44)
             mods.released()
