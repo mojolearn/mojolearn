@@ -115,6 +115,8 @@ from xtrees.glue_calls import (
     xt_isotonic_fit, xt_platt_apply_strided, xt_isotonic_predict_strided, xt_complement_pairs,
     xt_accumulate_cols_many, xt_ovr_assemble, xt_calibrated_proba,
 )
+from bindings.trees_keys_unpack import trees_keys
+from bindings.py_balanced import py_item
 
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -145,9 +147,10 @@ def meta_kind(model: PythonObject, context: PythonObject) raises -> String:
     reconnection (a new table) or a `__bases__` assignment (a new `__mro__`
     tuple) walks again."""
     var b = trees_builtins()
-    var table = context["trees_meta_classes"]
+    var nk = trees_keys()
+    var table = py_item(context, nk[].k_trees_meta_classes)
     var cls = py_type(model)
-    var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
+    var mro = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, cls)
     var held = trees_side_get(_META_KIND_SLOT, cls)
     if held is not None and held[0] is table and held[1] is mro:
         return String(held[2])
@@ -187,7 +190,8 @@ def _copy_block(array: PythonObject, start: Int, stop: Int, typestr: String, con
     var item = trees_itemsize(typestr)
     var view = py_call(b.memoryview, array._store)
     var raw = py_call(py_attr(py_call(view.cast, "B"), "__getitem__"), py_call(b.slice, PythonObject(start * item), PythonObject(stop * item)))
-    var store = py_call(context["array_type"], PythonObject(_store_code(typestr)))
+    var nk = trees_keys()
+    var store = py_call(py_item(context, nk[].k_array_type), PythonObject(_store_code(typestr)))
     _ = py_call(store.frombytes, py_call(raw.tobytes))
     return classical_wrap_array(store, Python.tuple(stop - start), typestr, "C", context)
 
@@ -290,7 +294,8 @@ def _codes_array(var values: PythonObject, context: PythonObject) raises -> Pyth
     # list storage instead of asking it for a buffer or invoking list hooks.
     values = classifier_label_list(values, context)
     var listed = values if py_type(values) is b.list or py_type(values) is b.tuple else _label_list(values, context)
-    var store = py_call(context["array_type"], PythonObject("i"), _int_list(listed))
+    var nk = trees_keys()
+    var store = py_call(py_item(context, nk[].k_array_type), PythonObject("i"), _int_list(listed))
     return classical_wrap_array(store, Python.tuple(len(store)), "<i4", "C", context)
 
 
@@ -322,7 +327,8 @@ def _member_class_codes(member: PythonObject, context: PythonObject) raises -> P
         if same:
             return held
     var subs = _int_list(listed)
-    var store = py_call(context["array_type"], PythonObject("i"), subs)
+    var nk = trees_keys()
+    var store = py_call(py_item(context, nk[].k_array_type), PythonObject("i"), subs)
     var array = classical_wrap_array(store, Python.tuple(len(store)), "<i4", "C", context)
     var at = -1
     for i in range(len(subs)):  # driver-loop: over the member's fitted classes
@@ -482,7 +488,8 @@ def _fit_member(member: PythonObject, X: PythonObject, y: PythonObject, weights:
                 context: PythonObject) raises:
     var keywords = Python.dict()
     if weights is not None:
-        py_setitem(keywords, "sample_weight", weights)
+        var nk = trees_keys()
+        py_setitem(keywords, nk[].k_sample_weight, weights)
     _ = prep_estimator_call(member, "fit", Python.tuple(X, y), context, keywords)
 
 
@@ -490,7 +497,8 @@ def _takes_weights(est: PythonObject, context: PythonObject) raises -> Bool:
     var plan = prep_estimator_plan(est, context)
     if plan is None:
         return False
-    var keywords = py_get(py_get(plan, "keywords", Python.dict()), "fit", Python.tuple())
+    var nk = trees_keys()
+    var keywords = py_get(py_get(plan, nk[].k_keywords, Python.dict()), nk[].k_fit, Python.tuple())
     return py_contains(keywords, PythonObject("sample_weight"))
 
 
@@ -586,7 +594,8 @@ def _cv_value(cv: PythonObject, context: PythonObject) raises -> PythonObject:
     if cv is None:
         return PythonObject(5)
     var native = prep_native_context(context)
-    if py_type(py_type(cv)) is b.type and py_contains(native["family_msel_splitter_layouts"], py_type(cv)):
+    var nk = trees_keys()
+    if py_type(py_type(cv)) is b.type and py_contains(py_item(native, nk[].k_family_msel_splitter_layouts), py_type(cv)):
         return cv
     if py_type(cv) is b.list or py_type(cv) is b.tuple:
         msel_admit(cv, native)
@@ -610,7 +619,8 @@ def _index_i64(v: PythonObject, context: PythonObject) raises -> PythonObject:
         _ = view  # keep the Python object alive through the native call above
         return out
     except:
-        var store = py_call(context["array_type"], PythonObject("q"), v)
+        var nk = trees_keys()
+        var store = py_call(py_item(context, nk[].k_array_type), PythonObject("q"), v)
         return classical_wrap_array(store, Python.tuple(len(store)), "<i8", "C", context)
 
 
@@ -676,12 +686,13 @@ def _splits(xt: PythonObject, cv: PythonObject, X: PythonObject, y: PythonObject
     if py_type(c) is b.int:
         return _native_folds(xt, Int(py=c), n, codes, n_classes, context)
     var pairs = c
-    if py_contains(prep_native_context(context)["family_msel_splitter_layouts"], py_type(c)):
+    var nk = trees_keys()
+    if py_contains(py_item(prep_native_context(context), nk[].k_family_msel_splitter_layouts), py_type(c)):
         pairs = prep_native_split(c, X, y, context)
     var out = Python.list()
     var seen = admitted_vector(n if n > 1 else 1, "<i8", context)
     var seen_addr = trees_address(seen)
-    var bkey = base_helpers_key(context["trees_helpers"])
+    var bkey = base_helpers_key(py_item(context, nk[].k_trees_helpers))
     for pair in pairs:  # api-bound-loop: over the folds the user's cv splitter yields (public type: iterable of (train, test) pairs); one tuple unpack and one native index read per fold
         var both = py_call(b.tuple, pair)
         if len(both) != 2:
@@ -1101,7 +1112,8 @@ def _stacking_classifier_fit(model: PythonObject, X: PythonObject, y: PythonObje
     var splits = _splits(xt, _attr(model, "cv", PythonObject(None)), X, y, labels.n, labels.codes, True, k, context)
     var final = _attr(model, "final_estimator", PythonObject(None))
     if final is None:
-        final = prep_estimator_clone(context["native_estimator_defaults"]["LogisticRegression"], context)
+        var nk = trees_keys()
+        final = prep_estimator_clone(py_item(py_item(context, nk[].k_native_estimator_defaults), nk[].k_LogisticRegression), context)
     return _stacking_fit(model, X, labels.codes, True, splits, final, sample_weight, True, context)
 
 
@@ -1114,7 +1126,8 @@ def _stacking_regressor_fit(model: PythonObject, X: PythonObject, y: PythonObjec
                          context)
     var final = _attr(model, "final_estimator", PythonObject(None))
     if final is None:
-        final = prep_estimator_clone(context["native_estimator_defaults"]["Ridge"], context)
+        var nk = trees_keys()
+        final = prep_estimator_clone(py_item(py_item(context, nk[].k_native_estimator_defaults), nk[].k_Ridge), context)
     return _stacking_fit(model, X, y32, False, splits, final, sample_weight, False, context)
 
 
@@ -1168,7 +1181,8 @@ def _ridge_multi_entry(model: PythonObject, est: PythonObject, sample_weight: Py
     """`_multiout_ridge_entry`: the estimators binding table when it has the
     one-program ridge (FAST + Apple builds) and `est` is a plain Ridge, else
     None."""
-    var ridge = py_type(context["native_estimator_defaults"]["Ridge"])
+    var nk = trees_keys()
+    var ridge = py_type(py_item(py_item(context, nk[].k_native_estimator_defaults), nk[].k_Ridge))
     var plain = py_type(est) is ridge
     if plain:
         # Ridge checks its parameters at fit; this route skips Ridge.fit.
@@ -1493,10 +1507,11 @@ def _multioutput_assemble(model: PythonObject, Xa: PythonObject, codes: PythonOb
     var cols = Python.list()
     var stacked = True
     var all_int = True
+    var nk = trees_keys()
     for j in range(len(codes)):  # driver-loop: over members
         var col = trees_decode_labels(classes[j], codes[j], context)
         _ = py_call(cols.append, col)
-        if py_type(col) is not context["array_class"]:
+        if py_type(col) is not py_item(context, nk[].k_array_class):
             stacked = False
         elif String(col.dtype) != "<i8":
             all_int = False
@@ -1579,7 +1594,8 @@ def _multioutput_classifier_score(model: PythonObject, X: PythonObject, y: Pytho
     var Xa = _check_x(model, X, context)
     var codes = _multioutput_member_codes(model, Xa, context)
     var pred = _multioutput_assemble(model, Xa, codes, context)
-    if py_type(pred) is not context["array_class"]:
+    var nk = trees_keys()
+    if py_type(pred) is not py_item(context, nk[].k_array_class):
         # Label objects no Array holds (str classes): scored in codes.
         return _multioutput_score_codes(model, codes, _rows(Xa), y, sample_weight, context)
     var truth = admit_c_view(y, "y", context)
@@ -1599,9 +1615,9 @@ def _multioutput_classifier_score(model: PythonObject, X: PythonObject, y: Pytho
     var t_int = tdt == "<i4" or tdt == "<i8" or tdt == "<u4" or tdt == "<u1" or tdt == "<u2" or tdt == "<i1"
     var p_int = pdt == "<i8"
     var size = n * m
-    var eq = py_call(context["array_type"], PythonObject("B"), py_call(context["native_bytes_type"], size))
+    var eq = py_call(py_item(context, nk[].k_array_type), PythonObject("B"), py_call(py_item(context, nk[].k_native_bytes_type), size))
     var eq_addr = Int(py=py_call(eq.buffer_info)[0])  # UNPACK: the flag store's address (Python array)
-    var bkey = base_helpers_key(context["trees_helpers"])
+    var bkey = base_helpers_key(py_item(context, nk[].k_trees_helpers))
     var tc = admitted_vector(size, "<i8" if t_int else "<f8", context)
     trees_cast(Int(py=classical_address(truth)), tdt, trees_address(tc), "<i8" if t_int else "<f8", size, context)
     _ = tc  # keep the Python object alive through the native call above
@@ -1640,7 +1656,8 @@ def _multioutput_rows_score(model: PythonObject, eq: PythonObject, n: Int, m: In
     _ = eq  # keep the flag store alive through the native call above
     _ = miss  # keep the Python object alive through the native call above
     var zero = admitted_vector(n, "<i4", context)
-    var mode = py_get(py_fields(model), "numeric_mode")
+    var nk = trees_keys()
+    var mode = py_get(py_fields(model), nk[].k_numeric_mode)
     return PythonObject(labels_accuracy(zero, miss, sample_weight, mode, context))
 
 
@@ -1664,9 +1681,10 @@ def _multioutput_score_codes(model: PythonObject, codes: PythonObject, n: Int, y
     if len(rows) != n or width != m:
         raise Error("y has shape " + _repr(Python.tuple(len(rows), width)) + ", the predictions have shape "
                     + _repr(Python.tuple(n, m)))
-    var eq = py_call(context["array_type"], PythonObject("B"), py_call(context["native_bytes_type"], n * m))
+    var nk = trees_keys()
+    var eq = py_call(py_item(context, nk[].k_array_type), PythonObject("B"), py_call(py_item(context, nk[].k_native_bytes_type), n * m))
     var base = Int(py=py_call(eq.buffer_info)[0])
-    var bkey = base_helpers_key(context["trees_helpers"])
+    var bkey = base_helpers_key(py_item(context, nk[].k_trees_helpers))
     var getter = native_loaded_module("operator").itemgetter
     for j in range(m):  # driver-loop: over the output columns (one member each)
         var column = py_call(b.list, py_call(b.map, py_call(getter, PythonObject(j)), rows))  # cpu-route: label objects (str/mixed) no Array holds, one output column at a time
@@ -2165,14 +2183,16 @@ def _cal_rows_call(obj: PythonObject, op: String, args: PythonObject, mctx: Pyth
     """One `_arena_io` DeviceRows / resident-scope operation through its
     compiled door (model selection's `_arena_rows_call`, bindings/msel_cv_door.mojo)."""
     # call-table: member DeviceRows (arena rows door over the Python owner) has no native entry yet
-    return family_call(mctx["family_msel_rows_entry"], obj, PythonObject(op), args, mctx["family_msel_rows_context"])
+    var nk = trees_keys()
+    return family_call(py_item(mctx, nk[].k_family_msel_rows_entry), obj, PythonObject(op), args, py_item(mctx, nk[].k_family_msel_rows_context))
 
 
 def _cal_resident_op(res: PythonObject, op: String, mctx: PythonObject) raises:
     """One `_Resident` lifecycle operation (msel_common_door `msel_resident_op`)."""
     # call-table: member resident rows (arena_resident_native door over the Python _Resident) has no native entry yet
-    _ = family_call(mctx["family_msel_resident_call"], res, PythonObject(op), Python.tuple(),
-                    mctx["family_msel_resident_context"])
+    var nk = trees_keys()
+    _ = family_call(py_item(mctx, nk[].k_family_msel_resident_call), res, PythonObject(op), Python.tuple(),
+                    py_item(mctx, nk[].k_family_msel_resident_context))
 
 
 def _cal_admit_x_once(base: PythonObject, Xa: PythonObject, n: Int, d: Int) raises:
@@ -2199,8 +2219,9 @@ def _calibrated_fit(model: PythonObject, X: PythonObject, y: PythonObject, conte
     if k < 2:
         raise Error("y has fewer than 2 classes")
     var base = _attr(model, "estimator", PythonObject(None))
+    var nk = trees_keys()
     if base is None:
-        base = prep_estimator_clone(context["native_estimator_defaults"]["LinearSVC"], context)
+        base = prep_estimator_clone(py_item(py_item(context, nk[].k_native_estimator_defaults), nk[].k_LinearSVC), context)
     _require_member(base, _owner(model), context)
     _set(model, "_cal_fast", PythonObject(None))
     var ensemble = _truthy(_attr(model, "ensemble", PythonObject(True)))
@@ -2230,7 +2251,7 @@ def _calibrated_fit(model: PythonObject, X: PythonObject, y: PythonObject, conte
     # calling thread (a resident scope belongs to the thread that opened it):
     # parallel CPU units keep the per-fold rows.
     var plan = prep_estimator_plan(base, context)
-    var dev = (plan is not None and _truthy(py_get(plan, "device_rows", PythonObject(False))) and n > 0 and d > 0
+    var dev = (plan is not None and _truthy(py_get(plan, nk[].k_device_rows, PythonObject(False))) and n > 0 and d > 0
                and String(py=Xa.dtype) == "<f4" and String(py=Xa.order) == "C"
                and native_unit_device_workers(min(jobs, len(splits) - 1), context) <= 1)
     var mctx = PythonObject(None)
@@ -2240,18 +2261,18 @@ def _calibrated_fit(model: PythonObject, X: PythonObject, y: PythonObject, conte
         _cal_admit_x_once(base, Xa, n, d)
         mctx = prep_native_context(context)
         var b = trees_builtins()
-        res = native_storage_allocate(mctx["family_msel_resident_class"])
+        res = native_storage_allocate(py_item(mctx, nk[].k_family_msel_resident_class))
         _cal_resident_op(res, "msel_resident_init", mctx)
         try:
             # only DeviceRows bases enter this scope (`rows_slot` ignores the
             # size floor), as in MselFoldRows
-            var opened = native_storage_allocate(family_call(b.getattr, mctx["family_msel_arena_io"],
+            var opened = native_storage_allocate(family_call(b.getattr, py_item(mctx, nk[].k_family_msel_arena_io),
                                                              PythonObject("resident")))
             py_setattr(opened, "min_words", PythonObject(1 << 62))
             py_setattr(opened, "_scope", PythonObject(None))
             _ = _cal_rows_call(opened, "scope_enter", Python.tuple(), mctx)
             scope = opened
-            units.rows_class = family_call(b.getattr, mctx["family_msel_arena_io"], PythonObject("DeviceRows"))
+            units.rows_class = family_call(b.getattr, py_item(mctx, nk[].k_family_msel_arena_io), PythonObject("DeviceRows"))
             units.rows_take = family_call(b.getattr, res, PythonObject("take"))
         except error:
             # lane fb16-audit: a scope already entered is exited before the
@@ -2384,14 +2405,15 @@ def _calibrated_codes(model: PythonObject, X: PythonObject, context: PythonObjec
 def _regressor_score(model: PythonObject, prediction: PythonObject, y: PythonObject, sample_weight: PythonObject,
                      context: PythonObject) raises -> PythonObject:
     """`RegressorScoreMixin.score`: the float32 R^2 of the prediction."""
-    var mode = py_get(py_fields(model), "numeric_mode")
+    var nk = trees_keys()
+    var mode = py_get(py_fields(model), nk[].k_numeric_mode)
     var truth = admit_f32(y, -1, "y", context, finite=False)
     var pred = admit_f32(prediction, -1, "prediction", context, finite=False)
     if len(_attr(pred.array, "shape", Python.tuple(0))) == 2 or len(_attr(truth.array, "shape", Python.tuple(0))) == 2:
         # 2-D targets: the metrics family's public r2_score (its multioutput
         # program), on the same float32 blocks.
-        var metrics = context["native_meta_metrics"]
-        var selected = mode if mode is not None else context["backend_fields"]["_DEFAULT_MODE"]
+        var metrics = py_item(context, nk[].k_native_meta_metrics)
+        var selected = mode if mode is not None else py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
         var binding = metrics[1][selected]
         if py_type(binding) is trees_builtins().str:
             raise Error(String(binding))
@@ -2602,7 +2624,8 @@ def _meta_dispatch(model: PythonObject, kind: String, operation: String, args: P
         # to labels (a Python list of n objects for str classes) that the
         # accuracy then re-encoded. Same refusals, same match count and
         # weight sums: the same bits.
-        var mode = py_get(py_fields(model), "numeric_mode")
+        var nk = trees_keys()
+        var mode = py_get(py_fields(model), nk[].k_numeric_mode)
         var codes = _meta_class_codes(model, kind, X, context)
         return PythonObject(classical_score_from_codes(y, _attr(model, "classes_", PythonObject(None)), codes,
                                                        sample_weight, mode, context))

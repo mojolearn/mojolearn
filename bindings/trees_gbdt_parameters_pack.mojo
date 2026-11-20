@@ -9,12 +9,15 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setit
 from bindings.params_metadata_native_door import _read, _resolved
 from bindings.trees_constructor_native_unpack import tree_store_parameters
 from bindings.trees_constructor_native_pack import tree_constructor_values
+from bindings.trees_keys_unpack import trees_keys
+from bindings.py_balanced import py_item
 
 
 def gbdt_adapter_construct(model: PythonObject, args: PythonObject,
                            context: PythonObject) raises -> PythonObject:
     var fields = _fields(model)
-    var prepared = tree_constructor_values(model, args, context["trees_gbdt_adapter_constructors"])
+    var nk = trees_keys()
+    var prepared = tree_constructor_values(model, args, py_item(context, nk[].k_trees_gbdt_adapter_constructors))
     if fields is not prepared[0]:
         raise Error("TypeError: native GBDT constructor requires stable instance storage")
     var values = prepared[1]
@@ -36,7 +39,8 @@ def gbdt_adapter_set_params(model: PythonObject, values: PythonObject,
     for i in range(len(keys)):  # driver-loop: admit keyword names before lookup/sorting
         if py_type(keys[i]) is not b.str:
             raise Error("TypeError: native GBDT parameter names must be exact strings")
-    var replacement = _read(model, False, context["trees_gbdt_parameter_metadata"], Python.list())
+    var nk = trees_keys()
+    var replacement = _read(model, False, py_item(context, nk[].k_trees_gbdt_parameter_metadata), Python.list())
     var unknown = Python.list()
     for i in range(len(keys)):  # driver-loop: the existing shallow schema rejects unknown names before mutation
         if not py_contains(replacement, keys[i]):
@@ -49,8 +53,8 @@ def gbdt_adapter_set_params(model: PythonObject, values: PythonObject,
     # Reuse constructor binding and its storage-hook checks; reconstruction
     # cannot silently bypass an application's custom __setattr__ or descriptors.
     var prepared = tree_constructor_values(model,
-        Python.tuple(context["trees_gbdt_adapter_tables"]["base"], Python.tuple(), replacement),
-        context["trees_gbdt_adapter_constructors"])
+        Python.tuple(py_item(py_item(context, nk[].k_trees_gbdt_adapter_tables), nk[].k_base), Python.tuple(), replacement),
+        py_item(context, nk[].k_trees_gbdt_adapter_constructors))
     replacement = prepared[1]
     var fields = _fields(model)
     # Reconstruction is parameter-only: changing even an identical parameter

@@ -25,6 +25,8 @@ from xtrees.trees_forest_run import _family
 from bindings.trees_public_boost_door import _seed
 from bindings.trees_explainer_native_door import _get, _int, _entry, _snapshot, _replace, _tree_mode
 from xtrees.trees_agnostic_native_run import _name, _SWITCH_FACTS, _chunk
+from bindings.trees_keys_unpack import trees_keys
+from bindings.py_balanced import py_item
 
 comptime _I64 = MutPointer[Int64, MutUntrackedOrigin]
 comptime _F32 = MutPointer[Float32, MutUntrackedOrigin]
@@ -84,7 +86,8 @@ def _ints(*values: Int) raises -> PythonObject:
 def _class_value(model: PythonObject, name: String) raises -> PythonObject:
     """A class attribute found on the model's MRO namespaces (no descriptor
     or metaclass protocol), or None."""
-    var mro = py_call(_b().type.__dict__["__mro__"].__get__, py_type(model))
+    var nk = trees_keys()
+    var mro = py_call(py_item(_b().type.__dict__, nk[].k___mro__).__get__, py_type(model))
     for i in range(len(mro)):  # driver-loop: the model class ancestry
         var namespace = _class_fields(mro[i])
         if py_contains(namespace, name):
@@ -130,13 +133,14 @@ def _evaluate(model: PythonObject, method: String, x: PythonObject, n: Int,
     # so a C-order float32 one is read in place (0.8.55's as_f32_c borrowed it the same way) and any other
     # numeric dtype is cast once into an unfilled float32 Array. The reshaped Array shares the store, which
     # keeps the words alive; every caller also holds its result through the kernels that read it.
-    if (py_type(out) is context["array_class"] and out._base is None and out._pin is None
+    var nk = trees_keys()
+    if (py_type(out) is py_item(context, nk[].k_array_class) and out._base is None and out._pin is None
             and (rank == 1 or String(out.order) == "C")):
         var source_type = String(out.dtype)
         if source_type == "<f4":
             return trees_reshape(out, Python.tuple(n, k), context)
         var narrow = admitted_unfilled([n * k], "<f4", context)
-        _ = _entry(context["trees_helpers"], "cast_elements")
+        _ = _entry(py_item(context, nk[].k_trees_helpers), "cast_elements")
         trees_cast(trees_address(out), source_type, narrow.addr, "<f4", n * k, context)
         _ = out  # the source words are read through the whole cast
         return trees_reshape(narrow.keep, Python.tuple(n, k), context)
@@ -171,18 +175,19 @@ def _device_forest(model: PythonObject, mode: String, permutation: Bool, table: 
     if inner is not None:
         m = inner
     var cls = py_type(m)
-    var keys = py_call(_b().list, context["trees_classes"])
+    var nk = trees_keys()
+    var keys = py_call(_b().list, py_item(context, nk[].k_trees_classes))
     var kind = String("")
     for i in range(len(keys)):  # driver-loop: connected exact tree classes
         if cls is keys[i]:
-            kind = String(context["trees_classes"][keys[i]])
+            kind = String(py_item(context, nk[].k_trees_classes)[keys[i]])
     var rf_input = 0
     if kind == "rf_classifier" or kind == "rf_regressor":
         rf_input = 1
     elif kind != "et_classifier" and kind != "et_regressor":
         return PythonObject(None)
     var fields = _fields(m)
-    if not py_contains(fields, "_offsets"):
+    if not py_contains(fields, nk[].k__offsets):
         return PythonObject(None)
     try:
         var forest_mode = forest_effective_mode(fields, context)
@@ -198,8 +203,8 @@ def _device_forest(model: PythonObject, mode: String, permutation: Bool, table: 
     var arrays = Python.list()
     for i in range(5):  # driver-loop: the five flat model arrays
         _ = py_call(arrays.append, fields[names[i]])
-    return Python.tuple(py_call(_b().tuple, arrays), _int(fields["_num_outputs"], "output count", True),
-                        _int(fields["_n_trees"], "tree count", True), rf_input)
+    return Python.tuple(py_call(_b().tuple, arrays), _int(py_item(fields, nk[].k__num_outputs), "output count", True),
+                        _int(py_item(fields, nk[].k__n_trees), "tree count", True), rf_input)
 
 
 def _model_load(dev: PythonObject, bg: PythonObject, table: PythonObject) raises -> Bool:
@@ -243,7 +248,8 @@ def _construct(fields: PythonObject, args: PythonObject, permutation: Bool,
     var model_fields = _fields(model)
     if requested is None:
         requested = _get(model_fields, "numeric_mode")
-    var mode = _tree_mode(requested if requested is not None else context["backend_fields"]["_DEFAULT_MODE"])
+    var nk = trees_keys()
+    var mode = _tree_mode(requested if requested is not None else py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE))
     var table = trees_table(context, mode, "_mojolearn_x_trees")
     var method = _method(model, context)
     var bg = _snapshot(data, "<f4", 2, "data", context, Python.dict())
@@ -275,7 +281,7 @@ def _construct(fields: PythonObject, args: PythonObject, permutation: Bool,
     for i in range(len(keys)):  # driver-loop: fixed explainer state fields
         py_setitem(changes, keys[i], values[i])
     if not permutation:
-        py_setitem(changes, "link", link)
+        py_setitem(changes, nk[].k_link, link)
     _replace(fields, changes, context)
 
 
@@ -311,7 +317,8 @@ def _state(fields: PythonObject, name: String, context: PythonObject) raises -> 
     if bg is None or method is None:
         raise Error("RuntimeError: " + name + " has not been initialized by the native owner")
     var requested = _get(fields, "numeric_mode")
-    var mode = _tree_mode(requested if requested is not None else context["backend_fields"]["_DEFAULT_MODE"])
+    var nk = trees_keys()
+    var mode = _tree_mode(requested if requested is not None else py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE))
     var table = trees_table(context, mode, "_mojolearn_x_trees")
     var model = _get(fields, "model")
     prep_estimator_admit(model, name, context)
@@ -491,7 +498,8 @@ def _linear_block(s: _State, context: PythonObject) raises -> PythonObject:
     var flag = py_call(ok)
     if py_type(flag) is not _b().int or Int(py=flag) != 1:
         return PythonObject(None)
-    var linear_predict = py_get(context, "trees_linear_predict")
+    var nk = trees_keys()
+    var linear_predict = py_get(context, nk[].k_trees_linear_predict)
     if linear_predict is None or _class_value(s.model, "predict") is not linear_predict:
         return PythonObject(None)
     var fields = _fields(s.model)

@@ -37,6 +37,7 @@ from bindings.trees_public_gbdt_door import (
     gbdt_predict, gbdt_predict_classes, gbdt_tree_metadata_op, ordered_rmse_fit,
     feature_freq_fit, adapter_decision_function, adapter_predict, adapter_predict_proba,
 )
+from bindings.trees_keys_unpack import trees_keys
 
 
 def trees_public_operation(model: PythonObject, operation: String, args: PythonObject,
@@ -77,7 +78,8 @@ def trees_public_operation(model: PythonObject, operation: String, args: PythonO
         return trees_explainer_operation(model, operation, args, context)
     if operation.startswith("trees_agnostic_"):
         return trees_agnostic_operation(model, operation, args, context)
-    if py_get(context, "cv_fixed_owner") is not None:
+    var nk = trees_keys()
+    if py_get(context, nk[].k_cv_fixed_owner) is not None:
         context = fixed_owner_context(context)
         _ = fixed_owner_fields(model, context)
         classical_admit_value(args, context)
@@ -161,4 +163,5 @@ def _gbdt_operation(model: PythonObject, operation: String, args: PythonObject,
 
 def py_unavailable(context: PythonObject) raises -> Bool:
     from bindings.py_balanced import py_contains
-    return py_contains(context, "trees_unavailable")
+    var nk = trees_keys()
+    return py_contains(context, nk[].k_trees_unavailable)

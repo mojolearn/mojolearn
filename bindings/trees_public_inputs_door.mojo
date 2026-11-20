@@ -80,6 +80,8 @@ from bindings.label_input_sources_unpack import labels_storage_source
 from bindings.perf3_label_doors_text_unpack import labels_all_exact_str
 from core.shared_slot import SharedSlot
 from bindings.py_optional import py_or_none, py_present
+from bindings.trees_keys_unpack import trees_keys
+from bindings.py_balanced import py_item
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _F64P = MutPointer[Float64, MutUntrackedOrigin]
@@ -97,7 +99,8 @@ def trees_builtins() raises -> PythonObject:
 def trees_table(context: PythonObject, mode: String, name: String) raises -> PythonObject:
     """The connected entry table of binding `name` in `mode`, or the
     refusal recorded at import ("<Class>: <message>")."""
-    var tables = py_get(context["trees_bindings"], PythonObject(mode))
+    var nk = trees_keys()
+    var tables = py_get(py_item(context, nk[].k_trees_bindings), PythonObject(mode))
     if tables is None:
         raise Error("numeric_mode must be fast, identical or None")
     var table = py_get(tables, PythonObject(name))
@@ -124,7 +127,8 @@ def trees_need(table: PythonObject, name: String, message: String, kind: String 
 
 def trees_helper(context: PythonObject, name: String) raises -> PythonObject:
     """A base binding helper (`_buffer._native`), or the recorded refusal."""
-    var entry = py_get(context["trees_helpers"], PythonObject(name))
+    var nk = trees_keys()
+    var entry = py_get(py_item(context, nk[].k_trees_helpers), PythonObject(name))
     if entry is None or py_type(entry) is py_type(PythonObject("")):
         if entry is None:
             raise Error("ImportError: mojolearn: the base binding has no `" + name + "`")

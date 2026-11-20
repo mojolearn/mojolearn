@@ -37,6 +37,8 @@ from bindings.trees_public_gbdt_fit_door import gbdt_fit, _tables as _gbdt_table
 from bindings.trees_public_gbdt_door import adapter_decision_function, adapter_predict, adapter_predict_proba
 from bindings.trees_public_gbdt_door import gbdt_predict, gbdt_predict_proba, ordered_rmse_fit, feature_freq_fit
 from bindings.trees_public_mixin_score_unpack import gbdt_adapter_score
+from bindings.trees_keys_unpack import trees_keys
+from bindings.py_balanced import py_item
 
 
 def _context(context: PythonObject) raises -> PythonObject:
@@ -48,10 +50,11 @@ def _context(context: PythonObject) raises -> PythonObject:
 
 def _learner_state(learner: PythonObject, context: PythonObject) raises:
     var b = native_loaded_module("builtins")
-    var cls = context["trees_gbdt_adapter_tables"]["learner"]
+    var nk = trees_keys()
+    var cls = py_item(py_item(context, nk[].k_trees_gbdt_adapter_tables), nk[].k_learner)
     if py_type(learner) is not cls:
         raise Error("TypeError: GBDT adapters require their connected native learner")
-    classical_check_layout(learner, context["trees_state_layouts"][cls])
+    classical_check_layout(learner, py_item(context, nk[].k_trees_state_layouts)[cls])
     var fields = _fields(learner)
     var keys = py_call(b.list, fields)
     tree_parameter_storage(learner, keys)
@@ -67,7 +70,7 @@ def _learner_state(learner: PythonObject, context: PythonObject) raises:
                     raise Error("TypeError: GBDT resident cache requires native text and handle metadata")
         else:
             classical_admit_value(value, context)
-    var text = py_get(fields, "model_")
+    var text = py_get(fields, nk[].k_model_)
     if text is not None and py_type(text) is not b.str:
         raise Error("TypeError: GBDT fitted model text must be an exact string")
 
@@ -86,7 +89,8 @@ def _state_stamp(model: PythonObject, fields: PythonObject) raises:
         return
     var content = ContentRecord()
     content_fields(content, fields, 4)
-    var learner = py_get(fields, "_learner_")
+    var nk = trees_keys()
+    var learner = py_get(fields, nk[].k__learner_)
     if learner is not None:
         content_object(content, learner, 4)
     _ = records_stamped_put(RECORDS_TREES, model, _STATE_STAMP, content^, Python.tuple(fields))
@@ -101,7 +105,8 @@ def _state_key(fields: PythonObject) raises -> PythonObject:
     var b = mods.module("builtins")
     var key = Python.list()
     trees_key_fields(mods, key, fields)
-    var learner = py_get(fields, "_learner_")
+    var nk = trees_keys()
+    var learner = py_get(fields, nk[].k__learner_)
     if learner is not None:
         _ = py_call(key.append, py_type(learner))
         var learner_fields = PythonObject(None)
@@ -128,18 +133,19 @@ def _adapter_state(model: PythonObject, context: PythonObject) raises -> PythonO
     # Generation fast path (lane ne1-e-records, row N253): one word for the
     # adapter plus the learner's native words instead of the ~60-entry key.
     var stamped = records_stamped_get(RECORDS_TREES, model, _STATE_STAMP)
+    var nk = trees_keys()
     if stamped is not None and stamped[0] is fields:
-        var learner = py_get(fields, "_learner_")
+        var learner = py_get(fields, nk[].k__learner_)
         if learner is not None:
-            classical_check_layout(learner, context["trees_state_layouts"][py_type(learner)])
+            classical_check_layout(learner, py_item(context, nk[].k_trees_state_layouts)[py_type(learner)])
         return fields
     var key = _state_key(fields)
     if key is not None:
         var held = trees_side_get(_STATE_SLOT, model)
         if held is not None and trees_key_same(held, key):
-            var learner = py_get(fields, "_learner_")
+            var learner = py_get(fields, nk[].k__learner_)
             if learner is not None:
-                classical_check_layout(learner, context["trees_state_layouts"][py_type(learner)])
+                classical_check_layout(learner, py_item(context, nk[].k_trees_state_layouts)[py_type(learner)])
             _state_stamp(model, fields)
             return fields
     _adapter_admit(model, fields, context)
@@ -157,11 +163,12 @@ def _adapter_admit(model: PythonObject, fields: PythonObject, context: PythonObj
     for i in range(len(names)):  # driver-loop: native prediction and fitted-check scalar state
         if py_contains(fields, names[i]):
             classical_admit_value(fields[names[i]], context)
-    if py_contains(fields, "classes_"):
-        classical_admit_value(classifier_label_list(fields["classes_"], context), context)
-    if py_contains(fields, "feature_names_in_"):
-        lda_native_labels(fields["feature_names_in_"], context)
-    var learner = py_get(fields, "_learner_")
+    var nk = trees_keys()
+    if py_contains(fields, nk[].k_classes_):
+        classical_admit_value(classifier_label_list(py_item(fields, nk[].k_classes_), context), context)
+    if py_contains(fields, nk[].k_feature_names_in_):
+        lda_native_labels(py_item(fields, nk[].k_feature_names_in_), context)
+    var learner = py_get(fields, nk[].k__learner_)
     if learner is not None:
         _learner_state(learner, context)
 
@@ -178,7 +185,8 @@ def gbdt_adapter_public_operation(model: PythonObject, operation: String, args: 
     var cls = py_type(model)
     if py_type(cls) is not b.type:
         raise Error("TypeError: native GBDT adapters require ordinary class metadata")
-    var kind = py_get(context["trees_gbdt_adapter_public_classes"], cls)
+    var nk = trees_keys()
+    var kind = py_get(py_item(context, nk[].k_trees_gbdt_adapter_public_classes), cls)
     if kind is None:
         raise Error("TypeError: native GBDT lifecycle requires a connected adapter class")
     var native = _context(context)
@@ -211,7 +219,7 @@ def gbdt_adapter_public_operation(model: PythonObject, operation: String, args: 
     var x = admit_f32(args[0], 2, "X", native, finite=False)
     var classifier = String(kind) == "classifier"
     if fitting:
-        var params = _read(model, False, native["trees_gbdt_parameter_metadata"], Python.list())
+        var params = _read(model, False, py_item(native, nk[].k_trees_gbdt_parameter_metadata), Python.list())
         classical_admit_value(params, native)
         var loss = _resolved(cls, "_loss", PythonObject(None))
         classical_admit_value(loss, native)
@@ -233,18 +241,18 @@ def gbdt_adapter_public_operation(model: PythonObject, operation: String, args: 
         else:
             # `args` (y among them) was admitted above: no second admission walk.
             y = classical_check_y(y, x.rows, name, native, True)
-        var saved = py_get(fields, "_mojolearn_fitting", PythonObject(0))
+        var saved = py_get(fields, nk[].k__mojolearn_fitting, PythonObject(0))
         if py_type(saved) is not b.int:
             raise Error("TypeError: native GBDT fit depth must be an exact integer")
         var depth = Int(py=saved)
-        py_setitem(fields, "_mojolearn_fitting", PythonObject(depth + 1))
+        py_setitem(fields, nk[].k__mojolearn_fitting, PythonObject(depth + 1))
         var result = PythonObject(None)
         try:
             var inputs = Python.tuple(x.array, y, args[2], args[3])
             result = adapter_classifier_fit(model, inputs, native) if classifier else adapter_regressor_fit(model, inputs, native)
         finally:
             if depth > 0:
-                py_setitem(fields, "_mojolearn_fitting", PythonObject(depth))
+                py_setitem(fields, nk[].k__mojolearn_fitting, PythonObject(depth))
             else:
                 _ = py_call(fields.pop, "_mojolearn_fitting", PythonObject(None))
         if classifier:
@@ -254,12 +262,12 @@ def gbdt_adapter_public_operation(model: PythonObject, operation: String, args: 
             if names is None:
                 _ = py_call(fields.pop, "feature_names_in_", PythonObject(None))
             else:
-                py_setitem(fields, "feature_names_in_", names)
-            py_setitem(fields, "_mojolearn_fitted", PythonObject(True))
+                py_setitem(fields, nk[].k_feature_names_in_, names)
+            py_setitem(fields, nk[].k__mojolearn_fitted, PythonObject(True))
         _ = x
         return result
-    if py_contains(fields, "n_features_in_"):
-        classical_check_width(x.cols, Int(py=fields["n_features_in_"]), name)
+    if py_contains(fields, nk[].k_n_features_in_):
+        classical_check_width(x.cols, Int(py=py_item(fields, nk[].k_n_features_in_)), name)
     estimator_feature_check(model, fields, args[0], native)
     var result = PythonObject(None)
     if method == "score":
@@ -294,8 +302,9 @@ def gbdt_adapter_public_operation(model: PythonObject, operation: String, args: 
 
 def _gbdt_model_class(cls: PythonObject, context: PythonObject) raises -> Bool:
     var b = native_loaded_module("builtins")
-    var classes = context["trees_classes"]
-    var ancestry = py_call(b.type.__dict__["__mro__"].__get__, cls)
+    var nk = trees_keys()
+    var classes = py_item(context, nk[].k_trees_classes)
+    var ancestry = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, cls)
     for i in range(len(ancestry)):  # driver-loop: over the model's class ancestry, to its connected GBDT base
         var kind = py_get(classes, ancestry[i])
         if kind is not None and String(kind) == "gbdt":
@@ -312,8 +321,9 @@ def _gbdt_model_y(y: PythonObject, rows: Int, model: PythonObject, fields: Pytho
     var b = native_loaded_module("builtins")
     if y is None or py_type(y) is b.list or py_type(y) is b.tuple or py_type(y) is b.memoryview:
         return y
-    var loss = py_get(fields, "loss")
-    if loss is not None and _gbdt_in(loss, _gbdt_tables(native)["multi_regression_losses"]):
+    var nk = trees_keys()
+    var loss = py_get(fields, nk[].k_loss)
+    if loss is not None and _gbdt_in(loss, py_item(_gbdt_tables(native), nk[].k_multi_regression_losses)):
         return y
     var column = False
     try:
@@ -343,10 +353,11 @@ def gbdt_model_public_operation(model: PythonObject, operation: String, args: Py
     var name = classical_estimator_name(model)
     var fitting = operation.endswith("_fit")
     var method = String("fit")
+    var nk = trees_keys()
     if not fitting:
         method = "predict_proba" if operation.endswith("_proba") else "predict"
         classical_require_fitted(model, False, method, native)
-        if Bool(py=py_get(fields, "_mojolearn_fitting", PythonObject(0))):
+        if Bool(py=py_get(fields, nk[].k__mojolearn_fitting, PythonObject(0))):
             # a fit's own predict sees its validated input, as before
             if method == "predict_proba":
                 return gbdt_predict_proba(model, args[0], context)
@@ -366,11 +377,11 @@ def gbdt_model_public_operation(model: PythonObject, operation: String, args: Py
                 var items = py_call(b.list, args)
                 py_setitem(items, PythonObject(1), y)
                 inputs = py_call(b.tuple, items)
-        var saved = py_get(fields, "_mojolearn_fitting", PythonObject(0))
+        var saved = py_get(fields, nk[].k__mojolearn_fitting, PythonObject(0))
         if py_type(saved) is not b.int:
             raise Error("TypeError: native GradientBoosting fit depth must be an exact integer")
         var depth = Int(py=saved)
-        py_setitem(fields, "_mojolearn_fitting", PythonObject(depth + 1))
+        py_setitem(fields, nk[].k__mojolearn_fitting, PythonObject(depth + 1))
         var result = PythonObject(None)
         try:
             if operation == "trees_public_gbdt_model_fit":
@@ -385,18 +396,18 @@ def gbdt_model_public_operation(model: PythonObject, operation: String, args: Py
             # `_fields` again: a fit may replace the instance dictionary's contents
             var after = _fields(model)
             if depth > 0:
-                py_setitem(after, "_mojolearn_fitting", PythonObject(depth))
+                py_setitem(after, nk[].k__mojolearn_fitting, PythonObject(depth))
             else:
                 _ = py_call(after.pop, "_mojolearn_fitting", PythonObject(None))
         var state = _fields(model)
-        py_setitem(state, "_mojolearn_fitted", PythonObject(True))
+        py_setitem(state, nk[].k__mojolearn_fitted, PythonObject(True))
         var names = _feature_names(args[0], native)
         if names is None:
             _ = py_call(state.pop, "feature_names_in_", PythonObject(None))
         else:
-            py_setitem(state, "feature_names_in_", names)
+            py_setitem(state, nk[].k_feature_names_in_, names)
         return result
-    var fitted = py_get(fields, "n_features_in_")
+    var fitted = py_get(fields, nk[].k_n_features_in_)
     if fitted is not None and py_type(fitted) is b.int:
         classical_check_width(cols, Int(py=fitted), name)
     estimator_feature_check(model, fields, args[0], native)

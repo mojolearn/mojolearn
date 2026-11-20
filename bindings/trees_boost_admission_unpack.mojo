@@ -13,6 +13,8 @@ from bindings.py_model_records import (
     records_stamped_get, records_stamped_put, records_stampable, records_drop, ContentRecord, content_fields,
     content_object, RECORDS_TREES,
 )
+from bindings.trees_keys_unpack import trees_keys
+from bindings.py_balanced import py_item
 
 comptime _FITTED_STAMP = "trees_boost_fitted_stamp_v1"
 
@@ -27,7 +29,8 @@ def _fitted_stamp(model: PythonObject, fields: PythonObject, reps: PythonObject)
         return
     var content = ContentRecord()
     content_fields(content, fields, 4)
-    var member = py_get(fields, "forest_")
+    var nk = trees_keys()
+    var member = py_get(fields, nk[].k_forest_)
     if member is not None:
         content_object(content, member, 4)
     for name in ["_estimators", "estimators_", "trees_", "_batched"]:  # small-loop(fixed stored member sequences)
@@ -47,7 +50,8 @@ def _fitted_key(mut mods: NativeModules, fields: PythonObject, key: PythonObject
     var b = mods.module("builtins")
     trees_key_fields(mods, key, fields)
     var groups = Python.list()
-    var member = py_get(fields, "forest_")
+    var nk = trees_keys()
+    var member = py_get(fields, nk[].k_forest_)
     if member is not None:
         _ = py_call(groups.append, Python.list(member))
     for name in ["_estimators", "estimators_", "trees_", "_batched"]:  # small-loop(fixed stored member sequences)
@@ -105,9 +109,10 @@ def _scalar_storage(value: PythonObject, context: PythonObject, depth: Int = 0) 
 def boost_tree_admit(model: PythonObject, context: PythonObject, cloning: Bool = False) raises:
     var fields = classical_family_admit(model)
     var b = native_loaded_module("builtins")
-    var defaults = context["trees_defaults"]
+    var nk = trees_keys()
+    var defaults = py_item(context, nk[].k_trees_defaults)
     var cls = py_type(model)
-    var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
+    var mro = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, cls)
     # Optional, not a PythonObject(None) sentinel read and reassigned in the
     # loop (modular/modular#7546 pattern; runtime-fix-save-forest).
     var found = Optional[PythonObject]()
@@ -131,8 +136,8 @@ def boost_tree_admit(model: PythonObject, context: PythonObject, cloning: Bool =
     for name in ["_cfg", "n_features_in_", "n_classes_", "_n_trees", "_num_outputs", "_fit_numeric_mode", "_fit_device"]:  # small-loop(forest scalar state)
         if py_contains(fields, name):
             _scalar_storage(fields[name], context)
-    if py_contains(fields, "classes_"):
-        classical_admit_value(classifier_label_list(fields["classes_"], context), context)
+    if py_contains(fields, nk[].k_classes_):
+        classical_admit_value(classifier_label_list(py_item(fields, nk[].k_classes_), context), context)
 
 
 def _require_connected_member(model: PythonObject, estimator: PythonObject, context: PythonObject) raises:
@@ -140,11 +145,12 @@ def _require_connected_member(model: PythonObject, estimator: PythonObject, cont
     estimator (trees_public_boost.mojo `_require_tree`), before the member's
     storage admission refuses it as an unconnected class. The class is named
     by its type name: a foreign object's Python __repr__ never runs."""
-    var classes = py_get(context, "trees_classes")
+    var nk = trees_keys()
+    var classes = py_get(context, nk[].k_trees_classes)
     if classes is None:
         return
     var b = native_loaded_module("builtins")
-    var mro = py_call(b.type.__dict__["__mro__"].__get__, py_type(estimator))
+    var mro = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, py_type(estimator))
     for i in range(len(mro)):  # driver-loop: over the member class ancestry metadata
         if py_contains(classes, mro[i]):
             return

@@ -26,6 +26,8 @@ from bindings.trees_public_score_door import (
 from bindings.classical_labels_door import classical_score_from_codes, _classification_encoded as labels_classification_encoded
 from bindings.trees_public_gbdt_door import _adapter_fitted, adapter_codes, adapter_decision_function
 from bindings.trees_public_boost_door import boost_operation, boost_kind, boost_predict_codes
+from bindings.trees_keys_unpack import trees_keys
+from bindings.py_balanced import py_item
 
 
 def _metrics_table(mode: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -55,7 +57,8 @@ def _codes_i32(codes: PythonObject, n: Int, context: PythonObject) raises -> Pyt
         raise Error("mojolearn metrics: y_pred must be an integer label array, got " + dtype
                     + "; the ported kernels take int32 labels")
     if n:
-        var bkey = base_helpers_key(context["trees_helpers"])
+        var nk = trees_keys()
+        var bkey = base_helpers_key(py_item(context, nk[].k_trees_helpers))
         var low = base_reduce_stat_int(bkey, trees_address(codes), 3, n, 0)
         var high = base_reduce_stat_int(bkey, trees_address(codes), 3, n, 1)
         _ = codes  # keep the code store alive through the native calls above
@@ -85,12 +88,13 @@ def gbdt_adapter_score(model: PythonObject, args: PythonObject, context: PythonO
     var sample_weight = args[2]
     _ = _adapter_fitted(model, context)
     var fields = py_fields(model)
-    var mode = fields["numeric_mode_"]
-    if py_contains(fields, "classes_"):
+    var nk = trees_keys()
+    var mode = py_item(fields, nk[].k_numeric_mode_)
+    if py_contains(fields, nk[].k_classes_):
         var target = labels_classification_encoded(y, "y", context)
-        if not Bool(py=PythonObject(target.kind) == fields["_label_kind_"]):
+        if not Bool(py=PythonObject(target.kind) == py_item(fields, nk[].k__label_kind_)):
             raise Error("TypeError: score labels must have the training label type")
-        var encoded = trees_class_codes(target, classifier_label_list(fields["classes_"], context), context)
+        var encoded = trees_class_codes(target, classifier_label_list(py_item(fields, nk[].k_classes_), context), context)
         _ = target^
         var predicted = adapter_codes(model, X, context)
         var n = Int(py=encoded.size)
@@ -103,14 +107,14 @@ def gbdt_adapter_score(model: PythonObject, args: PythonObject, context: PythonO
         var result = PythonObject(None)
         if sample_weight is not None:
             var w = trees_sample_weight_f32(sample_weight, n, "accuracy_score", context)
-            result = py_call_typed(metrics["accuracy_score_weighted"], PythonObject(trees_address(encoded)),
+            result = py_call_typed(py_item(metrics, nk[].k_accuracy_score_weighted), PythonObject(trees_address(encoded)),
                                    PythonObject(trees_address(yp)), PythonObject(w.address), Python.list(PythonObject(n)))
             _ = encoded  # keep the Python object alive through the native call above
             _ = w  # keep the Python object alive through the native call above
             _ = yp  # keep the Python object alive through the native call above
             _ = w^
         else:
-            result = py_call_typed(metrics["accuracy_score"], PythonObject(trees_address(encoded)),
+            result = py_call_typed(py_item(metrics, nk[].k_accuracy_score), PythonObject(trees_address(encoded)),
                                    PythonObject(trees_address(yp)), Python.list(PythonObject(n)))
             _ = encoded  # keep the Python object alive through the native call above
             _ = yp  # keep the Python object alive through the native call above

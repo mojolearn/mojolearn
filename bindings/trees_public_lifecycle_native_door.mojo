@@ -30,6 +30,8 @@ from bindings.admitted_input_unpack import admitted_array
 from bindings.trees_public_auxiliary_door import forest_auxiliary, forest_shape
 from bindings.trees_public_state_pack import forest_restore_state, tree_is_fitted
 from bindings.trees_side_records_unpack import trees_admit_parameters, trees_finite_mark, trees_finite_clear
+from bindings.trees_keys_unpack import trees_keys
+from bindings.py_balanced import py_item
 
 
 def _set_params(model: PythonObject, values: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -54,7 +56,8 @@ def _set_params(model: PythonObject, values: PythonObject, context: PythonObject
     # and all prior fitted/cache state is removed only after binding succeeds.
     py_call(fields.clear)
     py_call(fields.update, params)
-    py_setitem(fields, "_has_constructor_parameters", PythonObject(True))
+    var nk = trees_keys()
+    py_setitem(fields, nk[].k__has_constructor_parameters, PythonObject(True))
     return model
 
 
@@ -128,12 +131,13 @@ def forest_public_operation(model: PythonObject, operation: String, args: Python
     var kind = forest_kind(model, context)
     var classifier = kind.endswith("_classifier")
     var result = PythonObject(None)
+    var nk = trees_keys()
     if not fitting:
         # The admitted X is the predict's matrix as is (lane A1
         # admit-trees-labels: it was viewed a second time through trees_f32;
         # lane perf-trees-owed, 2026-11-06, had removed the third).
         var matrix = admitted.copy()
-        classical_check_width(matrix.cols, Int(py=fields["n_features_in_"]), name)
+        classical_check_width(matrix.cols, Int(py=py_item(fields, nk[].k_n_features_in_)), name)
         _feature_check(model, fields, args[0], context)
         if operation == "trees_public_forest_predict":
             result = forest_public_predict(model, kind, matrix, False, False, context)
@@ -155,11 +159,11 @@ def forest_public_operation(model: PythonObject, operation: String, args: Python
                 raise Error("Found input variables with inconsistent numbers of samples")
         else:
             y = classical_check_y(y, rows, name, context, True)
-        var depth_object = py_get(fields, "_mojolearn_fitting", PythonObject(0))
+        var depth_object = py_get(fields, nk[].k__mojolearn_fitting, PythonObject(0))
         if py_type(depth_object) is not b.int:
             raise Error("TypeError: native forest fit depth must be an exact integer")
         var depth = Int(py=depth_object)
-        py_setitem(fields, "_mojolearn_fitting", PythonObject(depth + 1))
+        py_setitem(fields, nk[].k__mojolearn_fitting, PythonObject(depth + 1))
         # A cast X was tested in its cast pass: the fit skips its second
         # scan of it (trees_side_records `trees_finite_known`). A borrowed
         # X is the entry's to test (defer_finite above).
@@ -180,8 +184,8 @@ def forest_public_operation(model: PythonObject, operation: String, args: Python
             if feature_names is None:
                 py_call(fields.pop, "feature_names_in_", PythonObject(None))
             else:
-                py_setitem(fields, "feature_names_in_", feature_names)
-            py_setitem(fields, "_mojolearn_fitted", PythonObject(True))
+                py_setitem(fields, nk[].k_feature_names_in_, feature_names)
+            py_setitem(fields, nk[].k__mojolearn_fitted, PythonObject(True))
         return result
     raise Error("unknown native public forest operation " + operation)
 
@@ -206,14 +210,16 @@ def _forest_fit_restore(model: PythonObject, depth: Int) raises:
     trees_finite_clear()
     var fields = py_fields(model)
     if depth > 0:
-        py_setitem(fields, "_mojolearn_fitting", PythonObject(depth))
+        var nk = trees_keys()
+        py_setitem(fields, nk[].k__mojolearn_fitting, PythonObject(depth))
     else:
         _ = py_call(fields.pop, "_mojolearn_fitting", PythonObject(None))
 
 
 def _public_result(var result: PythonObject, operation: String, classifier: Bool,
                    context: PythonObject) raises -> PythonObject:
-    if classical_is_array(result, context) and py_get(context, "ndarray") is not None and _outside():
+    var nk = trees_keys()
+    if classical_is_array(result, context) and py_get(context, nk[].k_ndarray) is not None and _outside():
         if operation == "trees_public_forest_predict" and not classifier and String(result.dtype) == "<f4":
             var wide = admitted_array(result.shape, "<f8", context)
             trees_cast(trees_address(result), "<f4", trees_address(wide), "<f8", Int(py=result.size), context)

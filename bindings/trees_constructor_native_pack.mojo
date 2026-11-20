@@ -16,6 +16,8 @@ from bindings.trees_constructor_native_unpack import (
     tree_parameter_storage,
     tree_store_parameters,
 )
+from bindings.trees_keys_unpack import trees_keys
+from bindings.py_balanced import py_item
 
 
 def tree_constructor_values(model: PythonObject, args: PythonObject, constructors: PythonObject) raises -> PythonObject:
@@ -27,7 +29,8 @@ def tree_constructor_values(model: PythonObject, args: PythonObject, constructor
     var plan = py_get(constructors, owner)
     if plan is None:
         raise Error("TypeError: the forest constructor is not connected")
-    var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
+    var nk = trees_keys()
+    var mro = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, cls)
     var found = False
     for i in range(len(mro)):  # driver-loop: native constructor ancestry metadata
         found = found or mro[i] is owner
@@ -43,7 +46,7 @@ def tree_constructor_values(model: PythonObject, args: PythonObject, constructor
         # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
         var actual = Optional[PythonObject]()
         for j in range(len(mro)):  # driver-loop: inherited native storage metadata
-            var namespace = py_call(b.type.__dict__["__dict__"].__get__, mro[j])
+            var namespace = py_call(py_item(b.type.__dict__, nk[].k___dict__).__get__, mro[j])
             if py_contains(namespace, hooks[i][0]):
                 actual = namespace[hooks[i][0]]
                 break
@@ -94,10 +97,11 @@ def tree_constructor_values(model: PythonObject, args: PythonObject, constructor
 
 def forest_construct(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = _fields(model)
-    var prepared = tree_constructor_values(model, args, context["trees_constructors"])
+    var nk = trees_keys()
+    var prepared = tree_constructor_values(model, args, py_item(context, nk[].k_trees_constructors))
     if fields is not prepared[0]:
         raise Error("TypeError: native forest constructor requires stable instance storage")
     var values = prepared[1]
-    py_setitem(values, "_has_constructor_parameters", PythonObject(True))
+    py_setitem(values, nk[].k__has_constructor_parameters, PythonObject(True))
     tree_store_parameters(fields, values, context, False)
     return PythonObject(None)
