@@ -87,8 +87,8 @@ def _family_par_run(model: PythonObject, args: PythonObject, context: PythonObje
             var table = operation_lookup()
             var code = operation_code(table, args[2])
             if code >= 0:
-                result = _family_owner_call(model, table[].family_routes[code], table[].leaves[code], owner,
-                                            owner_args, context)
+                result = _family_owner_call(model, table[].table.family_routes[code], table[].table.leaves[code],
+                                            owner, owner_args, context)
             else:
                 result = _family_owner_call(model, family_route(owner), OP_LEAF_NONE, owner, owner_args, context)
         else:

@@ -57,10 +57,11 @@ def classical_family_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
         # unknown-operation error text.
         var table = operation_lookup()
         var code = operation_code(table, request[1])
-        if code >= 0 and table[].routes[code] == OP_ROUTE_FAMILY:
+        if code >= 0 and table[].table.routes[code] == OP_ROUTE_FAMILY:
             _ = classical_family_admit(model)
-            var routed = family_operation_routed(model, table[].family_routes[code], table[].leaves[code],
-                                                 table[].names[code], request[2], request[3])
+            var routed = family_operation_routed(model, table[].table.family_routes[code],
+                                                 table[].table.leaves[code], table[].table.names[code],
+                                                 request[2], request[3])
             return routed.steal_data()
         var operation = String(request[1])
         if not classical_family_operation(operation):

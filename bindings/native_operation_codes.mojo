@@ -1,5 +1,4 @@
 from core.shared_slot import SharedSlot
-from std.python import PythonObject
 from bindings.operation_names_density import operation_names_density
 from bindings.operation_names_par import operation_names_par
 from bindings.operation_names_kmeans import operation_names_kmeans
@@ -45,7 +44,7 @@ from bindings.operation_names_linops import operation_names_linops
 # `<FAMILY>_OPN_<NAME upper>`, numbered by sub-owner so a group is one range
 # test). A str caller (a shell that passes the name, the parallel driver's
 # owner, model selection) is resolved by ONE dictionary lookup with its own
-# str object (`lookup`, filled by bindings/native_operation_names_unpack.mojo);
+# str object (`operation_code`, bindings/native_operation_names_unpack.mojo);
 # no String is built and no prefix chain runs for a name of the table. An
 # owner that is not converted yet has `OP_LEAF_NONE` and still receives the
 # operation name: the table's own String, borrowed, never built per call. A
@@ -282,16 +281,12 @@ def _leaves_pad(names: List[String], mut leaves: List[Int]):
 
 struct OperationTable(Defaultable, Movable):
     """The names, routes, family route words and leaf codes, filled once per
-    process, and the name -> code dictionary of the str callers (`lookup`,
-    filled at the first str call by
-    bindings/native_operation_names_unpack.mojo; `lookup_ready` is set
-    last)."""
+    process. No Python here: the name -> code dictionary of the str callers
+    is bindings/native_operation_names_unpack.mojo's."""
     var names: List[String]
     var routes: List[Int]
     var family_routes: List[Int]
     var leaves: List[Int]
-    var lookup: PythonObject
-    var lookup_ready: Bool
 
     def __init__(out self):
         var names = List[String]()
@@ -303,8 +298,6 @@ struct OperationTable(Defaultable, Movable):
         self.leaves = leaves^
         self.routes = List[Int]()
         self.family_routes = List[Int]()
-        self.lookup = PythonObject(None)
-        self.lookup_ready = False
         for i in range(len(self.names)):  # driver-loop: over the fixed operation names, once per process
             if self.names[i].startswith("trees_"):
                 self.routes.append(OP_ROUTE_TREES)
@@ -319,7 +312,7 @@ struct OperationTable(Defaultable, Movable):
 
 # Shared by every Mojo extension in the process; bump the version whenever a
 # name is added, removed or reordered (the codes are indices) or a field
-# changes. V4: the leaf column, the lookup dictionary and every family name.
+# changes. V4: the leaf column and every family name.
 comptime OPERATION_TABLE = SharedSlot[OperationTable, "MojolearnOperationCodesV4"]
 
 
