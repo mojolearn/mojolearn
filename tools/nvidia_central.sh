@@ -180,6 +180,8 @@ reconcile() {
     for k in $(live_pods); do
         pod_env $k
         rp_call GET "$RP/pods/$POD_ID"
+        # the v1 host unreachable (000) is not an answer: ask the v2 host (see api_gone in the watcher, 2026-11-20)
+        [ "$RP_CODE" = 404 ] || [ "$RP_CODE" = 200 ] || rp_call GET "$RP_V2/pods/$POD_ID"
         if [ "$RP_CODE" = 404 ] || [ "$(rp_py status)" = TERMINATED ]; then retire $k "gone per the RunPod API"; fi
     done
 }
@@ -224,9 +226,14 @@ log() { echo "$(date -u +%FT%TZ) $*" >> "$W/watch.log"; }
 tmo() { perl -e 'alarm shift @ARGV; exec @ARGV or exit 127' "$@"; }
 api_gone() {
     [ "@NO_API@" = 1 ] && return 1
-    local c; c=$(curl -s -m 30 -K "$W/curlrc" -o "$W/pod.json" -w '%{http_code}' "@RP@/pods/@POD@")
-    [ "$c" = 404 ] && return 0
-    [ "$c" = 200 ] && grep -q '"desiredStatus": *"TERMINATED"' "$W/pod.json" && return 0
+    # Both API hosts are asked (2026-11-20: rest.runpod.io answered 000 from this Mac for hours while the v2 host said
+    # 404; a deleted pod then stayed "up" in the state and `up` rented nothing). 404 or TERMINATED from either = gone.
+    local c u
+    for u in "@RP@/pods/@POD@" "@RPV2@/pods/@POD@"; do
+        c=$(curl -s -m 30 -K "$W/curlrc" -o "$W/pod.json" -w '%{http_code}' "$u")
+        [ "$c" = 404 ] && return 0
+        [ "$c" = 200 ] && grep -q -E '"(desiredStatus|status)": *"TERMINATED"' "$W/pod.json" && return 0
+    done
     return 1
 }
 retire() { [ -d "@D@" ] && mv "@D@" "@D@.down-$(date -u +%Y%m%dT%H%M%SZ)"; log "state retired: $1"; exit 0; }
