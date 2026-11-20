@@ -93,10 +93,12 @@ def _repr(value: PythonObject) raises -> String:
     return String(py_call(trees_builtins().repr, value))
 
 
-def _field(fields: PythonObject, model: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
-    """`self.<name>` of a stored constructor parameter."""
+def _field(fields: PythonObject, model: PythonObject, key: PythonObject, name: String,
+           context: PythonObject) raises -> PythonObject:
+    """`self.<name>` of a stored constructor parameter; `key` is the held key
+    of `name` (lane bw3-trees: a str was built from the name per call)."""
     var nk = trees_keys()
-    var value = py_get(fields, PythonObject(name), py_item(context, nk[].k_trees_missing))
+    var value = py_get(fields, key, py_item(context, nk[].k_trees_missing))
     if value is py_item(context, nk[].k_trees_missing):
         raise Error("AttributeError: '" + String(py_type(model).__name__) + "' object has no attribute '" + name + "'")
     if name != "n_jobs" and name != "output_type":
@@ -108,11 +110,11 @@ def iforest_validate(model: PythonObject, fields: PythonObject, context: PythonO
     """`IsolationForest._validate_params()`: the parameter checks, in order,
     with their wording; each resolved knob is stored as it is checked."""
     var b = trees_builtins()
-    var n_estimators = py_call_typed(b.int, _field(fields, model, "n_estimators", context))
+    var nk = trees_keys()
+    var n_estimators = py_call_typed(b.int, _field(fields, model, nk[].k_n_estimators, "n_estimators", context))
     if Bool(py=n_estimators < PythonObject(1)):
         raise Error(_PREFIX + "n_estimators must be at least 1, got " + _repr(n_estimators))
-    var max_samples = _field(fields, model, "max_samples", context)
-    var nk = trees_keys()
+    var max_samples = _field(fields, model, nk[].k_max_samples, "max_samples", context)
     if Bool(py=py_call(b.isinstance, max_samples, b.str)):
         if String(py_call(max_samples.lower)) != "auto":
             raise Error(_PREFIX + "max_samples=" + _repr(max_samples) + " is not a name; it is 'auto', a positive int, "
@@ -136,7 +138,7 @@ def iforest_validate(model: PythonObject, fields: PythonObject, context: PythonO
         py_setitem(fields, nk[].k__max_samples_mode, PythonObject(2))
         py_setitem(fields, nk[].k__max_samples_int, PythonObject(256))
         py_setitem(fields, nk[].k__max_samples_frac, PythonObject(v))
-    var max_depth = _field(fields, model, "max_depth", context)
+    var max_depth = _field(fields, model, nk[].k_max_depth, "max_depth", context)
     if max_depth is None:
         py_setitem(fields, nk[].k__max_depth, PythonObject(-1))
     else:
@@ -144,7 +146,7 @@ def iforest_validate(model: PythonObject, fields: PythonObject, context: PythonO
         py_setitem(fields, nk[].k__max_depth, depth)
         if Bool(py=depth < PythonObject(1)):
             raise Error(_PREFIX + "max_depth is None (their auto) or a positive int, got " + _repr(max_depth))
-    var max_features = _field(fields, model, "max_features", context)
+    var max_features = _field(fields, model, nk[].k_max_features, "max_features", context)
     if metric_is_bool(max_features, context):
         raise Error(_PREFIX + "max_features must be an int or a float, not a bool")
     var features_error = String(_PREFIX + "max_features must be an int in [1, n_features] or a float in (0.0, 1.0], got ")
@@ -162,7 +164,7 @@ def iforest_validate(model: PythonObject, fields: PythonObject, context: PythonO
         py_setitem(fields, nk[].k__max_features_mode, PythonObject(0))
         py_setitem(fields, nk[].k__max_features_int, PythonObject(0))
         py_setitem(fields, nk[].k__max_features_frac, PythonObject(v))
-    var contamination = _field(fields, model, "contamination", context)
+    var contamination = _field(fields, model, nk[].k_contamination, "contamination", context)
     var contamination_error = String(_PREFIX + "contamination must be 'auto' or a float in the range (0.0, 0.5], got ")
     if Bool(py=py_call(b.isinstance, contamination, b.str)):
         if String(py_call(contamination.lower)) != "auto":
@@ -175,28 +177,28 @@ def iforest_validate(model: PythonObject, fields: PythonObject, context: PythonO
             raise Error(contamination_error + _repr(contamination))
         py_setitem(fields, nk[].k__contamination_auto, PythonObject(False))
         py_setitem(fields, nk[].k__contamination, PythonObject(v))
-    var random_state = _field(fields, model, "random_state", context)
+    var random_state = _field(fields, model, nk[].k_random_state, "random_state", context)
     var seed = PythonObject(0)
     if random_state is not None:
         seed = py_call_typed(b.int, random_state)
         if Bool(py=seed < PythonObject(0)) or Bool(py=seed > PythonObject(4294967295)):
             raise Error(_PREFIX + "expected 0 <= random_state <= 2**32 - 1, got " + _repr(random_state))
-    if Bool(py=py_call(b.bool, _field(fields, model, "warm_start", context))):
+    if Bool(py=py_call(b.bool, _field(fields, model, nk[].k_warm_start, "warm_start", context))):
         raise Error("NotImplementedError: " + _PREFIX + "warm_start=True is not supported "
                     + "(cuML raises UnsupportedOnGPU for it too)")
-    if _field(fields, model, "n_jobs", context) is not None:
+    if _field(fields, model, nk[].k_n_jobs, "n_jobs", context) is not None:
         raise Error("NotImplementedError: " + _PREFIX + "n_jobs is refused; it is "
                     + "scikit-learn's CPU thread count and there is no CPU path in "
                     + "this library to spread")
-    if Bool(py=py_call(b.bool, _field(fields, model, "verbose", context))):
+    if Bool(py=py_call(b.bool, _field(fields, model, nk[].k_verbose, "verbose", context))):
         raise Error("NotImplementedError: " + _PREFIX + "verbose is refused; this implementation "
                     + "prints no log lines, so accepting it would be accepting-"
                     + "and-ignoring")
-    if _field(fields, model, "output_type", context) is not None:
+    if _field(fields, model, nk[].k_output_type, "output_type", context) is not None:
         raise Error("NotImplementedError: " + _PREFIX + "output_type is a cuML-internal "
                     + "array-type selector; this package returns mojolearn Arrays")
     py_setitem(fields, nk[].k__n_estimators, n_estimators)
-    py_setitem(fields, nk[].k__bootstrap, PythonObject(Bool(py=py_call(b.bool, _field(fields, model, "bootstrap", context)))))
+    py_setitem(fields, nk[].k__bootstrap, PythonObject(Bool(py=py_call(b.bool, _field(fields, model, nk[].k_bootstrap, "bootstrap", context)))))
     py_setitem(fields, nk[].k__seed, seed)
 
 

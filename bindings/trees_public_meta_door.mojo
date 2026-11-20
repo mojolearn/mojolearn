@@ -162,13 +162,15 @@ def meta_kind(model: PythonObject, context: PythonObject) raises -> String:
     raise Error("TypeError: the native meta-estimator owner requires a connected meta-estimator class")
 
 
-def _attr(owner: PythonObject, name: String, default: PythonObject) raises -> PythonObject:
-    """`getattr(owner, name, default)`."""
-    return py_call(trees_builtins().getattr, owner, PythonObject(name), default)
+def _attr(owner: PythonObject, key: PythonObject, default: PythonObject) raises -> PythonObject:
+    """`getattr(owner, name, default)` with the held key of the name
+    (`nk[].k_<name>`; lane bw3-trees: a str was built from the name per call)."""
+    return py_call(trees_builtins().getattr, owner, key, default)
 
 
-def _has(owner: PythonObject, name: String) raises -> Bool:
-    return Bool(py=py_call(trees_builtins().hasattr, owner, PythonObject(name)))
+def _has(owner: PythonObject, key: PythonObject) raises -> Bool:
+    """`hasattr(owner, name)` with the held key of the name."""
+    return Bool(py=py_call(trees_builtins().hasattr, owner, key))
 
 
 def _call_kw(callable: PythonObject, args: PythonObject, kwargs: PythonObject) raises -> PythonObject:
@@ -272,7 +274,8 @@ def _f32_array(value: PythonObject, ndim: Int, name: String, context: PythonObje
 def _out2d(x: PythonObject, n: Int, context: PythonObject) raises -> AdmittedX:
     """`_trees_output_2d(x, n)`: a member's output as a float32 (n, c) block
     (a 1-D output is c = 1)."""
-    var shape = _attr(x, "shape", Python.tuple())
+    var nk = trees_keys()
+    var shape = _attr(x, nk[].k_shape, Python.tuple())
     if len(shape) == 2:
         return admit_f32(x, 2, "output", context, finite=False)
     var v = admit_f32(x, 1, "output", context, finite=False)
@@ -314,7 +317,8 @@ def _member_class_codes(member: PythonObject, context: PythonObject) raises -> P
     the glue kernels (`x_trees_accumulate_cols`, the calibrated fusion), never
     written. Same values as before: no bits change."""
     var b = trees_builtins()
-    var classes = _attr(member, "classes_", PythonObject(None))
+    var nk = trees_keys()
+    var classes = _attr(member, nk[].k_classes_, PythonObject(None))
     var values = classifier_label_list(classes, context)
     var listed = values if py_type(values) is b.list or py_type(values) is b.tuple else _label_list(values, context)
     var held = trees_side_get(_MEMBER_CODES_SLOT, member)
@@ -327,7 +331,6 @@ def _member_class_codes(member: PythonObject, context: PythonObject) raises -> P
         if same:
             return held
     var subs = _int_list(listed)
-    var nk = trees_keys()
     var store = py_call(py_item(context, nk[].k_array_type), PythonObject("i"), subs)
     var array = classical_wrap_array(store, Python.tuple(len(store)), "<i4", "C", context)
     var at = -1
@@ -568,19 +571,21 @@ def _set(model: PythonObject, name: String, value: PythonObject) raises:
 
 def _check_x(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_TreesWrapperBase._check_X`."""
-    if not _truthy(_attr(model, "_fitted", PythonObject(False))):
+    var nk = trees_keys()
+    if not _truthy(_attr(model, nk[].k__fitted, PythonObject(False))):
         raise Error("RuntimeError: this estimator is not fitted yet")
     var Xa = _x_array(X, context)
-    var fitted = Int(py=_attr(model, "n_features_in_", PythonObject(0)))
+    var fitted = Int(py=_attr(model, nk[].k_n_features_in_, PythonObject(0)))
     trees_check_features(_cols(Xa), fitted)
     return Xa
 
 
 def _refuse_jobs(model: PythonObject, verbose: Bool, why: String) raises:
+    var nk = trees_keys()
     if verbose:
-        if _attr(model, "n_jobs", PythonObject(None)) is not None or _truthy(_attr(model, "verbose", PythonObject(0))):
+        if _attr(model, nk[].k_n_jobs, PythonObject(None)) is not None or _truthy(_attr(model, nk[].k_verbose, PythonObject(0))):
             _refuse("n_jobs/verbose", why)
-    elif _attr(model, "n_jobs", PythonObject(None)) is not None:
+    elif _attr(model, nk[].k_n_jobs, PythonObject(None)) is not None:
         _refuse("n_jobs", why)
 
 
@@ -740,8 +745,9 @@ def _splits(xt: PythonObject, cv: PythonObject, X: PythonObject, y: PythonObject
 def _voting_weights(model: PythonObject) raises -> PythonObject:
     """`VotingClassifier._weights`: one float per fitted member."""
     var b = trees_builtins()
-    var m = len(_attr(model, "estimators_", Python.list()))
-    var given = _attr(model, "weights", PythonObject(None))
+    var nk = trees_keys()
+    var m = len(_attr(model, nk[].k_estimators_, Python.list()))
+    var given = _attr(model, nk[].k_weights, PythonObject(None))
     var w = Python.list()
     if given is None:
         for _ in range(m):  # driver-loop: over members
@@ -759,8 +765,9 @@ def _voting_fit(model: PythonObject, X: PythonObject, y: PythonObject, sample_we
                 classifier: Bool, context: PythonObject) raises -> PythonObject:
     var fields = py_fields(model)
     var owner = _owner(model)
+    var nk = trees_keys()
     if classifier:
-        var voting = _attr(model, "voting", PythonObject(None))
+        var voting = _attr(model, nk[].k_voting, PythonObject(None))
         if not py_contains(Python.tuple("hard", "soft"), voting):
             raise Error("voting must be 'hard' or 'soft'")
     _refuse_jobs(model, True, "the members fit one after another.")
@@ -771,7 +778,7 @@ def _voting_fit(model: PythonObject, X: PythonObject, y: PythonObject, sample_we
         _set(model, "classes_", labels.classes)
         _set(model, "n_classes_", PythonObject(len(labels.classes)))
         target = labels.codes
-    var active = _active(_attr(model, "estimators", PythonObject(None)), owner, context)
+    var active = _active(_attr(model, nk[].k_estimators, PythonObject(None)), owner, context)
     var weights = _member_weights(active.names, active.ests, sample_weight, _rows(Xa), context)
     var fitted = Python.list()
     _set(model, "estimators_", fitted)
@@ -792,10 +799,11 @@ def _voting_soft(model: PythonObject, xt: PythonObject, Xa: PythonObject, contex
     """`VotingClassifier._soft`: the weighted average of the members'
     probabilities, class-major (n * k)."""
     var n = _rows(Xa)
-    var k = Int(py=_attr(model, "n_classes_", PythonObject(0)))
+    var nk = trees_keys()
+    var k = Int(py=_attr(model, nk[].k_n_classes_, PythonObject(0)))
     var acc = _class_zero(xt, n * k, context)
     var w = _voting_weights(model)
-    var members = _attr(model, "estimators_", Python.list())
+    var members = _attr(model, nk[].k_estimators_, Python.list())
     # Every member's probabilities into the vote in one call (lane
     # ne2-b-members, N083): the accumulator stays on the device across the
     # members. The same adds in member order: the same bits. The per-member
@@ -829,16 +837,18 @@ def _voting_soft(model: PythonObject, xt: PythonObject, Xa: PythonObject, contex
 
 
 def _voting_predict_proba(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
-    if String(_attr(model, "voting", PythonObject(""))) == "hard":
+    var nk = trees_keys()
+    if String(_attr(model, nk[].k_voting, PythonObject(""))) == "hard":
         raise Error("AttributeError: predict_proba is not available when voting='hard'")
     var Xa = _check_x(model, X, context)
     var xt = _xt(py_fields(model), context)
-    var k = Int(py=_attr(model, "n_classes_", PythonObject(0)))
+    var k = Int(py=_attr(model, nk[].k_n_classes_, PythonObject(0)))
     return trees_reshape(_voting_soft(model, xt, Xa, context), Python.tuple(_rows(Xa), k), context)
 
 
 def _voting_predict(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
-    return trees_decode_labels(_attr(model, "classes_", PythonObject(None)), _voting_codes(model, X, context), context)
+    var nk = trees_keys()
+    return trees_decode_labels(_attr(model, nk[].k_classes_, PythonObject(None)), _voting_codes(model, X, context), context)
 
 
 def _voting_codes(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -847,14 +857,15 @@ def _voting_codes(model: PythonObject, X: PythonObject, context: PythonObject) r
     var Xa = _check_x(model, X, context)
     var xt = _xt(py_fields(model), context)
     var n = _rows(Xa)
-    var k = Int(py=_attr(model, "n_classes_", PythonObject(0)))
+    var nk = trees_keys()
+    var k = Int(py=_attr(model, nk[].k_n_classes_, PythonObject(0)))
     var acc: PythonObject
-    if String(_attr(model, "voting", PythonObject(""))) == "soft":
+    if String(_attr(model, nk[].k_voting, PythonObject(""))) == "soft":
         acc = _voting_soft(model, xt, Xa, context)
     else:
         acc = _zeros(n * k, context)
         var w = _voting_weights(model)
-        var members = _attr(model, "estimators_", Python.list())
+        var members = _attr(model, nk[].k_estimators_, Python.list())
         for i in range(len(members)):  # driver-loop: over members
             _acc_votes(xt, acc, _member_label_codes(members[i], Xa, context), n, k, Float64(py=w[i]))
     return _argmax(xt, acc, n, k, context)
@@ -864,10 +875,11 @@ def _voting_transform(model: PythonObject, X: PythonObject, classifier: Bool, co
     var Xa = _check_x(model, X, context)
     var xt = _xt(py_fields(model), context)
     var n = _rows(Xa)
-    var members = _attr(model, "estimators_", Python.list())
+    var nk = trees_keys()
+    var members = _attr(model, nk[].k_estimators_, Python.list())
     var m = len(members)
-    var soft = classifier and String(_attr(model, "voting", PythonObject(""))) == "soft"
-    var k = Int(py=_attr(model, "n_classes_", PythonObject(0))) if classifier else 1
+    var soft = classifier and String(_attr(model, nk[].k_voting, PythonObject(""))) == "soft"
+    var k = Int(py=_attr(model, nk[].k_n_classes_, PythonObject(0))) if classifier else 1
     var width = m * k if soft else m
     var out = _zeros(n * width, context)
     var rows = _arange(xt, n, context)
@@ -893,9 +905,10 @@ def _voting_regress(model: PythonObject, X: PythonObject, context: PythonObject)
     var Xa = _check_x(model, X, context)
     var xt = _xt(py_fields(model), context)
     var n = _rows(Xa)
-    var members = _attr(model, "estimators_", Python.list())
+    var nk = trees_keys()
+    var members = _attr(model, nk[].k_estimators_, Python.list())
     var m = len(members)
-    var given = _attr(model, "weights", PythonObject(None))
+    var given = _attr(model, nk[].k_weights, PythonObject(None))
     var w = Python.list()
     if given is None:
         for _ in range(m):  # driver-loop: over members
@@ -918,15 +931,17 @@ def _voting_regress(model: PythonObject, X: PythonObject, context: PythonObject)
 
 def _stacking_validate(model: PythonObject, context: PythonObject) raises:
     _refuse_jobs(model, True, "the members fit one after another.")
-    var method = _attr(model, "stack_method", PythonObject("auto"))
+    var nk = trees_keys()
+    var method = _attr(model, nk[].k_stack_method, PythonObject("auto"))
     if not py_contains(Python.tuple("auto", "predict_proba", "decision_function", "predict"), method):
         raise Error("stack_method must be auto, predict_proba, decision_function or predict")
-    _ = _cv_value(_attr(model, "cv", PythonObject(None)), context)
+    _ = _cv_value(_attr(model, nk[].k_cv, PythonObject(None)), context)
 
 
 def _stack_method(model: PythonObject, est: PythonObject, classifier: Bool, context: PythonObject) raises -> PythonObject:
     """`_StackingBase._method`."""
-    var method = _attr(model, "stack_method", PythonObject("auto"))
+    var nk = trees_keys()
+    var method = _attr(model, nk[].k_stack_method, PythonObject("auto"))
     if String(method) != "auto":
         return method
     if classifier:
@@ -964,7 +979,8 @@ def _stacking_fit(model: PythonObject, X: PythonObject, y_full: PythonObject, co
     var y_view = y_full
     var n = Int(py=x_view.shape[0])
     var d = Int(py=x_view.shape[1])
-    var active = _active(_attr(model, "estimators", PythonObject(None)), owner, context)
+    var nk = trees_keys()
+    var active = _active(_attr(model, nk[].k_estimators, PythonObject(None)), owner, context)
     _require_member(final, owner, context)
     var all_names = py_call(trees_builtins().list, active.names)
     var all_ests = py_call(trees_builtins().list, active.ests)
@@ -987,8 +1003,8 @@ def _stacking_fit(model: PythonObject, X: PythonObject, y_full: PythonObject, co
         _ = py_call(methods.append, method)
         native_methods.append(String(method))
     _set(model, "stack_method_", methods)
-    var binary = _truthy(_attr(model, "_binary", PythonObject(False)))
-    var passthrough = _truthy(_attr(model, "passthrough", PythonObject(False)))
+    var binary = _truthy(_attr(model, nk[].k__binary, PythonObject(False)))
+    var passthrough = _truthy(_attr(model, nk[].k_passthrough, PythonObject(False)))
     var head_n = n if n < 2 else 2
     var head = _gather(xt, trees_address(x_view), n, d, _arange(xt, head_n, context), _arange(xt, d, context), context)
     _ = Xa  # keep the Python object alive through the native call above
@@ -1073,19 +1089,20 @@ def _stacking_transform(model: PythonObject, X: PythonObject, context: PythonObj
     var x_view = Xa
     var n = Int(py=x_view.shape[0])
     var d = Int(py=x_view.shape[1])
-    var widths = _attr(model, "_widths_", Python.list())
+    var nk = trees_keys()
+    var widths = _attr(model, nk[].k__widths_, Python.list())
     var total = 0
     for i in range(len(widths)):  # driver-loop: over members
         total += Int(py=widths[i])
-    var passthrough = _truthy(_attr(model, "passthrough", PythonObject(False)))
+    var passthrough = _truthy(_attr(model, nk[].k_passthrough, PythonObject(False)))
     var width = total + (d if passthrough else 0)
     var meta = _zeros(n * width, context)
     var meta_view = meta
     var rows_view = _arange(xt, n, context)
-    var binary = _truthy(_attr(model, "_binary", PythonObject(False)))
+    var binary = _truthy(_attr(model, nk[].k__binary, PythonObject(False)))
     var col0 = 0
-    var members = _attr(model, "estimators_", Python.list())
-    var methods = _attr(model, "stack_method_", Python.list())
+    var members = _attr(model, nk[].k_estimators_, Python.list())
+    var methods = _attr(model, nk[].k_stack_method_, Python.list())
     for i in range(len(members)):  # driver-loop: over members
         var blk = _out2d(_stack_out(xt, members[i], String(methods[i]), Xa, n, binary, context), n, context)
         col0 += _place(xt, meta_view, n, width, blk.view(), rows_view, col0)
@@ -1109,10 +1126,10 @@ def _stacking_classifier_fit(model: PythonObject, X: PythonObject, y: PythonObje
     var k = len(labels.classes)
     _set(model, "_binary", PythonObject(k == 2))
     var xt = _xt(py_fields(model), context)
-    var splits = _splits(xt, _attr(model, "cv", PythonObject(None)), X, y, labels.n, labels.codes, True, k, context)
-    var final = _attr(model, "final_estimator", PythonObject(None))
+    var nk = trees_keys()
+    var splits = _splits(xt, _attr(model, nk[].k_cv, PythonObject(None)), X, y, labels.n, labels.codes, True, k, context)
+    var final = _attr(model, nk[].k_final_estimator, PythonObject(None))
     if final is None:
-        var nk = trees_keys()
         final = prep_estimator_clone(py_item(py_item(context, nk[].k_native_estimator_defaults), nk[].k_LogisticRegression), context)
     return _stacking_fit(model, X, labels.codes, True, splits, final, sample_weight, True, context)
 
@@ -1122,11 +1139,11 @@ def _stacking_regressor_fit(model: PythonObject, X: PythonObject, y: PythonObjec
     _stacking_validate(model, context)
     var y32 = _f32_array(y, 1, "y", context)
     var xt = _xt(py_fields(model), context)
-    var splits = _splits(xt, _attr(model, "cv", PythonObject(None)), X, y, _rows(y32), PythonObject(None), True, 0,
+    var nk = trees_keys()
+    var splits = _splits(xt, _attr(model, nk[].k_cv, PythonObject(None)), X, y, _rows(y32), PythonObject(None), True, 0,
                          context)
-    var final = _attr(model, "final_estimator", PythonObject(None))
+    var final = _attr(model, nk[].k_final_estimator, PythonObject(None))
     if final is None:
-        var nk = trees_keys()
         final = prep_estimator_clone(py_item(py_item(context, nk[].k_native_estimator_defaults), nk[].k_Ridge), context)
     return _stacking_fit(model, X, y32, False, splits, final, sample_weight, False, context)
 
@@ -1136,24 +1153,27 @@ def _stacking_meta32(model: PythonObject, X: PythonObject, context: PythonObject
 
 
 def _stacking_predict(model: PythonObject, X: PythonObject, classifier: Bool, context: PythonObject) raises -> PythonObject:
-    var final_ = _attr(model, "final_estimator_", PythonObject(None))
+    var nk = trees_keys()
+    var final_ = _attr(model, nk[].k_final_estimator_, PythonObject(None))
     var Xm = _stacking_meta32(model, X, context)
     if not classifier:
         return prep_estimator_call(final_, "predict", Python.tuple(Xm), context)
-    return trees_decode_labels(_attr(model, "classes_", PythonObject(None)), _member_label_codes(final_, Xm, context),
+    return trees_decode_labels(_attr(model, nk[].k_classes_, PythonObject(None)), _member_label_codes(final_, Xm, context),
                                context)
 
 
 def _stacking_codes(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
     """`StackingClassifier.predict` before its decode: the final estimator's
     int32 codes into `classes_`."""
-    var final_ = _attr(model, "final_estimator_", PythonObject(None))
+    var nk = trees_keys()
+    var final_ = _attr(model, nk[].k_final_estimator_, PythonObject(None))
     return _member_label_codes(final_, _stacking_meta32(model, X, context), context)
 
 
 def _stacking_predict_proba(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
-    var final_ = _attr(model, "final_estimator_", PythonObject(None))
-    var k = len(_attr(model, "classes_", Python.list()))
+    var nk = trees_keys()
+    var final_ = _attr(model, nk[].k_final_estimator_, PythonObject(None))
+    var k = len(_attr(model, nk[].k_classes_, Python.list()))
     var Xm = _stacking_meta32(model, X, context)
     var n = _rows(Xm)
     var xt = _xt(py_fields(model), context)
@@ -1168,7 +1188,8 @@ def _stacking_predict_proba(model: PythonObject, X: PythonObject, context: Pytho
 def _multioutput_y(Y: PythonObject) raises:
     """`_trees_multioutput_y`: scikit-learn's refusal of a 1-D target."""
     var b = trees_builtins()
-    var nd = _attr(Y, "ndim", PythonObject(None))
+    var nk = trees_keys()
+    var nd = _attr(Y, nk[].k_ndim, PythonObject(None))
     if nd is None and Bool(py=py_call(b.isinstance, Y, Python.tuple(b.list, b.tuple))):
         var nested = len(Y) > 0 and Bool(py=py_call(b.isinstance, Y[0], Python.tuple(b.list, b.tuple)))
         nd = PythonObject(2 if nested else 1)
@@ -1187,7 +1208,7 @@ def _ridge_multi_entry(model: PythonObject, est: PythonObject, sample_weight: Py
     if plain:
         # Ridge checks its parameters at fit; this route skips Ridge.fit.
         _ = prep_estimator_call(est, "validate_params", Python.tuple(), context)
-    if sample_weight is not None or not plain or _truthy(_attr(est, "normalize", PythonObject(False))):
+    if sample_weight is not None or not plain or _truthy(_attr(est, nk[].k_normalize, PythonObject(False))):
         return PythonObject(None)
     try:
         var table = trees_table(context, _mode(py_fields(est), context), "_mojolearn_estimators")
@@ -1214,8 +1235,9 @@ def _multioutput_ridge_fit(model: PythonObject, table: PythonObject, Xa: PythonO
     var n = _rows(Xa)
     var d = _cols(Xa)
     var m = _cols(Ya)
-    var est = _attr(model, "estimator", PythonObject(None))
-    var intercept = _truthy(_attr(est, "fit_intercept", PythonObject(True)))
+    var nk = trees_keys()
+    var est = _attr(model, nk[].k_estimator, PythonObject(None))
+    var intercept = _truthy(_attr(est, nk[].k_fit_intercept, PythonObject(True)))
     var key = ridge_multi_ref(_estimators_key(table))  # resolved once for the fit
     var xm: PythonObject
     var work_x = Xa
@@ -1247,7 +1269,7 @@ def _multioutput_ridge_fit(model: PythonObject, table: PythonObject, Xa: PythonO
     var ymean = admitted_vector(m, "<f4", context)
     var icpt32 = admitted_vector(m, "<f4", context)
     # UNPACK: the member's alpha as Python's float() reads it.
-    var alpha = Float64(py=py_call_typed(trees_builtins().float, _attr(est, "alpha", PythonObject(1.0))))
+    var alpha = Float64(py=py_call_typed(trees_builtins().float, _attr(est, nk[].k_alpha, PythonObject(1.0))))
     var fit_x = trees_address(work_x)
     var fit_y = trees_address(Ya)
     var fit_coef = trees_address(coef)
@@ -1294,7 +1316,8 @@ def _multioutput_regressor_fit(model: PythonObject, X: PythonObject, y: PythonOb
     var Ya = _f32_array(y, 2, "y", context)
     if _rows(Ya) != _rows(Xa):
         raise Error("y has " + String(_rows(Ya)) + " rows, X has " + String(_rows(Xa)))
-    var est = _attr(model, "estimator", PythonObject(None))
+    var nk = trees_keys()
+    var est = _attr(model, nk[].k_estimator, PythonObject(None))
     _require_member(est, _owner(model), context)
     var weights = _member_weights(Python.list(PythonObject(None)), Python.list(est), sample_weight, _rows(Xa), context)
     _set(model, "_multi_ridge", PythonObject(None))
@@ -1322,9 +1345,10 @@ def _multioutput_regressor_predict(model: PythonObject, X: PythonObject, context
     var Xa = _check_x(model, X, context)
     var xt = _xt(py_fields(model), context)
     var n = _rows(Xa)
-    var members = _attr(model, "estimators_", Python.list())
+    var nk = trees_keys()
+    var members = _attr(model, nk[].k_estimators_, Python.list())
     var m = len(members)
-    var mr = _attr(model, "_multi_ridge", PythonObject(None))
+    var mr = _attr(model, nk[].k__multi_ridge, PythonObject(None))
     if mr is not None:
         var outputs = Int(py=mr[2])
         var out = admitted_array(Python.tuple(n, outputs), "<f4", context)
@@ -1376,11 +1400,12 @@ def _label_columns(Y: PythonObject, xt: PythonObject, context: PythonObject) rai
     for anything else (bool, str, object, nested lists, uint64), which keeps
     the Python rows."""
     var b = trees_builtins()
-    var dtype = _attr(Y, "dtype", PythonObject(None))
-    var nd = _attr(Y, "ndim", PythonObject(None))
+    var nk = trees_keys()
+    var dtype = _attr(Y, nk[].k_dtype, PythonObject(None))
+    var nd = _attr(Y, nk[].k_ndim, PythonObject(None))
     if nd is None or not Bool(py=nd == PythonObject(2)):
         return PythonObject(None)
-    var kind = _attr(dtype, "kind", PythonObject(None))
+    var kind = _attr(dtype, nk[].k_kind, PythonObject(None))
     if kind is None:
         if py_type(dtype) is not b.str:
             return PythonObject(None)
@@ -1430,11 +1455,12 @@ def _multioutput_classifier_fit(model: PythonObject, X: PythonObject, y: PythonO
     var listed = py_type(y) is b.list or py_type(y) is b.tuple
     if not listed and native_pandas_exact(y):
         target = _label_list(y, context)
-    var nd = _attr(target, "ndim", PythonObject(None))
+    var nk = trees_keys()
+    var nd = _attr(target, nk[].k_ndim, PythonObject(None))
     if nd is not None and Bool(py=nd == PythonObject(1)):
         raise Error("y must have at least two dimensions for multi-output classification but has only one.")
     _multioutput_y(target)
-    var est = _attr(model, "estimator", PythonObject(None))
+    var est = _attr(model, nk[].k_estimator, PythonObject(None))
     _require_member(est, _owner(model), context)
     var weights = _member_weights(Python.list(PythonObject(None)), Python.list(est), sample_weight, n, context)
     var fitted = Python.list()
@@ -1456,13 +1482,13 @@ def _multioutput_classifier_fit(model: PythonObject, X: PythonObject, y: PythonO
             _ = py_call(classes.append, labels.classes)
     else:
         var rows = Python.list()
-        if _has(target, "tolist"):
+        if _has(target, nk[].k_tolist):
             rows = _label_list(target, context)  # cpu-route: label objects (str/mixed) no Array holds, one output column at a time
         else:
             rows = py_call(b.list, py_call(b.map, b.list, target))  # cpu-route: label objects (str/mixed) no Array holds
         if len(rows) != n:
             raise Error("y has " + String(len(rows)) + " rows, X has " + String(n))
-        if len(rows) > 0 and not _has(rows[0], "__len__"):
+        if len(rows) > 0 and not _has(rows[0], nk[].k___len__):
             raise Error("y must have at least two dimensions for multi-output classification but has only one.")
         var m = len(rows[0])
         _set(model, "estimators_", fitted)
@@ -1483,7 +1509,8 @@ def _multioutput_classifier_fit(model: PythonObject, X: PythonObject, y: PythonO
 def _multioutput_member_codes(model: PythonObject, Xa: PythonObject, context: PythonObject) raises -> PythonObject:
     """Each output's member codes (int32, into that output's `classes_[j]`;
     the members were fitted on the column codes): `_member_label_codes`."""
-    var members = _attr(model, "estimators_", Python.list())
+    var nk = trees_keys()
+    var members = _attr(model, nk[].k_estimators_, Python.list())
     var out = Python.list()
     for j in range(len(members)):  # driver-loop: over members
         _ = py_call(out.append, _member_label_codes(members[j], Xa, context))
@@ -1503,11 +1530,11 @@ def _multioutput_assemble(model: PythonObject, Xa: PythonObject, codes: PythonOb
     var b = trees_builtins()
     var xt = _xt(py_fields(model), context)
     var n = _rows(Xa)
-    var classes = _attr(model, "classes_", Python.list())
+    var nk = trees_keys()
+    var classes = _attr(model, nk[].k_classes_, Python.list())
     var cols = Python.list()
     var stacked = True
     var all_int = True
-    var nk = trees_keys()
     for j in range(len(codes)):  # driver-loop: over members
         var col = trees_decode_labels(classes[j], codes[j], context)
         _ = py_call(cols.append, col)
@@ -1575,8 +1602,9 @@ def _multioutput_classifier_proba(model: PythonObject, X: PythonObject, context:
     var Xa = _check_x(model, X, context)
     var xt = _xt(py_fields(model), context)
     var n = _rows(Xa)
-    var members = _attr(model, "estimators_", Python.list())
-    var classes = _attr(model, "classes_", Python.list())
+    var nk = trees_keys()
+    var members = _attr(model, nk[].k_estimators_, Python.list())
+    var classes = _attr(model, nk[].k_classes_, Python.list())
     var out = Python.list()
     for j in range(len(members)):  # driver-loop: over members
         var k = len(classes[j])
@@ -1670,18 +1698,18 @@ def _multioutput_score_codes(model: PythonObject, codes: PythonObject, n: Int, y
     raised before, the predicted label lists have no buffer). A label
     matches exactly when it is the predicted class."""
     var b = trees_builtins()
-    var classes = _attr(model, "classes_", Python.list())
+    var nk = trees_keys()
+    var classes = _attr(model, nk[].k_classes_, Python.list())
     var m = len(codes)
     var rows = Python.list()
-    if _has(y, "tolist"):
+    if _has(y, nk[].k_tolist):
         rows = _label_list(y, context)  # cpu-route: label objects (str/mixed) no Array holds, the explicit label input step
     else:
         rows = py_call(b.list, py_call(b.map, b.list, y))  # cpu-route: label objects (str/mixed) no Array holds
-    var width = len(rows[0]) if len(rows) > 0 and _has(rows[0], "__len__") else 0
+    var width = len(rows[0]) if len(rows) > 0 and _has(rows[0], nk[].k___len__) else 0
     if len(rows) != n or width != m:
         raise Error("y has shape " + _repr(Python.tuple(len(rows), width)) + ", the predictions have shape "
                     + _repr(Python.tuple(n, m)))
-    var nk = trees_keys()
     var eq = py_call(py_item(context, nk[].k_array_type), PythonObject("B"), py_call(py_item(context, nk[].k_native_bytes_type), n * m))
     var base = Int(py=py_call(eq.buffer_info)[0])
     var bkey = base_helpers_key(py_item(context, nk[].k_trees_helpers))
@@ -1724,7 +1752,8 @@ def _ovr_fit(model: PythonObject, X: PythonObject, y: PythonObject, context: Pyt
     var k = len(labels.classes)
     if k < 2:
         raise Error("y has fewer than 2 classes")
-    var est = _attr(model, "estimator", PythonObject(None))
+    var nk = trees_keys()
+    var est = _attr(model, nk[].k_estimator, PythonObject(None))
     _require_member(est, _owner(model), context)
     var targets = Python.list()
     if k == 2:
@@ -1810,7 +1839,8 @@ def _ovr_fused(xt: PythonObject, members: PythonObject, Xa: PythonObject, n: Int
 
 
 def _ovr_predict(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
-    return trees_decode_labels(_attr(model, "classes_", PythonObject(None)), _ovr_codes(model, X, context), context)
+    var nk = trees_keys()
+    return trees_decode_labels(_attr(model, nk[].k_classes_, PythonObject(None)), _ovr_codes(model, X, context), context)
 
 
 def _ovr_codes(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -1819,9 +1849,10 @@ def _ovr_codes(model: PythonObject, X: PythonObject, context: PythonObject) rais
     var Xa = _check_x(model, X, context)
     var xt = _xt(py_fields(model), context)
     var n = _rows(Xa)
-    var classes = _attr(model, "classes_", PythonObject(None))
+    var nk = trees_keys()
+    var classes = _attr(model, nk[].k_classes_, PythonObject(None))
     var k = len(classes)
-    var members = _attr(model, "estimators_", Python.list())
+    var members = _attr(model, nk[].k_estimators_, Python.list())
     if k == 2:
         return _member_label_codes(members[0], Xa, context)
     if len(members) == k:
@@ -1839,8 +1870,9 @@ def _ovr_predict_proba(model: PythonObject, X: PythonObject, context: PythonObje
     var Xa = _check_x(model, X, context)
     var xt = _xt(py_fields(model), context)
     var n = _rows(Xa)
-    var k = len(_attr(model, "classes_", Python.list()))
-    var members = _attr(model, "estimators_", Python.list())
+    var nk = trees_keys()
+    var k = len(_attr(model, nk[].k_classes_, Python.list()))
+    var members = _attr(model, nk[].k_estimators_, Python.list())
     var glue = _xr(xt)
     if k == 2:
         # `_trees_binary_proba`: rows (1 - p, p) of the positive column
@@ -1867,14 +1899,15 @@ def _ovr_predict_proba(model: PythonObject, X: PythonObject, context: PythonObje
 
 
 def _calibrated_validate(model: PythonObject, context: PythonObject) raises:
-    var method = _attr(model, "method", PythonObject("sigmoid"))
+    var nk = trees_keys()
+    var method = _attr(model, nk[].k_method, PythonObject("sigmoid"))
     if not py_contains(Python.tuple("sigmoid", "isotonic"), method):
         raise Error("method must be 'sigmoid' or 'isotonic'")
-    _ = native_unit_jobs(_attr(model, "n_jobs", PythonObject(None)), "CalibratedClassifierCV")
-    var ensemble = _attr(model, "ensemble", PythonObject(True))
+    _ = native_unit_jobs(_attr(model, nk[].k_n_jobs, PythonObject(None)), "CalibratedClassifierCV")
+    var ensemble = _attr(model, nk[].k_ensemble, PythonObject(True))
     if not py_contains(Python.tuple(True, False), ensemble):
         _refuse("ensemble=" + _repr(ensemble), "True or False.")
-    _ = _cv_value(_attr(model, "cv", PythonObject(None)), context)
+    _ = _cv_value(_attr(model, nk[].k_cv, PythonObject(None)), context)
 
 
 def _cal_scores(model: PythonObject, xt: PythonObject, e: PythonObject, Xa: PythonObject,
@@ -1882,7 +1915,8 @@ def _cal_scores(model: PythonObject, xt: PythonObject, e: PythonObject, Xa: Pyth
     """`CalibratedClassifierCV._scores`: (n, c) float64 scores, c = 1 when
     binary, else one column per class."""
     var n = _rows(Xa)
-    var k = len(_attr(model, "classes_", Python.list()))
+    var nk = trees_keys()
+    var k = len(_attr(model, nk[].k_classes_, Python.list()))
     var out: PythonObject
     if prep_estimator_has(e, "decision_function", context):
         out = prep_estimator_call(e, "decision_function", Python.tuple(Xa), context)
@@ -1911,7 +1945,7 @@ def _cal_scores(model: PythonObject, xt: PythonObject, e: PythonObject, Xa: Pyth
     # consumed it. _A(_sub_cols(...)) returned only an address to a temporary.
     var sub_cols = _sub_cols(e, context)
     _ = xt_accumulate_cols(glue, trees_address(acc), blk.address, trees_address(sub_cols), n, k,
-                           len(_attr(e, "classes_", Python.list())), 1.0)
+                           len(_attr(e, nk[].k_classes_, Python.list())), 1.0)
     _ = sub_cols
     _ = acc  # keep the Python object alive through the native call above
     _ = blk^
@@ -1924,7 +1958,8 @@ def _fit_calibrators(model: PythonObject, xt: PythonObject, S: PythonObject, cod
     column, the column and its 0/1 target made natively."""
     var n = _rows(S)
     var c = _cols(S)
-    var sigmoid = String(_attr(model, "method", PythonObject("sigmoid"))) == "sigmoid"
+    var nk = trees_keys()
+    var sigmoid = String(_attr(model, nk[].k_method, PythonObject("sigmoid"))) == "sigmoid"
     var St = S
     var glue = _xr(xt)
     if c > 1:
@@ -1975,7 +2010,8 @@ def _calibrated_probs(model: PythonObject, xt: PythonObject, e: PythonObject, ca
     """`CalibratedClassifierCV._calibrated`: the flat (n, k) probabilities of
     one (member, calibrators) pair."""
     var n = _rows(Xa)
-    var k = len(_attr(model, "classes_", Python.list()))
+    var nk = trees_keys()
+    var k = len(_attr(model, nk[].k_classes_, Python.list()))
     var S = _cal_scores(model, xt, e, Xa, context)
     var c = _cols(S)
     var w = 2 if k == 2 else k
@@ -2218,14 +2254,14 @@ def _calibrated_fit(model: PythonObject, X: PythonObject, y: PythonObject, conte
     var k = len(labels.classes)
     if k < 2:
         raise Error("y has fewer than 2 classes")
-    var base = _attr(model, "estimator", PythonObject(None))
     var nk = trees_keys()
+    var base = _attr(model, nk[].k_estimator, PythonObject(None))
     if base is None:
         base = prep_estimator_clone(py_item(py_item(context, nk[].k_native_estimator_defaults), nk[].k_LinearSVC), context)
     _require_member(base, _owner(model), context)
     _set(model, "_cal_fast", PythonObject(None))
-    var ensemble = _truthy(_attr(model, "ensemble", PythonObject(True)))
-    var splits = _splits(xt, _attr(model, "cv", PythonObject(None)), X, y, n, labels.codes, not ensemble, k, context)
+    var ensemble = _truthy(_attr(model, nk[].k_ensemble, PythonObject(True)))
+    var splits = _splits(xt, _attr(model, nk[].k_cv, PythonObject(None)), X, y, n, labels.codes, not ensemble, k, context)
     var cols = _arange(xt, d, context)
     var pairs = Python.list()
     _set(model, "calibrated_classifiers_", pairs)
@@ -2234,7 +2270,7 @@ def _calibrated_fit(model: PythonObject, X: PythonObject, y: PythonObject, conte
     # pairs and the out-of-fold scores keep the fold order. REMOVED: the two
     # serial fold loops and the n_jobs refusal. Same member fits, gathers and
     # calibrators per fold: no bits change.
-    var jobs = native_unit_jobs(_attr(model, "n_jobs", PythonObject(None)), "CalibratedClassifierCV")
+    var jobs = native_unit_jobs(_attr(model, nk[].k_n_jobs, PythonObject(None)), "CalibratedClassifierCV")
     var units = _CalUnits(model, xt, base, Xa, splits, labels.codes, cols, n, d, ensemble, context)
     # fb12-rows (2026-11-17): the folds' X stays on the GPU. Each fold side
     # was `_gather` (xtrees gather_f32_device): all of X uploaded, the rows
@@ -2327,6 +2363,7 @@ def _calibrated_fused(model: PythonObject, xt: PythonObject, pairs: PythonObject
     var keep = List[PythonObject]()
     var acc = admitted_vector(n * k, "<f8", context)
     var program = CalibratedProgram(trees_address(acc), n, k, len(pairs))
+    var nk = trees_keys()
     for i in range(len(pairs)):  # driver-loop: over the (member, calibrators) pairs
         var e = pairs[i][0]
         var cals = pairs[i][1]
@@ -2348,7 +2385,7 @@ def _calibrated_fused(model: PythonObject, xt: PythonObject, pairs: PythonObject
             var sub_cols = _sub_cols(e, context)
             keep.append(sub_cols)
             cols_addr = trees_address(sub_cols)
-            ks = len(_attr(e, "classes_", Python.list()))
+            ks = len(_attr(e, nk[].k_classes_, Python.list()))
         program.pair(blk.address, cols_addr, blk.cols, at, ks, len(cals))
         for j in range(len(cals)):  # driver-loop: over the class columns (one calibrator each)
             var entry = cals[j]
@@ -2373,8 +2410,9 @@ def _calibrated_proba(model: PythonObject, X: PythonObject, context: PythonObjec
     var Xa = _check_x(model, X, context)
     var xt = _xt(py_fields(model), context)
     var n = _rows(Xa)
-    var k = len(_attr(model, "classes_", Python.list()))
-    var pairs = _attr(model, "calibrated_classifiers_", Python.list())
+    var nk = trees_keys()
+    var k = len(_attr(model, nk[].k_classes_, Python.list()))
+    var pairs = _attr(model, nk[].k_calibrated_classifiers_, Python.list())
     if k >= 2:
         return _calibrated_fused(model, xt, pairs, Xa, n, k, context)
     var acc = _class_zero(xt, n * k, context)
@@ -2386,7 +2424,8 @@ def _calibrated_proba(model: PythonObject, X: PythonObject, context: PythonObjec
 
 
 def _calibrated_predict(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
-    return trees_decode_labels(_attr(model, "classes_", PythonObject(None)), _calibrated_codes(model, X, context),
+    var nk = trees_keys()
+    return trees_decode_labels(_attr(model, nk[].k_classes_, PythonObject(None)), _calibrated_codes(model, X, context),
                                context)
 
 
@@ -2395,7 +2434,8 @@ def _calibrated_codes(model: PythonObject, X: PythonObject, context: PythonObjec
     the calibrated probabilities, int32 codes into `classes_`."""
     var p = _calibrated_proba(model, X, context)
     var xt = _xt(py_fields(model), context)
-    var classes = _attr(model, "classes_", PythonObject(None))
+    var nk = trees_keys()
+    var classes = _attr(model, nk[].k_classes_, PythonObject(None))
     return _argmax(xt, p, _rows(p), len(classes), context)
 
 
@@ -2409,7 +2449,7 @@ def _regressor_score(model: PythonObject, prediction: PythonObject, y: PythonObj
     var mode = py_get(py_fields(model), nk[].k_numeric_mode)
     var truth = admit_f32(y, -1, "y", context, finite=False)
     var pred = admit_f32(prediction, -1, "prediction", context, finite=False)
-    if len(_attr(pred.array, "shape", Python.tuple(0))) == 2 or len(_attr(truth.array, "shape", Python.tuple(0))) == 2:
+    if len(_attr(pred.array, nk[].k_shape, Python.tuple(0))) == 2 or len(_attr(truth.array, nk[].k_shape, Python.tuple(0))) == 2:
         # 2-D targets: the metrics family's public r2_score (its multioutput
         # program), on the same float32 blocks.
         var metrics = py_item(context, nk[].k_native_meta_metrics)
@@ -2518,13 +2558,14 @@ def meta_operation(model: PythonObject, operation: String, args: PythonObject,
 
 def _member_list(model: PythonObject, kind: String) raises -> PythonObject:
     """The fitted members a prediction of `model` runs on X itself."""
+    var nk = trees_keys()
     if kind == "calibrated":
-        var pairs = _attr(model, "calibrated_classifiers_", Python.list())
+        var pairs = _attr(model, nk[].k_calibrated_classifiers_, Python.list())
         var members = Python.list()
         for i in range(len(pairs)):  # driver-loop: over the (member, calibrators) pairs
             _ = py_call(members.append, pairs[i][0])
         return members
-    return _attr(model, "estimators_", Python.list())
+    return _attr(model, nk[].k_estimators_, Python.list())
 
 
 def _staged_input(model: PythonObject, kind: String, X: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -2627,6 +2668,6 @@ def _meta_dispatch(model: PythonObject, kind: String, operation: String, args: P
         var nk = trees_keys()
         var mode = py_get(py_fields(model), nk[].k_numeric_mode)
         var codes = _meta_class_codes(model, kind, X, context)
-        return PythonObject(classical_score_from_codes(y, _attr(model, "classes_", PythonObject(None)), codes,
+        return PythonObject(classical_score_from_codes(y, _attr(model, nk[].k_classes_, PythonObject(None)), codes,
                                                        sample_weight, mode, context))
     raise Error("unknown meta-estimator operation " + operation)

@@ -143,16 +143,18 @@ def gbdt_host_tree_context(context: PythonObject) raises -> PythonObject:
     return host
 
 
-def _field(fields: PythonObject, model: PythonObject, name: String) raises -> PythonObject:
+def _field(fields: PythonObject, model: PythonObject, key: PythonObject, name: String) raises -> PythonObject:
     """An attribute the model holds (instance first, then its class), or
-    the AttributeError Python's attribute read raised."""
+    the AttributeError Python's attribute read raised. `key` is the held key
+    of `name` (`nk[].k_<name>`; lane bw3-trees: up to three str were built
+    from the name per call); `name` is for the error text."""
     var missing = Python.tuple()
     var cls = py_type(model)
-    var member = _resolved(cls, PythonObject(name), missing)
+    var member = _resolved(cls, key, missing)
     if member is not missing and _resolved(py_type(member), "__get__", missing) is not missing:
         raise Error("TypeError: native GBDT fields cannot invoke Python property/descriptor hooks")
-    if py_contains(fields, PythonObject(name)):
-        return native_instance_item(fields, PythonObject(name))
+    if py_contains(fields, key):
+        return native_instance_item(fields, key)
     if member is not missing:
         return member
     raise Error("AttributeError: '" + String(cls.__name__) + "' object has no attribute '" + name + "'")
@@ -215,11 +217,11 @@ def _resident_call(table: PythonObject, handle: Int, x: AdmittedX, out_buf: Pyth
 def gbdt_predict(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
     """`GradientBoosting.predict`: raw float32 scores."""
     var fields = py_fields(model)
-    var text = _field(fields, model, "model_")
+    var nk = trees_keys()
+    var text = _field(fields, model, nk[].k_model_, "model_")
     if text is None:
         raise Error("RuntimeError: mojolearn: predict() before fit()")
     var table = gbdt_table(fields, context)
-    var nk = trees_keys()
     if gbdt_vendor(table) == "cpu" and gbdt_has_ctr(text):
         # The CPU restatement of a CTR model's apply (`HostGBDT`).
         var args = Python.tuple(X, py_item(fields, nk[].k_loss), text, py_item(fields, nk[].k_n_features_in_), py_item(fields, nk[].k_approx_dim_),
@@ -276,13 +278,13 @@ def gbdt_predict_proba(model: PythonObject, X: PythonObject, context: PythonObje
     sigmoid (MultiClassOneVsAll) or float64 `[1 - p, p]` (Logloss,
     CrossEntropy)."""
     var fields = py_fields(model)
-    var loss = _field(fields, model, "loss")
+    var nk = trees_keys()
+    var loss = _field(fields, model, nk[].k_loss, "loss")
     if _is_multi_output(loss):
-        if _field(fields, model, "model_") is None:
+        if _field(fields, model, nk[].k_model_, "model_") is None:
             raise Error("RuntimeError: mojolearn: predict_proba() before fit()")
         var mode = _PREDICT_SIGMOID if Bool(py=loss == PythonObject("MultiClassOneVsAll")) else _PREDICT_SOFTMAX
         var table = gbdt_table(fields, context)
-        var nk = trees_keys()
         var classes = _int(py_item(fields, nk[].k_n_classes_))
         var handle = gbdt_resident(fields, table)
         var width = 0
@@ -310,7 +312,7 @@ def gbdt_predict_proba(model: PythonObject, X: PythonObject, context: PythonObje
                     + "CrossEntropy, MultiClass and MultiClassOneVsAll; this model was fitted with "
                     + _repr(loss) + ". Use predict() and apply the link "
                     + "yourself.")
-    if _field(fields, model, "model_") is None:
+    if _field(fields, model, nk[].k_model_, "model_") is None:
         raise Error("RuntimeError: mojolearn: predict_proba() before fit()")
     var table = gbdt_table(fields, context)
     var handle = gbdt_resident(fields, table)
@@ -376,13 +378,13 @@ def gbdt_predict_classes(model: PythonObject, X: PythonObject, context: PythonOb
     resident direct-class kernels where they apply, else the argmax of
     `predict_proba`."""
     var fields = py_fields(model)
-    var loss = _field(fields, model, "loss")
+    var nk = trees_keys()
+    var loss = _field(fields, model, nk[].k_loss, "loss")
     if not _is_multi_output(loss) and not _is_binary(loss):
         raise Error("mojolearn: predict_classes needs a classification loss; "
                     + "this model was fitted with " + _repr(loss) + ".")
     var table = gbdt_table(fields, context)
     if _numeric_mode_used(table) == "fast":
-        var nk = trees_keys()
         if _is_binary(loss):
             var direct = trees_entry(table, "gbdt_resident_binary_classes")
             if direct is not None:
@@ -402,7 +404,7 @@ def gbdt_predict_classes(model: PythonObject, X: PythonObject, context: PythonOb
                         _ = x  # keep the Python object alive through the native call above
                     _ = out  # keep the Python object alive through the native calls above
                     return out
-        elif _int(py_item(fields, nk[].k_n_classes_)) <= 3 and Bool(py=_field(fields, model, "grow_policy") == PythonObject("SymmetricTree")):
+        elif _int(py_item(fields, nk[].k_n_classes_)) <= 3 and Bool(py=_field(fields, model, nk[].k_grow_policy, "grow_policy") == PythonObject("SymmetricTree")):
             if py_item(fields, nk[].k_model_) is None:
                 raise Error("RuntimeError: mojolearn: predict_proba() before fit()")
             var handle = gbdt_resident(fields, table)
@@ -501,7 +503,8 @@ def gbdt_tree_metadata_op(model: PythonObject, which: String, context: PythonObj
     """`get_tree_leaf_counts` (uint32 per tree) / `get_leaf_values`
     (float64, tree-major then leaf-major) from the model text."""
     var fields = py_fields(model)
-    var text = _field(fields, model, "model_")
+    var nk = trees_keys()
+    var text = _field(fields, model, nk[].k_model_, "model_")
     if text is None:
         raise Error("RuntimeError: mojolearn: tree inspection before fit()")
     var parsed = gbdt_tree_metadata(String(py_call(trees_builtins().str, text)))
@@ -541,7 +544,7 @@ def _ordered_options(fields: PythonObject, model: PythonObject, context: PythonO
     var upper: List[Int] = [2147483647, 8, 255]
     var nk = trees_keys()
     for i in range(3):  # driver-loop: over fixed call structure, small-loop(names): the three integer settings
-        var value = _field(fields, model, names[i])
+        var value = _field(fields, model, PythonObject(names[i]), names[i])
         var ok = not _is_bool(value) and _isinstance(value, py_item(context, nk[].k_trees_integral_type))
         if ok:
             ok = Bool(py=value >= PythonObject(1)) and Bool(py=value <= PythonObject(upper[i]))
@@ -549,7 +552,7 @@ def _ordered_options(fields: PythonObject, model: PythonObject, context: PythonO
             raise Error("mojolearn: " + names[i] + " must be an integer in 1.." + String(upper[i]))
     var reals: List[String] = ["learning_rate", "l2_leaf_reg"]
     for i in range(2):  # driver-loop: over fixed call structure, small-loop(reals): the two real settings
-        var value = _field(fields, model, reals[i])
+        var value = _field(fields, model, PythonObject(reals[i]), reals[i])
         var positive = i == 0
         var ok = not _is_bool(value) and _isinstance(value, py_item(context, nk[].k_trees_real_type))
         if ok:
@@ -708,11 +711,11 @@ def ordered_rmse_fit(model: PythonObject, args: PythonObject, context: PythonObj
         raise Error("RuntimeError: mojolearn: this GBDT binary predates OrderedRMSE; "
                     + "install or build a matching native extension")
     var params = Python.list(PythonObject(n), PythonObject(x.cols), PythonObject(n_weights), PythonObject(n),
-                             py_call_typed(b.int, _field(fields, model, "n_estimators")),
-                             py_call_typed(b.int, _field(fields, model, "max_depth")),
-                             py_call_typed(b.int, _field(fields, model, "border_count")),
-                             py_call_typed(b.float, _field(fields, model, "learning_rate")),
-                             py_call_typed(b.float, _field(fields, model, "l2_leaf_reg")))
+                             py_call_typed(b.int, _field(fields, model, nk[].k_n_estimators, "n_estimators")),
+                             py_call_typed(b.int, _field(fields, model, nk[].k_max_depth, "max_depth")),
+                             py_call_typed(b.int, _field(fields, model, nk[].k_border_count, "border_count")),
+                             py_call_typed(b.float, _field(fields, model, nk[].k_learning_rate, "learning_rate")),
+                             py_call_typed(b.float, _field(fields, model, nk[].k_l2_leaf_reg, "l2_leaf_reg")))
     var text = py_call_typed(entry, PythonObject(x.address), PythonObject(y.address), PythonObject(w_addr),
                              PythonObject(trees_address(order)), params)
     _ = x  # keep the Python object alive through the native call above
@@ -773,8 +776,8 @@ def feature_freq_fit(model: PythonObject, args: PythonObject, context: PythonObj
     var d = x.cols
     if n == 0 or d < 2:
         raise Error("mojolearn: experimental FeatureFreq needs rows and columns")
-    var sources = _source_columns(_field(fields, model, "sources"))
     var nk = trees_keys()
+    var sources = _source_columns(_field(fields, model, nk[].k_sources, "sources"))
     var helpers = base_helpers_key(py_item(context, nk[].k_trees_helpers))
     for i in range(len(sources)):  # driver-loop: over the named source columns
         var f = sources[i]
@@ -845,9 +848,9 @@ def feature_freq_fit(model: PythonObject, args: PythonObject, context: PythonObj
     var entry = trees_need(table, "gbdt_fit_two_level_feature_freq",
                            "mojolearn: this gbdt binding has no gbdt_fit_two_level_feature_freq", "AttributeError")
     var params = Python.list(PythonObject(n), PythonObject(d), PythonObject(n_weights), PythonObject(k),
-                             py_call_typed(b.float, _field(fields, model, "learning_rate")),
-                             py_call_typed(b.float, _field(fields, model, "l2_leaf_reg")),
-                             py_call_typed(b.int, _field(fields, model, "random_state")))
+                             py_call_typed(b.float, _field(fields, model, nk[].k_learning_rate, "learning_rate")),
+                             py_call_typed(b.float, _field(fields, model, nk[].k_l2_leaf_reg, "l2_leaf_reg")),
+                             py_call_typed(b.int, _field(fields, model, nk[].k_random_state, "random_state")))
     var text = py_call_typed(entry, PythonObject(x.address), PythonObject(y.address), PythonObject(w_addr),
                              PythonObject(trees_address(source_array)), params)
     _ = y  # keep the Python object alive through the native call above

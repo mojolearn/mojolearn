@@ -259,6 +259,34 @@ struct TreesKeys(Defaultable, Movable):
     var k_verbose: PythonObject
     var k_warm_start: PythonObject
     var k_x_trees_tree_shape: PythonObject
+    var k___len__: PythonObject
+    var k__binary: PythonObject
+    var k__fitted: PythonObject
+    var k__multi_ridge: PythonObject
+    var k__widths_: PythonObject
+    var k_alpha: PythonObject
+    var k_calibrated_classifiers_: PythonObject
+    var k_cv: PythonObject
+    var k_dtype: PythonObject
+    var k_ensemble: PythonObject
+    var k_estimators: PythonObject
+    var k_estimators_: PythonObject
+    var k_final_estimator: PythonObject
+    var k_final_estimator_: PythonObject
+    var k_fit_intercept: PythonObject
+    var k_kind: PythonObject
+    var k_method: PythonObject
+    var k_ndim: PythonObject
+    var k_normalize: PythonObject
+    var k_passthrough: PythonObject
+    var k_shape: PythonObject
+    var k_stack_method: PythonObject
+    var k_stack_method_: PythonObject
+    var k_tolist: PythonObject
+    var k_voting: PythonObject
+    var k_weights: PythonObject
+    var k_contamination: PythonObject
+    var k_output_type: PythonObject
 
     def __init__(out self):
         self.ready = False
@@ -507,6 +535,34 @@ struct TreesKeys(Defaultable, Movable):
         self.k_verbose = PythonObject(None)
         self.k_warm_start = PythonObject(None)
         self.k_x_trees_tree_shape = PythonObject(None)
+        self.k___len__ = PythonObject(None)
+        self.k__binary = PythonObject(None)
+        self.k__fitted = PythonObject(None)
+        self.k__multi_ridge = PythonObject(None)
+        self.k__widths_ = PythonObject(None)
+        self.k_alpha = PythonObject(None)
+        self.k_calibrated_classifiers_ = PythonObject(None)
+        self.k_cv = PythonObject(None)
+        self.k_dtype = PythonObject(None)
+        self.k_ensemble = PythonObject(None)
+        self.k_estimators = PythonObject(None)
+        self.k_estimators_ = PythonObject(None)
+        self.k_final_estimator = PythonObject(None)
+        self.k_final_estimator_ = PythonObject(None)
+        self.k_fit_intercept = PythonObject(None)
+        self.k_kind = PythonObject(None)
+        self.k_method = PythonObject(None)
+        self.k_ndim = PythonObject(None)
+        self.k_normalize = PythonObject(None)
+        self.k_passthrough = PythonObject(None)
+        self.k_shape = PythonObject(None)
+        self.k_stack_method = PythonObject(None)
+        self.k_stack_method_ = PythonObject(None)
+        self.k_tolist = PythonObject(None)
+        self.k_voting = PythonObject(None)
+        self.k_weights = PythonObject(None)
+        self.k_contamination = PythonObject(None)
+        self.k_output_type = PythonObject(None)
 
 
 comptime _TREES_KEYS = SharedSlot[TreesKeys, "MojolearnTreesKeysV1"]
@@ -759,6 +815,34 @@ def _trees_keys_fill(nk: UnsafePointer[TreesKeys, MutUntrackedOrigin]) raises:
     nk[].k_verbose = py_key("verbose")
     nk[].k_warm_start = py_key("warm_start")
     nk[].k_x_trees_tree_shape = py_key("x_trees_tree_shape")
+    nk[].k___len__ = py_key("__len__")
+    nk[].k__binary = py_key("_binary")
+    nk[].k__fitted = py_key("_fitted")
+    nk[].k__multi_ridge = py_key("_multi_ridge")
+    nk[].k__widths_ = py_key("_widths_")
+    nk[].k_alpha = py_key("alpha")
+    nk[].k_calibrated_classifiers_ = py_key("calibrated_classifiers_")
+    nk[].k_cv = py_key("cv")
+    nk[].k_dtype = py_key("dtype")
+    nk[].k_ensemble = py_key("ensemble")
+    nk[].k_estimators = py_key("estimators")
+    nk[].k_estimators_ = py_key("estimators_")
+    nk[].k_final_estimator = py_key("final_estimator")
+    nk[].k_final_estimator_ = py_key("final_estimator_")
+    nk[].k_fit_intercept = py_key("fit_intercept")
+    nk[].k_kind = py_key("kind")
+    nk[].k_method = py_key("method")
+    nk[].k_ndim = py_key("ndim")
+    nk[].k_normalize = py_key("normalize")
+    nk[].k_passthrough = py_key("passthrough")
+    nk[].k_shape = py_key("shape")
+    nk[].k_stack_method = py_key("stack_method")
+    nk[].k_stack_method_ = py_key("stack_method_")
+    nk[].k_tolist = py_key("tolist")
+    nk[].k_voting = py_key("voting")
+    nk[].k_weights = py_key("weights")
+    nk[].k_contamination = py_key("contamination")
+    nk[].k_output_type = py_key("output_type")
     var ops = Python.dict()
     nk[].ops = ops
     nk[].ready = True
