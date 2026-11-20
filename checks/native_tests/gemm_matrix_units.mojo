@@ -43,6 +43,11 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from gemm.fast_matrix_units import (
     GEMM_FAST_MATRIX_UNITS, matrix_units_takes, matrix_units_workspace_floats, matrix_units_cell_bound,
 )
+# lane fx-fast-bf16 (2026-11-20): the same fixtures and tests hold the bf16-units arm (gemm/fast_bf16_units.mojo) to its
+# own operand bound. With both arms compiled a cell is held to the wider (bf16) bound.
+from gemm.fast_bf16_units import (
+    GEMM_FAST_BF16_UNITS, bf16_units_takes, bf16_units_workspace_floats, bf16_units_cell_bound,
+)
 from gemm.checks.gemm_lowbit_check import _upload_f32, _download_f32, _poisoned
 from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
 
@@ -50,6 +55,23 @@ from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, 
 comptime MATRIX_UNITS_FIXTURES = 6
 #: test 2's tolerance: 1.25 * 2^-10, squared
 comptime MATRIX_UNITS_RMS_REL_SQ = (Float64(1.25) / Float64(1024.0)) * (Float64(1.25) / Float64(1024.0))
+#: the bf16 arm's: 1.25 * 2^-9, squared (round to nearest at 8 significant bits, two operands a term)
+comptime BF16_UNITS_RMS_REL_SQ = (Float64(1.25) / Float64(512.0)) * (Float64(1.25) / Float64(512.0))
+#: either arm compiled
+comptime UNITS_ARM = GEMM_FAST_MATRIX_UNITS or GEMM_FAST_BF16_UNITS
+
+
+def _units_cell_bound(abs_sum: Float64, k: Int) -> Float64:
+    """The per-cell bound of the arm compiled in (the bf16 one when both are)."""
+    comptime if GEMM_FAST_BF16_UNITS:
+        return bf16_units_cell_bound(abs_sum, k)
+    return matrix_units_cell_bound(abs_sum, k)
+
+
+def _units_rms_rel_sq() -> Float64:
+    comptime if GEMM_FAST_BF16_UNITS:
+        return BF16_UNITS_RMS_REL_SQ
+    return MATRIX_UNITS_RMS_REL_SQ
 
 
 def fixture_shape(fixture_id: Int) raises -> Tuple[Int, Int, Int, Int]:
@@ -134,9 +156,9 @@ def compare_rows(
             var diff = Float64(got) - Float64(want)
             if diff < 0.0:
                 diff = -diff
-            comptime if GEMM_FAST_MATRIX_UNITS:
+            comptime if UNITS_ARM:
                 # `not (diff <= bound)` so a NaN difference counts as over the bound
-                if not (diff <= matrix_units_cell_bound(abs_sum, k)):
+                if not (diff <= _units_cell_bound(abs_sum, k)):
                     row_over += 1
             row_diff += diff * diff
         op_ptr.unsafe_store(i, row_over)
@@ -177,6 +199,7 @@ def check_fixture(ctx: DeviceContext, fixture_id: Int) raises:
     var dc_ref = _poisoned(ctx, m * n)
     var need = identical_gemm_workspace_max_floats(m, n, k)
     need = max(need, matrix_units_workspace_floats(m, n, k, op))
+    need = max(need, bf16_units_workspace_floats(m, n, k))
     var ws_arm = ctx.enqueue_create_buffer[DType.float32](need)
     var ws_ref = ctx.enqueue_create_buffer[DType.float32](max(1, fp32_workspace_max_floats(m, n, k)))
     identical_gemm_into[True](ctx, dc_arm, da, db, ws_arm, m, n, k, op)
@@ -186,13 +209,13 @@ def check_fixture(ctx: DeviceContext, fixture_id: Int) raises:
     var arm = _download_f32(ctx, dc_arm, m * n, name + " (vendor route open)")
     var ref_c = _download_f32(ctx, dc_ref, m * n, name + " (FP32)")
     var r = compare_rows(arm, ref_c, a, b, m, n, k, op)
-    var routed = matrix_units_takes(m, n, k)
-    comptime if GEMM_FAST_MATRIX_UNITS:
+    var routed = matrix_units_takes(m, n, k) or bf16_units_takes(m, n, k)
+    comptime if UNITS_ARM:
         if routed:
-            require(r[0] == 0, name + ": " + String(r[0]) + " cells outside the TF32 operand bound")
+            require(r[0] == 0, name + ": " + String(r[0]) + " cells outside the matrix unit's operand bound")
             require(
-                r[2] <= MATRIX_UNITS_RMS_REL_SQ * r[3],
-                name + ": squared error " + String(r[2]) + " over (1.25 * 2^-10)^2 of the squared terms " + String(r[3]),
+                r[2] <= _units_rms_rel_sq() * r[3],
+                name + ": squared error " + String(r[2]) + " over the arm's squared operand tolerance of the squared terms " + String(r[3]),
             )
             require(r[1] > 0, name + ": no cell differs from FP32, the matrix-units route was not taken")
         else:
