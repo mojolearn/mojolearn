@@ -1,0 +1,339 @@
+name: Apple fast check
+
+# Does the Apple `fast` set still compile and start? (lane fx-apple-fast-ci, 2026-11-20.) `fast` was reopened on every
+# vendor (Andrew, 2026-11-19) and the Apple fast set (the legacy fast build: no -D MOJOLEARN_NUMERIC_IDENTICAL, the
+# `afn_*` routes, the Apple GPU target) had not been compiled since the per-estimator fast answer, the mode policy
+# table, the package_profile asserts and the boundary waves landed. This workflow answers on GitHub-hosted macOS
+# runners (Andrew approved them for this, 2026-11-20). Those are VMs with a paravirtual Metal device: fine for
+# compiling, maybe for a tiny run, NEVER for timing, and never the release build (wheel-ci.yml and
+# release-provenance.yml record why: a hosted runner has built files with no Metal kernels in them).
+#
+# TOOLING ONLY. It gates nothing and reports nothing to a release, a board or the paper.
+#
+# NO AGENT DISPATCHES THIS (AGENTS.md, HARD RULE on Apple machines): the orchestrator does, by hand:
+#   gh workflow run apple-fast-check.yml --ref main -f ref=<sha|branch> -f step=parse
+#   gh workflow run apple-fast-check.yml --ref main -f ref=<sha|branch> -f step=build
+#   gh workflow run apple-fast-check.yml --ref main -f ref=<sha|branch> -f step=smoke
+#
+# step=parse (the step that must work): every merged file of the Apple FAST set and the Apple IDENTICAL set of the
+#   Darwin plan (tools/merged_bindings.py plan --dir fast|identical --platform darwin, the byte LM in) put through
+#   `mojo build --emit llvm --no-optimization` with the flags bindings/merged_build.sh passes on macOS: parse, type
+#   check and elaboration, as native-checks.yml's host-parse and device-parse do for Linux, by the SAME step
+#   (tools/ops/native_checks_steps.sh parse-group, KIND apple-fast | apple-identical). One runner per file (a file of
+#   more than `units_per_job` units is dealt into parts, because the standard runner has 7 GB), all files in
+#   parallel as far as the account's macOS concurrency allows, each compile at -j the runner's cores, fail-fast off:
+#   every file's errors are collected. The same parse runs with no Mac at all as
+#   `native-checks.yml -f suite=apple-parse` (cross-elaborated on Linux runners).
+# step=build: every merged file of fast, identical and host through the real Apple build path, the command
+#   packaging/macos/build_release_wheel.sh runs for that file (MOJOLEARN_NUMERIC_MODE=<set> sh
+#   bindings/merged_build.sh gpu|host --group <stem>), one runner per file, MOJOLEARN_COMPILE_JOBS = its cores. Each
+#   file's .so is kept as an artifact for three days, with the release's own static check of whether it holds
+#   compiled Metal kernels (packaging/macos/check_gpu_embedded.py), REPORTED, not a gate.
+# step=smoke: the build, then one runner places the built files in the package tree, stages the runtime libraries
+#   with the release's stagers, packs a wheel (`python -m build`; NOT the release packer: no gates, no signing
+#   audit), installs it in a clean venv and runs tiny fits with numeric_mode='fast' and 'identical' (a forest, a
+#   linear model, KMeans, an MLP, one transformer block forward), each in its own process with a timeout. The table
+#   says ran / refused / crashed / timeout with the message, and records the Metal device macOS reports. A crash or
+#   a missing Metal feature on the paravirtual device is REPORTED; product code is never weakened for it.
+#
+# `accel`: the --target-accelerator of a default-class file. On the release Mac such a file passes NO accelerator
+# (the compiler reads the Mac's GPU, and that is the only form measured to embed every kernel); on a hosted VM the
+# compiler did not know the GPU ("Unknown GPU architecture detected", 2026-08-22), so the default names one:
+# apple-m2 (the M2 Pro that records the Apple column). `native` passes nothing: the exact release line.
+#
+# MANUAL ONLY (light-checks.yml refuses any other workflow with a push or schedule trigger).
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "commit or branch to check out"
+        required: true
+      step:
+        description: "parse (elaborate the fast and identical sets), build (the real Apple build), smoke (build, install, tiny fits)"
+        required: true
+        default: "parse"
+        type: choice
+        options: [parse, build, smoke]
+      runner:
+        description: "GitHub-hosted Apple-silicon label. macos-15 is the free standard runner (3 cores, 7 GB); a larger label (macos-15-xlarge) is billed and needs Andrew's word"
+        required: false
+        default: "macos-15"
+      sets:
+        description: "parse only: comma list of fast, identical, host (build and smoke always take all three)"
+        required: false
+        default: "fast,identical"
+      accel:
+        description: "--target-accelerator of a default-class file: apple-m1 .. apple-m5, or native (no flag, the release line)"
+        required: false
+        default: "apple-m2"
+      units_per_job:
+        description: "parse only: most units of one merged file per runner (0 = whole files; the 7 GB runner pages on a whole file)"
+        required: false
+        default: "3"
+
+run-name: "apple-fast-check ${{ inputs.ref }} ${{ inputs.step }} ${{ inputs.runner }} ${{ inputs.accel }}"
+
+permissions:
+  contents: read
+
+env:
+  # in-step limit of one parse (seconds); the step's timeout-minutes backs it up. Longer than native-checks': three
+  # cores and 7 GB.
+  PARSE_LIMIT_SECONDS: "3000"
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      sha: ${{ steps.plan.outputs.sha }}
+      parse_matrix: ${{ steps.plan.outputs.parse_matrix }}
+      parse_count: ${{ steps.plan.outputs.parse_count }}
+      build_matrix: ${{ steps.plan.outputs.build_matrix }}
+      build_count: ${{ steps.plan.outputs.build_count }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 1
+          persist-credentials: false
+      # the step bodies from the workflow's own commit, so the workflow on main runs on any ref (as native-checks.yml)
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .wf
+          sparse-checkout: |
+            tools/ops/native_checks_steps.sh
+            tools/ops/apple_fast_check.py
+            tools/ops/apple_fast_check_install.sh
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Plan the files
+        id: plan
+        env:
+          IN_STEP: ${{ inputs.step }}
+          IN_SETS: ${{ inputs.sets || 'fast,identical' }}
+          IN_UNITS: ${{ inputs.units_per_job || '3' }}
+        run: |
+          set -euo pipefail
+          echo '[]' > parse.json; echo '[]' > build.json
+          if [ "$IN_STEP" = parse ]; then
+              python3 .wf/tools/ops/apple_fast_check.py plan --sets "$IN_SETS" --units-per-job "$IN_UNITS" > parse.json
+          else
+              python3 .wf/tools/ops/apple_fast_check.py plan --sets fast,identical,host > build.json
+          fi
+          python3 - <<'PY'
+          import json
+          rows = [dict(step=s, key=r["key"]) for s in ("parse", "build") for r in json.load(open(s + ".json"))]
+          json.dump(rows, open("planned.json", "w"))
+          print(len(rows), "jobs planned")
+          PY
+          {
+              echo "parse_matrix=$(cat parse.json)"
+              echo "parse_count=$(python3 -c 'import json;print(len(json.load(open("parse.json"))))')"
+              echo "build_matrix=$(cat build.json)"
+              echo "build_count=$(python3 -c 'import json;print(len(json.load(open("build.json"))))')"
+              echo "sha=$(git rev-parse HEAD)"
+          } >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: apple-plan
+          path: |
+            parse.json
+            build.json
+            planned.json
+
+  parse:
+    needs: plan
+    if: needs.plan.outputs.parse_count != '0' && needs.plan.outputs.parse_count != ''
+    name: parse ${{ matrix.key }}
+    runs-on: ${{ inputs.runner || 'macos-15' }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.parse_matrix) }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .wf
+          sparse-checkout: tools/ops/native_checks_steps.sh
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: prefix-dev/setup-pixi@v0.10.1
+        with:
+          run-install: true
+          cache: false
+          environments: default
+      - name: The machine
+        run: |
+          mkdir -p out
+          { sw_vers; sysctl -n machdep.cpu.brand_string hw.ncpu hw.memsize; xcrun --sdk macosx --show-sdk-version; pixi run mojo --version; } 2>&1 | tee out/machine-${{ matrix.key }}.txt
+      - name: Parse and elaborate ${{ matrix.key }} (mojo build --emit llvm --no-optimization)
+        timeout-minutes: 60
+        env:
+          KIND: ${{ matrix.kind }}
+          CLS: ${{ matrix.cls }}
+          STEM: ${{ matrix.stem }}
+          KEY: ${{ matrix.key }}
+          MEMBERS: ${{ matrix.members }}
+          APPLE_ACCEL: ${{ inputs.accel || 'apple-m2' }}
+        run: bash .wf/tools/ops/native_checks_steps.sh parse-group
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: apple-parse-${{ matrix.key }}
+          path: |
+            out/*.log
+            out/*.txt
+
+  build:
+    needs: plan
+    if: needs.plan.outputs.build_count != '0' && needs.plan.outputs.build_count != ''
+    name: build ${{ matrix.key }}
+    runs-on: ${{ inputs.runner || 'macos-15' }}
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.build_matrix) }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .wf
+          sparse-checkout: tools/ops/apple_fast_check.py
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: prefix-dev/setup-pixi@v0.10.1
+        with:
+          run-install: true
+          cache: false
+          environments: default
+      - name: The machine
+        run: |
+          mkdir -p out
+          { sw_vers; sysctl -n machdep.cpu.brand_string hw.ncpu hw.memsize; xcrun --sdk macosx --show-sdk-version; pixi run mojo --version; } 2>&1 | tee out/machine-${{ matrix.key }}.txt
+      - name: Build ${{ matrix.key }} (bindings/merged_build.sh, every core)
+        env:
+          SET: ${{ matrix.set }}
+          STEM: ${{ matrix.stem }}
+          IN_ACCEL: ${{ inputs.accel || 'apple-m2' }}
+        run: python3 .wf/tools/ops/apple_fast_check.py build-group --set "$SET" --stem "$STEM" --out out --accel "$IN_ACCEL" --limit 19800
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: apple-build-${{ matrix.key }}
+          retention-days: 3
+          path: |
+            out/*.log
+            out/*.txt
+            out/pkg/**/*.so
+
+  smoke:
+    needs: [plan, build]
+    # after the builds, whatever they did: a file that did not build is a missing binding in the table, not a skip
+    if: ${{ !cancelled() && inputs.step == 'smoke' }}
+    name: smoke (install, tiny fits)
+    runs-on: ${{ inputs.runner || 'macos-15' }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .wf
+          sparse-checkout: |
+            tools/ops/apple_fast_check.py
+            tools/ops/apple_fast_check_install.sh
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: prefix-dev/setup-pixi@v0.10.1
+        with:
+          run-install: true
+          cache: false
+          environments: >-
+            default
+            pkg
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: apple-build-*
+          path: built
+      - name: Place, stage, pack, install, smoke
+        run: bash .wf/tools/ops/apple_fast_check_install.sh built out
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: apple-smoke
+          path: |
+            out/*.log
+            out/*.txt
+            out/*.md
+            out/*.json
+            out/logs/*.log
+
+  summary:
+    needs: [plan, parse, build, smoke]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.workflow_sha }}
+          sparse-checkout: tools/ops/apple_fast_check.py
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      # logs and results only: the built .so files stay in their own artifacts
+      - name: Fetch every job's logs and results
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -u
+          mkdir -p results
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts" --paginate \
+              --jq '.artifacts[] | select(.name | startswith("apple-")) | .name' > names.txt || true
+          while read -r name; do
+              case "$name" in
+                  apple-build-*)
+                      # a build artifact holds the .so too: take the text files only
+                      gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$name" --dir "tmp/$name" || continue
+                      mkdir -p "results/$name"
+                      find "tmp/$name" -maxdepth 1 -type f \( -name '*.log' -o -name '*.txt' \) -exec cp {} "results/$name/" \;
+                      rm -rf "tmp/$name" ;;
+                  *) gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$name" --dir "results/$name" || true ;;
+              esac
+          done < names.txt
+          ls results | head -n 80
+      - name: Summary
+        env:
+          TITLE: "${{ inputs.ref }} (${{ needs.plan.outputs.sha }}) step ${{ inputs.step }} on ${{ inputs.runner || 'macos-15' }}, accelerator ${{ inputs.accel || 'apple-m2' }}"
+        run: |
+          python3 tools/ops/apple_fast_check.py summary --results results --out SUMMARY.md \
+              --planned results/apple-plan/planned.json --title "$TITLE"
+          cat SUMMARY.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: apple-fast-check-SUMMARY
+          path: |
+            SUMMARY.md
+            results/**/*.log
+            results/**/*.txt
+            results/**/*.md
+            results/**/*.json

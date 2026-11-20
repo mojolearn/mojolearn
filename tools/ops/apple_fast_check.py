@@ -176,7 +176,7 @@ def cmd_place(args):
         parts = so.parts
         if "pkg" not in parts:
             continue
-        rel = pathlib.Path(*parts[len(parts) - 1 - parts[::-1].index("pkg"):])  # the path under .../pkg/
+        rel = pathlib.Path(*parts[len(parts) - parts[::-1].index("pkg"):])  # the path under the last .../pkg/
         found[str(rel)] = so
     missing = 0
     for name in SETS:
