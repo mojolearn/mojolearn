@@ -8,6 +8,7 @@ from bindings.native_loaded_module_door import native_loaded_module
 from bindings.gp_kernel_storage_boundary import GPPackedKernel
 from bindings.classical_arrays_door import classical_address
 from core.gp_entry_table import GPEntryKey
+from bindings.gp_keys_unpack import gp_keys
 from gaussian_process.gp_native_boundary_run import GPNative, gp_native_run
 from core.gp_native_api import (
     GPKernelView,
@@ -25,7 +26,8 @@ def gp_entry_key(binding: PythonObject) raises -> GPEntryKey:
     var b = native_loaded_module("builtins")
     if py_type(binding) is not py_type(b):
         raise Error("TypeError: GP execution requires its connected native module")
-    var key = py_get(py_fields(binding), PythonObject("gp_native_key"))
+    var nk = gp_keys()
+    var key = py_get(py_fields(binding), nk[].k_gp_native_key)
     if (key is None or py_type(key) is not b.tuple or len(key) != 3 or py_type(key[0]) is not b.int
             or py_type(key[1]) is not b.int or py_type(key[2]) is not b.int):
         raise Error("ImportError: mojolearn: the GP binding publishes no native gp_native_key table key; rebuild it")

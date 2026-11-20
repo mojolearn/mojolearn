@@ -42,12 +42,15 @@ from providers.python.estimator_binding_pyapi_door import estimator_binding, est
 from providers.python.estimator_lifecycle_pyapi_unpack import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
 from providers.python.cluster_public_lifecycle_pyapi_door import _refusal
 from bindings.py_optional import py_present
+from bindings.gp_keys_unpack import gp_keys
+from bindings.py_balanced import py_item
 
 
 def _gp_admit_state(model: PythonObject, context: PythonObject, classifier: Bool, fitting: Bool) raises -> PythonObject:
     var b = native_loaded_module("builtins")
     var fields = _fields(model)
-    if classifier or py_contains(fields, "estimators_"):
+    var nk = gp_keys()
+    if classifier or py_contains(fields, nk[].k_estimators_):
         _gp_admit_binary_class(context)
     # The ancestry scan runs once per class state (bindings/gp_svm_records.mojo).
     gpsvm_no_fit_callbacks(model, fields, "TypeError: native GP operations cannot invoke Python fit callbacks")
@@ -78,14 +81,14 @@ def _gp_admit_state(model: PythonObject, context: PythonObject, classifier: Bool
             var value = py_get(fields, name)
             if value is not None:
                 gp_admit_kernel(value, context)
-    if py_contains(fields, "classes_"):
-        classical_admit_value(classifier_label_list(fields["classes_"], context), context)
-    if py_contains(fields, "estimators_"):
-        var fits = fields["estimators_"]
+    if py_contains(fields, nk[].k_classes_):
+        classical_admit_value(classifier_label_list(py_item(fields, nk[].k_classes_), context), context)
+    if py_contains(fields, nk[].k_estimators_):
+        var fits = py_item(fields, nk[].k_estimators_)
         if py_type(fits) is not b.list and py_type(fits) is not b.tuple:
             raise Error("TypeError: GP fitted estimators require native list or tuple storage")
         for i in range(len(fits)):  # driver-loop: retained one-vs-rest binary fit owners
-            if py_type(fits[i]) is not context["family_gp_binary_laplace"]:
+            if py_type(fits[i]) is not py_item(context, nk[].k_family_gp_binary_laplace):
                 raise Error("TypeError: GP binary state requires its native-connected storage class")
             var own = _fields(fits[i])
             _gp_array_fields(own, member_arrays, context)
@@ -168,6 +171,7 @@ def _gp_classifier_target(source: PythonObject, rows: Int, name: String, context
         if (py_type(first) is b.list or py_type(first) is b.tuple) and len(first) == 1:
             classical_warn_column(context)
     var flat = _flatten_labels(values, context)
+    var nk = gp_keys()
     for i in range(len(flat)):  # driver-loop: admitted scalar labels before native encoder/comparison
         var item = host_inference_primitive_number(flat[i], context)
         if py_type(item) is b.float:
@@ -181,18 +185,19 @@ def _gp_classifier_target(source: PythonObject, rows: Int, name: String, context
         # 48664c4c59); writing the converted number back replaced NumPy scalar
         # labels with new Python numbers (1ec92cef40; smoke 2026-11-15). A 0-d
         # ndarray label is not a scalar the encoder admits: it keeps the number.
-        if py_type(flat[i]) is py_get(context, "ndarray"):
+        if py_type(flat[i]) is py_get(context, nk[].k_ndarray):
             py_setitem(flat, i, item)
     return flat
 
 
 def _gp_finished(value: PythonObject, context: PythonObject) raises -> PythonObject:
     var b = native_loaded_module("builtins")
-    if py_type(value) is context["array_class"]:
+    var nk = gp_keys()
+    if py_type(value) is py_item(context, nk[].k_array_class):
         return native_array_ndarray_view(value, context)
     var tuple_output = py_type(value) is b.tuple
     if not tuple_output and not (py_type(value) is b.list and len(value) > 0
-                                 and py_type(value[0]) is context["array_class"]):
+                                 and py_type(value[0]) is py_item(context, nk[].k_array_class)):
         return value
     ref cpy = Python().cpython()
     var api = cpython_table()
@@ -225,9 +230,10 @@ def _gp_public_arguments(mut call: AdmittedCall, model: PythonObject, fields: Py
     # `call`: the door's admission record (modules, fields, the resolved
     # binding), so the binding is resolved once per public call (N219).
     var b = call.builtins()
-    var metadata = py_fields(call.module("mojolearn._mode"))["_MODE_METADATA_CONTEXT"]
+    var nk = gp_keys()
+    var metadata = py_item(py_fields(call.module("mojolearn._mode")), nk[].k__MODE_METADATA_CONTEXT)
     var plan = _plan(call.modules, model, fields, metadata)
-    var route = String(plan["route"])
+    var route = String(py_item(plan, nk[].k_route))
     if route != "host" and route != "host_gp":
         if len(args) > 0 and args[0] is None:
             args.binding(estimator_binding(call, model, "_mojolearn_gp", context))
@@ -238,30 +244,30 @@ def _gp_public_arguments(mut call: AdmittedCall, model: PythonObject, fields: Py
     var requested = _configuration_value(model, fields, "numeric_mode")
     if requested is not None and (py_type(requested) is not b.str or String(requested) != "identical"):
         raise Error("ValueError: this host estimator runs identical only")
-    var connected = plan["modes"]["identical"]
-    var error = py_get(connected, "error")
+    var connected = py_item(py_item(plan, nk[].k_modes), nk[].k_identical)
+    var error = py_get(connected, nk[].k_error)
     if error is not None:
         ref cpy = Python().cpython()
         var kind = py_type(error)
         cpy.lib.get_function[NoneType]("PyErr_SetObject")(kind._obj_ptr, error._obj_ptr)
         var failure = stash_python_error()
         raise failure^
-    var reader = py_get(connected, "mode")
+    var reader = py_get(connected, nk[].k_mode)
     if reader is None:
-        reader = py_get(connected, "vendor")
+        reader = py_get(connected, nk[].k_vendor)
     if reader is None or py_type(reader) is not py_type(b.len):
         raise Error("TypeError: GP host execution requires its connected native module readback")
     var module = reader.__self__
     if py_type(module) is not py_type(b):
         raise Error("TypeError: GP host execution requires an exact native module")
-    var module_name = py_get(py_fields(module), "__name__")
+    var module_name = py_get(py_fields(module), nk[].k___name__)
     if py_type(module_name) is not b.str:
         raise Error("TypeError: GP host module name must be an exact string")
     var live = py_get(call.module("sys").modules, module_name)
     if live is None:
         raise Error("ImportError: GP host binding was removed after import-time connection")
     var live_reader = neural_descriptor_entry(live, String(reader.__name__))
-    if py_get(connected, "mode") is not None and Int(py=py_call(live_reader)) != 1:
+    if py_get(connected, nk[].k_mode) is not None and Int(py=py_call(live_reader)) != 1:
         raise Error("RuntimeError: GP host binding must report identical mode")
     args.binding(live)
     return args^
@@ -284,7 +290,8 @@ def gp_public_operation(model: PythonObject, operation: String, args: PythonObje
     var guarded = method != "other"
     var double_binding = classifier and (fitting or method == "predict" or method == "score")
     var x_index = 2 if double_binding else 1
-    var depth_value = py_get(fields, "_mojolearn_fitting", PythonObject(0))
+    var nk = gp_keys()
+    var depth_value = py_get(fields, nk[].k__mojolearn_fitting, PythonObject(0))
     if py_type(depth_value) is not py_type(PythonObject(0)):
         raise Error("TypeError: native GP fit depth must be an exact integer")
     var nested = Int(py=depth_value) > 0
@@ -337,7 +344,7 @@ def gp_public_operation(model: PythonObject, operation: String, args: PythonObje
                 var target = _gp_classifier_target(args[x_index + 1], rows, name, context) if classifier else classical_check_y(args[x_index + 1], rows, name, context)
                 values.set(x_index + 1, target)
             else:
-                var width = py_get(fields, "n_features_in_")
+                var width = py_get(fields, nk[].k_n_features_in_)
                 if py_type(width) is py_type(PythonObject(0)):
                     classical_check_width(columns, Int(py=width), name)
                 estimator_feature_check(model, fields, source, context)
@@ -386,12 +393,12 @@ def gp_public_operation(model: PythonObject, operation: String, args: PythonObje
         # Include the public boundary conversion in the recorded copy fact.
         # The numerical owner only sees our finished native input.
         if input_copied:
-            py_setitem(fields, "input_copied_", PythonObject(True))
+            py_setitem(fields, nk[].k_input_copied_, PythonObject(True))
         estimator_fit_complete(model, source, classifier, context)
-    if outside and (method == "predict" or method == "predict_proba") and py_get(context, "ndarray") is not None:
+    if outside and (method == "predict" or method == "predict_proba") and py_get(context, nk[].k_ndarray) is not None:
         # Existing semantics widen only a standalone regressor prediction.
         # A (mean, std/cov) tuple keeps each kernel's float32 output dtype.
-        if not classifier and method == "predict" and py_type(result) is context["array_class"]:
+        if not classifier and method == "predict" and py_type(result) is py_item(context, nk[].k_array_class):
             result = admit_family_f64(result, "prediction", context)
         return _gp_finished(result, context)
     return result

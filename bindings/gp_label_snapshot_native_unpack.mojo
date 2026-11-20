@@ -15,6 +15,8 @@ from providers.python.array_metadata_pyapi_door import ArrayPin, array_shape_onc
 from bindings.gp_label_snapshot_native_pack import (
     _gp_label_word,
 )
+from bindings.gp_keys_unpack import gp_keys
+from bindings.py_balanced import py_item
 
 
 struct GPArrayLabelCapture(Movable):
@@ -27,14 +29,16 @@ struct GPArrayLabelCapture(Movable):
 
 
 def gp_label_list(value: PythonObject, context: PythonObject) raises -> PythonObject:
-    if py_type(value) is not context["array_class"]:
+    var nk = gp_keys()
+    if py_type(value) is not py_item(context, nk[].k_array_class):
         return _label_list(value, context)
     var captured = _gp_array_label_capture[False](value, context)
     return captured.public_value
 
 
 def gp_label_pins(value: PythonObject, context: PythonObject) raises -> List[PythonObject]:
-    if py_type(value) is not context["array_class"]:
+    var nk = gp_keys()
+    if py_type(value) is not py_item(context, nk[].k_array_class):
         return _flatten_label_pins(value, context)
     var captured = _gp_array_label_capture[True](value, context)
     var result = List[PythonObject]()

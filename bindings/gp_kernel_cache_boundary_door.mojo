@@ -10,6 +10,8 @@ from bindings.py_balanced import py_type
 from bindings.gp_mapping_boundary_unpack import gp_mapping_snapshot
 from bindings.gp_common_native_unpack import gp_kernel_arrays
 from bindings.gp_kernel_public_native_door import gp_kernel_snapshot
+from bindings.gp_keys_unpack import gp_keys
+from bindings.py_balanced import py_item
 
 comptime GP_KERNEL_PACK_SLOT = "gp_kernel_pack_v1"
 comptime GP_KERNEL_CLASS_SLOT = "gp_kernel_class_admitted_v1"
@@ -105,7 +107,8 @@ def gp_key_fields(mut key: GPKernelKey, fields: PythonObject, skip: List[String]
 def _gp_key(context: PythonObject, nodes: List[PythonObject]) raises -> GPKernelKey:
     var key = GPKernelKey()
     key.pin(context)
-    key.pin(context["family_gp_kernel_nodes"])
+    var nk = gp_keys()
+    key.pin(py_item(context, nk[].k_family_gp_kernel_nodes))
     key.count(len(nodes))
     var mods = NativeModules()
     for i in range(len(nodes)):  # driver-loop: each distinct kernel object's mutable state
@@ -139,7 +142,8 @@ struct GPPreparedKernel(Movable, Writable):
                  var key: GPKernelKey, var content: ContentRecord, generation: Int) raises:
         self.kernel = kernel
         self.context = context
-        self.table = context["family_gp_kernel_nodes"]
+        var nk = gp_keys()
+        self.table = py_item(context, nk[].k_family_gp_kernel_nodes)
         self.packed = packed
         self.nodes = nodes^
         self.classes = classes^
@@ -168,7 +172,8 @@ def gp_packed_kernel_reused(owner: PythonObject, kernel: PythonObject, context: 
             var record = held.downcast_value_ptr[GPPreparedKernel]()
             if record[].kernel is kernel:
                 var generation = model_generation(owner)
-                var same_context = record[].context is context and record[].table is context["family_gp_kernel_nodes"]
+                var nk = gp_keys()
+                var same_context = record[].context is context and record[].table is py_item(context, nk[].k_family_gp_kernel_nodes)
                 var same = same_context and generation != 0 and generation == record[].generation and content_same(record[].content)
                 if not same:
                     var key = _gp_key(context, record[].nodes)

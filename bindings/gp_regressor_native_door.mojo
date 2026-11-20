@@ -60,6 +60,8 @@ from bindings.gp_common_native_pack import (
     gp_f32,
 )
 from gaussian_process.gp_regressor_native_run import GPRNormalization
+from bindings.gp_keys_unpack import gp_keys
+from bindings.py_balanced import py_item
 
 comptime _GPR = "mojolearn GaussianProcessRegressor"
 comptime _K_PROD = 5
@@ -77,21 +79,22 @@ def _gpr_ext(model: PythonObject, binding: PythonObject, context: PythonObject) 
 def _gpr_default_kernel(context: PythonObject) raises -> PythonObject:
     """`ConstantKernel(1.0, "fixed") * RBF(1.0, "fixed")`, built from fields."""
     var b = native_loaded_module("builtins")
-    var classes = context["family_gp_classes"]
-    var const = family_call(b.object.__new__, classes["const"])
+    var nk = gp_keys()
+    var classes = py_item(context, nk[].k_family_gp_classes)
+    var const = family_call(b.object.__new__, py_item(classes, nk[].k_const))
     var cf = py_fields(const)
-    py_setitem(cf, "constant_value", PythonObject(Float64(1.0)))
-    py_setitem(cf, "constant_value_bounds", PythonObject("fixed"))
-    var rbf = family_call(b.object.__new__, classes["rbf"])
+    py_setitem(cf, nk[].k_constant_value, PythonObject(Float64(1.0)))
+    py_setitem(cf, nk[].k_constant_value_bounds, PythonObject("fixed"))
+    var rbf = family_call(b.object.__new__, py_item(classes, nk[].k_rbf))
     var rf = py_fields(rbf)
-    py_setitem(rf, "length_scale", Python.list(PythonObject(Float64(1.0))))
-    py_setitem(rf, "length_scale_bounds", PythonObject("fixed"))
-    var pair = family_call(b.object.__new__, classes["combined"])
+    py_setitem(rf, nk[].k_length_scale, Python.list(PythonObject(Float64(1.0))))
+    py_setitem(rf, nk[].k_length_scale_bounds, PythonObject("fixed"))
+    var pair = family_call(b.object.__new__, py_item(classes, nk[].k_combined))
     var pf = py_fields(pair)
-    py_setitem(pf, "a", const)
-    py_setitem(pf, "b", rbf)
-    py_setitem(pf, "op", PythonObject(_K_PROD))
-    py_setitem(pf, "sym", PythonObject("*"))
+    py_setitem(pf, nk[].k_a, const)
+    py_setitem(pf, nk[].k_b, rbf)
+    py_setitem(pf, nk[].k_op, PythonObject(_K_PROD))
+    py_setitem(pf, nk[].k_sym, PythonObject("*"))
     return pair
 
 
@@ -115,7 +118,8 @@ def _gpr_validate(model: PythonObject, context: PythonObject) raises:
     var random_state = family_field(fields, "random_state")
     if kernel is None:
         kernel = _gpr_default_kernel(context)
-    if not family_isinstance(kernel, context["family_gp_kernel_base"]):
+    var nk = gp_keys()
+    if not family_isinstance(kernel, py_item(context, nk[].k_family_gp_kernel_base)):
         raise Error("TypeError: " + String(_GPR) + ": kernel must be a "
                     + "composition of mojolearn's RBF, Matern, ConstantKernel and "
                     + "WhiteKernel (a scikit-learn kernel object carries bounds "
@@ -155,7 +159,7 @@ def _gpr_validate(model: PythonObject, context: PythonObject) raises:
         if not bad:
             var seed = family_call(b.int, random_state)
             bad = not (Bool(py=py_call(py_attr(b.int, "__ge__"), seed, PythonObject(0)))
-                       and Bool(py=py_call(py_attr(b.int, "__lt__"), seed, context["family_gp_seed_bound"])))
+                       and Bool(py=py_call(py_attr(b.int, "__lt__"), seed, py_item(context, nk[].k_family_gp_seed_bound))))
         if bad:
             raise Error(String(_GPR) + ": random_state must be None "
                         + "or an int in [0, 2**64), got " + family_repr(random_state) + "; it keys the "
@@ -167,12 +171,12 @@ def _gpr_validate(model: PythonObject, context: PythonObject) raises:
                     + "are position-mapped Philox keyed by it (DEVIATION 2881), and "
                     + "scikit-learn's None (the global NumPy generator) has no "
                     + "identical counterpart")
-    py_setitem(fields, "_kernel", kernel)
-    py_setitem(fields, "_alpha", family_call(b.float, alpha))
-    py_setitem(fields, "_optimizer", optimizer)
-    py_setitem(fields, "_n_restarts_optimizer", PythonObject(restarts))
-    py_setitem(fields, "_normalize_y", PythonObject(read_bool(normalize_y)))
-    py_setitem(fields, "_random_state", PythonObject(None) if random_state is None else family_call(b.int, random_state))
+    py_setitem(fields, nk[].k__kernel, kernel)
+    py_setitem(fields, nk[].k__alpha, family_call(b.float, alpha))
+    py_setitem(fields, nk[].k__optimizer, optimizer)
+    py_setitem(fields, nk[].k__n_restarts_optimizer, PythonObject(restarts))
+    py_setitem(fields, nk[].k__normalize_y, PythonObject(read_bool(normalize_y)))
+    py_setitem(fields, nk[].k__random_state, PythonObject(None) if random_state is None else family_call(b.int, random_state))
 
 
 @fieldwise_init
@@ -184,10 +188,11 @@ struct GPRNormalizedTargets(Movable):
 
 def _gpr_normalize(model: PythonObject, binding: PythonObject, targets: PythonObject, n: Int,
                    context: PythonObject) raises -> GPRNormalizedTargets:
-    var scaler_context = context["family_gp_scaler"][1]
+    var nk = gp_keys()
+    var scaler_context = py_item(context, nk[].k_family_gp_scaler)[1]
     classical_connect_numpy(scaler_context)
     var mode = gp_numeric_mode_used(binding, context)
-    var connection = GPNormalizationConnection(scaler_context["scaler_bindings"][mode], 1 if String(mode) == "identical" else 0)
+    var connection = GPNormalizationConnection(py_item(scaler_context, nk[].k_scaler_bindings)[mode], 1 if String(mode) == "identical" else 0)
     # Only the normalized targets become public y_train_ storage. Column,
     # statistics, transformed targets and programs belong to native RUN.
     var flat = family_array(Python.tuple(n), "<f4", context)
@@ -209,9 +214,10 @@ def _gpr_lml_grad(model: PythonObject, binding: PythonObject, kernel: PythonObje
     var connection = GPConnection(ext)
     gp_require(connection.native, GP_CAP_GRADIENT, "gpr_lml_grad")
     var view = gp_kernel_view(arrays)
+    var nk = gp_keys()
     var request = GPRGradientRequest(Int(py=classical_address(x)), Int(py=classical_address(targets)),
         Int(free.flags.unsafe_ptr()), Int(scratch.gradient.unsafe_ptr()), Int(scratch.scalars.unsafe_ptr()),
-        n_rows, n_cols, view^, Float64(py=fields["_alpha"]))
+        n_rows, n_cols, view^, Float64(py=py_item(fields, nk[].k__alpha)))
     var info = gp_run(connection, request)
     lifecycle_admit_fields(fields)
     _ = arrays
@@ -231,14 +237,15 @@ def _gpr_lml_grad(model: PythonObject, binding: PythonObject, kernel: PythonObje
 def _gpr_optimize(model: PythonObject, binding: PythonObject, x: PythonObject, targets: PythonObject,
                    n_rows: Int, n_cols: Int, context: PythonObject) raises -> PythonObject:
     var fields = py_fields(model)
-    var base = fields["_kernel"]
+    var nk = gp_keys()
+    var base = py_item(fields, nk[].k__kernel)
     var arrays = gp_kernel_arrays(base, context)
     var free = GPFreeParameters()
     gp_free(base, free, context)
     var n_theta = len(free.values)
-    var n_runs = 1 + Int(py=fields["_n_restarts_optimizer"])
+    var n_runs = 1 + Int(py=py_item(fields, nk[].k__n_restarts_optimizer))
     var scratch = GPOptimizerScratch(n_theta, n_runs)
-    var seed = PythonObject(0) if fields["_random_state"] is None else fields["_random_state"]
+    var seed = PythonObject(0) if py_item(fields, nk[].k__random_state) is None else py_item(fields, nk[].k__random_state)
     var b = native_loaded_module("builtins")
     var bits = gp_seed_word(family_call(b.int, seed))
     var ext = _gpr_ext(model, binding, context)
@@ -248,17 +255,17 @@ def _gpr_optimize(model: PythonObject, binding: PythonObject, x: PythonObject, t
     var request = GPROptimizeRequest(Int(py=classical_address(x)), Int(py=classical_address(targets)),
         Int(free.flags.unsafe_ptr()), Int(free.bounds.unsafe_ptr()), Int(scratch.theta.unsafe_ptr()),
         Int(scratch.values.unsafe_ptr()), Int(scratch.runs.unsafe_ptr()), n_rows, n_cols, kernel^,
-        Float64(py=fields["_alpha"]), n_runs - 1, Int(bits & UInt64(0xFFFFFFFF)), Int(bits >> 32))
+        Float64(py=py_item(fields, nk[].k__alpha)), n_runs - 1, Int(bits & UInt64(0xFFFFFFFF)), Int(bits >> 32))
     _ = gp_run(connection, request)
     lifecycle_admit_fields(fields)
     _ = arrays
     _ = free
     _ = x
     _ = targets
-    var runs = fields["optimizer_runs_"]
+    var runs = py_item(fields, nk[].k_optimizer_runs_)
     if py_type(runs) is not b.list:
         raise Error("TypeError: native GP optimizer history requires an exact list")
-    var stops = context["family_gp_opt_stops"]
+    var stops = py_item(context, nk[].k_family_gp_opt_stops)
     if py_type(stops) is not b.tuple and py_type(stops) is not b.list:
         raise Error("TypeError: native GP optimizer stop metadata requires an exact sequence")
     for run in range(n_runs):  # driver-loop: pack public optimizer restart records
@@ -275,7 +282,8 @@ def _gpr_fit(model: PythonObject, args: GPArgumentPins, context: PythonObject) r
     _gpr_validate(model, context)
     var fields = py_fields(model)
     var source = admit_family(args[1], 2, "X", context).array
-    py_setitem(fields, "input_copied_", PythonObject(not (source is args[1])))
+    var nk = gp_keys()
+    py_setitem(fields, nk[].k_input_copied_, PythonObject(not (source is args[1])))
     var x = gp_fit_owned(source, args[1], context)
     _ = source^
     var n_rows = Int(py=x.shape[0])
@@ -296,16 +304,16 @@ def _gpr_fit(model: PythonObject, args: GPArgumentPins, context: PythonObject) r
                     + " entries, X has " + String(n_rows) + " rows")
     var y_mean = Float64(0.0)
     var y_std = Float64(1.0)
-    var normalize_y = Bool(py=fields["_normalize_y"])
+    var normalize_y = Bool(py=py_item(fields, nk[].k__normalize_y))
     if normalize_y:
         var scaled = _gpr_normalize(model, args[0], targets, n_rows, context)
         lifecycle_admit_fields(fields)
         targets = scaled.targets
         y_mean = scaled.mean
         y_std = scaled.stddev
-    var kernel_fit = fields["_kernel"]
-    py_setitem(fields, "optimizer_runs_", Python.list())
-    if fields["_optimizer"] is not None and gp_n_dims(fields["_kernel"], context) > 0:
+    var kernel_fit = py_item(fields, nk[].k__kernel)
+    py_setitem(fields, nk[].k_optimizer_runs_, Python.list())
+    if py_item(fields, nk[].k__optimizer) is not None and gp_n_dims(py_item(fields, nk[].k__kernel), context) > 0:
         kernel_fit = _gpr_optimize(model, args[0], x, targets, n_rows, n_cols, context)
     var arrays = gp_kernel_arrays(kernel_fit, context)
     # EVERY SIZE IS A FUNCTION OF (n_rows, n_cols) ALONE.
@@ -317,7 +325,7 @@ def _gpr_fit(model: PythonObject, args: GPArgumentPins, context: PythonObject) r
     var connection = GPConnection(ext)
     var kernel = gp_kernel_view(arrays)
     var info = 0
-    var alpha = Float64(py=fields["_alpha"])
+    var alpha = Float64(py=py_item(fields, nk[].k__alpha))
     while True:  # driver-loop: over the tenfold ridge retries (alpha up to 1.0)
         # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_fit_binding.
         # x, y, kinds, kparams, ls_len, ls, l_out, dual_out, scalars_out;
@@ -338,7 +346,7 @@ def _gpr_fit(model: PythonObject, args: GPArgumentPins, context: PythonObject) r
         if info == 0 or not alpha > 0.0 or alpha >= 1.0:
             break
         var raised = min(alpha * 10.0, 1.0)
-        py_setitem(fields, "_alpha", PythonObject(raised))
+        py_setitem(fields, nk[].k__alpha, PythonObject(raised))
         var message = (String(_GPR) + ": K + alpha*I is not positive "
                        + "definite in float32 with alpha=" + String(py_call(b.format, PythonObject(alpha), "g"))
                        + "; refitting with alpha=" + String(py_call(b.format, PythonObject(raised), "g"))
@@ -347,30 +355,31 @@ def _gpr_fit(model: PythonObject, args: GPArgumentPins, context: PythonObject) r
         alpha = raised
     var sp = scratch.scalars.unsafe_ptr()
     _ = scratch  # keep the Python object alive through the native call above
-    py_setitem(fields, "X_train_", x)
-    py_setitem(fields, "y_train_", targets)
-    py_setitem(fields, "_y_train_mean", PythonObject(y_mean))
-    py_setitem(fields, "_y_train_std", PythonObject(y_std))
-    py_setitem(fields, "normalize_y_", PythonObject(normalize_y))
-    py_setitem(fields, "kernel_", kernel_fit)
-    py_setitem(fields, "n_features_in_", PythonObject(n_cols))
-    py_setitem(fields, "L_", l_out)
-    py_setitem(fields, "alpha_", dual)
-    py_setitem(fields, "info_", PythonObject(info))
-    py_setitem(fields, "nb_", PythonObject(Int(sp[1])))
+    py_setitem(fields, nk[].k_X_train_, x)
+    py_setitem(fields, nk[].k_y_train_, targets)
+    py_setitem(fields, nk[].k__y_train_mean, PythonObject(y_mean))
+    py_setitem(fields, nk[].k__y_train_std, PythonObject(y_std))
+    py_setitem(fields, nk[].k_normalize_y_, PythonObject(normalize_y))
+    py_setitem(fields, nk[].k_kernel_, kernel_fit)
+    py_setitem(fields, nk[].k_n_features_in_, PythonObject(n_cols))
+    py_setitem(fields, nk[].k_L_, l_out)
+    py_setitem(fields, nk[].k_alpha_, dual)
+    py_setitem(fields, nk[].k_info_, PythonObject(info))
+    py_setitem(fields, nk[].k_nb_, PythonObject(Int(sp[1])))
     _ = scratch  # keep the Python object alive through the native call above
-    py_setitem(fields, "log_marginal_likelihood_value_", PythonObject(sp[4]))
+    py_setitem(fields, nk[].k_log_marginal_likelihood_value_, PythonObject(sp[4]))
     _ = scratch  # keep the Python object alive through the native call above
-    py_setitem(fields, "_logdet", PythonObject(sp[2]))
+    py_setitem(fields, nk[].k__logdet, PythonObject(sp[2]))
     _ = scratch  # keep the Python object alive through the native call above
-    py_setitem(fields, "_ydotalpha", PythonObject(sp[3]))
+    py_setitem(fields, nk[].k__ydotalpha, PythonObject(sp[3]))
     _ = scratch  # keep the Python object alive through the native call above
     _ = arrays^
     _ = scratch^
 
 
 def _gpr_fitted(fields: PythonObject, message: String) raises:
-    if not py_contains(fields, PythonObject("alpha_")):
+    var nk = gp_keys()
+    if not py_contains(fields, nk[].k_alpha_):
         raise Error(String(_GPR) + ": " + message)
 
 
@@ -384,7 +393,8 @@ def _gpr_query(fields: PythonObject, source: PythonObject, context: PythonObject
     # The public door already admitted this X as C-order float32 and
     # registered it (bindings/gp_svm_records.mojo): no second snapshot.
     var q = gp_query(source, "GaussianProcessRegressor", context, entry_tests)
-    var fitted = Int(py=fields["n_features_in_"])
+    var nk = gp_keys()
+    var fitted = Int(py=py_item(fields, nk[].k_n_features_in_))
     if q.cols != fitted:
         raise Error(String(_GPR) + ": X has " + String(q.cols) + " "
                     + "features, fit saw " + String(fitted))
@@ -392,10 +402,11 @@ def _gpr_query(fields: PythonObject, source: PythonObject, context: PythonObject
 
 def _gpr_normalization(fields: PythonObject) raises -> GPRNormalization:
     var b = native_loaded_module("builtins")
-    var enabled = Bool(py=py_call(b.bool, py_get(fields, PythonObject("normalize_y_"), PythonObject(False))))
+    var nk = gp_keys()
+    var enabled = Bool(py=py_call(b.bool, py_get(fields, nk[].k_normalize_y_, PythonObject(False))))
     if enabled:
-        return GPRNormalization(True, read_float_like(fields["_y_train_std"]),
-            read_float_like(fields["_y_train_mean"]))
+        return GPRNormalization(True, read_float_like(py_item(fields, nk[].k__y_train_std)),
+            read_float_like(py_item(fields, nk[].k__y_train_mean)))
     return GPRNormalization(False, 1.0, 0.0)
 
 
@@ -457,13 +468,14 @@ def _gpr_predict_result(model: PythonObject, fields: PythonObject,
     if not resident:
         # These entries return no status word: the query is tested here.
         gp_query_scan(gq, "GaussianProcessRegressor", context)
+    var nk = gp_keys()
     if resident:
         # Device-resident fitted state (lane ne1-a-gp-svm): X_train_, alpha_
         # and L_ cross to the device once per fitted state; the lease word
         # follows the pointer route's params. Lease 0 (an array the binding
         # reads is not the field itself, or cannot be made read-only) uploads
         # per call, as before.
-        if xt is fields["X_train_"] and lf is fields["L_"] and dual is fields["alpha_"]:
+        if xt is py_item(fields, nk[].k_X_train_) and lf is py_item(fields, nk[].k_L_) and dual is py_item(fields, nk[].k_alpha_):
             var mirrors = List[PythonObject]()
             mirrors.append(xt)
             mirrors.append(dual)
@@ -479,8 +491,8 @@ def _gpr_predict_result(model: PythonObject, fields: PythonObject,
     var kernel = gp_kernel_view(arrays)
     var request = GPRQueryRequest(Int(py=classical_address(xt)), Int(py=classical_address(lf)),
         Int(py=classical_address(dual)), Int(py=gp_query_address(gq)), mean.mean_address(),
-        var_address, std_address, clamped_address, n_train, Int(py=fields["n_features_in_"]), n_star,
-        kernel^, Int(py=fields["info_"]), return_std, normalization.enabled, normalization.stddev,
+        var_address, std_address, clamped_address, n_train, Int(py=py_item(fields, nk[].k_n_features_in_)), n_star,
+        kernel^, Int(py=py_item(fields, nk[].k_info_)), return_std, normalization.enabled, normalization.stddev,
         normalization.mean, route, lease, gq.store.base_id if gq.store.active() else -1,
         gq.store.base_rows if gq.store.active() else 0, gq.store.index_id if gq.store.active() else -1)
     var answer = gp_run(connection, request)
@@ -503,8 +515,8 @@ def _gpr_predict_result(model: PythonObject, fields: PythonObject,
     _ = arrays^
     _ = variance^
     if return_std:
-        py_setitem(fields, "clamped_", clamped)
-        py_setitem(fields, "n_clamped_", PythonObject(n_clamped))
+        py_setitem(fields, nk[].k_clamped_, clamped)
+        py_setitem(fields, nk[].k_n_clamped_, PythonObject(n_clamped))
         _ = clamped  # keep the Python object alive through the native call above
         _ = std  # keep the Python object alive through the native call above
         _ = mean  # keep the Python object alive through the native call above
@@ -535,10 +547,11 @@ def _gpr_predict_cov(model: PythonObject, args: GPArgumentPins, context: PythonO
     var dual = gp_f32(fields, "alpha_", -1, context)
     var normalization = _gpr_normalization(fields)
     var kernel = gp_kernel_view(arrays)
+    var nk = gp_keys()
     var request = GPRCovarianceRequest(Int(py=classical_address(xt)), Int(py=classical_address(lf)),
         Int(py=classical_address(dual)), Int(py=classical_address(q)), Int(py=classical_address(mean)),
-        Int(py=classical_address(cov)), n_train, Int(py=fields["n_features_in_"]), n_star,
-        kernel^, Int(py=fields["info_"]), normalization.enabled, normalization.stddev, normalization.mean)
+        Int(py=classical_address(cov)), n_train, Int(py=py_item(fields, nk[].k_n_features_in_)), n_star,
+        kernel^, Int(py=py_item(fields, nk[].k_info_)), normalization.enabled, normalization.stddev, normalization.mean)
     _ = gp_run(connection, request)
     lifecycle_admit_fields(fields)
     _ = dual  # keep the Python object alive through the native call above
@@ -565,10 +578,11 @@ def _gpr_sample_y(model: PythonObject, args: GPArgumentPins, context: PythonObje
         raise Error("TypeError: " + String(_GPR) + ": n_samples must be an int")
     var seed = args[3]
     var bad = not _is_integral(seed, context)
+    var nk = gp_keys()
     if not bad:
         var value = family_call(b.int, seed)
         bad = not (Bool(py=py_call(py_attr(b.int, "__ge__"), value, PythonObject(0)))
-                   and Bool(py=py_call(py_attr(b.int, "__lt__"), value, context["family_gp_seed_bound"])))
+                   and Bool(py=py_call(py_attr(b.int, "__lt__"), value, py_item(context, nk[].k_family_gp_seed_bound))))
     if bad:
         raise Error(String(_GPR) + ": sample_y needs random_state to "
                     + "be an int in [0, 2**64), got " + family_repr(seed) + "; it is the key of every "
@@ -597,7 +611,7 @@ def _gpr_sample_y(model: PythonObject, args: GPArgumentPins, context: PythonObje
     var kernel = gp_kernel_view(arrays)
     var request = GPRSampleRequest(Int(py=classical_address(xt)), Int(py=classical_address(lf)),
         Int(py=classical_address(dual)), Int(py=classical_address(q)), Int(py=classical_address(out)),
-        n_train, Int(py=fields["n_features_in_"]), n_star, kernel^, Int(py=fields["info_"]),
+        n_train, Int(py=py_item(fields, nk[].k_n_features_in_)), n_star, kernel^, Int(py=py_item(fields, nk[].k_info_)),
         n, Int(seed_bits & UInt64(0xFFFFFFFF)), Int(seed_bits >> 32), normalization.enabled,
         normalization.stddev, normalization.mean)
     _ = gp_run(connection, request)
@@ -649,10 +663,11 @@ def _gpr_log_marginal_likelihood(model: PythonObject, args: GPArgumentPins, cont
     var fields = py_fields(model)
     _gpr_fitted(fields, "call fit() first")
     var eval_gradient = args[2]
+    var nk = gp_keys()
     if args[1] is not None:
         if not py_contains(Python.tuple(PythonObject(True), PythonObject(False)), eval_gradient):
             raise Error("TypeError: " + String(_GPR) + ": eval_gradient must be a bool")
-        var kern = fields["kernel_"]
+        var kern = py_item(fields, nk[].k_kernel_)
         var theta = _gpr_theta(args[1], context)
         var n_dims = gp_n_dims(kern, context)
         if len(theta) != n_dims:
@@ -689,7 +704,7 @@ def _gpr_log_marginal_likelihood(model: PythonObject, args: GPArgumentPins, cont
     if read_bool(eval_gradient):
         raise Error(String(_GPR) + ": eval_gradient=True needs a theta, "
                     + "scikit-learn's rule (_gpr.py:582)")
-    var info = Int(py=fields["info_"])
+    var info = Int(py=py_item(fields, nk[].k_info_))
     if info != 0:
         raise Error("RuntimeError: " + String(_GPR) + ": the factorization "
                     + "failed (info=" + String(info) + "), so the leading minor of order "
@@ -703,7 +718,7 @@ def _gpr_log_marginal_likelihood(model: PythonObject, args: GPArgumentPins, cont
                     + "because it is comparing candidates; there is no optimizer "
                     + "in this lane (DEVIATION 1761), so this refuses instead. "
                     + "DEVIATION 1634")
-    return fields["log_marginal_likelihood_value_"]
+    return py_item(fields, nk[].k_log_marginal_likelihood_value_)
 
 
 def _gpr_score(model: PythonObject, args: GPArgumentPins, context: PythonObject) raises -> PythonObject:
@@ -720,7 +735,8 @@ def _gpr_score(model: PythonObject, args: GPArgumentPins, context: PythonObject)
         raise Error(String(_GPR) + ": y must be 1-D with one "
                     + "entry per row of X, got shape " + family_shape_repr(view) + " against "
                     + String(n) + " predictions")
-    if not py_contains(context, PythonObject("family_metrics_prog_context")):
+    var nk = gp_keys()
+    if not py_contains(context, nk[].k_family_metrics_prog_context):
         raise Error("ImportError: mojolearn GaussianProcessRegressor.score needs the metrics owner (mojolearn._expansion_metrics)")
     # The admitted view goes on to the float32 cast (lane p3-svm-gp-kernel,
     # row 629): y is not viewed and converted a second time.
