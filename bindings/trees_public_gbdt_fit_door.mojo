@@ -67,6 +67,7 @@ from gbdt.trees_gbdt_fit_run import (
     gbdt_validate_search_options, gbdt_id_code, gbdt_id_typestr_supported, gbdt_check_group_rows, gbdt_bias_of,
 )
 from bindings.trees_keys_unpack import trees_keys
+from bindings.operation_names_trees import TREES_OPN_TREES_GBDT_BOOSTING_TYPE, TREES_OPN_TREES_GBDT_LEARNING_RATE
 from bindings.py_balanced import py_item
 
 comptime _UNSET = -1.0
@@ -1115,13 +1116,14 @@ def gbdt_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     return model
 
 
-def gbdt_inspect(model: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def gbdt_inspect(model: PythonObject, operation: Int, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """The fit's resolved settings, for inspection: `_params(...)`,
-    `_resolved_learning_rate(...)`, `_resolved_boosting_type(n_rows)`."""
+    `_resolved_learning_rate(...)`, `_resolved_boosting_type(n_rows)`, by
+    the leaf code of `trees_gbdt_params` / `_learning_rate` / `_boosting_type`."""
     var fields = py_fields(model)
-    if operation == "trees_gbdt_boosting_type":
+    if operation == TREES_OPN_TREES_GBDT_BOOSTING_TYPE:
         return PythonObject(_resolved_boosting_type(fields, model, _int(args[0]), context))
-    if operation == "trees_gbdt_learning_rate":
+    if operation == TREES_OPN_TREES_GBDT_LEARNING_RATE:
         return PythonObject(_resolved_learning_rate(fields, model, _int(args[0]), _int(args[1]), _truthy(args[2]), context))
     return _params(fields, model, _int(args[0]), _int(args[1]), _int(args[2]), _int(args[3]), _int(args[4]),
                    _truthy(args[5]), context)

@@ -137,6 +137,10 @@ def test_restored_fit_plans_match_public_native_argument_order(plans):
             # The boost kind is resolved once per call and passed down (boost_operation_of, fed1b4e384).
             assert 'boost_operation_of(model, kind, "trees_boost_" + method, call_args, context)' in lifecycle
             dispatch = (ROOT / 'bindings/trees_public_native_door.mojo').read_text()
+            # The dispatcher routes by the leaf code's range (lane bw3-trees,
+            # bindings/operation_names_trees.mojo); a name the table lacks keeps the prefix.
+            assert ('if operation >= TREES_FIRST_PUBLIC_BOOST and operation < TREES_END_PUBLIC_BOOST:\n'
+                    '        return tree_boost_public_operation(model, name, args, context)') in dispatch
             assert 'if operation.startswith("trees_public_boost_"):\n        return tree_boost_public_operation(' in dispatch
         else:
             assert operation == public_operation, name

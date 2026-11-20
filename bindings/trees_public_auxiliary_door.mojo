@@ -26,13 +26,15 @@ def _field(fields: PythonObject, name: String) raises -> PythonObject:
     return native_instance_item(fields, PythonObject(name))
 
 
-def tree_export_state(model: PythonObject, operation: String) raises -> PythonObject:
+def tree_export_state(model: PythonObject, forest: Bool) raises -> PythonObject:
+    """`trees_forest_getstate` (`forest`) or `trees_gbdt_getstate`: the
+    dispatcher passes the test of its leaf code (lane bw3-trees)."""
     # Shallow copies keep arbitrary application metadata by identity. Reading
     # actual dictionary storage avoids __dict__/copy hooks, and the original
     # dictionary retains removed resident owners throughout this operation.
     var fields = _fields(model)
     var state = py_call(trees_builtins().dict, fields)
-    if operation == "trees_forest_getstate":
+    if forest:
         _ = py_call(state.pop, "_resident_holder", PythonObject(None))
         _ = py_call(state.pop, "_resident_forest", PythonObject(None))
     else:
