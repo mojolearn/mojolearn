@@ -24,13 +24,17 @@ comptime _RELEASE_TIMERS = is_defined["MOJOLEARN_KNN_PHASE_TIMERS"]()
 
 
 def host_archive_finalize(model: PythonObject, context: PythonObject) raises:
-    var nk = host_tree_archive_keys()
     # An instance collected during interpreter teardown (a model held in
     # `__main__` at exit) releases nothing: the process is ending, and the
     # loaded-module read below is a fatal error once the interpreter's modules
     # are cleared (test_host_density_save_native's KDE child exited -6).
+    # Tested BEFORE the key table is fetched: its first fill interns names
+    # through sys (py_key -> native_loaded_module), the same fatal read, so a
+    # process whose first finalized archive is collected at exit aborted
+    # (ivf-short-fill and the parallel fixtures, rc -6, build b59aff2e57).
     if native_interpreter_finalizing():
         return
+    var nk = host_tree_archive_keys()
     var b = native_loaded_module("builtins")
     var cls = py_type(model)
     if py_type(cls) is not b.type:

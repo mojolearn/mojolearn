@@ -155,6 +155,13 @@ def connect(context, package):
     for plan in registry.values():  # glue: import-time connection of fixed identities into each owner context
         if type(plan['context']) is dict:
             plan['context'].update(door)
+        # A method served by another owner (the x_linear regressors' score through
+        # the linear score door, _native_msel_prep) admits the same fold: its
+        # context needs the identities too, or a DeviceRows test fold reached
+        # Sequential admission and was refused (HuberRegressor cross_val_score).
+        for _entry, method_context in plan.get('method_entries', {}).values():  # glue: fixed per-method owners
+            if type(method_context) is dict:
+                method_context.update(door)
     context.update(family_msel_estimators=registry,
                    family_msel_pending_estimators=tuple(value for value in _public_classes(package, loaded)  # glue: distinguish known migration debt from external callbacks
                                                         if value not in registry),

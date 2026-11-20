@@ -18,6 +18,20 @@ def test_full_wide_matrix_refuses_outside_identical():
         model.fit(np.ones((8, 3), dtype=np.float32))
     except ImportError:
         pytest.skip('this install carries no fast estimators binding')
+    from mojolearn import _backend
+
+    if _backend.fast_answer() == 'identical':
+        # Off Apple with no fast set the identical set answers `fast` for PCA
+        # (core/mode_answer.mojo MODE_FAMILIES_ANSWERED): the wide fit is then
+        # exactly the identical fit, refusal (a CPU-only install) included.
+        def outcome(mode):
+            try:
+                model = PCA(2, svd_solver='full', numeric_mode=mode).fit(np.ones((3, 8), dtype=np.float32))
+            except Exception as error:  # the identical outcome, whatever it is
+                return type(error), str(error)
+            return None, np.asarray(model.components_).tobytes()
+        assert outcome('fast') == outcome('identical')
+        return
     with pytest.raises(NotImplementedError, match='at least as many samples'):
         PCA(2, svd_solver='full', numeric_mode='fast').fit(np.ones((3, 8), dtype=np.float32))
 

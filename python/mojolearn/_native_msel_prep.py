@@ -173,7 +173,11 @@ def connect(context, register, registry):
             methods = {
                 'fit': ('family_xn_knn_' + prefix + '_fit', (binding('_mojolearn_x_neighbors'), arg(0), arg(1))),
                 'predict': ('family_xn_knn_' + prefix + '_predict', (binding('_mojolearn'), arg(0))),
-                'score': ('family_xn_knn_' + prefix + '_score', (binding('_mojolearn'), arg(0), arg(1), constant(None))),
+                # The regressor's score takes a fifth argument, the metrics binding
+                # (None: the door resolves it), as the public score passes it;
+                # with four, CV's default scorer read args[4] out of range.
+                'score': ('family_xn_knn_' + prefix + '_score', (binding('_mojolearn'), arg(0), arg(1), constant(None))
+                          + ((constant(None),) if prefix == 'reg' else ())),
             }
             if prefix == 'clf':
                 methods['predict_proba'] = ('family_xn_knn_clf_predict_proba', (binding('_mojolearn'), arg(0)))
