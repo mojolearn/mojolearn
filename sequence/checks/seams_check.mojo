@@ -383,20 +383,18 @@ def main() raises:
     _check("5504_bptt_fold_blocked", o_bptt_dw(bhb[1], xb5, Tb, B5, GH, 3, False),
            o_bptt_dw(bhb[1], xb5, Tb, B5, GH, 3, True), bdb[0], bhb[0], tr, fails)
     _same("5504_bptt_fold_blocked dgx", "device vs host", _diff(bdb[1], bhb[1]), fails)
-    # The recurrent products on the lane's GEMM (autograd/rules_recurrent.mojo: the forward step by default,
-    # RNN_STEP_GEMM; the backward step and the tile-routed weight gradients under
-    # -D MOJOLEARN_SEQ_FAST_RNN_BPTT_GEMM), at shapes over the step rule's floor (B G H H >= 2^20 multiply-adds a
-    # step), T 9, B 64, K = T B = 576:
+    # The recurrent products on the lane's GEMM (autograd/rules_recurrent.mojo: the forward step, RNN_STEP_GEMM, and
+    # the LSTM cell's backward step, RNN_BPTT_LSTM_GEMM, both defaults; the weight gradients keep the blocked order),
+    # at shapes over the step rule's floor (B G H H >= 2^20 multiply-adds a step), T 9, B 64, K = T B = 576:
     #   lstm H 72 and gru H 96: forward (64, G H 288, K = H) is a split-K shape (the bits-change class against the
-    #     fused launch), and so is the arm's backward (64, H, K 288); dW_hh (288, H, 576) is not a split shape (one
-    #     chain under the arm, the blocked order without it), dW_ih (288, 3, 576) is (the blocked order on both);
-    #   lstm H 64: forward (64, 256, K 64) keeps the one chain (the same-bits class), the arm's backward (64, 64, 256)
+    #     fused launch), and so is the lstm's backward step (64, H, K 288); the gru's backward is the fused launch;
+    #   lstm H 64: forward (64, 256, K 64) keeps the one chain (the same-bits class), its backward step (64, 64, 256)
     #     splits.
     # dW_ih of layer 0 against the oracle's fold on the device and the host; dgx of layer 0 (the whole backward
     # chain's words, behind every per-step product) device against host. Run on every build since 2026-11-19
-    # (lane fx-verdicts4: the forward step is the default); RNN_STEP_GEMM is named so a _OFF build says so.
+    # (lane fx-verdicts4: the forward step is the default); RNN_STEP_GEMM is False in a fast build only.
     comptime if not RNN_STEP_GEMM:
-        print("5504 step_gemm cases: forward step on the fused launch (MOJOLEARN_SEQ_FAST_RNN_STEP_GEMM_OFF)")
+        print("5504 step_gemm cases: forward step on the fused launch (fast mode)")
     var Tg = 9; var Bg = 64
     var xg = _mixed(Tg * Bg * 3, 56)
     var dyg = _signed(Bg * 2, 57, 1.0)
