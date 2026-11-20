@@ -15,13 +15,15 @@ from providers.python.array_metadata_pyapi_door import ArrayPin, array_shape_onc
 from bindings.minmax_metadata_unpack import (
     _endpoint,
 )
+from bindings.minmax_keys_unpack import minmax_keys
 
 
 def minmax_range_values(value: PythonObject, context: PythonObject) raises -> Tuple[Float64, Float64]:
+    var nk = minmax_keys()
     classical_admit_value(value,context)
     var b = native_loaded_module("builtins")
     var sequence = py_type(value) is b.tuple or py_type(value) is b.list
-    var ndarray = py_get(context,"ndarray")
+    var ndarray = py_get(context,nk[].k_ndarray)
     if not sequence and not classical_is_array(value,context) and (ndarray is None or py_type(value) is not ndarray):
         raise Error("feature_range must be a reusable tuple, list or 1D array")
     if sequence:

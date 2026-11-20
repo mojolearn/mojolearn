@@ -21,15 +21,18 @@ from bindings.optimizer_public_words_unpack import stash_python_error
 from bindings.sequence_array_native_unpack import sequence_array_release
 from bindings.sequence_array_warnings_unpack import sequence_array_warn, sequence_array_report
 from bindings.sequence_array_warnings_pack import sequence_array_errstate
+from bindings.logistic_keys_unpack import logistic_keys
+from bindings.py_balanced import py_item
 
 def _logistic_width_numpy_dtype(value: PythonObject, context: PythonObject,
                                 array: Bool) raises -> PythonObject:
+    var nk = logistic_keys()
     # Descriptor identities, not user dtype attributes, admit the storage.
     # Ordinary fitted integer fields never enter this exceptional metadata
     # path. The existing native dtype constructor supplies immutable types.
     var cls = py_type(value)
     var scalar = False
-    var classes = context["scalar_types"]
+    var classes = py_item(context, nk[].k_scalar_types)
     for i in range(len(classes)):  # driver-loop: fixed connected primitive scalar classes
         scalar = scalar or cls is classes[i]
     if scalar:
@@ -45,7 +48,7 @@ def _logistic_width_numpy_dtype(value: PythonObject, context: PythonObject,
     var dtype = value.dtype
     if scalar:
         return dtype
-    var numeric = context["numeric_dtypes"]
+    var numeric = py_item(context, nk[].k_numeric_dtypes)
     if py_type(numeric) is not py_type(Python.dict()):
         raise Error("TypeError: LogisticRegression requires connected native dtype metadata")
     var position = Int(0)

@@ -23,20 +23,22 @@ from core.native_archive_minmax import (
     native_minmax_archive_plan, native_minmax_saved_statistic,
     native_minmax_archive_members, native_minmax_statistic_view,
 )
+from bindings.minmax_keys_unpack import minmax_keys
 
 
 def _minmax_archive_pack(cls: PythonObject, plan: NativeMinMaxArchivePlan,
                          members: List[NativeArchiveDecoded], context: PythonObject,
                          generic: Bool = False) raises -> PythonObject:
+    var nk = minmax_keys()
     var model = native_storage_allocate(cls)
     var fields = py_fields(model)
-    py_setitem(fields, "copy", True)
-    py_setitem(fields, "numeric_mode", PythonObject(None))
-    py_setitem(fields, "clip", plan.clip)
-    py_setitem(fields, "feature_range", Python.tuple(plan.lower, plan.upper))
+    py_setitem(fields, nk[].k_copy, True)
+    py_setitem(fields, nk[].k_numeric_mode, PythonObject(None))
+    py_setitem(fields, nk[].k_clip, plan.clip)
+    py_setitem(fields, nk[].k_feature_range, Python.tuple(plan.lower, plan.upper))
     var output_context = context
     if not generic:
-        output_context = py_get(context, "output_context", context)
+        output_context = py_get(context, nk[].k_output_context, context)
     var names = native_minmax_statistic_names()
     for i in range(len(names)):  # pack: fixed public statistic owners, under the GIL
         var value = PythonObject(None)
@@ -48,10 +50,10 @@ def _minmax_archive_pack(cls: PythonObject, plan: NativeMinMaxArchivePlan,
             var view = native_minmax_statistic_view(members[plan.statistics[i]])
             value = archive_numeric_pack(view, output_context)
         py_setitem(fields, PythonObject(names[i] + "_"), value)
-    py_setitem(fields, "n_features_in_", plan.features)
-    py_setitem(fields, "n_samples_seen_", plan.samples)
-    py_setitem(fields, "numeric_mode_", PythonObject(plan.mode))
-    py_setitem(fields, "feature_range_", Python.tuple(plan.lower, plan.upper))
-    py_setitem(fields, "clip_", plan.clip)
+    py_setitem(fields, nk[].k_n_features_in_, plan.features)
+    py_setitem(fields, nk[].k_n_samples_seen_, plan.samples)
+    py_setitem(fields, nk[].k_numeric_mode_, PythonObject(plan.mode))
+    py_setitem(fields, nk[].k_feature_range_, Python.tuple(plan.lower, plan.upper))
+    py_setitem(fields, nk[].k_clip_, plan.clip)
     _ = members
     return model

@@ -14,13 +14,16 @@ from glm.logistic_descriptor_boundary_run import (
 )
 from bindings.py_provider_pins import ProviderPins, provider_word
 from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
+from bindings.logistic_keys_unpack import logistic_keys
+from bindings.py_balanced import py_item
 
 
 comptime LOGISTIC_PROVIDER_PINS = SharedSlot[ProviderPins, "MojolearnLogisticProviderPinsV1"]
 
 
 def logistic_connection(entries: PythonObject) raises -> Int:
-    var provider = neural_descriptor_connect_factory_once(entries["logistic_native_api_v1"],
+    var nk = logistic_keys()
+    var provider = neural_descriptor_connect_factory_once(py_item(entries, nk[].k_logistic_native_api_v1),
         String(LOGISTIC_NATIVE_ABI), QN_NATIVE_COUNT)
     var index = logistic_connection_index(provider_word(provider))
     if index >= 0:

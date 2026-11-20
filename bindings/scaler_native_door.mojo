@@ -32,6 +32,8 @@ from bindings.classical_pandas_door import classical_admit_value, native_pandas_
 from bindings.sequential_admission_door import _ordinary_torch, _one_of
 from bindings.native_torch_admission_door import native_torch_numpy
 from bindings.prep_entry_cache_unpack import prep_mode_checked
+from bindings.scaler_keys_unpack import scaler_keys
+from bindings.py_balanced import py_item
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 
@@ -41,6 +43,7 @@ def _ptr(value: PythonObject) raises -> F32P:
 
 
 def _input(source: PythonObject, ndim: Int, strict: Bool, context: PythonObject) raises -> PythonObject:
+    var nk = scaler_keys()
     classical_admit_value(source, context)
     var b = native_loaded_module("builtins")
     var prepared = source
@@ -66,7 +69,7 @@ def _input(source: PythonObject, ndim: Int, strict: Bool, context: PythonObject)
     var native = classical_is_array(value, context) or Bool(py=value.dtype.isnative)
     if classical_is_f32(value, context) and classical_c_order(value, context) and native:
         return value
-    var output = classical_typed(Python.tuple(rows, cols) if rank == 2 else Python.tuple(rows), "<f4", context["output_context"])
+    var output = classical_typed(Python.tuple(rows, cols) if rank == 2 else Python.tuple(rows), "<f4", py_item(context, nk[].k_output_context))
     var dest = _ptr(output)
     var item = Int(py=value.itemsize)
     var kind = classical_cast_kind(value, item, "input", context)
@@ -80,7 +83,8 @@ def _input(source: PythonObject, ndim: Int, strict: Bool, context: PythonObject)
 
 
 def _copy_row(source: F32P, count: Int, context: PythonObject) raises -> PythonObject:
-    var out = classical_typed(Python.tuple(count), "<f4", context["output_context"])
+    var nk = scaler_keys()
+    var out = classical_typed(Python.tuple(count), "<f4", py_item(context, nk[].k_output_context))
     unsafe_memcpy(dest=_ptr(out), src=source, count=count)
     return out
 
@@ -131,12 +135,13 @@ struct ScalerDoorCalls(ScalerCalls, Movable):
         return got
 
     def standard_transform(self, r: ScalerTransformRequest) raises -> Int:
+        var nk = scaler_keys()
         if self.has_table:
             var got = 0
             with GILReleased(Python()):
                 got = self.table.standard_transform(r)
             return got
-        _ = py_call_typed(py_get(self.entries, "standard_transform"), r.source, r.mean, r.scale, r.dst,
+        _ = py_call_typed(py_get(self.entries, nk[].k_standard_transform), r.source, r.mean, r.scale, r.dst,
                           Python.list(r.rows, r.features, Int(r.inverse), Int(r.with_mean), Int(r.with_std)))
         return 1
 
@@ -147,12 +152,13 @@ struct ScalerDoorCalls(ScalerCalls, Movable):
         return got
 
     def minmax_transform(self, r: MinMaxTransformRequest) raises -> Int:
+        var nk = scaler_keys()
         if self.has_table:
             var got = 0
             with GILReleased(Python()):
                 got = self.table.minmax_transform(r)
             return got
-        _ = py_call_typed(py_get(self.entries, "minmax_transform"), r.source, r.scale, r.offset, r.dst,
+        _ = py_call_typed(py_get(self.entries, nk[].k_minmax_transform), r.source, r.scale, r.offset, r.dst,
                           Python.list(r.rows, r.features, Int(r.inverse), Int(r.clip), Float64(r.lower), Float64(r.upper)))
         return 1
 
@@ -169,12 +175,14 @@ def scaler_door_calls(entries: PythonObject) raises -> ScalerDoorCalls:
 def scaler_transform_calls(entries: PythonObject, context: PythonObject) raises -> ScalerDoorCalls:
     """UNPACK: a transform's calls; the explicit host context keeps its
     estimators-host transform entry (ScalerDoorCalls)."""
-    return ScalerDoorCalls(entries, not Bool(py=py_get(context, "scaler_explicit_host", False)))
+    var nk = scaler_keys()
+    return ScalerDoorCalls(entries, not Bool(py=py_get(context, nk[].k_scaler_explicit_host, False)))
 
 
 def scaler_standard_publish(fields: PythonObject, fit: ScalerStandardFit, d: Int, with_mean: Bool, with_std: Bool,
                             mode: PythonObject, context: PythonObject) raises:
     """PACK: a StandardScaler fit's fitted fields, one Array per row."""
+    var nk = scaler_keys()
     var stats = F32P(unsafe_from_address=Int(fit.stats.unsafe_ptr()))
     var seen = PythonObject(None)
     if fit.seen_kind == SCALER_SEEN_INT:
@@ -184,24 +192,25 @@ def scaler_standard_publish(fields: PythonObject, fit: ScalerStandardFit, d: Int
     elif fit.seen_kind == SCALER_SEEN_FLOAT_ROW:
         seen = _copy_row(F32P(unsafe_from_address=Int(fit.seen.unsafe_ptr())), d, context)
     else:
-        seen = classical_typed(Python.tuple(d), "<i8", context["output_context"])
+        seen = classical_typed(Python.tuple(d), "<i8", py_item(context, nk[].k_output_context))
         var counts = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(seen)))
         scaler_counts(F32P(unsafe_from_address=Int(fit.seen.unsafe_ptr())), counts, d)
         _ = seen  # keep the Python object alive through the native call above
-    py_setitem(fields, "mean_", _copy_row(stats, d, context) if with_mean or with_std else PythonObject(None))
-    py_setitem(fields, "var_", _copy_row(stats + d, d, context) if with_std else PythonObject(None))
-    py_setitem(fields, "scale_", _copy_row(stats + 2*d, d, context) if with_std else PythonObject(None))
-    py_setitem(fields, "n_features_in_", d)
-    py_setitem(fields, "n_samples_seen_", seen)
-    py_setitem(fields, "numeric_mode_", mode)
-    py_setitem(fields, "with_mean_", with_mean)
-    py_setitem(fields, "with_std_", with_std)
+    py_setitem(fields, nk[].k_mean_, _copy_row(stats, d, context) if with_mean or with_std else PythonObject(None))
+    py_setitem(fields, nk[].k_var_, _copy_row(stats + d, d, context) if with_std else PythonObject(None))
+    py_setitem(fields, nk[].k_scale_, _copy_row(stats + 2*d, d, context) if with_std else PythonObject(None))
+    py_setitem(fields, nk[].k_n_features_in_, d)
+    py_setitem(fields, nk[].k_n_samples_seen_, seen)
+    py_setitem(fields, nk[].k_numeric_mode_, mode)
+    py_setitem(fields, nk[].k_with_mean_, with_mean)
+    py_setitem(fields, nk[].k_with_std_, with_std)
 
 
 def _bool(value: PythonObject, context: PythonObject) raises -> Bool:
+    var nk = scaler_keys()
     var b = native_loaded_module("builtins")
     if py_type(value) is not b.bool:
-        var numpy = py_get(context, "bool_types")
+        var numpy = py_get(context, nk[].k_bool_types)
         if numpy is None or py_type(value) is not numpy[1]:
             raise Error("copy, with_mean and with_std must be bools")
     return Bool(py=value)
@@ -232,12 +241,13 @@ struct ScalerFitInput(Movable):
 def scaler_fit_entries(mode: PythonObject, context: PythonObject) raises -> PythonObject:
     """UNPACK: the mode's connected preprocessing entries for a fit, with the
     training-entry and mode-probe refusals."""
+    var nk = scaler_keys()
     var b = native_loaded_module("builtins")
-    var entries = context["scaler_bindings"][mode]
+    var entries = py_item(context, nk[].k_scaler_bindings)[mode]
     if py_type(entries) is b.str:
         raise Error("ImportError: " + String(entries))
-    if py_get(entries,"standard_fit") is None:
-        raise Error("ImportError: HostStandardScaler training requires _mojolearn_preprocessing_host: " + String(py_get(entries,"scaler_training_error","standard_fit is unavailable")))
+    if py_get(entries,nk[].k_standard_fit) is None:
+        raise Error("ImportError: HostStandardScaler training requires _mojolearn_preprocessing_host: " + String(py_get(entries,nk[].k_scaler_training_error,"standard_fit is unavailable")))
     var expected = 1 if String(mode) == "identical" else 0
     # The two mode probes run once per binding (prep_entry_cache).
     if not prep_mode_checked(entries, expected):
@@ -249,6 +259,7 @@ def scaler_fit_input(source: PythonObject, weight_source: PythonObject, context:
                      input_cache: PythonObject) raises -> ScalerFitInput:
     """UNPACK: X's snapshot and the admitted weights (refusals in the order
     the fit made them)."""
+    var nk = scaler_keys()
     var b = native_loaded_module("builtins")
     var snapshot = scaler_operation_input(source, context, input_cache)
     var captured = snapshot.downcast_value_ptr[ScalerInputSnapshot]()
@@ -265,8 +276,8 @@ def scaler_fit_input(source: PythonObject, weight_source: PythonObject, context:
         if weight_type is b.bool:
             raise Error("sample_weight must be one-dimensional")
         var scalar = weight_type is b.int or weight_type is b.float
-        var scalar_types = py_get(context, "scalar_types")
-        var bool_types = py_get(context, "bool_types")
+        var scalar_types = py_get(context, nk[].k_scalar_types)
+        var bool_types = py_get(context, nk[].k_bool_types)
         if scalar_types is not None and bool_types is not None:
             scalar = scalar or (_one_of(weight_type, scalar_types) and weight_type is not bool_types[1])
         # Real numeric scalars broadcast. A zero-dimensional buffer is
@@ -278,7 +289,7 @@ def scaler_fit_input(source: PythonObject, weight_source: PythonObject, context:
             # its broadcast replacement.
             var scalar_weight = weight
             var first = _ptr(scalar_weight)[0]
-            weight = classical_typed(Python.tuple(n), "<f4", context["output_context"])
+            weight = classical_typed(Python.tuple(n), "<f4", py_item(context, nk[].k_output_context))
             scaler_fill(_ptr(weight), n, first)
             _ = scalar_weight^
         elif Int(py=weight.size) != n:
@@ -292,15 +303,16 @@ def scaler_fit(model: PythonObject, source: PythonObject, weight_source: PythonO
 
 def scaler_fit(model: PythonObject, source: PythonObject, weight_source: PythonObject, context: PythonObject,
                input_cache: PythonObject) raises -> PythonObject:
+    var nk = scaler_keys()
     classical_connect_numpy(context)
     var b = native_loaded_module("builtins")
     var fields = py_fields(model)
-    _ = _bool(fields["copy"], context)
-    var with_mean = _bool(fields["with_mean"], context)
-    var with_std = _bool(fields["with_std"], context)
-    var mode = fields["numeric_mode"]
+    _ = _bool(py_item(fields, nk[].k_copy), context)
+    var with_mean = _bool(py_item(fields, nk[].k_with_mean), context)
+    var with_std = _bool(py_item(fields, nk[].k_with_std), context)
+    var mode = py_item(fields, nk[].k_numeric_mode)
     if mode is None:
-        mode = context["backend_fields"]["_DEFAULT_MODE"]
+        mode = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
     if py_type(mode) is not b.str:
         raise Error("numeric_mode must be fast, identical or None")
     mode = py_call(py_call(mode.strip).lower)
@@ -308,7 +320,7 @@ def scaler_fit(model: PythonObject, source: PythonObject, weight_source: PythonO
     if mode_word != "fast" and mode_word != "identical":
         raise Error("numeric_mode must be fast, identical or None")
     answer_mode_object(mode, mode_word, MODE_FAMILY_SCALER)
-    if Bool(py=py_get(context,"scaler_explicit_host",False)) and String(mode) != "identical":
+    if Bool(py=py_get(context,nk[].k_scaler_explicit_host,False)) and String(mode) != "identical":
         raise Error("HostStandardScaler runs identical only on the host")
     # Preserve refit's invalidation semantics, including failure after a valid
     # configuration. Use only the native dict operations, never model hooks.
