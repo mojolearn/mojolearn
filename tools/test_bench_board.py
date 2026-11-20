@@ -156,7 +156,9 @@ STUB_NEURAL = textwrap.dedent(r'''
         p.add_argument(f)
     p.add_argument("--keep-outputs", action="store_true")
     a = p.parse_args()
-    assert a.cmd == "race" and a.ours_python and a.theirs_python and a.keep_outputs
+    # --keep-outputs is passed only by a job that scores an opponent (bench_board_evidence.scores_opponent,
+    # AGENTS.md "What a measurement keeps", 2026-11-20); the driver computes quality and hashes without it
+    assert a.cmd == "race" and a.ours_python and a.theirs_python
     with open(os.environ["STUB_CALLS"], "a") as fh:
         fh.write("neural %s %s %s\n" % (a.lane, a.shape, a.arms))
     if os.environ.get("STUB_FAIL") == a.lane:
