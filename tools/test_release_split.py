@@ -183,10 +183,26 @@ class Gates(SplitBase):
         self.assertEqual(r.go(), 1)
         self.assertEqual(self.published(r), ["amd", "linux", "macos", "nvidia"])
 
+def _docker_up():
+    """Whether `docker info` answers: step_linux_pack's preflight calls it for real before packing."""
+    if not shutil.which("docker"):
+        return False
+    try:
+        return subprocess.run(["docker", "info"], capture_output=True, timeout=60).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
 class Pack(SplitBase):
     """linux-pack: pack (the real packer over fake sets), audit
     each wheel core first, strip each, split_audit the final set."""
 
+    # The pack's docker preflight runs the real `docker info` (tools/release.py step_linux_pack). GitHub's
+    # ubuntu runners have a docker daemon and run this test; the RunPod CPU box has no docker
+    # (FileNotFoundError, box job nvc-cpuchk-20261120T174232Z-018cbd), where it skips with this reason and
+    # tools/run_tool_tests.sh lists the skip in ENV.txt. The refusal itself is tested without docker below.
+    @unittest.skipUnless(_docker_up(), "environment: no running docker daemon (`docker info` fails); the pack's "
+                         "docker preflight needs one")
     def test_five_wheels_packed_audited_stripped_and_audited_as_a_set(self):
         import test_split_wheels as tsw
         sets_root = self.tmp / "fake"
@@ -235,6 +251,30 @@ class Pack(SplitBase):
         calls.clear()
         self.assertTrue(r.step_linux_pack().startswith("have "))
         self.assertEqual(calls, [])
+
+    def test_a_down_docker_is_refused_before_the_pack(self):
+        # no docker needed: `docker info` is answered as a down daemon answers it; the step refuses before it runs
+        # anything or moves the pack dir aside, so its resume is a restart of this one step
+        calls = []
+        r = self.release(commit=HEAD)
+        r.runner = lambda cmd, env, log, detach=False: calls.append(cmd) or 0
+        r.pack_inputs = lambda: ([], [], ["m.json"])
+        r.assembly_needed = lambda: False
+        r.source_checkout = lambda create=True: ROOT
+        real_run = subprocess.run
+
+        def run(cmd, *a, **kw):
+            if list(cmd)[:2] == ["docker", "info"]:
+                return subprocess.CompletedProcess(cmd, 1, "", "Cannot connect to the Docker daemon")
+            return real_run(cmd, *a, **kw)
+        dist = r.rel / "linux"
+        dist.mkdir(parents=True, exist_ok=True)
+        with mock.patch.object(release.subprocess, "run", side_effect=run):
+            with self.assertRaises(release.StepFailed) as got:
+                r.step_linux_pack()
+        self.assertIn("docker is not running", str(got.exception))
+        self.assertEqual(calls, [])
+        self.assertTrue(dist.is_dir(), "the pack dir is not moved aside")
 
 
 def fake_wheel(path, commit=None, data=b"x"):
