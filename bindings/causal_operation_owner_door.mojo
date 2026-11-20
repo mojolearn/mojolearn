@@ -17,6 +17,8 @@ from core.shared_slot import SharedSlot
 from bindings.py_optional import py_present
 # RUN (lane rs-neural): the live field names, no Python import.
 from training.causal_operation_owner_run import _causal_model_runtime_names, _causal_block_runtime_names
+from bindings.causal_keys_unpack import causal_keys, CausalKeys
+from bindings.py_balanced import py_item
 
 
 struct CausalFieldNames(Defaultable, Movable):
@@ -80,33 +82,36 @@ def _causal_native_plain(mut mods: NativeModules, value: PythonObject, context: 
     raise Error("TypeError: causal metadata requires native scalar/container values")
 
 
-def _causal_buffer(value: PythonObject, context: PythonObject) raises -> PythonObject:
+def _causal_buffer(value: PythonObject, context: PythonObject, nk: UnsafePointer[CausalKeys, MutUntrackedOrigin]) raises -> PythonObject:
     if value is None:
         return value
-    if py_type(value) is context["array_class"]:
+    if py_type(value) is py_item(context, nk[].k_array_class):
         return generation_array_snapshot(value)
     return generation_buffer_view(value)
 
 
 def causal_model_origin(mut mods: NativeModules, model: PythonObject) raises -> PythonObject:
     if py_type(model) is mods.module("types").SimpleNamespace:
-        return py_get(causal_snapshot_fields(mods, model), "_causal_original", model)
+        var nk = causal_keys()
+        return py_get(causal_snapshot_fields(mods, model), nk[].k__causal_original, model)
     return model
 
 
 def causal_state_origin(mut mods: NativeModules, state: PythonObject) raises -> PythonObject:
     if py_type(state) is mods.module("types").SimpleNamespace:
-        return py_get(causal_snapshot_fields(mods, state), "_causal_original", state)
+        var nk = causal_keys()
+        return py_get(causal_snapshot_fields(mods, state), nk[].k__causal_original, state)
     return state
 
 
 def causal_state_fields(mut mods: NativeModules, state: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = causal_keys()
     if py_type(state) is mods.module("types").SimpleNamespace:
         var fields = causal_snapshot_fields(mods, state)
-        if not py_contains(fields, "_causal_original"):
+        if not py_contains(fields, nk[].k__causal_original):
             raise Error("TypeError: causal state requires its retained native owner")
         return fields
-    return model_record_fields(mods, state, context["generation_classes"][1],
+    return model_record_fields(mods, state, py_item(context, nk[].k_generation_classes)[1],
         Python.tuple("batch_size", "max_tokens", "positions", "layers", "_owner", "_usable"))
 
 
@@ -163,7 +168,8 @@ def causal_entry_is_plain(name: String) -> Bool:
 def causal_pin_entries(mut mods: NativeModules, fields: PythonObject, entries: PythonObject) raises:
     neural_string_keys(mods, fields)
     neural_string_keys(mods, entries)
-    py_setitem(fields, "_causal_entries_owner", PythonObject(alloc=CausalExecutionEntries(mods, entries)))
+    var nk = causal_keys()
+    py_setitem(fields, nk[].k__causal_entries_owner, PythonObject(alloc=CausalExecutionEntries(mods, entries)))
 
 
 def _causal_entries(mut mods: NativeModules, entries: PythonObject, pinned: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -172,13 +178,14 @@ def _causal_entries(mut mods: NativeModules, entries: PythonObject, pinned: Pyth
     var types = mods.module("types")
     # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
     var original = Optional[PythonObject]()
+    var nk = causal_keys()
     if pinned is not None:
         original = py_present(pinned.downcast_value_ptr[CausalExecutionEntries]()[].entries)
         if len(original.value()) != len(entries):
             raise Error("TypeError: CausalLM native execution registry changed after admission")
-    elif py_get(entries, "parallel_call") is not None:
+    elif py_get(entries, nk[].k_parallel_call) is not None:
         ref cpy = Python().cpython()
-        var runtime = context["runtime"]
+        var runtime = py_item(context, nk[].k_runtime)
         if py_type(runtime) is not types.ModuleType:
             raise Error("TypeError: parallel execution requires its connected native runtime")
         var raw = cpython_table()[].PyModule_GetDict(runtime._obj_ptr)
@@ -186,7 +193,7 @@ def _causal_entries(mut mods: NativeModules, entries: PythonObject, pinned: Pyth
             raise cpy.unsafe_get_error()
         var connected = PythonObject(from_owned=cpy.Py_NewRef(raw))
         neural_string_keys(mods, connected)
-        if entries["parallel_call"] is not connected["parallel_causal_call"]:
+        if py_item(entries, nk[].k_parallel_call) is not py_item(connected, nk[].k_parallel_causal_call):
             raise Error("TypeError: parallel execution entry changed after native connection")
     else:
         raise Error("TypeError: CausalLM execution requires its constructed native entry owner")
@@ -218,23 +225,24 @@ def _causal_entries(mut mods: NativeModules, entries: PythonObject, pinned: Pyth
 
 def _causal_model_capture_full(mut mods: NativeModules, model: PythonObject, context: PythonObject) raises -> PythonObject:
     var names = _causal_model_names()
-    var live = model_record_fields(mods, model, context["model_class"], names)
+    var nk = causal_keys()
+    var live = model_record_fields(mods, model, py_item(context, nk[].k_model_class), names)
     var bi = mods.module("builtins")
     var fields = Python.dict()
     for i in range(len(names)):  # driver-loop: over retain only fields consumed by this operation
         if py_contains(live, names[i]):
             py_setitem(fields, names[i], live[names[i]])
-    py_setitem(fields, "_causal_original", model)
-    py_setitem(fields, "_causal_live_fields", live)
+    py_setitem(fields, nk[].k__causal_original, model)
+    py_setitem(fields, nk[].k__causal_live_fields, live)
     for name in ["kind", "d_model", "vocab_size", "n_layers", "norm_eps", "numeric_profile", "device", "weight_format", "max_positions", "_native_vendor", "_native_numeric_mode", "_parameters_exposed", "_resident_busy", "_closed", "_failed"]:  # driver-loop: over captured model scalar metadata
         if py_contains(fields, name):
             neural_plain_value(mods, fields[name], 0, context)
             py_setitem(fields, name, _causal_native_plain(mods, fields[name], context))
-    py_setitem(fields, "plan", _causal_namespace(mods, model_plan_snapshot(mods, fields["plan"])))
-    py_setitem(fields, "_runtime", context["runtime"])
-    py_setitem(fields, "_causal_entries_identity", fields["_native_entries"])
-    var entries = _causal_entries(mods, fields["_native_entries"], py_get(fields, "_causal_entries_owner"), context)
-    py_setitem(fields, "_native_entries", entries)
+    py_setitem(fields, nk[].k_plan, _causal_namespace(mods, model_plan_snapshot(mods, py_item(fields, nk[].k_plan))))
+    py_setitem(fields, nk[].k__runtime, py_item(context, nk[].k_runtime))
+    py_setitem(fields, nk[].k__causal_entries_identity, py_item(fields, nk[].k__native_entries))
+    var entries = _causal_entries(mods, py_item(fields, nk[].k__native_entries), py_get(fields, nk[].k__causal_entries_owner), context)
+    py_setitem(fields, nk[].k__native_entries, entries)
     var buffers = Python.dict()
     var original_parameters = Python.dict()
     for name in ["_embed", "_norm", "_head"]:  # small-loop(retained model head buffers, preserving tied-weight identity)
@@ -243,23 +251,23 @@ def _causal_model_capture_full(mut mods: NativeModules, model: PythonObject, con
         var identity = py_call(bi.id, original)
         var captured = py_get(buffers, identity)
         if captured is None and original is not None:
-            captured = _causal_buffer(original, context)
+            captured = _causal_buffer(original, context, nk)
             py_setitem(buffers, identity, captured)
         py_setitem(fields, name, captured)
-    py_setitem(fields, "_causal_original_parameters", original_parameters)
-    var packed = py_get(fields, "_head_int15")
+    py_setitem(fields, nk[].k__causal_original_parameters, original_parameters)
+    var packed = py_get(fields, nk[].k__head_int15)
     if packed is not None:
         if (py_type(packed) is not bi.list and py_type(packed) is not bi.tuple) or len(packed) != 3:
             raise Error("TypeError: CausalLM packed head requires three native planes")
         var copied = Python.list()
         for i in range(3):  # small-loop(retained int15 head planes)
-            _ = py_call(copied.append, _causal_buffer(packed[i], context))
-        py_setitem(fields, "_head_int15", copied)
-    var blocks = fields["_blocks"]
+            _ = py_call(copied.append, _causal_buffer(packed[i], context, nk))
+        py_setitem(fields, nk[].k__head_int15, copied)
+    var blocks = py_item(fields, nk[].k__blocks)
     if py_type(blocks) is not bi.list and py_type(blocks) is not bi.tuple:
         raise Error("TypeError: CausalLM blocks require an ordinary owner sequence")
-    py_setitem(fields, "_blocks", py_call(bi.list, blocks))
-    var parallel = py_get(entries, "parallel_call")
+    py_setitem(fields, nk[].k__blocks, py_call(bi.list, blocks))
+    var parallel = py_get(entries, nk[].k_parallel_call)
     if parallel is not None:
         var routing = py_call(parallel, "capture_model", Python.list(model, fields))
         mods.released()
@@ -278,15 +286,15 @@ def _causal_model_capture_full(mut mods: NativeModules, model: PythonObject, con
                         py_setitem(block, name, _causal_native_plain(mods, block[name], context))
                 seen[identity] = block
             _ = py_call(captured.append, block)
-        py_setitem(fields, "_native_block_fields", captured)
-    var resident = py_get(fields, "_resident_sessions")
+        py_setitem(fields, nk[].k__native_block_fields, captured)
+    var resident = py_get(fields, nk[].k__resident_sessions)
     if resident is not None:
         if (py_type(resident) is not bi.tuple and py_type(resident) is not bi.list) or len(resident) != 3:
             raise Error("TypeError: CausalLM resident cache requires its native owner record")
         neural_plain_value(mods, resident[0], 0, context)
         if py_type(resident[2]) is not bi.list and py_type(resident[2]) is not bi.tuple:
             raise Error("TypeError: CausalLM resident sessions require native owner slots")
-        py_setitem(fields, "_resident_sessions", Python.tuple(neural_metadata_snapshot(mods, resident[0]), resident[1], py_call(bi.list, resident[2])))
+        py_setitem(fields, nk[].k__resident_sessions, Python.tuple(neural_metadata_snapshot(mods, resident[0]), resident[1], py_call(bi.list, resident[2])))
     return _causal_namespace(mods, fields)
 
 
@@ -312,7 +320,8 @@ def _causal_model_key(mut mods: NativeModules, model: PythonObject, live: Python
     key.add(py_type(model))
     key.add_identity(context)
     key.fields(live, _causal_model_runtime_names())
-    var blocks = py_get(live, "_blocks")
+    var nk = causal_keys()
+    var blocks = py_get(live, nk[].k__blocks)
     if blocks is None or (py_type(blocks) is not bi.list and py_type(blocks) is not bi.tuple):
         return PythonObject(None)
     for i in range(len(blocks)):  # driver-loop: over each model layer's identity and setup inputs once
@@ -335,7 +344,8 @@ def _causal_model_matches(mut mods: NativeModules, saved: PythonObject, model: P
     if not key[].matches_fields(live, _causal_model_runtime_names(), offset):
         return False
     var bi = mods.module("builtins")
-    var blocks = py_get(live, "_blocks")
+    var nk = causal_keys()
+    var blocks = py_get(live, nk[].k__blocks)
     if blocks is None or (py_type(blocks) is not bi.list and py_type(blocks) is not bi.tuple):
         return False
     for i in range(len(blocks)):  # driver-loop: over model layer setup inputs compared in place
@@ -346,15 +356,17 @@ def _causal_model_matches(mut mods: NativeModules, saved: PythonObject, model: P
     return key[].complete(offset) and key[].arrays_match(mods, context)
 
 
-def _causal_view_retained(mut mods: NativeModules, view: PythonObject, original: PythonObject, context: PythonObject) raises -> Bool:
+def _causal_view_retained(mut mods: NativeModules, view: PythonObject, original: PythonObject, context: PythonObject,
+                          nk: UnsafePointer[CausalKeys, MutUntrackedOrigin]) raises -> Bool:
     # True when `view` is a passive view of the Array `original` (same
     # storage), never a converted copy or a foreign exporter.
     if view is None or original is None:
         return view is None and original is None
-    return py_type(original) is context["array_class"] and view._base is original
+    return py_type(original) is py_item(context, nk[].k_array_class) and view._base is original
 
 
 def _causal_block_retained(mut mods: NativeModules, snap: PythonObject, live: PythonObject, context: PythonObject) raises -> Bool:
+    var nk = causal_keys()
     for name in [String("_w"), String("_wopt")]:  # small-loop(weight slot lists)
         if py_contains(snap, name):
             var views = snap[name]
@@ -362,18 +374,18 @@ def _causal_block_retained(mut mods: NativeModules, snap: PythonObject, live: Py
             if len(views) != len(originals):
                 return False
             for i in range(len(views)):  # driver-loop: over the block's weight slots, identity only
-                if not _causal_view_retained(mods, views[i], originals[i], context):
+                if not _causal_view_retained(mods, views[i], originals[i], context, nk):
                     return False
-    var packed = py_get(live, "_int15")
+    var packed = py_get(live, nk[].k__int15)
     if packed is not None:
-        var planes = snap["_int15"]
+        var planes = py_item(snap, nk[].k__int15)
         for i in range(len(packed)):  # driver-loop: over packed weight planes, identity only
             if packed[i] is None or planes[i] is None:
                 if packed[i] is not planes[i]:
                     return False
                 continue
             for j in range(len(packed[i])):  # small-loop(packed: weight plane slots): identity only, no hooks
-                if not _causal_view_retained(mods, planes[i][j], packed[i][j], context):
+                if not _causal_view_retained(mods, planes[i][j], packed[i][j], context, nk):
                     return False
     return True
 
@@ -402,8 +414,9 @@ def _causal_block_class_record(mut mods: NativeModules, cls: PythonObject) raise
     # identities in insertion order. Taken right after a full capture admitted
     # the class (string keys, no field descriptors, connected ancestry).
     var bi = mods.module("builtins")
-    var mro = py_call(bi.type.__dict__["__mro__"].__get__, cls)
-    var get_namespace = bi.type.__dict__["__dict__"].__get__
+    var nk = causal_keys()
+    var mro = py_call(py_item(bi.type.__dict__, nk[].k___mro__).__get__, cls)
+    var get_namespace = py_item(bi.type.__dict__, nk[].k___dict__).__get__
     var rows = Python.list()
     for i in range(len(mro)):  # driver-loop: over the block class ancestry
         var row = py_call(get_namespace, mro[i])
@@ -419,7 +432,8 @@ def _causal_block_class_unchanged(mut mods: NativeModules, record: PythonObject,
     var bi = mods.module("builtins")
     if record[0] is not cls or py_type(cls) is not record[2]:
         return False
-    if py_call(bi.type.__dict__["__mro__"].__get__, cls) is not record[1]:
+    var nk = causal_keys()
+    if py_call(py_item(bi.type.__dict__, nk[].k___mro__).__get__, cls) is not record[1]:
         return False
     ref cpy = Python().cpython()
     # perf2-neural: typed pointers resolved once per process (the standard
@@ -483,7 +497,8 @@ def causal_model_capture(mut mods: NativeModules, model: PythonObject, context: 
     # admission runs first on every call, so a refusal keeps its type,
     # message and position.
     var bi = mods.module("builtins")
-    var live = model_record_fields(mods, model, context["model_class"], _causal_model_names())
+    var nk = causal_keys()
+    var live = model_record_fields(mods, model, py_item(context, nk[].k_model_class), _causal_model_names())
     var record = prepared_get(mods, _CAUSAL_MODEL_SLOT, model)
     var matches = False
     if record is not None:
@@ -499,23 +514,23 @@ def causal_model_capture(mut mods: NativeModules, model: PythonObject, context: 
         var captured_model = py_call(mods.module("types").SimpleNamespace)
         var fields = causal_snapshot_fields(mods, captured_model)
         _ = py_call(fields.update, record[1])
-        py_setitem(fields, "_causal_original", model)
-        py_setitem(fields, "_causal_live_fields", live)
+        py_setitem(fields, nk[].k__causal_original, model)
+        py_setitem(fields, nk[].k__causal_live_fields, live)
         # The private original-parameter mapping is read-only after capture;
         # the shallow template copy already retains it without another dict.
         var runtime_names = _causal_model_runtime_names()
         for name in runtime_names:  # small-loop(runtime-owned model words)
             _causal_runtime_word(mods, fields, live, name, context)
-        py_setitem(fields, "_causal_entries_identity", live["_native_entries"])
+        py_setitem(fields, nk[].k__causal_entries_identity, py_item(live, nk[].k__native_entries))
         # perf2-neural: the identity key walked `_native_entries` (the dict and
         # every key and value) and `_causal_entries_owner`, so the registry is
         # the one the full capture admitted through `_causal_entries`; reuse
         # that admitted copy instead of re-admitting every entry per operation.
         # Operations only read the registry; a fresh shallow copy keeps each
         # capture's dict its own. Parallel registries are never stored.
-        py_setitem(fields, "_native_entries", py_call(bi.dict, record[1]["_native_entries"]))
-        var blocks = live["_blocks"]
-        py_setitem(fields, "_blocks", py_call(bi.list, blocks))
+        py_setitem(fields, nk[].k__native_entries, py_call(bi.dict, py_item(record[1], nk[].k__native_entries)))
+        var blocks = py_item(live, nk[].k__blocks)
+        py_setitem(fields, nk[].k__blocks, py_call(bi.list, blocks))
         var derived = record[2]
         var classes = record[3]
         var checked = Dict[Int, Bool]()
@@ -539,21 +554,21 @@ def causal_model_capture(mut mods: NativeModules, model: PythonObject, context: 
                     block_live = neural_block_fields(mods, blocks[i], context)
                 block = py_call(bi.dict, block_live)
                 _ = py_call(block.update, derived[i])
-                py_setitem(block, "_neural_live_fields", block_live)
+                py_setitem(block, nk[].k__neural_live_fields, block_live)
                 for name in ["_arithmetic_profile", "_arithmetic_profile_changed"]:  # small-loop(runtime launch words normalized per call)
                     if py_contains(block, name):
                         py_setitem(block, name, _causal_native_plain(mods, block[name], context))
                 seen[identity] = block
             _ = py_call(captured.append, block)
-        py_setitem(fields, "_native_block_fields", captured)
-        var resident = py_get(fields, "_resident_sessions")
+        py_setitem(fields, nk[].k__native_block_fields, captured)
+        var resident = py_get(fields, nk[].k__resident_sessions)
         if resident is not None:
             if (py_type(resident) is not bi.tuple and py_type(resident) is not bi.list) or len(resident) != 3:
                 raise Error("TypeError: CausalLM resident cache requires its native owner record")
             neural_plain_value(mods, resident[0], 0, context)
             if py_type(resident[2]) is not bi.list and py_type(resident[2]) is not bi.tuple:
                 raise Error("TypeError: CausalLM resident sessions require native owner slots")
-            py_setitem(fields, "_resident_sessions", Python.tuple(neural_metadata_snapshot(mods, resident[0]), resident[1], py_call(bi.list, resident[2])))
+            py_setitem(fields, nk[].k__resident_sessions, Python.tuple(neural_metadata_snapshot(mods, resident[0]), resident[1], py_call(bi.list, resident[2])))
         return captured_model
     # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
     var key = Optional[PythonObject]()
@@ -565,23 +580,23 @@ def causal_model_capture(mut mods: NativeModules, model: PythonObject, context: 
     if not key:
         return result
     var fields = causal_snapshot_fields(mods, result)
-    var entries = fields["_native_entries"]
-    if py_get(entries, "parallel_call") is not None:
+    var entries = py_item(fields, nk[].k__native_entries)
+    if py_get(entries, nk[].k_parallel_call) is not None:
         return result
     for name in ["_embed", "_norm", "_head"]:  # small-loop(head buffers)
-        if not _causal_view_retained(mods, fields[name], fields["_causal_original_parameters"][name], context):
+        if not _causal_view_retained(mods, fields[name], py_item(fields, nk[].k__causal_original_parameters)[name], context, nk):
             return result
-    var packed = py_get(live, "_head_int15")
+    var packed = py_get(live, nk[].k__head_int15)
     if packed is not None:
         for i in range(3):  # small-loop(int15 head planes)
-            if not _causal_view_retained(mods, fields["_head_int15"][i], packed[i], context):
+            if not _causal_view_retained(mods, py_item(fields, nk[].k__head_int15)[i], packed[i], context, nk):
                 return result
     var derived = Python.list()
-    var blocks = live["_blocks"]
-    var captured = fields["_native_block_fields"]
+    var blocks = py_item(live, nk[].k__blocks)
+    var captured = py_item(fields, nk[].k__native_block_fields)
     for i in range(len(blocks)):  # driver-loop: over unique block owners, setup-derived words
         var snap = captured[i]
-        var block_live = snap["_neural_live_fields"]
+        var block_live = py_item(snap, nk[].k__neural_live_fields)
         if not _causal_block_retained(mods, snap, block_live, context):
             return result
         var words = bi.dict()
@@ -619,7 +634,8 @@ def causal_model_publish(mut mods: NativeModules, model: PythonObject) raises:
     if model is None or py_type(model) is not mods.module("types").SimpleNamespace:
         return
     var fields = causal_snapshot_fields(mods, model)
-    var live = py_get(fields, "_causal_live_fields")
+    var nk = causal_keys()
+    var live = py_get(fields, nk[].k__causal_live_fields)
     if live is None:
         return
     neural_string_keys(mods, live)
@@ -629,11 +645,11 @@ def causal_model_publish(mut mods: NativeModules, model: PythonObject) raises:
     # sessions, or exposed parameters since this snapshot was admitted. Replaying
     # the snapshot here restored busy=True after overlapping private reads.
     # Preserve live-field admission, but never replay another operation's state.
-    var blocks = py_get(fields, "_native_block_fields")
+    var blocks = py_get(fields, nk[].k__native_block_fields)
     if blocks is not None:
         for i in range(len(blocks)):  # driver-loop: validate retained live block owners without replay
             var block = blocks[i]
-            var original = block["_neural_live_fields"]
+            var original = py_item(block, nk[].k__neural_live_fields)
             neural_string_keys(mods, original)
             # The causal forward writes these lifecycle/report fields through
             # causal_block_cache_set. Replaying an untouched block snapshot can
@@ -662,10 +678,11 @@ def _causal_prepared_views(mut mods: NativeModules, record: PythonObject, buffer
     var prepared = record[0]
     if prepared is None:
         return prepared
+    var nk = causal_keys()
     for i in range(len(buffers)):  # driver-loop: over current state buffer identities
         var value = py_get(fields, buffers[i])
         var hit = py_get(prepared, buffers[i])
-        if value is not None and py_type(value) is context["array_class"]:
+        if value is not None and py_type(value) is py_item(context, nk[].k_array_class):
             if hit is None or hit[0] is not value:
                 return PythonObject(None)
         elif hit is not None:
@@ -684,9 +701,10 @@ def causal_layer_capture(mut mods: NativeModules, state: PythonObject, kind: Pyt
         names[].layer_scalars = scalars
     var scalar_names = names[].layer_scalars
     var buffers = names[].layer_buffers
+    var nk = causal_keys()
     # Admit the union once: repeating the same class/namespace walk for
     # scalar, buffer and session groups adds no protection between reads.
-    var live = model_record_fields(mods, state, context["generation_classes"][2][kind], names[].layer_all)
+    var live = model_record_fields(mods, state, py_item(context, nk[].k_generation_classes)[2][kind], names[].layer_all)
     var bi = mods.module("builtins")
     # perf2-neural: fill the returned namespace's own dictionary (one dict
     # copy per layer per operation fewer; same keys in the same order).
@@ -698,8 +716,8 @@ def causal_layer_capture(mut mods: NativeModules, state: PythonObject, kind: Pyt
     for i in range(len(buffers)):  # driver-loop: over retain declared layer state buffers
         if py_contains(live, buffers[i]):
             py_setitem(fields, buffers[i], live[buffers[i]])
-    if py_contains(live, "_resident_session"):
-        py_setitem(fields, "_resident_session", live["_resident_session"])
+    if py_contains(live, nk[].k__resident_session):
+        py_setitem(fields, nk[].k__resident_session, py_item(live, nk[].k__resident_session))
     for i in range(len(scalar_names)):  # driver-loop: over capture layer state scalars before conversion
         if py_contains(fields, scalar_names[i]):
             neural_plain_value(mods, fields[scalar_names[i]], 0, context)
@@ -724,7 +742,7 @@ def causal_layer_capture(mut mods: NativeModules, state: PythonObject, kind: Pyt
         try:
             for i in range(len(buffers)):  # driver-loop: over state buffers retained in the native metadata stamp
                 var value = py_get(fields, buffers[i])
-                if value is not None and py_type(value) is context["array_class"]:
+                if value is not None and py_type(value) is py_item(context, nk[].k_array_class):
                     stamp.value().add_identity(value)
             stamp.value().watch_arrays(mods, context)
             stamped = True
@@ -735,15 +753,15 @@ def causal_layer_capture(mut mods: NativeModules, state: PythonObject, kind: Pyt
         if py_contains(fields, buffers[i]):
             var value = fields[buffers[i]]
             var captured = PythonObject(None)
-            if value is not None and py_type(value) is context["array_class"]:
+            if value is not None and py_type(value) is py_item(context, nk[].k_array_class):
                 var hit = PythonObject(None) if prepared is None else py_get(prepared, buffers[i])
                 if hit is not None:
                     captured = hit[1]
                 else:
-                    captured = _causal_buffer(value, context)
+                    captured = _causal_buffer(value, context, nk)
                     py_setitem(views, buffers[i], Python.list(value, captured))
             else:
-                captured = _causal_buffer(value, context)
+                captured = _causal_buffer(value, context, nk)
             py_setitem(original_buffers, buffers[i], captured)
             py_setitem(fields, buffers[i], captured)
     if prepared is None and stamped:
@@ -754,17 +772,18 @@ def causal_layer_capture(mut mods: NativeModules, state: PythonObject, kind: Pyt
             unchanged = False
         if unchanged and not stamp.value().retains(state):
             prepared_put(mods, _CAUSAL_LAYER_SLOT, state, Python.list(views, PythonObject(alloc=stamp.take())))
-    py_setitem(fields, "_causal_original", state)
-    py_setitem(fields, "_native_state_identity", state)
-    py_setitem(fields, "_causal_live_fields", live)
-    py_setitem(fields, "_causal_initial_buffers", original_buffers)
+    py_setitem(fields, nk[].k__causal_original, state)
+    py_setitem(fields, nk[].k__native_state_identity, state)
+    py_setitem(fields, nk[].k__causal_live_fields, live)
+    py_setitem(fields, nk[].k__causal_initial_buffers, original_buffers)
     return captured_layer
 
 
 def causal_state_capture(mut mods: NativeModules, state: PythonObject, model: PythonObject, context: PythonObject) raises -> PythonObject:
     if state is None:
         return state
-    var live = model_record_fields(mods, state, context["generation_classes"][1],
+    var nk = causal_keys()
+    var live = model_record_fields(mods, state, py_item(context, nk[].k_generation_classes)[1],
         Python.tuple("batch_size", "max_tokens", "positions", "layers", "_owner", "_usable"))
     var bi = mods.module("builtins")
     # perf2-neural: fill the returned namespace's own dictionary directly.
@@ -777,12 +796,12 @@ def causal_state_capture(mut mods: NativeModules, state: PythonObject, model: Py
         if py_contains(fields, name):
             neural_plain_value(mods, fields[name], 0, context)
             py_setitem(fields, name, _causal_native_plain(mods, fields[name], context))
-    if fields["_owner"] is not causal_model_origin(mods, model):
+    if py_item(fields, nk[].k__owner) is not causal_model_origin(mods, model):
         raise Error("CausalLM: state belongs to another model")
-    var layers = fields["layers"]
+    var layers = py_item(fields, nk[].k_layers)
     if py_type(layers) is not bi.list and py_type(layers) is not bi.tuple:
         raise Error("TypeError: CausalLM state layers require an ordinary sequence")
-    var parallel = py_get(model._native_entries, "parallel_call")
+    var parallel = py_get(model._native_entries, nk[].k_parallel_call)
     var captured = Python.list()
     var seen = Dict[Int, PythonObject]()
     for i in range(len(layers)):  # driver-loop: over capture each unique state identity once
@@ -801,18 +820,18 @@ def causal_state_capture(mut mods: NativeModules, state: PythonObject, model: Py
                 # state. Native execution raises here only when it reaches
                 # this layer, preserving earlier partial progress.
                 var failed = Python.dict()
-                py_setitem(failed, "_causal_original", layers[i])
-                py_setitem(failed, "_native_state_identity", layers[i])
-                py_setitem(failed, "_causal_admission_failure", PythonObject(String(problem)))
-                py_setitem(failed, "_causal_live_fields", PythonObject(None))
+                py_setitem(failed, nk[].k__causal_original, layers[i])
+                py_setitem(failed, nk[].k__native_state_identity, layers[i])
+                py_setitem(failed, nk[].k__causal_admission_failure, PythonObject(String(problem)))
+                py_setitem(failed, nk[].k__causal_live_fields, PythonObject(None))
                 layer = _causal_namespace(mods, failed)
             seen[identity] = layer
         _ = py_call(captured.append, layer)
-    py_setitem(fields, "layers", captured)
-    py_setitem(fields, "_causal_initial_layers", captured)
-    py_setitem(fields, "_causal_original", state)
-    py_setitem(fields, "_native_state_identity", state)
-    py_setitem(fields, "_causal_live_fields", live)
+    py_setitem(fields, nk[].k_layers, captured)
+    py_setitem(fields, nk[].k__causal_initial_layers, captured)
+    py_setitem(fields, nk[].k__causal_original, state)
+    py_setitem(fields, nk[].k__native_state_identity, state)
+    py_setitem(fields, nk[].k__causal_live_fields, live)
     return captured_state
 
 
@@ -820,11 +839,12 @@ def causal_layer_publish(mut mods: NativeModules, value: PythonObject) raises:
     if py_type(value) is not mods.module("types").SimpleNamespace:
         return
     var layer = causal_snapshot_fields(mods, value)
-    var target = layer["_causal_live_fields"]
+    var nk = causal_keys()
+    var target = py_item(layer, nk[].k__causal_live_fields)
     if target is None:
         return
     neural_string_keys(mods, target)
-    var initial = py_get(layer, "_causal_initial_buffers", Python.dict())
+    var initial = py_get(layer, nk[].k__causal_initial_buffers, Python.dict())
     for name in ["cached_tokens", "arithmetic_profile", "_numeric_profile", "profile_id", "absolute_position", "_nn34_usable", "buffered_tokens", "_resident_session", "k_cache", "v_cache", "conv_window", "h", "affine_boundary", "affine_a", "affine_b", "buffer_xbc", "buffer_dtraw", "token", "_lifetime"]:  # driver-loop: over consumed state fields only
         if not py_contains(layer, name):
             continue
@@ -837,25 +857,26 @@ def causal_state_publish(mut mods: NativeModules, state: PythonObject) raises:
     if state is None or py_type(state) is not mods.module("types").SimpleNamespace:
         return
     var fields = causal_snapshot_fields(mods, state)
-    var live = fields["_causal_live_fields"]
+    var nk = causal_keys()
+    var live = py_item(fields, nk[].k__causal_live_fields)
     neural_string_keys(mods, live)
     for name in ["positions", "_usable"]:  # small-loop(success/failure publication)
         if py_contains(fields, name):
             py_setitem(live, name, fields[name])
-    var layers = fields["layers"]
+    var layers = py_item(fields, nk[].k_layers)
     var bi = mods.module("builtins")
-    if layers is not fields["_causal_initial_layers"]:
+    if layers is not py_item(fields, nk[].k__causal_initial_layers):
         # reset_state installed freshly allocated state owners.
         var published = Python.list()
         for i in range(len(layers)):  # driver-loop: over reset publishes fresh public state owners
             causal_layer_publish(mods, layers[i])
             _ = py_call(published.append, causal_state_origin(mods, layers[i]))
-        py_setitem(live, "layers", published)
+        py_setitem(live, nk[].k_layers, published)
         return
     var seen = Dict[Int, Bool]()
     for i in range(len(layers)):  # driver-loop: over publish one result per original aliased state
         var layer = causal_snapshot_fields(mods, layers[i])
-        var identity = Int(layer["_causal_original"]._obj_ptr)
+        var identity = Int(py_item(layer, nk[].k__causal_original)._obj_ptr)
         if identity in seen:
             continue
         seen[identity] = True
@@ -866,7 +887,8 @@ def causal_model_cache_set(mut mods: NativeModules, model: PythonObject, fields:
     # Busy and close/install transitions must be visible before GIL release,
     # just as they were when execution mutated the public dictionary directly.
     py_setitem(fields, name, value)
-    var live = py_get(fields, "_causal_live_fields")
+    var nk = causal_keys()
+    var live = py_get(fields, nk[].k__causal_live_fields)
     if live is not None:
         neural_string_keys(mods, live)
         py_setitem(live, name, value)
@@ -874,7 +896,8 @@ def causal_model_cache_set(mut mods: NativeModules, model: PythonObject, fields:
 
 def causal_block_cache_set(mut mods: NativeModules, fields: PythonObject, name: String, value: PythonObject) raises:
     py_setitem(fields, name, value)
-    var live = py_get(fields, "_neural_live_fields")
+    var nk = causal_keys()
+    var live = py_get(fields, nk[].k__neural_live_fields)
     if live is not None:
         neural_string_keys(mods, live)
         py_setitem(live, name, value)
@@ -885,11 +908,12 @@ def causal_checkpoint_capture(mut mods: NativeModules, checkpoint: PythonObject,
     var bi = mods.module("builtins")
     var result = Python.dict()
     var keys = py_call(bi.list, checkpoint.keys())
+    var nk = causal_keys()
     for i in range(len(keys)):  # driver-loop: over capture public checkpoint fields before checksum or restoration
         var name = String(keys[i])
         var value = checkpoint[keys[i]]
         if name == "prompt" or name == "current":
-            py_setitem(result, keys[i], _causal_buffer(value, context))
+            py_setitem(result, keys[i], _causal_buffer(value, context, nk))
         elif name == "pending_bytes":
             if py_type(value) is not bi.bytes and py_type(value) is not bi.bytearray:
                 raise Error("TypeError: generation checkpoint pending bytes require native byte storage")
@@ -904,7 +928,7 @@ def causal_checkpoint_capture(mut mods: NativeModules, checkpoint: PythonObject,
                 var names = py_call(bi.list, value[j].keys())
                 for k in range(len(names)):  # driver-loop: over captured checkpoint scalars and state bytes
                     var item = value[j][names[k]]
-                    if py_type(item) is context["array_class"]:
+                    if py_type(item) is py_item(context, nk[].k_array_class):
                         item = generation_array_snapshot(item)
                     else:
                         neural_plain_value(mods, item, 0, context)

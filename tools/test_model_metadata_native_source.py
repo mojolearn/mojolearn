@@ -1,7 +1,11 @@
 """Source controls only; compiled model/checkpoint execution remains unqualified."""
 import ast
+import sys
 from pathlib import Path
 import unittest
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from boundary_keys_plain import plain  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -30,7 +34,7 @@ class ModelMetadataSource(unittest.TestCase):
         self.assertGreaterEqual(count, 35)
 
     def test_configuration_snapshots_precede_mutable_state_reads(self):
-        source = (ROOT / "bindings/causal_model_config_door.mojo").read_text()
+        source = plain("bindings/causal_model_config_door.mojo", (ROOT / "bindings/causal_model_config_door.mojo").read_text())
         for old in ("config._d", "plan.__dict__", "plan._layer_map", "plan.n_layers", "Python.import_module"):
             self.assertNotIn(old, source)
         for guard in ("model_record_fields", "model_plain", "model_plan_snapshot",

@@ -1,5 +1,9 @@
 """Causal model source controls; compilation and runtime checks are separate."""
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from boundary_keys_plain import plain  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC = (ROOT / "bindings/causal_lm_public_door.mojo").read_text()
@@ -68,7 +72,7 @@ def test_model_modules_use_loaded_connections_and_safe_optional_entries():
 
 
 def test_construct_captures_plan_options_and_all_weights_before_numerical_work():
-    source = (ROOT / "bindings/causal_lm_construct_door.mojo").read_text()
+    source = plain("bindings/causal_lm_construct_door.mojo", (ROOT / "bindings/causal_lm_construct_door.mojo").read_text())
     construct = source.split("def causal_model_init_binding", 1)[1].split("def causal_model_read_weights_binding", 1)[0]
     for guard in ("_causal_model_fields(mods, model)", "model_plan_snapshot(mods, input_plan)", "_model_options_snapshot(mods, input_options, context)", "_model_weights_snapshot(mods, input_weights, context)"):
         assert construct.index(guard) < construct.index("_causal_model_prepare_snapshot(")
@@ -85,7 +89,7 @@ def test_construct_captures_plan_options_and_all_weights_before_numerical_work()
 
 
 def test_packed_weights_admit_metadata_and_keep_original_quantization_routes():
-    source = (ROOT / "bindings/causal_lm_construct_door.mojo").read_text()
+    source = plain("bindings/causal_lm_construct_door.mojo", (ROOT / "bindings/causal_lm_construct_door.mojo").read_text())
     unpack = source.split("def _model_unpack", 1)[1].split("def _model_quantize15", 1)[0]
     assert '_model_packed_fields(mods, value, context)' in unpack
     assert 'value.shape' not in unpack and 'value.bits' not in unpack and 'value.codes' not in unpack
@@ -99,7 +103,7 @@ def test_packed_weights_admit_metadata_and_keep_original_quantization_routes():
 
 
 def test_execution_registry_is_pinned_and_native_handles_do_not_reread_bindings():
-    owner = (ROOT / "bindings/causal_operation_owner_door.mojo").read_text()
+    owner = plain("bindings/causal_operation_owner_door.mojo", (ROOT / "bindings/causal_operation_owner_door.mojo").read_text())
     registry = owner.split("def _causal_entries", 1)[1].split("def causal_model_capture", 1)[0]
     assert 'downcast_value_ptr[CausalExecutionEntries]' in registry
     assert 'item is not original.value()[names[i]]' in registry   # Optional registry since 2e874ba989
@@ -111,7 +115,7 @@ def test_execution_registry_is_pinned_and_native_handles_do_not_reread_bindings(
 
 
 def test_operation_owner_preserves_aliases_tied_weights_and_original_parameters():
-    owner = (ROOT / "bindings/causal_operation_owner_door.mojo").read_text()
+    owner = plain("bindings/causal_operation_owner_door.mojo", (ROOT / "bindings/causal_operation_owner_door.mojo").read_text())
     # The full capture moved behind the prepared-capture reuse (053c27e4f2).
     model = owner.split("def _causal_model_capture_full", 1)[1].split("\ndef ", 1)[0]
     assert 'identity = py_call(bi.id, original)' in model
@@ -129,7 +133,7 @@ def test_operation_owner_preserves_aliases_tied_weights_and_original_parameters(
 
 
 def test_success_and_failure_publish_only_admitted_live_fields():
-    owner = (ROOT / "bindings/causal_operation_owner_door.mojo").read_text()
+    owner = plain("bindings/causal_operation_owner_door.mojo", (ROOT / "bindings/causal_operation_owner_door.mojo").read_text())
     state = owner.split("def causal_state_publish", 1)[1].split("def causal_model_cache_set", 1)[0]
     assert state.index('neural_string_keys(mods, live)') < state.index('py_setitem(live, name')
     assert 'if identity in seen:' in state
@@ -147,7 +151,7 @@ def test_success_and_failure_publish_only_admitted_live_fields():
 
 
 def test_parallel_paths_pass_identity_and_distinct_captured_payloads():
-    owner = (ROOT / "bindings/causal_operation_owner_door.mojo").read_text()
+    owner = plain("bindings/causal_operation_owner_door.mojo", (ROOT / "bindings/causal_operation_owner_door.mojo").read_text())
     assert '"capture_model", Python.list(model, fields)' in owner
     assert '"capture_state", Python.list(layers[i], model)' in owner
     assert '"run", Python.list(causal_model_origin(mods, model), ids, causal_state_origin(mods, state), remote_step, model, state)' in PUBLIC
@@ -157,7 +161,7 @@ def test_parallel_paths_pass_identity_and_distinct_captured_payloads():
 
 
 def test_streams_and_checkpoints_capture_before_execution_and_guard_output_metadata():
-    owner = (ROOT / "bindings/causal_operation_owner_door.mojo").read_text()
+    owner = plain("bindings/causal_operation_owner_door.mojo", (ROOT / "bindings/causal_operation_owner_door.mojo").read_text())
     door = PUBLIC.split("def _causal_public_execute[", 1)[1].split("def causal_public_c[", 1)[0]
     assert door.index('causal_model_capture(mods, args[0]') < door.index('causal_lm_forward_binding(mods, model')
     assert door.index('causal_checkpoint_capture(mods, args[1]') < door.index('causal_lm_resume_binding(mods, model')

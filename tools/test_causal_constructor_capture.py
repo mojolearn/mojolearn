@@ -1,8 +1,12 @@
 """Constructor source controls; compilation and public runtime remain separate."""
+import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from boundary_keys_plain import plain  # noqa: E402
+
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = (ROOT / "bindings/causal_lm_construct_door.mojo").read_text()
+SOURCE = plain("bindings/causal_lm_construct_door.mojo", (ROOT / "bindings/causal_lm_construct_door.mojo").read_text())
 
 
 def test_constructor_uses_private_metadata_after_native_calls():
