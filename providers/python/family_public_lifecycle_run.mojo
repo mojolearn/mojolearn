@@ -95,23 +95,8 @@ def family_lifecycle_spec(operation: String) -> FamilyLifecycle:
         return FamilyLifecycle("predict", widen=True)
     if operation == "family_xn_graph_svgp_score":
         return FamilyLifecycle("score")
-    # KMeans (bindings/kmeans_native.mojo): a fit's X reaches the owner as the
-    # caller passed it (array init receives the rows). Perf (lane
-    # perf2-cluster): predict and transform take the admitted float32
-    # snapshot, so X is admitted and cast once per query, not twice. Lane
-    # a7d: no scan here; the owner's kernel entry returns X's finite status
-    # word over its own upload, and a resident fold reaches the owner as the
-    # DeviceRows for its device-X entries (`device_x`).
-    if operation == "family_kmeans_fit":
-        return FamilyLifecycle("fit", replace=False, device_x=True)
-    if operation == "family_kmeans_fit_predict":
-        return FamilyLifecycle("fit_predict", replace=False, device_x=True)
-    if operation == "family_kmeans_fit_transform":
-        return FamilyLifecycle("fit_transform", replace=False, device_x=True)
-    if operation == "family_kmeans_predict":
-        return FamilyLifecycle("predict", device_x=True)
-    if operation == "family_kmeans_transform":
-        return FamilyLifecycle("transform", device_x=True)
+    # KMeans: coded in its owner (lane bw2-cluster,
+    # bindings/kmeans_native_pack.mojo `_kmeans_lifecycle`).
     return FamilyLifecycle("")
 
 

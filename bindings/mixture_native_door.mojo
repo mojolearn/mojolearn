@@ -1090,34 +1090,6 @@ def mixture_unknown_operation(operation: String) raises:
     raise Error("RuntimeError: unknown family operation " + operation)
 
 
-def mixture_operation(model: PythonObject, operation: String, args: PythonObject,
-         context: PythonObject, admitted: Bool = False) raises -> PythonObject:
-    """The named form for the one caller that still holds the name: the
-    public cluster door's BayesianGaussianMixture step
-    (providers/python/cluster_public_lifecycle_pyapi_door.mojo, the cluster
-    lane's file; only `family_mix_bgmm_*` names reach it). It maps the name
-    to its leaf code (at most six compares; the chain it replaces made up to
-    fourteen) and runs the coded form. Delete it when that door passes the
-    code."""
-    var code = -1
-    if operation == "family_mix_bgmm_fit":
-        code = MIX_OPN_FAMILY_MIX_BGMM_FIT
-    elif operation == "family_mix_bgmm_fit_predict":
-        code = MIX_OPN_FAMILY_MIX_BGMM_FIT_PREDICT
-    elif operation == "family_mix_bgmm_predict":
-        code = MIX_OPN_FAMILY_MIX_BGMM_PREDICT
-    elif operation == "family_mix_bgmm_predict_proba":
-        code = MIX_OPN_FAMILY_MIX_BGMM_PREDICT_PROBA
-    elif operation == "family_mix_bgmm_score_samples":
-        code = MIX_OPN_FAMILY_MIX_BGMM_SCORE_SAMPLES
-    elif operation == "family_mix_bgmm_score":
-        code = MIX_OPN_FAMILY_MIX_BGMM_SCORE
-    else:
-        classical_connect_numpy(context)
-        mixture_unknown_operation(operation)
-    return mixture_operation(model, code, args, context, admitted)
-
-
 def mixture_operation(model: PythonObject, operation: Int, args: PythonObject,
          context: PythonObject, admitted: Bool = False) raises -> PythonObject:
     """args[0] is the resolved binding; GaussianMixture fit and fit_predict

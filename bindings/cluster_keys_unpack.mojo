@@ -1,0 +1,324 @@
+# SPDX-License-Identifier: Apache-2.0
+# The cluster family's held name keys and operation codes (bindings/py_keys.mojo
+# has the form and its cost rule). Written by the boundary codemod of lane
+# fx-boundary-core; a name the family starts to read is added in the three
+# places below (field, None, fill), and the slot name keeps its V<n> until a
+# wheel that holds the old layout could meet this one in a process (bump
+# `V<n>` and the version together then: core/shared_slot.mojo).
+from std.python import Python, PythonObject
+from core.shared_slot import SharedSlot
+from bindings.py_keys import py_key, py_op_add
+
+
+
+struct ClusterKeys(Defaultable, Movable):
+    # Immutable interface names only: no model, state or user data.
+    var ready: Bool
+    var ops: PythonObject
+    var k__CONTEXT: PythonObject
+    var k__DEFAULT_MODE: PythonObject
+    var k___del__: PythonObject
+    var k___mro__: PythonObject
+    var k___name__: PythonObject
+    var k___setattr__: PythonObject
+    var k__dict: PythonObject
+    var k__eigen_tol: PythonObject
+    var k__fit_X: PythonObject
+    var k__gamma: PythonObject
+    var k__mojolearn_after_fit: PythonObject
+    var k__mojolearn_fitted: PythonObject
+    var k__mojolearn_fitting: PythonObject
+    var k__n_clusters: PythonObject
+    var k__n_components: PythonObject
+    var k__n_init: PythonObject
+    var k__n_neighbors: PythonObject
+    var k__pd_centroids: PythonObject
+    var k__pd_diag: PythonObject
+    var k__pd_eigenvalues: PythonObject
+    var k__pd_eigenvectors: PythonObject
+    var k__prediction_data: PythonObject
+    var k__raw_data: PythonObject
+    var k__resident: PythonObject
+    var k__resident_holder: PythonObject
+    var k__seed: PythonObject
+    var k__shape: PythonObject
+    var k__tree_centers: PythonObject
+    var k_affinity_matrix_: PythonObject
+    var k_array_class: PythonObject
+    var k_array_type: PythonObject
+    var k_backend_fields: PythonObject
+    var k_cluster_centers_: PythonObject
+    var k_cluster_public_array_parameters: PythonObject
+    var k_cluster_public_parameters: PythonObject
+    var k_cluster_public_replaced_fields: PythonObject
+    var k_coords: PythonObject
+    var k_core_distances_: PythonObject
+    var k_data: PythonObject
+    var k_deaths: PythonObject
+    var k_density_dbscan_class: PythonObject
+    var k_density_dbscan_parameters: PythonObject
+    var k_density_kde_class: PythonObject
+    var k_density_kde_parameters: PythonObject
+    var k_distances_: PythonObject
+    var k_dtype: PythonObject
+    var k_embedding_: PythonObject
+    var k_exemplar_idx: PythonObject
+    var k_exemplar_label_offsets: PythonObject
+    var k_family_cfa_hdbscan_metrics: PythonObject
+    var k_family_cfa_hdbscan_mode_codes: PythonObject
+    var k_family_cfa_hdbscan_selection: PythonObject
+    var k_family_cfa_minibatch: PythonObject
+    var k_family_cfa_optics_metrics: PythonObject
+    var k_family_cfb_assign_labels: PythonObject
+    var k_family_cfb_default_eigen_tol: PythonObject
+    var k_family_cfb_predict_affinities: PythonObject
+    var k_family_cfb_sc_affinities: PythonObject
+    var k_family_cfb_se_affinities: PythonObject
+    var k_family_kmeans_inits: PythonObject
+    var k_family_kmeans_metrics: PythonObject
+    var k_feature_names_in_: PythonObject
+    var k_float64: PythonObject
+    var k_gamma_: PythonObject
+    var k_hdbscan_public_class: PythonObject
+    var k_hdbscan_public_parameters: PythonObject
+    var k_index_into_children: PythonObject
+    var k_indices: PythonObject
+    var k_indptr: PythonObject
+    var k_inertia_: PythonObject
+    var k_input_copied_: PythonObject
+    var k_labels_: PythonObject
+    var k_lambdas: PythonObject
+    var k_mapping_types: PythonObject
+    var k_n_clusters_: PythonObject
+    var k_n_components_: PythonObject
+    var k_n_condensed: PythonObject
+    var k_n_edges: PythonObject
+    var k_n_exemplars: PythonObject
+    var k_n_features_in_: PythonObject
+    var k_n_iter_: PythonObject
+    var k_n_iter_assign_: PythonObject
+    var k_n_neighbors_: PythonObject
+    var k_ndarray: PythonObject
+    var k_numeric_dtypes: PythonObject
+    var k_numeric_mode: PythonObject
+    var k_numpy: PythonObject
+    var k_offsets: PythonObject
+    var k_parents: PythonObject
+    var k_rows: PythonObject
+    var k_selected_clusters: PythonObject
+    var k_sum_scale_: PythonObject
+    var k_tree_nodes_: PythonObject
+    var k_weight_scale_: PythonObject
+
+    def __init__(out self):
+        self.ready = False
+        self.ops = PythonObject(None)
+        self.k__CONTEXT = PythonObject(None)
+        self.k__DEFAULT_MODE = PythonObject(None)
+        self.k___del__ = PythonObject(None)
+        self.k___mro__ = PythonObject(None)
+        self.k___name__ = PythonObject(None)
+        self.k___setattr__ = PythonObject(None)
+        self.k__dict = PythonObject(None)
+        self.k__eigen_tol = PythonObject(None)
+        self.k__fit_X = PythonObject(None)
+        self.k__gamma = PythonObject(None)
+        self.k__mojolearn_after_fit = PythonObject(None)
+        self.k__mojolearn_fitted = PythonObject(None)
+        self.k__mojolearn_fitting = PythonObject(None)
+        self.k__n_clusters = PythonObject(None)
+        self.k__n_components = PythonObject(None)
+        self.k__n_init = PythonObject(None)
+        self.k__n_neighbors = PythonObject(None)
+        self.k__pd_centroids = PythonObject(None)
+        self.k__pd_diag = PythonObject(None)
+        self.k__pd_eigenvalues = PythonObject(None)
+        self.k__pd_eigenvectors = PythonObject(None)
+        self.k__prediction_data = PythonObject(None)
+        self.k__raw_data = PythonObject(None)
+        self.k__resident = PythonObject(None)
+        self.k__resident_holder = PythonObject(None)
+        self.k__seed = PythonObject(None)
+        self.k__shape = PythonObject(None)
+        self.k__tree_centers = PythonObject(None)
+        self.k_affinity_matrix_ = PythonObject(None)
+        self.k_array_class = PythonObject(None)
+        self.k_array_type = PythonObject(None)
+        self.k_backend_fields = PythonObject(None)
+        self.k_cluster_centers_ = PythonObject(None)
+        self.k_cluster_public_array_parameters = PythonObject(None)
+        self.k_cluster_public_parameters = PythonObject(None)
+        self.k_cluster_public_replaced_fields = PythonObject(None)
+        self.k_coords = PythonObject(None)
+        self.k_core_distances_ = PythonObject(None)
+        self.k_data = PythonObject(None)
+        self.k_deaths = PythonObject(None)
+        self.k_density_dbscan_class = PythonObject(None)
+        self.k_density_dbscan_parameters = PythonObject(None)
+        self.k_density_kde_class = PythonObject(None)
+        self.k_density_kde_parameters = PythonObject(None)
+        self.k_distances_ = PythonObject(None)
+        self.k_dtype = PythonObject(None)
+        self.k_embedding_ = PythonObject(None)
+        self.k_exemplar_idx = PythonObject(None)
+        self.k_exemplar_label_offsets = PythonObject(None)
+        self.k_family_cfa_hdbscan_metrics = PythonObject(None)
+        self.k_family_cfa_hdbscan_mode_codes = PythonObject(None)
+        self.k_family_cfa_hdbscan_selection = PythonObject(None)
+        self.k_family_cfa_minibatch = PythonObject(None)
+        self.k_family_cfa_optics_metrics = PythonObject(None)
+        self.k_family_cfb_assign_labels = PythonObject(None)
+        self.k_family_cfb_default_eigen_tol = PythonObject(None)
+        self.k_family_cfb_predict_affinities = PythonObject(None)
+        self.k_family_cfb_sc_affinities = PythonObject(None)
+        self.k_family_cfb_se_affinities = PythonObject(None)
+        self.k_family_kmeans_inits = PythonObject(None)
+        self.k_family_kmeans_metrics = PythonObject(None)
+        self.k_feature_names_in_ = PythonObject(None)
+        self.k_float64 = PythonObject(None)
+        self.k_gamma_ = PythonObject(None)
+        self.k_hdbscan_public_class = PythonObject(None)
+        self.k_hdbscan_public_parameters = PythonObject(None)
+        self.k_index_into_children = PythonObject(None)
+        self.k_indices = PythonObject(None)
+        self.k_indptr = PythonObject(None)
+        self.k_inertia_ = PythonObject(None)
+        self.k_input_copied_ = PythonObject(None)
+        self.k_labels_ = PythonObject(None)
+        self.k_lambdas = PythonObject(None)
+        self.k_mapping_types = PythonObject(None)
+        self.k_n_clusters_ = PythonObject(None)
+        self.k_n_components_ = PythonObject(None)
+        self.k_n_condensed = PythonObject(None)
+        self.k_n_edges = PythonObject(None)
+        self.k_n_exemplars = PythonObject(None)
+        self.k_n_features_in_ = PythonObject(None)
+        self.k_n_iter_ = PythonObject(None)
+        self.k_n_iter_assign_ = PythonObject(None)
+        self.k_n_neighbors_ = PythonObject(None)
+        self.k_ndarray = PythonObject(None)
+        self.k_numeric_dtypes = PythonObject(None)
+        self.k_numeric_mode = PythonObject(None)
+        self.k_numpy = PythonObject(None)
+        self.k_offsets = PythonObject(None)
+        self.k_parents = PythonObject(None)
+        self.k_rows = PythonObject(None)
+        self.k_selected_clusters = PythonObject(None)
+        self.k_sum_scale_ = PythonObject(None)
+        self.k_tree_nodes_ = PythonObject(None)
+        self.k_weight_scale_ = PythonObject(None)
+
+
+comptime _CLUSTER_KEYS = SharedSlot[ClusterKeys, "MojolearnClusterKeysV1"]
+
+
+def _cluster_keys_fill(nk: UnsafePointer[ClusterKeys, MutUntrackedOrigin]) raises:
+    # Once per process. `ready` is set last, so a fill that raised is run
+    # again whole by the next call.
+    nk[].k__CONTEXT = py_key("_CONTEXT")
+    nk[].k__DEFAULT_MODE = py_key("_DEFAULT_MODE")
+    nk[].k___del__ = py_key("__del__")
+    nk[].k___mro__ = py_key("__mro__")
+    nk[].k___name__ = py_key("__name__")
+    nk[].k___setattr__ = py_key("__setattr__")
+    nk[].k__dict = py_key("_dict")
+    nk[].k__eigen_tol = py_key("_eigen_tol")
+    nk[].k__fit_X = py_key("_fit_X")
+    nk[].k__gamma = py_key("_gamma")
+    nk[].k__mojolearn_after_fit = py_key("_mojolearn_after_fit")
+    nk[].k__mojolearn_fitted = py_key("_mojolearn_fitted")
+    nk[].k__mojolearn_fitting = py_key("_mojolearn_fitting")
+    nk[].k__n_clusters = py_key("_n_clusters")
+    nk[].k__n_components = py_key("_n_components")
+    nk[].k__n_init = py_key("_n_init")
+    nk[].k__n_neighbors = py_key("_n_neighbors")
+    nk[].k__pd_centroids = py_key("_pd_centroids")
+    nk[].k__pd_diag = py_key("_pd_diag")
+    nk[].k__pd_eigenvalues = py_key("_pd_eigenvalues")
+    nk[].k__pd_eigenvectors = py_key("_pd_eigenvectors")
+    nk[].k__prediction_data = py_key("_prediction_data")
+    nk[].k__raw_data = py_key("_raw_data")
+    nk[].k__resident = py_key("_resident")
+    nk[].k__resident_holder = py_key("_resident_holder")
+    nk[].k__seed = py_key("_seed")
+    nk[].k__shape = py_key("_shape")
+    nk[].k__tree_centers = py_key("_tree_centers")
+    nk[].k_affinity_matrix_ = py_key("affinity_matrix_")
+    nk[].k_array_class = py_key("array_class")
+    nk[].k_array_type = py_key("array_type")
+    nk[].k_backend_fields = py_key("backend_fields")
+    nk[].k_cluster_centers_ = py_key("cluster_centers_")
+    nk[].k_cluster_public_array_parameters = py_key("cluster_public_array_parameters")
+    nk[].k_cluster_public_parameters = py_key("cluster_public_parameters")
+    nk[].k_cluster_public_replaced_fields = py_key("cluster_public_replaced_fields")
+    nk[].k_coords = py_key("coords")
+    nk[].k_core_distances_ = py_key("core_distances_")
+    nk[].k_data = py_key("data")
+    nk[].k_deaths = py_key("deaths")
+    nk[].k_density_dbscan_class = py_key("density_dbscan_class")
+    nk[].k_density_dbscan_parameters = py_key("density_dbscan_parameters")
+    nk[].k_density_kde_class = py_key("density_kde_class")
+    nk[].k_density_kde_parameters = py_key("density_kde_parameters")
+    nk[].k_distances_ = py_key("distances_")
+    nk[].k_dtype = py_key("dtype")
+    nk[].k_embedding_ = py_key("embedding_")
+    nk[].k_exemplar_idx = py_key("exemplar_idx")
+    nk[].k_exemplar_label_offsets = py_key("exemplar_label_offsets")
+    nk[].k_family_cfa_hdbscan_metrics = py_key("family_cfa_hdbscan_metrics")
+    nk[].k_family_cfa_hdbscan_mode_codes = py_key("family_cfa_hdbscan_mode_codes")
+    nk[].k_family_cfa_hdbscan_selection = py_key("family_cfa_hdbscan_selection")
+    nk[].k_family_cfa_minibatch = py_key("family_cfa_minibatch")
+    nk[].k_family_cfa_optics_metrics = py_key("family_cfa_optics_metrics")
+    nk[].k_family_cfb_assign_labels = py_key("family_cfb_assign_labels")
+    nk[].k_family_cfb_default_eigen_tol = py_key("family_cfb_default_eigen_tol")
+    nk[].k_family_cfb_predict_affinities = py_key("family_cfb_predict_affinities")
+    nk[].k_family_cfb_sc_affinities = py_key("family_cfb_sc_affinities")
+    nk[].k_family_cfb_se_affinities = py_key("family_cfb_se_affinities")
+    nk[].k_family_kmeans_inits = py_key("family_kmeans_inits")
+    nk[].k_family_kmeans_metrics = py_key("family_kmeans_metrics")
+    nk[].k_feature_names_in_ = py_key("feature_names_in_")
+    nk[].k_float64 = py_key("float64")
+    nk[].k_gamma_ = py_key("gamma_")
+    nk[].k_hdbscan_public_class = py_key("hdbscan_public_class")
+    nk[].k_hdbscan_public_parameters = py_key("hdbscan_public_parameters")
+    nk[].k_index_into_children = py_key("index_into_children")
+    nk[].k_indices = py_key("indices")
+    nk[].k_indptr = py_key("indptr")
+    nk[].k_inertia_ = py_key("inertia_")
+    nk[].k_input_copied_ = py_key("input_copied_")
+    nk[].k_labels_ = py_key("labels_")
+    nk[].k_lambdas = py_key("lambdas")
+    nk[].k_mapping_types = py_key("mapping_types")
+    nk[].k_n_clusters_ = py_key("n_clusters_")
+    nk[].k_n_components_ = py_key("n_components_")
+    nk[].k_n_condensed = py_key("n_condensed")
+    nk[].k_n_edges = py_key("n_edges")
+    nk[].k_n_exemplars = py_key("n_exemplars")
+    nk[].k_n_features_in_ = py_key("n_features_in_")
+    nk[].k_n_iter_ = py_key("n_iter_")
+    nk[].k_n_iter_assign_ = py_key("n_iter_assign_")
+    nk[].k_n_neighbors_ = py_key("n_neighbors_")
+    nk[].k_ndarray = py_key("ndarray")
+    nk[].k_numeric_dtypes = py_key("numeric_dtypes")
+    nk[].k_numeric_mode = py_key("numeric_mode")
+    nk[].k_numpy = py_key("numpy")
+    nk[].k_offsets = py_key("offsets")
+    nk[].k_parents = py_key("parents")
+    nk[].k_rows = py_key("rows")
+    nk[].k_selected_clusters = py_key("selected_clusters")
+    nk[].k_sum_scale_ = py_key("sum_scale_")
+    nk[].k_tree_nodes_ = py_key("tree_nodes_")
+    nk[].k_weight_scale_ = py_key("weight_scale_")
+    var ops = Python.dict()
+    nk[].ops = ops
+    nk[].ready = True
+
+
+@always_inline
+def cluster_keys() raises -> UnsafePointer[ClusterKeys, MutUntrackedOrigin]:
+    """The family's keys: one slot fetch and one flag test. Fetch once per
+    function, outside loops."""
+    var nk = _CLUSTER_KEYS.get_or_create_ptr()
+    if not nk[].ready:
+        _cluster_keys_fill(nk)
+    return nk

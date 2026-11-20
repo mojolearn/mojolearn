@@ -28,11 +28,23 @@ from providers.python.estimator_lifecycle_pyapi_unpack import estimator_outside,
 from providers.python.cluster_public_lifecycle_pyapi_door import _target, _refusal
 
 
+from bindings.operation_names_density import (
+    DENSITY_OPN_FAMILY_DENSITY_DBSCAN_INITIALIZE, DENSITY_OPN_FAMILY_DENSITY_DBSCAN_GETSTATE,
+    DENSITY_OPN_FAMILY_DENSITY_DBSCAN_SETSTATE, DENSITY_OPN_FAMILY_DENSITY_DBSCAN_FIT,
+    DENSITY_OPN_FAMILY_DENSITY_DBSCAN_FIT_PREDICT, DENSITY_OPN_FAMILY_DENSITY_DBSCAN_PREDICT,
+    DENSITY_OPN_FAMILY_DENSITY_KDE_INITIALIZE, DENSITY_OPN_FAMILY_DENSITY_KDE_GETSTATE,
+    DENSITY_OPN_FAMILY_DENSITY_KDE_SETSTATE, DENSITY_OPN_FAMILY_DENSITY_KDE_SAMPLE,
+    DENSITY_OPN_FAMILY_DENSITY_KDE_RELEASE, DENSITY_OPN_FAMILY_DENSITY_KDE_FIT,
+    DENSITY_OPN_FAMILY_DENSITY_KDE_SCORE)
+from bindings.operation_names_cfb import (
+    CFB_OPN_FAMILY_CFB_DBSCAN_FIT, CFB_OPN_FAMILY_CFB_DBSCAN_FIT_PREDICT, CFB_OPN_FAMILY_CFB_DBSCAN_PREDICT)
 from providers.python.density_public_lifecycle_pyapi_unpack import (
     _admit,
     _keys,
     _resident,
 )
+from bindings.cluster_keys_unpack import cluster_keys
+from bindings.py_balanced import py_item
 
 
 def _initialize(model: PythonObject, args: PythonObject, names: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -91,34 +103,71 @@ comptime _DBSCAN_ADMIT_SLOT = "dbscan_density_admitted_v2"
 comptime _KDE_ADMIT_SLOT = "kde_density_admitted_v2"
 
 
-def density_public_operation(model: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def density_unknown_operation(operation: String) raises:
+    """A `family_density_*` name the operation table does not hold (the
+    shells pass table names only): the text the owner it reached raised
+    (the DBSCAN and KernelDensity owners named the operation they were
+    given; any other name has the family door's text)."""
+    if operation.startswith("family_density_dbscan_"):
+        raise Error("RuntimeError: unknown DBSCAN operation family_cfb_dbscan_"
+                    + String(operation[byte=String("family_density_dbscan_").byte_length():]))
+    if operation.startswith("family_density_kde_"):
+        raise Error("RuntimeError: unknown neighbors operation family_xn_kde_"
+                    + String(operation[byte=String("family_density_kde_").byte_length():]))
+    raise Error("RuntimeError: unknown family operation " + operation)
+
+
+def _density_method(operation: Int) -> String:
+    """The public method of a fit or query, for the not-fitted text (a
+    static literal; it was a slice of the name per call)."""
+    if operation == DENSITY_OPN_FAMILY_DENSITY_DBSCAN_FIT or operation == DENSITY_OPN_FAMILY_DENSITY_KDE_FIT:
+        return "fit"
+    if operation == DENSITY_OPN_FAMILY_DENSITY_DBSCAN_FIT_PREDICT:
+        return "fit_predict"
+    if operation == DENSITY_OPN_FAMILY_DENSITY_DBSCAN_PREDICT:
+        return "predict"
+    if operation == DENSITY_OPN_FAMILY_DENSITY_KDE_SCORE:
+        return "score"
+    return "score_samples"
+
+
+def density_public_operation(model: PythonObject, operation: Int, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`operation` is the leaf code of bindings/operation_names_density.mojo
+    (lane bw2-cluster: it was the name, sliced to a method String per call
+    and matched by up to eleven compares; the owner's name was concatenated
+    per call). DBSCAN 0-5, KernelDensity 6-13: each block's initialize,
+    getstate and setstate first, then the fits and queries."""
     classical_connect_numpy(context)
     var b = native_loaded_module("builtins")
     if py_type(args) is not b.tuple:
         raise Error("TypeError: density public arguments require an exact tuple")
-    var dbscan = operation.startswith("family_density_dbscan_")
-    var owner = context["density_dbscan_class"] if dbscan else context["density_kde_class"]
+    var dbscan = operation <= DENSITY_OPN_FAMILY_DENSITY_DBSCAN_PREDICT
+    var nk = cluster_keys()
+    var owner = py_item(context, nk[].k_density_dbscan_class) if dbscan else py_item(context, nk[].k_density_kde_class)
     # Passive subclasses are accepted: CPython's MRO test
     # (bindings/cluster_side_records.mojo), not a Python-level walk.
     if not cluster_is_subclass(py_type(model), owner):
         raise Error("TypeError: density execution requires its connected estimator class")
     lifecycle_admit_fields(py_fields(model))
-    var prefix = String("family_density_dbscan_") if dbscan else String("family_density_kde_")
-    var method = String(operation[byte=prefix.byte_length():])
-    var names = context["density_dbscan_parameters"] if dbscan else context["density_kde_parameters"]
-    if method == "initialize":
+    var names = py_item(context, nk[].k_density_dbscan_parameters) if dbscan else py_item(context, nk[].k_density_kde_parameters)
+    if operation == DENSITY_OPN_FAMILY_DENSITY_DBSCAN_INITIALIZE or operation == DENSITY_OPN_FAMILY_DENSITY_KDE_INITIALIZE:
         return _initialize(model, args, names, context)
-    if method == "getstate" or method == "setstate":
-        return _state(model, args, dbscan, method == "setstate", context)
-    if method == "sample":
+    if (operation == DENSITY_OPN_FAMILY_DENSITY_DBSCAN_GETSTATE or operation == DENSITY_OPN_FAMILY_DENSITY_DBSCAN_SETSTATE
+            or operation == DENSITY_OPN_FAMILY_DENSITY_KDE_GETSTATE or operation == DENSITY_OPN_FAMILY_DENSITY_KDE_SETSTATE):
+        return _state(model, args, dbscan, operation == DENSITY_OPN_FAMILY_DENSITY_DBSCAN_SETSTATE
+                      or operation == DENSITY_OPN_FAMILY_DENSITY_KDE_SETSTATE, context)
+    if operation == DENSITY_OPN_FAMILY_DENSITY_KDE_SAMPLE:
         raise Error("NotImplementedError: mojolearn KernelDensity: sample() is not implemented (drawing new points from the fitted density); score_samples() and score() are")
-    if method == "release":
+    if operation == DENSITY_OPN_FAMILY_DENSITY_KDE_RELEASE:
         var fields = py_fields(model)
-        _resident(py_get(fields, "_resident"), False, context)
+        _resident(py_get(fields, nk[].k__resident), False, context)
         _kde_release(fields)
         return PythonObject(None)
-    var fitting = method == "fit" or method == "fit_predict"
-    var query = not fitting and (method == "predict" or method == "score_samples" or method == "score")
+    # Every code left is a fit or a query (the old chain's other names are
+    # not in the table and are refused at the family door).
+    var fitting = (operation == DENSITY_OPN_FAMILY_DENSITY_DBSCAN_FIT or operation == DENSITY_OPN_FAMILY_DENSITY_DBSCAN_FIT_PREDICT
+                   or operation == DENSITY_OPN_FAMILY_DENSITY_KDE_FIT)
+    var query = not fitting
     var slot = String(_DBSCAN_ADMIT_SLOT) if dbscan else String(_KDE_ADMIT_SLOT)
     var recorded = _admit(model, names, dbscan, fitting, context, slot)
     var fields = py_fields(model)
@@ -134,11 +183,16 @@ def density_public_operation(model: PythonObject, operation: String, args: Pytho
             # Stamp admitted state before RUN. Concurrent replacement while
             # RUN releases the GIL must never become a freshly admitted record.
             kde_admission_remember(model, names, True, _KDE_ADMIT_SLOT, context)
-        return neighbors_kde_operation(model, "family_xn_kde_" + method, prepared, context)
+        # The neighbors owner still takes the name (its lane converts it):
+        # a static literal per code, not a String concatenated per call.
+        var kde = String("family_xn_kde_fit") if fitting else (
+            String("family_xn_kde_score") if operation == DENSITY_OPN_FAMILY_DENSITY_KDE_SCORE
+            else String("family_xn_kde_score_samples"))
+        return neighbors_kde_operation(model, kde, prepared, context)
     var outside = estimator_outside()
-    var depth_value = Int(py=py_get(fields, "_mojolearn_fitting", PythonObject(0)))
+    var depth_value = Int(py=py_get(fields, nk[].k__mojolearn_fitting, PythonObject(0)))
     if not fitting:
-        classical_require_fitted(model, False, method, context)
+        classical_require_fitted(model, False, _density_method(operation), context)
     var source = args[0]
     var name = classical_estimator_name(model)
     var x = classical_check_x(source, name, context)
@@ -148,7 +202,7 @@ def density_public_operation(model: PythonObject, operation: String, args: Pytho
         if fitting:
             _target(args[1], rows, name, context)
         else:
-            var width = py_get(fields, "n_features_in_")
+            var width = py_get(fields, nk[].k_n_features_in_)
             if py_type(width) is b.int:
                 classical_check_width(columns, Int(py=width), name)
             estimator_feature_check(model, fields, source, context)
@@ -163,7 +217,10 @@ def density_public_operation(model: PythonObject, operation: String, args: Pytho
     if query and not recorded:
         kde_admission_remember(model, names, True, slot, context)
     try:
-        result = cfb_dbscan_operation(model, "family_cfb_dbscan_" + method, prepared, context)
+        var owner = CFB_OPN_FAMILY_CFB_DBSCAN_FIT if operation == DENSITY_OPN_FAMILY_DENSITY_DBSCAN_FIT else (
+            CFB_OPN_FAMILY_CFB_DBSCAN_FIT_PREDICT if operation == DENSITY_OPN_FAMILY_DENSITY_DBSCAN_FIT_PREDICT
+            else CFB_OPN_FAMILY_CFB_DBSCAN_PREDICT)
+        result = cfb_dbscan_operation(model, owner, prepared, context)
     except error:
         var refused = _refusal(error, fitting, depth_value > 0, rows, columns, name)
         raise refused^
@@ -172,6 +229,6 @@ def density_public_operation(model: PythonObject, operation: String, args: Pytho
             estimator_fit_end(model, depth)
     if fitting:
         estimator_fit_complete(model, source, False, context)
-    if outside and py_type(result) is context["array_class"] and py_get(context, "ndarray") is not None:
+    if outside and py_type(result) is py_item(context, nk[].k_array_class) and py_get(context, nk[].k_ndarray) is not None:
         return native_array_ndarray_view(result, context)
     return result

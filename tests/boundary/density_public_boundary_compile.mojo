@@ -12,7 +12,7 @@ def density_public_compile(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -
     try:
         var args = PythonObject(from_borrowed=packed)
         _ = classical_family_admit(args[0])
-        return density_public_operation(args[0], String(args[1]), args[2], args[3]).steal_data()
+        return density_public_operation(args[0], Int(py=args[1]), args[2], args[3]).steal_data()
     except error:
         return raise_python_exception(error)
 

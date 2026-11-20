@@ -59,6 +59,8 @@ from bindings.kmeans_owner_boundary_door import (
     kmeans_owner_matching, kmeans_owner_handle, kmeans_owner_prepare,
     kmeans_owner_getstate, kmeans_owner_setstate,
 )
+from bindings.cluster_keys_unpack import cluster_keys
+from bindings.py_balanced import py_item
 
 comptime _HOLDER = "_resident_holder"
 
@@ -74,7 +76,8 @@ def _kmeans_centers_ready(centers: PythonObject, context: PythonObject) raises -
     float32 in C order: `as_f32_c` would return its own storage, so its
     words can be read (scanned) in place."""
     var cls = py_type(centers)
-    if cls is not context["array_class"] and cls is not py_get(context, "ndarray"):
+    var nk = cluster_keys()
+    if cls is not py_item(context, nk[].k_array_class) and cls is not py_get(context, nk[].k_ndarray):
         return False
     if Int(py=centers.ndim) != 2 or Int(py=centers.size) <= 0:
         return False
@@ -126,7 +129,8 @@ def _kmeans_is_name(value: PythonObject, context: PythonObject) raises -> Bool:
         return True
     if cpython_table()[].PyType_IsSubtype(cls._obj_ptr, string_type._obj_ptr) == 0:
         return False
-    if py_get(context, "ndarray") is not None and cls is py_call(native_numpy_dtype(context), "U").type:
+    var nk = cluster_keys()
+    if py_get(context, nk[].k_ndarray) is not None and cls is py_call(native_numpy_dtype(context), "U").type:
         return True
     raise Error("TypeError: scalar model state requires native values without Python conversion hooks")
 
@@ -138,7 +142,8 @@ def _kmeans_conversion_scalar(value: PythonObject, context: PythonObject) raises
     try:
         host_inference_scalar(value, context)
     except failure:
-        if py_get(context, "ndarray") is not None:
+        var nk = cluster_keys()
+        if py_get(context, nk[].k_ndarray) is not None:
             var cls = py_type(value)
             var constructor = native_numpy_dtype(context)
             var aliases = Python.tuple("U", "S", "q", "Q", "g")
@@ -152,7 +157,8 @@ def _kmeans_metric(fields: PythonObject, context: PythonObject) raises -> Int:
     """`KMeans._metric_code`: a name from the table, or `int(metric)`."""
     var metric = family_field(fields, "metric")
     if _kmeans_is_name(metric, context):
-        var table = context["family_kmeans_metrics"]
+        var nk = cluster_keys()
+        var table = py_item(context, nk[].k_family_kmeans_metrics)
         if not py_contains(table, metric):
             raise Error("mojolearn: metric must be one of "
                         + family_repr(py_call(native_loaded_module("builtins").sorted, table))
@@ -176,6 +182,7 @@ def _kmeans_admitted(source: PythonObject, context: PythonObject) raises -> Bool
     Array or ndarray (a sparse X passes through unreplaced and is neither),
     float32 in C order."""
     var cls = py_type(source)
-    if cls is not context["array_class"] and cls is not py_get(context, "ndarray"):
+    var nk = cluster_keys()
+    if cls is not py_item(context, nk[].k_array_class) and cls is not py_get(context, nk[].k_ndarray):
         return False
     return classical_is_f32(source, context) and classical_c_order(source, context)

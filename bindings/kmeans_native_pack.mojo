@@ -43,7 +43,11 @@ from bindings.classical_arrays_door import classical_is_f32, classical_c_order
 from core.host_finite_scan import host_all_finite_f32
 from bindings.p3nc_fitted_freeze_unpack import fitted_is_freezable, fitted_freeze
 from providers.python.family_public_lifecycle_pyapi_door import family_lifecycle_begin, family_lifecycle_finish
-from providers.python.family_public_lifecycle_run import family_lifecycle_spec
+from providers.python.family_public_lifecycle_run import FamilyLifecycle
+from bindings.operation_names_kmeans import (
+    KMEANS_OPN_FAMILY_KMEANS_FIT, KMEANS_OPN_FAMILY_KMEANS_FIT_PREDICT, KMEANS_OPN_FAMILY_KMEANS_FIT_TRANSFORM,
+    KMEANS_OPN_FAMILY_KMEANS_PREDICT, KMEANS_OPN_FAMILY_KMEANS_TRANSFORM, KMEANS_OPN_FAMILY_KMEANS_GETSTATE,
+    KMEANS_OPN_FAMILY_KMEANS_SETSTATE)
 from providers.python.neighbors_public_lifecycle_pyapi_door import neighbors_public_end, neighbors_public_refusal
 from bindings.py_optional import py_or_none, py_present
 from core.kmeans_native_api import (
@@ -74,6 +78,8 @@ from bindings.kmeans_native_unpack import (
     _kmeans_release,
     _kmeans_x,
 )
+from bindings.cluster_keys_unpack import cluster_keys
+from bindings.py_balanced import py_item
 
 
 comptime _INIT_ARRAY = 2
@@ -120,8 +126,9 @@ def _kmeans_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     var init = family_field(fields, "init")
     var init_centroids = family_field(fields, "init_centroids")
     var init_code: Int
+    var nk = cluster_keys()
     if _kmeans_is_name(init, context):
-        var inits = context["family_kmeans_inits"]
+        var inits = py_item(context, nk[].k_family_kmeans_inits)
         if not py_contains(inits, init):
             raise Error("mojolearn: init must be one of " + family_repr(py_call(b.sorted, inits))
                         + ", got " + family_repr(init))
@@ -144,12 +151,12 @@ def _kmeans_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     var factor = family_field(fields, "oversampling_factor")
     var factor_type = py_type(factor)
     var factor_admitted = factor_type is b.int or factor_type is b.float
-    if not factor_admitted and py_get(context, "ndarray") is not None:
-        factor_admitted = factor_type is context["float64"].type
+    if not factor_admitted and py_get(context, nk[].k_ndarray) is not None:
+        factor_admitted = factor_type is py_item(context, nk[].k_float64).type
     if not factor_admitted:
         # Use the canonical type getset directly; a custom metaclass can
         # override __name__ even through type.__getattribute__.
-        var name = String(py_call(b.type.__dict__["__name__"].__get__, factor_type))
+        var name = String(py_call(py_item(b.type.__dict__, nk[].k___name__).__get__, factor_type))
         raise Error("TypeError: mojolearn: oversampling_factor must be a float, got " + name)
     var oversampling = family_call(b.float, factor)
     var x = _kmeans_x(source, context)
@@ -242,13 +249,13 @@ def _kmeans_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     # so no NumPy view of them taken before the first query is writeable
     # (the resident device copy is keyed by identity).
     _ = fitted_freeze(centers, context)
-    py_setitem(fields, "cluster_centers_", centers)
-    py_setitem(fields, "labels_", labels)
-    py_setitem(fields, "inertia_", PythonObject(result.inertia))
-    py_setitem(fields, "n_iter_", PythonObject(result.iterations))
-    py_setitem(fields, "sum_scale_", PythonObject(result.sum_scale))
-    py_setitem(fields, "weight_scale_", PythonObject(result.weight_scale))
-    py_setitem(fields, "n_features_in_", PythonObject(d))
+    py_setitem(fields, nk[].k_cluster_centers_, centers)
+    py_setitem(fields, nk[].k_labels_, labels)
+    py_setitem(fields, nk[].k_inertia_, PythonObject(result.inertia))
+    py_setitem(fields, nk[].k_n_iter_, PythonObject(result.iterations))
+    py_setitem(fields, nk[].k_sum_scale_, PythonObject(result.sum_scale))
+    py_setitem(fields, nk[].k_weight_scale_, PythonObject(result.weight_scale))
+    py_setitem(fields, nk[].k_n_features_in_, PythonObject(d))
     # The last fit's resident centroids are released; the next query
     # uploads the new ones once (`_kmeans_resident`).
     _kmeans_release(model)
@@ -362,43 +369,78 @@ def _kmeans_inference(model: PythonObject, binding: PythonObject, source: Python
     return destination
 
 
-def _kmeans_operation_route(model: PythonObject, operation: String, args: PythonObject,
+def kmeans_unknown_operation(operation: String) raises:
+    """A `family_kmeans_*` name the operation table does not hold (the shells
+    pass table names only): the text the name chain raised."""
+    raise Error("unknown KMeans operation " + operation)
+
+
+def _kmeans_lifecycle(operation: Int) -> FamilyLifecycle:
+    """The lifecycle of the KMeans public operations (lane bw2-cluster: moved
+    from the shared name chain of
+    providers/python/family_public_lifecycle_run.mojo, same flags; the pickle
+    state runs outside it). A fit's X reaches the owner as the caller passed
+    it (array init receives the rows). Perf (lane perf2-cluster): predict and
+    transform take the admitted float32 snapshot, so X is admitted and cast
+    once per query, not twice. Lane a7d: no scan here; the owner's kernel
+    entry returns X's finite status word over its own upload, and a resident
+    fold reaches the owner as the DeviceRows for its device-X entries
+    (`device_x`)."""
+    if operation == KMEANS_OPN_FAMILY_KMEANS_FIT:
+        return FamilyLifecycle("fit", replace=False, device_x=True)
+    if operation == KMEANS_OPN_FAMILY_KMEANS_FIT_PREDICT:
+        return FamilyLifecycle("fit_predict", replace=False, device_x=True)
+    if operation == KMEANS_OPN_FAMILY_KMEANS_FIT_TRANSFORM:
+        return FamilyLifecycle("fit_transform", replace=False, device_x=True)
+    if operation == KMEANS_OPN_FAMILY_KMEANS_PREDICT:
+        return FamilyLifecycle("predict", device_x=True)
+    if operation == KMEANS_OPN_FAMILY_KMEANS_TRANSFORM:
+        return FamilyLifecycle("transform", device_x=True)
+    return FamilyLifecycle("")
+
+
+def _kmeans_operation_route(model: PythonObject, operation: Int, args: PythonObject,
                             context: PythonObject, admitted: Bool = False) raises -> PythonObject:
     """The KMeans public operations: args[0] is the resolved binding.
     `admitted`: the public lifecycle replaced X (args[1]) by its admitted
-    float32 snapshot."""
-    if operation == "family_kmeans_fit":
+    float32 snapshot. `operation` is the leaf code of
+    bindings/operation_names_kmeans.mojo (lane bw2-cluster)."""
+    if operation == KMEANS_OPN_FAMILY_KMEANS_FIT:
         _ = _kmeans_fit(model, args, context)
         return model
-    if operation == "family_kmeans_fit_predict":
+    if operation == KMEANS_OPN_FAMILY_KMEANS_FIT_PREDICT:
         return _kmeans_fit(model, args, context)
-    if operation == "family_kmeans_fit_transform":
+    if operation == KMEANS_OPN_FAMILY_KMEANS_FIT_TRANSFORM:
         return _kmeans_fit(model, args, context, True)
-    if operation == "family_kmeans_getstate":
+    if operation == KMEANS_OPN_FAMILY_KMEANS_GETSTATE:
         # A pickle or a deepcopy carries no device handle: it is meaningful
         # only in the process and registry that minted it. The copy uploads
         # its own centroids at its first query.
         return kmeans_owner_getstate(model)
-    if operation == "family_kmeans_setstate":
+    if operation == KMEANS_OPN_FAMILY_KMEANS_SETSTATE:
         kmeans_owner_setstate(model, args[0])
         return PythonObject(None)
-    if operation == "family_kmeans_predict":
+    if operation == KMEANS_OPN_FAMILY_KMEANS_PREDICT:
         return _kmeans_inference(model, args[0], args[1], False, context, admitted)
-    if operation == "family_kmeans_transform":
+    if operation == KMEANS_OPN_FAMILY_KMEANS_TRANSFORM:
         return _kmeans_inference(model, args[0], args[1], True, context, admitted)
-    raise Error("unknown KMeans operation " + operation)
+    raise Error("unknown KMeans operation code " + String(operation))
 
 
-def kmeans_operation(model: PythonObject, operation: String, args: PythonObject,
+def kmeans_operation(model: PythonObject, operation: Int, args: PythonObject,
                      context: PythonObject) raises -> PythonObject:
     """The public operation: the estimators that formerly took the `_mode`
     class-creation wrappers run their whole lifecycle around the owner
     (providers/python/family_public_lifecycle_pyapi.mojo); every other
-    operation goes straight to the owner."""
-    var lifecycle = family_lifecycle_spec(operation)
+    operation goes straight to the owner. `operation` is the leaf code of
+    bindings/operation_names_kmeans.mojo (lane bw2-cluster: the lifecycle is
+    an integer switch; it walked the shared chain of up to 22 String
+    compares, then up to seven more here)."""
+    var lifecycle = _kmeans_lifecycle(operation)
     if lifecycle.method.byte_length() == 0:
         return _kmeans_operation_route(model, operation, args, context)
-    var call = family_lifecycle_begin(model, operation, lifecycle, args, 1, context)
+    # The lifecycle's operation parameter is not read (its text is the spec's method).
+    var call = family_lifecycle_begin(model, "", lifecycle, args, 1, context)
     var result = PythonObject(None)
     try:
         result = _kmeans_operation_route(model, operation, call.args, context, lifecycle.replace)

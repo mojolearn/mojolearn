@@ -9,6 +9,6 @@ from bindings.cluster_fit_b_native_unpack import cluster_fit_b_operation
 def spectral_public_lifecycle_compile(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
     try:
         var args = PythonObject(from_borrowed=packed)
-        return cluster_fit_b_operation(args[0], String(args[1]), args[2], args[3]).steal_data()
+        return cluster_fit_b_operation(args[0], Int(py=args[1]), args[2], args[3]).steal_data()
     except error:
         return raise_python_exception(error)
