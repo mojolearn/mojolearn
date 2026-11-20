@@ -26,76 +26,69 @@ def run_checks() raises:
     print("single_pass_reached", ROUTED, "max_leaf_rows", large)
     var sizes: List[Int] = [large, short, 0]
     var offsets: List[Int] = [17, 17 + large + 11, total - 1]
-    var hflags = ctx.enqueue_create_host_buffer[DType.uint8](total)
-    var hlids = ctx.enqueue_create_host_buffer[DType.uint32](3)
-    var hoff = ctx.enqueue_create_host_buffer[DType.uint32](3)
-    var hsize = ctx.enqueue_create_host_buffer[DType.uint32](3)
-    var got = ctx.enqueue_create_host_buffer[DType.uint32](total)
-    var gotflags = ctx.enqueue_create_host_buffer[DType.uint8](total)
-    var gotzeros = ctx.enqueue_create_host_buffer[DType.uint32](3)
+    var slots: List[UInt32] = [1, 0, 2]
+    var hoff: List[UInt32] = [UInt32(offsets[0]), UInt32(offsets[1]), UInt32(offsets[2])]
+    var hsize: List[UInt32] = [UInt32(sizes[0]), UInt32(sizes[1]), UInt32(sizes[2])]
+    var lids = upload[DType.uint32](ctx, slots)
+    var off = upload[DType.uint32](ctx, hoff)
+    var size = upload[DType.uint32](ctx, hsize)
     var flags = ctx.enqueue_create_buffer[DType.uint8](total)
-    var lids = ctx.enqueue_create_buffer[DType.uint32](3)
-    var off = ctx.enqueue_create_buffer[DType.uint32](3)
-    var size = ctx.enqueue_create_buffer[DType.uint32](3)
     var gmap = ctx.enqueue_create_buffer[DType.uint32](total)
     var sorted_flags = ctx.enqueue_create_buffer[DType.uint8](total)
     var chunks = (large + PARTITION_BLOCK - 1) // PARTITION_BLOCK
     var chunk_zeros = ctx.enqueue_create_buffer[DType.uint32](3 * chunks)
     var chunk_offsets = ctx.enqueue_create_buffer[DType.uint32](3 * chunks)
     var leaf_zeros = ctx.enqueue_create_buffer[DType.uint32](3)
-    ctx.synchronize()
-    for i in range(3):
-        hlids.unsafe_ptr()[i] = UInt32(1 - i if i < 2 else i)
-        hoff.unsafe_ptr()[i] = UInt32(offsets[i])
-        hsize.unsafe_ptr()[i] = UInt32(sizes[i])
-    upload_host_into[DType.uint32](ctx, lids, hlids)
-    upload_host_into[DType.uint32](ctx, off, hoff)
-    upload_host_into[DType.uint32](ctx, size, hsize)
     for pattern in range(3):
-        for i in range(total):
-            hflags.unsafe_ptr()[i] = UInt8(9)
+        var hflags = List[UInt8](length=total, fill=UInt8(9))
         for leaf in range(3):
             for r in range(sizes[leaf]):
                 var flag = (r * 13 + r // 7 + leaf) & 1
                 if pattern < 2:
                     flag = pattern
-                hflags.unsafe_ptr()[offsets[leaf] + r] = UInt8(flag)
-        upload_host_into[DType.uint8](ctx, flags, hflags)
+                hflags[offsets[leaf] + r] = UInt8(flag)
+        upload_into[DType.uint8](ctx, flags, hflags)
         ctx.enqueue_memset(gmap, UInt32(0xDEADBEEF))
         ctx.enqueue_memset(sorted_flags, UInt8(9))
         launch_stable_partition_routed[IDENTICAL](
             ctx, 3, large, lids, off, size, flags, chunk_zeros,
             chunk_offsets, leaf_zeros, gmap, sorted_flags, sm_count=4,
         )
-        download_host_into[DType.uint32](ctx, gmap, got)
-        download_host_into[DType.uint8](ctx, sorted_flags, gotflags)
-        download_host_into[DType.uint32](ctx, leaf_zeros, gotzeros)
-        ctx.synchronize()
+        var got = download[DType.uint32](ctx, gmap, total)
+        var gotflags = download[DType.uint8](ctx, sorted_flags, total)
+        var gotzeros = download[DType.uint32](ctx, leaf_zeros, 3)
         for leaf in range(3):
             var cursor = offsets[leaf]
             var zero_count = 0
             for wanted in range(2):
                 for r in range(sizes[leaf]):
-                    if Int(hflags.unsafe_ptr()[offsets[leaf] + r]) == wanted:
-                        assert_equal(got.unsafe_ptr()[cursor], UInt32(r))
-                        assert_equal(gotflags.unsafe_ptr()[cursor], UInt8(wanted))
+                    if Int(hflags[offsets[leaf] + r]) == wanted:
+                        assert_equal(got[cursor], UInt32(r))
+                        assert_equal(gotflags[cursor], UInt8(wanted))
                         cursor += 1
                         if wanted == 0:
                             zero_count += 1
             var slot = 1 - leaf if leaf < 2 else leaf
-            assert_equal(gotzeros.unsafe_ptr()[slot], UInt32(zero_count))
+            assert_equal(gotzeros[slot], UInt32(zero_count))
         for i in range(total):
-            if hflags.unsafe_ptr()[i] == UInt8(9):
-                assert_equal(got.unsafe_ptr()[i], UInt32(0xDEADBEEF))
-                assert_equal(gotflags.unsafe_ptr()[i], UInt8(9))
+            if hflags[i] == UInt8(9):
+                assert_equal(got[i], UInt32(0xDEADBEEF))
+                assert_equal(gotflags[i], UInt8(9))
         print("PASS stable partition pattern", pattern)
+    # the launch inputs and scratch are read by launches the downloads above drained
+    _ = lids^
+    _ = off^
+    _ = size^
+    _ = flags^
+    _ = chunk_zeros^
+    _ = chunk_offsets^
 
 
 # Registered by lane checks-toplevel (2026-11-16): a standalone main() under
 # checks/ that no CI job ran. One process per check name in CI keeps any
 # fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
 from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-from checks.native_tests.kit import download_host_into, upload_host_into
+from checks.native_tests.kit import download, upload, upload_into
 
 
 def run_cases(column: Column, mut report: Report):
