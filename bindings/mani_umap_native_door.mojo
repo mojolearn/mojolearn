@@ -21,7 +21,7 @@ from bindings.py_attr import py_attr
 from bindings.classical_arrays_door import classical_address
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.pca_exact_unpack import pca_copied
-from bindings.manifold_settings_native_door import ManifoldSettings
+from bindings.manifold_settings_native_door import ManifoldSettings, mani_field
 from bindings.operation_names_mani import (
     MANI_OPN_FAMILY_MANI_UMAP_FIT, MANI_OPN_FAMILY_MANI_UMAP_FIT_TRANSFORM, MANI_OPN_FAMILY_MANI_UMAP_TRANSFORM,
 )
@@ -42,7 +42,6 @@ from bindings.family_common_unpack import (
 )
 from bindings.family_common_pack import (
     family_array,
-    family_field,
 )
 from bindings.spectral_umap_routes_pack import spectral_umap_route
 from core.mode_answer import fast_is_answered_by_identical, MODE_FAMILY_SPECTRAL
@@ -140,7 +139,8 @@ def _umap_initial(settings: ManifoldSettings, x: ArrayMetadata, n: Int, nc: Int,
     """`_initial(x, n, nc, seed)`: None for 'spectral'; 'random' uniform(-10,
     10) on the Philox stream; 'pca' umap-learn's PCA of the data scaled to
     max |coordinate| 10 plus N(0, 1e-4) noise; an array as given."""
-    var init = family_field(settings.values, "init")
+    var nk = mani_keys()
+    var init = mani_field(settings.values, nk[].k_init, "init")
     if family_is_str(init) and String(py=init) == "spectral":
         return Optional[ArrayMetadata]()
     if family_is_str(init):
@@ -272,14 +272,14 @@ def _umap_list_codes(y: PythonObject, n: Int, context: PythonObject) raises -> P
 
 def _umap_target(settings: ManifoldSettings, y: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
     """`_target(y, n)`: (kind, dims, codes, target_n_neighbors, weight)."""
-    var nk = mani_keys()
     var b = native_loaded_module("builtins")
     var op = native_loaded_module("operator")
     var fields = settings.values
-    var tm = family_field(fields, "target_metric")
-    var w = _umap_scalar(family_field(fields, "target_weight"), "target_weight", context)
+    var nk = mani_keys()
+    var tm = mani_field(fields, nk[].k_target_metric, "target_metric")
+    var w = _umap_scalar(mani_field(fields, nk[].k_target_weight, "target_weight"), "target_weight", context)
     umap_check_target_weight(w)
-    var tk = _umap_integer(family_field(fields, "target_n_neighbors"), "target_n_neighbors", -1, _I64_MAX, context)
+    var tk = _umap_integer(mani_field(fields, nk[].k_target_n_neighbors, "target_n_neighbors"), "target_n_neighbors", -1, _I64_MAX, context)
     var tk_kept = PythonObject(umap_target_neighbors(Int(py=tk)))
     if Bool(py=py_call(b.bool, py_call(op.eq, tm, PythonObject("categorical")))):
         # A 1-D NumPy array or mojolearn Array of one numeric dtype: the codes
@@ -359,7 +359,6 @@ def _umap_target(settings: ManifoldSettings, y: PythonObject, n: Int, context: P
 
 def _umap_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`UMAP.fit(X, y)`; returns the embedding."""
-    var nk = mani_keys()
     classical_connect_numpy(context)
     var binding = spectral_umap_route(context, "metrics", settings.mode)
     var source = args[0]
@@ -372,6 +371,7 @@ def _umap_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
     var b = native_loaded_module("builtins")
     var source_type = py_type(source)
     var copied = True
+    var nk = mani_keys()
     if source_type is py_get(context, nk[].k_ndarray) or source_type is py_item(context, nk[].k_array_class):
         copied = x.copied
     elif source_type is b.memoryview or source_type is py_item(context, nk[].k_array_type) or source_type is b.bytearray:
@@ -448,18 +448,18 @@ def _umap_concat_tuple(config: PythonObject, extras: PythonObject) raises -> Pyt
 
 def _umap_transform(model: PythonObject, settings: ManifoldSettings, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`UMAP.transform(X)`."""
-    var nk = mani_keys()
     classical_connect_numpy(context)
     var b = native_loaded_module("builtins")
     var op = native_loaded_module("operator")
+    var nk = mani_keys()
     if not py_contains(settings.values, nk[].k__transform_training):
         raise Error("UMAP transform requires a successful fit")
     var validated = umap_parameters_fields(settings.values, context)
     var config = validated[0]
     var extras = validated[1]
     var mode = _umap_mode(settings, context)
-    var fitted_config = family_field(settings.values, "_transform_config")
-    var fitted_mode = family_field(settings.values, "_transform_mode")
+    var fitted_config = mani_field(settings.values, nk[].k__transform_config, "_transform_config")
+    var fitted_mode = mani_field(settings.values, nk[].k__transform_mode, "_transform_mode")
     if (Bool(py=py_call(b.bool, py_call(op.ne, _umap_concat_tuple(config, extras), fitted_config)))
             or Bool(py=py_call(b.bool, py_call(op.ne, PythonObject(mode), fitted_mode)))):
         raise Error("UMAP parameters or numeric mode changed after fit; refit before transform")
@@ -470,8 +470,8 @@ def _umap_transform(model: PythonObject, settings: ManifoldSettings, args: Pytho
     var training_pin = ArrayPin()
     var fitted_pin = ArrayPin()
     var x = admit_family_meta(args[0], 2, "X", context, x_pin)
-    var training = _umap_state(family_field(settings.values, "_transform_training"), "training", context, training_pin)
-    var fitted_embedding = _umap_state(family_field(settings.values, "_transform_embedding"), "embedding", context, fitted_pin)
+    var training = _umap_state(mani_field(settings.values, nk[].k__transform_training, "_transform_training"), "training", context, training_pin)
+    var fitted_embedding = _umap_state(mani_field(settings.values, nk[].k__transform_embedding, "_transform_embedding"), "embedding", context, fitted_pin)
     var nq = x.source.rows
     var d = x.source.cols
     var nt = training.source.rows

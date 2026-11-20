@@ -69,6 +69,44 @@ struct ManiKeys(Defaultable, Movable):
     var k_reconstruction_error_: PythonObject
     var k_scalar_types: PythonObject
     var k_stress_: PythonObject
+    var k_n_components: PythonObject
+    var k_n_neighbors: PythonObject
+    var k_radius: PythonObject
+    var k_metric_params: PythonObject
+    var k_p: PythonObject
+    var k_path_method: PythonObject
+    var k_eigen_solver: PythonObject
+    var k_method: PythonObject
+    var k_random_state: PythonObject
+    var k_reg: PythonObject
+    var k_hessian_tol: PythonObject
+    var k_modified_tol: PythonObject
+    var k_max_iter: PythonObject
+    var k_eps: PythonObject
+    var k_init: PythonObject
+    var k_metric_mds: PythonObject
+    var k_normalized_stress: PythonObject
+    var k_n_init: PythonObject
+    var k_perplexity: PythonObject
+    var k_early_exaggeration: PythonObject
+    var k_learning_rate: PythonObject
+    var k_post_exaggeration_learning_rate_factor: PythonObject
+    var k_target_metric: PythonObject
+    var k_target_n_neighbors: PythonObject
+    var k_target_weight: PythonObject
+    var k_n_epochs: PythonObject
+    var k_min_dist: PythonObject
+    var k_spread: PythonObject
+    var k_set_op_mix_ratio: PythonObject
+    var k_local_connectivity: PythonObject
+    var k_repulsion_strength: PythonObject
+    var k_negative_sample_rate: PythonObject
+    var k_densmap: PythonObject
+    var k_output_metric: PythonObject
+    var k_metric_kwds: PythonObject
+    var k_a: PythonObject
+    var k_b: PythonObject
+    var k__mojolearn_fitting: PythonObject
 
     def __init__(out self):
         self.ready = False
@@ -127,6 +165,44 @@ struct ManiKeys(Defaultable, Movable):
         self.k_reconstruction_error_ = PythonObject(None)
         self.k_scalar_types = PythonObject(None)
         self.k_stress_ = PythonObject(None)
+        self.k_n_components = PythonObject(None)
+        self.k_n_neighbors = PythonObject(None)
+        self.k_radius = PythonObject(None)
+        self.k_metric_params = PythonObject(None)
+        self.k_p = PythonObject(None)
+        self.k_path_method = PythonObject(None)
+        self.k_eigen_solver = PythonObject(None)
+        self.k_method = PythonObject(None)
+        self.k_random_state = PythonObject(None)
+        self.k_reg = PythonObject(None)
+        self.k_hessian_tol = PythonObject(None)
+        self.k_modified_tol = PythonObject(None)
+        self.k_max_iter = PythonObject(None)
+        self.k_eps = PythonObject(None)
+        self.k_init = PythonObject(None)
+        self.k_metric_mds = PythonObject(None)
+        self.k_normalized_stress = PythonObject(None)
+        self.k_n_init = PythonObject(None)
+        self.k_perplexity = PythonObject(None)
+        self.k_early_exaggeration = PythonObject(None)
+        self.k_learning_rate = PythonObject(None)
+        self.k_post_exaggeration_learning_rate_factor = PythonObject(None)
+        self.k_target_metric = PythonObject(None)
+        self.k_target_n_neighbors = PythonObject(None)
+        self.k_target_weight = PythonObject(None)
+        self.k_n_epochs = PythonObject(None)
+        self.k_min_dist = PythonObject(None)
+        self.k_spread = PythonObject(None)
+        self.k_set_op_mix_ratio = PythonObject(None)
+        self.k_local_connectivity = PythonObject(None)
+        self.k_repulsion_strength = PythonObject(None)
+        self.k_negative_sample_rate = PythonObject(None)
+        self.k_densmap = PythonObject(None)
+        self.k_output_metric = PythonObject(None)
+        self.k_metric_kwds = PythonObject(None)
+        self.k_a = PythonObject(None)
+        self.k_b = PythonObject(None)
+        self.k__mojolearn_fitting = PythonObject(None)
 
 
 comptime _MANI_KEYS = SharedSlot[ManiKeys, "MojolearnManiKeysV1"]
@@ -189,6 +265,44 @@ def _mani_keys_fill(nk: UnsafePointer[ManiKeys, MutUntrackedOrigin]) raises:
     nk[].k_reconstruction_error_ = py_key("reconstruction_error_")
     nk[].k_scalar_types = py_key("scalar_types")
     nk[].k_stress_ = py_key("stress_")
+    nk[].k_n_components = py_key("n_components")
+    nk[].k_n_neighbors = py_key("n_neighbors")
+    nk[].k_radius = py_key("radius")
+    nk[].k_metric_params = py_key("metric_params")
+    nk[].k_p = py_key("p")
+    nk[].k_path_method = py_key("path_method")
+    nk[].k_eigen_solver = py_key("eigen_solver")
+    nk[].k_method = py_key("method")
+    nk[].k_random_state = py_key("random_state")
+    nk[].k_reg = py_key("reg")
+    nk[].k_hessian_tol = py_key("hessian_tol")
+    nk[].k_modified_tol = py_key("modified_tol")
+    nk[].k_max_iter = py_key("max_iter")
+    nk[].k_eps = py_key("eps")
+    nk[].k_init = py_key("init")
+    nk[].k_metric_mds = py_key("metric_mds")
+    nk[].k_normalized_stress = py_key("normalized_stress")
+    nk[].k_n_init = py_key("n_init")
+    nk[].k_perplexity = py_key("perplexity")
+    nk[].k_early_exaggeration = py_key("early_exaggeration")
+    nk[].k_learning_rate = py_key("learning_rate")
+    nk[].k_post_exaggeration_learning_rate_factor = py_key("post_exaggeration_learning_rate_factor")
+    nk[].k_target_metric = py_key("target_metric")
+    nk[].k_target_n_neighbors = py_key("target_n_neighbors")
+    nk[].k_target_weight = py_key("target_weight")
+    nk[].k_n_epochs = py_key("n_epochs")
+    nk[].k_min_dist = py_key("min_dist")
+    nk[].k_spread = py_key("spread")
+    nk[].k_set_op_mix_ratio = py_key("set_op_mix_ratio")
+    nk[].k_local_connectivity = py_key("local_connectivity")
+    nk[].k_repulsion_strength = py_key("repulsion_strength")
+    nk[].k_negative_sample_rate = py_key("negative_sample_rate")
+    nk[].k_densmap = py_key("densmap")
+    nk[].k_output_metric = py_key("output_metric")
+    nk[].k_metric_kwds = py_key("metric_kwds")
+    nk[].k_a = py_key("a")
+    nk[].k_b = py_key("b")
+    nk[].k__mojolearn_fitting = py_key("_mojolearn_fitting")
     var ops = Python.dict()
     nk[].ops = ops
     nk[].ready = True

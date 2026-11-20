@@ -22,7 +22,6 @@ def _with_cause(message: String, original: PythonObject) raises -> Error:
 
 
 def manifold_error(error: Error, rows: Int, cols: Int, fitting: Bool, name: String) raises -> Error:
-    var nk = mani_keys()
     var b = native_loaded_module("builtins")
     var text = String(error)
     if text != PYTHON_ERROR_PENDING:
@@ -68,6 +67,7 @@ def manifold_error(error: Error, rows: Int, cols: Int, fitting: Bool, name: Stri
         cpy.lib.get_function[NoneType]("PyErr_Restore")(words[0], words[1], words[2])
         return stash_python_error()
     var original = PythonObject(from_borrowed=words[1])
+    var nk = mani_keys()
     var args = py_call(py_item(b.BaseException.__dict__, nk[].k_args).__get__, original)
     if py_type(args) is not b.tuple or len(args) != 1 or py_type(args[0]) is not b.str:
         cpy.lib.get_function[NoneType]("PyErr_Restore")(words[0], words[1], words[2])

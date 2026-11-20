@@ -49,8 +49,8 @@ def mk_cache_home(ctx: PythonObject) raises -> PythonObject:
 
 
 def _mk_dev_one_cache(ctx: PythonObject) raises -> PythonObject:
-    var nk = mani_keys()
     var home = mk_cache_home(ctx)
+    var nk = mani_keys()
     var cache = py_get(home, nk[].k_family_mani_native_dev_one)
     if cache is None:
         cache = Python.dict()

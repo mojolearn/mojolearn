@@ -21,7 +21,7 @@ from bindings.py_balanced import py_call, py_setitem
 from bindings.classical_arrays_door import classical_address, classical_word
 from bindings.classical_attributes_door import classical_connect_numpy
 from providers.python.estimator_binding_pyapi_door import estimator_binding_mode
-from bindings.manifold_settings_native_door import ManifoldSettings
+from bindings.manifold_settings_native_door import ManifoldSettings, mani_field
 from bindings.operation_names_mani import MANI_OPN_FAMILY_MANI_TSNE_FIT, MANI_OPN_FAMILY_MANI_TSNE_FIT_TRANSFORM
 from bindings.manifold_scalar_native_door import manifold_number
 from providers.python.array_metadata_pyapi_door import ArrayMetadata, ArrayPin, array_shape_once, array_metadata_once, array_python_shape
@@ -43,9 +43,8 @@ from bindings.family_common_unpack import (
 )
 from bindings.family_common_pack import (
     family_array,
-from bindings.mani_keys_unpack import mani_keys
-    family_field,
 )
+from bindings.mani_keys_unpack import mani_keys
 
 
 def _tsne_int(name: String, value: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -111,7 +110,6 @@ def _tsne_pca_start(estimators: PythonObject, x_address: Int, n: Int, d: Int, k:
 def _tsne_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject, snapshot: ArrayMetadata,
               pin: ArrayPin, context: PythonObject) raises -> PythonObject:
     """`TSNE.fit(X)`; returns the embedding."""
-    var nk = mani_keys()
     classical_connect_numpy(context)
     var b = native_loaded_module("builtins")
     var op = native_loaded_module("operator")
@@ -129,14 +127,15 @@ def _tsne_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
     var n = snapshot.source.rows
     var d = snapshot.source.cols
     tsne_check_samples(n, d)
-    var components = family_field(fields, "n_components")
+    var nk = mani_keys()
+    var components = mani_field(fields, nk[].k_n_components, "n_components")
     if (_tsne_is_bool(components)
             or not Bool(py=py_call(op.contains, Python.tuple(PythonObject(1), PythonObject(2)), components))):
         raise Error("mojolearn TSNE: n_components must be 1 or 2, got " + family_repr(components))
     var k = Int(py=manifold_number(components, True, context))
-    var max_iter = _tsne_int("max_iter", family_field(fields, "max_iter"), context)
-    var seed = _tsne_int("random_state", family_field(fields, "random_state"), context)
-    var perplexity_param = family_field(fields, "perplexity")
+    var max_iter = _tsne_int("max_iter", mani_field(fields, nk[].k_max_iter, "max_iter"), context)
+    var seed = _tsne_int("random_state", mani_field(fields, nk[].k_random_state, "random_state"), context)
+    var perplexity_param = mani_field(fields, nk[].k_perplexity, "perplexity")
     var perplexity = Float64(py=manifold_number(perplexity_param, False, context))
     # scikit-learn's rules: perplexity > 0 (its parameter constraint) and
     # perplexity < n_samples (`_check_params_vs_input`), in its words
@@ -146,20 +145,20 @@ def _tsne_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
     if not tsne_perplexity_below_samples(perplexity, n):
         var refusal = tsne_perplexity_samples_refusal(family_str(perplexity_param), n)
         raise refusal^
-    var exag = Float64(py=manifold_number(family_field(fields, "early_exaggeration"), False, context))
-    var rate = family_field(fields, "learning_rate")
+    var exag = Float64(py=manifold_number(mani_field(fields, nk[].k_early_exaggeration, "early_exaggeration"), False, context))
+    var rate = mani_field(fields, nk[].k_learning_rate, "learning_rate")
     var lr: Float64
     if Bool(py=py_call(b.bool, py_call(op.eq, rate, PythonObject("auto")))):
         lr = tsne_auto_learning_rate(n, exag)
     else:
         lr = Float64(py=manifold_number(rate, False, context))
-    var post_param = family_field(fields, "post_exaggeration_learning_rate_factor")
+    var post_param = mani_field(fields, nk[].k_post_exaggeration_learning_rate_factor, "post_exaggeration_learning_rate_factor")
     var post_factor = Float64(py=manifold_number(post_param, False, context))
     if not tsne_post_factor_valid(post_factor):
         var refusal = tsne_post_factor_refusal(family_repr(post_param))
         raise refusal^
     var exploration = tsne_exploration_iterations(Int(py=max_iter))
-    var init = family_field(fields, "init")
+    var init = mani_field(fields, nk[].k_init, "init")
     var y0: PythonObject
     var y0_address = 0
     var initial_snapshot = Optional[ArrayMetadata]()

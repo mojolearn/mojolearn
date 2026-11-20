@@ -89,13 +89,13 @@ def manifold_buffer_bytes(value: PythonObject) raises -> PythonObject:
 
 
 def manifold_scalar_type(value: PythonObject, context: PythonObject) raises -> Bool:
-    var nk = mani_keys()
     var b = native_loaded_module("builtins")
     var cls = py_type(value)
     if cls is b.complex:
         return True
     if cls is b.int or cls is b.float or cls is b.bool or cls is b.str or cls is b.bytes or cls is b.bytearray or cls is b.list or cls is b.tuple or cls is b.dict or value is None:
         return False
+    var nk = mani_keys()
     if py_get(py_item(context, nk[].k_modules), nk[].k_numpy) is None:
         return False
     var classes = sequence_dtype_classes(context)
@@ -116,11 +116,11 @@ def _snapshot(value: PythonObject, context: PythonObject) raises -> PythonObject
 
 def _snapshot(value: PythonObject, context: PythonObject,
               captured_dtype: PythonObject) raises -> PythonObject:
-    var nk = mani_keys()
     var b = native_loaded_module("builtins")
     var cls = py_type(value)
     if cls is b.int or cls is b.float or cls is b.bool or cls is b.complex or cls is b.str or cls is b.bytes or cls is b.list or cls is b.tuple or cls is b.dict or cls is b.set or cls is b.frozenset or value is None:
         return PythonObject(None)
+    var nk = mani_keys()
     var cache = py_item(context, nk[].k_family_mani_scalar_cache)
     var key = PythonObject(Int(value._obj_ptr))
     var previous = py_get(cache, key)
@@ -281,7 +281,6 @@ def _temporal_word(state: ManifoldScalarSnapshot) raises -> Int64:
 
 def manifold_number(value: PythonObject, integer: Bool, context: PythonObject,
                     depth: Int = 0) raises -> PythonObject:
-    var nk = mani_keys()
     if depth > 64:
         raise Error("TypeError: manifold scalar settings exceed native nesting bounds")
     var captured = _snapshot(value, context)
@@ -296,6 +295,7 @@ def manifold_number(value: PythonObject, integer: Bool, context: PythonObject,
         # Retain that native error rather than enabling a packed input.
         return _builtin_number(state.owner, integer)
     if state.array:
+        var nk = mani_keys()
         if len(state.shape) > 0 and Int(py=py_item(context, nk[].k_family_mani_numpy_release)) >= 204:
             raise Error("TypeError: only 0-dimensional arrays can be converted to Python scalars")
         if state.count != 1:

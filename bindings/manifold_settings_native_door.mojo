@@ -12,19 +12,18 @@ from bindings.sequence_dtype_native_door import sequence_dtype_classes, sequence
 from providers.python.classical_family_admission_pyapi_unpack import classical_family_admit
 from bindings.operation_names_mani import (
     MANI_OPN_FAMILY_MANI_CMDS_FIT, MANI_OPN_FAMILY_MANI_CMDS_FIT_TRANSFORM, MANI_OPN_FAMILY_MANI_ISO_FIT,
-from bindings.mani_keys_unpack import mani_keys
-from bindings.py_balanced import py_item
     MANI_OPN_FAMILY_MANI_ISO_FIT_TRANSFORM, MANI_OPN_FAMILY_MANI_ISO_RECONSTRUCTION_ERROR, MANI_OPN_FAMILY_MANI_ISO_TRANSFORM,
     MANI_OPN_FAMILY_MANI_LLE_FIT, MANI_OPN_FAMILY_MANI_LLE_FIT_TRANSFORM, MANI_OPN_FAMILY_MANI_LLE_TRANSFORM,
     MANI_OPN_FAMILY_MANI_MDS_FIT, MANI_OPN_FAMILY_MANI_MDS_FIT_TRANSFORM, MANI_OPN_FAMILY_MANI_TSNE_FIT,
     MANI_OPN_FAMILY_MANI_TSNE_FIT_TRANSFORM, MANI_OPN_FAMILY_MANI_UMAP_FIT, MANI_OPN_FAMILY_MANI_UMAP_FIT_TRANSFORM,
     MANI_OPN_FAMILY_MANI_UMAP_TRANSFORM,
 )
+from bindings.mani_keys_unpack import mani_keys
+from bindings.py_balanced import py_item
 
 
 def _setting(value: PythonObject, context: PythonObject, depth: Int = 0,
              freeze_buffers: Bool = True, admitted: Bool = False) raises -> PythonObject:
-    var nk = mani_keys()
     # `admitted`: an enclosing list/tuple's classical_admit_value already
     # admitted this element (it walks list/tuple contents recursively), so
     # the element is not admitted a second time, once per nesting level.
@@ -45,7 +44,7 @@ def _setting(value: PythonObject, context: PythonObject, depth: Int = 0,
         for i in range(len(value)):  # driver-loop: copy configuration contents before execution can release the GIL
             _ = py_call(result.append, _setting(value[i], context, depth + 1, freeze_buffers, True))
         return py_call(b.tuple, result) if cls is b.tuple else result
-    elif cls is b.dict:
+    if cls is b.dict:
         var result = Python.dict()
         var keys = py_call(b.list, value)
         for i in range(len(keys)):  # driver-loop: configuration mapping keys before lookup or comparison
@@ -53,7 +52,10 @@ def _setting(value: PythonObject, context: PythonObject, depth: Int = 0,
                 raise Error("TypeError: manifold configuration mappings require exact string keys")
             py_setitem(result, keys[i], _setting(value[keys[i]], context, depth + 1, freeze_buffers))
         return result
-    elif cls is py_get(context, nk[].k_ndarray):
+    # Both branches above return: the key table is fetched only on the paths
+    # that read a key (list, tuple and dict elements built none before).
+    var nk = mani_keys()
+    if cls is py_get(context, nk[].k_ndarray):
         var dtype = value.dtype
         var native_dtype = sequence_dtype_instance(dtype, sequence_dtype_classes(context))
         for code in ["q", "Q"]:  # small-loop(dtype: platform long-long descriptor aliases)
@@ -130,6 +132,24 @@ def manifold_transforms(operation: Int) -> Bool:
             or operation == MANI_OPN_FAMILY_MANI_UMAP_TRANSFORM)
 
 
+def mani_field(fields: PythonObject, key: PythonObject, name: String) raises -> PythonObject:
+    """`fields[name]` by its held key (the family key table), refused as the
+    attribute lookup refused it: bindings/family_common_pack.mojo
+    `family_field`'s form, which built the key str up to twice per call
+    (lane bw2-manifold). `name` is refusal text only."""
+    var value = py_get(fields, key, PythonObject(None))
+    if value is None and not py_contains(fields, key):
+        raise Error("AttributeError: object has no attribute '" + name + "'")
+    return value
+
+
+def _freeze_setting(values: PythonObject, key: PythonObject, context: PythonObject, freeze_buffers: Bool) raises:
+    """One configuration field, when present: its private captured copy
+    (`_setting` at depth 0) replaces it in the operation's values."""
+    if py_contains(values, key):
+        py_setitem(values, key, _setting(py_item(values, key), context, 0, freeze_buffers))
+
+
 struct ManifoldSettings(Copyable, Movable):
     var fields: PythonObject
     var values: PythonObject
@@ -140,12 +160,12 @@ struct ManifoldSettings(Copyable, Movable):
     var mode: PythonObject
 
     def __init__(out self, model: PythonObject, operation: Int, context: PythonObject) raises:
-        var nk = mani_keys()
         # Admit class/storage hooks before any instance lookup. Retain fitted
         # buffers and freeze configuration contents before execution. Writes
         # still publish into the original admitted dictionary.
         self.fields = classical_family_admit(model)
         var b = native_loaded_module("builtins")
+        var nk = mani_keys()
         if manifold_fit_only(operation) or manifold_fit_transform(operation):
             if py_contains(self.fields, nk[].k__mojolearn_after_fit):
                 raise Error("TypeError: native manifold fitting does not accept Python after-fit callbacks")
@@ -166,14 +186,57 @@ struct ManifoldSettings(Copyable, Movable):
             if operation != MANI_OPN_FAMILY_MANI_UMAP_TRANSFORM:
                 self.mode = self.default_mode if self.fitted is None else self.fitted
         classical_connect_numpy(context)
-        for name in ["numeric_mode", "numeric_mode_", "n_components", "n_neighbors", "radius", "metric", "metric_params", "p", "path_method", "eigen_solver", "method", "random_state", "reg", "hessian_tol", "modified_tol", "max_iter", "eps", "init", "metric_mds", "normalized_stress", "n_init", "perplexity", "early_exaggeration", "learning_rate", "post_exaggeration_learning_rate_factor", "target_metric", "target_n_neighbors", "target_weight", "_knn", "_kind", "_pw", "_transform_config", "_transform_mode"]:  # small-loop(settings: fixed manifold scalar/configuration fields)
-            if py_contains(self.values, name):
-                # Initialization arrays are input buffers, captured by the
-                # algorithm's input preparation rather than scalar settings.
-                py_setitem(self.values, name, _setting(self.values[name], context, 0, name != "init"))
+        # The fixed manifold scalar/configuration fields, in the former
+        # loop's order, by held key (lane bw2-manifold: the loop built up to
+        # three str per name and call). Initialization arrays (`init`) are
+        # input buffers, captured by the algorithm's input preparation
+        # rather than scalar settings.
+        _freeze_setting(self.values, nk[].k_numeric_mode, context, True)
+        _freeze_setting(self.values, nk[].k_numeric_mode_, context, True)
+        _freeze_setting(self.values, nk[].k_n_components, context, True)
+        _freeze_setting(self.values, nk[].k_n_neighbors, context, True)
+        _freeze_setting(self.values, nk[].k_radius, context, True)
+        _freeze_setting(self.values, nk[].k_metric, context, True)
+        _freeze_setting(self.values, nk[].k_metric_params, context, True)
+        _freeze_setting(self.values, nk[].k_p, context, True)
+        _freeze_setting(self.values, nk[].k_path_method, context, True)
+        _freeze_setting(self.values, nk[].k_eigen_solver, context, True)
+        _freeze_setting(self.values, nk[].k_method, context, True)
+        _freeze_setting(self.values, nk[].k_random_state, context, True)
+        _freeze_setting(self.values, nk[].k_reg, context, True)
+        _freeze_setting(self.values, nk[].k_hessian_tol, context, True)
+        _freeze_setting(self.values, nk[].k_modified_tol, context, True)
+        _freeze_setting(self.values, nk[].k_max_iter, context, True)
+        _freeze_setting(self.values, nk[].k_eps, context, True)
+        _freeze_setting(self.values, nk[].k_init, context, False)
+        _freeze_setting(self.values, nk[].k_metric_mds, context, True)
+        _freeze_setting(self.values, nk[].k_normalized_stress, context, True)
+        _freeze_setting(self.values, nk[].k_n_init, context, True)
+        _freeze_setting(self.values, nk[].k_perplexity, context, True)
+        _freeze_setting(self.values, nk[].k_early_exaggeration, context, True)
+        _freeze_setting(self.values, nk[].k_learning_rate, context, True)
+        _freeze_setting(self.values, nk[].k_post_exaggeration_learning_rate_factor, context, True)
+        _freeze_setting(self.values, nk[].k_target_metric, context, True)
+        _freeze_setting(self.values, nk[].k_target_n_neighbors, context, True)
+        _freeze_setting(self.values, nk[].k_target_weight, context, True)
+        _freeze_setting(self.values, nk[].k__knn, context, True)
+        _freeze_setting(self.values, nk[].k__kind, context, True)
+        _freeze_setting(self.values, nk[].k__pw, context, True)
+        _freeze_setting(self.values, nk[].k__transform_config, context, True)
+        _freeze_setting(self.values, nk[].k__transform_mode, context, True)
         if operation >= MANI_OPN_FAMILY_MANI_UMAP_FIT and operation <= MANI_OPN_FAMILY_MANI_UMAP_TRANSFORM:
-            for name in ["n_epochs", "min_dist", "spread", "set_op_mix_ratio", "local_connectivity", "repulsion_strength", "negative_sample_rate", "densmap", "output_metric", "metric_kwds", "a", "b"]:  # small-loop(settings: UMAP-only scalar/configuration fields)
-                if py_contains(self.values, name):
-                    py_setitem(self.values, name, _setting(self.values[name], context))
+            # UMAP-only scalar/configuration fields, same order.
+            _freeze_setting(self.values, nk[].k_n_epochs, context, True)
+            _freeze_setting(self.values, nk[].k_min_dist, context, True)
+            _freeze_setting(self.values, nk[].k_spread, context, True)
+            _freeze_setting(self.values, nk[].k_set_op_mix_ratio, context, True)
+            _freeze_setting(self.values, nk[].k_local_connectivity, context, True)
+            _freeze_setting(self.values, nk[].k_repulsion_strength, context, True)
+            _freeze_setting(self.values, nk[].k_negative_sample_rate, context, True)
+            _freeze_setting(self.values, nk[].k_densmap, context, True)
+            _freeze_setting(self.values, nk[].k_output_metric, context, True)
+            _freeze_setting(self.values, nk[].k_metric_kwds, context, True)
+            _freeze_setting(self.values, nk[].k_a, context, True)
+            _freeze_setting(self.values, nk[].k_b, context, True)
         if py_type(self.default_mode) is not b.str:
             raise Error("TypeError: manifold default numeric mode requires an exact native string")
