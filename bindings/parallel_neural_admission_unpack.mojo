@@ -3,6 +3,7 @@
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.samba_admission_door import samba_admit, samba_admit_value, _samba_metadata
+from bindings.samba_keys_unpack import SAMBA_OPN_PARALLEL_LAYOUT
 from bindings.py_balanced import py_call, py_type
 from bindings.parallel_keys_unpack import (
     parallel_keys,
@@ -31,7 +32,7 @@ def neural_admit(operation: Int, args: PythonObject, owner_cls: PythonObject,
     var nk = parallel_keys()
     var admission = py_item(context, nk[].k_admission)
     # Validate cached class descriptors before reading even an exact owner.
-    samba_admit("parallel_layout", bi.tuple(), context)
+    samba_admit(SAMBA_OPN_PARALLEL_LAYOUT, bi.tuple(), context)
     _neural_container(args, "argument envelope")
     if operation == PARALLEL_NEURAL_OPN_WORKER:
         samba_admit_value(args, admission)

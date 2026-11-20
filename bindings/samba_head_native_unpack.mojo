@@ -18,12 +18,15 @@ from bindings.tensor_view import TensorView, shape_text
 from bindings.optimizer_device_native_door import shape_count
 from bindings.training_embedding_native_door import embedding_indices
 from bindings.training_extra_native_door import _c32
+from bindings.samba_keys_unpack import samba_keys
+from bindings.py_balanced import py_item
 
 
 def training_samba_head_loss(values: PythonObject, entries: PythonObject, context: PythonObject) raises -> PythonObject:
     """values: (a, weight, targets, num_items). `(loss, da, dweight)`, or None
     when the selected binding has no fused `samba_head_loss` entry (the
     caller then runs the three separate calls)."""
+    var nk = samba_keys()
     var buffer_pins = OptimizerInputOwners()
     try:
         if len(values) != 4:
@@ -31,11 +34,11 @@ def training_samba_head_loss(values: PythonObject, entries: PythonObject, contex
         opt_value(values, context)
         var bi = native_loaded_module("builtins")
         # The unfused entry is required before the optional fused one is resolved.
-        _ = entries["linear_forward"]
-        var entry = py_call(bi.getattr, entries["module"], PythonObject("samba_head_loss"), PythonObject(None))
+        _ = py_item(entries, nk[].k_linear_forward)
+        var entry = py_call(bi.getattr, py_item(entries, nk[].k_module), PythonObject("samba_head_loss"), PythonObject(None))
         if entry is None:
             return PythonObject(None)
-        if py_type(entry) is not context["device_finalizer_types"][2]:
+        if py_type(entry) is not py_item(context, nk[].k_device_finalizer_types)[2]:
             raise Error("TypeError: samba_head_loss requires its connected compiled entry")
         var site = String("samba_head_loss")
         var keep = List[List[Float32]]()
