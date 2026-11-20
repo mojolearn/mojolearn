@@ -1,17 +1,25 @@
 """Source guards for Program serialization admission; no runtime execution."""
 import ast
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from boundary_keys_plain import plain  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT/'providers/python/autograd_program_save_pyapi_door.mojo'
 
 
+def _text():
+    return plain('providers/python/autograd_program_save_pyapi_door.mojo', SOURCE.read_text())
+
+
 def section(name):
-    return SOURCE.read_text().split('def '+name+'(', 1)[1].split('\n\ndef ', 1)[0]
+    return _text().split('def '+name+'(', 1)[1].split('\n\ndef ', 1)[0]
 
 
 def test_save_reads_only_admitted_owner_storage():
-    source = SOURCE.read_text()
+    source = _text()
     for forbidden in ('program._s', 'program._id', 'b.hasattr', 'b.getattr', 'Python.import_module'):
         assert forbidden not in source
     assert '_fields(program, layout)' in section('_save_fields')
