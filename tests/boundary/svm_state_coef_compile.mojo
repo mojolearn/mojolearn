@@ -14,7 +14,7 @@ def svm_state_compile(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyO
     try:
         var args = PythonObject(from_borrowed=packed)
         _ = classical_family_admit(args[0])
-        return svc_public_state_operation(args[0], String(args[1]), args[2], args[3]).steal_data()
+        return svc_public_state_operation(args[0], Int(py=args[1]), args[2], args[3]).steal_data()
     except error:
         return raise_python_exception(error)
 
@@ -24,7 +24,7 @@ def svm_coef_compile(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyOb
         var args = PythonObject(from_borrowed=packed)
         _ = classical_family_admit(args[0])
         var module = estimator_binding(args[0], "_mojolearn_svm", args[3])
-        return svc_kernel_operation(args[0], String(args[1]), Python.tuple(module), args[3]).steal_data()
+        return svc_kernel_operation(args[0], Int(py=args[1]), Python.tuple(module), args[3]).steal_data()
     except error:
         return raise_python_exception(error)
 
