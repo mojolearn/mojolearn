@@ -165,5 +165,15 @@ def type_version_tag_assign(cls: PythonObject) raises -> Int:
     var tag = type_version_tag(cls)
     if tag != 0:
         return tag
-    _ = py_attr(cls, "__init__")
+    # The lookup is CPython's own MRO cache lookup (`_PyType_Lookup`, exported
+    # by 3.10 / 3.11, the only versions that reach here): it assigns the tag
+    # and returns a borrowed entry, sets no error and runs no descriptor. An
+    # attribute read (`getattr(cls, "__init__")`) went through the class's
+    # METACLASS `__getattribute__`, so a value whose class has a Python
+    # metaclass ran a Python frame inside get_params on 3.10
+    # (test_leaf_metaclass_hooks_are_not_needed_to_read_native_storage).
+    var name = PythonObject("__init__")
+    ref cpy = Python().cpython()
+    _ = cpy.lib.get_function[PyObjectPtr]("_PyType_Lookup")(cls._obj_ptr, name._obj_ptr)
+    _ = name
     return type_version_tag(cls)
