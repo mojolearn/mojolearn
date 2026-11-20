@@ -5,14 +5,16 @@ from bindings.py_balanced import py_call, py_type
 from providers.python.estimator_binding_pyapi_door import estimator_binding_mode
 from bindings.resample_keys_unpack import resample_keys
 from bindings.py_balanced import py_item
+from bindings.operation_names_linops import LINOPS_OPN_FAMILY_RS_BOOTSTRAP, LINOPS_OPN_FAMILY_RS_PERMUTATION_TEST
 
 
-def resample_arguments(operation: String, args: PythonObject,
+def resample_arguments(operation: Int, args: PythonObject,
                        context: PythonObject) raises -> PythonObject:
     if len(args) == 0 or args[0] is not None:
         return args
     var index = len(args) - 1
-    if operation == "family_rs_bootstrap" or operation == "family_rs_permutation_test":
+    # bw2-linalg: `operation` is a leaf code of bindings/operation_names_linops.mojo.
+    if operation == LINOPS_OPN_FAMILY_RS_BOOTSTRAP or operation == LINOPS_OPN_FAMILY_RS_PERMUTATION_TEST:
         index -= 1
     var binding = estimator_binding_mode(args[index], "_mojolearn_resample", context, False)
     # One tuple concatenation (perf3-nbr-msel-trees), not a list built by

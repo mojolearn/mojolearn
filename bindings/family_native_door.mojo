@@ -12,7 +12,7 @@ from bindings.py_balanced import py_type, py_get
 from bindings.family_common_pack import family_call
 from bindings.kmeans_native_pack import kmeans_operation
 from bindings.kernel_methods_native_door import kernel_methods_operation, kernel_methods_unknown_operation
-from bindings.linalg_native_door import linalg_operation
+from bindings.linalg_native_door import linalg_operation, linalg_unknown_operation
 from bindings.neighbors_native_pack import neighbors_operation
 from bindings.metrics_reg_door import metrics_reg_operation
 from bindings.cluster_native_door import cluster_operation
@@ -26,8 +26,8 @@ from providers.python.hdbscan_public_lifecycle_pyapi_door import hdbscan_public_
 from providers.python.density_public_lifecycle_pyapi_pack import density_public_operation
 from bindings.cluster_fit_b_native_unpack import cluster_fit_b_operation
 from bindings.mixture_native_door import mixture_operation, mixture_unknown_operation
-from bindings.linalg_ops_native_unpack import linalg_ops_operation
-from providers.python.lowbit_weight_pyapi_door import lowbit_weight_operation
+from bindings.linalg_ops_native_unpack import linalg_ops_operation, linalg_ops_unknown_operation
+from providers.python.lowbit_weight_pyapi_door import lowbit_weight_operation, lowbit_weight_unknown_operation
 from bindings.parallel_public_native_door import parallel_public_operation
 from bindings.parallel_plan_door import plan_devices, plan_enter_all, plan_exit_all
 from bindings.parallel_plan_specs import par_spec_families, par_spec_rebuild, par_spec_admits, par_spec_driver_name
@@ -166,7 +166,7 @@ def _family_owner_call(model: PythonObject, route: Int, leaf: Int, operation: St
 def _family_owner_first(model: PythonObject, owner: Int, leaf: Int, operation: String, args: PythonObject,
                         context: PythonObject) raises -> PythonObject:
     """Owners FR_DENSITY .. FR_CHOL (and FR_UNKNOWN, refused). `leaf` is
-    the operation's leaf code for a converted owner (FR_KM, FR_SVM); the
+    the operation's leaf code for a converted owner (FR_KM, FR_SVM, FR_CHOL); the
     others match `operation`."""
     if owner == FR_DENSITY:
         return density_public_operation(model, operation, args, context)
@@ -191,14 +191,17 @@ def _family_owner_first(model: PythonObject, owner: Int, leaf: Int, operation: S
     if owner == FR_XN:
         return neighbors_operation(model, operation, args, context)
     if owner == FR_CHOL:
-        return linalg_operation(model, operation, args, context)
+        if leaf == OP_LEAF_NONE:
+            linalg_unknown_operation(operation)
+        return linalg_operation(model, leaf, args, context)
     raise Error("RuntimeError: unknown family operation " + operation)
 
 
 def _family_owner_second(model: PythonObject, owner: Int, leaf: Int, operation: String, args: PythonObject,
                          context: PythonObject) raises -> PythonObject:
     """Owners FR_MSEL .. FR_LINALG_OPS. `leaf` is the operation's leaf code
-    for a converted owner (FR_SVC, FR_GP, FR_MIX); the others match `operation`."""
+    for a converted owner (FR_SVC, FR_GP, FR_MIX, FR_LOW, FR_LINALG_OPS); the others
+    match `operation`."""
     if owner == FR_MSEL:
         # Preserve the existing generic entry ABI without importing the
         # independently compiled model-selection owner. Import setup retains
@@ -243,7 +246,11 @@ def _family_owner_second(model: PythonObject, owner: Int, leaf: Int, operation: 
             raise Error("TypeError: manifold requires its compiled native entry")
         return family_call(entry, model, PythonObject(operation), args, context)
     if owner == FR_LOW:
-        return lowbit_weight_operation(model, operation, args, context)
+        if leaf == OP_LEAF_NONE:
+            lowbit_weight_unknown_operation(operation)
+        return lowbit_weight_operation(model, leaf, args, context)
     if owner == FR_LINALG_OPS:
-        return linalg_ops_operation(model, operation, args, context)
+        if leaf == OP_LEAF_NONE:
+            linalg_ops_unknown_operation(operation)
+        return linalg_ops_operation(model, leaf, args, context)
     raise Error("RuntimeError: unknown family operation " + operation)

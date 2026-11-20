@@ -25,6 +25,10 @@ from bindings.native_loaded_module_door import NativeModules, native_loaded_modu
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entry
 from providers.python.resample_public_pyapi_pack import resample_arguments, resample_result_initialize, resample_result_layout
 from providers.python.resample_rows_operation_pyapi_pack import resample_rows_operation
+from bindings.operation_names_linops import (
+    LINOPS_OPN_FAMILY_RS_RESULT_INITIALIZE, LINOPS_OPN_FAMILY_RS_RESAMPLE, LINOPS_OPN_FAMILY_RS_BOOTSTRAP,
+    LINOPS_OPN_FAMILY_RS_PERMUTATION_TEST, LINOPS_OPN_FAMILY_RS_MONTE_CARLO_INTEGRATE,
+    LINOPS_OPN_FAMILY_RS_RESAMPLE_INDICES)
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.native_buffer_owner_pack import native_storage_allocate
 from bindings.family_common_unpack import (
@@ -506,11 +510,13 @@ def _rs_resample_indices(args: PythonObject, context: PythonObject) raises -> Py
 #          sample_weight, numeric_mode)
 
 
-def rs_operation(operation: String, var args: PythonObject, context: PythonObject) raises -> PythonObject:
-    if operation == "family_rs_result_initialize":
+def rs_operation(operation: Int, var args: PythonObject, context: PythonObject) raises -> PythonObject:
+    # bw2-linalg: `operation` is a leaf code of bindings/operation_names_linops.mojo
+    # (the per-argument data test made up to three String compares per argument).
+    if operation == LINOPS_OPN_FAMILY_RS_RESULT_INITIALIZE:
         return resample_result_initialize(args, context)
     classical_connect_numpy(context)
-    if operation == "family_rs_resample":
+    if operation == LINOPS_OPN_FAMILY_RS_RESAMPLE:
         return resample_rows_operation(args, context)
     args = resample_arguments(operation, args, context)
     # perf2-msel: one module handle and one set of admission type vectors for
@@ -522,17 +528,17 @@ def rs_operation(operation: String, var args: PythonObject, context: PythonObjec
     var kinds = _ClassicalAdmitTypes()
     for i in range(1, len(args)):  # driver-loop: admit native public inputs before any legacy scalar/container operations
         _classical_admit(mods, seq, kinds, args[i], context, 0)
-        var data = ((operation == "family_rs_bootstrap" and i == 1)
-                    or (operation == "family_rs_permutation_test" and (i == 1 or i == 2))
-                    or (operation == "family_rs_monte_carlo_integrate" and (i == 2 or i == 3)))
+        var data = ((operation == LINOPS_OPN_FAMILY_RS_BOOTSTRAP and i == 1)
+                    or (operation == LINOPS_OPN_FAMILY_RS_PERMUTATION_TEST and (i == 1 or i == 2))
+                    or (operation == LINOPS_OPN_FAMILY_RS_MONTE_CARLO_INTEGRATE and (i == 2 or i == 3)))
         if not data:
             host_inference_scalar(args[i], context, True)
-    if operation == "family_rs_bootstrap":
+    if operation == LINOPS_OPN_FAMILY_RS_BOOTSTRAP:
         return _rs_bootstrap(args, context)
-    if operation == "family_rs_permutation_test":
+    if operation == LINOPS_OPN_FAMILY_RS_PERMUTATION_TEST:
         return _rs_permutation_test(args, context)
-    if operation == "family_rs_monte_carlo_integrate":
+    if operation == LINOPS_OPN_FAMILY_RS_MONTE_CARLO_INTEGRATE:
         return _rs_monte_carlo(args, context)
-    if operation == "family_rs_resample_indices":
+    if operation == LINOPS_OPN_FAMILY_RS_RESAMPLE_INDICES:
         return _rs_resample_indices(args, context)
-    raise Error("RuntimeError: unknown resample operation " + operation)
+    raise Error("RuntimeError: unknown resample operation " + String(operation))
