@@ -57,6 +57,7 @@ struct MinMaxKeys(Defaultable, Movable):
     var k_scale_: PythonObject
     var k_scaler_class: PythonObject
     var k_scaler_explicit_host: PythonObject
+    var k_scaler_host_contexts: PythonObject
     var k_scaler_training_error: PythonObject
 
     def __init__(out self):
@@ -94,6 +95,7 @@ struct MinMaxKeys(Defaultable, Movable):
         self.k_scale_ = PythonObject(None)
         self.k_scaler_class = PythonObject(None)
         self.k_scaler_explicit_host = PythonObject(None)
+        self.k_scaler_host_contexts = PythonObject(None)
         self.k_scaler_training_error = PythonObject(None)
 
 
@@ -135,6 +137,7 @@ def _minmax_keys_fill(nk: UnsafePointer[MinMaxKeys, MutUntrackedOrigin]) raises:
     nk[].k_scale_ = py_key("scale_")
     nk[].k_scaler_class = py_key("scaler_class")
     nk[].k_scaler_explicit_host = py_key("scaler_explicit_host")
+    nk[].k_scaler_host_contexts = py_key("scaler_host_contexts")
     nk[].k_scaler_training_error = py_key("scaler_training_error")
     var ops = Python.dict()
     py_op_add(ops, "init", MINMAX_OPN_INIT)

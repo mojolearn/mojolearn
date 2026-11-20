@@ -44,7 +44,11 @@ from bindings.scaler_lifecycle_run import (
     SCALER_SEEN_SOURCE_I64, SCALER_SEEN_SOURCE_F32,
 )
 from core.scaler_core import ScalerTransformSpec, scaler_transform_rows, scaler_transform_rows_valid, scaler_transform_core
-from bindings.scaler_keys_unpack import scaler_keys
+from bindings.scaler_keys_unpack import (
+    scaler_keys, SCALER_OPN_INIT, SCALER_OPN_GET_PARAMS, SCALER_OPN_SET_PARAMS, SCALER_OPN_IS_FITTED,
+    SCALER_OPN_TRANSFORM, SCALER_OPN_PARTIAL_FIT, SCALER_OPN_FIT_TRANSFORM, SCALER_OPN_SAVE, SCALER_OPN_LOAD,
+)
+from bindings.py_keys import py_op_code
 from bindings.py_balanced import py_item
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -586,48 +590,49 @@ def scaler_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
     try:
         var all = PythonObject(from_borrowed=args_ptr)
         var model = all[0]
-        var op = String(all[1])
+        var nk = scaler_keys()
+        var op = py_op_code(nk[].ops, all[1])
         var args = all[2]
         var context = all[3]
         var cls = model if py_type(model) is native_loaded_module("builtins").type else py_type(model)
-        var host = py_get(context["scaler_host_contexts"],cls)
+        var host = py_get(py_item(context, nk[].k_scaler_host_contexts),cls)
         if host is not None:
             context = host
         classical_connect_numpy(context)
         classical_check_layout(model,context)
         var result = PythonObject(None)
-        if op == "init":
+        if op == SCALER_OPN_INIT:
             result = scaler_initialize(model,args)
-        elif op == "get_params":
+        elif op == SCALER_OPN_GET_PARAMS:
             var fields = py_fields(model)
-            result = Python.dict(copy=fields["copy"],with_mean=fields["with_mean"],with_std=fields["with_std"],numeric_mode=fields["numeric_mode"])
-        elif op == "set_params":
+            result = Python.dict(copy=py_item(fields, nk[].k_copy),with_mean=py_item(fields, nk[].k_with_mean),with_std=py_item(fields, nk[].k_with_std),numeric_mode=py_item(fields, nk[].k_numeric_mode))
+        elif op == SCALER_OPN_SET_PARAMS:
             var fields = py_fields(model)
             var options = args[0]
             var b = native_loaded_module("builtins")
             var names = py_call(b.list,options)
-            var known = Python.tuple("copy","with_mean","with_std","numeric_mode")
+            var known = Python.tuple(nk[].k_copy,nk[].k_with_mean,nk[].k_with_std,nk[].k_numeric_mode)
             for k in range(len(names)):  # driver-loop: proposed estimator parameter names
                 if py_type(names[k]) is not b.str or not py_contains(known,names[k]):
                     raise Error("Invalid StandardScaler parameters")
             if len(names):
-                var values = Python.tuple(py_get(options,"copy",fields["copy"]),py_get(options,"with_mean",fields["with_mean"]),py_get(options,"with_std",fields["with_std"]),py_get(options,"numeric_mode",fields["numeric_mode"]))
+                var values = Python.tuple(py_get(options,nk[].k_copy,py_item(fields, nk[].k_copy)),py_get(options,nk[].k_with_mean,py_item(fields, nk[].k_with_mean)),py_get(options,nk[].k_with_std,py_item(fields, nk[].k_with_std)),py_get(options,nk[].k_numeric_mode,py_item(fields, nk[].k_numeric_mode)))
                 _ = py_call(fields.clear)
                 _ = scaler_initialize(model,values)
             result = model
-        elif op == "is_fitted":
+        elif op == SCALER_OPN_IS_FITTED:
             result = PythonObject(_fitted(py_fields(model)))
-        elif op == "transform":
+        elif op == SCALER_OPN_TRANSFORM:
             var input_cache = Python.list()
             result = _public_result(scaler_transform(model,args[0],Bool(py=args[1]),args[2],context,input_cache),context,input_cache)
-        elif op == "partial_fit":
+        elif op == SCALER_OPN_PARTIAL_FIT:
             result = scaler_partial_fit(model,args[0],args[2],context)
-        elif op == "fit_transform":
+        elif op == SCALER_OPN_FIT_TRANSFORM:
             var input_cache = Python.list()
             result = _public_result(scaler_fit_transform(model,args[0],args[2],context,input_cache),context,input_cache)
-        elif op == "save":
+        elif op == SCALER_OPN_SAVE:
             result = scaler_archive_save(model,args[0],context)
-        elif op == "load":
+        elif op == SCALER_OPN_LOAD:
             result = scaler_archive_load(model,args[0],context)
         else:
             raise Error("unknown native StandardScaler operation")

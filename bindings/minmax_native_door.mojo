@@ -32,7 +32,11 @@ from bindings.minmax_metadata_unpack import _flag
 from bindings.minmax_metadata_pack import minmax_range_pair
 from bindings.minmax_archive_native_unpack import minmax_archive_load, minmax_archive_save
 from bindings.py_optional import py_or_none, py_present
-from bindings.minmax_keys_unpack import minmax_keys
+from bindings.minmax_keys_unpack import (
+    minmax_keys, MINMAX_OPN_INIT, MINMAX_OPN_GET_PARAMS, MINMAX_OPN_SET_PARAMS, MINMAX_OPN_IS_FITTED, MINMAX_OPN_FIT,
+    MINMAX_OPN_PARTIAL_FIT, MINMAX_OPN_FIT_TRANSFORM, MINMAX_OPN_TRANSFORM, MINMAX_OPN_SAVE, MINMAX_OPN_LOAD,
+)
+from bindings.py_keys import py_op_code
 from bindings.py_balanced import py_item
 # TOMBSTONE: P1_NATIVE_SKLEARN_TAGS (removed: native code importing sklearn.utils._tags and building its Tag dataclasses; the tags are built by the Python compatibility layer, _mode.sklearn_tags) deleted 2026-11-09 by lane p1-python-callbacks-worst; code recoverable at e68654a757.
 # Restore: experiments/removed/P1_NATIVE_SKLEARN_TAGS.patch.
@@ -382,47 +386,48 @@ def minmax_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
     try:
         var all = PythonObject(from_borrowed=args_ptr)
         var model = all[0]
-        var operation = String(all[1])
+        var nk = minmax_keys()
+        var operation = py_op_code(nk[].ops, all[1])
         var args = all[2]
         var context = all[3]
         var b = native_loaded_module("builtins")
         var cls = model if py_type(model) is b.type else py_type(model)
         if py_type(cls) is not b.type:
             raise Error("TypeError: native MinMaxScaler refuses Python metaclass hooks")
-        var host = py_get(context["scaler_host_contexts"],cls)
+        var host = py_get(py_item(context, nk[].k_scaler_host_contexts),cls)
         if host is not None:
             context = host
         classical_connect_numpy(context)
         classical_check_layout(model,context)
         # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
         var result = Optional[PythonObject]()
-        if operation == "init":
+        if operation == MINMAX_OPN_INIT:
             result = py_present(minmax_initialize(model,args))
-        elif operation == "get_params":
+        elif operation == MINMAX_OPN_GET_PARAMS:
             var fields = _fields(model)
-            result = Python.dict(feature_range=fields["feature_range"],copy=fields["copy"],clip=fields["clip"],numeric_mode=fields["numeric_mode"])
-        elif operation == "set_params":
+            result = Python.dict(feature_range=py_item(fields, nk[].k_feature_range),copy=py_item(fields, nk[].k_copy),clip=py_item(fields, nk[].k_clip),numeric_mode=py_item(fields, nk[].k_numeric_mode))
+        elif operation == MINMAX_OPN_SET_PARAMS:
             var fields = _fields(model)
             var options = args[0]
             if py_type(options) is not b.dict:
                 raise Error("TypeError: MinMaxScaler parameters require an ordinary keyword dictionary")
             var names = py_call(b.list,options)
-            var known = Python.tuple("feature_range","copy","clip","numeric_mode")
+            var known = Python.tuple(nk[].k_feature_range,nk[].k_copy,nk[].k_clip,nk[].k_numeric_mode)
             for k in range(len(names)):  # driver-loop: proposed estimator parameter names
                 if py_type(names[k]) is not b.str or not py_contains(known,names[k]):
                     raise Error("Invalid MinMaxScaler parameters")
             if len(names):
-                var values = Python.tuple(py_get(options,"feature_range",fields["feature_range"]),py_get(options,"copy",fields["copy"]),py_get(options,"clip",fields["clip"]),py_get(options,"numeric_mode",fields["numeric_mode"]))
+                var values = Python.tuple(py_get(options,nk[].k_feature_range,py_item(fields, nk[].k_feature_range)),py_get(options,nk[].k_copy,py_item(fields, nk[].k_copy)),py_get(options,nk[].k_clip,py_item(fields, nk[].k_clip)),py_get(options,nk[].k_numeric_mode,py_item(fields, nk[].k_numeric_mode)))
                 _ = py_call(fields.clear)
                 _ = minmax_initialize(model,values)
             result = py_present(model)
-        elif operation == "is_fitted":
+        elif operation == MINMAX_OPN_IS_FITTED:
             result = PythonObject(_fitted(_fields(model)))
-        elif operation == "fit":
+        elif operation == MINMAX_OPN_FIT:
             result = py_present(minmax_fit(model,args[0],context))
-        elif operation == "partial_fit":
+        elif operation == MINMAX_OPN_PARTIAL_FIT:
             result = py_present(minmax_partial_fit(model,args[0],context))
-        elif operation == "fit_transform":
+        elif operation == MINMAX_OPN_FIT_TRANSFORM:
             if len(args[2]):
                 raise Error("TypeError: MinMaxScaler.fit got an unexpected keyword argument")
             var input_cache = Python.list()
@@ -432,12 +437,12 @@ def minmax_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
                 _ = minmax_fit(model,args[0],context,input_cache,configuration)
                 result = py_present(minmax_transform(model,args[0],False,context,input_cache,configuration))
             result = py_present(_public_result(py_or_none(result),context,input_cache))
-        elif operation == "transform":
+        elif operation == MINMAX_OPN_TRANSFORM:
             var input_cache = Python.list()
             result = py_present(_public_result(minmax_transform(model,args[0],Bool(py=args[1]),context,input_cache),context,input_cache))
-        elif operation == "save":
+        elif operation == MINMAX_OPN_SAVE:
             result = py_present(minmax_archive_save(model,args[0],context))
-        elif operation == "load":
+        elif operation == MINMAX_OPN_LOAD:
             result = py_present(minmax_archive_load(model,args[0],context))
         else:
             raise Error("unknown native MinMaxScaler operation")

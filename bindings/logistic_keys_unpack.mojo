@@ -50,6 +50,7 @@ struct LogisticKeys(Defaultable, Movable):
     var k_lr_bindings: PythonObject
     var k_lr_complex_type: PythonObject
     var k_lr_consumed_fields: PythonObject
+    var k_lr_host_contexts: PythonObject
     var k_lr_host_model: PythonObject
     var k_lr_host_score_context: PythonObject
     var k_lr_parameters: PythonObject
@@ -100,6 +101,7 @@ struct LogisticKeys(Defaultable, Movable):
         self.k_lr_bindings = PythonObject(None)
         self.k_lr_complex_type = PythonObject(None)
         self.k_lr_consumed_fields = PythonObject(None)
+        self.k_lr_host_contexts = PythonObject(None)
         self.k_lr_host_model = PythonObject(None)
         self.k_lr_host_score_context = PythonObject(None)
         self.k_lr_parameters = PythonObject(None)
@@ -154,6 +156,7 @@ def _logistic_keys_fill(nk: UnsafePointer[LogisticKeys, MutUntrackedOrigin]) rai
     nk[].k_lr_bindings = py_key("lr_bindings")
     nk[].k_lr_complex_type = py_key("lr_complex_type")
     nk[].k_lr_consumed_fields = py_key("lr_consumed_fields")
+    nk[].k_lr_host_contexts = py_key("lr_host_contexts")
     nk[].k_lr_host_model = py_key("lr_host_model")
     nk[].k_lr_host_score_context = py_key("lr_host_score_context")
     nk[].k_lr_parameters = py_key("lr_parameters")

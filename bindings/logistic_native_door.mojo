@@ -41,7 +41,7 @@ from bindings.logistic_descriptor_boundary_door import (
 from bindings.classical_attributes_door import classical_connect_numpy, classical_getattribute
 from bindings.classical_pandas_door import classical_admit_value
 from bindings.classical_exceptions_door import classical_require_fitted, classical_not_fitted_class
-from providers.python.linear_metadata_boundary_door import classical_is_fitted
+from providers.python.linear_metadata_boundary_door import classical_is_fitted, linear_fitted_unpack
 from bindings.logistic_admission_unpack import logistic_storage, logistic_fields, logistic_fit_replacements_admit
 from bindings.logistic_admission_pack import logistic_initialize, logistic_get_params, logistic_set_params
 from bindings.prep_lda_admission_door import lda_native_context, lda_native_labels
@@ -57,7 +57,12 @@ from bindings.classical_labels_door import (
     labels_address, labels_cast,
 )
 from bindings.admitted_input_unpack import AdmittedX, admit_weight_words, admitted_words, admitted_storage_native
-from bindings.logistic_keys_unpack import logistic_keys
+from bindings.logistic_keys_unpack import (
+    logistic_keys, LOGISTIC_OPN_INITIALIZE, LOGISTIC_OPN_GET_PARAMS, LOGISTIC_OPN_SET_PARAMS, LOGISTIC_OPN_IS_FITTED,
+    LOGISTIC_OPN_FIT, LOGISTIC_OPN_DECISION_FUNCTION, LOGISTIC_OPN_PREDICT, LOGISTIC_OPN_PREDICT_PROBA,
+    LOGISTIC_OPN_PREDICT_LOG_PROBA, LOGISTIC_OPN_SCORE,
+)
+from bindings.py_keys import py_op_code
 from bindings.py_balanced import py_item
 
 comptime _I64P = MutPointer[Int64, MutUntrackedOrigin]
@@ -591,12 +596,13 @@ def logistic_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObject
     try:
         var call = PythonObject(from_borrowed=args_ptr)
         var model = call[0]
-        var operation = String(call[1])
+        var nk = logistic_keys()
+        var operation = py_op_code(nk[].ops, call[1])
         var args = call[2]
         var context = call[3]
         if py_type(py_type(model)) is not py_type(py_type(PythonObject(0))):
             raise Error("TypeError: LogisticRegression cannot invoke Python metaclass hooks")
-        var hosts = py_get(context, "lr_host_contexts")
+        var hosts = py_get(context, nk[].k_lr_host_contexts)
         if hosts is not None and len(hosts) > 0:
             var mro = py_type(model).__mro__
             for k in range(len(mro)):  # driver-loop: over the model's class hierarchy (explicit host classes)
@@ -607,35 +613,37 @@ def logistic_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObject
         classical_connect_numpy(context)
         context = lda_native_context(context)
         var result = PythonObject(None)
-        if operation == "initialize":
+        if operation == LOGISTIC_OPN_INITIALIZE:
             result = logistic_initialize(model, args, context)
             return result.steal_data()
         # get_params/set_params/is_fitted validate nothing beyond admission
         # (scikit-learn's convention); consuming operations check values.
-        var configuring = operation == "get_params" or operation == "set_params" or operation == "is_fitted"
+        var configuring = operation == LOGISTIC_OPN_GET_PARAMS or operation == LOGISTIC_OPN_SET_PARAMS or operation == LOGISTIC_OPN_IS_FITTED
         # Admit live storage once; query owners below pin only consumed
         # public fields, without copying the complete Python dictionary.
         var fields = logistic_fields(model, context, configuring)
-        if operation == "get_params":
+        if operation == LOGISTIC_OPN_GET_PARAMS:
             # PACK the admitted public parameters in their fixed order.
             var params = Python.dict()
-            var names = context["lr_sorted_parameters"]
+            var names = py_item(context, nk[].k_lr_sorted_parameters)
             for i in range(len(names)):  # driver-loop: ParamsMixin's sorted parameter names
                 py_setitem(params, names[i], fields[names[i]])
             result = params
             return result.steal_data()
-        if operation == "set_params":
+        if operation == LOGISTIC_OPN_SET_PARAMS:
             result = logistic_set_params(model, args[0], context)
             return result.steal_data()
-        if operation == "is_fitted":
+        if operation == LOGISTIC_OPN_IS_FITTED:
             result = classical_is_fitted(model)
             return result.steal_data()
-        if operation != "fit":
-            classical_require_fitted(model, False, operation, context)
+        # The operation's name String is built only for the not-fitted message
+        # (classical_require_fitted re-checks and raises it).
+        if operation != LOGISTIC_OPN_FIT and not linear_fitted_unpack(model):
+            classical_require_fitted(model, False, String(call[1]), context)
         # One module handle for this call's input admissions.
         var mods = NativeModules()
         classical_admit_value(mods, args[0], context)
-        if operation == "fit":
+        if operation == LOGISTIC_OPN_FIT:
             var target = classifier_label_list(args[1], context)
             lda_native_labels(target, context, True, "LogisticRegression")
             var shape = labels_shape_of(target, context)
@@ -651,17 +659,17 @@ def logistic_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObject
         else:
             var query = LogisticQueryOwners(fields, context)
             try:
-                if operation == "decision_function":
+                if operation == LOGISTIC_OPN_DECISION_FUNCTION:
                     var entries = PythonObject(None)
                     result = logistic_decision(model, query, entries, args[0], context)
-                elif operation == "predict":
+                elif operation == LOGISTIC_OPN_PREDICT:
                     result = logistic_predict(model, query, args[0], context)
-                elif operation == "predict_proba":
+                elif operation == LOGISTIC_OPN_PREDICT_PROBA:
                     var entries = PythonObject(None)
                     result = logistic_proba(model, query, entries, args[0], context)
-                elif operation == "predict_log_proba":
+                elif operation == LOGISTIC_OPN_PREDICT_LOG_PROBA:
                     result = logistic_log_proba(model, query, args[0], context)
-                elif operation == "score":
+                elif operation == LOGISTIC_OPN_SCORE:
                     var target = classifier_label_list(args[1], context)
                     lda_native_labels(target, context, False, "LogisticRegression")
                     result = logistic_score(model, query, args[0], target, context)

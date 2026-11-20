@@ -44,6 +44,7 @@ struct ScalerKeys(Defaultable, Movable):
     var k_scale_: PythonObject
     var k_scaler_bindings: PythonObject
     var k_scaler_explicit_host: PythonObject
+    var k_scaler_host_contexts: PythonObject
     var k_scaler_training_error: PythonObject
     var k_standard_fit: PythonObject
     var k_standard_transform: PythonObject
@@ -77,6 +78,7 @@ struct ScalerKeys(Defaultable, Movable):
         self.k_scale_ = PythonObject(None)
         self.k_scaler_bindings = PythonObject(None)
         self.k_scaler_explicit_host = PythonObject(None)
+        self.k_scaler_host_contexts = PythonObject(None)
         self.k_scaler_training_error = PythonObject(None)
         self.k_standard_fit = PythonObject(None)
         self.k_standard_transform = PythonObject(None)
@@ -114,6 +116,7 @@ def _scaler_keys_fill(nk: UnsafePointer[ScalerKeys, MutUntrackedOrigin]) raises:
     nk[].k_scale_ = py_key("scale_")
     nk[].k_scaler_bindings = py_key("scaler_bindings")
     nk[].k_scaler_explicit_host = py_key("scaler_explicit_host")
+    nk[].k_scaler_host_contexts = py_key("scaler_host_contexts")
     nk[].k_scaler_training_error = py_key("scaler_training_error")
     nk[].k_standard_fit = py_key("standard_fit")
     nk[].k_standard_transform = py_key("standard_transform")
