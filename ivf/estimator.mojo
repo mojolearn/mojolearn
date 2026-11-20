@@ -135,11 +135,14 @@ def ivf_flat_build_resident_host(
     metric: Int,
     seed: UInt64,
     mut dev: IvfFlatBuildDevice,
+    train_rows_per_list: Int = 0,
 ) raises -> IvfFlatIndex:
     """`ivf_flat_build_host` with the index left on the device (lane gap-ivf,
     2026-10-08; `ivf_flat_build_resident`): the same parameters, the same
     statements, the vectors and the device CSR in `dev`. `x` may be empty
-    when the rows are read from `x_addr` (`IVF_BUILD_FROM_POINTER`)."""
+    when the rows are read from `x_addr` (`IVF_BUILD_FROM_POINTER`).
+    `train_rows_per_list`: `ivf_flat_build_host`'s (the IVF-SQ build's
+    coarse step, x_ann/ivf_pq_device.mojo `_coarse_rows`)."""
     ivf_refuse_algorithm(String("ivf_flat"))
     var params = IvfFlatIndexParams.default()
     params.n_lists = n_lists
@@ -147,6 +150,7 @@ def ivf_flat_build_resident_host(
     params.kmeans_trainset_fraction = Float64(1.0)
     params.metric = metric
     params.seed = seed
+    params.train_rows_per_list = train_rows_per_list
     var trace = IdentityTrace()
     return ivf_flat_build_resident(ctx, trace, params, x, x_addr, n_rows, dim, dev)
 

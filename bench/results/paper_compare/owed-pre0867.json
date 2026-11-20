@@ -927,6 +927,11 @@
    "define": "MOJOLEARN_SEQ_FAST_RNN_BPTT_LSTM_GEMM_OFF",
    "status": "define in code (autograd/rules_recurrent.mojo RNN_BPTT_LSTM_GEMM): B = the fused backward launch for the LSTM cell (the form before 2026-11-20); A = the default, the LSTM backward step as its own GEMM above the step floor. A bit version at split-K LSTM backward steps, every column together. Owed: one confirming measurement on the lstm rows and shapes (gru and rnn rows are controls: untouched).",
    "owed": "RUN"
+  },
+  "ann3-direct-out": {
+   "define": "MOJOLEARN_ANN3_DIRECT_OUT",
+   "status": "define in code (x_ann/ivf_pq_device.mojo ivf_sq_build_device_ptr and _ivf_pq_build_impl): A = the default since lane fx-ann-fit-nocopy, the IVF-SQ codes (n x dim int32) downloaded into the caller's array through the pooled pinned stages (download_i32_into); B = one raw device copy into the caller's pageable array. Plain copies: no bit moves. The arm was written for Apple fast (lane ann-apple3, paused, never run); since 2026-11-20 it is only this choice of copy and compiles in every mode.",
+   "owed": "RUN"
   }
  },
  "rows": [
@@ -5499,6 +5504,47 @@
     "quality"
    ],
    "decides": "per row and per family: a seam row becomes the default of the NVIDIA fast set (policy_row_default in checks/mode_policy.mojo) only for families where it is faster than A beyond noise with the board quality field not lower; a row that moves no family is retired with its EXPERIMENTS.md verdict (the seam keeps its exact arm either way: it is the identical kernel)"
+  },
+  {
+   "id": "ann-fit-nocopy-board",
+   "source": "lane fx-ann-fit-nocopy (2026-11-20, a046de1b58 and 84ec116e8e): the ANN fit bindings pass the caller's arrays (rows read in place and uploaded once through the resident coarse build; codes, graph and the other results downloaded where the caller wants them); the per-call search entries and the filtered top-k upload from the caller's arrays. Transport only: hashes must equal the prior's.",
+   "kind": "board",
+   "lane": [
+    "ivf-sq",
+    "ivf-rabitq",
+    "cagra",
+    "ivf-pq",
+    "ivf-filter",
+    "ivf-refine"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "decides": "fit and infer of every ANN row, candidate beside the prior in one pod job: the candidate must not be slower and its hashes must match the prior's; expected on ivf-sq fit: minor faults and system time down by about two thirds (the 352 MB list copy of X and the 352 MB codes list are gone; the caller's codes array is still first touched), ivf-rabitq and cagra fit lose the X copy; a slower row is fixed in the transport, the list copies are never restored"
+  },
+  {
+   "id": "ann-fit-nocopy-neighbour",
+   "source": "lane fx-ann-fit-nocopy (2026-11-20, a046de1b58 and 84ec116e8e): the ANN fit bindings pass the caller's arrays (rows read in place and uploaded once through the resident coarse build; codes, graph and the other results downloaded where the caller wants them); the per-call search entries and the filtered top-k upload from the caller's arrays. Transport only: hashes must equal the prior's.",
+   "kind": "board",
+   "lane": [
+    "ivf-sq",
+    "ivf-rabitq",
+    "cagra"
+   ],
+   "dataset": "istella",
+   "rows": 200000,
+   "decides": "the same verdict on a neighbouring, non-board shape (200,000 rows; the cause is general: every host array the size of X or of the codes made inside the call pays first-touch faults); the non-board dataset is SIFT-1M (1,000,000 x 128) when a pod holds it"
+  },
+  {
+   "id": "ann3-direct-out-ivf-sq",
+   "source": "lane fx-ann-fit-nocopy (2026-11-20, a046de1b58 and 84ec116e8e): the ANN fit bindings pass the caller's arrays (rows read in place and uploaded once through the resident coarse build; codes, graph and the other results downloaded where the caller wants them); the per-call search entries and the filtered top-k upload from the caller's arrays. Transport only: hashes must equal the prior's.",
+   "kind": "ab",
+   "lane": "ivf-sq",
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "ann3-direct-out"
+   ],
+   "decides": "which copy brings the n x dim codes into the caller's array: B (one raw copy into pageable memory) becomes the default and the switch goes if it is faster than A (pooled pinned stages) beyond noise on ivf-sq fit; otherwise the arm stays opt-in for the paused Apple fast programme (not deleted on this NVIDIA row: its programme is paused)"
   }
  ]
 }

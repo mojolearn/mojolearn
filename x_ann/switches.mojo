@@ -69,9 +69,12 @@ comptime ANN3_TSNE_RB64 = is_defined["MOJOLEARN_ANN3_TSNE_RB64"]()
 # Restore: git apply experiments/removed/MOJOLEARN_ANN3_TSNE_RB64.patch; record in docs/TOMBSTONES.md.
 # RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 
-#: The IVF-PQ and IVF-SQ builds download their code arrays (n x pq_dim and
-#: n x dim int32) straight into the caller's arrays, instead of a host
-#: buffer, then a list, then the caller's array. Plain copies: no bit moves.
+#: The IVF-PQ (non-resident) and IVF-SQ builds bring their code arrays
+#: (n x pq_dim and n x dim int32) into the caller's arrays with one raw
+#: device copy into the pageable array, in place of the pooled pinned
+#: stages (`download_i32_into`). Since lane fx-ann-fit-nocopy (2026-11-20)
+#: the codes go into the caller's arrays by default (no result list, no
+#: copy out); the switch only chooses the copy. Plain copies: no bit moves.
 comptime ANN3_DIRECT_OUT = is_defined["MOJOLEARN_ANN3_DIRECT_OUT"]()
 # TOMBSTONE: MOJOLEARN_ANN3_DIRECT_OUT (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 09d08d6e01.
 # Restore: git apply experiments/removed/MOJOLEARN_ANN3_DIRECT_OUT.patch; record in docs/TOMBSTONES.md.
