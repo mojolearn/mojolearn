@@ -960,7 +960,13 @@ def _gls_host_grid(
             bs.append(Float32(3.4028234663852886e38))
         fold_counts.append(len(bs))
         borders.append(bs^)
-        nan_treatment.append(nan_value_treatment(modes[f]))
+        # The treatment of the nan_mode the fit was given, as
+        # `gbdt/train.mojo`'s device grid records it (the host column and the
+        # device columns change together): a column with no NaN in the learn
+        # rows takes Min's AsFalse or Max's AsTrue too, with no NaN border, so
+        # a predict accepts a missing value there. `modes[f]` is `nan_mode` or
+        # Forbidden here (a refused column raised above).
+        nan_treatment.append(nan_value_treatment(nan_mode))
     return GbdtHostGrid(borders^, fold_counts^, nan_treatment^)
 
 
