@@ -17,21 +17,27 @@
 #
 # PARALLEL PLAN (AGENTS.md hard rules: 100 percent of rented CPU; parallel by default). The units are independent: every
 # parse group, the checks build, the check slices (dealt from the plan once the build passes) and the tool tests. They
-# run at once, admitted by MEMORY: a unit starts when the box-wide reservations (every concurrent check job on the box
-# shares one ledger, $CPU_CHECKS_HOME/ledger) plus its estimate fit in 85 percent of the allocation's memory; a unit
-# larger than that runs when nothing else is reserved. Each unit is itself multi-threaded on every core (the compiler at
+# run at once, admitted by MEMORY through tools/ops/box_mem_sched.sh: a unit starts when the box-wide reservations
+# (every concurrent check job on the box shares one ledger, $CPU_CHECKS_HOME/ledger) plus its estimate fit in 85 percent
+# of the allocation's memory; a unit that does not fit WAITS until memory frees (2026-11-20: six checks queued behind
+# cpc1-0001 each ended in a minute with every unit "no result"); a unit larger than the budget runs when nothing else is
+# reserved, and only one larger than the whole allocation is "cannot fit: needs N GiB of M". Each unit is itself
+# multi-threaded on every core (the compiler at
 # -j nproc, run_tool_tests.sh workers = cores), so memory, not cores, bounds the count. Estimates are MEASURED: each unit
-# runs under /usr/bin/time -v and its peak RSS goes to $CPU_CHECKS_HOME/peaks.tsv, which the next job on the box reads;
+# runs under /usr/bin/time -v and its peak RSS goes to $CPU_CHECKS_HOME/peaks.tsv; the next job takes the largest of the
+# last three of each class;
 # until a group has a measurement: host parse 8 GiB, device parse 12 GiB (the release recorded 10-12.5), checks build
 # 40 GiB (the GPU column's build peaked at 43 GB), a check 2 GiB (largest 1.64 GB), a tool test file 0.5 GiB x cores.
 # Order: the checks build first (it gates every check), then device groups, host groups, tool tests; the check slices
 # go to the front when the build passes. Busy cores of total are printed every minute and in SUMMARY.md.
 #
 # Results ($MOJOLEARN_RESULTS_DIR, persisted to R2 by tools/box_persist_run.sh): SUMMARY.md (line 3: checks: N passed: N
-# failed: N, then each part and the first error per failing group, as watch_checks.sh prints for a GitHub run),
+# failed: N not run: N; line 4: result: green | red: ...; then each part, the first error per failed group and the
+# reason per unit not run),
 # parse/<host|device>-parse-<key>/ (the parse step's log, result and memory files), native/ (results, logs, SUMMARY.md,
 # REPORT.txt), tools/ (run_tool_tests.sh's logs and SUMMARY.txt), logs/<unit>.log, time/<unit>.txt, busy_cores.txt.
-# Exit 0 when everything passed, 1 when anything failed, 2 on a setup failure.
+# Exit 0 when everything passed, 1 when anything failed, 3 when nothing failed but something was not run (or nothing was
+# checked), 2 on a setup failure.
 #
 # job-preflight: the sha is a full commit the box's source repo holds, the suite is known, the steps script is here
 set -u
@@ -95,12 +101,15 @@ case "$SUITE" in native) DO_NATIVE=1 ;; parse) DO_PARSE=1 ;; tools) DO_TOOLS=1 ;
 
 # ---- the units: name<TAB>class<TAB>estimate kB; the command is built by run_unit from the name ----
 GIB=1048576
-peak_of() {  # <class> <default kB>: the measured peak of that class on this box, else the default
-    local v; v=$(awk -F'\t' -v c="$1" '$1 == c {v = $2} END {print v}' "$BASE/peaks.tsv" 2> /dev/null)
+peak_of() {  # <class> <default kB>: the largest of the last 3 measured peaks of that class on this box, else the default
+    local v; v=$(awk -F'\t' -v c="$1" '$1 == c && $2 ~ /^[0-9]+$/ {a = b; b = d; d = $2} END {m = a; if (b > m) m = b; if (d > m) m = d; if (m > 0) print m}' "$BASE/peaks.tsv" 2> /dev/null)
     [[ "$v" =~ ^[0-9]+$ ]] && [ "$v" -gt 0 ] && echo "$v" || echo "$2"
 }
+peak_src() {  # <class>: where its estimate comes from
+    local n; n=$(awk -F'\t' -v c="$1" '$1 == c && $2 ~ /^[0-9]+$/ {n++} END {print n + 0}' "$BASE/peaks.tsv" 2> /dev/null)
+    [ "${n:-0}" -gt 0 ] && echo "measured on this box, largest of the last $(( n < 3 ? n : 3 )) of $n in peaks.tsv" || echo "default, not yet measured"
+}
 QUEUE=()      # pending unit lines, in start order
-front() { QUEUE=("$@" "${QUEUE[@]}"); }
 [ "$DO_NATIVE" = 1 ] && [ -s "$RES/plan/planned.txt" ] && QUEUE+=("build-cpu	build-cpu	$(peak_of build-cpu $(( 40 * GIB )))")
 if [ "$DO_PARSE" = 1 ]; then
     while IFS=$'\t' read -r key; do
@@ -150,76 +159,43 @@ run_unit() {
     UNIT_PID=$!
 }
 
-# ---- the box-wide memory ledger (shared by every check job on this box) ----
-ledger_sum() {
-    local s=0 f p kb
-    for f in "$BASE"/ledger/*; do
-        [ -f "$f" ] || continue
-        read -r p kb < "$f" 2> /dev/null || continue
-        if kill -0 "$p" 2> /dev/null; then s=$(( s + kb )); else rm -f "$f"; fi
-    done
-    echo $s
-}
-
-# ---- the scheduler ----
-declare -A PID
-SAMPLER=$(busy_sampler "$RES/busy_cores.txt" 60)
-last_report=$(date +%s)
-say "plan: ${#QUEUE[@]} units to start (more when the build passes), memory budget $(( BUDGET_KB / GIB )) GiB shared by every job on the box"
-while [ ${#QUEUE[@]} -gt 0 ] || [ ${#PID[@]} -gt 0 ]; do
-    # reap
-    for name in "${!PID[@]}"; do
-        if [ -f "$RES/rc/$name" ] || ! kill -0 "${PID[$name]}" 2> /dev/null; then
-            wait "${PID[$name]}" 2> /dev/null
-            rm -f "$BASE/ledger/$TAG-$name"
-            rc=$(cat "$RES/rc/$name" 2> /dev/null || echo none)
-            say "done $name rc=$rc"
-            unset "PID[$name]"
-            if [ "$name" = build-cpu ]; then
-                if [ "$rc" = 0 ]; then
-                    # the checks dealt into one slice per core (each slice runs its checks one by one, like a shard)
-                    n=$(grep -c . "$RES/plan/planned.txt")
-                    s=$(( n < CORES ? n : CORES ))
-                    est=$(peak_of check $(( 2 * GIB )))
-                    lines=()
-                    for i in $(seq 0 $(( s - 1 ))); do
-                        awk -v s="$s" -v i="$i" 'NF && (NR - 1) % s == i' "$RES/plan/planned.txt" | tr '\n' ' ' > "$RES/plan/shard-$i.tasks"
-                        lines+=("shard-$i	check	$est")
-                    done
-                    front "${lines[@]}"
-                    say "build passed: $n checks in $s slices queued first"
-                else
-                    say "build failed (rc $rc): every planned check reads MISSING"
-                fi
-            fi
-        fi
-    done
-    # start every queued unit that fits (backfill: a smaller unit may pass a larger one that does not fit yet)
-    rest=()
-    for line in "${QUEUE[@]}"; do
-        IFS=$'\t' read -r name class est <<< "$line"
-        started=0
-        exec 8> "$BASE/ledger.lock"; flock 8
-        used=$(ledger_sum)
-        if [ $(( used + est )) -le "$BUDGET_KB" ] || [ "$used" -eq 0 ]; then
-            run_unit "$name" || true
-            if [ -n "$UNIT_PID" ]; then
-                echo "$UNIT_PID $est" > "$BASE/ledger/$TAG-$name"
-                PID[$name]=$UNIT_PID; started=1
-                say "start $name (estimate $(( est / GIB )) GiB, reserved now $(( (used + est) / GIB )) of $(( BUDGET_KB / GIB )) GiB)"
-            fi
-        fi
-        flock -u 8; exec 8>&-
-        [ "$started" = 1 ] || rest+=("$line")
-    done
-    QUEUE=("${rest[@]}")
-    now=$(date +%s)
-    if [ $(( now - last_report )) -ge 60 ]; then
-        last_report=$now
-        say "BUSY $(tail -n 1 "$RES/busy_cores.txt" 2> /dev/null || echo '?') of $CORES cores; running ${#PID[@]} (${!PID[*]}); queued ${#QUEUE[@]}; reserved $(( $(ledger_sum) / GIB )) of $(( BUDGET_KB / GIB )) GiB"
+# ---- the scheduler: tools/ops/box_mem_sched.sh (one ledger shared by every check job on this box; a unit that does
+# not fit WAITS for memory, it never ends the job unrun) ----
+. "$TOOLS/tools/ops/box_mem_sched.sh"
+SCHED_HOME=$BASE; SCHED_TAG=$TAG; BUSY_FILE="$RES/busy_cores.txt"
+sched_on_done() {  # <name> <rc>: the check slices are queued first once the build passes
+    local name=$1 rc=$2 n s est i lines
+    [ "$name" = build-cpu ] || return 0
+    if [ "$rc" = 0 ]; then
+        # the checks dealt into one slice per core (each slice runs its checks one by one, like a shard)
+        n=$(grep -c . "$RES/plan/planned.txt")
+        s=$(( n < CORES ? n : CORES ))
+        est=$(peak_of check $(( 2 * GIB )))
+        lines=()
+        for i in $(seq 0 $(( s - 1 ))); do
+            awk -v s="$s" -v i="$i" 'NF && (NR - 1) % s == i' "$RES/plan/planned.txt" | tr '\n' ' ' > "$RES/plan/shard-$i.tasks"
+            lines+=("shard-$i	check	$est")
+        done
+        [ ${#lines[@]} -eq 0 ] || sched_front "${lines[@]}"
+        say "build passed: $n checks in $s slices queued first (estimate $(sched_gib "$est") GiB each)"
+    else
+        say "build failed (rc $rc): the planned checks are not run; the summary names the build's first error"
     fi
-    sleep 2
+}
+sched_pending_note() {
+    if [ -n "${SCHED_PID[build-cpu]:-}" ]; then echo "the check slices are queued when build-cpu passes"; fi
+}
+SAMPLER=$(busy_sampler "$BUSY_FILE" 60)
+# the plan: every unit with its estimate (measured on this box, else the default) against the shared budget
+sum=0
+for line in ${QUEUE[@]+"${QUEUE[@]}"}; do
+    IFS=$'\t' read -r name class est <<< "$line"; sum=$(( sum + est ))
+    say "plan unit $name: estimate $(sched_gib "$est") GiB ($(peak_src "$class"))"
 done
+say "PARALLEL PLAN: ${#QUEUE[@]} units now$([ "$DO_NATIVE" = 1 ] && echo " + up to $CORES check slices after the build"), estimates sum $(sched_gib "$sum") GiB;" \
+    "memory budget $(sched_gib "$BUDGET_KB") GiB of $(sched_gib "$TOTAL_KB") shared by every job on the box; $CORES cores." \
+    "Units start as memory frees (waiting, never skipped); busy cores of total every minute with the reason when below 80%"
+sched_loop
 kill "$SAMPLER" 2> /dev/null
 WALL=$(( $(date +%s) - START ))
 BUSY=$(busy_of "$RES/busy_cores.txt")
@@ -235,38 +211,76 @@ done > "$RES/peaks.tsv"
 ( flock 9; cat "$RES/peaks.tsv" >> "$BASE/peaks.tsv" ) 9> "$BASE/peaks.lock"
 
 # ---- verdicts, through the same steps the workflow runs ----
-TOTAL=0; PASSED=0; FAILED=0; PARTS=(); FIRST=()
+# Three outcomes, never folded: PASSED, FAILED (it ran and failed; its first error is listed) and NOT RUN (it never ran
+# or left no result: cannot fit, the build it needs failed, or the job was cut short; its reason is listed).
+TOTAL=0; PASSED=0; FAILED=0; NOTRUN=0; PARTS=(); FIRST=(); NOTRUN_WHY=()
+why_not_run() {  # <unit>: the reason a unit has no result
+    if [ -s "$RES/notrun/$1" ]; then cat "$RES/notrun/$1"
+    elif [ ! -f "$RES/rc/$1" ]; then echo "never started (the job ended or was cancelled first)"
+    else echo "ran (rc $(cat "$RES/rc/$1")) but left no result"; fi
+}
+first_error() {  # <log> [<log>...]: the first error line, else the last two lines of the first log that exists
+    local f l
+    for f in "$@"; do [ -s "$f" ] || continue; l=$(grep -m 1 -iE 'error' "$f" | cut -c1-220); [ -z "$l" ] || { echo "$l"; return; }; done
+    for f in "$@"; do [ -s "$f" ] || continue; tail -n 2 "$f" | tr '\n' ' ' | cut -c1-220; return; done
+    echo "no log"
+}
 if [ "$DO_NATIVE" = 1 ]; then
     cp "$RES/plan/planned.txt" "$RES/native/planned.txt"
     { echo "box: $(hostname), $CORES cores, $(( TOTAL_KB / GIB )) GiB; busy cores of $CORES: $BUSY"; } > "$RES/notes.txt"
     MERGED="$RES/native" SOURCE_SHA=$SHA SUMMARY_NOTES="$RES/notes.txt" bash "$STEPS" summary > "$RES/logs/native-summary.log" 2>&1
     mv -f SUMMARY.md REPORT.txt notes.txt "$RES/native/" 2> /dev/null
+    planned=$(grep -c . "$RES/plan/planned.txt" 2> /dev/null || echo 0)
+    brc=$(cat "$RES/rc/build-cpu" 2> /dev/null || echo none)
+    # the build is a unit of its own: passed, failed (first error) or not run
+    if [ "$planned" -gt 0 ]; then
+        TOTAL=$(( TOTAL + 1 ))
+        case "$brc" in
+            0) PASSED=$(( PASSED + 1 )) ;;
+            none) NOTRUN=$(( NOTRUN + 1 )); NOTRUN_WHY+=("- build-cpu: $(why_not_run build-cpu)") ;;
+            *) FAILED=$(( FAILED + 1 )); FIRST+=("- build-cpu (rc $brc): $(first_error "$RES/native/logs/build-cpu.log" "$RES/logs/build-cpu.log")") ;;
+        esac
+    fi
     line=$(sed -n 3p "$RES/native/SUMMARY.md" 2> /dev/null)
     read -r n p f m < <(echo "$line" | sed -E 's/checks: ([0-9]+) +passed: ([0-9]+) +failed: ([0-9]+) +missing: ([0-9]+).*/\1 \2 \3 \4/')
-    if [[ "${n:-}" =~ ^[0-9]+$ ]]; then
-        TOTAL=$(( TOTAL + n )); PASSED=$(( PASSED + p )); FAILED=$(( FAILED + f + m ))
-        PARTS+=("native checks: $line")
+    if [[ "${n:-}" =~ ^[0-9]+$ ]] && [[ "${m:-}" =~ ^[0-9]+$ ]]; then
+        # a planned check without a result was not run (the build failed or was not run, or its slice never started)
+        TOTAL=$(( TOTAL + n )); PASSED=$(( PASSED + p )); FAILED=$(( FAILED + f )); NOTRUN=$(( NOTRUN + m ))
+        PARTS+=("native checks: $n planned, $p passed, $f failed, $m not run")
+        if [ "$m" -gt 0 ]; then
+            if [ "$brc" != 0 ]; then NOTRUN_WHY+=("- $m native checks: build-cpu $([ "$brc" = none ] && echo 'was not run' || echo "failed (rc $brc)")")
+            else
+                for t in "$RES"/plan/shard-*.tasks; do
+                    [ -f "$t" ] || continue; u=$(basename "$t" .tasks)
+                    [ -f "$RES/rc/$u" ] || NOTRUN_WHY+=("- native $u ($(wc -w < "$t" | tr -d ' ') checks): $(why_not_run "$u")")
+                done
+                NOTRUN_WHY+=("- $m native checks have no result file in total (native/REPORT.txt lists them)")
+            fi
+        fi
     else
-        TOTAL=$(( TOTAL + 1 )); FAILED=$(( FAILED + 1 )); PARTS+=("native checks: no summary (see logs/native-summary.log)")
-    fi
-    if [ "$(cat "$RES/rc/build-cpu" 2> /dev/null)" != 0 ]; then
-        FIRST+=("- build-cpu: $(grep -m 1 -E 'error' "$RES/native/logs/build-cpu.log" 2> /dev/null | cut -c1-240)")
+        TOTAL=$(( TOTAL + planned )); NOTRUN=$(( NOTRUN + planned ))
+        PARTS+=("native checks: $planned planned, no summary (logs/native-summary.log): counted not run")
+        NOTRUN_WHY+=("- native checks: the summary step left no counts ($(first_error "$RES/logs/native-summary.log"))")
     fi
     while IFS= read -r g; do FIRST+=("- native $g"); done < <(grep '^## ' "$RES/native/REPORT.txt" 2> /dev/null | head -n 15 | cut -c4-240)
 fi
 if [ "$DO_PARSE" = 1 ]; then
     for kind in host device; do
-        n=0; p=0
+        n=0; p=0; f=0; r0=0
         while IFS= read -r key; do
             [ -n "$key" ] || continue
-            n=$(( n + 1 ))
-            r="$RES/parse/$kind-parse-$key/result-$key.txt"
+            n=$(( n + 1 )); u="$kind-parse-$key"
+            r="$RES/parse/$u/result-$key.txt"
             k=$(sed -n 's/.*kind=\([a-z]*\).*/\1/p' "$r" 2> /dev/null)
             if [ "$k" = pass ]; then p=$(( p + 1 ))
-            else FIRST+=("- $kind-parse $key (${k:-no result}): $(grep -m 1 'error:' "$RES/parse/$kind-parse-$key/$key.log" 2> /dev/null | cut -c1-220)"); fi
+            elif [ -n "$k" ] || [ -f "$RES/rc/$u" ]; then   # it ran: a non-pass result, or no result at all
+                f=$(( f + 1 )); FIRST+=("- $u (${k:-no result, rc $(cat "$RES/rc/$u" 2> /dev/null)}): $(first_error "$RES/parse/$u/$key.log" "$RES/logs/$u.log")")
+            else
+                r0=$(( r0 + 1 )); NOTRUN_WHY+=("- $u: $(why_not_run "$u")")
+            fi
         done < <(python3 -c 'import json,sys;[print(e["key"]) for e in json.load(open(sys.argv[1]))]' "$RES/plan/$kind.json")
-        TOTAL=$(( TOTAL + n )); PASSED=$(( PASSED + p )); FAILED=$(( FAILED + n - p ))
-        PARTS+=("$kind-parse: $n groups, $p passed, $(( n - p )) failed")
+        TOTAL=$(( TOTAL + n )); PASSED=$(( PASSED + p )); FAILED=$(( FAILED + f )); NOTRUN=$(( NOTRUN + r0 ))
+        PARTS+=("$kind-parse: $n groups, $p passed, $f failed, $r0 not run")
     done
     DEVICE_MATRIX=$(cat "$RES/plan/device.json") RETRY_MATRIX='[]' PARSE_DIR="$RES/parse" bash "$STEPS" verdict \
         > "$RES/parse/device-verdict.md" 2>&1
@@ -276,32 +290,45 @@ if [ "$DO_TOOLS" = 1 ]; then
     if [ -n "$tt" ]; then
         tp=$(echo "$tt" | sed -n 's/.*passed=\([0-9]*\).*/\1/p'); tf=$(echo "$tt" | sed -n 's/.* failed=\([0-9]*\).*/\1/p')
         te=$(echo "$tt" | sed -n 's/.*errors=\([0-9]*\).*/\1/p')
+        tp=${tp:-0}; tf=${tf:-0}; te=${te:-0}
         TOTAL=$(( TOTAL + tp + tf + te )); PASSED=$(( PASSED + tp )); FAILED=$(( FAILED + tf + te ))
         PARTS+=("tools: $tt")
         while IFS= read -r l; do FIRST+=("- tools $l"); done < <(grep -E '^  FAILED ' "$RES/logs/tools.log" | head -n 20 | sed 's/^  //' | cut -c1-240)
-    else
+    elif [ -f "$RES/rc/tools" ] && [ ! -s "$RES/notrun/tools" ]; then
         TOTAL=$(( TOTAL + 1 )); FAILED=$(( FAILED + 1 ))
-        PARTS+=("tools: no result (rc $(cat "$RES/rc/tools" 2> /dev/null || echo none); see logs/tools.log)")
-        FIRST+=("- tools: $(tail -n 2 "$RES/logs/tools.log" 2> /dev/null | tr '\n' ' ' | cut -c1-240)")
+        PARTS+=("tools: ran (rc $(cat "$RES/rc/tools")) with no TOOL-TESTS line: counted failed")
+        FIRST+=("- tools (rc $(cat "$RES/rc/tools")): $(first_error "$RES/logs/tools.log")")
+    else
+        TOTAL=$(( TOTAL + 1 )); NOTRUN=$(( NOTRUN + 1 ))
+        PARTS+=("tools: not run")
+        NOTRUN_WHY+=("- tools: $(why_not_run tools)")
     fi
 fi
 grep -h '^TOOLS: ' "$RES/logs/tools.log" 2> /dev/null | head -n 1 | sed 's/^/- /' > "$RES/tool-notes.txt"
+if [ "$FAILED" -eq 0 ] && [ "$NOTRUN" -eq 0 ] && [ "$TOTAL" -gt 0 ]; then RESULT="green"; EXIT=0
+elif [ "$FAILED" -gt 0 ]; then RESULT="red: $FAILED failed, $NOTRUN not run"; EXIT=1
+elif [ "$TOTAL" -eq 0 ]; then RESULT="red: nothing was checked"; EXIT=3
+else RESULT="red: $NOTRUN not run"; EXIT=3; fi
 {
     echo "# CPU box checks ${SHA:0:10} suite $SUITE"
     echo
-    echo "checks: $TOTAL  passed: $PASSED  failed: $FAILED"
+    echo "checks: $TOTAL  passed: $PASSED  failed: $FAILED  not run: $NOTRUN"
+    echo "result: $RESULT"
     echo
     for l in "${PARTS[@]}"; do echo "- $l"; done
     cat "$RES/tool-notes.txt"
     echo "- busy cores of $CORES: $BUSY (sampled every 60 s); wall ${WALL}s"
-    echo "- parallel plan: units admitted by memory (budget $(( BUDGET_KB / GIB )) GiB of $(( TOTAL_KB / GIB )), shared by every job on the box), estimates from measured peaks ($BASE/peaks.tsv; this job's in peaks.tsv)"
+    echo "- parallel plan: units admitted by memory (budget $(( BUDGET_KB / GIB )) GiB of $(( TOTAL_KB / GIB )), one ledger shared by every job on the box; a unit waits for memory, never skipped), estimates from measured peaks ($BASE/peaks.tsv; this job's in peaks.tsv)"
     echo "- source $SHA; tools tree $(git -C "$TOOLS" rev-parse --short=10 HEAD 2> /dev/null); box $(hostname)"
     echo
-    echo "## first error per failing group"
+    echo "## first error per failed group"
     if [ ${#FIRST[@]} -eq 0 ]; then echo "none"; else for l in "${FIRST[@]}"; do echo "$l"; done; fi
+    echo
+    echo "## not run"
+    if [ ${#NOTRUN_WHY[@]} -eq 0 ]; then echo "none"; else for l in "${NOTRUN_WHY[@]}"; do echo "$l"; done; fi
 } > "$RES/SUMMARY.md"
 cat "$RES/SUMMARY.md"
 # the worktree goes (its results are in $RES); the shared repo and the measured peaks stay
 cd / || true
 ( flock 9; git -C "$SRC" worktree remove --force "$WT" ) 9> "$BASE/src.lock" > /dev/null 2>&1 || true
-[ "$FAILED" -eq 0 ]
+exit "$EXIT"
