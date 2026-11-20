@@ -269,7 +269,10 @@ def refuse_fast(ml, est=None):
                          "bits; the check runs in identical mode only")
     mode = None
     if est is not None:
-        mode = getattr(est, "numeric_mode", None)
+        try:
+            mode = getattr(est, "numeric_mode", None)
+        except Exception:
+            mode = None     # an estimator that does not name a mode runs in the process's
         if not isinstance(mode, str):
             mode = None
     if mode is not None and mode != "identical":

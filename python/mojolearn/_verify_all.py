@@ -3708,6 +3708,8 @@ def format_human(report):
     if cross.get('ran'):
         lines.append(f"GPU/CPU inference: {cross['agree']} agreeing parts, {cross['differ']} differences; "
                      f"complete={cross.get('complete', False)}.")
+        # what answered on each side, by the shared check module's own lines
+        lines.extend(cb.sides_lines(cross.get('sides') or {}))
     lines.append("Scope: selected fixtures and properties only; use verify --coverage for omissions.")
     lines.append(f"RESULT: {report['verdict']} ({report['detail']}). {report['elapsed_s']:.1f}s. exit {report['exit']}")
     return "\n".join(lines)
