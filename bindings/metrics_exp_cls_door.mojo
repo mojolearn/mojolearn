@@ -13,6 +13,8 @@
 # builds the one program (the sums and the four set-wise epilogues) its
 # Python memo made, and the support total's program. Same programs, same
 # kernels: the bits do not move.
+from bindings.metrics_keys_unpack import metrics_keys
+from bindings.py_balanced import py_item
 from bindings.operation_names_mexp import (
     MEXP_OPN_FAMILY_MEXP_CLS_BALANCED_ACCURACY,
     MEXP_OPN_FAMILY_MEXP_CLS_FBETA,
@@ -605,7 +607,8 @@ def _report(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var total = PythonObject(arena.f64(total_out)) if s.weighted else PythonObject(arena.i64(total_out))
     if micro_is_accuracy:
         _prf_warn(arena.i32(s.eos[1]), all_for, zero_division, context)
-        py_setitem(report, "accuracy", PythonObject(arena.f64(s.eos[1] + 2)))
+        var nk = metrics_keys()
+        py_setitem(report, nk[].k_accuracy, PythonObject(arena.f64(s.eos[1] + 2)))
     var avg_names = Python.list()
     var avg_slots = List[Int]()
     if not micro_is_accuracy:
@@ -637,9 +640,10 @@ def _report(args: PythonObject, context: PythonObject) raises -> PythonObject:
         out = out + family_call_kw(mx_attr(row_fmt, "format"), _fmt_kw(width, digits), row[0], row[1], row[2], row[3], row[4])
     out = out + PythonObject("\n")
     if micro_is_accuracy:
+        var nk = metrics_keys()
         var acc_fmt = PythonObject("{:>{width}s}  {:>9.{digits}} {:>9.{digits}} {:>9.{digits}f} {:>9}\n")
         out = out + family_call_kw(mx_attr(acc_fmt, "format"), _fmt_kw(width, digits), PythonObject("accuracy"), PythonObject(""),
-                                   PythonObject(""), report["accuracy"], total)
+                                   PythonObject(""), py_item(report, nk[].k_accuracy), total)
     for i in range(mx_len(avg_rows)):  # small-loop(3: the report's average rows): at most three
         var row = avg_rows[i]
         out = out + family_call_kw(mx_attr(row_fmt, "format"), _fmt_kw(width, digits), row[0], row[1], row[2], row[3], row[4])
@@ -648,9 +652,10 @@ def _report(args: PythonObject, context: PythonObject) raises -> PythonObject:
 
 def _fmt_kw(width: PythonObject, digits: PythonObject) raises -> PythonObject:
     var keywords = Python.dict()
-    py_setitem(keywords, "width", width)
+    var nk = metrics_keys()
+    py_setitem(keywords, nk[].k_width, width)
     if digits is not None:
-        py_setitem(keywords, "digits", digits)
+        py_setitem(keywords, nk[].k_digits, digits)
     return keywords
 
 

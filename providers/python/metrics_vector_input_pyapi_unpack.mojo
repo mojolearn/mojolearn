@@ -8,10 +8,12 @@ from bindings.tensor_view import base_format, TensorView
 from bindings.family_common_unpack import family_repr, FAMILY_F32P, FAMILY_I64P
 from core.host_finite_scan import host_all_finite_f32
 from metrics.metrics_vector_input_run import metric_i32_narrow
+from bindings.metrics_keys_unpack import metrics_keys
 
 
 def metric_vector_exact(value: PythonObject, context: PythonObject) raises -> Bool:
-    return classical_is_array(value, context) or py_type(value) is py_get(context, "ndarray")
+    var nk = metrics_keys()
+    return classical_is_array(value, context) or py_type(value) is py_get(context, nk[].k_ndarray)
 
 
 def _metric_vector_shape(input: TensorView, name: String) raises -> Int:

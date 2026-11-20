@@ -11,6 +11,8 @@ from bindings.optimizer_public_words_unpack import stash_python_error
 from bindings.native_scalar_decode_unpack import native_scalar_buffer
 from bindings.native_caller_frame_pack import native_frame_globals
 from bindings.admitted_input_unpack import admitted_snapshot
+from bindings.metrics_keys_unpack import metrics_keys
+from bindings.py_balanced import py_item
 
 
 def metric_is_bool(value: PythonObject, context: PythonObject) raises -> Bool:
@@ -62,9 +64,10 @@ def metric_arguments(args: PythonObject, first: Int, context: PythonObject) rais
     # and original aliases so existing native dtype inference stays intact.
     var out = Python.list()
     var snapshots = Python.dict()
+    var nk = metrics_keys()
     for index in range(len(args)):  # driver-loop: fixed public metric arguments
         var value = args[index]
-        if index >= first and _one_of(py_type(value), context["scalar_types"]):
+        if index >= first and _one_of(py_type(value), py_item(context, nk[].k_scalar_types)):
             var scalar = native_scalar_buffer(value)
             if metric_is_bool(value, context):
                 value = PythonObject(scalar.truth())
@@ -99,7 +102,8 @@ def metric_warning_location(stacklevel: Int) raises -> PythonObject:
     var code = PythonObject(from_owned=pointer)
     var line = cpy.lib.get_function[Int32]("PyFrame_GetLineNumber")(frame._obj_ptr)
     var fields = native_frame_globals(frame)
-    var module = py_get(fields, "__name__", "<unknown>")
+    var nk = metrics_keys()
+    var module = py_get(fields, nk[].k___name__, "<unknown>")
     if py_type(module) is not py_type(PythonObject("")):
         raise Error("TypeError: warning module names must be native strings")
     return Python.tuple(code.co_filename, Int(line), module)
@@ -122,10 +126,11 @@ def metric_warn(var message: String, category: PythonObject, context: PythonObje
 
 
 def metric_undefined(message: String, context: PythonObject) raises:
-    var category = context["family_metrics_undefined"]
-    var module = py_get(context["modules"], "sklearn.exceptions")
+    var nk = metrics_keys()
+    var category = py_item(context, nk[].k_family_metrics_undefined)
+    var module = py_get(py_item(context, nk[].k_modules), "sklearn.exceptions")
     if module is not None:
-        if py_type(module) is not context["native_module_type"]:
+        if py_type(module) is not py_item(context, nk[].k_native_module_type):
             raise Error("TypeError: metric warning categories require native module metadata")
-        category = py_get(native_numpy_module_fields(module), "UndefinedMetricWarning", category)
+        category = py_get(native_numpy_module_fields(module), nk[].k_UndefinedMetricWarning, category)
     metric_warn(message, category, context)

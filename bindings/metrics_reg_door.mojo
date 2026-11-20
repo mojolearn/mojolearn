@@ -20,6 +20,7 @@
 # the custom weights read once), the typed program (`_Reg` in
 # bindings/metrics_reg_run.mojo, stage records through the typed op and term
 # tables), the run with y / p / w as the only pins, and PACK.
+from bindings.metrics_keys_unpack import metrics_keys
 from std.memory import unsafe_memcpy, bitcast
 from bindings.admitted_family_door import admit_family, admit_family_f64
 from bindings.native_loaded_module_door import native_loaded_module
@@ -442,13 +443,14 @@ def _regression_report(args: PythonObject, context: PythonObject) raises -> Pyth
     var r2 = r.assemble(numerator, denominator, Bool(py=args[4]), True)
     var arena = metric_plan_run(r.plan, pins, args[5], context)
     var result = Python.dict()
-    py_setitem(result, "mean_squared_error", _reg_result(r, mse, arena, context))
-    py_setitem(result, "mean_absolute_error", _reg_result(r, mae, arena, context))
+    var nk = metrics_keys()
+    py_setitem(result, nk[].k_mean_squared_error, _reg_result(r, mse, arena, context))
+    py_setitem(result, nk[].k_mean_absolute_error, _reg_result(r, mae, arena, context))
     if r.n < 2:
         _undefined("R^2 score is not well-defined with less than two samples.", context)
-        py_setitem(result, "r2_score", py_call(b.float, PythonObject("nan")))
+        py_setitem(result, nk[].k_r2_score, py_call(b.float, PythonObject("nan")))
     else:
-        py_setitem(result, "r2_score", _reg_result(r, r2, arena, context))
+        py_setitem(result, nk[].k_r2_score, _reg_result(r, r2, arena, context))
     return result
 
 
