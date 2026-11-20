@@ -40,7 +40,10 @@ from bindings.user_objects_native_door import _Env, _f32_exact, _indicator, _new
 from bindings.py_cpython_table import cpython_table
 from bindings.p3_labels_metrics_native_door import p3_item, p3_type_word, p3_dict_codes, p3_decode_list
 from core.label_words_impl import label_codes_i32_to_f64
-from bindings.prep_keys_unpack import prep_keys
+from bindings.prep_keys_unpack import (
+    prep_keys,
+    PREP_OPN_FIT, PREP_OPN_FIT_TRANSFORM, PREP_OPN_INVERSE_TRANSFORM, PREP_OPN_TRANSFORM,
+)
 from bindings.py_balanced import py_item
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -1692,37 +1695,37 @@ def _mlb_inverse(model: PythonObject, yt: PythonObject, context: PythonObject) r
 
 
 # ---------------------------------------------------------------- the dispatch
-def prep_labels_call(model: PythonObject, kind: String, operation: String, args: PythonObject,
+def prep_labels_call(model: PythonObject, kind: String, op: Int, operation: String, args: PythonObject,
                      context: PythonObject) raises -> PythonObject:
     """LabelEncoder / LabelBinarizer / MultiLabelBinarizer fit(y),
     fit_transform(y), transform(y), inverse_transform(y) (LabelBinarizer:
     inverse_transform(Y, threshold))."""
     if kind == "label_encoder":
-        if operation == "fit":
+        if op == PREP_OPN_FIT:
             return _le_fit(model, args[0], context)
-        if operation == "fit_transform":
+        if op == PREP_OPN_FIT_TRANSFORM:
             return _le_fit_transform(model, args[0], context)
-        if operation == "transform":
+        if op == PREP_OPN_TRANSFORM:
             return _le_transform(model, args[0], context)
-        if operation == "inverse_transform":
+        if op == PREP_OPN_INVERSE_TRANSFORM:
             return _le_inverse(model, args[0], context)
     elif kind == "label_binarizer":
-        if operation == "fit":
+        if op == PREP_OPN_FIT:
             return _lb_fit(model, args[0], context)
-        if operation == "fit_transform":
+        if op == PREP_OPN_FIT_TRANSFORM:
             _ = _lb_fit(model, args[0], context)
             return _lb_transform(model, args[0], context)
-        if operation == "transform":
+        if op == PREP_OPN_TRANSFORM:
             return _lb_transform(model, args[0], context)
-        if operation == "inverse_transform":
+        if op == PREP_OPN_INVERSE_TRANSFORM:
             return _lb_inverse(model, args[0], args[1], context)
     elif kind == "multilabel_binarizer":
-        if operation == "fit":
+        if op == PREP_OPN_FIT:
             return _mlb_fit(model, args[0], context)
-        if operation == "fit_transform":
+        if op == PREP_OPN_FIT_TRANSFORM:
             return _mlb_fit_transform(model, args[0], context)
-        if operation == "transform":
+        if op == PREP_OPN_TRANSFORM:
             return _mlb_transform(model, args[0], context)
-        if operation == "inverse_transform":
+        if op == PREP_OPN_INVERSE_TRANSFORM:
             return _mlb_inverse(model, args[0], context)
     raise Error("TypeError: the native label owner does not serve " + operation)

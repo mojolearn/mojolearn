@@ -33,7 +33,10 @@ from bindings.prep_encode_prog_run import enc_ii_rows
 from bindings.prep_encode_native_door import (
     EncProg, _cs, _mark_missing, _imputer_fit, _imputer_transform, _precheck, _default_mode, _word, _iword,
     _take1, _take2, _seed64, _seed_words, _truth, _float, _is_str, _check_width, _int_list, _index_list)
-from bindings.prep_keys_unpack import prep_keys
+from bindings.prep_keys_unpack import (
+    prep_keys,
+    PREP_OPN_FIT, PREP_OPN_FIT_TRANSFORM, PREP_OPN_TRANSFORM,
+)
 from bindings.py_balanced import py_item
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -875,15 +878,15 @@ def _transform(model: PythonObject, x: PythonObject, context: PythonObject) rais
 
 
 # ---------------------------------------------------------------- the door
-def prep_iterimp_call(model: PythonObject, operation: String, args: PythonObject,
+def prep_iterimp_call(model: PythonObject, op: Int, operation: String, args: PythonObject,
                       context: PythonObject) raises -> PythonObject:
     """IterativeImputer.fit(X, y=None) (returns the model), fit_transform(X,
     y=None) and transform(X)."""
-    if operation == "fit":
+    if op == PREP_OPN_FIT:
         _ = _fit_transform(model, args[0], context)
         return model
-    if operation == "fit_transform":
+    if op == PREP_OPN_FIT_TRANSFORM:
         return _fit_transform(model, args[0], context)
-    if operation == "transform":
+    if op == PREP_OPN_TRANSFORM:
         return _transform(model, args[0], context)
     raise Error("TypeError: the native IterativeImputer owner does not serve " + operation)

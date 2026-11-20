@@ -14,7 +14,10 @@ from bindings.optimizer_public_words_unpack import stash_python_error
 from bindings.prep_native_estimator_door import prep_estimator_admit
 from bindings.prep_select_native_door import rfe_support_cached
 from bindings.x_prep_native_inputs_door import _dense_values, _target
-from bindings.prep_keys_unpack import prep_keys
+from bindings.prep_keys_unpack import (
+    prep_keys,
+    PREP_OPN_FIT, PREP_OPN_FIT_TRANSFORM, PREP_OPN_GET_SUPPORT,
+)
 from bindings.py_balanced import py_item
 
 
@@ -83,19 +86,19 @@ def composition_require_fitted(model: PythonObject, fields: PythonObject, operat
     raise failure^
 
 
-def composition_before(model: PythonObject, kind: String, operation: String, args: PythonObject,
+def composition_before(model: PythonObject, kind: String, op: Int, operation: String, args: PythonObject,
                        context: PythonObject) raises -> PythonObject:
     var nk = prep_keys()
     var fields = composition_fields(model, context)
-    var fitting = operation == "fit" or operation == "fit_transform"
+    var fitting = op == PREP_OPN_FIT or op == PREP_OPN_FIT_TRANSFORM
     if not fitting:
         composition_require_fitted(model, fields, operation, context)
         # A predict reads fit's stored support words, not `_mask`
         # (prep_select_native rfe_support_cached); the mask is admitted only
         # when it is read: get_support, or a mask put there after fit.
-        if kind == "rfe" and (operation == "get_support" or not rfe_support_cached(fields)):
+        if kind == "rfe" and (op == PREP_OPN_GET_SUPPORT or not rfe_support_cached(fields)):
             composition_value(py_item(fields, nk[].k__mask), context)
-    if operation == "get_support":
+    if op == PREP_OPN_GET_SUPPORT:
         composition_value(args[0], context)
         return args
     # Admit each argument before conversion. A dictionary of fit keywords is

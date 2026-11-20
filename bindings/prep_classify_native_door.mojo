@@ -52,7 +52,14 @@ from bindings.prep_classify_common_door import (
     nb_onepass, nb_counts, encode_y, partial_codes, stage_partial_codes, partial_refuse,
     IDN_NB_CSR, XB,
 )
-from bindings.prep_keys_unpack import prep_keys
+from bindings.prep_keys_unpack import (
+    prep_keys,
+    PREP_OPN_CV_SET_PARAMS, PREP_OPN_DECISION_FUNCTION, PREP_OPN_FIT, PREP_OPN_FIT_TRANSFORM, PREP_OPN_GET_PARAMS,
+    PREP_OPN_INITIALIZE, PREP_OPN_IS_FITTED, PREP_OPN_NB_CSR_READY, PREP_OPN_PARTIAL_FIT, PREP_OPN_PREDICT,
+    PREP_OPN_PREDICT_JOINT_LOG_PROBA, PREP_OPN_PREDICT_LOG_PROBA, PREP_OPN_PREDICT_PROBA, PREP_OPN_SCORE,
+    PREP_OPN_SET_PARAMS, PREP_OPN_TRANSFORM,
+)
+from bindings.py_keys import py_op_code
 from bindings.py_balanced import py_item
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -1511,7 +1518,7 @@ def _kind_of(model: PythonObject, context: PythonObject) raises -> String:
     return cls_kind(model, context)
 
 
-def _dispatch(model: PythonObject, operation: String, var args: PythonObject, var context: PythonObject,
+def _dispatch(model: PythonObject, op: Int, operation: String, var args: PythonObject, var context: PythonObject,
               known: String = "", given: Optional[PythonObject] = None) raises -> PythonObject:
     var nk = prep_keys()
     # `known`: the kind the caller already resolved for this model (the
@@ -1522,22 +1529,22 @@ def _dispatch(model: PythonObject, operation: String, var args: PythonObject, va
     var fields: PythonObject
     if kind == "lda":
         context = lda_native_context(context)
-        if operation == "initialize":
+        if op == PREP_OPN_INITIALIZE:
             return lda_native_initialize(model, args, context)
         # One admission pass per fitted state (a per-model record), and the
         # plain classes_ list it read is reused below instead of a second copy.
-        var admitted = lda_native_fields_plain(model, context, operation == "is_fitted" or operation == "get_params" or operation == "set_params")
+        var admitted = lda_native_fields_plain(model, context, op == PREP_OPN_IS_FITTED or op == PREP_OPN_GET_PARAMS or op == PREP_OPN_SET_PARAMS)
         fields = admitted[0]
-        if operation == "is_fitted":
+        if op == PREP_OPN_IS_FITTED:
             return classical_is_fitted(model)
-        if operation == "get_params":
+        if op == PREP_OPN_GET_PARAMS:
             return lda_native_get_params(fields, context)
-        if operation == "set_params":
+        if op == PREP_OPN_SET_PARAMS:
             return lda_native_set_params(model, fields, args[0], context)
-        if operation == "fit" or operation == "fit_transform" or operation == "score":
+        if op == PREP_OPN_FIT or op == PREP_OPN_FIT_TRANSFORM or op == PREP_OPN_SCORE:
             args = Python.tuple(args[0], prep_plain_classes(args[1], context))
-            lda_native_labels(args[1], context, operation != "score")
-        if operation != "fit" and operation != "fit_transform":
+            lda_native_labels(args[1], context, op != PREP_OPN_SCORE)
+        if op != PREP_OPN_FIT and op != PREP_OPN_FIT_TRANSFORM:
             lda_require_fitted(model, operation, context)
             var plain = admitted[1]
             fields = py_call(native_loaded_module("builtins").dict, fields)
@@ -1547,34 +1554,34 @@ def _dispatch(model: PythonObject, operation: String, var args: PythonObject, va
     elif kind == "gnb" and py_get(context, nk[].k_cv_fixed_owner) is not None:
         context = fixed_owner_context(context)
         fields = fixed_owner_fields(model, context)
-        if operation == "cv_set_params":
+        if op == PREP_OPN_CV_SET_PARAMS:
             return fixed_owner_set_params(model, args[0], context)
         for i in range(len(args)):  # driver-loop: fixed public arguments, including native resident-fold handles
             if i == 0 and py_type(args[i]) is py_item(context, nk[].k_maxabs_rows_class):
                 _ = _rows_fields(args[i], context)
             else:
                 classical_admit_value(args[i], context)
-        if operation == "fit" or operation == "score":
-            lda_native_labels(args[1], context, operation == "fit", "GaussianNB")
+        if op == PREP_OPN_FIT or op == PREP_OPN_SCORE:
+            lda_native_labels(args[1], context, op == PREP_OPN_FIT, "GaussianNB")
     elif given:
         # A read-only public operation's private fields view (classes_ as the
         # plain list), never written back into the model (p3-prep).
         fields = given.value()
     else:
         fields = py_fields(model)
-    if operation == "predict":
+    if op == PREP_OPN_PREDICT:
         return _predict(model, fields, kind, args[0], context)
-    if operation == "predict_proba":
+    if op == PREP_OPN_PREDICT_PROBA:
         return _predict_proba(model, fields, kind, args[0], context)
-    if operation == "predict_log_proba":
+    if op == PREP_OPN_PREDICT_LOG_PROBA:
         return _predict_log_proba(model, fields, kind, args[0], context)
-    if operation == "predict_joint_log_proba":
+    if op == PREP_OPN_PREDICT_JOINT_LOG_PROBA:
         return _joint_log_proba(model, fields, kind, args[0], context)
-    if operation == "score":
+    if op == PREP_OPN_SCORE:
         return _score(model, fields, kind, args[0], args[1], context)
-    if operation == "decision_function" and (kind == "lda" or kind == "qda"):
+    if op == PREP_OPN_DECISION_FUNCTION and (kind == "lda" or kind == "qda"):
         return _decision_function(model, fields, kind, args[0], context)
-    if operation == "fit":
+    if op == PREP_OPN_FIT:
         if kind == "gnb":
             return _gnb_fit(model, fields, args, context)
         if kind == "mnb" or kind == "bnb" or kind == "cnb":
@@ -1585,17 +1592,17 @@ def _dispatch(model: PythonObject, operation: String, var args: PythonObject, va
             _ = _lda_fit(model, fields, args[0], args[1], context)
             return model
         return _qda_fit(model, fields, args[0], args[1], context)
-    if operation == "partial_fit":
+    if op == PREP_OPN_PARTIAL_FIT:
         if kind == "gnb":
             return _gnb_partial_fit(model, fields, args, context)
         if kind == "mnb" or kind == "bnb" or kind == "cnb":
             return _dnb_partial_fit(model, fields, kind, args, context)
         if kind == "cat":
             return _cat_partial_fit(model, fields, args, context)
-    if kind == "lda" and operation == "transform":
+    if kind == "lda" and op == PREP_OPN_TRANSFORM:
         check_fitted(model, fields)
         return _lda_transform(model, fields, cls_x2d(args[0], context), context)
-    if kind == "lda" and operation == "fit_transform":
+    if kind == "lda" and op == PREP_OPN_FIT_TRANSFORM:
         # The X converted for the fit is the transform's input.
         var arr = _lda_fit(model, fields, args[0], args[1], context)
         return _lda_transform(model, fields, arr, context)
@@ -1616,7 +1623,7 @@ def _public_kind(model: PythonObject, context: PythonObject) raises -> String:
     return ""
 
 
-def _classifier_public(model: PythonObject, kind: String, operation: String, args: PythonObject,
+def _classifier_public(model: PythonObject, kind: String, op: Int, operation: String, args: PythonObject,
                        context: PythonObject) raises -> PythonObject:
     """GaussianNB, MultinomialNB, BernoulliNB, ComplementNB, CategoricalNB and
     QDA: the former `_mode` wrappers (NotFittedError, X refusals, width and
@@ -1637,23 +1644,23 @@ def _classifier_public(model: PythonObject, kind: String, operation: String, arg
     var plain = prep_plain_classes(public_labels, context)
     var fitting = lifecycle_fitting(operation)
     var swapped = plain is not public_labels and not (
-        operation == "predict" or operation == "predict_proba" or operation == "predict_log_proba"
-        or operation == "predict_joint_log_proba" or operation == "score" or operation == "decision_function")
+        op == PREP_OPN_PREDICT or op == PREP_OPN_PREDICT_PROBA or op == PREP_OPN_PREDICT_LOG_PROBA
+        or op == PREP_OPN_PREDICT_JOINT_LOG_PROBA or op == PREP_OPN_SCORE or op == PREP_OPN_DECISION_FUNCTION)
     var result = PythonObject(None)
     try:
         if fitting and len(args) > 1 and depth == 0:
             lda_native_labels(args[1], lda_native_context(context), True, classical_estimator_name(model))
         if swapped:
             py_setitem(fields, nk[].k_classes_, plain)
-        var reading = (operation == "predict" or operation == "predict_proba" or operation == "predict_log_proba"
-                       or operation == "predict_joint_log_proba" or operation == "score"
-                       or operation == "decision_function")
+        var reading = (op == PREP_OPN_PREDICT or op == PREP_OPN_PREDICT_PROBA or op == PREP_OPN_PREDICT_LOG_PROBA
+                       or op == PREP_OPN_PREDICT_JOINT_LOG_PROBA or op == PREP_OPN_SCORE
+                       or op == PREP_OPN_DECISION_FUNCTION)
         if reading and plain is not public_labels:
             var view = py_call(native_loaded_module("builtins").dict, fields)
             py_setitem(view, nk[].k_classes_, plain)
-            result = _dispatch(model, operation, args, context, kind, view)
+            result = _dispatch(model, op, operation, args, context, kind, view)
         else:
-            result = _dispatch(model, operation, args, context, kind)
+            result = _dispatch(model, op, operation, args, context, kind)
     finally:
         lifecycle_end(model, operation, depth)
         if swapped:
@@ -1668,19 +1675,23 @@ def prep_classify_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyO
     try:
         var call = PythonObject(from_borrowed=args_ptr)
         var model = call[0]
+        var nk = prep_keys()
+        # The code of the operation (one lookup with the caller's str); the
+        # name String stays for the lifecycle owner and the refusal texts.
+        var op = py_op_code(nk[].ops, call[1])
         var operation = String(call[1])
         var args = call[2]
         var context = call[3]
-        if operation == "nb_csr_ready":
+        if op == PREP_OPN_NB_CSR_READY:
             # a class-level probe: `model` is the class, args[0] its `_csr_ok`
             return PythonObject(_nb_csr_ready_op(Bool(py=args[0]), context)).steal_data()
         classical_connect_numpy(context)
         var public_kind = _public_kind(model, context)
         if public_kind != "":
-            return _classifier_public(model, public_kind, operation, args, context).steal_data()
-        var result = _dispatch(model, operation, args, context)
-        if py_type(model) is py_get(context, "lda_native_class"):
-            if operation == "fit" or operation == "fit_transform":
+            return _classifier_public(model, public_kind, op, operation, args, context).steal_data()
+        var result = _dispatch(model, op, operation, args, context)
+        if py_type(model) is py_get(context, nk[].k_lda_native_class):
+            if op == PREP_OPN_FIT or op == PREP_OPN_FIT_TRANSFORM:
                 classifier_after_fit(py_fields(model), args[0], context)
             result = _public_result(result, context)
         return result.steal_data()

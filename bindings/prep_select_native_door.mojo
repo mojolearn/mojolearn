@@ -45,7 +45,11 @@ from bindings.prep_classify_native_door import resident_enter_min, _resident_exi
 from bindings.py_optional import py_or_none, py_present
 from bindings.prep_native_estimator_door import (
     prep_estimator_admit, prep_estimator_has, prep_estimator_clone, prep_estimator_call, prep_estimator_attribute)
-from bindings.prep_keys_unpack import prep_keys
+from bindings.prep_keys_unpack import (
+    prep_keys,
+    PREP_OPN_DECISION_FUNCTION, PREP_OPN_FIT, PREP_OPN_FIT_TRANSFORM, PREP_OPN_GET_SUPPORT,
+    PREP_OPN_MUTUAL_INFO_CLASSIF, PREP_OPN_PREDICT, PREP_OPN_PREDICT_PROBA, PREP_OPN_SCORE, PREP_OPN_TRANSFORM,
+)
 from bindings.py_balanced import py_item
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -408,10 +412,10 @@ def rfe_support_cached(fields: PythonObject) raises -> Bool:
     return mask is not None and mask is py_get(fields, nk[].k__support_mask_) and k is not None and Int(py=k) > 0
 
 
-def prep_rfe_call(model: PythonObject, operation: String, args: PythonObject,
+def prep_rfe_call(model: PythonObject, op: Int, operation: String, args: PythonObject,
                   context: PythonObject) raises -> PythonObject:
     var nk = prep_keys()
-    if operation == "get_support":
+    if op == PREP_OPN_GET_SUPPORT:
         var fields = py_fields(model)
         var mask = py_item(fields, nk[].k__mask)
         var indices = Bool(py=args[0])
@@ -424,15 +428,15 @@ def prep_rfe_call(model: PythonObject, operation: String, args: PythonObject,
         for i in range(len(keep)):  # driver-loop: completed feature support metadata
             _ = py_call(result.append, PythonObject(keep[i]))
         return result
-    if operation == "transform":
+    if op == PREP_OPN_TRANSFORM:
         return _rfe_transform(model, args[0], context)
-    if operation == "fit":
+    if op == PREP_OPN_FIT:
         _rfe_fit(model, args, context)
         return model
-    if operation == "fit_transform":
+    if op == PREP_OPN_FIT_TRANSFORM:
         _rfe_fit(model, args, context)
         return _rfe_transform(model, args[0], context)
-    if operation == "predict" or operation == "predict_proba" or operation == "decision_function" or operation == "score":
+    if op == PREP_OPN_PREDICT or op == PREP_OPN_PREDICT_PROBA or op == PREP_OPN_DECISION_FUNCTION or op == PREP_OPN_SCORE:
         # `self.estimator_.<op>(self.transform(X)[, y])`: the method is looked
         # up first, in the fitted estimator's native plan
         var fitted = py_fields(model)
@@ -444,7 +448,7 @@ def prep_rfe_call(model: PythonObject, operation: String, args: PythonObject,
         if not prep_estimator_has(est, operation, context):
             raise Error("AttributeError: '" + _class_name(est) + "' object has no attribute '" + operation + "'")
         var xs = _rfe_transform(model, args[0], context)
-        if operation == "score":
+        if op == PREP_OPN_SCORE:
             return prep_estimator_call(est, operation, Python.tuple(xs, args[1]), context)
         return prep_estimator_call(est, operation, Python.tuple(xs), context)
     raise Error("TypeError: the native RFE owner does not serve " + operation)
@@ -542,14 +546,14 @@ def _work(mut p: EncProg, words: Int, scratch: Bool) -> Int:
     return p.work(words) if scratch else p.alloc(words)
 
 
-def prep_mutual_info_call(operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def prep_mutual_info_call(op: Int, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_mutual_info(X, y, discrete_target, discrete_features, n_neighbors,
     random_state)`: continuous columns scaled and noised (the 1e-10-scaled
     noise kept as a second word), then per column Kraskov, Ross or the
     contingency table, in one program."""
     var nk = prep_keys()
     var b = native_loaded_module("builtins")
-    var discrete_target = operation == "mutual_info_classif"
+    var discrete_target = op == PREP_OPN_MUTUAL_INFO_CLASSIF
     var x = args[0]
     var y = args[1]
     var k = Int(py=py_call_typed(b.int, args[3]))
