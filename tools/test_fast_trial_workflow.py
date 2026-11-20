@@ -65,7 +65,10 @@ def test_verify_smoke_uses_the_shared_fetch():
 
 def test_units_cover_every_estimator_once_across_shards():
     module = ft.load_test(TESTS_ROOT)
-    names = [row[0] for row in module.FAMILIES]
+    # The trial runs FAMILIES and WALK (tools/ops/fast_trial.py); lane fx-fast-per-estimator (2026-11-19) added
+    # the 67 WALK estimators and their family labels, so the label set is FAMILIES + WALK, each name once.
+    names = [row[0] for row in module.FAMILIES + module.WALK]
+    assert len(names) == len(set(names))
     assert set(names) == set(module.ESTIMATOR_FAMILY)  # every estimator has a family label
     trial_list = ft.trials("0x7ffffff", "0x88")
     every = [u for k in range(3) for u in ft.units(names, trial_list, k, 3)]
