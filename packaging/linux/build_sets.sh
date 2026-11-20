@@ -867,8 +867,12 @@ if [[ "$VENDOR" = cuda ]] && ls "$SET"/identical/*.so > /dev/null 2>&1; then
   python3 "$REPO/packaging/linux/ptx_contract.py" patch "$SET"/identical/*.so $ADAPTER_SO > "$DEST/ptx_rn.jsonl" \
     || { say "REFUSING: the IDENTICAL PTX .rn pass failed (read $DEST/ptx_rn.jsonl)"; exit 5; }
   if ! python3 "$REPO/packaging/linux/ptx_contract.py" audit "$SET"/identical/*.so $ADAPTER_SO > "$DEST/ptx_audit.jsonl"; then
-    say "REFUSING: IDENTICAL PTX still carries a float op without a rounding modifier:"
-    grep -v '"plain_float_ops": 0' "$DEST/ptx_audit.jsonl" | head -5 | cut -c1-240 | sed 's/^/    /'
+    # Two refusals, each printed with its rows (2026-11-20: an approximate-instruction refusal printed the
+    # rounding-modifier sentence and no row, because only plain_float_ops was read).
+    say "REFUSING: IDENTICAL PTX carries a float op without a rounding modifier, or an approximate instruction outside APPROX_ALLOW (packaging/linux/ptx_contract.py):"
+    grep -v '"plain_float_ops": 0' "$DEST/ptx_audit.jsonl" | head -5 | cut -c1-240 | sed 's/^/    plain: /' || true
+    grep -v '"approx_refused": \[\]' "$DEST/ptx_audit.jsonl" | head -5 \
+      | python3 -c 'import json,sys; [print("    approx:", json.loads(l)["file"].rsplit("/",1)[-1], json.loads(l)["approx_refused"][:5]) for l in sys.stdin]' || true
     exit 5
   fi
   say "IDENTICAL PTX: $(python3 -c 'import json,sys; print(sum(json.loads(l)["rewritten"] for l in open(sys.argv[1])))' "$DEST/ptx_rn.jsonl") float ops given .rn"
