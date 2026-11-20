@@ -807,7 +807,7 @@ class PodJob2(unittest.TestCase):
                                   '[ "$a $r" = "b1 r2" ] && exit 2; exit 0\n')
             os.chmod(fake, 0o755)
             script = ("set -u\nRES=" + td + "\nTGO=" + tgo + "\nPY=" + sys.executable + "\nOWED=1\nOWED_FILE=x\n"
-                      "mkdir -p $RES/logs\nLAST_PRIOR=\nB_NAMES=(b1 b2)\ndeclare -A ARM_PY\n"
+                      "mkdir -p $RES/logs\nLAST_PRIOR=\nB_NAMES=(b1 b2)\ndeclare -A ARM_PY ARM_XENV\n"
                       "ARM_PY[candidate]=" + fake + "\nARM_PY[b2]=" + fake + "\n"
                       "venv_arm() { echo \"$1\"; }\npart() { [ \"$1\" = tg-drivers ]; }\nphase() { echo \"PHASE $1\"; }\n"
                       "phase_end() { echo \"PHASE_END $1\"; }\n"
