@@ -219,7 +219,8 @@ def test_meta_owners_do_not_call_member_methods_or_python_constructors():
     admission = (ROOT / 'bindings/trees_meta_admission_door.mojo').read_text()
     assert 'prep_estimator_call(model, "__admit__"' in admission
     assert 'msel_admit(args, prep_native_context(context))' in source
-    assert '"family_mcls_r2"' in source
+    # The r2 score is passed as the metrics owner's leaf code (lane bw2-metrics).
+    assert 'metrics_cls_operation(PythonObject(None), MCLS_OPN_FAMILY_MCLS_R2,' in source
     assert 'native_estimator_defaults' in source
     # The entry is connected when the family loads (b6aa87e41d), not in __init__.
     assert 'native_estimator_entry=selection._NATIVE' in (PACKAGE / '_families.py').read_text()
