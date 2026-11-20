@@ -63,7 +63,7 @@ from sequence.gemm_tiled import (
     seq_gemm_split_blocks, seq_gemm_split_kernel,
 )
 from sequence.gemm_split import GEMM_SPLITK, OP_GK_SPLIT, gemm_split_args, gemm_split_on
-# lane fx-gemm-seq-packed: the large products on the neural packed body (default since 2026-11-19; -D MOJOLEARN_GEMM_FAST_SEQ_PACKED_OFF restores the tile)
+# lane fx-gemm-seq-packed: the large products on the neural packed body (default since 2026-11-19, confirmed 2026-11-20)
 from sequence.gemm_packed_route import SEQ_GEMM_PACKED, SP_NONE, GR_PROF_PACKED, seq_gemm_packed_on, seq_gemm_packed_launch
 from sequence.gemm_packed_route import SEQ_GEMM_PACKED_EPI, seq_gemm_packed_epi_kind, seq_gemm_packed_epi_launch
 # lane fx-fast-matrix-units (2026-11-19): the matrix-units relaxation of an NVIDIA `fast` build (default OFF).
@@ -1400,8 +1400,7 @@ struct DeviceExec(Exec, Movable):
                         self._launch[OP_GEMM_EPI_TAIL](a, a.i0 * a.i1)
                 return
         # lane fx-gemm-seq-packed (DEFAULT since 2026-11-19, promoted on the A/B beside SEQ_GEMM_PACKED in
-        # sequence/gemm_packed_route.mojo: mlp fit 0.59-0.66, infer 0.43-0.68, digests equal;
-        # -D MOJOLEARN_GEMM_FAST_SEQ_PACKED_OFF restores the tile): a large
+        # sequence/gemm_packed_route.mojo: mlp fit 0.59-0.66, infer 0.43-0.68, digests equal): a large
         # plain dense product (the size rule and the order argument are sequence/gemm_packed_route.mojo's
         # docstring) runs the neural packed body with ONE leaf of K terms: per cell the same chain,
         # acc = ftz(fma(ld a, ld b, acc)), k ascending from +0.0, so the tile's word. An epilogue opcode

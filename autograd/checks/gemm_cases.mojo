@@ -24,8 +24,8 @@
 # pass-6 shapes (micro edges 63..65 x K 15..129, long-K split shapes) add
 # "digest6", and every case's split words "split_digest".
 #
-# Lane fx-gemm-seq-packed (the default route since 2026-11-19;
-# -D MOJOLEARN_GEMM_FAST_SEQ_PACKED_OFF is the other arm): the large
+# Lane fx-gemm-seq-packed (the default route since 2026-11-19 on the
+# NVIDIA and AMD columns): the large
 # products the packed rule selects (sequence/gemm_packed_route.mojo), run on
 # either arm: one thread a cell, the 16 x 16 tile, the dispatch (the packed
 # body with one leaf where the arm routes it) and the host executor, the
