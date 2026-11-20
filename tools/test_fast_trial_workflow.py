@@ -144,7 +144,9 @@ def test_workflow_coverage_mode():
     cov = run[run.index("fast_trial.py coverage"):run.index("fast_trial.py run")]
     assert '--workers "$(nproc)"' in cov and '--shard "$SHARD" --shards "$SHARDS"' in cov
     # GitHub's bash is `-eo pipefail`: every rc is captured with ||, so the log tail always prints
-    assert "rc=$?\n" not in run and "|| rc=$?" in run
+    # no bare `rc=$?` on a line of its own (under `bash -e` it never runs after a failure); `cmd || rc=$?` is the form.
+    # The old substring test `"rc=$?\n" not in run` also rejected `|| rc=$?` at a line end (cpc2-0007, 2026-11-20).
+    assert all(line.strip() != "rc=$?" for line in run.splitlines()) and "|| rc=$?" in run
     srun = _steps_text(wf["jobs"]["summary"])
     assert "fast_trial.py coverage-summary" in srun and "coverage_ledger.json" in srun
     assert "cpu-coverage" in wf["jobs"]["summary"]["steps"][-1]["with"]["name"]
