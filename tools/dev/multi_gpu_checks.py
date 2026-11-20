@@ -145,9 +145,10 @@ def _svr(ml, np, fx, devices):
 
 def _gp(ml, np, fx, devices):
     from mojolearn import parallel_classical as pc
-    X, y = fx["X"][:512, :8], fx["yr"][:512]
+    X, y = np.ascontiguousarray(fx["X"][:512, :8]), fx["yr"][:512]
     est = pc.fit_gaussian_process(ml.GaussianProcessRegressor(), X, y, devices=devices)
-    mean, std = pc.predict_gaussian_process(est, fx["X"][512:576, :8], devices=devices, return_std=True)
+    Xq = np.ascontiguousarray(fx["X"][512:576, :8])
+    mean, std = pc.predict_gaussian_process(est, Xq, devices=devices, return_std=True)
     return [("alpha_", est.alpha_), ("L_", est.L_), ("mean", mean), ("std", std)]
 
 
@@ -188,13 +189,13 @@ def _ridge(ml, np, fx, devices):
 def _ols(ml, np, fx, devices):
     from mojolearn import parallel_classical as pc
     # every row of the 13000-row fixture: the TSQR row blocks are 4096 rows (tools/logical_shard_identity.py)
-    est = pc.fit_gram_estimator(ml.LinearRegression(), fx["X"][:, :8], fx["yr"], devices=devices)
+    est = pc.fit_gram_estimator(ml.LinearRegression(), np.ascontiguousarray(fx["X"][:, :8]), fx["yr"], devices=devices)
     return [("coef_", est.coef_), ("intercept_", [est.intercept_])]
 
 
 def _logistic(ml, np, fx, devices):
     from mojolearn import parallel_classical as pc
-    X, y = fx["Xb"][:2000, :8], fx["yb"][:2000]
+    X, y = np.ascontiguousarray(fx["Xb"][:2000, :8]), fx["yb"][:2000]
     multi = pc.fit_logistic(ml.LogisticRegression(max_iter=50), X, np.minimum(y, 2), devices=devices)
     binary = pc.fit_logistic(ml.LogisticRegression(max_iter=50), X, (y > 1).astype(np.int32), devices=devices)
     return [("multi coef_", multi.coef_), ("multi intercept_", multi.intercept_),
@@ -203,26 +204,28 @@ def _logistic(ml, np, fx, devices):
 
 def _kmeans(ml, np, fx, devices):
     from mojolearn import parallel_classical as pc
-    est = pc.fit_kmeans(ml.KMeans(n_clusters=4, random_state=0), fx["Xb"][:4000, :8], devices=devices)
+    X = np.ascontiguousarray(fx["Xb"][:4000, :8])
+    est = pc.fit_kmeans(ml.KMeans(n_clusters=4, random_state=0), X, devices=devices)
     return [("cluster_centers_", est.cluster_centers_), ("labels_", est.labels_)]
 
 
 def _dbscan(ml, np, fx, devices):
     from mojolearn import parallel_classical as pc
     # algorithm='brute': the default 'rbc' bitmap passes have no device plan (tools/logical_shard_identity.py)
-    est = pc.fit_dbscan(ml.DBSCAN(eps=0.5, min_samples=5, algorithm="brute"), fx["Xb"][:1500, :4], devices=devices)
+    X = np.ascontiguousarray(fx["Xb"][:1500, :4])
+    est = pc.fit_dbscan(ml.DBSCAN(eps=0.5, min_samples=5, algorithm="brute"), X, devices=devices)
     return [("labels_", est.labels_)]
 
 
 def _hdbscan(ml, np, fx, devices):
     from mojolearn import parallel_classical as pc
-    est = pc.fit_hdbscan(ml.HDBSCAN(min_cluster_size=5), fx["Xb"][:6000, :4], devices=devices)
+    est = pc.fit_hdbscan(ml.HDBSCAN(min_cluster_size=5), np.ascontiguousarray(fx["Xb"][:6000, :4]), devices=devices)
     return [("labels_", est.labels_), ("core_distances_", est.core_distances_)]
 
 
 def _gmm(ml, np, fx, devices):
     from mojolearn import parallel_classical as pc
-    X = fx["Xb"][:3000, :4]
+    X = np.ascontiguousarray(fx["Xb"][:3000, :4])
     est = pc.fit_gaussian_mixture(ml.GaussianMixture(n_components=3, random_state=0), X, devices=devices)
     return [("weights_", est.weights_), ("means_", est.means_), ("covariances_", est.covariances_),
             ("predict_proba", pc.predict_gaussian_mixture(est, X, devices=devices, method="predict_proba")),
@@ -254,18 +257,18 @@ def _cholesky(ml, np, fx, devices):
 def _kernel_ridge(ml, np, fx, devices):
     from mojolearn import parallel_classical as pc
     Y = np.ascontiguousarray(np.stack([fx["yr"][:600], fx["yr"][600:1200]], 1).astype(np.float32))
-    est = pc.fit_kernel_method(ml.KernelRidge(alpha=0.1, kernel="rbf", gamma=0.5), fx["X"][:600, :4], Y,
-                               devices=devices)
+    X = np.ascontiguousarray(fx["X"][:600, :4])
+    est = pc.fit_kernel_method(ml.KernelRidge(alpha=0.1, kernel="rbf", gamma=0.5), X, Y, devices=devices)
     return [("dual_coef_", est.dual_coef_),
-            ("predict", pc.apply_kernel_method(est, fx["X"][600:856, :4], devices=devices))]
+            ("predict", pc.apply_kernel_method(est, np.ascontiguousarray(fx["X"][600:856, :4]), devices=devices))]
 
 
 def _nystroem(ml, np, fx, devices):
     from mojolearn import parallel_classical as pc
     est = pc.fit_kernel_method(ml.Nystroem(kernel="rbf", gamma=0.5, n_components=32, random_state=7),
-                               fx["X"][:600, :4], devices=devices)
+                               np.ascontiguousarray(fx["X"][:600, :4]), devices=devices)
     return [("components_", est.components_), ("normalization_", est.normalization_),
-            ("transform", pc.apply_kernel_method(est, fx["X"][600:1624, :4], devices=devices))]
+            ("transform", pc.apply_kernel_method(est, np.ascontiguousarray(fx["X"][600:1624, :4]), devices=devices))]
 
 
 def _rbf_sampler(ml, np, fx, devices):
@@ -356,9 +359,9 @@ def _boosting(cls_name, target, **kw):
 
 def _iforest(ml, np, fx, devices):
     from mojolearn import parallel_ensemble as pe
-    est = pe.fit_isolation_forest(ml.IsolationForest(random_state=0), fx["X"][:2000, :8], devices=devices)
-    return [("score_samples", pe.score_isolation_forest(est, fx["X"][:2000, :8], devices=devices,
-                                                        method="score_samples"))]
+    X = np.ascontiguousarray(fx["X"][:2000, :8])
+    est = pe.fit_isolation_forest(ml.IsolationForest(random_state=0), X, devices=devices)
+    return [("score_samples", pe.score_isolation_forest(est, X, devices=devices, method="score_samples"))]
 
 
 def _ordered_rmse(ml, np, fx, devices):
@@ -456,7 +459,7 @@ def _gpc(ml, np, fx, devices):
     from mojolearn.parallel_gaussian_process import (fit_gaussian_process_classifier,
                                                      predict_gaussian_process_classifier)
     X = fx["X"]
-    xs, q = X[:256, :4], X[256:320, :4]
+    xs, q = np.ascontiguousarray(X[:256, :4]), np.ascontiguousarray(X[256:320, :4])
     # three classes, so the one-vs-rest fit has more than one binary problem to place
     y3 = ((X[:256, 3] > 0).astype(np.int32) + (X[:256, 4] > 0).astype(np.int32)).astype(np.int32)
     kernel = ml.ConstantKernel(1.0) * ml.RBF(1.0)
@@ -515,7 +518,8 @@ def _byte_lm(trainer_module, trainer_name):
         import importlib
         cls = getattr(importlib.import_module(trainer_module), trainer_name)
         shape = ml.ByteLanguageModelConfig()
-        rng = np.random.default_rng(31)  # test control: the weights are the same in every arm; the fixture is the tokens
+        # test control: the weights are the same in every arm; the fixture is the token stream
+        rng = np.random.default_rng(31)
         named = {}
         for name, shp in zip(shape.parameter_names, shape.parameter_shapes):
             if name.endswith("norm1_w") or name.endswith("norm2_w"):
