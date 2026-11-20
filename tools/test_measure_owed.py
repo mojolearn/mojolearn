@@ -519,7 +519,7 @@ class CommittedOwed(unittest.TestCase):
         from release_github_build import normalize_defines
         doc = json.load(open(os.path.join(PC.OUT_DIR, "owed-pre0867.json")))
         rows = ("MOJOLEARN_MODE_FAST_", "MOJOLEARN_GEMM_FAST_MATRIX_UNITS", "MOJOLEARN_DECOMP_FAST_MATRIX_UNITS",
-                "MOJOLEARN_NEIGHBORS_FAST_MATRIX_UNITS")
+                "MOJOLEARN_NEIGHBORS_FAST_MATRIX_UNITS", "MOJOLEARN_GEMM_FAST_BF16_UNITS")
         for name, arm in doc["b_arms"].items():
             if arm["owed"] != "RUN" or arm.get("env"):
                 continue

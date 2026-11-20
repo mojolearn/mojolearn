@@ -786,6 +786,16 @@
    "status": "define in code (gemm/fast_matrix_units.mojo GEMM_FAST_MATRIX_UNITS_ALL): B1 plus the neural-dispatch callers that closed the vendor route (Llama stage projections, CNN linear, MoE grouped)",
    "owed": "RUN"
   },
+  "fast-bf16-units": {
+   "define": "MOJOLEARN_GEMM_FAST_BF16_UNITS=1,MOJOLEARN_MODE_FAST_ROWS",
+   "status": "define in code (gemm/fast_bf16_units.mojo BF16_UNITS_KIND, policy row BF16_UNITS): B narrows both operands of a large neural FP32 GEMM to bf16 in scratch (round to nearest even) and runs MAX linalg.matmul on the half-precision matrix unit, FP32 accumulation and FP32 output, at the neural dispatch (callers with the vendor route open), the sequence executor's plain dense GEMM launches (row-major or transposed A) and the public linalg.matmul entry; master weights, loss, normalisations and optimizer stay FP32; A = the FP32 kernels",
+   "owed": "RUN"
+  },
+  "fast-bf16-units-bf16out": {
+   "define": "MOJOLEARN_GEMM_FAST_BF16_UNITS=2,MOJOLEARN_MODE_FAST_ROWS",
+   "status": "define in code (gemm/fast_bf16_units.mojo BF16_UNITS_KIND_BF16_OUT): fast-bf16-units with the product stored as bf16 by MAX and widened to FP32 by one more launch (what torch autocast(bfloat16) computes for a linear layer); the form to time if MAX refuses bf16 operands with an FP32 output, and the torch-BF16 reference point otherwise",
+   "owed": "RUN"
+  },
   "mcd-lockstep": {
    "define": "MOJOLEARN_MCD_FAST_LOCKSTEP",
    "status": "PROMOTED 2026-11-20 (lane fx-verdicts5): MCD_LOCKSTEP is the default on the NVIDIA and AMD columns (x_decomp/mcd.mojo; -D MOJOLEARN_MCD_FAST_LOCKSTEP_OFF builds the serial loop); the Apple column keeps the serial loop and the old name still opts in there (smoke owed, never timed).",
@@ -4980,6 +4990,40 @@
    "decides": "per row: B becomes the default of the NVIDIA fast set for that family only if it is faster than A beyond the noise floor AND every quality field is inside its tolerance against A; a row with a quality drop keeps FP32 whatever its time. B2 replaces B1 only if it is faster with quality equal."
   },
   {
+   "id": "fast-bf16-units-board",
+   "source": "lane fx-fast-bf16 (2026-11-20): the bf16 matrix-unit route of mode-policy row BF16_UNITS",
+   "kind": "ab",
+   "lane": [
+    "lm-train-step",
+    "lm-forward",
+    "transformer-forward",
+    "transformer-decode",
+    "mlp-clf",
+    "mlp-reg",
+    "gemm"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "fast-bf16-units",
+    "fast-bf16-units-bf16out"
+   ],
+   "columns": [
+    "time",
+    "quality"
+   ],
+   "quality": {
+    "lm-train-step": "loss_first_step, loss_last_step: relative 0.05 (tools/board_quality.py RELATIVE)",
+    "lm-forward": "mean_nll: absolute 0.05 nats; max_rel_diff vs the A arm reported, expected about 1e-3, drop above 0.01",
+    "transformer-forward": "max_rel_diff vs the A arm: drop above 0.01 (the common bound of REFERENCE max_rel_diff_vs_ours)",
+    "transformer-decode": "mean_nll absolute 0.05 nats; tokens_equal and first_divergence_index against the A arm reported (a divergence is not by itself a drop: greedy ties)",
+    "mlp-clf": "held-out accuracy, log_loss (relative 0.05), auc; train_loss_last_step",
+    "mlp-reg": "held-out rmse (relative 0.05)",
+    "gemm": "max_rel_err_vs_fp64: 0.01 (expected about 1e-4: bf16 operands, FP32 accumulation; a value at the FP32 arm's 2.4e-7 means the route was not taken)"
+   },
+   "decides": "per row: B (bf16 units) becomes the default of the NVIDIA fast set for that family only if it is faster than A beyond the noise floor AND every quality field is inside its tolerance against A (the identical arm) and against fast-matrix-units-tf32 on the same rows; a row with a quality drop keeps FP32 or TF32 whatever its time. Equal output hash on a row means the route was not taken there. fast-bf16-units-bf16out is timed for the torch-BF16 reference point and replaces B only if B does not build"
+  },
+  {
    "id": "fast-matrix-units-shapes",
    "source": "lane fx-fast-matrix-units: the size rule's constants are reasoned, not measured",
    "kind": "driver",
@@ -5038,6 +5082,76 @@
    "decides": "each constant of matrix_units_takes (K 32, edge 64, work 2^27): moved to where B stops being faster than A; a shape the rule routes that is slower in B is a rule defect"
   },
   {
+   "id": "fast-bf16-units-shapes",
+   "source": "lane fx-fast-bf16: the bf16 size rule's constants (K 64, edge 64, work 2^27) are reasoned, not measured",
+   "kind": "driver",
+   "driver": "gemm shapes through gemm/neural_dispatch.mojo::identical_gemm_into, NT / NN / TN, and through the public linalg.matmul",
+   "shapes": [
+    {
+     "m": 512,
+     "n": 512,
+     "k": 512,
+     "side": "routed (at the work floor 2^27)"
+    },
+    {
+     "m": 512,
+     "n": 512,
+     "k": 256,
+     "side": "FP32 (half the floor)"
+    },
+    {
+     "m": 4096,
+     "n": 4096,
+     "k": 48,
+     "side": "FP32 (K under 64)"
+    },
+    {
+     "m": 4096,
+     "n": 4096,
+     "k": 64,
+     "side": "routed (K at the floor)"
+    },
+    {
+     "m": 1024,
+     "n": 48,
+     "k": 768,
+     "side": "FP32 (edge under 64)"
+    },
+    {
+     "m": 1024,
+     "n": 192,
+     "k": 768,
+     "side": "routed, not square"
+    },
+    {
+     "m": 4096,
+     "n": 256,
+     "k": 220,
+     "side": "routed (a hidden layer at batch 4096)"
+    },
+    {
+     "m": 256,
+     "n": 256,
+     "k": 4096,
+     "side": "routed, long K (a weight gradient, transposed A)"
+    },
+    {
+     "m": 2048,
+     "n": 3072,
+     "k": 1024,
+     "side": "routed, a neighbour of the board's gemm shape"
+    }
+   ],
+   "b_arms": [
+    "fast-bf16-units"
+   ],
+   "columns": [
+    "time",
+    "max_rel_err_vs_fp64"
+   ],
+   "decides": "each constant of bf16_units_takes (K 64, edge 64, work 2^27): moved to where B stops being faster than A and than fast-matrix-units-tf32; a shape the rule routes that is slower in B is a rule defect (the two narrow launches are inside B's time)"
+  },
+  {
    "id": "fast-matrix-units-nonboard",
    "source": "AGENTS.md: a non-board model for every fix found on a board row",
    "kind": "driver",
@@ -5073,6 +5187,43 @@
     "loss per step for all 200 steps (divergence check), held-out loss"
    ],
    "decides": "training with TF32 products does not diverge where FP32 does not: the B loss curve stays within 0.05 relative of A at every recorded step and the held-out loss within 0.05 relative"
+  },
+  {
+   "id": "fast-bf16-units-nonboard",
+   "source": "AGENTS.md: a non-board model for every fix found on a board row",
+   "kind": "driver",
+   "driver": "mlp_fit and a byte LM step",
+   "shape": [
+    {
+     "model": "MLPClassifier",
+     "rows": 50000,
+     "features": 96,
+     "hidden": [
+      192
+     ],
+     "classes": 7,
+     "max_iter": 5,
+     "batch": 4096
+    },
+    {
+     "model": "byte LM",
+     "layers": 6,
+     "width": 384,
+     "heads": 6,
+     "context": 256,
+     "batch": 32,
+     "steps": 200
+    }
+   ],
+   "b_arms": [
+    "fast-bf16-units"
+   ],
+   "columns": [
+    "time",
+    "held-out accuracy / log_loss",
+    "loss per step for all 200 steps (divergence check), held-out loss"
+   ],
+   "decides": "training with bf16-operand products (FP32 accumulation, FP32 masters) does not diverge where FP32 does not: the B loss curve stays within 0.05 relative of A at every recorded step and the held-out loss within 0.05 relative; reported beside fast-matrix-units-tf32 on the same models"
   },
   {
    "id": "mcd-lockstep",
