@@ -17,25 +17,34 @@ from bindings.admitted_input_unpack import AdmittedBuf, AdmittedTypedPin, admitt
 from bindings.linalg_ops_lowbit_door import lin_connected_binding, lin_lowbit, lin_call, lin_ints
 from bindings.tensor_view import base_format, shape_text, TensorView
 from bindings.lowbit_weight_run import low_empty
+from bindings.lowbit_keys_unpack import lowbit_keys
+from bindings.py_balanced import py_item
+from bindings.linalg_ops_lowbit_run import LIN_OP_FROM_BF16, LIN_OP_DEQUANTIZE_INT8, LIN_OP_TO_BF16, LIN_OP_QUANTIZE_INT8
+from bindings.operation_names_low import (
+    LOW_OPN_FAMILY_LOW_IS_PACKED, LOW_OPN_FAMILY_LOW_FORMAT_OF, LOW_OPN_FAMILY_LOW_REPR, LOW_OPN_FAMILY_LOW_BF16_INIT,
+    LOW_OPN_FAMILY_LOW_INT8_INIT, LOW_OPN_FAMILY_LOW_MATERIALIZE_ONE, LOW_OPN_FAMILY_LOW_WIDEN_BF16,
+    LOW_OPN_FAMILY_LOW_PACK_ONE, LOW_OPN_FAMILY_LOW_UNPACK, LOW_OPN_FAMILY_LOW_PACK)
 
 
 
 def low_fields(value: PythonObject) raises -> PythonObject:
     var fields = py_fields(value)
-    if py_type(fields) is not py_type(Python.dict()):
+    var b = native_loaded_module("builtins")
+    if py_type(fields) is not b.dict:
         raise Error("TypeError: packed storage requires an exact native instance dictionary")
-    var keys = py_call(native_loaded_module("builtins").list, fields.keys())
+    var keys = py_call(b.list, fields.keys())
     for i in range(len(keys)):  # small-loop(stored packed weight field names)
-        if py_type(keys[i]) is not py_type(PythonObject("")):
+        if py_type(keys[i]) is not b.str:
             raise Error("TypeError: packed storage field names must be exact strings")
     return fields
 
 
 def low_kind(value: PythonObject, context: PythonObject) raises -> Int:
+    var nk = lowbit_keys()
     var cls = py_type(value)
-    if cls is context["family_low_bf16"]:
+    if cls is py_item(context, nk[].k_family_low_bf16):
         return 1
-    if cls is context["family_low_int8"]:
+    if cls is py_item(context, nk[].k_family_low_int8):
         return 2
     return 0
 
@@ -62,12 +71,13 @@ def low_binding(mut binding: PythonObject, context: PythonObject) raises -> Pyth
 
 
 def low_wrap(kind: Int, q: AdmittedBuf, e: PythonObject, context: PythonObject) raises -> PythonObject:
-    var result = native_storage_allocate(context["family_low_bf16"] if kind == 1 else context["family_low_int8"])
+    var nk = lowbit_keys()
+    var result = native_storage_allocate(py_item(context, nk[].k_family_low_bf16) if kind == 1 else py_item(context, nk[].k_family_low_int8))
     var fields = py_fields(result)
-    py_setitem(fields, "bits" if kind == 1 else "codes", q.keep)
+    py_setitem(fields, nk[].k_bits if kind == 1 else nk[].k_codes, q.keep)
     if kind == 2:
-        py_setitem(fields, "exponents", e)
-    py_setitem(fields, "shape", admitted_shape_tuple(q.shape))
+        py_setitem(fields, nk[].k_exponents, e)
+    py_setitem(fields, nk[].k_shape, admitted_shape_tuple(q.shape))
     return result
 
 
@@ -102,15 +112,16 @@ def low_materialize(value: PythonObject, mut binding: PythonObject, context: Pyt
     var kind = low_kind(value, context)
     if kind == 0:
         return value
+    var nk = lowbit_keys()
     var fields = low_fields(value)
-    var q = low_admit(native_instance_item(fields, PythonObject("bits" if kind == 1 else "codes")), "<u2" if kind == 1 else "<i1", 2, "weight", context)
+    var q = low_admit(native_instance_item(fields, nk[].k_bits if kind == 1 else nk[].k_codes), "<u2" if kind == 1 else "<i1", 2, "weight", context)
     # lane fix-output-zero-fill (2026-11-14): unfilled; from_bf16 / dequantize_int8 write every cell.
     var result = admitted_unfilled(q.shape, "<f4", context)
     if kind == 1:
-        _ = lin_call(low_binding(binding, context), context, "from_bf16", PythonObject(result.addr), PythonObject(q.addr), lin_ints(q.count()))
+        _ = lin_call(low_binding(binding, context), context, LIN_OP_FROM_BF16, "from_bf16", PythonObject(result.addr), PythonObject(q.addr), lin_ints(q.count()))
     else:
-        var e = low_exponents(native_instance_item(fields, PythonObject("exponents")), q.dim(0), context)
-        _ = lin_call(low_binding(binding, context), context, "dequantize_int8", PythonObject(result.addr), PythonObject(q.addr), PythonObject(e.addr), lin_ints(q.dim(0), q.dim(1)))
+        var e = low_exponents(native_instance_item(fields, nk[].k_exponents), q.dim(0), context)
+        _ = lin_call(low_binding(binding, context), context, LIN_OP_DEQUANTIZE_INT8, "dequantize_int8", PythonObject(result.addr), PythonObject(q.addr), PythonObject(e.addr), lin_ints(q.dim(0), q.dim(1)))
         _ = e^
     _ = q^
     return result.keep
@@ -131,11 +142,11 @@ def low_pack_admitted(input: TensorView, var input_pin: AdmittedTypedPin, fmt: S
     var q = admitted_unfilled(a.shape, "<u2" if fmt == "bfloat16" else "<i1", context)
     var result = PythonObject(None)
     if fmt == "bfloat16":
-        _ = lin_call(low_binding(binding, context), context, "to_bf16", PythonObject(q.addr), PythonObject(a.addr), lin_ints(a.count()))
+        _ = lin_call(low_binding(binding, context), context, LIN_OP_TO_BF16, "to_bf16", PythonObject(q.addr), PythonObject(a.addr), lin_ints(a.count()))
         result = low_wrap(1, q, PythonObject(None), context)
     else:
         var e = admitted_unfilled([a.dim(0)], "<i4", context)
-        _ = lin_call(low_binding(binding, context), context, "quantize_int8", PythonObject(q.addr), PythonObject(e.addr), PythonObject(a.addr), lin_ints(a.dim(0), a.dim(1)))
+        _ = lin_call(low_binding(binding, context), context, LIN_OP_QUANTIZE_INT8, "quantize_int8", PythonObject(q.addr), PythonObject(e.addr), PythonObject(a.addr), lin_ints(a.dim(0), a.dim(1)))
         result = low_wrap(2, q, e.keep, context)
         _ = e^
     _ = a^
@@ -164,57 +175,67 @@ def low_formats(weights: PythonObject, context: PythonObject) raises -> String:
     return "float32" if kind == 0 else ("bfloat16" if kind == 1 else "int8")
 
 
-def lowbit_weight_operation(model: PythonObject, operation: String, args: PythonObject,
+def lowbit_weight_unknown_operation(operation: String) raises:
+    """The error of a `family_low_*` name that is not an operation (it has no
+    leaf code): the owner's unchanged text. Always raises."""
+    raise Error("RuntimeError: unknown lowbit storage operation " + operation)
+
+
+def lowbit_weight_operation(model: PythonObject, operation: Int, args: PythonObject,
                             context: PythonObject) raises -> PythonObject:
+    # bw2-linalg: `operation` is the leaf code of bindings/operation_names_low.mojo,
+    # resolved once by the family door (it was up to eleven String compares here).
     classical_connect_numpy(context)
     var binding = PythonObject(None)
-    if operation == "family_low_is_packed":
+    if operation == LOW_OPN_FAMILY_LOW_IS_PACKED:
         return PythonObject(low_kind(args[0], context) != 0)
-    if operation == "family_low_format_of":
+    if operation == LOW_OPN_FAMILY_LOW_FORMAT_OF:
         return PythonObject(low_formats(args[0], context))
-    if operation == "family_low_repr":
+    if operation == LOW_OPN_FAMILY_LOW_REPR:
         var kind = low_kind(model, context)
+        var nk = lowbit_keys()
         var fields = low_fields(model)
-        var shape = native_instance_item(fields, PythonObject("shape"))
+        var shape = native_instance_item(fields, nk[].k_shape)
         classical_admit_value(shape, context)
         var text = String("BF16Weight" if kind == 1 else "Int8Weight")
         return PythonObject(text + "(shape=" + String(py=py_call(native_loaded_module("builtins").repr, shape)) + ")")
-    if operation == "family_low_bf16_init" or operation == "family_low_int8_init":
-        var kind = 1 if operation == "family_low_bf16_init" else 2
+    if operation == LOW_OPN_FAMILY_LOW_BF16_INIT or operation == LOW_OPN_FAMILY_LOW_INT8_INIT:
+        var kind = 1 if operation == LOW_OPN_FAMILY_LOW_BF16_INIT else 2
         if low_kind(model, context) != kind:
             raise Error("TypeError: lowbit storage requires its native public class without Python subclass hooks")
         var q = low_admit(args[0], "<u2" if kind == 1 else "<i1", 2, "bits" if kind == 1 else "codes", context)
         var fields = low_fields(model)
+        var nk = lowbit_keys()
         if kind == 2:
             var e = low_exponents(args[1], q.dim(0), context)
-            py_setitem(fields, "codes", q.keep)
-            py_setitem(fields, "exponents", e.keep)
+            py_setitem(fields, nk[].k_codes, q.keep)
+            py_setitem(fields, nk[].k_exponents, e.keep)
             _ = e^
         else:
-            py_setitem(fields, "bits", q.keep)
-        py_setitem(fields, "shape", admitted_shape_tuple(q.shape))
+            py_setitem(fields, nk[].k_bits, q.keep)
+        py_setitem(fields, nk[].k_shape, admitted_shape_tuple(q.shape))
         _ = q^
         return PythonObject(None)
-    if operation == "family_low_materialize_one":
+    if operation == LOW_OPN_FAMILY_LOW_MATERIALIZE_ONE:
         return low_materialize(args[0], binding, context)
-    if operation == "family_low_widen_bf16":
+    if operation == LOW_OPN_FAMILY_LOW_WIDEN_BF16:
         var input_pin = AdmittedTypedPin()
         var input = admitted_typed_once(args[0], context, input_pin)
         var a = admitted_typed_c(input, input_pin^, "<u2", "bits", context)
         if a.count() == 0:
             raise Error("mojolearn.linalg.from_bf16: bits has no elements")
         var result = admitted_unfilled(a.shape, "<f4", context)
-        _ = lin_call(low_binding(binding, context), context, "from_bf16", PythonObject(result.addr), PythonObject(a.addr), lin_ints(a.count()))
+        _ = lin_call(low_binding(binding, context), context, LIN_OP_FROM_BF16, "from_bf16", PythonObject(result.addr), PythonObject(a.addr), lin_ints(a.count()))
         _ = a^
         return result.keep
-    if operation == "family_low_pack_one":
+    if operation == LOW_OPN_FAMILY_LOW_PACK_ONE:
         var fmt = low_format(args[1])
         var name = low_name(args[2])
         var input_pin = AdmittedTypedPin()
         var input = admitted_typed_once(args[0], context, input_pin)
         return low_pack_admitted(input, input_pin^, fmt, name, binding, context)
     var b = native_loaded_module("builtins")
-    if operation == "family_low_unpack":
+    if operation == LOW_OPN_FAMILY_LOW_UNPACK:
         if py_type(args[0]) is not b.dict:
             return Python.tuple(args[0], "float32")
         var fmt = low_formats(args[0], context)
@@ -226,10 +247,11 @@ def lowbit_weight_operation(model: PythonObject, operation: String, args: Python
             var name = low_name(pairs[i][0])
             py_setitem(result, pairs[i][0], low_materialize(pairs[i][1], binding, context))
         return Python.tuple(result, fmt)
-    if operation == "family_low_pack":
+    if operation == LOW_OPN_FAMILY_LOW_PACK:
         var fmt = low_format(args[1])
         if py_type(args[0]) is not b.dict:
             raise Error("TypeError: mojolearn.lowbit.pack: weights must be a dict keyed by name; Python mapping hooks are not supported")
+        var nk = lowbit_keys()
         var result = Python.dict()
         var pairs = py_call(b.list, args[0].items())
         for i in range(len(pairs)):  # driver-loop: over named weights through one admitted provider
@@ -241,11 +263,11 @@ def lowbit_weight_operation(model: PythonObject, operation: String, args: Python
                 # Same-format repacking copies packed storage directly. It must
                 # not widen/requantize, which changes both work and ownership.
                 var fields = low_fields(value)
-                var q = low_admit(native_instance_item(fields, PythonObject("bits" if kind == 1 else "codes")), "<u2" if kind == 1 else "<i1", 2, name, context, True)
+                var q = low_admit(native_instance_item(fields, nk[].k_bits if kind == 1 else nk[].k_codes), "<u2" if kind == 1 else "<i1", 2, name, context, True)
                 if kind == 1:
                     py_setitem(result, key, low_wrap(1, q, PythonObject(None), context))
                 else:
-                    var e = low_exponents(native_instance_item(fields, PythonObject("exponents")), q.dim(0), context, True)
+                    var e = low_exponents(native_instance_item(fields, nk[].k_exponents), q.dim(0), context, True)
                     py_setitem(result, key, low_wrap(2, q, e.keep, context))
                     _ = e^
                 _ = q^
@@ -266,4 +288,5 @@ def lowbit_weight_operation(model: PythonObject, operation: String, args: Python
                 py_setitem(result, key, value)
                 _ = input_pin^
         return result
-    raise Error("RuntimeError: unknown lowbit storage operation " + operation)
+    # Unreachable from the family door (every leaf is handled above).
+    raise Error("RuntimeError: unknown lowbit storage operation " + String(operation))
