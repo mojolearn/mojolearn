@@ -19,11 +19,14 @@ from bindings.logistic_admission_unpack import (
     logistic_release_admit,
     logistic_storage,
 )
+from bindings.logistic_keys_unpack import logistic_keys
+from bindings.py_balanced import py_item
 
 
 def logistic_initialize(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = logistic_storage(model, context)
-    var names = context["lr_parameters"]
+    var nk = logistic_keys()
+    var names = py_item(context, nk[].k_lr_parameters)
     if len(args) != len(names):
         raise Error("TypeError: native LogisticRegression requires its full constructor configuration")
     for i in range(len(names)):  # driver-loop: refusal before publishing any constructor parameters
@@ -42,7 +45,8 @@ def logistic_initialize(model: PythonObject, args: PythonObject, context: Python
 def logistic_get_params(model: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = logistic_fields(model, context, True)
     var out = Python.dict()
-    var names = context["lr_sorted_parameters"]
+    var nk = logistic_keys()
+    var names = py_item(context, nk[].k_lr_sorted_parameters)
     for i in range(len(names)):  # driver-loop: ParamsMixin's sorted parameter names
         py_setitem(out, names[i], fields[names[i]])
     return out
@@ -59,13 +63,14 @@ def logistic_set_params(model: PythonObject, values: PythonObject, context: Pyth
     for i in range(len(names)):  # driver-loop: names before key comparison or formatting
         if py_type(names[i]) is not b.str:
             raise Error("TypeError: native LogisticRegression parameter names must be strings")
+    var nk = logistic_keys()
     for i in range(len(names)):  # driver-loop: ordered scalar/native-container parameter updates
         var key = names[i]
         var parts = py_call(key.partition, "__")
         if not py_contains(params, parts[0]):
             raise Error("Invalid parameter " + String(py_call(b.repr, parts[0])) + " for estimator "
                         + String(py_type(model).__name__) + ". Valid parameters are: "
-                        + String(py_call(b.repr, py_call(b.list, context["lr_sorted_parameters"]))) + ".")
+                        + String(py_call(b.repr, py_call(b.list, py_item(context, nk[].k_lr_sorted_parameters)))) + ".")
         if String(parts[1]) != "":
             raise Error("AttributeError: scalar parameter has no set_params")
         _parameter(parts[0], values[key], context, True)

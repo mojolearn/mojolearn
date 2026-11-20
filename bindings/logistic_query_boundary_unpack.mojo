@@ -24,6 +24,8 @@ from bindings.logistic_query_boundary_pack import (
     _logistic_width_item,
     _logistic_width_numpy_dtype,
 )
+from bindings.logistic_keys_unpack import logistic_keys
+from bindings.py_balanced import py_item
 
 
 comptime _LogisticComplexReal = ExternalFunction[
@@ -62,7 +64,8 @@ def _logistic_width_builtin(value: PythonObject, context: PythonObject) raises -
         return LogisticQueryWidth(logistic_width_integer(Int(number)), kind=3, integer_value=Int(number))
     if cls is py_type(PythonObject(0.0)):
         return LogisticQueryWidth(_scalar_ieee(bitcast[DType.uint64](Float64(py=value)), 0, 52, 11))
-    if cls is context["lr_complex_type"]:
+    var nk = logistic_keys()
+    if cls is py_item(context, nk[].k_lr_complex_type):
         var api = LOGISTIC_WIDTH_API.get_or_create_ptr()
         var real = api[].real(value._obj_ptr)
         var imag = api[].imag(value._obj_ptr)
@@ -75,17 +78,18 @@ def _logistic_width_builtin(value: PythonObject, context: PythonObject) raises -
 
 
 def _logistic_width_array(value: PythonObject, context: PythonObject) raises -> LogisticQueryWidth:
+    var nk = logistic_keys()
     # Native Array scalar comparison requires exact representability, unlike
     # NumPy's weak scalar promotion. Read its admitted fixed slots directly.
-    var slots = context["array_fields"]
-    if Int(py=py_call(slots["size"], value)) != 1:
+    var slots = py_item(context, nk[].k_array_fields)
+    if Int(py=py_call(py_item(slots, nk[].k_size), value)) != 1:
         raise Error("ValueError: mojolearn: the truth value of an Array with more than one element is ambiguous")
-    var dtype = String(py_call(slots["dtype"], value))
+    var dtype = String(py_call(py_item(slots, nk[].k_dtype), value))
     var width = native_array_itemsize(dtype)
     var code = String("q") if dtype[byte=1] == "i" else String("Q")
     if dtype[byte=1] == "f":
         code = String("e") if width == 2 else (String("f") if width == 4 else String("d"))
-    var address = Int(py=py_call(slots["_addr"], value))
+    var address = Int(py=py_call(py_item(slots, nk[].k__addr), value))
     if address <= 0 or address > 9223372036854775807 - width:
         raise Error("ValueError: LogisticRegression feature metadata has invalid scalar storage")
     var data = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=address)
@@ -96,12 +100,13 @@ def _logistic_width_array(value: PythonObject, context: PythonObject) raises -> 
 
 def logistic_query_width(value: PythonObject, context: PythonObject) raises -> LogisticQueryWidth:
     var current = value
+    var nk = logistic_keys()
     for depth in range(65):  # driver-loop: bounded object-array metadata unboxing, no row traversal
         var cls = py_type(current)
         if (cls is py_type(PythonObject(0)) or cls is py_type(PythonObject(True)) or
-                cls is py_type(PythonObject(0.0)) or cls is context["lr_complex_type"]):
+                cls is py_type(PythonObject(0.0)) or cls is py_item(context, nk[].k_lr_complex_type)):
             return _logistic_width_builtin(current, context)
-        if cls is context["array_class"]:
+        if cls is py_item(context, nk[].k_array_class):
             return _logistic_width_array(current, context)
         if native_torch_exact(cls):
             var unpacked = native_torch_scalar(current)
@@ -110,8 +115,8 @@ def logistic_query_width(value: PythonObject, context: PythonObject) raises -> L
             result = logistic_torch_width_run(result, dtype)
             _ = unpacked^
             return result
-        var array = cls is py_get(context, "ndarray")
-        if py_get(context, "ndarray") is None:
+        var array = cls is py_get(context, nk[].k_ndarray)
+        if py_get(context, nk[].k_ndarray) is None:
             return LogisticQueryWidth(kind=1)
         var dtype = _logistic_width_numpy_dtype(current, context, array)
         if dtype is None:
@@ -120,10 +125,10 @@ def logistic_query_width(value: PythonObject, context: PythonObject) raises -> L
             # refused before invoking their equality/conversion hooks.
             if depth != 0:
                 var allowed = cls is py_type(Python.list()) or cls is py_type(Python.tuple())
-                var types = context["native_value_types"]
+                var types = py_item(context, nk[].k_native_value_types)
                 for i in range(len(types)):  # driver-loop: exact connected nonnumeric owners, no element comparison
                     allowed = allowed or cls is types[i]
-                types = context["mapping_types"]
+                types = py_item(context, nk[].k_mapping_types)
                 for i in range(len(types)):  # driver-loop: exact native mapping owners
                     allowed = allowed or cls is types[i]
                 if not allowed:
@@ -136,7 +141,7 @@ def logistic_query_width(value: PythonObject, context: PythonObject) raises -> L
             var count = Int(py=current.size)
             if count != 1:
                 if count == 0 and sequence_array_release(context) < 202:
-                    sequence_array_warn("The truth value of an empty array is ambiguous. Returning False, but in future this will result in an error. Use `array.size > 0` to check that an array is not empty.", context["sequence_array_warnings"], "DeprecationWarning")
+                    sequence_array_warn("The truth value of an empty array is ambiguous. Returning False, but in future this will result in an error. Use `array.size > 0` to check that an array is not empty.", py_item(context, nk[].k_sequence_array_warnings), "DeprecationWarning")
                     return LogisticQueryWidth(kind=2)
                 if count == 0:
                     raise Error("ValueError: The truth value of an empty array is ambiguous. Use `array.size > 0` to check that an array is not empty.")
@@ -149,7 +154,7 @@ def logistic_query_width(value: PythonObject, context: PythonObject) raises -> L
             return LogisticQueryWidth(kind=1)
         if kind == "m":
             if sequence_array_release(context) >= 205:
-                sequence_array_warn("The 'generic' unit for NumPy timedelta is deprecated, and will raise an error in the future. This includes implicit conversion of bare integers (e.g. `+ 1`). Please use a specific unit instead.", context["sequence_array_warnings"], "DeprecationWarning")
+                sequence_array_warn("The 'generic' unit for NumPy timedelta is deprecated, and will raise an error in the future. This includes implicit conversion of bare integers (e.g. `+ 1`). Please use a specific unit instead.", py_item(context, nk[].k_sequence_array_warnings), "DeprecationWarning")
             var bytes = native_scalar_buffer_bytes(current, 8)
             var pointer = bytes.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
             var result = LogisticQueryWidth(native_scalar_real(pointer, 0, "q", 8, String(dtype.byteorder) != ">"))

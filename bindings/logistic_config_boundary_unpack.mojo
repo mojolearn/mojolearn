@@ -16,6 +16,8 @@ from bindings.native_scalar_promotion_unpack import native_scalar_weak_promotion
 from bindings.optimizer_public_words_unpack import stash_python_error
 from bindings.sequence_array_warnings_unpack import sequence_array_report
 from bindings.sequence_array_warnings_pack import sequence_array_errstate
+from bindings.logistic_keys_unpack import logistic_keys
+from bindings.py_balanced import py_item
 
 comptime _LogisticRepr = ExternalFunction[
     "PyObject_Repr", def(PyObjectPtr) thin abi("C") -> PyObjectPtr]
@@ -112,25 +114,26 @@ def _logistic_compare_value(value: PythonObject, operation: String, right: Strin
 
 
 def logistic_validate_configuration(fields: PythonObject) raises -> Int:
-    var penalty = fields["penalty"]
+    var nk = logistic_keys()
+    var penalty = py_item(fields, nk[].k_penalty)
     var code = logistic_penalty(String(penalty) if py_type(penalty) is py_type(PythonObject("")) else String(""), penalty is None)
     if code < 0:
         raise Error("`penalty` " + logistic_scalar_text(penalty) + " not supported.")
-    var solver = fields["solver"]
+    var solver = py_item(fields, nk[].k_solver)
     if py_type(solver) is not py_type(PythonObject("")) or String(solver) != "qn":
         raise Error("Only quasi-newton `qn` solver is supported, not " + logistic_scalar_text(solver, 1))
-    var c = fields["C"]
+    var c = py_item(fields, nk[].k_C)
     if not logistic_positive(_logistic_compare_value(c, "<=", "int")):
         raise Error("C must be positive, got " + logistic_scalar_text(c, 2))
     # Preserve publication/refusal order, including an elastic-net failure.
-    py_setitem(fields, "_l1_ratio", PythonObject(None))
+    py_setitem(fields, nk[].k__l1_ratio, PythonObject(None))
     if code == LOGISTIC_ELASTIC:
-        var ratio = fields["l1_ratio"]
+        var ratio = py_item(fields, nk[].k_l1_ratio)
         if ratio is None:
             raise Error("l1_ratio has to be specified for loss='elasticnet'")
         if not logistic_ratio_valid(_logistic_compare_value(ratio, "<", "float")):
             raise Error("l1_ratio value has to be between 0.0 and 1.0")
-        py_setitem(fields, "_l1_ratio", ratio)
+        py_setitem(fields, nk[].k__l1_ratio, ratio)
     return code
 
 
@@ -175,11 +178,12 @@ def logistic_configuration_strengths(fields: PythonObject, penalty: Int,
         mut policy: LogisticPromotion, context: PythonObject) raises -> Tuple[Float64, Float64]:
     if penalty == LOGISTIC_NO_PENALTY:
         return (0.0, 0.0)
-    var c = _logistic_number(fields["C"])
+    var nk = logistic_keys()
+    var c = _logistic_number(py_item(fields, nk[].k_C))
     _logistic_promotion(policy, c, context)
     var ratio = LogisticScalar(0.0, 0, 8)
     if penalty == LOGISTIC_ELASTIC:
-        ratio = _logistic_number(fields["l1_ratio"])
+        ratio = _logistic_number(py_item(fields, nk[].k_l1_ratio))
         _logistic_promotion(policy, ratio, context)
     var plan = logistic_strength_plan(penalty, c, ratio, policy.weak)
     for i in range(4):  # driver-loop: the four original scalar expressions, in refusal order

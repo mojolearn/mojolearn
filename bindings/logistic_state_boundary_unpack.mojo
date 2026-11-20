@@ -7,6 +7,8 @@ from bindings.admitted_input_unpack import admitted_storage_native
 from bindings.classical_labels_door import labels_address
 from bindings.py_balanced import py_get, py_contains
 from bindings.classifier_public_lifecycle_door import classifier_label_list
+from bindings.logistic_keys_unpack import logistic_keys
+from bindings.py_balanced import py_item
 
 
 struct LogisticQueryOwners(Movable):
@@ -26,14 +28,15 @@ struct LogisticQueryOwners(Movable):
     var has_features: Bool
 
     def __init__(out self, fields: PythonObject, context: PythonObject) raises:
-        self.has_weights = py_contains(fields, "_w")
-        self.has_features = py_contains(fields, "n_features_in_")
-        self.weights = py_get(fields, "_w")
-        var classes = py_get(fields, "classes_")
-        self.classes = classifier_label_list(classes, context) if py_contains(fields, "classes_") else PythonObject(None)
-        self.feature_owner = py_get(fields, "n_features_in_")
-        self.intercept_owner = fields["fit_intercept"]
-        self.mode_owner = fields["numeric_mode"]
+        var nk = logistic_keys()
+        self.has_weights = py_contains(fields, nk[].k__w)
+        self.has_features = py_contains(fields, nk[].k_n_features_in_)
+        self.weights = py_get(fields, nk[].k__w)
+        var classes = py_get(fields, nk[].k_classes_)
+        self.classes = classifier_label_list(classes, context) if py_contains(fields, nk[].k_classes_) else PythonObject(None)
+        self.feature_owner = py_get(fields, nk[].k_n_features_in_)
+        self.intercept_owner = py_item(fields, nk[].k_fit_intercept)
+        self.mode_owner = py_item(fields, nk[].k_numeric_mode)
 
     def features(self) raises -> PythonObject:
         if not self.has_features:

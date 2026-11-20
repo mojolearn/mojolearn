@@ -41,7 +41,7 @@ from bindings.logistic_descriptor_boundary_door import (
 from bindings.classical_attributes_door import classical_connect_numpy, classical_getattribute
 from bindings.classical_pandas_door import classical_admit_value
 from bindings.classical_exceptions_door import classical_require_fitted, classical_not_fitted_class
-from providers.python.linear_metadata_boundary_door import classical_is_fitted
+from providers.python.linear_metadata_boundary_door import classical_is_fitted, linear_fitted_unpack
 from bindings.logistic_admission_unpack import logistic_storage, logistic_fields, logistic_fit_replacements_admit
 from bindings.logistic_admission_pack import logistic_initialize, logistic_get_params, logistic_set_params
 from bindings.prep_lda_admission_door import lda_native_context, lda_native_labels
@@ -57,6 +57,13 @@ from bindings.classical_labels_door import (
     labels_address, labels_cast,
 )
 from bindings.admitted_input_unpack import AdmittedX, admit_weight_words, admitted_words, admitted_storage_native
+from bindings.logistic_keys_unpack import (
+    logistic_keys, LOGISTIC_OPN_INITIALIZE, LOGISTIC_OPN_GET_PARAMS, LOGISTIC_OPN_SET_PARAMS, LOGISTIC_OPN_IS_FITTED,
+    LOGISTIC_OPN_FIT, LOGISTIC_OPN_DECISION_FUNCTION, LOGISTIC_OPN_PREDICT, LOGISTIC_OPN_PREDICT_PROBA,
+    LOGISTIC_OPN_PREDICT_LOG_PROBA, LOGISTIC_OPN_SCORE,
+)
+from bindings.py_keys import py_op_code
+from bindings.py_balanced import py_item
 
 comptime _I64P = MutPointer[Int64, MutUntrackedOrigin]
 
@@ -78,14 +85,16 @@ def _name(model: PythonObject) raises -> String:
 
 
 def _mode(fields: PythonObject, context: PythonObject) raises -> String:
-    return _mode_value(py_get(fields, "numeric_mode"), context)
+    var nk = logistic_keys()
+    return _mode_value(py_get(fields, nk[].k_numeric_mode), context)
 
 
 def _mode_value(var mode: PythonObject, context: PythonObject) raises -> String:
     """`_backend.binding(name, self.numeric_mode)`'s mode: the instance's,
     or the process default."""
     if mode is None:
-        mode = context["backend_fields"]["_DEFAULT_MODE"]
+        var nk = logistic_keys()
+        mode = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
     if py_type(mode) is not py_type(PythonObject("")):
         raise Error("numeric_mode must be fast, identical or None")
     return linear_mode_name(String(mode))
@@ -100,7 +109,8 @@ def _table(tables: PythonObject, mode: String) raises -> PythonObject:
 
 
 def _host_mode(model: PythonObject, fields: PythonObject) raises -> String:
-    return _host_mode_value(model, py_get(fields, "numeric_mode"))
+    var nk = logistic_keys()
+    return _host_mode_value(model, py_get(fields, nk[].k_numeric_mode))
 
 
 def _host_mode_value(model: PythonObject, mode: PythonObject) raises -> String:
@@ -113,15 +123,17 @@ def _host_mode_value(model: PythonObject, mode: PythonObject) raises -> String:
 
 
 def _entries(model: PythonObject, fields: PythonObject, context: PythonObject) raises -> PythonObject:
-    return _entries_value(model, py_get(fields, "numeric_mode"), context)
+    var nk = logistic_keys()
+    return _entries_value(model, py_get(fields, nk[].k_numeric_mode), context)
 
 
 def _entries_value(model: PythonObject, mode_owner: PythonObject, context: PythonObject) raises -> PythonObject:
     """The estimators entries of the estimator's mode, checked against the
     mode the binary was compiled for (`_backend.binding`'s refusal)."""
-    var host = py_get(context, "lr_host_model")
+    var nk = logistic_keys()
+    var host = py_get(context, nk[].k_lr_host_model)
     var mode = _host_mode_value(model, mode_owner) if host is not None else _mode_value(mode_owner, context)
-    var entries = _table(context["lr_bindings"], mode)
+    var entries = _table(py_item(context, nk[].k_lr_bindings), mode)
     # The boundary cache pins the extension and stores native mode metadata.
     var compiled = logistic_compiled_mode(entries)
     var expected = 1 if String(mode) == "identical" else 0
@@ -164,10 +176,11 @@ def _row_weights(model: PythonObject, fields: PythonObject, sample_weight: Pytho
         raise Error("The 'class_weight' parameter of " + _name(model) + " must be an "
                     + "instance of 'dict', a str among {'balanced'} or None. "
                     + "Got " + _repr(class_weight) + " instead.")
-    var host = py_get(context, "lr_host_model")
+    var nk = logistic_keys()
+    var host = py_get(context, nk[].k_lr_host_model)
     # The mode from the fit's admitted fields snapshot (numeric_mode is a
     # constructor parameter the fit already admitted), not a third admission.
-    var xtrees = _table(context["lr_x_trees"], _host_mode(model, fields) if host is not None
+    var xtrees = _table(py_item(context, nk[].k_lr_x_trees), _host_mode(model, fields) if host is not None
                         else _mode(fields, context))
     var cw = labels_class_weight_rows(class_weight, labels, xtrees, context)
     if cw is None:  # every class weight is 1
@@ -195,10 +208,11 @@ def _logistic_buffer_column(y: PythonObject, shape: List[Int], context: PythonOb
     if len(shape) != 2 or shape[1] != 1:
         return False
     var cls = py_type(y)
-    var ndarray = py_get(context, "ndarray")
+    var nk = logistic_keys()
+    var ndarray = py_get(context, nk[].k_ndarray)
     if ndarray is not None and cls is ndarray:
         return True
-    var array_class = py_get(context, "array_class")
+    var array_class = py_get(context, nk[].k_array_class)
     return array_class is not None and cls is array_class
 
 
@@ -214,7 +228,8 @@ def logistic_fit(model: PythonObject, source_x: PythonObject, source_y: PythonOb
     # fit is gathered on the device out of model selection's resident base
     # by the base binding's `qn_fit_fold` (no host gather, no upload of X);
     # without it (the CPU column, FAST) the door gets the host rows.
-    var fold_entry = py_get(context, "logistic_fold_native_api_v1")
+    var nk = logistic_keys()
+    var fold_entry = py_get(context, nk[].k_logistic_fold_native_api_v1)
     var store = QnFoldStore()
     var x = PythonObject(None)
     var rows = 0
@@ -228,10 +243,10 @@ def logistic_fit(model: PythonObject, source_x: PythonObject, source_y: PythonOb
             store = QnFoldStore(fx.store.base_id, fx.store.base_rows, fx.store.index_id)
         else:
             x = fx.array
-        py_setitem(fields, "input_copied_", PythonObject(True))
+        py_setitem(fields, nk[].k_input_copied_, PythonObject(True))
     else:
         x = admit_x(source_x, 2, "X", context, defer_finite=True)
-        py_setitem(fields, "input_copied_", PythonObject(not (x is source_x)))
+        py_setitem(fields, nk[].k_input_copied_, PythonObject(not (x is source_x)))
         rows = Int(py=x.shape[0])
         cols = Int(py=x.shape[1])
     var y = source_y
@@ -239,7 +254,7 @@ def logistic_fit(model: PythonObject, source_x: PythonObject, source_y: PythonOb
     if len(y_shape) != 1 and not _logistic_buffer_column(y, y_shape, context):
         raise Error("mojolearn LogisticRegression requires a 1-D y")
     var labels = classical_encode_labels(y, context)
-    py_setitem(fields, "classes_", labels.classes)
+    py_setitem(fields, nk[].k_classes_, labels.classes)
     if labels.n != rows:
         raise Error("mojolearn LogisticRegression X and y lengths differ")
     var n_classes = len(labels.classes)
@@ -255,27 +270,27 @@ def logistic_fit(model: PythonObject, source_x: PythonObject, source_y: PythonOb
     var l1 = strengths[0]
     var l2 = strengths[1]
     if n_targets > 1 and l1 != 0.0:
-        raise Error("NotImplementedError: mojolearn LogisticRegression: penalty=" + _repr(fields["penalty"]) + " with "
+        raise Error("NotImplementedError: mojolearn LogisticRegression: penalty=" + _repr(py_item(fields, nk[].k_penalty)) + " with "
                     + String(n_classes) + " classes selects OWL-QN on the softmax objective, "
                     + "which runs but has no identity gate (glm/checks/"
                     + "multinomial_check.mojo gates l2 and no penalty); refused by "
                     + "name until it is gated (CONTRIBUTING.md (Non-default paths))")
-    var sw = _row_weights(model, fields, sample_weight, fields["class_weight"], labels, rows, context)
+    var sw = _row_weights(model, fields, sample_weight, py_item(fields, nk[].k_class_weight), labels, rows, context)
     var entries = _entries(model, fields, context)
-    var intercept = Bool(py=fields["fit_intercept"])
+    var intercept = Bool(py=py_item(fields, nk[].k_fit_intercept))
     var layout = LogisticFitLayout(cols, n_targets, intercept)
     var w = admitted_storage_native([layout.weights], "<f4", context, as_array=True)
     # Private solver outputs are native owners; only the final scalar values
     # are packed into the model's public objective_/retcode_ fields.
     var info = List[Float32](length=2, fill=Float32(0))
-    var tol = fields["tol"]
+    var tol = py_item(fields, nk[].k_tol)
     _ = sw  # keep the Python object alive through the native call above
     var status = List[Int32](length=1, fill=Int32(0))
     var tolerances = logistic_configuration_tolerance(tol, promotion, context)
     var request = QnFitRequest(0 if store.active() else Int(py=classical_address(x)),
         labels_address(y_enc), labels_address(w), Int(info.unsafe_ptr()), sw.address,
         Int(status.unsafe_ptr()), rows, cols, n_classes,
-        logistic_integer(fields["max_iter"]), logistic_integer(fields["linesearch_max_iter"]),
+        logistic_integer(py_item(fields, nk[].k_max_iter)), logistic_integer(py_item(fields, nk[].k_linesearch_max_iter)),
         logistic_integer(_class_constant(model, fields, "lbfgs_memory", context)), intercept,
         Bool(py=_class_constant(model, fields, "penalty_normalized", context)), loss,
         l1, l2, tolerances[0], tolerances[1], 0.0)
@@ -299,23 +314,23 @@ def logistic_fit(model: PythonObject, source_x: PythonObject, source_y: PythonOb
     try:
         public_parameters = logistic_parameters_pack(w, layout, context)
     except error:
-        py_setitem(fields, "_w", w)
+        py_setitem(fields, nk[].k__w, w)
         raise error^
-    py_setitem(fields, "_w", w)
+    py_setitem(fields, nk[].k__w, w)
     var coef = public_parameters[0]
     var inter = public_parameters[1]
-    py_setitem(fields, "coef_", coef)
-    py_setitem(fields, "intercept_", inter)
+    py_setitem(fields, nk[].k_coef_, coef)
+    py_setitem(fields, nk[].k_intercept_, inter)
     var iterations = admitted_storage_native([1], "<i8", context, as_array=True)
     _I64P(unsafe_from_address=labels_address(iterations))[0] = Int64(n_iter)
     _ = iterations  # keep the Python object alive through the native call above
     _ = w  # keep the Python object alive through the native call above
     _ = y_enc  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
-    py_setitem(fields, "n_iter_", iterations)
-    py_setitem(fields, "objective_", PythonObject(Float64(info[0])))
-    py_setitem(fields, "retcode_", PythonObject(Int(info[1])))
-    py_setitem(fields, "n_features_in_", cols)
+    py_setitem(fields, nk[].k_n_iter_, iterations)
+    py_setitem(fields, nk[].k_objective_, PythonObject(Float64(info[0])))
+    py_setitem(fields, nk[].k_retcode_, PythonObject(Int(info[1])))
+    py_setitem(fields, nk[].k_n_features_in_, cols)
     _ = x^
     _ = y_enc^
     _ = sw^
@@ -390,9 +405,10 @@ def _query_x(model: PythonObject, state: LogisticQueryOwners, source: PythonObje
     word. A DeviceRows fold of an identical-mode GPU model is read on the
     device (`qn_infer_fold`); without it (the CPU column, FAST, a host
     class) the fold's rows are gathered on the host and tested there."""
-    var fold_entry = py_get(context, "logistic_fold_native_api_v1")
+    var nk = logistic_keys()
+    var fold_entry = py_get(context, nk[].k_logistic_fold_native_api_v1)
     var status = List[Int32](length=1, fill=Int32(0))
-    if (fold_entry is not None and py_get(context, "lr_host_model") is None
+    if (fold_entry is not None and py_get(context, nk[].k_lr_host_model) is None
             and _mode_value(state.mode_owner, context) == "identical"
             and door_is_device_rows(source, context)):
         var fx = admit_x_unrecorded(source, _name(model), context, device_x=True)
@@ -411,7 +427,8 @@ def _infer_fold(model: PythonObject, state: LogisticQueryOwners, q: _QueryX, dst
     var operation = QN_NATIVE_DECISION if mode == _FOLD_DECISION else (QN_NATIVE_BINARY if mode == _FOLD_CODES else QN_NATIVE_PROBA)
     var request = QnQueryRequest(0, Int(py=classical_address(state.weights)),
         labels_address(dst), 0, q.rows, q.cols, n_classes, Bool(py=state.intercept_owner), log_out)
-    var result = logistic_run_fold_query(context["logistic_fold_native_api_v1"], operation, q.store, request)
+    var nk = logistic_keys()
+    var result = logistic_run_fold_query(py_item(context, nk[].k_logistic_fold_native_api_v1), operation, q.store, request)
     _ = dst
     door_rows_refuse(result.finite, result.range_error, _name(model), q.store.base_rows)
 
@@ -558,7 +575,8 @@ def logistic_score(model: PythonObject, state: LogisticQueryOwners, source: Pyth
     """`score`: the mean accuracy of predict(X) against y, the prediction
     handed straight to the native accuracy program (`_accuracy_host`)."""
     var prediction = PythonObject(None)
-    var host_context = py_get(context, "lr_host_score_context")
+    var nk = logistic_keys()
+    var host_context = py_get(context, nk[].k_lr_host_score_context)
     if host_context is not None:
         # The explicit host class predicts through its own native host
         # inference owner, as its `predict` does.
@@ -578,12 +596,13 @@ def logistic_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObject
     try:
         var call = PythonObject(from_borrowed=args_ptr)
         var model = call[0]
-        var operation = String(call[1])
+        var nk = logistic_keys()
+        var operation = py_op_code(nk[].ops, call[1])
         var args = call[2]
         var context = call[3]
         if py_type(py_type(model)) is not py_type(py_type(PythonObject(0))):
             raise Error("TypeError: LogisticRegression cannot invoke Python metaclass hooks")
-        var hosts = py_get(context, "lr_host_contexts")
+        var hosts = py_get(context, nk[].k_lr_host_contexts)
         if hosts is not None and len(hosts) > 0:
             var mro = py_type(model).__mro__
             for k in range(len(mro)):  # driver-loop: over the model's class hierarchy (explicit host classes)
@@ -594,35 +613,37 @@ def logistic_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObject
         classical_connect_numpy(context)
         context = lda_native_context(context)
         var result = PythonObject(None)
-        if operation == "initialize":
+        if operation == LOGISTIC_OPN_INITIALIZE:
             result = logistic_initialize(model, args, context)
             return result.steal_data()
         # get_params/set_params/is_fitted validate nothing beyond admission
         # (scikit-learn's convention); consuming operations check values.
-        var configuring = operation == "get_params" or operation == "set_params" or operation == "is_fitted"
+        var configuring = operation == LOGISTIC_OPN_GET_PARAMS or operation == LOGISTIC_OPN_SET_PARAMS or operation == LOGISTIC_OPN_IS_FITTED
         # Admit live storage once; query owners below pin only consumed
         # public fields, without copying the complete Python dictionary.
         var fields = logistic_fields(model, context, configuring)
-        if operation == "get_params":
+        if operation == LOGISTIC_OPN_GET_PARAMS:
             # PACK the admitted public parameters in their fixed order.
             var params = Python.dict()
-            var names = context["lr_sorted_parameters"]
+            var names = py_item(context, nk[].k_lr_sorted_parameters)
             for i in range(len(names)):  # driver-loop: ParamsMixin's sorted parameter names
                 py_setitem(params, names[i], fields[names[i]])
             result = params
             return result.steal_data()
-        if operation == "set_params":
+        if operation == LOGISTIC_OPN_SET_PARAMS:
             result = logistic_set_params(model, args[0], context)
             return result.steal_data()
-        if operation == "is_fitted":
+        if operation == LOGISTIC_OPN_IS_FITTED:
             result = classical_is_fitted(model)
             return result.steal_data()
-        if operation != "fit":
-            classical_require_fitted(model, False, operation, context)
+        # The operation's name String is built only for the not-fitted message
+        # (classical_require_fitted re-checks and raises it).
+        if operation != LOGISTIC_OPN_FIT and not linear_fitted_unpack(model):
+            classical_require_fitted(model, False, String(call[1]), context)
         # One module handle for this call's input admissions.
         var mods = NativeModules()
         classical_admit_value(mods, args[0], context)
-        if operation == "fit":
+        if operation == LOGISTIC_OPN_FIT:
             var target = classifier_label_list(args[1], context)
             lda_native_labels(target, context, True, "LogisticRegression")
             var shape = labels_shape_of(target, context)
@@ -638,17 +659,17 @@ def logistic_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObject
         else:
             var query = LogisticQueryOwners(fields, context)
             try:
-                if operation == "decision_function":
+                if operation == LOGISTIC_OPN_DECISION_FUNCTION:
                     var entries = PythonObject(None)
                     result = logistic_decision(model, query, entries, args[0], context)
-                elif operation == "predict":
+                elif operation == LOGISTIC_OPN_PREDICT:
                     result = logistic_predict(model, query, args[0], context)
-                elif operation == "predict_proba":
+                elif operation == LOGISTIC_OPN_PREDICT_PROBA:
                     var entries = PythonObject(None)
                     result = logistic_proba(model, query, entries, args[0], context)
-                elif operation == "predict_log_proba":
+                elif operation == LOGISTIC_OPN_PREDICT_LOG_PROBA:
                     result = logistic_log_proba(model, query, args[0], context)
-                elif operation == "score":
+                elif operation == LOGISTIC_OPN_SCORE:
                     var target = classifier_label_list(args[1], context)
                     lda_native_labels(target, context, False, "LogisticRegression")
                     result = logistic_score(model, query, args[0], target, context)

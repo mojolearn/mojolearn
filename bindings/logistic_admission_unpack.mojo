@@ -9,6 +9,8 @@ from bindings.classical_pandas_door import classical_admit_value
 from bindings.sequential_admission_door import _one_of
 from bindings.classifier_public_lifecycle_door import classifier_label_list
 from bindings.native_owner_lifetime_door import native_release_admit, native_release_weakrefs
+from bindings.logistic_keys_unpack import logistic_keys
+from bindings.py_balanced import py_item
 
 
 def _parameter(name: PythonObject, value: PythonObject, context: PythonObject, configure: Bool = False) raises:
@@ -21,33 +23,36 @@ def _parameter(name: PythonObject, value: PythonObject, context: PythonObject, c
         # consumed (fit, predict, ...).
         return
     var b = native_loaded_module("builtins")
-    if String(name) == "class_weight" and _one_of(py_type(value), context["mapping_types"]):
+    var nk = logistic_keys()
+    if String(name) == "class_weight" and _one_of(py_type(value), py_item(context, nk[].k_mapping_types)):
         var keys = py_call(b.list, value)
         for i in range(len(keys)):  # driver-loop: native scalar class labels and scalar weights only
             _parameter(PythonObject("class label"), keys[i], context)
             _parameter(PythonObject("class weight"), value[keys[i]], context)
         return
     var cls = py_type(value)
-    if value is not None and cls is not b.str and cls is not b.bool and cls is not b.int and cls is not b.float and not _one_of(cls, context["scalar_types"]):
+    if value is not None and cls is not b.str and cls is not b.bool and cls is not b.int and cls is not b.float and not _one_of(cls, py_item(context, nk[].k_scalar_types)):
         raise Error("TypeError: LogisticRegression parameter " + String(name) + " requires native scalar configuration without conversion hooks")
 
 
 def logistic_storage(model: PythonObject, context: PythonObject) raises -> PythonObject:
     classical_check_layout(model, context)
-    var layout = py_get(context["classical_public_layouts"], py_type(model))
+    var nk = logistic_keys()
+    var layout = py_get(py_item(context, nk[].k_classical_public_layouts), py_type(model))
     if layout is None:
         raise Error("TypeError: LogisticRegression requires its connected native class")
-    return py_call(layout["fields_get"], model, py_type(model))
+    return py_call(py_item(layout, nk[].k_fields_get), model, py_type(model))
 
 
 def logistic_fields(model: PythonObject, context: PythonObject, configure: Bool = False) raises -> PythonObject:
     var fields = logistic_storage(model, context)
-    var names = context["lr_parameters"]
+    var nk = logistic_keys()
+    var names = py_item(context, nk[].k_lr_parameters)
     for i in range(len(names)):  # driver-loop: fixed constructor parameter values before comparisons/conversion
         if not py_contains(fields, names[i]):
             raise Error("AttributeError: missing LogisticRegression parameter " + String(names[i]))
         _parameter(names[i], fields[names[i]], context, configure)
-    names = context["lr_consumed_fields"]
+    names = py_item(context, nk[].k_lr_consumed_fields)
     for i in range(len(names)):  # driver-loop: consumed fitted state and optional native solver configuration
         if py_contains(fields, names[i]):
             var value = classifier_label_list(fields[names[i]], context) if String(names[i]) == "classes_" else fields[names[i]]
@@ -56,7 +61,8 @@ def logistic_fields(model: PythonObject, context: PythonObject, configure: Bool 
 
 
 def logistic_release_admit(value: PythonObject, context: PythonObject) raises:
-    if py_type(value) is py_get(context, "classifier_labels_class"):
+    var nk = logistic_keys()
+    if py_type(value) is py_get(context, nk[].k_classifier_labels_class):
         # ClassLabels is the fixed slots-only list subclass exposed by the
         # classifier boundary. Its native copier checks the frozen class/MRO;
         # inspect its retained elements and weakrefs without invoking list hooks.

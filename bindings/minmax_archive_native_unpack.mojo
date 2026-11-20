@@ -26,6 +26,8 @@ from core.native_archive_minmax import (
 from bindings.minmax_archive_native_pack import (
     _minmax_archive_pack,
 )
+from bindings.minmax_keys_unpack import minmax_keys
+from bindings.py_balanced import py_item
 
 
 def _minmax_archive_class_unpack(cls: PythonObject, context: PythonObject,
@@ -36,23 +38,24 @@ def _minmax_archive_class_unpack(cls: PythonObject, context: PythonObject,
         result.layout_error = 1
         return result^
     var type_fields = native_type.__dict__
-    var mro = py_call(type_fields["__mro__"].__get__, cls)
-    var descriptor_type = py_type(context["archive_memoryview_type"].obj)
+    var nk = minmax_keys()
+    var mro = py_call(py_item(type_fields, nk[].k___mro__).__get__, cls)
+    var descriptor_type = py_type(py_item(context, nk[].k_archive_memoryview_type).obj)
     if generic:
-        descriptor_type = context["host_archive_dict_descriptor_type"]
+        descriptor_type = py_item(context, nk[].k_host_archive_dict_descriptor_type)
     var dictionary = False
     var finalizer = False
     for i in range(len(mro)):  # unpack: exact native class namespace metadata
         result.names.append(_archive_class_name_unpack(mro[i]))
-        var fields = py_call(type_fields["__dict__"].__get__, mro[i])
-        if (not generic or not finalizer) and py_contains(fields, "__del__"):
-            if not generic or (fields["__del__"] is not py_get(context, "host_archive_finalizer_descriptor")
-                    and fields["__del__"] is not py_get(context, "host_archive_peer_finalizer_descriptor")):
+        var fields = py_call(py_item(type_fields, nk[].k___dict__).__get__, mro[i])
+        if (not generic or not finalizer) and py_contains(fields, nk[].k___del__):
+            if not generic or (py_item(fields, nk[].k___del__) is not py_get(context, nk[].k_host_archive_finalizer_descriptor)
+                    and py_item(fields, nk[].k___del__) is not py_get(context, nk[].k_host_archive_peer_finalizer_descriptor)):
                 if not result.layout_error:
                     result.layout_error = 2
             finalizer = True
-        if not dictionary and py_contains(fields, "__dict__"):
-            if py_type(fields["__dict__"]) is not descriptor_type and not result.layout_error:
+        if not dictionary and py_contains(fields, nk[].k___dict__):
+            if py_type(py_item(fields, nk[].k___dict__)) is not descriptor_type and not result.layout_error:
                 result.layout_error = 3
             dictionary = True
     if not dictionary and not result.layout_error:
@@ -62,15 +65,16 @@ def _minmax_archive_class_unpack(cls: PythonObject, context: PythonObject,
 
 def minmax_archive_save(model: PythonObject, path: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = py_fields(model)
-    if py_get(fields, "numeric_mode_") is None or py_get(fields, "scale_") is None:
+    var nk = minmax_keys()
+    if py_get(fields, nk[].k_numeric_mode_) is None or py_get(fields, nk[].k_scale_) is None:
         raise Error("RuntimeError: this estimator is not fitted yet")
     var integers = py_type(PythonObject(0))
-    if py_type(fields["n_features_in_"]) is not integers or py_type(fields["n_samples_seen_"]) is not integers:
+    if py_type(py_item(fields, nk[].k_n_features_in_)) is not integers or py_type(py_item(fields, nk[].k_n_samples_seen_)) is not integers:
         raise Error("TypeError: MinMaxScaler dimensions and counts must remain native integers")
-    var features = Int(py=fields["n_features_in_"])
-    var samples = Int64(py=fields["n_samples_seen_"])
-    var clip = _flag(fields["clip_"], "clip_", context)
-    var endpoints = minmax_range_values(fields["feature_range_"], context)
+    var features = Int(py=py_item(fields, nk[].k_n_features_in_))
+    var samples = Int64(py=py_item(fields, nk[].k_n_samples_seen_))
+    var clip = _flag(py_item(fields, nk[].k_clip_), "clip_", context)
+    var endpoints = minmax_range_values(py_item(fields, nk[].k_feature_range_), context)
     var names = native_minmax_statistic_names()
     var values = List[PythonObject]()
     for name in names:  # unpack: five public statistic buffers, in refusal order
@@ -92,13 +96,13 @@ def minmax_archive_save(model: PythonObject, path: PythonObject, context: Python
         var statistics = List[NativeArchiveMember]()
         for i in range(len(names)):  # unpack: native descriptors and borrowed owner pins
             statistics.append(_archive_unpack_member(names[i], values[i], context, pins))
-        var mode = _archive_unpack_member("numeric_mode", fields["numeric_mode_"], context, pins)
+        var mode = _archive_unpack_member("numeric_mode", py_item(fields, nk[].k_numeric_mode_), context, pins)
         members = native_minmax_archive_members(statistics^, mode^, _archive_class_name_unpack(py_type(model)),
             features, samples, clip, endpoints[0], endpoints[1])
         _archive_pack_members(file, methods, members)
     finally:
         if Bool(py=opened[1]):
-            _ = _archive_file_call(methods["close"], file)
+            _ = _archive_file_call(py_item(methods, nk[].k_close), file)
         _ = values
         _ = pins
         _ = members
@@ -115,8 +119,9 @@ def minmax_archive_decoded(cls: PythonObject, members: List[NativeArchiveDecoded
 
 def minmax_archive_load(cls: PythonObject, path: PythonObject, context: PythonObject) raises -> PythonObject:
     var admitted = _archive_read_input(path, context)
-    var minor = Int(py=context["archive_python_minor"])
-    var micro = Int(py=context["archive_python_micro"])
+    var nk = minmax_keys()
+    var minor = Int(py=py_item(context, nk[].k_archive_python_minor))
+    var micro = Int(py=py_item(context, nk[].k_archive_python_micro))
     try:
         var members = native_archive_read_status(admitted.span, minor, micro)
         archive_events_pack(members, context)

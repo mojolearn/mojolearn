@@ -44,6 +44,12 @@ from bindings.scaler_lifecycle_run import (
     SCALER_SEEN_SOURCE_I64, SCALER_SEEN_SOURCE_F32,
 )
 from core.scaler_core import ScalerTransformSpec, scaler_transform_rows, scaler_transform_rows_valid, scaler_transform_core
+from bindings.scaler_keys_unpack import (
+    scaler_keys, SCALER_OPN_INIT, SCALER_OPN_GET_PARAMS, SCALER_OPN_SET_PARAMS, SCALER_OPN_IS_FITTED,
+    SCALER_OPN_TRANSFORM, SCALER_OPN_PARTIAL_FIT, SCALER_OPN_FIT_TRANSFORM, SCALER_OPN_SAVE, SCALER_OPN_LOAD,
+)
+from bindings.py_keys import py_op_code
+from bindings.py_balanced import py_item
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime I64P = MutPointer[Int64, MutUntrackedOrigin]
@@ -53,9 +59,10 @@ def _entries(mode: PythonObject, context: PythonObject) raises -> PythonObject:
     var b = native_loaded_module("builtins")
     if py_type(mode) is not b.str or (String(mode) != "fast" and String(mode) != "identical"):
         raise Error("numeric_mode must be fast, identical or None")
-    if Bool(py=py_get(context,"scaler_explicit_host",False)) and String(mode) != "identical":
+    var nk = scaler_keys()
+    if Bool(py=py_get(context,nk[].k_scaler_explicit_host,False)) and String(mode) != "identical":
         raise Error("HostStandardScaler runs identical only on the host")
-    var entries = context["scaler_bindings"][mode]
+    var entries = py_item(context, nk[].k_scaler_bindings)[mode]
     if py_type(entries) is b.str:
         raise Error("ImportError: " + String(entries))
     var expected = 1 if String(mode) == "identical" else 0
@@ -66,12 +73,13 @@ def _entries(mode: PythonObject, context: PythonObject) raises -> PythonObject:
 
 
 def _mode(fields: PythonObject, context: PythonObject) raises -> PythonObject:
-    _ = _bool(fields["copy"], context)
-    _ = _bool(fields["with_mean"], context)
-    _ = _bool(fields["with_std"], context)
-    var mode = fields["numeric_mode"]
+    var nk = scaler_keys()
+    _ = _bool(py_item(fields, nk[].k_copy), context)
+    _ = _bool(py_item(fields, nk[].k_with_mean), context)
+    _ = _bool(py_item(fields, nk[].k_with_std), context)
+    var mode = py_item(fields, nk[].k_numeric_mode)
     if mode is None:
-        mode = context["backend_fields"]["_DEFAULT_MODE"]
+        mode = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
     return _answered_mode(mode)
 
 
@@ -96,9 +104,10 @@ def scaler_requested_mode(fields: PythonObject, context: PythonObject) raises ->
     or absent (an instance pickled before the parameter existed), else the
     validated word, answered as StandardScaler's is. Once per fit, in no loop;
     the None path makes the one default read the fit made before."""
-    var mode = py_get(fields, "numeric_mode")
+    var nk = scaler_keys()
+    var mode = py_get(fields, nk[].k_numeric_mode)
     if mode is None:
-        return context["backend_fields"]["_DEFAULT_MODE"]
+        return py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
     return _answered_mode(mode)
 
 
@@ -112,18 +121,21 @@ def _run(mut arena: List[Float32], mut program: List[Int32], entries: PythonObje
     """The compiled x_prep program entry on an arena (bindings/minmax_native_door.mojo still drives MinMax through it;
     StandardScaler's fit and partial_fit run the typed ScalerDriverCalls in bindings/scaler_lifecycle_run.mojo).
     Follow-up: move MinMax onto the typed run and delete this."""
-    _ = py_call_typed(entries["x_prep_run"], Int(arena.unsafe_ptr()), len(arena), Int(program.unsafe_ptr()), len(program) // 16)
+    var nk = scaler_keys()
+    _ = py_call_typed(py_item(entries, nk[].k_x_prep_run), Int(arena.unsafe_ptr()), len(arena), Int(program.unsafe_ptr()), len(program) // 16)
 
 
 def _features(fields: PythonObject) raises -> Int:
-    var value = fields["n_features_in_"]
+    var nk = scaler_keys()
+    var value = py_item(fields, nk[].k_n_features_in_)
     if py_type(value) is not native_loaded_module("builtins").int:
         raise Error("TypeError: StandardScaler n_features_in_ must remain a native integer")
     return Int(py=value)
 
 
 def _fitted(fields: PythonObject) raises -> Bool:
-    return py_contains(fields, "scale_") and py_contains(fields, "numeric_mode_")
+    var nk = scaler_keys()
+    return py_contains(fields, nk[].k_scale_) and py_contains(fields, nk[].k_numeric_mode_)
 
 
 def scaler_initialize(model: PythonObject, args: PythonObject) raises -> PythonObject:
@@ -219,11 +231,12 @@ def scaler_transform(model: PythonObject, source: PythonObject, inverse: Bool, c
 def scaler_transform(model: PythonObject, source: PythonObject, inverse: Bool, copy_option: PythonObject, context: PythonObject,
                      input_cache: PythonObject) raises -> PythonObject:
     var fields = py_fields(model)
-    var copy = _bool(fields["copy"] if copy_option is None else copy_option, context)
+    var nk = scaler_keys()
+    var copy = _bool(py_item(fields, nk[].k_copy) if copy_option is None else copy_option, context)
     if not _fitted(fields):
         _ = classical_not_fitted_class(context)
         raise Error("NotFittedError: StandardScaler is not fitted")
-    var entries = _entries(fields["numeric_mode_"], context)
+    var entries = _entries(py_item(fields, nk[].k_numeric_mode_), context)
     var calls = scaler_transform_calls(entries, context)
     var snapshot = scaler_operation_input(source, context, input_cache)
     var captured = snapshot.downcast_value_ptr[ScalerInputSnapshot]()
@@ -232,10 +245,10 @@ def scaler_transform(model: PythonObject, source: PythonObject, inverse: Bool, c
     var d = captured[].metadata.source.cols
     if d != _features(fields):
         raise Error("StandardScaler input feature count differs from fit")
-    var with_mean = _bool(fields["with_mean_"], context)
-    var with_std = _bool(fields["with_std_"], context)
-    var mean = fields["mean_"]
-    var scale = fields["scale_"]
+    var with_mean = _bool(py_item(fields, nk[].k_with_mean_), context)
+    var with_std = _bool(py_item(fields, nk[].k_with_std_), context)
+    var mean = py_item(fields, nk[].k_mean_)
+    var scale = py_item(fields, nk[].k_scale_)
     var arena = List[Float32](length=7*d+5, fill=0)
     var ap = F32P(unsafe_from_address=Int(arena.unsafe_ptr()))
     # The derived and validated rows of the fitted statistics (the stage 264
@@ -248,7 +261,7 @@ def scaler_transform(model: PythonObject, source: PythonObject, inverse: Bool, c
     # replacing a statistic (refit, partial_fit, load, assignment) misses and
     # rebuilds.
     var mods = NativeModules()
-    var mode_text = String(fields["numeric_mode_"])
+    var mode_text = String(py_item(fields, nk[].k_numeric_mode_))
     var held = prepared_get(mods, _STANDARD_ROWS_SLOT, model)
     if (held is not None and held[0] is mean and held[1] is scale and Int(py=held[3]) == d
             and String(held[4]) == mode_text and Bool(py=held[5]) == with_mean and Bool(py=held[6]) == with_std):
@@ -258,7 +271,7 @@ def scaler_transform(model: PythonObject, source: PythonObject, inverse: Bool, c
         arena = scaler_standard_rows(calls, mean, scale, d, with_mean, with_std, context)
         ap = F32P(unsafe_from_address=Int(arena.unsafe_ptr()))
         if scaler_transform_rows_valid(ap, d):
-            var rows = classical_typed(Python.tuple(7*d+5), "<f4", context["output_context"])
+            var rows = classical_typed(Python.tuple(7*d+5), "<f4", py_item(context, nk[].k_output_context))
             unsafe_memcpy(dest=_ptr(rows), src=ap, count=7*d+5)
             _ = rows  # keep the Python object alive through the copy above
             if mean is not None:
@@ -276,7 +289,7 @@ def scaler_transform(model: PythonObject, source: PythonObject, inverse: Bool, c
     # writer then overwrote. Same object type and slots; no bit moves.
     var output = classical_wrap_layout(native_array_unfilled(String("f"), n*d),
                                        NativeArrayLayout(native_matrix_shape(n, d), 4), "<f4",
-                                       context["output_context"])
+                                       py_item(context, nk[].k_output_context))
     # RUN: the typed core (statistic refusals, kernel, NaN fill and restore,
     # overflow refusal) on the borrowed input and the new output.
     scaler_transform_core(calls, ScalerTransformSpec(False, inverse, with_mean, with_std, False, 0, 0),
@@ -314,7 +327,8 @@ def _seen_pack(merged: ScalerStandardMerged, d: Int, context: PythonObject) rais
         return PythonObject(merged.seen_scalar)
     if merged.seen_kind == SCALER_SEEN_FLOAT_ROW:
         return _copy_row(F32P(unsafe_from_address=Int(merged.seen_f32.unsafe_ptr())), d, context)
-    var count = classical_typed(Python.tuple(d), "<i8", context["output_context"])
+    var nk = scaler_keys()
+    var count = classical_typed(Python.tuple(d), "<i8", py_item(context, nk[].k_output_context))
     unsafe_memcpy(dest=I64P(unsafe_from_address=Int(py=classical_address(count))),
                   src=I64P(unsafe_from_address=Int(merged.seen_i64.unsafe_ptr())), count=d)
     _ = count  # keep the Python object alive through the copy above
@@ -330,14 +344,15 @@ def scaler_partial_fit(model: PythonObject, source: PythonObject, weights: Pytho
     if not _fitted(fields):
         return scaler_fit(model, source, weights, context)
     _ = _mode(fields, context)
-    if _bool(fields["with_mean"], context) != _bool(fields["with_mean_"], context) or _bool(fields["with_std"], context) != _bool(fields["with_std_"], context):
+    var nk = scaler_keys()
+    if _bool(py_item(fields, nk[].k_with_mean), context) != _bool(py_item(fields, nk[].k_with_mean_), context) or _bool(py_item(fields, nk[].k_with_std), context) != _bool(py_item(fields, nk[].k_with_std_), context):
         raise Error("StandardScaler partial_fit: with_mean / with_std changed since the first batch")
     var b = native_loaded_module("builtins")
     # The batch fit's own admission, in the order StandardScaler.fit makes it
     # (copy True, the fitted flags, the fitted mode).
-    var with_mean = _bool(fields["with_mean_"], context)
-    var with_std = _bool(fields["with_std_"], context)
-    var mode = fields["numeric_mode_"]
+    var with_mean = _bool(py_item(fields, nk[].k_with_mean_), context)
+    var with_std = _bool(py_item(fields, nk[].k_with_std_), context)
+    var mode = py_item(fields, nk[].k_numeric_mode_)
     if py_type(mode) is not b.str:
         raise Error("numeric_mode must be fast, identical or None")
     mode = py_call(py_call(mode.strip).lower)
@@ -345,7 +360,7 @@ def scaler_partial_fit(model: PythonObject, source: PythonObject, weights: Pytho
     if mode_word != "fast" and mode_word != "identical":
         raise Error("numeric_mode must be fast, identical or None")
     answer_mode_object(mode, mode_word, MODE_FAMILY_SCALER)
-    if Bool(py=py_get(context,"scaler_explicit_host",False)) and String(mode) != "identical":
+    if Bool(py=py_get(context,nk[].k_scaler_explicit_host,False)) and String(mode) != "identical":
         raise Error("HostStandardScaler runs identical only on the host")
     var entries = scaler_fit_entries(mode, context)
     var batch = scaler_fit_input(source, weights, context, PythonObject(None))
@@ -363,22 +378,22 @@ def scaler_partial_fit(model: PythonObject, source: PythonObject, weights: Pytho
     if batch_d != d:
         raise Error("StandardScaler input feature count differs from fit")
     # UNPACK the fitted state (borrowed rows, alive to the end of the merge).
-    var old_seen = fields["n_samples_seen_"]
+    var old_seen = py_item(fields, nk[].k_n_samples_seen_)
     var old = _seen_view(old_seen, d, context)
-    var kept = fields["mean_"] is not None
+    var kept = py_item(fields, nk[].k_mean_) is not None
     var old_mean = PythonObject(None)
     var old_var = PythonObject(None)
     var mean_addr = 0
     var var_addr = 0
     if kept:
-        old_mean = _statistic(fields["mean_"], d, "mean_", context)
+        old_mean = _statistic(py_item(fields, nk[].k_mean_), d, "mean_", context)
         mean_addr = Int(py=classical_address(old_mean))
         if not with_mean and not with_std:
             # the batch publishes no mean_ to merge with
             classical_admit_value(PythonObject(None), context)
             raise Error("StandardScaler mean_ must remain a finite contiguous Float32 feature vector")
-        if fields["var_"] is not None:
-            old_var = _statistic(fields["var_"], d, "var_", context)
+        if py_item(fields, nk[].k_var_) is not None:
+            old_var = _statistic(py_item(fields, nk[].k_var_), d, "var_", context)
             var_addr = Int(py=classical_address(old_var))
     var scratch = List[Int64]()
     var new = scaler_seen_of_fit(fit, scratch, d)
@@ -394,11 +409,11 @@ def scaler_partial_fit(model: PythonObject, source: PythonObject, weights: Pytho
     # PACK
     if merged.kept:
         var ptr = F32P(unsafe_from_address=Int(merged.stats.unsafe_ptr()))
-        py_setitem(fields, "mean_", _copy_row(ptr, d, context))
+        py_setitem(fields, nk[].k_mean_, _copy_row(ptr, d, context))
         if with_std:
-            py_setitem(fields, "var_", _copy_row(ptr + d, d, context))
-            py_setitem(fields, "scale_", _copy_row(ptr + 2 * d, d, context))
-    py_setitem(fields, "n_samples_seen_", _seen_pack(merged, d, context))
+            py_setitem(fields, nk[].k_var_, _copy_row(ptr + d, d, context))
+            py_setitem(fields, nk[].k_scale_, _copy_row(ptr + 2 * d, d, context))
+    py_setitem(fields, nk[].k_n_samples_seen_, _seen_pack(merged, d, context))
     return model
 
 
@@ -415,6 +430,7 @@ def scaler_fit_transform(model: PythonObject, source: PythonObject, options: Pyt
     for k in range(len(names)):  # driver-loop: fit's keyword names, not data
         if py_type(names[k]) is not b.str or String(names[k]) != "sample_weight":
             raise Error("TypeError: StandardScaler.fit got an unexpected keyword argument")
+    var nk = scaler_keys()
     if len(options) == 0:
         var fields = py_fields(model)
         var mode = _mode(fields, context)
@@ -439,10 +455,10 @@ def scaler_fit_transform(model: PythonObject, source: PythonObject, options: Pyt
             var values = captured[].values
             var n = captured[].metadata.source.rows
             var d = captured[].metadata.source.cols
-            var stats = classical_typed(Python.tuple(3,d), "<f4", context["output_context"])
-            var output = classical_typed(Python.tuple(n,d), "<f4", context["output_context"])
-            var wm = _bool(fields["with_mean"], context)
-            var ws = _bool(fields["with_std"], context)
+            var stats = classical_typed(Python.tuple(3,d), "<f4", py_item(context, nk[].k_output_context))
+            var output = classical_typed(Python.tuple(n,d), "<f4", py_item(context, nk[].k_output_context))
+            var wm = _bool(py_item(fields, nk[].k_with_mean), context)
+            var ws = _bool(py_item(fields, nk[].k_with_std), context)
             var got = Int(py=py_call(entry, classical_address(values), classical_address(stats), classical_address(output), Python.list(n,d,Int(wm),Int(ws))))
             _ = output  # keep the Python object alive through the native call above
             _ = stats  # keep the Python object alive through the native call above
@@ -450,27 +466,27 @@ def scaler_fit_transform(model: PythonObject, source: PythonObject, options: Pyt
             if got != 0:
                 var ptr = _ptr(stats)
                 _ = stats  # keep the Python object alive through the native call above
-                py_setitem(fields, "mean_", _copy_row(ptr,d,context) if wm or ws else PythonObject(None))
+                py_setitem(fields, nk[].k_mean_, _copy_row(ptr,d,context) if wm or ws else PythonObject(None))
                 _ = stats  # keep the Python object alive through the native call above
-                py_setitem(fields, "var_", _copy_row(ptr+d,d,context) if ws else PythonObject(None))
+                py_setitem(fields, nk[].k_var_, _copy_row(ptr+d,d,context) if ws else PythonObject(None))
                 _ = stats  # keep the Python object alive through the native call above
-                py_setitem(fields, "scale_", _copy_row(ptr+2*d,d,context) if ws else PythonObject(None))
+                py_setitem(fields, nk[].k_scale_, _copy_row(ptr+2*d,d,context) if ws else PythonObject(None))
                 _ = stats  # keep the Python object alive through the native call above
-                py_setitem(fields, "n_features_in_", d)
-                py_setitem(fields, "n_samples_seen_", n)
-                py_setitem(fields, "numeric_mode_", mode)
-                py_setitem(fields, "with_mean_", wm)
-                py_setitem(fields, "with_std_", ws)
+                py_setitem(fields, nk[].k_n_features_in_, d)
+                py_setitem(fields, nk[].k_n_samples_seen_, n)
+                py_setitem(fields, nk[].k_numeric_mode_, mode)
+                py_setitem(fields, nk[].k_with_mean_, wm)
+                py_setitem(fields, nk[].k_with_std_, ws)
                 _ = stats^
                 if got < 0:
                     raise Error("StandardScaler transform overflowed in Float32")
                 _ = output  # keep the Python object alive through the native calls above
                 _ = values  # keep the Python object alive through the native calls above
-                return _write_back(source, values, output, _bool(fields["copy"],context), context, snapshot)
+                return _write_back(source, values, output, _bool(py_item(fields, nk[].k_copy),context), context, snapshot)
             _ = output  # keep the Python object alive through the native calls above
             _ = stats  # keep the Python object alive through the native calls above
             _ = values  # keep the Python object alive through the native calls above
-    _ = scaler_fit(model, source, py_get(options,"sample_weight"), context, input_cache)
+    _ = scaler_fit(model, source, py_get(options,nk[].k_sample_weight), context, input_cache)
     return scaler_transform(model, source, False, PythonObject(None), context, input_cache)
 
 
@@ -480,15 +496,16 @@ def scaler_archive_save(model: PythonObject, path: PythonObject, context: Python
     var fields = py_fields(model)
     if not _fitted(fields):
         raise Error("RuntimeError: this estimator is not fitted yet")
-    var seen = fields["n_samples_seen_"]
+    var nk = scaler_keys()
+    var seen = py_item(fields, nk[].k_n_samples_seen_)
     var integer = py_type(seen) is py_type(PythonObject(0))
     var features = _features(fields)
     var integer_count = Int64(py=seen) if integer else Int64(-1)
-    var with_mean = _bool(fields["with_mean_"], context)
-    var with_std = _bool(fields["with_std_"], context)
+    var with_mean = _bool(py_item(fields, nk[].k_with_mean_), context)
+    var with_std = _bool(py_item(fields, nk[].k_with_std_), context)
     var saved = NativeStandardArchiveSaved(features, integer_count, with_mean, with_std)
     var estimator = _archive_class_name_unpack(py_type(model))
-    var mode = fields["numeric_mode_"]
+    var mode = py_item(fields, nk[].k_numeric_mode_)
     var count_kind = 0
     var scalar_count = Float64(0)
     if not integer:
@@ -515,13 +532,14 @@ def _outside(context: PythonObject, depth: Int) raises -> Bool:
         var globals = native_caller_globals(depth)
         if globals is None:
             return True
-        var name = py_get(globals,"__name__")
+        var nk = scaler_keys()
+        var name = py_get(globals,nk[].k___name__)
         if py_type(name) is py_type(PythonObject("")):
             var module = String(name)
             outside = module != "mojolearn" and not module.startswith("mojolearn.") and not module.startswith("mojolearn_verify_all_")
-        if py_get(globals,"__mojolearn_user_boundary__") is PythonObject(True):
+        if py_get(globals,nk[].k___mojolearn_user_boundary__) is PythonObject(True):
             outside = True
-        elif py_get(globals,"__mojolearn_internal__") is PythonObject(True):
+        elif py_get(globals,nk[].k___mojolearn_internal__) is PythonObject(True):
             outside = False
     except:
         outside = True
@@ -534,7 +552,8 @@ def _public_result(result: PythonObject, context: PythonObject) raises -> Python
 
 def _public_result(result: PythonObject, context: PythonObject,
                    input_cache: PythonObject) raises -> PythonObject:
-    if classical_is_array(result,context) and py_get(context,"ndarray") is not None and _outside(context,1):
+    var nk = scaler_keys()
+    if classical_is_array(result,context) and py_get(context,nk[].k_ndarray) is not None and _outside(context,1):
         if input_cache is not None and len(input_cache) > 0:
             var captured = input_cache[0].downcast_value_ptr[ScalerInputSnapshot]()
             if result is captured[].original:
@@ -571,48 +590,49 @@ def scaler_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
     try:
         var all = PythonObject(from_borrowed=args_ptr)
         var model = all[0]
-        var op = String(all[1])
+        var nk = scaler_keys()
+        var op = py_op_code(nk[].ops, all[1])
         var args = all[2]
         var context = all[3]
         var cls = model if py_type(model) is native_loaded_module("builtins").type else py_type(model)
-        var host = py_get(context["scaler_host_contexts"],cls)
+        var host = py_get(py_item(context, nk[].k_scaler_host_contexts),cls)
         if host is not None:
             context = host
         classical_connect_numpy(context)
         classical_check_layout(model,context)
         var result = PythonObject(None)
-        if op == "init":
+        if op == SCALER_OPN_INIT:
             result = scaler_initialize(model,args)
-        elif op == "get_params":
+        elif op == SCALER_OPN_GET_PARAMS:
             var fields = py_fields(model)
-            result = Python.dict(copy=fields["copy"],with_mean=fields["with_mean"],with_std=fields["with_std"],numeric_mode=fields["numeric_mode"])
-        elif op == "set_params":
+            result = Python.dict(copy=py_item(fields, nk[].k_copy),with_mean=py_item(fields, nk[].k_with_mean),with_std=py_item(fields, nk[].k_with_std),numeric_mode=py_item(fields, nk[].k_numeric_mode))
+        elif op == SCALER_OPN_SET_PARAMS:
             var fields = py_fields(model)
             var options = args[0]
             var b = native_loaded_module("builtins")
             var names = py_call(b.list,options)
-            var known = Python.tuple("copy","with_mean","with_std","numeric_mode")
+            var known = Python.tuple(nk[].k_copy,nk[].k_with_mean,nk[].k_with_std,nk[].k_numeric_mode)
             for k in range(len(names)):  # driver-loop: proposed estimator parameter names
                 if py_type(names[k]) is not b.str or not py_contains(known,names[k]):
                     raise Error("Invalid StandardScaler parameters")
             if len(names):
-                var values = Python.tuple(py_get(options,"copy",fields["copy"]),py_get(options,"with_mean",fields["with_mean"]),py_get(options,"with_std",fields["with_std"]),py_get(options,"numeric_mode",fields["numeric_mode"]))
+                var values = Python.tuple(py_get(options,nk[].k_copy,py_item(fields, nk[].k_copy)),py_get(options,nk[].k_with_mean,py_item(fields, nk[].k_with_mean)),py_get(options,nk[].k_with_std,py_item(fields, nk[].k_with_std)),py_get(options,nk[].k_numeric_mode,py_item(fields, nk[].k_numeric_mode)))
                 _ = py_call(fields.clear)
                 _ = scaler_initialize(model,values)
             result = model
-        elif op == "is_fitted":
+        elif op == SCALER_OPN_IS_FITTED:
             result = PythonObject(_fitted(py_fields(model)))
-        elif op == "transform":
+        elif op == SCALER_OPN_TRANSFORM:
             var input_cache = Python.list()
             result = _public_result(scaler_transform(model,args[0],Bool(py=args[1]),args[2],context,input_cache),context,input_cache)
-        elif op == "partial_fit":
+        elif op == SCALER_OPN_PARTIAL_FIT:
             result = scaler_partial_fit(model,args[0],args[2],context)
-        elif op == "fit_transform":
+        elif op == SCALER_OPN_FIT_TRANSFORM:
             var input_cache = Python.list()
             result = _public_result(scaler_fit_transform(model,args[0],args[2],context,input_cache),context,input_cache)
-        elif op == "save":
+        elif op == SCALER_OPN_SAVE:
             result = scaler_archive_save(model,args[0],context)
-        elif op == "load":
+        elif op == SCALER_OPN_LOAD:
             result = scaler_archive_load(model,args[0],context)
         else:
             raise Error("unknown native StandardScaler operation")
