@@ -38,9 +38,14 @@ from core.dbscan_native_state import dbscan_metric_code, dbscan_method_code
 from bindings.public_lifecycle_owner_door import lifecycle_admit_fields
 from bindings.host_inference_scalars_door import host_inference_scalar
 from bindings.decomp_scalar_admission_unpack import decomp_scalar_repr
+from bindings.operation_names_cfb import (
+    CFB_OPN_FAMILY_CFB_DBSCAN_FIT, CFB_OPN_FAMILY_CFB_DBSCAN_FIT_PREDICT, CFB_OPN_FAMILY_CFB_DBSCAN_PREDICT,
+    CFB_OPN_FAMILY_XC_DBSCAN_PREDICT)
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.family_raw_attr_unpack import family_raw_has
 from bindings.family_raw_attr_pack import family_raw_get, family_raw_get_or
+from bindings.cluster_keys_unpack import cluster_keys
+from bindings.py_balanced import py_item
 
 
 def cfb_borrow_copy(x: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -59,7 +64,8 @@ def cfb_borrow_copy(x: PythonObject, source: PythonObject, context: PythonObject
 
 def _dbscan_text(value: PythonObject, context: PythonObject) raises -> String:
     host_inference_scalar(value, context, True)
-    if py_type(value) is py_get(context, "ndarray"):
+    var nk = cluster_keys()
+    if py_type(value) is py_get(context, nk[].k_ndarray):
         return decomp_scalar_repr(value, context)
     return String(py=family_call(native_loaded_module("builtins").str, value))
 
@@ -73,9 +79,10 @@ def _dbscan_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
     var source = args[1]
     var weights_source = args[2]
     var prediction_data = family_field(fields, "prediction_data")
+    var nk = cluster_keys()
     if py_type(prediction_data) is not b.bool:
         raise Error("TypeError: mojolearn DBSCAN: prediction_data must be a bool, got "
-                    + String(py_call(b.type.__dict__["__name__"].__get__, py_type(prediction_data))))
+                    + String(py_call(py_item(b.type.__dict__, nk[].k___name__).__get__, py_type(prediction_data))))
     var metric_attr = family_field(fields, "metric")
     var metric_key = _dbscan_text(metric_attr, context).lower()
     var metric = dbscan_metric_code(metric_key)
@@ -134,7 +141,7 @@ def _dbscan_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
         raise Error("TypeError: DBSCAN admission marker requires an exact bool")
     var admitted = len(args) > 3 and Bool(py=args[3])
     var x = source if admitted else admit_family(source, 2, "X", context).array
-    py_setitem(fields, "input_copied_", PythonObject(not (x is source)))
+    py_setitem(fields, nk[].k_input_copied_, PythonObject(not (x is source)))
     var n = Int(py=x.shape[0])
     var d = Int(py=x.shape[1])
     var x_address = Int(py=classical_address(x))
@@ -236,19 +243,22 @@ def _dbscan_predict(model: PythonObject, binding: PythonObject, source: PythonOb
     return result
 
 
-def cfb_dbscan_operation(model: PythonObject, operation: String, args: PythonObject,
+def cfb_dbscan_operation(model: PythonObject, operation: Int, args: PythonObject,
                          context: PythonObject) raises -> PythonObject:
-    """args: (binding, X[, sample_weight[, admitted]]), unpacked here once."""
+    """args: (binding, X[, sample_weight[, admitted]]), unpacked here once.
+    `operation` is the leaf code of bindings/operation_names_cfb.mojo
+    (DBSCAN block; lane bw2-cluster: it was the name, four String compares)."""
     lifecycle_admit_fields(py_fields(model))
-    if operation == "family_cfb_dbscan_fit":
+    if operation == CFB_OPN_FAMILY_CFB_DBSCAN_FIT:
         _dbscan_fit(model, args, context)
         return model
-    if operation == "family_cfb_dbscan_fit_predict":
+    if operation == CFB_OPN_FAMILY_CFB_DBSCAN_FIT_PREDICT:
+        var nk = cluster_keys()
         _dbscan_fit(model, args, context)
-        return py_fields(model)["labels_"]
-    if operation == "family_cfb_dbscan_predict":
+        return py_item(py_fields(model), nk[].k_labels_)
+    if operation == CFB_OPN_FAMILY_CFB_DBSCAN_PREDICT:
         return _dbscan_predict(model, args[0], args[1], context)
-    if operation == "family_xc_dbscan_predict":
+    if operation == CFB_OPN_FAMILY_XC_DBSCAN_PREDICT:
         # The historical internal entry always used direct reference uploads.
         return _dbscan_predict(model, args[0], args[1], context, False)
-    raise Error("RuntimeError: unknown DBSCAN operation " + operation)
+    raise Error("RuntimeError: unknown DBSCAN operation code " + String(operation))

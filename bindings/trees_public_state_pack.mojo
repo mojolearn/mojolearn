@@ -17,6 +17,7 @@ from bindings.py_model_records import bump_model_generation
 from bindings.trees_public_state_unpack import (
     _release_tree_values,
 )
+from bindings.trees_keys_unpack import trees_keys
 
 
 def forest_restore_state(model: PythonObject, state: PythonObject,
@@ -37,7 +38,8 @@ def forest_restore_state(model: PythonObject, state: PythonObject,
     _ = py_call(replacement.update, state)
     # Preserve __setstate__'s update semantics, including unrelated old fields,
     # while resetting the process-local resident holder even if state supplied it.
-    py_setitem(replacement, "_resident_holder", Python.dict())
+    var nk = trees_keys()
+    py_setitem(replacement, nk[].k__resident_holder, Python.dict())
     _release_tree_values(py_call(b.list, previous.values()),
                          py_call(b.list, replacement.values()), context)
     _ = py_call(fields.update, replacement)
@@ -47,9 +49,10 @@ def forest_restore_state(model: PythonObject, state: PythonObject,
 
 def tree_is_fitted(model: PythonObject, forest: Bool) raises -> PythonObject:
     var fields = _fields(model)
+    var nk = trees_keys()
     if forest:
-        return PythonObject(py_contains(fields, "_offsets"))
-    var learner = py_get(fields, "_learner_")
+        return PythonObject(py_contains(fields, nk[].k__offsets))
+    var learner = py_get(fields, nk[].k__learner_)
     if learner is None:
         return PythonObject(False)
-    return PythonObject(py_get(_fields(learner), "model_") is not None)
+    return PythonObject(py_get(_fields(learner), nk[].k_model_) is not None)

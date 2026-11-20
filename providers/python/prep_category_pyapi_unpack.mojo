@@ -10,6 +10,8 @@ from bindings.classical_pandas_door import _pd_class, _pd_fields, _pd_get
 from providers.python.array_metadata_pyapi_door import ArrayMetadata, ArrayPin
 from providers.python.prep_metadata_pyapi_unpack import _array_snapshot, _description, prep_numeric_vector
 from core.prep_boundary_impl import prep_category_flags, prep_category_export
+from bindings.prep_keys_unpack import prep_keys
+from bindings.py_balanced import py_item
 
 
 def prep_ndarray_backed(value: PythonObject) raises -> PythonObject:
@@ -22,8 +24,9 @@ def prep_ndarray_backed(value: PythonObject) raises -> PythonObject:
 
 def _category_capture(value: PythonObject, context: PythonObject, mut codes_pin: ArrayPin,
                       mut labels_pin: ArrayPin) raises -> Tuple[ArrayMetadata, ArrayMetadata, Int, Int, Bool]:
+    var nk = prep_keys()
     var raw_codes = _pd_get("pandas._libs.arrays", "NDArrayBacked", "_ndarray", value)
-    if py_type(raw_codes) is not context["ndarray"]:
+    if py_type(raw_codes) is not py_item(context, nk[].k_ndarray):
         raise Error("TypeError: pandas categorical codes require native array storage")
     var codes = _array_snapshot(raw_codes, context, codes_pin)
     if len(codes.shape) != 1 or not codes.castable or codes.source.kind != 1:
@@ -31,19 +34,19 @@ def _category_capture(value: PythonObject, context: PythonObject, mut codes_pin:
     var dtype = _pd_get("pandas._libs.arrays", "NDArrayBacked", "_dtype", value)
     if py_type(dtype) is not _pd_class("pandas.core.dtypes.dtypes", "CategoricalDtype"):
         raise Error("TypeError: pandas categorical dtype requires native metadata")
-    var categories = py_get(_pd_fields(dtype), "_categories")
+    var categories = py_get(_pd_fields(dtype), nk[].k__categories)
     var cls = py_type(categories)
     var raw = PythonObject(None)
     if cls is _pd_class("pandas.core.indexes.range", "RangeIndex"):
-        raw = py_get(_pd_fields(categories), "_range")
+        raw = py_get(_pd_fields(categories), nk[].k__range)
         if py_type(raw) is not native_loaded_module("builtins").range:
             raise Error("TypeError: pandas category range requires native range storage")
         raw = classical_input(raw, context)
     elif cls is _pd_class("pandas.core.indexes.base", "Index") or cls is _pd_class("pandas.core.indexes.datetimes", "DatetimeIndex") or cls is _pd_class("pandas.core.indexes.timedeltas", "TimedeltaIndex") or cls is _pd_class("pandas.core.indexes.period", "PeriodIndex"):
-        raw = prep_ndarray_backed(py_get(_pd_fields(categories), "_data"))
+        raw = prep_ndarray_backed(py_get(_pd_fields(categories), nk[].k__data))
     else:
         raise Error("TypeError: pandas categories require native index storage")
-    if py_type(raw) is not context["ndarray"]:
+    if py_type(raw) is not py_item(context, nk[].k_ndarray):
         raise Error("TypeError: pandas categories require native array storage")
     var labels = _array_snapshot(raw, context, labels_pin)
     if len(labels.shape) != 1:

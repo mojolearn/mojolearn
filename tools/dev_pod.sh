@@ -23,7 +23,7 @@
 #                                              --checkout also moves the working tree to it (tools/cpu_central.sh)
 #
 # THE CPU CHECK BOX (`up <key> --vendor cpu`, lane fx-cpu-box-checks, 2026-11-19): a RunPod CPU pod (no GPU) that
-# only tools/cpu_central.sh rents (key cpc1), with the CPU flavors and vCPU count it picks
+# only tools/cpu_central.sh rents (keys cpc1, cpc2), with the CPU flavors and vCPU count it picks
 # (MOJOLEARN_DEVPOD_CPU_FLAVORS, MOJOLEARN_DEVPOD_CPU_VCPU) on runpod/base (MOJOLEARN_DEVPOD_CPU_IMAGE); created
 # through the v1 CPU schema as tools/runpod_cpu_leg.sh does, its status read through v2. Its lease is the queue's
 # (tools/cpu_central.sh), as for the shared NVIDIA pods.
@@ -274,7 +274,9 @@ echo HEAD=\$(git rev-parse HEAD)" < /dev/null 2>&1) || { printf '%s\n' "$_out" >
 # was created, the per-attempt dead-man disarmed).
 runpod_create() {  # <retry minutes> <gpus | cpu flavors> <image> <kind: 0 nvidia, 1 amd, cpu>
     POD_NAME="mojolearn-dev-$KEY-$(date -u +%m%d%H%M)"
-    if [ "$4" != 0 ]; then rp_select_api 1; else rp_select_api 2; fi
+    # NVIDIA and the CPU box create, read and delete through v2 (api.runpod.io); only the AMD kind keeps v1, whose host
+    # rest.runpod.io no longer resolves (2026-11-20, lane fx-cpu-pod-v2: the AMD kind needs the same v2 move)
+    if [ "$4" = 1 ]; then rp_select_api 1; else rp_select_api 2; fi
     # Keep complete request/response evidence outside D: a confirmed failed
     # create may remove D, but must never erase the provider's diagnosis.
     _request_evidence="$STATE_ROOT/$KEY.requests-$(date -u +%Y%m%dT%H%M%SZ)-$$"
@@ -283,7 +285,7 @@ runpod_create() {  # <retry minutes> <gpus | cpu flavors> <image> <kind: 0 nvidi
     cp "$TMPD/rp.body" "$_request_evidence/list-before.json" || die "cannot retain pre-create listing"
     [ "$(rp_py listingvalid)" = yes ] || die "pod listing incomplete or invalid; no create attempted"
     if [ "$4" = cpu ]; then
-        python3 "$ROOT/tools/runpod_gpu_request.py" cpu "$TMPD/create.json" "$POD_NAME" "$3" "$2" "$CPU_VCPU" "$DISK_GB" \
+        python3 "$ROOT/tools/runpod_gpu_request.py" cpu "$TMPD/create.json" "$POD_NAME" "$3" "$2" "$CPU_VCPU" "$DISK_GB" 0 \
             || die "CPU request validation failed; no create attempted"
     elif [ "$4" = 1 ]; then
         python3 "$ROOT/tools/runpod_gpu_request.py" "$TMPD/create.json" "$POD_NAME" "$3" "$2" "$DISK_GB" 1 \
@@ -306,6 +308,10 @@ runpod_create() {  # <retry minutes> <gpus | cpu flavors> <image> <kind: 0 nvidi
         if [ "$4" = 0 ]; then
             python3 "$ROOT/tools/runpod_gpu_request.py" v2 "$TMPD/create.json" "$POD_NAME" "$3" "$2" "$DISK_GB" "$NV_GPU_COUNT" "$((attempt - 1))" \
                 || die "CUDA/placement validation failed; no create attempted"
+        elif [ "$4" = cpu ]; then
+            # v2 takes one CPU flavor per create: attempt N asks for flavor N of our order (runpod_gpu_request.py cpu)
+            python3 "$ROOT/tools/runpod_gpu_request.py" cpu "$TMPD/create.json" "$POD_NAME" "$3" "$2" "$CPU_VCPU" "$DISK_GB" "$((attempt - 1))" \
+                || die "CPU request validation failed; no create attempted"
         fi
         cp "$TMPD/create.json" "$_request_evidence/request-$attempt.json" || die "cannot retain request; no create attempted"
         cp "$TMPD/create.json" "$D/create_request.json" || die "cannot retain request; no create attempted"
@@ -323,6 +329,10 @@ runpod_create() {  # <retry minutes> <gpus | cpu flavors> <image> <kind: 0 nvidi
         printf '%s\n' "$_create_code" > "$_request_evidence/http-$attempt.txt" || die "cannot retain create status; dead-man stays armed"
         cp "$TMPD/rp.body" "$D/create_response.json" || die "cannot retain create response; dead-man stays armed"
         POD_ID=$(rp_py id)
+        # v2 answers 202 only for a QUEUED create (no pod yet, one may appear later); we never send `queue`, so a 202
+        # is unexpected: stop with the dead-man armed (it deletes by name), never a second create
+        [ "$RP_API_VERSION" != 2 ] || [ "$_create_code" != 202 ] \
+            || die "create HTTP 202 (queued); dead-man stays armed; evidence $_request_evidence"
         [ -z "$POD_ID" ] || break
         _body=$(head -c 300 "$TMPD/rp.body"); rp_call GET "$RP/pods"
         cp "$TMPD/rp.body" "$_request_evidence/list-after-$attempt.json" || die "cannot retain create recovery listing; dead-man stays armed"
@@ -356,16 +366,11 @@ runpod_create() {  # <retry minutes> <gpus | cpu flavors> <image> <kind: 0 nvidi
     printf '%s attempt %s: created %s\n' "$(date -u +%FT%TZ)" "$attempt" "$POD_ID" >> "$attempts_log"
     echo "$POD_ID" > "$D/deadman/pod_id.txt"
     COST_HR=$(rp_py cost)
-    if [ "$4" = cpu ]; then
-        # the v1 status endpoint answered 403 for a live CPU pod (tools/runpod_cpu_leg.sh, 2026-10-29): readiness, the
-        # guard and every later call go through v2, which also supplies ssh.direct
-        rp_select_api 2
-    fi
     GPU=$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); m=d.get("machine") or {}; print(m.get("gpuTypeId") or (d.get("gpu") or {}).get("id") or "?")' "$D/create_response.json" 2>/dev/null || echo "?")
     if [ "$4" = cpu ]; then
         GPU=$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); m=d.get("machine") or {}
-f=d.get("cpuFlavorId") or m.get("cpuFlavorId") or m.get("cpuTypeId") or ",".join(d.get("cpuFlavorIds") or []) or "?"
-print("cpu %s %s vCPU %s GB" % (f, d.get("vcpuCount") or d.get("vcpu") or "?", d.get("memoryInGb") or "?"))' "$D/create_response.json" 2>/dev/null || echo "cpu ?")
+c=d.get("cpu") if isinstance(d.get("cpu"), dict) else {}
+print("cpu %s %s vCPU %s GB" % (c.get("id") or "?", c.get("vcpuCount") or "?", c.get("memory") or "?"))' "$D/create_response.json" 2>/dev/null || echo "cpu ?")
     fi
     _deadline=$(( $(now) + READY_TIMEOUT )); SSH_TARGET=""; _ready_attempt=0
     while [ "$(now)" -lt "$_deadline" ]; do

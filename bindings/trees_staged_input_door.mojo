@@ -23,6 +23,8 @@ from bindings.py_optional import py_present
 from bindings.py_model_records import (
     records_stamped_get, records_stamped_put, records_stampable, ContentRecord, RECORDS_TREES,
 )
+from bindings.trees_keys_unpack import trees_keys
+from bindings.py_balanced import py_item
 
 comptime _TABLE_STAMP = "trees_staged_member_table_v1"
 
@@ -44,8 +46,9 @@ def _member_table(member: PythonObject, cols: Int, context: PythonObject) raises
     mode object and the connected class table are compared too. A
     random-splitter tree (its inner forest decides) and any refusal are not
     stamped: they walk every call, as before."""
-    var defaults = context["backend_fields"]["_DEFAULT_MODE"]
-    var classes = context["trees_classes"]
+    var nk = trees_keys()
+    var defaults = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
+    var classes = py_item(context, nk[].k_trees_classes)
     var held = records_stamped_get(RECORDS_TREES, member, _TABLE_STAMP)
     if held is not None and Int(py=held[1]) == cols and held[2] is defaults and held[3] is classes:
         return held[0]
@@ -79,13 +82,14 @@ def _member_table_walk(member: PythonObject, cols: Int, context: PythonObject) r
         # class does (a class reassignment changes the generation).
         return Python.tuple(PythonObject(None), PythonObject(True), PythonObject(None))
     var fields = py_fields(member)
+    var nk = trees_keys()
     if kind.startswith("dt_"):
-        var inner = py_get(fields, "_random_inner")
+        var inner = py_get(fields, nk[].k__random_inner)
         if inner is not None:
             return Python.tuple(PythonObject(None), PythonObject(False), inner)
-    if not py_contains(fields, "_offsets"):
+    if not py_contains(fields, nk[].k__offsets):
         return Python.tuple(PythonObject(None), PythonObject(True), PythonObject(None))
-    var width = py_get(fields, "n_features_in_")
+    var width = py_get(fields, nk[].k_n_features_in_)
     if width is None:
         return Python.tuple(PythonObject(None), PythonObject(True), PythonObject(None))
     try:

@@ -13,7 +13,7 @@ from bindings.classical_caller_unpack import classical_caller_outside
 from bindings.host_archive_native_door import host_archive_build
 from bindings.host_archive_predict_native_pack import host_archive_predict
 from bindings.host_knn_predict_native_pack import host_knn_predict
-from bindings.native_operation_codes import operation_table, OP_ROUTE_TREES, OP_ROUTE_HOST_TREE, OP_ROUTE_CLASSICAL
+from bindings.native_operation_codes import operation_table, OP_ROUTE_TREES, OP_ROUTE_HOST_TREE, OP_ROUTE_CLASSICAL, OP_LEAF_NONE
 from bindings.native_operation_names_unpack import operation_lookup, operation_code
 from bindings.host_tree_native_door import host_tree_operation
 from bindings.trees_public_native_door import trees_public_operation
@@ -39,15 +39,16 @@ from bindings.operation_names_classical import (
 from bindings.py_balanced import py_item
 
 
-def _trees_routed(model: PythonObject, route: Int, name: String, args: PythonObject,
+def _trees_routed(model: PythonObject, route: Int, leaf: Int, name: String, args: PythonObject,
                   context: PythonObject) raises -> PythonObject:
     """A `trees_*` or `host_tree_*` operation of the table, by its route; `name`
     is the table's own String, borrowed (bw2-classical: it was copied per
-    call)."""
+    call). `leaf` is a `trees_*` name's code (bindings/operation_names_trees.mojo,
+    lane bw3-trees), OP_LEAF_NONE for a name the table does not hold."""
     if route == OP_ROUTE_TREES:
         # The public tree ensembles' one-call methods
         # (bindings/trees_public_native.mojo).
-        return trees_public_operation(model, name, args, context)
+        return trees_public_operation(model, leaf, name, args, context)
     if route == OP_ROUTE_HOST_TREE:
         var nk = classical_keys()
         return host_tree_operation(model, name, args, py_item(context, nk[].k_host_tree_context))
@@ -59,7 +60,7 @@ def _trees_coded(model: PythonObject, code: Int, args: PythonObject, context: Py
     var table = operation_table()
     if code < 0 or code >= len(table[].names):
         raise Error("TypeError: unknown native operation code")
-    return _trees_routed(model, table[].routes[code], table[].names[code], args, context)
+    return _trees_routed(model, table[].routes[code], table[].leaves[code], table[].names[code], args, context)
 
 
 def _trees_leaf(model: PythonObject, operation: Int, name: String, args: PythonObject,
@@ -115,9 +116,9 @@ def _trees_prefixed(model: PythonObject, operation: String, args: PythonObject, 
         var nk = classical_keys()
         return host_inference_operation(model, operation, args, py_item(context, nk[].k_host_inference_context), context, classical_caller_outside(context))
     if operation.startswith("trees_"):
-        return _trees_routed(model, OP_ROUTE_TREES, operation, args, context)
+        return _trees_routed(model, OP_ROUTE_TREES, OP_LEAF_NONE, operation, args, context)
     if operation.startswith("host_tree_"):
-        return _trees_routed(model, OP_ROUTE_HOST_TREE, operation, args, context)
+        return _trees_routed(model, OP_ROUTE_HOST_TREE, OP_LEAF_NONE, operation, args, context)
     raise Error("RuntimeError: unknown native tree operation " + operation)
 
 
@@ -144,7 +145,8 @@ def classical_trees_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> P
         if code >= 0:
             var route = names[].table.routes[code]
             if route == OP_ROUTE_TREES or route == OP_ROUTE_HOST_TREE:
-                var routed = _trees_routed(request[0], route, names[].table.names[code], request[2], request[3])
+                var routed = _trees_routed(request[0], route, names[].table.leaves[code], names[].table.names[code],
+                                           request[2], request[3])
                 return routed.steal_data()
             if route == OP_ROUTE_CLASSICAL and names[].table.leaves[code] >= CLASSICAL_TREES_FIRST:
                 var leaf = _trees_leaf(request[0], names[].table.leaves[code], names[].table.names[code],

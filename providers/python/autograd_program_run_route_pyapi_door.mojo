@@ -43,6 +43,8 @@ from providers.python.autograd_session_frontend_pyapi_door import _SESSION_LAYOU
 from providers.python.autograd_program_arrays_pyapi_door import program_admission_context
 from providers.python.neural_descriptor_pyapi_door import NativeDescriptorResource
 from autograd.ops_api import ops_session_registry_token
+from bindings.autograd_keys_unpack import autograd_keys
+from bindings.py_balanced import py_item
 
 
 @fieldwise_init
@@ -186,7 +188,8 @@ def program_run_route_record[KIND: Int](
     if program_layout == 0 or session_layout == 0:
         return  # no class record: these classes keep the full admission per run
     var context = program_admission_context()
-    if session_layout != Int(context["ops_session_layout"]._obj_ptr):
+    var nk = autograd_keys()
+    if session_layout != Int(py_item(context, nk[].k_ops_session_layout)._obj_ptr):
         return
     var route = ProgramRunRoute(
         kind=KIND, registry=ops_session_registry_token(),

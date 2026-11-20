@@ -10,12 +10,15 @@ from providers.python.neural_descriptor_pyapi_door import NativeDescriptorResour
 from bindings.py_model_records import (
     RECORDS_PREPARED, ContentRecord, content_value, records_stampable, records_stamped_get, records_stamped_put,
 )
+from bindings.autograd_keys_unpack import autograd_keys
+from bindings.py_balanced import py_item
 
 
 def _fields(value: PythonObject, layout: PythonObject) raises -> PythonObject:
     var b = native_loaded_module("builtins")
     var cls = py_type(value)
-    if cls is not layout["cls"] or py_type(cls) is not b.type:
+    var nk = autograd_keys()
+    if cls is not py_item(layout, nk[].k_cls) or py_type(cls) is not b.type:
         raise Error("TypeError: artifact import requires exact native storage classes")
     # The ancestry and hook checks depend only on class rows. When every
     # hook row is a class in the ancestry, a passed check is kept per class
@@ -25,16 +28,16 @@ def _fields(value: PythonObject, layout: PythonObject) raises -> PythonObject:
     var mods = NativeModules()
     var record = class_record(mods, _IMPORT_LAYOUT_SLOT, cls)
     if record is None or Int(py=record) != Int(layout._obj_ptr):
-        var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
-        if len(mro) != len(layout["mro"]):
+        var mro = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, cls)
+        if len(mro) != len(py_item(layout, nk[].k_mro)):
             raise Error("TypeError: artifact import class ancestry changed")
         for i in range(len(mro)):  # driver-loop: over connected class ancestry
-            if mro[i] is not layout["mro"][i]:
+            if mro[i] is not py_item(layout, nk[].k_mro)[i]:
                 raise Error("TypeError: artifact import class ancestry changed")
-        var hooks = layout["hooks"]
+        var hooks = py_item(layout, nk[].k_hooks)
         var covered = True
         for i in range(len(hooks)):  # driver-loop: over fixed native storage identities
-            var row = py_call(b.type.__dict__["__dict__"].__get__, hooks[i][0])
+            var row = py_call(py_item(b.type.__dict__, nk[].k___dict__).__get__, hooks[i][0])
             if py_get(row, hooks[i][1]) is not hooks[i][2]:
                 raise Error("TypeError: artifact import refuses changed Python storage hooks")
             var in_mro = False
@@ -44,7 +47,7 @@ def _fields(value: PythonObject, layout: PythonObject) raises -> PythonObject:
             covered = covered and in_mro
         if covered:
             class_admit(mods, _IMPORT_LAYOUT_SLOT, cls, PythonObject(Int(layout._obj_ptr)))
-    var fields = py_call(layout["fields_get"], value, cls)
+    var fields = py_call(py_item(layout, nk[].k_fields_get), value, cls)
     if py_type(fields) is not b.dict or not dict_keys_admitted(fields):
         var keys = py_call(b.list, fields)
         for i in range(len(keys)):  # driver-loop: over safe keys before field lookup
@@ -94,18 +97,19 @@ def imported_program_snapshot(program: PythonObject) raises -> PythonObject:
     # Retain owners and capture metadata once for the whole public operation.
     var b = native_loaded_module("builtins")
     var module = native_loaded_module("mojolearn.importers._program")
-    var context = py_fields(module)["_IMPORT_CONTEXT"]
+    var nk = autograd_keys()
+    var context = py_item(py_fields(module), nk[].k__IMPORT_CONTEXT)
     if py_type(context) is not b.dict:
         raise Error("TypeError: imported program requires its native connection")
-    var fields = py_call(b.dict, _fields(program, context["layouts"][context["imported"]]))
-    var session = fields["_s"]
-    var state = py_call(b.dict, _fields(session, context["layouts"][context["session"]]))
-    if state["_id"] is None:
+    var fields = py_call(b.dict, _fields(program, py_item(context, nk[].k_layouts)[py_item(context, nk[].k_imported)]))
+    var session = py_item(fields, nk[].k__s)
+    var state = py_call(b.dict, _fields(session, py_item(context, nk[].k_layouts)[py_item(context, nk[].k_session)]))
+    if py_item(state, nk[].k__id) is None:
         raise Error("ValueError: this session is closed")
-    if py_type(fields["_id"]) is not b.int or py_type(state["_id"]) is not b.int:
+    if py_type(py_item(fields, nk[].k__id)) is not b.int or py_type(py_item(state, nk[].k__id)) is not b.int:
         raise Error("TypeError: program and Session handles require exact native integers")
-    var owner = state["_lifetime"].downcast_value_ptr[NativeDescriptorResource]()
-    if owner[].handle == 0 or owner[].handle != Int(py=state["_id"]):
+    var owner = py_item(state, nk[].k__lifetime).downcast_value_ptr[NativeDescriptorResource]()
+    if owner[].handle == 0 or owner[].handle != Int(py=py_item(state, nk[].k__id)):
         raise Error("TypeError: Session handle differs from its native registry owner")
     var inputs = _program_specs_kept(program, fields, "inputs")
     var outputs = _program_specs_kept(program, fields, "outputs")
@@ -154,7 +158,8 @@ def _shape_words(shapes: PythonObject, context: PythonObject) raises -> PythonOb
     if shapes is None:
         return Python.tuple(names, flat)
     var cls = py_type(shapes)
-    if not _one_of(cls, context["shape_mappings"]) and cls is not b.list and cls is not b.tuple:
+    var nk = autograd_keys()
+    if not _one_of(cls, py_item(context, nk[].k_shape_mappings)) and cls is not b.list and cls is not b.tuple:
         raise Error("TypeError: shapes requires a native mapping or key/value sequence; Python mapping callbacks are unsupported")
     # Do not traverse dimension objects yet: a standard torch.Size is a native
     # tuple subtype. It is read through tuple's C iterator below, after checking
@@ -168,36 +173,36 @@ def _shape_words(shapes: PythonObject, context: PythonObject) raises -> PythonOb
                 raise Error("TypeError: shape entries require native key/value pairs")
             var key = pair[0]
             var key_type = py_type(key)
-            _scalar(key, context["shape_names"])
+            _scalar(key, py_item(context, nk[].k_shape_names))
             py_setitem(provided, key, pair[1])
     var keys = py_call(b.list, provided)
     for i in range(len(keys)):  # driver-loop: over named input shape metadata
         var key = keys[i]
-        _scalar(key, context["shape_names"])
+        _scalar(key, py_item(context, nk[].k_shape_names))
         var name = py_call(b.str, key)
         var dims = provided[key]
         var dims_type = py_type(dims)
         var tuple_storage = False
         if py_type(dims_type) is b.type:
-            var mro = py_call(b.type.__dict__["__mro__"].__get__, dims_type)
+            var mro = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, dims_type)
             tuple_storage = py_contains(mro, b.tuple)
             if tuple_storage:
                 for j in range(len(mro)):  # driver-loop: over effective tuple iterator identity
-                    var fields = py_call(b.type.__dict__["__dict__"].__get__, mro[j])
-                    if py_contains(fields, "__iter__"):
-                        if fields["__iter__"] is not b.tuple.__dict__["__iter__"]:
+                    var fields = py_call(py_item(b.type.__dict__, nk[].k___dict__).__get__, mro[j])
+                    if py_contains(fields, nk[].k___iter__):
+                        if py_item(fields, nk[].k___iter__) is not py_item(b.tuple.__dict__, nk[].k___iter__):
                             raise Error("TypeError: dimensions refuse Python iteration hooks")
                         break
         if tuple_storage:
-            dims = py_call(b.tuple, py_call(b.tuple.__dict__["__iter__"], dims))
+            dims = py_call(b.tuple, py_call(py_item(b.tuple.__dict__, nk[].k___iter__), dims))
         else:
-            if not _one_of(dims_type, context["shape_containers"]):
+            if not _one_of(dims_type, py_item(context, nk[].k_shape_containers)):
                 raise Error("TypeError: dimensions require native sequence storage")
             dims = py_call(b.tuple, dims)
         py_call(names.append, name)
         py_call(flat.append, len(dims))
         for j in range(len(dims)):  # driver-loop: over native scalar axis conversion
-            _scalar(dims[j], context["shape_scalars"])
+            _scalar(dims[j], py_item(context, nk[].k_shape_scalars))
             py_call(flat.append, graph_int(dims[j]))
     return Python.tuple(names, flat)
 
@@ -232,11 +237,12 @@ def _unsupported(source: PythonObject, problems: PythonObject, context: PythonOb
         if item[1] is not None:
             message += " (" + String(item[1]) + ")"
         message += ": " + String(item[2])
-    var category = context["unsupported"]
+    var nk = autograd_keys()
+    var category = py_item(context, nk[].k_unsupported)
     var exception = py_call(b.ValueError.__new__, category, PythonObject(message))
-    var fields = py_call(b.BaseException.__dict__["__dict__"].__get__, exception, category)
-    py_setitem(fields, "source", source)
-    py_setitem(fields, "problems", py_call(b.tuple, output))
+    var fields = py_call(py_item(b.BaseException.__dict__, nk[].k___dict__).__get__, exception, category)
+    py_setitem(fields, nk[].k_source, source)
+    py_setitem(fields, nk[].k_problems, py_call(b.tuple, output))
     _raise_object(category, exception)
 
 

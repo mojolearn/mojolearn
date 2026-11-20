@@ -17,6 +17,8 @@ from core.hierarchy_connectivity_plan import (
     ConnectivityStorage, ConnectivityEdge, HierarchyConnectivityPlan,
     connectivity_edge, connectivity_pack, connectivity_compressed, connectivity_coo, connectivity_dia,
 )
+from bindings.cluster_keys_unpack import cluster_keys
+from bindings.py_balanced import py_item
 
 
 struct HierarchyConnectivity(Movable):
@@ -43,7 +45,8 @@ struct HierarchyConnectivity(Movable):
 
 def _kind(dtype: PythonObject, context: PythonObject) raises -> Int:
     var b = native_loaded_module("builtins")
-    var types = context["numeric_dtypes"]
+    var nk = cluster_keys()
+    var types = py_item(context, nk[].k_numeric_dtypes)
     if py_type(types) is not b.dict:
         raise Error("TypeError: sparse connectivity dtype metadata requires a native dictionary")
     var known = False
@@ -71,7 +74,8 @@ struct _Storage(Movable):
     var view: ConnectivityStorage
 
     def __init__(out self, value: PythonObject, rank: Int, indices: Bool, context: PythonObject) raises:
-        if py_type(value) is not context["ndarray"]:
+        var nk = cluster_keys()
+        if py_type(value) is not py_item(context, nk[].k_ndarray):
             raise Error("TypeError: sparse connectivity storage requires ordinary ndarrays")
         self.keep = value
         var shape = value.shape
@@ -112,50 +116,51 @@ def hierarchy_connectivity(source: PythonObject, n: Int, context: PythonObject) 
         var dense = HierarchyConnectivity(source, pin.keep, snapshot.source.addr, snapshot.count, snapshot.count, 1)
         dense.snapshot_owner = pin.owner
         return dense^
-    var ancestry = py_call(b.type.__dict__["__mro__"].__get__, py_type(source))
+    var nk = cluster_keys()
+    var ancestry = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, py_type(source))
     for i in range(len(ancestry)):  # boundary admission: refuse finalizers before storage acquisition
-        if py_get(_pd_type_fields(ancestry[i]), "__del__") is not None:
+        if py_get(_pd_type_fields(ancestry[i]), nk[].k___del__) is not None:
             raise Error("TypeError: sparse connectivity cannot use Python finalizers")
     var fields = _sparse_fields(source)
-    var shape = fields["_shape"]
+    var shape = py_item(fields, nk[].k__shape)
     if py_type(shape) is not b.tuple or len(shape) != 2 or py_type(shape[0]) is not b.int or py_type(shape[1]) is not b.int:
         raise Error("TypeError: sparse connectivity requires two native shape dimensions")
     if Int(py=shape[0]) != n or Int(py=shape[1]) != n:
         raise Error("Wrong shape for connectivity matrix when X has " + String(n) + " samples")
     var plan = HierarchyConnectivityPlan()
     if format == "csr" or format == "csc" or format == "bsr":
-        var data = _Storage(fields["data"], 3 if format == "bsr" else 1, False, context)
-        var indices = _Storage(fields["indices"], 1, True, context)
-        var pointers = _Storage(fields["indptr"], 1, True, context)
+        var data = _Storage(py_item(fields, nk[].k_data), 3 if format == "bsr" else 1, False, context)
+        var indices = _Storage(py_item(fields, nk[].k_indices), 1, True, context)
+        var pointers = _Storage(py_item(fields, nk[].k_indptr), 1, True, context)
         with GILReleased(Python()):
             plan = connectivity_compressed(data.view, indices.view, pointers.view, n, format == "csc", format == "bsr")
         _ = data^
         _ = indices^
         _ = pointers^
     elif format == "coo":
-        var coords = fields["coords"]
+        var coords = py_item(fields, nk[].k_coords)
         if py_type(coords) is not b.tuple or len(coords) != 2:
             raise Error("TypeError: sparse connectivity coordinates require two native arrays")
         var row = _Storage(coords[0], 1, True, context)
         var col = _Storage(coords[1], 1, True, context)
-        var data = _Storage(fields["data"], 1, False, context)
+        var data = _Storage(py_item(fields, nk[].k_data), 1, False, context)
         with GILReleased(Python()):
             plan = connectivity_coo(row.view, col.view, data.view, n)
         _ = row^
         _ = col^
         _ = data^
     elif format == "dia":
-        var offsets = _Storage(fields["offsets"], 1, True, context)
-        var data = _Storage(fields["data"], 2, False, context)
+        var offsets = _Storage(py_item(fields, nk[].k_offsets), 1, True, context)
+        var data = _Storage(py_item(fields, nk[].k_data), 2, False, context)
         with GILReleased(Python()):
             plan = connectivity_dia(offsets.view, data.view, n)
         _ = offsets^
         _ = data^
     elif format == "dok":
-        var dictionary = fields["_dict"]
+        var dictionary = py_item(fields, nk[].k__dict)
         if py_type(dictionary) is not b.dict:
             raise Error("TypeError: sparse DOK connectivity requires native dictionary storage")
-        var dtype = fields["dtype"]
+        var dtype = py_item(fields, nk[].k_dtype)
         var kind = _kind(dtype, context)
         var width = Int(py=dtype.itemsize)
         var records = List[ConnectivityEdge]()
@@ -179,12 +184,12 @@ def hierarchy_connectivity(source: PythonObject, n: Int, context: PythonObject) 
         _ = records^
         _ = dictionary
     elif format == "lil":
-        var dtype = fields["dtype"]
+        var dtype = py_item(fields, nk[].k_dtype)
         var kind = _kind(dtype, context)
         var width = Int(py=dtype.itemsize)
-        var indices = fields["rows"]
-        var data = fields["data"]
-        if py_type(indices) is not context["ndarray"] or py_type(data) is not context["ndarray"]:
+        var indices = py_item(fields, nk[].k_rows)
+        var data = py_item(fields, nk[].k_data)
+        if py_type(indices) is not py_item(context, nk[].k_ndarray) or py_type(data) is not py_item(context, nk[].k_ndarray):
             raise Error("TypeError: sparse LIL connectivity requires ordinary object ndarrays")
         if Int(py=indices.ndim) != 1 or Int(py=data.ndim) != 1 or Int(py=indices.size) != n or Int(py=data.size) != n or String(indices.dtype.kind) != "O" or String(data.dtype.kind) != "O":
             raise Error("sparse LIL connectivity requires one native object row per sample")

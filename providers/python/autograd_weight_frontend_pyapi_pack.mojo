@@ -14,6 +14,8 @@ from providers.python.autograd_program_pyapi_door import program_input, _integer
 from providers.python.autograd_pyapi_door import ops_load_weights_py
 from bindings.native_json_door import native_json_parse, native_json_read, native_path, native_path_exists
 from autograd.autograd_weight_frontend_run import _dtype
+from bindings.autograd_keys_unpack import autograd_keys
+from bindings.py_balanced import py_item
 
 
 def _file_header(path: PythonObject) raises -> PythonObject:
@@ -44,12 +46,13 @@ def _checkpoint(path: PythonObject, mut owners: PythonObject) raises -> PythonOb
     var file = native_path(path)
     var files = Python.list()
     var weight_map = b.dict()
+    var nk = autograd_keys()
     if native_path_exists(file, True):
         var base = String(file)
         var index = PythonObject(base + "/model.safetensors.index.json")
         if native_path_exists(index):
             var metadata = native_json_read(index)
-            weight_map = metadata["weight_map"]
+            weight_map = py_item(metadata, nk[].k_weight_map)
             if py_type(weight_map) is not b.dict or len(weight_map) == 0:
                 raise Error("ValueError: safetensors index has no weight_map")
             var shards = py_call(b.list, weight_map.values())
@@ -104,15 +107,16 @@ def _record(name: PythonObject, target: Int, layout: Int, value: PythonObject, c
     var dims = PythonObject(None)
     var strides = PythonObject(None)
     var unit = 0
+    var nk = autograd_keys()
     if checkpoint:
         var view = value[0]
         var info = value[1]
-        var dt = _dtype(String(info["dtype"]))
+        var dt = _dtype(String(py_item(info, nk[].k_dtype)))
         dtype = dt[0]
         size = dt[1]
-        dims = info["shape"]
-        addr = Int(py=view.__array_interface__["data"][0])
-        var offsets = info["data_offsets"]
+        dims = py_item(info, nk[].k_shape)
+        addr = Int(py=py_item(view.__array_interface__, nk[].k_data)[0])
+        var offsets = py_item(info, nk[].k_data_offsets)
         var begin = _integer(offsets[0], "tensor begin", 0)
         var end = _integer(offsets[1], "tensor end", begin)
         var n = 1
@@ -137,7 +141,7 @@ def _record(name: PythonObject, target: Int, layout: Int, value: PythonObject, c
             raise Error("TypeError: a weight must use native byte order")
         dtype = 4096 if String(value.dtype.type.__name__) == "bfloat16" else Int(py=value.dtype.num)
         size = Int(py=value.itemsize)
-        addr = Int(py=value.__array_interface__["data"][0])
+        addr = Int(py=py_item(value.__array_interface__, nk[].k_data)[0])
         dims = value.shape
         strides = value.strides
         unit = 1

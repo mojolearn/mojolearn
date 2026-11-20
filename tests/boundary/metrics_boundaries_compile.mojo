@@ -7,13 +7,13 @@ from bindings.metrics_reg_door import metrics_reg_operation
 from bindings.metrics_exp_native_unpack import metrics_exp_operation
 
 def classifications(model: PythonObject, operation: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    return metrics_cls_operation(model, String(operation), args, context)
+    return metrics_cls_operation(model, Int(py=operation), args, context)
 
 def regressions(operation: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    return metrics_reg_operation(String(operation), args, context)
+    return metrics_reg_operation(Int(py=operation), args, context)
 
 def expansions(model: PythonObject, operation: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    return metrics_exp_operation(model, String(operation), args, context)
+    return metrics_exp_operation(model, Int(py=operation), args, context)
 
 @export
 def PyInit__mojolearn_metrics_boundaries_compile() abi("C") -> PythonObject:

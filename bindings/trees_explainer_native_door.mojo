@@ -25,6 +25,9 @@ def _check_rank(view: PythonObject, rank: Int, name: String) raises:
         raise Error("mojolearn: " + name + " must be " + String(rank) + "-D, got " + String(Int(py=view.ndim)) + "-D")
 from providers.python.array_metadata_pyapi_door import array_owner_once
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entry
+from bindings.trees_keys_unpack import trees_keys
+from bindings.operation_names_trees import TREES_OPN_TREES_EXPLAINER_INIT, TREES_OPN_TREES_EXPLAINER_CLOSE, TREES_OPN_TREES_EXPLAINER_VALUES
+from bindings.py_balanced import py_item
 
 comptime _I32 = MutPointer[Int32, MutUntrackedOrigin]
 comptime _F32 = MutPointer[Float32, MutUntrackedOrigin]
@@ -69,7 +72,8 @@ def _entry(table: PythonObject, name: String, required: Bool = True) raises -> P
 def _kind(model: PythonObject, context: PythonObject) raises -> String:
     var cls = py_type(model)
     # The CPU host forest registers itself when its module loads (CPU installs).
-    var host = py_get(context, "trees_explainer_host_forest")
+    var nk = trees_keys()
+    var host = py_get(context, nk[].k_trees_explainer_host_forest)
     if host is not None and cls is host:
         return "rf_regressor"  # the archive keeps its actual output count
     # Compare identities before dictionary lookup; custom metaclasses must not
@@ -126,7 +130,8 @@ def _snapshot(source: PythonObject, dtype: String, rank: Int, name: String,
     if source_type == dtype:
         return raw
     var out = admitted_array(raw.shape, dtype, context)
-    _ = _entry(context["trees_helpers"], "cast_elements")
+    var nk = trees_keys()
+    _ = _entry(py_item(context, nk[].k_trees_helpers), "cast_elements")
     var count = Int(py=raw.shape[0]) * (Int(py=raw.shape[1]) if rank == 2 else 1)
     trees_cast(trees_address(raw), source_type, trees_address(out), dtype, count, context)
     _ = raw
@@ -348,7 +353,8 @@ def _is_owner(value: PythonObject) -> Bool:
 def _admit_owner(owner: PythonObject) raises:
     if not _is_owner(owner):
         raise Error("TypeError: TreeExplainer requires its native cache owner")
-    if py_contains(_class_fields(py_type(owner)), "__del__"):
+    var nk = trees_keys()
+    if py_contains(_class_fields(py_type(owner)), nk[].k___del__):
         raise Error("TypeError: TreeExplainer refuses injected Python finalizers")
 
 
@@ -362,6 +368,7 @@ def _replace(fields: PythonObject, changes: PythonObject, context: PythonObject)
             _ = py_call(todo.append, old)
     var seen = Python.dict()
     var at = 0
+    var nk = trees_keys()
     while at < len(todo):  # driver-loop: cycle-safe owner admission without releasing Python callbacks
         var value = todo[at]
         at += 1
@@ -385,7 +392,7 @@ def _replace(fields: PythonObject, changes: PythonObject, context: PythonObject)
             for i in range(len(value)):  # driver-loop: over a displaced owner container
                 _ = py_call(todo.append, value[i])
         else:
-            var host = py_get(context, "trees_explainer_host_forest")
+            var host = py_get(context, nk[].k_trees_explainer_host_forest)
             var tree = host is not None and py_type(value) is host
             for group_index in range(2):  # driver-loop: connected class tables
                 var group = "trees_classes" if group_index == 0 else "trees_boost_classes"
@@ -394,9 +401,9 @@ def _replace(fields: PythonObject, changes: PythonObject, context: PythonObject)
                     tree = tree or py_type(value) is keys[i]
             if tree:
                 native_release_weakrefs(value, context)
-                var mro = py_call(b.type.__dict__["__mro__"].__get__, py_type(value))
+                var mro = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, py_type(value))
                 for i in range(len(mro)):  # driver-loop: over the model class ancestry
-                    if py_contains(_class_fields(mro[i]), "__del__"):
+                    if py_contains(_class_fields(mro[i]), nk[].k___del__):
                         raise Error("TypeError: TreeExplainer reinitialization cannot release Python model finalizers")
                 var previous = _fields(value)
                 var values = py_call(b.list, previous.values())
@@ -425,7 +432,8 @@ def _construct(fields: PythonObject, args: PythonObject, context: PythonObject) 
     var snapshots = Python.dict()
     var state = _capture(model, context, captures)
     var requested = args[4] if args[4] is not None else _get(state, "numeric_mode")
-    var mode = _tree_mode(requested if requested is not None else context["backend_fields"]["_DEFAULT_MODE"])
+    var nk = trees_keys()
+    var mode = _tree_mode(requested if requested is not None else py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE))
     var captured_mode = _get(state, "_fit_numeric_mode")
     if captured_mode is not None and _tree_mode(captured_mode) != mode:
         raise Error("ValueError: TreeExplainer numeric_mode differs from the fitted model")
@@ -504,25 +512,29 @@ def _construct(fields: PythonObject, args: PythonObject, context: PythonObject) 
     return PythonObject(None)
 
 
-def trees_explainer_operation(model: PythonObject, operation: String, args: PythonObject,
+def trees_explainer_operation(model: PythonObject, operation: Int, args: PythonObject,
                               context: PythonObject) raises -> PythonObject:
+    """One `trees_explainer_*` method by its leaf code
+    (bindings/operation_names_trees.mojo; lane bw3-trees). OP_LEAF_NONE (a
+    name the table does not hold) reaches the same refusal as before."""
     classical_check_layout(model, context)
     var fields = _fields(model)
-    if operation == "trees_explainer_init":
+    if operation == TREES_OPN_TREES_EXPLAINER_INIT:
         return _construct(fields, args, context)
     var owner = _get(fields, "_shap_native")
     if owner is None:
         raise Error("RuntimeError: TreeExplainer has not been initialized by the native owner")
     _admit_owner(owner)
     var held = owner.downcast_value_ptr[TreeShapOwner]()
-    if operation == "trees_explainer_close":
+    if operation == TREES_OPN_TREES_EXPLAINER_CLOSE:
         var changes = Python.dict()
-        py_setitem(changes, "_shap_cache", PythonObject(None))
-        py_setitem(changes, "_shap_closed", PythonObject(True))
+        var nk = trees_keys()
+        py_setitem(changes, nk[].k__shap_cache, PythonObject(None))
+        py_setitem(changes, nk[].k__shap_closed, PythonObject(True))
         _replace(fields, changes, context)
         held[].close()
         return PythonObject(None)
-    if operation != "trees_explainer_values":
+    if operation != TREES_OPN_TREES_EXPLAINER_VALUES:
         raise Error("unknown TreeExplainer operation")
     if held[].closed:
         raise Error("RuntimeError: this TreeExplainer has been closed")

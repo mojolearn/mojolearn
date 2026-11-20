@@ -14,18 +14,21 @@ from providers.python.prep_transform_pyapi_unpack import prep_transform_snapshot
 from providers.python.prep_transform_pyapi_pack import prep_transform_values
 from providers.python.array_metadata_pyapi_door import ArrayPin
 from providers.python.prep_target_pyapi_pack import prep_ignored_target
+from bindings.prep_keys_unpack import prep_keys
+from bindings.py_balanced import py_item
 
 
 def _process_mode(context: PythonObject) raises -> PythonObject:
+    var nk = prep_keys()
     var b = native_loaded_module("builtins")
-    var fields = context["backend_fields"]
+    var fields = py_item(context, nk[].k_backend_fields)
     if py_type(fields) is not b.dict:
         raise Error("TypeError: native Normalizer mode settings require an ordinary dictionary")
     var keys = py_call(b.list, fields)
     for i in range(len(keys)):  # driver-loop: native namespace keys before default-mode lookup
         if py_type(keys[i]) is not b.str:
             raise Error("TypeError: native Normalizer mode keys require exact strings")
-    return fields["_DEFAULT_MODE"]
+    return py_item(fields, nk[].k__DEFAULT_MODE)
 
 
 def _publication(state: PythonObject) raises:
@@ -37,10 +40,11 @@ def _publication(state: PythonObject) raises:
 
 
 def _finish_depth(state: PythonObject, remaining: PythonObject) raises:
+    var nk = prep_keys()
     # remaining comes from exact native bool/int/float arithmetic before execution.
     # Reuse the snapshot, not a mutable model setting reread after a kernel.
     _publication(state)
     if Bool(py=remaining > PythonObject(0)):
-        py_setitem(state, "_mojolearn_fitting", remaining)
+        py_setitem(state, nk[].k__mojolearn_fitting, remaining)
     else:
         _ = py_call(state.pop, "_mojolearn_fitting", PythonObject(None))

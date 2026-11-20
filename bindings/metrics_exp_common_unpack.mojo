@@ -64,6 +64,8 @@ from core.labels_score_encode import score_encode_cast
 from core.metrics_exp_impl import mexp_gather_i32
 from bindings.label_input_sources_unpack import labels_list_scalar_kind, LABELS_LIST_INT
 from bindings.p3_labels_metrics_native_door import p3_integral_list, p3_text_codes, p3_text_classes, P3_TEXT_OK
+from bindings.metrics_keys_unpack import metrics_keys
+from bindings.py_balanced import py_item
 
 
 
@@ -250,7 +252,8 @@ def mx_list_labels(values: PythonObject, name: String, allow_empty: Bool,
         # p3-labels-metrics: one presized list filled by C conversions (exact
         # ints kept, bools 0 / 1, NumPy integer scalars their exact int), not
         # `metric_integer` and a Python append per label.
-        return (p3_integral_list(labels, py_get(context, "bool_types")), String("integer"))
+        var nk = metrics_keys()
+        return (p3_integral_list(labels, py_get(context, nk[].k_bool_types)), String("integer"))
     raise Error("TypeError: " + name + " must contain only strings or only integers; "
                 + "floating labels, missing labels and mixed types are unsupported")
 
@@ -261,6 +264,7 @@ def _mx_buffer_labels(values: PythonObject, name: String, context: PythonObject)
     Python label step reads (every other input)."""
     var b = mx_b()
     var source = values
+    var nk = metrics_keys()
     if py_type(values) is b.list or py_type(values) is b.tuple:
         # a flat list of exact Python ints as an int64 buffer (OverflowError
         # for an int outside int64 keeps the list route)
@@ -273,12 +277,12 @@ def _mx_buffer_labels(values: PythonObject, name: String, context: PythonObject)
             return PythonObject(None)
         var store = PythonObject(None)
         try:
-            store = py_call(context["array_type"], PythonObject("q"), values)
+            store = py_call(py_item(context, nk[].k_array_type), PythonObject("q"), values)
         except:
             return PythonObject(None)
         source = classical_wrap_array(store, Python.tuple(PythonObject(n)), "<i8", "C", context)
     elif not classical_is_array(values, context):
-        var nd_class = py_get(context, "ndarray")
+        var nd_class = py_get(context, nk[].k_ndarray)
         if nd_class is None or py_type(values) is not nd_class:
             return PythonObject(None)
     if Int(py=source.ndim) != 1:
@@ -298,8 +302,8 @@ def _mx_buffer_labels(values: PythonObject, name: String, context: PythonObject)
     _ = source  # keep the Python object alive through the native call above
     var lk = label_kind_of(kind, item, name)
     var code_kind = 1 if kind == 1 else 0
-    var raw = py_call(context["array_type"], PythonObject(mx_class_code(code_kind, item)),
-                      py_call(context["native_bytes_type"], n * item))
+    var raw = py_call(py_item(context, nk[].k_array_type), PythonObject(mx_class_code(code_kind, item)),
+                      py_call(py_item(context, nk[].k_native_bytes_type), n * item))
     var codes = family_array(Python.tuple(PythonObject(n)), "<i4", context)
     # fb-metrics: a contiguous signed label buffer within its value range
     # takes the dense table (core/labels_score_encode.mojo), else the radix route.
@@ -352,7 +356,8 @@ def mx_encode(values: PythonObject, name: String, context: PythonObject) raises 
     var classes = mx_sorted(mx_set(labels))
     var index = mx_index(classes)
     var n = mx_len(labels)
-    var store = py_call(context["array_type"], PythonObject("i"), py_call(b.map, mx_attr(index, "__getitem__"), labels))
+    var nk = metrics_keys()
+    var store = py_call(py_item(context, nk[].k_array_type), PythonObject("i"), py_call(b.map, mx_attr(index, "__getitem__"), labels))
     var codes = classical_wrap_array(store, Python.tuple(PythonObject(n)), "<i4", "C", context)
     return MxLab(listed[1], classes, codes, n)
 
@@ -392,7 +397,8 @@ def mx_codes(lab: MxLab, order: PythonObject, strict: Bool, context: PythonObjec
     outside it; `strict` raises the KeyError `index[v]` raised for one."""
     var b = mx_b()
     var index = mx_index(order)
-    var table = py_call(context["array_type"], PythonObject("i"),
+    var nk = metrics_keys()
+    var table = py_call(py_item(context, nk[].k_array_type), PythonObject("i"),
                         py_call(b.map, index.get, lab.classes, py_call(native_loaded_module("itertools").repeat, PythonObject(-1))))
     return _mx_gather(lab, table, strict, context)
 
@@ -402,7 +408,8 @@ def mx_map_eq(lab: MxLab, pos: PythonObject, context: PythonObject) raises -> Py
     var b = mx_b()
     var hits = py_call(b.map, native_loaded_module("operator").eq, lab.classes,
                        py_call(native_loaded_module("itertools").repeat, pos))
-    var table = py_call(context["array_type"], PythonObject("i"), py_call(b.map, b.int, py_call(b.map, b.bool, hits)))
+    var nk = metrics_keys()
+    var table = py_call(py_item(context, nk[].k_array_type), PythonObject("i"), py_call(b.map, b.int, py_call(b.map, b.bool, hits)))
     return _mx_gather(lab, table, False, context)
 
 

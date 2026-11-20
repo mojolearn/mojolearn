@@ -45,6 +45,12 @@ from bindings.prep_classify_native_door import resident_enter_min, _resident_exi
 from bindings.py_optional import py_or_none, py_present
 from bindings.prep_native_estimator_door import (
     prep_estimator_admit, prep_estimator_has, prep_estimator_clone, prep_estimator_call, prep_estimator_attribute)
+from bindings.prep_keys_unpack import (
+    prep_keys,
+    PREP_OPN_DECISION_FUNCTION, PREP_OPN_FIT, PREP_OPN_FIT_TRANSFORM, PREP_OPN_GET_SUPPORT,
+    PREP_OPN_MUTUAL_INFO_CLASSIF, PREP_OPN_PREDICT, PREP_OPN_PREDICT_PROBA, PREP_OPN_SCORE, PREP_OPN_TRANSFORM,
+)
+from bindings.py_balanced import py_item
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime I64P = MutPointer[Int64, MutUntrackedOrigin]
@@ -190,8 +196,9 @@ def _fit_params(args: PythonObject) raises -> PythonObject:
 def _rfe_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises:
     """RFE.fit(X, y, **fit_params): the elimination rounds, then the final
     estimator on the selected columns."""
+    var nk = prep_keys()
     var b = native_loaded_module("builtins")
-    var cc = context["select_context"]
+    var cc = py_item(context, nk[].k_select_context)
     # RFE uses the classifier arena's independent input context. The outer
     # prep door connects only its encode context, so a first RFE call could
     # reject the ndarray that composition_before just prepared. Connect this
@@ -199,9 +206,9 @@ def _rfe_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     # not be required, and NumPy may be loaded after package import.
     classical_connect_numpy(cc)
     var fields = py_fields(model)
-    var estimator = fields["estimator"]
+    var estimator = py_item(fields, nk[].k_estimator)
     prep_estimator_admit(estimator, "RFE", context)
-    var g = fields["importance_getter"]
+    var g = py_item(fields, nk[].k_importance_getter)
     if not Bool(py=py_call(b.isinstance, g, b.str)):
         if Bool(py=py_call(b.callable, g)):
             raise Error("TypeError: mojolearn: RFE importance_getter must be 'auto' or an attribute path; a callable is not supported")
@@ -228,7 +235,7 @@ def _rfe_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     # member door (in any binding: one registry per process) reads it with
     # no view, check or scan. A fold's DeviceRows X was not tested here, so
     # its blocks are not held.
-    var hold = py_type(args[0]) is not cc["maxabs_rows_class"]
+    var hold = py_type(args[0]) is not py_item(cc, nk[].k_maxabs_rows_class)
     var mark = -1
     var scope = resident_enter_min(cc, PythonObject(arr.n * arr.d))
     try:
@@ -266,12 +273,13 @@ def _rfe_rounds(model: PythonObject, fields: PythonObject, estimator: PythonObje
                 cc: PythonObject, hold: Bool, mut mark: Int) raises:
     """The elimination rounds and the final fit of `_rfe_fit`, inside its
     resident scope."""
+    var nk = prep_keys()
     var b = native_loaded_module("builtins")
     var n = arr.n
     var d = arr.d
     var mode = cls_mode(cc)
     # n_features_to_select: None -> d // 2; a float in (0, 1) -> int(nsel * d); then max(1, int(nsel))
-    var nsel_arg = fields["n_features_to_select"]
+    var nsel_arg = py_item(fields, nk[].k_n_features_to_select)
     var nsel = 0
     if nsel_arg is None:
         nsel = d // 2
@@ -281,7 +289,7 @@ def _rfe_rounds(model: PythonObject, fields: PythonObject, estimator: PythonObje
         nsel = Int(py=py_call_typed(b.int, nsel_arg))
     nsel = max(1, nsel)
     # step: a float below 1 -> int(max(1, step * d)); else int(step)
-    var step_arg = fields["step"]
+    var step_arg = py_item(fields, nk[].k_step)
     var step = 0
     if Bool(py=py_call(b.isinstance, step_arg, b.float)) and Float64(py=step_arg) < 1.0:
         var v = Float64(py=step_arg) * Float64(d)
@@ -346,45 +354,46 @@ def _rfe_rounds(model: PythonObject, fields: PythonObject, estimator: PythonObje
         if fs[j] != Float32(0):
             kept.append(j)
         _ = support  # keep the Python object alive through the native call above
-    py_setitem(fields, "estimator_", final)
-    py_setitem(fields, "_mask", mask_list)
+    py_setitem(fields, nk[].k_estimator_, final)
+    py_setitem(fields, nk[].k__mask, mask_list)
     # Lane p3-msel-parallel-and-process-pool (audit B: RFE redid its support
     # and member admission on every predict): the kept columns as the gather's
     # index words and the admitted member, stored once here. A predict reads
     # them while `_mask` and `estimator_` are still the objects stored here
     # (identity), else it falls back to reading the mask and admitting.
-    py_setitem(fields, "_support_words_", _words(kept, context))
-    py_setitem(fields, "_support_k_", PythonObject(len(kept)))
-    py_setitem(fields, "_support_mask_", mask_list)
-    py_setitem(fields, "_estimator_admitted_", final)
-    py_setitem(fields, "support_", py_call(b.list, mask_list))
+    py_setitem(fields, nk[].k__support_words_, _words(kept, context))
+    py_setitem(fields, nk[].k__support_k_, PythonObject(len(kept)))
+    py_setitem(fields, nk[].k__support_mask_, mask_list)
+    py_setitem(fields, nk[].k__estimator_admitted_, final)
+    py_setitem(fields, nk[].k_support_, py_call(b.list, mask_list))
     # ranking.astype("<i8")
-    var ranks = classical_typed(Python.tuple(d), "<i8", cc["output_context"])
+    var ranks = classical_typed(Python.tuple(d), "<i8", py_item(cc, nk[].k_output_context))
     var dst = I64P(unsafe_from_address=Int(py=classical_address(ranks)))
     var src = _ptr(ranking)
     for j in range(d):  # driver-loop: over the fitted ranking (feature count)
         dst[j] = Int64(Int(src[j]))
         _ = ranks  # keep the Python object alive through the native call above
         _ = ranking  # keep the Python object alive through the native call above
-    py_setitem(fields, "ranking_", ranks)
-    py_setitem(fields, "n_features_", nsup)
-    py_setitem(fields, "numeric_mode_", mode)
-    py_setitem(fields, "n_features_in_", d)
+    py_setitem(fields, nk[].k_ranking_, ranks)
+    py_setitem(fields, nk[].k_n_features_, nsup)
+    py_setitem(fields, nk[].k_numeric_mode_, mode)
+    py_setitem(fields, nk[].k_n_features_in_, d)
 
 
 def _rfe_transform(model: PythonObject, x: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = prep_keys()
     # `_SelectorMixin.transform`, as the stateless owner runs it.
     var fields = py_fields(model)
-    if not py_contains(fields, "n_features_in_"):
+    if not py_contains(fields, nk[].k_n_features_in_):
         raise Error("RuntimeError: mojolearn: this " + _class_name(model) + " instance is not fitted yet")
-    var values = xprep_values(x, _entries(fields["numeric_mode_"], context), context)
+    var values = xprep_values(x, _entries(py_item(fields, nk[].k_numeric_mode_), context), context)
     var out: PythonObject
     if rfe_support_cached(fields):
         var d = Int(py=values[4])
-        var fitted = fields["n_features_in_"]
+        var fitted = py_item(fields, nk[].k_n_features_in_)
         if Int(py=fitted) != d:
             raise Error("mojolearn: X has " + String(d) + " features, " + _class_name(model) + " was fitted with " + String(Int(py=fitted)))
-        out = _select_gather(fields, values, fields["_support_words_"], Int(py=fields["_support_k_"]), context)
+        out = _select_gather(fields, values, py_item(fields, nk[].k__support_words_), Int(py=py_item(fields, nk[].k__support_k_)), context)
     else:
         out = _select_transform(model, values, context)
     _ = values^
@@ -394,19 +403,21 @@ def _rfe_transform(model: PythonObject, x: PythonObject, context: PythonObject) 
 def rfe_support_cached(fields: PythonObject) raises -> Bool:
     """Whether fit's stored support words still describe `_mask` (the mask
     object fit stored, not one put there since) and select any column."""
-    var words = py_get(fields, "_support_words_")
+    var nk = prep_keys()
+    var words = py_get(fields, nk[].k__support_words_)
     if words is None:
         return False
-    var mask = py_get(fields, "_mask")
-    var k = py_get(fields, "_support_k_")
-    return mask is not None and mask is py_get(fields, "_support_mask_") and k is not None and Int(py=k) > 0
+    var mask = py_get(fields, nk[].k__mask)
+    var k = py_get(fields, nk[].k__support_k_)
+    return mask is not None and mask is py_get(fields, nk[].k__support_mask_) and k is not None and Int(py=k) > 0
 
 
-def prep_rfe_call(model: PythonObject, operation: String, args: PythonObject,
+def prep_rfe_call(model: PythonObject, op: Int, operation: String, args: PythonObject,
                   context: PythonObject) raises -> PythonObject:
-    if operation == "get_support":
+    var nk = prep_keys()
+    if op == PREP_OPN_GET_SUPPORT:
         var fields = py_fields(model)
-        var mask = fields["_mask"]
+        var mask = py_item(fields, nk[].k__mask)
         var indices = Bool(py=args[0])
         if not indices:
             # list(mask): one call (p3-prep)
@@ -417,27 +428,27 @@ def prep_rfe_call(model: PythonObject, operation: String, args: PythonObject,
         for i in range(len(keep)):  # driver-loop: completed feature support metadata
             _ = py_call(result.append, PythonObject(keep[i]))
         return result
-    if operation == "transform":
+    if op == PREP_OPN_TRANSFORM:
         return _rfe_transform(model, args[0], context)
-    if operation == "fit":
+    if op == PREP_OPN_FIT:
         _rfe_fit(model, args, context)
         return model
-    if operation == "fit_transform":
+    if op == PREP_OPN_FIT_TRANSFORM:
         _rfe_fit(model, args, context)
         return _rfe_transform(model, args[0], context)
-    if operation == "predict" or operation == "predict_proba" or operation == "decision_function" or operation == "score":
+    if op == PREP_OPN_PREDICT or op == PREP_OPN_PREDICT_PROBA or op == PREP_OPN_DECISION_FUNCTION or op == PREP_OPN_SCORE:
         # `self.estimator_.<op>(self.transform(X)[, y])`: the method is looked
         # up first, in the fitted estimator's native plan
         var fitted = py_fields(model)
-        if not py_contains(fitted, "estimator_"):
+        if not py_contains(fitted, nk[].k_estimator_):
             raise Error("AttributeError: '" + _class_name(model) + "' object has no attribute 'estimator_'")
-        var est = fitted["estimator_"]
-        if est is not py_get(fitted, "_estimator_admitted_"):
+        var est = py_item(fitted, nk[].k_estimator_)
+        if est is not py_get(fitted, nk[].k__estimator_admitted_):
             prep_estimator_admit(est, "RFE", context)
         if not prep_estimator_has(est, operation, context):
             raise Error("AttributeError: '" + _class_name(est) + "' object has no attribute '" + operation + "'")
         var xs = _rfe_transform(model, args[0], context)
-        if operation == "score":
+        if op == PREP_OPN_SCORE:
             return prep_estimator_call(est, operation, Python.tuple(xs, args[1]), context)
         return prep_estimator_call(est, operation, Python.tuple(xs), context)
     raise Error("TypeError: the native RFE owner does not serve " + operation)
@@ -447,6 +458,7 @@ def prep_rfe_call(model: PythonObject, operation: String, args: PythonObject,
 def _discrete_mask(df: PythonObject, d: Int, context: PythonObject) raises -> List[Bool]:
     """`_mi_discrete_mask(discrete_features, d)`: 'auto' (none), a bool for
     every column, a bool mask of length d, or column indices."""
+    var nk = prep_keys()
     var b = native_loaded_module("builtins")
     if Bool(py=py_call(b.isinstance, df, b.str)):
         if String(df) != "auto":
@@ -479,7 +491,7 @@ def _discrete_mask(df: PythonObject, d: Int, context: PythonObject) raises -> Li
     var mask = List[Bool](length=d, fill=False)
     # (int, numbers.Integral), connected once (python/mojolearn/_native_prep_encode_bridge.py);
     # the per-call numbers import fallback is gone.
-    var integral = context["integral_type"]
+    var integral = py_item(context, nk[].k_integral_type)
     for i in range(count):  # driver-loop: over the discrete_features indices
         var v = vals[i]
         if Bool(py=py_call(b.isinstance, v, b.bool)) or not Bool(py=py_call(b.isinstance, v, integral)):
@@ -534,13 +546,14 @@ def _work(mut p: EncProg, words: Int, scratch: Bool) -> Int:
     return p.work(words) if scratch else p.alloc(words)
 
 
-def prep_mutual_info_call(operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def prep_mutual_info_call(op: Int, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_mutual_info(X, y, discrete_target, discrete_features, n_neighbors,
     random_state)`: continuous columns scaled and noised (the 1e-10-scaled
     noise kept as a second word), then per column Kraskov, Ross or the
     contingency table, in one program."""
+    var nk = prep_keys()
     var b = native_loaded_module("builtins")
-    var discrete_target = operation == "mutual_info_classif"
+    var discrete_target = op == PREP_OPN_MUTUAL_INFO_CLASSIF
     var x = args[0]
     var y = args[1]
     var k = Int(py=py_call_typed(b.int, args[3]))
@@ -564,7 +577,7 @@ def prep_mutual_info_call(operation: String, args: PythonObject, context: Python
         else:
             cont.append(j)
     var seed = _seed64(args[4])[0] & 0x3FFFFFFF
-    var scratch = Bool(py=context["select_mi_work"]) and String(mode) == "fast"
+    var scratch = Bool(py=py_item(context, nk[].k_select_mi_work)) and String(mode) == "fast"
     var p = EncProg()
     var yo = -1
     var lc = -1
@@ -677,7 +690,7 @@ def prep_mutual_info_call(operation: String, args: PythonObject, context: Python
         _ = values^
         return res
     # the device's values scattered to their columns, as a float32 Array
-    var out = classical_typed(Python.tuple(d), "<f4", context["output_context"])
+    var out = classical_typed(Python.tuple(d), "<f4", py_item(context, nk[].k_output_context))
     var dst = _ptr(out)
     for i in range(dc):  # driver-loop: scatters device MI values to their columns (continuous feature count)
         dst[cont[i]] = _word(ran, outc + i)

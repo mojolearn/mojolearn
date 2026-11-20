@@ -12,7 +12,8 @@ def cluster_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr
     try:
         var args = PythonObject(from_borrowed=packed)
         _ = classical_family_admit(args[0])
-        return cluster_public_operation(args[0], String(args[1]), args[2], args[3]).steal_data()
+        # args[1]: the route owner, args[2]: its leaf code (lane bw2-cluster).
+        return cluster_public_operation(args[0], Int(py=args[1]), Int(py=args[2]), "", args[3], args[4]).steal_data()
     except problem:
         return raise_python_exception(problem)
 

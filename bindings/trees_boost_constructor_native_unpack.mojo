@@ -9,6 +9,8 @@ from bindings.py_balanced import py_call, py_type, py_fields, py_setitem
 from bindings.py_typed_call import py_call_typed
 from bindings.params_metadata_native_door import _resolved
 from bindings.trees_constructor_native_unpack import tree_parameter_storage
+from bindings.trees_keys_unpack import trees_keys
+from bindings.py_balanced import py_item
 
 
 def _is_bool(value: PythonObject) raises -> Bool:
@@ -36,7 +38,8 @@ def tree_constructor_storage(model: PythonObject, names: PythonObject) raises:
     var cls = py_type(model)
     if py_type(cls) is not b.type:
         raise Error("TypeError: native tree constructors require ordinary class metadata")
-    if _resolved(cls, PythonObject("__setattr__"), PythonObject(None)) is not b.object.__dict__["__setattr__"]:
+    var nk = trees_keys()
+    if _resolved(cls, PythonObject("__setattr__"), PythonObject(None)) is not py_item(b.object.__dict__, nk[].k___setattr__):
         raise Error("TypeError: native tree constructors cannot invoke modified Python storage hooks")
     tree_parameter_storage(model, names)
 
@@ -46,7 +49,8 @@ def trees_seed_check(value: PythonObject, context: PythonObject) raises:
     if value is None:
         return
     var b = native_loaded_module("builtins")
-    var ok = not _is_bool(value) and Bool(py=py_call(b.isinstance, value, context["trees_integral_type"]))
+    var nk = trees_keys()
+    var ok = not _is_bool(value) and Bool(py=py_call(b.isinstance, value, py_item(context, nk[].k_trees_integral_type)))
     if ok:
         ok = not Bool(py=value < PythonObject(0))
     if not ok:

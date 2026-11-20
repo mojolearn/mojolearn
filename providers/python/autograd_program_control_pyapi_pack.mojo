@@ -12,6 +12,7 @@ from autograd.program_io import ProgramInput
 from autograd.ops_api import ops_session
 from bindings.py_balanced import py_call
 from bindings.native_loaded_module_door import native_loaded_module
+from bindings.autograd_keys_unpack import autograd_keys
 
 
 def ops_program_control_py[E: Exec & Movable & Deinitable, KIND: Int](
@@ -40,9 +41,10 @@ def ops_program_control_py[E: Exec & Movable & Deinitable, KIND: Int](
     if not plan.is_loop:
         return _result(result)
     var report = _dict()
-    py_setitem(report, "outputs", _result(result))
-    py_setitem(report, "iterations", r.iterations)
-    py_setitem(report, "stopped", r.stopped)
+    var nk = autograd_keys()
+    py_setitem(report, nk[].k_outputs, _result(result))
+    py_setitem(report, nk[].k_iterations, r.iterations)
+    py_setitem(report, nk[].k_stopped, r.stopped)
     return report
 
 
@@ -80,7 +82,8 @@ def ops_program_decode_py[E: Exec & Movable & Deinitable, KIND: Int](
         inputs = program_inputs(plan.body, arrays, True)
     var r = control_run[E, KIND](session_id, plan, inputs^)
     var report = _dict()
-    py_setitem(report, "outputs", _result(host_arrays_py(r.outputs)))
-    py_setitem(report, "tokens", host_array_py(r.history[0]))
-    py_setitem(report, "iterations", r.iterations)
+    var nk = autograd_keys()
+    py_setitem(report, nk[].k_outputs, _result(host_arrays_py(r.outputs)))
+    py_setitem(report, nk[].k_tokens, host_array_py(r.history[0]))
+    py_setitem(report, nk[].k_iterations, r.iterations)
     return report

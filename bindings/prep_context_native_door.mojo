@@ -6,6 +6,8 @@ from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.classical_attributes_door import classical_connect_numpy
 from core.shared_slot import SharedSlot
+from bindings.prep_keys_unpack import prep_keys
+from bindings.py_balanced import py_item
 
 
 def _exact_dict(mapping: PythonObject, b: PythonObject) raises:
@@ -49,14 +51,15 @@ def _numpy_names() raises -> PythonObject:
 
 
 def _connect_numpy_once(source: PythonObject, context: PythonObject) raises:
-    if py_get(context, "ndarray") is not None:
+    var nk = prep_keys()
+    if py_get(context, nk[].k_ndarray) is not None:
         return
     var cached = py_get(source, _NUMPY_CACHE)
     if cached is not None:
         _ = py_call(context.update, cached)
         return
     classical_connect_numpy(context)
-    if py_get(context, "ndarray") is None:
+    if py_get(context, nk[].k_ndarray) is None:
         return  # NumPy is not loaded; the next operation looks again
     var names = _numpy_names()
     var kept = Python.dict()
@@ -90,6 +93,7 @@ comptime _CONTEXT_TEMPLATE = SharedSlot[_ContextTemplate, "MojolearnPrepOperatio
 
 
 def prep_operation_context(source: PythonObject) raises -> PythonObject:
+    var nk = prep_keys()
     # native_loaded_module verifies the bridge module and the exact immutable
     # CONNECTION export captured at import. Replacing a context's own alleged
     # identity table cannot authorize callbacks or new descriptor references.
@@ -111,19 +115,19 @@ def prep_operation_context(source: PythonObject) raises -> PythonObject:
     # The process mode is mutable process data: the backend namespace (a
     # small module dict) is copied in C before a readback or input
     # preparation can release the GIL, so one operation reads one mode.
-    var process = context["backend_fields"]
-    var modules = context["modules"]
+    var process = py_item(context, nk[].k_backend_fields)
+    var modules = py_item(context, nk[].k_modules)
     _exact_dict(process, b)
     _exact_dict(modules, b)
     var process_copy = py_call(b.dict, process)
-    py_setitem(context, "backend_fields", process_copy)
-    py_setitem(output, "backend_fields", process_copy)
+    py_setitem(context, nk[].k_backend_fields, process_copy)
+    py_setitem(output, nk[].k_backend_fields, process_copy)
     # sys.modules (~1000-3000 keys with NumPy loaded) is no longer copied per
     # operation (perf2-prep): the stateless chain only looks modules up by
     # name (`py_get(context["modules"], name)`), exactly as every other native
     # family reads the live sys.modules its import context holds, and a
     # lookup after a GIL window sees the current module, as theirs do.
-    py_setitem(output, "modules", modules)
-    py_setitem(context, "output_context", output)
+    py_setitem(output, nk[].k_modules, modules)
+    py_setitem(context, nk[].k_output_context, output)
     _connect_numpy_once(source, context)
     return context

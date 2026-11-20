@@ -14,6 +14,8 @@ from sequence.ops import FP
 from autograd.rankn import ShapeN
 from autograd.program_io import HostArray
 from core.shared_slot import SharedSlot
+from bindings.autograd_keys_unpack import autograd_keys
+from bindings.py_balanced import py_item
 
 
 struct _ProgramArrays(Defaultable, Movable):
@@ -101,7 +103,8 @@ def program_numeric_scalar(value: PythonObject) raises -> Bool:
     var cls = py_type(value)
     if cls is py_type(PythonObject(0)) or cls is py_type(PythonObject(0.0)) or cls is py_type(PythonObject(True)):
         return True
-    return state[].admission is not None and _one_of(cls, state[].admission["scalar_types"])
+    var nk = autograd_keys()
+    return state[].admission is not None and _one_of(cls, py_item(state[].admission, nk[].k_scalar_types))
 
 
 def program_native_input(value: PythonObject) raises -> PythonObject:
@@ -109,7 +112,8 @@ def program_native_input(value: PythonObject) raises -> PythonObject:
     # dtype, shape, scalar conversion or any foreign descriptor could execute.
     program_admit_value(value)
     var state = _PROGRAM_ARRAYS.get_or_create_ptr()
-    if py_type(value) is state[].admission["array_class"]:
+    var nk = autograd_keys()
+    if py_type(value) is py_item(state[].admission, nk[].k_array_class):
         # This is a zero-copy view over the Array's retained exporter. The
         # original public argument remains live through synchronous execution;
         # no copied temporary buffer is introduced or cached across calls.
@@ -164,7 +168,8 @@ def is_integer_input(value: PythonObject) raises -> Bool:
     var state = _PROGRAM_ARRAYS.get_or_create_ptr()
     if state[].admission is None:
         return py_type(value) is py_type(PythonObject(0))
-    return _one_of(py_type(value), state[].admission["integer_types"])
+    var nk = autograd_keys()
+    return _one_of(py_type(value), py_item(state[].admission, nk[].k_integer_types))
 
 
 def uint64_input(value: PythonObject, name: String) raises -> UInt64:

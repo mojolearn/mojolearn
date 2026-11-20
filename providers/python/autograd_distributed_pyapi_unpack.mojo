@@ -20,6 +20,8 @@ from autograd.rankn import ShapeN
 from autograd.program_io import ProgramInput
 from core.cast_in import CastIn
 from autograd.autograd_distributed_run import distributed_loss_kind
+from bindings.autograd_keys_unpack import autograd_keys
+from bindings.py_balanced import py_item
 
 
 def distributed_object(cls: PythonObject, binding: PythonObject, handle: PythonObject) raises -> PythonObject:
@@ -62,8 +64,9 @@ def distributed_fit_py[E: Exec & Movable & Deinitable, KIND: Int](
         raise Error("distributed fit: epochs must be positive")
     var curve = output_array(ShapeN.of([ne]))
     var p = distributed[E, KIND](Int(py=id))
+    var nk = autograd_keys()
     p[].fit(srcs, shapes, target, kind, Float32(Float64(py=delta)), ne, _integer(batch, "batch_size", 1), Bool(py=shuffle),
-            FP(unsafe_from_address=Int(py=curve.__array_interface__["data"][0])))
+            FP(unsafe_from_address=Int(py=py_item(curve.__array_interface__, nk[].k_data)[0])))
     _ = retained  # CastIn borrows sequence backing stores through the complete fit
     _ = arrays
     _ = targets

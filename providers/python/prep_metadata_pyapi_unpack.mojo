@@ -8,6 +8,8 @@ from bindings.classical_pandas_door import classical_admit_value, _pd_class, _pd
 from bindings.sequential_admission_door import sequential_admit_value
 from providers.python.array_metadata_pyapi_door import ArrayMetadata, ArrayPin, array_shape_once, array_metadata_once
 from core.cast_in import CastIn, cast_in_kind
+from bindings.prep_keys_unpack import prep_keys
+from bindings.py_balanced import py_item
 
 
 # TOMBSTONE: prep_check_info, prep_scalar_dtype (orphan functions: no caller) deleted 2026-11-08 by 7b2e1d1d83; code recoverable at 41ffcec665.
@@ -27,6 +29,7 @@ def _array_snapshot(value: PythonObject, context: PythonObject, mut pin: ArrayPi
 
 
 def _pandas_empty_shape(manager: PythonObject, context: PythonObject) raises -> List[Int]:
+    var nk = prep_keys()
     var b = native_loaded_module("builtins")
     var axes = _pd_get("pandas._libs.internals", "BlockManager", "axes", manager)
     if py_type(axes) is not b.list or len(axes) != 2:
@@ -35,13 +38,13 @@ def _pandas_empty_shape(manager: PythonObject, context: PythonObject) raises -> 
     for axis in [1, 0]:  # small-loop(metadata: dataframe rows and columns)
         var index = axes[axis]
         if py_type(index) is _pd_class("pandas.core.indexes.range", "RangeIndex"):
-            var span = py_get(_pd_fields(index), "_range")
+            var span = py_get(_pd_fields(index), nk[].k__range)
             if py_type(span) is not b.range:
                 raise Error("TypeError: pandas range index requires native range storage")
             shape.append(len(span))
         elif py_type(index) is _pd_class("pandas.core.indexes.base", "Index"):
-            var storage = py_get(_pd_fields(index), "_data")
-            if py_type(storage) is not context["ndarray"]:
+            var storage = py_get(_pd_fields(index), nk[].k__data)
+            if py_type(storage) is not py_item(context, nk[].k_ndarray):
                 raise Error("TypeError: empty pandas axes require native array storage")
             var dims = array_shape_once(storage, context)
             if len(dims) != 1:
@@ -66,6 +69,7 @@ def _description(source: PythonObject, var shape: List[Int], dtype: Int,
 
 def prep_numeric_vector(count: Int, number: Int, width: Int, owner: PythonObject,
                         context: PythonObject, mut pin: ArrayPin) raises -> ArrayMetadata:
+    var nk = prep_keys()
     # pandas is already loaded, so this exact ndarray constructor is the
     # existing provider allocation boundary. Its metadata is known, not read
     # back from mutable caller slots after allocation.
@@ -73,7 +77,7 @@ def prep_numeric_vector(count: Int, number: Int, width: Int, owner: PythonObject
     var code = String("|b1")
     if number != 0:
         code = "<" + ("f" if kind == 2 else ("i" if kind == 1 else "u")) + String(width)
-    var output = py_call(context["ndarray"], Python.tuple(count), dtype=PythonObject(code))
+    var output = py_call(py_item(context, nk[].k_ndarray), Python.tuple(count), dtype=PythonObject(code))
     var shape = List[Int]()
     shape.append(count)
     pin = ArrayPin(output, Python.tuple(output, owner))

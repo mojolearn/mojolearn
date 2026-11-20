@@ -35,6 +35,10 @@ from bindings.kmeans_variants_boundary_door import (
 from bindings.kmeans_variants_resident_boundary_unpack import VariantsResidentLease, variants_resident_prepare, variants_resident_retire
 from bindings.native_buffer_address_unpack import native_buffer_address
 from bindings.py_optional import py_or_none
+from bindings.operation_names_xc import (
+    XC_OPN_FAMILY_XC_PREDICT, XC_OPN_FAMILY_XC_VARIANTS_PREDICT, XC_OPN_FAMILY_XC_VARIANTS_TRANSFORM,
+    XC_OPN_FAMILY_XC_VARIANTS_SCORE, XC_OPN_FAMILY_XC_BISECT_PREDICT, XC_OPN_FAMILY_XC_AP_PREDICT,
+    XC_OPN_FAMILY_XC_AGGLO_PREDICT)
 from core.kmeans_variants_api import (
     VariantsSpan, VariantsResultSlot, VariantsQueryRequest, BisectPredictRequest, VARIANTS_CAP_RESIDENT,
 )
@@ -48,6 +52,8 @@ from bindings.family_common_unpack import (
 from bindings.family_common_pack import (
     family_array,
 )
+from bindings.cluster_keys_unpack import cluster_keys
+from bindings.py_balanced import py_item
 
 # The query kinds of the GPU binding's `x_cluster_resident_query`
 # (x_cluster/resident.mojo XC_RES_*).
@@ -71,7 +77,8 @@ def _xc_f32_ready(source: PythonObject, context: PythonObject) raises -> Bool:
     order: `as_f32_c(source, ndim=2)` would admit it and return its own
     storage (the test of bindings/mixture_native_door.mojo `_f32_ready`)."""
     var cls = py_type(source)
-    if cls is not context["array_class"] and cls is not py_get(context, "ndarray"):
+    var nk = cluster_keys()
+    if cls is not py_item(context, nk[].k_array_class) and cls is not py_get(context, nk[].k_ndarray):
         return False
     if Int(py=source.ndim) != 2 or Int(py=source.size) <= 0:
         return False
@@ -122,8 +129,9 @@ def _xc_array(flat: PythonObject, shape: PythonObject, typestr: String, code: St
     Array's store as it is. Anything else is copied once, as `_from_flat` did.
     Same values either way."""
     var store = flat
-    if py_type(flat) is not context["array_type"] or String(py=flat.typecode) != code:
-        store = py_call(context["array_type"], PythonObject(code), flat)
+    var nk = cluster_keys()
+    if py_type(flat) is not py_item(context, nk[].k_array_type) or String(py=flat.typecode) != code:
+        store = py_call(py_item(context, nk[].k_array_type), PythonObject(code), flat)
     return classical_wrap_array(store, shape, typestr, "C", context)
 
 
@@ -262,44 +270,52 @@ def _agglo_predict(model: PythonObject, binding: PythonObject, source: PythonObj
     return result
 
 
-def cluster_operation(model: PythonObject, operation: String, args: PythonObject,
+def cluster_unknown_operation(operation: String) raises:
+    """A `family_xc_*` name the operation table does not hold (the shells
+    pass table names only): the text the name chain raised."""
+    raise Error("RuntimeError: unknown x_cluster operation " + operation)
+
+
+def cluster_operation(model: PythonObject, operation: Int, args: PythonObject,
                       context: PythonObject, x_admitted: Bool = False) raises -> PythonObject:
     """args[0] is the resolved binding, args[1] X. `x_admitted`: args[1] is
     the X the public door already admitted (classical_check_x: 2-D,
     non-empty, finite, C-ordered float32), so the finite scan is not run a
-    second time over the same words."""
+    second time over the same words. `operation` is the leaf code of
+    bindings/operation_names_xc.mojo (lane bw2-cluster; it was the name,
+    matched by up to eight String compares per call)."""
     classical_connect_numpy(context)
     var b = native_loaded_module("builtins")
     # One module handle for every fitted-field read of this call.
     var mods = NativeModules()
     var binding = args[0]
-    if operation == "family_xc_agglo_predict":
+    if operation == XC_OPN_FAMILY_XC_AGGLO_PREDICT:
         return _agglo_predict(model, binding, args[1], context)
-    if (operation == "family_xc_variants_predict" or operation == "family_xc_variants_transform"
-            or operation == "family_xc_variants_score"):
+    if operation >= XC_OPN_FAMILY_XC_VARIANTS_PREDICT and operation <= XC_OPN_FAMILY_XC_VARIANTS_SCORE:
         var centers = _xc_fitted(mods, model, "cluster_centers_")
         var x = _xc_input(mods, model, args[1], context, x_admitted)
-        var kind = _XC_RES_PREDICT if operation == "family_xc_variants_predict" else (
-            _XC_RES_TRANSFORM if operation == "family_xc_variants_transform" else _XC_RES_SCORE)
+        var kind = _XC_RES_PREDICT if operation == XC_OPN_FAMILY_XC_VARIANTS_PREDICT else (
+            _XC_RES_TRANSFORM if operation == XC_OPN_FAMILY_XC_VARIANTS_TRANSFORM else _XC_RES_SCORE)
         return _centers_query(model, binding, x, centers, kind, context)
-    if operation == "family_xc_predict":
+    if operation == XC_OPN_FAMILY_XC_PREDICT:
         var centers = _xc_fitted(mods, model, "cluster_centers_")
         var x = _xc_input(mods, model, args[1], context, x_admitted)
         return _centers_query(model, binding, x, centers, _XC_RES_PREDICT, context)
-    if operation == "family_xc_bisect_predict":
+    if operation == XC_OPN_FAMILY_XC_BISECT_PREDICT:
+        var nk = cluster_keys()
         _ = _xc_fitted(mods, model, "cluster_centers_")
         var x = _xc_input(mods, model, args[1], context, x_admitted)
         var n = Int(py=x.shape[0])
         var d = Int(py=x.shape[1])
         var fields = py_fields(model)
-        var node_source = fields["tree_nodes_"]
+        var node_source = py_item(fields, nk[].k_tree_nodes_)
         # Preserve the existing raw C-order byte interpretation, including
         # rebound storage. The extra array('i') and boxed Int list disappear.
         var nodes = classical_c_bytes(node_source, "tree_nodes_", context)
         var byte_count = len(nodes)
         if byte_count % 4 != 0:
             raise Error("ValueError: bytes length not a multiple of item size")
-        var centers = fields["_tree_centers"]
+        var centers = py_item(fields, nk[].k__tree_centers)
         var connection = variants_connection(binding)
         var center_span = variants_span(centers)
         var source_span = variants_span(x)
@@ -316,7 +332,7 @@ def cluster_operation(model: PythonObject, operation: String, args: PythonObject
             _ = centers
             _ = x
         return _xc_array(variants_pack_i32(result.storage[0].labels), Python.tuple(n), "<i4", "i", context)
-    if operation == "family_xc_ap_predict":
+    if operation == XC_OPN_FAMILY_XC_AP_PREDICT:
         _ = _xc_fitted(mods, model, "labels_")
         var affinity = native_fitted_get(mods, model, "affinity")
         if py_type(affinity) is b.str and String(affinity) == "precomputed":
@@ -331,4 +347,4 @@ def cluster_operation(model: PythonObject, operation: String, args: PythonObject
             _ = labels  # keep the Python object alive through the native call above
             return labels
         return _centers_query(model, binding, x, centers, _XC_RES_PREDICT, context)
-    raise Error("RuntimeError: unknown x_cluster operation " + operation)
+    raise Error("RuntimeError: unknown x_cluster operation code " + String(operation))

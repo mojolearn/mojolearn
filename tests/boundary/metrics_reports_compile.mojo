@@ -4,12 +4,14 @@ from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
 from bindings.metrics_reg_door import metrics_reg_operation
 from bindings.metrics_exp_native_unpack import metrics_exp_operation
+from bindings.operation_names_metric import METRIC_OPN_FAMILY_METRIC_REGRESSION_REPORT
+from bindings.operation_names_mexp import MEXP_OPN_FAMILY_MEXP_CURVE_RANKING_REPORT
 
 def regression_report_compile(args: PythonObject, context: PythonObject) raises -> PythonObject:
-    return metrics_reg_operation("family_metric_regression_report", args, context)
+    return metrics_reg_operation(METRIC_OPN_FAMILY_METRIC_REGRESSION_REPORT, args, context)
 
 def ranking_report_compile(args: PythonObject, context: PythonObject) raises -> PythonObject:
-    return metrics_exp_operation(PythonObject(None), "family_mexp_curve_ranking_report", args, context)
+    return metrics_exp_operation(PythonObject(None), MEXP_OPN_FAMILY_MEXP_CURVE_RANKING_REPORT, args, context)
 
 @export
 def PyInit__mojolearn_metrics_reports_compile() abi("C") -> PythonObject:

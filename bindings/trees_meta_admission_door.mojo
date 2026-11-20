@@ -29,6 +29,8 @@ from bindings.py_model_records import (
     records_stamped_get, records_stamped_put, records_stampable, ContentRecord, content_value, content_object,
     RECORDS_TREES,
 )
+from bindings.trees_keys_unpack import trees_keys
+from bindings.py_balanced import py_item
 
 
 comptime _RECORD_SLOT = "trees_meta_admitted_v1"
@@ -72,8 +74,9 @@ def _record_into(record: PythonObject, value: PythonObject, context: PythonObjec
         # Any other value (a NumPy scalar or array, a splitter class, ...) is
         # recorded by identity alone; the clone admits it by type.
         return True
-    var names = plan["parameters"]
-    var fields = py_call(plan["fields_get"], value, kind)
+    var nk = trees_keys()
+    var names = py_item(plan, nk[].k_parameters)
+    var fields = py_call(py_item(plan, nk[].k_fields_get), value, kind)
     for k in range(len(names)):  # driver-loop: a member's fixed constructor parameters
         if not _record_into(record, py_get(fields, names[k]), context, depth + 1):
             return False
@@ -87,8 +90,9 @@ def _record_of(model: PythonObject, context: PythonObject) raises -> PythonObjec
     if plan is None:
         return PythonObject(None)
     var record = Python.list()
-    var names = plan["parameters"]
-    var fields = py_call(plan["fields_get"], model, py_type(model))
+    var nk = trees_keys()
+    var names = py_item(plan, nk[].k_parameters)
+    var fields = py_call(py_item(plan, nk[].k_fields_get), model, py_type(model))
     for k in range(len(names)):  # driver-loop: the meta-estimator's fixed constructor parameters
         if not _record_into(record, py_get(fields, names[k]), context, 1):
             return PythonObject(None)
@@ -181,8 +185,9 @@ def _match_into(held: PythonObject, mut pos: Int, value: PythonObject, context: 
     var plan = prep_estimator_plan(value, context)
     if plan is None:
         return True
-    var names = plan["parameters"]
-    var fields = py_call(plan["fields_get"], value, kind)
+    var nk = trees_keys()
+    var names = py_item(plan, nk[].k_parameters)
+    var fields = py_call(py_item(plan, nk[].k_fields_get), value, kind)
     for k in range(len(names)):  # driver-loop: a member's fixed constructor parameters
         if not _match_into(held, pos, py_get(fields, names[k]), context, depth + 1):
             return False
@@ -196,8 +201,9 @@ def _held_matches(held: PythonObject, model: PythonObject, context: PythonObject
     var plan = prep_estimator_plan(model, context)
     if plan is None:
         return False
-    var names = plan["parameters"]
-    var fields = py_call(plan["fields_get"], model, py_type(model))
+    var nk = trees_keys()
+    var names = py_item(plan, nk[].k_parameters)
+    var fields = py_call(py_item(plan, nk[].k_fields_get), model, py_type(model))
     var pos = Int(0)
     for k in range(len(names)):  # driver-loop: the meta-estimator's fixed constructor parameters
         if not _match_into(held, pos, py_get(fields, names[k]), context, 1):
@@ -234,6 +240,7 @@ def _stamp_into(mut rec: ContentRecord, value: PythonObject, context: PythonObje
     var depths = List[Int]()
     pending.append(value)
     depths.append(depth)
+    var nk = trees_keys()
     while len(pending) > 0 and rec.ok:  # driver-loop: over a configuration's nested values (once per stamp)
         var item = pending.pop()
         var level = depths.pop()
@@ -269,14 +276,14 @@ def _stamp_into(mut rec: ContentRecord, value: PythonObject, context: PythonObje
             # Identity alone, as the record; its class is kept too.
             content_value(rec, item, 0, 1, True)
             continue
-        var fields = py_call(plan["fields_get"], item, kind)
+        var fields = py_call(py_item(plan, nk[].k_fields_get), item, kind)
         if not (fields is py_fields(item)):
             rec.ok = False
             return
         # The member's class and generation word (limit 0: its values are walked
         # below, parameter by parameter, as the record walks them).
         content_object(rec, item, 0)
-        var names = plan["parameters"]
+        var names = py_item(plan, nk[].k_parameters)
         for k in range(len(names) - 1, -1, -1):  # driver-loop: a member's fixed constructor parameters (once per stamp)
             pending.append(py_get(fields, names[k]))
             depths.append(level + 1)
@@ -289,11 +296,12 @@ def _stamp(model: PythonObject, context: PythonObject) raises:
     var plan = prep_estimator_plan(model, context)
     if plan is None:
         return
-    var fields = py_call(plan["fields_get"], model, py_type(model))
+    var nk = trees_keys()
+    var fields = py_call(py_item(plan, nk[].k_fields_get), model, py_type(model))
     if not (fields is py_fields(model)):
         return
     var rec = ContentRecord()
-    var names = plan["parameters"]
+    var names = py_item(plan, nk[].k_parameters)
     for k in range(len(names)):  # driver-loop: the meta-estimator's fixed constructor parameters (once per stamp)
         _stamp_into(rec, py_get(fields, names[k]), context, 1)
     _ = records_stamped_put(RECORDS_TREES, model, _STAMP_SLOT, rec^, PythonObject(True))

@@ -19,6 +19,8 @@ out to the caller's state, as the device arm's export does.
 # The PACK half of the former `bindings/samba_decode_native.mojo` (fence-flip-2 split, 2026-11-12);
 # the UNPACK half is `bindings/samba_decode_native_unpack.mojo`.
 from std.python import Python, PythonObject
+from bindings.samba_keys_unpack import samba_keys
+from bindings.py_balanced import py_item
 from std.memory import unsafe_memcpy
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type
@@ -43,18 +45,19 @@ from bindings.samba_decode_native_unpack import (
 
 
 def samba_decode_sync(session: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = samba_keys()
     var values = samba_fields(session)
     var what = String("SambaDecodeSession.sync_state")
     _decode_require_open(values, what)
-    var state = values["_state"]
-    var handle = values["_handle"]
+    var state = py_item(values, nk[].k__state)
+    var handle = py_item(values, nk[].k__handle)
     if handle is None:
         # The host arm: the session-owned state out to the caller's.
-        samba_admit_value(state, context["admission"])
-        _samba_state_copy(values["_model"], values["_private"], state, what)
+        samba_admit_value(state, py_item(context, nk[].k_admission))
+        _samba_state_copy(py_item(values, nk[].k__model), py_item(values, nk[].k__private), state, what)
         return state
-    samba_admit_value(state, context["admission"])
-    var model = values["_model"]
+    samba_admit_value(state, py_item(context, nk[].k_admission))
+    var model = py_item(values, nk[].k__model)
     var keep = List[PythonObject]()
     var copies = List[PythonObject]()
     var words = samba_state_words(model, state, what, keep, copies)
@@ -72,8 +75,9 @@ def samba_decode_sync(session: PythonObject, context: PythonObject) raises -> Py
 
 
 def samba_decode_close(session: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = samba_keys()
     var values = samba_fields(session)
-    if not Bool(py=py_get(values, "_open", PythonObject(False))):
+    if not Bool(py=py_get(values, nk[].k__open, PythonObject(False))):
         return PythonObject(None)
     try:
         _ = samba_decode_sync(session, context)
@@ -89,11 +93,13 @@ def samba_decode_drop(session: PythonObject) raises -> PythonObject:
 
 
 def samba_decode_is_open(session: PythonObject) raises -> PythonObject:
-    return PythonObject(Bool(py=py_get(samba_fields(session), "_open", PythonObject(False))))
+    var nk = samba_keys()
+    return PythonObject(Bool(py=py_get(samba_fields(session), nk[].k__open, PythonObject(False))))
 
 
 def samba_decode_repr(session: PythonObject) raises -> PythonObject:
+    var nk = samba_keys()
     var values = samba_fields(session)
-    var flag = String("True") if Bool(py=py_get(values, "_open", PythonObject(False))) else String("False")
-    var rows = py_get(values, "_rows", PythonObject(0))
+    var flag = String("True") if Bool(py=py_get(values, nk[].k__open, PythonObject(False))) else String("False")
+    var rows = py_get(values, nk[].k__rows, PythonObject(0))
     return PythonObject("SambaDecodeSession(open=" + flag + ", rows=" + String(rows) + ")")

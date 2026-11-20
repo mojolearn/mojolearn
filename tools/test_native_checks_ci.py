@@ -170,8 +170,8 @@ def test_workflow_shape():
     assert set(on) == {"workflow_dispatch"}  # manual only (light-checks.yml)
     inputs = on["workflow_dispatch"]["inputs"]
     assert inputs["filter"]["default"] == "*" and inputs["column"]["default"] == "cpu" and "ref" in inputs
-    assert set(wf["jobs"]) == {"plan", "host-parse", "device-parse", "device-parse-triage", "device-parse-retry",
-                               "device-parse-verdict", "build", "check", "summary"}
+    assert set(wf["jobs"]) == {"plan", "host-parse", "device-parse", "apple-parse", "device-parse-triage",
+                               "device-parse-retry", "device-parse-verdict", "build", "check", "summary"}
     assert inputs["suite"]["default"] == "all"
     # every job body is a step of tools/ops/native_checks_steps.sh (lane fx-cpu-box-checks, 2026-11-19), checked out from
     # the workflow's own commit at .wf/ so the workflow on main runs on any older ref; the CPU box runs the same steps
@@ -192,7 +192,9 @@ def test_workflow_shape():
     script = body("parse_group")
     assert "--emit llvm --no-optimization" in script and "MOJOLEARN_COLUMN_CPU" in script  # parse only, no codegen
     assert "merged_bindings.py root" in script and wf["jobs"]["host-parse"]["strategy"]["fail-fast"] is False
-    assert 'timeout -k 60 "$limit"' in script and '-j "$(nproc)"' in script  # a limit, never a lowered -j
+    # a limit, never a lowered -j (`limited` is `timeout -k 60`, or the same rule in Python on macOS, which has none)
+    assert 'limited "$limit" pixi run mojo build -j "$cores"' in script and 'timeout -k 60 "$@"' in script
+    assert "cores=$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN)" in script
     assert "memory.peak" in script and 'result-$KEY.txt' in script
     for job in ("host-parse", "device-parse", "device-parse-retry"):
         step = runs(job, "parse-group")
@@ -209,6 +211,16 @@ def test_workflow_shape():
     assert wf["jobs"]["device-parse"]["name"].startswith("device-parse")  # tools/prebuild_check.py reads job names
     assert wf["jobs"]["device-parse-retry"]["name"].startswith("device-parse retry ")
     assert not wf["jobs"]["device-parse-verdict"]["name"].startswith(("host-parse", "device-parse"))
+    # apple-parse (lane fx-apple-fast-ci, 2026-11-20): the Apple sets cross-elaborated on Linux; its own suite, never `all`
+    step = runs("apple-parse", "parse-group")
+    assert step["env"]["KIND"] == "${{ matrix.kind }}" and step["env"]["CLS"] == "${{ matrix.cls }}"
+    assert wf["jobs"]["apple-parse"]["runs-on"] == "ubuntu-latest"  # no job of this workflow runs on a Mac
+    assert all("macos" not in str(job.get("runs-on")) for job in wf["jobs"].values())
+    assert wf["jobs"]["apple-parse"]["strategy"]["fail-fast"] is False
+    assert 'if [ "$IN_SUITE" = apple-parse ]; then' in plan and "apple_fast_check.py\" plan" in plan
+    assert "--target-triple arm64-apple-macosx11.0 --target-cpu apple-m1" in script
+    assert 'apple-fast) flags="$accel_flags" ;;' in script  # the legacy fast set: no MOJOLEARN_NUMERIC_IDENTICAL
+    assert 'metal1) accel_flags="--target-accelerator metal:1" ;;' in script
     runs("build", "build"), runs("check", "shard"), runs("summary", "summary"), runs("device-parse-verdict", "verdict")
     build = body("build")
     assert "mojo build" in build and "run_$IN_COLUMN.mojo" in build and "MOJOLEARN_COLUMN_CPU=1" in build

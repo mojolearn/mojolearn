@@ -25,6 +25,8 @@ from core.xseq_marshal import xseq_min_max_f32
 from core.host_finite_scan import host_all_finite_f32
 from bindings.metrics_reg_door import metrics_reg_operation
 from bindings.metrics_cls_native_unpack import metrics_cls_operation
+from bindings.operation_names_metric import METRIC_OPN_FAMILY_METRIC_R2_OPTIONS
+from bindings.operation_names_mcls import MCLS_OPN_FAMILY_MCLS_ACCURACY_FRACTION
 from sequence.xseq_score_run import (
     xseq_run_vector_rows, xseq_run_vector_finite, xseq_run_lengths_check, xseq_run_weights_check,
     xseq_run_metrics_mode, xseq_run_r2,
@@ -131,7 +133,7 @@ def xseq_regressor_score(model: PythonObject, prediction: PythonObject, args: Py
         # pyout-metrics-cnn (2026-11-11): the metrics owner's body, called natively (no CPython call of
         # its family door); the operands are this call's own admitted arrays, which that owner admits in
         # its UNPACK, and options[1] is the metrics family context the door would have received.
-        return metrics_reg_operation("family_metric_r2_options",
+        return metrics_reg_operation(METRIC_OPN_FAMILY_METRIC_R2_OPTIONS,
                                      Python.tuple(truth, pred, sample_weight, "uniform_average", True, mode),
                                      options[1])
     var y = _vector(truth, "y_true")
@@ -175,5 +177,5 @@ def xseq_classifier_score(model: PythonObject, prediction: PythonObject, args: P
     var mode = py_get(py_fields(model), nk[].k_numeric_mode)
     # pyout-metrics-cnn (2026-11-11): the metrics owner's body, called natively (no CPython call of its
     # family door); the labels are the caller's Python objects, admitted in that owner's UNPACK.
-    return metrics_cls_operation(PythonObject(None), "family_mcls_accuracy_fraction",
+    return metrics_cls_operation(PythonObject(None), MCLS_OPN_FAMILY_MCLS_ACCURACY_FRACTION,
                                  Python.tuple(args[1], prediction, args[2], mode), owner[1])

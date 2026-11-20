@@ -92,6 +92,7 @@ from core.forest_calls import (
     xf_export_verify, xf_export_release, xf_predict, xf_resident_prepare, xf_resident_predict, xf_resident_labels,
     xf_strict_prepare, xf_strict_predict, xf_snapshot_release,
 )
+from bindings.trees_keys_unpack import trees_keys
 
 comptime _INT32_MAX = 2147483647
 comptime _MODEL_FIELDS = FOREST_MODEL_FIELDS
@@ -134,12 +135,14 @@ def _float(value: PythonObject) raises -> PythonObject:
 
 def _class_fields(cls: PythonObject) raises -> PythonObject:
     var b = trees_builtins()
-    return py_call(b.type.__dict__["__dict__"].__get__, cls)
+    var nk = trees_keys()
+    return py_call(py_item(b.type.__dict__, nk[].k___dict__).__get__, cls)
 
 
 def _mro(cls: PythonObject) raises -> PythonObject:
     var b = trees_builtins()
-    return py_call(b.type.__dict__["__mro__"].__get__, cls)
+    var nk = trees_keys()
+    return py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, cls)
 
 
 comptime _KIND_SLOT = "trees_forest_kind_v1"
@@ -150,7 +153,8 @@ def forest_kind(model: PythonObject, context: PythonObject) raises -> String:
     class in its ancestry ("rf_classifier", "dt_regressor", "et_classifier",
     ...)."""
     var cls = py_type(model)
-    var table = context["trees_classes"]
+    var nk = trees_keys()
+    var table = py_item(context, nk[].k_trees_classes)
     # Once per class (p3-trees): the forest door and the forest predict each
     # walked the class ancestry on every call. The record lives in the native
     # side table keyed weakly on the class and holds the connected class
@@ -177,7 +181,8 @@ def forest_check_fit_device(model: PythonObject, context: PythonObject) raises:
     hook. Random forests have no device parameter."""
     if _family(forest_kind(model, context)) != "et":
         return
-    var device = py_get(py_fields(model), "device", PythonObject(None))
+    var nk = trees_keys()
+    var device = py_get(py_fields(model), nk[].k_device, PythonObject(None))
     var b = trees_builtins()
     if not Bool(py=py_call(b.isinstance, device, b.str)) or not Bool(py=device == PythonObject("gpu")):
         raise Error("Extra Trees training is GPU-only; device must be 'gpu', got " + _repr(device))
@@ -189,25 +194,26 @@ def forest_get_params(model: PythonObject, context: PythonObject) raises -> Pyth
     var b = trees_builtins()
     var cls = py_type(model)
     var mro = _mro(cls)
+    var nk = trees_keys()
     for i in range(len(mro)):  # driver-loop: over the class ancestry metadata
         var own = _class_fields(mro[i])
-        if py_contains(own, "__init__"):
-            if not py_contains(own, "_parameter_names"):
+        if py_contains(own, nk[].k___init__):
+            if not py_contains(own, nk[].k__parameter_names):
                 raise Error("TypeError: Forest subclasses with a custom constructor must register "
                             + "their parameters before cloning or refitting")
             break
     var fields = py_fields(model)
-    var has = py_get(fields, "_has_constructor_parameters")
+    var has = py_get(fields, nk[].k__has_constructor_parameters)
     if has is None:
-        has = py_get(_class_fields(cls), "_has_constructor_parameters", PythonObject(False))
+        has = py_get(_class_fields(cls), nk[].k__has_constructor_parameters, PythonObject(False))
     if not _truthy(has):
         raise Error("This inference-only forest archive has no constructor "
                     + "parameters; construct a new estimator for cloning/refitting")
     var names = cls._parameter_names
     var params = Python.dict()
     for i in range(len(names)):  # driver-loop: over the constructor parameter names
-        var value = py_get(fields, names[i], context["trees_missing"])
-        if value is context["trees_missing"]:
+        var value = py_get(fields, names[i], py_item(context, nk[].k_trees_missing))
+        if value is py_item(context, nk[].k_trees_missing):
             raise Error("AttributeError: '" + String(cls.__name__) + "' object has no attribute '" + String(names[i]) + "'")
         py_setitem(params, names[i], value)
     return params
@@ -313,59 +319,60 @@ def _rf_base(params: PythonObject, criterion_code: PythonObject, class_weight: P
     """`_RandomForestBase.__init__`: its refusals in order, then the native
     configuration `_cfg`. `params` hold the base's arguments by name."""
     var b = trees_builtins()
-    var device = params["device"]
+    var nk = trees_keys()
+    var device = py_item(params, nk[].k_device)
     if not Bool(py=device == PythonObject("gpu")):
         raise Error("device must be 'gpu', got " + _repr(device) + ": the fit runs on the"
                     + " GPU binding, or, on a CPU-only install with the rf host"
                     + " binding built, on its host restatement"
                     + " (ensemble/host/rf_oracle.mojo) under the same device='gpu'")
-    if params["max_leaf_nodes"] is not None:
-        _refuse("max_leaf_nodes", String(tables["max_leaf_nodes_why"]))
-    var oob = params["oob_score"]
+    if py_item(params, nk[].k_max_leaf_nodes) is not None:
+        _refuse("max_leaf_nodes", String(py_item(tables, nk[].k_max_leaf_nodes_why)))
+    var oob = py_item(params, nk[].k_oob_score)
     if not _is_bool(oob):
         raise Error("oob_score must be a boolean; callable scoring is not supported")
-    if _truthy(oob) and not _truthy(params["bootstrap"]):
+    if _truthy(oob) and not _truthy(py_item(params, nk[].k_bootstrap)):
         raise Error("oob_score=True requires bootstrap=True")
-    if _truthy(params["warm_start"]):
+    if _truthy(py_item(params, nk[].k_warm_start)):
         _refuse("warm_start=True", "there is no incremental fit here,"
                 + " and accepting it would silently refit from scratch.")
-    if _truthy(params["ccp_alpha"]):
+    if _truthy(py_item(params, nk[].k_ccp_alpha)):
         _refuse("ccp_alpha", "cost-complexity pruning is a"
                 + " post-processing pass neither cuML nor this implementation"
                 + " implements. Only 0.0 is accepted.")
     if class_weight is not None and not Bool(py=py_call(b.isinstance, class_weight, b.dict)):
         if not Bool(py=py_call(b.isinstance, class_weight, b.str)) or not Bool(py=class_weight == PythonObject("balanced")):
             raise Error("class_weight must be None, a dict, or 'balanced'; balanced_subsample is unsupported")
-    if params["monotonic_cst"] is not None:
+    if py_item(params, nk[].k_monotonic_cst) is not None:
         _refuse("monotonic_cst", "no cuML counterpart.")
-    if params["n_jobs"] is not None:
+    if py_item(params, nk[].k_n_jobs) is not None:
         _refuse("n_jobs", "there is no CPU thread pool here -- the fit"
                 + " is one host thread driving the GPU.")
-    if _truthy(params["verbose"]):
+    if _truthy(py_item(params, nk[].k_verbose)):
         _refuse("verbose", "nothing in the Mojo layer logs per-tree progress.")
-    var max_samples = params["max_samples"]
+    var max_samples = py_item(params, nk[].k_max_samples)
     if max_samples is not None:
         var f = Float64(py=_float(max_samples))
         if not (f > 0.0 and f <= 1.0):
             raise Error("max_samples=" + _str(max_samples) + " is outside (0, 1]")
     var cfg = Python.dict()
-    py_setitem(cfg, "criterion", _int(criterion_code))
-    py_setitem(cfg, "n_estimators", _int(params["n_estimators"]))
-    var depth = params["max_depth"]
-    py_setitem(cfg, "max_depth", PythonObject(_INT32_MAX) if depth is None else _int(depth))
-    py_setitem(cfg, "max_leaves", _max_leaves_slot(params["max_leaves"], context))
-    py_setitem(cfg, "max_features", params["max_features"])
-    py_setitem(cfg, "n_bins", _int(params["n_bins"]))
-    py_setitem(cfg, "min_samples_leaf", _int(params["min_samples_leaf"]))
-    py_setitem(cfg, "min_samples_split", _int(params["min_samples_split"]))
-    py_setitem(cfg, "min_impurity_decrease", _float(params["min_impurity_decrease"]))
-    py_setitem(cfg, "bootstrap", PythonObject(_truthy(params["bootstrap"])))
-    py_setitem(cfg, "max_samples", PythonObject(1.0) if max_samples is None else _float(max_samples))
-    var seed = params["random_state"]
-    py_setitem(cfg, "random_state", PythonObject(0) if seed is None else _int(seed))
-    py_setitem(cfg, "n_streams", _int(params["n_streams"]))
-    py_setitem(cfg, "max_batch_size", _int(params["max_batch_size"]))
-    py_setitem(cfg, "oob_score", PythonObject(_truthy(oob)))
+    py_setitem(cfg, nk[].k_criterion, _int(criterion_code))
+    py_setitem(cfg, nk[].k_n_estimators, _int(py_item(params, nk[].k_n_estimators)))
+    var depth = py_item(params, nk[].k_max_depth)
+    py_setitem(cfg, nk[].k_max_depth, PythonObject(_INT32_MAX) if depth is None else _int(depth))
+    py_setitem(cfg, nk[].k_max_leaves, _max_leaves_slot(py_item(params, nk[].k_max_leaves), context))
+    py_setitem(cfg, nk[].k_max_features, py_item(params, nk[].k_max_features))
+    py_setitem(cfg, nk[].k_n_bins, _int(py_item(params, nk[].k_n_bins)))
+    py_setitem(cfg, nk[].k_min_samples_leaf, _int(py_item(params, nk[].k_min_samples_leaf)))
+    py_setitem(cfg, nk[].k_min_samples_split, _int(py_item(params, nk[].k_min_samples_split)))
+    py_setitem(cfg, nk[].k_min_impurity_decrease, _float(py_item(params, nk[].k_min_impurity_decrease)))
+    py_setitem(cfg, nk[].k_bootstrap, PythonObject(_truthy(py_item(params, nk[].k_bootstrap))))
+    py_setitem(cfg, nk[].k_max_samples, PythonObject(1.0) if max_samples is None else _float(max_samples))
+    var seed = py_item(params, nk[].k_random_state)
+    py_setitem(cfg, nk[].k_random_state, PythonObject(0) if seed is None else _int(seed))
+    py_setitem(cfg, nk[].k_n_streams, _int(py_item(params, nk[].k_n_streams)))
+    py_setitem(cfg, nk[].k_max_batch_size, _int(py_item(params, nk[].k_max_batch_size)))
+    py_setitem(cfg, nk[].k_oob_score, PythonObject(_truthy(oob)))
     return cfg
 
 
@@ -376,48 +383,50 @@ def _rf_arguments(params: PythonObject, kind: String, context: PythonObject) rai
     if not kind.startswith("dt_"):
         return params
     var b = trees_builtins()
-    var splitter = params["splitter"]
+    var nk = trees_keys()
+    var splitter = py_item(params, nk[].k_splitter)
     if not Bool(py=splitter == PythonObject("best")) and not Bool(py=splitter == PythonObject("random")):
         raise Error("splitter must be 'best' or 'random', got " + _repr(splitter))
     var best = Bool(py=splitter == PythonObject("best"))
-    if best and params["max_leaf_nodes"] is not None:
+    if best and py_item(params, nk[].k_max_leaf_nodes) is not None:
         _refuse("max_leaf_nodes with splitter='best'", "best-first growth exists on the random"
                 + " splitter's builder (extratrees/, DEVIATIONS 466-469); pass splitter='random'.")
     var args = py_call(b.dict, params)
-    py_setitem(args, "n_estimators", PythonObject(1))
-    py_setitem(args, "max_leaf_nodes", PythonObject(None) if not best else params["max_leaf_nodes"])
-    py_setitem(args, "bootstrap", PythonObject(False))
-    py_setitem(args, "n_streams", PythonObject(1))
-    py_setitem(args, "oob_score", PythonObject(False))
-    py_setitem(args, "n_jobs", PythonObject(None))
-    py_setitem(args, "verbose", PythonObject(0))
-    py_setitem(args, "warm_start", PythonObject(False))
-    py_setitem(args, "max_samples", PythonObject(None))
-    py_setitem(args, "max_leaves", PythonObject(-1))
-    py_setitem(args, "max_batch_size", PythonObject(4096))
+    py_setitem(args, nk[].k_n_estimators, PythonObject(1))
+    py_setitem(args, nk[].k_max_leaf_nodes, PythonObject(None) if not best else py_item(params, nk[].k_max_leaf_nodes))
+    py_setitem(args, nk[].k_bootstrap, PythonObject(False))
+    py_setitem(args, nk[].k_n_streams, PythonObject(1))
+    py_setitem(args, nk[].k_oob_score, PythonObject(False))
+    py_setitem(args, nk[].k_n_jobs, PythonObject(None))
+    py_setitem(args, nk[].k_verbose, PythonObject(0))
+    py_setitem(args, nk[].k_warm_start, PythonObject(False))
+    py_setitem(args, nk[].k_max_samples, PythonObject(None))
+    py_setitem(args, nk[].k_max_leaves, PythonObject(-1))
+    py_setitem(args, nk[].k_max_batch_size, PythonObject(4096))
     if kind == "dt_regressor":
-        py_setitem(args, "class_weight", PythonObject(None))
-        var bins = params["n_bins"]
-        py_setitem(args, "n_bins", PythonObject(128) if bins is None else bins)
+        py_setitem(args, nk[].k_class_weight, PythonObject(None))
+        var bins = py_item(params, nk[].k_n_bins)
+        py_setitem(args, nk[].k_n_bins, PythonObject(128) if bins is None else bins)
     return args
 
 
 def _rf_derive(model: PythonObject, params: PythonObject, kind: String, context: PythonObject) raises -> PythonObject:
     """The state the RandomForest*/DecisionTree* constructor derived (in
     its order): `device` and `_cfg`."""
-    var tables = context["trees_rf_tables"]
+    var nk = trees_keys()
+    var tables = py_item(context, nk[].k_trees_rf_tables)
     var args = _rf_arguments(params, kind, context)
     var who = String(py_type(model).__name__)
     var classifier = _classifier(kind)
-    var code = _criterion_code(args["criterion"], tables["cls_criteria" if classifier else "reg_criteria"],
-                               tables["unsupported"], "classifier" if classifier else "regressor")
-    var mwf = _min_weight_fraction(args["min_weight_fraction_leaf"], who)
+    var code = _criterion_code(py_item(args, nk[].k_criterion), tables["cls_criteria" if classifier else "reg_criteria"],
+                               py_item(tables, nk[].k_unsupported), "classifier" if classifier else "regressor")
+    var mwf = _min_weight_fraction(py_item(args, nk[].k_min_weight_fraction_leaf), who)
     var cfg = _rf_base(args, code, _param(args, "class_weight", PythonObject(None)) if classifier else PythonObject(None),
                        tables, context)
-    py_setitem(cfg, "min_weight_fraction_leaf", mwf)
+    py_setitem(cfg, nk[].k_min_weight_fraction_leaf, mwf)
     var derived = Python.dict()
-    py_setitem(derived, "device", args["device"])
-    py_setitem(derived, "_cfg", cfg)
+    py_setitem(derived, nk[].k_device, py_item(args, nk[].k_device))
+    py_setitem(derived, nk[].k__cfg, cfg)
     return derived
 
 
@@ -426,23 +435,24 @@ def _et_derive(model: PythonObject, params: PythonObject, kind: String, context:
     the criterion, then `device`, `_criterion_code` and `_cfg` (the raw
     parameters; `_fit_params` converts them at fit)."""
     var b = trees_builtins()
-    var tables = context["trees_et_tables"]
-    var device = params["device"]
+    var nk = trees_keys()
+    var tables = py_item(context, nk[].k_trees_et_tables)
+    var device = py_item(params, nk[].k_device)
     if not Bool(py=py_call(b.isinstance, device, b.str)) or not Bool(py=device == PythonObject("gpu")):
         raise Error("Extra Trees training is GPU-only; device must be 'gpu', got " + _repr(device))
-    if params["n_jobs"] is not None:
+    if py_item(params, nk[].k_n_jobs) is not None:
         raise Error("NotImplementedError: n_jobs is not implemented: there is no CPU thread pool here -- the"
                     + " fit runs one host thread driving the GPU (device='gpu')."
                     + " Refused by name rather than"
                     + " accepted and ignored.")
-    if _truthy(params["verbose"]):
+    if _truthy(py_item(params, nk[].k_verbose)):
         raise Error("NotImplementedError: verbose is not implemented: nothing in the Mojo layer logs per-tree"
                     + " progress. Refused by name rather than accepted and ignored.")
     var classifier = _classifier(kind)
-    var criterion = params["criterion"]
+    var criterion = py_item(params, nk[].k_criterion)
     var table = tables["cls_criteria" if classifier else "reg_criteria"]
     if not py_contains(table, criterion):
-        var reason = py_get(tables["unsupported"], criterion)
+        var reason = py_get(py_item(tables, nk[].k_unsupported), criterion)
         var tail = (String("; 'gini', 'entropy' and its alias 'log_loss' are.") if classifier else
             String("; 'squared_error', 'poisson', 'gamma' and 'inverse_gaussian' are."))
         raise Error("NotImplementedError: criterion=" + _repr(criterion) + " is not implemented"
@@ -459,13 +469,13 @@ def _et_derive(model: PythonObject, params: PythonObject, kind: String, context:
         else:
             py_setitem(cfg, name, params[name])
     if not classifier:
-        var mf = params["max_features"]
+        var mf = py_item(params, nk[].k_max_features)
         if Bool(py=mf == PythonObject(1.0)) and not Bool(py=py_call(b.isinstance, mf, b.int)):
-            py_setitem(cfg, "max_features", PythonObject(None))
+            py_setitem(cfg, nk[].k_max_features, PythonObject(None))
     var derived = Python.dict()
-    py_setitem(derived, "device", device)
-    py_setitem(derived, "_criterion_code", table[criterion])
-    py_setitem(derived, "_cfg", cfg)
+    py_setitem(derived, nk[].k_device, device)
+    py_setitem(derived, nk[].k__criterion_code, table[criterion])
+    py_setitem(derived, nk[].k__cfg, cfg)
     return derived
 
 
@@ -487,7 +497,8 @@ def forest_refresh(model: PythonObject, kind: String, context: PythonObject) rai
             py_setitem(keep, kept[i], fields[kept[i]])
     _ = py_call(fields.clear)
     _ = py_call(fields.update, params)
-    py_setitem(fields, "_has_constructor_parameters", PythonObject(True))
+    var nk = trees_keys()
+    py_setitem(fields, nk[].k__has_constructor_parameters, PythonObject(True))
     _ = py_call(fields.update, derived)
     _ = py_call(fields.update, keep)
     return fields
@@ -504,7 +515,8 @@ def forest_validate_stored(model: PythonObject, context: PythonObject) raises:
     var cls = py_type(model)
     var names = cls._parameter_names
     var fields = py_fields(model)
-    var missing = context["trees_missing"]
+    var nk = trees_keys()
+    var missing = py_item(context, nk[].k_trees_missing)
     var params = Python.dict()
     for i in range(len(names)):  # driver-loop: over the constructor parameter names
         var value = py_get(fields, names[i], missing)
@@ -520,7 +532,8 @@ def forest_validate_stored(model: PythonObject, context: PythonObject) raises:
 def forest_prediction_engine(fields: PythonObject, context: PythonObject) raises -> String:
     """`ForestProtocol._prediction_engine()`: the engine checked first, then
     (for `auto` only) the effective mode, in the Python method's order."""
-    var engine = _check_engine(py_get(fields, "inference_engine", PythonObject("sequential")))
+    var nk = trees_keys()
+    var engine = _check_engine(py_get(fields, nk[].k_inference_engine, PythonObject("sequential")))
     if engine == "auto":
         return "parallel_groves" if forest_effective_mode(fields, context) == "fast" else "sequential"
     return engine
@@ -548,17 +561,19 @@ def forest_ordered_resident_auto(model: PythonObject, fields: PythonObject, cont
 def forest_capture_mode(fields: PythonObject, context: PythonObject) raises -> String:
     """`ForestProtocol._capture_fit_mode()`: the requested mode, or the
     process default, stored as `_fit_numeric_mode`."""
-    var requested = _check_mode(py_get(fields, "numeric_mode"))
-    var mode = requested if requested is not None else context["backend_fields"]["_DEFAULT_MODE"]
+    var nk = trees_keys()
+    var requested = _check_mode(py_get(fields, nk[].k_numeric_mode))
+    var mode = requested if requested is not None else py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
     var clean = _check_mode(mode)
-    py_setitem(fields, "_fit_numeric_mode", clean)
+    py_setitem(fields, nk[].k__fit_numeric_mode, clean)
     return String(clean)
 
 
 def forest_effective_mode(fields: PythonObject, context: PythonObject) raises -> String:
     """`ForestProtocol._effective_mode()`."""
-    var requested = _check_mode(py_get(fields, "numeric_mode"))
-    var captured = py_get(fields, "_fit_numeric_mode")
+    var nk = trees_keys()
+    var requested = _check_mode(py_get(fields, nk[].k_numeric_mode))
+    var captured = py_get(fields, nk[].k__fit_numeric_mode)
     if captured is not None:
         if requested is not None and not Bool(py=requested == captured):
             raise Error("This forest was fitted with numeric_mode=" + _repr(captured) + "; "
@@ -566,7 +581,7 @@ def forest_effective_mode(fields: PythonObject, context: PythonObject) raises ->
         return String(captured)
     if requested is not None:
         return String(requested)
-    return String(_check_mode(context["backend_fields"]["_DEFAULT_MODE"]))
+    return String(_check_mode(py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)))
 
 
 # ------------------------------------------------------------ fit export
@@ -724,7 +739,8 @@ def _max_features_fraction(max_features: PythonObject, n_features: Int, context:
 def _dt_tier_bins(fields: PythonObject, rf: PythonObject) raises -> PythonObject:
     """`_expansion_trees._dt_tier_bins`: the tree's own n_bins, or for
     n_bins=None its binding's `rf_dt_default_bins` (128 without one)."""
-    var bins = py_get(fields, "n_bins")
+    var nk = trees_keys()
+    var bins = py_get(fields, nk[].k_n_bins)
     if bins is not None:
         return _int(bins)
     # XF_DT_DEFAULT_BINS: the image's bin count (128 in one without its own)
@@ -736,14 +752,15 @@ def _rf_params(fields: PythonObject, kind: String, rows: Int, cols: Int, classes
     """`_RandomForestBase._fit_params`: the 16-slot list in
     _mojolearn_rf.mojo's order, then min_weight_fraction_leaf when it is
     not 0; DecisionTreeRegressor's slot 7 is its tier's bin count."""
-    var cfg = fields["_cfg"]
+    var nk = trees_keys()
+    var cfg = py_item(fields, nk[].k__cfg)
     var params = Python.list(PythonObject(rows), PythonObject(cols), PythonObject(classes),
-                             cfg["n_estimators"], cfg["max_depth"], cfg["max_leaves"],
-                             PythonObject(_max_features_fraction(cfg["max_features"], cols, context)),
-                             cfg["n_bins"], cfg["min_samples_leaf"], cfg["min_samples_split"],
-                             cfg["min_impurity_decrease"], PythonObject(1 if _truthy(cfg["bootstrap"]) else 0),
-                             cfg["max_samples"], cfg["random_state"], cfg["n_streams"], cfg["max_batch_size"])
-    var mwf = py_get(cfg, "min_weight_fraction_leaf", PythonObject(0.0))
+                             py_item(cfg, nk[].k_n_estimators), py_item(cfg, nk[].k_max_depth), py_item(cfg, nk[].k_max_leaves),
+                             PythonObject(_max_features_fraction(py_item(cfg, nk[].k_max_features), cols, context)),
+                             py_item(cfg, nk[].k_n_bins), py_item(cfg, nk[].k_min_samples_leaf), py_item(cfg, nk[].k_min_samples_split),
+                             py_item(cfg, nk[].k_min_impurity_decrease), PythonObject(1 if _truthy(py_item(cfg, nk[].k_bootstrap)) else 0),
+                             py_item(cfg, nk[].k_max_samples), py_item(cfg, nk[].k_random_state), py_item(cfg, nk[].k_n_streams), py_item(cfg, nk[].k_max_batch_size))
+    var mwf = py_get(cfg, nk[].k_min_weight_fraction_leaf, PythonObject(0.0))
     if _truthy(mwf):
         _ = py_call(params.append, mwf)
     if kind == "dt_regressor":
@@ -754,14 +771,15 @@ def _rf_params(fields: PythonObject, kind: String, rows: Int, cols: Int, classes
 def _et_max_features(max_features: PythonObject, context: PythonObject) raises -> PythonObject:
     """`extratrees._max_features_slots`: (spec, fraction)."""
     var b = trees_builtins()
-    var tables = context["trees_et_tables"]
+    var nk = trees_keys()
+    var tables = py_item(context, nk[].k_trees_et_tables)
     if max_features is None:
-        return Python.tuple(tables["mf_all"], PythonObject(0.0))
+        return Python.tuple(py_item(tables, nk[].k_mf_all), PythonObject(0.0))
     if Bool(py=py_call(b.isinstance, max_features, b.str)):
         if String(max_features) == "sqrt":
-            return Python.tuple(tables["mf_sqrt"], PythonObject(0.0))
+            return Python.tuple(py_item(tables, nk[].k_mf_sqrt), PythonObject(0.0))
         if String(max_features) == "log2":
-            return Python.tuple(tables["mf_log2"], PythonObject(0.0))
+            return Python.tuple(py_item(tables, nk[].k_mf_log2), PythonObject(0.0))
         raise Error("max_features=" + _repr(max_features) + " is not a recognised form; sklearn"
                     + " accepts 'sqrt', 'log2', None, a float fraction or an int count")
     if _is_integral(max_features, context) and not _is_bool(max_features):
@@ -790,24 +808,25 @@ def _et_params(fields: PythonObject, cfg: PythonObject, rows: Int, cols: Int, cl
                context: PythonObject) raises -> PythonObject:
     """`extratrees._fit_params`: the 22-slot list in _mojolearn_trees.mojo's
     order."""
-    var device = fields["device"]
+    var nk = trees_keys()
+    var device = py_item(fields, nk[].k_device)
     var b = trees_builtins()
     if not Bool(py=py_call(b.isinstance, device, b.str)) or not Bool(py=device == PythonObject("gpu")):
         raise Error("Extra Trees training is GPU-only; device must be 'gpu', got " + _repr(device))
-    var slots = _et_max_features(cfg["max_features"], context)
-    var depth = cfg["max_depth"]
-    var seed = cfg["random_state"]
-    var leaves = cfg["max_leaf_nodes"]
+    var slots = _et_max_features(py_item(cfg, nk[].k_max_features), context)
+    var depth = py_item(cfg, nk[].k_max_depth)
+    var seed = py_item(cfg, nk[].k_random_state)
+    var leaves = py_item(cfg, nk[].k_max_leaf_nodes)
     return Python.list(
-        PythonObject(rows), PythonObject(cols), PythonObject(classes), _int(cfg["n_estimators"]),
+        PythonObject(rows), PythonObject(cols), PythonObject(classes), _int(py_item(cfg, nk[].k_n_estimators)),
         PythonObject(-1) if depth is None else _int(depth),
-        _int(cfg["min_samples_split"]), _int(cfg["min_samples_leaf"]), _float(cfg["min_weight_fraction_leaf"]),
-        slots[0], slots[1], _float(cfg["min_impurity_decrease"]),
-        PythonObject(1 if _truthy(cfg["bootstrap"]) else 0), PythonObject(1 if _truthy(cfg["oob_score"]) else 0),
-        PythonObject(0) if seed is None else _int(seed), PythonObject(1 if _truthy(cfg["warm_start"]) else 0),
-        _float(cfg["ccp_alpha"]), PythonObject(0 if cfg["class_weight"] is None else 1),
-        PythonObject(0 if cfg["monotonic_cst"] is None else 1), _et_bootstrap_rows(rows, cfg["max_samples"], context),
-        PythonObject(-1) if leaves is None else _int(leaves), PythonObject(1), _int(fields["_criterion_code"]),
+        _int(py_item(cfg, nk[].k_min_samples_split)), _int(py_item(cfg, nk[].k_min_samples_leaf)), _float(py_item(cfg, nk[].k_min_weight_fraction_leaf)),
+        slots[0], slots[1], _float(py_item(cfg, nk[].k_min_impurity_decrease)),
+        PythonObject(1 if _truthy(py_item(cfg, nk[].k_bootstrap)) else 0), PythonObject(1 if _truthy(py_item(cfg, nk[].k_oob_score)) else 0),
+        PythonObject(0) if seed is None else _int(seed), PythonObject(1 if _truthy(py_item(cfg, nk[].k_warm_start)) else 0),
+        _float(py_item(cfg, nk[].k_ccp_alpha)), PythonObject(0 if py_item(cfg, nk[].k_class_weight) is None else 1),
+        PythonObject(0 if py_item(cfg, nk[].k_monotonic_cst) is None else 1), _et_bootstrap_rows(rows, py_item(cfg, nk[].k_max_samples), context),
+        PythonObject(-1) if leaves is None else _int(leaves), PythonObject(1), _int(py_item(fields, nk[].k__criterion_code)),
     )
 
 
@@ -829,10 +848,11 @@ def _store_model(fields: PythonObject, arrays: PythonObject, cols: Int) raises:
         trees_freeze(arrays[i])
         py_setitem(fields, names[i], arrays[i])
     var meta = arrays[5]
-    py_setitem(fields, "n_features_in_", PythonObject(cols))
-    py_setitem(fields, "_n_trees", _int(meta[0]))
-    py_setitem(fields, "_num_outputs", _int(meta[1]))
-    py_setitem(fields, "_resident_holder", Python.dict())
+    var nk = trees_keys()
+    py_setitem(fields, nk[].k_n_features_in_, PythonObject(cols))
+    py_setitem(fields, nk[].k__n_trees, _int(meta[0]))
+    py_setitem(fields, nk[].k__num_outputs, _int(meta[1]))
+    py_setitem(fields, nk[].k__resident_holder, Python.dict())
 
 
 def _x_for(source: PythonObject, rowmajor: Bool, context: PythonObject) raises -> AdmittedX:
@@ -864,7 +884,8 @@ def _rf_fit_arrays(fields: PythonObject, kind: String, x: AdmittedX, y_addr: Int
     _y_rows_check(y_rows, x.rows)
     var device_scan = _device_scan(rf)
     _finite_or_refuse(x, device_scan, context)
-    var request = forest_fit_request(fields, fields["_cfg"], kind, x.rows, x.cols, classes, x.address, y_addr, fit,
+    var nk = trees_keys()
+    var request = forest_fit_request(fields, py_item(fields, nk[].k__cfg), kind, x.rows, x.cols, classes, x.address, y_addr, fit,
                                      rf, context)
     var result = _launch(rf, fit, x.view(), request, device_scan, context)
     _rf_fit_notices(result[5], context)
@@ -900,7 +921,8 @@ def rf_fit(model: PythonObject, args: PythonObject, kind: String, context: Pytho
     var fields = forest_refresh(model, kind, context)
     var mode = forest_capture_mode(fields, context)
     var rf = trees_table(context, mode, "_mojolearn_rf")
-    var cfg = fields["_cfg"]
+    var nk = trees_keys()
+    var cfg = py_item(fields, nk[].k__cfg)
     if _classifier(kind):
         return _rf_fit_classifier(model, fields, kind, X, y, sample_weight, importances, tree_start, mode, rf, context)
     return _rf_fit_regressor(model, fields, kind, X, y, sample_weight, importances, tree_start, mode, rf, context)
@@ -911,13 +933,14 @@ def _rf_fit_classifier(model: PythonObject, fields: PythonObject, kind: String, 
                        rf: PythonObject, context: PythonObject) raises -> PythonObject:
     var b = trees_builtins()
     var labels = trees_encode_labels(y, context)
-    py_setitem(fields, "classes_", labels.classes)
+    var nk = trees_keys()
+    py_setitem(fields, nk[].k_classes_, labels.classes)
     var k = len(labels.classes)
-    py_setitem(fields, "n_classes_", PythonObject(k))
+    py_setitem(fields, nk[].k_n_classes_, PythonObject(k))
     if k < 2:
         raise Error("y has fewer than 2 classes")
     var xtrees = trees_table(context, mode, "_mojolearn_x_trees")
-    var class_weight = py_get(fields, "class_weight")
+    var class_weight = py_get(fields, nk[].k_class_weight)
     var weights: Optional[AdmittedX] = None
     if sample_weight is not None:
         weights = trees_weighted_rows(sample_weight, class_weight, labels, xtrees, context)
@@ -927,15 +950,15 @@ def _rf_fit_classifier(model: PythonObject, fields: PythonObject, kind: String, 
     for i in range(3):  # driver-loop: over fixed call structure, small-loop(names): the three requested-output attribute names
         _ = py_call(fields.pop, names[i], PythonObject(None))
     var y_addr = trees_address(labels.codes)
-    var cfg = fields["_cfg"]
-    if _truthy(cfg["oob_score"]) or importances:
+    var cfg = py_item(fields, nk[].k__cfg)
+    if _truthy(py_item(cfg, nk[].k_oob_score)) or importances:
         if tree_start is not None:
             raise Error("auxiliary outputs require a complete forest, not a tree-ID shard")
         # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
         var oob = Optional[PythonObject]()
         # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
         var score = Optional[PythonObject]()
-        if _truthy(cfg["oob_score"]):
+        if _truthy(py_item(cfg, nk[].k_oob_score)):
             oob = admitted_array(Python.tuple(labels.n, k), "<f8", context)
             score = admitted_vector(1, "<f8", context)
         var x = _x_for(X, False, context)
@@ -950,10 +973,10 @@ def _rf_fit_classifier(model: PythonObject, fields: PythonObject, kind: String, 
         _ = score  # keep the Python object alive through the native call above
         _ = oob  # keep the Python object alive through the native call above
         if Bool(oob):
-            py_setitem(fields, "oob_decision_function_", oob.value())
-            py_setitem(fields, "oob_score_", PythonObject(_F64(score.value(), 0)))
+            py_setitem(fields, nk[].k_oob_decision_function_, oob.value())
+            py_setitem(fields, nk[].k_oob_score_, PythonObject(_F64(score.value(), 0)))
         if importance is not None:
-            py_setitem(fields, "feature_importances_", importance)
+            py_setitem(fields, nk[].k_feature_importances_, importance)
         _ = weights^
         return model
     if tree_start is not None:
@@ -990,9 +1013,10 @@ def _reduce(addr: Int, count: Int, what: Int, context: PythonObject) raises -> P
 def _check_regression_target(y: AdmittedXView, code: Int, criterion: PythonObject, family: String,
                              context: PythonObject) raises:
     """The deviance criteria's target refusals (RF and ET wording)."""
-    var tables = context["trees_rf_tables"] if family == "rf" else context["trees_et_tables"]
+    var nk = trees_keys()
+    var tables = py_item(context, nk[].k_trees_rf_tables) if family == "rf" else py_item(context, nk[].k_trees_et_tables)
     var n = y.rows
-    if code == Int(py=tables["poisson"]):
+    if code == Int(py=py_item(tables, nk[].k_poisson)):
         if (not trees_finite_f32(y.address, n) or Bool(py=_reduce(y.address, n, 0, context) < PythonObject(0))
                 or not Bool(py=_reduce(y.address, n, 1, context) > PythonObject(0))):
             if family == "rf":
@@ -1003,7 +1027,7 @@ def _check_regression_target(y: AdmittedXView, code: Int, criterion: PythonObjec
             raise Error("criterion='poisson' requires y >= 0 with a positive sum: the"
                         + " Poisson gain is -max() for a non-positive label sum"
                         + " (objectives.cuh:251-253), which would fit a stump silently")
-    elif code == Int(py=tables["gamma"]) or code == Int(py=tables["inverse_gaussian"]):
+    elif code == Int(py=py_item(tables, nk[].k_gamma)) or code == Int(py=py_item(tables, nk[].k_inverse_gaussian)):
         if not trees_finite_f32(y.address, n) or Bool(py=_reduce(y.address, n, 0, context) <= PythonObject(0)):
             if family == "rf":
                 raise Error("criterion=" + _repr(criterion) + " requires y > 0: its"
@@ -1018,15 +1042,16 @@ def _check_regression_target(y: AdmittedXView, code: Int, criterion: PythonObjec
 def _rf_fit_regressor(model: PythonObject, fields: PythonObject, kind: String, X: PythonObject, y: PythonObject,
                       sample_weight: PythonObject, importances: Bool, tree_start: PythonObject, mode: String,
                       rf: PythonObject, context: PythonObject) raises -> PythonObject:
-    var cfg = fields["_cfg"]
+    var nk = trees_keys()
+    var cfg = py_item(fields, nk[].k__cfg)
     var y32 = admit_f32(y, 1, "y", context, finite=False)
-    var code = Int(py=cfg["criterion"])
-    _check_regression_target(y32.view(), code, fields["criterion"], "rf", context)
+    var code = Int(py=py_item(cfg, nk[].k_criterion))
+    _check_regression_target(y32.view(), code, py_item(fields, nk[].k_criterion), "rf", context)
     var names = Python.tuple("oob_prediction_", "oob_score_", "feature_importances_")
     for i in range(3):  # driver-loop: over fixed call structure, small-loop(names): the three requested-output attribute names
         _ = py_call(fields.pop, names[i], PythonObject(None))
     if sample_weight is not None:
-        if tree_start is not None or _truthy(cfg["oob_score"]) or importances:
+        if tree_start is not None or _truthy(py_item(cfg, nk[].k_oob_score)) or importances:
             raise Error("NotImplementedError: sample_weight is not implemented together with oob_score, feature "
                         + "importances or a tree-ID shard")
         var w = admit_weight_words(sample_weight, y32.rows, context)
@@ -1038,14 +1063,14 @@ def _rf_fit_regressor(model: PythonObject, fields: PythonObject, kind: String, X
         _ = w^
         _ = y32^
         return model
-    if _truthy(cfg["oob_score"]) or importances:
+    if _truthy(py_item(cfg, nk[].k_oob_score)) or importances:
         if tree_start is not None:
             raise Error("auxiliary outputs require a complete forest, not a tree-ID shard")
         # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
         var oob = Optional[PythonObject]()
         # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
         var score = Optional[PythonObject]()
-        if _truthy(cfg["oob_score"]):
+        if _truthy(py_item(cfg, nk[].k_oob_score)):
             oob = admitted_vector(y32.rows, "<f8", context)
             score = admitted_vector(1, "<f8", context)
         var x = _x_for(X, False, context)
@@ -1058,10 +1083,10 @@ def _rf_fit_regressor(model: PythonObject, fields: PythonObject, kind: String, X
         _ = score  # keep the Python object alive through the native call above
         _ = oob  # keep the Python object alive through the native call above
         if Bool(oob):
-            py_setitem(fields, "oob_prediction_", oob.value())
-            py_setitem(fields, "oob_score_", PythonObject(_F64(score.value(), 0)))
+            py_setitem(fields, nk[].k_oob_prediction_, oob.value())
+            py_setitem(fields, nk[].k_oob_score_, PythonObject(_F64(score.value(), 0)))
         if importance is not None:
-            py_setitem(fields, "feature_importances_", importance)
+            py_setitem(fields, nk[].k_feature_importances_, importance)
         _ = y32^
         return model
     if tree_start is not None:
@@ -1090,11 +1115,12 @@ def _et_fit_arrays(fields: PythonObject, cfg: PythonObject, X: PythonObject, y_a
     var result = _launch(et, fit, x.view(), request, device_scan, context)
     _store_model(fields, result, x.cols)
     var meta = result[5]
-    py_setitem(fields, "depth_cap_bound_", PythonObject(_truthy(meta[2])))
-    py_setitem(fields, "max_depth_resolved_", _int(meta[3]))
-    py_setitem(fields, "max_features_", _int(meta[4]))
+    var nk = trees_keys()
+    py_setitem(fields, nk[].k_depth_cap_bound_, PythonObject(_truthy(meta[2])))
+    py_setitem(fields, nk[].k_max_depth_resolved_, _int(meta[3]))
+    py_setitem(fields, nk[].k_max_features_, _int(meta[4]))
     var bootstrap_rows = _int(meta[5])
-    py_setitem(fields, "_n_samples_bootstrap", bootstrap_rows if Int(py=bootstrap_rows) != 0 else PythonObject(None))
+    py_setitem(fields, nk[].k__n_samples_bootstrap, bootstrap_rows if Int(py=bootstrap_rows) != 0 else PythonObject(None))
 
 
 def et_fit(model: PythonObject, args: PythonObject, kind: String, context: PythonObject) raises -> PythonObject:
@@ -1107,22 +1133,23 @@ def et_fit(model: PythonObject, args: PythonObject, kind: String, context: Pytho
     var fields = forest_refresh(model, kind, context)
     var mode = forest_capture_mode(fields, context)
     var et = trees_table(context, mode, "_mojolearn_trees")
-    var cfg = fields["_cfg"]
+    var nk = trees_keys()
+    var cfg = py_item(fields, nk[].k__cfg)
     if _classifier(kind):
         var labels = trees_encode_labels(y, context)
-        py_setitem(fields, "classes_", labels.classes)
+        py_setitem(fields, nk[].k_classes_, labels.classes)
         var k = len(labels.classes)
-        py_setitem(fields, "n_classes_", PythonObject(k))
+        py_setitem(fields, nk[].k_n_classes_, PythonObject(k))
         # `codes.astype('<f4')`: the ET classifier reads float32 class codes.
         var codes = admitted_vector(labels.n, "<f4", context)
         trees_cast(trees_address(labels.codes), "<i4", trees_address(codes), "<f4", labels.n, context)
         _ = codes  # keep the Python object alive through the native call above
-        var class_weight = cfg["class_weight"]
+        var class_weight = py_item(cfg, nk[].k_class_weight)
         if sample_weight is not None or class_weight is not None:
             var xtrees = trees_table(context, mode, "_mojolearn_x_trees")
             var weights = trees_weighted_rows(sample_weight, class_weight, labels, xtrees, context)
             var unweighted = py_call(b.dict, cfg)
-            py_setitem(unweighted, "class_weight", PythonObject(None))
+            py_setitem(unweighted, nk[].k_class_weight, PythonObject(None))
             if tree_start is not None:
                 _et_fit_arrays(fields, unweighted, X, trees_address(codes), labels.n, k,
                                ForestFit(True, weights=weights.address, tree_start=Int(py=tree_start)), et, context)
@@ -1146,7 +1173,7 @@ def et_fit(model: PythonObject, args: PythonObject, kind: String, context: Pytho
         _ = codes^
         return model
     var y32 = admit_f32(y, 1, "y", context, finite=False)
-    _check_regression_target(y32.view(), Int(py=fields["_criterion_code"]), fields["criterion"], "et", context)
+    _check_regression_target(y32.view(), Int(py=py_item(fields, nk[].k__criterion_code)), py_item(fields, nk[].k_criterion), "et", context)
     if sample_weight is not None:
         var weights = admit_weight_words(sample_weight, y32.rows, context)
         if tree_start is not None:
@@ -1180,38 +1207,39 @@ def dt_random_fit(model: PythonObject, args: PythonObject, kind: String, context
     this tree's; predict delegates to it."""
     var b = trees_builtins()
     var fields = forest_refresh(model, kind, context)
-    var inner_cls = context["trees_et_classifier"] if _classifier(kind) else context["trees_et_regressor"]
+    var nk = trees_keys()
+    var inner_cls = py_item(context, nk[].k_trees_et_classifier) if _classifier(kind) else py_item(context, nk[].k_trees_et_regressor)
     var inner = py_call(b.object.__new__, inner_cls)
     var inner_fields = py_fields(inner)
-    _ = py_call(inner_fields.update, context["trees_defaults"][inner_cls])
-    var max_features = fields["max_features"]
-    var seed = fields["random_state"]
+    _ = py_call(inner_fields.update, py_item(context, nk[].k_trees_defaults)[inner_cls])
+    var max_features = py_item(fields, nk[].k_max_features)
+    var seed = py_item(fields, nk[].k_random_state)
     var settings = Python.dict()
-    py_setitem(settings, "n_estimators", PythonObject(1))
-    py_setitem(settings, "bootstrap", PythonObject(False))
-    py_setitem(settings, "max_features", PythonObject(1.0) if max_features is None else max_features)
+    py_setitem(settings, nk[].k_n_estimators, PythonObject(1))
+    py_setitem(settings, nk[].k_bootstrap, PythonObject(False))
+    py_setitem(settings, nk[].k_max_features, PythonObject(1.0) if max_features is None else max_features)
     var copied = Python.tuple("max_depth", "min_samples_split", "min_samples_leaf", "max_leaf_nodes",
                               "min_impurity_decrease", "criterion", "min_weight_fraction_leaf")
     for i in range(len(copied)):  # driver-loop: over fixed call structure, small-loop(copied): the seven settings the inner tree takes as given
         py_setitem(settings, copied[i], fields[copied[i]])
-    py_setitem(settings, "random_state", PythonObject(0) if seed is None else seed)
-    py_setitem(settings, "numeric_mode", fields["numeric_mode"])
+    py_setitem(settings, nk[].k_random_state, PythonObject(0) if seed is None else seed)
+    py_setitem(settings, nk[].k_numeric_mode, py_item(fields, nk[].k_numeric_mode))
     if _classifier(kind):
-        py_setitem(settings, "class_weight", fields["class_weight"])
+        py_setitem(settings, nk[].k_class_weight, py_item(fields, nk[].k_class_weight))
     _ = py_call(inner_fields.update, settings)
-    py_setitem(inner_fields, "_has_constructor_parameters", PythonObject(True))
+    py_setitem(inner_fields, nk[].k__has_constructor_parameters, PythonObject(True))
     var inner_kind = String("et_classifier") if _classifier(kind) else String("et_regressor")
     var inner_args = Python.tuple(args[0], args[1], args[2], PythonObject(False), PythonObject(None))
     _ = et_fit(inner, inner_args, inner_kind, context)
-    py_setitem(inner_fields, "_mojolearn_fitted", PythonObject(True))
-    py_setitem(fields, "_random_inner", inner)
+    py_setitem(inner_fields, nk[].k__mojolearn_fitted, PythonObject(True))
+    py_setitem(fields, nk[].k__random_inner, inner)
     var names = Python.tuple("_offsets", "_colid", "_quesval", "_left_child", "_leaves", "_n_trees", "_num_outputs",
                              "n_features_in_")
     for i in range(len(names)):  # driver-loop: over fixed call structure, small-loop(names): the fitted attributes the tree shares with its inner forest
         py_setitem(fields, names[i], inner_fields[names[i]])
-    if py_contains(inner_fields, "classes_"):
-        py_setitem(fields, "classes_", inner_fields["classes_"])
-        py_setitem(fields, "n_classes_", PythonObject(len(inner_fields["classes_"])))
+    if py_contains(inner_fields, nk[].k_classes_):
+        py_setitem(fields, nk[].k_classes_, py_item(inner_fields, nk[].k_classes_))
+        py_setitem(fields, nk[].k_n_classes_, PythonObject(len(py_item(inner_fields, nk[].k_classes_))))
     return model
 
 
@@ -1222,7 +1250,8 @@ def forest_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
     # the fit replaced did the same), not at the next predict.
     trees_resident_forget(model_identity_key(model))
     var result: PythonObject
-    var splitter = py_get(py_fields(model), "splitter") if kind.startswith("dt_") else PythonObject(None)
+    var nk = trees_keys()
+    var splitter = py_get(py_fields(model), nk[].k_splitter) if kind.startswith("dt_") else PythonObject(None)
     if _family(kind) == "et":
         result = et_fit(model, args, kind, context)
     elif splitter is not None and Bool(py=splitter == PythonObject("random")):
@@ -1274,13 +1303,14 @@ def forest_shard_prepare(model: PythonObject, rows: Int, cols: Int, y_source: Py
     var mode = py_get(params, PythonObject("numeric_mode"), PythonObject(None))
     if mode is not None and (py_type(mode) is not trees_builtins().str or String(mode) != "identical"):
         raise Error("ValueError: parallel forests require IDENTICAL numeric mode")
-    py_setitem(py_fields(model), "numeric_mode", PythonObject("identical"))
+    var nk = trees_keys()
+    py_setitem(py_fields(model), nk[].k_numeric_mode, PythonObject("identical"))
     trees_resident_forget(model_identity_key(model))
     var fields = forest_refresh(model, kind, context)
     var captured = forest_capture_mode(fields, context)
     var et = _family(kind) == "et"
     var native = trees_table(context, captured, "_mojolearn_trees" if et else "_mojolearn_rf")
-    var cfg = fields["_cfg"]
+    var cfg = py_item(fields, nk[].k__cfg)
     var params_cfg = cfg
     var classifier = _classifier(kind)
     var classes = PythonObject(None)
@@ -1290,9 +1320,9 @@ def forest_shard_prepare(model: PythonObject, rows: Int, cols: Int, y_source: Py
     if classifier:
         var labels = trees_encode_labels(y_source, context)
         _y_rows_check(labels.n, rows)
-        py_setitem(fields, "classes_", labels.classes)
+        py_setitem(fields, nk[].k_classes_, labels.classes)
         k = len(labels.classes)
-        py_setitem(fields, "n_classes_", PythonObject(k))
+        py_setitem(fields, nk[].k_n_classes_, PythonObject(k))
         if k < 2:
             raise Error("y has fewer than 2 classes")
         classes = labels.classes
@@ -1302,14 +1332,14 @@ def forest_shard_prepare(model: PythonObject, rows: Int, cols: Int, y_source: Py
             var codes = admitted_vector(labels.n, "<f4", context)
             trees_cast(trees_address(labels.codes), "<i4", trees_address(codes), "<f4", labels.n, context)
             y = codes
-            var class_weight = cfg["class_weight"]
+            var class_weight = py_item(cfg, nk[].k_class_weight)
             if class_weight is not None:
                 weights = trees_weighted_rows(PythonObject(None), class_weight, labels, xtrees, context).array
                 params_cfg = py_call(trees_builtins().dict, cfg)
-                py_setitem(params_cfg, "class_weight", PythonObject(None))
+                py_setitem(params_cfg, nk[].k_class_weight, PythonObject(None))
         else:
             y = labels.codes
-            var class_weight = py_get(fields, "class_weight")
+            var class_weight = py_get(fields, nk[].k_class_weight)
             if class_weight is not None:
                 var rows_only = trees_class_rows_only(class_weight, labels, xtrees, context)
                 if rows_only:
@@ -1318,10 +1348,10 @@ def forest_shard_prepare(model: PythonObject, rows: Int, cols: Int, y_source: Py
         var checked = classical_check_y(y_source, rows, classical_estimator_name(model), context)
         var y32 = admit_f32(checked, 1, "y", context, finite=False)
         _y_rows_check(y32.rows, rows)
-        var code = Int(py=fields["_criterion_code"]) if et else Int(py=cfg["criterion"])
-        _check_regression_target(y32.view(), code, fields["criterion"], "et" if et else "rf", context)
+        var code = Int(py=py_item(fields, nk[].k__criterion_code)) if et else Int(py=py_item(cfg, nk[].k_criterion))
+        _check_regression_target(y32.view(), code, py_item(fields, nk[].k_criterion), "et" if et else "rf", context)
         y = y32.array
-    if not et and _truthy(cfg["oob_score"]):
+    if not et and _truthy(py_item(cfg, nk[].k_oob_score)):
         raise Error("auxiliary outputs require a complete forest, not a tree-ID shard")
     # The addresses are the worker's own (forest_shard_fit); the words carry
     # the params views and the criterion.
@@ -1362,7 +1392,8 @@ def forest_shard_fit(state: PythonObject, args: PythonObject, context: PythonObj
     var names = Python.tuple("_offsets", "_colid", "_quesval", "_left_child", "_leaves")
     for i in range(_MODEL_FIELDS):  # driver-loop: over the five model arrays
         py_setitem(out, names[i], exported[i])
-    py_setitem(out, "meta", exported[5])
+    var nk = trees_keys()
+    py_setitem(out, nk[].k_meta, exported[5])
     return out
 
 
@@ -1373,7 +1404,8 @@ def forest_shard_publish(plan: ForestShardPlan, merged: PythonObject, parts: Pyt
     `count` trees, the first range's metadata for the rest (the ET fitted
     fields; the RF notices), the ET depth-cap flag of any range."""
     var fields = plan.fields
-    var meta = py_call(trees_builtins().list, parts[0]["meta"])
+    var nk = trees_keys()
+    var meta = py_call(trees_builtins().list, py_item(parts[0], nk[].k_meta))
     py_setitem(meta, PythonObject(0), PythonObject(count))
     var names = Python.tuple("_offsets", "_colid", "_quesval", "_left_child", "_leaves")
     var arrays = Python.list()
@@ -1384,13 +1416,13 @@ def forest_shard_publish(plan: ForestShardPlan, merged: PythonObject, parts: Pyt
     if _family(plan.kind) == "et":
         var bound = False
         for r in range(len(parts)):  # driver-loop: one flag per tree range
-            if _truthy(parts[r]["meta"][2]):
+            if _truthy(py_item(parts[r], nk[].k_meta)[2]):
                 bound = True
-        py_setitem(fields, "depth_cap_bound_", PythonObject(bound))
-        py_setitem(fields, "max_depth_resolved_", _int(meta[3]))
-        py_setitem(fields, "max_features_", _int(meta[4]))
+        py_setitem(fields, nk[].k_depth_cap_bound_, PythonObject(bound))
+        py_setitem(fields, nk[].k_max_depth_resolved_, _int(meta[3]))
+        py_setitem(fields, nk[].k_max_features_, _int(meta[4]))
         var bootstrap_rows = _int(meta[5])
-        py_setitem(fields, "_n_samples_bootstrap", bootstrap_rows if Int(py=bootstrap_rows) != 0 else PythonObject(None))
+        py_setitem(fields, nk[].k__n_samples_bootstrap, bootstrap_rows if Int(py=bootstrap_rows) != 0 else PythonObject(None))
     else:
         _rf_fit_notices(meta, context)
 
@@ -1400,9 +1432,10 @@ def _report_engine(model: PythonObject, context: PythonObject) raises:
     ('sequential' or 'parallel_groves'; `auto` resolved for the fitted
     numeric mode), set once at fit (predict leaves `__dict__` unchanged)."""
     var fields = py_fields(model)
-    if not py_contains(fields, "_offsets"):
+    var nk = trees_keys()
+    if not py_contains(fields, nk[].k__offsets):
         return
-    py_setitem(fields, "inference_engine_", PythonObject(_engine(fields, forest_effective_mode(fields, context))))
+    py_setitem(fields, nk[].k_inference_engine_, PythonObject(_engine(fields, forest_effective_mode(fields, context))))
 
 
 # ---------------------------------------------------------------- predict
@@ -1411,7 +1444,8 @@ def _report_engine(model: PythonObject, context: PythonObject) raises:
 def _engine(fields: PythonObject, mode: String) raises -> String:
     """`ForestProtocol._prediction_engine()`: IDENTICAL `auto` predicts as
     'sequential', FAST `auto` as 'parallel_groves'."""
-    var engine = _check_engine(py_get(fields, "inference_engine", PythonObject("sequential")))
+    var nk = trees_keys()
+    var engine = _check_engine(py_get(fields, nk[].k_inference_engine, PythonObject("sequential")))
     if engine == "auto":
         return "parallel_groves" if mode == "fast" else "sequential"
     return engine
@@ -1485,13 +1519,14 @@ def _resident_with(model: PythonObject, fields: PythonObject, native: PythonObje
     arrays it read before."""
     if engine != "parallel_groves" and not (engine == "sequential" and ordered_export):
         raise Error("resident forest preparation requires parallel_groves")
-    if not py_contains(fields, "_offsets"):
+    var nk = trees_keys()
+    if not py_contains(fields, nk[].k__offsets):
         raise Error("RuntimeError: this estimator is not fitted yet")
     # perf-audit-3: the caller's entry (ForestInput.key, resolved once per
     # predict) is passed in, not resolved again here.
-    var features = Int(py=_int(fields["n_features_in_"]))
-    var trees = Int(py=_int(fields["_n_trees"]))
-    var outputs = Int(py=_int(fields["_num_outputs"]))
+    var features = Int(py=_int(py_item(fields, nk[].k_n_features_in_)))
+    var trees = Int(py=_int(py_item(fields, nk[].k__n_trees)))
+    var outputs = Int(py=_int(py_item(fields, nk[].k__num_outputs)))
     # The aggregation (`_resident_ordered_flag`): strict for the sequential
     # engine, the 32-grove graph named explicitly under IDENTICAL, the
     # binary's default otherwise. Word: -1 the default, 1 strict, 0 groves.
@@ -1519,7 +1554,7 @@ def _resident_with(model: PythonObject, fields: PythonObject, native: PythonObje
         return ForestHandle(held, True, key, XF_RESIDENT_RELEASE)
     for i in range(_MODEL_FIELDS):  # driver-loop: over the five model arrays
         var a = arrays[i]
-        if py_type(a) is not context["array_class"] or String(a.dtype) != forest_export_dtype(i) or Int(py=a.ndim) != 1:
+        if py_type(a) is not py_item(context, nk[].k_array_class) or String(a.dtype) != forest_export_dtype(i) or Int(py=a.ndim) != 1:
             raise Error("forest model arrays must have their original flat dtypes")
     var nodes = Int(py=arrays[1].size)
     var offsets = arrays[0]
@@ -1561,8 +1596,9 @@ def _strict_vote(model: PythonObject, fields: PythonObject, staged: ForestInput,
     arrays. Returns the rows written."""
     var native = staged.native
     var key = staged.key.copy()
-    var features = Int(py=_int(fields["n_features_in_"]))
-    var trees = Int(py=_int(fields["_n_trees"]))
+    var nk = trees_keys()
+    var features = Int(py=_int(py_item(fields, nk[].k_n_features_in_)))
+    var trees = Int(py=_int(py_item(fields, nk[].k__n_trees)))
     var outputs = staged.outputs
     var arrays = _model_arrays(fields)
     var mirrors = List[PythonObject]()
@@ -1579,7 +1615,7 @@ def _strict_vote(model: PythonObject, fields: PythonObject, staged: ForestInput,
     if not kept:
         for i in range(_MODEL_FIELDS):  # driver-loop: over the five model arrays
             var a = arrays[i]
-            if py_type(a) is not context["array_class"] or String(a.dtype) != forest_export_dtype(i) or Int(py=a.ndim) != 1:
+            if py_type(a) is not py_item(context, nk[].k_array_class) or String(a.dtype) != forest_export_dtype(i) or Int(py=a.ndim) != 1:
                 raise Error("forest model arrays must have their original flat dtypes")
             _ = fitted_freeze(a, context)
         handle = xf_strict_prepare(key, _model_addresses(arrays), features, trees, outputs)
@@ -1635,14 +1671,15 @@ struct ForestInput(Copyable, Movable):
 
 def _stage(fields: PythonObject, kind: String, var x: AdmittedX, context: PythonObject) raises -> ForestInput:
     """The resolved predict state of a fitted model over an admitted X."""
-    if not py_contains(fields, "_offsets"):
+    var nk = trees_keys()
+    if not py_contains(fields, nk[].k__offsets):
         raise Error("RuntimeError: this estimator is not fitted yet")
     var mode = forest_effective_mode(fields, context)
     var native = trees_table(context, mode, "_mojolearn_trees" if _family(kind) == "et" else "_mojolearn_rf")
     var engine = _engine(fields, mode)
     var key = forest_key(native)
     var caps = xf_caps(key)
-    var outputs = Int(py=_int(fields["_num_outputs"]))
+    var outputs = Int(py=_int(py_item(fields, nk[].k__num_outputs)))
     return ForestInput(x^, mode, native, key, caps, engine, outputs)
 
 
@@ -1650,10 +1687,11 @@ def _predict_input(model: PythonObject, fields: PythonObject, kind: String, X: P
                    context: PythonObject) raises -> ForestInput:
     """`_check_predict_input` / `_vote`'s checks: fitted, X as C-order
     float32, the fitted width."""
-    if not py_contains(fields, "_offsets"):
+    var nk = trees_keys()
+    if not py_contains(fields, nk[].k__offsets):
         raise Error("RuntimeError: this estimator is not fitted yet")
     var x = admit_f32(X, 2, "X", context, finite=False)
-    var fitted = Int(py=_int(fields["n_features_in_"]))
+    var fitted = Int(py=_int(py_item(fields, nk[].k_n_features_in_)))
     trees_check_features(x.cols, fitted)
     return _stage(fields, kind, x^, context)
 
@@ -1674,7 +1712,8 @@ def _vote(model: PythonObject, fields: PythonObject, kind: String, staged: Fores
     elif engine == "sequential" and not staged.ordered_export:
         var arrays = _model_arrays(fields)
         var model_addrs = List[Int]()
-        var array_class = context["array_class"]
+        var nk = trees_keys()
+        var array_class = py_item(context, nk[].k_array_class)
         var views = List[PythonObject]()
         for i in range(_MODEL_FIELDS):  # driver-loop: over the five model arrays
             # An exact mojolearn Array's data address is its `_addr` slot, the
@@ -1688,7 +1727,7 @@ def _vote(model: PythonObject, fields: PythonObject, kind: String, staged: Fores
                 model_addrs.append(Int(py=classical_address(view)))
                 views.append(view)
         wrote = xf_predict(staged.key, model_addrs, staged.x.address, trees_address(out), rows, staged.x.cols,
-                           Int(py=_int(fields["_n_trees"])), outputs, sequential_name == "rf_predict_reg")
+                           Int(py=_int(py_item(fields, nk[].k__n_trees))), outputs, sequential_name == "rf_predict_reg")
         _ = out  # keep the Python object alive through the native call above
         _ = views^
         _ = arrays^
@@ -1753,7 +1792,8 @@ def _widen(vote: PythonObject, shape: PythonObject, context: PythonObject) raise
 
 def _inner(fields: PythonObject) raises -> PythonObject:
     """A splitter='random' tree's inner extra-trees forest, or None."""
-    return py_get(fields, "_random_inner")
+    var nk = trees_keys()
+    return py_get(fields, nk[].k__random_inner)
 
 
 def _proba_staged(model: PythonObject, fields: PythonObject, kind: String, staged: ForestInput,
@@ -1778,7 +1818,8 @@ def _codes_staged(model: PythonObject, fields: PythonObject, kind: String, stage
 def _predict_staged(model: PythonObject, fields: PythonObject, kind: String, staged: ForestInput,
                     context: PythonObject) raises -> PythonObject:
     if _classifier(kind):
-        return trees_decode_labels(fields["classes_"], _codes_staged(model, fields, kind, staged, context), context)
+        var nk = trees_keys()
+        return trees_decode_labels(py_item(fields, nk[].k_classes_), _codes_staged(model, fields, kind, staged, context), context)
     if _family(kind) == "et":
         return _widen(_vote(model, fields, kind, staged, "et_predict", context), Python.tuple(staged.x.rows), context)
     return _vote(model, fields, kind, staged, "rf_predict_reg", context)
@@ -1852,7 +1893,8 @@ def forest_predict_codes(model: PythonObject, args: PythonObject, context: Pytho
     if not _classifier(kind):
         raise Error("TypeError: forest class codes require a classifier")
     var staged = _predict_input(target, fields, kind, args[0], context)
-    return Python.tuple(fields["classes_"], _codes_staged(target, fields, kind, staged, context))
+    var nk = trees_keys()
+    return Python.tuple(py_item(fields, nk[].k_classes_), _codes_staged(target, fields, kind, staged, context))
 
 
 def forest_public_predict(model: PythonObject, kind: String, x: AdmittedX, proba: Bool, codes: Bool,
@@ -1869,9 +1911,10 @@ def forest_public_predict(model: PythonObject, kind: String, x: AdmittedX, proba
     if inner is not None:
         var inner_fields = py_fields(inner)
         var inner_kind = forest_kind(inner, context)
-        if not py_contains(inner_fields, "_offsets"):
+        var nk = trees_keys()
+        if not py_contains(inner_fields, nk[].k__offsets):
             raise Error("RuntimeError: this estimator is not fitted yet")
-        var fitted = Int(py=_int(inner_fields["n_features_in_"]))
+        var fitted = Int(py=_int(py_item(inner_fields, nk[].k_n_features_in_)))
         trees_check_features(x.cols, fitted)
         return _public_deferred(model, inner, inner_fields, inner_kind,
                                 _stage(inner_fields, inner_kind, x.copy(), context), proba, codes, context)
@@ -1909,5 +1952,6 @@ def _public_staged(model: PythonObject, fields: PythonObject, kind: String, stag
     if proba:
         return _proba_staged(model, fields, kind, staged, context)
     if codes:
-        return Python.tuple(fields["classes_"], _codes_staged(model, fields, kind, staged, context))
+        var nk = trees_keys()
+        return Python.tuple(py_item(fields, nk[].k_classes_), _codes_staged(model, fields, kind, staged, context))
     return _predict_staged(model, fields, kind, staged, context)

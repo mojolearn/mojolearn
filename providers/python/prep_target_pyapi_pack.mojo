@@ -19,6 +19,8 @@ from providers.python.prep_transform_pyapi_unpack import _array_snapshot, _panda
 from providers.python.prep_category_pyapi_unpack import prep_ndarray_backed, prep_category_target
 from providers.python.prep_arrow_target_pyapi_unpack import prep_arrow_target
 from core.prep_boundary_impl import prep_float_finite, prep_mask_any
+from bindings.prep_keys_unpack import prep_keys
+from bindings.py_balanced import py_item
 
 
 def _length(rows: Int, target: Int) raises:
@@ -44,14 +46,15 @@ def _complex(code: Int) -> Bool:
 
 def _pandas_target(source: PythonObject, rows: Int, multi: Bool, name: String,
                    context: PythonObject) raises -> PythonObject:
+    var nk = prep_keys()
     var b = native_loaded_module("builtins")
     var series = py_type(source) is _pd_class("pandas.core.series", "Series")
-    var manager = py_get(_pd_fields(source), "_mgr")
+    var manager = py_get(_pd_fields(source), nk[].k__mgr)
     var blocks = PythonObject(None)
     if series:
         if py_type(manager) is not _pd_class("pandas.core.internals.managers", "SingleBlockManager"):
             raise Error("TypeError: pandas target requires native single-block storage")
-        blocks = py_get(_pd_fields(manager), "blocks")
+        blocks = py_get(_pd_fields(manager), nk[].k_blocks)
     else:
         if py_type(manager) is not _pd_class("pandas.core.internals.managers", "BlockManager"):
             raise Error("TypeError: pandas target requires native block storage")
@@ -106,14 +109,14 @@ def _pandas_target(source: PythonObject, rows: Int, multi: Bool, name: String,
         else:
             var period = py_type(raw) is _pd_class("pandas.core.arrays.period", "PeriodArray")
             raw = prep_ndarray_backed(raw)
-            if py_type(raw) is not context["ndarray"]:
+            if py_type(raw) is not py_item(context, nk[].k_ndarray):
                 var kind = py_type(raw)
                 if kind is not _pd_class("pandas.core.arrays.integer", "IntegerArray") and kind is not _pd_class("pandas.core.arrays.floating", "FloatingArray") and kind is not _pd_class("pandas.core.arrays.boolean", "BooleanArray"):
                     raise Error("TypeError: pandas target requires native numeric or object storage")
                 var fields = _pd_fields(raw)
-                var mask_value = py_get(fields, "_mask")
-                raw = py_get(fields, "_data")
-                if py_type(raw) is not context["ndarray"] or py_type(mask_value) is not context["ndarray"]:
+                var mask_value = py_get(fields, nk[].k__mask)
+                raw = py_get(fields, nk[].k__data)
+                if py_type(raw) is not py_item(context, nk[].k_ndarray) or py_type(mask_value) is not py_item(context, nk[].k_ndarray):
                     raise Error("TypeError: pandas nullable target requires native arrays")
                 var mask_pin = ArrayPin()
                 var mask = _array_snapshot(mask_value, context, mask_pin)
@@ -171,6 +174,7 @@ def _pandas_target(source: PythonObject, rows: Int, multi: Bool, name: String,
 
 def prep_ignored_target(y: PythonObject, rows: Int, required: Bool, multi: Bool,
                         name: String, context: PythonObject) raises -> PythonObject:
+    var nk = prep_keys()
     if y is None:
         if required:
             raise Error(name + " requires y to be passed, but the target y is None.")
@@ -181,8 +185,8 @@ def prep_ignored_target(y: PythonObject, rows: Int, required: Bool, multi: Bool,
     # builtin complex scalar y was ignored. A NumPy complex buffer is not.
     if cls is b.int or cls is b.float or cls is b.bool or cls is b.complex or cls is b.str or cls is b.bytes or cls is b.dict or cls is b.range:
         return y
-    if cls is context["maxabs_rows_class"]:
-        var shape = py_get(_rows_fields(y, context), "shape")
+    if cls is py_item(context, nk[].k_maxabs_rows_class):
+        var shape = py_get(_rows_fields(y, context), nk[].k_shape)
         if py_type(shape) is not b.tuple:
             raise Error("TypeError: target row selection requires native shape metadata")
         for i in range(len(shape)):  # small-loop(rank: passive selected-target shape metadata)
@@ -192,14 +196,14 @@ def prep_ignored_target(y: PythonObject, rows: Int, required: Bool, multi: Bool,
             _length(rows, Int(py=shape[0]))
         return Python.tuple(y, shape)
     if host_sparse_format(y).byte_length() > 0:
-        var shape = py_get(_sparse_fields(y), "_shape")
+        var shape = py_get(_sparse_fields(y), nk[].k__shape)
         if py_type(shape) is not b.tuple or len(shape) != 2 or py_type(shape[0]) is not b.int or py_type(shape[1]) is not b.int:
             raise Error("TypeError: sparse target storage requires native shape metadata")
         _length(rows, Int(py=shape[0]))
         return y
     if native_pandas_exact(y):
         return _pandas_target(y, rows, multi, name, context)
-    if _one_of(cls, context["scalar_types"]):
+    if _one_of(cls, py_item(context, nk[].k_scalar_types)):
         var scalar_kind = String(y.dtype.kind)
         if scalar_kind == "c":
             raise Error("Complex data not supported: " + name + " got a complex y.")
@@ -217,7 +221,7 @@ def prep_ignored_target(y: PythonObject, rows: Int, required: Bool, multi: Bool,
         if kind is b.complex:
             raise Error("Complex data not supported: " + name + " got a complex y.")
         scan = kind is b.float
-        if _one_of(kind, context["scalar_types"]):
+        if _one_of(kind, py_item(context, nk[].k_scalar_types)):
             var code = String(first.dtype.kind)
             if code == "c":
                 raise Error("Complex data not supported: " + name + " got a complex y.")
@@ -232,7 +236,7 @@ def prep_ignored_target(y: PythonObject, rows: Int, required: Bool, multi: Bool,
     var snapshot = _array_snapshot(view, context, pin)
     if _complex(snapshot.dtype_number):
         raise Error("Complex data not supported: " + name + " got a complex y.")
-    var reshape = cls is py_get(context, "ndarray") or cls is context["array_class"] or _ordinary_torch(cls, context)
+    var reshape = cls is py_get(context, nk[].k_ndarray) or cls is py_item(context, nk[].k_array_class) or _ordinary_torch(cls, context)
     if not multi and reshape and len(snapshot.shape) == 2 and snapshot.shape[1] == 1:
         metric_warn(COLUMN_WARNING, _warning_category(context), context)
     if scan:

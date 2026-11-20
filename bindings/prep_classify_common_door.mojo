@@ -22,6 +22,8 @@ from bindings.classical_labels_door import ClassicalLabels, classical_encode_lab
 from bindings.prep_classify_prog_door import ClsProg, NONE, INT32_MAX, off_add, f32_array, i32_array
 from bindings.sequential_admission_door import _one_of
 from bindings.prep_entry_cache_unpack import prep_entry_word
+from bindings.prep_keys_unpack import prep_keys
+from bindings.py_balanced import py_item
 
 comptime I32P = MutPointer[Int32, MutUntrackedOrigin]
 comptime I64P = MutPointer[Int64, MutUntrackedOrigin]
@@ -91,9 +93,10 @@ def cls_str(value: PythonObject) raises -> String:
 
 def cls_kind(model: PythonObject, context: PythonObject) raises -> String:
     """The admitted classifier this model is (or subclasses), by its MRO."""
+    var nk = prep_keys()
     var b = cls_builtins()
-    var mro = py_call(b.type.__dict__["__mro__"].__get__, py_type(model))
-    var kinds = context["cls_kinds"]
+    var mro = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, py_type(model))
+    var kinds = py_item(context, nk[].k_cls_kinds)
     for k in range(len(mro)):  # driver-loop: over the model class's MRO
         var kind = py_get(kinds, mro[k])
         if kind is not None:
@@ -103,7 +106,8 @@ def cls_kind(model: PythonObject, context: PythonObject) raises -> String:
 
 def cls_mode(context: PythonObject) raises -> PythonObject:
     """`_expansion_prep._mode()`: the process numeric mode."""
-    return context["backend_fields"]["_DEFAULT_MODE"]
+    var nk = prep_keys()
+    return py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
 
 
 def cls_requested_mode(fields: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -112,9 +116,10 @@ def cls_requested_mode(fields: PythonObject, context: PythonObject) raises -> Py
     model pickled before the parameter existed), else the validated word,
     answered (core/mode_answer.mojo, family PREP). Once per fit, in no loop;
     the None path makes the one default read `cls_mode` makes."""
-    var mode = py_get(fields, "numeric_mode")
+    var nk = prep_keys()
+    var mode = py_get(fields, nk[].k_numeric_mode)
     if mode is None:
-        return context["backend_fields"]["_DEFAULT_MODE"]
+        return py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
     if py_type(mode) is not cls_builtins().str:
         raise Error("ValueError: numeric_mode must be fast, identical or None")
     mode = py_call(py_call(mode.strip).lower)
@@ -128,16 +133,18 @@ def cls_requested_mode(fields: PythonObject, context: PythonObject) raises -> Py
 def cls_entry(mode: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
     """`_optional_prep_entry(_prep_binding(mode), name)`: the connected export,
     or None (a binding that did not connect fails in the run itself)."""
-    var entries = py_get(context["cls_bindings"], mode)
+    var nk = prep_keys()
+    var entries = py_get(py_item(context, nk[].k_cls_bindings), mode)
     if entries is None or py_type(entries) is cls_builtins().str:
         return PythonObject(None)
     return py_get(entries, PythonObject(name))
 
 
 def _bits(mode: PythonObject, name: String, context: PythonObject) raises -> Int:
+    var nk = prep_keys()
     if String(mode) != "identical":
         return 0
-    var entries = py_get(context["cls_bindings"], mode)
+    var entries = py_get(py_item(context, nk[].k_cls_bindings), mode)
     if entries is None or py_type(entries) is cls_builtins().str:
         return 0
     return prep_entry_word(entries, name)  # read once per binding
@@ -165,12 +172,14 @@ def blocked() -> Bool:
 
 
 def check_fitted(model: PythonObject, fields: PythonObject) raises:
-    if not py_contains(fields, "n_features_in_"):
+    var nk = prep_keys()
+    if not py_contains(fields, nk[].k_n_features_in_):
         raise Error("RuntimeError: mojolearn: this " + cls_name(model) + " instance is not fitted yet")
 
 
 def check_width(model: PythonObject, fields: PythonObject, d: Int) raises:
-    var fitted = fields["n_features_in_"]
+    var nk = prep_keys()
+    var fitted = py_item(fields, nk[].k_n_features_in_)
     if py_type(fitted) is not cls_builtins().int or Int(py=fitted) != d:
         raise Error("mojolearn: X has " + String(d) + " features, " + cls_name(model) + " was fitted with " + cls_str(fitted))
 
@@ -190,14 +199,15 @@ struct XIn(Movable):
 
 def cls_x2d(source: PythonObject, context: PythonObject) raises -> XIn:
     """`_expansion_prep._x2d(X)`."""
+    var nk = prep_keys()
     var b = cls_builtins()
     var value = source
     var n = 0
     var d = 0
-    if py_type(source) is context["maxabs_rows_class"]:
+    if py_type(source) is py_item(context, nk[].k_maxabs_rows_class):
         var fields = _rows_fields(source, context)
-        var dtype = fields["dtype"]
-        var shape = fields["shape"]
+        var dtype = py_item(fields, nk[].k_dtype)
+        var shape = py_item(fields, nk[].k_shape)
         if py_type(dtype) is b.str and String(dtype) == "<f4" and py_type(shape) is b.tuple and len(shape) == 2:
             n = Int(py=shape[0])
             d = Int(py=shape[1])
@@ -225,6 +235,7 @@ def is_sparse(source: PythonObject) raises -> Bool:
 
 def _i32_vector(source: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
     """`_as_typed(source, "<i4", "C", 1, name)` for a CSR index array."""
+    var nk = prep_keys()
     var view = classical_view(source, context, name)
     if Int(py=view.ndim) != 1:
         raise Error(name + " must be 1-D")
@@ -242,11 +253,11 @@ def _i32_vector(source: PythonObject, name: String, context: PythonObject) raise
     # allocation and copy. A strided or int64 view still narrows into an
     # unfilled array (every word written before any read).
     if n == 0:
-        return classical_wrap_array(native_array_empty("i"), Python.tuple(0), "<i4", "C", context["output_context"])
+        return classical_wrap_array(native_array_empty("i"), Python.tuple(0), "<i4", "C", py_item(context, nk[].k_output_context))
     if typestr == "<i4" and classical_c_order(view, context):
         return view
     var out = classical_wrap_array(native_array_unfilled("i", n), Python.tuple(n), "<i4", "C",
-                                   context["output_context"])
+                                   py_item(context, nk[].k_output_context))
     var dest = I32P(unsafe_from_address=Int(py=classical_address(out)))
     _ = out  # keep the Python object alive through the native call above
     # int64 words are one range-checked narrowing pass; only a strided view
@@ -365,11 +376,12 @@ def prior_sum(vals: List[Float64]) -> Float64:
 
 
 def is_real(value: PythonObject, context: PythonObject) raises -> Bool:
+    var nk = prep_keys()
     var cls = py_type(value)
     if cls is py_type(PythonObject(0)) or cls is py_type(PythonObject(0.0)) or cls is py_type(PythonObject(True)):
         return True
-    return (_one_of(cls, context["scalar_types"])
-            and not _one_of(cls, py_get(context, "bool_types", Python.tuple(py_type(PythonObject(True))))))
+    return (_one_of(cls, py_item(context, nk[].k_scalar_types))
+            and not _one_of(cls, py_get(context, nk[].k_bool_types, Python.tuple(py_type(PythonObject(True))))))
 
 
 def cls_float(value: PythonObject) raises -> Float64:
@@ -509,10 +521,11 @@ def nb_counts(mut pr: ClsProg, wo: Int, xo: Int, n: Int, d: Int, yo: Int, K: Int
 
 def encode_y(model: PythonObject, fields: PythonObject, y: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
     """`_Classifier._encode_y`: classes_ set, the int32 codes returned."""
+    var nk = prep_keys()
     var labels = classical_encode_labels(y, context)
     if labels.n != n:
         raise Error("mojolearn: X and y have different numbers of rows")
-    py_setitem(fields, "classes_", labels.classes)
+    py_setitem(fields, nk[].k_classes_, labels.classes)
     return labels.codes
 
 
@@ -546,11 +559,12 @@ def partial_walk(fields: PythonObject, y: PythonObject, n: Int, context: PythonO
     """`_partial_walk`: the batch's codes among classes_, refusing (and naming)
     labels outside them. The batch is encoded once; its classes are looked up
     in classes_ (Python equality, as the dict did) and the row codes remapped."""
+    var nk = prep_keys()
     var b = cls_builtins()
     var labels = classical_encode_labels(y, context)
     if labels.n != n:
         raise Error("mojolearn: X and y have different numbers of rows")
-    var classes = fields["classes_"]
+    var classes = py_item(fields, nk[].k_classes_)
     var index = Python.dict()
     for i in range(len(classes)):  # driver-loop: over the class index table (classes-sized)
         py_setitem(index, classes[i], PythonObject(i))
@@ -603,19 +617,20 @@ def _label_kind(typestr: String) -> Tuple[Int, Int]:
 def partial_codes(model: PythonObject, fields: PythonObject, y: PythonObject, classes: PythonObject, n: Int,
                   context: PythonObject) raises -> PartialCodes:
     """`_partial_codes(est, y, classes, n, defer=True)`."""
+    var nk = prep_keys()
     var b = cls_builtins()
-    var first = py_get(fields, "classes_") is None
+    var first = py_get(fields, nk[].k_classes_) is None
     if first and classes is None:
         raise Error("mojolearn: classes must be passed on the first call to partial_fit.")
     if classes is not None:
         var given = classical_encode_labels(classes, context).classes
-        if not first and Bool(py=py_call(b.list, given) != py_call(b.list, fields["classes_"])):
-            raise Error("mojolearn: `classes=" + cls_str(given) + "` is not the same as on last call to partial_fit, was: " + cls_str(fields["classes_"]))
+        if not first and Bool(py=py_call(b.list, given) != py_call(b.list, py_item(fields, nk[].k_classes_))):
+            raise Error("mojolearn: `classes=" + cls_str(given) + "` is not the same as on last call to partial_fit, was: " + cls_str(py_item(fields, nk[].k_classes_)))
         if first:
-            py_setitem(fields, "classes_", given)
+            py_setitem(fields, nk[].k_classes_, given)
     # `_partial_dev`: every class an exact int or float with an exact,
     # strictly ascending float32 word, and y a numeric label vector of n labels
-    var cl = py_call(b.list, fields["classes_"])
+    var cl = py_call(b.list, py_item(fields, nk[].k_classes_))
     var K = len(cl)
     var dev = K > 0
     var cats = f32_array(K, context)
@@ -643,6 +658,7 @@ def partial_codes(model: PythonObject, fields: PythonObject, y: PythonObject, cl
 def label_words(y: PythonObject, n: Int, context: PythonObject) raises -> Tuple[Int, Int, PythonObject]:
     """`_label_buffer(y)` when it holds exactly n labels: (kind, n, the raw
     int32 words), or (-1, 0, None) for the walk."""
+    var nk = prep_keys()
     var b = cls_builtins()
     var cls = py_type(y)
     if cls is b.list or cls is b.tuple or cls is b.str or cls is b.bytes:
@@ -666,7 +682,7 @@ def label_words(y: PythonObject, n: Int, context: PythonObject) raises -> Tuple[
         return (-1, 0, PythonObject(None))
     var store = native_array_empty("i")
     _ = py_call(store.frombytes, classical_c_bytes(view, "y", context))
-    return (spec[0], size, classical_wrap_array(store, Python.tuple(nw), "<i4", "C", context["output_context"]))
+    return (spec[0], size, classical_wrap_array(store, Python.tuple(nw), "<i4", "C", py_item(context, nk[].k_output_context)))
 
 
 def stage_partial_codes(mut pr: ClsProg, pc: PartialCodes, context: PythonObject) raises -> Tuple[Int, Int]:

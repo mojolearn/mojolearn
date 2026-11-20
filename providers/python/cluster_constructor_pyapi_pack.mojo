@@ -9,6 +9,8 @@ from bindings.mode_metadata_native_door import _fields
 from bindings.classical_attributes_door import _type_mro, classical_connect_numpy
 from bindings.native_owner_lifetime_door import native_release_admit
 from bindings.py_optional import py_present
+from bindings.cluster_keys_unpack import cluster_keys
+from bindings.py_balanced import py_item
 
 
 def cluster_initialize_py(model: PythonObject, values: PythonObject,
@@ -16,7 +18,8 @@ def cluster_initialize_py(model: PythonObject, values: PythonObject,
     var b = native_loaded_module("builtins")
     if py_type(values) is not b.tuple:
         raise Error("TypeError: cluster constructor requires its native argument tuple")
-    var schemas = context["cluster_public_parameters"]
+    var nk = cluster_keys()
+    var schemas = py_item(context, nk[].k_cluster_public_parameters)
     if py_type(schemas) is not b.dict:
         raise Error("TypeError: cluster constructor requires its connected parameter schema")
     var ancestry = _type_mro(py_type(model))

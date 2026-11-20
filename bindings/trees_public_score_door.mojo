@@ -37,6 +37,8 @@ from bindings.trees_public_forest_door import (
 )
 from bindings.classical_labels_door import classical_score_from_codes
 from xtrees.trees_score_run import score_shape_text
+from bindings.trees_keys_unpack import trees_keys
+from bindings.py_balanced import py_item
 
 # ------------------------------------------------------------ shapes
 
@@ -47,7 +49,8 @@ def trees_shape_of(value: PythonObject, context: PythonObject) raises -> List[In
     var b = trees_builtins()
     var cls = py_type(value)
     var shape = List[Int]()
-    if cls is context["array_class"]:
+    var nk = trees_keys()
+    if cls is py_item(context, nk[].k_array_class):
         for k in range(Int(py=value.ndim)):  # driver-loop: over array rank metadata
             shape.append(Int(py=value.shape[k]))
         return shape^
@@ -81,7 +84,8 @@ def _buffer_format(value: PythonObject, context: PythonObject) raises -> String:
     """`linear_model._buffer_format`: the struct format code, byte order
     stripped; "" when the value exports no buffer."""
     var b = trees_builtins()
-    if py_type(value) is context["array_class"]:
+    var nk = trees_keys()
+    if py_type(value) is py_item(context, nk[].k_array_class):
         var dtype = String(value.dtype)
         if dtype == "<f4":
             return "f"
@@ -150,7 +154,8 @@ def _as_f32_1d(source: PythonObject, name: String, context: PythonObject) raises
 def _reduce(addr: Int, count: Int, what: Int, context: PythonObject) raises -> PythonObject:
     """`Array.min()` (0) / `max()` (1) of a float32 vector: `reduce_stat`
     through the base helper table; PACK of its answer as the Python float."""
-    return labels_stat_pack(base_reduce_stat(base_helpers_key(context["trees_helpers"]), addr, 0, count, what))
+    var nk = trees_keys()
+    return labels_stat_pack(base_reduce_stat(base_helpers_key(py_item(context, nk[].k_trees_helpers)), addr, 0, count, what))
 
 
 def trees_sample_weight_f32(source: PythonObject, n: Int, caller: String, context: PythonObject) raises -> AdmittedX:
@@ -192,7 +197,8 @@ def _metrics_mode(mode: PythonObject, context: PythonObject) raises -> String:
             raise Error("numeric_mode must be 'fast' or 'identical'")
         answer_mode_word(clean, MODE_FAMILY_FOREST)
         return clean
-    return String(py_call(py_call(context["backend_fields"]["_DEFAULT_MODE"].strip).lower))
+    var nk = trees_keys()
+    return String(py_call(py_call(py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE).strip).lower))
 
 
 def trees_r2(y_true: PythonObject, prediction: PythonObject, sample_weight: PythonObject, mode: PythonObject,
@@ -216,16 +222,17 @@ def trees_r2(y_true: PythonObject, prediction: PythonObject, sample_weight: Pyth
             raise Error("RuntimeError: mojolearn metrics: requested " + selected + ", binary reports "
                         + actual + "; rebuild it")
     var result = PythonObject(None)
+    var nk = trees_keys()
     if sample_weight is not None:
         var w = trees_sample_weight_f32(sample_weight, y.rows, "r2_score", context)
-        result = py_call_typed(metrics["r2_score_weighted"], PythonObject(y.address), PythonObject(yh.address),
+        result = py_call_typed(py_item(metrics, nk[].k_r2_score_weighted), PythonObject(y.address), PythonObject(yh.address),
                                PythonObject(w.address), Python.list(PythonObject(y.rows)))
         _ = yh  # keep the Python object alive through the native call above
         _ = y  # keep the Python object alive through the native call above
         _ = w  # keep the Python object alive through the native call above
         _ = w^
     else:
-        result = py_call_typed(metrics["r2_score"], PythonObject(y.address), PythonObject(yh.address),
+        result = py_call_typed(py_item(metrics, nk[].k_r2_score), PythonObject(y.address), PythonObject(yh.address),
                                Python.list(PythonObject(y.rows)))
         _ = yh  # keep the Python object alive through the native call above
         _ = y  # keep the Python object alive through the native call above
@@ -330,7 +337,8 @@ def forest_score_public(model: PythonObject, kind: String, x: AdmittedX, y: Pyth
 
 def _score_values(model: PythonObject, prediction: PythonObject, y: PythonObject, sample_weight: PythonObject,
                   n: Int, context: PythonObject) raises -> PythonObject:
-    var rows = Int(py=prediction.shape[0]) if py_type(prediction) is context["array_class"] else len(prediction)
+    var nk = trees_keys()
+    var rows = Int(py=prediction.shape[0]) if py_type(prediction) is py_item(context, nk[].k_array_class) else len(prediction)
     if rows != n:
         raise Error("score target and prediction lengths differ")
     var mode = PythonObject(forest_effective_mode(py_fields(model), context))

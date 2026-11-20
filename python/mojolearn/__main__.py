@@ -6,6 +6,10 @@
                                          reference card shipped in the wheel;
                                          with no card shipped, `verify --quick`
     python -m mojolearn verify --json    the same, machine readable
+    python -m mojolearn verify --check MODEL --estimator CLASS --inputs X.npy
+                                         run your saved model on your rows on
+                                         the GPU and on the CPU of this machine
+                                         and compare the bits (_verify_check.py)
     python -m mojolearn env              what this process loaded, no GPU
     python -m mojolearn check-fixture    rebuild and hash the pinned fixture,
                                          no GPU and no extension call
@@ -119,6 +123,9 @@ QUICK_FALLBACK_NOTE = ("# no reference card ships with this install; running "
 
 
 def _verify_dispatch(args):
+    if getattr(args, "check", None):
+        from . import _verify_check
+        return _verify_check.cmd_check(args)
     if getattr(args, "training_only", False) or getattr(args, 'neural_training', False):
         args.no_models = True
     if not _asks_for_card(args):
@@ -327,6 +334,28 @@ def build_parser():
                         "--lanes and --fixtures explicitly select a custom "
                         "scope. Missing or failed checks exit nonzero. On a CPU-only "
                         "install it says so rather than silently skipping")
+    v.add_argument("--check", metavar="MODEL", default=None,
+                   help="CHECK YOUR OWN MODEL AND DATA ON THE GPU AND ON THE CPU of this "
+                        "machine. MODEL is a file an estimator's save wrote; --estimator "
+                        "names the class that saved it and --inputs a .npy or .npz file of "
+                        "rows. The model answers --method for those rows twice, from the "
+                        "GPU estimator and from the CPU model mojolearn.host_model loads "
+                        "from the same file, and the report shows both sides (device, "
+                        "binaries loaded, wall time, and the shape, dtype, SHA-256 and first "
+                        "values of the output) and one verdict line: MATCH, or MISMATCH with "
+                        "the index and the two values of the first differing element. It is "
+                        "the same check --cross-check runs on the fixtures in the wheel. "
+                        "identical mode only: fast makes no promise about bits and is "
+                        "refused (exit 3). --cpu-threads sets the CPU side's threads")
+    v.add_argument("--estimator", metavar="CLASS", default=None,
+                   help="with --check: the mojolearn class whose save wrote MODEL, for "
+                        "example RandomForestClassifier")
+    v.add_argument("--inputs", metavar="FILE", default=None,
+                   help="with --check: the rows to answer for, a .npy file or a .npz file "
+                        "(its array X, else its first array)")
+    v.add_argument("--method", metavar="NAME", default=None,
+                   help="with --check: the method to check (default: predict when the "
+                        "model has it, else transform)")
     # `--par`, `--par-devices` and `--par-self-test` (the two-device column
     # of the par-* lanes) were removed when multi-GPU verification was
     # retired (owner, 2026-10-31); argparse refuses them as unknown options.

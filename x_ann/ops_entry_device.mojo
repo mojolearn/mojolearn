@@ -12,7 +12,7 @@ resident operations with it held, see the table's module note); nothing
 here touches Python.
 """
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from core.hostptr import read_f32, read_i32
+from core.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot
@@ -24,14 +24,15 @@ from core.neighbors_entry_table_ann import (
 )
 from x_ann.abi import check_search, out_f32_to, out_i32_to
 from x_ann.abi_shell_impl import rabitq_padded_dim
-from x_ann.filter_topk import filter_topk_device
+from x_ann.filter_topk import filter_topk_device_ptr
 from x_ann.tsne_init import TSNE_INIT_GIVEN, TSNE_INIT_RANDOM, tsne_first_components, tsne_init_y0
 from x_ann.tsne_device import tsne_fit_device
 from x_ann.ivf_pq_core import pq_len_of
 from x_ann.cagra_device import cagra_search_on
 from x_ann.device_ctx import x_ann_ctx
-from x_ann.io import upload_f32, upload_i32
-from x_ann.ivf_pq_device import ivf_pq_search_device, ivf_sq_search_device, ivf_rabitq_search_device
+from x_ann.io import upload_f32_ptr, upload_i32_ptr
+from x_ann.ivf_pq_device import ivf_pq_search_on, ivf_sq_search_on, ivf_rabitq_search_on
+from x_ann.stage_timer import AnnStages
 from x_ann.resident import x_ann_index_export_codes, x_ann_index_prepare, x_ann_index_release, x_ann_index_search
 
 
@@ -55,18 +56,42 @@ def ann_ivf_pq_search_device_run(a: List[Int], p: List[Int]) raises -> Int:
     var status = _opt(p, 8, 0)
     check_search(n_lists, m, k, n_probes)
     var pq_len = pq_len_of(dim, pq_dim)
-    var centers = read_f32(a[0], n_lists * dim)
+    # Lane fx-ann-fit-nocopy (2026-11-20): `ivf_pq_search_device`'s uploads
+    # from the caller's arrays (kept alive by the door for the whole call;
+    # each upload is drained before it returns). Gone: a list copy of every
+    # index array, the queries and the mask per call. Only the n_lists + 1
+    # offsets stay a host list (the scan reads them on the host).
     var offsets = read_i32(a[1], n_lists + 1)
-    var list_indices = read_i32(a[2], n)
-    var cb = read_f32(a[3], pq_dim * (1 << pq_bits) * pq_len)
-    var codes = read_i32(a[4], n * pq_dim)
-    var queries = read_f32(a[5], m * dim)
-    var mask = read_i32(a[9], n)
     var od = List[Float32]()
     var oi = List[Int32]()
     var on = List[Int32]()
-    ivf_pq_search_device(centers, offsets, list_indices, cb, codes, mask, n_lists, dim, pq_dim, pq_bits,
-                         queries, m, k, n_probes, od, oi, on, status)
+    var sst = AnnStages("ivf_search")
+    var ctx = x_ann_ctx()
+    var dc = upload_f32_ptr(ctx, f32_ptr(a[0]), n_lists * dim)
+    var doff = upload_i32_ptr(ctx, i32_ptr(a[1]), n_lists + 1)
+    var dli = upload_i32_ptr(ctx, i32_ptr(a[2]), n)
+    var dcodes = upload_i32_ptr(ctx, i32_ptr(a[4]), n * pq_dim)
+    var dcb = upload_f32_ptr(ctx, f32_ptr(a[3]), pq_dim * (1 << pq_bits) * pq_len)
+    var dmask = upload_i32_ptr(ctx, i32_ptr(a[9]), n)
+    sst.mark(ctx, "upload")
+    var pc = dc.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var poff = doff.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var pli = dli.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var pcodes = dcodes.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var pcb = dcb.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var pmask = dmask.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    ivf_pq_search_on(
+        ctx, pc, poff, pli, pcb, pcodes, pmask, offsets, n_lists, dim, pq_dim, pq_bits,
+        f32_ptr(a[5]), m, k, n_probes, od, oi, on,
+        False, pcodes, pc, pc, False, status,
+    )
+    _ = dmask^
+    _ = dcb^
+    _ = dcodes^
+    _ = dli^
+    _ = doff^
+    _ = dc^
+    _ = ctx^
     out_f32_to(od, a[6])
     out_i32_to(oi, a[7])
     out_i32_to(on, a[8])
@@ -85,19 +110,43 @@ def ann_ivf_sq_search_device_run(a: List[Int], p: List[Int]) raises -> Int:
     var n_probes = p[5]
     var status = _opt(p, 6, 0)
     check_search(n_lists, m, k, n_probes)
-    var centers = read_f32(a[0], n_lists * dim)
+    # Lane fx-ann-fit-nocopy (2026-11-20): `ivf_sq_search_device`'s uploads
+    # from the caller's arrays (`ann_ivf_pq_search_device_run`'s note); the
+    # list copy of the n x dim codes per call is gone with the others.
     var offsets = read_i32(a[1], n_lists + 1)
-    var list_indices = read_i32(a[2], n)
-    var vmin = read_f32(a[3], dim)
-    var delta = read_f32(a[4], dim)
-    var codes = read_i32(a[5], n * dim)
-    var mask = read_i32(a[6], n)
-    var queries = read_f32(a[7], m * dim)
     var od = List[Float32]()
     var oi = List[Int32]()
     var on = List[Int32]()
-    ivf_sq_search_device(centers, offsets, list_indices, vmin, delta, codes, mask, n_lists, dim, queries, m, k,
-                         n_probes, od, oi, on, status)
+    var sst = AnnStages("ivf_search")
+    var ctx = x_ann_ctx()
+    var dc = upload_f32_ptr(ctx, f32_ptr(a[0]), n_lists * dim)
+    var doff = upload_i32_ptr(ctx, i32_ptr(a[1]), n_lists + 1)
+    var dli = upload_i32_ptr(ctx, i32_ptr(a[2]), n)
+    var dcodes = upload_i32_ptr(ctx, i32_ptr(a[5]), n * dim)
+    var dvmin = upload_f32_ptr(ctx, f32_ptr(a[3]), dim)
+    var ddelta = upload_f32_ptr(ctx, f32_ptr(a[4]), dim)
+    var dmask = upload_i32_ptr(ctx, i32_ptr(a[6]), n)
+    sst.mark(ctx, "upload")
+    var pc = dc.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var poff = doff.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var pli = dli.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var pcodes = dcodes.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var pvmin = dvmin.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var pdelta = ddelta.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var pmask = dmask.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    ivf_sq_search_on(
+        ctx, pc, poff, pli, pvmin, pdelta, pcodes, pmask, offsets, n_lists, dim,
+        f32_ptr(a[7]), m, k, n_probes, od, oi, on,
+        False, pcodes, pc, pc, False, status,
+    )
+    _ = dmask^
+    _ = ddelta^
+    _ = dvmin^
+    _ = dcodes^
+    _ = dli^
+    _ = doff^
+    _ = dc^
+    _ = ctx^
     out_f32_to(od, a[8])
     out_i32_to(oi, a[9])
     out_i32_to(on, a[10])
@@ -119,19 +168,42 @@ def ann_ivf_rabitq_search_device_run(a: List[Int], p: List[Int]) raises -> Int:
     check_search(n_lists, m, k, n_probes)
     var D = rabitq_padded_dim(dim)
     var words = (D + 31) // 32
-    var centers = read_f32(a[0], n_lists * dim)
+    # Lane fx-ann-fit-nocopy (2026-11-20): `ivf_rabitq_search_device`'s
+    # uploads from the caller's arrays (`ann_ivf_pq_search_device_run`'s note).
     var offsets = read_i32(a[1], n_lists + 1)
-    var list_indices = read_i32(a[2], n)
-    var codes = read_i32(a[3], n * words)
-    var norms = read_f32(a[4], n)
-    var ips = read_f32(a[5], n)
-    var mask = read_i32(a[6], n)
-    var queries = read_f32(a[7], m * dim)
     var od = List[Float32]()
     var oi = List[Int32]()
     var on = List[Int32]()
-    ivf_rabitq_search_device(centers, offsets, list_indices, codes, norms, ips, mask, n_lists, dim, seed,
-                             queries, m, k, n_probes, od, oi, on, status)
+    var sst = AnnStages("ivf_search")
+    var ctx = x_ann_ctx()
+    var dc = upload_f32_ptr(ctx, f32_ptr(a[0]), n_lists * dim)
+    var doff = upload_i32_ptr(ctx, i32_ptr(a[1]), n_lists + 1)
+    var dli = upload_i32_ptr(ctx, i32_ptr(a[2]), n)
+    var dcodes = upload_i32_ptr(ctx, i32_ptr(a[3]), n * words)
+    var dnorm = upload_f32_ptr(ctx, f32_ptr(a[4]), n)
+    var dip = upload_f32_ptr(ctx, f32_ptr(a[5]), n)
+    var dmask = upload_i32_ptr(ctx, i32_ptr(a[6]), n)
+    sst.mark(ctx, "upload")
+    var pc = dc.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var poff = doff.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var pli = dli.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var pcodes = dcodes.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var pnorm = dnorm.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var pip = dip.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var pmask = dmask.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    ivf_rabitq_search_on(
+        ctx, pc, poff, pli, pcodes, pnorm, pip, pmask, offsets, n_lists, dim, seed,
+        f32_ptr(a[7]), m, k, n_probes, od, oi, on,
+        False, pcodes, pnorm, pip, False, status,
+    )
+    _ = dmask^
+    _ = dip^
+    _ = dnorm^
+    _ = dcodes^
+    _ = dli^
+    _ = doff^
+    _ = dc^
+    _ = ctx^
     out_f32_to(od, a[8])
     out_i32_to(oi, a[9])
     out_i32_to(on, a[10])
@@ -157,22 +229,23 @@ def ann_cagra_search_device_run(a: List[Int], p: List[Int]) raises -> Int:
         raise Error("CAGRA search: rs must be >= 0")
     if m <= 0 or k <= 0 or L < k or width < 1 or max_iter < 1 or n_seeds < 1 or n_seeds > n:
         raise Error("CAGRA search: need k >= 1, itopk_size >= k, search_width >= 1, max_iterations >= 1, 1 <= n_seeds <= n")
-    var x = read_f32(a[0], n * d)
-    var g = read_i32(a[1], n * deg)
-    var q = read_f32(a[2], m * d)
     var od = List[Float32]()
     var oi = List[Int32]()
     # cpu3-bindings: `cagra_search_device`'s uploads, then the graph's
     # row-id range refusal as one device pass over the uploaded graph
-    # (one Int32 back) instead of a host walk over n * deg ids
+    # (one Int32 back) instead of a host walk over n * deg ids.
+    # Lane fx-board-1p2 (2026-11-20): the dataset, the graph and the queries
+    # are uploaded from the caller's arrays (kept alive by the door for the
+    # whole call; each upload is drained before it returns); the three list
+    # copies of them per call are gone.
     var ctx = x_ann_ctx()
-    var dx = upload_f32(ctx, x)
-    var dg = upload_i32(ctx, g)
+    var dx = upload_f32_ptr(ctx, f32_ptr(a[0]), n * d)
+    var dg = upload_i32_ptr(ctx, i32_ptr(a[1]), n * deg)
     if device_any_index_out_of_range(ctx, dg, n * deg, n):
         raise Error("CAGRA search: the graph names a row outside the dataset")
     cagra_search_on(
         ctx, dx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), n, d,
-        dg.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), deg, q, m, k, L, width,
+        dg.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), deg, f32_ptr(a[2]), m, k, L, width,
         max_iter, n_seeds, od, oi, rs, status,
     )
     _ = dg^
@@ -192,14 +265,9 @@ def ann_filter_topk_device_run(a: List[Int], p: List[Int]) raises -> Int:
     var k = p[3]
     if m <= 0 or n <= 0 or k <= 0 or L < k:
         raise Error("CAGRA filtered search: need m, n, k >= 1 and itopk_size >= k")
-    var bd = read_f32(a[0], m * L)
-    var bi = read_i32(a[1], m * L)
-    var keep = read_i32(a[2], n)
-    var od = List[Float32]()
-    var oi = List[Int32]()
-    filter_topk_device(bd, bi, keep, m, n, L, k, od, oi)
-    out_f32_to(od, a[3])
-    out_i32_to(oi, a[4])
+    # Lane fx-ann-fit-nocopy (2026-11-20): the caller's five arrays
+    # themselves; three list copies in and two lists out per call are gone.
+    filter_topk_device_ptr(f32_ptr(a[0]), i32_ptr(a[1]), i32_ptr(a[2]), m, n, L, k, f32_ptr(a[3]), i32_ptr(a[4]))
     return m
 
 

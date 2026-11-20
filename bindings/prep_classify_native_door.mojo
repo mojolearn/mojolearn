@@ -52,6 +52,15 @@ from bindings.prep_classify_common_door import (
     nb_onepass, nb_counts, encode_y, partial_codes, stage_partial_codes, partial_refuse,
     IDN_NB_CSR, XB,
 )
+from bindings.prep_keys_unpack import (
+    prep_keys,
+    PREP_OPN_CV_SET_PARAMS, PREP_OPN_DECISION_FUNCTION, PREP_OPN_FIT, PREP_OPN_FIT_TRANSFORM, PREP_OPN_GET_PARAMS,
+    PREP_OPN_INITIALIZE, PREP_OPN_IS_FITTED, PREP_OPN_NB_CSR_READY, PREP_OPN_PARTIAL_FIT, PREP_OPN_PREDICT,
+    PREP_OPN_PREDICT_JOINT_LOG_PROBA, PREP_OPN_PREDICT_LOG_PROBA, PREP_OPN_PREDICT_PROBA, PREP_OPN_SCORE,
+    PREP_OPN_SET_PARAMS, PREP_OPN_TRANSFORM,
+)
+from bindings.py_keys import py_op_code
+from bindings.py_balanced import py_item
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime I32P = MutPointer[Int32, MutUntrackedOrigin]
@@ -108,7 +117,8 @@ def _put_attr(mut pr: ClsProg, fields: PythonObject, name: String, context: Pyth
 
 
 def _n_classes(fields: PythonObject) raises -> Int:
-    return len(fields["classes_"])
+    var nk = prep_keys()
+    return len(py_item(fields, nk[].k_classes_))
 
 
 def _zeros(count: Int) -> List[Float64]:
@@ -194,6 +204,7 @@ struct Offs(Copyable, Movable):
 def _jll_stages(mut pr: ClsProg, kind: String, fields: PythonObject, xo_in: Int, n: Int, d: Int, out_buf: Int,
                 context: PythonObject) raises:
     """The subclass's `_jll_stages`: its joint log likelihood stages."""
+    var nk = prep_keys()
     var K = _n_classes(fields)
     var xo = xo_in
     if kind == "gnb":
@@ -206,8 +217,8 @@ def _jll_stages(mut pr: ClsProg, kind: String, fields: PythonObject, xo_in: Int,
         var b = _put_attr(pr, fields, "class_log_prior_", context)
         pr.stage(OP_MATMUL, n * K, xo, d, 1, w, 1, d, out_buf, K, d, b, NONE)
     elif kind == "bnb":
-        if fields["binarize"] is not None:
-            var thr = pr.put_scalar(cls_float(fields["binarize"]), context)
+        if py_item(fields, nk[].k_binarize) is not None:
+            var thr = pr.put_scalar(cls_float(py_item(fields, nk[].k_binarize)), context)
             var xb = pr.work(n * d)
             pr.stage(OP_BINARIZE, n * d, xo, n * d, thr, xb)
             xo = xb
@@ -221,7 +232,7 @@ def _jll_stages(mut pr: ClsProg, kind: String, fields: PythonObject, xo_in: Int,
     elif kind == "cat":
         var fo = _put_attr(pr, fields, "_flp", context)
         var co = _put_attr(pr, fields, "class_log_prior_", context)
-        pr.stage(OP_CAT_JLL, n * K, xo, n, d, fo, K, Int(py=fields["_cmax"]), co, out_buf)
+        pr.stage(OP_CAT_JLL, n * K, xo, n, d, fo, K, Int(py=py_item(fields, nk[].k__cmax)), co, out_buf)
     elif kind == "lda":
         var c = _put_attr(pr, fields, "_coef", context)
         var b = _put_attr(pr, fields, "_inter", context)
@@ -266,9 +277,10 @@ def _tail(mut pr: ClsProg, fields: PythonObject, kind: String, mode: PythonObjec
 
 def _score_refusals(pr: ClsProg, fields: PythonObject, kind: String, d: Int, st: Int) raises:
     """CategoricalNB's `_score_refusals`: a category index outside the fitted range."""
+    var nk = prep_keys()
     if kind != "cat" or st == NONE:
         return
-    var ncat = I64P(unsafe_from_address=Int(py=classical_address(fields["n_categories_"])))
+    var ncat = I64P(unsafe_from_address=Int(py=classical_address(py_item(fields, nk[].k_n_categories_))))
     for j in range(d):  # driver-loop: over the feature columns' fitted category counts
         if pr.value(st + 3 * d + j) < 0:
             raise Error("IndexError: mojolearn: CategoricalNB got a category index outside the fitted range")
@@ -311,7 +323,8 @@ def _csr_route_ready(context: PythonObject) raises -> Bool:
 def _base_scores(mut pr: ClsProg, model: PythonObject, fields: PythonObject, kind: String, X: PythonObject,
                  want: Int, csr: CsrIn, has_csr: Bool, context: PythonObject, pair: Bool = False) raises -> Offs:
     """`_Classifier._scores` (`csr`: the IDENTICAL CSR scoring's fallback)."""
-    var mode = fields["numeric_mode_"]
+    var nk = prep_keys()
+    var mode = py_item(fields, nk[].k_numeric_mode_)
     var xo = csr_dense_x(pr, csr, mode, context) if has_csr else -1
     var n = csr.n
     var d = csr.d
@@ -339,25 +352,26 @@ def _no_csr(context: PythonObject) raises -> CsrIn:
 def _scores(mut pr: ClsProg, model: PythonObject, fields: PythonObject, kind: String, X: PythonObject, want: Int,
             context: PythonObject) raises -> Offs:
     """`_scores` with `_DiscreteNB._scores`' CSR route."""
+    var nk = prep_keys()
     check_fitted(model, fields)
     if not (is_sparse(X) and _csr_ready(kind, context)):
         return _base_scores(pr, model, fields, kind, X, want, _no_csr(context), False, context)
     var csr = csr_input(X, context)
     var n = csr.n
     var d = csr.d
-    if py_type(fields["n_features_in_"]) is not cls_builtins().int or d != Int(py=fields["n_features_in_"]):
-        raise Error("mojolearn: X has " + String(d) + " features, but " + cls_name(model) + " was fitted with " + cls_str(fields["n_features_in_"]))
+    if py_type(py_item(fields, nk[].k_n_features_in_)) is not cls_builtins().int or d != Int(py=py_item(fields, nk[].k_n_features_in_)):
+        raise Error("mojolearn: X has " + String(d) + " features, but " + cls_name(model) + " was fitted with " + cls_str(py_item(fields, nk[].k_n_features_in_)))
     var K = _n_classes(fields)
-    var mode = fields["numeric_mode_"]
+    var mode = py_item(fields, nk[].k_numeric_mode_)
     var jll_csr = cls_entry(mode, "x_prep_nb_csr_jll", context)
     if jll_csr is None:
         raise Error("RuntimeError: the numeric mode's binding has no x_prep_nb_csr_jll")
-    var jll_h = classical_typed(Python.tuple(n, K), "<f4", context["output_context"])
-    var flp = f32_input(fields["feature_log_prob_"], context)
+    var jll_h = classical_typed(Python.tuple(n, K), "<f4", py_item(context, nk[].k_output_context))
+    var flp = f32_input(py_item(fields, nk[].k_feature_log_prob_), context)
     var bias = PythonObject(0)
     var bias_keep = PythonObject(None)
     if kind == "mnb" or K == 1:
-        bias_keep = f32_input(fields["class_log_prior_"], context)
+        bias_keep = f32_input(py_item(fields, nk[].k_class_log_prior_), context)
         bias = classical_address(bias_keep)
         _ = bias_keep  # keep the Python object alive through the native call above
     var dims = Python.list(n, d, K, csr.nnz)
@@ -387,9 +401,10 @@ def _scores(mut pr: ClsProg, model: PythonObject, fields: PythonObject, kind: St
 
 
 def _predict(model: PythonObject, fields: PythonObject, kind: String, X: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = prep_keys()
     var pr = ClsProg()
     var o = _scores(pr, model, fields, kind, X, W_PREDICT, context)
-    return classical_decode_labels(fields["classes_"], pr.get_i32(o.am, o.n, context), context)
+    return classical_decode_labels(py_item(fields, nk[].k_classes_), pr.get_i32(o.am, o.n, context), context)
 
 
 def _predict_proba(model: PythonObject, fields: PythonObject, kind: String, X: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -419,18 +434,20 @@ def _score(model: PythonObject, fields: PythonObject, kind: String, X: PythonObj
     Lane p2-labels-lists-arrays: the decode of every row to a Python label
     and its re-encode in `classical_accuracy` (str / bool classes: one
     Python object per row each way) are gone."""
+    var nk = prep_keys()
     var pr = ClsProg()
     var o = _scores(pr, model, fields, kind, X, W_PREDICT, context)
     var codes = pr.get_i32(o.am, o.n, context)
-    return PythonObject(classical_score_from_codes(y, fields["classes_"], codes, PythonObject(None),
+    return PythonObject(classical_score_from_codes(y, py_item(fields, nk[].k_classes_), codes, PythonObject(None),
                                                    PythonObject(None), context))
 
 
 def _decision_function(model: PythonObject, fields: PythonObject, kind: String, X: PythonObject, context: PythonObject) raises -> PythonObject:
     """LinearDiscriminantAnalysis / QuadraticDiscriminantAnalysis decision_function."""
+    var nk = prep_keys()
     check_fitted(model, fields)
     var K = _n_classes(fields)
-    var mode = fields["numeric_mode_"]
+    var mode = py_item(fields, nk[].k_numeric_mode_)
     if kind == "lda" and K == 2:
         # The two-class answer is the coefficient difference's one column
         # (`_pair`, and the C56 route): one program over X; the K scores the
@@ -462,7 +479,8 @@ def _decision_function(model: PythonObject, fields: PythonObject, kind: String, 
 
 
 def _gnb_refuse(fields: PythonObject, context: PythonObject) raises:
-    var vs = fields["var_smoothing"]
+    var nk = prep_keys()
+    var vs = py_item(fields, nk[].k_var_smoothing)
     var b = cls_builtins()
     if py_type(vs) is b.bool or not is_real(vs, context) or not (cls_float(vs) >= 0):
         raise Error("The 'var_smoothing' parameter of GaussianNB must be a float in the range [0.0, inf). Got " + cls_repr(vs) + " instead.")
@@ -491,6 +509,7 @@ def _gnb_publish(pr: ClsProg, fields: PythonObject, mode: PythonObject, K: Int, 
 
 
 def _gnb_fit(model: PythonObject, fields: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = prep_keys()
     _gnb_refuse(fields, context)
     var arr = cls_x2d(args[0], context)
     var n = arr.n
@@ -501,7 +520,7 @@ def _gnb_fit(model: PythonObject, fields: PythonObject, args: PythonObject, cont
     var pr = ClsProg()
     var xo = pr.put(arr.value)
     var yo = pr.put_codes(codes)
-    var vs = pr.put_scalar(cls_float(fields["var_smoothing"]), context)
+    var vs = pr.put_scalar(cls_float(py_item(fields, nk[].k_var_smoothing)), context)
     var eps = pr.alloc(1)
     var cnt = pr.alloc(K)
     var theta = pr.alloc(K * d)
@@ -512,8 +531,8 @@ def _gnb_fit(model: PythonObject, fields: PythonObject, args: PythonObject, cont
     _gnb_stats(pr, mode, wo, xo, n, d, yo, K, cnt, theta, var_, eps, vs, context)
     var raw = _copy_block(pr, var_, K, d, context)
     var given = NONE
-    if fields["priors"] is not None:
-        given = pr.put_list(given_priors(fields["priors"], K, "GaussianNB", True, context), context)
+    if py_item(fields, nk[].k_priors) is not None:
+        given = pr.put_list(given_priors(py_item(fields, nk[].k_priors), K, "GaussianNB", True, context), context)
     elif wo != NONE:
         # class_count_ / class_count_.sum() over the weighted counts
         given = pr.alloc(K)
@@ -526,6 +545,7 @@ def _gnb_fit(model: PythonObject, fields: PythonObject, args: PythonObject, cont
 
 
 def _gnb_partial_fit(model: PythonObject, fields: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = prep_keys()
     _gnb_refuse(fields, context)
     var arr = cls_x2d(args[0], context)
     var n = arr.n
@@ -535,12 +555,12 @@ def _gnb_partial_fit(model: PythonObject, fields: PythonObject, args: PythonObje
     var mode = cls_requested_mode(fields, context)
     if not pc.first:
         check_width(model, fields, d)
-        mode = fields["numeric_mode_"]
+        mode = py_item(fields, nk[].k_numeric_mode_)
     var pr = ClsProg()
     var xo = pr.put(arr.value)
     var coded = stage_partial_codes(pr, pc, context)
     var yo = coded[0]
-    var vs = pr.put_scalar(cls_float(fields["var_smoothing"]), context)
+    var vs = pr.put_scalar(cls_float(py_item(fields, nk[].k_var_smoothing)), context)
     var eps = pr.alloc(1)
     var bc = pr.alloc(K)
     var bm = pr.alloc(K * d)
@@ -556,8 +576,8 @@ def _gnb_partial_fit(model: PythonObject, fields: PythonObject, args: PythonObje
     pr.stage(OP_GNB_MERGE, K * d, oc, om, ov, bc, bm, bv, K, d, cnt, theta, raw)
     var var_ = _copy_block(pr, raw, K, d, context)
     var given = NONE
-    if fields["priors"] is not None:
-        given = pr.put_list(given_priors(fields["priors"], K, "GaussianNB", True, context), context)
+    if py_item(fields, nk[].k_priors) is not None:
+        given = pr.put_list(given_priors(py_item(fields, nk[].k_priors), K, "GaussianNB", True, context), context)
     else:
         given = pr.alloc(K)
         var scratch = pr.alloc(d)
@@ -588,7 +608,8 @@ struct Counts(Copyable, Movable):
 
 
 def _check_alpha(model: PythonObject, fields: PythonObject, context: PythonObject) raises:
-    var alpha = fields["alpha"]
+    var nk = prep_keys()
+    var alpha = py_item(fields, nk[].k_alpha)
     if not is_real(alpha, context) or not (cls_float(alpha) > 0):
         raise Error("NotImplementedError: mojolearn: " + cls_name(model) + " needs alpha > 0 (alpha = 0 makes log(0) terms)")
 
@@ -596,11 +617,12 @@ def _check_alpha(model: PythonObject, fields: PythonObject, context: PythonObjec
 def _prior_stages(mut pr: ClsProg, model: PythonObject, fields: PythonObject, K: Int, cnt: Int, clp: Int,
                   context: PythonObject) raises:
     """`_DiscreteNB._prior_stages`."""
-    var given = py_get(fields, "class_prior")
+    var nk = prep_keys()
+    var given = py_get(fields, nk[].k_class_prior)
     if given is not None:
         var po = pr.put_list(given_priors(given, K, cls_name(model), False, context), context)
         pr.stage(OP_LOG, K, po, clp)
-    elif Bool(py=fields["fit_prior"]):
+    elif Bool(py=py_item(fields, nk[].k_fit_prior)):
         pr.stage(OP_CLASS_LOG_PRIOR, K, cnt, K, clp)
     else:
         var ones = pr.put_list(_ones(K), context)
@@ -612,9 +634,10 @@ def _needs_min(kind: String) -> Bool:
 
 
 def _binarize(kind: String, fields: PythonObject) raises -> PythonObject:
+    var nk = prep_keys()
     if kind != "bnb":
         return PythonObject(None)
-    return fields["binarize"]
+    return py_item(fields, nk[].k_binarize)
 
 
 def _fit_counts(mut pr: ClsProg, model: PythonObject, fields: PythonObject, kind: String, X: PythonObject,
@@ -665,6 +688,7 @@ def _fit_counts_csr(mut pr: ClsProg, model: PythonObject, fields: PythonObject, 
                     mut done: Bool, context: PythonObject) raises -> Counts:
     """`_DiscreteNB._fit_counts_csr`; `done` False: IDENTICAL refused the
     rows (the caller runs the dense program)."""
+    var nk = prep_keys()
     var n = csr.n
     var d = csr.d
     var codes = encode_y(model, fields, y, n, context)
@@ -673,8 +697,8 @@ def _fit_counts_csr(mut pr: ClsProg, model: PythonObject, fields: PythonObject, 
     var fit_csr = cls_entry(mode, "x_prep_nb_csr_fit", context)
     if fit_csr is None:
         raise Error("RuntimeError: the numeric mode's binding has no x_prep_nb_csr_fit")
-    var fc = classical_typed(Python.tuple(K, d), "<f4", context["output_context"])
-    var cnt = classical_typed(Python.tuple(K), "<f4", context["output_context"])
+    var fc = classical_typed(Python.tuple(K, d), "<f4", py_item(context, nk[].k_output_context))
+    var cnt = classical_typed(Python.tuple(K), "<f4", py_item(context, nk[].k_output_context))
     var flag = i32_array(1, context)
     _ = py_call_typed(fit_csr, classical_address(csr.indptr), classical_address(csr.indices), classical_address(csr.data),
                       classical_address(codes), Python.list(n, d, K, csr.nnz),
@@ -721,9 +745,10 @@ def _params(mut pr: ClsProg, model: PythonObject, fields: PythonObject, kind: St
             pc: PartialCodes, context: PythonObject) raises -> PythonObject:
     """The subclass's `_params`: its parameter stage, the run, the refusals,
     the fitted attributes (`_finish_counts`)."""
+    var nk = prep_keys()
     var K = c.K
     var d = c.d
-    var a = pr.put_scalar(cls_float(fields["alpha"]), context)
+    var a = pr.put_scalar(cls_float(py_item(fields, nk[].k_alpha)), context)
     var flp = pr.alloc(K * d)
     var w = NONE
     var bias = NONE
@@ -734,7 +759,7 @@ def _params(mut pr: ClsProg, model: PythonObject, fields: PythonObject, kind: St
         bias = pr.alloc(K)
         pr.stage(OP_BNB_PARAMS, K, c.fc, c.cnt, K, d, a, c.clp, flp, w, bias)
     else:
-        pr.stage(OP_CNB_PARAMS, K, c.fc, K, d, a, 1 if Bool(py=fields["norm"]) else 0, flp)
+        pr.stage(OP_CNB_PARAMS, K, c.fc, K, d, a, 1 if Bool(py=py_item(fields, nk[].k_norm)) else 0, flp)
     pr.run(c.mode, context)
     partial_refuse(pr, neg, fields, pc, context)
     if kind == "mnb":
@@ -783,6 +808,7 @@ def _dnb_fit(model: PythonObject, fields: PythonObject, kind: String, args: Pyth
 
 def _dnb_partial_fit(model: PythonObject, fields: PythonObject, kind: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_DiscreteNB.partial_fit`."""
+    var nk = prep_keys()
     _check_alpha(model, fields, context)
     var arr = cls_x2d(args[0], context)
     var n = arr.n
@@ -792,7 +818,7 @@ def _dnb_partial_fit(model: PythonObject, fields: PythonObject, kind: String, ar
     var mode = cls_mode(context)
     if not pc.first:
         check_width(model, fields, d)
-        mode = fields["numeric_mode_"]
+        mode = py_item(fields, nk[].k_numeric_mode_)
     var pr = ClsProg()
     var xo = pr.put(arr.value)
     var wo = _put_weights(pr, _weights(args[3], n, context))
@@ -839,7 +865,8 @@ def _dnb_partial_fit(model: PythonObject, fields: PythonObject, kind: String, ar
 def _resident_enter(context: PythonObject) raises -> PythonObject:
     """`with _arena_io.resident():` entered natively (the scope's own native
     enter): the two programs share their big inputs' device copies."""
-    return resident_enter_min(context, context["resident_min_words"])
+    var nk = prep_keys()
+    return resident_enter_min(context, py_item(context, nk[].k_resident_min_words))
 
 
 def resident_enter_min(context: PythonObject, min_words: PythonObject) raises -> PythonObject:
@@ -847,17 +874,19 @@ def resident_enter_min(context: PythonObject, min_words: PythonObject) raises ->
     least `min_words` words keep one device copy for the scope (RFE's rounds
     pass n * d, so only X is held; lane ne2-b-rounds, N059). Inside an
     enclosing scope the enclosing one is used and this one closes nothing."""
-    var scope = py_call(cls_builtins().object.__new__, context["resident_class"])
+    var nk = prep_keys()
+    var scope = py_call(cls_builtins().object.__new__, py_item(context, nk[].k_resident_class))
     var fields = py_fields(scope)
-    py_setitem(fields, "min_words", min_words)
-    py_setitem(fields, "_scope", PythonObject(None))
+    py_setitem(fields, nk[].k_min_words, min_words)
+    py_setitem(fields, nk[].k__scope, PythonObject(None))
     # the arena rows owner connects its context when model_selection imports
-    _ = arena_cache_release_operation(scope, "scope_enter", Python.tuple(), context["arena_io_fields"]["_ROWS_CONTEXT"])
+    _ = arena_cache_release_operation(scope, "scope_enter", Python.tuple(), py_item(py_item(context, nk[].k_arena_io_fields), nk[].k__ROWS_CONTEXT))
     return scope
 
 
 def _resident_exit(scope: PythonObject, context: PythonObject) raises:
-    _ = arena_cache_release_operation(scope, "scope_exit", Python.tuple(PythonObject(None), PythonObject(None), PythonObject(None)), context["arena_io_fields"]["_ROWS_CONTEXT"])
+    var nk = prep_keys()
+    _ = arena_cache_release_operation(scope, "scope_exit", Python.tuple(PythonObject(None), PythonObject(None), PythonObject(None)), py_item(py_item(context, nk[].k_arena_io_fields), nk[].k__ROWS_CONTEXT))
 
 
 def _int_list(values: PythonObject, context: PythonObject) raises -> List[Int]:
@@ -870,9 +899,10 @@ def _int_list(values: PythonObject, context: PythonObject) raises -> List[Int]:
 
 def _cat_blocks(pr: ClsProg, off: Int, d: Int, K: Int, cmax: Int, ncat: List[Int], context: PythonObject) raises -> PythonObject:
     """Per feature j, the (K, ncat[j]) float32 block of the (d, K, cmax) table."""
+    var nk = prep_keys()
     var out = Python.list()
     for j in range(d):  # driver-loop: over the feature columns (model structure)
-        var block = classical_typed(Python.tuple(K, ncat[j]), "<f4", context["output_context"]) if ncat[j] > 0 else classical_wrap_array(native_array_empty("f"), Python.tuple(K, 0), "<f4", "C", context["output_context"])
+        var block = classical_typed(Python.tuple(K, ncat[j]), "<f4", py_item(context, nk[].k_output_context)) if ncat[j] > 0 else classical_wrap_array(native_array_empty("f"), Python.tuple(K, 0), "<f4", "C", py_item(context, nk[].k_output_context))
         if ncat[j] > 0:
             var dest = F32P(unsafe_from_address=Int(py=classical_address(block)))
             _ = block  # keep the Python object alive through the native call above
@@ -885,6 +915,7 @@ def _cat_blocks(pr: ClsProg, off: Int, d: Int, K: Int, cmax: Int, ncat: List[Int
 
 def _cat_fit_programs(model: PythonObject, fields: PythonObject, arr: XIn, pc: PartialCodes, w: PythonObject,
                       mode: PythonObject, merge: Bool, context: PythonObject) raises -> PythonObject:
+    var nk = prep_keys()
     var n = arr.n
     var d = arr.d
     var K = _n_classes(fields)
@@ -904,11 +935,11 @@ def _cat_fit_programs(model: PythonObject, fields: PythonObject, arr: XIn, pc: P
         pr.stage(OP_ADD_ARRAYS, K, oc, bc, cnt)
     else:
         class_stats(pr, wo, K, xo, n, 1, yo, K, cnt, NONE, NONE, NONE, mode, context, False)
-    if fields["class_prior"] is not None:
-        var po = pr.put_list(given_priors(fields["class_prior"], K, "CategoricalNB", False, context), context)
+    if py_item(fields, nk[].k_class_prior) is not None:
+        var po = pr.put_list(given_priors(py_item(fields, nk[].k_class_prior), K, "CategoricalNB", False, context), context)
         pr.stage(OP_LOG, K, po, clp)
     else:
-        var prior_src = cnt if Bool(py=fields["fit_prior"]) else pr.put_list(_ones(K), context)
+        var prior_src = cnt if Bool(py=py_item(fields, nk[].k_fit_prior)) else pr.put_list(_ones(K), context)
         pr.stage(OP_CLASS_LOG_PRIOR, K, prior_src, K, clp)
     pr.run(mode, context)
     partial_refuse(pr, coded[1], fields, pc, context)
@@ -918,10 +949,10 @@ def _cat_fit_programs(model: PythonObject, fields: PythonObject, arr: XIn, pc: P
     var ncat = List[Int]()
     for j in range(d):  # driver-loop: over the per-column maximum statistics (feature count)
         ncat.append(Int(pr.value(st + 4 * d + j)) + 1)
-    var mc = fields["min_categories"]
+    var mc = py_item(fields, nk[].k_min_categories)
     if mc is not None:
         var mcs = List[Int]()
-        if Bool(py=py_call(cls_builtins().isinstance, mc, context["integral_type"])):
+        if Bool(py=py_call(cls_builtins().isinstance, mc, py_item(context, nk[].k_integral_type))):
             mcs = List[Int](length=d, fill=Int(py=py_call(cls_builtins().int, mc)))
         else:
             mcs = _int_list(mc, context)
@@ -930,7 +961,7 @@ def _cat_fit_programs(model: PythonObject, fields: PythonObject, arr: XIn, pc: P
         for j in range(d):  # driver-loop: over the feature columns (model structure)
             ncat[j] = max(ncat[j], mcs[j])
     if merge:
-        var old = I64P(unsafe_from_address=Int(py=classical_address(fields["n_categories_"])))
+        var old = I64P(unsafe_from_address=Int(py=classical_address(py_item(fields, nk[].k_n_categories_))))
         for j in range(d):  # driver-loop: over the feature columns (model structure)
             ncat[j] = max(ncat[j], Int(old[j]))
     var cmax = 0
@@ -945,7 +976,7 @@ def _cat_fit_programs(model: PythonObject, fields: PythonObject, arr: XIn, pc: P
         nlist.append(Float64(ncat[j]))
     var no = q.put_list(nlist, context)
     var co = q.put(pr.get(cnt, K, 0, context))
-    var a = q.put_scalar(cls_float(fields["alpha"]), context)
+    var a = q.put_scalar(cls_float(py_item(fields, nk[].k_alpha)), context)
     var wq = _put_weights(q, w)
     var cc = q.alloc(d * K * cmax)
     if blocked():
@@ -959,7 +990,7 @@ def _cat_fit_programs(model: PythonObject, fields: PythonObject, arr: XIn, pc: P
     else:
         q.stage(OP_CAT_COUNTS, d * K * cmax, xq, n, d, yq, K, no, cmax, wq, cc)
     if merge:
-        var oc = Int(py=fields["_cmax"])
+        var oc = Int(py=py_item(fields, nk[].k__cmax))
         var pad = q.alloc(d * K * cmax)
         var src = cc
         cc = q.alloc(d * K * cmax)
@@ -973,7 +1004,7 @@ def _cat_fit_programs(model: PythonObject, fields: PythonObject, arr: XIn, pc: P
     partial_refuse(q, qcoded[1], fields, pc, context)
     _set(fields, "_cc", q.get(cc, d * K * cmax, 0, context))
     _set(fields, "category_count_", _cat_blocks(q, cc, d, K, cmax, ncat, context))
-    var counts = classical_typed(Python.tuple(d), "<i8", context["output_context"])
+    var counts = classical_typed(Python.tuple(d), "<i8", py_item(context, nk[].k_output_context))
     var cp = I64P(unsafe_from_address=Int(py=classical_address(counts)))
     _ = counts  # keep the Python object alive through the native call above
     for j in range(d):  # driver-loop: over the feature columns (model structure)
@@ -1015,13 +1046,14 @@ def _cat_fit_op(model: PythonObject, fields: PythonObject, args: PythonObject, c
 
 
 def _cat_partial_fit(model: PythonObject, fields: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = prep_keys()
     _check_alpha(model, fields, context)
     var arr = cls_x2d(args[0], context)
     var pc = partial_codes(model, fields, args[1], args[2], arr.n, context)
     if pc.first:
         return _cat_fit(model, fields, arr, pc, args[3], cls_mode(context), False, context)
     check_width(model, fields, arr.d)
-    return _cat_fit(model, fields, arr, pc, args[3], fields["numeric_mode_"], True, context)
+    return _cat_fit(model, fields, arr, pc, args[3], py_item(fields, nk[].k_numeric_mode_), True, context)
 
 
 # ---------------------------------------------------------------- discriminant analysis
@@ -1047,7 +1079,8 @@ def _check_estimator_shrinkage(est: PythonObject, shrinkage: PythonObject) raise
 
 
 def _solver_is(fields: PythonObject, name: String) raises -> Bool:
-    var solver = fields["solver"]
+    var nk = prep_keys()
+    var solver = py_item(fields, nk[].k_solver)
     return py_type(solver) is cls_builtins().str and String(solver) == name
 
 
@@ -1088,9 +1121,10 @@ def _lda_binary(mut pr: ClsProg, coef: Int, inter: Int, K: Int, d: Int, context:
 
 def _lda_priors(mut pr: ClsProg, fields: PythonObject, K: Int, context: PythonObject) raises -> Tuple[Int, Int]:
     """(gflag, gofs) of the user priors (2 when they are renormalized)."""
-    if fields["priors"] is None:
+    var nk = prep_keys()
+    if py_item(fields, nk[].k_priors) is None:
         return (0, 0)
-    var pv = given_priors(fields["priors"], K, "LinearDiscriminantAnalysis", False, context)
+    var pv = given_priors(py_item(fields, nk[].k_priors), K, "LinearDiscriminantAnalysis", False, context)
     var flag = 2 if abs(prior_sum(pv) - 1.0) > 1e-5 else 1
     return (flag, pr.put_list(pv, context))
 
@@ -1111,19 +1145,20 @@ def _lda_publish_coef(pr: ClsProg, fields: PythonObject, K: Int, d: Int, coef: I
 
 def _lda_fit(model: PythonObject, fields: PythonObject, X: PythonObject, y: PythonObject, context: PythonObject) raises -> XIn:
     """`LinearDiscriminantAnalysis.fit`; returns the admitted X (fit_transform's input)."""
+    var nk = prep_keys()
     var b = cls_builtins()
-    var solver = fields["solver"]
+    var solver = py_item(fields, nk[].k_solver)
     if not (_solver_is(fields, "svd") or _solver_is(fields, "lsqr") or _solver_is(fields, "eigen")):
         raise Error("mojolearn: invalid solver " + cls_repr(solver))
-    if _solver_is(fields, "svd") and fields["shrinkage"] is not None:
+    if _solver_is(fields, "svd") and py_item(fields, nk[].k_shrinkage) is not None:
         raise Error("NotImplementedError: mojolearn: shrinkage not supported with 'svd' solver.")
-    var est = fields["covariance_estimator"]
+    var est = py_item(fields, nk[].k_covariance_estimator)
     if est is not None and _solver_is(fields, "svd"):
         raise Error("mojolearn: covariance estimator is not supported with svd solver. Try another solver")
-    _check_estimator_shrinkage(est, fields["shrinkage"])
+    _check_estimator_shrinkage(est, py_item(fields, nk[].k_shrinkage))
     var shr: Optional[Float64] = None
     if est is None:
-        shr = _shrinkage(fields["shrinkage"], context)
+        shr = _shrinkage(py_item(fields, nk[].k_shrinkage), context)
     var arr = cls_x2d(X, context)
     var n = arr.n
     var d = arr.d
@@ -1132,7 +1167,7 @@ def _lda_fit(model: PythonObject, fields: PythonObject, X: PythonObject, y: Pyth
     if K < 2 or n <= K:
         raise Error("mojolearn: LinearDiscriminantAnalysis needs at least two classes and more samples than classes")
     var maxc = min(K - 1, d)
-    var nc = fields["n_components"]
+    var nc = py_item(fields, nk[].k_n_components)
     if nc is not None and Bool(py=nc > PythonObject(maxc)):
         raise Error("mojolearn: n_components cannot be larger than min(n_features, n_classes - 1)")
     var mode = cls_mode(context)
@@ -1153,7 +1188,7 @@ def _lda_fit(model: PythonObject, fields: PythonObject, X: PythonObject, y: Pyth
     var e1 = pr.alloc(d)
     var v1 = pr.alloc(d * d)
     var meta_words = List[Float64]()
-    meta_words.append(cls_float(fields["tol"]))
+    meta_words.append(cls_float(py_item(fields, nk[].k_tol)))
     meta_words.append(0.0)
     meta_words.append(0.0)
     # lda_stage2 writes the ranks into it
@@ -1184,7 +1219,7 @@ def _lda_fit(model: PythonObject, fields: PythonObject, X: PythonObject, y: Pyth
     pr.stage(OP_LDA_STAGE3, 1, e2, v2, scal1, mean, xbar, priors, K, d, meta, scal, coef, inter, evr, tmp)
     var bin = _lda_binary(pr, coef, inter, K, d, context)
     var sw = NONE
-    if Bool(py=fields["store_covariance"]):
+    if Bool(py=py_item(fields, nk[].k_store_covariance)):
         var cov = _lda_cov_blocks(pr, xo, n, d, yo, K, mean, NONE, cnt, None, None, context)
         sw = pr.alloc(d * d)
         pr.stage(OP_DA_POOL, d * d, cov, K, d, priors, sw, NONE, NONE)
@@ -1198,9 +1233,9 @@ def _lda_fit(model: PythonObject, fields: PythonObject, X: PythonObject, y: Pyth
     _set(fields, "xbar_", pr.get(xbar, d, 0, context))
     _set(fields, "_scal_full", pr.get(scal, d, d, context))
     # the rank columns of the (d, d) scalings (Array.__getitem__'s strided copy)
-    var scalings = classical_wrap_array(native_array_empty("f"), Python.tuple(d, 0), "<f4", "C", context["output_context"])
+    var scalings = classical_wrap_array(native_array_empty("f"), Python.tuple(d, 0), "<f4", "C", py_item(context, nk[].k_output_context))
     if rank2 > 0:
-        scalings = classical_typed(Python.tuple(d, rank2), "<f4", context["output_context"])
+        scalings = classical_typed(Python.tuple(d, rank2), "<f4", py_item(context, nk[].k_output_context))
         var dest = F32P(unsafe_from_address=Int(py=classical_address(scalings)))
         _ = scalings  # keep the Python object alive through the native call above
         var src = F32P(unsafe_from_address=pr.base) + scal
@@ -1220,6 +1255,7 @@ def _lda_fit(model: PythonObject, fields: PythonObject, X: PythonObject, y: Pyth
 def _lda_cov_solver(model: PythonObject, fields: PythonObject, arr: XIn, codes: PythonObject, K: Int, d: Int, n: Int,
                     mode: PythonObject, shr: Optional[Float64], context: PythonObject) raises:
     """solver 'lsqr' / 'eigen' (`_fit_cov_solver`)."""
+    var nk = prep_keys()
     var b = cls_builtins()
     var pr = ClsProg()
     var xo = pr.put(arr.value)
@@ -1233,7 +1269,7 @@ def _lda_cov_solver(model: PythonObject, fields: PythonObject, arr: XIn, codes: 
     var gp = _lda_priors(pr, fields, K, context)
     pr.stage(OP_LDA_PREP, 1, cnt, mean, K, d, n, priors, xbar, gp[0], gp[1])
     var eigen = _solver_is(fields, "eigen")
-    var est = fields["covariance_estimator"]
+    var est = py_item(fields, nk[].k_covariance_estimator)
     var tot = NONE
     if eigen:
         # The one-class code vector: a zeroed float32 Array put as it is (no
@@ -1267,7 +1303,7 @@ def _lda_cov_solver(model: PythonObject, fields: PythonObject, arr: XIn, codes: 
     pr.stage(OP_EIGH, 1, swc, d, 0, e, v)
     var coef = pr.alloc(K * d)
     var inter = pr.alloc(K)
-    var nc = fields["n_components"]
+    var nc = py_item(fields, nk[].k_n_components)
     var mc = min(K - 1, d) if nc is None else Int(py=py_call(b.int, nc))
     var ev = NONE
     var evr = NONE
@@ -1317,14 +1353,15 @@ def _lda_cov_solver(model: PythonObject, fields: PythonObject, arr: XIn, codes: 
 
 def _lda_transform(model: PythonObject, fields: PythonObject, arr: XIn, context: PythonObject) raises -> PythonObject:
     """`LinearDiscriminantAnalysis.transform` of an admitted X."""
+    var nk = prep_keys()
     check_fitted(model, fields)
     check_width(model, fields, arr.d)
     var n = arr.n
     var d = arr.d
     if _solver_is(fields, "lsqr"):
         raise Error("NotImplementedError: mojolearn: transform not implemented for 'lsqr' solver (use 'svd' or 'eigen').")
-    var mc = min(Int(py=fields["_max_components"]), Int(py=fields["_rank"]))
-    var mode = fields["numeric_mode_"]
+    var mc = min(Int(py=py_item(fields, nk[].k__max_components)), Int(py=py_item(fields, nk[].k__rank)))
+    var mode = py_item(fields, nk[].k_numeric_mode_)
     var eigen = _solver_is(fields, "eigen")
     var pr = ClsProg()
     var xo = pr.put(arr.value)
@@ -1345,23 +1382,24 @@ def _lda_transform(model: PythonObject, fields: PythonObject, arr: XIn, context:
 
 def _qda_fit(model: PythonObject, fields: PythonObject, X: PythonObject, y: PythonObject, context: PythonObject) raises -> PythonObject:
     """`QuadraticDiscriminantAnalysis.fit`."""
-    if fields["covariance_estimator"] is not None:
+    var nk = prep_keys()
+    if py_item(fields, nk[].k_covariance_estimator) is not None:
         # Fitting a user covariance estimator runs its Python `fit` inside
         # the runtime. Refused by name before any other check, as LDA does
         # (a5f9cc738, bindings/prep_lda_admission.mojo).
         raise Error("TypeError: covariance_estimator cannot invoke Python callbacks; use covariance_estimator=None and the native solver/shrinkage configuration")
-    var solver = fields["solver"]
+    var solver = py_item(fields, nk[].k_solver)
     if not (_solver_is(fields, "svd") or _solver_is(fields, "eigen")):
         raise Error("mojolearn: invalid solver " + cls_repr(solver))
-    if _solver_is(fields, "svd") and fields["shrinkage"] is not None:
+    if _solver_is(fields, "svd") and py_item(fields, nk[].k_shrinkage) is not None:
         raise Error("NotImplementedError: mojolearn: shrinkage not supported with 'svd' solver.")
-    var est = fields["covariance_estimator"]
+    var est = py_item(fields, nk[].k_covariance_estimator)
     if est is not None and _solver_is(fields, "svd"):
         raise Error("mojolearn: covariance_estimator is not supported with solver='svd'. Try solver='eigen' instead.")
-    _check_estimator_shrinkage(est, fields["shrinkage"])
+    _check_estimator_shrinkage(est, py_item(fields, nk[].k_shrinkage))
     var shr: Optional[Float64] = None
     if est is None:
-        shr = _shrinkage(fields["shrinkage"], context)
+        shr = _shrinkage(py_item(fields, nk[].k_shrinkage), context)
     var eigen = _solver_is(fields, "eigen")
     var arr = cls_x2d(X, context)
     var n = arr.n
@@ -1399,7 +1437,7 @@ def _qda_fit(model: PythonObject, fields: PythonObject, X: PythonObject, y: Pyth
     var cov = pr.alloc(K * d * d)
     var ev = pr.alloc(K * d)
     var evec = pr.alloc(K * d * d)
-    var reg = pr.put_scalar(0.0 if eigen else cls_float(fields["reg_param"]), context)
+    var reg = pr.put_scalar(0.0 if eigen else cls_float(py_item(fields, nk[].k_reg_param)), context)
     var rot = pr.alloc(K * d * d)
     var logc = pr.alloc(K)
     var s2 = pr.alloc(K * d)
@@ -1408,9 +1446,9 @@ def _qda_fit(model: PythonObject, fields: PythonObject, X: PythonObject, y: Pyth
     cls_stats(pr, mode, xo, n, d, yo, K, cnt, mean, var_, NONE, context, 1)
     var gflag = 0
     var gofs = 0
-    if fields["priors"] is not None:
+    if py_item(fields, nk[].k_priors) is not None:
         gflag = 1
-        gofs = pr.put_list(given_priors(fields["priors"], K, "QuadraticDiscriminantAnalysis", False, context), context)
+        gofs = pr.put_list(given_priors(py_item(fields, nk[].k_priors), K, "QuadraticDiscriminantAnalysis", False, context), context)
     pr.stage(OP_LDA_PREP, 1, cnt, mean, K, d, n, priors, xbar, gflag, gofs)
     if est is not None:
         cov = pr.put_list(_estimator_covs(est, arr, codes, K, "QuadraticDiscriminantAnalysis", context), context)
@@ -1420,7 +1458,7 @@ def _qda_fit(model: PythonObject, fields: PythonObject, X: PythonObject, y: Pyth
         var so = pr.put_scalar(shr.value(), context)
         var scratch = pr.alloc(K)
         pr.stage(OP_DA_SHRINK, K, xo, n, d, yo, mean, var_, cnt, cov, so, scratch)
-    var store = Bool(py=fields["store_covariance"])
+    var store = Bool(py=py_item(fields, nk[].k_store_covariance))
     var keep = NONE
     if store and eigen:
         keep = pr.alloc(K * d * d)
@@ -1437,8 +1475,8 @@ def _qda_fit(model: PythonObject, fields: PythonObject, X: PythonObject, y: Pyth
         for k in range(K):  # driver-loop: over the class counts (class count)
             if pr.value(cnt + k) < 2:
                 raise Error("mojolearn: y has only 1 sample in a class, covariance is ill defined")
-    var tol = cls_float(fields["tol"])
-    var classes = fields["classes_"]
+    var tol = cls_float(py_item(fields, nk[].k_tol))
+    var classes = py_item(fields, nk[].k_classes_)
     for k in range(K):  # driver-loop: rank check per class before raising (class count)
         var above = 0
         for j in range(d):  # driver-loop: over one class's scalings (feature count)
@@ -1471,16 +1509,18 @@ def _qda_fit(model: PythonObject, fields: PythonObject, X: PythonObject, y: Pyth
 
 
 def _kind_of(model: PythonObject, context: PythonObject) raises -> String:
+    var nk = prep_keys()
     # `cls_kind`: an exact public class is the MRO's first row, answered by
     # one lookup without the MRO read; a subclass walks the MRO (perf2-prep).
-    var own = py_get(context["cls_kinds"], py_type(model))
+    var own = py_get(py_item(context, nk[].k_cls_kinds), py_type(model))
     if own is not None:
         return String(own)
     return cls_kind(model, context)
 
 
-def _dispatch(model: PythonObject, operation: String, var args: PythonObject, var context: PythonObject,
+def _dispatch(model: PythonObject, op: Int, operation: String, var args: PythonObject, var context: PythonObject,
               known: String = "", given: Optional[PythonObject] = None) raises -> PythonObject:
+    var nk = prep_keys()
     # `known`: the kind the caller already resolved for this model (the
     # public naive Bayes / QDA door), so the MRO is not read twice.
     if py_type(py_type(model)) is not py_type(py_type(PythonObject(0))):
@@ -1489,59 +1529,59 @@ def _dispatch(model: PythonObject, operation: String, var args: PythonObject, va
     var fields: PythonObject
     if kind == "lda":
         context = lda_native_context(context)
-        if operation == "initialize":
+        if op == PREP_OPN_INITIALIZE:
             return lda_native_initialize(model, args, context)
         # One admission pass per fitted state (a per-model record), and the
         # plain classes_ list it read is reused below instead of a second copy.
-        var admitted = lda_native_fields_plain(model, context, operation == "is_fitted" or operation == "get_params" or operation == "set_params")
+        var admitted = lda_native_fields_plain(model, context, op == PREP_OPN_IS_FITTED or op == PREP_OPN_GET_PARAMS or op == PREP_OPN_SET_PARAMS)
         fields = admitted[0]
-        if operation == "is_fitted":
+        if op == PREP_OPN_IS_FITTED:
             return classical_is_fitted(model)
-        if operation == "get_params":
+        if op == PREP_OPN_GET_PARAMS:
             return lda_native_get_params(fields, context)
-        if operation == "set_params":
+        if op == PREP_OPN_SET_PARAMS:
             return lda_native_set_params(model, fields, args[0], context)
-        if operation == "fit" or operation == "fit_transform" or operation == "score":
+        if op == PREP_OPN_FIT or op == PREP_OPN_FIT_TRANSFORM or op == PREP_OPN_SCORE:
             args = Python.tuple(args[0], prep_plain_classes(args[1], context))
-            lda_native_labels(args[1], context, operation != "score")
-        if operation != "fit" and operation != "fit_transform":
+            lda_native_labels(args[1], context, op != PREP_OPN_SCORE)
+        if op != PREP_OPN_FIT and op != PREP_OPN_FIT_TRANSFORM:
             lda_require_fitted(model, operation, context)
             var plain = admitted[1]
             fields = py_call(native_loaded_module("builtins").dict, fields)
             if plain is None:
-                plain = prep_plain_classes(fields["classes_"], context)
-            py_setitem(fields, "classes_", plain)
-    elif kind == "gnb" and py_get(context, "cv_fixed_owner") is not None:
+                plain = prep_plain_classes(py_item(fields, nk[].k_classes_), context)
+            py_setitem(fields, nk[].k_classes_, plain)
+    elif kind == "gnb" and py_get(context, nk[].k_cv_fixed_owner) is not None:
         context = fixed_owner_context(context)
         fields = fixed_owner_fields(model, context)
-        if operation == "cv_set_params":
+        if op == PREP_OPN_CV_SET_PARAMS:
             return fixed_owner_set_params(model, args[0], context)
         for i in range(len(args)):  # driver-loop: fixed public arguments, including native resident-fold handles
-            if i == 0 and py_type(args[i]) is context["maxabs_rows_class"]:
+            if i == 0 and py_type(args[i]) is py_item(context, nk[].k_maxabs_rows_class):
                 _ = _rows_fields(args[i], context)
             else:
                 classical_admit_value(args[i], context)
-        if operation == "fit" or operation == "score":
-            lda_native_labels(args[1], context, operation == "fit", "GaussianNB")
+        if op == PREP_OPN_FIT or op == PREP_OPN_SCORE:
+            lda_native_labels(args[1], context, op == PREP_OPN_FIT, "GaussianNB")
     elif given:
         # A read-only public operation's private fields view (classes_ as the
         # plain list), never written back into the model (p3-prep).
         fields = given.value()
     else:
         fields = py_fields(model)
-    if operation == "predict":
+    if op == PREP_OPN_PREDICT:
         return _predict(model, fields, kind, args[0], context)
-    if operation == "predict_proba":
+    if op == PREP_OPN_PREDICT_PROBA:
         return _predict_proba(model, fields, kind, args[0], context)
-    if operation == "predict_log_proba":
+    if op == PREP_OPN_PREDICT_LOG_PROBA:
         return _predict_log_proba(model, fields, kind, args[0], context)
-    if operation == "predict_joint_log_proba":
+    if op == PREP_OPN_PREDICT_JOINT_LOG_PROBA:
         return _joint_log_proba(model, fields, kind, args[0], context)
-    if operation == "score":
+    if op == PREP_OPN_SCORE:
         return _score(model, fields, kind, args[0], args[1], context)
-    if operation == "decision_function" and (kind == "lda" or kind == "qda"):
+    if op == PREP_OPN_DECISION_FUNCTION and (kind == "lda" or kind == "qda"):
         return _decision_function(model, fields, kind, args[0], context)
-    if operation == "fit":
+    if op == PREP_OPN_FIT:
         if kind == "gnb":
             return _gnb_fit(model, fields, args, context)
         if kind == "mnb" or kind == "bnb" or kind == "cnb":
@@ -1552,17 +1592,17 @@ def _dispatch(model: PythonObject, operation: String, var args: PythonObject, va
             _ = _lda_fit(model, fields, args[0], args[1], context)
             return model
         return _qda_fit(model, fields, args[0], args[1], context)
-    if operation == "partial_fit":
+    if op == PREP_OPN_PARTIAL_FIT:
         if kind == "gnb":
             return _gnb_partial_fit(model, fields, args, context)
         if kind == "mnb" or kind == "bnb" or kind == "cnb":
             return _dnb_partial_fit(model, fields, kind, args, context)
         if kind == "cat":
             return _cat_partial_fit(model, fields, args, context)
-    if kind == "lda" and operation == "transform":
+    if kind == "lda" and op == PREP_OPN_TRANSFORM:
         check_fitted(model, fields)
         return _lda_transform(model, fields, cls_x2d(args[0], context), context)
-    if kind == "lda" and operation == "fit_transform":
+    if kind == "lda" and op == PREP_OPN_FIT_TRANSFORM:
         # The X converted for the fit is the transform's input.
         var arr = _lda_fit(model, fields, args[0], args[1], context)
         return _lda_transform(model, fields, arr, context)
@@ -1573,8 +1613,9 @@ def _public_kind(model: PythonObject, context: PythonObject) raises -> String:
     """The kind of a naive Bayes / QDA model whose public operation runs the
     native lifecycle here ("" for LDA, which keeps its own, the CV fixed
     owner's private calls, and a metaclass the door refuses)."""
+    var nk = prep_keys()
     var b = native_loaded_module("builtins")
-    if py_type(py_type(model)) is not b.type or py_get(context, "cv_fixed_owner") is not None:
+    if py_type(py_type(model)) is not b.type or py_get(context, nk[].k_cv_fixed_owner) is not None:
         return ""
     var kind = _kind_of(model, context)
     if kind == "gnb" or kind == "mnb" or kind == "bnb" or kind == "cnb" or kind == "cat" or kind == "qda":
@@ -1582,7 +1623,7 @@ def _public_kind(model: PythonObject, context: PythonObject) raises -> String:
     return ""
 
 
-def _classifier_public(model: PythonObject, kind: String, operation: String, args: PythonObject,
+def _classifier_public(model: PythonObject, kind: String, op: Int, operation: String, args: PythonObject,
                        context: PythonObject) raises -> PythonObject:
     """GaussianNB, MultinomialNB, BernoulliNB, ComplementNB, CategoricalNB and
     QDA: the former `_mode` wrappers (NotFittedError, X refusals, width and
@@ -1593,38 +1634,39 @@ def _classifier_public(model: PythonObject, kind: String, operation: String, arg
     plain list, so the model is never mutated and a concurrent caller never
     sees a swapped state (p3-prep); a fit / partial_fit swaps it in the
     model (its solvers write the fitted fields there) and back after."""
+    var nk = prep_keys()
     var source = args[0] if len(args) > 0 else PythonObject(None)
     # MultinomialNB and ComplementNB take CSR X (`_DiscreteNB._csr_ok`).
     var sparse_ok = kind == "mnb" or kind == "cnb"
     var depth = lifecycle_begin(model, operation, source, True, sparse_ok, True, context)
     var fields = py_fields(model)
-    var public_labels = py_get(fields, "classes_")
+    var public_labels = py_get(fields, nk[].k_classes_)
     var plain = prep_plain_classes(public_labels, context)
     var fitting = lifecycle_fitting(operation)
     var swapped = plain is not public_labels and not (
-        operation == "predict" or operation == "predict_proba" or operation == "predict_log_proba"
-        or operation == "predict_joint_log_proba" or operation == "score" or operation == "decision_function")
+        op == PREP_OPN_PREDICT or op == PREP_OPN_PREDICT_PROBA or op == PREP_OPN_PREDICT_LOG_PROBA
+        or op == PREP_OPN_PREDICT_JOINT_LOG_PROBA or op == PREP_OPN_SCORE or op == PREP_OPN_DECISION_FUNCTION)
     var result = PythonObject(None)
     try:
         if fitting and len(args) > 1 and depth == 0:
             lda_native_labels(args[1], lda_native_context(context), True, classical_estimator_name(model))
         if swapped:
-            py_setitem(fields, "classes_", plain)
-        var reading = (operation == "predict" or operation == "predict_proba" or operation == "predict_log_proba"
-                       or operation == "predict_joint_log_proba" or operation == "score"
-                       or operation == "decision_function")
+            py_setitem(fields, nk[].k_classes_, plain)
+        var reading = (op == PREP_OPN_PREDICT or op == PREP_OPN_PREDICT_PROBA or op == PREP_OPN_PREDICT_LOG_PROBA
+                       or op == PREP_OPN_PREDICT_JOINT_LOG_PROBA or op == PREP_OPN_SCORE
+                       or op == PREP_OPN_DECISION_FUNCTION)
         if reading and plain is not public_labels:
             var view = py_call(native_loaded_module("builtins").dict, fields)
-            py_setitem(view, "classes_", plain)
-            result = _dispatch(model, operation, args, context, kind, view)
+            py_setitem(view, nk[].k_classes_, plain)
+            result = _dispatch(model, op, operation, args, context, kind, view)
         else:
-            result = _dispatch(model, operation, args, context, kind)
+            result = _dispatch(model, op, operation, args, context, kind)
     finally:
         lifecycle_end(model, operation, depth)
         if swapped:
             var after = py_fields(model)
-            if py_get(after, "classes_") is plain:
-                py_setitem(after, "classes_", public_labels)
+            if py_get(after, nk[].k_classes_) is plain:
+                py_setitem(after, nk[].k_classes_, public_labels)
     lifecycle_complete(model, operation, source, True, context)
     return lifecycle_result(model, operation, result, "classifier", context)
 
@@ -1633,19 +1675,23 @@ def prep_classify_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyO
     try:
         var call = PythonObject(from_borrowed=args_ptr)
         var model = call[0]
+        var nk = prep_keys()
+        # The code of the operation (one lookup with the caller's str); the
+        # name String stays for the lifecycle owner and the refusal texts.
+        var op = py_op_code(nk[].ops, call[1])
         var operation = String(call[1])
         var args = call[2]
         var context = call[3]
-        if operation == "nb_csr_ready":
+        if op == PREP_OPN_NB_CSR_READY:
             # a class-level probe: `model` is the class, args[0] its `_csr_ok`
             return PythonObject(_nb_csr_ready_op(Bool(py=args[0]), context)).steal_data()
         classical_connect_numpy(context)
         var public_kind = _public_kind(model, context)
         if public_kind != "":
-            return _classifier_public(model, public_kind, operation, args, context).steal_data()
-        var result = _dispatch(model, operation, args, context)
-        if py_type(model) is py_get(context, "lda_native_class"):
-            if operation == "fit" or operation == "fit_transform":
+            return _classifier_public(model, public_kind, op, operation, args, context).steal_data()
+        var result = _dispatch(model, op, operation, args, context)
+        if py_type(model) is py_get(context, nk[].k_lda_native_class):
+            if op == PREP_OPN_FIT or op == PREP_OPN_FIT_TRANSFORM:
                 classifier_after_fit(py_fields(model), args[0], context)
             result = _public_result(result, context)
         return result.steal_data()

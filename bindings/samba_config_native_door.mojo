@@ -6,7 +6,9 @@ from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.samba_admission_door import samba_admit
-from bindings.py_balanced import py_call, py_setattr, py_setitem
+from bindings.py_balanced import py_call, py_item, py_setattr, py_setitem
+from bindings.samba_keys_unpack import samba_keys, SAMBA_OPN_BLOCK_SHAPES, SAMBA_OPN_DICT, SAMBA_OPN_FROM_DICT, SAMBA_OPN_INITIALIZE, SAMBA_OPN_REGISTRY
+from bindings.py_keys import py_op_code
 
 
 def samba_config_init(config: PythonObject, args: PythonObject) raises -> PythonObject:
@@ -60,25 +62,37 @@ def samba_config_init(config: PythonObject, args: PythonObject) raises -> Python
 
 
 def samba_config_dict(config: PythonObject) raises -> PythonObject:
+    var nk = samba_keys()
     var result = Python.dict()
-    py_setitem(result, "vocab", config.vocab)
-    py_setitem(result, "d_model", config.d_model)
-    py_setitem(result, "layers", py_call(native_loaded_module("builtins").list, config.layers))
-    py_setitem(result, "n_heads", config.n_heads)
-    py_setitem(result, "n_kv_heads", config.n_kv_heads)
-    py_setitem(result, "head_dim", config.head_dim)
-    py_setitem(result, "intermediate", config.intermediate)
-    py_setitem(result, "tie_embeddings", config.tie_embeddings)
-    py_setitem(result, "norm_eps", config.norm_eps)
-    py_setitem(result, "dropout", config.dropout)
+    py_setitem(result, nk[].k_vocab, config.vocab)
+    py_setitem(result, nk[].k_d_model, config.d_model)
+    py_setitem(result, nk[].k_layers, py_call(native_loaded_module("builtins").list, config.layers))
+    py_setitem(result, nk[].k_n_heads, config.n_heads)
+    py_setitem(result, nk[].k_n_kv_heads, config.n_kv_heads)
+    py_setitem(result, nk[].k_head_dim, config.head_dim)
+    py_setitem(result, nk[].k_intermediate, config.intermediate)
+    py_setitem(result, nk[].k_tie_embeddings, config.tie_embeddings)
+    py_setitem(result, nk[].k_norm_eps, config.norm_eps)
+    py_setitem(result, nk[].k_dropout, config.dropout)
     return result
 
 
 def samba_config_from_dict(cls: PythonObject, value: PythonObject) raises -> PythonObject:
+    var nk = samba_keys()
     var bi = native_loaded_module("builtins")
     var args = bi.list()
-    for name in [String("vocab"), String("d_model"), String("layers"), String("n_heads"), String("n_kv_heads"), String("head_dim"), String("intermediate"), String("tie_embeddings"), String("norm_eps"), String("dropout")]:  # driver-loop: over fixed configuration keys
-        _ = py_call(args.append, value[name])
+    # The fixed configuration keys, in constructor order (held keys: no str
+    # build or key list per call).
+    _ = py_call(args.append, py_item(value, nk[].k_vocab))
+    _ = py_call(args.append, py_item(value, nk[].k_d_model))
+    _ = py_call(args.append, py_item(value, nk[].k_layers))
+    _ = py_call(args.append, py_item(value, nk[].k_n_heads))
+    _ = py_call(args.append, py_item(value, nk[].k_n_kv_heads))
+    _ = py_call(args.append, py_item(value, nk[].k_head_dim))
+    _ = py_call(args.append, py_item(value, nk[].k_intermediate))
+    _ = py_call(args.append, py_item(value, nk[].k_tie_embeddings))
+    _ = py_call(args.append, py_item(value, nk[].k_norm_eps))
+    _ = py_call(args.append, py_item(value, nk[].k_dropout))
     var result = py_call(bi.object.__new__, cls)
     _ = samba_config_init(result, args)
     return result
@@ -165,22 +179,23 @@ def samba_registry(config: PythonObject) raises -> PythonObject:
 def samba_config_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
     try:
         var args = PythonObject(from_borrowed=args_ptr)
-        var operation = String(args[0])
+        var nk = samba_keys()
+        var operation = py_op_code(nk[].ops, args[0])
         var values = args[1]
         samba_admit(operation, values, args[2])
         var result = PythonObject(None)
-        if operation == "initialize":
+        if operation == SAMBA_OPN_INITIALIZE:
             result = samba_config_init(values[0], values[1])
-        elif operation == "dict":
+        elif operation == SAMBA_OPN_DICT:
             result = samba_config_dict(values[0])
-        elif operation == "from_dict":
+        elif operation == SAMBA_OPN_FROM_DICT:
             result = samba_config_from_dict(values[0], values[1])
-        elif operation == "block_shapes":
+        elif operation == SAMBA_OPN_BLOCK_SHAPES:
             result = samba_block_shapes(values[0], String(values[1]))
-        elif operation == "registry":
+        elif operation == SAMBA_OPN_REGISTRY:
             result = samba_registry(values[0])
         else:
-            raise Error("SambaConfig: unknown native operation " + operation)
+            raise Error("SambaConfig: unknown native operation " + String(args[0]))
         return result.steal_data()
     except error:
         if String(error).startswith("TypeError:"):

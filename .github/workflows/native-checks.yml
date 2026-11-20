@@ -47,8 +47,18 @@ name: Native checks
 # on main runs on any older ref; tools/ops/cpu_box_checks_job.sh runs the same steps on a rented CPU box
 # (tools/cpu_central.sh check), every group at once across its cores. One copy of the check logic.
 #
+# apple-parse (lane fx-apple-fast-ci, 2026-11-20; suite=apple-parse only, never part of `all`): the Apple sets of the
+# Darwin plan (the legacy `fast` set, built with no -D MOJOLEARN_NUMERIC_IDENTICAL, and the Apple column of the
+# `identical` set; apple_sets picks, `host` adds the CPU column on the Apple CPU) CROSS-elaborated on Linux runners:
+# --target-triple arm64-apple-macosx11.0 --target-cpu apple-m1 and one named accelerator (apple_accel for a
+# default-class file, metal:1 for a metal1 file, as bindings/merged_build.sh passes it). No Apple machine. It is the
+# same parse-group step as the two parses above (tools/ops/native_checks_steps.sh, the Apple kinds); the same step on a
+# GitHub-hosted Mac is .github/workflows/apple-fast-check.yml. What it cannot find: anything the Metal lowering, the
+# metallib, the link or a run on an Apple GPU finds.
+#
 # MANUAL ONLY (light-checks.yml refuses any other workflow with a push or schedule trigger):
 #   gh workflow run native-checks.yml --ref main -f ref=<sha|branch> [-f filter='spectral_*,gbdt_*'] [-f suite=host-parse]
+#   gh workflow run native-checks.yml --ref main -f ref=<sha|branch> -f suite=apple-parse [-f apple_sets=fast,identical]
 on:
   workflow_dispatch:
     inputs:
@@ -68,9 +78,21 @@ on:
         required: false
         default: "900"
       suite:
-        description: "all (the checks and host-parse), checks, or host-parse (every release host group parsed)"
+        description: "all (the checks and host-parse), checks, host-parse (every release host group parsed), or apple-parse (the Apple sets cross-elaborated on Linux)"
         required: false
         default: "all"
+      apple_sets:
+        description: "suite apple-parse: comma list of fast, identical, host"
+        required: false
+        default: "fast,identical"
+      apple_units_per_job:
+        description: "suite apple-parse: most units of one merged file per runner (0 = whole files); 4 deals the 8-unit trees file into two parts, as PARSE_SPLIT does for device-parse"
+        required: false
+        default: "4"
+      apple_accel:
+        description: "suite apple-parse: --target-accelerator of a default-class file (apple-m1 .. apple-m5)"
+        required: false
+        default: "apple-m2"
 
 run-name: "native-checks ${{ inputs.ref }} ${{ inputs.suite || 'all' }} ${{ inputs.column }} ${{ inputs.filter }}"
 
@@ -94,6 +116,8 @@ jobs:
       host_count: ${{ steps.plan.outputs.host_count }}
       device_matrix: ${{ steps.plan.outputs.device_matrix }}
       device_count: ${{ steps.plan.outputs.device_count }}
+      apple_matrix: ${{ steps.plan.outputs.apple_matrix }}
+      apple_count: ${{ steps.plan.outputs.apple_count }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -106,7 +130,9 @@ jobs:
         with:
           ref: ${{ github.workflow_sha }}
           path: .wf
-          sparse-checkout: tools/ops/native_checks_steps.sh
+          sparse-checkout: |
+            tools/ops/native_checks_steps.sh
+            tools/ops/apple_fast_check.py
           sparse-checkout-cone-mode: false
           persist-credentials: false
       - name: List and shard the matching checks
@@ -115,6 +141,8 @@ jobs:
           IN_FILTER: ${{ inputs.filter }}
           IN_COLUMN: ${{ inputs.column }}
           IN_SUITE: ${{ inputs.suite || 'all' }}
+          APPLE_SETS: ${{ inputs.apple_sets || 'fast,identical' }}
+          APPLE_UNITS_PER_JOB: ${{ inputs.apple_units_per_job || '4' }}
         run: bash .wf/tools/ops/native_checks_steps.sh plan
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -124,6 +152,7 @@ jobs:
             planned.txt
             host.json
             device.json
+            apple.json
 
   host-parse:
     needs: plan
@@ -224,6 +253,57 @@ jobs:
         if: always()
         with:
           name: device-parse-${{ matrix.key }}
+          path: |
+            out/*.log
+            out/*.txt
+
+  # The Apple sets, cross-elaborated (see the header). One runner per merged file, all in parallel, each -j its cores;
+  # every file's errors are collected (fail-fast off), and a failed file fails the run.
+  apple-parse:
+    needs: plan
+    if: needs.plan.outputs.apple_count != '0' && needs.plan.outputs.apple_count != ''
+    name: apple-parse ${{ matrix.key }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.apple_matrix) }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .wf
+          sparse-checkout: tools/ops/native_checks_steps.sh
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Swap
+        run: bash tools/gha_release_box.sh swap 24 "$RUNNER_TEMP/swap.txt" || echo "no swap added"
+      - uses: prefix-dev/setup-pixi@v0.10.1
+        with:
+          run-install: true
+          cache: true
+          cache-write: false
+          environments: default
+      - name: Parse and elaborate ${{ matrix.key }} for the Apple target (mojo build --emit llvm --no-optimization)
+        timeout-minutes: 25
+        env:
+          KIND: ${{ matrix.kind }}
+          CLS: ${{ matrix.cls }}
+          STEM: ${{ matrix.stem }}
+          KEY: ${{ matrix.key }}
+          MEMBERS: ${{ matrix.members }}
+          APPLE_ACCEL: ${{ inputs.apple_accel || 'apple-m2' }}
+        run: bash .wf/tools/ops/native_checks_steps.sh parse-group
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: apple-parse-${{ matrix.key }}
           path: |
             out/*.log
             out/*.txt

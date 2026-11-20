@@ -46,12 +46,15 @@ from providers.python.estimator_lifecycle_pyapi_unpack import (
 from providers.python.hierarchy_public_lifecycle_pyapi_unpack import (
     HierarchyPublicCall,
 )
+from bindings.cluster_keys_unpack import cluster_keys
+from bindings.py_balanced import py_item
 
 
 def hierarchy_public_finish(model: PythonObject, result: PythonObject,
                             call: HierarchyPublicCall, context: PythonObject) raises -> PythonObject:
     if call.fitting:
         estimator_fit_complete(model, call.source, False, context)
-    if call.outside and py_type(result) is context["array_class"] and py_get(context, "ndarray") is not None:
+    var nk = cluster_keys()
+    if call.outside and py_type(result) is py_item(context, nk[].k_array_class) and py_get(context, nk[].k_ndarray) is not None:
         return native_array_ndarray_view(result, context)
     return result

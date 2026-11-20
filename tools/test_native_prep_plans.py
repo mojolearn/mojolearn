@@ -10,6 +10,8 @@ import types
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "tools"))
+from boundary_keys_plain import plain  # noqa: E402
 PACKAGE = ROOT / "python/mojolearn"
 MODULES = ("_expansion_linear", "_solver_impl", "_svm_impl", "svm", "_gp_impl", "kernel_methods", "neighbors",
            "linear_model", "_expansion_trees", "model_selection", "_metrics_impl")
@@ -137,6 +139,10 @@ def test_restored_fit_plans_match_public_native_argument_order(plans):
             # The boost kind is resolved once per call and passed down (boost_operation_of, fed1b4e384).
             assert 'boost_operation_of(model, kind, "trees_boost_" + method, call_args, context)' in lifecycle
             dispatch = (ROOT / 'bindings/trees_public_native_door.mojo').read_text()
+            # The dispatcher routes by the leaf code's range (lane bw3-trees,
+            # bindings/operation_names_trees.mojo); a name the table lacks keeps the prefix.
+            assert ('if operation >= TREES_FIRST_PUBLIC_BOOST and operation < TREES_END_PUBLIC_BOOST:\n'
+                    '        return tree_boost_public_operation(model, name, args, context)') in dispatch
             assert 'if operation.startswith("trees_public_boost_"):\n        return tree_boost_public_operation(' in dispatch
         else:
             assert operation == public_operation, name
@@ -182,7 +188,8 @@ def test_rfe_passes_fit_parameters_to_every_fit_without_python_attribute_hooks()
     assert 'len(fit_params) != 0' not in source
     assert 'attrgetter' not in source
     assert '_call(b.getattr, Python.tuple(est' not in source
-    helper = (ROOT / "bindings/prep_native_estimator_door.mojo").read_text()
+    helper = plain("bindings/prep_native_estimator_door.mojo",
+                   (ROOT / "bindings/prep_native_estimator_door.mojo").read_text())
     assert 'plan["fields_get"]' in helper
 
 
@@ -219,7 +226,8 @@ def test_meta_owners_do_not_call_member_methods_or_python_constructors():
     admission = (ROOT / 'bindings/trees_meta_admission_door.mojo').read_text()
     assert 'prep_estimator_call(model, "__admit__"' in admission
     assert 'msel_admit(args, prep_native_context(context))' in source
-    assert '"family_mcls_r2"' in source
+    # The r2 score is passed as the metrics owner's leaf code (lane bw2-metrics).
+    assert 'metrics_cls_operation(PythonObject(None), MCLS_OPN_FAMILY_MCLS_R2,' in source
     assert 'native_estimator_defaults' in source
     # The entry is connected when the family loads (b6aa87e41d), not in __init__.
     assert 'native_estimator_entry=selection._NATIVE' in (PACKAGE / '_families.py').read_text()

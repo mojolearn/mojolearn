@@ -22,6 +22,7 @@ from bindings.prep_native_estimator_door import prep_estimator_admit, prep_nativ
 from bindings.trees_meta_admission_door import meta_admit_configuration
 from bindings.msel_inputs_unpack import msel_admit, msel_input_count
 from bindings.parallel_public_result_door import parallel_public_result
+from bindings.trees_keys_unpack import trees_keys
 
 
 def meta_public_operation(model: PythonObject, operation: String, args: PythonObject,
@@ -68,16 +69,17 @@ def meta_public_operation(model: PythonObject, operation: String, args: PythonOb
     var result = PythonObject(None)
     if fitting:
         var b = native_loaded_module("builtins")
-        var saved = py_get(fields, "_mojolearn_fitting", PythonObject(0))
+        var nk = trees_keys()
+        var saved = py_get(fields, nk[].k__mojolearn_fitting, PythonObject(0))
         if py_type(saved) is not b.int:
             raise Error("TypeError: native meta-estimator fit depth must be an exact integer")
         var depth = Int(py=saved)
-        py_setitem(fields, "_mojolearn_fitting", PythonObject(depth + 1))
+        py_setitem(fields, nk[].k__mojolearn_fitting, PythonObject(depth + 1))
         try:
             result = meta_admitted_operation(model, kind, "trees_meta_" + method, call_args, context)
         finally:
             if depth:
-                py_setitem(fields, "_mojolearn_fitting", PythonObject(depth))
+                py_setitem(fields, nk[].k__mojolearn_fitting, PythonObject(depth))
             else:
                 _ = py_call(fields.pop, "_mojolearn_fitting", PythonObject(None))
         if not kind.endswith("_regressor") and kind != "multioutput_classifier":
@@ -89,8 +91,8 @@ def meta_public_operation(model: PythonObject, operation: String, args: PythonOb
             if names is None:
                 _ = py_call(fields.pop, "feature_names_in_", PythonObject(None))
             else:
-                py_setitem(fields, "feature_names_in_", names)
-            py_setitem(fields, "_mojolearn_fitted", PythonObject(True))
+                py_setitem(fields, nk[].k_feature_names_in_, names)
+            py_setitem(fields, nk[].k__mojolearn_fitted, PythonObject(True))
         if method == "fit":
             return result
     else:

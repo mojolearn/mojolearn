@@ -9,6 +9,8 @@ from bindings.native_error_class import error_without_class
 from bindings.optimizer_public_words_unpack import PYTHON_ERROR_PENDING, PENDING_PYTHON_ERROR, stash_python_error
 from bindings.prep_normalizer_lifecycle_unpack import _repr_admit
 from bindings.py_optional import py_present
+from bindings.prep_keys_unpack import prep_keys
+from bindings.py_balanced import py_item
 
 
 def _reference(address: Int) raises -> PythonObject:
@@ -19,6 +21,7 @@ def _reference(address: Int) raises -> PythonObject:
 
 
 def prep_fit_error(var error: Error, name: String, rows: Int, cols: Int) raises:
+    var nk = prep_keys()
     var b = native_loaded_module("builtins")
     var text = String(error)
     var pending_error = text == PYTHON_ERROR_PENDING
@@ -37,14 +40,14 @@ def prep_fit_error(var error: Error, name: String, rows: Int, cols: Int) raises:
             text = String(value)
             cause = py_present(py_call(category, value))
         elif py_type(value) is category:
-            var args = py_call(b.BaseException.__dict__["args"].__get__, value, category)
+            var args = py_call(py_item(b.BaseException.__dict__, nk[].k_args).__get__, value, category)
             try:
                 _repr_admit(args)
             except:
                 # Preserve the pending exception without invoking its args'
                 # repr hooks just to add small-fit context.
                 raise error^
-            text = String(py_call(b.BaseException.__dict__["__str__"], value))
+            text = String(py_call(py_item(b.BaseException.__dict__, nk[].k___str__), value))
             cause = py_present(value)
         else:
             raise error^

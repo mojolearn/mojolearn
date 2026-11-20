@@ -50,6 +50,8 @@ from bindings.native_buffer_owner_pack import native_buffer_view
 from bindings.native_array_storage_door import native_scratch_bytes, native_scratch_address
 from bindings.host_inference_scalars_door import host_inference_scalar
 from bindings.metrics_native_support_door import metric_is_integral, metric_is_bool
+from bindings.trees_keys_unpack import trees_keys
+from bindings.py_balanced import py_item
 
 comptime _WANT_SCORE_SAMPLES = 0
 comptime _WANT_DECISION_FUNCTION = 1
@@ -91,10 +93,13 @@ def _repr(value: PythonObject) raises -> String:
     return String(py_call(trees_builtins().repr, value))
 
 
-def _field(fields: PythonObject, model: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
-    """`self.<name>` of a stored constructor parameter."""
-    var value = py_get(fields, PythonObject(name), context["trees_missing"])
-    if value is context["trees_missing"]:
+def _field(fields: PythonObject, model: PythonObject, key: PythonObject, name: String,
+           context: PythonObject) raises -> PythonObject:
+    """`self.<name>` of a stored constructor parameter; `key` is the held key
+    of `name` (lane bw3-trees: a str was built from the name per call)."""
+    var nk = trees_keys()
+    var value = py_get(fields, key, py_item(context, nk[].k_trees_missing))
+    if value is py_item(context, nk[].k_trees_missing):
         raise Error("AttributeError: '" + String(py_type(model).__name__) + "' object has no attribute '" + name + "'")
     if name != "n_jobs" and name != "output_type":
         host_inference_scalar(value, context, True)
@@ -105,42 +110,43 @@ def iforest_validate(model: PythonObject, fields: PythonObject, context: PythonO
     """`IsolationForest._validate_params()`: the parameter checks, in order,
     with their wording; each resolved knob is stored as it is checked."""
     var b = trees_builtins()
-    var n_estimators = py_call_typed(b.int, _field(fields, model, "n_estimators", context))
+    var nk = trees_keys()
+    var n_estimators = py_call_typed(b.int, _field(fields, model, nk[].k_n_estimators, "n_estimators", context))
     if Bool(py=n_estimators < PythonObject(1)):
         raise Error(_PREFIX + "n_estimators must be at least 1, got " + _repr(n_estimators))
-    var max_samples = _field(fields, model, "max_samples", context)
+    var max_samples = _field(fields, model, nk[].k_max_samples, "max_samples", context)
     if Bool(py=py_call(b.isinstance, max_samples, b.str)):
         if String(py_call(max_samples.lower)) != "auto":
             raise Error(_PREFIX + "max_samples=" + _repr(max_samples) + " is not a name; it is 'auto', a positive int, "
                         + "or a float in (0.0, 1.0]")
-        py_setitem(fields, "_max_samples_mode", PythonObject(0))
-        py_setitem(fields, "_max_samples_int", PythonObject(256))
-        py_setitem(fields, "_max_samples_frac", PythonObject(1.0))
+        py_setitem(fields, nk[].k__max_samples_mode, PythonObject(0))
+        py_setitem(fields, nk[].k__max_samples_int, PythonObject(256))
+        py_setitem(fields, nk[].k__max_samples_frac, PythonObject(1.0))
     elif metric_is_bool(max_samples, context):
         raise Error(_PREFIX + "max_samples must be 'auto', an int, or a float, not a bool")
     elif metric_is_integral(max_samples, context):
         var count = py_call_typed(b.int, max_samples)
         if Bool(py=count <= PythonObject(0)):
             raise Error(_PREFIX + "max_samples must be a positive integer, got " + _repr(max_samples))
-        py_setitem(fields, "_max_samples_mode", PythonObject(1))
-        py_setitem(fields, "_max_samples_int", count)
-        py_setitem(fields, "_max_samples_frac", PythonObject(1.0))
+        py_setitem(fields, nk[].k__max_samples_mode, PythonObject(1))
+        py_setitem(fields, nk[].k__max_samples_int, count)
+        py_setitem(fields, nk[].k__max_samples_frac, PythonObject(1.0))
     else:
         var v = Float64(py=py_call_typed(b.float, max_samples))
         if not (v > 0.0 and v <= 1.0):
             raise Error(_PREFIX + "float max_samples must be in (0.0, 1.0], got " + _repr(max_samples))
-        py_setitem(fields, "_max_samples_mode", PythonObject(2))
-        py_setitem(fields, "_max_samples_int", PythonObject(256))
-        py_setitem(fields, "_max_samples_frac", PythonObject(v))
-    var max_depth = _field(fields, model, "max_depth", context)
+        py_setitem(fields, nk[].k__max_samples_mode, PythonObject(2))
+        py_setitem(fields, nk[].k__max_samples_int, PythonObject(256))
+        py_setitem(fields, nk[].k__max_samples_frac, PythonObject(v))
+    var max_depth = _field(fields, model, nk[].k_max_depth, "max_depth", context)
     if max_depth is None:
-        py_setitem(fields, "_max_depth", PythonObject(-1))
+        py_setitem(fields, nk[].k__max_depth, PythonObject(-1))
     else:
         var depth = py_call_typed(b.int, max_depth)
-        py_setitem(fields, "_max_depth", depth)
+        py_setitem(fields, nk[].k__max_depth, depth)
         if Bool(py=depth < PythonObject(1)):
             raise Error(_PREFIX + "max_depth is None (their auto) or a positive int, got " + _repr(max_depth))
-    var max_features = _field(fields, model, "max_features", context)
+    var max_features = _field(fields, model, nk[].k_max_features, "max_features", context)
     if metric_is_bool(max_features, context):
         raise Error(_PREFIX + "max_features must be an int or a float, not a bool")
     var features_error = String(_PREFIX + "max_features must be an int in [1, n_features] or a float in (0.0, 1.0], got ")
@@ -148,61 +154,62 @@ def iforest_validate(model: PythonObject, fields: PythonObject, context: PythonO
         var count = py_call_typed(b.int, max_features)
         if Bool(py=count < PythonObject(1)):
             raise Error(features_error + _repr(max_features))
-        py_setitem(fields, "_max_features_mode", PythonObject(1))
-        py_setitem(fields, "_max_features_int", count)
-        py_setitem(fields, "_max_features_frac", PythonObject(1.0))
+        py_setitem(fields, nk[].k__max_features_mode, PythonObject(1))
+        py_setitem(fields, nk[].k__max_features_int, count)
+        py_setitem(fields, nk[].k__max_features_frac, PythonObject(1.0))
     else:
         var v = Float64(py=py_call_typed(b.float, max_features))
         if not (v > 0.0 and v <= 1.0):
             raise Error(features_error + _repr(max_features))
-        py_setitem(fields, "_max_features_mode", PythonObject(0))
-        py_setitem(fields, "_max_features_int", PythonObject(0))
-        py_setitem(fields, "_max_features_frac", PythonObject(v))
-    var contamination = _field(fields, model, "contamination", context)
+        py_setitem(fields, nk[].k__max_features_mode, PythonObject(0))
+        py_setitem(fields, nk[].k__max_features_int, PythonObject(0))
+        py_setitem(fields, nk[].k__max_features_frac, PythonObject(v))
+    var contamination = _field(fields, model, nk[].k_contamination, "contamination", context)
     var contamination_error = String(_PREFIX + "contamination must be 'auto' or a float in the range (0.0, 0.5], got ")
     if Bool(py=py_call(b.isinstance, contamination, b.str)):
         if String(py_call(contamination.lower)) != "auto":
             raise Error(contamination_error + _repr(contamination))
-        py_setitem(fields, "_contamination_auto", PythonObject(True))
-        py_setitem(fields, "_contamination", PythonObject(0.0))
+        py_setitem(fields, nk[].k__contamination_auto, PythonObject(True))
+        py_setitem(fields, nk[].k__contamination, PythonObject(0.0))
     else:
         var v = Float64(py=py_call_typed(b.float, contamination))
         if not (v > 0.0 and v <= 0.5):
             raise Error(contamination_error + _repr(contamination))
-        py_setitem(fields, "_contamination_auto", PythonObject(False))
-        py_setitem(fields, "_contamination", PythonObject(v))
-    var random_state = _field(fields, model, "random_state", context)
+        py_setitem(fields, nk[].k__contamination_auto, PythonObject(False))
+        py_setitem(fields, nk[].k__contamination, PythonObject(v))
+    var random_state = _field(fields, model, nk[].k_random_state, "random_state", context)
     var seed = PythonObject(0)
     if random_state is not None:
         seed = py_call_typed(b.int, random_state)
         if Bool(py=seed < PythonObject(0)) or Bool(py=seed > PythonObject(4294967295)):
             raise Error(_PREFIX + "expected 0 <= random_state <= 2**32 - 1, got " + _repr(random_state))
-    if Bool(py=py_call(b.bool, _field(fields, model, "warm_start", context))):
+    if Bool(py=py_call(b.bool, _field(fields, model, nk[].k_warm_start, "warm_start", context))):
         raise Error("NotImplementedError: " + _PREFIX + "warm_start=True is not supported "
                     + "(cuML raises UnsupportedOnGPU for it too)")
-    if _field(fields, model, "n_jobs", context) is not None:
+    if _field(fields, model, nk[].k_n_jobs, "n_jobs", context) is not None:
         raise Error("NotImplementedError: " + _PREFIX + "n_jobs is refused; it is "
                     + "scikit-learn's CPU thread count and there is no CPU path in "
                     + "this library to spread")
-    if Bool(py=py_call(b.bool, _field(fields, model, "verbose", context))):
+    if Bool(py=py_call(b.bool, _field(fields, model, nk[].k_verbose, "verbose", context))):
         raise Error("NotImplementedError: " + _PREFIX + "verbose is refused; this implementation "
                     + "prints no log lines, so accepting it would be accepting-"
                     + "and-ignoring")
-    if _field(fields, model, "output_type", context) is not None:
+    if _field(fields, model, nk[].k_output_type, "output_type", context) is not None:
         raise Error("NotImplementedError: " + _PREFIX + "output_type is a cuML-internal "
                     + "array-type selector; this package returns mojolearn Arrays")
-    py_setitem(fields, "_n_estimators", n_estimators)
-    py_setitem(fields, "_bootstrap", PythonObject(Bool(py=py_call(b.bool, _field(fields, model, "bootstrap", context)))))
-    py_setitem(fields, "_seed", seed)
+    py_setitem(fields, nk[].k__n_estimators, n_estimators)
+    py_setitem(fields, nk[].k__bootstrap, PythonObject(Bool(py=py_call(b.bool, _field(fields, model, nk[].k_bootstrap, "bootstrap", context)))))
+    py_setitem(fields, nk[].k__seed, seed)
 
 
 def _mode(fields: PythonObject, context: PythonObject) raises -> String:
     """The tier `NumericModeMixin._bind` resolves: `numeric_mode`, or the
     process default."""
     var b = trees_builtins()
-    var mode = py_get(fields, "numeric_mode")
+    var nk = trees_keys()
+    var mode = py_get(fields, nk[].k_numeric_mode)
     if mode is None:
-        mode = context["backend_fields"]["_DEFAULT_MODE"]
+        mode = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
     host_inference_scalar(mode, context)
     if not Bool(py=py_call(b.isinstance, mode, b.str)):
         raise Error("numeric_mode must be fast, identical or None")
@@ -216,15 +223,16 @@ def _mode(fields: PythonObject, context: PythonObject) raises -> String:
 def _params(model: PythonObject, fields: PythonObject, n_train: Int, n_features: Int, n_query: Int, want: Int,
             context: PythonObject) raises -> PythonObject:
     """`IsolationForest._params`: the sixteen `iforest_run` slots."""
-    if not py_contains(fields, "_seed"):  # an instance assembled without fit or load
+    var nk = trees_keys()
+    if not py_contains(fields, nk[].k__seed):  # an instance assembled without fit or load
         iforest_validate(model, fields, context)
     var b = trees_builtins()
     return Python.list(
-        PythonObject(n_train), PythonObject(n_features), PythonObject(n_query), fields["_n_estimators"],
-        fields["_max_samples_mode"], fields["_max_samples_int"], fields["_max_samples_frac"], fields["_max_depth"],
-        fields["_max_features_mode"], fields["_max_features_int"], fields["_max_features_frac"],
-        PythonObject(1 if Bool(py=py_call(b.bool, fields["_bootstrap"])) else 0), fields["_seed"],
-        PythonObject(1 if Bool(py=py_call(b.bool, fields["_contamination_auto"])) else 0), fields["_contamination"],
+        PythonObject(n_train), PythonObject(n_features), PythonObject(n_query), py_item(fields, nk[].k__n_estimators),
+        py_item(fields, nk[].k__max_samples_mode), py_item(fields, nk[].k__max_samples_int), py_item(fields, nk[].k__max_samples_frac), py_item(fields, nk[].k__max_depth),
+        py_item(fields, nk[].k__max_features_mode), py_item(fields, nk[].k__max_features_int), py_item(fields, nk[].k__max_features_frac),
+        PythonObject(1 if Bool(py=py_call(b.bool, py_item(fields, nk[].k__bootstrap))) else 0), py_item(fields, nk[].k__seed),
+        PythonObject(1 if Bool(py=py_call(b.bool, py_item(fields, nk[].k__contamination_auto))) else 0), py_item(fields, nk[].k__contamination),
         PythonObject(want),
     )
 
@@ -234,9 +242,10 @@ def _release(model: PythonObject, fields: PythonObject) raises:
     lifetime releases it in the binding). Fields an older build stored in
     the instance dictionary are dropped too."""
     trees_side_drop(_TOKEN_SLOT, model)
-    if py_contains(fields, "_if_token"):
+    var nk = trees_keys()
+    if py_contains(fields, nk[].k__if_token):
         _ = py_call(fields.pop, "_if_token", PythonObject(0))
-    if py_contains(fields, "_if_lifetime"):
+    if py_contains(fields, nk[].k__if_lifetime):
         _ = py_call(fields.pop, "_if_lifetime", PythonObject(None))
 
 
@@ -296,7 +305,8 @@ def _run(model: PythonObject, fields: PythonObject, x: AdmittedX, train: PythonO
     var same_train = held is not None and held[1] is train
     if keep:
         _ = py_call(params.append, PythonObject(0 if fresh or not same_train else held_token))
-    var run = py_get(svm, "iforest_run")
+    var nk = trees_keys()
+    var run = py_get(svm, nk[].k_iforest_run)
     if run is None:
         raise Error("ImportError: mojolearn: the svm binding has no iforest_run")
     _ = trees_call(run, Python.list(PythonObject(trees_address(train)), PythonObject(x.address),
@@ -309,9 +319,9 @@ def _run(model: PythonObject, fields: PythonObject, x: AdmittedX, train: PythonO
     var words = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=trees_address(info))
     _ = info  # keep the Python object alive through the native call above
     # `array.array("f", [float(info[0])])[0]`: the float32 offset as a float.
-    py_setitem(fields, "offset_", PythonObject(Float64(Float32(words[0]))))
+    py_setitem(fields, nk[].k_offset_, PythonObject(Float64(Float32(words[0]))))
     _ = info  # keep the Python object alive through the native call above
-    py_setitem(fields, "max_samples_", PythonObject(Int(words[1])))
+    py_setitem(fields, nk[].k_max_samples_, PythonObject(Int(words[1])))
     _ = info  # keep the Python object alive through the native call above
     if keep:
         var token = Int(words[3])
@@ -324,7 +334,7 @@ def _run(model: PythonObject, fields: PythonObject, x: AdmittedX, train: PythonO
             if token == held_token and held is not None:
                 lifetime = held[2]
             else:
-                var release = py_get(svm, "iforest_resident_release")
+                var release = py_get(svm, nk[].k_iforest_resident_release)
                 if release is not None:
                     lifetime = trees_resident_new(release, token)
             # A model without weak references keeps no record: the record
@@ -339,10 +349,11 @@ def _as_array(x: AdmittedX, context: PythonObject) raises -> PythonObject:
     returned): the converted copy, the caller's Array, or a zero-copy Array
     view of the caller's buffer (`Array.from_buffer`)."""
     var b = trees_builtins()
-    if py_type(x.array) is context["array_class"]:
+    var nk = trees_keys()
+    if py_type(x.array) is py_item(context, nk[].k_array_class):
         return x.array
     var view = x.array
-    var array = native_storage_allocate(context["array_class"])
+    var array = native_storage_allocate(py_item(context, nk[].k_array_class))
     py_setattr(array, "_store", view.obj)
     py_setattr(array, "_base", PythonObject(None))
     py_setattr(array, "_pin", view)
@@ -394,7 +405,8 @@ def _fit(model: PythonObject, X: PythonObject, want: Int, context: PythonObject,
     var view = classical_view(X, context, "X")
     var copied = not ((view is X or view is copy_source) and Int(py=view.ndim) == 2
                       and classical_is_f32(view, context) and classical_c_order(view, context))
-    py_setitem(fields, "input_copied_", PythonObject(copied))
+    var nk = trees_keys()
+    py_setitem(fields, nk[].k_input_copied_, PythonObject(copied))
     # Lane perf-iforest (2026-11-13): as_array=False. With as_array=True an
     # ndarray input (the board's float32 C-order X) was never borrowed: the
     # admission allocated a ZERO-FILLED Array store (native_array_zeros, one
@@ -467,7 +479,7 @@ def _fit(model: PythonObject, X: PythonObject, want: Int, context: PythonObject,
         # byte view of its buffer, whose `obj` is the caller's ndarray, so
         # `_as_array` wraps it as the zero-copy Array 0.8.55's
         # `Array.from_buffer` made.
-        if py_type(x.array) is not context["array_class"]:
+        if py_type(x.array) is not py_item(context, nk[].k_array_class):
             var caller_view = py_call(native_buffer_view(x.array).cast, "B")
             x = admitted_words(caller_view, x.address, x.rows, x.cols)
     elif x.borrowed:
@@ -478,7 +490,7 @@ def _fit(model: PythonObject, X: PythonObject, want: Int, context: PythonObject,
             host_parallel_copy_bytes(dst, x.address, count * 4)
         _ = x  # keep the caller's buffer alive through the copy above
         x = admitted_words(native_buffer_view(owned), dst, x.rows, x.cols)
-    elif py_type(x.array) is not context["array_class"]:
+    elif py_type(x.array) is not py_item(context, nk[].k_array_class):
         # The cast copy admit_f32 made into uninitialised storage (an ndarray
         # with NumPy): this fit owns it, so it is the training matrix as it
         # is. `_as_array` wraps its one-dimensional byte view as the fitted
@@ -495,8 +507,8 @@ def _fit(model: PythonObject, X: PythonObject, want: Int, context: PythonObject,
     _release(model, fields)
     _ = py_call(fields.pop, _FOREST_FIELD, PythonObject(None))
     var train = _as_array(x, context)
-    py_setitem(fields, "_x", train)
-    py_setitem(fields, "n_features_in_", PythonObject(x.cols))
+    py_setitem(fields, nk[].k__x, train)
+    py_setitem(fields, nk[].k_n_features_in_, PythonObject(x.cols))
     # `fit` scores the training matrix's first row (the Python `x[:1]`
     # copy: the same bytes, read in place); `fit_predict` predicts X.
     var query = admitted_words(train, x.address, 1 if want < 0 else x.rows, x.cols)
@@ -530,16 +542,17 @@ def _score(model: PythonObject, X: PythonObject, want: Int, wide: Bool,
            context: PythonObject) raises -> PythonObject:
     """`score_samples` / `decision_function` / `predict`: `_run(X, want)`."""
     var fields = py_fields(model)
-    var trained = py_contains(fields, "_x")
+    var nk = trees_keys()
+    var trained = py_contains(fields, nk[].k__x)
     if not trained and not py_contains(fields, _FOREST_FIELD):
         raise Error(_PREFIX + "call fit() first")
     var x = admit_f32(X, 2, "X", context, finite=False)
-    var fitted = Int(py=py_call(trees_builtins().int, fields["n_features_in_"]))
+    var fitted = Int(py=py_call(trees_builtins().int, py_item(fields, nk[].k_n_features_in_)))
     if x.cols != fitted:
         raise Error(_PREFIX + "X has " + String(x.cols) + " features, fit saw " + String(fitted))
     if not trained:
         return _run_forest(model, fields, x, want, wide, context)
-    return _run(model, fields, x, fields["_x"], want, False, wide, context)
+    return _run(model, fields, x, py_item(fields, nk[].k__x), want, False, wide, context)
 
 
 def iforest_forest_words(forest: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -585,7 +598,8 @@ def _keep_token(model: PythonObject, svm: PythonObject, held: PythonObject, held
     if token == held_token and held is not None:
         lifetime = held[2]
     else:
-        var release = py_get(svm, "iforest_resident_release")
+        var nk = trees_keys()
+        var release = py_get(svm, nk[].k_iforest_resident_release)
         if release is not None:
             lifetime = trees_resident_new(release, token)
     _ = trees_side_put(_TOKEN_SLOT, model, Python.list(PythonObject(token), anchor, lifetime, svm))
@@ -625,9 +639,10 @@ def _run_forest(model: PythonObject, fields: PythonObject, x: AdmittedX, want: I
     var held_token = Int(py=held[0]) if held is not None else 0
     var same = held is not None and held[1] is forest
     var b = trees_builtins()
+    var nk = trees_keys()
     var params = Python.list(
-        PythonObject(x.cols), PythonObject(n_query), py_call_typed(b.int, fields["max_samples_"]),
-        py_call_typed(b.float, fields["offset_"]), PythonObject(want + _WANT_WIDE_BASE if wide_out else want),
+        PythonObject(x.cols), PythonObject(n_query), py_call_typed(b.int, py_item(fields, nk[].k_max_samples_)),
+        py_call_typed(b.float, py_item(fields, nk[].k_offset_)), PythonObject(want + _WANT_WIDE_BASE if wide_out else want),
         PythonObject(held_token if same else 0),
     )
     _ = trees_call(run, Python.list(unpacked[0], PythonObject(x.address),
@@ -659,13 +674,14 @@ def iforest_export_forest(model: PythonObject, context: PythonObject) raises -> 
     if py_contains(fields, _FOREST_FIELD):
         _ = iforest_forest_words(fields[_FOREST_FIELD], context)  # refuse a malformed held forest here
         return fields[_FOREST_FIELD]
-    if not py_contains(fields, "_x"):
+    var nk = trees_keys()
+    if not py_contains(fields, nk[].k__x):
         raise Error("RuntimeError: " + _PREFIX + "this estimator is not fitted yet")
     var svm = trees_table(context, _mode(fields, context), "_mojolearn_svm")
     var export = trees_entry(svm, "iforest_forest_export")
     if export is None:
         raise Error("ImportError: mojolearn: the svm binding has no iforest_forest_export")
-    var train = fields["_x"]
+    var train = py_item(fields, nk[].k__x)
     var params = _params(model, fields, Int(py=train.shape[0]), Int(py=train.shape[1]), 1, _WANT_SCORE_SAMPLES,
                          context)
     var resident = _resident_table(svm)
@@ -716,7 +732,8 @@ def iforest_getstate(model: PythonObject, context: PythonObject) raises -> Pytho
     var state = py_call(trees_builtins().dict, fields)
     _ = py_call(state.pop, "_if_token", PythonObject(None))
     _ = py_call(state.pop, "_if_lifetime", PythonObject(None))
-    if py_contains(fields, "_x") or py_contains(fields, _FOREST_FIELD):
+    var nk = trees_keys()
+    if py_contains(fields, nk[].k__x) or py_contains(fields, _FOREST_FIELD):
         py_setitem(state, _FOREST_FIELD, iforest_export_forest(model, context))
         _ = py_call(state.pop, "_x", PythonObject(None))
     _ = fields

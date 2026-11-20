@@ -10,6 +10,16 @@
 # into the score with the same binary64 operations in the same order. The
 # micro-average precision no longer runs the one-vs-rest curve program
 # whose results it never read. Same kernels: the bits do not move.
+from bindings.metrics_keys_unpack import metrics_keys
+from bindings.py_balanced import py_item
+from bindings.operation_names_mexp import (
+    MEXP_OPN_FAMILY_MEXP_CURVE_AUC,
+    MEXP_OPN_FAMILY_MEXP_CURVE_AVERAGE_PRECISION,
+    MEXP_OPN_FAMILY_MEXP_CURVE_DET,
+    MEXP_OPN_FAMILY_MEXP_CURVE_RANKING_REPORT,
+    MEXP_OPN_FAMILY_MEXP_CURVE_ROC,
+    MEXP_OPN_FAMILY_MEXP_CURVE_TOP_K,
+)
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.admitted_family_door import admit_family_f64
@@ -156,7 +166,8 @@ def _auc_values(v: PythonObject, name: String, context: PythonObject) raises -> 
     if Bool(py=py_call(b.isinstance, values, seq)):
         var nested = Bool(py=py_call(b.any, py_call(b.map, b.isinstance, values, py_call(it.repeat, seq))))
         if not nested:
-            var store = py_call(context["array_type"], PythonObject("d"), values)
+            var nk = metrics_keys()
+            var store = py_call(py_item(context, nk[].k_array_type), PythonObject("d"), values)
             var n = mx_len(store)
             var out = family_array(Python.tuple(PythonObject(n)), "<f8", context)
             if n > 0:
@@ -171,7 +182,8 @@ def _auc_values(v: PythonObject, name: String, context: PythonObject) raises -> 
 
 
 def _is_ndarray(v: PythonObject, context: PythonObject) raises -> Bool:
-    var nd = py_get(context, "ndarray")
+    var nk = metrics_keys()
+    var nd = py_get(context, nk[].k_ndarray)
     return nd is not None and Bool(py=py_call(mx_b().isinstance, v, nd))
 
 
@@ -194,7 +206,8 @@ def _auc(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var arena = metric_door_run(prog, PythonObject(None), context)
     var flags = arena.i32(OUT + 2)
     if (flags & _AX_NEG) and (flags & _AX_POS):
-        var store = py_call(context["array_type"], PythonObject("d"), py_call(context["native_bytes_type"], 8 * n))
+        var nk = metrics_keys()
+        var store = py_call(py_item(context, nk[].k_array_type), PythonObject("d"), py_call(py_item(context, nk[].k_native_bytes_type), 8 * n))
         unsafe_memcpy(dest=FAMILY_F64P(unsafe_from_address=Int(py=py_call(store.buffer_info)[0])),
                src=FAMILY_F64P(unsafe_from_address=Int(py=classical_address(xa))), count=n)
         _ = xa  # keep the Python object alive through the native call above
@@ -517,8 +530,9 @@ def _ranking_report(args: PythonObject, context: PythonObject) raises -> PythonO
     if arena.f32(totals[1] + 1) == 0:
         mx_warn("No positive class found in y_true, recall is set to one for all thresholds.", b.UserWarning, 2, context)
     var result = Python.dict()
-    py_setitem(result, "roc_auc", PythonObject(arena.f64(outputs[0])))
-    py_setitem(result, "average_precision", PythonObject(arena.f64(outputs[2])))
+    var nk = metrics_keys()
+    py_setitem(result, nk[].k_roc_auc, PythonObject(arena.f64(outputs[0])))
+    py_setitem(result, nk[].k_average_precision, PythonObject(arena.f64(outputs[2])))
     if include_curves:
         for kind in range(2):  # driver-loop: fixed ROC/PR result tuples
             var output = curve_outputs[2 * kind]
@@ -531,19 +545,19 @@ def _ranking_report(args: PythonObject, context: PythonObject) raises -> PythonO
     return result
 
 
-def metrics_exp_curve_operation(operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def metrics_exp_curve_operation(operation: Int, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """The curve metrics; each shell passes its arguments in the order its
     docstring's owner function names (see python/mojolearn/_expansion_metrics.py)."""
-    if operation == "family_mexp_curve_ranking_report":
+    if operation == MEXP_OPN_FAMILY_MEXP_CURVE_RANKING_REPORT:
         return _ranking_report(args, context)
-    if operation == "family_mexp_curve_roc":
+    if operation == MEXP_OPN_FAMILY_MEXP_CURVE_ROC:
         return _roc_curve(args, context)
-    if operation == "family_mexp_curve_det":
+    if operation == MEXP_OPN_FAMILY_MEXP_CURVE_DET:
         return _det_curve(args, context)
-    if operation == "family_mexp_curve_auc":
+    if operation == MEXP_OPN_FAMILY_MEXP_CURVE_AUC:
         return _auc(args, context)
-    if operation == "family_mexp_curve_average_precision":
+    if operation == MEXP_OPN_FAMILY_MEXP_CURVE_AVERAGE_PRECISION:
         return _average_precision(args, context)
-    if operation == "family_mexp_curve_top_k":
+    if operation == MEXP_OPN_FAMILY_MEXP_CURVE_TOP_K:
         return _top_k(args, context)
-    raise Error("RuntimeError: unknown curve metric " + operation)
+    raise Error("RuntimeError: unknown curve metric " + String(operation))

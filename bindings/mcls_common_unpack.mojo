@@ -61,6 +61,7 @@ from bindings.p3_labels_metrics_native_door import (
     p3_integral_list, p3_text_codes, p3_text_classes, P3_TEXT_OK)
 from bindings.py_cpython_table import cpython_table
 from bindings.py_optional import py_present
+from bindings.metrics_keys_unpack import metrics_keys
 
 
 
@@ -345,7 +346,8 @@ def mc_label_list(values: PythonObject, name: String, allow_empty: Bool, context
         # buffer decode, a PyLong parsed from text, a Python append) becomes
         # one presized list filled by C calls: exact ints kept, bools 0 / 1,
         # NumPy integer scalars their exact int (bindings/p3_labels_metrics_native.mojo).
-        return Python.tuple(p3_integral_list(labels, py_get(context, "bool_types")), PythonObject("integer"))
+        var nk = metrics_keys()
+        return Python.tuple(p3_integral_list(labels, py_get(context, nk[].k_bool_types)), PythonObject("integer"))
     raise Error("TypeError: " + name + " must contain only strings or only integers; "
                 + "floating labels, missing labels and mixed types are unsupported")
 

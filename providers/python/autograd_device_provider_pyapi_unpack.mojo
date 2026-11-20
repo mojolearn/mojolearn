@@ -9,6 +9,8 @@ from providers.python.autograd_program_arrays_pyapi_door import program_admit_va
 from providers.python.neural_descriptor_pyapi_door import NativeDescriptorResource, NeuralDescriptorProvider, neural_descriptor_execute, neural_descriptor_entry
 from sequence.neural_model_dispatch import PROGRAM_DEVICE_RUN
 from autograd.autograd_device_provider_run import _descriptor_kind
+from bindings.autograd_keys_unpack import autograd_keys
+from bindings.py_balanced import py_item
 
 
 def _metadata_sequence(value: PythonObject) raises:
@@ -21,22 +23,23 @@ def imported_device_provider_run(snapshot: PythonObject, descriptors: PythonObje
                                  output_addresses: PythonObject) raises:
     var fields = snapshot[0]
     var session_fields = snapshot[1]
-    if session_fields["_id"] is None:
+    var nk = autograd_keys()
+    if py_item(session_fields, nk[].k__id) is None:
         raise Error("ValueError: this session is closed")
     var b = native_loaded_module("builtins")
-    if py_type(session_fields["_id"]) is not b.int or py_type(fields["_id"]) is not b.int:
+    if py_type(py_item(session_fields, nk[].k__id)) is not b.int or py_type(py_item(fields, nk[].k__id)) is not b.int:
         raise Error("TypeError: program and Session handles require native integers")
-    var lifetime = session_fields["_lifetime"]
+    var lifetime = py_item(session_fields, nk[].k__lifetime)
     var owner = lifetime.downcast_value_ptr[NativeDescriptorResource]()
-    if owner[].handle == 0 or owner[].handle != Int(py=session_fields["_id"]):
+    if owner[].handle == 0 or owner[].handle != Int(py=py_item(session_fields, nk[].k__id)):
         raise Error("TypeError: Session handle differs from its native registry owner")
     var provider = owner[].provider.downcast_value_ptr[NeuralDescriptorProvider]()
-    var binding = session_fields["_b"]
+    var binding = py_item(session_fields, nk[].k__b)
     # _b can be the supported Python module facade. Compare its retained native
     # factory, rather than requiring that facade to be the extension module.
     if py_type(binding) is not py_type(b):
         raise Error("TypeError: Session binding requires exact module storage")
-    if py_get(py_fields(binding), "model_native_api_v1") is not provider[].factory:
+    if py_get(py_fields(binding), nk[].k_model_native_api_v1) is not provider[].factory:
         raise Error("TypeError: Session binding differs from its native provider")
     if provider[].factory is not neural_descriptor_entry(provider[].module, "model_native_api_v1"):
         raise Error("TypeError: Session provider factory changed; reconnect the compiled binding")
@@ -55,7 +58,7 @@ def imported_device_provider_run(snapshot: PythonObject, descriptors: PythonObje
     var addresses = List[Int]()
     var words = owner[].context.copy()
     words.append(owner[].handle)
-    words.append(Int(py=fields["_id"]))
+    words.append(Int(py=py_item(fields, nk[].k__id)))
     words.append(len(inputs))
     words.append(len(outputs))
     for k in range(len(inputs)):  # driver-loop: over admitted device input metadata

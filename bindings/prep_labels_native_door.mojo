@@ -40,6 +40,11 @@ from bindings.user_objects_native_door import _Env, _f32_exact, _indicator, _new
 from bindings.py_cpython_table import cpython_table
 from bindings.p3_labels_metrics_native_door import p3_item, p3_type_word, p3_dict_codes, p3_decode_list
 from core.label_words_impl import label_codes_i32_to_f64
+from bindings.prep_keys_unpack import (
+    prep_keys,
+    PREP_OPN_FIT, PREP_OPN_FIT_TRANSFORM, PREP_OPN_INVERSE_TRANSFORM, PREP_OPN_TRANSFORM,
+)
+from bindings.py_balanced import py_item
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime F64P = MutPointer[Float64, MutUntrackedOrigin]
@@ -105,8 +110,9 @@ def _raise_python(cls: PythonObject, message: String) raises:
 
 
 def _check_fitted(fields: PythonObject, name: String) raises:
+    var nk = prep_keys()
     # `_check_fitted`: hasattr(self, "_classes").
-    if not py_contains(fields, "_classes"):
+    if not py_contains(fields, nk[].k__classes):
         raise Error("RuntimeError: mojolearn: this " + name + " instance is not fitted yet")
 
 
@@ -115,7 +121,8 @@ def _text(value: PythonObject) raises -> String:
 
 
 def _out(context: PythonObject) raises -> PythonObject:
-    return context["output_context"]
+    var nk = prep_keys()
+    return py_item(context, nk[].k_output_context)
 
 
 def _take_words(ran: PythonObject, offset: Int, count: Int, shape: PythonObject, code: String, typestr: String,
@@ -123,6 +130,7 @@ def _take_words(ran: PythonObject, offset: Int, count: Int, shape: PythonObject,
     """`_Prog.get_i32(off, shape)` (code "i", 4-byte words) and `_class_words`
     (code "q" / "d", 8-byte words): a copy of the program's words at
     `offset` (the output region at OUT_MARK) as an Array of `typestr`."""
+    var nk = prep_keys()
     if count == 0:
         return classical_wrap_array(native_array_empty(code), shape, typestr, "C", _out(context))
     var b = _builtins()
@@ -156,7 +164,7 @@ def _take_words(ran: PythonObject, offset: Int, count: Int, shape: PythonObject,
         # and stays. Limits: NVIDIA only (AGENTS.md part 8).
         var typed = py_call(py_call(part.cast, "B").cast, code)
         var ndim = Int(py=py_call(b.len, shape))
-        var result = py_call(b.object.__new__, context["array_class"])
+        var result = py_call(b.object.__new__, py_item(context, nk[].k_array_class))
         py_setattr(result, "_store", PythonObject(None))
         py_setattr(result, "_base", store)
         py_setattr(result, "_pin", PythonObject(None))
@@ -458,8 +466,9 @@ def _numeric_label_words(values: PythonObject, mut words: List[Float64], mut all
     `count_ints`, `all_ints` tells whether every label is integral. This
     replaces the Python float list f32_exact built and the one or two further
     walks over the labels that read it back."""
+    var nk = prep_keys()
     var env = _Env()
-    var integral = context["labels_integral_type"] if count_ints else PythonObject(None)
+    var integral = py_item(context, nk[].k_labels_integral_type) if count_ints else PythonObject(None)
     # Exact int and float labels (the common case) are read by type pointer
     # and PyFloat_AsDouble (the same double float(v) returns, the same
     # OverflowError for an int too large); an exact int is integral, an
@@ -733,7 +742,8 @@ def _text_labels(y: PythonObject, context: PythonObject, mut table: StrTable) ra
     `table` (every label's code points, trailing NULs dropped, which is the
     str `tolist()` gives). False for anything else (a list, another dtype, an
     empty or multi-dimensional array), which keeps the label input step."""
-    var ndarray = py_get(context, "ndarray")
+    var nk = prep_keys()
+    var ndarray = py_get(context, nk[].k_ndarray)
     if ndarray is None or not (py_type(y) is ndarray):
         return False
     if String(py=y.dtype.kind) != "U" or Int(py=y.ndim) != 1 or Int(py=y.size) == 0:
@@ -814,7 +824,8 @@ def _code_buffer(y: PythonObject, context: PythonObject, mut codes: List[Int]) r
     into `codes` (the `int(v)` of each entry `_int64_codes` read from its
     `tolist()`). False for anything else, including uint64 storage (whose
     words past int64 the list path refuses with OverflowError)."""
-    var ndarray = py_get(context, "ndarray")
+    var nk = prep_keys()
+    var ndarray = py_get(context, nk[].k_ndarray)
     if ndarray is None or not (py_type(y) is ndarray):
         return False
     var kind = String(py=y.dtype.kind)
@@ -841,11 +852,12 @@ def _multilabel_buffer(y: PythonObject, shape: PythonObject, context: PythonObje
     """`_multilabel_buffer`: a 2-D buffer of finite integral values with at
     most two distinct values as a float32 C-order (n, K) Array; None for an
     empty or one-column y; the multioutput refusal otherwise."""
+    var nk = prep_keys()
     var b = _builtins()
     if Int(py=shape[0]) == 0 or Int(py=shape[1]) < 2:
         return None
     var dtype = py_call(b.getattr, y, "dtype", "")
-    var ndarray = py_get(context, "ndarray")
+    var ndarray = py_get(context, nk[].k_ndarray)
     if ndarray is not None and Bool(py=py_call(b.isinstance, y, ndarray)):
         # An ndarray's dtype kind is a C attribute: str(dtype) ran NumPy's
         # Python _dtype.__str__ / _name_get / issubdtype chain, 7 frames per
@@ -928,8 +940,9 @@ def _multilabel_indicator(y: PythonObject, context: PythonObject) raises -> Opti
 
 # ---------------------------------------------------------------- LabelEncoder
 def _set_fit(fields: PythonObject, fit: LabelFit, context: PythonObject) raises:
-    py_setitem(fields, "_classes", fit.classes)
-    py_setitem(fields, "_cats", fit.cats)
+    var nk = prep_keys()
+    py_setitem(fields, nk[].k__classes, fit.classes)
+    py_setitem(fields, nk[].k__cats, fit.cats)
 
 
 def _fit_labels(fields: PythonObject, mode: PythonObject, y: PythonObject, context: PythonObject) raises -> LabelFit:
@@ -953,35 +966,37 @@ def _fit_labels(fields: PythonObject, mode: PythonObject, y: PythonObject, conte
 
 
 def _le_fit(model: PythonObject, y: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = prep_keys()
     var fields = py_fields(model)
     var mode = _default_mode(context)
-    py_setitem(fields, "numeric_mode_", mode)
+    py_setitem(fields, nk[].k_numeric_mode_, mode)
     var fit = _fit_labels(fields, mode, y, context)
-    py_setitem(fields, "classes_", _fit_array(fit, context))
+    py_setitem(fields, nk[].k_classes_, _fit_array(fit, context))
     return model
 
 
 def _le_fit_transform(model: PythonObject, y: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = prep_keys()
     # A numeric buffer: classes and codes in ONE program.
     var lb = _label_buffer(y, context)
     if lb:
         var fields = py_fields(model)
         var mode = _default_mode(context)
-        py_setitem(fields, "numeric_mode_", mode)
+        py_setitem(fields, nk[].k_numeric_mode_, mode)
         var got = _label_fit_device(mode, lb.value(), True, context)
         if got:
             var fit = got.value().copy()
             _set_fit(fields, fit, context)
-            py_setitem(fields, "classes_", _fit_array(fit, context))
+            py_setitem(fields, nk[].k_classes_, _fit_array(fit, context))
             return fit.codes
     var text = StrTable()
     if _text_labels(y, context, text):
         # A 'U' label vector: the classes and the codes from ONE read.
         var fields = py_fields(model)
-        py_setitem(fields, "numeric_mode_", _default_mode(context))
+        py_setitem(fields, nk[].k_numeric_mode_, _default_mode(context))
         var fit = _text_fit(text, context)
         _set_fit(fields, fit, context)
-        py_setitem(fields, "classes_", _classes_array(fit.classes, context))
+        py_setitem(fields, nk[].k_classes_, _classes_array(fit.classes, context))
         return fit.codes
     _ = _le_fit(model, y, context)
     return _le_transform(model, y, context)
@@ -1011,11 +1026,12 @@ def _le_transform_device(mode: PythonObject, lb: LabelBuf, cats: PythonObject, c
 
 
 def _le_transform(model: PythonObject, y: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = prep_keys()
     var fields = py_fields(model)
     _check_fitted(fields, "LabelEncoder")
-    var cats = fields["_cats"]
-    var classes = fields["_classes"]
-    var mode = fields["numeric_mode_"]
+    var cats = py_item(fields, nk[].k__cats)
+    var classes = py_item(fields, nk[].k__classes)
+    var mode = py_item(fields, nk[].k_numeric_mode_)
     if cats is not None:
         var lb = _label_buffer(y, context)
         if lb:
@@ -1083,7 +1099,8 @@ def _le_inverse_device(fields: PythonObject, lb: LabelBuf, cats: PythonObject, c
                        context: PythonObject) raises -> PythonObject:
     """`_inverse_device`: each code checked (an integer in [0, K)) and its
     class written as the int64 / float64 word returned, one program."""
-    var entries = _entries(fields["numeric_mode_"], context)
+    var nk = prep_keys()
+    var entries = _entries(py_item(fields, nk[].k_numeric_mode_), context)
     var n = lb.n
     var ints = labels_label_kind(classes, context) == "int"
     var p = EncProg()
@@ -1096,10 +1113,11 @@ def _le_inverse_device(fields: PythonObject, lb: LabelBuf, cats: PythonObject, c
 
 
 def _le_inverse(model: PythonObject, y: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = prep_keys()
     var fields = py_fields(model)
     _check_fitted(fields, "LabelEncoder")
-    var cats = fields["_cats"]
-    var classes = fields["_classes"]
+    var cats = py_item(fields, nk[].k__cats)
+    var classes = py_item(fields, nk[].k__classes)
     if cats is not None:
         # `_inverse_device`: an integer or float code buffer over numeric classes
         var lb = _label_buffer(y, context)
@@ -1119,30 +1137,31 @@ def _le_inverse(model: PythonObject, y: PythonObject, context: PythonObject) rai
 
 # ---------------------------------------------------------------- LabelBinarizer
 def _lb_fit(model: PythonObject, y: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = prep_keys()
     var b = _builtins()
     var fields = py_fields(model)
-    if _truth(fields["sparse_output"]):
+    if _truth(py_item(fields, nk[].k_sparse_output)):
         raise Error("NotImplementedError: mojolearn: LabelBinarizer(sparse_output=True) is not implemented")
-    var integral = context["labels_integral_type"]
-    var neg = fields["neg_label"]
-    var pos = fields["pos_label"]
+    var integral = py_item(context, nk[].k_labels_integral_type)
+    var neg = py_item(fields, nk[].k_neg_label)
+    var pos = py_item(fields, nk[].k_pos_label)
     if not (Bool(py=py_call(b.isinstance, neg, integral)) and Bool(py=py_call(b.isinstance, pos, integral))
             and _truth(py_call(native_loaded_module("operator").lt, neg, pos))):
         raise Error("mojolearn: neg_label must be an integer below pos_label")
     var mode = _default_mode(context)
-    py_setitem(fields, "numeric_mode_", mode)
+    py_setitem(fields, nk[].k_numeric_mode_, mode)
     var ind = _multilabel_indicator(y, context)
     if ind:
         var columns = _range_classes(Int(py=ind.value().shape[1]))
-        py_setitem(fields, "_classes", columns)
-        py_setitem(fields, "_cats", PythonObject(None))
-        py_setitem(fields, "classes_", _classes_array(columns, context))
-        py_setitem(fields, "y_type_", PythonObject(MULTILABEL))
+        py_setitem(fields, nk[].k__classes, columns)
+        py_setitem(fields, nk[].k__cats, PythonObject(None))
+        py_setitem(fields, nk[].k_classes_, _classes_array(columns, context))
+        py_setitem(fields, nk[].k_y_type_, PythonObject(MULTILABEL))
         return model
     var fit = _fit_labels(fields, mode, y, context)
     var classes = fit.classes
-    py_setitem(fields, "classes_", _fit_array(fit, context))
-    py_setitem(fields, "y_type_", PythonObject("binary" if len(classes) <= 2 else "multiclass"))
+    py_setitem(fields, nk[].k_classes_, _fit_array(fit, context))
+    py_setitem(fields, nk[].k_y_type_, PythonObject("binary" if len(classes) <= 2 else "multiclass"))
     return model
 
 
@@ -1176,15 +1195,16 @@ def _lb_transform_device(mode: PythonObject, lb: LabelBuf, cats: PythonObject, K
 
 
 def _lb_transform(model: PythonObject, y: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = prep_keys()
     var b = _builtins()
     var fields = py_fields(model)
     _check_fitted(fields, "LabelBinarizer")
-    var classes = fields["_classes"]
-    var cats = fields["_cats"]
-    var mode = fields["numeric_mode_"]
-    var y_type = String(fields["y_type_"])
-    var neg = Int(py=py_call(b.int, fields["neg_label"]))
-    var pos = Int(py=py_call(b.int, fields["pos_label"]))
+    var classes = py_item(fields, nk[].k__classes)
+    var cats = py_item(fields, nk[].k__cats)
+    var mode = py_item(fields, nk[].k_numeric_mode_)
+    var y_type = String(py_item(fields, nk[].k_y_type_))
+    var neg = Int(py=py_call(b.int, py_item(fields, nk[].k_neg_label)))
+    var pos = Int(py=py_call(b.int, py_item(fields, nk[].k_pos_label)))
     var ind = _multilabel_indicator(y, context)
     if ind or y_type == MULTILABEL:
         if y_type != MULTILABEL:
@@ -1256,10 +1276,11 @@ def _block_argmax(mut p: EncProg, values: PythonObject, K: Int, context: PythonO
 
 
 def _threshold(fields: PythonObject, threshold: PythonObject) raises -> Float64:
+    var nk = prep_keys()
     # threshold, or halfway between neg_label and pos_label.
     if threshold is None:
         var b = _builtins()
-        return Float64(Int(py=py_call(b.int, fields["pos_label"])) + Int(py=py_call(b.int, fields["neg_label"]))) / 2.0
+        return Float64(Int(py=py_call(b.int, py_item(fields, nk[].k_pos_label))) + Int(py=py_call(b.int, py_item(fields, nk[].k_neg_label)))) / 2.0
     return Float64(py=py_call(_builtins().float, threshold))
 
 
@@ -1270,16 +1291,17 @@ def _one_float(value: Float64) -> List[Float64]:
 
 
 def _lb_inverse(model: PythonObject, y: PythonObject, threshold: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = prep_keys()
     var fields = py_fields(model)
     _check_fitted(fields, "LabelBinarizer")
-    var classes = fields["_classes"]
-    var cats = fields["_cats"]
-    var entries = _entries(fields["numeric_mode_"], context)
+    var classes = py_item(fields, nk[].k__classes)
+    var cats = py_item(fields, nk[].k__cats)
+    var entries = _entries(py_item(fields, nk[].k_numeric_mode_), context)
     var values = xprep_values(y, entries, context)
     var n = Int(py=values[3])
     var W = Int(py=values[4])
     var K = len(classes)
-    var y_type = String(fields["y_type_"])
+    var y_type = String(py_item(fields, nk[].k_y_type_))
     var p = EncProg()
     if y_type == MULTILABEL:
         if W != K:
@@ -1463,13 +1485,14 @@ def _mlb_flat(y: PythonObject, context: PythonObject) raises -> Optional[MLBFlat
 
 
 def _mlb_transform_flat(model: PythonObject, fl: MLBFlat, context: PythonObject) raises -> PythonObject:
+    var nk = prep_keys()
     # `_transform_flat`: the int32 indicator from the device route, one program.
     var fields = py_fields(model)
-    var entries = _entries(fields["numeric_mode_"], context)
+    var entries = _entries(py_item(fields, nk[].k_numeric_mode_), context)
     var n = fl.n
-    var K = len(fields["_classes"])
+    var K = len(py_item(fields, nk[].k__classes))
     var p = EncProg()
-    var codes = _label_codes_device(p, fl.lb, fields["_cats"], context)
+    var codes = _label_codes_device(p, fl.lb, py_item(fields, nk[].k__cats), context)
     var offs = p.put(fl.offs, n + 1)
     var out = p.output(n * max(K, 1), entries)
     _stage(p.prog.program, OP_ROW_ONES, n, codes, offs, K, out)
@@ -1478,6 +1501,7 @@ def _mlb_transform_flat(model: PythonObject, fl: MLBFlat, context: PythonObject)
 
 
 def _fit_flat(fields: PythonObject, mode: PythonObject, fl: Optional[MLBFlat], context: PythonObject) raises -> Bool:
+    var nk = prep_keys()
     # `_fit_flat`: classes_ from the device route; False when it does not apply.
     if not fl:
         return False
@@ -1485,7 +1509,7 @@ def _fit_flat(fields: PythonObject, mode: PythonObject, fl: Optional[MLBFlat], c
     if not got:
         return False
     _set_fit(fields, got.value(), context)
-    py_setitem(fields, "_given", PythonObject(False))
+    py_setitem(fields, nk[].k__given, PythonObject(False))
     return True
 
 
@@ -1502,16 +1526,17 @@ def _rows_lists(y: PythonObject) raises -> PythonObject:
 
 
 def _mlb_fit(model: PythonObject, y: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = prep_keys()
     var b = _builtins()
     var fields = py_fields(model)
-    if _truth(fields["sparse_output"]):
+    if _truth(py_item(fields, nk[].k_sparse_output)):
         raise Error("NotImplementedError: mojolearn: MultiLabelBinarizer(sparse_output=True) is not implemented")
     var mode = _default_mode(context)
-    py_setitem(fields, "numeric_mode_", mode)
-    if fields["classes"] is not None:
-        py_setitem(fields, "_classes", py_call(b.list, fields["classes"]))
-        py_setitem(fields, "_given", PythonObject(True))
-        py_setitem(fields, "_cats", PythonObject(None))
+    py_setitem(fields, nk[].k_numeric_mode_, mode)
+    if py_item(fields, nk[].k_classes) is not None:
+        py_setitem(fields, nk[].k__classes, py_call(b.list, py_item(fields, nk[].k_classes)))
+        py_setitem(fields, nk[].k__given, PythonObject(True))
+        py_setitem(fields, nk[].k__cats, PythonObject(None))
     elif not _fit_flat(fields, mode, _mlb_flat(y, context), context):
         var rows = _rows_lists(y)
         var flat = Python.list()
@@ -1521,22 +1546,23 @@ def _mlb_fit(model: PythonObject, y: PythonObject, context: PythonObject) raises
         if len(flat) > 0:
             _set_fit(fields, _label_classes(mode, flat, context), context)
         else:
-            py_setitem(fields, "_classes", Python.list())
-            py_setitem(fields, "_cats", PythonObject(None))
-        py_setitem(fields, "_given", PythonObject(False))
-    py_setitem(fields, "classes_", _classes_array(fields["_classes"], context))
+            py_setitem(fields, nk[].k__classes, Python.list())
+            py_setitem(fields, nk[].k__cats, PythonObject(None))
+        py_setitem(fields, nk[].k__given, PythonObject(False))
+    py_setitem(fields, nk[].k_classes_, _classes_array(py_item(fields, nk[].k__classes), context))
     return model
 
 
 def _mlb_fit_transform(model: PythonObject, y: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = prep_keys()
     var fields = py_fields(model)
-    if fields["classes"] is None and not _truth(fields["sparse_output"]):
+    if py_item(fields, nk[].k_classes) is None and not _truth(py_item(fields, nk[].k_sparse_output)):
         var fl = _mlb_flat(y, context)
         if fl:
             var mode = _default_mode(context)
-            py_setitem(fields, "numeric_mode_", mode)
+            py_setitem(fields, nk[].k_numeric_mode_, mode)
             if _fit_flat(fields, mode, fl, context):
-                py_setitem(fields, "classes_", _classes_array(fields["_classes"], context))
+                py_setitem(fields, nk[].k_classes_, _classes_array(py_item(fields, nk[].k__classes), context))
                 return _mlb_transform_flat(model, fl.value(), context)
     var rows = _rows_lists(y)
     _ = _mlb_fit(model, rows, context)
@@ -1544,10 +1570,11 @@ def _mlb_fit_transform(model: PythonObject, y: PythonObject, context: PythonObje
 
 
 def _mlb_transform(model: PythonObject, y: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = prep_keys()
     var fields = py_fields(model)
     _check_fitted(fields, "MultiLabelBinarizer")
-    var classes = fields["_classes"]
-    var cats = fields["_cats"]
+    var classes = py_item(fields, nk[].k__classes)
+    var cats = py_item(fields, nk[].k__cats)
     if cats is not None and len(classes) > 0:
         var fl = _mlb_flat(y, context)
         if fl:
@@ -1564,7 +1591,7 @@ def _mlb_transform(model: PythonObject, y: PythonObject, context: PythonObject) 
         _ = py_call(extend_fn, row)
         for _ in range(m):  # native data loop (not a driver loop): the row's owner words (no CPython call)
             owner.append(Float64(i))
-    var entries = _entries(fields["numeric_mode_"], context)
+    var entries = _entries(py_item(fields, nk[].k_numeric_mode_), context)
     var p = EncProg()
     var m = len(flat)
     if m == 0:
@@ -1596,9 +1623,10 @@ def _mlb_inverse_direct(classes: PythonObject, k: Int, yt: PythonObject, context
     classes and the row tuples become Python objects (p3-prep). None for any
     other input (the general walk below). A nonzero or NaN cell is set, as
     the Python truth test reads it."""
+    var nk = prep_keys()
     var b = _builtins()
-    var ndarray = py_get(context, "ndarray")
-    var is_array = py_type(yt) is context["array_class"]
+    var ndarray = py_get(context, nk[].k_ndarray)
+    var is_array = py_type(yt) is py_item(context, nk[].k_array_class)
     if not is_array and (ndarray is None or py_type(yt) is not ndarray):
         return None
     if Int(py=yt.ndim) != 2 or Int(py=yt.shape[1]) != k:
@@ -1642,11 +1670,12 @@ def _mlb_inverse_direct(classes: PythonObject, k: Int, yt: PythonObject, context
 
 
 def _mlb_inverse(model: PythonObject, yt: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = prep_keys()
     # One tuple of labels per row: the user list of Python label tuples.
     var b = _builtins()
     var fields = py_fields(model)
     _check_fitted(fields, "MultiLabelBinarizer")
-    var classes = fields["_classes"]
+    var classes = py_item(fields, nk[].k__classes)
     var k = len(classes)
     var direct = _mlb_inverse_direct(classes, k, yt, context)
     if direct is not None:
@@ -1666,37 +1695,37 @@ def _mlb_inverse(model: PythonObject, yt: PythonObject, context: PythonObject) r
 
 
 # ---------------------------------------------------------------- the dispatch
-def prep_labels_call(model: PythonObject, kind: String, operation: String, args: PythonObject,
+def prep_labels_call(model: PythonObject, kind: String, op: Int, operation: String, args: PythonObject,
                      context: PythonObject) raises -> PythonObject:
     """LabelEncoder / LabelBinarizer / MultiLabelBinarizer fit(y),
     fit_transform(y), transform(y), inverse_transform(y) (LabelBinarizer:
     inverse_transform(Y, threshold))."""
     if kind == "label_encoder":
-        if operation == "fit":
+        if op == PREP_OPN_FIT:
             return _le_fit(model, args[0], context)
-        if operation == "fit_transform":
+        if op == PREP_OPN_FIT_TRANSFORM:
             return _le_fit_transform(model, args[0], context)
-        if operation == "transform":
+        if op == PREP_OPN_TRANSFORM:
             return _le_transform(model, args[0], context)
-        if operation == "inverse_transform":
+        if op == PREP_OPN_INVERSE_TRANSFORM:
             return _le_inverse(model, args[0], context)
     elif kind == "label_binarizer":
-        if operation == "fit":
+        if op == PREP_OPN_FIT:
             return _lb_fit(model, args[0], context)
-        if operation == "fit_transform":
+        if op == PREP_OPN_FIT_TRANSFORM:
             _ = _lb_fit(model, args[0], context)
             return _lb_transform(model, args[0], context)
-        if operation == "transform":
+        if op == PREP_OPN_TRANSFORM:
             return _lb_transform(model, args[0], context)
-        if operation == "inverse_transform":
+        if op == PREP_OPN_INVERSE_TRANSFORM:
             return _lb_inverse(model, args[0], args[1], context)
     elif kind == "multilabel_binarizer":
-        if operation == "fit":
+        if op == PREP_OPN_FIT:
             return _mlb_fit(model, args[0], context)
-        if operation == "fit_transform":
+        if op == PREP_OPN_FIT_TRANSFORM:
             return _mlb_fit_transform(model, args[0], context)
-        if operation == "transform":
+        if op == PREP_OPN_TRANSFORM:
             return _mlb_transform(model, args[0], context)
-        if operation == "inverse_transform":
+        if op == PREP_OPN_INVERSE_TRANSFORM:
             return _mlb_inverse(model, args[0], context)
     raise Error("TypeError: the native label owner does not serve " + operation)

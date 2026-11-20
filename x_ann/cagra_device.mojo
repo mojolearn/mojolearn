@@ -21,6 +21,7 @@ from x_ann.cagra_fast_knn import cg_ivfg_enqueue
 from max.gpu.host import DeviceBuffer
 
 from x_ann.io import upload_f32, upload_i32, download_f32, download_i32, enqueue_query_status
+from x_ann.io import upload_f32_ptr, download_i32_into
 from x_ann.cagra_core import F32P, I32P, cg_dist, cg_search_cell, cg_seed_node, cg_search_budget
 from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
@@ -527,17 +528,47 @@ def cagra_knn_enqueue(
     knn_enqueue(ctx, dx, n, d, kdeg, dnd, dni)
 
 
-def cagra_build_device(x: List[Float32], n: Int, d: Int, kdeg: Int, deg: Int) raises -> List[Int32]:
-    """The exact k-NN graph, the prune and the reverse-edge merge, all on
-    the device; the merged graph is the one download."""
+def _cagra_build_check(n: Int, kdeg: Int, deg: Int) raises:
     if kdeg > PRUNE_KMAX:
         raise Error("CAGRA: intermediate_graph_degree " + String(kdeg) + " exceeds the device prune's "
                     + String(PRUNE_KMAX) + " (one block per node holds its row)")
     if n * deg >= 2147483647:
         raise Error("CAGRA: n * graph_degree must be below 2^31 (the reverse-edge sort's index)")
+
+
+def cagra_build_device(x: List[Float32], n: Int, d: Int, kdeg: Int, deg: Int) raises -> List[Int32]:
+    """The list form (the checks'): `cagra_build_device_ptr` over the rows
+    in `x`, the merged graph in a new list."""
+    _cagra_build_check(n, kdeg, deg)
+    if n <= 0 or deg <= 0 or len(x) < n * d:
+        raise Error("CAGRA: the row list is shorter than n x d")
+    var merged = List[Int32](unsafe_uninit_length=n * deg)
+    cagra_build_device_ptr(
+        MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(x.unsafe_ptr())), n, d, kdeg, deg,
+        MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(merged.unsafe_ptr())),
+    )
+    # the rows are named here, after the drains inside the call above
+    _ = len(x)
+    return merged^
+
+
+def cagra_build_device_ptr(
+    xp: MutPointer[Float32, MutUntrackedOrigin], n: Int, d: Int, kdeg: Int, deg: Int,
+    graph_p: MutPointer[Int32, MutUntrackedOrigin],
+) raises:
+    """The exact k-NN graph, the prune and the reverse-edge merge, all on
+    the device; the merged graph is the one download.
+
+    On the CALLER's arrays (lane fx-ann-fit-nocopy, 2026-11-20): the n x d
+    rows are uploaded from where they are and the n x deg graph is written
+    where the caller wants it. Before, the binding copied the rows into a
+    list and the graph came down into a list and was copied out of it. The
+    same words; the caller keeps both arrays alive for the whole call (each
+    copy is drained before the return)."""
+    _cagra_build_check(n, kdeg, deg)
     var st = AnnStages("cagra_build")
     var ctx = x_ann_ctx()
-    var dx = upload_f32(ctx, x)
+    var dx = upload_f32_ptr(ctx, xp, n * d)
     st.mark(ctx, "upload")
     var dnd = ctx.enqueue_create_buffer[DType.float32](n * kdeg)
     var dni = ctx.enqueue_create_buffer[DType.int32](n * kdeg)
@@ -567,7 +598,7 @@ def cagra_build_device(x: List[Float32], n: Int, d: Int, kdeg: Int, deg: Int) ra
                   vals.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
                   dmg.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
     st.mark(ctx, "reverse_merge")
-    var merged = download_i32(ctx, dmg, total)
+    download_i32_into(ctx, dmg, total, graph_p)
     st.host("download")
     _ = dmg^
     _ = counts^
@@ -581,7 +612,6 @@ def cagra_build_device(x: List[Float32], n: Int, d: Int, kdeg: Int, deg: Int) ra
     _ = dnd^
     _ = dx^
     _ = ctx^
-    return merged^
 
 
 def cagra_search_device(
@@ -589,6 +619,8 @@ def cagra_search_device(
     k: Int, L: Int, width: Int, max_iter: Int, n_seeds: Int,
     mut out_d: List[Float32], mut out_i: List[Int32], rs: Int = 0,
 ) raises:
+    if len(queries) < m * d:
+        raise Error("CAGRA search: the query list is shorter than m x d")
     var st = AnnStages("cagra_search")
     var ctx = x_ann_ctx()
     var dx = upload_f32(ctx, x)
@@ -596,16 +628,20 @@ def cagra_search_device(
     st.mark(ctx, "upload")
     cagra_search_on(
         ctx, dx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), n, d,
-        dg.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), deg, queries, m, k, L, width, max_iter,
-        n_seeds, out_d, out_i, rs,
+        dg.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), deg,
+        MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(queries.unsafe_ptr())),
+        m, k, L, width, max_iter, n_seeds, out_d, out_i, rs,
     )
+    # the query list is named here, after the drains inside the call above
+    _ = len(queries)
     _ = dg^
     _ = dx^
     _ = ctx^
 
 
 def cagra_search_on(
-    ctx: DeviceContext, dx: F32P, n: Int, d: Int, dg: I32P, deg: Int, queries: List[Float32], m: Int,
+    ctx: DeviceContext, dx: F32P, n: Int, d: Int, dg: I32P, deg: Int,
+    qp: MutPointer[Float32, MutUntrackedOrigin], m: Int,
     k: Int, L: Int, width: Int, max_iter_in: Int, n_seeds_in: Int,
     mut out_d: List[Float32], mut out_i: List[Int32], rs: Int = 0, status_addr: Int = 0,
 ) raises:
@@ -618,7 +654,10 @@ def cagra_search_on(
     var budget = cg_search_budget(n, d, deg, L, n_seeds_in, max_iter_in)
     var n_seeds = budget[0]
     var max_iter = budget[1]
-    var dq = upload_f32(ctx, queries)
+    # The queries are read where the caller holds them (`qp`, m x d words
+    # kept alive by the caller for the whole call; lane fx-board-1p2,
+    # 2026-11-20): the resident search copied them into a new list first.
+    var dq = upload_f32_ptr(ctx, qp, m * d)
     # Lane a8b-device-x-neighbors-rest: the queries' finite status behind
     # their upload, read back by the downloads below (no new sync).
     var dst = enqueue_query_status(ctx, dq, m * d, status_addr)

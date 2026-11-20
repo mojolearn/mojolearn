@@ -15,15 +15,18 @@ from bindings.trees_public_auxiliary_door import _model_buffers
 from bindings.native_array_storage_door import native_array_from_values
 from bindings.classical_arrays_door import classical_wrap_array
 from bindings.gp_label_snapshot_native_unpack import gp_label_list
+from bindings.trees_keys_unpack import trees_keys
+from bindings.py_balanced import py_item
 
 
 def bagging_members(model: PythonObject) raises -> PythonObject:
-    var context = py_fields(native_loaded_module("mojolearn._expansion_trees"))["_TREES_CONTEXT"]
+    var nk = trees_keys()
+    var context = py_item(py_fields(native_loaded_module("mojolearn._expansion_trees")), nk[].k__TREES_CONTEXT)
     var fields = boost_admit(model, context)
-    var existing = py_get(fields, "_estimators")
+    var existing = py_get(fields, nk[].k__estimators)
     if existing is not None:
         return existing
-    var batched = py_get(fields, "_batched")
+    var batched = py_get(fields, nk[].k__batched)
     if batched is None:
         raise Error("AttributeError: estimators_")
     if len(batched) != 2:
@@ -31,27 +34,27 @@ def bagging_members(model: PythonObject) raises -> PythonObject:
     var forest = batched[0]
     var base = batched[1]
     boost_tree_admit(base, context, True)
-    host_inference_scalar(fields["random_state"], context)
+    host_inference_scalar(py_item(fields, nk[].k_random_state), context)
     var ff = py_fields(forest)
-    var count = Int(py=ff["_n_trees"])
-    var outputs = Int(py=ff["_num_outputs"])
+    var count = Int(py=py_item(ff, nk[].k__n_trees))
+    var outputs = Int(py=py_item(ff, nk[].k__num_outputs))
     if count < 0 or outputs <= 0:
         raise Error("ValueError: invalid Bagging forest dimensions")
     var storage = _model_buffers(ff, count, outputs, context)
-    var offsets = gp_label_list(ff["_offsets"], context)
-    var seed = _seed(fields["random_state"], context)
+    var offsets = gp_label_list(py_item(ff, nk[].k__offsets), context)
+    var seed = _seed(py_item(fields, nk[].k_random_state), context)
     var result = Python.list()
     # The forest's arrays and scalars, read once (lane perf-trees-owed,
     # 2026-11-06: re-read from the forest's fields for every tree), and the
     # members' kind once: every member is a clone of `base`, so of its class.
-    var colid = ff["_colid"]
-    var quesval = ff["_quesval"]
-    var left = ff["_left_child"]
-    var leaves = ff["_leaves"]
-    var n_features = ff["n_features_in_"]
-    var classified = py_contains(ff, "classes_")
-    var classes = ff["classes_"] if classified else PythonObject(None)
-    var n_classes = ff["n_classes_"] if classified else PythonObject(None)
+    var colid = py_item(ff, nk[].k__colid)
+    var quesval = py_item(ff, nk[].k__quesval)
+    var left = py_item(ff, nk[].k__left_child)
+    var leaves = py_item(ff, nk[].k__leaves)
+    var n_features = py_item(ff, nk[].k_n_features_in_)
+    var classified = py_contains(ff, nk[].k_classes_)
+    var classes = py_item(ff, nk[].k_classes_) if classified else PythonObject(None)
+    var n_classes = py_item(ff, nk[].k_n_classes_) if classified else PythonObject(None)
     var one = PythonObject(1)
     var width = PythonObject(outputs)
     var kind = forest_kind(base, context)
@@ -70,20 +73,20 @@ def bagging_members(model: PythonObject) raises -> PythonObject:
         var hi = Int(py=offsets[t + 1])
         var member = _validated_clone(base, template, _sub_seed(seed, t), kind, memo, context)
         var mf = py_fields(member)
-        py_setitem(mf, "_offsets", classical_wrap_array(native_array_from_values("i", Python.list(0, hi - lo)), Python.tuple(2), "<i4", "C", context))
-        py_setitem(mf, "_colid", _copy_block(colid, lo, hi, "<i4", context))
-        py_setitem(mf, "_quesval", _copy_block(quesval, lo, hi, "<f4", context))
-        py_setitem(mf, "_left_child", _copy_block(left, lo, hi, "<i4", context))
-        py_setitem(mf, "_leaves", _copy_block(leaves, lo * outputs, hi * outputs, "<f4", context))
-        py_setitem(mf, "_n_trees", one)
-        py_setitem(mf, "_num_outputs", width)
-        py_setitem(mf, "n_features_in_", n_features)
+        py_setitem(mf, nk[].k__offsets, classical_wrap_array(native_array_from_values("i", Python.list(0, hi - lo)), Python.tuple(2), "<i4", "C", context))
+        py_setitem(mf, nk[].k__colid, _copy_block(colid, lo, hi, "<i4", context))
+        py_setitem(mf, nk[].k__quesval, _copy_block(quesval, lo, hi, "<f4", context))
+        py_setitem(mf, nk[].k__left_child, _copy_block(left, lo, hi, "<i4", context))
+        py_setitem(mf, nk[].k__leaves, _copy_block(leaves, lo * outputs, hi * outputs, "<f4", context))
+        py_setitem(mf, nk[].k__n_trees, one)
+        py_setitem(mf, nk[].k__num_outputs, width)
+        py_setitem(mf, nk[].k_n_features_in_, n_features)
         if classified:
-            py_setitem(mf, "classes_", classes)
-            py_setitem(mf, "n_classes_", n_classes)
+            py_setitem(mf, nk[].k_classes_, classes)
+            py_setitem(mf, nk[].k_n_classes_, n_classes)
         _ = py_call(result.append, member)
     _ = storage
-    py_setitem(fields, "_estimators", result)
+    py_setitem(fields, nk[].k__estimators, result)
     return result
 
 
@@ -91,6 +94,7 @@ def bagging_members_set(model: PythonObject, value: PythonObject, context: Pytho
     # Assignment preserves identity; only actual consumption admits members.
     from providers.python.classical_family_admission_pyapi_unpack import classical_family_admit
     var fields = classical_family_admit(model)
-    py_setitem(fields, "_estimators", value)
-    py_setitem(fields, "_batched", PythonObject(None))
+    var nk = trees_keys()
+    py_setitem(fields, nk[].k__estimators, value)
+    py_setitem(fields, nk[].k__batched, PythonObject(None))
     return PythonObject(None)
