@@ -10,6 +10,8 @@ import types
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "tools"))
+from boundary_keys_plain import plain  # noqa: E402
 PACKAGE = ROOT / "python/mojolearn"
 MODULES = ("_expansion_linear", "_solver_impl", "_svm_impl", "svm", "_gp_impl", "kernel_methods", "neighbors",
            "linear_model", "_expansion_trees", "model_selection", "_metrics_impl")
@@ -182,7 +184,8 @@ def test_rfe_passes_fit_parameters_to_every_fit_without_python_attribute_hooks()
     assert 'len(fit_params) != 0' not in source
     assert 'attrgetter' not in source
     assert '_call(b.getattr, Python.tuple(est' not in source
-    helper = (ROOT / "bindings/prep_native_estimator_door.mojo").read_text()
+    helper = plain("bindings/prep_native_estimator_door.mojo",
+                   (ROOT / "bindings/prep_native_estimator_door.mojo").read_text())
     assert 'plan["fields_get"]' in helper
 
 

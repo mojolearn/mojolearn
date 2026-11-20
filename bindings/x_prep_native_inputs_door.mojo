@@ -16,6 +16,8 @@ from bindings.scaler_native_door import _input
 from core.array_helpers_impl import strided_copy_bytes
 from bindings.py_optional import py_present
 from bindings.py_cpython_table import cpython_table  # buffer calls without a dlsym per call (perf2-prep)
+from bindings.x_prep_keys_unpack import x_prep_keys
+from bindings.py_balanced import py_item
 
 
 def _target_finite(view: PythonObject, context: PythonObject) raises:
@@ -65,10 +67,11 @@ def _target_finite(view: PythonObject, context: PythonObject) raises:
 
 
 def _target_pandas(value: PythonObject, context: PythonObject) raises -> Int:
+    var nk = x_prep_keys()
     var b = native_loaded_module("builtins")
-    var manager = py_get(_pd_fields(value),"_mgr")
+    var manager = py_get(_pd_fields(value),nk[].k__mgr)
     var series = py_type(value) is _pd_class("pandas.core.series","Series")
-    var blocks = py_get(_pd_fields(manager),"blocks") if series else _pd_get("pandas._libs.internals","BlockManager","blocks",manager)
+    var blocks = py_get(_pd_fields(manager),nk[].k_blocks) if series else _pd_get("pandas._libs.internals","BlockManager","blocks",manager)
     if py_type(blocks) is not b.tuple or len(blocks) == 0:
         raise Error("TypeError: target requires native pandas block storage")
     var rows = -1
@@ -77,13 +80,13 @@ def _target_pandas(value: PythonObject, context: PythonObject) raises -> Int:
     var arrays = Python.list()
     for k in range(len(blocks)):  # driver-loop: over target pandas storage blocks
         var raw = _pd_get("pandas._libs.internals","Block","values",blocks[k])
-        if py_type(raw) is not context["ndarray"]:
+        if py_type(raw) is not py_item(context, nk[].k_ndarray):
             var cls = py_type(raw)
             if cls is not _pd_class("pandas.core.arrays.integer","IntegerArray") and cls is not _pd_class("pandas.core.arrays.floating","FloatingArray") and cls is not _pd_class("pandas.core.arrays.boolean","BooleanArray"):
                 raise Error("TypeError: target requires native pandas numeric or object storage")
-            raw = py_get(_pd_fields(raw),"_data")
+            raw = py_get(_pd_fields(raw),nk[].k__data)
             object_result = True
-        if py_type(raw) is not context["ndarray"]:
+        if py_type(raw) is not py_item(context, nk[].k_ndarray):
             raise Error("TypeError: pandas target storage requires exact native arrays")
         var rank = Int(py=raw.ndim)
         var n = Int(py=raw.shape[rank-1])
@@ -112,6 +115,7 @@ def _target_view(value: PythonObject, context: PythonObject) raises -> PythonObj
 
 
 def _target(value: PythonObject, rows: Int, context: PythonObject) raises:
+    var nk = x_prep_keys()
     var b = native_loaded_module("builtins")
     var cls = py_type(value)
     if value is None or cls is b.int or cls is b.float or cls is b.bool or cls is b.str or cls is b.bytes or cls is b.dict:
@@ -137,7 +141,7 @@ def _target(value: PythonObject, rows: Int, context: PythonObject) raises:
         if atom is b.complex:
             raise Error("Complex data not supported: MaxAbsScaler got a complex y.")
         classical_admit_value(value,context)
-        examine = examine and (atom is b.float or _one_of(atom,context["scalar_types"]))
+        examine = examine and (atom is b.float or _one_of(atom,py_item(context, nk[].k_scalar_types)))
         if examine:
             view = classical_input(value,context,"y")
     else:
@@ -174,15 +178,16 @@ def _dense_values(source: PythonObject, context: PythonObject) raises -> PythonO
 
 
 def _rows_snapshot(base: PythonObject, indices: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = x_prep_keys()
     # DeviceRows' host materialization is stored before the estimator casts
     # its inputs. Preserve original f64/integer words for later consumers.
     var b = native_loaded_module("builtins")
     classical_admit_value(base,context)
     if not classical_is_array(base,context):
         raise Error("TypeError: native DeviceRows requires an ordinary numeric Array base")
-    var shape = py_call(context["array_fields"]["shape"],base,context["array_class"])
-    var dtype_value = py_call(context["array_fields"]["dtype"],base,context["array_class"])
-    var order = py_call(context["array_fields"]["order"],base,context["array_class"])
+    var shape = py_call(py_item(py_item(context, nk[].k_array_fields), nk[].k_shape),base,py_item(context, nk[].k_array_class))
+    var dtype_value = py_call(py_item(py_item(context, nk[].k_array_fields), nk[].k_dtype),base,py_item(context, nk[].k_array_class))
+    var order = py_call(py_item(py_item(context, nk[].k_array_fields), nk[].k_order),base,py_item(context, nk[].k_array_class))
     if py_type(dtype_value) is not b.str or py_type(shape) is not b.tuple or len(shape) != 2 or py_type(shape[0]) is not b.int or py_type(shape[1]) is not b.int or py_type(order) is not b.str:
         raise Error("TypeError: native DeviceRows requires native numeric Array metadata")
     var dtype = String(dtype_value)
@@ -192,7 +197,7 @@ def _rows_snapshot(base: PythonObject, indices: PythonObject, context: PythonObj
     var n = Int(py=indices.size)
     if nr < 1 or d < 1 or n < 1 or nr > 2147483647//d or n > 2147483647//d:
         raise Error("MaxAbsScaler requires a nonempty row selection within native indexing bounds")
-    var view = py_call(context["array_fields"]["_mv"],base,context["array_class"])
+    var view = py_call(py_item(py_item(context, nk[].k_array_fields), nk[].k__mv),base,py_item(context, nk[].k_array_class))
     if py_type(view) is not b.memoryview:
         raise Error("TypeError: native row selection requires a native backing memoryview")
     classical_admit_value(view,context)
@@ -226,8 +231,8 @@ def _rows_snapshot(base: PythonObject, indices: PythonObject, context: PythonObj
         raise Error("TypeError: native row selection requires C or Fortran Array order")
     # lane fix-output-zero-fill (2026-11-14): unfilled; maxabs_gather_rows writes all n rows of d.
     var store = native_array_unfilled(String(code), n*d)
-    var output = classical_wrap_array(store,Python.tuple(n,d),dtype,"C",context["output_context"])
-    _ = py_call(context["maxabs_gather_rows"],address,classical_address(output),classical_address(indices),nr,n,item*d)
+    var output = classical_wrap_array(store,Python.tuple(n,d),dtype,"C",py_item(context, nk[].k_output_context))
+    _ = py_call(py_item(context, nk[].k_maxabs_gather_rows),address,classical_address(output),classical_address(indices),nr,n,item*d)
     # PyBuffer_Release above releases its temporary export, not the native
     # gather's raw address. Retain both source and index owners to that read.
     _ = view^
@@ -237,28 +242,29 @@ def _rows_snapshot(base: PythonObject, indices: PythonObject, context: PythonObj
 
 
 def _rows_fields(source: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = x_prep_keys()
     # Even an exact DeviceRows can contain foreign dictionary keys. Native
     # dict lookup would invoke their Python equality before buffer admission.
     # Resolve its native dictionary slot without application descriptors.
     var b = native_loaded_module("builtins")
-    var cls = context["maxabs_rows_class"]
+    var cls = py_item(context, nk[].k_maxabs_rows_class)
     if py_type(source) is not cls or py_type(cls) is not b.type:
         raise Error("TypeError: native row selection requires its ordinary metadata class")
-    var descriptor = context["maxabs_rows_dict"]
+    var descriptor = py_item(context, nk[].k_maxabs_rows_dict)
     # p3-array-arena: the class rows are admitted once per class state (type
     # watcher); a class modification re-runs the full check.
     if not p3_layout_admitted(P3_ROWS_EXACT_LAYOUT, cls, descriptor):
-        var ancestry = py_call(b.type.__dict__["__mro__"].__get__,cls)
+        var ancestry = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__,cls)
         if len(ancestry) != 2 or ancestry[1] is not b.object:
             raise Error("TypeError: native row selection cannot inherit Python lifecycle hooks")
-        var mapping = py_call(b.type.__dict__["__dict__"].__get__,cls)
+        var mapping = py_call(py_item(b.type.__dict__, nk[].k___dict__).__get__,cls)
         var keys = py_call(b.list,mapping)
         for k in range(len(keys)):  # driver-loop: class keys precede dictionary-descriptor lookup
             if py_type(keys[k]) is not b.str:
                 raise Error("TypeError: native row selection class keys must be native strings")
-        if py_get(mapping,"__dict__") is not descriptor or py_type(descriptor) is not py_type(b.object.__dict__["__class__"]) or descriptor.__objclass__ is not cls:
+        if py_get(mapping,nk[].k___dict__) is not descriptor or py_type(descriptor) is not py_type(py_item(b.object.__dict__, nk[].k___class__)) or descriptor.__objclass__ is not cls:
             raise Error("TypeError: native row selection requires a native instance dictionary slot")
-        if py_get(mapping,"__del__") is not None or py_get(mapping,"__getattribute__") is not None:
+        if py_get(mapping,nk[].k___del__) is not None or py_get(mapping,nk[].k___getattribute__) is not None:
             raise Error("TypeError: native row selection cannot install Python lifecycle hooks")
         p3_layout_admit(P3_ROWS_EXACT_LAYOUT, cls, descriptor)
     var fields = py_call(descriptor.__get__,source,cls)
@@ -271,33 +277,34 @@ def _rows_fields(source: PythonObject, context: PythonObject) raises -> PythonOb
 
 
 def _values(source: PythonObject, context: PythonObject, force_host_rows: Bool = False) raises -> PythonObject:
-    if py_type(source) is context["maxabs_rows_class"]:
+    var nk = x_prep_keys()
+    if py_type(source) is py_item(context, nk[].k_maxabs_rows_class):
         var fields = _rows_fields(source,context)
         # DeviceRows.materialize's host-route contract is a single retained
         # snapshot. A later mutation of base/indices must not silently
         # replace an already materialized selection. GPU ranges deliberately
         # retain their separate device-gather/resident-base semantics.
-        var host_rows = force_host_rows or String(context["vendor"]) == "cpu" or String(getenv("MOJOLEARN_ARENA_RANGES","1").strip()) == "0"
-        if py_type(fields["dtype"]) is not native_loaded_module("builtins").str:
+        var host_rows = force_host_rows or String(py_item(context, nk[].k_vendor)) == "cpu" or String(getenv("MOJOLEARN_ARENA_RANGES","1").strip()) == "0"
+        if py_type(py_item(fields, nk[].k_dtype)) is not native_loaded_module("builtins").str:
             raise Error("TypeError: native row selection requires native dtype metadata")
-        host_rows = host_rows or String(fields["dtype"]) != "<f4"
-        if host_rows and py_get(fields,"_host") is not None:
-            return _dense_values(fields["_host"],context)
-        var indices = fields["indices"]
+        host_rows = host_rows or String(py_item(fields, nk[].k_dtype)) != "<f4"
+        if host_rows and py_get(fields,nk[].k__host) is not None:
+            return _dense_values(py_item(fields, nk[].k__host),context)
+        var indices = py_item(fields, nk[].k_indices)
         classical_admit_value(indices,context)
         if not classical_is_array(indices,context) or String(indices.dtype) != "<i8" or Int(py=indices.ndim) != 1 or not classical_c_order(indices,context):
             raise Error("TypeError: native row selection requires a contiguous int64 index buffer")
         if host_rows:
-            var snapshot = _rows_snapshot(fields["base"],indices,context)
-            py_setitem(fields,"_host",snapshot)
+            var snapshot = _rows_snapshot(py_item(fields, nk[].k_base),indices,context)
+            py_setitem(fields,nk[].k__host,snapshot)
             return _dense_values(snapshot,context)
-        var base = _dense_values(fields["base"],context)
+        var base = _dense_values(py_item(fields, nk[].k_base),context)
         var n = Int(py=indices.size)
         var d = Int(py=base.shape[1])
         if n < 1 or n > 2147483647 // d:
             raise Error("MaxAbsScaler requires a nonempty row selection within native indexing bounds")
-        var output = classical_typed(Python.tuple(n,d),"<f4",context["output_context"])
-        _ = py_call(context["maxabs_gather_rows"],classical_address(base),classical_address(output),classical_address(indices),base.shape[0],n,4*d)
+        var output = classical_typed(Python.tuple(n,d),"<f4",py_item(context, nk[].k_output_context))
+        _ = py_call(py_item(context, nk[].k_maxabs_gather_rows),classical_address(base),classical_address(output),classical_address(indices),base.shape[0],n,4*d)
         _ = base^
         return output
     return _dense_values(source,context)

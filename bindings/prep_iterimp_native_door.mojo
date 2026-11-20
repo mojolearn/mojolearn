@@ -33,6 +33,11 @@ from bindings.prep_encode_prog_run import enc_ii_rows
 from bindings.prep_encode_native_door import (
     EncProg, _cs, _mark_missing, _imputer_fit, _imputer_transform, _precheck, _default_mode, _word, _iword,
     _take1, _take2, _seed64, _seed_words, _truth, _float, _is_str, _check_width, _int_list, _index_list)
+from bindings.prep_keys_unpack import (
+    prep_keys,
+    PREP_OPN_FIT, PREP_OPN_FIT_TRANSFORM, PREP_OPN_TRANSFORM,
+)
+from bindings.py_balanced import py_item
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime F64P = MutPointer[Float64, MutUntrackedOrigin]
@@ -121,13 +126,15 @@ def _one(value: Float64) -> List[Float64]:
 
 
 def _empty1(context: PythonObject) raises -> PythonObject:
+    var nk = prep_keys()
     # `Array.from_list([], "<f4")`
-    return classical_wrap_array(py_call(context["array_type"], "f"), Python.tuple(0), "<f4", "C", context["output_context"])
+    return classical_wrap_array(py_call(py_item(context, nk[].k_array_type), "f"), Python.tuple(0), "<f4", "C", py_item(context, nk[].k_output_context))
 
 
 def _f32_vector(values: List[Float64], context: PythonObject) raises -> PythonObject:
+    var nk = prep_keys()
     # The values as a float32 vector (`Array(...).astype("<f4")`).
-    var out = classical_typed(Python.tuple(len(values)), "<f4", context["output_context"])
+    var out = classical_typed(Python.tuple(len(values)), "<f4", py_item(context, nk[].k_output_context))
     var dest = _ptr(out)
     _ = out  # keep the Python object alive through the native call above
     for i in range(len(values)):  # cpu-route: one feature's estimator predictions, rounded once to float32
@@ -182,27 +189,28 @@ def _pred_f64(v: PythonObject, context: PythonObject) raises -> List[Float64]:
 
 # ---------------------------------------------------------------- parameters
 def _refuse(model: PythonObject, context: PythonObject) raises:
+    var nk = prep_keys()
     # `_refuse`: the parameter refusals, before X is read.
     var b = _b()
     var fields = py_fields(model)
-    var estimator = fields["estimator"]
+    var estimator = py_item(fields, nk[].k_estimator)
     if estimator is not None:
         # A user estimator is a mojolearn estimator with a connected native
         # plan (its clone, fit and predict are compiled operations); any other
         # class is refused by name first.
         prep_estimator_admit(estimator, "IterativeImputer", context)
-    var mi = fields["max_iter"]
+    var mi = py_item(fields, nk[].k_max_iter)
     if Bool(py=py_call(b.isinstance, mi, b.bool)) or not _int_like(mi, context) or Int(py=py_call(b.int, mi)) < 0:
         raise Error("The 'max_iter' parameter of IterativeImputer must be an int in the range [0, inf). Got "
                     + _repr(mi) + " instead.")
-    var order = fields["imputation_order"]
+    var order = py_item(fields, nk[].k_imputation_order)
     var text = String(order) if _is_str(order) else String("")
     if text != "ascending" and text != "descending" and text != "roman" and text != "arabic" and text != "random":
         raise Error("mojolearn: invalid imputation_order " + _repr(order))
-    var nnf = fields["n_nearest_features"]
+    var nnf = py_item(fields, nk[].k_n_nearest_features)
     if nnf is not None and (not _int_like(nnf, context) or Int(py=py_call(b.int, nnf)) < 1):
         raise Error("mojolearn: n_nearest_features must be an int >= 1; got " + _repr(nnf))
-    if (_truth(fields["sample_posterior"]) and estimator is not None
+    if (_truth(py_item(fields, nk[].k_sample_posterior)) and estimator is not None
             and not prep_estimator_has(estimator, "predict_std", context)):
         # The native plan declares the supported return_std operation;
         # inspecting/calling the estimator's Python predict is unnecessary.
@@ -227,10 +235,11 @@ def _per_bound(v: PythonObject, d: Int) raises -> List[Float64]:
 
 
 def _bounds_k(model: PythonObject, d: Int, keep: List[Int]) raises -> List[Float64]:
+    var nk = prep_keys()
     # `_bounds(d)` interleaved (zip stops at the shorter), then the kept columns'.
     var fields = py_fields(model)
-    var lo = _per_bound(fields["min_value"], d)
-    var hi = _per_bound(fields["max_value"], d)
+    var lo = _per_bound(py_item(fields, nk[].k_min_value), d)
+    var hi = _per_bound(py_item(fields, nk[].k_max_value), d)
     var bounds = List[Float64]()
     for i in range(min(len(lo), len(hi))):  # driver-loop: over the per-column bound pairs
         bounds.append(lo[i])
@@ -253,8 +262,9 @@ def _float_list(values: List[Float64]) raises -> PythonObject:
 
 
 def _bounds_of(model: PythonObject) raises -> List[Float64]:
+    var nk = prep_keys()
     # The fitted `_bounds_k` list.
-    var items = py_call(_b().list, py_fields(model)["_bounds_k"])
+    var items = py_call(_b().list, py_item(py_fields(model), nk[].k__bounds_k))
     var out = List[Float64]()
     for i in range(len(items)):  # driver-loop: over fitted per-column bounds
         out.append(_float(items[i]))
@@ -343,16 +353,17 @@ def _prepare(mut p: EncProg, values: PythonObject, xf: PythonObject, keep: List[
 def _with_indicator(model: PythonObject, values: PythonObject, xt: PythonObject, dk: Int,
                     context: PythonObject) raises -> PythonObject:
     """`_with_indicator`: Xt, then MissingIndicator's columns (add_indicator)."""
+    var nk = prep_keys()
     var fields = py_fields(model)
-    var indicator = _index_list(fields["_indicator"])
+    var indicator = _index_list(py_item(fields, nk[].k__indicator))
     var m = len(indicator)
     if m == 0:
         return xt
     var n = Int(py=values[3])
     var d = Int(py=values[4])
-    var entries = _entries(fields["numeric_mode_"], context)
+    var entries = _entries(py_item(fields, nk[].k_numeric_mode_), context)
     var p = EncProg()
-    var xo = _mark_missing(p, p.put_x(values), n * d, fields["missing_values"], context)
+    var xo = _mark_missing(p, p.put_x(values), n * d, py_item(fields, nk[].k_missing_values), context)
     var mo = p.alloc(n * m)
     var io = p.put_floats(_floats_of(indicator), context)
     _stage(p.prog.program, OP_NAN_MASK, n * m, xo, n, d, io, m, mo)
@@ -551,23 +562,25 @@ def _nbl_of(value: PythonObject) raises -> List[Int]:
 def _initial(model: PythonObject, values: PythonObject, context: PythonObject) raises -> PythonObject:
     """`SimpleImputer(missing_values, strategy=initial_strategy, fill_value,
     keep_empty_features).fit(arr)`, run by the encode owner's native fit."""
+    var nk = prep_keys()
     var fields = py_fields(model)
     # a fresh instance holding SimpleImputer.__init__'s six parameters
-    var cls = context["prep_owner_classes"]["SimpleImputer"]
+    var cls = py_item(py_item(context, nk[].k_prep_owner_classes), nk[].k_SimpleImputer)
     var imputer = py_call(_b().object.__new__, cls)
     var own = py_fields(imputer)
-    py_setitem(own, "missing_values", fields["missing_values"])
-    py_setitem(own, "strategy", fields["initial_strategy"])
-    py_setitem(own, "fill_value", fields["fill_value"])
-    py_setitem(own, "copy", PythonObject(True))
-    py_setitem(own, "add_indicator", PythonObject(False))
-    py_setitem(own, "keep_empty_features", fields["keep_empty_features"])
+    py_setitem(own, nk[].k_missing_values, py_item(fields, nk[].k_missing_values))
+    py_setitem(own, nk[].k_strategy, py_item(fields, nk[].k_initial_strategy))
+    py_setitem(own, nk[].k_fill_value, py_item(fields, nk[].k_fill_value))
+    py_setitem(own, nk[].k_copy, PythonObject(True))
+    py_setitem(own, nk[].k_add_indicator, PythonObject(False))
+    py_setitem(own, nk[].k_keep_empty_features, py_item(fields, nk[].k_keep_empty_features))
     _precheck(imputer, "simple_imputer", context)
     _imputer_fit(imputer, values, context)
     return imputer
 
 
 def _fit_transform(model: PythonObject, x: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = prep_keys()
     _refuse(model, context)
     var b = _b()
     var fields = py_fields(model)
@@ -576,28 +589,28 @@ def _fit_transform(model: PythonObject, x: PythonObject, context: PythonObject) 
     var values = xprep_values(x, entries, context)
     var n = Int(py=values[3])
     var d = Int(py=values[4])
-    var rng = _u64_of(fields["random_state"])
+    var rng = _u64_of(py_item(fields, nk[].k_random_state))
     var post_step = 0
-    py_setitem(fields, "_rng", _u64_obj(rng))
-    py_setitem(fields, "_post_step", PythonObject(0))
+    py_setitem(fields, nk[].k__rng, _u64_obj(rng))
+    py_setitem(fields, nk[].k__post_step, PythonObject(0))
     var imputer = _initial(model, values, context)
-    py_setitem(fields, "initial_imputer_", imputer)
+    py_setitem(fields, nk[].k_initial_imputer_, imputer)
     var xf = _imputer_transform(imputer, values, context)
-    var keep = _index_list(py_fields(imputer)["_keep"])
-    py_setitem(fields, "_keep", py_call(b.list, py_fields(imputer)["_keep"]))
+    var keep = _index_list(py_item(py_fields(imputer), nk[].k__keep))
+    py_setitem(fields, nk[].k__keep, py_call(b.list, py_item(py_fields(imputer), nk[].k__keep)))
     var dk = len(keep)
     var bounds = _bounds_k(model, d, keep)
-    py_setitem(fields, "_bounds_k", _float_list(bounds))
-    var missing = fields["missing_values"]
-    var order_name = String(fields["imputation_order"])
-    var skip = _truth(fields["skip_complete"])
-    var posterior = _truth(fields["sample_posterior"])
+    py_setitem(fields, nk[].k__bounds_k, _float_list(bounds))
+    var missing = py_item(fields, nk[].k_missing_values)
+    var order_name = String(py_item(fields, nk[].k_imputation_order))
+    var skip = _truth(py_item(fields, nk[].k_skip_complete))
+    var posterior = _truth(py_item(fields, nk[].k_sample_posterior))
     # the statistics, the scale and the imputation orders: one program
     var p = EncProg()
     var xo = _mark_missing(p, p.put_x(values), n * d, missing, context)
     var st = p.alloc(6 * d)
     _cs(p, mode, entries, xo, n, d, st)
-    var rounds = Int(py=py_call(b.int, fields["max_iter"]))
+    var rounds = Int(py=py_call(b.int, py_item(fields, nk[].k_max_iter)))
     var R = max(rounds, 1)
     var ordw = p.alloc(max(R * dk, 1))
     var lens = p.alloc(R)
@@ -626,11 +639,11 @@ def _fit_transform(model: PythonObject, x: PythonObject, context: PythonObject) 
     if not isfinite(scale) and scale == scale and scale > 0.0:
         raise Error("Input X contains infinity or a value too large for dtype('float64').")
     var indicator = List[Int]()
-    if _truth(fields["add_indicator"]):
+    if _truth(py_item(fields, nk[].k_add_indicator)):
         for j in range(d):  # driver-loop: over the per-column non-missing counts (feature metadata)
             if Int(_word(ran, st + j)) < n:
                 indicator.append(j)
-    py_setitem(fields, "_indicator", _int_list(indicator))
+    py_setitem(fields, nk[].k__indicator, _int_list(indicator))
     var ln = List[Int]()
     for r in range(R):  # driver-loop: over the imputation rounds
         ln.append(_iword(ran, lens + r) if dk > 0 else 0)
@@ -644,17 +657,17 @@ def _fit_transform(model: PythonObject, x: PythonObject, context: PythonObject) 
         any_order = any_order or len(order) > 0
         total_steps += len(order)
         orders.append(order^)
-    py_setitem(fields, "n_features_with_missing_", PythonObject(ln[0]))
+    py_setitem(fields, nk[].k_n_features_with_missing_, PythonObject(ln[0]))
     if order_name == "random":
         var m = ln[0] if skip else dk
         rng = rng + UInt64(rounds) * UInt64(max(m - 1, 0)) * GOLDEN
-        py_setitem(fields, "_rng", _u64_obj(rng))
-    py_setitem(fields, "numeric_mode_", mode)
-    py_setitem(fields, "n_features_in_", PythonObject(d))
+        py_setitem(fields, nk[].k__rng, _u64_obj(rng))
+    py_setitem(fields, nk[].k_numeric_mode_, mode)
+    py_setitem(fields, nk[].k_n_features_in_, PythonObject(d))
     _ = ran^
     # the n_nearest_features draws, every step up front in one program
     var draws = _Draws()
-    var nnf = fields["n_nearest_features"]
+    var nnf = py_item(fields, nk[].k_n_nearest_features)
     if nnf is not None and Int(py=py_call(b.int, nnf)) < dk:
         draws.on = True
         draws.k = Int(py=py_call(b.int, nnf))
@@ -665,8 +678,8 @@ def _fit_transform(model: PythonObject, x: PythonObject, context: PythonObject) 
                 js.append(orders[r][i])
         if len(js) > 0:
             draws.lists = _neighbours(xf, n, dk, mode, js, draws.k, rng, context)
-    var tol = _float(fields["tol"]) * scale
-    var estimator = fields["estimator"]
+    var tol = _float(py_item(fields, nk[].k_tol)) * scale
+    var estimator = py_item(fields, nk[].k_estimator)
     if estimator is not None:
         # the reference's rounds over copies of the user estimator
         var mask = _mask_arr(values, keep, missing, context)
@@ -687,9 +700,9 @@ def _fit_transform(model: PythonObject, x: PythonObject, context: PythonObject) 
             done = r + 1
             if check and _ii_stop(xt, prev, n, dk, tol, mode, context):
                 break
-        py_setitem(fields, "_rng", _u64_obj(rng))
-        py_setitem(fields, "n_iter_", PythonObject(done if any_order else min(1, len(orders))))
-        py_setitem(fields, "imputation_sequence_", seq)
+        py_setitem(fields, nk[].k__rng, _u64_obj(rng))
+        py_setitem(fields, nk[].k_n_iter_, PythonObject(done if any_order else min(1, len(orders))))
+        py_setitem(fields, nk[].k_imputation_sequence_, seq)
         return _with_indicator(model, values, xt, dk, context)
     # the built-in Bayesian ridge: every round in one program
     var q = EncProg()
@@ -770,7 +783,7 @@ def _fit_transform(model: PythonObject, x: PythonObject, context: PythonObject) 
     var done = 0
     if any_order:
         done = Int(_word(got, niter)) if conv else rounds
-    py_setitem(fields, "n_iter_", PythonObject(done if any_order else min(1, rounds)))
+    py_setitem(fields, nk[].k_n_iter_, PythonObject(done if any_order else min(1, rounds)))
     var steps = 0
     for r in range(min(done, len(orders))):  # driver-loop: count of finished imputation steps (imputation rounds)
         steps += len(orders[r])
@@ -778,59 +791,60 @@ def _fit_transform(model: PythonObject, x: PythonObject, context: PythonObject) 
     for s in range(min(steps, len(seq_j))):  # driver-loop: fitted imputation sequence views (finished imputation steps)
         _ = py_call(sequence.append, Python.tuple(seq_j[s], _take1(got, seq_coef[s], dk, context),
                                                   _take1(got, seq_inter[s], 1, context)))
-    py_setitem(fields, "imputation_sequence_", sequence)
+    py_setitem(fields, nk[].k_imputation_sequence_, sequence)
     var post = Python.list()
     for s in range(min(steps, len(post_sig))):  # driver-loop: fitted posterior views (finished imputation steps)
         var side = max(post_pp[s], 1)
         _ = py_call(post.append, Python.tuple(post_nbl[s], _take1(got, post_sig[s], side * side, context),
                                               _take1(got, post_al[s], 2, context), _take1(got, post_means[s], dk, context)))
-    py_setitem(fields, "_posterior", post)
-    py_setitem(fields, "_rng", _u64_obj(rng))
-    py_setitem(fields, "_post_step", PythonObject(post_step))
+    py_setitem(fields, nk[].k__posterior, post)
+    py_setitem(fields, nk[].k__rng, _u64_obj(rng))
+    py_setitem(fields, nk[].k__post_step, PythonObject(post_step))
     var xt = _take2(got, fo, n, dk, context)
     return _with_indicator(model, values, xt, dk, context)
 
 
 # ---------------------------------------------------------------- transform
 def _transform(model: PythonObject, x: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = prep_keys()
     var fields = py_fields(model)
-    if not py_contains(fields, "imputation_sequence_"):
+    if not py_contains(fields, nk[].k_imputation_sequence_):
         raise Error("RuntimeError: mojolearn: this IterativeImputer instance is not fitted yet")
-    var mode = fields["numeric_mode_"]
+    var mode = py_item(fields, nk[].k_numeric_mode_)
     var entries = _entries(mode, context)
     var values = xprep_values(x, entries, context)
     var n = Int(py=values[3])
     var d = Int(py=values[4])
     _check_width(model, d)
-    var keep = _index_list(fields["_keep"])
+    var keep = _index_list(py_item(fields, nk[].k__keep))
     var dk = len(keep)
     var bounds = _bounds_of(model)
-    var imputer = fields["initial_imputer_"]
-    if not py_contains(py_fields(imputer), "n_features_in_"):
+    var imputer = py_item(fields, nk[].k_initial_imputer_)
+    if not py_contains(py_fields(imputer), nk[].k_n_features_in_):
         raise Error("RuntimeError: mojolearn: this " + _name(imputer) + " instance is not fitted yet")
     # `initial_imputer_.transform(arr)`: X as converted above
     var xf = _imputer_transform(imputer, values, context)
-    var posterior = _truth(fields["sample_posterior"])
-    var rng = _u64_of(fields["_rng"])
-    var sequence = fields["imputation_sequence_"]
-    if fields["estimator"] is not None:
-        var mask = _mask_arr(values, keep, fields["missing_values"], context)
+    var posterior = _truth(py_item(fields, nk[].k_sample_posterior))
+    var rng = _u64_of(py_item(fields, nk[].k__rng))
+    var sequence = py_item(fields, nk[].k_imputation_sequence_)
+    if py_item(fields, nk[].k_estimator) is not None:
+        var mask = _mask_arr(values, keep, py_item(fields, nk[].k_missing_values), context)
         var xt = xf
         for s in range(len(sequence)):  # api-bound-loop: over the fitted imputation steps; one predict of the user-supplied fitted estimator object's native plan each
             var step = sequence[s]
             var j = Int(py=step[0])
             var took = _ii_take(xt, mask, n, dk, j, _nbl_of(step[1]), mode, False, context)
             xt = _ii_put(xt, took.xm, took.rows, took.m, n, dk, j, step[2], posterior, bounds, mode, rng, context)
-        py_setitem(fields, "_rng", _u64_obj(rng))
+        py_setitem(fields, nk[].k__rng, _u64_obj(rng))
         return _with_indicator(model, values, xt, dk, context)
     var p = EncProg()
-    var prep = _prepare(p, values, xf, keep, bounds, fields["missing_values"], context)
+    var prep = _prepare(p, values, xf, keep, bounds, py_item(fields, nk[].k_missing_values), context)
     var fo = prep[0]
     var mo = prep[1]
     var bo = prep[2]
     var seed = Int(rng & 0x7FFFFFFF)
-    var post_step = Int(py=py_call(_b().int, fields["_post_step"]))
-    var posts = fields["_posterior"] if posterior else PythonObject(None)
+    var post_step = Int(py=py_call(_b().int, py_item(fields, nk[].k__post_step)))
+    var posts = py_item(fields, nk[].k__posterior) if posterior else PythonObject(None)
     for s in range(len(sequence)):  # driver-loop: drives one device regression per step (fitted imputation steps)
         var step = sequence[s]
         var j = Int(py=step[0])
@@ -858,21 +872,21 @@ def _transform(model: PythonObject, x: PythonObject, context: PythonObject) rais
         else:
             _stage(p.prog.program, OP_II_PREDICT, n, fo, n, dk, mo, j, co, io, bo, NONE)
     var ran = p.run(entries, context)
-    py_setitem(fields, "_post_step", PythonObject(post_step))
+    py_setitem(fields, nk[].k__post_step, PythonObject(post_step))
     var xt = _take2(ran, fo, n, dk, context)
     return _with_indicator(model, values, xt, dk, context)
 
 
 # ---------------------------------------------------------------- the door
-def prep_iterimp_call(model: PythonObject, operation: String, args: PythonObject,
+def prep_iterimp_call(model: PythonObject, op: Int, operation: String, args: PythonObject,
                       context: PythonObject) raises -> PythonObject:
     """IterativeImputer.fit(X, y=None) (returns the model), fit_transform(X,
     y=None) and transform(X)."""
-    if operation == "fit":
+    if op == PREP_OPN_FIT:
         _ = _fit_transform(model, args[0], context)
         return model
-    if operation == "fit_transform":
+    if op == PREP_OPN_FIT_TRANSFORM:
         return _fit_transform(model, args[0], context)
-    if operation == "transform":
+    if op == PREP_OPN_TRANSFORM:
         return _transform(model, args[0], context)
     raise Error("TypeError: the native IterativeImputer owner does not serve " + operation)

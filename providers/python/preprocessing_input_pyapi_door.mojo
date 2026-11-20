@@ -14,6 +14,8 @@ from bindings.native_torch_admission_door import native_torch_numpy
 from bindings.sequential_admission_door import _ordinary_torch, sequential_admit_value
 from providers.python.array_metadata_pyapi_door import ArrayMetadata, ArrayPin, array_shape_once, array_metadata_once, array_slot_once
 from core.scaler_fit_impl import scaler_cast
+from bindings.prep_keys_unpack import prep_keys
+from bindings.py_balanced import py_item
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 
@@ -55,9 +57,10 @@ def register_scaler_snapshot(mut module: PythonModuleBuilder) raises:
 
 
 def _frozen_values(metadata: ArrayMetadata, pin: ArrayPin, view: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = prep_keys()
     # This view owns its pinned storage independently of the caller's Array
     # slots. Its shape, dtype and address are supplied from the snapshot.
-    var result = native_storage_allocate(context["array_class"])
+    var result = native_storage_allocate(py_item(context, nk[].k_array_class))
     var n = metadata.source.rows
     var d = metadata.source.cols
     py_setattr(result, "_store", PythonObject(None))
@@ -78,6 +81,7 @@ def _frozen_values(metadata: ArrayMetadata, pin: ArrayPin, view: PythonObject, c
 
 
 def scaler_input_snapshot(source: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = prep_keys()
     classical_admit_value(source, context)
     var b = native_loaded_module("builtins")
     var pandas = native_pandas_exact(source)
@@ -129,7 +133,7 @@ def scaler_input_snapshot(source: PythonObject, context: PythonObject) raises ->
                 and (not classical_is_array(source, context) or (metadata.c_order and not metadata.readonly))):
             write_view = destination
     if not metadata.f32_c() or not metadata.native_byte_order:
-        var output = classical_typed(Python.tuple(n, d), "<f4", context["output_context"])
+        var output = classical_typed(Python.tuple(n, d), "<f4", py_item(context, nk[].k_output_context))
         var address = Int(py=classical_address(output))
         scaler_cast(metadata.source.addr, metadata.source.s0, metadata.source.s1, n, d,
                     metadata.source.itemsize, metadata.source.kind, metadata.native_byte_order,

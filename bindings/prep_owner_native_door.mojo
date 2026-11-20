@@ -25,9 +25,18 @@ from bindings.prep_select_native_door import prep_rfe_call, prep_mutual_info_cal
 from bindings.prep_composition_lifecycle_door import composition_before, composition_after_fit
 from bindings.parallel_public_result_door import parallel_public_result
 from bindings.public_lifecycle_owner_door import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result
+from bindings.prep_keys_unpack import (
+    prep_keys,
+    PREP_OPN_CHI2, PREP_OPN_FIT, PREP_OPN_FIT_TRANSFORM, PREP_OPN_F_CLASSIF, PREP_OPN_F_REGRESSION,
+    PREP_OPN_INVERSE_TRANSFORM, PREP_OPN_MUTUAL_INFO_CLASSIF, PREP_OPN_MUTUAL_INFO_REGRESSION,
+    PREP_OPN_R_REGRESSION, PREP_OPN_TRANSFORM,
+)
+from bindings.py_keys import py_op_code
+from bindings.py_balanced import py_item
 
 
 def _owner_kind(model: PythonObject, context: PythonObject) raises -> String:
+    var nk = prep_keys()
     # The owner kind of this model's class (or a base, by its MRO); "" when
     # the encode owner serves it (or model is None: a module function).
     if model is None:
@@ -37,7 +46,7 @@ def _owner_kind(model: PythonObject, context: PythonObject) raises -> String:
     var cls = py_type(model)
     if py_type(cls) is not b.type:
         raise Error("TypeError: native preprocessing refuses Python metaclass hooks")
-    var kinds = context["prep_owner_kinds"]
+    var kinds = py_item(context, nk[].k_prep_owner_kinds)
     # The model's own class is the MRO's first row: an exact owner class is
     # answered by that one lookup (perf3-prep-shared; same as the encode
     # owner's `_kind`). Any other class (the encode classes: the common
@@ -51,7 +60,7 @@ def _owner_kind(model: PythonObject, context: PythonObject) raises -> String:
     var record = class_record(mods, _OWNER_KIND_SLOT, cls)
     if record is not None and record[0] is kinds:
         return String(record[1])
-    var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
+    var mro = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, cls)
     var found = String("")
     for k in range(len(mro)):  # driver-loop: over the model class's MRO
         var kind = py_get(kinds, mro[k])
@@ -79,17 +88,20 @@ def prep_owner_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObje
         if kind == "" and model is not None:
             # SimpleImputer, KBinsDiscretizer, the encoders, SplineTransformer, SelectKBest
             return prep_encode_c(py_self, args_ptr)
+        # The code of the operation (one lookup with the caller's str); the
+        # name String stays for the lifecycle owner and the refusal texts.
+        var op = py_op_code(prep_keys()[].ops, call[1])
         classical_connect_numpy(context)
         var result = PythonObject(None)
         if kind == "label_encoder" or kind == "label_binarizer" or kind == "multilabel_binarizer":
             # The label encoders' public lifecycle (the former `_mode`
             # wrappers): NotFittedError, fit bookkeeping and NumPy results;
             # their input is y, so no X table checks.
-            var public = (operation == "fit" or operation == "fit_transform" or operation == "transform"
-                          or operation == "inverse_transform")
+            var public = (op == PREP_OPN_FIT or op == PREP_OPN_FIT_TRANSFORM or op == PREP_OPN_TRANSFORM
+                          or op == PREP_OPN_INVERSE_TRANSFORM)
             var depth = lifecycle_begin(model, operation, args[0], False, False, True, context) if public else 0
             try:
-                result = prep_labels_call(model, kind, operation, args, context)
+                result = prep_labels_call(model, kind, op, operation, args, context)
             finally:
                 if public:
                     lifecycle_end(model, operation, depth)
@@ -97,21 +109,21 @@ def prep_owner_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObje
                 lifecycle_complete(model, operation, PythonObject(None), False, context)
                 result = lifecycle_result(model, operation, result, "", context)
         elif kind == "iterative_imputer":
-            var prepared = composition_before(model, kind, operation, args, context)
-            result = prep_iterimp_call(model, operation, prepared, context)
+            var prepared = composition_before(model, kind, op, operation, args, context)
+            result = prep_iterimp_call(model, op, operation, prepared, context)
         elif kind == "rfe":
-            var prepared = composition_before(model, kind, operation, args, context)
-            result = prep_rfe_call(model, operation, prepared, context)
+            var prepared = composition_before(model, kind, op, operation, args, context)
+            result = prep_rfe_call(model, op, operation, prepared, context)
         elif kind != "":
             raise Error("TypeError: the native prep owner does not serve this class")
-        elif operation == "mutual_info_classif" or operation == "mutual_info_regression":
-            result = prep_mutual_info_call(operation, args, context)
-        elif operation == "f_classif" or operation == "chi2" or operation == "f_regression" or operation == "r_regression":
+        elif op == PREP_OPN_MUTUAL_INFO_CLASSIF or op == PREP_OPN_MUTUAL_INFO_REGRESSION:
+            result = prep_mutual_info_call(op, args, context)
+        elif op == PREP_OPN_F_CLASSIF or op == PREP_OPN_CHI2 or op == PREP_OPN_F_REGRESSION or op == PREP_OPN_R_REGRESSION:
             result = prep_encode_scores_call(operation, args, context)
         else:
             raise Error("unknown native prep operation")
         if kind == "rfe" or kind == "iterative_imputer":
-            if operation == "fit" or operation == "fit_transform":
+            if op == PREP_OPN_FIT or op == PREP_OPN_FIT_TRANSFORM:
                 composition_after_fit(model, args[0], context)
             result = parallel_public_result(result, operation, PythonObject(None), context)
         return result.steal_data()

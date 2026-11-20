@@ -1,9 +1,12 @@
 """Source-only public-door contracts; no product import or native build."""
 import ast
 from pathlib import Path
+import sys
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'tools'))
+from boundary_keys_plain import plain  # noqa: E402
 
 
 def classes_from(path, names, namespace, keep=None):
@@ -95,7 +98,8 @@ class CompositionDoors(unittest.TestCase):
         self.assertIn('parallel_public_result(result, operation, PythonObject(None), context)', owner)
 
     def test_instance_dictionary_type_is_checked_before_iteration(self):
-        source = (ROOT / 'bindings/prep_composition_lifecycle_door.mojo').read_text()
+        rel = 'bindings/prep_composition_lifecycle_door.mojo'
+        source = plain(rel, (ROOT / rel).read_text())
         fields = source.split('def composition_fields(', 1)[1].split('def composition_require_fitted(', 1)[0]
         descriptor = fields.index('var fields = py_call(plan["fields_get"], model, cls)')
         guard = fields.index('if py_type(fields) is not b.dict:')
