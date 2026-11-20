@@ -773,12 +773,12 @@
    "evidence": "A/B round 2 2026-11-19, NVIDIA L40S host bd9c355c19c0, wheel 0c68d6cd27 and its B set, base and arm in one pod job (nvc1-0008, tag nvc-ab-20261119T154232Z-0642a5; ~/mojolearn-evidence/measure-candidate/build-0c68d6cd27/ab2/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts4/tab-<arm>.txt, driver rows x/logs/drivers.log), one scored run per arm, small rows the median of 20 calls: 28 cells, digests and quality equal; the 18 pairs whose two cells ran on one NUMA node: fits 0.98-1.01; predicts (medians of 20) huber istella 5.683 -> 6.792 ms (1.20), sgd-clf taxi 1.085 -> 1.239 (1.14), bayesian-ridge taxi 0.755 -> 0.788 (1.04), the other six 0.94-1.00; the 10 pairs on different nodes (lars, lasso-lars, sgd-clf istella) 0.93-1.07, not used. NOISE: deleted."
   },
   "fast-matrix-units-tf32": {
-   "define": "MOJOLEARN_GEMM_FAST_MATRIX_UNITS=1 (with MOJOLEARN_MODE_FAST_ROWS)",
+   "define": "MOJOLEARN_GEMM_FAST_MATRIX_UNITS=1,MOJOLEARN_MODE_FAST_ROWS",
    "status": "define in code (gemm/fast_matrix_units.mojo MATRIX_UNITS_KIND): B routes large neural FP32 GEMMs of callers with the vendor route open, and the sequence executor's plain dense row-major GEMM launches, to linalg.matmul (TF32 operands, FP32 accumulation); A = the FP32 kernels",
    "owed": "RUN"
   },
   "fast-matrix-units-tf32-all": {
-   "define": "MOJOLEARN_GEMM_FAST_MATRIX_UNITS=3 (with MOJOLEARN_MODE_FAST_ROWS)",
+   "define": "MOJOLEARN_GEMM_FAST_MATRIX_UNITS=3,MOJOLEARN_MODE_FAST_ROWS",
    "status": "define in code (gemm/fast_matrix_units.mojo GEMM_FAST_MATRIX_UNITS_ALL): B1 plus the neural-dispatch callers that closed the vendor route (Llama stage projections, CNN linear, MoE grouped)",
    "owed": "RUN"
   },
@@ -828,27 +828,32 @@
    "owed": "RUN"
   },
   "fast-decomp-matrix-units": {
-   "define": "MOJOLEARN_DECOMP_FAST_MATRIX_UNITS (with MOJOLEARN_MODE_FAST_ROWS)",
+   "define": "MOJOLEARN_DECOMP_FAST_MATRIX_UNITS,MOJOLEARN_MODE_FAST_ROWS",
    "status": "define in code (checks/mode_policy.mojo ROUTE_DECOMP_MATRIX_UNITS; decomposition/gram_matrix_units_route.mojo): B runs the PCA / truncated-SVD Gram past the split-K width and the projections on MAX linalg.matmul (NVIDIA TF32 operands, FP32 accumulation); A = the zero-row fast set (the exact kernels), flags -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_MODE_FAST_ROWS",
    "owed": "RUN"
   },
   "fast-neighbors-matrix-units": {
-   "define": "MOJOLEARN_NEIGHBORS_FAST_MATRIX_UNITS (with MOJOLEARN_MODE_FAST_ROWS)",
+   "define": "MOJOLEARN_MODE_FAST_ROWS,MOJOLEARN_NEIGHBORS_FAST_MATRIX_UNITS",
    "status": "define in code (checks/mode_policy.mojo ROUTE_NEIGHBORS_MATRIX_UNITS; neighbors/distance_matrix_units_route.mojo): B runs the tiled brute-force k-NN L2 distance product on MAX linalg.matmul at n_features >= 256, then the FP32 epilogue and the unchanged selectors; A = the zero-row fast set (fused exact kernels), flags -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_MODE_FAST_ROWS",
    "owed": "RUN"
   },
+  "fast-rows": {
+   "define": "MOJOLEARN_MODE_FAST_ROWS",
+   "status": "define in code (core/package_profile.mojo MODE_FAST_ROWS; checks/mode_policy.mojo POLICY_BUILD_FAST_ROWS), lane fx-fast-set-build 2026-11-20: B = the zero-row fast set (the identical kernels with the contract off, no row on, mode policy mask 0); A = the identical set. The control of every fast arm: B must not be slower than A and its digests must equal A's (a difference is a seam that reads the build kind where it should read a row)",
+   "owed": "RUN"
+  },
   "fast-flush-off": {
-   "define": "MOJOLEARN_MODE_FAST_FLUSH_OFF (with MOJOLEARN_MODE_FAST_ROWS)",
+   "define": "MOJOLEARN_MODE_FAST_FLUSH_OFF,MOJOLEARN_MODE_FAST_ROWS",
    "status": "define in code (checks/mode_policy.mojo ROW_FLUSH_OFF; checks/numerics.mojo ftz, ftz_simd): B drops the denormal flush at every seam call of every family; A = the zero-row fast set",
    "owed": "RUN"
   },
   "fast-vendor-math": {
-   "define": "MOJOLEARN_MODE_FAST_VENDOR_MATH (with MOJOLEARN_MODE_FAST_ROWS)",
+   "define": "MOJOLEARN_MODE_FAST_ROWS,MOJOLEARN_MODE_FAST_VENDOR_MATH",
    "status": "define in code (checks/mode_policy.mojo ROW_VENDOR_MATH; checks/numerics.mojo identical_exp ... identical_clamp): B uses the stdlib exp / log / sqrt / div forms; A = the zero-row fast set",
    "owed": "RUN"
   },
   "fast-fold-free": {
-   "define": "MOJOLEARN_MODE_FAST_FOLD_FREE -D MOJOLEARN_MODE_FAST_TILE_FREE (with MOJOLEARN_MODE_FAST_ROWS)",
+   "define": "MOJOLEARN_MODE_FAST_FOLD_FREE,MOJOLEARN_MODE_FAST_ROWS,MOJOLEARN_MODE_FAST_TILE_FREE",
    "status": "defines in code (checks/mode_policy.mojo ROW_FOLD_FREE, ROW_TILE_FREE; core/pinned_reduce.mojo pinned_block_sum, checks/kernel_matrix.mojo lib_block_size_for): B takes the library fold at the hardware width and the column's own block size; A = the zero-row fast set",
    "owed": "RUN"
   },
@@ -5289,6 +5294,7 @@
    "rows": "full",
    "vendor": "nvidia",
    "b_arms": [
+    "fast-rows",
     "fast-flush-off",
     "fast-vendor-math",
     "fast-fold-free"

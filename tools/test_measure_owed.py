@@ -511,6 +511,26 @@ class CommittedOwed(unittest.TestCase):
             if arm["owed"] == "RUN":
                 self.assertIn(name, used, name)
 
+    def test_every_run_arm_define_is_a_build_argument(self):
+        # lane fx-fast-set-build, 2026-11-20: tools/release.py candidate --owed-arm hands an arm's `define` to the
+        # build as it is written. Seven fast arms read "NAME (with MOJOLEARN_MODE_FAST_ROWS)" and their builds were
+        # refused ("--defines: not NAME or NAME=VALUE"). A RUN arm's define is what normalize_defines takes, and a
+        # relaxation of `fast` names MOJOLEARN_MODE_FAST_ROWS with it (checks/mode_policy.mojo `_row`)
+        from release_github_build import normalize_defines
+        doc = json.load(open(os.path.join(PC.OUT_DIR, "owed-pre0867.json")))
+        rows = ("MOJOLEARN_MODE_FAST_", "MOJOLEARN_GEMM_FAST_MATRIX_UNITS", "MOJOLEARN_DECOMP_FAST_MATRIX_UNITS",
+                "MOJOLEARN_NEIGHBORS_FAST_MATRIX_UNITS")
+        for name, arm in doc["b_arms"].items():
+            if arm["owed"] != "RUN" or arm.get("env"):
+                continue
+            try:
+                names = [e.split("=", 1)[0] for e in normalize_defines(arm["define"]).split(",")]
+            except SystemExit as exc:
+                self.fail(f"{name}: {exc}")
+            self.assertTrue(names[0], name)
+            if any(n.startswith(rows) for n in names):
+                self.assertIn("MOJOLEARN_MODE_FAST_ROWS", names, name)
+
 
 if __name__ == "__main__":
     unittest.main()
