@@ -96,7 +96,43 @@ from bindings.trees_public_forest_door import forest_shard_prepare, forest_shard
 from core.parallel_forecast_impl import forecast_gather_cols, forecast_scatter_cols
 from core.hotpath_impl import cast_elements, HP_I32, HP_I64, HP_U32
 from core.shared_slot import SharedSlot
-from bindings.parallel_keys_unpack import parallel_keys
+from bindings.parallel_keys_unpack import (
+    parallel_keys,
+    PARALLEL_SHARD_OPN_FAULTS_ARM,
+    PARALLEL_SHARD_OPN_FAULTS_TAKE,
+    PARALLEL_SHARD_OPN_FIT_FOREST,
+    PARALLEL_SHARD_OPN_FIT_GAUSSIAN_PROCESS_CLASSIFIER,
+    PARALLEL_SHARD_OPN_FIT_SCALER,
+    PARALLEL_SHARD_OPN_HOLDER_CLOSE,
+    PARALLEL_SHARD_OPN_HOLDER_ENTER,
+    PARALLEL_SHARD_OPN_IVF_CLOSE,
+    PARALLEL_SHARD_OPN_IVF_ENTER,
+    PARALLEL_SHARD_OPN_IVF_FROM_INDEX,
+    PARALLEL_SHARD_OPN_IVF_INIT,
+    PARALLEL_SHARD_OPN_IVF_SEARCH,
+    PARALLEL_SHARD_OPN_PARALLEL_QUERIES,
+    PARALLEL_SHARD_OPN_PREDICT_GAUSSIAN_PROCESS_CLASSIFIER,
+    PARALLEL_SHARD_OPN_QUERIES_INIT,
+    PARALLEL_SHARD_OPN_REFERENCE_INIT,
+    PARALLEL_SHARD_OPN_REFERENCE_QUERY,
+    PARALLEL_SHARD_OPN_REGISTER,
+    PARALLEL_SHARD_OPN_SABOTAGE_ARM,
+    PARALLEL_SHARD_OPN_TRACE_TAKE,
+    PARALLEL_SHARD_OPN_TRANSFORM_RBF_SAMPLER,
+    PARALLEL_SHARD_OPN_TRANSFORM_SCALER,
+    PARALLEL_SHARD_OPN_WORKER,
+    PARALLEL_SHARD_WORKER_OPN_FOREST_FIT,
+    PARALLEL_SHARD_WORKER_OPN_GPC_CLASS_FIT,
+    PARALLEL_SHARD_WORKER_OPN_GPC_CLASS_PREDICT,
+    PARALLEL_SHARD_WORKER_OPN_IDENTITY,
+    PARALLEL_SHARD_WORKER_OPN_RBF_ROWS,
+    PARALLEL_SHARD_WORKER_OPN_REFERENCE_SHARD,
+    PARALLEL_SHARD_WORKER_OPN_SCALER_FIT,
+    PARALLEL_SHARD_WORKER_OPN_SCALER_TRANSFORM,
+    PARALLEL_SHARD_WORKER_OPN_SHARD_RELEASE,
+    PARALLEL_SHARD_WORKER_OPN_SHARD_STORE,
+)
+from bindings.py_keys import py_op_code
 from bindings.py_balanced import py_item
 
 comptime _CHILD = "mojolearn._native_parallel_shard_worker"
@@ -193,7 +229,7 @@ def _transform_rbf_sampler(args: PythonObject) raises -> PythonObject:
         var lo = ranges[2 * r]
         var hi = ranges[2 * r + 1]
         var shift = shard_read_shift(r, lo, n_devices)
-        _ = py_call(requests.append, Python.tuple("rbf_rows", state, Python.tuple(shard_rows(x, lo - shift, hi - shift, context))))
+        _ = py_call(requests.append, Python.tuple(nk[].k_rbf_rows, state, Python.tuple(shard_rows(x, lo - shift, hi - shift, context))))
     var parts = shard_run(requests, args[2], _CHILD)
     var q = Int(py=py_item(fields, nk[].k_random_weights_).shape[1])
     for r in range(len(parts)):  # driver-loop: checks one result block per row shard
@@ -290,7 +326,7 @@ def _fit_scaler(args: PythonObject) raises -> PythonObject:
         var lo = ranges[2 * r]
         var hi = ranges[2 * r + 1]
         var shift = shard_read_shift(r, lo, n_devices)
-        _ = py_call(requests.append, Python.tuple("scaler_fit", Python.tuple(kind, py_call(b.tuple, init)),
+        _ = py_call(requests.append, Python.tuple(nk[].k_scaler_fit, Python.tuple(kind, py_call(b.tuple, init)),
                                                   Python.tuple(_columns(data, lo - shift, hi - shift, context))))
     var parts = shard_run(requests, args[2], _CHILD)
     var merged = b.dict()
@@ -359,7 +395,7 @@ def _transform_scaler(args: PythonObject) raises -> PythonObject:
             var value = fields[names[k]]
             py_setitem(part, names[k], PythonObject(None) if value is None else shard_rows(value, lo, hi, context))
         var shift = shard_read_shift(r, lo, n_devices)
-        _ = py_call(requests.append, Python.tuple("scaler_transform", Python.tuple(kind, part),
+        _ = py_call(requests.append, Python.tuple(nk[].k_scaler_transform, Python.tuple(kind, part),
                                                   Python.tuple(_columns(data, lo - shift, hi - shift, context), inverse)))
     var parts = shard_run(requests, args[2], _CHILD)
     var out = shard_array("<f4", Python.tuple(n, d), n * d, context)
@@ -440,11 +476,11 @@ def _fit_gpc(args: PythonObject) raises -> PythonObject:
     var requests = b.list()
     for i in range(len(columns)):  # driver-loop: one worker request per class column
         if stored:
-            _ = py_call(requests.append, Python.tuple("gpc_class_fit", Python.tuple(carried, max_iter),
+            _ = py_call(requests.append, Python.tuple(nk[].k_gpc_class_fit, Python.tuple(carried, max_iter),
                                                       Python.tuple(shard_stored_ref(token, 0), shard_stored_ref(token, 1),
                                                                    columns[i])))
         else:
-            _ = py_call(requests.append, Python.tuple("gpc_class_fit", Python.tuple(carried, max_iter),
+            _ = py_call(requests.append, Python.tuple(nk[].k_gpc_class_fit, Python.tuple(carried, max_iter),
                                                       Python.tuple(x, codes, columns[i])))
     var parts = (shard_run_stored(Python.tuple(x, codes), token, requests, args[3], _CHILD) if stored
                  else shard_run(requests, args[3], _CHILD))
@@ -507,7 +543,7 @@ def _predict_gpc(args: PythonObject) raises -> PythonObject:
                                                       Python.tuple(carried, shard_stored_ref(token, 0), fit_state),
                                                       Python.tuple(shard_stored_ref(token, 1), want_proba, out_kind)))
         else:
-            _ = py_call(requests.append, Python.tuple("gpc_class_predict", Python.tuple(carried, py_item(fields, nk[].k_X_train_), fit_state),
+            _ = py_call(requests.append, Python.tuple(nk[].k_gpc_class_predict, Python.tuple(carried, py_item(fields, nk[].k_X_train_), fit_state),
                                                       Python.tuple(q, want_proba, out_kind)))
     var columns = (shard_run_stored(Python.tuple(py_item(fields, nk[].k_X_train_), q), token, requests, args[2], _CHILD) if stored
                    else shard_run(requests, args[2], _CHILD))
@@ -595,11 +631,11 @@ def _fit_forest(args: PythonObject) raises -> PythonObject:
         var shift = shard_read_shift(r, lo, n_devices)
         if stored:
             var w_ref = shard_stored_ref(token, 2) if weighted else PythonObject(None)
-            _ = py_call(requests.append, Python.tuple("forest_fit", plan.state,
+            _ = py_call(requests.append, Python.tuple(nk[].k_forest_fit, plan.state,
                                                       Python.tuple(shard_stored_ref(token, 0), shard_stored_ref(token, 1),
                                                                    w_ref, lo - shift, hi - lo)))
         else:
-            _ = py_call(requests.append, Python.tuple("forest_fit", plan.state,
+            _ = py_call(requests.append, Python.tuple(nk[].k_forest_fit, plan.state,
                                                       Python.tuple(x, plan.y, plan.weights, lo - shift, hi - lo)))
     var parts = (shard_run_stored(payload, token, requests, args[3], _CHILD) if stored
                  else shard_run(requests, args[3], _CHILD))
@@ -681,7 +717,7 @@ def _map(pool: PythonObject, requests: PythonObject) raises -> PythonObject:
     return result
 
 
-def _native_request(name: String, args: PythonObject) raises -> PythonObject:
+def _native_request(name: PythonObject, args: PythonObject) raises -> PythonObject:
     return Python.tuple(name, PythonObject(None), args)
 
 
@@ -861,7 +897,7 @@ def _reference_query(args: PythonObject) raises -> PythonObject:
         while store_wave < n_ranges:  # driver-loop: over waves of len(devices) reference blocks
             var stores = b.list()
             for r in range(store_wave, min(store_wave + n_devices, n_ranges)):  # driver-loop: one store per reference block
-                _ = py_call(stores.append, _native_request("reference_store", Python.tuple(tokens[r], params, blocks[r])))
+                _ = py_call(stores.append, _native_request(nk[].k_reference_store, Python.tuple(tokens[r], params, blocks[r])))
             _ = _map(pool, stores)
             store_wave += n_devices
         while first < rows:  # driver-loop: over the query row blocks
@@ -874,7 +910,7 @@ def _reference_query(args: PythonObject) raises -> PythonObject:
                 for r in range(wave, min(wave + n_devices, n_ranges)):  # driver-loop: one request per reference block
                     var start = ranges[2 * r]
                     var stop = ranges[2 * r + 1]
-                    _ = py_call(requests.append, _native_request("reference_query", Python.tuple(
+                    _ = py_call(requests.append, _native_request(nk[].k_reference_query, Python.tuple(
                         tokens[r], query, min(k, stop - start))))
                 _ = py_call(parts.extend, _map(pool, requests))
                 wave += n_devices
@@ -890,7 +926,7 @@ def _reference_query(args: PythonObject) raises -> PythonObject:
                 _ = wide  # keep the Python object alive through the native call above
                 output = Python.tuple(merged[0], wide) if Bool(py=args[4]) else wide
             else:
-                var vote = Python.list(_native_request("reference_vote", Python.tuple(cls.__name__, vote_state, merged[0],
+                var vote = Python.list(_native_request(nk[].k_reference_vote, Python.tuple(cls.__name__, vote_state, merged[0],
                                                                                    merged[1], method)))
                 output = _map(pool, vote)[0]
             _ = py_call(outputs.append, output)
@@ -977,7 +1013,7 @@ def _release_reference(pool: PythonObject, tokens: PythonObject, workers: Int) r
         while wave < len(tokens):  # driver-loop: over waves of len(devices) stored blocks
             var releases = b.list()
             for r in range(wave, min(wave + workers, len(tokens))):  # driver-loop: one release per stored block
-                _ = py_call(releases.append, _native_request("release", Python.tuple(tokens[r])))
+                _ = py_call(releases.append, _native_request(nk[].k_release, Python.tuple(tokens[r])))
             _ = _map(pool, releases)
             wave += workers
     except:
@@ -1014,7 +1050,7 @@ def _release_query_state(pool: PythonObject, token: String, name: PythonObject, 
     var b = shard_b()
     var releases = b.list()
     for i in range(workers):  # driver-loop: one release request per worker
-        _ = py_call(releases.append, _native_request("query_state", Python.tuple(token, name, PythonObject(None))))
+        _ = py_call(releases.append, _native_request(nk[].k_query_state, Python.tuple(token, name, PythonObject(None))))
     try:
         _ = _map(pool, releases)
     except:
@@ -1148,7 +1184,7 @@ def _parallel_queries(args: PythonObject) raises -> PythonObject:
             py_setitem(state, nk[].k__index, shard_rows(index_object, 0, Int(py=index_object.shape[0]), context))
         var stores = b.list()
         for i in range(workers):  # driver-loop: one snapshot request per worker
-            _ = py_call(stores.append, _native_request("query_state", Python.tuple(token, name, state)))
+            _ = py_call(stores.append, _native_request(nk[].k_query_state, Python.tuple(token, name, state)))
         _ = _map(pool, stores)
         # The pool starts its workers on the first map: record their IDs now.
         prepared_put(mods, _QUERY_RESIDENT_SLOT, driver, Python.tuple(token, pool, _pool_pids(pool), key, name))
@@ -1160,7 +1196,7 @@ def _parallel_queries(args: PythonObject) raises -> PythonObject:
             var lo = ranges[2 * r]
             var hi = ranges[2 * r + 1]
             var shift = shard_read_shift(r, lo, n_devices)
-            _ = py_call(requests.append, _native_request("query_rows", Python.tuple(
+            _ = py_call(requests.append, _native_request(nk[].k_query_rows, Python.tuple(
                 token, shard_rows(data, lo - shift, hi - shift, context), method, args[3])))
         results = _map(pool, requests)
     except error:
@@ -1267,7 +1303,7 @@ def _ivf_from_index(args: PythonObject) raises -> PythonObject:
         py_setitem(state, nk[].k_list_indices_, shard_rows(local_all, lo, hi, context))
         py_setitem(state, nk[].k_list_data_, shard_rows(py_item(fields, nk[].k_list_data_), lo, hi, context))
         _ = py_call(maps.append, shard_rows(map_all, lo, hi, context))
-        _ = py_call(requests.append, _native_request("ivf_store", Python.tuple(token, state)))
+        _ = py_call(requests.append, _native_request(nk[].k_ivf_store, Python.tuple(token, state)))
     py_setitem(own, nk[].k__id_maps, maps)
     try:
         var receipts = _map(pool, requests)
@@ -1301,7 +1337,7 @@ def _ivf_search(args: PythonObject) raises -> PythonObject:
     try:
         var requests = b.list()
         for i in range(len(py_item(own, nk[].k_devices))):  # driver-loop: one search request per stored shard
-            _ = py_call(requests.append, _native_request("ivf_search", Python.tuple(py_item(own, nk[].k__token), q)))
+            _ = py_call(requests.append, _native_request(nk[].k_ivf_search, Python.tuple(py_item(own, nk[].k__token), q)))
         var parts = _map(pool, requests)
         if len(parts) != len(maps):
             raise Error("ValueError: incomplete IVF result shards")
@@ -1368,7 +1404,7 @@ def _ivf_close(obj: PythonObject) raises:
 
 # ---------------------------------------------------------------- the scaler worker
 
-def _scaler_worker(operation: String, state: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def _scaler_worker(operation: Int, state: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """One column block's scaler fit or transform through the typed cores
     (core/scaler_core.mojo) and the identical images' scaler and x_prep table
     entries (lane scaler-typed-core): UNPACK the block and the state record
@@ -1385,7 +1421,7 @@ def _scaler_worker(operation: String, state: PythonObject, args: PythonObject, c
     var n = Int(py=x.shape[0])
     var w = Int(py=x.shape[1])
     var xp = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(x)))
-    if operation == "scaler_fit":
+    if operation == PARALLEL_SHARD_WORKER_OPN_SCALER_FIT:
         var init = state[1]
         var fields = shard_b().dict()
         if kind == "standard":
@@ -1441,20 +1477,21 @@ def shard_worker_dispatch(request: PythonObject) raises -> PythonObject:
     """One shard: its model rebuilt natively from the state record, then the
     plain native owner."""
     var b = shard_b()
-    if len(request) == 1 and String(request[0]) == "identity":
+    var nk = parallel_keys()
+    if len(request) == 1 and py_op_code(nk[].ops_shard_worker, request[0]) == PARALLEL_SHARD_WORKER_OPN_IDENTITY:
         return shard_identity()
     var context = _ctx()
     if len(request) != 3:
         raise Error("parallel shards: invalid worker request envelope")
-    var operation = String(request[0])
+    var operation = py_op_code(nk[].ops_shard_worker, request[0])
     # N452 (lane ne2-i-j): a call's shared operands, stored once per worker
-    if operation == "shard_store":
+    if operation == PARALLEL_SHARD_WORKER_OPN_SHARD_STORE:
         return shard_store_put(request[1], request[2])
-    if operation == "shard_release":
+    if operation == PARALLEL_SHARD_WORKER_OPN_SHARD_RELEASE:
         return shard_store_drop(request[1])
     var state = shard_resolve_stored(request[1])
     var args = shard_resolve_stored(request[2])
-    if operation == "rbf_rows":
+    if operation == PARALLEL_SHARD_WORKER_OPN_RBF_ROWS:
         var model = shard_model(_t("rbf_class"), state)
         var rows_pin = ArrayPin()
         var rows_meta = admit_family_meta(args[0], 2, "X", context, rows_pin, True)
@@ -1462,27 +1499,27 @@ def shard_worker_dispatch(request: PythonObject) raises -> PythonObject:
                                       context, rows_meta, rows_pin)
         _ = rows_pin^
         return rows_out
-    if operation == "scaler_fit" or operation == "scaler_transform":
+    if operation == PARALLEL_SHARD_WORKER_OPN_SCALER_FIT or operation == PARALLEL_SHARD_WORKER_OPN_SCALER_TRANSFORM:
         return _scaler_worker(operation, state, args, context)
     # The GPC sites call the GP table entry (core/gp_entry_table.mojo) of the
     # connected identical binding with plain arrays and words
     # (bindings/gp_classifier_native_door.mojo gpc_worker_fit/gpc_worker_latent).
-    if operation == "gpc_class_fit":
+    if operation == PARALLEL_SHARD_WORKER_OPN_GPC_CLASS_FIT:
         var fields = gpc_worker_fit(_worker_binding("_mojolearn_gp"), args[0], args[1], state[0], Int(py=state[1]),
                                     Int(py=args[2]), context)
         return shard_state(fields, b.frozenset(), context)
-    if operation == "gpc_class_predict":
+    if operation == PARALLEL_SHARD_WORKER_OPN_GPC_CLASS_PREDICT:
         return gpc_worker_latent(_worker_binding("_mojolearn_gp"), state[1], state[2], args[0], Bool(py=args[1]),
                                  Int(py=args[2]), state[0], context)
-    if operation == "forest_fit":
+    if operation == PARALLEL_SHARD_WORKER_OPN_FOREST_FIT:
         # Lane forest-typed-fit: the request words and the arrays, fitted by
         # the one typed forest fit core; no estimator is built here.
         return forest_shard_fit(state, args, _t("trees_context"))
-    if (operation == "reference_shard" or operation == "reference_store" or operation == "reference_query"
-            or operation == "reference_vote" or operation == "query_state"
-            or operation == "query_rows" or operation == "ivf_store" or operation == "ivf_search" or operation == "release"):
+    # The neighbor shard operations are the last codes of the worker table
+    # (reference_shard .. query_rows): one range test.
+    if operation >= PARALLEL_SHARD_WORKER_OPN_REFERENCE_SHARD:
         return parallel_neighbor_worker(operation, args, PARALLEL_SHARD_BOUNDARY.get_or_create_ptr()[].tables, context)
-    raise Error("parallel shards: unsupported worker operation " + operation)
+    raise Error("parallel shards: unsupported worker operation " + String(request[0]))
 
 
 def shard_worker(argv: PythonObject) raises:
@@ -1504,10 +1541,12 @@ def shard_worker(argv: PythonObject) raises:
     transport_close(socket)
 
 
-def parallel_shard_call(operation: String, args: PythonObject) raises -> PythonObject:
+def parallel_shard_call(operation: Int, name: PythonObject, args: PythonObject) raises -> PythonObject:
+    """`operation` is a `PARALLEL_SHARD_OPN_*` code (-1 for a name the table
+    does not hold); `name` is read only for the unknown operation's text."""
     var s = PARALLEL_SHARD_BOUNDARY.get_or_create_ptr()
     var nk = parallel_keys()
-    if operation == "register":
+    if operation == PARALLEL_SHARD_OPN_REGISTER:
         # A driver module's fixed classes, entries and contexts, at its import.
         if s[].tables is None:
             s[].tables = shard_b().dict()
@@ -1516,43 +1555,43 @@ def parallel_shard_call(operation: String, args: PythonObject) raises -> PythonO
         if context is not None:
             codec_initialize(py_item(context, nk[].k_array_class), PythonObject(None), PythonObject(None))
         return PythonObject(None)
-    if operation == "transform_rbf_sampler":
+    if operation == PARALLEL_SHARD_OPN_TRANSFORM_RBF_SAMPLER:
         return _transform_rbf_sampler(args)
-    if operation == "fit_scaler":
+    if operation == PARALLEL_SHARD_OPN_FIT_SCALER:
         return _fit_scaler(args)
-    if operation == "transform_scaler":
+    if operation == PARALLEL_SHARD_OPN_TRANSFORM_SCALER:
         var result = _transform_scaler(args)
         return parallel_public_result(result, "inverse_transform" if Bool(py=args[4]) else "transform",
                                       PythonObject(None), _ctx())
-    if operation == "fit_gaussian_process_classifier":
+    if operation == PARALLEL_SHARD_OPN_FIT_GAUSSIAN_PROCESS_CLASSIFIER:
         return _fit_gpc(args)
-    if operation == "predict_gaussian_process_classifier":
+    if operation == PARALLEL_SHARD_OPN_PREDICT_GAUSSIAN_PROCESS_CLASSIFIER:
         var context = _ctx()
         classical_connect_numpy(context)
         return _public_result(_predict_gpc(args), context)
-    if operation == "fit_forest":
+    if operation == PARALLEL_SHARD_OPN_FIT_FOREST:
         return _fit_forest(args)
-    if operation == "trace_take":
+    if operation == PARALLEL_SHARD_OPN_TRACE_TAKE:
         return shard_trace_take()
-    if operation == "faults_take":
+    if operation == PARALLEL_SHARD_OPN_FAULTS_TAKE:
         return PythonObject(shard_faults_take())
-    if operation == "faults_arm":
+    if operation == PARALLEL_SHARD_OPN_FAULTS_ARM:
         # The verifier's transport negative control (lane
         # envgate-classical-deviceplan: replaces MOJOLEARN_PAR_TRANSPORT_FAULT,
         # read per numerical batch): "drop_result", "reverse_results" or "".
         shard_faults_arm(String(args[0]))
         return PythonObject(None)
-    if operation == "sabotage_arm":
+    if operation == PARALLEL_SHARD_OPN_SABOTAGE_ARM:
         # The driver read-shift negative control inside a running process.
         shard_sabotage_arm(Bool(py=args[0]))
         return PythonObject(None)
-    if operation == "reference_init" or operation == "queries_init":
-        return _holder_init(args, operation == "reference_init")
-    if operation == "holder_enter":
+    if operation == PARALLEL_SHARD_OPN_REFERENCE_INIT or operation == PARALLEL_SHARD_OPN_QUERIES_INIT:
+        return _holder_init(args, operation == PARALLEL_SHARD_OPN_REFERENCE_INIT)
+    if operation == PARALLEL_SHARD_OPN_HOLDER_ENTER:
         if py_type(args[0]) is not _t("reference_driver_class") and py_type(args[0]) is not _t("query_driver_class"):
             raise Error("TypeError: parallel driver requires its exact connected class")
         return args[0]
-    if operation == "holder_close":
+    if operation == PARALLEL_SHARD_OPN_HOLDER_CLOSE:
         if py_type(args[0]) is not _t("reference_driver_class") and py_type(args[0]) is not _t("query_driver_class"):
             raise Error("TypeError: parallel driver requires its exact connected class")
         # A construction that failed (every refusal of _holder_init runs
@@ -1563,33 +1602,34 @@ def parallel_shard_call(operation: String, args: PythonObject) raises -> PythonO
         if pool is not None and not Bool(py=py_item(pool, nk[].k_closed)):
             process_pool_close(pool)
         return PythonObject(None)
-    if operation == "ivf_init":
+    if operation == PARALLEL_SHARD_OPN_IVF_INIT:
         raise Error("TypeError: use DistributedIVFIndex.from_index(index, devices=...)")
-    if operation == "ivf_enter":
+    if operation == PARALLEL_SHARD_OPN_IVF_ENTER:
         if Bool(py=py_item(_driver_fields(args[0], "distributed_ivf_class"), nk[].k__closed)):
             raise Error("RuntimeError: distributed IVF index is closed")
         return args[0]
-    if operation == "reference_query":
+    if operation == PARALLEL_SHARD_OPN_REFERENCE_QUERY:
         return _reference_query(args)
-    if operation == "parallel_queries":
+    if operation == PARALLEL_SHARD_OPN_PARALLEL_QUERIES:
         return _parallel_queries(args)
-    if operation == "ivf_from_index":
+    if operation == PARALLEL_SHARD_OPN_IVF_FROM_INDEX:
         return _ivf_from_index(args)
-    if operation == "ivf_search":
+    if operation == PARALLEL_SHARD_OPN_IVF_SEARCH:
         return _ivf_search(args)
-    if operation == "ivf_close":
+    if operation == PARALLEL_SHARD_OPN_IVF_CLOSE:
         _ivf_close(args[0])
         return PythonObject(None)
-    if operation == "worker":
+    if operation == PARALLEL_SHARD_OPN_WORKER:
         shard_worker(args)
         return PythonObject(None)
-    raise Error("RuntimeError: parallel shards: unknown operation " + operation)
+    raise Error("RuntimeError: parallel shards: unknown operation " + String(name))
 
 
 def parallel_shard_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
     var args = PythonObject(from_borrowed=args_ptr)
     try:
-        var result = parallel_shard_call(String(args[0]), args[1])
+        var nk = parallel_keys()
+        var result = parallel_shard_call(py_op_code(nk[].ops_shard, args[0]), args[0], args[1])
         return result.steal_data()
     except error:
         var message = String(error)

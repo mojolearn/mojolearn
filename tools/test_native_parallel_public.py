@@ -10,6 +10,8 @@ import types
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from boundary_keys_plain import plain  # noqa: E402
 PACKAGE = ROOT / 'python/mojolearn'
 
 
@@ -211,7 +213,8 @@ def test_bindings_are_the_exact_compiled_modules(connected):
 
 
 def test_native_boundary_admits_before_hooks_and_scopes_predictor_lifetime():
-    source = (ROOT / 'bindings/parallel_public_native_door.mojo').read_text()
+    # The door reads held keys (bindings/parallel_keys_unpack.mojo); its by-name form is plain().
+    source = plain('bindings/parallel_public_native_door.mojo', (ROOT / 'bindings/parallel_public_native_door.mojo').read_text())
     for unsafe in ('Python.import_module', 'copy.copy', 'threading', '._finalizer', 'model.fit(', 'model.predict(', '._bind(', 'public_method_result'):
         assert unsafe not in source
     assert source.index('py_type(value) is not b.tuple') < source.index('py_call(b.tuple, value)')

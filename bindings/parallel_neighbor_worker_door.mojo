@@ -26,7 +26,18 @@ from bindings.neighbors_kde_native_door import _kde_scores, _kde_release
 from bindings.neighbors_ann_native_door import _ivf_metric, _ann_key_entry
 from bindings.host_inference_scalars_door import host_inference_scalar
 from core.shared_slot import SharedSlot
-from bindings.parallel_keys_unpack import parallel_keys
+from bindings.parallel_keys_unpack import (
+    parallel_keys,
+    PARALLEL_SHARD_WORKER_OPN_IVF_SEARCH,
+    PARALLEL_SHARD_WORKER_OPN_IVF_STORE,
+    PARALLEL_SHARD_WORKER_OPN_QUERY_ROWS,
+    PARALLEL_SHARD_WORKER_OPN_QUERY_STATE,
+    PARALLEL_SHARD_WORKER_OPN_REFERENCE_QUERY,
+    PARALLEL_SHARD_WORKER_OPN_REFERENCE_SHARD,
+    PARALLEL_SHARD_WORKER_OPN_REFERENCE_STORE,
+    PARALLEL_SHARD_WORKER_OPN_REFERENCE_VOTE,
+    PARALLEL_SHARD_WORKER_OPN_RELEASE,
+)
 from bindings.py_balanced import py_item
 
 
@@ -391,18 +402,18 @@ def _ivf_partial(model: PythonObject, source: PythonObject, tables: PythonObject
     return Python.tuple(dist, ids, counts)
 
 
-def parallel_neighbor_worker(operation: String, args: PythonObject, tables: PythonObject,
+def parallel_neighbor_worker(operation: Int, args: PythonObject, tables: PythonObject,
                              context: PythonObject) raises -> PythonObject:
     var b = native_loaded_module("builtins")
     var nk = parallel_keys()
-    if operation == "reference_shard":
+    if operation == PARALLEL_SHARD_WORKER_OPN_REFERENCE_SHARD:
         var model = shard_model(py_item(tables, nk[].k_nearest_class), args[0])
         _nn_fit(model, args[1], context)
         try:
             return neighbor_kneighbors(model, args[2], args[3], PythonObject(True), neighbor_binding(tables, "neighbors_base"), context)
         finally:
             knn_release(model)
-    if operation == "reference_store":
+    if operation == PARALLEL_SHARD_WORKER_OPN_REFERENCE_STORE:
         # (token, params, block): one reference block fitted once and kept
         # under the driver's token until its "release" (pass 3, rank 108).
         _release(args[0], tables, context)
@@ -410,10 +421,10 @@ def parallel_neighbor_worker(operation: String, args: PythonObject, tables: Pyth
         _nn_fit(stored, args[2], context)
         py_setitem(_snapshots(), args[0], stored)
         return PythonObject(None)
-    if operation == "reference_vote":
+    if operation == PARALLEL_SHARD_WORKER_OPN_REFERENCE_VOTE:
         var model = shard_model(py_item(tables, nk[].k_query_classes)[args[0]], args[1])
         return _vote(model, args[2], args[3], String(args[4]), tables, context)
-    if operation == "query_state":
+    if operation == PARALLEL_SHARD_WORKER_OPN_QUERY_STATE:
         if args[2] is None:
             _release(args[0], tables, context)
         else:
@@ -422,10 +433,10 @@ def parallel_neighbor_worker(operation: String, args: PythonObject, tables: Pyth
             py_setitem(py_fields(model), nk[].k__resident_holder, Python.dict())
             py_setitem(_snapshots(), args[0], model)
         return PythonObject(None)
-    if operation == "release":
+    if operation == PARALLEL_SHARD_WORKER_OPN_RELEASE:
         _release(args[0], tables, context)
         return PythonObject(None)
-    if operation == "ivf_store":
+    if operation == PARALLEL_SHARD_WORKER_OPN_IVF_STORE:
         var model = shard_model(py_item(tables, nk[].k_ivf_class), args[1])
         _ = family_entry(neighbor_binding(tables, "_mojolearn_ivf"), "ivf_flat_partial_search", context)
         py_setitem(_snapshots(), args[0], model)
@@ -433,12 +444,12 @@ def parallel_neighbor_worker(operation: String, args: PythonObject, tables: Pyth
     var model = py_get(_snapshots(), args[0])
     if model is None:
         raise Error("RuntimeError: shard worker has no stored snapshot")
-    if operation == "ivf_search":
+    if operation == PARALLEL_SHARD_WORKER_OPN_IVF_SEARCH:
         return _ivf_partial(model, args[1], tables, context)
-    if operation == "reference_query":
+    if operation == PARALLEL_SHARD_WORKER_OPN_REFERENCE_QUERY:
         # (token, query rows, k): the stored block's k nearest, with distances.
         return neighbor_kneighbors(model, args[1], args[2], PythonObject(True), neighbor_binding(tables, "neighbors_base"), context)
-    if operation != "query_rows":
+    if operation != PARALLEL_SHARD_WORKER_OPN_QUERY_ROWS:
         raise Error("ValueError: unsupported native neighbor shard operation")
     var method = String(args[2])
     var kwargs = args[3]

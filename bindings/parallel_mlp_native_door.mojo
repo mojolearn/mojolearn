@@ -31,7 +31,18 @@ from core.samba_entry_table import (
     SAMBA_PRIM_OPTIMIZER_STEP,
 )
 from bindings.parallel_mlp_native_run import _mlp_names, _mlp_dims
-from bindings.parallel_keys_unpack import parallel_keys
+from bindings.parallel_keys_unpack import (
+    parallel_keys,
+    PARALLEL_MLP_OPN_APPLY,
+    PARALLEL_MLP_OPN_FROM_STATE,
+    PARALLEL_MLP_OPN_GRADIENT,
+    PARALLEL_MLP_OPN_INITIALIZE,
+    PARALLEL_MLP_OPN_ORDERED_SUM,
+    PARALLEL_MLP_OPN_PUBLISH,
+    PARALLEL_MLP_OPN_SNAPSHOT,
+    PARALLEL_MLP_OPN_VALIDATE,
+)
+from bindings.py_keys import py_op_code
 from bindings.py_balanced import py_item
 
 
@@ -474,32 +485,35 @@ def mlp_apply_from_state(state: PythonObject, gradients: PythonObject) raises ->
     return next
 
 
-def mlp_call(operation: String, args: PythonObject) raises -> PythonObject:
-    if operation == "initialize":
+def mlp_call(operation: Int, name: PythonObject, args: PythonObject) raises -> PythonObject:
+    """`operation` is a `PARALLEL_MLP_OPN_*` code (-1 for a name the table
+    does not hold); `name` is read only for the unknown operation's text."""
+    if operation == PARALLEL_MLP_OPN_INITIALIZE:
         mlp_initialize(args[0], args[1], args[2], args[3], String(args[4]), String(args[5]))
-    elif operation == "snapshot":
+    elif operation == PARALLEL_MLP_OPN_SNAPSHOT:
         return mlp_snapshot(args[0])
-    elif operation == "validate":
+    elif operation == PARALLEL_MLP_OPN_VALIDATE:
         return mlp_validate_state(args[0])
-    elif operation == "from_state":
+    elif operation == PARALLEL_MLP_OPN_FROM_STATE:
         return mlp_from_state(args[0])
-    elif operation == "publish":
+    elif operation == PARALLEL_MLP_OPN_PUBLISH:
         mlp_publish(args[0], args[1])
-    elif operation == "gradient":
+    elif operation == PARALLEL_MLP_OPN_GRADIENT:
         return mlp_gradients_from_state(args[0], args[1], args[2])
-    elif operation == "ordered_sum":
+    elif operation == PARALLEL_MLP_OPN_ORDERED_SUM:
         return neural_ordered_sum(args[0])
-    elif operation == "apply":
+    elif operation == PARALLEL_MLP_OPN_APPLY:
         return mlp_apply_from_state(args[0], args[1])
     else:
-        raise Error("parallel MLP: unknown operation " + operation)
+        raise Error("parallel MLP: unknown operation " + String(name))
     return PythonObject(None)
 
 
 def parallel_mlp_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
     var args = PythonObject(from_borrowed=args_ptr)
     try:
-        var result = mlp_call(String(args[0]), args[1])
+        var nk = parallel_keys()
+        var result = mlp_call(py_op_code(nk[].ops_mlp, args[0]), args[0], args[1])
         return result.steal_data()
     except error:
         if String(error).startswith("TypeError:"):

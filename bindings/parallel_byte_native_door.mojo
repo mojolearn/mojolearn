@@ -36,7 +36,35 @@ from training.byte_lm_glue_abi import (
     BYTE_LM_GLUE_ABI, BG_OP_COUNT, BG_NUMERIC_MODE, BG_VENDOR, BG_PROFILE, BG_SUFFIX, BG_CONFIG_PROFILE,
     byte_lm_glue_ref, byte_lm_glue_read_text, byte_lm_glue_read_int,
 )
-from bindings.parallel_keys_unpack import parallel_keys
+from bindings.parallel_keys_unpack import (
+    parallel_keys,
+    PARALLEL_BYTE_OPN_ADMITTED_STATE,
+    PARALLEL_BYTE_OPN_ADMIT_CLASS,
+    PARALLEL_BYTE_OPN_APPLY_GRADIENT,
+    PARALLEL_BYTE_OPN_CHECKPOINT,
+    PARALLEL_BYTE_OPN_CLOSE,
+    PARALLEL_BYTE_OPN_ENTER,
+    PARALLEL_BYTE_OPN_EXPORT_GRADIENTS,
+    PARALLEL_BYTE_OPN_EXPORT_RAW,
+    PARALLEL_BYTE_OPN_FOLD_ADD,
+    PARALLEL_BYTE_OPN_FOLD_EXPORT,
+    PARALLEL_BYTE_OPN_FOLD_RESET,
+    PARALLEL_BYTE_OPN_FROM_CHECKPOINT,
+    PARALLEL_BYTE_OPN_HAS_DEVICE_FOLD,
+    PARALLEL_BYTE_OPN_INIT,
+    PARALLEL_BYTE_OPN_INITIALIZE,
+    PARALLEL_BYTE_OPN_MODEL_OWNERSHIP,
+    PARALLEL_BYTE_OPN_OPEN,
+    PARALLEL_BYTE_OPN_OWNERSHIP,
+    PARALLEL_BYTE_OPN_REQUIRE_FOLD,
+    PARALLEL_BYTE_OPN_SET_LR,
+    PARALLEL_BYTE_OPN_SHARD_GRADIENT,
+    PARALLEL_BYTE_OPN_SHARD_GRADIENT_FOLD,
+    PARALLEL_BYTE_OPN_STATE,
+    PARALLEL_BYTE_OPN_STEP,
+    PARALLEL_BYTE_OPN_TRAIN_STEP,
+)
+from bindings.py_keys import py_op_code
 from bindings.py_balanced import py_item
 
 
@@ -1111,20 +1139,23 @@ def _parallel_state_snapshot(record: PythonObject) raises -> PythonObject:
     return result
 
 
-def parallel_byte_call(operation: String, args: PythonObject) raises -> PythonObject:
+def parallel_byte_call(operation: Int, name: PythonObject, args: PythonObject) raises -> PythonObject:
+    """`operation` is a `PARALLEL_BYTE_OPN_*` code (-1 for a name the table
+    does not hold); `name` is the caller's str, read only for the unknown
+    operation's text."""
     var p = PARALLEL_BYTE_BOUNDARY.get_or_create_ptr()
-    if operation == "initialize":
+    if operation == PARALLEL_BYTE_OPN_INITIALIZE:
         parallel_byte_initialize(args[0], args[1], args[2], String(args[3]))
         return PythonObject(None)
-    if operation == "admit_class":
+    if operation == PARALLEL_BYTE_OPN_ADMIT_CLASS:
         parallel_byte_admit_class(args[0], String(args[1]))
         return PythonObject(None)
-    if operation == "init":
+    if operation == PARALLEL_BYTE_OPN_INIT:
         if len(args) != 5:
             raise Error("TypeError: parallel init takes owner, state, devices, logical_shards, pool_optimizer")
         return parallel_byte_init(args[0], args[1], args[2], args[3], args[4])
     var nk = parallel_keys()
-    if operation == "from_checkpoint":
+    if operation == PARALLEL_BYTE_OPN_FROM_CHECKPOINT:
         if len(args) != 4:
             raise Error("TypeError: parallel from_checkpoint takes cls, checkpoint, devices, pool_optimizer")
         var cls = args[0]
@@ -1140,13 +1171,13 @@ def parallel_byte_call(operation: String, args: PythonObject) raises -> PythonOb
     var owner = args[0]
     var record = _parallel_record(owner)
     var rec = record.downcast_value_ptr[ParallelByteOwner]()
-    if operation == "step":
+    if operation == PARALLEL_BYTE_OPN_STEP:
         return PythonObject(_parallel_completed(record))
-    if operation == "enter":
+    if operation == PARALLEL_BYTE_OPN_ENTER:
         return owner
-    if operation == "admitted_state":
+    if operation == PARALLEL_BYTE_OPN_ADMITTED_STATE:
         return _parallel_state_snapshot(record)
-    if operation == "close":
+    if operation == PARALLEL_BYTE_OPN_CLOSE:
         rec[].closed = True
         if rec[].handle != 0:
             var failure = String()
@@ -1160,25 +1191,25 @@ def parallel_byte_call(operation: String, args: PythonObject) raises -> PythonOb
             if failure.byte_length() > 0:
                 raise Error(failure)
         return PythonObject(None)
-    if operation == "open":
+    if operation == PARALLEL_BYTE_OPN_OPEN:
         parallel_byte_open(owner)
         return PythonObject(None)
-    if operation == "train_step":
+    if operation == PARALLEL_BYTE_OPN_TRAIN_STEP:
         return parallel_byte_train_step(owner, args[1])
-    if operation == "state":
+    if operation == PARALLEL_BYTE_OPN_STATE:
         return parallel_byte_state(owner, args[1])
-    if operation == "export_raw":
+    if operation == PARALLEL_BYTE_OPN_EXPORT_RAW:
         return _parallel_export(owner, args[1], args[2])
-    if operation == "export_gradients":
+    if operation == PARALLEL_BYTE_OPN_EXPORT_GRADIENTS:
         return _parallel_export(owner, args[1], args[2], True)
-    if operation == "checkpoint":
+    if operation == PARALLEL_BYTE_OPN_CHECKPOINT:
         var result = p[].bi.dict()
         py_setitem(result, nk[].k_schema, PythonObject("mojolearn.parallel-byte-lm.v1"))
         py_setitem(result, nk[].k_logical_shards, PythonObject(rec[].logical_shards))
         py_setitem(result, nk[].k_reduction, PythonObject("ordered_sum"))
         py_setitem(result, nk[].k_state, parallel_byte_state(owner, PythonObject(0)))
         return result
-    if operation == "set_lr":
+    if operation == PARALLEL_BYTE_OPN_SET_LR:
         var lr = _parallel_float(args[1], "lr")
         if lr <= 0:
             raise Error("Byte-LM requires lr > 0")
@@ -1193,28 +1224,28 @@ def parallel_byte_call(operation: String, args: PythonObject) raises -> PythonOb
         py_setitem(config, nk[].k_lr, PythonObject(Float64(lr)))
         py_setitem(rec[].state, nk[].k_config, config)
         return PythonObject(Float64(lr))
-    if operation == "require_fold":
+    if operation == PARALLEL_BYTE_OPN_REQUIRE_FOLD:
         _parallel_require_split(record, "shard_gradient")
         return PythonObject(None)
-    if operation == "has_device_fold":
+    if operation == PARALLEL_BYTE_OPN_HAS_DEVICE_FOLD:
         parallel_byte_open(owner)
         return PythonObject(rec[].schedule == PARALLEL_REPLICA)
-    if operation == "ownership":
+    if operation == PARALLEL_BYTE_OPN_OWNERSHIP:
         return _parallel_ownership(owner)
-    if operation == "model_ownership":
+    if operation == PARALLEL_BYTE_OPN_MODEL_OWNERSHIP:
         if rec[].schedule != PARALLEL_MODEL_POOL:
             raise Error("model_ownership requires PooledByteLanguageModelTrainer")
         return _parallel_ownership(owner)
     var n = rec[].n_total
-    if operation == "shard_gradient" or operation == "shard_gradient_fold":
-        var fold = operation == "shard_gradient_fold"
+    if operation == PARALLEL_BYTE_OPN_SHARD_GRADIENT or operation == PARALLEL_BYTE_OPN_SHARD_GRADIENT_FOLD:
+        var fold = operation == PARALLEL_BYTE_OPN_SHARD_GRADIENT_FOLD
         # pass 3 (N102): the shard is read in place when it already is
         # C-contiguous int32 (pinned for the call); only other layouts copy.
         var pins = List[AdmittedBorrowedBuffer]()
         var copies = List[PythonObject]()
         var ids_address = _parallel_borrow(args[1], [rec[].dims[0], rec[].dims[1] + 1], True, pins, copies)
         parallel_byte_open(owner)
-        _parallel_require_split(record, operation)
+        _parallel_require_split(record, "shard_gradient_fold" if fold else "shard_gradient")
         var loss = List[Float64](length=1, fill=0)
         var gradient = PythonObject(None)
         var addresses: List[Int] = [ids_address]
@@ -1234,7 +1265,7 @@ def parallel_byte_call(operation: String, args: PythonObject) raises -> PythonOb
         _ = py_call(result.append, value)
         _ = py_call(result.append, gradient)
         return py_call(p[].bi.tuple, result)
-    if operation == "apply_gradient":
+    if operation == PARALLEL_BYTE_OPN_APPLY_GRADIENT:
         # `total` is documented as the bytes `cross_vendor.ordered_fold`
         # returns; admit raw float32 bytes the way fold_reset/fold_add do.
         # pass 3 (N111, N157): the caller's buffer (the received payload)
@@ -1257,7 +1288,7 @@ def parallel_byte_call(operation: String, args: PythonObject) raises -> PythonOb
             raise Error("RuntimeError: apply_gradient returned wrong step")
         _parallel_commit(record, completed)
         return PythonObject(completed)
-    if operation == "fold_reset" or operation == "fold_add":
+    if operation == PARALLEL_BYTE_OPN_FOLD_RESET or operation == PARALLEL_BYTE_OPN_FOLD_ADD:
         # pass 3 (N111, N157): a held gradient or received prefix is read in
         # place; the device scan in fold_reset/fold_add refuses non-finite
         # values before the fold changes (no host copy, no host scan).
@@ -1266,16 +1297,16 @@ def parallel_byte_call(operation: String, args: PythonObject) raises -> PythonOb
         var addresses = List[Int]()
         if args[1] is not None:
             addresses.append(_parallel_borrow(args[1], [n], False, pins, copies, False))
-        elif operation == "fold_add":
+        elif operation == PARALLEL_BYTE_OPN_FOLD_ADD:
             raise Error("fold_add requires a gradient")
         parallel_byte_open(owner)
-        _parallel_require_split(record, operation)
-        _ = _parallel_execute(record, PARALLEL_OP_FOLD_RESET if operation == "fold_reset" else PARALLEL_OP_FOLD_ADD,
+        _parallel_require_split(record, "fold_reset" if operation == PARALLEL_BYTE_OPN_FOLD_RESET else "fold_add")
+        _ = _parallel_execute(record, PARALLEL_OP_FOLD_RESET if operation == PARALLEL_BYTE_OPN_FOLD_RESET else PARALLEL_OP_FOLD_ADD,
                               addresses^, List[Int](), List[Float64]())
         _parallel_release(pins)
         _ = copies^
         return PythonObject(None)
-    if operation == "fold_export":
+    if operation == PARALLEL_BYTE_OPN_FOLD_EXPORT:
         var into = args[1]
         var output = generation_array([n]) if into is None else into
         var pins = List[PythonObject]()
@@ -1286,13 +1317,14 @@ def parallel_byte_call(operation: String, args: PythonObject) raises -> PythonOb
         var result = py_call(output._mv.cast, "B").tobytes() if into is None else output
         _ = pins^
         return result
-    raise Error("parallel: unknown native operation " + operation)
+    raise Error("parallel: unknown native operation " + String(name))
 
 
 def parallel_byte_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
     var args = PythonObject(from_borrowed=args_ptr)
     try:
-        var result = parallel_byte_call(String(args[0]), args[1])
+        var nk = parallel_keys()
+        var result = parallel_byte_call(py_op_code(nk[].ops_byte, args[0]), args[0], args[1])
         return result.steal_data()
     except error:
         var message = String(error)

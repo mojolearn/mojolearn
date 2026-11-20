@@ -27,7 +27,37 @@ from core.parallel_worker_request import (
 from core.parallel_worker_frame import WIRE_REQUEST, WIRE_RESULT, WIRE_ERROR, WIRE_CLOSE, WIRE_MAP, WIRE_LIST
 from core.shared_slot import SharedSlot
 from std.collections import Dict
-from bindings.parallel_keys_unpack import parallel_keys
+from bindings.parallel_keys_unpack import (
+    parallel_keys,
+    PARALLEL_CAUSAL_OPN_ALLOCATE_LAYER,
+    PARALLEL_CAUSAL_OPN_BLOCK_ALLOCATE,
+    PARALLEL_CAUSAL_OPN_BLOCK_CALL,
+    PARALLEL_CAUSAL_OPN_BLOCK_FIELDS,
+    PARALLEL_CAUSAL_OPN_BLOCK_INIT,
+    PARALLEL_CAUSAL_OPN_BLOCK_RUN,
+    PARALLEL_CAUSAL_OPN_CAPTURE_MODEL,
+    PARALLEL_CAUSAL_OPN_CAPTURE_STATE,
+    PARALLEL_CAUSAL_OPN_CLOSE,
+    PARALLEL_CAUSAL_OPN_CLOSE_QUIET,
+    PARALLEL_CAUSAL_OPN_ENTER,
+    PARALLEL_CAUSAL_OPN_EXIT,
+    PARALLEL_CAUSAL_OPN_INIT,
+    PARALLEL_CAUSAL_OPN_INITIALIZE,
+    PARALLEL_CAUSAL_OPN_LOAD,
+    PARALLEL_CAUSAL_OPN_LOAD_WITH_WORKER,
+    PARALLEL_CAUSAL_OPN_PARAMETERS,
+    PARALLEL_CAUSAL_OPN_PRIMITIVE,
+    PARALLEL_CAUSAL_OPN_PRIMITIVES_INIT,
+    PARALLEL_CAUSAL_OPN_RELEASE_LAYERS,
+    PARALLEL_CAUSAL_OPN_RPC,
+    PARALLEL_CAUSAL_OPN_RUN,
+    PARALLEL_CAUSAL_OPN_STATE_CLOSE,
+    PARALLEL_CAUSAL_OPN_STATE_INIT,
+    PARALLEL_CAUSAL_OPN_STATE_PUBLISH,
+    PARALLEL_CAUSAL_OPN_STATE_SNAPSHOT,
+    PARALLEL_CAUSAL_OPN_WORKER,
+)
+from bindings.py_keys import py_op_code
 from bindings.py_balanced import py_item
 
 
@@ -1204,27 +1234,30 @@ def _parallel_layer_item(mut mods: NativeModules, captured_block: PythonObject, 
     return LayerItem(_parallel_word(py_item(layer, nk[].k_index)), token)
 
 
-def parallel_causal_call(mut mods: NativeModules, operation: String, args: PythonObject) raises -> PythonObject:
+def parallel_causal_call(mut mods: NativeModules, operation: Int, name: PythonObject, args: PythonObject) raises -> PythonObject:
+    """`operation` is a `PARALLEL_CAUSAL_OPN_*` code (-1 for a name the table
+    does not hold); `name` is the caller's exact str, read only for the
+    unknown operation's text."""
     var p = PARALLEL_CAUSAL.get_or_create_ptr()
     var child = String("mojolearn._native_parallel_causal_worker")
     model_sequence(mods, args)
     var nk = parallel_keys()
-    if operation == "initialize":
+    if operation == PARALLEL_CAUSAL_OPN_INITIALIZE:
         parallel_causal_initialize(mods, args)
-    elif operation == "worker":
+    elif operation == PARALLEL_CAUSAL_OPN_WORKER:
         parallel_causal_worker(mods, args)
-    elif operation == "init":
+    elif operation == PARALLEL_CAUSAL_OPN_INIT:
         _parallel_causal_init(mods, args[0], args[1], args[2], args[3], _parallel_causal_options(mods, args[4]), child)
-    elif operation == "load" or operation == "load_with_worker":
-        return _parallel_causal_load(mods, args[0], args[1], args[2], args[3], child if operation == "load" else model_string(mods, args[4]))
-    elif operation == "rpc":
+    elif operation == PARALLEL_CAUSAL_OPN_LOAD or operation == PARALLEL_CAUSAL_OPN_LOAD_WITH_WORKER:
+        return _parallel_causal_load(mods, args[0], args[1], args[2], args[3], child if operation == PARALLEL_CAUSAL_OPN_LOAD else model_string(mods, args[4]))
+    elif operation == PARALLEL_CAUSAL_OPN_RPC:
         var typed = _parallel_causal_typed(mods, model_string(mods, args[2]), args[3])
         return _parallel_causal_rpc(mods, args[0], args[1], typed.request, typed.payload)
-    elif operation == "capture_model":
+    elif operation == PARALLEL_CAUSAL_OPN_CAPTURE_MODEL:
         return _parallel_capture_model(mods, args[0], args[1]) if len(args) > 1 else _parallel_capture_model(mods, args[0])
-    elif operation == "capture_state":
+    elif operation == PARALLEL_CAUSAL_OPN_CAPTURE_STATE:
         return _parallel_capture_state(mods, args[0], args[1]) if len(args) > 1 else _parallel_capture_state(mods, args[0])
-    elif operation == "parameters":
+    elif operation == PARALLEL_CAUSAL_OPN_PARAMETERS:
         var model = causal_model_capture(mods, args[0], p[].context)
         _parallel_causal_usable(causal_snapshot_fields(mods, model))
         var result = PythonObject(None)
@@ -1236,38 +1269,38 @@ def parallel_causal_call(mut mods: NativeModules, operation: String, args: Pytho
             raise error
         causal_model_publish(mods, model)
         return result
-    elif operation == "block_fields":
+    elif operation == PARALLEL_CAUSAL_OPN_BLOCK_FIELDS:
         var captured = args[2] if len(args) > 2 else _parallel_owner_snapshot(mods, args[0])
         var fields = _parallel_captured(mods, args[0], captured)
         var index = _parallel_word(args[1])
         return _parallel_causal_rpc(mods, args[0], py_item(fields, nk[].k_layer_devices)[index], WorkerRequest(PC_BLOCK_FIELDS, index), PythonObject(None), captured)
-    elif operation == "allocate_layer":
+    elif operation == PARALLEL_CAUSAL_OPN_ALLOCATE_LAYER:
         var captured = args[4] if len(args) > 4 else _parallel_owner_snapshot(mods, args[0])
         return _parallel_causal_allocate(mods, args[0], _parallel_word(args[1]), args[2], args[3], captured)
-    elif operation == "block_allocate":
+    elif operation == PARALLEL_CAUSAL_OPN_BLOCK_ALLOCATE:
         var block = _parallel_block_fields(mods, args[0])
         return _parallel_causal_allocate(mods, py_item(block, nk[].k_model), _parallel_word(py_item(block, nk[].k_index)), args[1], args[2])
-    elif operation == "block_run":
+    elif operation == PARALLEL_CAUSAL_OPN_BLOCK_RUN:
         return _parallel_causal_block_run(mods, args[0], args[1], args[2], args[3])
-    elif operation == "block_call":
+    elif operation == PARALLEL_CAUSAL_OPN_BLOCK_CALL:
         var original = py_item(_parallel_block_fields(mods, args[0]), nk[].k_model)
         var captured = _parallel_owner_snapshot(mods, original)
         var fields = causal_snapshot_fields(mods, captured)
         var block = causal_snapshot_fields(mods, _parallel_find_block(mods, args[0], captured))
         var typed = _parallel_causal_typed(mods, model_string(mods, args[1]), args[2])
         return _parallel_causal_rpc(mods, py_item(fields, nk[].k__causal_original), py_item(fields, nk[].k_layer_devices)[py_item(block, nk[].k_index)], typed.request, typed.payload, captured)
-    elif operation == "block_init":
+    elif operation == PARALLEL_CAUSAL_OPN_BLOCK_INIT:
         var destination = _parallel_block_fields(mods, args[0])
         var created = _parallel_causal_block(mods, args[1], _parallel_word(args[2]), args[3])
         _ = py_call(destination.update, _parallel_block_fields(mods, created))
     # TOMBSTONE: operation "make_blocks" (dead code: its one caller, ParallelCausalLM._make_blocks, had no
     # caller) deleted 2026-11-09 by 57b86ba5ac; code recoverable at 57b86ba5ac^.
     # Restore: git apply experiments/removed/dead_code_p5_20261109.patch
-    elif operation == "state_init":
+    elif operation == PARALLEL_CAUSAL_OPN_STATE_INIT:
         _parallel_causal_attach(mods, args[0], args[1], args[2])
-    elif operation == "state_snapshot":
+    elif operation == PARALLEL_CAUSAL_OPN_STATE_SNAPSHOT:
         return _parallel_causal_snapshot(mods, args[0], args[1]) if len(args) > 1 else _parallel_causal_snapshot(mods, args[0])
-    elif operation == "state_publish":
+    elif operation == PARALLEL_CAUSAL_OPN_STATE_PUBLISH:
         var remote = args[0]
         var captured = args[2] if len(args) > 2 else _parallel_capture_state(mods, remote)
         var fields = _parallel_captured(mods, remote, captured)
@@ -1278,9 +1311,9 @@ def parallel_causal_call(mut mods: NativeModules, operation: String, args: Pytho
         var block = causal_snapshot_fields(mods, py_item(fields, nk[].k__native_parallel_block))
         return _parallel_causal_rpc(mods, py_item(owner, nk[].k__causal_original), py_item(owner, nk[].k_layer_devices)[py_item(block, nk[].k_index)],
                                     WorkerRequest(PC_PUBLISH_STATE, _parallel_word(py_item(fields, nk[].k_token))), _parallel_causal_fields(args[1]), model)
-    elif operation == "state_close":
+    elif operation == PARALLEL_CAUSAL_OPN_STATE_CLOSE:
         _parallel_causal_release(mods, args[0])
-    elif operation == "release_layers":
+    elif operation == PARALLEL_CAUSAL_OPN_RELEASE_LAYERS:
         var owner = _parallel_captured(mods, args[0], args[2])
         var state = _parallel_captured(mods, args[1], args[3])
         var layers = py_item(state, nk[].k_layers)
@@ -1295,7 +1328,7 @@ def parallel_causal_call(mut mods: NativeModules, operation: String, args: Pytho
                     failure = String(error)
         if failure != "":
             raise Error(failure)
-    elif operation == "run":
+    elif operation == PARALLEL_CAUSAL_OPN_RUN:
         var owner = args[0]
         var ids = generation_array_snapshot(args[1])
         var length = Int(py=ids.shape[1])
@@ -1365,17 +1398,17 @@ def parallel_causal_call(mut mods: NativeModules, operation: String, args: Pytho
             result = _parallel_causal_rpc(mods, owner, head_device, WorkerRequest(PC_FINAL), x, args[4])
         py_setitem(state_fields, nk[].k_positions, _parallel_word(py_item(state_fields, nk[].k_positions)) + length)
         return result
-    elif operation == "close" or operation == "close_quiet" or operation == "exit":
+    elif operation == PARALLEL_CAUSAL_OPN_CLOSE or operation == PARALLEL_CAUSAL_OPN_CLOSE_QUIET or operation == PARALLEL_CAUSAL_OPN_EXIT:
         _parallel_causal_close(mods, args[0])
-    elif operation == "enter":
+    elif operation == PARALLEL_CAUSAL_OPN_ENTER:
         if _parallel_flag(py_item(_parallel_model_fields(mods, args[0]), nk[].k__closed)):
             raise Error("RuntimeError: ParallelCausalLM is closed")
         return args[0]
-    elif operation == "primitives_init":
+    elif operation == PARALLEL_CAUSAL_OPN_PRIMITIVES_INIT:
         var fields = model_record_fields(mods, args[0], py_item(p[].classes, nk[].k_primitives), Python.tuple("model"))
         _ = _parallel_model_fields(mods, args[1])
         py_setitem(fields, nk[].k_model, args[1])
-    elif operation == "primitive":
+    elif operation == PARALLEL_CAUSAL_OPN_PRIMITIVE:
         var fields = model_record_fields(mods, args[0], py_item(p[].classes, nk[].k_primitives), Python.tuple("model"))
         var owner = py_item(fields, nk[].k_model)
         var captured = _parallel_owner_snapshot(mods, owner)
@@ -1389,21 +1422,26 @@ def parallel_causal_call(mut mods: NativeModules, operation: String, args: Pytho
     # refuses a layer-worker model in bindings/causal_lm_public_door.mojo
     # (lane verify-open-sites, 2026-11-16).
     else:
-        raise Error("ParallelCausalLM: unknown native operation " + operation)
+        raise Error("ParallelCausalLM: unknown native operation " + String(name))
     return PythonObject(None)
 
 
 def parallel_causal_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
     var mods = NativeModules()
     var args = PythonObject(from_borrowed=args_ptr)
-    var operation = String()
+    var operation = -1
     try:
         model_sequence(mods, args)
-        operation = model_string(mods, args[0])
-        var result = parallel_causal_call(mods, operation, args[1])
+        # model_string's exact-str refusal, without building the String: the
+        # name is one lookup of the caller's own str in the operation table.
+        if py_type(args[0]) is not mods.module("builtins").str:
+            raise Error("TypeError: model metadata requires exact strings")
+        var nk = parallel_keys()
+        operation = py_op_code(nk[].ops_causal, args[0])
+        var result = parallel_causal_call(mods, operation, args[0], args[1])
         return result.steal_data()
     except error:
-        if operation == "close_quiet":
+        if operation == PARALLEL_CAUSAL_OPN_CLOSE_QUIET:
             var nil = PythonObject(None)
             return nil.steal_data()
         var message = String(error)

@@ -30,7 +30,9 @@ from bindings.linalg_ops_native_unpack import linalg_ops_operation
 from providers.python.lowbit_weight_pyapi_door import lowbit_weight_operation
 from bindings.parallel_public_native_door import parallel_public_operation
 from bindings.parallel_plan_door import plan_devices, plan_enter_all, plan_exit_all
-from bindings.parallel_plan_specs import par_spec_families, par_spec_rebuild, par_spec_admits
+from bindings.parallel_plan_specs import par_spec_families, par_spec_rebuild, par_spec_admits, par_spec_driver_name
+from bindings.parallel_keys_unpack import parallel_keys
+from bindings.py_keys import py_op_code
 from bindings.native_operation_names_unpack import operation_lookup, operation_code
 from bindings.native_operation_codes import (
     family_route, family_route_owner, family_route_pre, family_route_cluster, OP_LEAF_NONE,
@@ -54,11 +56,15 @@ def _family_par_run(model: PythonObject, args: PythonObject, context: PythonObje
     plain owner runs: a family operation here (owner entry None), any other
     through the plain method's own compiled entry and context. The plans are
     released in a `finally`."""
-    var driver = String(args[0])
-    var owner = String(args[2])
-    if not par_spec_admits(driver, owner):
-        raise Error("RuntimeError: parallel driver " + driver + " does not run " + owner)
-    var devices = plan_devices(args[1], driver, True, context)
+    # bw2-parallel: the driver and its owner operation are one lookup each of
+    # the caller's own str in the parallel key table (it built two Strings
+    # and walked the specs' name chains per call). Only a refusal builds the
+    # names' text.
+    var nk = parallel_keys()
+    var driver = py_op_code(nk[].ops_par_driver, args[0])
+    if not par_spec_admits(driver, py_op_code(nk[].ops_par_owner, args[2])):
+        raise Error("RuntimeError: parallel driver " + String(args[0]) + " does not run " + String(args[2]))
+    var devices = plan_devices(args[1], String(par_spec_driver_name(driver)), True, context)
     var owner_args = args[3]
     var owner_entry = args[4]
     var owner_context = args[5]
@@ -66,9 +72,9 @@ def _family_par_run(model: PythonObject, args: PythonObject, context: PythonObje
     if owner_entry is not None and py_type(owner_entry) is not context["family_builtin_type"]:
         raise Error("TypeError: a parallel driver's owner must be a compiled entry")
     if len(bindings) == 0:
-        raise Error("ImportError: " + par_spec_rebuild(driver))
+        raise Error("ImportError: " + String(par_spec_rebuild(driver)))
     var result = PythonObject(None)
-    plan_enter_all(bindings, devices, par_spec_rebuild(driver), par_spec_families(driver))
+    plan_enter_all(bindings, devices, String(par_spec_rebuild(driver)), par_spec_families(driver))
     try:
         if owner_entry is None:
             # No recursion back into the dispatcher (lane ne-fix-hang3): the
@@ -88,11 +94,14 @@ def _family_par_run(model: PythonObject, args: PythonObject, context: PythonObje
             var code = operation_code(table, args[2])
             if code >= 0:
                 result = _family_owner_call(model, table[].table.family_routes[code], table[].table.leaves[code],
-                                            owner, owner_args, context)
+                                            table[].table.names[code], owner_args, context)
             else:
+                var owner = String(args[2])
                 result = _family_owner_call(model, family_route(owner), OP_LEAF_NONE, owner, owner_args, context)
         else:
-            result = family_call(owner_entry, model, PythonObject(owner), owner_args, owner_context)
+            # The owner name is the caller's own str (it was a str built
+            # from the String copy of it).
+            result = family_call(owner_entry, model, args[2], owner_args, owner_context)
     finally:
         plan_exit_all(bindings)
     return result

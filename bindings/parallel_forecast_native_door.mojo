@@ -45,7 +45,23 @@ from bindings.parallel_shard_common_door import (
 from bindings.parallel_shard_common_run import shard_read_shift
 from core.parallel_forecast_impl import forecast_gather_cols, forecast_scatter_cols
 from core.shared_slot import SharedSlot
-from bindings.parallel_keys_unpack import parallel_keys
+from bindings.parallel_keys_unpack import (
+    parallel_keys,
+    PARALLEL_FORECAST_OPN_FIT_ARIMA,
+    PARALLEL_FORECAST_OPN_FIT_EXPONENTIAL_SMOOTHING,
+    PARALLEL_FORECAST_OPN_FORECAST_ARIMA,
+    PARALLEL_FORECAST_OPN_FORECAST_EXPONENTIAL_SMOOTHING,
+    PARALLEL_FORECAST_OPN_INITIALIZE,
+    PARALLEL_FORECAST_OPN_PREDICT_ARIMA,
+    PARALLEL_FORECAST_OPN_PREDICT_EXPONENTIAL_SMOOTHING,
+    PARALLEL_FORECAST_OPN_WORKER,
+    PARALLEL_FORECAST_WORKER_OPN_ARIMA_FIT_SHARD,
+    PARALLEL_FORECAST_WORKER_OPN_ARIMA_PREDICT_SHARD,
+    PARALLEL_FORECAST_WORKER_OPN_HW_FIT_SHARD,
+    PARALLEL_FORECAST_WORKER_OPN_HW_PREDICT_SHARD,
+    PARALLEL_FORECAST_WORKER_OPN_IDENTITY,
+)
+from bindings.py_keys import py_op_code
 from bindings.py_balanced import py_item
 
 comptime _CHILD = "mojolearn._native_parallel_forecast_worker"
@@ -163,7 +179,7 @@ def _predict_arima(estimator: PythonObject, start_obj: PythonObject, end_obj: Py
         py_setitem(state, nk[].k_batch_size_, hi - lo)
         py_setitem(state, nk[].k__y, _rows(py_item(fields, nk[].k__y), lo, hi, n_obs, context))
         py_setitem(state, nk[].k_params_, _rows(py_item(fields, nk[].k_params_), lo, hi, complexity, context))
-        _ = py_call(requests.append, Python.tuple("arima_predict_shard", state, Python.tuple(start, end)))
+        _ = py_call(requests.append, Python.tuple(nk[].k_arima_predict_shard, state, Python.tuple(start, end)))
     var parts = _run(requests, devices)
     var width = end - start
     var result = tsa_array("f", "<f4", Python.tuple(batch, width), batch * width, 4, context)
@@ -251,7 +267,7 @@ def _predict_hw(estimator: PythonObject, start_obj: PythonObject, end_obj: Pytho
         _ = part  # keep the Python object alive through the native call above
         _ = comps  # keep the Python object alive through the native call above
         py_setitem(state, nk[].k__comps, part)
-        _ = py_call(requests.append, Python.tuple("hw_predict_shard", state, Python.tuple(start, end)))
+        _ = py_call(requests.append, Python.tuple(nk[].k_hw_predict_shard, state, Python.tuple(start, end)))
     var parts = _run(requests, devices)
     var width = end - start
     var result = tsa_array("f", "<f4", Python.tuple(width * batch), width * batch, 4, context)
@@ -343,7 +359,7 @@ def _fit_arima(estimator: PythonObject, y: PythonObject, devices: PythonObject, 
         var lo = ranges[2 * r]
         var hi = ranges[2 * r + 1]
         var shift = shard_read_shift(r, lo, n_devices)
-        _ = py_call(requests.append, Python.tuple("arima_fit_shard", state,
+        _ = py_call(requests.append, Python.tuple(nk[].k_arima_fit_shard, state,
                                                   Python.tuple(shard_rows(data, lo - shift, hi - shift, context))))
     var parts = shard_run(requests, devices, _CHILD)
     var merged = b.dict()
@@ -403,7 +419,7 @@ def _fit_hw(estimator: PythonObject, devices: PythonObject, sps: PythonObject) r
         # `ExponentialSmoothing(data[lo:hi], ts_num=hi - lo, **params)`
         py_setitem(shard_state_r, nk[].k_endog, shard_rows(data, lo - shift, hi - shift, context))
         py_setitem(shard_state_r, nk[].k_ts_num, hi - lo)
-        _ = py_call(requests.append, Python.tuple("hw_fit_shard", shard_state_r, Python.tuple()))
+        _ = py_call(requests.append, Python.tuple(nk[].k_hw_fit_shard, shard_state_r, Python.tuple()))
     var parts = shard_run(requests, devices, _CHILD)
     # The plain fit's buffers for the whole batch, every shard's columns at
     # its series offset: the packed components (3 * steps rows of `batch`
@@ -472,15 +488,15 @@ def forecast_worker_dispatch(request: PythonObject) raises -> PythonObject:
     native predict over (start, end)."""
     var f = PARALLEL_FORECAST_BOUNDARY.get_or_create_ptr()
     var b = _b()
-    if len(request) == 1 and String(request[0]) == "identity":
+    var nk = parallel_keys()
+    if len(request) == 1 and py_op_code(nk[].ops_forecast_worker, request[0]) == PARALLEL_FORECAST_WORKER_OPN_IDENTITY:
         return shard_identity()
     if len(request) != 3:
         raise Error("parallel forecasting: invalid worker request envelope")
-    var operation = String(request[0])
+    var operation = py_op_code(nk[].ops_forecast_worker, request[0])
     var state = request[1]
     var args = request[2]
-    if operation == "arima_predict_shard":
-        var nk = parallel_keys()
+    if operation == PARALLEL_FORECAST_WORKER_OPN_ARIMA_PREDICT_SHARD:
         var model = py_call(b.object.__new__, f[].arima_cls)
         var fields = py_fields(model)
         var keys = py_call(b.list, state)
@@ -488,21 +504,21 @@ def forecast_worker_dispatch(request: PythonObject) raises -> PythonObject:
             py_setitem(fields, keys[k], state[keys[k]])
         py_setitem(fields, nk[].k__exog, PythonObject(None))
         return arima_predict(model, Python.tuple(args[0], args[1], PythonObject(None)), f[].arima_context)
-    if operation == "hw_predict_shard":
+    if operation == PARALLEL_FORECAST_WORKER_OPN_HW_PREDICT_SHARD:
         var model = py_call(b.object.__new__, f[].hw_cls)
         var fields = py_fields(model)
         var keys = py_call(b.list, state)
         for k in range(len(keys)):  # driver-loop: over the shard's state record fields
             py_setitem(fields, keys[k], state[keys[k]])
         return hw_predict(model, Python.tuple(args[0], args[1], PythonObject(None)), f[].hw_context)
-    if operation == "arima_fit_shard":
+    if operation == PARALLEL_FORECAST_WORKER_OPN_ARIMA_FIT_SHARD:
         var model = shard_model(f[].arima_cls, state)
         _ = arima_fit(model, Python.tuple(args[0], PythonObject(None)), f[].arima_context)
         # everything the fit set except the shard's series copy
         var fields = py_call(b.dict, py_fields(model))
         _ = py_call(fields.pop, "_y", PythonObject(None))
         return shard_state(fields, b.frozenset(), f[].arima_context)
-    if operation == "hw_fit_shard":
+    if operation == PARALLEL_FORECAST_WORKER_OPN_HW_FIT_SHARD:
         var model = shard_model(f[].hw_cls, state)
         _ = hw_fit(model, f[].hw_context)
         return _fitted_record(model, Python.list("n", "_comps", "sse_", "alpha_", "beta_", "gamma_", "n_iter_",
@@ -529,37 +545,40 @@ def forecast_worker(argv: PythonObject) raises:
     transport_close(socket)
 
 
-def parallel_forecast_call(operation: String, args: PythonObject) raises -> PythonObject:
+def parallel_forecast_call(operation: Int, name: PythonObject, args: PythonObject) raises -> PythonObject:
+    """`operation` is a `PARALLEL_FORECAST_OPN_*` code (-1 for a name the table
+    does not hold); `name` is read only for the unknown operation's text."""
     var f = PARALLEL_FORECAST_BOUNDARY.get_or_create_ptr()
-    if operation == "initialize":
+    if operation == PARALLEL_FORECAST_OPN_INITIALIZE:
         f[].arima_cls = args[0]
         f[].hw_cls = args[1]
         f[].arima_context = args[2]
         f[].hw_context = args[3]
         f[].backend = args[4]
         return PythonObject(None)
-    if operation == "predict_arima":
+    if operation == PARALLEL_FORECAST_OPN_PREDICT_ARIMA:
         return _predict_arima(args[0], args[1], args[2], args[3], args[4], args[5])
-    if operation == "forecast_arima":
+    if operation == PARALLEL_FORECAST_OPN_FORECAST_ARIMA:
         return _forecast_arima(args[0], args[1], args[2], args[3], args[4])
-    if operation == "predict_exponential_smoothing":
+    if operation == PARALLEL_FORECAST_OPN_PREDICT_EXPONENTIAL_SMOOTHING:
         return _predict_hw(args[0], args[1], args[2], args[3], args[4], args[5])
-    if operation == "forecast_exponential_smoothing":
+    if operation == PARALLEL_FORECAST_OPN_FORECAST_EXPONENTIAL_SMOOTHING:
         return _forecast_hw(args[0], args[1], args[2], args[3], args[4])
-    if operation == "fit_arima":
+    if operation == PARALLEL_FORECAST_OPN_FIT_ARIMA:
         return _fit_arima(args[0], args[1], args[2], args[3], args[4])
-    if operation == "fit_exponential_smoothing":
+    if operation == PARALLEL_FORECAST_OPN_FIT_EXPONENTIAL_SMOOTHING:
         return _fit_hw(args[0], args[1], args[2])
-    if operation == "worker":
+    if operation == PARALLEL_FORECAST_OPN_WORKER:
         forecast_worker(args)
         return PythonObject(None)
-    raise Error("RuntimeError: parallel forecasting: unknown operation " + operation)
+    raise Error("RuntimeError: parallel forecasting: unknown operation " + String(name))
 
 
 def parallel_forecast_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
     var args = PythonObject(from_borrowed=args_ptr)
     try:
-        var result = parallel_forecast_call(String(args[0]), args[1])
+        var nk = parallel_keys()
+        var result = parallel_forecast_call(py_op_code(nk[].ops_forecast, args[0]), args[0], args[1])
         return result.steal_data()
     except error:
         var message = String(error)

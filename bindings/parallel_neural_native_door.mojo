@@ -24,7 +24,28 @@ from core.sha256 import Sha256
 from bindings.py_cpython_table import cpython_table
 from bindings.sha256_door import sha256_update, sha256_update_text
 from core.shared_slot import SharedSlot
-from bindings.parallel_keys_unpack import parallel_keys
+from bindings.parallel_keys_unpack import (
+    parallel_keys,
+    PARALLEL_NEURAL_OPN_CHECKPOINT,
+    PARALLEL_NEURAL_OPN_CLOSE,
+    PARALLEL_NEURAL_OPN_ENTER,
+    PARALLEL_NEURAL_OPN_EXIT,
+    PARALLEL_NEURAL_OPN_EXPORT_GRADIENTS,
+    PARALLEL_NEURAL_OPN_INIT,
+    PARALLEL_NEURAL_OPN_INITIALIZE,
+    PARALLEL_NEURAL_OPN_INIT_WITH_WORKER,
+    PARALLEL_NEURAL_OPN_ORDERED_SUM,
+    PARALLEL_NEURAL_OPN_RESTORE,
+    PARALLEL_NEURAL_OPN_TRAIN,
+    PARALLEL_NEURAL_OPN_WORKER,
+    PARALLEL_NEURAL_WORKER_OPN_MLP_GRADIENT,
+    PARALLEL_NEURAL_WORKER_OPN_MLP_GRADIENT_CACHED,
+    PARALLEL_NEURAL_WORKER_OPN_MLP_UPDATE,
+    PARALLEL_NEURAL_WORKER_OPN_SAMBA_GRADIENT,
+    PARALLEL_NEURAL_WORKER_OPN_SAMBA_GRADIENT_CACHED,
+    PARALLEL_NEURAL_WORKER_OPN_SAMBA_UPDATE,
+)
+from bindings.py_keys import py_op_code
 from bindings.py_balanced import py_item
 
 
@@ -201,7 +222,7 @@ def _neural_ids(value: PythonObject) raises -> PythonObject:
     return out
 
 
-def _neural_request(operation: String, state: PythonObject, args: PythonObject) raises -> PythonObject:
+def _neural_request(operation: PythonObject, state: PythonObject, args: PythonObject) raises -> PythonObject:
     var bi = PARALLEL_NEURAL_BOUNDARY.get_or_create_ptr()[].bi
     var request = bi.list()
     _ = py_call(request.append, operation)
@@ -351,8 +372,10 @@ def _worker_model(header: PythonObject, samba: Bool) raises -> PythonObject:
 def _neural_requests(owner: PythonObject, header: PythonObject, shard_args: PythonObject) raises -> PythonObject:
     var b = PARALLEL_NEURAL_BOUNDARY.get_or_create_ptr()
     var requests = b[].bi.list()
+    var nk = parallel_keys()
+    var operation = nk[].k_samba_gradient_cached if String(owner._operation) == "samba_gradient" else nk[].k_mlp_gradient_cached
     for i in range(len(shard_args)):  # driver-loop: over logical training shards in immutable reduction order
-        _ = py_call(requests.append, _neural_request(String(owner._operation) + "_cached", header, shard_args[i]))
+        _ = py_call(requests.append, _neural_request(operation, header, shard_args[i]))
     return requests
 
 
@@ -422,7 +445,7 @@ def _neural_train(owner: PythonObject, supplied: PythonObject) raises -> PythonO
             update_state = py_call(b[].bi.dict, snapshot)
             py_setitem(update_state, nk[].k_rng, next_rng)
         var update_requests = b[].bi.list()
-        _ = py_call(update_requests.append, _neural_request("samba_update" if samba else "mlp_update", update_state, parts))
+        _ = py_call(update_requests.append, _neural_request(nk[].k_samba_update if samba else nk[].k_mlp_update, update_state, parts))
         var updated = process_pool_map(owner._update_pool, update_requests)[0]
         _neural_publish(owner, updated[0])
         py_setattr(owner, "_gradients", updated[1])
@@ -502,11 +525,11 @@ def neural_worker_dispatch(request: PythonObject) raises -> PythonObject:
     var b = PARALLEL_NEURAL_BOUNDARY.get_or_create_ptr()
     if len(request) != 3:
         raise Error("parallel neural: invalid worker request envelope")
-    var operation = String(request[0])
+    var nk = parallel_keys()
+    var operation = py_op_code(nk[].ops_neural_worker, request[0])
     var state = request[1]
     var args = request[2]
-    var nk = parallel_keys()
-    if operation == "mlp_gradient_cached":
+    if operation == PARALLEL_NEURAL_WORKER_OPN_MLP_GRADIENT_CACHED:
         # The worker's resident state is replaced (never edited in place) when
         # a full state or a committed delta arrives: validate each resident
         # state object once and open ONE gradient slot over it (the
@@ -523,7 +546,7 @@ def neural_worker_dispatch(request: PythonObject) raises -> PythonObject:
             py_setitem(cache, nk[].k_mlp_slot, slot)
             py_setitem(cache, nk[].k_checked_of, resident)
         return mlp_gradients_on(Int(py=slot), args[0], args[1])
-    if operation == "samba_gradient_cached":
+    if operation == PARALLEL_NEURAL_WORKER_OPN_SAMBA_GRADIENT_CACHED:
         var cache = _worker_model(state, True)
         var values = _neural_values(py_item(cache, nk[].k_model))
         _ = py_call(values.append, args[0])
@@ -532,20 +555,20 @@ def neural_worker_dispatch(request: PythonObject) raises -> PythonObject:
         _ = py_call(values.append, args[2])
         _ = py_call(values.append, args[3])
         return _neural_samba("model_gradients", values)
-    if operation == "mlp_gradient":
+    if operation == PARALLEL_NEURAL_WORKER_OPN_MLP_GRADIENT:
         return mlp_gradients_from_state(state, args[0], args[1])
-    if operation == "samba_gradient":
+    if operation == PARALLEL_NEURAL_WORKER_OPN_SAMBA_GRADIENT:
         var values = _neural_values(state)
         for i in range(len(args)):  # driver-loop: over the compiled Samba gradient operation envelope
             _ = py_call(values.append, args[i])
         return _neural_samba("gradients", values)
-    if operation != "mlp_update" and operation != "samba_update":
+    if operation != PARALLEL_NEURAL_WORKER_OPN_MLP_UPDATE and operation != PARALLEL_NEURAL_WORKER_OPN_SAMBA_UPDATE:
         raise Error("parallel neural: unsupported worker operation")
     neural_cooperative_admit()
     var grads = neural_ordered_sum(args)
     var updated = PythonObject(None)
     var step = 0
-    if operation == "mlp_update":
+    if operation == PARALLEL_NEURAL_WORKER_OPN_MLP_UPDATE:
         updated = mlp_apply_from_state(state, grads)
         step = Int(py=py_item(py_item(updated, nk[].k_optimizer), nk[].k_step))
     else:
@@ -580,48 +603,50 @@ def neural_worker(argv: PythonObject) raises:
     transport_close(socket)
 
 
-def parallel_neural_call(operation: String, args: PythonObject) raises -> PythonObject:
+def parallel_neural_call(operation: Int, name: PythonObject, args: PythonObject) raises -> PythonObject:
+    """`operation` is a `PARALLEL_NEURAL_OPN_*` code (-1 for a name the table
+    does not hold); `name` is read only for the unknown operation's text."""
     var b = PARALLEL_NEURAL_BOUNDARY.get_or_create_ptr()
     var child = String("mojolearn._native_parallel_neural_worker")
-    if operation == "initialize":
+    if operation == PARALLEL_NEURAL_OPN_INITIALIZE:
         parallel_neural_initialize(args)
         return PythonObject(None)
     neural_admit(operation, args, b[].owner_cls, b[].mlp_cls, b[].samba_cls, b[].admission_context)
-    if operation == "init":
+    if operation == PARALLEL_NEURAL_OPN_INIT:
         _neural_init(args[0], args[1], args[2], args[3], child)
         return PythonObject(None)
-    if operation == "init_with_worker":
+    if operation == PARALLEL_NEURAL_OPN_INIT_WITH_WORKER:
         # Verification entry chooses an independent child audit controller;
         # the public constructor always selects the installed native worker.
         _neural_init(args[0], args[1], args[2], args[3], String(args[4]))
         return PythonObject(None)
-    if operation == "restore":
+    if operation == PARALLEL_NEURAL_OPN_RESTORE:
         return _neural_restore(args[0], args[1], args[2], child)
-    if operation == "ordered_sum":
+    if operation == PARALLEL_NEURAL_OPN_ORDERED_SUM:
         return neural_ordered_sum(args[0])
-    if operation == "worker":
+    if operation == PARALLEL_NEURAL_OPN_WORKER:
         neural_worker(args)
         return PythonObject(None)
     var owner = args[0]
     _ = owner._lock.acquire()
     var result = PythonObject(None)
     try:
-        if operation == "train":
+        if operation == PARALLEL_NEURAL_OPN_TRAIN:
             result = _neural_train(owner, args[1])
-        elif operation == "export_gradients":
+        elif operation == PARALLEL_NEURAL_OPN_EXPORT_GRADIENTS:
             if owner._gradients is None:
                 raise Error("RuntimeError: no committed parallel gradient")
             result = b[].bi.list()
             for i in range(len(owner._gradients)):  # driver-loop: over committed gradient output buffers
                 _ = py_call(result.append, generation_copy(owner._gradients[i]))
-        elif operation == "checkpoint":
+        elif operation == PARALLEL_NEURAL_OPN_CHECKPOINT:
             result = _neural_checkpoint(owner)
-        elif operation == "close" or operation == "exit":
+        elif operation == PARALLEL_NEURAL_OPN_CLOSE or operation == PARALLEL_NEURAL_OPN_EXIT:
             _neural_close(owner)
-        elif operation == "enter":
+        elif operation == PARALLEL_NEURAL_OPN_ENTER:
             result = owner
         else:
-            raise Error("parallel neural: unknown operation " + operation)
+            raise Error("parallel neural: unknown operation " + String(name))
     except error:
         _ = owner._lock.release()
         raise error
@@ -632,7 +657,8 @@ def parallel_neural_call(operation: String, args: PythonObject) raises -> Python
 def parallel_neural_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
     var args = PythonObject(from_borrowed=args_ptr)
     try:
-        var result = parallel_neural_call(String(args[0]), args[1])
+        var nk = parallel_keys()
+        var result = parallel_neural_call(py_op_code(nk[].ops_neural, args[0]), args[0], args[1])
         return result.steal_data()
     except error:
         var message = String(error)

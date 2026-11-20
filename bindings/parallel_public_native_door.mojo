@@ -13,7 +13,16 @@ from bindings.parallel_public_result_door import parallel_public_result
 from bindings.native_buffer_owner_pack import native_storage_allocate
 from bindings.trees_public_forest_door import forest_effective_mode, _engine
 from core.device_plan import device_plan_logical
-from bindings.parallel_keys_unpack import parallel_keys
+from bindings.parallel_keys_unpack import (
+    parallel_keys,
+    PARALLEL_PREDICTOR_OPN_PREDICTOR_CLOSE,
+    PARALLEL_PREDICTOR_OPN_PREDICTOR_ENTER,
+    PARALLEL_PREDICTOR_OPN_PREDICTOR_EXIT,
+    PARALLEL_PREDICTOR_OPN_PREDICTOR_INIT,
+    PARALLEL_PREDICTOR_OPN_PREDICTOR_PREDICT,
+    PARALLEL_PREDICTOR_OPN_PREDICTOR_PREDICT_PROBA,
+)
+from bindings.py_keys import py_op_code
 from bindings.py_balanced import py_item
 
 
@@ -111,14 +120,17 @@ def _run(model: PythonObject, driver: PythonObject, operation: PythonObject, arg
                         Python.tuple(driver, devices, operation, args, entry, owner, _modules(meta, names)), context)
 
 
-def _predictor(model: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def _predictor(model: PythonObject, operation: Int, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`operation` is a `PARALLEL_PREDICTOR_OPN_*` code; any other
+    `predictor_*` name runs as `predictor_predict` (the former chain's last
+    branch)."""
     var b = native_loaded_module("builtins")
     var nk = parallel_keys()
     var meta = py_item(context, nk[].k_parallel_public)
     if py_type(model) is not py_item(meta, nk[].k_predictor_class):
         raise Error("TypeError: requires the native ParallelForestPredictor class")
     var fields = _fields(model, py_item(meta, nk[].k_predictor_layout))
-    if operation == "predictor_init":
+    if operation == PARALLEL_PREDICTOR_OPN_PREDICTOR_INIT:
         var source = args[0]
         var cls = py_type(source)
         if py_type(cls) is not b.type or not py_contains(py_item(meta, nk[].k_forests), cls):
@@ -162,7 +174,7 @@ def _predictor(model: PythonObject, operation: String, args: PythonObject, conte
             py_setitem(fields, nk[].k_n_classes_, PythonObject(Int(py=py_item(original, nk[].k__num_outputs))))
         return PythonObject(None)
     var lock = py_get(fields, nk[].k__lock)
-    if lock is None and (operation == "predictor_close" or operation == "predictor_exit"):
+    if lock is None and (operation == PARALLEL_PREDICTOR_OPN_PREDICTOR_CLOSE or operation == PARALLEL_PREDICTOR_OPN_PREDICTOR_EXIT):
         # A CONSTRUCTION THAT FAILED before its lock (every refusal of
         # predictor_init above runs before `_model` and `_lock` are stored):
         # nothing resident was built, since the pool is built on the first
@@ -177,7 +189,7 @@ def _predictor(model: PythonObject, operation: String, args: PythonObject, conte
         raise Error("TypeError: ParallelForestPredictor state requires native booleans")
     _ = py_call(lock.acquire)
     try:
-        if operation == "predictor_close" or operation == "predictor_exit":
+        if operation == PARALLEL_PREDICTOR_OPN_PREDICTOR_CLOSE or operation == PARALLEL_PREDICTOR_OPN_PREDICTOR_EXIT:
             if not Bool(py=py_item(fields, nk[].k__closed)):
                 py_setitem(fields, nk[].k__closed, PythonObject(True))
                 var snapshot = py_item(fields, nk[].k__model)
@@ -189,9 +201,9 @@ def _predictor(model: PythonObject, operation: String, args: PythonObject, conte
             return PythonObject(None)
         if Bool(py=py_item(fields, nk[].k__closed)):
             raise Error("RuntimeError: pooled forest predictor is closed")
-        if operation == "predictor_enter":
+        if operation == PARALLEL_PREDICTOR_OPN_PREDICTOR_ENTER:
             return model
-        var proba = operation == "predictor_predict_proba"
+        var proba = operation == PARALLEL_PREDICTOR_OPN_PREDICTOR_PREDICT_PROBA
         if proba and not Bool(py=py_item(fields, nk[].k__classifier)):
             raise Error("ValueError: predict_proba requires a classifier")
         classical_admit_value(args, context)
@@ -210,12 +222,21 @@ def parallel_public_operation(model: PythonObject, packed: PythonObject, context
     var meta = py_item(context, nk[].k_parallel_public)
     if py_type(packed[0]) is not b.str:
         raise Error("TypeError: parallel operation requires an exact name")
-    var operation = String(packed[0])
     var args = py_call(b.list, packed[1])
     classical_connect_numpy(context)
-    if operation.startswith("predictor_"):
-        return _predictor(model, operation, py_call(b.tuple, args), context)
-    var options = py_item(meta, nk[].k_plans)[packed[0]]
+    # One lookup of the caller's own str: a predictor operation by its code;
+    # a plan by its name. Only a name that is neither builds its String (an
+    # other `predictor_*` name runs as predict, as the prefix test ran it;
+    # any other raises the plans' KeyError, as before).
+    var predictor = py_op_code(nk[].ops_predictor, packed[0])
+    if predictor >= 0:
+        return _predictor(model, predictor, py_call(b.tuple, args), context)
+    var plans = py_item(meta, nk[].k_plans)
+    var options = py_get(plans, packed[0])
+    if options is None:
+        if String(packed[0]).startswith("predictor_"):
+            return _predictor(model, PARALLEL_PREDICTOR_OPN_PREDICTOR_PREDICT, py_call(b.tuple, args), context)
+        options = plans[packed[0]]
     var cls = py_type(model) if model is not None else PythonObject(None)
     if model is not None and py_type(cls) is not b.type:
         raise Error("TypeError: parallel drivers refuse Python metaclass hooks")
@@ -235,7 +256,7 @@ def parallel_public_operation(model: PythonObject, packed: PythonObject, context
         var policy = String(py_item(spec, nk[].k_mode))
         var selected = process_mode if policy == "default" else effective if policy == "effective" else mode
         if selected is not None and (py_type(selected) is not b.str or String(selected) != "identical"):
-            raise Error("ValueError: parallel " + operation + " requires IDENTICAL numeric mode")
+            raise Error("ValueError: parallel " + String(packed[0]) + " requires IDENTICAL numeric mode")
     var check = String(py_item(spec, nk[].k_check)) if py_item(spec, nk[].k_check) is not None else String("")
     if check == "gram" or check == "matrix" or check == "kmeans" or check == "gmm_predict":
         var data = admit_x(args[0], 2, "X", context)
