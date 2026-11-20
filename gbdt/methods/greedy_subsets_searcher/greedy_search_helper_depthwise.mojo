@@ -1045,22 +1045,36 @@ struct TDepthwiseWorkspace(Movable):
             max_leaves
         )
         # DEVIATION 1904 (wired): see the field block above
-        self.d_bf_feature = ctx.enqueue_create_buffer[DType.int32](hist_cells)
+        # lane fx-gbdt-constcol (2026-11-20): at least one record, zeroed.
+        # A layout whose features all have zero folds has no bin-feature,
+        # and four zero-length tables were handed to the fold launch
+        # (`leaf_winner_fold_kernel`) by address. The fold reads a record
+        # only for a block winner below the cell count, so the spare record
+        # is never read; it exists so the address does.
+        var bf_capacity = hist_cells
+        if bf_capacity < 1:
+            bf_capacity = 1
+        self.d_bf_feature = ctx.enqueue_create_buffer[DType.int32](bf_capacity)
         self.h_bf_feature = ctx.enqueue_create_host_buffer[DType.int32](
-            hist_cells
+            bf_capacity
         )
-        self.d_bf_bin = ctx.enqueue_create_buffer[DType.int32](hist_cells)
+        self.d_bf_bin = ctx.enqueue_create_buffer[DType.int32](bf_capacity)
         self.h_bf_bin = ctx.enqueue_create_host_buffer[DType.int32](
-            hist_cells
+            bf_capacity
         )
-        self.d_bf_one_hot = ctx.enqueue_create_buffer[DType.uint8](hist_cells)
+        self.d_bf_one_hot = ctx.enqueue_create_buffer[DType.uint8](bf_capacity)
         self.h_bf_one_hot = ctx.enqueue_create_host_buffer[DType.uint8](
-            hist_cells
+            bf_capacity
         )
-        self.d_bf_folds = ctx.enqueue_create_buffer[DType.int32](hist_cells)
+        self.d_bf_folds = ctx.enqueue_create_buffer[DType.int32](bf_capacity)
         self.h_bf_folds = ctx.enqueue_create_host_buffer[DType.int32](
-            hist_cells
+            bf_capacity
         )
+        if hist_cells == 0:
+            self.h_bf_feature.unsafe_ptr().unsafe_store(0, Int32(0))
+            self.h_bf_bin.unsafe_ptr().unsafe_store(0, Int32(0))
+            self.h_bf_one_hot.unsafe_ptr().unsafe_store(0, UInt8(0))
+            self.h_bf_folds.unsafe_ptr().unsafe_store(0, Int32(0))
         self.d_winner = ctx.enqueue_create_buffer[DType.uint32](
             WINNER_RECORD_WORDS * max_leaves
         )
@@ -2861,8 +2875,12 @@ def fit_non_symmetric_tree[
                     d_zero_ids.unsafe_ptr(),
                     Int32(hist_cells_per_leaf),
                     hist.unsafe_ptr(),
+                    # at least one block: a layout whose features all
+                    # have zero folds has no cells, and the root's zero
+                    # pass is launched before anything is known about it
+                    # (the kernel tests its index against the cell count)
                     grid_dim=(
-                        (hist_cells_per_leaf + 255) // 256,
+                        max(1, (hist_cells_per_leaf + 255) // 256),
                         zero_count,
                         stat_count,
                     ),

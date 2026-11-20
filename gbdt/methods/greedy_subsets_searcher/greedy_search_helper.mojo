@@ -5130,7 +5130,7 @@ struct TSynchronizedSymmetricLevelState(Movable):
                     workspace.sub_what.unsafe_ptr(),
                     Int32(self.layout.hist_cells), workspace.hist.unsafe_ptr(),
                     grid_dim=(
-                        (self.layout.hist_cells // 4 + 255) // 256,
+                        cell_grid_blocks(self.layout.hist_cells // 4, 256),
                         half, self.stat_count,
                     ),
                     block_dim=(256, 1, 1),
@@ -5141,7 +5141,7 @@ struct TSynchronizedSymmetricLevelState(Movable):
                     workspace.sub_what.unsafe_ptr(),
                     Int32(self.layout.hist_cells), workspace.hist.unsafe_ptr(),
                     grid_dim=(
-                        (self.layout.hist_cells + 255) // 256,
+                        cell_grid_blocks(self.layout.hist_cells, 256),
                         half, self.stat_count,
                     ),
                     block_dim=(256, 1, 1),
