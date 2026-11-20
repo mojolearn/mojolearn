@@ -140,7 +140,7 @@ def training_cross_entropy(values: PythonObject, entries: PythonObject, context:
             raise Error("ValueError: cross_entropy logits and targets row counts differ")
         var smoothing = PythonObject(None)
         if not device:
-            smoothing = training_scalar_float(values[4], "cross_entropy", context)
+            smoothing = training_scalar_float(values[4], nk[].k_cross_entropy, context)
         var loss = new_array([1], "<f4")
         # Row N118 (lane ne3-c-blocks-embedding): the per-row losses are an
         # output only under reduction='none'; for 'sum' and 'mean' no rows-long
@@ -159,11 +159,11 @@ def training_cross_entropy(values: PythonObject, entries: PythonObject, context:
             gradient = new_array(shape, "<f4")
         else:
             gradient = new_array([1], "<f4")
-        var ignored = training_scalar_number(values[2], "cross_entropy", context, True)
-        var divisor = training_scalar_number(PythonObject(0) if values[5] is None else values[5], "cross_entropy", context, True)
+        var ignored = training_scalar_number(values[2], nk[].k_cross_entropy, context, True)
+        var divisor = training_scalar_number(PythonObject(0) if values[5] is None else values[5], nk[].k_cross_entropy, context, True)
         var params = Python.list(rows, vocab, ignored, reduction, divisor, 1 if want_grad else 0)
         if device:
-            smoothing = training_scalar_float(values[4], "cross_entropy", context)
+            smoothing = training_scalar_float(values[4], nk[].k_cross_entropy, context)
         py_call(params.append, smoothing)
         var keep = List[List[Float32]]()
         if device:

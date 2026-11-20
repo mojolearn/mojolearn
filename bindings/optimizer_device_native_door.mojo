@@ -19,7 +19,8 @@ from training.optimizer_device_storage_plan import (
     optimizer_device_extent, optimizer_device_count as shape_count, optimizer_device_reshape, optimizer_device_upload,
     optimizer_device_output,
 )
-from bindings.optimizer_keys_unpack import optimizer_keys
+from bindings.optimizer_keys_unpack import optimizer_keys, optimizer_keys_in_finalizer
+from bindings.optimizer_keys_unpack import OPTIMIZER_OPN_DEVICE_CONSTRUCT, OPTIMIZER_OPN_DEVICE_HOST, OPTIMIZER_OPN_DEVICE_NEW, OPTIMIZER_OPN_DEVICE_RESHAPE, OPTIMIZER_OPN_DEVICE_UPLOAD
 from bindings.py_balanced import py_item
 
 
@@ -150,7 +151,11 @@ def _device_fields(owner: PythonObject, context: PythonObject, cleanup: Bool) ra
 
 
 def device_finalize(owner: PythonObject, context: PythonObject) raises -> PythonObject:
-    var nk = optimizer_keys()
+    # A device array collected during interpreter teardown before any call
+    # filled the key table releases nothing (optimizer_keys_in_finalizer).
+    var nk = optimizer_keys_in_finalizer()
+    if not nk[].ready:
+        return PythonObject(None)
     if py_type(owner) is not py_item(context, nk[].k_device_class):
         raise Error("TypeError: training device cleanup requires its exact native owner")
     var fields = _device_fields(owner, context, True)
@@ -188,15 +193,15 @@ def device_finalize_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> P
     return PythonObject(None).steal_data()
 
 
-def device_operation(operation: String, owner: PythonObject, values: PythonObject, context: PythonObject,
+def device_operation(operation: Int, owner: PythonObject, values: PythonObject, context: PythonObject,
     selected: PythonObject) raises -> PythonObject:
     var nk = optimizer_keys()
-    if operation == "device_construct" or operation == "device_new":
+    if operation == OPTIMIZER_OPN_DEVICE_CONSTRUCT or operation == OPTIMIZER_OPN_DEVICE_NEW:
         var binding = values[0]
         var entries = device_entries(binding, context)
-        var dims = device_shape(values[2] if operation == "device_construct" else values[1], context)
+        var dims = device_shape(values[2] if operation == OPTIMIZER_OPN_DEVICE_CONSTRUCT else values[1], context)
         _ = shape_count(dims)
-        if operation == "device_construct":
+        if operation == OPTIMIZER_OPN_DEVICE_CONSTRUCT:
             if py_type(owner) is not py_item(context, nk[].k_device_class):
                 raise Error("TypeError: training device array requires the exact native owner")
             opt_scalar(values[1], context)
@@ -206,7 +211,7 @@ def device_operation(operation: String, owner: PythonObject, values: PythonObjec
             device_set(owner, binding, PythonObject(optimizer_integer(values[1], context)), dims, base)
             return PythonObject(None)
         return device_allocate(entries, dims, context)
-    if operation == "device_upload":
+    if operation == OPTIMIZER_OPN_DEVICE_UPLOAD:
         var source = values[0]
         if py_type(source) is py_item(context, nk[].k_device_class):
             opt_value(source, context)
@@ -233,12 +238,12 @@ def device_operation(operation: String, owner: PythonObject, values: PythonObjec
     var fields = _device_fields(owner, context, False)
     opt_value(owner, context)
     var entries = device_entries(py_item(fields, nk[].k__b), context)
-    if operation == "device_reshape":
+    if operation == OPTIMIZER_OPN_DEVICE_RESHAPE:
         var dims = device_shape(values[0], context)
         optimizer_device_reshape(dims, Int(py=py_item(fields, nk[].k_size)))
         var base = py_item(fields, nk[].k__base)
         return device_new(py_item(fields, nk[].k__b), py_item(fields, nk[].k_h), dims, owner if base is None else base, context)
-    if operation == "device_host":
+    if operation == OPTIMIZER_OPN_DEVICE_HOST:
         var dims = device_shape(py_item(fields, nk[].k_shape), context)
         var count = Int(py=py_item(fields, nk[].k_size))
         optimizer_device_output(dims, count)

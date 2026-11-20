@@ -46,8 +46,10 @@ def training_scalar_warning(message: String, category: PythonObject, operation: 
         raise failure^
 
 
-def training_scalar_number(value: PythonObject, operation: String, context: PythonObject,
+def training_scalar_number(value: PythonObject, where: PythonObject, context: PythonObject,
                            integer: Bool, depth: Int = 0) raises -> PythonObject:
+    # `where`: the public operation's name as the caller's str (the router's
+    # own argument or a held key); a String of it is built only for a warning.
     if depth > 64:
         raise Error("TypeError: scalar configuration exceeds native nesting; supply a native number")
     var b = native_loaded_module("builtins")
@@ -82,7 +84,7 @@ def training_scalar_number(value: PythonObject, operation: String, context: Pyth
                 raise Error("TypeError: only size-1 arrays can be converted to Python scalars")
             if ndim > 0:
                 training_scalar_warning("Conversion of an array with ndim > 0 to a scalar is deprecated, and will error in future. Ensure you extract a single element from your array before performing this operation. (Deprecated NumPy 1.25.)",
-                                        b.DeprecationWarning, operation, context)
+                                        b.DeprecationWarning, String(py=where), context)
             if String(dtype.kind) == "c":
                 # F/D box builtin complex and refuse conversion. G retains
                 # an extended native scalar, including on double-width ABIs.
@@ -92,7 +94,7 @@ def training_scalar_number(value: PythonObject, operation: String, context: Pyth
                 if exceptions is None or py_type(exceptions) is not py_item(context, nk[].k_module_type):
                     raise Error("TypeError: complex scalar warnings require NumPy's native exception metadata")
                 var category = py_get(native_numpy_module_fields(exceptions), nk[].k_ComplexWarning)
-                training_scalar_warning("Casting complex values to real discards the imaginary part", category, operation, context)
+                training_scalar_warning("Casting complex values to real discards the imaginary part", category, String(py=where), context)
                 return native_scalar_buffer_dtype(value, dtype).to_python_number(integer)
             var kind = String(dtype.kind)
             if kind == "b" or kind == "i" or kind == "u" or kind == "f":
@@ -109,7 +111,7 @@ def training_scalar_number(value: PythonObject, operation: String, context: Pyth
                 # parses those bytes (e.g. V4(b'1e-5')); keep both successful
                 # text parsing and ValueError for invalid raw bytes.
                 var raw = training_void_bytes(value)
-                return training_scalar_number(raw, operation, context, integer, depth + 1)
+                return training_scalar_number(raw, where, context, integer, depth + 1)
             var indexes = Python.list()
             for i in range(ndim):  # driver-loop: native scalar index, one zero per singleton axis
                 py_call(indexes.append, 0)
@@ -124,7 +126,7 @@ def training_scalar_number(value: PythonObject, operation: String, context: Pyth
                 var failure = stash_python_error()
                 raise failure^
             var scalar = PythonObject(from_owned=pointer)
-            var result = training_scalar_number(scalar, operation, context, integer, depth + 1)
+            var result = training_scalar_number(scalar, where, context, integer, depth + 1)
             _ = scalar^
             return result
         for i in range(len(classes)):  # driver-loop: exact native scalar class identities
@@ -139,13 +141,13 @@ def training_scalar_number(value: PythonObject, operation: String, context: Pyth
             if dtype.fields is not None:
                 raise Error("TypeError: float() argument must be a string or a real number, not 'tuple'")
             var raw = training_void_bytes(value)
-            return training_scalar_number(raw, operation, context, integer, depth + 1)
+            return training_scalar_number(raw, where, context, integer, depth + 1)
         if kind == "c":
             var exceptions = py_get(py_item(context, nk[].k_modules), "numpy.exceptions")
             if exceptions is None or py_type(exceptions) is not py_item(context, nk[].k_module_type):
                 raise Error("TypeError: complex scalar warnings require NumPy's native exception metadata")
             var category = py_get(native_numpy_module_fields(exceptions), nk[].k_ComplexWarning)
-            training_scalar_warning("Casting complex values to real discards the imaginary part", category, operation, context)
+            training_scalar_warning("Casting complex values to real discards the imaginary part", category, String(py=where), context)
             return native_scalar_buffer_dtype(value, dtype).to_python_number(integer)
         if kind == "b" or kind == "i" or kind == "u" or kind == "f":
             return native_scalar_buffer_dtype(value, dtype).to_python_number(integer)
@@ -160,5 +162,5 @@ def training_scalar_number(value: PythonObject, operation: String, context: Pyth
     return PythonObject(from_owned=pointer)
 
 
-def training_scalar_float(value: PythonObject, operation: String, context: PythonObject) raises -> PythonObject:
-    return training_scalar_number(value, operation, context, False)
+def training_scalar_float(value: PythonObject, where: PythonObject, context: PythonObject) raises -> PythonObject:
+    return training_scalar_number(value, where, context, False)

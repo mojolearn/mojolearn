@@ -24,16 +24,18 @@ from bindings.optimizer_admission_door import opt_value
 from bindings.training_embedding_native_door import embedding_indices
 from bindings.py_cpython_table import cpython_table
 from bindings.optimizer_keys_unpack import optimizer_keys
+from bindings.optimizer_keys_unpack import OPTIMIZER_OPN_RESIDUAL_DROPOUT
 from bindings.py_balanced import py_item
 
 
 
-def _entry(entries: PythonObject, name: String, missing: String) raises -> PythonObject:
+def _entry(entries: PythonObject, name: PythonObject, missing: String) raises -> PythonObject:
     """A connected compiled training entry, refused by name when this build
-    lacks it."""
-    var entry = py_get(entries, PythonObject(name))
+    lacks it. `name` is a held key (bindings/optimizer_keys_unpack.mojo); its
+    String is built only for the refusal."""
+    var entry = py_get(entries, name)
     if entry is None:
-        raise Error("ImportError: " + missing + name)
+        raise Error("ImportError: " + missing + String(py=name))
     return entry
 
 
@@ -117,7 +119,7 @@ def _rd_device_operand(value: PythonObject, name: String, entries: PythonObject,
     return fields
 
 
-def _rd_device(operation: String, values: PythonObject, entries: PythonObject,
+def _rd_device(operation: Int, values: PythonObject, entries: PythonObject,
                context: PythonObject) raises -> PythonObject:
     """Lane ne3-c-blocks-embedding (row N117): residual dropout on training
     device arrays. The outputs are new device arrays of the same binding and
@@ -128,10 +130,10 @@ def _rd_device(operation: String, values: PythonObject, entries: PythonObject,
     var nk = optimizer_keys()
     var native = device_entries(py_item(entries, nk[].k_module), context)
     var shape = List[Int]()
-    var first = _rd_device_operand(values[0], "values" if operation == "residual_dropout" else "gradient",
+    var first = _rd_device_operand(values[0], "values" if operation == OPTIMIZER_OPN_RESIDUAL_DROPOUT else "gradient",
                                    entries, context, shape)
     var count = shape_count(shape)
-    if operation == "residual_dropout":
+    if operation == OPTIMIZER_OPN_RESIDUAL_DROPOUT:
         var residual_shape = List[Int]()
         var second = _rd_device_operand(values[1], "residual", entries, context, residual_shape)
         if len(residual_shape) != len(shape):
@@ -141,7 +143,7 @@ def _rd_device(operation: String, values: PythonObject, entries: PythonObject,
                 raise Error("ValueError: values and residual must have identical shapes")
         var params = _rd_params(count, values[2], values[3], values[4], values[5])
         var result = device_allocate(native, shape, context)
-        var written = py_call_typed(_entry(native, "residual_dropout_dev", missing),
+        var written = py_call_typed(_entry(native, nk[].k_residual_dropout_dev, missing),
                                     Python.list(py_item(py_fields(result), nk[].k_h), py_item(first, nk[].k_h), py_item(second, nk[].k_h)), params)
         if Int(py=written) != count:
             raise Error("RuntimeError: residual_dropout returned an incomplete output")
@@ -149,14 +151,14 @@ def _rd_device(operation: String, values: PythonObject, entries: PythonObject,
     var params = _rd_params(count, values[1], values[2], values[3], values[4])
     var d_values = device_allocate(native, shape, context)
     var d_residual = device_allocate(native, shape, context)
-    var written = py_call_typed(_entry(native, "residual_dropout_backward_dev", missing),
+    var written = py_call_typed(_entry(native, nk[].k_residual_dropout_backward_dev, missing),
                                 Python.list(py_item(py_fields(d_values), nk[].k_h), py_item(py_fields(d_residual), nk[].k_h), py_item(first, nk[].k_h)), params)
     if Int(py=written) != count:
         raise Error("RuntimeError: residual_dropout_backward returned incomplete gradients")
     return Python.tuple(d_values, d_residual)
 
 
-def training_residual_dropout(operation: String, values: PythonObject, entries: PythonObject,
+def training_residual_dropout(operation: Int, values: PythonObject, entries: PythonObject,
                               context: PythonObject) raises -> PythonObject:
     """values: (values, residual, p, seed, stream, offset) for the forward,
     (gradient, p, seed, stream, offset) for the backward; identical mode.
@@ -167,7 +169,7 @@ def training_residual_dropout(operation: String, values: PythonObject, entries: 
         if py_type(values[0]) is py_item(context, nk[].k_device_class):
             return _rd_device(operation, values, entries, context)
         var missing = String("residual dropout requires updated training binding: missing ")
-        if operation == "residual_dropout":
+        if operation == OPTIMIZER_OPN_RESIDUAL_DROPOUT:
             var vv = TensorView()
             var rv = TensorView()
             var count = _rd_operand(values[0], "values", vv, buffer_pins)
@@ -179,7 +181,7 @@ def training_residual_dropout(operation: String, values: PythonObject, entries: 
                     raise Error("ValueError: values and residual must have identical shapes")
             var params = _rd_params(count, values[2], values[3], values[4], values[5])
             var result = new_array(vv.shape, "<f4")
-            var written = py_call_typed(_entry(entries, "residual_dropout", missing),
+            var written = py_call_typed(_entry(entries, nk[].k_residual_dropout, missing),
                                         PythonObject(vv.addr if count else 0), PythonObject(rv.addr if count else 0),
                                         result._addr if count else PythonObject(0), params)
             _ = rv  # keep the Python object alive through the native call above
@@ -196,7 +198,7 @@ def training_residual_dropout(operation: String, values: PythonObject, entries: 
         var params = _rd_params(count, values[1], values[2], values[3], values[4])
         var d_values = new_array(gv.shape, "<f4")
         var d_residual = new_array(gv.shape, "<f4")
-        var written = py_call_typed(_entry(entries, "residual_dropout_backward", missing),
+        var written = py_call_typed(_entry(entries, nk[].k_residual_dropout_backward, missing),
                                     PythonObject(gv.addr if count else 0), d_values._addr if count else PythonObject(0),
                                     d_residual._addr if count else PythonObject(0), params)
         _ = d_values  # keep the Python object alive through the native call above
@@ -266,8 +268,9 @@ def training_chunked_lm_head(values: PythonObject, entries: PythonObject, contex
         var row_denom = new_array([rows], "<f4")
         var plist = Python.list(rows, vocab, width)
         var result: PythonObject
+        var nk = optimizer_keys()
         if not Bool(py=py_call_typed(b.bool, values[3])):
-            _ = py_call_typed(_entry(entries, "chunked_lm_head_v2_loss", "mojolearn: this training binding lacks "),
+            _ = py_call_typed(_entry(entries, nk[].k_chunked_lm_head_v2_loss, "mojolearn: this training binding lacks "),
                               Python.list(loss._addr, row_max._addr, row_denom._addr, ha, wa, targets[1]), plist)
             _ = row_denom  # keep the Python object alive through the native call above
             _ = row_max  # keep the Python object alive through the native call above
@@ -277,7 +280,7 @@ def training_chunked_lm_head(values: PythonObject, entries: PythonObject, contex
         else:
             var d_hidden = new_array([rows, width], "<f4")
             var d_weight = new_array([vocab, width], "<f4")
-            _ = py_call_typed(_entry(entries, "chunked_lm_head_v2_train", "mojolearn: this training binding lacks "),
+            _ = py_call_typed(_entry(entries, nk[].k_chunked_lm_head_v2_train, "mojolearn: this training binding lacks "),
                               Python.list(loss._addr, row_max._addr, row_denom._addr, d_hidden._addr, d_weight._addr,
                                           ha, wa, targets[1]), plist)
             _ = d_weight  # keep the Python object alive through the native call above
@@ -345,7 +348,8 @@ def training_mlp_sessions(values: PythonObject, entries: PythonObject) raises ->
         # (the `mlp_sessions_rows` rule: at least one session, every session a
         # (rows, width) matrix), not by a second call that re-reads the shape
         # tuples.
-        var sessions_entry = _entry(entries, "mlp_sessions", "mojolearn: this training binding lacks ")
+        var nk = optimizer_keys()
+        var sessions_entry = _entry(entries, nk[].k_mlp_sessions, "mojolearn: this training binding lacks ")
         if len(views) == 0:
             raise Error("ValueError: MLP sessions require at least one (rows, width) input")
         var total_rows = 0

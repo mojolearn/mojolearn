@@ -21,6 +21,7 @@ from gemm.f16_widen import f16_bits_to_f32
 from core.training_embedding_inputs import embedding_pack, embedding_cast_refusal
 from bindings.py_cpython_table import cpython_table
 from bindings.optimizer_keys_unpack import optimizer_keys
+from bindings.optimizer_keys_unpack import OPTIMIZER_OPN_EMBEDDING_BACKWARD
 from bindings.py_balanced import py_item
 
 
@@ -401,29 +402,29 @@ def embedding_indices(value: PythonObject, context: PythonObject, mut buffer_pin
     return Python.tuple(result, result._addr, count)
 
 
-def training_embedding_operation(operation: String, values: PythonObject, entries: PythonObject,
+def training_embedding_operation(operation: Int, where: PythonObject, values: PythonObject, entries: PythonObject,
                                  context: PythonObject) raises -> PythonObject:
     var buffer_pins = OptimizerInputOwners()
     try:
-        var backward = operation == "embedding_backward"
+        var backward = operation == OPTIMIZER_OPN_EMBEDDING_BACKWARD
         if len(values) != (3 if backward else 2):
             raise Error("TypeError: invalid embedding argument envelope")
-        var entry = entries[PythonObject(operation)]
+        var entry = py_item(entries, where)
         var nk = optimizer_keys()
         if py_type(entry) is not py_item(context, nk[].k_device_finalizer_types)[2]:
             raise Error("TypeError: embedding requires its connected compiled entry")
         var input = values[0]
         var view = TensorView()
-        rms_host_view(input, "dy" if backward else "weight", operation, view, buffer_pins)
+        rms_host_view(input, "dy" if backward else "weight", where, view, buffer_pins)
         if len(view.shape) != 2:
-            raise Error("ValueError: mojolearn." + operation + ": " + ("dy must be (N, D)" if backward else "weight must be (V, D)"))
+            raise Error("ValueError: mojolearn." + String(py=where) + ": " + ("dy must be (N, D)" if backward else "weight must be (V, D)"))
         var ids = embedding_indices(values[1], context, buffer_pins)
         var count = Int(py=ids[2])
         if backward and count != view.shape[0]:
             raise Error("ValueError: mojolearn.embedding_backward: ids and dy row counts differ")
         var vocab = view.shape[0]
         if backward:
-            vocab = Int(py=training_scalar_number(values[2], operation, context, True))
+            vocab = Int(py=training_scalar_number(values[2], where, context, True))
             if vocab < 0:
                 raise Error("ValueError: negative embedding vocabulary size")
         _ = shape_count([vocab, view.shape[1]])
@@ -435,7 +436,7 @@ def training_embedding_operation(operation: String, values: PythonObject, entrie
         if backward:
             # The public contract converted vocab for allocation and again for
             # launch metadata; preserve native scalar warnings from both calls.
-            vocab = Int(py=training_scalar_number(values[2], operation, context, True))
+            vocab = Int(py=training_scalar_number(values[2], where, context, True))
         _ = py_call(entry, Python.list(result._addr, address, ids[1]), Python.list(count, vocab, view.shape[1]))
         _ = keep^
         _ = input^

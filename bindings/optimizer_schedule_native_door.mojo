@@ -21,6 +21,20 @@ from training.optimizer_schedule_plan import (
     optimizer_schedule_config_kind, optimizer_schedule_config_name, optimizer_schedule_evaluation,
 )
 from bindings.optimizer_keys_unpack import optimizer_keys
+from bindings.optimizer_keys_unpack import (
+    OPTIMIZER_OPN_SCHEDULE_AT,
+    OPTIMIZER_OPN_SCHEDULE_BITS,
+    OPTIMIZER_OPN_SCHEDULE_CONFIG,
+    OPTIMIZER_OPN_SCHEDULE_CONSTRUCT,
+    OPTIMIZER_OPN_SCHEDULE_DELATTR,
+    OPTIMIZER_OPN_SCHEDULE_FROM_CONFIG,
+    OPTIMIZER_OPN_SCHEDULE_GETSTATE,
+    OPTIMIZER_OPN_SCHEDULE_LIST,
+    OPTIMIZER_OPN_SCHEDULE_SETATTR,
+    OPTIMIZER_OPN_SCHEDULE_SETSTATE,
+    OPTIMIZER_OPN_SCHEDULE_SPEC,
+    OPTIMIZER_OPN_SCHEDULE_VALUES,
+)
 from bindings.py_balanced import py_item
 
 
@@ -154,15 +168,19 @@ def _schedule_rebind(owner: PythonObject, name: PythonObject, context: PythonObj
         _ = schedule_construct(owner, _schedule_arguments(owner, schedule_kind(owner, context)), context)
     except:
         var edited = py_fields(owner)
-        _ = edited.pop(PythonObject("lr_at"), PythonObject(None))
-        _ = edited.pop(PythonObject("bits_at"), PythonObject(None))
+        var nk = optimizer_keys()
+        _ = edited.pop(nk[].k_lr_at, PythonObject(None))
+        _ = edited.pop(nk[].k_bits_at, PythonObject(None))
 
 
-def schedule_operation(operation: String, owner: PythonObject, values: PythonObject, context: PythonObject) raises -> PythonObject:
-    if operation == "schedule_construct":
+def schedule_run(operation: Int, owner: PythonObject, values: PythonObject, context: PythonObject) raises -> PythonObject:
+    """A schedule operation by its code (bindings/optimizer_keys_unpack.mojo).
+    A code that is no schedule operation (an unknown `schedule_*` name, -1)
+    ends where an unknown name ended before: the rate at the given step."""
+    if operation == OPTIMIZER_OPN_SCHEDULE_CONSTRUCT:
         return schedule_construct(owner, values, context)
     var nk = optimizer_keys()
-    if operation == "schedule_from_config":
+    if operation == OPTIMIZER_OPN_SCHEDULE_FROM_CONFIG:
         var cfg = values[0]
         opt_value(cfg, context)
         if not opt_exact(py_type(cfg), py_item(context, nk[].k_mapping_types)):
@@ -186,7 +204,7 @@ def schedule_operation(operation: String, owner: PythonObject, values: PythonObj
         _warmup_pack(result, spec)
         schedule_bind_block(result, kind, context)
         return result
-    if operation == "schedule_getstate":
+    if operation == OPTIMIZER_OPN_SCHEDULE_GETSTATE:
         # Pickle and copy state: the stored settings only. The bound block
         # methods are rebuilt by `schedule_setstate`, never serialized.
         opt_schedule(owner, context)
@@ -195,10 +213,10 @@ def schedule_operation(operation: String, owner: PythonObject, values: PythonObj
         if not copied:
             raise Error("RuntimeError: schedule state copy failed")
         var state = PythonObject(from_owned=copied)
-        _ = state.pop(PythonObject("lr_at"), PythonObject(None))
-        _ = state.pop(PythonObject("bits_at"), PythonObject(None))
+        _ = state.pop(nk[].k_lr_at, PythonObject(None))
+        _ = state.pop(nk[].k_bits_at, PythonObject(None))
         return state
-    if operation == "schedule_setattr":
+    if operation == OPTIMIZER_OPN_SCHEDULE_SETATTR:
         # `sched.<name> = value` (lane fb2-lr, 2026-11-17): the instance
         # dictionary takes the value as object.__setattr__ stored it, then the
         # rate block is rebuilt from the edited settings, so `lr_at` follows
@@ -214,7 +232,7 @@ def schedule_operation(operation: String, owner: PythonObject, values: PythonObj
         py_setitem(edited, name, values[1])
         _schedule_rebind(owner, name, context)
         return PythonObject(None)
-    if operation == "schedule_delattr":
+    if operation == OPTIMIZER_OPN_SCHEDULE_DELATTR:
         # `del sched.<name>` (lane fb4-audit, 2026-11-17): object.__delattr__'s
         # own deletion and refusal (PyObject_GenericSetAttr with no value),
         # then the same rebuild as an edit. Without it a deleted setting left
@@ -230,7 +248,7 @@ def schedule_operation(operation: String, owner: PythonObject, values: PythonObj
             raise failure^
         _schedule_rebind(owner, name, context)
         return PythonObject(None)
-    if operation == "schedule_setstate":
+    if operation == OPTIMIZER_OPN_SCHEDULE_SETSTATE:
         var restored = values[0]
         if py_type(restored) is not py_item(context, nk[].k_container_types)[2]:
             raise Error("TypeError: schedule state requires a native dictionary")
@@ -242,20 +260,20 @@ def schedule_operation(operation: String, owner: PythonObject, values: PythonObj
     opt_schedule(owner, context)
     var kind = schedule_kind(owner, context)
     var spec = schedule_spec_admitted(owner)
-    if operation == "schedule_spec":
+    if operation == OPTIMIZER_OPN_SCHEDULE_SPEC:
         # These containers are the documented public _lr_spec result only.
         return Python.tuple(Python.list(spec.kind, spec.a, spec.b, spec.c),
                             Python.list(spec.f0, spec.f1, spec.f2, spec.f3))
-    if operation == "schedule_config":
+    if operation == OPTIMIZER_OPN_SCHEDULE_CONFIG:
         var fields = py_fields(owner)
         return Python.dict(kind=optimizer_schedule_config_name(kind), peak_lr=py_item(fields, nk[].k_peak_lr), min_lr=py_item(fields, nk[].k_min_lr),
                            warmup_steps=py_item(fields, nk[].k_warmup_steps), total_steps=py_item(fields, nk[].k_total_steps))
     opt_scalar(values, context)
     var requested = optimizer_integer(values[0], context)
-    var series = operation == "schedule_values" or operation == "schedule_list"
+    var series = operation == OPTIMIZER_OPN_SCHEDULE_VALUES or operation == OPTIMIZER_OPN_SCHEDULE_LIST
     var plan = optimizer_schedule_evaluation(kind, spec, requested, series)
     if series:
-        if operation == "schedule_list":
+        if operation == OPTIMIZER_OPN_SCHEDULE_LIST:
             var rates = List[Float32](length=plan.count, fill=0)
             with GILReleased(Python()):
                 plan.fill(rates.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]())
@@ -272,6 +290,39 @@ def schedule_operation(operation: String, owner: PythonObject, values: PythonObj
     var stored = List[Float32](length=1, fill=0)
     with GILReleased(Python()):
         plan.fill(stored.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]())
-    if operation == "schedule_bits":
+    if operation == OPTIMIZER_OPN_SCHEDULE_BITS:
         return PythonObject(Int(bitcast[DType.uint32](stored[0])))
     return PythonObject(Float64(stored[0]))
+
+def schedule_operation(operation: String, owner: PythonObject, values: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The named form, for the two native callers outside this family that
+    pass a literal (bindings/sequence_optimizer_native_door.mojo
+    `schedule_at` per optimizer step; bindings/xseq_neural_native_door.mojo
+    `schedule_values`). The router passes the code to `schedule_run`. The
+    per-step name is tested first (it was the last of eleven compares)."""
+    var code = -1
+    if operation == "schedule_at":
+        code = OPTIMIZER_OPN_SCHEDULE_AT
+    elif operation == "schedule_values":
+        code = OPTIMIZER_OPN_SCHEDULE_VALUES
+    elif operation == "schedule_construct":
+        code = OPTIMIZER_OPN_SCHEDULE_CONSTRUCT
+    elif operation == "schedule_from_config":
+        code = OPTIMIZER_OPN_SCHEDULE_FROM_CONFIG
+    elif operation == "schedule_getstate":
+        code = OPTIMIZER_OPN_SCHEDULE_GETSTATE
+    elif operation == "schedule_setattr":
+        code = OPTIMIZER_OPN_SCHEDULE_SETATTR
+    elif operation == "schedule_delattr":
+        code = OPTIMIZER_OPN_SCHEDULE_DELATTR
+    elif operation == "schedule_setstate":
+        code = OPTIMIZER_OPN_SCHEDULE_SETSTATE
+    elif operation == "schedule_spec":
+        code = OPTIMIZER_OPN_SCHEDULE_SPEC
+    elif operation == "schedule_config":
+        code = OPTIMIZER_OPN_SCHEDULE_CONFIG
+    elif operation == "schedule_list":
+        code = OPTIMIZER_OPN_SCHEDULE_LIST
+    elif operation == "schedule_bits":
+        code = OPTIMIZER_OPN_SCHEDULE_BITS
+    return schedule_run(code, owner, values, context)

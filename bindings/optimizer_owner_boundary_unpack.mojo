@@ -7,7 +7,7 @@ from bindings.optimizer_admission_door import opt_value, opt_schedule
 from bindings.py_balanced import py_fields, py_get, py_type
 from training.optimizer_owner_control import OptimizerOwnerControl
 from training.optimizer_native_api import OptimizerNativeDriver
-from bindings.optimizer_keys_unpack import optimizer_keys
+from bindings.optimizer_keys_unpack import optimizer_keys, optimizer_keys_in_finalizer
 from bindings.py_balanced import py_item
 
 
@@ -134,7 +134,11 @@ def optimizer_owner_close(value: PythonObject, owner: PythonObject) raises:
 
 
 def optimizer_owner_finalize(owner: PythonObject) raises:
-    var nk = optimizer_keys()
+    # An optimizer collected during interpreter teardown before any call
+    # filled the key table releases nothing (optimizer_keys_in_finalizer).
+    var nk = optimizer_keys_in_finalizer()
+    if not nk[].ready:
+        return
     var value = py_get(py_fields(owner), nk[].k__native_optimizer_owner)
     if value is None:
         return

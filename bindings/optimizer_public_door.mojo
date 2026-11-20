@@ -954,10 +954,10 @@ def door_state(module: PythonObject, provider: PythonObject, opt: PythonObject, 
         _ = lease
         return py_item(py_fields(opt), nk[].k__v)
     var out = Python.dict()
-    py_setitem(out, PythonObject("t"), PythonObject(Int(py=py_item(py_fields(opt), nk[].k_t))))
-    py_setitem(out, PythonObject("exp_avg"), copy_array(py_item(py_fields(opt), nk[].k__m)))
-    py_setitem(out, PythonObject("exp_avg_sq"), copy_array(py_item(py_fields(opt), nk[].k__v)))
-    py_setitem(out, PythonObject("buf_initialized"), copy_array(py_item(py_fields(opt), nk[].k_buf_initialized)))
+    py_setitem(out, nk[].k_t, PythonObject(Int(py=py_item(py_fields(opt), nk[].k_t))))
+    py_setitem(out, nk[].k_exp_avg, copy_array(py_item(py_fields(opt), nk[].k__m)))
+    py_setitem(out, nk[].k_exp_avg_sq, copy_array(py_item(py_fields(opt), nk[].k__v)))
+    py_setitem(out, nk[].k_buf_initialized, copy_array(py_item(py_fields(opt), nk[].k_buf_initialized)))
     _ = lease
     return out
 
@@ -986,7 +986,7 @@ def optimizer_export_state(opt: PythonObject) raises -> PythonObject:
         var key = PythonObject(from_borrowed=pair[0])
         if String(key) != "_native_optimizer_owner":
             py_setitem(result, key, PythonObject(from_borrowed=pair[1]))
-    py_setitem(result, "_native_optimizer_pristine", PythonObject(record[].control.serialized_pristine(
+    py_setitem(result, nk[].k__native_optimizer_pristine, PythonObject(record[].control.serialized_pristine(
         py_item(fields, nk[].k__m) is not None, py_item(fields, nk[].k__v) is not None)))
     _ = lease
     return result
