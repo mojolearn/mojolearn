@@ -22,6 +22,7 @@ from bindings.classical_arrays_door import classical_address, classical_word
 from bindings.classical_attributes_door import classical_connect_numpy
 from providers.python.estimator_binding_pyapi_door import estimator_binding_mode
 from bindings.manifold_settings_native_door import ManifoldSettings
+from bindings.operation_names_mani import MANI_OPN_FAMILY_MANI_TSNE_FIT, MANI_OPN_FAMILY_MANI_TSNE_FIT_TRANSFORM
 from bindings.manifold_scalar_native_door import manifold_number
 from providers.python.array_metadata_pyapi_door import ArrayMetadata, ArrayPin, array_shape_once, array_metadata_once, array_python_shape
 from bindings.classical_validate_unpack import classical_view
@@ -234,12 +235,13 @@ def _tsne_is_bool(value: PythonObject) raises -> Bool:
                            native_loaded_module("builtins").bool))
 
 
-def tsne_operation(model: PythonObject, settings: ManifoldSettings, operation: String, args: PythonObject,
+def tsne_operation(model: PythonObject, settings: ManifoldSettings, operation: Int, args: PythonObject,
                    snapshot: ArrayMetadata, pin: ArrayPin, context: PythonObject) raises -> PythonObject:
     """TSNE: args = (x_ann binding, estimators binding, X)."""
-    if operation == "family_mani_tsne_fit":
+    if operation == MANI_OPN_FAMILY_MANI_TSNE_FIT:
         _ = _tsne_fit(model, settings, args, snapshot, pin, context)
         return model
-    if operation == "family_mani_tsne_fit_transform":
+    if operation == MANI_OPN_FAMILY_MANI_TSNE_FIT_TRANSFORM:
         return _tsne_fit(model, settings, args, snapshot, pin, context)
-    raise Error("RuntimeError: unknown TSNE operation " + operation)
+    # Unreachable from the entry (an unknown name is refused there by name).
+    raise Error("RuntimeError: unknown TSNE operation code " + String(operation))

@@ -31,6 +31,19 @@ from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.admitted_family_door import admit_family_meta
 from providers.python.estimator_binding_pyapi_door import estimator_binding_mode
 from bindings.manifold_settings_native_door import ManifoldSettings
+from bindings.operation_names_mani import (
+    MANI_OPN_FAMILY_MANI_CMDS_FIT,
+    MANI_OPN_FAMILY_MANI_CMDS_FIT_TRANSFORM,
+    MANI_OPN_FAMILY_MANI_ISO_FIT,
+    MANI_OPN_FAMILY_MANI_ISO_FIT_TRANSFORM,
+    MANI_OPN_FAMILY_MANI_ISO_RECONSTRUCTION_ERROR,
+    MANI_OPN_FAMILY_MANI_ISO_TRANSFORM,
+    MANI_OPN_FAMILY_MANI_LLE_FIT,
+    MANI_OPN_FAMILY_MANI_LLE_FIT_TRANSFORM,
+    MANI_OPN_FAMILY_MANI_LLE_TRANSFORM,
+    MANI_OPN_FAMILY_MANI_MDS_FIT,
+    MANI_OPN_FAMILY_MANI_MDS_FIT_TRANSFORM,
+)
 from bindings.manifold_scalar_native_door import manifold_number
 from providers.python.array_metadata_pyapi_door import ArrayMetadata, ArrayPin
 from bindings.metrics_native_support_door import metric_warn
@@ -567,8 +580,7 @@ def _lle_transform(model: PythonObject, settings: ManifoldSettings, args: Python
         mk_finish(run, context)
 
 
-def _mani_arguments(settings: ManifoldSettings, operation: String, args: PythonObject,
-                    context: PythonObject) raises -> PythonObject:
+def _mani_arguments(settings: ManifoldSettings, args: PythonObject, context: PythonObject) raises -> PythonObject:
     # Public shells hand over settings and buffers only. Resolve both legacy
     # binding slots after crossing the native boundary. Explicit modules remain
     # supported for internal/legacy callers and are admitted by mk_image.
@@ -587,34 +599,35 @@ def _mani_arguments(settings: ManifoldSettings, operation: String, args: PythonO
     return py_call(native_loaded_module("builtins").tuple, resolved)
 
 
-def mani_decomp_operation(model: PythonObject, settings: ManifoldSettings, operation: String, var args: PythonObject,
+def mani_decomp_operation(model: PythonObject, settings: ManifoldSettings, operation: Int, var args: PythonObject,
                           x: Optional[ArrayMetadata], context: PythonObject) raises -> PythonObject:
     """args = (optional decomp binding, optional default binding, X[, init])."""
-    args = _mani_arguments(settings, operation, args, context)
-    if operation == "family_mani_cmds_fit":
+    args = _mani_arguments(settings, args, context)
+    if operation == MANI_OPN_FAMILY_MANI_CMDS_FIT:
         _ = _cmds_fit(model, settings, args, x.value(), context)
         return model
-    if operation == "family_mani_cmds_fit_transform":
+    if operation == MANI_OPN_FAMILY_MANI_CMDS_FIT_TRANSFORM:
         return _cmds_fit(model, settings, args, x.value(), context)
-    if operation == "family_mani_mds_fit":
+    if operation == MANI_OPN_FAMILY_MANI_MDS_FIT:
         _ = _mds_fit(model, settings, args, x.value(), context)
         return model
-    if operation == "family_mani_mds_fit_transform":
+    if operation == MANI_OPN_FAMILY_MANI_MDS_FIT_TRANSFORM:
         return _mds_fit(model, settings, args, x.value(), context)
-    if operation == "family_mani_iso_fit":
+    if operation == MANI_OPN_FAMILY_MANI_ISO_FIT:
         _ = _iso_fit(model, settings, args, x.value(), context)
         return model
-    if operation == "family_mani_iso_fit_transform":
+    if operation == MANI_OPN_FAMILY_MANI_ISO_FIT_TRANSFORM:
         return _iso_fit(model, settings, args, x.value(), context)
-    if operation == "family_mani_iso_transform":
+    if operation == MANI_OPN_FAMILY_MANI_ISO_TRANSFORM:
         return _iso_transform(model, settings, args, x.value(), context)
-    if operation == "family_mani_iso_reconstruction_error":
+    if operation == MANI_OPN_FAMILY_MANI_ISO_RECONSTRUCTION_ERROR:
         return _iso_reconstruction_error(model, settings, args, context)
-    if operation == "family_mani_lle_fit":
+    if operation == MANI_OPN_FAMILY_MANI_LLE_FIT:
         _ = _lle_fit(model, settings, args, x.value(), context)
         return model
-    if operation == "family_mani_lle_fit_transform":
+    if operation == MANI_OPN_FAMILY_MANI_LLE_FIT_TRANSFORM:
         return _lle_fit(model, settings, args, x.value(), context)
-    if operation == "family_mani_lle_transform":
+    if operation == MANI_OPN_FAMILY_MANI_LLE_TRANSFORM:
         return _lle_transform(model, settings, args, x.value(), context)
-    raise Error("RuntimeError: unknown manifold operation " + operation)
+    # Unreachable from the entry (an unknown name is refused there by name).
+    raise Error("RuntimeError: unknown manifold operation code " + String(operation))

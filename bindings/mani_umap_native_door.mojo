@@ -22,6 +22,9 @@ from bindings.classical_arrays_door import classical_address
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.pca_exact_unpack import pca_copied
 from bindings.manifold_settings_native_door import ManifoldSettings
+from bindings.operation_names_mani import (
+    MANI_OPN_FAMILY_MANI_UMAP_FIT, MANI_OPN_FAMILY_MANI_UMAP_FIT_TRANSFORM, MANI_OPN_FAMILY_MANI_UMAP_TRANSFORM,
+)
 from providers.python.array_metadata_pyapi_door import ArrayMetadata, ArrayPin, array_shape_once, array_metadata_once, array_python_shape
 from bindings.classical_validate_unpack import classical_view
 from bindings.umap_parameters_native_door import umap_parameters_fields, umap_scalar as _umap_scalar, umap_integer as _umap_integer
@@ -508,14 +511,15 @@ def _umap_transform(model: PythonObject, settings: ManifoldSettings, args: Pytho
     return output
 
 
-def umap_operation(model: PythonObject, settings: ManifoldSettings, operation: String, args: PythonObject,
+def umap_operation(model: PythonObject, settings: ManifoldSettings, operation: Int, args: PythonObject,
                    context: PythonObject) raises -> PythonObject:
     """UMAP: fit / fit_transform args = (X, y); transform args = (X,)."""
-    if operation == "family_mani_umap_fit":
+    if operation == MANI_OPN_FAMILY_MANI_UMAP_FIT:
         _ = _umap_fit(model, settings, args, context)
         return model
-    if operation == "family_mani_umap_fit_transform":
+    if operation == MANI_OPN_FAMILY_MANI_UMAP_FIT_TRANSFORM:
         return _umap_fit(model, settings, args, context)
-    if operation == "family_mani_umap_transform":
+    if operation == MANI_OPN_FAMILY_MANI_UMAP_TRANSFORM:
         return _umap_transform(model, settings, args, context)
-    raise Error("RuntimeError: unknown UMAP operation " + operation)
+    # Unreachable from the entry (an unknown name is refused there by name).
+    raise Error("RuntimeError: unknown UMAP operation code " + String(operation))

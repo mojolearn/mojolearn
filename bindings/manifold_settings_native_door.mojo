@@ -10,6 +10,14 @@ from bindings.native_array_storage_door import native_array_from_bytes
 from bindings.manifold_scalar_native_door import ManifoldScalarSnapshot, manifold_buffer_bytes, manifold_scalar_type, _snapshot
 from bindings.sequence_dtype_native_door import sequence_dtype_classes, sequence_dtype_instance, sequence_dtype_create
 from providers.python.classical_family_admission_pyapi_unpack import classical_family_admit
+from bindings.operation_names_mani import (
+    MANI_OPN_FAMILY_MANI_CMDS_FIT, MANI_OPN_FAMILY_MANI_CMDS_FIT_TRANSFORM, MANI_OPN_FAMILY_MANI_ISO_FIT,
+    MANI_OPN_FAMILY_MANI_ISO_FIT_TRANSFORM, MANI_OPN_FAMILY_MANI_ISO_RECONSTRUCTION_ERROR, MANI_OPN_FAMILY_MANI_ISO_TRANSFORM,
+    MANI_OPN_FAMILY_MANI_LLE_FIT, MANI_OPN_FAMILY_MANI_LLE_FIT_TRANSFORM, MANI_OPN_FAMILY_MANI_LLE_TRANSFORM,
+    MANI_OPN_FAMILY_MANI_MDS_FIT, MANI_OPN_FAMILY_MANI_MDS_FIT_TRANSFORM, MANI_OPN_FAMILY_MANI_TSNE_FIT,
+    MANI_OPN_FAMILY_MANI_TSNE_FIT_TRANSFORM, MANI_OPN_FAMILY_MANI_UMAP_FIT, MANI_OPN_FAMILY_MANI_UMAP_FIT_TRANSFORM,
+    MANI_OPN_FAMILY_MANI_UMAP_TRANSFORM,
+)
 
 
 def _setting(value: PythonObject, context: PythonObject, depth: Int = 0,
@@ -93,6 +101,32 @@ def _setting(value: PythonObject, context: PythonObject, depth: Int = 0,
     return value
 
 
+# The operation sets of the former suffix tests (lane bw2-manifold): each set
+# is written out from the names of bindings/operation_names_mani.mojo.
+@always_inline
+def manifold_fit_only(operation: Int) -> Bool:
+    """The names ending `_fit`."""
+    return (operation == MANI_OPN_FAMILY_MANI_CMDS_FIT or operation == MANI_OPN_FAMILY_MANI_ISO_FIT
+            or operation == MANI_OPN_FAMILY_MANI_LLE_FIT or operation == MANI_OPN_FAMILY_MANI_MDS_FIT
+            or operation == MANI_OPN_FAMILY_MANI_TSNE_FIT or operation == MANI_OPN_FAMILY_MANI_UMAP_FIT)
+
+
+@always_inline
+def manifold_fit_transform(operation: Int) -> Bool:
+    """The names ending `_fit_transform`."""
+    return (operation == MANI_OPN_FAMILY_MANI_CMDS_FIT_TRANSFORM or operation == MANI_OPN_FAMILY_MANI_ISO_FIT_TRANSFORM
+            or operation == MANI_OPN_FAMILY_MANI_LLE_FIT_TRANSFORM or operation == MANI_OPN_FAMILY_MANI_MDS_FIT_TRANSFORM
+            or operation == MANI_OPN_FAMILY_MANI_TSNE_FIT_TRANSFORM
+            or operation == MANI_OPN_FAMILY_MANI_UMAP_FIT_TRANSFORM)
+
+
+@always_inline
+def manifold_transforms(operation: Int) -> Bool:
+    """The names ending `_transform` but not `_fit_transform`."""
+    return (operation == MANI_OPN_FAMILY_MANI_ISO_TRANSFORM or operation == MANI_OPN_FAMILY_MANI_LLE_TRANSFORM
+            or operation == MANI_OPN_FAMILY_MANI_UMAP_TRANSFORM)
+
+
 struct ManifoldSettings(Copyable, Movable):
     var fields: PythonObject
     var values: PythonObject
@@ -102,13 +136,13 @@ struct ManifoldSettings(Copyable, Movable):
     var default_mode: PythonObject
     var mode: PythonObject
 
-    def __init__(out self, model: PythonObject, operation: String, context: PythonObject) raises:
+    def __init__(out self, model: PythonObject, operation: Int, context: PythonObject) raises:
         # Admit class/storage hooks before any instance lookup. Retain fitted
         # buffers and freeze configuration contents before execution. Writes
         # still publish into the original admitted dictionary.
         self.fields = classical_family_admit(model)
         var b = native_loaded_module("builtins")
-        if operation.endswith("_fit") or operation.endswith("_fit_transform"):
+        if manifold_fit_only(operation) or manifold_fit_transform(operation):
             if py_contains(self.fields, "_mojolearn_after_fit"):
                 raise Error("TypeError: native manifold fitting does not accept Python after-fit callbacks")
             var ancestry = _type_mro(py_type(model))
@@ -124,8 +158,8 @@ struct ManifoldSettings(Copyable, Movable):
         self.requested = py_get(self.values, "numeric_mode")
         self.fitted = py_get(self.values, "numeric_mode_")
         self.mode = self.default_mode if self.requested is None else self.requested
-        if (operation.endswith("_transform") and not operation.endswith("_fit_transform")) or operation == "family_mani_iso_reconstruction_error":
-            if not operation.startswith("family_mani_umap_"):
+        if manifold_transforms(operation) or operation == MANI_OPN_FAMILY_MANI_ISO_RECONSTRUCTION_ERROR:
+            if operation != MANI_OPN_FAMILY_MANI_UMAP_TRANSFORM:
                 self.mode = self.default_mode if self.fitted is None else self.fitted
         classical_connect_numpy(context)
         for name in ["numeric_mode", "numeric_mode_", "n_components", "n_neighbors", "radius", "metric", "metric_params", "p", "path_method", "eigen_solver", "method", "random_state", "reg", "hessian_tol", "modified_tol", "max_iter", "eps", "init", "metric_mds", "normalized_stress", "n_init", "perplexity", "early_exaggeration", "learning_rate", "post_exaggeration_learning_rate_factor", "target_metric", "target_n_neighbors", "target_weight", "_knn", "_kind", "_pw", "_transform_config", "_transform_mode"]:  # small-loop(settings: fixed manifold scalar/configuration fields)
@@ -133,7 +167,7 @@ struct ManifoldSettings(Copyable, Movable):
                 # Initialization arrays are input buffers, captured by the
                 # algorithm's input preparation rather than scalar settings.
                 py_setitem(self.values, name, _setting(self.values[name], context, 0, name != "init"))
-        if operation.startswith("family_mani_umap_"):
+        if operation >= MANI_OPN_FAMILY_MANI_UMAP_FIT and operation <= MANI_OPN_FAMILY_MANI_UMAP_TRANSFORM:
             for name in ["n_epochs", "min_dist", "spread", "set_op_mix_ratio", "local_connectivity", "repulsion_strength", "negative_sample_rate", "densmap", "output_metric", "metric_kwds", "a", "b"]:  # small-loop(settings: UMAP-only scalar/configuration fields)
                 if py_contains(self.values, name):
                     py_setitem(self.values, name, _setting(self.values[name], context))
