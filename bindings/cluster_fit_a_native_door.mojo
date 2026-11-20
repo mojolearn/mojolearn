@@ -43,6 +43,13 @@ from bindings.family_common_pack import (
 )
 from bindings.optimizer_public_words_unpack import PYTHON_ERROR_PENDING, PENDING_PYTHON_ERROR
 from bindings.cluster_native_door import cluster_operation, _xc_array
+from bindings.operation_names_xc import XC_OPN_FAMILY_XC_VARIANTS_TRANSFORM
+from bindings.operation_names_cfa import (
+    CFA_OPN_FAMILY_CFA_MBK_FIT, CFA_OPN_FAMILY_CFA_MBK_PARTIAL_FIT, CFA_OPN_FAMILY_CFA_BISECT_FIT,
+    CFA_OPN_FAMILY_CFA_FIT_PREDICT, CFA_OPN_FAMILY_CFA_FIT_TRANSFORM, CFA_OPN_FAMILY_CFA_MEANSHIFT_FIT,
+    CFA_OPN_FAMILY_CFA_MEANSHIFT_FIT_PREDICT, CFA_OPN_FAMILY_CFA_OPTICS_FIT, CFA_OPN_FAMILY_CFA_OPTICS_FIT_PREDICT,
+    CFA_OPN_FAMILY_CFA_AP_FIT, CFA_OPN_FAMILY_CFA_AP_FIT_PREDICT, CFA_OPN_FAMILY_CFA_HDBSCAN_FIT,
+    CFA_OPN_FAMILY_CFA_HDBSCAN_FIT_PREDICT)
 from bindings.py_cluster_resident import CRES_X_CLUSTER, cres_forget
 from core.kmeans_variants_api import (
     MiniBatchFitRequest, MiniBatchPartialRequest, BisectFitRequest, VariantsResultSlot, VariantsSpan, VARIANTS_CAP_DEVSCAN,
@@ -924,49 +931,57 @@ def _hdbscan_prediction_data(model: PythonObject, binding: PythonObject, n: Int,
 
 # ---------------------------------------------------------------- door
 
-def cluster_fit_a_operation(model: PythonObject, operation: String, args: PythonObject,
+def cluster_fit_a_unknown_operation(operation: String) raises:
+    """A `family_cfa_*` name the operation table does not hold (the shells
+    pass table names only): the text the name chain raised."""
+    raise Error("RuntimeError: unknown family operation " + operation)
+
+
+def cluster_fit_a_operation(model: PythonObject, operation: Int, args: PythonObject,
          context: PythonObject) raises -> PythonObject:
     """args[0] is the resolved binding, args[1] X, args[2] sample_weight
-    where the method takes one."""
+    where the method takes one. `operation` is the leaf code of
+    bindings/operation_names_cfa.mojo (lane bw2-cluster; it was the name,
+    matched by up to thirteen String compares per call)."""
     classical_connect_numpy(context)
     var binding = args[0]
-    if operation == "family_cfa_mbk_fit":
+    if operation == CFA_OPN_FAMILY_CFA_MBK_FIT:
         _mbk_fit(model, binding, args[1], args[2], context)
         return model
-    if operation == "family_cfa_mbk_partial_fit":
+    if operation == CFA_OPN_FAMILY_CFA_MBK_PARTIAL_FIT:
         _mbk_partial_fit(model, binding, args[1], args[2], context)
         return model
-    if operation == "family_cfa_bisect_fit":
+    if operation == CFA_OPN_FAMILY_CFA_BISECT_FIT:
         _bisect_fit(model, binding, args[1], args[2], context)
         return model
-    if operation == "family_cfa_fit_predict":
+    if operation == CFA_OPN_FAMILY_CFA_FIT_PREDICT:
         _centers_fit(model, binding, args[1], context)
         return _attr(model, "labels_")
-    if operation == "family_cfa_fit_transform":
+    if operation == CFA_OPN_FAMILY_CFA_FIT_TRANSFORM:
         _centers_fit(model, binding, args[1], context)
-        return cluster_operation(model, "family_xc_variants_transform", Python.tuple(binding, args[1]), context)
-    if operation == "family_cfa_meanshift_fit":
+        return cluster_operation(model, XC_OPN_FAMILY_XC_VARIANTS_TRANSFORM, Python.tuple(binding, args[1]), context)
+    if operation == CFA_OPN_FAMILY_CFA_MEANSHIFT_FIT:
         _meanshift_fit(model, binding, args[1], context)
         return model
-    if operation == "family_cfa_meanshift_fit_predict":
+    if operation == CFA_OPN_FAMILY_CFA_MEANSHIFT_FIT_PREDICT:
         _meanshift_fit(model, binding, args[1], context)
         return _attr(model, "labels_")
-    if operation == "family_cfa_optics_fit":
+    if operation == CFA_OPN_FAMILY_CFA_OPTICS_FIT:
         _optics_fit(model, binding, args[1], context)
         return model
-    if operation == "family_cfa_optics_fit_predict":
+    if operation == CFA_OPN_FAMILY_CFA_OPTICS_FIT_PREDICT:
         _optics_fit(model, binding, args[1], context)
         return _attr(model, "labels_")
-    if operation == "family_cfa_ap_fit":
+    if operation == CFA_OPN_FAMILY_CFA_AP_FIT:
         _affinity_fit(model, binding, args[1], context)
         return model
-    if operation == "family_cfa_ap_fit_predict":
+    if operation == CFA_OPN_FAMILY_CFA_AP_FIT_PREDICT:
         _affinity_fit(model, binding, args[1], context)
         return _attr(model, "labels_")
-    if operation == "family_cfa_hdbscan_fit":
+    if operation == CFA_OPN_FAMILY_CFA_HDBSCAN_FIT:
         _hdbscan_fit(model, binding, args[1], context)
         return model
-    if operation == "family_cfa_hdbscan_fit_predict":
+    if operation == CFA_OPN_FAMILY_CFA_HDBSCAN_FIT_PREDICT:
         _hdbscan_fit(model, binding, args[1], context)
         return _attr(model, "labels_")
-    raise Error("RuntimeError: unknown family operation " + operation)
+    raise Error("RuntimeError: unknown family operation code " + String(operation))

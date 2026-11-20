@@ -38,6 +38,9 @@ from core.dbscan_native_state import dbscan_metric_code, dbscan_method_code
 from bindings.public_lifecycle_owner_door import lifecycle_admit_fields
 from bindings.host_inference_scalars_door import host_inference_scalar
 from bindings.decomp_scalar_admission_unpack import decomp_scalar_repr
+from bindings.operation_names_cfb import (
+    CFB_OPN_FAMILY_CFB_DBSCAN_FIT, CFB_OPN_FAMILY_CFB_DBSCAN_FIT_PREDICT, CFB_OPN_FAMILY_CFB_DBSCAN_PREDICT,
+    CFB_OPN_FAMILY_XC_DBSCAN_PREDICT)
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.family_raw_attr_unpack import family_raw_has
 from bindings.family_raw_attr_pack import family_raw_get, family_raw_get_or
@@ -236,19 +239,21 @@ def _dbscan_predict(model: PythonObject, binding: PythonObject, source: PythonOb
     return result
 
 
-def cfb_dbscan_operation(model: PythonObject, operation: String, args: PythonObject,
+def cfb_dbscan_operation(model: PythonObject, operation: Int, args: PythonObject,
                          context: PythonObject) raises -> PythonObject:
-    """args: (binding, X[, sample_weight[, admitted]]), unpacked here once."""
+    """args: (binding, X[, sample_weight[, admitted]]), unpacked here once.
+    `operation` is the leaf code of bindings/operation_names_cfb.mojo
+    (DBSCAN block; lane bw2-cluster: it was the name, four String compares)."""
     lifecycle_admit_fields(py_fields(model))
-    if operation == "family_cfb_dbscan_fit":
+    if operation == CFB_OPN_FAMILY_CFB_DBSCAN_FIT:
         _dbscan_fit(model, args, context)
         return model
-    if operation == "family_cfb_dbscan_fit_predict":
+    if operation == CFB_OPN_FAMILY_CFB_DBSCAN_FIT_PREDICT:
         _dbscan_fit(model, args, context)
         return py_fields(model)["labels_"]
-    if operation == "family_cfb_dbscan_predict":
+    if operation == CFB_OPN_FAMILY_CFB_DBSCAN_PREDICT:
         return _dbscan_predict(model, args[0], args[1], context)
-    if operation == "family_xc_dbscan_predict":
+    if operation == CFB_OPN_FAMILY_XC_DBSCAN_PREDICT:
         # The historical internal entry always used direct reference uploads.
         return _dbscan_predict(model, args[0], args[1], context, False)
-    raise Error("RuntimeError: unknown DBSCAN operation " + operation)
+    raise Error("RuntimeError: unknown DBSCAN operation code " + String(operation))

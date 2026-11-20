@@ -35,6 +35,10 @@ from bindings.kmeans_variants_boundary_door import (
 from bindings.kmeans_variants_resident_boundary_unpack import VariantsResidentLease, variants_resident_prepare, variants_resident_retire
 from bindings.native_buffer_address_unpack import native_buffer_address
 from bindings.py_optional import py_or_none
+from bindings.operation_names_xc import (
+    XC_OPN_FAMILY_XC_PREDICT, XC_OPN_FAMILY_XC_VARIANTS_PREDICT, XC_OPN_FAMILY_XC_VARIANTS_TRANSFORM,
+    XC_OPN_FAMILY_XC_VARIANTS_SCORE, XC_OPN_FAMILY_XC_BISECT_PREDICT, XC_OPN_FAMILY_XC_AP_PREDICT,
+    XC_OPN_FAMILY_XC_AGGLO_PREDICT)
 from core.kmeans_variants_api import (
     VariantsSpan, VariantsResultSlot, VariantsQueryRequest, BisectPredictRequest, VARIANTS_CAP_RESIDENT,
 )
@@ -262,31 +266,38 @@ def _agglo_predict(model: PythonObject, binding: PythonObject, source: PythonObj
     return result
 
 
-def cluster_operation(model: PythonObject, operation: String, args: PythonObject,
+def cluster_unknown_operation(operation: String) raises:
+    """A `family_xc_*` name the operation table does not hold (the shells
+    pass table names only): the text the name chain raised."""
+    raise Error("RuntimeError: unknown x_cluster operation " + operation)
+
+
+def cluster_operation(model: PythonObject, operation: Int, args: PythonObject,
                       context: PythonObject, x_admitted: Bool = False) raises -> PythonObject:
     """args[0] is the resolved binding, args[1] X. `x_admitted`: args[1] is
     the X the public door already admitted (classical_check_x: 2-D,
     non-empty, finite, C-ordered float32), so the finite scan is not run a
-    second time over the same words."""
+    second time over the same words. `operation` is the leaf code of
+    bindings/operation_names_xc.mojo (lane bw2-cluster; it was the name,
+    matched by up to eight String compares per call)."""
     classical_connect_numpy(context)
     var b = native_loaded_module("builtins")
     # One module handle for every fitted-field read of this call.
     var mods = NativeModules()
     var binding = args[0]
-    if operation == "family_xc_agglo_predict":
+    if operation == XC_OPN_FAMILY_XC_AGGLO_PREDICT:
         return _agglo_predict(model, binding, args[1], context)
-    if (operation == "family_xc_variants_predict" or operation == "family_xc_variants_transform"
-            or operation == "family_xc_variants_score"):
+    if operation >= XC_OPN_FAMILY_XC_VARIANTS_PREDICT and operation <= XC_OPN_FAMILY_XC_VARIANTS_SCORE:
         var centers = _xc_fitted(mods, model, "cluster_centers_")
         var x = _xc_input(mods, model, args[1], context, x_admitted)
-        var kind = _XC_RES_PREDICT if operation == "family_xc_variants_predict" else (
-            _XC_RES_TRANSFORM if operation == "family_xc_variants_transform" else _XC_RES_SCORE)
+        var kind = _XC_RES_PREDICT if operation == XC_OPN_FAMILY_XC_VARIANTS_PREDICT else (
+            _XC_RES_TRANSFORM if operation == XC_OPN_FAMILY_XC_VARIANTS_TRANSFORM else _XC_RES_SCORE)
         return _centers_query(model, binding, x, centers, kind, context)
-    if operation == "family_xc_predict":
+    if operation == XC_OPN_FAMILY_XC_PREDICT:
         var centers = _xc_fitted(mods, model, "cluster_centers_")
         var x = _xc_input(mods, model, args[1], context, x_admitted)
         return _centers_query(model, binding, x, centers, _XC_RES_PREDICT, context)
-    if operation == "family_xc_bisect_predict":
+    if operation == XC_OPN_FAMILY_XC_BISECT_PREDICT:
         _ = _xc_fitted(mods, model, "cluster_centers_")
         var x = _xc_input(mods, model, args[1], context, x_admitted)
         var n = Int(py=x.shape[0])
@@ -316,7 +327,7 @@ def cluster_operation(model: PythonObject, operation: String, args: PythonObject
             _ = centers
             _ = x
         return _xc_array(variants_pack_i32(result.storage[0].labels), Python.tuple(n), "<i4", "i", context)
-    if operation == "family_xc_ap_predict":
+    if operation == XC_OPN_FAMILY_XC_AP_PREDICT:
         _ = _xc_fitted(mods, model, "labels_")
         var affinity = native_fitted_get(mods, model, "affinity")
         if py_type(affinity) is b.str and String(affinity) == "precomputed":
@@ -331,4 +342,4 @@ def cluster_operation(model: PythonObject, operation: String, args: PythonObject
             _ = labels  # keep the Python object alive through the native call above
             return labels
         return _centers_query(model, binding, x, centers, _XC_RES_PREDICT, context)
-    raise Error("RuntimeError: unknown x_cluster operation " + operation)
+    raise Error("RuntimeError: unknown x_cluster operation code " + String(operation))

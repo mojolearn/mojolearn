@@ -36,6 +36,7 @@ from providers.python.array_metadata_pyapi_door import ArrayMetadata, ArrayPin
 from providers.python.hierarchy_settings_pyapi_unpack import AggloSettings
 from bindings.public_lifecycle_owner_door import lifecycle_admit_fields
 from bindings.py_optional import py_present
+from bindings.operation_names_cfb import CFB_OPN_FAMILY_CFB_AGGLO_PREDICT
 from providers.python.estimator_lifecycle_pyapi_unpack import (
     estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete,
 )
@@ -210,12 +211,12 @@ def hierarchy_target(source: PythonObject, rows: Int, name: String, classifier: 
     return source
 
 
-def hierarchy_public_begin(model: PythonObject, operation: String, args: PythonObject,
+def hierarchy_public_begin(model: PythonObject, operation: Int, args: PythonObject,
                            context: PythonObject) raises -> HierarchyPublicCall:
     classical_connect_numpy(context)
     var settings = hierarchy_settings(model, context)
     var fields = _fields(model)
-    var fitting = operation != "family_cfb_agglo_predict"
+    var fitting = operation != CFB_OPN_FAMILY_CFB_AGGLO_PREDICT  # the leaf code (lane bw2-cluster)
     var b = native_loaded_module("builtins")
     var depth = py_get(fields, "_mojolearn_fitting", PythonObject(0))
     var fitted = py_get(fields, "_mojolearn_fitted", PythonObject(False))

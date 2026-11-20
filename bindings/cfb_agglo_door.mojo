@@ -34,6 +34,9 @@ from core.agglo_native_api import AggloSolverScratch, AggloClusterScratch, Agglo
 from core.agglo_native_state import (
     AggloOptions, AGGLO_PAIRWISE_MAX_ROWS, agglo_metric_code, agglo_linkage_code, agglo_predicts, agglo_tree_plan,
 )
+from bindings.operation_names_cfb import (
+    CFB_OPN_FAMILY_CFB_AGGLO_FIT, CFB_OPN_FAMILY_CFB_AGGLO_FIT_PREDICT, CFB_OPN_FAMILY_CFB_AGGLO_PREDICT,
+    CFB_OPN_FAMILY_CFB_AGGLO_GETSTATE, CFB_OPN_FAMILY_CFB_AGGLO_SETSTATE)
 from cluster.cfb_agglo_run import (
     AGGLO_METRIC_UNKNOWN, agglo_linkage_refusal, agglo_check_connectivity, agglo_metric_refusal,
     agglo_ward_accepts, agglo_ward_refusal, agglo_check_cluster_choice, agglo_check_threshold_tree,
@@ -323,16 +326,19 @@ def _agglo_predict(fields: PythonObject, settings: AggloSettings, binding: Pytho
     return result
 
 
-def cfb_agglo_operation(model: PythonObject, operation: String, args: PythonObject,
+def cfb_agglo_operation(model: PythonObject, operation: Int, args: PythonObject,
                         context: PythonObject) raises -> PythonObject:
+    # `operation` is the leaf code of bindings/operation_names_cfb.mojo
+    # (Agglomerative block; lane bw2-cluster: it was the name, up to five
+    # String compares and two more in the lifecycle begin).
     # Public ABI: (None, X, y) for fit/fit_predict, (None, X) for predict.
     # Pickle operations transport plain admitted instance dictionaries only.
-    if operation == "family_cfb_agglo_getstate":
+    if operation == CFB_OPN_FAMILY_CFB_AGGLO_GETSTATE:
         var fields = _fields(model)
         var state = py_call(native_loaded_module("builtins").dict, fields)
         _ = py_call(state.pop, "_resident_holder", PythonObject(None))
         return state
-    if operation == "family_cfb_agglo_setstate":
+    if operation == CFB_OPN_FAMILY_CFB_AGGLO_SETSTATE:
         var b = native_loaded_module("builtins")
         var state = args[0]
         if py_type(state) is not b.dict:
@@ -354,8 +360,8 @@ def cfb_agglo_operation(model: PythonObject, operation: String, args: PythonObje
         agglo_holder_admit(py_get(fields, "_resident_holder"))
         agglo_publish(fields, "_resident_holder", agglo_holder_empty(), context)
         return PythonObject(None)
-    if operation != "family_cfb_agglo_fit" and operation != "family_cfb_agglo_fit_predict" and operation != "family_cfb_agglo_predict":
-        raise Error("RuntimeError: unknown AgglomerativeClustering operation " + operation)
+    if operation < CFB_OPN_FAMILY_CFB_AGGLO_FIT or operation > CFB_OPN_FAMILY_CFB_AGGLO_PREDICT:
+        raise Error("RuntimeError: unknown AgglomerativeClustering operation code " + String(operation))
     # Parallel graph plans retain their original explicit four-module ABI.
     # Admit the same captured operation without reselecting its pinned modules.
     var explicit = len(args) == 5 and args[0] is not None
@@ -371,7 +377,7 @@ def cfb_agglo_operation(model: PythonObject, operation: String, args: PythonObje
             agglo_publish(call.fields, "input_copied_", PythonObject(not (call.x_pin.keep is call.source)), context)
             var bindings = AggloBindings(estimators, solver, cluster, neighbors)
             _agglo_fit(call.fields, call.settings, bindings, call.x, call.x_pin, context)
-            result = call.fields["labels_"] if operation == "family_cfb_agglo_fit_predict" else model
+            result = call.fields["labels_"] if operation == CFB_OPN_FAMILY_CFB_AGGLO_FIT_PREDICT else model
         else:
             result = _agglo_predict(call.fields, call.settings, estimators, call.x, call.x_pin, context)
     except error:

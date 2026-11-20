@@ -23,16 +23,19 @@ from bindings.classical_exceptions_door import classical_require_fitted
 from bindings.native_array_view_pack import native_array_ndarray_view
 from bindings.native_owner_lifetime_door import native_release_admit
 from bindings.host_inference_scalars_door import host_inference_scalar
-from bindings.cluster_fit_a_native_door import cluster_fit_a_operation, _pending, _pending_text, _drop_pending
+from bindings.cluster_fit_a_native_door import cluster_fit_a_operation, cluster_fit_a_unknown_operation, _pending, _pending_text, _drop_pending
 from bindings.optimizer_public_words_unpack import PYTHON_ERROR_PENDING
-from bindings.cluster_native_door import cluster_operation
-from bindings.mixture_native_door import mixture_operation
+from bindings.cluster_native_door import cluster_operation, cluster_unknown_operation
+from bindings.mixture_native_door import mixture_operation, mixture_unknown_operation
 from providers.python.estimator_binding_pyapi_door import estimator_arguments
 from providers.python.estimator_lifecycle_pyapi_unpack import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
 from providers.python.cluster_constructor_pyapi_pack import cluster_initialize_py
 from providers.python.estimator_tabular_boundary_pyapi_unpack import _target, _refusal
 from bindings.py_optional import py_present
-from cluster.cluster_public_lifecycle_run import _method
+from cluster.cluster_public_lifecycle_run import (
+    _method, _method_text, CLUSTER_METHOD_PARTIAL_FIT, CLUSTER_METHOD_FIT_TRANSFORM)
+from bindings.native_operation_codes import FR_CFA, FR_XC, OP_LEAF_NONE
+from bindings.operation_names_xc import XC_OPN_FAMILY_XC_INITIALIZE
 
 
 def _scalar_state(value: PythonObject, context: PythonObject, depth: Int = 0) raises:
@@ -194,13 +197,28 @@ def _admit_replaced_state(model: PythonObject, fields: PythonObject, context: Py
             native_release_admit(fields[name], context)
 
 
-def cluster_public_operation(model: PythonObject, operation: String, args: PythonObject,
+def cluster_public_operation(model: PythonObject, owner: Int, operation: Int, name: String, args: PythonObject,
                              context: PythonObject) raises -> PythonObject:
-    if operation == "family_xc_initialize":
+    """The public lifecycle of the flagged cluster operations (the family
+    door's FR_CFA, FR_XC and `family_mix_bgmm_*` names called with no
+    binding). `owner` is the route owner and `operation` the name's leaf
+    code in that owner's numbering (lane bw2-cluster: it was the name, with a
+    method String built per call from suffix tests and two prefix tests to
+    pick the owner); `name` is read only for a name the table does not hold
+    (OP_LEAF_NONE), whose owner's unknown-operation text is raised."""
+    if operation == OP_LEAF_NONE:
+        if owner == FR_CFA:
+            cluster_fit_a_unknown_operation(name)
+        elif owner == FR_XC:
+            cluster_unknown_operation(name)
+        else:
+            classical_connect_numpy(context)
+            mixture_unknown_operation(name)
+    if owner == FR_XC and operation == XC_OPN_FAMILY_XC_INITIALIZE:
         return cluster_initialize_py(model, args[1], context)
     classical_connect_numpy(context)
-    var method = _method(operation)
-    var fitting = method == "fit" or method == "partial_fit" or method == "fit_predict" or method == "fit_transform"
+    var method = _method(owner, operation)
+    var fitting = method <= CLUSTER_METHOD_FIT_TRANSFORM
     var key = PythonObject(None)
     var recorded = False
     var direct = False
@@ -228,7 +246,7 @@ def cluster_public_operation(model: PythonObject, operation: String, args: Pytho
         raise Error("TypeError: native fit depth must be an exact integer")
     var nested = Int(py=depth_value) > 0
     if not fitting:
-        classical_require_fitted(model, False, method, context)
+        classical_require_fitted(model, False, _method_text(method), context)
     var name = classical_estimator_name(model)
     var source = args[1]
     var x = classical_check_x(source, name, context)
@@ -240,7 +258,7 @@ def cluster_public_operation(model: PythonObject, operation: String, args: Pytho
             # All six classes retain their y argument, including fit_predict.
             # It follows the old owner arguments in the public call envelope.
             _target(args[len(args) - 1], rows, name, context)
-        if not fitting or method == "partial_fit":
+        if not fitting or method == CLUSTER_METHOD_PARTIAL_FIT:
             var precomputed = False
             # The loop name differs from the record `key` above so the two never share a binding.
             for setting in ["metric", "affinity"]:  # driver-loop: two supported precomputed-mode settings
@@ -262,9 +280,9 @@ def cluster_public_operation(model: PythonObject, operation: String, args: Pytho
     var depth = estimator_fit_begin(fields) if fitting else 0
     var result = PythonObject(None)
     try:
-        if operation.startswith("family_cfa_"):
+        if owner == FR_CFA:
             result = cluster_fit_a_operation(model, operation, prepared, context)
-        elif operation.startswith("family_xc_"):
+        elif owner == FR_XC:
             # prepared[1] is the X classical_check_x admitted above (finite,
             # float32 C order): the cluster queries skip a second scan.
             result = cluster_operation(model, operation, prepared, context, True)

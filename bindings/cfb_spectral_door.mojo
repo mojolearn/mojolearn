@@ -55,6 +55,11 @@ from bindings.spectral_resident_boundary_unpack import (
     SpectralResidentLease, spectral_resident_prepare, spectral_resident_query, spectral_resident_retire,
 )
 from bindings.p3nc_fitted_freeze_unpack import fitted_is_freezable, fitted_freeze
+from bindings.operation_names_cfb import (
+    CFB_OPN_FAMILY_CFB_SC_FIT, CFB_OPN_FAMILY_CFB_SC_FIT_PREDICT, CFB_OPN_FAMILY_CFB_SC_PREDICT,
+    CFB_OPN_FAMILY_CFB_SC_PREDICT_EMBEDDING, CFB_OPN_FAMILY_CFB_SE_FIT, CFB_OPN_FAMILY_CFB_SE_FIT_TRANSFORM,
+    CFB_OPN_FAMILY_CFB_SE_VALIDATE, CFB_OPN_FAMILY_CFB_SE_KNN_AFFINITY, CFB_OPN_FAMILY_CFB_SPECTRAL_EMBEDDING,
+    CFB_OPN_FAMILY_CFB_COO_TRIPLES)
 from bindings.spectral_umap_routes_pack import (
     spectral_umap_route,
 )
@@ -1088,20 +1093,20 @@ def _spectral_embedding(args: PythonObject, routes: SpectralRoutePins, context: 
         routes, args[1], context, True)
 
 
-def _cfb_spectral_algorithm_operation(model: PythonObject, operation: String, args: PythonObject,
+def _cfb_spectral_algorithm_operation(model: PythonObject, operation: Int, args: PythonObject,
                            context: PythonObject, supplied_binding: PythonObject, source: PythonObject) raises -> PythonObject:
     """Fit/predict shells pass (X,); route selection belongs to this owner."""
-    if operation == "family_cfb_sc_fit" or operation == "family_cfb_sc_fit_predict":
+    if operation == CFB_OPN_FAMILY_CFB_SC_FIT or operation == CFB_OPN_FAMILY_CFB_SC_FIT_PREDICT:
         var routed = SpectralRoutePins(
             spectral_umap_route(context, "metrics", PythonObject(None)),
             spectral_umap_route(context, "decomp", PythonObject(None)),
             spectral_umap_route(context, "base", PythonObject("identical")),
             spectral_umap_route(context, "cluster", py_get(py_fields(model), "numeric_mode")))
         _sc_fit(model, routed, source, context)
-        if operation == "family_cfb_sc_fit":
+        if operation == CFB_OPN_FAMILY_CFB_SC_FIT:
             return model
         return py_fields(model)["labels_"]
-    if operation == "family_cfb_sc_predict":
+    if operation == CFB_OPN_FAMILY_CFB_SC_PREDICT:
         var mode = py_get(py_fields(model), "numeric_mode")
         var binding = supplied_binding
         if binding is None:
@@ -1110,7 +1115,7 @@ def _cfb_spectral_algorithm_operation(model: PythonObject, operation: String, ar
             binding = spectral_umap_route(context, "metrics", mode)
         var result = _sc_predict(model, binding, source, context)
         return result.labels
-    if operation == "family_cfb_sc_predict_embedding":
+    if operation == CFB_OPN_FAMILY_CFB_SC_PREDICT_EMBEDDING:
         var mode = py_get(py_fields(model), "numeric_mode")
         var binding = supplied_binding
         if binding is None:
@@ -1119,62 +1124,68 @@ def _cfb_spectral_algorithm_operation(model: PythonObject, operation: String, ar
             binding = spectral_umap_route(context, "metrics", mode)
         var result = _sc_predict(model, binding, source, context)
         return Python.tuple(result.labels, result.embedding)
-    if operation == "family_cfb_se_validate":
+    if operation == CFB_OPN_FAMILY_CFB_SE_VALIDATE:
         _ = _se_validate(py_fields(model), context)
         return PythonObject(None)
-    if operation == "family_cfb_se_knn_affinity":
+    if operation == CFB_OPN_FAMILY_CFB_SE_KNN_AFFINITY:
         var base = spectral_umap_route(context, "base", PythonObject("identical"))
         var result = _knn_affinity(py_fields(model), source, False, base, context)
         return result.public_array
-    if operation == "family_cfb_coo_triples":
+    if operation == CFB_OPN_FAMILY_CFB_COO_TRIPLES:
         var base = spectral_umap_route(context, "base", PythonObject("identical"))
         var coo = _coo_triples(args[0], String(py=args[1]), base, context, True)
         return Python.tuple(coo.rows, coo.cols, coo.vals, PythonObject(coo.n))
-    if operation == "family_cfb_se_fit" or operation == "family_cfb_se_fit_transform":
+    if operation == CFB_OPN_FAMILY_CFB_SE_FIT or operation == CFB_OPN_FAMILY_CFB_SE_FIT_TRANSFORM:
         var routed = SpectralRoutePins(
             spectral_umap_route(context, "metrics", PythonObject(None)),
             spectral_umap_route(context, "decomp", PythonObject(None)),
             spectral_umap_route(context, "base", PythonObject("identical")), PythonObject(None))
         _se_fit(model, routed, source, context)
-        if operation == "family_cfb_se_fit":
+        if operation == CFB_OPN_FAMILY_CFB_SE_FIT:
             return model
         return py_fields(model)["embedding_"]
-    if operation == "family_cfb_spectral_embedding":
+    if operation == CFB_OPN_FAMILY_CFB_SPECTRAL_EMBEDDING:
         var routed = SpectralRoutePins(
             spectral_umap_route(context, "metrics", PythonObject(None)),
             spectral_umap_route(context, "decomp", PythonObject(None)),
             spectral_umap_route(context, "base", PythonObject("identical")), PythonObject(None))
         return _spectral_embedding(args, routed, context)
-    raise Error("RuntimeError: unknown spectral operation " + operation)
+    raise Error("RuntimeError: unknown spectral operation code " + String(operation))
 
 
-def cfb_spectral_operation(model: PythonObject, operation: String, args: PythonObject,
+def cfb_spectral_operation(model: PythonObject, operation: Int, args: PythonObject,
                            context: PythonObject) raises -> PythonObject:
+    # `operation` is the leaf code of bindings/operation_names_cfb.mojo
+    # (spectral block; lane bw2-cluster: it was the name, up to twelve String
+    # compares here and eleven in the algorithm owner, plus a method String
+    # built per call from two suffix tests).
     classical_connect_numpy(context)
     var b = _builtins()
     if py_type(args) is not b.tuple:
         raise Error("TypeError: spectral public arguments require an exact tuple")
     var supplied_binding = PythonObject(None)
     var source_index = 0
-    if operation == "family_cfb_sc_predict" and len(args) == 2:
+    if operation == CFB_OPN_FAMILY_CFB_SC_PREDICT and len(args) == 2:
         # The archive recipe already carries its admitted CPU owner.
         supplied_binding = args[0]
         source_index = 1
-    var clustering = operation.startswith("family_cfb_sc_")
+    var clustering = operation >= CFB_OPN_FAMILY_CFB_SC_FIT and operation <= CFB_OPN_FAMILY_CFB_SC_PREDICT_EMBEDDING
     if model is None:
         return _cfb_spectral_algorithm_operation(model, operation, args, context, supplied_binding, PythonObject(None))
-    var fitting = operation == "family_cfb_sc_fit" or operation == "family_cfb_sc_fit_predict" or operation == "family_cfb_se_fit" or operation == "family_cfb_se_fit_transform"
+    var fitting = (operation == CFB_OPN_FAMILY_CFB_SC_FIT or operation == CFB_OPN_FAMILY_CFB_SC_FIT_PREDICT
+                   or operation == CFB_OPN_FAMILY_CFB_SE_FIT or operation == CFB_OPN_FAMILY_CFB_SE_FIT_TRANSFORM)
     var fields = spectral_admit(model, clustering, fitting, context)
-    if operation == "family_cfb_se_validate":
+    if operation == CFB_OPN_FAMILY_CFB_SE_VALIDATE:
         for name in ["_n_components", "_n_neighbors", "_seed", "_gamma"]:  # small-loop(private validation output fields)
             if py_contains(fields, name):
                 native_release_admit(fields[name], context)
         return _cfb_spectral_algorithm_operation(model, operation, args, context, supplied_binding, PythonObject(None))
-    var method = String("fit_predict") if operation.endswith("_fit_predict") else (String("fit_transform") if operation.endswith("_fit_transform") else (String("fit") if fitting else String("predict")))
-    var public_prediction = operation == "family_cfb_sc_predict"
+    var public_prediction = operation == CFB_OPN_FAMILY_CFB_SC_PREDICT
     if public_prediction:
-        classical_require_fitted(model, False, method, context)
-    if operation == "family_cfb_se_knn_affinity" and py_contains(fields, "affinity_matrix_"):
+        # The not-fitted text's method: the only operation here is predict
+        # (the old per-call `method` String gave "predict" for it).
+        classical_require_fitted(model, False, "predict", context)
+    if operation == CFB_OPN_FAMILY_CFB_SE_KNN_AFFINITY and py_contains(fields, "affinity_matrix_"):
         native_release_admit(fields["affinity_matrix_"], context)
     var source = args[source_index]
     var name = classical_estimator_name(model)

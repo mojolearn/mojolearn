@@ -39,7 +39,12 @@ from providers.python.estimator_binding_pyapi_door import estimator_binding
 from providers.python.estimator_lifecycle_pyapi_unpack import estimator_outside, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
 from providers.python.estimator_tabular_boundary_pyapi_unpack import _target, _refusal
 from bindings.py_optional import py_present
-from providers.python.hdbscan_public_lifecycle_run import _query_slot
+from providers.python.hdbscan_public_lifecycle_run import _query_slot, _query_method
+from bindings.operation_names_hdbscan import (
+    HDBSCAN_OPN_FAMILY_HDBSCAN_PUBLIC_INITIALIZE, HDBSCAN_OPN_FAMILY_HDBSCAN_PUBLIC_BINDING,
+    HDBSCAN_OPN_FAMILY_HDBSCAN_PUBLIC_FIT_PREDICT, HDBSCAN_OPN_FAMILY_HDBSCAN_PUBLIC_APPROXIMATE_PREDICT,
+    HDBSCAN_OPN_FAMILY_HDBSCAN_PUBLIC_MEMBERSHIP_VECTOR, HDBSCAN_OPN_FAMILY_HDBSCAN_PUBLIC_ALL_POINTS_MEMBERSHIP_VECTORS)
+from bindings.operation_names_cfa import CFA_OPN_FAMILY_CFA_HDBSCAN_FIT, CFA_OPN_FAMILY_CFA_HDBSCAN_FIT_PREDICT
 
 
 def _schema(context: PythonObject) raises -> PythonObject:
@@ -144,7 +149,7 @@ def _buffer(source: PythonObject, name: String, dtype: String, count: Int, conte
     return view
 
 
-def _inference(model: PythonObject, method: String, args: PythonObject, fields: PythonObject,
+def _inference(model: PythonObject, operation: Int, args: PythonObject, fields: PythonObject,
                binding: PythonObject, context: PythonObject, key: PythonObject) raises -> PythonObject:
     """approximate_predict, membership_vector or all_points_membership_vectors.
 
@@ -156,9 +161,12 @@ def _inference(model: PythonObject, method: String, args: PythonObject, fields: 
     record is written only after the full path succeeded. The views share
     the fitted arrays' storage, so in-place value edits are still read."""
     var b = native_loaded_module("builtins")
-    var approximate = method == "approximate_predict"
-    var all_points = method == "all_points_membership_vectors"
-    var slot = _query_slot(method)
+    # `operation` is a query's leaf code (lane bw2-cluster); `method` is its
+    # static name for the refusal texts.
+    var method = _query_method(operation)
+    var approximate = operation == HDBSCAN_OPN_FAMILY_HDBSCAN_PUBLIC_APPROXIMATE_PREDICT
+    var all_points = operation == HDBSCAN_OPN_FAMILY_HDBSCAN_PUBLIC_ALL_POINTS_MEMBERSHIP_VECTORS
+    var slot = _query_slot(operation)
     var held = cluster_record_get(slot, model, key)
     if held is not None:
         var cached = held.downcast_value_ptr[HdbscanQueryRecord]()
@@ -357,7 +365,19 @@ def _record(model: PythonObject, slot: String, key: PythonObject, binding: Pytho
     cluster_record_put(slot, model, key, PythonObject(alloc=record^))
 
 
-def hdbscan_public_operation(model: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def hdbscan_unknown_operation(operation: String) raises:
+    """A `family_hdbscan_public_*` name the operation table does not hold
+    (the shells pass table names only). The name chain had no refusal of
+    its own (an unknown method ran the membership-vector query); the
+    family door's unknown-operation text is raised instead."""
+    raise Error("RuntimeError: unknown family operation " + operation)
+
+
+def hdbscan_public_operation(model: PythonObject, operation: Int, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`operation` is the leaf code of bindings/operation_names_hdbscan.mojo
+    (lane bw2-cluster: it was the name, sliced to a method String per call
+    and matched by up to nine compares; the fit name and the three query
+    slot names were concatenated per call)."""
     classical_connect_numpy(context)
     var b = native_loaded_module("builtins")
     if py_type(args) is not b.tuple:
@@ -366,26 +386,25 @@ def hdbscan_public_operation(model: PythonObject, operation: String, args: Pytho
     # test (bindings/cluster_side_records.mojo), not a Python-level walk.
     if not cluster_is_subclass(py_type(model), context["hdbscan_public_class"]):
         raise Error("TypeError: HDBSCAN execution requires its connected class")
-    var method = String(operation[byte=String("family_hdbscan_public_").byte_length():])
-    if method == "initialize":
+    if operation == HDBSCAN_OPN_FAMILY_HDBSCAN_PUBLIC_INITIALIZE:
         return _initialize(model, args, context)
-    var fitting = method == "fit" or method == "fit_predict"
-    var query = method == "approximate_predict" or method == "membership_vector" or method == "all_points_membership_vectors"
+    var fitting = operation > HDBSCAN_OPN_FAMILY_HDBSCAN_PUBLIC_BINDING and operation <= HDBSCAN_OPN_FAMILY_HDBSCAN_PUBLIC_FIT_PREDICT
+    var query = operation >= HDBSCAN_OPN_FAMILY_HDBSCAN_PUBLIC_APPROXIMATE_PREDICT
     var key = _record_key(model, context) if query else PythonObject(None)
     var recorded = _admit(model, context, fitting, key)
     var fields = py_fields(model)
     if fitting:
         # A fit replaces the fitted state: release the old records now.
         cluster_record_drop(_ADMIT_SLOT, model)
-        cluster_record_drop(_query_slot("approximate_predict"), model)
-        cluster_record_drop(_query_slot("membership_vector"), model)
-        cluster_record_drop(_query_slot("all_points_membership_vectors"), model)
+        cluster_record_drop(_query_slot(HDBSCAN_OPN_FAMILY_HDBSCAN_PUBLIC_APPROXIMATE_PREDICT), model)
+        cluster_record_drop(_query_slot(HDBSCAN_OPN_FAMILY_HDBSCAN_PUBLIC_MEMBERSHIP_VECTOR), model)
+        cluster_record_drop(_query_slot(HDBSCAN_OPN_FAMILY_HDBSCAN_PUBLIC_ALL_POINTS_MEMBERSHIP_VECTORS), model)
     var binding = estimator_binding(model, "_mojolearn_hdbscan", context, False)
-    if method == "binding":
+    if operation == HDBSCAN_OPN_FAMILY_HDBSCAN_PUBLIC_BINDING:
         _hdbscan_mode(model, binding, context)
         return binding
     if not fitting:
-        var result = _inference(model, method, args, fields, binding, context, key)
+        var result = _inference(model, operation, args, fields, binding, context, key)
         if query and not recorded:
             cluster_record_put(_ADMIT_SLOT, model, key, PythonObject(True))
         return result
@@ -397,7 +416,8 @@ def hdbscan_public_operation(model: PythonObject, operation: String, args: Pytho
     var depth = estimator_fit_begin(fields)
     var result = PythonObject(None)
     try:
-        result = cluster_fit_a_operation(model, "family_cfa_hdbscan_" + method, Python.tuple(binding, x), context)
+        var fit = CFA_OPN_FAMILY_CFA_HDBSCAN_FIT_PREDICT if operation == HDBSCAN_OPN_FAMILY_HDBSCAN_PUBLIC_FIT_PREDICT else CFA_OPN_FAMILY_CFA_HDBSCAN_FIT
+        result = cluster_fit_a_operation(model, fit, Python.tuple(binding, x), context)
     except problem:
         var refused = _refusal(problem, True, depth > 0, rows, columns, name)
         raise refused^
