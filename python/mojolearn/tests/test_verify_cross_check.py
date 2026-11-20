@@ -118,8 +118,14 @@ def test_spectral_batch_uses_identical_fixture_input_on_both_devices(monkeypatch
         fixture=lambda fx: (affinity, None, None), heldout=lambda fx: affinity,
         _save_load=lambda est: ('save', None, '.model'), _public_est=lambda lane, est: est,
         _h=lambda *a: 'b' * 16, _probe_batch=batch, BATCH_ALONE=1,
-        Fit=lambda *a: SimpleNamespace())
-    ml = SimpleNamespace(vendor=lambda: 'metal', host_model=lambda p: host)
+        Fit=lambda *a: SimpleNamespace(), cpu_model=lambda: 'test processor')
+    # the two sides are described from the runtime report (the shared check
+    # module, _check_both.side_environment), once, after the cells ran
+    report = dict(version='0', numeric_mode='identical', vendor='metal', gpu_arch=None, code_kind='native',
+                  package_dir='/pkg', bindings={
+                      'mojolearn._mojolearn': dict(path='/pkg/metal/identical/_mojolearn.so', loaded=True),
+                      'mojolearn._host._mojolearn_core_host': dict(path='/pkg/host/_mojolearn_core_host.so', loaded=True)})
+    ml = SimpleNamespace(vendor=lambda: 'metal', host_model=lambda p: host, runtime_report=lambda: report)
     result = va.cross_check(harness, ml, ['spectral-precomputed'], ['base'])
     if batch_error:
         assert result['passed'] is not True
@@ -127,3 +133,8 @@ def test_spectral_batch_uses_identical_fixture_input_on_both_devices(monkeypatch
     else:
         assert seen == [est, host]
         assert result['passed'] is True and result['agree'] == 2
+        assert result['sides']['gpu']['binaries'] == dict(directories=['metal/identical'], loaded=1)
+        assert result['sides']['cpu']['binaries'] == dict(directories=['host'], loaded=1)
+        assert result['sides']['cpu']['device'] == 'test processor'
+        text = va.format_cross_check(dict(result, elapsed_s=0.0))
+        assert 'side      gpu' in text and 'side      cpu' in text and 'host (1 loaded)' in text
