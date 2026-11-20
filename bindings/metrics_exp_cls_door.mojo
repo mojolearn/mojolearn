@@ -13,6 +13,21 @@
 # builds the one program (the sums and the four set-wise epilogues) its
 # Python memo made, and the support total's program. Same programs, same
 # kernels: the bits do not move.
+from bindings.metrics_keys_unpack import metrics_keys
+from bindings.py_balanced import py_item
+from bindings.operation_names_mexp import (
+    MEXP_OPN_FAMILY_MEXP_CLS_BALANCED_ACCURACY,
+    MEXP_OPN_FAMILY_MEXP_CLS_FBETA,
+    MEXP_OPN_FAMILY_MEXP_CLS_HAMMING,
+    MEXP_OPN_FAMILY_MEXP_CLS_JACCARD,
+    MEXP_OPN_FAMILY_MEXP_CLS_KAPPA,
+    MEXP_OPN_FAMILY_MEXP_CLS_LIKELIHOOD_RATIOS,
+    MEXP_OPN_FAMILY_MEXP_CLS_MATTHEWS,
+    MEXP_OPN_FAMILY_MEXP_CLS_MLCM,
+    MEXP_OPN_FAMILY_MEXP_CLS_PRFS,
+    MEXP_OPN_FAMILY_MEXP_CLS_REPORT,
+    MEXP_OPN_FAMILY_MEXP_CLS_ZERO_ONE,
+)
 from std.python import Python, PythonObject
 from bindings.metrics_native_inputs_door import metric_flatten
 from bindings.py_balanced import py_call, py_contains, py_setitem
@@ -592,7 +607,8 @@ def _report(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var total = PythonObject(arena.f64(total_out)) if s.weighted else PythonObject(arena.i64(total_out))
     if micro_is_accuracy:
         _prf_warn(arena.i32(s.eos[1]), all_for, zero_division, context)
-        py_setitem(report, "accuracy", PythonObject(arena.f64(s.eos[1] + 2)))
+        var nk = metrics_keys()
+        py_setitem(report, nk[].k_accuracy, PythonObject(arena.f64(s.eos[1] + 2)))
     var avg_names = Python.list()
     var avg_slots = List[Int]()
     if not micro_is_accuracy:
@@ -624,9 +640,10 @@ def _report(args: PythonObject, context: PythonObject) raises -> PythonObject:
         out = out + family_call_kw(mx_attr(row_fmt, "format"), _fmt_kw(width, digits), row[0], row[1], row[2], row[3], row[4])
     out = out + PythonObject("\n")
     if micro_is_accuracy:
+        var nk = metrics_keys()
         var acc_fmt = PythonObject("{:>{width}s}  {:>9.{digits}} {:>9.{digits}} {:>9.{digits}f} {:>9}\n")
         out = out + family_call_kw(mx_attr(acc_fmt, "format"), _fmt_kw(width, digits), PythonObject("accuracy"), PythonObject(""),
-                                   PythonObject(""), report["accuracy"], total)
+                                   PythonObject(""), py_item(report, nk[].k_accuracy), total)
     for i in range(mx_len(avg_rows)):  # small-loop(3: the report's average rows): at most three
         var row = avg_rows[i]
         out = out + family_call_kw(mx_attr(row_fmt, "format"), _fmt_kw(width, digits), row[0], row[1], row[2], row[3], row[4])
@@ -635,35 +652,36 @@ def _report(args: PythonObject, context: PythonObject) raises -> PythonObject:
 
 def _fmt_kw(width: PythonObject, digits: PythonObject) raises -> PythonObject:
     var keywords = Python.dict()
-    py_setitem(keywords, "width", width)
+    var nk = metrics_keys()
+    py_setitem(keywords, nk[].k_width, width)
     if digits is not None:
-        py_setitem(keywords, "digits", digits)
+        py_setitem(keywords, nk[].k_digits, digits)
     return keywords
 
 
-def metrics_exp_cls_operation(operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def metrics_exp_cls_operation(operation: Int, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """The classification metrics; each shell passes its arguments in its
     signature's order (see python/mojolearn/_expansion_metrics.py)."""
-    if operation == "family_mexp_cls_prfs":
+    if operation == MEXP_OPN_FAMILY_MEXP_CLS_PRFS:
         return _prfs(args, context)
-    if operation == "family_mexp_cls_fbeta":
+    if operation == MEXP_OPN_FAMILY_MEXP_CLS_FBETA:
         return _fbeta(args, context)
-    if operation == "family_mexp_cls_jaccard":
+    if operation == MEXP_OPN_FAMILY_MEXP_CLS_JACCARD:
         return _jaccard(args, context)
-    if operation == "family_mexp_cls_balanced_accuracy":
+    if operation == MEXP_OPN_FAMILY_MEXP_CLS_BALANCED_ACCURACY:
         return _balanced_accuracy(args, context)
-    if operation == "family_mexp_cls_matthews":
+    if operation == MEXP_OPN_FAMILY_MEXP_CLS_MATTHEWS:
         return _matthews(args, context)
-    if operation == "family_mexp_cls_mlcm":
+    if operation == MEXP_OPN_FAMILY_MEXP_CLS_MLCM:
         return _mlcm(args, context)
-    if operation == "family_mexp_cls_hamming":
+    if operation == MEXP_OPN_FAMILY_MEXP_CLS_HAMMING:
         return _hamming(args, context)
-    if operation == "family_mexp_cls_zero_one":
+    if operation == MEXP_OPN_FAMILY_MEXP_CLS_ZERO_ONE:
         return _zero_one(args, context)
-    if operation == "family_mexp_cls_kappa":
+    if operation == MEXP_OPN_FAMILY_MEXP_CLS_KAPPA:
         return _kappa(args, context)
-    if operation == "family_mexp_cls_likelihood_ratios":
+    if operation == MEXP_OPN_FAMILY_MEXP_CLS_LIKELIHOOD_RATIOS:
         return _likelihood_ratios(args, context)
-    if operation == "family_mexp_cls_report":
+    if operation == MEXP_OPN_FAMILY_MEXP_CLS_REPORT:
         return _report(args, context)
-    raise Error("RuntimeError: unknown classification metric " + operation)
+    raise Error("RuntimeError: unknown classification metric " + String(operation))

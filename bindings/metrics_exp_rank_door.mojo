@@ -10,6 +10,17 @@
 # refusals, then the same x_metrics PROGRAM (arena layout, stage records,
 # parameter words, order), run by the shared program runner, and the same
 # flag checks after the run. Same kernels: the bits do not move.
+from bindings.operation_names_mexp import (
+    MEXP_OPN_FAMILY_MEXP_RANK_BRIER,
+    MEXP_OPN_FAMILY_MEXP_RANK_COVERAGE,
+    MEXP_OPN_FAMILY_MEXP_RANK_D2_BRIER,
+    MEXP_OPN_FAMILY_MEXP_RANK_D2_LOG_LOSS,
+    MEXP_OPN_FAMILY_MEXP_RANK_DCG,
+    MEXP_OPN_FAMILY_MEXP_RANK_HINGE,
+    MEXP_OPN_FAMILY_MEXP_RANK_LOSS,
+    MEXP_OPN_FAMILY_MEXP_RANK_LRAP,
+    MEXP_OPN_FAMILY_MEXP_RANK_NDCG,
+)
 from std.python import Python, PythonObject
 from bindings.admitted_family_door import admit_family
 from bindings.py_balanced import py_call, py_contains
@@ -314,25 +325,25 @@ def _label_ranking(args: PythonObject, kind: Int, caller: String, context: Pytho
     return PythonObject(arena.f64(res))
 
 
-def metrics_exp_rank_operation(operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def metrics_exp_rank_operation(operation: Int, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """The probability, hinge and ranking metrics (argument orders: see
     python/mojolearn/_expansion_metrics.py)."""
-    if operation == "family_mexp_rank_brier":
+    if operation == MEXP_OPN_FAMILY_MEXP_RANK_BRIER:
         return _brier(args, context)
-    if operation == "family_mexp_rank_d2_log_loss":
+    if operation == MEXP_OPN_FAMILY_MEXP_RANK_D2_LOG_LOSS:
         return _d2_proba(args, "d2_log_loss_score", True, context)
-    if operation == "family_mexp_rank_d2_brier":
+    if operation == MEXP_OPN_FAMILY_MEXP_RANK_D2_BRIER:
         return _d2_proba(args, "d2_brier_score", False, context)
-    if operation == "family_mexp_rank_hinge":
+    if operation == MEXP_OPN_FAMILY_MEXP_RANK_HINGE:
         return _hinge(args, context)
-    if operation == "family_mexp_rank_dcg":
+    if operation == MEXP_OPN_FAMILY_MEXP_RANK_DCG:
         return _dcg(args, context)
-    if operation == "family_mexp_rank_ndcg":
+    if operation == MEXP_OPN_FAMILY_MEXP_RANK_NDCG:
         return _ndcg(args, context)
-    if operation == "family_mexp_rank_coverage":
+    if operation == MEXP_OPN_FAMILY_MEXP_RANK_COVERAGE:
         return _label_ranking(args, _ROW_COVERAGE, "coverage_error", context)
-    if operation == "family_mexp_rank_lrap":
+    if operation == MEXP_OPN_FAMILY_MEXP_RANK_LRAP:
         return _label_ranking(args, _ROW_LRAP, "label_ranking_average_precision_score", context)
-    if operation == "family_mexp_rank_loss":
+    if operation == MEXP_OPN_FAMILY_MEXP_RANK_LOSS:
         return _label_ranking(args, _ROW_RANKLOSS, "label_ranking_loss", context)
-    raise Error("RuntimeError: unknown ranking metric " + operation)
+    raise Error("RuntimeError: unknown ranking metric " + String(operation))

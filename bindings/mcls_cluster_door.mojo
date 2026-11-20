@@ -8,6 +8,23 @@
 # and r2_score run the x_metrics program of bindings/metrics_reg_door.mojo
 # itself (`_mean_error`, `_r2_options`), as `regression_error_options` and
 # `r2_score_options` did. Same kernels, same operands: the bits do not move.
+from bindings.operation_names_mcls import (
+    MCLS_OPN_FAMILY_MCLS_ADJUSTED_RAND,
+    MCLS_OPN_FAMILY_MCLS_COMPLETENESS,
+    MCLS_OPN_FAMILY_MCLS_ENTROPY,
+    MCLS_OPN_FAMILY_MCLS_FOWLKES_MALLOWS,
+    MCLS_OPN_FAMILY_MCLS_HCV,
+    MCLS_OPN_FAMILY_MCLS_HOMOGENEITY,
+    MCLS_OPN_FAMILY_MCLS_KL,
+    MCLS_OPN_FAMILY_MCLS_MUTUAL_INFO,
+    MCLS_OPN_FAMILY_MCLS_R2,
+    MCLS_OPN_FAMILY_MCLS_RAND,
+    MCLS_OPN_FAMILY_MCLS_REGRESSION_ERROR,
+    MCLS_OPN_FAMILY_MCLS_SILHOUETTE_SAMPLES,
+    MCLS_OPN_FAMILY_MCLS_SILHOUETTE_SCORE,
+    MCLS_OPN_FAMILY_MCLS_TRUSTWORTHINESS,
+    MCLS_OPN_FAMILY_MCLS_V_MEASURE,
+)
 from std.python import Python, PythonObject
 from bindings.admitted_family_door import admit_family
 from bindings.native_loaded_module_door import native_loaded_module
@@ -339,17 +356,17 @@ def _r2(args: PythonObject, context: PythonObject) raises -> PythonObject:
     return result
 
 
-def mcls_cluster_operation(operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def mcls_cluster_operation(operation: Int, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """The label-pair, divergence, silhouette, trustworthiness and
     regression metrics; args[0] is the metrics binding."""
     var b = mc_b()
-    if operation == "family_mcls_rand":
+    if operation == MCLS_OPN_FAMILY_MCLS_RAND:
         return _raw_pair_call(args[0], "rand_score", args, context)
-    if operation == "family_mcls_adjusted_rand":
+    if operation == MCLS_OPN_FAMILY_MCLS_ADJUSTED_RAND:
         return _raw_pair_call(args[0], "adjusted_rand_score", args, context)
-    if operation == "family_mcls_entropy":
+    if operation == MCLS_OPN_FAMILY_MCLS_ENTROPY:
         return _entropy(args, context)
-    if operation == "family_mcls_mutual_info":
+    if operation == MCLS_OPN_FAMILY_MCLS_MUTUAL_INFO:
         # args = (binding, labels_true, labels_pred, contingency)
         if args[3] is not None:
             raise Error("NotImplementedError: mojolearn mutual_info_score: contingency= is refused; the "
@@ -357,7 +374,7 @@ def mcls_cluster_operation(operation: String, args: PythonObject, context: Pytho
                         + "(metrics/impl/stats/detail/contingency_matrix.mojo) and has "
                         + "no arm that consumes a precomputed one")
         return _cluster_call(args[0], "mutual_info_score", _cluster_codes(args[1], args[2], context), Python.list())
-    if operation == "family_mcls_fowlkes_mallows":
+    if operation == MCLS_OPN_FAMILY_MCLS_FOWLKES_MALLOWS:
         # args = (binding, labels_true, labels_pred, sparse)
         if not (mc_is_str(args[3]) and String(args[3]) == "deprecated"):
             if Bool(py=family_call(native_loaded_module("operator").ne, args[3], PythonObject("deprecated"))):
@@ -376,15 +393,15 @@ def mcls_cluster_operation(operation: String, args: PythonObject, context: Pytho
         if empty:
             return PythonObject(0.0)
         return _cluster_call(args[0], "fowlkes_mallows_score", _cluster_codes(args[1], args[2], context), Python.list())
-    if operation == "family_mcls_homogeneity":
+    if operation == MCLS_OPN_FAMILY_MCLS_HOMOGENEITY:
         return _cluster_call(args[0], "homogeneity_score", _cluster_codes(args[1], args[2], context), Python.list())
-    if operation == "family_mcls_completeness":
+    if operation == MCLS_OPN_FAMILY_MCLS_COMPLETENESS:
         return _cluster_call(args[0], "completeness_score", _cluster_codes(args[1], args[2], context), Python.list())
-    if operation == "family_mcls_v_measure":
+    if operation == MCLS_OPN_FAMILY_MCLS_V_MEASURE:
         # args = (binding, labels_true, labels_pred, beta)
         return _cluster_call(args[0], "v_measure_score", _cluster_codes(args[1], args[2], context),
                              Python.list(family_call(b.float, args[3])))
-    if operation == "family_mcls_hcv":
+    if operation == MCLS_OPN_FAMILY_MCLS_HCV:
         # args = (binding, labels_true, labels_pred, beta): the labels are
         # checked and remapped once; the three entries are the three calls
         # homogeneity_score, completeness_score and v_measure_score made
@@ -407,22 +424,33 @@ def mcls_cluster_operation(operation: String, args: PythonObject, context: Pytho
         var c = _cluster_call(args[0], "completeness_score", prepared, Python.list())
         var v = _cluster_call(args[0], "v_measure_score", prepared, Python.list(family_call(b.float, args[3])))
         return Python.tuple(h, c, v)
-    if operation == "family_mcls_kl":
+    if operation == MCLS_OPN_FAMILY_MCLS_KL:
         return _kl_divergence(args, context)
-    if operation == "family_mcls_silhouette_score":
+    if operation == MCLS_OPN_FAMILY_MCLS_SILHOUETTE_SCORE:
         # args = (binding, X, labels, metric, sample_size, random_state, chunksize)
         if args[4] is not None or args[5] is not None:
             raise Error("NotImplementedError: mojolearn silhouette_score: sample_size / random_state are "
                         + "refused; subsample X yourself so the rows that were scored are "
                         + "the rows you chose (cuML's surface has no subsampling either)")
         return _silhouette(Python.tuple(args[0], args[1], args[2], args[3], args[6]), "silhouette_score", context)[0]
-    if operation == "family_mcls_silhouette_samples":
+    if operation == MCLS_OPN_FAMILY_MCLS_SILHOUETTE_SAMPLES:
         # args = (binding, X, labels, metric, chunksize)
         return _silhouette(args, "silhouette_samples", context)[1]
-    if operation == "family_mcls_trustworthiness":
+    if operation == MCLS_OPN_FAMILY_MCLS_TRUSTWORTHINESS:
         return _trustworthiness(args, context)
-    if operation == "family_mcls_regression_error":
+    if operation == MCLS_OPN_FAMILY_MCLS_REGRESSION_ERROR:
         return _regression_error(args, context)
-    if operation == "family_mcls_r2":
+    if operation == MCLS_OPN_FAMILY_MCLS_R2:
         return _r2(args, context)
+    raise Error("RuntimeError: unknown family operation " + String(operation))
+
+
+def mcls_cluster_operation(operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The named form, for the one caller that still passes the name (lane
+    bw2-metrics): bindings/neighbors_knn_native_door.mojo `_reg_score`, a
+    file an open A/B arm reads, passes "family_mcls_r2". Every other caller
+    passes the leaf code. Delete this form when that caller passes
+    MCLS_OPN_FAMILY_MCLS_R2."""
+    if operation == "family_mcls_r2":
+        return mcls_cluster_operation(MCLS_OPN_FAMILY_MCLS_R2, args, context)
     raise Error("RuntimeError: unknown family operation " + operation)

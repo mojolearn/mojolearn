@@ -14,13 +14,13 @@ from bindings.kmeans_native_pack import kmeans_operation, kmeans_unknown_operati
 from bindings.kernel_methods_native_door import kernel_methods_operation, kernel_methods_unknown_operation
 from bindings.linalg_native_door import linalg_operation, linalg_unknown_operation
 from bindings.neighbors_native_pack import neighbors_operation
-from bindings.metrics_reg_door import metrics_reg_operation
+from bindings.metrics_reg_door import metrics_reg_operation, metrics_reg_unknown_operation
 from bindings.cluster_native_door import cluster_operation, cluster_unknown_operation
 from bindings.svm_mixture_native_door import svm_mixture_operation, svm_mixture_unknown_operation
 from bindings.svc_native_pack import svc_operation, svc_unknown_operation
 from bindings.gp_native_pack import gp_operation, gp_unknown_operation
-from bindings.metrics_cls_native_unpack import metrics_cls_operation
-from bindings.metrics_exp_native_unpack import metrics_exp_operation
+from bindings.metrics_cls_native_unpack import metrics_cls_operation, metrics_cls_unknown_operation
+from bindings.metrics_exp_native_unpack import metrics_exp_operation, metrics_exp_unknown_operation
 from bindings.cluster_fit_a_native_door import cluster_fit_a_operation, cluster_fit_a_unknown_operation
 from providers.python.hdbscan_public_lifecycle_pyapi_door import hdbscan_public_operation, hdbscan_unknown_operation
 from providers.python.density_public_lifecycle_pyapi_pack import density_public_operation, density_unknown_operation
@@ -169,7 +169,7 @@ def _family_owner_first(model: PythonObject, owner: Int, leaf: Int, operation: S
                         context: PythonObject) raises -> PythonObject:
     """Owners FR_DENSITY .. FR_CHOL (and FR_UNKNOWN, refused). `leaf` is
     the operation's leaf code for a converted owner (FR_DENSITY, FR_KMEANS,
-    FR_KM, FR_SVM, FR_XC, FR_CHOL); the others match `operation`."""
+    FR_KM, FR_SVM, FR_XC, FR_METRIC, FR_CHOL); the others match `operation`."""
     if owner == FR_DENSITY:
         if leaf == OP_LEAF_NONE:
             density_unknown_operation(operation)
@@ -195,7 +195,9 @@ def _family_owner_first(model: PythonObject, owner: Int, leaf: Int, operation: S
             return cluster_fit_b_operation(model, CFB_OPN_FAMILY_XC_DBSCAN_PREDICT, args, context)
         return cluster_operation(model, leaf, args, context)
     if owner == FR_METRIC:
-        return metrics_reg_operation(operation, args, context)
+        if leaf == OP_LEAF_NONE:
+            metrics_reg_unknown_operation(operation)
+        return metrics_reg_operation(leaf, args, context)
     if owner == FR_XN:
         return neighbors_operation(model, operation, args, context)
     if owner == FR_CHOL:
@@ -208,8 +210,8 @@ def _family_owner_first(model: PythonObject, owner: Int, leaf: Int, operation: S
 def _family_owner_second(model: PythonObject, owner: Int, leaf: Int, operation: String, args: PythonObject,
                          context: PythonObject) raises -> PythonObject:
     """Owners FR_MSEL .. FR_LINALG_OPS. `leaf` is the operation's leaf code
-    for a converted owner (FR_SVC, FR_GP, FR_HDBSCAN_PUBLIC, FR_CFA, FR_CFB, FR_MIX,
-    FR_LOW, FR_LINALG_OPS); the others match `operation`."""
+    for a converted owner (FR_SVC, FR_GP, FR_HDBSCAN_PUBLIC, FR_CFA, FR_CFB, FR_MCLS,
+    FR_MEXP, FR_MIX, FR_LOW, FR_LINALG_OPS); the others match `operation`."""
     if owner == FR_MSEL:
         # Preserve the existing generic entry ABI without importing the
         # independently compiled model-selection owner. Import setup retains
@@ -230,9 +232,13 @@ def _family_owner_second(model: PythonObject, owner: Int, leaf: Int, operation: 
             gp_unknown_operation(operation)
         return gp_operation(model, leaf, args, context)
     if owner == FR_MCLS:
-        return metrics_cls_operation(model, operation, args, context)
+        if leaf == OP_LEAF_NONE:
+            metrics_cls_unknown_operation(operation)
+        return metrics_cls_operation(model, leaf, args, context)
     if owner == FR_MEXP:
-        return metrics_exp_operation(model, operation, args, context)
+        if leaf == OP_LEAF_NONE:
+            metrics_exp_unknown_operation(operation)
+        return metrics_exp_operation(model, leaf, args, context)
     if owner == FR_HDBSCAN_PUBLIC:
         if leaf == OP_LEAF_NONE:
             hdbscan_unknown_operation(operation)

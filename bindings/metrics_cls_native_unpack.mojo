@@ -10,6 +10,11 @@
 #                                trustworthiness, mean_squared/absolute/root_mean_squared_error, r2_score
 #   bindings/mcls_classify_door.mojo  accuracy_score, confusion_matrix, precision/recall/f1_score, log_loss
 #   bindings/mcls_ranking_door.mojo   roc_auc_score, precision_recall_curve
+from bindings.operation_names_mcls import (
+    MCLS_OPN_FAMILY_MCLS_ACCURACY_FRACTION,
+    MCLS_OPN_FAMILY_MCLS_LOG_LOSS,
+    MCLS_OPN_FAMILY_MCLS_PR_CURVE,
+)
 from std.python import Python, PythonObject
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.classical_pandas_door import classical_admit_value
@@ -20,20 +25,27 @@ from bindings.mcls_classify_door import mcls_classify_operation
 from bindings.mcls_ranking_door import mcls_ranking_operation
 
 
-def metrics_cls_operation(model: PythonObject, operation: String, var args: PythonObject,
+def metrics_cls_unknown_operation(operation: String) raises:
+    """A `family_mcls_*` name the operation table does not hold (the shells
+    pass table names only): the text the cluster owner's chain raised for it."""
+    raise Error("RuntimeError: unknown family operation " + operation)
+
+
+def metrics_cls_operation(model: PythonObject, operation: Int, var args: PythonObject,
          context: PythonObject) raises -> PythonObject:
+    """`operation` is the leaf code of bindings/operation_names_mcls.mojo:
+    classify, ranking and cluster codes are three ranges."""
     args = metric_binding_arguments(operation, args, context)
     classical_connect_numpy(context)
     # The first argument is a connected binding for these operations; all
     # remaining arguments are user data/configuration and must be admitted
     # before any truth, equality, length or scalar conversion can run.
-    var first = 0 if operation == "family_mcls_log_loss" or operation == "family_mcls_accuracy_fraction" else 1
+    var first = 0 if operation == MCLS_OPN_FAMILY_MCLS_LOG_LOSS or operation == MCLS_OPN_FAMILY_MCLS_ACCURACY_FRACTION else 1
     for index in range(first, len(args)):  # driver-loop: metric input owners and native option metadata
         classical_admit_value(args[index], context)
     args = metric_arguments(args, first, context)
-    if (operation == "family_mcls_accuracy" or operation == "family_mcls_accuracy_fraction" or operation == "family_mcls_confusion"
-            or operation == "family_mcls_prf" or operation == "family_mcls_log_loss"):
+    if operation <= MCLS_OPN_FAMILY_MCLS_LOG_LOSS:
         return mcls_classify_operation(operation, args, context)
-    if operation == "family_mcls_roc_auc" or operation == "family_mcls_pr_curve":
+    if operation <= MCLS_OPN_FAMILY_MCLS_PR_CURVE:
         return mcls_ranking_operation(operation, args, context)
     return mcls_cluster_operation(operation, args, context)

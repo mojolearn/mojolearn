@@ -15,6 +15,8 @@ from std.python import PythonObject
 from core.metrics_program_plan import MetricProgramPlan
 from bindings.arena_prog_run import MetricArenaOwner
 from bindings.arena_prog_native_door import _metrics_run_plan
+from bindings.metrics_keys_unpack import metrics_keys
+from bindings.py_balanced import py_item
 
 
 struct MetricDoorProg(Movable):
@@ -81,7 +83,8 @@ def metric_plan_run(plan: MetricProgramPlan, pins: List[PythonObject], mode: Pyt
     """`_run(prog, numeric_mode)`: a typed plan and its pins handed to the
     shared runner (bindings/arena_prog_native_door.mojo `_metrics_run_plan`,
     UNPACK of the input addresses + typed RUN, the GIL released)."""
-    var prog_context = context["family_metrics_prog_context"]
+    var nk = metrics_keys()
+    var prog_context = py_item(context, nk[].k_family_metrics_prog_context)
     return _metrics_run_plan(plan, pins, mode, prog_context)
 
 

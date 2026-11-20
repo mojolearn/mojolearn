@@ -35,6 +35,7 @@ from bindings.host_sparse_native_door import host_sparse_format, _sparse_fields,
 from bindings.cfb_sparse_read_unpack import cfb_sparse_triples
 from bindings.neighbors_ann_native_door import ann_keep_array
 from bindings.mcls_cluster_door import mcls_cluster_operation
+from bindings.operation_names_mcls import MCLS_OPN_FAMILY_MCLS_R2
 from bindings.optimizer_public_words_unpack import PYTHON_ERROR_PENDING, PENDING_PYTHON_ERROR
 from neighbors.neighbors_graph_run import (
     XnOpRequest, xn_rows_match_check, xn_relabel_request, xn_relabel_decode, xn_fill_request,
@@ -807,7 +808,7 @@ def _svgp_score(model: PythonObject, args: PythonObject, context: PythonObject) 
     var mode = py_get(py_fields(model), PythonObject("numeric_mode"), PythonObject(None))
     var metrics = args[4] if len(args) > 4 and args[4] is not None else estimator_binding(
         model, "_mojolearn_metrics", context)
-    return mcls_cluster_operation("family_mcls_r2", Python.tuple(metrics, truth, prediction, args[3],
+    return mcls_cluster_operation(MCLS_OPN_FAMILY_MCLS_R2, Python.tuple(metrics, truth, prediction, args[3],
                                   PythonObject("uniform_average"), PythonObject(True), mode), context)
 
 

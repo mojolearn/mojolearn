@@ -13,6 +13,13 @@
 # `log_loss_options`), rebuilt here with the same arena layout, the same
 # stage records in the same order and the same declared outputs, run by the
 # shared runner. Same kernels, same programs: the bits do not move.
+from bindings.operation_names_mcls import (
+    MCLS_OPN_FAMILY_MCLS_ACCURACY,
+    MCLS_OPN_FAMILY_MCLS_ACCURACY_FRACTION,
+    MCLS_OPN_FAMILY_MCLS_CONFUSION,
+    MCLS_OPN_FAMILY_MCLS_LOG_LOSS,
+    MCLS_OPN_FAMILY_MCLS_PRF,
+)
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.admitted_family_door import admit_family
@@ -637,16 +644,16 @@ def mcls_accuracy_fraction(y_true: PythonObject, y_pred: PythonObject, sample_we
     return PythonObject(arena.f64(out + 8))
 
 
-def mcls_classify_operation(operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    if operation == "family_mcls_accuracy":
+def mcls_classify_operation(operation: Int, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    if operation == MCLS_OPN_FAMILY_MCLS_ACCURACY:
         return _accuracy(args, context)
-    if operation == "family_mcls_accuracy_fraction":
+    if operation == MCLS_OPN_FAMILY_MCLS_ACCURACY_FRACTION:
         # args = (y_true, y_pred, sample_weight, numeric_mode)
         return mcls_accuracy_fraction(args[0], args[1], args[2], args[3], context, True, True)
-    if operation == "family_mcls_confusion":
+    if operation == MCLS_OPN_FAMILY_MCLS_CONFUSION:
         return _confusion(args, context)
-    if operation == "family_mcls_prf":
+    if operation == MCLS_OPN_FAMILY_MCLS_PRF:
         return _prf(args, context)
-    if operation == "family_mcls_log_loss":
+    if operation == MCLS_OPN_FAMILY_MCLS_LOG_LOSS:
         return _log_loss(args, context)
-    raise Error("RuntimeError: unknown family operation " + operation)
+    raise Error("RuntimeError: unknown family operation " + String(operation))

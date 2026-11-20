@@ -12,6 +12,14 @@
 # each clustering into its own sorted classes are the encoder's codes
 # themselves (the Python `_codes(a, ca)` gathered the identity table). Same
 # kernels: the bits do not move.
+from bindings.operation_names_mexp import (
+    MEXP_OPN_FAMILY_MEXP_CLUSTER_AMI,
+    MEXP_OPN_FAMILY_MEXP_CLUSTER_CALINSKI_HARABASZ,
+    MEXP_OPN_FAMILY_MEXP_CLUSTER_CONTINGENCY,
+    MEXP_OPN_FAMILY_MEXP_CLUSTER_DAVIES_BOULDIN,
+    MEXP_OPN_FAMILY_MEXP_CLUSTER_NMI,
+    MEXP_OPN_FAMILY_MEXP_CLUSTER_PAIR_CONFUSION,
+)
 from bindings.metrics_exp_cluster_run import nmi_finish, ami_finish, contingency_dtype_code
 from std.python import Python, PythonObject
 from bindings.admitted_family_door import admit_family
@@ -256,18 +264,18 @@ def _cluster_score(args: PythonObject, caller: String, db: Bool, context: Python
     return PythonObject(arena.f64(res))
 
 
-def metrics_exp_cluster_operation(operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def metrics_exp_cluster_operation(operation: Int, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """The clustering metrics (argument orders: see python/mojolearn/_expansion_metrics.py)."""
-    if operation == "family_mexp_cluster_contingency":
+    if operation == MEXP_OPN_FAMILY_MEXP_CLUSTER_CONTINGENCY:
         return _contingency_matrix(args, context)
-    if operation == "family_mexp_cluster_pair_confusion":
+    if operation == MEXP_OPN_FAMILY_MEXP_CLUSTER_PAIR_CONFUSION:
         return _pair_confusion(args, context)
-    if operation == "family_mexp_cluster_nmi":
+    if operation == MEXP_OPN_FAMILY_MEXP_CLUSTER_NMI:
         return _nmi(args, context)
-    if operation == "family_mexp_cluster_ami":
+    if operation == MEXP_OPN_FAMILY_MEXP_CLUSTER_AMI:
         return _ami(args, context)
-    if operation == "family_mexp_cluster_calinski_harabasz":
+    if operation == MEXP_OPN_FAMILY_MEXP_CLUSTER_CALINSKI_HARABASZ:
         return _cluster_score(args, "calinski_harabasz_score", False, context)
-    if operation == "family_mexp_cluster_davies_bouldin":
+    if operation == MEXP_OPN_FAMILY_MEXP_CLUSTER_DAVIES_BOULDIN:
         return _cluster_score(args, "davies_bouldin_score", True, context)
-    raise Error("RuntimeError: unknown clustering metric " + operation)
+    raise Error("RuntimeError: unknown clustering metric " + String(operation))

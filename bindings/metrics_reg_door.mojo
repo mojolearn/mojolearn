@@ -20,6 +20,7 @@
 # the custom weights read once), the typed program (`_Reg` in
 # bindings/metrics_reg_run.mojo, stage records through the typed op and term
 # tables), the run with y / p / w as the only pins, and PACK.
+from bindings.metrics_keys_unpack import metrics_keys
 from std.memory import unsafe_memcpy, bitcast
 from bindings.admitted_family_door import admit_family, admit_family_f64
 from bindings.native_loaded_module_door import native_loaded_module
@@ -57,6 +58,24 @@ from bindings.family_common_pack import (
 )
 from core.family_cast_impl import family_max_f32
 from core.host_finite_scan import host_all_finite_f32
+from bindings.operation_names_metric import (
+    METRIC_OPN_FAMILY_METRIC_D2_ABSOLUTE,
+    METRIC_OPN_FAMILY_METRIC_D2_PINBALL,
+    METRIC_OPN_FAMILY_METRIC_D2_TWEEDIE,
+    METRIC_OPN_FAMILY_METRIC_EXPLAINED_VARIANCE,
+    METRIC_OPN_FAMILY_METRIC_GAMMA,
+    METRIC_OPN_FAMILY_METRIC_MAPE,
+    METRIC_OPN_FAMILY_METRIC_MAX_ERROR,
+    METRIC_OPN_FAMILY_METRIC_MEDAE,
+    METRIC_OPN_FAMILY_METRIC_MSLE,
+    METRIC_OPN_FAMILY_METRIC_PINBALL,
+    METRIC_OPN_FAMILY_METRIC_POISSON,
+    METRIC_OPN_FAMILY_METRIC_R2_OPTIONS,
+    METRIC_OPN_FAMILY_METRIC_REGRESSION_ERROR,
+    METRIC_OPN_FAMILY_METRIC_REGRESSION_REPORT,
+    METRIC_OPN_FAMILY_METRIC_RMSLE,
+    METRIC_OPN_FAMILY_METRIC_TWEEDIE,
+)
 
 # TOMBSTONE: `_Prog` (the third copy of the metric program builder, with a per-program Python opcode
 # snapshot), the Python-holding `_Reg`, `_reg_run` and the `_arena_*` readers deleted 2026-11-12 by lane
@@ -424,25 +443,33 @@ def _regression_report(args: PythonObject, context: PythonObject) raises -> Pyth
     var r2 = r.assemble(numerator, denominator, Bool(py=args[4]), True)
     var arena = metric_plan_run(r.plan, pins, args[5], context)
     var result = Python.dict()
-    py_setitem(result, "mean_squared_error", _reg_result(r, mse, arena, context))
-    py_setitem(result, "mean_absolute_error", _reg_result(r, mae, arena, context))
+    var nk = metrics_keys()
+    py_setitem(result, nk[].k_mean_squared_error, _reg_result(r, mse, arena, context))
+    py_setitem(result, nk[].k_mean_absolute_error, _reg_result(r, mae, arena, context))
     if r.n < 2:
         _undefined("R^2 score is not well-defined with less than two samples.", context)
-        py_setitem(result, "r2_score", py_call(b.float, PythonObject("nan")))
+        py_setitem(result, nk[].k_r2_score, py_call(b.float, PythonObject("nan")))
     else:
-        py_setitem(result, "r2_score", _reg_result(r, r2, arena, context))
+        py_setitem(result, nk[].k_r2_score, _reg_result(r, r2, arena, context))
     return result
 
 
-def metrics_reg_operation(operation: String, var args: PythonObject, context: PythonObject) raises -> PythonObject:
+def metrics_reg_unknown_operation(operation: String) raises:
+    """A `family_metric_*` name the operation table does not hold (the shells
+    pass table names only): the text the chain raised for it."""
+    raise Error("RuntimeError: unknown regression metric " + operation)
+
+
+def metrics_reg_operation(operation: Int, var args: PythonObject, context: PythonObject) raises -> PythonObject:
     """The regression metrics; each shell passes its arguments in its
-    signature's order (see python/mojolearn/_expansion_metrics.py)."""
+    signature's order (see python/mojolearn/_expansion_metrics.py).
+    `operation` is the leaf code of bindings/operation_names_metric.mojo."""
     classical_connect_numpy(context)
     classical_admit_value(args, context)
     args = metric_arguments(args, 0, context)
-    if operation == "family_metric_regression_report":
+    if operation == METRIC_OPN_FAMILY_METRIC_REGRESSION_REPORT:
         return _regression_report(args, context)
-    if operation == "family_metric_regression_error":
+    if operation == METRIC_OPN_FAMILY_METRIC_REGRESSION_ERROR:
         # args = (name, y_true, y_pred, sample_weight, multioutput, mode):
         # mean_squared_error / mean_absolute_error / root_mean_squared_error
         # with weights, multioutput or 2-D targets.
@@ -455,36 +482,36 @@ def metrics_reg_operation(operation: String, var args: PythonObject, context: Py
         if name == "root_mean_squared_error":
             return _mean_error(rest, "sq", name, True, 0.0, "", context)
         raise Error("RuntimeError: unknown regression error metric " + family_repr(args[0]))
-    if operation == "family_metric_r2_options":
+    if operation == METRIC_OPN_FAMILY_METRIC_R2_OPTIONS:
         return _r2_options(args, context)
-    if operation == "family_metric_msle":
+    if operation == METRIC_OPN_FAMILY_METRIC_MSLE:
         return _mean_error(args, "sqlog", "mean_squared_log_error", False, 0.0, "Mean Squared Logarithmic Error", context)
-    if operation == "family_metric_rmsle":
+    if operation == METRIC_OPN_FAMILY_METRIC_RMSLE:
         return _mean_error(args, "sqlog", "root_mean_squared_log_error", True, 0.0, "Root Mean Squared Logarithmic Error", context)
-    if operation == "family_metric_mape":
+    if operation == METRIC_OPN_FAMILY_METRIC_MAPE:
         return _mean_error(args, "ape", "mean_absolute_percentage_error", False, 0.0, "", context)
-    if operation == "family_metric_pinball":
+    if operation == METRIC_OPN_FAMILY_METRIC_PINBALL:
         # args = (y_true, y_pred, sample_weight, multioutput, mode, alpha)
         var alpha = _check_alpha(args[5], context)
         return _mean_error(args, "pinball", "mean_pinball_loss", False, alpha, "", context)
-    if operation == "family_metric_medae":
+    if operation == METRIC_OPN_FAMILY_METRIC_MEDAE:
         return _median_absolute_error(args, context)
-    if operation == "family_metric_max_error":
+    if operation == METRIC_OPN_FAMILY_METRIC_MAX_ERROR:
         return _max_error(args, context)
-    if operation == "family_metric_explained_variance":
+    if operation == METRIC_OPN_FAMILY_METRIC_EXPLAINED_VARIANCE:
         return _explained_variance(args, context)
-    if operation == "family_metric_tweedie":
+    if operation == METRIC_OPN_FAMILY_METRIC_TWEEDIE:
         # args = (y_true, y_pred, sample_weight, mode, power)
         return _tweedie(args, args[4], "mean_tweedie_deviance", False, context)
-    if operation == "family_metric_poisson":
+    if operation == METRIC_OPN_FAMILY_METRIC_POISSON:
         return _tweedie(args, PythonObject(1), "mean_tweedie_deviance", False, context)
-    if operation == "family_metric_gamma":
+    if operation == METRIC_OPN_FAMILY_METRIC_GAMMA:
         return _tweedie(args, PythonObject(2), "mean_tweedie_deviance", False, context)
-    if operation == "family_metric_d2_tweedie":
+    if operation == METRIC_OPN_FAMILY_METRIC_D2_TWEEDIE:
         return _tweedie(args, args[4], "d2_tweedie_score", True, context)
-    if operation == "family_metric_d2_pinball":
+    if operation == METRIC_OPN_FAMILY_METRIC_D2_PINBALL:
         # args = (y_true, y_pred, sample_weight, multioutput, mode, alpha)
         return _d2_pinball(args, args[5], context)
-    if operation == "family_metric_d2_absolute":
+    if operation == METRIC_OPN_FAMILY_METRIC_D2_ABSOLUTE:
         return _d2_pinball(args, PythonObject(0.5), context)
-    raise Error("RuntimeError: unknown regression metric " + operation)
+    raise Error("RuntimeError: unknown regression metric " + String(operation))

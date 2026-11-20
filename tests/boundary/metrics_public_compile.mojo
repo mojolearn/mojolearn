@@ -6,7 +6,7 @@ from std.python.bindings import PythonModuleBuilder
 from bindings.metrics_cls_native_unpack import metrics_cls_operation
 
 def metrics_public_compile(model: PythonObject, operation: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    return metrics_cls_operation(model, String(operation), args, context)
+    return metrics_cls_operation(model, Int(py=operation), args, context)
 
 @export
 def PyInit__mojolearn_metrics_public_compile() abi("C") -> PythonObject:
