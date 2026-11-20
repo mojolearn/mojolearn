@@ -529,11 +529,17 @@ def ivf_pq_search_device(
     var dcb = upload_f32(ctx, codebooks)
     var dmask = upload_i32(ctx, mask)
     sst.mark(ctx, "upload")
+    if len(queries) < m * dim:
+        raise Error("x_ann search: the query list is shorter than m x dim")
     ivf_pq_search_on(
         ctx, _dp(dc), _dp(doff), _dp(dli), _dp(dcb), _dp(dcodes), _dp(dmask), offsets, n_lists, dim,
-        pq_dim, pq_bits, queries, m, k, n_probes, out_d, out_i, out_n,
+        pq_dim, pq_bits,
+        MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(queries.unsafe_ptr())),
+        m, k, n_probes, out_d, out_i, out_n,
         False, _dp(dcodes), _dp(dc), _dp(dc), False, status_addr,
     )
+    # the query list is named here, after the drains inside the call above
+    _ = len(queries)
     _ = dmask^
     _ = dcb^
     _ = dcodes^
@@ -546,7 +552,7 @@ def ivf_pq_search_device(
 def ivf_pq_search_on(
     ctx: DeviceContext, dc: F32P, doff: I32P, dli: I32P, dcb: F32P, dcodes: I32P, dmask: I32P,
     offsets: List[Int32], n_lists: Int, dim: Int, pq_dim: Int, pq_bits: Int,
-    queries: List[Float32], m: Int, k: Int, n_probes: Int,
+    qp: MutPointer[Float32, MutUntrackedOrigin], m: Int, k: Int, n_probes: Int,
     mut out_d: List[Float32], mut out_i: List[Int32], mut out_n: List[Int32],
     have_pre: Bool, pre_codes: I32P, pre_a: F32P, pre_b: F32P, mask_pre: Bool,
     status_addr: Int = 0,
@@ -558,7 +564,10 @@ def ivf_pq_search_on(
     the all-ones filter, which is its own list-order copy."""
     var pq_len = pq_len_of(dim, pq_dim)
     var n_codes = 1 << pq_bits
-    var dq = upload_f32(ctx, queries)
+    # The queries are read where the caller holds them (`qp`, m x dim words
+    # kept alive by the caller for the whole call; lane fx-board-1p2,
+    # 2026-11-20): the resident search copied them into a new list first.
+    var dq = upload_f32_ptr(ctx, qp, m * dim)
     # Lane a8b-device-x-neighbors-rest: the queries' finite status behind
     # their upload, read back by the downloads below (no new sync).
     var dst = enqueue_query_status(ctx, dq, m * dim, status_addr)
@@ -782,11 +791,17 @@ def ivf_sq_search_device(
     var ddelta = upload_f32(ctx, delta)
     var dmask = upload_i32(ctx, mask)
     sst.mark(ctx, "upload")
+    if len(queries) < m * dim:
+        raise Error("x_ann search: the query list is shorter than m x dim")
     ivf_sq_search_on(
         ctx, _dp(dc), _dp(doff), _dp(dli), _dp(dvmin), _dp(ddelta), _dp(dcodes), _dp(dmask), offsets,
-        n_lists, dim, queries, m, k, n_probes, out_d, out_i, out_n,
+        n_lists, dim,
+        MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(queries.unsafe_ptr())),
+        m, k, n_probes, out_d, out_i, out_n,
         False, _dp(dcodes), _dp(dc), _dp(dc), False, status_addr,
     )
+    # the query list is named here, after the drains inside the call above
+    _ = len(queries)
     _ = dmask^
     _ = ddelta^
     _ = dvmin^
@@ -800,13 +815,16 @@ def ivf_sq_search_device(
 def ivf_sq_search_on(
     ctx: DeviceContext, dc: F32P, doff: I32P, dli: I32P, dvmin: F32P, ddelta: F32P, dcodes: I32P,
     dmask: I32P, offsets: List[Int32], n_lists: Int, dim: Int,
-    queries: List[Float32], m: Int, k: Int, n_probes: Int,
+    qp: MutPointer[Float32, MutUntrackedOrigin], m: Int, k: Int, n_probes: Int,
     mut out_d: List[Float32], mut out_i: List[Int32], mut out_n: List[Int32],
     have_pre: Bool, pre_codes: I32P, pre_a: F32P, pre_b: F32P, mask_pre: Bool,
     status_addr: Int = 0,
 ) raises:
     """`ivf_pq_search_on`'s SQ twin: the index already on the device."""
-    var dq = upload_f32(ctx, queries)
+    # The queries are read where the caller holds them (`qp`, m x dim words
+    # kept alive by the caller for the whole call; lane fx-board-1p2,
+    # 2026-11-20): the resident search copied them into a new list first.
+    var dq = upload_f32_ptr(ctx, qp, m * dim)
     # Lane a8b-device-x-neighbors-rest: the queries' finite status behind
     # their upload, read back by the downloads below (no new sync).
     var dst = enqueue_query_status(ctx, dq, m * dim, status_addr)
@@ -973,11 +991,17 @@ def ivf_rabitq_search_device(
     var dip = upload_f32(ctx, ips)
     var dmask = upload_i32(ctx, mask)
     sst.mark(ctx, "upload")
+    if len(queries) < m * dim:
+        raise Error("x_ann search: the query list is shorter than m x dim")
     ivf_rabitq_search_on(
         ctx, _dp(dc), _dp(doff), _dp(dli), _dp(dcodes), _dp(dnorm), _dp(dip), _dp(dmask), offsets,
-        n_lists, dim, seed, queries, m, k, n_probes, out_d, out_i, out_n,
+        n_lists, dim, seed,
+        MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(queries.unsafe_ptr())),
+        m, k, n_probes, out_d, out_i, out_n,
         False, _dp(dcodes), _dp(dnorm), _dp(dip), False, status_addr,
     )
+    # the query list is named here, after the drains inside the call above
+    _ = len(queries)
     _ = dmask^
     _ = dip^
     _ = dnorm^
@@ -991,7 +1015,7 @@ def ivf_rabitq_search_device(
 def ivf_rabitq_search_on(
     ctx: DeviceContext, dc: F32P, doff: I32P, dli: I32P, dcodes: I32P, dnorm: F32P, dip: F32P,
     dmask: I32P, offsets: List[Int32], n_lists: Int, dim: Int, seed: Int,
-    queries: List[Float32], m: Int, k: Int, n_probes: Int,
+    qp: MutPointer[Float32, MutUntrackedOrigin], m: Int, k: Int, n_probes: Int,
     mut out_d: List[Float32], mut out_i: List[Int32], mut out_n: List[Int32],
     have_pre: Bool, pre_codes: I32P, pre_a: F32P, pre_b: F32P, mask_pre: Bool,
     status_addr: Int = 0,
@@ -1000,7 +1024,10 @@ def ivf_rabitq_search_on(
     var D = rq_pow2(dim)
     var words = (D + 31) // 32
     var scale = rq_scale(D)
-    var dq = upload_f32(ctx, queries)
+    # The queries are read where the caller holds them (`qp`, m x dim words
+    # kept alive by the caller for the whole call; lane fx-board-1p2,
+    # 2026-11-20): the resident search copied them into a new list first.
+    var dq = upload_f32_ptr(ctx, qp, m * dim)
     # Lane a8b-device-x-neighbors-rest: the queries' finite status behind
     # their upload, read back by the downloads below (no new sync).
     var dst = enqueue_query_status(ctx, dq, m * dim, status_addr)
