@@ -14,6 +14,8 @@ from bindings.py_provider_pins import ProviderPins, provider_word
 from bindings.py_balanced import py_call, py_type, py_get
 from bindings.native_class_admission_door import dict_keys_admitted, dict_keys_admit
 from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
+from bindings.tsvd_keys_unpack import tsvd_keys
+from bindings.py_balanced import py_item
 
 
 comptime TSVD_PROVIDER_PINS = SharedSlot[ProviderPins, "MojolearnTSVDProviderPinsV1"]
@@ -50,8 +52,9 @@ def tsvd_connect(factory: PythonObject, mode: Int, vendor: String) raises -> Int
 
 
 def tsvd_connection(mode: String, context: PythonObject) raises -> Int:
+    var nk = tsvd_keys()
     return tsvd_connect(tsvd_factory(context, "tsvd_bindings", mode),
-        1 if mode == "identical" else 0, String(context["vendor"]))
+        1 if mode == "identical" else 0, String(py_item(context, nk[].k_vendor)))
 
 
 def tsvd_provider(connection: Int) raises -> PythonObject:

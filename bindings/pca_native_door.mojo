@@ -18,9 +18,17 @@ from bindings.pca_fit_native_door import pca_fit_operation
 from bindings.pca_query_native_unpack import pca_query_operation
 from x_decomp.pca_descriptor_boundary_run import pca_mode, pca_vendor
 from bindings.pca_archive_pack import pca_archive_save, pca_archive_load
+from bindings.pca_keys_unpack import (
+    pca_keys, PCA_OPN_LOAD, PCA_OPN_TRANSFORM, PCA_OPN_INVERSE_TRANSFORM, PCA_OPN_FIT, PCA_OPN_FIT_TRANSFORM,
+    PCA_OPN_SAVE, PCA_OPN_INITIALIZE, PCA_OPN_GET_PARAMS, PCA_OPN_SET_PARAMS, PCA_OPN_IS_FITTED,
+    PCA_OPN_NUMERIC_MODE_USED, PCA_OPN_VENDOR_USED,
+)
+from bindings.py_keys import py_op_code
+from bindings.py_balanced import py_item
 
 
 def _pca_admitted(b: PythonObject, model: PythonObject, loading: Bool, context: PythonObject) raises -> Bool:
+    var nk = pca_keys()
     # PCA itself or an ordinary subclass of it (HostPCA, a user's class):
     # the class's MRO, read through type's own descriptor, holds PCA.
     # `b` is the builtins module the entry already admitted this call (one
@@ -28,7 +36,7 @@ def _pca_admitted(b: PythonObject, model: PythonObject, loading: Bool, context: 
     var cls = model if loading else py_type(model)
     if py_type(cls) is not b.type:
         return False
-    var target = context["pca_class"]
+    var target = py_item(context, nk[].k_pca_class)
     if py_type(target) is not b.type:
         return False
     # CPython's own subtype test walks the same tp_mro by identity in one
@@ -47,12 +55,13 @@ def pca_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
         var b = native_loaded_module("builtins")
         if py_type(call[1]) is not b.str or py_type(call[2]) is not b.tuple:
             raise Error("TypeError: native PCA operation and argument tuple are required")
-        var operation = String(call[1])
+        var nk = pca_keys()
+        var operation = py_op_code(nk[].ops, call[1])
         var args = call[2]
         var context = call[3]
         if py_type(context) is not b.dict:
             raise Error("TypeError: native PCA requires connected context")
-        var loading = operation == "load"
+        var loading = operation == PCA_OPN_LOAD
         if not _pca_admitted(b, model, loading, context):
             raise Error("TypeError: the native PCA owner requires a PCA instance")
         classical_connect_numpy(context)
@@ -61,38 +70,38 @@ def pca_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
             _ = pca_dictionary(context)
             result = pca_archive_load(model, args[0], context)
             return result.steal_data()
-        if operation == "transform" or operation == "inverse_transform":
+        if operation == PCA_OPN_TRANSFORM or operation == PCA_OPN_INVERSE_TRANSFORM:
             # The query's native PCA provider owns sparse/pandas/Torch and
             # ordinary buffer admission. Sequential's narrower generic
             # admission must not preempt those supported native paths.
-            result = pca_query_operation(model, args[0], operation == "inverse_transform", context)
+            result = pca_query_operation(model, args[0], operation == PCA_OPN_INVERSE_TRANSFORM, context)
             return result.steal_data()
-        if operation == "fit" or operation == "fit_transform":
-            result = pca_fit_operation(model, args, operation == "fit_transform", context)
+        if operation == PCA_OPN_FIT or operation == PCA_OPN_FIT_TRANSFORM:
+            result = pca_fit_operation(model, args, operation == PCA_OPN_FIT_TRANSFORM, context)
             return result.steal_data()
         # Archive paths use the strict shared native path/file admission;
         # other legacy operations retain their existing generic admission.
-        if operation != "save":
+        if operation != PCA_OPN_SAVE:
             sequential_admit_value(args, context)
         var fields = pca_fields(model, context)
-        if operation == "initialize":
+        if operation == PCA_OPN_INITIALIZE:
             result = pca_initialize(model, args)
-        elif operation == "get_params":
+        elif operation == PCA_OPN_GET_PARAMS:
             result = pca_get_params(model, context)
-        elif operation == "set_params":
+        elif operation == PCA_OPN_SET_PARAMS:
             result = pca_set_params(model, args[0], context)
-        elif operation == "is_fitted":
+        elif operation == PCA_OPN_IS_FITTED:
             result = classical_is_fitted(model)
-        elif operation == "save":
+        elif operation == PCA_OPN_SAVE:
             result = pca_archive_save(model, args[0], context)
         else:
-            if py_get(context, "ndarray") is None:
+            if py_get(context, nk[].k_ndarray) is None:
                 raise Error("ImportError: mojolearn: PCA requires optional NumPy support. Install it with: "
                             + 'python -m pip install "mojolearn[numpy]" ("mojolearn[verify]" also includes NumPy).')
             var entries = pca_entries(fields, context)
-            if operation == "numeric_mode_used":
+            if operation == PCA_OPN_NUMERIC_MODE_USED:
                 result = PythonObject("identical" if pca_mode(entries) == 1 else "fast")
-            elif operation == "vendor_used":
+            elif operation == PCA_OPN_VENDOR_USED:
                 result = PythonObject(pca_vendor(entries))
             else:
                 raise Error("unknown private PCA operation")

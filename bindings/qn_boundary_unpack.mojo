@@ -20,16 +20,19 @@ from glm.qn_door_run import (
     QnDoorFitRequest, QnDoorFitResult, QnDoorPredictRequest,
     qn_check_lengths, qn_check_features, qn_check_coefficients, qn_change_tolerance,
 )
+from bindings.qn_keys_unpack import qn_keys
+from bindings.py_balanced import py_item
 
 
 def _qn_key(fields: PythonObject, context: PythonObject) raises -> EstimatorsEntryKey:
+    var nk = qn_keys()
     # The estimator's numeric mode (None: the process mode) and the native
     # QN table key of its connected estimators image (the bridge records
     # it at import), checked against the selected vendor and mode.
     var b = native_loaded_module("builtins")
-    var mode = py_get(fields, "numeric_mode")
+    var mode = py_get(fields, nk[].k_numeric_mode)
     if mode is None:
-        mode = context["backend_fields"]["_DEFAULT_MODE"]
+        mode = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
     if py_type(mode) is not b.str:
         raise Error("numeric_mode must be fast, identical or None")
     # ASCII strip/lower natively; other spellings take Python's Unicode-aware
@@ -40,15 +43,15 @@ def _qn_key(fields: PythonObject, context: PythonObject) raises -> EstimatorsEnt
     if mode_name != "identical" and mode_name != "fast":
         raise Error("numeric_mode must be fast, identical or None")
     answer_mode_word(mode_name, MODE_FAMILY_LINEAR)
-    var entries = context["qn_bindings"][PythonObject(mode_name)]
+    var entries = py_item(context, nk[].k_qn_bindings)[PythonObject(mode_name)]
     if py_type(entries) is b.str:
         raise Error("ImportError: " + String(entries))
     # The image's compiled tier and vendor were read once at import; these
     # compares replace the per-call Python probes (`estimators_vendor`,
     # `estimators_numeric_mode`) and their per-table verdict cache.
-    var native = entries["native_key"]
+    var native = py_item(entries, nk[].k_native_key)
     var key = EstimatorsEntryKey(Int(py=native[0]), Int(py=native[1]))
-    if key.vendor != estimators_vendor_word(String(context["vendor"])):
+    if key.vendor != estimators_vendor_word(String(py_item(context, nk[].k_vendor))):
         raise Error("RuntimeError: QN native vendor differs from selected execution")
     if key.mode != (1 if mode_name == "identical" else 0):
         raise Error("RuntimeError: QN native mode differs from selected execution")
@@ -97,6 +100,7 @@ struct QnFitUnpacked(Movable):
 
 
 def qn_fit_unpack(model: PythonObject, args: PythonObject, context: PythonObject) raises -> QnFitUnpacked:
+    var nk = qn_keys()
     var fields = py_fields(model)
     var key = _qn_key(fields, context)
     # Lane a7c: the finite test of a borrowed X is the QN fit entry's
@@ -106,7 +110,7 @@ def qn_fit_unpack(model: PythonObject, args: PythonObject, context: PythonObject
     # base binding's resident-fold QN entry (core/estimators_entry_table.mojo
     # ESTIMATORS_TABLE_QN_FOLD) on rows gathered on the device out of model
     # selection's resident base (no host gather, no upload of X).
-    var fold_key = py_get(context, "qn_fold_key")
+    var fold_key = py_get(context, nk[].k_qn_fold_key)
     var use_fold = False
     var store = QnFoldStore()
     var x = PythonObject(None)
@@ -131,17 +135,17 @@ def qn_fit_unpack(model: PythonObject, args: PythonObject, context: PythonObject
     var target = admit_x(view, 1, "y", context)
     qn_check_lengths(rows, Int(py=target.shape[0]))
     var weights = classical_check_weights_input(args[2], rows, context)
-    var tol = _float(fields["tol"])
-    var delta = fields["delta"]
+    var tol = _float(py_item(fields, nk[].k_tol))
+    var delta = py_item(fields, nk[].k_delta)
     var delta_value = Optional[Float64](None)
     if delta is not None:
         delta_value = _float(delta)
     var change_tol = qn_change_tolerance(delta_value, tol)
-    var loss = py_get(context["qn_losses"], fields["loss"])
+    var loss = py_get(py_item(context, nk[].k_qn_losses), py_item(fields, nk[].k_loss))
     if loss is None:
-        raise Error("mojolearn QNRegressor: unknown loss " + String(py_call(native_loaded_module("builtins").repr, fields["loss"])))
-    var intercept = Bool(py=fields["fit_intercept"])
-    var output = context["output_context"]
+        raise Error("mojolearn QNRegressor: unknown loss " + String(py_call(native_loaded_module("builtins").repr, py_item(fields, nk[].k_loss))))
+    var intercept = Bool(py=py_item(fields, nk[].k_fit_intercept))
+    var output = py_item(context, nk[].k_output_context)
     var w = classical_typed(Python.tuple(cols + (1 if intercept else 0)), "<f4", output)
     var info = classical_typed(Python.tuple(2), "<f4", output)
     var status = admitted_vector(1, "<i4", output)
@@ -153,9 +157,9 @@ def qn_fit_unpack(model: PythonObject, args: PythonObject, context: PythonObject
     # the weights' address or 0, then the status word).
     var request = QnFitRequest(0 if use_fold else _addr(x), _addr(target), _addr(w), _addr(info),
         _addr(weights) if weights is not None else 0, 0 if use_fold else status_addr, rows, cols, 1,
-        _int(fields["max_iter"]), _int(fields["linesearch_max_iter"]), _int(fields["lbfgs_memory"]), intercept,
-        Bool(py=fields["penalty_normalized"]), _int(loss), _float(fields["l1_strength"]),
-        _float(fields["l2_strength"]), tol, change_tol, 0.0)
+        _int(py_item(fields, nk[].k_max_iter)), _int(py_item(fields, nk[].k_linesearch_max_iter)), _int(py_item(fields, nk[].k_lbfgs_memory)), intercept,
+        Bool(py=py_item(fields, nk[].k_penalty_normalized)), _int(loss), _float(py_item(fields, nk[].k_l1_strength)),
+        _float(py_item(fields, nk[].k_l2_strength)), tol, change_tol, 0.0)
     var fold = EstimatorsEntryKey(Int(py=fold_key[0]), Int(py=fold_key[1])) if use_fold else key.copy()
     var copied = not (x is args[0])
     var run = QnDoorFitRequest(key^, fold^, use_fold, store^, request^, status_addr, _addr(coef), _addr(iterations))
@@ -179,19 +183,20 @@ struct QnPredictUnpacked(Movable):
 
 
 def qn_predict_unpack(model: PythonObject, source: PythonObject, context: PythonObject) raises -> QnPredictUnpacked:
+    var nk = qn_keys()
     var fields = py_fields(model)
-    if not py_contains(fields, "_w"):
+    if not py_contains(fields, nk[].k__w):
         raise Error("mojolearn QNRegressor: call fit before predict")
     var key = _qn_key(fields, context)
     var x = admit_x(source, 2, "X", context)
     var rows = Int(py=x.shape[0])
     var cols = Int(py=x.shape[1])
-    qn_check_features(cols, Int(py=fields["n_features_in_"]))
-    var weights = classical_view(fields["_w"], context, "fitted coefficients")
-    var intercept = Bool(py=fields["fit_intercept"])
+    qn_check_features(cols, Int(py=py_item(fields, nk[].k_n_features_in_)))
+    var weights = classical_view(py_item(fields, nk[].k__w), context, "fitted coefficients")
+    var intercept = Bool(py=py_item(fields, nk[].k_fit_intercept))
     qn_check_coefficients(classical_dtype_str(weights, context) == "<f4" and classical_c_order(weights, context),
                           Int(py=weights.size), cols, intercept)
-    var result = classical_typed(Python.tuple(rows), "<f4", context["output_context"])
+    var result = classical_typed(Python.tuple(rows), "<f4", py_item(context, nk[].k_output_context))
     # The qn_decision_function request: one target, no status word (X was
     # tested by admit_x), through the native estimators QN table.
     var request = QnQueryRequest(_addr(x), _addr(weights), _addr(result), 0, rows, cols, 1, intercept, False)

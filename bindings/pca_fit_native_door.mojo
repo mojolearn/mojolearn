@@ -20,6 +20,8 @@ from bindings.device_rows_door import door_rows_refuse, door_is_device_rows
 from providers.python.pca_fit_scalar_pyapi_unpack import PCAFitScalar, pca_fit_scalar_capture
 from providers.python.pca_fit_model_pyapi_unpack import pca_fit_entries, pca_fit_host_only, pca_fit_preflight
 from providers.python.pca_fit_model_pyapi_pack import pca_fit_fields
+from bindings.pca_keys_unpack import pca_keys
+from bindings.py_balanced import py_item
 
 
 struct PCAFitOutput(Copyable, Movable):
@@ -27,7 +29,8 @@ struct PCAFitOutput(Copyable, Movable):
     var address: Int
 
     def __init__(out self, rows: Int, cols: Int, context: PythonObject) raises:
-        self.keep = sequential_array(Python.tuple(rows, cols) if cols else Python.tuple(rows), context["float32"], context)
+        var nk = pca_keys()
+        self.keep = sequential_array(Python.tuple(rows, cols) if cols else Python.tuple(rows), py_item(context, nk[].k_float32), context)
         self.address = Int(py=sequential_address(self.keep))
 
     def prefix(self, rows: Int, cols: Int, context: PythonObject) raises -> Self:
@@ -41,6 +44,7 @@ struct PCAFitOutput(Copyable, Movable):
 
 def pca_fit_operation(model: PythonObject, args: PythonObject, project: Bool,
                        context: PythonObject) raises -> PythonObject:
+    var nk = pca_keys()
     var state = classical_family_admit(model)
     if len(args) != 2:
         raise Error("TypeError: native PCA fitting requires X and ignored y")
@@ -48,7 +52,7 @@ def pca_fit_operation(model: PythonObject, args: PythonObject, project: Bool,
     # PCA's dedicated sparse/pandas/Torch/buffer provider, not the narrower
     # sequential-value admission that formerly preempted its supported paths.
     sequential_admit_value(args[1], context)
-    if py_get(context, "ndarray") is None:
+    if py_get(context, nk[].k_ndarray) is None:
         raise Error("ImportError: mojolearn: PCA requires optional NumPy support. Install it with: "
                     + 'python -m pip install "mojolearn[numpy]" ("mojolearn[verify]" also includes NumPy).')
     var operation = String("fit_transform") if project else String("fit")
@@ -66,12 +70,12 @@ def pca_fit_operation(model: PythonObject, args: PythonObject, project: Bool,
     # Freeze mutable scalar storage before Torch/native input preparation
     # can release the GIL. Conversion/errors stay at their prior stages.
     var settings = List[PCAFitScalar]()
-    var count_setting = pca_fit_scalar_capture(fields["n_components"], settings, context)
+    var count_setting = pca_fit_scalar_capture(py_item(fields, nk[].k_n_components), settings, context)
     var extra_setting = -1
     var power_setting = -1
     if solver == "randomized":
-        extra_setting = pca_fit_scalar_capture(fields["n_oversamples"], settings, context)
-        power_setting = pca_fit_scalar_capture(fields["iterated_power"], settings, context)
+        extra_setting = pca_fit_scalar_capture(py_item(fields, nk[].k_n_oversamples), settings, context)
+        power_setting = pca_fit_scalar_capture(py_item(fields, nk[].k_iterated_power), settings, context)
     var source = args[0]
     # The one admission path: borrowed when X already is C float32, else one
     # parallel cast into uninitialised storage (scikit-learn wording, est PCA).
@@ -100,7 +104,7 @@ def pca_fit_operation(model: PythonObject, args: PythonObject, project: Bool,
     # The former pca_copied reports native C-f32 ndarray/Array/buffer inputs
     # as uncopied; sequences, sparse, pandas and Torch are materialized. The
     # conversion bit is captured by the same descriptor used for execution.
-    var direct = source_type is context["ndarray"] or source_type is context["array_class"] or source_type is b.memoryview or source_type is context["array_type"] or source_type is b.bytearray
+    var direct = source_type is py_item(context, nk[].k_ndarray) or source_type is py_item(context, nk[].k_array_class) or source_type is b.memoryview or source_type is py_item(context, nk[].k_array_type) or source_type is b.bytearray
     var copied = not direct or not x.borrowed
     var randomized = solver == "randomized"
     var dense = solver == "full" and cols >= 2
@@ -114,7 +118,7 @@ def pca_fit_operation(model: PythonObject, args: PythonObject, project: Bool,
                     + "features and got " + String(rows) + " x " + String(cols) + ". The dense route is an R-SVD, "
                     + "which needs a tall matrix; svd_solver='covariance_eigh' handles this shape "
                     + "(decomposition/NOT_IMPLEMENTED.tsv, DEVIATION 593)")
-    var requested = fields["n_components"]
+    var requested = py_item(fields, nk[].k_n_components)
     var keep_mode = 0
     var fraction = Float64(0)
     var count = min(rows, cols)
@@ -122,7 +126,7 @@ def pca_fit_operation(model: PythonObject, args: PythonObject, project: Bool,
         if rows < cols:
             raise Error("n_components='mle' is only supported if n_samples >= n_features")
         keep_mode = 2
-    elif not randomized and (py_type(requested) is b.float or py_type(requested) is context["float64"].type):
+    elif not randomized and (py_type(requested) is b.float or py_type(requested) is py_item(context, nk[].k_float64).type):
         requested = settings[count_setting].convert(operation, context, False)
         fraction = Float64(py=requested)
         if not (fraction > 0 and fraction < 1):
@@ -143,17 +147,17 @@ def pca_fit_operation(model: PythonObject, args: PythonObject, project: Bool,
     var auto = False
     var seed = 0
     if randomized:
-        var normalizer = fields["power_iteration_normalizer"]
+        var normalizer = py_item(fields, nk[].k_power_iteration_normalizer)
         if py_type(normalizer) is not b.str or (String(normalizer) != "auto" and String(normalizer) != "QR" and String(normalizer) != "LU" and String(normalizer) != "none"):
             raise Error("power_iteration_normalizer must be 'auto', 'QR', 'LU' or 'none'")
-        var seed_value = fields["random_state"]
+        var seed_value = py_item(fields, nk[].k_random_state)
         if seed_value is not None and py_type(seed_value) is not b.int:
             raise Error("TypeError: random_state must be None or an int (the counter-based RNG takes an integer seed)")
         var extra = settings[extra_setting].convert(operation, context, True)
         oversamples = Int(py=extra)
         if oversamples < 0:
             raise Error("n_oversamples must be nonnegative")
-        var power = fields["iterated_power"]
+        var power = py_item(fields, nk[].k_iterated_power)
         auto = py_type(power) is b.str and String(power) == "auto"
         if not auto:
             power = settings[power_setting].convert(operation, context, True)
@@ -163,7 +167,7 @@ def pca_fit_operation(model: PythonObject, args: PythonObject, project: Bool,
                         + "pca_fit_randomized; rebuild it with bindings/build_estimators.sh")
         # Exact immutable native integer, frozen before any input/reader work.
         if seed_value is not None:
-            seed = Int(py=py_call(b.int.__dict__["__and__"], seed_value, PythonObject(0xFFFFFFFF)))
+            seed = Int(py=py_call(py_item(b.int.__dict__, nk[].k___and__), seed_value, PythonObject(0xFFFFFFFF)))
     elif (capabilities & PCA_CAP_EXACT) == 0:
         raise Error("NotImplementedError: mojolearn PCA: this build of _mojolearn_estimators does not export "
                     + "pca_fit_owned; rebuild it with bindings/build_estimators.sh")
@@ -177,7 +181,7 @@ def pca_fit_operation(model: PythonObject, args: PythonObject, project: Bool,
     var projection = PythonObject(None)
     var projection_address = 0
     if project:
-        projection = sequential_array(Python.tuple(rows, count), context["float32"], context)
+        projection = sequential_array(Python.tuple(rows, count), py_item(context, nk[].k_float32), context)
         projection_address = Int(py=sequential_address(projection))
     var fold = PCAFoldStore()
     if on_device:
@@ -207,7 +211,7 @@ def pca_fit_operation(model: PythonObject, args: PythonObject, project: Bool,
         if project:
             # Preserve the exact solver's packed-prefix copy, including a
             # matrix result when MLE selects an empty component axis.
-            var cropped = sequential_array(Python.tuple(rows, keep), context["float32"], context)
+            var cropped = sequential_array(Python.tuple(rows, keep), py_item(context, nk[].k_float32), context)
             var cropped_address = Int(py=sequential_address(cropped))
             if keep > 0:
                 unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=cropped_address),
@@ -217,17 +221,17 @@ def pca_fit_operation(model: PythonObject, args: PythonObject, project: Bool,
             projection = cropped
     # Publish only after the solver and all finished-output allocations pass.
     # Writes target the admitted original dict; no live settings are reread.
-    py_setitem(state, "input_copied_", copied)
-    py_setitem(state, "components_", components.keep)
-    py_setitem(state, "mean_", mean.keep)
-    py_setitem(state, "explained_variance_", variance.keep)
-    py_setitem(state, "explained_variance_ratio_", ratio.keep)
-    py_setitem(state, "singular_values_", singular.keep)
-    py_setitem(state, "noise_variance_", PythonObject(fitted.noise))
-    py_setitem(state, "n_components_", keep)
-    py_setitem(state, "n_features_in_", cols)
-    py_setitem(state, "n_samples_", rows)
-    py_setitem(state, "_mojolearn_fitted", True)
+    py_setitem(state, nk[].k_input_copied_, copied)
+    py_setitem(state, nk[].k_components_, components.keep)
+    py_setitem(state, nk[].k_mean_, mean.keep)
+    py_setitem(state, nk[].k_explained_variance_, variance.keep)
+    py_setitem(state, nk[].k_explained_variance_ratio_, ratio.keep)
+    py_setitem(state, nk[].k_singular_values_, singular.keep)
+    py_setitem(state, nk[].k_noise_variance_, PythonObject(fitted.noise))
+    py_setitem(state, nk[].k_n_components_, keep)
+    py_setitem(state, nk[].k_n_features_in_, cols)
+    py_setitem(state, nk[].k_n_samples_, rows)
+    py_setitem(state, nk[].k__mojolearn_fitted, True)
     _ = settings^
     _ = fields^
     _ = x^
