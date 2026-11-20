@@ -12,11 +12,7 @@ from sequence.ops import FP
 from checks.numerics import ftz, identical_div, identical_mul
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
-from training.chunked_lm_head_v2 import (
-    LM_HEAD_V2_LOSS_LEAF,
-    chunked_lm_head_v2_row_body, chunked_lm_head_v2_dhidden_body, chunked_lm_head_v2_dweight_body,
-)
-from training.chunked_lm_head_panel_math import LMHEAD_FAST_GEMM_PANEL
+from training.chunked_lm_head_v2 import LM_HEAD_V2_LOSS_LEAF
 from training.chunked_lm_head_gemm_panel_host import lmhead_gp_host_forward_into, lmhead_gp_host_backward_into
 
 comptime _F = MutPointer[Float32, MutAnyOrigin]
@@ -61,7 +57,7 @@ def _host_loss_total(loss: _F, row_loss: _F, rows: Int):
     loss.unsafe_store(0, ftz(identical_div(ftz(level[0]), Float32(rows))))
 
 
-# The GEMM-panel profile (default since 2026-11-19; -D MOJOLEARN_LMHEAD_FAST_GEMM_PANEL_OFF: the scalar one): the op's host
+# The GEMM-panel profile (the only profile since 2026-11-20): the op's host
 # arm runs the host column of the public door's arm
 # (training/chunked_lm_head_gemm_panel_host.mojo), the words the device op
 # computes under the same define (autograd/lm_head_v2_op.mojo). The op's own
@@ -123,27 +119,7 @@ def lm_head_v2_forward_host(
     maxima: FP, denom: FP, row_loss: FP, loss: FP, rows: Int, vocab: Int, width: Int,
 ) raises:
     """The device forward's words on the host, rows split across cores."""
-    comptime if LMHEAD_FAST_GEMM_PANEL:
-        _forward_gp_host(hidden, weight, codes, targets, maxima, denom, row_loss, loss, rows, vocab, width)
-        return
-    var h = _fp(hidden)
-    var w = _fp(weight)
-    var c = _fp(codes)
-    var t = _ip(targets)
-    var mx = _fp(maxima)
-    var dn = _fp(denom)
-    var rl = _fp(row_loss)
-    var tasks = host_predict_task_count_work(rows, rows * vocab * width)
-    var chunk = host_predict_chunk(rows, tasks)
-
-    def _rows(k: Int) {imm h, imm w, imm c, imm t, imm mx, imm dn, imm rl, imm chunk, imm rows, imm vocab, imm width}:
-        var lo = k * chunk
-        for row in range(lo, min(lo + chunk, rows)):
-            t.unsafe_store(row, c.unsafe_load(row).cast[DType.int32]())
-            chunked_lm_head_v2_row_body(row, mx, dn, rl, h, w, t, vocab, width)
-
-    host_parallelize(_rows, tasks)
-    _host_loss_total(_fp(loss), rl, rows)
+    _forward_gp_host(hidden, weight, codes, targets, maxima, denom, row_loss, loss, rows, vocab, width)
 
 
 def lm_head_v2_backward_host(
@@ -152,43 +128,7 @@ def lm_head_v2_backward_host(
 ) raises:
     """The device VJP's words on the host: row owners, then vocabulary
     owners, each split across cores; then the upstream factor."""
-    comptime if LMHEAD_FAST_GEMM_PANEL:
-        _backward_gp_host(d_hidden, d_weight, hidden, weight, targets, maxima, denom, upstream, rows, vocab, width)
-        return
-    var h = _fp(hidden)
-    var w = _fp(weight)
-    var t = _ip(targets)
-    var mx = _fp(maxima)
-    var dn = _fp(denom)
-    var up = _fp(upstream).unsafe_load(0)
-    if Int(d_hidden) != 0:
-        var dh = _fp(d_hidden)
-        var tasks = host_predict_task_count_work(rows, rows * vocab * width)
-        var chunk = host_predict_chunk(rows, tasks)
-
-        def _rows(k: Int) {imm dh, imm h, imm w, imm t, imm mx, imm dn, imm up, imm chunk, imm rows, imm vocab, imm width}:
-            var lo = k * chunk
-            for row in range(lo, min(lo + chunk, rows)):
-                chunked_lm_head_v2_dhidden_body(row, dh, h, w, t, mx, dn, rows, vocab, width)
-                for f in range(width):
-                    var cell = row * width + f
-                    dh.unsafe_store(cell, ftz(identical_mul(dh.unsafe_load(cell), up)))
-
-        host_parallelize(_rows, tasks)
-    if Int(d_weight) != 0:
-        var dw = _fp(d_weight)
-        var vtasks = host_predict_task_count_work(vocab, rows * vocab * width)
-        var vchunk = host_predict_chunk(vocab, vtasks)
-
-        def _tokens(k: Int) {imm dw, imm h, imm w, imm t, imm mx, imm dn, imm up, imm vchunk, imm rows, imm vocab, imm width}:
-            var lo = k * vchunk
-            for token in range(lo, min(lo + vchunk, vocab)):
-                chunked_lm_head_v2_dweight_body(token, dw, h, w, t, mx, dn, rows, width)
-                for f in range(width):
-                    var cell = token * width + f
-                    dw.unsafe_store(cell, ftz(identical_mul(dw.unsafe_load(cell), up)))
-
-        host_parallelize(_tokens, vtasks)
+    _backward_gp_host(d_hidden, d_weight, hidden, weight, targets, maxima, denom, upstream, rows, vocab, width)
 
 
 def lm_head_v2_host_run(backward: Bool, bufs: List[FP], rows: Int, vocab: Int, width: Int) raises:

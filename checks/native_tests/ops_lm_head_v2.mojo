@@ -21,11 +21,9 @@ word and every dHidden and dWeight word with the oracle's:
     of the same row: the row loss is `-(0 - log(denominator))`, the op's own
     rule. A recording and an inference session must give that word.
 
-The oracle follows the profile switch (`LMHEAD_FAST_GEMM_PANEL`, the default
-since 2026-11-19): the op, its host arm and the oracle all run the GEMM-panel
-fold, so the same check decides it. The scalar serial profile is the other
-arm (pixi tasks check-ops-lm-head-v2-scalar and check-ops-lm-head-v2-scalar-cpu
-build it with `-D MOJOLEARN_LMHEAD_FAST_GEMM_PANEL_OFF=1`).
+The op, its host arm and the oracle all run the GEMM-panel fold (the only
+profile since 2026-11-20; the scalar serial profile is deleted), so the same
+check decides it.
 
 What a sabotage of the kernels changes here: a vocabulary or row fold out of
 ascending order (cases 0 and 1: dHidden, dWeight or the denominator move), a

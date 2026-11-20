@@ -8,7 +8,7 @@ executor op with its backward rule (lane m2-neural-leftovers, 2026-11-09).
 is the mean next-token cross-entropy of `hidden @ weight^T` against the class
 codes, computed without the (rows, vocab) logits: per row, the maximum, the
 denominator and the row loss over vocabulary panels
-(training/chunked_lm_head_v2.mojo `chunked_lm_head_v2_row_body`), then the
+(training/chunked_lm_head_v2.mojo `chunked_lm_head_gp_forward_into`), then the
 fixed leaf-and-tree mean of the row losses. The recorded op is one tape
 custom node (`LM_HEAD_V2_TAG`) over [hidden, weight]; its VJP
 (`lm_head_v2_backward`, reached through autograd/rules_step_ops.mojo
@@ -19,8 +19,8 @@ the int32 codes, no logits.
 
 One algorithm on every column: the device kernels here and the host arm
 (autograd/lm_head_v2_host.mojo, reached through `Exec.lm_head_v2_host`, so no
-GPU module imports it) call the same @always_inline bodies (`chunked_lm_head_v2_row_body`,
-`chunked_lm_head_v2_dhidden_body`, `chunked_lm_head_v2_dweight_body`); the
+GPU module imports it) call the same @always_inline bodies
+(training/chunked_lm_head_panel_math.mojo); the
 host arm splits rows (and vocabulary entries) across cores, the fold inside
 each owner is unchanged. The codes are class indices as float values (the
 cross-entropy op's convention); a code that names no vocabulary entry (the
@@ -34,11 +34,10 @@ from checks.numerics import ftz, identical_div, identical_mul
 from autograd.block_step_ops import block_buffer_view
 from training.chunked_lm_head_v2 import (
     LM_HEAD_V2_TPB,
-    chunked_lm_head_v2_rows_kernel, chunked_lm_head_v2_dhidden_kernel, chunked_lm_head_v2_dweight_kernel,
     _enqueue_loss_total,
     chunked_lm_head_gp_forward_into, chunked_lm_head_gp_backward_into, chunked_lm_head_gp_workspace_floats,
 )
-from training.chunked_lm_head_panel_math import LMHEAD_FAST_GEMM_PANEL, lmhead_gp_leaf_count, lmhead_gp_stack_slots
+from training.chunked_lm_head_panel_math import lmhead_gp_leaf_count, lmhead_gp_stack_slots
 from training.chunked_lm_head_profile import LM_HEAD_V2_CHUNK
 
 #: The session op code (autograd/ops_api.mojo) and the tape custom tag.
@@ -68,21 +67,12 @@ def lm_head_v2_check(rows: Int, vocab: Int, width: Int) raises:
         raise Error("ValueError: ops: lm_head_v2 needs rows >= 1, vocab >= 2 and width >= 1")
     if rows > 2147483647 // width or vocab > 2147483647 // width:
         raise Error("ValueError: ops: lm_head_v2 exceeds signed 32-bit kernel indexing")
-    comptime if LMHEAD_FAST_GEMM_PANEL:
-        # the arm's kernels also index a logit panel and the denominator leaves
-        if rows > 2147483647 // min(vocab, LM_HEAD_V2_CHUNK) or rows > 2147483647 // lmhead_gp_leaf_count(vocab):
-            raise Error("ValueError: ops: lm_head_v2 exceeds signed 32-bit kernel indexing")
+    # the arm's kernels also index a logit panel and the denominator leaves
+    if rows > 2147483647 // min(vocab, LM_HEAD_V2_CHUNK) or rows > 2147483647 // lmhead_gp_leaf_count(vocab):
+        raise Error("ValueError: ops: lm_head_v2 exceeds signed 32-bit kernel indexing")
 
 
 # ---------------------------------------------------------------- device
-def _codes_kernel(targets: _I, codes: _F, rows_in: Int32):
-    """targets[i] = the int32 class code of codes[i] (a float class value)."""
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i >= Int(rows_in):
-        return
-    targets.unsafe_store(i, codes.unsafe_load(i).cast[DType.int32]())
-
-
 def _scale_kernel(dst: _F, upstream: _F, n_in: Int32):
     """dst[i] *= upstream[0] (the VJP's chain factor; 1 at a loss root)."""
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
@@ -96,7 +86,7 @@ def _grid(n: Int) -> Int:
 
 
 # ------------------------------------------------- device, GEMM-panel arm
-# The GEMM-panel profile (default since 2026-11-19; -D MOJOLEARN_LMHEAD_FAST_GEMM_PANEL_OFF: the scalar one): the op runs the
+# The GEMM-panel profile (the only profile since 2026-11-20): the op runs the
 # public door's forward and backward (training/chunked_lm_head_v2.mojo
 # `chunked_lm_head_gp_forward_into`, `chunked_lm_head_gp_backward_into`) over
 # the executor's own storage, so the door, the op and the oracle share one
@@ -107,8 +97,8 @@ def _grid(n: Int) -> Int:
 # dHidden scratch are allocated per call and released after a wait; holding
 # them in the session is owed if the arm is promoted.
 def _codes_zero_kernel(targets: _I, row_loss: _F, codes: _F, rows_in: Int32):
-    """`_codes_kernel`, and row_loss[i] = +0.0: the shifted logit a row
-    keeps when its code names no vocabulary entry."""
+    """targets[i] = the int32 class code of codes[i], and row_loss[i] = +0.0:
+    the shifted logit a row keeps when its code names no vocabulary entry."""
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i >= Int(rows_in):
         return
@@ -206,21 +196,7 @@ def lm_head_v2_forward_device(
     maxima: FP, denom: FP, row_loss: FP, loss: FP, rows: Int, vocab: Int, width: Int,
 ) raises:
     """loss[0] = the mean row loss; the row statistics stay for the VJP."""
-    comptime if LMHEAD_FAST_GEMM_PANEL:
-        _forward_gp_device(ex, hidden, weight, codes, targets, maxima, denom, row_loss, loss, rows, vocab, width)
-        return
-    var ctx = ex.ctx.copy()
-    ctx.enqueue_function[_codes_kernel](_ip(targets), _fp(codes), Int32(rows),
-                                        grid_dim=_grid(rows), block_dim=LM_HEAD_V2_TPB)
-    ctx.enqueue_function[chunked_lm_head_v2_rows_kernel](
-        _fp(maxima), _fp(denom), _fp(row_loss), _fp(hidden), _fp(weight), _ip(targets),
-        Int32(rows), Int32(vocab), Int32(width), grid_dim=_grid(rows), block_dim=LM_HEAD_V2_TPB,
-    )
-    var lb = block_buffer_view(ex, loss, 1)
-    var rb = block_buffer_view(ex, row_loss, rows)
-    _enqueue_loss_total(ctx, lb, rb, rows)
-    _ = lb^
-    _ = rb^
+    _forward_gp_device(ex, hidden, weight, codes, targets, maxima, denom, row_loss, loss, rows, vocab, width)
 
 
 def lm_head_v2_backward_device(
@@ -229,22 +205,5 @@ def lm_head_v2_backward_device(
 ) raises:
     """d_hidden (rows, width) and d_weight (vocab, width), each written whole
     (a null destination is skipped), scaled by upstream[0]."""
-    comptime if LMHEAD_FAST_GEMM_PANEL:
-        _backward_gp_device(ex, d_hidden, d_weight, hidden, weight, targets, maxima, denom, upstream,
-                            rows, vocab, width)
-        return
-    var ctx = ex.ctx.copy()
-    if Int(d_hidden) != 0:
-        ctx.enqueue_function[chunked_lm_head_v2_dhidden_kernel](
-            _fp(d_hidden), _fp(hidden), _fp(weight), _ip(targets), _fp(maxima), _fp(denom),
-            Int32(rows), Int32(vocab), Int32(width), grid_dim=_grid(rows), block_dim=LM_HEAD_V2_TPB,
-        )
-        ctx.enqueue_function[_scale_kernel](_fp(d_hidden), _fp(upstream), Int32(rows * width),
-                                            grid_dim=_grid(rows * width), block_dim=LM_HEAD_V2_TPB)
-    if Int(d_weight) != 0:
-        ctx.enqueue_function[chunked_lm_head_v2_dweight_kernel](
-            _fp(d_weight), _fp(hidden), _fp(weight), _ip(targets), _fp(maxima), _fp(denom),
-            Int32(rows), Int32(vocab), Int32(width), grid_dim=_grid(vocab), block_dim=LM_HEAD_V2_TPB,
-        )
-        ctx.enqueue_function[_scale_kernel](_fp(d_weight), _fp(upstream), Int32(vocab * width),
-                                            grid_dim=_grid(vocab * width), block_dim=LM_HEAD_V2_TPB)
+    _backward_gp_device(ex, d_hidden, d_weight, hidden, weight, targets, maxima, denom, upstream,
+                        rows, vocab, width)

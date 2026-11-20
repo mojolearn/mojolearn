@@ -50,8 +50,6 @@ check-native-cpu = "python3 tools/generated_sources.py prepare --repo . && mojo 
 check-native-gpu = "python3 tools/generated_sources.py prepare --repo . && mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_RESIDENT_UPLOAD_COUNT=1 -I . checks/native_tests/run_gpu.mojo"
 # The registered checks that decide an opt-in arm, built with the arm's define (lane fx-missing-checks,
 # 2026-11-19). Each is the default build's check by name: the host words, the oracle and the device follow the define.
-check-ops-lm-head-v2-scalar = "python3 tools/generated_sources.py prepare --repo . && mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_LMHEAD_FAST_GEMM_PANEL_OFF=1 -I . checks/native_tests/run_gpu.mojo ops_lm_head_v2"
-check-ops-lm-head-v2-scalar-cpu = "python3 tools/generated_sources.py prepare --repo . && mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -D MOJOLEARN_LMHEAD_FAST_GEMM_PANEL_OFF=1 -I . checks/native_tests/run_cpu.mojo ops_lm_head_v2"
 check-nan-canon-off-cpu = "python3 tools/generated_sources.py prepare --repo . && mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -D MOJOLEARN_IDENTITY_FAST_NAN_CANON_OFF=1 -I . checks/native_tests/run_cpu.mojo nan_canon"
 check-nan-canon-off-gpu = "python3 tools/generated_sources.py prepare --repo . && mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_IDENTITY_FAST_NAN_CANON_OFF=1 -I . checks/native_tests/run_gpu.mojo nan_canon"
 check-native-optimizer-state-input = "mojo run -I . training/checks/optimizer_state_input_check.mojo"
