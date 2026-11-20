@@ -185,6 +185,11 @@ _LAZY_NAMES = {
     "SVC": "._svm_impl", "SVR": "._svm_impl",
     "svm": None, "LinearSVC": ".svm", "LinearSVR": ".svm",
     "ARIMA": "._arima_impl",
+    # The GPU-versus-CPU check of a user's own estimator and rows (Andrew,
+    # 2026-11-20: one call, not a private module path). It is the same function
+    # `verify --check` runs, and `mojolearn._verify_check.check` stays; routed
+    # here so `import mojolearn` loads neither module until it is touched.
+    "check": "._verify_check",
     "ExponentialSmoothing": "._tsa_impl", "kpss_test": "._tsa_impl", "select_d": "._tsa_impl",
     "lm_corpus": None,
     "Cholesky": "._cholesky_impl",
@@ -446,6 +451,7 @@ __all__ = [
     "gpu_arch",
     "gpu_arch_how",
     "runtime_report",
+    "check",
 ]
 
 __all__.extend(name for name, where in _LAZY_NAMES.items()  # glue: the doors' names, in door order

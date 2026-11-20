@@ -35,8 +35,9 @@ class CompositionDoors(unittest.TestCase):
         )
         # Execute the actual class-definition hooks with inert installers, then
         # the actual two public class definitions. No mojolearn import occurs.
+        # CheckMixin: PublicOutputsMixin's base (the `check(X)` method, 2026-11-20).
         classes_from(ROOT / 'python/mojolearn/_mode.py',
-                     {'PublicOutputsMixin', 'SklearnTagsMixin'}, ns, {'__init_subclass__'})
+                     {'CheckMixin', 'PublicOutputsMixin', 'SklearnTagsMixin'}, ns, {'__init_subclass__', 'check'})
         ns['_PrepBase'] = ns['_SelectorMixin'] = ns['SklearnTagsMixin']
         classes_from(ROOT / 'python/mojolearn/_expansion_prep.py', {'RFE', 'IterativeImputer'}, ns)
         self.models = dict(RFE=ns['RFE'](object()), IterativeImputer=ns['IterativeImputer']())

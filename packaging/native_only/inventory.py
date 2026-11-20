@@ -73,6 +73,13 @@ def origins(root):
                 targets = [t.id for t in node.targets if isinstance(t, ast.Name)]
                 if name in targets and isinstance(node.value, ast.Name):
                     return resolve(module, node.value.id, depth + 1)
+                if "_LAZY_NAMES" in targets:
+                    # The package's first-touch table (lazy-family-import,
+                    # 2026-11-12): name -> '.module' that defines it (None is a
+                    # submodule, which is its own origin).
+                    mapping = literal(node.value)
+                    if isinstance(mapping, dict) and isinstance(mapping.get(name), str):
+                        return resolve(package + mapping[name], name, depth + 1)
                 if "_LAZY_EXPORTS" in targets:
                     mapping = literal(node.value)
                     if isinstance(mapping, dict) and name in mapping:

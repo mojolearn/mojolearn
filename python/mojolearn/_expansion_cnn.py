@@ -15,6 +15,10 @@ first imported, after the package, so both may rely on every module existing:
                                its `_HostBound`; never import it at module level
 """
 from . import _native_xcnn_bridge
+# `check(X)` (the GPU-versus-CPU check as a call): the one shared method every
+# other estimator inherits through _mode.PublicOutputsMixin. _mode is core
+# (loaded with the package), so this import loads nothing new.
+from ._mode import CheckMixin as _CheckMixin
 
 # Package-import connection: the migrated layer methods are ONE call each
 # into the compiled owner (bindings/xcnn_native_pack.mojo).
@@ -442,7 +446,7 @@ class _Linear(_Layer):
 # Restore: git apply experiments/removed/X8_CNN_HAND_EPOCH.patch
 
 
-class CNNClassifier(_Layer):
+class CNNClassifier(_Layer, _CheckMixin):
     """A small CNN image classifier, sklearn-shaped: for each entry of
     `conv_channels` a Conv2d (kernel_size, 'same' zero padding for odd
     kernels) -> ReLU -> MaxPool2d(pool_size) block (the pool is skipped once
