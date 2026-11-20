@@ -31,6 +31,8 @@ from bindings.py_cpython_table import cpython_table
 from core.shared_slot import SharedSlot
 from bindings.py_optional import py_present
 from autograd.autograd_torch_program_run import _torch_kind
+from bindings.autograd_keys_unpack import autograd_keys
+from bindings.py_balanced import py_item
 
 
 def _torch_entry(context: PythonObject, name: String) raises -> PythonObject:
@@ -81,7 +83,8 @@ def _torch_route_with_devices(snapshot: PythonObject, devices: List[TorchDeviceS
         ref other = devices[i]
         if other.kind != "cuda" or other.index != 0:
             return Python.tuple("host", "the inputs use different devices")
-    if py_get(snapshot[0], "_run_device") is None:
+    var nk = autograd_keys()
+    if py_get(snapshot[0], nk[].k__run_device) is None:
         return Python.tuple("host", "this mojolearn binding takes no device buffers")
     return Python.tuple("device", "")
 
@@ -96,9 +99,10 @@ def _torch_run_host(
 ) raises:
     var fields = snapshot[0]
     var session = snapshot[1]
-    if session["_id"] is None:
+    var nk = autograd_keys()
+    if py_item(session, nk[].k__id) is None:
         raise Error("ValueError: this session is closed")
-    var sid = Int(py=session["_id"])
+    var sid = Int(py=py_item(session, nk[].k__id))
     var request = NativeProgramHostRun()
     imported_host_provider_request(snapshot, request, 0)
     ref plan = request.plan
@@ -165,7 +169,8 @@ def _torch_loaded_namespace(modules: PythonObject, b: PythonObject,
 def _torch_native_type(cls: PythonObject, b: PythonObject, module: String, name: String) raises -> Bool:
     if py_type(cls) is not b.type:
         return False
-    var flags = b.type.__dict__["__flags__"].__get__
+    var nk = autograd_keys()
+    var flags = py_item(b.type.__dict__, nk[].k___flags__).__get__
     if (Int(py=py_call(flags, cls)) & 512) != 0:
         return False
     # Exact type + non-heap native type excludes user metaclasses and property
@@ -204,6 +209,7 @@ def _torch_artifact_context(snapshot: PythonObject) raises -> PythonObject:
     var g = TORCH_ARTIFACT_BASE.get_or_create_ptr()
     # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
     var base = Optional[PythonObject]()
+    var nk = autograd_keys()
     if (g[].base is not None and modules is g[].modules and dict_keys_admitted(g[].modules)
             and dict_keys_admitted(g[].torch_namespace) and dict_keys_admitted(g[].native_namespace)):
         base = py_present(g[].base)
@@ -211,8 +217,8 @@ def _torch_artifact_context(snapshot: PythonObject) raises -> PythonObject:
         base = py_present(_torch_artifact_base(b, sys, modules))
         g[].base = base.value()
         g[].modules = modules
-        g[].torch_namespace = base.value()["torch_namespace"]
-        g[].native_namespace = base.value()["native_namespace"]
+        g[].torch_namespace = py_item(base.value(), nk[].k_torch_namespace)
+        g[].native_namespace = py_item(base.value(), nk[].k_native_namespace)
         dict_keys_admit(modules)
         dict_keys_admit(g[].torch_namespace)
         dict_keys_admit(g[].native_namespace)
@@ -221,9 +227,9 @@ def _torch_artifact_context(snapshot: PythonObject) raises -> PythonObject:
     var free = Python.list()
     for index in range(count):  # driver-loop: declared graph input positions
         py_call(free.append, index)
-    py_setitem(context, "free", free)
-    py_setitem(context, "n_args", count)
-    py_setitem(context, "sequence", len(snapshot[3]) != 1)
+    py_setitem(context, nk[].k_free, free)
+    py_setitem(context, nk[].k_n_args, count)
+    py_setitem(context, nk[].k_sequence, len(snapshot[3]) != 1)
     return context
 
 
@@ -236,16 +242,17 @@ def _torch_artifact_base(b: PythonObject, sys: PythonObject, modules: PythonObje
     var torch = _torch_loaded_namespace(modules, b, module_type, "torch")
     var native = _torch_loaded_namespace(modules, b, module_type, "torch._C")
     var fields = native[1]
-    var variables = fields["_VariableFunctions"]
+    var nk = autograd_keys()
+    var variables = py_item(fields, nk[].k__VariableFunctions)
     if not _torch_native_type(py_type(variables), b, "torch._C", "_VariableFunctionsClass"):
         raise Error("TypeError: Torch allocation requires its native function container")
     var context = Python.dict()
     # Hold both admitted namespaces/modules through execution and GIL release.
-    py_setitem(context, "torch_owner", torch[0])
-    py_setitem(context, "torch_namespace", torch[1])
-    py_setitem(context, "native_owner", native[0])
-    py_setitem(context, "native_namespace", native[1])
-    py_setitem(context, "empty", variables.empty)
+    py_setitem(context, nk[].k_torch_owner, torch[0])
+    py_setitem(context, nk[].k_torch_namespace, torch[1])
+    py_setitem(context, nk[].k_native_owner, native[0])
+    py_setitem(context, nk[].k_native_namespace, native[1])
+    py_setitem(context, nk[].k_empty, variables.empty)
     _ = _torch_entry(context, "empty")
     for pair in [Python.tuple("get_device", "_cuda_getDevice"),  # small-loop(fixed native framework entries)
                  Python.tuple("set_device", "_cuda_setDevice"),
@@ -253,21 +260,21 @@ def _torch_artifact_base(b: PythonObject, sys: PythonObject, modules: PythonObje
                  Python.tuple("synchronize_mps", "_mps_deviceSynchronize")]:
         py_setitem(context, pair[0], py_get(fields, pair[1]))
     var public = torch[1]
-    var device_type = public["device"]
+    var device_type = py_item(public, nk[].k_device)
     if not _torch_native_type(device_type, b, "torch", "device"):
         raise Error("TypeError: Torch device requires its native type")
-    var dtype_type = public["dtype"]
+    var dtype_type = py_item(public, nk[].k_dtype)
     if not _torch_native_type(dtype_type, b, "torch", "dtype"):
         raise Error("TypeError: Torch allocation requires its native dtype")
-    var f32 = public["float32"]
-    var i32 = public["int32"]
+    var f32 = py_item(public, nk[].k_float32)
+    var i32 = py_item(public, nk[].k_int32)
     if py_type(f32) is not dtype_type or py_type(i32) is not dtype_type:
         raise Error("TypeError: Torch allocation requires its native dtype")
     if String(f32) != "torch.float32" or String(i32) != "torch.int32":
         raise Error("TypeError: Torch allocation dtype exports were replaced")
-    py_setitem(context, "cpu", py_call(device_type, "cpu"))
-    py_setitem(context, "f32", f32)
-    py_setitem(context, "i32", i32)
+    py_setitem(context, nk[].k_cpu, py_call(device_type, "cpu"))
+    py_setitem(context, nk[].k_f32, f32)
+    py_setitem(context, nk[].k_i32, i32)
     return context
 
 
@@ -278,23 +285,24 @@ def ops_torch_program_run_py(
     var snapshot = imported_program_snapshot(program)
     if context is None:
         context = _torch_artifact_context(snapshot)
-    var profile = Bool(py=py_get(context, "profile", False))
+    var nk = autograd_keys()
+    var profile = Bool(py=py_get(context, nk[].k_profile, False))
     var started = perf_counter_ns() if profile else 0
     native_torch_modes_admit()
     if route_only:
         return _torch_route(snapshot, args)
-    if len(args) != Int(py=context["n_args"]):
+    if len(args) != Int(py=py_item(context, nk[].k_n_args)):
         raise Error("ValueError: compiled graph input count differs from its captured signature")
     var inputs = Python.list()
-    var free = context["free"]
+    var free = py_item(context, nk[].k_free)
     for i in range(len(free)):  # driver-loop: graph input selection
         py_call(inputs.append, args[Int(py=free[i])])
     var devices = _torch_devices(inputs)
     var route = _torch_route_with_devices(snapshot, devices)
-    if Bool(py=py_get(context, "force_host", False)):
+    if Bool(py=py_get(context, nk[].k_force_host, False)):
         route = Python.tuple("host", "host route selected by the transfer test controller")
     var on_device = String(route[0]) == "device"
-    var target = context["cpu"]
+    var target = py_item(context, nk[].k_cpu)
     if len(inputs) > 0:
         target = devices[0].owner
     var prepared = Python.list()
@@ -303,9 +311,9 @@ def ops_torch_program_run_py(
     var fields = snapshot[0]
     var specs = snapshot[3]
     var outputs = Python.list()
-    var destination = target if on_device else context["cpu"]
+    var destination = target if on_device else py_item(context, nk[].k_cpu)
     for k in range(len(specs)):  # driver-loop: native framework output allocation
-        var dtype = context["i32"] if String(specs[k][2]) == "int32" else context["f32"]
+        var dtype = py_item(context, nk[].k_i32) if String(specs[k][2]) == "int32" else py_item(context, nk[].k_f32)
         var output = py_call(_torch_entry(context, "empty"), specs[k][1], dtype=dtype, device=destination)
         native_torch_admit(output)
         py_call(outputs.append, output)
@@ -326,7 +334,7 @@ def ops_torch_program_run_py(
                 py_call(descriptors.append, _torch_describe(prepared[k]))
             for k in range(len(outputs)):  # driver-loop: caller-owned output addresses
                 py_call(addresses.append, _torch_describe(outputs[k])[0])
-            var run = fields["_run_device"]
+            var run = py_item(fields, nk[].k__run_device)
             if py_type(run) is not py_type(b.len):
                 raise Error("TypeError: Torch execution requires the compiled device program entry")
             ready = perf_counter_ns() if profile else 0
@@ -348,7 +356,7 @@ def ops_torch_program_run_py(
     _ = prepared  # contiguous copies stay alive until native replay completes
     _ = snapshot  # graph/session owners and admitted descriptors survive replay
     if profile:
-        py_setitem(context, "last_profile", Python.tuple(route[0], ready - started, ran - ready, perf_counter_ns() - ran))
-    if Bool(py=context["sequence"]):
+        py_setitem(context, nk[].k_last_profile, Python.tuple(route[0], ready - started, ran - ready, perf_counter_ns() - ran))
+    if Bool(py=py_item(context, nk[].k_sequence)):
         return py_call(b.tuple, outputs)
     return outputs[0]

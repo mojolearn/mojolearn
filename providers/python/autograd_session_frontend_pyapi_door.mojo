@@ -13,6 +13,8 @@ from providers.python.neural_descriptor_pyapi_door import (
 )
 from autograd.model_descriptor import MODEL_ABI_NAME
 from sequence.neural_model_dispatch import MODEL_OPERATION_COUNT, SESSION_OPEN, SESSION_CLOSE
+from bindings.autograd_keys_unpack import autograd_keys
+from bindings.py_balanced import py_item
 
 
 def _session_string_keys(fields: PythonObject) raises:
@@ -73,10 +75,11 @@ def ops_session_fields(session: PythonObject) raises -> PythonObject:
         var kept = class_record(mods, _SESSION_LAYOUT_SLOT, cls)
         if kept is not None and Int(py=kept) == words[].layout:
             return _session_instance_fields(session)
-    var connected = context["ops_session_class"]
+    var nk = autograd_keys()
+    var connected = py_item(context, nk[].k_ops_session_class)
     if cls is not connected:
         raise Error("TypeError: Session requires its connected native owner class; Python subclass hooks are unsupported")
-    var layout = context["ops_session_layout"]
+    var layout = py_item(context, nk[].k_ops_session_layout)
     # The layout check depends only on the class rows: keep it per class
     # under the type watcher (bindings/native_class_admission.mojo); the
     # instance key check per dictionary under the dict watcher. Python
@@ -84,7 +87,7 @@ def ops_session_fields(session: PythonObject) raises -> PythonObject:
     var record = class_record(mods, _SESSION_LAYOUT_SLOT, cls)
     if record is None or Int(py=record) != Int(layout._obj_ptr):
         var b = native_loaded_module("builtins")
-        var namespace = py_call(b.type.__dict__["__dict__"].__get__, cls)
+        var namespace = py_call(py_item(b.type.__dict__, nk[].k___dict__).__get__, cls)
         for i in range(len(layout)):  # driver-loop: over connected Session descriptor identities
             if py_get(namespace, layout[i][0]) is not layout[i][1]:
                 raise Error("TypeError: Session owner has a replaced Python attribute hook or storage descriptor")
@@ -115,14 +118,15 @@ def ops_session_initialize_py(session: PythonObject, record: PythonObject, mode:
                                           String(MODEL_ABI_NAME), MODEL_OPERATION_COUNT)
     var context = program_admission_context()
     var fields = ops_session_fields(session)
-    if program_class is not context["ops_program_class"]:
+    var nk = autograd_keys()
+    if program_class is not py_item(context, nk[].k_ops_program_class):
         raise Error("TypeError: Session requires its connected native Program class")
     var b = native_loaded_module("builtins")
     var requested = mode
     if requested is None:
-        requested = context["backend_fields"]["_DEFAULT_MODE"]
+        requested = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
         if requested is None:
-            requested = context["backend_fields"]["_SELECTED"]
+            requested = py_item(py_item(context, nk[].k_backend_fields), nk[].k__SELECTED)
     if py_type(requested) is not py_type(PythonObject("")):
         raise Error("ValueError: numeric_mode must be fast, identical or None")
     var normalized = py_call(py_call(requested.strip).lower)
@@ -136,17 +140,17 @@ def ops_session_initialize_py(session: PythonObject, record: PythonObject, mode:
     var entry = connections[normalized]
     if py_type(entry) is py_type(PythonObject("")):
         raise Error(String(entry))
-    if py_type(entry) is not context["ops_connection_type"]:
+    if py_type(entry) is not py_item(context, nk[].k_ops_connection_type):
         raise Error("TypeError: Session requires an admitted native connection record")
     var connection = py_fields(entry)
     _session_string_keys(connection)
-    var module = connection["native_module"]
-    var provider = connection["native_provider"]
+    var module = py_item(connection, nk[].k_native_module)
+    var provider = py_item(connection, nk[].k_native_provider)
     if not neural_descriptor_matches(provider, module):
         raise Error("TypeError: Session provider belongs to another compiled module")
     if provider.downcast_value_ptr[NeuralDescriptorProvider]()[].factory is not neural_descriptor_entry(module, "model_native_api_v1"):
         raise Error("TypeError: Session provider factory changed; reconnect the compiled binding")
-    var public_provider = connection["public_provider"]
+    var public_provider = py_item(connection, nk[].k_public_provider)
     if not neural_descriptor_matches(public_provider, module):
         raise Error("TypeError: Session public provider belongs to another compiled module")
     var public_owner = public_provider.downcast_value_ptr[NeuralDescriptorProvider]()
@@ -164,18 +168,18 @@ def ops_session_initialize_py(session: PythonObject, record: PythonObject, mode:
     var recording = Bool(py=record)
     # Empty shell first, matching the former allocation/error ownership rule.
     # Direct dictionary writes cannot invoke a Python __setattr__ callback.
-    py_setitem(fields, "_id", PythonObject(None))
-    py_setitem(fields, "_session_native", connection["call"])
-    py_setitem(fields, "_public_provider", connection["public_provider"])
-    py_setitem(fields, "record", recording)
-    py_setitem(fields, "numeric_mode", mode)
-    py_setitem(fields, "_b", connection["binding"])
-    py_setitem(fields, "_program_execute", connection["execute"])
-    py_setitem(fields, "_program_inspect", connection["inspect"])
-    py_setitem(fields, "_program_control", connection["control"])
-    py_setitem(fields, "_program_fit", connection["fit"])
-    py_setitem(fields, "_program_class", program_class)
-    py_setitem(fields, "_distributed_binding", connection["distributed"])
+    py_setitem(fields, nk[].k__id, PythonObject(None))
+    py_setitem(fields, nk[].k__session_native, py_item(connection, nk[].k_call))
+    py_setitem(fields, nk[].k__public_provider, py_item(connection, nk[].k_public_provider))
+    py_setitem(fields, nk[].k_record, recording)
+    py_setitem(fields, nk[].k_numeric_mode, mode)
+    py_setitem(fields, nk[].k__b, py_item(connection, nk[].k_binding))
+    py_setitem(fields, nk[].k__program_execute, py_item(connection, nk[].k_execute))
+    py_setitem(fields, nk[].k__program_inspect, py_item(connection, nk[].k_inspect))
+    py_setitem(fields, nk[].k__program_control, py_item(connection, nk[].k_control))
+    py_setitem(fields, nk[].k__program_fit, py_item(connection, nk[].k_fit))
+    py_setitem(fields, nk[].k__program_class, program_class)
+    py_setitem(fields, nk[].k__distributed_binding, py_item(connection, nk[].k_distributed))
     var scope = List[Int](length=2, fill=0)
     var addresses: List[Int] = [Int(scope.unsafe_ptr())]
     var options: List[Int] = [1 if recording else 0, 1 if key == "identical" else 0]
@@ -183,6 +187,6 @@ def ops_session_initialize_py(session: PythonObject, record: PythonObject, mode:
     # numerical execution is unchanged and not performed by this operation.
     var sid = neural_descriptor_execute(provider, SESSION_OPEN, addresses, options, List[Float64](), False)
     var lifetime = neural_descriptor_adopt(provider, sid, SESSION_CLOSE, scope^)
-    py_setitem(fields, "_lifetime", lifetime)
-    py_setitem(fields, "_id", sid)
+    py_setitem(fields, nk[].k__lifetime, lifetime)
+    py_setitem(fields, nk[].k__id, sid)
     return PythonObject(None)

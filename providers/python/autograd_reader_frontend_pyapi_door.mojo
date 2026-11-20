@@ -10,6 +10,8 @@ from providers.python.autograd_import_metadata_pyapi_door import _fields, _shape
 from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider, NativeDescriptorResource, neural_descriptor_reuse, neural_descriptor_entry, neural_descriptor_execute, neural_descriptor_adopt
 from autograd.import_reader_dispatch import NativeReaderRequest
 from providers.python.autograd_graph_metadata_pyapi_door import graph_metadata_operation
+from bindings.autograd_keys_unpack import autograd_keys
+from bindings.py_balanced import py_item
 
 
 struct _Cursor(Movable):
@@ -76,19 +78,21 @@ def _object(cls: PythonObject, names: List[String], values: List[PythonObject]) 
 
 def _tensor(mut c: _Cursor, views: PythonObject, context: PythonObject) raises -> PythonObject:
     var name = c.text()
-    var dtype = context["dtypes"][c.take()]
+    var nk = autograd_keys()
+    var dtype = py_item(context, nk[].k_dtypes)[c.take()]
     var shape = _tuple_words(c)
     var buffer = c.take()
     var first = c.take()
     var end = c.take()
     var slice = py_call(native_loaded_module("builtins").slice, first, end)
-    return _object(context["tensor"], [String("name"), String("dtype"), String("shape"), String("data")],
+    return _object(py_item(context, nk[].k_tensor), [String("name"), String("dtype"), String("shape"), String("data")],
         [name, dtype, shape, views[buffer][slice]])
 
 
 def _value(mut c: _Cursor, context: PythonObject) raises -> PythonObject:
     var name = c.text()
-    var dtype = context["dtypes"][c.take()]
+    var nk = autograd_keys()
+    var dtype = py_item(context, nk[].k_dtypes)[c.take()]
     var rank = c.take()
     var dims = Python.list()
     for i in range(rank):  # driver-loop: over graph value axes
@@ -130,6 +134,7 @@ def _views(mut c: _Cursor, buffers: List[Int], resource: PythonObject, context: 
     var count = c.take()
     if count != len(buffers):
         raise Error("RuntimeError: ONNX reader buffer table differs from graph metadata")
+    var nk = autograd_keys()
     for i in range(count):  # driver-loop: over native reader buffer ownership records
         _ = c.take()
         _ = c.take()
@@ -137,9 +142,9 @@ def _views(mut c: _Cursor, buffers: List[Int], resource: PythonObject, context: 
         if size == 0:
             _ = py_call(views.append, py_call(bi.memoryview, py_call(bi.bytes)))
         else:
-            var base = context["byte_type"] * PythonObject(size)
+            var base = py_item(context, nk[].k_byte_type) * PythonObject(size)
             var namespace = bi.dict()
-            py_setitem(namespace, "__slots__", Python.tuple("owner"))
+            py_setitem(namespace, nk[].k___slots__, Python.tuple("owner"))
             var cls = py_call(bi.type, "_ReaderBytes", Python.tuple(base), namespace)
             var array = py_call(cls.from_address, buffers[i])
             py_setattr(array, "owner", resource)
@@ -150,29 +155,30 @@ def _views(mut c: _Cursor, buffers: List[Int], resource: PythonObject, context: 
 def _reader_binding(value: PythonObject, context: PythonObject) raises -> Tuple[PythonObject, PythonObject]:
     var bi = native_loaded_module("builtins")
     var binding = value
+    var nk = autograd_keys()
     if value is None:
-        var mode = context["backend"]["_DEFAULT_MODE"]
+        var mode = py_item(py_item(context, nk[].k_backend), nk[].k__DEFAULT_MODE)
         if mode is None:
-            mode = context["backend"]["_SELECTED"]
-        var entry = context["bindings"][mode]
+            mode = py_item(py_item(context, nk[].k_backend), nk[].k__SELECTED)
+        var entry = py_item(context, nk[].k_bindings)[mode]
         if py_type(entry) is bi.str:
             raise Error(String(py=entry))
         binding = entry
-    var aliases = context["aliases"]
+    var aliases = py_item(context, nk[].k_aliases)
     for i in range(len(aliases)):  # driver-loop: over connected module aliases, without invoking lazy Python proxy hooks
         if binding is aliases[i][0]:
             binding = aliases[i][1]
             break
     if py_type(binding) is not py_type(bi):
         raise Error("TypeError: ONNX reader requires a connected native binding module")
-    var factory = py_get(py_fields(binding), "onnx_native_api_v1")
+    var factory = py_get(py_fields(binding), nk[].k_onnx_native_api_v1)
     if factory is None or py_type(factory) is not py_type(bi.len):
         raise Error("RuntimeError: mojolearn: this install's x_sequence binding has no native ONNX reader; rebuild the x_sequence bindings")
     if factory is not neural_descriptor_entry(factory.__self__, "onnx_native_api_v1"):
         raise Error("TypeError: ONNX reader provider factory changed")
-    var provider = neural_descriptor_reuse(py_get(context["providers"], factory.__self__), factory,
+    var provider = neural_descriptor_reuse(py_get(py_item(context, nk[].k_providers), factory.__self__), factory,
         "mojolearn.autograd.onnx.v1", 4)
-    py_setitem(context["providers"], factory.__self__, provider)
+    py_setitem(py_item(context, nk[].k_providers), factory.__self__, provider)
     return (factory.__self__, provider)
 
 
@@ -187,6 +193,7 @@ def reader_read(path: PythonObject, binding: PythonObject, context: PythonObject
     var handle = neural_descriptor_execute(selected[1], 0, [Int(request.unsafe_ptr()), Int(scope.unsafe_ptr())],
         List[Int](), List[Float64](), False)
     var resource = neural_descriptor_adopt(selected[1], handle, 3, scope.copy())
+    var nk = autograd_keys()
     try:
         _ = neural_descriptor_execute(selected[1], 1, [handle, Int(request.unsafe_ptr())], scope, List[Float64](), False)
         var c = _Cursor(request[0].info.words.copy(), request[0].info.strs.copy(), request[0].info.floats.copy())
@@ -216,16 +223,16 @@ def reader_read(path: PythonObject, binding: PythonObject, context: PythonObject
             for j in range(attr_count):  # driver-loop: over one node's attributes
                 var key = c.text()
                 py_setitem(attrs, key, _attribute(c, views, context))
-            _ = py_call(nodes.append, _object(context["node"], [String("op"), String("domain"), String("name"),
+            _ = py_call(nodes.append, _object(py_item(context, nk[].k_node), [String("op"), String("domain"), String("name"),
                 String("inputs"), String("outputs"), String("attrs")], [op, domain, name, ins, outs, attrs]))
         var initializers = bi.dict()
         var init_count = c.take()
         for i in range(init_count):  # driver-loop: over initializer metadata, never tensor arithmetic
             var tensor = _tensor(c, views, context)
-            py_setitem(initializers, py_fields(tensor)["name"], tensor)
-        var native = _object(context["reader"], [String("b"), String("h"), String("views"), String("_lifetime")],
+            py_setitem(initializers, py_item(py_fields(tensor), nk[].k_name), tensor)
+        var native = _object(py_item(context, nk[].k_reader), [String("b"), String("h"), String("views"), String("_lifetime")],
             [selected[0], PythonObject(handle), py_call(bi.tuple, views), resource])
-        return _object(context["graph"], [String("opset"), String("inputs"), String("outputs"), String("nodes"),
+        return _object(py_item(context, nk[].k_graph), [String("opset"), String("inputs"), String("outputs"), String("nodes"),
             String("initializers"), String("source"), String("_native")], [PythonObject(opset), py_call(bi.tuple, inputs),
             py_call(bi.tuple, outputs), py_call(bi.tuple, nodes), initializers, source, native])
     except error:
@@ -238,19 +245,20 @@ def reader_resolve(value: PythonObject, shapes: PythonObject, context: PythonObj
     var bi = native_loaded_module("builtins")
     var native = value
     var source = PythonObject("the model graph")
+    var nk = autograd_keys()
     if not is_native:
-        var graph = _fields(value, context["layouts"][context["graph"]])
-        native = py_get(graph, "_native")
-        source = graph["source"]
+        var graph = _fields(value, py_item(context, nk[].k_layouts)[py_item(context, nk[].k_graph)])
+        native = py_get(graph, nk[].k__native)
+        source = py_item(graph, nk[].k_source)
     if native is None:
         raise Error("TypeError: resolve takes a graph read by mojolearn.importers.onnx.read")
-    var fields = _fields(native, context["layouts"][context["reader"]])
-    var lifetime = fields["_lifetime"]
+    var fields = _fields(native, py_item(context, nk[].k_layouts)[py_item(context, nk[].k_reader)])
+    var lifetime = py_item(fields, nk[].k__lifetime)
     var owner = lifetime.downcast_value_ptr[NativeDescriptorResource]()
-    if owner[].handle == 0 or py_type(fields["h"]) is not bi.int or owner[].handle != Int(py=fields["h"]):
+    if owner[].handle == 0 or py_type(py_item(fields, nk[].k_h)) is not bi.int or owner[].handle != Int(py=py_item(fields, nk[].k_h)):
         raise Error("TypeError: ONNX reader handle differs from its retained owner")
     var provider = owner[].provider.downcast_value_ptr[NeuralDescriptorProvider]()
-    if provider[].factory is not py_get(py_fields(fields["b"]), "onnx_native_api_v1"):
+    if provider[].factory is not py_get(py_fields(py_item(fields, nk[].k_b)), nk[].k_onnx_native_api_v1):
         raise Error("TypeError: ONNX reader binding changed")
     if provider[].factory is not neural_descriptor_entry(provider[].module, "onnx_native_api_v1"):
         raise Error("TypeError: ONNX native provider factory changed")
@@ -269,7 +277,7 @@ def reader_resolve(value: PythonObject, shapes: PythonObject, context: PythonObj
     var count = c.take()
     for i in range(count):  # driver-loop: over resolved graph values
         var name = c.text()
-        var dtype = context["dtypes"][c.take()]
+        var dtype = py_item(context, nk[].k_dtypes)[c.take()]
         py_setitem(output, name, _tuple_words(c))
         py_setitem(dtypes, name, dtype)
     var folded = bi.dict()
@@ -283,7 +291,7 @@ def reader_resolve(value: PythonObject, shapes: PythonObject, context: PythonObj
         if len(problems) != 0:
             _unsupported(source, problems, context)
         return output
-    return _object(context["resolved"], [String("shapes"), String("dtypes"), String("folded"), String("no_rule"), String("problems")],
+    return _object(py_item(context, nk[].k_resolved), [String("shapes"), String("dtypes"), String("folded"), String("no_rule"), String("problems")],
         [output, dtypes, folded, no_rule, py_call(bi.tuple, problems)])
 
 

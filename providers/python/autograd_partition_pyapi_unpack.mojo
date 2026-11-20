@@ -19,6 +19,8 @@ from autograd.rankn import ShapeN
 from autograd.program_io import ProgramInput
 from core.cast_in import CastIn
 from autograd.autograd_partition_run import partition_loss_kind
+from bindings.autograd_keys_unpack import autograd_keys
+from bindings.py_balanced import py_item
 
 
 def partition_fit_py[E: Exec & Movable & Deinitable, KIND: Int](
@@ -46,8 +48,9 @@ def partition_fit_py[E: Exec & Movable & Deinitable, KIND: Int](
         raise Error("partitioned fit: epochs must be positive")
     var curve = output_array(ShapeN.of([ne]))
     var d = partition[E, KIND](Int(py=id))
+    var nk = autograd_keys()
     d[].fit(srcs, shapes, target, kind, Float32(Float64(py=delta)), ne, _integer(batch, "batch_size", 1), Bool(py=shuffle),
-            FP(unsafe_from_address=Int(py=curve.__array_interface__["data"][0])))
+            FP(unsafe_from_address=Int(py=py_item(curve.__array_interface__, nk[].k_data)[0])))
     _ = retained  # CastIn borrows sequence backing stores through the complete fit
     _ = arrays
     _ = targets
@@ -56,7 +59,8 @@ def partition_fit_py[E: Exec & Movable & Deinitable, KIND: Int](
 
 def graph_array_output(a: GraphBytes) raises -> PythonObject:
     var out = output_array(a.shape)
-    unsafe_memcpy(dest=FP(unsafe_from_address=Int(py=out.__array_interface__["data"][0])),
+    var nk = autograd_keys()
+    unsafe_memcpy(dest=FP(unsafe_from_address=Int(py=py_item(out.__array_interface__, nk[].k_data)[0])),
            src=a.words.unsafe_ptr(), count=a.shape.count())
     return out
 

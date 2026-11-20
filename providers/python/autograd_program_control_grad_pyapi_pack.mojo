@@ -11,6 +11,7 @@ from providers.python.autograd_program_arrays_pyapi_door import host_array_py, h
 from autograd.program_control_grad import (
     control_vjp_abort, control_vjp_finish, control_vjp_forward, control_vjp_prepare,
 )
+from bindings.autograd_keys_unpack import autograd_keys
 
 
 def _gradient_py(arrays: List[HostArray], present: List[Bool], k: Int) raises -> PythonObject:
@@ -64,9 +65,10 @@ def ops_program_control_vjp_py[E: Exec & Movable & Deinitable, KIND: Int](
     for k in range(len(r.parameters)):  # small-loop(parameters: one gradient per parameter): result packing, no data
         py_setitem(parameter_gradients, r.parameters[k], _gradient_py(r.parameter_gradients, r.parameter_present, k))
     var result = _dict()
-    py_setitem(result, "outputs", _result(host_arrays_py(r.values)))
-    py_setitem(result, "input_gradients", py_call(native_loaded_module("builtins").tuple, input_gradients))
-    py_setitem(result, "parameter_gradients", parameter_gradients)
-    py_setitem(result, "iterations", r.iterations)
-    py_setitem(result, "stopped", r.stopped)
+    var nk = autograd_keys()
+    py_setitem(result, nk[].k_outputs, _result(host_arrays_py(r.values)))
+    py_setitem(result, nk[].k_input_gradients, py_call(native_loaded_module("builtins").tuple, input_gradients))
+    py_setitem(result, nk[].k_parameter_gradients, parameter_gradients)
+    py_setitem(result, nk[].k_iterations, r.iterations)
+    py_setitem(result, nk[].k_stopped, r.stopped)
     return result

@@ -26,6 +26,7 @@ from autograd.autograd_partition_run import partition_loss_kind
 from providers.python.autograd_partition_pyapi_unpack import (
     graph_array_output,
 )
+from bindings.autograd_keys_unpack import autograd_keys
 
 
 def partition_open[E: Exec & Movable & Deinitable, KIND: Int](
@@ -75,15 +76,16 @@ def partition_state_py[E: Exec & Movable & Deinitable, KIND: Int](id: PythonObje
     owned_program_id_admission(id)
     var r = partition_state_native[E, KIND](Int(py=id))
     var result = Python.dict()
-    py_setitem(result, "parameters", host_arrays_py(r.arrays[0]))
-    py_setitem(result, "first_moments", host_arrays_py(r.arrays[1]))
-    py_setitem(result, "second_moments", host_arrays_py(r.arrays[2]))
-    py_setitem(result, "epoch", PythonObject(r.epoch))
-    py_setitem(result, "step", PythonObject(r.step))
-    py_setitem(result, "seed", PythonObject(r.seed))
-    py_setitem(result, "logical_stages", PythonObject(r.stages))
-    py_setitem(result, "tensor_shards", PythonObject(r.tensor_shards))
-    py_setitem(result, "microbatches", PythonObject(r.microbatches))
+    var nk = autograd_keys()
+    py_setitem(result, nk[].k_parameters, host_arrays_py(r.arrays[0]))
+    py_setitem(result, nk[].k_first_moments, host_arrays_py(r.arrays[1]))
+    py_setitem(result, nk[].k_second_moments, host_arrays_py(r.arrays[2]))
+    py_setitem(result, nk[].k_epoch, PythonObject(r.epoch))
+    py_setitem(result, nk[].k_step, PythonObject(r.step))
+    py_setitem(result, nk[].k_seed, PythonObject(r.seed))
+    py_setitem(result, nk[].k_logical_stages, PythonObject(r.stages))
+    py_setitem(result, nk[].k_tensor_shards, PythonObject(r.tensor_shards))
+    py_setitem(result, nk[].k_microbatches, PythonObject(r.microbatches))
     return result
 
 
@@ -98,17 +100,18 @@ def partition_residency_py[E: Exec & Movable & Deinitable, KIND: Int](id: Python
     owned_program_id_admission(id)
     var r = partition_residency_native[E, KIND](Int(py=id))
     var result = Python.dict()
-    py_setitem(result, "devices", _int_list(r.devices))
-    py_setitem(result, "parameter_elements_per_rank", _int_list(r.counts))
-    py_setitem(result, "parameter_owner_devices", _int_list(r.owners))
-    py_setitem(result, "node_devices", _int_list(r.placements))
-    py_setitem(result, "parameter_residency", PythonObject("one authoritative device owner per tensor shard"))
-    py_setitem(result, "optimizer_residency", PythonObject("same unique owner as its parameter shard"))
-    py_setitem(result, "activation_residency", PythonObject("native host-staged bytes with local recomputation"))
-    py_setitem(result, "logical_stages", PythonObject(r.stages))
-    py_setitem(result, "tensor_shards", PythonObject(r.tensor_shards))
-    py_setitem(result, "microbatches", PythonObject(r.microbatches))
-    py_setitem(result, "partitioned_products", PythonObject(r.partitioned_products))
+    var nk = autograd_keys()
+    py_setitem(result, nk[].k_devices, _int_list(r.devices))
+    py_setitem(result, nk[].k_parameter_elements_per_rank, _int_list(r.counts))
+    py_setitem(result, nk[].k_parameter_owner_devices, _int_list(r.owners))
+    py_setitem(result, nk[].k_node_devices, _int_list(r.placements))
+    py_setitem(result, nk[].k_parameter_residency, PythonObject("one authoritative device owner per tensor shard"))
+    py_setitem(result, nk[].k_optimizer_residency, PythonObject("same unique owner as its parameter shard"))
+    py_setitem(result, nk[].k_activation_residency, PythonObject("native host-staged bytes with local recomputation"))
+    py_setitem(result, nk[].k_logical_stages, PythonObject(r.stages))
+    py_setitem(result, nk[].k_tensor_shards, PythonObject(r.tensor_shards))
+    py_setitem(result, nk[].k_microbatches, PythonObject(r.microbatches))
+    py_setitem(result, nk[].k_partitioned_products, PythonObject(r.partitioned_products))
     return result
 
 
@@ -116,16 +119,17 @@ def partition_profile_py[E: Exec & Movable & Deinitable, KIND: Int](id: PythonOb
     owned_program_id_admission(id)
     var events = partition_events[E, KIND](Int(py=id))
     var result = Python.list()
+    var nk = autograd_keys()
     for k in range(len(events)):  # small-loop(events: one row per recorded operation interval): result packing, no data
         var e = events[k]
         var row = Python.dict()
-        py_setitem(row, "node", PythonObject(e.node))
-        py_setitem(row, "microbatch", PythonObject(e.microbatch))
-        py_setitem(row, "stage", PythonObject(e.stage))
-        py_setitem(row, "device", PythonObject(e.device))
-        py_setitem(row, "backward", PythonObject(e.backward))
-        py_setitem(row, "start_ns", PythonObject(e.start_ns))
-        py_setitem(row, "end_ns", PythonObject(e.end_ns))
+        py_setitem(row, nk[].k_node, PythonObject(e.node))
+        py_setitem(row, nk[].k_microbatch, PythonObject(e.microbatch))
+        py_setitem(row, nk[].k_stage, PythonObject(e.stage))
+        py_setitem(row, nk[].k_device, PythonObject(e.device))
+        py_setitem(row, nk[].k_backward, PythonObject(e.backward))
+        py_setitem(row, nk[].k_start_ns, PythonObject(e.start_ns))
+        py_setitem(row, nk[].k_end_ns, PythonObject(e.end_ns))
         _ = py_call(result.append, row)
     return result
 

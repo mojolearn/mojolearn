@@ -22,13 +22,16 @@ from providers.python.autograd_program_public_dispatch_pyapi_unpack import (
     _arguments,
     _option,
 )
+from bindings.autograd_keys_unpack import autograd_keys
+from bindings.py_balanced import py_item
 
 
 def _component(owner: PythonObject, session: PythonObject) raises -> PythonObject:
     var fields = program_owner_fields(owner)
-    if fields["_s"] is not session:
+    var nk = autograd_keys()
+    if py_item(fields, nk[].k__s) is not session:
         raise Error("ValueError: control and training components must belong to the same session")
-    return PythonObject(_integer(fields["_id"], "program", 1))
+    return PythonObject(_integer(py_item(fields, nk[].k__id), "program", 1))
 
 
 def ops_program_public_execute_py[E: Exec & Movable & Deinitable, KIND: Int](
@@ -46,27 +49,28 @@ def ops_program_public_execute_py[E: Exec & Movable & Deinitable, KIND: Int](
     for i in range(len(keys)):  # driver-loop: direct native callers cannot supply key comparison callbacks
         if py_type(keys[i]) is not py_type(PythonObject("")):
             raise Error("TypeError: Program snapshot requires native string keys")
-    if fields["_id"] is not output_fields["_id"]:
+    var nk = autograd_keys()
+    if py_item(fields, nk[].k__id) is not py_item(output_fields, nk[].k__id):
         raise Error("TypeError: Program snapshot differs from its admitted handle")
-    if fields["_id"] is not None and py_type(fields["_id"]) is not py_type(PythonObject(0)):
+    if py_item(fields, nk[].k__id) is not None and py_type(py_item(fields, nk[].k__id)) is not py_type(PythonObject(0)):
         raise Error("TypeError: Program handle requires an exact native integer")
     if py_type(request[3]) is not py_type(PythonObject("")):
         raise Error("TypeError: Program requires an exact operation string")
     var name = String(py=request[3])
     var args = request[4]
-    if fields["_s"] is not session or output_fields["_s"] is not session:
+    if py_item(fields, nk[].k__s) is not session or py_item(output_fields, nk[].k__s) is not session:
         raise Error("ValueError: Program belongs to another Session")
     if name == "free":
         _arguments(args, 0)
-        if state["_id"] is not None and fields["_id"] is not None:
-            var s = ops_session[E, KIND](Int(py=state["_id"]))
-            s[].program_free(_integer(fields["_id"], "program", 1))
-        py_setitem(output_fields, "_id", PythonObject(None))
+        if py_item(state, nk[].k__id) is not None and py_item(fields, nk[].k__id) is not None:
+            var s = ops_session[E, KIND](Int(py=py_item(state, nk[].k__id)))
+            s[].program_free(_integer(py_item(fields, nk[].k__id), "program", 1))
+        py_setitem(output_fields, nk[].k__id, PythonObject(None))
         return PythonObject(None)
-    if state["_id"] is None:
+    if py_item(state, nk[].k__id) is None:
         raise Error("ValueError: this session is closed")
-    var sid = state["_id"]
-    var pid = PythonObject(_integer(fields["_id"], "program", 1))
+    var sid = py_item(state, nk[].k__id)
+    var pid = PythonObject(_integer(py_item(fields, nk[].k__id), "program", 1))
     if name == "partition" or name == "distribute":
         _arguments(args, 2)
         return ops_owned_program_create_request_py(state, Int(py=pid), name, args)
@@ -144,10 +148,10 @@ def ops_program_public_execute_py[E: Exec & Movable & Deinitable, KIND: Int](
         var result = ops_program_fit_native_py[E, KIND](sid, pid, args[2], args[3],
             options[0], options[1], options[2], options[3], options[4], options[5], options[6], options[7],
             condition, otherwise, stop[0], stop[1])
-        py_setitem(output_fields, "loss_curve_", result[0])
-        py_setitem(output_fields, "n_iter_", result[1])
+        py_setitem(output_fields, nk[].k_loss_curve_, result[0])
+        py_setitem(output_fields, nk[].k_n_iter_, result[1])
         if name == "fit_if":
-            py_setitem(output_fields, "branch_counts_", result[2])
+            py_setitem(output_fields, nk[].k_branch_counts_, result[2])
         return owner
     if name == "save":
         # (path,) or (path, verify): `verify` False skips the seeded replay

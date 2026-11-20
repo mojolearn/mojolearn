@@ -11,6 +11,8 @@ from bindings.native_json_door import native_path
 from providers.python.autograd_import_metadata_pyapi_door import _fields, _raise_object
 from providers.python.autograd_python_errors_pyapi_unpack import graph_python_error
 from bindings.optimizer_public_words_unpack import optimizer_python_error, PYTHON_ERROR_PENDING
+from bindings.autograd_keys_unpack import autograd_keys
+from bindings.py_balanced import py_item
 
 
 def _admit(value: PythonObject, context: PythonObject, mut seen: List[Int]) raises:
@@ -25,10 +27,11 @@ def _admit(value: PythonObject, context: PythonObject, mut seen: List[Int]) rais
         if known == address:
             return
     seen.append(address)
-    if py_contains(context["records"], cls):
+    var nk = autograd_keys()
+    if py_contains(py_item(context, nk[].k_records), cls):
         # Validate its native hooks now. Its own compiled protocol captures
         # its fields once when the enclosing builtin reaches that record.
-        _ = _fields(value, context["layouts"][cls])
+        _ = _fields(value, py_item(context, nk[].k_layouts)[cls])
         return
     if cls is b.tuple or cls is b.list:
         for i in range(len(value)):  # driver-loop: over native sequence metadata
@@ -46,8 +49,9 @@ def _admit(value: PythonObject, context: PythonObject, mut seen: List[Int]) rais
 
 def _record_values(value: PythonObject, context: PythonObject) raises -> PythonObject:
     var cls = py_type(value)
-    var fields = _fields(value, context["layouts"][cls])
-    var names = context["records"][cls]
+    var nk = autograd_keys()
+    var fields = _fields(value, py_item(context, nk[].k_layouts)[cls])
+    var names = py_item(context, nk[].k_records)[cls]
     var values = Python.list()
     for i in range(len(names)):  # driver-loop: over one captured record's fields
         _ = py_call(values.append, fields[names[i]])
@@ -67,14 +71,15 @@ def graph_record_bound(args: PythonObject) raises -> PythonObject:
     var context = args[0][1]
     var value = args[1]
     var cls = py_type(value)
-    if py_type(cls) is not b.type or not py_contains(context["records"], cls):
+    var nk = autograd_keys()
+    if py_type(cls) is not b.type or not py_contains(py_item(context, nk[].k_records), cls):
         raise Error("TypeError: graph metadata requires an exact connected record class")
     if operation == "__setattr__" or operation == "__delattr__":
         if py_type(args[2]) is not b.str:
             raise Error("TypeError: attribute name must be a native string")
         var verb = String("assign to" if operation == "__setattr__" else "delete")
-        var exception = py_call(b.BaseException.__new__, context["frozen_error"], "cannot " + verb + " field " + String(py_call(b.repr, args[2])))
-        _raise_object(context["frozen_error"], exception)
+        var exception = py_call(b.BaseException.__new__, py_item(context, nk[].k_frozen_error), "cannot " + verb + " field " + String(py_call(b.repr, args[2])))
+        _raise_object(py_item(context, nk[].k_frozen_error), exception)
     if operation == "__eq__" and py_type(args[2]) is not cls:
         return b.NotImplemented
     var seen = List[Int]()
@@ -96,8 +101,8 @@ def graph_record_bound(args: PythonObject) raises -> PythonObject:
         if entered > 0:
             return PythonObject("...")
         try:
-            var names = context["records"][cls]
-            var text = String(context["record_names"][cls]) + "("
+            var names = py_item(context, nk[].k_records)[cls]
+            var text = String(py_item(context, nk[].k_record_names)[cls]) + "("
             for i in range(len(names)):  # driver-loop: over formatted native record fields
                 if i > 0:
                     text += ", "
@@ -159,8 +164,9 @@ def _message(source: PythonObject, problems: PythonObject, context: PythonObject
 
 def graph_metadata_operation(operation: String, value: PythonObject, options: PythonObject, context: PythonObject) raises -> PythonObject:
     var b = native_loaded_module("builtins")
+    var nk = autograd_keys()
     if operation == "record_descriptor":
-        if py_type(value) is not context["method_type"] or value.__func__ is not context["record_native_entry"]:
+        if py_type(value) is not py_item(context, nk[].k_method_type) or value.__func__ is not py_item(context, nk[].k_record_native_entry):
             raise Error("TypeError: graph protocol descriptors require the connected compiled entry")
         ref cpy = Python().cpython()
         var descriptor = cpy.lib.get_function[PyObjectPtr]("PyInstanceMethod_New")(value._obj_ptr)
@@ -169,10 +175,10 @@ def graph_metadata_operation(operation: String, value: PythonObject, options: Py
         return PythonObject(from_owned=descriptor)
     if operation == "record_construct" or operation == "reader_construct":
         var cls = py_type(value)
-        if py_type(cls) is not b.type or (cls is not context["reader"] and not py_contains(context["records"], cls)):
+        if py_type(cls) is not b.type or (cls is not py_item(context, nk[].k_reader) and not py_contains(py_item(context, nk[].k_records), cls)):
             raise Error("TypeError: graph construction requires a connected native record class")
-        var fields = _fields(value, context["layouts"][cls])
-        var names = Python.tuple("b", "h", "views") if operation == "reader_construct" else context["records"][cls]
+        var fields = _fields(value, py_item(context, nk[].k_layouts)[cls])
+        var names = Python.tuple("b", "h", "views") if operation == "reader_construct" else py_item(context, nk[].k_records)[cls]
         if len(options) != len(names):
             raise Error("TypeError: graph record arguments differ from its connected layout")
         # Construction stores references exactly as a dataclass does. It does
@@ -183,27 +189,27 @@ def graph_metadata_operation(operation: String, value: PythonObject, options: Py
                 var seen = List[Int]()
                 _admit(item, context, seen)
                 item = py_call(b.tuple, item)
-            if cls is context["node"] and i == 5 and item is context["attrs_default"]:
+            if cls is py_item(context, nk[].k_node) and i == 5 and item is py_item(context, nk[].k_attrs_default):
                 item = Python.dict()
             py_setitem(fields, names[i], item)
         return PythonObject(None)
     if operation == "unsupported_construct":
-        if py_type(value) is not context["unsupported"]:
+        if py_type(value) is not py_item(context, nk[].k_unsupported):
             raise Error("TypeError: UnsupportedModel requires its connected native class")
         var message = _message(options[0], options[1], context)
-        var fields = py_call(b.BaseException.__dict__["__dict__"].__get__, value, context["unsupported"])
-        py_setitem(fields, "source", options[0])
-        py_setitem(fields, "problems", py_call(b.tuple, options[1]))
-        _ = py_call(b.BaseException.__dict__["args"].__set__, value, Python.tuple(message))
+        var fields = py_call(py_item(b.BaseException.__dict__, nk[].k___dict__).__get__, value, py_item(context, nk[].k_unsupported))
+        py_setitem(fields, nk[].k_source, options[0])
+        py_setitem(fields, nk[].k_problems, py_call(b.tuple, options[1]))
+        _ = py_call(py_item(b.BaseException.__dict__, nk[].k_args).__set__, value, Python.tuple(message))
         return PythonObject(None)
     if operation == "supported_ops":
-        return py_call(b.list, context["supported_ops"])
+        return py_call(b.list, py_item(context, nk[].k_supported_ops))
     if operation == "dtype_name":
         var seen = List[Int]()
         _admit(value, context, seen)
-        var found = py_get(context["dtype_names"], value)
+        var found = py_get(py_item(context, nk[].k_dtype_names), value)
         if found is None:
-            found = py_get(context["refused_names"], value)
+            found = py_get(py_item(context, nk[].k_refused_names), value)
         return PythonObject("data type " + String(py_call(b.str, value))) if found is None else found
     if operation == "session_shape":
         var seen = List[Int]()
@@ -215,19 +221,19 @@ def graph_metadata_operation(operation: String, value: PythonObject, options: Py
     if operation == "buffer_address":
         if value is None:
             return PythonObject(0)
-        if context["numpy"] is None or py_type(value) is not context["numpy"].ndarray:
+        if py_item(context, nk[].k_numpy) is None or py_type(value) is not py_item(context, nk[].k_numpy).ndarray:
             raise Error("TypeError: buffer_address requires exact native NumPy storage")
-        var metadata = py_call(context["numpy_array_interface"], value)
-        return metadata["data"][0]
+        var metadata = py_call(py_item(context, nk[].k_numpy_array_interface), value)
+        return py_item(metadata, nk[].k_data)[0]
     if operation == "bytes_view":
-        if context["numpy"] is None:
+        if py_item(context, nk[].k_numpy) is None:
             raise Error("ImportError: mojolearn.importers requires NumPy")
         var cls = py_type(value)
-        if value is not None and cls is not b.bytes and cls is not b.bytearray and cls is not b.memoryview and cls is not context["array_type"] and cls is not context["numpy"].ndarray:
+        if value is not None and cls is not b.bytes and cls is not b.bytearray and cls is not b.memoryview and cls is not py_item(context, nk[].k_array_type) and cls is not py_item(context, nk[].k_numpy).ndarray:
             raise Error("TypeError: bytes_view requires native buffer storage; Python buffer hooks are unsupported")
         var raw = native_buffer_view(py_call(b.bytes)) if value is None else native_buffer_view(value)
         raw = py_call(raw.cast, "B")
         if Int(py=raw.nbytes) == 0:
             return PythonObject(None)
-        return py_call(context["numpy_frombuffer"], raw, context["numpy_uint8"])
+        return py_call(py_item(context, nk[].k_numpy_frombuffer), raw, py_item(context, nk[].k_numpy_uint8))
     raise Error("ValueError: unknown graph metadata operation")
