@@ -172,6 +172,17 @@ def test_gc_runs_once_per_checkout_before_analysis(tmp_path, monkeypatch):
     assert rd.gc_before_analysis(r, say=lines.append) is None
 
 
+def _terminal_signals():
+    # The child starts as it would from a terminal: SIGINT at its default, so Python installs its KeyboardInterrupt
+    # handler and _install_worktree_cleanup takes Ctrl-C. Started under a background job (`cmd &` in a
+    # non-interactive shell, as the box's check job starts the tool tests), SIGINT is inherited IGNORED; the cleanup
+    # then rightly leaves Ctrl-C alone and the child slept out the 30 s wait (box job
+    # nvc-cpuchk-20261120T174232Z-018cbd).
+    import signal
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
+    signal.signal(signal.SIGQUIT, signal.SIG_DFL)
+
+
 def _killed_child(tmp_path, r, tree, thread):
     # Registers a tree (from a pool thread when THREAD, as prefetch does) and waits to be signalled.
     register = ("rd._register_worktree(%r, t)" % str(r))
@@ -184,7 +195,7 @@ def _killed_child(tmp_path, r, tree, thread):
             "print('ready', flush=True); time.sleep(60)") % (str(ROOT / "tools"), str(tree), str(r), register)
     env = dict(os.environ, MOJOLEARN_DEPENDENCY_WORKTREES=str(tmp_path / "registry"))
     p = subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                         text=True, env=env)
+                         text=True, env=env, preexec_fn=_terminal_signals)
     assert p.stdout.readline().strip() == "ready"
     return p
 
