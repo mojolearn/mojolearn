@@ -46,6 +46,12 @@ from providers.python.neural_descriptor_pyapi_door import (
 )
 from core.scale_gamma_exact import scale_gamma_from_limbs, SGX_BAD
 from bindings.mcls_cluster_door import mcls_cluster_operation
+from bindings.operation_names_km import (
+    KM_OPN_FAMILY_KM_GETSTATE, KM_OPN_FAMILY_KM_SETSTATE, KM_OPN_FAMILY_KM_PAR_FIT, KM_OPN_FAMILY_KM_PAR_APPLY,
+    KM_OPN_FAMILY_KM_KRR_FIT, KM_OPN_FAMILY_KM_KRR_PREDICT, KM_OPN_FAMILY_KM_KRR_SCORE, KM_OPN_FAMILY_KM_NYS_FIT,
+    KM_OPN_FAMILY_KM_NYS_FIT_TRANSFORM, KM_OPN_FAMILY_KM_NYS_TRANSFORM, KM_OPN_FAMILY_KM_RBF_FIT,
+    KM_OPN_FAMILY_KM_RBF_FIT_TRANSFORM, KM_OPN_FAMILY_KM_RBF_TRANSFORM,
+)
 from bindings.parallel_plan_door import plan_devices, plan_enter, plan_exit, plan_field, plan_require_identical
 from core.device_plan import DEVICE_PLAN_WORKER, DEVICE_PLAN_CHOLESKY
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem, py_setattr
@@ -1222,19 +1228,43 @@ def _km_par_apply(model: PythonObject, args: PythonObject, context: PythonObject
     _ = x_pin
     return out
 
-def kernel_methods_operation(model: PythonObject, operation: String, args: PythonObject,
+def kernel_methods_unknown_operation(operation: String) raises:
+    """A `family_km_*` name the operation table does not hold (the shells
+    pass table names only): the text the name chain raised."""
+    raise Error("RuntimeError: unknown kernel methods operation " + operation)
+
+
+def _km_method(operation: Int) -> String:
+    """The public method an operation serves, for the not-fitted text (a
+    static literal; the old door built it per call from four suffix tests)."""
+    if operation == KM_OPN_FAMILY_KM_NYS_FIT_TRANSFORM or operation == KM_OPN_FAMILY_KM_RBF_FIT_TRANSFORM:
+        return "fit_transform"
+    if (operation == KM_OPN_FAMILY_KM_KRR_FIT or operation == KM_OPN_FAMILY_KM_NYS_FIT
+            or operation == KM_OPN_FAMILY_KM_RBF_FIT):
+        return "fit"
+    if operation == KM_OPN_FAMILY_KM_KRR_PREDICT:
+        return "predict"
+    if operation == KM_OPN_FAMILY_KM_KRR_SCORE:
+        return "score"
+    return "transform"
+
+
+def kernel_methods_operation(model: PythonObject, operation: Int, args: PythonObject,
                              context: PythonObject) raises -> PythonObject:
-    if operation == "family_km_par_fit" or operation == "family_km_par_apply":
+    """`operation` is the leaf code of bindings/operation_names_km.mojo
+    (lane bw2-svm: one range test or integer compare per step; the door
+    resolved the caller's str once)."""
+    if operation == KM_OPN_FAMILY_KM_PAR_FIT or operation == KM_OPN_FAMILY_KM_PAR_APPLY:
         var admitted = estimator_arguments(model, "_mojolearn_kernel_methods", args, context)
-        if operation == "family_km_par_fit":
+        if operation == KM_OPN_FAMILY_KM_PAR_FIT:
             return _km_par_fit(model, admitted, context)
         return _km_par_apply(model, admitted, context)
-    if operation == "family_km_getstate":
+    if operation == KM_OPN_FAMILY_KM_GETSTATE:
         var state = py_call(native_loaded_module("builtins").dict, _fields(model))
         _ = py_call(state.pop, PythonObject(_HOLDER), PythonObject(None))
         _ = py_call(state.pop, "_native_kernel_method_provider", PythonObject(None))
         return state
-    if operation == "family_km_setstate":
+    if operation == KM_OPN_FAMILY_KM_SETSTATE:
         var fields = _fields(model)
         if py_type(args[0]) is not native_loaded_module("builtins").dict:
             raise Error("TypeError: kernel state requires an ordinary native dictionary")
@@ -1242,25 +1272,19 @@ def kernel_methods_operation(model: PythonObject, operation: String, args: Pytho
         _ = py_call(fields.update, args[0])
         py_setitem(fields, _HOLDER, Python.dict())
         return PythonObject(None)
-    var fitting = operation.endswith("fit") or operation.endswith("fit_transform")
-    var method = String("transform")
-    if operation.endswith("fit_transform"):
-        method = "fit_transform"
-    elif fitting:
-        method = "fit"
-    elif operation.endswith("predict"):
-        method = "predict"
-    elif operation.endswith("score"):
-        method = "score"
-    var fields = kernel_public_admit(model, method, fitting, args[1], context)
+    # The fits: the old suffix test `endswith("fit") or endswith("fit_transform")`.
+    var fitting = (operation == KM_OPN_FAMILY_KM_KRR_FIT or operation == KM_OPN_FAMILY_KM_NYS_FIT
+                   or operation == KM_OPN_FAMILY_KM_RBF_FIT or operation == KM_OPN_FAMILY_KM_NYS_FIT_TRANSFORM
+                   or operation == KM_OPN_FAMILY_KM_RBF_FIT_TRANSFORM)
+    var fields = kernel_public_admit(model, _km_method(operation), fitting, args[1], context)
     # Lane a7a: a KernelRidge predict / score of a cross-validation fold
     # keeps the fold on the device (admit_x `device_x`: its store ids, no
     # host gather); `_krr_predict` gathers it there or, on a route that
     # reads host words, gathers its host rows.
     var fold = DoorRowsStore.none()
-    var krr_query = operation == "family_km_krr_predict" or operation == "family_km_krr_score"
+    var krr_query = operation == KM_OPN_FAMILY_KM_KRR_PREDICT or operation == KM_OPN_FAMILY_KM_KRR_SCORE
     # Lane a8a: the fit takes a fold on the device too (`_krr_fit`).
-    var krr_device_x = krr_query or operation == "family_km_krr_fit"
+    var krr_device_x = krr_query or operation == KM_OPN_FAMILY_KM_KRR_FIT
     var x: ArrayMetadata
     var x_pin = ArrayPin()  # the door's pin of X, held through the operation
     if krr_device_x and door_is_device_rows(args[1], context):
@@ -1272,9 +1296,9 @@ def kernel_methods_operation(model: PythonObject, operation: String, args: Pytho
             x = admit_family_meta(fx.array, 2, "X", context, x_pin, True)
     else:
         x = admit_family_meta(args[1], 2, "X", context, x_pin, True)
-    if operation.startswith("family_km_rbf_"):
+    if operation >= KM_OPN_FAMILY_KM_RBF_FIT and operation <= KM_OPN_FAMILY_KM_RBF_TRANSFORM:
         kernel_public_finite(x, "X")
-    if fitting and not operation.startswith("family_km_krr_"):
+    if fitting and not (operation >= KM_OPN_FAMILY_KM_KRR_FIT and operation <= KM_OPN_FAMILY_KM_KRR_SCORE):
         kernel_public_ignored_target(args[2] if len(args) > 2 else PythonObject(None), x.source.rows, context)
     var feature_names = kernel_public_feature_snapshot(args[1], context) if fitting else PythonObject(None)
     var admitted = estimator_arguments(model, "_mojolearn_kernel_methods", args, context)
@@ -1294,35 +1318,35 @@ def kernel_methods_operation(model: PythonObject, operation: String, args: Pytho
     _ = feature_names^
     _ = x^
     _ = x_pin
-    return kernel_public_result(result, method == "predict", outside, context)
+    return kernel_public_result(result, operation == KM_OPN_FAMILY_KM_KRR_PREDICT, outside, context)
 
 
-def _kernel_methods_operation(model: PythonObject, operation: String, args: PythonObject,
+def _kernel_methods_operation(model: PythonObject, operation: Int, args: PythonObject,
                               context: PythonObject, x: ArrayMetadata, x_pin: ArrayPin,
                               fold: DoorRowsStore = DoorRowsStore.none()) raises -> PythonObject:
-    if operation == "family_km_krr_fit":
+    if operation == KM_OPN_FAMILY_KM_KRR_FIT:
         _krr_fit(model, args, context, x, x_pin, fold)
         return model
-    if operation == "family_km_krr_predict":
+    if operation == KM_OPN_FAMILY_KM_KRR_PREDICT:
         return _krr_predict(model, args, context, x, x_pin, True, fold)
-    if operation == "family_km_krr_score":
+    if operation == KM_OPN_FAMILY_KM_KRR_SCORE:
         var truth = admit_family(args[2], -1, "y", context, finite=True).array
         var prediction = _krr_predict(model, args, context, x, x_pin, True, fold)
         var mode = py_get(py_fields(model), PythonObject("numeric_mode"), PythonObject(None))
         var metrics = estimator_binding(model, "_mojolearn_metrics", context)
         return mcls_cluster_operation("family_mcls_r2", Python.tuple(metrics, truth, prediction, args[3],
                                       PythonObject("uniform_average"), PythonObject(True), mode), context)
-    if operation == "family_km_nys_fit":
+    if operation == KM_OPN_FAMILY_KM_NYS_FIT:
         _ = _nys_fit(model, args, context, x, x_pin)
         return model
-    if operation == "family_km_nys_transform":
+    if operation == KM_OPN_FAMILY_KM_NYS_TRANSFORM:
         return _nys_transform(model, args, context, x, x_pin)
-    if operation == "family_km_rbf_transform":
+    if operation == KM_OPN_FAMILY_KM_RBF_TRANSFORM:
         return _rbf_transform(model, args, context, x, x_pin)
-    if operation == "family_km_nys_fit_transform":
+    if operation == KM_OPN_FAMILY_KM_NYS_FIT_TRANSFORM:
         return _nys_fit(model, args, context, x, x_pin, True)
-    if operation == "family_km_rbf_fit":
+    if operation == KM_OPN_FAMILY_KM_RBF_FIT:
         return _rbf_fit(model, args, False, context, x, x_pin)
-    if operation == "family_km_rbf_fit_transform":
+    if operation == KM_OPN_FAMILY_KM_RBF_FIT_TRANSFORM:
         return _rbf_fit(model, args, True, context, x, x_pin)
-    raise Error("RuntimeError: unknown kernel methods operation " + operation)
+    raise Error("RuntimeError: unknown kernel methods operation " + String(operation))
