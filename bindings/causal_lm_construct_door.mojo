@@ -531,9 +531,9 @@ def _model_block(mut mods: NativeModules, weights: PythonObject, input_plan: Pyt
             raise Error("CausalLM: d_model must equal n_heads * head_dim, all positive")
         var mlp = String(py_item(options, nk[].k_mlp))
         var norm = String(py_item(options, nk[].k_norm))
-        var nk = 0 if norm == "rmsnorm" else (1 if norm == "layernorm" else (2 if norm == "rmsnorm_offset" else -1))
+        var norm_code = 0 if norm == "rmsnorm" else (1 if norm == "layernorm" else (2 if norm == "rmsnorm_offset" else -1))
         var mk = 0 if mlp == "swiglu" else (1 if mlp == "gelu" else (2 if mlp == "gelu_tanh" else (3 if mlp == "geglu" else (4 if mlp == "geglu_tanh" else -1))))
-        if nk < 0:
+        if norm_code < 0:
             raise Error("CausalLM: unsupported norm=" + String(py_call(bi.repr, py_item(options, nk[].k_norm)))
                         + "; norm is 'rmsnorm', 'layernorm' or 'rmsnorm_offset'")
         if mk < 0:
@@ -578,7 +578,7 @@ def _model_block(mut mods: NativeModules, weights: PythonObject, input_plan: Pyt
         tail[7] = Int(py=py_item(options, nk[].k_max_positions))
         tail[8] = Int(Bool(py=py_item(options, nk[].k_qkv_bias)))
         tail[9] = Int(Bool(py=py_item(options, nk[].k_o_bias)))
-        tail[10] = nk
+        tail[10] = norm_code
         tail[11] = _model_bits(mods, py_item(options, nk[].k_norm_eps), "norm_eps", context)
         tail[12] = Int(Bool(py=py_item(options, nk[].k_norm_bias)))
         tail[13] = mk
@@ -587,9 +587,9 @@ def _model_block(mut mods: NativeModules, weights: PythonObject, input_plan: Pyt
         tail[16] = 0 if py_item(options, nk[].k_attn_softcap) is None else _model_bits(mods, py_item(options, nk[].k_attn_softcap), "attn_softcap", context)
         if tail[7] < 1:
             raise Error("CausalLM: max_positions must be positive")
-        if tail[12] != 0 and nk != 1:
+        if tail[12] != 0 and norm_code != 1:
             raise Error("CausalLM: norm_bias=True needs norm='layernorm'")
-        if tail[15] != 0 and nk == 1:
+        if tail[15] != 0 and norm_code == 1:
             raise Error("CausalLM: qk_norm=True with norm='layernorm' is not supported (qk_norm is an RMSNorm)")
         var window = Int(py=py_item(options, nk[].k_window))
         if window < 0:

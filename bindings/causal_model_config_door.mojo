@@ -447,14 +447,14 @@ def _config_transformer(mut mods: NativeModules, data: PythonObject, mt: String,
         raise Error("model config: layer_types requests alternating attention kinds")
     var dm = Int(py=_config_int(mods, data, "hidden_size"))
     var nh = Int(py=_config_int(mods, data, "num_attention_heads"))
-    var nk = Int(py=_config_int(mods, data, "num_key_value_heads", PythonObject(nh)))
-    if dm < 1 or nh < 1 or nk < 1:
+    var n_kv = Int(py=_config_int(mods, data, "num_key_value_heads", PythonObject(nh)))
+    if dm < 1 or nh < 1 or n_kv < 1:
         raise Error("model config: hidden_size and attention head counts must be positive")
     var hd_field = _config_int(mods, data, "head_dim", PythonObject(None), False)
     var hd = dm // nh if hd_field is None else Int(py=hd_field)
     if nh * hd != dm:
         raise Error("model config: head_dim * num_attention_heads must equal hidden_size")
-    if nh % nk != 0:
+    if nh % n_kv != 0:
         _config_refuse(mods, data, "num_key_value_heads", "num_attention_heads is not a multiple of it (must divide num_attention_heads)")
     if hd % 2 != 0:
         raise Error("model config: head_dim must be even")

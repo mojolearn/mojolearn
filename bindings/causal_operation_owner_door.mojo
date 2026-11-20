@@ -178,11 +178,11 @@ def _causal_entries(mut mods: NativeModules, entries: PythonObject, pinned: Pyth
     var types = mods.module("types")
     # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
     var original = Optional[PythonObject]()
+    var nk = causal_keys()
     if pinned is not None:
         original = py_present(pinned.downcast_value_ptr[CausalExecutionEntries]()[].entries)
         if len(original.value()) != len(entries):
             raise Error("TypeError: CausalLM native execution registry changed after admission")
-    var nk = causal_keys()
     elif py_get(entries, nk[].k_parallel_call) is not None:
         ref cpy = Python().cpython()
         var runtime = py_item(context, nk[].k_runtime)
