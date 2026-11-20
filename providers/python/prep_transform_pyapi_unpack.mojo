@@ -22,6 +22,8 @@ from core.cast_in import CastIn, cast_in_kind, CAST_KIND_FLOAT
 from core.scaler_fit_impl import scaler_cast
 from core.prep_boundary_impl import prep_float_finite, prep_gather_rows, prep_mask_any, prep_mask_export
 from core.classical_pandas_impl import pd_scatter_numeric
+from bindings.prep_keys_unpack import prep_keys
+from bindings.py_balanced import py_item
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 
@@ -69,8 +71,9 @@ def prep_finite(snapshot: ArrayMetadata, name: String) raises:
 
 def _pandas_block(value: PythonObject, single: Bool, context: PythonObject,
                   mut pin: ArrayPin) raises -> Tuple[ArrayMetadata, Bool]:
+    var nk = prep_keys()
     # `pin` receives the door's pin of the returned view.
-    if py_type(value) is context["ndarray"]:
+    if py_type(value) is py_item(context, nk[].k_ndarray):
         return (_array_snapshot(value, context, pin), False)
     var cls = py_type(value)
     if cls is _pd_class("pandas.core.arrays.categorical", "Categorical"):
@@ -81,7 +84,7 @@ def _pandas_block(value: PythonObject, single: Bool, context: PythonObject,
         if cls is _pd_class("pandas.core.arrays.datetimes", "DatetimeArray"):
             var dtype = _pd_get("pandas._libs.arrays", "NDArrayBacked", "_dtype", value)
             opaque = py_type(dtype) is _pd_class("pandas.core.dtypes.dtypes", "DatetimeTZDtype")
-        if py_type(backed) is not context["ndarray"]:
+        if py_type(backed) is not py_item(context, nk[].k_ndarray):
             raise Error("TypeError: pandas extension requires native ndarray storage")
         var data = _array_snapshot(backed, context, pin)
         pin.owner = Python.tuple(value, pin.owner)
@@ -89,9 +92,9 @@ def _pandas_block(value: PythonObject, single: Bool, context: PythonObject,
     if cls is not _pd_class("pandas.core.arrays.integer", "IntegerArray") and cls is not _pd_class("pandas.core.arrays.floating", "FloatingArray") and cls is not _pd_class("pandas.core.arrays.boolean", "BooleanArray"):
         raise Error("TypeError: pandas input requires ordinary numeric storage without extension callbacks")
     var fields = _pd_fields(value)
-    var data_value = py_get(fields, "_data")
-    var mask_value = py_get(fields, "_mask")
-    if py_type(data_value) is not context["ndarray"] or py_type(mask_value) is not context["ndarray"]:
+    var data_value = py_get(fields, nk[].k__data)
+    var mask_value = py_get(fields, nk[].k__mask)
+    if py_type(data_value) is not py_item(context, nk[].k_ndarray) or py_type(mask_value) is not py_item(context, nk[].k_ndarray):
         raise Error("TypeError: pandas nullable storage requires exact native arrays")
     var data_pin = ArrayPin()
     var mask_pin = ArrayPin()
@@ -135,14 +138,15 @@ def _pandas_admit_block(block: PythonObject) raises:
 
 def _pandas_snapshot(source: PythonObject, name: String, validate: Bool, scan: Bool,
                      context: PythonObject, mut pin: ArrayPin) raises -> ArrayMetadata:
+    var nk = prep_keys()
     var b = native_loaded_module("builtins")
     var series = py_type(source) is _pd_class("pandas.core.series", "Series")
-    var manager = py_get(_pd_fields(source), "_mgr")
+    var manager = py_get(_pd_fields(source), nk[].k__mgr)
     var blocks = PythonObject(None)
     if series:
         if py_type(manager) is not _pd_class("pandas.core.internals.managers", "SingleBlockManager"):
             raise Error("TypeError: pandas Series requires native single-block storage")
-        blocks = py_get(_pd_fields(manager), "blocks")
+        blocks = py_get(_pd_fields(manager), nk[].k_blocks)
     else:
         if py_type(manager) is not _pd_class("pandas.core.internals.managers", "BlockManager"):
             raise Error("TypeError: pandas DataFrame requires native block storage")
@@ -220,7 +224,7 @@ def _pandas_snapshot(source: PythonObject, name: String, validate: Bool, scan: B
         if not objects and long_width > 0:
             description.source.itemsize = long_width
         return description^
-    var output = classical_typed(Python.tuple(rows) if series else Python.tuple(rows, cols), "<f4", context["output_context"])
+    var output = classical_typed(Python.tuple(rows) if series else Python.tuple(rows, cols), "<f4", py_item(context, nk[].k_output_context))
     var address = Int(py=classical_address(output))
     var dest = F32P(unsafe_from_address=address)
     var seen = List[Bool](length=cols, fill=False)
@@ -248,17 +252,18 @@ def _pandas_snapshot(source: PythonObject, name: String, validate: Bool, scan: B
 
 
 def _rows_snapshot(source: PythonObject, context: PythonObject, mut pin: ArrayPin) raises -> ArrayMetadata:
+    var nk = prep_keys()
     var b = native_loaded_module("builtins")
     var fields = _rows_fields(source, context)
-    var dtype = fields["dtype"]
+    var dtype = py_item(fields, nk[].k_dtype)
     if py_type(dtype) is not b.str:
         raise Error("TypeError: native row selection requires native dtype metadata")
     # No gathered host copy is cached on the selection (hazard class A,
     # p3-prep): an unkeyed `_host` copy was served after the base Array or
     # the indices were edited in place. The native gather below runs on each
     # call; it is one strided copy of the selected rows.
-    var base = fields["base"]
-    var indices = fields["indices"]
+    var base = py_item(fields, nk[].k_base)
+    var indices = py_item(fields, nk[].k_indices)
     classical_admit_value(base, context)
     classical_admit_value(indices, context)
     if not classical_is_array(base, context) or not classical_is_array(indices, context):
@@ -278,7 +283,7 @@ def _rows_snapshot(source: PythonObject, context: PythonObject, mut pin: ArrayPi
         raise Error("MaxAbsScaler requires a nonempty row selection within native indexing bounds")
     var code = String("<f") if data.source.kind == CAST_KIND_FLOAT else (String("<i") if data.source.kind == 1 else String("<u"))
     code += String(data.source.itemsize)
-    var output = classical_typed(Python.tuple(n, d), code, context["output_context"])
+    var output = classical_typed(Python.tuple(n, d), code, py_item(context, nk[].k_output_context))
     var address = Int(py=classical_address(output))
     prep_gather_rows(data.source, index.source.addr, n, address)
     var shape = List[Int]()
@@ -336,8 +341,9 @@ def prep_transform_snapshot(source: PythonObject, name: String, validate: Bool,
                             scan: Bool, context: PythonObject, mut pin: ArrayPin,
                             allow_sparse: Bool = False,
                             check_sparse: Bool = True) raises -> ArrayMetadata:
+    var nk = prep_keys()
     var source_type = py_type(source)
-    if source_type is context["maxabs_rows_class"]:
+    if source_type is py_item(context, nk[].k_maxabs_rows_class):
         # DeviceRows is a frame-like native handle in _sk_validate.describe;
         # it has width semantics but no outer float-buffer finite scan.
         var snapshot = _rows_snapshot(source, context, pin)
@@ -346,8 +352,8 @@ def prep_transform_snapshot(source: PythonObject, name: String, validate: Bool,
         return snapshot^
     # Exact array classes are never a sparse, pandas, torch, sequence or
     # scalar input: identity tests only, then the one-admission snapshot.
-    var ndarray = py_get(context, "ndarray")
-    if (ndarray is not None and source_type is ndarray) or source_type is py_get(context, "array_class"):
+    var ndarray = py_get(context, nk[].k_ndarray)
+    if (ndarray is not None and source_type is ndarray) or source_type is py_get(context, nk[].k_array_class):
         return _exact_array_snapshot(source, name, validate, scan, context, pin)
     var b = native_loaded_module("builtins")
     # Match loaded native sparse class identities before general admission.
@@ -356,7 +362,7 @@ def prep_transform_snapshot(source: PythonObject, name: String, validate: Bool,
     if host_sparse_format(source).byte_length() > 0:
         if check_sparse and not allow_sparse:
             raise Error("TypeError: Sparse data was passed for X, but dense data is required. Use '.toarray()' to convert to a dense numpy array. (" + name + " takes dense X only.)")
-        var raw = py_get(_sparse_fields(source), "_shape")
+        var raw = py_get(_sparse_fields(source), nk[].k__shape)
         if py_type(raw) is not b.tuple or len(raw) != 2 or py_type(raw[0]) is not b.int or py_type(raw[1]) is not b.int:
             raise Error("TypeError: sparse input requires native shape metadata")
         var shape = List[Int]()
@@ -370,7 +376,7 @@ def prep_transform_snapshot(source: PythonObject, name: String, validate: Bool,
     var sequence = py_type(prepared) is b.list or py_type(prepared) is b.tuple
     var cls = py_type(prepared)
     var described = cls is not b.int and cls is not b.float and cls is not b.bool and cls is not b.str and cls is not b.bytes and cls is not b.dict and cls is not b.range and prepared is not None
-    if _one_of(cls, context["scalar_types"]) and String(prepared.dtype.kind) == "c":
+    if _one_of(cls, py_item(context, nk[].k_scalar_types)) and String(prepared.dtype.kind) == "c":
         raise Error("Complex data not supported: " + name + " got a complex X.")
     var scan_sequence = True
     var dimensions = List[Int]()
@@ -387,7 +393,7 @@ def prep_transform_snapshot(source: PythonObject, name: String, validate: Bool,
             raise Error("Complex data not supported: " + name + " got a complex X.")
         scan_sequence = cls is b.float
         numeric_sequence = cls is b.int or cls is b.bool or cls is b.float or cls is b.list or cls is b.tuple
-        if _one_of(cls, context["scalar_types"]):
+        if _one_of(cls, py_item(context, nk[].k_scalar_types)):
             var kind = String(first.dtype.kind)
             if kind == "c":
                 raise Error("Complex data not supported: " + name + " got a complex X.")

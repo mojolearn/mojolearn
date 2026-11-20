@@ -27,28 +27,32 @@ from bindings.x_prep_native_owner_run import xprep_r3
 from bindings.x_prep_native_owner_door import xprep_storage, xprep_take, xprep_values, xprep_run
 from gemm.f16_widen import f16_bits_to_f32
 from bindings.py_optional import py_or_none, py_present
+from bindings.robust_keys_unpack import robust_keys
+from bindings.py_balanced import py_item
 
 def _truth(value: PythonObject, context: PythonObject) raises -> Bool:
+    var nk = robust_keys()
     var b = native_loaded_module("builtins")
     var cls = py_type(value)
-    if value is None or cls is b.bool or cls is b.int or cls is b.float or cls is b.complex or cls is b.str or cls is b.bytes or cls is b.list or cls is b.tuple or cls is b.dict or cls is b.range or _one_of(cls,context["scalar_types"]):
+    if value is None or cls is b.bool or cls is b.int or cls is b.float or cls is b.complex or cls is b.str or cls is b.bytes or cls is b.list or cls is b.tuple or cls is b.dict or cls is b.range or _one_of(cls,py_item(context, nk[].k_scalar_types)):
         return Bool(py=value)
     raise Error("TypeError: RobustScaler options require native values; Python truth hooks cannot execute")
 
 
 def _complex_warning(context: PythonObject) raises:
+    var nk = robust_keys()
     var b = native_loaded_module("builtins")
-    var module = py_get(context["modules"],"numpy.exceptions")
+    var module = py_get(py_item(context, nk[].k_modules),"numpy.exceptions")
     if module is None:
-        module = py_get(context["modules"],"numpy")
+        module = py_get(py_item(context, nk[].k_modules),nk[].k_numpy)
     if module is None or py_type(module) is not py_type(native_loaded_module("sys")):
         raise Error("TypeError: complex quantiles require native NumPy warning metadata")
-    var category = py_get(_warning_fields(py_fields(module)),"ComplexWarning")
+    var category = py_get(_warning_fields(py_fields(module)),nk[].k_ComplexWarning)
     if py_type(category) is not b.type:
         raise Error("TypeError: complex quantiles require a native warning category")
-    var ancestry = py_call(b.type.__dict__["__mro__"].__get__,category)
+    var ancestry = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__,category)
     for i in range(len(ancestry)):  # driver-loop: admit warning class metadata before its native slot guard
-        var mapping = py_call(b.type.__dict__["__dict__"].__get__,ancestry[i])
+        var mapping = py_call(py_item(b.type.__dict__, nk[].k___dict__).__get__,ancestry[i])
         var keys = py_call(b.list,mapping)
         for k in range(len(keys)):  # driver-loop: class keys may otherwise invoke Python equality during lookup
             if py_type(keys[k]) is not b.str:
@@ -59,11 +63,12 @@ def _complex_warning(context: PythonObject) raises:
 
 
 def _number(value: PythonObject, context: PythonObject) raises -> Float64:
+    var nk = robust_keys()
     var b = native_loaded_module("builtins")
     var cls = py_type(value)
-    if cls is b.bool or cls is b.int or cls is b.float or cls is b.str or cls is b.bytes or _one_of(cls,context["scalar_types"]):
+    if cls is b.bool or cls is b.int or cls is b.float or cls is b.str or cls is b.bytes or _one_of(cls,py_item(context, nk[].k_scalar_types)):
         return Float64(py=py_call(b.float,value))
-    if py_get(context,"ndarray") is not None:
+    if py_get(context,nk[].k_ndarray) is not None:
         var constructor = native_numpy_dtype(context)
         for code in ["S", "U", "g", "c8", "c16", "G"]:  # small-loop(params: supported native quantile scalar kinds)
             if cls is py_call(constructor,code).type:

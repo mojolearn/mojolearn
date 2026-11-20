@@ -14,9 +14,12 @@ from bindings.optimizer_public_words_unpack import stash_python_error
 from bindings.prep_native_estimator_door import prep_estimator_admit
 from bindings.prep_select_native_door import rfe_support_cached
 from bindings.x_prep_native_inputs_door import _dense_values, _target
+from bindings.prep_keys_unpack import prep_keys
+from bindings.py_balanced import py_item
 
 
 def composition_value(value: PythonObject, context: PythonObject, depth: Int = 0) raises:
+    var nk = prep_keys()
     if depth > 64:
         raise Error("TypeError: native composition configuration exceeds the supported nesting depth")
     classical_admit_value(value, context)
@@ -25,7 +28,7 @@ def composition_value(value: PythonObject, context: PythonObject, depth: Int = 0
     if cls is b.list or cls is b.tuple:
         for i in range(len(value)):  # driver-loop: admitted configuration containers
             composition_value(value[i], context, depth + 1)
-    elif cls is py_get(context, "ndarray") and String(value.dtype.kind) == "O":
+    elif cls is py_get(context, nk[].k_ndarray) and String(value.dtype.kind) == "O":
         # Exact ndarray storage may contain arbitrary Python objects. Inspect
         # the native flat iterator's references before later bool/float casts.
         var flat = value.flat
@@ -34,14 +37,15 @@ def composition_value(value: PythonObject, context: PythonObject, depth: Int = 0
 
 
 def composition_fields(model: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = prep_keys()
     var cls = py_type(model)
     var b = native_loaded_module("builtins")
     if py_type(cls) is not b.type:
         raise Error("TypeError: native preprocessing composition refuses Python metaclass hooks")
-    var plan = py_get(context["prep_composition_plans"], cls)
+    var plan = py_get(py_item(context, nk[].k_prep_composition_plans), cls)
     if plan is None:
         raise Error("TypeError: native preprocessing composition requires its exact connected class; Python subclasses are not supported")
-    var fields = py_call(plan["fields_get"], model, cls)
+    var fields = py_call(py_item(plan, nk[].k_fields_get), model, cls)
     # __dict__ assignment accepts dict subclasses. Refuse before iteration,
     # hashing or lookup can invoke a subclass's Python protocol methods.
     if py_type(fields) is not b.dict:
@@ -50,7 +54,7 @@ def composition_fields(model: PythonObject, context: PythonObject) raises -> Pyt
     for i in range(len(keys)):  # driver-loop: instance state keys before native dictionary lookup
         if py_type(keys[i]) is not b.str:
             raise Error("TypeError: native preprocessing state requires exact string keys")
-    var names = plan["parameters"]
+    var names = py_item(plan, nk[].k_parameters)
     for i in range(len(names)):  # driver-loop: declared composition configuration, before coercion or comparison
         var value = fields[names[i]]
         if String(names[i]) == "estimator":
@@ -68,7 +72,8 @@ def composition_fields(model: PythonObject, context: PythonObject) raises -> Pyt
 
 def composition_require_fitted(model: PythonObject, fields: PythonObject, operation: String,
                                context: PythonObject) raises:
-    if py_contains(fields, "n_features_in_"):
+    var nk = prep_keys()
+    if py_contains(fields, nk[].k_n_features_in_):
         return
     var cls = classical_not_fitted_class(context)
     var message = "This " + String(py_type(model).__name__) + " instance is not fitted yet. Call 'fit' with appropriate arguments before using " + operation + "."
@@ -80,6 +85,7 @@ def composition_require_fitted(model: PythonObject, fields: PythonObject, operat
 
 def composition_before(model: PythonObject, kind: String, operation: String, args: PythonObject,
                        context: PythonObject) raises -> PythonObject:
+    var nk = prep_keys()
     var fields = composition_fields(model, context)
     var fitting = operation == "fit" or operation == "fit_transform"
     if not fitting:
@@ -88,7 +94,7 @@ def composition_before(model: PythonObject, kind: String, operation: String, arg
         # (prep_select_native rfe_support_cached); the mask is admitted only
         # when it is read: get_support, or a mask put there after fit.
         if kind == "rfe" and (operation == "get_support" or not rfe_support_cached(fields)):
-            composition_value(fields["_mask"], context)
+            composition_value(py_item(fields, nk[].k__mask), context)
     if operation == "get_support":
         composition_value(args[0], context)
         return args
@@ -110,7 +116,7 @@ def composition_before(model: PythonObject, kind: String, operation: String, arg
         _target(args[1], rows, context)
     if not fitting:
         var names = _feature_names(args[0], context)
-        var fitted = py_get(fields, "feature_names_in_")
+        var fitted = py_get(fields, nk[].k_feature_names_in_)
         if names is not None and fitted is not None:
             classical_admit_value(fitted, context)
             var previous = py_call(b.list, fitted)
@@ -131,10 +137,11 @@ def composition_before(model: PythonObject, kind: String, operation: String, arg
 
 
 def composition_after_fit(model: PythonObject, source: PythonObject, context: PythonObject) raises:
+    var nk = prep_keys()
     var fields = composition_fields(model, context)
     var names = _feature_names(source, context)
     if names is None:
         _ = py_call(fields.pop, "feature_names_in_", PythonObject(None))
     else:
-        py_setitem(fields, "feature_names_in_", names)
-    py_setitem(fields, "_mojolearn_fitted", PythonObject(True))
+        py_setitem(fields, nk[].k_feature_names_in_, names)
+    py_setitem(fields, nk[].k__mojolearn_fitted, PythonObject(True))

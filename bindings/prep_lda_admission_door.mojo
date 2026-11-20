@@ -27,13 +27,16 @@ from bindings.native_class_admission_door import class_record, class_admit, clas
 from bindings.label_admission_native_unpack import _labels_class as native_labels_class
 from bindings.py_attr import py_attr
 from bindings.py_model_records import bump_model_generation
+from bindings.prep_keys_unpack import prep_keys
+from bindings.py_balanced import py_item
 
 
 def _lda_storage(model: PythonObject, context: PythonObject) raises -> PythonObject:
-    if py_type(model) is not py_get(context, "lda_native_class"):
+    var nk = prep_keys()
+    if py_type(model) is not py_get(context, nk[].k_lda_native_class):
         raise Error("TypeError: native LDA requires its connected class without Python subclass hooks")
-    classical_check_layout(model, context["lda_admission_context"])
-    return py_call(context["lda_fields_get"], model, py_type(model))
+    classical_check_layout(model, py_item(context, nk[].k_lda_admission_context))
+    return py_call(py_item(context, nk[].k_lda_fields_get), model, py_type(model))
 
 
 def _lda_parameter(name: PythonObject, value: PythonObject, context: PythonObject, configure: Bool = False) raises:
@@ -54,8 +57,9 @@ def _lda_parameter(name: PythonObject, value: PythonObject, context: PythonObjec
 
 
 def lda_native_initialize(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = prep_keys()
     var fields = _lda_storage(model, context)
-    var names = context["lda_parameters"]
+    var names = py_item(context, nk[].k_lda_parameters)
     if len(args) != len(names):
         raise Error("TypeError: native LDA initializer requires its complete constructor configuration")
     for i in range(len(names)):  # driver-loop: seven unchanged constructor values, before publication
@@ -95,15 +99,16 @@ def _lda_stamped(model: PythonObject, fields: PythonObject, names: PythonObject,
     `plain` is derived from `classes_` again unless the record's `classes_`
     is itself the plain list: an ndarray's elements can change in place, so
     the derived labels are compared as the key path compares them."""
+    var nk = prep_keys()
     var stamped = records_stamped_get(RECORDS_PREPARED, model, _LDA_STAMP)
     if stamped is None or not (stamped[0] is fields) or not (stamped[1] is names) or not (stamped[2] is fitted):
         return PythonObject(None)
     if Bool(py=stamped[4]) != configure:
         return PythonObject(None)
     var kept = stamped[3]
-    if kept is None or not py_contains(fields, "classes_"):
+    if kept is None or not py_contains(fields, nk[].k_classes_):
         return Python.tuple(fields, kept)
-    var value = fields["classes_"]
+    var value = py_item(fields, nk[].k_classes_)
     if kept is value:
         return Python.tuple(fields, kept)
     var again = PythonObject(None)
@@ -125,10 +130,11 @@ def prep_plain_classes(value: PythonObject, context: PythonObject) raises -> Pyt
     per class state: the result is kept in the class-admission registry
     (type-watcher epoch; any class or ancestor assignment drops it; Python
     3.10/3.11 keep no record and check every call, as before) (perf2-prep)."""
-    var cls = py_get(context, "classifier_labels_class")
+    var nk = prep_keys()
+    var cls = py_get(context, nk[].k_classifier_labels_class)
     if cls is None or py_type(value) is not cls:
         return value
-    var connected = context["classifier_labels_namespace"]
+    var connected = py_item(context, nk[].k_classifier_labels_namespace)
     var mods = NativeModules()
     var record = class_record(mods, _LABELS_CLASS_SLOT, cls)
     if record is None or record[0] is not connected:
@@ -164,9 +170,10 @@ def lda_native_fields_plain(model: PythonObject, context: PythonObject, configur
     Array value (its admission is of the object, its dtype and shape, which
     such a write does not change), or an in-place dtype/shape reassignment of
     an ndarray. The covariance_estimator refusal runs on every call."""
+    var nk = prep_keys()
     var fields = _lda_storage(model, context)
-    var names = context["lda_parameters"]
-    var hit = _lda_stamped(model, fields, names, context["lda_fitted_fields"], configure, context)
+    var names = py_item(context, nk[].k_lda_parameters)
+    var hit = _lda_stamped(model, fields, names, py_item(context, nk[].k_lda_fitted_fields), configure, context)
     if hit is not None:
         return hit
     var mods = NativeModules()
@@ -184,7 +191,7 @@ def lda_native_fields_plain(model: PythonObject, context: PythonObject, configur
             break
         _ = py_call(key.append, names[i])
         prepared_key_add(mods, key, value)
-    var fitted = context["lda_fitted_fields"]
+    var fitted = py_item(context, nk[].k_lda_fitted_fields)
     # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
     # The try lives in `_lda_plain_attempt`, which returns from inside it.
     var found_plain = Optional[PythonObject]()
@@ -245,8 +252,9 @@ def lda_native_fields(model: PythonObject, context: PythonObject, configure: Boo
 
 
 def lda_native_get_params(fields: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = prep_keys()
     var result = Python.dict()
-    var names = context["lda_parameters"]
+    var names = py_item(context, nk[].k_lda_parameters)
     for i in range(len(names)):  # driver-loop: the fixed constructor parameter schema
         py_setitem(result, names[i], fields[names[i]])
     return result
@@ -254,12 +262,13 @@ def lda_native_get_params(fields: PythonObject, context: PythonObject) raises ->
 
 def lda_native_set_params(model: PythonObject, fields: PythonObject, values: PythonObject,
                           context: PythonObject) raises -> PythonObject:
+    var nk = prep_keys()
     # Generation word (bindings/py_model_records.mojo, lane ne1-e-records):
     # every stamped record of this object misses from here on.
     _ = bump_model_generation(model)
     if py_type(values) is not py_type(Python.dict()):
         raise Error("TypeError: native LDA parameter updates require an ordinary dictionary")
-    var names = context["lda_parameters"]
+    var names = py_item(context, nk[].k_lda_parameters)
     var keys = py_call(py_type(Python.list()), values)
     for i in range(len(keys)):  # driver-loop: argument names before equality or conversion
         if py_type(keys[i]) is not py_type(PythonObject("")):
@@ -275,6 +284,7 @@ def lda_native_set_params(model: PythonObject, fields: PythonObject, values: Pyt
 
 
 def lda_native_labels(value: PythonObject, context: PythonObject, fitting: Bool = False, name: String = "LinearDiscriminantAnalysis") raises:
+    var nk = prep_keys()
     if fitting and value is None:
         raise Error(name + " requires y to be passed, but the target y is None.")
     classical_admit_value(value, context)
@@ -339,9 +349,9 @@ def lda_native_labels(value: PythonObject, context: PythonObject, fitting: Bool 
         if len(shape) == 2 and shape[1] == 1 and py_type(value) is not b.list and py_type(value) is not b.tuple and py_type(value) is not b.memoryview:
             metric_warn(COLUMN_WARNING, _warning_category(context), context)
         var numeric_float = True
-        if py_type(value) is context["array_class"]:
+        if py_type(value) is py_item(context, nk[].k_array_class):
             numeric_float = String(value.dtype).startswith("<f")
-        elif py_type(value) is py_get(context, "ndarray"):
+        elif py_type(value) is py_get(context, nk[].k_ndarray):
             numeric_float = String(value.dtype.kind) == "f"
         elif py_type(value) is b.list or py_type(value) is b.tuple:
             numeric_float = len(flat) > 0 and metric_is_real(flat[0], context) and not metric_is_integral(flat[0], context)

@@ -17,6 +17,8 @@ from std.python._cpython import PyObjectPtr
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.optimizer_public_words_unpack import stash_python_error
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
+from bindings.prep_keys_unpack import prep_keys
+from bindings.py_balanced import py_item
 
 
 def prep_entry_call(entry: PythonObject, args: PythonObject) raises -> PythonObject:
@@ -33,15 +35,17 @@ def prep_entry_call(entry: PythonObject, args: PythonObject) raises -> PythonObj
 def prep_native_entry(context: PythonObject) raises -> PythonObject:
     """The model-selection owner's compiled entry (a builtin function, never a
     Python callable)."""
+    var nk = prep_keys()
     var b = native_loaded_module("builtins")
-    var entry = py_get(context, "native_estimator_entry")
+    var entry = py_get(context, nk[].k_native_estimator_entry)
     if entry is None or py_type(entry) is not py_type(b.len):
         raise Error("ImportError: mojolearn: the native estimator entry is unavailable")
     return entry
 
 
 def prep_native_context(context: PythonObject) raises -> PythonObject:
-    var found = py_get(context, "native_estimator_context")
+    var nk = prep_keys()
+    var found = py_get(context, nk[].k_native_estimator_context)
     if found is None:
         raise Error("ImportError: mojolearn: the native estimator plans are not connected")
     return found
@@ -49,23 +53,25 @@ def prep_native_context(context: PythonObject) raises -> PythonObject:
 
 def prep_estimator_plan(est: PythonObject, context: PythonObject) raises -> PythonObject:
     """The connected native ABI plan of est's exact class, or None."""
+    var nk = prep_keys()
     var b = native_loaded_module("builtins")
     var cls = py_type(est)
     if py_type(cls) is not b.type:
         return PythonObject(None)
-    return py_get(prep_native_context(context)["family_msel_estimators"], cls)
+    return py_get(py_item(prep_native_context(context), nk[].k_family_msel_estimators), cls)
 
 
 def prep_estimator_admit(est: PythonObject, owner: String, context: PythonObject) raises:
     """Refuse an estimator without a connected native plan: a user class, a
     subclass of a mojolearn estimator, or a built-in whose native schema is
     still pending. Its methods would be Python code in the runtime."""
+    var nk = prep_keys()
     var b = native_loaded_module("builtins")
     if py_type(py_type(est)) is not b.type:
         # A class with its own metaclass (scikit-learn's ABCMeta estimators)
         # has no connected plan either: the same by-name refusal, its name
         # read through type's own descriptor so no metaclass hook runs.
-        var name = py_call(b.type.__dict__["__name__"].__get__, py_type(est))
+        var name = py_call(py_item(b.type.__dict__, nk[].k___name__).__get__, py_type(est))
         raise Error("TypeError: mojolearn: " + owner + " requires a mojolearn estimator; got " + String(name))
     if prep_estimator_plan(est, context) is None:
         raise Error("TypeError: mojolearn: " + owner + " requires a mojolearn estimator; got "
@@ -74,8 +80,9 @@ def prep_estimator_admit(est: PythonObject, owner: String, context: PythonObject
 
 def prep_estimator_has(est: PythonObject, method: String, context: PythonObject) raises -> Bool:
     """Whether est's native plan serves `method` (the plan's fixed method table)."""
+    var nk = prep_keys()
     var plan = prep_estimator_plan(est, context)
-    return plan is not None and py_contains(plan["methods"], PythonObject(method))
+    return plan is not None and py_contains(py_item(plan, nk[].k_methods), PythonObject(method))
 
 
 def prep_estimator_clone(est: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -123,6 +130,7 @@ def prep_native_split(cv: PythonObject, x: PythonObject, y: PythonObject, contex
 
 
 def prep_estimator_attribute(est: PythonObject, name: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = prep_keys()
     # RFE's attribute path reads only connected native estimator state or
     # an explicitly registered native attribute operation (SVM coef_).
     # operator.attrgetter/getattr could invoke arbitrary Python descriptors.
@@ -138,7 +146,7 @@ def prep_estimator_attribute(est: PythonObject, name: PythonObject, context: Pyt
         if prep_estimator_has(current, String(parts[k]), context):
             current = prep_estimator_call(current, String(parts[k]), Python.tuple(), context)
         else:
-            var fields = py_call(plan["fields_get"], current, py_type(current))
+            var fields = py_call(py_item(plan, nk[].k_fields_get), current, py_type(current))
             current = py_get(fields, parts[k])
         if current is None:
             return current

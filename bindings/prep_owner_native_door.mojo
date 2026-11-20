@@ -25,9 +25,12 @@ from bindings.prep_select_native_door import prep_rfe_call, prep_mutual_info_cal
 from bindings.prep_composition_lifecycle_door import composition_before, composition_after_fit
 from bindings.parallel_public_result_door import parallel_public_result
 from bindings.public_lifecycle_owner_door import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result
+from bindings.prep_keys_unpack import prep_keys
+from bindings.py_balanced import py_item
 
 
 def _owner_kind(model: PythonObject, context: PythonObject) raises -> String:
+    var nk = prep_keys()
     # The owner kind of this model's class (or a base, by its MRO); "" when
     # the encode owner serves it (or model is None: a module function).
     if model is None:
@@ -37,7 +40,7 @@ def _owner_kind(model: PythonObject, context: PythonObject) raises -> String:
     var cls = py_type(model)
     if py_type(cls) is not b.type:
         raise Error("TypeError: native preprocessing refuses Python metaclass hooks")
-    var kinds = context["prep_owner_kinds"]
+    var kinds = py_item(context, nk[].k_prep_owner_kinds)
     # The model's own class is the MRO's first row: an exact owner class is
     # answered by that one lookup (perf3-prep-shared; same as the encode
     # owner's `_kind`). Any other class (the encode classes: the common
@@ -51,7 +54,7 @@ def _owner_kind(model: PythonObject, context: PythonObject) raises -> String:
     var record = class_record(mods, _OWNER_KIND_SLOT, cls)
     if record is not None and record[0] is kinds:
         return String(record[1])
-    var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
+    var mro = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, cls)
     var found = String("")
     for k in range(len(mro)):  # driver-loop: over the model class's MRO
         var kind = py_get(kinds, mro[k])

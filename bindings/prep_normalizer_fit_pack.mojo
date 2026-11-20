@@ -23,6 +23,8 @@ from bindings.prep_normalizer_fit_unpack import (
     _process_mode,
     _publication,
 )
+from bindings.prep_keys_unpack import prep_keys
+from bindings.py_balanced import py_item
 
 
 def _target_tags(model: PythonObject) raises -> PythonObject:
@@ -39,20 +41,21 @@ def _target_tags(model: PythonObject) raises -> PythonObject:
 
 def normalizer_fit(model: PythonObject, source: PythonObject, target: PythonObject,
                    project: Bool, context: PythonObject) raises -> PythonObject:
+    var nk = prep_keys()
     var b = native_loaded_module("builtins")
     var state = _fields(model)
     var fields = py_call(b.dict, state)
     var mode = _process_mode(context)
     var missing = Python.list()
-    var norm = py_get(fields, "norm", missing)
-    var previous = py_get(fields, "_mojolearn_fitting", 0)
+    var norm = py_get(fields, nk[].k_norm, missing)
+    var previous = py_get(fields, nk[].k__mojolearn_fitting, 0)
     var nested = _truth(previous)
     var name = String(py_type(model).__name__)
     var tags = _tags(model, fields)
     var targets = _target_tags(model)
-    var validate = not nested and _truth(py_get(tags, "two_d_array", True)) and not _truth(py_get(tags, "one_d_array", False))
-    var scan = not _truth(py_get(tags, "allow_nan", False))
-    var sparse = _truth(py_get(tags, "sparse", False))
+    var validate = not nested and _truth(py_get(tags, nk[].k_two_d_array, True)) and not _truth(py_get(tags, nk[].k_one_d_array, False))
+    var scan = not _truth(py_get(tags, nk[].k_allow_nan, False))
+    var sparse = _truth(py_get(tags, nk[].k_sparse, False))
     # _sk_validate._check_y's required default follows _estimator_type.
     # Only exact strings are compared natively; other values would run
     # Python equality hooks.
@@ -61,8 +64,8 @@ def normalizer_fit(model: PythonObject, source: PythonObject, target: PythonObje
         raise Error("TypeError: native Normalizer fit requires an exact string estimator type")
     var classifier = estimator_type is not None and String(estimator_type) == "classifier"
     var regressor = estimator_type is not None and String(estimator_type) == "regressor"
-    var required = _truth(py_get(targets, "required", PythonObject(classifier or regressor)))
-    var multi = _truth(py_get(targets, "multi_output", False))
+    var required = _truth(py_get(targets, nk[].k_required, PythonObject(classifier or regressor)))
+    var multi = _truth(py_get(targets, nk[].k_multi_output, False))
     # Hooks are captured/admitted before any input conversion or native entry
     # can release the GIL. This operation has no dynamic Python metadata work.
     if not nested and scan and _setting(model, fields, "_mojolearn_allows_nan", PythonObject(None)) is not None:
@@ -92,21 +95,21 @@ def normalizer_fit(model: PythonObject, source: PythonObject, target: PythonObje
     var started = previous + PythonObject(1)
     var remaining = started - PythonObject(1)
     _publication(state)
-    py_setitem(state, "_mojolearn_fitting", started)
+    py_setitem(state, nk[].k__mojolearn_fitting, started)
     var result = model
     try:
         var entries = _native_entries(mode, context)
         var values = prep_transform_values(snapshot, pin, context)
         if norm is missing:
-            norm = fields["norm"]
+            norm = py_item(fields, nk[].k_norm)
         var code = _normalizer_norm(norm)
         var n = snapshot.source.rows
         var d = snapshot.source.cols
         # Preserve the old _fit publication point: combined-transform failure
         # retains these learned fields, but does not set a new success flag.
         _publication(state)
-        py_setitem(state, "n_features_in_", d)
-        py_setitem(state, "numeric_mode_", mode)
+        py_setitem(state, nk[].k_n_features_in_, d)
+        py_setitem(state, nk[].k_numeric_mode_, mode)
         if project:
             result = _normalizer_apply(values, n, d, code, entries, context)
             # PublicOutputsMixin installs this conversion before _track_fit
@@ -120,7 +123,7 @@ def normalizer_fit(model: PythonObject, source: PythonObject, target: PythonObje
             raise error^
     finally:
         _finish_depth(state, remaining)
-    py_setitem(state, "_mojolearn_fitted", True)
+    py_setitem(state, nk[].k__mojolearn_fitted, True)
     if not nested:
         # before_fit's old _array_like had already removed DataFrame column
         # labels. Preserve that behavior, including removal on successful refit.

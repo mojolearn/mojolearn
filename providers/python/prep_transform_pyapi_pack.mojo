@@ -28,9 +28,12 @@ from core.classical_pandas_impl import pd_scatter_numeric
 from providers.python.prep_transform_pyapi_unpack import (
     F32P,
 )
+from bindings.prep_keys_unpack import prep_keys
+from bindings.py_balanced import py_item
 
 
 def prep_transform_values(mut snapshot: ArrayMetadata, mut pin: ArrayPin, context: PythonObject) raises -> PythonObject:
+    var nk = prep_keys()
     if snapshot.dtype_number == -102 or snapshot.dtype_number == -103:
         raise Error(snapshot.dtype_name)
     if snapshot.dtype_number == -101:
@@ -58,7 +61,7 @@ def prep_transform_values(mut snapshot: ArrayMetadata, mut pin: ArrayPin, contex
         return _frozen_values(snapshot, pin, view, context)
     # Allocate a private packed view, so the transport cannot reread any
     # original mutable Array slot after the operation snapshot was captured.
-    var output = classical_typed(Python.tuple(n, d), "<f4", context["output_context"])
+    var output = classical_typed(Python.tuple(n, d), "<f4", py_item(context, nk[].k_output_context))
     var address = Int(py=classical_address(output))
     scaler_cast(snapshot.source.addr, snapshot.source.s0, snapshot.source.s1, n, d,
                 snapshot.source.itemsize, snapshot.source.kind, snapshot.native_byte_order,

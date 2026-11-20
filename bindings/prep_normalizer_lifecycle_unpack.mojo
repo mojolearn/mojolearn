@@ -20,13 +20,15 @@ from providers.python.prep_transform_pyapi_unpack import prep_transform_snapshot
 from providers.python.prep_transform_pyapi_pack import prep_transform_values
 from providers.python.array_metadata_pyapi_door import ArrayPin
 from core.shared_slot import SharedSlot
+from bindings.prep_keys_unpack import prep_keys
 
 
 def _fitted(fields: PythonObject) raises -> Bool:
-    if _truth(py_get(fields, "_mojolearn_fitted")) or _truth(py_get(fields, "_mojolearn_fitting")):
+    var nk = prep_keys()
+    if _truth(py_get(fields, nk[].k__mojolearn_fitted)) or _truth(py_get(fields, nk[].k__mojolearn_fitting)):
         return True
     var b = native_loaded_module("builtins")
-    var names = py_get(fields, "_mojolearn_params_reset")
+    var names = py_get(fields, nk[].k__mojolearn_params_reset)
     if names is None:
         names = py_call(b.list, fields)
     elif py_type(names) is not b.tuple:
