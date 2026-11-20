@@ -15,9 +15,12 @@ from providers.python.prophet_lifecycle_pyapi_unpack import prophet_scalar
 from core.cast_in import cast_in_kind
 from core.prophet_input_marshal import prophet_numeric_copy, prophet_datetime_copy
 from sequence.prophet_buffers_run import prophet_time_unit
+from bindings.prophet_keys_unpack import prophet_keys
+from bindings.py_balanced import py_item
 
 
 def _admit(value: PythonObject, context: PythonObject, depth: Int = 0) raises:
+    var nk = prophet_keys()
     if depth > 64:
         raise Error("TypeError: ProphetForecaster input nesting exceeds the supported depth")
     var b = native_loaded_module("builtins")
@@ -25,10 +28,10 @@ def _admit(value: PythonObject, context: PythonObject, depth: Int = 0) raises:
     if cls is b.list or cls is b.tuple:
         for i in range(len(value)):  # driver-loop: exact sequence leaves before inference or conversion
             _admit(value[i], context, depth + 1)
-    elif cls is context["xseq_prophet_datetime_type"] or cls is context["xseq_prophet_timedelta_type"] or cls is b.bytes or cls is b.complex or _one_of(cls, context["xseq_prophet_extra_scalars"]):
+    elif cls is py_item(context, nk[].k_xseq_prophet_datetime_type) or cls is py_item(context, nk[].k_xseq_prophet_timedelta_type) or cls is b.bytes or cls is b.complex or _one_of(cls, py_item(context, nk[].k_xseq_prophet_extra_scalars)):
         pass  # exact native scalar storage, never a subclass protocol
     else:
-        classical_admit_value(value, context["xseq_lifecycle_context"])
+        classical_admit_value(value, py_item(context, nk[].k_xseq_lifecycle_context))
 
 
 def _leaves(value: PythonObject, depth: Int, mut dims: List[Int], mut leaf_depth: Int,
@@ -52,6 +55,7 @@ def _leaves(value: PythonObject, depth: Int, mut dims: List[Int], mut leaf_depth
 
 
 def _object_source(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = prophet_keys()
     var leaves = Python.list()
     var dims = List[Int]()
     var leaf_depth = -1
@@ -75,25 +79,25 @@ def _object_source(value: PythonObject, context: PythonObject) raises -> PythonO
     var b = native_loaded_module("builtins")
     for i in range(len(leaves)):  # driver-loop: infer a datetime64 sequence without NumPy asarray
         var cls = py_type(leaves[i])
-        all_dates = all_dates and cls is context["xseq_prophet_datetime_type"]
-        all_deltas = all_deltas and cls is context["xseq_prophet_timedelta_type"]
-        any_complex = any_complex or cls is b.complex or _one_of(cls, context["xseq_prophet_complex_scalars"])
+        all_dates = all_dates and cls is py_item(context, nk[].k_xseq_prophet_datetime_type)
+        all_deltas = all_deltas and cls is py_item(context, nk[].k_xseq_prophet_timedelta_type)
+        any_complex = any_complex or cls is b.complex or _one_of(cls, py_item(context, nk[].k_xseq_prophet_complex_scalars))
         all_numeric = all_numeric and (cls is b.complex or cls is b.float or cls is b.int or cls is b.bool
-            or _one_of(cls, context["xseq_lifecycle_context"]["scalar_types"])
-            or _one_of(cls, context["xseq_prophet_extended_scalars"]))
+            or _one_of(cls, py_item(py_item(context, nk[].k_xseq_lifecycle_context), nk[].k_scalar_types))
+            or _one_of(cls, py_item(context, nk[].k_xseq_prophet_extended_scalars)))
     var shape_tuple = py_call(b.tuple, shape)
     if all_dates or all_deltas:
         var dtype = leaves[0].dtype
         for i in range(1, len(leaves)):  # driver-loop: common native temporal dtype metadata, no array conversion
-            dtype = py_call(context["xseq_prophet_promote_types"], dtype, leaves[i].dtype)
-        var out = sequential_array(shape_tuple, context["int64"], context)
+            dtype = py_call(py_item(context, nk[].k_xseq_prophet_promote_types), dtype, leaves[i].dtype)
+        var out = sequential_array(shape_tuple, py_item(context, nk[].k_int64), context)
         var destination = Int(py=xseq_addr(out))
         for i in range(len(leaves)):  # driver-loop: native temporal scalar storage converted to its common input unit
             var source = py_call(leaves[i].reshape, Python.tuple())
             prophet_temporal_into(source, dtype, destination + 8 * i, True, context)
         return py_call(out.view, dtype)
     if any_complex and all_numeric:
-        var out = sequential_array(shape_tuple, context["xseq_prophet_complex_dtype"], context)
+        var out = sequential_array(shape_tuple, py_item(context, nk[].k_xseq_prophet_complex_dtype), context)
         var words = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=xseq_addr(out)))
         for i in range(len(leaves)):  # driver-loop: native complex scalar storage, copied without NumPy conversion hooks
             var value = leaves[i]
@@ -101,7 +105,7 @@ def _object_source(value: PythonObject, context: PythonObject) raises -> PythonO
             if cls is b.complex:
                 words[2 * i] = Float64(py=value.real)
                 words[2 * i + 1] = Float64(py=value.imag)
-            elif _one_of(cls, context["xseq_prophet_extended_scalars"]):
+            elif _one_of(cls, py_item(context, nk[].k_xseq_prophet_extended_scalars)):
                 var scalar = native_scalar_buffer(value)
                 words[2 * i] = Float64(py=scalar.to_python_number(False))
                 if scalar.complex:
@@ -111,7 +115,7 @@ def _object_source(value: PythonObject, context: PythonObject) raises -> PythonO
             else:
                 words[2 * i] = Float64(py=py_call(b.float, value))
         return out
-    var out = py_call(context["ndarray"], shape_tuple, dtype=context["xseq_prophet_object_dtype"])
+    var out = py_call(py_item(context, nk[].k_ndarray), shape_tuple, dtype=py_item(context, nk[].k_xseq_prophet_object_dtype))
     var flat = out.flat
     for i in range(len(leaves)):  # driver-loop: native object storage receives already admitted scalar leaves
         flat[i] = leaves[i]
@@ -119,7 +123,8 @@ def _object_source(value: PythonObject, context: PythonObject) raises -> PythonO
 
 
 def prophet_source(value: PythonObject, context: PythonObject) raises -> PythonObject:
-    var lifecycle = context["xseq_lifecycle_context"]
+    var nk = prophet_keys()
+    var lifecycle = py_item(context, nk[].k_xseq_lifecycle_context)
     _admit(value, context)
     var source = value
     if native_pandas_exact(value):
@@ -130,7 +135,7 @@ def prophet_source(value: PythonObject, context: PythonObject) raises -> PythonO
     except error:
         var b = native_loaded_module("builtins")
         var cls = py_type(source)
-        if cls is not b.list and cls is not b.tuple and cls is not b.str and cls is not b.bytes and cls is not b.complex and cls is not context["xseq_prophet_datetime_type"] and cls is not context["xseq_prophet_timedelta_type"] and not _one_of(cls, context["xseq_prophet_extra_scalars"]):
+        if cls is not b.list and cls is not b.tuple and cls is not b.str and cls is not b.bytes and cls is not b.complex and cls is not py_item(context, nk[].k_xseq_prophet_datetime_type) and cls is not py_item(context, nk[].k_xseq_prophet_timedelta_type) and not _one_of(cls, py_item(context, nk[].k_xseq_prophet_extra_scalars)):
             raise error
         array = _object_source(source, context)
     # Exact ndarray's C view captures shape/dtype/strides and retains its
@@ -139,6 +144,7 @@ def prophet_source(value: PythonObject, context: PythonObject) raises -> PythonO
 
 
 def _numbers(value: PythonObject, result: PythonObject, context: PythonObject, depth: Int = 0) raises:
+    var nk = prophet_keys()
     if depth > 64:
         raise Error("TypeError: ProphetForecaster object payload nesting exceeds the supported depth")
     var b = native_loaded_module("builtins")
@@ -147,32 +153,33 @@ def _numbers(value: PythonObject, result: PythonObject, context: PythonObject, d
             _numbers(value[i], result, context, depth + 1)
     else:
         var cls = py_type(value)
-        if _one_of(cls, context["xseq_prophet_extended_scalars"]):
+        if _one_of(cls, py_item(context, nk[].k_xseq_prophet_extended_scalars)):
             var scalar = native_scalar_buffer(value)
             if scalar.complex:
                 classical_warning("Casting complex values to real discards the imaginary part",
-                    context["xseq_prophet_complex_warning"], context["xseq_lifecycle_context"], PythonObject(None))
+                    py_item(context, nk[].k_xseq_prophet_complex_warning), py_item(context, nk[].k_xseq_lifecycle_context), PythonObject(None))
             _ = py_call(result.append, scalar.to_python_number(False))
         else:
-            if cls is not b.bytes and cls is not context["xseq_prophet_datetime_type"] and cls is not context["xseq_prophet_timedelta_type"] and not _one_of(cls, context["xseq_prophet_extra_scalars"]):
+            if cls is not b.bytes and cls is not py_item(context, nk[].k_xseq_prophet_datetime_type) and cls is not py_item(context, nk[].k_xseq_prophet_timedelta_type) and not _one_of(cls, py_item(context, nk[].k_xseq_prophet_extra_scalars)):
                 prophet_scalar(value, context)
             _ = py_call(result.append, py_call(b.float, value))
 
 
 def prophet_contiguous(source: PythonObject, wide: Bool, context: PythonObject) raises -> PythonObject:
-    var lifecycle = context["xseq_lifecycle_context"]
+    var nk = prophet_keys()
+    var lifecycle = py_item(context, nk[].k_xseq_lifecycle_context)
     var dtype = source.dtype
     var letter = String(dtype.kind)
     if letter == "M" or letter == "m":
         # Numeric casts of temporal arrays consume their signed tick words;
         # only the time-axis entry interprets datetime units as nanoseconds.
-        var words = py_call(source.view, context["xseq_prophet_big_i64"] if String(dtype.byteorder) == ">" else context["int64"])
+        var words = py_call(source.view, py_item(context, nk[].k_xseq_prophet_big_i64) if String(dtype.byteorder) == ">" else py_item(context, nk[].k_int64))
         return prophet_contiguous(words, wide, context)
     var shape = array_shape_once(source, lifecycle)
     var info_pin = ArrayPin()
     var info = array_metadata_once(source, shape^, "ProphetForecaster input", lifecycle, info_pin,
                                   allow_non_native=True, allow_unsupported=True)
-    var out = sequential_array(source.shape, context["float64"] if wide else context["float32"], context)
+    var out = sequential_array(source.shape, py_item(context, nk[].k_float64) if wide else py_item(context, nk[].k_float32), context)
     if info.count == 0:
         return out
     if letter == "O" or letter == "U" or letter == "S":
@@ -195,7 +202,7 @@ def prophet_contiguous(source: PythonObject, wide: Bool, context: PythonObject) 
             kind = cast_in_kind(info.dtype_number, info.source.itemsize, "ProphetForecaster input")
         if info.dtype_number >= 14 and info.dtype_number <= 16:
             classical_warning("Casting complex values to real discards the imaginary part",
-                context["xseq_prophet_complex_warning"], lifecycle, PythonObject(None))
+                py_item(context, nk[].k_xseq_prophet_complex_warning), lifecycle, PythonObject(None))
         prophet_numeric_copy(info.source.addr, info.shape, info.strides, info.source.itemsize,
             kind, info.native_byte_order, Int(py=xseq_addr(out)), wide)
     _ = info
@@ -210,14 +217,15 @@ def _time_unit(dtype: PythonObject) raises -> PythonObject:
 
 def prophet_temporal_into(source: PythonObject, target_dtype: PythonObject, destination: Int,
                            common: Bool, context: PythonObject) raises:
+    var nk = prophet_keys()
     var dtype = source.dtype
     var little = String(dtype.byteorder) != ">"
     var unit = _time_unit(dtype)
     var target = _time_unit(target_dtype)
     # A dtype view reinterprets bytes only. Unit conversion arithmetic runs
     # in Mojo, with common-unit promotion kept separate from ns time axes.
-    var words = py_call(source.view, context["int64"])
-    var lifecycle = context["xseq_lifecycle_context"]
+    var words = py_call(source.view, py_item(context, nk[].k_int64))
+    var lifecycle = py_item(context, nk[].k_xseq_lifecycle_context)
     var info_pin = ArrayPin()
     var info = array_metadata_once(words, array_shape_once(words, lifecycle), "ProphetForecaster times", lifecycle,
                                    info_pin, allow_unsupported=True)
@@ -228,6 +236,7 @@ def prophet_temporal_into(source: PythonObject, target_dtype: PythonObject, dest
 
 
 def prophet_nanoseconds(source: PythonObject, context: PythonObject) raises -> PythonObject:
-    var out = sequential_array(Python.tuple(Int(py=source.size)), context["int64"], context)
-    prophet_temporal_into(source, context["xseq_prophet_datetime_ns"], Int(py=xseq_addr(out)), False, context)
+    var nk = prophet_keys()
+    var out = sequential_array(Python.tuple(Int(py=source.size)), py_item(context, nk[].k_int64), context)
+    prophet_temporal_into(source, py_item(context, nk[].k_xseq_prophet_datetime_ns), Int(py=xseq_addr(out)), False, context)
     return out

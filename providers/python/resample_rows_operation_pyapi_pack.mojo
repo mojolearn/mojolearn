@@ -11,9 +11,11 @@ from bindings.host_inference_scalars_door import host_inference_scalar
 from providers.python.estimator_binding_pyapi_door import estimator_binding_mode
 from providers.python.resample_rows_pyapi_door import ResampleRows, resample_rows_indices, resample_rows_gpu, resample_rows_narrow
 from providers.python.resample_pandas_pyapi_door import resample_pandas_array
+from bindings.resample_keys_unpack import resample_keys
 
 
 def resample_rows_operation(args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = resample_keys()
     var b = native_loaded_module("builtins")
     classical_connect_numpy(context)
     # Public calls reserve slot zero; the shared import-connected provider
@@ -35,7 +37,7 @@ def resample_rows_operation(args: PythonObject, context: PythonObject) raises ->
     for i in range(len(arrays)):  # driver-loop: capture each original input and metadata once, retaining its owners
         var original = arrays[i]
         var value = original
-        var gpu = py_type(original) is py_get(context, "ndarray")
+        var gpu = py_type(original) is py_get(context, nk[].k_ndarray)
         if native_pandas_exact(original):
             value = resample_pandas_array(original, context)
         elif native_torch_exact(py_type(original)):

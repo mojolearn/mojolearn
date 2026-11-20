@@ -16,6 +16,8 @@ from bindings.py_balanced import py_call, py_type
 from bindings.decomp_owner_common_unpack import decomp_attr
 from bindings.native_class_admission_door import dict_keys_admitted, dict_keys_admit
 from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
+from bindings.nmf_keys_unpack import nmf_keys
+from bindings.py_balanced import py_item
 
 
 comptime NMF_PROVIDER_PINS = SharedSlot[ProviderPins, "MojolearnNMFProviderPinsV1"]
@@ -23,6 +25,7 @@ comptime NMF_PROVIDER_PINS = SharedSlot[ProviderPins, "MojolearnNMFProviderPinsV
 
 def nmf_connection(model: PythonObject, fields: PythonObject, context: PythonObject,
                    capability: Int, legacy_name: String) raises -> Int:
+    var nk = nmf_keys()
     # Keep the former decomp_entries mode/availability refusal at its stage.
     var mode = decomp_attr(model, fields, "numeric_mode_")
     if py_type(mode) is not py_type(PythonObject("")):
@@ -31,7 +34,7 @@ def nmf_connection(model: PythonObject, fields: PythonObject, context: PythonObj
     if name != "identical" and name != "fast":
         raise Error("numeric_mode must be fast, identical or None")
     answer_mode_word(name, MODE_FAMILY_NMF)
-    var table = context["nmf_bindings"]
+    var table = py_item(context, nk[].k_nmf_bindings)
     if py_type(table) is not py_type(Python.dict()):
         raise Error("TypeError: NMF binding tables require native dictionaries")
     if not dict_keys_admitted(table):
@@ -54,7 +57,7 @@ def nmf_connection(model: PythonObject, fields: PythonObject, context: PythonObj
         index = nmf_connection_add(provider_word(provider),
             NMFNativeDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry))
         NMF_PROVIDER_PINS.get_or_create_ptr()[].providers.append(provider)
-    if pca_vendor_name(nmf_vendor(index)) != String(context["vendor"]):
+    if pca_vendor_name(nmf_vendor(index)) != String(py_item(context, nk[].k_vendor)):
         raise Error("RuntimeError: NMF native vendor differs from selected execution")
     if nmf_mode(index) != (1 if name == "identical" else 0):
         raise Error("RuntimeError: NMF native mode differs from selected execution")

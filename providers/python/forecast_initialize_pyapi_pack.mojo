@@ -13,9 +13,12 @@ from providers.python.forecast_owner_pyapi_unpack import forecast_commit
 from providers.python.forecast_initialize_pyapi_unpack import (
     _scalar,
 )
+from bindings.forecast_keys_unpack import forecast_keys
+from bindings.py_balanced import py_item
 
 
 def forecast_initialize(model: PythonObject, kind: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = forecast_keys()
     var records = context["xseq_" + kind + "_classes"]
     var cls = py_type(model)
     # Optional, not a PythonObject(None) sentinel: its presence is the old `found` flag (modular/modular#7546).
@@ -28,13 +31,13 @@ def forecast_initialize(model: PythonObject, kind: String, args: PythonObject, c
     var fixed_model = connected.value()[1]
     var fields = _fields(model, cls)
     var updates = Python.dict()
-    var lifecycle = context["xseq_lifecycle_context"]
+    var lifecycle = py_item(context, nk[].k_xseq_lifecycle_context)
     for i in range(len(args)):  # driver-loop: over constructor scalar argument words
         _scalar(args[i], lifecycle)
     if kind == "croston":
-        py_setitem(updates, "alias", args[0])
-        py_setitem(updates, "numeric_mode", args[1])
-        forecast_commit(fields, updates, context["xseq_forecast_ownership"])
+        py_setitem(updates, nk[].k_alias, args[0])
+        py_setitem(updates, nk[].k_numeric_mode, args[1])
+        forecast_commit(fields, updates, py_item(context, nk[].k_xseq_forecast_ownership))
         return PythonObject(None)
     var b = native_loaded_module("builtins")
     if kind == "theta":
@@ -42,16 +45,16 @@ def forecast_initialize(model: PythonObject, kind: String, args: PythonObject, c
         if not Bool(py=decomposition == "multiplicative") and not Bool(py=decomposition == "additive"):
             raise Error("ValueError: decomposition_type must be 'multiplicative' or 'additive'")
         var choice = args[2]
-        if choice is not None and not py_contains(context["xseq_theta_codes"], choice):
+        if choice is not None and not py_contains(py_item(context, nk[].k_xseq_theta_codes), choice):
             raise Error("ValueError: model must be STM, OTM, DSTM, DOTM or None")
-        py_setitem(updates, "season_length", _integer(args[0], lifecycle))
-        py_setitem(updates, "decomposition_type", decomposition)
-        py_setitem(updates, "model", choice if fixed_model is None else fixed_model)
-        py_setitem(updates, "initial_smoothed", args[3])
-        py_setitem(updates, "alpha", args[4])
-        py_setitem(updates, "theta", args[5])
-        py_setitem(updates, "numeric_mode", args[6])
-        forecast_commit(fields, updates, context["xseq_forecast_ownership"])
+        py_setitem(updates, nk[].k_season_length, _integer(args[0], lifecycle))
+        py_setitem(updates, nk[].k_decomposition_type, decomposition)
+        py_setitem(updates, nk[].k_model, choice if fixed_model is None else fixed_model)
+        py_setitem(updates, nk[].k_initial_smoothed, args[3])
+        py_setitem(updates, nk[].k_alpha, args[4])
+        py_setitem(updates, nk[].k_theta, args[5])
+        py_setitem(updates, nk[].k_numeric_mode, args[6])
+        forecast_commit(fields, updates, py_item(context, nk[].k_xseq_forecast_ownership))
         return PythonObject(None)
     if kind == "garch":
         if not Bool(py=args[3] == "Constant") and not Bool(py=args[3] == "Zero"):
@@ -67,14 +70,14 @@ def forecast_initialize(model: PythonObject, kind: String, args: PythonObject, c
             raise Error("ValueError: GARCH: p, o, q >= 0 with at least one term")
         if o > 0 and p == 0:
             raise Error("ValueError: GARCH: o > 0 needs p > 0 (arch refuses it too)")
-        py_setitem(updates, "p", p)
-        py_setitem(updates, "o", o)
-        py_setitem(updates, "q", q)
-        py_setitem(updates, "mean", args[3])
-        py_setitem(updates, "dist", args[4])
-        py_setitem(updates, "power", args[5])
-        py_setitem(updates, "numeric_mode", args[6])
-        forecast_commit(fields, updates, context["xseq_forecast_ownership"])
+        py_setitem(updates, nk[].k_p, p)
+        py_setitem(updates, nk[].k_o, o)
+        py_setitem(updates, nk[].k_q, q)
+        py_setitem(updates, nk[].k_mean, args[3])
+        py_setitem(updates, nk[].k_dist, args[4])
+        py_setitem(updates, nk[].k_power, args[5])
+        py_setitem(updates, nk[].k_numeric_mode, args[6])
+        forecast_commit(fields, updates, py_item(context, nk[].k_xseq_forecast_ownership))
         return PythonObject(None)
     # ETS and its DampedETS constructor share the same complete normalization.
     var damped_ctor = len(args) == 6
@@ -108,18 +111,18 @@ def forecast_initialize(model: PythonObject, kind: String, args: PythonObject, c
     # argument is stored itself; a converted one (NumPy scalar) as its value.
     var str_type = py_type(PythonObject(""))
     var int_type = py_type(PythonObject(0))
-    py_setitem(updates, "season_length", args[0] if py_type(args[0]) is int_type else PythonObject(period))
+    py_setitem(updates, nk[].k_season_length, args[0] if py_type(args[0]) is int_type else PythonObject(period))
     if damped_ctor or py_type(args[1]) is not str_type:
-        py_setitem(updates, "model", text)
+        py_setitem(updates, nk[].k_model, text)
     else:
-        py_setitem(updates, "model", args[1])
-    py_setitem(updates, "damped", damped)
-    py_setitem(updates, "alpha", args[2] if damped_ctor else args[3])
-    py_setitem(updates, "beta", args[3] if damped_ctor else args[4])
-    py_setitem(updates, "phi", args[4] if damped_ctor else args[5])
-    py_setitem(updates, "gamma", PythonObject(None) if damped_ctor else args[6])
-    py_setitem(updates, "numeric_mode", args[5] if damped_ctor else args[7])
+        py_setitem(updates, nk[].k_model, args[1])
+    py_setitem(updates, nk[].k_damped, damped)
+    py_setitem(updates, nk[].k_alpha, args[2] if damped_ctor else args[3])
+    py_setitem(updates, nk[].k_beta, args[3] if damped_ctor else args[4])
+    py_setitem(updates, nk[].k_phi, args[4] if damped_ctor else args[5])
+    py_setitem(updates, nk[].k_gamma, PythonObject(None) if damped_ctor else args[6])
+    py_setitem(updates, nk[].k_numeric_mode, args[5] if damped_ctor else args[7])
     if damped_ctor:
-        py_setitem(updates, "error", error)
-    forecast_commit(fields, updates, context["xseq_forecast_ownership"])
+        py_setitem(updates, nk[].k_error, error)
+    forecast_commit(fields, updates, py_item(context, nk[].k_xseq_forecast_ownership))
     return PythonObject(None)

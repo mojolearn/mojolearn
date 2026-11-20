@@ -41,6 +41,8 @@ from bindings.dict_learning_run import (
 )
 from bindings.py_lists import py_list_f64
 from std.python._cpython import GILReleased
+from bindings.dict_keys_unpack import dict_keys
+from bindings.py_balanced import py_item
 
 
 def _name(model: PythonObject) raises -> String:
@@ -99,6 +101,7 @@ def _fit_index(fit_algorithm: PythonObject) raises -> Int:
 
 
 def _is_a(model: PythonObject, cls: PythonObject) raises -> Bool:
+    var nk = dict_keys()
     # The model's class MRO, read through type's own descriptor, holds cls.
     var b = native_loaded_module("builtins")
     if py_type(cls) is b.type:
@@ -107,7 +110,7 @@ def _is_a(model: PythonObject, cls: PythonObject) raises -> Bool:
         # Resolved once per process in the shared table (pass 2), not by name per call.
         var t = cpython_table()
         return t[].PyType_IsSubtype(py_type(model)._obj_ptr, cls._obj_ptr) != 0
-    var mro = py_call(b.type.__dict__["__mro__"].__get__, py_type(model))
+    var mro = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, py_type(model))
     for k in range(len(mro)):  # driver-loop: over the model class's MRO
         if mro[k] is cls:
             return True
@@ -115,8 +118,9 @@ def _is_a(model: PythonObject, cls: PythonObject) raises -> Bool:
 
 
 def _check_fitted(model: PythonObject, fields: PythonObject) raises:
+    var nk = dict_keys()
     # `_Base._check`.
-    if not py_contains(fields, "components_"):
+    if not py_contains(fields, nk[].k_components_):
         raise Error("RuntimeError: " + _name(model) + " is not fitted; call fit first")
 
 
@@ -207,13 +211,14 @@ def _encode_words(m: Int, kc: Int, algorithm: PythonObject, alpha: PythonObject,
 
 
 def _coding_words(m: Int, kc: Int, fields: PythonObject) raises -> EncodeWords:
+    var nk = dict_keys()
     # UNPACK `_SparseCoding._encode`'s options.
-    var alpha = py_get(fields, "transform_alpha")
+    var alpha = py_get(fields, nk[].k_transform_alpha)
     if alpha is None:
-        alpha = py_get(fields, "alpha", PythonObject(1.0))
-    var words = _encode_words(m, kc, fields["transform_algorithm"], alpha, fields["transform_n_nonzero_coefs"],
-                              fields["transform_max_iter"], fields["positive_code"], False)
-    words.split_sign = Bool(py=fields["split_sign"])
+        alpha = py_get(fields, nk[].k_alpha, PythonObject(1.0))
+    var words = _encode_words(m, kc, py_item(fields, nk[].k_transform_algorithm), alpha, py_item(fields, nk[].k_transform_n_nonzero_coefs),
+                              py_item(fields, nk[].k_transform_max_iter), py_item(fields, nk[].k_positive_code), False)
+    words.split_sign = Bool(py=py_item(fields, nk[].k_split_sign))
     return words^
 
 
@@ -246,11 +251,12 @@ def _minibatch_words(n: Int, batch_size: PythonObject, random_state: PythonObjec
 
 
 def coding_transform(model: PythonObject, args: PythonObject, inverse: Bool, context: PythonObject) raises -> PythonObject:
+    var nk = dict_keys()
     # DictionaryLearning / MiniBatchDictionaryLearning transform and inverse_transform.
     var fields = py_fields(model)
     _check_fitted(model, fields)
-    var entries = decomp_entries(py_get(fields, "numeric_mode_"), context)
-    var door = DecompDoor(entries, context["output_context"])
+    var entries = decomp_entries(py_get(fields, nk[].k_numeric_mode_), context)
+    var door = DecompDoor(entries, py_item(context, nk[].k_output_context))
     # A query: the fitted dictionary stays on the device across calls.
     door.owner = model
     var kit = decomp_kit_unpack(entries)
@@ -258,14 +264,14 @@ def coding_transform(model: PythonObject, args: PythonObject, inverse: Bool, con
         var py = Python()
         if inverse:
             var c = _matrix(door, kit, args[0], "code", context)
-            var d = _fitted_matrix(door, kit, fields["components_"], "components_", context)
-            var split = Bool(py=fields["split_sign"])
+            var d = _fitted_matrix(door, kit, py_item(fields, nk[].k_components_), "components_", context)
+            var split = Bool(py=py_item(fields, nk[].k_split_sign))
             var out = -1
             with GILReleased(py):
                 out = dl_inverse_run(kit, c, d, split)
             return decomp_kit_publish(door, kit, out)
         var x = _matrix(door, kit, args[0], "X", context)
-        var source = fields["components_"]
+        var source = py_item(fields, nk[].k_components_)
         var d = _fitted_matrix(door, kit, source, "components_", context)
         var words = _coding_words(kit.ncols(x), kit.nrows(d), fields)
         var gram = _gram(door, kit, source, words)
@@ -280,26 +286,28 @@ def coding_transform(model: PythonObject, args: PythonObject, inverse: Bool, con
 
 
 def _coder_dictionary(fields: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = dict_keys()
     # SparseCoder's parameter check, then its dictionary as float32.
-    var transform = fields["transform_algorithm"]
+    var transform = py_item(fields, nk[].k_transform_algorithm)
     if _algo_index(transform) < 0:
         raise Error("transform_algorithm must be one of " + String(XD_SPARSE_ALGOS))
-    return decomp_input(fields["dictionary"], "dictionary", context)
+    return decomp_input(py_item(fields, nk[].k_dictionary), "dictionary", context)
 
 
 def sparse_pca_transform(model: PythonObject, args: PythonObject, inverse: Bool, context: PythonObject) raises -> PythonObject:
+    var nk = dict_keys()
     # `_BaseSparsePCA.transform` / `inverse_transform`.
     var fields = py_fields(model)
     _check_fitted(model, fields)
-    var entries = decomp_entries(py_get(fields, "numeric_mode_"), context)
-    var door = DecompDoor(entries, context["output_context"])
+    var entries = decomp_entries(py_get(fields, nk[].k_numeric_mode_), context)
+    var door = DecompDoor(entries, py_item(context, nk[].k_output_context))
     # A query: the fitted mean and components stay on the device across calls.
     door.owner = model
     var kit = decomp_kit_unpack(entries)
     try:
         var x = _matrix(door, kit, args[0], "X", context)
-        var mean = _fitted_row(door, kit, fields["mean_"], "mean_", context)
-        var source = fields["components_"]
+        var mean = _fitted_row(door, kit, py_item(fields, nk[].k_mean_), "mean_", context)
+        var source = py_item(fields, nk[].k_components_)
         var comps = _fitted_matrix(door, kit, source, "components_", context)
         var py = Python()
         var out = -1
@@ -307,7 +315,7 @@ def sparse_pca_transform(model: PythonObject, args: PythonObject, inverse: Bool,
             with GILReleased(py):
                 out = dl_spca_inverse(kit, x, mean, comps)
             return decomp_kit_publish(door, kit, out)
-        var ridge = Float32(decomp_float(fields["ridge_alpha"]))
+        var ridge = Float32(decomp_float(py_item(fields, nk[].k_ridge_alpha)))
         var gram = Gram(decomp_door_resident_derived(door, kit, source, _GRAM_NAME))
         with GILReleased(py):
             out = dl_spca_project(kit, x, mean, comps, ridge, gram)
@@ -319,10 +327,11 @@ def sparse_pca_transform(model: PythonObject, args: PythonObject, inverse: Bool,
 
 
 def sparse_encode_call(args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = dict_keys()
     # `sparse_encode(X, dictionary, algorithm, n_nonzero_coefs, alpha, init,
     # max_iter, positive, numeric_mode)`.
     var entries = decomp_entries(args[8], context)
-    var door = DecompDoor(entries, context["output_context"])
+    var door = DecompDoor(entries, py_item(context, nk[].k_output_context))
     var kit = decomp_kit_unpack(entries)
     try:
         var init = -1 if args[5] is None else _matrix(door, kit, args[5], "init", context)

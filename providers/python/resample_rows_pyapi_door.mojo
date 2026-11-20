@@ -19,6 +19,8 @@ from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from bindings.py_cpython_table import cpython_table
 from bindings.native_buffer_address_unpack import native_buffer_address
+from bindings.resample_keys_unpack import resample_keys
+from bindings.py_balanced import py_item
 
 
 # _row_dtype_admit moved to bindings/admitted_input_unpack.mojo admitted_dtype_admit (lane a6-device-x-family-classical; word for word).
@@ -73,6 +75,7 @@ struct ResampleRows(Movable):
     var n: Int
 
     def __init__(out self, source: PythonObject, context: PythonObject, gpu: Bool = True) raises:
+        var nk = resample_keys()
         var b = native_loaded_module("builtins")
         self.source = source
         self.sequence = PythonObject(None)
@@ -86,11 +89,11 @@ struct ResampleRows(Movable):
         self.gpu = False
         self.n = 0
         var cls = py_type(source)
-        if cls is py_get(context, "ndarray"):
+        if cls is py_get(context, nk[].k_ndarray):
             # ndarray.view is the exact immutable C descriptor. Its native
             # view freezes this operation's shape/strides/dtype and keeps the
             # original owner alive without Array/Python conversion callbacks.
-            self.source = py_call(py_attr(context["ndarray"], "view"), source)
+            self.source = py_call(py_attr(py_item(context, nk[].k_ndarray), "view"), source)
             self.dtype = self.source.dtype
             admitted_dtype_admit(self.dtype, context)
             self.has_objects = Bool(py=self.dtype.hasobject) or String(self.dtype.kind) == "T"
@@ -111,13 +114,13 @@ struct ResampleRows(Movable):
                 for axis in range(len(shape)):  # driver-loop: one native-view metadata capture for non-buffer dtypes
                     sizes.append(Int(py=shape[axis]))
                     steps.append(Int(py=strides[axis]))
-                var address = Int(py=self.source.__array_interface__["data"][0])
+                var address = Int(py=py_item(self.source.__array_interface__, nk[].k_data)[0])
                 self.layout = BorrowedBufferLayout(max(address, 1) if item == 0 else address,
                     max(item, 1), not Bool(py=self.source.flags.writeable), sizes^, steps^,
                     List[Int](length=len(shape), fill=-1))
             self.gpu = gpu and String(self.dtype.str) == "<f4" and self.layout.contiguous()
         elif classical_is_array(source, context):
-            if py_get(context, "ndarray") is None:
+            if py_get(context, nk[].k_ndarray) is None:
                 raise Error("ImportError: mojolearn: resample requires optional NumPy support for Array outputs")
             var view = admitted_typed_once(source, context, self.array_owner)
             self.layout = BorrowedBufferLayout(view.addr, view.itemsize, view.readonly,
@@ -131,7 +134,7 @@ struct ResampleRows(Movable):
             classical_admit_value(source, context)
             if (cls is not b.list and cls is not b.tuple and cls is not b.range
                     and cls is not b.str and cls is not b.bytes and cls is not b.bytearray
-                    and cls is not b.memoryview and cls is not context["array_type"]):
+                    and cls is not b.memoryview and cls is not py_item(context, nk[].k_array_type)):
                 raise Error("TypeError: resample requires a native array or sequence without Python indexing hooks")
             self.sequence = py_call(b.tuple, source)
             native_release_admit(self.sequence, context)
@@ -164,13 +167,15 @@ struct ResampleRows(Movable):
         return self.layout.shape[1] if len(self.layout.shape) == 2 else 1
 
     def output(self, count: Int, context: PythonObject) raises -> PythonObject:
+        var nk = resample_keys()
         var shape = self.layout.shape.copy()
         shape[0] = count
         # Exact ndarray allocation with a retained native dtype is storage
         # construction only. No asarray, conversion, or caller protocol runs.
-        return py_call(context["ndarray"], admitted_shape_tuple(shape), dtype=self.dtype)
+        return py_call(py_item(context, nk[].k_ndarray), admitted_shape_tuple(shape), dtype=self.dtype)
 
     def take(self, indices: AdmittedBuf, context: PythonObject) raises -> PythonObject:
+        var nk = resample_keys()
         var rows = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=indices.addr)
         var count = indices.dim(0)
         if not self.is_array:
@@ -208,16 +213,16 @@ struct ResampleRows(Movable):
             # loop over rows here: the per-leaf C-API reference counting P1
             # wrote in this file (the object-leaf offsets walk and the row x
             # element x leaf loops) is gone.
-            var index_array = py_call(context["ndarray"], admitted_shape_tuple([count]),
+            var index_array = py_call(py_item(context, nk[].k_ndarray), admitted_shape_tuple([count]),
                                       dtype=py_call(native_numpy_dtype(context), "<i4"))
             unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=native_buffer_address(index_array)),
                 src=Pointer[UInt8, ImmUntrackedOrigin](unsafe_from_address=indices.addr), count=count * 4)
             _ = indices
-            return py_call(py_attr(context["ndarray"], "take"), self.source, index_array, 0)
+            return py_call(py_attr(py_item(context, nk[].k_ndarray), "take"), self.source, index_array, 0)
         var out = self.output(count, context)
         # The output's exact native ndarray metadata is read once as well;
         # datetime and zero-width dtypes need no PEP3118 exporter.
-        var dst = Int(py=out.__array_interface__["data"][0])
+        var dst = Int(py=py_item(out.__array_interface__, nk[].k_data)[0])
         var rank = len(self.layout.shape)
         var row_items = 1
         for axis in range(1, rank):  # driver-loop: captured trailing dimensions of one row

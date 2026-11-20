@@ -38,6 +38,20 @@ from bindings.mcd_run import McdFit, mcd_fit_run, mcd_labels_run, mcd_score_run,
 from core.decomp_native_impl import decomp_f32_to_i32
 from std.python._cpython import GILReleased
 from std.memory import unsafe_memcpy
+from bindings.mcd_keys_unpack import (
+    mcd_keys,
+    MCD_OPN_FIT,
+    MCD_OPN_FIT_PREDICT,
+    MCD_OPN_GET_PRECISION,
+    MCD_OPN_SCORE,
+    MCD_OPN_MAHALANOBIS,
+    MCD_OPN_SCORE_SAMPLES,
+    MCD_OPN_DECISION_FUNCTION,
+    MCD_OPN_PREDICT,
+    MCD_OPN_ELLIPTIC_SCORE,
+)
+from bindings.py_keys import py_op_code
+from bindings.py_balanced import py_item
 
 
 def _name(model: PythonObject) raises -> String:
@@ -61,9 +75,10 @@ def _fitted(mut door: DecompDoor, mut kit: DKit, fields: PythonObject, name: Str
 
 
 def _typed(n: Int, typestr: String, code: String, item: Int, context: PythonObject) raises -> PythonObject:
+    var nk = mcd_keys()
     # A zero-filled (n,) Array of a fixed small dtype.
-    var output = context["output_context"]
-    var store = py_call(output["array_type"], PythonObject(code), py_call(output["native_bytes_type"], n * item))
+    var output = py_item(context, nk[].k_output_context)
+    var store = py_call(py_item(output, nk[].k_array_type), PythonObject(code), py_call(py_item(output, nk[].k_native_bytes_type), n * item))
     return classical_wrap_array(store, Python.tuple(n), typestr, "C", output)
 
 
@@ -88,18 +103,20 @@ def _labels_pack(mut kit: DKit, chosen: Int, rows: Int, context: PythonObject) r
 
 
 def _check_fitted(model: PythonObject, fields: PythonObject) raises:
-    if not py_contains(fields, "_precision"):
+    var nk = mcd_keys()
+    if not py_contains(fields, nk[].k__precision):
         raise Error("RuntimeError: " + _name(model) + " is not fitted; call fit first")
 
 
 def mcd_fit(model: PythonObject, args: PythonObject, envelope: Bool, predict: Bool,
             context: PythonObject) raises -> PythonObject:
+    var nk = mcd_keys()
     # `MinCovDet.fit` (and fit_predict): one UNPACK, one RUN, one PACK.
     var fields = py_fields(model)
-    var mode = decomp_mode(fields["numeric_mode"], context)
-    py_setitem(fields, "numeric_mode_", mode)
+    var mode = decomp_mode(py_item(fields, nk[].k_numeric_mode), context)
+    py_setitem(fields, nk[].k_numeric_mode_, mode)
     var entries = decomp_entries(mode, context)
-    var door = DecompDoor(entries, context["output_context"])
+    var door = DecompDoor(entries, py_item(context, nk[].k_output_context))
     var kit = decomp_kit_unpack(entries)
     try:
         # UNPACK: X, the seed, h and the options.
@@ -109,18 +126,18 @@ def mcd_fit(model: PythonObject, args: PythonObject, envelope: Bool, predict: Bo
         if n < 2:
             raise Error("Found array with " + String(n) + " sample(s) (shape=(" + String(n) + ", " + String(p)
                         + ")) while a minimum of 2 is required by MinCovDet.")
-        var seed = decomp_seed(fields["random_state"])
-        py_setitem(fields, "_seed", seed)
-        py_setitem(fields, "_draws", PythonObject(0))
-        var fraction = fields["support_fraction"]
+        var seed = decomp_seed(py_item(fields, nk[].k_random_state))
+        py_setitem(fields, nk[].k__seed, seed)
+        py_setitem(fields, nk[].k__draws, PythonObject(0))
+        var fraction = py_item(fields, nk[].k_support_fraction)
         var h: Int
         if fraction is None:
             h = min((n + p + 2) // 2, n)        # min(int(ceil(0.5 * (n + p + 1))), n)
         else:
             h = decomp_int(fraction * PythonObject(n))
         var seed_word = decomp_seed_word(seed)
-        var assume_centered = Bool(py=fields["assume_centered"])
-        var contamination = decomp_float(fields["contamination"]) if envelope else 0.0
+        var assume_centered = Bool(py=py_item(fields, nk[].k_assume_centered))
+        var contamination = decomp_float(py_item(fields, nk[].k_contamination)) if envelope else 0.0
         # RUN: fast_mcd, the corrections, the precision, the distances (and
         # fit_predict's labels over the fit's own distances: predict(X) on the
         # X the fit converted computes exactly these mahalanobis words again).
@@ -132,19 +149,19 @@ def mcd_fit(model: PythonObject, args: PythonObject, envelope: Bool, predict: Bo
             if predict:
                 chosen = mcd_labels_run(kit, fit.dist, fit.offset)
         # PACK: the fitted fields, once.
-        py_setitem(fields, "raw_location_", decomp_kit_out_shape(door, kit, fit.raw_loc, Python.tuple(p)))
-        py_setitem(fields, "raw_covariance_", decomp_kit_publish(door, kit, fit.raw_cov))
-        py_setitem(fields, "raw_support_", _support_pack(fit.raw_support, n, context))
-        py_setitem(fields, "location_", decomp_kit_out_shape(door, kit, fit.loc, Python.tuple(p)))
-        py_setitem(fields, "covariance_", decomp_kit_publish(door, kit, fit.cov))
+        py_setitem(fields, nk[].k_raw_location_, decomp_kit_out_shape(door, kit, fit.raw_loc, Python.tuple(p)))
+        py_setitem(fields, nk[].k_raw_covariance_, decomp_kit_publish(door, kit, fit.raw_cov))
+        py_setitem(fields, nk[].k_raw_support_, _support_pack(fit.raw_support, n, context))
+        py_setitem(fields, nk[].k_location_, decomp_kit_out_shape(door, kit, fit.loc, Python.tuple(p)))
+        py_setitem(fields, nk[].k_covariance_, decomp_kit_publish(door, kit, fit.cov))
         var stored = decomp_kit_publish(door, kit, fit.precision)
-        py_setitem(fields, "_precision", stored)
-        py_setitem(fields, "precision_", stored if Bool(py=fields["store_precision"]) else PythonObject(None))
-        py_setitem(fields, "support_", _support_pack(fit.support, n, context))
-        py_setitem(fields, "dist_", decomp_kit_out_shape(door, kit, fit.dist, Python.tuple(n)))
-        py_setitem(fields, "n_features_in_", PythonObject(p))
+        py_setitem(fields, nk[].k__precision, stored)
+        py_setitem(fields, nk[].k_precision_, stored if Bool(py=py_item(fields, nk[].k_store_precision)) else PythonObject(None))
+        py_setitem(fields, nk[].k_support_, _support_pack(fit.support, n, context))
+        py_setitem(fields, nk[].k_dist_, decomp_kit_out_shape(door, kit, fit.dist, Python.tuple(n)))
+        py_setitem(fields, nk[].k_n_features_in_, PythonObject(p))
         if envelope:
-            py_setitem(fields, "offset_", PythonObject(fit.offset))
+            py_setitem(fields, nk[].k_offset_, PythonObject(fit.offset))
         if not predict:
             return model
         return _labels_pack(kit, chosen, n, context)
@@ -153,25 +170,26 @@ def mcd_fit(model: PythonObject, args: PythonObject, envelope: Bool, predict: Bo
         door.keep_alive()  # the borrowed owners outlive every RUN read
 
 
-def mcd_operation(model: PythonObject, operation: String, args: PythonObject, envelope: Bool,
+def mcd_operation(model: PythonObject, operation: Int, args: PythonObject, envelope: Bool,
                   context: PythonObject) raises -> PythonObject:
+    var nk = mcd_keys()
     # `envelope`: the model is an EllipticEnvelope, resolved once in mcd_c
     # and passed down (N345; it was asked twice per call).
     var fields = py_fields(model)
-    if operation == "fit" or operation == "fit_predict":
+    if operation == MCD_OPN_FIT or operation == MCD_OPN_FIT_PREDICT:
         if envelope:
-            var c = fields["contamination"]
+            var c = py_item(fields, nk[].k_contamination)
             var op = native_loaded_module("operator")
             if not (Bool(py=py_call(op.lt, PythonObject(0), c)) and Bool(py=py_call(op.le, c, PythonObject(0.5)))):
                 raise Error("contamination must be in (0, 0.5]")
-        return mcd_fit(model, args, envelope, operation == "fit_predict", context)
+        return mcd_fit(model, args, envelope, operation == MCD_OPN_FIT_PREDICT, context)
     _check_fitted(model, fields)
-    var entries = decomp_entries(py_get(fields, "numeric_mode_"), context)
-    var door = DecompDoor(entries, context["output_context"])
+    var entries = decomp_entries(py_get(fields, nk[].k_numeric_mode_), context)
+    var door = DecompDoor(entries, py_item(context, nk[].k_output_context))
     var kit = decomp_kit_unpack(entries)
     try:
-        if operation == "get_precision":
-            var p = Int(py=fields["_precision"].shape[0])
+        if operation == MCD_OPN_GET_PRECISION:
+            var p = Int(py=py_item(fields, nk[].k__precision).shape[0])
             return decomp_kit_publish(door, kit, _fitted(door, kit, fields, "_precision", p, context))
         # A query: the fitted location and precision stay on the device across calls.
         door.owner = model
@@ -181,31 +199,31 @@ def mcd_operation(model: PythonObject, operation: String, args: PythonObject, en
         var loc = _fitted(door, kit, fields, "location_", 1, context)
         var precision = _fitted(door, kit, fields, "_precision", p, context)
         var py = Python()
-        if operation == "score":
+        if operation == MCD_OPN_SCORE:
             var value = Float64(0.0)
             with GILReleased(py):
                 value = mcd_score_run(kit, x, loc, precision)
             return PythonObject(value)
-        if operation == "mahalanobis" or operation == "score_samples":
+        if operation == MCD_OPN_MAHALANOBIS or operation == MCD_OPN_SCORE_SAMPLES:
             var out = -1
             with GILReleased(py):
                 out = mcd_mahal(kit, x, loc, precision)
-                if operation == "score_samples":
+                if operation == MCD_OPN_SCORE_SAMPLES:
                     out = kit.ew(DK_SCALE, out, scalar=-1.0)
             return decomp_kit_out_shape(door, kit, out, Python.tuple(kit.nrows(out)))
-        if operation == "decision_function" or operation == "predict":
-            var offset = Float64(py=fields["offset_"])
+        if operation == MCD_OPN_DECISION_FUNCTION or operation == MCD_OPN_PREDICT:
+            var offset = Float64(py=py_item(fields, nk[].k_offset_))
             var out = -1
             var rows = 0
             with GILReleased(py):
                 var d = mcd_mahal(kit, x, loc, precision)
                 rows = kit.nrows(d)
-                if operation == "predict":
+                if operation == MCD_OPN_PREDICT:
                     out = mcd_labels_run(kit, d, offset)
                 else:
                     var negated = kit.ew(DK_SCALE, d, scalar=-1.0)
                     out = kit.ew(DK_ADDS, negated, scalar=-offset)
-            if operation == "predict":
+            if operation == MCD_OPN_PREDICT:
                 return _labels_pack(kit, out, rows, context)
             return decomp_kit_out_shape(door, kit, out, Python.tuple(rows))
         raise Error("unknown native MinCovDet operation")
@@ -218,7 +236,8 @@ def elliptic_score(model: PythonObject, args: PythonObject, envelope: Bool, cont
     """EllipticEnvelope.score: the native predict, then the (weighted) match
     fraction of the x_metrics accuracy program in the fitted mode, the
     prediction handed straight to it (`accuracy_fraction`)."""
-    var prediction = mcd_operation(model, "predict", Python.tuple(args[0]), envelope, context)
+    var nk = mcd_keys()
+    var prediction = mcd_operation(model, MCD_OPN_PREDICT, Python.tuple(args[0]), envelope, context)
     var n = labels_shape_of(prediction, context)[0]
     var y = args[1]
     var sample_weight = args[2]
@@ -234,7 +253,7 @@ def elliptic_score(model: PythonObject, args: PythonObject, envelope: Bool, cont
         if Int(py=view.shape[0]) != n:
             raise Error("sample_weight and X have different numbers of rows")
     try:
-        return PythonObject(classical_accuracy(y, prediction, sample_weight, py_fields(model)["numeric_mode_"], context))
+        return PythonObject(classical_accuracy(y, prediction, sample_weight, py_item(py_fields(model), nk[].k_numeric_mode_), context))
     except error:
         if String(error).startswith("ZeroDivisionError"):
             raise Error("ZeroDivisionError: Weights sum to zero, can't be normalized")
@@ -252,17 +271,20 @@ def mcd_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
         var context = call[3]
         classical_connect_numpy(context)
         var model = call[0]
-        var operation = String(py=call[1])
+        var nk = mcd_keys()
+        var operation = py_op_code(nk[].ops, call[1])
         var args = call[2]
         var kind = String("")
-        var envelope = decomp_is_a(model, context["elliptic_envelope_class"])
+        var envelope = decomp_is_a(model, py_item(context, nk[].k_elliptic_envelope_class))
         if envelope:
             kind = "outlier_detector"  # float64 scores for callers outside the package
-        var method = decomp_public_method(operation)
+        # The public method's name comes from the decomposition table, which
+        # still reads the name (the decomp family's own conversion owns it).
+        var method = decomp_public_method(String(py=call[1]))
         var depth = decomp_public_begin(model, method, args, True, True, context)
         var result = PythonObject(None)
         try:
-            if operation == "elliptic_score":
+            if operation == MCD_OPN_ELLIPTIC_SCORE:
                 result = elliptic_score(model, args, envelope, context)
             else:
                 result = mcd_operation(model, operation, args, envelope, context)

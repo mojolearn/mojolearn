@@ -16,6 +16,8 @@ from core.xseq_marshal import xseq_var_blocks
 from core.admitted_input_nd import admitted_cast_nd_f32
 from bindings.admitted_sequence_door import admitted_ndarray_f32
 from core.cast_in import NPY_DOUBLE, NPY_FLOAT, CAST_KIND_FLOAT
+from bindings.forecast_keys_unpack import forecast_keys
+from bindings.py_balanced import py_item
 
 
 def _state(model: PythonObject, key: String, context: PythonObject) raises -> PythonObject:
@@ -25,32 +27,34 @@ def _state(model: PythonObject, key: String, context: PythonObject) raises -> Py
 
 
 def _new_result(key: String, context: PythonObject) raises -> PythonObject:
+    var nk = forecast_keys()
     var cls = context[key]
     var b = native_loaded_module("builtins")
     if py_type(cls) is not b.type:
         raise Error("TypeError: forecast results require an ordinary native type")
-    var ancestry = py_call(b.type.__dict__["__mro__"].__get__, cls)
+    var ancestry = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, cls)
     var storage = False
     for i in range(len(ancestry)):  # driver-loop: result class lifecycle and descriptor metadata before allocation
         var own = _class_fields(ancestry[i])
-        if py_contains(own, "__del__"):
+        if py_contains(own, nk[].k___del__):
             raise Error("TypeError: native forecast results cannot invoke Python finalizers")
-        if not storage and py_contains(own, "__dict__"):
-            var descriptor = own["__dict__"]
-            if py_type(descriptor) is not py_type(b.type.__dict__["__dict__"]) or descriptor.__objclass__ is not ancestry[i]:
+        if not storage and py_contains(own, nk[].k___dict__):
+            var descriptor = py_item(own, nk[].k___dict__)
+            if py_type(descriptor) is not py_type(py_item(b.type.__dict__, nk[].k___dict__)) or descriptor.__objclass__ is not ancestry[i]:
                 raise Error("TypeError: forecast results require ordinary instance storage")
             storage = True
     return py_call(b.object.__new__, cls)
 
 
 def _matrix(value: PythonObject, name: String, context: PythonObject, reject_double: Bool = True) raises -> ArimaBuffer:
+    var nk = forecast_keys()
     var refusal = String("TypeError: ") + name + ": float64 is refused; pass float32"
-    var source = arima_buffer(value, name, context["xseq_lifecycle_context"], False, refusal if reject_double else String())
+    var source = arima_buffer(value, name, py_item(context, nk[].k_xseq_lifecycle_context), False, refusal if reject_double else String())
     if len(source.shape) > 2:
         raise Error("ValueError: " + name + " requires a vector or matrix")
     if reject_double and source.dtype_number == NPY_DOUBLE:
         raise Error("TypeError: " + name + ": float64 is refused; pass float32")
-    if not source.f32_c() or py_type(source.keep) is not context["ndarray"]:
+    if not source.f32_c() or py_type(source.keep) is not py_item(context, nk[].k_ndarray):
         var shape = Python.tuple(source.shape[0]) if len(source.shape) == 1 else Python.tuple(source.shape[0], source.shape[1])
         # One parallel cast into uninitialised storage (REGRESSIONS F3/C3).
         var result = admitted_ndarray_f32(shape, source.count, context)
@@ -70,6 +74,7 @@ def _mode(value: PythonObject) raises:
 
 
 def _var_initialize(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = forecast_keys()
     var fields = _state(model, "xseq_var_class", context)
     if args[1] is not None:
         raise Error("NotImplementedError: VAR: exog is not implemented")
@@ -78,17 +83,18 @@ def _var_initialize(model: PythonObject, args: PythonObject, context: PythonObje
     if len(y.shape) != 2 or y.shape[1] < 1:
         raise Error("ValueError: VAR: endog must be (n_obs, n_variables)")
     var updates = Python.dict()
-    py_setitem(updates, "endog", args[0])
-    py_setitem(updates, "exog", args[1])
-    py_setitem(updates, "_endog", y.keep)
-    py_setitem(updates, "neqs", y.shape[1])
-    py_setitem(updates, "numeric_mode", args[2])
-    forecast_commit(fields, updates, context["xseq_forecast_ownership"])
+    py_setitem(updates, nk[].k_endog, args[0])
+    py_setitem(updates, nk[].k_exog, args[1])
+    py_setitem(updates, nk[].k__endog, y.keep)
+    py_setitem(updates, nk[].k_neqs, y.shape[1])
+    py_setitem(updates, nk[].k_numeric_mode, args[2])
+    forecast_commit(fields, updates, py_item(context, nk[].k_xseq_forecast_ownership))
     return PythonObject(None)
 
 
 def _var_publish(fields: PythonObject, y: ArimaBuffer, params: ArimaBuffer, sigma: PythonObject,
                  resid: ArimaBuffer, p: Int, kt: Int, mode: PythonObject, context: PythonObject, originals: PythonObject) raises:
+    var nk = forecast_keys()
     if len(y.shape) != 2 or len(params.shape) != 2 or len(resid.shape) != 2:
         raise Error("ValueError: VARResults requires endog, params and resid matrices")
     var n = y.shape[0]
@@ -105,25 +111,26 @@ def _var_publish(fields: PythonObject, y: ArimaBuffer, params: ArimaBuffer, sigm
                     MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=resid.address),
                     xseq_f32p(intercept), xseq_f32p(coefs), xseq_f32p(fitted), p, kt, k, rows)
     var updates = Python.dict()
-    py_setitem(updates, "endog", y.keep if originals is None else originals[0])
-    py_setitem(updates, "params", params.keep if originals is None else originals[1])
-    py_setitem(updates, "sigma_u", sigma)
-    py_setitem(updates, "resid", resid.keep if originals is None else originals[3])
-    py_setitem(updates, "k_ar", p)
-    py_setitem(updates, "k_trend", kt)
-    py_setitem(updates, "neqs", k)
-    py_setitem(updates, "nobs", rows)
-    py_setitem(updates, "df_resid", rows - m)
-    py_setitem(updates, "intercept", intercept)
-    py_setitem(updates, "coefs", coefs)
-    py_setitem(updates, "fittedvalues", fitted)
-    py_setitem(updates, "_numeric_mode", mode)
-    forecast_commit(fields, updates, context["xseq_forecast_ownership"])
+    py_setitem(updates, nk[].k_endog, y.keep if originals is None else originals[0])
+    py_setitem(updates, nk[].k_params, params.keep if originals is None else originals[1])
+    py_setitem(updates, nk[].k_sigma_u, sigma)
+    py_setitem(updates, nk[].k_resid, resid.keep if originals is None else originals[3])
+    py_setitem(updates, nk[].k_k_ar, p)
+    py_setitem(updates, nk[].k_k_trend, kt)
+    py_setitem(updates, nk[].k_neqs, k)
+    py_setitem(updates, nk[].k_nobs, rows)
+    py_setitem(updates, nk[].k_df_resid, rows - m)
+    py_setitem(updates, nk[].k_intercept, intercept)
+    py_setitem(updates, nk[].k_coefs, coefs)
+    py_setitem(updates, nk[].k_fittedvalues, fitted)
+    py_setitem(updates, nk[].k__numeric_mode, mode)
+    forecast_commit(fields, updates, py_item(context, nk[].k_xseq_forecast_ownership))
 
 
 def _var_results_initialize(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = forecast_keys()
     var fields = _state(model, "xseq_var_results", context)
-    var lifecycle = context["xseq_lifecycle_context"]
+    var lifecycle = py_item(context, nk[].k_xseq_lifecycle_context)
     var y = _matrix(args[0], "VARResults endog", context, False)
     var params = _matrix(args[1], "VARResults params", context, False)
     var resid = _matrix(args[3], "VARResults resid", context, False)
@@ -135,8 +142,9 @@ def _var_results_initialize(model: PythonObject, args: PythonObject, context: Py
 
 
 def _var_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = forecast_keys()
     var fields = _state(model, "xseq_var_class", context)
-    var lifecycle = context["xseq_lifecycle_context"]
+    var lifecycle = py_item(context, nk[].k_xseq_lifecycle_context)
     var string_type = py_type(PythonObject(""))
     if args[2] is not None:
         raise Error("NotImplementedError: VAR.fit: information-criterion order selection is not implemented")
@@ -146,13 +154,13 @@ def _var_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
         raise Error("NotImplementedError: VAR.fit: only trends 'c' and 'n' are implemented")
     var p = _integer(args[0], lifecycle)
     var kt = 1 if String(args[3]) == "c" else 0
-    var y = _matrix(fields["_endog"], "VAR", context)
+    var y = _matrix(py_item(fields, nk[].k__endog), "VAR", context)
     if len(y.shape) != 2 or y.shape[1] < 1 or p < 0 or p >= y.shape[0]:
         raise Error("ValueError: VAR.fit needs a matrix with 0 <= maxlags < observations")
-    var mode = py_get(fields, "numeric_mode")
+    var mode = py_get(fields, nk[].k_numeric_mode)
     _mode(mode)
     var route = Python.dict()
-    py_setitem(route, "numeric_mode", mode)
+    py_setitem(route, nk[].k_numeric_mode, mode)
     var n = y.shape[0]
     var k = y.shape[1]
     var m = Int(py=PythonObject(k) * p + kt)
@@ -175,22 +183,23 @@ def _var_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
 
 
 def _var_forecast(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = forecast_keys()
     var fields = _state(model, "xseq_var_results", context)
-    var lifecycle = context["xseq_lifecycle_context"]
-    var p = _integer(fields["k_ar"], lifecycle)
-    var k = _integer(fields["neqs"], lifecycle)
-    var kt = _integer(fields["k_trend"], lifecycle)
+    var lifecycle = py_item(context, nk[].k_xseq_lifecycle_context)
+    var p = _integer(py_item(fields, nk[].k_k_ar), lifecycle)
+    var k = _integer(py_item(fields, nk[].k_neqs), lifecycle)
+    var kt = _integer(py_item(fields, nk[].k_k_trend), lifecycle)
     var steps = _integer(args[1], lifecycle)
     var y = _matrix(args[0], "VARResults.forecast", context)
-    var params = _matrix(fields["params"], "VARResults.params", context, False)
+    var params = _matrix(py_item(fields, nk[].k_params), "VARResults.params", context, False)
     if p < 0 or k < 1 or kt < 0 or kt > 1 or steps < 0 or len(y.shape) != 2 or y.shape[1] != k or y.shape[0] < p:
         raise Error("ValueError: VAR forecast requires nonnegative steps and sufficient history columns/rows")
     if len(params.shape) != 2 or params.shape[0] != Int(py=PythonObject(k) * p + kt) or params.shape[1] != k:
         raise Error("ValueError: VAR fitted parameter dimensions disagree")
     var state = Python.dict()
-    var mode = fields["_numeric_mode"]
+    var mode = py_item(fields, nk[].k__numeric_mode)
     _mode(mode)
-    py_setitem(state, "numeric_mode", mode)
+    py_setitem(state, nk[].k_numeric_mode, mode)
     var key = xseq_key(state, context)
     var result = xseq_zeros(Python.tuple(steps, k), context)
     var history = y.address + (y.shape[0] - p) * k * 4
@@ -204,8 +213,9 @@ def _var_forecast(model: PythonObject, args: PythonObject, context: PythonObject
 
 
 def _stl_initialize(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = forecast_keys()
     var fields = _state(model, "xseq_stl_class", context)
-    var lifecycle = context["xseq_lifecycle_context"]
+    var lifecycle = py_item(context, nk[].k_xseq_lifecycle_context)
     var y = _matrix(args[0], "STL", context)
     var one = len(y.shape) == 1
     var rows = 1 if one else y.shape[0]
@@ -237,29 +247,30 @@ def _stl_initialize(model: PythonObject, args: PythonObject, context: PythonObje
             raise Error("ValueError: STL smoother degrees must be 0 or 1")
     var b = native_loaded_module("builtins")
     var updates = Python.dict()
-    py_setitem(updates, "endog", args[0])
-    py_setitem(updates, "_endog", py_call(y.keep.reshape, Python.tuple(rows, n)) if one else y.keep)
-    py_setitem(updates, "_one", one)
+    py_setitem(updates, nk[].k_endog, args[0])
+    py_setitem(updates, nk[].k__endog, py_call(y.keep.reshape, Python.tuple(rows, n)) if one else y.keep)
+    py_setitem(updates, nk[].k__one, one)
     var names = Python.tuple("period", "seasonal", "trend", "low_pass", "seasonal_deg", "trend_deg", "low_pass_deg")
     var values = Python.tuple(period, _integer(args[2], lifecycle), _integer(trend, lifecycle), _integer(low, lifecycle), _integer(args[5], lifecycle), _integer(args[6], lifecycle), _integer(args[7], lifecycle))
     for i in range(len(names)):  # driver-loop: seven normalized smoother metadata fields
         py_setitem(updates, names[i], values[i])
-    py_setitem(updates, "robust", Bool(py=args[8]))
-    py_setitem(updates, "seasonal_jump", _integer(args[9], lifecycle))
-    py_setitem(updates, "trend_jump", _integer(args[10], lifecycle))
-    py_setitem(updates, "low_pass_jump", _integer(args[11], lifecycle))
-    py_setitem(updates, "numeric_mode", args[12])
-    forecast_commit(fields, updates, context["xseq_forecast_ownership"])
+    py_setitem(updates, nk[].k_robust, Bool(py=args[8]))
+    py_setitem(updates, nk[].k_seasonal_jump, _integer(args[9], lifecycle))
+    py_setitem(updates, nk[].k_trend_jump, _integer(args[10], lifecycle))
+    py_setitem(updates, nk[].k_low_pass_jump, _integer(args[11], lifecycle))
+    py_setitem(updates, nk[].k_numeric_mode, args[12])
+    forecast_commit(fields, updates, py_item(context, nk[].k_xseq_forecast_ownership))
     return PythonObject(None)
 
 
 def _decompose_initialize(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = forecast_keys()
     var fields = _state(model, "xseq_decompose_result", context)
     var updates = Python.dict()
     var names = Python.tuple("observed", "seasonal", "trend", "resid", "weights")
     for i in range(len(names)):  # driver-loop: five retained result references, with no input protocols
         py_setitem(updates, names[i], args[i])
-    forecast_commit(fields, updates, context["xseq_forecast_ownership"])
+    forecast_commit(fields, updates, py_item(context, nk[].k_xseq_forecast_ownership))
     return PythonObject(None)
 
 
@@ -273,19 +284,20 @@ def _stl_config(model: PythonObject, context: PythonObject) raises -> PythonObje
 
 
 def _stl_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = forecast_keys()
     var fields = _state(model, "xseq_stl_class", context)
-    var lifecycle = context["xseq_lifecycle_context"]
-    _scalar(fields["robust"], lifecycle)
-    _scalar(fields["_one"], lifecycle)
-    var mode = py_get(fields, "numeric_mode")
+    var lifecycle = py_item(context, nk[].k_xseq_lifecycle_context)
+    _scalar(py_item(fields, nk[].k_robust), lifecycle)
+    _scalar(py_item(fields, nk[].k__one), lifecycle)
+    var mode = py_get(fields, nk[].k_numeric_mode)
     _mode(mode)
     var route = Python.dict()
-    py_setitem(route, "numeric_mode", mode)
-    var one = Bool(py=fields["_one"])
-    var robust = Bool(py=fields["robust"])
+    py_setitem(route, nk[].k_numeric_mode, mode)
+    var one = Bool(py=py_item(fields, nk[].k__one))
+    var robust = Bool(py=py_item(fields, nk[].k_robust))
     var inner = (2 if robust else 5) if args[0] is None else _integer(args[0], lifecycle)
     var outer = (15 if robust else 0) if args[1] is None else _integer(args[1], lifecycle)
-    var y = _matrix(fields["_endog"], "STL", context)
+    var y = _matrix(py_item(fields, nk[].k__endog), "STL", context)
     if len(y.shape) != 2 or y.shape[1] < 1:
         raise Error("ValueError: STL fitted input must be a nonempty series matrix")
     var batch = y.shape[0]
@@ -297,13 +309,13 @@ def _stl_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     var resid = xseq_zeros(shape, context)
     # The STL plan words, in the former Python list's order: batch, n, the
     # four smoother lengths, the degree bits, the three jumps, inner, outer.
-    var plan: List[Int] = [batch, n, _integer(fields["period"], lifecycle), _integer(fields["seasonal"], lifecycle),
-                           _integer(fields["trend"], lifecycle), _integer(fields["low_pass"], lifecycle)]
-    var degree = _integer(fields["seasonal_deg"], lifecycle) + 2 * _integer(fields["trend_deg"], lifecycle) + 4 * _integer(fields["low_pass_deg"], lifecycle)
+    var plan: List[Int] = [batch, n, _integer(py_item(fields, nk[].k_period), lifecycle), _integer(py_item(fields, nk[].k_seasonal), lifecycle),
+                           _integer(py_item(fields, nk[].k_trend), lifecycle), _integer(py_item(fields, nk[].k_low_pass), lifecycle)]
+    var degree = _integer(py_item(fields, nk[].k_seasonal_deg), lifecycle) + 2 * _integer(py_item(fields, nk[].k_trend_deg), lifecycle) + 4 * _integer(py_item(fields, nk[].k_low_pass_deg), lifecycle)
     plan.append(degree)
-    plan.append(_integer(fields["seasonal_jump"], lifecycle))
-    plan.append(_integer(fields["trend_jump"], lifecycle))
-    plan.append(_integer(fields["low_pass_jump"], lifecycle))
+    plan.append(_integer(py_item(fields, nk[].k_seasonal_jump), lifecycle))
+    plan.append(_integer(py_item(fields, nk[].k_trend_jump), lifecycle))
+    plan.append(_integer(py_item(fields, nk[].k_low_pass_jump), lifecycle))
     plan.append(inner)
     plan.append(outer)
     var addresses: List[Int] = [y.address, Int(py=xseq_addr(season)), Int(py=xseq_addr(trend)), Int(py=xseq_addr(weights)),
