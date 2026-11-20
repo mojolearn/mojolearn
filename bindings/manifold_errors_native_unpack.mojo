@@ -8,6 +8,8 @@ from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type
 from bindings.optimizer_public_words_unpack import PYTHON_ERROR_PENDING, optimizer_python_error, stash_python_error
 from bindings.manifold_errors_run import _refinement
+from bindings.mani_keys_unpack import mani_keys
+from bindings.py_balanced import py_item
 
 
 def _with_cause(message: String, original: PythonObject) raises -> Error:
@@ -20,6 +22,7 @@ def _with_cause(message: String, original: PythonObject) raises -> Error:
 
 
 def manifold_error(error: Error, rows: Int, cols: Int, fitting: Bool, name: String) raises -> Error:
+    var nk = mani_keys()
     var b = native_loaded_module("builtins")
     var text = String(error)
     if text != PYTHON_ERROR_PENDING:
@@ -65,7 +68,7 @@ def manifold_error(error: Error, rows: Int, cols: Int, fitting: Bool, name: Stri
         cpy.lib.get_function[NoneType]("PyErr_Restore")(words[0], words[1], words[2])
         return stash_python_error()
     var original = PythonObject(from_borrowed=words[1])
-    var args = py_call(b.BaseException.__dict__["args"].__get__, original)
+    var args = py_call(py_item(b.BaseException.__dict__, nk[].k_args).__get__, original)
     if py_type(args) is not b.tuple or len(args) != 1 or py_type(args[0]) is not b.str:
         cpy.lib.get_function[NoneType]("PyErr_Restore")(words[0], words[1], words[2])
         return stash_python_error()

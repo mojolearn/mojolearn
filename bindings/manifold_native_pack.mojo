@@ -22,6 +22,8 @@ from bindings.manifold_errors_native_unpack import manifold_error
 from bindings.public_lifecycle_owner_door import lifecycle_begin, lifecycle_end
 from bindings.operation_names_mani import (
     MANI_OPN_FAMILY_MANI_ISO_RECONSTRUCTION_ERROR, MANI_OPN_FAMILY_MANI_MDS_FIT, MANI_OPN_FAMILY_MANI_MDS_FIT_TRANSFORM,
+from bindings.mani_keys_unpack import mani_keys
+from bindings.py_balanced import py_item
     MANI_OPN_FAMILY_MANI_TSNE_FIT, MANI_OPN_FAMILY_MANI_TSNE_FIT_TRANSFORM, MANI_OPN_FAMILY_MANI_UMAP_FIT,
     MANI_OPN_FAMILY_MANI_UMAP_TRANSFORM,
 )
@@ -40,6 +42,7 @@ def manifold_unknown_operation(operation: String) raises:
 
 def manifold_operation(model: PythonObject, operation: Int, args: PythonObject,
          shared_context: PythonObject) raises -> PythonObject:
+    var nk = mani_keys()
     # Scalar snapshots belong to this operation, never a mutable global cache.
     # Retained connection tables remain shared; only this exact native mapping
     # receives private scalar owners and operation-local helper cache entries.
@@ -47,11 +50,11 @@ def manifold_operation(model: PythonObject, operation: Int, args: PythonObject,
     # The kit's cross-call constants (the host 1 x 1 zero, the device zero
     # per binding) live in the long-lived shared context (row N290); only
     # the scalar snapshots and helper entries below are operation-local.
-    py_setitem(context, "family_mani_shared", shared_context)
-    py_setitem(context, "family_mani_scalar_cache", Python.dict())
-    py_setitem(context, "module_type", py_type(native_loaded_module("sys")))
-    var release = sequence_array_release(context) if py_get(context["modules"], "numpy") is not None else 0
-    py_setitem(context, "family_mani_numpy_release", PythonObject(release))
+    py_setitem(context, nk[].k_family_mani_shared, shared_context)
+    py_setitem(context, nk[].k_family_mani_scalar_cache, Python.dict())
+    py_setitem(context, nk[].k_module_type, py_type(native_loaded_module("sys")))
+    var release = sequence_array_release(context) if py_get(py_item(context, nk[].k_modules), nk[].k_numpy) is not None else 0
+    py_setitem(context, nk[].k_family_mani_numpy_release, PythonObject(release))
     var settings = ManifoldSettings(model, operation, context)
     if operation >= MANI_OPN_FAMILY_MANI_UMAP_FIT and operation <= MANI_OPN_FAMILY_MANI_UMAP_TRANSFORM:
         # UMAP's whole public lifecycle (the former `_mode` wrappers): the

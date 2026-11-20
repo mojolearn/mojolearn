@@ -43,6 +43,7 @@ from bindings.family_common_unpack import (
 )
 from bindings.family_common_pack import (
     family_array,
+from bindings.mani_keys_unpack import mani_keys
     family_field,
 )
 
@@ -110,6 +111,7 @@ def _tsne_pca_start(estimators: PythonObject, x_address: Int, n: Int, d: Int, k:
 def _tsne_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject, snapshot: ArrayMetadata,
               pin: ArrayPin, context: PythonObject) raises -> PythonObject:
     """`TSNE.fit(X)`; returns the embedding."""
+    var nk = mani_keys()
     classical_connect_numpy(context)
     var b = native_loaded_module("builtins")
     var op = native_loaded_module("operator")
@@ -222,11 +224,11 @@ def _tsne_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
     _ = init_pin^
     _ = x^
     _ = y0^
-    py_setitem(settings.fields, "embedding_", embedding)
-    py_setitem(settings.fields, "kl_divergence_", PythonObject(classical_word(kl)))
-    py_setitem(settings.fields, "n_iter_", max_iter)
-    py_setitem(settings.fields, "learning_rate_", PythonObject(lr))
-    py_setitem(settings.fields, "n_features_in_", PythonObject(d))
+    py_setitem(settings.fields, nk[].k_embedding_, embedding)
+    py_setitem(settings.fields, nk[].k_kl_divergence_, PythonObject(classical_word(kl)))
+    py_setitem(settings.fields, nk[].k_n_iter_, max_iter)
+    py_setitem(settings.fields, nk[].k_learning_rate_, PythonObject(lr))
+    py_setitem(settings.fields, nk[].k_n_features_in_, PythonObject(d))
     return embedding
 
 

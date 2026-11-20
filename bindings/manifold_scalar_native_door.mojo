@@ -16,6 +16,8 @@ from bindings.umap_parameters_native_door import umap_is_string
 from bindings.manifold_temporal_native import temporal_object_kind
 from bindings.py_cpython_table import cpython_table
 from core.native_scalar_decode import NativeRealBits
+from bindings.mani_keys_unpack import mani_keys
+from bindings.py_balanced import py_item
 
 
 struct ManifoldScalarSnapshot(Movable, Writable):
@@ -87,13 +89,14 @@ def manifold_buffer_bytes(value: PythonObject) raises -> PythonObject:
 
 
 def manifold_scalar_type(value: PythonObject, context: PythonObject) raises -> Bool:
+    var nk = mani_keys()
     var b = native_loaded_module("builtins")
     var cls = py_type(value)
     if cls is b.complex:
         return True
     if cls is b.int or cls is b.float or cls is b.bool or cls is b.str or cls is b.bytes or cls is b.bytearray or cls is b.list or cls is b.tuple or cls is b.dict or value is None:
         return False
-    if py_get(context["modules"], "numpy") is None:
+    if py_get(py_item(context, nk[].k_modules), nk[].k_numpy) is None:
         return False
     var classes = sequence_dtype_classes(context)
     for i in range(len(classes)):  # small-loop(dtype: fixed immutable native scalar identities)
@@ -113,16 +116,17 @@ def _snapshot(value: PythonObject, context: PythonObject) raises -> PythonObject
 
 def _snapshot(value: PythonObject, context: PythonObject,
               captured_dtype: PythonObject) raises -> PythonObject:
+    var nk = mani_keys()
     var b = native_loaded_module("builtins")
     var cls = py_type(value)
     if cls is b.int or cls is b.float or cls is b.bool or cls is b.complex or cls is b.str or cls is b.bytes or cls is b.list or cls is b.tuple or cls is b.dict or cls is b.set or cls is b.frozenset or value is None:
         return PythonObject(None)
-    var cache = context["family_mani_scalar_cache"]
+    var cache = py_item(context, nk[].k_family_mani_scalar_cache)
     var key = PythonObject(Int(value._obj_ptr))
     var previous = py_get(cache, key)
     if previous is not None:
         return previous
-    if cls is b.bytearray or cls is b.memoryview or cls is context["array_type"]:
+    if cls is b.bytearray or cls is b.memoryview or cls is py_item(context, nk[].k_array_type):
         var shape = value.shape if cls is b.memoryview else Python.tuple(len(value))
         var count = Int(py=shape[0]) if len(shape) > 0 else -1
         var contiguous = Bool(py=value.c_contiguous) if cls is b.memoryview else True
@@ -154,8 +158,8 @@ def _snapshot(value: PythonObject, context: PythonObject,
             String("C") if contiguous else String("strided"), True))
         py_setitem(cache, key, result)
         return result
-    var array = cls is py_get(context, "ndarray")
-    if py_get(context["modules"], "numpy") is None:
+    var array = cls is py_get(context, nk[].k_ndarray)
+    if py_get(py_item(context, nk[].k_modules), nk[].k_numpy) is None:
         return PythonObject(None)
     var classes = sequence_dtype_classes(context)
     var admitted = array
@@ -277,6 +281,7 @@ def _temporal_word(state: ManifoldScalarSnapshot) raises -> Int64:
 
 def manifold_number(value: PythonObject, integer: Bool, context: PythonObject,
                     depth: Int = 0) raises -> PythonObject:
+    var nk = mani_keys()
     if depth > 64:
         raise Error("TypeError: manifold scalar settings exceed native nesting bounds")
     var captured = _snapshot(value, context)
@@ -291,7 +296,7 @@ def manifold_number(value: PythonObject, integer: Bool, context: PythonObject,
         # Retain that native error rather than enabling a packed input.
         return _builtin_number(state.owner, integer)
     if state.array:
-        if len(state.shape) > 0 and Int(py=context["family_mani_numpy_release"]) >= 204:
+        if len(state.shape) > 0 and Int(py=py_item(context, nk[].k_family_mani_numpy_release)) >= 204:
             raise Error("TypeError: only 0-dimensional arrays can be converted to Python scalars")
         if state.count != 1:
             raise Error("TypeError: only size-1 arrays can be converted to Python scalars")
@@ -306,10 +311,10 @@ def manifold_number(value: PythonObject, integer: Bool, context: PythonObject,
                 var name = String("int") if integer else String("float")
                 var bytes = String(", a bytes-like object") if integer else String("")
                 raise Error("TypeError: " + name + "() argument must be a string" + bytes + " or a real number, not 'complex'")
-            var exceptions = py_get(context["modules"], "numpy.exceptions")
-            if exceptions is None or py_type(exceptions) is not context["module_type"]:
+            var exceptions = py_get(py_item(context, nk[].k_modules), "numpy.exceptions")
+            if exceptions is None or py_type(exceptions) is not py_item(context, nk[].k_module_type):
                 raise Error("TypeError: complex scalar settings require native NumPy exception metadata")
-            var category = py_get(native_numpy_module_fields(exceptions), "ComplexWarning")
+            var category = py_get(native_numpy_module_fields(exceptions), nk[].k_ComplexWarning)
             metric_warn("Casting complex values to real discards the imaginary part", category, context)
         return state.number.to_python_number(integer)
     if state.kind == "M" or state.kind == "m":

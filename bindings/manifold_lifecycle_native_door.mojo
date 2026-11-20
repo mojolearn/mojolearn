@@ -24,6 +24,8 @@ from providers.python.array_metadata_pyapi_door import ArrayMetadata, ArrayPin, 
 from core.cast_in import cast_in_kind
 from core.admitted_input import admitted_cast_f32
 from core.host_finite_scan import host_all_finite_nd
+from bindings.mani_keys_unpack import mani_keys
+from bindings.py_balanced import py_item
 
 
 def manifold_method(operation: Int) -> String:
@@ -39,6 +41,7 @@ def manifold_method(operation: Int) -> String:
 
 
 def _fitted(fields: PythonObject) raises -> Bool:
+    var nk = mani_keys()
     var b = native_loaded_module("builtins")
     for name in ["_mojolearn_fitted", "_mojolearn_fitting"]:  # small-loop(fitted flags: two native metadata fields)
         var value = py_get(fields, name)
@@ -47,7 +50,7 @@ def _fitted(fields: PythonObject) raises -> Bool:
                 raise Error("TypeError: manifold fitted flags require native booleans or integers")
             if Bool(py=value):
                 return True
-    var reset = py_get(fields, "_mojolearn_params_reset")
+    var reset = py_get(fields, nk[].k__mojolearn_params_reset)
     var names: PythonObject
     if reset is not None:
         if py_type(reset) is not b.tuple:
@@ -126,6 +129,7 @@ def _target_finite(snapshot: ArrayMetadata) raises -> Bool:
 
 def manifold_input(source: PythonObject, name: String, sparse_allowed: Bool,
                    context: PythonObject, mut pin: ArrayPin) raises -> ArrayMetadata:
+    var nk = mani_keys()
     var prepared = source
     var sparse = host_sparse_format(source)
     if sparse_allowed:
@@ -133,9 +137,9 @@ def manifold_input(source: PythonObject, name: String, sparse_allowed: Bool,
             # The densifier reads `output_context`; a self-reference left in
             # the per-call context made it a cycle only the collector frees
             # (p3 rank 945), so the entry added here is removed after use.
-            var added = not py_contains(context, "output_context")
+            var added = not py_contains(context, nk[].k_output_context)
             if added:
-                py_setitem(context, "output_context", context)
+                py_setitem(context, nk[].k_output_context, context)
             try:
                 prepared = host_sparse_dense(source, sparse, context)
             finally:
@@ -205,6 +209,7 @@ def _target_leaves(mut mods: NativeModules, b: PythonObject, seq: _SequentialVal
 
 
 def _target_list_kind(value: PythonObject, context: PythonObject) raises -> Int:
+    var nk = mani_keys()
     # The historical validator describes a list's first leaf; an integer-first
     # or nonnumeric-first ignored y does not acquire a new finite-value scan.
     var b = native_loaded_module("builtins")
@@ -220,7 +225,7 @@ def _target_list_kind(value: PythonObject, context: PythonObject) raises -> Int:
         return 2
     if cls is b.int or cls is b.bool:
         return 1
-    if _one_of(cls, context["scalar_types"]):
+    if _one_of(cls, py_item(context, nk[].k_scalar_types)):
         var kind = String(item.dtype.kind)
         if kind == "c":
             return 3
@@ -232,6 +237,7 @@ def _target_list_kind(value: PythonObject, context: PythonObject) raises -> Int:
 
 
 def manifold_ignored_target(y: PythonObject, rows: Int, name: String, context: PythonObject) raises:
+    var nk = mani_keys()
     if y is None:
         return
     var b = native_loaded_module("builtins")
@@ -260,7 +266,7 @@ def manifold_ignored_target(y: PythonObject, rows: Int, name: String, context: P
     # Ignored sparse y has only length semantics; never densify its labels.
     var sparse = host_sparse_format(y)
     if sparse.byte_length() > 0:
-        var shape = py_get(_sparse_fields(y), "_shape")
+        var shape = py_get(_sparse_fields(y), nk[].k__shape)
         if py_type(shape) is not b.tuple or len(shape) != 2 or py_type(shape[0]) is not b.int or py_type(shape[1]) is not b.int:
             raise Error("TypeError: sparse target storage requires a native two-dimensional shape")
         if Int(py=shape[0]) != rows:
@@ -273,7 +279,7 @@ def manifold_ignored_target(y: PythonObject, rows: Int, name: String, context: P
                                       allow_non_native=True, allow_unsupported=True)
     if _complex_dtype(snapshot.dtype_number):
         raise Error("Complex data not supported: " + name + " got a complex y.")
-    var reshape_supported = cls is py_get(context, "ndarray") or cls is context["array_class"] or native_pandas_exact(y) or _ordinary_torch(cls, context)
+    var reshape_supported = cls is py_get(context, nk[].k_ndarray) or cls is py_item(context, nk[].k_array_class) or native_pandas_exact(y) or _ordinary_torch(cls, context)
     if len(snapshot.shape) == 2 and snapshot.shape[1] == 1 and reshape_supported:
         metric_warn(COLUMN_WARNING, _warning_category(context), context)
     if not _target_finite(snapshot):
@@ -287,14 +293,15 @@ def manifold_ignored_target(y: PythonObject, rows: Int, name: String, context: P
 
 def manifold_check_width(settings: ManifoldSettings, x: ArrayMetadata, names: PythonObject,
                          name: String, context: PythonObject) raises:
+    var nk = mani_keys()
     var b = native_loaded_module("builtins")
-    var metric = py_get(settings.values, "metric")
+    var metric = py_get(settings.values, nk[].k_metric)
     if py_type(metric) is b.str and String(metric) == "precomputed":
         return
-    var width = py_get(settings.values, "n_features_in_")
+    var width = py_get(settings.values, nk[].k_n_features_in_)
     if py_type(width) is b.int and x.source.cols != Int(py=width):
         raise Error("X has " + String(x.source.cols) + " features, but " + name + " is expecting " + String(Int(py=width)) + " features as input.")
-    var fitted = py_get(settings.values, "feature_names_in_")
+    var fitted = py_get(settings.values, nk[].k_feature_names_in_)
     if fitted is None:
         if names is not None and (py_type(width) is b.int or py_type(width) is b.bool):
             metric_warn("X has feature names, but " + name + " was fitted without feature names", b.UserWarning, context)
@@ -313,12 +320,13 @@ def manifold_check_width(settings: ManifoldSettings, x: ArrayMetadata, names: Py
 
 def manifold_finish(settings: ManifoldSettings, result: PythonObject, method: String,
                     names: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = mani_keys()
     if method == "fit" or method == "fit_transform":
         if names is None:
             _ = py_call(settings.fields.pop, "feature_names_in_", PythonObject(None))
         else:
-            py_setitem(settings.fields, "feature_names_in_", names)
-        py_setitem(settings.fields, "_mojolearn_fitted", PythonObject(True))
+            py_setitem(settings.fields, nk[].k_feature_names_in_, names)
+        py_setitem(settings.fields, nk[].k__mojolearn_fitted, PythonObject(True))
     if method == "fit":
         return result
     return parallel_public_result(result, method, PythonObject(None), context)

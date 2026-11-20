@@ -53,6 +53,8 @@ from bindings.mani_kit_door import mk_image, mk_fitted, mk_keep, mk_owner, mk_ou
 from bindings.mani_kit_run import MRun
 from bindings.mani_decomp_run import (
     MANI_METRIC_PRECOMPUTED, MANI_METRIC_EUCLIDEAN, LLE_STANDARD, LLE_LTSA, LLE_HESSIAN, LLE_MODIFIED,
+from bindings.mani_keys_unpack import mani_keys
+from bindings.py_balanced import py_item
     MDS_INIT_ARRAY, MDS_INIT_CLASSICAL, MDS_INIT_RANDOM, MdsPlan, IsoPlan, IsoFit, IsoState, LlePlan, LleFit,
     cmds_core, mds_dissimilarity_run, mds_fit_run, iso_fit_run, iso_transform_run, iso_reconstruction_error_run,
     lle_fit_run, lle_transform_run,
@@ -167,6 +169,7 @@ def _mani_eigen_solver(name: PythonObject, who: String, context: PythonObject) r
 def _mani_metric_spec(metric: PythonObject, p_in: PythonObject, metric_params: PythonObject,
                       who: String, context: PythonObject) raises -> Tuple[Int, Float64]:
     """`_metric_spec(metric, p, metric_params, who)`: (kind, p)."""
+    var nk = mani_keys()
     var b = native_loaded_module("builtins")
     var p = p_in
     if _mani_truth(metric_params, context):
@@ -189,7 +192,7 @@ def _mani_metric_spec(metric: PythonObject, p_in: PythonObject, metric_params: P
         if pw > 0 and not (pw - pw == 0.0):
             return (Int(2), Float64(0.0))
         return (Int(3), pw)
-    var kinds = context["family_mani_pd_kind"]
+    var kinds = py_item(context, nk[].k_family_mani_pd_kind)
     if family_is_str(metric) and py_contains(kinds, metric):
         return (Int(py=kinds[metric]), Float64(0.0))
     raise Error("NotImplementedError: " + who + ": metric=" + family_repr(metric) + " is not carried (euclidean, "
@@ -210,6 +213,7 @@ def _mani_metric(metric: PythonObject, metric_params: PythonObject, who: String,
 # ---------------------------------------------------------------- ClassicalMDS
 def _cmds_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject, x: ArrayMetadata, context: PythonObject) raises -> PythonObject:
     """`ClassicalMDS.fit(X)`; returns embedding_."""
+    var nk = mani_keys()
     classical_connect_numpy(context)
     var fields = settings.values
     var mode = settings.mode
@@ -229,12 +233,12 @@ def _cmds_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
         var values = mk_out(run, got[1], Python.tuple(run.c(got[1])), context)
         var embedding = mk_out2(run, got[2], context)
         var owner = mk_owner(run, got[2])
-        py_setitem(settings.fields, "numeric_mode_", mode)
-        py_setitem(settings.fields, "dissimilarity_matrix_", dissimilarity)
-        py_setitem(settings.fields, "eigenvalues_", values)
-        py_setitem(settings.fields, "embedding_m_", owner)
-        py_setitem(settings.fields, "embedding_", embedding)
-        py_setitem(settings.fields, "n_features_in_", PythonObject(run.c(m)))
+        py_setitem(settings.fields, nk[].k_numeric_mode_, mode)
+        py_setitem(settings.fields, nk[].k_dissimilarity_matrix_, dissimilarity)
+        py_setitem(settings.fields, nk[].k_eigenvalues_, values)
+        py_setitem(settings.fields, nk[].k_embedding_m_, owner)
+        py_setitem(settings.fields, nk[].k_embedding_, embedding)
+        py_setitem(settings.fields, nk[].k_n_features_in_, PythonObject(run.c(m)))
         return embedding
     finally:
         mk_finish(run, context)
@@ -244,6 +248,7 @@ def _cmds_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
 def _mds_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject, x: ArrayMetadata, context: PythonObject) raises -> PythonObject:
     """`MDS.fit_transform(X, init=init)`; returns embedding_. args = (decomp
     binding, default-mode binding, X, init)."""
+    var nk = mani_keys()
     classical_connect_numpy(context)
     var b = native_loaded_module("builtins")
     var fields = settings.values
@@ -295,13 +300,13 @@ def _mds_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject
         # PACK
         var dissimilarity = mk_out2(run, dis, context)
         var embedding = mk_out2(run, got[0], context)
-        py_setitem(settings.fields, "numeric_mode_", mode)
-        py_setitem(settings.fields, "dissimilarity_matrix_", dissimilarity)
-        py_setitem(settings.fields, "_norm", PythonObject(plan.norm))
-        py_setitem(settings.fields, "stress_", py_call(b.float, PythonObject(got[1])))
-        py_setitem(settings.fields, "n_iter_", PythonObject(got[2]))
-        py_setitem(settings.fields, "embedding_", embedding)
-        py_setitem(settings.fields, "n_features_in_", PythonObject(run.c(m)))
+        py_setitem(settings.fields, nk[].k_numeric_mode_, mode)
+        py_setitem(settings.fields, nk[].k_dissimilarity_matrix_, dissimilarity)
+        py_setitem(settings.fields, nk[].k__norm, PythonObject(plan.norm))
+        py_setitem(settings.fields, nk[].k_stress_, py_call(b.float, PythonObject(got[1])))
+        py_setitem(settings.fields, nk[].k_n_iter_, PythonObject(got[2]))
+        py_setitem(settings.fields, nk[].k_embedding_, embedding)
+        py_setitem(settings.fields, nk[].k_n_features_in_, PythonObject(run.c(m)))
         return embedding
     finally:
         mk_finish(run, context)
@@ -310,6 +315,7 @@ def _mds_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject
 # ---------------------------------------------------------------- Isomap
 def _iso_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject, x: ArrayMetadata, context: PythonObject) raises -> PythonObject:
     """`Isomap.fit(X)`; returns embedding_."""
+    var nk = mani_keys()
     classical_connect_numpy(context)
     var fields = settings.values
     var mode = settings.mode
@@ -368,23 +374,23 @@ def _iso_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject
         var kc = mk_owner(run, fit.kc)
         # transform's eigenvectors / sqrt(eigenvalues) (row N295)
         var iv = mk_owner(run, fit.iv)
-        py_setitem(settings.fields, "numeric_mode_", mode)
-        py_setitem(settings.fields, "_kind", PythonObject(plan.kind))
-        py_setitem(settings.fields, "_pw", PythonObject(plan.pw))
-        py_setitem(settings.fields, "n_connected_components_", PythonObject(fit.components))
-        py_setitem(settings.fields, "dist_matrix_m_", dist_m)
-        py_setitem(settings.fields, "dist_matrix_", dist)
-        py_setitem(settings.fields, "_k_col", k_col)
-        py_setitem(settings.fields, "_k_all", k_all)
-        py_setitem(settings.fields, "eigenvalues_m_", values)
-        py_setitem(settings.fields, "eigenvectors_m_", vectors)
-        py_setitem(settings.fields, "embedding_m_", em)
-        py_setitem(settings.fields, "embedding_", embedding)
-        py_setitem(settings.fields, "_fit_X", fit_x)
-        py_setitem(settings.fields, "_knn", nn_out)
-        py_setitem(settings.fields, "n_features_in_", PythonObject(run.c(m)))
-        py_setitem(settings.fields, "_Kc", kc)
-        py_setitem(settings.fields, "_iso_v_m_", iv)
+        py_setitem(settings.fields, nk[].k_numeric_mode_, mode)
+        py_setitem(settings.fields, nk[].k__kind, PythonObject(plan.kind))
+        py_setitem(settings.fields, nk[].k__pw, PythonObject(plan.pw))
+        py_setitem(settings.fields, nk[].k_n_connected_components_, PythonObject(fit.components))
+        py_setitem(settings.fields, nk[].k_dist_matrix_m_, dist_m)
+        py_setitem(settings.fields, nk[].k_dist_matrix_, dist)
+        py_setitem(settings.fields, nk[].k__k_col, k_col)
+        py_setitem(settings.fields, nk[].k__k_all, k_all)
+        py_setitem(settings.fields, nk[].k_eigenvalues_m_, values)
+        py_setitem(settings.fields, nk[].k_eigenvectors_m_, vectors)
+        py_setitem(settings.fields, nk[].k_embedding_m_, em)
+        py_setitem(settings.fields, nk[].k_embedding_, embedding)
+        py_setitem(settings.fields, nk[].k__fit_X, fit_x)
+        py_setitem(settings.fields, nk[].k__knn, nn_out)
+        py_setitem(settings.fields, nk[].k_n_features_in_, PythonObject(run.c(m)))
+        py_setitem(settings.fields, nk[].k__Kc, kc)
+        py_setitem(settings.fields, nk[].k__iso_v_m_, iv)
         return embedding
     finally:
         mk_finish(run, context)
@@ -392,6 +398,7 @@ def _iso_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject
 
 def _iso_transform(model: PythonObject, settings: ManifoldSettings, args: PythonObject, x: ArrayMetadata, context: PythonObject) raises -> PythonObject:
     """`Isomap.transform(X)`."""
+    var nk = mani_keys()
     _mani_check(model, settings.values, "embedding_m_")
     classical_connect_numpy(context)
     var fields = settings.values
@@ -419,7 +426,7 @@ def _iso_transform(model: PythonObject, settings: ManifoldSettings, args: Python
             st.knn = _mani_int(knn, context)
         # eigenvectors / sqrt(eigenvalues), kept by fit; a model fitted before
         # it was kept makes it from eigenvectors_m_ / eigenvalues_m_
-        var iv = py_get(fields, PythonObject("_iso_v_m_"))
+        var iv = py_get(fields, nk[].k__iso_v_m_)
         var w = PythonObject(None)
         var v = PythonObject(None)
         if iv is None:
@@ -473,6 +480,7 @@ def _iso_reconstruction_error(model: PythonObject, settings: ManifoldSettings, a
 # ---------------------------------------------------------------- LocallyLinearEmbedding
 def _lle_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject, x: ArrayMetadata, context: PythonObject) raises -> PythonObject:
     """`LocallyLinearEmbedding.fit(X)`; returns embedding_."""
+    var nk = mani_keys()
     classical_connect_numpy(context)
     var b = native_loaded_module("builtins")
     var fields = settings.values
@@ -540,13 +548,13 @@ def _lle_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject
         var embedding = mk_out2(run, fit.em, context)
         var em = mk_owner(run, fit.em)
         var fit_x = mk_owner(run, m)
-        py_setitem(settings.fields, "numeric_mode_", mode)
-        py_setitem(settings.fields, "embedding_m_", em)
-        py_setitem(settings.fields, "embedding_", embedding)
-        py_setitem(settings.fields, "reconstruction_error_", PythonObject(fit.reconstruction_error))
-        py_setitem(settings.fields, "_fit_X", fit_x)
-        py_setitem(settings.fields, "_knn", PythonObject(nn))
-        py_setitem(settings.fields, "n_features_in_", PythonObject(run.c(m)))
+        py_setitem(settings.fields, nk[].k_numeric_mode_, mode)
+        py_setitem(settings.fields, nk[].k_embedding_m_, em)
+        py_setitem(settings.fields, nk[].k_embedding_, embedding)
+        py_setitem(settings.fields, nk[].k_reconstruction_error_, PythonObject(fit.reconstruction_error))
+        py_setitem(settings.fields, nk[].k__fit_X, fit_x)
+        py_setitem(settings.fields, nk[].k__knn, PythonObject(nn))
+        py_setitem(settings.fields, nk[].k_n_features_in_, PythonObject(run.c(m)))
         return embedding
     finally:
         mk_finish(run, context)

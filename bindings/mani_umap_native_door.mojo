@@ -60,6 +60,8 @@ from core.label_words_impl import label_words_f64, label_words_i64, label_dense_
 from bindings.mani_kit_door import mk_image, mk_out2, mk_finish, mk_seed_word
 from bindings.mani_kit_run import MRun
 from bindings.mani_umap_init_run import umap_random_start_run, umap_pca_start_run
+from bindings.mani_keys_unpack import mani_keys
+from bindings.py_balanced import py_item
 
 comptime _F32_MAX = 3.4028234663852886e+38
 comptime _I64_MAX = 9223372036854775807
@@ -270,6 +272,7 @@ def _umap_list_codes(y: PythonObject, n: Int, context: PythonObject) raises -> P
 
 def _umap_target(settings: ManifoldSettings, y: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
     """`_target(y, n)`: (kind, dims, codes, target_n_neighbors, weight)."""
+    var nk = mani_keys()
     var b = native_loaded_module("builtins")
     var op = native_loaded_module("operator")
     var fields = settings.values
@@ -285,7 +288,7 @@ def _umap_target(settings: ManifoldSettings, y: PythonObject, n: Int, context: P
         # value order; NaN, uint64, float16 and every other source keep the
         # object path below.
         var y_type = py_type(y)
-        if y_type is py_get(context, "ndarray") or y_type is context["array_class"]:
+        if y_type is py_get(context, nk[].k_ndarray) or y_type is py_item(context, nk[].k_array_class):
             var fast = _umap_native_codes(y, n, context)
             if fast is not None:
                 return Python.tuple(PythonObject(1), PythonObject(1), fast[0], tk_kept, PythonObject(w), fast[0], fast[1])
@@ -303,8 +306,8 @@ def _umap_target(settings: ManifoldSettings, y: PythonObject, n: Int, context: P
         # (type name, value) sort over arbitrary labels are removed).
         var y_cls = py_type(y)
         var vals: PythonObject
-        if y_cls is py_get(context, "ndarray"):
-            vals = py_call(py_attr(py_get(context, "ndarray"), "tolist"), y)
+        if y_cls is py_get(context, nk[].k_ndarray):
+            vals = py_call(py_attr(py_get(context, nk[].k_ndarray), "tolist"), y)
         elif y_cls is b.list or y_cls is b.tuple:
             vals = py_call(b.list, y)
         else:
@@ -356,6 +359,7 @@ def _umap_target(settings: ManifoldSettings, y: PythonObject, n: Int, context: P
 
 def _umap_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`UMAP.fit(X, y)`; returns the embedding."""
+    var nk = mani_keys()
     classical_connect_numpy(context)
     var binding = spectral_umap_route(context, "metrics", settings.mode)
     var source = args[0]
@@ -368,9 +372,9 @@ def _umap_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
     var b = native_loaded_module("builtins")
     var source_type = py_type(source)
     var copied = True
-    if source_type is py_get(context, "ndarray") or source_type is context["array_class"]:
+    if source_type is py_get(context, nk[].k_ndarray) or source_type is py_item(context, nk[].k_array_class):
         copied = x.copied
-    elif source_type is b.memoryview or source_type is context["array_type"] or source_type is b.bytearray:
+    elif source_type is b.memoryview or source_type is py_item(context, nk[].k_array_type) or source_type is b.bytearray:
         # Remaining shared-provider debt: native buffer materialization does
         # not yet carry the original input_copied provenance in ArrayMetadata.
         # Preserve this public flag until the provider can capture it once.
@@ -426,13 +430,13 @@ def _umap_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
     var frozen = _umap_copy(Python.tuple(n, nc), embedding_address, n * nc, context)
     _ = x^
     _ = x_pin^  # the door's pin held X through every RUN read and the copy
-    py_setitem(settings.fields, "embedding_", embedding)
-    py_setitem(settings.fields, "n_features_in_", PythonObject(d))
-    py_setitem(settings.fields, "input_copied_", PythonObject(copied))
-    py_setitem(settings.fields, "_transform_training", training)
-    py_setitem(settings.fields, "_transform_embedding", frozen)
-    py_setitem(settings.fields, "_transform_config", _umap_concat_tuple(config, extras))
-    py_setitem(settings.fields, "_transform_mode", PythonObject(mode))
+    py_setitem(settings.fields, nk[].k_embedding_, embedding)
+    py_setitem(settings.fields, nk[].k_n_features_in_, PythonObject(d))
+    py_setitem(settings.fields, nk[].k_input_copied_, PythonObject(copied))
+    py_setitem(settings.fields, nk[].k__transform_training, training)
+    py_setitem(settings.fields, nk[].k__transform_embedding, frozen)
+    py_setitem(settings.fields, nk[].k__transform_config, _umap_concat_tuple(config, extras))
+    py_setitem(settings.fields, nk[].k__transform_mode, PythonObject(mode))
     return embedding
 
 
@@ -444,10 +448,11 @@ def _umap_concat_tuple(config: PythonObject, extras: PythonObject) raises -> Pyt
 
 def _umap_transform(model: PythonObject, settings: ManifoldSettings, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`UMAP.transform(X)`."""
+    var nk = mani_keys()
     classical_connect_numpy(context)
     var b = native_loaded_module("builtins")
     var op = native_loaded_module("operator")
-    if not py_contains(settings.values, "_transform_training"):
+    if not py_contains(settings.values, nk[].k__transform_training):
         raise Error("UMAP transform requires a successful fit")
     var validated = umap_parameters_fields(settings.values, context)
     var config = validated[0]

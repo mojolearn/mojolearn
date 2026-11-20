@@ -12,6 +12,8 @@ from bindings.sequence_dtype_native_door import sequence_dtype_classes, sequence
 from providers.python.classical_family_admission_pyapi_unpack import classical_family_admit
 from bindings.operation_names_mani import (
     MANI_OPN_FAMILY_MANI_CMDS_FIT, MANI_OPN_FAMILY_MANI_CMDS_FIT_TRANSFORM, MANI_OPN_FAMILY_MANI_ISO_FIT,
+from bindings.mani_keys_unpack import mani_keys
+from bindings.py_balanced import py_item
     MANI_OPN_FAMILY_MANI_ISO_FIT_TRANSFORM, MANI_OPN_FAMILY_MANI_ISO_RECONSTRUCTION_ERROR, MANI_OPN_FAMILY_MANI_ISO_TRANSFORM,
     MANI_OPN_FAMILY_MANI_LLE_FIT, MANI_OPN_FAMILY_MANI_LLE_FIT_TRANSFORM, MANI_OPN_FAMILY_MANI_LLE_TRANSFORM,
     MANI_OPN_FAMILY_MANI_MDS_FIT, MANI_OPN_FAMILY_MANI_MDS_FIT_TRANSFORM, MANI_OPN_FAMILY_MANI_TSNE_FIT,
@@ -22,6 +24,7 @@ from bindings.operation_names_mani import (
 
 def _setting(value: PythonObject, context: PythonObject, depth: Int = 0,
              freeze_buffers: Bool = True, admitted: Bool = False) raises -> PythonObject:
+    var nk = mani_keys()
     # `admitted`: an enclosing list/tuple's classical_admit_value already
     # admitted this element (it walks list/tuple contents recursively), so
     # the element is not admitted a second time, once per nesting level.
@@ -50,7 +53,7 @@ def _setting(value: PythonObject, context: PythonObject, depth: Int = 0,
                 raise Error("TypeError: manifold configuration mappings require exact string keys")
             py_setitem(result, keys[i], _setting(value[keys[i]], context, depth + 1, freeze_buffers))
         return result
-    elif cls is py_get(context, "ndarray"):
+    elif cls is py_get(context, nk[].k_ndarray):
         var dtype = value.dtype
         var native_dtype = sequence_dtype_instance(dtype, sequence_dtype_classes(context))
         for code in ["q", "Q"]:  # small-loop(dtype: platform long-long descriptor aliases)
@@ -93,7 +96,7 @@ def _setting(value: PythonObject, context: PythonObject, depth: Int = 0,
             var result = py_call(cls, shape, dtype=dtype, buffer=store)
             _ = _snapshot(result, context)
             return result
-    elif freeze_buffers and (cls is b.bytearray or cls is b.memoryview or cls is context["array_type"]):
+    elif freeze_buffers and (cls is b.bytearray or cls is b.memoryview or cls is py_item(context, nk[].k_array_type)):
         # Keep the public native buffer type while capturing its scalar text
         # payload now. Later numeric parsing reads the private byte snapshot;
         # truth and error behavior keep the captured source layout.
@@ -137,26 +140,27 @@ struct ManifoldSettings(Copyable, Movable):
     var mode: PythonObject
 
     def __init__(out self, model: PythonObject, operation: Int, context: PythonObject) raises:
+        var nk = mani_keys()
         # Admit class/storage hooks before any instance lookup. Retain fitted
         # buffers and freeze configuration contents before execution. Writes
         # still publish into the original admitted dictionary.
         self.fields = classical_family_admit(model)
         var b = native_loaded_module("builtins")
         if manifold_fit_only(operation) or manifold_fit_transform(operation):
-            if py_contains(self.fields, "_mojolearn_after_fit"):
+            if py_contains(self.fields, nk[].k__mojolearn_after_fit):
                 raise Error("TypeError: native manifold fitting does not accept Python after-fit callbacks")
             var ancestry = _type_mro(py_type(model))
             for i in range(len(ancestry)):  # driver-loop: refuse application after-fit hooks before execution
-                if py_contains(_class_fields(ancestry[i]), "_mojolearn_after_fit"):
+                if py_contains(_class_fields(ancestry[i]), nk[].k__mojolearn_after_fit):
                     raise Error("TypeError: native manifold fitting does not accept Python after-fit callbacks")
         self.values = py_call(b.dict, self.fields)
         # Retain original field owners as well as the private scalar copies;
         # concurrent application field replacement cannot release an exporter
         # while this operation still owns its captured configuration.
         self.owners = py_call(b.tuple, py_call(self.values.values))
-        self.default_mode = context["backend_fields"]["_DEFAULT_MODE"]
-        self.requested = py_get(self.values, "numeric_mode")
-        self.fitted = py_get(self.values, "numeric_mode_")
+        self.default_mode = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
+        self.requested = py_get(self.values, nk[].k_numeric_mode)
+        self.fitted = py_get(self.values, nk[].k_numeric_mode_)
         self.mode = self.default_mode if self.requested is None else self.requested
         if manifold_transforms(operation) or operation == MANI_OPN_FAMILY_MANI_ISO_RECONSTRUCTION_ERROR:
             if operation != MANI_OPN_FAMILY_MANI_UMAP_TRANSFORM:
