@@ -18,6 +18,7 @@ from providers.python.svc_public_state_pyapi_unpack import (
     _state_fitted,
     _state_keys,
 )
+from bindings.svm_keys_unpack import svm_keys
 
 
 def svc_public_state_operation(model: PythonObject, operation: Int, args: PythonObject,
@@ -31,7 +32,8 @@ def svc_public_state_operation(model: PythonObject, operation: Int, args: Python
     var staged = py_call(native_loaded_module("builtins").dict, fields)
     for i in range(len(keys)):  # driver-loop: stage restoration without mutating or releasing model state
         py_setitem(staged, keys[i], state[keys[i]])
-    if not py_contains(state, "_hp_C") and _state_fitted(staged):
+    var nk = svm_keys()
+    if not py_contains(state, nk[].k__hp_C) and _state_fitted(staged):
         _svm_validate(model, staged, operation == SVC_OPN_FAMILY_SVC_PUBLIC_SVC_SETSTATE, context)
     var publish = _state_keys(staged)
     for i in range(len(publish)):  # driver-loop: all old owners remain intact until full admission succeeds

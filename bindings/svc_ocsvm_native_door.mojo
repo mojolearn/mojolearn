@@ -45,6 +45,8 @@ from bindings.operation_names_svc import (
     SVC_OPN_FAMILY_SVC_OCSVM_FIT, SVC_OPN_FAMILY_SVC_OCSVM_SCORE_SAMPLES, SVC_OPN_FAMILY_SVC_OCSVM_DECISION,
     SVC_OPN_FAMILY_SVC_OCSVM_PREDICT, SVC_OPN_FAMILY_SVC_OCSVM_FIT_PREDICT,
 )
+from bindings.svm_keys_unpack import svm_keys
+from bindings.py_balanced import py_item
 
 
 def _oc_kernel_code(kernel: PythonObject, context: PythonObject) raises -> Int:
@@ -52,8 +54,9 @@ def _oc_kernel_code(kernel: PythonObject, context: PythonObject) raises -> Int:
     # key: keep CPython's TypeError (a caught Python error reaches Mojo as its
     # message only, which the door would otherwise raise as a ValueError).
     var code = PythonObject(None)
+    var nk = svm_keys()
     try:
-        code = context["family_svc_xn_kernels"][kernel]
+        code = py_item(context, nk[].k_family_svc_xn_kernels)[kernel]
     except e:
         raise Error("TypeError: " + String(e))
     return Int(py=code)
@@ -76,7 +79,8 @@ def _fast_tier_native(mut connection: OcConnection, binding: PythonObject, conte
     if not xn_is_module(binding):
         return False
     var module = xn_module(binding)
-    var full_value = py_get(_loaded_fields(module), "__name__")
+    var nk = svm_keys()
+    var full_value = py_get(_loaded_fields(module), nk[].k___name__)
     if py_type(full_value) is not svc_builtins().str:
         return False
     var parts = String(full_value).split(".")
@@ -108,12 +112,13 @@ def _ocsvm_fit_native(model: PythonObject, binding: PythonObject, source: Python
     sample_weight: PythonObject, context: PythonObject, mut connection: OcConnection) raises:
     var b = svc_builtins()
     var fields = py_fields(model)
-    var kernel = svc_field(fields, "kernel")
+    var nk = svm_keys()
+    var kernel = svc_field(fields, nk[].k_kernel, "kernel")
     if Bool(py=family_call(b.callable, kernel)):
         raise Error("NotImplementedError: OneClassSVM callable kernels require a native kernel name")
     if not oc_kernel_admit(kernel, context):
         raise Error("NotImplementedError: OneClassSVM: kernel=" + oc_parameter_repr(kernel, context) + " is not implemented")
-    var nu = _oc_float(svc_field(fields, "nu"), context)
+    var nu = _oc_float(svc_field(fields, nk[].k_nu, "nu"), context)
     if not (0.0 < nu and nu <= 1.0):
         raise Error("nu must be in (0, 1]")
     var x = source if gp_x_known(source, context) else admit_family(source, 2, "X", context, True).array
@@ -146,7 +151,7 @@ def _ocsvm_fit_native(model: PythonObject, binding: PythonObject, source: Python
     var degree = 0
     var coef0 = Float64(0)
     if precomputed:
-        py_setitem(fields, PythonObject("_gamma"), PythonObject(0.0))
+        py_setitem(fields, nk[].k__gamma, PythonObject(0.0))
         if not weights.selected:
             q = OcMatrix(n, d, x_address)
         else:
@@ -157,10 +162,10 @@ def _ocsvm_fit_native(model: PythonObject, binding: PythonObject, source: Python
                 _ = selected_rows
         has_gram = True
     else:
-        degree = _oc_int(svc_field(fields, "degree"), context)
-        coef0 = _oc_float(svc_field(fields, "coef0"), context)
-        var gamma = _f32_scalar(_resolve_gamma_native(connection, svc_field(fields, "gamma"), x_address, n, d, context))
-        py_setitem(fields, PythonObject("_gamma"), PythonObject(gamma))
+        degree = _oc_int(svc_field(fields, nk[].k_degree, "degree"), context)
+        coef0 = _oc_float(svc_field(fields, nk[].k_coef0, "coef0"), context)
+        var gamma = _f32_scalar(_resolve_gamma_native(connection, svc_field(fields, nk[].k_gamma, "gamma"), x_address, n, d, context))
+        py_setitem(fields, nk[].k__gamma, PythonObject(gamma))
         if weights.selected:
             var driver = connection.driver()
             with GILReleased(Python()):
@@ -182,12 +187,12 @@ def _ocsvm_fit_native(model: PythonObject, binding: PythonObject, source: Python
     with GILReleased(Python()):
         state.initialize(driver, oc_f32_address(weights.values), nu)
     state.prepare_metadata()
-    var max_iter = _oc_int(svc_field(fields, "max_iter"), context)
+    var max_iter = _oc_int(svc_field(fields, nk[].k_max_iter, "max_iter"), context)
     var cap = 10000000 if max_iter < 0 else max_iter
-    var tol = _f32_scalar(_oc_float(svc_field(fields, "tol"), context))
+    var tol = _f32_scalar(_oc_float(svc_field(fields, nk[].k_tol, "tol"), context))
     if not has_gram:
         var code = _oc_kernel_code(kernel, context)
-        var gamma = _oc_float(svc_field(fields, "_gamma"), context)
+        var gamma = _oc_float(svc_field(fields, nk[].k__gamma, "_gamma"), context)
         if xn_is_module(binding):
             var resident = connection.resident_driver()
             with GILReleased(Python()):
@@ -215,9 +220,9 @@ def _ocsvm_fit_native(model: PythonObject, binding: PythonObject, source: Python
         _ = prefix
     else:
         support = svc_prefix(oc_i32_address(state.support_rows), n_sv, Python.tuple(PythonObject(n_sv)), "<i4", context)
-    py_setitem(fields, PythonObject("support_"), support)
+    py_setitem(fields, nk[].k_support_, support)
     if precomputed:
-        py_setitem(fields, PythonObject("support_vectors_"),
+        py_setitem(fields, nk[].k_support_vectors_,
             family_array(Python.tuple(PythonObject(n_sv), PythonObject(0)), "<f4", context))
     else:
         var vectors = family_array(Python.tuple(PythonObject(n_sv), PythonObject(d)), "<f4", context)
@@ -227,15 +232,15 @@ def _ocsvm_fit_native(model: PythonObject, binding: PythonObject, source: Python
             oc_take_rows_into(driver, x_address, n, d, support_address, n_sv, vectors_address)
         _ = support
         _ = vectors
-        py_setitem(fields, PythonObject("support_vectors_"), vectors)
-    py_setitem(fields, PythonObject("dual_coef_"),
+        py_setitem(fields, nk[].k_support_vectors_, vectors)
+    py_setitem(fields, nk[].k_dual_coef_,
         svc_prefix(oc_f32_address(state.support_values), n_sv,
             Python.tuple(PythonObject(1), PythonObject(n_sv)), "<f4", context))
-    py_setitem(fields, PythonObject("intercept_"), svc_scalar_array(-rho, "<f4", context))
-    py_setitem(fields, PythonObject("offset_"), PythonObject(rho))
-    py_setitem(fields, PythonObject("n_iter_"), PythonObject(Int(state.iterations[0])))
-    py_setitem(fields, PythonObject("n_features_in_"), PythonObject(d))
-    py_setitem(fields, PythonObject("fit_status_"), PythonObject(0))
+    py_setitem(fields, nk[].k_intercept_, svc_scalar_array(-rho, "<f4", context))
+    py_setitem(fields, nk[].k_offset_, PythonObject(rho))
+    py_setitem(fields, nk[].k_n_iter_, PythonObject(Int(state.iterations[0])))
+    py_setitem(fields, nk[].k_n_features_in_, PythonObject(d))
+    py_setitem(fields, nk[].k_fit_status_, PythonObject(0))
     _ = x
     _ = xw
     _ = q
@@ -282,7 +287,8 @@ def _ocsvm_run(model: PythonObject, binding: PythonObject, source: PythonObject,
     labels: Bool, public_output: Bool, context: PythonObject, mut connection: OcConnection) raises -> OcOutput:
     var fields = py_fields(model)
     var q = source if gp_x_known(source, context) else admit_family(source, 2, "X", context, True).array
-    var dual = svc_field(fields, "dual_coef_")
+    var nk = svm_keys()
+    var dual = svc_field(fields, nk[].k_dual_coef_, "dual_coef_")
     var n_sv = Int(py=dual.shape[1])
     var coef: PythonObject
     if ocsvm_coef_reused(model, dual):
@@ -290,17 +296,17 @@ def _ocsvm_run(model: PythonObject, binding: PythonObject, source: PythonObject,
     else:
         coef = admit_family(dual, 2, "dual_coef_", context, False).array
         ocsvm_coef_remember(model, dual, coef)
-    var kernel = svc_field(fields, "kernel")
+    var kernel = svc_field(fields, nk[].k_kernel, "kernel")
     var precomputed = oc_precomputed(kernel, context)
     var nq = Int(py=q.shape[0])
-    var sv = svc_field(fields, "support_vectors_")
-    if not precomputed and n_sv > 0 and nq > 0 and not svc_truthy(context["family_svc_xn_old_items"]):
-        var degree = _oc_int(svc_field(fields, "degree"), context)
-        var gamma = _oc_float(svc_field(fields, "_gamma"), context)
-        var coef0 = _oc_float(svc_field(fields, "coef0"), context)
+    var sv = svc_field(fields, nk[].k_support_vectors_, "support_vectors_")
+    if not precomputed and n_sv > 0 and nq > 0 and not svc_truthy(py_item(context, nk[].k_family_svc_xn_old_items)):
+        var degree = _oc_int(svc_field(fields, nk[].k_degree, "degree"), context)
+        var gamma = _oc_float(svc_field(fields, nk[].k__gamma, "_gamma"), context)
+        var coef0 = _oc_float(svc_field(fields, nk[].k_coef0, "coef0"), context)
         var d = Int(py=q.shape[1])
         if labels and _ocsvm_labels_available(binding):
-            var offset = _oc_float(svc_field(fields, "offset_"), context)
+            var offset = _oc_float(svc_field(fields, nk[].k_offset_, "offset_"), context)
             var result = OcOutput(nq, True, False, context)
             var query_address = Int(py=_a(q))
             var reference_address = Int(py=_a(sv))
@@ -329,7 +335,7 @@ def _ocsvm_run(model: PythonObject, binding: PythonObject, source: PythonObject,
         return result^
     var gram = OcMatrix(0, 0)
     if precomputed:
-        var support = _oc_indices(svc_field(fields, "support_"))
+        var support = _oc_indices(svc_field(fields, nk[].k_support_, "support_"))
         var query_address = Int(py=_a(q))
         var columns = Int(py=q.shape[1])
         var driver = connection.driver()
@@ -338,9 +344,9 @@ def _ocsvm_run(model: PythonObject, binding: PythonObject, source: PythonObject,
         _ = support
     else:
         var code = _oc_kernel_code(kernel, context)
-        var gamma = _oc_float(svc_field(fields, "_gamma"), context)
-        var coef0 = _oc_float(svc_field(fields, "coef0"), context)
-        var degree = _oc_int(svc_field(fields, "degree"), context)
+        var gamma = _oc_float(svc_field(fields, nk[].k__gamma, "_gamma"), context)
+        var coef0 = _oc_float(svc_field(fields, nk[].k_coef0, "coef0"), context)
+        var degree = _oc_int(svc_field(fields, nk[].k_degree, "degree"), context)
         var features = Int(py=q.shape[1])
         var references = Int(py=sv.shape[0])
         var query_address = Int(py=_a(q))
@@ -373,7 +379,8 @@ def _ocsvm_decision(model: PythonObject, binding: PythonObject, source: PythonOb
     context: PythonObject, mut connection: OcConnection) raises -> PythonObject:
     var scores = _ocsvm_run(model, binding, source, False, False, context, connection)
     var result = family_array(Python.tuple(PythonObject(scores.state.count)), "<f4", context)
-    var offset = _oc_float(svc_field(py_fields(model), "offset_"), context)
+    var nk = svm_keys()
+    var offset = _oc_float(svc_field(py_fields(model), nk[].k_offset_, "offset_"), context)
     var address = Int(py=_a(result))
     var driver = connection.driver()
     with GILReleased(Python()):
@@ -392,7 +399,8 @@ def _ocsvm_predict(model: PythonObject, binding: PythonObject, source: PythonObj
     var label_address = first.state.address()
     if not first.state.labels:
         decision = OcQueryState(n, False, True)
-        var offset = _oc_float(svc_field(py_fields(model), "offset_"), context)
+        var nk = svm_keys()
+        var offset = _oc_float(svc_field(py_fields(model), nk[].k_offset_, "offset_"), context)
         var driver = connection.driver()
         with GILReleased(Python()):
             oc_decision(driver, first.state.address(), decision.address(), n, offset)
@@ -413,10 +421,11 @@ def _ocsvm_predict(model: PythonObject, binding: PythonObject, source: PythonObj
 
 def _oc_binding(source: PythonObject, context: PythonObject) raises -> PythonObject:
     oc_dictionary(context)
-    var backend = context["backend_fields"]
+    var nk = svm_keys()
+    var backend = py_item(context, nk[].k_backend_fields)
     oc_dictionary(backend)
     var binding = source
-    if py_type(source) is backend["_HostBinding"] or py_type(source) is backend["_NoGpuBinding"]:
+    if py_type(source) is py_item(backend, nk[].k__HostBinding) or py_type(source) is py_item(backend, nk[].k__NoGpuBinding):
         binding = estimator_binding(PythonObject(None), "_mojolearn_x_neighbors", context)
     return xn_admit(binding)
 

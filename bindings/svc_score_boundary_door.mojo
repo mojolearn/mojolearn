@@ -39,6 +39,8 @@ from bindings.arena_prog_run import _switch
 from bindings.x_prep_native_owner_door import _resident_scope
 from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
 from x_metrics.descriptor_schema import METRICS_PROGRAM_ABI, MP_OPERATION_COUNT
+from bindings.svm_keys_unpack import svm_keys
+from bindings.py_balanced import py_item
 
 
 struct SvcScoreLabels(Movable):
@@ -274,21 +276,22 @@ def svc_accuracy_native(truth: PythonObject, prediction: SvcDecodedScore,
     # the GP caller's connected context or cache a rebinding-sensitive value.
     var prog_context = _accuracy_context(context)
     var entries = _family_entries(PythonObject(None), "x_metrics", prog_context)
-    var provider = neural_descriptor_connect_factory_once(entries["metrics_program_native_api_v1"],
+    var nk = svm_keys()
+    var provider = neural_descriptor_connect_factory_once(py_item(entries, nk[].k_metrics_program_native_api_v1),
         String(METRICS_PROGRAM_ABI), MP_OPERATION_COUNT)
     var entry = provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry
     var program = GPCAccuracyProgram(prediction.rows, class_count,
         Int(true_codes.unsafe_ptr()), Int(pred_codes.unsafe_ptr()))
     _ = true_codes
     _ = pred_codes
-    var ranges = _switch("MOJOLEARN_ARENA_RANGES") and py_get(entries, "x_metrics_run_ranges") is not None
+    var ranges = _switch("MOJOLEARN_ARENA_RANGES") and py_get(entries, nk[].k_x_metrics_run_ranges) is not None
     if ranges and prediction.rows > 0:
         # Same thread-local admission. Metrics store exports were tombstoned;
         # connected x_metrics images have no resident cache or input uploads.
         var scope = _resident_scope(entries, prog_context, "x_metrics")
         if scope is not None:
             raise Error("TypeError: x_metrics native accuracy requires its connected nonresident input ABI")
-    var output_ranges = py_get(entries, "x_metrics_run_out") is not None
+    var output_ranges = py_get(entries, nk[].k_x_metrics_run_out) is not None
     var result = Float64(0)
     try:
         with GILReleased(Python()):

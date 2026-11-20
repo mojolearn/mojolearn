@@ -71,6 +71,8 @@ from bindings.family_common_pack import (
     family_array,
     family_field,
 )
+from bindings.svm_keys_unpack import svm_keys
+from bindings.py_balanced import py_item
 
 comptime _KM_MODE_SLOT = "p3_km_binding_mode_checked_v1"
 comptime _KERNEL_PRECOMPUTED = 4
@@ -91,7 +93,8 @@ def _km_warning_location() raises -> PythonObject:
         raise cpy.unsafe_get_error()
     var code = PythonObject(from_owned=raw)
     var line = cpy.lib.get_function[Int32]("PyFrame_GetLineNumber")(frame._obj_ptr)
-    var module = py_get(native_frame_globals(frame), "__name__", "")
+    var nk = svm_keys()
+    var module = py_get(native_frame_globals(frame), nk[].k___name__, "")
     if py_type(module) is not py_type(PythonObject("")):
         module = PythonObject("")
     return Python.tuple(code.co_filename, Int(line), module)
@@ -200,9 +203,10 @@ def _km_extension(fields: PythonObject, binding: PythonObject, where: String, co
     """`_KernelMethodBase._extension`: the binary's own compile-time mode
     must be the one requested."""
     var b = native_loaded_module("builtins")
-    var want = py_get(fields, PythonObject("numeric_mode"), PythonObject(None))
+    var nk = svm_keys()
+    var want = py_get(fields, nk[].k_numeric_mode, PythonObject(None))
     if want is None:
-        want = context["backend_fields"]["_DEFAULT_MODE"]
+        want = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
     if py_type(want) is not py_type(PythonObject("")):
         raise Error("TypeError: numeric_mode must be a native string or None")
     # The spelling is normalized natively (lane p3-svm-gp-kernel, row 472):
@@ -227,10 +231,10 @@ def _km_extension(fields: PythonObject, binding: PythonObject, where: String, co
         getter = py_present(neural_descriptor_entry(binding, "kernel_methods_numeric_mode", False))
     if native is not None or Bool(getter):
         var got = kernel_method_metadata(native, 13) if native is not None else _km_int(family_call(getter.value()), "numeric mode")
-        var codes = context["family_km_mode_codes"]
+        var codes = py_item(context, nk[].k_family_km_mode_codes)
         var wanted = py_get(codes, want, PythonObject(None))
         if wanted is None or Int(py=wanted) != got:
-            var owner_name = py_get(py_fields(binding), "__name__", PythonObject("kernel methods binding"))
+            var owner_name = py_get(py_fields(binding), nk[].k___name__, PythonObject("kernel methods binding"))
             if py_type(owner_name) is not b.str:
                 raise Error("TypeError: kernel methods binding name must be a native string")
             raise Error("RuntimeError: mojolearn " + where + ": numeric_mode=" + family_repr(want) + " was requested "
@@ -385,13 +389,14 @@ def _krr_fit(model: PythonObject, args: PythonObject, context: PythonObject, x_m
     _ = weights_owner^
     _ = target^
     _ = target_pin
-    py_setitem(fields, "X_fit_", kept)
-    py_setitem(fields, "n_features_in_", PythonObject(d))
-    py_setitem(fields, "n_targets_", PythonObject(t))
-    py_setitem(fields, "_squeeze", PythonObject(squeeze))
-    py_setitem(fields, "dual_coef_", dual)
-    py_setitem(fields, "info_", PythonObject(_km_int(info, "info_")))
-    py_setitem(fields, "_kernel_params", Python.tuple(PythonObject(kernel), PythonObject(degree), gamma, coef0, alpha))
+    var nk = svm_keys()
+    py_setitem(fields, nk[].k_X_fit_, kept)
+    py_setitem(fields, nk[].k_n_features_in_, PythonObject(d))
+    py_setitem(fields, nk[].k_n_targets_, PythonObject(t))
+    py_setitem(fields, nk[].k__squeeze, PythonObject(squeeze))
+    py_setitem(fields, nk[].k_dual_coef_, dual)
+    py_setitem(fields, nk[].k_info_, PythonObject(_km_int(info, "info_")))
+    py_setitem(fields, nk[].k__kernel_params, Python.tuple(PythonObject(kernel), PythonObject(degree), gamma, coef0, alpha))
     _ = x^
     # The last fit's resident arrays are released; the next predict uploads
     # the new ones once (`_km_resident_krr`).
@@ -420,7 +425,8 @@ def _krr_predict(model: PythonObject, args: PythonObject, context: PythonObject,
     var where = String("KernelRidge")
     var b = native_loaded_module("builtins")
     var fields = py_fields(model)
-    if not py_contains(fields, PythonObject("dual_coef_")):
+    var nk = svm_keys()
+    if not py_contains(fields, nk[].k_dual_coef_):
         raise Error("mojolearn " + where + ": call fit before predict")
     var xq = xq_pin.keep
     var q = xq_meta.source.rows
@@ -682,14 +688,15 @@ def _nys_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     _ = indices  # keep the Python object alive through the native call above
     _ = components  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
-    py_setitem(fields, "n_features_in_", PythonObject(d))
-    py_setitem(fields, "components_", components)
-    py_setitem(fields, "component_indices_", indices)
-    py_setitem(fields, "normalization_", normalization)
-    py_setitem(fields, "eigenvalues_", eigenvalues)
-    py_setitem(fields, "eigenvectors_", eigenvectors)
-    py_setitem(fields, "sweeps_", PythonObject(_km_int(sweeps, "sweeps_")))
-    py_setitem(fields, "_kernel_params", Python.tuple(PythonObject(kernel), PythonObject(degree), gamma, coef0, seed))
+    var nk = svm_keys()
+    py_setitem(fields, nk[].k_n_features_in_, PythonObject(d))
+    py_setitem(fields, nk[].k_components_, components)
+    py_setitem(fields, nk[].k_component_indices_, indices)
+    py_setitem(fields, nk[].k_normalization_, normalization)
+    py_setitem(fields, nk[].k_eigenvalues_, eigenvalues)
+    py_setitem(fields, nk[].k_eigenvectors_, eigenvectors)
+    py_setitem(fields, nk[].k_sweeps_, PythonObject(_km_int(sweeps, "sweeps_")))
+    py_setitem(fields, nk[].k__kernel_params, Python.tuple(PythonObject(kernel), PythonObject(degree), gamma, coef0, seed))
     if transform and not out:
         out = family_array(Python.tuple(n, q), "<f4", context)
         var transform_addresses = Python.list(classical_address(components), classical_address(indices),
@@ -718,7 +725,8 @@ def _nys_transform(model: PythonObject, args: PythonObject, context: PythonObjec
     classical_connect_numpy(context)
     var where = String("Nystroem")
     var fields = py_fields(model)
-    if not py_contains(fields, PythonObject("components_")):
+    var nk = svm_keys()
+    if not py_contains(fields, nk[].k_components_):
         raise Error("mojolearn " + where + ": call fit before transform")
     var x = x_pin.keep
     var m = x_meta.source.rows
@@ -808,7 +816,8 @@ def _rbf_transform(model: PythonObject, args: PythonObject, context: PythonObjec
     classical_connect_numpy(context)
     var where = String("RBFSampler")
     var fields = py_fields(model)
-    if not py_contains(fields, PythonObject("random_weights_")):
+    var nk = svm_keys()
+    if not py_contains(fields, nk[].k_random_weights_):
         raise Error("mojolearn " + where + ": call fit before transform")
     var x = x_pin.keep
     var m = x_meta.source.rows
@@ -874,14 +883,15 @@ def _km_release(model: PythonObject, release: String) raises:
     var holder = py_get(py_fields(model), PythonObject(_HOLDER), PythonObject(None))
     if holder is None or py_type(holder) is not b.dict:
         return
-    var held = py_get(holder, PythonObject("index"), PythonObject(None))
+    var nk = svm_keys()
+    var held = py_get(holder, nk[].k_index, PythonObject(None))
     if held is None:
         return
     if py_type(held) is not py_type(Python.tuple()):
         raise Error("TypeError: kernel resident ownership must be a native tuple")
     if len(held) != 3 and len(held) != 5:
         raise Error("ValueError: kernel resident ownership has an invalid size")
-    py_setitem(holder, "index", PythonObject(None))
+    py_setitem(holder, nk[].k_index, PythonObject(None))
     try:
         if len(held) == 5:
             neural_descriptor_resource_close(held[3], [])
@@ -940,7 +950,8 @@ def _km_resident_hit(model: PythonObject, binding: PythonObject, native: PythonO
     var holder = py_get(py_fields(model), PythonObject(_HOLDER), PythonObject(None))
     if holder is None or py_type(holder) is not b.dict:
         return -1
-    var held = py_get(holder, PythonObject("index"), PythonObject(None))
+    var nk = svm_keys()
+    var held = py_get(holder, nk[].k_index, PythonObject(None))
     if held is None or py_type(held) is not b.tuple or (len(held) != 3 and len(held) != 5):
         return -1
     var key = held[0]
@@ -977,7 +988,8 @@ def _km_resident_krr(model: PythonObject, binding: PythonObject, x_fit_obj: Pyth
     if holder is None or py_type(holder) is not b.dict:
         holder = Python.dict()
         py_setitem(fields, _HOLDER, holder)
-    var held = py_get(holder, PythonObject("index"), PythonObject(None))
+    var nk = svm_keys()
+    var held = py_get(holder, nk[].k_index, PythonObject(None))
     if held is not None:
         if py_type(held) is not py_type(Python.tuple()):
             raise Error("TypeError: kernel resident ownership must be a native tuple")
@@ -1002,9 +1014,9 @@ def _km_resident_krr(model: PythonObject, binding: PythonObject, x_fit_obj: Pyth
     var handle = kernel_method_execute(native, "kernel_ridge_resident_prepare", addresses, parameters) if native is not None else family_call(prepare.value(), addresses, parameters)
     if native is not None:
         var owner = neural_descriptor_adopt(native, Int(py=handle), 5, [])
-        py_setitem(holder, "index", Python.tuple(key, handle, binding, owner, native))
+        py_setitem(holder, nk[].k_index, Python.tuple(key, handle, binding, owner, native))
     else:
-        py_setitem(holder, "index", Python.tuple(key, handle, binding))
+        py_setitem(holder, nk[].k_index, Python.tuple(key, handle, binding))
     return handle
 
 
@@ -1115,16 +1127,17 @@ def _rbf_fit(model: PythonObject, args: PythonObject, transform: Bool, context: 
         _ = weights  # keep the Python object alive through the native call above
     var sp = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(scalars)))
     _ = scalars  # keep the Python object alive through the native call above
-    py_setitem(fields, "n_features_in_", PythonObject(d))
-    py_setitem(fields, "random_weights_", weights)
-    py_setitem(fields, "random_offset_", offset)
+    var nk = svm_keys()
+    py_setitem(fields, nk[].k_n_features_in_, PythonObject(d))
+    py_setitem(fields, nk[].k_random_weights_, weights)
+    py_setitem(fields, nk[].k_random_offset_, offset)
     var sigma = sp[0]
     var scale = sp[1]
-    py_setitem(fields, "sigma_", PythonObject(sigma))
+    py_setitem(fields, nk[].k_sigma_, PythonObject(sigma))
     _ = scalars  # keep the Python object alive through the native call above
-    py_setitem(fields, "scale_", PythonObject(scale))
+    py_setitem(fields, nk[].k_scale_, PythonObject(scale))
     _ = scalars  # keep the Python object alive through the native call above
-    py_setitem(fields, "_params", Python.tuple(gamma, seed))
+    py_setitem(fields, nk[].k__params, Python.tuple(gamma, seed))
     _ = scalars^
     if not transform:
         _ = x^
@@ -1166,7 +1179,8 @@ def _rbf_fit(model: PythonObject, args: PythonObject, transform: Bool, context: 
 def _km_par_admit(model: PythonObject, context: PythonObject) raises -> Bool:
     """`parallel_classical._admit_kernel_method`, in its order and wording;
     True for a KernelRidge, False for a Nystroem."""
-    var classes = context["family_km_par_classes"]
+    var nk = svm_keys()
+    var classes = py_item(context, nk[].k_family_km_par_classes)
     var cls = py_type(model)
     var ridge = cls is classes[0]
     if not ridge and cls is not classes[1]:
@@ -1332,7 +1346,8 @@ def _kernel_methods_operation(model: PythonObject, operation: Int, args: PythonO
     if operation == KM_OPN_FAMILY_KM_KRR_SCORE:
         var truth = admit_family(args[2], -1, "y", context, finite=True).array
         var prediction = _krr_predict(model, args, context, x, x_pin, True, fold)
-        var mode = py_get(py_fields(model), PythonObject("numeric_mode"), PythonObject(None))
+        var nk = svm_keys()
+        var mode = py_get(py_fields(model), nk[].k_numeric_mode, PythonObject(None))
         var metrics = estimator_binding(model, "_mojolearn_metrics", context)
         return mcls_cluster_operation("family_mcls_r2", Python.tuple(metrics, truth, prediction, args[3],
                                       PythonObject("uniform_average"), PythonObject(True), mode), context)

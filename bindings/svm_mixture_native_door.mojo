@@ -35,6 +35,8 @@ from bindings.operation_names_svm import (
     SVM_OPN_FAMILY_SVM_LINEAR_SVC_DECISION, SVM_OPN_FAMILY_SVM_LINEAR_SVR_PREDICT, SVM_OPN_FAMILY_SVM_GMM_SAMPLE,
 )
 from providers.python.neighbors_public_lifecycle_pyapi_door import neighbors_public_end, neighbors_public_refusal
+from bindings.svm_keys_unpack import svm_keys
+from bindings.py_balanced import py_item
 
 
 @fieldwise_init
@@ -131,17 +133,18 @@ def _gmm_sample(model: PythonObject, binding: PythonObject, n_samples: PythonObj
     var y = family_array(Python.tuple(rows), "<i4", context)
     # `_extension`: the binary's own compile-time mode must be the one requested.
     var fields = py_fields(model)
-    var want = py_get(fields, PythonObject("numeric_mode"), PythonObject(None))
+    var nk = svm_keys()
+    var want = py_get(fields, nk[].k_numeric_mode, PythonObject(None))
     if want is None or not Bool(py=py_call(b.bool, want)):
-        want = context["backend_fields"]["_DEFAULT_MODE"]
+        want = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
     var getter = neural_descriptor_entry(binding, "mixture_numeric_mode", False)
     if getter is not None:
         var got = Int(py=family_call(b.int, family_call(getter)))
-        var wanted = py_get(context["family_gmm_mode_codes"], want, PythonObject(None))
+        var wanted = py_get(py_item(context, nk[].k_family_gmm_mode_codes), want, PythonObject(None))
         if (wanted is None or Int(py=wanted) != got) and not fast_answers_compiled_code(
-                want, context["family_gmm_mode_codes"], got, MODE_FAMILY_MIXTURE):
+                want, py_item(context, nk[].k_family_gmm_mode_codes), got, MODE_FAMILY_MIXTURE):
             raise Error("RuntimeError: mojolearn GaussianMixture: numeric_mode=" + family_repr(want) + " was requested "
-                        + "but " + String(py_fields(binding)["__name__"]) + " reports compile-time mode code "
+                        + "but " + String(py_item(py_fields(binding), nk[].k___name__)) + " reports compile-time mode code "
                         + String(got) + "; rebuild it with bash bindings/build_mixture.sh")
     var converged = 1 if Bool(py=py_call(b.bool, family_raw_get(model, "converged_"))) else 0
     # ORDER MATCHES bindings/_mojolearn_mixture.mojo::gmm_sample_binding:
