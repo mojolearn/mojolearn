@@ -237,7 +237,9 @@ def _build_packed_predict(
         if len(tm.borders[f]) == 0:
             continue
         per_word[Int(layout.features[f].offset)].append(f)
-    var fits = nw > 0
+    # a layout always holds a column (`build_layout`); a model without a
+    # bordered feature is caught by `ne == 0` below
+    var fits = True
     var ne = 0
     # driver-loop: over the packed words
     for w in range(nw):

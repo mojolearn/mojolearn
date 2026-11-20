@@ -630,7 +630,7 @@ def _cindex_from_device_columns(
     var packed = False
     comptime if GBDT_INDEX_PACK_DEVICE:
         var tab = _qd_pack_word_table(lay, dev_col_of, borders, nan_treatment)
-        if tab.fits and lay.columns > 0 and len(tab.col) > 0:
+        if tab.fits and len(tab.col) > 0:
             var ne = len(tab.col)
             var nw = lay.columns
             var h_ws = ctx.enqueue_create_host_buffer[DType.uint32](nw + 1)

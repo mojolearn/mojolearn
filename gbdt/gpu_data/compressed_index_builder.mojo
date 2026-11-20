@@ -106,6 +106,9 @@ def build_layout(
     renumber every feature after it and break the caller's column mapping.
     It occupies no bits and no bins, so it takes no column and does not
     advance the fold cursor.
+
+    The layout never has zero columns: when no feature has a fold it holds
+    one column that no feature owns (see the return).
     """
     var n = len(fold_counts)
 
@@ -184,8 +187,22 @@ def build_layout(
             )
             fold_cursor += folds
 
+    # A LAYOUT ALWAYS HOLDS ONE COLUMN (lane fx-gbdt-constcol, 2026-11-20).
+    # When no feature has a fold (every column constant, or a per-tree
+    # sample that drew only constant columns) the walk above opens no
+    # column, and a compressed index of `n_rows * 0` words is a zero-length
+    # buffer. The searchers still address it: a level with no candidate
+    # resolves to the zero descriptor (offset 0, mask 0) and reads one word
+    # per row through it, on the device (`sym_resolve_split_count_kernel`)
+    # and in the host column (`cindex[offset * n_rows + row]`) alike. The
+    # mask is 0, so the word's value never matters; its address has to
+    # exist. One column no feature owns makes that true for every consumer
+    # of the layout at once. `hist_cells` stays the true count, 0.
+    var columns = next_column
+    if columns < 1:
+        columns = 1
     return CompressedIndexLayout(
-        features^, policy_of^, next_column, fold_cursor
+        features^, policy_of^, columns, fold_cursor
     )
 
 

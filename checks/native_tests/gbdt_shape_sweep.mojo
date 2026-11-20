@@ -30,7 +30,30 @@ Units, in order:
   `'Forbidden'` the predict refuses. The device column also runs the
   device-resident predict on the same rows.
 
+Lane fx-gbdt-constcol (2026-11-20) added the neighbours of the unit that
+faulted (one constant column: a layout with no histogram cell and, before
+the fix, no compressed-index column, whose zero-length device buffers the
+level's no-winner fallback read). They follow the units above, so the
+earlier unit numbers stand:
+
+- one constant column first, in the middle and last among 1..33 wide
+  columns: these fits must succeed;
+- every column constant under the other growth policies and another loss
+  (Depthwise, Lossguide, SymmetricTree RMSE; 1 and 3 columns);
+- a column that is constant only after binning (two adjacent float values),
+  alone and beside wide columns;
+- a per-tree column sample over a table whose late columns are constant, so
+  some trees draw only constant columns;
+- a table with no rows.
+
+For a table without any candidate split, and for the table without rows,
+the fit may refuse in words; it may not fault the device, and an ordinary
+fit on the same context must succeed afterwards. The table without rows is
+the last unit.
+
 The host column runs the same units, one task per unit across the cores.
+The device column runs them in order on one context because a device fault
+stays on the context: run in order, the first failing unit names the shape.
 """
 from std.math import inf, nan
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -56,7 +79,20 @@ comptime SWEEP_UNITS = SWEEP_MIXES * SWEEP_MAX_COLUMNS * SWEEP_ROW_COUNTS
 comptime LARGE_UNITS = 4
 comptime CONSTANT_UNITS = 2
 comptime NAN_UNITS = 3
-comptime SHAPE_UNITS = SWEEP_UNITS + LARGE_UNITS + CONSTANT_UNITS + NAN_UNITS
+#: one constant column at 3 places among 1..SWEEP_MAX_COLUMNS wide columns
+comptime AMONG_PLACES = 3
+comptime AMONG_UNITS = AMONG_PLACES * SWEEP_MAX_COLUMNS
+#: every column constant: 3 configurations x {1, 3} columns
+comptime POLICY_UNITS = 6
+#: constant after binning (alone, beside wide columns)
+comptime BINNED_UNITS = 2
+#: a per-tree column sample that can draw only constant columns
+comptime SAMPLED_UNITS = 2
+#: no rows
+comptime EMPTY_UNITS = 1
+comptime NEIGHBOUR_UNITS = AMONG_UNITS + POLICY_UNITS + BINNED_UNITS + SAMPLED_UNITS + EMPTY_UNITS
+comptime FIRST_UNITS = SWEEP_UNITS + LARGE_UNITS + CONSTANT_UNITS + NAN_UNITS
+comptime SHAPE_UNITS = FIRST_UNITS + NEIGHBOUR_UNITS
 
 comptime MIX_WIDE = 0
 comptime MIX_HALF = 1
@@ -160,15 +196,146 @@ def constant_unit[I: GbdtImage](unit: Int) raises:
     is not, and the context must still fit an ordinary table afterwards."""
     var d = 1 if unit == 0 else 3
     var inp = _table(MIX_CONSTANT, 301, d)
+    _fit_or_refuse[I](_options(2, d), inp, String(d) + " constant columns")
+
+
+def _no_device_fault(error_text: String, what: String) raises:
+    """A refusal in words passes; a device fault does not."""
+    require(
+        error_text.find("CUDA") < 0 and error_text.find("HIP") < 0 and error_text.find("Metal") < 0,
+        "gbdt shape sweep: " + what + " faulted the device: " + error_text,
+    )
+
+
+def _fit_or_refuse[I: GbdtImage](o: GbdtOpts, inp: GbdtInputs, what: String) raises:
+    """One fit that may refuse in words, then an ordinary fit that must
+    succeed on the same context."""
     try:
-        _ = fit[I](_options(2, d), inp)
+        _ = fit[I](o, inp)
     except error:
-        var said = String(error)
-        require(
-            said.find("CUDA") < 0 and said.find("HIP") < 0 and said.find("Metal") < 0,
-            "gbdt shape sweep: " + String(d) + " constant columns faulted the device: " + said,
-        )
+        _no_device_fault(String(error), what)
     _fit_and_score[I](MIX_WIDE, 301, 4, 2)
+
+
+def _table_with_constant(n: Int, wide: Int, place: Int) -> GbdtInputs:
+    """`wide` wide columns and one constant column at index `place`."""
+    var d = wide + 1
+    var x = List[Float32](length=n * d, fill=Float32(3.0))
+    var y = List[Float32](length=n, fill=Float32(0.0))
+    for column in range(d):  # small-loop(d: at most 34 generated columns of one unit, inside one unit's task)
+        if column == place:
+            continue
+        for row in range(n):  # small-loop(n: rows of one generated column, inside one unit's task)
+            x[column * n + row] = _cell(MIX_WIDE, row, column)
+    for row in range(n):  # small-loop(n: labels of one generated table, inside one unit's task)
+        var high = _hash(row, 0) < 5000
+        var flip = row % 5 == 0
+        y[row] = Float32(1.0) if high != flip else Float32(0.0)
+    return GbdtInputs(x^, n, d, y^)
+
+
+def among_unit[I: GbdtImage](unit: Int) raises:
+    """One constant column first, in the middle or last among wide columns."""
+    var which = unit // SWEEP_MAX_COLUMNS
+    var wide = 1 + unit % SWEEP_MAX_COLUMNS
+    var place = 0
+    if which == 1:
+        place = wide // 2
+    elif which == 2:
+        place = wide
+    var n = 301
+    var d = wide + 1
+    var inp = _table_with_constant(n, wide, place)
+    var shape = String(wide) + " wide columns and a constant column at " + String(place)
+    var text = String("")
+    try:
+        var model = fit[I](_options(2, d), inp)
+        text = model.text
+    except error:
+        raise Error("gbdt shape sweep: the fit failed at " + shape + ": " + String(error))
+    var scores = predict(text, inp.x, n)
+    require(len(scores) == n, "gbdt shape sweep: predict extent at " + shape)
+    require(all_finite_f32(scores), "gbdt shape sweep: a non-finite score at " + shape)
+
+
+def policy_unit[I: GbdtImage](unit: Int) raises:
+    """Every column constant under the other growth policies and RMSE."""
+    var which = unit // 2
+    var d = 1 if unit % 2 == 0 else 3
+    var inp = _table(MIX_CONSTANT, 301, d)
+    var o = _options(2, d)
+    var what = String("Depthwise")
+    if which == 0:
+        o.max_depth = 3
+        o.grow_policy = "Depthwise"
+    elif which == 1:
+        o.max_leaves = 8
+        o.grow_policy = "Lossguide"
+        what = String("Lossguide")
+    else:
+        o.loss = "RMSE"
+        what = String("SymmetricTree RMSE")
+    _fit_or_refuse[I](o, inp, what + ", " + String(d) + " constant columns")
+
+
+def binned_unit[I: GbdtImage](unit: Int) raises:
+    """A column holding two adjacent float values: distinct in the table,
+    and with no float between them to put a border at."""
+    var n = 301
+    var d = 1 if unit == 0 else 3
+    var inp = _table(MIX_WIDE, n, d)
+    var low = Float32(1.0)
+    var high = Float32(1.0) + Float32(1.1920929e-07)
+    for row in range(n):  # small-loop(n: rows of one column of one unit)
+        inp.x[row] = high if _hash(row, 7) < 5000 else low
+    _fit_or_refuse[I](_options(2, d), inp, "two adjacent values in column 0 of " + String(d))
+
+
+def sampled_unit[I: GbdtImage](unit: Int) raises:
+    """A per-tree column sample over sparse counts whose late columns are
+    constant on 301 rows: some trees draw only constant columns."""
+    var d = 14
+    var inp = _table(MIX_SPARSE, 301, d)
+    var o = _options(8, d)
+    o.feature_fraction = 0.1
+    var what = String("SymmetricTree")
+    if unit == 1:
+        o.max_leaves = 8
+        o.grow_policy = "Lossguide"
+        what = String("Lossguide")
+    _fit_or_refuse[I](o, inp, what + " with feature_fraction 0.1 over constant columns")
+
+
+def empty_unit[I: GbdtImage]() raises:
+    """No rows: the fit refuses in words."""
+    var inp = _table(MIX_WIDE, 0, 4)
+    var refused = False
+    try:
+        _ = fit[I](_options(2, 4), inp)
+    except error:
+        _no_device_fault(String(error), "a table with no rows")
+        refused = True
+    require(refused, "gbdt shape sweep: a fit on a table with no rows returned a model")
+    _fit_and_score[I](MIX_WIDE, 301, 4, 2)
+
+
+def neighbour_unit[I: GbdtImage](unit: Int) raises:
+    if unit < AMONG_UNITS:
+        among_unit[I](unit)
+        return
+    var at = unit - AMONG_UNITS
+    if at < POLICY_UNITS:
+        policy_unit[I](at)
+        return
+    at -= POLICY_UNITS
+    if at < BINNED_UNITS:
+        binned_unit[I](at)
+        return
+    at -= BINNED_UNITS
+    if at < SAMPLED_UNITS:
+        sampled_unit[I](at)
+        return
+    empty_unit[I]()
 
 
 def _resident_raw(text: String, x: List[Float32], n: Int) raises -> List[Float32]:
@@ -254,17 +421,29 @@ def shape_unit[I: GbdtImage](unit: Int) raises:
     if at < CONSTANT_UNITS:
         constant_unit[I](at)
         return
-    nan_unit[I](at - CONSTANT_UNITS)
+    at -= CONSTANT_UNITS
+    if at < NAN_UNITS:
+        nan_unit[I](at)
+        return
+    neighbour_unit[I](at - NAN_UNITS)
 
 
 def _run_cpu(mut report: Report) raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     var cases = report.cases(SHAPE_UNITS)
+    # A host fit that TRAPS (CPU box cpc1-0010: rc 132 inside the border
+    # grid's parallel range, no case printed) ends the process, so no
+    # `except` and no report can name its unit. Each unit therefore prints a
+    # line when it starts and one when it returns or raises; after a trap the
+    # units with a start line and no done line are the ones that were in
+    # flight (at most one per core), and the trapping unit is among them.
     def task(unit: Int) {imm cases}:
+        print("gbdt_shape_sweep unit", unit, "start")
         try:
             shape_unit[_HostFit](unit)
         except error:
             cases.fail(unit, error)
+        print("gbdt_shape_sweep unit", unit, "done")
     report.parallel(task, SHAPE_UNITS)
 
 
