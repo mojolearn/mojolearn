@@ -4,7 +4,8 @@
 `python -m mojolearn verify --check MODEL --estimator CLASS --inputs X.npy`,
 `python -m mojolearn verify --fit-both --estimator CLASS --inputs X.npy
 --fit-inputs XTRAIN.npy` (the same fit on each side) and `check(estimator, X)`
-below. Both only call the shared check module
+below, public as `mojolearn.check` (the package routes that name here lazily;
+this private path keeps working). Both only call the shared check module
 (`_check_both.py`), which `verify --cross-check` runs on the wheel's
 fixtures: there is no second compare and no second report here.
 """
@@ -60,22 +61,23 @@ def check(estimator, X, *, method=None, fit=None, fit_both=False, max_rows=None)
     -------
     dict
         `ran` is False, with a `reason`, when nothing was compared: the
-        process or the estimator is in `fast` mode (which makes no promise
-        about bits), the installation has no GPU, or the model cannot be
-        loaded on the CPU. Otherwise `sides` holds one record per side
-        (device, binaries loaded, what the runtime counted while the side
-        ran, wall time, and the shape, dtype, SHA-256 and first values of each
-        output) and `verdict` says `MATCH`, or `MISMATCH`
-        with the index and the two values of the first differing element.
-        `format_check(result)` gives the same report as text.
+        process or the estimator is not in `identical` mode, the installation
+        has no GPU, or the model cannot be loaded on the CPU. Otherwise
+        `sides` holds one record per side (device, binaries loaded, what the
+        runtime counted while the side ran, wall time, and the shape, dtype,
+        SHA-256 and first values of each output) and `verdict["verdict"]` is
+        `'MATCH'`, or `'MISMATCH'` with the index and the two values of the
+        first differing element. `python -m mojolearn verify --check` prints
+        the same report from a saved model and a rows file.
 
     Examples
     --------
     >>> import numpy as np, mojolearn
-    >>> from mojolearn._verify_check import check, format_check
     >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
     >>> model = mojolearn.RandomForestRegressor(n_estimators=20).fit(X, X[:, 0])
-    >>> print(format_check(check(model, X)))    # doctest: +SKIP
+    >>> result = mojolearn.check(model, X)
+    >>> result["verdict"]["verdict"]    # doctest: +SKIP
+    'MATCH'
     """
     import mojolearn as ml
     return cb.check_estimator(ml, estimator, X, method=method, fit=fit, fit_both=fit_both, max_rows=max_rows)
