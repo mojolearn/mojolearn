@@ -41,7 +41,7 @@ def capture(tmp_path, model=None, family="neural"):
     workers.mkdir(parents=True)
     E.write(directory / "recipe.json", {})
     outputs = {"pred": np.array([[0.0, -0.0], [1.0, 2.0]], dtype=np.float32)}
-    with patch.dict(os.environ, {E.RECEIPTS: str(workers)}):
+    with patch.dict(os.environ, {E.RETAIN_BYTES: "1", E.RECEIPTS: str(workers)}):
         receipt = S.scored_receipt(outputs, model=model)
     cell = dict(arm="ours", mode="identical", status="ok", state_receipts=[receipt])
     rec = dict(family=family, lane="fixture", dataset="fixture", cells=[cell])
@@ -141,7 +141,7 @@ def test_no_receipt_is_explicit_and_stored_cells_are_not_recaptured(tmp_path):
 
 def test_non_array_outputs_keep_scalar_types_and_rounds_keep_distinct_bytes(tmp_path):
     directory, rec, members = capture(tmp_path)
-    with patch.dict(os.environ, {E.RECEIPTS: str(directory / "workers")}):
+    with patch.dict(os.environ, {E.RETAIN_BYTES: "1", E.RECEIPTS: str(directory / "workers")}):
         second = S.scored_receipt({"loss": 0.5, "step": np.int32(2)})
     rec["cells"][0]["state_receipts"].append(second)
     members.update({str(p.relative_to(directory)): p.read_bytes() for p in (directory / "scored").rglob("*.npz")})
@@ -159,7 +159,7 @@ def test_seal_archives_output_and_model_and_preserves_failure_without_remeasurem
     receipt = rec["cells"][0]["state_receipts"][0]
     # This fixture intentionally lacks other worker provenance: seal must
     # retain its bytes and exact missing-evidence reasons, never rerun a model.
-    E.seal(dict(out=str(tmp_path), measurement_inventory={}, measurement_source={"status": "local"},
+    E.seal(dict(out=str(tmp_path), with_opponents=True, measurement_inventory={}, measurement_source={"status": "local"},
                 evidence_r2=False), directory, dict(source={}, dataset={"identity": "input-sha"}, hardware={}), rec)
     with tarfile.open(directory / "run.tar.gz") as archive:
         for name, payload in members.items():
@@ -176,7 +176,7 @@ def test_upload_retry_updates_all_byte_refs_without_changing_timings(tmp_path):
     import json
     directory, rec, members = capture(tmp_path, model=PublicState())
     rec["cells"][0].update(times_ms=[1.25], median_ms=1.25)
-    E.seal(dict(out=str(tmp_path), measurement_inventory={}, measurement_source={"status": "local"},
+    E.seal(dict(out=str(tmp_path), with_opponents=True, measurement_inventory={}, measurement_source={"status": "local"},
                 evidence_r2=False), directory, dict(source={}, dataset={"identity": "input-sha"}, hardware={}), rec)
     # Only the upload is retried; an unrelated incomplete worker receipt must
     # remain incomplete and the original times and scored bytes cannot change.
@@ -205,7 +205,7 @@ def test_missing_scored_bytes_halt_next_race_and_fast_never_claims_identity(tmp_
     cell.update(mode="fast", times_ms=[1.25], median_ms=1.25)
     output = cell["state_receipts"][0]["retained_output"]
     Path(output["path"]).unlink()
-    E.seal(dict(out=str(tmp_path), measurement_inventory={}, measurement_source={"status": "local"},
+    E.seal(dict(out=str(tmp_path), with_opponents=True, measurement_inventory={}, measurement_source={"status": "local"},
                 evidence_r2=False), directory, dict(source={}, dataset={"identity": "input-sha"}, hardware={}), rec)
     assert rec["evidence_failure"].startswith("incomplete scored-byte retention")
     assert cell["times_ms"] == [1.25]
@@ -236,7 +236,7 @@ def tree_inference(tmp_path, monkeypatch):
     ticks = iter(range(12))
     monkeypatch.setattr(driver.time, "perf_counter", lambda: next(ticks))
     text = io.StringIO()
-    with patch.dict(os.environ, {E.RECEIPTS: str(directory / "workers")}), redirect_stdout(text):
+    with patch.dict(os.environ, {E.RETAIN_BYTES: "1", E.RECEIPTS: str(directory / "workers")}), redirect_stdout(text):
         driver.run_inference("rf", [SimpleNamespace(name="ours")], {"ours": object()},
                              data, 2, 5, float("inf"))
     assert calls == [3, 3, 3, 5, 5, 5]
@@ -263,7 +263,7 @@ def test_tree_inference_retains_every_scored_round_and_separates_fit_batches(tmp
             with np.load(io.BytesIO(members[row["output"]["member"]]), allow_pickle=False) as saved:
                 np.testing.assert_array_equal(saved["prediction"], np.full(rows, expected, np.float32))
             assert row["input"]["shape"] == [rows, 2]
-    E.seal(dict(out=str(tmp_path), measurement_inventory={}, measurement_source={"status": "local"},
+    E.seal(dict(out=str(tmp_path), with_opponents=True, measurement_inventory={}, measurement_source={"status": "local"},
                 evidence_r2=False), directory, dict(source={}, dataset={"identity": "input-sha"}, hardware={}), rec)
     identities = set()
     for cell in rec["infer_cells"]:
@@ -308,7 +308,7 @@ def test_output_omitted_over_receipt_cap_is_a_gap_not_a_retention_failure(tmp_pa
     receipt["retained_output"] = {"omitted": True, "bytes": 536870912, "limit": 268435456,
                                   "reason": "over MOJOLEARN_RECEIPT_OUTPUT_MAX_BYTES"}
     members = {}
-    E.seal(dict(out=str(tmp_path), measurement_inventory={}, measurement_source={"status": "local"},
+    E.seal(dict(out=str(tmp_path), with_opponents=True, measurement_inventory={}, measurement_source={"status": "local"},
                 evidence_r2=False), directory, dict(source={}, dataset={"identity": "input-sha"}, hardware={}), rec)
     # the fixture has no worker metadata (a "metadata" failure, retained, never blocking); no retention failure
     assert rec.get("evidence_failure_kind") != "retention"

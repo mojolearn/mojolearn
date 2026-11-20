@@ -108,8 +108,9 @@
 # (ENOSPC in a log written during it, or under PC_DISK_MIN_FREE_MB left) stops the job with exit 28, and a smoke,
 # board or owed phase refuses to start (exit 28) when the free disk is below its predicted evidence (disk_gate,
 # printed as a DISK line; a timed board counts only its races not yet done in its board.json). Every timed board runs
-# with --drop-race-scratch: each race's driver scratch (work/) goes once its record and evidence are written, the
-# evidence stays (the 80 GB L40S pod filled during the d95f805cce full board, 2026-11-17); the prepared input blocks
+# with --drop-race-scratch: each race's driver scratch (work/) goes once its record and evidence are written (the
+# 80 GB L40S pod filled during the d95f805cce full board, 2026-11-17); since 2026-11-20 an own-arms race's evidence
+# is its board row, logs and small JSON, no archive and no arrays (see the note after box_job_lib); the prepared input blocks
 # in the cache stay, because the prior boards later in this job read the same blocks.
 # RESUME (2026-11-17): a job cut by the 240-minute cap ends its open phase with a `partial <done>/<total> <board>` line
 # in job/phases.tsv (box_job_lib.sh phase_partial); the next submit says "resuming" and the boards resume from
@@ -124,6 +125,13 @@ set -uo pipefail
 JOB_NAME=paper-compare-job
 # shellcheck source=tools/ops/box_job_lib.sh
 source "$(dirname "$0")/box_job_lib.sh"
+# OWN ARMS ONLY, SO NO BULKY EVIDENCE (AGENTS.md "What a measurement keeps", Andrew, 2026-11-20): bench_board writes no
+# source, run, receipt or loaded-module archive here and deletes each race's arrays once its quality and hashes are
+# recorded (tools/bench_board_evidence.py scores_opponent / discard_race_arrays). A race leaves its board row, logs and
+# small JSON (about 1-3 MB); the disk gates count 4 MB a race and no per-board module archive.
+PC_EVIDENCE_MB_PER_RACE=${PC_EVIDENCE_MB_PER_RACE:-4}
+PC_LOADED_MB=${PC_LOADED_MB:-0}
+export PC_EVIDENCE_MB_PER_RACE PC_LOADED_MB
 
 usage() { echo "usage: $0 [<nvidia|amd> [<version>|candidate]] | --detect-vendor" >&2; exit 2; }
 if [ "${1:-}" = --detect-vendor ]; then
@@ -641,7 +649,7 @@ prior_board_run() {   # arm, the ids the candidate passed (full), out dir, prefi
     grep -m 40 '^PAPER-PASS-IDS-FAILED' "$RES/logs/pass-ids-$pre$arm.log" | cut -c1-300
     [ -s "$ids" ] || { say "board $arm: no race passed both smokes; its column is NOT-RUN"; return 0; }
     [ -f "${ARM_MAN[$arm]:-/nonexistent}" ] || { say "board $arm: no installed venv (logs/install-$arm.log)"; return 6; }
-    disk_gate "board-$pre$arm" "$(races_left "$ids" "$out/board.json")" 1 "${PC_EVIDENCE_MB_PER_RACE:-40}"
+    disk_gate "board-$pre$arm" "$(races_left "$ids" "$out/board.json")" 1 "$PC_EVIDENCE_MB_PER_RACE"
     CUR_IDS=$ids; CUR_BOARD=$out
     # shellcheck disable=SC2046
     $PY tools/bench_board.py "${CARGS[@]}" $(run_as "$arm") --cache "$CACHE_ROOT/c1" --race-ids @"$ids" \
@@ -728,7 +736,7 @@ if part all-plan || part all-install || part all-smoke || part all-board || part
     tail -n 1 "$RES/logs/pass-ids-all.log"
     if part all-board; then
         phase all-board
-        disk_gate all-board "$(races_left "$PA/race-ids-pass.txt" "$RES/board-all/board.json")" 1 "${PC_EVIDENCE_MB_PER_RACE:-40}"
+        disk_gate all-board "$(races_left "$PA/race-ids-pass.txt" "$RES/board-all/board.json")" 1 "$PC_EVIDENCE_MB_PER_RACE"
         if [ -s "$PA/race-ids-pass.txt" ]; then
             CUR_IDS="$PA/race-ids-pass.txt"; CUR_BOARD="$RES/board-all"
             # shellcheck disable=SC2046
@@ -997,7 +1005,7 @@ if part tg-install || part tg-prep || part tg-smoke || part tg-board || part tg-
         # a board dir's fixed part here is the measured one (lane fx-pod-job, 2026-11-18: the ab1 unit boards were
         # 98-166 MB each with their races, against the 400 MB default), so a 42-arm job's 85 unit boards are not
         # refused on a disk they fit; the B arms' venvs are counted per install window (window_size)
-        PC_LOADED_MB=${PC_LOADED_MB:-200} disk_gate tg-board "$left" "$nb" "${PC_EVIDENCE_MB_PER_RACE:-40}"
+        disk_gate tg-board "$left" "$nb" "$PC_EVIDENCE_MB_PER_RACE"
         # the listed rows: chunk by chunk, the candidate then each prior on the same races in the same order
         $PY tools/ops/targeted_rows.py chunks --ids "$TG/race-ids-pass.txt" --rows "$TG/rows.tsv" \
             --chunk-s "${PC_TG_CHUNK_S:-600}" --out-dir "$TG/chunks" | tail -n 1
@@ -1038,7 +1046,7 @@ if part tg-install || part tg-prep || part tg-smoke || part tg-board || part tg-
                 LAST_UNIT[$arm]=${#UNITS[@]}
                 UNITS+=("$arm"$'\t'"$rows"$'\t'"$ids"$'\t'"$use"$'\t'"$abrows")
                 [ -n "${SEEN_ARM[$arm]:-}" ] || { SEEN_ARM[$arm]=1; WIN_ARMS+=("$arm"); }
-                EV_LEFT_MB=$(( EV_LEFT_MB + 2 * $(nlines "$use") * ${PC_EVIDENCE_MB_PER_RACE:-40} ))
+                EV_LEFT_MB=$(( EV_LEFT_MB + 2 * $(nlines "$use") * $PC_EVIDENCE_MB_PER_RACE ))
             done 3< "$TGO/units.tsv"
             for k in ${UNITS[@]+"${!UNITS[@]}"}; do
                 IFS=$'\t' read -r arm rows ids use abrows <<< "${UNITS[$k]}"
@@ -1064,7 +1072,7 @@ if part tg-install || part tg-prep || part tg-smoke || part tg-board || part tg-
                     fi
                     tg_board "$arm" "$c" "$RES/board-tg-ab-$arm-$rows" "$abrows" "${SJT[@]}" ${cap[@]+"${cap[@]}"}; r=$?; [ $r -gt $rc ] && rc=$r
                 done
-                EV_LEFT_MB=$(( EV_LEFT_MB - 2 * $(nlines "$use") * ${PC_EVIDENCE_MB_PER_RACE:-40} ))
+                EV_LEFT_MB=$(( EV_LEFT_MB - 2 * $(nlines "$use") * $PC_EVIDENCE_MB_PER_RACE ))
                 if [ "${LAST_UNIT[$arm]}" = "$k" ] && [ -z "${ARM_ENV[$arm]:-}" ]; then
                     if capped; then say "venv $arm kept: the cap guard cut its units (the next submit resumes them)"
                     else drop_arm_venv "$arm"; fi
@@ -1278,7 +1286,7 @@ board_run() {   # arm, ids file, out dir, extra args...
 }
 if part board; then
     phase board
-    disk_gate board "$(races_left "$PASS_IDS" "$RES/board/board.json")" 1 "${PC_EVIDENCE_MB_PER_RACE:-40}"
+    disk_gate board "$(races_left "$PASS_IDS" "$RES/board/board.json")" 1 "$PC_EVIDENCE_MB_PER_RACE"
     if [ -s "$PASS_IDS" ]; then board_run candidate "$PASS_IDS" "$RES/board"; rc=$?; else say "no race passed its smoke"; rc=6; fi
     phase_end $rc
 fi
@@ -1310,7 +1318,7 @@ if [ "$OWED" = 1 ] && part owed && [ -s "$RES/plan-owed/units.tsv" ]; then
         [ -n "${PC_OWED_ARMS:-}" ] && [[ ",$PC_OWED_ARMS," != *",$arm,"* ]] && continue
         left=$(( left + $(races_left "$ids" "$RES/board-$arm-$rows/board.json") ))
     done < "$RES/plan-owed/units.tsv"
-    disk_gate owed "$left" "$(nlines "$RES/plan-owed/units.tsv")" "${PC_EVIDENCE_MB_PER_RACE:-40}"
+    disk_gate owed "$left" "$(nlines "$RES/plan-owed/units.tsv")" "$PC_EVIDENCE_MB_PER_RACE"
     rc=0
     while IFS=$'\t' read -r arm rows ids; do
         [ "$arm" = candidate ] && [ "$rows" = full ] && continue   # timed with the paper races (part board)

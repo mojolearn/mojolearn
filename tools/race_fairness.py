@@ -346,6 +346,13 @@ def _pair_problems(race, ours, opp):
         if m:
             if m.get("completeness") != "complete":
                 missing.extend(m.get("missing") or ["incomplete measurement record"])
+            if cell is ours and m.get("evidence_scope") == "own-arms":
+                # An own-arms job (AGENTS.md "What a measurement keeps", Andrew, 2026-11-20) keeps no source or run
+                # archive: the commit is the record of the source, and the scored output and model hashes stand in
+                # the record (bench_board_evidence.scores_opponent). Our cell needs its commit, never an archive.
+                if not re.fullmatch(r"[0-9a-f]{40}", str((m.get("source") or {}).get("commit") or "")):
+                    missing.append("measurement source commit missing")
+                continue
             if any((m.get(k) or {}).get("status") != "verified" for k in ("source", "artifacts")):
                 missing.append("measurement source/logs not verified in R2")
             if ((race.get("family") or cell.get("family")) == "classical"

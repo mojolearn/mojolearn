@@ -4,6 +4,10 @@
 This is benchmark tooling, never product execution. Source is captured before
 the race; logs and resolved worker records are sealed afterwards. Object names
 are content hashes, and R2 uploads are verified by reading the bytes back.
+What is kept follows one decision, scores_opponent(ctx): a job that scores an
+opponent keeps the archives above; a job with only our own arms keeps its
+results, hashes, settings, probe, commit and logs and nothing bulky (AGENTS.md
+"What a measurement keeps", Andrew, 2026-11-20). Nothing here is inside a clock.
 """
 import argparse
 import atexit
@@ -27,6 +31,18 @@ SCHEMA = "mojolearn.measurement.v1"
 ROOT = Path(__file__).resolve().parents[1]
 PREFIX = "measurements/records/v1"
 RECEIPTS = "MOJOLEARN_MEASUREMENT_RECEIPTS"
+#: Set for a worker only when its job scores an opponent (scores_opponent): the scored call's output and model bytes
+#: are then kept under scored/ for the race archive. Unset, the worker records their hashes only.
+RETAIN_BYTES = "MOJOLEARN_MEASUREMENT_RETAIN_BYTES"
+#: what an own-arms job writes instead of an archive ref (AGENTS.md "What a measurement keeps", Andrew, 2026-11-20)
+OWN_ARMS = "own-arms"
+NOT_ARCHIVED = dict(status="not-archived",
+                    reason="own-arms job: the commit is the record of the source; results, quality, hashes, "
+                           "settings, the probe and the logs are kept, no archive (AGENTS.md \"What a measurement keeps\")")
+#: array and archive files a race writes (driver outputs, quality references, neural inputs, model exports)
+ARRAY_SUFFIXES = (".npz", ".npy", ".bin", ".safetensors", ".pt")
+#: a failed row of an own-arms job keeps the arrays it wrote for its diagnosis when they total at most this
+FAILED_ROW_ARRAY_BYTES = 64 * 1024 * 1024
 _registered = False
 _libraries = set()
 _arms = {}
@@ -37,12 +53,26 @@ ENV_KEYS = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
             "LD_LIBRARY_PATH", "LIBRARY_PATH", "PYTHONPATH")
 
 
+def scores_opponent(ctx):
+    """THE one decision of what a measurement keeps (AGENTS.md "What a measurement keeps", Andrew, 2026-11-20): does
+    this job score an opponent? True for --with-opponents, --retime-opponents, --retime-cpu-opponents and
+    --opponents-only: the job keeps the source archive, the per-race archive of logs, scored output and model bytes
+    and the loaded native modules (begin, seal, audit plan), uploaded to R2. False for a job with only our own arms
+    (the ours-only default: targeted rows, A/B arms, pairs, a board against our own prior wheel; stored opponent
+    cells join without running): it keeps each row's result (times, quality, hashes, settings, flags), the worker
+    and probe JSON and the logs, writes no source, run, receipt or module archive and no scored byte copies, and
+    deletes the arrays a race wrote once its quality and hash are recorded (discard_race_arrays). Every writer reads
+    this function; none has a flag of its own."""
+    return bool(ctx.get("with_opponents") or ctx.get("retime") or ctx.get("retime_cpu_opponents")
+                or ctx.get("opponents_only"))
+
+
 def runtime_environment(environ=None):
     """Retain numerical/runtime switches, excluding credentials and receipt paths."""
     environ = os.environ if environ is None else environ
     prefixes = ("MOJOLEARN_", "CUDA_", "HIP_", "HIPBLASLT_", "ROCR_", "ROCM_", "OMP_", "OPENBLAS_",
                 "MKL_", "TORCH_", "PYTORCH_", "CUBLAS_", "CUDNN_", "NCCL_", "MODULAR_", "MAX_")
-    ignored = {RECEIPTS, "MOJOLEARN_BOARD_RECEIPTS", "MOJOLEARN_BOARD_SESSION"}
+    ignored = {RECEIPTS, RETAIN_BYTES, "MOJOLEARN_BOARD_RECEIPTS", "MOJOLEARN_BOARD_SESSION"}
     return {k: v for k, v in sorted(environ.items())
             if (k in ENV_KEYS or k.startswith(prefixes)) and k not in ignored
             and not any(word in k.upper() for word in ("TOKEN", "SECRET", "PASSWORD", "CREDENTIAL", "CREDS", "API_KEY", "R2_"))}
@@ -156,9 +186,9 @@ def source_archive(path, members, cache_dir=None):
     return ref
 
 
-def source_snapshot(directory, repo=ROOT, drivers=(), cache_dir=None):
-    repo, directory = Path(repo), Path(directory)
-    directory.mkdir(parents=True, exist_ok=True)
+def _source_members(repo, drivers):
+    """The tracked code and explicit driver files: (members, inventory, commit, manifest)."""
+    repo = Path(repo)
     names = subprocess.check_output(["git", "-C", str(repo), "ls-files", "-z"]).decode().split("\0")
     suffixes = {".py", ".mojo", ".sh", ".c", ".h", ".cpp", ".hpp", ".toml", ".lock"}
     members, inventory = {}, {}
@@ -178,10 +208,26 @@ def source_snapshot(directory, repo=ROOT, drivers=(), cache_dir=None):
     commit = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
     manifest = dict(commit=commit, files={k: digest(v) for k, v in members.items()},
                     scope="tracked repository code and explicit driver files, actual working bytes")
+    return members, inventory, commit, manifest
+
+
+def source_snapshot(directory, repo=ROOT, drivers=(), cache_dir=None):
+    """A job that scores an opponent: the source archive (source.tar.gz) and the inventory seal() checks."""
+    directory = Path(directory)
+    directory.mkdir(parents=True, exist_ok=True)
+    members, inventory, commit, manifest = _source_members(repo, drivers)
     members["source-manifest.json"] = encoded(manifest)
     ref = source_archive(directory / "source.tar.gz", members, cache_dir)
     ref.update(commit=commit, manifest_sha256=digest(encoded(manifest)))
     return ref, inventory
+
+
+def source_commit(repo=ROOT, drivers=()):
+    """An own-arms job: the commit is the record of the source, no archive. The manifest digest names the working
+    bytes and the inventory still lets seal() refuse a file that changed during the run."""
+    _, inventory, commit, manifest = _source_members(repo, drivers)
+    return dict(NOT_ARCHIVED, status="commit", kind="git commit", commit=commit,
+                manifest_sha256=digest(encoded(manifest)), files=len(manifest["files"])), inventory
 
 
 def credentials():
@@ -420,10 +466,13 @@ def begin(ctx, race, settings, data):
     if not data.get("identity") or any(v is None for v in data.get("files", {}).values()):
         raise ValueError("measurement input identity is missing; refused before timing")
     if "measurement_source" not in ctx:
-        source, inventory = source_snapshot(Path(ctx["out"]) / "evidence" / "source",
-            drivers=[ctx[k] for k in ("tree_driver", "classical_driver", "more_driver", "neural_driver", "algos_driver") if ctx.get(k)])
-        if ctx.get("evidence_r2", True):
-            source = upload(source)  # refuse before spending GPU time if storage is unavailable
+        drivers = [ctx[k] for k in ("tree_driver", "classical_driver", "more_driver", "neural_driver", "algos_driver") if ctx.get(k)]
+        if scores_opponent(ctx):
+            source, inventory = source_snapshot(Path(ctx["out"]) / "evidence" / "source", drivers=drivers)
+            if ctx.get("evidence_r2", True):
+                source = upload(source)  # refuse before spending GPU time if storage is unavailable
+        else:
+            source, inventory = source_commit(drivers=drivers)
         ctx["measurement_source"], ctx["measurement_inventory"] = source, inventory
     parent = Path(ctx["out"]) / "evidence" / "runs"
     parent.mkdir(parents=True, exist_ok=True)
@@ -478,13 +527,15 @@ def scored_state_key(phase, cell):
     return (phase, cell["arm"], cell.get("batch")) if phase == "infer" else (phase, cell["arm"])
 
 
-def scored_state_refs(rec, directory, members):
+def scored_state_refs(rec, directory, members, keep_bytes=True):
     """Verify exact scored-call output/model bytes, independently of timers.
 
     Model snapshots and output identity are separate. An unavailable public
     model export is an explicit coverage gap, not an output-identity failure.
     These receipts do not themselves compare vendors or certify a complete
-    fitted-state contract.
+    fitted-state contract. KEEP_BYTES False (an own-arms job, scores_opponent):
+    the workers kept no bytes, so each row records the canonical output and
+    model hashes the scored call produced (status "hash-only").
     """
     import numpy as np
     import bench_board_state as state
@@ -550,7 +601,9 @@ def scored_state_refs(rec, directory, members):
                 if receipt.get("output_status") != "ok":
                     raise ValueError("scored output unavailable")
                 omitted = receipt.get("retained_output") or {}
-                if omitted.get("omitted"):
+                if not keep_bytes:
+                    row["output"] = dict(status="hash-only", canonical_sha256=receipt.get("output_sha256"))
+                elif omitted.get("omitted"):
                     # Over MOJOLEARN_RECEIPT_OUTPUT_MAX_BYTES (bench_board_state.scored_receipt): the
                     # output's canonical hash is recorded, its bytes are not. An explicit coverage gap of
                     # this receipt, never "incomplete scored-byte retention" (2026-11-14: the 512 MiB
@@ -564,7 +617,9 @@ def scored_state_refs(rec, directory, members):
             model = receipt.get("model") or {}
             row["model"] = ({k: model[k] for k in ("status", "class", "source", "reason", "error") if k in model}
                             or row["model"])
-            if model.get("status") == "ok":
+            if model.get("status") == "ok" and not keep_bytes:
+                row["model"]["sha256"] = model.get("sha256")
+            elif model.get("status") == "ok":
                 try:
                     row["model"]["retained"] = retained(model.get("retained_export"), model.get("sha256"), model=model)
                     row["model"]["completeness"] = "public snapshot; full fitted-state contract not certified"
@@ -586,7 +641,9 @@ class LoadedBytesMissing(ValueError):
 def loaded_module_ref(ctx, filename, sha):
     """Retain one loaded native module once per results dir; return its archive ref.
 
-    The archive is evidence/loaded/<sha256>.tar.gz holding `<sha256>/<name>`,
+    An own-arms job (scores_opponent False) checks the hash and records path,
+    sha256 and size only (status "not-archived"); no copy of the module is made.
+    Otherwise the archive is evidence/loaded/<sha256>.tar.gz holding `<sha256>/<name>`,
     deterministic (gzip mtime 0), so its R2 key is content-addressed and a
     second run of the same wheel finds it already present. A module that is gone
     or whose bytes no longer match the worker's hash raises LoadedBytesMissing.
@@ -602,6 +659,10 @@ def loaded_module_ref(ctx, filename, sha):
     if entry is None or signature not in entry["seen"]:
         if file_hash(p) != sha:
             raise LoadedBytesMissing(filename)
+    if entry is None and not scores_opponent(ctx):
+        # An own-arms job keeps the module's path, sha256 and size (and the wheel identity), never a copy of it.
+        entry = cache[sha] = dict(ref=dict(NOT_ARCHIVED, module_sha256=sha, module_bytes=st.st_size,
+                                           module_name=p.name), seen=set())
     if entry is None:
         target = Path(ctx["out"]) / "evidence" / "loaded" / (sha + ".tar.gz")
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -609,44 +670,51 @@ def loaded_module_ref(ctx, filename, sha):
         ref.update(module_sha256=sha, module_bytes=st.st_size, module_name=p.name)
         entry = cache[sha] = dict(ref=ref, seen=set())
     entry["seen"].add(signature)
-    if ctx.get("evidence_r2", True) and entry["ref"].get("status") != "verified":
+    if ctx.get("evidence_r2", True) and entry["ref"].get("status") not in ("verified", "not-archived"):
         entry["ref"] = upload(entry["ref"])
     return entry["ref"]
 
 
 def seal(ctx, directory, recipe, rec):
-    """Capture measured records and logs, then attach the durable refs per arm."""
+    """Capture measured records and logs, then attach the durable refs per arm.
+
+    A job that scores an opponent (scores_opponent) archives the records, logs, scored bytes and the arrays the
+    drivers wrote into run.tar.gz and uploads it. An own-arms job writes no archive: the board record holds the
+    times, quality, hashes, settings and per-arm measurement record, the race directory keeps its small JSON
+    (recipe, preflight, workers, loaded.json, upload.json) and the logs stay where the drivers wrote them."""
     directory = Path(directory)
+    full = scores_opponent(ctx)
     changed = [p for p, h in ctx["measurement_inventory"].items() if not Path(p).is_file() or file_hash(p) != h]
     workers = [json.loads(p.read_text()) for p in sorted((directory / "workers").glob("*.json"))]
     members = {"recipe.json": encoded(recipe), "result.json": encoded(rec), "workers.json": encoded(workers)}
     for p in directory.glob("*.json"):
         if p.name != "upload.json":
             members["records/" + p.name] = p.read_bytes()
-    for p in (directory / "scored").rglob("*.npz"):
+    for p in (directory / "scored").rglob("*.npz") if full else ():
         if p.is_file():
             members[str(p.relative_to(directory))] = p.read_bytes()
     started = (directory / "recipe.json").stat().st_mtime
     # FAIRNESS FIX (2026-10-13 audit): drivers save scored arrays under work/,
     # while receipts previously retained only logs/raw. Keep the actual output
     # and independent quality-reference bytes in the per-race verified archive.
-    for sub in ("logs", "raw", "work"):
+    for sub in ("logs", "raw", "work") if full else ():
         for p in (Path(ctx["out"]) / sub).rglob("*"):
             if p.is_file() and p.suffix in (".log", ".json", ".npz", ".npy", ".bin", ".safetensors", ".pt") and p.stat().st_mtime >= started:
                 members["run/" + str(p.relative_to(ctx["out"]))] = p.read_bytes()
     missing = []
     output_refs, output_missing = {}, {}
-    if rec.get("family") == "classical":
+    if full and rec.get("family") == "classical":
         # FAIRNESS FIX (2026-10-13 audit): the classical wrapper used to
         # delete these arrays before seal(). A verified archive of hashes
         # and logs alone does not retain the scored outputs.
         output_refs, output_missing = classical_output_refs(rec, members)
-    state_refs, state_missing = scored_state_refs(rec, directory, members)
+    state_refs, state_missing = scored_state_refs(rec, directory, members, keep_bytes=full)
     for field in ("log", "race_json"):
         if rec.get(field):
             p = Path(ctx["out"]) / rec[field]
             if p.is_file():
-                members["run/" + rec[field]] = p.read_bytes()
+                if full:
+                    members["run/" + rec[field]] = p.read_bytes()
             else:
                 missing.append(field)
     # Retain actual loaded product code/binary bytes, not only their hashes:
@@ -702,20 +770,24 @@ def seal(ctx, directory, recipe, rec):
             missing.append("timed parameter read-back missing: " + arm)
         elif any(params.get(k) != before[arm].get(k) for k in ("params", "raw_params", "implementation")):
             missing.append("effective parameters/implementation changed after preflight: " + arm)
-    ref = archive(directory / "run.tar.gz", members)
-    write(directory / "upload.json", dict(source=ctx["measurement_source"], run=ref, **loaded_refs))
     error = loaded_error
-    if ctx.get("evidence_r2", True):
-        try:
-            ref = upload(ref)
-        except (OSError, ValueError, SystemExit) as exc:
-            error = "R2 retention failed; retry sync without rerunning the measurement"
+    if full:
+        ref = archive(directory / "run.tar.gz", members)
+        write(directory / "upload.json", dict(source=ctx["measurement_source"], run=ref, **loaded_refs))
+        if ctx.get("evidence_r2", True):
+            try:
+                ref = upload(ref)
+            except (OSError, ValueError, SystemExit) as exc:
+                error = "R2 retention failed; retry sync without rerunning the measurement"
+        # The scored/ bytes now live in run.tar.gz (written and hashed above); the
+        # loose copies beside it were a second on-disk copy of every receipt.
+        for p in sorted((directory / "scored").rglob("*.npz")) if (directory / "scored").is_dir() else ():
+            if str(p.relative_to(directory)) in members:
+                p.unlink()
+    else:
+        ref = dict(NOT_ARCHIVED)
+        (directory / "loaded.json").write_bytes(members["loaded.json"])
     write(directory / "upload.json", dict(source=ctx["measurement_source"], run=ref, **loaded_refs))
-    # The scored/ bytes now live in run.tar.gz (written and hashed above); the
-    # loose copies beside it were a second on-disk copy of every receipt.
-    for p in sorted((directory / "scored").rglob("*.npz")) if (directory / "scored").is_dir() else ():
-        if str(p.relative_to(directory)) in members:
-            p.unlink()
     for phase, field in (("fit", "cells"), ("infer", "infer_cells")):
         for cell in rec.get(field) or []:
             if cell.get("stored") or cell.get("arm") in rec.get("stored_arms", []):
@@ -759,6 +831,7 @@ def seal(ctx, directory, recipe, rec):
             if not (cell.get("comparability") or {}).get("span"):
                 absent.append("timing boundary")
             record = dict(schema=SCHEMA, phase=phase, source=recipe["source"], artifacts=public_ref(ref),
+                          evidence_scope="opponent" if full else OWN_ARMS,
                           software=dict(library=cell.get("library"), version=cell.get("library_version") or cell.get("version")),
                           parameters=params, dataset=recipe["dataset"], shape=measured_shape(cell, rec),
                           invocation=dict(implementation=(params or {}).get("implementation"),
@@ -785,7 +858,7 @@ def seal(ctx, directory, recipe, rec):
                 status = "verified" if ref.get("status") == "verified" else "local"
                 for row in rows:
                     for value in (row.get("output"), row["model"].get("retained")):
-                        if value and value.get("status") != "omitted":
+                        if value and value.get("status") not in ("omitted", "hash-only"):
                             value["status"] = status
                 record["scored_state"] = dict(receipts=rows, comparison="not compared",
                     phase=phase, batch=cell.get("batch") if phase == "infer" else None,
@@ -793,22 +866,26 @@ def seal(ctx, directory, recipe, rec):
                            else "each captured scored call"),
                     cross_vendor_promise=cell.get("mode") == "identical",
                     eligibility="cross-vendor output comparison requires identical mode, same numerical source, inputs, initial state and settings")
-                if rows and rows[-1].get("output") and rows[-1]["output"].get("status") != "omitted":
+                if rows and rows[-1].get("output") and rows[-1]["output"].get("status") not in ("omitted", "hash-only"):
                     record["retained_outputs"] = dict(rows[-1]["output"],
                         output_sha256=rows[-1]["output"]["canonical_sha256"])
             record["id"] = digest(encoded(record))
             cell["measurement"] = record
     # A separate receipt avoids a circular hash between the raw archive and
     # its own reference. The full finalized board record is retained too.
-    receipt = archive(directory / "receipt.tar.gz", {"result.json": encoded(rec)})
-    write(directory / "receipt-upload.json", receipt)
-    if ctx.get("evidence_r2", True):
-        try:
-            receipt = upload(receipt)
-        except (OSError, ValueError, SystemExit):
-            error = "R2 retention failed; retry sync without rerunning the measurement"
-    write(directory / "receipt-upload.json", receipt)
+    # An own-arms job's finalized record is its row in board.json; it writes no receipt archive.
+    receipt = dict(NOT_ARCHIVED)
+    if full:
+        receipt = archive(directory / "receipt.tar.gz", {"result.json": encoded(rec)})
+        write(directory / "receipt-upload.json", receipt)
+        if ctx.get("evidence_r2", True):
+            try:
+                receipt = upload(receipt)
+            except (OSError, ValueError, SystemExit):
+                error = "R2 retention failed; retry sync without rerunning the measurement"
+        write(directory / "receipt-upload.json", receipt)
     rec["evidence_receipt"] = public_ref(receipt)
+    rec["evidence_scope"] = "opponent" if full else OWN_ARMS
     rec["evidence_directory"] = str(directory.relative_to(Path(ctx["out"])))
     if error or changed:
         rec["evidence_failure"] = error or "source changed during measurement"
@@ -823,6 +900,43 @@ def seal(ctx, directory, recipe, rec):
         rec["evidence_failure_kind"] = "metadata"
         rec["status"] = "failed"
     return rec
+
+
+def discard_race_arrays(ctx, directory, rec):
+    """An own-arms job (scores_opponent False), once seal() has recorded the row's quality and hashes: delete every
+    array and archive file the race wrote (ARRAY_SUFFIXES and *.tar.gz under out/work, out/raw, out/logs and the
+    race's evidence directory, written since its recipe.json): the drivers' scored outputs and quality references,
+    the neural inputs and kept outputs, model exports. Logs and JSON stay. A failed row keeps its arrays for its
+    diagnosis when they total at most FAILED_ROW_ARRAY_BYTES. Records what went (or stayed) in the row; returns the
+    bytes freed. A job that scores an opponent keeps everything (its seal archived these files)."""
+    if scores_opponent(ctx):
+        return 0
+    out, directory = Path(ctx["out"]).resolve(), Path(directory).resolve()
+    started = (directory / "recipe.json").stat().st_mtime
+    found = []
+    for root in [out / sub for sub in ("work", "raw", "logs")] + [directory]:
+        for p in root.rglob("*") if root.is_dir() else ():
+            try:
+                st = p.lstat()
+            except OSError:
+                continue
+            if (p.is_file() and not p.is_symlink() and st.st_mtime >= started
+                    and (p.suffix in ARRAY_SUFFIXES or p.name.endswith(".tar.gz"))):
+                found.append((p, st.st_size))
+    total = sum(size for _, size in found)
+    if rec.get("status") not in ("done", "unsupported") and total <= FAILED_ROW_ARRAY_BYTES:
+        rec["arrays_kept_for_diagnosis"] = dict(files=len(found), bytes=total)
+        return 0
+    freed = 0
+    for p, size in found:
+        try:
+            p.unlink()
+            freed += size
+        except OSError:
+            pass
+    rec["arrays_discarded"] = dict(files=len(found), bytes=freed,
+                                   reason="own-arms job: quality and hashes recorded; arrays are not kept")
+    return freed
 
 
 def blocks_campaign(record):
@@ -901,6 +1015,8 @@ def sync(board_path):
             continue
         state_path = path.parent / rr["evidence_directory"] / "upload.json"
         state = json.loads(state_path.read_text())
+        if (state.get("run") or {}).get("status") == "not-archived":
+            continue                      # an own-arms race: nothing was archived, nothing to retain
         # The shared loaded-module archive is listed in every race's upload.json;
         # transfer each distinct object once per sync.
         for k, v in state.items():

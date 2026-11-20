@@ -204,7 +204,7 @@ class Evidence(unittest.TestCase):
         d=self.root/"evidence/runs/r1";(d/"workers").mkdir(parents=True)
         E.write(d/"recipe.json",{})
         src=self.root/"source.py";src.write_text("code")
-        ctx=dict(out=str(self.root),measurement_inventory={str(src):E.file_hash(src)},
+        ctx=dict(out=str(self.root),with_opponents=True,measurement_inventory={str(src):E.file_hash(src)},
                  measurement_source={"status":"local"},evidence_r2=False)
         recipe=dict(source={"status":"local"},dataset={"identity":"hash"},hardware={})
         own=dict(arm="ours",library="mojolearn",params={"params":{"alpha":1}},library_version="1",
@@ -244,7 +244,8 @@ class Evidence(unittest.TestCase):
         from types import SimpleNamespace
         B=load("bench_board")
         directory=self.root/"run";directory.mkdir()
-        evidence=SimpleNamespace(begin=lambda *a: (directory, {}), write=E.write, seal=lambda *a: None)
+        evidence=SimpleNamespace(begin=lambda *a: (directory, {}), write=E.write, seal=lambda *a: None,
+                                 scores_opponent=E.scores_opponent, discard_race_arrays=lambda *a: 0)
         original=B._load_tool
         race=dict(id="r",family="algos",lane="ridge",dataset="synthetic",rows=None,
                   arms=["ours","lib"],opponents=["lib"],our_arms={"ours":"identical"})
@@ -298,7 +299,7 @@ class Evidence(unittest.TestCase):
                  command=["python", "driver.py", "--seed", "7"])
         E.write(d/"workers/1.json",dict(status="recorded",arms={receipt_arm:"library"},environment={},
                 versions={receipt_arm:worker_version},hardware=hardware if worker_hardware is None else worker_hardware))
-        E.seal(dict(out=str(self.root),measurement_inventory={},measurement_source={"status":"local"},
+        E.seal(dict(out=str(self.root),with_opponents=True,measurement_inventory={},measurement_source={"status":"local"},
                     evidence_r2=False), d, dict(source={},dataset={"identity":"abc"},hardware={}),rec)
         return rec, cell
 

@@ -433,7 +433,10 @@ def scored_receipt(outputs, runner=None, model=None):
                "output_sha256": canonical_hash(outputs) if present else None}
     directory = None
     receipts = os.environ.get("MOJOLEARN_MEASUREMENT_RECEIPTS")
-    if receipts:
+    # Bytes are kept only in a job that scores an opponent: bench_board sets MOJOLEARN_MEASUREMENT_RETAIN_BYTES from
+    # bench_board_evidence.scores_opponent. An own-arms job's receipt holds the output and model hashes only (the
+    # model export goes to a temporary directory that is deleted once hashed).
+    if receipts and os.environ.get("MOJOLEARN_MEASUREMENT_RETAIN_BYTES"):
         # FAIRNESS FIX (2026-10-13 audit): tree/model receipts used to hash
         # temporary exports and discard the actual bytes. Capture each scored
         # call centrally, before a later round can replace its output/state.

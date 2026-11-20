@@ -1490,6 +1490,10 @@ def child_env(ctx, extra=None):
             env["LD_LIBRARY_PATH"] = os.pathsep.join(native + ([env["LD_LIBRARY_PATH"]] if env.get("LD_LIBRARY_PATH") else []))
     if ctx.get("measurement_receipts"):
         env["MOJOLEARN_MEASUREMENT_RECEIPTS"] = ctx["measurement_receipts"]
+    if ctx.get("measurement_receipts") and ctx.get("measurement_retain_bytes"):
+        env["MOJOLEARN_MEASUREMENT_RETAIN_BYTES"] = "1"     # bench_board_evidence.RETAIN_BYTES
+    else:
+        env.pop("MOJOLEARN_MEASUREMENT_RETAIN_BYTES", None)
     if ctx["vendor"] == "nvidia" and ctx.get("ptxas"):
         env.setdefault("MODULAR_NVPTX_COMPILER_PATH", ctx["ptxas"])
     if ctx.get("artifact_manifest"):
@@ -3218,7 +3222,9 @@ def neural_cmd(ctx, race):
            "--ours-python", shlex.quote(ctx["python"]),
            "--theirs-python", shlex.quote(ctx["python"]),
            "--ready-seconds", str(rsec), "--warmup-seconds", str(rsec),
-           "--round-seconds", str(rsec), "--keep-outputs"]
+           "--round-seconds", str(rsec)]
+    if ctx.get("measurement_retain_bytes"):
+        cmd += ["--keep-outputs"]          # a job that scores an opponent archives every arm's outputs
     if ctx.get("reference_python") and race["lane"] in NEURAL_TORCH_REFERENCE_LANES:
         cmd += ["--reference-python", shlex.quote(ctx["reference_python"])]
     if race.get("dataset") == "higgs":
@@ -4084,6 +4090,10 @@ def audit_plan(ctx, races):
     report["status"] = "complete"
     report["source"] = E.public_ref(ctx["measurement_source"]) if races else None
     E.write(os.path.join(ctx["out"], "evidence", "preflight.json"), report)
+    if not E.scores_opponent(ctx):
+        # an own-arms job: evidence/preflight.json and the raw/params-only logs are the record, no archive of them
+        report["artifacts"] = dict(E.NOT_ARCHIVED)
+        return report
     members = {"preflight.json": E.encoded(report)}
     for p in Path(ctx["out"], "raw", "params-only").rglob("*"):
         if p.is_file() and p.suffix in (".log", ".json"):
@@ -4407,7 +4417,10 @@ def run_race(ctx, race):
                 "files": {name: sha256_file(path) if os.path.isfile(path) else None for name, path in files},
                 "generator": "retained source and recorded seed" if not files else None}
         evidence = E.begin(ctx, race, race_settings(ctx, race), data)
-        ctx = dict(ctx, measurement_receipts=str(evidence[0] / "workers"))
+        # the workers keep scored output and model bytes only in a job that scores an opponent (the one decision:
+        # bench_board_evidence.scores_opponent); an own-arms job's workers record the hashes
+        ctx = dict(ctx, measurement_receipts=str(evidence[0] / "workers"),
+                   measurement_retain_bytes=E.scores_opponent(ctx))
     unsupported = unsupported_our_arms(race, ctx)
     all_unsupported = bool(race.get("our_arms")) and set(race["our_arms"]) <= set(unsupported)
     stored = {} if all_unsupported else stored_opponents(ctx, race)
@@ -4507,6 +4520,8 @@ def run_race(ctx, race):
         print("MEASUREMENT_INCOMPLETE " + json.dumps(dict(id=race["id"], **rec["measurement_completion"])), flush=True)
     if evidence:
         E.seal(ctx, *evidence, rec)
+        # an own-arms job: the row's quality and hashes are recorded now; the arrays the race wrote go
+        E.discard_race_arrays(ctx, evidence[0], rec)
     rec["stored_now"] = store_opponents(ctx, full, rec)
     return rec
 

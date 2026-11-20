@@ -138,12 +138,14 @@ HEADROOM_GB = 20
 #: THE TARGETED JOB'S DISK FOLLOWS ITS ARMS (lane fx-pod-job, 2026-11-18; it was MIN_FREE_GB whatever was staged):
 #: an ours-only venv with its install cache (1.3 GB measured on the L40S pod, ideas-cycle-time-RESULT.md 1e); the
 #: smoke shards' scratch (12 GB on 2026-11-13; pruned after the smoke, before any board); a timed race's evidence
-#: (paper_compare_job.sh PC_EVIDENCE_MB_PER_RACE; ab1 measured 8.5 MB a race on average, 31 at most); a board dir's
+#: (paper_compare_job.sh PC_EVIDENCE_MB_PER_RACE; ab1 measured 8.5 MB a race on average, 31 at most, when every race
+#: archived its arrays; since 2026-11-20 an own-arms race keeps no archive or array, tools/bench_board_evidence.py
+#: scores_opponent, so its row, logs and JSON: 4 MB); a board dir's
 #: fixed part (ab1: 98-166 MB a unit board with its races); the job's own reserve (PC_DISK_RESERVE_GB). The B arms'
 #: venvs are made by window (paper_compare_job.sh arm-window), so the need counts one, not one per arm.
 VENV_GB = 1.5
 SMOKE_SCRATCH_GB = 12
-EVIDENCE_MB_PER_RACE = 40
+EVIDENCE_MB_PER_RACE = 4
 BOARD_MB = 200
 RESERVE_GB = 5
 #: the paper's NVIDIA device (tools/ops/paper_compare_job.sh PC_GPU_TOKEN default); `stage nvidia` refuses others

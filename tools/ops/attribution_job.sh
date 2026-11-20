@@ -59,6 +59,13 @@ set -uo pipefail
 JOB_NAME=attribution-job
 # shellcheck source=tools/ops/box_job_lib.sh
 source "$(dirname "$0")/box_job_lib.sh"
+# OWN ARMS ONLY, SO NO BULKY EVIDENCE (AGENTS.md "What a measurement keeps", Andrew, 2026-11-20): bench_board writes no
+# source, run, receipt or loaded-module archive here and deletes each race's arrays once its quality and hashes are
+# recorded (tools/bench_board_evidence.py scores_opponent / discard_race_arrays). A race leaves its board row, logs and
+# small JSON (about 1-3 MB); the disk gates count 4 MB a race and no per-board module archive.
+PC_EVIDENCE_MB_PER_RACE=${PC_EVIDENCE_MB_PER_RACE:-4}
+PC_LOADED_MB=${PC_LOADED_MB:-0}
+export PC_EVIDENCE_MB_PER_RACE PC_LOADED_MB
 
 if [ "${MOJOLEARN_BOX_PERSIST:-}" != 1 ] && [ "${MOJOLEARN_ALLOW_UNPERSISTED:-}" != 1 ]; then
     echo "attribution-job: runs under tools/box_persist_run.sh (tools/nvidia_central.sh submit); MOJOLEARN_ALLOW_UNPERSISTED=1 overrides" >&2
@@ -243,7 +250,7 @@ if part time; then
     phase time
     say "time runs under: node ${AT_MEM_NODE:-any}, huge pages ${AT_MEM_THP:-on}"
     n=$(runs_of time | grep -c .)
-    disk_gate time $(( n * ${#ARMS[@]} )) $(( n * ${#ARMS[@]} )) "${PC_EVIDENCE_MB_PER_RACE:-40}"
+    disk_gate time $(( n * ${#ARMS[@]} )) $(( n * ${#ARMS[@]} )) "$PC_EVIDENCE_MB_PER_RACE"
     rc=0
     while IFS=$'\t' read -r _ row rid ph own tag; do
         for arm in "${ARMS[@]}"; do      # the wheels back to back: same box, minutes apart
