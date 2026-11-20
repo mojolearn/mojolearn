@@ -6,7 +6,7 @@ from bindings.gp_native_pack import gp_operation
 from bindings.archive_schema_native_door import archive_schema_save
 
 def compile_entry(model: PythonObject, operation: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    return gp_operation(model, String(operation), args, context)
+    return gp_operation(model, Int(py=operation), args, context)
 
 @export
 def PyInit__mojolearn_gp_public_compile() abi("C") -> PythonObject:

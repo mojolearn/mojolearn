@@ -936,8 +936,9 @@ class OwnerDispatch:
                 for t in cands:
                     # a family's key table (bindings/py_keys.mojo) lists every name the
                     # family reads; a branch that fetches the table calls none of them
+                    # (the same for an owner's operation-name file, operation_names_<owner>.mojo)
                     if t in seen or not t[1].startswith("bindings/") or \
-                            os.path.basename(t[1]).startswith("_mojolearn") or \
+                            os.path.basename(t[1]).startswith(("_mojolearn", "operation_names_")) or \
                             t[1].endswith("_keys_unpack.mojo"):
                         continue
                     seen.add(t)

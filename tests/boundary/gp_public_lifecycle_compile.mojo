@@ -5,7 +5,7 @@ from std.python.bindings import PythonModuleBuilder
 from providers.python.gp_public_lifecycle_pyapi_door import gp_public_operation
 
 def lifecycle(model: PythonObject, operation: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    return gp_public_operation(model, String(operation), args, context)
+    return gp_public_operation(model, Int(py=operation), args, context)
 
 @export
 def PyInit__mojolearn_gp_lifecycle_compile() abi("C") -> PythonObject:

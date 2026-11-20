@@ -55,6 +55,9 @@ from bindings.gp_labels_native_door import gp_decode_score_labels
 from bindings.mcls_common_unpack import mc_shape_of
 from bindings.host_inference_scalars_door import host_inference_scalar
 from bindings.gp_keys_unpack import gp_keys
+from bindings.operation_names_gp import (
+    GP_OPN_FAMILY_GP_GPC_LML, GP_OPN_FAMILY_GP_GPC_FIT, GP_OPN_FAMILY_GP_GPC_PREDICT,
+    GP_OPN_FAMILY_GP_GPC_PREDICT_PROBA, GP_OPN_FAMILY_GP_GPC_LATENT, GP_OPN_FAMILY_GP_GPC_SCORE)
 from bindings.py_balanced import py_item
 
 comptime _NAME = "mojolearn GaussianProcessClassifier"
@@ -447,16 +450,16 @@ def _gpc_latent(ext: PythonObject, fields: PythonObject, est: PythonObject, q: P
     """`_latent(ext, est, q, want_proba, out_kind)`: (mean, var, proba[, out]).
     `kernel_arrays`: the kernel's packed arrays when the caller already has
     them; else `gp_kernel_arrays(fields["_kernel"])`."""
-    var xt = gp_f32(fields, "X_train_", 2, context)
+    var nk = gp_keys()
+    var xt = gp_f32(fields, nk[].k_X_train_, "X_train_", 2, context)
     var arrays = kernel_arrays
     if arrays is None:
-        var nk = gp_keys()
         arrays = gp_kernel_arrays(py_item(fields, nk[].k__kernel), context)
     var own = py_fields(est)
-    var y01 = gp_f32(own, "y_train_", -1, context)
-    var pi = gp_f32(own, "pi_", -1, context)
-    var wsr = gp_f32(own, "W_sr_", -1, context)
-    var lf = gp_f32(own, "L_", -1, context)
+    var y01 = gp_f32(own, nk[].k_y_train_, "y_train_", -1, context)
+    var pi = gp_f32(own, nk[].k_pi_, "pi_", -1, context)
+    var wsr = gp_f32(own, nk[].k_W_sr_, "W_sr_", -1, context)
+    var lf = gp_f32(own, nk[].k_L_, "L_", -1, context)
     var connection = GPConnection(ext)
     var result = _gpc_latent_run(connection, xt, y01, pi, wsr, lf, q, want_proba, out_kind, arrays, pack,
                                  native_codes, context)
@@ -532,10 +535,11 @@ def gpc_worker_latent(binding: PythonObject, x_train: PythonObject, fit_fields: 
     or holder dict is built in the worker."""
     var connection = GPConnection(binding)
     var xt = admit_family(x_train, 2, "X_train_", context).array
-    var y01 = gp_f32(fit_fields, "y_train_", -1, context)
-    var pi = gp_f32(fit_fields, "pi_", -1, context)
-    var wsr = gp_f32(fit_fields, "W_sr_", -1, context)
-    var lf = gp_f32(fit_fields, "L_", -1, context)
+    var nk = gp_keys()
+    var y01 = gp_f32(fit_fields, nk[].k_y_train_, "y_train_", -1, context)
+    var pi = gp_f32(fit_fields, nk[].k_pi_, "pi_", -1, context)
+    var wsr = gp_f32(fit_fields, nk[].k_W_sr_, "W_sr_", -1, context)
+    var lf = gp_f32(fit_fields, nk[].k_L_, "L_", -1, context)
     var latent = _gpc_latent_run(connection, xt, y01, pi, wsr, lf, q, want_proba, out_kind, arrays,
                                  4 if want_proba else 1, False, context)
     _ = xt^
@@ -556,11 +560,11 @@ def _gpc_predict_all(model: PythonObject, ext: PythonObject, fields: PythonObjec
     is host words or a device fold; the entry returns its status words and
     a flagged query is refused here (lane a7a)."""
     var n_star = gq.rows
-    var xt = gp_f32(fields, "X_train_", 2, context)
+    var nk = gp_keys()
+    var xt = gp_f32(fields, nk[].k_X_train_, "X_train_", 2, context)
     var n_train = Int(py=xt.shape[0])
     var n_features = Int(py=xt.shape[1])
     var arrays = kernel_arrays
-    var nk = gp_keys()
     var fits = py_item(fields, nk[].k_estimators_)
     var k = len(fits)
     var probabilities = PythonObject(None)
@@ -582,10 +586,10 @@ def _gpc_predict_all(model: PythonObject, ext: PythonObject, fields: PythonObjec
     for i in range(k):  # driver-loop: four model buffers per fitted OVR member
         var own = py_fields(fits[i])
         var parts = List[PythonObject]()
-        parts.append(gp_f32(own, "y_train_", -1, context))
-        parts.append(gp_f32(own, "pi_", -1, context))
-        parts.append(gp_f32(own, "W_sr_", -1, context))
-        parts.append(gp_f32(own, "L_", -1, context))
+        parts.append(gp_f32(own, nk[].k_y_train_, "y_train_", -1, context))
+        parts.append(gp_f32(own, nk[].k_pi_, "pi_", -1, context))
+        parts.append(gp_f32(own, nk[].k_W_sr_, "W_sr_", -1, context))
+        parts.append(gp_f32(own, nk[].k_L_, "L_", -1, context))
         tables.targets[i] = Int(py=classical_address(parts[0]))
         tables.pis[i] = Int(py=classical_address(parts[1]))
         tables.wsrs[i] = Int(py=classical_address(parts[2]))
@@ -757,10 +761,10 @@ def _gpc_latent_mean_and_variance(model: PythonObject, args: GPArgumentPins, con
     return Python.tuple(latent.mean, latent.variance)
 
 
-def gp_classifier_operation(model: PythonObject, operation: String, args: GPArgumentPins,
+def gp_classifier_operation(model: PythonObject, operation: Int, args: GPArgumentPins,
                             context: PythonObject) raises -> PythonObject:
     """GaussianProcessClassifier's public operations: args[0] is the resolved binding."""
-    if operation == "family_gp_gpc_lml":
+    if operation == GP_OPN_FAMILY_GP_GPC_LML:
         # The complete public operation: refusal order, fitted state and final
         # scalar are native. Admit truth values before any boolean protocol.
         if args[0] is not None:
@@ -780,16 +784,16 @@ def gp_classifier_operation(model: PythonObject, operation: String, args: GPArgu
         var result = py_item(fields, nk[].k_log_marginal_likelihood_value_)
         host_inference_scalar(result, context)
         return result
-    if operation == "family_gp_gpc_fit":
+    if operation == GP_OPN_FAMILY_GP_GPC_FIT:
         _gpc_fit(model, args, context)
         return model
-    if operation == "family_gp_gpc_predict":
+    if operation == GP_OPN_FAMILY_GP_GPC_PREDICT:
         return _gpc_predict(model, args, context)
-    if operation == "family_gp_gpc_predict_proba":
+    if operation == GP_OPN_FAMILY_GP_GPC_PREDICT_PROBA:
         return _gpc_predict_proba(model, args, context)
-    if operation == "family_gp_gpc_latent":
+    if operation == GP_OPN_FAMILY_GP_GPC_LATENT:
         return _gpc_latent_mean_and_variance(model, args, context)
-    if operation == "family_gp_gpc_score":
+    if operation == GP_OPN_FAMILY_GP_GPC_SCORE:
         # `score(X, y)`: predict, the row-count refusal, then
         # `accuracy_fraction(y, pred)`; args = (binding, base binding, X, y).
         var prediction = _gpc_prediction_codes(model, args[0], args[2], context)
@@ -806,10 +810,10 @@ def gp_classifier_operation(model: PythonObject, operation: String, args: GPArgu
         _ = prediction
         _ = pred
         return PythonObject(result)
-    raise Error("RuntimeError: unknown gaussian process classifier operation " + operation)
+    raise Error("RuntimeError: unknown gaussian process classifier operation code " + String(operation))
 
 
-def gp_classifier_operation(model: PythonObject, operation: String, args: PythonObject,
+def gp_classifier_operation(model: PythonObject, operation: Int, args: PythonObject,
                             context: PythonObject) raises -> PythonObject:
     # Compatibility UNPACK for internal archive/model-selection callers.
     # Public GP lifecycle already owns these slots in its native call record.

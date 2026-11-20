@@ -154,9 +154,12 @@ def gp_with_free_values(kernel: PythonObject, values: List[Float64], theta: List
     return out
 
 
-def gp_f32(fields: PythonObject, name: String, ndim: Int, context: PythonObject) raises -> PythonObject:
+def gp_f32(fields: PythonObject, key: PythonObject, name: String, ndim: Int,
+           context: PythonObject) raises -> PythonObject:
     """A fitted float32 array field as the C-order float32 buffer the
-    binding reads (`addr_ro`)."""
-    if not py_contains(fields, PythonObject(name)):
+    binding reads (`addr_ro`). `key` is the held key of the field
+    (`nk[].k_<name>`, bindings/gp_keys_unpack.mojo); `name` is its text, for
+    the refusals only (the helper built two Python str from it per call)."""
+    if not py_contains(fields, key):
         raise Error("AttributeError: object has no attribute '" + name + "'")
-    return admit_family(fields[name], ndim, name, context).array
+    return admit_family(py_item(fields, key), ndim, name, context).array

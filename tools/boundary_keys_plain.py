@@ -24,14 +24,18 @@ Rules it relies on (the codemod and the recipe keep them):
     (operation names are lower-case identifiers), and the variable holding a code keeps the name the
     door's chain compared (`operation`, or `op`);
   * a family's table file is `bindings/<family>_keys_unpack.mojo`; it is returned unchanged (its fill lists
-    every name of the family, so readers treat it as a manifest, never as a caller).
+    every name of the family, so readers treat it as a manifest, never as a caller);
+  * a family owner's operation-name file is `bindings/operation_names_<owner>.mojo` (the names and leaf codes
+    `bindings/native_operation_codes.mojo` registers for an owner reached through a forwarding dispatcher,
+    lane bw2-core): a manifest too, returned unchanged. Its constants are `<FAMILY>_OPN_<FULL NAME upper>`
+    (`GP_OPN_FAMILY_GP_GPR_FIT` reads back as `"family_gp_gpr_fit"`).
 Import statements are left as written.
 """
 from __future__ import annotations
 
 import re
 
-KEYS_FILE = re.compile(r"(?:^|/)bindings/[a-z0-9_]+_keys_unpack\.mojo$")
+KEYS_FILE = re.compile(r"(?:^|/)bindings/(?:[a-z0-9_]+_keys_unpack|operation_names_[a-z0-9_]+)\.mojo$")
 _KEY = re.compile(r"\bnk\[\]\.k_(\w+)")
 _ITEM = re.compile(r"\bpy_item\(")
 _OPN = re.compile(r"\b[A-Z][A-Z0-9_]*?_OPN_([A-Z0-9_]+)\b")
@@ -40,7 +44,8 @@ _OP_PARAM = re.compile(r"\b(operation|op)\s*:\s*Int\b")
 
 
 def is_keys_file(path):
-    """True for a family's key table (a manifest of names for the source readers)."""
+    """True for a family's key table or an owner's operation-name file (manifests of names for the source
+    readers)."""
     return bool(KEYS_FILE.search(path.replace("\\", "/")))
 
 

@@ -50,6 +50,7 @@ MANIFESTS = (
     re.compile(r"^tools/verify_coverage_audit\.py$"),
     re.compile(r"^bindings/native_operation_codes\.mojo$"),   # the name -> integer code table; callers use _OP.<name>
     re.compile(r"^bindings/[a-z0-9_]+_keys_unpack\.mojo$"),   # a family's held keys and operation codes (py_keys.mojo)
+    re.compile(r"^bindings/operation_names_[a-z0-9_]+\.mojo$"),  # a family owner's operation names and leaf codes
     re.compile(r"^tools/native_caller_audit\.py$"),
     re.compile(r"^tools/test_native_caller_audit\.py$"),
 )

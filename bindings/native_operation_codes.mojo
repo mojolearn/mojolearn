@@ -1,4 +1,25 @@
 from core.shared_slot import SharedSlot
+from bindings.operation_names_density import operation_names_density
+from bindings.operation_names_par import operation_names_par
+from bindings.operation_names_kmeans import operation_names_kmeans
+from bindings.operation_names_km import operation_names_km
+from bindings.operation_names_svm import operation_names_svm
+from bindings.operation_names_xc import operation_names_xc
+from bindings.operation_names_metric import operation_names_metric
+from bindings.operation_names_xn import operation_names_xn
+from bindings.operation_names_chol import operation_names_chol
+from bindings.operation_names_msel import operation_names_msel
+from bindings.operation_names_svc import operation_names_svc
+from bindings.operation_names_gp import operation_names_gp
+from bindings.operation_names_mcls import operation_names_mcls
+from bindings.operation_names_mexp import operation_names_mexp
+from bindings.operation_names_hdbscan import operation_names_hdbscan
+from bindings.operation_names_cfa import operation_names_cfa
+from bindings.operation_names_cfb import operation_names_cfb
+from bindings.operation_names_mix import operation_names_mix
+from bindings.operation_names_mani import operation_names_mani
+from bindings.operation_names_low import operation_names_low
+from bindings.operation_names_linops import operation_names_linops
 # SPDX-License-Identifier: Apache-2.0
 # The one table of integer operation codes for the classical owner's door
 # (lane ne1-h-labels, plan NATIVE_ENTRY_POINTS_AFTER_0866 section H, lesson
@@ -13,13 +34,31 @@ from core.shared_slot import SharedSlot
 # (python/mojolearn/_native_ops.py, door operation "operation_codes") and
 # passes the integer code; the door reads the route, the family route and
 # the name from the table (filled once per process) and calls the owner
-# directly. The family owners still receive the operation name (a String
-# built once here, never from the Python object), so their own suffix
-# matches are unchanged.
+# directly.
 #
-# Codes are the index in `_operation_names` (sorted); they hold within one
-# build only, and Python never hard-codes them. Add a name here when a shell
-# passes a new `family_*`, `trees_*` or `host_tree_*` operation by code.
+# THE LEAF COLUMN (lane bw2-core, 2026-11-20: the prefix route of the boundary
+# conversion). A dispatcher that tested name prefixes and forwarded the name
+# String to another owner now resolves the name ONCE to its code here, and a
+# converted owner switches on the name's LEAF code (`leaves`), an integer the
+# owner's own file defines (bindings/operation_names_<owner>.mojo:
+# `<FAMILY>_OPN_<NAME upper>`, numbered by sub-owner so a group is one range
+# test). A str caller (a shell that passes the name, the parallel driver's
+# owner, model selection) is resolved by ONE dictionary lookup with its own
+# str object (`operation_code`, bindings/native_operation_names_unpack.mojo);
+# no String is built and no prefix chain runs for a name of the table. An
+# owner that is not converted yet has `OP_LEAF_NONE` and still receives the
+# operation name: the table's own String, borrowed, never built per call. A
+# name the table does not hold keeps the String path (`family_route` on the
+# name), which is also where an unknown name gets its error text.
+#
+# Codes are the index in `names` (registration order: the trees names, then
+# each family owner's file); they hold within one build only, and Python
+# never hard-codes them. Every `family_*` name a caller can pass belongs in
+# its owner's file; `trees_*` and `host_tree_*` names passed by code are in
+# `_operation_names` below.
+
+#: The leaf of a name whose owner still matches the name.
+comptime OP_LEAF_NONE = -1
 
 comptime OP_ROUTE_FAMILY = 1
 comptime OP_ROUTE_TREES = 2
@@ -140,126 +179,8 @@ def family_route(operation: String) -> Int:
 
 
 def _operation_names(mut names: List[String]):
-    """Every operation a shell passes by code, sorted; the code is the
-    index. Straight-line appends (no branch per name)."""
-    names.append("family_mcls_accuracy")
-    names.append("family_mcls_accuracy_fraction")
-    names.append("family_mcls_adjusted_rand")
-    names.append("family_mcls_completeness")
-    names.append("family_mcls_confusion")
-    names.append("family_mcls_entropy")
-    names.append("family_mcls_fowlkes_mallows")
-    names.append("family_mcls_hcv")
-    names.append("family_mcls_homogeneity")
-    names.append("family_mcls_kl")
-    names.append("family_mcls_log_loss")
-    names.append("family_mcls_mutual_info")
-    names.append("family_mcls_pr_curve")
-    names.append("family_mcls_prf")
-    names.append("family_mcls_r2")
-    names.append("family_mcls_rand")
-    names.append("family_mcls_regression_error")
-    names.append("family_mcls_roc_auc")
-    names.append("family_mcls_silhouette_samples")
-    names.append("family_mcls_silhouette_score")
-    names.append("family_mcls_trustworthiness")
-    names.append("family_mcls_v_measure")
-    names.append("family_metric_d2_absolute")
-    names.append("family_metric_d2_pinball")
-    names.append("family_metric_d2_tweedie")
-    names.append("family_metric_explained_variance")
-    names.append("family_metric_gamma")
-    names.append("family_metric_mape")
-    names.append("family_metric_max_error")
-    names.append("family_metric_medae")
-    names.append("family_metric_msle")
-    names.append("family_metric_pinball")
-    names.append("family_metric_poisson")
-    names.append("family_metric_r2_options")
-    names.append("family_metric_regression_error")
-    names.append("family_metric_regression_report")
-    names.append("family_metric_rmsle")
-    names.append("family_metric_tweedie")
-    names.append("family_mexp_cls_balanced_accuracy")
-    names.append("family_mexp_cls_fbeta")
-    names.append("family_mexp_cls_hamming")
-    names.append("family_mexp_cls_jaccard")
-    names.append("family_mexp_cls_kappa")
-    names.append("family_mexp_cls_likelihood_ratios")
-    names.append("family_mexp_cls_matthews")
-    names.append("family_mexp_cls_mlcm")
-    names.append("family_mexp_cls_prfs")
-    names.append("family_mexp_cls_report")
-    names.append("family_mexp_cls_zero_one")
-    names.append("family_mexp_cluster_ami")
-    names.append("family_mexp_cluster_calinski_harabasz")
-    names.append("family_mexp_cluster_contingency")
-    names.append("family_mexp_cluster_davies_bouldin")
-    names.append("family_mexp_cluster_nmi")
-    names.append("family_mexp_cluster_pair_confusion")
-    names.append("family_mexp_curve_auc")
-    names.append("family_mexp_curve_average_precision")
-    names.append("family_mexp_curve_det")
-    names.append("family_mexp_curve_ranking_report")
-    names.append("family_mexp_curve_roc")
-    names.append("family_mexp_curve_top_k")
-    names.append("family_mexp_rank_brier")
-    names.append("family_mexp_rank_coverage")
-    names.append("family_mexp_rank_d2_brier")
-    names.append("family_mexp_rank_d2_log_loss")
-    names.append("family_mexp_rank_dcg")
-    names.append("family_mexp_rank_hinge")
-    names.append("family_mexp_rank_loss")
-    names.append("family_mexp_rank_lrap")
-    names.append("family_mexp_rank_ndcg")
-    names.append("family_svc_ocsvm_decision")
-    names.append("family_svc_ocsvm_fit")
-    names.append("family_svc_ocsvm_fit_predict")
-    names.append("family_svc_ocsvm_predict")
-    names.append("family_svc_ocsvm_score_samples")
-    names.append("family_xn_graph_connected_components")
-    names.append("family_xn_graph_louvain_fit")
-    names.append("family_xn_graph_louvain_fit_predict")
-    names.append("family_xn_graph_pagerank_fit")
-    names.append("family_xn_graph_svgp_fit")
-    names.append("family_xn_graph_svgp_predict")
-    names.append("family_xn_graph_svgp_predict_f")
-    names.append("family_xn_graph_svgp_predict_y")
-    names.append("family_xn_graph_svgp_score")
-    names.append("family_xn_loc_imp_fit")
-    names.append("family_xn_loc_imp_fit_transform")
-    names.append("family_xn_loc_imp_transform")
-    names.append("family_xn_loc_lof_decision_function")
-    names.append("family_xn_loc_lof_fit")
-    names.append("family_xn_loc_lof_fit_predict")
-    names.append("family_xn_loc_lof_predict")
-    names.append("family_xn_loc_lof_score_samples")
-    names.append("family_xn_loc_nc_decision_function")
-    names.append("family_xn_loc_nc_fit")
-    names.append("family_xn_loc_nc_predict")
-    names.append("family_xn_loc_nc_predict_log_proba")
-    names.append("family_xn_loc_nc_predict_proba")
-    names.append("family_xn_loc_nc_score")
-    names.append("family_xn_names_achi2")
-    names.append("family_xn_names_imputer")
-    names.append("family_xn_names_kpca")
-    names.append("family_xn_names_schi2")
-    names.append("family_xn_pcs_feature_names")
-    names.append("family_xn_pcs_fit")
-    names.append("family_xn_pcs_fit_transform")
-    names.append("family_xn_pcs_transform")
-    names.append("family_xn_schi2_set_weights")
-    names.append("family_xn_schi2_weights")
-    names.append("family_xn_semi_achi2_fit")
-    names.append("family_xn_semi_achi2_fit_transform")
-    names.append("family_xn_semi_achi2_transform")
-    names.append("family_xn_semi_lp_fit")
-    names.append("family_xn_semi_lp_predict")
-    names.append("family_xn_semi_lp_predict_proba")
-    names.append("family_xn_semi_lp_score")
-    names.append("family_xn_semi_schi2_fit")
-    names.append("family_xn_semi_schi2_fit_transform")
-    names.append("family_xn_semi_schi2_transform")
+    """The `host_tree_*` and `trees_*` operations a shell passes by code.
+    Straight-line appends (no branch per name)."""
     names.append("host_tree_count")
     names.append("host_tree_ctr_dim")
     names.append("host_tree_ctr_predict")
@@ -304,17 +225,79 @@ def _operation_names(mut names: List[String]):
     names.append("trees_public_meta_transform")
 
 
+def _family_names(mut names: List[String], mut leaves: List[Int]):
+    """Every family owner's names, in the owners' route order. An owner
+    that is not converted appends names only; its leaves are filled with
+    `OP_LEAF_NONE` here."""
+    operation_names_density(names, leaves)
+    _leaves_pad(names, leaves)
+    operation_names_par(names, leaves)
+    _leaves_pad(names, leaves)
+    operation_names_kmeans(names, leaves)
+    _leaves_pad(names, leaves)
+    operation_names_km(names, leaves)
+    _leaves_pad(names, leaves)
+    operation_names_svm(names, leaves)
+    _leaves_pad(names, leaves)
+    operation_names_xc(names, leaves)
+    _leaves_pad(names, leaves)
+    operation_names_metric(names, leaves)
+    _leaves_pad(names, leaves)
+    operation_names_xn(names, leaves)
+    _leaves_pad(names, leaves)
+    operation_names_chol(names, leaves)
+    _leaves_pad(names, leaves)
+    operation_names_msel(names, leaves)
+    _leaves_pad(names, leaves)
+    operation_names_svc(names, leaves)
+    _leaves_pad(names, leaves)
+    operation_names_gp(names, leaves)
+    _leaves_pad(names, leaves)
+    operation_names_mcls(names, leaves)
+    _leaves_pad(names, leaves)
+    operation_names_mexp(names, leaves)
+    _leaves_pad(names, leaves)
+    operation_names_hdbscan(names, leaves)
+    _leaves_pad(names, leaves)
+    operation_names_cfa(names, leaves)
+    _leaves_pad(names, leaves)
+    operation_names_cfb(names, leaves)
+    _leaves_pad(names, leaves)
+    operation_names_mix(names, leaves)
+    _leaves_pad(names, leaves)
+    operation_names_mani(names, leaves)
+    _leaves_pad(names, leaves)
+    operation_names_low(names, leaves)
+    _leaves_pad(names, leaves)
+    operation_names_linops(names, leaves)
+    _leaves_pad(names, leaves)
+
+
+def _leaves_pad(names: List[String], mut leaves: List[Int]):
+    """`OP_LEAF_NONE` for every name registered without a leaf."""
+    while len(leaves) < len(names):  # driver-loop: over the fixed operation names, once per process
+        leaves.append(OP_LEAF_NONE)
+
+
 struct OperationTable(Defaultable, Movable):
-    """The names, routes and family route words, filled once per process."""
+    """The names, routes, family route words and leaf codes, filled once per
+    process. No Python here: the name -> code dictionary of the str callers
+    is bindings/native_operation_names_unpack.mojo's."""
     var names: List[String]
     var routes: List[Int]
     var family_routes: List[Int]
+    var leaves: List[Int]
 
     def __init__(out self):
-        self.names = List[String]()
+        var names = List[String]()
+        var leaves = List[Int]()
+        _operation_names(names)
+        _leaves_pad(names, leaves)
+        _family_names(names, leaves)
+        self.names = names^
+        self.leaves = leaves^
         self.routes = List[Int]()
         self.family_routes = List[Int]()
-        _operation_names(self.names)
         for i in range(len(self.names)):  # driver-loop: over the fixed operation names, once per process
             if self.names[i].startswith("trees_"):
                 self.routes.append(OP_ROUTE_TREES)
@@ -328,8 +311,9 @@ struct OperationTable(Defaultable, Movable):
 
 
 # Shared by every Mojo extension in the process; bump the version whenever a
-# name is added, removed or reordered (the codes are indices).
-comptime OPERATION_TABLE = SharedSlot[OperationTable, "MojolearnOperationCodesV3"]
+# name is added, removed or reordered (the codes are indices) or a field
+# changes. V4: the leaf column and every family name.
+comptime OPERATION_TABLE = SharedSlot[OperationTable, "MojolearnOperationCodesV4"]
 
 
 def operation_table() raises -> UnsafePointer[OperationTable, MutAnyOrigin]:
