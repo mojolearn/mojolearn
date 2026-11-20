@@ -504,6 +504,23 @@ class ArmOnGithubPackedBase(unittest.TestCase):
             self.assertEqual(RC.repair_finished_github_pack(r, say=lines.append), [])
         self.assertIn("repair_finished_github_pack(r)", (TOOLS / "release_candidate.py").read_text())
 
+    def test_an_arm_planned_before_its_base_was_repacked_plans_again(self):
+        import threading
+        with tempfile.TemporaryDirectory() as td:
+            rel = Path(td) / "arm"
+            write(rel / "reuse" / "plan.json", json.dumps(dict(made="2026-11-19T22:00:00Z", legs=["cuda-sm_89", "cuda-sm_80"])))
+            base = Path(td) / "base"
+            write(base / "linux" / "final" / "candidate.json", json.dumps(dict(made="2026-11-19T23:56:15Z")))
+            r = SimpleNamespace(rel=rel, _lock=threading.Lock(), save=lambda: None,
+                                state=dict(steps={s: {} for s in ("reuse-plan",) + RC.REPACK_STEPS}, failures={}))
+            self.assertFalse(RC.replan_arm_on_repaired_base(r, None, say=lambda m: None))
+            self.assertTrue(RC.replan_arm_on_repaired_base(r, dict(build_dir=str(base)), say=lambda m: None))
+            self.assertEqual(r.state["steps"], {})
+            self.assertFalse((rel / "reuse" / "plan.json").exists())
+            # a plan made after the base's pack stays
+            write(rel / "reuse" / "plan.json", json.dumps(dict(made="2026-11-20T00:10:00Z")))
+            self.assertFalse(RC.replan_arm_on_repaired_base(r, dict(build_dir=str(base)), say=lambda m: None))
+
     def test_a_failed_github_pack_drops_the_source_worktree(self):
         with tempfile.TemporaryDirectory() as td:
             src = write(Path(td) / "source" / SHA[:12] / "file", "x" * 100).parent

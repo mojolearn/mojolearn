@@ -268,6 +268,39 @@ def repair_finished_github_pack(r, say=print):
     return why
 
 
+def replan_arm_on_repaired_base(r, base, say=print):
+    """An unfinished B arm whose reuse plan predates its base's (re)pack is planned again: the plan decided which
+    sets the arm builds from the base it saw (2026-11-19: arms planned on a base without leg provenance refused its
+    PTX set and launched sm_80 despite --timed-on sm_89; after repair_finished_github_pack repacked that base, a
+    resumed arm kept the stale two-leg plan). Its legs already built keep their records (a leg still in the new plan
+    is done; the collectors re-attach by --run-id otherwise). Returns True when it re-plans."""
+    if not base or base.get("pending"):
+        return False
+    rel = Path(r.rel)
+    if any((rel / "linux" / "final").glob("*.whl")):
+        return False
+    plan_path = rel / "reuse" / "plan.json"
+    try:
+        plan = json.loads(plan_path.read_text())
+        made = (json.loads((Path(base["build_dir"]) / "linux" / "final" / "candidate.json").read_text()) or {}).get("made")
+    except (OSError, ValueError):
+        return False
+    if not made or not plan.get("made") or str(plan["made"]) >= str(made):
+        return False
+    import datetime as dt
+    stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
+    plan_path.rename(plan_path.with_name("plan.json.stale-" + stamp))
+    with r._lock:
+        for step in ("reuse-plan",) + REPACK_STEPS:
+            (r.state.get("steps") or {}).pop(step, None)
+            (r.state.get("failures") or {}).pop(step, None)
+        r.state.pop("remote_pack", None)
+        r.save()
+    say(f"measurement build: the arm's reuse plan ({plan['made']}) predates its base's pack ({made}); planned again "
+        f"(the old plan is {plan_path.name}.stale-{stamp})")
+    return True
+
+
 def prune_set(work, commit, say=print):
     """After a set packed and its candidate.json was written: delete prune_plan's files, the directories they
     leave empty, and the detached source worktree <work>/source/<commit12> (a resume makes it again). Returns the
@@ -827,6 +860,7 @@ def main(argv=None, release=None):
     r = release.Release(args)
     if not a.dry_run and not a.pack_here and args.candidate_pack == "github":
         repair_finished_github_pack(r)
+        replan_arm_on_repaired_base(r, base_build)
     if r.commit != a.commit:
         raise SystemExit(f"measurement build: the Release resolved {r.commit}, not {a.commit}")
     print(f"measurement build {version} of {a.commit[:12]}" + (f" defines {defines}" if defines else "")
