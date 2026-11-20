@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """The block step op's Mamba-1 / Mamba-2 VJP: the hand chain (the default,
 `mamba{1,2}_step_backward_hand`) against the tape graph (the
-MOJOLEARN_IDN_MAMBA_BACKWARD_GENERIC arm, `mamba{1,2}_step_backward_tape`),
+former MOJOLEARN_IDN_MAMBA_BACKWARD_GENERIC arm, `mamba{1,2}_step_backward_tape`),
 word for word, in one binary (lane restore-mamba-backward-glue, 2026-11-13).
 
 Each case runs the recorded run's forward (`mamba{1,2}_step_forward`, the
