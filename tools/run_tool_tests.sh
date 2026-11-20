@@ -20,6 +20,17 @@
 #                           checkout this worktree belongs to, else python3)
 #   MOJOLEARN_TEST_WORKERS  parallel files (default: the core count)
 #   MOJOLEARN_TOOL_TESTS_OUT  log dir (default ~/mojolearn-evidence/tool-tests/<UTC time>; never /private/tmp)
+#
+# Every test starts from a scrubbed environment (lane fx-box-tooltests, 2026-11-20): once the three settings above are
+# read, every exported MOJOLEARN_*, CPU_CHECK_*, CPU_CHECKS_*, CPC_* and NVC_* variable is unset, because a run
+# started inside a box job inherited that job's MOJOLEARN_RESULTS_DIR, MOJOLEARN_PERSIST_TAG, MOJOLEARN_BOX_PERSIST,
+# MOJOLEARN_PERSIST_RUNNER (tools/box_persist_run.sh) and CPU_CHECK_SHA / CPU_CHECK_SUITE (tools/cpu_central.sh
+# check), and the tools under test took them for their own (test_cpu_central: the job script read the enclosing
+# job's results dir and sha instead of printing usage). Each unit also starts with SIGINT and SIGQUIT at their
+# defaults, as from a terminal or a GitHub step: a run started in the background by a non-interactive shell (`cmd &`,
+# tools/ops/cpu_box_checks_job.sh) inherits both ignored, and neither bash nor Python can then take Ctrl-C.
+# OUT/ENV.txt lists the scrubbed names and every skipped test with its reason; the summary prints them as the
+# run's environment notes.
 set -uo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -41,6 +52,14 @@ CORES=$(nproc 2> /dev/null || sysctl -n hw.ncpu 2> /dev/null || echo 1)
 WORKERS=${MOJOLEARN_TEST_WORKERS:-$CORES}
 OUT=${MOJOLEARN_TOOL_TESTS_OUT:-$HOME/mojolearn-evidence/tool-tests/$(date -u +%Y%m%dT%H%M%SZ)}
 mkdir -p "$OUT/logs" || exit 2
+
+SCRUBBED=()
+while IFS= read -r v; do
+    case "$v" in
+        MOJOLEARN_*|CPU_CHECK_*|CPU_CHECKS_*|CPC_*|NVC_*) SCRUBBED+=("$v"); unset "$v" ;;
+    esac
+done < <(compgen -e)
+printf 'scrubbed\t%s\n' "${SCRUBBED[*]:-none}" > "$OUT/ENV.txt"
 
 if [ $# -gt 0 ]; then FILES=("$@"); else FILES=(tools/test_*.py tools/tests/test_*.py); fi
 # kind<TAB>path per file: pytest (test functions / TestCase classes) or script (a module-style check)
@@ -82,24 +101,31 @@ for kind, p in rows:
 EOF
 NFILES=$(wc -l < "$OUT/files.tsv" | tr -d ' ')
 echo "run_tool_tests: $NFILES units, $WORKERS workers of $CORES cores, $PY, logs $OUT"
+echo "run_tool_tests: environment scrubbed of ${#SCRUBBED[@]} job variables: ${SCRUBBED[*]:-none}"
 
 export PY OUT
+dfl() {   # run "$@" with SIGINT and SIGQUIT at their defaults (an ignored disposition survives exec; bash cannot undo it)
+    "$PY" -c 'import os, signal, sys
+for s in (signal.SIGINT, signal.SIGQUIT):
+    signal.signal(s, signal.SIG_DFL)
+os.execvp(sys.argv[1], sys.argv[1:])' "$@"
+}
 one() {   # kind path: one file, its log, and one "rc kind path seconds" line in rc.txt
     local kind=$1 path=$2 log rc t0
     log="$OUT/logs/$(echo "$path" | tr '/' '.').log"
     t0=$(date +%s)
     if [ "$kind" = pytest ]; then
-        "$PY" -m pytest -q -p no:cacheprovider -p no:xdist -rfE "$path" > "$log" 2>&1 < /dev/null; rc=$?
+        dfl "$PY" -m pytest -q -p no:cacheprovider -p no:xdist -rfEs "$path" > "$log" 2>&1 < /dev/null; rc=$?
     elif [ "$kind" = shard ]; then   # this shard's test ids, one per line (ids may hold spaces)
-        "$PY" -c 'import sys, pytest; sys.exit(pytest.main(["-q", "-p", "no:cacheprovider", "-p", "no:xdist", "-rfE",
+        dfl "$PY" -c 'import sys, pytest; sys.exit(pytest.main(["-q", "-p", "no:cacheprovider", "-p", "no:xdist", "-rfEs",
             *open(sys.argv[1]).read().splitlines()]))' "$OUT/shards/$(echo "$path" | tr '/' '.').ids" \
             > "$log" 2>&1 < /dev/null; rc=$?
     else
-        "$PY" "$path" > "$log" 2>&1 < /dev/null; rc=$?
+        dfl "$PY" "$path" > "$log" 2>&1 < /dev/null; rc=$?
     fi
     printf '%s\t%s\t%s\t%s\n' "$rc" "$kind" "$path" "$(( $(date +%s) - t0 ))" >> "$OUT/rc.txt"
 }
-export -f one
+export -f dfl one
 : > "$OUT/rc.txt"
 start=$(date +%s)
 tr '\t' '\n' < "$OUT/files.tsv" | xargs -n 2 -P "$WORKERS" bash -c 'one "$0" "$1"'
@@ -109,7 +135,7 @@ secs=$(( $(date +%s) - start ))
 import os, re, sys
 out, secs = sys.argv[1], sys.argv[2]
 counts = {"passed": 0, "failed": 0, "errors": 0, "skipped": 0}
-bad_files, names, times = [], [], []
+bad_files, names, times, skips = [], [], [], []
 for line in open(os.path.join(out, "rc.txt")):
     rc, kind, path, took = line.rstrip("\n").split("\t")
     times.append((float(took), path))
@@ -121,6 +147,7 @@ for line in open(os.path.join(out, "rc.txt")):
             counts["errors" if w.startswith("error") else w] += int(n)
         hit = re.findall(r"^(?:FAILED|ERROR) (\S+)", text, re.M)
         names += hit
+        skips += re.findall(r"^SKIPPED \[\d+\] (.+)$", text, re.M)
         if rc not in ("0", "5") and not hit:          # 5: nothing collected; any other rc without a name
             names.append("%s (rc %s, see %s)" % (path, rc, log))
         if rc not in ("0", "5"):
@@ -134,6 +161,13 @@ print("TOOL-TESTS passed=%(passed)d failed=%(failed)d errors=%(errors)d skipped=
       + " files_failing=%d seconds=%s logs=%s" % (len(bad_files), secs, out))
 for n in sorted(set(names)):
     print("  FAILED " + n)
+# the environment notes: what was scrubbed and every skip with its reason (a skip is never counted as a pass)
+with open(os.path.join(out, "ENV.txt"), "a") as fh:
+    fh.writelines("skipped\t%s\n" % s for s in skips)
+env_lines = open(os.path.join(out, "ENV.txt")).read().splitlines()
+print("environment notes (%s):" % os.path.join(out, "ENV.txt"))
+for line in env_lines:
+    print("  " + line.replace("\t", ": ", 1))
 print("slowest units (seconds):")
 for took, path in sorted(times, reverse=True)[:10]:
     print("  %6.0f  %s" % (took, path))
