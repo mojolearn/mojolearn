@@ -959,7 +959,6 @@ def _import_dotted(rel, node):
     return ".".join(p for p in (prefix, module) if p)
 
 
-@_by_path
 def _verification_door_imports(rel, tree):
     """ids of the import nodes of `rel` that are VERIFICATION_DOORS edges (never a lane edge)."""
     doors = VERIFICATION_DOORS.get(rel)
@@ -980,6 +979,7 @@ def _verification_door_imports(rel, tree):
     return frozenset(found)
 
 
+@_by_path
 def _import_edges(rel):
     """file -> the NAMES `rel` imports from it, or None for the whole module,
     over the whole file (`_region_import_edges` with `wanted` None).
