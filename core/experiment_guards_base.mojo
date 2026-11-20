@@ -195,6 +195,13 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_IF_FIT_OWN_X.fx-old-arms-triage.patch; record in docs/TOMBSTONES.md.
     comptime assert not is_defined["MOJOLEARN_IDN_IF_FIT_OWN_X"](), "removed 2026-11-19 (lane/fx-old-arms-triage, A/B ab4 NVIDIA L40S, wheel d652a4b0a1, job nvc-ab-20261118T201200Z-d21ba0, one run per arm): the IsolationForest fit owning a copy of a borrowed float32 X was slower, fit istella 197 -> 267 ms (1.36), taxi 149 -> 171 (1.15); the resident borrow stays; code at a7c89e7558; restore: experiments/removed/MOJOLEARN_IDN_IF_FIT_OWN_X.fx-old-arms-triage.patch"
     # ---- end lane fx-old-arms-triage
+    # ---- lane fx-verdicts5 (2026-11-20): verdicts of A/B round 3 (NVIDIA L40S, wheel 28a780604c, job nvc-ab-20261120T063324Z-c630ad)
+    # MOJOLEARN_MSEL_FAST_LC_TEST_REUSE (bindings/msel_cv_door.mojo): promoted to the default; the old opt-in name is refused.
+    comptime assert not is_defined["MOJOLEARN_MSEL_FAST_LC_TEST_REUSE"](), "promoted 2026-11-20 (lane/fx-verdicts5, A/B round 3 NVIDIA L40S, wheel 28a780604c, job nvc-ab-20261120T063324Z-c630ad, one run per arm, learning-curve istella 0.853, taxi 0.956, scores and digests equal): it is the default; drop the define, or build the old form with -D MOJOLEARN_MSEL_FAST_LC_TEST_REUSE_OFF"
+    # TOMBSTONE: MOJOLEARN_XPREP_FAST_ARENA_HUGEPAGE (NOISE, A/B round 3 NVIDIA L40S, wheel 28a780604c, job nvc-ab-20261120T063324Z-c630ad, one run per arm: 20 x_prep cells 0.952-1.092, geomean 1.012, digests equal) deleted 2026-11-20 by lane/fx-verdicts5; code recoverable at e25e35dab8.
+    # Restore: git apply experiments/removed/MOJOLEARN_XPREP_FAST_ARENA_HUGEPAGE.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_XPREP_FAST_ARENA_HUGEPAGE"](), "removed 2026-11-20 (lane/fx-verdicts5, A/B round 3 NVIDIA L40S, wheel 28a780604c, job nvc-ab-20261120T063324Z-c630ad, one run per arm; NOISE: 20 x_prep cells 0.952-1.092, geomean 1.012, digests equal): the huge-page advice on a mapped x_prep arena; see docs/TOMBSTONES.md"
+    # ---- end lane fx-verdicts5
     return True
 
 

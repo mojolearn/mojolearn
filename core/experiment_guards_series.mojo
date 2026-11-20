@@ -158,6 +158,11 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_ARIMA_ORDER_SEASONAL_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_ARIMA_ORDER_SEASONAL_OFF"](), "removed 2026-11-15 (lane/expdel2-47-promote): IDN_ARIMA_ORDER_SEASONAL_OFF (old path, Time series (AutoARIMA seasonal grouped search, IDENTICAL); no A/B recorded) is gone; the default is kept; restore: experiments/removed/MOJOLEARN_IDN_ARIMA_ORDER_SEASONAL_OFF.patch"
     # ---- end lane expdel2-47-promote
+    # ---- lane fx-verdicts5 (2026-11-20): verdicts of A/B round 3 (NVIDIA L40S, wheel 28a780604c, job nvc-ab-20261120T063324Z-c630ad)
+    # TOMBSTONE: MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_EARLY (LOSS, A/B round 3 NVIDIA L40S, wheel 28a780604c, job nvc-ab-20261120T063324Z-c630ad, one run per arm: permutation-test istella 1.075, taxi 1.101, digests equal) deleted 2026-11-20 by lane/fx-verdicts5; code recoverable at e25e35dab8.
+    # Restore: git apply experiments/removed/MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_EARLY.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_EARLY"](), "removed 2026-11-20 (lane/fx-verdicts5, A/B round 3 NVIDIA L40S, wheel 28a780604c, job nvc-ab-20261120T063324Z-c630ad, one run per arm; LOSS: permutation-test istella 1.075, taxi 1.101, digests equal): the early stop of perm_select_stat_kernel's key passes; see docs/TOMBSTONES.md"
+    # ---- end lane fx-verdicts5
     return True
 
 
