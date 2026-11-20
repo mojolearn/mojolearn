@@ -8803,20 +8803,20 @@
    }
   },
   "guards": {
-   "asserts": 1612,
+   "asserts": 1628,
    "modules": {
-    "core/experiment_guards_base.mojo": "9722afea916f3d12985e312e449de5e56aa431093f647e2bfae3761eea6e3253",
+    "core/experiment_guards_base.mojo": "c854ca169fc7846e3ea0af063cd8981fc5bf130e8c63a174145307e04ca178e1",
     "core/experiment_guards_cluster.mojo": "df366411312d3926145a7965451081462a2e66ba42ceac17d2e2d211f3fe2295",
     "core/experiment_guards_decomposition.mojo": "748f20ec4b109c10e768fdf9ef45cf572a5d4822e8c430d35e6a0fe0c56b27a8",
     "core/experiment_guards_kernel.mojo": "55a65b34b89882107e19d458c21a301f6252355efc3795d5cf72c7dacd75a32c",
     "core/experiment_guards_linear.mojo": "0089b485bc0d26b1e88897ea7977db843dc49331e0f1db66ff269ab884847a71",
-    "core/experiment_guards_neural.mojo": "385abe77b33828c0285c6264143276a9ee7204203b3be1699c4c61d61b294dad",
-    "core/experiment_guards_series.mojo": "8c8e69f4819586579532fb84e68131857767cfd1a668369aeda9579ae8d93fb8",
+    "core/experiment_guards_neural.mojo": "0de4d5ae4daf4a1de2fb727612f2b1e858c448a67b49fbe8081e3df31bfefdb6",
+    "core/experiment_guards_series.mojo": "bd3d0e9299e3bd1157b4d04dfab58081fdd98e3a8a278428eaac79847bb574c5",
     "core/experiment_guards_trees.mojo": "f4b078c84d939ec3db80a3b41cffbe6646c493c6127bd30181cda6d5ed3a1d6e",
-    "core/six_lane_experiment_guards.mojo": "91b449cbf503bdb529fc60d63286a11fbceaf4117a2a42fd94bde26b63fa8cdf"
+    "core/six_lane_experiment_guards.mojo": "67e9393bbc17a831f17fbd86f572a0ed3bd020b7648fb1c1d16fb83c8fbdcd91"
    },
    "path": "core/six_lane_experiment_guards.mojo",
-   "sha256": "91b449cbf503bdb529fc60d63286a11fbceaf4117a2a42fd94bde26b63fa8cdf"
+   "sha256": "67e9393bbc17a831f17fbd86f572a0ed3bd020b7648fb1c1d16fb83c8fbdcd91"
   },
   "stale_not_used": [
    "experiments/six_lane_integration/catalog.json (define lists)",
@@ -8995,7 +8995,7 @@
   "deferred_cross_configs": 65,
   "deferred_cross_groups": 4,
   "excluded_controls": 19,
-  "guard_asserts": 1612,
+  "guard_asserts": 1628,
   "mapped_algorithms": 25,
   "packed_multi_member": 7,
   "packs": 101,
