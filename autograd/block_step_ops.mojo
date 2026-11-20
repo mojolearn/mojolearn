@@ -226,7 +226,7 @@ comptime _M12_HELD_ARENA = _M12_HOLD and not IDN_MAMBA12_FORWARD_DOOR_OLD
 #: Lane fx-mamba-decode-arena (2026-11-18, ideas-neural-speed ideas 2 and 7):
 #: what this switch decides is whether a Mamba-2 / Mamba-3 decode token (an
 #: L = 1 run) allocates, zero-fills and frees its stage buffers. The old form
-#: (`-D MOJOLEARN_MAMBA_FAST_DECODE_STAGE_ARENA_OFF`): 28 (Mamba-2) / 33
+#: (now only a guard-band or poison build): 28 (Mamba-2) / 33
 #: (Mamba-3) `mamba_zeros` per token, parked and freed at the caller's wait.
 #: THE DEFAULT since 2026-11-19 (the experiment
 #: `MOJOLEARN_MAMBA_FAST_DECODE_STAGE_ARENA`, promoted; numbers beside the
@@ -255,8 +255,8 @@ comptime _M12_HELD_ARENA = _M12_HOLD and not IDN_MAMBA12_FORWARD_DOOR_OLD
 #: form), Mamba-3 only. Here: one allocation, exact-length views, one fill,
 #: Mamba-2 and Mamba-3, and the held L > 1 sets.
 # MOJOLEARN_MAMBA_FAST_DECODE_STAGE_ARENA: PROMOTED 2026-11-19 (lane fx-verdicts3). The arena is the default on
-# every column that runs these device stages; `-D MOJOLEARN_MAMBA_FAST_DECODE_STAGE_ARENA_OFF` restores the per-token
-# stage buffers and rezero's 33 fills (the old opt-in name is refused, core/experiment_guards_neural.mojo; the constant
+# every column that runs these device stages (confirmed and its _OFF switch deleted 2026-11-20, round 3 below;
+# the old opt-in name and _OFF are refused, core/experiment_guards_neural.mojo; the constant
 # keeps its experiment name). Evidence: A/B round 1, NVIDIA L40S (host bd9c355c19c0, 14-core cgroup), wheel 0c68d6cd27
 # and its B set, base and arm back to back in ONE pod job (nvc1-0006, tag nvc-ab-20261119T125554Z-6f7afc), one scored
 # run per arm; digests and quality equal on all 6 cells. Base -> arm ms: mamba3-decode 1066.9 -> 849.3 (0.80),
@@ -270,9 +270,18 @@ comptime _M12_HELD_ARENA = _M12_HOLD and not IDN_MAMBA12_FORWARD_DOOR_OLD
 # General mechanism: the arena extent comes from the state contract's largest carried buf_len, never from a shape.
 # Limits: NVIDIA only (AGENTS.md part 8), one run per arm. OWED (does not hold the flip): the neighbouring shape
 # (d_model 256, B 4) and a non-board model (a 6-layer Samba at L 300) against the _OFF arm, with mamba1-decode again.
+# A/B round 3, 2026-11-20 (lane fx-verdicts5; NVIDIA L40S host 2ef132a6de04, wheel 28a780604c and its _OFF set, base
+# and arm back to back in one pod job, tag nvc-ab-20261120T063324Z-c630ad; digests and quality equal on all 6 cells).
+# Arena (default) -> per-token stages ms: mamba3-decode 855.7 -> 1,063.3 (1.243), mamba2-decode 1,062.2 -> 1,245.6
+# (1.173), samba-decode 1,312.8 -> 1,431.8 (1.091; its other base in the job 1,302.9); the control mamba1-decode
+# 348.5 -> 351.0 (1.007: no drift in this pair); mamba3-forward 2.324 -> 2.325 and samba-forward 4.570 -> 4.575
+# (1.001, medians of 20; samba-forward's three bases 4.561 to 4.570). CONFIRMED a second time with a still control:
+# the arena stands and its switch is deleted. Not timed: the d_model 256 and 6-layer Samba cases named above.
+# The per-token stages themselves stay for a guard-band or poison build (below).
+# TOMBSTONE: MOJOLEARN_MAMBA_FAST_DECODE_STAGE_ARENA_OFF (old path's switch; the promotion confirmed by A/B rounds 1 and 3, numbers above) deleted 2026-11-20 by lane/fx-verdicts5; code recoverable at e25e35dab8.
+# Restore: git apply experiments/removed/MOJOLEARN_MAMBA_FAST_DECODE_STAGE_ARENA_OFF.patch; record in docs/TOMBSTONES.md.
 comptime MAMBA_FAST_DECODE_STAGE_ARENA = (
-    not is_defined["MOJOLEARN_MAMBA_FAST_DECODE_STAGE_ARENA_OFF"]()
-    and MAMBA_GUARD == 0
+    MAMBA_GUARD == 0
     and not is_defined["MOJOLEARN_MAMBA_POISON"]()
 )
 
