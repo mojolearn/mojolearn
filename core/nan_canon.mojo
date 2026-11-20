@@ -60,9 +60,12 @@ comptime NAN_CANON_BITS: UInt32 = 0x7FC00000
 # its B set, base and arm back to back in one pod job, tag nvc-ab-20261120T063324Z-c630ad; one scored run per arm;
 # digests and quality equal on both cells, which hold no NaN). Base -> arm ms: neural/gemm 73.55 -> 67.42 (0.917;
 # the row's other base in the job is 61.74, so the row's own spread is 19 %: no cost readable), transformer-decode
-# 1,086.0 -> 1,095.6 (1.009; the row's three other bases 1,086.0 to 1,086.8, another arm that does not touch it
-# 1,089.4: at most 0.9 %, at the edge of the row's noise). Cost is noise: DEFAULT. BITS CHANGE on every column
-# together, only in results that hold a NaN: NVIDIA 0x7fffffff, AMD and x86 host 0xffc00000 -> 0x7fc00000.
+# 1,086.0 -> 1,095.6 (1.009; the row's three bases in the job are 1,086.0 to 1,086.8 and an arm that does not touch
+# it reads 1,089.4, so +0.9 % is above the row's base spread: a cost of at most 9.6 ms a call, one reading). DEFAULT
+# as the identity fix it is: no cost on the GEMM row, under 1 % on the decode row. OWED: name the door the decode row
+# passes (lane fx-nan-canon read the decode rows as returning tokens through no canon door) and drop the pass there
+# if its buffer cannot hold a computed NaN. BITS CHANGE on every column together, only in results that hold a NaN:
+# NVIDIA 0x7fffffff, AMD and x86 host 0xffc00000 -> 0x7fc00000.
 # -D MOJOLEARN_IDENTITY_FAST_NAN_CANON_OFF returns the vendor's word (kept until the release's one verification
 # has recorded the columns; then an owed deletion).
 # OWED, doors that still return the vendor's NaN word (lane fx-nan-canon's list, each needs its buffer confirmed to
