@@ -449,7 +449,10 @@ class ArmOnGithubPackedBase(unittest.TestCase):
         saved = R.LINUX_SETS
         try:
             R.LINUX_SETS = (("cuda", "sm_89"), ("cuda", "sm_80"))
-            legs, why = R.launch_legs([row("sm_80", "device"), row("sm_89", "host"), row("sm_80", "host")], "REUSE")
+            legs, _ = R.launch_legs([row("sm_80", "device"), row("sm_89", "host"), row("sm_80", "host")], "REUSE")
+            self.assertEqual(legs, ["cuda-sm_80"], "no base: the PTX leg builds the host bindings (unchanged)")
+            legs, why = R.launch_legs([row("sm_80", "device"), row("sm_89", "host"), row("sm_80", "host")], "REUSE",
+                                      arm=True)
             self.assertEqual(legs, ["cuda-sm_89", "cuda-sm_80"])
             self.assertIn("host owner", why["cuda-sm_89"])
             legs, _ = R.launch_legs([row("sm_80", "device"), row("sm_89", "device", "REUSE")], "REUSE")

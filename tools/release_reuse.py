@@ -1370,10 +1370,13 @@ def apply_defines(rows, current, facts, readers, names, timed=None):
     return moved
 
 
-def launch_legs(rows, rt_decision):
+def launch_legs(rows, rt_decision, arm=False):
     """(legs, why) of a plan: the "<vendor>-<arch>" legs to launch, in LINUX_SETS order, and each one's reason.
     A set's leg runs when one of its device rows BUILDs; host rows or a runtime BUILD with no such leg run the host
-    owner's leg (HOST_LEG, the cheapest); host rows BUILD beside other sets' legs also run the host owner's leg."""
+    owner's leg (HOST_LEG, the cheapest). In a B ARM (a plan with a base, ARM) host rows BUILD beside other sets'
+    legs also run the host owner's leg: the arm assembles every set from its base and its own legs, and a set's
+    merged host file serving a BUILD row must be its own leg's. Without a base the PTX leg builds the host bindings
+    and the host composition carries them to every set (unchanged)."""
     legs, why = [], {}
     for vendor, arch in LINUX_SETS:
         need = [r for r in rows if r["target"] == LINUX and not r["tier"] == "host"
@@ -1387,7 +1390,7 @@ def launch_legs(rows, rt_decision):
         legs.append(name)
         why[name] = ("%d host binding(s)" % len(host_build) if host_build else "the runtime closure") + \
             " need a build box and no set does: the cheapest leg builds them"
-    elif host_build and HOST_LEG in LINUX_SETS and "%s-%s" % HOST_LEG not in legs:
+    elif arm and host_build and HOST_LEG in LINUX_SETS and "%s-%s" % HOST_LEG not in legs:
         # Host rows BUILD and only other sets' legs run (a B arm timed on some sets whose PTX set was refused: its
         # sm_80 leg runs, the timed sm_89 set reads the define in host bindings only). The host owner's set is
         # assembled from its own leg (place_merged: a merged host file serving a binding to BUILD must be the
@@ -1605,7 +1608,7 @@ def make_plan(commit, cache_dir, root=ROOT, host_toolchain=None, prev=None, buil
         _refuse_ptx(rows, "the published set is taken with the host owner's host bindings and no %s-%s leg runs "
                     "at this freeze" % HOST_LEG)
         ptx_proof = None
-    legs, why = launch_legs(rows, rt_decision)
+    legs, why = launch_legs(rows, rt_decision, arm=bool(base))
     plan = dict(schema=PLAN_SCHEMA, commit=commit, made=dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
                 previous=prev, previous_identities_from=prev_source, considered=considered, rows=rows, runtime=runtime,
                 legs=legs, leg_reasons=why, ptx_proof=ptx_proof, host_toolchain=host_toolchain,
@@ -1912,7 +1915,11 @@ def payload_runtime_mismatches(whl):
     closure from its base wheel against exactly these records (extract_member), so a base that disagrees with
     itself is refused at the base's pack instead of at every arm's assemble. A member the wheel does not carry is
     skipped (a split plugin's payload lists the shared closure that ships in the core wheel)."""
-    payload = linux_payload(whl)
+    with zipfile.ZipFile(whl) as z:
+        names = [n for n in z.namelist() if n.endswith(".dist-info/LINUX_PAYLOAD.json")]
+        if len(names) != 1:
+            return []           # no payload, nothing a B arm could reuse against (linux_payload refuses it there)
+        payload = json.loads(z.read(names[0]))
     out = []
     with zipfile.ZipFile(whl) as z:
         members = set(z.namelist())
