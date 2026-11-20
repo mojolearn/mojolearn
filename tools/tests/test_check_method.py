@@ -11,6 +11,7 @@ statements, on a sample of families and on the family with its own base), the me
 """
 import ast
 import importlib.util
+import re
 import sys
 from pathlib import Path
 
@@ -228,5 +229,7 @@ def test_the_docstring_is_user_documentation():
         assert section in doc, section
     assert "In `identical` mode, Mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs" in doc
     assert ".check(X)" in doc and "MATCH" in doc and "MISMATCH" in doc
-    assert "_verify" not in doc and "_check_both" not in doc and "_mode" not in doc
+    # private module names only: a bare substring test also matched the public `mojolearn.host_model` ("host_model")
+    for private in ("_verify", "_check_both", "_mode"):
+        assert not re.search(r"(?<![A-Za-z0-9])" + private, doc), private
     assert "fast" not in doc, "the public docs speak of identical only"
