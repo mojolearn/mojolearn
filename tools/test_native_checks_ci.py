@@ -173,16 +173,29 @@ def test_workflow_shape():
     assert set(wf["jobs"]) == {"plan", "host-parse", "device-parse", "device-parse-triage", "device-parse-retry",
                                "device-parse-verdict", "build", "check", "summary"}
     assert inputs["suite"]["default"] == "all"
-    plan = "\n".join(s.get("run", "") for s in wf["jobs"]["plan"]["steps"])
+    # every job body is a step of tools/ops/native_checks_steps.sh (lane fx-cpu-box-checks, 2026-11-19), checked out from
+    # the workflow's own commit at .wf/ so the workflow on main runs on any older ref; the CPU box runs the same steps
+    steps_sh = (ROOT / "tools/ops/native_checks_steps.sh").read_text()
+    body = lambda name: steps_sh[steps_sh.index(f"step_{name}() {{"):].split("\n}\n", 1)[0]
+
+    def runs(job, step):
+        st = [s for s in wf["jobs"][job]["steps"] if s.get("run", "").strip() == f"bash .wf/tools/ops/native_checks_steps.sh {step}"]
+        assert len(st) == 1, (job, step)
+        wf_co = [s for s in wf["jobs"][job]["steps"] if s.get("with", {}).get("path") == ".wf"]
+        assert wf_co and wf_co[0]["with"]["ref"] == "${{ github.workflow_sha }}", job
+        return st[0]
+    runs("plan", "plan")
+    plan = body("plan")
     assert "merged_bindings.py plan --dir host --platform linux --byte-lm 0 --layout release" in plan
-    # one parse script for every parse job (lane fx-trees-device-parse, 2026-11-19), in the workflow's env
-    script = wf["env"]["PARSE_GROUP_SH"]
+    # one parse script for every parse job (lane fx-trees-device-parse, 2026-11-19)
+    assert "PARSE_GROUP_SH" not in wf.get("env", {})
+    script = body("parse_group")
     assert "--emit llvm --no-optimization" in script and "MOJOLEARN_COLUMN_CPU" in script  # parse only, no codegen
     assert "merged_bindings.py root" in script and wf["jobs"]["host-parse"]["strategy"]["fail-fast"] is False
     assert 'timeout -k 60 "$limit"' in script and '-j "$(nproc)"' in script  # a limit, never a lowered -j
-    assert "memory.peak" in script and "result-$KEY.txt" in script
+    assert "memory.peak" in script and 'result-$KEY.txt' in script
     for job in ("host-parse", "device-parse", "device-parse-retry"):
-        step = next(st for st in wf["jobs"][job]["steps"] if "PARSE_GROUP_SH" in st.get("run", ""))
+        step = runs(job, "parse-group")
         assert step["timeout-minutes"] <= 30 and step["env"]["KIND"] == ("host" if job == "host-parse" else "device")
         upload = wf["jobs"][job]["steps"][-1]
         assert upload["if"] == "always()" and "out/*.txt" in upload["with"]["path"]
@@ -196,9 +209,10 @@ def test_workflow_shape():
     assert wf["jobs"]["device-parse"]["name"].startswith("device-parse")  # tools/prebuild_check.py reads job names
     assert wf["jobs"]["device-parse-retry"]["name"].startswith("device-parse retry ")
     assert not wf["jobs"]["device-parse-verdict"]["name"].startswith(("host-parse", "device-parse"))
-    build = "\n".join(s.get("run", "") for s in wf["jobs"]["build"]["steps"])
+    runs("build", "build"), runs("check", "shard"), runs("summary", "summary"), runs("device-parse-verdict", "verdict")
+    build = body("build")
     assert "mojo build" in build and "run_$IN_COLUMN.mojo" in build and "MOJOLEARN_COLUMN_CPU=1" in build
-    run = "\n".join(s.get("run", "") for s in wf["jobs"]["check"]["steps"])
+    run = body("shard")
     assert "set +e" in run and 'pixi run "$bin" "$name"' in run and "native_checks_report.py result" in run
     assert "mojo build" not in run and "mojo run" not in run  # the shards never compile
     assert wf["jobs"]["check"]["needs"] == ["plan", "build"]

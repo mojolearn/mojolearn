@@ -17,6 +17,16 @@
 #   tools/dev_pod.sh extend <lane> [--vendor amd] [minutes]   the heartbeat: on-box lease AND Mac dead-man
 #   tools/dev_pod.sh down   <lane> [--vendor amd]             delete, verify gone, disarm the Mac dead-man
 #   tools/dev_pod.sh list                                     every box, from the state files
+#   tools/dev_pod.sh seed   <key> <commit> <box dir> [--checkout]
+#                                              that commit into the git repo at <box dir> on the box (fetched from
+#                                              GitHub, shipped from this checkout when GitHub refuses the box);
+#                                              --checkout also moves the working tree to it (tools/cpu_central.sh)
+#
+# THE CPU CHECK BOX (`up <key> --vendor cpu`, lane fx-cpu-box-checks, 2026-11-19): a RunPod CPU pod (no GPU) that
+# only tools/cpu_central.sh rents (key cpc1), with the CPU flavors and vCPU count it picks
+# (MOJOLEARN_DEVPOD_CPU_FLAVORS, MOJOLEARN_DEVPOD_CPU_VCPU) on runpod/base (MOJOLEARN_DEVPOD_CPU_IMAGE); created
+# through the v1 CPU schema as tools/runpod_cpu_leg.sh does, its status read through v2. Its lease is the queue's
+# (tools/cpu_central.sh), as for the shared NVIDIA pods.
 #
 # THE SHARED AMD HOST (`host up`, a Hot Aisle bare-metal 8x MI300X with GPU
 # slots per lane) and the Hot Aisle VM fallback were removed 2026-11-18 by
@@ -118,14 +128,14 @@ CURLRC="$TMPD/curlrc"
 cmd="${1:-}"; lane="${2:-}"; lane_arg=""; VENDOR=nvidia
 case "$cmd" in
 list) ;;
-up|sync|run|extend|down)
+up|sync|run|extend|down|seed)
     shift $(( $# < 2 ? $# : 2 ))
     case "$lane" in *-amd) VENDOR=amd ;; esac
     lane_arg=${lane%-amd}
     [[ "$lane_arg" =~ ^[a-z0-9-]{1,24}$ ]] || die "lane must be [a-z0-9-]{1,24}"
     if [ "$cmd" != up ] && [ "${1:-}" = --vendor ]; then VENDOR="${2:?--vendor nvidia|amd}"; shift 2; fi
     ;;
-*) sed -n 2,16p "$0"; exit 2 ;;
+*) sed -n 2,24p "$0"; exit 2 ;;
 esac
 if [ "$cmd" = up ]; then
     minutes=240; BASE_REF=""
@@ -138,7 +148,11 @@ if [ "$cmd" = up ]; then
         esac
     done
 fi
-case "$VENDOR" in nvidia|amd) ;; *) die "--vendor must be nvidia or amd" ;; esac
+case "$VENDOR" in nvidia|amd|cpu) ;; *) die "--vendor must be nvidia, amd or cpu" ;; esac
+# the CPU check box (tools/cpu_central.sh picks the flavors and vCPUs; runpod_gpu_request.py cpu validates them)
+CPU_IMAGE="${MOJOLEARN_DEVPOD_CPU_IMAGE:-runpod/base:1.3.1-ubuntu2204}"
+CPU_FLAVORS="${MOJOLEARN_DEVPOD_CPU_FLAVORS:-cpu5c,cpu3c}"
+CPU_VCPU="${MOJOLEARN_DEVPOD_CPU_VCPU:-32}"
 KEY="$lane_arg"; [ "$VENDOR" = amd ] && KEY="$lane_arg-amd"
 D="$STATE_ROOT/$KEY"
 BOX_ENV=""
@@ -155,6 +169,13 @@ fi
 # THE SHARED NVIDIA PODS (tools/nvidia_central.sh, 2026-09-28): keys nvc1..nvc3.
 # Their lease is the pod's job queue, so `extend` refuses, and `down`, `run` and
 # `sync` refuse unless tools/nvidia_central.sh is the caller.
+case "$KEY" in cpc[0-9])
+    case "$cmd" in
+    extend) die "$KEY is the shared CPU check box: its job queue keeps its lease (tools/cpu_central.sh); nothing extended" ;;
+    down) [ "${MOJOLEARN_NVC_DOWN:-0}" = 1 ] || die "$KEY is the shared CPU check box; tools/cpu_central.sh down" ;;
+    run|sync) die "$KEY is the shared CPU check box: use tools/cpu_central.sh check/sh" ;;
+    esac ;;
+esac
 case "$KEY" in nvc[0-9])
     case "$cmd" in
     extend) die "$KEY is a shared NVIDIA pod: its job queue keeps its lease (tools/nvidia_central.sh); nothing extended" ;;
@@ -251,9 +272,9 @@ echo HEAD=\$(git rev-parse HEAD)" < /dev/null 2>&1) || { printf '%s\n' "$_out" >
 # One RunPod create loop: out of stock is retried until $1 minutes pass, any
 # other refusal dies. 0 with POD_ID set, 1 when stock never came (nothing
 # was created, the per-attempt dead-man disarmed).
-runpod_create() {  # <retry minutes> <gpus> <image> <amd 0|1>
+runpod_create() {  # <retry minutes> <gpus | cpu flavors> <image> <kind: 0 nvidia, 1 amd, cpu>
     POD_NAME="mojolearn-dev-$KEY-$(date -u +%m%d%H%M)"
-    if [ "$4" = 1 ]; then rp_select_api 1; else rp_select_api 2; fi
+    if [ "$4" != 0 ]; then rp_select_api 1; else rp_select_api 2; fi
     # Keep complete request/response evidence outside D: a confirmed failed
     # create may remove D, but must never erase the provider's diagnosis.
     _request_evidence="$STATE_ROOT/$KEY.requests-$(date -u +%Y%m%dT%H%M%SZ)-$$"
@@ -261,7 +282,10 @@ runpod_create() {  # <retry minutes> <gpus> <image> <amd 0|1>
     rp_call GET "$RP/pods"; case "$RP_CODE" in 2*) ;; *) die "pod listing HTTP $RP_CODE" ;; esac
     cp "$TMPD/rp.body" "$_request_evidence/list-before.json" || die "cannot retain pre-create listing"
     [ "$(rp_py listingvalid)" = yes ] || die "pod listing incomplete or invalid; no create attempted"
-    if [ "$4" = 1 ]; then
+    if [ "$4" = cpu ]; then
+        python3 "$ROOT/tools/runpod_gpu_request.py" cpu "$TMPD/create.json" "$POD_NAME" "$3" "$2" "$CPU_VCPU" "$DISK_GB" \
+            || die "CPU request validation failed; no create attempted"
+    elif [ "$4" = 1 ]; then
         python3 "$ROOT/tools/runpod_gpu_request.py" "$TMPD/create.json" "$POD_NAME" "$3" "$2" "$DISK_GB" 1 \
             "$ROOT/tools/runpod_ssh_bootstrap.sh" 1 "" || die "AMD placement validation failed; no create attempted"
     else
@@ -279,7 +303,7 @@ runpod_create() {  # <retry minutes> <gpus> <image> <amd 0|1>
     while :; do
         attempt=$(( attempt + 1 ))
         POD_ID=""
-        if [ "$4" != 1 ]; then
+        if [ "$4" = 0 ]; then
             python3 "$ROOT/tools/runpod_gpu_request.py" v2 "$TMPD/create.json" "$POD_NAME" "$3" "$2" "$DISK_GB" "$NV_GPU_COUNT" "$((attempt - 1))" \
                 || die "CUDA/placement validation failed; no create attempted"
         fi
@@ -289,7 +313,7 @@ runpod_create() {  # <retry minutes> <gpus> <image> <amd 0|1>
         # API and refuses at or above MOJOLEARN_RUNPOD_CAP (12; the Mambik pods count); NVIDIA pods also stay under our own
         # MAX_RUNPOD_PODS (mojolearn-*). Checked here, before every attempt, so no caller (tools/nvidia_central.sh
         # up, the AMD RunPod path, a retry an hour later) creates past it. Nothing was created or armed yet.
-        _own_cap="--own-cap=$MAX_RUNPOD_PODS"; [ "$4" != 1 ] || _own_cap=""
+        _own_cap="--own-cap=$MAX_RUNPOD_PODS"; [ "$4" = 0 ] || _own_cap=""
         bash "$ROOT/tools/rent_guard.sh" $_own_cap || die "tools/rent_guard.sh refused the create (above); nothing was created"
         arm_mac_deadman $(( READY_TIMEOUT + minutes * 60 + 600 ))
         say "creating $POD_NAME on RunPod API v$RP_API_VERSION (requested types: $2), attempt $attempt. THE BILL STARTS HERE."
@@ -309,7 +333,7 @@ runpod_create() {  # <retry minutes> <gpus> <image> <amd 0|1>
             echo "$POD_ID" > "$D/deadman/pod_id.txt"; delete_pod "$POD_ID"
             die "create response unparsed but $POD_ID exists by name; deleted, dead-man stays armed"
         fi
-        if [ "$RP_API_VERSION" = 2 ]; then
+        if [ "$RP_API_VERSION" = 2 ] || [ "$4" = cpu ]; then
             # A timeout, 5xx, or malformed successful response is not proof
             # that no pod will appear. Never create a second pod on uncertainty.
             case "$_create_code" in 4??) ;; *) die "create HTTP $_create_code unresolved; dead-man stays armed; evidence $_request_evidence" ;; esac
@@ -332,7 +356,17 @@ runpod_create() {  # <retry minutes> <gpus> <image> <amd 0|1>
     printf '%s attempt %s: created %s\n' "$(date -u +%FT%TZ)" "$attempt" "$POD_ID" >> "$attempts_log"
     echo "$POD_ID" > "$D/deadman/pod_id.txt"
     COST_HR=$(rp_py cost)
+    if [ "$4" = cpu ]; then
+        # the v1 status endpoint answered 403 for a live CPU pod (tools/runpod_cpu_leg.sh, 2026-10-29): readiness, the
+        # guard and every later call go through v2, which also supplies ssh.direct
+        rp_select_api 2
+    fi
     GPU=$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); m=d.get("machine") or {}; print(m.get("gpuTypeId") or (d.get("gpu") or {}).get("id") or "?")' "$D/create_response.json" 2>/dev/null || echo "?")
+    if [ "$4" = cpu ]; then
+        GPU=$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); m=d.get("machine") or {}
+f=d.get("cpuFlavorId") or m.get("cpuFlavorId") or m.get("cpuTypeId") or ",".join(d.get("cpuFlavorIds") or []) or "?"
+print("cpu %s %s vCPU %s GB" % (f, d.get("vcpuCount") or d.get("vcpu") or "?", d.get("memoryInGb") or "?"))' "$D/create_response.json" 2>/dev/null || echo "cpu ?")
+    fi
     _deadline=$(( $(now) + READY_TIMEOUT )); SSH_TARGET=""; _ready_attempt=0
     while [ "$(now)" -lt "$_deadline" ]; do
         _ready_attempt=$((_ready_attempt + 1))
@@ -351,8 +385,8 @@ runpod_create() {  # <retry minutes> <gpus> <image> <amd 0|1>
         SSH_TARGET=""; sleep 10
     done
     [ -n "$SSH_TARGET" ] || { delete_pod "$POD_ID"; die "no ssh after ${READY_TIMEOUT}s; deleted"; }
-    if [ "$4" = 1 ]; then
-        # the watchdog below needs curl; the ROCm image may lack it
+    if [ "$4" != 0 ]; then
+        # the watchdog below needs curl; the ROCm image (and a plain CPU image) may lack it
         bx 600 'command -v curl > /dev/null || { export DEBIAN_FRONTEND=noninteractive; apt-get update -qq > /dev/null && apt-get install -y -qq curl ca-certificates > /dev/null; }; command -v curl' \
             < /dev/null > "$D/curl.log" 2>&1 || { cat "$D/curl.log"; delete_pod "$POD_ID"; die "no curl on the AMD pod for its lease; deleted"; }
     fi
@@ -375,7 +409,9 @@ case "$cmd" in
 up)
     [ ! -f "$D/state.env" ] || die "$KEY already has a box ($D/state.env); down it first"
     [ ! -s "$D/deadman.pid" ] || die "$KEY has an unresolved rental/dead-man; recover its retained evidence before another create"
-    if [ "$VENDOR" != amd ]; then
+    if [ "$VENDOR" = cpu ]; then
+        [ "${MOJOLEARN_DEVPOD_VIA_CENTRAL:-0}" = 1 ] || die "only tools/cpu_central.sh rents the CPU check box (orchestrator only)"
+    elif [ "$VENDOR" != amd ]; then
         # 2026-09-28: one or two shared RunPod pods, never one per lane. A lane
         # never rents its own NVIDIA pod; every lane submits to the shared pods.
         [ "${MOJOLEARN_DEVPOD_VIA_CENTRAL:-0}" = 1 ] || [ "${MOJOLEARN_DEVPOD_OWN_NVIDIA:-0}" = 1 ] \
@@ -390,6 +426,11 @@ up)
         load_key || die "no RunPod key (~/.mojolearn_runpod_key, mode 600)"
         PROVIDER=runpod
         runpod_create "${MOJOLEARN_DEVPOD_RETRY_MINUTES:-60}" "$NV_GPUS" "$NV_IMAGE" 0 \
+            || { rm -rf "$D"; die "nothing was created"; }
+    elif [ "$VENDOR" = cpu ]; then
+        load_key || { rm -rf "$D"; die "no RunPod key (~/.mojolearn_runpod_key, mode 600)"; }
+        PROVIDER=runpod
+        runpod_create "${MOJOLEARN_DEVPOD_RETRY_MINUTES:-15}" "$CPU_FLAVORS" "$CPU_IMAGE" cpu \
             || { rm -rf "$D"; die "nothing was created"; }
     else
         load_key || { rm -rf "$D"; die "no RunPod key (~/.mojolearn_runpod_key, mode 600)"; }
@@ -530,6 +571,21 @@ down)
     [ -z "$_p" ] || { pkill -P "$_p" 2>/dev/null || true; kill "$_p" 2>/dev/null || true; }
     mv "$D" "$D.down-$(date -u +%Y%m%dT%H%M%SZ)"
     say "$KEY box $POD_ID down"
+    ;;
+seed)
+    # seed <key> <commit> <box dir> [--checkout]: the commit into the repo at <box dir> (seed_git: GitHub first, else
+    # shipped from this checkout); --checkout also moves its working tree there. tools/cpu_central.sh check calls it.
+    load_state
+    _c="${1:?seed <key> <commit> <box dir> [--checkout]}"; BOX_DIR="${2:?seed <key> <commit> <box dir> [--checkout]}"
+    case "$BOX_DIR" in /root/*) ;; *) die "seed: the box dir must be under /root" ;; esac
+    _sha=$(git -C "$ROOT" rev-parse --verify "$_c^{commit}") || die "no commit $_c in this checkout"
+    seed_git "$_sha"
+    if [ "${3:-}" = --checkout ]; then
+        bx 900 "cd $BOX_DIR && git reset -q --hard $_sha && git rev-parse HEAD" < /dev/null | grep -qx "$_sha" \
+            || die "could not check out $_sha in $BOX_DIR"
+    fi
+    say "seeded $(git -C "$ROOT" rev-parse --short "$_sha") into $KEY:$BOX_DIR${3:+ (checked out)}"
+    echo "SEEDED $_sha"
     ;;
 list)
     for s in "$STATE_ROOT"/*/state.env; do

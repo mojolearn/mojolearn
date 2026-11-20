@@ -180,7 +180,7 @@ exit "$code"
 def test_slow_readiness_preserves_status_and_ssh_errors_without_restarting(tmp_path):
     source = Path(__file__).with_name('dev_pod.sh').read_text()
     start = source.index('    _deadline=$(( $(now) + READY_TIMEOUT )); SSH_TARGET=""; _ready_attempt=0')
-    end = source.index('    if [ "$4" = 1 ]; then', start)
+    end = source.index('    if [ "$4" != 0 ]; then', start)   # the curl install of the AMD and CPU kinds follows the loop
     body = source[start:end]
     (tmp_path / 'evidence').mkdir()
     env = dict(os.environ, TMPD=str(tmp_path), RP='https://invalid.test/v2', POD_ID='owned',

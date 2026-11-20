@@ -120,8 +120,99 @@ def build_v2_request(name, image, gpus, disk, count, attempt, *, env):
             "startSsh": True, "ports": ["22/tcp"], "gpu": gpu}
 
 
+# CPU pods (tools/cpu_central.sh through tools/dev_pod.sh up --vendor cpu, lane fx-cpu-box-checks, 2026-11-19). The
+# create body is the v1 REST CPU shape tools/runpod_cpu_leg.sh has rented with since 2026-09-15 (computeType CPU,
+# cpuFlavorIds, vcpuCount); its status is then read through v2 (the v1 status endpoint answered 403 for a live CPU pod
+# on 2026-10-29). Flavors: cpu<gen><class>, class c (2 GB a vCPU), g (4 GB), m (8 GB); gen 3 or 5. Only these RunPod
+# Linux CPU flavors are accepted, so no Apple machine can be named here (AGENTS.md hard rule).
+CPU_FLAVOR = re.compile(r"cpu[35][cgm]")
+NOT_LINUX_IMAGE = re.compile(r"(?i)apple|macos|darwin|osx")
+# RAM per vCPU of a class, when the catalog does not say (RunPod's compute / general / memory classes)
+CPU_CLASS_RAM = {"c": 2, "g": 4, "m": 8}
+CPU_FALLBACK = ["cpu5c", "cpu3c", "cpu5g", "cpu3g", "cpu5m", "cpu3m"]
+
+
+def build_cpu_request(name, image, flavors, vcpu, disk, *, env):
+    flavor_ids = [f.strip() for f in flavors.split(",") if f.strip()]
+    if not flavor_ids or any(not CPU_FLAVOR.fullmatch(f) for f in flavor_ids):
+        raise ValueError("CPU flavors must be cpu3c/cpu3g/cpu3m/cpu5c/cpu5g/cpu5m, comma separated (RunPod Linux CPU only)")
+    if NOT_LINUX_IMAGE.search(image):
+        raise ValueError("the CPU box is a RunPod Linux pod; no Apple image, ever (AGENTS.md hard rule)")
+    vcpu, disk = int(vcpu), int(disk)
+    if not 2 <= vcpu <= 512 or disk < 1:
+        raise ValueError("invalid vCPU count or disk size")
+    cloud = env.get("MOJOLEARN_DEVPOD_CLOUD_TYPE", "SECURE")
+    if cloud not in ("SECURE", "COMMUNITY"):
+        raise ValueError("MOJOLEARN_DEVPOD_CLOUD_TYPE must be SECURE or COMMUNITY")
+    # cpuFlavorPriority custom: RunPod tries the flavors in OUR order (the best for the price first)
+    return {"name": name, "imageName": image, "computeType": "CPU", "cpuFlavorIds": flavor_ids,
+            "cpuFlavorPriority": "custom", "vcpuCount": vcpu, "containerDiskInGb": disk, "volumeInGb": 0,
+            "ports": ["22/tcp"], "supportPublicIp": True, "cloudType": cloud}
+
+
+def pick_cpu_instance(catalog, min_vcpu=32, min_ram_per_vcpu=2):
+    """(flavor ids in order, vCPU count) from RunPod's CPU catalog: the most vCPUs for the price.
+
+    catalog: the GraphQL `cpuFlavors` rows ({id, maxVcpu, ramMultiplier[, pricePerVcpu]}) or None. Only flavors with
+    at least min_vcpu vCPUs and min_ram_per_vcpu GB a vCPU qualify. The vCPU count is the largest the best flavor
+    offers; ranked by price a vCPU when every row has one, else by vCPUs, then the cheaper RAM class, then the newer
+    generation. With no usable catalog: the fallback order at min_vcpu vCPUs.
+    """
+    rows = []
+    for row in catalog or []:
+        if not isinstance(row, dict) or not isinstance(row.get("id"), str) or not CPU_FLAVOR.fullmatch(row["id"]):
+            continue
+        try:
+            maxv = int(row.get("maxVcpu") or 0)
+            ram = float(row.get("ramMultiplier") or CPU_CLASS_RAM[row["id"][-1]])
+            price = row.get("pricePerVcpu")
+            price = float(price) if price not in (None, "") else None
+        except (TypeError, ValueError):
+            continue
+        if maxv >= min_vcpu and ram >= min_ram_per_vcpu:
+            rows.append((row["id"], maxv, ram, price))
+    if not rows:
+        order = [f for f in CPU_FALLBACK if CPU_CLASS_RAM[f[-1]] >= min_ram_per_vcpu]
+        if not order:
+            raise ValueError(f"no CPU flavor has {min_ram_per_vcpu} GB a vCPU")
+        return order, int(min_vcpu)
+    priced = all(r[3] is not None for r in rows)
+    if priced:
+        rows.sort(key=lambda r: (r[3], -r[1], r[2], -int(r[0][3])))
+    else:
+        rows.sort(key=lambda r: (-r[1], r[2], -int(r[0][3])))
+    vcpu = rows[0][1]
+    return [r[0] for r in rows if r[1] >= vcpu], vcpu
+
+
 def main(argv=None):
     args = sys.argv[1:] if argv is None else argv
+    if args and args[0] == "cpu":
+        if len(args) != 7:
+            raise SystemExit("usage: runpod_gpu_request.py cpu OUT NAME IMAGE FLAVORS VCPU DISK")
+        _, out, name, image, flavors, vcpu, disk = args
+        try:
+            req = build_cpu_request(name, image, flavors, vcpu, disk, env=os.environ)
+            Path(out).write_text(json.dumps(req, indent=2) + "\n")
+        except (OSError, ValueError, TypeError) as error:
+            raise SystemExit("RunPod request refused before create: " + str(error)) from None
+        return 0
+    if args and args[0] == "cpu-pick":
+        # cpu-pick CATALOG_JSON MIN_VCPU MIN_RAM_PER_VCPU -> "<flavor,flavor,...> <vcpu>"; a missing or unreadable
+        # catalog picks from the fallback order
+        if len(args) != 4:
+            raise SystemExit("usage: runpod_gpu_request.py cpu-pick CATALOG_JSON MIN_VCPU MIN_RAM_PER_VCPU")
+        try:
+            data = json.loads(Path(args[1]).read_text())
+            catalog = (data.get("data") or {}).get("cpuFlavors") if isinstance(data, dict) else data
+        except (OSError, ValueError, AttributeError):
+            catalog = None
+        try:
+            order, vcpu = pick_cpu_instance(catalog, int(args[2]), float(args[3]))
+        except ValueError as error:
+            raise SystemExit("RunPod request refused before create: " + str(error)) from None
+        print(",".join(order), vcpu)
+        return 0
     if args and args[0] == "v2":
         if len(args) != 8:
             raise SystemExit("usage: runpod_gpu_request.py v2 OUT NAME IMAGE GPUS DISK COUNT ATTEMPT")

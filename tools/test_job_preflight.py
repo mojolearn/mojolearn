@@ -64,7 +64,11 @@ class SubmitPreflight(unittest.TestCase):
 
     def test_submit_runs_it_before_anything_is_queued(self):
         text = CENTRAL.read_text()
-        sub = text[text.index("\nsubmit)\n"):text.index("\nqueue)\n")]
+        # the submit body is the function central_submit (lane fx-cpu-box-checks: tools/cpu_central.sh check runs the
+        # same code), dispatched by `submit)`
+        self.assertIn('\nsubmit) central_submit "$@" ;;\n', text)
+        start = text.index("\ncentral_submit() {")
+        sub = text[start:text.index("\n}\n", start)]
         self.assertIn('< "$ROOT/tools/ops/job_preflight.sh"', sub)
         self.assertLess(sub.index("job_preflight.sh"), sub.index("bp_prepare"))
         self.assertLess(sub.index("job_preflight.sh"), sub.index("$NVQ submit"))
