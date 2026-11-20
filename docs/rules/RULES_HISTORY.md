@@ -957,3 +957,14 @@ Ends when Andrew says. It narrows the NVIDIA-only direction above while it runs.
 - Order, without haste: this round is finished and timed in full; wide gaps fixed and timed again; then the boundary
   cleanup (typed tables, decided by its pilot A/B); then the shared test kit and the rule for new checks; then the
   other owed cleanups; and only then the release, when Andrew says. Nothing is skipped or shortened to reach it sooner.
+
+## Replaced 2026-11-20 (Andrew: only the measurements are kept; the tools stop archiving our own runs)
+
+Old text of AGENTS.md "Race fairness", verbatim:
+
+- New measurements keep source bytes before execution and full logs after (`tools/bench_board_evidence.py`). A
+  retention failure stops the next race; retry the upload without rerunning completed measurements.
+
+Why it changed: on 2026-11-20 the Mac held 110 GB under `~/mojolearn-evidence/measure-candidate` and
+`release-candidates`, of which about 400 MB per large job was results; the rest was `run.tar.gz` per race (34 GB),
+model, input and output arrays (14 GB) and old builds. Nearly every job since 2026-11-17 times our own arms only.

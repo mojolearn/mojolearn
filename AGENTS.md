@@ -328,8 +328,13 @@ every rebuild; the paper and mojolearn.org only read its marks.
   one opponent arm is broken, exclude that arm and show the race against the rest.
 - Keep measurements with sufficient evidence; exclude pairings with missing or bad evidence; do not rerun
   everything. Audits never rerun anything. No host is excluded for being slow.
-- New measurements keep source bytes before execution and full logs after (`tools/bench_board_evidence.py`). A
-  retention failure stops the next race; retry the upload without rerunning completed measurements.
+- **What a measurement keeps (Andrew, 2026-11-20).** A race that scores an opponent keeps source bytes before
+  execution and full logs after (`tools/bench_board_evidence.py`); a retention failure stops the next race; retry the
+  upload without rerunning completed measurements. A job with only our own arms keeps the measurement and nothing
+  bulky: each row's times, quality, settings and flags, the box probe, the busy-cores record, the commit and wheel
+  identity, and a short log per row. It writes no source archive (the commit is the record of the source), no fitted
+  model, input or output arrays after quality and hash are computed, and no binaries; a failed row keeps its full
+  log. The same holds on the Mac and in R2: results are kept, archives of what git or a rebuild already holds are not.
 - A new harness-written arm is recorded in the registry `HARNESS_ARMS`. Every race-code fix from an audit carries
   a `FAIRNESS FIX (<date> audit)` comment saying what was wrong before.
 
