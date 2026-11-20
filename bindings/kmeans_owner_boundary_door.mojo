@@ -11,6 +11,7 @@ from bindings.py_cpython_table import cpython_table
 from bindings.py_balanced import py_fields, py_contains, py_setitem, py_type
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.optimizer_public_words_unpack import stash_python_error
+from bindings.cluster_keys_unpack import cluster_keys
 
 comptime _KMeansDictDel = ExternalFunction[
     "PyDict_DelItem", def(PyObjectPtr, PyObjectPtr) thin abi("C") -> Int32]
@@ -136,7 +137,8 @@ def kmeans_owner_setstate(model: PythonObject, state: PythonObject) raises:
     if KMEANS_STATE_API.get_or_create_ptr()[].update(fields._obj_ptr, state._obj_ptr) != 0:
         var failure = stash_python_error()
         raise failure^
-    py_setitem(fields, "_resident_holder", PythonObject(None))
+    var nk = cluster_keys()
+    py_setitem(fields, nk[].k__resident_holder, PythonObject(None))
 
 
 def kmeans_resident_owner_pins(value: Int, index: Int) abi("C") -> Int:

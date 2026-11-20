@@ -36,6 +36,8 @@ from cluster.cluster_public_lifecycle_run import (
     _method, _method_text, CLUSTER_METHOD_PARTIAL_FIT, CLUSTER_METHOD_FIT_TRANSFORM)
 from bindings.native_operation_codes import FR_CFA, FR_XC, OP_LEAF_NONE
 from bindings.operation_names_xc import XC_OPN_FAMILY_XC_INITIALIZE
+from bindings.cluster_keys_unpack import cluster_keys
+from bindings.py_balanced import py_item
 
 
 def _scalar_state(value: PythonObject, context: PythonObject, depth: Int = 0) raises:
@@ -94,7 +96,8 @@ def _admit_model(model: PythonObject, context: PythonObject, mut direct: Bool) r
     var b = native_loaded_module("builtins")
     var module_fields = py_fields(native_loaded_module("mojolearn._native_public_attributes"))
     _string_keys(module_fields)
-    var attributes = py_get(module_fields, "_CONTEXT")
+    var nk = cluster_keys()
+    var attributes = py_get(module_fields, nk[].k__CONTEXT)
     if py_type(attributes) is not b.dict:
         raise Error("TypeError: native cluster attribute metadata requires its connected dictionary")
     _string_keys(attributes)
@@ -106,7 +109,7 @@ def _admit_model(model: PythonObject, context: PythonObject, mut direct: Bool) r
     var found_parameters = Optional[PythonObject]()
     for i in range(len(ancestry)):  # driver-loop: passive subclasses share their connected native owner
         if not found_parameters:
-            var candidate = py_get(context["cluster_public_parameters"], ancestry[i])
+            var candidate = py_get(py_item(context, nk[].k_cluster_public_parameters), ancestry[i])
             if candidate is not None:
                 found_parameters = candidate
     # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
@@ -118,13 +121,13 @@ def _admit_model(model: PythonObject, context: PythonObject, mut direct: Bool) r
     var setter_seen = False
     for i in range(len(ancestry)):  # driver-loop: admit native field writes before entering algorithm owners
         var names = _class_fields(ancestry[i])
-        if not setter_seen and py_contains(names, "__setattr__"):
-            if names["__setattr__"] is not b.object.__dict__["__setattr__"]:
+        if not setter_seen and py_contains(names, nk[].k___setattr__):
+            if py_item(names, nk[].k___setattr__) is not py_item(b.object.__dict__, nk[].k___setattr__):
                 raise Error("TypeError: native cluster execution cannot invoke Python field setters")
             setter_seen = True
-        if py_contains(names, "_mojolearn_after_fit"):
+        if py_contains(names, nk[].k__mojolearn_after_fit):
             raise Error("TypeError: native cluster execution cannot invoke Python fit callbacks")
-    if py_contains(fields, "_mojolearn_after_fit"):
+    if py_contains(fields, nk[].k__mojolearn_after_fit):
         raise Error("TypeError: native cluster execution cannot invoke Python fit callbacks")
     for i in range(len(parameters.value())):  # driver-loop: fixed model parameter metadata, never a Python property
         var name = parameters.value()[i]
@@ -137,7 +140,7 @@ def _admit_model(model: PythonObject, context: PythonObject, mut direct: Bool) r
         if String(name) == "metric_params" and value is not None:
             # OPTICS consumes only p from this native mapping. An admitted
             # object ndarray still must not invoke element conversion hooks.
-            var mappings = context["mapping_types"]
+            var mappings = py_item(context, nk[].k_mapping_types)
             var mapping = False
             for j in range(len(mappings)):  # driver-loop: exact native mapping owners, before method lookup
                 mapping = mapping or py_type(value) is mappings[j]
@@ -146,8 +149,8 @@ def _admit_model(model: PythonObject, context: PythonObject, mut direct: Bool) r
             var p = py_call(value.get, "p", PythonObject(None))
             if p is not None:
                 host_inference_scalar(p, context)
-        if (not py_contains(context["cluster_public_array_parameters"], name)
-                or (py_type(value) is py_get(context, "ndarray") and Int(py=value.ndim) == 0)):
+        if (not py_contains(py_item(context, nk[].k_cluster_public_array_parameters), name)
+                or (py_type(value) is py_get(context, nk[].k_ndarray) and Int(py=value.ndim) == 0)):
             # Exact ndarray admission alone would still permit an object-dtype
             # scalar to execute Python __float__/__int__ during old-owner casts.
             host_inference_scalar(value, context, True)
@@ -177,9 +180,10 @@ def _admit_replaced_state(model: PythonObject, fields: PythonObject, context: Py
     var ancestry = _type_mro(py_type(model))
     # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
     var found_names = Optional[PythonObject]()
+    var nk = cluster_keys()
     for i in range(len(ancestry)):  # driver-loop: use the connected owner's fit-state schema
         if not found_names:
-            var candidate = py_get(context["cluster_public_replaced_fields"], ancestry[i])
+            var candidate = py_get(py_item(context, nk[].k_cluster_public_replaced_fields), ancestry[i])
             if candidate is not None:
                 found_names = candidate
     var names = PythonObject(None)
@@ -223,6 +227,7 @@ def cluster_public_operation(model: PythonObject, owner: Int, operation: Int, na
     var recorded = False
     var direct = False
     var fields = PythonObject(None)
+    var nk = cluster_keys()
     if fitting:
         # A fit replaces the fitted state: release the old record now.
         cluster_record_drop(_XC_ADMIT_SLOT, model)
@@ -232,16 +237,16 @@ def cluster_public_operation(model: PythonObject, owner: Int, operation: Int, na
         recorded = cluster_record_get(_XC_ADMIT_SLOT, model, key) is not None
         if recorded:
             fields = _fields(model)
-            if py_contains(fields, "_mojolearn_after_fit"):
+            if py_contains(fields, nk[].k__mojolearn_after_fit):
                 raise Error("TypeError: native cluster execution cannot invoke Python fit callbacks")
         else:
             fields = _admit_model(model, context, direct)
     if fitting:
         _admit_replaced_state(model, fields, context)
-    var fitted_flag = py_get(fields, "_mojolearn_fitted", PythonObject(False))
+    var fitted_flag = py_get(fields, nk[].k__mojolearn_fitted, PythonObject(False))
     if py_type(fitted_flag) is not py_type(PythonObject(True)) and py_type(fitted_flag) is not py_type(PythonObject(0)):
         raise Error("TypeError: native fitted flags cannot invoke Python boolean hooks")
-    var depth_value = py_get(fields, "_mojolearn_fitting", PythonObject(0))
+    var depth_value = py_get(fields, nk[].k__mojolearn_fitting, PythonObject(0))
     if py_type(depth_value) is not py_type(PythonObject(0)):
         raise Error("TypeError: native fit depth must be an exact integer")
     var nested = Int(py=depth_value) > 0
@@ -265,7 +270,7 @@ def cluster_public_operation(model: PythonObject, owner: Int, operation: Int, na
                 var value = py_get(fields, setting)
                 precomputed = precomputed or (py_type(value) is py_type(PythonObject("")) and String(value) == "precomputed")
             if not precomputed:
-                var width = py_get(fields, "n_features_in_")
+                var width = py_get(fields, nk[].k_n_features_in_)
                 if py_type(width) is py_type(PythonObject(0)):
                     classical_check_width(columns, Int(py=width), name)
                 estimator_feature_check(model, fields, source, context)
@@ -302,6 +307,6 @@ def cluster_public_operation(model: PythonObject, owner: Int, operation: Int, na
     elif direct and not recorded:
         # Written only after the full admission and the query succeeded.
         cluster_record_put(_XC_ADMIT_SLOT, model, key, PythonObject(True))
-    if outside and py_type(result) is context["array_class"] and py_get(context, "ndarray") is not None:
+    if outside and py_type(result) is py_item(context, nk[].k_array_class) and py_get(context, nk[].k_ndarray) is not None:
         return native_array_ndarray_view(result, context)
     return result

@@ -24,6 +24,8 @@ from bindings.public_lifecycle_owner_door import lifecycle_admit_fields
 from providers.python.host_estimator_binding_pyapi_door import host_estimator_binding_current as estimator_binding
 from providers.python.estimator_lifecycle_pyapi_unpack import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
 from providers.python.cluster_public_lifecycle_pyapi_door import _target, _refusal
+from bindings.cluster_keys_unpack import cluster_keys
+from bindings.py_balanced import py_item
 
 
 def _keys(value: PythonObject) raises -> PythonObject:
@@ -82,15 +84,16 @@ def _admit(model: PythonObject, names: PythonObject, dbscan: Bool, fitting: Bool
                 classical_admit_value(fields[arrays[i]], context)
                 if fitting:
                     native_release_admit(fields[arrays[i]], context)
-    if fitting and py_contains(fields, "feature_names_in_"):
-        native_release_admit(fields["feature_names_in_"], context)
-    var flag = py_get(fields, "_mojolearn_fitted", PythonObject(False))
+    var nk = cluster_keys()
+    if fitting and py_contains(fields, nk[].k_feature_names_in_):
+        native_release_admit(py_item(fields, nk[].k_feature_names_in_), context)
+    var flag = py_get(fields, nk[].k__mojolearn_fitted, PythonObject(False))
     if py_type(flag) is not b.bool and py_type(flag) is not b.int:
         raise Error("TypeError: native fitted flags require exact booleans or integers")
-    if py_type(py_get(fields, "_mojolearn_fitting", PythonObject(0))) is not b.int:
+    if py_type(py_get(fields, nk[].k__mojolearn_fitting, PythonObject(0))) is not b.int:
         raise Error("TypeError: native fitting depth requires an exact integer")
     cluster_refuse_fit_callbacks(py_type(model), "TypeError: density execution cannot invoke Python fit callbacks")
-    if py_contains(fields, "_mojolearn_after_fit"):
+    if py_contains(fields, nk[].k__mojolearn_after_fit):
         raise Error("TypeError: density execution cannot invoke Python fit callbacks")
     if not recorded:
         _resident(py_get(fields, "_resident_holder" if dbscan else "_resident"), dbscan, context)

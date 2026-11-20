@@ -45,11 +45,14 @@ from bindings.operation_names_hdbscan import (
     HDBSCAN_OPN_FAMILY_HDBSCAN_PUBLIC_FIT_PREDICT, HDBSCAN_OPN_FAMILY_HDBSCAN_PUBLIC_APPROXIMATE_PREDICT,
     HDBSCAN_OPN_FAMILY_HDBSCAN_PUBLIC_MEMBERSHIP_VECTOR, HDBSCAN_OPN_FAMILY_HDBSCAN_PUBLIC_ALL_POINTS_MEMBERSHIP_VECTORS)
 from bindings.operation_names_cfa import CFA_OPN_FAMILY_CFA_HDBSCAN_FIT, CFA_OPN_FAMILY_CFA_HDBSCAN_FIT_PREDICT
+from bindings.cluster_keys_unpack import cluster_keys
+from bindings.py_balanced import py_item
 
 
 def _schema(context: PythonObject) raises -> PythonObject:
     var b = native_loaded_module("builtins")
-    var names = context["hdbscan_public_parameters"]
+    var nk = cluster_keys()
+    var names = py_item(context, nk[].k_hdbscan_public_parameters)
     if py_type(names) is not b.tuple:
         raise Error("TypeError: HDBSCAN constructor schema requires its native tuple")
     for i in range(len(names)):  # driver-loop: exact fixed parameter names before hashing or lookup
@@ -99,7 +102,8 @@ def _admit(model: PythonObject, context: PythonObject, fitting: Bool, key: Pytho
     var b = native_loaded_module("builtins")
     var fields = py_fields(model)
     cluster_refuse_fit_callbacks(py_type(model), "TypeError: HDBSCAN cannot invoke Python fit callbacks")
-    if py_contains(fields, "_mojolearn_after_fit"):
+    var nk = cluster_keys()
+    if py_contains(fields, nk[].k__mojolearn_after_fit):
         raise Error("TypeError: HDBSCAN cannot invoke Python fit callbacks")
     var recorded = not fitting and cluster_record_get(_ADMIT_SLOT, model, key) is not None
     if not recorded:
@@ -121,10 +125,10 @@ def _admit(model: PythonObject, context: PythonObject, fitting: Bool, key: Pytho
                 classical_admit_value(fields[arrays[i]], context)
                 if fitting:
                     native_release_admit(fields[arrays[i]], context)
-    var depth = py_get(fields, "_mojolearn_fitting", PythonObject(0))
+    var depth = py_get(fields, nk[].k__mojolearn_fitting, PythonObject(0))
     if py_type(depth) is not b.int:
         raise Error("TypeError: native fitting depth requires an exact integer")
-    var fitted = py_get(fields, "_mojolearn_fitted", PythonObject(False))
+    var fitted = py_get(fields, nk[].k__mojolearn_fitted, PythonObject(False))
     if py_type(fitted) is not b.int and py_type(fitted) is not b.bool:
         raise Error("TypeError: native fitted flags require exact booleans or integers")
     return recorded
@@ -192,6 +196,7 @@ def _inference(model: PythonObject, operation: Int, args: PythonObject, fields: 
     var neighbors = 0
     # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
     var pd = Optional[PythonObject]()
+    var nk = cluster_keys()
     if held is not None:
         var cached = held.downcast_value_ptr[HdbscanQueryRecord]()
         connection = Optional(HdbscanQueryConnection(cached[].provider, cached[].driver.copy(), cached[].host))
@@ -214,9 +219,9 @@ def _inference(model: PythonObject, operation: Int, args: PythonObject, fields: 
         selected = counts.clusters
         neighbors = counts.neighbors
     else:
-        if not py_contains(fields, "labels_"):
+        if not py_contains(fields, nk[].k_labels_):
             raise Error("mojolearn " + method + ": this HDBSCAN instance is not fitted yet; call fit first")
-        pd = py_present(py_get(fields, "_prediction_data"))
+        pd = py_present(py_get(fields, nk[].k__prediction_data))
         if not pd:
             raise Error("mojolearn " + method + ": Prediction data not yet generated. Fit with HDBSCAN(prediction_data=True); cuML refuses the same call the same way (hdbscan.pyx:1104-1108)")
         if py_type(pd.value()) is not b.dict:
@@ -226,11 +231,11 @@ def _inference(model: PythonObject, operation: Int, args: PythonObject, fields: 
         for name in ["n_edges", "n_condensed", "n_exemplars"]:  # driver-loop: fixed tree counts
             if py_type(pd.value()[name]) is not b.int or Int(py=pd.value()[name]) < 0:
                 raise Error("TypeError: HDBSCAN tree counts require non-negative native integers")
-        edges = Int(py=pd.value()["n_edges"])
-        condensed = Int(py=pd.value()["n_condensed"])
-        exemplars = Int(py=pd.value()["n_exemplars"])
-        selected = Int(py=fields["n_clusters_"])
-        columns = Int(py=fields["n_features_in_"])
+        edges = Int(py=py_item(pd.value(), nk[].k_n_edges))
+        condensed = Int(py=py_item(pd.value(), nk[].k_n_condensed))
+        exemplars = Int(py=py_item(pd.value(), nk[].k_n_exemplars))
+        selected = Int(py=py_item(fields, nk[].k_n_clusters_))
+        columns = Int(py=py_item(fields, nk[].k_n_features_in_))
         if selected < 0 or columns < 1:
             raise Error("ValueError: HDBSCAN fitted dimensions are invalid")
     var batch = 1
@@ -244,7 +249,7 @@ def _inference(model: PythonObject, operation: Int, args: PythonObject, fields: 
     if approximate and selected == 0:
         metric_warn("Clusterer does not have any defined clusters, new data will be automatically predicted as outliers.", b.UserWarning, context)
     if held is None:
-        raw = _buffer(fields["_raw_data"], "training data", "<f4", 0, context)
+        raw = _buffer(py_item(fields, nk[].k__raw_data), "training data", "<f4", 0, context)
         if Int(py=raw.ndim) != 2 or Int(py=raw.shape[1]) != columns:
             raise Error("ValueError: HDBSCAN training storage differs from its fitted shape")
         rows = Int(py=raw.shape[0])
@@ -265,13 +270,13 @@ def _inference(model: PythonObject, operation: Int, args: PythonObject, fields: 
         neighbors = Int(py=min_samples)
         if neighbors < 1 or neighbors > rows:
             raise Error("ValueError: HDBSCAN min_samples must fit its training row count")
-        core = _buffer(fields["core_distances_"], "core_distances_", "<f4", rows, context)
-        labels = _buffer(fields["labels_"], "labels_", "<i4", rows, context)
-        parents = _buffer(pd.value()["parents"], "tree parents", "<i4", edges, context)
-        lambdas = _buffer(pd.value()["lambdas"], "tree lambdas", "<f4", edges, context)
-        deaths = _buffer(pd.value()["deaths"], "deaths", "<f4", condensed, context)
-        clusters = _buffer(pd.value()["selected_clusters"], "selected_clusters", "<i4", selected, context)
-        children = _buffer(pd.value()["index_into_children"], "index_into_children", "<i4", edges + 1, context)
+        core = _buffer(py_item(fields, nk[].k_core_distances_), "core_distances_", "<f4", rows, context)
+        labels = _buffer(py_item(fields, nk[].k_labels_), "labels_", "<i4", rows, context)
+        parents = _buffer(py_item(pd.value(), nk[].k_parents), "tree parents", "<i4", edges, context)
+        lambdas = _buffer(py_item(pd.value(), nk[].k_lambdas), "tree lambdas", "<f4", edges, context)
+        deaths = _buffer(py_item(pd.value(), nk[].k_deaths), "deaths", "<f4", condensed, context)
+        clusters = _buffer(py_item(pd.value(), nk[].k_selected_clusters), "selected_clusters", "<i4", selected, context)
+        children = _buffer(py_item(pd.value(), nk[].k_index_into_children), "index_into_children", "<i4", edges + 1, context)
         _hdbscan_mode(model, binding, context)
     if approximate:
         if held is None:
@@ -308,8 +313,8 @@ def _inference(model: PythonObject, operation: Int, args: PythonObject, fields: 
         _ = children^
         return Python.tuple(output, probabilities)
     if held is None:
-        indices = _buffer(pd.value()["exemplar_idx"], "exemplar_idx", "<i4", exemplars, context)
-        offsets = _buffer(pd.value()["exemplar_label_offsets"], "exemplar_label_offsets", "<i4", selected + 1, context)
+        indices = _buffer(py_item(pd.value(), nk[].k_exemplar_idx), "exemplar_idx", "<i4", exemplars, context)
+        offsets = _buffer(py_item(pd.value(), nk[].k_exemplar_label_offsets), "exemplar_label_offsets", "<i4", selected + 1, context)
         connection = Optional(hdbscan_query_connection(binding))
     # Keep the old tree-first and query/output-before-training address reads.
     # These are boundary storage admissions, not numerical work.
@@ -384,7 +389,8 @@ def hdbscan_public_operation(model: PythonObject, operation: Int, args: PythonOb
         raise Error("TypeError: HDBSCAN arguments require their native tuple")
     # Passive subclasses share the connected native owner: CPython's MRO
     # test (bindings/cluster_side_records.mojo), not a Python-level walk.
-    if not cluster_is_subclass(py_type(model), context["hdbscan_public_class"]):
+    var nk = cluster_keys()
+    if not cluster_is_subclass(py_type(model), py_item(context, nk[].k_hdbscan_public_class)):
         raise Error("TypeError: HDBSCAN execution requires its connected class")
     if operation == HDBSCAN_OPN_FAMILY_HDBSCAN_PUBLIC_INITIALIZE:
         return _initialize(model, args, context)
@@ -424,6 +430,6 @@ def hdbscan_public_operation(model: PythonObject, operation: Int, args: PythonOb
     finally:
         estimator_fit_end(model, depth)
     estimator_fit_complete(model, args[0], False, context)
-    if estimator_outside() and py_type(result) is context["array_class"] and py_get(context, "ndarray") is not None:
+    if estimator_outside() and py_type(result) is py_item(context, nk[].k_array_class) and py_get(context, nk[].k_ndarray) is not None:
         return native_array_ndarray_view(result, context)
     return result

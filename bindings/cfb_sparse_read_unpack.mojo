@@ -15,6 +15,8 @@ from bindings.host_sparse_native_door import host_sparse_format, _sparse_fields,
 from bindings.classical_arrays_door import classical_address
 from bindings.family_common_pack import family_array
 from core.cfb_sparse_read_impl import cfb_sparse_expand
+from bindings.cluster_keys_unpack import cluster_keys
+from bindings.py_balanced import py_item
 
 
 def cfb_sparse_triples(source: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -28,28 +30,29 @@ def cfb_sparse_triples(source: PythonObject, context: PythonObject) raises -> Py
     var fields = _sparse_fields(source)
     if not py_contains(fields, PythonObject("_shape")) or not py_contains(fields, PythonObject("data")):
         return PythonObject(None)
-    var shape = fields["_shape"]
+    var nk = cluster_keys()
+    var shape = py_item(fields, nk[].k__shape)
     if py_type(shape) is not b.tuple or len(shape) != 2 or py_type(shape[0]) is not b.int or py_type(shape[1]) is not b.int:
         return PythonObject(None)
-    var data = fields["data"]
+    var data = py_item(fields, nk[].k_data)
     if format == "coo":
         if not py_contains(fields, PythonObject("coords")):
             return PythonObject(None)
-        var coords = fields["coords"]
+        var coords = py_item(fields, nk[].k_coords)
         if py_type(coords) is not b.tuple or len(coords) != 2:
             return PythonObject(None)
         return Python.tuple(coords[0], coords[1], data, shape)
     if not py_contains(fields, PythonObject("indptr")) or not py_contains(fields, PythonObject("indices")):
         return PythonObject(None)
-    if py_type(data) is not context["ndarray"] or Int(py=data.ndim) != 1:
+    if py_type(data) is not py_item(context, nk[].k_ndarray) or Int(py=data.ndim) != 1:
         return PythonObject(None)
     var csc = format == "csc"
     var rows = Int(py=shape[0])
     var columns = Int(py=shape[1])
     var major = columns if csc else rows
     var minor = rows if csc else columns
-    var pointers = _sparse_indices(fields["indptr"], context)
-    var indices = _sparse_indices(fields["indices"], context)
+    var pointers = _sparse_indices(py_item(fields, nk[].k_indptr), context)
+    var indices = _sparse_indices(py_item(fields, nk[].k_indices), context)
     var count = indices.count
     # An empty matrix keeps `tocoo()`: its refusal names the empty rows.
     if count < 1 or Int(py=data.size) != count or pointers.count != major + 1:

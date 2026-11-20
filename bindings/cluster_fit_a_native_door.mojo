@@ -74,6 +74,8 @@ from providers.python.estimator_binding_pyapi_door import _estimator_mode_word
 from bindings.mode_answer_door import fast_answers_compiled_code
 from core.mode_answer import MODE_FAMILY_CLUSTER
 from bindings.py_optional import py_or_none, py_present
+from bindings.cluster_keys_unpack import cluster_keys
+from bindings.py_balanced import py_item
 
 # x_cluster/entries.mojo: the entry numbers of `x_cluster_call`
 # OPTICS metric codes (x_cluster/optics.mojo)
@@ -471,7 +473,8 @@ def _centers_fit(model: PythonObject, binding: PythonObject, source: PythonObjec
                  context: PythonObject) raises:
     """`self.fit(X)` of a centers estimator (fit_predict and fit_transform
     pass no sample_weight)."""
-    if family_isinstance(model, context["family_cfa_minibatch"]):
+    var nk = cluster_keys()
+    if family_isinstance(model, py_item(context, nk[].k_family_cfa_minibatch)):
         _mbk_fit(model, binding, source, PythonObject(None), context)
     else:
         _bisect_fit(model, binding, source, PythonObject(None), context)
@@ -554,7 +557,8 @@ def _optics_metric(model: PythonObject, context: PythonObject) raises -> OpticsM
         return OpticsMetric(3, pv)
     if _one_of(metric, "euclidean", "l2"):
         return OpticsMetric(-1, 2.0)
-    var table = context["family_cfa_optics_metrics"]
+    var nk = cluster_keys()
+    var table = py_item(context, nk[].k_family_cfa_optics_metrics)
     if not py_contains(table, metric):
         var names = py_call(native_loaded_module("operator").add, py_call(b.sorted, table),
                             Python.list(PythonObject("minkowski")))
@@ -716,8 +720,9 @@ def _hdbscan_mode(model: PythonObject, binding: PythonObject, context: PythonObj
     one requested."""
     var b = native_loaded_module("builtins")
     var want = _attr_or_none(model, "numeric_mode")
+    var nk = cluster_keys()
     if want is None or not _truthy(want):
-        want = context["backend_fields"]["_DEFAULT_MODE"]
+        want = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
     var getter = neural_descriptor_entry(binding, "hdbscan_numeric_mode", False)
     if getter is not None:
         # Perf (lane perf3-cluster-gp-gate): the compiled mode word is a
@@ -725,7 +730,7 @@ def _hdbscan_mode(model: PythonObject, binding: PythonObject, context: PythonObj
         # the process, as GaussianMixture's _check_mode reads it
         # (bindings/mixture_native_door.mojo), not called on every fit and query.
         var got = _estimator_mode_word(binding, getter)
-        var codes = context["family_cfa_hdbscan_mode_codes"]
+        var codes = py_item(context, nk[].k_family_cfa_hdbscan_mode_codes)
         var wanted = py_get(codes, want, PythonObject(None))
         # The word `fast` answered by the identical set (core/mode_answer.mojo,
         # family CLUSTER) matches the identical binary: tested on the
@@ -733,7 +738,7 @@ def _hdbscan_mode(model: PythonObject, binding: PythonObject, context: PythonObj
         if (wanted is None or Int(py=wanted) != got) and not fast_answers_compiled_code(
                 want, codes, got, MODE_FAMILY_CLUSTER):
             raise Error("RuntimeError: mojolearn HDBSCAN: numeric_mode=" + family_repr(want) + " was requested but "
-                        + String(py_fields(binding)["__name__"]) + " reports compile-time "
+                        + String(py_item(py_fields(binding), nk[].k___name__)) + " reports compile-time "
                         + "mode code " + String(got) + "; rebuild it with bash bindings/build_hdbscan.sh")
 
 
@@ -766,8 +771,9 @@ def _hdbscan_fit(model: PythonObject, binding: PythonObject, source: PythonObjec
         min_samples = _int(ms_field)
     var metric_field = _attr(model, "metric")
     var metric: PythonObject
+    var nk = cluster_keys()
     if family_is_str(metric_field):
-        var metrics = context["family_cfa_hdbscan_metrics"]
+        var metrics = py_item(context, nk[].k_family_cfa_hdbscan_metrics)
         if not py_contains(metrics, metric_field):
             raise Error("mojolearn HDBSCAN: metric must be 'euclidean' (cuML's L2SqrtExpanded, the one "
                         + "fit_hdbscan accepts), got " + family_repr(metric_field))
@@ -777,7 +783,7 @@ def _hdbscan_fit(model: PythonObject, binding: PythonObject, source: PythonObjec
     var method_field = _attr(model, "cluster_selection_method")
     var method: PythonObject
     if family_is_str(method_field):
-        var selections = context["family_cfa_hdbscan_selection"]
+        var selections = py_item(context, nk[].k_family_cfa_hdbscan_selection)
         if not py_contains(selections, method_field):
             raise Error("mojolearn HDBSCAN: cluster_selection_method must be 'eom' or 'leaf', got "
                         + family_repr(method_field))

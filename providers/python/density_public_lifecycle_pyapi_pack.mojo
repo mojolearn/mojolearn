@@ -43,6 +43,8 @@ from providers.python.density_public_lifecycle_pyapi_unpack import (
     _keys,
     _resident,
 )
+from bindings.cluster_keys_unpack import cluster_keys
+from bindings.py_balanced import py_item
 
 
 def _initialize(model: PythonObject, args: PythonObject, names: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -140,13 +142,14 @@ def density_public_operation(model: PythonObject, operation: Int, args: PythonOb
     if py_type(args) is not b.tuple:
         raise Error("TypeError: density public arguments require an exact tuple")
     var dbscan = operation <= DENSITY_OPN_FAMILY_DENSITY_DBSCAN_PREDICT
-    var owner = context["density_dbscan_class"] if dbscan else context["density_kde_class"]
+    var nk = cluster_keys()
+    var owner = py_item(context, nk[].k_density_dbscan_class) if dbscan else py_item(context, nk[].k_density_kde_class)
     # Passive subclasses are accepted: CPython's MRO test
     # (bindings/cluster_side_records.mojo), not a Python-level walk.
     if not cluster_is_subclass(py_type(model), owner):
         raise Error("TypeError: density execution requires its connected estimator class")
     lifecycle_admit_fields(py_fields(model))
-    var names = context["density_dbscan_parameters"] if dbscan else context["density_kde_parameters"]
+    var names = py_item(context, nk[].k_density_dbscan_parameters) if dbscan else py_item(context, nk[].k_density_kde_parameters)
     if operation == DENSITY_OPN_FAMILY_DENSITY_DBSCAN_INITIALIZE or operation == DENSITY_OPN_FAMILY_DENSITY_KDE_INITIALIZE:
         return _initialize(model, args, names, context)
     if (operation == DENSITY_OPN_FAMILY_DENSITY_DBSCAN_GETSTATE or operation == DENSITY_OPN_FAMILY_DENSITY_DBSCAN_SETSTATE
@@ -157,7 +160,7 @@ def density_public_operation(model: PythonObject, operation: Int, args: PythonOb
         raise Error("NotImplementedError: mojolearn KernelDensity: sample() is not implemented (drawing new points from the fitted density); score_samples() and score() are")
     if operation == DENSITY_OPN_FAMILY_DENSITY_KDE_RELEASE:
         var fields = py_fields(model)
-        _resident(py_get(fields, "_resident"), False, context)
+        _resident(py_get(fields, nk[].k__resident), False, context)
         _kde_release(fields)
         return PythonObject(None)
     # Every code left is a fit or a query (the old chain's other names are
@@ -187,7 +190,7 @@ def density_public_operation(model: PythonObject, operation: Int, args: PythonOb
             else String("family_xn_kde_score_samples"))
         return neighbors_kde_operation(model, kde, prepared, context)
     var outside = estimator_outside()
-    var depth_value = Int(py=py_get(fields, "_mojolearn_fitting", PythonObject(0)))
+    var depth_value = Int(py=py_get(fields, nk[].k__mojolearn_fitting, PythonObject(0)))
     if not fitting:
         classical_require_fitted(model, False, _density_method(operation), context)
     var source = args[0]
@@ -199,7 +202,7 @@ def density_public_operation(model: PythonObject, operation: Int, args: PythonOb
         if fitting:
             _target(args[1], rows, name, context)
         else:
-            var width = py_get(fields, "n_features_in_")
+            var width = py_get(fields, nk[].k_n_features_in_)
             if py_type(width) is b.int:
                 classical_check_width(columns, Int(py=width), name)
             estimator_feature_check(model, fields, source, context)
@@ -226,6 +229,6 @@ def density_public_operation(model: PythonObject, operation: Int, args: PythonOb
             estimator_fit_end(model, depth)
     if fitting:
         estimator_fit_complete(model, source, False, context)
-    if outside and py_type(result) is context["array_class"] and py_get(context, "ndarray") is not None:
+    if outside and py_type(result) is py_item(context, nk[].k_array_class) and py_get(context, nk[].k_ndarray) is not None:
         return native_array_ndarray_view(result, context)
     return result

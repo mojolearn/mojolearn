@@ -40,6 +40,8 @@ from bindings.operation_names_cfb import CFB_OPN_FAMILY_CFB_AGGLO_PREDICT
 from providers.python.estimator_lifecycle_pyapi_unpack import (
     estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete,
 )
+from bindings.cluster_keys_unpack import cluster_keys
+from bindings.py_balanced import py_item
 
 
 struct HierarchyPublicCall(Movable):
@@ -78,7 +80,8 @@ def hierarchy_settings(model: PythonObject, context: PythonObject) raises -> Agg
         raise Error("TypeError: native hierarchy operations refuse Python metaclass hooks")
     var fields = _fields(model)
     lifecycle_admit_fields(fields)
-    var attributes = py_get(_loaded_fields(native_loaded_module("mojolearn._native_public_attributes")), "_CONTEXT")
+    var nk = cluster_keys()
+    var attributes = py_get(_loaded_fields(native_loaded_module("mojolearn._native_public_attributes")), nk[].k__CONTEXT)
     var modules = NativeModules()
     var plan = _plan(modules, model, attributes)
     # p3-neighbors-cluster: the ancestry walk is recorded per class
@@ -90,17 +93,17 @@ def hierarchy_settings(model: PythonObject, context: PythonObject) raises -> Agg
         var setter_seen = False
         for i in range(len(ancestry)):  # driver-loop: passive subclass storage admission
             var names = _class_fields(ancestry[i])
-            if not setter_seen and py_contains(names, "__setattr__"):
-                if names["__setattr__"] is not b.object.__dict__["__setattr__"]:
+            if not setter_seen and py_contains(names, nk[].k___setattr__):
+                if py_item(names, nk[].k___setattr__) is not py_item(b.object.__dict__, nk[].k___setattr__):
                     raise Error("TypeError: native hierarchy execution cannot invoke Python field setters")
                 setter_seen = True
-            if py_contains(names, "_mojolearn_after_fit"):
+            if py_contains(names, nk[].k__mojolearn_after_fit):
                 raise Error("TypeError: native hierarchy execution cannot invoke Python fit callbacks")
         class_admit(modules, _HIER_CLASS_SLOT, model_class, PythonObject(True))
-    if py_contains(fields, "_mojolearn_after_fit"):
+    if py_contains(fields, nk[].k__mojolearn_after_fit):
         raise Error("TypeError: native hierarchy execution cannot invoke Python fit callbacks")
     var values = List[PythonObject]()
-    var mode = py_get(fields, "numeric_mode")
+    var mode = py_get(fields, nk[].k_numeric_mode)
     host_inference_scalar(mode, context)
     values.append(mode)
     var parameters = Python.tuple("n_clusters", "metric", "connectivity", "linkage", "c", "memory", "compute_full_tree", "distance_threshold", "compute_distances", "prediction_data")
@@ -129,15 +132,16 @@ def hierarchy_target(source: PythonObject, rows: Int, name: String, classifier: 
             raise Error(name + " requires y to be passed, but the target y is None.")
         return source
     var b = native_loaded_module("builtins")
+    var nk = cluster_keys()
     if host_sparse_format(source).byte_length() > 0:
-        var shape = _sparse_fields(source)["_shape"]
+        var shape = py_item(_sparse_fields(source), nk[].k__shape)
         if py_type(shape) is not b.tuple or len(shape) != 2 or py_type(shape[0]) is not b.int:
             raise Error("TypeError: sparse target shape requires native dimensions")
         if Int(py=shape[0]) != rows:
             raise Error("Found input variables with inconsistent numbers of samples: [" + String(rows) + ", " + String(Int(py=shape[0])) + "]")
         return source
     classical_admit_value(source, context)
-    if py_type(source) is py_get(context, "ndarray") and String(source.dtype.kind) == "c":
+    if py_type(source) is py_get(context, nk[].k_ndarray) and String(source.dtype.kind) == "c":
         raise Error("Complex data not supported: " + name + " got a complex y.")
     var shape = labels_shape_of(source, context)
     if len(shape) > 0 and shape[0] != rows:
@@ -218,8 +222,9 @@ def hierarchy_public_begin(model: PythonObject, operation: Int, args: PythonObje
     var fields = _fields(model)
     var fitting = operation != CFB_OPN_FAMILY_CFB_AGGLO_PREDICT  # the leaf code (lane bw2-cluster)
     var b = native_loaded_module("builtins")
-    var depth = py_get(fields, "_mojolearn_fitting", PythonObject(0))
-    var fitted = py_get(fields, "_mojolearn_fitted", PythonObject(False))
+    var nk = cluster_keys()
+    var depth = py_get(fields, nk[].k__mojolearn_fitting, PythonObject(0))
+    var fitted = py_get(fields, nk[].k__mojolearn_fitted, PythonObject(False))
     if py_type(depth) is not b.int or (py_type(fitted) is not b.bool and py_type(fitted) is not b.int):
         raise Error("TypeError: native hierarchy fit state requires exact integer and boolean flags")
     if not fitting and not Bool(py=_fitted(model)):
@@ -236,7 +241,7 @@ def hierarchy_public_begin(model: PythonObject, operation: Int, args: PythonObje
         if fitting:
             _ = hierarchy_target(args[2], x.shape[0], "AgglomerativeClustering", False, False, False, context)
         else:
-            var width = py_get(fields, "n_features_in_")
+            var width = py_get(fields, nk[].k_n_features_in_)
             host_inference_scalar(width, context)
             classical_check_width(x.shape[1], Int(py=width), "AgglomerativeClustering")
             estimator_feature_check(model, fields, source, context)

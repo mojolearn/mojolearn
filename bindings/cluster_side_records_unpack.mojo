@@ -39,6 +39,7 @@ from bindings.native_loaded_module_door import native_loaded_module
 from bindings.classical_arrays_door import classical_address
 from bindings.trees_side_records_unpack import trees_key_same, trees_key_shallow
 from bindings.py_model_records import records_get, records_put, records_drop, records_key_append, RECORDS_CLUSTER
+from bindings.cluster_keys_unpack import cluster_keys
 
 # PyType_IsSubtype comes from the one CPython table (ClusterCPython,
 # MojolearnClusterCPythonV1, folded into it by lane ne1-e-table, 2026-11-06).
@@ -77,8 +78,9 @@ def cluster_refuse_fit_callbacks(cls: PythonObject, message: String) raises:
     if class_record(mods, _AFTER_FIT_SLOT, cls) is not None:
         return
     var ancestry = _type_mro(cls)
+    var nk = cluster_keys()
     for i in range(len(ancestry)):  # driver-loop: no completion callback may execute from a native call
-        if py_contains(_class_fields(mods, ancestry[i]), "_mojolearn_after_fit"):
+        if py_contains(_class_fields(mods, ancestry[i]), nk[].k__mojolearn_after_fit):
             raise Error(message)
     class_admit(mods, _AFTER_FIT_SLOT, cls, PythonObject(True))
 
@@ -94,7 +96,8 @@ def _cluster_array_words(key: PythonObject, value: PythonObject) raises:
     var modules = native_loaded_module("sys").modules
     var cls = py_type(value)
     var arrays = py_get(modules, "mojolearn._array")
-    var numpy = py_get(modules, "numpy")
+    var nk = cluster_keys()
+    var numpy = py_get(modules, nk[].k_numpy)
     var is_ndarray = numpy is not None and cls is numpy.ndarray
     if not is_ndarray and (arrays is None or cls is not arrays.Array):
         return

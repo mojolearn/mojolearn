@@ -78,6 +78,8 @@ from bindings.kmeans_native_unpack import (
     _kmeans_release,
     _kmeans_x,
 )
+from bindings.cluster_keys_unpack import cluster_keys
+from bindings.py_balanced import py_item
 
 
 comptime _INIT_ARRAY = 2
@@ -124,8 +126,9 @@ def _kmeans_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     var init = family_field(fields, "init")
     var init_centroids = family_field(fields, "init_centroids")
     var init_code: Int
+    var nk = cluster_keys()
     if _kmeans_is_name(init, context):
-        var inits = context["family_kmeans_inits"]
+        var inits = py_item(context, nk[].k_family_kmeans_inits)
         if not py_contains(inits, init):
             raise Error("mojolearn: init must be one of " + family_repr(py_call(b.sorted, inits))
                         + ", got " + family_repr(init))
@@ -148,12 +151,12 @@ def _kmeans_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     var factor = family_field(fields, "oversampling_factor")
     var factor_type = py_type(factor)
     var factor_admitted = factor_type is b.int or factor_type is b.float
-    if not factor_admitted and py_get(context, "ndarray") is not None:
-        factor_admitted = factor_type is context["float64"].type
+    if not factor_admitted and py_get(context, nk[].k_ndarray) is not None:
+        factor_admitted = factor_type is py_item(context, nk[].k_float64).type
     if not factor_admitted:
         # Use the canonical type getset directly; a custom metaclass can
         # override __name__ even through type.__getattribute__.
-        var name = String(py_call(b.type.__dict__["__name__"].__get__, factor_type))
+        var name = String(py_call(py_item(b.type.__dict__, nk[].k___name__).__get__, factor_type))
         raise Error("TypeError: mojolearn: oversampling_factor must be a float, got " + name)
     var oversampling = family_call(b.float, factor)
     var x = _kmeans_x(source, context)
@@ -246,13 +249,13 @@ def _kmeans_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     # so no NumPy view of them taken before the first query is writeable
     # (the resident device copy is keyed by identity).
     _ = fitted_freeze(centers, context)
-    py_setitem(fields, "cluster_centers_", centers)
-    py_setitem(fields, "labels_", labels)
-    py_setitem(fields, "inertia_", PythonObject(result.inertia))
-    py_setitem(fields, "n_iter_", PythonObject(result.iterations))
-    py_setitem(fields, "sum_scale_", PythonObject(result.sum_scale))
-    py_setitem(fields, "weight_scale_", PythonObject(result.weight_scale))
-    py_setitem(fields, "n_features_in_", PythonObject(d))
+    py_setitem(fields, nk[].k_cluster_centers_, centers)
+    py_setitem(fields, nk[].k_labels_, labels)
+    py_setitem(fields, nk[].k_inertia_, PythonObject(result.inertia))
+    py_setitem(fields, nk[].k_n_iter_, PythonObject(result.iterations))
+    py_setitem(fields, nk[].k_sum_scale_, PythonObject(result.sum_scale))
+    py_setitem(fields, nk[].k_weight_scale_, PythonObject(result.weight_scale))
+    py_setitem(fields, nk[].k_n_features_in_, PythonObject(d))
     # The last fit's resident centroids are released; the next query
     # uploads the new ones once (`_kmeans_resident`).
     _kmeans_release(model)

@@ -52,6 +52,8 @@ from bindings.family_common_unpack import (
 from bindings.family_common_pack import (
     family_array,
 )
+from bindings.cluster_keys_unpack import cluster_keys
+from bindings.py_balanced import py_item
 
 # The query kinds of the GPU binding's `x_cluster_resident_query`
 # (x_cluster/resident.mojo XC_RES_*).
@@ -75,7 +77,8 @@ def _xc_f32_ready(source: PythonObject, context: PythonObject) raises -> Bool:
     order: `as_f32_c(source, ndim=2)` would admit it and return its own
     storage (the test of bindings/mixture_native_door.mojo `_f32_ready`)."""
     var cls = py_type(source)
-    if cls is not context["array_class"] and cls is not py_get(context, "ndarray"):
+    var nk = cluster_keys()
+    if cls is not py_item(context, nk[].k_array_class) and cls is not py_get(context, nk[].k_ndarray):
         return False
     if Int(py=source.ndim) != 2 or Int(py=source.size) <= 0:
         return False
@@ -126,8 +129,9 @@ def _xc_array(flat: PythonObject, shape: PythonObject, typestr: String, code: St
     Array's store as it is. Anything else is copied once, as `_from_flat` did.
     Same values either way."""
     var store = flat
-    if py_type(flat) is not context["array_type"] or String(py=flat.typecode) != code:
-        store = py_call(context["array_type"], PythonObject(code), flat)
+    var nk = cluster_keys()
+    if py_type(flat) is not py_item(context, nk[].k_array_type) or String(py=flat.typecode) != code:
+        store = py_call(py_item(context, nk[].k_array_type), PythonObject(code), flat)
     return classical_wrap_array(store, shape, typestr, "C", context)
 
 
@@ -298,19 +302,20 @@ def cluster_operation(model: PythonObject, operation: Int, args: PythonObject,
         var x = _xc_input(mods, model, args[1], context, x_admitted)
         return _centers_query(model, binding, x, centers, _XC_RES_PREDICT, context)
     if operation == XC_OPN_FAMILY_XC_BISECT_PREDICT:
+        var nk = cluster_keys()
         _ = _xc_fitted(mods, model, "cluster_centers_")
         var x = _xc_input(mods, model, args[1], context, x_admitted)
         var n = Int(py=x.shape[0])
         var d = Int(py=x.shape[1])
         var fields = py_fields(model)
-        var node_source = fields["tree_nodes_"]
+        var node_source = py_item(fields, nk[].k_tree_nodes_)
         # Preserve the existing raw C-order byte interpretation, including
         # rebound storage. The extra array('i') and boxed Int list disappear.
         var nodes = classical_c_bytes(node_source, "tree_nodes_", context)
         var byte_count = len(nodes)
         if byte_count % 4 != 0:
             raise Error("ValueError: bytes length not a multiple of item size")
-        var centers = fields["_tree_centers"]
+        var centers = py_item(fields, nk[].k__tree_centers)
         var connection = variants_connection(binding)
         var center_span = variants_span(centers)
         var source_span = variants_span(x)

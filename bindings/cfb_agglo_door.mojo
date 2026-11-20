@@ -50,6 +50,8 @@ from bindings.decomp_scalar_compare_unpack import decomp_equal_admitted
 from bindings.public_lifecycle_owner_door import lifecycle_admit_fields
 from bindings.native_owner_lifetime_door import native_release_admit
 from bindings.native_loaded_module_door import native_loaded_module
+from bindings.cluster_keys_unpack import cluster_keys
+from bindings.py_balanced import py_item
 
 def _truth(value: PythonObject) raises -> Bool:
     """Truth conversion of the already admitted exact public scalar."""
@@ -245,8 +247,9 @@ def _agglo_x(fields: PythonObject, settings: AggloSettings, options: AggloOption
     if agglo_publishes_distances(options):
         agglo_publish(fields, "distances_", distances, context)
     else:
+        var nk = cluster_keys()
         lifecycle_admit_fields(fields)
-        native_release_admit(py_get(fields, "distances_"), context)
+        native_release_admit(py_get(fields, nk[].k_distances_), context)
         _ = py_call(fields.pop, PythonObject("distances_"), PythonObject(None))
     # The cut's cluster word is read only when the fitted count is the cut's.
     var cut_clusters = scalars.clusters() if agglo_cut_counts(options, plan) else 0
@@ -287,8 +290,9 @@ def _agglo_fit(fields: PythonObject, settings: AggloSettings, bindings: AggloBin
     agglo_publish(fields, "_compute_distances", PythonObject(options.compute_distances), context)
     var prediction_data = settings.prediction_data
     if py_type(prediction_data) is not b.bool:
+        var nk = cluster_keys()
         raise Error("TypeError: mojolearn AgglomerativeClustering: prediction_data must be a "
-                    + "bool, got " + String(py_call(b.type.__dict__["__name__"].__get__, py_type(prediction_data))))
+                    + "bool, got " + String(py_call(py_item(b.type.__dict__, nk[].k___name__).__get__, py_type(prediction_data))))
     options.prediction_data = Bool(py=prediction_data)
     # Keep both existing numerical owners and their unchanged route predicate.
     if options.solver_route():
@@ -301,13 +305,14 @@ def _agglo_predict(fields: PythonObject, settings: AggloSettings, binding: Pytho
                    query: ArrayMetadata, query_pin: ArrayPin, context: PythonObject) raises -> PythonObject:
     if not _predicts(settings, context):
         raise Error("NotImplementedError: mojolearn AgglomerativeClustering.predict: only single linkage under the euclidean metric has a predict rule (DEVIATION 2740)")
-    var refs_source = py_get(fields, "_fit_X")
+    var nk = cluster_keys()
+    var refs_source = py_get(fields, nk[].k__fit_X)
     if refs_source is None:
         raise Error("mojolearn AgglomerativeClustering.predict: prediction data was not stored. Fit with AgglomerativeClustering(prediction_data=True)")
     var refs_pin = ArrayPin()
     var refs = admit_family_meta(refs_source, 2, "fitted reference rows", context, refs_pin)
     agglo_check_reference_width(refs.shape[1], query.shape[1])
-    var labels = classical_view(fields["labels_"], context, "labels_")
+    var labels = classical_view(py_item(fields, nk[].k_labels_), context, "labels_")
     var labels_shape = array_shape_once(labels, context)
     agglo_check_label_rank(len(labels_shape))
     var labels_pin = ArrayPin()
@@ -317,7 +322,7 @@ def _agglo_predict(fields: PythonObject, settings: AggloSettings, binding: Pytho
     # p3-neighbors-cluster: the resident record is keyed by the STORED field
     # objects (`_fit_X`, `labels_`), the ones fit minted it for; the per-call
     # snapshot and view objects were new every call, so it never hit.
-    var result = agglo_reference_labels(fields, binding, refs_source, fields["labels_"], query_pin.keep, refs.source.addr, labels_snapshot.source.addr,
+    var result = agglo_reference_labels(fields, binding, refs_source, py_item(fields, nk[].k_labels_), query_pin.keep, refs.source.addr, labels_snapshot.source.addr,
                                            query.source.addr, refs.shape[0], query.shape[0], query.shape[1], context)
     _ = refs^
     _ = labels_snapshot^
@@ -338,6 +343,7 @@ def cfb_agglo_operation(model: PythonObject, operation: Int, args: PythonObject,
         var state = py_call(native_loaded_module("builtins").dict, fields)
         _ = py_call(state.pop, "_resident_holder", PythonObject(None))
         return state
+    var nk = cluster_keys()
     if operation == CFB_OPN_FAMILY_CFB_AGGLO_SETSTATE:
         var b = native_loaded_module("builtins")
         var state = args[0]
@@ -357,7 +363,7 @@ def cfb_agglo_operation(model: PythonObject, operation: Int, args: PythonObject,
         for i in range(len(names)):  # driver-loop: publish the admitted pickle schema after the release window
             if String(names[i]) != "_resident_holder":
                 agglo_publish(fields, String(names[i]), state[names[i]], context)
-        agglo_holder_admit(py_get(fields, "_resident_holder"))
+        agglo_holder_admit(py_get(fields, nk[].k__resident_holder))
         agglo_publish(fields, "_resident_holder", agglo_holder_empty(), context)
         return PythonObject(None)
     if operation < CFB_OPN_FAMILY_CFB_AGGLO_FIT or operation > CFB_OPN_FAMILY_CFB_AGGLO_PREDICT:
@@ -377,7 +383,7 @@ def cfb_agglo_operation(model: PythonObject, operation: Int, args: PythonObject,
             agglo_publish(call.fields, "input_copied_", PythonObject(not (call.x_pin.keep is call.source)), context)
             var bindings = AggloBindings(estimators, solver, cluster, neighbors)
             _agglo_fit(call.fields, call.settings, bindings, call.x, call.x_pin, context)
-            result = call.fields["labels_"] if operation == CFB_OPN_FAMILY_CFB_AGGLO_FIT_PREDICT else model
+            result = py_item(call.fields, nk[].k_labels_) if operation == CFB_OPN_FAMILY_CFB_AGGLO_FIT_PREDICT else model
         else:
             result = _agglo_predict(call.fields, call.settings, estimators, call.x, call.x_pin, context)
     except error:
