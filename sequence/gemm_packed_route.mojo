@@ -233,6 +233,21 @@ def seq_gemm_packed_launch(ctx: DeviceContext, a: Args, geom: Int) raises:
 
 
 #: The fused store of a follower: this route (default) with the GEMM store-epilogue arm (default off).
+# A/B round 3, 2026-11-20 (lane fx-verdicts5; NVIDIA L40S host 2ef132a6de04, wheel 28a780604c and its B set, base and
+# arm back to back in one pod job, tag nvc-ab-20261120T063324Z-c630ad, workers on the GPU's NUMA node 0; digests and
+# quality equal on all 8 cells). Follower launch (default) -> fused store ms: fit mlp-clf istella 862.9 -> 850.5
+# (0.986), taxi 673.9 -> 665.4 (0.987), mlp-reg istella 855.5 -> 842.2 (0.984), taxi 662.5 -> 653.4 (0.986); infer
+# taxi 7.955 -> 7.722 (0.971) and 2.762 -> 2.694 (0.975), medians of 20; infer istella 24.17 -> 29.44 (1.218) and
+# 15.83 -> 16.59 (1.048), one call each, and their warm-up calls say the same (29.0 -> 33.2, 17.0 -> 17.8).
+# NOT PROMOTED: MIXED. The fits gain 1.3 to 1.6 % (the fit rows' bases agree to 0.6 % in this job) and the predict of
+# the wide input loses 5 to 22 %; the arm's rule wants every fit and infer faster. The neighbouring and non-board
+# shapes of its row were not timed. Default stays the follower launch. OWED DELETION (not done by lane fx-verdicts5:
+# the kernel family is in gemm/checks/gemm_identical.mojo and was already cut once without a compile): this
+# constant, seq_gemm_packed_epi_kind / _go / _launch below and the branch in sequence/exec_device.mojo _launch;
+# gemm/neural_dispatch.mojo GEMM_LEAF_PTR_EPI, GEMM_EPI_* and identical_gemm_leaf_ptr_epi_into;
+# identical_gemm_kpack_epi_ptr_kernel; the PACKED EPI clause of autograd/checks/gemm_cases.mojo;
+# checks/native_tests/transformer_backward_packed.mojo's epi build and its pixi task; then the refusal of
+# MOJOLEARN_GEMM_FAST_EPI.
 comptime SEQ_GEMM_PACKED_EPI = SEQ_GEMM_PACKED and GEMM_LEAF_PTR_EPI
 
 
