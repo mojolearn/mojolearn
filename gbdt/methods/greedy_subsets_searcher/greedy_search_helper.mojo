@@ -4060,7 +4060,24 @@ struct TTreeWorkspace(Movable):
         var max_leaves = leaf_slots if leaf_slots > 0 else (1 << max_depth)
         var n_features = len(layout.features)
         var hist_cells_per_leaf = layout.hist_cells
-        var hist_cells = max_leaves * stat_count * hist_cells_per_leaf
+        # NO ZERO-LENGTH PLANE (lane fx-gbdt-constcol, 2026-11-20). A layout
+        # whose features all have zero folds has `hist_cells == 0`, and
+        # every plane below sized by the cell count was a zero-length device
+        # buffer. The level's no-winner fallback reads flat bin-feature 0 of
+        # the seven `bfr_*` tables with 4-byte loads whatever the cell count
+        # (`sym_resolve_split_count_kernel`, `resolve_and_pack_kernel`), so
+        # on such a layout it loaded from the address of a zero-length
+        # allocation: CUDA_ERROR_MISALIGNED_ADDRESS at the tree's drain
+        # (nvc1-0007, one constant column). The capacity is the cell count,
+        # at least one; `refresh_layout_metadata` writes the zero descriptor
+        # into that one cell, which is what the host column's fallback reads
+        # (`layout.features[0]` of a zero-fold feature). The cell COUNT the
+        # kernels are given stays `hist_cells_per_leaf`, 0: nothing is
+        # scanned, scored or copied for the spare cell.
+        var cell_capacity = hist_cells_per_leaf
+        if cell_capacity < 1:
+            cell_capacity = 1
+        var hist_cells = max_leaves * stat_count * cell_capacity
         var widest_block = 1
         for b in range(len(blocks)):  # small-loop(blocks: policy blocks, at most 3): workspace capacity from fold counts
             var tf = 0
@@ -4147,7 +4164,7 @@ struct TTreeWorkspace(Movable):
             max_leaves
         )
         self.skip = ctx.enqueue_create_buffer[DType.uint8](
-            hist_cells_per_leaf
+            cell_capacity
         )
         self.out_score = ctx.enqueue_create_buffer[DType.float32](
             argmax_blocks
@@ -4183,29 +4200,29 @@ struct TTreeWorkspace(Movable):
             n_features
         )
         self.bff = ctx.enqueue_create_buffer[DType.uint32](
-            hist_cells_per_leaf
+            cell_capacity
         )
         self.ffw = ctx.enqueue_create_buffer[DType.float32](n_features)
         self.bfr_off = ctx.enqueue_create_buffer[DType.uint32](
-            hist_cells_per_leaf
+            cell_capacity
         )
         self.bfr_mask = ctx.enqueue_create_buffer[DType.uint32](
-            hist_cells_per_leaf
+            cell_capacity
         )
         self.bfr_shift = ctx.enqueue_create_buffer[DType.uint32](
-            hist_cells_per_leaf
+            cell_capacity
         )
         self.bfr_first = ctx.enqueue_create_buffer[DType.uint32](
-            hist_cells_per_leaf
+            cell_capacity
         )
         self.bfr_folds = ctx.enqueue_create_buffer[DType.uint32](
-            hist_cells_per_leaf
+            cell_capacity
         )
         self.bfr_oh = ctx.enqueue_create_buffer[DType.uint8](
-            hist_cells_per_leaf
+            cell_capacity
         )
         self.bfr_bin = ctx.enqueue_create_buffer[DType.uint32](
-            hist_cells_per_leaf
+            cell_capacity
         )
         self.scale_dev = ctx.enqueue_create_buffer[DType.float32](1)
         self.h_scale = ctx.enqueue_create_host_buffer[DType.float32](1)
@@ -4256,6 +4273,11 @@ struct TTreeWorkspace(Movable):
         var n_features = self.n_features_key
         var max_leaves = self.max_leaves_key
         var hist_cells_per_leaf = self.hist_cells_per_leaf_key
+        # the constructor's capacity: one spare cell on a layout without
+        # cells, holding the zero descriptor (see `__init__`)
+        var cell_capacity = hist_cells_per_leaf
+        if cell_capacity < 1:
+            cell_capacity = 1
         self.dblocks = upload_blocks(ctx, blocks)
         comptime if SYM_GROUP_WIDTH_2581:
             self.width_plans = upload_width_plans(ctx, blocks)
@@ -4277,9 +4299,9 @@ struct TTreeWorkspace(Movable):
         # needs an id list DISTINCT from `dense_ids` for the same reason
         ctx.enqueue_copy(dst_buf=self.zero_ids, src_ptr=h_dense.unsafe_ptr())
         var hsk = ctx.enqueue_create_host_buffer[DType.uint8](
-            hist_cells_per_leaf
+            cell_capacity
         )
-        for i in range(hist_cells_per_leaf):
+        for i in range(cell_capacity):
             hsk.unsafe_ptr().unsafe_store(i, UInt8(0))
         ctx.enqueue_copy(dst_buf=self.skip, src_ptr=hsk.unsafe_ptr())
         var hff = ctx.enqueue_create_host_buffer[DType.uint32](n_features)
@@ -4298,7 +4320,7 @@ struct TTreeWorkspace(Movable):
         ctx.enqueue_copy(dst_buf=self.flat_folds, src_ptr=hfd.unsafe_ptr())
         ctx.enqueue_copy(dst_buf=self.flat_one_hot, src_ptr=hfoh.unsafe_ptr())
         var hbf = ctx.enqueue_create_host_buffer[DType.uint32](
-            hist_cells_per_leaf
+            cell_capacity
         )
         var hfw = ctx.enqueue_create_host_buffer[DType.float32](n_features)
         for f in range(n_features):
@@ -4309,28 +4331,30 @@ struct TTreeWorkspace(Movable):
                 )
         for f in range(n_features):
             hfw.unsafe_ptr().unsafe_store(f, Float32(1.0))
+        if hist_cells_per_leaf == 0:
+            hbf.unsafe_ptr().unsafe_store(0, UInt32(0))
         ctx.enqueue_copy(dst_buf=self.bff, src_ptr=hbf.unsafe_ptr())
         ctx.enqueue_copy(dst_buf=self.ffw, src_ptr=hfw.unsafe_ptr())
         var hbr1 = ctx.enqueue_create_host_buffer[DType.uint32](
-            hist_cells_per_leaf
+            cell_capacity
         )
         var hbr2 = ctx.enqueue_create_host_buffer[DType.uint32](
-            hist_cells_per_leaf
+            cell_capacity
         )
         var hbr3 = ctx.enqueue_create_host_buffer[DType.uint32](
-            hist_cells_per_leaf
+            cell_capacity
         )
         var hbr4 = ctx.enqueue_create_host_buffer[DType.uint32](
-            hist_cells_per_leaf
+            cell_capacity
         )
         var hbr5 = ctx.enqueue_create_host_buffer[DType.uint32](
-            hist_cells_per_leaf
+            cell_capacity
         )
         var hbr6 = ctx.enqueue_create_host_buffer[DType.uint8](
-            hist_cells_per_leaf
+            cell_capacity
         )
         var hbr7 = ctx.enqueue_create_host_buffer[DType.uint32](
-            hist_cells_per_leaf
+            cell_capacity
         )
         for f in range(n_features):
             ref tf2 = layout.features[f]
@@ -4347,6 +4371,17 @@ struct TTreeWorkspace(Movable):
                     bfx, UInt8(1) if tf2.one_hot_feature else UInt8(0)
                 )
                 hbr7.unsafe_ptr().unsafe_store(bfx, UInt32(b))
+        if hist_cells_per_leaf == 0:
+            # no feature owns a cell: the spare cell is the zero descriptor
+            # (column 0, mask 0, shift 0, bin 0, ordered), so a level with
+            # no candidate sends every row left without reading a feature
+            hbr1.unsafe_ptr().unsafe_store(0, UInt32(0))
+            hbr2.unsafe_ptr().unsafe_store(0, UInt32(0))
+            hbr3.unsafe_ptr().unsafe_store(0, UInt32(0))
+            hbr4.unsafe_ptr().unsafe_store(0, UInt32(0))
+            hbr5.unsafe_ptr().unsafe_store(0, UInt32(0))
+            hbr6.unsafe_ptr().unsafe_store(0, UInt8(0))
+            hbr7.unsafe_ptr().unsafe_store(0, UInt32(0))
         ctx.enqueue_copy(dst_buf=self.bfr_off, src_ptr=hbr1.unsafe_ptr())
         ctx.enqueue_copy(dst_buf=self.bfr_mask, src_ptr=hbr2.unsafe_ptr())
         ctx.enqueue_copy(dst_buf=self.bfr_shift, src_ptr=hbr3.unsafe_ptr())
