@@ -4,6 +4,10 @@
 This is benchmark tooling, never product execution. Source is captured before
 the race; logs and resolved worker records are sealed afterwards. Object names
 are content hashes, and R2 uploads are verified by reading the bytes back.
+What is kept follows one decision, scores_opponent(ctx): a job that scores an
+opponent keeps the archives above; a job with only our own arms keeps its
+results, hashes, settings, probe, commit and logs and nothing bulky (AGENTS.md
+"What a measurement keeps", Andrew, 2026-11-20). Nothing here is inside a clock.
 """
 import argparse
 import atexit
@@ -637,7 +641,9 @@ class LoadedBytesMissing(ValueError):
 def loaded_module_ref(ctx, filename, sha):
     """Retain one loaded native module once per results dir; return its archive ref.
 
-    The archive is evidence/loaded/<sha256>.tar.gz holding `<sha256>/<name>`,
+    An own-arms job (scores_opponent False) checks the hash and records path,
+    sha256 and size only (status "not-archived"); no copy of the module is made.
+    Otherwise the archive is evidence/loaded/<sha256>.tar.gz holding `<sha256>/<name>`,
     deterministic (gzip mtime 0), so its R2 key is content-addressed and a
     second run of the same wheel finds it already present. A module that is gone
     or whose bytes no longer match the worker's hash raises LoadedBytesMissing.
