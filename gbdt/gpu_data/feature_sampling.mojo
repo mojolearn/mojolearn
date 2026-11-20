@@ -114,8 +114,9 @@ struct FeatureProjectionWorkspace(Movable):
     ) raises -> DeviceBuffer[DType.uint32]:
         if selected.columns > self.column_capacity or len(selected.features) != self.feature_capacity:
             raise Error("feature projection workspace capacity mismatch")
-        if selected.columns == 0:
-            return source.copy()
+        # A sample that drew only constant columns still has one column
+        # (`build_layout`): it is projected like any other and comes out as
+        # `rows` zero words, the kernel's `packed` with no descriptor.
         # The previous tree may still have queued work reading this output.
         ctx.synchronize()
         # Capacity is the maximum selected width seen so far. Growth can
