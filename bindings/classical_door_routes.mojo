@@ -6,26 +6,20 @@
 # bindings/classical_family_door.mojo), which keeps their code out of its
 # compile.
 
-#: Connection-context keys of the doors' retained compiled entries
-#: (python/mojolearn/_native_classical_bridge.py `_classical_doors`).
-comptime CLASSICAL_TREES_DOOR = "classical_trees_door"
-comptime CLASSICAL_FAMILY_DOOR = "classical_family_door"
+# bw2-classical (2026-11-20): the doors' connection-context keys
+# ("classical_trees_door", "classical_family_door") are held keys of
+# bindings/classical_keys_unpack.mojo (a str was built per forwarded call),
+# and every exact name the tree door serves is a leaf of
+# bindings/operation_names_classical.mojo, resolved by one table lookup. What
+# is left here is the route of a name the table does not hold: the prefixes.
 
 
 def classical_trees_operation(operation: String) -> Bool:
-    """Whether a string operation belongs to the tree door: the names the
-    classical door's own branches matched before the split."""
-    return (operation == "host_kde_fit" or operation == "host_iforest_fit"
-            or operation == "host_density_save" or operation == "host_density_hash"
-            or operation == "host_bound_hash"
-            or operation == "host_density_initialize"
-            or operation.startswith("host_infer_")
-            or operation == "archive_infer_predict" or operation == "archive_infer_predict_proba"
-            or operation == "archive_knn_classifier" or operation == "archive_knn_regressor"
-            or operation.startswith("trees_") or operation.startswith("host_tree_")
-            or operation == "host_archive_predict" or operation == "host_archive_predict_proba"
-            or operation == "host_archive_model" or operation == "host_archive_load"
-            or operation == "host_archive_classical_model")
+    """Whether a string operation the operation table does not hold belongs
+    to the tree door: the prefixes it forwards by name (its exact names are
+    all in the table)."""
+    return (operation.startswith("host_infer_") or operation.startswith("trees_")
+            or operation.startswith("host_tree_"))
 
 
 def classical_family_operation(operation: String) -> Bool:

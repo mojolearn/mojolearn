@@ -20,6 +20,7 @@ from bindings.operation_names_mix import operation_names_mix
 from bindings.operation_names_mani import operation_names_mani
 from bindings.operation_names_low import operation_names_low
 from bindings.operation_names_linops import operation_names_linops
+from bindings.operation_names_classical import operation_names_classical
 # SPDX-License-Identifier: Apache-2.0
 # The one table of integer operation codes for the classical owner's door
 # (lane ne1-h-labels, plan NATIVE_ENTRY_POINTS_AFTER_0866 section H, lesson
@@ -63,6 +64,11 @@ comptime OP_LEAF_NONE = -1
 comptime OP_ROUTE_FAMILY = 1
 comptime OP_ROUTE_TREES = 2
 comptime OP_ROUTE_HOST_TREE = 3
+# The classical door's and its tree door's own string operations (lane
+# bw2-classical): registered LAST (bindings/operation_names_classical.mojo),
+# so they follow every code Python maps; never passed by code (the coded
+# doors refuse this route) and never in `operation_code_names`.
+comptime OP_ROUTE_CLASSICAL = 4
 
 # Family owner routes (`family_route`), in the priority order of the former
 # prefix chain of bindings/family_native.mojo.
@@ -294,12 +300,18 @@ struct OperationTable(Defaultable, Movable):
         _operation_names(names)
         _leaves_pad(names, leaves)
         _family_names(names, leaves)
+        var first_classical = len(names)
+        operation_names_classical(names, leaves)
+        _leaves_pad(names, leaves)
         self.names = names^
         self.leaves = leaves^
         self.routes = List[Int]()
         self.family_routes = List[Int]()
         for i in range(len(self.names)):  # driver-loop: over the fixed operation names, once per process
-            if self.names[i].startswith("trees_"):
+            if i >= first_classical:
+                self.routes.append(OP_ROUTE_CLASSICAL)
+                self.family_routes.append(FR_UNKNOWN)
+            elif self.names[i].startswith("trees_"):
                 self.routes.append(OP_ROUTE_TREES)
                 self.family_routes.append(FR_UNKNOWN)
             elif self.names[i].startswith("host_tree_"):
@@ -312,7 +324,8 @@ struct OperationTable(Defaultable, Movable):
 
 # Shared by every Mojo extension in the process; bump the version whenever a
 # name is added, removed or reordered (the codes are indices) or a field
-# changes. V4: the leaf column and every family name.
+# changes. V4: the leaf column and every family name. (bw2-classical adds the
+# OP_ROUTE_CLASSICAL names at the end; the integrator bumps once per wave.)
 comptime OPERATION_TABLE = SharedSlot[OperationTable, "MojolearnOperationCodesV4"]
 
 

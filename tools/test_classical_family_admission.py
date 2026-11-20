@@ -6,6 +6,8 @@ import sys
 import types
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'tools'))
+from boundary_keys_plain import plain  # noqa: E402  (the doors read through held keys: bw2-classical)
 
 
 def connection():
@@ -84,7 +86,10 @@ def test_native_family_door_admits_storage_before_dispatch_and_operation_coercio
     # The family operations moved to their own host door (d24e390da9); the classical door only routes them.
     source = (ROOT / 'bindings/classical_native_pack.mojo').read_text()
     body = source.split('def classical_c(', 1)[1]
-    assert body.index('py_type(request[1]) is not b.str') < body.index('var operation = String(request[1])')
+    # bw2-classical: the str is resolved by one table lookup (classical_operation_leaf); only a name
+    # the table does not hold is copied into a String. Both follow the exact-str admission.
+    assert body.index('py_type(request[1]) is not b.str') < body.index('var operation = classical_operation_leaf(request[1])')
+    assert body.index('py_type(request[1]) is not b.str') < body.index('var name = String(request[1])')
     door = (ROOT / 'bindings/classical_family_door.mojo').read_text()
     entry = door.split('def classical_family_c(', 1)[1]
     assert entry.index('py_type(request[1]) is not b.str') < entry.index('var operation = String(request[1])')
@@ -94,7 +99,8 @@ def test_native_family_door_admits_storage_before_dispatch_and_operation_coercio
 
 
 def test_guard_keeps_none_passive_subclasses_and_native_dictionary_boundary():
-    source = (ROOT / 'providers/python/classical_family_admission_pyapi_unpack.mojo').read_text()
+    rel = 'providers/python/classical_family_admission_pyapi_unpack.mojo'
+    source = plain(rel, (ROOT / rel).read_text())
     assert source.index('if model is None:') < source.index('mods.module("mojolearn._native_family_layouts")')
     assert 'len(ancestry) - start != len(connected)' in source
     assert 'String(name) == "__init__" or not py_contains(names, name)' in source

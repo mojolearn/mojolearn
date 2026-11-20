@@ -17,6 +17,8 @@ from core.native_archive_linear import native_archive_string, native_linear_arch
 from core.native_archive_read import native_archive_read_status
 from core.native_archive_repr import NativeArchiveReprNode, archive_repr_format
 from bindings.classical_archive_read_run import _archive_missing
+from bindings.classical_keys_unpack import classical_keys
+from bindings.py_balanced import py_item
 
 
 def _archive_builtin_repr(value: PythonObject) raises -> String:
@@ -71,13 +73,14 @@ def _archive_repr_types() raises -> PythonObject:
 def _archive_repr_kind(value: PythonObject, context: PythonObject,
                        native_types: PythonObject) raises -> Int:
     var cls = py_type(value)
-    if (cls is py_type(PythonObject("")) or cls is context["archive_bytes_type"]
+    var nk = classical_keys()
+    if (cls is py_type(PythonObject("")) or cls is py_item(context, nk[].k_archive_bytes_type)
             or cls is py_type(PythonObject(0)) or cls is py_type(PythonObject(True))
             or cls is py_type(PythonObject(Float64(0)))
-            or cls is native_types[0] or cls is context["archive_bytearray_type"]
-            or cls is context["archive_memoryview_type"] or value is None):
+            or cls is native_types[0] or cls is py_item(context, nk[].k_archive_bytearray_type)
+            or cls is py_item(context, nk[].k_archive_memoryview_type) or value is None):
         return 0
-    var paths = context["archive_path_types"]
+    var paths = py_item(context, nk[].k_archive_path_types)
     if cls is paths[0] or cls is paths[1]:
         return 1
     if cls is py_type(Python.list()):
@@ -90,7 +93,7 @@ def _archive_repr_kind(value: PythonObject, context: PythonObject,
         return 5
     if cls is native_types[2]:
         return 6
-    var types = context["archive_file_types"]
+    var types = py_item(context, nk[].k_archive_file_types)
     for i in range(len(types)):  # driver-loop: connected exact native file identities
         if cls is types[i]:
             return 7 + i
@@ -116,7 +119,8 @@ def _archive_repr_file_name(value: PythonObject, context: PythonObject, kind: In
     # class and traceback. Only AttributeError means the name was deleted;
     # allocation and other native errors must not become a nameless display.
     ref cpy = Python().cpython()
-    var attribute_error = context["archive_attribute_error"]
+    var nk = classical_keys()
+    var attribute_error = py_item(context, nk[].k_archive_attribute_error)
     var matches = cpy.lib.get_function[Int32]("PyErr_ExceptionMatches")
     var clear = cpython_table()[].PyErr_Clear
     var key = String("name")
@@ -234,6 +238,7 @@ def _archive_repr_paths(value: PythonObject, context: PythonObject,
     var failures = List[_ArchiveReprFailure]()
     _ = _archive_repr_child_unpack(value, pins, nodes, indices)
     var index = 0
+    var nk = classical_keys()
     while index < len(pins):  # unpack: admitted native object graph and owners
         var item = pins[index]
         var kind = _archive_repr_kind(item, context, native_types)
@@ -242,7 +247,7 @@ def _archive_repr_paths(value: PythonObject, context: PythonObject,
             _archive_repr_leaf_unpack(item, node, failures)
         elif kind == 1:
             var normalized = _archive_read_path(item, context)
-            node.pure_path = py_type(item) is context["archive_path_types"][1]
+            node.pure_path = py_type(item) is py_item(context, nk[].k_archive_path_types)[1]
             _archive_repr_leaf_unpack(normalized, node, failures)
         elif kind >= 2 and kind <= 6:
             var members = _archive_repr_members(item, kind)
@@ -290,20 +295,22 @@ def _archive_read_repr(value: PythonObject, context: PythonObject) raises -> Str
 def _archive_read_input(path: PythonObject, context: PythonObject) raises -> ArchiveReadInput:
     var file = path
     var close = True
-    var types = context["archive_file_types"]
+    var nk = classical_keys()
+    var types = py_item(context, nk[].k_archive_file_types)
     for k in range(len(types)):
         if py_type(path) is types[k]:
             close = False
     if close:
-        file = _archive_file_call(context["archive_open"], _archive_read_path(path, context), "rb")
+        file = _archive_file_call(py_item(context, nk[].k_archive_open), _archive_read_path(path, context), "rb")
     return archive_input_unpack(file, close, context)
 
 
 def classical_archive_read(path: PythonObject, context: PythonObject) raises -> PythonObject:
     # Generic format boundary used by the remaining saved-model families.
     var admitted = _archive_read_input(path, context)
-    var minor = Int(py=context["archive_python_minor"])
-    var micro = Int(py=context["archive_python_micro"])
+    var nk = classical_keys()
+    var minor = Int(py=py_item(context, nk[].k_archive_python_minor))
+    var micro = Int(py=py_item(context, nk[].k_archive_python_micro))
     try:
         var members = native_archive_read_status(admitted.span, minor, micro)
         return archive_members_pack(members, context)
@@ -314,9 +321,10 @@ def classical_archive_read(path: PythonObject, context: PythonObject) raises -> 
 def _archive_dtype_name(value: PythonObject, context: PythonObject) raises -> String:
     # The dtype a refusal names, as `_serialize._dtype_name` named it.
     var strings = py_type(PythonObject(""))
-    var bytes = context["archive_bytes_type"]
+    var nk = classical_keys()
+    var bytes = py_item(context, nk[].k_archive_bytes_type)
     var lists = py_type(Python.list())
-    if classical_is_array(value, context) or (classical_numpy(context) and py_type(value) is context["ndarray"]):
+    if classical_is_array(value, context) or (classical_numpy(context) and py_type(value) is py_item(context, nk[].k_ndarray)):
         return classical_dtype_str(value, context)
     if py_type(value) is strings:
         return "<U"
@@ -342,7 +350,8 @@ def _archive_exact(arrays: PythonObject, name: String, dtype: String, context: P
     # The reader publishes a mojolearn Array for every dtype an Array holds,
     # with or without NumPy (classical_archive_output_door.mojo, 2745da68ec);
     # an ndarray only for the other dtypes, when NumPy is connected.
-    var numeric = classical_is_array(value, context) or (classical_numpy(context) and py_type(value) is context["ndarray"])
+    var nk = classical_keys()
+    var numeric = classical_is_array(value, context) or (classical_numpy(context) and py_type(value) is py_item(context, nk[].k_ndarray))
     if not numeric or classical_dtype_str(value, context) != dtype:
         raise Error("mojolearn: model field '" + name + "' has dtype " + _archive_dtype_name(value, context)
                     + ", the format stores " + dtype + "; refusing to cast a model file")
@@ -353,10 +362,11 @@ def _archive_string(arrays: PythonObject, name: String, context: PythonObject) r
     if not py_contains(arrays, name):
         raise Error(_archive_missing(name))
     var value = arrays[name]
-    if py_type(value) is context["array_class"]:
+    var nk = classical_keys()
+    if py_type(value) is py_item(context, nk[].k_array_class):
         # A NumPy-free read: a text field never decodes to numbers.
         raise Error("model string field " + name + " is not text")
-    if classical_numpy(context) and py_type(value) is context["ndarray"]:
+    if classical_numpy(context) and py_type(value) is py_item(context, nk[].k_ndarray):
         if Int(py=value.size) == 0:
             raise Error("model string field is empty")
         value = value.flat[0]
@@ -369,8 +379,9 @@ def _archive_string(arrays: PythonObject, name: String, context: PythonObject) r
 
 def classical_archive_load(cls: PythonObject, path: PythonObject, ridge: Bool, context: PythonObject) raises -> PythonObject:
     var admitted = _archive_read_input(path, context)
-    var minor = Int(py=context["archive_python_minor"])
-    var micro = Int(py=context["archive_python_micro"])
+    var nk = classical_keys()
+    var minor = Int(py=py_item(context, nk[].k_archive_python_minor))
+    var micro = Int(py=py_item(context, nk[].k_archive_python_micro))
     try:
         var members = native_archive_read_status(admitted.span, minor, micro)
         archive_events_pack(members, context)
@@ -388,26 +399,27 @@ def classical_archive_load(cls: PythonObject, path: PythonObject, ridge: Bool, c
 def classical_host_model(path: PythonObject, context: PythonObject) raises -> PythonObject:
     """Load an explicit host linear model from one native archive execution."""
     var admitted = _archive_read_input(path, context)
-    var minor = Int(py=context["archive_python_minor"])
-    var micro = Int(py=context["archive_python_micro"])
+    var nk = classical_keys()
+    var minor = Int(py=py_item(context, nk[].k_archive_python_minor))
+    var micro = Int(py=py_item(context, nk[].k_archive_python_micro))
     try:
         var members = native_archive_read_status(admitted.span, minor, micro)
         archive_events_pack(members, context)
         var print_mode = archive_print_mode_unpack(members, context)
         var numpy = classical_numpy(context)
         var saved_as = native_archive_string(members, "estimator", numpy, print_mode)
-        var cls = py_get(context["classical_host_estimators"], PythonObject(saved_as))
+        var cls = py_get(py_item(context, nk[].k_classical_host_estimators), PythonObject(saved_as))
         if cls is None:
             raise Error("mojolearn: " + _archive_read_repr(path, context) + " was saved by "
                         + saved_as + ", which mojolearn-linear-1 does not hold")
-        var ridge = Bool(py=context["classical_kinds"][cls])
+        var ridge = Bool(py=py_item(context, nk[].k_classical_kinds)[cls])
         var ancestry = archive_class_names_unpack(cls)
         var plan = native_linear_archive_plan(members, ancestry, ridge, numpy, print_mode)
         if plan.class_mismatch:
             raise Error("mojolearn: " + _archive_read_repr(path, context) + " was saved by "
                         + plan.saved_as + ", not " + ancestry[0])
         var model = archive_linear_pack(cls, plan, members, ridge, context)
-        py_setitem(_archive_model_fields(model), "estimator", PythonObject(saved_as))
+        py_setitem(_archive_model_fields(model), nk[].k_estimator, PythonObject(saved_as))
         return model
     finally:
         admitted.close()

@@ -13,6 +13,8 @@ from bindings.py_balanced import py_type
 from bindings.classical_archive_door import _archive_methods, _archive_file_call
 from bindings.optimizer_public_words_unpack import stash_python_error
 from core.native_archive_span import ArchiveSpan
+from bindings.classical_keys_unpack import classical_keys
+from bindings.py_balanced import py_item
 
 
 struct ArchiveReadInput(Movable):
@@ -43,7 +45,8 @@ struct ArchiveReadInput(Movable):
         self.owner = PythonObject(None)
         if self.close_file:
             self.close_file = False
-            _ = _archive_file_call(self.methods["close"], self.file)
+            var nk = classical_keys()
+            _ = _archive_file_call(py_item(self.methods, nk[].k_close), self.file)
         _ = self.owned
 
 
@@ -51,10 +54,11 @@ def _archive_map_or_none(file: PythonObject, methods: PythonObject, context: Pyt
     # mmap is an already-connected immutable native type, not a caller
     # protocol. Mapping failure is not an archive failure: readinto retains
     # support for native seekable file kinds without a mapping operation.
-    var fd = _archive_file_call(methods["fileno"], file)
+    var nk = classical_keys()
+    var fd = _archive_file_call(py_item(methods, nk[].k_fileno), file)
     ref cpy = Python().cpython()
     var args = Python.tuple(fd, size, 2, 1)  # MAP_PRIVATE, PROT_READ (LP64 Unix)
-    var result = cpy.PyObject_Call(context["owner_mmap_class"]._obj_ptr, args._obj_ptr, PyObjectPtr())
+    var result = cpy.PyObject_Call(py_item(context, nk[].k_owner_mmap_class)._obj_ptr, args._obj_ptr, PyObjectPtr())
     if not result:
         cpython_table()[].PyErr_Clear()
         return PythonObject(None)
@@ -67,16 +71,17 @@ def archive_input_unpack(file: PythonObject, close_file: Bool, context: PythonOb
     result.close_file = close_file
     result.methods = _archive_methods(file, context)
     try:
-        _ = _archive_file_call(result.methods["seek"], file, 0, 2)
-        var size = Int(py=_archive_file_call(result.methods["tell"], file))
+        var nk = classical_keys()
+        _ = _archive_file_call(py_item(result.methods, nk[].k_seek), file, 0, 2)
+        var size = Int(py=_archive_file_call(py_item(result.methods, nk[].k_tell), file))
         if size < 0:
             raise Error("invalid checkpoint offset or size")
-        if not Bool(py=_archive_file_call(result.methods["readable"], file)):
+        if not Bool(py=_archive_file_call(py_item(result.methods, nk[].k_readable), file)):
             # Preserve the native IO object's established UnsupportedOperation
             # class/message instead of silently permitting a write-only fd.
-            _ = _archive_file_call(result.methods["read"], file, 1)
-        if py_type(file) is context["archive_file_types"][0]:
-            result.owner = _archive_file_call(result.methods["getbuffer"], file)
+            _ = _archive_file_call(py_item(result.methods, nk[].k_read), file, 1)
+        if py_type(file) is py_item(context, nk[].k_archive_file_types)[0]:
+            result.owner = _archive_file_call(py_item(result.methods, nk[].k_getbuffer), file)
         elif size > 0:
             result.owner = _archive_map_or_none(file, result.methods, context, size)
         if result.owner is not None:
@@ -96,8 +101,8 @@ def archive_input_unpack(file: PythonObject, close_file: Bool, context: PythonOb
                 var failure = stash_python_error()
                 raise failure^
             var buffer = PythonObject(from_owned=view)
-            _ = _archive_file_call(result.methods["seek"], file, 0, 0)
-            var read = _archive_file_call(result.methods["readinto"], file, buffer)
+            _ = _archive_file_call(py_item(result.methods, nk[].k_seek), file, 0, 0)
+            var read = _archive_file_call(py_item(result.methods, nk[].k_readinto), file, buffer)
             if read is None or Int(py=read) != size:
                 raise Error("truncated checkpoint payload")
             result.span = ArchiveSpan(Int(result.owned.unsafe_ptr()), size)

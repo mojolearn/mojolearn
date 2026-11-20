@@ -1261,10 +1261,13 @@ def test_no_docstring_is_read_back_at_run_time():
     bindings/classical_exceptions_door.mojo stores it as the class's `__doc__`. A
     keyword is a doc copy only when every native read of that context key is
     such a store."""
+    from boundary_keys_plain import plain
     mojo_texts = []
     for d in ("bindings", "core"):
         for root, _dirs, files in os.walk(os.path.join(lane_select.ROOT, d)):
-            mojo_texts += [open(os.path.join(root, f), errors="replace").read()
+            # The by-name form (tools/boundary_keys_plain.py): a converted door
+            # reads `py_item(context, nk[].k_<key>)` where it read `context["<key>"]`.
+            mojo_texts += [plain(os.path.join(root, f), open(os.path.join(root, f), errors="replace").read())
                            for f in files if f.endswith(".mojo")]
 
     def native_doc_key(key):

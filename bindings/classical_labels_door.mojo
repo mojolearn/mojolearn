@@ -85,6 +85,8 @@ from bindings.p3_labels_metrics_native_door import (
     p3_call_object, p3_decode_list, p3_text_codes, p3_text_classes, p3_text_lookup, p3_dict_codes,
     p3_item, p3_type_word, P3_TEXT_OK, P3_TEXT_NOT_STR,
     _p3_text_codes_source, _p3_text_classes_source)
+from bindings.classical_keys_unpack import classical_keys
+from bindings.py_balanced import py_item
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _F64P = MutPointer[Float64, MutUntrackedOrigin]
@@ -104,7 +106,8 @@ def labels_type_name(t: PythonObject) raises -> String:
     """A type's name through type's own C descriptor: no metaclass
     attribute hook runs (error messages name refused label types)."""
     var b = labels_builtins()
-    return String(py_call(b.type.__dict__["__name__"].__get__, t))
+    var nk = classical_keys()
+    return String(py_call(py_item(b.type.__dict__, nk[].k___name__).__get__, t))
 
 
 def _labels_one_of(t: PythonObject, types: PythonObject) raises -> Bool:
@@ -117,8 +120,9 @@ def _labels_one_of(t: PythonObject, types: PythonObject) raises -> Bool:
 def _labels_connect(context: PythonObject) raises:
     """Connect NumPy's exact scalar types once NumPy is loaded, so label
     admission recognizes them by identity (never numbers ABC callbacks)."""
-    if (py_get(context, "ndarray") is None and py_contains(context, "modules")
-            and py_contains(context, "native_module_type")):
+    var nk = classical_keys()
+    if (py_get(context, nk[].k_ndarray) is None and py_contains(context, nk[].k_modules)
+            and py_contains(context, nk[].k_native_module_type)):
         classical_connect_numpy(context)
 
 
@@ -151,7 +155,8 @@ def labels_text_type(t: PythonObject, context: PythonObject) raises -> Bool:
 def labels_table(context: PythonObject, mode: String, name: String) raises -> PythonObject:
     """The connected entry table of binding `name` in `mode`, or the
     refusal recorded at import ("<Class>: <message>")."""
-    var tables = py_get(context["labels_bindings"], PythonObject(mode))
+    var nk = classical_keys()
+    var tables = py_get(py_item(context, nk[].k_labels_bindings), PythonObject(mode))
     if tables is None:
         raise Error("numeric_mode must be fast, identical or None")
     var table = py_get(tables, PythonObject(name))
@@ -234,7 +239,8 @@ def labels_reshape(array: PythonObject, shape: PythonObject, context: PythonObje
     var strides = Python.list()
     for k in range(rank):  # driver-loop: over array rank metadata
         _ = py_call(strides.append, steps[k])
-    var out = native_storage_allocate(context["array_class"])
+    var nk = classical_keys()
+    var out = native_storage_allocate(py_item(context, nk[].k_array_class))
     py_setattr(out, "_store", array._store)
     py_setattr(out, "_base", PythonObject(None))
     py_setattr(out, "_pin", PythonObject(None))
@@ -269,8 +275,9 @@ def labels_address(array: PythonObject) raises -> Int:
 def _pandas_values(source: PythonObject) raises -> PythonObject:
     """The storage array of an exact single-block pandas Series (what its
     `tolist()` lists), read through pandas' native slots."""
-    var manager = py_get(_pd_fields(source), "_mgr")
-    var blocks = py_get(_pd_fields(manager), "blocks")
+    var nk = classical_keys()
+    var manager = py_get(_pd_fields(source), nk[].k__mgr)
+    var blocks = py_get(_pd_fields(manager), nk[].k_blocks)
     if py_type(blocks) is not labels_builtins().tuple or len(blocks) != 1:
         raise Error("TypeError: pandas Series requires native single-block storage")
     return _pd_get("pandas._libs.internals", "Block", "values", blocks[0])
@@ -369,18 +376,19 @@ def _label_list(var y: PythonObject, context: PythonObject) raises -> PythonObje
     var cls = py_type(y)
     if cls is b.list or cls is b.tuple:
         return py_call(b.list, y)
-    var ndarray = py_get(context, "ndarray")
+    var nk = classical_keys()
+    var ndarray = py_get(context, nk[].k_ndarray)
     if ndarray is not None and cls is ndarray:
         return py_call(ndarray.tolist, y)
-    if cls is context["array_type"]:
-        return py_call(context["array_type"].tolist, y)
+    if cls is py_item(context, nk[].k_array_type):
+        return py_call(py_item(context, nk[].k_array_type).tolist, y)
     if native_pandas_exact(y):
         return _label_list(_pandas_values(y), context)
-    if cls is context["array_class"]:
+    if cls is py_item(context, nk[].k_array_class):
         return label_array_list(y, context)
     # Only connected C buffer exporters: a Python class's __buffer__ hook
     # would run inside PyMemoryView_FromObject.
-    var owners = py_get(context, "buffer_owner_types")
+    var owners = py_get(context, nk[].k_buffer_owner_types)
     if cls is not b.memoryview and (owners is None or not _labels_one_of(cls, owners)):
         raise Error("TypeError: mojolearn: y must be a list, tuple, array or native buffer of labels, not "
                     + labels_type_name(cls))
@@ -555,7 +563,8 @@ def _numeric_label_view(y: PythonObject, context: PythonObject, mut bool_source:
     var view = PythonObject(None)
     var typestr = String("")
     try:
-        if cls is not context["array_class"]:
+        var nk = classical_keys()
+        if cls is not py_item(context, nk[].k_array_class):
             bool_source = String(native_buffer_view(y).format) == "?"
         elif String(y.dtype).endswith("b1"):
             return None  # a bool Array takes the label input step, as before
@@ -607,7 +616,8 @@ def _encode_label_view(y: PythonObject, context: PythonObject, mut bool_source: 
     var view = PythonObject(None)
     var typestr = String("")
     try:
-        if cls is context["array_class"]:
+        var nk = classical_keys()
+        if cls is py_item(context, nk[].k_array_class):
             bool_source = String(source.dtype).endswith("b1")
         else:
             bool_source = String(native_buffer_view(source).format) == "?"
@@ -729,7 +739,8 @@ def _text_buffer_labels_into[S: _TextCodeStorage](y: PythonObject, context: Pyth
     the same classes and codes. None for anything else."""
     if not labels_text_storage(y, context):
         return None
-    var ndarray = context["ndarray"]
+    var nk = classical_keys()
+    var ndarray = py_item(context, nk[].k_ndarray)
     var rank = Int(py=y.ndim)
     var pyshape = y.shape
     var pystrides = y.strides
@@ -898,7 +909,8 @@ def classical_encode_labels(var y: PythonObject, context: PythonObject) raises -
     # A context without the base binding's label helpers (an owner context
     # that connects none) takes the label input step only, as svc_encode_1d
     # did: the same sorted classes and codes.
-    if py_get(context, "labels_base_binding") is None:
+    var nk = classical_keys()
+    if py_get(context, nk[].k_labels_base_binding) is None:
         return _sorted_classes(_flatten_labels(y, context), context)
     var b = labels_builtins()
     y = classifier_label_list(y, context)
@@ -1100,8 +1112,9 @@ def labels_shape_of(var value: PythonObject, context: PythonObject) raises -> Li
     var b = labels_builtins()
     var cls = py_type(value)
     var shape = List[Int]()
-    if cls is context["array_class"]:
-        var dimensions = py_call(context["array_fields"]["shape"], value)
+    var nk = classical_keys()
+    if cls is py_item(context, nk[].k_array_class):
+        var dimensions = py_call(py_item(py_item(context, nk[].k_array_fields), nk[].k_shape), value)
         for k in range(len(dimensions)):  # driver-loop: native Array shape slots
             shape.append(Int(py=dimensions[k]))
         return shape^
@@ -1139,7 +1152,8 @@ def _buffer_format(value: PythonObject, context: PythonObject) raises -> String:
     """`linear_model._buffer_format`: the struct format code, byte order
     stripped; "" when the value exports no buffer."""
     var b = labels_builtins()
-    if py_type(value) is context["array_class"]:
+    var nk = classical_keys()
+    if py_type(value) is py_item(context, nk[].k_array_class):
         var dtype = String(value.dtype)
         if dtype == "<f4":
             return "f"
@@ -1249,7 +1263,8 @@ def _metrics_mode(mode: PythonObject, context: PythonObject) raises -> String:
             raise Error("numeric_mode must be 'fast' or 'identical'")
         answer_mode_word(clean, MODE_FAMILY_LINEAR)
         return clean
-    return String(py_call(py_call(context["backend_fields"]["_DEFAULT_MODE"].strip).lower))
+    var nk = classical_keys()
+    return String(py_call(py_call(py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE).strip).lower))
 
 
 def labels_r2(y_true: PythonObject, prediction: PythonObject, sample_weight: PythonObject, mode: PythonObject,
@@ -1273,16 +1288,17 @@ def labels_r2(y_true: PythonObject, prediction: PythonObject, sample_weight: Pyt
             raise Error("RuntimeError: mojolearn metrics: requested " + selected + ", binary reports "
                         + actual + "; rebuild it")
     var result = PythonObject(None)
+    var nk = classical_keys()
     if sample_weight is not None:
         var w = labels_sample_weight_f32(sample_weight, y.rows, "r2_score", context)
-        result = py_call_typed(metrics["r2_score_weighted"], PythonObject(y.address), PythonObject(yh.address),
+        result = py_call_typed(py_item(metrics, nk[].k_r2_score_weighted), PythonObject(y.address), PythonObject(yh.address),
                                PythonObject(w.address), Python.list(PythonObject(y.rows)))
         _ = yh  # keep the Python object alive through the native call above
         _ = y  # keep the Python object alive through the native call above
         _ = w  # keep the Python object alive through the native call above
         _ = w^
     else:
-        result = py_call_typed(metrics["r2_score"], PythonObject(y.address), PythonObject(yh.address),
+        result = py_call_typed(py_item(metrics, nk[].k_r2_score), PythonObject(y.address), PythonObject(yh.address),
                                Python.list(PythonObject(y.rows)))
         _ = yh  # keep the Python object alive through the native call above
         _ = y  # keep the Python object alive through the native call above
@@ -1456,7 +1472,8 @@ def _accuracy_context(context: PythonObject) raises -> PythonObject:
     var module = py_get(sys.modules, "mojolearn._expansion_metrics")
     if module is None:
         raise Error("ImportError: mojolearn: the metrics programs are not connected")
-    var prog_context = py_get(py_fields(module), "_PROG_CONTEXT")
+    var nk = classical_keys()
+    var prog_context = py_get(py_fields(module), nk[].k__PROG_CONTEXT)
     if prog_context is None:
         raise Error("ImportError: mojolearn: the metrics programs are not connected")
     _family_dictionary(prog_context, labels_builtins())
@@ -1521,8 +1538,9 @@ def _accuracy_codes(yt: PythonObject, yp: PythonObject, n: Int, L: Int, var w: O
         # is wrapped as a zero-copy Array view the runner reads in place; it
         # was copied into a new zero-filled Array per weighted call (O(n)).
         ref wv = w.value()
-        w_array = wv.array if py_type(wv.array) is context["array_class"] else native_f32_view_array(
-            wv.array, wv.address, Python.tuple(wv.rows), wv.rows, 1, context["array_class"])
+        var nk = classical_keys()
+        w_array = wv.array if py_type(wv.array) is py_item(context, nk[].k_array_class) else native_f32_view_array(
+            wv.array, wv.address, Python.tuple(wv.rows), wv.rows, 1, py_item(context, nk[].k_array_class))
         inputs.append(w_array)
     var arena = _accuracy_run(plan.program, inputs, mode, context)
     var base = arena.base()

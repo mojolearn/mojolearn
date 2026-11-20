@@ -19,6 +19,8 @@ from core.native_archive_read import NativeArchiveDecoded
 from core.native_archive_npy import ArchiveLiteralWarning
 from core.native_archive_write import archive_contiguous_strides
 from core.native_archive_copy import archive_copy_bytes
+from bindings.classical_keys_unpack import classical_keys
+from bindings.py_balanced import py_item
 
 
 def archive_warning_pack(warning: ArchiveLiteralWarning, context: PythonObject) raises:
@@ -33,11 +35,12 @@ def archive_warning_pack(warning: ArchiveLiteralWarning, context: PythonObject) 
     message += "'"
     # Native sys._getframe sees the same public Python caller as the former
     # C codec. No Python stack-walk helper or application warning hook runs.
-    var frame = _archive_file_call(context["warning_getframe"])
-    var location = Python.tuple(frame.f_code.co_filename, frame.f_lineno, frame.f_globals["__name__"])
+    var nk = classical_keys()
+    var frame = _archive_file_call(py_item(context, nk[].k_warning_getframe))
+    var location = Python.tuple(frame.f_code.co_filename, frame.f_lineno, py_item(frame.f_globals, nk[].k___name__))
     # The incumbent Mojo codec door surfaced warning-as-error text as a
     # ValueError. The shared emitter admits exact filters/recording/output.
-    classical_warning(message, context["warning_deprecation_type"], context, location, "ValueError")
+    classical_warning(message, py_item(context, nk[].k_warning_deprecation_type), context, location, "ValueError")
 
 
 def archive_events_pack(members: List[NativeArchiveDecoded], context: PythonObject) raises:
@@ -60,15 +63,16 @@ def archive_numeric_pack(member: NativeArchiveDecoded, context: PythonObject) ra
     var dtype = member.layout.dtype
     var array_dtype = (dtype == "<f4" or dtype == "<f8" or dtype == "<i8" or dtype == "<i4" or dtype == "<u4"
                        or dtype == "<u1" or dtype == "<i1" or dtype == "<f2" or dtype == "<u2")
+    var nk = classical_keys()
     if not array_dtype and classical_numpy(context):
         var raw = cpython_table()[].PyByteArray_FromStringAndSize(payload.address, payload.size)
         if not raw:
             var failure = stash_python_error()
             raise failure^
         var storage = PythonObject(from_owned=raw)
-        return py_call(context["ndarray"], shape, dtype=context["archive_npy_dtypes"][PythonObject(member.layout.dtype)], buffer=storage, order=order)
+        return py_call(py_item(context, nk[].k_ndarray), shape, dtype=py_item(context, nk[].k_archive_npy_dtypes)[PythonObject(member.layout.dtype)], buffer=storage, order=order)
     var layout = NativeArrayLayout(member.layout.shape.copy(), member.layout.width, order)
-    var store = py_call(context["array_type"], native_array_code(member.layout.dtype))
+    var store = py_call(py_item(context, nk[].k_array_type), native_array_code(member.layout.dtype))
     var raw = Python().cpython().lib.get_function[PyObjectPtr]("PyMemoryView_FromMemory")(
         MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=payload.address), payload.size, Int32(0x100))
     if not raw:

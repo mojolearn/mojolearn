@@ -9,6 +9,7 @@ A converted door (bindings/py_keys.mojo) writes
     py_get(context, nk[].k_ndarray)                          py_get(context, "ndarray")
     operation == TSA_OPN_HW_FIT                              operation == "hw_fit"
     var operation = py_op_code(nk[].ops, call[1])            var operation = String(py=call[1])
+    var operation = classical_operation_leaf(request[1])     var operation = String(py=request[1])
     def owner(model, operation: Int, ...)                    def owner(model, operation: String, ...)
 
 The tools that read Mojo SOURCE to learn what a door reaches (tools/lane_select.py: the dispatcher's
@@ -40,6 +41,9 @@ _KEY = re.compile(r"\bnk\[\]\.k_(\w+)")
 _ITEM = re.compile(r"\bpy_item\(")
 _OPN = re.compile(r"\b[A-Z][A-Z0-9_]*?_OPN_([A-Z0-9_]+)\b")
 _OP_CODE = re.compile(r"\bpy_op_code\(")
+# A door's leaf of the caller's str by the operation table (bindings/classical_native_pack.mojo
+# `classical_operation_leaf(name)`, lane bw2-classical): one argument, the caller's str.
+_OP_LEAF = re.compile(r"\b\w*_operation_leaf\(")
 _OP_PARAM = re.compile(r"\b(operation|op)\s*:\s*Int\b")
 
 
@@ -133,6 +137,18 @@ def _line(line):
         if len(args) != 2:
             break
         line = line[:m.start()] + "String(py=" + args[1].strip() + ")" + line[end + 1:]
+    # var operation = classical_operation_leaf(request[1]) -> var operation = String(py=request[1])
+    while True:
+        m = _OP_LEAF.search(line)
+        if not m or line[:m.start()].rstrip().endswith("def"):
+            break
+        end = _close(line, m.end() - 1)
+        if end < 0:
+            break
+        args = _split(line[m.end():end])
+        if len(args) != 1:
+            break
+        line = line[:m.start()] + "String(py=" + args[0].strip() + ")" + line[end + 1:]
     line = _OPN.sub(lambda m: '"' + m.group(1).lower() + '"', line)
     return _OP_PARAM.sub(lambda m: m.group(1) + ": String", line)
 
@@ -142,9 +158,9 @@ def plain(path, text):
     by-name forms. Text that uses neither, a non-Mojo path and a key table are returned as they are."""
     if text is None or not path.endswith(".mojo") or is_keys_file(path):
         return text
-    if "nk[].k_" not in text and "_OPN_" not in text and "py_op_code(" not in text:
+    if "nk[].k_" not in text and "_OPN_" not in text and "py_op_code(" not in text and "_operation_leaf(" not in text:
         return text
-    coded = "_OPN_" in text or "py_op_code(" in text
+    coded = "_OPN_" in text or "py_op_code(" in text or "_operation_leaf(" in text
     out, importing = [], False
     for line in text.split("\n"):
         stripped = line.lstrip()
@@ -157,7 +173,8 @@ def plain(path, text):
             out.append(line)
             importing = "(" in line and ")" not in line
             continue
-        if "nk[].k_" in line or (coded and ("_OPN_" in line or "py_op_code(" in line or ": Int" in line)):
+        if "nk[].k_" in line or (coded and ("_OPN_" in line or "py_op_code(" in line or "_operation_leaf(" in line
+                                             or ": Int" in line)):
             line = _line(line)
         out.append(line)
     return "\n".join(out)

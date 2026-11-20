@@ -29,17 +29,21 @@ from bindings.native_array_storage_admission_door import array_storage_admit, ar
 from core.native_array_layout import NativeArrayLayout, native_matrix_shape, native_array_code as _store_code, native_array_itemsize
 from providers.python.array_layout_boundary_unpack import native_shape_unpack
 from providers.python.array_layout_boundary_pack import native_shape_pack
+from bindings.classical_keys_unpack import classical_keys
+from bindings.py_balanced import py_item
 
 
 def classical_numpy(context: PythonObject) raises -> Bool:
     """True when NumPy is connected: arrays are ndarrays. Otherwise they are
     mojolearn Arrays."""
-    return py_get(context, "ndarray") is not None
+    var nk = classical_keys()
+    return py_get(context, nk[].k_ndarray) is not None
 
 
 def classical_is_array(value: PythonObject, context: PythonObject) raises -> Bool:
     """True for an exact mojolearn Array."""
-    return py_type(value) is context["array_class"]
+    var nk = classical_keys()
+    return py_type(value) is py_item(context, nk[].k_array_class)
 
 
 def classical_address(value: PythonObject) raises -> PythonObject:
@@ -83,8 +87,9 @@ def classical_wrap_layout(store: PythonObject, layout: NativeArrayLayout, typest
     context: PythonObject) raises -> PythonObject:
     if layout.count != len(store):
         raise Error("RuntimeError: an array store does not match its shape")
-    var cls = context["array_class"]
-    _ = array_storage_admit(cls, cls, context["array_storage_slots"], "Array native output")
+    var nk = classical_keys()
+    var cls = py_item(context, nk[].k_array_class)
+    _ = array_storage_admit(cls, cls, py_item(context, nk[].k_array_storage_slots), "Array native output")
     return classical_wrap_admitted_layout(cls, store, layout, typestr)
 
 
@@ -181,7 +186,8 @@ def classical_input(value: PythonObject, context: PythonObject, name: String = "
     if classical_is_array(value, context):
         return value
     var b = native_loaded_module("builtins")
-    if py_type(value) is b.memoryview or py_type(value) is context["array_type"] or py_type(value) is b.bytearray:
+    var nk = classical_keys()
+    if py_type(value) is b.memoryview or py_type(value) is py_item(context, nk[].k_array_type) or py_type(value) is b.bytearray:
         var view = native_buffer_view(value)
         var typestr = _buffer_typestr(view, name)
         # memoryview.tobytes packs any strides in C order, in C.
@@ -233,7 +239,8 @@ def classical_dtype_is(dtype: PythonObject, canonical: PythonObject, typestr: St
 def classical_is_f32(value: PythonObject, context: PythonObject) raises -> Bool:
     if classical_is_array(value, context):
         return String(value.dtype) == "<f4"
-    return classical_dtype_is(value.dtype, context["float32"], "<f4")
+    var nk = classical_keys()
+    return classical_dtype_is(value.dtype, py_item(context, nk[].k_float32), "<f4")
 
 
 def classical_dtype_str(value: PythonObject, context: PythonObject) raises -> String:

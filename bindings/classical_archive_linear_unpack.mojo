@@ -16,12 +16,15 @@ from bindings.classical_archive_door import _archive_class_name_unpack
 from providers.python.linear_state_boundary_door import linear_state_publish
 from core.native_archive_read import NativeArchiveDecoded
 from core.native_archive_linear import NativeLinearArchivePlan, native_archive_needs_float_text
+from bindings.classical_keys_unpack import classical_keys
+from bindings.py_balanced import py_item
 
 
 def archive_class_names_unpack(cls: PythonObject) raises -> List[String]:
     var native_type = py_type(py_type(PythonObject("")))
     var fields = native_type.__dict__
-    var mro = py_call(fields["__mro__"].__get__, cls)
+    var nk = classical_keys()
+    var mro = py_call(py_item(fields, nk[].k___mro__).__get__, cls)
     var names = List[String](capacity=len(mro))
     for i in range(len(mro)):
         # Explicit immutable type slots bypass Python metaclass hooks.
@@ -45,43 +48,44 @@ def archive_print_mode_unpack(members: List[NativeArchiveDecoded], context: Pyth
     var native_type = py_type(py_type(PythonObject("")))
     var strings = py_type(PythonObject(""))
     var integers = py_type(PythonObject(0))
-    var np = py_get(context["modules"], "numpy")
-    if np is None or py_type(np) is not context["native_module_type"]:
+    var nk = classical_keys()
+    var np = py_get(py_item(context, nk[].k_modules), nk[].k_numpy)
+    if np is None or py_type(np) is not py_item(context, nk[].k_native_module_type):
         raise Error("TypeError: archive scalar metadata requires the connected native NumPy module")
     var numpy_fields = py_fields(np)
     _archive_metadata_keys(numpy_fields)
-    var version = py_get(numpy_fields, "__version__")
+    var version = py_get(numpy_fields, nk[].k___version__)
     if py_type(version) is not strings:
         raise Error("TypeError: archive scalar metadata requires native NumPy version text")
     var parts = String(version).split(".")
     if len(parts) < 2:
         raise Error("TypeError: archive scalar metadata requires NumPy major.minor metadata")
     var release = Int(parts[0]) * 100 + Int(parts[1])
-    var module = py_get(context["modules"], "numpy._core.arrayprint" if release >= 200 else "numpy.core.arrayprint")
-    if module is None or py_type(module) is not context["native_module_type"]:
+    var module = py_get(py_item(context, nk[].k_modules), "numpy._core.arrayprint" if release >= 200 else "numpy.core.arrayprint")
+    if module is None or py_type(module) is not py_item(context, nk[].k_native_module_type):
         raise Error("TypeError: archive scalar metadata requires native print configuration")
     var fields = py_fields(module)
     _archive_metadata_keys(fields)
-    var options = py_get(fields, "_format_options")
+    var options = py_get(fields, nk[].k__format_options)
     if options is None:
-        var variable = py_get(fields, "format_options")
+        var variable = py_get(fields, nk[].k_format_options)
         var cls = py_type(variable)
         var type_fields = native_type.__dict__
         var flags = cpython_table()[].PyType_GetFlags(cls._obj_ptr)
         if flags & 512:
             raise Error("TypeError: archive scalar metadata requires a native print configuration ContextVar")
-        var name = String(py=py_call(type_fields["__name__"].__get__, cls))
+        var name = String(py=py_call(py_item(type_fields, nk[].k___name__).__get__, cls))
         var owner = String(py=py_call(native_type.__getattribute__, cls, "__module__"))
         if name != "ContextVar" or owner != "_contextvars":
             raise Error("TypeError: archive scalar metadata requires a native print configuration ContextVar")
-        var entry = py_get(py_fields(cls), "get")
-        if py_type(entry) is not py_type(context["archive_file_methods"][0]["getbuffer"]):
+        var entry = py_get(py_fields(cls), nk[].k_get)
+        if py_type(entry) is not py_type(py_item(py_item(context, nk[].k_archive_file_methods)[0], nk[].k_getbuffer)):
             raise Error("TypeError: archive scalar print metadata cannot invoke Python callbacks")
         options = py_call(entry, variable)
     if py_type(options) is not py_type(Python.dict()):
         raise Error("TypeError: archive scalar metadata requires a native print configuration dictionary")
     _archive_metadata_keys(options)
-    var legacy = py_get(options, "legacy")
+    var legacy = py_get(options, nk[].k_legacy)
     if py_type(legacy) is not integers:
         raise Error("TypeError: archive scalar print configuration requires native integer legacy mode")
     var mode = Int(py=legacy)

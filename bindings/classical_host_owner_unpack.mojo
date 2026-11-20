@@ -8,19 +8,22 @@ from bindings.py_balanced import py_type, py_get
 from bindings.sequential_description_unpack import sequential_fields
 from core.linear_fit_types import LF_MODE, LF_VENDOR
 from providers.python.linear_execution_boundary_unpack import linear_execution_word
+from bindings.classical_keys_unpack import classical_keys
+from bindings.py_balanced import py_item
 
 
 def classical_host_entries(model: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = sequential_fields(model)
     var b = native_loaded_module("builtins")
-    var mode = py_get(fields, "numeric_mode")
+    var nk = classical_keys()
+    var mode = py_get(fields, nk[].k_numeric_mode)
     if mode is not None and (py_type(mode) is not b.str or String(mode) != "identical"):
         raise Error("the host model runs identical only; this model was saved with a different numeric_mode")
     # Host*'s inference binding is always CPU/identical. Preserve the old fit
     # helper and score selection separately: those helpers use the process
     # default when numeric_mode is None, even for a Host* subclass.
-    var helper_mode = context["backend_fields"]["_DEFAULT_MODE"] if mode is None else mode
-    var entries = context["classical_bindings"][helper_mode]
+    var helper_mode = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE) if mode is None else mode
+    var entries = py_item(context, nk[].k_classical_bindings)[helper_mode]
     if py_type(entries) is b.str:
         raise Error("ImportError: " + String(entries))
     if linear_execution_word(entries, LF_VENDOR) != 0 or linear_execution_word(entries, LF_MODE) != 1:
