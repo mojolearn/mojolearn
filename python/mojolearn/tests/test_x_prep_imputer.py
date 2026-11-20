@@ -10,6 +10,7 @@ except ImportError:
     pass
 from sklearn.impute import SimpleImputer as SkSI
 import mojolearn as ml
+from mojolearn.tests._sklearn_oracle import older_reference
 
 
 def _data(seed=0, n=203, d=5):
@@ -26,6 +27,8 @@ def test_strategies():
     for kw in (dict(strategy="mean"), dict(strategy="median"), dict(strategy="most_frequent"),
                dict(strategy="constant", fill_value=-3.0), dict(strategy="median", keep_empty_features=True),
                dict(strategy="mean", add_indicator=True)):
+        if older_reference() and kw["strategy"] == "constant":
+            continue  # before 1.9 the reference fills an all-missing column with fill_value; 1.9 leaves NaN
         m = ml.SimpleImputer(**kw).fit(X)
         r = SkSI(**kw).fit(X.astype(np.float64))
         np.testing.assert_allclose(np.asarray(m.statistics_), np.asarray(r.statistics_, dtype=np.float64), rtol=1e-5, atol=1e-6)

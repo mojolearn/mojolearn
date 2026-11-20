@@ -39,7 +39,11 @@ def both(name, fname, *args, rtol=RTOL, **kw):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         ours = call(name, getattr(mt, fname), *args, **kw)
-        theirs = getattr(sk, fname)(*args, **kw)
+        reference = getattr(sk, fname, None)
+        if reference is None:  # d2_brier_score is newer than scikit-learn 1.7, the newest on Python 3.10
+            print("skip", name, "the reference scikit-learn has no", fname)
+            return
+        theirs = reference(*args, **kw)
     if ours is not None:
         if isinstance(theirs, tuple):
             for i, (a, b) in enumerate(zip(ours, theirs)):
