@@ -28,7 +28,8 @@ from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvid
 from providers.python.autograd_pyapi_door import cast_in_of
 from bindings.sequential_arrays_door import sequential_array, sequential_address, sequential_descriptor
 from bindings.optimizer_admission_door import opt_schedule
-from bindings.optimizer_schedule_native_door import schedule_operation
+from bindings.optimizer_schedule_native_door import schedule_run
+from bindings.optimizer_keys_unpack import OPTIMIZER_OPN_SCHEDULE_VALUES
 from bindings.xseq_native_common_door import (
     XF32P, XI32P, xseq_entries, xseq_base, xseq_input, xseq_is_f64, xseq_refuse_f64, xseq_zeros,
     xseq_addr, xseq_f32p, xseq_reshape, xseq_curve_list, xseq_int, xseq_float, xseq_truth, xseq_is_int,
@@ -200,7 +201,7 @@ def _rnn_rates(fields: PythonObject, steps: Int, context: PythonObject) raises -
     if schedule is not None:
         var optimizer_context = py_item(context, nk[].k_optimizer_context)
         opt_schedule(schedule, optimizer_context)
-        return schedule_operation("schedule_values", schedule, Python.tuple(steps), optimizer_context)
+        return schedule_run(OPTIMIZER_OPN_SCHEDULE_VALUES, schedule, Python.tuple(steps), optimizer_context)
     var rates = xseq_zeros(Python.tuple(steps), context)
     var rate = Float32(_opt_real(py_item(fields, nk[].k_learning_rate)))
     xseq_fill_f32(xseq_f32p(rates), steps, rate)

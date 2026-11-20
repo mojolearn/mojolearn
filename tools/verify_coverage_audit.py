@@ -1828,7 +1828,7 @@ ANNOTATIONS_BY_SRC.update({
     **{("lr_schedule_at", src): (
         "covered", ["sequence-lr-schedulers"],
         "Source reach: sequence-lr-schedulers hashes StepLR/ExponentialLR/OneCycleLR.bits_at; "
-        "_OPT_NATIVE(schedule_bits) -> schedule_operation -> retained lr_schedule_at. "
+        "_OPT_NATIVE(schedule_bits) -> schedule_run -> retained lr_schedule_at. "
         "_lr_native uses the identical base binding (core_host for the CPU package). "
         "Source accounting only; reference and execution admission stay separate.")
        for src in ("bindings/_mojolearn.mojo", "bindings/_mojolearn_core_host.mojo")},

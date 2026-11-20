@@ -21,6 +21,17 @@ from core.sequence_array_cast import sequence_cast_leaf
 from bindings.sequence_array_warnings_unpack import sequence_array_report
 from bindings.sequence_array_warnings_pack import sequence_array_errstate
 from bindings.sequence_keys_unpack import sequence_keys
+from bindings.optimizer_keys_unpack import (
+    OPTIMIZER_OPN_SEQMOE_BACKWARD,
+    OPTIMIZER_OPN_SEQMOE_FORWARD,
+    OPTIMIZER_OPN_SEQMOE_INITIALIZE,
+    OPTIMIZER_OPN_SEQMOE_LOAD,
+    OPTIMIZER_OPN_SEQMOE_RELEASE,
+    OPTIMIZER_OPN_SEQMOE_ROUTING,
+    OPTIMIZER_OPN_SEQMOE_SELECTED,
+    OPTIMIZER_OPN_SEQMOE_SETATTR,
+    OPTIMIZER_OPN_SEQMOE_TO_DEVICE,
+)
 from bindings.py_balanced import py_item
 
 
@@ -412,13 +423,13 @@ def _routing(fields: PythonObject, index: Int, context: PythonObject) raises -> 
     return result
 
 
-def sequence_moe_operation(operation: String, owner: PythonObject, values: PythonObject, mode: PythonObject,
+def sequence_moe_operation(operation: Int, owner: PythonObject, values: PythonObject, mode: PythonObject,
                            context: PythonObject) raises -> PythonObject:
     var fields = _owner(owner, context)
-    if operation == "seqmoe_initialize":
+    if operation == OPTIMIZER_OPN_SEQMOE_INITIALIZE:
         return _initialize(fields, values, mode, context)
     var nk = sequence_keys()
-    if operation == "seqmoe_setattr":
+    if operation == OPTIMIZER_OPN_SEQMOE_SETATTR:
         var name = values[0]
         if py_type(name) is not _b().str:
             raise Error("TypeError: MoEBlock attribute names require exact strings")
@@ -445,21 +456,21 @@ def sequence_moe_operation(operation: String, owner: PythonObject, values: Pytho
                 break
             py_setitem(fields, name, values[1])
         return PythonObject(None)
-    if operation == "seqmoe_load":
+    if operation == OPTIMIZER_OPN_SEQMOE_LOAD:
         return _load(owner, fields, values[0], context)
-    if operation == "seqmoe_release":
+    if operation == OPTIMIZER_OPN_SEQMOE_RELEASE:
         try:
             _release(fields, context)
         except:
             pass  # Best-effort cleanup, as the previous public finalizer.
         return PythonObject(None)
-    if operation == "seqmoe_forward" or operation == "seqmoe_backward":
-        return _run(fields, values, context, operation == "seqmoe_backward")
-    if operation == "seqmoe_routing":
+    if operation == OPTIMIZER_OPN_SEQMOE_FORWARD or operation == OPTIMIZER_OPN_SEQMOE_BACKWARD:
+        return _run(fields, values, context, operation == OPTIMIZER_OPN_SEQMOE_BACKWARD)
+    if operation == OPTIMIZER_OPN_SEQMOE_ROUTING:
         return _routing(fields, _integer(values[0], context), context)
-    if operation == "seqmoe_selected":
+    if operation == OPTIMIZER_OPN_SEQMOE_SELECTED:
         return _routing(fields, 3, context)
-    if operation == "seqmoe_to_device":
+    if operation == OPTIMIZER_OPN_SEQMOE_TO_DEVICE:
         opt_scalar(py_get(fields, nk[].k_numeric_mode), context)
         var entries = seq_binding(py_get(fields, nk[].k_numeric_mode), context, PythonObject(None))
         var value = values[0]

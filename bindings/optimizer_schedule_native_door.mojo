@@ -293,36 +293,3 @@ def schedule_run(operation: Int, owner: PythonObject, values: PythonObject, cont
     if operation == OPTIMIZER_OPN_SCHEDULE_BITS:
         return PythonObject(Int(bitcast[DType.uint32](stored[0])))
     return PythonObject(Float64(stored[0]))
-
-def schedule_operation(operation: String, owner: PythonObject, values: PythonObject, context: PythonObject) raises -> PythonObject:
-    """The named form, for the two native callers outside this family that
-    pass a literal (bindings/sequence_optimizer_native_door.mojo
-    `schedule_at` per optimizer step; bindings/xseq_neural_native_door.mojo
-    `schedule_values`). The router passes the code to `schedule_run`. The
-    per-step name is tested first (it was the last of eleven compares)."""
-    var code = -1
-    if operation == "schedule_at":
-        code = OPTIMIZER_OPN_SCHEDULE_AT
-    elif operation == "schedule_values":
-        code = OPTIMIZER_OPN_SCHEDULE_VALUES
-    elif operation == "schedule_construct":
-        code = OPTIMIZER_OPN_SCHEDULE_CONSTRUCT
-    elif operation == "schedule_from_config":
-        code = OPTIMIZER_OPN_SCHEDULE_FROM_CONFIG
-    elif operation == "schedule_getstate":
-        code = OPTIMIZER_OPN_SCHEDULE_GETSTATE
-    elif operation == "schedule_setattr":
-        code = OPTIMIZER_OPN_SCHEDULE_SETATTR
-    elif operation == "schedule_delattr":
-        code = OPTIMIZER_OPN_SCHEDULE_DELATTR
-    elif operation == "schedule_setstate":
-        code = OPTIMIZER_OPN_SCHEDULE_SETSTATE
-    elif operation == "schedule_spec":
-        code = OPTIMIZER_OPN_SCHEDULE_SPEC
-    elif operation == "schedule_config":
-        code = OPTIMIZER_OPN_SCHEDULE_CONFIG
-    elif operation == "schedule_list":
-        code = OPTIMIZER_OPN_SCHEDULE_LIST
-    elif operation == "schedule_bits":
-        code = OPTIMIZER_OPN_SCHEDULE_BITS
-    return schedule_run(code, owner, values, context)

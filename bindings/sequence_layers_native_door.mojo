@@ -1,6 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
-# Whole public LayerNorm operations and the sequence-layer dispatcher. Input
-# shape/storage/ownership are pinned once and reused for admission and execution.
+# Whole public LayerNorm operations. Input shape/storage/ownership are pinned
+# once and reused for admission and execution. The router
+# (bindings/optimizer_native_router_door.mojo) calls `sequence_layer_norm` and
+# `sequence_moe_operation` by the code's range (bw2-router-seq, 2026-11-20: the
+# `seqmoe_` prefix dispatcher that sat here is deleted).
 from bindings.native_class_admission_door import class_record, class_admit
 from bindings.native_loaded_module_door import NativeModules
 from std.python import Python, PythonObject
@@ -17,7 +20,15 @@ from bindings.sequence_device_native_unpack import seq_device_make
 from bindings.classical_arrays_door import classical_address
 from bindings.classical_attributes_door import classical_connect_numpy
 from providers.python.sequence_layer_buffer_pyapi_unpack import SequenceFloatBuffer, SequenceResidentSnapshot, _array, _array_unfilled
-from bindings.sequence_moe_native_door import sequence_moe_operation
+from bindings.optimizer_keys_unpack import (
+    OPTIMIZER_OPN_SEQLN_BACKWARD,
+    OPTIMIZER_OPN_SEQLN_DEVICE_IO,
+    OPTIMIZER_OPN_SEQLN_FORWARD,
+    OPTIMIZER_OPN_SEQLN_INITIALIZE,
+    OPTIMIZER_OPN_SEQLN_LAYER,
+    OPTIMIZER_OPN_SEQLN_LAYER_BACKWARD,
+    OPTIMIZER_OPN_SEQLN_TO_DEVICE,
+)
 from core.scaler_fit_impl import scaler_fill
 from bindings.py_optional import py_present
 from bindings.sequence_keys_unpack import sequence_keys
@@ -319,10 +330,10 @@ def _run(input: LayerInput, d: Int, weight: PythonObject, bias: PythonObject, ep
             dw if had_weight else PythonObject(None), db if had_bias else PythonObject(None))
 
 
-def sequence_layer_norm(operation: String, owner: PythonObject, values: PythonObject, mode: PythonObject,
+def sequence_layer_norm(operation: Int, owner: PythonObject, values: PythonObject, mode: PythonObject,
                         context: PythonObject) raises -> PythonObject:
-    if operation == "seqln_forward" or operation == "seqln_backward":
-        var backward = operation == "seqln_backward"
+    if operation == OPTIMIZER_OPN_SEQLN_FORWARD or operation == OPTIMIZER_OPN_SEQLN_BACKWARD:
+        var backward = operation == OPTIMIZER_OPN_SEQLN_BACKWARD
         var offset = 1 if backward else 0
         opt_scalar(values[offset + 1], context)
         opt_scalar(values[offset + 4], context)
@@ -338,7 +349,7 @@ def sequence_layer_norm(operation: String, owner: PythonObject, values: PythonOb
                             PythonObject(None) if values[4] is None else result[3])
     var fields = _ln_fields(owner, context)
     var nk = sequence_keys()
-    if operation == "seqln_initialize":
+    if operation == OPTIMIZER_OPN_SEQLN_INITIALIZE:
         opt_scalar(values, context)
         opt_scalar(mode, context)
         var shape = _norm_shape(values[0], context)
@@ -364,10 +375,10 @@ def sequence_layer_norm(operation: String, owner: PythonObject, values: PythonOb
         for name in ["weight_grad", "bias_grad", "_x", "_stats"]:  # driver-loop: over initial native state fields
             py_setitem(fields, name, PythonObject(None))
         return PythonObject(None)
-    if operation == "seqln_device_io":
+    if operation == OPTIMIZER_OPN_SEQLN_DEVICE_IO:
         var entries = _ln_device_entries(fields, context)
         return PythonObject(entries is not None)
-    if operation == "seqln_to_device":
+    if operation == OPTIMIZER_OPN_SEQLN_TO_DEVICE:
         var input = LayerInput(values[0], context)
         if input.absent:
             raise Error("TypeError: layer_norm input requires a native array")
@@ -383,7 +394,7 @@ def sequence_layer_norm(operation: String, owner: PythonObject, values: PythonOb
     var shape = _norm_shape(py_item(fields, nk[].k_normalized_shape), context)
     if d < 1 or d > 2147483647 or d != shape_count(shape):
         raise Error("ValueError: normalized_shape and native layer width must agree")
-    if operation == "seqln_layer_backward":
+    if operation == OPTIMIZER_OPN_SEQLN_LAYER_BACKWARD:
         var x = py_get(fields, nk[].k__x)
         if x is None:
             raise Error("RuntimeError: LayerNorm.backward: call forward first")
@@ -395,7 +406,7 @@ def sequence_layer_norm(operation: String, owner: PythonObject, values: PythonOb
         py_setitem(fields, nk[].k_weight_grad, result[2])
         py_setitem(fields, nk[].k_bias_grad, result[3])
         return result[1]
-    if operation != "seqln_layer":
+    if operation != OPTIMIZER_OPN_SEQLN_LAYER:
         raise Error("ValueError: unknown LayerNorm public operation")
     var input = LayerInput(values[0], context)
     _ = _width_known(input, d)
@@ -425,9 +436,3 @@ def sequence_layer_norm(operation: String, owner: PythonObject, values: PythonOb
     _ = input^
     return result[0]
 
-
-def sequence_layers_operation(operation: String, owner: PythonObject, values: PythonObject, mode: PythonObject,
-                              context: PythonObject) raises -> PythonObject:
-    if operation.startswith("seqmoe_"):
-        return sequence_moe_operation(operation, owner, values, mode, context)
-    return sequence_layer_norm(operation, owner, values, mode, context)

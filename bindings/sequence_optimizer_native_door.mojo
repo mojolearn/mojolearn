@@ -18,7 +18,7 @@ from bindings.tensor_view import TensorView, base_format
 from training.optimizer_input_plan import same_shape
 from providers.python.array_layout_boundary_pack import native_shape_pack
 from bindings.optimizer_device_native_door import device_shape, shape_count
-from bindings.optimizer_schedule_native_door import schedule_operation
+from bindings.optimizer_schedule_native_door import schedule_run
 from bindings.classical_arrays_door import classical_input, classical_typed, classical_address, classical_is_array, classical_cast_kind, classical_numpy
 from bindings.classical_attributes_door import classical_connect_numpy
 from core.sequence_optimizer_inputs import sequence_optimizer_cast
@@ -29,6 +29,22 @@ from sequence.opt_entry_abi import (
     seq_opt_ref, seq_opt_call, SO_INIT, SO_STEP, SO_LAMB_STEP, SO_ADAFACTOR_STEP, SO_STATE, SO_EXPORT, SO_IMPORT, SO_CLOSE,
 )
 from bindings.sequence_keys_unpack import sequence_keys
+from bindings.optimizer_keys_unpack import (
+    OPTIMIZER_OPN_SEQ_BINDING,
+    OPTIMIZER_OPN_SEQ_CONSTRUCT,
+    OPTIMIZER_OPN_SEQ_EXPORT,
+    OPTIMIZER_OPN_SEQ_FINALIZE,
+    OPTIMIZER_OPN_SEQ_HANDLE,
+    OPTIMIZER_OPN_SEQ_IMPORT,
+    OPTIMIZER_OPN_SEQ_RESIDENT,
+    OPTIMIZER_OPN_SEQ_SLOT,
+    OPTIMIZER_OPN_SEQ_STATE,
+    OPTIMIZER_OPN_SEQ_STATE_SET,
+    OPTIMIZER_OPN_SEQ_STEP,
+    OPTIMIZER_OPN_SEQ_WORD,
+    OPTIMIZER_OPN_SEQ_WORD_SET,
+    OPTIMIZER_OPN_SCHEDULE_AT,
+)
 from bindings.py_balanced import py_item
 
 
@@ -559,7 +575,7 @@ def seq_step(owner: PythonObject, fields: PythonObject, params: PythonObject, gr
         var schedule = py_get(fields, nk[].k_lr_schedule)
         if schedule is not None:
             var t = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=words)[0]
-            py_setitem(fields, nk[].k_lr, schedule_operation("schedule_at", schedule, Python.tuple(Int(t) + 1), context))
+            py_setitem(fields, nk[].k_lr, schedule_run(OPTIMIZER_OPN_SCHEDULE_AT, schedule, Python.tuple(Int(t) + 1), context))
         # fp: the same Float64 conversion of each value the Python entry made
         var fp = List[Float64](capacity=7)  # lr and at most six optimizer scalars
         fp.append(Float64(py=py_item(fields, nk[].k_lr)))
@@ -589,16 +605,16 @@ def seq_step(owner: PythonObject, fields: PythonObject, params: PythonObject, gr
 
 
 
-def sequence_optimizer_operation(operation: String, owner: PythonObject, values: PythonObject,
+def sequence_optimizer_operation(operation: Int, owner: PythonObject, values: PythonObject,
                                  mode: PythonObject, context: PythonObject) raises -> PythonObject:
     var buffer_pins = OptimizerInputOwners()
     try:
-        if operation == "seq_construct":
+        if operation == OPTIMIZER_OPN_SEQ_CONSTRUCT:
             return seq_construct(owner, values, mode, context)
         var kind = seq_class(owner, context)
         var b = native_loaded_module("builtins")
         var nk = sequence_keys()
-        if operation == "seq_word" or operation == "seq_word_set":
+        if operation == OPTIMIZER_OPN_SEQ_WORD or operation == OPTIMIZER_OPN_SEQ_WORD_SET:
             # One state word reads or writes only the `_words` buffer: admit the
             # owner class, its string keys and that buffer (seq_addr runs the same
             # tensor admission), not the whole optimizer, its binding, the params
@@ -616,31 +632,31 @@ def sequence_optimizer_operation(operation: String, owner: PythonObject, values:
             var word_index = Int(py=values[0])
             if word_index < 0 or word_index >= 9:
                 raise Error("ValueError: optimizer word index out of range")
-            if operation == "seq_word_set":
+            if operation == OPTIMIZER_OPN_SEQ_WORD_SET:
                 word_ptr[word_index] = Int64(Int(py=py_call(b.int, values[1])))
                 return PythonObject(None)
             return PythonObject(word_ptr[word_index] != 0) if Bool(py=values[1]) else PythonObject(Int(word_ptr[word_index]))
-        var fields = py_fields(owner) if operation == "seq_finalize" else seq_fields(owner, context)
-        if operation == "seq_finalize" and py_get(fields, nk[].k__res_b) is None:
+        var fields = py_fields(owner) if operation == OPTIMIZER_OPN_SEQ_FINALIZE else seq_fields(owner, context)
+        if operation == OPTIMIZER_OPN_SEQ_FINALIZE and py_get(fields, nk[].k__res_b) is None:
             return PythonObject(None)
         var entries = seq_binding(py_item(fields, nk[].k_numeric_mode), context, py_get(fields, nk[].k__res_b) if py_get(fields, nk[].k__res_b) is not None else py_get(fields, nk[].k__dev_b))
-        if operation == "seq_binding":
+        if operation == OPTIMIZER_OPN_SEQ_BINDING:
             return py_item(seq_binding(py_item(fields, nk[].k_numeric_mode), context, py_get(fields, nk[].k__dev_b)), nk[].k_module)
         var params = seq_list(py_item(fields, nk[].k_params), context)
         var nh = len(params) if kind == 5 else 1
         var words = seq_addr(py_item(fields, nk[].k__words), 9, context, buffer_pins, True)
         var handles = seq_addr(py_item(fields, nk[].k__handles), nh, context, buffer_pins, True)
         var w = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=words)
-        if operation == "seq_word" or operation == "seq_word_set":
+        if operation == OPTIMIZER_OPN_SEQ_WORD or operation == OPTIMIZER_OPN_SEQ_WORD_SET:
             opt_scalar(values, context)
             var index = Int(py=values[0])
             if index < 0 or index >= 9:
                 raise Error("ValueError: optimizer word index out of range")
-            if operation == "seq_word_set":
+            if operation == OPTIMIZER_OPN_SEQ_WORD_SET:
                 w[index] = Int64(Int(py=py_call(b.int, values[1])))
                 return PythonObject(None)
             return PythonObject(w[index] != 0) if Bool(py=values[1]) else PythonObject(Int(w[index]))
-        if operation == "seq_finalize":
+        if operation == OPTIMIZER_OPN_SEQ_FINALIZE:
             try:
                 var close: List[Int] = [words, handles, nh]
                 _ = seq_opt_call(seq_key(entries), SO_CLOSE, List[Int](), close, List[Float64]())
@@ -648,14 +664,14 @@ def sequence_optimizer_operation(operation: String, owner: PythonObject, values:
                 return PythonObject(None)
             py_setitem(fields, nk[].k__res_b, PythonObject(None))
             return PythonObject(None)
-        if operation == "seq_resident":
+        if operation == OPTIMIZER_OPN_SEQ_RESIDENT:
             return PythonObject(w[2] >= 0)
-        if operation == "seq_handle":
+        if operation == OPTIMIZER_OPN_SEQ_HANDLE:
             if w[2] < 0:
                 return PythonObject(None)
             var hp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=handles)
             return PythonObject(Int(hp[0]))
-        if operation == "seq_state_set":
+        if operation == OPTIMIZER_OPN_SEQ_STATE_SET:
             opt_value(values[0], context)
             var proposed = py_call(b.dict, fields)
             py_setitem(proposed, "_af_state" if kind == 5 else "_state", values[0])
@@ -665,12 +681,12 @@ def sequence_optimizer_operation(operation: String, owner: PythonObject, values:
             w[5] = 1
             w[6] = 0
             return PythonObject(None)
-        if operation == "seq_step":
+        if operation == OPTIMIZER_OPN_SEQ_STEP:
             var selected = seq_binding(py_item(fields, nk[].k_numeric_mode), context, py_get(fields, nk[].k__dev_b))
             if w[2] >= 0 and py_item(selected, nk[].k_module) is not py_item(entries, nk[].k_module):
                 raise Error("ValueError: resident optimizer state must keep its owning numeric-mode binding")
             return seq_step(owner, fields, params, values[0], kind, selected, words, handles, context)
-        if operation == "seq_state" or operation == "seq_slot":
+        if operation == OPTIMIZER_OPN_SEQ_STATE or operation == OPTIMIZER_OPN_SEQ_SLOT:
             var slots = seq_slots(fields, kind, context, buffer_pins, True)
             var slot_words = List[Int]()
             for i in range(len(slots)):  # driver-loop: over padded optimizer state slot addresses
@@ -678,11 +694,11 @@ def sequence_optimizer_operation(operation: String, owner: PythonObject, values:
             var state_words: List[Int] = [words, handles]
             _ = seq_opt_call(seq_key(entries), SO_STATE, slot_words, state_words, List[Float64]())
             var state = fields["_af_state" if kind == 5 else "_state"]
-            if operation == "seq_slot":
+            if operation == OPTIMIZER_OPN_SEQ_SLOT:
                 opt_scalar(values[0], context)
                 return state[values[0]]
             return state
-        if operation == "seq_export" or operation == "seq_import":
+        if operation == OPTIMIZER_OPN_SEQ_EXPORT or operation == OPTIMIZER_OPN_SEQ_IMPORT:
             if kind == 5:
                 raise Error("TypeError: Adafactor exposes state, without an optimizer checkpoint method")
             var slots = seq_slots(fields, kind, context, buffer_pins)
@@ -695,7 +711,7 @@ def sequence_optimizer_operation(operation: String, owner: PythonObject, values:
             var t = Int(w[0])
             var sc_t = 0
             var sc_given = False
-            if operation == "seq_export":
+            if operation == OPTIMIZER_OPN_SEQ_EXPORT:
                 for i in range(k):  # driver-loop: over independent checkpoint output buffers
                     _ = py_call(out.append, seq_array(n, context))
                 sc = seq_array(sc_len, context)
@@ -731,11 +747,11 @@ def sequence_optimizer_operation(operation: String, owner: PythonObject, values:
             addrs.append(sc_addr)
             addrs.append(Int(py=classical_address(sc)))
             var copy_words: List[Int] = [words, handles, k, n, sc_len, len(out), t, Int(sc_given), sc_t]
-            _ = seq_opt_call(seq_key(entries), SO_EXPORT if operation == "seq_export" else SO_IMPORT, addrs, copy_words,
+            _ = seq_opt_call(seq_key(entries), SO_EXPORT if operation == OPTIMIZER_OPN_SEQ_EXPORT else SO_IMPORT, addrs, copy_words,
                              List[Float64]())
             _ = out  # keep the copy buffers alive through the native call above
             _ = sc
-            if operation == "seq_import":
+            if operation == OPTIMIZER_OPN_SEQ_IMPORT:
                 return owner
             return Python.dict(t=Int(w[0]), lr=py_item(fields, nk[].k_lr), state=out, options=py_call(b.dict, py_get(fields, nk[].k_options, Python.dict())), scalars=Python.tuple(Int(w[1]), sc))
         raise Error("TypeError: unknown sequence optimizer native operation")
