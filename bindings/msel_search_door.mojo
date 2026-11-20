@@ -541,10 +541,10 @@ def msel_learning_curve(args: PythonObject, context: PythonObject) raises -> Pyt
     var ft = List[Float64]()
     var st = List[Float64]()
     var rows = MselFoldRows(x, y, unit_folds, False, context)
-    # Every size of a fold scores on the same test rows; under
-    # -D MOJOLEARN_MSEL_FAST_LC_TEST_REUSE (bindings/msel_cv_door.mojo, default
-    # off) they are gathered once per fold. Without the define the flag is read
-    # by nothing.
+    # Every size of a fold scores on the same test rows; they are gathered
+    # once per fold (MSEL_LC_TEST_REUSE, bindings/msel_cv_door.mojo, default
+    # since 2026-11-20). Under MOJOLEARN_MSEL_FAST_LC_TEST_REUSE_OFF the flag
+    # is read by nothing.
     rows.reuse_test = True
     try:
         var r = msel_cross_validate_run(estimator, y, rows, scoring, True, False, False, error_score, context, jobs)
