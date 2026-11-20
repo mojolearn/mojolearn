@@ -1,12 +1,16 @@
 """Source contracts for manifold route migration; no runtime qualification."""
 import ast
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "tools"))
+from boundary_keys_plain import plain  # noqa: E402
 
 
 def _source(name):
-    return (ROOT / name).read_text()
+    # Held keys and operation codes read back by name (lane bw2-manifold).
+    return plain(name, (ROOT / name).read_text())
 
 
 def test_route_connections_are_import_time_and_cover_both_families():
@@ -85,7 +89,7 @@ def test_settings_admission_precedes_snapshot_and_is_shared_by_every_owner():
     assert source.count('context["backend_fields"]["_DEFAULT_MODE"]') == 1
     assert 'if manifold_fit_only(operation) or manifold_fit_transform(operation):' in source
     assert 'self.fitted = py_get(self.values, "numeric_mode_")' in source
-    assert 'if operation != MANI_OPN_FAMILY_MANI_UMAP_TRANSFORM:' in source
+    assert 'if operation != "family_mani_umap_transform":' in source
     assert '_setting(flat[i], context, depth + 1, freeze_buffers)' in source
     assert '_setting(value[keys[i]], context, depth + 1, freeze_buffers)' in source
     # Private byte copy of the configuration array, now through the CPython
