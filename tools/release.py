@@ -1000,7 +1000,11 @@ def launch_detached(ctx, legs):
             leg.command = command + ["--run-id", str(attach)]
             ctx.say(f"  {leg.name}: collecting the succeeded GitHub run {attach} (--run-id; no new dispatch)")
         prov = leg.provenance
-        if prov is None and type(leg) is Leg and callable(getattr(ctx, "leg_provenance", None)):
+        # a RemoteLeg (--pack github) records its launch provenance too: a B arm finds its base's PTX proof through
+        # legs/<leg>.provenance.json (release_reuse._ptx_leg_docs). Without it (2026-11-19, `type(leg) is Leg`) every
+        # arm on a GitHub-packed base lost the proof, refused the published PTX set and launched an sm_80 leg
+        # despite --timed-on sm_89.
+        if prov is None and type(leg) in (Leg, RemoteLeg) and callable(getattr(ctx, "leg_provenance", None)):
             prov = ctx.leg_provenance(leg)
         if compile_requirements is not None:
             prov = dict(prov or {}, compile_requirements=compile_requirements)
@@ -1026,7 +1030,9 @@ def github_attach_run(ctx, leg):
     run its command already names, else the run its last attempt's GHA/run-id.json names when that run built this
     commit with these defines and concluded success (release_github_build.succeeded_run). None for any other leg.
     2026-11-13: collectors killed by GitHub's quota refusals left succeeded runs; their reruns dispatched anew."""
-    if type(leg) is not Leg or not any("release_github_build.py" in str(c) for c in leg.command or []):
+    # RemoteLeg too (--pack github): its records-only collector attaches the same way (2026-11-19: `type(leg) is
+    # not Leg` re-dispatched a whole GitHub build for a remote leg whose collector died after its run succeeded)
+    if type(leg) not in (Leg, RemoteLeg) or not any("release_github_build.py" in str(c) for c in leg.command or []):
         return None
     if "--run-id" in leg.command:
         return leg.command[leg.command.index("--run-id") + 1]
@@ -3672,7 +3678,7 @@ class Release(release_identity_wheels.IdentityOnWheels):
             for l in legs:
                 if l.running() or l.exit_code() is None:
                     continue
-                if (l.exit_code() == release_github_build.DOWNLOAD_PENDING_EXIT and type(l) is Leg
+                if (l.exit_code() == release_github_build.DOWNLOAD_PENDING_EXIT and type(l) in (Leg, RemoteLeg)
                         and pending[l.name] < DOWNLOAD_PENDING_RELAUNCHES):
                     # its run succeeded and only the artifact download failed: collect that run again
                     # (launch_detached attaches by --run-id), never a failed leg
@@ -3983,7 +3989,12 @@ class Release(release_identity_wheels.IdentityOnWheels):
         directory-entry strip, then split_audit over the final set."""
         finals = self.split_finals()
         if all(finals.values()) and wheel_commit(finals["linux"]) == self.commit:
-            return "have " + ", ".join(w.name for w in finals.values())
+            # a final set whose runtime bytes differ from its own LINUX_PAYLOAD (the GitHub-packed 7f5eac7eab base,
+            # 2026-11-19) is not this step's output: every B arm on it is refused, so it packs again
+            drift = [f"{w.name}: {line}" for w in finals.values() for line in release_reuse.payload_runtime_mismatches(w)]
+            if not drift:
+                return "have " + ", ".join(w.name for w in finals.values())
+            self.say("  the final wheels' runtime bytes differ from their LINUX_PAYLOAD; packing again: " + "; ".join(drift))
         if candidate_pack(self) == "github":
             # THE PACK ON GITHUB (lane fx-pack-offload, 2026-11-19; Andrew: offload the laptop): this same step,
             # with linux-wait's tree checks and linux-assemble, runs on a free runner beside the trees
@@ -4040,6 +4051,17 @@ class Release(release_identity_wheels.IdentityOnWheels):
                 # shipped source from the candidate's checkout: the retained-host-composition route above, unchanged
                 args += ["--source-root", src]
                 pack_cwd = ROOT
+        # THE LEGS' libMojolearnMath.so, on every packing host: without --portable-math-helper the packer's
+        # portable_math/wheel.py (the SOURCE's copy) rebuilds it with the packing host's `cc` on Linux and keeps the
+        # set's file on the Mac. 2026-11-19: the ubuntu-24.04 pack runner (GCC 13.3) shipped 9b82408bae1d where the
+        # legs (GCC 11.4) built 35c849364120, the bytes LINUX_PAYLOAD records, and release_reuse refused every arm.
+        # (each set's arch directories carry one, built by the same leg image; given only when they all agree)
+        helpers = sorted(h for s_ in sets for h in Path(s_).glob("*/.libs/libMojolearnMath.so") if h.is_file())
+        if helpers and not self.dry and len({sha256(h) for h in helpers}) == 1:
+            args += ["--portable-math-helper", str(helpers[0])]
+        elif helpers and not self.dry:
+            self.say("  the sets' libMojolearnMath.so differ; the packer's own rule applies (the payload check below "
+                     "refuses a mismatch): " + ", ".join(f"{h} {sha256(h)[:12]}" for h in helpers))
         args += ["--out", dist]
         # the vendor wheel's README says which native set ships unsmoked (no Hopper box held)
         unsmoked = sorted(self.smoke_notes("nvidia"))
@@ -4110,6 +4132,12 @@ class Release(release_identity_wheels.IdentityOnWheels):
         write_json(final_dir / "split-audit.json", report)
         if report["problems"] or not all(finals.values()):
             raise StepFailed("the final split wheels fail their audit: " + "; ".join(report["problems"] or ["missing"]))
+        # every final wheel's runtime bytes are the ones its own LINUX_PAYLOAD records: the bytes a B arm reuses
+        # from this base (release_reuse.extract_member refuses any other). 2026-11-19: a GitHub-packed base whose
+        # packer rebuilt libMojolearnMath.so passed this step and failed all 12 arms on it.
+        drift = [f"{w.name}: {line}" for w in finals.values() for line in release_reuse.payload_runtime_mismatches(w)]
+        if drift:
+            raise StepFailed("the final wheels' runtime bytes differ from their LINUX_PAYLOAD: " + "; ".join(drift))
         self.state["linux_layout"] = "split"
         return ", ".join(f"{w.name} sha256 {sha256(w)}" for w in finals.values())
 
