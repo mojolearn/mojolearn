@@ -61,7 +61,7 @@ Who reads the rows
     MATRIX_UNITS    gemm/fast_matrix_units.mojo: GEMM_FAST_MATRIX_UNITS (the NVIDIA TF32 arm,
                     `-D MOJOLEARN_GEMM_FAST_MATRIX_UNITS=<kind>`, a term of the row), and the
                     classical family routes below
-    BF16_UNITS      gemm/fast_bf16_units.mojo: GEMM_FAST_BF16_UNITS (`-D MOJOLEARN_GEMM_FAST_BF16_UNITS=<kind>`)
+    BF16_UNITS      gemm/fast_bf16_units.mojo: GEMM_FAST_BF16_UNITS (`-D MOJOLEARN_GEMM_FAST_BF16_UNITS=1`)
     WAITS_ELIDED    no seam yet (only waits that can move a bit)
 
 `MODE_POLICY_MASK` has bit i set when row i is relaxed. Bindings export it so
@@ -80,7 +80,7 @@ is False, so a host binding of the same set compiles and stays exact.
     GEMM matrix units             MOJOLEARN_GEMM_FAST_MATRIX_UNITS=<kind>  MATRIX_UNITS  MAX matmul, TF32  MAX matmul, MFMA  afn route (AFN_GEMM_*)      exact
     ROUTE_DECOMP_MATRIX_UNITS     MOJOLEARN_DECOMP_FAST_MATRIX_UNITS       MATRIX_UNITS  MAX matmul, TF32  MAX matmul, MFMA  afn route (PCA Gram tile)   exact
     ROUTE_NEIGHBORS_MATRIX_UNITS  MOJOLEARN_NEIGHBORS_FAST_MATRIX_UNITS    MATRIX_UNITS  MAX matmul, TF32  MAX matmul, MFMA  Apple MMA distance kernels  exact
-    ROUTE_GEMM_BF16_UNITS         MOJOLEARN_GEMM_FAST_BF16_UNITS=<kind>    BF16_UNITS    MAX matmul, bf16  MAX matmul, bf16  afn route (AFN_GEMM_BF16_MMA)  exact
+    ROUTE_GEMM_BF16_UNITS         MOJOLEARN_GEMM_FAST_BF16_UNITS=1    BF16_UNITS    MAX matmul, bf16  MAX matmul, bf16  afn route (AFN_GEMM_BF16_MMA)  exact
 
   GEMM: gemm/fast_matrix_units.mojo (neural dispatch, sequence executor). DECOMP:
   decomposition/gram_matrix_units_route.mojo (PCA / truncated SVD: the Gram past the split-K width, the
@@ -216,7 +216,7 @@ comptime _DECOMP_MATRIX_UNITS_DEFINED = is_defined["MOJOLEARN_DECOMP_FAST_MATRIX
 #   MOJOLEARN_NEIGHBORS_FAST_MATRIX_UNITS (neighbors/distance_matrix_units_route.mojo: the brute-force k-NN
 #   expanded-L2 distance product at wide features on the NVIDIA tensor cores).
 comptime _NEIGHBORS_MATRIX_UNITS_DEFINED = is_defined["MOJOLEARN_NEIGHBORS_FAST_MATRIX_UNITS"]()
-#   MOJOLEARN_GEMM_FAST_BF16_UNITS=<kind> (gemm/fast_bf16_units.mojo: the neural products on the bf16 matrix
+#   MOJOLEARN_GEMM_FAST_BF16_UNITS=1 (gemm/fast_bf16_units.mojo: the neural products on the bf16 matrix
 #   unit, FP32 accumulation): any non-zero kind relaxes BF16_UNITS.
 comptime _GEMM_BF16_UNITS_DEFINED = get_defined_int["MOJOLEARN_GEMM_FAST_BF16_UNITS", 0]() != 0
 # The matrix-units routes are vendor-neutral in source: one call of MAX `linalg.matmul`, whose GPU backends are

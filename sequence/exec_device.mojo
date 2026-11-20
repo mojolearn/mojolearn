@@ -70,7 +70,7 @@ from sequence.gemm_packed_route import SEQ_GEMM_PACKED_EPI, seq_gemm_packed_epi_
 from sequence.gemm_bf16_units_route import (
     SEQ_GEMM_BF16_UNITS, SBU_NONE, seq_gemm_bf16_units_on, seq_gemm_bf16_units_launch,
 )
-from gemm.fast_bf16_units import BF16_UNITS_KIND, BF16_UNITS_KIND_BF16_OUT, bf16_units_workspace_floats
+from gemm.fast_bf16_units import bf16_units_workspace_floats
 from sequence.gemm_matrix_units_route import (
     SEQ_GEMM_MATRIX_UNITS, SMU_NONE, seq_gemm_matrix_units_on, seq_gemm_matrix_units_launch,
     seq_gemm_matrix_units_ta_on, seq_gemm_matrix_units_ta_launch,
@@ -1374,7 +1374,7 @@ struct DeviceExec(Exec, Movable):
         # runs bf16 where its rule takes. The scratch for the two bf16 operand images is the executor's own
         # allocation, freed here: `free` retires it until the next sync, after the launches that use it. An
         # epilogue opcode runs its follower in FP32 as OP_GEMM_EPI_TAIL. Per call under the arm: eight integer
-        # tests, one take, one free, three launches (four under kind 2); no wait. Off: not compiled.
+        # tests, one take, one free, three launches; no wait. Off: not compiled.
         comptime if SEQ_GEMM_BF16_UNITS and (
                 OP == OP_GEMM or OP == OP_AGK_GEMM_EPI or OP == OP_GEMM_EPI):
             var bf16_form = seq_gemm_bf16_units_on[OP](a)
@@ -1386,8 +1386,6 @@ struct DeviceExec(Exec, Movable):
                 self.execution_profile.kernel()
                 self.execution_profile.kernel()
                 self.execution_profile.kernel()
-                comptime if BF16_UNITS_KIND == BF16_UNITS_KIND_BF16_OUT:
-                    self.execution_profile.kernel()
                 self.free(bf16_scratch)
                 comptime if OP != OP_GEMM:
                     if seq_gemm_epi_kind(a.i9, a.i10) != GK_PLAIN:

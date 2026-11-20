@@ -4,17 +4,14 @@
 (lane fx-fast-bf16, 2026-11-20; the kernel of mode-policy row BF16_UNITS, checks/mode_policy.mojo).
 
 EXPERIMENT `-D MOJOLEARN_GEMM_FAST_BF16_UNITS=<kind>`, default OFF, A/B owed with quality beside time
-(docs/apple-fast/EXPERIMENTS.md; arms `fast-bf16-units` and `fast-bf16-units-bf16out` of
-bench/results/paper_compare/owed-pre0867.json).
+(docs/apple-fast/EXPERIMENTS.md; arm `fast-bf16-units` of bench/results/paper_compare/owed-pre0867.json).
 
-  kind 1 = bf16 operands, FP32 accumulation, FP32 OUTPUT. One call of MAX `linalg.matmul` over two bf16 operand
-           tensors and the caller's FP32 output tensor. This is the arm.
-  kind 2 = bf16 operands, FP32 accumulation, BF16 OUTPUT widened to FP32 (what torch autocast(bfloat16) computes
-           for a linear layer): `linalg.matmul` over three bf16 tensors, then one widen launch into the caller's
-           FP32 output. It exists because the pinned MAX (26.7.0, compiled, no source) does not document whether
-           its GPU entry takes operands and output of different dtypes; if kind 1 does not instantiate, kind 2
-           is the same route with one more launch and 8-bit outputs. Its own arm; never the default over kind 1
-           without its A/B.
+  kind 1 = bf16 operands, FP32 accumulation, FP32 OUTPUT: one call of MAX `linalg.matmul` over two bf16 operand
+           tensors and the caller's FP32 output tensor (the mixed-dtype call instantiates on sm_89 under mojo
+           1.2.0 / max 26.7.0: GitHub run 44733416797). The only value. A second form that had MAX store bf16
+           and widened it (torch autocast's linear) was written as a fallback in case the mixed call did not
+           compile; it compiled too (run 44733420954) and was deleted unmeasured: one more launch and an 8-bit
+           output for nothing. Recoverable at lane/fx-fast-bf16@ef53d91d70.
 
 WHERE IT IS LEGAL, AND ON WHICH VENDOR. Only in a `fast` build (`-D MOJOLEARN_MODE_FAST_ROWS`); in a build that
 promises identical bits the define is a compile error (checks/mode_policy.mojo `_row`). Vendor-neutral source,
@@ -33,13 +30,12 @@ mantissa bits: 8 significant bits) by round to nearest even with subnormals flus
 
 relative to the ABSOLUTE sum (times the condition number where terms cancel). Round to nearest has zero mean
 error, so the typical error is 2^-9 sqrt(2 / 3) / sqrt(K) of the absolute sum for K terms of similar size:
-1.0e-4 at K = 256, 2.5e-5 at K = 4096. `bf16_units_cell_bound` is the bound as code. Under kind 2 the stored
-cell is rounded once more to 8 significant bits (another 2^-9 relative to |c|).
+1.0e-4 at K = 256, 2.5e-5 at K = 4096. `bf16_units_cell_bound` is the bound as code.
 
 WHAT STAYS FP32, and why.
   - ACCUMULATION: every cell is summed in FP32 inside the unit. A bf16 accumulator would lose a term below
     2^-8 of the running sum; no vendor's unit accumulates in bf16.
-  - THE OUTPUT (kind 1): activations, dInput and dWeight are stored FP32, so the next product rounds a
+  - THE OUTPUT: activations, dInput and dWeight are stored FP32, so the next product rounds a
     full-precision value once instead of compounding rounded values through the layers.
   - THE MASTER WEIGHTS, the optimizer moments and the update: FP32. The bf16 image of an operand is made per
     product in scratch and never written back: an update of 1e-3 relative is below bf16's half-ulp (2e-3) and
@@ -64,7 +60,7 @@ THE SIZE RULE (`bf16_units_takes`): sizes and the hardware unit only, no data sh
      adds two narrow launches, so nothing under it can gain.
   The constants are reasoned, not measured: the owed shapes row times both sides of each.
 
-COST PER CALL under the arm: the integer rule, then three launches (four under kind 2); no lookup, allocation,
+COST PER CALL under the arm: the integer rule, then three launches; no lookup, allocation,
 lock or wait here (the sequence executor's site takes its scratch from its own allocator). With the define off
 nothing here is compiled into a launch.
 """
@@ -76,13 +72,12 @@ from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.mode_policy import ROUTE_GEMM_BF16_UNITS
-from checks.numerics import bf16_bits_to_f32, f32_to_bf16_bits_rne
+from checks.numerics import f32_to_bf16_bits_rne
 from gemm.contract import OP_NN, OP_NT, OP_TN
 
 #: The define's values.
 comptime BF16_UNITS_KIND_OFF = 0
 comptime BF16_UNITS_KIND_F32_OUT = 1
-comptime BF16_UNITS_KIND_BF16_OUT = 2
 comptime BF16_UNITS_KIND = get_defined_int["MOJOLEARN_GEMM_FAST_BF16_UNITS", 0]()
 
 
@@ -90,10 +85,8 @@ def _bf16_units_checked() -> Bool:
     """The compile-time refusal of an unknown kind. True when the arm is on: the policy table's route constant,
     which is True only in a fast-rows build on the NVIDIA or AMD column with the define passed."""
     comptime assert (
-        BF16_UNITS_KIND == BF16_UNITS_KIND_OFF
-        or BF16_UNITS_KIND == BF16_UNITS_KIND_F32_OUT
-        or BF16_UNITS_KIND == BF16_UNITS_KIND_BF16_OUT
-    ), "MOJOLEARN_GEMM_FAST_BF16_UNITS takes 1 (bf16 operands, fp32 output) or 2 (bf16 output, widened)"
+        BF16_UNITS_KIND == BF16_UNITS_KIND_OFF or BF16_UNITS_KIND == BF16_UNITS_KIND_F32_OUT
+    ), "MOJOLEARN_GEMM_FAST_BF16_UNITS takes 1 (bf16 operands, fp32 accumulation and output)"
     return ROUTE_GEMM_BF16_UNITS
 
 
@@ -106,7 +99,7 @@ comptime BF16_UNITS_MIN_K = 64
 comptime BF16_UNITS_MIN_EDGE = 64
 #: rule 3: 2^27 multiply-adds
 comptime BF16_UNITS_MIN_WORK = 134217728
-#: threads a block of the narrow / widen launches
+#: threads a block of the narrow launches
 comptime BF16_UNITS_TPB = 256
 
 #: Operand relative error of one bf16 operand: round to nearest at 8 significant bits.
@@ -137,27 +130,20 @@ def _round8(x: Int) -> Int:
 @always_inline
 def bf16_units_workspace_floats(m: Int, n: Int, k: Int) -> Int:
     """FP32 words of scratch a taken m x n x k product needs (any op): the bf16 images of A (m k) and B (n k),
-    and under kind 2 of C (m n), each started on a 16-byte boundary. 0 without the arm or under the rule."""
+    each started on a 16-byte boundary. 0 without the arm or under the rule."""
     comptime if not GEMM_FAST_BF16_UNITS:
         return 0
     if not bf16_units_takes(m, n, k):
         return 0
-    var words = _round8(m * k) + _round8(n * k)
-    comptime if BF16_UNITS_KIND == BF16_UNITS_KIND_BF16_OUT:
-        words += _round8(m * n)
-    return (words + 1) // 2
+    return (_round8(m * k) + _round8(n * k) + 1) // 2
 
 
 def bf16_units_cell_bound(abs_sum: Float64, k: Int) -> Float64:
     """The bound on |c_bf16 - c_fp32| for one cell whose absolute sum of terms is `abs_sum` (module docstring):
-    both operands of every term rounded to bf16, the FP32 accumulation of K terms in either order, and under
-    kind 2 the rounding of the stored cell (|c| <= abs_sum)."""
+    both operands of every term rounded to bf16, and the FP32 accumulation of K terms in either order."""
     var operand = Float64(2.0) * BF16_UNITS_OPERAND_REL + BF16_UNITS_OPERAND_REL * BF16_UNITS_OPERAND_REL
     var fold = Float64(2.0) * Float64(k) / Float64(16777216.0)
-    var stored = Float64(0.0)
-    comptime if BF16_UNITS_KIND == BF16_UNITS_KIND_BF16_OUT:
-        stored = BF16_UNITS_OPERAND_REL
-    return (operand + fold + stored) * abs_sum
+    return (operand + fold) * abs_sum
 
 
 def bf16_units_narrow_kernel(dst: _U16P, src: _F32P, count: Int64):
@@ -179,14 +165,6 @@ def bf16_units_narrow_t_kernel(dst: _U16P, src: _F32P, m: Int64, k: Int64):
     dst.unsafe_store(i, f32_to_bf16_bits_rne(src.unsafe_load(col * Int(m) + r)))
 
 
-def bf16_units_widen_kernel(dst: _F32P, src: _U16P, count: Int64):
-    """dst[i] = the exact FP32 value of the bf16 word src[i] (kind 2's output), one element a thread."""
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i >= Int(count):
-        return
-    dst.unsafe_store(i, bf16_bits_to_f32(src.unsafe_load(i)))
-
-
 def bf16_units_product_ptr(
     ctx: DeviceContext,
     pc: _F32P,
@@ -202,7 +180,7 @@ def bf16_units_product_ptr(
     """The one bf16 matrix-unit product of the tree, with no arm and no size test: C[m x n] (FP32, dense) =
     A . B with A stored m x k (or k x m when `a_transposed`) and B stored k x n (or n x k when
     `b_transposed`), both FP32. `ps` is `bf16_units_workspace_floats(m, n, k)` FP32 words of scratch that
-    overlap nothing. Three asynchronous launches (four under kind 2), no wait: every pointer stays live to the
+    overlap nothing. Three asynchronous launches, no wait: every pointer stays live to the
     caller's next synchronize. Instantiated only where the arm is on."""
     comptime if GEMM_FAST_BF16_UNITS:
         var a_cells = m * k
@@ -236,31 +214,13 @@ def bf16_units_product_ptr(
         var ha = sa.bitcast[_BF16]().unsafe_origin_cast[MutAnyOrigin]()
         var hb = sb.bitcast[_BF16]().unsafe_origin_cast[MutAnyOrigin]()
         var ta = TileTensor(ptr=ha, layout=row_major(m, k))
-        comptime if BF16_UNITS_KIND == BF16_UNITS_KIND_BF16_OUT:
-            var sc = sb + _round8(b_cells)
-            var hc = sc.bitcast[_BF16]().unsafe_origin_cast[MutAnyOrigin]()
-            var tch = TileTensor(ptr=hc, layout=row_major(m, n))
-            if b_transposed:
-                var tbt2 = TileTensor(ptr=hb, layout=row_major(n, k))
-                matmul[transpose_b=True, target="gpu"](tch, ta, tbt2, ctx)
-            else:
-                var tb2 = TileTensor(ptr=hb, layout=row_major(k, n))
-                matmul[transpose_b=False, target="gpu"](tch, ta, tb2, ctx)
-            ctx.enqueue_function[bf16_units_widen_kernel](
-                pc,
-                sc,
-                Int64(m * n),
-                grid_dim=((m * n + BF16_UNITS_TPB - 1) // BF16_UNITS_TPB, 1, 1),
-                block_dim=(BF16_UNITS_TPB, 1, 1),
-            )
+        var tc = TileTensor(ptr=pc, layout=row_major(m, n))
+        if b_transposed:
+            var tbt = TileTensor(ptr=hb, layout=row_major(n, k))
+            matmul[transpose_b=True, target="gpu"](tc, ta, tbt, ctx)
         else:
-            var tc = TileTensor(ptr=pc, layout=row_major(m, n))
-            if b_transposed:
-                var tbt = TileTensor(ptr=hb, layout=row_major(n, k))
-                matmul[transpose_b=True, target="gpu"](tc, ta, tbt, ctx)
-            else:
-                var tb = TileTensor(ptr=hb, layout=row_major(k, n))
-                matmul[transpose_b=False, target="gpu"](tc, ta, tb, ctx)
+            var tb = TileTensor(ptr=hb, layout=row_major(k, n))
+            matmul[transpose_b=False, target="gpu"](tc, ta, tb, ctx)
 
 
 def bf16_units_gemm_into(

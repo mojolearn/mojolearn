@@ -791,11 +791,6 @@
    "status": "define in code (gemm/fast_bf16_units.mojo BF16_UNITS_KIND, policy row BF16_UNITS): B narrows both operands of a large neural FP32 GEMM to bf16 in scratch (round to nearest even) and runs MAX linalg.matmul on the half-precision matrix unit, FP32 accumulation and FP32 output, at the neural dispatch (callers with the vendor route open), the sequence executor's plain dense GEMM launches (row-major or transposed A) and the public linalg.matmul entry; master weights, loss, normalisations and optimizer stay FP32; A = the FP32 kernels",
    "owed": "RUN"
   },
-  "fast-bf16-units-bf16out": {
-   "define": "MOJOLEARN_GEMM_FAST_BF16_UNITS=2,MOJOLEARN_MODE_FAST_ROWS",
-   "status": "define in code (gemm/fast_bf16_units.mojo BF16_UNITS_KIND_BF16_OUT): fast-bf16-units with the product stored as bf16 by MAX and widened to FP32 by one more launch (what torch autocast(bfloat16) computes for a linear layer); the form to time if MAX refuses bf16 operands with an FP32 output, and the torch-BF16 reference point otherwise",
-   "owed": "RUN"
-  },
   "mcd-lockstep": {
    "define": "MOJOLEARN_MCD_FAST_LOCKSTEP",
    "status": "PROMOTED 2026-11-20 (lane fx-verdicts5): MCD_LOCKSTEP is the default on the NVIDIA and AMD columns (x_decomp/mcd.mojo; -D MOJOLEARN_MCD_FAST_LOCKSTEP_OFF builds the serial loop); the Apple column keeps the serial loop and the old name still opts in there (smoke owed, never timed).",
@@ -5005,8 +5000,7 @@
    "dataset": "*",
    "rows": "full",
    "b_arms": [
-    "fast-bf16-units",
-    "fast-bf16-units-bf16out"
+    "fast-bf16-units"
    ],
    "columns": [
     "time",
@@ -5021,7 +5015,7 @@
     "mlp-reg": "held-out rmse (relative 0.05)",
     "gemm": "max_rel_err_vs_fp64: 0.01 (expected about 1e-4: bf16 operands, FP32 accumulation; a value at the FP32 arm's 2.4e-7 means the route was not taken)"
    },
-   "decides": "per row: B (bf16 units) becomes the default of the NVIDIA fast set for that family only if it is faster than A beyond the noise floor AND every quality field is inside its tolerance against A (the identical arm) and against fast-matrix-units-tf32 on the same rows; a row with a quality drop keeps FP32 or TF32 whatever its time. Equal output hash on a row means the route was not taken there. fast-bf16-units-bf16out is timed for the torch-BF16 reference point and replaces B only if B does not build"
+   "decides": "per row: B (bf16 units) becomes the default of the NVIDIA fast set for that family only if it is faster than A beyond the noise floor AND every quality field is inside its tolerance against A (the identical arm) and against fast-matrix-units-tf32 on the same rows; a row with a quality drop keeps FP32 or TF32 whatever its time. Equal output hash on a row means the route was not taken there"
   },
   {
    "id": "fast-matrix-units-shapes",

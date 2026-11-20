@@ -22,7 +22,7 @@ launches (i11 != 0), every product the split-K rule or the coop rule takes first
 rule, the host column.
 
 COST PER CALL under the arm: eight integer tests, one allocator take and one free (short host list scans),
-three launches (four under kind 2, one more for an epilogue); no wait.
+three launches (one more for an epilogue); no wait.
 """
 from sequence.ops import Args, OP_GEMM, OP_GEMM_EPI
 from autograd.ops import OP_AGK_GEMM_EPI
