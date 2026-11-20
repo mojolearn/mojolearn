@@ -1,8 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 """Check your own model and data on the GPU and on the CPU.
 
-`python -m mojolearn verify --check MODEL --estimator CLASS --inputs X.npy`
-and `check(estimator, X)` below. Both only call the shared check module
+`python -m mojolearn verify --check MODEL --estimator CLASS --inputs X.npy`,
+`python -m mojolearn verify --fit-both --estimator CLASS --inputs X.npy
+--fit-inputs XTRAIN.npy` (the same fit on each side) and `check(estimator, X)`
+below. Both only call the shared check module
 (`_check_both.py`), which `verify --cross-check` runs on the wheel's
 fixtures: there is no second compare and no second report here.
 """
@@ -18,7 +20,7 @@ EXIT_REFUSED_FAST = 3
 EXIT_CANNOT_RUN = 4
 
 
-def check(estimator, X, *, method=None, fit=None):
+def check(estimator, X, *, method=None, fit=None, fit_both=False, max_rows=None):
     """Run one method of a fitted estimator on the GPU and on the CPU and
     compare the two answers bit for bit.
 
@@ -43,6 +45,16 @@ def check(estimator, X, *, method=None, fit=None):
         Arguments for `estimator.fit`. When given, the estimator is fitted on
         the GPU first, then the fitted model is checked on both sides. Fitting
         is never done unless asked for.
+    fit_both : bool, default False
+        With `fit`: run the same fit once on each side, the GPU side in this
+        process and the CPU side in a child process, and compare what the two
+        fitted models answer. Use it for an estimator whose fitted model
+        cannot be loaded on the CPU. The estimator must be unfitted, with
+        constructor parameters that are plain values. A class the CPU does
+        not run reports why and nothing is compared.
+    max_rows : int, optional
+        With `fit_both`: fit both sides on the first `max_rows` training rows
+        only. The CPU fit can be slow on large inputs.
 
     Returns
     -------
@@ -51,8 +63,9 @@ def check(estimator, X, *, method=None, fit=None):
         process or the estimator is in `fast` mode (which makes no promise
         about bits), the installation has no GPU, or the model cannot be
         loaded on the CPU. Otherwise `sides` holds one record per side
-        (device, binaries loaded, wall time, and the shape, dtype, SHA-256 and
-        first values of each output) and `verdict` says `MATCH`, or `MISMATCH`
+        (device, binaries loaded, what the runtime counted while the side
+        ran, wall time, and the shape, dtype, SHA-256 and first values of each
+        output) and `verdict` says `MATCH`, or `MISMATCH`
         with the index and the two values of the first differing element.
         `format_check(result)` gives the same report as text.
 
@@ -65,7 +78,7 @@ def check(estimator, X, *, method=None, fit=None):
     >>> print(format_check(check(model, X)))    # doctest: +SKIP
     """
     import mojolearn as ml
-    return cb.check_estimator(ml, estimator, X, method=method, fit=fit)
+    return cb.check_estimator(ml, estimator, X, method=method, fit=fit, fit_both=fit_both, max_rows=max_rows)
 
 
 format_check = cb.format_check
@@ -83,17 +96,24 @@ def _load_inputs(path):
 
 
 def cmd_check(args):
-    """`verify --check MODEL --estimator CLASS --inputs FILE [--method NAME]`."""
+    """`verify --check MODEL --estimator CLASS --inputs FILE [--method NAME]`,
+    and the fit-on-both-sides form `verify --fit-both --estimator CLASS
+    --inputs FILE --fit-inputs FILE [--fit-targets FILE] [--params JSON]
+    [--fit-rows N] [--method NAME]`."""
     json_out = getattr(args, "json", False)
+    fit_both = bool(getattr(args, "fit_both", False))
 
     def finish(code, result):
         print(json.dumps(result, indent=1, sort_keys=True) if json_out else cb.format_check(result))
         return code
 
     missing = [flag for flag, value in (("--estimator", args.estimator), ("--inputs", args.inputs)) if not value]
+    if fit_both and not getattr(args, "fit_inputs", None):
+        missing.append("--fit-inputs")
     if missing:
-        print(f"USAGE: --check needs {' and '.join(missing)}: the class that saved the model "
-              "(for example RandomForestClassifier) and a .npy or .npz file of rows", file=sys.stderr)
+        print(f"USAGE: {'--fit-both' if fit_both else '--check'} needs {' and '.join(missing)}: the class "
+              "(for example RandomForestClassifier), a .npy or .npz file of rows"
+              + (" and the training rows to fit on each side" if fit_both else ""), file=sys.stderr)
         return EXIT_USAGE
     stub = dict(format=cb.FORMAT, ran=False, estimator=args.estimator, method=args.method)
     try:
@@ -106,13 +126,22 @@ def cmd_check(args):
     if ml.vendor() == "cpu":
         return finish(EXIT_CANNOT_RUN, dict(stub, reason=cb.NO_GPU))
     cls = getattr(ml, args.estimator, None)
-    if cls is None or not callable(getattr(cls, "load", None)):
-        print(f"USAGE: --estimator {args.estimator} is not a mojolearn class with load", file=sys.stderr)
+    if cls is None or not (callable(cls) if fit_both else callable(getattr(cls, "load", None))):
+        print(f"USAGE: --estimator {args.estimator} is not a mojolearn class"
+              + ("" if fit_both else " with load"), file=sys.stderr)
         return EXIT_USAGE
     try:
         X = _load_inputs(args.inputs)
-        estimator = cls.load(args.check)
-        result = cb.check_estimator(ml, estimator, X, method=args.method, saved=args.check)
+        if fit_both:
+            params = json.loads(getattr(args, "params", None) or "{}")
+            fit = (_load_inputs(args.fit_inputs),)
+            if getattr(args, "fit_targets", None):
+                fit += (_load_inputs(args.fit_targets),)
+            result = cb.check_estimator(ml, cls(**params), X, method=args.method, fit=fit, fit_both=True,
+                                        max_rows=getattr(args, "fit_rows", None))
+        else:
+            estimator = cls.load(args.check)
+            result = cb.check_estimator(ml, estimator, X, method=args.method, saved=args.check)
     except Exception as exc:
         return finish(EXIT_CANNOT_RUN, dict(stub, reason=f"{type(exc).__name__}: {exc}"[:400]))
     if not result["ran"]:
