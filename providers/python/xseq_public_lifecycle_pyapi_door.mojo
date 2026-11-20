@@ -29,6 +29,12 @@ from bindings.py_model_records import (
     RECORDS_PREPARED, ContentRecord, content_value, records_drop, records_stampable, records_stamped_get,
     records_stamped_put,
 )
+from bindings.xseq_keys_unpack import (
+    xseq_keys, XSEQ_OPN_RNN_FIT, XSEQ_OPN_RNN_PREDICT_PROBA, XSEQ_OPN_RNN_HIDDEN_SEQUENCE, XSEQ_OPN_RNN_SCORE,
+    XSEQ_OPN_RNN_CLASSIFIER_SCORE, XSEQ_OPN_MLP_FIT, XSEQ_OPN_MLP_PREDICT_PROBA, XSEQ_OPN_MLP_SCORE,
+    XSEQ_OPN_MLP_CLASSIFIER_SCORE,
+)
+from bindings.py_balanced import py_item
 
 
 # perf3-seq-neural (2026-11-06): the admitted-fields record. A predict on a
@@ -117,20 +123,21 @@ def _owner_record_put(mut mods: NativeModules, model: PythonObject, fields: Pyth
 
 
 def xseq_public_owner(model: PythonObject, context: PythonObject, fitting: Bool = True) raises -> PythonObject:
+    var nk = xseq_keys()
     # Reuse the connected constructor's native storage/ancestry contract, not
     # its execution: methods must reject replaced hooks before any field read.
-    var owner_context = context["xseq_owner_context"]
+    var owner_context = py_item(context, nk[].k_xseq_owner_context)
     var fields = _fields(model)
     var plan = _constructor_plan(model, fields, owner_context)
     var b = native_loaded_module("builtins")
-    var missing = owner_context["missing"]
+    var missing = py_item(owner_context, nk[].k_missing)
     for name in ["_CELL", "_TASK", "_LOSS_CODE", "_estimator_type"]:  # driver-loop: class metadata consumed by neural execution
         var value = _resolved(py_type(model), PythonObject(name), missing)
         if value is not missing and py_type(value) is not b.str and py_type(value) is not b.int:
             raise Error("TypeError: native neural class metadata cannot invoke Python descriptors")
-    var lifecycle = context["xseq_lifecycle_context"]
+    var lifecycle = py_item(context, nk[].k_xseq_lifecycle_context)
     classical_connect_numpy(lifecycle)
-    var names = plan["names"]
+    var names = py_item(plan, nk[].k_names)
     var mods = NativeModules()
     if fitting:
         prepared_drop(mods, _OWNER_SLOT, model)  # the fit replaces the fields
@@ -143,14 +150,14 @@ def xseq_public_owner(model: PythonObject, context: PythonObject, fitting: Bool 
                 var value = py_get(fields, names[i])
                 if value is not None:
                     _ = _fields(value)
-                opt_schedule(value, context["optimizer_context"])
+                opt_schedule(value, py_item(context, nk[].k_optimizer_context))
         return fields
     for i in range(len(names)):  # driver-loop: native constructor parameters before operation coercion
         var value = py_get(fields, names[i])
         if String(names[i]) == "lr_schedule":
             if value is not None:
                 _ = _fields(value)
-            opt_schedule(value, context["optimizer_context"])
+            opt_schedule(value, py_item(context, nk[].k_optimizer_context))
         else:
             classical_admit_value(value, lifecycle)
     for name in ["_mojolearn_fitted", "_mojolearn_fitting", "_y_1d", "_LOSS_CODE", "n_features_in_",  # driver-loop: over consumed or replaced fitted state owners
@@ -164,37 +171,40 @@ def xseq_public_owner(model: PythonObject, context: PythonObject, fitting: Bool 
 
 
 def xseq_private_input(source: PythonObject, context: PythonObject, name: String) raises -> PythonObject:
+    var nk = xseq_keys()
     # Exact ndarray.view is a native C storage operation. It snapshots shape,
     # strides, dtype and the data pointer into a private header, with its base
     # retaining the data owner. Exact-type admission excludes array-finalize
     # callbacks. Array/buffer/sequence conversion already yields native views;
     # giving those their own header keeps the same contract for every input.
-    var lifecycle = context["xseq_lifecycle_context"]
+    var lifecycle = py_item(context, nk[].k_xseq_lifecycle_context)
     var view = classical_view(source, lifecycle, name)
-    if py_type(view) is not lifecycle["ndarray"]:
+    if py_type(view) is not py_item(lifecycle, nk[].k_ndarray):
         raise Error("TypeError: native sequence input requires an admitted ndarray view")
-    return py_call(lifecycle["ndarray"].view, view)
+    return py_call(py_item(lifecycle, nk[].k_ndarray).view, view)
 
 
 def _private_argument(source: PythonObject, context: PythonObject, depth: Int = 0) raises -> PythonObject:
     if depth > 64:
         raise Error("TypeError: native sequence input nesting exceeds the supported depth")
     var b = native_loaded_module("builtins")
-    var lifecycle = context["xseq_lifecycle_context"]
+    var nk = xseq_keys()
+    var lifecycle = py_item(context, nk[].k_xseq_lifecycle_context)
     var cls = py_type(source)
     if cls is b.list or cls is b.tuple:
         var items = Python.list()
         for i in range(len(source)):  # driver-loop: snapshot admitted argument container metadata once
             _ = py_call(items.append, _private_argument(source[i], context, depth + 1))
         return items if cls is b.list else py_call(b.tuple, items)
-    if (cls is lifecycle["ndarray"] or cls is b.memoryview or cls is b.bytearray
-            or cls is lifecycle["array_type"] or cls is lifecycle["array_class"]):
+    if (cls is py_item(lifecycle, nk[].k_ndarray) or cls is b.memoryview or cls is b.bytearray
+            or cls is py_item(lifecycle, nk[].k_array_type) or cls is py_item(lifecycle, nk[].k_array_class)):
         return xseq_private_input(source, context, "argument")
     return source
 
 
 def xseq_public_labels(fields: PythonObject, context: PythonObject) raises -> PythonObject:
-    return classifier_label_list(fields["classes_"], context["xseq_lifecycle_context"])
+    var nk = xseq_keys()
+    return classifier_label_list(py_item(fields, nk[].k_classes_), py_item(context, nk[].k_xseq_lifecycle_context))
 
 
 def _finite(view: PythonObject, name: String, model_name: String, context: PythonObject) raises:
@@ -223,6 +233,30 @@ def _finite(view: PythonObject, name: String, model_name: String, context: Pytho
     _ = view
 
 
+def _xseq_method(operation: Int, name: PythonObject, fitting: Bool) raises -> String:
+    """The public method an operation runs, for the fitted check's message and
+    the output rule of `finish`."""
+    if fitting:
+        return "fit"
+    if operation >= 0:
+        if (operation == XSEQ_OPN_RNN_SCORE or operation == XSEQ_OPN_RNN_CLASSIFIER_SCORE
+                or operation == XSEQ_OPN_MLP_SCORE or operation == XSEQ_OPN_MLP_CLASSIFIER_SCORE):
+            return "score"
+        if operation == XSEQ_OPN_RNN_PREDICT_PROBA or operation == XSEQ_OPN_MLP_PREDICT_PROBA:
+            return "predict_proba"
+        if operation == XSEQ_OPN_RNN_HIDDEN_SEQUENCE:
+            return "hidden_sequence"
+        return "predict"
+    # A name that is not an operation: the suffix rule of the former name test.
+    var text = String(py=name)
+    if text.endswith("score"):
+        return "score"
+    if text.endswith("predict_proba"):
+        return "predict_proba"
+    if text.endswith("hidden_sequence"):
+        return "hidden_sequence"
+    return "predict"
+
 
 struct XseqPublicLifecycle(Movable):
     var source: PythonObject
@@ -237,23 +271,33 @@ struct XseqPublicLifecycle(Movable):
     var method: String
     var shape: List[Int]
 
-    def __init__(out self, model: PythonObject, operation: String, args: PythonObject,
+    def __init__(out self, model: PythonObject, operation: Int, name: PythonObject, args: PythonObject,
                  context: PythonObject) raises:
-        var fields = xseq_public_owner(model, context, operation.endswith("_fit"))
+        # bw2-sequence (2026-11-20): `operation` is the xseq code
+        # (bindings/xseq_keys_unpack.mojo). The fit test, the method name and
+        # the perceptron test were suffix and prefix tests of the name String
+        # on every call; only a name that is not an operation (-1) still
+        # reads them from its String, as before.
+        var fitting = operation == XSEQ_OPN_RNN_FIT or operation == XSEQ_OPN_MLP_FIT
+        var perceptron = operation >= XSEQ_OPN_MLP_FIT and operation <= XSEQ_OPN_MLP_CLASSIFIER_SCORE
+        if operation < 0:
+            var text = String(py=name)
+            fitting = text.endswith("_fit")
+            perceptron = text.startswith("mlp_")
+        var fields = xseq_public_owner(model, context, fitting)
         self.source = args[0]
         self.original_arguments = args  # retain every original owner through finish
         self.arguments = args
-        self.lifecycle = context["xseq_lifecycle_context"]
-        self.fitting = operation.endswith("_fit")
-        self.method = String("fit" if self.fitting else ("score" if operation.endswith("score") else
-            ("predict_proba" if operation.endswith("predict_proba") else
-             ("hidden_sequence" if operation.endswith("hidden_sequence") else "predict"))))
+        var nk = xseq_keys()
+        self.lifecycle = py_item(context, nk[].k_xseq_lifecycle_context)
+        self.fitting = fitting
+        self.method = _xseq_method(operation, name, fitting)
         self.outside = estimator_outside()
         self.name = classical_estimator_name(model)
         self.shape = List[Int]()
         var b = native_loaded_module("builtins")
         self.classifier = String(py=py_call(b.getattr, py_type(model), "_estimator_type", "")) == "classifier"
-        var depth = py_get(fields, "_mojolearn_fitting", PythonObject(0))
+        var depth = py_get(fields, nk[].k__mojolearn_fitting, PythonObject(0))
         if py_type(depth) is not b.int:
             raise Error("TypeError: native fit depth must be an exact integer")
         self.nested = Int(py=depth) > 0
@@ -289,10 +333,10 @@ struct XseqPublicLifecycle(Movable):
             if rank == 2 and (self.shape[0] == 0 or self.shape[1] == 0):
                 raise Error("Found array with 0 " + String("sample(s)" if self.shape[0] == 0 else "feature(s)")
                     + " (shape=" + String(py=py_call(b.repr, dimensions)) + ") while a minimum of 1 is required by " + self.name + ".")
-        if operation.startswith("mlp_"):
+        if perceptron:
             _finite(x, "X", self.name, context)
         if not self.fitting and rank == 2:
-            var columns = py_get(fields, "n_features_in_")
+            var columns = py_get(fields, nk[].k_n_features_in_)
             if py_type(columns) is b.int:
                 classical_check_width(self.shape[1], Int(py=columns), self.name)
             estimator_feature_check(model, fields, self.source, self.lifecycle)
@@ -339,17 +383,18 @@ struct XseqPublicLifecycle(Movable):
         return Error(text)
 
     def finish(self, model: PythonObject, result: PythonObject, context: PythonObject) raises -> PythonObject:
+        var nk = xseq_keys()
         if self.fitting:
             if self.nested:
-                py_setitem(py_fields(model), "_mojolearn_fitted", PythonObject(True))
+                py_setitem(py_fields(model), nk[].k__mojolearn_fitted, PythonObject(True))
             else:
                 estimator_fit_complete(model, self.source, self.classifier, self.lifecycle)
             return result
         if self.outside and self.method == "predict" and not self.classifier:
             # The former public-output wrapper widens external regression
             # predictions exactly. Internal score/identity calls retain f32.
-            if py_type(result) is context["ndarray"] and String(py=result.dtype.kind) == "f" and Int(py=result.itemsize) == 4:
-                var wide = sequential_array(result.shape, context["float64"], context)
+            if py_type(result) is py_item(context, nk[].k_ndarray) and String(py=result.dtype.kind) == "f" and Int(py=result.itemsize) == 4:
+                var wide = sequential_array(result.shape, py_item(context, nk[].k_float64), context)
                 classical_widen_f32_f64(Int(py=sequential_address(result)), Int(py=sequential_address(wide)), Int(py=result.size))
                 _ = result
                 return wide

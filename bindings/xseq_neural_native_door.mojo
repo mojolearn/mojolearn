@@ -49,6 +49,11 @@ from sequence.xseq_neural_run import (
     xseq_run_mlp_layers_check, xseq_run_mlp_layer_check, xseq_run_mlp_pack, xseq_run_mlp_output_check,
     xseq_run_mlp_predict,
 )
+from bindings.xseq_keys_unpack import (
+    xseq_keys, XSEQ_OPN_RNN_FIT, XSEQ_OPN_RNN_HIDDEN_SEQUENCE, XSEQ_OPN_RNN_PREDICT_PROBA, XSEQ_OPN_MLP_FIT,
+    XSEQ_OPN_MLP_PREDICT_PROBA,
+)
+from bindings.py_balanced import py_item
 
 
 def _attr(owner: PythonObject, name: String) raises -> PythonObject:
@@ -117,7 +122,8 @@ def xseq_take(classes: PythonObject, codes: PythonObject, context: PythonObject)
 def xseq_argmax(scores: PythonObject, rows: Int, cols: Int, context: PythonObject) raises -> PythonObject:
     """The base binding's first-max-wins row argmax (`argmax_rows_f32`) of a
     C-ordered float32 block, as an int64 array."""
-    var codes = sequential_array(Python.tuple(rows), context["int64"], context)
+    var nk = xseq_keys()
+    var codes = sequential_array(Python.tuple(rows), py_item(context, nk[].k_int64), context)
     if rows:
         var scores_address = Int(py=xseq_addr(scores))
         var codes_address = Int(py=xseq_addr(codes))
@@ -145,7 +151,8 @@ def _rnn_optimizer(name: PythonObject, options: PythonObject, context: PythonObj
     """`(kind, flags, [f1, f2, eps, weight_decay, f7, initial_accumulator])`
     of the binding's optimizer slots, PyTorch's defaults under `options`."""
     var b = native_loaded_module("builtins")
-    var kinds = context["xseq_rnn_optimizers"]
+    var nk = xseq_keys()
+    var kinds = py_item(context, nk[].k_xseq_rnn_optimizers)
     var known = False
     try:
         known = py_contains(kinds, name)
@@ -153,7 +160,7 @@ def _rnn_optimizer(name: PythonObject, options: PythonObject, context: PythonObj
         known = False
     if not known:
         raise Error("optimizer must be one of " + String(py=py_call(b.str, py_call(b.sorted, kinds))) + ", got " + _repr(name))
-    var o = py_call(b.dict, context["xseq_rnn_defaults"][name])
+    var o = py_call(b.dict, py_item(context, nk[].k_xseq_rnn_defaults)[name])
     var given = py_call(b.dict) if not xseq_truth(options) else options
     var unknown = py_call(b.set, given) - py_call(b.set, o)
     if len(unknown) > 0:
@@ -165,36 +172,37 @@ def _rnn_optimizer(name: PythonObject, options: PythonObject, context: PythonObj
     var kind = Int(py=kinds[name])
     var label = String(py=name)
     if label == "sgd":
-        return xseq_run_opt_sgd(kind, xseq_truth(o["nesterov"]), _opt_real(o["momentum"]),
-                                _opt_real(o["weight_decay"]), _opt_real(o["dampening"]))
+        return xseq_run_opt_sgd(kind, xseq_truth(py_item(o, nk[].k_nesterov)), _opt_real(py_item(o, nk[].k_momentum)),
+                                _opt_real(py_item(o, nk[].k_weight_decay)), _opt_real(py_item(o, nk[].k_dampening)))
     elif label == "adam" or label == "adamw" or label == "adamax":
-        return xseq_run_opt_adam(label, kind, _opt_real(o["betas"][0]), _opt_real(o["betas"][1]),
-                                 _opt_real(o["eps"]), _opt_real(o["weight_decay"]))
+        return xseq_run_opt_adam(label, kind, _opt_real(py_item(o, nk[].k_betas)[0]), _opt_real(py_item(o, nk[].k_betas)[1]),
+                                 _opt_real(py_item(o, nk[].k_eps)), _opt_real(py_item(o, nk[].k_weight_decay)))
     elif label == "nadam":
-        return xseq_run_opt_nadam(kind, _opt_real(o["betas"][0]), _opt_real(o["betas"][1]), _opt_real(o["eps"]),
-                                  _opt_real(o["weight_decay"]), _opt_real(o["momentum_decay"]),
-                                  xseq_truth(o["decoupled_weight_decay"]))
+        return xseq_run_opt_nadam(kind, _opt_real(py_item(o, nk[].k_betas)[0]), _opt_real(py_item(o, nk[].k_betas)[1]), _opt_real(py_item(o, nk[].k_eps)),
+                                  _opt_real(py_item(o, nk[].k_weight_decay)), _opt_real(py_item(o, nk[].k_momentum_decay)),
+                                  xseq_truth(py_item(o, nk[].k_decoupled_weight_decay)))
     elif label == "lion":
-        return xseq_run_opt_lion(kind, _opt_real(o["betas"][0]), _opt_real(o["betas"][1]),
-                                 _opt_real(o["weight_decay"]))
+        return xseq_run_opt_lion(kind, _opt_real(py_item(o, nk[].k_betas)[0]), _opt_real(py_item(o, nk[].k_betas)[1]),
+                                 _opt_real(py_item(o, nk[].k_weight_decay)))
     elif label == "rmsprop":
-        return xseq_run_opt_rmsprop(kind, xseq_truth(o["centered"]), _opt_real(o["alpha"]), _opt_real(o["eps"]),
-                                    _opt_real(o["weight_decay"]), _opt_real(o["momentum"]))
-    return xseq_run_opt_adagrad(kind, _opt_real(o["lr_decay"]), _opt_real(o["eps"]), _opt_real(o["weight_decay"]),
-                                _opt_real(o["initial_accumulator_value"]))
+        return xseq_run_opt_rmsprop(kind, xseq_truth(py_item(o, nk[].k_centered)), _opt_real(py_item(o, nk[].k_alpha)), _opt_real(py_item(o, nk[].k_eps)),
+                                    _opt_real(py_item(o, nk[].k_weight_decay)), _opt_real(py_item(o, nk[].k_momentum)))
+    return xseq_run_opt_adagrad(kind, _opt_real(py_item(o, nk[].k_lr_decay)), _opt_real(py_item(o, nk[].k_eps)), _opt_real(py_item(o, nk[].k_weight_decay)),
+                                _opt_real(py_item(o, nk[].k_initial_accumulator_value)))
 
 
 def _rnn_rates(fields: PythonObject, steps: Int, context: PythonObject) raises -> PythonObject:
     """The float32 learning rate of every optimizer step: the built-in
     schedule's `lr_values(steps)` (one native series), else `learning_rate`
     repeated."""
-    var schedule = py_get(fields, "lr_schedule")
+    var nk = xseq_keys()
+    var schedule = py_get(fields, nk[].k_lr_schedule)
     if schedule is not None:
-        var optimizer_context = context["optimizer_context"]
+        var optimizer_context = py_item(context, nk[].k_optimizer_context)
         opt_schedule(schedule, optimizer_context)
         return schedule_operation("schedule_values", schedule, Python.tuple(steps), optimizer_context)
     var rates = xseq_zeros(Python.tuple(steps), context)
-    var rate = Float32(_opt_real(fields["learning_rate"]))
+    var rate = Float32(_opt_real(py_item(fields, nk[].k_learning_rate)))
     xseq_fill_f32(xseq_f32p(rates), steps, rate)
     _ = rates  # keep the Python object alive through the native call above
     return rates
@@ -336,7 +344,8 @@ def _xseq_params_frozen(first: PythonObject, second: PythonObject, freeze: Bool,
     caller turns writeable again fails the check on the next predict and the
     record is rebuilt. Cost: one flags read per array, not one pass over the
     bytes."""
-    var ndarray = context["xseq_ndarray"]
+    var nk = xseq_keys()
+    var ndarray = py_item(context, nk[].k_xseq_ndarray)
     if not _xseq_field_frozen(first, freeze, ndarray):
         return 0
     if second is not None and not _xseq_field_frozen(second, freeze, ndarray):
@@ -378,7 +387,8 @@ def _rnn_cell(model: PythonObject, fields: PythonObject) raises -> Int:
     var tanh = False
     var relu = False
     if cell == "rnn":
-        var nl = py_get(fields, "nonlinearity")
+        var nk = xseq_keys()
+        var nl = py_get(fields, nk[].k_nonlinearity)
         tanh = _eq(nl, "tanh")
         relu = not tanh and _eq(nl, "relu")
     return xseq_run_rnn_cell(cell, tanh, relu)
@@ -390,22 +400,24 @@ def _rnn_x(source: PythonObject, fields: PythonObject, fitting: Bool, context: P
     xseq_refuse_f64(a, "X: float64 is refused; pass float32 (no float64 on the device)")
     var x = admit_nd_f32(a, "X", False, context)
     xseq_run_rnn_rank_check(Int(py=x.ndim))
+    var nk = xseq_keys()
     if fitting:
-        py_setitem(fields, "n_features_in_", Int(py=x.shape[2]))
-    elif not Bool(py=x.shape[2] == fields["n_features_in_"]):
+        py_setitem(fields, nk[].k_n_features_in_, Int(py=x.shape[2]))
+    elif not Bool(py=x.shape[2] == py_item(fields, nk[].k_n_features_in_)):
         raise Error("X has " + String(py=py_call(native_loaded_module("builtins").str, x.shape[2]))
                     + " features, the model was fitted on "
-                    + String(py=py_call(native_loaded_module("builtins").str, fields["n_features_in_"])))
+                    + String(py=py_call(native_loaded_module("builtins").str, py_item(fields, nk[].k_n_features_in_))))
     return x
 
 
 def _rnn_ints(model: PythonObject, fields: PythonObject) raises -> List[Int]:
     """`_RecurrentBase._ints()`, as the native words the descriptor reads."""
     var cell = _rnn_cell(model, fields)
-    var d = Int(py=fields["n_features_in_"])
-    var hidden = xseq_int(fields["hidden_size"])
-    var layers = xseq_int(fields["num_layers"])
-    var ip: List[Int] = [cell, d, hidden, layers, Int(py=fields["n_outputs_"])]
+    var nk = xseq_keys()
+    var d = Int(py=py_item(fields, nk[].k_n_features_in_))
+    var hidden = xseq_int(py_item(fields, nk[].k_hidden_size))
+    var layers = xseq_int(py_item(fields, nk[].k_num_layers))
+    var ip: List[Int] = [cell, d, hidden, layers, Int(py=py_item(fields, nk[].k_n_outputs_))]
     return ip^
 
 
@@ -416,17 +428,18 @@ def _rnn_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
     var n = Int(py=x.shape[0])
     var steps_t = Int(py=x.shape[1])
     xseq_run_rnn_dims_check(n, steps_t)
-    var stream = XseqStream(py_get(fields, "random_state"), context)
+    var nk = xseq_keys()
+    var stream = XseqStream(py_get(fields, nk[].k_random_state), context)
     var mods = NativeModules()
     prepared_drop(mods, _RNN_PARAMS_SLOT, model)  # the new params_ is a new object
     # the parameters in layout order, U(-1/sqrt(H), 1/sqrt(H)), one block
     var cell = _rnn_cell(model, fields)
-    var hidden = xseq_int(fields["hidden_size"])
-    var layers = xseq_int(fields["num_layers"])
-    var d = Int(py=fields["n_features_in_"])
-    var outputs = Int(py=fields["n_outputs_"])
+    var hidden = xseq_int(py_item(fields, nk[].k_hidden_size))
+    var layers = xseq_int(py_item(fields, nk[].k_num_layers))
+    var d = Int(py=py_item(fields, nk[].k_n_features_in_))
+    var outputs = Int(py=py_item(fields, nk[].k_n_outputs_))
     var total = xseq_run_rnn_param_count(xseq_run_rnn_gates(cell), d, hidden, layers, outputs)
-    var bound = xseq_run_rnn_bound(xseq_float(fields["hidden_size"]))
+    var bound = xseq_run_rnn_bound(xseq_float(py_item(fields, nk[].k_hidden_size)))
     var params = xseq_zeros(Python.tuple(total), context)
     var params_address = Int(py=xseq_addr(params))
     var output_provider = xseq_output_provider(context)
@@ -438,15 +451,15 @@ def _rnn_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
     _ = params  # keep the Python object alive through the native call above
     # p3-cnn-sequence-tsa: the fitted block is published read-only (the fit
     # entry below still writes it through its address)
-    py_setitem(fields, "params_", xseq_readonly_view(params))
+    py_setitem(fields, nk[].k_params_, xseq_readonly_view(params))
     # the minibatch schedule's scalars; each epoch's row order is built by rnn_fit
-    var batch_size = xseq_int(fields["batch_size"])
-    var epochs = xseq_int(fields["max_epochs"])
+    var batch_size = xseq_int(py_item(fields, nk[].k_batch_size))
+    var epochs = xseq_int(py_item(fields, nk[].k_max_epochs))
     var schedule = xseq_run_rnn_schedule(batch_size, n, epochs)
     var seed = stream.child_seed()
-    var shuffle = xseq_truth(fields["shuffle"])
+    var shuffle = xseq_truth(py_item(fields, nk[].k_shuffle))
     var steps = schedule.steps
-    var optimizer = _rnn_optimizer(py_get(fields, "optimizer"), py_get(fields, "optimizer_options"), context)
+    var optimizer = _rnn_optimizer(py_get(fields, nk[].k_optimizer), py_get(fields, nk[].k_optimizer_options), context)
     var rates = _rnn_rates(fields, steps, context)
     var losses = xseq_zeros(Python.tuple(steps), context)
     var request = XseqRnnFitRequest(cell, d, hidden, layers, outputs, Int(py=_attr(py_type(model), "_TASK")), n,
@@ -466,9 +479,9 @@ def _rnn_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
     _ = rates  # keep the Python object alive through the native call above
     _ = x^
     _ = rates^
-    py_setitem(fields, "loss_curve_", losses)
-    py_setitem(fields, "n_iter_", steps)
-    py_setitem(fields, "n_timesteps_", steps_t)
+    py_setitem(fields, nk[].k_loss_curve_, losses)
+    py_setitem(fields, nk[].k_n_iter_, steps)
+    py_setitem(fields, nk[].k_n_timesteps_, steps_t)
     return model
 
 
@@ -479,12 +492,13 @@ def _rnn_run(model: PythonObject, fields: PythonObject, source: PythonObject, wa
     var x = _rnn_x(source, fields, False, context)
     var n = Int(py=x.shape[0])
     var steps_t = Int(py=x.shape[1])
-    var out = xseq_zeros(Python.tuple(n, fields["n_outputs_"]), context)
-    var seq = xseq_zeros(Python.tuple(n, steps_t, xseq_int(fields["hidden_size"])) if want_seq else Python.tuple(1), context)
+    var nk = xseq_keys()
+    var out = xseq_zeros(Python.tuple(n, py_item(fields, nk[].k_n_outputs_)), context)
+    var seq = xseq_zeros(Python.tuple(n, steps_t, xseq_int(py_item(fields, nk[].k_hidden_size))) if want_seq else Python.tuple(1), context)
     # The admitted float32 view of `params_`, kept per model while `params_`
     # is the same object (see "fitted-weight records" above).
     var mods = NativeModules()
-    var source_params = fields["params_"]
+    var source_params = py_item(fields, nk[].k_params_)
     var params: PythonObject
     var record = _record_get(mods, _RNN_PARAMS_SLOT, model, source_params, PythonObject(None))
     # a record is valid while params_ stays read-only (p3-cnn-sequence-tsa)
@@ -502,7 +516,7 @@ def _rnn_run(model: PythonObject, fields: PythonObject, source: PythonObject, wa
     var ints = _rnn_ints(model, fields)
     var n_params = xseq_run_rnn_layout(ints, Int(py=params.size))
     var task = Int(py=_attr(py_type(model), "_TASK"))
-    var request = XseqRnnPredictRequest(ints^, n_params, task, n, steps_t, xseq_int(fields["predict_chunk"]), want_seq,
+    var request = XseqRnnPredictRequest(ints^, n_params, task, n, steps_t, xseq_int(py_item(fields, nk[].k_predict_chunk)), want_seq,
                                         Int(model._obj_ptr), token)
     var addresses: List[Int] = [Int(py=xseq_addr(x)), Int(py=xseq_addr(params)), Int(py=xseq_addr(out)), Int(py=xseq_addr(seq))]
     var provider = xseq_neural_provider(entries)
@@ -520,26 +534,30 @@ def _rnn_run(model: PythonObject, fields: PythonObject, source: PythonObject, wa
     return Python.tuple(out, seq)
 
 
-def xseq_rnn(model: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def xseq_rnn(model: PythonObject, operation: Int, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    # bw2-sequence (2026-11-20): `operation` is the xseq code (bindings/xseq_keys_unpack.mojo); it was
+    # the name String, compared per call. A code that is not one of these (an unknown `rnn_` name
+    # is -1) predicts, as the name chain did.
     var fields = py_fields(model)
-    if operation == "rnn_fit":
+    if operation == XSEQ_OPN_RNN_FIT:
+        var nk = xseq_keys()
         var task = Int(py=_attr(py_type(model), "_TASK"))
         if task == 0:
             var y = xseq_input(args[1], context)
             xseq_refuse_f64(y, "y: float64 is refused; pass float32 (no float64 on the device)")
             y = admit_nd_f32(y, "y", False, context)
-            py_setitem(fields, "_y_1d", Int(py=y.ndim) == 1)
+            py_setitem(fields, nk[].k__y_1d, Int(py=y.ndim) == 1)
             var rows = Int(py=y.shape[0])
             var target = xseq_reshape(y, Python.tuple(rows, -1))
-            py_setitem(fields, "n_outputs_", Int(py=target.shape[1]))
+            py_setitem(fields, nk[].k_n_outputs_, Int(py=target.shape[1]))
             return _rnn_fit(model, fields, args[0], target, xseq_entries(fields, context), context)
         var entries = xseq_entries(fields, context)
         var encoded = xseq_labels(args[1], entries, context)
-        py_setitem(fields, "classes_", encoded[0])
+        py_setitem(fields, nk[].k_classes_, encoded[0])
         var k = len(encoded[0])
         if k < 2:
             raise Error("classification needs at least two classes")
-        py_setitem(fields, "n_outputs_", k)
+        py_setitem(fields, nk[].k_n_outputs_, k)
         # the int32 codes as the float32 target the recurrent loss reads
         var codes = encoded[1]
         var count = Int(py=codes.shape[0])
@@ -548,14 +566,15 @@ def xseq_rnn(model: PythonObject, operation: String, args: PythonObject, context
         _ = target  # keep the Python object alive through the native call above
         _ = codes  # keep the Python object alive through the native call above
         return _rnn_fit(model, fields, args[0], target, entries, context)
-    if operation == "rnn_hidden_sequence":
+    if operation == XSEQ_OPN_RNN_HIDDEN_SEQUENCE:
         return _rnn_run(model, fields, args[0], True, context)[1]
+    var nk = xseq_keys()
     var result = _rnn_run(model, fields, args[0], False, context)
     var out = result[0]
-    if operation == "rnn_predict_proba":
+    if operation == XSEQ_OPN_RNN_PREDICT_PROBA:
         return out
     if Int(py=_attr(py_type(model), "_TASK")) == 0:
-        if xseq_truth(py_get(fields, "_y_1d", PythonObject(False))):
+        if xseq_truth(py_get(fields, nk[].k__y_1d, PythonObject(False))):
             return xseq_reshape(out, Python.tuple(out.shape[0]))
         return out
     var rows = Int(py=out.shape[0])
@@ -567,26 +586,28 @@ def xseq_rnn(model: PythonObject, operation: String, args: PythonObject, context
 
 def _mlp_check(fields: PythonObject, context: PythonObject) raises:
     """`_BaseMLP._check()`."""
-    var solver = py_get(fields, "solver")
+    var nk = xseq_keys()
+    var solver = py_get(fields, nk[].k_solver)
     if _eq(solver, "lbfgs"):
         raise Error("NotImplementedError: solver='lbfgs' is not implemented (adam and sgd are)")
-    if not py_contains(context["xseq_mlp_solvers"], solver):
+    if not py_contains(py_item(context, nk[].k_xseq_mlp_solvers), solver):
         raise Error("solver must be one of ['adam', 'sgd']")
-    if not py_contains(context["xseq_mlp_activations"], py_get(fields, "activation")):
+    if not py_contains(py_item(context, nk[].k_xseq_mlp_activations), py_get(fields, nk[].k_activation)):
         raise Error("activation must be one of ['identity', 'logistic', 'relu', 'tanh']")
-    if not py_contains(context["xseq_mlp_rates"], py_get(fields, "learning_rate")):
+    if not py_contains(py_item(context, nk[].k_xseq_mlp_rates), py_get(fields, nk[].k_learning_rate)):
         raise Error("learning_rate must be one of ['adaptive', 'constant', 'invscaling']")
     for name in ["early_stopping", "warm_start", "verbose"]:  # driver-loop: over three named flag arguments
         if xseq_truth(py_get(fields, PythonObject(name))):
             raise Error("NotImplementedError: " + String(name) + "=True is not implemented")
-    xseq_run_mlp_scalars_check(xseq_float(fields["learning_rate_init"]), xseq_float(fields["max_iter"]),
-                               xseq_float(fields["alpha"]))
+    xseq_run_mlp_scalars_check(xseq_float(py_item(fields, nk[].k_learning_rate_init)), xseq_float(py_item(fields, nk[].k_max_iter)),
+                               xseq_float(py_item(fields, nk[].k_alpha)))
 
 
 def _mlp_hidden(fields: PythonObject, context: PythonObject) raises -> List[Int]:
     """`_BaseMLP._hidden()`."""
     var b = native_loaded_module("builtins")
-    var h = fields["hidden_layer_sizes"]
+    var nk = xseq_keys()
+    var h = py_item(fields, nk[].k_hidden_layer_sizes)
     var values = Python.list(h) if xseq_is_int(h, context) else py_call(b.list, h)
     var out = List[Int]()
     for i in range(len(values)):  # driver-loop: over hidden layer size arguments
@@ -617,10 +638,11 @@ def _mlp_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
     var o = Int(py=target.shape[1]) if n_out == 0 else n_out
     var hidden = _mlp_hidden(fields, context)
     var sizes = xseq_run_mlp_sizes(d, hidden, o)
-    var stream = XseqStream(py_get(fields, "random_state"), context)
+    var nk = xseq_keys()
+    var stream = XseqStream(py_get(fields, nk[].k_random_state), context)
     var mods = NativeModules()
     prepared_drop(mods, _MLP_PACKED_SLOT, model)  # the refit publishes new coefs_ / intercepts_
-    var logistic = _eq(fields["activation"], "logistic")
+    var logistic = _eq(py_item(fields, nk[].k_activation), "logistic")
     # Glorot-uniform per layer, drawn straight into the flat block the
     # entry trains, w then b of each layer, as the packed layout orders them
     var total = xseq_run_mlp_param_count(sizes)
@@ -635,31 +657,31 @@ def _mlp_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
     _ = params  # keep the Python object alive through the native calls above
     var seed = Int(stream.child_seed() % UInt64(2147483647))
     var batch: Int
-    var requested = fields["batch_size"]
+    var requested = py_item(fields, nk[].k_batch_size)
     if _eq(requested, "auto"):
         batch = min(200, rows)
     else:
         var clipped = py_call(b.max, PythonObject(1), py_call(b.min, requested, PythonObject(rows)))
         batch = xseq_int(clipped)
-    py_setitem(fields, "n_outputs_", o)
-    py_setitem(fields, "n_layers_", len(sizes))
-    py_setitem(fields, "out_activation_", PythonObject(xseq_run_mlp_out_name(out_act)))
-    py_setitem(fields, "n_features_in_", d)
-    var max_iter = xseq_int(fields["max_iter"])
+    py_setitem(fields, nk[].k_n_outputs_, o)
+    py_setitem(fields, nk[].k_n_layers_, len(sizes))
+    py_setitem(fields, nk[].k_out_activation_, PythonObject(xseq_run_mlp_out_name(out_act)))
+    py_setitem(fields, nk[].k_n_features_in_, d)
+    var max_iter = xseq_int(py_item(fields, nk[].k_max_iter))
     var curve = xseq_zeros(Python.tuple(max_iter), context)
     # the descriptor's int and float words, native (no Python list built
     # and converted back word by word)
-    var activation = Int(py=context["xseq_mlp_activations"][fields["activation"]])
-    var loss_code = Int(py=fields["_LOSS_CODE"] if py_contains(fields, "_LOSS_CODE") else _attr(py_type(model), "_LOSS_CODE"))
-    var solver = Int(py=context["xseq_mlp_solvers"][fields["solver"]])
-    var rate_code = Int(py=context["xseq_mlp_rates"][fields["learning_rate"]])
-    var nesterov = xseq_truth(fields["nesterovs_momentum"])
-    var shuffle = xseq_truth(fields["shuffle"])
+    var activation = Int(py=py_item(context, nk[].k_xseq_mlp_activations)[py_item(fields, nk[].k_activation)])
+    var loss_code = Int(py=py_item(fields, nk[].k__LOSS_CODE) if py_contains(fields, nk[].k__LOSS_CODE) else _attr(py_type(model), "_LOSS_CODE"))
+    var solver = Int(py=py_item(context, nk[].k_xseq_mlp_solvers)[py_item(fields, nk[].k_solver)])
+    var rate_code = Int(py=py_item(context, nk[].k_xseq_mlp_rates)[py_item(fields, nk[].k_learning_rate)])
+    var nesterov = xseq_truth(py_item(fields, nk[].k_nesterovs_momentum))
+    var shuffle = xseq_truth(py_item(fields, nk[].k_shuffle))
     var request = XseqMlpFitRequest(rows, d, o, activation, out_act, loss_code, solver, rate_code, nesterov, batch,
-                                    max_iter, shuffle, seed, xseq_int(fields["n_iter_no_change"]), hidden.copy(), n_out)
-    var fp: List[Float64] = [_opt_real(fields["learning_rate_init"]), _opt_real(fields["beta_1"]),
-                             _opt_real(fields["beta_2"]), _opt_real(fields["epsilon"]), _opt_real(fields["momentum"]),
-                             _opt_real(fields["power_t"]), _opt_real(fields["alpha"]), _opt_real(fields["tol"])]
+                                    max_iter, shuffle, seed, xseq_int(py_item(fields, nk[].k_n_iter_no_change)), hidden.copy(), n_out)
+    var fp: List[Float64] = [_opt_real(py_item(fields, nk[].k_learning_rate_init)), _opt_real(py_item(fields, nk[].k_beta_1)),
+                             _opt_real(py_item(fields, nk[].k_beta_2)), _opt_real(py_item(fields, nk[].k_epsilon)), _opt_real(py_item(fields, nk[].k_momentum)),
+                             _opt_real(py_item(fields, nk[].k_power_t)), _opt_real(py_item(fields, nk[].k_alpha)), _opt_real(py_item(fields, nk[].k_tol))]
     var entries = xseq_entries(fields, context)
     var addresses: List[Int] = [Int(py=xseq_addr(x)), Int(py=xseq_addr(target)), Int(py=xseq_addr(params)), Int(py=xseq_addr(curve))]
     var provider = xseq_neural_provider(entries)
@@ -687,19 +709,19 @@ def _mlp_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
         _ = py_call(_method(intercepts, "append"),
                     xseq_readonly_view(_mlp_layer_copy(params, offset, Python.tuple(fo), fo, context)))
         offset += fo
-    py_setitem(fields, "coefs_", coefs)
-    py_setitem(fields, "intercepts_", intercepts)
-    py_setitem(fields, "n_iter_", n_iter)
+    py_setitem(fields, nk[].k_coefs_, coefs)
+    py_setitem(fields, nk[].k_intercepts_, intercepts)
+    py_setitem(fields, nk[].k_n_iter_, n_iter)
     _ = curve  # keep the Python object alive through the native call above
     _ = params  # keep the Python object alive through the native call above
     var losses = xseq_curve_list(curve, n_iter)
     _ = params  # keep the Python object alive through the native call above
-    py_setitem(fields, "loss_curve_", losses)
+    py_setitem(fields, nk[].k_loss_curve_, losses)
     if n_iter == 0:
         raise Error("IndexError: list index out of range")
     _ = curve  # keep the Python object alive through the native calls above
     _ = params  # keep the Python object alive through the native calls above
-    py_setitem(fields, "loss_", losses[n_iter - 1])
+    py_setitem(fields, nk[].k_loss_, losses[n_iter - 1])
     _ = curve  # keep the Python object alive through the native call above
     _ = params  # keep the Python object alive through the native call above
     # the first-wins minimum of the curve (`reduce_stat` 0)
@@ -712,9 +734,9 @@ def _mlp_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
     _ = best_provider
     _ = curve  # keep the Python object alive through the native call above
     _ = params  # keep the Python object alive through the native call above
-    py_setitem(fields, "best_loss_", best)
+    py_setitem(fields, nk[].k_best_loss_, best)
     _ = curve  # keep the Python object alive through the native call above
-    py_setitem(fields, "t_", n_iter * rows)
+    py_setitem(fields, nk[].k_t_, n_iter * rows)
     _ = curve  # keep the Python object alive through the native call above
     _ = params  # keep the Python object alive through the native call above
     return model
@@ -769,11 +791,12 @@ def _mlp_forward(model: PythonObject, fields: PythonObject, source: PythonObject
     var x_shape = x.shape
     var rows = Int(py=x_shape[0])
     var columns = Int(py=x_shape[1])
-    if not Bool(py=PythonObject(columns) == fields["n_features_in_"]):
+    var nk = xseq_keys()
+    if not Bool(py=PythonObject(columns) == py_item(fields, nk[].k_n_features_in_)):
         raise Error("X has " + String(columns) + " features, the model was fitted on "
-                    + String(py=py_call(b.str, fields["n_features_in_"])))
-    var coefs = fields["coefs_"]
-    var intercepts = fields["intercepts_"]
+                    + String(py=py_call(b.str, py_item(fields, nk[].k_n_features_in_))))
+    var coefs = py_item(fields, nk[].k_coefs_)
+    var intercepts = py_item(fields, nk[].k_intercepts_)
     # The packed fitted block, kept per model while `coefs_` and
     # `intercepts_` hold the same arrays (see "fitted-weight records" above).
     # A record packed for another input width is not reused: the full path
@@ -801,12 +824,12 @@ def _mlp_forward(model: PythonObject, fields: PythonObject, source: PythonObject
     var hidden = List[Int]()
     for i in range(len(hidden_widths)):  # driver-loop: over hidden layer widths
         hidden.append(Int(py=hidden_widths[i]))
-    var n_outputs = Int(py=fields["n_outputs_"])
+    var n_outputs = Int(py=py_item(fields, nk[].k_n_outputs_))
     xseq_run_mlp_output_check(input_width, n_outputs)
     var width = 2 if proba2 else n_outputs
     var out = xseq_zeros(Python.tuple(rows, width), context)
-    var out_act = Int(py=context["xseq_mlp_outputs"][fields["out_activation_"]])
-    var activation = Int(py=context["xseq_mlp_activations"][fields["activation"]])
+    var out_act = Int(py=py_item(context, nk[].k_xseq_mlp_outputs)[py_item(fields, nk[].k_out_activation_)])
+    var activation = Int(py=py_item(context, nk[].k_xseq_mlp_activations)[py_item(fields, nk[].k_activation)])
     var entries = xseq_entries(fields, context)
     var request = XseqMlpPredictRequest(rows, columns, n_outputs, activation, out_act, hidden^, proba2, width,
                                         Int(py=params.size), Int(model._obj_ptr), token)
@@ -825,13 +848,15 @@ def _mlp_forward(model: PythonObject, fields: PythonObject, source: PythonObject
     return out
 
 
-def xseq_mlp(model: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def xseq_mlp(model: PythonObject, operation: Int, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    # bw2-sequence (2026-11-20): the xseq code, as `xseq_rnn`.
     var fields = py_fields(model)
     var classifier = String(py=_attr(py_type(model), "_estimator_type")) == "classifier"
-    if operation == "mlp_fit":
+    var nk = xseq_keys()
+    if operation == XSEQ_OPN_MLP_FIT:
         if not classifier:
             var y = xseq_as_f32_c(args[1], 0, "y", context)
-            py_setitem(fields, "_y_1d", Int(py=y.ndim) == 1)
+            py_setitem(fields, nk[].k__y_1d, Int(py=y.ndim) == 1)
             var target = xseq_reshape(y, Python.tuple(Int(py=y.shape[0]), -1))
             return _mlp_fit(model, fields, args[0], target, 0, 0, context)
         var rank = 1
@@ -842,27 +867,27 @@ def xseq_mlp(model: PythonObject, operation: String, args: PythonObject, context
         if rank != 1:
             raise Error("NotImplementedError: multilabel targets are not implemented")
         var encoded = xseq_labels(args[1], xseq_entries(fields, context), context)
-        py_setitem(fields, "classes_", encoded[0])
+        py_setitem(fields, nk[].k_classes_, encoded[0])
         var k = len(encoded[0])
         if k < 2:
             raise Error("MLPClassifier needs at least two classes")
         var codes = encoded[1]
         if k == 2:
-            py_setitem(fields, "_LOSS_CODE", 1)
+            py_setitem(fields, nk[].k__LOSS_CODE, 1)
             return _mlp_fit(model, fields, args[0], codes, 1, 1, context)
-        py_setitem(fields, "_LOSS_CODE", 2)
+        py_setitem(fields, nk[].k__LOSS_CODE, 2)
         return _mlp_fit(model, fields, args[0], codes, 4, k, context)
-    if operation == "mlp_predict_proba":
-        return _mlp_forward(model, fields, args[0], Int(py=fields["n_outputs_"]) == 1, context)
+    if operation == XSEQ_OPN_MLP_PREDICT_PROBA:
+        return _mlp_forward(model, fields, args[0], Int(py=py_item(fields, nk[].k_n_outputs_)) == 1, context)
     var out = _mlp_forward(model, fields, args[0], False, context)
     var rows = Int(py=out.shape[0])
     if not classifier:
-        if xseq_truth(py_get(fields, "_y_1d", PythonObject(False))):
+        if xseq_truth(py_get(fields, nk[].k__y_1d, PythonObject(False))):
             return xseq_reshape(out, Python.tuple(rows))
         return out
     if Int(py=out.shape[1]) == 1:
         # p > 0.5 per row (`threshold_labels_i64`; NaN takes class 0)
-        var codes = sequential_array(Python.tuple(rows), context["int64"], context)
+        var codes = sequential_array(Python.tuple(rows), py_item(context, nk[].k_int64), context)
         if rows:
             var scores_address = Int(py=xseq_addr(out))
             var codes_address = Int(py=xseq_addr(codes))

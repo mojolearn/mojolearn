@@ -5,13 +5,15 @@ import re
 
 import pytest
 
+from boundary_keys_plain import plain
 from check_neural_native_boundary import audit, imports
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def function(path, name):
-    source = (ROOT / path).read_text()
+    # Doors that read through held name keys are read in their plain (by-name) form.
+    source = plain(path, (ROOT / path).read_text())
     return re.search(rf'^def {name}\(.*?(?=^def |^struct |\Z)', source,
                      flags=re.M | re.S).group()
 

@@ -29,6 +29,8 @@ from sequence.xseq_score_run import (
     xseq_run_vector_rows, xseq_run_vector_finite, xseq_run_lengths_check, xseq_run_weights_check,
     xseq_run_metrics_mode, xseq_run_r2,
 )
+from bindings.xseq_keys_unpack import xseq_keys
+from bindings.py_balanced import py_item
 
 
 def _shape_words(value: PythonObject) raises -> List[Int]:
@@ -69,19 +71,20 @@ def _metrics_key(model: PythonObject, context: PythonObject) raises -> MetricsEn
     that mode (or the process default), as its native R^2 table key (the
     bridge records it at import), checked against its compiled mode."""
     var b = native_loaded_module("builtins")
-    var mode = py_get(py_fields(model), "numeric_mode")
+    var nk = xseq_keys()
+    var mode = py_get(py_fields(model), nk[].k_numeric_mode)
     if mode is not None:
         if py_type(mode) is not b.str:
             raise Error("ValueError: numeric_mode must be 'fast' or 'identical'")
         var clean = String(py=py_call(py_call(mode.strip).lower))  # one strip/lower, not two
         if clean != "fast" and clean != "identical":
             raise Error("ValueError: numeric_mode must be 'fast' or 'identical'")
-    var expected = context["backend_fields"]["_DEFAULT_MODE"] if mode is None else mode
+    var expected = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE) if mode is None else mode
     expected = py_call(py_call(expected.strip).lower)
     var expected_word = String(py=expected)
     answer_mode_object(expected, expected_word, MODE_FAMILY_XSEQ)
     answer_mode_word(expected_word, MODE_FAMILY_XSEQ)
-    var table = context["xseq_metrics"]
+    var table = py_item(context, nk[].k_xseq_metrics)
     var record = table[expected]
     if py_type(record) is b.str:
         raise Error("ImportError: " + String(py=record))
@@ -119,11 +122,12 @@ def xseq_regressor_score(model: PythonObject, prediction: PythonObject, args: Py
     var sample_weight = args[2]
     if Int(py=truth.ndim) == 2 and Int(py=truth.shape[1]) != 1:
         # multi-output targets: the x_metrics program of `r2_score_options`
-        var options = py_get(context, "xseq_r2_options")
+        var nk = xseq_keys()
+        var options = py_get(context, nk[].k_xseq_r2_options)
         if options is None:
             raise Error("NotImplementedError: mojolearn: the multi-output score needs the native metrics owner "
                         + "(family_metric_r2_options); this install does not carry it")
-        var mode = py_get(py_fields(model), "numeric_mode")
+        var mode = py_get(py_fields(model), nk[].k_numeric_mode)
         # pyout-metrics-cnn (2026-11-11): the metrics owner's body, called natively (no CPython call of
         # its family door); the operands are this call's own admitted arrays, which that owner admits in
         # its UNPACK, and options[1] is the metrics family context the door would have received.
@@ -163,11 +167,12 @@ def xseq_classifier_score(model: PythonObject, prediction: PythonObject, args: P
     prediction, sample_weight, numeric_mode)`: the native metrics owner's
     `family_mcls_accuracy_fraction`, the same entry with the same arguments,
     so the score keeps its bits."""
-    var owner = py_get(context, "xseq_r2_options")
+    var nk = xseq_keys()
+    var owner = py_get(context, nk[].k_xseq_r2_options)
     if owner is None:
         raise Error("NotImplementedError: mojolearn: the classifier score needs the native metrics owner "
                     + "(family_mcls_accuracy_fraction); this install does not carry it")
-    var mode = py_get(py_fields(model), "numeric_mode")
+    var mode = py_get(py_fields(model), nk[].k_numeric_mode)
     # pyout-metrics-cnn (2026-11-11): the metrics owner's body, called natively (no CPython call of its
     # family door); the labels are the caller's Python objects, admitted in that owner's UNPACK.
     return metrics_cls_operation(PythonObject(None), "family_mcls_accuracy_fraction",

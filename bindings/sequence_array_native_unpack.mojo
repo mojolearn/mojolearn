@@ -15,6 +15,8 @@ from bindings.sequence_array_warnings_pack import sequence_array_errstate
 from bindings.native_numpy_metadata_unpack import native_numpy_dtype
 from bindings.sequence_dtype_native_door import sequence_dtype_classes, sequence_dtype_instance, sequence_dtype_normalize, sequence_dtype_allocation_shape
 from bindings.sequence_string_storage_door import sequence_string_admit, sequence_string_leaf
+from bindings.sequence_keys_unpack import sequence_keys
+from bindings.py_balanced import py_item
 
 
 def sequence_dtype_leaves(dtype: PythonObject, offset: Int, classes: PythonObject,
@@ -99,14 +101,15 @@ def sequence_array_address(value: PythonObject) raises -> Int:
 
 
 def sequence_array_release(context: PythonObject) raises -> Int:
+    var nk = sequence_keys()
     # NumPy 2.3 added NPY_METH_NO_FLOATINGPOINT_ERRORS to any_to_object
     # (numpy/_core/src/multiarray/dtype_transfer.c). Its 2.0 ABI version
     # cannot distinguish this change from 2.0--2.2, which still report flags.
     # Read only exact native module/string metadata; no version helper runs.
-    var module = py_get(context["modules"], "numpy")
-    if module is None or py_type(module) is not context["module_type"]:
+    var module = py_get(py_item(context, nk[].k_modules), nk[].k_numpy)
+    if module is None or py_type(module) is not py_item(context, nk[].k_module_type):
         raise Error("TypeError: array cast compatibility requires NumPy's native module")
-    var version = py_get(py_fields(module), "__version__")
+    var version = py_get(py_fields(module), nk[].k___version__)
     if py_type(version) is not native_loaded_module("builtins").str:
         raise Error("TypeError: array cast compatibility requires native NumPy version text")
     var text = String(version)
@@ -128,9 +131,10 @@ def sequence_array_cast(source: PythonObject, requested: PythonObject, context: 
     if requested is None:
         return source
     var dtype_constructor = native_numpy_dtype(context)
-    var input = context["input_context"]
+    var nk = sequence_keys()
+    var input = py_item(context, nk[].k_input_context)
     classical_connect_numpy(input)
-    if py_get(input, "ndarray") is None:
+    if py_get(input, nk[].k_ndarray) is None:
         raise Error("TypeError: the ndarray protocol requires NumPy's native array type to be connected")
     var classes = sequence_dtype_classes(context)
     var dtype = sequence_dtype_normalize(requested, classes, context)
@@ -151,7 +155,7 @@ def sequence_array_cast(source: PythonObject, requested: PythonObject, context: 
     var settings = sequence_array_errstate(context)
     # Native ndarray allocation owns and initializes object slots. No buffer
     # protocol, scalar conversion or user allocation subclass is invoked.
-    var result = py_call(input["ndarray"], source.shape, dtype=dtype)
+    var result = py_call(py_item(input, nk[].k_ndarray), source.shape, dtype=dtype)
     var count = Int(py=source.size)
     var stride = Int(py=dtype.itemsize)
     var managed = False

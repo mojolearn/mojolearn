@@ -18,27 +18,32 @@ from bindings.classical_arrays_door import classical_input, classical_typed, cla
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.sequence_array_native_unpack import sequence_array_cast
 from bindings.native_numpy_metadata_unpack import native_numpy_dtype
+from bindings.sequence_keys_unpack import sequence_keys
+from bindings.py_balanced import py_item
 
 
 def seq_device_set(owner: PythonObject, binding: PythonObject, shape: List[Int], handle: PythonObject,
                    base: PythonObject, context: PythonObject) raises:
-    var setters = context["sequence_device_setters"]
-    _ = py_call(setters["shape"], owner, native_shape_pack(shape))
-    _ = py_call(setters["h"], owner, handle)
-    _ = py_call(setters["_base"], owner, base)
-    _ = py_call(setters["b"], owner, binding)
+    var nk = sequence_keys()
+    var setters = py_item(context, nk[].k_sequence_device_setters)
+    _ = py_call(py_item(setters, nk[].k_shape), owner, native_shape_pack(shape))
+    _ = py_call(py_item(setters, nk[].k_h), owner, handle)
+    _ = py_call(py_item(setters, nk[].k__base), owner, base)
+    _ = py_call(py_item(setters, nk[].k_b), owner, binding)
 
 
 def seq_device_make(binding: PythonObject, shape: List[Int], handle: PythonObject, base: PythonObject,
                     context: PythonObject) raises -> PythonObject:
-    var result = py_call(native_loaded_module("builtins").object.__new__, context["sequence_device_class"])
+    var nk = sequence_keys()
+    var result = py_call(native_loaded_module("builtins").object.__new__, py_item(context, nk[].k_sequence_device_class))
     seq_device_set(result, binding, shape, handle, base, context)
     return result
 
 
 def seq_device_input(value: PythonObject, strict: Bool, context: PythonObject, mut buffer_pins: OptimizerInputOwners) raises -> PythonObject:
     opt_value(value, context)
-    var input = context["input_context"]
+    var nk = sequence_keys()
+    var input = py_item(context, nk[].k_input_context)
     classical_connect_numpy(input)
     var source = classical_input(value, input)
     var view = TensorView()

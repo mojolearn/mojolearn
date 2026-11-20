@@ -8,21 +8,24 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
 from bindings.classical_warnings_unpack import _warning_fields, _warning_class_fields, _warning_match, _warning_write
 from bindings.optimizer_public_words_unpack import stash_python_error
 from core.sequence_array_cast import SEQ_CAST_OVERFLOW, SEQ_CAST_UNDERFLOW, SEQ_CAST_INVALID
+from bindings.sequence_keys_unpack import sequence_keys
+from bindings.py_balanced import py_item
 
 
 def sequence_array_errstate(context: PythonObject) raises -> PythonObject:
-    var module = py_get(context["modules"], "numpy._core._multiarray_umath")
+    var nk = sequence_keys()
+    var module = py_get(py_item(context, nk[].k_modules), "numpy._core._multiarray_umath")
     if module is None:
-        module = py_get(context["modules"], "numpy.core._multiarray_umath")
-    if module is None or py_type(module) is not context["module_type"]:
+        module = py_get(py_item(context, nk[].k_modules), "numpy.core._multiarray_umath")
+    if module is None or py_type(module) is not py_item(context, nk[].k_module_type):
         raise Error("TypeError: array output requires NumPy's native error-state metadata")
-    var entry = py_get(py_fields(module), "_get_extobj_dict")
+    var entry = py_get(py_fields(module), nk[].k__get_extobj_dict)
     var legacy = entry is None
     if legacy:
-        entry = py_get(py_fields(module), "geterrobj")
-    var warning = context["sequence_array_warnings"]
+        entry = py_get(py_fields(module), nk[].k_geterrobj)
+    var warning = py_item(context, nk[].k_sequence_array_warnings)
     var name = String("geterrobj") if legacy else String("_get_extobj_dict")
-    if entry is None or py_type(entry) is not warning["warning_native_function"] or String(entry.__name__) != name or entry.__self__ is not module:
+    if entry is None or py_type(entry) is not py_item(warning, nk[].k_warning_native_function) or String(entry.__name__) != name or entry.__self__ is not module:
         raise Error("TypeError: NumPy error-state metadata must use its native entry")
     var stored = py_call(entry)
     if not legacy:
@@ -43,14 +46,15 @@ def sequence_array_errstate(context: PythonObject) raises -> PythonObject:
         if action >= len(actions):
             raise Error("TypeError: NumPy error-state mask has an unsupported action")
         py_setitem(result, PythonObject(names[i]), PythonObject(actions[action]))
-    py_setitem(result, "call", stored[2])
+    py_setitem(result, nk[].k_call, stored[2])
     return result
 
 
 def sequence_array_category(kind: String) raises -> PythonObject:
     var b = native_loaded_module("builtins")
     var category = py_get(py_fields(b), PythonObject(kind))
-    var flags = b.type.__dict__["__flags__"]
+    var nk = sequence_keys()
+    var flags = py_item(b.type.__dict__, nk[].k___flags__)
     # Validate before PyErr_SetString or constructing a warning message: both
     # can instantiate the exception class. Replaced Python classes/functions
     # therefore must be refused even though the call site itself is native.

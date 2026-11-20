@@ -20,6 +20,8 @@ from providers.python.sequence_layer_buffer_pyapi_unpack import SequenceFloatBuf
 from bindings.sequence_moe_native_door import sequence_moe_operation
 from core.scaler_fit_impl import scaler_fill
 from bindings.py_optional import py_present
+from bindings.sequence_keys_unpack import sequence_keys
+from bindings.py_balanced import py_item
 
 
 def _b() raises -> PythonObject:
@@ -27,13 +29,15 @@ def _b() raises -> PythonObject:
 
 
 def _new(entries: PythonObject, shape: List[Int], context: PythonObject) raises -> PythonObject:
-    var handle = py_call_typed(entries["seq_tensor_alloc"], PythonObject(max(1, shape_count(shape))), PythonObject(0))
-    return seq_device_make(entries["module"], shape, handle, PythonObject(None), context)
+    var nk = sequence_keys()
+    var handle = py_call_typed(py_item(entries, nk[].k_seq_tensor_alloc), PythonObject(max(1, shape_count(shape))), PythonObject(0))
+    return seq_device_make(py_item(entries, nk[].k_module), shape, handle, PythonObject(None), context)
 
 
 def _handle(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = sequence_keys()
     # Only freshly allocated, native-owned outputs are read here.
-    return py_call(context["sequence_device_getters"]["h"], value)
+    return py_call(py_item(py_item(context, nk[].k_sequence_device_getters), nk[].k_h), value)
 
 
 struct LayerInput(Movable):
@@ -61,7 +65,8 @@ struct LayerInput(Movable):
         self.absent = value is None
         if value is None:
             return
-        if py_type(value) is context["sequence_device_class"]:
+        var nk = sequence_keys()
+        if py_type(value) is py_item(context, nk[].k_sequence_device_class):
             self.resident = SequenceResidentSnapshot(value, context)
             self.device = True
             self.shape = self.resident.value().shape.copy()
@@ -79,14 +84,16 @@ struct LayerInput(Movable):
 def _upload(input: LayerInput, entries: PythonObject, context: PythonObject) raises -> PythonObject:
     var output = _new(entries, input.shape, context)
     if input.count > 0:
-        _ = py_call_typed(entries["seq_tensor_upload"], _handle(output, context), PythonObject(input.address), PythonObject(input.count))
+        var nk = sequence_keys()
+        _ = py_call_typed(py_item(entries, nk[].k_seq_tensor_upload), _handle(output, context), PythonObject(input.address), PythonObject(input.count))
     return output
 def _norm_shape(normalized_shape: PythonObject, context: PythonObject) raises -> List[Int]:
     opt_scalar(normalized_shape, context)
     var b = _b()
-    var input = context["input_context"]
+    var nk = sequence_keys()
+    var input = py_item(context, nk[].k_input_context)
     classical_connect_numpy(input)
-    var integer = Bool(py=py_call(b.isinstance, normalized_shape, b.int)) or Bool(py=py_call(b.isinstance, normalized_shape, input["int_types"]))
+    var integer = Bool(py=py_call(b.isinstance, normalized_shape, b.int)) or Bool(py=py_call(b.isinstance, normalized_shape, py_item(input, nk[].k_int_types)))
     var shape = Python.tuple(normalized_shape) if integer else py_call(b.tuple, normalized_shape)
     if len(shape) == 0:
         raise Error("ValueError: normalized_shape must be positive")
@@ -105,7 +112,8 @@ def _norm_d(normalized_shape: PythonObject, context: PythonObject) raises -> Int
 
 def _ln_fields(owner: PythonObject, context: PythonObject) raises -> PythonObject:
     var b = _b()
-    var layout = context["seqln_layout"]
+    var nk = sequence_keys()
+    var layout = py_item(context, nk[].k_seqln_layout)
     var cls = py_type(owner)
     if cls is not layout[0] or py_type(cls) is not b.type:
         raise Error("TypeError: LayerNorm requires its connected native storage class")
@@ -129,11 +137,12 @@ comptime _LN_CLASS_SLOT = "seqln_class_admitted_v1"
 
 
 def _ln_class_admit(cls: PythonObject, layout: PythonObject, b: PythonObject) raises:
-    if py_call(b.type.__dict__["__mro__"].__get__, cls) is not layout[1]:
+    var nk = sequence_keys()
+    if py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, cls) is not layout[1]:
         raise Error("TypeError: LayerNorm class ancestry changed")
     var hooks = layout[3]
     for i in range(len(hooks)):  # small-loop(connected native storage hooks)
-        var row = py_call(b.type.__dict__["__dict__"].__get__, hooks[i][0])
+        var row = py_call(py_item(b.type.__dict__, nk[].k___dict__).__get__, hooks[i][0])
         if py_get(row, hooks[i][1]) is not hooks[i][2]:
             raise Error("TypeError: LayerNorm refuses replaced Python storage hooks")
     var ancestry = layout[1]
@@ -145,10 +154,11 @@ def _ln_class_admit(cls: PythonObject, layout: PythonObject, b: PythonObject) ra
 
 
 def _ln_device_entries(fields: PythonObject, context: PythonObject) raises -> PythonObject:
-    if Bool(py=context["seqln_class_device_io_off"]):
+    var nk = sequence_keys()
+    if Bool(py=py_item(context, nk[].k_seqln_class_device_io_off)):
         return PythonObject(None)
     try:
-        var entries = seq_binding(py_get(fields, "numeric_mode"), context, PythonObject(None))
+        var entries = seq_binding(py_get(fields, nk[].k_numeric_mode), context, PythonObject(None))
         for name in ["seq_tensor_alloc", "seq_tensor_free", "seq_tensor_upload", "seq_tensor_download", "layer_norm_dev"]:  # small-loop(required resident native entries)
             if py_get(entries, name) is None:
                 return PythonObject(None)
@@ -199,8 +209,9 @@ def _run(input: LayerInput, d: Int, weight: PythonObject, bias: PythonObject, ep
     var m = input.count // d
     var flags = Python.list(m, d, 0 if w.absent else 1, 0 if b.absent else 1, 1 if backward else 0)
     var fp = Python.list(eps)
+    var nk = sequence_keys()
     if input.device:
-        var entry = py_get(input.entries, "layer_norm_dev")
+        var entry = py_get(input.entries, nk[].k_layer_norm_dev)
         if entry is None:
             raise Error("RuntimeError: layer_norm: this binding has no device LayerNorm; pass a host input")
         var means = PythonObject(None)
@@ -216,7 +227,7 @@ def _run(input: LayerInput, d: Int, weight: PythonObject, bias: PythonObject, ep
         if stats is not None:
             if not mean.device or not rstd.device or mean.count != m or rstd.count != m:
                 raise Error("ValueError: layer_norm: stats must be two resident tensors of M floats")
-            if mean.entries["module"] is not input.entries["module"] or rstd.entries["module"] is not input.entries["module"]:
+            if py_item(mean.entries, nk[].k_module) is not py_item(input.entries, nk[].k_module) or py_item(rstd.entries, nk[].k_module) is not py_item(input.entries, nk[].k_module):
                 raise Error("ValueError: layer_norm: stats must use x's native binding")
             handles = Python.list(mean.handle, rstd.handle)
             _ = py_call(flags.append, PythonObject(1))
@@ -228,7 +239,7 @@ def _run(input: LayerInput, d: Int, weight: PythonObject, bias: PythonObject, ep
         # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
         var fused = Optional[PythonObject]()
         if not backward:
-            fused = py_present(py_get(input.entries, "layer_norm_dev_alloc"))
+            fused = py_present(py_get(input.entries, nk[].k_layer_norm_dev_alloc))
         if Bool(fused):
             var out_count = max(1, shape_count(input.shape))
             var fused_hs = Python.list(input.handle, PythonObject(0), PythonObject(0), PythonObject(0))
@@ -243,7 +254,7 @@ def _run(input: LayerInput, d: Int, weight: PythonObject, bias: PythonObject, ep
                 _ = py_call(flags.append, PythonObject(1))
             var fused_addrs = Python.list(w.address, b.address, PythonObject(0), PythonObject(0))
             var made = py_call_typed(fused.value(), fused_hs, fused_addrs, flags, fp, sizes)
-            var module = input.entries["module"]
+            var module = py_item(input.entries, nk[].k_module)
             var fused_output = seq_device_make(module, input.shape, made[1], PythonObject(None), context)
             var kept = PythonObject(None)
             if make_stats:
@@ -262,7 +273,7 @@ def _run(input: LayerInput, d: Int, weight: PythonObject, bias: PythonObject, ep
         var db = PythonObject(None)
         if backward:
             if gradient.device:
-                if gradient.entries["module"] is not input.entries["module"]:
+                if py_item(gradient.entries, nk[].k_module) is not py_item(input.entries, nk[].k_module):
                     raise Error("ValueError: layer_norm_backward: dy must use x's native binding")
                 dy_handle = gradient.handle
             else:
@@ -287,7 +298,7 @@ def _run(input: LayerInput, d: Int, weight: PythonObject, bias: PythonObject, ep
     if gradient.device:
         raise Error("TypeError: layer_norm host input requires a host output gradient")
     var entries = seq_binding(mode, context, PythonObject(None))
-    var entry = py_get(entries, "layer_norm")
+    var entry = py_get(entries, nk[].k_layer_norm)
     if entry is None:
         raise Error("ImportError: the sequence binding lacks layer_norm; rebuild it")
     # y (forward) or dx (backward): the entry downloads every word, so the
@@ -326,6 +337,7 @@ def sequence_layer_norm(operation: String, owner: PythonObject, values: PythonOb
         return Python.tuple(result[1], PythonObject(None) if values[3] is None else result[2],
                             PythonObject(None) if values[4] is None else result[3])
     var fields = _ln_fields(owner, context)
+    var nk = sequence_keys()
     if operation == "seqln_initialize":
         opt_scalar(values, context)
         opt_scalar(mode, context)
@@ -342,13 +354,13 @@ def sequence_layer_norm(operation: String, owner: PythonObject, values: PythonOb
             scaler_fill(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(weight))), d, Float32(1))
         if with_bias:
             bias = _array(shape, context)
-        py_setitem(fields, "normalized_shape", native_shape_pack(shape))
-        py_setitem(fields, "_D", d)
-        py_setitem(fields, "eps", Float64(py=values[1]))
-        py_setitem(fields, "elementwise_affine", affine)
-        py_setitem(fields, "weight", weight)
-        py_setitem(fields, "bias", bias)
-        py_setitem(fields, "numeric_mode", mode)
+        py_setitem(fields, nk[].k_normalized_shape, native_shape_pack(shape))
+        py_setitem(fields, nk[].k__D, d)
+        py_setitem(fields, nk[].k_eps, Float64(py=values[1]))
+        py_setitem(fields, nk[].k_elementwise_affine, affine)
+        py_setitem(fields, nk[].k_weight, weight)
+        py_setitem(fields, nk[].k_bias, bias)
+        py_setitem(fields, nk[].k_numeric_mode, mode)
         for name in ["weight_grad", "bias_grad", "_x", "_stats"]:  # driver-loop: over initial native state fields
             py_setitem(fields, name, PythonObject(None))
         return PythonObject(None)
@@ -367,21 +379,21 @@ def sequence_layer_norm(operation: String, owner: PythonObject, values: PythonOb
         return result
     for name in ["normalized_shape", "_D", "eps", "numeric_mode"]:  # driver-loop: over layer configuration metadata
         opt_scalar(fields[PythonObject(name)], context)
-    var d = Int(py=fields["_D"])
-    var shape = _norm_shape(fields["normalized_shape"], context)
+    var d = Int(py=py_item(fields, nk[].k__D))
+    var shape = _norm_shape(py_item(fields, nk[].k_normalized_shape), context)
     if d < 1 or d > 2147483647 or d != shape_count(shape):
         raise Error("ValueError: normalized_shape and native layer width must agree")
     if operation == "seqln_layer_backward":
-        var x = py_get(fields, "_x")
+        var x = py_get(fields, nk[].k__x)
         if x is None:
             raise Error("RuntimeError: LayerNorm.backward: call forward first")
         var input = LayerInput(x, context)
         _ = _width_known(input, d)
-        var result = _run(input, d, fields["weight"], fields["bias"], Float64(py=fields["eps"]), values[0],
-            py_get(fields, "numeric_mode"), py_get(fields, "_stats"), shape, context)
+        var result = _run(input, d, py_item(fields, nk[].k_weight), py_item(fields, nk[].k_bias), Float64(py=py_item(fields, nk[].k_eps)), values[0],
+            py_get(fields, nk[].k_numeric_mode), py_get(fields, nk[].k__stats), shape, context)
         _ = input^
-        py_setitem(fields, "weight_grad", result[2])
-        py_setitem(fields, "bias_grad", result[3])
+        py_setitem(fields, nk[].k_weight_grad, result[2])
+        py_setitem(fields, nk[].k_bias_grad, result[3])
         return result[1]
     if operation != "seqln_layer":
         raise Error("ValueError: unknown LayerNorm public operation")
@@ -395,21 +407,21 @@ def sequence_layer_norm(operation: String, owner: PythonObject, values: PythonOb
     if not same:
         raise Error("ValueError: LayerNorm input trailing shape differs from normalized_shape")
     var stats = PythonObject(None)
-    var keep_stats = input.device and not Bool(py=context["seqln_keep_stats_off"])
+    var keep_stats = input.device and not Bool(py=py_item(context, nk[].k_seqln_keep_stats_off))
     # Row N162: with the fused entry the kept stats are made inside the
     # forward's one crossing (`_run`, alloc_stats) and published after it.
-    var fused = keep_stats and py_get(input.entries, "layer_norm_dev_alloc") is not None
+    var fused = keep_stats and py_get(input.entries, nk[].k_layer_norm_dev_alloc) is not None
     if keep_stats and not fused:
         var m = input.count // d
         stats = Python.tuple(_new(input.entries, [m], context), _new(input.entries, [m], context))
     # Keep the same normalized input owner and resident statistics for the
     # next public backward; its metadata is refreshed at that next operation.
-    py_setitem(fields, "_x", input.owner)
-    py_setitem(fields, "_stats", stats)
-    var result = _run(input, d, fields["weight"], fields["bias"], Float64(py=fields["eps"]), PythonObject(None),
-        py_get(fields, "numeric_mode"), stats, shape, context, fused)
+    py_setitem(fields, nk[].k__x, input.owner)
+    py_setitem(fields, nk[].k__stats, stats)
+    var result = _run(input, d, py_item(fields, nk[].k_weight), py_item(fields, nk[].k_bias), Float64(py=py_item(fields, nk[].k_eps)), PythonObject(None),
+        py_get(fields, nk[].k_numeric_mode), stats, shape, context, fused)
     if fused and len(result) == 5:
-        py_setitem(fields, "_stats", result[4])
+        py_setitem(fields, nk[].k__stats, result[4])
     _ = input^
     return result[0]
 

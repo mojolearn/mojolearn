@@ -27,6 +27,8 @@ from bindings.sequence_device_native_unpack import (
     seq_device_make,
     seq_device_set,
 )
+from bindings.sequence_keys_unpack import sequence_keys
+from bindings.py_balanced import py_item
 
 
 def seq_device_entries(binding: PythonObject, context: PythonObject, required: Bool = True) raises -> PythonObject:
@@ -54,9 +56,15 @@ def sequence_device_finalize(owner: PythonObject, values: PythonObject,
     var base = PythonObject(None)
     var handle = PythonObject(None)
     try:
-        binding = seq_device_get(owner, "b", context)
-        base = seq_device_get(owner, "_base", context)
-        handle = seq_device_get(owner, "h", context)
+        # bw2-sequence (2026-11-20): the owner's exact type was tested above,
+        # so the three getters are called directly (seq_device_get repeated
+        # that test per slot). This finalizer reads no key table: its names
+        # stay literal, so a release during interpreter shutdown never runs a
+        # table fill (fx-smoke-b59).
+        var getters = context["sequence_device_getters"]
+        binding = py_call(getters["b"], owner)
+        base = py_call(getters["_base"], owner)
+        handle = py_call(getters["h"], owner)
     except:
         # Failed constructors may have installed only some native slots.
         return PythonObject(None)
@@ -115,8 +123,9 @@ def sequence_device_operation(operation: String, owner: PythonObject, values: Py
         var b = native_loaded_module("builtins")
         if operation == "seqdev_size_of":
             return PythonObject(shape_count(device_shape(values[0], context)))
+        var nk = sequence_keys()
         if operation == "seqdev_construct":
-            if py_type(owner) is not context["sequence_device_class"]:
+            if py_type(owner) is not py_item(context, nk[].k_sequence_device_class):
                 raise Error("TypeError: sequence device constructor requires its exact owner")
             var entries = seq_device_entries(values[0], context)
             var shape = device_shape(values[1], context)
@@ -124,41 +133,41 @@ def sequence_device_operation(operation: String, owner: PythonObject, values: Py
             opt_scalar(values[2], context)
             var base = values[3]
             if base is not None:
-                if not seq_device(base, context) or seq_device_get(base, "b", context) is not entries["module"]:
+                if not seq_device(base, context) or seq_device_get(base, "b", context) is not py_item(entries, nk[].k_module):
                     raise Error("TypeError: sequence tensor view must retain its native binding owner")
-            seq_device_set(owner, entries["module"], shape, py_call(b.int, values[2]), base, context)
+            seq_device_set(owner, py_item(entries, nk[].k_module), shape, py_call(b.int, values[2]), base, context)
             return PythonObject(None)
         if operation == "seqdev_new":
-            if owner is not context["sequence_device_class"]:
+            if owner is not py_item(context, nk[].k_sequence_device_class):
                 raise Error("TypeError: sequence tensor allocation requires its exact native class")
             var entries = seq_device_entries(values[0], context)
             var shape = device_shape(values[1], context)
             opt_scalar(values[2], context)
-            var handle = py_call_typed(entries["seq_tensor_alloc"], max(1, shape_count(shape)), Int(Bool(py=values[2])))
-            return seq_device_make(entries["module"], shape, handle, PythonObject(None), context)
+            var handle = py_call_typed(py_item(entries, nk[].k_seq_tensor_alloc), max(1, shape_count(shape)), Int(Bool(py=values[2])))
+            return seq_device_make(py_item(entries, nk[].k_module), shape, handle, PythonObject(None), context)
         if operation == "seqdev_to" or operation == "seqdev_wrap":
             var source = values[0] if operation == "seqdev_to" else values[1]
             if operation == "seqdev_to" and seq_device(source, context):
                 return source
             var input = seq_device_input(source, operation == "seqdev_to", context, buffer_pins)
-            if operation == "seqdev_to" and Bool(py=context["sequence_device_io_off"]):
+            if operation == "seqdev_to" and Bool(py=py_item(context, nk[].k_sequence_device_io_off)):
                 return input
             var selected = seq_binding(mode, context, PythonObject(None)) if operation == "seqdev_to" else seq_binding(mode, context, values[0])
-            var entries = seq_device_entries(selected["module"], context, operation != "seqdev_to")
+            var entries = seq_device_entries(py_item(selected, nk[].k_module), context, operation != "seqdev_to")
             if entries is None:
                 return input
             var shape = device_shape(input.shape, context)
             var n = shape_count(shape)
-            var handle = py_call_typed(entries["seq_tensor_alloc"], max(n, 1), 0)
+            var handle = py_call_typed(py_item(entries, nk[].k_seq_tensor_alloc), max(n, 1), 0)
             try:
                 if n > 0:
-                    _ = py_call_typed(entries["seq_tensor_upload"], handle, classical_address(input), n)
+                    _ = py_call_typed(py_item(entries, nk[].k_seq_tensor_upload), handle, classical_address(input), n)
             except error:
-                _ = py_call_typed(entries["seq_tensor_free"], handle)
+                _ = py_call_typed(py_item(entries, nk[].k_seq_tensor_free), handle)
                 raise error^
             _ = input^
-            return seq_device_make(entries["module"], shape, handle, PythonObject(None), context)
-        if py_type(owner) is not context["sequence_device_class"]:
+            return seq_device_make(py_item(entries, nk[].k_module), shape, handle, PythonObject(None), context)
+        if py_type(owner) is not py_item(context, nk[].k_sequence_device_class):
             raise Error("TypeError: sequence device operation requires its exact native owner")
         _ = seq_device(owner, context)
         var binding = seq_device_get(owner, "b", context)
@@ -175,29 +184,29 @@ def sequence_device_operation(operation: String, owner: PythonObject, values: Py
                 # Validate before classical_connect_numpy's first-call setup can
                 # touch the live numpy.dtype field, including late NumPy import.
                 _ = native_numpy_dtype(context)
-            var input = context["input_context"]
+            var input = py_item(context, nk[].k_input_context)
             classical_connect_numpy(input)
             var result = classical_typed(native_shape_pack(shape), "<f4", input)
             if n > 0:
-                _ = py_call_typed(entries["seq_tensor_download"], handle, classical_address(result), n)
+                _ = py_call_typed(py_item(entries, nk[].k_seq_tensor_download), handle, classical_address(result), n)
             return result if operation == "seqdev_host" else sequence_array_cast(result, values[0], context)
         if operation == "seqdev_upload":
             var input = seq_device_input(values[0], False, context, buffer_pins)
             if not same_shape(device_shape(input.shape, context), shape):
                 raise Error("ValueError: uploaded array shape does not match the device tensor")
             if n > 0:
-                _ = py_call_typed(entries["seq_tensor_upload"], handle, classical_address(input), n)
+                _ = py_call_typed(py_item(entries, nk[].k_seq_tensor_upload), handle, classical_address(input), n)
             _ = input^
             return owner
         if operation == "seqdev_copy":
-            if py_get(entries, "seq_tensor_copy") is None:
+            if py_get(entries, nk[].k_seq_tensor_copy) is None:
                 raise Error("RuntimeError: native binding has no device-to-device tensor copy")
-            var result_handle = py_call_typed(entries["seq_tensor_alloc"], max(n, 1), 0)
+            var result_handle = py_call_typed(py_item(entries, nk[].k_seq_tensor_alloc), max(n, 1), 0)
             try:
                 if n > 0:
-                    _ = py_call_typed(entries["seq_tensor_copy"], result_handle, handle, n)
+                    _ = py_call_typed(py_item(entries, nk[].k_seq_tensor_copy), result_handle, handle, n)
             except error:
-                _ = py_call_typed(entries["seq_tensor_free"], result_handle)
+                _ = py_call_typed(py_item(entries, nk[].k_seq_tensor_free), result_handle)
                 raise error^
             return seq_device_make(binding, shape, result_handle, PythonObject(None), context)
         if operation == "seqdev_reshape":

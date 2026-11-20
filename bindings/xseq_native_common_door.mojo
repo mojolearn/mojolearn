@@ -29,6 +29,8 @@ from sequence.neural_model_dispatch import MODEL_OPERATION_COUNT, MODEL_UNIFORM
 from autograd.model_descriptor import MODEL_ABI_NAME
 from core.xseq_marshal import xseq_column_copy_f32, xseq_column_copy_i64
 from sequence.xseq_native_common_run import xseq_stream_child_seed
+from bindings.xseq_keys_unpack import xseq_keys
+from bindings.py_balanced import py_item
 
 comptime XF32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime XI32P = MutPointer[Int32, MutUntrackedOrigin]
@@ -42,9 +44,10 @@ def xseq_mode(fields: PythonObject, context: PythonObject) raises -> PythonObjec
     """The model's numeric mode, or the process default, as `_backend.binding`
     resolves it."""
     var b = native_loaded_module("builtins")
-    var mode = py_get(fields, "numeric_mode")
+    var nk = xseq_keys()
+    var mode = py_get(fields, nk[].k_numeric_mode)
     if mode is None:
-        mode = context["backend_fields"]["_DEFAULT_MODE"]
+        mode = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
     # perf3-seq-neural: an exact str that already is one of the two modes
     # (every default and every documented value) is returned as it is: the
     # strip().lower() below would give an equal str, so the bindings lookup
@@ -68,7 +71,8 @@ def _xseq_key_of(mode: PythonObject, context: PythonObject) raises -> XseqEntryK
     """The sequence-table key of the image connected for `mode` (recorded by
     the bridge at import as `xseq_native_keys`), checked against the mode
     asked for; the connection error of that mode otherwise."""
-    var key = context["xseq_native_keys"][mode]
+    var nk = xseq_keys()
+    var key = py_item(context, nk[].k_xseq_native_keys)[mode]
     if py_type(key) is native_loaded_module("builtins").str:
         raise Error(String(py=key))
     var code = Int(py=key[0])
@@ -104,7 +108,8 @@ def xseq_entries(fields: PythonObject, context: PythonObject) raises -> PythonOb
     connection error of that mode otherwise."""
     var b = native_loaded_module("builtins")
     var mode = xseq_mode(fields, context)
-    var entries = context["xseq_bindings"][mode]
+    var nk = xseq_keys()
+    var entries = py_item(context, nk[].k_xseq_bindings)[mode]
     if py_type(entries) is b.str:
         raise Error(String(py=entries))
     # The compiled-mode check reads the key the bridge recorded at import;
@@ -116,22 +121,25 @@ def xseq_entries(fields: PythonObject, context: PythonObject) raises -> PythonOb
 
 
 def xseq_neural_provider(entries: PythonObject) raises -> PythonObject:
+    var nk = xseq_keys()
     # Immutable engine table only. Inputs/weights are admitted afresh by callers.
-    var provider = neural_descriptor_reuse(py_get(entries, "native_model_provider"),
-        entries["model_native_api_v1"], String(MODEL_ABI_NAME), MODEL_OPERATION_COUNT)
-    py_setitem(entries, "native_model_provider", provider)
+    var provider = neural_descriptor_reuse(py_get(entries, nk[].k_native_model_provider),
+        py_item(entries, nk[].k_model_native_api_v1), String(MODEL_ABI_NAME), MODEL_OPERATION_COUNT)
+    py_setitem(entries, nk[].k_native_model_provider, provider)
     return provider
 
 
 def xseq_output_provider(context: PythonObject) raises -> PythonObject:
+    var nk = xseq_keys()
     # Preserve the old base-helper route: default mode, independent of a
     # particular estimator's optional numeric_mode override.
-    return xseq_neural_provider(context["xseq_bindings"][context["backend_fields"]["_DEFAULT_MODE"]])
+    return xseq_neural_provider(py_item(context, nk[].k_xseq_bindings)[py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)])
 
 
 def xseq_base(context: PythonObject, name: String) raises -> PythonObject:
     """A compiled entry of the base binding, connected at import."""
-    return context["xseq_base"][PythonObject(name)]
+    var nk = xseq_keys()
+    return py_item(context, nk[].k_xseq_base)[PythonObject(name)]
 
 
 # ---------------------------------------------------------------- inputs
@@ -173,11 +181,13 @@ def xseq_refuse_f64(value: PythonObject, message: String) raises:
 
 def xseq_zeros(shape: PythonObject, context: PythonObject) raises -> PythonObject:
     """`np.zeros(shape, dtype=np.float32)`."""
-    return sequential_array(shape, context["float32"], context)
+    var nk = xseq_keys()
+    return sequential_array(shape, py_item(context, nk[].k_float32), context)
 
 
 def xseq_zeros_i64(shape: PythonObject, context: PythonObject) raises -> PythonObject:
-    return sequential_array(shape, context["int64"], context)
+    var nk = xseq_keys()
+    return sequential_array(shape, py_item(context, nk[].k_int64), context)
 
 
 def xseq_addr(value: PythonObject) raises -> PythonObject:
@@ -260,7 +270,8 @@ def xseq_curve_list(value: PythonObject, count: Int) raises -> PythonObject:
 def xseq_mean_dict(forecast: PythonObject) raises -> PythonObject:
     """`{"mean": forecast}`."""
     var result = Python.dict()
-    py_setitem(result, "mean", forecast)
+    var nk = xseq_keys()
+    py_setitem(result, nk[].k_mean, forecast)
     return result
 
 
@@ -287,7 +298,8 @@ def xseq_truth(value: PythonObject) raises -> Bool:
 def xseq_is_int(value: PythonObject, context: PythonObject) raises -> Bool:
     """`isinstance(value, (int, np.integer))`."""
     var b = native_loaded_module("builtins")
-    return Bool(py=py_call(b.isinstance, value, context["int_types"]))
+    var nk = xseq_keys()
+    return Bool(py=py_call(b.isinstance, value, py_item(context, nk[].k_int_types)))
 
 
 # ---------------------------------------------------------------- the seeded stream
@@ -319,9 +331,10 @@ struct XseqStream(Movable):
             # Admit exact built-in/NumPy scalars before the native int conversion;
             # user __int__/bitwise methods never participate in this operation.
             var cls = py_type(random_state)
+            var nk = xseq_keys()
             if (cls is not b.int and cls is not b.float and cls is not b.bool
                     and cls is not b.str and cls is not b.bytes and cls is not b.bytearray
-                    and not _one_of(cls, context["scalar_types"])):
+                    and not _one_of(cls, py_item(context, nk[].k_scalar_types))):
                 raise Error("TypeError: random_state requires a native scalar, without conversion hooks")
             var word = py_call_typed(b.int, random_state)
             self.seed = cpy.lib.get_function[UInt64]("PyLong_AsUnsignedLongLongMask")(word._obj_ptr)
