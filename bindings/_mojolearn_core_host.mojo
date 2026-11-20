@@ -177,7 +177,9 @@ from checks.mode_policy import mode_policy_mask
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.neighbors_entry_table import NeighborsEntryKey, neighbors_ops_publish
 from neighbors.ops_entry_host import NEIGHBORS_OPS_HOST_API, neighbors_ops_host_v1
-from bindings.py_balanced import py_setattr
+from bindings.py_balanced import py_setattr, py_setitem
+from core.activity_record import ACTIVITY_KIND_LAUNCH
+from core.launch_log import activity_begin, activity_end
 from core.base_helpers_host import publish_base_helpers_host
 from cluster.host.kmeans_oracle import KMEANS_ORACLE_HOST_SABOTAGE
 from core.knn_host_predict import KNN_HOST_SABOTAGE
@@ -279,6 +281,50 @@ def core_host_sabotage_binding() raises -> PythonObject:
         or KMEANS_ORACLE_HOST_SABOTAGE
         or HOTPATH_SABOTAGE
     )
+
+
+# The activity record (lane fx-verify-trace, 2026-11-20): verification
+# tooling's switch and read-back of what the runtime counted during a call
+# (core/activity_record.mojo). The slot is process-wide by name, so this one
+# binding switches and reads the record every loaded binding, GPU or host,
+# fills. No product call reaches these two.
+
+
+def activity_begin_binding() raises -> PythonObject:
+    """Clear the activity record and start counting."""
+    activity_begin()
+    return PythonObject(True)
+
+
+def activity_end_binding() raises -> PythonObject:
+    """Stop counting and return the record as a dictionary. PACK only: every
+    number was counted by the native runtime."""
+    var r = activity_end()
+    var record = Python.dict()
+    py_setitem(record, "format", "mojolearn-activity-record/1")
+    py_setitem(record, "launches", r.launches)
+    py_setitem(record, "upload_calls", r.upload_calls)
+    py_setitem(record, "upload_bytes", r.upload_bytes)
+    py_setitem(record, "download_calls", r.download_calls)
+    py_setitem(record, "download_bytes", r.download_bytes)
+    py_setitem(record, "host_splits", r.host_splits)
+    py_setitem(record, "host_tasks", r.host_tasks)
+    py_setitem(record, "host_tasks_widest", r.host_tasks_widest)
+    py_setitem(record, "host_entries", r.host_entries)
+    py_setitem(record, "names_dropped", r.names_dropped)
+    var kernels = Python.list()
+    var routines = Python.list()
+    for i in range(len(r.names)):  # driver-loop: over the record's named rows (at most 64)
+        var row = Python.dict()
+        py_setitem(row, "name", PythonObject(r.names[i]))
+        py_setitem(row, "count", r.counts[i])
+        if r.kinds[i] == ACTIVITY_KIND_LAUNCH:
+            _ = _balanced_call(kernels.append, row)
+        else:
+            _ = _balanced_call(routines.append, row)
+    py_setitem(record, "launch_names", kernels)
+    py_setitem(record, "host_names", routines)
+    return record
 
 
 # The base binding's names, same contract.
@@ -1095,6 +1141,8 @@ def build__mojolearn_core_host() -> PythonObject:
         module.def_function[core_host_vendor_binding]("core_host_vendor")
         module.def_function[core_host_column_binding]("core_host_column")
         module.def_function[core_host_sabotage_binding]("core_host_sabotage")
+        module.def_function[activity_begin_binding]("activity_begin")
+        module.def_function[activity_end_binding]("activity_end")
         module.def_function[mojolearn_vendor_binding]("mojolearn_vendor")
         module.def_function[mojolearn_numeric_mode_binding]("mojolearn_numeric_mode")
         module.def_function[mojolearn_mode_policy_mask_binding]("mojolearn_mode_policy_mask")

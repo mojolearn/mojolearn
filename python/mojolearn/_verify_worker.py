@@ -323,15 +323,25 @@ def execute(request):
         _HARNESSES[path] = verifier.load_harness(path)
     harness = _HARNESSES[path]
     action = request["action"]
+    activity = None
     if action == "cell":
+        from . import _check_both as check_both
         fixture = request["fixture"]
         data, held = harness.fixture(fixture), harness.heldout(fixture)
         actual = dict(X=harness._h(data[0]), y_clf=harness._h(data[1]), y_reg=harness._h(data[2]),
                       held=harness._h(held))
         if actual != request["fixture_hashes"]:
             raise WorkerFailure("worker fixture bytes differ from the controller")
-        value = verifier.run_cell(harness, ml, request["lane"], fixture, data, held,
-                                  request["repeats"], extra_parts=request["extra_parts"])
+        # The runtime's activity record around the cell: what this device
+        # did to produce the cell's hashes. It rides beside the value and no
+        # hash, state or verdict reads it; an install without the record
+        # (begin answers False) runs the cell exactly as before.
+        counting = check_both.activity_begin(ml)
+        try:
+            value = verifier.run_cell(harness, ml, request["lane"], fixture, data, held,
+                                      request["repeats"], extra_parts=request["extra_parts"])
+        finally:
+            activity = check_both.activity_end(ml) if counting else None
     elif action == "self-test":
         value = verifier.self_test(harness, ml, reference.load_table(request["table"]))
     elif action == "models":
@@ -349,7 +359,10 @@ def execute(request):
                 for b in _verify.binding_artifacts()]
     # The shared inventory includes actual loaded host aliases and raises on
     # unresolved native bytes; a completed worker cannot return empty evidence.
-    return dict(value=value, bindings=bindings)
+    result = dict(value=value, bindings=bindings)
+    if activity is not None:
+        result["activity"] = activity
+    return result
 
 
 def _redirect(path):

@@ -7,6 +7,7 @@
                                          with no card shipped, `verify --quick`
     python -m mojolearn verify --json    the same, machine readable
     python -m mojolearn verify --check MODEL --estimator CLASS --inputs X.npy
+    python -m mojolearn verify --fit-both --estimator CLASS --inputs X.npy --fit-inputs XTRAIN.npy
                                          run your saved model on your rows on
                                          the GPU and on the CPU of this machine
                                          and compare the bits (_verify_check.py)
@@ -123,7 +124,7 @@ QUICK_FALLBACK_NOTE = ("# no reference card ships with this install; running "
 
 
 def _verify_dispatch(args):
-    if getattr(args, "check", None):
+    if getattr(args, "check", None) or getattr(args, "fit_both", False):
         from . import _verify_check
         return _verify_check.cmd_check(args)
     if getattr(args, "training_only", False) or getattr(args, 'neural_training', False):
@@ -341,12 +342,30 @@ def build_parser():
                         "rows. The model answers --method for those rows twice, from the "
                         "GPU estimator and from the CPU model mojolearn.host_model loads "
                         "from the same file, and the report shows both sides (device, "
-                        "binaries loaded, wall time, and the shape, dtype, SHA-256 and first "
+                        "binaries loaded, what the runtime counted while it ran, wall time, and the shape, dtype, SHA-256 and first "
                         "values of the output) and one verdict line: MATCH, or MISMATCH with "
                         "the index and the two values of the first differing element. It is "
                         "the same check --cross-check runs on the fixtures in the wheel. "
                         "identical mode only: fast makes no promise about bits and is "
                         "refused (exit 3). --cpu-threads sets the CPU side's threads")
+    v.add_argument("--fit-both", dest="fit_both", action="store_true",
+                   help="CHECK A FIT ON THE GPU AND ON THE CPU of this machine, for an "
+                        "estimator whose fitted model cannot be loaded on the CPU: "
+                        "--estimator CLASS (built with --params, a JSON object of constructor "
+                        "arguments) is fitted on --fit-inputs (and --fit-targets) once on each "
+                        "side, the CPU side in a child process that selects the CPU binaries, "
+                        "and each fitted model answers --method for --inputs. Same report and "
+                        "verdict as --check, with the CPU side's fit and wall time. Opt-in: "
+                        "the CPU fit can be slow (--fit-rows N fits both sides on the first N "
+                        "rows). A class the CPU does not run reports why (exit 4)")
+    v.add_argument("--fit-inputs", dest="fit_inputs", metavar="FILE", default=None,
+                   help="with --fit-both: the training rows, a .npy or .npz file")
+    v.add_argument("--fit-targets", dest="fit_targets", metavar="FILE", default=None,
+                   help="with --fit-both: the training targets, when the estimator takes them")
+    v.add_argument("--params", metavar="JSON", default=None,
+                   help="with --fit-both: the constructor arguments as a JSON object")
+    v.add_argument("--fit-rows", dest="fit_rows", type=int, default=None, metavar="N",
+                   help="with --fit-both: fit both sides on the first N training rows only")
     v.add_argument("--estimator", metavar="CLASS", default=None,
                    help="with --check: the mojolearn class whose save wrote MODEL, for "
                         "example RandomForestClassifier")

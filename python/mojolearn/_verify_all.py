@@ -1307,6 +1307,7 @@ def cross_check(harness, ml, lanes, fixtures, log=None):
                             "against the recorded columns, and `--self-test` still shows the "
                             "comparison can fail."))
     rows, skipped = [], {}
+    ran = dict(gpu=None, cpu=None)      # the activity record of each side, summed over the cells
     for lane in lanes:
         for fx in fixtures:
             t0 = time.time()
@@ -1330,7 +1331,7 @@ def cross_check(harness, ml, lanes, fixtures, log=None):
                 # `cb.compare`: the same calls `verify --check` makes for a
                 # user's estimator. The digest stays the harness's `_h`.
                 gpu_est = harness._public_est(lane, fit.est)
-                pair = {"infer": [cb.run_side("gpu", lambda: fit.probe(gpu_est), digest=harness._h), None]}
+                pair = {"infer": [cb.run_side("gpu", lambda: fit.probe(gpu_est), digest=harness._h, ml=ml), None]}
                 # THE BATCH PART TOO, where the lane has one. Batch invariance is
                 # a DIFFERENT AXIS from cross-vendor identity: cross-vendor asks
                 # "same input, different hardware, same bits", batch invariance
@@ -1345,7 +1346,7 @@ def cross_check(harness, ml, lanes, fixtures, log=None):
                     if gerr is not None or not isinstance(gb, str):
                         raise RuntimeError(f'GPU batch check failed: {gerr or gb}')
                     return gb
-                batch = cb.run_side("gpu", gpu_batch)
+                batch = cb.run_side("gpu", gpu_batch, ml=ml)
                 if batch[0]["digest"].startswith("n/a"):
                     pair["batch"] = batch[0]["digest"]      # declared absent on both sides
                 else:
@@ -1358,7 +1359,7 @@ def cross_check(harness, ml, lanes, fixtures, log=None):
                         host._identity_heldout_affinity = fit.est._identity_heldout_affinity
                     if type(host).__name__ in ("HostGBDT", "HostForest"):
                         _require_forest_host_binding(ml.runtime_report())
-                    pair["infer"][1] = cb.run_side("cpu", lambda: fit.probe(host), digest=harness._h)
+                    pair["infer"][1] = cb.run_side("cpu", lambda: fit.probe(host), digest=harness._h, ml=ml)
                     if isinstance(pair.get("batch"), list):
                         hfit = harness.Fit({})
                         hfit.est = host
@@ -1368,7 +1369,7 @@ def cross_check(harness, ml, lanes, fixtures, log=None):
                             hb, herr = harness._probe_batch(hfit, lane, ml, held.copy(),
                                                             harness.BATCH_ALONE, False)
                             return hb if herr is None and isinstance(hb, str) else f"raised: {herr or hb}"[:120]
-                        pair["batch"][1] = cb.run_side("cpu", cpu_batch)
+                        pair["batch"][1] = cb.run_side("cpu", cpu_batch, ml=ml)
             except Exception as exc:
                 skipped[f'{lane}/{fx}'] = f"{type(exc).__name__}: {exc}"[:200]
                 continue
@@ -1382,10 +1383,16 @@ def cross_check(harness, ml, lanes, fixtures, log=None):
                     continue
                 (g, g_arrays), (c, c_arrays) = both
                 judged = cb.compare(g, c, g_arrays, c_arrays)
+                # what the runtime counted while each side answered (the
+                # shared module's activity record), per cell and summed per side
                 row = dict(lane=lane, fixture=fx, part=part, gpu=g["digest"], cpu=c["digest"],
                            agree=judged["match"], na=False, seconds=secs,
-                           sides=dict(gpu=dict(wall_s=g["wall_s"], outputs=g["outputs"]),
-                                      cpu=dict(wall_s=c["wall_s"], outputs=c["outputs"])))
+                           sides=dict(gpu=dict(wall_s=g["wall_s"], outputs=g["outputs"],
+                                               activity=g.get("activity")),
+                                      cpu=dict(wall_s=c["wall_s"], outputs=c["outputs"],
+                                               activity=c.get("activity"))))
+                ran["gpu"] = cb.activity_merge(ran["gpu"], g.get("activity"))
+                ran["cpu"] = cb.activity_merge(ran["cpu"], c.get("activity"))
                 if not judged["match"]:
                     row["first"] = judged["first"]
                 rows.append(row)
@@ -1401,8 +1408,8 @@ def cross_check(harness, ml, lanes, fixtures, log=None):
     # a refused run (lane/verify-cross-check, 2026-09-16).
     # What answered on each side, read after the cells ran (a binding loads at
     # its first use), once for the run: the device and the binary set.
-    sides = ({side: cb.side_environment(ml, side, cpu_model=harness.cpu_model) for side in cb.SIDES}
-             if rows else None)
+    sides = ({side: dict(cb.side_environment(ml, side, cpu_model=harness.cpu_model), activity=ran[side])
+              for side in cb.SIDES} if rows else None)
     return _cross_check_result(vendor, lanes, fixtures, rows, skipped, sides)
 
 
@@ -1757,6 +1764,8 @@ COMMITMENT_COVERS = ("format", "cells", "device", "verification_contract",
 COMMITMENT_EXCLUDES = {
     "elapsed_s": "wall clock; nobody compares it and it would bind a party to a stopwatch",
     "lane_seconds": "wall clock, per lane; same reason",
+    "what_ran": ("the runtime's activity record per lane (launches, copies, host splits): how this "
+                 "machine did the work, which differs by device by design and no comparison reads"),
     REVEAL_KEY: "the nonce and the commitment itself; a hash cannot cover itself",
     # `CHALLENGE_KEY`, spelled out because it is defined below this line. The
     # challenge is derived FROM this commitment, so the response cannot exist
@@ -3623,6 +3632,10 @@ def _public_check_verdict(report, code, headline):
     return code,headline
 
 
+#: lanes whose "what ran" line the text report prints; --json holds every lane
+WHAT_RAN_LANES_SHOWN = 40
+
+
 def format_human(report):
     lines = []
     d = report["device"]
@@ -3710,6 +3723,17 @@ def format_human(report):
                      f"complete={cross.get('complete', False)}.")
         # what answered on each side, by the shared check module's own lines
         lines.extend(cb.sides_lines(cross.get('sides') or {}))
+    what = report.get('what_ran') or {}
+    if what.get('lanes'):
+        # what the runtime itself counted while each lane's cells ran, by the
+        # shared check module's own lines (the same `verify --check` prints)
+        lines.append(f"What ran on the {what['side'].upper()} side, per lane (counted by the runtime; "
+                     "every lane is in --json):")
+        shown = sorted(what['lanes'])[:WHAT_RAN_LANES_SHOWN]
+        for lane in shown:
+            lines.append(f"  {lane:<26} {cb.activity_line(what['side'], what['lanes'][lane])}")
+        if len(what['lanes']) > len(shown):
+            lines.append(f"  ... and {len(what['lanes']) - len(shown)} more lanes")
     lines.append("Scope: selected fixtures and properties only; use verify --coverage for omissions.")
     lines.append(f"RESULT: {report['verdict']} ({report['detail']}). {report['elapsed_s']:.1f}s. exit {report['exit']}")
     return "\n".join(lines)
@@ -3988,12 +4012,24 @@ def cmd_verify_all(args):
                 cells_journal=journal_path, harness_sha256=contract.get("harness_sha256"),
                 lanes=lanes, fixtures=fixtures))
 
+    # WHAT RAN, per lane: the activity record the runtime filled while a
+    # worker ran the lane's cells (`_check_both.activity_begin` / `_end` in
+    # `_verify_worker.execute`), summed over the lane's fixtures. It is beside
+    # the cells, never in them: no cell value, verdict or commitment reads it.
+    lane_activity = {}
+
+    def ran_activity(lane, result):
+        if result.get("activity"):
+            lane_activity[lane] = cb.activity_merge(lane_activity.get(lane), result["activity"])
+
     def isolated(action, **kwargs):
         progress(action)
         result = worker.run(dict(action=action, harness=os.path.abspath(harness_file),
                                  table=os.path.abspath(table_file), **kwargs), timeout, log)
         for binding in result.get("bindings", []):
             worker_bindings[(binding["module"], binding["sha256"])] = binding
+        if action == "cell":
+            ran_activity(kwargs["lane"], result)
         return result["value"]
 
     preflight = dict(passed=None, ran=False,
@@ -4068,6 +4104,7 @@ def cmd_verify_all(args):
                 worker_bindings[(binding["module"], binding["sha256"])] = binding
             crash_streak = 0
             execution["batched_cells"] += 1
+            ran_activity(chunk[index][0], result)
             now = time.monotonic()
             record(*chunk[index], result["value"], now - last[0])
             last[0] = now
@@ -4215,6 +4252,7 @@ def cmd_verify_all(args):
         counts=counts, families=fams, cells=rows,
         lane_accounting=accounting, smoke=smoke,
         lane_seconds=lane_seconds, execution=execution,
+        what_ran=dict(side="cpu" if vclass == "cpu" else "gpu", lanes=lane_activity),
         coverage=coverage_report, scope_gaps=scope_gaps, verification_contract=contract,
         selection=dict(include_pending=include_pending, models_only=models_only, profile=profile,
                        cpu_logical_shard_lanes=[name for name in lanes if vclass == "cpu" and name.startswith("par-")]),

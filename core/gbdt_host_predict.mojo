@@ -80,6 +80,7 @@ refused for the model before the NaN, where the old loops refused the NaN
 first; both are refusals.
 """
 from core.host_parallel import host_parallelize
+from core.launch_log import activity_host
 from std.sys.compile import is_defined
 
 from core.forest_host_predict import host_task_count, host_worker_count
@@ -700,6 +701,8 @@ def gbdt_host_predict(
     `workers` is the thread count, `host_worker_count`'s reading of zero
     (DEVIATION 2901).
     """
+    # lane fx-verify-trace: once per call, counted only for a verification
+    activity_host("gbdt_host_predict")
     if n_rows <= 0 or n_features <= 0 or dim <= 0 or n_trees < 0:
         raise Error("gbdt host: n_rows, n_features and dim must be positive")
     if len(x_colmajor) < n_rows * n_features:
