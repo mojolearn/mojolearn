@@ -282,7 +282,8 @@ def _run(column, mode, path):
         env["MOJOLEARN_VENDOR"] = "cpu"
     else:
         env.pop("MOJOLEARN_VENDOR", None)
-    here = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    # the IMPORTED package's parent, not python/ of a source checkout (no binaries there)
+    here = os.path.dirname(os.path.dirname(os.path.abspath(ml.__file__)))
     env["PYTHONPATH"] = here + os.pathsep + env.get("PYTHONPATH", "")
     r = subprocess.run([sys.executable, "-c", _CHILD, mode, str(path)], env=env, capture_output=True,
                        text=True, timeout=900)
