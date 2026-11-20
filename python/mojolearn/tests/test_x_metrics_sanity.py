@@ -177,7 +177,12 @@ import mojolearn.model_selection as ms
 from sklearn import model_selection as skms
 g = (np.arange(n) // 7) % 23
 Xs = X
+from mojolearn.tests._sklearn_oracle import older_reference
 for name in ("KFold", "StratifiedKFold", "GroupKFold", "TimeSeriesSplit", "LeaveOneGroupOut"):
+    if name == "GroupKFold" and older_reference():
+        # the reference GroupKFold assigns groups to folds differently before 1.9 (ours: 1.9's)
+        print("skip split GroupKFold: reference scikit-learn predates 1.9")
+        continue
     ours = [(np.asarray(a).tolist(), np.asarray(b).tolist()) for a, b in getattr(ms, name)().split(Xs, yt, g)]
     theirs = [(a.tolist(), b.tolist()) for a, b in getattr(skms, name)().split(Xs, yt, g)]
     ok = ours == theirs
