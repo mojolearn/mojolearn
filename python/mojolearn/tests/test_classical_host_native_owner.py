@@ -117,10 +117,23 @@ def test_native_host_hash_preserves_none_empty_and_noncontiguous_storage(host_cl
 
 @pytest.mark.parametrize("cls,host_cls", [(Ridge, HostRidge), (LinearRegression, HostLinearRegression)])
 def test_native_host_preserves_saved_fast_mode_refusal_at_inference(cls, host_cls):
+    from mojolearn import _backend
+
     archive = saved(cls, "fast")
     native = clean(audit_native_call(native_load, host_cls, io.BytesIO(archive)))
     old = host_cls.load(io.BytesIO(archive))
     x = np.ones((2, 3), dtype="f4")
+    # Off Apple, an install with no fast set answers the word `fast` by the
+    # identical set in the LINEAR family (core/mode_answer.mojo
+    # MODE_FAMILIES_ANSWERED, fx-fast-per-estimator): the saved fast model then
+    # predicts as its identical twin. Where `fast` is not answered it is still
+    # refused at inference, by both paths.
+    if _backend.fast_answer() == "identical":
+        expected = np.asarray(host_cls.load(io.BytesIO(saved(cls))).predict(x), dtype="f8")
+        np.testing.assert_array_equal(np.asarray(old.predict(x), dtype="f8").view("u8"), expected.view("u8"))
+        result = clean(audit_native_call(native_predict, native, x))
+        np.testing.assert_array_equal(np.asarray(result, dtype="f8").view("u8"), expected.view("u8"))
+        return
     with pytest.raises(ValueError):
         old.predict(x)
     clean(audit_native_call(native_predict, native, x), ValueError)
