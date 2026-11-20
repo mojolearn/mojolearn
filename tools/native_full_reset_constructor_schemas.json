@@ -2923,91 +2923,98 @@
           "value": {
             "parameter": "alpha"
           },
-          "source": "python/mojolearn/_solver_impl.py:224"
+          "source": "python/mojolearn/_solver_impl.py:227"
         },
         {
           "field": "l1_ratio",
           "value": {
             "parameter": "l1_ratio"
           },
-          "source": "python/mojolearn/_solver_impl.py:224"
+          "source": "python/mojolearn/_solver_impl.py:227"
         },
         {
           "field": "fit_intercept",
           "value": {
             "parameter": "fit_intercept"
           },
-          "source": "python/mojolearn/_solver_impl.py:224"
+          "source": "python/mojolearn/_solver_impl.py:227"
         },
         {
           "field": "max_iter",
           "value": {
             "parameter": "max_iter"
           },
-          "source": "python/mojolearn/_solver_impl.py:224"
+          "source": "python/mojolearn/_solver_impl.py:227"
         },
         {
           "field": "tol",
           "value": {
             "parameter": "tol"
           },
-          "source": "python/mojolearn/_solver_impl.py:224"
+          "source": "python/mojolearn/_solver_impl.py:227"
         },
         {
           "field": "solver",
           "value": {
             "parameter": "solver"
           },
-          "source": "python/mojolearn/_solver_impl.py:224"
+          "source": "python/mojolearn/_solver_impl.py:227"
         },
         {
           "field": "selection",
           "value": {
             "parameter": "selection"
           },
-          "source": "python/mojolearn/_solver_impl.py:224"
+          "source": "python/mojolearn/_solver_impl.py:227"
         },
         {
           "field": "precompute",
           "value": {
             "parameter": "precompute"
           },
-          "source": "python/mojolearn/_solver_impl.py:224"
+          "source": "python/mojolearn/_solver_impl.py:227"
         },
         {
           "field": "copy_X",
           "value": {
             "parameter": "copy_X"
           },
-          "source": "python/mojolearn/_solver_impl.py:224"
+          "source": "python/mojolearn/_solver_impl.py:227"
         },
         {
           "field": "warm_start",
           "value": {
             "parameter": "warm_start"
           },
-          "source": "python/mojolearn/_solver_impl.py:224"
+          "source": "python/mojolearn/_solver_impl.py:227"
         },
         {
           "field": "positive",
           "value": {
             "parameter": "positive"
           },
-          "source": "python/mojolearn/_solver_impl.py:224"
+          "source": "python/mojolearn/_solver_impl.py:227"
         },
         {
           "field": "random_state",
           "value": {
             "parameter": "random_state"
           },
-          "source": "python/mojolearn/_solver_impl.py:224"
+          "source": "python/mojolearn/_solver_impl.py:227"
+        },
+        {
+          "field": "numeric_mode",
+          "value": {
+            "parameter": "numeric_mode"
+          },
+          "source": "python/mojolearn/_solver_impl.py:227"
         }
       ],
       "trace": [
-        "python/mojolearn/_solver_impl.py:224"
+        "python/mojolearn/_solver_impl.py:227"
       ],
-      "constructor": "python/mojolearn/_solver_impl.py:224",
-      "signature_source": "def __init__(self, alpha=1.0, *, l1_ratio=0.5, fit_intercept=True, max_iter=1000, tol=0.001, solver='auto', selection='cyclic', precompute=False, copy_X=True, warm_start=False, positive=False, random_state=None)",
+      "constructor": "python/mojolearn/_solver_impl.py:227",
+      "signature_source": "def __init__(self, alpha=1.0, *, l1_ratio=0.5, fit_intercept=True, max_iter=1000, tol=0.001, solver='auto', selection='cyclic', precompute=False, copy_X=True, warm_start=False, positive=False, random_state=None, numeric_mode=None)",
       "parameters": [
         "alpha",
         "l1_ratio",
@@ -3020,9 +3027,10 @@
         "copy_X",
         "warm_start",
         "positive",
-        "random_state"
+        "random_state",
+        "numeric_mode"
       ],
-      "constructor_ast_sha256": "3ef39e53f311acad3045743573e2447b579708812196e6018e4fe2e0cec591ce",
+      "constructor_ast_sha256": "f54ceb5efa39c7fce5bb53a708c434f89ca4a5fe9abf911e9d2bfef08bc0f03e",
       "field_order": [
         "alpha",
         "l1_ratio",
@@ -3035,7 +3043,8 @@
         "copy_X",
         "warm_start",
         "positive",
-        "random_state"
+        "random_state",
+        "numeric_mode"
       ],
       "final_fields": {
         "alpha": {
@@ -3073,6 +3082,9 @@
         },
         "random_state": {
           "parameter": "random_state"
+        },
+        "numeric_mode": {
+          "parameter": "numeric_mode"
         }
       },
       "signature_defaults": {
@@ -3087,7 +3099,8 @@
         "copy_X": "True",
         "warm_start": "False",
         "positive": "False",
-        "random_state": "None"
+        "random_state": "None",
+        "numeric_mode": "None"
       },
       "numeric_mode_injection": false,
       "module": "mojolearn._solver_impl",
@@ -3096,8 +3109,8 @@
         {
           "path": "python/mojolearn/_solver_impl.py",
           "name": "__init__",
-          "line": 224,
-          "ast_sha256": "3ef39e53f311acad3045743573e2447b579708812196e6018e4fe2e0cec591ce"
+          "line": 227,
+          "ast_sha256": "f54ceb5efa39c7fce5bb53a708c434f89ca4a5fe9abf911e9d2bfef08bc0f03e"
         }
       ],
       "constructor_ancestry": [
@@ -8059,92 +8072,99 @@
           "value": {
             "parameter": "alpha"
           },
-          "source": "python/mojolearn/_solver_impl.py:224"
+          "source": "python/mojolearn/_solver_impl.py:227"
         },
         {
           "field": "l1_ratio",
           "value": {
             "literal": 1.0
           },
-          "source": "python/mojolearn/_solver_impl.py:224"
+          "source": "python/mojolearn/_solver_impl.py:227"
         },
         {
           "field": "fit_intercept",
           "value": {
             "parameter": "fit_intercept"
           },
-          "source": "python/mojolearn/_solver_impl.py:224"
+          "source": "python/mojolearn/_solver_impl.py:227"
         },
         {
           "field": "max_iter",
           "value": {
             "parameter": "max_iter"
           },
-          "source": "python/mojolearn/_solver_impl.py:224"
+          "source": "python/mojolearn/_solver_impl.py:227"
         },
         {
           "field": "tol",
           "value": {
             "parameter": "tol"
           },
-          "source": "python/mojolearn/_solver_impl.py:224"
+          "source": "python/mojolearn/_solver_impl.py:227"
         },
         {
           "field": "solver",
           "value": {
             "parameter": "solver"
           },
-          "source": "python/mojolearn/_solver_impl.py:224"
+          "source": "python/mojolearn/_solver_impl.py:227"
         },
         {
           "field": "selection",
           "value": {
             "parameter": "selection"
           },
-          "source": "python/mojolearn/_solver_impl.py:224"
+          "source": "python/mojolearn/_solver_impl.py:227"
         },
         {
           "field": "precompute",
           "value": {
             "parameter": "precompute"
           },
-          "source": "python/mojolearn/_solver_impl.py:224"
+          "source": "python/mojolearn/_solver_impl.py:227"
         },
         {
           "field": "copy_X",
           "value": {
             "parameter": "copy_X"
           },
-          "source": "python/mojolearn/_solver_impl.py:224"
+          "source": "python/mojolearn/_solver_impl.py:227"
         },
         {
           "field": "warm_start",
           "value": {
             "parameter": "warm_start"
           },
-          "source": "python/mojolearn/_solver_impl.py:224"
+          "source": "python/mojolearn/_solver_impl.py:227"
         },
         {
           "field": "positive",
           "value": {
             "parameter": "positive"
           },
-          "source": "python/mojolearn/_solver_impl.py:224"
+          "source": "python/mojolearn/_solver_impl.py:227"
         },
         {
           "field": "random_state",
           "value": {
             "parameter": "random_state"
           },
-          "source": "python/mojolearn/_solver_impl.py:224"
+          "source": "python/mojolearn/_solver_impl.py:227"
+        },
+        {
+          "field": "numeric_mode",
+          "value": {
+            "parameter": "numeric_mode"
+          },
+          "source": "python/mojolearn/_solver_impl.py:227"
         }
       ],
       "trace": [
-        "python/mojolearn/_solver_impl.py:409",
-        "python/mojolearn/_solver_impl.py:224"
+        "python/mojolearn/_solver_impl.py:413",
+        "python/mojolearn/_solver_impl.py:227"
       ],
-      "constructor": "python/mojolearn/_solver_impl.py:409",
-      "signature_source": "def __init__(self, alpha=1.0, *, fit_intercept=True, max_iter=1000, tol=0.001, solver='auto', selection='cyclic', precompute=False, copy_X=True, warm_start=False, positive=False, random_state=None)",
+      "constructor": "python/mojolearn/_solver_impl.py:413",
+      "signature_source": "def __init__(self, alpha=1.0, *, fit_intercept=True, max_iter=1000, tol=0.001, solver='auto', selection='cyclic', precompute=False, copy_X=True, warm_start=False, positive=False, random_state=None, numeric_mode=None)",
       "parameters": [
         "alpha",
         "fit_intercept",
@@ -8156,9 +8176,10 @@
         "copy_X",
         "warm_start",
         "positive",
-        "random_state"
+        "random_state",
+        "numeric_mode"
       ],
-      "constructor_ast_sha256": "ddd817404d11787bc2d9fe043025be8a0c317cb109a247534e059741f553b648",
+      "constructor_ast_sha256": "c3b3ffe35da38c9eaaac6f40f716110682d3bb2cb318928d1a1eee2a0d3111d8",
       "field_order": [
         "alpha",
         "l1_ratio",
@@ -8171,7 +8192,8 @@
         "copy_X",
         "warm_start",
         "positive",
-        "random_state"
+        "random_state",
+        "numeric_mode"
       ],
       "final_fields": {
         "alpha": {
@@ -8209,6 +8231,9 @@
         },
         "random_state": {
           "parameter": "random_state"
+        },
+        "numeric_mode": {
+          "parameter": "numeric_mode"
         }
       },
       "signature_defaults": {
@@ -8222,7 +8247,8 @@
         "copy_X": "True",
         "warm_start": "False",
         "positive": "False",
-        "random_state": "None"
+        "random_state": "None",
+        "numeric_mode": "None"
       },
       "numeric_mode_injection": false,
       "module": "mojolearn._solver_impl",
@@ -8231,14 +8257,14 @@
         {
           "path": "python/mojolearn/_solver_impl.py",
           "name": "__init__",
-          "line": 409,
-          "ast_sha256": "ddd817404d11787bc2d9fe043025be8a0c317cb109a247534e059741f553b648"
+          "line": 413,
+          "ast_sha256": "c3b3ffe35da38c9eaaac6f40f716110682d3bb2cb318928d1a1eee2a0d3111d8"
         },
         {
           "path": "python/mojolearn/_solver_impl.py",
           "name": "__init__",
-          "line": 224,
-          "ast_sha256": "3ef39e53f311acad3045743573e2447b579708812196e6018e4fe2e0cec591ce"
+          "line": 227,
+          "ast_sha256": "f54ceb5efa39c7fce5bb53a708c434f89ca4a5fe9abf911e9d2bfef08bc0f03e"
         }
       ],
       "constructor_ancestry": [
