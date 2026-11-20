@@ -15,6 +15,8 @@ from bindings.training_scalar_native_door import training_scalar_warning
 from bindings.training_loss_options_pack import (
     loss_native_item,
 )
+from bindings.optimizer_keys_unpack import optimizer_keys
+from bindings.py_balanced import py_item
 
 
 def loss_array_truth(value: PythonObject, context: PythonObject) raises -> Bool:
@@ -22,12 +24,13 @@ def loss_array_truth(value: PythonObject, context: PythonObject) raises -> Bool:
     # refuses both empty and multi-element arrays. Read retained native slots
     # and the admitted memoryview; do not invoke Array._values or __bool__.
     opt_value(value, context)
-    var getters = context["array_getters"]
-    if Int(py=py_call(getters["size"], value)) != 1:
+    var nk = optimizer_keys()
+    var getters = py_item(context, nk[].k_array_getters)
+    if Int(py=py_call(py_item(getters, nk[].k_size), value)) != 1:
         raise Error("ValueError: mojolearn: the truth value of an Array with more than one element is ambiguous")
-    var view = py_call(getters["_mv"], value)
+    var view = py_call(py_item(getters, nk[].k__mv), value)
     var scalar = loss_native_item(view, PythonObject(0))
-    var dtype = String(py_call(getters["dtype"], value))
+    var dtype = String(py_call(py_item(getters, nk[].k_dtype), value))
     if dtype == "<f2":
         # Array stores binary16 as native unsigned words. Both signed zero
         # encodings are false; all other values, including NaNs, are true.
@@ -45,15 +48,16 @@ def loss_truth(value: PythonObject, context: PythonObject, depth: Int = 0) raise
         raise Error("TypeError: loss options require native scalar configuration")
     var cls = py_type(value)
     var b = native_loaded_module("builtins")
-    var admitted = opt_exact(cls, context["scalar_types"]) or opt_exact(cls, context["buffer_types"])
-    admitted = admitted or opt_exact(cls, context["container_types"])
-    if cls is context["container_types"][5]:
+    var nk = optimizer_keys()
+    var admitted = opt_exact(cls, py_item(context, nk[].k_scalar_types)) or opt_exact(cls, py_item(context, nk[].k_buffer_types))
+    admitted = admitted or opt_exact(cls, py_item(context, nk[].k_container_types))
+    if cls is py_item(context, nk[].k_container_types)[5]:
         opt_value(value, context)
         admitted = True
-    if cls is context["array_class"]:
+    if cls is py_item(context, nk[].k_array_class):
         return loss_array_truth(value, context)
     if not admitted:
-        var numpy = py_get(context["modules"], "numpy")
+        var numpy = py_get(py_item(context, nk[].k_modules), nk[].k_numpy)
         if numpy is None:
             raise Error("TypeError: return_grad requires native configuration without Python truth hooks")
         var classes = sequence_dtype_classes(context)
@@ -87,7 +91,7 @@ def loss_truth(value: PythonObject, context: PythonObject, depth: Int = 0) raise
                 var indexes = Python.list()
                 for i in range(Int(py=value.ndim)):  # driver-loop: one native singleton coordinate per rank
                     py_call(indexes.append, 0)
-                var key = py_call(context["container_types"][1], indexes)
+                var key = py_call(py_item(context, nk[].k_container_types)[1], indexes)
                 var scalar = loss_native_item(value, key)
                 var result = loss_truth(scalar, context, depth + 1)
                 _ = scalar^
@@ -117,8 +121,9 @@ def loss_truth(value: PythonObject, context: PythonObject, depth: Int = 0) raise
 def loss_reduction(value: PythonObject, context: PythonObject) raises -> Int:
     var b = native_loaded_module("builtins")
     var cls = py_type(value)
-    var text = cls is context["scalar_types"][5]
-    if not text and py_get(context["modules"], "numpy") is not None:
+    var nk = optimizer_keys()
+    var text = cls is py_item(context, nk[].k_scalar_types)[5]
+    if not text and py_get(py_item(context, nk[].k_modules), nk[].k_numpy) is not None:
         var classes = sequence_dtype_classes(context)
         for i in range(len(classes)):  # driver-loop: recognize the native NumPy unicode scalar
             if cls is classes[i][1]:

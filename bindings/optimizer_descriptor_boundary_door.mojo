@@ -12,6 +12,8 @@ from training.optimizer_descriptor_boundary_run import (
     optimizer_record_device,
 )
 from bindings.py_provider_pins import ProviderPins, provider_word
+from bindings.optimizer_keys_unpack import optimizer_keys
+from bindings.py_balanced import py_item
 
 
 # GIL-owned boundary pins: providers pin extension images, capsule tables and
@@ -25,7 +27,8 @@ def optimizer_provider(module: PythonObject) raises -> PythonObject:
 
 
 def optimizer_provider_entries(entries: PythonObject) raises -> PythonObject:
-    var factory = entries["optimizer_native_api_v1"]
+    var nk = optimizer_keys()
+    var factory = py_item(entries, nk[].k_optimizer_native_api_v1)
     var provider = neural_descriptor_connect_factory_once(factory, String(OPTIMIZER_NATIVE_ABI), OPT_NATIVE_COUNT)
     # The provider's module is the compiled owner of the factory function
     # (PyCFunction self). The bridge's `entries["module"]` is the public
@@ -36,7 +39,7 @@ def optimizer_provider_entries(entries: PythonObject) raises -> PythonObject:
     # failures, training-mlp-sessions). Accept the admitted module or the
     # factory's own compiled owner; anything else is a foreign descriptor.
     ref owner = provider.downcast_value_ptr[NeuralDescriptorProvider]()[].module
-    if owner is not entries["module"] and owner._obj_ptr != _neural_descriptor_function_owner(factory):
+    if owner is not py_item(entries, nk[].k_module) and owner._obj_ptr != _neural_descriptor_function_owner(factory):
         raise Error("TypeError: optimizer descriptor must belong to its connected native extension")
     return provider
 

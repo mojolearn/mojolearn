@@ -8,6 +8,8 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_cpython_table import cpython_table
 from bindings.py_balanced import py_call, py_type, py_get, py_fields
+from bindings.optimizer_keys_unpack import optimizer_keys
+from bindings.py_balanced import py_item
 
 
 def opt_exact(cls: PythonObject, classes: PythonObject) raises -> Bool:
@@ -31,13 +33,14 @@ comptime _OPT_GUARD_SLOT = "p3_opt_layout_guard_v1_"
 
 
 def opt_guards(context: PythonObject) raises:
-    var guards = context["guards"]
+    var nk = optimizer_keys()
+    var guards = py_item(context, nk[].k_guards)
     var mods = NativeModules()
     for i in range(len(guards)):  # driver-loop: over registered public native object layouts
         var guard = guards[i]
         if guard_row_admitted(mods, _OPT_GUARD_SLOT, i, guard[0], guard):
             continue
-        if py_call(context["type_mro"], guard[0]) is not guard[1]:
+        if py_call(py_item(context, nk[].k_type_mro), guard[0]) is not guard[1]:
             raise Error("TypeError: optimizer native owner inheritance has changed")
         var fields = guard[2]
         var pairs = guard[3]
@@ -51,13 +54,14 @@ def opt_scalar(value: PythonObject, context: PythonObject, depth: Int = 0) raise
     if depth > 64:
         raise Error("TypeError: optimizer scalar metadata exceeds the native nesting limit")
     var cls = py_type(value)
-    if opt_exact(cls, context["scalar_types"]):
+    var nk = optimizer_keys()
+    if opt_exact(cls, py_item(context, nk[].k_scalar_types)):
         return
     if opt_numpy(cls, context):
-        var numpy = py_fields(context["modules"]["numpy"])
-        if cls is not numpy["ndarray"]:
+        var numpy = py_fields(py_item(py_item(context, nk[].k_modules), nk[].k_numpy))
+        if cls is not py_item(numpy, nk[].k_ndarray):
             return
-    if cls is context["container_types"][1] or cls is context["container_types"][0]:
+    if cls is py_item(context, nk[].k_container_types)[1] or cls is py_item(context, nk[].k_container_types)[0]:
         for i in range(len(value)):  # driver-loop: over scalar shape/configuration metadata
             opt_scalar(value[i], context, depth + 1)
         return
@@ -67,10 +71,11 @@ def opt_scalar(value: PythonObject, context: PythonObject, depth: Int = 0) raise
 def opt_schedule(value: PythonObject, context: PythonObject) raises:
     if value is None:
         return
-    if not opt_exact(py_type(value), context["schedules"]):
+    var nk = optimizer_keys()
+    if not opt_exact(py_type(value), py_item(context, nk[].k_schedules)):
         raise Error("TypeError: optimizer lr_schedule requires a built-in native schedule (ConstantLR, WarmupLinearLR, WarmupCosineLR, StepLR, ExponentialLR or OneCycleLR); Python learning-rate callbacks cannot execute in the native runtime")
     var fields = py_fields(value)
-    var classes = context["schedules"]
+    var classes = py_item(context, nk[].k_schedules)
     var index = 0
     for i in range(len(classes)):  # driver-loop: over connected built-in schedule types
         if py_type(value) is classes[i]:
@@ -79,10 +84,10 @@ def opt_schedule(value: PythonObject, context: PythonObject) raises:
         for name in ["peak_lr", "min_lr", "warmup_steps", "total_steps"]:  # driver-loop: over stored warmup schedule configuration
             opt_scalar(fields[PythonObject(name)], context)
     elif index < 5:
-        opt_scalar(fields["base_lr"], context)
-        opt_scalar(fields["gamma"], context)
+        opt_scalar(py_item(fields, nk[].k_base_lr), context)
+        opt_scalar(py_item(fields, nk[].k_gamma), context)
         if index == 3:
-            opt_scalar(fields["_step"], context)
+            opt_scalar(py_item(fields, nk[].k__step), context)
     else:
         for name in ["max_lr", "total_steps", "pct_start", "anneal_strategy", "div_factor", "final_div_factor", "three_phase"]:  # driver-loop: over stored OneCycle schedule configuration
             opt_scalar(fields[PythonObject(name)], context)
@@ -92,21 +97,22 @@ def opt_value(value: PythonObject, context: PythonObject, depth: Int = 0) raises
     if depth > 64:
         raise Error("TypeError: optimizer input nesting exceeds the native limit")
     var cls = py_type(value)
-    if opt_exact(cls, context["scalar_types"]) or opt_exact(cls, context["buffer_types"]) or opt_numpy(cls, context):
+    var nk = optimizer_keys()
+    if opt_exact(cls, py_item(context, nk[].k_scalar_types)) or opt_exact(cls, py_item(context, nk[].k_buffer_types)) or opt_numpy(cls, context):
         return
-    if cls is context["container_types"][0] or cls is context["container_types"][1]:
+    if cls is py_item(context, nk[].k_container_types)[0] or cls is py_item(context, nk[].k_container_types)[1]:
         for i in range(len(value)):  # driver-loop: over caller's native tensor/argument containers
             opt_value(value[i], context, depth + 1)
         return
-    if opt_exact(cls, context["mapping_types"]):
+    if opt_exact(cls, py_item(context, nk[].k_mapping_types)):
         var table = cpython_table()
-        if cls is context["container_types"][2]:
+        if cls is py_item(context, nk[].k_container_types)[2]:
             var position = List[Int](length=1, fill=0)
             var pair = List[PyObjectPtr](length=2, fill=PyObjectPtr())
             while table[].PyDict_Next(value._obj_ptr, Int(position.unsafe_ptr()),
                     Int(pair.unsafe_ptr()), Int(pair.unsafe_ptr() + 1)):  # driver-loop: exact external dictionary entries
                 var key = PythonObject(from_borrowed=pair[0])
-                if py_type(key) is not context["scalar_types"][5]:
+                if py_type(key) is not py_item(context, nk[].k_scalar_types)[5]:
                     raise Error("TypeError: optimizer state requires native string keys")
                 opt_value(PythonObject(from_borrowed=pair[1]), context, depth + 1)
         else:
@@ -124,25 +130,25 @@ def opt_value(value: PythonObject, context: PythonObject, depth: Int = 0) raises
                         raise cpy.unsafe_get_error()
                     break
                 var key = PythonObject(from_owned=item)
-                if py_type(key) is not context["scalar_types"][5]:
+                if py_type(key) is not py_item(context, nk[].k_scalar_types)[5]:
                     raise Error("TypeError: optimizer state requires native string keys")
                 opt_value(value[key], context, depth + 1)
         return
-    if cls is context["container_types"][5]:
+    if cls is py_item(context, nk[].k_container_types)[5]:
         var owner = value.obj
-        if owner is None or opt_exact(py_type(owner), context["buffer_types"]) or opt_numpy(py_type(owner), context):
+        if owner is None or opt_exact(py_type(owner), py_item(context, nk[].k_buffer_types)) or opt_numpy(py_type(owner), context):
             return
         raise Error("TypeError: optimizer memoryview requires a native buffer owner")
-    if cls is context["array_class"]:
-        var getters = context["array_getters"]
+    if cls is py_item(context, nk[].k_array_class):
+        var getters = py_item(context, nk[].k_array_getters)
         for name in ["shape", "dtype", "order", "_addr", "_readonly", "ndim", "size", "nbytes", "itemsize", "strides"]:  # driver-loop: over fixed native Array metadata slots
             opt_scalar(py_call(getters[PythonObject(name)], value), context, depth + 1)
-        var view = py_call(getters["_mv"], value)
-        if py_type(view) is not context["container_types"][5]:
+        var view = py_call(py_item(getters, nk[].k__mv), value)
+        if py_type(view) is not py_item(context, nk[].k_container_types)[5]:
             raise Error("TypeError: optimizer Array requires native memoryview storage")
         opt_value(view, context, depth + 1)
         return
-    if cls is context["device_class"]:
+    if cls is py_item(context, nk[].k_device_class):
         var fields = py_fields(value)
         for name in ["h", "size", "shape"]:  # driver-loop: over fixed native device-handle metadata
             opt_scalar(fields[PythonObject(name)], context, depth + 1)
@@ -154,7 +160,8 @@ def _opt_owner_keys(owner: PythonObject, context: PythonObject) raises -> Python
     """`opt_owner`'s first half: the exact owner class and native string
     field names (so a keyed lookup runs no key `__eq__`). Returns the
     instance dictionary."""
-    if not opt_exact(py_type(owner), context["owners"]):
+    var nk = optimizer_keys()
+    if not opt_exact(py_type(owner), py_item(context, nk[].k_owners)):
         raise Error("TypeError: optimizer requires an exact SGD, Adam or AdamW native owner")
     var fields = py_fields(owner)
     # Key admission kept per dictionary under the dict watcher
@@ -165,7 +172,7 @@ def _opt_owner_keys(owner: PythonObject, context: PythonObject) raises -> Python
         var pair = List[PyObjectPtr](length=2, fill=PyObjectPtr())
         while table[].PyDict_Next(fields._obj_ptr, Int(position.unsafe_ptr()),
                 Int(pair.unsafe_ptr()), Int(pair.unsafe_ptr() + 1)):  # driver-loop: exact instance dictionary names
-            if py_type(PythonObject(from_borrowed=pair[0])) is not context["scalar_types"][5]:
+            if py_type(PythonObject(from_borrowed=pair[0])) is not py_item(context, nk[].k_scalar_types)[5]:
                 raise Error("TypeError: optimizer metadata requires native string keys")
         dict_keys_admit(fields)
     return fields
@@ -182,7 +189,8 @@ def opt_owner_mode(owner: PythonObject, context: PythonObject) raises:
     first refusal and its message are the same, since nothing else reads the
     owner between the two."""
     var fields = _opt_owner_keys(owner, context)
-    opt_scalar(py_get(fields, "numeric_mode"), context)
+    var nk = optimizer_keys()
+    opt_scalar(py_get(fields, nk[].k_numeric_mode), context)
 
 
 def opt_owner(owner: PythonObject, context: PythonObject) raises:
@@ -199,11 +207,12 @@ def opt_owner(owner: PythonObject, context: PythonObject, defer_params: Bool) ra
     var fields = _opt_owner_keys(owner, context)
     for name in ["_resident_wanted", "n_total", "t", "numeric_mode", "lr", "momentum", "dampening", "weight_decay", "nesterov", "maximize", "betas", "eps", "accumulation_steps"]:  # driver-loop: over fixed optimizer scalar configuration/state
         opt_scalar(py_get(fields, PythonObject(name)), context)
-    opt_schedule(py_get(fields, "lr_schedule"), context)
-    var params = py_get(fields, "params")
+    var nk = optimizer_keys()
+    opt_schedule(py_get(fields, nk[].k_lr_schedule), context)
+    var params = py_get(fields, nk[].k_params)
     if defer_params:
         var cls = py_type(params)
-        if not (cls is context["container_types"][0] or cls is context["container_types"][1]):
+        if not (cls is py_item(context, nk[].k_container_types)[0] or cls is py_item(context, nk[].k_container_types)[1]):
             opt_value(params, context)  # the full walk raises its usual refusal
     else:
         opt_value(params, context)

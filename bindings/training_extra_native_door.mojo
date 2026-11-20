@@ -23,6 +23,8 @@ from bindings.optimizer_device_native_door import shape_count, device_entries, d
 from bindings.optimizer_admission_door import opt_value
 from bindings.training_embedding_native_door import embedding_indices
 from bindings.py_cpython_table import cpython_table
+from bindings.optimizer_keys_unpack import optimizer_keys
+from bindings.py_balanced import py_item
 
 
 
@@ -97,15 +99,16 @@ def _rd_device_operand(value: PythonObject, name: String, entries: PythonObject,
                        mut shape: List[Int]) raises -> PythonObject:
     """A training device array of the identical binding: its fields; its
     shape into `shape`."""
-    if py_type(value) is not context["device_class"]:
+    var nk = optimizer_keys()
+    if py_type(value) is not py_item(context, nk[].k_device_class):
         raise Error("TypeError: mojolearn: " + name + " must be a device array like the first operand")
     opt_value(value, context)
     var fields = py_fields(value)
-    if fields["_b"] is not entries["module"]:
+    if py_item(fields, nk[].k__b) is not py_item(entries, nk[].k_module):
         raise Error("ValueError: residual_dropout device arrays must belong to the identical training binding")
-    shape = device_shape(fields["shape"], context)
+    shape = device_shape(py_item(fields, nk[].k_shape), context)
     var count = shape_count(shape)
-    if count != Int(py=fields["size"]):
+    if count != Int(py=py_item(fields, nk[].k_size)):
         raise Error("ValueError: residual_dropout device shape does not match its stored element count")
     if count < 1:
         raise Error("ValueError: residual_dropout device arrays must be nonempty")
@@ -122,7 +125,8 @@ def _rd_device(operation: String, values: PythonObject, entries: PythonObject,
     `residual_dropout_backward_dev`): no upload, no download. The same
     parameter words and kernels as the host-array call."""
     var missing = String("residual dropout on device arrays requires updated training binding: missing ")
-    var native = device_entries(entries["module"], context)
+    var nk = optimizer_keys()
+    var native = device_entries(py_item(entries, nk[].k_module), context)
     var shape = List[Int]()
     var first = _rd_device_operand(values[0], "values" if operation == "residual_dropout" else "gradient",
                                    entries, context, shape)
@@ -138,7 +142,7 @@ def _rd_device(operation: String, values: PythonObject, entries: PythonObject,
         var params = _rd_params(count, values[2], values[3], values[4], values[5])
         var result = device_allocate(native, shape, context)
         var written = py_call_typed(_entry(native, "residual_dropout_dev", missing),
-                                    Python.list(py_fields(result)["h"], first["h"], second["h"]), params)
+                                    Python.list(py_item(py_fields(result), nk[].k_h), py_item(first, nk[].k_h), py_item(second, nk[].k_h)), params)
         if Int(py=written) != count:
             raise Error("RuntimeError: residual_dropout returned an incomplete output")
         return result
@@ -146,7 +150,7 @@ def _rd_device(operation: String, values: PythonObject, entries: PythonObject,
     var d_values = device_allocate(native, shape, context)
     var d_residual = device_allocate(native, shape, context)
     var written = py_call_typed(_entry(native, "residual_dropout_backward_dev", missing),
-                                Python.list(py_fields(d_values)["h"], py_fields(d_residual)["h"], first["h"]), params)
+                                Python.list(py_item(py_fields(d_values), nk[].k_h), py_item(py_fields(d_residual), nk[].k_h), py_item(first, nk[].k_h)), params)
     if Int(py=written) != count:
         raise Error("RuntimeError: residual_dropout_backward returned incomplete gradients")
     return Python.tuple(d_values, d_residual)
@@ -159,7 +163,8 @@ def training_residual_dropout(operation: String, values: PythonObject, entries: 
     Training device arrays run on the device (`_rd_device`)."""
     var buffer_pins = OptimizerInputOwners()
     try:
-        if py_type(values[0]) is context["device_class"]:
+        var nk = optimizer_keys()
+        if py_type(values[0]) is py_item(context, nk[].k_device_class):
             return _rd_device(operation, values, entries, context)
         var missing = String("residual dropout requires updated training binding: missing ")
         if operation == "residual_dropout":

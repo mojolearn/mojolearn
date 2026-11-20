@@ -11,6 +11,8 @@ from training.optimizer_input_plan import optimizer_contiguous_address
 from providers.python.array_layout_boundary_pack import native_shape_pack
 from bindings.optimizer_device_native_door import device_entries, device_shape, device_allocate, shape_count
 from training.training_linear_run import linear_dimensions
+from bindings.optimizer_keys_unpack import optimizer_keys
+from bindings.py_balanced import py_item
 
 
 def linear_host_view(value: PythonObject, name: String, where: String, mut view: TensorView, mut buffer_pins: OptimizerInputOwners) raises:
@@ -28,45 +30,46 @@ def linear_host_view(value: PythonObject, name: String, where: String, mut view:
 def linear_device(operation: String, a: PythonObject, weight: PythonObject, gradient: PythonObject,
                   entries: PythonObject, context: PythonObject) raises -> PythonObject:
     var backward = operation == "linear_backward"
-    var cls = context["device_class"]
+    var nk = optimizer_keys()
+    var cls = py_item(context, nk[].k_device_class)
     if py_type(a) is not cls or py_type(weight) is not cls or (backward and py_type(gradient) is not cls):
         raise Error("TypeError: mojolearn." + operation + ": device and host arrays are mixed; pass every array through train_to_device, or none")
     var a_owner = a
     var weight_owner = weight
     var gradient_owner = gradient
-    var native = device_entries(entries["module"], context)
+    var native = device_entries(py_item(entries, nk[].k_module), context)
     var af = py_fields(a)
     var wf = py_fields(weight)
     var gf = py_fields(gradient) if backward else Python.dict()
-    if af["_b"] is not entries["module"] or wf["_b"] is not entries["module"]:
+    if py_item(af, nk[].k__b) is not py_item(entries, nk[].k_module) or py_item(wf, nk[].k__b) is not py_item(entries, nk[].k_module):
         raise Error("ValueError: linear device inputs must belong to the selected native binding")
-    if backward and gf["_b"] is not entries["module"]:
+    if backward and py_item(gf, nk[].k__b) is not py_item(entries, nk[].k_module):
         raise Error("ValueError: linear device gradient must belong to the selected native binding")
-    var ashape = device_shape(af["shape"], context)
-    var wshape = device_shape(wf["shape"], context)
-    var gshape = device_shape(gf["shape"], context) if backward else List[Int]()
+    var ashape = device_shape(py_item(af, nk[].k_shape), context)
+    var wshape = device_shape(py_item(wf, nk[].k_shape), context)
+    var gshape = device_shape(py_item(gf, nk[].k_shape), context) if backward else List[Int]()
     var dims = linear_dimensions(ashape, wshape, gshape, backward)
-    if shape_count(ashape) != Int(py=af["size"]) or shape_count(wshape) != Int(py=wf["size"]):
+    if shape_count(ashape) != Int(py=py_item(af, nk[].k_size)) or shape_count(wshape) != Int(py=py_item(wf, nk[].k_size)):
         raise Error("ValueError: linear device shape does not match its stored element count")
-    if backward and shape_count(gshape) != Int(py=gf["size"]):
+    if backward and shape_count(gshape) != Int(py=py_item(gf, nk[].k_size)):
         raise Error("ValueError: linear device gradient shape does not match its stored element count")
     var entry = py_get(native, PythonObject(operation + "_dev"))
     if entry is None:
         raise Error("RuntimeError: this build has no native device linear layer entry")
-    if py_type(entry) is not context["device_finalizer_types"][2]:
+    if py_type(entry) is not py_item(context, nk[].k_device_finalizer_types)[2]:
         raise Error("TypeError: linear layer requires its connected compiled entry")
     if not backward:
         var shape = ashape.copy()
         shape[len(shape) - 1] = dims[1]
         var result = device_allocate(native, shape, context)
-        _ = py_call(entry, Python.list(py_fields(result)["h"], af["h"], wf["h"]), native_shape_pack(dims))
+        _ = py_call(entry, Python.list(py_item(py_fields(result), nk[].k_h), py_item(af, nk[].k_h), py_item(wf, nk[].k_h)), native_shape_pack(dims))
         _ = a_owner^
         _ = weight_owner^
         _ = gradient_owner^
         return result
     var da = device_allocate(native, ashape, context)
     var dw = device_allocate(native, wshape, context)
-    _ = py_call(entry, Python.list(py_fields(da)["h"], py_fields(dw)["h"], gf["h"], af["h"], wf["h"]), native_shape_pack(dims))
+    _ = py_call(entry, Python.list(py_item(py_fields(da), nk[].k_h), py_item(py_fields(dw), nk[].k_h), py_item(gf, nk[].k_h), py_item(af, nk[].k_h), py_item(wf, nk[].k_h)), native_shape_pack(dims))
     var result = Python.tuple(da, dw)
     _ = a_owner^
     _ = weight_owner^
@@ -83,12 +86,13 @@ def training_linear_operation(operation: String, values: PythonObject, entries: 
             raise Error("TypeError: invalid linear-layer argument envelope")
         opt_value(values, context)
         var entry = entries[PythonObject(operation)]
-        if py_type(entry) is not context["device_finalizer_types"][2]:
+        var nk = optimizer_keys()
+        if py_type(entry) is not py_item(context, nk[].k_device_finalizer_types)[2]:
             raise Error("TypeError: linear layer requires its connected compiled entry")
         var a = values[1] if backward else values[0]
         var weight = values[2] if backward else values[1]
         var gradient = values[0] if backward else PythonObject(None)
-        var cls = context["device_class"]
+        var cls = py_item(context, nk[].k_device_class)
         if py_type(a) is cls or py_type(weight) is cls or (backward and py_type(gradient) is cls):
             return linear_device(operation, a, weight, gradient, entries, context)
         var av = TensorView()

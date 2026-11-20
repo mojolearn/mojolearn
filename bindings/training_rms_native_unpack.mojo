@@ -9,6 +9,8 @@ from bindings.tensor_view import TensorView, base_format
 from training.optimizer_input_plan import optimizer_contiguous_address
 from bindings.optimizer_device_native_door import shape_count
 from bindings.training_scalar_native_door import training_scalar_float
+from bindings.optimizer_keys_unpack import optimizer_keys
+from bindings.py_balanced import py_item
 
 
 def rms_host_view(value: PythonObject, name: String, operation: String, mut view: TensorView, mut buffer_pins: OptimizerInputOwners) raises:
@@ -29,7 +31,8 @@ def training_rms_operation(operation: String, values: PythonObject, entries: Pyt
         if len(values) != (4 if backward else 3):
             raise Error("TypeError: invalid RMS-normalization argument envelope")
         var entry = entries[PythonObject(operation)]
-        if py_type(entry) is not context["device_finalizer_types"][2]:
+        var nk = optimizer_keys()
+        if py_type(entry) is not py_item(context, nk[].k_device_finalizer_types)[2]:
             raise Error("TypeError: RMS normalization requires its connected compiled entry")
         var x = values[1] if backward else values[0]
         var weight = values[2] if backward else values[1]
