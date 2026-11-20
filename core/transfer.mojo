@@ -39,8 +39,10 @@ tier half of the name), so a stage is never handed to another binding's
 context.
 """
 from std.memory import unsafe_memcpy
+from std.sys.info import size_of
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from core.launch_log import activity_downloaded, activity_uploaded
 from core.shared_slot import SharedSlot
 from core.staged_download import (
     DOWNLOAD_STAGE_KEEP, download_chunk_floats, download_f32_into, download_staged,
@@ -66,6 +68,7 @@ def transfer_upload_list[dt: DType](
         )
     var buf = ctx.enqueue_create_buffer[dt](length)
     if n > 0:
+        activity_uploaded(n * size_of[Scalar[dt]]())
         step_count_h2d()
         if n == length:
             ctx.enqueue_copy(dst_buf=buf, src_ptr=values.unsafe_ptr())
@@ -97,6 +100,7 @@ def transfer_upload_into[dt: DType](
             "transfer_upload_into: " + String(n) + " elements from a list of " + String(len(values))
             + " into a buffer of " + String(len(buf))
         )
+    activity_uploaded(n * size_of[Scalar[dt]]())
     step_count_h2d()
     if n == len(buf):
         ctx.enqueue_copy(dst_buf=buf, src_ptr=values.unsafe_ptr())
@@ -119,6 +123,7 @@ def transfer_upload_ptr[dt: DType](
         raise Error("transfer_upload_ptr: " + String(n) + " elements into a buffer of " + String(length))
     var buf = ctx.enqueue_create_buffer[dt](length)
     if n > 0:
+        activity_uploaded(n * size_of[Scalar[dt]]())
         step_count_h2d()
         if n == length:
             ctx.enqueue_copy(dst_buf=buf, src_ptr=src)
@@ -150,6 +155,7 @@ def transfer_download_f32_into[pool: StaticString](
         return
     if n > len(buf):
         raise Error("transfer_download_f32_into: " + String(n) + " elements from a buffer of " + String(len(buf)))
+    activity_downloaded(n * 4)
     if download_staged(n):
         var staged = buf.create_sub_buffer[DType.float32](0, n)
         download_f32_into[pool](ctx, staged, n, dst)
@@ -194,6 +200,7 @@ def transfer_download_list[dt: DType](
         return List[Scalar[dt]]()
     if n > len(buf):
         raise Error("transfer_download_list: " + String(n) + " elements from a buffer of " + String(len(buf)))
+    activity_downloaded(n * size_of[Scalar[dt]]())
     var dst = List[Scalar[dt]](unsafe_uninit_length=n)
     step_count_d2h()
     if n == len(buf):
@@ -303,6 +310,7 @@ def transfer_download_i32_into[pool: StaticString](
         return
     if n > len(buf):
         raise Error("transfer_download_i32_into: " + String(n) + " elements from a buffer of " + String(len(buf)))
+    activity_downloaded(n * 4)
     if not download_staged(n):
         step_count_d2h()
         if n == len(buf):

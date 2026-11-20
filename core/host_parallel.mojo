@@ -64,6 +64,8 @@ from std.memory import stack_allocation
 
 from max.algorithm import sync_parallelize
 
+from core.launch_log import activity_host_split
+
 
 @always_inline
 def host_fp_env() -> UInt64:
@@ -103,6 +105,10 @@ def host_parallelize[FuncType: def(Int) -> None](ref func: FuncType, n: Int):
     is pinned to, so the bits are the pool's."""
     if n <= 0:
         return
+    # lane fx-verify-trace: the activity record of a verification call counts
+    # this split (one slot read and one Bool test when no verification asked;
+    # a split is never inside a loop over rows or elements, it IS that loop)
+    activity_host_split(n)
     if n == 1:
         func(0)
         return
@@ -121,4 +127,6 @@ def host_parallelize_pool_env[FuncType: def(Int) -> None](ref func: FuncType, n:
     """`sync_parallelize(func, n)` with the runtime WORKER's environment
     (FTZ+DAZ on x86), for the GBDT fit's host regions only; see the module
     note. Every other host loop uses `host_parallelize`."""
+    if n > 0:
+        activity_host_split(n)
     sync_parallelize(func, n)
