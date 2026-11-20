@@ -30,6 +30,8 @@ from bindings.py_cpython_table import cpython_table
 from bindings.native_loaded_module_door import NativeModules, native_namespace_string_keys
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.py_model_records import records_get, records_put, records_drop, records_key_append, RECORDS_PREPARED
+from bindings.native_keys_unpack import native_keys
+from bindings.py_balanced import py_item
 
 
 # The registry itself lives in bindings/py_model_records.mojo (lane
@@ -110,9 +112,10 @@ def prepared_class_stamp(mut mods: NativeModules, cls: PythonObject, extras: Pyt
     var bi = mods.module("builtins")
     ref cpy = Python().cpython()
     var stamp = py_call(bi.list, extras)
-    var ancestry = py_call(bi.type.__dict__["__mro__"].__get__, cls)
+    var nk = native_keys()
+    var ancestry = py_call(py_item(bi.type.__dict__, nk[].k___mro__).__get__, cls)
     records_key_append(stamp, ancestry)
-    var dict_get = bi.type.__dict__["__dict__"].__get__
+    var dict_get = py_item(bi.type.__dict__, nk[].k___dict__).__get__
     for i in range(len(ancestry)):  # small-loop(ancestry: class rows): identity stamp of mutable rows
         var row = ancestry[i]
         records_key_append(stamp, row)
@@ -159,10 +162,11 @@ def prepared_class_matches(mut mods: NativeModules, cls: PythonObject, extras: L
         if not _class_stamp_identity(stamp, extras[i], offset):
             return False
     var bi = mods.module("builtins")
-    var ancestry = py_call(bi.type.__dict__["__mro__"].__get__, cls)
+    var nk = native_keys()
+    var ancestry = py_call(py_item(bi.type.__dict__, nk[].k___mro__).__get__, cls)
     if not _class_stamp_identity(stamp, ancestry, offset):
         return False
-    var dict_get = bi.type.__dict__["__dict__"].__get__
+    var dict_get = py_item(bi.type.__dict__, nk[].k___dict__).__get__
     ref cpy = Python().cpython()
     for i in range(len(ancestry)):  # driver-loop: over class ancestry metadata
         var row = ancestry[i]

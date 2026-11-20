@@ -8,6 +8,7 @@ from types import ModuleType
 from unittest.mock import patch
 
 import test_native_public_attribute_connection as public_fixture
+from boundary_keys_plain import plain  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -118,7 +119,7 @@ def test_unknown_descriptor_and_other_families_are_not_blessed():
 
 
 def test_native_availability_never_calls_predicate_or_descriptor():
-    source = (ROOT / 'bindings/public_attributes_native_door.mojo').read_text()
+    source = plain('bindings/public_attributes_native_door.mojo', (ROOT / 'bindings/public_attributes_native_door.mojo').read_text())
     assert '.PyFunction_GetCode(' in source   # typed cpython_table() call (fed1b4e384)
     assert '"availability"' in source
     assert '"transform"' in source

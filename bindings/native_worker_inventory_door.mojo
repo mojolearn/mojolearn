@@ -10,6 +10,7 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.native_transport_door import TRANSPORT_BOUNDARY
 from bindings.native_worker_inventory_run import _inventory_status, _inventory_hex
+from bindings.native_keys_unpack import native_keys
 
 def _inventory_dict(value: PythonObject) raises:
     var bi = TRANSPORT_BOUNDARY.get_or_create_ptr()[].bi
@@ -50,11 +51,12 @@ def native_worker_inventory(vendor: String, environ: PythonObject) raises -> Pyt
     if vendor != "cuda" and vendor != "hip" and vendor != "cpu" and vendor != "metal":
         raise Error("worker inventory: unsupported vendor")
     var result = bi.dict()
-    py_setitem(result, "vendor", vendor)
-    py_setitem(result, "pid", Int(external_call["getpid", c_int]()))
-    py_setitem(result, "ppid", Int(external_call["getppid", c_int]()))
+    var nk = native_keys()
+    py_setitem(result, nk[].k_vendor, vendor)
+    py_setitem(result, nk[].k_pid, Int(external_call["getpid", c_int]()))
+    py_setitem(result, nk[].k_ppid, Int(external_call["getppid", c_int]()))
     if vendor == "cpu" or vendor == "metal":
-        py_setitem(result, "kind", "worker-process-identity" if vendor == "cpu" else "single-metal-worker")
+        py_setitem(result, nk[].k_kind, "worker-process-identity" if vendor == "cpu" else "single-metal-worker")
         return result
     if py_type(environ) is not bi.dict:
         raise Error("worker inventory: visibility requires the connected native environment dictionary")
@@ -135,16 +137,16 @@ def native_worker_inventory(vendor: String, environ: PythonObject) raises -> Pyt
         if len(pci) == 0:
             raise Error("worker inventory: GPU driver returned an empty PCI bus ID")
         var row = bi.dict()
-        py_setitem(row, "ordinal", ordinal)
-        py_setitem(row, "uuid", py_call(uuid_bytes.hex))
-        py_setitem(row, "pci_bus_id", pci)
+        py_setitem(row, nk[].k_ordinal, ordinal)
+        py_setitem(row, nk[].k_uuid, py_call(uuid_bytes.hex))
+        py_setitem(row, nk[].k_pci_bus_id, pci)
         # Driver names are UTF-8 in the existing inventory contract.
-        py_setitem(row, "name", _inventory_utf8(MutPointer[Int8, MutUntrackedOrigin](unsafe_from_address=Int(name.unsafe_ptr())), 256))
+        py_setitem(row, nk[].k_name, _inventory_utf8(MutPointer[Int8, MutUntrackedOrigin](unsafe_from_address=Int(name.unsafe_ptr())), 256))
         _ = py_call(devices.append, row)
-    py_setitem(result, "kind", "visible-device-inventory")
-    py_setitem(result, "driver_library", library)
-    py_setitem(result, "devices", devices)
-    py_setitem(result, "visibility", visibility)
+    py_setitem(result, nk[].k_kind, "visible-device-inventory")
+    py_setitem(result, nk[].k_driver_library, library)
+    py_setitem(result, nk[].k_devices, devices)
+    py_setitem(result, nk[].k_visibility, visibility)
     _ = driver^
     return result
 
@@ -169,6 +171,7 @@ def native_require_worker_inventory(records: PythonObject, vendor: String, expec
     var pids = bi.set()
     var uuids = bi.set()
     var buses = bi.set()
+    var nk = native_keys()
     for i in range(len(records)):  # driver-loop: bind each ordered reply to its authenticated process
         var record = records[i]
         _inventory_dict(record)
@@ -189,7 +192,7 @@ def native_require_worker_inventory(records: PythonObject, vendor: String, expec
             continue
         if kind != "visible-device-inventory":
             raise Error("worker inventory: GPU placement requires a driver inventory")
-        var devices = py_get(record, "devices")
+        var devices = py_get(record, nk[].k_devices)
         if py_type(devices) is not bi.list and py_type(devices) is not bi.tuple:
             raise Error("worker inventory: GPU inventory requires a native device list")
         if len(devices) != 1:

@@ -8,6 +8,8 @@ from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.native_class_admission_door import dict_keys_admitted, dict_keys_admit
 from bindings.py_cpython_table import cpython_table
+from bindings.native_keys_unpack import native_keys
+from bindings.py_balanced import py_item
 
 
 def native_numpy_module_fields(module: PythonObject) raises -> PythonObject:
@@ -35,9 +37,10 @@ def native_numpy_module_fields(module: PythonObject) raises -> PythonObject:
 def native_numpy_type(name: String, context: PythonObject) raises -> PythonObject:
     # Obtain type from a C-created scalar, independent of builtins.type.
     var type_class = py_type(py_type(PythonObject(0)))
-    var modules = context["modules"]
+    var nk = native_keys()
+    var modules = py_item(context, nk[].k_modules)
     var module_type = py_type(native_loaded_module("sys"))
-    var numpy = py_get(modules, "numpy")
+    var numpy = py_get(modules, nk[].k_numpy)
     var owner = py_get(modules, "numpy._core._multiarray_umath")
     if owner is None:
         owner = py_get(modules, "numpy.core._multiarray_umath")
@@ -56,7 +59,7 @@ def native_numpy_type(name: String, context: PythonObject) raises -> PythonObjec
     # The type descriptor itself refuses non-types without invoking them.
     # Python-created types/metaclasses carry HEAPTYPE; the supported NumPy
     # dtype constructor and its metaclass are static extension types.
-    var flags = type_class.__dict__["__flags__"]
+    var flags = py_item(type_class.__dict__, nk[].k___flags__)
     if dtype is None or (Int(py=py_call(flags.__get__, dtype)) & 512) != 0 or (Int(py=py_call(flags.__get__, py_type(dtype))) & 512) != 0:
         raise Error("TypeError: np." + name + " must be NumPy's native type")
     if String(py_call(type_class.__getattribute__, dtype, "__name__")) != name or String(py_call(type_class.__getattribute__, dtype, "__module__")) != "numpy":

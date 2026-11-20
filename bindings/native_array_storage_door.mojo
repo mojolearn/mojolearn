@@ -15,6 +15,7 @@ from bindings.cpython_layout import (
     ARRAY_OB_SIZE, ARRAY_OB_ITEM, ARRAY_ALLOCATED, LAYOUT_ARRAY_BLOCK, CPYTHON_LAYOUT_MODE,
 )
 from bindings.py_version_tags import cpython_layout_groups
+from bindings.native_keys_unpack import native_keys
 
 
 def _storage_metadata() raises -> PythonObject:
@@ -29,7 +30,8 @@ def _storage_metadata() raises -> PythonObject:
 
 
 def _storage_type(metadata: PythonObject) raises -> PythonObject:
-    var cls = py_get(metadata, "ARRAY_TYPE")
+    var nk = native_keys()
+    var cls = py_get(metadata, nk[].k_ARRAY_TYPE)
     # Both metadata fields are Python-visible. A replacement class must be
     # refused before len/getitem/typecode or the sequence-repeat protocol.
     if py_type(cls) is not py_type(py_type(PythonObject(0))):
@@ -65,7 +67,8 @@ def _zero_seed(code: String) raises -> PythonObject:
     raw bytes are all zero."""
     var metadata = _storage_metadata()
     var cls = _storage_type(metadata)
-    var seeds = py_get(metadata, "ZERO_STORES")
+    var nk = native_keys()
+    var seeds = py_get(metadata, nk[].k_ZERO_STORES)
     if py_type(seeds) is not py_type(Python.dict()):
         raise Error("TypeError: native array storage metadata is unavailable")
     var seed = py_get(seeds, PythonObject(code))

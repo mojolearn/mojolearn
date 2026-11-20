@@ -30,6 +30,16 @@ from bindings.native_transport_run import (
     transport_hostname,
     transport_terminate,
 )
+from bindings.native_keys_unpack import native_keys
+from bindings.native_keys_unpack import (
+    NATIVE_TRANSPORT_OPN_INITIALIZE, NATIVE_TRANSPORT_OPN_IDNA, NATIVE_TRANSPORT_OPN_LISTEN,
+    NATIVE_TRANSPORT_OPN_ACCEPT, NATIVE_TRANSPORT_OPN_CONNECT, NATIVE_TRANSPORT_OPN_ADDRESS,
+    NATIVE_TRANSPORT_OPN_PORT, NATIVE_TRANSPORT_OPN_TIMEOUT, NATIVE_TRANSPORT_OPN_SEND,
+    NATIVE_TRANSPORT_OPN_RECEIVE, NATIVE_TRANSPORT_OPN_CLOSE, NATIVE_TRANSPORT_OPN_SLEEP,
+    NATIVE_TRANSPORT_OPN_SPAWN, NATIVE_TRANSPORT_OPN_WAIT, NATIVE_TRANSPORT_OPN_TERMINATE,
+)
+from bindings.py_keys import py_op_code
+from bindings.py_balanced import py_item
 
 
 struct TransportBoundary(Defaultable, Movable):
@@ -62,7 +72,8 @@ def transport_initialize() raises:
     var array_module = native_loaded_module("array")
     if py_type(array_module) is not py_type(native_loaded_module("sys")):
         raise Error("transport: array buffers require their native module")
-    var array_type = py_get(native_numpy_module_fields(array_module), "array")
+    var nk = native_keys()
+    var array_type = py_get(native_numpy_module_fields(array_module), nk[].k_array)
     if py_type(array_type) is not t[].bi.type:
         raise Error("transport: array buffers require their native type")
     # array.array is a module-associated C heap type on CPython >=3.10.
@@ -76,7 +87,7 @@ def transport_initialize() raises:
         raise Error("transport: array buffer type has a different extension owner")
     t[].array_type = array_type
     t[].numpy_context = t[].bi.dict()
-    py_setitem(t[].numpy_context, "modules", native_loaded_module("sys").modules)
+    py_setitem(t[].numpy_context, nk[].k_modules, native_loaded_module("sys").modules)
     idna_initialize()
 
 
@@ -305,8 +316,9 @@ def _transport_send_frame(socket: PythonObject, header: PythonObject, first: Pyt
     if py_type(header) is not t[].bi.dict:
         raise Error("transport: send requires a native socket and dict header")
     var cls = py_type(payload)
+    var nk = native_keys()
     if payload is not None and cls is not t[].bi.bytes and cls is not t[].bi.bytearray and cls is not t[].bi.memoryview and cls is not t[].array_type:
-        var numpy = py_get(t[].numpy_context["modules"], "numpy")
+        var numpy = py_get(py_item(t[].numpy_context, nk[].k_modules), nk[].k_numpy)
         if numpy is None or cls is not native_numpy_type("ndarray", t[].numpy_context):
             raise Error("transport: payload requires a native contiguous buffer; Python buffer hooks are not accepted")
     var header_keys = py_call(t[].bi.list, header)
@@ -316,7 +328,7 @@ def _transport_send_frame(socket: PythonObject, header: PythonObject, first: Pyt
     var bytes = t[].bi.bytes() if payload is None else py_call(py_call(t[].bi.memoryview, payload).cast, "B")
     var lead = 0 if first is None else len(first)
     var envelope = py_call(t[].bi.dict, header)
-    py_setitem(envelope, "nbytes", PythonObject(lead + len(bytes)))
+    py_setitem(envelope, nk[].k_nbytes, PythonObject(lead + len(bytes)))
     var raw = py_call(PythonObject(_transport_json(envelope)).encode, "ascii")
     var n = len(raw)
     if n > (1 << 20):
@@ -375,7 +387,8 @@ def _transport_receive(socket: PythonObject, max_payload: Int, owned: Bool) rais
     var header = native_json_parse(_transport_exact(socket, count))
     if py_type(header) is not t[].bi.dict:
         raise Error("transport: framed header must be an object")
-    var raw_count = py_get(header, "nbytes", PythonObject(0))
+    var nk = native_keys()
+    var raw_count = py_get(header, nk[].k_nbytes, PythonObject(0))
     if py_type(raw_count) is not t[].bi.int:
         raise Error("transport: payload size must be an integer")
     var n = Int(py=raw_count)
@@ -411,33 +424,35 @@ def transport_wait(pid: Int, nohang: Bool = False) raises -> Int:
         raise Error("transport: invalid child process ID")
     return posix_wait(pid, nohang)
 
-def transport_call(operation: String, args: PythonObject) raises -> PythonObject:
+def transport_call(operation: Int, name: PythonObject, args: PythonObject) raises -> PythonObject:
     """Single native operation entry for admission and installed protocol tests."""
-    if operation == "initialize":
+    # `operation`: a NATIVE_TRANSPORT_OPN_* code; `name` is the caller's str,
+    # read only for the unknown-operation text.
+    if operation == NATIVE_TRANSPORT_OPN_INITIALIZE:
         transport_initialize()
-    elif operation == "idna":
+    elif operation == NATIVE_TRANSPORT_OPN_IDNA:
         return idna_encode(args[0])
-    elif operation == "listen":
+    elif operation == NATIVE_TRANSPORT_OPN_LISTEN:
         return transport_listen(String(args[0]), Int(py=args[1]), Float64(py=args[2]))
-    elif operation == "accept":
+    elif operation == NATIVE_TRANSPORT_OPN_ACCEPT:
         return transport_accept(args[0], Float64(py=args[1]))
-    elif operation == "connect":
+    elif operation == NATIVE_TRANSPORT_OPN_CONNECT:
         return transport_connect(String(args[0]), Int(py=args[1]), Float64(py=args[2]))
-    elif operation == "address":
+    elif operation == NATIVE_TRANSPORT_OPN_ADDRESS:
         return transport_address(args[0], Bool(py=args[1]))
-    elif operation == "port":
+    elif operation == NATIVE_TRANSPORT_OPN_PORT:
         return PythonObject(transport_port(args[0]))
-    elif operation == "timeout":
+    elif operation == NATIVE_TRANSPORT_OPN_TIMEOUT:
         transport_timeout(args[0], Float64(py=args[1]))
-    elif operation == "send":
+    elif operation == NATIVE_TRANSPORT_OPN_SEND:
         transport_send(args[0], args[1], args[2])
-    elif operation == "receive":
+    elif operation == NATIVE_TRANSPORT_OPN_RECEIVE:
         return transport_receive(args[0], Int(py=args[1]))
-    elif operation == "close":
+    elif operation == NATIVE_TRANSPORT_OPN_CLOSE:
         transport_close(args[0])
-    elif operation == "sleep":
+    elif operation == NATIVE_TRANSPORT_OPN_SLEEP:
         transport_sleep(Float64(py=args[0]))
-    elif operation == "spawn":
+    elif operation == NATIVE_TRANSPORT_OPN_SPAWN:
         var argv = List[String]()
         var environment = List[String]()
         for i in range(len(args[1])):  # small-loop(process argument words)
@@ -445,19 +460,20 @@ def transport_call(operation: String, args: PythonObject) raises -> PythonObject
         for i in range(len(args[2])):  # small-loop(process environment words)
             environment.append(String(args[2][i]))
         return PythonObject(transport_spawn(String(args[0]), argv, environment))
-    elif operation == "wait":
+    elif operation == NATIVE_TRANSPORT_OPN_WAIT:
         return PythonObject(transport_wait(Int(py=args[0]), Bool(py=args[1])))
-    elif operation == "terminate":
+    elif operation == NATIVE_TRANSPORT_OPN_TERMINATE:
         transport_terminate(Int(py=args[0]), Int(py=args[1]))
     else:
-        raise Error("transport: unknown operation " + operation)
+        raise Error("transport: unknown operation " + String(name))
     return PythonObject(None)
 
 
 def transport_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
     var args = PythonObject(from_borrowed=args_ptr)
     try:
-        var result = transport_call(String(args[0]), args[1])
+        var nk = native_keys()
+        var result = transport_call(py_op_code(nk[].ops_transport, args[0]), args[0], args[1])
         return result.steal_data()
     except error:
         if String(error).startswith("InterruptedError:"):

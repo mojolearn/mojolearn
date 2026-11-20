@@ -11,34 +11,37 @@ from bindings.native_loaded_module_door import native_loaded_module
 from bindings.native_numpy_metadata_pack import native_numpy_module_fields
 from bindings.native_class_admission_door import static_builtin_type
 from bindings.native_scalar_promotion_run import native_numpy_version_weak
+from bindings.native_keys_unpack import native_keys
+from bindings.py_balanced import py_item
 
 
 def native_scalar_weak_promotion(admission: PythonObject, label: String) raises -> Bool:
     var module_type = py_type(native_loaded_module("sys"))
-    var numpy = py_get(admission["modules"], "numpy")
+    var nk = native_keys()
+    var numpy = py_get(py_item(admission, nk[].k_modules), nk[].k_numpy)
     if numpy is None or py_type(numpy) is not module_type:
         raise Error("TypeError: " + label + " requires native NumPy version metadata")
     var fields = native_numpy_module_fields(numpy)
-    var version = py_get(fields, "__version__")
+    var version = py_get(fields, nk[].k___version__)
     if py_type(version) is not py_type(PythonObject("")):
         raise Error("TypeError: " + label + " requires native NumPy version metadata")
     var text = String(version)
     if native_numpy_version_weak(text, label):
         return True
-    var owner = py_get(admission["modules"], "numpy._core._multiarray_umath")
+    var owner = py_get(py_item(admission, nk[].k_modules), "numpy._core._multiarray_umath")
     if owner is None:
-        owner = py_get(admission["modules"], "numpy.core._multiarray_umath")
+        owner = py_get(py_item(admission, nk[].k_modules), "numpy.core._multiarray_umath")
     if owner is None or py_type(owner) is not module_type:
         raise Error("TypeError: " + label + " NumPy promotion requires its native state getter")
-    var getter = py_get(native_numpy_module_fields(owner), "_get_promotion_state")
+    var getter = py_get(native_numpy_module_fields(owner), nk[].k__get_promotion_state)
     if py_type(getter) is not static_builtin_type("types", "BuiltinFunctionType"):
         raise Error("TypeError: " + label + " NumPy promotion requires its native state getter")
     if getter.__self__ is not owner or String(getter.__name__) != "_get_promotion_state":
         raise Error("TypeError: " + label + " NumPy promotion getter belongs to a different native entry")
-    var retained = py_get(admission, "native_scalar_promotion_getter")
+    var retained = py_get(admission, nk[].k_native_scalar_promotion_getter)
     if retained is not None and retained is not getter:
         raise Error("TypeError: " + label + " NumPy promotion getter was replaced")
-    py_setitem(admission, "native_scalar_promotion_getter", getter)
+    py_setitem(admission, nk[].k_native_scalar_promotion_getter, getter)
     var mode = py_call(getter)
     if py_type(mode) is not py_type(PythonObject("")):
         raise Error("TypeError: " + label + " NumPy promotion state requires a native string")

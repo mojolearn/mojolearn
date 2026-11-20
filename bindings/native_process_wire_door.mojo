@@ -33,6 +33,7 @@ from core.parallel_worker_frame import (
     WIRE_NONE, WIRE_BOOL, WIRE_INT, WIRE_FLOAT, WIRE_TEXT, WIRE_TENSOR, WIRE_BF16, WIRE_INT8,
     WIRE_LIST, WIRE_TUPLE, WIRE_MAP,
 )
+from bindings.native_keys_unpack import native_keys
 
 
 comptime WIRE_MAX_TENSOR_BYTES = (1 << 62)
@@ -273,6 +274,7 @@ def _wire_pack(record: WireRecord, mut cursor: Int, tensors: List[PythonObject],
         next_tensor += width
         if tag == WIRE_TENSOR:
             return tensors[word]
+        var nk = native_keys()
         if tag == WIRE_BF16:
             if c[].bf16_cls is None:
                 raise Error("parallel wire: bfloat16 weight class is not connected")
@@ -282,8 +284,8 @@ def _wire_pack(record: WireRecord, mut cursor: Int, tensors: List[PythonObject],
             _codec_packed_class(c[].bf16_cls, Python.tuple("bits", "shape"))
             var packed = py_call(bi.object.__new__, c[].bf16_cls)
             var fields = _codec_packed_fields(packed, c[].bf16_cls, Python.tuple("bits", "shape"))
-            py_setitem(fields, "bits", bits)
-            py_setitem(fields, "shape", bits.shape)
+            py_setitem(fields, nk[].k_bits, bits)
+            py_setitem(fields, nk[].k_shape, bits.shape)
             return packed
         if c[].int8_cls is None:
             raise Error("parallel wire: int8 weight class is not connected")
@@ -296,9 +298,9 @@ def _wire_pack(record: WireRecord, mut cursor: Int, tensors: List[PythonObject],
         _codec_packed_class(c[].int8_cls, Python.tuple("codes", "exponents", "shape"))
         var packed = py_call(bi.object.__new__, c[].int8_cls)
         var fields = _codec_packed_fields(packed, c[].int8_cls, Python.tuple("codes", "exponents", "shape"))
-        py_setitem(fields, "codes", codes)
-        py_setitem(fields, "exponents", exponents)
-        py_setitem(fields, "shape", codes.shape)
+        py_setitem(fields, nk[].k_codes, codes)
+        py_setitem(fields, nk[].k_exponents, exponents)
+        py_setitem(fields, nk[].k_shape, codes.shape)
         return packed
     if tag == WIRE_LIST or tag == WIRE_TUPLE:
         if word < 0 or word > record.node_count() - cursor:

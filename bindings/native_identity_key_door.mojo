@@ -12,6 +12,8 @@ from bindings.native_loaded_module_door import NativeModules
 from bindings.py_balanced import py_type, py_call
 from bindings.native_array_snapshot_door import native_array_slots
 from bindings.py_cpython_table import cpython_table
+from bindings.native_keys_unpack import native_keys
+from bindings.py_balanced import py_item
 
 
 struct NativeIdentityKey(Movable, Writable):
@@ -205,7 +207,8 @@ struct NativeIdentityKey(Movable, Writable):
     def watch_arrays(mut self, mut mods: NativeModules, context: PythonObject) raises:
         # Array slots are public writable storage. Object identity alone cannot
         # establish that a retained view still describes the caller's Array.
-        var cls = context["array_class"]
+        var nk = native_keys()
+        var cls = py_item(context, nk[].k_array_class)
         for i in range(len(self.objects)):  # driver-loop: over retained input identities
             var value = self.objects[i]
             if py_type(value) is cls:
@@ -229,7 +232,7 @@ struct NativeIdentityKey(Movable, Writable):
                 self.array_values.append(py_call(self.array_getters[j], self.array_owners[i], cls))
         # A released memoryview keeps its identity, but no longer admits a
         # fresh capture. The snapshot's independent pin must not hide that.
-        self.array_view_owner_getter = bi.memoryview.__dict__["obj"].__get__
+        self.array_view_owner_getter = py_item(bi.memoryview.__dict__, nk[].k_obj).__get__
         for i in range(len(self.array_values)):  # driver-loop: over retained Array slot values
             if py_type(self.array_values[i]) is bi.memoryview:
                 _ = py_call(self.array_view_owner_getter, self.array_values[i])
@@ -237,9 +240,9 @@ struct NativeIdentityKey(Movable, Writable):
         # Keep live mapping proxies, not dictionary copies. On a hit, native
         # lookups compare every admitted class value and namespace size. This
         # detects same-size replacement, descriptor edits and inherited hooks.
-        self.array_mro_getter = bi.type.__dict__["__mro__"].__get__
+        self.array_mro_getter = py_item(bi.type.__dict__, nk[].k___mro__).__get__
         self.array_mro = py_call(self.array_mro_getter, cls)
-        var get_namespace = bi.type.__dict__["__dict__"].__get__
+        var get_namespace = py_item(bi.type.__dict__, nk[].k___dict__).__get__
         for i in range(len(self.array_mro)):  # driver-loop: over native Array class ancestry metadata
             var row = py_call(get_namespace, self.array_mro[i])
             self.array_rows.append(row)
@@ -261,7 +264,8 @@ struct NativeIdentityKey(Movable, Writable):
     def arrays_match(self, mut mods: NativeModules, context: PythonObject) raises -> Bool:
         if len(self.array_owners) == 0:
             return True
-        if context["array_class"] is not self.array_class or py_call(self.array_mro_getter, self.array_class) is not self.array_mro:
+        var nk = native_keys()
+        if py_item(context, nk[].k_array_class) is not self.array_class or py_call(self.array_mro_getter, self.array_class) is not self.array_mro:
             return False
         ref cpy = Python().cpython()
         for i in range(len(self.array_rows)):  # small-loop(self.array_rows: Array namespaces): fixed storage class hierarchy not tensor rows

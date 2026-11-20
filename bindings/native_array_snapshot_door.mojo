@@ -7,6 +7,8 @@ from bindings.native_loaded_module_door import native_loaded_module, NativeModul
 from bindings.mode_metadata_native_door import _class_fields
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from providers.python.borrowed_buffer_pyapi_unpack import admit_native_buffer_exporter, AdmittedBorrowedBuffer
+from bindings.native_keys_unpack import native_keys
+from bindings.py_balanced import py_item
 
 
 def native_array_slots(context: PythonObject) raises -> PythonObject:
@@ -19,12 +21,13 @@ def native_array_slots(mut mods: NativeModules, context: PythonObject) raises ->
     # `mods`: the operation's admitted module connections (one check per GIL
     # release window instead of one per Array).
     var b = mods.module("builtins")
-    var cls = context["array_class"]
+    var nk = native_keys()
+    var cls = py_item(context, nk[].k_array_class)
     if py_type(cls) is not b.type:
         raise Error("TypeError: neural arrays require their native storage class")
     var namespace = _class_fields(mods, cls)
-    var names = Python.tuple("_store", "_base", "_pin", "_mv", "_addr", "_readonly",
-        "shape", "dtype", "ndim", "size", "nbytes", "itemsize", "strides", "order")
+    var names = Python.tuple(nk[].k__store, nk[].k__base, nk[].k__pin, nk[].k__mv, nk[].k__addr, nk[].k__readonly,
+        nk[].k_shape, nk[].k_dtype, nk[].k_ndim, nk[].k_size, nk[].k_nbytes, nk[].k_itemsize, nk[].k_strides, nk[].k_order)
     var slots = Python.dict()
     var types = mods.module("types")
     for i in range(len(names)):  # small-loop(names: native Array slots): fixed storage descriptor schema only
@@ -33,15 +36,19 @@ def native_array_slots(mut mods: NativeModules, context: PythonObject) raises ->
                 or not Bool(py=slot.__name__ == names[i])):
             raise Error("TypeError: neural Array storage descriptors changed")
         py_setitem(slots, names[i], slot)
-    var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
+    var mro = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, cls)
     for i in range(len(mro)):  # driver-loop: over the Array class ancestry (fixed native storage class hierarchy)
         var row = _class_fields(mods, mro[i])
-        if py_contains(row, "__getattr__") or py_contains(row, "__del__"):
+        if py_contains(row, nk[].k___getattr__) or py_contains(row, nk[].k___del__):
             raise Error("TypeError: neural Array metadata hooks are not supported")
-        for name in ["__getattribute__", "__setattr__"]:  # driver-loop: native admission metadata and retained owner registry
-            var own = py_get(row, PythonObject(name))
-            if own is not None and own is not b.object.__dict__[name]:
-                raise Error("TypeError: neural Array metadata hooks are not supported")
+        # Native admission metadata and retained owner registry: the two
+        # protocol names, held keys (was a loop building each str per class).
+        var own = py_get(row, nk[].k___getattribute__)
+        if own is not None and own is not py_item(b.object.__dict__, nk[].k___getattribute__):
+            raise Error("TypeError: neural Array metadata hooks are not supported")
+        own = py_get(row, nk[].k___setattr__)
+        if own is not None and own is not py_item(b.object.__dict__, nk[].k___setattr__):
+            raise Error("TypeError: neural Array metadata hooks are not supported")
     return slots
 
 
@@ -56,7 +63,8 @@ def native_array_snapshot(mut mods: NativeModules, value: PythonObject, context:
     # The returned passive view retains both the original owner and a real
     # buffer export; execution never consults mutable caller shape/stride slots.
     var b = mods.module("builtins")
-    var cls = context["array_class"]
+    var nk = native_keys()
+    var cls = py_item(context, nk[].k_array_class)
     if py_type(value) is not cls:
         raise Error("TypeError: neural Array input requires its exact native class")
     var slots = native_array_slots(mods, context)
@@ -64,18 +72,20 @@ def native_array_snapshot(mut mods: NativeModules, value: PythonObject, context:
     var names = py_call(b.list, slots.keys())
     for i in range(len(names)):  # driver-loop: over the native Array metadata names, captured once
         py_setitem(values, names[i], py_call(slots[names[i]].__get__, value, cls))
-    for name in ["_addr", "ndim", "size", "nbytes", "itemsize"]:  # small-loop(native size and address words)
-        if py_type(values[name]) is not b.int:
-            raise Error("TypeError: neural Array dimensions and addresses require native integers")
-    if (py_type(values["shape"]) is not b.tuple or py_type(values["strides"]) is not b.tuple
-            or py_type(values["dtype"]) is not b.str or py_type(values["order"]) is not b.str
-            or py_type(values["_readonly"]) is not b.bool):
+    # Native size and address words (held keys; was a loop building each str).
+    if (py_type(py_item(values, nk[].k__addr)) is not b.int or py_type(py_item(values, nk[].k_ndim)) is not b.int
+            or py_type(py_item(values, nk[].k_size)) is not b.int or py_type(py_item(values, nk[].k_nbytes)) is not b.int
+            or py_type(py_item(values, nk[].k_itemsize)) is not b.int):
+        raise Error("TypeError: neural Array dimensions and addresses require native integers")
+    if (py_type(py_item(values, nk[].k_shape)) is not b.tuple or py_type(py_item(values, nk[].k_strides)) is not b.tuple
+            or py_type(py_item(values, nk[].k_dtype)) is not b.str or py_type(py_item(values, nk[].k_order)) is not b.str
+            or py_type(py_item(values, nk[].k__readonly)) is not b.bool):
         raise Error("TypeError: neural Array metadata requires native shape, dtype and layout")
-    var shape = values["shape"]
-    var strides = values["strides"]
+    var shape = py_item(values, nk[].k_shape)
+    var strides = py_item(values, nk[].k_strides)
     var count = 1
-    var itemsize = Int(py=values["itemsize"])
-    var dtype = String(values["dtype"])
+    var itemsize = Int(py=py_item(values, nk[].k_itemsize))
+    var dtype = String(py_item(values, nk[].k_dtype))
     var code = "f" if dtype == "<f4" else ("i" if dtype == "<i4" else ("b" if dtype == "<i1" else ("H" if dtype == "<u2" else "")))
     var expected_itemsize = 1 if code == "b" else (2 if code == "H" else 4)
     if all_dtypes:
@@ -91,7 +101,7 @@ def native_array_snapshot(mut mods: NativeModules, value: PythonObject, context:
         elif dtype == "<f2":
             code = "H"
             expected_itemsize = 2
-    if code == "" or itemsize != expected_itemsize or len(shape) != len(strides) or Int(py=values["ndim"]) != len(shape):
+    if code == "" or itemsize != expected_itemsize or len(shape) != len(strides) or Int(py=py_item(values, nk[].k_ndim)) != len(shape):
         raise Error("TypeError: neural Array storage dtype or rank is inconsistent")
     for i in range(len(shape)):  # driver-loop: over the tensor rank (dimension metadata, not elements)
         if py_type(shape[i]) is not b.int or py_type(strides[i]) is not b.int:
@@ -100,9 +110,9 @@ def native_array_snapshot(mut mods: NativeModules, value: PythonObject, context:
         if n < 0 or (n != 0 and count > 2147483647 // n):
             raise Error("neural Array shape exceeds native indexing")
         count *= n
-    if Int(py=values["size"]) != count or Int(py=values["nbytes"]) != count * itemsize:
+    if Int(py=py_item(values, nk[].k_size)) != count or Int(py=py_item(values, nk[].k_nbytes)) != count * itemsize:
         raise Error("neural Array size differs from shape")
-    var order = String(values["order"])
+    var order = String(py_item(values, nk[].k_order))
     if order != "C" and order != "F":
         raise Error("neural Array requires contiguous C or F layout")
     var step = itemsize
@@ -111,15 +121,15 @@ def native_array_snapshot(mut mods: NativeModules, value: PythonObject, context:
         if count > 0 and Int(py=shape[axis]) > 1 and Int(py=strides[axis]) != step:
             raise Error("neural Array strides differ from its declared layout")
         step *= Int(py=shape[axis])
-    var store = values["_store"]
+    var store = py_item(values, nk[].k__store)
     if store is None:
-        store = values["_mv"]
+        store = py_item(values, nk[].k__mv)
         if py_type(store) is not b.memoryview or store.obj is None:
             raise Error("TypeError: neural Array needs retained native storage")
     admit_native_buffer_exporter(store)
     var pin = AdmittedBorrowedBuffer(store)
     var layout = pin.layout.value().copy()
-    var offset = Int(py=values["_addr"]) - layout.address
+    var offset = Int(py=py_item(values, nk[].k__addr)) - layout.address
     if count == 0:
         offset = 0
     var compact = layout.contiguous()
@@ -135,7 +145,7 @@ def native_array_snapshot(mut mods: NativeModules, value: PythonObject, context:
         raise Error("neural Array lies outside its retained native storage")
     # _mv is mutable too: copying it blindly would reintroduce arbitrary
     # format/shape/buffer hooks when a downstream operation reads the snapshot.
-    var original_view = values["_mv"]
+    var original_view = py_item(values, nk[].k__mv)
     if py_type(original_view) is not b.memoryview:
         raise Error("TypeError: native Array requires its native memoryview storage")
     admit_native_buffer_exporter(original_view)
@@ -143,18 +153,18 @@ def native_array_snapshot(mut mods: NativeModules, value: PythonObject, context:
     var view_layout = view_pin.layout.value().copy()
     if (view_pin.format != code or view_layout.itemsize != itemsize
             or view_layout.count != count
-            or (count > 0 and view_layout.address != Int(py=values["_addr"]))):
+            or (count > 0 and view_layout.address != Int(py=py_item(values, nk[].k__addr)))):
         raise Error("TypeError: native Array memoryview differs from its captured storage")
-    if (layout.readonly or view_layout.readonly) and not Bool(py=values["_readonly"]):
+    if (layout.readonly or view_layout.readonly) and not Bool(py=py_item(values, nk[].k__readonly)):
         raise Error("TypeError: native Array cannot mark read-only storage writable")
     var retained = py_call(b.memoryview, store)
     var retained_view = py_call(b.memoryview, original_view)
     var result = py_call(b.object.__new__, cls)
     for i in range(len(names)):  # driver-loop: over the captured metadata names, published via native slot setters
         py_call(slots[names[i]].__set__, result, values[names[i]])
-    py_call(slots["_store"].__set__, result, retained)
-    py_call(slots["_mv"].__set__, result, retained_view)
-    py_call(slots["_base"].__set__, result, value)
+    py_call(py_item(slots, nk[].k__store).__set__, result, retained)
+    py_call(py_item(slots, nk[].k__mv).__set__, result, retained_view)
+    py_call(py_item(slots, nk[].k__base).__set__, result, value)
     _ = pin^
     _ = view_pin^
     return result
@@ -192,13 +202,14 @@ struct NativeArrayAdmission(Copyable, Movable):
     def __init__(out self, context: PythonObject) raises:
         self.slots = native_array_slots(context)
         var b = native_loaded_module("builtins")
-        self.cls = context["array_class"]
+        var nk = native_keys()
+        self.cls = py_item(context, nk[].k_array_class)
         self.type_cls = b.type
         self.str_cls = b.str
-        self.mro_get = b.type.__dict__["__mro__"].__get__
-        self.dict_get = b.type.__dict__["__dict__"].__get__
-        self.object_getattribute = b.object.__dict__["__getattribute__"]
-        self.object_setattr = b.object.__dict__["__setattr__"]
+        self.mro_get = py_item(b.type.__dict__, nk[].k___mro__).__get__
+        self.dict_get = py_item(b.type.__dict__, nk[].k___dict__).__get__
+        self.object_getattribute = py_item(b.object.__dict__, nk[].k___getattribute__)
+        self.object_setattr = py_item(b.object.__dict__, nk[].k___setattr__)
         self.mro = py_call(self.mro_get, self.cls)
         self.rows = List[PythonObject]()
         self.slot_names = List[PythonObject]()
@@ -222,7 +233,8 @@ struct NativeArrayAdmission(Copyable, Movable):
                 self.rows.append(self.mro[i])
 
     def _unchanged(self, context: PythonObject) raises -> Bool:
-        var cls = context["array_class"]
+        var nk = native_keys()
+        var cls = py_item(context, nk[].k_array_class)
         if cls is not self.cls or py_type(cls) is not self.type_cls:
             return False
         if py_call(self.mro_get, cls) is not self.mro:
@@ -248,7 +260,7 @@ struct NativeArrayAdmission(Copyable, Movable):
                 var key = PythonObject(from_owned=raw_key)
                 if py_type(key) is not self.str_cls:
                     return False
-            if py_contains(row, "__getattr__") or py_contains(row, "__del__"):
+            if py_contains(row, nk[].k___getattr__) or py_contains(row, nk[].k___del__):
                 return False
             var own = py_get(row, PythonObject("__getattribute__"))
             if own is not None and own is not self.object_getattribute:

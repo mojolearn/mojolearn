@@ -1,11 +1,16 @@
 """Source checks only; public hook and numeric checks require compiled bindings."""
 from pathlib import Path
+import sys
 import unittest
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from boundary_keys_plain import plain  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC = (ROOT / "bindings/neural_block_public_door.mojo").read_text()
 ADMISSION = (ROOT / "bindings/neural_block_admission_door.mojo").read_text()
-ARRAY_ADMISSION = (ROOT / "bindings/native_array_snapshot_door.mojo").read_text()
+# The held-key door reads by name through plain() (tools/boundary_keys_plain.py).
+ARRAY_ADMISSION = plain("bindings/native_array_snapshot_door.mojo", (ROOT / "bindings/native_array_snapshot_door.mojo").read_text())
 
 
 class NeuralAdmissionSource(unittest.TestCase):

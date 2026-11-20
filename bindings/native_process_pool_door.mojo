@@ -35,6 +35,12 @@ from core.parallel_worker_frame import WIRE_REQUEST, WIRE_RESULT, WIRE_ERROR, WI
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type
 from core.shared_slot import SharedSlot
 from bindings.native_process_pool_run import ReapOutcome
+from bindings.native_keys_unpack import native_keys
+from bindings.native_keys_unpack import (
+    NATIVE_PROCESS_OPN_INITIALIZE, NATIVE_PROCESS_OPN_CREATE, NATIVE_PROCESS_OPN_MAP, NATIVE_PROCESS_OPN_CLOSE, NATIVE_PROCESS_OPN_WORKER_ECHO, NATIVE_PROCESS_OPN_ENVIRONMENT,
+)
+from bindings.py_keys import py_op_code
+from bindings.py_balanced import py_item
 
 
 comptime PROCESS_MAX_BYTES = (1 << 63) - 1
@@ -90,11 +96,12 @@ def _process_environment(devices: PythonObject, group: PythonObject, overrides: 
     var keys = py_call(bi.list, p[].environ)
     for i in range(len(keys)):  # driver-loop: over process environment records
         py_setitem(env, py_call(keys[i].decode, "utf-8", "surrogateescape"), py_call(p[].environ[keys[i]].decode, "utf-8", "surrogateescape"))
-    py_setitem(env, "MOJOLEARN_NUMERIC_MODE", "identical")
+    var nk = native_keys()
+    py_setitem(env, nk[].k_MOJOLEARN_NUMERIC_MODE, "identical")
     # The parent selected its installed route at connection time. Later
     # visibility-mask edits still apply, but a changed process environment
     # must not silently move an existing GPU owner onto CPU workers.
-    py_setitem(env, "MOJOLEARN_VENDOR", p[].vendor)
+    py_setitem(env, nk[].k_MOJOLEARN_VENDOR, p[].vendor)
     var mask = String()
     if p[].vendor == "cuda":
         mask = "CUDA_VISIBLE_DEVICES"
@@ -166,12 +173,13 @@ def process_pool_create(devices: PythonObject, cooperative: Bool, child_module: 
             raise Error("process: devices must be distinct nonnegative integer indices")
         _ = py_call(seen.add, selected[i])
     var result = bi.dict()
-    py_setitem(result, "devices", selected)
-    py_setitem(result, "cooperative", cooperative)
-    py_setitem(result, "module", child_module)
-    py_setitem(result, "workers", bi.list())
-    py_setitem(result, "closed", False)
-    py_setitem(result, "sequence", 0)
+    var nk = native_keys()
+    py_setitem(result, nk[].k_devices, selected)
+    py_setitem(result, nk[].k_cooperative, cooperative)
+    py_setitem(result, nk[].k_module, child_module)
+    py_setitem(result, nk[].k_workers, bi.list())
+    py_setitem(result, nk[].k_closed, False)
+    py_setitem(result, nk[].k_sequence, 0)
     return result
 
 
@@ -180,9 +188,10 @@ def process_send(socket: PythonObject, kind: String, sequence: Int, value: Pytho
     var packed = codec_pack_owned(value, PROCESS_MAX_BYTES)
     var description = py_call(PythonObject(_transport_json(packed[0])).encode, "ascii")
     var header = p[].bi.dict()
-    py_setitem(header, "kind", kind)
-    py_setitem(header, "sequence", sequence)
-    py_setitem(header, "description_bytes", len(description))
+    var nk = native_keys()
+    py_setitem(header, nk[].k_kind, kind)
+    py_setitem(header, nk[].k_sequence, sequence)
+    py_setitem(header, nk[].k_description_bytes, len(description))
     # Descriptors travel in the binary frame so tensor registries do not
     # inherit the transport's small control-header size limit. The frame
     # payload is the descriptor then the codec bytes, written from the two
@@ -195,7 +204,8 @@ def process_receive(socket: PythonObject) raises -> PythonObject:
     var frame = transport_receive_owned(socket, PROCESS_MAX_BYTES)
     var header = frame[0]
     var body = frame[1]
-    var raw = py_get(header, "description_bytes")
+    var nk = native_keys()
+    var raw = py_get(header, nk[].k_description_bytes)
     if py_type(raw) is not p[].bi.int:
         raise Error("process: missing structural descriptor length")
     var length = Int(py=raw)
@@ -289,19 +299,20 @@ def process_pool_close(pool: PythonObject) raises:
 
 
 def _process_pool_close(pool: PythonObject, abort: Bool) raises:
-    var workers = pool["workers"]
+    var nk = native_keys()
+    var workers = py_item(pool, nk[].k_workers)
     var bi = PROCESS_BOUNDARY.get_or_create_ptr()[].bi
     # A typed pool's workers read typed frames only; tell them to close in one.
-    var typed = Bool(py=py_get(pool, "typed", PythonObject(False)))
-    py_setitem(pool, "workers", bi.list())
-    py_setitem(pool, "closed", True)
+    var typed = Bool(py=py_get(pool, nk[].k_typed, PythonObject(False)))
+    py_setitem(pool, nk[].k_workers, bi.list())
+    py_setitem(pool, nk[].k_closed, True)
     var failure = String()
     if abort:
         # Cancel every owned child before serial reaping; do not spend one
         # full grace interval per still-running peer or drain its reply.
         for i in range(len(workers)):  # driver-loop: signal the authenticated owned worker set
             try:
-                transport_terminate(Int(py=workers[i]["pid"]))
+                transport_terminate(Int(py=py_item(workers[i], nk[].k_pid)))
             except:
                 pass  # Reap below distinguishes an already-exited child.
     # Every worker is told to close and its socket closed before any reap, and
@@ -312,25 +323,25 @@ def _process_pool_close(pool: PythonObject, abort: Bool) raises:
     var pids = List[Int]()
     for i in range(len(workers)):  # driver-loop: over owned worker sockets and process IDs
         var worker = workers[i]
-        if worker["socket"] is not None and not abort:
+        if py_item(worker, nk[].k_socket) is not None and not abort:
             try:
                 # Cleanup must not inherit the unbounded training timeout.
                 # A nonreading worker can fill its socket before close starts.
-                transport_timeout(worker["socket"], 1.0)
+                transport_timeout(py_item(worker, nk[].k_socket), 1.0)
                 if typed:
-                    wire_send(worker["socket"], WIRE_CLOSE, -1, List[Int64](), WireOutgoing())
+                    wire_send(py_item(worker, nk[].k_socket), WIRE_CLOSE, -1, List[Int64](), WireOutgoing())
                 else:
-                    process_send(worker["socket"], "close", -1, PythonObject(None))
+                    process_send(py_item(worker, nk[].k_socket), "close", -1, PythonObject(None))
             except:
                 # Failed workers can already have closed their socket. Their
                 # process is still reaped below; no owner is abandoned.
                 pass
         try:
-            transport_close(worker["socket"])
+            transport_close(py_item(worker, nk[].k_socket))
         except error:
             if failure == "":
                 failure = String(error)
-        pids.append(Int(py=worker["pid"]))
+        pids.append(Int(py=py_item(worker, nk[].k_pid)))
     var reaped = _process_reap_group(pids)
     var close_seconds = bi.list()
     var close_signal = bi.list()
@@ -339,15 +350,15 @@ def _process_pool_close(pool: PythonObject, abort: Bool) raises:
         _ = py_call(close_signal.append, PythonObject(reaped.signal[i]))
         if reaped.errors[i] != "":
             # A failed reap remains owned and can be retried by close().
-            _ = py_call(pool["workers"].append, workers[i])
+            _ = py_call(py_item(pool, nk[].k_workers).append, workers[i])
             if failure == "":
                 failure = reaped.errors[i]
     # Seconds from the close request to each worker's reap, and the signal
     # its reap needed (0: none, 15: SIGTERM, 9: SIGKILL).
-    var timing = py_get(pool, "timing", PythonObject(None))
+    var timing = py_get(pool, nk[].k_timing, PythonObject(None))
     if timing is not None and len(workers) > 0:
-        py_setitem(timing, "close_seconds", close_seconds)
-        py_setitem(timing, "close_signal", close_signal)
+        py_setitem(timing, nk[].k_close_seconds, close_seconds)
+        py_setitem(timing, nk[].k_close_signal, close_signal)
     if failure != "":
         raise Error(failure)
 
@@ -355,12 +366,13 @@ def _process_pool_close(pool: PythonObject, abort: Bool) raises:
 def process_pool_start(pool: PythonObject) raises:
     var p = PROCESS_BOUNDARY.get_or_create_ptr()
     var bi = p[].bi
-    if Bool(py=pool["closed"]):
+    var nk = native_keys()
+    if Bool(py=py_item(pool, nk[].k_closed)):
         raise Error("process: pool is closed")
-    if len(pool["workers"]) != 0:
+    if len(py_item(pool, nk[].k_workers)) != 0:
         return
-    var devices = pool["devices"]
-    var cooperative = Bool(py=pool["cooperative"])
+    var devices = py_item(pool, nk[].k_devices)
+    var cooperative = Bool(py=py_item(pool, nk[].k_cooperative))
     if p[].vendor == "cpu" and cooperative and len(devices) != 1:
         raise Error("NotImplementedError: cooperative neural updates across multiple CPU devices have no host implementation")
     var server = transport_listen("127.0.0.1", 0, 120.0)
@@ -377,8 +389,8 @@ def process_pool_start(pool: PythonObject) raises:
     var pending = bi.dict()
     var timing = bi.dict()
     var started = bi.list()
-    py_setitem(timing, "start_seconds", started)
-    py_setitem(pool, "timing", timing)
+    py_setitem(timing, nk[].k_start_seconds, started)
+    py_setitem(pool, nk[].k_timing, timing)
     try:
         for i in range(groups):  # driver-loop: over native worker process groups (spawn all first)
             var group = bi.list()
@@ -386,21 +398,21 @@ def process_pool_start(pool: PythonObject) raises:
                 group = py_call(bi.list, devices)
             else:
                 _ = py_call(group.append, devices[i])
-            var env = _process_environment(devices, group, py_get(pool, "environment"))
+            var env = _process_environment(devices, group, py_get(pool, nk[].k_environment))
             var token = String(py_call(p[].random, 32).hex())
             var argv = List[String]()
             argv.append(String(p[].executable))
             argv.append(String("-m"))
-            argv.append(String(pool["module"]))
+            argv.append(String(py_item(pool, nk[].k_module)))
             argv.append(String(port))
             argv.append(String(token))
             var spawned = transport_clock()
             var pid = transport_spawn(p[].executable, argv, env)
             var worker = bi.dict()
-            py_setitem(worker, "pid", pid)
-            py_setitem(worker, "socket", PythonObject(None))
-            py_setitem(worker, "devices", py_call(bi.tuple, group))
-            _ = py_call(pool["workers"].append, worker)
+            py_setitem(worker, nk[].k_pid, pid)
+            py_setitem(worker, nk[].k_socket, PythonObject(None))
+            py_setitem(worker, nk[].k_devices, py_call(bi.tuple, group))
+            _ = py_call(py_item(pool, nk[].k_workers).append, worker)
             _ = py_call(started.append, PythonObject(None))
             var entry = bi.list()
             _ = py_call(entry.append, worker)
@@ -412,21 +424,21 @@ def process_pool_start(pool: PythonObject) raises:
             var attached = False
             try:
                 var hello = transport_receive(connection, 0)[0]
-                var claimed = PythonObject(String(py_get(hello, "token", "")))
+                var claimed = PythonObject(String(py_get(hello, nk[].k_token, "")))
                 var entry = py_get(pending, claimed, PythonObject(None))
-                if String(py_get(hello, "kind", "")) != "hello" or entry is None or Int(py=py_get(hello, "pid", -1)) != Int(py=entry[0]["pid"]):
+                if String(py_get(hello, nk[].k_kind, "")) != "hello" or entry is None or Int(py=py_get(hello, nk[].k_pid, -1)) != Int(py=py_item(entry[0], nk[].k_pid)):
                     raise Error("process: child authentication or process identity mismatch")
                 _ = py_call(pending.pop, claimed)  # a token authenticates one connection only
                 var worker = entry[0]
-                py_setitem(worker, "socket", connection)
+                py_setitem(worker, nk[].k_socket, connection)
                 attached = True
-                if String(py_get(hello, "vendor", "")) != p[].vendor:
+                if String(py_get(hello, nk[].k_vendor, "")) != p[].vendor:
                     raise Error("process: child vendor differs from the parent native route")
                 # Existing local model workers have no training-operation timeout.
                 # Keep only the connection handshake bounded; large supported
                 # model steps must not acquire a new two-minute runtime limit.
                 transport_timeout(connection, -1.0)
-                py_setitem(worker, "identity", hello)
+                py_setitem(worker, nk[].k_identity, hello)
                 # Seconds from this worker's spawn to its authenticated hello
                 # (interpreter start, package import, binding connection).
                 py_setitem(started, entry[1], PythonObject(transport_clock() - Float64(py=entry[2])))
@@ -443,7 +455,7 @@ def process_pool_start(pool: PythonObject) raises:
             _process_pool_close(pool, String(error).startswith("InterruptedError:"))
         except cleanup_error:
             raise Error("RuntimeError: native process startup failed: " + String(error) + "; cleanup also failed: " + String(cleanup_error))
-        py_setitem(pool, "closed", False)
+        py_setitem(pool, nk[].k_closed, False)
         raise error
     transport_close(server)
 
@@ -453,24 +465,25 @@ def process_pool_map(pool: PythonObject, requests: PythonObject) raises -> Pytho
     var bi = p[].bi
     var inputs = py_call(bi.list, requests)
     process_pool_start(pool)
-    var workers = pool["workers"]
+    var nk = native_keys()
+    var workers = py_item(pool, nk[].k_workers)
     var result = bi.list()
-    var sequence = Int(py=pool["sequence"])
+    var sequence = Int(py=py_item(pool, nk[].k_sequence))
     var offset = 0
     try:
         while offset < len(inputs):  # driver-loop: over logical request waves across physical worker groups
             var width = min(len(workers), len(inputs) - offset)
             for i in range(width):  # driver-loop: over independent requests launched before consuming wave results
-                process_send(workers[i]["socket"], "request", sequence + i, inputs[offset + i])
+                process_send(py_item(workers[i], nk[].k_socket), "request", sequence + i, inputs[offset + i])
             var failure = String()
             for i in range(width):  # driver-loop: over worker replies in fixed logical request order
                 try:
-                    var reply = process_receive(workers[i]["socket"])
-                    if Int(py=py_get(reply[0], "sequence", -1)) != sequence + i:
+                    var reply = process_receive(py_item(workers[i], nk[].k_socket))
+                    if Int(py=py_get(reply[0], nk[].k_sequence, -1)) != sequence + i:
                         raise Error("process: response sequence mismatch")
-                    if String(py_get(reply[0], "kind", "")) == "error":
+                    if String(py_get(reply[0], nk[].k_kind, "")) == "error":
                         raise Error("RuntimeError: native model worker failed: " + String(reply[1]))
-                    if String(py_get(reply[0], "kind", "")) != "result":
+                    if String(py_get(reply[0], nk[].k_kind, "")) != "result":
                         raise Error("process: unexpected worker response")
                     _ = py_call(result.append, reply[1])
                 except error:
@@ -482,13 +495,13 @@ def process_pool_map(pool: PythonObject, requests: PythonObject) raises -> Pytho
                 raise Error(failure)
             offset += width
             sequence += width
-            py_setitem(pool, "sequence", sequence)
+            py_setitem(pool, nk[].k_sequence, sequence)
     except error:
         try:
             _process_pool_close(pool, String(error).startswith("InterruptedError:"))
         except cleanup_error:
             raise Error("RuntimeError: native process request failed: " + String(error) + "; cleanup also failed: " + String(cleanup_error))
-        py_setitem(pool, "closed", False)
+        py_setitem(pool, nk[].k_closed, False)
         raise error
     return result
 
@@ -503,19 +516,20 @@ def process_pool_request(pool: PythonObject, worker_index: Int, request: List[In
     # because remote state ownership can no longer be trusted.
     # REMOVED: process_pool_call (the codec-framed addressed call; its one
     # product caller was ParallelCausalLM) and its "call" operation.
-    if not Bool(py=py_get(pool, "typed", PythonObject(False))):
+    var nk = native_keys()
+    if not Bool(py=py_get(pool, nk[].k_typed, PythonObject(False))):
         raise Error("process: typed requests require a typed worker pool")
-    var count = 1 if Bool(py=pool["cooperative"]) else len(pool["devices"])
+    var count = 1 if Bool(py=py_item(pool, nk[].k_cooperative)) else len(py_item(pool, nk[].k_devices))
     if worker_index < 0 or worker_index >= count:
         raise Error("process: addressed worker index outside the selected group")
     process_pool_start(pool)
-    var sequence = Int(py=pool["sequence"])
+    var sequence = Int(py=py_item(pool, nk[].k_sequence))
     var value = PythonObject(None)
     var failed = False
     try:
-        var workers = pool["workers"]
+        var workers = py_item(pool, nk[].k_workers)
         var worker = workers[worker_index]
-        var socket = worker["socket"]
+        var socket = py_item(worker, nk[].k_socket)
         wire_send(socket, WIRE_REQUEST, sequence, request, outgoing)
         var reply = wire_receive(socket)
         if reply.sequence != sequence:
@@ -524,13 +538,13 @@ def process_pool_request(pool: PythonObject, worker_index: Int, request: List[In
             raise Error("process: unexpected addressed worker response")
         failed = reply.kind == WIRE_ERROR
         value = reply.value
-        py_setitem(pool, "sequence", sequence + 1)
+        py_setitem(pool, nk[].k_sequence, sequence + 1)
     except error:
         try:
             _process_pool_close(pool, String(error).startswith("InterruptedError:"))
         except cleanup_error:
             raise Error("RuntimeError: native process request failed: " + String(error) + "; cleanup also failed: " + String(cleanup_error))
-        py_setitem(pool, "closed", False)
+        py_setitem(pool, nk[].k_closed, False)
         raise error
     if failed:
         raise Error("RuntimeError: native model worker failed: " + String(value))
@@ -547,10 +561,11 @@ def process_worker_connect(argv: PythonObject) raises -> PythonObject:
         raise Error("process: invalid worker connection envelope")
     var socket = transport_connect("127.0.0.1", port, 120.0)
     var hello = p[].bi.dict()
-    py_setitem(hello, "kind", "hello")
-    py_setitem(hello, "token", token)
-    py_setitem(hello, "pid", p[].pid())
-    py_setitem(hello, "vendor", p[].vendor)
+    var nk = native_keys()
+    py_setitem(hello, nk[].k_kind, "hello")
+    py_setitem(hello, nk[].k_token, token)
+    py_setitem(hello, nk[].k_pid, p[].pid())
+    py_setitem(hello, nk[].k_vendor, p[].vendor)
     transport_send(socket, hello, PythonObject(None))
     transport_timeout(socket, -1.0)
     return socket
@@ -560,12 +575,13 @@ def process_echo_worker(argv: PythonObject) raises:
     # Native protocol probe used by the installed verifier. Model workers use
     # the same framing helpers with their compiled model dispatch table.
     var socket = process_worker_connect(argv)
+    var nk = native_keys()
     try:
         while True:  # driver-loop: over authenticated local protocol-verifier requests
             var request = process_worker_next(socket)
             if request is None:
                 break
-            var sequence = Int(py=py_get(request[0], "sequence", -1))
+            var sequence = Int(py=py_get(request[0], nk[].k_sequence, -1))
             process_send(socket, "result", sequence, request[1])
     except:
         transport_close(socket)
@@ -575,7 +591,8 @@ def process_echo_worker(argv: PythonObject) raises:
 
 def process_worker_next(socket: PythonObject) raises -> PythonObject:
     var request = process_receive(socket)
-    var kind = String(py_get(request[0], "kind", ""))
+    var nk = native_keys()
+    var kind = String(py_get(request[0], nk[].k_kind, ""))
     if kind == "close":
         return PythonObject(None)
     if kind != "request":
@@ -583,32 +600,35 @@ def process_worker_next(socket: PythonObject) raises -> PythonObject:
     return request
 
 
-def process_call(operation: String, args: PythonObject) raises -> PythonObject:
-    if operation == "initialize":
+def process_call(operation: Int, name: PythonObject, args: PythonObject) raises -> PythonObject:
+    # `operation`: a NATIVE_PROCESS_OPN_* code; `name` is the caller's str, read
+    # only for the unknown-operation text.
+    if operation == NATIVE_PROCESS_OPN_INITIALIZE:
         process_initialize(String(args[0]), args[1], String(args[2]))
-    elif operation == "create":
+    elif operation == NATIVE_PROCESS_OPN_CREATE:
         return process_pool_create(args[0], Bool(py=args[1]), String(args[2]))
-    elif operation == "map":
+    elif operation == NATIVE_PROCESS_OPN_MAP:
         return process_pool_map(args[0], args[1])
-    elif operation == "close":
+    elif operation == NATIVE_PROCESS_OPN_CLOSE:
         process_pool_close(args[0])
-    elif operation == "worker_echo":
+    elif operation == NATIVE_PROCESS_OPN_WORKER_ECHO:
         process_echo_worker(args)
-    elif operation == "environment":
+    elif operation == NATIVE_PROCESS_OPN_ENVIRONMENT:
         var env = _process_environment(args[0], args[1], args[2] if len(args) > 2 else PythonObject(None))
         var out = PROCESS_BOUNDARY.get_or_create_ptr()[].bi.list()
         for i in range(len(env)):  # driver-loop: over verifier-visible process environment entries
             _ = py_call(out.append, env[i])
         return out
     else:
-        raise Error("process: unknown operation " + operation)
+        raise Error("process: unknown operation " + String(name))
     return PythonObject(None)
 
 
 def process_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
     var args = PythonObject(from_borrowed=args_ptr)
     try:
-        var result = process_call(String(args[0]), args[1])
+        var nk = native_keys()
+        var result = process_call(py_op_code(nk[].ops_process, args[0]), args[0], args[1])
         return result.steal_data()
     except error:
         if String(error).startswith("InterruptedError:"):
