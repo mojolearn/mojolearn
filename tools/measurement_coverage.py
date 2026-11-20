@@ -150,6 +150,8 @@ NOT_MEASURED = (
     ("mojolearn.training.numeric_mode_used", "getter; no compute"),
     ("mojolearn.training.vendor_used", "getter; no compute"),
     ("mojolearn.runtime_report", "getter: reports vendor, modes, arch and loaded bindings (3eeb4874a3); no compute"),
+    ("mojolearn.check", "verification tool: runs a fitted estimator's own method on the GPU and the CPU and "
+                        "compares the bytes; its compute is the estimator lanes'"),
     ("mojolearn.ensemble.catboost_auto_learning_rate", "a scalar formula of the row count; no array compute"),
     ("mojolearn.models.plan_for", "returns an import plan record; no compute"),
     ("mojolearn.import_model", "one-time model import (parse and weight load, disk-bound); the imported "
