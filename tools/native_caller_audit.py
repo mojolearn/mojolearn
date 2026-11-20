@@ -95,10 +95,6 @@ FAMILIES = (
                        r"""\b(?:native|driver)\.run\(\s*"([a-z0-9_]+)\""""),
          note="x_neighbors/gen.py registers an export for every op of its OPS table; an op the XnDriver descriptor "
               "path runs (core/*_plan.mojo, core/agglo_native_api.mojo) keeps its generated export"),
-    dict(site="bindings/mixture_native_door.mojo", literal='"family_mix_gmm_" + method', strict=True,
-         prefixes=["family_mix_gmm_"],
-         suffixes=_src(_PUBLIC, r"""(?:["']|_OP\.)family_mix_gmm_public_(fit|fit_predict|bic|aic)\b"""),
-         note="GaussianMixture public fit/fit_predict/bic/aic (the queries take _gmm_public_query)"),
     dict(site="python/mojolearn/_native_parallel_public.py", literal="{name:'family_mix_gmm_'+name for name in",
          strict=True, prefixes=["family_mix_gmm_"],
          suffixes=_src(r"^python/mojolearn/_native_parallel_public\.py$",

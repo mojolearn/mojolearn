@@ -1325,6 +1325,20 @@ def _gmm_public_method(operation: Int) -> String:
     return "predict"
 
 
+def _gmm_public_plain(operation: Int) -> Int:
+    """The plain operation a public fit, fit_predict, bic or aic runs (it
+    was a String concat of the method name per call)."""
+    if operation == MIX_OPN_FAMILY_MIX_GMM_PUBLIC_FIT:
+        return MIX_OPN_FAMILY_MIX_GMM_FIT
+    if operation == MIX_OPN_FAMILY_MIX_GMM_PUBLIC_FIT_PREDICT:
+        return MIX_OPN_FAMILY_MIX_GMM_FIT_PREDICT
+    if operation == MIX_OPN_FAMILY_MIX_GMM_PUBLIC_BIC:
+        return MIX_OPN_FAMILY_MIX_GMM_BIC
+    if operation == MIX_OPN_FAMILY_MIX_GMM_PUBLIC_AIC:
+        return MIX_OPN_FAMILY_MIX_GMM_AIC
+    return -1
+
+
 def _gmm_public_operation(model: PythonObject, operation: Int, args: PythonObject,
                           context: PythonObject) raises -> PythonObject:
     if py_type(args) is not py_type(Python.tuple()):
@@ -1399,11 +1413,7 @@ def _gmm_public_operation(model: PythonObject, operation: Int, args: PythonObjec
         if query:
             result = _gmm_public_query(model, operation, binding, x, context, key)
         else:
-            # fit, fit_predict, bic, aic: the public block holds the plain
-            # block's first seven names in the same order, so the plain code
-            # is one subtraction (was a String concat per call).
-            result = mixture_operation(model, operation - (MIX_OPN_FAMILY_MIX_GMM_PUBLIC_FIT - MIX_OPN_FAMILY_MIX_GMM_FIT),
-                                       prepared, context)
+            result = mixture_operation(model, _gmm_public_plain(operation), prepared, context)
     except problem:
         if guarded:
             var refused = _refusal(problem, fitting, depth > 0, rows, columns, name)
