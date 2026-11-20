@@ -41,6 +41,10 @@ from bindings.svc_common_door import (
     svc_builtins, svc_field, svc_float, svc_int, svc_truthy, svc_prefix, svc_scalar_array,
 )
 from svm.svc_ocsvm_native_run import _f32_scalar
+from bindings.operation_names_svc import (
+    SVC_OPN_FAMILY_SVC_OCSVM_FIT, SVC_OPN_FAMILY_SVC_OCSVM_SCORE_SAMPLES, SVC_OPN_FAMILY_SVC_OCSVM_DECISION,
+    SVC_OPN_FAMILY_SVC_OCSVM_PREDICT, SVC_OPN_FAMILY_SVC_OCSVM_FIT_PREDICT,
+)
 
 
 def _oc_kernel_code(kernel: PythonObject, context: PythonObject) raises -> Int:
@@ -417,25 +421,25 @@ def _oc_binding(source: PythonObject, context: PythonObject) raises -> PythonObj
     return xn_admit(binding)
 
 
-def svc_ocsvm_operation(model: PythonObject, operation: String, args: PythonObject,
+def svc_ocsvm_operation(model: PythonObject, operation: Int, args: PythonObject,
     context: PythonObject) raises -> PythonObject:
     var binding = _oc_binding(args[0], context)
     classical_connect_numpy(context)
     var connection = OcConnection(binding)
     try:
-        if operation == "family_svc_ocsvm_fit":
+        if operation == SVC_OPN_FAMILY_SVC_OCSVM_FIT:
             _ocsvm_fit_native(model, binding, args[1], args[2], context, connection)
             return model
-        if operation == "family_svc_ocsvm_score_samples":
+        if operation == SVC_OPN_FAMILY_SVC_OCSVM_SCORE_SAMPLES:
             return _ocsvm_scores(model, binding, args[1], context, connection)
-        if operation == "family_svc_ocsvm_decision":
+        if operation == SVC_OPN_FAMILY_SVC_OCSVM_DECISION:
             return _ocsvm_decision(model, binding, args[1], context, connection)
-        if operation == "family_svc_ocsvm_predict":
+        if operation == SVC_OPN_FAMILY_SVC_OCSVM_PREDICT:
             return _ocsvm_predict(model, binding, args[1], context, connection)
-        if operation == "family_svc_ocsvm_fit_predict":
+        if operation == SVC_OPN_FAMILY_SVC_OCSVM_FIT_PREDICT:
             _ocsvm_fit_native(model, binding, args[1], PythonObject(None), context, connection)
             return _ocsvm_predict(model, binding, args[1], context, connection)
-        raise Error("RuntimeError: unknown OneClassSVM operation " + operation)
+        raise Error("RuntimeError: unknown OneClassSVM operation " + String(operation))
     finally:
         _ = connection
         _ = args

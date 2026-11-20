@@ -28,6 +28,10 @@ from bindings.family_common_pack import (
     family_call,
     family_array,
 )
+from bindings.operation_names_svc import (
+    SVC_OPN_FAMILY_SVC_LINEAR_SVR_FIT, SVC_OPN_FAMILY_SVC_LINEAR_SVR_SCORE, SVC_OPN_FAMILY_SVC_LINEAR_SVC_FIT,
+    SVC_OPN_FAMILY_SVC_LINEAR_SVC_PREDICT, SVC_OPN_FAMILY_SVC_LINEAR_SVC_SCORE,
+)
 from bindings.svm_mixture_native_door import _qn_scores, _qn_scores_native
 from core.admitted_weights import admitted_fill
 from bindings.class_weight_boundary_unpack import CLASS_WEIGHT_SVC
@@ -406,23 +410,24 @@ def _linear_svc_predict(model: PythonObject, binding: PythonObject, source: Pyth
     return svc_decode(model, result.classes, result.codes, context)
 
 
-def svc_linear_operation(model: PythonObject, operation: String, args: PythonObject,
+def svc_linear_operation(model: PythonObject, operation: Int, args: PythonObject,
                          context: PythonObject) raises -> PythonObject:
-    """The linear machines; args[0] is the resolved estimators binding."""
+    """The linear machines; args[0] is the resolved estimators binding;
+    `operation` is the leaf code of bindings/operation_names_svc.mojo."""
     classical_connect_numpy(context)
-    if operation == "family_svc_linear_svr_fit":
+    if operation == SVC_OPN_FAMILY_SVC_LINEAR_SVR_FIT:
         _linear_svr_fit(model, args, context)
         return model
-    if operation == "family_svc_linear_svr_score":
+    if operation == SVC_OPN_FAMILY_SVC_LINEAR_SVR_SCORE:
         var pred = _linear_svr_predict(model, args[0], args[1], context)
         return _r2_host(pred, args[2], context)
-    if operation == "family_svc_linear_svc_fit":
+    if operation == SVC_OPN_FAMILY_SVC_LINEAR_SVC_FIT:
         _linear_svc_fit(model, args, context)
         return model
-    if operation == "family_svc_linear_svc_predict":
+    if operation == SVC_OPN_FAMILY_SVC_LINEAR_SVC_PREDICT:
         return _linear_svc_predict(model, args[0], args[1], context)
-    if operation == "family_svc_linear_svc_score":
+    if operation == SVC_OPN_FAMILY_SVC_LINEAR_SVC_SCORE:
         var result = _linear_svc_prediction(model, args[0], args[1], context)
         var prediction = svc_decode_score(model, result.classes, result.codes, context)
         return PythonObject(svc_accuracy_native(args[2], prediction, context))
-    raise Error("RuntimeError: unknown linear SVM operation " + operation)
+    raise Error("RuntimeError: unknown linear SVM operation " + String(operation))

@@ -102,6 +102,13 @@ from providers.python.compiled_binding_snapshot_pyapi_door import CompiledBindin
 from providers.python.array_metadata_pyapi_door import ArrayMetadata, ArrayPin, array_shape_once, array_metadata_once
 from providers.python.classical_native_dispatch import CLASSICAL_NATIVE_DISPATCH
 from svm.operation_metadata import SvcOperationSettings, SVC_ABI_NAME
+from bindings.operation_names_svc import (
+    SVC_OPN_FAMILY_SVC_SVC_COEF, SVC_OPN_FAMILY_SVC_SVC_DECISION, SVC_OPN_FAMILY_SVC_SVC_FIT,
+    SVC_OPN_FAMILY_SVC_SVC_LOG_PROBA, SVC_OPN_FAMILY_SVC_SVC_PREDICT, SVC_OPN_FAMILY_SVC_SVC_PROBA,
+    SVC_OPN_FAMILY_SVC_SVC_SCORE, SVC_OPN_FAMILY_SVC_SVC_VALIDATE, SVC_OPN_FAMILY_SVC_SVR_COEF,
+    SVC_OPN_FAMILY_SVC_SVR_FIT, SVC_OPN_FAMILY_SVC_SVR_PREDICT, SVC_OPN_FAMILY_SVC_SVR_SCORE,
+    SVC_OPN_FAMILY_SVC_SVR_VALIDATE,
+)
 from bindings.py_optional import py_or_none
 from providers.python.neural_descriptor_pyapi_door import (
     neural_descriptor_entry, neural_descriptor_connect, neural_descriptor_execute, neural_descriptor_info,
@@ -1851,26 +1858,44 @@ def _svm_lifecycle_admit(model: PythonObject, fields: PythonObject, context: Pyt
     gpsvm_no_fit_callbacks(model, fields, "TypeError: SVM fitting cannot invoke Python completion callbacks")
 
 
-def svc_kernel_operation(model: PythonObject, operation: String, args: PythonObject,
+def _svc_method(operation: Int) -> String:
+    """The public method a kernel-machine operation serves, for the
+    not-fitted text (a static literal; the old door built it per call from
+    five suffix tests)."""
+    if operation == SVC_OPN_FAMILY_SVC_SVC_DECISION:
+        return "decision_function"
+    if operation == SVC_OPN_FAMILY_SVC_SVC_LOG_PROBA:
+        return "predict_log_proba"
+    if operation == SVC_OPN_FAMILY_SVC_SVC_PROBA:
+        return "predict_proba"
+    if operation == SVC_OPN_FAMILY_SVC_SVC_PREDICT or operation == SVC_OPN_FAMILY_SVC_SVR_PREDICT:
+        return "predict"
+    if operation == SVC_OPN_FAMILY_SVC_SVC_SCORE or operation == SVC_OPN_FAMILY_SVC_SVR_SCORE:
+        return "score"
+    return "fit"
+
+
+def svc_kernel_operation(model: PythonObject, operation: Int, args: PythonObject,
                          context: PythonObject) raises -> PythonObject:
     """The kernel machines' whole public operation: argument admission, the
     fitted and feature-name checks, fit bookkeeping (depth, fitted flag,
     feature names, public class labels), the algorithm through one admitted
-    provider, and NumPy results for callers outside the package."""
+    provider, and NumPy results for callers outside the package.
+    `operation` is the leaf code of bindings/operation_names_svc.mojo."""
     classical_connect_numpy(context)
     var b = native_loaded_module("builtins")
     if py_type(args) is not b.tuple:
         raise Error("TypeError: SVM public arguments require an exact tuple")
     var fields = py_fields(model)
-    var classifier = operation.startswith("family_svc_svc_")
-    if operation == "family_svc_svc_validate" or operation == "family_svc_svr_validate":
+    var classifier = operation >= SVC_OPN_FAMILY_SVC_SVC_COEF and operation <= SVC_OPN_FAMILY_SVC_SVC_VALIDATE
+    if operation == SVC_OPN_FAMILY_SVC_SVC_VALIDATE or operation == SVC_OPN_FAMILY_SVC_SVR_VALIDATE:
         _svm_validate(model, fields, classifier, context)
         return PythonObject(None)
-    var fitting = operation == "family_svc_svc_fit" or operation == "family_svc_svr_fit"
-    var public = (operation == "family_svc_svc_decision" or operation == "family_svc_svc_predict"
-                  or operation == "family_svc_svc_proba" or operation == "family_svc_svc_log_proba"
-                  or operation == "family_svc_svc_score" or operation == "family_svc_svr_predict"
-                  or operation == "family_svc_svr_score")
+    var fitting = operation == SVC_OPN_FAMILY_SVC_SVC_FIT or operation == SVC_OPN_FAMILY_SVC_SVR_FIT
+    var public = (operation == SVC_OPN_FAMILY_SVC_SVC_DECISION or operation == SVC_OPN_FAMILY_SVC_SVC_PREDICT
+                  or operation == SVC_OPN_FAMILY_SVC_SVC_PROBA or operation == SVC_OPN_FAMILY_SVC_SVC_LOG_PROBA
+                  or operation == SVC_OPN_FAMILY_SVC_SVC_SCORE or operation == SVC_OPN_FAMILY_SVC_SVR_PREDICT
+                  or operation == SVC_OPN_FAMILY_SVC_SVR_SCORE)
     if not fitting and not public:
         # coef_ (the native property schema) and composed callers: algorithm only.
         var native_only = _svc_provider(args[0])
@@ -1878,20 +1903,9 @@ def svc_kernel_operation(model: PythonObject, operation: String, args: PythonObj
         _svc_publish_dispatch(fields, native_only, context)
         return plain
     _svm_lifecycle_admit(model, fields, context)
-    var method = String("fit")
-    if operation.endswith("_decision"):
-        method = "decision_function"
-    elif operation.endswith("_log_proba"):
-        method = "predict_log_proba"
-    elif operation.endswith("_proba"):
-        method = "predict_proba"
-    elif operation.endswith("_predict"):
-        method = "predict"
-    elif operation.endswith("_score"):
-        method = "score"
     var depth = Int(py=py_get(fields, "_mojolearn_fitting", PythonObject(0)))
     if public:
-        classical_require_fitted(model, False, method, context)
+        classical_require_fitted(model, False, _svc_method(operation), context)
         if depth == 0:
             estimator_feature_check(model, fields, args[1], context)
     var native = _svc_provider(args[0])
@@ -1908,10 +1922,11 @@ def svc_kernel_operation(model: PythonObject, operation: String, args: PythonObj
     if fitting:
         estimator_fit_complete(model, args[1], classifier, context)
         return result
-    if (method == "score" or not estimator_outside() or py_get(context, "ndarray") is None
+    if (operation == SVC_OPN_FAMILY_SVC_SVC_SCORE or operation == SVC_OPN_FAMILY_SVC_SVR_SCORE
+            or not estimator_outside() or py_get(context, "ndarray") is None
             or py_type(result) is not context["array_class"]):
         return result
-    if not classifier and method == "predict":
+    if operation == SVC_OPN_FAMILY_SVC_SVR_PREDICT:
         # scikit-learn's regression predictions are float64: widened exactly.
         var wide = classical_typed(result.shape, "<f8", context)
         labels_cast(Int(py=classical_address(result)), "<f4", Int(py=classical_address(wide)), "<f8",
@@ -1921,22 +1936,22 @@ def svc_kernel_operation(model: PythonObject, operation: String, args: PythonObj
     return native_array_ndarray_view(result, context)
 
 
-def _svc_kernel_operation(model: PythonObject, operation: String, args: PythonObject,
+def _svc_kernel_operation(model: PythonObject, operation: Int, args: PythonObject,
                           context: PythonObject, fields: PythonObject, native: PythonObject) raises -> PythonObject:
-    if operation == "family_svc_svc_coef" or operation == "family_svc_svr_coef":
-        return _linear_coef(fields, args[0], operation == "family_svc_svc_coef", context, native)
-    if operation == "family_svc_svc_fit":
+    if operation == SVC_OPN_FAMILY_SVC_SVC_COEF or operation == SVC_OPN_FAMILY_SVC_SVR_COEF:
+        return _linear_coef(fields, args[0], operation == SVC_OPN_FAMILY_SVC_SVC_COEF, context, native)
+    if operation == SVC_OPN_FAMILY_SVC_SVC_FIT:
         _svc_fit(model, args, context, native)
         return model
-    if operation == "family_svc_svc_decision":
+    if operation == SVC_OPN_FAMILY_SVC_SVC_DECISION:
         return _svc_decision(model, fields, args[0], args[1], context, native)
-    if operation == "family_svc_svc_predict":
+    if operation == SVC_OPN_FAMILY_SVC_SVC_PREDICT:
         return _svc_predict(model, fields, args[0], args[1], context, native)
-    if operation == "family_svc_svc_proba":
+    if operation == SVC_OPN_FAMILY_SVC_SVC_PROBA:
         return _svc_proba(model, fields, args[0], args[1], _EPI_PROBA, context, native)
-    if operation == "family_svc_svc_log_proba":
+    if operation == SVC_OPN_FAMILY_SVC_SVC_LOG_PROBA:
         return _svc_proba(model, fields, args[0], args[1], _EPI_LOG_PROBA, context, native)
-    if operation == "family_svc_svc_score":
+    if operation == SVC_OPN_FAMILY_SVC_SVC_SCORE:
         # N382: accuracy on codes. y is encoded once against classes_ and
         # compared with the predicted codes in the x_metrics COUNT program
         # (classical_score_from_codes, bindings/classical_labels_door.mojo); the
@@ -1945,11 +1960,11 @@ def _svc_kernel_operation(model: PythonObject, operation: String, args: PythonOb
         var codes = _svc_predict_codes(model, fields, args[0], args[1], context, native)
         return PythonObject(svc_accuracy_codes(args[2], svc_field(fields, "classes_"), codes,
                                                Int(py=codes.shape[0]), context))
-    if operation == "family_svc_svr_fit":
+    if operation == SVC_OPN_FAMILY_SVC_SVR_FIT:
         _svr_fit(model, args, context, native)
         return model
-    if operation == "family_svc_svr_predict":
+    if operation == SVC_OPN_FAMILY_SVC_SVR_PREDICT:
         return _svr_predict(model, fields, args[0], args[1], context, native)
-    if operation == "family_svc_svr_score":
+    if operation == SVC_OPN_FAMILY_SVC_SVR_SCORE:
         return _svr_score(model, fields, args[0], args[1], args[2], context, native)
-    raise Error("RuntimeError: unknown kernel SVM operation " + operation)
+    raise Error("RuntimeError: unknown kernel SVM operation " + String(operation))
