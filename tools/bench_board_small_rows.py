@@ -13,7 +13,8 @@ carries CUDA/HIP start-up and kernel compilation (neural/mamba3-forward: warmup 
 whose first scored call is at or above SMALL_ROW_MS keep that one call. Every arm of a compare (the
 candidate and the prior wheels re-timed on the same box) runs this same code, so each is scored by the
 same rule; tools/paper_compare.py flags a row whose two arms landed on different rules (SCORING-MIXED,
-a first call on either side of SMALL_ROW_MS). Opponent arms are never repeated (their stored cells
+a first call on either side of SMALL_ROW_MS; the flag replaces that column's REGRESSION / FASTER, because
+the first scored call carries the first-touch faults the median does not). Opponent arms are never repeated (their stored cells
 stay). One scored run per arm is unchanged and nothing is rerun. Reason: a single call of a millisecond-scale row is dominated by
 first-touch page faults and the allocator (program-run 3.4 ms once vs 0.76 ms steady).
 
