@@ -962,6 +962,18 @@ in the tables after the sections.
 | [`MOJOLEARN_GBDT_FAST_RADIX8`](#mojolearn_gbdt_fast_radix8-fx-verdicts4) | Trees (GBDT low-bit stable sorts, CTR bins and leaf partition, on eight-bit digits; same order) | removed (decided B arm: L40S B 0.965-1.03 over 10 fits, noise; rule needed every row at least as fast) | 2026-11-19 | [MOJOLEARN_GBDT_FAST_RADIX8.patch](../experiments/removed/MOJOLEARN_GBDT_FAST_RADIX8.patch) |
 | [`MOJOLEARN_XLINEAR_FAST_WB_RESIDENT`](#mojolearn_xlinear_fast_wb_resident-fx-verdicts4) | Classical linear (predict / decision_function: the fitted weight block kept resident on the device between calls; same bits) | removed (decided B arm: L40S B predicts 0.94-1.20 on same-node pairs, three slower, noise) | 2026-11-19 | [MOJOLEARN_XLINEAR_FAST_WB_RESIDENT.patch](../experiments/removed/MOJOLEARN_XLINEAR_FAST_WB_RESIDENT.patch) |
 | [`MOJOLEARN_SEQ_FAST_RNN_STEP_GEMM`](#mojolearn_seq_fast_rnn_step_gemm-split-k-weight-gradients-fx-verdicts4) | Neural (recurrent trainer: the two weight gradients as one GEMM at split-K shapes; the forward step's GEMM is promoted, the rest is the arm MOJOLEARN_SEQ_FAST_RNN_BPTT_GEMM) | removed (decided B arm, this part: L40S B fit 2.3-3.4 at hidden 64, loss; forward step promoted at predict 0.35-0.39) | 2026-11-19 | [MOJOLEARN_SEQ_FAST_RNN_STEP_GEMM.patch](../experiments/removed/MOJOLEARN_SEQ_FAST_RNN_STEP_GEMM.patch) |
+| [`MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_EARLY`](#mojolearn_resample_fast_perm_select_early-fx-verdicts5) | Resample (permutation test: perm_select_stat_kernel's key passes stopped at the first pass whose selected bucket goes to the first group whole; same membership) | removed (decided B arm, LOSS) | 2026-11-20 | [MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_EARLY.patch](../experiments/removed/MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_EARLY.patch) |
+| [`MOJOLEARN_XPREP_FAST_ARENA_HUGEPAGE`](#mojolearn_xprep_fast_arena_hugepage-fx-verdicts5) | Prep (x_prep mapped arena or output store advised for transparent huge pages before its first write; storage backing only) | removed (decided B arm, NOISE) | 2026-11-20 | [MOJOLEARN_XPREP_FAST_ARENA_HUGEPAGE.patch](../experiments/removed/MOJOLEARN_XPREP_FAST_ARENA_HUGEPAGE.patch) |
+| [`MOJOLEARN_IDN_MAMBA_BACKWARD_GENERIC`](#mojolearn_idn_mamba_backward_generic-product-switch-fx-verdicts5) | Neural (the tape graph as the Mamba-1/2 block step VJP, B arm of the restored hand chain; same kernels, same bits) | removed (decided B arm, NOISE) | 2026-11-20 | [MOJOLEARN_IDN_MAMBA_BACKWARD_GENERIC.fx-verdicts5.patch](../experiments/removed/MOJOLEARN_IDN_MAMBA_BACKWARD_GENERIC.fx-verdicts5.patch) |
+| [`MOJOLEARN_SEQ_POOL_OFF`](#mojolearn_seq_pool_off-fx-verdicts5) | Neural (sequence executor: fresh buffers a call in place of the shared executor's device buffer and pinned stage pool; same bits) | removed (decided B arm, NOISE twice) | 2026-11-20 | [MOJOLEARN_SEQ_POOL_OFF.patch](../experiments/removed/MOJOLEARN_SEQ_POOL_OFF.patch) |
+| [`MOJOLEARN_SEQ_FAST_RNN_STEP_GEMM_OFF`](#mojolearn_seq_fast_rnn_step_gemm_off-fx-verdicts5) | Neural (recurrent trainer: the fused forward launch OP_CELL_FWD_H above the step rule; old path of the forward step GEMM) | removed (old path; promotion confirmed twice) | 2026-11-20 | [MOJOLEARN_SEQ_FAST_RNN_STEP_GEMM_OFF.patch](../experiments/removed/MOJOLEARN_SEQ_FAST_RNN_STEP_GEMM_OFF.patch) |
+| [`MOJOLEARN_SEQ_FAST_RNN_BPTT_GEMM`](#mojolearn_seq_fast_rnn_bptt_gemm-fx-verdicts5) | Neural (recurrent trainer: backward step and tile-routed weight gradients on the sequence GEMM; a bit version) | split (LSTM backward step promoted; the rest removed) | 2026-11-20 | [MOJOLEARN_SEQ_FAST_RNN_BPTT_GEMM.patch](../experiments/removed/MOJOLEARN_SEQ_FAST_RNN_BPTT_GEMM.patch) |
+| [`MOJOLEARN_GEMM_FAST_SEQ_PACKED_OFF`](#mojolearn_gemm_fast_seq_packed_off-fx-verdicts5) | Neural (sequence GEMM: the 16 x 16 tile for the products the packed rule selects; old path of the packed route) | removed (old path; promotion confirmed twice) | 2026-11-20 | [MOJOLEARN_GEMM_FAST_SEQ_PACKED_OFF.patch](../experiments/removed/MOJOLEARN_GEMM_FAST_SEQ_PACKED_OFF.patch) |
+| [`MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK_OFF`](#mojolearn_llama_fast_refuse_watermark_off-fx-verdicts5) | Neural (decode: the whole-cache refusal scans at every step; old path of the appended-row scan) | removed (old path; promotion confirmed twice) | 2026-11-20 | [MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK_OFF.patch](../experiments/removed/MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK_OFF.patch) |
+| [`MOJOLEARN_LLAMA_FAST_STAGE_KEEP_OFF`](#mojolearn_llama_fast_stage_keep_off-fx-verdicts5) | Neural (stateless transformer block forward: thirty zero fills and a wait before a forward-only run on kept stages; old path of the kept stages) | removed (old path; promotion confirmed twice) | 2026-11-20 | [MOJOLEARN_LLAMA_FAST_STAGE_KEEP_OFF.patch](../experiments/removed/MOJOLEARN_LLAMA_FAST_STAGE_KEEP_OFF.patch) |
+| [`MOJOLEARN_MAMBA_FAST_DECODE_STAGE_ARENA_OFF`](#mojolearn_mamba_fast_decode_stage_arena_off-fx-verdicts5) | Neural (Mamba-2 / Mamba-3 decode: per-token stage buffers; old path of the resident stage arena) | removed (old path; promotion confirmed twice) | 2026-11-20 | [MOJOLEARN_MAMBA_FAST_DECODE_STAGE_ARENA_OFF.patch](../experiments/removed/MOJOLEARN_MAMBA_FAST_DECODE_STAGE_ARENA_OFF.patch) |
+| [`MOJOLEARN_LMHEAD_FAST_GEMM_PANEL_OFF`](#mojolearn_lmhead_fast_gemm_panel_off-fx-verdicts5) | Neural (chunked LM head v2: the scalar serial profile; old path of the GEMM-panel profile) | removed (old path; promotion confirmed twice) | 2026-11-20 | [MOJOLEARN_LMHEAD_FAST_GEMM_PANEL_OFF.patch](../experiments/removed/MOJOLEARN_LMHEAD_FAST_GEMM_PANEL_OFF.patch) |
+| [`MOJOLEARN_MAMBA3_FAST_S17_TAIL_TREE_OFF`](#mojolearn_mamba3_fast_s17_tail_tree_off-fx-verdicts5) | Neural (Mamba-3 backward: the serial S17 chunk-end chain; old path of the lane chains and the tree) | removed (old path; promotion confirmed twice) | 2026-11-20 | [MOJOLEARN_MAMBA3_FAST_S17_TAIL_TREE_OFF.patch](../experiments/removed/MOJOLEARN_MAMBA3_FAST_S17_TAIL_TREE_OFF.patch) |
 
 | [`MOJOLEARN_IDN_M1_SCAN`](#mojolearn_idn_m1_scan) | Neural (Mamba-1 scan selector, IDENTICAL) | removed (opt-in arms, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_M1_SCAN.patch](../experiments/removed/MOJOLEARN_IDN_M1_SCAN.patch) |
 | [`MOJOLEARN_IDN_M2_CB_LOWER_OFF`](#mojolearn_idn_m2_cb_lower_off) | Neural (Mamba-2 oracle cb.G triangle, IDENTICAL) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_M2_CB_LOWER_OFF.patch](../experiments/removed/MOJOLEARN_IDN_M2_CB_LOWER_OFF.patch) |
@@ -22987,6 +22999,95 @@ Arms decided by A/B round 2 on the NVIDIA L40S (host bd9c355c19c0; wheel 0c68d6c
 - Verdict: split by site. 27 cells; quality equal to 1e-8 on every cell (the arm is a bit version). Same-NUMA-node pairs (14; the gru-clf synthetic and all rnn pairs ran on different nodes and are not used): PREDICT gru-clf taxi 38.98 -> 14.81 ms (0.38), gru-reg 19.53 -> 6.89, 19.52 -> 6.83 (0.35), lstm-clf 50.97 -> 18.74, 50.69 -> 18.80 (0.37), lstm-reg 25.35 -> 9.10, 25.44 -> 9.14 (0.36); FIT gru-clf taxi 467.2 -> 1115.7 (2.39), gru-reg 463.7 -> 1111.1, 463.2 -> 1111.9 (2.40), lstm-clf 572.7 -> 1352.1, 572.4 -> 1351.5 (2.36), lstm-reg 566.7 -> 1340.4, 566.7 -> 1340.5 (2.37). No node record: gru-fit higgs 120.0 -> 384.6 (3.20), lstm-fit 146.1 -> 490.0 (3.35), rnn-fit 55.7 -> 154.3 (2.77). Different nodes: rnn fit 2.26-2.32, rnn predict 1.01-1.04. Driver fits (one call): lstm T 48 H 64 879 -> 2575 (2.93), rnn H 64 137 -> 318 (2.32), lstm H 128 1167 -> 720 (0.62), gru H 128 911 -> 594 (0.65), 2-layer gru H 96 on 12 features 1871 -> 1622 (0.87), lstm H 16 batch 64 254.5 -> 236.2 (0.93). The rnn (scan) cells change only in the two weight gradients, so their 2.3x is the weight gradients' alone: at hidden 64 the output [G H, H] is under 8 tiles of 64 x 64, the launch rule splits K = T B = 6144 into 96 blocks and gives each cell 128 threads of a 256-thread block; the cost grows with the cell count (rnn +0.38 ms a step, gru 3 times the cells +1.15, lstm 4 times +1.38) and with K (T 48: 2.93). DELETED: the weight-gradient GEMM at split-K shapes. PROMOTED: the forward step (predict is the forward alone). KEPT as the narrowed opt-in arm `MOJOLEARN_SEQ_FAST_RNN_BPTT_GEMM`: the backward step and the weight gradients the rule does not split (the composition that won at hidden 128 and 96 in the driver, not timed as narrowed).
 - Files: autograd/rules_recurrent.mojo (`_wgrad`: the GEMM at every shape; `RNN_STEP_GEMM` as the one opt-in constant of all three sites), sequence/checks/oracle.mojo (`_O_RNN_STEP_GEMM`, `_o_bptt_block`), sequence/checks/seams_check.mojo (the three 5504 step_gemm cases under the define).
 - Patch: `experiments/removed/MOJOLEARN_SEQ_FAST_RNN_STEP_GEMM.patch`. Code recoverable at 509d2506d9^ (deleted by 509d2506d9). EXPERIMENTS.md: the `MOJOLEARN_SEQ_FAST_RNN_STEP_GEMM` row. The patch restores the whole arm as it was timed (one define for the three sites).
+
+## A/B round 3 verdicts: lane fx-verdicts5 (2026-11-20)
+
+Arms decided by A/B round 3 on the NVIDIA L40S (fresh pod, host 2ef132a6de04, 14-core cgroup; wheel 28a780604c and its B sets; base and arm back to back in the same pod job, workers bound to the GPU's NUMA node; one scored run per arm, small rows the median of 20 calls). Evidence `~/mojolearn-evidence/measure-candidate/build-28a780604c/ab3/x/` (job 1) and `ab3b/x/` (job 2, the x_prep huge-page arm); per-cell tables, the cross-job base spreads and the driver rows `~/mojolearn-evidence/briefs-20261118/fx-verdicts5/` (`tab-<arm>-<rows>.txt`, `bases.txt`, `drivers.txt`). NVIDIA only (AGENTS.md part 8).
+
+### mojolearn_resample_fast_perm_select_early (fx-verdicts5)
+
+- What it was: an early stop of the eight radix key passes of the permutation-selection kernel, with the low bytes of the threshold set to ones.
+- Verdict (A/B round 3, NVIDIA L40S host 2ef132a6de04, wheel 28a780604c, job nvc-ab-20261120T063324Z-c630ad): LOSS. permutation-test istella 285.3 -> 306.7 ms (1.075), taxi 285.1 -> 313.9 (1.101); p-values and digests equal. The neighbouring and non-board inputs of its row were not timed.
+- Files: `resample/checks/statistics.mojo`
+- Patch: `experiments/removed/MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_EARLY.patch`. Code recoverable at e25e35dab8 (the lane's base; deleted by ac42a0c7d6). EXPERIMENTS.md: the `MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_EARLY` row.
+
+### mojolearn_xprep_fast_arena_hugepage (fx-verdicts5)
+
+- What it was: madvise(MADV_HUGEPAGE) over the whole 2 MiB pages of a mapped x_prep store, and the helper native_scratch_advise_huge (its other caller, the byte-LM logits arm, was deleted in round 2).
+- Verdict (A/B round 3, NVIDIA L40S host 2ef132a6de04, wheel 28a780604c, job nvc-ab-20261120T063324Z-c630ad): NOISE. 20 cells (binarizer, label-binarizer, multilabel-binarizer, normalizer, poly-features; istella and taxi; fit and infer) 0.952-1.092, geomean 1.012; normalizer istella fit 1,053 -> 1,149 ms (1.091), infer 1.092; multilabel-binarizer taxi 1.07; poly-features taxi 0.952. Digests equal.
+- Files: `bindings/x_prep_native_owner_door.mojo`, `bindings/native_array_storage_door.mojo`
+- Patch: `experiments/removed/MOJOLEARN_XPREP_FAST_ARENA_HUGEPAGE.patch`. Code recoverable at e25e35dab8 (the lane's base; deleted by ae74f1ea21). EXPERIMENTS.md: the `MOJOLEARN_XPREP_FAST_ARENA_HUGEPAGE` row.
+
+### mojolearn_idn_mamba_backward_generic-product-switch (fx-verdicts5)
+
+- What it was: the build switch that ran mamba{1,2}_step_backward_tape as the block step op's VJP. The two tape functions stay as the reference of the glue check.
+- Verdict (A/B round 3, NVIDIA L40S host 2ef132a6de04, wheel 28a780604c, job nvc-ab-20261120T063324Z-c630ad): NOISE on three readings. Round 3 driver, median of 20 calls, 4 x 512 d256, hand -> tape: Mamba1Block.backward 9.408 -> 9.501 ms (1.010), Mamba2Block.backward 13.795 -> 13.688 (0.992). Round 2, one call: 0.95, 0.99. The n = 20 record on file: 1.05, 1.01.
+- Files: `autograd/rules_mamba.mojo`, `mamba/checks/mamba_step_backward_glue_check_suite.mojo`
+- Patch: `experiments/removed/MOJOLEARN_IDN_MAMBA_BACKWARD_GENERIC.fx-verdicts5.patch`. Code recoverable at e25e35dab8 (the lane's base; deleted by d40107b20a). EXPERIMENTS.md: the `MOJOLEARN_IDN_MAMBA_BACKWARD_GENERIC` row.
+
+### mojolearn_seq_pool_off (fx-verdicts5)
+
+- What it was: the build switch that turned the shared sequence executor's pool off (SEQ_POOL, seq_pool_on).
+- Verdict (A/B round 3, NVIDIA L40S host 2ef132a6de04, wheel 28a780604c, job nvc-ab-20261120T063324Z-c630ad): NOISE twice on the same two small-buffer rows: sequential-fit 272.7 -> 270.3 ms (0.991), sequential-predict 2.585 -> 2.644 (1.023, medians of 20); round 2: 0.98, 0.95. The rows with stages of tens of MB that the pool was built for were in neither pair; the pool's own record stands for them (a 64 MB pinned allocation a call: the layernorm cell 99.7 ms against a 1 ms kernel).
+- Files: `sequence/exec_device.mojo`
+- Patch: `experiments/removed/MOJOLEARN_SEQ_POOL_OFF.patch`. Code recoverable at e25e35dab8 (the lane's base; deleted by e8d0314d4f). EXPERIMENTS.md: the `MOJOLEARN_SEQ_POOL_OFF` row.
+
+### mojolearn_seq_fast_rnn_step_gemm_off (fx-verdicts5)
+
+- What it was: the switch that restored the fused forward launch at every shape of an IDENTICAL build. OP_CELL_FWD_H itself stays for steps below the rule's floor and for fast mode.
+- Verdict (A/B round 3, NVIDIA L40S host 2ef132a6de04, wheel 28a780604c, job nvc-ab-20261120T063324Z-c630ad): CONFIRMED in rounds 2 and 3. Round 3, GEMM step (default) -> fused launch: fit gru 1.19, lstm 1.28, neural gru-fit 1.30, lstm-fit 1.32; predict gru 3.37-4.39, lstm 3.69-4.54; rnn rows 0.99-1.02; driver fit lstm T 48 H 64 1.30, lstm H 128 1.60, gru H 128 1.59, 2-layer gru H 96 1.26, controls 1.00. Digests equal at H 64.
+- Files: `autograd/rules_recurrent.mojo`, `sequence/checks/oracle.mojo`, `sequence/checks/seams_check.mojo`
+- Patch: `experiments/removed/MOJOLEARN_SEQ_FAST_RNN_STEP_GEMM_OFF.patch`. Code recoverable at e25e35dab8 (the lane's base; deleted by 3684109c47). EXPERIMENTS.md: the `MOJOLEARN_SEQ_FAST_RNN_STEP_GEMM_OFF` row. The patch is the reverse of one commit that also carries the MOJOLEARN_SEQ_FAST_RNN_BPTT_GEMM split; the two patch files are the same bytes.
+
+### mojolearn_seq_fast_rnn_bptt_gemm (fx-verdicts5)
+
+- What it was: the opt-in arm: every cell's backward step dh += dGH W_hh as its own OP_GEMM above the step floor, and a weight gradient the launch rule does not split as one OP_GEMM.
+- Verdict (A/B round 3, NVIDIA L40S host 2ef132a6de04, wheel 28a780604c, job nvc-ab-20261120T063324Z-c630ad): SPLIT by site and cell. Round 3 fits, quality equal to 1e-8: lstm-clf 0.961, 0.956, lstm-reg 0.952, 0.956; gru-clf 1.056, 1.067, gru-reg 1.049, 1.048; rnn 1.000-1.004; driver lstm T 48 H 64 0.949, lstm H 128 0.981, gru H 128 1.039, 2-layer gru H 96 1.040. At H 64 the weight gradients are split shapes, so the board rows time the backward step alone. The LSTM cell's backward step GEMM is the default (RNN_BPTT_LSTM_GEMM, old form under MOJOLEARN_SEQ_FAST_RNN_BPTT_LSTM_GEMM_OFF; bits change at split-K LSTM backward steps on every column together); the GRU and tanh cells keep the fused launch; the non-split weight-gradient GEMM had no cell of its own and is deleted.
+- Files: `autograd/rules_recurrent.mojo`, `sequence/checks/oracle.mojo`, `sequence/checks/seams_check.mojo`
+- Patch: `experiments/removed/MOJOLEARN_SEQ_FAST_RNN_BPTT_GEMM.patch`. Code recoverable at e25e35dab8 (the lane's base; deleted by 3684109c47). EXPERIMENTS.md: the `MOJOLEARN_SEQ_FAST_RNN_BPTT_GEMM` row. Same bytes as MOJOLEARN_SEQ_FAST_RNN_STEP_GEMM_OFF.patch.
+
+### mojolearn_gemm_fast_seq_packed_off (fx-verdicts5)
+
+- What it was: the build switch of the sequence packed route. The 16 x 16 tile stays for every product the rule does not select, the Apple column and fast mode.
+- Verdict (A/B round 3, NVIDIA L40S host 2ef132a6de04, wheel 28a780604c, job nvc-ab-20261120T063324Z-c630ad): CONFIRMED in rounds 1 and 3. Round 3 driver MLPClassifier.fit, packed (default) -> tile: 4096 x 256 over K 128 70.99 -> 79.62 ms (1.12), 2048 x 512 x 512 303.2 -> 505.4 (1.67), 8192 x 192 over K 96 249.4 -> 254.2 (1.02), control batch 1024 (below the rule) 1.005. Round 1: mlp fit 0.59-0.66, infer 0.43-0.68.
+- Files: `sequence/gemm_packed_route.mojo`, `gemm/neural_dispatch.mojo`, `sequence/exec_device.mojo`, `autograd/profile.mojo`, `autograd/checks/gemm_cases.mojo`
+- Patch: `experiments/removed/MOJOLEARN_GEMM_FAST_SEQ_PACKED_OFF.patch`. Code recoverable at e25e35dab8 (the lane's base; deleted by 95221453aa). EXPERIMENTS.md: the `MOJOLEARN_GEMM_FAST_SEQ_PACKED_OFF` row.
+
+### mojolearn_llama_fast_refuse_watermark_off (fx-verdicts5)
+
+- What it was: the switch that restored the whole key / value cache scans on per-call scratch at every step of an IDENTICAL build, and its pixi task. FAST builds keep the whole scans.
+- Verdict (A/B round 3, NVIDIA L40S host 2ef132a6de04, wheel 28a780604c, job nvc-ab-20261120T063324Z-c630ad): CONFIRMED in rounds 1 and 3. Round 3, row scan (default) -> whole scans: transformer-decode 1,086.8 -> 1,118.2 ms (1.029; the row's three bases 1,086.0-1,086.8), causal-lm-generate-smollm2 1.030, causal-lm-generate 1.019, samba-decode 1.013. Digests equal. Round 1: 0.91-0.94.
+- Files: `transformer/impl/llama/modeling_llama.mojo`, `training/samba_program.mojo`, `transformer/causal_lm_program.mojo`, `transformer/attn_step_session.mojo`, `checks/native_tests/llama_refuse_row_scan.mojo`, `pixi.toml`
+- Patch: `experiments/removed/MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK_OFF.patch`. Code recoverable at e25e35dab8 (the lane's base; deleted by 38eb6883a4). EXPERIMENTS.md: the `MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK_OFF` row.
+
+### mojolearn_llama_fast_stage_keep_off (fx-verdicts5)
+
+- What it was: the switch that restored LlamaDeviceStages.reset before every stateless forward on kept stages of the same shape.
+- Verdict (A/B round 3, NVIDIA L40S host 2ef132a6de04, wheel 28a780604c, job nvc-ab-20261120T063324Z-c630ad): CONFIRMED in rounds 2 and 3. Round 3, kept stages (default) -> reset: transformer-forward 2.617 -> 2.901 ms (1.108, medians of 20); driver TransformerBlock.forward 1 x 4096 d384 1.00, 1 x 2048 d512 1.10, 3 x 700 d320 1.06, 4 x 128 d384 1.04; rows it does not reach 1.000-1.003 (lm-forward 0.911 inside that row's own 10 % base spread). Digests equal.
+- Files: `transformer/impl/llama/modeling_llama.mojo`, `autograd/block_step_ops.mojo`
+- Patch: `experiments/removed/MOJOLEARN_LLAMA_FAST_STAGE_KEEP_OFF.patch`. Code recoverable at e25e35dab8 (the lane's base; deleted by 0b024ba48c). EXPERIMENTS.md: the `MOJOLEARN_LLAMA_FAST_STAGE_KEEP_OFF` row.
+
+### mojolearn_mamba_fast_decode_stage_arena_off (fx-verdicts5)
+
+- What it was: the build switch of the per-token stage buffers. They stay for a guard-band or poison build.
+- Verdict (A/B round 3, NVIDIA L40S host 2ef132a6de04, wheel 28a780604c, job nvc-ab-20261120T063324Z-c630ad): CONFIRMED in rounds 1 and 3. Round 3, arena (default) -> per-token stages: mamba3-decode 855.7 -> 1,063.3 ms (1.243), mamba2-decode 1,062.2 -> 1,245.6 (1.173), samba-decode 1.091, control mamba1-decode 1.007, the two forwards 1.001. Digests equal.
+- Files: `autograd/block_step_ops.mojo`
+- Patch: `experiments/removed/MOJOLEARN_MAMBA_FAST_DECODE_STAGE_ARENA_OFF.patch`. Code recoverable at e25e35dab8 (the lane's base; deleted by 5b1bdf5837). EXPERIMENTS.md: the `MOJOLEARN_MAMBA_FAST_DECODE_STAGE_ARENA_OFF` row.
+
+### mojolearn_lmhead_fast_gemm_panel_off (fx-verdicts5)
+
+- What it was: the scalar serial LM-head profile: its device kernels and bodies (rows, dHidden, dWeight, _device_logit), the op's and the host arm's scalar paths, the oracle's scalar folds, the device check's scalar clause and two pixi tasks (569 lines).
+- Verdict (A/B round 3, NVIDIA L40S host 2ef132a6de04, wheel 28a780604c, job nvc-ab-20261120T063324Z-c630ad): CONFIRMED in rounds 1 and 3. train-chunked-lm-head-loss (rows 8192, vocab 32768, width 1024): round 1 33,016.9 -> 284.5 ms with the panels; round 3 277.9 -> 33,009 ms with the scalar profile (118.8).
+- Files: `autograd/lm_head_v2_host.mojo`, `autograd/lm_head_v2_op.mojo`, `checks/native_tests/ops_lm_head_v2.mojo`, `pixi.toml`, `training/checks/chunked_lm_head_device_check.mojo`, `training/checks/chunked_lm_head_oracle.mojo`, `training/chunked_lm_head_gemm_panel_host.mojo`, `training/chunked_lm_head_panel_math.mojo`, `training/chunked_lm_head_v2.mojo`
+- Patch: `experiments/removed/MOJOLEARN_LMHEAD_FAST_GEMM_PANEL_OFF.patch`. Code recoverable at e25e35dab8 (the lane's base; deleted by 6043eb1cd6). EXPERIMENTS.md: the `MOJOLEARN_LMHEAD_FAST_GEMM_PANEL_OFF` row.
+
+### mojolearn_mamba3_fast_s17_tail_tree_off (fx-verdicts5)
+
+- What it was: the serial chain in the host column's operands kernel and the launch of the shared / pipe tail kernels, in the device file and its generated host twin.
+- Verdict (A/B round 3, NVIDIA L40S host 2ef132a6de04, wheel 28a780604c, job nvc-ab-20261120T063324Z-c630ad): CONFIRMED in rounds 1 and 3. Round 3 driver SambaStack.train_step, tree (default) -> serial chain: Mamba-3 only 4 x 300 d256 23.68 -> 34.96 ms (1.48), 4 x 64 11.89 -> 22.46 (1.89), Samba 6 layers 2 x 512 d384 54.02 -> 71.14 (1.32); losses equal to one float32 step. Round 1: samba-train-step 50.37 -> 38.33 with the tree.
+- Files: `autograd/kernels/mamba3.mojo`, `mamba/host/gen/mamba3_backward.mojo`, `mamba/checks/mamba3_s17_tail_tree_check.mojo`
+- Patch: `experiments/removed/MOJOLEARN_MAMBA3_FAST_S17_TAIL_TREE_OFF.patch`. Code recoverable at e25e35dab8 (the lane's base; deleted by 0876884db5). EXPERIMENTS.md: the `MOJOLEARN_MAMBA3_FAST_S17_TAIL_TREE_OFF` row. Left as an owed deletion: mamba3_s17_tail_shared_kernel, mamba3_s17_tail_pipe_kernel and M3_S17_TAIL_PIPE, which nothing launches now (they go with a regeneration of the host twin).
+
 
 ## Dead checks: lane fx-checks-orphans (2026-11-18)
 

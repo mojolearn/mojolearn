@@ -1,0 +1,109 @@
+diff --git a/autograd/checks/gemm_cases.mojo b/autograd/checks/gemm_cases.mojo
+index b54def02ad..f3e5e3d0b2 100644
+--- a/autograd/checks/gemm_cases.mojo
++++ b/autograd/checks/gemm_cases.mojo
+@@ -24,8 +24,8 @@
+ # pass-6 shapes (micro edges 63..65 x K 15..129, long-K split shapes) add
+ # "digest6", and every case's split words "split_digest".
+ #
+-# Lane fx-gemm-seq-packed (the default route since 2026-11-19 on the
+-# NVIDIA and AMD columns): the large
++# Lane fx-gemm-seq-packed (the default route since 2026-11-19;
++# -D MOJOLEARN_GEMM_FAST_SEQ_PACKED_OFF is the other arm): the large
+ # products the packed rule selects (sequence/gemm_packed_route.mojo), run on
+ # either arm: one thread a cell, the 16 x 16 tile, the dispatch (the packed
+ # body with one leaf where the arm routes it) and the host executor, the
+diff --git a/autograd/profile.mojo b/autograd/profile.mojo
+index b408303cec..ba1d03c7cc 100644
+--- a/autograd/profile.mojo
++++ b/autograd/profile.mojo
+@@ -256,7 +256,7 @@ def ag_route_name(route: Int) -> String:
+     if route == 11:
+         return "splitk_fold"
+     if route == 13:
+-        # sequence/gemm_packed_route.mojo GR_PROF_PACKED (the default route on the NVIDIA and AMD columns)
++        # sequence/gemm_packed_route.mojo GR_PROF_PACKED (the default route; -D MOJOLEARN_GEMM_FAST_SEQ_PACKED_OFF removes it)
+         return "packed"
+     return "route_" + String(route)
+ 
+diff --git a/gemm/neural_dispatch.mojo b/gemm/neural_dispatch.mojo
+index 16fd19e4a9..a1d45bf9ee 100644
+--- a/gemm/neural_dispatch.mojo
++++ b/gemm/neural_dispatch.mojo
+@@ -203,7 +203,7 @@ def neural_model_leaf_into[MIN_LEAF: Int](ctx: DeviceContext,
+ # lane fx-gemm-seq-packed (2026-11-18, idea 1 of briefs-20261118/ideas-gemm-headroom-RESULT.md):
+ # THE PACKED BODY AT A CALLER'S PARTITION, OVER RAW POINTERS.
+ # Reached from the sequence packed route (sequence/gemm_packed_route.mojo; the default since 2026-11-19,
+-# confirmed 2026-11-20).
++# -D MOJOLEARN_GEMM_FAST_SEQ_PACKED_OFF removes the caller).
+ # Every neural caller keeps `identical_gemm_into`, whose `(L, P)` is `contract_partition(k)` and nothing else.
+ # ---------------------------------------------------------------------------
+ #: The columns whose build carries `identical_gemm_kpack_kernel` with the gather staging and the hardware fold
+diff --git a/sequence/exec_device.mojo b/sequence/exec_device.mojo
+index 83d30fac72..dcc322e3be 100644
+--- a/sequence/exec_device.mojo
++++ b/sequence/exec_device.mojo
+@@ -63,7 +63,7 @@ from sequence.gemm_tiled import (
+     seq_gemm_split_blocks, seq_gemm_split_kernel,
+ )
+ from sequence.gemm_split import GEMM_SPLITK, OP_GK_SPLIT, gemm_split_args, gemm_split_on
+-# lane fx-gemm-seq-packed: the large products on the neural packed body (default since 2026-11-19, confirmed 2026-11-20)
++# lane fx-gemm-seq-packed: the large products on the neural packed body (default since 2026-11-19; -D MOJOLEARN_GEMM_FAST_SEQ_PACKED_OFF restores the tile)
+ from sequence.gemm_packed_route import SEQ_GEMM_PACKED, SP_NONE, GR_PROF_PACKED, seq_gemm_packed_on, seq_gemm_packed_launch
+ from sequence.gemm_packed_route import SEQ_GEMM_PACKED_EPI, seq_gemm_packed_epi_kind, seq_gemm_packed_epi_launch
+ # lane fx-fast-matrix-units (2026-11-19): the matrix-units relaxation of an NVIDIA `fast` build (default OFF).
+@@ -1400,7 +1400,8 @@ struct DeviceExec(Exec, Movable):
+                         self._launch[OP_GEMM_EPI_TAIL](a, a.i0 * a.i1)
+                 return
+         # lane fx-gemm-seq-packed (DEFAULT since 2026-11-19, promoted on the A/B beside SEQ_GEMM_PACKED in
+-        # sequence/gemm_packed_route.mojo: mlp fit 0.59-0.66, infer 0.43-0.68, digests equal): a large
++        # sequence/gemm_packed_route.mojo: mlp fit 0.59-0.66, infer 0.43-0.68, digests equal;
++        # -D MOJOLEARN_GEMM_FAST_SEQ_PACKED_OFF restores the tile): a large
+         # plain dense product (the size rule and the order argument are sequence/gemm_packed_route.mojo's
+         # docstring) runs the neural packed body with ONE leaf of K terms: per cell the same chain,
+         # acc = ftz(fma(ld a, ld b, acc)), k ascending from +0.0, so the tile's word. An epilogue opcode
+diff --git a/sequence/gemm_packed_route.mojo b/sequence/gemm_packed_route.mojo
+index 62be72cfae..973db583b0 100644
+--- a/sequence/gemm_packed_route.mojo
++++ b/sequence/gemm_packed_route.mojo
+@@ -5,8 +5,9 @@
+ 
+ THE DEFAULT on the NVIDIA and AMD columns since 2026-11-19 (the experiment
+ `MOJOLEARN_GEMM_FAST_SEQ_PACKED`, promoted; A/B numbers beside
+-`SEQ_GEMM_PACKED` below; docs/apple-fast/EXPERIMENTS.md). On the Apple
+-column nothing here is compiled into a launch.
++`SEQ_GEMM_PACKED` below; docs/apple-fast/EXPERIMENTS.md).
++`-D MOJOLEARN_GEMM_FAST_SEQ_PACKED_OFF` restores the 16 x 16 tile at every
++size: then nothing here is compiled into a launch.
+ 
+ WHAT MOVES. The 16 x 16 sequence tile (sequence/gemm_tiled.mojo) gives every
+ thread ONE cell and reads two threadgroup words per fused multiply-add, so it
+@@ -139,7 +140,8 @@ from sequence.mlp import EPI_BIAS_ACT, EPI_ACT_BWD
+ #: The route switch. IDENTICAL on the NVIDIA and AMD columns (`GEMM_LEAF_PTR_COLUMN`);
+ #: never Apple, whose sequence GEMM is not tiled (SEQ_GEMM_TILED).
+ # MOJOLEARN_GEMM_FAST_SEQ_PACKED: PROMOTED 2026-11-19 (lane fx-verdicts3). The packed route is the default;
+-# (the old opt-in name and its _OFF are refused, core/experiment_guards_neural.mojo). Evidence: A/B round 1, NVIDIA L40S (host
++# `-D MOJOLEARN_GEMM_FAST_SEQ_PACKED_OFF` restores the 16 x 16 tile for the products the rule selects (the old
++# opt-in name is refused, core/experiment_guards_neural.mojo). Evidence: A/B round 1, NVIDIA L40S (host
+ # bd9c355c19c0, 14-core cgroup), wheel 0c68d6cd27 and its B set, base and arm back to back in ONE pod job
+ # (nvc1-0006, tag nvc-ab-20261119T125554Z-6f7afc), one scored run per arm; digests and quality equal on all 8
+ # cells. Base -> arm ms: mlp-clf istella fit 1462.4 -> 868.3 (0.59), infer 52.80 -> 28.63 (0.54); mlp-clf taxi
+@@ -151,16 +153,9 @@ from sequence.mlp import EPI_BIAS_ACT, EPI_ACT_BWD
+ # Limits: NVIDIA only (AGENTS.md part 8); the AMD column takes the route only from 1024 wide tiles (about 16.7 M
+ # cells), not timed. OWED (does not hold the flip): the driver row gemm-seq-packed-shapes (neighbour
+ # 4096 x 256 x 128, non-board 2048 x 512 x 512 and 8192 x 192 x 96, control 1024 x 256) against the _OFF arm.
+-# A/B round 3, 2026-11-20 (lane fx-verdicts5; NVIDIA L40S host 2ef132a6de04, wheel 28a780604c and its _OFF set, one pod
+-# job, tag nvc-ab-20261120T063324Z-c630ad), that driver row, MLPClassifier.fit, packed (default) -> 16 x 16 tile ms:
+-# 4096 x 256 over K 128 (neighbour) 70.99 -> 79.62 (1.12), 2048 x 512 x 512 (non-board) 303.2 -> 505.4 (1.67),
+-# 8192 x 192 over K 96 249.4 -> 254.2 (1.02), control batch 1024 x 256 (below the rule) 89.58 -> 90.03 (1.005).
+-# CONFIRMED a second time, on shapes the board does not hold: the route stands and its switch is deleted. The 16 x 16
+-# tile itself stays: it serves every product the rule does not select, the Apple column and fast mode.
+-# TOMBSTONE: MOJOLEARN_GEMM_FAST_SEQ_PACKED_OFF (old path's switch; the promotion confirmed by A/B rounds 1 and 3, numbers above) deleted 2026-11-20 by lane/fx-verdicts5; code recoverable at e25e35dab8.
+-# Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_SEQ_PACKED_OFF.patch; record in docs/TOMBSTONES.md.
+ comptime SEQ_GEMM_PACKED = (
+-    GEMM_LEAF_PTR_COLUMN
++    not is_defined["MOJOLEARN_GEMM_FAST_SEQ_PACKED_OFF"]()
++    and GEMM_LEAF_PTR_COLUMN
+     and not TARGET_HAS_APPLE_GPU
+ )
+ 

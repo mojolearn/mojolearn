@@ -1,0 +1,43 @@
+diff --git a/resample/checks/statistics.mojo b/resample/checks/statistics.mojo
+index dc47f651ea..827c676ade 100644
+--- a/resample/checks/statistics.mojo
++++ b/resample/checks/statistics.mojo
+@@ -964,8 +964,17 @@ def perm_observed_fold_kernel[stat: Int](
+ 
+ comptime PERM_SELECT_BUCKETS = 256
+ 
+-# TOMBSTONE: MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_EARLY (LOSS, A/B round 3 NVIDIA L40S, wheel 28a780604c, job nvc-ab-20261120T063324Z-c630ad, one run per arm, digests equal: permutation-test istella 285.3 -> 306.7 ms, 1.075; taxi 285.1 -> 313.9, 1.101) deleted 2026-11-20 by lane/fx-verdicts5; code recoverable at e25e35dab8.
+-# Restore: git apply experiments/removed/MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_EARLY.patch; record in docs/TOMBSTONES.md.
++#: `-D MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_EARLY` (lane fx-board-modelsel-metrics,
++#: 2026-11-19; default OFF, A/B OWED: bench/results/paper_compare/owed-pre0867.json
++#: `fx-perm-select-early`, docs/apple-fast/EXPERIMENTS.md).
++#: `perm_select_stat_kernel` stops its key passes at the first pass whose
++#: selected bucket goes to the first group whole. A pass divides the live keys
++#: by 256, so that is pass ceil(log256(N)) or the one after (pass 2 or 3 of 8
++#: for 40,000 pooled values; a pass is N Philox key draws per replicate and
++#: the fold is one more): about 4 draws per position where 9 are made. The
++#: membership mask is the same set, so the null is the same words on every
++#: vendor; the host column (`permutation_ranks_host`, index_map.mojo) ranks and is untouched.
++comptime PERM_SELECT_EARLY = is_defined["MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_EARLY"]()
+ 
+ 
+ @always_inline
+@@ -1100,6 +1109,18 @@ def perm_select_stat_kernel[
+         need = Int(sel[1])
+         eq_count = Int(sel[2])
+         barrier()
++        if PERM_SELECT_EARLY and eq_count == need:
++            # MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_EARLY (default off): the
++            # first group takes EVERY live key of the selected bucket, so the
++            # group is exactly the keys whose bytes down to this one are at
++            # or below kstar's. The bytes below are set to ones: `k <= kstar`
++            # is then that prefix test, `jstar` stays `n_pooled` and the tie
++            # passes are skipped (`eq_count == need`). The same membership as
++            # the eight passes give; the passes left would each redraw every
++            # key to count a bucket that is already decided. Every thread of
++            # the block reads the same `sel`, so all leave together.
++            kstar = kstar | ((UInt64(1) << UInt64(shift)) - UInt64(1))
++            break
+ 
+     # The tie passes, only when the threshold splits a run of equal keys
+     # (probability ~ N^2 / 2^65 per replicate): select the need-th smallest
