@@ -130,7 +130,7 @@ from neighbors.impl.ball_cover.scan import rbc_exclusive_scan_launch
 # arm back to back in one pod job, tag nvc-ab-20261120T063324Z-c630ad; one scored run per arm; labels, quality and
 # digests equal on every cell). Base -> arm ms, fit: classical/dbscan taxi 1,000,000 x 11 1,040,400 -> 351,860
 # (0.338; 36 clusters, noise 0.000174); taxi 250,000 rows (the neighbouring size) 37,950 -> 19,701 (0.519);
-# istella 1,000,000 x 220 597,190 -> 591,530 (0.991: its ball-cover route does not come here). PROMOTED.
+# istella 1,000,000 x 220 597,190 -> 591,530 (0.991: no change on that row). PROMOTED.
 # The mechanism is general (per-batch label work and 2 GB adjacency compactions removed; range sized from free
 # memory), no shape or dataset key. Not timed: the non-board make_blobs 1,000,000 x 16 case of the EXPERIMENTS row.
 # The old route stays behind _OFF until one more measurement confirms; then it is an owed deletion.
