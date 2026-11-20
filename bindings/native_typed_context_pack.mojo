@@ -19,6 +19,8 @@
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module, shared_dict_watch, shared_dict_epoch
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
+from bindings.native_keys_unpack import native_keys
+from bindings.py_balanced import py_item
 
 comptime _KEY_LABELS = "_mojolearn_typed_context_labels"
 comptime _KEY_TREES = "_mojolearn_typed_context_trees"
@@ -30,6 +32,7 @@ def native_typed_context(context: PythonObject, labels: Bool, trees: Bool) raise
     `labels`) and `trees_real_type`/`trees_integral_type` (when `trees`):
     tuples of the concrete native int/float/bool and connected NumPy scalar
     classes, so isinstance tests never run numbers.Real/Integral ABC hooks."""
+    var nk = native_keys()
     var b = native_loaded_module("builtins")
     var key = PythonObject(_KEY_BOTH if (labels and trees) else (_KEY_LABELS if labels else _KEY_TREES))
     if py_type(context) is b.dict:
@@ -41,8 +44,8 @@ def native_typed_context(context: PythonObject, labels: Bool, trees: Bool) raise
             # existing key bumps the epoch). Epoch -1: not watched.
             var epoch = Int(py=cached[2][0])
             if (Int(py=cached[1]) == len(context)
-                    and cached[3] is py_get(context, "scalar_types")
-                    and cached[4] is py_get(context, "integer_types")
+                    and cached[3] is py_get(context, nk[].k_scalar_types)
+                    and cached[4] is py_get(context, nk[].k_integer_types)
                     and (epoch < 0 or epoch == shared_dict_epoch(Int(context._obj_ptr)))):
                 return cached[0]
     var result = py_call(b.dict, context)
@@ -51,22 +54,22 @@ def native_typed_context(context: PythonObject, labels: Bool, trees: Bool) raise
     _ = py_call(result.pop, PythonObject(_KEY_BOTH), PythonObject(None))
     var types = Python.list()
     _ = py_call(types.extend, Python.tuple(b.int, b.float, b.bool))
-    _ = py_call(types.extend, context["scalar_types"])
+    _ = py_call(types.extend, py_item(context, nk[].k_scalar_types))
     var real = py_call(b.tuple, types)
-    var integral = context["integer_types"]
+    var integral = py_item(context, nk[].k_integer_types)
     if labels:
-        py_setitem(result, "labels_real_type", real)
-        py_setitem(result, "labels_integral_type", integral)
+        py_setitem(result, nk[].k_labels_real_type, real)
+        py_setitem(result, nk[].k_labels_integral_type, integral)
     if trees:
-        py_setitem(result, "trees_real_type", real)
-        py_setitem(result, "trees_integral_type", integral)
+        py_setitem(result, nk[].k_trees_real_type, real)
+        py_setitem(result, nk[].k_trees_integral_type, integral)
     if py_type(context) is b.dict:
         # Insert first so the recorded source size counts the cache key.
         var epoch_slot = Python.list(PythonObject(-1))
-        py_setitem(context, key, Python.tuple(result, PythonObject(0), epoch_slot, context["scalar_types"], integral))
+        py_setitem(context, key, Python.tuple(result, PythonObject(0), epoch_slot, py_item(context, nk[].k_scalar_types), integral))
         var watched = shared_dict_watch(context._obj_ptr)
         py_setitem(context, key, Python.tuple(result, PythonObject(len(context)), epoch_slot,
-                                              context["scalar_types"], integral))
+                                              py_item(context, nk[].k_scalar_types), integral))
         # The epoch is read after the record's own store (filling the list
         # does not edit the source dict), so only later edits invalidate it.
         if watched:

@@ -8,14 +8,17 @@ from bindings.native_class_admission_door import class_record, class_admit
 from bindings.native_buffer_owner_pack import native_buffer_view
 from bindings.sequential_admission_door import sequential_admit_value, _one_of, _ctypes_array_owner
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
+from bindings.native_keys_unpack import native_keys
+from bindings.py_balanced import py_item
 
 
 comptime _VIEW_CLASS_SLOT = "array_view_class_keys_v1"
 
 
 def _namespace(cls: PythonObject) raises -> PythonObject:
+    var nk = native_keys()
     var b = native_loaded_module("builtins")
-    var fields = py_call(b.type.__dict__["__dict__"].__get__, cls)
+    var fields = py_call(py_item(b.type.__dict__, nk[].k___dict__).__get__, cls)
     # The exact-string key scan of the Array class namespace runs once per
     # class state (native_class_admission), not once per fitted-output view.
     var mods = NativeModules()
@@ -30,11 +33,12 @@ def _namespace(cls: PythonObject) raises -> PythonObject:
 
 
 def native_array_ndarray_view(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = native_keys()
     # A raw Array._mv may be an ownerless memory_at view. Build the ndarray
     # from its admitted backing store and offset instead, retaining that store
     # through the native memoryview after the model/Array has been released.
-    var cls = context["array_class"]
-    var slots = context["array_storage_slots"]
+    var cls = py_item(context, nk[].k_array_class)
+    var slots = py_item(context, nk[].k_array_storage_slots)
     var namespace = _namespace(cls)
     var names = Python.tuple("_store", "_mv", "_addr", "_readonly", "shape", "dtype", "order")
     var values = Python.dict()
@@ -44,34 +48,34 @@ def native_array_ndarray_view(value: PythonObject, context: PythonObject) raises
             raise Error("TypeError: native output requires the connected Array storage slots")
         py_setitem(values, name, py_call(slots[name].__get__, value, cls))
     var b = native_loaded_module("builtins")
-    if (py_type(values["_addr"]) is not b.int or py_type(values["_readonly"]) is not b.bool
-            or py_type(values["shape"]) is not b.tuple or py_type(values["dtype"]) is not b.str
-            or py_type(values["order"]) is not b.str):
+    if (py_type(py_item(values, nk[].k__addr)) is not b.int or py_type(py_item(values, nk[].k__readonly)) is not b.bool
+            or py_type(py_item(values, nk[].k_shape)) is not b.tuple or py_type(py_item(values, nk[].k_dtype)) is not b.str
+            or py_type(py_item(values, nk[].k_order)) is not b.str):
         raise Error("TypeError: native output requires ordinary Array shape and storage metadata")
-    if not py_contains(context["array_storage_dtypes"], values["dtype"]):
+    if not py_contains(py_item(context, nk[].k_array_storage_dtypes), py_item(values, nk[].k_dtype)):
         raise Error("TypeError: native output requires a supported numeric Array dtype")
-    var shape = values["shape"]
+    var shape = py_item(values, nk[].k_shape)
     var empty = False
     for i in range(len(shape)):  # driver-loop: over admit dimensions before ndarray's native constructor
         if py_type(shape[i]) is not b.int or Int(py=shape[i]) < 0:
             raise Error("TypeError: native output requires nonnegative native shape dimensions")
         empty = empty or Int(py=shape[i]) == 0
-    var order = String(values["order"])
+    var order = String(py_item(values, nk[].k_order))
     if order != "C" and order != "F":
         raise Error("TypeError: native output requires contiguous C or F order")
-    var store = values["_store"]
+    var store = py_item(values, nk[].k__store)
     if store is None:
         # The native mapped-preprocessing output keeps an owning memoryview
         # slice in _mv and has no _store. This is safe only when the view has
         # an actual exporter; ownerless memory_at views need their _store.
-        store = values["_mv"]
+        store = py_item(values, nk[].k__mv)
         if py_type(store) is not b.memoryview or store.obj is None:
             raise Error("TypeError: native output Array has no retained storage exporter")
     var store_type = py_type(store)
     if store_type is b.memoryview:
         sequential_admit_value(store, context)
-    elif (store is None or not (_one_of(store_type, context["buffer_owner_types"])
-            or _one_of(store_type, context["scalar_types"]) or _ctypes_array_owner(store_type, context))):
+    elif (store is None or not (_one_of(store_type, py_item(context, nk[].k_buffer_owner_types))
+            or _one_of(store_type, py_item(context, nk[].k_scalar_types)) or _ctypes_array_owner(store_type, context))):
         # General input admission accepts Array/list values too. They are not
         # native buffer exporters; never ask them for a Python buffer hook.
         raise Error("TypeError: native output requires a native storage buffer, not a Python exporter")
@@ -93,12 +97,12 @@ def native_array_ndarray_view(value: PythonObject, context: PythonObject) raises
     # list before PyBuffer_Release reads the Py_buffer (view->obj, then its
     # DECREF). Keep the storage alive past the release.
     _ = exported^
-    var offset = 0 if empty else Int(py=values["_addr"]) - address
+    var offset = 0 if empty else Int(py=py_item(values, nk[].k__addr)) - address
     if offset < 0 or offset > size:
         raise Error("ValueError: native output view lies outside its retained storage")
-    if Bool(py=values["_readonly"]) and not Bool(py=buffer.readonly):
+    if Bool(py=py_item(values, nk[].k__readonly)) and not Bool(py=buffer.readonly):
         buffer = py_call(buffer.toreadonly)
     # Exact ndarray C construction only: no asarray, Array.__array__, Python
     # buffer protocol, dtype conversion, or data copy. NumPy validates span.
-    return py_call(context["ndarray"], shape, dtype=values["dtype"], buffer=buffer,
-                   offset=offset, order=values["order"])
+    return py_call(py_item(context, nk[].k_ndarray), shape, dtype=py_item(values, nk[].k_dtype), buffer=buffer,
+                   offset=offset, order=py_item(values, nk[].k_order))

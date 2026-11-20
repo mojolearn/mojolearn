@@ -29,6 +29,7 @@ from bindings.native_posix_transport_run import PosixBytes
 from providers.python.borrowed_buffer_pyapi_unpack import admit_native_buffer_exporter, AdmittedBorrowedBuffer
 from core.parallel_worker_frame import (
     WireRecord, WireTensor, WireFrame, wire_frame_words, wire_frame_header, wire_frame_body,
+from bindings.native_keys_unpack import native_keys
     wire_dtype_word, wire_dtype_name, WIRE_FRAME_HEADER_WORDS, WIRE_RECORD_MAX_DEPTH,
     WIRE_NONE, WIRE_BOOL, WIRE_INT, WIRE_FLOAT, WIRE_TEXT, WIRE_TENSOR, WIRE_BF16, WIRE_INT8,
     WIRE_LIST, WIRE_TUPLE, WIRE_MAP,
@@ -247,6 +248,7 @@ def _wire_array(fd: Int, timeout: Float64, tensor: WireTensor) raises -> PythonO
 
 def _wire_pack(record: WireRecord, mut cursor: Int, tensors: List[PythonObject], mut next_tensor: Int,
                depth: Int) raises -> PythonObject:
+    var nk = native_keys()
     if cursor >= record.node_count() or depth > WIRE_RECORD_MAX_DEPTH:
         raise Error("parallel wire: record tree exceeds its nodes or depth")
     var c = CODEC_BOUNDARY.get_or_create_ptr()
@@ -282,8 +284,8 @@ def _wire_pack(record: WireRecord, mut cursor: Int, tensors: List[PythonObject],
             _codec_packed_class(c[].bf16_cls, Python.tuple("bits", "shape"))
             var packed = py_call(bi.object.__new__, c[].bf16_cls)
             var fields = _codec_packed_fields(packed, c[].bf16_cls, Python.tuple("bits", "shape"))
-            py_setitem(fields, "bits", bits)
-            py_setitem(fields, "shape", bits.shape)
+            py_setitem(fields, nk[].k_bits, bits)
+            py_setitem(fields, nk[].k_shape, bits.shape)
             return packed
         if c[].int8_cls is None:
             raise Error("parallel wire: int8 weight class is not connected")
@@ -296,9 +298,9 @@ def _wire_pack(record: WireRecord, mut cursor: Int, tensors: List[PythonObject],
         _codec_packed_class(c[].int8_cls, Python.tuple("codes", "exponents", "shape"))
         var packed = py_call(bi.object.__new__, c[].int8_cls)
         var fields = _codec_packed_fields(packed, c[].int8_cls, Python.tuple("codes", "exponents", "shape"))
-        py_setitem(fields, "codes", codes)
-        py_setitem(fields, "exponents", exponents)
-        py_setitem(fields, "shape", codes.shape)
+        py_setitem(fields, nk[].k_codes, codes)
+        py_setitem(fields, nk[].k_exponents, exponents)
+        py_setitem(fields, nk[].k_shape, codes.shape)
         return packed
     if tag == WIRE_LIST or tag == WIRE_TUPLE:
         if word < 0 or word > record.node_count() - cursor:

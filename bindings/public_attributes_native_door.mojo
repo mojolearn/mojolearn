@@ -20,6 +20,7 @@ from bindings.native_mode_recipe_pack import mode_recipe_call
 from bindings.optimizer_public_words_unpack import optimizer_python_error, stash_python_error, PYTHON_ERROR_PENDING
 from bindings.host_inference_scalars_door import host_inference_scalar
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entry
+from bindings.public_keys_unpack import public_keys
 
 
 def _string_keys(fields: PythonObject) raises:
@@ -30,6 +31,7 @@ def _string_keys(fields: PythonObject) raises:
 
 
 def _outside() raises -> Bool:
+    var nk = public_keys()
     ref cpy = Python().cpython()
     var table = cpython_table()
     var pointer = table[].PyEval_GetFrame()
@@ -46,7 +48,7 @@ def _outside() raises -> Bool:
         if not dict_keys_admitted(fields):
             _string_keys(fields)
             dict_keys_admit(fields)
-        var module = py_get(fields, "__name__")
+        var module = py_get(fields, nk[].k___name__)
         var skip = False
         if py_type(module) is py_type(PythonObject("")) and String(module) == "mojolearn._mode":
             pointer = table[].PyFrame_GetCode(frame._obj_ptr)
@@ -59,9 +61,9 @@ def _outside() raises -> Bool:
             skip = (name == "public" or name == "guarded" or name == "tracked" or name == "load"
                     or name == "__getattribute__")
         if not skip:
-            if py_get(fields, "__mojolearn_user_boundary__") is PythonObject(True):
+            if py_get(fields, nk[].k___mojolearn_user_boundary__) is PythonObject(True):
                 return True
-            if py_get(fields, "__mojolearn_internal__") is PythonObject(True):
+            if py_get(fields, nk[].k___mojolearn_internal__) is PythonObject(True):
                 return False
             if not _truth(module):
                 module = PythonObject("")
@@ -102,12 +104,14 @@ comptime _DESCRIPTOR_KIND_SLOT = "public_attribute_descriptor_kind_v1"
 
 
 def _namespace(mut mods: NativeModules, cls: PythonObject) raises -> PythonObject:
+    var nk = public_keys()
     # Raw class namespace of an ancestry row whose keys were admitted with
     # the reused class record.
-    return py_call(mods.module("builtins").type.__dict__["__dict__"].__get__, cls)
+    return py_call(py_item(mods.module("builtins").type.__dict__, nk[].k___dict__).__get__, cls)
 
 
 def _plan_reused(mut mods: NativeModules, cls: PythonObject, mro: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = public_keys()
     # The full admission in _plan reads only the class rows (watched through
     # native_class_admission) and three import-connected context objects.
     # Reuse its record while the class state and those identities are
@@ -117,8 +121,8 @@ def _plan_reused(mut mods: NativeModules, cls: PythonObject, mro: PythonObject, 
     var record = class_record(mods, _ATTRIBUTE_CLASS_SLOT, cls)
     if record is None:
         return PythonObject(None)
-    var plans = context["plans"]
-    if record[1] is not context["missing"] or record[2] is not context["descriptor"] or record[3] is not plans:
+    var plans = py_item(context, nk[].k_plans)
+    if record[1] is not py_item(context, nk[].k_missing) or record[2] is not py_item(context, nk[].k_descriptor) or record[3] is not plans:
         return PythonObject(None)
     var plan_row = Int(py=record[4])
     if plan_row < 0 or plan_row >= len(mro):
@@ -132,6 +136,7 @@ def _plan_reused(mut mods: NativeModules, cls: PythonObject, mro: PythonObject, 
 
 
 def _plan(mut mods: NativeModules, model: PythonObject, context: PythonObject) raises -> _AttributeAdmission:
+    var nk = public_keys()
     var b = mods.module("builtins")
     var cls = py_type(model)
     if py_type(cls) is not b.type:
@@ -142,7 +147,7 @@ def _plan(mut mods: NativeModules, model: PythonObject, context: PythonObject) r
         var admitted_rows = List[PythonObject](capacity=len(mro))
         # The type.__dict__ getter is read once per admission, not three
         # attribute lookups per ancestry row.
-        var namespace_of = mods.module("builtins").type.__dict__["__dict__"].__get__
+        var namespace_of = py_item(mods.module("builtins").type.__dict__, nk[].k___dict__).__get__
         for i in range(len(mro)):  # driver-loop: over admitted ancestry rows
             admitted_rows.append(py_call(namespace_of, mro[i]))
         return _AttributeAdmission(reused[0], mro, admitted_rows^, Int(py=reused[4]), True)
@@ -156,27 +161,28 @@ def _plan(mut mods: NativeModules, model: PythonObject, context: PythonObject) r
             raise Error("TypeError: native attributes refuse Python metaclass protocols")
         var namespace = _class_fields(mods, mro[i])
         rows.append(namespace)
-        if py_contains(namespace, "__getattr__"):
+        if py_contains(namespace, nk[].k___getattr__):
             raise Error("TypeError: native attributes refuse Python __getattr__ hooks")
-        if not found_getter and py_contains(namespace, "__getattribute__"):
-            var candidate = namespace["__getattribute__"]
-            if candidate is not context["missing"]:
+        if not found_getter and py_contains(namespace, nk[].k___getattribute__):
+            var candidate = py_item(namespace, nk[].k___getattribute__)
+            if candidate is not py_item(context, nk[].k_missing):
                 found_getter = candidate
         if not found_plan:
-            var candidate = py_get(context["plans"], mro[i])
+            var candidate = py_get(py_item(context, nk[].k_plans), mro[i])
             if candidate is not None:
                 found_plan = candidate
                 plan_row = i
-    var getter = context["missing"]
+    var getter = py_item(context, nk[].k_missing)
     if found_getter:
         getter = found_getter.value()
-    if not found_plan or getter is not context["descriptor"]:
+    if not found_plan or getter is not py_item(context, nk[].k_descriptor):
         raise Error("TypeError: native attribute class has no connected slot")
     return _AttributeAdmission(found_plan.value(), mro, rows^, plan_row, False)
 
 
 def _plan_admit(mut mods: NativeModules, model: PythonObject, admission: _AttributeAdmission,
                 context: PythonObject) raises:
+    var nk = public_keys()
     # Called after the full class admission and the storage-descriptor check
     # both passed. The record holds the plan and the context objects, never
     # the class itself; a connected class reachable through context["plans"]
@@ -187,7 +193,7 @@ def _plan_admit(mut mods: NativeModules, model: PythonObject, admission: _Attrib
     if not class_watch_ready():
         return
     class_admit(mods, _ATTRIBUTE_CLASS_SLOT, py_type(model),
-                Python.tuple(admission.plan, context["missing"], context["descriptor"], context["plans"],
+                Python.tuple(admission.plan, py_item(context, nk[].k_missing), py_item(context, nk[].k_descriptor), py_item(context, nk[].k_plans),
                              PythonObject(admission.plan_row)))
 
 
@@ -247,36 +253,37 @@ def _availability_member(mut mods: NativeModules, cls: PythonObject, name: Pytho
 
 def _available(mut mods: NativeModules, model: PythonObject, member: PythonObject, schema: PythonObject,
                fields: PythonObject, admission: _AttributeAdmission, context: PythonObject) raises -> PythonObject:
+    var nk = public_keys()
     # `mods`: the operation's module view (the door's AdmittedCall.modules),
     # never a fresh one per availability read (row N265).
     # Admitted rules are presence of transform and LOF's novelty word. Never
     # call the Python available_if descriptor, its check, or its wrapped body.
     var ancestry = _type_mro(py_type(member))
-    if len(ancestry) != len(schema["mro"]):
+    if len(ancestry) != len(py_item(schema, nk[].k_mro)):
         raise Error("TypeError: native availability descriptor ancestry changed")
     for i in range(len(ancestry)):  # driver-loop: frozen descriptor class identities
-        if ancestry[i] is not schema["mro"][i]:
+        if ancestry[i] is not py_item(schema, nk[].k_mro)[i]:
             raise Error("TypeError: native availability descriptor ancestry changed")
-    var hooks = schema["hooks"]
+    var hooks = py_item(schema, nk[].k_hooks)
     var member_class = py_type(member)
     for i in range(len(hooks)):  # driver-loop: changed Python descriptor hooks are never executed
-        if _availability_member(mods, member_class, hooks[i][0], context["missing"]) is not hooks[i][1]:
+        if _availability_member(mods, member_class, hooks[i][0], py_item(context, nk[].k_missing)) is not hooks[i][1]:
             raise Error("TypeError: native availability descriptor hooks changed")
     var metadata = _fields(member)
-    if (py_get(metadata, "check") is not schema["check"]
-            or py_get(metadata, "fn") is not schema["function"]
-            or py_get(metadata, "attribute_name", context["missing"]) is not schema["attribute_name"]):
+    if (py_get(metadata, nk[].k_check) is not py_item(schema, nk[].k_check)
+            or py_get(metadata, nk[].k_fn) is not py_item(schema, nk[].k_function)
+            or py_get(metadata, nk[].k_attribute_name, py_item(context, nk[].k_missing)) is not py_item(schema, nk[].k_attribute_name)):
         raise Error("TypeError: native availability descriptor data changed")
     ref cpy = Python().cpython()
     # Direct CPython function metadata access avoids the object.__getattr__
     # audit event emitted by Python's function.__code__ getset descriptor.
-    var code = cpython_table()[].PyFunction_GetCode(schema["check"]._obj_ptr)
+    var code = cpython_table()[].PyFunction_GetCode(py_item(schema, nk[].k_check)._obj_ptr)
     if not code:
         raise cpy.unsafe_get_error()
-    if PythonObject(from_borrowed=code) is not schema["code"]:
+    if PythonObject(from_borrowed=code) is not py_item(schema, nk[].k_code):
         raise Error("TypeError: native availability predicate code changed")
     try:
-        var condition = py_get(schema, "condition")
+        var condition = py_get(schema, nk[].k_condition)
         if condition is not None:
             if py_type(condition) is not py_type(PythonObject("")):
                 raise Error("TypeError: native availability requires its connected condition")
@@ -326,22 +333,23 @@ def _available(mut mods: NativeModules, model: PythonObject, member: PythonObjec
             _ = _lookup_impl[False](mods, model, PythonObject("transform"), fields, admission, context)
     except error:
         if String(error).startswith("AttributeError:"):
-            var name = schema["attribute_name"]
-            if name is context["missing"]:
-                name = schema["function"].__name__
+            var name = py_item(schema, nk[].k_attribute_name)
+            if name is py_item(context, nk[].k_missing):
+                name = py_item(schema, nk[].k_function).__name__
             if py_type(name) is not py_type(PythonObject("")):
                 raise Error("TypeError: native availability method name must be an exact string")
-            var cls_name = py_call(mods.module("builtins").type.__dict__["__name__"].__get__, py_type(model))
+            var cls_name = py_call(py_item(mods.module("builtins").type.__dict__, nk[].k___name__).__get__, py_type(model))
             raise Error("AttributeError: This '" + String(cls_name) + "' has no attribute '" + String(name) + "'")
         raise error^
-    return _bound_function(schema["function"], model)
+    return _bound_function(py_item(schema, nk[].k_function), model)
 
 
 def _property(mut mods: NativeModules, model: PythonObject, name: PythonObject, kind: String, fields: PythonObject,
               admission: _AttributeAdmission, context: PythonObject) raises -> PythonObject:
+    var nk = public_keys()
     # `mods`: the operation's module view, shared with _lookup_impl (row N265).
     if kind == "svm_svc_coef" or kind == "svm_svr_coef":
-        var owner = context["svm_owner"]
+        var owner = py_item(context, nk[].k_svm_owner)
         var entry = owner[0]
         if py_type(entry) is not mods.module("types").BuiltinFunctionType:
             raise Error("TypeError: SVM coefficient property requires its compiled owner")
@@ -373,10 +381,10 @@ def _property(mut mods: NativeModules, model: PythonObject, name: PythonObject, 
         for i in range(len(names)):  # driver-loop: supported STL configuration fields
             py_setitem(out, names[i], _lookup_impl[False](mods, model, names[i], fields, admission, context))
         return out
-    var recipes = py_get(context, "native_property_recipes")
+    var recipes = py_get(context, nk[].k_native_property_recipes)
     var recipe = PythonObject(None) if recipes is None else py_get(recipes, PythonObject(kind))
     if recipe is not None:
-        return mode_recipe_call(recipe["entry"], Python.tuple(model, recipe["operation"], recipe["arguments"], recipe["context"]))
+        return mode_recipe_call(py_item(recipe, nk[].k_entry), Python.tuple(model, py_item(recipe, nk[].k_operation), py_item(recipe, nk[].k_arguments), py_item(recipe, nk[].k_context)))
     raise Error("TypeError: unconnected native property schema")
 
 
@@ -392,6 +400,7 @@ def _property(mut mods: NativeModules, model: PythonObject, name: PythonObject, 
 def _lookup_impl[allow_special: Bool](mut mods: NativeModules, model: PythonObject, name: PythonObject,
                                     fields: PythonObject, admission: _AttributeAdmission,
                                     context: PythonObject) raises -> PythonObject:
+    var nk = public_keys()
     var plan = admission.plan
     var found = _member(admission, name)
     var present = Bool(py=found[0])
@@ -403,11 +412,11 @@ def _lookup_impl[allow_special: Bool](mut mods: NativeModules, model: PythonObje
         descriptor_kind = _descriptor_kind(mods, member_type)
     var descriptor = descriptor_kind != 0
     var data = descriptor_kind == 3
-    var binding = py_get(plan["bindings"], name)
+    var binding = py_get(py_item(plan, nk[].k_bindings), name)
     var known = binding is not None and member is binding[0]
     if data:
         comptime if allow_special:
-            var property_plan = py_get(plan["properties"], name)
+            var property_plan = py_get(py_item(plan, nk[].k_properties), name)
             if property_plan is not None and member is property_plan[0]:
                 return _property(mods, model, name, String(property_plan[1]), fields, admission, context)
         if not known:
@@ -422,10 +431,10 @@ def _lookup_impl[allow_special: Bool](mut mods: NativeModules, model: PythonObje
     if not present:
         raise Error("AttributeError: native model has no attribute '" + String(name) + "'")
     comptime if allow_special:
-        var availability = py_get(plan, "availability")
+        var availability = py_get(plan, nk[].k_availability)
         if availability is not None:
             var schema = py_get(availability, name)
-            if schema is not None and member is schema["member"]:
+            if schema is not None and member is py_item(schema, nk[].k_member):
                 return _available(mods, model, member, schema, fields, admission, context)
     if descriptor:
         # Creating a bound method does not execute its body. Preserve ordinary

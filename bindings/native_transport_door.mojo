@@ -26,6 +26,8 @@ from bindings.py_cpython_table import cpython_table
 from core.shared_slot import SharedSlot
 from bindings.native_transport_run import (
     transport_clock,
+from bindings.native_keys_unpack import native_keys
+from bindings.py_balanced import py_item
     _transport_timeout,
     transport_hostname,
     transport_terminate,
@@ -53,6 +55,7 @@ comptime TRANSPORT_BOUNDARY = SharedSlot[TransportBoundary, "MojolearnNativeTran
 
 
 def transport_initialize() raises:
+    var nk = native_keys()
     var t = TRANSPORT_BOUNDARY.get_or_create_ptr()
     t[].bi = native_loaded_module("builtins")
     var entry = Python.import_module("_json").encode_basestring_ascii
@@ -62,7 +65,7 @@ def transport_initialize() raises:
     var array_module = native_loaded_module("array")
     if py_type(array_module) is not py_type(native_loaded_module("sys")):
         raise Error("transport: array buffers require their native module")
-    var array_type = py_get(native_numpy_module_fields(array_module), "array")
+    var array_type = py_get(native_numpy_module_fields(array_module), nk[].k_array)
     if py_type(array_type) is not t[].bi.type:
         raise Error("transport: array buffers require their native type")
     # array.array is a module-associated C heap type on CPython >=3.10.
@@ -76,7 +79,7 @@ def transport_initialize() raises:
         raise Error("transport: array buffer type has a different extension owner")
     t[].array_type = array_type
     t[].numpy_context = t[].bi.dict()
-    py_setitem(t[].numpy_context, "modules", native_loaded_module("sys").modules)
+    py_setitem(t[].numpy_context, nk[].k_modules, native_loaded_module("sys").modules)
     idna_initialize()
 
 
@@ -300,13 +303,14 @@ def transport_send_parts(socket: PythonObject, header: PythonObject, first: Pyth
 
 
 def _transport_send_frame(socket: PythonObject, header: PythonObject, first: PythonObject, payload: PythonObject) raises:
+    var nk = native_keys()
     var t = TRANSPORT_BOUNDARY.get_or_create_ptr()
     _ = _transport_state(socket)
     if py_type(header) is not t[].bi.dict:
         raise Error("transport: send requires a native socket and dict header")
     var cls = py_type(payload)
     if payload is not None and cls is not t[].bi.bytes and cls is not t[].bi.bytearray and cls is not t[].bi.memoryview and cls is not t[].array_type:
-        var numpy = py_get(t[].numpy_context["modules"], "numpy")
+        var numpy = py_get(py_item(t[].numpy_context, nk[].k_modules), nk[].k_numpy)
         if numpy is None or cls is not native_numpy_type("ndarray", t[].numpy_context):
             raise Error("transport: payload requires a native contiguous buffer; Python buffer hooks are not accepted")
     var header_keys = py_call(t[].bi.list, header)
@@ -316,7 +320,7 @@ def _transport_send_frame(socket: PythonObject, header: PythonObject, first: Pyt
     var bytes = t[].bi.bytes() if payload is None else py_call(py_call(t[].bi.memoryview, payload).cast, "B")
     var lead = 0 if first is None else len(first)
     var envelope = py_call(t[].bi.dict, header)
-    py_setitem(envelope, "nbytes", PythonObject(lead + len(bytes)))
+    py_setitem(envelope, nk[].k_nbytes, PythonObject(lead + len(bytes)))
     var raw = py_call(PythonObject(_transport_json(envelope)).encode, "ascii")
     var n = len(raw)
     if n > (1 << 20):
@@ -362,6 +366,7 @@ def transport_receive_owned(socket: PythonObject, max_payload: Int) raises -> Py
 
 
 def _transport_receive(socket: PythonObject, max_payload: Int, owned: Bool) raises -> PythonObject:
+    var nk = native_keys()
     var t = TRANSPORT_BOUNDARY.get_or_create_ptr()
     _ = _transport_state(socket)
     if max_payload < 0:
@@ -375,7 +380,7 @@ def _transport_receive(socket: PythonObject, max_payload: Int, owned: Bool) rais
     var header = native_json_parse(_transport_exact(socket, count))
     if py_type(header) is not t[].bi.dict:
         raise Error("transport: framed header must be an object")
-    var raw_count = py_get(header, "nbytes", PythonObject(0))
+    var raw_count = py_get(header, nk[].k_nbytes, PythonObject(0))
     if py_type(raw_count) is not t[].bi.int:
         raise Error("transport: payload size must be an integer")
     var n = Int(py=raw_count)
