@@ -193,17 +193,33 @@ def test_nonfinite_limits_refuse_before_scheduler(monkeypatch, flag, value):
         mac_slot.main([f"{flag}={value}", "run", "true"])
 
 
+def _python_start_seconds():
+    """Wall seconds for one interpreter start on this machine now, the slower of two. The deadline test scales its
+    budget by it: on a box with every core busy two starts (mac_slot, then its child) took longer than the bare 0.8 s
+    budget, so the child was killed before it ran (box job nvc-cpuchk-20261120T174232Z-018cbd)."""
+    took = []
+    for _ in range(2):
+        t0 = time.monotonic()
+        subprocess.run([sys.executable, "-c", "import pathlib, time, sys"], check=True)
+        took.append(time.monotonic() - t0)
+    return max(took)
+
+
 def test_shared_deadline_includes_queue_and_execution(env, tmp_path):
+    start = _python_start_seconds()
+    hold = max(.2, 2 * start)                 # the queue part: the owner holds the slot while the launcher waits
     owner = Scheduler(env)
     assert owner.attempt(False, ["owner"])
     marker = tmp_path / "started"
-    deadline = time.monotonic() + .8
+    # queue + the launcher's and the child's starts (two interpreters, 2x margin each) + 0.4 s of execution: the
+    # same 0.8 s as before on an idle machine, and still room for the child to run when every core is busy
+    deadline = time.monotonic() + hold + 4 * start + .4
     p = launch(env, "--deadline", str(deadline), "run", sys.executable, "-c",
                "import pathlib,time,sys;pathlib.Path(sys.argv[1]).touch();time.sleep(30)", str(marker))
     try:
-        time.sleep(.2)
+        time.sleep(hold)
         owner.release()
-        p.communicate(timeout=5)
+        p.communicate(timeout=max(0, deadline - time.monotonic()) + 5)
         assert marker.exists(), "child never ran; execution budget was not exercised"
         assert p.returncode == 124
         assert time.monotonic() < deadline + 2

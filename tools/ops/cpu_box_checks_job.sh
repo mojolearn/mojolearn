@@ -32,8 +32,9 @@
 # go to the front when the build passes. Busy cores of total are printed every minute and in SUMMARY.md.
 #
 # Results ($MOJOLEARN_RESULTS_DIR, persisted to R2 by tools/box_persist_run.sh): SUMMARY.md (line 3: checks: N passed: N
-# failed: N not run: N; line 4: result: green | red: ...; then each part, the first error per failed group and the
-# reason per unit not run),
+# failed: N not run: N; line 4: result: green | red: ...; lines 5-7: verdict compile|native|tools: green (N) | red: ...
+# | not in this suite, so a compile result reads apart from red tool tests; then each part, the first error per failed
+# group and the reason per unit not run),
 # parse/<host|device>-parse-<key>/ (the parse step's log, result and memory files), native/ (results, logs, SUMMARY.md,
 # REPORT.txt), tools/ (run_tool_tests.sh's logs and SUMMARY.txt), logs/<unit>.log, time/<unit>.txt, busy_cores.txt.
 # Exit 0 when everything passed, 1 when anything failed, 3 when nothing failed but something was not run (or nothing was
@@ -214,6 +215,10 @@ done > "$RES/peaks.tsv"
 # Three outcomes, never folded: PASSED, FAILED (it ran and failed; its first error is listed) and NOT RUN (it never ran
 # or left no result: cannot fit, the build it needs failed, or the job was cut short; its reason is listed).
 TOTAL=0; PASSED=0; FAILED=0; NOTRUN=0; PARTS=(); FIRST=(); NOTRUN_WHY=()
+# Per-part counts for the three verdict lines (lane fx-box-tooltests, 2026-11-20): compile = build-cpu and the host
+# and device parse groups; native = the native checks; tools = the tool tests. A lane's compile result stays readable
+# when only the tool tests are red. "" = the part is not in this suite.
+CT=""; CF=0; CN=0; NT=""; NF=0; NN=0; TT=""; TF=0; TN=0
 why_not_run() {  # <unit>: the reason a unit has no result
     if [ -s "$RES/notrun/$1" ]; then cat "$RES/notrun/$1"
     elif [ ! -f "$RES/rc/$1" ]; then echo "never started (the job ended or was cancelled first)"
@@ -234,11 +239,11 @@ if [ "$DO_NATIVE" = 1 ]; then
     brc=$(cat "$RES/rc/build-cpu" 2> /dev/null || echo none)
     # the build is a unit of its own: passed, failed (first error) or not run
     if [ "$planned" -gt 0 ]; then
-        TOTAL=$(( TOTAL + 1 ))
+        TOTAL=$(( TOTAL + 1 )); CT=$(( ${CT:-0} + 1 ))
         case "$brc" in
             0) PASSED=$(( PASSED + 1 )) ;;
-            none) NOTRUN=$(( NOTRUN + 1 )); NOTRUN_WHY+=("- build-cpu: $(why_not_run build-cpu)") ;;
-            *) FAILED=$(( FAILED + 1 )); FIRST+=("- build-cpu (rc $brc): $(first_error "$RES/native/logs/build-cpu.log" "$RES/logs/build-cpu.log")") ;;
+            none) NOTRUN=$(( NOTRUN + 1 )); CN=$(( CN + 1 )); NOTRUN_WHY+=("- build-cpu: $(why_not_run build-cpu)") ;;
+            *) FAILED=$(( FAILED + 1 )); CF=$(( CF + 1 )); FIRST+=("- build-cpu (rc $brc): $(first_error "$RES/native/logs/build-cpu.log" "$RES/logs/build-cpu.log")") ;;
         esac
     fi
     line=$(sed -n 3p "$RES/native/SUMMARY.md" 2> /dev/null)
@@ -246,6 +251,7 @@ if [ "$DO_NATIVE" = 1 ]; then
     if [[ "${n:-}" =~ ^[0-9]+$ ]] && [[ "${m:-}" =~ ^[0-9]+$ ]]; then
         # a planned check without a result was not run (the build failed or was not run, or its slice never started)
         TOTAL=$(( TOTAL + n )); PASSED=$(( PASSED + p )); FAILED=$(( FAILED + f )); NOTRUN=$(( NOTRUN + m ))
+        NT=$n; NF=$f; NN=$m
         PARTS+=("native checks: $n planned, $p passed, $f failed, $m not run")
         if [ "$m" -gt 0 ]; then
             if [ "$brc" != 0 ]; then NOTRUN_WHY+=("- $m native checks: build-cpu $([ "$brc" = none ] && echo 'was not run' || echo "failed (rc $brc)")")
@@ -258,7 +264,7 @@ if [ "$DO_NATIVE" = 1 ]; then
             fi
         fi
     else
-        TOTAL=$(( TOTAL + planned )); NOTRUN=$(( NOTRUN + planned ))
+        TOTAL=$(( TOTAL + planned )); NOTRUN=$(( NOTRUN + planned )); NT=$planned; NN=$planned
         PARTS+=("native checks: $planned planned, no summary (logs/native-summary.log): counted not run")
         NOTRUN_WHY+=("- native checks: the summary step left no counts ($(first_error "$RES/logs/native-summary.log"))")
     fi
@@ -280,6 +286,7 @@ if [ "$DO_PARSE" = 1 ]; then
             fi
         done < <(python3 -c 'import json,sys;[print(e["key"]) for e in json.load(open(sys.argv[1]))]' "$RES/plan/$kind.json")
         TOTAL=$(( TOTAL + n )); PASSED=$(( PASSED + p )); FAILED=$(( FAILED + f )); NOTRUN=$(( NOTRUN + r0 ))
+        CT=$(( ${CT:-0} + n )); CF=$(( CF + f )); CN=$(( CN + r0 ))
         PARTS+=("$kind-parse: $n groups, $p passed, $f failed, $r0 not run")
     done
     DEVICE_MATRIX=$(cat "$RES/plan/device.json") RETRY_MATRIX='[]' PARSE_DIR="$RES/parse" bash "$STEPS" verdict \
@@ -292,14 +299,15 @@ if [ "$DO_TOOLS" = 1 ]; then
         te=$(echo "$tt" | sed -n 's/.*errors=\([0-9]*\).*/\1/p')
         tp=${tp:-0}; tf=${tf:-0}; te=${te:-0}
         TOTAL=$(( TOTAL + tp + tf + te )); PASSED=$(( PASSED + tp )); FAILED=$(( FAILED + tf + te ))
+        TT=$(( tp + tf + te )); TF=$(( tf + te ))
         PARTS+=("tools: $tt")
         while IFS= read -r l; do FIRST+=("- tools $l"); done < <(grep -E '^  FAILED ' "$RES/logs/tools.log" | head -n 20 | sed 's/^  //' | cut -c1-240)
     elif [ -f "$RES/rc/tools" ] && [ ! -s "$RES/notrun/tools" ]; then
-        TOTAL=$(( TOTAL + 1 )); FAILED=$(( FAILED + 1 ))
+        TOTAL=$(( TOTAL + 1 )); FAILED=$(( FAILED + 1 )); TT=1; TF=1
         PARTS+=("tools: ran (rc $(cat "$RES/rc/tools")) with no TOOL-TESTS line: counted failed")
         FIRST+=("- tools (rc $(cat "$RES/rc/tools")): $(first_error "$RES/logs/tools.log")")
     else
-        TOTAL=$(( TOTAL + 1 )); NOTRUN=$(( NOTRUN + 1 ))
+        TOTAL=$(( TOTAL + 1 )); NOTRUN=$(( NOTRUN + 1 )); TT=1; TN=1
         PARTS+=("tools: not run")
         NOTRUN_WHY+=("- tools: $(why_not_run tools)")
     fi
@@ -309,11 +317,21 @@ if [ "$FAILED" -eq 0 ] && [ "$NOTRUN" -eq 0 ] && [ "$TOTAL" -gt 0 ]; then RESULT
 elif [ "$FAILED" -gt 0 ]; then RESULT="red: $FAILED failed, $NOTRUN not run"; EXIT=1
 elif [ "$TOTAL" -eq 0 ]; then RESULT="red: nothing was checked"; EXIT=3
 else RESULT="red: $NOTRUN not run"; EXIT=3; fi
+part_verdict() {  # <total or ""> <failed> <not run>: green | red: ... | not in this suite
+    if [ -z "$1" ]; then echo "not in this suite"
+    elif [ "$1" -eq 0 ]; then echo "red: nothing was checked"
+    elif [ "$2" -gt 0 ]; then echo "red: $2 of $1 failed, $3 not run"
+    elif [ "$3" -gt 0 ]; then echo "red: $3 of $1 not run"
+    else echo "green ($1)"; fi
+}
 {
     echo "# CPU box checks ${SHA:0:10} suite $SUITE"
     echo
     echo "checks: $TOTAL  passed: $PASSED  failed: $FAILED  not run: $NOTRUN"
     echo "result: $RESULT"
+    echo "verdict compile: $(part_verdict "$CT" "$CF" "$CN")"
+    echo "verdict native: $(part_verdict "$NT" "$NF" "$NN")"
+    echo "verdict tools: $(part_verdict "$TT" "$TF" "$TN")"
     echo
     for l in "${PARTS[@]}"; do echo "- $l"; done
     cat "$RES/tool-notes.txt"

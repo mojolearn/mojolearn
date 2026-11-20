@@ -177,7 +177,8 @@ class Base(unittest.TestCase):
 
     def runner(self, js, res, cmd, wait=True, timeout=60):
         p = subprocess.Popen(["bash", os.path.join(self.box, "bin", "box_persist_run.sh"), js, res, "--", "bash", "-c", cmd],
-                             env=self.env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                             env=self.env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                             preexec_fn=_terminal_signals)
         if not wait:
             return p
         out, err = p.communicate(timeout=timeout)
@@ -757,6 +758,15 @@ class TestHooks(unittest.TestCase):
         for f, what in (("nvidia_central.sh", "bp_prepare \"nvc-$lane\""), ("do_amd_steward.sh", "bp_prepare \"$tag\""),
                         ("dev_pod.sh", "bp_prepare \"dp-$KEY\"")):
             self.assertIn(what, self.read(f), f)
+
+
+def _terminal_signals():
+    # The runner starts as it would from a terminal: SIGINT and SIGQUIT at their defaults. A test run started in the
+    # background by a non-interactive shell (`cmd &`, as tools/ops/cpu_box_checks_job.sh starts the tool tests on the
+    # box) inherits both IGNORED, and bash can neither trap nor reset a signal ignored on entry, so the INT trap under
+    # test never ran and test_int_trap waited out its 60 s (box job nvc-cpuchk-20261120T174232Z-018cbd).
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
+    signal.signal(signal.SIGQUIT, signal.SIG_DFL)
 
 
 def _alive(pid):

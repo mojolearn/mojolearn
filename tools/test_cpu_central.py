@@ -21,7 +21,10 @@ STEPS = ROOT / "tools/ops/native_checks_steps.sh"
 
 
 def env_for(tmp_path, **extra):
-    env = {k: v for k, v in os.environ.items() if not k.startswith(("MOJOLEARN_", "CPC_", "RUNPOD_"))}
+    # CPU_CHECK_*: a run inside a box check job inherits that job's CPU_CHECK_SHA / CPU_CHECK_SUITE (cpu_central.sh
+    # check --env), and the job script under test took them as its arguments: no usage, then "needs
+    # MOJOLEARN_RESULTS_DIR" (box job nvc-cpuchk-20261120T174232Z-018cbd)
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("MOJOLEARN_", "CPC_", "RUNPOD_", "CPU_CHECK", "NVC_"))}
     env.update(MOJOLEARN_CPC_HOME=str(tmp_path / "cpc"), MOJOLEARN_DEVPOD_STATE=str(tmp_path / "devpods"),
                MOJOLEARN_NVC_NO_API="1", MOJOLEARN_RUNPOD_KEY_FILE=str(tmp_path / "no-key"),
                MOJOLEARN_PERSIST_HOME=str(tmp_path / "persist"), MOJOLEARN_DEVPOD_DISK_GB="100",
@@ -334,3 +337,33 @@ def test_units_wait_for_memory_across_jobs_and_never_end_unrun(tmp_path):
     assert "BUSY 1.0 of 4 cores" in out_b and "BELOW 80%" in out_b
     assert "waiting on memory" in out_b or "reserve " in out_b, out_b
     assert not list((home / "ledger").iterdir()) and not list((home / "reserve").iterdir())
+
+
+def _summary_verdict(tmp_path, text):
+    # summary_verdict from cpu_central.sh, run alone over a summary as the box returns it (no box needed)
+    src = CPC.read_text()
+    start = src.index("summary_verdict() {")
+    body = src[start:src.index("\n}\n", start) + 3]
+    f = tmp_path / "summary.out"
+    f.write_text(text)
+    return subprocess.run(["bash", "-c", body + '\nsummary_verdict "$1" "$2"', "x", "cpc1-0009", str(f)],
+                          capture_output=True, text=True, timeout=60)
+
+
+def test_summary_prints_compile_and_tools_verdicts_apart(tmp_path):
+    job = (ROOT / "tools/ops/cpu_box_checks_job.sh").read_text()
+    for part in ("compile", "native", "tools"):
+        assert 'echo "verdict %s: $(part_verdict' % part in job
+    text = ("# CPU box checks abcdef0123 suite all\n\nchecks: 400  passed: 395  failed: 5  not run: 0\n"
+            "result: red: 5 failed, 0 not run\nverdict compile: green (40)\nverdict native: green (330)\n"
+            "verdict tools: red: 5 of 30 failed, 0 not run\n\nJOBSTATUS done\n")
+    got = _summary_verdict(tmp_path, text)
+    lines = got.stdout.splitlines()
+    assert got.returncode == 1, got.stderr
+    assert "COMPILE cpc1-0009 abcdef0123 all: green (40)" in lines
+    assert "TOOLS   cpc1-0009 abcdef0123 all: red: 5 of 30 failed, 0 not run" in lines
+    assert lines[-1] == "RESULT cpc1-0009 abcdef0123 all: red: 5 failed, 0 not run (job done)"
+    # a summary written by an older job script still decides; the parts say they are not in it
+    old = text.replace("verdict compile: green (40)\n", "")
+    got = _summary_verdict(tmp_path, old)
+    assert any(l.startswith("COMPILE cpc1-0009 abcdef0123 all: not in this summary") for l in got.stdout.splitlines())
