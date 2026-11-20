@@ -1,12 +1,16 @@
 """Source contracts for manifold route migration; no runtime qualification."""
 import ast
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "tools"))
+from boundary_keys_plain import plain  # noqa: E402
 
 
 def _source(name):
-    return (ROOT / name).read_text()
+    # Held keys and operation codes read back by name (lane bw2-manifold).
+    return plain(name, (ROOT / name).read_text())
 
 
 def test_route_connections_are_import_time_and_cover_both_families():
@@ -23,7 +27,7 @@ def test_native_manifold_selects_fitted_and_default_modes():
     selection = source.split("def _mani_arguments(", 1)[1].split("def mani_decomp_operation(", 1)[0]
     assert 'estimator_binding_mode(requested, "_mojolearn_x_decomp", context)' in selection
     assert 'estimator_binding_mode(settings.default_mode, "_mojolearn_x_decomp", context)' in selection
-    assert 'args = _mani_arguments(settings, operation, args, context)' in source
+    assert 'args = _mani_arguments(settings, args, context)' in source
     assert 'var requested = settings.mode' in selection
     assert '.hasattr' not in source.split("def _mani_check(", 1)[1].split("def _mani_seed(", 1)[0]
 
@@ -83,9 +87,9 @@ def test_settings_admission_precedes_snapshot_and_is_shared_by_every_owner():
     source = _source("bindings/manifold_settings_native_door.mojo")
     assert source.index('self.fields = classical_family_admit(model)') < source.index('self.values = py_call(b.dict, self.fields)')
     assert source.count('context["backend_fields"]["_DEFAULT_MODE"]') == 1
-    assert 'operation.endswith("_fit_transform")' in source
+    assert 'if manifold_fit_only(operation) or manifold_fit_transform(operation):' in source
     assert 'self.fitted = py_get(self.values, "numeric_mode_")' in source
-    assert 'if not operation.startswith("family_mani_umap_")' in source
+    assert 'if operation != "family_mani_umap_transform":' in source
     assert '_setting(flat[i], context, depth + 1, freeze_buffers)' in source
     assert '_setting(value[keys[i]], context, depth + 1, freeze_buffers)' in source
     # Private byte copy of the configuration array, now through the CPython

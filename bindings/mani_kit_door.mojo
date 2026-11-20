@@ -34,6 +34,7 @@ from bindings.kit_call_pack import kit_connect
 from bindings.manifold_storage_native_unpack import ManifoldMatrix
 from bindings.mani_kit_run import MRun, MImage, MFitted, MExport, MK_F32P
 from x_decomp.descriptor_schema import XD_ABI_NAME, XD_OPERATION_COUNT, XD_MODE, XD_CAPABILITIES, XD_VENDOR
+from bindings.mani_keys_unpack import mani_keys
 
 comptime XD_VENDOR_METAL = 1  # x_decomp/descriptor_schema.mojo xd_vendor_code("metal")
 
@@ -42,16 +43,18 @@ def mk_cache_home(ctx: PythonObject) raises -> PythonObject:
     """Where the kit's cross-call device zero lives (row N290): the long-lived
     shared connection context bindings/manifold_native.mojo hands down as
     `family_mani_shared`; a caller without it keeps its own."""
-    var home = py_get(ctx, "family_mani_shared")
+    var nk = mani_keys()
+    var home = py_get(ctx, nk[].k_family_mani_shared)
     return ctx if home is None else home
 
 
 def _mk_dev_one_cache(ctx: PythonObject) raises -> PythonObject:
     var home = mk_cache_home(ctx)
-    var cache = py_get(home, "family_mani_native_dev_one")
+    var nk = mani_keys()
+    var cache = py_get(home, nk[].k_family_mani_native_dev_one)
     if cache is None:
         cache = Python.dict()
-        py_setitem(home, "family_mani_native_dev_one", cache)
+        py_setitem(home, nk[].k_family_mani_native_dev_one, cache)
     return cache
 
 

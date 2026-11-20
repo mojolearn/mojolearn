@@ -30,12 +30,24 @@ from bindings.py_balanced import py_call, py_get, py_setitem, py_contains, py_ty
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.admitted_family_door import admit_family_meta
 from providers.python.estimator_binding_pyapi_door import estimator_binding_mode
-from bindings.manifold_settings_native_door import ManifoldSettings
+from bindings.manifold_settings_native_door import ManifoldSettings, mani_field
+from bindings.operation_names_mani import (
+    MANI_OPN_FAMILY_MANI_CMDS_FIT,
+    MANI_OPN_FAMILY_MANI_CMDS_FIT_TRANSFORM,
+    MANI_OPN_FAMILY_MANI_ISO_FIT,
+    MANI_OPN_FAMILY_MANI_ISO_FIT_TRANSFORM,
+    MANI_OPN_FAMILY_MANI_ISO_RECONSTRUCTION_ERROR,
+    MANI_OPN_FAMILY_MANI_ISO_TRANSFORM,
+    MANI_OPN_FAMILY_MANI_LLE_FIT,
+    MANI_OPN_FAMILY_MANI_LLE_FIT_TRANSFORM,
+    MANI_OPN_FAMILY_MANI_LLE_TRANSFORM,
+    MANI_OPN_FAMILY_MANI_MDS_FIT,
+    MANI_OPN_FAMILY_MANI_MDS_FIT_TRANSFORM,
+)
 from bindings.manifold_scalar_native_door import manifold_number
 from providers.python.array_metadata_pyapi_door import ArrayMetadata, ArrayPin
 from bindings.metrics_native_support_door import metric_warn
 from bindings.family_common_unpack import family_repr, family_str, family_is_str, family_is_int, family_type_name
-from bindings.family_common_pack import family_field
 from bindings.mani_kit_door import mk_image, mk_fitted, mk_keep, mk_owner, mk_out, mk_out2, mk_finish, mk_seed_word
 from bindings.mani_kit_run import MRun
 from bindings.mani_decomp_run import (
@@ -44,6 +56,8 @@ from bindings.mani_decomp_run import (
     cmds_core, mds_dissimilarity_run, mds_fit_run, iso_fit_run, iso_transform_run, iso_reconstruction_error_run,
     lle_fit_run, lle_transform_run,
 )
+from bindings.mani_keys_unpack import mani_keys
+from bindings.py_balanced import py_item
 
 comptime _LLE_ITER_MIN_N = 200
 comptime _LLE_ITER_MAX_K = 10
@@ -176,7 +190,8 @@ def _mani_metric_spec(metric: PythonObject, p_in: PythonObject, metric_params: P
         if pw > 0 and not (pw - pw == 0.0):
             return (Int(2), Float64(0.0))
         return (Int(3), pw)
-    var kinds = context["family_mani_pd_kind"]
+    var nk = mani_keys()
+    var kinds = py_item(context, nk[].k_family_mani_pd_kind)
     if family_is_str(metric) and py_contains(kinds, metric):
         return (Int(py=kinds[metric]), Float64(0.0))
     raise Error("NotImplementedError: " + who + ": metric=" + family_repr(metric) + " is not carried (euclidean, "
@@ -201,12 +216,13 @@ def _cmds_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
     var fields = settings.values
     var mode = settings.mode
     var run = MRun()
+    var nk = mani_keys()
     try:
         var k = _mani_kit(run, mode, args[0], context)
         var m = _mani_x(run, k, x)
-        var spec = _mani_metric(family_field(fields, "metric"), family_field(fields, "metric_params"), "ClassicalMDS",
+        var spec = _mani_metric(mani_field(fields, nk[].k_metric, "metric"), mani_field(fields, nk[].k_metric_params, "metric_params"), "ClassicalMDS",
                                 context)
-        var nc = _mani_int(family_field(fields, "n_components"), context)
+        var nc = _mani_int(mani_field(fields, nk[].k_n_components, "n_components"), context)
         var got = Tuple[Int, Int, Int](-1, -1, -1)
         with GILReleased(Python()):
             got = cmds_core(run, k, m, spec[0], spec[1], nc)
@@ -216,12 +232,12 @@ def _cmds_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
         var values = mk_out(run, got[1], Python.tuple(run.c(got[1])), context)
         var embedding = mk_out2(run, got[2], context)
         var owner = mk_owner(run, got[2])
-        py_setitem(settings.fields, "numeric_mode_", mode)
-        py_setitem(settings.fields, "dissimilarity_matrix_", dissimilarity)
-        py_setitem(settings.fields, "eigenvalues_", values)
-        py_setitem(settings.fields, "embedding_m_", owner)
-        py_setitem(settings.fields, "embedding_", embedding)
-        py_setitem(settings.fields, "n_features_in_", PythonObject(run.c(m)))
+        py_setitem(settings.fields, nk[].k_numeric_mode_, mode)
+        py_setitem(settings.fields, nk[].k_dissimilarity_matrix_, dissimilarity)
+        py_setitem(settings.fields, nk[].k_eigenvalues_, values)
+        py_setitem(settings.fields, nk[].k_embedding_m_, owner)
+        py_setitem(settings.fields, nk[].k_embedding_, embedding)
+        py_setitem(settings.fields, nk[].k_n_features_in_, PythonObject(run.c(m)))
         return embedding
     finally:
         mk_finish(run, context)
@@ -236,23 +252,24 @@ def _mds_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject
     var fields = settings.values
     var mode = settings.mode
     var run = MRun()
+    var nk = mani_keys()
     try:
         var k = _mani_kit(run, mode, args[0], context)
         var m = _mani_x(run, k, x)
         var plan = MdsPlan()
-        var spec = _mani_metric(family_field(fields, "metric"), family_field(fields, "metric_params"), "MDS", context)
+        var spec = _mani_metric(mani_field(fields, nk[].k_metric, "metric"), mani_field(fields, nk[].k_metric_params, "metric_params"), "MDS", context)
         plan.metric = spec[0]
         plan.pw = spec[1]
         var dis = -1
         with GILReleased(Python()):
             dis = mds_dissimilarity_run(run, k, m, plan)
-        plan.metric_mds = _mani_truth(family_field(fields, "metric_mds"), context)
-        var normalized = family_field(fields, "normalized_stress")
+        plan.metric_mds = _mani_truth(mani_field(fields, nk[].k_metric_mds, "metric_mds"), context)
+        var normalized = mani_field(fields, nk[].k_normalized_stress, "normalized_stress")
         plan.norm = (normalized is PythonObject(True)) or (_mani_eq(normalized, "auto", context) and not plan.metric_mds)
-        plan.nc = _mani_int(family_field(fields, "n_components"), context)
-        var seed = _mani_seed(family_field(fields, "random_state"))
+        plan.nc = _mani_int(mani_field(fields, nk[].k_n_components, "n_components"), context)
+        var seed = _mani_seed(mani_field(fields, nk[].k_random_state, "random_state"))
         var init_arg = args[3]
-        var init = family_field(fields, "init")
+        var init = mani_field(fields, nk[].k_init, "init")
         # the admitted `init` array's storage stays pinned (`init_pin`) through the RUN
         var init_pin = ArrayPin()
         var init_meta = Optional[ArrayMetadata]()
@@ -267,12 +284,12 @@ def _mds_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject
             plan.init = MDS_INIT_CLASSICAL
         elif _mani_eq(init, "random", context):
             plan.init = MDS_INIT_RANDOM
-            plan.restarts = _mani_int(family_field(fields, "n_init"), context)
+            plan.restarts = _mani_int(mani_field(fields, nk[].k_n_init, "n_init"), context)
             plan.seed = mk_seed_word(seed)
         else:
             raise Error("init must be 'random', 'classical_mds' or an array")
-        plan.max_iter = _mani_int(family_field(fields, "max_iter"), context)
-        plan.eps = _mani_float(family_field(fields, "eps"), context)
+        plan.max_iter = _mani_int(mani_field(fields, nk[].k_max_iter, "max_iter"), context)
+        plan.eps = _mani_float(mani_field(fields, nk[].k_eps, "eps"), context)
         var got = Tuple[Int, Float64, Int](-1, 0.0, 0)
         with GILReleased(Python()):
             got = mds_fit_run(run, k, dis, plan)
@@ -282,13 +299,13 @@ def _mds_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject
         # PACK
         var dissimilarity = mk_out2(run, dis, context)
         var embedding = mk_out2(run, got[0], context)
-        py_setitem(settings.fields, "numeric_mode_", mode)
-        py_setitem(settings.fields, "dissimilarity_matrix_", dissimilarity)
-        py_setitem(settings.fields, "_norm", PythonObject(plan.norm))
-        py_setitem(settings.fields, "stress_", py_call(b.float, PythonObject(got[1])))
-        py_setitem(settings.fields, "n_iter_", PythonObject(got[2]))
-        py_setitem(settings.fields, "embedding_", embedding)
-        py_setitem(settings.fields, "n_features_in_", PythonObject(run.c(m)))
+        py_setitem(settings.fields, nk[].k_numeric_mode_, mode)
+        py_setitem(settings.fields, nk[].k_dissimilarity_matrix_, dissimilarity)
+        py_setitem(settings.fields, nk[].k__norm, PythonObject(plan.norm))
+        py_setitem(settings.fields, nk[].k_stress_, py_call(b.float, PythonObject(got[1])))
+        py_setitem(settings.fields, nk[].k_n_iter_, PythonObject(got[2]))
+        py_setitem(settings.fields, nk[].k_embedding_, embedding)
+        py_setitem(settings.fields, nk[].k_n_features_in_, PythonObject(run.c(m)))
         return embedding
     finally:
         mk_finish(run, context)
@@ -300,8 +317,9 @@ def _iso_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject
     classical_connect_numpy(context)
     var fields = settings.values
     var mode = settings.mode
-    var neighbors = family_field(fields, "n_neighbors")
-    var radius = family_field(fields, "radius")
+    var nk = mani_keys()
+    var neighbors = mani_field(fields, nk[].k_n_neighbors, "n_neighbors")
+    var radius = mani_field(fields, nk[].k_radius, "radius")
     if not (neighbors is None) and not (radius is None):
         raise Error("Both n_neighbors and radius are provided. Use Isomap(radius=" + family_str(radius)
                     + ", n_neighbors=None) if intended to use radius-based neighbors")
@@ -309,13 +327,13 @@ def _iso_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject
         raise Error("Isomap: one of n_neighbors and radius must be set")
     if not (radius is None) and not (_mani_float(radius, context) >= 0):
         raise Error("Isomap: radius must be >= 0")
-    if not _mani_in(family_field(fields, "path_method"), Python.tuple(PythonObject("auto"), PythonObject("FW"),
+    if not _mani_in(mani_field(fields, nk[].k_path_method, "path_method"), Python.tuple(PythonObject("auto"), PythonObject("FW"),
                                                                        PythonObject("D")), context):
         raise Error("path_method must be 'auto', 'FW' or 'D'")
-    var solver = family_field(fields, "eigen_solver")
+    var solver = mani_field(fields, nk[].k_eigen_solver, "eigen_solver")
     _mani_eigen_solver(solver, "Isomap", context)
-    var spec = _mani_metric_spec(family_field(fields, "metric"), family_field(fields, "p"),
-                                 family_field(fields, "metric_params"), "Isomap", context)
+    var spec = _mani_metric_spec(mani_field(fields, nk[].k_metric, "metric"), mani_field(fields, nk[].k_p, "p"),
+                                 mani_field(fields, nk[].k_metric_params, "metric_params"), "Isomap", context)
     var plan = IsoPlan()
     plan.kind = spec[0]
     plan.pw = spec[1]
@@ -328,10 +346,10 @@ def _iso_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject
             plan.use_radius = True
             plan.radius = _mani_f32(_mani_float(radius, context))
         else:
-            plan.nn = _mani_int(family_field(fields, "n_neighbors"), context)
+            plan.nn = _mani_int(mani_field(fields, nk[].k_n_neighbors, "n_neighbors"), context)
             nn_out = PythonObject(plan.nn)
         plan.topk = _mani_in(solver, Python.tuple(PythonObject("auto"), PythonObject("arpack")), context)
-        plan.nc = _mani_int(family_field(fields, "n_components"), context)
+        plan.nc = _mani_int(mani_field(fields, nk[].k_n_components, "n_components"), context)
         var fit = IsoFit()
         with GILReleased(Python()):
             fit = iso_fit_run(run, k, m, plan)
@@ -355,23 +373,23 @@ def _iso_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject
         var kc = mk_owner(run, fit.kc)
         # transform's eigenvectors / sqrt(eigenvalues) (row N295)
         var iv = mk_owner(run, fit.iv)
-        py_setitem(settings.fields, "numeric_mode_", mode)
-        py_setitem(settings.fields, "_kind", PythonObject(plan.kind))
-        py_setitem(settings.fields, "_pw", PythonObject(plan.pw))
-        py_setitem(settings.fields, "n_connected_components_", PythonObject(fit.components))
-        py_setitem(settings.fields, "dist_matrix_m_", dist_m)
-        py_setitem(settings.fields, "dist_matrix_", dist)
-        py_setitem(settings.fields, "_k_col", k_col)
-        py_setitem(settings.fields, "_k_all", k_all)
-        py_setitem(settings.fields, "eigenvalues_m_", values)
-        py_setitem(settings.fields, "eigenvectors_m_", vectors)
-        py_setitem(settings.fields, "embedding_m_", em)
-        py_setitem(settings.fields, "embedding_", embedding)
-        py_setitem(settings.fields, "_fit_X", fit_x)
-        py_setitem(settings.fields, "_knn", nn_out)
-        py_setitem(settings.fields, "n_features_in_", PythonObject(run.c(m)))
-        py_setitem(settings.fields, "_Kc", kc)
-        py_setitem(settings.fields, "_iso_v_m_", iv)
+        py_setitem(settings.fields, nk[].k_numeric_mode_, mode)
+        py_setitem(settings.fields, nk[].k__kind, PythonObject(plan.kind))
+        py_setitem(settings.fields, nk[].k__pw, PythonObject(plan.pw))
+        py_setitem(settings.fields, nk[].k_n_connected_components_, PythonObject(fit.components))
+        py_setitem(settings.fields, nk[].k_dist_matrix_m_, dist_m)
+        py_setitem(settings.fields, nk[].k_dist_matrix_, dist)
+        py_setitem(settings.fields, nk[].k__k_col, k_col)
+        py_setitem(settings.fields, nk[].k__k_all, k_all)
+        py_setitem(settings.fields, nk[].k_eigenvalues_m_, values)
+        py_setitem(settings.fields, nk[].k_eigenvectors_m_, vectors)
+        py_setitem(settings.fields, nk[].k_embedding_m_, em)
+        py_setitem(settings.fields, nk[].k_embedding_, embedding)
+        py_setitem(settings.fields, nk[].k__fit_X, fit_x)
+        py_setitem(settings.fields, nk[].k__knn, nn_out)
+        py_setitem(settings.fields, nk[].k_n_features_in_, PythonObject(run.c(m)))
+        py_setitem(settings.fields, nk[].k__Kc, kc)
+        py_setitem(settings.fields, nk[].k__iso_v_m_, iv)
         return embedding
     finally:
         mk_finish(run, context)
@@ -383,35 +401,36 @@ def _iso_transform(model: PythonObject, settings: ManifoldSettings, args: Python
     classical_connect_numpy(context)
     var fields = settings.values
     var run = MRun()
+    var nk = mani_keys()
     try:
         var k = _mani_kit(run, settings.mode, args[0], context)
         var q = _mani_x(run, k, x)
         var st = IsoState()
-        var fit_x = family_field(fields, "_fit_X")
-        var d = family_field(fields, "dist_matrix_m_")
-        var col = family_field(fields, "_k_col")
-        var allm = family_field(fields, "_k_all")
+        var fit_x = mani_field(fields, nk[].k__fit_X, "_fit_X")
+        var d = mani_field(fields, nk[].k_dist_matrix_m_, "dist_matrix_m_")
+        var col = mani_field(fields, nk[].k__k_col, "_k_col")
+        var allm = mani_field(fields, nk[].k__k_all, "_k_all")
         st.fit_x = mk_fitted(run, fit_x, "_fit_X")
         st.d = mk_fitted(run, d, "dist_matrix_m_")
         st.col = mk_fitted(run, col, "_k_col")
         st.allm = mk_fitted(run, allm, "_k_all")
-        var knn = family_field(fields, "_knn")
-        st.kind = _mani_int(family_field(fields, "_kind"), context)
-        st.pw = _mani_float(family_field(fields, "_pw"), context)
+        var knn = mani_field(fields, nk[].k__knn, "_knn")
+        st.kind = _mani_int(mani_field(fields, nk[].k__kind, "_kind"), context)
+        st.pw = _mani_float(mani_field(fields, nk[].k__pw, "_pw"), context)
         if knn is None:
-            var radius = family_field(fields, "radius")
+            var radius = mani_field(fields, nk[].k_radius, "radius")
             st.radius = _mani_f32(_mani_float(radius, context))
             st.radius_text = family_str(radius)
         else:
             st.knn = _mani_int(knn, context)
         # eigenvectors / sqrt(eigenvalues), kept by fit; a model fitted before
         # it was kept makes it from eigenvectors_m_ / eigenvalues_m_
-        var iv = py_get(fields, PythonObject("_iso_v_m_"))
+        var iv = py_get(fields, nk[].k__iso_v_m_)
         var w = PythonObject(None)
         var v = PythonObject(None)
         if iv is None:
-            w = family_field(fields, "eigenvalues_m_")
-            v = family_field(fields, "eigenvectors_m_")
+            w = mani_field(fields, nk[].k_eigenvalues_m_, "eigenvalues_m_")
+            v = mani_field(fields, nk[].k_eigenvectors_m_, "eigenvectors_m_")
             st.w = mk_fitted(run, w, "eigenvalues_m_")
             st.v = mk_fitted(run, v, "eigenvectors_m_")
         else:
@@ -441,10 +460,11 @@ def _iso_reconstruction_error(model: PythonObject, settings: ManifoldSettings, a
     _mani_check(model, settings.values, "embedding_m_")
     var fields = settings.values
     var run = MRun()
+    var nk = mani_keys()
     try:
         var k = _mani_kit(run, settings.mode, args[0], context)
-        var kc_owner = family_field(fields, "_Kc")
-        var w_owner = family_field(fields, "eigenvalues_m_")
+        var kc_owner = mani_field(fields, nk[].k__Kc, "_Kc")
+        var w_owner = mani_field(fields, nk[].k_eigenvalues_m_, "eigenvalues_m_")
         var kc = mk_fitted(run, kc_owner, "_Kc")
         var w = mk_fitted(run, w_owner, "eigenvalues_m_")
         var error = 0.0
@@ -464,11 +484,12 @@ def _lle_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject
     var b = native_loaded_module("builtins")
     var fields = settings.values
     var mode = settings.mode
-    var method = family_field(fields, "method")
+    var nk = mani_keys()
+    var method = mani_field(fields, nk[].k_method, "method")
     if not _mani_in(method, Python.tuple(PythonObject("standard"), PythonObject("hessian"), PythonObject("modified"),
                                          PythonObject("ltsa")), context):
         raise Error("LocallyLinearEmbedding: unrecognized method " + family_repr(method))
-    var solver = family_field(fields, "eigen_solver")
+    var solver = mani_field(fields, nk[].k_eigen_solver, "eigen_solver")
     _mani_eigen_solver(solver, "LocallyLinearEmbedding", context)
     var plan = LlePlan()
     if _mani_eq(method, "standard", context):
@@ -485,8 +506,8 @@ def _lle_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject
         var hk = mk_image(run, String(settings.default_mode), args[1], context)
         var m = _mani_x(run, k, x)
         var n = run.r(m)
-        plan.nn = _mani_int(family_field(fields, "n_neighbors"), context)
-        plan.nc = _mani_int(family_field(fields, "n_components"), context)
+        plan.nn = _mani_int(mani_field(fields, nk[].k_n_neighbors, "n_neighbors"), context)
+        plan.nc = _mani_int(mani_field(fields, nk[].k_n_components, "n_components"), context)
         var nn = plan.nn
         var nc = plan.nc
         if nn >= n:
@@ -498,15 +519,15 @@ def _lle_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject
         if plan.method == LLE_MODIFIED and nn < nc:
             raise Error("modified LLE requires n_neighbors >= n_components")
         if plan.method == LLE_STANDARD:
-            plan.reg = Float64(py=py_call(b.float, family_field(fields, "reg")))
+            plan.reg = Float64(py=py_call(b.float, mani_field(fields, nk[].k_reg, "reg")))
         elif plan.method == LLE_HESSIAN:
-            plan.tol = _mani_float(family_field(fields, "hessian_tol"), context)
+            plan.tol = _mani_float(mani_field(fields, nk[].k_hessian_tol, "hessian_tol"), context)
         elif plan.method == LLE_MODIFIED:
-            plan.tol = _mani_float(family_field(fields, "modified_tol"), context)
+            plan.tol = _mani_float(mani_field(fields, nk[].k_modified_tol, "modified_tol"), context)
         plan.auto_solver = _mani_eq(solver, "auto", context)
         if plan.method == LLE_STANDARD and plan.auto_solver and n > _LLE_ITER_MIN_N and nc + 1 < _LLE_ITER_MAX_K:
-            plan.max_iter = _mani_int(family_field(fields, "max_iter"), context)
-            plan.seed = mk_seed_word(_mani_seed(family_field(fields, "random_state")))
+            plan.max_iter = _mani_int(mani_field(fields, nk[].k_max_iter, "max_iter"), context)
+            plan.seed = mk_seed_word(_mani_seed(mani_field(fields, nk[].k_random_state, "random_state")))
         var fit = LleFit()
         with GILReleased(Python()):
             fit = lle_fit_run(run, k, hk, m, plan)
@@ -527,13 +548,13 @@ def _lle_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject
         var embedding = mk_out2(run, fit.em, context)
         var em = mk_owner(run, fit.em)
         var fit_x = mk_owner(run, m)
-        py_setitem(settings.fields, "numeric_mode_", mode)
-        py_setitem(settings.fields, "embedding_m_", em)
-        py_setitem(settings.fields, "embedding_", embedding)
-        py_setitem(settings.fields, "reconstruction_error_", PythonObject(fit.reconstruction_error))
-        py_setitem(settings.fields, "_fit_X", fit_x)
-        py_setitem(settings.fields, "_knn", PythonObject(nn))
-        py_setitem(settings.fields, "n_features_in_", PythonObject(run.c(m)))
+        py_setitem(settings.fields, nk[].k_numeric_mode_, mode)
+        py_setitem(settings.fields, nk[].k_embedding_m_, em)
+        py_setitem(settings.fields, nk[].k_embedding_, embedding)
+        py_setitem(settings.fields, nk[].k_reconstruction_error_, PythonObject(fit.reconstruction_error))
+        py_setitem(settings.fields, nk[].k__fit_X, fit_x)
+        py_setitem(settings.fields, nk[].k__knn, PythonObject(nn))
+        py_setitem(settings.fields, nk[].k_n_features_in_, PythonObject(run.c(m)))
         return embedding
     finally:
         mk_finish(run, context)
@@ -546,14 +567,15 @@ def _lle_transform(model: PythonObject, settings: ManifoldSettings, args: Python
     var b = native_loaded_module("builtins")
     var fields = settings.values
     var run = MRun()
+    var nk = mani_keys()
     try:
         var k = _mani_kit(run, settings.mode, args[0], context)
         var q = _mani_x(run, k, x)
-        var fit_x_owner = family_field(fields, "_fit_X")
-        var em_owner = family_field(fields, "embedding_m_")
+        var fit_x_owner = mani_field(fields, nk[].k__fit_X, "_fit_X")
+        var em_owner = mani_field(fields, nk[].k_embedding_m_, "embedding_m_")
         var fit_x = mk_fitted(run, fit_x_owner, "_fit_X")
-        var nn = _mani_int(family_field(fields, "_knn"), context)
-        var reg = Float64(py=py_call(b.float, family_field(fields, "reg")))
+        var nn = _mani_int(mani_field(fields, nk[].k__knn, "_knn"), context)
+        var reg = Float64(py=py_call(b.float, mani_field(fields, nk[].k_reg, "reg")))
         var em = mk_fitted(run, em_owner, "embedding_m_")
         var out = -1
         with GILReleased(Python()):
@@ -567,8 +589,7 @@ def _lle_transform(model: PythonObject, settings: ManifoldSettings, args: Python
         mk_finish(run, context)
 
 
-def _mani_arguments(settings: ManifoldSettings, operation: String, args: PythonObject,
-                    context: PythonObject) raises -> PythonObject:
+def _mani_arguments(settings: ManifoldSettings, args: PythonObject, context: PythonObject) raises -> PythonObject:
     # Public shells hand over settings and buffers only. Resolve both legacy
     # binding slots after crossing the native boundary. Explicit modules remain
     # supported for internal/legacy callers and are admitted by mk_image.
@@ -587,34 +608,35 @@ def _mani_arguments(settings: ManifoldSettings, operation: String, args: PythonO
     return py_call(native_loaded_module("builtins").tuple, resolved)
 
 
-def mani_decomp_operation(model: PythonObject, settings: ManifoldSettings, operation: String, var args: PythonObject,
+def mani_decomp_operation(model: PythonObject, settings: ManifoldSettings, operation: Int, var args: PythonObject,
                           x: Optional[ArrayMetadata], context: PythonObject) raises -> PythonObject:
     """args = (optional decomp binding, optional default binding, X[, init])."""
-    args = _mani_arguments(settings, operation, args, context)
-    if operation == "family_mani_cmds_fit":
+    args = _mani_arguments(settings, args, context)
+    if operation == MANI_OPN_FAMILY_MANI_CMDS_FIT:
         _ = _cmds_fit(model, settings, args, x.value(), context)
         return model
-    if operation == "family_mani_cmds_fit_transform":
+    if operation == MANI_OPN_FAMILY_MANI_CMDS_FIT_TRANSFORM:
         return _cmds_fit(model, settings, args, x.value(), context)
-    if operation == "family_mani_mds_fit":
+    if operation == MANI_OPN_FAMILY_MANI_MDS_FIT:
         _ = _mds_fit(model, settings, args, x.value(), context)
         return model
-    if operation == "family_mani_mds_fit_transform":
+    if operation == MANI_OPN_FAMILY_MANI_MDS_FIT_TRANSFORM:
         return _mds_fit(model, settings, args, x.value(), context)
-    if operation == "family_mani_iso_fit":
+    if operation == MANI_OPN_FAMILY_MANI_ISO_FIT:
         _ = _iso_fit(model, settings, args, x.value(), context)
         return model
-    if operation == "family_mani_iso_fit_transform":
+    if operation == MANI_OPN_FAMILY_MANI_ISO_FIT_TRANSFORM:
         return _iso_fit(model, settings, args, x.value(), context)
-    if operation == "family_mani_iso_transform":
+    if operation == MANI_OPN_FAMILY_MANI_ISO_TRANSFORM:
         return _iso_transform(model, settings, args, x.value(), context)
-    if operation == "family_mani_iso_reconstruction_error":
+    if operation == MANI_OPN_FAMILY_MANI_ISO_RECONSTRUCTION_ERROR:
         return _iso_reconstruction_error(model, settings, args, context)
-    if operation == "family_mani_lle_fit":
+    if operation == MANI_OPN_FAMILY_MANI_LLE_FIT:
         _ = _lle_fit(model, settings, args, x.value(), context)
         return model
-    if operation == "family_mani_lle_fit_transform":
+    if operation == MANI_OPN_FAMILY_MANI_LLE_FIT_TRANSFORM:
         return _lle_fit(model, settings, args, x.value(), context)
-    if operation == "family_mani_lle_transform":
+    if operation == MANI_OPN_FAMILY_MANI_LLE_TRANSFORM:
         return _lle_transform(model, settings, args, x.value(), context)
-    raise Error("RuntimeError: unknown manifold operation " + operation)
+    # Unreachable from the entry (an unknown name is refused there by name).
+    raise Error("RuntimeError: unknown manifold operation code " + String(operation))

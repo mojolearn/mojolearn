@@ -21,7 +21,10 @@ from bindings.py_attr import py_attr
 from bindings.classical_arrays_door import classical_address
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.pca_exact_unpack import pca_copied
-from bindings.manifold_settings_native_door import ManifoldSettings
+from bindings.manifold_settings_native_door import ManifoldSettings, mani_field
+from bindings.operation_names_mani import (
+    MANI_OPN_FAMILY_MANI_UMAP_FIT, MANI_OPN_FAMILY_MANI_UMAP_FIT_TRANSFORM, MANI_OPN_FAMILY_MANI_UMAP_TRANSFORM,
+)
 from providers.python.array_metadata_pyapi_door import ArrayMetadata, ArrayPin, array_shape_once, array_metadata_once, array_python_shape
 from bindings.classical_validate_unpack import classical_view
 from bindings.umap_parameters_native_door import umap_parameters_fields, umap_scalar as _umap_scalar, umap_integer as _umap_integer
@@ -39,7 +42,6 @@ from bindings.family_common_unpack import (
 )
 from bindings.family_common_pack import (
     family_array,
-    family_field,
 )
 from bindings.spectral_umap_routes_pack import spectral_umap_route
 from core.mode_answer import fast_is_answered_by_identical, MODE_FAMILY_SPECTRAL
@@ -57,6 +59,8 @@ from core.label_words_impl import label_words_f64, label_words_i64, label_dense_
 from bindings.mani_kit_door import mk_image, mk_out2, mk_finish, mk_seed_word
 from bindings.mani_kit_run import MRun
 from bindings.mani_umap_init_run import umap_random_start_run, umap_pca_start_run
+from bindings.mani_keys_unpack import mani_keys
+from bindings.py_balanced import py_item
 
 comptime _F32_MAX = 3.4028234663852886e+38
 comptime _I64_MAX = 9223372036854775807
@@ -135,7 +139,8 @@ def _umap_initial(settings: ManifoldSettings, x: ArrayMetadata, n: Int, nc: Int,
     """`_initial(x, n, nc, seed)`: None for 'spectral'; 'random' uniform(-10,
     10) on the Philox stream; 'pca' umap-learn's PCA of the data scaled to
     max |coordinate| 10 plus N(0, 1e-4) noise; an array as given."""
-    var init = family_field(settings.values, "init")
+    var nk = mani_keys()
+    var init = mani_field(settings.values, nk[].k_init, "init")
     if family_is_str(init) and String(py=init) == "spectral":
         return Optional[ArrayMetadata]()
     if family_is_str(init):
@@ -270,10 +275,11 @@ def _umap_target(settings: ManifoldSettings, y: PythonObject, n: Int, context: P
     var b = native_loaded_module("builtins")
     var op = native_loaded_module("operator")
     var fields = settings.values
-    var tm = family_field(fields, "target_metric")
-    var w = _umap_scalar(family_field(fields, "target_weight"), "target_weight", context)
+    var nk = mani_keys()
+    var tm = mani_field(fields, nk[].k_target_metric, "target_metric")
+    var w = _umap_scalar(mani_field(fields, nk[].k_target_weight, "target_weight"), "target_weight", context)
     umap_check_target_weight(w)
-    var tk = _umap_integer(family_field(fields, "target_n_neighbors"), "target_n_neighbors", -1, _I64_MAX, context)
+    var tk = _umap_integer(mani_field(fields, nk[].k_target_n_neighbors, "target_n_neighbors"), "target_n_neighbors", -1, _I64_MAX, context)
     var tk_kept = PythonObject(umap_target_neighbors(Int(py=tk)))
     if Bool(py=py_call(b.bool, py_call(op.eq, tm, PythonObject("categorical")))):
         # A 1-D NumPy array or mojolearn Array of one numeric dtype: the codes
@@ -282,7 +288,7 @@ def _umap_target(settings: ManifoldSettings, y: PythonObject, n: Int, context: P
         # value order; NaN, uint64, float16 and every other source keep the
         # object path below.
         var y_type = py_type(y)
-        if y_type is py_get(context, "ndarray") or y_type is context["array_class"]:
+        if y_type is py_get(context, nk[].k_ndarray) or y_type is py_item(context, nk[].k_array_class):
             var fast = _umap_native_codes(y, n, context)
             if fast is not None:
                 return Python.tuple(PythonObject(1), PythonObject(1), fast[0], tk_kept, PythonObject(w), fast[0], fast[1])
@@ -300,8 +306,8 @@ def _umap_target(settings: ManifoldSettings, y: PythonObject, n: Int, context: P
         # (type name, value) sort over arbitrary labels are removed).
         var y_cls = py_type(y)
         var vals: PythonObject
-        if y_cls is py_get(context, "ndarray"):
-            vals = py_call(py_attr(py_get(context, "ndarray"), "tolist"), y)
+        if y_cls is py_get(context, nk[].k_ndarray):
+            vals = py_call(py_attr(py_get(context, nk[].k_ndarray), "tolist"), y)
         elif y_cls is b.list or y_cls is b.tuple:
             vals = py_call(b.list, y)
         else:
@@ -365,9 +371,10 @@ def _umap_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
     var b = native_loaded_module("builtins")
     var source_type = py_type(source)
     var copied = True
-    if source_type is py_get(context, "ndarray") or source_type is context["array_class"]:
+    var nk = mani_keys()
+    if source_type is py_get(context, nk[].k_ndarray) or source_type is py_item(context, nk[].k_array_class):
         copied = x.copied
-    elif source_type is b.memoryview or source_type is context["array_type"] or source_type is b.bytearray:
+    elif source_type is b.memoryview or source_type is py_item(context, nk[].k_array_type) or source_type is b.bytearray:
         # Remaining shared-provider debt: native buffer materialization does
         # not yet carry the original input_copied provenance in ArrayMetadata.
         # Preserve this public flag until the provider can capture it once.
@@ -423,13 +430,13 @@ def _umap_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
     var frozen = _umap_copy(Python.tuple(n, nc), embedding_address, n * nc, context)
     _ = x^
     _ = x_pin^  # the door's pin held X through every RUN read and the copy
-    py_setitem(settings.fields, "embedding_", embedding)
-    py_setitem(settings.fields, "n_features_in_", PythonObject(d))
-    py_setitem(settings.fields, "input_copied_", PythonObject(copied))
-    py_setitem(settings.fields, "_transform_training", training)
-    py_setitem(settings.fields, "_transform_embedding", frozen)
-    py_setitem(settings.fields, "_transform_config", _umap_concat_tuple(config, extras))
-    py_setitem(settings.fields, "_transform_mode", PythonObject(mode))
+    py_setitem(settings.fields, nk[].k_embedding_, embedding)
+    py_setitem(settings.fields, nk[].k_n_features_in_, PythonObject(d))
+    py_setitem(settings.fields, nk[].k_input_copied_, PythonObject(copied))
+    py_setitem(settings.fields, nk[].k__transform_training, training)
+    py_setitem(settings.fields, nk[].k__transform_embedding, frozen)
+    py_setitem(settings.fields, nk[].k__transform_config, _umap_concat_tuple(config, extras))
+    py_setitem(settings.fields, nk[].k__transform_mode, PythonObject(mode))
     return embedding
 
 
@@ -444,14 +451,15 @@ def _umap_transform(model: PythonObject, settings: ManifoldSettings, args: Pytho
     classical_connect_numpy(context)
     var b = native_loaded_module("builtins")
     var op = native_loaded_module("operator")
-    if not py_contains(settings.values, "_transform_training"):
+    var nk = mani_keys()
+    if not py_contains(settings.values, nk[].k__transform_training):
         raise Error("UMAP transform requires a successful fit")
     var validated = umap_parameters_fields(settings.values, context)
     var config = validated[0]
     var extras = validated[1]
     var mode = _umap_mode(settings, context)
-    var fitted_config = family_field(settings.values, "_transform_config")
-    var fitted_mode = family_field(settings.values, "_transform_mode")
+    var fitted_config = mani_field(settings.values, nk[].k__transform_config, "_transform_config")
+    var fitted_mode = mani_field(settings.values, nk[].k__transform_mode, "_transform_mode")
     if (Bool(py=py_call(b.bool, py_call(op.ne, _umap_concat_tuple(config, extras), fitted_config)))
             or Bool(py=py_call(b.bool, py_call(op.ne, PythonObject(mode), fitted_mode)))):
         raise Error("UMAP parameters or numeric mode changed after fit; refit before transform")
@@ -462,8 +470,8 @@ def _umap_transform(model: PythonObject, settings: ManifoldSettings, args: Pytho
     var training_pin = ArrayPin()
     var fitted_pin = ArrayPin()
     var x = admit_family_meta(args[0], 2, "X", context, x_pin)
-    var training = _umap_state(family_field(settings.values, "_transform_training"), "training", context, training_pin)
-    var fitted_embedding = _umap_state(family_field(settings.values, "_transform_embedding"), "embedding", context, fitted_pin)
+    var training = _umap_state(mani_field(settings.values, nk[].k__transform_training, "_transform_training"), "training", context, training_pin)
+    var fitted_embedding = _umap_state(mani_field(settings.values, nk[].k__transform_embedding, "_transform_embedding"), "embedding", context, fitted_pin)
     var nq = x.source.rows
     var d = x.source.cols
     var nt = training.source.rows
@@ -508,14 +516,15 @@ def _umap_transform(model: PythonObject, settings: ManifoldSettings, args: Pytho
     return output
 
 
-def umap_operation(model: PythonObject, settings: ManifoldSettings, operation: String, args: PythonObject,
+def umap_operation(model: PythonObject, settings: ManifoldSettings, operation: Int, args: PythonObject,
                    context: PythonObject) raises -> PythonObject:
     """UMAP: fit / fit_transform args = (X, y); transform args = (X,)."""
-    if operation == "family_mani_umap_fit":
+    if operation == MANI_OPN_FAMILY_MANI_UMAP_FIT:
         _ = _umap_fit(model, settings, args, context)
         return model
-    if operation == "family_mani_umap_fit_transform":
+    if operation == MANI_OPN_FAMILY_MANI_UMAP_FIT_TRANSFORM:
         return _umap_fit(model, settings, args, context)
-    if operation == "family_mani_umap_transform":
+    if operation == MANI_OPN_FAMILY_MANI_UMAP_TRANSFORM:
         return _umap_transform(model, settings, args, context)
-    raise Error("RuntimeError: unknown UMAP operation " + operation)
+    # Unreachable from the entry (an unknown name is refused there by name).
+    raise Error("RuntimeError: unknown UMAP operation code " + String(operation))
