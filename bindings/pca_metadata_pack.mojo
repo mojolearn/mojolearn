@@ -9,7 +9,6 @@ from bindings.native_class_admission_door import class_record, class_admit
 from bindings.sequential_description_unpack import sequential_fields
 from bindings.sequential_admission_door import sequential_admit_value
 from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type
-from bindings.pca_descriptor_boundary_door import pca_connection
 
 
 from bindings.pca_metadata_unpack import (
@@ -17,16 +16,23 @@ from bindings.pca_metadata_unpack import (
 )
 from bindings.pca_keys_unpack import pca_keys
 from bindings.py_balanced import py_item
+from bindings.decomp_device_route_door import decomp_device_admit, decomp_route_clear
 
 
-def pca_initialize(model: PythonObject, args: PythonObject) raises -> PythonObject:
+def pca_initialize(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     var nk = pca_keys()
-    if len(args) != 10:
-        raise Error("TypeError: native PCA initialization requires its ten constructor arguments")
+    if len(args) != 11:
+        raise Error("TypeError: native PCA initialization requires its eleven constructor arguments")
+    # `device` is checked where it is given, before any field changes: an
+    # unknown value and an explicit 'gpu' on a CPU-only installation are
+    # refused in words (bindings/decomp_device_route_door.mojo). The default
+    # None is one identity compare.
+    decomp_device_admit(args[10], context)
+    decomp_route_clear(model)
     var fields = sequential_fields(model)
     var names = Python.tuple("n_components", "copy", "whiten", "svd_solver", "tol",
                              "iterated_power", "n_oversamples", "power_iteration_normalizer",
-                             "random_state", "numeric_mode")
+                             "random_state", "numeric_mode", "device")
     for k in range(len(names)):  # driver-loop: over fixed constructor argument metadata
         if k != 9 or args[k] is not None or not py_contains(fields, nk[].k_numeric_mode):
             py_setitem(fields, names[k], args[k])
@@ -62,7 +68,10 @@ def pca_set_params(model: PythonObject, values: PythonObject, context: PythonObj
             raise Error("Invalid parameter '" + String(parts[0]) + "' for PCA")
         if String(parts[1]) != "":
             raise Error("AttributeError: scalar parameter has no set_params")
+        if String(parts[0]) == "device":
+            decomp_device_admit(values[key], context)
         py_setitem(current, key, values[key])
+    decomp_route_clear(model)
     var fields = sequential_fields(model)
     var stored = py_call(b.list, fields.values())
     for k in range(len(stored)):  # driver-loop: over owned values before resetting the estimator dictionary
