@@ -64,7 +64,11 @@ def test_fused_doors_keep_the_op_chain_fallback():
     assert 'request.distance_labels(connection.driver, code_address, euclidean)' in local
     assert 'inputs.request.score_labels(connection.driver, code_address)' in local
     semi = _read('bindings/neighbors_semi_native_door.mojo')
-    assert '_lp_dense_available(binding)' in semi and 'xn_semi_row_normalize_request(' in semi
+    # LabelPropagation: the fused query when the image carries it, the operation chain otherwise
+    # (typed RUN, neighbors/label_propagation_run.mojo).
+    assert '_lp_dense_available(binding)' in semi and 'lp_query_run(connection.driver, request)' in semi
+    chain = _read('neighbors/label_propagation_run.mojo')
+    assert 'if lp_query_fused(request):' in chain and 'xn_semi_row_normalize_request(' in chain
     cluster = _read('bindings/mcls_cluster_door.mojo')
     assert '"homogeneity_completeness_v_measure", False' in cluster and '"v_measure_score"' in cluster
     for path in ('bindings/_mojolearn_metrics.mojo', 'bindings/_mojolearn_metrics_host.mojo'):

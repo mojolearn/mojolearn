@@ -36,7 +36,10 @@ def test_existing_provider_is_admitted_outside_packed_operation_loops():
     for filename in ('neighbors_local_native_door','neighbors_semi_native_door','neighbors_graph_native_door'):
         source = (ROOT / 'bindings' / (filename+'.mojo')).read_text()
         assert source.count('args = xn_admit_arguments(args, context)') == 1
-        assert re.search(r'xn_execute\(binding, (request\.)?name, ', source), filename
+        # Every step of these doors runs on one typed connection (the image's native descriptor
+        # entry) inside a single GIL release; no door packs Python lists for a named xn_* export.
+        assert 'xn_execute(' not in source and 'Python.list(classical_address' not in source, filename
+        assert 'LofConnection(' in source and 'with GILReleased(Python()):' in source, filename
     # OneClassSVM admits its binding once per public operation and runs every step on one typed
     # connection (OcConnection: the native driver), never a named per-step provider lookup.
     ocsvm = (ROOT / 'bindings/svc_ocsvm_native_door.mojo').read_text()
