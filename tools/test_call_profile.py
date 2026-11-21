@@ -516,6 +516,126 @@ class Job(unittest.TestCase):
             self.assertIn("        %s)" % p, body)                               # run_pass has a case per pass
 
 
+class LongRows(unittest.TestCase):
+    """Lane fx-profile-big-rows (2026-11-20): rows whose one call takes minutes, one call per pass, under a cap."""
+    BIG = os.path.join(HERE, "ops", "call_profile_rows_big.tsv")
+
+    def setUp(self):
+        self.keys = [SR.FORCE_CALLS_ENV, SR.FORCE_CALLS_PHASE_ENV, SR.PROFILE_WINDOW_ENV, SR.PROFILE_SECONDS_ENV,
+                     SR.PROFILE_ONE_CALL_ENV, SR.NVTX_RANGE_ENV, SR.PYSPY_ENV, SR.SHIM_ENV, SR.CALLGRIND_ENV]
+        self.old = {k: os.environ.pop(k) for k in self.keys if k in os.environ}
+        del SR._RANGE[:]
+
+    def tearDown(self):
+        for k in self.keys:
+            os.environ.pop(k, None)
+        os.environ.update(self.old)
+        del SR._RANGE[:]
+
+    def test_big_rows_file(self):
+        rows = CP.load_rows(self.BIG)
+        self.assertEqual(len(rows), 14)
+        self.assertTrue(all(r.long and r.phase == "fit" for r in rows))
+        self.assertEqual(sorted((r.ms for r in rows), reverse=True), [r.ms for r in rows])     # biggest first
+        lle = [r for r in rows if r.name == "lle-taxi-fit"][0]
+        self.assertEqual(lle.cap(), int(-(-(524886 / 1000.0 * CP.CAP_FACTOR + CP.CAP_PAD_S) // 1)))
+
+    def test_fields_and_refusals(self):
+        r = CP.parse_rows("algos/x/y/rows=full fit ms=20000 cap=900\nalgos/z/y/rows=full fit ms=5\n")
+        self.assertEqual((r[0].ms, r[0].cap(), r[0].long), (20000.0, 900, True))
+        self.assertEqual((r[1].long, r[1].cap()), (False, None))                  # a small row keeps the old job
+        for bad in ("algos/x/y/rows=full fit ms=-1\n", "algos/x/y/rows=full fit cap=x\n",
+                    "algos/x/y/rows=full fit+infer ms=20000\n"):
+            with self.assertRaises(ValueError):
+                CP.parse_rows(bad)
+
+    def test_estimate_one_call_per_pass(self):
+        rows = CP.parse_rows("algos/x/y/rows=full fit ms=100000\n")
+        e = CP.estimate(rows, ("time", "pyspy", "nsys", "shim", "callgrind"))
+        self.assertEqual(e["long_passes"], ["pyspy", "nsys", "shim"])              # no time pass, no callgrind
+        self.assertEqual(e["callgrind_s"], 0.0)
+        want = sum(CP.OVERHEAD_S * CP.PASS_SLOWDOWN[p] + 100.0 * CP.LONG_CALL_SLOWDOWN[p] for p in e["long_passes"])
+        self.assertAlmostEqual(e["rows"][0]["seconds"], round(want, 1))
+        self.assertEqual(e["long_stored_x_passes_min"], 5.0)
+
+    def test_one_call_harness(self):
+        env = {SR.FORCE_CALLS_ENV: "1", SR.FORCE_CALLS_PHASE_ENV: "fit", SR.PROFILE_ONE_CALL_ENV: "1"}
+        self.assertFalse(SR.one_call(env))                                       # nothing to open: not a profile run
+        env[SR.PROFILE_WINDOW_ENV] = "/nonexistent/w.jsonl"
+        self.assertTrue(SR.one_call(env))
+        self.assertEqual(SR.first_round(env), 1)
+        self.assertTrue(SR.fit_warmup_skipped(env))
+        self.assertEqual(SR.profile_calls(1, 500000.0, dict(env, **{SR.PROFILE_SECONDS_ENV: "10"})), 1)
+        self.assertEqual(SR.first_round({}), 0)                                  # a board: the warmup round
+        self.assertFalse(SR.fit_warmup_skipped({}))
+
+    def test_window_around_the_first_call(self):
+        with tempfile.TemporaryDirectory() as d:
+            w = os.path.join(d, "window.jsonl")
+            os.environ.update({SR.FORCE_CALLS_ENV: "1", SR.FORCE_CALLS_PHASE_ENV: "fit",
+                               SR.PROFILE_ONE_CALL_ENV: "1", SR.PROFILE_WINDOW_ENV: w})
+            self.assertFalse(SR.range_open_one("infer"))                          # not the forced phase
+            self.assertEqual(SR.calls_for(500000.0, True, "fit"), 1)              # no extra calls after it
+            self.assertTrue(SR.range_open_one("fit"))
+            with open(w) as fh:                                                  # on disk before the call runs
+                mark = json.loads(fh.readline())
+            self.assertEqual((mark["event"], mark["calls"]), ("open-mark", 1))
+            SR.range_close()
+            win = CP.read_window(w)
+            self.assertEqual((win["calls"], win["windows"]), (1, 1))
+            self.assertIsNotNone(win["opened_unix"])
+        os.environ.pop(SR.PROFILE_ONE_CALL_ENV)
+        self.assertFalse(SR.range_open_one("fit"))                               # small rows: unchanged
+
+    def test_capped_row_is_reported(self):
+        with tempfile.TemporaryDirectory() as d:
+            write(os.path.join(d, "rows.tsv"), "algos/a/taxi/rows=full\tfit\tname=a\tms=500000\n")
+            rd = os.path.join(d, "rows", "a")
+            write(os.path.join(rd, "shim", "window.jsonl"), window_lines(1, 480 * 10 ** 9))
+            write(os.path.join(rd, "pyspy", "window.jsonl"),
+                  json.dumps({"event": "open-mark", "calls": 1, "pid": 5, "t_unix": 1000.0}) + "\n")
+            write(os.path.join(rd, "pyspy", "run.capped"), json.dumps(
+                {"cap_s": 1300, "elapsed_s": 1300, "t_capped_unix": 2250.0}))
+            write(os.path.join(rd, "pyspy", "pyspy.json"), json.dumps(
+                {"samples": 9, "shares": {"bindings": 1.0}, "shim_share": 0.0, "bindings": [],
+                 "self": [{"frame": "dijkstra (_mojolearn_x_decomp.so)", "pct": 90.0, "us_per_call": 9e8}] +
+                         [{"frame": "f%d (b.py)" % i, "pct": 0.1, "us_per_call": 1.0} for i in range(30)],
+                 "inclusive": []}))
+            write(os.path.join(rd, "nsys", "nsys.json"), json.dumps(
+                {"captured": True, "api_ms": 470000.0, "kernel_ms": 400000.0, "sync_ms": 465000.0,
+                 "counts": {"launch": 9000.0, "sync": 3000.0},
+                 "kernels": [{"name": "small_k", "total_ms_per_call": 1000.0, "instances_per_call": 10.0},
+                             {"name": "dijkstra_row", "total_ms_per_call": 390000.0, "instances_per_call": 3.0}],
+                 "api": {"cuStreamSynchronize": {"calls": 3000.0, "ms": 465000.0, "kind": "sync"}},
+                 "mem": {"h2d": {"count": 2.0, "mb": 160.0}, "d2h": {"count": 1.0, "mb": 0.4}}}))
+            rc = CP.main(["report", "--res", d, "--rows-file", os.path.join(d, "rows.tsv"), "--top", "15"])
+            self.assertEqual(rc, CP.EXIT_CAPPED)
+            with open(os.path.join(d, "CALL-PROFILE-nvidia.json")) as fh:
+                r = json.load(fh)["rows"][0]
+            self.assertEqual(r["status"], "CAPPED")
+            self.assertEqual(r["capped"]["passes"], ["pyspy"])
+            self.assertEqual(r["passes"]["pyspy"]["capped"]["in_call_s"], 1250.0)
+            self.assertAlmostEqual(r["wall_ms_per_call"], 480000.0)               # the shim pass's one call
+            self.assertTrue(r["largest_cost"].startswith("GPU kernels 400000.0 ms of 480000.0 ms (83.3%): "
+                                                         "top kernel `dijkstra_row` 390000.0 ms in 3 launches"))
+            with open(os.path.join(d, "CALL-PROFILE-nvidia.md")) as fh:
+                md = fh.read()
+            self.assertIn("CAPPED: pyspy stopped at the cap of 1300 s (1250 s inside the call", md)
+            self.assertIn("| a | 500000 | 480000 | CAPPED | 400000 | 470000 | 465000 | 10000 | 9000 | 3000 | 160.0 | 0.4 |", md)
+            self.assertEqual(md.count("| `f"), 14)                               # top 15 frames: 1 + 14
+
+    def test_job_runs_long_rows_in_one_call(self):
+        with open(JOB) as fh:
+            body = fh.read()
+        for want in ("MOJOLEARN_BENCH_PROFILE_ONE_CALL=1", "MOJOLEARN_BENCH_FORCE_CALLS=1", "run.capped",
+                     "read -r row rid ph cap long", "--race-round-seconds", "--top \"${CP_REPORT_TOP:-40}\"",
+                     "signal.signal(signal.SIGINT, signal.SIG_DFL)"):
+            self.assertIn(want, body)
+        self.assertEqual(SR.PROFILE_ONE_CALL_ENV, "MOJOLEARN_BENCH_PROFILE_ONE_CALL")
+        r = subprocess.run(["bash", "-n", JOB], capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr[-400:])
+
+
 if __name__ == "__main__":
     unittest.main()
 
