@@ -24,7 +24,7 @@ from core.step_phase import (
     step_count_host_alloc,
     step_count_sync,
 )
-from core.shared_slot import SharedSlot
+from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 from core.ctx_key import ctx_cache_key
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
@@ -240,16 +240,23 @@ struct _StagePool(Defaultable, Movable):
     #: into x_ann, the metrics device_io into x_cnn), so a name alone did not
     #: stop a pinned stage made by one context reaching a copy on another.
     var key: Int
+    #: Lane fx-gil (2026-11-21): the pool's own lock word, held for the list
+    #: step of a take or a give. The pool was serialized by the GIL, which a
+    #: door releases around the download and a member's worker never holds.
+    var lock: List[Int64]
 
     def __init__(out self):
         self.bufs = List[HostBuffer[DType.float32]]()
         self.n = 0
         self.key = 0
+        self.lock = List[Int64](length=1, fill=Int64(0))
 
 
 comptime _STAGE_NAME = "MojolearnDownloadStagesIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnDownloadStagesFastV1"
-#: Layout version of `_StagePool` for every pool name (2: `key` added).
-comptime _STAGE_LAYOUT = 2
+#: Layout version of `_StagePool` for every pool name (2: `key` added; 3:
+#: `lock` added. The pool names are their callers' and are not renamed: the
+#: layout word stops an image built from another layout).
+comptime _STAGE_LAYOUT = 3
 comptime DOWNLOAD_STAGES = SharedSlot[_StagePool, _STAGE_NAME, _STAGE_LAYOUT]
 
 
@@ -261,16 +268,25 @@ def _stage_take[name: StaticString](ctx: DeviceContext, chunk: Int) raises -> Ho
     var pool = SLOT.get_or_create_ptr()
     # One word read from the context's handle; no lookup (core/ctx_key.mojo).
     var key = ctx_cache_key(ctx)
-    if pool[].key != key:
-        pool[].bufs.clear()
-        pool[].key = key
-    if pool[].n < chunk:
-        pool[].bufs.clear()
-        pool[].n = chunk
-    if len(pool[].bufs) > 0:
-        return pool[].bufs.pop()
+    var size = 0
+    # retired stages are freed after the lock word is released
+    var retired = List[HostBuffer[DType.float32]]()
+    var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](pool[].lock.unsafe_ptr())
+    shared_slot_lock(word)
+    try:
+        if pool[].key != key or pool[].n < chunk:
+            while len(pool[].bufs) > 0:  # driver-loop: over the kept stages (at most DOWNLOAD_STAGE_KEEP)
+                retired.append(pool[].bufs.pop())
+            pool[].key = key
+            if pool[].n < chunk:
+                pool[].n = chunk
+        if len(pool[].bufs) > 0:
+            return pool[].bufs.pop()
+        size = pool[].n
+    finally:
+        shared_slot_unlock(word)
     step_count_host_alloc()
-    return ctx.enqueue_create_host_buffer[DType.float32](pool[].n)
+    return ctx.enqueue_create_host_buffer[DType.float32](size)
 
 
 def _stage_give[name: StaticString](ctx: DeviceContext, var stage: HostBuffer[DType.float32]) raises:
@@ -278,9 +294,13 @@ def _stage_give[name: StaticString](ctx: DeviceContext, var stage: HostBuffer[DT
     context's and holds fewer than DOWNLOAD_STAGE_KEEP; dropped otherwise."""
     comptime SLOT = SharedSlot[_StagePool, name, _STAGE_LAYOUT]
     var pool = SLOT.get_or_create_ptr()
-    if (pool[].key == ctx_cache_key(ctx) and len(stage) == pool[].n
+    var key = ctx_cache_key(ctx)
+    var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](pool[].lock.unsafe_ptr())
+    shared_slot_lock(word)
+    if (pool[].key == key and len(stage) == pool[].n
             and len(pool[].bufs) < DOWNLOAD_STAGE_KEEP):
         pool[].bufs.append(stage^)
+    shared_slot_unlock(word)
 
 
 @always_inline

@@ -90,7 +90,7 @@ from autograd.kernels.recurrent_scan import cell_bwd_scan_kernel
 from x_linear.ops import IP
 from x_linear.witness import witness_end
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
-from core.shared_slot import SharedSlot
+from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 
 #: the simdgroup-cooperative long folds (sequence/coop.mojo): Apple, and
 #: since nr-small D1/D11 (2026-10-04) NVIDIA and AMD in IDENTICAL. The
@@ -198,21 +198,31 @@ struct _SeqContext(Defaultable, Movable):
     finding). Storage is `std.ffi._Global`, one slot per numeric tier so a
     FAST and an IDENTICAL .so in one process never share it."""
     var ctx: Optional[DeviceContext]
+    #: Lane fx-gil (2026-11-21): the first creation was serialized by the
+    #: GIL, which a door releases around its kernels and a member's worker
+    #: never holds. Held for the test, the creation and the handle copy.
+    var ctx_lock: List[Int64]
 
     def __init__(out self):
         self.ctx = Optional[DeviceContext]()
+        self.ctx_lock = List[Int64](length=1, fill=Int64(0))
 
 
-comptime _CTX_NAME = "MojolearnXSequenceContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXSequenceContextFastV3"
-comptime X_SEQUENCE_CONTEXT = SharedSlot[_SeqContext, _CTX_NAME]
+comptime _CTX_NAME = "MojolearnXSequenceContextIdenticalV4" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXSequenceContextFastV4"
+comptime X_SEQUENCE_CONTEXT = SharedSlot[_SeqContext, _CTX_NAME, 2]
 
 
 def sequence_ctx() raises -> DeviceContext:
     """The shared context, created on first use."""
     var slot = X_SEQUENCE_CONTEXT.get_or_create_ptr()
-    if not slot[].ctx:
-        slot[].ctx = DeviceContext()
-    return slot[].ctx.value().copy()
+    var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](slot[].ctx_lock.unsafe_ptr())
+    shared_slot_lock(word)
+    try:
+        if not slot[].ctx:
+            slot[].ctx = DeviceContext()
+        return slot[].ctx.value().copy()
+    finally:
+        shared_slot_unlock(word)
 
 
 @always_inline

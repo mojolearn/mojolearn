@@ -46,7 +46,7 @@ from std.sys.info import size_of
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.launch_log import activity_downloaded, activity_uploaded
-from core.shared_slot import SharedSlot
+from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 from core.staged_download import (
     DOWNLOAD_STAGE_KEEP, download_chunk_floats, download_f32_into, download_staged,
 )
@@ -236,31 +236,53 @@ struct _I32StagePool(Defaultable, Movable):
     """The pinned int32 stages kept between calls, all of `n` words."""
     var bufs: List[HostBuffer[DType.int32]]
     var n: Int
+    #: Lane fx-gil (2026-11-21): the pool's own lock word (list step of a
+    #: take or a give); the pool was serialized by the GIL.
+    var lock: List[Int64]
 
     def __init__(out self):
         self.bufs = List[HostBuffer[DType.int32]]()
         self.n = 0
+        self.lock = List[Int64](length=1, fill=Int64(0))
+
+
+#: Layout version of `_I32StagePool` (2: `lock` added; the pool names are
+#: their callers' and are not renamed).
+comptime _I32_STAGE_LAYOUT = 2
 
 
 def _i32_stage_take[name: StaticString](ctx: DeviceContext, chunk: Int) raises -> HostBuffer[DType.int32]:
     """A pooled pinned stage of at least `chunk` words, else a new one (a
     larger chunk retires the smaller stages)."""
-    comptime SLOT = SharedSlot[_I32StagePool, name]
+    comptime SLOT = SharedSlot[_I32StagePool, name, _I32_STAGE_LAYOUT]
     var pool = SLOT.get_or_create_ptr()
-    if pool[].n < chunk:
-        pool[].bufs.clear()
-        pool[].n = chunk
-    if len(pool[].bufs) > 0:
-        return pool[].bufs.pop()
+    var size = 0
+    # retired stages are freed after the lock word is released
+    var retired = List[HostBuffer[DType.int32]]()
+    var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](pool[].lock.unsafe_ptr())
+    shared_slot_lock(word)
+    try:
+        if pool[].n < chunk:
+            while len(pool[].bufs) > 0:  # driver-loop: over the kept stages (at most DOWNLOAD_STAGE_KEEP)
+                retired.append(pool[].bufs.pop())
+            pool[].n = chunk
+        if len(pool[].bufs) > 0:
+            return pool[].bufs.pop()
+        size = pool[].n
+    finally:
+        shared_slot_unlock(word)
     step_count_host_alloc()
-    return ctx.enqueue_create_host_buffer[DType.int32](pool[].n)
+    return ctx.enqueue_create_host_buffer[DType.int32](size)
 
 
 def _i32_stage_give[name: StaticString](var stage: HostBuffer[DType.int32]) raises:
-    comptime SLOT = SharedSlot[_I32StagePool, name]
+    comptime SLOT = SharedSlot[_I32StagePool, name, _I32_STAGE_LAYOUT]
     var pool = SLOT.get_or_create_ptr()
+    var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](pool[].lock.unsafe_ptr())
+    shared_slot_lock(word)
     if len(stage) == pool[].n and len(pool[].bufs) < DOWNLOAD_STAGE_KEEP:
         pool[].bufs.append(stage^)
+    shared_slot_unlock(word)
 
 
 def _i32_stage_enqueue(
