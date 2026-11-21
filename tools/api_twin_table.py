@@ -76,7 +76,7 @@ def doc_section(doc, title):
         if line and not line.startswith(" "):
             head, _, kind = line.partition(" : ")
             for name in head.split(","):
-                name = name.strip()
+                name = name.strip().strip("`*")
                 if re.fullmatch(r"\w+", name):
                     out[name] = kind.strip()
     return out
@@ -207,7 +207,7 @@ def our_class(mods, module, name):
         return None
     line = _ancestry(mods, found[0], found[1])
     params, owner = None, None
-    methods = set()
+    methods, props, conditional = set(), set(), {}
     doc_attrs, doc_params = None, {}
     for mod, node in line:
         doc = ast.get_docstring(node)
@@ -219,18 +219,28 @@ def our_class(mods, module, name):
             if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 if item.name == "__init__" and params is None:
                     params, owner = _init_params(item), node.name
+                elif item.name.endswith("_") and not item.name.startswith("_"):
+                    props.add(item.name)  # a fitted attribute served by a property
                 elif not item.name.startswith("_"):
                     methods.add(item.name)
+                    for dec in item.decorator_list:  # @available_if(lambda self: hasattr(self, "transform"))
+                        need = re.search(r"available_if\(lambda self: hasattr\(self, ['\"](\w+)['\"]\)\)",
+                                         ast.unparse(dec))
+                        if need:
+                            conditional[item.name] = need.group(1)
             elif isinstance(item, ast.Assign) and len(item.targets) == 1 and isinstance(item.targets[0], ast.Name):
                 t = item.targets[0].id
                 if t == "__init__" and params is None:
                     params, owner = {"**<connected constructor>": {"default": ast.unparse(item.value)}}, node.name
+                elif t.endswith("_") and not t.startswith("_"):
+                    props.add(t)
                 elif not t.startswith("_") and not t.isupper() and _is_method_value(item.value):
                     methods.add(t)
+    methods -= {m for m, need in conditional.items() if need not in methods}
     for p, row in (params or {}).items():
         row["accepts"] = doc_params.get(p, "")
     return {"module": found[0], "init_owner": owner, "params": params or {},
-            "methods": sorted(methods), "attributes": sorted(doc_attrs or {})}
+            "methods": sorted(methods), "attributes": sorted(set(doc_attrs or {}) | props)}
 
 
 # ---------------------------------------------------------------- scikit-learn's side
@@ -272,6 +282,8 @@ def sklearn_side():
             d = p.default
             if d is inspect.Parameter.empty:
                 d = "<required>"
+            elif isinstance(d, float) or type(d).__name__ in ("float64", "float32"):
+                d = repr(float(d))  # np.float64(x) is the number x
             elif inspect.isfunction(d) or inspect.isclass(d):
                 d = d.__name__  # a callable default: its name, since Mojolearn takes names
             else:
@@ -336,11 +348,16 @@ def differences(cls, ours, theirs):
     return rows
 
 
-def classify(rules, cls, kind, name):
+def classify(rules, cls, kind, name, ours, theirs):
+    """The reason of the first rule that matches; `class`, `name`, `ours` and
+    `sklearn` are fnmatch globs (a list is any of them), `kind` a kind or a list."""
+    def hit(pattern, value):
+        pats = pattern if isinstance(pattern, list) else [pattern]
+        return any(fnmatch.fnmatchcase(str(value), p) for p in pats)
     for r in rules:
         kinds = r["kind"] if isinstance(r["kind"], list) else [r["kind"]]
-        if kind in kinds and fnmatch.fnmatchcase(cls, r.get("class", "*")) \
-                and fnmatch.fnmatchcase(name, r.get("name", "*")):
+        if (kind in kinds and hit(r.get("class", "*"), cls) and hit(r.get("name", "*"), name)
+                and hit(r.get("ours", "*"), ours) and hit(r.get("sklearn", "*"), theirs)):
             return r["reason"]
     return None
 
@@ -419,7 +436,7 @@ def main(argv):
             missing_class.append(name)
             continue
         theirs = sk["classes"][name]
-        rows = [dict(kind=k, name=n, ours=o, sklearn=s, reason=classify(rules, name, k, n))
+        rows = [dict(kind=k, name=n, ours=o, sklearn=s, reason=classify(rules, name, k, n, o, s))
                 for k, n, o, s in differences(name, ours, theirs)]
         table[name] = {"module": ours["module"], "twin": theirs["public_path"], "ours": ours, "sklearn": theirs,
                        "differences": rows}

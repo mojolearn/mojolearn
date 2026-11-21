@@ -2628,7 +2628,7 @@
      "accepts": "{'average', 'complete', 'single', 'ward'}"
     },
     "pooling_func": {
-     "default": "<function mean at 0x1080b8d70>",
+     "default": "<function mean at 0x10a408e70>",
      "positional": false,
      "accepts": "builtin_function_or_method"
     },
@@ -3532,7 +3532,7 @@
      "accepts": "verbose"
     },
     "eps": {
-     "default": "np.float64(2.220446049250313e-16)",
+     "default": "2.220446049250313e-16",
      "positional": false,
      "accepts": "Real in [0, inf]"
     },
@@ -3608,7 +3608,7 @@
      "accepts": "verbose"
     },
     "eps": {
-     "default": "np.float64(2.220446049250313e-16)",
+     "default": "2.220446049250313e-16",
      "positional": false,
      "accepts": "Real in [0, inf]"
     },
@@ -5197,7 +5197,7 @@
      "accepts": "Integral in [1, inf)"
     },
     "eps": {
-     "default": "np.float64(2.220446049250313e-16)",
+     "default": "2.220446049250313e-16",
      "positional": false,
      "accepts": "Real in [0, inf)"
     },
@@ -5277,7 +5277,7 @@
      "accepts": "Integral | None"
     },
     "eps": {
-     "default": "np.float64(2.220446049250313e-16)",
+     "default": "2.220446049250313e-16",
      "positional": false,
      "accepts": "Real in [0, inf)"
     },
@@ -5492,7 +5492,7 @@
      "accepts": "Integral in [0, inf)"
     },
     "eps": {
-     "default": "np.float64(2.220446049250313e-16)",
+     "default": "2.220446049250313e-16",
      "positional": false,
      "accepts": "Real in [0, inf)"
     },
@@ -5577,7 +5577,7 @@
      "accepts": "Integral | None"
     },
     "eps": {
-     "default": "np.float64(2.220446049250313e-16)",
+     "default": "2.220446049250313e-16",
      "positional": false,
      "accepts": "Real in [0, inf)"
     },
@@ -5640,7 +5640,7 @@
      "accepts": "Integral in [0, inf)"
     },
     "eps": {
-     "default": "np.float64(2.220446049250313e-16)",
+     "default": "2.220446049250313e-16",
      "positional": false,
      "accepts": "Real in [0, inf)"
     },

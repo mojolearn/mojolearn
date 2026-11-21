@@ -1181,7 +1181,6 @@
     },
     "methods": [
      "check",
-     "estimators_",
      "fit",
      "get_params",
      "numeric_mode_used",
@@ -1320,13 +1319,6 @@
     },
     {
      "kind": "method_extra",
-     "name": "estimators_",
-     "ours": "yes",
-     "sklearn": "",
-     "reason": null
-    },
-    {
-     "kind": "method_extra",
      "name": "numeric_mode_used",
      "ours": "yes",
      "sklearn": "",
@@ -1429,7 +1421,6 @@
     },
     "methods": [
      "check",
-     "estimators_",
      "fit",
      "get_params",
      "numeric_mode_used",
@@ -1540,13 +1531,6 @@
     {
      "kind": "method_extra",
      "name": "check",
-     "ours": "yes",
-     "sklearn": "",
-     "reason": null
-    },
-    {
-     "kind": "method_extra",
-     "name": "estimators_",
      "ours": "yes",
      "sklearn": "",
      "reason": null
@@ -2187,7 +2171,6 @@
     "methods": [
      "check",
      "fit",
-     "fit_transform",
      "get_params",
      "partial_fit",
      "predict",
@@ -2204,6 +2187,7 @@
      "classes_",
      "feature_count_",
      "feature_log_prob_",
+     "n_features_in_",
      "numeric_mode_"
     ]
    },
@@ -2272,13 +2256,6 @@
     },
     {
      "kind": "method_extra",
-     "name": "fit_transform",
-     "ours": "yes",
-     "sklearn": "",
-     "reason": null
-    },
-    {
-     "kind": "method_extra",
      "name": "receipt",
      "ours": "yes",
      "sklearn": "",
@@ -2287,13 +2264,6 @@
     {
      "kind": "attribute_missing",
      "name": "feature_names_in_",
-     "ours": "",
-     "sklearn": "yes",
-     "reason": null
-    },
-    {
-     "kind": "attribute_missing",
-     "name": "n_features_in_",
      "ours": "",
      "sklearn": "yes",
      "reason": null
@@ -2337,6 +2307,7 @@
      "transform"
     ],
     "attributes": [
+     "n_features_in_",
      "numeric_mode_"
     ]
    },
@@ -2397,13 +2368,6 @@
     {
      "kind": "attribute_missing",
      "name": "feature_names_in_",
-     "ours": "",
-     "sklearn": "yes",
-     "reason": null
-    },
-    {
-     "kind": "attribute_missing",
-     "name": "n_features_in_",
      "ours": "",
      "sklearn": "yes",
      "reason": null
@@ -2969,7 +2933,6 @@
     "methods": [
      "check",
      "fit",
-     "fit_transform",
      "get_params",
      "partial_fit",
      "predict",
@@ -2987,6 +2950,7 @@
      "classes_",
      "feature_log_prob_",
      "n_categories_",
+     "n_features_in_",
      "numeric_mode_"
     ]
    },
@@ -3056,13 +3020,6 @@
     },
     {
      "kind": "method_extra",
-     "name": "fit_transform",
-     "ours": "yes",
-     "sklearn": "",
-     "reason": null
-    },
-    {
-     "kind": "method_extra",
      "name": "receipt",
      "ours": "yes",
      "sklearn": "",
@@ -3071,13 +3028,6 @@
     {
      "kind": "attribute_missing",
      "name": "feature_names_in_",
-     "ours": "",
-     "sklearn": "yes",
-     "reason": null
-    },
-    {
-     "kind": "attribute_missing",
-     "name": "n_features_in_",
      "ours": "",
      "sklearn": "yes",
      "reason": null
@@ -3239,7 +3189,6 @@
     "methods": [
      "check",
      "fit",
-     "fit_transform",
      "get_params",
      "partial_fit",
      "predict",
@@ -3256,6 +3205,7 @@
      "classes_",
      "feature_count_",
      "feature_log_prob_",
+     "n_features_in_",
      "numeric_mode_"
     ]
    },
@@ -3325,13 +3275,6 @@
     },
     {
      "kind": "method_extra",
-     "name": "fit_transform",
-     "ours": "yes",
-     "sklearn": "",
-     "reason": null
-    },
-    {
-     "kind": "method_extra",
      "name": "receipt",
      "ours": "yes",
      "sklearn": "",
@@ -3347,13 +3290,6 @@
     {
      "kind": "attribute_missing",
      "name": "feature_names_in_",
-     "ours": "",
-     "sklearn": "yes",
-     "reason": null
-    },
-    {
-     "kind": "attribute_missing",
-     "name": "n_features_in_",
      "ours": "",
      "sklearn": "yes",
      "reason": null
@@ -5106,7 +5042,6 @@
      "decision_function",
      "fit",
      "fit_predict",
-     "fit_transform",
      "get_params",
      "get_precision",
      "mahalanobis",
@@ -5121,6 +5056,7 @@
      "covariance_",
      "dist_",
      "location_",
+     "n_features_in_",
      "offset_",
      "precision_",
      "support_"
@@ -5227,13 +5163,6 @@
     },
     {
      "kind": "method_extra",
-     "name": "fit_transform",
-     "ours": "yes",
-     "sklearn": "",
-     "reason": null
-    },
-    {
-     "kind": "method_extra",
      "name": "receipt",
      "ours": "yes",
      "sklearn": "",
@@ -5249,13 +5178,6 @@
     {
      "kind": "attribute_missing",
      "name": "feature_names_in_",
-     "ours": "",
-     "sklearn": "yes",
-     "reason": null
-    },
-    {
-     "kind": "attribute_missing",
-     "name": "n_features_in_",
      "ours": "",
      "sklearn": "yes",
      "reason": null
@@ -6948,7 +6870,6 @@
     "methods": [
      "check",
      "fit",
-     "fit_transform",
      "get_params",
      "partial_fit",
      "predict",
@@ -6964,6 +6885,7 @@
      "class_prior_",
      "classes_",
      "epsilon_",
+     "n_features_in_",
      "numeric_mode_",
      "theta_",
      "var_"
@@ -7027,13 +6949,6 @@
     },
     {
      "kind": "method_extra",
-     "name": "fit_transform",
-     "ours": "yes",
-     "sklearn": "",
-     "reason": null
-    },
-    {
-     "kind": "method_extra",
      "name": "receipt",
      "ours": "yes",
      "sklearn": "",
@@ -7042,13 +6957,6 @@
     {
      "kind": "attribute_missing",
      "name": "feature_names_in_",
-     "ours": "",
-     "sklearn": "yes",
-     "reason": null
-    },
-    {
-     "kind": "attribute_missing",
-     "name": "n_features_in_",
      "ours": "",
      "sklearn": "yes",
      "reason": null
@@ -7649,7 +7557,6 @@
     },
     "methods": [
      "check",
-     "components_",
      "fit",
      "fit_transform",
      "get_params",
@@ -7730,13 +7637,6 @@
     {
      "kind": "method_extra",
      "name": "check",
-     "ours": "yes",
-     "sklearn": "",
-     "reason": null
-    },
-    {
-     "kind": "method_extra",
-     "name": "components_",
      "ours": "yes",
      "sklearn": "",
      "reason": null
@@ -10218,6 +10118,7 @@
      "vendor_used"
     ],
     "attributes": [
+     "max_samples_",
      "n_features_in_",
      "offset_"
     ]
@@ -10384,13 +10285,6 @@
     {
      "kind": "attribute_missing",
      "name": "feature_names_in_",
-     "ours": "",
-     "sklearn": "yes",
-     "reason": null
-    },
-    {
-     "kind": "attribute_missing",
-     "name": "max_samples_",
      "ours": "",
      "sklearn": "yes",
      "reason": null
@@ -10829,6 +10723,7 @@
     "attributes": [
      "bin_edges_",
      "n_bins_",
+     "n_features_in_",
      "numeric_mode_"
     ]
    },
@@ -10924,13 +10819,6 @@
     {
      "kind": "attribute_missing",
      "name": "feature_names_in_",
-     "ours": "",
-     "sklearn": "yes",
-     "reason": null
-    },
-    {
-     "kind": "attribute_missing",
-     "name": "n_features_in_",
      "ours": "",
      "sklearn": "yes",
      "reason": null
@@ -11446,7 +11334,6 @@
     },
     "methods": [
      "check",
-     "classes_",
      "fit",
      "get_params",
      "kneighbors",
@@ -11590,13 +11477,6 @@
     {
      "kind": "method_extra",
      "name": "check",
-     "ours": "yes",
-     "sklearn": "",
-     "reason": null
-    },
-    {
-     "kind": "method_extra",
-     "name": "classes_",
      "ours": "yes",
      "sklearn": "",
      "reason": null
@@ -13213,7 +13093,7 @@
       "accepts": "Integral in [1, inf)"
      },
      "eps": {
-      "default": "np.float64(2.220446049250313e-16)",
+      "default": "2.220446049250313e-16",
       "positional": false,
       "accepts": "Real in [0, inf)"
      },
@@ -13255,13 +13135,6 @@
     ]
    },
    "differences": [
-    {
-     "kind": "default",
-     "name": "eps",
-     "ours": "2.220446049250313e-16",
-     "sklearn": "np.float64(2.220446049250313e-16)",
-     "reason": null
-    },
     {
      "kind": "param_extra",
      "name": "numeric_mode",
@@ -13922,7 +13795,7 @@
       "accepts": "Integral in [0, inf)"
      },
      "eps": {
-      "default": "np.float64(2.220446049250313e-16)",
+      "default": "2.220446049250313e-16",
       "positional": false,
       "accepts": "Real in [0, inf)"
      },
@@ -13969,13 +13842,6 @@
     ]
    },
    "differences": [
-    {
-     "kind": "default",
-     "name": "eps",
-     "ours": "2.220446049250313e-16",
-     "sklearn": "np.float64(2.220446049250313e-16)",
-     "reason": null
-    },
     {
      "kind": "param_extra",
      "name": "numeric_mode",
@@ -14388,6 +14254,7 @@
      "explained_variance_ratio_",
      "intercept_",
      "means_",
+     "n_features_in_",
      "numeric_mode_",
      "priors_",
      "scalings_",
@@ -14497,13 +14364,6 @@
     {
      "kind": "attribute_missing",
      "name": "feature_names_in_",
-     "ours": "",
-     "sklearn": "yes",
-     "reason": null
-    },
-    {
-     "kind": "attribute_missing",
-     "name": "n_features_in_",
      "ours": "",
      "sklearn": "yes",
      "reason": null
@@ -17331,6 +17191,7 @@
     ],
     "attributes": [
      "max_abs_",
+     "n_features_in_",
      "n_samples_seen_",
      "numeric_mode_",
      "scale_"
@@ -17433,13 +17294,6 @@
     {
      "kind": "attribute_missing",
      "name": "feature_names_in_",
-     "ours": "",
-     "sklearn": "yes",
-     "reason": null
-    },
-    {
-     "kind": "attribute_missing",
-     "name": "n_features_in_",
      "ours": "",
      "sklearn": "yes",
      "reason": null
@@ -17662,7 +17516,6 @@
     "methods": [
      "check",
      "fit",
-     "fit_transform",
      "get_params",
      "get_precision",
      "mahalanobis",
@@ -17768,13 +17621,6 @@
     {
      "kind": "method_extra",
      "name": "check",
-     "ours": "yes",
-     "sklearn": "",
-     "reason": null
-    },
-    {
-     "kind": "method_extra",
-     "name": "fit_transform",
      "ours": "yes",
      "sklearn": "",
      "reason": null
@@ -19083,7 +18929,6 @@
     "methods": [
      "check",
      "fit",
-     "fit_transform",
      "get_params",
      "partial_fit",
      "predict",
@@ -19100,6 +18945,7 @@
      "classes_",
      "feature_count_",
      "feature_log_prob_",
+     "n_features_in_",
      "numeric_mode_"
     ]
    },
@@ -19163,13 +19009,6 @@
     },
     {
      "kind": "method_extra",
-     "name": "fit_transform",
-     "ours": "yes",
-     "sklearn": "",
-     "reason": null
-    },
-    {
-     "kind": "method_extra",
      "name": "receipt",
      "ours": "yes",
      "sklearn": "",
@@ -19178,13 +19017,6 @@
     {
      "kind": "attribute_missing",
      "name": "feature_names_in_",
-     "ours": "",
-     "sklearn": "yes",
-     "reason": null
-    },
-    {
-     "kind": "attribute_missing",
-     "name": "n_features_in_",
      "ours": "",
      "sklearn": "yes",
      "reason": null
@@ -19844,6 +19676,7 @@
      "transform"
     ],
     "attributes": [
+     "n_features_in_",
      "numeric_mode_"
     ]
    },
@@ -19904,13 +19737,6 @@
     {
      "kind": "attribute_missing",
      "name": "feature_names_in_",
-     "ours": "",
-     "sklearn": "yes",
-     "reason": null
-    },
-    {
-     "kind": "attribute_missing",
-     "name": "n_features_in_",
      "ours": "",
      "sklearn": "yes",
      "reason": null
@@ -20667,6 +20493,7 @@
     "attributes": [
      "categories_",
      "drop_idx_",
+     "n_features_in_",
      "numeric_mode_"
     ]
    },
@@ -20790,13 +20617,6 @@
     {
      "kind": "attribute_missing",
      "name": "infrequent_categories_",
-     "ours": "",
-     "sklearn": "yes",
-     "reason": null
-    },
-    {
-     "kind": "attribute_missing",
-     "name": "n_features_in_",
      "ours": "",
      "sklearn": "yes",
      "reason": null
@@ -21012,6 +20832,7 @@
     ],
     "attributes": [
      "categories_",
+     "n_features_in_",
      "numeric_mode_"
     ]
    },
@@ -21126,13 +20947,6 @@
      "reason": null
     },
     {
-     "kind": "attribute_missing",
-     "name": "n_features_in_",
-     "ours": "",
-     "sklearn": "yes",
-     "reason": null
-    },
-    {
      "kind": "attribute_extra",
      "name": "numeric_mode_",
      "ours": "yes",
@@ -21210,6 +21024,7 @@
      "explained_variance_ratio_",
      "input_copied_",
      "mean_",
+     "n_components_",
      "n_features_in_",
      "n_samples_",
      "noise_variance_",
@@ -21377,13 +21192,6 @@
     {
      "kind": "attribute_missing",
      "name": "feature_names_in_",
-     "ours": "",
-     "sklearn": "yes",
-     "reason": null
-    },
-    {
-     "kind": "attribute_missing",
-     "name": "n_components_",
      "ours": "",
      "sklearn": "yes",
      "reason": null
@@ -22908,6 +22716,8 @@
      "transform"
     ],
     "attributes": [
+     "n_features_in_",
+     "n_output_features_",
      "numeric_mode_",
      "powers_"
     ]
@@ -22986,20 +22796,6 @@
      "reason": null
     },
     {
-     "kind": "attribute_missing",
-     "name": "n_features_in_",
-     "ours": "",
-     "sklearn": "yes",
-     "reason": null
-    },
-    {
-     "kind": "attribute_missing",
-     "name": "n_output_features_",
-     "ours": "",
-     "sklearn": "yes",
-     "reason": null
-    },
-    {
      "kind": "attribute_extra",
      "name": "numeric_mode_",
      "ours": "yes",
@@ -23045,6 +22841,7 @@
     ],
     "attributes": [
      "lambdas_",
+     "n_features_in_",
      "numeric_mode_"
     ]
    },
@@ -23117,13 +22914,6 @@
      "reason": null
     },
     {
-     "kind": "attribute_missing",
-     "name": "n_features_in_",
-     "ours": "",
-     "sklearn": "yes",
-     "reason": null
-    },
-    {
      "kind": "attribute_extra",
      "name": "numeric_mode_",
      "ours": "yes",
@@ -23176,7 +22966,6 @@
      "check",
      "decision_function",
      "fit",
-     "fit_transform",
      "get_params",
      "predict",
      "predict_joint_log_proba",
@@ -23190,6 +22979,7 @@
      "classes_",
      "covariance_",
      "means_",
+     "n_features_in_",
      "numeric_mode_",
      "priors_",
      "rotations_",
@@ -23271,13 +23061,6 @@
     },
     {
      "kind": "method_extra",
-     "name": "fit_transform",
-     "ours": "yes",
-     "sklearn": "",
-     "reason": null
-    },
-    {
-     "kind": "method_extra",
      "name": "predict_joint_log_proba",
      "ours": "yes",
      "sklearn": "",
@@ -23293,13 +23076,6 @@
     {
      "kind": "attribute_missing",
      "name": "feature_names_in_",
-     "ours": "",
-     "sklearn": "yes",
-     "reason": null
-    },
-    {
-     "kind": "attribute_missing",
-     "name": "n_features_in_",
      "ours": "",
      "sklearn": "yes",
      "reason": null
@@ -23530,6 +23306,8 @@
      "transform"
     ],
     "attributes": [
+     "n_features_in_",
+     "n_quantiles_",
      "numeric_mode_",
      "quantiles_",
      "references_"
@@ -23616,20 +23394,6 @@
     {
      "kind": "attribute_missing",
      "name": "feature_names_in_",
-     "ours": "",
-     "sklearn": "yes",
-     "reason": null
-    },
-    {
-     "kind": "attribute_missing",
-     "name": "n_features_in_",
-     "ours": "",
-     "sklearn": "yes",
-     "reason": null
-    },
-    {
-     "kind": "attribute_missing",
-     "name": "n_quantiles_",
      "ours": "",
      "sklearn": "yes",
      "reason": null
@@ -23845,6 +23609,7 @@
     "attributes": [
      "estimator_",
      "n_features_",
+     "n_features_in_",
      "numeric_mode_",
      "ranking_",
      "support_"
@@ -23948,13 +23713,6 @@
     {
      "kind": "attribute_missing",
      "name": "feature_names_in_",
-     "ours": "",
-     "sklearn": "yes",
-     "reason": null
-    },
-    {
-     "kind": "attribute_missing",
-     "name": "n_features_in_",
      "ours": "",
      "sklearn": "yes",
      "reason": null
@@ -24851,6 +24609,7 @@
     "attributes": [
      "forest_",
      "n_features_in_",
+     "n_output_features_",
      "n_trees_"
     ]
    },
@@ -25046,6 +24805,13 @@
     {
      "kind": "attribute_extra",
      "name": "forest_",
+     "ours": "yes",
+     "sklearn": "",
+     "reason": null
+    },
+    {
+     "kind": "attribute_extra",
+     "name": "n_output_features_",
      "ours": "yes",
      "sklearn": "",
      "reason": null
@@ -25721,6 +25487,7 @@
     ],
     "attributes": [
      "center_",
+     "n_features_in_",
      "numeric_mode_",
      "scale_"
     ]
@@ -25821,13 +25588,6 @@
     {
      "kind": "attribute_missing",
      "name": "feature_names_in_",
-     "ours": "",
-     "sklearn": "yes",
-     "reason": null
-    },
-    {
-     "kind": "attribute_missing",
-     "name": "n_features_in_",
      "ours": "",
      "sklearn": "yes",
      "reason": null
@@ -26864,7 +26624,6 @@
     },
     "methods": [
      "check",
-     "coef_",
      "decision_function",
      "fit",
      "get_params",
@@ -27057,13 +26816,6 @@
     },
     {
      "kind": "method_extra",
-     "name": "coef_",
-     "ours": "yes",
-     "sklearn": "",
-     "reason": null
-    },
-    {
-     "kind": "method_extra",
      "name": "load",
      "ours": "yes",
      "sklearn": "",
@@ -27189,7 +26941,6 @@
     },
     "methods": [
      "check",
-     "coef_",
      "fit",
      "get_params",
      "load",
@@ -27342,13 +27093,6 @@
     },
     {
      "kind": "method_extra",
-     "name": "coef_",
-     "ours": "yes",
-     "sklearn": "",
-     "reason": null
-    },
-    {
-     "kind": "method_extra",
      "name": "load",
      "ours": "yes",
      "sklearn": "",
@@ -27438,6 +27182,7 @@
      "vendor_used"
     ],
     "attributes": [
+     "n_features_in_",
      "numeric_mode_",
      "pvalues_",
      "scores_"
@@ -27523,13 +27268,6 @@
      "reason": null
     },
     {
-     "kind": "attribute_missing",
-     "name": "n_features_in_",
-     "ours": "",
-     "sklearn": "yes",
-     "reason": null
-    },
-    {
      "kind": "attribute_extra",
      "name": "numeric_mode_",
      "ours": "yes",
@@ -27585,6 +27323,7 @@
      "vendor_used"
     ],
     "attributes": [
+     "n_features_in_",
      "numeric_mode_",
      "statistics_"
     ]
@@ -27695,13 +27434,6 @@
      "reason": null
     },
     {
-     "kind": "attribute_missing",
-     "name": "n_features_in_",
-     "ours": "",
-     "sklearn": "yes",
-     "reason": null
-    },
-    {
      "kind": "attribute_extra",
      "name": "numeric_mode_",
      "ours": "yes",
@@ -27745,7 +27477,6 @@
      "get_feature_names_out",
      "get_params",
      "numeric_mode_used",
-     "random_weights_",
      "receipt",
      "set_params",
      "transform",
@@ -27814,13 +27545,6 @@
     {
      "kind": "method_extra",
      "name": "numeric_mode_used",
-     "ours": "yes",
-     "sklearn": "",
-     "reason": null
-    },
-    {
-     "kind": "method_extra",
-     "name": "random_weights_",
      "ours": "yes",
      "sklearn": "",
      "reason": null
@@ -28282,7 +28006,6 @@
     },
     "methods": [
      "check",
-     "components_",
      "fit",
      "fit_transform",
      "get_params",
@@ -28375,13 +28098,6 @@
     {
      "kind": "method_extra",
      "name": "check",
-     "ours": "yes",
-     "sklearn": "",
-     "reason": null
-    },
-    {
-     "kind": "method_extra",
-     "name": "components_",
      "ours": "yes",
      "sklearn": "",
      "reason": null
@@ -28920,6 +28636,7 @@
     ],
     "attributes": [
      "bsplines_",
+     "n_features_in_",
      "n_features_out_",
      "numeric_mode_"
     ]
@@ -29020,13 +28737,6 @@
     {
      "kind": "attribute_missing",
      "name": "feature_names_in_",
-     "ours": "",
-     "sklearn": "yes",
-     "reason": null
-    },
-    {
-     "kind": "attribute_missing",
-     "name": "n_features_in_",
      "ours": "",
      "sklearn": "yes",
      "reason": null
@@ -29874,6 +29584,7 @@
      "categories_",
      "classes_",
      "encodings_",
+     "n_features_in_",
      "numeric_mode_",
      "target_mean_",
      "target_type_"
@@ -29987,13 +29698,6 @@
      "reason": null
     },
     {
-     "kind": "attribute_missing",
-     "name": "n_features_in_",
-     "ours": "",
-     "sklearn": "yes",
-     "reason": null
-    },
-    {
      "kind": "attribute_extra",
      "name": "numeric_mode_",
      "ours": "yes",
@@ -30062,6 +29766,7 @@
      "explained_variance_",
      "explained_variance_ratio_",
      "input_copied_",
+     "n_components_",
      "n_features_in_",
      "singular_values_"
     ]
@@ -30195,6 +29900,13 @@
     {
      "kind": "attribute_extra",
      "name": "input_copied_",
+     "ours": "yes",
+     "sklearn": "",
+     "reason": null
+    },
+    {
+     "kind": "attribute_extra",
+     "name": "n_components_",
      "ours": "yes",
      "sklearn": "",
      "reason": null
@@ -30414,6 +30126,7 @@
      "transform"
     ],
     "attributes": [
+     "n_features_in_",
      "numeric_mode_",
      "variances_"
     ]
@@ -30480,13 +30193,6 @@
     {
      "kind": "attribute_missing",
      "name": "feature_names_in_",
-     "ours": "",
-     "sklearn": "yes",
-     "reason": null
-    },
-    {
-     "kind": "attribute_missing",
-     "name": "n_features_in_",
      "ours": "",
      "sklearn": "yes",
      "reason": null
