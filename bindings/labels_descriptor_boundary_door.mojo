@@ -5,7 +5,10 @@ The route word, the typed driver and the device-or-host dispatch are in
 `bindings/labels_descriptor_boundary_run.mojo`."""
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
-from bindings.py_balanced import py_get, py_type
+from bindings.py_balanced import py_get, py_type, py_fields
+from bindings.classical_keys_unpack import classical_keys
+from core.device_route import DEVICE_CPU
+from providers.python.device_route_boundary_door import device_route_resolved
 from core.shared_slot import SharedSlot
 from core.hotpath_impl import HpStat
 from core.labels_native_api import (
@@ -15,7 +18,7 @@ from core.labels_native_api import (
 )
 from core.labels_native_host import labels_host_fsum
 from bindings.labels_descriptor_boundary_run import (
-    labels_route_state, labels_route_host, labels_route_check, labels_route_device, labels_route_driver,
+    labels_route_state, labels_route_check, labels_route_device, labels_route_driver,
     labels_prepare_run, labels_reduce_run, labels_threshold_run, labels_argmax_run, labels_gather_run,
     labels_ratio_run,
 )
@@ -44,8 +47,8 @@ def _labels_route(context: PythonObject) raises -> Int:
     if base is None:
         raise Error("ImportError: mojolearn: the label steps need the label context (labels_base_binding)")
     if py_type(base) is py_type(PythonObject(False)):
-        labels_route_host()
-        return 2
+        # `_labels_pin` answers a host context before it asks for the route.
+        raise Error("RuntimeError: mojolearn: a host label context asked for the device label route")
     if py_type(base) is py_type(PythonObject("")):
         raise Error(String(base))
     var factory = neural_descriptor_entry(base, LABELS_NATIVE_FACTORY)
@@ -66,6 +69,15 @@ struct _LabelsPin(Movable):
 
 
 def _labels_pin(context: PythonObject) raises -> _LabelsPin:
+    # THE CALLER'S CONTEXT names the label image, never a process state: a
+    # context whose `labels_base_binding` is exactly False (a CPU-only
+    # installation, and the CPU scope of a `device="cpu"` estimator beside a
+    # GPU set: `_native_labels_bridge.cpu_scope`) runs the host kernels of
+    # this image and connects nothing. One dictionary read with the interned
+    # key and one pointer compare per label step (it was one route-word
+    # read); every other context takes the device provider, connected once.
+    if py_get(context, classical_keys()[].k_labels_base_binding) is PythonObject(False):
+        return _LabelsPin(PythonObject(None), Optional[LabelsNativeDriver]())
     _ = _labels_route(context)
     return _LabelsPin(_LABELS_PROVIDER_PIN.get_or_create_ptr()[].provider, labels_route_driver())
 
@@ -155,6 +167,36 @@ def labels_class_ratio_f64(context: PythonObject, counts_addr: Int, k: Int, n: I
 def labels_fsum_f64(src_addr: Int, n: Int, out_addr: Int) raises -> Int:
     with GILReleased(Python()):
         return labels_host_fsum(src_addr, n, out_addr)
+
+
+def labels_scope(model: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The context a classifier's door hands the label boundary
+    (bindings/classical_labels_door.mojo and the six steps here) for THIS
+    estimator: `context` itself, or, for an estimator whose device is the CPU
+    beside a GPU set, the family's CPU label scope
+    (`context["labels_cpu_scope"]`: the same context with the host label
+    kernels and the CPU metrics tables, built once at import by
+    `_native_labels_bridge.cpu_scope`). The estimator's device is its
+    resolved route's (two record reads at most); before its first operation
+    resolved one, the admitted `device` parameter is read once. A family
+    without a CPU scope (no CPU implementation, or a CPU-only installation,
+    whose one context is already the host one) gets `context`.
+
+    The call site changes only its argument: `classical_encode_labels(y,
+    labels_scope(model, context))`."""
+    var device = device_route_resolved(model)
+    if device < 0:
+        # No route yet: the parameter was checked where it was given, so an
+        # exact 'cpu' string is the only value that names the CPU.
+        var value = py_get(py_fields(model), "device")
+        if value is None or py_type(value) is not py_type(PythonObject("")) or String(value) != "cpu":
+            return context
+    elif device != DEVICE_CPU:
+        return context
+    var scope = py_get(context, "labels_cpu_scope")
+    if scope is None:
+        return context
+    return scope
 
 
 # ---------------------------------------------------------------- routed forms
