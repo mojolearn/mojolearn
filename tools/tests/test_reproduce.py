@@ -95,6 +95,20 @@ class Scaler:
         return (np.asarray(X, dtype=np.float32) - self.mean_) * np.float32(self.scale)
 
 
+class Clusterer:
+    """An estimator that answers at fit: no save, no predict, `labels_`."""
+
+    def __init__(self, cut=0.5):
+        self.cut = cut
+
+    def get_params(self, deep=True):
+        return dict(cut=self.cut)
+
+    def fit(self, X):
+        self.labels_ = (np.asarray(X)[:, 0] > self.cut).astype(np.int32)
+        return self
+
+
 class Install(types.ModuleType):
     """A stub `mojolearn`: what `_reproduce` asks of the package."""
 
@@ -104,7 +118,7 @@ class Install(types.ModuleType):
         self.__package__ = "mojolearn"
         self.__version__ = version
         self._mode, self._vendor, self.door = mode, vendor, Door(with_state)
-        self.Ridge, self.Scaler = Ridge, Scaler
+        self.Ridge, self.Scaler, self.Clusterer = Ridge, Scaler, Clusterer
 
     def numeric_mode(self):
         return self._mode
@@ -339,6 +353,19 @@ class TestReproduce(Base):
         X[0, 0] += 1
         record = self.rp.reproduce_with(self.ml, receipt, X)
         self.assertEqual(record["different"], ["data", "predictions"])
+
+    def test_an_estimator_that_answers_at_fit_is_compared_on_its_labels(self):
+        receipt = self.rp.make_receipt(self.ml, Clusterer().fit(self.X), self.X)
+        self.assertEqual(receipt["predictions"]["attribute"], "labels_")
+        self.assertNotIn("method", receipt["predictions"])
+        self.assertTrue(self.rp.reproduce_with(self.ml, receipt, self.X)["same"])
+        record = self.rp.reproduce_with(self.ml, receipt, self.X, params={"cut": 0.25})
+        self.assertEqual(record["different"], ["parameters", "predictions"])
+        est = Clusterer().fit(self.X)
+        del est.labels_
+        with self.assertRaises(self.rp.NotReproducible) as raised:
+            self.rp.make_receipt(self.ml, est, self.X)
+        self.assertIn("nothing to record", str(raised.exception))
 
     def test_same_data_and_a_different_model_is_the_reproducibility_failure(self):
         receipt = self.receipt()

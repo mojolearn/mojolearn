@@ -42,6 +42,9 @@ FORMAT = "mojolearn.reproduce.v1"
 PARTS = ("version", "parameters", "data", "fitted_state", "predictions")
 #: the native entry that hashes a saved model file (bindings/_mojolearn_core_host.mojo)
 STATE_ENTRY = "state_file_sha256"
+#: for an estimator with neither predict nor transform (it answers at fit):
+#: the fitted attribute hashed in the answer's place, the first it has
+FITTED_ANSWERS = ("labels_", "embedding_")
 
 EXIT_SAME = 0
 EXIT_DIFFERENT = 1
@@ -156,17 +159,30 @@ def default_method(est, method=None):
     return next((m for m in cb.DEFAULT_METHODS if callable(getattr(est, m, None))), None)
 
 
-def prediction_hash(est, X, method=None):
-    """What the fitted model answers for X, hashed as `check` hashes it."""
-    method = default_method(est, method)
-    if method is None:
-        return dict(present=False, reason=f"{type(est).__name__} has neither predict nor transform")
-    arrays = cb.as_arrays(getattr(est, method)(X))
+def prediction_hash(est, X, method=None, attribute=None):
+    """What the fitted model answers for X, hashed as `check` hashes it. An
+    estimator with neither predict nor transform answered at fit: its
+    `labels_` or `embedding_` is hashed (`attribute` names it in the record)."""
+    if attribute is None:
+        method = default_method(est, method)
+    if attribute is None and method is None:
+        attribute = next((a for a in FITTED_ANSWERS if getattr(est, a, None) is not None), None)
+        if attribute is None:
+            return dict(present=False, reason=f"{type(est).__name__} has neither predict nor transform, "
+                                              f"and no {' or '.join(FITTED_ANSWERS)}")
+    if attribute is not None:
+        value = getattr(est, attribute, None)
+        if value is None:
+            return dict(present=False, reason=f"{type(est).__name__} has no {attribute} after fit")
+        arrays, method = cb.as_arrays(value), None
+    else:
+        arrays = cb.as_arrays(getattr(est, method)(X))
     outputs = []
     for a in arrays:
         described = cb.describe_output(a)
         outputs.append(dict(shape=described["shape"], dtype=described["dtype"], sha256=described["sha256"]))
-    return dict(present=True, method=method, sha256=cb.outputs_digest(arrays), outputs=outputs)
+    named = dict(method=method) if attribute is None else dict(attribute=attribute)
+    return dict(present=True, sha256=cb.outputs_digest(arrays), outputs=outputs, **named)
 
 
 # --------------------------------------------------------------------------
@@ -331,7 +347,7 @@ def _compare_hashed(then, now, what):
     if not now.get("present"):
         raise NotReproducible(f"the receipt carries a {what} and it cannot be computed here: {now.get('reason')}")
     part = dict(compared=True, same=then["sha256"] == now["sha256"], receipt=then["sha256"], now=now["sha256"])
-    for key in ("form", "method"):
+    for key in ("form", "method", "attribute"):
         if key in then:
             part[key] = then[key]
     if not part["same"] and "outputs" in then and "outputs" in now:
@@ -382,7 +398,8 @@ def reproduce_with(ml, receipt, X, y=None, estimator=None, params=None):
         parts["fitted_state"] = _compare_hashed(
             then_state, state_hash(ml, est) if then_state.get("present") else {}, "fitted-state hash")
         parts["predictions"] = _compare_hashed(
-            then_pred, prediction_hash(est, X, then_pred.get("method")) if then_pred.get("present") else {},
+            then_pred, prediction_hash(est, X, then_pred.get("method"), then_pred.get("attribute"))
+            if then_pred.get("present") else {},
             "prediction hash")
     except cb.NotChecked as exc:
         return dict(record, reason=str(exc))
@@ -491,7 +508,7 @@ def _array_line(label, part):
 def _hashed_line(label, part):
     if not part["compared"]:
         return f"  {label:<13} not compared  {part['reason']}"
-    how = part.get("method") or part.get("form") or ""
+    how = part.get("method") or part.get("attribute") or part.get("form") or ""
     if part["same"]:
         return f"  {label:<13} same          {how} {_short(part['now'])}".rstrip()
     return f"  {label:<13} DIFFERENT     {how} receipt {_short(part['receipt'])}, now {_short(part['now'])}"
