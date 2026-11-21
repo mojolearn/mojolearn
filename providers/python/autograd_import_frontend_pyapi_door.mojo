@@ -72,6 +72,13 @@ def _construct(program: PythonObject, session: PythonObject, info: PythonObject,
 
 def _import(source: PythonObject, label: PythonObject, shapes: PythonObject,
             mode: PythonObject, context: PythonObject) raises -> PythonObject:
+    # An overload, not a `device = PythonObject(None)` default (a default is
+    # evaluated at compile time): the import on this installation's device.
+    return _import(source, label, shapes, mode, context, PythonObject(None))
+
+
+def _import(source: PythonObject, label: PythonObject, shapes: PythonObject,
+            mode: PythonObject, context: PythonObject, device: PythonObject) raises -> PythonObject:
     var b = native_loaded_module("builtins")
     if mode is not None and py_type(mode) is not b.str:
         raise Error("ValueError: numeric_mode must be fast, identical or None")
@@ -110,10 +117,23 @@ def _import(source: PythonObject, label: PythonObject, shapes: PythonObject,
         name = path.value() if label is None else label
     var session = native_storage_allocate(py_item(context, nk[].k_session))
     _ = _fields(session, py_item(context, nk[].k_layouts)[py_item(context, nk[].k_session)])
-    # The fifth slot is the session's `device` (None: this installation's device).
-    _ = ops_session_initialize_py(session, PythonObject(False), mode, py_item(context, nk[].k_connections), PythonObject(None), py_item(context, nk[].k_program))
+    # The fifth slot is the session's `device` (None: this installation's
+    # device). The session initializer applies the shared device rule and
+    # words ONCE and keeps the connection of the selected image; the lowering
+    # below runs on that session's own provider.
+    _ = ops_session_initialize_py(session, PythonObject(False), mode, py_item(context, nk[].k_connections), device, py_item(context, nk[].k_program))
     try:
         var fields = ops_session_fields(session)
+        if device is not None:
+            # A session of the CPU image beside a GPU set: the program's run
+            # entries are the CPU image's set, connected once at import
+            # (importers/_native_import_bridge.py). Identity of the session's
+            # binding decides; nothing about the device is read again.
+            var cpu_binding = py_get(context, nk[].k_import_cpu_binding)
+            if cpu_binding is not None and py_item(fields, nk[].k__b) is cpu_binding:
+                entries = py_item(context, nk[].k_import_cpu_entries)
+                if py_type(entries) is b.str:
+                    raise Error(String(entries))
         var lifetime = py_item(fields, nk[].k__lifetime)
         var owner = lifetime.downcast_value_ptr[NativeDescriptorResource]()
         var handle = 0
@@ -177,6 +197,12 @@ def ops_import_model_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> Py
             return framework_metadata_operation(args[0], args[1], args[2], io_error).steal_data()
         if len(args) == 6:
             return _construct(args[0], args[1], args[2], args[3], args[4], args[5]).steal_data()
+        if len(args) == 7:
+            # import_model(..., device=): the sixth word is the device, the
+            # seventh is reserved (None) and only tells this form apart.
+            if args[6] is not None:
+                raise Error("TypeError: ops_import_model expects source, label, shapes, numeric_mode, context, device and None")
+            return _import(args[0], args[1], args[2], args[3], args[4], args[5]).steal_data()
         if len(args) != 5:
             raise Error("TypeError: ops_import_model expects source, label, shapes, numeric_mode and context")
         return _import(args[0], args[1], args[2], args[3], args[4]).steal_data()

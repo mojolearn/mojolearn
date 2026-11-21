@@ -27,7 +27,24 @@ comptime CNN_FIT = 18
 # CNN_OPEN made (the fitted parameters uploaded once)
 comptime CNN_PREDICT = 19
 comptime CNN_OPEN = 20
-comptime MODEL_OPERATION_COUNT = 21
+# lane dw-autograd-seq (2026-11-21): the Sequential model-file operations
+# (checkpoint save / info / load, the verify sidecar's four numbers, the
+# parameter count and the weight import) are operations of this descriptor,
+# served by sequence/model_file_dispatch.mojo in both images. Before, the
+# Sequential door reached each through the x_sequence binding's Python entry
+# of the same name (a CPython call with Python lists of words inside RUN).
+# The same typed functions run (autograd/model_checkpoint.mojo,
+# autograd/model_verify.mojo, autograd/weight_import.mojo): no bit changes.
+comptime MODEL_SAVE_CHECKPOINT = 21
+comptime MODEL_CHECKPOINT_INFO = 22
+comptime MODEL_LOAD_CHECKPOINT = 23
+comptime MODEL_VERIFY_DIGEST = 24
+comptime MODEL_VERIFY_FILL = 25
+comptime MODEL_VERIFY_FILE_SHA256 = 26
+comptime MODEL_VERIFY_MODEL_INFO = 27
+comptime MODEL_N_PARAMS = 28
+comptime MODEL_IMPORT_PARAMS = 29
+comptime MODEL_OPERATION_COUNT = 30
 
 
 struct NeuralModelRequest(Movable):
@@ -36,7 +53,7 @@ struct NeuralModelRequest(Movable):
     var floats: List[Float64]
 
     def __init__(out self, op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int) raises:
-        if op < RNN_FIT or (op >= SESSION_OPEN and op != CNN_FIT and op != CNN_PREDICT and op != CNN_OPEN) or op >= MODEL_OPERATION_COUNT:
+        if op < RNN_FIT or (op >= SESSION_OPEN and op != CNN_FIT and op != CNN_PREDICT and op != CNN_OPEN) or op >= MODEL_SAVE_CHECKPOINT:
             raise Error("native model: unknown operation")
         self.addresses = native_descriptor_words(aa, na)
         self.options = native_descriptor_words(pp, np)

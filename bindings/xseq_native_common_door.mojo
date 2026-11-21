@@ -44,12 +44,13 @@ comptime XU8P = MutPointer[UInt8, MutUntrackedOrigin]
 
 # ---------------------------------------------------------------- the route
 
-def xseq_mode(fields: PythonObject, context: PythonObject) raises -> PythonObject:
-    """The model's numeric mode, or the process default, as `_backend.binding`
-    resolves it."""
+def _xseq_mode_resolve(mode_field: PythonObject, context: PythonObject) raises -> PythonObject:
+    """A numeric-mode field value, or the process default for None, as
+    `_backend.binding` resolves it. Runs when a route is resolved, never per
+    operation."""
     var b = native_loaded_module("builtins")
     var nk = xseq_keys()
-    var mode = py_get(fields, nk[].k_numeric_mode)
+    var mode = mode_field
     if mode is None:
         mode = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
     # perf3-seq-neural: an exact str that already is one of the two modes
@@ -86,12 +87,12 @@ def _xseq_key_of(mode: PythonObject, context: PythonObject) raises -> XseqEntryK
     return XseqEntryKey(code, Int(py=key[1]))
 
 
-def xseq_key(fields: PythonObject, context: PythonObject) raises -> EntryRef:
-    """The glue entry of the model's mode, resolved once per operation (lane
-    entry-table-zero-alloc; the table refusals raise here): the forecaster
-    operations run through that image's published glue entry (`xseq_glue`),
-    not through Python entries."""
-    return xseq_glue_ref(_xseq_key_of(xseq_mode(fields, context), context))
+# TOMBSTONE: `xseq_key` and `xseq_mode` (the forecaster doors' per-call glue selection: the mode word
+# built and answered, the `xseq_native_keys` read by that word, two Int conversions and the sequence
+# table's slot read and admission, at every forecaster fit and forecast; and the mode word re-resolved
+# for each stored-forecast key) deleted 2026-11-21 by lane dw-neural-b; the estimator's route owner
+# holds the glue entry and the stored-forecast word (`xseq_route`: `route.glue`, `route.word`). Code
+# recoverable at 373a48c4d2.
 
 
 def xseq_glue(entry: EntryRef, operation: Int, addresses: List[Int], ints: List[Int],
@@ -128,10 +129,17 @@ struct XseqRoute(Movable):
     var mode: Int
     var cpu_table: Bool
     var owner: PythonObject
+    # The image's published glue entry (the forecaster operations), and the
+    # word a stored forecast is keyed by: the resolved numeric mode (the same
+    # object the key always held) on this installation's device, and that
+    # mode marked `/cpu` on a CPU route beside a GPU set, so a stored answer
+    # is reused only on the device that made it.
+    var glue: EntryRef
+    var word: PythonObject
 
 
 def _xseq_route_build(requested_device: Int, mode_field: PythonObject, default_mode: PythonObject,
-    fields: PythonObject, context: PythonObject, b: PythonObject) raises -> DeviceRouteOwner:
+    context: PythonObject, b: PythonObject) raises -> DeviceRouteOwner:
     """Resolve an estimator's sequence images once: its numeric mode (None:
     the process mode), its device (None: this installation's), the entries
     and the table key of the image those select (the bridge recorded both at
@@ -141,7 +149,7 @@ def _xseq_route_build(requested_device: Int, mode_field: PythonObject, default_m
     independent units to split."""
     var nk = xseq_keys()
     var owner = DeviceRouteOwner(requested_device)
-    var mode = xseq_mode(fields, context)
+    var mode = _xseq_mode_resolve(mode_field, context)
     var mode_code = device_mode_code(String(py=mode))
     # The process image of that mode: its vendor word is this process's
     # device (0: a CPU-only installation), and its connection error or
@@ -185,6 +193,12 @@ def _xseq_route_build(requested_device: Int, mode_field: PythonObject, default_m
         metrics = py_item(py_item(context, nk[].k_xseq_metrics), mode)
     owner.route.device = plan.device
     owner.route.flags = 1 if plan.cpu_table else 0
+    # The glue entry of the resolved image, read from the sequence table and
+    # admitted once (every image publishes it at module init; the table's
+    # refusals raise here), and the stored-forecast word of that image. The
+    # `cls` pin holds the word: this family keys nothing by class.
+    owner.route.entry = xseq_glue_ref(XseqEntryKey(owner.route.mode, owner.route.vendor))
+    owner.cls = PythonObject(String(py=mode) + "/cpu") if plan.cpu_table else mode
     owner.mode = mode_field
     owner.default_mode = default_mode
     owner.context = context
@@ -195,25 +209,36 @@ def _xseq_route_build(requested_device: Int, mode_field: PythonObject, default_m
     return owner^
 
 
-def xseq_route(model: PythonObject, fields: PythonObject, context: PythonObject) raises -> XseqRoute:
-    """The estimator's route for this operation. A hit is the mode read, the
-    default-mode read, one record read and three pointer compares; a miss
-    (first operation, a changed mode object, a new `__init__` or
-    `set_params`) resolves and stores it. No operation reads or compares the
-    device."""
+def xseq_route_of(model: PythonObject, mode: PythonObject, fields: PythonObject,
+    context: PythonObject) raises -> XseqRoute:
+    """The route of `model` for this operation, for the numeric-mode field
+    value `mode` the caller read (an owner that stores it under another name,
+    as `VARResults._numeric_mode`). `fields` is the instance dictionary the
+    device is read from on a miss. A hit is the default-mode read, one record
+    read and three pointer compares; a miss (first operation, a changed mode
+    object, a new `__init__` or `set_params`) resolves and stores it. No
+    operation reads or compares the device."""
     var nk = xseq_keys()
-    var mode = py_get(fields, nk[].k_numeric_mode)
     var default_mode = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
     var owner = device_route_held(model, mode, default_mode, context)
     if owner is None:
         var b = native_loaded_module("builtins")
         var device = device_request(fields, b)
-        owner = device_route_keep(model, _xseq_route_build(device, mode, default_mode, fields, context, b))
+        owner = device_route_keep(model, _xseq_route_build(device, mode, default_mode, context, b))
     var native = owner.downcast_value_ptr[DeviceRouteOwner]()
     var entries = native[].images
     var output = native[].scope
     var metrics = native[].table
-    return XseqRoute(entries, output, metrics, native[].route.mode, native[].route.flags == 1, owner)
+    var word = native[].cls
+    return XseqRoute(entries, output, metrics, native[].route.mode, native[].route.flags == 1, owner,
+                     native[].route.entry, word)
+
+
+def xseq_route(model: PythonObject, fields: PythonObject, context: PythonObject) raises -> XseqRoute:
+    """The estimator's route for this operation, by its `numeric_mode`
+    parameter (`xseq_route_of`)."""
+    var nk = xseq_keys()
+    return xseq_route_of(model, py_get(fields, nk[].k_numeric_mode), fields, context)
 
 
 def xseq_neural_provider(entries: PythonObject) raises -> PythonObject:

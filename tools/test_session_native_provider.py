@@ -68,4 +68,4 @@ def test_imported_constructor_shares_public_session_connection_and_owner():
                    (ROOT / 'providers/python/autograd_import_frontend_pyapi_door.mojo').read_text())
     assert 'connections=ops._SESSION_CONNECTIONS' in bridge
     assert 'session=session, program=program' in bridge
-    assert 'ops_session_initialize_py(session, PythonObject(False), mode, context["connections"], PythonObject(None), context["program"])' in native
+    assert 'ops_session_initialize_py(session, PythonObject(False), mode, context["connections"], device, context["program"])' in native

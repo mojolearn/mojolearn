@@ -15,7 +15,7 @@ from core.causal_lm_entry_table_sessions import (
     CAUSAL_SESSION_PROGRAM_READ, CAUSAL_SESSION_PROGRAM_RELEASE,
 )
 from core.causal_session_handles import CausalSessionHandles
-from core.entry_table import EntryRef, entry_ref_unresolved
+from core.entry_table import EntryRef
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr, GILReleased
 from bindings.py_cpython_table import cpython_table
@@ -27,7 +27,10 @@ from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_se
 from checks.numerics import NUMERIC_IDENTICAL
 from core.native_descriptor_abi import TRANSFORMER_BLOCK_ABI_NAME, PRIMITIVE_ABI_NAME, MAMBA_STATE_ABI_NAME
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_reuse, NEURAL_NATIVE_DISPATCH
-from providers.python.transformer_block_session_pyapi_door import transformer_block_session_open, transformer_block_session_run
+from providers.python.transformer_block_session_pyapi_door import (
+    transformer_block_session_open, transformer_block_session_entry, transformer_block_session_handle,
+    transformer_block_session_run_words,
+)
 from core.neural_entry_table import (
     NeuralEntryKey, neural_ref, neural_table_entry, NEURAL_TABLE_BLOCK_FORWARD,
     NEURAL_BLOCK_SESSION_FORWARD, NEURAL_BLOCK_SESSION_FORWARD_INT15,
@@ -36,6 +39,9 @@ from core.generation_metadata import generation_transformer_addresses
 from providers.python.generation_metadata_pyapi_door import (
     GenerationWeightSnapshot, GenerationLayerSnapshot, GenerationHeadSnapshot, GenerationOperationSnapshot, GenerationEngineAdmission, _generation_bool,
     _generation_fields,
+)
+from core.causal_layer_run import (
+    CausalLayerRoute, CausalLayerRequest, CAUSAL_LAYER_TRANSFORMER, CAUSAL_LAYER_MAMBA1, CAUSAL_LAYER_MAMBA2,
 )
 from autograd.block_step_ops import OPS_ATTN_STEP, OPS_M1_STEP, OPS_M2_STEP, IDN_MAMBA12_FORWARD_COPIES_OLD, IDN_MAMBA12_FORWARD_DOOR_OLD
 from std.memory import unsafe_memcpy, unsafe_memset_zero
@@ -755,35 +761,17 @@ def _transformer_params(blk: PythonObject, st: PythonObject, b: Int, l: Int) rai
 # entries) is deleted; a block session closes through its native owner
 # (providers/python/transformer_block_session_pyapi.mojo).
 
-def causal_layer_run(mut mods: NativeModules, model: PythonObject, i: Int, x: PythonObject, supplied_state: PythonObject, step: Bool = False) raises -> PythonObject:
-    # Standalone public block calls retain their existing ABI and admit anew.
-    _causal_array_guard(mods)
-    var shape = x.shape
-    var b = Int(py=shape[0])
-    var l = Int(py=shape[1])
-    var d = Int(py=model.d_model)
-    var kind = String(model.kind)
-    var entries = model._native_entries
-    var profile = kind == "transformer" and model._head_int15 is not None
-    var planes = profile and py_contains(entries, "forward15")
-    # A prepared standalone block owner carries the layer words and weight
-    # views captured at its setup; reuse them and bind this call's snapshot.
-    var prepared = PythonObject(None)
-    if py_type(model) is mods.module("types").SimpleNamespace:
-        prepared = py_get(_standalone_record_fields(mods, model), "_prepared_layer")
-    if prepared is not None:
-        var reused = prepared.downcast_value_ptr[PreparedGenerationLayer]()[].layer.copy()
-        reused.rebind(_block(mods, model, i), kind)
-        mods.released()
-        return _causal_layer_run_prepared(mods, entries, kind, d, b, l, reused, profile, planes, x, supplied_state, step)
-    var layer = GenerationLayerSnapshot(_block(mods, model, i), kind, planes)
-    mods.released()
-    return _causal_layer_run_prepared(mods, entries, kind, d, b, l, layer, profile, planes, x, supplied_state, step)
+# Lane dw-neural-models (2026-11-21): `causal_layer_run(model, i, ...)`, the
+# layer run over a SimpleNamespace owner, is deleted: it had no caller (the
+# block door runs `causal_layer_run_fields` with its plan's route, the
+# whole-model path `_run_snapshot` with its snapshot's).
 
 
-def causal_layer_run_fields(mut mods: NativeModules, fields: PythonObject, entries: PythonObject, kind: String, d: Int, packed: Bool, prepared: PythonObject, x: PythonObject, supplied_state: PythonObject, step: Bool = False, stateless: Bool = False) raises -> PythonObject:
+def causal_layer_run_fields(mut mods: NativeModules, fields: PythonObject, entries: PythonObject, route: CausalLayerRoute, kind: String, d: Int, packed: Bool, planes: Bool, prepared: PythonObject, x: PythonObject, supplied_state: PythonObject, step: Bool = False, stateless: Bool = False) raises -> PythonObject:
     # Standalone callers supply the retained native plan directly: no temporary
     # namespace or Python attribute dispatch to reconstruct execution metadata.
+    # `route` and `planes` are the plan's (`NativeBlockPlan.layer_route`,
+    # `.planes`), resolved once: this door reads no entry word by name.
     # `stateless` (lane fix-mamba12-forward-exec, `causal_layer_stateless_plan`):
     # a Mamba-1/2 device forward with no state object; `supplied_state` is
     # None and the call runs from a zero state with nothing written back.
@@ -791,26 +779,25 @@ def causal_layer_run_fields(mut mods: NativeModules, fields: PythonObject, entri
     var shape = x.shape
     var b = Int(py=shape[0])
     var l = Int(py=shape[1])
-    var profile = kind == "transformer" and packed
-    var planes = profile and py_contains(entries, "forward15")
+    var profile = route.kind == CAUSAL_LAYER_TRANSFORMER and packed
     if prepared is not None:
         # Reuse the immutable native layer vectors directly. Only mutable
         # arithmetic-profile words and this operation's fields are rebound.
         model_dict(fields)
         var profile_id = PythonObject(None)
         var profile_changed = False
-        if kind == "transformer":
+        if route.kind == CAUSAL_LAYER_TRANSFORMER:
             profile_id = model_plain(py_get(fields, "_arithmetic_profile", PythonObject(None)))
             profile_changed = _generation_bool(py_get(fields, "_arithmetic_profile_changed", PythonObject(False)))
         ref reused = prepared.downcast_value_ptr[PreparedGenerationLayer]()[].layer
         mods.released()
-        return _causal_layer_run_bound(mods, entries, kind, d, b, l, reused, profile, planes, x, supplied_state, step, fields, profile_id, profile_changed, None, stateless)
+        return _causal_layer_run_bound(mods, route, entries, d, b, l, reused, profile, planes, x, supplied_state, step, fields, profile_id, profile_changed, stateless)
     var layer = GenerationLayerSnapshot(fields, kind, planes)
     mods.released()
     if stateless:
-        return _causal_layer_run_bound(mods, entries, kind, d, b, l, layer, profile, planes, x, supplied_state, step,
-            layer.block, layer.profile, layer.profile_changed, None, True)
-    return _causal_layer_run_prepared(mods, entries, kind, d, b, l, layer, profile, planes, x, supplied_state, step)
+        return _causal_layer_run_bound(mods, route, entries, d, b, l, layer, profile, planes, x, supplied_state, step,
+            layer.block, layer.profile, layer.profile_changed, True)
+    return _causal_layer_run_prepared(mods, route, entries, d, b, l, layer, profile, planes, x, supplied_state, step)
 
 
 def causal_layer_stateless_plan(kind: String, entries: PythonObject) raises -> Bool:
@@ -937,7 +924,7 @@ struct PreparedGenerationLayer(Movable, Writable):
 def causal_prepared_layer(mut mods: NativeModules, block_fields: PythonObject, kind: String, planes: Bool) raises -> PythonObject:
     # Capture a reusable layer for a prepared standalone owner. A capture
     # refusal is not raised here: the call then captures at its usual
-    # position (causal_layer_run) and refuses there with the same error.
+    # position (causal_layer_run_fields) and refuses there with the same error.
     try:
         return PythonObject(alloc=PreparedGenerationLayer(GenerationLayerSnapshot(block_fields, kind, planes)))
     except:
@@ -946,33 +933,54 @@ def causal_prepared_layer(mut mods: NativeModules, block_fields: PythonObject, k
 
 
 def _causal_layer_run_prepared(mut mods: NativeModules,
-    e: PythonObject, kind: String, d: Int, b: Int, l: Int, layer: GenerationLayerSnapshot,
+    route: CausalLayerRoute, e: PythonObject, d: Int, b: Int, l: Int, layer: GenerationLayerSnapshot,
     head_profile: Bool, device15: Bool, x: PythonObject, supplied_state: PythonObject, step: Bool,
-    layer_entry: Optional[EntryRef] = None, layer_vendor: Int = -1,
 ) raises -> PythonObject:
-    return _causal_layer_run_bound(mods, e, kind, d, b, l, layer, head_profile, device15, x, supplied_state, step, layer.block, layer.profile, layer.profile_changed, layer_entry, False, layer_vendor)
+    return _causal_layer_run_bound(mods, route, e, d, b, l, layer, head_profile, device15, x, supplied_state, step, layer.block, layer.profile, layer.profile_changed, False)
 
 
-def _layer_entry[family: Int](e: PythonObject, held: Optional[EntryRef]) raises -> EntryRef:
-    # The layer's table entry: the one a model snapshot resolved once
-    # (`GenerationOperationSnapshot.layer_entry`, held across a session's
-    # steps), else resolved here (a standalone one-layer call).
-    if held:
-        return held.value()
-    return causal_ref[family](causal_entry_key(e))
+def _causal_layer_request_run(request: CausalLayerRequest) raises -> Int:
+    # RUN of a layer call: typed words only (core/causal_layer_run.mojo). One
+    # block-session operation (reserved and released around it with the GIL
+    # held) or one CausalLM table call; the numerical work runs with the GIL
+    # released. No Python object, entry dictionary or block field reaches
+    # here. The caller keeps the session owner and every addressed buffer
+    # alive, and resets its NativeModules cache afterwards.
+    if request.session:
+        return transformer_block_session_run_words(request.entry, request.handle, request.operation,
+            request.addresses, request.words)
+    return _causal_table_call(request.entry, request.operation, request.addresses, request.words, request.floats)
 
 
 def _causal_layer_run_bound(mut mods: NativeModules,
-    e: PythonObject, kind: String, d: Int, b: Int, l: Int, layer: GenerationLayerSnapshot,
+    route: CausalLayerRoute, e: PythonObject, d: Int, b: Int, l: Int, layer: GenerationLayerSnapshot,
     head_profile: Bool, device15: Bool, x: PythonObject, supplied_state: PythonObject, step: Bool,
     block_override: PythonObject, profile_override: PythonObject, profile_changed_override: Bool,
-    layer_entry: Optional[EntryRef] = None, stateless: Bool = False, layer_vendor: Int = -1,
+    stateless: Bool = False,
 ) raises -> PythonObject:
+    # Lane dw-neural-models (2026-11-21): one layer call as UNPACK / RUN /
+    # PACK, for the block door and the whole-model path alike.
+    #   UNPACK (below, to the RUN line): the state object, the weights and the
+    #     block's session become a `CausalLayerRequest` (entry, operation,
+    #     address and scalar words). Arm selection reads `route`, resolved
+    #     once by the plan or the snapshot: no entry word is read by name per
+    #     call (before: the `cpu`, `block_session` and `mamba1_profile` words
+    #     per layer per call, and the (tier, vendor) key plus a table resolve
+    #     per standalone call).
+    #   RUN: `_causal_layer_request_run`, typed words only.
+    #   PACK: the returned word onto the state, the Mamba-2 h_last report onto
+    #     the block's fields, the copied state buffers back.
+    # `e` is read only where a block session is opened (once per block) and
+    # in the Python-entry arm kept for -D MOJOLEARN_TRANSFORMER_LEGACY_SETUP.
     var keep = List[PythonObject]()
     var copies = List[PythonObject]()
     var blk = block_override
     var st = supplied_state
-    if stateless and (st is not None or step or (kind != "mamba1" and kind != "mamba2")):
+    if not route.bound:
+        raise Error("CausalLM: layer route is not resolved")
+    var transformer = route.kind == CAUSAL_LAYER_TRANSFORMER
+    var mamba1 = route.kind == CAUSAL_LAYER_MAMBA1
+    if stateless and (st is not None or step or (not mamba1 and route.kind != CAUSAL_LAYER_MAMBA2)):
         raise Error("CausalLM: a stateless layer call is a Mamba-1/2 forward with no state")
     if py_type(st) is mods.module("types").SimpleNamespace:
         var failure = py_get(causal_snapshot_fields(mods, st), "_causal_admission_failure")
@@ -983,21 +991,10 @@ def _causal_layer_run_bound(mut mods: NativeModules,
     # element of y (one download of the block output), so y is allocated
     # unfilled there; the host image and the Transformer keep the zeros.
     # Hot-path audit 2026-11-13 (BLOCK door:894): the Mamba table entry and
-    # its vendor are resolved ONCE per call, before y: a model snapshot
-    # passes both (`GenerationOperationSnapshot.layer_entry/layer_vendor`,
-    # resolved once per snapshot: no entry word read per layer), a
-    # standalone call reads the (tier, vendor) key once, as the table call
-    # below always did; every Mamba arm calls through `mamba_entry`.
-    var device_mamba = False
-    var mamba_entry = entry_ref_unresolved()
-    if kind != "transformer":
-        if layer_vendor >= 0 and Bool(layer_entry):
-            mamba_entry = layer_entry.value()
-            device_mamba = layer_vendor != 0
-        else:
-            var mamba_key = causal_entry_key(e)
-            mamba_entry = causal_ref[CAUSAL_TABLE_MAMBA](mamba_key)
-            device_mamba = mamba_key.vendor != 0
+    # its vendor are resolved once, by the route's owner (`causal_layer_route`:
+    # per block plan, per model snapshot); every Mamba arm calls through
+    # `route.entry`.
+    var device_mamba = route.device_mamba
     if stateless and not device_mamba:
         raise Error("CausalLM: a stateless layer call needs a device Mamba image")
     var y: PythonObject
@@ -1008,13 +1005,19 @@ def _causal_layer_run_bound(mut mods: NativeModules,
             y = generation_array([b, l, d])
     else:
         y = generation_array([b, l, d])
-    var addresses = PythonObject(None)
-    var params = PythonObject(None)
     # every layer kind: a state a decode session holds resident is refused by name
     var gb = GENERATION_BOUNDARY.get_or_create_ptr()
     if py_call(gb[].bi.getattr, st, "_resident_session", PythonObject(None)) is not None:
         raise Error("CausalLM: layer state is owned by a decode session (resident in it); sync_state() or close it first")
-    if kind == "transformer":
+    var request = CausalLayerRequest()
+    # The block session owner of a device Transformer call and the Mamba-2
+    # h_last report: Python-held buffers the request's words address, kept
+    # alive here across RUN.
+    var session = PythonObject(None)
+    var last = PythonObject(None)
+    # True when the Python-entry arm (LEGACY_SETUP) already ran the call.
+    var entry_arm_ran = False
+    if transformer:
         var g = GENERATION_BOUNDARY.get_or_create_ptr()
         var old_profile = py_call(g[].bi.getattr, st, "arithmetic_profile", PythonObject(None))
         var profile_id = profile_override
@@ -1033,16 +1036,17 @@ def _causal_layer_run_bound(mut mods: NativeModules,
             layer.optional.resolve(keep), layer.packed.resolve(keep))
         a_words[10] = _mutable(st.k_cache, [cache_n], keep, copies, "k_cache")
         a_words[11] = _mutable(st.v_cache, [cache_n], keep, copies, "v_cache")
-        if Bool(py=e["cpu"]):
+        request.addresses = a_words^
+        request.words = p_words^
+        if route.cpu:
             # Every CPU layer, every tier: the neural host image's block entry
             # through the CausalLM entry table (op 34 under fixed15_v1, else
             # 33). The former Python-entry arms (transformer_forward,
             # transformer_decode_step at L = 1, transformer_forward_int15) ran
             # the same _run_forward with the same words.
-            py_setattr(st, "cached_tokens", PythonObject(_causal_table_call(_layer_entry[CAUSAL_TABLE_BLOCK](e, layer_entry),
-                CAUSAL_BLOCK_HOST_FORWARD_INT15 if head_profile else CAUSAL_BLOCK_HOST_FORWARD, a_words, p_words, [])))
-            mods.released()
-        elif device15 or (not TRANSFORMER_LEGACY_SETUP and py_contains(e, "block_session")):
+            request.entry = route.entry
+            request.operation = CAUSAL_BLOCK_HOST_FORWARD_INT15 if head_profile else CAUSAL_BLOCK_HOST_FORWARD
+        elif device15 or (not TRANSFORMER_LEGACY_SETUP and route.block_session):
             # A GPU layer: the block's session (a native registry handle of its
             # image, opened on first use through the neural table) runs op 35
             # under fixed15_v1, else op 11, reserved with the GIL held and run
@@ -1050,23 +1054,27 @@ def _causal_layer_run_bound(mut mods: NativeModules,
             # three arms (the block provider capsule's op 35, the generation
             # session provider and the transformer_session_forward[_int15]
             # Python entries) ran these bodies with these words.
-            var session = blk["_native_session"]
+            session = blk["_native_session"]
             if session is None:
                 session = transformer_block_session_open(neural_ref[NEURAL_TABLE_BLOCK_FORWARD](
                     NeuralEntryKey(Int(py=e["entry_mode"]), Int(py=e["entry_vendor"]))))
                 causal_block_cache_set(mods, blk, "_native_session", session)
                 mods.released()
-            py_setattr(st, "cached_tokens", PythonObject(transformer_block_session_run(session,
-                NEURAL_BLOCK_SESSION_FORWARD_INT15 if device15 else NEURAL_BLOCK_SESSION_FORWARD, a_words, p_words)))
-            mods.released()
-            _ = session
+            request.session = True
+            request.entry = transformer_block_session_entry(session)
+            request.handle = transformer_block_session_handle(session)
+            request.operation = NEURAL_BLOCK_SESSION_FORWARD_INT15 if device15 else NEURAL_BLOCK_SESSION_FORWARD
         else:
-            addresses = py_ints(a_words)
-            params = py_ints(p_words)
+            # The Python-entry arm (a device route with no block session:
+            # -D MOJOLEARN_TRANSFORMER_LEGACY_SETUP). Not a typed request: it
+            # calls the image's Python entry with packed word lists, as before.
+            var addresses = py_ints(request.addresses)
+            var params = py_ints(request.words)
             if step:
                 _ = py_call(params.pop, 1)
             py_setattr(st, "cached_tokens", py_call(e["decode" if step else "forward"], addresses, params))
             mods.released()
+            entry_arm_ran = True
     else:
         # The `_resident_session` refusal above already covers every layer
         # kind; the second per-layer getattr that stood here never fired.
@@ -1075,10 +1083,15 @@ def _causal_layer_run_bound(mut mods: NativeModules,
         # through multiple allocations during every public decode step.
         # TOMBSTONE: the Mamba-2 public-step workspace (MAMBA2_WORKSPACE_STEP route) (moved onto the block step op, lane x5-mamba-on-executor) deleted 2026-11-09 by 08332f3665; code recoverable at 25e5650c14.
         # Restore: git apply experiments/removed/X5_MAMBA_PER_CALL_BODIES.patch
+        # The Mamba image's state entry through the CausalLM entry table:
+        # one route for every tier and profile (the provider-capsule and
+        # Python-entry arms ran this same mamba_state operation; both
+        # refuse the 17-word affine profile by the same arity rule).
+        request.entry = route.entry
         var m_addresses = List[Int](capacity=len(layer.weights.addresses) + 7)
         m_addresses.append(_addr(x, keep))
         layer.weights.append_resolved(m_addresses, keep)
-        if kind == "mamba1" and stateless:
+        if mamba1 and stateless:
             # lane fix-mamba12-forward-exec: no state object; every state
             # address 0 runs the device program from a zero state, nothing
             # read back (`causal_layer_stateless_plan`, plain profile only)
@@ -1086,37 +1099,24 @@ def _causal_layer_run_bound(mut mods: NativeModules,
             m_addresses.append(0)
             m_addresses.append(_addr(y, keep))
             var s_params: List[Int] = [b, l, d]
-            _ = _causal_table_call(mamba_entry,
-                CAUSAL_MAMBA1_FORWARD, m_addresses, s_params, [])
-            mods.released()
-            _ = y  # keep the Python object alive through the native call above
-        elif kind == "mamba1":
+            request.operation = CAUSAL_MAMBA1_FORWARD
+            request.words = s_params^
+        elif mamba1:
             var di = layer.words.inner
             m_addresses.append(_mutable(st.conv_window, [b, di, 4], keep, copies, "conv_window"))
             m_addresses.append(_mutable(st.h, [b, di, 16], keep, copies, "h"))
             m_addresses.append(_addr(y, keep))
-            _ = y  # keep the Python object alive through the native call above
             var m_params: List[Int] = [b, d] if step else [b, l, d]
-            var profile = Int(py=e["mamba1_profile"])
+            var profile = route.mamba1_profile
             if Int(py=st.profile_id) != profile or not Bool(py=st._nn34_usable):
                 raise Error("CausalLM: incompatible or failed Mamba1 state")
             if profile == 2:
                 m_addresses.append(_mutable(st.affine_boundary, [b, di, 16], keep, copies, "affine_boundary"))
-                _ = y  # keep the Python object alive through the native call above
                 m_addresses.append(_mutable(st.affine_a, [b, di, 16, 6], keep, copies, "affine_a"))
-                _ = y  # keep the Python object alive through the native call above
                 m_addresses.append(_mutable(st.affine_b, [b, di, 16, 6], keep, copies, "affine_b"))
-                _ = y  # keep the Python object alive through the native call above
                 m_params.append(Int(py=st.absolute_position))
-            # The Mamba image's state entry through the CausalLM entry table:
-            # one route for every tier and profile (the provider-capsule and
-            # Python-entry arms ran this same mamba_state operation; both
-            # refuse the 17-word affine profile by the same arity rule).
-            _ = _causal_table_call(mamba_entry,
-                CAUSAL_MAMBA1_DECODE if step else CAUSAL_MAMBA1_FORWARD, m_addresses, m_params, [])
-            mods.released()
-            _ = y  # keep the Python object alive through the native call above
-            py_setattr(st, "absolute_position", PythonObject(Int(py=st.absolute_position) + l))
+            request.operation = CAUSAL_MAMBA1_DECODE if step else CAUSAL_MAMBA1_FORWARD
+            request.words = m_params^
         elif stateless:
             # lane fix-mamba12-forward-exec: the Mamba-2 stateless forward
             # (see the Mamba-1 arm above): buf_len 0, the h_last report into
@@ -1126,29 +1126,21 @@ def _causal_layer_run_bound(mut mods: NativeModules,
             m_addresses.append(0)
             m_addresses.append(0)
             m_addresses.append(_addr(y, keep))
-            var s_last = generation_array_unfilled([b, layer.words.heads, 64, 128])
-            m_addresses.append(_addr(s_last, keep))
+            last = generation_array_unfilled([b, layer.words.heads, 64, 128])
+            m_addresses.append(_addr(last, keep))
             var s_params: List[Int] = [b, l, d, 0]
-            _ = _causal_table_call(mamba_entry,
-                CAUSAL_MAMBA2_FORWARD, m_addresses, s_params, [layer.words.dt_low, layer.words.dt_high])
-            mods.released()
-            _ = s_last  # keep the Python object alive through the native call above
-            _ = y  # keep the Python object alive through the native call above
-            causal_block_cache_set(mods, blk, "h_last_", s_last)
+            var s_floats: List[Float64] = [layer.words.dt_low, layer.words.dt_high]
+            request.operation = CAUSAL_MAMBA2_FORWARD
+            request.words = s_params^
+            request.floats = s_floats^
         else:
             var nh = layer.words.heads
             var cd = layer.words.conv
             m_addresses.append(_mutable(st.conv_window, [b, cd, 4], keep, copies, "conv_window"))
-            _ = y  # keep the Python object alive through the native call above
             m_addresses.append(_mutable(st.h, [b, nh, 64, 128], keep, copies, "h"))
-            _ = y  # keep the Python object alive through the native call above
             m_addresses.append(_mutable(st.buffer_xbc, [b, 256, cd], keep, copies, "buffer_xbc"))
-            _ = y  # keep the Python object alive through the native call above
             m_addresses.append(_mutable(st.buffer_dtraw, [b, 256, nh], keep, copies, "buffer_dtraw"))
-            _ = y  # keep the Python object alive through the native call above
             m_addresses.append(_addr(y, keep))
-            _ = y  # keep the Python object alive through the native call above
-            var last: PythonObject
             comptime if not IDN_MAMBA12_FORWARD_COPIES_OLD:
                 # lane fix-mamba12-forward-exec: written whole by the device
                 # report copy; the host image keeps the zeros
@@ -1159,18 +1151,36 @@ def _causal_layer_run_bound(mut mods: NativeModules,
             else:
                 last = generation_array([b, layer.words.heads, 64, 128])
             m_addresses.append(_addr(last, keep))
-            _ = last  # keep the Python object alive through the native call above
-            _ = y  # keep the Python object alive through the native call above
             var m_params: List[Int] = [b, d, Int(py=st.buffered_tokens)] if step else [b, l, d, Int(py=st.buffered_tokens)]
-            py_setattr(st, "buffered_tokens", PythonObject(_causal_table_call(mamba_entry,
-                CAUSAL_MAMBA2_DECODE if step else CAUSAL_MAMBA2_FORWARD,
-                m_addresses, m_params, [layer.words.dt_low, layer.words.dt_high])))
-            mods.released()
-            _ = last  # keep the Python object alive through the native call above
-            _ = y  # keep the Python object alive through the native call above
-            causal_block_cache_set(mods, blk, "h_last_", last)
+            var m_floats: List[Float64] = [layer.words.dt_low, layer.words.dt_high]
+            request.operation = CAUSAL_MAMBA2_DECODE if step else CAUSAL_MAMBA2_FORWARD
+            request.words = m_params^
+            request.floats = m_floats^
+        request.addresses = m_addresses^
+    # RUN
+    var result = 0
+    if not entry_arm_ran:
+        result = _causal_layer_request_run(request)
+        mods.released()
+    # Every Python-held buffer the request addressed is named after the call:
+    # Mojo frees a local at its last named use.
+    _ = session
+    _ = last
+    _ = y
+    # PACK
+    if transformer:
+        if not entry_arm_ran:
+            py_setattr(st, "cached_tokens", PythonObject(result))
+    elif mamba1:
+        if not stateless:
+            py_setattr(st, "absolute_position", PythonObject(Int(py=st.absolute_position) + l))
+    else:
+        if not stateless:
+            py_setattr(st, "buffered_tokens", PythonObject(result))
+        causal_block_cache_set(mods, blk, "h_last_", last)
     _writeback(copies)
     _ = layer  # retain captured Array weights until every native read completes
+    _ = request^
     _ = keep^
     return y
 
@@ -1870,9 +1880,8 @@ def _run_snapshot(mut mods: NativeModules, snapshot: GenerationOperationSnapshot
                                             b, l, False, snapshot.embedding, ids)
     mods.released()
     for i in range(len(snapshot.layers)):  # driver-loop: over retained native layer descriptions
-        x = _causal_layer_run_prepared(mods, snapshot.entries, snapshot.kind, snapshot.width, b, l,
-            snapshot.layers[i], snapshot.head.packed, snapshot.planes, x, state.layers[i], False,
-            snapshot.layer_entry, snapshot.layer_vendor)
+        x = _causal_layer_run_prepared(mods, snapshot.layer_route, snapshot.entries, snapshot.width, b, l,
+            snapshot.layers[i], snapshot.head.packed, snapshot.planes, x, state.layers[i], False)
     var out = _causal_model_head_prepared(snapshot.head, x, b, l, False, output)
     mods.released()
     _ = snapshot  # pins model and all captured weight owners until computation finishes
