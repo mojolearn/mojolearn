@@ -126,7 +126,7 @@ def build__mojolearn_arima_host() -> PythonObject:
         module.def_function[arima_host_sabotage_binding]("arima_host_sabotage")
         module.def_function[arima_vendor_binding]("arima_vendor")
         module.def_function[arima_numeric_mode_binding]("arima_numeric_mode")
-        # TOMBSTONE: dead Python exports arima_order_caps, arima_fit, arima_predict, arima_forecast (no product caller: the ARIMA and AutoARIMA owners reach these kernels through the published ARIMA operations table, core/arima_entry_table.mojo; lane dw-forecast-tail) deleted 2026-11-21; code recoverable at SHA_PLACEHOLDER.
+        # TOMBSTONE: dead Python exports arima_order_caps, arima_fit, arima_predict, arima_forecast (no product caller: the ARIMA and AutoARIMA owners reach these kernels through the published ARIMA operations table, core/arima_entry_table.mojo; lane dw-forecast-tail) deleted 2026-11-21; code recoverable at d8f4bf534c.
         # Restore: git apply experiments/removed/dead_entries_arima_calls.patch
         # The ARIMA operations table of this image (core/arima_entry_table.mojo).
         var published_module = module.finalize()

@@ -135,7 +135,7 @@ def build__mojolearn_arima() -> PythonObject:
         m.def_function[arima_vendor_binding]("arima_vendor")
         m.def_function[arima_numeric_mode_binding]("arima_numeric_mode")
         m.def_function[arima_resident_count_binding]("arima_resident_count")
-        # TOMBSTONE: dead Python exports arima_fit, arima_ic_from_loglike, arima_order_batch_enabled, arima_order_search, arima_order_caps, arima_order_search_device, arima_search_reuse_enabled, arima_order_search_fit, arima_fast_search_mode, arima_ndiffs_kpss, arima_predict, arima_forecast, arima_resident_prepare, arima_resident_release, arima_predict_resident, arima_forecast_resident (no product caller: the ARIMA and AutoARIMA owners reach these kernels through the published ARIMA operations table, core/arima_entry_table.mojo; lane dw-forecast-tail) deleted 2026-11-21; code recoverable at SHA_PLACEHOLDER.
+        # TOMBSTONE: dead Python exports arima_fit, arima_ic_from_loglike, arima_order_batch_enabled, arima_order_search, arima_order_caps, arima_order_search_device, arima_search_reuse_enabled, arima_order_search_fit, arima_fast_search_mode, arima_ndiffs_kpss, arima_predict, arima_forecast, arima_resident_prepare, arima_resident_release, arima_predict_resident, arima_forecast_resident (no product caller: the ARIMA and AutoARIMA owners reach these kernels through the published ARIMA operations table, core/arima_entry_table.mojo; lane dw-forecast-tail) deleted 2026-11-21; code recoverable at d8f4bf534c.
         # Restore: git apply experiments/removed/dead_entries_arima_calls.patch
         # The ARIMA operations table of this image (core/arima_entry_table.mojo):
         # an estimator's route resolves it once.

@@ -116,7 +116,7 @@ def build__mojolearn_forecast_host() -> PythonObject:
         module.def_function[forecast_host_sabotage_binding]("forecast_host_sabotage")
         module.def_function[arima_vendor_binding]("arima_vendor")
         module.def_function[arima_numeric_mode_binding]("arima_numeric_mode")
-        # TOMBSTONE: dead Python exports arima_predict, arima_forecast (no product caller: the ARIMA and AutoARIMA owners reach these kernels through the published ARIMA operations table, core/arima_entry_table.mojo; lane dw-forecast-tail) deleted 2026-11-21; code recoverable at SHA_PLACEHOLDER.
+        # TOMBSTONE: dead Python exports arima_predict, arima_forecast (no product caller: the ARIMA and AutoARIMA owners reach these kernels through the published ARIMA operations table, core/arima_entry_table.mojo; lane dw-forecast-tail) deleted 2026-11-21; code recoverable at d8f4bf534c.
         # Restore: git apply experiments/removed/dead_entries_arima_calls.patch
         # TOMBSTONE: hdbscan_host_predict_sabotage and the host tsa_vendor aliases (dead native entries: the host loader reads <prefix>_sabotage / <prefix>_vendor) deleted 2026-10-26 by 2013bdd1e; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_host_aliases.patch
