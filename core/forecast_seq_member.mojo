@@ -1,14 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
-"""The sequence-image forecasters (the theta models) as MEMBERS
+"""The sequence-image forecasters (the theta models and ETS) as MEMBERS
 (core/member_abi.mojo), family 43 `MEMBER_FAMILY_FORECAST_SEQ`.
 
 One entry, `forecast_seq_member_v2`, published by each `_mojolearn_x_sequence`
 image (`forecast_seq_member_publish`, beside the recurrent member). It runs
 the family's existing typed RUN (sequence/xseq_forecast_run.mojo: the theta
-checks, `forecast_run_theta`, `forecast_run_theta_forecast`) over the glue
-entry of the `DeviceRoute` it is handed, the same entry the estimator's own
-door (bindings/xseq_forecast_native_door.mojo `_theta_fit` /
-`_theta_predict`) calls. No kernel is touched.
+checks, `forecast_run_theta`, `forecast_run_theta_forecast`; the ETS
+checks and `forecast_run_ets`) over the glue entry of the `DeviceRoute` it
+is handed, the same entry the estimator's own door
+(bindings/xseq_forecast_native_door.mojo `_theta_fit` / `_theta_predict`,
+`_ets_fit` / `_ets_predict`) calls. No kernel is touched.
 
 THE FORECAST FORM (MEMBER_CAN_FORECAST): FIT reads the series in `y`, host
 float32, observations x series (one column per series); `x` must not be
@@ -16,13 +17,23 @@ given (exogenous regressors are not implemented, as the estimator's own
 fit refuses them). PREDICT with `x` not given writes `dst` = horizon x
 series float32: `dst.rows` is the horizon h.
 
-KINDS: 0 theta (AutoTheta and its four fixed-model classes).
+KINDS: 0 theta (AutoTheta and its four fixed-model classes); 1 ETS (ETS,
+DampedETS).
 
 ROUTE SLOTS (filled by providers/python/member_forecast_seq_boundary_door.mojo):
   * `entry`: the glue entry of the route's sequence image (`xseq_route`'s
     `route.entry`, the door's `route.glue`).
 
 MEMBER_OP_NEW parameters (Float64 words):
+  ETS, 11 words: [0] kind 1; [1] season_length m; [2] error (0 A, 1 M);
+  [3] trend (0 N, 1 A); [4] season of the spec (0 N, 1 A, 2 M); [5] damped
+  (0 / 1); [6] fixed-setting mask (1 alpha, 2 beta, 4 phi, 8 gamma); [7]
+  alpha; [8] beta; [9] phi; [10] gamma (0 when free). A spec that may need
+  positive data (error or season M) is admitted only on a CPU route beside
+  a GPU set (route `flags` 1), where the positivity scans are the host's
+  (`host_all_finite_f32`, `family_min_f32`, as the door there); on every
+  other route the estimator's own fit scans through the base binding's
+  Python entry `all_finite_f32`, so the caller keeps the estimator's path.
   theta, 8 words: [0] kind 0; [1] season_length; [2] model code (-1 auto
   selection, 0 STM, 1 OTM, 2 DSTM, 3 DOTM: the estimator's `model` mapped by
   the connected code table); [3] decomposition (1 additive, 0
@@ -31,7 +42,7 @@ MEMBER_OP_NEW parameters (Float64 words):
 
 FITTED-STATE BLOCKS, in index order:
   0 `MEMBER_BLOCK_SCALARS` float64 [kind, series, observations, season
-    letter (theta: 0)];
+    letter (ETS: the season the fit kept, 0 N, 1 A, 2 M; theta: 0)];
   1 `MEMBER_BLOCK_FAMILY` float32 series x observations: the series,
     series-major (the estimator's `_y`).
 An import needs both.
@@ -43,7 +54,10 @@ horizon and keeps the fit's info rows; a later PREDICT at another horizon
 runs the fit's forecast-only tail from those rows (no Nelder-Mead; the fit
 does not read h, so its words are the whole call's at that horizon), and a
 PREDICT at the stored horizon publishes the stored forecast, as the
-estimator's stored-forecast reuse does.
+estimator's stored-forecast reuse does. ETS: the fit stores the series and
+runs the estimator's fit checks (length, positivity, tiny data, parameter
+count) and keeps the season letter; every PREDICT at a new horizon runs the
+whole ETS fit and forecast (`forecast_run_ets`), as the estimator's.
 
 The fitted state is OWNED here, in a process-wide store of fixed chunks: a
 slot never moves once minted; the store's lock covers only mint, free and
@@ -68,14 +82,21 @@ from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
+from core.family_cast_impl import family_min_f32
+from core.host_finite_scan import host_all_finite_f32
 from sequence.xseq_forecast_run import (
-    forecast_run_theta_check_n, forecast_run_theta, forecast_run_theta_forecast,
+    forecast_run_theta_check_n, forecast_run_theta, forecast_run_theta_forecast, forecast_run_ets_check_n,
+    forecast_run_ets_season, forecast_run_ets_needs_positive, forecast_run_ets_check_positive,
+    forecast_run_ets_check_tiny, forecast_run_ets_check_counts, forecast_run_ets, forecast_run_letter,
 )
 
 comptime _CHUNK = 256
 comptime _INDEX_SPAN = 16777216
 comptime _KIND_THETA = 0
+comptime _KIND_ETS = 1
 comptime _THETA_WORDS = 8
+comptime _ETS_WORDS = 11
+comptime _ETS_INFO = 10
 comptime _SCALAR_WORDS = 4
 comptime _THETA_INFO = 8
 comptime _BLOCK_SERIES = MEMBER_BLOCK_FAMILY
@@ -211,7 +232,41 @@ def _lookup(handle: Int, release: Bool) raises -> Int:
 
 
 def _name(slot: _SlotP) -> String:
-    return String("Theta")
+    return String("ETS") if slot[].kind == _KIND_ETS else String("Theta")
+
+
+def _ets_spec(w: _F64P) raises -> String:
+    """The model spec letters of the NEW words ("AAN" ...)."""
+    return (forecast_run_letter("AM", Int(w[2])) + forecast_run_letter("NA", Int(w[3]))
+        + forecast_run_letter("NAM", Int(w[4])))
+
+
+def _ets_checks(slot: _SlotP, call: _CallP, n: Int, size: Int) raises -> Int:
+    """The estimator's ETS fit checks on the stored series, in its order;
+    returns the season letter the fit keeps (0 N, 1 A, 2 M)."""
+    forecast_run_ets_check_n(n)
+    var w = _F64P(unsafe_from_address=Int(slot[].words.unsafe_ptr()))
+    var spec = _ets_spec(w)
+    var m = Int(w[1])
+    var s = forecast_run_ets_season(spec, n, m)
+    if forecast_run_ets_needs_positive(spec, s):
+        if (call[].route.flags & 1) == 0:
+            raise Error("member ABI: an ETS member scans positive data only on a CPU route; the estimator's "
+                + "own fit runs this check")
+        var words = _F32P(unsafe_from_address=Int(slot[].series.unsafe_ptr()))
+        var positive = host_all_finite_f32(words, size)
+        if positive:
+            positive = family_min_f32(words, size) > 0.0
+        forecast_run_ets_check_positive(positive)
+    var damped = w[5] != 0.0
+    forecast_run_ets_check_tiny(spec, s, n, damped)
+    var mask = Int(w[6])
+    var alpha_free = (mask & 1) == 0
+    var beta_free = forecast_run_letter(spec, 1) != "N" and (mask & 2) == 0
+    var gamma_free = s != "N" and (mask & 8) == 0
+    var phi_free = damped and (mask & 4) == 0
+    forecast_run_ets_check_counts(spec, s, n, m, damped, alpha_free, beta_free, gamma_free, phi_free)
+    return String("NAM").find(s)
 
 
 def _dense(view: MemberMatrix, dtype: Int, what: String, estimator: String) raises:
@@ -262,13 +317,16 @@ def _fit(slot: _SlotP, call: _CallP) raises:
     var n = call[].y.rows
     var batch = call[].y.cols
     _clear(slot)
-    forecast_run_theta_check_n(n)
+    if slot[].kind == _KIND_THETA:
+        forecast_run_theta_check_n(n)
     # The estimator's own fit keeps a private series-major copy (`_y`).
     var series = List[Float32](length=batch * n, fill=0.0)
     _transpose(call[].y.data, Int(series.unsafe_ptr()), n, batch)
     slot[].series = series^
     slot[].batch = batch
     slot[].n = n
+    if slot[].kind == _KIND_ETS:
+        slot[].letter = _ets_checks(slot, call, n, batch * n)
     slot[].scalars = [Float64(slot[].kind), Float64(batch), Float64(n), Float64(slot[].letter)]
     slot[].fitted = True
 
@@ -295,6 +353,25 @@ def _theta_run(slot: _SlotP, call: _CallP, h: Int) raises:
     slot[].forecast_h = h
 
 
+def _ets_run(slot: _SlotP, call: _CallP, h: Int) raises:
+    """The whole ETS fit and forecast at horizon h (the estimator's words)."""
+    var w = _F64P(unsafe_from_address=Int(slot[].words.unsafe_ptr()))
+    var batch = slot[].batch
+    var m = Int(w[1]) if slot[].letter != 0 else 1
+    var forecast = List[Float32](length=batch * h, fill=0.0)
+    var info = List[Float32](length=batch * _ETS_INFO, fill=0.0)
+    var states = List[Float32](length=batch * m, fill=0.0)
+    var words: List[Int] = [batch, slot[].n, h, Int(w[2]), Int(w[3]), Int(w[5]), Int(w[6]), slot[].letter, m]
+    var floats: List[Float64] = [w[7], w[8], w[9], w[10]]
+    forecast_run_ets(call[].route.entry, Int(slot[].series.unsafe_ptr()), Int(forecast.unsafe_ptr()),
+        Int(info.unsafe_ptr()), Int(states.unsafe_ptr()), words, floats)
+    slot[].info = info^
+    slot[].info_ready = True
+    _ = states^
+    slot[].forecast = forecast^
+    slot[].forecast_h = h
+
+
 def _predict(slot: _SlotP, call: _CallP) raises:
     var estimator = _name(slot)
     if not slot[].fitted:
@@ -306,7 +383,10 @@ def _predict(slot: _SlotP, call: _CallP) raises:
         raise Error("ValueError: the forecast buffer holds one column per fitted series")
     var h = call[].dst.rows
     if slot[].forecast_h != h:
-        _theta_run(slot, call, h)
+        if slot[].kind == _KIND_ETS:
+            _ets_run(slot, call, h)
+        else:
+            _theta_run(slot, call, h)
     # batch x h -> h x batch (the caller's layout).
     _transpose(Int(slot[].forecast.unsafe_ptr()), call[].dst.data, slot[].batch, h)
 
@@ -391,6 +471,13 @@ def _new(call: _CallP) raises:
             raise Error("member ABI: a theta member takes eight parameters")
         if w[1] < 1.0 or w[2] < -1.0 or w[2] > 3.0 or (w[3] != 0.0 and w[3] != 1.0) or w[4] < 0.0 or w[4] > 7.0:
             raise Error("member ABI: a theta member's season, model, decomposition or mask word is out of range")
+    elif w[0] == Float64(_KIND_ETS):
+        count = _ETS_WORDS
+        if call[].param_count != count:
+            raise Error("member ABI: an ETS member takes eleven parameters")
+        if (w[1] < 1.0 or (w[2] != 0.0 and w[2] != 1.0) or (w[3] != 0.0 and w[3] != 1.0) or w[4] < 0.0
+                or w[4] > 2.0 or (w[5] != 0.0 and w[5] != 1.0) or w[6] < 0.0 or w[6] > 15.0):
+            raise Error("member ABI: an ETS member's season, letter, damped or mask word is out of range")
     else:
         raise Error("member ABI: unknown forecaster member kind")
     var words = List[Float64](length=count, fill=0.0)
@@ -434,7 +521,7 @@ def _forecast_seq_member(operation: Int, address: Int) raises -> Int:
 
 def forecast_seq_member_v2(operation: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
     result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
-    """The member entry of the theta forecasters (schema `MEMBER_ABI`)."""
+    """The member entry of the theta and ETS forecasters (schema `MEMBER_ABI`)."""
     try:
         var word = _forecast_seq_member(operation, member_call_from_spans(operation, aa, na, np, nf))
         if result:
