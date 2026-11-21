@@ -10884,6 +10884,14 @@
       "positional": true,
       "accepts": "float, default 2.0"
      },
+     "verbose": {
+      "default": "0",
+      "accepts": "int, default 0"
+     },
+     "copy_x": {
+      "default": "True",
+      "accepts": "bool, default True"
+     },
      "numeric_mode": {
       "default": "None",
       "accepts": "{'identical', 'fast'} or None, default None"
@@ -10994,25 +11002,11 @@
      "reason": "One start by default (cuML's default); 'auto' (scikit-learn: 1 for k-means++, 10 for random) is not implemented. Changing the default changes fitted centers on every KMeans row: an A/B, not a rename."
     },
     {
-     "kind": "param_missing",
-     "name": "verbose",
-     "ours": "",
-     "sklearn": "0",
-     "reason": null
-    },
-    {
      "kind": "default",
      "name": "random_state",
      "ours": "0",
      "sklearn": "None",
      "reason": "Identity: a fixed default seed makes every fit reproducible and the same bits on every vendor; scikit-learn's None draws fresh entropy per fit."
-    },
-    {
-     "kind": "param_missing",
-     "name": "copy_x",
-     "ours": "",
-     "sklearn": "True",
-     "reason": null
     },
     {
      "kind": "param_missing",
@@ -11327,6 +11321,14 @@
       "default": "2",
       "accepts": "float, default 2"
      },
+     "leaf_size": {
+      "default": "30",
+      "accepts": "int, default 30"
+     },
+     "n_jobs": {
+      "default": "None",
+      "accepts": "int or None, default None"
+     },
      "device": {
       "default": "None",
       "accepts": ""
@@ -11426,13 +11428,6 @@
      "reason": "Exact brute force on the GPU is the only kNN search here ('auto' means 'brute'); scikit-learn's 'auto' picks a CPU tree."
     },
     {
-     "kind": "param_missing",
-     "name": "leaf_size",
-     "ours": "",
-     "sklearn": "30",
-     "reason": null
-    },
-    {
      "kind": "default",
      "name": "metric",
      "ours": "'euclidean'",
@@ -11445,13 +11440,6 @@
      "ours": "",
      "sklearn": "None",
      "reason": "Metrics are named and run natively; per-metric parameter dictionaries are not supported."
-    },
-    {
-     "kind": "param_missing",
-     "name": "n_jobs",
-     "ours": "",
-     "sklearn": "None",
-     "reason": null
     },
     {
      "kind": "param_extra",
@@ -11579,6 +11567,14 @@
       "default": "2",
       "accepts": "float, default 2"
      },
+     "leaf_size": {
+      "default": "30",
+      "accepts": "int, default 30"
+     },
+     "n_jobs": {
+      "default": "None",
+      "accepts": "int or None, default None"
+     },
      "device": {
       "default": "None",
       "accepts": ""
@@ -11673,13 +11669,6 @@
      "reason": "Exact brute force on the GPU is the only kNN search here ('auto' means 'brute'); scikit-learn's 'auto' picks a CPU tree."
     },
     {
-     "kind": "param_missing",
-     "name": "leaf_size",
-     "ours": "",
-     "sklearn": "30",
-     "reason": null
-    },
-    {
      "kind": "default",
      "name": "metric",
      "ours": "'euclidean'",
@@ -11692,13 +11681,6 @@
      "ours": "",
      "sklearn": "None",
      "reason": "Metrics are named and run natively; per-metric parameter dictionaries are not supported."
-    },
-    {
-     "kind": "param_missing",
-     "name": "n_jobs",
-     "ours": "",
-     "sklearn": "None",
-     "reason": null
     },
     {
      "kind": "param_extra",
@@ -19394,6 +19376,14 @@
       "default": "2",
       "accepts": "float, default 2"
      },
+     "leaf_size": {
+      "default": "30",
+      "accepts": "int, default 30"
+     },
+     "n_jobs": {
+      "default": "None",
+      "accepts": "int or None, default None"
+     },
      "device": {
       "default": "None",
       "accepts": ""
@@ -19493,13 +19483,6 @@
      "reason": "Exact brute force on the GPU is the only kNN search here ('auto' means 'brute'); scikit-learn's 'auto' picks a CPU tree."
     },
     {
-     "kind": "param_missing",
-     "name": "leaf_size",
-     "ours": "",
-     "sklearn": "30",
-     "reason": null
-    },
-    {
      "kind": "default",
      "name": "metric",
      "ours": "'euclidean'",
@@ -19512,13 +19495,6 @@
      "ours": "",
      "sklearn": "None",
      "reason": "Metrics are named and run natively; per-metric parameter dictionaries are not supported."
-    },
-    {
-     "kind": "param_missing",
-     "name": "n_jobs",
-     "ours": "",
-     "sklearn": "None",
-     "reason": null
     },
     {
      "kind": "param_extra",
@@ -19775,6 +19751,10 @@
       "default": "0",
       "positional": true,
       "accepts": "int, default 0"
+     },
+     "n_jobs": {
+      "default": "None",
+      "accepts": "int or None, default None"
      }
     },
     "methods": [
@@ -19886,13 +19866,6 @@
      "ours": "0",
      "sklearn": "None",
      "reason": "Identity: a fixed default seed makes every fit reproducible and the same bits on every vendor; scikit-learn's None draws fresh entropy per fit."
-    },
-    {
-     "kind": "param_missing",
-     "name": "n_jobs",
-     "ours": "",
-     "sklearn": "None",
-     "reason": null
     },
     {
      "kind": "method_missing",
@@ -29271,9 +29244,16 @@
       "positional": true,
       "accepts": "float, default 1.0"
      },
+     "verbose": {
+      "default": "0",
+      "accepts": "int, default 0"
+     },
+     "n_jobs": {
+      "default": "None",
+      "accepts": "int or None, default None"
+     },
      "device": {
       "default": "None",
-      "positional": true,
       "accepts": ""
      }
     },
@@ -29418,13 +29398,6 @@
      "reason": "Metrics are named and run natively; per-metric parameter dictionaries are not supported."
     },
     {
-     "kind": "param_missing",
-     "name": "verbose",
-     "ours": "",
-     "sklearn": "0",
-     "reason": null
-    },
-    {
      "kind": "default",
      "name": "random_state",
      "ours": "0",
@@ -29444,13 +29417,6 @@
      "ours": "",
      "sklearn": "0.5",
      "reason": "One GPU schedule over Euclidean distances with a fixed iteration count: no progress-based stopping, no metric choice, no Barnes-Hut method or angle."
-    },
-    {
-     "kind": "param_missing",
-     "name": "n_jobs",
-     "ours": "",
-     "sklearn": "None",
-     "reason": null
     },
     {
      "kind": "param_extra",
