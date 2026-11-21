@@ -37,6 +37,7 @@ from xtrees.dart_abi import XD_CAP_ROUND
 from xtrees.dart_calls import xd_caps, xd_open, xd_step, xd_add, xd_close
 from xtrees.glue_calls import (
     xt_ref, xt_bag_rows, xt_dart_thresholds, xt_dart_rescale, xt_iota_i32, xt_remap_cols, xt_sample_indices,
+    xt_exact_sum, xt_log64, xt_class_counts, xt_class_priors,
 )
 from xtrees.trees_boost_run import boost_dart_cap_check, _sub_seed
 from xtrees.trees_forest_run import forest_export_counts
@@ -358,3 +359,87 @@ def dart_member_into(rounds: DartRounds, member: Int, dst: List[Int]):
                 rounds.word(member, DART_M_LEAF_N))
     _copy_words(dst[5], Int(rounds.values.unsafe_ptr()) + rounds.word(member, DART_M_VAL_START) * 4,
                 rounds.word(member, DART_M_VAL_N))
+
+
+@fieldwise_init
+struct DartWords(Copyable, Movable):
+    """The estimator's DART settings as plain values (UNPACK, once per
+    estimator: the door's `_dart_boost` and the Dart member's admission read
+    the same fields with the same checks). `col_seed_refusal` holds the
+    `random_state` refusal text of an invalid `feature_fraction_seed`, raised
+    only when a fit samples columns (where the door reads that seed)."""
+    var n_iters: Int
+    var node_cap: Int
+    var skip_thr: Int
+    var uniform: Int
+    var xgb: Int
+    var max_drop: Int
+    var drop_rate: Float64
+    var lr: Float64
+    var lam: Float64
+    var l1: Float64
+    var mds: Float64
+    var bag: Bool
+    var bag_freq: Int
+    var bag_frac: Float64
+    var bag_seed: Int
+    var col_frac: Float64
+    var col_seed: Int
+    var col_seed_refusal: String
+    var seed: Int
+    var drop_seed: Int
+
+
+def dart_starts(glue: EntryRef, y: Int, n: Int, K: Int, kind: Int) raises -> List[Float64]:
+    """`_DARTBase._boost`'s class starts (`init_score_`): the exact mean of
+    y (regression), its log-odds (binary), or the class priors (multiclass),
+    through the image's glue (`glue` = xt_ref). Refuses a non-finite y and a
+    binary y without both classes, in the estimator's words."""
+    var starts = List[Float64]()
+    if kind == 0 or kind == 1:
+        var sum_out = List[Float64](length=1, fill=0.0)
+        var sum_flags = List[Int32](length=8, fill=0)
+        _ = xt_exact_sum(glue, y, Int(sum_out.unsafe_ptr()), Int(sum_flags.unsafe_ptr()), n, 0)
+        if sum_flags[0] != 0 or sum_flags[1] != 0 or sum_flags[2] != 0:
+            raise Error("Input y contains NaN or infinity.")
+        var mean = sum_out[0] / Float64(n)
+        if kind == 0:
+            starts.append(mean)
+        else:
+            if not (0.0 < mean and mean < 1.0):
+                raise Error("y must hold both classes")
+            var log_word: List[Float64] = [0.0]
+            _ = xt_log64(glue, Int(log_word.unsafe_ptr()), mean / (1.0 - mean))
+            starts.append(log_word[0])
+            _ = len(log_word)
+        _ = len(sum_out)
+        _ = len(sum_flags)
+        return starts^
+    var counts = List[Int32](length=K, fill=0)
+    _ = xt_class_counts(glue, y, Int(counts.unsafe_ptr()), n, K)
+    var priors = List[Float64](length=K, fill=0.0)
+    _ = xt_class_priors(glue, Int(counts.unsafe_ptr()), Int(priors.unsafe_ptr()), n, K)
+    _ = len(counts)
+    return priors^
+
+
+def dart_round_plan(words: DartWords, dart: EntryRef, glue_key: TreesEntryKey, forest: EntryRef, x: Int, y: Int,
+                    var inits: List[Float64], n: Int, d: Int, K: Int, kind: Int) raises -> DartRoundPlan:
+    """The round loop's plan from the settings and the fit's dimensions:
+    the sampled column count `max(int(d * colsample_bytree + 0.5),
+    min(1, d))` when below d (else every column), as the door computed it."""
+    var col_count = 0
+    var col_seed = 0
+    if words.col_frac < 1.0:
+        var count = max(Int(Float64(d) * words.col_frac + 0.5), min(1, d))
+        if count < d:
+            if words.col_seed_refusal != "":
+                raise Error(words.col_seed_refusal)
+            col_count = count
+            col_seed = words.col_seed
+    return DartRoundPlan(
+        dart=dart, glue_key=glue_key.copy(), forest=forest, x=x, y=y, inits=inits^, n=n, d=d, k=K, kind=kind,
+        n_iters=words.n_iters, node_cap=words.node_cap, drop_seed=words.drop_seed, skip_thr=words.skip_thr,
+        uniform=words.uniform, xgb=words.xgb, max_drop=words.max_drop, drop_rate=words.drop_rate, lr=words.lr,
+        lam=words.lam, l1=words.l1, mds=words.mds, bag=words.bag, bag_freq=words.bag_freq,
+        bag_frac=words.bag_frac, bag_seed=words.bag_seed, col_count=col_count, col_seed=col_seed, seed=words.seed)
