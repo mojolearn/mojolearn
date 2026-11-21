@@ -20,18 +20,22 @@ _CPU_DONE = False
 _CPU_LATER = []
 
 
-def cpu_scope_later(context):
+def cpu_scope_later(context, load=None):
     """Build `context`'s CPU label scope (_native_labels_bridge `cpu_scope`)
     at the first device="cpu" admission beside a GPU set, or now when that
     already happened: a family context connected at import that should not
-    load the host label images at import."""
+    load the host label images at import. `load(context)`, when given,
+    connects the family's own CPU image into `context` first (the
+    decomposition kit's x_decomp host image), at the same moment."""
     # glue: import-time registration, once per family context
     if _CPU_DONE:
+        if load is not None:
+            load(context)
         from ._native_labels_bridge import cpu_scope
         cpu_scope(context)
     else:
         _hold_cpu_connect(context)
-        _CPU_LATER.append(context)
+        _CPU_LATER.append((context, load))
 
 
 def _hold_cpu_connect(context):
@@ -79,7 +83,9 @@ def connect_cpu():
         _connect_cpu(_CONTEXT)
     _CPU_DONE = True
     from ._native_labels_bridge import cpu_scope
-    for context in _CPU_LATER:  # glue: once, over the registered family contexts (at most a few)
+    for context, load in _CPU_LATER:  # glue: once, over the registered family contexts (at most a few)
+        if load is not None:
+            load(context)
         cpu_scope(context)
     _CPU_LATER.clear()
     return None
