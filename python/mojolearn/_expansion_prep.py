@@ -1381,6 +1381,9 @@ class BernoulliNB(_DiscreteNB):
     >>> model = mojolearn.BernoulliNB().fit(X, y)
     """
     _parameters = ("alpha", "force_alpha", "binarize", "fit_prior", "class_prior", "device")
+    #: the meta-estimators run this class through its native member entry
+    #: (core/naive_bayes_member.mojo; dense X).
+    _mojolearn_member = (9, 2)
     #: This class takes `device=`: the check builds its other side as the same
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """The NaiveBayes family as MEMBERS (core/member_abi.mojo): GaussianNB
-(kind 0) and MultinomialNB (kind 1); BernoulliNB, ComplementNB and
+(kind 0), MultinomialNB (kind 1) and BernoulliNB (kind 2); ComplementNB and
 CategoricalNB are not published yet (`naive_bayes_kind_published`).
 
 One entry, `naive_bayes_member_v2`, published by each x_prep image beside its
@@ -310,7 +310,7 @@ def _kind_name(kind: Int) -> String:
 
 def naive_bayes_kind_published(kind: Int) -> Bool:
     """The kinds this entry serves (a class is marked when its kind is here)."""
-    return kind == NB_KIND_GAUSSIAN or kind == NB_KIND_MULTINOMIAL
+    return kind == NB_KIND_GAUSSIAN or kind == NB_KIND_MULTINOMIAL or kind == NB_KIND_BERNOULLI
 
 
 def _run_plan(call: _Call) -> ClsRunPlan:
