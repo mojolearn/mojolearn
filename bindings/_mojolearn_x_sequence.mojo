@@ -37,6 +37,7 @@ from core.xseq_entry_table import xseq_vendor_word
 from core.mlp_member import mlp_member_publish
 from core.cnn_member import cnn_member_publish
 from core.sequence_member import sequence_member_publish
+from core.forecast_seq_member import forecast_seq_member_publish
 from providers.python.sequence_pyapi_door import opt_step_py, rnn_fit_py, rnn_predict_py, mlp_fit_py, mlp_predict_py, layer_norm_py, moe_forward_py
 from sequence.opt_resident import AF_RESIDENT
 from providers.python.sequence_opt_resident_pyapi_unpack import adafactor_resident_open_py, lamb_resident_open_py, opt_resident_open_py
@@ -741,6 +742,7 @@ def build__mojolearn_x_sequence() -> PythonObject:
         mlp_member_publish(Int(GLOBAL_NUMERIC_MODE), xseq_vendor_word(COMPILED_VENDOR), Int(XSEQ_DEVICE_OWNER.get_or_create_ptr()))
         cnn_member_publish(Int(GLOBAL_NUMERIC_MODE), xseq_vendor_word(COMPILED_VENDOR), Int(XSEQ_DEVICE_OWNER.get_or_create_ptr()))
         sequence_member_publish(Int(GLOBAL_NUMERIC_MODE), xseq_vendor_word(COMPILED_VENDOR), Int(XSEQ_DEVICE_OWNER.get_or_create_ptr()))
+        forecast_seq_member_publish(Int(GLOBAL_NUMERIC_MODE), xseq_vendor_word(COMPILED_VENDOR), Int(XSEQ_DEVICE_OWNER.get_or_create_ptr()))
         # Neural-blocks entry table (core/neural_entry_table.mojo): SmallMLPTrainer's
         # program; the Python entry remains for its other callers and the boundary tests.
         publish_neural_small_mlp_device()

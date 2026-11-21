@@ -89,7 +89,8 @@ from std.python.bindings import PythonModuleBuilder
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
 
-from arima.arima_ops_device import publish_arima_ops_device
+from arima.arima_ops_device import publish_arima_ops_device, ARIMA_OPS_DEVICE_API, _VENDOR_CODE
+from core.forecast_member import forecast_member_publish
 from arima.resident_state import arima_resident_count
 
 
@@ -141,6 +142,8 @@ def build__mojolearn_arima() -> PythonObject:
         # an estimator's route resolves it once.
         var published_module = m.finalize()
         publish_arima_ops_device()
+        # The member entry (core/member_abi.mojo): ARIMA runs as a member of a meta-estimator.
+        forecast_member_publish(Int(GLOBAL_NUMERIC_MODE), _VENDOR_CODE, Int(ARIMA_OPS_DEVICE_API.get_or_create_ptr()))
         return published_module
     except e:
         abort(String("failed to create _mojolearn_arima: ", e))

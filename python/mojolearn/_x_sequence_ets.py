@@ -105,6 +105,8 @@ class ETS(ParamsMixin):
     #: This class takes `device=`: the check builds its other side as the same
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
+    #: A member of a meta-estimator (core/forecast_seq_member.mojo: family 43, kind 1).
+    _mojolearn_member = (43, 1)
 
     def __init__(self, season_length=1, model="AAN", damped=True, alpha=None, beta=None, phi=None,
                  gamma=None, numeric_mode=None, device=None):
@@ -212,6 +214,7 @@ class DampedETS(ETS):
     >>> mojolearn.DampedETS().fit(y).predict(10)["mean"].shape
     (10,)
     """
+    _mojolearn_member = (43, 1)
 
     def __init__(self, season_length=1, error="A", alpha=None, beta=None, phi=None, numeric_mode=None, device=None):
         _XSEQ(self, "ets_initialize", (season_length, error, alpha, beta, phi, numeric_mode, device), _XSEQ_CONTEXT)

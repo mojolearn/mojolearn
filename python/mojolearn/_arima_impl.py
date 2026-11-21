@@ -453,6 +453,8 @@ class ARIMA(NumericModeMixin):
     # NotFittedError of predict in bindings/tsa_public_native_door.mojo), so no
     # `_mode` class-creation wrappers are installed.
     _mojolearn_native_public = True
+    #: A member of a meta-estimator (core/forecast_member.mojo: family 37, kind 0).
+    _mojolearn_member = (37, 0)
 
     def __init__(
         self,
