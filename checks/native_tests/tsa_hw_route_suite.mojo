@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """The Holt-Winters operations table and the device route, on the host.
 
-The route (core/tsa_route.mojo) is what an ExponentialSmoothing estimator
+The route (core/device_route.mojo `DeviceRoute`, resolved by core/tsa_hw_run.mojo) is what an ExponentialSmoothing estimator
 resolves once for its `device`: it is refused before its table is published
 and for a vendor no image published; it reports the CPU words of the host
 entry; the fit, the forecast and the in-sample prediction through the route
@@ -17,8 +17,8 @@ native host worker pool. No Python module participates.
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.host_parallel import host_parallelize
 from core.hostptr import f32_ptr, i32_ptr
-from core.linear_route import (
-    LINEAR_DEVICE_CPU, LINEAR_DEVICE_GPU, LINEAR_DEVICE_INSTALL, linear_device_code, linear_device_installed,
+from core.device_route import (
+    DeviceRoute, DEVICE_CPU, DEVICE_GPU, DEVICE_INSTALL, device_code, device_installed, device_vendor_word,
 )
 from core.mojolearn_tsa_host_impl import holtwinters_fit_host_into
 from core.tsa_entry_table import (
@@ -27,10 +27,8 @@ from core.tsa_entry_table import (
 )
 from core.tsa_hw_run import (
     tsa_hw_fit_run, tsa_hw_forecast_run, tsa_hw_predict_run, tsa_hw_resident_count_run,
-    tsa_hw_resident_prepare_run, tsa_hw_query_resident_run,
-)
-from core.tsa_route import (
-    TsaHwRoute, tsa_hw_route_fits, tsa_hw_route_resident, tsa_hw_route_resolve, tsa_vendor_word,
+    tsa_hw_resident_prepare_run, tsa_hw_query_resident_run, tsa_hw_route_fits, tsa_hw_route_resident,
+    tsa_hw_route_resolve,
 )
 from bindings.holtwinters_host_predict_run import holtwinters_forecast_run, holtwinters_predict_run
 from holtwinters.impl.tsa.holtwinters_params import seasonal_name
@@ -86,34 +84,34 @@ def span_rules() raises:
 
 
 def device_rules() raises:
-    require(linear_device_code(String("gpu")) == LINEAR_DEVICE_GPU and linear_device_code(String("cpu")) == LINEAR_DEVICE_CPU
-        and linear_device_code(String("GPU")) == -1, "device words differ")
-    require(linear_device_installed(LINEAR_DEVICE_INSTALL, 0) == LINEAR_DEVICE_CPU
-        and linear_device_installed(LINEAR_DEVICE_INSTALL, 2) == LINEAR_DEVICE_GPU
-        and linear_device_installed(LINEAR_DEVICE_CPU, 2) == LINEAR_DEVICE_CPU, "installed device rule differs")
+    require(device_code(String("gpu")) == DEVICE_GPU and device_code(String("cpu")) == DEVICE_CPU
+        and device_code(String("GPU")) == -1, "device words differ")
+    require(device_installed(DEVICE_INSTALL, 0) == DEVICE_CPU
+        and device_installed(DEVICE_INSTALL, 2) == DEVICE_GPU
+        and device_installed(DEVICE_CPU, 2) == DEVICE_CPU, "installed device rule differs")
     var refused = False
     try:
-        _ = linear_device_installed(LINEAR_DEVICE_GPU, 0)
+        _ = device_installed(DEVICE_GPU, 0)
     except:
         refused = True
     require(refused, "an explicit gpu on a CPU-only installation was not refused")
-    require(tsa_vendor_word(0) == "cpu" and tsa_vendor_word(2) == "cuda", "vendor words differ")
+    require(device_vendor_word(0) == "cpu" and device_vendor_word(2) == "cuda", "vendor words differ")
     print("PASS tsa device rules")
 
 
 def missing_before_publication() raises:
     var refused = 0
     try:
-        _ = tsa_hw_route_resolve(LINEAR_DEVICE_CPU, TSA_TABLE_TSA, Int(GLOBAL_NUMERIC_MODE), 0)
+        _ = tsa_hw_route_resolve(DEVICE_CPU, TSA_TABLE_TSA, Int(GLOBAL_NUMERIC_MODE), 0)
     except:
         refused += 1
     try:
-        _ = tsa_hw_route_resolve(LINEAR_DEVICE_CPU, TSA_TABLE_FORECAST, 1, 0)
+        _ = tsa_hw_route_resolve(DEVICE_CPU, TSA_TABLE_FORECAST, 1, 0)
     except:
         refused += 1
     require(refused == 2, "a route resolved before its table was published")
     # An unresolved route's entry refuses and writes nothing.
-    var idle = TsaHwRoute(LINEAR_DEVICE_CPU)
+    var idle = DeviceRoute(DEVICE_CPU)
     var sink = List[Float32](length=4, fill=-37)
     var called = False
     try:
@@ -154,8 +152,8 @@ def same_bytes(left: List[Float32], right: List[Float32]) -> Bool:
 
 
 def fixture(multiplicative: Bool) raises:
-    var route = tsa_hw_route_resolve(LINEAR_DEVICE_CPU, TSA_TABLE_TSA, Int(GLOBAL_NUMERIC_MODE), 0)
-    var inference = tsa_hw_route_resolve(LINEAR_DEVICE_CPU, TSA_TABLE_FORECAST, 1, 0)
+    var route = tsa_hw_route_resolve(DEVICE_CPU, TSA_TABLE_TSA, Int(GLOBAL_NUMERIC_MODE), 0)
+    var inference = tsa_hw_route_resolve(DEVICE_CPU, TSA_TABLE_FORECAST, 1, 0)
     var seasonal = 1 if multiplicative else 0
     var cl = (_N - _FREQ) * _B
     var data = series(multiplicative)
@@ -204,15 +202,15 @@ def fixture(multiplicative: Bool) raises:
 
 
 def published_words() raises:
-    var route = tsa_hw_route_resolve(LINEAR_DEVICE_CPU, TSA_TABLE_TSA, Int(GLOBAL_NUMERIC_MODE), 0)
+    var route = tsa_hw_route_resolve(DEVICE_CPU, TSA_TABLE_TSA, Int(GLOBAL_NUMERIC_MODE), 0)
     require(route.vendor == 0 and route.mode == Int(GLOBAL_NUMERIC_MODE) and tsa_hw_route_fits(route)
         and not tsa_hw_route_resident(route), "the CPU route reports different words")
-    var inference = tsa_hw_route_resolve(LINEAR_DEVICE_CPU, TSA_TABLE_FORECAST, 1, 0)
+    var inference = tsa_hw_route_resolve(DEVICE_CPU, TSA_TABLE_FORECAST, 1, 0)
     require(inference.vendor == 0 and not tsa_hw_route_fits(inference) and not tsa_hw_route_resident(inference),
         "the forecast inference route reports different words")
     var refused = 0
     try:
-        _ = tsa_hw_route_resolve(LINEAR_DEVICE_GPU, TSA_TABLE_TSA, Int(GLOBAL_NUMERIC_MODE), 2)
+        _ = tsa_hw_route_resolve(DEVICE_GPU, TSA_TABLE_TSA, Int(GLOBAL_NUMERIC_MODE), 2)
     except:
         refused += 1
     var sink = List[Float32](length=8, fill=-37)

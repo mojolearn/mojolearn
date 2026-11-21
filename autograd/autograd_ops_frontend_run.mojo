@@ -327,13 +327,10 @@ struct _SessionOpCodes(Defaultable, Movable):
 comptime _SESSION_OP_CODES = SharedSlot[_SessionOpCodes, "MojolearnSessionOpCodesV4"]
 
 
-def _session_op_code(name: String) raises -> Int:
-    var g = _SESSION_OP_CODES.get_or_create_ptr()
-    # One hashed lookup per Session call (was `in` then `[]`: two).
-    var found = g[].codes.find(name)
-    if found:
-        return found.value()
-    return 0
+# The name lookup is the door's (providers/python/autograd_ops_frontend_pyapi_door.mojo
+# `_session_op_names`): one Python dictionary built once from this table and
+# read with the caller's own str. The former `_session_op_code(name: String)`
+# (a String copy and a hash of the copy per Session operation) had no caller left.
 
 
 def _append(mut dest: List[Int], src: List[Int]):

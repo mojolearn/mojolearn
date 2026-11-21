@@ -1,14 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
-"""`device=None` (default), `device="gpu"` and `device="cpu"` on the Gaussian process estimators, at the Python boundary.
+"""The Gaussian process estimators on both devices: the fit-level rows of `device=`.
 
-The device is a constructor parameter of GaussianProcessRegressor and GaussianProcessClassifier. None is this
-installation's device: the GPU where the installation has a GPU set, else the CPU. `get_params` returns what was
-passed (None stays None). The constructor stores the value as given, as it stores every other parameter of these
-classes; it is read once, by the estimator's first operation, into its route record. An unknown value, and an
-explicit `device="gpu"` on a CPU-only installation, are refused there in words. `get_params`, `set_params`, clone
-and pickle carry it. On a GPU installation `device="cpu"` runs the CPU binaries beside the GPU ones in one process
-(`vendor_used() == "cpu"`); in `identical` mode it returns the bits the GPU returns. These tests run on a GPU
-installation and on a CPU-only one; what needs two devices is skipped by name on the CPU-only one.
+Construction, refusals, `set_params`, clone and pickle of the parameter itself are covered for every class that takes
+`device=` by `test_device_parameter.py`. Here: on a GPU installation `device="cpu"` runs the CPU binaries beside the GPU
+ones in one process (`vendor_used() == "cpu"`, nothing launched on the GPU, `score` included); in `identical` mode it
+returns the bits the GPU returns; `check` compares the two devices in this process. What needs two devices is skipped
+by name on a CPU-only installation.
 """
 import pickle
 import sys
@@ -39,59 +36,12 @@ def answer(model, x):
 
 
 @pytest.mark.parametrize("cls", CLASSES)
-def test_device_is_a_constructor_parameter_with_default_none(cls):
-    assert cls().get_params()["device"] is None
-    assert cls(device=None).get_params()["device"] is None
-    assert cls(device="cpu").get_params()["device"] == "cpu"
-    assert "device" in cls._get_param_names()
-
-
-@pytest.mark.parametrize("cls", CLASSES)
-@pytest.mark.parametrize("bad", ["tpu", "GPU", " cpu", "", "None", 0, False, b"cpu"])
-def test_unknown_device_is_refused_in_words_by_the_first_operation(cls, bad):
-    x, y = data(cls)
-    model = cls(device=bad)                      # stored as given, like every parameter of these classes
-    assert model.get_params()["device"] is bad
-    with pytest.raises(ValueError, match="device must be 'gpu', 'cpu' or None, got"):
-        model.fit(x, y)
-    with pytest.raises(ValueError, match="device must be 'gpu', 'cpu' or None, got"):
-        model.vendor_used()
-
-
-@pytest.mark.parametrize("cls", CLASSES)
 def test_default_device_is_this_installations_device(cls):
     x, y = data(cls)
     model = cls().fit(x, y)
     assert model.vendor_used() == mojolearn.vendor()
     assert model.get_params()["device"] is None
     assert answer(model, x).shape == (len(x),)
-
-
-@pytest.mark.parametrize("cls", CLASSES)
-def test_explicit_gpu_runs_on_a_gpu_installation_and_is_refused_in_words_on_a_cpu_only_one(cls):
-    x, y = data(cls)
-    if TWO_DEVICES:
-        model = cls(device="gpu").fit(x, y)
-        assert model.vendor_used() == mojolearn.vendor() and model.get_params()["device"] == "gpu"
-        return
-    with pytest.raises(ValueError, match="device='gpu' needs a GPU build of mojolearn.*Use device='cpu'"):
-        cls(device="gpu").fit(x, y)
-    model = cls().fit(x, y)
-    model.set_params(device="gpu")
-    with pytest.raises(ValueError, match="Use device='cpu'"):
-        model.fit(x, y)
-
-
-@pytest.mark.parametrize("cls", CLASSES)
-def test_a_refused_device_leaves_the_fitted_model_answering_after_it_is_set_back(cls):
-    x, y = data(cls)
-    model = cls().fit(x, y)
-    before = answer(model, x).copy()
-    model.device = "tpu"
-    with pytest.raises(ValueError, match="device must be 'gpu', 'cpu' or None, got 'tpu'"):
-        model.predict(x)
-    model.device = None
-    np.testing.assert_array_equal(answer(model, x), before)
 
 
 @pytest.mark.parametrize("cls", CLASSES)
@@ -172,18 +122,6 @@ def test_set_params_moves_the_estimator_to_the_other_device(cls):
     assert model.vendor_used() == "cpu"
     model.set_params(device=None).fit(x, y)
     assert model.get_params()["device"] is None
-    assert model.vendor_used() == mojolearn.vendor()
-
-
-@two_devices
-@pytest.mark.parametrize("cls", CLASSES)
-def test_an_assigned_device_is_seen_by_the_next_operation(cls):
-    x, y = data(cls)
-    model = cls().fit(x, y)
-    assert model.vendor_used() == mojolearn.vendor()
-    model.device = "cpu"
-    assert model.vendor_used() == "cpu"
-    model.device = None
     assert model.vendor_used() == mojolearn.vendor()
 
 

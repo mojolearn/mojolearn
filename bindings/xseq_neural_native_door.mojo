@@ -31,9 +31,9 @@ from bindings.optimizer_admission_door import opt_schedule
 from bindings.optimizer_schedule_native_door import schedule_run
 from bindings.optimizer_keys_unpack import OPTIMIZER_OPN_SCHEDULE_VALUES
 from bindings.xseq_native_common_door import (
-    XF32P, XI32P, xseq_entries, xseq_base, xseq_input, xseq_is_f64, xseq_refuse_f64, xseq_zeros,
+    XF32P, XI32P, xseq_route, XseqRoute, xseq_base, xseq_input, xseq_is_f64, xseq_refuse_f64, xseq_zeros,
     xseq_addr, xseq_f32p, xseq_reshape, xseq_curve_list, xseq_int, xseq_float, xseq_truth, xseq_is_int,
-    XseqStream, xseq_neural_provider, xseq_output_provider,
+    XseqStream, xseq_neural_provider,
 )
 from bindings.admitted_sequence_door import admit_nd_f32
 from providers.python.xseq_public_lifecycle_pyapi_door import xseq_public_labels, xseq_private_input
@@ -120,15 +120,17 @@ def xseq_take(classes: PythonObject, codes: PythonObject, context: PythonObject)
     return neural_decode_labels(classes, codes, context)
 
 
-def xseq_argmax(scores: PythonObject, rows: Int, cols: Int, context: PythonObject) raises -> PythonObject:
-    """The base binding's first-max-wins row argmax (`argmax_rows_f32`) of a
-    C-ordered float32 block, as an int64 array."""
+def xseq_argmax(scores: PythonObject, rows: Int, cols: Int, output: PythonObject,
+                context: PythonObject) raises -> PythonObject:
+    """The first-max-wins row argmax (`argmax_rows_f32`) of a C-ordered
+    float32 block, as an int64 array, on the image of the estimator's route
+    (`output`: the route's output entries)."""
     var nk = xseq_keys()
     var codes = sequential_array(Python.tuple(rows), py_item(context, nk[].k_int64), context)
     if rows:
         var scores_address = Int(py=xseq_addr(scores))
         var codes_address = Int(py=xseq_addr(codes))
-        var provider = xseq_output_provider(context)
+        var provider = xseq_neural_provider(output)
         var entry = _entry(provider)
         var py = Python()
         with GILReleased(py):
@@ -423,7 +425,7 @@ def _rnn_ints(model: PythonObject, fields: PythonObject) raises -> List[Int]:
 
 
 def _rnn_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, target: PythonObject,
-             entries: PythonObject, context: PythonObject) raises -> PythonObject:
+             route: XseqRoute, context: PythonObject) raises -> PythonObject:
     """`_RecurrentBase._fit(X, target)`."""
     var x = _rnn_x(x_source, fields, True, context)
     var n = Int(py=x.shape[0])
@@ -443,7 +445,7 @@ def _rnn_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
     var bound = xseq_run_rnn_bound(xseq_float(py_item(fields, nk[].k_hidden_size)))
     var params = xseq_zeros(Python.tuple(total), context)
     var params_address = Int(py=xseq_addr(params))
-    var output_provider = xseq_output_provider(context)
+    var output_provider = xseq_neural_provider(route.output)
     var output_entry = _entry(output_provider)
     var py = Python()
     with GILReleased(py):
@@ -467,7 +469,7 @@ def _rnn_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
                                     steps_t, epochs, schedule.batch, shuffle, seed)
     var addresses: List[Int] = [Int(py=xseq_addr(x)), Int(py=xseq_addr(target)), Int(py=xseq_addr(params)),
                                  Int(py=xseq_addr(losses)), Int(py=_buffer_address(rates))]
-    var provider = xseq_neural_provider(entries)
+    var provider = xseq_neural_provider(route.entries)
     var entry = _entry(provider)
     with GILReleased(py):
         xseq_run_rnn_fit(entry, request, optimizer, addresses[0], addresses[1], addresses[2], addresses[3],
@@ -480,6 +482,7 @@ def _rnn_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
     _ = rates  # keep the Python object alive through the native call above
     _ = x^
     _ = rates^
+    _ = route.owner  # the route's images stay loaded through the calls above
     py_setitem(fields, nk[].k_loss_curve_, losses)
     py_setitem(fields, nk[].k_n_iter_, steps)
     py_setitem(fields, nk[].k_n_timesteps_, steps_t)
@@ -487,9 +490,9 @@ def _rnn_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
 
 
 def _rnn_run(model: PythonObject, fields: PythonObject, source: PythonObject, want_seq: Bool,
-             context: PythonObject) raises -> PythonObject:
-    """`_RecurrentBase._run(X, want_seq)`: `(out, seq)`."""
-    var entries = xseq_entries(fields, context)
+             route: XseqRoute, context: PythonObject) raises -> PythonObject:
+    """`_RecurrentBase._run(X, want_seq)`: `(out, seq)`, on the estimator's
+    route (resolved by the caller, first, as the entries were)."""
     var x = _rnn_x(source, fields, False, context)
     var n = Int(py=x.shape[0])
     var steps_t = Int(py=x.shape[1])
@@ -520,7 +523,7 @@ def _rnn_run(model: PythonObject, fields: PythonObject, source: PythonObject, wa
     var request = XseqRnnPredictRequest(ints^, n_params, task, n, steps_t, xseq_int(py_item(fields, nk[].k_predict_chunk)), want_seq,
                                         Int(model._obj_ptr), token)
     var addresses: List[Int] = [Int(py=xseq_addr(x)), Int(py=xseq_addr(params)), Int(py=xseq_addr(out)), Int(py=xseq_addr(seq))]
-    var provider = xseq_neural_provider(entries)
+    var provider = xseq_neural_provider(route.entries)
     var entry = _entry(provider)
     var py = Python()
     with GILReleased(py):
@@ -532,6 +535,7 @@ def _rnn_run(model: PythonObject, fields: PythonObject, source: PythonObject, wa
     _ = x  # keep the Python object alive through the native call above
     _ = x^
     _ = params^
+    _ = route.owner  # the route's images stay loaded through the call above
     return Python.tuple(out, seq)
 
 
@@ -551,9 +555,9 @@ def xseq_rnn(model: PythonObject, operation: Int, args: PythonObject, context: P
             var rows = Int(py=y.shape[0])
             var target = xseq_reshape(y, Python.tuple(rows, -1))
             py_setitem(fields, nk[].k_n_outputs_, Int(py=target.shape[1]))
-            return _rnn_fit(model, fields, args[0], target, xseq_entries(fields, context), context)
-        var entries = xseq_entries(fields, context)
-        var encoded = xseq_labels(args[1], entries, context)
+            return _rnn_fit(model, fields, args[0], target, xseq_route(model, fields, context), context)
+        var route = xseq_route(model, fields, context)
+        var encoded = xseq_labels(args[1], route.entries, context)
         py_setitem(fields, nk[].k_classes_, encoded[0])
         var k = len(encoded[0])
         if k < 2:
@@ -566,11 +570,12 @@ def xseq_rnn(model: PythonObject, operation: Int, args: PythonObject, context: P
         xseq_codes_f32(XI32P(unsafe_from_address=Int(py=xseq_addr(codes))), xseq_f32p(target), count)
         _ = target  # keep the Python object alive through the native call above
         _ = codes  # keep the Python object alive through the native call above
-        return _rnn_fit(model, fields, args[0], target, entries, context)
+        return _rnn_fit(model, fields, args[0], target, route, context)
+    var route = xseq_route(model, fields, context)
     if operation == XSEQ_OPN_RNN_HIDDEN_SEQUENCE:
-        return _rnn_run(model, fields, args[0], True, context)[1]
+        return _rnn_run(model, fields, args[0], True, route, context)[1]
     var nk = xseq_keys()
-    var result = _rnn_run(model, fields, args[0], False, context)
+    var result = _rnn_run(model, fields, args[0], False, route, context)
     var out = result[0]
     if operation == XSEQ_OPN_RNN_PREDICT_PROBA:
         return out
@@ -579,7 +584,7 @@ def xseq_rnn(model: PythonObject, operation: Int, args: PythonObject, context: P
             return xseq_reshape(out, Python.tuple(out.shape[0]))
         return out
     var rows = Int(py=out.shape[0])
-    var codes = xseq_argmax(out, rows, Int(py=out.shape[1]), context)
+    var codes = xseq_argmax(out, rows, Int(py=out.shape[1]), route.output, context)
     return xseq_take(xseq_public_labels(fields, context), codes, context)
 
 
@@ -649,7 +654,10 @@ def _mlp_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
     var total = xseq_run_mlp_param_count(sizes)
     var params = xseq_zeros(Python.tuple(total), context)
     var base = Int(py=xseq_addr(params))
-    var output_provider = xseq_output_provider(context)
+    # The estimator's route: the output image draws the weights, the fit
+    # entry below is the route's own.
+    var route = xseq_route(model, fields, context)
+    var output_provider = xseq_neural_provider(route.output)
     var output_entry = _entry(output_provider)
     var py = Python()
     with GILReleased(py):
@@ -683,9 +691,8 @@ def _mlp_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
     var fp: List[Float64] = [_opt_real(py_item(fields, nk[].k_learning_rate_init)), _opt_real(py_item(fields, nk[].k_beta_1)),
                              _opt_real(py_item(fields, nk[].k_beta_2)), _opt_real(py_item(fields, nk[].k_epsilon)), _opt_real(py_item(fields, nk[].k_momentum)),
                              _opt_real(py_item(fields, nk[].k_power_t)), _opt_real(py_item(fields, nk[].k_alpha)), _opt_real(py_item(fields, nk[].k_tol))]
-    var entries = xseq_entries(fields, context)
     var addresses: List[Int] = [Int(py=xseq_addr(x)), Int(py=xseq_addr(target)), Int(py=xseq_addr(params)), Int(py=xseq_addr(curve))]
-    var provider = xseq_neural_provider(entries)
+    var provider = xseq_neural_provider(route.entries)
     var entry = _entry(provider)
     var n_iter = 0
     with GILReleased(py):
@@ -727,7 +734,7 @@ def _mlp_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
     _ = params  # keep the Python object alive through the native call above
     # the first-wins minimum of the curve (`reduce_stat` 0)
     var curve_address = Int(py=xseq_addr(curve))
-    var best_provider = xseq_output_provider(context)
+    var best_provider = xseq_neural_provider(route.output)
     var best_entry = _entry(best_provider)
     var best = 0.0
     with GILReleased(py):
@@ -736,6 +743,7 @@ def _mlp_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
     _ = curve  # keep the Python object alive through the native call above
     _ = params  # keep the Python object alive through the native call above
     py_setitem(fields, nk[].k_best_loss_, best)
+    _ = route.owner  # the route's images stay loaded through the calls above
     _ = curve  # keep the Python object alive through the native call above
     py_setitem(fields, nk[].k_t_, n_iter * rows)
     _ = curve  # keep the Python object alive through the native call above
@@ -831,11 +839,11 @@ def _mlp_forward(model: PythonObject, fields: PythonObject, source: PythonObject
     var out = xseq_zeros(Python.tuple(rows, width), context)
     var out_act = Int(py=py_item(context, nk[].k_xseq_mlp_outputs)[py_item(fields, nk[].k_out_activation_)])
     var activation = Int(py=py_item(context, nk[].k_xseq_mlp_activations)[py_item(fields, nk[].k_activation)])
-    var entries = xseq_entries(fields, context)
+    var route = xseq_route(model, fields, context)
     var request = XseqMlpPredictRequest(rows, columns, n_outputs, activation, out_act, hidden^, proba2, width,
                                         Int(py=params.size), Int(model._obj_ptr), token)
     var addresses: List[Int] = [Int(py=xseq_addr(x)), Int(py=xseq_addr(params)), Int(py=xseq_addr(out))]
-    var provider = xseq_neural_provider(entries)
+    var provider = xseq_neural_provider(route.entries)
     var entry = _entry(provider)
     var py = Python()
     with GILReleased(py):
@@ -846,6 +854,7 @@ def _mlp_forward(model: PythonObject, fields: PythonObject, source: PythonObject
     _ = x  # keep the Python object alive through the native call above
     _ = x^
     _ = params^
+    _ = route.owner  # the route's images stay loaded through the call above
     return out
 
 
@@ -867,7 +876,9 @@ def xseq_mlp(model: PythonObject, operation: Int, args: PythonObject, context: P
             rank = 1  # str labels: the flat list the label input step reads
         if rank != 1:
             raise Error("NotImplementedError: multilabel targets are not implemented")
-        var encoded = xseq_labels(args[1], xseq_entries(fields, context), context)
+        var label_route = xseq_route(model, fields, context)
+        var encoded = xseq_labels(args[1], label_route.entries, context)
+        _ = label_route.owner  # the route's image stays loaded through the encoding above
         py_setitem(fields, nk[].k_classes_, encoded[0])
         var k = len(encoded[0])
         if k < 2:
@@ -886,13 +897,16 @@ def xseq_mlp(model: PythonObject, operation: Int, args: PythonObject, context: P
         if xseq_truth(py_get(fields, nk[].k__y_1d, PythonObject(False))):
             return xseq_reshape(out, Python.tuple(rows))
         return out
+    # The output helpers run on the image of the estimator's route (a hit:
+    # the forward above resolved it).
+    var route = xseq_route(model, fields, context)
     if Int(py=out.shape[1]) == 1:
         # p > 0.5 per row (`threshold_labels_i64`; NaN takes class 0)
         var codes = sequential_array(Python.tuple(rows), py_item(context, nk[].k_int64), context)
         if rows:
             var scores_address = Int(py=xseq_addr(out))
             var codes_address = Int(py=xseq_addr(codes))
-            var provider = xseq_output_provider(context)
+            var provider = xseq_neural_provider(route.output)
             var entry = _entry(provider)
             var py = Python()
             with GILReleased(py):
@@ -901,4 +915,4 @@ def xseq_mlp(model: PythonObject, operation: Int, args: PythonObject, context: P
             _ = out  # keep the Python object alive through the native call above
             _ = codes  # keep the Python object alive through the native call above
         return xseq_take(xseq_public_labels(fields, context), codes, context)
-    return xseq_take(xseq_public_labels(fields, context), xseq_argmax(out, rows, Int(py=out.shape[1]), context), context)
+    return xseq_take(xseq_public_labels(fields, context), xseq_argmax(out, rows, Int(py=out.shape[1]), route.output, context), context)

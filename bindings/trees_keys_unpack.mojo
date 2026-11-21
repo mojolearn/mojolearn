@@ -20,7 +20,6 @@ struct TreesKeys(Defaultable, Movable):
     var k_Ridge: PythonObject
     var k__CLASSICAL: PythonObject
     var k__DEFAULT_MODE: PythonObject
-    var k__TREES_CONTEXT: PythonObject
     var k___del__: PythonObject
     var k___dict__: PythonObject
     var k___init__: PythonObject
@@ -105,7 +104,6 @@ struct TreesKeys(Defaultable, Movable):
     var k_depth_cap_bound_: PythonObject
     var k_device: PythonObject
     var k_device_rows: PythonObject
-    var k_device_fit_cpu: PythonObject
     var k_device_cpu_bindings: PythonObject
     var k_device_cpu_context: PythonObject
     var k_device_cpu_size: PythonObject
@@ -301,7 +299,6 @@ struct TreesKeys(Defaultable, Movable):
         self.k_Ridge = PythonObject(None)
         self.k__CLASSICAL = PythonObject(None)
         self.k__DEFAULT_MODE = PythonObject(None)
-        self.k__TREES_CONTEXT = PythonObject(None)
         self.k___del__ = PythonObject(None)
         self.k___dict__ = PythonObject(None)
         self.k___init__ = PythonObject(None)
@@ -386,7 +383,6 @@ struct TreesKeys(Defaultable, Movable):
         self.k_depth_cap_bound_ = PythonObject(None)
         self.k_device = PythonObject(None)
         self.k_device_rows = PythonObject(None)
-        self.k_device_fit_cpu = PythonObject(None)
         self.k_device_cpu_bindings = PythonObject(None)
         self.k_device_cpu_context = PythonObject(None)
         self.k_device_cpu_size = PythonObject(None)
@@ -586,7 +582,6 @@ def _trees_keys_fill(nk: UnsafePointer[TreesKeys, MutUntrackedOrigin]) raises:
     nk[].k_Ridge = py_key("Ridge")
     nk[].k__CLASSICAL = py_key("_CLASSICAL")
     nk[].k__DEFAULT_MODE = py_key("_DEFAULT_MODE")
-    nk[].k__TREES_CONTEXT = py_key("_TREES_CONTEXT")
     nk[].k___del__ = py_key("__del__")
     nk[].k___dict__ = py_key("__dict__")
     nk[].k___init__ = py_key("__init__")
@@ -672,7 +667,6 @@ def _trees_keys_fill(nk: UnsafePointer[TreesKeys, MutUntrackedOrigin]) raises:
     nk[].k_device = py_key("device")
     nk[].k_device_rows = py_key("device_rows")
     # The estimator's device route (bindings/trees_route_boundary_door.mojo).
-    nk[].k_device_fit_cpu = py_key("_mojolearn_fit_cpu")
     nk[].k_device_cpu_bindings = py_key("trees_cpu_bindings")
     nk[].k_device_cpu_context = py_key("trees_cpu_context")
     nk[].k_device_cpu_size = py_key("trees_cpu_context_size")

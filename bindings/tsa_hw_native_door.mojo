@@ -20,7 +20,7 @@ and buffers (UNPACK) and writes the fitted state and the returned arrays
 (PACK). RUN is core/tsa_hw_run.mojo: one call through the estimator's
 resolved operations entry (core/tsa_entry_table.mojo) over typed addresses
 and words, with the GIL released. The entry is the estimator's device route
-(`device=None | "gpu" | "cpu"`, providers/python/tsa_route_boundary_door.mojo),
+(`device=None | "gpu" | "cpu"`, bindings/tsa_hw_route_unpack.mojo),
 resolved once per estimator; no operation here tests the device, looks an
 entry up by name or builds a Python argument list. A host inference class
 (`HostExponentialSmoothing`) resolves the forecast inference image's table.
@@ -52,14 +52,15 @@ from bindings.native_loaded_module_door import NativeModules
 from bindings.native_prepared_owner_unpack import prepared_get, prepared_put
 from core.tsa_hw_run import (
     tsa_hw_fit_run, tsa_hw_forecast_run, tsa_hw_predict_run, tsa_hw_resident_prepare_run,
-    tsa_hw_resident_release_run, tsa_hw_query_resident_run,
+    tsa_hw_resident_release_run, tsa_hw_query_resident_run, tsa_hw_route_fits, tsa_hw_route_resident,
 )
-from core.tsa_route import TsaHwRoute, tsa_hw_route_fits, tsa_hw_route_resident, tsa_vendor_word
+from core.device_route import DeviceRoute, device_vendor_word
 from holtwinters.impl.tsa.holtwinters_params import seasonal_from_name
-from providers.python.tsa_route_boundary_door import (
-    TsaHwRouteCall, tsa_hw_route_call, tsa_hw_route_clear, tsa_hw_device_admit,
+from bindings.tsa_hw_route_unpack import (
+    TsaHwCall, tsa_hw_route, tsa_hw_device_admit,
     tsa_hw_resident_new, tsa_hw_resident_matches, tsa_hw_resident_handle,
 )
+from providers.python.device_route_boundary_door import device_route_clear
 from bindings.p3nc_fitted_freeze_unpack import fitted_is_freezable_any, fitted_freeze_any
 from bindings.tsa_keys_unpack import tsa_keys
 from bindings.py_balanced import py_item
@@ -69,7 +70,7 @@ comptime _HW = "mojolearn ExponentialSmoothing: "
 # The resident fitted components of a fitted model (lane ne1-a-decomp-tsa,
 # plan section A, row N030): one prepared-owner record per model, outside
 # its __dict__ and dropped with it, `(_comps, lifetime owner, n, ts_num,
-# seasonal_periods)`. The lifetime owner (providers/python/tsa_route_boundary_door.mojo
+# seasonal_periods)`. The lifetime owner (bindings/tsa_hw_route_unpack.mojo
 # `TsaHwResidentOwner`) holds the handle and the entry that minted it. A
 # refit stores a new `_comps`, so the next query misses, mints again and the
 # replaced record's owner returns the old device copy through that entry.
@@ -116,11 +117,11 @@ def _is_int(value: PythonObject) raises -> Bool:
     return py_type(value) is b.int
 
 
-def _hw_route(model: PythonObject, fields: PythonObject, context: PythonObject) raises -> TsaHwRouteCall:
+def _hw_route(model: PythonObject, fields: PythonObject, context: PythonObject) raises -> TsaHwCall:
     """The estimator's resolved device route (one record read and three
     pointer compares once resolved); the returned owner pins the image and
     is kept alive by the caller through its entry calls."""
-    return tsa_hw_route_call(model, fields, tsa_hw_class(model, context), context, _b())
+    return tsa_hw_route(model, fields, tsa_hw_class(model, context), context, _b())
 
 
 def _seasonal(fields: PythonObject) raises -> Int:
@@ -287,7 +288,7 @@ def _hw_held(model: PythonObject, fields: PythonObject) raises -> PythonObject:
     return held
 
 
-def _hw_matches(held: PythonObject, route: TsaHwRoute, n: Int, b: Int, period: Int) raises -> Bool:
+def _hw_matches(held: PythonObject, route: DeviceRoute, n: Int, b: Int, period: Int) raises -> Bool:
     """The held record was minted through this route's entry with these
     fitted words."""
     if held is None or not tsa_hw_route_resident(route):
@@ -296,7 +297,7 @@ def _hw_matches(held: PythonObject, route: TsaHwRoute, n: Int, b: Int, period: I
             and Int(py=held[3]) == b and Int(py=held[4]) == period)
 
 
-def _hw_mint(model: PythonObject, fields: PythonObject, call: TsaHwRouteCall, n: Int, b: Int, period: Int,
+def _hw_mint(model: PythonObject, fields: PythonObject, call: TsaHwCall, n: Int, b: Int, period: Int,
              comps_address: Int) raises -> PythonObject:
     """Upload the admitted components (`comps_address`, the `_packed`
     admission of `_comps`) once and record them; returns the record (word 1
@@ -331,7 +332,7 @@ def _hw_mint(model: PythonObject, fields: PythonObject, call: TsaHwRouteCall, n:
     return record
 
 
-def _hw_query(call: TsaHwRouteCall, record: PythonObject, fields: PythonObject, start: Int, end: Int, b: Int,
+def _hw_query(call: TsaHwCall, record: PythonObject, fields: PythonObject, start: Int, end: Int, b: Int,
               context: PythonObject) raises -> PythonObject:
     """One resident query: `(end - start) * b` float32, time-major, the
     in-sample steps then the forecast steps."""
@@ -526,7 +527,7 @@ def hw_vendor_used(model: PythonObject, context: PythonObject) raises -> PythonO
     this is the estimator's first operation."""
     var fields = tsa_hw_fields(model, context)
     var call = _hw_route(model, fields, context)
-    return PythonObject(tsa_vendor_word(call.route.vendor))
+    return PythonObject(device_vendor_word(call.route.vendor))
 
 
 def hw_initialize(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -540,7 +541,7 @@ def hw_initialize(model: PythonObject, args: PythonObject, context: PythonObject
         start_periods=args[3], ts_num=args[4], eps=args[5], initialization_method=args[6], fit_executed_flag=False,
         device=args[7])
     _settings(updates, context)
-    tsa_hw_route_clear(model)
+    device_route_clear(model)
     # Constructor retains endog without numerical preparation, matching its
     # deferred fit contract. Its replacement is admitted before publication.
     _commit(fields, updates, context)

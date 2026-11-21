@@ -22,10 +22,9 @@
 # vote) without returning to Python between the vote and the decode.
 from bindings.mode_answer_door import answer_mode_object
 from core.mode_answer import MODE_FAMILY_FOREST
-from std.math import sqrt
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields, py_item
-from bindings.trees_route_boundary_door import trees_device_unpack
+from providers.python.device_route_boundary_door import device_unpack
 from bindings.py_typed_call import py_call_typed
 from bindings.trees_public_inputs_door import (
     TreesLabels,
@@ -65,8 +64,8 @@ from bindings.classical_arrays_door import classical_address
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
 from bindings.trees_side_records_unpack import trees_finite_known, trees_finite_mark, trees_side_get, trees_side_put
 from bindings.py_trees_resident import (
-    TREES_RESIDENT_FOREST, TREES_RESIDENT_FOREST_STRICT, trees_resident_find, trees_resident_put_native, trees_resident_pin, trees_resident_unpin,
-    trees_resident_watch, trees_resident_forget,
+    TREES_RESIDENT_FOREST, TREES_RESIDENT_FOREST_STRICT, trees_resident_find, trees_resident_keep, trees_resident_ids,
+    trees_resident_pin, trees_resident_unpin, trees_resident_watch, trees_resident_forget,
 )
 from bindings.py_model_records import model_identity_key, model_generation
 from bindings.p3nc_fitted_freeze_unpack import fitted_freeze
@@ -78,20 +77,29 @@ from xtrees.trees_forest_run import (
     ForestFit, ForestHandle, FOREST_MODEL_FIELDS, forest_export_selection, forest_export_counts, forest_export_dtype,
     forest_export_verdict_check, forest_fit_notice_codes, trees_refuse, trees_check_features, forest_fit_core,
 )
-from checks.numerics import portable_log2_64
-from bindings.forest_fit_boundary_unpack import forest_fit_request_py, forest_request_from_words_py
+from bindings.forest_config_run import (
+    ForestFeatures, ForestConfig, forest_features_fraction, forest_request, forest_target_need, forest_target_check,
+    FOREST_FEATURES_SQRT, FOREST_FEATURES_LOG2, FOREST_FEATURES_COUNT, FOREST_FEATURES_FRACTION,
+    FOREST_FEATURES_REFUSED, FOREST_TARGET_ANY, FOREST_TARGET_POISSON,
+)
+from bindings.forest_predict_run import (
+    ForestState, FOREST_ROUTE_SEQUENTIAL, FOREST_ROUTE_STRICT, FOREST_ROUTE_RESIDENT, forest_labels_route,
+    forest_shape_check, forest_snapshot_prepare, forest_vote, forest_labels, forest_wrote_check,
+)
+from bindings.forest_fit_boundary_unpack import forest_request_from_words_py
+from bindings.gbdt_fit_boundary_unpack import gbdt_fit_param_py
+from core.forest_fit_request import ForestFitArgs
 from bindings.forest_fit_boundary_pack import forest_request_words_py
 from core.forest_entry_table import ForestEntryKey, FOREST_TABLE_RF, FOREST_TABLE_ET
 from core.trees_entry_table import TreesEntryKey
 from core.forest_fit_request import (
-    ForestFitArgs, XF_CAP_DEVICE_SCAN, XF_CAP_ORDERED_RESIDENT, XF_CAP_FUSED_LABELS, XF_CAP_RESIDENT_LABELS, XF_CAP_STRICT,
+    ForestFitArgs, XF_CAP_DEVICE_SCAN, XF_CAP_ORDERED_RESIDENT, XF_CAP_STRICT,
     XF_RESIDENT_RELEASE, XF_STRICT_RELEASE,
 )
-from core.entry_table import EntryRef
+from core.entry_table import EntryRef, entry_ref_unresolved
 from core.forest_calls import (
     ForestExport, xf_ref, xf_caps, xf_dt_default_bins, xf_export_sizes, xf_export_into,
-    xf_export_verify, xf_export_release, xf_predict, xf_resident_prepare, xf_resident_predict, xf_resident_labels,
-    xf_strict_prepare, xf_strict_predict, xf_snapshot_release,
+    xf_export_verify, xf_export_release, xf_snapshot_release,
 )
 from bindings.trees_keys_unpack import trees_keys
 
@@ -176,8 +184,8 @@ def forest_kind(model: PythonObject, context: PythonObject) raises -> String:
 
 # TOMBSTONE: forest_check_fit_device (Extra Trees' fit-time `device must be
 # 'gpu'` test) deleted 2026-11-20 by lane dw-trees: the estimator's device is
-# admitted where every operation starts (bindings/trees_route_boundary_door.mojo
-# `trees_route_enter`: a fit refuses an unknown device before any input is read).
+# admitted where it is given: the constructor and `set_params`
+# (bindings/trees_route_boundary_door.mojo `trees_device_admit`).
 
 
 def forest_get_params(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -312,9 +320,6 @@ def _rf_base(params: PythonObject, criterion_code: PythonObject, class_weight: P
     configuration `_cfg`. `params` hold the base's arguments by name."""
     var b = trees_builtins()
     var nk = trees_keys()
-    # `device`: None, 'gpu' or 'cpu' (the pilot's rule and words); which table
-    # set runs is the route's question, answered where the operation starts.
-    _ = trees_device_unpack(py_item(params, nk[].k_device), True)
     if py_item(params, nk[].k_max_leaf_nodes) is not None:
         _refuse("max_leaf_nodes", String(py_item(tables, nk[].k_max_leaf_nodes_why)))
     var oob = py_item(params, nk[].k_oob_score)
@@ -427,7 +432,6 @@ def _et_derive(model: PythonObject, params: PythonObject, kind: String, context:
     var nk = trees_keys()
     var tables = py_item(context, nk[].k_trees_et_tables)
     var device = py_item(params, nk[].k_device)
-    _ = trees_device_unpack(device, True)
     if py_item(params, nk[].k_n_jobs) is not None:
         raise Error("NotImplementedError: n_jobs is not implemented: there is no CPU thread pool here -- the"
                     + " fit runs one host thread driving the GPU (device='gpu')."
@@ -513,6 +517,11 @@ def forest_validate_stored(model: PythonObject, context: PythonObject) raises:
         py_setitem(params, names[i], value)
     _ = _check_mode(_param(params, "numeric_mode", PythonObject(None)))
     _ = _check_engine(_param(params, "inference_engine", PythonObject("sequential")))
+    # `device`: None, 'gpu' or 'cpu' (the shared rule and words). Checked by
+    # this explicit validation, the constructor and `set_params`; a fit reads
+    # no device (lane dw-trees, 2026-11-21: the per-fit check in `_rf_base`,
+    # `_et_derive` and the ET fit params is gone).
+    _ = device_unpack(py_item(params, nk[].k_device), trees_builtins())
     var derived = _et_derive(model, params, kind, context) if _family(kind) == "et" else _rf_derive(model, params, kind, context)
     _ = py_call(fields.update, derived)
 
@@ -652,40 +661,35 @@ def forest_export_handle(key: EntryRef, handle: Int, selection: String,
 def forest_fit_request(fields: PythonObject, cfg: PythonObject, kind: String, rows: Int, cols: Int, classes: Int,
                        x_addr: Int, y_addr: Int, fit: ForestFit, native: PythonObject,
                        context: PythonObject) raises -> ForestFitArgs:
-    """UNPACK, once per fit: the typed request (`ForestFitArgs`) from the
-    fitted configuration (the RF 16/17-slot or the ET 22-slot params list,
-    read into int and float views once), the X and y (label codes or
-    targets) addresses and the trailing words of `fit` (row weights, the
-    tree-ID start, the auxiliary outputs, the largest weight). `cfg` is the
-    ET params' configuration (the unweighted copy for a class-weighted ET
-    fit); the RF params read `fields["_cfg"]`. The public fit and the
-    tree-range shard driver (`forest_shard_prepare`) both build their
-    request here; `forest_fit_core` runs it."""
-    var params: PythonObject
-    var criterion: PythonObject
+    """The typed request of one fit from the Python configuration, for a
+    caller that holds no `ForestConfig` (the boost door's member fits):
+    UNPACK (`forest_config`: `cfg` for an ET kind, the instance's own `_cfg`
+    for an RF kind, as before) then `forest_request`. The door's own fits and
+    the tree-range shard driver read the configuration once per fit and call
+    `forest_request` directly."""
     if _family(kind) == "et":
-        params = _et_params(fields, cfg, rows, cols, classes, context)
-        criterion = PythonObject(None)
-    else:
-        params = _rf_params(fields, kind, rows, cols, classes, native, context)
-        criterion = py_item(py_item(fields, PythonObject("_cfg")), PythonObject("criterion"))
-    var args = forest_fit_request_py(x_addr, y_addr, params, criterion)
-    args.weights = fit.weights
-    args.tree_start = fit.tree_start
-    args.oob = fit.oob
-    args.score = fit.score
-    args.importance = fit.importance
-    args.weight_max = fit.weight_max
-    return args^
+        var et_config = forest_config(fields, cfg, kind, False, context)
+        return forest_request(et_config, entry_ref_unresolved(), rows, cols, classes, x_addr, y_addr, fit, False)
+    var nk = trees_keys()
+    var config = forest_config(fields, py_item(fields, nk[].k__cfg), kind, False, context)
+    if config.bins_image:
+        return forest_request(config, forest_key(native), rows, cols, classes, x_addr, y_addr, fit, False)
+    return forest_request(config, entry_ref_unresolved(), rows, cols, classes, x_addr, y_addr, fit, False)
 
 
 def _launch(native: PythonObject, fit: ForestFit, x: AdmittedXView, args: ForestFitArgs, device_scan: Bool,
             context: PythonObject) raises -> PythonObject:
-    """One fit launch and its export, through the connected image's native
-    entry: the typed fit core (`forest_fit_core`, XF_FIT) on the request
-    `forest_fit_request` built, then the owned export copied into the model
-    Arrays (PACK)."""
-    var key = forest_key(native)
+    """`_launch_on` for a caller that holds the binding, not its entry (the
+    boost door)."""
+    return _launch_on(forest_key(native), fit, x, args, device_scan, context)
+
+
+def _launch_on(key: EntryRef, fit: ForestFit, x: AdmittedXView, args: ForestFitArgs, device_scan: Bool,
+               context: PythonObject) raises -> PythonObject:
+    """One fit launch and its export, through the image's native entry `key`
+    (resolved once per fit): the typed fit core (`forest_fit_core`, XF_FIT)
+    on the request `forest_request` built (RUN), then the owned export
+    copied into the model Arrays (PACK)."""
     var selection = forest_export_selection()
     var handle = forest_fit_core(key, fit.classifier, fit.rowmajor_ok and x.c_order, args, device_scan)
     return forest_export_handle(key, handle, selection, context)
@@ -699,29 +703,10 @@ def _launch(native: PythonObject, fit: ForestFit, x: AdmittedXView, args: Forest
 
 
 def _max_features_fraction(max_features: PythonObject, n_features: Int, context: PythonObject) raises -> Float64:
-    """`randomforest._max_features_fraction`: the fraction the RF binding
-    takes. 'sqrt' uses the correctly rounded square root and 'log2' the
-    pinned `portable_log2_64` the builder uses, as the Python helper did."""
-    var b = trees_builtins()
-    if max_features is None:
-        return 1.0
-    if Bool(py=py_call(b.isinstance, max_features, b.str)):
-        if String(max_features) == "sqrt":
-            return sqrt(Float64(n_features)) / Float64(n_features)
-        if String(max_features) == "log2":
-            return portable_log2_64(Float64(max(2, n_features))) / Float64(n_features)
-        raise Error("max_features=" + _repr(max_features) + " is not a recognised form;"
-                    + " accepted are 'sqrt', 'log2', None, a float fraction or an"
-                    + " int count")
-    if _is_integral(max_features, context) and not _is_bool(max_features):
-        var count = Int(py=_int(max_features))
-        if not (1 <= count and count <= n_features):
-            raise Error("max_features=" + _str(max_features) + " is outside [1, " + String(n_features) + "]")
-        return Float64(count) / Float64(n_features)
-    var f = Float64(py=_float(max_features))
-    if not (f > 0.0 and f <= 1.0):
-        raise Error("max_features=" + _str(PythonObject(f)) + " is outside (0, 1]")
-    return f
+    """`randomforest._max_features_fraction` for `_rf_params` (the boost
+    door's list): the form read once (`_rf_features`), the fraction and its
+    refusals in `forest_features_fraction`."""
+    return forest_features_fraction(_rf_features(max_features, context), n_features)
 
 
 def _dt_tier_bins(fields: PythonObject, rf: PythonObject) raises -> PythonObject:
@@ -756,6 +741,283 @@ def _rf_params(fields: PythonObject, kind: String, rows: Int, cols: Int, classes
     return params
 
 
+def _note(first: String, text: String) -> String:
+    """The first refusal of a fit's parameter conversions."""
+    if first != "":
+        return first
+    return text
+
+
+def _word(value: Int, mut ints: List[Int], mut floats: List[Float64], mut bad: List[UInt8]):
+    """A slot whose value the door holds as an integer (both readings)."""
+    ints.append(value)
+    floats.append(Float64(value))
+    bad.append(UInt8(0))
+
+
+def _slot_int(value: PythonObject, mut ints: List[Int], mut floats: List[Float64],
+              mut bad: List[UInt8]) raises -> String:
+    """`int(value)` as a slot. A refusal is returned as its text (the slot
+    stays empty) for RUN to raise where the fit reached it."""
+    try:
+        gbdt_fit_param_py(_int(value), ints, floats, bad)
+    except error:
+        _word(0, ints, floats, bad)
+        return String(error)
+    return String("")
+
+
+def _slot_float(value: PythonObject, mut ints: List[Int], mut floats: List[Float64],
+                mut bad: List[UInt8]) raises -> String:
+    """`float(value)` as a slot; a refusal as `_slot_int` returns it."""
+    try:
+        gbdt_fit_param_py(_float(value), ints, floats, bad)
+    except error:
+        _word(0, ints, floats, bad)
+        return String(error)
+    return String("")
+
+
+def _rf_features(max_features: PythonObject, context: PythonObject) raises -> ForestFeatures:
+    """UNPACK of RandomForest's `max_features`: its form as plain values. A
+    form `randomforest._max_features_fraction` refuses is kept with its
+    words; `forest_features_fraction` raises them (and the count's range
+    against the fitted width) where the fit reached them."""
+    var b = trees_builtins()
+    var given = ForestFeatures()
+    if max_features is None:
+        return given^
+    if Bool(py=py_call(b.isinstance, max_features, b.str)):
+        var word = String(max_features)
+        if word == "sqrt":
+            given.form = FOREST_FEATURES_SQRT
+        elif word == "log2":
+            given.form = FOREST_FEATURES_LOG2
+        else:
+            given.form = FOREST_FEATURES_REFUSED
+            given.refusal = ("max_features=" + _repr(max_features) + " is not a recognised form;"
+                             + " accepted are 'sqrt', 'log2', None, a float fraction or an"
+                             + " int count")
+        return given^
+    try:
+        if _is_integral(max_features, context) and not _is_bool(max_features):
+            given.count = Int(py=_int(max_features))
+            given.form = FOREST_FEATURES_COUNT
+        else:
+            var f = Float64(py=_float(max_features))
+            if f > 0.0 and f <= 1.0:
+                given.fraction = f
+                given.form = FOREST_FEATURES_FRACTION
+            else:
+                given.refusal = "max_features=" + _str(PythonObject(f)) + " is outside (0, 1]"
+                given.form = FOREST_FEATURES_REFUSED
+    except error:
+        given.refusal = String(error)
+        given.form = FOREST_FEATURES_REFUSED
+    return given^
+
+
+def _target_codes(mut config: ForestConfig, tables: PythonObject) raises:
+    """The deviance criteria's codes the regression target check compares
+    (the gamma and inverse Gaussian codes only when the criterion is not
+    Poisson's, as the check read them)."""
+    var nk = trees_keys()
+    config.poisson = Int(py=py_item(tables, nk[].k_poisson))
+    if config.target_code != config.poisson:
+        config.gamma = Int(py=py_item(tables, nk[].k_gamma))
+        config.inverse_gaussian = Int(py=py_item(tables, nk[].k_inverse_gaussian))
+
+
+def _rf_config(fields: PythonObject, cfg: PythonObject, kind: String, targets: Bool,
+               context: PythonObject) raises -> ForestConfig:
+    """`_RandomForestBase._fit_params` as plain values: the 16 slots in
+    _mojolearn_rf.mojo's order (then min_weight_fraction_leaf when it is not
+    0), read from the configuration once. The rows, columns, classes and the
+    feature fraction are the fit's (`forest_request`); DecisionTreeRegressor's
+    slot 7 is its own n_bins or its image's bin count."""
+    var nk = trees_keys()
+    var ints = List[Int](capacity=24)
+    var floats = List[Float64](capacity=24)
+    var bad = List[UInt8](capacity=24)
+    var refusal = String("")
+    var bins_image = False
+    _word(0, ints, floats, bad)
+    _word(0, ints, floats, bad)
+    _word(0, ints, floats, bad)
+    gbdt_fit_param_py(py_item(cfg, nk[].k_n_estimators), ints, floats, bad)
+    gbdt_fit_param_py(py_item(cfg, nk[].k_max_depth), ints, floats, bad)
+    gbdt_fit_param_py(py_item(cfg, nk[].k_max_leaves), ints, floats, bad)
+    _word(0, ints, floats, bad)
+    if kind == "dt_regressor":
+        # `_expansion_trees._dt_tier_bins`: the tree's own n_bins, or for
+        # n_bins=None its image's default.
+        var bins = py_get(fields, nk[].k_n_bins)
+        if bins is not None:
+            refusal = _slot_int(bins, ints, floats, bad)
+        else:
+            bins_image = True
+            _word(0, ints, floats, bad)
+    else:
+        gbdt_fit_param_py(py_item(cfg, nk[].k_n_bins), ints, floats, bad)
+    gbdt_fit_param_py(py_item(cfg, nk[].k_min_samples_leaf), ints, floats, bad)
+    gbdt_fit_param_py(py_item(cfg, nk[].k_min_samples_split), ints, floats, bad)
+    gbdt_fit_param_py(py_item(cfg, nk[].k_min_impurity_decrease), ints, floats, bad)
+    _word(1 if _truthy(py_item(cfg, nk[].k_bootstrap)) else 0, ints, floats, bad)
+    gbdt_fit_param_py(py_item(cfg, nk[].k_max_samples), ints, floats, bad)
+    gbdt_fit_param_py(py_item(cfg, nk[].k_random_state), ints, floats, bad)
+    gbdt_fit_param_py(py_item(cfg, nk[].k_n_streams), ints, floats, bad)
+    gbdt_fit_param_py(py_item(cfg, nk[].k_max_batch_size), ints, floats, bad)
+    var mwf = py_get(cfg, nk[].k_min_weight_fraction_leaf, PythonObject(0.0))
+    if _truthy(mwf):
+        gbdt_fit_param_py(mwf, ints, floats, bad)
+    var config = ForestConfig(False, ints^, floats^, bad^)
+    config.refusal = refusal
+    config.bins_image = bins_image
+    config.features = _rf_features(py_item(cfg, nk[].k_max_features), context)
+    var criterion = py_item(cfg, nk[].k_criterion)
+    if criterion is not None:
+        config.criterion = Int(py=criterion)
+    var oob = py_get(cfg, nk[].k_oob_score)
+    if oob is not None:
+        config.oob_score = _truthy(oob)
+    if targets:
+        config.target_code = config.criterion
+        _target_codes(config, py_item(context, nk[].k_trees_rf_tables))
+    return config^
+
+
+def _et_config(fields: PythonObject, cfg: PythonObject, targets: Bool,
+               context: PythonObject) raises -> ForestConfig:
+    """`extratrees._fit_params` as plain values: the 22 slots in
+    _mojolearn_trees.mojo's order, read from the configuration once, in the
+    order the Python helper converted them (max_features first). A
+    conversion Python refuses is kept as its text: `forest_request` raises
+    the first one where the fit reached it. The bootstrap row count of a
+    float `max_samples` is the fit's (`forest_request`)."""
+    var nk = trees_keys()
+    var refusal = String("")
+    var late = String("")
+    var f_ints = List[Int](capacity=2)
+    var f_floats = List[Float64](capacity=2)
+    var f_bad = List[UInt8](capacity=2)
+    try:
+        var slots = _et_max_features(py_item(cfg, nk[].k_max_features), context)
+        gbdt_fit_param_py(slots[0], f_ints, f_floats, f_bad)
+        gbdt_fit_param_py(slots[1], f_ints, f_floats, f_bad)
+    except error:
+        refusal = String(error)
+    while len(f_ints) < 2:  # small-loop(the two max_features slots of a refused form)
+        _word(0, f_ints, f_floats, f_bad)
+    var ints = List[Int](capacity=24)
+    var floats = List[Float64](capacity=24)
+    var bad = List[UInt8](capacity=24)
+    _word(0, ints, floats, bad)
+    _word(0, ints, floats, bad)
+    _word(0, ints, floats, bad)
+    refusal = _note(refusal, _slot_int(py_item(cfg, nk[].k_n_estimators), ints, floats, bad))
+    var depth = py_item(cfg, nk[].k_max_depth)
+    if depth is None:
+        _word(-1, ints, floats, bad)
+    else:
+        refusal = _note(refusal, _slot_int(depth, ints, floats, bad))
+    refusal = _note(refusal, _slot_int(py_item(cfg, nk[].k_min_samples_split), ints, floats, bad))
+    refusal = _note(refusal, _slot_int(py_item(cfg, nk[].k_min_samples_leaf), ints, floats, bad))
+    refusal = _note(refusal, _slot_float(py_item(cfg, nk[].k_min_weight_fraction_leaf), ints, floats, bad))
+    for k in range(2):  # small-loop(the two max_features slots)
+        ints.append(f_ints[k])
+        floats.append(f_floats[k])
+        bad.append(f_bad[k])
+    refusal = _note(refusal, _slot_float(py_item(cfg, nk[].k_min_impurity_decrease), ints, floats, bad))
+    _word(1 if _truthy(py_item(cfg, nk[].k_bootstrap)) else 0, ints, floats, bad)
+    _word(1 if _truthy(py_item(cfg, nk[].k_oob_score)) else 0, ints, floats, bad)
+    var seed = py_item(cfg, nk[].k_random_state)
+    if seed is None:
+        _word(0, ints, floats, bad)
+    else:
+        refusal = _note(refusal, _slot_int(seed, ints, floats, bad))
+    _word(1 if _truthy(py_item(cfg, nk[].k_warm_start)) else 0, ints, floats, bad)
+    refusal = _note(refusal, _slot_float(py_item(cfg, nk[].k_ccp_alpha), ints, floats, bad))
+    var class_weighted = py_item(cfg, nk[].k_class_weight) is not None
+    _word(1 if class_weighted else 0, ints, floats, bad)
+    _word(0 if py_item(cfg, nk[].k_monotonic_cst) is None else 1, ints, floats, bad)
+    # `extratrees._n_samples_bootstrap`: None, an int >= 1, or a float
+    # fraction of the fit's rows.
+    var rows_fraction = 0.0
+    var max_samples = py_item(cfg, nk[].k_max_samples)
+    if max_samples is None:
+        _word(0, ints, floats, bad)
+    elif _is_bool(max_samples):
+        _word(0, ints, floats, bad)
+        refusal = _note(refusal, String("max_samples must be None, an int >= 1 or a float"))
+    elif _is_integral(max_samples, context):
+        if Bool(py=max_samples < PythonObject(1)):
+            _word(0, ints, floats, bad)
+            refusal = _note(refusal, "max_samples=" + _str(max_samples) + " must be >= 1 when an int")
+        else:
+            refusal = _note(refusal, _slot_int(max_samples, ints, floats, bad))
+    else:
+        _word(0, ints, floats, bad)
+        try:
+            var f = Float64(py=_float(max_samples))
+            if f > 0.0:
+                rows_fraction = f
+            else:
+                refusal = _note(refusal, "max_samples=" + _str(max_samples) + " must be > 0 when a float")
+        except error:
+            refusal = _note(refusal, String(error))
+    var leaves = py_item(cfg, nk[].k_max_leaf_nodes)
+    if leaves is None:
+        _word(-1, ints, floats, bad)
+    else:
+        late = _slot_int(leaves, ints, floats, bad)
+    _word(1, ints, floats, bad)
+    late = _note(late, _slot_int(py_item(fields, nk[].k__criterion_code), ints, floats, bad))
+    var config = ForestConfig(True, ints^, floats^, bad^)
+    config.refusal = refusal
+    config.refusal_late = late
+    config.rows_fraction = rows_fraction
+    config.class_weighted = class_weighted
+    if targets:
+        config.target_code = Int(py=py_item(fields, nk[].k__criterion_code))
+        _target_codes(config, py_item(context, nk[].k_trees_et_tables))
+    return config^
+
+
+def forest_config(fields: PythonObject, cfg: PythonObject, kind: String, targets: Bool,
+                  context: PythonObject) raises -> ForestConfig:
+    """UNPACK, once per fit: the derived configuration (`cfg`: the instance's
+    `_cfg`; for Extra Trees also its `_criterion_code`) as plain values
+    (`ForestConfig`, bindings/forest_config_run.mojo). Everything a fit
+    decides after this reads the struct; `forest_request` builds the request
+    from it. `targets` also reads the criterion codes a regressor's target
+    check compares.
+
+    `_cfg` itself stays in the instance dictionary: the boost door reads it
+    by name (its member and session fits)."""
+    if _family(kind) == "et":
+        return _et_config(fields, cfg, targets, context)
+    return _rf_config(fields, cfg, kind, targets, context)
+
+
+def _target_check(y: AdmittedXView, config: ForestConfig, context: PythonObject) raises:
+    """A regressor's target against its criterion: UNPACK reads what the
+    deviance criteria test of y (finite; its smallest and, for Poisson, its
+    largest value, each only when the one before passed), and
+    `forest_target_check` refuses in the RF or ET words."""
+    var need = forest_target_need(config)
+    if need == FOREST_TARGET_ANY:
+        return
+    var n = y.rows
+    var finite = trees_finite_f32(y.address, n)
+    var lowest = 0.0
+    var highest = 1.0
+    if finite:
+        lowest = Float64(py=_reduce(y.address, n, 0, context))
+        if need == FOREST_TARGET_POISSON and not lowest < 0.0:
+            highest = Float64(py=_reduce(y.address, n, 1, context))
+    forest_target_check(config, finite, lowest, highest)
+
+
 def _et_max_features(max_features: PythonObject, context: PythonObject) raises -> PythonObject:
     """`extratrees._max_features_slots`: (spec, fraction)."""
     var b = trees_builtins()
@@ -775,54 +1037,16 @@ def _et_max_features(max_features: PythonObject, context: PythonObject) raises -
     return Python.tuple(PythonObject(0), _float(max_features))
 
 
-def _et_bootstrap_rows(rows: Int, max_samples: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`extratrees._n_samples_bootstrap`."""
-    if max_samples is None:
-        return PythonObject(0)
-    if _is_bool(max_samples):
-        raise Error("max_samples must be None, an int >= 1 or a float")
-    if _is_integral(max_samples, context):
-        if Bool(py=max_samples < PythonObject(1)):
-            raise Error("max_samples=" + _str(max_samples) + " must be >= 1 when an int")
-        return _int(max_samples)
-    var f = Float64(py=_float(max_samples))
-    if not f > 0.0:
-        raise Error("max_samples=" + _str(max_samples) + " must be > 0 when a float")
-    var count = Int(py=_int(PythonObject(f * Float64(rows))))
-    return PythonObject(max(count, 1))
-
-
-def _et_params(fields: PythonObject, cfg: PythonObject, rows: Int, cols: Int, classes: Int,
-               context: PythonObject) raises -> PythonObject:
-    """`extratrees._fit_params`: the 22-slot list in _mojolearn_trees.mojo's
-    order."""
-    var nk = trees_keys()
-    _ = trees_device_unpack(py_item(fields, nk[].k_device), True)
-    var slots = _et_max_features(py_item(cfg, nk[].k_max_features), context)
-    var depth = py_item(cfg, nk[].k_max_depth)
-    var seed = py_item(cfg, nk[].k_random_state)
-    var leaves = py_item(cfg, nk[].k_max_leaf_nodes)
-    return Python.list(
-        PythonObject(rows), PythonObject(cols), PythonObject(classes), _int(py_item(cfg, nk[].k_n_estimators)),
-        PythonObject(-1) if depth is None else _int(depth),
-        _int(py_item(cfg, nk[].k_min_samples_split)), _int(py_item(cfg, nk[].k_min_samples_leaf)), _float(py_item(cfg, nk[].k_min_weight_fraction_leaf)),
-        slots[0], slots[1], _float(py_item(cfg, nk[].k_min_impurity_decrease)),
-        PythonObject(1 if _truthy(py_item(cfg, nk[].k_bootstrap)) else 0), PythonObject(1 if _truthy(py_item(cfg, nk[].k_oob_score)) else 0),
-        PythonObject(0) if seed is None else _int(seed), PythonObject(1 if _truthy(py_item(cfg, nk[].k_warm_start)) else 0),
-        _float(py_item(cfg, nk[].k_ccp_alpha)), PythonObject(0 if py_item(cfg, nk[].k_class_weight) is None else 1),
-        PythonObject(0 if py_item(cfg, nk[].k_monotonic_cst) is None else 1), _et_bootstrap_rows(rows, py_item(cfg, nk[].k_max_samples), context),
-        PythonObject(-1) if leaves is None else _int(leaves), PythonObject(1), _int(py_item(fields, nk[].k__criterion_code)),
-    )
-
-
-# -------------------------------------------------------------------- fit
-
-
-def _device_scan(native: PythonObject) raises -> Bool:
-    """The image's fits refuse a non-finite X cell on the device
-    (XF_CAP_DEVICE_SCAN, the former `rf_device_finite_scan` /
-    `trees_device_finite_scan`)."""
-    return (xf_caps(forest_key(native)) & XF_CAP_DEVICE_SCAN) != 0
+# TOMBSTONE: _et_params (the 22-slot Python list of an Extra Trees fit, built
+# and read back per fit) deleted 2026-11-21 by lane dw-trees. `_rf_params`
+# stays: five sites of bindings/trees_public_boost_door.mojo, which reads open
+# arms, still take its list.
+# TOMBSTONE: _rf_slots / _et_slots / _et_bootstrap_rows / _check_regression_target /
+# _device_scan (the per-fit reads of the `_cfg` dictionary, each scalar boxed
+# as a Python object, and the Python comparisons of the target check) deleted
+# 2026-11-21 by lane dw-trees: `forest_config` reads the configuration once
+# into `ForestConfig` and bindings/forest_config_run.mojo builds the request
+# and checks the target on plain values.
 
 
 def _store_model(fields: PythonObject, arrays: PythonObject, cols: Int) raises:
@@ -860,19 +1084,18 @@ def _finite_or_refuse(x: AdmittedX, device_scan: Bool, context: PythonObject) ra
         raise Error(TREES_NONFINITE)
 
 
-def _rf_fit_arrays(fields: PythonObject, kind: String, x: AdmittedX, y_addr: Int, y_rows: Int,
+def _rf_fit_arrays(fields: PythonObject, config: ForestConfig, x: AdmittedX, y_addr: Int, y_rows: Int,
                    classes: Int, fit: ForestFit, rf: PythonObject,
                    context: PythonObject) raises -> PythonObject:
     """`_RandomForestBase._fit_arrays` on X already in the entry's layout
-    (`_x_for`): the length and finiteness checks, the params, the launch
+    (`_x_for`): the length and finiteness checks, the request, the launch
     and the model export. Returns the fit result tuple."""
     _y_rows_check(y_rows, x.rows)
-    var device_scan = _device_scan(rf)
+    var key = forest_key(rf)
+    var device_scan = (xf_caps(key) & XF_CAP_DEVICE_SCAN) != 0
     _finite_or_refuse(x, device_scan, context)
-    var nk = trees_keys()
-    var request = forest_fit_request(fields, py_item(fields, nk[].k__cfg), kind, x.rows, x.cols, classes, x.address, y_addr, fit,
-                                     rf, context)
-    var result = _launch(rf, fit, x.view(), request, device_scan, context)
+    var request = forest_request(config, key, x.rows, x.cols, classes, x.address, y_addr, fit, False)
+    var result = _launch_on(key, fit, x.view(), request, device_scan, context)
     _rf_fit_notices(result[5], context)
     _store_model(fields, result, x.cols)
     return result
@@ -907,13 +1130,13 @@ def rf_fit(model: PythonObject, args: PythonObject, kind: String, context: Pytho
     var mode = forest_capture_mode(fields, context)
     var rf = trees_table(context, mode, "_mojolearn_rf")
     var nk = trees_keys()
-    var cfg = py_item(fields, nk[].k__cfg)
+    var config = forest_config(fields, py_item(fields, nk[].k__cfg), kind, not _classifier(kind), context)
     if _classifier(kind):
-        return _rf_fit_classifier(model, fields, kind, X, y, sample_weight, importances, tree_start, mode, rf, context)
-    return _rf_fit_regressor(model, fields, kind, X, y, sample_weight, importances, tree_start, mode, rf, context)
+        return _rf_fit_classifier(model, fields, config, X, y, sample_weight, importances, tree_start, mode, rf, context)
+    return _rf_fit_regressor(model, fields, config, X, y, sample_weight, importances, tree_start, mode, rf, context)
 
 
-def _rf_fit_classifier(model: PythonObject, fields: PythonObject, kind: String, X: PythonObject, y: PythonObject,
+def _rf_fit_classifier(model: PythonObject, fields: PythonObject, config: ForestConfig, X: PythonObject, y: PythonObject,
                        sample_weight: PythonObject, importances: Bool, tree_start: PythonObject, mode: String,
                        rf: PythonObject, context: PythonObject) raises -> PythonObject:
     var b = trees_builtins()
@@ -935,15 +1158,14 @@ def _rf_fit_classifier(model: PythonObject, fields: PythonObject, kind: String, 
     for i in range(3):  # driver-loop: over fixed call structure, small-loop(names): the three requested-output attribute names
         _ = py_call(fields.pop, names[i], PythonObject(None))
     var y_addr = trees_address(labels.codes)
-    var cfg = py_item(fields, nk[].k__cfg)
-    if _truthy(py_item(cfg, nk[].k_oob_score)) or importances:
+    if config.oob_score or importances:
         if tree_start is not None:
             raise Error("auxiliary outputs require a complete forest, not a tree-ID shard")
         # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
         var oob = Optional[PythonObject]()
         # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
         var score = Optional[PythonObject]()
-        if _truthy(py_item(cfg, nk[].k_oob_score)):
+        if config.oob_score:
             oob = admitted_array(Python.tuple(labels.n, k), "<f8", context)
             score = admitted_vector(1, "<f8", context)
         var x = _x_for(X, False, context)
@@ -952,7 +1174,7 @@ def _rf_fit_classifier(model: PythonObject, fields: PythonObject, kind: String, 
                             oob=0 if not oob else trees_address(oob.value()),
                             score=0 if not score else trees_address(score.value()),
                             importance=0 if importance is None else trees_address(importance))
-        _ = _rf_fit_arrays(fields, kind, x, y_addr, labels.n, k, fit, rf, context)
+        _ = _rf_fit_arrays(fields, config, x, y_addr, labels.n, k, fit, rf, context)
         _ = labels  # y_addr borrows the encoded codes, not the stored classes_
         _ = importance  # keep the Python object alive through the native call above
         _ = score  # keep the Python object alive through the native call above
@@ -967,17 +1189,17 @@ def _rf_fit_classifier(model: PythonObject, fields: PythonObject, kind: String, 
     if tree_start is not None:
         var fit = ForestFit(True, weights=0 if not weights else weights.value().address,
                             tree_start=Int(py=tree_start))
-        _ = _rf_fit_arrays(fields, kind, _x_for(X, False, context), y_addr, labels.n, k, fit, rf, context)
+        _ = _rf_fit_arrays(fields, config, _x_for(X, False, context), y_addr, labels.n, k, fit, rf, context)
         _ = labels  # retain shard labels through the address-only fit
         _ = weights^
         return model
     if weights:
-        _ = _rf_fit_arrays(fields, kind, _x_for(X, False, context), y_addr, labels.n, k,
+        _ = _rf_fit_arrays(fields, config, _x_for(X, False, context), y_addr, labels.n, k,
                            ForestFit(True, weights=weights.value().address), rf, context)
         _ = labels
         _ = weights^
         return model
-    _ = _rf_fit_arrays(fields, kind, _x_for(X, True, context), y_addr, labels.n, k,
+    _ = _rf_fit_arrays(fields, config, _x_for(X, True, context), y_addr, labels.n, k,
                        ForestFit(True, rowmajor_ok=True), rf, context)
     _ = labels
     return model
@@ -995,67 +1217,36 @@ def _reduce(addr: Int, count: Int, what: Int, context: PythonObject) raises -> P
                          PythonObject(count), PythonObject(what))
 
 
-def _check_regression_target(y: AdmittedXView, code: Int, criterion: PythonObject, family: String,
-                             context: PythonObject) raises:
-    """The deviance criteria's target refusals (RF and ET wording)."""
-    var nk = trees_keys()
-    var tables = py_item(context, nk[].k_trees_rf_tables) if family == "rf" else py_item(context, nk[].k_trees_et_tables)
-    var n = y.rows
-    if code == Int(py=py_item(tables, nk[].k_poisson)):
-        if (not trees_finite_f32(y.address, n) or Bool(py=_reduce(y.address, n, 0, context) < PythonObject(0))
-                or not Bool(py=_reduce(y.address, n, 1, context) > PythonObject(0))):
-            if family == "rf":
-                raise Error("criterion='poisson' requires y >= 0 with a positive"
-                            + " sum: PoissonGain returns -max() for a non-positive"
-                            + " label sum (objectives.cuh:251-253), which would fit"
-                            + " a stump silently")
-            raise Error("criterion='poisson' requires y >= 0 with a positive sum: the"
-                        + " Poisson gain is -max() for a non-positive label sum"
-                        + " (objectives.cuh:251-253), which would fit a stump silently")
-    elif code == Int(py=py_item(tables, nk[].k_gamma)) or code == Int(py=py_item(tables, nk[].k_inverse_gaussian)):
-        if not trees_finite_f32(y.address, n) or Bool(py=_reduce(y.address, n, 0, context) <= PythonObject(0)):
-            if family == "rf":
-                raise Error("criterion=" + _repr(criterion) + " requires y > 0: its"
-                            + " gain returns -max() for a non-positive label sum"
-                            + " (objectives.cuh:279-281, :306-308), which would fit"
-                            + " a stump silently")
-            raise Error("criterion=" + _repr(criterion) + " requires y > 0: its gain is"
-                        + " -max() for a non-positive label sum, which would fit a stump"
-                        + " silently")
-
-
-def _rf_fit_regressor(model: PythonObject, fields: PythonObject, kind: String, X: PythonObject, y: PythonObject,
+def _rf_fit_regressor(model: PythonObject, fields: PythonObject, config: ForestConfig, X: PythonObject, y: PythonObject,
                       sample_weight: PythonObject, importances: Bool, tree_start: PythonObject, mode: String,
                       rf: PythonObject, context: PythonObject) raises -> PythonObject:
     var nk = trees_keys()
-    var cfg = py_item(fields, nk[].k__cfg)
     var y32 = admit_f32(y, 1, "y", context, finite=False)
-    var code = Int(py=py_item(cfg, nk[].k_criterion))
-    _check_regression_target(y32.view(), code, py_item(fields, nk[].k_criterion), "rf", context)
+    _target_check(y32.view(), config, context)
     var names = Python.tuple("oob_prediction_", "oob_score_", "feature_importances_")
     for i in range(3):  # driver-loop: over fixed call structure, small-loop(names): the three requested-output attribute names
         _ = py_call(fields.pop, names[i], PythonObject(None))
     if sample_weight is not None:
-        if tree_start is not None or _truthy(py_item(cfg, nk[].k_oob_score)) or importances:
+        if tree_start is not None or config.oob_score or importances:
             raise Error("NotImplementedError: sample_weight is not implemented together with oob_score, feature "
                         + "importances or a tree-ID shard")
         var w = admit_weight_words(sample_weight, y32.rows, context)
         var w_max = Float64(py=_float(_reduce(w.address, y32.rows, 1, context)))
-        _ = _rf_fit_arrays(fields, kind, _x_for(X, False, context), y32.address, y32.rows, 0,
+        _ = _rf_fit_arrays(fields, config, _x_for(X, False, context), y32.address, y32.rows, 0,
                            ForestFit(False, weights=w.address, weight_max=w_max), rf, context)
         _ = y32  # keep the Python object alive through the native call above
         _ = w  # keep the Python object alive through the native call above
         _ = w^
         _ = y32^
         return model
-    if _truthy(py_item(cfg, nk[].k_oob_score)) or importances:
+    if config.oob_score or importances:
         if tree_start is not None:
             raise Error("auxiliary outputs require a complete forest, not a tree-ID shard")
         # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
         var oob = Optional[PythonObject]()
         # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
         var score = Optional[PythonObject]()
-        if _truthy(py_item(cfg, nk[].k_oob_score)):
+        if config.oob_score:
             oob = admitted_vector(y32.rows, "<f8", context)
             score = admitted_vector(1, "<f8", context)
         var x = _x_for(X, False, context)
@@ -1063,7 +1254,7 @@ def _rf_fit_regressor(model: PythonObject, fields: PythonObject, kind: String, X
         var fit = ForestFit(False, oob=0 if not oob else trees_address(oob.value()),
                             score=0 if not score else trees_address(score.value()),
                             importance=0 if importance is None else trees_address(importance))
-        _ = _rf_fit_arrays(fields, kind, x, y32.address, y32.rows, 0, fit, rf, context)
+        _ = _rf_fit_arrays(fields, config, x, y32.address, y32.rows, 0, fit, rf, context)
         _ = importance  # keep the Python object alive through the native call above
         _ = score  # keep the Python object alive through the native call above
         _ = oob  # keep the Python object alive through the native call above
@@ -1075,29 +1266,30 @@ def _rf_fit_regressor(model: PythonObject, fields: PythonObject, kind: String, X
         _ = y32^
         return model
     if tree_start is not None:
-        _ = _rf_fit_arrays(fields, kind, _x_for(X, False, context), y32.address, y32.rows, 0,
+        _ = _rf_fit_arrays(fields, config, _x_for(X, False, context), y32.address, y32.rows, 0,
                            ForestFit(False, tree_start=Int(py=tree_start)), rf, context)
         _ = y32^
         return model
-    _ = _rf_fit_arrays(fields, kind, _x_for(X, True, context), y32.address, y32.rows, 0,
+    _ = _rf_fit_arrays(fields, config, _x_for(X, True, context), y32.address, y32.rows, 0,
                        ForestFit(False, rowmajor_ok=True), rf, context)
     _ = y32^
     return model
 
 
-def _et_fit_arrays(fields: PythonObject, cfg: PythonObject, X: PythonObject, y_addr: Int, y_rows: Int,
-                   classes: Int, fit: ForestFit, et: PythonObject,
+def _et_fit_arrays(fields: PythonObject, config: ForestConfig, unweighted: Bool, X: PythonObject, y_addr: Int,
+                   y_rows: Int, classes: Int, fit: ForestFit, et: PythonObject,
                    context: PythonObject) raises:
     """`_ExtraTreesBase._fit_arrays`: X in the entry's layout, the length
-    and finiteness checks, the 22 params, the launch, the export and the
-    fitted state with its four extra-trees fields."""
+    and finiteness checks, the request (`unweighted`: a fit whose class
+    weights travel as row weights), the launch, the export and the fitted
+    state with its four extra-trees fields."""
     var x = _x_for(X, fit.rowmajor_ok, context)
     _y_rows_check(y_rows, x.rows)
-    var device_scan = _device_scan(et)
+    var key = forest_key(et)
+    var device_scan = (xf_caps(key) & XF_CAP_DEVICE_SCAN) != 0
     _finite_or_refuse(x, device_scan, context)
-    # "et_forest": an ET kind for `_family` (the ET params do not read the kind)
-    var request = forest_fit_request(fields, cfg, "et_forest", x.rows, x.cols, classes, x.address, y_addr, fit, et, context)
-    var result = _launch(et, fit, x.view(), request, device_scan, context)
+    var request = forest_request(config, key, x.rows, x.cols, classes, x.address, y_addr, fit, unweighted)
+    var result = _launch_on(key, fit, x.view(), request, device_scan, context)
     _store_model(fields, result, x.cols)
     var meta = result[5]
     var nk = trees_keys()
@@ -1120,6 +1312,7 @@ def et_fit(model: PythonObject, args: PythonObject, kind: String, context: Pytho
     var et = trees_table(context, mode, "_mojolearn_trees")
     var nk = trees_keys()
     var cfg = py_item(fields, nk[].k__cfg)
+    var config = forest_config(fields, cfg, kind, not _classifier(kind), context)
     if _classifier(kind):
         var labels = trees_encode_labels(y, context)
         py_setitem(fields, nk[].k_classes_, labels.classes)
@@ -1133,52 +1326,50 @@ def et_fit(model: PythonObject, args: PythonObject, kind: String, context: Pytho
         if sample_weight is not None or class_weight is not None:
             var xtrees = trees_table(context, mode, "_mojolearn_x_trees")
             var weights = trees_weighted_rows(sample_weight, class_weight, labels, xtrees, context)
-            var unweighted = py_call(b.dict, cfg)
-            py_setitem(unweighted, nk[].k_class_weight, PythonObject(None))
             if tree_start is not None:
-                _et_fit_arrays(fields, unweighted, X, trees_address(codes), labels.n, k,
+                _et_fit_arrays(fields, config, True, X, trees_address(codes), labels.n, k,
                                ForestFit(True, weights=weights.address, tree_start=Int(py=tree_start)), et, context)
                 _ = codes  # keep the Python object alive through the native call above
                 _ = weights  # keep the Python object alive through the native call above
                 _ = weights^
                 return model
-            _et_fit_arrays(fields, unweighted, X, trees_address(codes), labels.n, k,
+            _et_fit_arrays(fields, config, True, X, trees_address(codes), labels.n, k,
                            ForestFit(True, rowmajor_ok=True, weights=weights.address), et, context)
             _ = codes  # keep the Python object alive through the native call above
             _ = weights^
             return model
         if tree_start is not None:
-            _et_fit_arrays(fields, cfg, X, trees_address(codes), labels.n, k,
+            _et_fit_arrays(fields, config, False, X, trees_address(codes), labels.n, k,
                            ForestFit(True, tree_start=Int(py=tree_start)), et, context)
             _ = codes  # keep the Python object alive through the native call above
             return model
-        _et_fit_arrays(fields, cfg, X, trees_address(codes), labels.n, k,
+        _et_fit_arrays(fields, config, False, X, trees_address(codes), labels.n, k,
                        ForestFit(True, rowmajor_ok=True), et, context)
         _ = codes  # keep the Python object alive through the native call above
         _ = codes^
         return model
     var y32 = admit_f32(y, 1, "y", context, finite=False)
-    _check_regression_target(y32.view(), Int(py=py_item(fields, nk[].k__criterion_code)), py_item(fields, nk[].k_criterion), "et", context)
+    _target_check(y32.view(), config, context)
     if sample_weight is not None:
         var weights = admit_weight_words(sample_weight, y32.rows, context)
         if tree_start is not None:
-            _et_fit_arrays(fields, cfg, X, y32.address, y32.rows, 0,
+            _et_fit_arrays(fields, config, False, X, y32.address, y32.rows, 0,
                            ForestFit(False, weights=weights.address, tree_start=Int(py=tree_start)), et, context)
             _ = y32  # keep the Python object alive through the native call above
             _ = weights  # keep the Python object alive through the native call above
             _ = weights^
             return model
-        _et_fit_arrays(fields, cfg, X, y32.address, y32.rows, 0,
+        _et_fit_arrays(fields, config, False, X, y32.address, y32.rows, 0,
                        ForestFit(False, rowmajor_ok=True, weights=weights.address), et, context)
         _ = y32  # keep the Python object alive through the native call above
         _ = weights^
         return model
     if tree_start is not None:
-        _et_fit_arrays(fields, cfg, X, y32.address, y32.rows, 0,
+        _et_fit_arrays(fields, config, False, X, y32.address, y32.rows, 0,
                        ForestFit(False, tree_start=Int(py=tree_start)), et, context)
         _ = y32  # keep the Python object alive through the native call above
         return model
-    _et_fit_arrays(fields, cfg, X, y32.address, y32.rows, 0, ForestFit(False, rowmajor_ok=True), et, context)
+    _et_fit_arrays(fields, config, False, X, y32.address, y32.rows, 0, ForestFit(False, rowmajor_ok=True), et, context)
     _ = y32  # keep the Python object alive through the native call above
     _ = y32^
     return model
@@ -1295,8 +1486,9 @@ def forest_shard_prepare(model: PythonObject, rows: Int, cols: Int, y_source: Py
     var et = _family(kind) == "et"
     var native = trees_table(context, captured, "_mojolearn_trees" if et else "_mojolearn_rf")
     var cfg = py_item(fields, nk[].k__cfg)
-    var params_cfg = cfg
     var classifier = _classifier(kind)
+    var config = forest_config(fields, cfg, kind, not classifier, context)
+    var unweighted = False
     var classes = PythonObject(None)
     var y = PythonObject(None)
     var weights = PythonObject(None)
@@ -1319,8 +1511,8 @@ def forest_shard_prepare(model: PythonObject, rows: Int, cols: Int, y_source: Py
             var class_weight = py_item(cfg, nk[].k_class_weight)
             if class_weight is not None:
                 weights = trees_weighted_rows(PythonObject(None), class_weight, labels, xtrees, context).array
-                params_cfg = py_call(trees_builtins().dict, cfg)
-                py_setitem(params_cfg, nk[].k_class_weight, PythonObject(None))
+                # the class weights travel as row weights
+                unweighted = True
         else:
             y = labels.codes
             var class_weight = py_get(fields, nk[].k_class_weight)
@@ -1332,15 +1524,13 @@ def forest_shard_prepare(model: PythonObject, rows: Int, cols: Int, y_source: Py
         var checked = classical_check_y(y_source, rows, classical_estimator_name(model), context)
         var y32 = admit_f32(checked, 1, "y", context, finite=False)
         _y_rows_check(y32.rows, rows)
-        var code = Int(py=py_item(fields, nk[].k__criterion_code)) if et else Int(py=py_item(cfg, nk[].k_criterion))
-        _check_regression_target(y32.view(), code, py_item(fields, nk[].k_criterion), "et" if et else "rf", context)
+        _target_check(y32.view(), config, context)
         y = y32.array
-    if not et and _truthy(py_item(cfg, nk[].k_oob_score)):
+    if not et and config.oob_score:
         raise Error("auxiliary outputs require a complete forest, not a tree-ID shard")
     # The addresses are the worker's own (forest_shard_fit); the words carry
     # the params views and the criterion.
-    var request = forest_fit_request(fields, params_cfg, kind, rows, cols, k, 0, 0, ForestFit(classifier), native,
-                                     context)
+    var request = forest_request(config, forest_key(native), rows, cols, k, 0, 0, ForestFit(classifier), unweighted)
     var state = Python.tuple(PythonObject(not et), PythonObject(classifier), forest_request_words_py(request))
     return ForestShardPlan(fields, kind^, classifier, classes, y, weights, state, cols)
 
@@ -1423,6 +1613,19 @@ def _report_engine(model: PythonObject, context: PythonObject) raises:
 
 
 # ---------------------------------------------------------------- predict
+# A predict is three steps (lane dw-trees, 2026-11-21):
+#   UNPACK  `_stage`: the fitted state as plain values (`ForestState`,
+#           bindings/forest_predict_run.mojo), read once; the model arrays
+#           are admitted only where the route reads them (`_snapshot` on a
+#           miss, `_walk_words` for the sequential walk).
+#   RUN     `forest_snapshot_prepare`, `forest_vote`, `forest_labels`: typed
+#           values and addresses only.
+#   PACK    the result Array (allocated before RUN, which writes into it),
+#           the widening, the label decode, and the Python pins of a kept
+#           snapshot.
+# The fitted bytes stay the five package arrays in the instance dictionary:
+# the boost door, the explainers, save and pickling read them by name there.
+# model.check, fitted-model form: the state transfer to the other device's twin would attach here (a class hook of `_check_both.on_device`; the shared-files lane owns it).
 
 
 def _engine(fields: PythonObject, mode: String) raises -> String:
@@ -1442,14 +1645,6 @@ def _ordered_export(native: PythonObject) raises -> Bool:
     return (xf_caps(forest_key(native)) & XF_CAP_ORDERED_RESIDENT) != 0
 
 
-def _model_arrays(fields: PythonObject) raises -> PythonObject:
-    var names = Python.tuple("_offsets", "_colid", "_quesval", "_left_child", "_leaves")
-    var out = Python.list()
-    for i in range(_MODEL_FIELDS):  # driver-loop: over the five model arrays
-        _ = py_call(out.append, fields[names[i]])
-    return py_call(trees_builtins().tuple, out)
-
-
 def forest_handle_done(use: ForestHandle):
     """End a predict's use of its snapshot (non-raising: error paths)."""
     if use.kept:
@@ -1461,199 +1656,134 @@ def forest_handle_done(use: ForestHandle):
         pass
 
 
-def _model_addresses(arrays: PythonObject) raises -> List[Int]:
-    """The five exact model Arrays' data addresses (their `_addr` slots)."""
-    var model = List[Int]()
-    for i in range(_MODEL_FIELDS):  # driver-loop: over the five model arrays
-        model.append(trees_address(arrays[i]))
-    return model^
-
-
-def _resident(model: PythonObject, fields: PythonObject, native: PythonObject, mode: String,
-              context: PythonObject) raises -> Int:
-    """`ForestProtocol._prepare_resident_forest()` through the owner: the
-    device snapshot of the five model arrays, prepared once and kept in the
-    tree resident table (bindings/trees_resident_table_run.mojo) while the
-    model, its generation, the arrays, dimensions, mode and aggregation are
-    the same. Returns its handle, or 0 when nothing could be kept (the
-    snapshot was released again)."""
-    var engine = _engine(fields, mode)
-    var key = forest_key(native)
-    var ordered_export = (xf_caps(key) & XF_CAP_ORDERED_RESIDENT) != 0
-    var use = _resident_with(model, fields, native, key, mode, engine, ordered_export, context)
-    var handle = use.handle if use.kept else 0
-    forest_handle_done(use)
-    return handle
-
-
-def _resident_with(model: PythonObject, fields: PythonObject, native: PythonObject, key: EntryRef, mode: String,
-                   engine: String, ordered_export: Bool, context: PythonObject) raises -> ForestHandle:
-    """`_resident` with the engine and the ordered export its caller already
-    resolved (ForestInput: read once per predict). The returned handle is
-    pinned (or owned by the call); the caller ends it with
-    `forest_handle_done` after its launch.
-
-    Workstream A (ne1-a-trees, 2026-11-06): the snapshot lives in the native
-    resident table keyed by (model_identity_key, model_generation), never in
-    the model's `__dict__` (it was `fields["_resident_holder"]`). The mirrored
-    arrays are frozen in place (`fitted_freeze`) instead of copied, so an
-    in-place NumPy write raises and the snapshot stays the same bytes as the
-    public arrays; replacing an array changes its identity and the next call
-    uploads again. No bit change: `forest_prepare_gpu` reads the same five
-    arrays it read before."""
-    if engine != "parallel_groves" and not (engine == "sequential" and ordered_export):
-        raise Error("resident forest preparation requires parallel_groves")
+def _model_list(fields: PythonObject) raises -> List[PythonObject]:
+    """The five model arrays of the instance dictionary, in export order."""
     var nk = trees_keys()
-    if not py_contains(fields, nk[].k__offsets):
-        raise Error("RuntimeError: this estimator is not fitted yet")
-    # perf-audit-3: the caller's entry (ForestInput.key, resolved once per
-    # predict) is passed in, not resolved again here.
-    var features = Int(py=_int(py_item(fields, nk[].k_n_features_in_)))
-    var trees = Int(py=_int(py_item(fields, nk[].k__n_trees)))
+    var arrays = List[PythonObject](capacity=_MODEL_FIELDS)
+    arrays.append(py_item(fields, nk[].k__offsets))
+    arrays.append(py_item(fields, nk[].k__colid))
+    arrays.append(py_item(fields, nk[].k__quesval))
+    arrays.append(py_item(fields, nk[].k__left_child))
+    arrays.append(py_item(fields, nk[].k__leaves))
+    return arrays^
+
+
+def _state(fields: PythonObject, native: PythonObject, key: EntryRef, caps: Int, mode: String,
+           engine: String) raises -> ForestState:
+    """UNPACK of a fitted forest for the image `key`: the mode and engine as
+    words, the route, and the dimensions the route reads (the fitted width
+    only where a snapshot is keyed on it)."""
+    var nk = trees_keys()
+    var groves = engine == "parallel_groves"
     var outputs = Int(py=_int(py_item(fields, nk[].k__num_outputs)))
-    # The aggregation (`_resident_ordered_flag`): strict for the sequential
-    # engine, the 32-grove graph named explicitly under IDENTICAL, the
-    # binary's default otherwise. Word: -1 the default, 1 strict, 0 groves.
-    var ordered = -1
-    if ordered_export:
-        if engine == "sequential":
-            ordered = 1
-        elif mode == "identical":
-            ordered = 0
-    var arrays = _model_arrays(fields)
-    var mirrors = List[PythonObject]()
-    for i in range(_MODEL_FIELDS):  # driver-loop: over the five model arrays
-        mirrors.append(arrays[i])
-    var words = List[Int]()
-    words.append(features)
-    words.append(trees)
-    words.append(outputs)
-    words.append(1 if mode == "fast" else 0)
-    words.append(ordered)
+    var trees = Int(py=_int(py_item(fields, nk[].k__n_trees)))
+    var features = 0
+    if groves or (caps & (XF_CAP_ORDERED_RESIDENT | XF_CAP_STRICT)) != 0:
+        features = Int(py=_int(py_item(fields, nk[].k_n_features_in_)))
+    return ForestState(key, Int(native._obj_ptr), caps, mode == "fast", groves, features, trees, outputs)
+
+
+def _snapshot(model: PythonObject, fields: PythonObject, native: PythonObject, state: ForestState,
+              context: PythonObject) raises -> ForestHandle:
+    """`ForestProtocol._prepare_resident_forest()` through the owner: the
+    snapshot of the five model arrays for the state's route (the device
+    snapshot, or a host image's strict snapshot), prepared once and kept in
+    the tree resident table (bindings/trees_resident_table_run.mojo) while
+    the model, its generation, the arrays, dimensions, mode and aggregation
+    are the same. The returned handle is pinned (or owned by the call); the
+    caller ends it with `forest_handle_done` after its launch.
+
+    The snapshot is keyed by (model_identity_key, model_generation), never
+    held in the model's `__dict__`. The mirrored arrays are frozen in place
+    (`fitted_freeze`), so an in-place write raises and the snapshot stays the
+    same bytes as the public arrays; replacing an array changes its identity
+    and the next call prepares again.
+
+    A hit is the table read and the pin. On a miss the arrays are admitted
+    (their flat dtypes, sizes and addresses: UNPACK), `forest_snapshot_prepare`
+    prepares and lists the snapshot (RUN), and the Python pins of a kept
+    snapshot are stored beside it before anything launches on it."""
+    var strict = state.route == FOREST_ROUTE_STRICT
+    var kind = TREES_RESIDENT_FOREST_STRICT if strict else TREES_RESIDENT_FOREST
+    var release_op = XF_STRICT_RELEASE if strict else XF_RESIDENT_RELEASE
+    var arrays = _model_list(fields)
     var model_key = model_identity_key(model)
     var generation = model_generation(model)
-    var held = trees_resident_find(model_key, generation, TREES_RESIDENT_FOREST, native, words, mirrors)
+    var held = trees_resident_find(model_key, generation, kind, native, state.words, arrays)
     if held > 0:
         trees_resident_pin(held)
-        return ForestHandle(held, True, key, XF_RESIDENT_RELEASE)
+        return ForestHandle(held, True, state.key, release_op)
+    var nk = trees_keys()
+    var array_class = py_item(context, nk[].k_array_class)
+    var addrs = List[Int](capacity=_MODEL_FIELDS)
+    var sizes = List[Int](capacity=_MODEL_FIELDS)
     for i in range(_MODEL_FIELDS):  # driver-loop: over the five model arrays
-        var a = arrays[i]
-        if py_type(a) is not py_item(context, nk[].k_array_class) or String(a.dtype) != forest_export_dtype(i) or Int(py=a.ndim) != 1:
+        if (py_type(arrays[i]) is not array_class or String(arrays[i].dtype) != forest_export_dtype(i)
+                or Int(py=arrays[i].ndim) != 1):
             raise Error("forest model arrays must have their original flat dtypes")
-    var nodes = Int(py=arrays[1].size)
-    var offsets = arrays[0]
-    var last = (Int(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=trees_address(offsets))[Int(py=offsets.size) - 1])
-        if Int(py=offsets.size) > 0 else -1)
-    _ = offsets  # keep the Python object alive through the native call above
-    if (Int(py=offsets.size) != trees + 1 or nodes < 1 or Int(py=arrays[2].size) != nodes
-            or Int(py=arrays[3].size) != nodes or Int(py=arrays[4].size) != nodes * outputs or last != nodes):
-        raise Error("forest model array shapes do not match metadata")
-    _ = offsets  # keep the Python object alive through the native calls above
+        sizes.append(Int(py=arrays[i].size))
+        addrs.append(trees_address(arrays[i]))
+    if not strict:
+        forest_shape_check(state, sizes, addrs[0])
     for i in range(_MODEL_FIELDS):  # driver-loop: over the five model arrays
         # The read-only rule (p3nc_fitted_freeze): every mirrored exact Array
         # is read-only from here on (the fit stored them frozen already; an
         # Array assigned later is frozen in place, not copied).
         _ = fitted_freeze(arrays[i], context)
-    var handle = xf_resident_prepare(key, _model_addresses(arrays), features, trees, outputs, ordered)
-    _ = arrays  # keep the Python objects alive through the native call above
-    # The snapshot's device bytes: the five flat arrays, 4 bytes an item.
-    var bytes = 4 * ((trees + 1) + 3 * nodes + nodes * outputs)
-    var kept = False
-    try:
-        if trees_resident_watch(model, model_key):
-            kept = trees_resident_put_native(model_key, generation, TREES_RESIDENT_FOREST, native, key.call,
-                                             XF_RESIDENT_RELEASE, handle, words^, mirrors^, bytes)
-        if kept:
-            trees_resident_pin(handle)
-    except error:
-        xf_snapshot_release(key, XF_RESIDENT_RELEASE, handle)
-        raise error^
-    return ForestHandle(handle, kept, key, XF_RESIDENT_RELEASE)
-
-
-def _strict_vote(model: PythonObject, fields: PythonObject, staged: ForestInput, dest: PythonObject,
-                 context: PythonObject) raises -> Int:
-    """The sequential vote of a host binding over its strict snapshot
-    (bindings/forest_host_strict_binding.mojo), kept in the tree resident
-    table like the device snapshots: keyed by the model's identity and
-    generation, the dimensions and the identities of the five frozen model
-    arrays. Returns the rows written."""
-    var native = staged.native
-    var key = staged.key.copy()
-    var nk = trees_keys()
-    var features = Int(py=_int(py_item(fields, nk[].k_n_features_in_)))
-    var trees = Int(py=_int(py_item(fields, nk[].k__n_trees)))
-    var outputs = staged.outputs
-    var arrays = _model_arrays(fields)
-    var mirrors = List[PythonObject]()
-    for i in range(_MODEL_FIELDS):  # driver-loop: over the five model arrays
-        mirrors.append(arrays[i])
-    var words = List[Int]()
-    words.append(features)
-    words.append(trees)
-    words.append(outputs)
-    var model_key = model_identity_key(model)
-    var generation = model_generation(model)
-    var handle = trees_resident_find(model_key, generation, TREES_RESIDENT_FOREST_STRICT, native, words, mirrors)
-    var kept = handle > 0
-    if not kept:
-        for i in range(_MODEL_FIELDS):  # driver-loop: over the five model arrays
-            var a = arrays[i]
-            if py_type(a) is not py_item(context, nk[].k_array_class) or String(a.dtype) != forest_export_dtype(i) or Int(py=a.ndim) != 1:
-                raise Error("forest model arrays must have their original flat dtypes")
-            _ = fitted_freeze(a, context)
-        handle = xf_strict_prepare(key, _model_addresses(arrays), features, trees, outputs)
-        _ = arrays  # keep the Python objects alive through the native call above
-        var nodes = Int(py=arrays[1].size)
-        var bytes = 4 * ((trees + 1) + 3 * nodes + nodes * outputs)
+    var watchable = trees_resident_watch(model, model_key)
+    var use = forest_snapshot_prepare(state, kind, release_op, model_key, generation, addrs, sizes[1],
+                                      trees_resident_ids(arrays), watchable)
+    if use.kept:
         try:
-            if trees_resident_watch(model, model_key):
-                kept = trees_resident_put_native(model_key, generation, TREES_RESIDENT_FOREST_STRICT, native,
-                                                 key.call, XF_STRICT_RELEASE, handle, words^, mirrors^, bytes)
+            trees_resident_keep(use.handle, native, arrays)
         except error:
-            xf_snapshot_release(key, XF_STRICT_RELEASE, handle)
+            forest_handle_done(use)
             raise error^
-    if kept:
-        trees_resident_pin(handle)
-    var use = ForestHandle(handle, kept, key, XF_STRICT_RELEASE)
-    var wrote = 0
-    try:
-        wrote = xf_strict_predict(key, handle, staged.x.address, trees_address(dest), staged.x.rows, staged.x.cols,
-                                  outputs)
-    finally:
-        forest_handle_done(use)
-    _ = dest  # keep the Python object alive through the native call above
-    return wrote
+    _ = arrays  # keep the Python objects alive through the native calls above
+    return use^
 
 
-struct ForestInput(Copyable, Movable):
-    """One predict's resolved state, read once (lane perf-trees-owed,
-    2026-11-06; `_int`, `_engine` and `_ordered_export` were re-read two or
-    three times per predict): X, the effective mode, the binding, the
-    engine, whether the binding has the ordered resident export, and the
-    fitted output width."""
+def _resident(model: PythonObject, fields: PythonObject, native: PythonObject, mode: String,
+              context: PythonObject) raises -> Int:
+    """The kept device snapshot of a fitted forest on the binding `native`
+    (the explainers' resident route): its handle, or 0 when nothing could be
+    kept (the snapshot was released again)."""
+    var engine = _engine(fields, mode)
+    var key = forest_key(native)
+    var caps = xf_caps(key)
+    if engine != "parallel_groves" and (caps & XF_CAP_ORDERED_RESIDENT) == 0:
+        raise Error("resident forest preparation requires parallel_groves")
+    var nk = trees_keys()
+    if not py_contains(fields, nk[].k__offsets):
+        raise Error("RuntimeError: this estimator is not fitted yet")
+    var state = _state(fields, native, key, caps, mode, engine)
+    var use = _snapshot(model, fields, native, state, context)
+    var handle = use.handle if use.kept else 0
+    forest_handle_done(use)
+    return handle
+
+
+struct ForestStaged(Movable):
+    """One predict's UNPACK: the admitted X, the fitted state as plain
+    values, and the Python objects the boundary still reads or pins (the
+    binding, the model whose snapshot is kept, its instance dictionary)."""
     var x: AdmittedX
-    var mode: String
+    var state: ForestState
     var native: PythonObject
-    var key: EntryRef
-    var caps: Int
-    var engine: String
-    var ordered_export: Bool
-    var outputs: Int
+    var model: PythonObject
+    var fields: PythonObject
 
-    def __init__(out self, var x: AdmittedX, mode: String, native: PythonObject, key: EntryRef, caps: Int,
-                 engine: String, outputs: Int):
+    def __init__(out self, var x: AdmittedX, var state: ForestState, native: PythonObject, model: PythonObject,
+                 fields: PythonObject):
         self.x = x^
-        self.mode = mode
+        self.state = state^
         self.native = native
-        self.key = key.copy()
-        self.caps = caps
-        self.engine = engine
-        self.ordered_export = (caps & XF_CAP_ORDERED_RESIDENT) != 0
-        self.outputs = outputs
+        self.model = model
+        self.fields = fields
 
 
-def _stage(fields: PythonObject, kind: String, var x: AdmittedX, context: PythonObject) raises -> ForestInput:
+def _stage(model: PythonObject, fields: PythonObject, kind: String, var x: AdmittedX,
+           context: PythonObject) raises -> ForestStaged:
     """The resolved predict state of a fitted model over an admitted X."""
     var nk = trees_keys()
     if not py_contains(fields, nk[].k__offsets):
@@ -1663,12 +1793,12 @@ def _stage(fields: PythonObject, kind: String, var x: AdmittedX, context: Python
     var engine = _engine(fields, mode)
     var key = forest_key(native)
     var caps = xf_caps(key)
-    var outputs = Int(py=_int(py_item(fields, nk[].k__num_outputs)))
-    return ForestInput(x^, mode, native, key, caps, engine, outputs)
+    var state = _state(fields, native, key, caps, mode, engine)
+    return ForestStaged(x^, state^, native, model, fields)
 
 
 def _predict_input(model: PythonObject, fields: PythonObject, kind: String, X: PythonObject,
-                   context: PythonObject) raises -> ForestInput:
+                   context: PythonObject) raises -> ForestStaged:
     """`_check_predict_input` / `_vote`'s checks: fitted, X as C-order
     float32, the fitted width."""
     var nk = trees_keys()
@@ -1677,101 +1807,72 @@ def _predict_input(model: PythonObject, fields: PythonObject, kind: String, X: P
     var x = admit_f32(X, 2, "X", context, finite=False)
     var fitted = Int(py=_int(py_item(fields, nk[].k_n_features_in_)))
     trees_check_features(x.cols, fitted)
-    return _stage(fields, kind, x^, context)
+    return _stage(model, fields, kind, x^, context)
 
 
-def _vote(model: PythonObject, fields: PythonObject, kind: String, staged: ForestInput, sequential_name: String,
-          context: PythonObject) raises -> PythonObject:
+def _vote(staged: ForestStaged, sequential_name: String, context: PythonObject) raises -> PythonObject:
     """`ForestProtocol._predict_forest`: the rows' votes or values, flat
-    float32, through the model's engine."""
+    float32, through the state's route."""
     var rows = staged.x.rows
-    var outputs = staged.outputs
-    var out = admitted_vector(rows * outputs, "<f4", context)
-    var engine = staged.engine
+    var result = admitted_vector(rows * staged.state.outputs, "<f4", context)
+    var dst = trees_address(result)
     var wrote = 0
-    if engine == "sequential" and not staged.ordered_export and (staged.caps & XF_CAP_STRICT) != 0:
-        # The host column's kept trees (N044): the same sequential vote over
-        # trees rebuilt once per fitted model, not once per call.
-        wrote = _strict_vote(model, fields, staged, out, context)
-    elif engine == "sequential" and not staged.ordered_export:
-        var arrays = _model_arrays(fields)
-        var model_addrs = List[Int]()
+    if staged.state.route == FOREST_ROUTE_SEQUENTIAL:
+        var arrays = _model_list(staged.fields)
         var nk = trees_keys()
         var array_class = py_item(context, nk[].k_array_class)
+        var addrs = List[Int](capacity=_MODEL_FIELDS)
         var views = List[PythonObject]()
         for i in range(_MODEL_FIELDS):  # driver-loop: over the five model arrays
-            # An exact mojolearn Array's data address is its `_addr` slot, the
-            # one `trees_view` reads; any other storage is viewed as before
-            # (UNPACK: the view is kept alive through the vote below).
-            var a = arrays[i]
-            if py_type(a) is array_class:
-                model_addrs.append(trees_address(a))
+            # An exact mojolearn Array's data address is its `_addr` slot; any
+            # other storage is viewed (UNPACK: the view is kept alive through
+            # the vote below).
+            if py_type(arrays[i]) is array_class:
+                addrs.append(trees_address(arrays[i]))
             else:
-                var view = classical_view(a, context, "forest model")
-                model_addrs.append(Int(py=classical_address(view)))
+                var view = classical_view(arrays[i], context, "forest model")
+                addrs.append(Int(py=classical_address(view)))
                 views.append(view)
-        wrote = xf_predict(staged.key, model_addrs, staged.x.address, trees_address(out), rows, staged.x.cols,
-                           Int(py=_int(py_item(fields, nk[].k__n_trees))), outputs, sequential_name == "rf_predict_reg")
-        _ = out  # keep the Python object alive through the native call above
+        wrote = forest_vote(staged.state, 0, addrs, staged.x.view(), dst, sequential_name == "rf_predict_reg")
         _ = views^
         _ = arrays^
     else:
-        var use = _resident_with(model, fields, staged.native, staged.key, staged.mode, engine, staged.ordered_export, context)
+        var none = List[Int]()
+        var use = _snapshot(staged.model, staged.fields, staged.native, staged.state, context)
         try:
-            wrote = xf_resident_predict(staged.key, use.handle, staged.x.address, trees_address(out), rows,
-                                        staged.x.cols, outputs)
+            wrote = forest_vote(staged.state, use.handle, none, staged.x.view(), dst, False)
         finally:
             forest_handle_done(use)
-        _ = out  # keep the Python object alive through the native call above
-    if wrote != rows:
-        raise Error("RuntimeError: " + sequential_name + " wrote " + String(wrote) + " of " + String(rows) + " rows")
-    return out
+    _ = result  # keep the Python object alive through the native call above
+    forest_wrote_check(wrote, rows, sequential_name)
+    return result
 
 
-def _fused_labels_capable(staged: ForestInput) -> Bool:
-    """The image's compiled T38 fused labels (XF_CAP_FUSED_LABELS, read
-    once per predict with the other capability bits; the former
-    `forest_identical_fused_labels` entry and its per-binary answer cache)."""
-    return (staged.caps & XF_CAP_FUSED_LABELS) != 0
-
-
-def _resident_labels(model: PythonObject, fields: PythonObject, staged: ForestInput, context: PythonObject) raises -> PythonObject:
+def _resident_labels(staged: ForestStaged, context: PythonObject) raises -> PythonObject:
     """`ForestProtocol._predict_forest_labels`: the resident classifier's
     int32 codes, or None where the fused label route does not apply."""
-    var engine = staged.engine
-    if staged.mode == "identical":
-        if not _fused_labels_capable(staged):
-            return PythonObject(None)
-        if not (engine == "sequential" and staged.ordered_export) and engine != "parallel_groves":
-            return PythonObject(None)
-    elif staged.mode != "fast" or engine != "parallel_groves":
-        return PythonObject(None)
-    if (staged.caps & XF_CAP_RESIDENT_LABELS) == 0:
+    if not forest_labels_route(staged.state):
         return PythonObject(None)
     var rows = staged.x.rows
-    var out = admitted_vector(rows, "<i4", context)
-    var use = _resident_with(model, fields, staged.native, staged.key, staged.mode, engine, staged.ordered_export, context)
+    var result = admitted_vector(rows, "<i4", context)
+    var use = _snapshot(staged.model, staged.fields, staged.native, staged.state, context)
     var wrote = 0
     try:
-        wrote = xf_resident_labels(staged.key, use.handle, staged.x.address, trees_address(out), rows, staged.x.cols,
-                                   staged.outputs)
+        wrote = forest_labels(staged.state, use.handle, staged.x.view(), trees_address(result))
     finally:
         forest_handle_done(use)
-    _ = out  # keep the Python object alive through the native call above
-    if wrote != rows:
-        raise Error("RuntimeError: forest label prediction wrote " + String(wrote) + " of " + String(rows) + " rows")
-        _ = out  # keep the Python object alive through the native call above
-    _ = out  # keep the Python object alive through the native calls above
-    return out
+    _ = result  # keep the Python object alive through the native call above
+    forest_wrote_check(wrote, rows, "forest label prediction")
+    return result
 
 
 def _widen(vote: PythonObject, shape: PythonObject, context: PythonObject) raises -> PythonObject:
     """`vote.astype('<f8')` under `shape`."""
     var n = Int(py=vote.size)
-    var out = admitted_array(shape, "<f8", context)
-    trees_cast(trees_address(vote), "<f4", trees_address(out), "<f8", n, context)
-    _ = out  # keep the Python object alive through the native call above
-    return out
+    var wide = admitted_array(shape, "<f8", context)
+    trees_cast(trees_address(vote), "<f4", trees_address(wide), "<f8", n, context)
+    _ = wide  # keep the Python object alive through the native call above
+    return wide
 
 
 def _inner(fields: PythonObject) raises -> PythonObject:
@@ -1780,33 +1881,30 @@ def _inner(fields: PythonObject) raises -> PythonObject:
     return py_get(fields, nk[].k__random_inner)
 
 
-def _proba_staged(model: PythonObject, fields: PythonObject, kind: String, staged: ForestInput,
-                  context: PythonObject) raises -> PythonObject:
-    var shape = Python.tuple(staged.x.rows, staged.outputs)
+def _proba_staged(kind: String, staged: ForestStaged, context: PythonObject) raises -> PythonObject:
+    var shape = Python.tuple(staged.x.rows, staged.state.outputs)
     if _family(kind) == "et":
-        return _widen(_vote(model, fields, kind, staged, "et_predict", context), shape, context)
-    return trees_reshape(_vote(model, fields, kind, staged, "rf_predict_proba", context), shape, context)
+        return _widen(_vote(staged, "et_predict", context), shape, context)
+    return trees_reshape(_vote(staged, "rf_predict_proba", context), shape, context)
 
 
-def _codes_staged(model: PythonObject, fields: PythonObject, kind: String, staged: ForestInput,
-                  context: PythonObject) raises -> PythonObject:
+def _codes_staged(kind: String, staged: ForestStaged, context: PythonObject) raises -> PythonObject:
     """A classifier's undecoded class codes: the resident fused labels
     (int32), else the first-max argmax of the vote (int64)."""
-    var codes = _resident_labels(model, fields, staged, context)
+    var codes = _resident_labels(staged, context)
     if codes is not None:
         return codes
-    var vote = _vote(model, fields, kind, staged, "et_predict" if _family(kind) == "et" else "rf_predict_proba", context)
-    return trees_argmax_rows(vote, staged.x.rows, staged.outputs, False, context)
+    var vote = _vote(staged, "et_predict" if _family(kind) == "et" else "rf_predict_proba", context)
+    return trees_argmax_rows(vote, staged.x.rows, staged.state.outputs, False, context)
 
 
-def _predict_staged(model: PythonObject, fields: PythonObject, kind: String, staged: ForestInput,
-                    context: PythonObject) raises -> PythonObject:
+def _predict_staged(kind: String, staged: ForestStaged, context: PythonObject) raises -> PythonObject:
     if _classifier(kind):
         var nk = trees_keys()
-        return trees_decode_labels(py_item(fields, nk[].k_classes_), _codes_staged(model, fields, kind, staged, context), context)
+        return trees_decode_labels(py_item(staged.fields, nk[].k_classes_), _codes_staged(kind, staged, context), context)
     if _family(kind) == "et":
-        return _widen(_vote(model, fields, kind, staged, "et_predict", context), Python.tuple(staged.x.rows), context)
-    return _vote(model, fields, kind, staged, "rf_predict_reg", context)
+        return _widen(_vote(staged, "et_predict", context), Python.tuple(staged.x.rows), context)
+    return _vote(staged, "rf_predict_reg", context)
 
 
 def forest_predict_proba(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -1828,7 +1926,7 @@ def forest_predict_proba(model: PythonObject, args: PythonObject, context: Pytho
     var target = walked.value()
     var fields = walked_fields.value()
     var staged = _predict_input(target, fields, kind, args[0], context)
-    return _proba_staged(target, fields, kind, staged, context)
+    return _proba_staged(kind, staged, context)
 
 
 def forest_predict(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -1851,7 +1949,7 @@ def forest_predict(model: PythonObject, args: PythonObject, context: PythonObjec
     var target = walked.value()
     var fields = walked_fields.value()
     var staged = _predict_input(target, fields, kind, args[0], context)
-    return _predict_staged(target, fields, kind, staged, context)
+    return _predict_staged(kind, staged, context)
 
 
 def forest_predict_codes(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -1878,7 +1976,7 @@ def forest_predict_codes(model: PythonObject, args: PythonObject, context: Pytho
         raise Error("TypeError: forest class codes require a classifier")
     var staged = _predict_input(target, fields, kind, args[0], context)
     var nk = trees_keys()
-    return Python.tuple(py_item(fields, nk[].k_classes_), _codes_staged(target, fields, kind, staged, context))
+    return Python.tuple(py_item(fields, nk[].k_classes_), _codes_staged(kind, staged, context))
 
 
 def forest_public_predict(model: PythonObject, kind: String, x: AdmittedX, proba: Bool, codes: Bool,
@@ -1900,30 +1998,31 @@ def forest_public_predict(model: PythonObject, kind: String, x: AdmittedX, proba
             raise Error("RuntimeError: this estimator is not fitted yet")
         var fitted = Int(py=_int(py_item(inner_fields, nk[].k_n_features_in_)))
         trees_check_features(x.cols, fitted)
-        return _public_deferred(model, inner, inner_fields, inner_kind,
-                                _stage(inner_fields, inner_kind, x.copy(), context), proba, codes, context)
-    return _public_deferred(model, model, fields, kind, _stage(fields, kind, x.copy(), context), proba, codes, context)
+        var inner_staged = _stage(inner, inner_fields, inner_kind, x.copy(), context)
+        return _public_deferred(model, inner_kind, inner_staged, proba, codes, context)
+    var staged = _stage(model, fields, kind, x.copy(), context)
+    return _public_deferred(model, kind, staged, proba, codes, context)
 
 
-def _public_deferred(public: PythonObject, model: PythonObject, fields: PythonObject, kind: String,
-                     staged: ForestInput, proba: Bool, codes: Bool, context: PythonObject) raises -> PythonObject:
+def _public_deferred(public: PythonObject, kind: String, staged: ForestStaged, proba: Bool, codes: Bool,
+                     context: PythonObject) raises -> PythonObject:
     """`_public_staged` with the deferred finite test of the door's X (lane
     a7c): the public door admits X with `defer_finite`, so a borrowed X
-    reaches here untested (`finite` False). Every resident engine tests the
+    reaches here untested (`finite` False). The resident route tests the
     words it uploads (the device scan after the upload on the GPU, the
     row tasks' scan of the host groves on the CPU column) and refuses in
     its own words, which the one scikit-learn wording replaces; the
-    sequential engines (`forest_strict_predict`, `rf_predict_*`,
+    sequential routes (`forest_strict_predict`, `rf_predict_*`,
     `et_predict`) test nothing, so a deferred X takes the door's parallel
     host scan before them (the scan admit_x made before, now only there).
     Refusals name the public estimator (`public`)."""
     var est = classical_estimator_name(public)
-    if not staged.x.finite and staged.engine == "sequential" and not staged.ordered_export:
+    if not staged.x.finite and staged.state.route != FOREST_ROUTE_RESIDENT:
         if not trees_finite_f32(staged.x.address, staged.x.rows * staged.x.cols):
             admitted_finite_refuse(1, est)
     var result = PythonObject(None)
     try:
-        result = _public_staged(model, fields, kind, staged, proba, codes, context)
+        result = _public_staged(kind, staged, proba, codes, context)
     except error:
         if not staged.x.finite:
             admitted_finite_entry_refuse(error, est)
@@ -1931,11 +2030,11 @@ def _public_deferred(public: PythonObject, model: PythonObject, fields: PythonOb
     return result
 
 
-def _public_staged(model: PythonObject, fields: PythonObject, kind: String, staged: ForestInput, proba: Bool,
-                   codes: Bool, context: PythonObject) raises -> PythonObject:
+def _public_staged(kind: String, staged: ForestStaged, proba: Bool, codes: Bool,
+                   context: PythonObject) raises -> PythonObject:
     if proba:
-        return _proba_staged(model, fields, kind, staged, context)
+        return _proba_staged(kind, staged, context)
     if codes:
         var nk = trees_keys()
-        return Python.tuple(py_item(fields, nk[].k_classes_), _codes_staged(model, fields, kind, staged, context))
-    return _predict_staged(model, fields, kind, staged, context)
+        return Python.tuple(py_item(staged.fields, nk[].k_classes_), _codes_staged(kind, staged, context))
+    return _predict_staged(kind, staged, context)
