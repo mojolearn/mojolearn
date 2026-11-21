@@ -385,14 +385,9 @@ def _wire_byte_strings(record: WireRecord) raises -> List[Bool]:
     return marked^
 
 
-def wire_receive(socket: PythonObject) raises -> WireMessage:
-    """One typed frame from an owned native socket (a worker's connection)."""
-    var fd = -1
-    var timeout = Float64(-1)
-    _wire_socket(socket, fd, timeout)
-    var message = wire_receive_fd(fd, timeout)
-    _ = socket
-    return message^
+# Removed 2026-11-21 (lane pools-frame): `wire_receive(socket)`, the PACKing
+# receive of a worker's connection. Its last caller, the causal worker loop,
+# reads typed turns (`process_worker_next`, bindings/native_process_pool_door.mojo).
 
 
 struct WireReply(Movable):

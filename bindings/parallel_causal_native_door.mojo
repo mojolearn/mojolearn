@@ -18,9 +18,9 @@ from bindings.causal_exception_unpack import causal_borrowed_item, causal_set_ex
 from bindings.native_json_door import native_path, native_path_exists
 from bindings.native_process_pool_door import (
     process_pool_create, process_pool_start, process_pool_request, process_pool_close, process_worker_connect, process_pool_admit,
-    process_pool_pids,
+    process_pool_pids, process_worker_next, process_worker_value,
 )
-from bindings.native_process_wire_door import WireOutgoing, wire_unpack, wire_append, wire_key, wire_text, wire_send, wire_receive
+from bindings.native_process_wire_door import WireOutgoing, wire_unpack, wire_append, wire_key, wire_text, wire_send
 from bindings.native_transport_door import transport_close
 from bindings.py_balanced import py_call, py_contains, py_fields, py_get, py_setattr, py_setitem, py_type
 from core.parallel_worker_request import (
@@ -35,7 +35,7 @@ from bindings.parallel_causal_native_run import (
     causal_closed_admit, causal_layer_format_admit, causal_layer_owner_admit,
     CausalRegistryState, causal_registry_usable, causal_registry_worker,
     causal_option_admit, causal_weight_format_admit, causal_block_index_admit, causal_allocation_index_admit,
-    causal_frame_admit, causal_worker_route, causal_worker_route_admit, causal_top_tensor_admit,
+    causal_worker_route, causal_worker_route_admit, causal_top_tensor_admit,
     causal_step_word, causal_run_request, causal_layers_request, causal_layers_count,
     causal_run_joins, causal_run_embeds, causal_run_final,
 )
@@ -667,17 +667,28 @@ def parallel_causal_worker(mut mods: NativeModules, argv: PythonObject) raises:
             # the request struct's words and its PACKed payload. REMOVED: the
             # codec envelope (JSON header, bytes request, structural payload)
             # and its decoder _parallel_causal_decode.
-            var message = wire_receive(socket)
+            # The typed receive every worker uses (`process_worker_next`:
+            # the frame's request words and its record, no Python value). The
+            # request is PACKed once, and only when it carries a record: the
+            # operations whose arguments are all request words (allocate,
+            # release, state, parameters, block fields) build no Python
+            # value. REMOVED 2026-11-21 (lane pools-frame): `wire_receive`,
+            # which PACKed every frame before its kind and words were read.
+            var turn = process_worker_next(socket)
             mods.released()
-            if message.kind == WIRE_CLOSE:
+            if not turn.open:
                 break
-            causal_frame_admit(message.kind)
-            var sequence = message.sequence
+            var sequence = turn.sequence
+            # Outside the model-error handler, as the PACK always was: a
+            # record that cannot be PACKed ends the worker.
+            var payload = PythonObject(None)
+            if turn.frame.record.node_count() > 0 or len(turn.frame.stores) > 0:
+                payload = process_worker_value(turn)
             var reply = WireOutgoing()
             var failed = False
             try:
-                var typed = worker_request_decode(Int(message.request.unsafe_ptr()), len(message.request) * 8)
-                reply = _parallel_causal_worker_request(mods, registry, typed, message.value)
+                var typed = worker_request_decode(Int(turn.request.unsafe_ptr()), len(turn.request) * 8)
+                reply = _parallel_causal_worker_request(mods, registry, typed, payload)
             except error:
                 # A model error is the reply; the worker and its registry live on.
                 reply = wire_text(String(error))
