@@ -13,8 +13,7 @@ map), at the boundary, before RUN:
     are keyed natively;
   * an X that holds text or None in a categorical column (an exact list or
     tuple of exact list or tuple rows, an exact object ndarray through its
-    own object words, or a unicode / bytes ndarray through its own `tolist`)
-    is read cell by cell (`_read_cell`, the one cell reader) with exact-type
+    own object words) is read cell by cell (`_read_cell`, the one cell reader) with exact-type
     C-API reads into one column-major float32 block (the numeric columns)
     and one key block (the categorical columns). That read is one pass
     under the GIL over Python objects, which is what the input is; it is
@@ -29,7 +28,12 @@ map), at the boundary, before RUN:
     Python-backed string columns through the same cell reader, a
     Categorical through its codes array and its k categories (keyed once,
     then every code mapped in parallel; code -1 is the missing category).
-    An Arrow-backed string column is refused by name.
+    An Arrow-backed string column is refused by name;
+  * an exact NumPy unicode (U) or bytes (S) array is read natively from
+    its fixed-width cells, rows across the workers with the GIL released
+    (`category_fixed_text`): the categorical columns keyed as text, the
+    other columns parsed in Mojo as numbers (a cell that is not one is
+    refused by name).
 
 The codes are written over the categorical columns of the float block the
 fit reads. A block the door made (a cast, a transpose, the object path) is
@@ -84,6 +88,9 @@ from gbdt.data.category_map import (
     category_apply_column,
     category_keys_from_codes,
     category_values_from_codes,
+    category_fixed_text,
+    CATEGORY_TEXT_INVALID,
+    CATEGORY_TEXT_NOT_A_NUMBER,
 )
 
 comptime _CatWordPtr = MutPointer[Int, MutUntrackedOrigin]
@@ -530,6 +537,49 @@ def _object_array(X: PythonObject, name: String, columns: List[Int], mut keys: L
     return admitted_words(matrix, block_address, n_rows, n_features, False)
 
 
+def _fixed_text_array(X: PythonObject, wide: Bool, name: String, columns: List[Int], mut keys: List[UInt64],
+                      context: PythonObject) raises -> AdmittedX:
+    """An exact 2-D NumPy unicode (`wide`) or bytes array, read natively
+    from its fixed-width cells with the GIL released, rows across the
+    workers (`category_fixed_text`): the categorical columns keyed as text
+    (the keys a str or bytes cell with the same UTF-8 bytes gets), the other
+    columns parsed as numbers, a cell that is not one refused by name. No
+    Python str or bytes object is made."""
+    var n_rows = Int(py=X.shape[0])
+    var n_features = Int(py=X.shape[1])
+    if n_rows == 0:
+        raise Error("mojolearn: " + name + " has no rows")
+    if n_features == 0:
+        raise Error("mojolearn: " + name + " has no features")
+    if wide and not Bool(py=X.dtype.isnative):
+        raise Error("TypeError: mojolearn: " + name + " is a unicode array in non-native byte order; "
+                    + "pass it in native order (`X.astype(X.dtype.newbyteorder('='))`)")
+    var slot_of = _cat_slots(columns, n_features)
+    var address = Int(py=sequential_address(X))
+    var row_stride = Int(py=X.strides[0])
+    var col_stride = Int(py=X.strides[1])
+    var itemsize = Int(py=X.dtype.itemsize)
+    var matrix = admitted_vector(n_rows * n_features, "<f4", context)
+    var mp = CategoryF32Ptr(unsafe_from_address=trees_address(matrix))
+    keys.resize(len(columns) * n_rows, UInt64(0))
+    var kp = CategoryKeyPtr(unsafe_from_address=Int(keys.unsafe_ptr()))
+    var slots = Int(slot_of.unsafe_ptr())
+    var failed: Tuple[Int, Int, Int] = (Int(-1), Int(-1), Int(0))
+    with GILReleased(Python()):
+        failed = category_fixed_text(address, itemsize, wide, row_stride, col_stride, n_rows, n_features,
+                                     slots, kp, mp)
+    _ = X  # keep the array alive through the native reads above
+    _ = slot_of^
+    if failed[2] == CATEGORY_TEXT_INVALID:
+        raise Error("mojolearn: " + name + _at(failed[0], failed[1])
+                    + " is not valid text (it cannot be encoded as UTF-8)")
+    if failed[2] == CATEGORY_TEXT_NOT_A_NUMBER:
+        raise Error("ValueError: mojolearn: " + name + _at(failed[0], failed[1])
+                    + " is not a number; only the cat_features columns may hold text")
+    var block_address = trees_address(matrix)
+    return admitted_words(matrix, block_address, n_rows, n_features, False)
+
+
 # The storage forms of a pandas column this file reads (`_PdPart.form`).
 comptime _PD_NUMERIC = 1
 comptime _PD_OBJECT = 2
@@ -833,7 +883,7 @@ def gbdt_category_admit(X: PythonObject, name: String, columns: List[Int], mut k
     var cls = py_type(X)
     var ndarray = py_get(context, nk[].k_ndarray)
     if ndarray is not None and cls is ndarray:
-        # an exact ndarray: its dtype kind is a C slot read, `tolist` its own C method
+        # an exact ndarray: its dtype kind is a C slot read
         var kind = String(py=X.dtype.kind)
         if kind == "O" or kind == "U" or kind == "S":
             if Int(py=X.ndim) != 2:
@@ -841,11 +891,9 @@ def gbdt_category_admit(X: PythonObject, name: String, columns: List[Int], mut k
         # an object array: its cells read from its own object words
         if kind == "O":
             return _object_array(X, name, columns, keys, context)
-        # unicode and bytes arrays: their cells through the array's own C
-        # `tolist` (str for U, bytes for S), then the exact-type read
+        # unicode and bytes arrays: read natively from their fixed-width cells
         if kind == "U" or kind == "S":
-            var listed = py_call(ndarray.tolist, X)
-            return _object_rows(listed, name, columns, keys, context)
+            return _fixed_text_array(X, kind == "U", name, columns, keys, context)
     elif cls is b.list or cls is b.tuple:
         var w = _CellWords()
         if len(X) != 0 and _rows_hold_text(X, columns, w, name):
