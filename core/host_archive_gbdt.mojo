@@ -61,7 +61,16 @@ def host_archive_gbdt_text(text: String) raises -> HostArchiveGBDT:
         if n_input + n_tensors != features:
             raise Error("saved GBDT tensor CTR apply plan does not end at the last model column")
     elif n_tables:
-        n_input = column_plan(saved.ctr_tables, features).n_input_features
+        # the tree-CTR columns (feature combinations) are the model's last
+        # columns and read the raw input through their maps: the column
+        # plan of the simple CTRs covers the columns before them
+        n_input = column_plan(
+            saved.ctr_tables, features - len(saved.combination_ctrs.tables)
+        ).n_input_features
+    if not saved.combination_ctrs.is_empty():
+        if n_tensors or not n_tables:
+            raise Error("a saved GBDT model with feature combinations carries simple CTR tables and no tensor CTR registry")
+        saved.combination_ctrs.check(n_input, features)
     metadata["n_input_features"] = n_input
     metadata["n_ctr_tables"] = n_tables
     metadata["n_tensor_tables"] = n_tensors
@@ -87,6 +96,54 @@ def host_archive_gbdt_text(text: String) raises -> HostArchiveGBDT:
         ctr_floats.append(table.shift)
         ctr_floats.append(table.scale)
         counts.extend(table.counts.copy())
+    # THE COMBINATION SECTION (tree CTRs), the tail of the three CTR arrays
+    # after the `n_ctr_tables` records; a model without combinations writes
+    # no tail, so its arrays are what they were. `core/gbdt_host_ctr.mojo::
+    # _combination_section` reads it back.
+    #   ctr_ints:   n_maps, n_combination_tables; per map: n_members, groups,
+    #               (kind, feature, value, nan_side) per member, then the
+    #               tuples (groups x n_members words); per table the eight
+    #               `ctr_ints` fields of a CTR table (source = its map)
+    #   ctr_floats: per map, one border per member; per table the four
+    #               `ctr_floats` fields
+    #   ctr_counts: the tables' counts, at the offsets their records name
+    if not saved.combination_ctrs.is_empty():
+        ctr_ints.append(len(saved.combination_ctrs.maps))
+        ctr_ints.append(len(saved.combination_ctrs.tables))
+        # driver-loop: over the model's combination maps and their members
+        for i in range(len(saved.combination_ctrs.maps)):
+            ref cmap = saved.combination_ctrs.maps[i]
+            ctr_ints.append(len(cmap.members))
+            ctr_ints.append(cmap.groups())
+            for j in range(len(cmap.members)):
+                ctr_ints.append(cmap.members[j].kind)
+                ctr_ints.append(cmap.members[j].feature)
+                ctr_ints.append(cmap.members[j].value)
+                ctr_ints.append(cmap.members[j].nan_side)
+                ctr_floats.append(cmap.members[j].border)
+            # one pass over the map's tuple words (model data, not rows)
+            for w in range(len(cmap.tuples)):
+                if cmap.tuples[w] > UInt32(2147483647):
+                    raise Error("a combination map holds a category code past int32")
+                ctr_ints.append(Int(cmap.tuples[w]))
+        # driver-loop: over the model's combination tables
+        for i in range(len(saved.combination_ctrs.tables)):
+            ref table = saved.combination_ctrs.tables[i]
+            if table.ctr_type != 0 and table.ctr_type != 4 and table.ctr_type != 5:
+                raise Error("saved GBDT combination table type " + ctr_type_name(table.ctr_type) + " has no prediction-time formula")
+            ctr_ints.append(table.column)
+            ctr_ints.append(table.source_feature)
+            ctr_ints.append(table.ctr_type)
+            ctr_ints.append(table.counter_denominator)
+            ctr_ints.append(table.target_classes_count)
+            ctr_ints.append(table.target_border_idx)
+            ctr_ints.append(len(counts))
+            ctr_ints.append(len(table.counts))
+            ctr_floats.append(table.prior_num)
+            ctr_floats.append(table.prior_denom)
+            ctr_floats.append(table.shift)
+            ctr_floats.append(table.scale)
+            counts.extend(table.counts.copy())
     for i in range(n_tensors):
         ref table = saved.tensor_ctr_registry.features[i].table
         tensor_ints.append(len(table.source_features))

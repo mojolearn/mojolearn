@@ -20,9 +20,11 @@ from bindings.prep_native_estimator_door import (
 from bindings.member_held_door import MemberHeld, member_held, member_held_release
 from bindings.member_set_door import MEMBER_SET_NATIVE
 from core.member_abi import (
-    MemberCall, MemberMatrix, MemberPlan, member_call, member_outputs_of,
-    MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA,
+    MemberCall, MemberMatrix, MemberPlan, member_call, member_call_of, member_outputs_of,
+    MEMBER_OP_CAPABILITIES, MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA,
+    MEMBER_CAN_TEST_ROWS, MEMBER_F32, MEMBER_DTYPE_UNSAID,
 )
+from bindings.trees_public_inputs_run import trees_finite_f32
 from bindings.trees_public_inputs_door import trees_table, trees_call, trees_address, trees_reshape, trees_cast
 from bindings.admitted_input_unpack import admitted_vector, admitted_unfilled, classical_view
 # TOMBSTONE: trees_view / trees_vector uses (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
@@ -375,15 +377,26 @@ def _member_release(mut em: _Member):
     member_held_release(em.held)
 
 
-def _member_open(mut em: _Member, s: _State, context: PythonObject):
+def _member_open(mut em: _Member, s: _State, x: PythonObject, n: Int, context: PythonObject):
     """UNPACK, once per values call: the explained model's held member state
     when its family serves the explained method (predict of a regressor
     kind, predict_proba of a classifier) and its output width is the one
     construction recorded. Anything else (no mark, a classifier explained
     through predict, whose member predict writes codes, an admission or
-    import the family refuses, another width) leaves `em` closed: the
-    fallback rule, the model's own door then answers or raises its own
-    words. Never raises."""
+    import the family refuses, another width, an element type other than
+    float32, a classifier member that does not say its element type) leaves
+    `em` closed: the fallback rule, the model's own door then answers or
+    raises its own words. Never raises.
+
+    WHO REFUSES A NON-FINITE ROW. This door snapshots X (`x`, `n` rows) and
+    the background without a finite test: the model's own door tests every
+    chunk it is given. A member whose kind tests its rows
+    (MEMBER_CAN_TEST_ROWS) refuses a non-finite chunk in its own kernel pass
+    (`_member_rows` then answers None and the model's door raises its words):
+    no host scan here. Any other member reads admitted words, and every
+    chunk is a mix of cells of X and of the background, so both are scanned
+    once per values call (against the door's test of every synthesized
+    chunk); not finite = `em` stays closed and the door refuses."""
     comptime if not MEMBER_SET_NATIVE:
         return
     try:
@@ -401,17 +414,34 @@ def _member_open(mut em: _Member, s: _State, context: PythonObject):
                                MEMBER_CAN_PREDICT_PROBA if proba else MEMBER_CAN_PREDICT)
         if not held.published:
             return
-        var call = MemberCall(held.plan.route, held.state)
         var cols = -1
+        var dtype = MEMBER_DTYPE_UNSAID
+        var tests = False
         try:
-            cols = member_outputs_of(held.plan, call, operation)
+            var probe = member_call_of(held.plan, held.state)
+            cols = member_outputs_of(held.plan, probe, operation)
+            dtype = probe.out_dtype
+            if dtype == MEMBER_DTYPE_UNSAID and not proba:
+                dtype = MEMBER_F32   # a regressor writes float32 (every published regressor documents it)
+            # Kind-exact, asked of the held state; a family whose union mask
+            # lacks the bit is not asked.
+            if held.plan.member.can(MEMBER_CAN_TEST_ROWS):
+                tests = (member_call(held.plan.member, MEMBER_OP_CAPABILITIES, probe) & MEMBER_CAN_TEST_ROWS) != 0
         except:
             cols = -1
-        if cols != s.k:
+        var served = cols == s.k and dtype == MEMBER_F32
+        if served and not tests:
+            served = (trees_finite_f32(trees_address(x), n * s.d)
+                      and trees_finite_f32(trees_address(s.bg), s.nb * s.d))
+            _ = x  # keep the Python objects alive through the scans above
+            _ = s.bg
+        if not served:
             member_held_release(held)
             return
         em.held = held^
-        em.call = call^
+        # Built from the hold where it now lives: the call carries the
+        # addresses of its plan's parameter and device words.
+        em.call = member_call_of(em.held.plan, em.held.state)
         em.operation = operation
         em.native = True
     except:
@@ -525,7 +555,7 @@ def _kernel_values_over(fields: PythonObject, args: PythonObject, context: Pytho
     # A forest evaluated on the device needs the model once (fx): no member
     # state is imported for it. Every other route calls the model per chunk.
     if s.dev is None:
-        _member_open(em, s, context)
+        _member_open(em, s, x, n, context)
     var fx = _model_out(em, s, x, n, context)   # the explained rows, one model call
     if Int(py=fx.shape[1]) != k:
         raise Error("ValueError: the explained model output width changed after construction")
@@ -749,7 +779,7 @@ def _permutation_values_over(fields: PythonObject, args: PythonObject, context: 
         return _shape(phi, n, d, k, context)
     # Past the device forest and the resident linear routes (neither calls
     # the model per chunk): the explained model as a native member.
-    _member_open(em, s, context)
+    _member_open(em, s, x, n, context)
     var bits = _switches(s.table)
     var fast = s.mode == "fast"
     var idn_pool = (bits & _AGN_IDN_SYN_POOL) != 0

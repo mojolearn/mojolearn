@@ -204,7 +204,7 @@ from core.member_abi import (
     MEMBER_OP_PREDICT_PROBA, MEMBER_OP_DECISION, MEMBER_OP_OUTPUTS, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT,
     MEMBER_OP_SCORE_SAMPLES, MEMBER_I64, MEMBER_CAN_SCORE_SAMPLES, MEMBER_OP_TRANSFORM, MEMBER_CAN_TRANSFORM,
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA, MEMBER_CAN_DECISION,
-    MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT, MEMBER_CAN_CLASSIFIER,
+    MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT, MEMBER_CAN_CLASSIFIER, MEMBER_CAN_TEST_ROWS,
     MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
 )
@@ -2154,9 +2154,27 @@ comptime _NC_EUCLIDEAN = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_PREDI
 comptime _NC_MANHATTAN = MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_CAN_CLASSIFIER
 
 
+# MEMBER_CAN_TEST_ROWS, per kind (MEMBER-ABI-V2 item 25: set only where every
+# published operation of the kind refuses non-finite words itself):
+#   NearestCentroid: none: bit clear. Its fit and its fused queries return
+#     the deferred finite word (`_nc_fit` / `_nc_predict` / `_nc_decision` /
+#     `_nc_proba` below), but `nc_labels_run` on the unfused entries defers
+#     nothing (neighbors/nearest_centroid_run.mojo:140-166: status 0), and
+#     the fused choice depends on the image and the row count.
+#   LocalOutlierFactor (both kinds): SET. Fit (`lof_fit_run`,
+#     neighbors/lof_run.mojo:64) and every query (`lof_query_run`, :130) take
+#     the finite word of the distance entry on BOTH the tiled and the
+#     unfused path (core/lof_plan.mojo:73-94 `select`: the status word is a
+#     parameter of `sqdist` and of `knn_sq` / `knn_sq_tiled`), refused by
+#     `admitted_finite_refuse` in `_lof_fit` and `_lof_query`.
+#   OneClassSVM, KernelPCA, PolynomialCountSketch, AdditiveChi2Sampler,
+#   SkewedChi2Sampler, KNNImputer, SVGP: none: bit clear (their RUN calls
+#     return no finite word; KNNImputer admits NaN as missing by design and
+#     its RUN applies no infinity rule).
 comptime _LOF_NOVELTY = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_DECISION | MEMBER_CAN_SCORE_SAMPLES
-    | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT)
-comptime _LOF_OUTLIER = MEMBER_CAN_FIT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT   # fit_predict: FIT + fit_output
+    | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_CAN_TEST_ROWS)
+comptime _LOF_OUTLIER = (MEMBER_CAN_FIT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT   # fit_predict: FIT + fit_output
+    | MEMBER_CAN_TEST_ROWS)
 comptime _KERNEL_PCA = MEMBER_CAN_FIT | MEMBER_CAN_TRANSFORM | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
 comptime _TRANSFORMER = _KERNEL_PCA   # fit, transform, export, import (fit_output TRANSFORM)
 comptime _SVGP = MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
@@ -2256,6 +2274,20 @@ def _outputs(kind: Int, classes: Int, call: _CallPtr) raises:
     call[].out_cols = 1
 
 
+def _out_dtype(kind: Int, asked: Int) -> Int:
+    """The element type of `dst` for the asked operation of a kind:
+    NearestCentroid's predict writes int32 class codes; LocalOutlierFactor's
+    and OneClassSVM's predict (and fit_predict) int64 labels; every other
+    output float32 (NearestCentroid's predict_proba also takes a float64
+    buffer when the caller hands one)."""
+    if asked == MEMBER_OP_PREDICT or asked == MEMBER_OP_FIT:
+        if kind == XNEIGHBORS_KIND_NEAREST_CENTROID:
+            return MEMBER_I32
+        if kind == XNEIGHBORS_KIND_LOF or kind == XNEIGHBORS_KIND_OCSVM:
+            return MEMBER_I64
+    return MEMBER_F32
+
+
 def _xneighbors_member(operation: Int, address: Int) raises -> Int:
     var call = _CallPtr(unsafe_from_address=address)
     if operation == MEMBER_OP_CAPABILITIES:
@@ -2275,6 +2307,7 @@ def _xneighbors_member(operation: Int, address: Int) raises -> Int:
         if call[].param_count < 1 or not call[].params:
             raise Error("member ABI: an XNeighbors member takes its kind as the first parameter")
         var asked = Int(_F64P(unsafe_from_address=call[].params)[0])
+        call[].out_dtype = _out_dtype(asked, call[].flags)
         if asked == XNEIGHBORS_KIND_KERNEL_PCA:
             # The kept component count is chosen by the fit (rank, zero eigenvalues).
             raise Error("member ABI: a KernelPCA member's transform width is chosen by its fit; ask a fitted state")
@@ -2310,6 +2343,7 @@ def _xneighbors_member(operation: Int, address: Int) raises -> Int:
         return 0
     var slot = _SlotPtr(unsafe_from_address=_lookup(call[].state, False))
     if operation == MEMBER_OP_OUTPUTS:
+        call[].out_dtype = _out_dtype(slot[].kind, call[].flags)
         if slot[].kind == XNEIGHBORS_KIND_KERNEL_PCA:
             if not slot[].fitted:
                 raise Error("member ABI: a KernelPCA member's transform width is chosen by its fit; fit it first")

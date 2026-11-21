@@ -369,7 +369,7 @@ def _fit_kbest(slot: _Slot, call: _Call) raises:
     var mo = -1
     if not keep_all:
         mo = score_topk_stage(prog, score_at, 0, d, k)
-    var arena = prep_enc_run(call, prog, call[].y.data, 0)
+    var arena = prep_enc_run(call, prog, call[].y.data, 0, False)
     _ = len(prog.consts_f)  # the program's own input words live past the run
     var ap = _F32P(unsafe_from_address=Int(arena.unsafe_ptr()))
     if score == SELECT_SCORE_CHI2:
@@ -499,6 +499,8 @@ def _import(slot: _Slot, call: _Call) raises:
 def _outputs(call: _Call) raises:
     """`call.out_cols` of transform: the kept column count, known after the fit."""
     call[].classes = 0
+    # Every transform / inverse_transform of the family writes float32.
+    call[].out_dtype = MEMBER_F32
     var kind = SELECT_KIND_VARIANCE
     var source = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call[].params)
     if call[].state == 0 and call[].param_count >= 1 and call[].params:
