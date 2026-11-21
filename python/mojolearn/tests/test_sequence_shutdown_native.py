@@ -105,10 +105,11 @@ def test_sequence_cleanup_without_imports(scenario, tmp_path):
 def test_sequence_cleanup_retries_failed_native_release(monkeypatch):
     owner = _owner()
     binding, handle = owner.b, owner.h
-    entries = _SEQ_CONTEXT["sequence_bindings"]["identical"]
     with monkeypatch.context() as patch:
-        # A native arity/type failure before any pointer access, not a callback.
-        patch.setitem(entries, "seq_tensor_free", len)
+        # A native refusal inside the release (a handle that is not open),
+        # not a callback: the tensor's image releases through its native
+        # descriptor, so no entry of the image is replaced here.
+        patch.setattr(owner, "h", 1 << 40)
         audit_native_call(owner.__del__).assert_native()
         assert owner.b is binding
     assert owner.numpy().tobytes() == np.arange(15, dtype="f4").tobytes()
@@ -143,7 +144,10 @@ def test_sequence_cleanup_refuses_conversion_and_release_callbacks(monkeypatch):
                 if field == "handle":
                     patch.setattr(owner, "h", Hook())
                 else:
-                    patch.setitem(entries, "seq_tensor_free", release)
+                    # The release runs on the provider held beside the
+                    # image's entries; anything but the compiled provider is
+                    # refused before it is called.
+                    patch.setitem(entries, "native_model_provider", release)
                 audit = audit_native_call(owner.__del__)
                 assert audit.exception is not None, audit.report()
                 for key in ("python_frames", "forbidden_native_calls", "wrapper_work", "unobserved_existing_threads"):

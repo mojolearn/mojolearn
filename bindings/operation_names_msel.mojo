@@ -56,6 +56,7 @@ def operation_names_msel(mut names: List[String], mut leaves: List[Int]):
     names.append("family_msel_search_init")
     names.append("family_msel_search_score")
     names.append("family_msel_search_set_params")
+    names.append("family_msel_search_vendor_used")
     names.append("family_msel_split")
     names.append("family_msel_split_descriptor")
     names.append("family_msel_split_logo_at")

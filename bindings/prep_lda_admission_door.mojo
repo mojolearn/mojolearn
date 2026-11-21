@@ -2,6 +2,9 @@
 # The LDA owner reads only connected native class storage and admitted values.
 from std.math import isfinite, floor
 from bindings.native_loaded_module_door import native_loaded_module
+from providers.python.device_route_boundary_door import device_admit
+from x_prep.transport_abi import xp_vendor_word
+from bindings.prep_classify_common_door import cls_builtins
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.classical_attributes_door import classical_check_layout
@@ -56,6 +59,16 @@ def _lda_parameter(name: PythonObject, value: PythonObject, context: PythonObjec
     classical_admit_value(value, context)
 
 
+def _lda_device(name: PythonObject, value: PythonObject, context: PythonObject) raises:
+    """The one device check, where the value is given (the constructor,
+    set_params; `context` is the owner's own, never a routed one): an
+    unknown value and 'gpu' on a CPU-only installation are refused in the
+    shared words before anything is stored. None (this installation's
+    device) reads nothing."""
+    if value is not None and String(name) == "device":
+        device_admit(value, xp_vendor_word(String(context["vendor"])), cls_builtins())
+
+
 def lda_native_initialize(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     var nk = prep_keys()
     var fields = _lda_storage(model, context)
@@ -64,6 +77,7 @@ def lda_native_initialize(model: PythonObject, args: PythonObject, context: Pyth
         raise Error("TypeError: native LDA initializer requires its complete constructor configuration")
     for i in range(len(names)):  # driver-loop: seven unchanged constructor values, before publication
         _lda_parameter(names[i], args[i], context, True)
+        _lda_device(names[i], args[i], context)
     for i in range(len(names)):  # driver-loop: native instance dictionary writes, no __setattr__ hooks
         py_setitem(fields, names[i], args[i])
     return PythonObject(None)
@@ -279,6 +293,7 @@ def lda_native_set_params(model: PythonObject, fields: PythonObject, values: Pyt
             raise Error("mojolearn: invalid parameter " + String(py_call(native_loaded_module("builtins").repr, name))
                         + " for LinearDiscriminantAnalysis")
         _lda_parameter(name, values[name], context, True)
+        _lda_device(name, values[name], context)
         py_setitem(fields, name, values[name])
     return model
 

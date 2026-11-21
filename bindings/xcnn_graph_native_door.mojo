@@ -43,6 +43,7 @@ from bindings.xcnn_common_door import (
     xcnn_on_dev, xcnn_new, xcnn_wrap, xcnn_host_of, xcnn_host_f32, xcnn_f32, xcnn_addr, xcnn_dev, xcnn_dev_get,
     xcnn_dev_upload, xcnn_shape, xcnn_size, xcnn_tuple, xcnn_host_i32, xcnn_device_io_off,
     xcnn_dev_fields, xcnn_reshape_t, xcnn_dev_get_f, xcnn_out_new, xcnn_plain_scalar,
+    xcnn_device_init, xcnn_device_inherit,
 )
 from core.entry_table import EntryRef
 from x_cnn.graph_layer_run import (
@@ -969,6 +970,7 @@ def _linear_fields(layer: PythonObject, context: PythonObject) raises -> PythonO
 def _linear_init(layer: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     neural_plain_value(args, 0, Python.dict(admission_context=context))
     var fields = _fields(layer)
+    xcnn_device_init(layer, fields, args[4], context)
     var d = _dimension(args[0], "in_features", context)
     var f = _dimension(args[1], "out_features", context)
     graph_run_check_features(d, f)
@@ -988,10 +990,11 @@ def _linear_init(layer: PythonObject, args: PythonObject, context: PythonObject)
     return PythonObject(None)
 
 
-def _linear_new(d: Int, f: Int, seed: PythonObject, mode: PythonObject, context: PythonObject) raises -> PythonObject:
+def _linear_new(d: Int, f: Int, seed: PythonObject, mode: PythonObject, device: PythonObject,
+                context: PythonObject) raises -> PythonObject:
     var nk = xcnn_keys()
     var layer = py_call(xcnn_builtins().object.__new__, py_item(context, nk[].k_xcnn_linear_class))
-    _ = _linear_init(layer, Python.tuple(d, f, seed, mode), context)
+    _ = _linear_init(layer, Python.tuple(d, f, seed, mode, device), context)
     return layer
 
 
@@ -1044,6 +1047,10 @@ def _linear_backward(lin: PythonObject, gradient: PythonObject, context: PythonO
 def _graph_init(layer: PythonObject, args: PythonObject, sage: Bool, context: PythonObject) raises -> PythonObject:
     neural_plain_value(args, 0, Python.dict(admission_context=context))
     var fields = _fields(layer)
+    # The layer's device, checked once here (the last init argument); its
+    # child layers take it where they take its numeric mode.
+    var device = args[10] if sage else args[9]
+    xcnn_device_init(layer, fields, device, context)
     var d = _dimension(args[0], "in_channels", context)
     var f = _dimension(args[1], "out_channels", context)
     graph_run_check_channels(d, f)
@@ -1059,7 +1066,7 @@ def _graph_init(layer: PythonObject, args: PythonObject, sage: Bool, context: Py
     py_setitem(fields, nk[].k_bias, Bool(py=py_call(b.bool, args[5])))
     # fx-rows (2026-11-18): `cached=True` (the PyG name) keys the graph cache
     # by array identity and layout only; the default False keeps the content
-    # compare (`_key_matches`). The word is the last init argument.
+    # compare (`_key_matches`). The word follows the numeric mode.
     py_setitem(fields, nk[].k_cached, Bool(py=py_call(b.bool, args[9] if sage else args[8])))
     if not sage:
         py_setitem(fields, nk[].k_improved, Bool(py=py_call(b.bool, args[2])))
@@ -1078,7 +1085,7 @@ def _graph_init(layer: PythonObject, args: PythonObject, sage: Bool, context: Py
     py_setitem(fields, nk[].k_aggr, args[2])
     py_setitem(fields, nk[].k_normalize, Bool(py=py_call(b.bool, args[3])))
     py_setitem(fields, nk[].k_root_weight, Bool(py=py_call(b.bool, args[4])))
-    var lin_l = _linear_new(d, f, PythonObject(Int(stream.child_seed())), mode, context)
+    var lin_l = _linear_new(d, f, PythonObject(Int(stream.child_seed())), mode, device, context)
     if not Bool(py=py_item(fields, nk[].k_bias)):
         py_setitem(_fields(lin_l), nk[].k_bias_, xcnn_host_f32([f], context))
     py_setitem(fields, nk[].k_lin_l, lin_l)
@@ -1090,9 +1097,10 @@ def _graph_init(layer: PythonObject, args: PythonObject, sage: Bool, context: Py
     py_setitem(fields, nk[].k_project, project)
     py_setitem(fields, nk[].k_lin, PythonObject(None))
     if project:
-        py_setitem(fields, nk[].k_lin, _linear_new(d, d, PythonObject(Int(stream.child_seed())), mode, context))
+        py_setitem(fields, nk[].k_lin, _linear_new(d, d, PythonObject(Int(stream.child_seed())), mode, device, context))
         var relu = py_call(b.object.__new__, py_item(context, nk[].k_xcnn_relu_class))
         py_setitem(_fields(relu), nk[].k_numeric_mode, mode)
+        xcnn_device_inherit(_fields(relu), fields)
         py_setitem(fields, nk[].k__relu_p, relu)
     return PythonObject(None)
 
@@ -1511,7 +1519,9 @@ def xcnn_graph_layers(layer: PythonObject, operation: Int, name: PythonObject, a
     if operation == XCNN_OPN_RELU_INIT:
         neural_plain_value(args, 0, Python.dict(admission_context=context))
         var nk = xcnn_keys()
-        py_setitem(_fields(layer), nk[].k_numeric_mode, args[0])
+        var relu_fields = _fields(layer)
+        xcnn_device_init(layer, relu_fields, args[1], context)
+        py_setitem(relu_fields, nk[].k_numeric_mode, args[0])
         return PythonObject(None)
     if operation == XCNN_OPN_RELU_FORWARD:
         return xcnn_relu_forward(layer, args[0], context)

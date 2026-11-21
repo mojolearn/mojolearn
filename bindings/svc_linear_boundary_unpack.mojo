@@ -43,9 +43,9 @@ from bindings.classical_labels_door import labels_type_name, classical_encode_la
 from bindings.linear_svc_boundary_unpack import LinearSvcWeights, LinearSvcConnection, linear_svc_connection
 from core.linear_svc_native_api import LinearSvcOptions, LinearSvcFitRequest, LinearSvcWeightsState
 from core.logistic_native_api import QnFitRequest, QnQueryRequest
-from bindings.svc_common_door import (
-    svc_builtins, svc_field, svc_attr, svc_has, svc_name, svc_float, svc_int, svc_truthy,
-    svc_mode, svc_shape_of,
+from bindings.svc_common_unpack import (
+    svc_builtins, svc_field, svc_attr, svc_has, svc_name, svc_float, svc_int, svc_truthy, svc_mode,
+    svc_shape_of,
 )
 from bindings.svm_keys_unpack import svm_keys
 

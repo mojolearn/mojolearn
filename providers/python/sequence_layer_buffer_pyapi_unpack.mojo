@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # Shared sequence-layer input snapshots. Native metadata is captured once per
 # argument; original owners and any prepared buffers remain alive through use.
+from bindings.sequence_ops_door import seq_tensor_get
 from std.python import PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get
-from bindings.py_typed_call import py_call_typed
 from bindings.optimizer_admission_door import opt_value
 from providers.python.array_layout_boundary_pack import native_shape_pack
 from bindings.optimizer_device_native_door import device_shape, shape_count
@@ -152,9 +152,7 @@ struct SequenceResidentSnapshot(Movable):
         # fully written by the download below (lane fb-neural: unfilled)
         var result = _array_unfilled(self.shape, context)
         if self.count > 0:
-            var nk = sequence_keys()
-            _ = py_call_typed(py_item(self.entries, nk[].k_seq_tensor_download), self.handle,
-                               classical_address(result), PythonObject(self.count))
+            seq_tensor_get(self.entries, Int(py=self.handle), Int(py=classical_address(result)), self.count)
             _ = result
         return result
 

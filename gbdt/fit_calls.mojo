@@ -14,6 +14,8 @@ from core.gbdt_entry_table import gbdt_table_entry
 from gbdt.fit_request import (
     GbdtFitArgs, GbdtFitOutcome, GBDT_ENTRY_ABI, XG_OP_COUNT, XG_CAPS, XG_NUMERIC_MODE, XG_FIT, XG_FIT_ROWMAJOR,
     XG_OUTCOME_SIZES, XG_OUTCOME_COPY, XG_OUTCOME_FREE, XG_MODEL_DIM, XG_CAP_ROW_MAJOR, gbdt_string_at,
+    XG_PREDICT, XG_PREDICT_MULTI, XG_BINARY, XG_SIGMOID_PAIR, XG_RESIDENT_PREPARE, XG_RESIDENT_PREDICT,
+    XG_CAP_RESIDENT, XG_ORDERED_FIT, XG_FEATURE_FREQ_FIT,
 )
 
 
@@ -47,6 +49,108 @@ def xg_model_dim(entry: EntryRef, text: String) raises -> Int:
     var dim = entry_ref_call(entry, XG_MODEL_DIM, addrs, ints, floats)
     _ = text
     return dim
+
+
+# ---- The predict operations (lane dw-trees-boost, 2026-11-21): plain words
+# on this frame (no heap), one indirect call each. `text` / `text_bytes` are
+# a UTF-8 span the caller keeps alive (the model text is copied once, by the
+# image, as its Python entry copied it). The image releases the GIL around
+# its work.
+
+
+def xg_resident(entry: EntryRef) raises -> Bool:
+    """Whether the image holds device-resident parsed models (the former
+    `gbdt_resident_prepare` attribute probe)."""
+    var none = List[Int]()
+    return (entry_ref_call(entry, XG_CAPS, none, none, _none_f()) & XG_CAP_RESIDENT) != 0
+
+
+def xg_predict(entry: EntryRef, text: Int, text_bytes: Int, x: Int, n_rows: Int, dst: Int) raises -> Int:
+    """Raw approxes of a one-dimensional model; the rows written."""
+    var a: Array[Int, 3] = [text, x, dst]
+    var p: Array[Int, 2] = [text_bytes, n_rows]
+    var f: Array[Float64, 2] = [0.0, 0.0]
+    return entry_ref_call(entry, XG_PREDICT, a, p, f)
+
+
+def xg_predict_multi(entry: EntryRef, text: Int, text_bytes: Int, x: Int, n_rows: Int, dst: Int,
+                     mode: Int) raises -> Int:
+    """A multi-dimensional model in `mode`; the width written per row."""
+    var a: Array[Int, 3] = [text, x, dst]
+    var p: Array[Int, 3] = [text_bytes, n_rows, mode]
+    var f: Array[Float64, 3] = [0.0, 0.0, 0.0]
+    return entry_ref_call(entry, XG_PREDICT_MULTI, a, p, f)
+
+
+def xg_binary(entry: EntryRef, probabilities: Bool, raw: Int, dst: Int, n: Int) raises -> Int:
+    """The adapters' binary transform of n float32 margins; the values
+    written (2 n probabilities or n class codes)."""
+    var a: Array[Int, 2] = [raw, dst]
+    var p: Array[Int, 2] = [n, 1 if probabilities else 0]
+    var f: Array[Float64, 2] = [0.0, 0.0]
+    return entry_ref_call(entry, XG_BINARY, a, p, f)
+
+
+def xg_sigmoid_pair(entry: EntryRef, raw: Int, dst: Int, n: Int) raises -> Int:
+    """Float64 raw scores to the float64 pair `[1 - p, p]`; n."""
+    var a: Array[Int, 2] = [raw, dst]
+    var p: Array[Int, 1] = [n]
+    var f: Array[Float64, 1] = [0.0]
+    return entry_ref_call(entry, XG_SIGMOID_PAIR, a, p, f)
+
+
+def xg_resident_prepare(entry: EntryRef, text: Int, text_bytes: Int) raises -> Int:
+    """Parse, pack and upload the model once; the image's handle."""
+    var a: Array[Int, 1] = [text]
+    var p: Array[Int, 1] = [text_bytes]
+    var f: Array[Float64, 1] = [0.0]
+    return entry_ref_call(entry, XG_RESIDENT_PREPARE, a, p, f)
+
+
+def xg_resident_predict(entry: EntryRef, handle: Int, x: Int, n_rows: Int, dst: Int, mode: Int,
+                        row_major: Bool) raises -> Int:
+    """Apply a prepared model; the width written per row."""
+    var a: Array[Int, 2] = [x, dst]
+    var p: Array[Int, 4] = [handle, n_rows, mode, 1 if row_major else 0]
+    var f: Array[Float64, 4] = [0.0, 0.0, 0.0, 0.0]
+    return entry_ref_call(entry, XG_RESIDENT_PREDICT, a, p, f)
+
+
+def _xg_outcome_text(entry: EntryRef, handle: Int) raises -> String:
+    """The model text of a text-only fit's outcome, copied once from the
+    image's String, the outcome freed in that image."""
+    var sizes: List[Int] = [0, 0, 0, 0, 0, 0]
+    var outcome_addrs: List[Int] = [handle, Int(sizes.unsafe_ptr())]
+    var none = List[Int]()
+    try:
+        _ = entry_ref_call(entry, XG_OUTCOME_SIZES, outcome_addrs, none, _none_f())
+        return gbdt_string_at(sizes[5], sizes[0])
+    finally:
+        var free_addrs: List[Int] = [handle]
+        _ = entry_ref_call(entry, XG_OUTCOME_FREE, free_addrs, none, _none_f())
+        _ = sizes
+
+
+def xg_ordered_fit(entry: EntryRef, x: Int, y: Int, weights: Int, permutation: Int, n_rows: Int, n_features: Int,
+                   n_weights: Int, n_estimators: Int, max_depth: Int, border_count: Int, learning_rate: Float64,
+                   l2_leaf_reg: Float64) raises -> String:
+    """The OrderedRMSE fit (the former `gbdt_fit_ordered_rmse` entry): the
+    model text. The permutation holds one UInt32 row id per row."""
+    var a: Array[Int, 4] = [x, y, weights, permutation]
+    var p: Array[Int, 9] = [n_rows, n_features, n_weights, n_rows, n_estimators, max_depth, border_count, 0, 0]
+    var f: Array[Float64, 9] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, learning_rate, l2_leaf_reg]
+    return _xg_outcome_text(entry, entry_ref_call(entry, XG_ORDERED_FIT, a, p, f))
+
+
+def xg_feature_freq_fit(entry: EntryRef, x: Int, y: Int, weights: Int, sources: Int, n_rows: Int, n_features: Int,
+                        n_weights: Int, n_sources: Int, learning_rate: Float64, l2_leaf_reg: Float64,
+                        random_seed: Int) raises -> String:
+    """The two-level FeatureFreq fit (the former
+    `gbdt_fit_two_level_feature_freq` entry): the model text."""
+    var a: Array[Int, 4] = [x, y, weights, sources]
+    var p: Array[Int, 7] = [n_rows, n_features, n_weights, n_sources, 0, 0, random_seed]
+    var f: Array[Float64, 7] = [0.0, 0.0, 0.0, 0.0, learning_rate, l2_leaf_reg, 0.0]
+    return _xg_outcome_text(entry, entry_ref_call(entry, XG_FEATURE_FREQ_FIT, a, p, f))
 
 
 def xg_fit(entry: EntryRef, row_major: Bool, args: GbdtFitArgs) raises -> GbdtFitOutcome:
