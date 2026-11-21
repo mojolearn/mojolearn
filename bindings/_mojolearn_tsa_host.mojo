@@ -62,7 +62,7 @@ from holtwinters.impl.runner import (
     holtwinters_validate_params,
 )
 from holtwinters.impl.tsa.holtwinters_params import seasonal_from_name
-from bindings.kpss_host_test_unpack import KPSS_DECISION_SABOTAGE, kpss_test_binding, select_d_host_binding
+from core.kpss_host_test_impl import KPSS_DECISION_SABOTAGE
 from tsa.checks.kpss_oracle import KPSS_ORACLE_HOST_SABOTAGE
 from tsa.tsa_ops_host import publish_tsa_hw_ops_host
 
@@ -120,8 +120,8 @@ def build__mojolearn_tsa_host() -> PythonObject:
         # Restore: git apply experiments/removed/dead_entries_host_aliases.patch
         # TOMBSTONE: dead Python exports holtwinters_fit, holtwinters_forecast, holtwinters_predict (no product caller: the ExponentialSmoothing owner reaches these kernels through the published Holt-Winters operations table, core/tsa_entry_table.mojo; lane dw-forecast-tail) deleted 2026-11-21; code recoverable at 8e1fedd052.
         # Restore: git apply experiments/removed/dead_entries_tsa_hw_calls.patch
-        module.def_function[kpss_test_binding]("kpss_test")
-        module.def_function[select_d_host_binding]("select_d")
+        # TOMBSTONE: dead Python exports kpss_test, select_d (no product caller: the stationarity functions and AutoARIMA's search reach these kernels through the published tsa operations table, core/tsa_entry_table.mojo TSA_OP_KPSS_TEST / TSA_OP_SELECT_D; lane dw-forecast-tail) deleted 2026-11-21; code recoverable at 038b12431e.
+        # Restore: git apply experiments/removed/dead_entries_tsa_kpss_calls.patch
         # The Holt-Winters operations table (core/tsa_entry_table.mojo): the
         # ExponentialSmoothing owner resolves it once per estimator and calls
         # through it; published once the module is ready.

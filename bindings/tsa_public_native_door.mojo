@@ -39,6 +39,10 @@ from bindings.tsa_keys_unpack import (tsa_keys, TSA_OPN_ARIMA_FIT, TSA_OPN_ARIMA
 from bindings.py_keys import py_op_code
 from bindings.py_balanced import py_item
 
+from std.python._cpython import GILReleased
+from bindings.tsa_hw_route_unpack import tsa_function_route
+from core.tsa_hw_run import tsa_kpss_run, tsa_select_d_run
+
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
 comptime _U8P = MutPointer[UInt8, MutUntrackedOrigin]
@@ -51,16 +55,6 @@ def _b() raises -> PythonObject:
 def _array(code: String, typestr: String, count: Int, width: Int, context: PythonObject) raises -> PythonObject:
     """A zero-filled `(count,)` mojolearn Array of `typestr`."""
     return tsa_array(code, typestr, Python.tuple(count), count, width, context)
-
-
-def _entries(context: PythonObject) raises -> PythonObject:
-    """The `_mojolearn_tsa` entries of the process default tier."""
-    var nk = tsa_keys()
-    var mode = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
-    var entries = py_item(context, nk[].k_tsa_bindings)[mode]
-    if py_type(entries) is _b().str:
-        raise Error(String(py=entries))
-    return entries
 
 
 def _series_major(source: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
@@ -104,12 +98,24 @@ def tsa_kpss(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var batch = Int(py=prepared[2])
     var flags = _array("i", "<i4", batch, 4, context)
     var stat = _array("f", "<f4", batch, 4, context)
-    _ = py_call_typed(py_item(_entries(context), nk[].k_kpss_test), PythonObject(native_scratch_address(flat)), classical_address(flags), classical_address(stat),
-                      Python.list(batch, n_obs, py_call_typed(b.int, tsa_scalar(args[1], context, True)), py_call_typed(b.int, tsa_scalar(args[2], context, True)),
-                                  py_call_typed(b.int, tsa_scalar(args[3], context, True)), py_call_typed(b.float, tsa_scalar(args[4], context))))
-    _ = stat  # keep the Python object alive through the native call above
-    _ = flags  # keep the Python object alive through the native call above
-    _ = flat  # keep the Python object alive through the native call above
+    var d = Int(py=py_call_typed(b.int, tsa_scalar(args[1], context, True)))
+    var seasonal_d = Int(py=py_call_typed(b.int, tsa_scalar(args[2], context, True)))
+    var period = Int(py=py_call_typed(b.int, tsa_scalar(args[3], context, True)))
+    var pval = Float64(py=py_call_typed(b.float, tsa_scalar(args[4], context)))
+    var call = tsa_function_route(context, False, b)
+    var route = call.route
+    var flat_address = native_scratch_address(flat)
+    var flags_address = Int(py=classical_address(flags))
+    var stat_address = Int(py=classical_address(stat))
+    var py = Python()
+    try:
+        with GILReleased(py):
+            _ = tsa_kpss_run(route, flat_address, flags_address, stat_address, batch, n_obs, d, seasonal_d, period, pval)
+    finally:
+        _ = stat  # keep the Python object alive through the native call above
+        _ = flags  # keep the Python object alive through the native call above
+        _ = flat  # keep the Python object alive through the native call above
+        _ = call.owner  # the route owner pins the image through the call
     # the binding writes 1 (stationary) or 0
     var stationary = _array("B", "<u1", batch, 1, context)
     tsa_flags_u8(_I32P(unsafe_from_address=Int(py=classical_address(flags))),
@@ -140,11 +146,21 @@ def tsa_select_d(args: PythonObject, context: PythonObject) raises -> PythonObje
             raise Error("select_d: d_max must satisfy 0 <= d_max <= 2 - D (d_max=" + String(limit) + ", D="
                         + String(seasonal) + "), refused by name")
     var out = _array("i", "<i4", batch, 4, context)
-    _ = py_call_typed(py_item(_entries(context), nk[].k_select_d), PythonObject(native_scratch_address(flat)), classical_address(out),
-                      Python.list(batch, n_obs, seasonal, py_call_typed(b.int, tsa_scalar(args[2], context, True)), py_call_typed(b.int, limit_value),
-                                  py_call_typed(b.float, tsa_scalar(args[4], context))))
-    _ = out  # keep the Python object alive through the native call above
-    _ = flat  # keep the Python object alive through the native call above
+    var period = Int(py=py_call_typed(b.int, tsa_scalar(args[2], context, True)))
+    var d_max = Int(py=py_call_typed(b.int, limit_value))
+    var pval = Float64(py=py_call_typed(b.float, tsa_scalar(args[4], context)))
+    var call = tsa_function_route(context, False, b)
+    var route = call.route
+    var flat_address = native_scratch_address(flat)
+    var out_address = Int(py=classical_address(out))
+    var py = Python()
+    try:
+        with GILReleased(py):
+            _ = tsa_select_d_run(route, flat_address, out_address, batch, n_obs, seasonal, period, d_max, pval)
+    finally:
+        _ = out  # keep the Python object alive through the native call above
+        _ = flat  # keep the Python object alive through the native call above
+        _ = call.owner  # the route owner pins the image through the call
     _ = flat^
     return out
 

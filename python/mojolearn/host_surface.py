@@ -2353,20 +2353,18 @@ FAMILIES = (
         display="Holt-Winters",
         host_modules=("holtwinters/host/hw_oracle.mojo", "tsa/checks/kpss_oracle.mojo",
                       "holtwinters/host/hw_predict.mojo", "bindings/holtwinters_host_predict_run.mojo",
-                      "bindings/kpss_host_test_unpack.mojo"),
+                      "core/kpss_host_test_impl.mojo"),
         exports=(
             "tsa_host_numeric_mode", "tsa_host_vendor", "tsa_host_column",
-            "tsa_host_sabotage", "kpss_test",
-            # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
-            "select_d",
+            "tsa_host_sabotage",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
             "Ships: holtwinters_fit and the KPSS test (also used by the Python select_d controller), "
             "so the holtwinters, kpss and select-d lanes can be "
             "checked on an installed CPU. A saved ExponentialSmoothing still forecasts through the "
-            "shipped forecast binding, which registers kpss_test from the same shared module "
-            "(bindings/kpss_host_test_unpack.mojo), so the two binaries cannot drift."
+            "shipped forecast binding, which answers kpss_test from the same shared module "
+            "(tsa/tsa_ops_host_inference.mojo), so the two binaries cannot drift."
         ),
         ships_in_wheel=True,
     ),
@@ -3184,9 +3182,6 @@ FAMILIES = (
         exports=(
             "arima_host_numeric_mode", "arima_host_vendor", "arima_host_column",
             "arima_host_sabotage", "arima_vendor", "arima_numeric_mode",
-            "arima_fit", "arima_predict", "arima_forecast",
-            # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
-            "arima_order_caps",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -3355,7 +3350,7 @@ FAMILIES = (
         # for saved ARIMA models, with no fit in the binary. The reference
         # arima family above carries the whole fit and stays out of the
         # wheels; this binding registers arima_predict and arima_forecast
-        # from the same source (bindings/arima_host_predict_pack.mojo) and ships.
+        # from the same source (arima/arima_ops_host_inference.mojo) and ships.
         # `routes` is None because `_mojolearn_arima` routes to the reference
         # binding when it is built; `serves` names the route this binding
         # takes when it is not (`_backend._HOST_INFERENCE_MODULES`), which is
@@ -3378,15 +3373,12 @@ FAMILIES = (
         display=("batched ARIMA prediction, in sample and out of sample, and forecasts, with or without"
                  " exogenous regressors, and Holt-Winters"
                  " forecasts and in-sample one-step predictions, additive and multiplicative"),
-        host_modules=("arima/host/arima_oracle.mojo", "bindings/arima_host_predict_pack.mojo",
+        host_modules=("arima/host/arima_oracle.mojo", "arima/arima_ops_host_inference.mojo",
                       "holtwinters/host/hw_predict.mojo", "bindings/holtwinters_host_predict_run.mojo",
-                      "tsa/checks/kpss_oracle.mojo", "bindings/kpss_host_test_unpack.mojo"),
+                      "tsa/checks/kpss_oracle.mojo", "core/kpss_host_test_impl.mojo"),
         exports=(
             "forecast_host_numeric_mode", "forecast_host_vendor", "forecast_host_column",
             "forecast_host_sabotage", "arima_vendor", "arima_numeric_mode",
-            "arima_predict", "arima_forecast", "kpss_test",
-            # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
-            "select_d",
         ),
         gate="tools/classical_host_gate.py and tools/identity_break.py",
         wheel_note=(
@@ -3395,7 +3387,7 @@ FAMILIES = (
             "lane/expose-inference-surface (2026-09-16) it also carries kpss_test, which trains no "
             "model at all: it computes a statistic from the caller's own series, so it belongs on "
             "the shipped side, and registering it here puts it there without shipping the tsa "
-            "family's holtwinters_fit. Both bindings register it from bindings/kpss_host_test_unpack.mojo, "
+            "family's holtwinters_fit. Both bindings answer it from tsa/tsa_ops_host_inference.mojo, "
             "so they answer through one source."
         ),
         ships_in_wheel=True,

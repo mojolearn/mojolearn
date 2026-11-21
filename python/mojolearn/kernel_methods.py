@@ -95,6 +95,11 @@ _native_family_bridge.tables(family_km_kernels=dict(_KERNELS), family_km_mode_co
 
 class _KernelMethodBase(_NumericModeMixin):
     _BINDING = "_mojolearn_kernel_methods"
+    # The door takes the kernel methods module and the metrics module from
+    # the estimator's binding route and asks the handed module for its
+    # resident entries (a host module has none: the per-call entries run):
+    # device="cpu" runs beside a GPU set.
+    _mojolearn_device = True
     _WHERE = "kernel method"
 
 

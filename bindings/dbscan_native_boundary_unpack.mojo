@@ -1,5 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
-"""DBSCAN unpack/pack storage and provider pins around native requests."""
+# DBSCAN boundary, UNPACK side: the provider connection, the native owners
+# of the resident core rows (lifetime pins: provider, references, keys,
+# labels) and their holder, the holder's admission and release, the typed
+# provider calls entered with the GIL released, and the resident reference
+# owner (prepared once per model, provider and key). PACK is
+# bindings/dbscan_native_boundary_pack.mojo. (The two were
+# bindings/dbscan_native_boundary_door.mojo.)
 from std.python import Python, PythonObject
 from bindings.native_owner_registry_pack import borrowed_native_owner
 from std.python._cpython import GILReleased
@@ -140,32 +146,6 @@ def dbscan_release(model: PythonObject) raises:
     _ = holder
 
 
-def dbscan_fresh_holder(model: PythonObject) raises:
-    dbscan_release(model)
-    var fields = py_fields(model)
-    lifecycle_admit_fields(fields)
-    # A release can let another Python thread replace the namespace/holder.
-    dbscan_holder_admit(py_get(fields, "_resident_holder"))
-    py_setitem(fields, "_resident_holder", dbscan_holder_empty())
-
-
-def dbscan_publish(fields: PythonObject, name: String, value: PythonObject, context: PythonObject) raises:
-    # RUN can release the GIL. Admit a newly rebound old owner before its
-    # last reference is dropped by a public field publication.
-    lifecycle_admit_fields(fields)
-    var old = py_get(fields, name)
-    if old is not value:
-        native_release_admit(old, context)
-    py_setitem(fields, name, value)
-
-
-def dbscan_array(shape: List[Int], typestr: String, context: PythonObject) raises -> PythonObject:
-    var width = 1 if typestr == "|u1" else 4
-    var layout = NativeArrayLayout(shape.copy(), width)
-    var storage = native_array_zeros(native_array_code(typestr), layout.count)
-    return classical_wrap_layout(storage, layout, typestr, context)
-
-
 def dbscan_run_fit(connection: DBSCANConnection, request: DBSCANFitRequest) raises -> Int:
     try:
         with GILReleased(Python()):
@@ -242,53 +222,3 @@ def dbscan_reference_owner(model: PythonObject, connection: DBSCANConnection, re
     var owner = _dbscan_prepare(model, connection, key, refs, keys, labels)
     holder.downcast_value_ptr[DBSCANHolder]()[].resident = owner
     return owner
-
-
-def dbscan_mint(model: PythonObject, connection: DBSCANConnection, refs: PythonObject, keys: PythonObject,
-                 labels: PythonObject, rows: Int, features: Int, metric: Int, context: PythonObject) raises:
-    if rows < 1:
-        return
-    try:
-        _ = dbscan_reference_owner(model, connection, refs, keys, labels, rows, features, metric, context)
-    except:
-        dbscan_release(model)
-
-
-def dbscan_reference_labels(model: PythonObject, binding: PythonObject, refs: PythonObject, keys: PythonObject,
-    labels: PythonObject, query: PythonObject, rows: Int, features: Int, metric: Int, eps: Float64,
-    context: PythonObject, resident: Bool = True) raises -> PythonObject:
-    var connection = DBSCANConnection(binding)
-    # Capture admitted query dimensions before a resident prepare/release
-    # allows another Python thread to alter caller-visible metadata.
-    var queries = Int(py=query.shape[0])
-    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
-    var owner = Optional[PythonObject]()
-    if resident:
-        owner = py_present(dbscan_reference_owner(model, connection, refs, keys, labels, rows, features, metric, context))
-    var dst = dbscan_array(List[Int](length=1, fill=queries), "<i4", context)
-    try:
-        if Bool(owner):
-            var driver = owner.value().downcast_value_ptr[DBSCANReferenceOwner]()[].state.driver.copy()
-            var request = DBSCANResidentQuery(Int(py=classical_address(query)), Int(py=classical_address(dst)),
-                owner.value().downcast_value_ptr[DBSCANReferenceOwner]()[].state.handle, queries, features, metric, True, eps)
-            with GILReleased(Python()):
-                _ = driver.resident(request)
-        else:
-            # The old unused chosen-reference output was a private Python
-            # Array. Native scratch keeps its original size and zero fill.
-            var chosen = List[Int32](length=queries, fill=0)
-            var request = DBSCANQueryRequest(Int(py=classical_address(refs)), Int(py=classical_address(keys)),
-                Int(py=classical_address(labels)), Int(py=classical_address(query)), Int(py=classical_address(dst)),
-                Int(chosen.unsafe_ptr()), rows, queries, features, metric, True, eps)
-            with GILReleased(Python()):
-                _ = connection.driver.query(request)
-            _ = chosen^
-    finally:
-        _ = owner
-        _ = connection
-        _ = refs
-        _ = keys
-        _ = labels
-        _ = query
-        _ = dst
-    return dst

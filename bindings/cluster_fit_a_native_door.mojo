@@ -15,25 +15,20 @@
 # which uploads X once per fit. Same entries, same operands, same order: the
 # bits do not move.
 from std.math import isinf
-from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.admitted_family_door import admit_family, admit_family_weights
 from providers.python.array_metadata_pyapi_door import ArrayPin
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.family_raw_attr_pack import family_raw_get, family_raw_get_or
-from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entry
 from std.python._cpython import PyObjectPtr, GILReleased
-from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setattr, py_setitem
+from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setattr
 from bindings.classical_arrays_door import classical_address
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.family_common_unpack import (
-    FAMILY_F32P,
     family_repr,
     family_str,
     family_is_str,
-    family_is_int,
     family_isinstance,
-    family_type_name,
     family_nonfinite,
     family_shape_repr,
 )
@@ -48,8 +43,7 @@ from bindings.operation_names_cfa import (
     CFA_OPN_FAMILY_CFA_MBK_FIT, CFA_OPN_FAMILY_CFA_MBK_PARTIAL_FIT, CFA_OPN_FAMILY_CFA_BISECT_FIT,
     CFA_OPN_FAMILY_CFA_FIT_PREDICT, CFA_OPN_FAMILY_CFA_FIT_TRANSFORM, CFA_OPN_FAMILY_CFA_MEANSHIFT_FIT,
     CFA_OPN_FAMILY_CFA_MEANSHIFT_FIT_PREDICT, CFA_OPN_FAMILY_CFA_OPTICS_FIT, CFA_OPN_FAMILY_CFA_OPTICS_FIT_PREDICT,
-    CFA_OPN_FAMILY_CFA_AP_FIT, CFA_OPN_FAMILY_CFA_AP_FIT_PREDICT, CFA_OPN_FAMILY_CFA_HDBSCAN_FIT,
-    CFA_OPN_FAMILY_CFA_HDBSCAN_FIT_PREDICT)
+    CFA_OPN_FAMILY_CFA_AP_FIT, CFA_OPN_FAMILY_CFA_AP_FIT_PREDICT, CFA_OPN_FAMILY_CFA_HDBSCAN_FIT)
 from bindings.py_cluster_resident import CRES_X_CLUSTER, cres_forget
 from core.kmeans_variants_api import (
     MiniBatchFitRequest, MiniBatchPartialRequest, BisectFitRequest, VariantsResultSlot, VariantsSpan, VARIANTS_CAP_DEVSCAN,
@@ -58,21 +52,13 @@ from core.kmeans_variants_plan import MiniBatchStreamState
 from core.cluster_centroid_fit_api import MeanShiftFitRequest, AffinityFitRequest, CentroidFitResultSlot
 from core.affinity_preference_plan import AffinityPreferencePlan
 from core.optics_fit_api import OpticsMetric, OpticsFitRequest, OpticsFitResultSlot
-from core.hdbscan_fit_api import (
-    HdbscanFitOptions, HdbscanFitRequest, HdbscanFitPlan,
-    HdbscanPredictionRequest, HdbscanPredictionPlan,
-)
-from bindings.hdbscan_fit_boundary_unpack import hdbscan_fit_connection, hdbscan_buffer_span
-from bindings.hdbscan_fit_boundary_pack import hdbscan_pack_head
+from bindings.hdbscan_fit_boundary_pack import hdbscan_fit
 from bindings.optics_fit_boundary_door import optics_fit_connection, OpticsPackedResult
 from bindings.cluster_centroid_fit_boundary_door import centroid_fit_connection, CentroidPackedResult
 from bindings.affinity_preference_boundary_door import affinity_preference_prepare
 from bindings.kmeans_variants_boundary_door import (
     variants_connection, variants_span, VariantsAuxiliaryPins, VariantsPackedResult,
 )
-from providers.python.estimator_binding_pyapi_door import _estimator_mode_word
-from bindings.mode_answer_door import fast_answers_compiled_code
-from core.mode_answer import MODE_FAMILY_CLUSTER
 from bindings.py_optional import py_or_none, py_present
 from bindings.cluster_keys_unpack import cluster_keys
 from bindings.py_balanced import py_item
@@ -707,232 +693,10 @@ def _affinity_fit(model: PythonObject, binding: PythonObject, source: PythonObje
 
 
 # ---------------------------------------------------------------- HDBSCAN
-
-def _hdbscan_int_param(model: PythonObject, name: String) raises -> PythonObject:
-    var value = _attr(model, name)
-    if not family_is_int(value):
-        raise Error("TypeError: mojolearn HDBSCAN: " + name + " must be an int, got " + family_type_name(value))
-    return value
-
-
-def _hdbscan_mode(model: PythonObject, binding: PythonObject, context: PythonObject) raises:
-    """`HDBSCAN._extension`: the binary's own compile-time mode must be the
-    one requested."""
-    var b = native_loaded_module("builtins")
-    var want = _attr_or_none(model, "numeric_mode")
-    var nk = cluster_keys()
-    if want is None or not _truthy(want):
-        want = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
-    var getter = neural_descriptor_entry(binding, "hdbscan_numeric_mode", False)
-    if getter is not None:
-        # Perf (lane perf3-cluster-gp-gate): the compiled mode word is a
-        # constant of the loaded binary, read once per (module, getter) for
-        # the process, as GaussianMixture's _check_mode reads it
-        # (bindings/mixture_native_door.mojo), not called on every fit and query.
-        var got = _estimator_mode_word(binding, getter)
-        var codes = py_item(context, nk[].k_family_cfa_hdbscan_mode_codes)
-        var wanted = py_get(codes, want, PythonObject(None))
-        # The word `fast` answered by the identical set (core/mode_answer.mojo,
-        # family CLUSTER) matches the identical binary: tested on the
-        # mismatch branch only, so a matching call pays nothing.
-        if (wanted is None or Int(py=wanted) != got) and not fast_answers_compiled_code(
-                want, codes, got, MODE_FAMILY_CLUSTER):
-            raise Error("RuntimeError: mojolearn HDBSCAN: numeric_mode=" + family_repr(want) + " was requested but "
-                        + String(py_item(py_fields(binding), nk[].k___name__)) + " reports compile-time "
-                        + "mode code " + String(got) + "; rebuild it with bash bindings/build_hdbscan.sh")
-
-
-def _hdbscan_fit(model: PythonObject, binding: PythonObject, source: PythonObject,
-                 context: PythonObject) raises:
-    """`HDBSCAN.fit(X)`."""
-    var b = native_loaded_module("builtins")
-    # The one admission path: the rank and emptiness refusals, then the
-    # borrow or the cast (family_view deleted).
-    var admitted = admit_family(source, 2, "X", context)
-    var x = admitted.array
-    # `as_f32_c`'s `copied`: the cast made new storage.
-    var copied = not admitted.borrowed
-    var n = Int(py=x.shape[0])
-    var d = Int(py=x.shape[1])
-    if n < 2:
-        # scikit-learn's check_array wording (ensure_min_samples=2); the
-        # mutual-reachability tree needs two points
-        raise Error("Found array with " + String(n) + " sample(s) (shape=(" + String(n) + ", " + String(d)
-                    + ")) while a minimum of 2 is required.")
-    var min_cluster_size = _hdbscan_int_param(model, "min_cluster_size")
-    var max_cluster_size = _hdbscan_int_param(model, "max_cluster_size")
-    var ms_field = _attr(model, "min_samples")
-    var min_samples: PythonObject
-    if ms_field is None:
-        min_samples = _int(min_cluster_size)
-    elif not family_is_int(ms_field):
-        raise Error("TypeError: mojolearn HDBSCAN: min_samples must be an int or None")
-    else:
-        min_samples = _int(ms_field)
-    var metric_field = _attr(model, "metric")
-    var metric: PythonObject
-    var nk = cluster_keys()
-    if family_is_str(metric_field):
-        var metrics = py_item(context, nk[].k_family_cfa_hdbscan_metrics)
-        if not py_contains(metrics, metric_field):
-            raise Error("mojolearn HDBSCAN: metric must be 'euclidean' (cuML's L2SqrtExpanded, the one "
-                        + "fit_hdbscan accepts), got " + family_repr(metric_field))
-        metric = metrics[metric_field]
-    else:
-        metric = _int(metric_field)
-    var method_field = _attr(model, "cluster_selection_method")
-    var method: PythonObject
-    if family_is_str(method_field):
-        var selections = py_item(context, nk[].k_family_cfa_hdbscan_selection)
-        if not py_contains(selections, method_field):
-            raise Error("mojolearn HDBSCAN: cluster_selection_method must be 'eom' or 'leaf', got "
-                        + family_repr(method_field))
-        method = selections[method_field]
-    else:
-        method = _int(method_field)
-    var alpha_field = _attr(model, "alpha")
-    if not family_isinstance(alpha_field, Python.tuple(b.int, b.float)) or family_isinstance(alpha_field, b.bool):
-        raise Error("TypeError: mojolearn HDBSCAN: alpha must be a real number")
-    var cse_field = _attr(model, "cluster_selection_epsilon")
-    if not family_isinstance(cse_field, Python.tuple(b.int, b.float)) or family_isinstance(cse_field, b.bool):
-        raise Error("TypeError: mojolearn HDBSCAN: cluster_selection_epsilon must be a real number")
-    var cse = Float64(py=_float(cse_field))
-    if not (cse >= 0.0) or (isinf(cse) and cse > 0):
-        raise Error("mojolearn HDBSCAN: cluster_selection_epsilon must be a finite number >= 0, got "
-                    + family_repr(cse_field) + " (scikit-learn's range)")
-    var want_pd_field = _attr(model, "prediction_data")
-    if not family_isinstance(want_pd_field, b.bool):
-        raise Error("TypeError: mojolearn HDBSCAN: prediction_data must be a bool")
-    var want_pd = Bool(py=want_pd_field)
-    var labels = family_array(Python.tuple(n), "<i4", context)
-    var core = family_array(Python.tuple(n), "<f4", context)
-    var plan = HdbscanFitPlan(want_pd)
-    # Preserve the original initial address admission before probabilities
-    # allocation. Private info/tree addresses now come from Mojo owners.
-    var source_address = Int(py=classical_address(x))
-    var label_address = Int(py=classical_address(labels))
-    var core_address = Int(py=classical_address(core))
-    var probs = family_array(Python.tuple(n), "<f4", context)
-    if want_pd:
-        plan.storage[0].prepare_tree(n)
-    var probability_address = Int(py=classical_address(probs))
-    _hdbscan_mode(model, binding, context)
-    # Stage every original scalar conversion before machine-word narrowing,
-    # preserving large-int versus later invalid-parameter refusal order.
-    var staged_min_cluster = _int(min_cluster_size)
-    var staged_max_cluster = _int(max_cluster_size)
-    var staged_alpha = _float(alpha_field)
-    var allow_single = _truthy(_attr(model, "allow_single_cluster"))
-    var staged_epsilon = _float(cse_field)
-    var connection = hdbscan_fit_connection(binding)
-    var options = HdbscanFitOptions(n, d, Int(py=min_samples), Int(py=staged_min_cluster),
-        Int(py=staged_max_cluster), allow_single, Int(py=method), Int(py=metric), want_pd,
-        Float64(py=staged_alpha), Float64(py=staged_epsilon))
-    var request = HdbscanFitRequest(VariantsSpan(source_address, n * d),
-        VariantsSpan(label_address, n), VariantsSpan(core_address, n),
-        VariantsSpan(probability_address, n), options.copy())
-    if connection.host:
-        plan.capture_host_source(request)
-    var n_clusters = 0
-    try:
-        with GILReleased(Python()):
-            n_clusters = connection.driver.fit(request, plan)
-    finally:
-        _ = connection.provider
-        _ = x
-        _ = labels
-        _ = core
-        _ = probs
-        _ = plan
-    plan.storage[0].host_source = List[Float32]()
-    _set(model, "n_features_in_", PythonObject(d))
-    _set(model, "labels_", labels)
-    _set(model, "core_distances_", core)
-    _set(model, "probabilities_", probs)
-    _set(model, "n_clusters_", PythonObject(n_clusters))
-    _set(model, "n_outliers_", PythonObject(Int(plan.storage[0].info[1])))
-    _set(model, "n_boruvka_rounds_", PythonObject(Int(plan.storage[0].info[2])))
-    _set(model, "n_condensed_clusters_", PythonObject(Int(plan.storage[0].info[3])))
-    _set(model, "_prediction_data", PythonObject(None))
-    _set(model, "_raw_data", PythonObject(None))
-    if want_pd:
-        _set(model, "_prediction_data", _hdbscan_prediction_data(model, binding, n,
-            Int(plan.storage[0].info[4]), plan, context))
-        # Keep the original borrowed-input copy and publication stage.
-        var raw = x
-        if not copied:
-            raw = family_array(Python.tuple(n, d), "<f4", context)
-            unsafe_memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(raw))),
-                src=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), count=n * d)
-            _ = raw
-            _ = x
-        _set(model, "_raw_data", raw)
-    _ = x
-    _ = plan
-
-
-def _hdbscan_prediction_data(model: PythonObject, binding: PythonObject, n: Int, n_edges: Int,
-    fit_plan: HdbscanFitPlan, context: PythonObject) raises -> PythonObject:
-    """Same prediction-data algorithm and observable mapping; native scratch."""
-    var n_cond = Int(py=_attr(model, "n_condensed_clusters_"))
-    var n_sel = Int(py=_attr(model, "n_clusters_"))
-    var pd = Python.dict()
-    py_setitem(pd, PythonObject("n_edges"), PythonObject(n_edges))
-    py_setitem(pd, PythonObject("n_condensed"), PythonObject(n_cond))
-    var parents = hdbscan_pack_head(Int(fit_plan.storage[0].tree_parents.unsafe_ptr()), n_edges, "<i4", context)
-    var children = hdbscan_pack_head(Int(fit_plan.storage[0].tree_children.unsafe_ptr()), n_edges, "<i4", context)
-    var lambdas = hdbscan_pack_head(Int(fit_plan.storage[0].tree_lambdas.unsafe_ptr()), n_edges, "<f4", context)
-    var sizes = hdbscan_pack_head(Int(fit_plan.storage[0].tree_sizes.unsafe_ptr()), n_edges, "<i4", context)
-    var inverse = hdbscan_pack_head(Int(fit_plan.storage[0].inverse.unsafe_ptr()), max(n_sel, 1), "<i4", context)
-    var deaths = family_array(Python.tuple(n_cond), "<f4", context)
-    var selected = family_array(Python.tuple(max(n_sel, 1)), "<i4", context)
-    var plan = HdbscanPredictionPlan(n)
-    var offsets = family_array(Python.tuple(n_sel + 1), "<i4", context)
-    var index_into = family_array(Python.tuple(n_edges + 1), "<i4", context)
-    py_setitem(pd, PythonObject("parents"), parents)
-    py_setitem(pd, PythonObject("children"), children)
-    py_setitem(pd, PythonObject("lambdas"), lambdas)
-    py_setitem(pd, PythonObject("sizes"), sizes)
-    py_setitem(pd, PythonObject("inverse_label_map"), inverse)
-    py_setitem(pd, PythonObject("deaths"), deaths)
-    py_setitem(pd, PythonObject("selected_clusters"), selected)
-    # The mapping is still private until return. Preserve its original key
-    # insertion order without constructing the replaced full-capacity Array.
-    py_setitem(pd, PythonObject("exemplar_idx"), PythonObject(None))
-    py_setitem(pd, PythonObject("exemplar_label_offsets"), offsets)
-    py_setitem(pd, PythonObject("index_into_children"), index_into)
-    var labels = _attr(model, "labels_")
-    var connection = hdbscan_fit_connection(binding)
-    var request = HdbscanPredictionRequest(hdbscan_buffer_span(labels, n), hdbscan_buffer_span(parents, n_edges),
-        hdbscan_buffer_span(children, n_edges), hdbscan_buffer_span(lambdas, n_edges), hdbscan_buffer_span(sizes, n_edges), hdbscan_buffer_span(inverse, n_sel),
-        hdbscan_buffer_span(deaths, n_cond), hdbscan_buffer_span(selected, n_sel), hdbscan_buffer_span(offsets, n_sel + 1), hdbscan_buffer_span(index_into, n_edges + 1),
-        n, n_edges, n_cond, n_sel)
-    plan.storage[0].capture(request)
-    var n_exemplars = 0
-    try:
-        with GILReleased(Python()):
-            n_exemplars = connection.driver.prediction(request, plan)
-    finally:
-        _ = connection.provider
-        _ = labels
-        _ = parents
-        _ = children
-        _ = lambdas
-        _ = sizes
-        _ = inverse
-        _ = deaths
-        _ = selected
-        _ = offsets
-        _ = index_into
-        _ = plan
-        _ = fit_plan
-    plan.storage[0].release_inputs()
-    py_setitem(pd, PythonObject("n_exemplars"), PythonObject(n_exemplars))
-    py_setitem(pd, PythonObject("exemplar_idx"),
-        hdbscan_pack_head(Int(plan.storage[0].exemplars.unsafe_ptr()), max(n_exemplars, 1), "<i4", context))
-    _ = plan
-    _ = labels
-    return pd
+# HDBSCAN.fit is `hdbscan_fit` (bindings/hdbscan_fit_boundary_pack.mojo: UNPACK,
+# typed RUN, PACK), called directly by HDBSCAN's lifecycle. The one code
+# `family_cfa_hdbscan_fit` below stays for the parallel fit plan
+# (bindings/parallel_plan_specs.mojo), which enters here.
 
 
 # ---------------------------------------------------------------- door
@@ -985,9 +749,6 @@ def cluster_fit_a_operation(model: PythonObject, operation: Int, args: PythonObj
         _affinity_fit(model, binding, args[1], context)
         return _attr(model, "labels_")
     if operation == CFA_OPN_FAMILY_CFA_HDBSCAN_FIT:
-        _hdbscan_fit(model, binding, args[1], context)
+        _ = hdbscan_fit(model, binding, args[1], context)
         return model
-    if operation == CFA_OPN_FAMILY_CFA_HDBSCAN_FIT_PREDICT:
-        _hdbscan_fit(model, binding, args[1], context)
-        return _attr(model, "labels_")
     raise Error("RuntimeError: unknown family operation code " + String(operation))

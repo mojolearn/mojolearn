@@ -443,7 +443,7 @@ class KernelDensity(_NumericModeMixin):
 
     # The constructor checks (`_validate_params`), the device-resident fit
     # handle and its release live in the native owner
-    # (bindings/neighbors_kde_native_door.mojo): `fit`, `score_samples` and `score`
+    # (bindings/kde_public_native_pack.mojo): `fit`, `score_samples` and `score`
     # are one native call each.
 
     def _release_resident_fit(self):

@@ -1,10 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # Shared pieces of the decomposition expansion's native owners
 # (bindings/decomp_native.mojo and the per-class files it dispatches to):
-# instance fields with Python's AttributeError, the fitted numeric mode's
-# connected x_decomp entries, mojolearn Array outputs and scalar reads.
-from bindings.mode_answer_door import answer_mode_object
-from core.mode_answer import MODE_FAMILY_DECOMP_KIT
+# instance fields with Python's AttributeError, mojolearn Array outputs and
+# scalar reads. (The estimator's x_decomp image is resolved by
+# bindings/decomp_kit_native_door.mojo `decomp_entries_routed`.)
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_type, py_contains, py_setitem
@@ -52,30 +51,6 @@ def decomp_set_mode(fields: PythonObject, context: PythonObject) raises:
     if mode is None:
         mode = context["backend_fields"]["_DEFAULT_MODE"]
     py_setitem(fields, "numeric_mode_", mode)
-
-
-def decomp_entries(model: PythonObject, fields: PythonObject, names: PythonObject,
-                   context: PythonObject) raises -> PythonObject:
-    """The connected _mojolearn_x_decomp entries of the fitted mode
-    (`_Kit(self.numeric_mode_)`); every name in `names` must be exported."""
-    var b = native_loaded_module("builtins")
-    var mode = decomp_attr(model, fields, "numeric_mode_")
-    if py_type(mode) is not b.str:
-        raise Error("numeric_mode must be fast, identical or None")
-    var name = py_call(py_call(mode.strip).lower)
-    var name_word = String(name)
-    if name_word != "identical" and name_word != "fast":
-        raise Error("numeric_mode must be fast, identical or None")
-    answer_mode_object(name, name_word, MODE_FAMILY_DECOMP_KIT)
-    var entries = context["decomp_entries"][name]
-    if py_type(entries) is b.str:
-        raise Error(String(entries))
-    for k in range(len(names)):  # driver-loop: over the owner's required entry names
-        if py_get(entries, names[k]) is None:
-            raise Error("NotImplementedError: mojolearn " + String(py_type(model).__name__) + ": this build of "
-                        + "_mojolearn_x_decomp does not export " + String(names[k])
-                        + "; rebuild it with bindings/build_x_decomp.sh")
-    return entries
 
 
 def decomp_f32(shape: PythonObject, context: PythonObject) raises -> PythonObject:
