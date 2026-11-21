@@ -25,10 +25,11 @@ from bindings.member_boundary_door import member_admit_serving, member_pack, mem
 from bindings.member_owner_unpack import MemberOwner
 from bindings.member_set_door import MEMBER_SET_NATIVE
 from core.member_abi import (
-    MemberCall, MemberMatrix, member_call, member_new, member_free, member_kind_capabilities,
+    MemberCall, MemberMatrix, MemberPlan, member_call, member_new, member_free, member_kind_capabilities,
     MEMBER_OP_FIT, MEMBER_OP_EXPORT, MEMBER_CAN_FIT, MEMBER_CAN_EXPORT, MEMBER_CAN_COEF, MEMBER_CAN_IMPORTANCES,
     MEMBER_CAN_CLASSIFIER, MEMBER_BLOCK_COEF, MEMBER_BLOCK_FEATURE_IMPORTANCES, MEMBER_F32, MEMBER_I32,
 )
+from core.member_families import MEMBER_FAMILY_TREE, MEMBER_FAMILY_FOREST
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.optimizer_public_words_unpack import stash_python_error
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
@@ -219,7 +220,11 @@ struct RfeMember(Movable):
     every round reads by address (float32 values for a regressor kind, the
     int32 class codes of `labels` for a classifier kind: encoded once per
     fit); `block` names the fitted block the importances come from and
-    `squared` whether it is squared and summed over its rows."""
+    `squared` whether it is squared and summed over its rows.
+    `importance_word`: the rounds' fits compute feature importances because
+    this door set the family's parameter word for it (the tree and forest
+    families, core/forest_member_run.mojo word [10]); the final fit, whose
+    importances nobody reads, clears it."""
     var native: Bool
     var owner: MemberOwner
     var template: PythonObject
@@ -231,6 +236,7 @@ struct RfeMember(Movable):
     var labels: PythonObject
     var block: Int
     var squared: Bool
+    var importance_word: Bool
 
     def __init__(out self):
         self.native = False
@@ -244,6 +250,7 @@ struct RfeMember(Movable):
         self.labels = PythonObject(None)
         self.block = 0
         self.squared = False
+        self.importance_word = False
 
 
 def _rfe_member(estimator: PythonObject, y: PythonObject, n: Int, g: PythonObject, fit_params: PythonObject,
@@ -295,6 +302,16 @@ def _rfe_member(estimator: PythonObject, y: PythonObject, n: Int, g: PythonObjec
             # The target once, as a regressor member's fit door admits it
             # (present, real, one column, finite, as long as X).
             member.y = classical_check_y(y, n, classical_estimator_name(estimator), member_context)
+        # A DecisionTree or RandomForest member computes its feature
+        # importances only when its parameter word [10] asks for them
+        # (core/forest_member_run.mojo: "a caller that reads importances sets
+        # it to 1 in `plan.params` before `member_new`"; its admission writes
+        # 0, and the kind's mask has MEMBER_CAN_IMPORTANCES only then). Set
+        # before the mask is asked, unless the getter names `coef_`.
+        if ((owner.plan.family == MEMBER_FAMILY_TREE or owner.plan.family == MEMBER_FAMILY_FOREST)
+                and getter != "coef_" and len(owner.plan.params) > 10):
+            owner.plan.params[10] = 1.0
+            member.importance_word = True
         # The mask of THIS kind (the family's union also holds its other
         # kinds' bits): one state minted, asked and released, once per fit.
         var mask = member_kind_capabilities(owner.plan)
@@ -321,21 +338,23 @@ def _rfe_member(estimator: PythonObject, y: PythonObject, n: Int, g: PythonObjec
     return member^
 
 
-def _rfe_member_fit(member: RfeMember, block: PythonObject, n: Int, k: Int) raises -> MemberCall:
-    """One member state fitted on the round's (n, k) float32 host block, the
-    GIL released for the fit. The caller frees it (`member_free`)."""
-    var call = member_new(member.owner.plan)
+def _rfe_member_fit(member: RfeMember, plan: MemberPlan, block: PythonObject, n: Int, k: Int) raises -> MemberCall:
+    """One member state of `plan` (the member's own plan, or the final fit's
+    copy of it) fitted on the round's (n, k) float32 host block, the GIL
+    released for the fit. The caller frees it (`member_free`) and keeps
+    `plan` alive until then (the call holds the address of its words)."""
+    var call = member_new(plan)
     var done = False
     try:
         call.x = MemberMatrix(Int(py=classical_address(block)), n, k)
         call.y = MemberMatrix(member.y_address, n, 1, member.y_dtype)
         var py = Python()
         with GILReleased(py):
-            _ = member_call(member.owner.plan.member, MEMBER_OP_FIT, call)
+            _ = member_call(plan.member, MEMBER_OP_FIT, call)
         done = True
     finally:
         if not done:
-            member_free(member.owner.plan, call)
+            member_free(plan, call)
         _ = block  # keep the Python objects alive through the native call above
         _ = member.y
     return call^
@@ -349,7 +368,7 @@ def _rfe_member_words(member: RfeMember, block: PythonObject, n: Int, m: Int,
     `_keys_of` stages: m words, or (rows, m) for a coefficient block with one
     row per class or output. Raises when the member refuses the round; the
     caller then runs the estimator's own doors (nothing was staged)."""
-    var call = _rfe_member_fit(member, block, n, m)
+    var call = _rfe_member_fit(member, member.owner.plan, block, n, m)
     var words = PythonObject(None)
     try:
         call.block = member.block
@@ -377,15 +396,21 @@ def _rfe_member_final(member: RfeMember, block: PythonObject, n: Int, k: Int, b:
     block, its state written into the clone (`member_pack`, a classifier
     with its labels: the attributes its own fit writes, so RFE's predict /
     score / transform read it as before) and released."""
-    var call = _rfe_member_fit(member, block, n, k)
+    # The final fit is the estimator's plain fit: the importance word this
+    # door set for the rounds is cleared (nobody reads the final fit's
+    # importances, and computing them costs a column-major copy of the block).
+    var plan = member.owner.plan.copy()
+    if member.importance_word:
+        plan.params[10] = 0.0
+    var call = _rfe_member_fit(member, plan, block, n, k)
     try:
         if member.labels is None:
-            member_pack(member.template, member.fields, member.member_context, b, member.owner.plan, call.state)
+            member_pack(member.template, member.fields, member.member_context, b, plan, call.state)
         else:
-            member_pack_labeled(member.template, member.fields, member.member_context, b, member.owner.plan,
+            member_pack_labeled(member.template, member.fields, member.member_context, b, plan,
                                 call.state, member.labels)
     finally:
-        member_free(member.owner.plan, call)
+        member_free(plan, call)
     return member.template
 
 

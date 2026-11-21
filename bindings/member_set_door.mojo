@@ -71,7 +71,7 @@ from bindings.member_held_door import MemberHeld, member_held, member_held_relea
 from bindings.admitted_input_unpack import admitted_unfilled
 from bindings.native_unit_os_threads_run import native_unit_cores
 from bindings.prep_native_estimator_door import prep_estimator_plan
-from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
+from bindings.py_balanced import py_call, py_type, py_get
 from core.device_route import DEVICE_CPU
 from core.host_parallel import host_parallelize
 from core.member_abi import (
@@ -670,10 +670,6 @@ def member_set_pack(mut set: MemberSet, u: Int, classes: PythonObject, b: Python
         var call = MemberCall(set.run.plans[u].route, set.run.states[u])
         member_free(set.run.plans[u], call)
     set.run.states[u] = 0
-    # A family whose pack does not write the class count yet (the tree
-    # families: owed by their publication lane) gets it here, as round 1 did.
-    if classes is not None and not py_contains(fields, "n_classes_"):
-        py_setitem(fields, "n_classes_", PythonObject(len(classes)))
     return estimator
 
 
