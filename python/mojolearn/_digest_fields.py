@@ -13,8 +13,8 @@ The field source of a class, first match in its ancestry:
 2. A connected save schema (`_native_archive_bridge.register`): the members
    `save` writes.
 3. Otherwise: every public fitted attribute (an instance field whose name ends
-   in "_" and does not start with "_", value not None), minus the names in
-   `SKIP`, plus the private fields in `EXTRA`.
+   in "_" and does not start with "_", value not None), plus the private
+   fields in `EXTRA`.
 
 This module holds declarations and import-time glue only: nothing here runs
 when a model is fitted, and the read itself is one native call.
@@ -22,15 +22,6 @@ when a model is fitted, and the read itself is one native call.
 #: class name -> the private instance fields that are fitted state (they
 #: decide the model's answers and no public attribute carries them).
 EXTRA_BY_NAME = {}
-
-#: class name -> the public trailing-underscore fields that are not fitted
-#: state: wall times, which differ between two equal fits.
-SKIP_BY_NAME = {
-    "GridSearchCV": ("cv_results_", "refit_time_"),
-    "RandomizedSearchCV": ("cv_results_", "refit_time_"),
-    "HalvingGridSearchCV": ("cv_results_", "refit_time_"),
-    "HalvingRandomSearchCV": ("cv_results_", "refit_time_"),
-}
 
 #: class name -> why it has no digest yet, in words a user reads.
 REFUSED_BY_NAME = {
@@ -42,7 +33,6 @@ REFUSED_BY_NAME = {
 
 #: The tables the compiled walk reads, keyed by class (filled by `declare`).
 EXTRA = {}
-SKIP = {}
 REFUSED = {}
 
 #: The one connection of the `digest_` property: the property object, the
@@ -59,8 +49,6 @@ def declare(cls):
     name = cls.__name__
     if name in EXTRA_BY_NAME:
         EXTRA[cls] = EXTRA_BY_NAME[name]
-    if name in SKIP_BY_NAME:
-        SKIP[cls] = SKIP_BY_NAME[name]
     if name in REFUSED_BY_NAME:
         REFUSED[cls] = REFUSED_BY_NAME[name]
 
@@ -75,7 +63,7 @@ def connect(base):
     from ._native_archive_bridge import connect as connect_archive
     entry, context = connect_archive()
     if "archive_unavailable" not in context:
-        context.update(digest_base=base, digest_extra=EXTRA, digest_skip=SKIP, digest_refused=REFUSED)
+        context.update(digest_base=base, digest_extra=EXTRA, digest_refused=REFUSED)
         CONNECTION["entry"] = entry
     CONNECTION["context"] = context
     return entry, context
