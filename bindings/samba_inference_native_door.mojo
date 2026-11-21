@@ -7,22 +7,26 @@ session, one step op per layer, the hidden state on the device. The host
 route (CPU builds, the CPU inference model) runs the installed CPU kernels
 layer by layer. Public classes and buffer exporters remain CPython-owned
 interface records.
+
+Door split: this file is UNPACK (ids, state pieces and cursors, the model's
+route and addresses) and PACK (the logits array, the reports, the cursors).
+RUN is typed (training/samba_inference_run.mojo: the admission checks, the
+program's open and forward words, the host route's embedding and head, the
+loss) plus the table calls made with the GIL released. The per-layer block
+calls of the host route are the block door's own operations.
 """
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from core.samba_ids_impl import samba_inference_ids_into, samba_copy_row_prefixes
 from std.memory import unsafe_memcpy
 from bindings.generation_buffers_door import generation_initialize_binding, generation_array, generation_array_unfilled, generation_address, generation_weight_address, py_ints
-from bindings.samba_state_native_door import samba_fields, samba_primitive
+from bindings.samba_state_native_door import samba_fields
 from bindings.samba_route_unpack import samba_route
 from core.entry_table import EntryRef, entry_ref_call
 from core.mamba_state_entry_table import Mamba3StateRoute, MAMBA3_STATE_FORWARD, MAMBA3_STATE_DECODE
 from core.neural_entry_table import NEURAL_MAMBA3_OWNED_STATE
 from providers.python.mamba3_prefill_session_pyapi_door import mamba3_prefill_session_serves, mamba3_prefill_session_run
-from core.samba_entry_table import (
-    SambaEntryKey, SAMBA_PRIM_EMBEDDING_FORWARD,
-    SAMBA_PRIM_RMS_NORM_FORWARD, SAMBA_PRIM_LINEAR_FORWARD, SAMBA_PRIM_CE_LOSS,
-)
+from core.samba_entry_table import SambaEntryKey
 from bindings.samba_training_native_door import samba_ids
 from std.python._cpython import GILReleased
 from core.samba_entry_table_programs import (
@@ -37,8 +41,13 @@ from bindings.causal_lm_construct_door import _model_bindings
 from bindings.py_balanced import py_call, py_get, py_setattr, py_setitem, py_type
 from bindings.byte_perf_helpers_unpack import byte_view_bytes
 from bindings.samba_admission_door import samba_admit_model_fields
-# RUN (lane rs-neural): typed pieces, no Python import.
-from training.samba_inference_run import _m3_shapes, _m3_names
+# RUN: typed pieces, no Python import.
+from training.samba_inference_run import (
+    _m3_shapes, _m3_names, samba_allocate_check, samba_ids_rank_check, samba_ids_extent_check, samba_ids_signed,
+    samba_program_open_words, samba_program_stateless_addresses, samba_program_stateless_words,
+    samba_program_state_addresses, samba_program_state_words, samba_host_state_check, samba_host_embed_run,
+    samba_host_head_run, samba_loss_rows_check, samba_ce_loss_run,
+)
 # The stateless forward's route (lane restore-samba-resident-forward): the
 # resident forward by default, the stack program under the B-arm define.
 from providers.python.samba_resident_pyapi_door import samba_resident_native_forward
@@ -68,8 +77,7 @@ def samba_allocate(model: PythonObject, batch: PythonObject, maximum: PythonObje
         cap = Int(py=py_call(operator.index, maximum))
     except error:
         raise Error("TypeError: SambaStack.allocate_state: batch_size and max_tokens must be integers")
-    if b < 1 or cap < 1:
-        raise Error("SambaStack.allocate_state: batch_size and max_tokens must be positive")
+    samba_allocate_check(b, cap)
     var fields = samba_fields(model)
     var config = samba_fields(fields["config"])
     var blocks = fields["_blocks"]
@@ -207,25 +215,28 @@ def _m3_state_forward(block: PythonObject, x: PythonObject, state: PythonObject,
 # Restore: git apply experiments/removed/SAMBA_THREE_TIER_FORWARD.patch
 
 
+def _samba_optional_word(value: PythonObject) raises -> Int:
+    return 0 if value is None else Int(py=value)
+
+
 def samba_program_words(fields: PythonObject, config: PythonObject, b: Int, smax: Int) raises -> Tuple[List[Int], Float64]:
-    """UNPACK, once per program open: SAMBA_PROGRAM_OPEN's integer words
-    ([n_layers, layer codes, vocab, d_model, n_heads, n_kv_heads, head_dim,
-    intermediate, tie, n_total, batch_size, max_tokens]) and norm_eps."""
+    """UNPACK, once per program open, the configuration's words; RUN builds
+    SAMBA_PROGRAM_OPEN's integer words (training/samba_inference_run.mojo
+    `samba_program_open_words`); returns them with norm_eps."""
     var layers = config["layers"]
     var n = len(layers)
-    var words = List[Int](capacity=n + 11)
-    words.append(n)
+    var codes = List[Int](capacity=n)
     for i in range(n):  # driver-loop: over model layer metadata at program creation
-        words.append(0 if String(layers[i]) == "mamba3" else 1)
-    words.append(Int(py=config["vocab"]))
-    words.append(Int(py=config["d_model"]))
-    for name in [String("n_heads"), String("n_kv_heads"), String("head_dim"), String("intermediate")]:  # driver-loop: over program shape metadata
-        var value = config[name]
-        words.append(0 if value is None else Int(py=value))
-    words.append(1 if Bool(py=config["tie_embeddings"]) else 0)
-    words.append(Int(py=fields["n_total"]))
-    words.append(b)
-    words.append(smax)
+        codes.append(0 if String(layers[i]) == "mamba3" else 1)
+    var vocab = Int(py=config["vocab"])
+    var d_model = Int(py=config["d_model"])
+    var n_heads = _samba_optional_word(config["n_heads"])
+    var n_kv_heads = _samba_optional_word(config["n_kv_heads"])
+    var head_dim = _samba_optional_word(config["head_dim"])
+    var intermediate = _samba_optional_word(config["intermediate"])
+    var tie = Bool(py=config["tie_embeddings"])
+    var words = samba_program_open_words(codes, vocab, d_model, n_heads, n_kv_heads, head_dim, intermediate, tie,
+                                         Int(py=fields["n_total"]), b, smax)
     return (words^, Float64(py=config["norm_eps"]))
 
 
@@ -399,7 +410,8 @@ def _samba_program_call(model: PythonObject, fields: PythonObject, config: Pytho
     # per-block calls assign them: the program's step ops keep the last
     # run's reports, read back with the run's one wait
     # (training/samba_program.mojo enqueue_reports); then the state pieces.
-    var addresses: List[Int] = [registry, Int(py=ids._addr), Int(py=output._addr), 0]
+    var ids_addr = Int(py=ids._addr)
+    var output_addr = Int(py=output._addr)
     if state is None:
         # lane perf-neural-sessions (2026-11-13): the stateless forward
         # requests no Mamba-3 reports. A stack's Mamba-3 blocks discard them
@@ -412,27 +424,26 @@ def _samba_program_call(model: PythonObject, fields: PythonObject, config: Pytho
         # downloaded the reports into them and rewrote four block fields.
         # Reports stay on the stateful forward and the step, whose callers
         # read them. No kernel and no logits byte changes.
-        var stateless_words: List[Int] = [b, l, 0]
-        _ = samba_program_call(program, SAMBA_PROGRAM_FORWARD, addresses, stateless_words)
+        var stateless_addresses = samba_program_stateless_addresses(registry, ids_addr, output_addr)
+        var stateless_words = samba_program_stateless_words(b, l)
+        _ = samba_program_call(program, SAMBA_PROGRAM_FORWARD, stateless_addresses, stateless_words)
         _ = ids  # keep the Python object alive through the native call above
         _ = output
         return output
     var report_addresses = List[Int]()
     var reports = _samba_program_reports(fields, config, b, report_addresses)
-    for i in range(len(report_addresses)):  # driver-loop: over the Mamba-3 layers' report addresses
-        addresses.append(report_addresses[i])
-    var words: List[Int] = [b, l, len(report_addresses)]
     # The state was admitted at the public door (samba_admit).
     var keep = List[PythonObject]()
     var copies = List[PythonObject]()
     var state_words = samba_state_words(model, state, "SambaStack", keep, copies)
     var cursors = List[Int](length=len(state_words[1]), fill=0)
-    addresses[3] = Int(cursors.unsafe_ptr())
-    for i in range(len(state_words[0])):  # driver-loop: over the state's piece addresses (per layer)
-        addresses.append(state_words[0][i])
-    for i in range(len(state_words[1])):  # driver-loop: over the state's cursor words (two per layer)
-        words.append(state_words[1][i])
+    # RUN's request: each list allocated once at its exact size (the former
+    # door grew one list by appends, per call and per token).
+    var addresses = samba_program_state_addresses(registry, ids_addr, output_addr, Int(cursors.unsafe_ptr()),
+                                                  report_addresses, state_words[0])
+    var words = samba_program_state_words(b, l, len(report_addresses), state_words[1])
     _ = samba_program_call(program, SAMBA_PROGRAM_FORWARD, addresses, words)
+    _ = output  # keep the Python object alive through the native call above
     _samba_publish_reports(fields, config, reports)
     _writeback(copies)
     _ = keep^
@@ -447,18 +458,16 @@ def _samba_inference_ids(value: PythonObject, vocab: Int, step: Bool, lengths: P
     var own = py_type(value) is context["neural"]["array_class"]
     var view = value._mv if own else py_call(bi.memoryview, value)
     var shape = value.shape if own else view.shape
-    if (len(shape) != 2 and not (step and len(shape) == 1)):
-        raise Error("Samba: inputs must be (B,L) integer ids, or (B,) for step")
+    var rank = len(shape)
+    samba_ids_rank_check(rank, step)
     var b = Int(py=shape[0])
-    var l = 1 if len(shape) == 1 else Int(py=shape[1])
-    if b < 1 or l < 1 or (step and l != 1):
-        raise Error("Samba: input batch/length must be positive; step takes one token per row")
+    var l = 1 if rank == 1 else Int(py=shape[1])
+    samba_ids_extent_check(b, l, step)
     var sizes = List[Int]()
     if lengths is not None:
         sizes = _neural_lengths(lengths, b, l, context["neural"])
     var fmt = String(py_call(view.format.lstrip, "=@<"))
-    if fmt != "b" and fmt != "B" and fmt != "h" and fmt != "H" and fmt != "i" and fmt != "I" and fmt != "l" and fmt != "L" and fmt != "q" and fmt != "Q":
-        raise Error("Samba: inputs must be native-endian integer ids")
+    var signed = samba_ids_signed(fmt)
     # One native C-order copy of the ids under a buffer pin (formerly
     # view.tobytes then array.frombytes: two Python copies per token step).
     var item = Int(py=view.itemsize)
@@ -467,7 +476,6 @@ def _samba_inference_ids(value: PythonObject, vocab: Int, step: Bool, lengths: P
     var ids = generation_array([b, l], "i")
     var dst = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=ids._addr))
     _ = ids  # keep the Python object alive through the native call above
-    var signed = fmt == "b" or fmt == "h" or fmt == "i" or fmt == "l" or fmt == "q"
     samba_inference_ids_into(Int(packed.unsafe_ptr()), item, signed, b, l,
                              column_major, vocab, lengths is not None, sizes, dst)
     _ = packed  # keep the Python object alive through the native call above
@@ -476,12 +484,6 @@ def _samba_inference_ids(value: PythonObject, vocab: Int, step: Bool, lengths: P
     # The admitted ragged lengths go back to samba_forward, which formerly
     # admitted them a second time for the output prefix copy.
     return (ids, sizes^)
-
-
-def _samba_host_primitive(prim: EntryRef, op: Int, addresses: List[Int], ints: List[Int],
-                          floats: List[Float64]) raises:
-    """One host route primitive through the resolved entry."""
-    _ = samba_primitive(prim, op, addresses, ints, floats)
 
 
 def samba_forward(model: PythonObject, inputs: PythonObject, state: PythonObject, lengths: PythonObject,
@@ -560,14 +562,18 @@ def samba_forward(model: PythonObject, inputs: PythonObject, state: PythonObject
         var states = PythonObject(None)
         if state is not None:
             var slots = samba_fields(state)
-            if Int(py=slots["batch_size"]) != b or len(slots["layers"]) != len(config["layers"]):
-                raise Error("Samba: decode state batch or layer count differs")
+            samba_host_state_check(Int(py=slots["batch_size"]), len(slots["layers"]), b, len(config["layers"]))
             states = slots["layers"]
         var arrays = fields["arrays"]
         var hidden = generation_array([b, l, d])
         var prim = model_route.primitives()
-        _samba_host_primitive(prim, SAMBA_PRIM_EMBEDDING_FORWARD,
-            [Int(py=hidden._addr), Int(py=arrays["embed.weight"]._addr), Int(py=ids._addr)], [b * l, v, d], [])
+        var embed_weight = arrays["embed.weight"]
+        var hidden_addr = Int(py=hidden._addr)
+        var embed_addr = Int(py=embed_weight._addr)
+        var host_ids_addr = Int(py=ids._addr)
+        with GILReleased(Python()):
+            samba_host_embed_run(prim, hidden_addr, embed_addr, host_ids_addr, b * l, v, d)
+        _ = embed_weight
         _ = hidden  # keep the Python object alive through the native call above
         _ = ids  # keep the Python object alive through the native call above
         for i in range(len(config["layers"])):  # driver-loop: over native model layer execution owners
@@ -585,13 +591,19 @@ def samba_forward(model: PythonObject, inputs: PythonObject, state: PythonObject
         output = generation_array([b, l, v])
         var head = arrays["embed.weight"] if Bool(py=config["tie_embeddings"]) else arrays["lm_head.weight"]
         var normalized = generation_array([b, l, d])
-        _samba_host_primitive(prim, SAMBA_PRIM_RMS_NORM_FORWARD,
-            [Int(py=normalized._addr), Int(py=hidden._addr), Int(py=arrays["norm_f.weight"]._addr)], [b * l, d],
-            [Float64(py=config["norm_eps"])])
-        _ = normalized  # keep the Python object alive through the native call above
+        var norm_weight = arrays["norm_f.weight"]
+        var output_addr = Int(py=output._addr)
+        var normalized_addr = Int(py=normalized._addr)
+        var last_addr = Int(py=hidden._addr)
+        var norm_addr = Int(py=norm_weight._addr)
+        var head_addr = Int(py=head._addr)
+        var eps = Float64(py=config["norm_eps"])
+        # RUN: the final norm and the head under ONE GIL release (two until
+        # 2026-11-21, one per primitive; no interpreter work sat between them).
+        with GILReleased(Python()):
+            samba_host_head_run(prim, output_addr, normalized_addr, last_addr, norm_addr, head_addr, b * l, v, d, eps)
+        _ = norm_weight
         _ = hidden  # keep the Python object alive through the native call above
-        _samba_host_primitive(prim, SAMBA_PRIM_LINEAR_FORWARD,
-            [Int(py=output._addr), Int(py=normalized._addr), Int(py=head._addr)], [b * l, v, d], [])
         _ = normalized  # keep the Python object alive through the native call above
         _ = head  # keep the Python object alive through the native call above
         _ = output  # keep the Python object alive through the native call above
@@ -625,25 +637,28 @@ def samba_loss(model: PythonObject, inputs: PythonObject, targets: PythonObject,
     var v = Int(py=samba_fields(fields["config"])["vocab"])
     var y = samba_ids(targets, v, True, context)
     var rows = Int(py=logits.shape[0]) * Int(py=logits.shape[1])
-    if Int(py=y.size) != rows:
-        raise Error("SambaStack.loss: targets must contain one class index per logit row")
+    samba_loss_rows_check(Int(py=y.size), rows)
     # The stack's route (the forward above resolved or hit it): the loss
     # primitive of its image.
     var loss_entry = samba_route(model, fields, context).primitives()
     var loss = generation_array([1])
     var row_loss = generation_array([rows])
     var unused_gradient = generation_array([1])
-    # ce_loss words: [n_rows, vocab, ignore_index, reduction (2 mean), num_items, want_grad], [label_smoothing].
-    _ = samba_primitive(loss_entry, SAMBA_PRIM_CE_LOSS,
-        [Int(py=loss._addr), Int(py=row_loss._addr), Int(py=unused_gradient._addr), Int(py=logits._addr), Int(py=y._addr)],
-        [rows, v, -100, 2, 0, 0], [0.0])
+    var loss_addr = Int(py=loss._addr)
+    var row_addr = Int(py=row_loss._addr)
+    var gradient_addr = Int(py=unused_gradient._addr)
+    var logits_addr = Int(py=logits._addr)
+    var targets_addr = Int(py=y._addr)
+    # RUN: the loss primitive and the read of its float32 result.
+    var value = 0.0
+    with GILReleased(Python()):
+        value = samba_ce_loss_run(loss_entry, loss_addr, row_addr, gradient_addr, logits_addr, targets_addr, rows, v)
     _ = unused_gradient  # keep the Python object alive through the native call above
     _ = row_loss  # keep the Python object alive through the native call above
     _ = loss  # keep the Python object alive through the native call above
     _ = y  # keep the Python object alive through the native call above
     _ = logits  # keep the Python object alive through the native call above
-    var result = PythonObject(Float64(Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=Int(py=loss._addr))[0]))
-    _ = loss  # keep the Python object alive through the native call above
+    var result = PythonObject(value)
     _ = loss^
     _ = row_loss^
     _ = unused_gradient^
