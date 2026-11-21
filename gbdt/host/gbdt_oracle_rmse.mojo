@@ -94,7 +94,10 @@ from gbdt.gpu_data.grid_policy import (
     POLICY_HALF_BYTE,
     POLICY_ONE_BYTE,
 )
+from core.host_parallel import host_parallelize
+from core.host_predict_threads import HostF32Ptr
 from gbdt.host.gbdt_oracle import (
+    _gbdt_units,
     apply_scaled_leaves_host,
     _identity_rows,
     _split_level,
@@ -196,24 +199,49 @@ def _rmse_search_pass(
     der, one score partial and two magnitude partials per 256-thread block
     through the halving tree. Out-of-range threads add 0.0."""
     var blocks = (n_rows + GBDT_MSE_BLOCK - 1) // GBDT_MSE_BLOCK
-    var weight = Float32(1.0)
-    for b in range(blocks):
+    # THE SPLIT (lane gbdt-host-par), the unit of `_logloss_search_pass`:
+    # one 256-thread device block owns its rows' two planes and its three
+    # partials, and its halving trees are the kernel's. Blocks go round
+    # robin to `_gbdt_units` tasks; a task holds three block slabs.
+    var units = _gbdt_units(blocks, 8 * n_rows)
+    var targets_p = rebind[HostF32Ptr](targets.unsafe_ptr())
+    var cursor_p = rebind[HostF32Ptr](cursor.unsafe_ptr())
+    var stats_p = rebind[HostF32Ptr](stats.unsafe_ptr())
+    var fv_p = rebind[HostF32Ptr](fv_partials.unsafe_ptr())
+    var mag_p = rebind[HostF32Ptr](mag_partials.unsafe_ptr())
+
+    def score_blocks(unit: Int) {imm units, imm blocks, imm n_rows, imm targets_p, imm cursor_p, imm stats_p, imm fv_p, imm mag_p}:
         var s_score = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
         var s_w = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
         var s_g = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
-        for t in range(GBDT_MSE_BLOCK):
-            var i = b * GBDT_MSE_BLOCK + t
-            if i < n_rows:
-                var r = _rmse_row(targets[i], cursor[i], weight)
-                var plane0 = weight
-                stats[i] = plane0
-                stats[n_rows + i] = r.der
-                s_score[t] = r.score
-                s_w[t] = abs(plane0)
-                s_g[t] = abs(r.der)
-        fv_partials[b] = _halving_fold(s_score)
-        mag_partials[2 * b] = _halving_fold(s_w)
-        mag_partials[2 * b + 1] = _halving_fold(s_g)
+        var weight = Float32(1.0)
+        var b = unit
+        while b < blocks:
+            for t in range(GBDT_MSE_BLOCK):
+                var i = b * GBDT_MSE_BLOCK + t
+                # an out-of-range thread adds 0.0 (the slabs are reused)
+                s_score[t] = Float32(0.0)
+                s_w[t] = Float32(0.0)
+                s_g[t] = Float32(0.0)
+                if i < n_rows:
+                    var r = _rmse_row(targets_p[i], cursor_p[i], weight)
+                    var plane0 = weight
+                    stats_p[i] = plane0
+                    stats_p[n_rows + i] = r.der
+                    s_score[t] = r.score
+                    s_w[t] = abs(plane0)
+                    s_g[t] = abs(r.der)
+            fv_p[b] = _halving_fold(s_score)
+            mag_p[2 * b] = _halving_fold(s_w)
+            mag_p[2 * b + 1] = _halving_fold(s_g)
+            b += units
+
+    host_parallelize(score_blocks, units)
+    _ = len(targets)
+    _ = len(cursor)
+    _ = len(stats)
+    _ = len(fv_partials)
+    _ = len(mag_partials)
 
 
 def _rmse_value(targets: List[Float32], cursor: List[Float32], n_rows: Int) -> Float32:
@@ -222,14 +250,31 @@ def _rmse_value(targets: List[Float32], cursor: List[Float32], n_rows: Int) -> F
     `deterministic_sum_lanes_kernel[1]`."""
     var blocks = (n_rows + GBDT_MSE_BLOCK - 1) // GBDT_MSE_BLOCK
     var fv_partials = List[Float32](length=blocks, fill=Float32(0.0))
-    var weight = Float32(1.0)
-    for b in range(blocks):
+    # THE SPLIT (lane gbdt-host-par): one 256-thread device block per unit
+    # (its own halving tree), round robin to `_gbdt_units` tasks; the lane
+    # fold over the blocks runs after the join in block order.
+    var units = _gbdt_units(blocks, 8 * n_rows)
+    var targets_p = rebind[HostF32Ptr](targets.unsafe_ptr())
+    var cursor_p = rebind[HostF32Ptr](cursor.unsafe_ptr())
+    var fv_p = rebind[HostF32Ptr](fv_partials.unsafe_ptr())
+
+    def score_blocks(unit: Int) {imm units, imm blocks, imm n_rows, imm targets_p, imm cursor_p, imm fv_p}:
         var s_score = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
-        for t in range(GBDT_MSE_BLOCK):
-            var i = b * GBDT_MSE_BLOCK + t
-            if i < n_rows:
-                s_score[t] = _rmse_row(targets[i], cursor[i], weight).score
-        fv_partials[b] = _halving_fold(s_score)
+        var weight = Float32(1.0)
+        var b = unit
+        while b < blocks:
+            for t in range(GBDT_MSE_BLOCK):
+                var i = b * GBDT_MSE_BLOCK + t
+                # an out-of-range thread adds 0.0 (the slab is reused)
+                s_score[t] = Float32(0.0)
+                if i < n_rows:
+                    s_score[t] = _rmse_row(targets_p[i], cursor_p[i], weight).score
+            fv_p[b] = _halving_fold(s_score)
+            b += units
+
+    host_parallelize(score_blocks, units)
+    _ = len(targets)
+    _ = len(cursor)
     return _deterministic_sum_lanes(fv_partials, 1, blocks)[0]
 
 
