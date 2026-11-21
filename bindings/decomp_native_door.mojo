@@ -14,7 +14,7 @@ from bindings.py_balanced import py_call, py_get, py_type, py_fields
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.ica_native_unpack import ica_fit, ica_project
 from bindings.fa_native_unpack import fa_fit, fa_query
-from bindings.kpca_native_door import kpca_fit, kpca_fit_transform, kpca_transform
+from bindings.kpca_native_door import kpca_fit, kpca_fit_transform, kpca_transform, kpca_route_vendor
 from bindings.classical_error_boundary_pack import classical_python_error
 from providers.python.family_public_lifecycle_pyapi_door import family_lifecycle_begin, family_lifecycle_finish
 from providers.python.family_public_lifecycle_run import kpca_lifecycle_spec
@@ -203,7 +203,9 @@ def decomp_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPt
             raise Error("TypeError: the native decomposition owner requires a connected estimator")
         classical_connect_numpy(context)
         var result = PythonObject(None)
-        if family == "KernelPCA":
+        if family == "KernelPCA" and operation == "vendor_used":
+            result = PythonObject(kpca_route_vendor(model, context))
+        elif family == "KernelPCA":
             # KernelPCA runs its own public lifecycle (family_public_lifecycle_pyapi);
             # every other family runs the decomposition lifecycle here.
             result = _kpca_public(model, operation, args, context)

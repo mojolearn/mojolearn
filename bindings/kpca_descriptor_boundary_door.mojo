@@ -22,7 +22,7 @@ from core.kpca_native_plan import (
 from core.pca_native_api import pca_vendor_name
 from x_neighbors.descriptor_schema import XN_ABI_NAME, XN_OPERATION_COUNT
 from x_decomp.descriptor_schema import XD_ABI_NAME, XD_OPERATION_COUNT
-from bindings.py_balanced import py_call, py_type
+from bindings.py_balanced import py_call, py_type, py_get
 from bindings.native_class_admission_door import dict_keys_admitted, dict_keys_admit
 from providers.python.neural_descriptor_pyapi_door import (
     NeuralDescriptorProvider, neural_descriptor_connect_factory_once, neural_descriptor_connect_once,
@@ -47,7 +47,12 @@ comptime KPCA_PROVIDER_PINS = SharedSlot[KPCAProviderPins, "MojolearnKPCAProvide
 
 
 def _factory(context: PythonObject, table_name: String, mode: String) raises -> PythonObject:
-    var table = context[PythonObject(table_name)]
+    # `table_name` is the device table's, or the CPU image's table of a
+    # `device="cpu"` route beside a device set (`*_cpu_bindings`, connected
+    # at import by python/mojolearn/_native_decomp_bridge.py).
+    var table = py_get(context, PythonObject(table_name))
+    if table is None:
+        raise Error("ImportError: device='cpu' is not connected in this installation")
     if py_type(table) is not py_type(Python.dict()):
         raise Error("TypeError: KernelPCA binding tables require native dictionaries")
     if not dict_keys_admitted(table):
@@ -65,11 +70,10 @@ def _factory(context: PythonObject, table_name: String, mode: String) raises -> 
 
 
 def _check(mode: String, vendor: Int, native_mode: Int, capabilities: Int,
-           required: Int, context: PythonObject) raises:
-    var selected_vendor = context["vendor"]
-    if py_type(selected_vendor) is not py_type(PythonObject("")):
-        raise Error("TypeError: KernelPCA selected vendor requires a native string")
-    if pca_vendor_name(vendor) != String(selected_vendor):
+           required: Int, selected_vendor: String) raises:
+    # `selected_vendor`: the vendor word the estimator's route expects (`cpu`
+    # for a CPU route), read once at resolution, never per call.
+    if pca_vendor_name(vendor) != selected_vendor:
         raise Error("RuntimeError: KernelPCA native vendor differs from selected execution")
     if native_mode != (1 if mode == "identical" else 0):
         raise Error("RuntimeError: KernelPCA native mode differs from selected execution")
@@ -77,10 +81,14 @@ def _check(mode: String, vendor: Int, native_mode: Int, capabilities: Int,
         raise Error("NotImplementedError: KernelPCA native provider lacks the required operation")
 
 
-def kpca_near_connection(mode: String, context: PythonObject) raises -> Int:
-    var provider = neural_descriptor_connect_factory_once(_factory(context, "kpca_neighbors_bindings", mode),
+def kpca_near_connection(mode: String, cpu_image: Bool, vendor: String, context: PythonObject) raises -> Int:
+    """Resolution only (bindings/kpca_native_door.mojo `_kpca_route`): the
+    neighbors image pair of the device set, or of the CPU image."""
+    var provider = neural_descriptor_connect_factory_once(_factory(context,
+        String("kpca_neighbors_cpu_bindings") if cpu_image else String("kpca_neighbors_bindings"), mode),
         String(XN_ABI_NAME), XN_OPERATION_COUNT)
-    var metadata = neural_descriptor_connect_factory_once(_factory(context, "kpca_info_bindings", mode),
+    var metadata = neural_descriptor_connect_factory_once(_factory(context,
+        String("kpca_info_cpu_bindings") if cpu_image else String("kpca_info_bindings"), mode),
         String(KPCA_NATIVE_ABI), KPCA_NATIVE_COUNT)
     if provider.downcast_value_ptr[NeuralDescriptorProvider]()[].module is not metadata.downcast_value_ptr[NeuralDescriptorProvider]()[].module:
         raise Error("RuntimeError: KernelPCA neighbor metadata and execution must belong to the same provider image")
@@ -94,12 +102,14 @@ def kpca_near_connection(mode: String, context: PythonObject) raises -> Int:
         pins[].near_providers.append(provider)
         pins[].near_metadata.append(metadata)
     var facts = kpca_near_facts(index)
-    _check(mode, facts.vendor, facts.mode, facts.capabilities, KPCA_CAP_NEIGHBORS, context)
+    _check(mode, facts.vendor, facts.mode, facts.capabilities, KPCA_CAP_NEIGHBORS, vendor)
     return index
 
 
-def kpca_decomp_connection(mode: String, context: PythonObject) raises -> Int:
-    var provider = neural_descriptor_connect_factory_once(_factory(context, "kpca_decomp_bindings", mode),
+def kpca_decomp_connection(mode: String, cpu_image: Bool, vendor: String, context: PythonObject) raises -> Int:
+    """Resolution only: the eigensolver image of the device set, or the CPU image."""
+    var provider = neural_descriptor_connect_factory_once(_factory(context,
+        String("kpca_decomp_cpu_bindings") if cpu_image else String("kpca_decomp_bindings"), mode),
         String(KPCA_NATIVE_ABI), KPCA_NATIVE_COUNT)
     var module = provider.downcast_value_ptr[NeuralDescriptorProvider]()[].module
     var reduction = neural_descriptor_connect_once(module, "x_decomp_native_api_v1", String(XD_ABI_NAME), XD_OPERATION_COUNT)
@@ -115,7 +125,7 @@ def kpca_decomp_connection(mode: String, context: PythonObject) raises -> Int:
         pins[].decomp_providers.append(provider)
         pins[].decomp_reductions.append(reduction)
     var facts = kpca_decomp_facts(index)
-    _check(mode, facts.vendor, facts.mode, facts.capabilities, KPCA_CAP_EIGEN, context)
+    _check(mode, facts.vendor, facts.mode, facts.capabilities, KPCA_CAP_EIGEN, vendor)
     return index
 
 
