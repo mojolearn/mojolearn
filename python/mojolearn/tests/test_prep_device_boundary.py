@@ -14,7 +14,8 @@ import pytest
 import mojolearn
 from mojolearn import (
     BernoulliNB, Binarizer, CategoricalNB, ComplementNB, GaussianNB, LinearDiscriminantAnalysis, MultinomialNB,
-    PolynomialFeatures, PowerTransformer, QuadraticDiscriminantAnalysis, QuantileTransformer, VarianceThreshold,
+    Normalizer, PolynomialFeatures, PowerTransformer, QuadraticDiscriminantAnalysis, QuantileTransformer,
+    VarianceThreshold,
 )
 
 TWO_DEVICES = mojolearn.vendor() != "cpu"
@@ -30,6 +31,7 @@ def data(rows=300, cols=6, seed=11):
 #: (id, class, constructor parameters, fitted attribute names compared as bytes, has inverse_transform)
 CASES = [
     ("binarizer", Binarizer, dict(threshold=0.1), (), False),
+    ("normalizer", Normalizer, dict(norm="l2"), (), False),
     ("polynomial", PolynomialFeatures, dict(degree=2), ("powers_",), False),
     ("polynomial-f", PolynomialFeatures, dict(degree=3, interaction_only=True, order="F"), ("powers_",), False),
     ("variance", VarianceThreshold, dict(threshold=0.05), ("variances_",), False),

@@ -33,6 +33,7 @@ from bindings.prep_encode_prog_run import enc_ii_rows
 from bindings.prep_encode_native_door import (
     EncProg, _cs, _mark_missing, _imputer_fit, _imputer_transform, _precheck, _default_mode, _word, _iword,
     _take1, _take2, _seed64, _seed_words, _truth, _float, _is_str, _check_width, _int_list, _index_list)
+from bindings.prep_owner_route_unpack import prep_route_context
 from bindings.prep_keys_unpack import (
     prep_keys,
     PREP_OPN_FIT, PREP_OPN_FIT_TRANSFORM, PREP_OPN_TRANSFORM,
@@ -573,6 +574,16 @@ def _initial(model: PythonObject, values: PythonObject, context: PythonObject) r
     py_setitem(own, nk[].k_copy, PythonObject(True))
     py_setitem(own, nk[].k_add_indicator, PythonObject(False))
     py_setitem(own, nk[].k_keep_empty_features, py_item(fields, nk[].k_keep_empty_features))
+    # The initial imputer takes this estimator's `device` (None for an
+    # instance saved before the parameter existed), so `initial_imputer_`
+    # used on its own runs where its owner ran. Its route is resolved here,
+    # once per fit, for the context this operation runs in: the imputer's
+    # fit and transform below (and this estimator's later transforms) then
+    # read the selection and the run capabilities from that route (one
+    # record read each) where they made the full selection and the by-name
+    # reads. Nothing below reads `device`.
+    py_setitem(own, nk[].k_device, py_get(fields, nk[].k_device))
+    _ = prep_route_context(imputer, context)
     _precheck(imputer, "simple_imputer", context)
     _imputer_fit(imputer, values, context)
     return imputer

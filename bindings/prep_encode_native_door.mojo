@@ -8,9 +8,8 @@
 # stores the fitted attributes under the names, types and dtypes the Python
 # set. fit_transform converts X once and hands the converted X to the
 # transform program.
-from std.memory import unsafe_memcpy, bitcast
+from std.memory import unsafe_memcpy
 from std.math import ceil
-from std.os import getenv
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
@@ -27,10 +26,9 @@ from bindings.prep_native_estimator_door import prep_native_split, prep_entry_ca
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.classical_arrays_door import classical_address, classical_typed, classical_wrap_array, classical_c_order
 from bindings.scaler_native_door import _ptr, _input
-from core.preprocessing_program import prep_program_stage as _stage
 from bindings.scaler_lifecycle_native_door import _entries, scaler_entries
 from bindings.prep_owner_route_unpack import (
-    prep_route_context, prep_route_caps, prep_route_refuse_cpu_table, prep_route_vendor_used)
+    prep_route_context, prep_route_caps, prep_route_vendor_used)
 from bindings.prep_entry_cache_unpack import prep_entry_word, prep_entry_text
 from bindings.x_prep_native_owner_door import xprep_storage, xprep_take, xprep_values, xprep_run_records, xprep_caps
 from bindings.prep_encode_prog_run import (
@@ -56,6 +54,9 @@ from bindings.prep_encode_target_run import (
 from bindings.prep_encode_spline_run import (
     SplineFit, SplineApply, SPL_KNOTS_GIVEN, SPL_KNOTS_QUANTILE, SPL_KNOTS_UNIFORM, spline_features,
     spline_fit_stage, spline_transform_stage)
+from bindings.prep_encode_select_run import (
+    ScoreClassif, ScorePearson, ScorePlan, score_classif_stage, score_pearson_stage, score_topk_stage,
+    score_topk_words_stage, score_integral_stage)
 from bindings.x_prep_native_owner_run import xprep_r3, XprepCaps
 from bindings.public_lifecycle_owner_door import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result
 from bindings.classical_validate_unpack import classical_estimator_name
@@ -71,36 +72,13 @@ comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime I32P = MutPointer[Int32, MutUntrackedOrigin]
 comptime I64P = MutPointer[Int64, MutUntrackedOrigin]
 
-# x_prep stage codes (_expansion_prep._OPS).
-comptime OP_CLASS_STATS = 16
-comptime OP_F_CLASSIF = 63
-comptime OP_F_REGRESSION = 64
-comptime OP_CHI2 = 65
-comptime OP_CSB_PART = 129
-comptime OP_CSB_FOLD = 130
-comptime OP_CSB1_PART = 162
-comptime OP_FCB_PART = 166
-comptime OP_FCB_FIN = 167
-comptime OP_FRB_PART1 = 168
-comptime OP_FRB_MEAN = 169
-comptime OP_FRB_PART2 = 170
-comptime OP_FRB_FIN = 171
-comptime OP_INTEGRAL = 247
-comptime OP_ISUM = 248
-comptime OP_KEY64 = 253
-comptime OP_TOPK = 254
 # x_prep_idn_fam bits 2 IDN_CLASS_ONEPASS and 4 IDN_SELECT_BLOCKED.
 comptime IDN_CLASS_ONEPASS = 2
 comptime IDN_SELECT_BLOCKED = 4
-# `_CLS_BLOCK_WORDS`: the most partial words a blocked class_stats keeps.
-comptime CLS_BLOCK_WORDS = 67108864
 # `_NONE`: a stage's "no operand" word.
 comptime NONE = -1
 # x_prep_idn_fam bit 1: IDN_STATS_BLOCKED.
 comptime IDN_STATS_BLOCKED = 1
-# Row blocks of the blocked column statistics (_expansion_prep._XB).
-comptime ROW_BLOCK = 2048
-# `_II_CH`: the most chunks of a chunk-parallel p2m selection.
 
 
 # ---------------------------------------------------------------- programs
@@ -883,7 +861,8 @@ def _fit_categories_with_codes(values: PythonObject, entries: PythonObject, caps
     var n = Int(py=values[3])
     var d = Int(py=values[4])
     var p = EncProg()
-    var plan = cat_fit_stage(p.prog, CatFit(n, d, p.own_x(values), NONE, CAT_FIT_INVERSE))
+    var x = p.own_x(values)
+    var plan = cat_fit_stage(p.prog, CatFit(n, d, x, NONE, CAT_FIT_INVERSE))
     var ran = p.run_caps(entries, context, caps)
     return (_cat_fit_pack(ran, plan, n, d, context), _take2(ran, plan.inverse, n, d, context))
 
@@ -1116,8 +1095,8 @@ def _codes(mut p: EncProg, values: PythonObject, categories: PythonObject, conte
     stages (bindings/prep_encode_cats_run.mojo `cat_codes_stage`)."""
     var record = _category_record(owner, categories, context)
     var x = p.own_x(values)
-    var staged = cat_codes_stage(p.prog, Int(py=values[3]), Int(py=values[4]), x, _cat_block(p, record, True),
-                                 device_only)
+    var block = _cat_block(p, record, True)
+    var staged = cat_codes_stage(p.prog, Int(py=values[3]), Int(py=values[4]), x, block, device_only)
     return (staged.codes, staged.unknown)
 
 
@@ -2100,9 +2079,13 @@ def _f32_target(view: PythonObject, context: PythonObject) raises -> PythonObjec
     return out
 
 
-def _all_integral(view: PythonObject, vector: Bool, context: PythonObject) raises -> Bool:
+def _all_integral(model: PythonObject, view: PythonObject, vector: Bool, context: PythonObject) raises -> Bool:
     """`_all_integral`: every float32 / float64 value finite and an integer,
-    on the device (c2_integral by chunks, c2_isum, one word read back)."""
+    on the estimator's image (c2_integral by chunks, c2_isum, one word read
+    back). UNPACK (the view's words as an owner; the entry selection and the
+    run capabilities the estimator's route holds), the typed stages
+    (bindings/prep_encode_select_run.mojo `score_integral_stage`), the typed
+    run, one word read back."""
     var t = _v_type(view, context)
     var kind = 0 if t == "<f4" else 4
     var per = 1 if t == "<f4" else 2
@@ -2119,17 +2102,13 @@ def _all_integral(view: PythonObject, vector: Bool, context: PythonObject) raise
         words = classical_typed(Python.tuple(n * per), "<f4", context["output_context"])
         unsafe_memcpy(dest=_ptr(words), src=F32P(unsafe_from_address=_v_addr(view)), count=n * per)
         _ = words  # keep the Python object alive through the native call above
-    var ch = max(4096, (n + 4095) // 4096)
-    var nch = (n + ch - 1) // ch
-    var mode = _default_mode(context)
-    var entries = _entries(mode, context)
+    # The fit's own selection (the same mode object), held by the route.
+    var entries = scaler_entries(model, _default_mode(context), context)
+    var caps = enc_caps(model, entries)
     var p = EncProg()
-    var cnt = p.alloc(nch)
-    var tot = p.alloc(1)
-    var wo = p.put(words, n * per)
-    _stage(p.prog.program, OP_INTEGRAL, nch, wo, kind, n, ch, cnt)
-    _stage(p.prog.program, OP_ISUM, 1, cnt, nch, tot)
-    var ran = p.run(entries, context)
+    var held = p.own(words, n * per)
+    var tot = score_integral_stage(p.prog, held, n * per, kind, n)
+    var ran = p.run_caps(entries, context, caps)
     return _iword(ran, tot) == 0
 
 
@@ -2140,7 +2119,7 @@ def _class_target(labels: ClassicalLabels, target_type: String) raises -> Target
     return TargetInfo("multiclass", labels.classes, labels.codes, K, labels.n)
 
 
-def _target_info(y: PythonObject, target_type: String, context: PythonObject) raises -> TargetInfo:
+def _target_info(model: PythonObject, y: PythonObject, target_type: String, context: PythonObject) raises -> TargetInfo:
     """`_target_arrays`, else `_target_kind`: a numeric buffer vector's own
     words (continuous: float32; else its class codes), then the label input
     step's codes for anything else."""
@@ -2164,7 +2143,7 @@ def _target_info(y: PythonObject, target_type: String, context: PythonObject) ra
                           MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=_v_addr(view)), _v_size(view))))
                 _ = view  # keep the Python object alive through the native call above
             if ok:
-                var cont = target_type == "continuous" or (target_type == "auto" and floating and not _all_integral(view, True, context))
+                var cont = target_type == "continuous" or (target_type == "auto" and floating and not _all_integral(model, view, True, context))
                 if cont:
                     return TargetInfo("continuous", PythonObject(None), _f32_target(view, context), 1, _v_size(view))
                 return _class_target(classical_encode_labels(y, context), target_type)
@@ -2175,7 +2154,7 @@ def _target_info(y: PythonObject, target_type: String, context: PythonObject) ra
         var view = found.value()
         var vt = _v_type(view, context)
         if _v_size(view) > 0 and (vt == "<f4" or vt == "<f8"):
-            continuous = not _all_integral(view, False, context)
+            continuous = not _all_integral(model, view, False, context)
     if continuous:
         if not numeric:
             raise Error("mojolearn: a continuous TargetEncoder target must be numeric")
@@ -2211,7 +2190,8 @@ def _put_codes(mut p: EncProg, codes: PythonObject) raises -> Int:
     # `_Prog.put_codes`: int32 codes as words, then their floats (i2f):
     # UNPACK of the codes as an owner, then the typed stage.
     var count = Int(py=codes.size)
-    return cat_i2f_stage(p.prog, count, p.own(codes, count))
+    var held = p.own(codes, count)
+    return cat_i2f_stage(p.prog, count, held)
 
 
 def _target_run(model: PythonObject, values: PythonObject, info: TargetInfo, folds: PythonObject, n_folds: Int,
@@ -2322,7 +2302,7 @@ def _target_fit(model: PythonObject, values: PythonObject, y: PythonObject, cont
     # TargetEncoder.fit: `_run(arr, y, None, 0, False)`.
     var fields = py_fields(model)
     var tt = String(fields["target_type"])
-    var info = _target_info(y, tt, context)
+    var info = _target_info(model, y, tt, context)
     _ = _target_run(model, values, info, PythonObject(None), 0, 0, 0, False, False, context)
 
 
@@ -2416,7 +2396,7 @@ def _target_fit_transform(model: PythonObject, values: PythonObject, y: PythonOb
     var n = Int(py=values[3])
     var tt = String(fields["target_type"])
     if splits is not None:
-        var info = _target_info(y, tt, context)
+        var info = _target_info(model, y, tt, context)
         return _target_run(model, values, info, splits[0], Int(py=splits[1]), 0, 0, False, True, context)
     var cv = 5 if fields["cv"] is None else Int(py=py_call_typed(b.int, fields["cv"]))
     if n < cv:
@@ -2430,7 +2410,7 @@ def _target_fit_transform(model: PythonObject, values: PythonObject, y: PythonOb
             raise Error("mojolearn: X and y have different numbers of rows")
         var info = TargetInfo("binary", labels.classes, labels.codes, 1, labels.n)
         return _target_run(model, values, info, PythonObject(None), cv, seed[0], seed[1], shuffle, True, context)
-    var info = _target_info(y, tt, context)
+    var info = _target_info(model, y, tt, context)
     if info.size != n:
         raise Error("mojolearn: X and y have different numbers of rows")
     return _target_run(model, values, info, PythonObject(None), cv, seed[0], seed[1], shuffle, True, context)
@@ -2438,91 +2418,44 @@ def _target_fit_transform(model: PythonObject, values: PythonObject, y: PythonOb
 
 # ---------------------------------------------------------------- SelectKBest
 def _scores_classif(mut p: EncProg, values: PythonObject, y: PythonObject, chi: Bool, mode: PythonObject,
-                    entries: PythonObject, context: PythonObject) raises -> Tuple[Int, Int, Int]:
-    """`_scores_classif`'s stages (class_stats or its blocked order, then
-    chi2, or f_classif or its blocked fcb_* order). Returns (scores,
-    p-values, column statistics or -1)."""
+                    entries: PythonObject, context: PythonObject) raises -> ScorePlan:
+    """`_scores_classif`: UNPACK (the label input step's class codes, the
+    image's family word as three Bool fields, X and the codes as owners),
+    then the typed stages (bindings/prep_encode_select_run.mojo
+    `score_classif_stage`). The plan's `extra`: chi2's column statistics."""
     var n = Int(py=values[3])
     var d = Int(py=values[4])
     var labels = classical_encode_labels(y, context)
     if labels.n != n:
         raise Error("mojolearn: X and y have different numbers of rows")
-    var K = len(labels.classes)
-    var xo = p.put_x(values)
-    var yo = _put_codes(p, labels.codes)
-    var cnt = p.alloc(K)
-    var mean = p.alloc(K * d)
-    var sums = p.alloc(K * d)
-    var sc = p.alloc(d)
-    var pv = p.alloc(d)
-    var st = p.alloc(6 * d)
-    var blocked = String(getenv("MOJOLEARN_XPREP_BLOCKED", "1").strip()) != "0"
     var fam = _fam(mode, entries)
-    # `_cls`: the blocked order while its partial tables stay within 2**26 words
-    var nb = (n + ROW_BLOCK - 1) // ROW_BLOCK
-    if blocked and (fam & IDN_STATS_BLOCKED) != 0 and nb * K * d <= CLS_BLOCK_WORDS:
-        var ps = p.work(nb * K * d)
-        var pc = p.work(nb * K * d)
-        var cn = p.work(K * d)
-        if (fam & IDN_CLASS_ONEPASS) != 0:
-            _stage(p.prog.program, OP_CSB1_PART, nb * d, xo, n, d, yo, K, ps, pc, nb, NONE, NONE, NONE)
-        else:
-            _stage(p.prog.program, OP_CSB_PART, nb * K * d, xo, n, d, yo, K, ps, pc, nb, NONE)
-        _stage(p.prog.program, OP_CSB_FOLD, K * d, ps, pc, nb, K, d, cn, cnt, mean, sums, NONE)
-    else:
-        _stage(p.prog.program, OP_CLASS_STATS, K * d, xo, n, d, yo, K, cnt, mean, NONE, sums)
-    if chi:
-        _cs(p, mode, entries, xo, n, d, st, False)
-        _stage(p.prog.program, OP_CHI2, d, sums, K, d, cnt, n, sc, pv)
-        return (sc, pv, st)
-    if blocked and (fam & IDN_SELECT_BLOCKED) != 0:
-        var ps = p.work(nb * d)
-        _stage(p.prog.program, OP_FCB_PART, nb * d, xo, n, d, yo, mean, ps, nb)
-        _stage(p.prog.program, OP_FCB_FIN, d, ps, n, d, nb, K, cnt, mean, sc, pv)
-    else:
-        _stage(p.prog.program, OP_F_CLASSIF, d, xo, n, d, yo, K, cnt, mean, sc, pv)
-    return (sc, pv, -1)
+    var x = p.own_x(values)
+    var count = Int(py=labels.codes.size)
+    var codes = p.own(labels.codes, count)
+    var request = ScoreClassif(n, d, x, codes, count, len(labels.classes), chi, (fam & IDN_STATS_BLOCKED) != 0,
+                               (fam & IDN_CLASS_ONEPASS) != 0, (fam & IDN_SELECT_BLOCKED) != 0)
+    return score_classif_stage(p.prog, request)
 
 
 def _pearson(mut p: EncProg, values: PythonObject, y: PythonObject, mode: PythonObject, entries: PythonObject,
-             context: PythonObject, center: Bool = True, force_finite: Bool = True) raises -> Tuple[Int, Int, Int]:
-    """`_pearson(X, y, center, force_finite)`'s stages (f_regression, or the
-    blocked frb_* order). Returns (scores, p-values, correlations)."""
+             context: PythonObject, center: Bool = True, force_finite: Bool = True) raises -> ScorePlan:
+    """`_pearson(X, y, center, force_finite)`: UNPACK (the admitted float32
+    y, the image's family word as a Bool field, X and y as owners), then the
+    typed stages (`score_pearson_stage`). The plan's `extra`: the correlations."""
     var n = Int(py=values[3])
     var d = Int(py=values[4])
     var target = admit_f32(y, 1, "y", context, finite=False)
     if target.rows != n:
         raise Error("mojolearn: X and y have different numbers of rows")
     # fb-boost-copy (2026-11-17): the program reads the admitted C-order
-    # float32 y in place (EncProg.put holds its owner for the run); it was
-    # copied into a zero-filled vector per f_regression call (O(n)).
-    var xo = p.put_x(values)
-    var yo = p.put(target.array, n)
-    var sc = p.alloc(d)
-    var pv = p.alloc(d)
-    var co = p.alloc(d)
-    var blocked = String(getenv("MOJOLEARN_XPREP_BLOCKED", "1").strip()) != "0"
-    if blocked and (_fam(mode, entries) & IDN_SELECT_BLOCKED) != 0:
-        var nb = (n + ROW_BLOCK - 1) // ROW_BLOCK
-        # the Python's `mx = my = _NONE` unless centred
-        var mx = NONE
-        var my = NONE
-        if center:
-            var psx = p.work(nb * d)
-            var psy = p.work(nb)
-            mx = p.work(d)
-            my = p.work(1)
-            _stage(p.prog.program, OP_FRB_PART1, nb * d, xo, n, d, yo, psx, psy, nb)
-            _stage(p.prog.program, OP_FRB_MEAN, d, psx, psy, nb, d, n, mx, my)
-        var pxy = p.work(nb * d)
-        var pxx = p.work(nb * d)
-        var pyy = p.work(nb)
-        _stage(p.prog.program, OP_FRB_PART2, nb * d, xo, n, d, yo, mx, my, pxy, pxx, pyy, nb)
-        _stage(p.prog.program, OP_FRB_FIN, d, pxy, pxx, pyy, nb, d, n, 1 if center else 0, sc, pv, co, 1 if force_finite else 0)
-    else:
-        _stage(p.prog.program, OP_F_REGRESSION, d, xo, n, d, yo, 1 if center else 0, sc, pv, co, 1 if force_finite else 0)
+    # float32 y in place (its owner is held for the run); it was copied
+    # into a zero-filled vector per f_regression call (O(n)).
+    var x = p.own_x(values)
+    var held = p.own(target.array, n)
+    var request = ScorePearson(n, d, x, held, center, force_finite, (_fam(mode, entries) & IDN_SELECT_BLOCKED) != 0)
+    var plan = score_pearson_stage(p.prog, request)
     _ = target^
-    return (sc, pv, co)
+    return plan
 
 
 def _score_words(scores: PythonObject, d: Int, context: PythonObject) raises -> Tuple[PythonObject, Int]:
@@ -2564,17 +2497,6 @@ def _score_words(scores: PythonObject, d: Int, context: PythonObject) raises -> 
     return (words, 4)
 
 
-def _topk_stages(mut p: EncProg, words: PythonObject, kind: Int, d: Int, k: Int) raises -> Int:
-    # c2_key64 (binary64 ordered keys, a NaN as -inf) and c2_topk (stable
-    # ascending rank, the later of tied columns wins). Returns the mask.
-    var key = p.work(2 * d)
-    var mask = p.alloc(d)
-    var wo = p.put(words, Int(py=words.size))
-    _stage(p.prog.program, OP_KEY64, d, wo, kind, key)
-    _stage(p.prog.program, OP_TOPK, d, key, d, k, mask)
-    return mask
-
-
 def _topk_from(p_ran: PythonObject, mask: Int, d: Int) raises -> PythonObject:
     var out = Python.list()
     for j in range(d):  # driver-loop: the device's mask as the fitted list (feature count)
@@ -2594,6 +2516,8 @@ def _select_fit(model: PythonObject, x: PythonObject, values: PythonObject, y: P
     var d = Int(py=values[4])
     var mode = _default_mode(context)
     var entries = scaler_entries(model, mode, context)
+    # the run capabilities of the estimator's route, once for the fit's programs
+    var caps = enc_caps(model, entries)
     var score_func = fields["score_func"]
     var builtin = py_get(context["prep_encode_scores"], score_func)
     if builtin is None:
@@ -2612,42 +2536,40 @@ def _select_fit(model: PythonObject, x: PythonObject, values: PythonObject, y: P
     if not mutual:
         var name = String(builtin)
         var p = EncProg()
-        var offs = (0, 0, -1)
+        var plan = ScorePlan(0, 0, NONE)
         if name == "f_classif" or name == "chi2":
-            offs = _scores_classif(p, values, y, name == "chi2", mode, entries, context)
+            plan = _scores_classif(p, values, y, name == "chi2", mode, entries, context)
         else:
-            offs = _pearson(p, values, y, mode, entries, context)
-        var score_at = offs[2] if name == "r_regression" else offs[0]
+            plan = _pearson(p, values, y, mode, entries, context)
+        var score_at = plan.extra if name == "r_regression" else plan.scores
         # the scores' float32 words, read by c2_key64 where the device wrote them
         var mo = -1
         if not keep_all and k_ok:
-            var key = p.work(2 * d)
-            mo = p.alloc(d)
-            _stage(p.prog.program, OP_KEY64, d, score_at, 0, key)
-            _stage(p.prog.program, OP_TOPK, d, key, d, k, mo)
-        var ran = p.run(entries, context, model)
+            mo = score_topk_stage(p.prog, score_at, 0, d, k)
+        # RUN: the typed run on the estimator's image, then PACK
+        var ran = p.run_caps(entries, context, caps)
         if name == "chi2":
             for j in range(d):  # driver-loop: over the per-column minima (feature metadata)
-                if _word(ran, offs[2] + 3 * d + j) < 0:
+                if _word(ran, plan.extra + 3 * d + j) < 0:
                     raise Error("mojolearn: Input X must be non-negative.")
         if name == "r_regression":
-            py_setitem(fields, "scores_", _take1(ran, offs[2], d, context))
+            py_setitem(fields, "scores_", _take1(ran, plan.extra, d, context))
             py_setitem(fields, "pvalues_", PythonObject(None))
         else:
-            py_setitem(fields, "scores_", _take1(ran, offs[0], d, context))
-            py_setitem(fields, "pvalues_", _take1(ran, offs[1], d, context))
+            py_setitem(fields, "scores_", _take1(ran, plan.scores, d, context))
+            py_setitem(fields, "pvalues_", _take1(ran, plan.pvalues, d, context))
         if mo >= 0:
             mask = _topk_from(ran, mo, d)
     else:
         # `score_func(X, y)`: mutual_info_*(X, y) with its defaults
         # (discrete_features='auto', n_neighbors=3, random_state=None), the
         # operation the public function passes to the same entry.
-        # The mutual-information functions run on the classifier owner's
-        # arena context, which has no device route yet: an estimator on the
-        # CPU beside a device set is refused in the shared words (one record
-        # read), never scored on the device its caller did not name.
-        prep_route_refuse_cpu_table(model, classical_estimator_name(model),
-                                    String("its mutual information score functions are not connected to device= yet"))
+        # `context` is the connected context of this estimator's device
+        # route (the door top), and the mutual-information programs run on
+        # the encode transport of the context they are handed (their entry
+        # selection, label step and storage all come from it), so the
+        # scores are computed on the estimator's device. Nothing here reads
+        # `device`.
         var entry = context["prep_encode_entry"]
         if py_type(entry) is not py_type(b.len):
             raise Error("ImportError: mojolearn: the encode owner's entry is unavailable")
@@ -2669,9 +2591,10 @@ def _select_fit(model: PythonObject, x: PythonObject, values: PythonObject, y: P
             var p = EncProg()
             var got = _score_words(scores, d, context)
             _ = scores  # keep the Python object alive through the native call above
-            var mo = _topk_stages(p, got[0], got[1], d, k)
-            _ = scores  # keep the Python object alive through the native call above
-            var ran = p.run(entries, context, model)
+            var count = Int(py=got[0].size)
+            var held = p.own(got[0], count)
+            var mo = score_topk_words_stage(p.prog, held, count, got[1], d, k)
+            var ran = p.run_caps(entries, context, caps)
             mask = _topk_from(ran, mo, d)
     if keep_all:
         mask = Python.list()
@@ -2696,20 +2619,20 @@ def prep_encode_scores_call(operation: String, args: PythonObject, context: Pyth
     var result = PythonObject(None)
     if operation == "f_classif" or operation == "chi2":
         var chi = operation == "chi2"
-        var offs = _scores_classif(p, values, args[1], chi, mode, entries, context)
+        var plan = _scores_classif(p, values, args[1], chi, mode, entries, context)
         var ran = p.run(entries, context)
         if chi:
             for j in range(d):  # driver-loop: over the per-column minima (feature metadata)
-                if _word(ran, offs[2] + 3 * d + j) < 0:
+                if _word(ran, plan.extra + 3 * d + j) < 0:
                     raise Error("mojolearn: Input X must be non-negative.")
-        result = Python.tuple(_take1(ran, offs[0], d, context), _take1(ran, offs[1], d, context))
+        result = Python.tuple(_take1(ran, plan.scores, d, context), _take1(ran, plan.pvalues, d, context))
     else:
-        var offs = _pearson(p, values, args[1], mode, entries, context, _truth(args[2]), _truth(args[3]))
+        var plan = _pearson(p, values, args[1], mode, entries, context, _truth(args[2]), _truth(args[3]))
         var ran = p.run(entries, context)
         if operation == "r_regression":
-            result = _take1(ran, offs[2], d, context)
+            result = _take1(ran, plan.extra, d, context)
         else:
-            result = Python.tuple(_take1(ran, offs[0], d, context), _take1(ran, offs[1], d, context))
+            result = Python.tuple(_take1(ran, plan.scores, d, context), _take1(ran, plan.pvalues, d, context))
     _ = values^
     return result
 

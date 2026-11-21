@@ -8,7 +8,9 @@ file is only the resolver of the classes the family door serves through the
 encode owner and the label owner (bindings/prep_owner_native_door.mojo:
 SimpleImputer, KBinsDiscretizer, OrdinalEncoder, OneHotEncoder,
 TargetEncoder, SplineTransformer, SelectKBest, LabelEncoder, LabelBinarizer,
-MultiLabelBinarizer). The route's layout is the scalers'
+MultiLabelBinarizer) and of IterativeImputer, whose operation context the
+family door takes from the same route (its initial SimpleImputer is given the
+estimator's `device` and resolves its own route for that context). The route's layout is the scalers'
 (bindings/scaler_route_unpack.mojo: `context` the door's connected context,
 `scope` the context the estimator runs in, `images` / `mode` the held entry
 selection, `route.entry` the x_prep transport entry, `route.flags` the
@@ -41,7 +43,7 @@ from bindings.scaler_route_unpack import (
 )
 from bindings.x_prep_native_owner_run import XprepCaps
 from bindings.prep_entry_cache_unpack import prep_entry_text
-from core.device_route import DEVICE_GPU, DEVICE_CPU, device_installed, device_cpu_absent
+from core.device_route import DEVICE_GPU, DEVICE_CPU, device_installed
 from providers.python.device_route_boundary_door import (
     DeviceRouteOwner, device_request, device_route_owner, device_route_keep,
 )
@@ -114,19 +116,6 @@ def prep_route_caps(model: PythonObject, entries: PythonObject) raises -> XprepC
     `entries` as before. The caller keeps `entries` named through its run."""
     var held = scaler_route_held(model, entries)
     return scaler_held_caps(held)
-
-
-def prep_route_refuse_cpu_table(model: PythonObject, shown: String, reason: String) raises:
-    """Refuse, in the shared words, a step of this estimator that has no
-    route of its own yet when the estimator runs on the CPU beside a device
-    set (never run it on the device its caller did not name). One record
-    read; nothing is said for an estimator on the installation's device."""
-    var owner = device_route_owner(model)
-    if owner is None:
-        return
-    var native = owner.downcast_value_ptr[DeviceRouteOwner]()
-    if native[].resolved and (native[].route.flags & SCALER_ROUTE_CPU_TABLE) != 0:
-        device_cpu_absent(shown, reason)
 
 
 def prep_route_vendor_used(model: PythonObject, context: PythonObject) raises -> PythonObject:

@@ -111,6 +111,7 @@ struct PrepKeys(Defaultable, Movable):
     var k_initial_strategy: PythonObject
     var k_integral_type: PythonObject
     var k_keep_empty_features: PythonObject
+    var k_device: PythonObject
     var k_labels_integral_type: PythonObject
     var k_lda_admission_context: PythonObject
     var k_lda_fields_get: PythonObject
@@ -250,6 +251,7 @@ struct PrepKeys(Defaultable, Movable):
         self.k_initial_strategy = PythonObject(None)
         self.k_integral_type = PythonObject(None)
         self.k_keep_empty_features = PythonObject(None)
+        self.k_device = PythonObject(None)
         self.k_labels_integral_type = PythonObject(None)
         self.k_lda_admission_context = PythonObject(None)
         self.k_lda_fields_get = PythonObject(None)
@@ -393,6 +395,7 @@ def _prep_keys_fill(nk: UnsafePointer[PrepKeys, MutUntrackedOrigin]) raises:
     nk[].k_initial_strategy = py_key("initial_strategy")
     nk[].k_integral_type = py_key("integral_type")
     nk[].k_keep_empty_features = py_key("keep_empty_features")
+    nk[].k_device = py_key("device")
     nk[].k_labels_integral_type = py_key("labels_integral_type")
     nk[].k_lda_admission_context = py_key("lda_admission_context")
     nk[].k_lda_fields_get = py_key("lda_fields_get")
