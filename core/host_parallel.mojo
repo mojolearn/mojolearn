@@ -130,3 +130,26 @@ def host_parallelize_pool_env[FuncType: def(Int) -> None](ref func: FuncType, n:
     if n > 0:
         activity_host_split(n)
     sync_parallelize(func, n)
+
+
+comptime HOST_NARROW_CHUNK = 65536
+
+
+def host_narrow_codes_i32(src_address: Int, dst_address: Int, count: Int):
+    """Narrow `count` int64 class codes at `src_address` into int32 at
+    `dst_address`, split across the host pool in chunks of
+    `HOST_NARROW_CHUNK` words (lane fx-audit, audit-neural finding 1: the
+    member predicts' serial narrowing loop). A count of one chunk or less runs
+    on the calling thread (`host_parallelize` with one task), so a small
+    predict pays no pool launch; the chunk size is a memory-bandwidth grain,
+    not a shape rule. Codes are class indices, so the narrowing is exact."""
+    var units = (count + HOST_NARROW_CHUNK - 1) // HOST_NARROW_CHUNK
+
+    def task(unit: Int) {imm src_address, imm dst_address, imm count}:
+        var src = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=src_address)
+        var dst = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=dst_address)
+        var stop = min(count, (unit + 1) * HOST_NARROW_CHUNK)
+        for i in range(unit * HOST_NARROW_CHUNK, stop):  # native data loop (one host-pool chunk of codes, not a driver loop)
+            dst[i] = Int32(src[i])
+
+    host_parallelize(task, units)
