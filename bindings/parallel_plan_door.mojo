@@ -17,53 +17,48 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_fields
 from bindings.family_common_pack import family_call
-from core.device_plan import DEVICE_PLAN_WORKER, DEVICE_PLAN_CHOLESKY, device_plan_logical
-from core.mode_answer import fast_is_answered_by_identical
+from core.device_plan import DEVICE_PLAN_WORKER, DEVICE_PLAN_CHOLESKY
+from bindings.parallel_plan_run import (
+    PLAN_DEVICES_REFUSAL, plan_indices_admit, plan_vendor_admit, plan_vendor_is_gpu, plan_mode_admitted,
+)
+
+
+def plan_indices(devices: PythonObject) raises -> List[Int]:
+    """UNPACK: an exact tuple of exact ints as typed indices (a value that
+    is not an exact int is refused in the devices words)."""
+    var b = native_loaded_module("builtins")
+    var indices = List[Int](capacity=len(devices))
+    for i in range(len(devices)):  # driver-loop: over the selected device indices
+        if py_type(devices[i]) is not b.int:
+            raise Error(PLAN_DEVICES_REFUSAL)
+        indices.append(Int(py=devices[i]))
+    return indices^
 
 
 def plan_devices(value: PythonObject, operation: String, cooperative: Bool,
                  context: PythonObject) raises -> PythonObject:
     """`devices` as an exact tuple of distinct nonnegative ints, admitted
-    for the installed route with the old pool's refusals and wording.
-    `cooperative`: the binding shards inside one call (refused on a CPU-only
-    install); otherwise the door shards and a CPU-only install runs the
-    host binding per shard."""
+    for the installed route with the old pool's refusals and wording
+    (`plan_indices_admit`, `plan_vendor_admit`: typed, in
+    bindings/parallel_plan_run.mojo). `cooperative`: the binding shards
+    inside one call (refused on a CPU-only install); otherwise the door
+    shards and a CPU-only install runs the host binding per shard."""
     var b = native_loaded_module("builtins")
     if py_type(value) is not b.tuple and py_type(value) is not b.list and py_type(value) is not b.range:
         raise Error("TypeError: devices requires a native tuple, list or range; Python iteration hooks are unsupported")
     var devices = py_call(b.tuple, value)
     if len(devices) == 0:
-        raise Error("ValueError: devices must be distinct nonnegative integer indices")
-    # The logical-device test option (core/device_plan.mojo) admits a
-    # repeated index; nothing else about the route changes.
-    var logical = device_plan_logical()
-    for i in range(len(devices)):  # driver-loop: over the selected device indices
-        if py_type(devices[i]) is not b.int or Int(py=devices[i]) < 0:
-            raise Error("ValueError: devices must be distinct nonnegative integer indices")
-        if logical:
-            continue
-        for j in range(i):  # driver-loop: over the earlier selected device indices
-            if Int(py=devices[j]) == Int(py=devices[i]):
-                raise Error("ValueError: devices must be distinct nonnegative integer indices")
-    var vendor = String(py_get(context, PythonObject("vendor"), PythonObject("cpu")))
-    if vendor == "cpu" or vendor == "None":
-        if cooperative:
-            raise Error("NotImplementedError: no CPU implementation of the cooperative multi-GPU driver "
-                        + operation + " yet: its shards are device row tiles, chunks or ranges inside "
-                        + "the GPU binding, which no host binding restates")
-        return devices
-    if vendor == "metal" and (len(devices) != 1 or Int(py=devices[0]) != 0):
-        raise Error("ValueError: device selection is unavailable for this vendor/device group")
-    if vendor != "cuda" and vendor != "hip" and vendor != "metal":
-        raise Error("ValueError: device selection is unavailable for this vendor/device group")
+        raise Error(PLAN_DEVICES_REFUSAL)
+    var indices = plan_indices(devices)
+    plan_indices_admit(indices)
+    plan_vendor_admit(indices, String(py_get(context, PythonObject("vendor"), PythonObject("cpu"))), operation, cooperative)
     return devices
 
 
 def plan_on_gpu(context: PythonObject) raises -> Bool:
     """True on a CUDA, HIP or Metal install (a plan is bound); False on a
     CPU-only install (no plan: the host binding runs the owner)."""
-    var vendor = String(py_get(context, PythonObject("vendor"), PythonObject("cpu")))
-    return vendor == "cuda" or vendor == "hip" or vendor == "metal"
+    return plan_vendor_is_gpu(String(py_get(context, PythonObject("vendor"), PythonObject("cpu"))))
 
 
 def plan_enter(binding: PythonObject, devices: PythonObject, rebuild: String,
@@ -105,12 +100,8 @@ def plan_require_identical(model: PythonObject, message: String, family: Int) ra
     var b = native_loaded_module("builtins")
     if py_type(mode) is not b.str:
         raise Error("ValueError: " + message)
-    var word = String(mode)
-    if word == "identical":
-        return
-    if word == "fast" and fast_is_answered_by_identical(family):
-        return
-    raise Error("ValueError: " + message)
+    if not plan_mode_admitted(String(mode), family):
+        raise Error("ValueError: " + message)
 
 
 def plan_enter_all(bindings: PythonObject, devices: PythonObject, rebuild: String,
