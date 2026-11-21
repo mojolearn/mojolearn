@@ -41,14 +41,19 @@ from providers.python.device_route_boundary_door import (
 
 
 struct TsaHwResidentOwner(Movable, Writable):
-    """One resident handle and the entry that minted it. `images` pins the
-    extension image the entry lives in until the handle is released."""
+    """One resident handle and the entry that minted it. `release` is the
+    operation id of that entry's table that returns the handle (the
+    Holt-Winters table's, or the ARIMA table's: bindings/tsa_arima_route_unpack.mojo).
+    `images` pins the extension image the entry lives in until the handle is
+    released."""
     var ops: EntryRef
+    var release: Int
     var handle: Int
     var images: PythonObject
 
-    def __init__(out self, ops: EntryRef, handle: Int, images: PythonObject):
+    def __init__(out self, ops: EntryRef, release: Int, handle: Int, images: PythonObject):
         self.ops = ops
+        self.release = release
         self.handle = handle
         self.images = images
 
@@ -66,7 +71,7 @@ struct TsaHwResidentOwner(Movable, Writable):
             # binding is being torn down and has nothing left to release.
             if not native_interpreter_finalizing():
                 var words: List[Int] = [self.handle]
-                _ = entry_ref_call(self.ops, TSA_OP_HW_RESIDENT_RELEASE, List[Int](), words, List[Float64]())
+                _ = entry_ref_call(self.ops, self.release, List[Int](), words, List[Float64]())
         except:
             pass
 
@@ -105,7 +110,18 @@ def register_tsa_hw_resident_owner_identity(published: PythonObject) raises:
 
 def tsa_hw_resident_new(route: DeviceRoute, handle: Int, images: PythonObject) raises -> PythonObject:
     """The lifetime owner of `handle`, minted through `route`'s entry."""
-    return PythonObject(alloc=TsaHwResidentOwner(route.entry, handle, images))
+    return PythonObject(alloc=TsaHwResidentOwner(route.entry, TSA_OP_HW_RESIDENT_RELEASE, handle, images))
+
+
+def tsa_resident_new(ops: EntryRef, release: Int, handle: Int, images: PythonObject) raises -> PythonObject:
+    """The lifetime owner of a `handle` minted through `ops`, returned by
+    that entry's `release` operation (`p [handle]`)."""
+    return PythonObject(alloc=TsaHwResidentOwner(ops, release, handle, images))
+
+
+def tsa_resident_same_entry(resident: PythonObject, ops: EntryRef) raises -> Bool:
+    """The handle was minted through this very entry."""
+    return entry_ref_same(resident.downcast_value_ptr[TsaHwResidentOwner]()[].ops, ops)
 
 
 def tsa_hw_resident_matches(resident: PythonObject, route: DeviceRoute) raises -> Bool:
