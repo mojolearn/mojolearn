@@ -3,7 +3,6 @@
 from bindings.native_array_storage_door import native_array_from_bytes, native_array_unfilled
 from bindings.native_loaded_module_door import native_loaded_module, native_namespace_string_keys
 from bindings.p3_array_arena_records_unpack import P3_ROWS_EXACT_LAYOUT, p3_layout_admitted, p3_layout_admit
-from std.os import getenv
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
 from bindings.classical_arrays_door import classical_input, classical_address, classical_typed, classical_is_array, classical_c_order, classical_kind, classical_wrap_array, _store_code
@@ -282,31 +281,26 @@ def _values(source: PythonObject, context: PythonObject, force_host_rows: Bool =
         var fields = _rows_fields(source,context)
         # DeviceRows.materialize's host-route contract is a single retained
         # snapshot. A later mutation of base/indices must not silently
-        # replace an already materialized selection. GPU ranges deliberately
-        # retain their separate device-gather/resident-base semantics.
-        var host_rows = force_host_rows or String(py_item(context, nk[].k_vendor)) == "cpu" or String(getenv("MOJOLEARN_ARENA_RANGES","1").strip()) == "0"
+        # replace an already materialized selection.
+        # Every caller of a row selection asks for the host snapshot
+        # (`force_host_rows` True at each of them; a device gather is the
+        # caller's own ranges path, bindings/x_prep_native_owner_door.mojo
+        # `xprep_values`). The process question this function used to ask for
+        # a caller that did not (the context's vendor word, the run-time
+        # switch MOJOLEARN_ARENA_RANGES) and the unretained host gather it
+        # selected had no caller left and are removed (lane dw-prep, round 3):
+        # a row selection here is the host snapshot, on every device.
         if py_type(py_item(fields, nk[].k_dtype)) is not native_loaded_module("builtins").str:
             raise Error("TypeError: native row selection requires native dtype metadata")
-        host_rows = host_rows or String(py_item(fields, nk[].k_dtype)) != "<f4"
-        if host_rows and py_get(fields,nk[].k__host) is not None:
+        if py_get(fields,nk[].k__host) is not None:
             return _dense_values(py_item(fields, nk[].k__host),context)
         var indices = py_item(fields, nk[].k_indices)
         classical_admit_value(indices,context)
         if not classical_is_array(indices,context) or String(indices.dtype) != "<i8" or Int(py=indices.ndim) != 1 or not classical_c_order(indices,context):
             raise Error("TypeError: native row selection requires a contiguous int64 index buffer")
-        if host_rows:
-            var snapshot = _rows_snapshot(py_item(fields, nk[].k_base),indices,context)
-            py_setitem(fields,nk[].k__host,snapshot)
-            return _dense_values(snapshot,context)
-        var base = _dense_values(py_item(fields, nk[].k_base),context)
-        var n = Int(py=indices.size)
-        var d = Int(py=base.shape[1])
-        if n < 1 or n > 2147483647 // d:
-            raise Error("MaxAbsScaler requires a nonempty row selection within native indexing bounds")
-        var output = classical_typed(Python.tuple(n,d),"<f4",py_item(context, nk[].k_output_context))
-        _ = py_call(py_item(context, nk[].k_maxabs_gather_rows),classical_address(base),classical_address(output),classical_address(indices),base.shape[0],n,4*d)
-        _ = base^
-        return output
+        var snapshot = _rows_snapshot(py_item(fields, nk[].k_base),indices,context)
+        py_setitem(fields,nk[].k__host,snapshot)
+        return _dense_values(snapshot,context)
     return _dense_values(source,context)
 
 
