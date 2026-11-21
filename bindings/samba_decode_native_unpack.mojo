@@ -20,9 +20,12 @@ not advanced between them. (Before lane cpu-native-crashes, 2026-11-15, the host
 arm stepped the caller's state itself and `load_state` could not discard the
 steps after a `sync_state`: smoke 91d5 samba-decode-session differed in 7585 of
 8192 bytes.)
+
+UNPACK of the session's operations. RUN is training/samba_decode_run.mojo
+(checks, piece counts, the host arm's copies, the program requests) and the
+typed program call; no Python object crosses into either.
 """
 from std.python import Python, PythonObject
-from std.memory import unsafe_memcpy
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type
 from bindings.generation_buffers_door import generation_initialize_binding, generation_array
@@ -33,7 +36,12 @@ from bindings.samba_inference_native_door import (
     _samba_inference_ids, samba_forward, samba_program_words, samba_program_open_owner,
     samba_program_call, samba_state_words, samba_set_cursors, samba_allocate,
 )
-from training.samba_inference_run import _m3_shapes
+# RUN: typed pieces, no Python import.
+from training.samba_decode_run import (
+    samba_decode_layers_check, samba_decode_rows_check, samba_decode_batch_check, samba_attention_counts,
+    samba_m3_counts, samba_state_copy_run, samba_decode_request_addresses, samba_decode_open_words,
+    samba_decode_column_run, samba_decode_logits_run,
+)
 from core.samba_entry_table_programs import (
     SAMBA_PROGRAM_DECODE_STEP, SAMBA_PROGRAM_DECODE_TOKENS, SAMBA_PROGRAM_DECODE_EXPORT, SAMBA_PROGRAM_DECODE_LOAD,
 )
@@ -70,16 +78,10 @@ def _samba_state_counts(model: PythonObject, state: PythonObject) raises -> List
     for i in range(len(py_item(config, nk[].k_layers))):  # driver-loop: over the stack's layer state owners
         if String(py_item(config, nk[].k_layers)[i]) == "attention":
             var lslots = samba_fields(layers[i])
-            var n = b * Int(py=py_item(lslots, nk[].k_n_kv_heads)) * smax * Int(py=py_item(lslots, nk[].k_head_dim))
-            counts.append(n)
-            counts.append(n)
+            samba_attention_counts(counts, b, Int(py=py_item(lslots, nk[].k_n_kv_heads)), smax,
+                                   Int(py=py_item(lslots, nk[].k_head_dim)))
         else:
-            var shapes = _m3_shapes(b, Int(py=py_item(samba_fields(blocks[i]), nk[].k_nheads)))
-            for k in range(len(shapes)):  # driver-loop: over the fixed Mamba3 continuation buffer ABI
-                var n = 1
-                for j in range(len(shapes[k])):  # small-loop(piece rank)
-                    n *= shapes[k][j]
-                counts.append(n)
+            samba_m3_counts(counts, b, Int(py=py_item(samba_fields(blocks[i]), nk[].k_nheads)))
     return counts^
 
 
@@ -93,9 +95,7 @@ def _samba_state_copy(model: PythonObject, source: PythonObject, target: PythonO
     var target_copies = List[PythonObject]()
     var dst = samba_state_words(model, target, what, target_keep, target_copies)
     var counts = _samba_state_counts(model, source)
-    for i in range(len(counts)):  # driver-loop: over the state's pieces (per layer)
-        unsafe_memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=dst[0][i]),
-                      src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=src[0][i]), count=counts[i])
+    samba_state_copy_run(dst[0], src[0], counts)
     _writeback(target_copies)
     samba_set_cursors(model, target, src[1])
     _ = keep^
@@ -123,15 +123,13 @@ def samba_decode_init(session: PythonObject, model: PythonObject, state: PythonO
     if py_get(slots, nk[].k__resident_session) is not None:
         raise Error(what + ": the state is owned by an open resident decode session; call sync_state() or close() on it first")
     var layers = py_item(slots, nk[].k_layers)
-    if len(layers) != len(py_item(config, nk[].k_layers)):
-        raise Error(what + ": the state holds " + String(len(layers)) + " layers, the stack " + String(len(py_item(config, nk[].k_layers))))
+    samba_decode_layers_check(what, len(layers), len(py_item(config, nk[].k_layers)))
     for i in range(len(layers)):  # driver-loop: over the stack's layer state owners
         if py_get(samba_fields(layers[i]), nk[].k__resident_session) is not None:
             raise Error(what + ": layer " + String(i) + " state is owned by an open resident decode session")
     var b = Int(py=py_item(slots, nk[].k_batch_size))
     var smax = Int(py=py_item(slots, nk[].k_max_tokens))
-    if b < 1 or smax < 1:
-        raise Error(what + ": the state holds no rows")
+    samba_decode_rows_check(what, b, smax)
     # The stack's route (mode/vendor admission of the connected binding,
     # resolved once with the stack); the session then reaches its program
     # through the table key alone (lane samba-sessions-native: no `_entries`
@@ -151,12 +149,9 @@ def samba_decode_init(session: PythonObject, model: PythonObject, state: PythonO
         var copies = List[PythonObject]()
         var words = samba_state_words(model, state, what, keep, copies)
         var opened = samba_program_words(fields, config, b, smax)
-        var addresses: List[Int] = [Int(py=py_item(fields, nk[].k_flat)._addr)]
-        for i in range(len(words[0])):  # driver-loop: over the state's piece addresses (per layer)
-            addresses.append(words[0][i])
-        var open_words = opened[0].copy()
-        for i in range(len(words[1])):  # driver-loop: over the state's cursor words (two per layer)
-            open_words.append(words[1][i])
+        # RUN: the open request, each list allocated once at its size.
+        var addresses = samba_decode_request_addresses(Int(py=py_item(fields, nk[].k_flat)._addr), words[0])
+        var open_words = samba_decode_open_words(opened[0], words[1])
         var handle = samba_program_open_owner(key, addresses, open_words, opened[1], b, smax)
         _ = keep^
         py_setitem(values, nk[].k__handle, handle)
@@ -199,8 +194,7 @@ def samba_decode_step(session: PythonObject, inputs: PythonObject, context: Pyth
     # integers, range-checked against the vocabulary in one native pass.
     var admitted = _samba_inference_ids(inputs, v, True, PythonObject(None), context)
     var ids = admitted[0]
-    if Int(py=ids.shape[0]) != b:
-        raise Error(what + ": the session holds " + String(b) + " rows, inputs has B = " + String(ids.shape[0]))
+    samba_decode_batch_check(what, b, Int(py=ids.shape[0]))
     var output = generation_array([b, v])
     var addresses: List[Int] = [Int(py=ids._addr), Int(py=output._addr)]
     var words: List[Int] = [b]
@@ -227,25 +221,25 @@ def samba_decode_tokens(session: PythonObject, inputs: PythonObject, context: Py
     var b = Int(py=ids.shape[0])
     var n = Int(py=ids.shape[1])
     var rows = Int(py=py_item(values, nk[].k__rows))
-    if b != rows:
-        raise Error(what + ": the session holds " + String(rows) + " rows, inputs has B = " + String(b))
+    samba_decode_batch_check(what, rows, b)
     var output = generation_array([b, n, v])
     if handle is None:
         # The host arm: the per-call step on the session-owned state, token by
         # token, with column t of the ids as the step's (B, 1) input.
-        var src = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=ids._addr))
-        var dst = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=output._addr))
+        var ids_addr = Int(py=ids._addr)
+        var output_addr = Int(py=output._addr)
         # One (B, 1) id column for every token (was one allocation per token):
         # the step's id admission copies it into its own array before the run.
         var column = generation_array([b, 1], "i")
-        var col = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=column._addr))
+        var column_addr = Int(py=column._addr)
+        # The session's stack and state, read once for the call (two field
+        # reads per token until 2026-11-21).
+        var model = py_item(values, nk[].k__model)
+        var private = py_item(values, nk[].k__private)
         for t in range(n):  # driver-loop: over decode tokens, one host-arm step each
-            for r in range(b):  # driver-loop: over the batch rows, a host-arm copy of token t's id
-                col.unsafe_store(r, src.unsafe_load(r * n + t))
-            var logits = samba_forward(py_item(values, nk[].k__model), column, py_item(values, nk[].k__private), PythonObject(None), True, context)
-            var row = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=logits._addr))
-            for r in range(b):  # driver-loop: over the batch rows, a host-arm copy of token t's logits
-                unsafe_memcpy(dest=dst + (r * n + t) * v, src=row + r * v, count=v)
+            samba_decode_column_run(column_addr, ids_addr, b, n, t)
+            var logits = samba_forward(model, column, private, PythonObject(None), True, context)
+            samba_decode_logits_run(output_addr, Int(py=logits._addr), b, n, t, v)
             _ = logits^
         _ = column^  # keep the id column alive past the last step's read
         _ = ids

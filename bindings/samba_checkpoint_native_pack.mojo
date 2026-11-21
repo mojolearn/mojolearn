@@ -1,5 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Native, bounded streaming for the existing Samba v2 checkpoint format."""
+"""Native, bounded streaming for the existing Samba v2 checkpoint format.
+
+PACK of the checkpoint doors: the envelope, the file's posix calls (one each
+per save or load) and the restored state dictionary. Every array byte is
+written, read and hashed in RUN (training/samba_checkpoint_run.mojo
+`_checkpoint_write`, `_checkpoint_read`) through the raw descriptor."""
 # The PACK half of the former `bindings/samba_checkpoint_native.mojo` (fence-flip-2 split, 2026-11-12);
 # the UNPACK half is `bindings/samba_checkpoint_native_unpack.mojo`.
 from std.python import Python, PythonObject
@@ -18,7 +23,10 @@ from core.sha256 import sha256_hex_addr
 from providers.python.borrowed_buffer_pyapi_unpack import AdmittedBorrowedBuffer
 from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type
 # RUN (lane rs-neural): names, hash and the native chunked write, no Python import.
-from training.samba_checkpoint_run import SAMBA_TRANSFER_CHUNK, _checkpoint_names, _checkpoint_hash, _checkpoint_write
+from training.samba_checkpoint_run import (
+    _checkpoint_names, _checkpoint_hash, _checkpoint_write, _checkpoint_read, samba_checkpoint_header_size_check,
+    samba_checkpoint_unchanged_check, samba_checkpoint_array_check,
+)
 
 
 from bindings.samba_checkpoint_native_unpack import (
@@ -35,14 +43,6 @@ def _checkpoint_magic() raises -> PythonObject:
     return py_call(PythonObject("MOJOLEARN-SAMBA").encode, "ascii") + py_call(native_loaded_module("builtins").bytes, py_ints([2, 10]))
 
 
-def _checkpoint_digest(raw: PythonObject) raises -> PythonObject:
-    var bi = native_loaded_module("builtins")
-    var hash = _checkpoint_hash()
-    for start in range(0, len(raw), SAMBA_TRANSFER_CHUNK):  # driver-loop: over bounded file hashing chunks
-        sha256_update(hash, raw[py_call(bi.slice, start, min(start + SAMBA_TRANSFER_CHUNK, len(raw)))])
-    return PythonObject(hash.hexdigest())
-
-
 def samba_checkpoint_save(model: PythonObject, value: PythonObject, context: PythonObject) raises -> PythonObject:
     var nk = samba_keys()
     var state = samba_snapshot(model, False, context)
@@ -53,6 +53,7 @@ def samba_checkpoint_save(model: PythonObject, value: PythonObject, context: Pyt
     var metadata = py_call(bi.dict, state)
     var views = bi.list()
     var descriptors = bi.list()
+    var digests = List[String]()
     for i in range(4):  # driver-loop: over complete training-state arrays
         var name = names[i]
         _ = py_call(metadata.pop, name)
@@ -63,7 +64,9 @@ def samba_checkpoint_save(model: PythonObject, value: PythonObject, context: Pyt
         py_setitem(entry, nk[].k_shape, py_call(bi.list, state[name].shape))
         py_setitem(entry, nk[].k_nbytes, len(raw))
         var pin = AdmittedBorrowedBuffer(raw)
-        py_setitem(entry, nk[].k_sha256, PythonObject(sha256_hex_addr(pin.layout.value().address, len(raw))))
+        var digest = sha256_hex_addr(pin.layout.value().address, len(raw))
+        py_setitem(entry, nk[].k_sha256, PythonObject(digest))
+        digests.append(digest)
         pin.release()
         _ = py_call(views.append, raw)
         _ = py_call(descriptors.append, entry)
@@ -73,8 +76,7 @@ def samba_checkpoint_save(model: PythonObject, value: PythonObject, context: Pyt
     py_setitem(envelope, nk[].k_state, metadata)
     py_setitem(envelope, nk[].k_arrays, descriptors)
     var header = py_call(PythonObject(_transport_json(envelope)).encode, "ascii")
-    if len(header) > SAMBA_HEADER_LIMIT:
-        raise Error("Samba checkpoint metadata exceeds the header limit")
+    samba_checkpoint_header_size_check(len(header), SAMBA_HEADER_LIMIT)
     var header_hash = _checkpoint_hash()
     sha256_update(header_hash, header)
     var prefix = _checkpoint_magic() + py_call(PythonObject(len(header)).to_bytes, 8, "little") + header + sha256_digest(header_hash)
@@ -97,8 +99,7 @@ def samba_checkpoint_save(model: PythonObject, value: PythonObject, context: Pyt
             var pin = AdmittedBorrowedBuffer(raw)
             _checkpoint_write(fd, pin.layout.value().address, len(raw), written, whole)
             pin.release()
-            if Bool(py=PythonObject(written.hexdigest()) != py_item(descriptors[i], nk[].k_sha256)):
-                raise Error("Samba checkpoint state changed during save")
+            samba_checkpoint_unchanged_check(written.hexdigest(), digests[i])
         _ = py_call(os.fsync, fd)
         var closing = fd
         fd = -1
@@ -138,28 +139,31 @@ def _checkpoint_read_stream(stream: PythonObject, context: PythonObject) raises 
     var state = py_item(envelope, nk[].k_state)
     var descriptors = py_item(envelope, nk[].k_arrays)
     _checkpoint_validate(state, descriptors, context)
-    var expected = len(_checkpoint_magic()) + 8 + length + 32
+    var expected_header = len(_checkpoint_magic()) + 8 + length + 32
+    var expected = expected_header
     for i in range(4):  # driver-loop: over stored array spans
         expected += Int(py=py_item(descriptors[i], nk[].k_nbytes))
-    if Int(py=py_call(native_loaded_module("posix").fstat, stream.fileno()).st_size) != expected:
+    var posix = native_loaded_module("posix")
+    var fd = Int(py=stream.fileno())
+    if Int(py=py_call(posix.fstat, fd).st_size) != expected:
         raise Error("Samba checkpoint truncated or trailing array data")
+    # The arrays are read through the raw descriptor, positioned once at the
+    # first array (one posix call per load); the buffered stream is not used
+    # for them and is repositioned for the trailing-data check below.
+    _ = py_call(posix.lseek, fd, expected_header, 0)
     for i in range(4):  # driver-loop: over admitted complete training-state arrays
         var entry = descriptors[i]
         var array = generation_array([Int(py=py_item(entry, nk[].k_shape)[0])], "i" if i == 3 else "f")
         var raw = _checkpoint_raw(array, "i" if i == 3 else "f", context)
+        var size = len(raw)
+        var address = Int(py=array._addr)
         var actual = _checkpoint_hash()
-        for start in range(0, len(raw), SAMBA_TRANSFER_CHUNK):  # driver-loop: over bounded file read chunks
-            var chunk = raw[py_call(bi.slice, start, min(start + SAMBA_TRANSFER_CHUNK, len(raw)))]
-            var received = 0
-            while received < len(chunk):  # driver-loop: over partial native file reads within one chunk
-                var count = Int(py=py_call(stream.readinto, chunk[py_call(bi.slice, received, PythonObject(None))]))
-                if count < 1:
-                    raise Error("Samba checkpoint truncated array")
-                received += count
-            sha256_update(actual, chunk)
-        if Bool(py=PythonObject(actual.hexdigest()) != py_item(entry, nk[].k_sha256)):
-            raise Error("Samba checkpoint array integrity mismatch: " + String(py_item(entry, nk[].k_name)))
+        # RUN: bounded native reads, hashed as they arrive.
+        _checkpoint_read(fd, address, size, actual)
+        samba_checkpoint_array_check(actual.hexdigest(), String(py_item(entry, nk[].k_sha256)), String(py_item(entry, nk[].k_name)))
+        _ = raw^
         py_setitem(state, py_item(entry, nk[].k_name), array)
+    _ = py_call(stream.seek, expected)
     if len(py_call(stream.read, 1)) != 0:
         raise Error("Samba checkpoint trailing array data")
     return state

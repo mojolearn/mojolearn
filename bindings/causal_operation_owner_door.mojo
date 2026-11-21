@@ -230,7 +230,7 @@ def causal_model_owner_build(fields: PythonObject) raises -> PythonObject:
     return PythonObject(alloc=CausalModelOwner(words^))
 
 
-def causal_model_snapshot_keep(held: PythonObject, var built: GenerationOperationSnapshot):
+def causal_model_snapshot_keep(held: PythonObject, var built: GenerationOperationSnapshot) raises:
     """Give the model owner its weight snapshot, once per generation. Call
     with the GIL held, on a snapshot built from a capture of this owner's
     generation. A snapshot already kept wins (another operation built it

@@ -64,13 +64,13 @@ def lof_fit_run(driver: XnDriver, request: LofFitRequest) raises -> LofFitOutcom
     outcome.status = plan.select(driver, request.x, request.x)
     plan.roots(driver, request.distances)
     if outcome.status != 0:
-        return outcome
+        return outcome^
     plan.density(driver, request.distances, request.distances, request.densities, n)
     plan.score(driver, request.densities, request.densities, request.scores, n)
     if not request.auto:
         outcome.offset = lof_offset(driver, request.scores, n, request.contamination)
     _ = plan^
-    return outcome
+    return outcome^
 
 
 def lof_fit_labels_run(driver: XnDriver, scores: Int, rows: Int, offset: Float64, dst: Int) raises:

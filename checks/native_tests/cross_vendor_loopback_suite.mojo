@@ -131,7 +131,7 @@ def witness(state: Int) -> List[Int]:
 
 
 def worker(name: String, var shards: List[Int], chained: Bool, fd: Int, feed: Int, feed_shards: Int,
-           var snapshot: List[Int]) -> CrossWorkerState:
+           var snapshot: List[Int]) raises -> CrossWorkerState:
     """A worker as the door's UNPACK leaves it at the start of a run."""
     var w = CrossWorkerState()
     w.name = name

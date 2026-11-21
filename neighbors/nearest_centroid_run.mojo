@@ -90,14 +90,14 @@ def nc_fit_run(driver: XnDriver, request: NcFitRequest, mut plan: NcFitPlan) rai
     plan.euclidean = request.euclidean
     outcome.status = plan.statistics(driver, request.x, request.labels, request.stats)
     if outcome.status != 0:
-        return outcome
+        return outcome^
     var summary = plan.median_std(driver, request.stats)
     if summary[1]:
         outcome.constant = plan.constant(driver, request.x)
         if outcome.constant:
-            return outcome
+            return outcome^
     plan.shrink(driver, request.x, request.stats, request.centroids, request.deviations, summary[0], request.shrink)
-    return outcome
+    return outcome^
 
 
 struct NcQueryRequest(Copyable, Movable):

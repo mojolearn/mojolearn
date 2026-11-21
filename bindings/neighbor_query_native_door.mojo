@@ -382,7 +382,7 @@ def _ivf_search(model: PythonObject, kind: PythonObject, args: PythonObject, adm
     # array that cannot be frozen) reads and admits the five.
     var spans = IvfIndexSpans(0, 0, 0, 0, 0) if handle != IVF_NO_HANDLE else _ivf_snapshot_spans(stored_snapshots)
     ivf_door_search(ops_key, IvfSearchRequest(
-        index_words, handle, spans, q.source.addr, Int(py=classical_address(dist)), Int(py=classical_address(ids)),
+        index_words^, handle, spans^, q.source.addr, Int(py=classical_address(dist)), Int(py=classical_address(ids)),
         Int(py=classical_address(count)), 0 if keep is None else Int(py=classical_address(keep)),
         m, k, Int(py=fields["n_probes"]), False))
     _ = q

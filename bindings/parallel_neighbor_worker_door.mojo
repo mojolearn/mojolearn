@@ -472,7 +472,7 @@ def _ivf_partial(model: PythonObject, source: PythonObject, tables: PythonObject
     else:
         handle = Int(py=held[1])
     ivf_door_search(ops_key, IvfSearchRequest(
-        index_words, handle, spans, Int(py=classical_address(q)), Int(py=classical_address(dist)),
+        index_words^, handle, spans^, Int(py=classical_address(q)), Int(py=classical_address(dist)),
         Int(py=classical_address(ids)), Int(py=classical_address(counts)), 0,
         m, k, Int(py=py_item(fields, nk[].k_n_probes)), True))
     _ = q

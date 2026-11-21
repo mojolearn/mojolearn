@@ -7,7 +7,8 @@ Python exports (bindings/_mojolearn_x_ann_host.mojo `x_ann_ivf_pq_search`,
 arrays in place. The exports UNPACK their lists, release the GIL and call the
 same `*_run` body the table entry calls: the same checks, the same kernels
 and the same words. The host binding has no resident index, so the resident
-operations are refused here, as the absent exports were. The table entry is
+operations are refused here, as the absent exports were. The fit
+operations' bodies are in x_ann/ops_entry_host_fit.mojo. The table entry is
 called with the GIL already released by its caller; nothing here touches
 Python.
 """
@@ -19,7 +20,12 @@ from core.shared_slot import SharedSlot
 from core.host_finite_scan import host_all_finite_f32, host_finite_status
 from core.neighbors_entry_table_ann import (
     ANN_OP_IVF_PQ_SEARCH, ANN_OP_IVF_SQ_SEARCH, ANN_OP_IVF_RABITQ_SEARCH, ANN_OP_CAGRA_SEARCH,
-    ANN_OP_FILTER_TOPK, ANN_OP_TSNE_FIT, ann_ops_check_spans, ann_span_list,
+    ANN_OP_FILTER_TOPK, ANN_OP_TSNE_FIT, ANN_OP_IVF_PQ_BUILD, ANN_OP_IVF_SQ_BUILD, ANN_OP_IVF_RABITQ_BUILD,
+    ANN_OP_CAGRA_BUILD, ann_ops_check_spans, ann_span_list,
+)
+from x_ann.ops_entry_host_fit import (
+    ann_ivf_pq_build_host_run, ann_ivf_sq_build_host_run, ann_ivf_rabitq_build_host_run,
+    ann_cagra_build_host_run,
 )
 from x_ann.abi import check_search, out_f32_to
 from x_ann.abi_shell_impl import cagra_check_graph
@@ -235,6 +241,16 @@ def ann_ops_host_run(operation: Int, pa: MutPointer[Int, MutUntrackedOrigin], na
         for i in range(nf):  # small-loop(no: t-SNE's four float settings): metadata, not data
             f.append(pf[i])
         return ann_tsne_fit_host_run(a, p, f)
+    if operation == ANN_OP_IVF_PQ_BUILD:
+        return ann_ivf_pq_build_host_run(a, p)
+    if operation == ANN_OP_IVF_SQ_BUILD:
+        return ann_ivf_sq_build_host_run(a, p)
+    if operation == ANN_OP_IVF_RABITQ_BUILD:
+        return ann_ivf_rabitq_build_host_run(a, p)
+    if operation == ANN_OP_CAGRA_BUILD:
+        return ann_cagra_build_host_run(a, p)
+    # The resident operations, ANN_OP_IVF_PQ_BUILD_RESIDENT and
+    # ANN_OP_IVF_PQ_REGISTER_BUILT among them.
     raise Error("ann ops: operation " + String(operation)
                 + " needs a resident index, which the CPU column does not keep")
 
