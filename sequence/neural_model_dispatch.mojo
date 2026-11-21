@@ -69,7 +69,10 @@ comptime SEQ_MOE_FORWARD_DEV = 40
 comptime SEQ_MOE_FORWARD_DEV_ALLOC = 41
 comptime SEQ_MOE_WEIGHTS_PUT = 42
 comptime SEQ_MOE_WEIGHTS_FREE = 43
-comptime MODEL_OPERATION_COUNT = 44
+# lane api-torch round 2 (2026-11-21): Sequential.state_dict's weight export
+# (autograd/weight_import.mojo model_export_params), on either executor.
+comptime MODEL_EXPORT_PARAMS = 44
+comptime MODEL_OPERATION_COUNT = 45
 
 
 struct NeuralModelRequest(Movable):

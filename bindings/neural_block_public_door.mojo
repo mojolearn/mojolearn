@@ -31,6 +31,7 @@ from core.host_helpers_impl import all_finite_f32
 from core.native_descriptor_abi import TRANSFORMER_BLOCK_ABI_NAME, MAMBA_BLOCK_ABI_NAME, MAMBA_STATE_ABI_NAME
 from providers.python.operation_lock_pyapi_door import OperationLockLease, operation_lock_create
 from bindings.py_model_records import bump_model_generation
+from bindings.torch_to_unpack import torch_to_device
 from providers.python.neural_descriptor_pyapi_door import (
     neural_descriptor_reuse, NEURAL_NATIVE_DISPATCH,
 )
@@ -688,72 +689,15 @@ def neural_block_load_state_dict_binding(mut mods: NativeModules, block: PythonO
     return neural_block_set_params_binding(mods, block, updates, context)
 
 
-def _neural_float32_word(mut mods: NativeModules, value: PythonObject) raises -> Bool:
-    # True for `torch.float32`, NumPy's float32 dtype or the word "float32";
-    # False for any other dtype. Exact-type admission: a str, or a dtype
-    # class named `dtype` (torch.dtype; NumPy's `dtype[float32]` or, from
-    # NumPy 2, `Float32DType`: C types whose str is their name); nothing
-    # else is read.
-    var bi = mods.module("builtins")
-    var kind = py_type(value)
-    if kind is bi.str:
-        var word = String(value)
-        return word == "float32" or word == "torch.float32"
-    var kind_name = String(py_call(bi.type.__dict__["__name__"].__get__, kind))
-    if kind_name != "dtype" and not kind_name.startswith("dtype[") and not kind_name.endswith("DType"):
-        raise Error("TypeError: neural block: dtype must be torch.float32, numpy.float32's dtype or 'float32'")
-    var word = String(py_call(bi.str, value))
-    return word == "float32" or word == "torch.float32"
-
-
 def neural_block_to_binding(mut mods: NativeModules, block: PythonObject, args: PythonObject, kwargs: PythonObject,
     context: PythonObject) raises -> PythonObject:
-    # `to(device=None, dtype=None)` as torch spells it: a str positional is the
-    # device, a dtype positional is the dtype. A new device rebuilds the block
+    # `to(device=None, dtype=None)`: the arguments are admitted by the shared
+    # UNPACK (bindings/torch_to_unpack.mojo). A new device rebuilds the block
     # on that route through the constructor (as `set_params(device=...)`); the
     # device word is admitted there by the one rule (core/device_route.mojo).
-    # Blocks are float32 only, so the dtype is admitted or refused, never
-    # converted.
     var bi = mods.module("builtins")
-    if py_type(args) is not bi.tuple or py_type(kwargs) is not bi.dict:
-        raise Error("TypeError: neural block: to() requires ordinary positional and keyword arguments")
-    if len(args) > 2:
-        raise Error("TypeError: neural block: to() takes a device and a dtype")
-    var device = PythonObject(None)
-    var dtype = PythonObject(None)
-    var has_device = False
-    for i in range(len(args)):  # driver-loop: over at most two positional arguments
-        var item = args[i]
-        if item is None:
-            continue
-        if py_type(item) is bi.str and String(item) != "float32" and String(item) != "torch.float32":
-            if has_device:
-                raise Error("TypeError: neural block: to() got two devices")
-            device = item
-            has_device = True
-        else:
-            dtype = item
-    var keys = py_call(bi.list, kwargs)
-    for i in range(len(keys)):  # driver-loop: over the keyword names given
-        var key = keys[i]
-        if py_type(key) is not bi.str:
-            raise Error("TypeError: neural block: to() keywords must be names")
-        var name = String(key)
-        if name == "device":
-            if has_device:
-                raise Error("TypeError: neural block: to() got two devices")
-            device = kwargs[key]
-            has_device = device is not None
-        elif name == "dtype":
-            dtype = kwargs[key]
-        elif name == "non_blocking" or name == "copy":
-            # Accepted for PyTorch code that passes them: a rebuild is
-            # synchronous and never shares the old block's device storage.
-            continue
-        else:
-            raise Error("TypeError: neural block: to() got an unexpected keyword argument '" + name + "'")
-    if dtype is not None and not _neural_float32_word(mods, dtype):
-        raise Error("ValueError: neural block: the blocks run float32 only (identical mode defines its bits in float32), got dtype " + String(py_call(bi.repr, dtype)))
+    var device = torch_to_device(mods, args, kwargs, "neural block")
+    var has_device = device is not None
     if not has_device:
         return block
     var fields = neural_block_fields(mods, block, context)
