@@ -1443,6 +1443,12 @@ class ParameterSampler:
 
 class _BaseSearch:
     _estimator_type = None
+    # The search runs on both devices: its scorers and its member calls take
+    # their compiled modules by the member's device, and its fold rows follow
+    # its own `device`. `mojolearn.check(search, X)` builds the search on the
+    # other device with its members moved there too (the default twin of the
+    # check moves `estimator` and hands `best_estimator_` over).
+    _mojolearn_device = True
 
     def __init__(self, estimator, *, scoring=None, n_jobs=None, refit=True, cv=None, verbose=0,
                  pre_dispatch='2*n_jobs', error_score=float('nan'), return_train_score=False, device=None):
@@ -1560,6 +1566,17 @@ class _BaseSearch:
         With several metrics, the metric named by ``refit`` is used.
         """
         return _NATIVE(self, "family_msel_search_score", (X, y), _NATIVE_CONTEXT)
+
+    def vendor_used(self):
+        """Return the vendor of the compiled binary ``best_estimator_`` answers with.
+
+        Returns
+        -------
+        str
+            ``'cpu'`` when the best estimator runs on the CPU, else the vendor
+            of this installation's GPU binaries.
+        """
+        return _NATIVE(self, "family_msel_search_vendor_used", (), _NATIVE_CONTEXT)
 
     @property
     def classes_(self):

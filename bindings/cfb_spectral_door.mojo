@@ -14,13 +14,15 @@ from bindings.spectral_native_boundary_unpack import (
     SpectralConnection, SpectralStatePins, SpectralRoutePins, SpectralPredictionPins,
     spectral_fit_run, spectral_embedding_run, spectral_query_run,
 )
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from providers.python.host_estimator_binding_pyapi_door import host_estimator_binding
+from providers.python.estimator_binding_pyapi_door import estimator_binding_routed
 from bindings.admitted_family_door import admit_family, admit_family_f64, admit_family_input
 from providers.python.array_metadata_pyapi_door import ArrayPin
 from bindings.admitted_input_unpack import admit_typed
 from bindings.py_balanced import py_call, py_type, py_contains, py_setitem, py_fields, py_get
-from bindings.classical_arrays_door import classical_address
+from bindings.classical_arrays_door import classical_address, classical_is_array
 from core.host_finite_scan import host_all_finite_f32
 from core.family_cast_impl import family_min_f32
 from core.spectral_embedding_config import SpectralEmbeddingConfig
@@ -63,7 +65,6 @@ from bindings.operation_names_cfb import (
 from bindings.spectral_umap_routes_pack import (
     spectral_umap_route,
 )
-from bindings.cfb_dbscan_door import cfb_borrow_copy
 from bindings.cfb_sparse_read_unpack import cfb_sparse_triples
 from bindings.host_sparse_native_door import host_sparse_format, host_sparse_dense
 from bindings.native_loaded_module_door import native_loaded_module
@@ -89,6 +90,47 @@ from bindings.py_balanced import py_item
 
 def _builtins() raises -> PythonObject:
     return native_loaded_module("builtins")
+
+
+def cfb_borrow_copy(x: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`x if input_copied_ else x.copy()` as a mojolearn Array: an Array the
+    cast made is kept, anything else (the caller's own buffer) is copied so
+    a later write by the caller cannot move what predict reads."""
+    if classical_is_array(x, context) and not (x is source):
+        return x
+    var b = _builtins()
+    var copied = family_array(py_call(b.tuple, x.shape), "<f4", context)
+    unsafe_memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(copied))),
+           src=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), count=Int(py=x.size))
+    _ = copied  # keep the Python object alive through the native call above
+    return copied
+
+
+def _routed(model: PythonObject, group: String, name: String, requested: PythonObject,
+            context: PythonObject) raises -> PythonObject:
+    """The compiled module of one spectral group for this operation. An
+    estimator's operation takes it from the ESTIMATOR'S binding route (its
+    device, read once on a miss; a hit is one record read and, per held
+    name, a name compare and two pointer compares). A module-level function
+    has no estimator and keeps the import-time process connection."""
+    if model is None:
+        return spectral_umap_route(context, group, requested)
+    return estimator_binding_routed(model, requested, name, context, False)
+
+
+def _routes(model: PythonObject, clustering: Bool, context: PythonObject) raises -> SpectralRoutePins:
+    """The four modules of a fit. The base image runs `identical` only: the
+    mode object is the one retained in the connection context, so the route
+    compares it by identity (a new str per call would never hit)."""
+    var identical = context["family_cfb_identical"]
+    var cluster = PythonObject(None)
+    if clustering:
+        var nk = cluster_keys()
+        cluster = _routed(model, "cluster", "_mojolearn_x_cluster", py_get(py_fields(model), nk[].k_numeric_mode), context)
+    return SpectralRoutePins(
+        _routed(model, "metrics", "_mojolearn_metrics", PythonObject(None), context),
+        _routed(model, "decomp", "_mojolearn_x_decomp", PythonObject(None), context),
+        _routed(model, "base", "_mojolearn", identical, context), cluster)
 
 
 def _int(value: PythonObject) raises -> Int:
@@ -1109,11 +1151,7 @@ def _cfb_spectral_algorithm_operation(model: PythonObject, operation: Int, args:
     """Fit/predict shells pass (X,); route selection belongs to this owner."""
     var nk = cluster_keys()
     if operation == CFB_OPN_FAMILY_CFB_SC_FIT or operation == CFB_OPN_FAMILY_CFB_SC_FIT_PREDICT:
-        var routed = SpectralRoutePins(
-            spectral_umap_route(context, "metrics", PythonObject(None)),
-            spectral_umap_route(context, "decomp", PythonObject(None)),
-            spectral_umap_route(context, "base", PythonObject("identical")),
-            spectral_umap_route(context, "cluster", py_get(py_fields(model), nk[].k_numeric_mode)))
+        var routed = _routes(model, True, context)
         _sc_fit(model, routed, source, context)
         if operation == CFB_OPN_FAMILY_CFB_SC_FIT:
             return model
@@ -1124,7 +1162,7 @@ def _cfb_spectral_algorithm_operation(model: PythonObject, operation: Int, args:
         if binding is None:
             binding = host_estimator_binding(model, "_mojolearn_metrics", mode, context)
         if binding is None:
-            binding = spectral_umap_route(context, "metrics", mode)
+            binding = _routed(model, "metrics", "_mojolearn_metrics", mode, context)
         var result = _sc_predict(model, binding, source, context)
         return result.labels
     if operation == CFB_OPN_FAMILY_CFB_SC_PREDICT_EMBEDDING:
@@ -1133,14 +1171,14 @@ def _cfb_spectral_algorithm_operation(model: PythonObject, operation: Int, args:
         if binding is None:
             binding = host_estimator_binding(model, "_mojolearn_metrics", mode, context)
         if binding is None:
-            binding = spectral_umap_route(context, "metrics", mode)
+            binding = _routed(model, "metrics", "_mojolearn_metrics", mode, context)
         var result = _sc_predict(model, binding, source, context)
         return Python.tuple(result.labels, result.embedding)
     if operation == CFB_OPN_FAMILY_CFB_SE_VALIDATE:
         _ = _se_validate(py_fields(model), context)
         return PythonObject(None)
     if operation == CFB_OPN_FAMILY_CFB_SE_KNN_AFFINITY:
-        var base = spectral_umap_route(context, "base", PythonObject("identical"))
+        var base = _routed(model, "base", "_mojolearn", context["family_cfb_identical"], context)
         var result = _knn_affinity(py_fields(model), source, False, base, context)
         return result.public_array
     if operation == CFB_OPN_FAMILY_CFB_COO_TRIPLES:
@@ -1148,10 +1186,7 @@ def _cfb_spectral_algorithm_operation(model: PythonObject, operation: Int, args:
         var coo = _coo_triples(args[0], String(py=args[1]), base, context, True)
         return Python.tuple(coo.rows, coo.cols, coo.vals, PythonObject(coo.n))
     if operation == CFB_OPN_FAMILY_CFB_SE_FIT or operation == CFB_OPN_FAMILY_CFB_SE_FIT_TRANSFORM:
-        var routed = SpectralRoutePins(
-            spectral_umap_route(context, "metrics", PythonObject(None)),
-            spectral_umap_route(context, "decomp", PythonObject(None)),
-            spectral_umap_route(context, "base", PythonObject("identical")), PythonObject(None))
+        var routed = _routes(model, False, context)
         _se_fit(model, routed, source, context)
         if operation == CFB_OPN_FAMILY_CFB_SE_FIT:
             return model

@@ -41,9 +41,10 @@ def test_existing_provider_is_admitted_outside_packed_operation_loops():
     # connection (OcConnection: the native driver), never a named per-step provider lookup.
     ocsvm = (ROOT / 'bindings/svc_ocsvm_native_door.mojo').read_text()
     operation = ocsvm[ocsvm.index('def svc_ocsvm_operation('):]
-    assert operation.count('_oc_binding(args[0], context)') == 1
+    assert operation.count('oc_binding_unpack(model, args[0], context)') == 1
     assert operation.count('OcConnection(binding)') == 1
-    assert ocsvm.count('return xn_admit(binding)') == 1 and 'xn_execute(' not in ocsvm
+    unpack = (ROOT / 'bindings/svc_ocsvm_boundary_unpack.mojo').read_text()
+    assert unpack.count('return xn_admit(binding)') == 1 and 'xn_execute(' not in ocsvm + unpack
 
 
 def test_selected_public_method_bodies_have_no_python_binding_lookup():

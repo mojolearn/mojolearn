@@ -14,7 +14,7 @@ from bindings.sequential_inputs_door import sequential_sequence_f32
 from bindings.linalg_ops_buffers_unpack import lin_dtype_name
 from bindings.linalg_ops_buffers_run import lin_is_f32
 from bindings.admitted_input_unpack import AdmittedBuf, AdmittedTypedPin, admitted_typed_once, admitted_typed_c, admitted_shape_tuple, admitted_unfilled
-from bindings.linalg_ops_lowbit_door import lin_connected_binding, lin_lowbit, lin_call, lin_ints
+from bindings.linalg_ops_lowbit_door import lin_connected_binding, lin_lowbit, lin_call
 from bindings.tensor_view import base_format, shape_text, TensorView
 from bindings.lowbit_weight_run import low_empty
 from bindings.lowbit_keys_unpack import lowbit_keys
@@ -118,10 +118,12 @@ def low_materialize(value: PythonObject, mut binding: PythonObject, context: Pyt
     # lane fix-output-zero-fill (2026-11-14): unfilled; from_bf16 / dequantize_int8 write every cell.
     var result = admitted_unfilled(q.shape, "<f4", context)
     if kind == 1:
-        _ = lin_call(low_binding(binding, context), context, LIN_OP_FROM_BF16, "from_bf16", PythonObject(result.addr), PythonObject(q.addr), lin_ints(q.count()))
+        _ = low_binding(binding, context)
+        _ = lin_call(context, LIN_OP_FROM_BF16, [result.addr, q.addr], [q.count()])
     else:
         var e = low_exponents(native_instance_item(fields, nk[].k_exponents), q.dim(0), context)
-        _ = lin_call(low_binding(binding, context), context, LIN_OP_DEQUANTIZE_INT8, "dequantize_int8", PythonObject(result.addr), PythonObject(q.addr), PythonObject(e.addr), lin_ints(q.dim(0), q.dim(1)))
+        _ = low_binding(binding, context)
+        _ = lin_call(context, LIN_OP_DEQUANTIZE_INT8, [result.addr, q.addr, e.addr], [q.dim(0), q.dim(1)])
         _ = e^
     _ = q^
     return result.keep
@@ -142,11 +144,13 @@ def low_pack_admitted(input: TensorView, var input_pin: AdmittedTypedPin, fmt: S
     var q = admitted_unfilled(a.shape, "<u2" if fmt == "bfloat16" else "<i1", context)
     var result = PythonObject(None)
     if fmt == "bfloat16":
-        _ = lin_call(low_binding(binding, context), context, LIN_OP_TO_BF16, "to_bf16", PythonObject(q.addr), PythonObject(a.addr), lin_ints(a.count()))
+        _ = low_binding(binding, context)
+        _ = lin_call(context, LIN_OP_TO_BF16, [q.addr, a.addr], [a.count()])
         result = low_wrap(1, q, PythonObject(None), context)
     else:
         var e = admitted_unfilled([a.dim(0)], "<i4", context)
-        _ = lin_call(low_binding(binding, context), context, LIN_OP_QUANTIZE_INT8, "quantize_int8", PythonObject(q.addr), PythonObject(e.addr), PythonObject(a.addr), lin_ints(a.dim(0), a.dim(1)))
+        _ = low_binding(binding, context)
+        _ = lin_call(context, LIN_OP_QUANTIZE_INT8, [q.addr, e.addr, a.addr], [a.dim(0), a.dim(1)])
         result = low_wrap(2, q, e.keep, context)
         _ = e^
     _ = a^
@@ -225,7 +229,8 @@ def lowbit_weight_operation(model: PythonObject, operation: Int, args: PythonObj
         if a.count() == 0:
             raise Error("mojolearn.linalg.from_bf16: bits has no elements")
         var result = admitted_unfilled(a.shape, "<f4", context)
-        _ = lin_call(low_binding(binding, context), context, LIN_OP_FROM_BF16, "from_bf16", PythonObject(result.addr), PythonObject(a.addr), lin_ints(a.count()))
+        _ = low_binding(binding, context)
+        _ = lin_call(context, LIN_OP_FROM_BF16, [result.addr, a.addr], [a.count()])
         _ = a^
         return result.keep
     if operation == LOW_OPN_FAMILY_LOW_PACK_ONE:

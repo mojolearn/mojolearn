@@ -21,13 +21,14 @@ def test_reuse_checks_exact_factory_module_and_session_admission_identity():
 
 
 def test_existing_mode_vendor_and_factory_admission_precedes_reuse():
-    src = text('bindings/causal_lm_public_door.mojo').split('def causal_lm_admit_binding(')[1].split('def _block(')[0]
+    src = text('bindings/causal_lm_public_door.mojo').split('def causal_lm_admit(')[1].split('def _block(')[0]
     assert src.index('primitive_vendor != vendor or primitive_mode != mode') < src.index('neural_table_entry[NEURAL_TABLE_BLOCK_FORWARD]')
     assert 'transformer_native_session_handle_v1")' not in src
     assert '_native_function(mods, primitives, "neural_primitives_api_v1")' in src
     assert '_native_function(mods, block_binding, "mamba_state_api_v1")' in src
     # Owner caches live in the admitted block record (22f3790f7c), not a raw __dict__ read.
-    assert 'neural_block_fields(mods, model._blocks[0], _causal_context_for(mods, model))' in src
+    # The typed admission owner carries the first block and its context (lane dw-neural-models).
+    assert 'neural_block_fields(mods, admission.first_block, admission.context)' in src
     for name in ('_native_primitives_provider_cache', '_native_mamba_provider_cache'):
         assert f'py_get(owner_fields, "{name}")' in src
         assert f'py_setitem(owner_fields, "{name}"' in src

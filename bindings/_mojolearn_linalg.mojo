@@ -232,16 +232,6 @@ def linalg_vendor_binding() raises -> PythonObject:
 
 
 
-def lowbit_profile_version_binding() raises -> PythonObject:
-    """The MAJOR VERSION of the two low-bit profiles this binary implements:
-    1, for `mojolearn.identical.gemm.bf16f32.v1` and
-    `mojolearn.identical.gemm.int8i32.v1`."""
-    return PythonObject(LOWBIT_PROFILE_VERSION)
-
-
-
-
-
 def gemm_bf16_binding(
     c_addr: PythonObject,
     a_addr: PythonObject,
@@ -405,12 +395,6 @@ def dequantize_int8_binding(
 # the package's Array has no int16, and the planes are what the product
 # reads on every column.
 # ===========================================================================
-
-
-def int15_profile_version_binding() raises -> PythonObject:
-    """The MAJOR VERSION of the fifteen-bit profile this binary
-    implements: 1, for `mojolearn.identical.gemm.int15i64.v1`."""
-    return PythonObject(INT15_PROFILE_VERSION)
 
 
 def gemm_int15_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -678,7 +662,6 @@ def build__mojolearn_linalg() -> PythonObject:
             "linalg_profile_version"
         )
         m.def_function[linalg_numerical_profile_binding]("linalg_numerical_profile")
-        m.def_function[lowbit_profile_version_binding]("lowbit_profile_version")
         m.def_function[gemm_bf16_binding]("gemm_bf16")
         initialize_fast_bf16_boundary()
         m.def_function[fast_bf16_available_binding]("fast_bf16_available")
@@ -695,7 +678,6 @@ def build__mojolearn_linalg() -> PythonObject:
             m.def_function[gemm_fused_binding]("gemm_fused")
         m.def_function[quantize_int8_binding]("quantize_int8")
         m.def_function[dequantize_int8_binding]("dequantize_int8")
-        m.def_function[int15_profile_version_binding]("int15_profile_version")
         m.def_function[gemm_int15_binding]("gemm_int15")
         m.def_function[quantize_int15_binding]("quantize_int15")
         m.def_function[dequantize_int15_binding]("dequantize_int15")

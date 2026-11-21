@@ -78,3 +78,50 @@ def test_the_same_checkpoint_returns_the_same_logits_bits_on_each_device(tmp_pat
     left = np.asarray(gpu.forward(ids))
     right = np.asarray(cpu.forward(ids))
     assert left.shape == right.shape and left.tobytes() == right.tobytes()
+
+
+@pytest.mark.parametrize("family", FAMILIES)
+def test_vendor_used_names_the_device_that_answers(tmp_path, family):
+    cpu = CausalLM.load(checkpoint(tmp_path, family), device="cpu")
+    assert cpu.vendor_used() == "cpu"
+    assert CausalLM.load(tmp_path).vendor_used() == mojolearn.vendor()
+
+
+@pytest.mark.parametrize("family", FAMILIES)
+@pytest.mark.parametrize("weight_format", ["float32", "bfloat16", "int8"])
+def test_the_device_twin_is_the_same_model_from_the_same_tensors(tmp_path, family, weight_format):
+    # The hook `model.check` uses (`_check_both.on_device`): on the model's own device the answer is the model
+    # itself. The compiled twin door is called directly here, so it is exercised on a CPU-only installation too:
+    # a second model on "cpu" built from the first one's tensors, in every weight format.
+    from mojolearn import _check_both
+    model = CausalLM.load(checkpoint(tmp_path, family), device="cpu", weight_format=weight_format,
+                          numeric_profile="fp32_v1")
+    assert _check_both.takes_device(model)
+    assert _check_both.on_device(model, "cpu") is model
+    twin = model._mojolearn_device_twin("cpu")
+    assert type(twin) is CausalLM and twin is not model
+    assert (twin.device, twin.weight_format, twin.numeric_profile) == ("cpu", weight_format, "fp32_v1")
+    assert twin.max_positions == model.max_positions and len(twin.blocks) == len(model.blocks)
+    ids = np.array([[1, 7, 3, 11, 5], [2, 9, 2, 4, 8]], dtype="<i4")
+    assert np.asarray(twin.forward(ids)).tobytes() == np.asarray(model.forward(ids)).tobytes()
+
+
+@two_devices
+@pytest.mark.parametrize("family", FAMILIES)
+def test_check_runs_the_same_model_on_both_devices_in_this_process(tmp_path, family, capsys):
+    model = CausalLM.load(checkpoint(tmp_path, family), numeric_profile="fp32_v1")
+    ids = np.array([[1, 7, 3, 11, 5], [2, 9, 2, 4, 8]], dtype="<i4")
+    result = model.check(ids)
+    assert result["ran"], result.get("reason")
+    assert result["transfer"] == "device" and result["method"] == "forward"
+    assert result["sides"]["gpu"]["route"]["vendor_used"] == mojolearn.vendor()
+    assert result["sides"]["cpu"]["route"]["vendor_used"] == "cpu"
+    assert result["verdict"]["verdict"] == "MATCH"
+    assert "MATCH" in capsys.readouterr().out
+
+
+@one_device
+def test_check_on_a_cpu_only_installation_says_why_nothing_was_compared(tmp_path, capsys):
+    model = CausalLM.load(checkpoint(tmp_path, "llama"))
+    result = model.check(np.array([[1, 7, 3]], dtype="<i4"))
+    assert result["ran"] is False and result["reason"]

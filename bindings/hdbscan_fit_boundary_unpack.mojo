@@ -88,7 +88,7 @@ def _hdbscan_mode(model: PythonObject, binding: PythonObject, context: PythonObj
         # Perf (lane perf3-cluster-gp-gate): the compiled mode word is a
         # constant of the loaded binary, read once per (module, getter) for
         # the process, as GaussianMixture's _check_mode reads it
-        # (bindings/mixture_native_door.mojo), not called on every fit and query.
+        # (bindings/mixture_public_native_pack.mojo), not called on every fit and query.
         var got = _estimator_mode_word(binding, getter)
         var codes = py_item(context, nk[].k_family_cfa_hdbscan_mode_codes)
         var wanted = py_get(codes, want, PythonObject(None))

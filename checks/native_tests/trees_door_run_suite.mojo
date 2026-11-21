@@ -15,7 +15,7 @@ from gbdt.trees_gbdt_fit_run import (
     GbdtOrderedFacts, GbdtSearchFacts, gbdt_c_round, gbdt_auto_rate, gbdt_check_ordered_options,
     gbdt_validate_search_options, gbdt_id_code, gbdt_id_typestr_supported, gbdt_check_group_rows, gbdt_bias_of,
 )
-from gbdt.trees_gbdt_run import gbdt_mode_checked, gbdt_text_has_ctr, gbdt_mode_of_code, gbdt_known_mode
+from gbdt.trees_gbdt_run import gbdt_mode_checked, gbdt_text_has_ctr
 from xtrees.trees_forest_run import (
     forest_export_counts, forest_export_dtype, forest_export_verdict_check, forest_fit_notice_codes,
     trees_refuse, trees_check_features,
@@ -109,8 +109,6 @@ def case_gbdt_predict() raises:
         refuses(problem, "numeric_mode must be fast, identical or None")
     require(gbdt_text_has_ctr("x\nctr_table 1") and gbdt_text_has_ctr("ctr_columns 2"), "ctr records")
     require(not gbdt_text_has_ctr("trees 1\n"), "no ctr records")
-    require(gbdt_mode_of_code(-17, 1) == "identical", "mode word")
-    require(gbdt_known_mode(-17).value() == "identical", "mode cached")
 
 
 def case_forest() raises:
