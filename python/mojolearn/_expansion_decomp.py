@@ -501,6 +501,8 @@ class GaussianRandomProjection(_RandomProjection):
     """
     _device_door = "decomp"
     _parameters = ("n_components", "eps", "compute_inverse_components", "random_state", "numeric_mode", "device")
+    #: The member ABI mark (family 32 XDecomp, kind 5; core/xdecomp_member.mojo).
+    _mojolearn_member = (32, 5)
 
     def __init__(self, n_components="auto", *, eps=0.1, compute_inverse_components=False, random_state=None,
                  numeric_mode=None, device=None):
@@ -568,6 +570,8 @@ class SparseRandomProjection(_RandomProjection):
     _device_door = "decomp"
     _parameters = ("n_components", "density", "eps", "dense_output", "compute_inverse_components",
                    "random_state", "numeric_mode", "device")
+    #: The member ABI mark (family 32 XDecomp, kind 6; core/xdecomp_member.mojo).
+    _mojolearn_member = (32, 6)
 
     def __init__(self, n_components="auto", *, density="auto", eps=0.1, dense_output=False,
                  compute_inverse_components=False, random_state=None, numeric_mode=None, device=None):

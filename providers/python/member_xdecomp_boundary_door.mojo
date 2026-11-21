@@ -2,8 +2,9 @@
 """The member boundary of the XDecomp family: its place in
 `bindings/member_boundary_door.mojo` (recipe: MEMBER-ABI-V2.md; RUN:
 core/xdecomp_member.mojo). Published: IncrementalPCA (kind 0,
-`_mojolearn_member = (32, 0)`), NMF (kind 3, `(32, 3)`). The family's other
-classes (GaussianRandomProjection SparseRandomProjection FastICA FactorAnalysis
+`_mojolearn_member = (32, 0)`), NMF (kind 3, `(32, 3)`),
+GaussianRandomProjection (kind 5, `(32, 5)`), SparseRandomProjection (kind 6,
+`(32, 6)`). The family's other classes (FastICA FactorAnalysis
 DictionaryLearning MiniBatchDictionaryLearning SparsePCA MiniBatchSparsePCA
 SparseCoder LatentDirichletAllocation Isomap MDS ClassicalMDS
 LocallyLinearEmbedding MinCovDet EllipticEnvelope) carry no mark yet: a
@@ -25,7 +26,7 @@ from std.python import Python, PythonObject
 from bindings.admitted_input_unpack import admit_f32
 from bindings.classical_arrays_door import classical_address
 from bindings.member_owner_unpack import MemberOwner
-from bindings.py_balanced import py_get, py_setitem
+from bindings.py_balanced import py_get, py_setitem, py_call, py_contains
 from bindings.decomp_device_route_door import decomp_route_hit
 from bindings.decomp_truth_boundary_unpack import decomp_truth
 from bindings.ipca_descriptor_boundary_door import _ipca_route as ipca_route, ipca_provider
@@ -50,7 +51,16 @@ from core.ipca_native_api import IPCA_NATIVE_COUNT
 from core.xdecomp_member import (
     XDECOMP_KIND_IPCA, XDECOMP_KIND_NMF, XDECOMP_ROUTE_RESIDENT, XDECOMP_ROUTE_NMF_INVERSE, XDECOMP_BLOCK_COMPONENTS, XDECOMP_BLOCK_SINGULAR,
     XDECOMP_BLOCK_MEAN, XDECOMP_BLOCK_VAR, XDECOMP_BLOCK_VARIANCE, XDECOMP_BLOCK_RATIO,
+    XDECOMP_KIND_GRP, XDECOMP_KIND_SRP, XDECOMP_ROUTE_POOL, XDECOMP_BLOCK_RP_INVERSE,
 )
+from bindings.decomp_kit_native_door import (
+    decomp_entries_routed, decomp_entries_ref, decomp_resident_binding, decomp_resident_drop,
+)
+from bindings.decomp_owner_common_unpack import (
+    decomp_eq, decomp_int, decomp_float, decomp_seed, decomp_repr, decomp_f32,
+)
+from bindings.py_cpython_table import cpython_table
+from providers.python.jl_scalar_pyapi_unpack import jl_scalar_word, jl_type_word, jl_type_words
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free,
     MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_BLOCK_SCALARS, MEMBER_IMPORT_DONE, MEMBER_F64,
@@ -142,6 +152,53 @@ def _nmf_admit(model: PythonObject, fields: PythonObject, context: PythonObject,
     owner.pins = NMF_PROVIDER_PINS.get_or_create_ptr()[].providers[connection]
 
 
+def _rp_admit(model: PythonObject, fields: PythonObject, kind: Int, context: PythonObject,
+    mut owner: MemberOwner) raises:
+    # bindings/rp_native_door.mojo `rp_fit`: the estimator's entries through
+    # its resolver (`decomp_entries_routed`: a hit is one record read), the
+    # data-independent checks in the door's words; the target dimension of
+    # 'auto' and the density of 'auto' need X's shape: RUN computes them.
+    var mode = _ipca_mode_object(fields, context)
+    var entries = decomp_entries_routed(model, fields, mode, context)
+    var hit = decomp_route_hit(model, mode, context)
+    var words = List[Float64](length=6, fill=0.0)
+    words[0] = Float64(kind)
+    var requested = fields["n_components"]
+    if decomp_eq(requested, PythonObject("auto")):
+        words[1] = -1.0
+        # johnson_lindenstrauss_min_dim's own admission of eps (its refusals).
+        var eps = fields["eps"]
+        words[2] = jl_scalar_word(eps._obj_ptr, jl_type_word(eps._obj_ptr), True, context._obj_ptr,
+            cpython_table(), jl_type_words())
+        _ = eps
+    else:
+        var count = decomp_int(requested)
+        if count <= 0:
+            raise Error("n_components must be greater than 0, got " + String(count))
+        words[1] = Float64(count)
+    if kind == XDECOMP_KIND_SRP:
+        var given = fields["density"]
+        if decomp_eq(given, PythonObject("auto")):
+            words[3] = -1.0
+        else:
+            var density = decomp_float(given)
+            if not (density > 0 and density <= 1):
+                raise Error("Expected density in range ]0, 1], got: " + decomp_repr(PythonObject(density)))
+            words[3] = density
+    words[4] = 1.0 if Bool(py=fields["compute_inverse_components"]) else 0.0
+    words[5] = Float64(decomp_seed(fields["random_state"]))
+    var entry = decomp_entries_ref(entries)
+    var key = entries["x_decomp_native_key"]
+    var route = DeviceRoute(hit.route.device if hit.found else 0)
+    route.mode = Int(py=key[0])
+    route.vendor = Int(py=key[1])
+    route.entry = entry
+    route.flags = XDECOMP_ROUTE_POOL if decomp_resident_binding(entries) else 0
+    owner.plan.route = route
+    owner.plan.params = words^
+    owner.pins = entries
+
+
 def xdecomp_member_admit(model: PythonObject, fields: PythonObject, kind: Int, context: PythonObject,
     b: PythonObject, mut owner: MemberOwner) raises -> Bool:
     """UNPACK: fill `owner.plan.route`, `owner.plan.params` and `owner.pins`
@@ -151,6 +208,9 @@ def xdecomp_member_admit(model: PythonObject, fields: PythonObject, kind: Int, c
         return True
     if kind == XDECOMP_KIND_NMF:
         _nmf_admit(model, fields, context, owner)
+        return True
+    if kind == XDECOMP_KIND_GRP or kind == XDECOMP_KIND_SRP:
+        _rp_admit(model, fields, kind, context, owner)
         return True
     raise Error("ValueError: mojolearn: XDecomp member kind " + String(kind) + " is not published")
 
@@ -178,6 +238,9 @@ def xdecomp_member_pack(model: PythonObject, fields: PythonObject, context: Pyth
     `ipca_fit` / `_finish_fit` / `_publish`: the same names and array types)."""
     if plan.kind == XDECOMP_KIND_NMF:
         _nmf_pack(model, fields, context, plan, state)
+        return
+    if plan.kind == XDECOMP_KIND_GRP or plan.kind == XDECOMP_KIND_SRP:
+        _rp_pack(model, fields, context, plan, state)
         return
     if plan.kind != XDECOMP_KIND_IPCA:
         raise Error("ValueError: mojolearn: XDecomp member kind " + String(plan.kind) + " is not published")
@@ -255,6 +318,8 @@ def xdecomp_member_state(model: PythonObject, fields: PythonObject, context: Pyt
     The caller frees it (`member_free`)."""
     if plan.kind == XDECOMP_KIND_NMF:
         return _nmf_state(fields, context, plan)
+    if plan.kind == XDECOMP_KIND_GRP or plan.kind == XDECOMP_KIND_SRP:
+        return _rp_state(fields, context, plan)
     if plan.kind != XDECOMP_KIND_IPCA:
         raise Error("ValueError: mojolearn: XDecomp member kind " + String(plan.kind) + " is not published")
     var count = py_get(fields, "n_components_")
@@ -300,6 +365,69 @@ def _nmf_state(fields: PythonObject, context: PythonObject, plan: MemberPlan) ra
     var call = member_new(plan)
     try:
         _import(plan, call, fields, "components_", 2, XDECOMP_BLOCK_COMPONENTS, context)
+        call.block = MEMBER_BLOCK_SCALARS
+        call.x = MemberMatrix(Int(scalars.unsafe_ptr()), 1, len(scalars), MEMBER_F64)
+        call.flags = MEMBER_IMPORT_DONE
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+    except error:
+        member_free(plan, call)
+        raise error
+    _ = len(scalars)
+    return call.state
+
+
+def _rp_matrix(view: MemberMatrix, context: PythonObject) raises -> PythonObject:
+    # The door's `decomp_f32` array (the type its transform and save read).
+    var array = decomp_f32(Python.tuple(view.rows, view.cols), context)
+    var count = view.rows * view.cols
+    if count > 0:
+        unsafe_memcpy(dest=f32_ptr(Int(py=classical_address(array))), src=f32_ptr(view.data), count=count)
+    return array
+
+
+def _rp_pack(model: PythonObject, fields: PythonObject, context: PythonObject, plan: MemberPlan,
+    state: Int) raises:
+    # bindings/rp_native_door.mojo `rp_fit`, in its order: the resident
+    # copies of the old matrix dropped, numeric_mode_, density_ (Sparse),
+    # n_components_, n_features_in_, the `components_` setter's fields,
+    # inverse_components_ (with compute_inverse_components).
+    decomp_resident_drop(model)
+    decomp_set_mode(fields, context)
+    var call = MemberCall(plan.route, state)
+    var scalars_view = _export(plan, call, MEMBER_BLOCK_SCALARS)
+    var scalars = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=scalars_view.data)
+    var count = Int(scalars[0])
+    var features = Int(scalars[1])
+    var density = scalars[2]
+    var inverse = scalars[3] != 0.0
+    var components = _rp_matrix(_export(plan, call, XDECOMP_BLOCK_COMPONENTS), context)
+    if plan.kind == XDECOMP_KIND_SRP:
+        py_setitem(fields, "density_", PythonObject(density))
+    py_setitem(fields, "n_components_", PythonObject(count))
+    py_setitem(fields, "n_features_in_", PythonObject(features))
+    if py_contains(fields, "_rp_lazy"):
+        _ = py_call(fields.pop, "_rp_lazy")
+    py_setitem(fields, "_rp_components", components)
+    if inverse:
+        py_setitem(fields, "inverse_components_", _rp_matrix(_export(plan, call, XDECOMP_BLOCK_RP_INVERSE), context))
+
+
+def _rp_state(fields: PythonObject, context: PythonObject, plan: MemberPlan) raises -> Int:
+    # The fitted fields the door's transform reads: `_rp_components` (what
+    # the `components_` property holds), n_features_in_, inverse_components_.
+    var count = py_get(fields, "n_components_")
+    var features = py_get(fields, "n_features_in_")
+    if count is None or features is None or py_get(fields, "_rp_components") is None:
+        raise Error("NotFittedError: this member is not fitted yet")
+    var density = py_get(fields, "density_")
+    var inverse = py_get(fields, "inverse_components_") is not None
+    var scalars: List[Float64] = [Float64(decomp_int(count)), Float64(decomp_int(features)),
+        Float64(py=density) if density is not None else 0.0, 1.0 if inverse else 0.0]
+    var call = member_new(plan)
+    try:
+        _import(plan, call, fields, "_rp_components", 2, XDECOMP_BLOCK_COMPONENTS, context)
+        if inverse:
+            _import(plan, call, fields, "inverse_components_", 2, XDECOMP_BLOCK_RP_INVERSE, context)
         call.block = MEMBER_BLOCK_SCALARS
         call.x = MemberMatrix(Int(scalars.unsafe_ptr()), 1, len(scalars), MEMBER_F64)
         call.flags = MEMBER_IMPORT_DONE
