@@ -812,12 +812,16 @@ def _device_wrapper(wrapper, orig, sig):
         # route. The instance dictionary is read through object's own lookup:
         # two membership tests, no attribute door and no AttributeError built.
         fields = _OBJECT_GET(self, "__dict__")
-        if device is not None or "device" in fields:
+        again = "device" in fields
+        if device is not None or again:
             _MODE_METADATA(self, "device_admit", _MODE_METADATA_CONTEXT, device)
         orig(self, *args, **kwargs)
         if numeric_mode is not None or not hasattr(self, "numeric_mode"):
             self.numeric_mode = numeric_mode
-        if device is not None or "device" not in fields:
+        # A base class's wrapper runs inside `orig` and stores its own None
+        # first; the outermost wrapper stores last. A constructor run again
+        # stores what it was given (None too).
+        if device is not None or again or "device" not in fields:
             self.device = device
 
     params = list(sig.parameters.values())

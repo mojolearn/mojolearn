@@ -89,13 +89,28 @@ def test_import_connection_unwraps_host_proxy_without_attribute_callback(monkeyp
     assert modes['identical']==(real,real.__name__,'x_neighbors_host_numeric_mode')
     assert modes['fast'][0].startswith('ValueError:')
     assert loaded==['_mojolearn_x_neighbors_host']
+    # A CPU-only process connects no second table: its own set is the CPU one.
+    assert context['family_binding_connections_cpu']['_mojolearn_x_neighbors'][0].startswith('ImportError:')
+    # A GPU installation: the CPU identical module beside the device one, loaded once at import;
+    # a binding name without a CPU training binding records its refusal in words.
+    backend._CPU_ONLY=None
+    backend._HOST_MODULES={'_mojolearn_x_neighbors':'_mojolearn_x_neighbors_host'}
+    assert bridge._connect_cpu_binding(backend,'_mojolearn_x_neighbors')==(real,real.__name__,'x_neighbors_host_numeric_mode')
+    refused=bridge._connect_cpu_binding(backend,'_mojolearn_other')
+    assert len(refused)==1 and "device='cpu' is not available" in refused[0] and 'device=None' in refused[0]
     assert context['family_binding_offerings']['_mojolearn_x_neighbors']=={'identical':True,'fast':False}
 
 
 def test_native_admission_preserves_mode_check_and_live_host_replacement():
     source=(ROOT/'providers/python/estimator_binding_pyapi_door.mojo').read_text()
     assert 'context["family_binding_offerings"][name][selected_mode]' in source
-    # bc9d3e04b8: the live sys.modules slot is read from the caller's admitted sys module (per call, never cached)
+    # bc9d3e04b8: the live sys.modules slot is read from the caller's admitted sys module. Since lane dw-core
+    # (2026-11-20) the selection below runs when an estimator's binding route resolves (first operation, a new
+    # binding name, a changed mode object, a new constructor call or set_params), not at every call; a call
+    # without an estimator still runs it every time.
+    assert 'device_binding_held(model, name, check_mode, requested, default_mode, context)' in source
+    assert 'context["family_binding_connections_cpu"]' not in source and 'py_get(context, "family_binding_connections_cpu")' in source
+    assert 'device_cpu_fast()' in source
     assert 'py_get(sys_module.modules, record[1])' in source
     assert 'call.module("sys")' in source and 'native_loaded_module("sys")' in source
     assert 'neural_descriptor_entry(module, reader, False)' in source
