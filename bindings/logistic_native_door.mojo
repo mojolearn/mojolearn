@@ -50,9 +50,10 @@ from bindings.logistic_config_boundary_unpack import (
 from bindings.logistic_descriptor_boundary_door import logistic_run_fold_fit, logistic_run_fold_query
 from providers.python.logistic_route_boundary_door import (
     LogisticRouteCall, logistic_route_held, logistic_route_context, logistic_route_current, logistic_route_resolve,
-    logistic_route_of, logistic_route_clear, logistic_route_xtrees, logistic_route_fit, logistic_route_query,
+    logistic_route_of, logistic_route_xtrees, logistic_route_fit, logistic_route_query,
     logistic_device_admit,
 )
+from providers.python.device_route_boundary_door import device_route_clear
 from bindings.classical_attributes_door import classical_connect_numpy, classical_getattribute
 from bindings.classical_pandas_door import classical_admit_value
 from bindings.classical_exceptions_door import classical_require_fitted, classical_not_fitted_class
@@ -581,7 +582,7 @@ def logistic_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObject
                     classical_admit_value(device, context)
                     logistic_device_admit(device, context, _builtins())
             result = logistic_initialize(model, args, context)
-            logistic_route_clear(model)
+            device_route_clear(model)
             return result.steal_data()
         # get_params/set_params/is_fitted validate nothing beyond admission
         # (scikit-learn's convention); consuming operations check values.
@@ -606,7 +607,7 @@ def logistic_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObject
             # (inside). The device or the numeric mode may have changed: the
             # next operation resolves the route again.
             result = logistic_set_params(model, args[0], context)
-            logistic_route_clear(model)
+            device_route_clear(model)
             return result.steal_data()
         if operation == LOGISTIC_OPN_IS_FITTED:
             result = classical_is_fitted(model)
