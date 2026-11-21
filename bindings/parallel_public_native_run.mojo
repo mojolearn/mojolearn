@@ -156,6 +156,17 @@ def public_predictor_devices_admit(count: Int) raises:
         raise Error("ValueError: ParallelForestPredictor supports at most 64 devices")
 
 
+struct ForestPredictorState(Movable):
+    """The typed state of one pooled forest predictor: its lifecycle word
+    and whether the copied forest is a classifier."""
+    var closed: Bool
+    var classifier: Bool
+
+    def __init__(out self, classifier: Bool):
+        self.closed = False
+        self.classifier = classifier
+
+
 def public_predictor_open_admit(closed: Bool) raises:
     if closed:
         raise Error("RuntimeError: pooled forest predictor is closed")

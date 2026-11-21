@@ -6,7 +6,9 @@ from std.ffi import c_int, external_call
 from core.native_string import unsafe_string_from_utf8_cstr
 from bindings.byte_checkpoint_native_run import (
     ByteCheckpointArchive, ByteCheckpointWriteFailure, byte_checkpoint_read_header, byte_checkpoint_read_arrays,
+    byte_checkpoint_write,
 )
+from providers.python.borrowed_buffer_pyapi_unpack import AdmittedBorrowedBuffer
 from bindings.cross_vendor_admission_unpack import cv_types_initialize, cv_buffer, cv_int, cv_json, cv_state, CROSS_VENDOR_TYPES
 from bindings.cross_vendor_admission_pack import cv_path
 from bindings.native_json_door import native_json_parse
@@ -14,36 +16,27 @@ from bindings.native_transport_door import _transport_json, transport_initialize
 from bindings.parallel_byte_native_door import PARALLEL_BYTE_BOUNDARY, _parallel_shape
 from bindings.generation_buffers_door import GENERATION_BOUNDARY, generation_array
 from bindings.byte_checkpoint_io_unpack import ByteCheckpointIOError
-from bindings.byte_checkpoint_io_pack import byte_checkpoint_io
-from bindings.sha256_door import sha256_update, sha256_hexdigest, sha256_digest_of
 from bindings.py_balanced import py_call, py_contains, py_setitem, py_type
 from bindings.py_typed_call import py_call_typed
-from core.sha256 import Sha256
 from core.shared_slot import SharedSlot
-from bindings.py_optional import py_present
 
 
 struct ByteCheckpointBoundary(Defaultable, Movable):
     var bi: PythonObject
     var os: PythonObject
-    var magic: PythonObject
 
     def __init__(out self):
         self.bi = PythonObject(None)
         self.os = PythonObject(None)
-        self.magic = PythonObject(None)
 
 
 comptime BYTE_CHECKPOINT_BOUNDARY = SharedSlot[ByteCheckpointBoundary, "MojolearnByteCheckpointBoundaryV1"]
-comptime BYTE_CHECKPOINT_CHUNK = 1048576
-comptime BYTE_CHECKPOINT_HEADER_LIMIT = 1048576
 
 
 def byte_checkpoint_initialize(array_cls: PythonObject) raises:
     var c = BYTE_CHECKPOINT_BOUNDARY.get_or_create_ptr()
     c[].bi = Python.import_module("builtins")
     c[].os = Python.import_module("posix")
-    c[].magic = py_call(PythonObject("MOJOLEARN-BYTE-LM\x01\n").encode, "ascii")
     if String(Python.import_module("sys").byteorder) != "little":
         raise Error("Byte-LM streamed checkpoint requires a little-endian host")
     cv_types_initialize(array_cls)
@@ -124,10 +117,28 @@ def byte_checkpoint_validate(metadata: PythonObject, entries: PythonObject) rais
     return shape
 
 
+def _checkpoint_span(pin: AdmittedBorrowedBuffer, mut addresses: List[Int], mut counts: List[Int]) raises:
+    """UNPACK one pinned array: its address and its count of four-byte elements."""
+    var layout = pin.layout.value().copy()
+    var total = layout.count * layout.itemsize
+    if not layout.contiguous() or total % 4 != 0:
+        raise Error("Byte-LM checkpoint arrays must be contiguous float32/int32 vectors")
+    addresses.append(layout.address)
+    counts.append(total // 4)
+
+
 def byte_checkpoint_save(path: PythonObject, state: PythonObject, mut failure: ByteCheckpointIOError) raises -> PythonObject:
+    """UNPACK the path, the state's metadata text and the four arrays (each
+    under one read-only buffer export held through the write); RUN the typed
+    archive write (bindings/byte_checkpoint_native_run.mojo: the four array
+    digests on four host tasks, one ordered write, fsync, rename), the GIL
+    released; PACK the file's digest. No Python file object. REMOVED: the
+    Python `os.open` / `open` / `write` / `fsync` / `replace` calls, the
+    per-MiB slice objects and the three SHA-256 passes on one thread with
+    the GIL held."""
     var c = BYTE_CHECKPOINT_BOUNDARY.get_or_create_ptr()
     cv_state(state)
-    var normalized = cv_path(path)
+    var target = String(cv_path(path))
     var metadata = py_call(c[].bi.dict, state)
     var views = c[].bi.list()
     var entries = c[].bi.list()
@@ -143,64 +154,40 @@ def byte_checkpoint_save(path: PythonObject, state: PythonObject, mut failure: B
         _ = py_call(dims.append, len(raw) // 4)
         py_setitem(descriptor, "shape", dims)
         py_setitem(descriptor, "nbytes", PythonObject(len(raw)))
-        py_setitem(descriptor, "sha256", sha256_hexdigest(raw))
+        # The writer hashes each array once and writes its own digest; the
+        # descriptor admitted here carries a well-formed stand-in that reaches
+        # neither the file nor a comparison (as the cross commit checkpoint's).
+        py_setitem(descriptor, "sha256", PythonObject("0000000000000000000000000000000000000000000000000000000000000000"))
         _ = py_call(entries.append, descriptor)
     _ = byte_checkpoint_validate(metadata, entries)
-    var envelope = c[].bi.dict()
-    py_setitem(envelope, "schema", PythonObject("mojolearn.byte-lm-stream.v1"))
-    py_setitem(envelope, "state", metadata)
-    py_setitem(envelope, "arrays", entries)
-    var header = py_call(PythonObject(_transport_json(envelope)).encode, "ascii")
-    if len(header) > BYTE_CHECKPOINT_HEADER_LIMIT:
-        raise Error("Byte-LM checkpoint metadata exceeds the header limit")
-    var length = py_call(c[].bi.bytearray, 8)
-    for i in range(8):  # small-loop(the 8-byte header length word)
-        py_setitem(length, i, PythonObject((len(header) >> (8 * i)) & 255))
-    var prefix = c[].magic + py_call(c[].bi.bytes, length) + header + sha256_digest_of(header)
-    var temporary = normalized + PythonObject(".tmp-") + py_call(c[].os.urandom, 16).hex()
-    var flags = Int(py=c[].os.O_WRONLY) | Int(py=c[].os.O_CREAT) | Int(py=c[].os.O_EXCL)
-    var fd = byte_checkpoint_io(failure, c[].os.open, [temporary, PythonObject(flags), PythonObject(384)])
-    var descriptor_open = True
-    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
-    var stream = Optional[PythonObject]()
-    var whole = Sha256()
+    var text = _transport_json(metadata)
+    var pin0 = AdmittedBorrowedBuffer(views[0])
+    var pin1 = AdmittedBorrowedBuffer(views[1])
+    var pin2 = AdmittedBorrowedBuffer(views[2])
+    var pin3 = AdmittedBorrowedBuffer(views[3])
+    var addresses = List[Int]()
+    var counts = List[Int]()
+    var file_failure = ByteCheckpointWriteFailure()
+    var digest = String("")
+    var py = Python()
     try:
-        stream = py_present(byte_checkpoint_io(failure, c[].bi.open, [fd, PythonObject("wb")]))
-        if Int(py=byte_checkpoint_io(failure, stream.value().write, [prefix])) != len(prefix):
-            raise Error("Byte-LM checkpoint short header write")
-        sha256_update(whole, prefix)
-        for i in range(4):  # driver-loop: over the four checkpoint arrays
-            var raw = views[i]
-            var written = Sha256()
-            for start in range(0, len(raw), BYTE_CHECKPOINT_CHUNK):  # driver-loop: over bounded checkpoint I/O chunks, preserving raw bytes
-                var end = min(start + BYTE_CHECKPOINT_CHUNK, len(raw))
-                var chunk = raw[py_call(c[].bi.slice, start, end)]
-                if Int(py=byte_checkpoint_io(failure, stream.value().write, [chunk])) != len(chunk):
-                    raise Error("Byte-LM checkpoint short write")
-                sha256_update(written, chunk)
-                sha256_update(whole, chunk)
-            if not Bool(py=PythonObject(written.hexdigest()) == entries[i]["sha256"]):
-                raise Error("Byte-LM checkpoint state changed during save")
-        _ = byte_checkpoint_io(failure, stream.value().flush, List[PythonObject]())
-        _ = byte_checkpoint_io(failure, c[].os.fsync, [fd])
-        _ = byte_checkpoint_io(failure, stream.value().close, List[PythonObject]())
-        descriptor_open = False
-        stream = Optional[PythonObject]()
-        _ = byte_checkpoint_io(failure, c[].os.replace, [temporary, normalized])
+        _checkpoint_span(pin0, addresses, counts)
+        _checkpoint_span(pin1, addresses, counts)
+        _checkpoint_span(pin2, addresses, counts)
+        _checkpoint_span(pin3, addresses, counts)
+        with GILReleased(py):
+            digest = byte_checkpoint_write(target, Int(text.unsafe_ptr()), text.byte_length(), addresses, counts, file_failure)
     except error:
-        try:
-            if Bool(stream):
-                _ = byte_checkpoint_io(failure, stream.value().close, List[PythonObject]())
-            elif descriptor_open:
-                _ = byte_checkpoint_io(failure, c[].os.close, [fd])
-        except:
-            pass
-        try:
-            _ = byte_checkpoint_io(failure, c[].os.unlink, [temporary])
-        except:
-            pass
+        if file_failure.number != 0:
+            byte_checkpoint_file_error(failure, file_failure)
         raise error
-    return PythonObject(whole.hexdigest())
+    # The exports pinned the written bytes to here; so did the text.
+    pin0.release()
+    pin1.release()
+    pin2.release()
+    pin3.release()
+    _ = text.byte_length()
+    return PythonObject(digest)
 
 
 def byte_checkpoint_file_error(mut io_error: ByteCheckpointIOError, failure: ByteCheckpointWriteFailure) raises:
@@ -209,12 +196,15 @@ def byte_checkpoint_file_error(mut io_error: ByteCheckpointIOError, failure: Byt
     var bi = BYTE_CHECKPOINT_BOUNDARY.get_or_create_ptr()[].bi
     var message = unsafe_string_from_utf8_cstr(external_call["strerror", Pointer[Int8, ImmUntrackedOrigin]](c_int(failure.number)))
     # The words the Python file calls gave: `open` names the file (the
-    # temporary one of a write); a failed read, write, fsync or close carries
-    # no file name. (`replace` named both files; the typed failure holds the
-    # target only.)
+    # temporary one of a write; a directory given to a read); `replace`
+    # names both files; a failed read, write, fsync or close carries no file
+    # name.
     var value = py_call(bi.OSError, failure.number, PythonObject(message))
-    if failure.operation == "open" or failure.operation == "replace":
+    if failure.operation == "open":
         value = py_call(bi.OSError, failure.number, PythonObject(message), PythonObject(failure.path))
+    elif failure.operation == "replace":
+        value = py_call(bi.OSError, failure.number, PythonObject(message), PythonObject(failure.path),
+                        PythonObject(None), PythonObject(failure.second))
     io_error.pending = True
     io_error.has_value = True
     io_error.has_traceback = False

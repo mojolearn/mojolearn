@@ -69,6 +69,8 @@ from bindings.msel_common_door import (
 from bindings.msel_split_door import msel_split, msel_check_cv, msel_default_folds, msel_truth, msel_flag_truth, msel_cls, msel_sabotage
 from bindings.msel_cv_run import msel_seconds, _numeric_dtype
 from bindings.msel_member_units_door import msel_member_units
+from bindings.msel_scorer_native_door import msel_scorer_response, msel_scorer_predicted
+from core.member_abi import MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA
 
 #: model_selection's CV_FAST bits of the resample binding's define mask.
 comptime MSEL_CV_SLICE_BIT = 32
@@ -533,6 +535,20 @@ struct MselFoldRows(Movable):
             return msel_take_labels(values, idx, context)
         return self.resident_take(values, idx, context)
 
+    def yrows(mut self, y_in: PythonObject, idx: PythonObject, context: PythonObject) raises -> PythonObject:
+        """The target's rows `idx` alone, as `take` hands them to a unit
+        (a `y_in` stands in for the stored one): for a caller whose X never
+        leaves its buffer (the native member units' metric)."""
+        var y = y_in
+        if y is None:
+            y = self.y
+        elif y is not self.y and y is not self.extra:
+            if self.extra is not None:
+                var previous = self.extra
+                self.resident_release(previous, context)
+            self.extra = y
+        return self.rows(y, idx, context)
+
     def take(mut self, i: Int, y_in: PythonObject, context: PythonObject) raises -> PythonObject:
         """(X_train, y_train, X_test, y_test) of fold i; a `y_in` (a permuted
         y) stands in for the stored one."""
@@ -965,6 +981,179 @@ struct MselUnitRun(Movable):
         return out^
 
 
+def _msel_response_op(method: PythonObject) raises -> Int:
+    """The member operation of a response method name the native member units
+    place (`predict`, `predict_proba`), else -1: decision_function and any
+    other response keep the Python units."""
+    var name = String(py=method)
+    if name == "predict":
+        return MEMBER_OP_PREDICT
+    if name == "predict_proba":
+        return MEMBER_OP_PREDICT_PROBA
+    return -1
+
+
+def _msel_member_route(mut run: MselUnitRun, mut rows: MselFoldRows, y: PythonObject, workers: Int,
+                       context: PythonObject) raises -> Bool:
+    """The units of `run` over native members
+    (bindings/msel_member_units_door.mojo): True with every result slot of
+    `run` filled, False having published nothing (the Python units then run:
+    THE FALLBACK RULE, a member mark never turns a working call into a
+    refusal, so nothing in here raises for a request those units serve).
+
+    Asked for a host fold set that gathers per unit. `error_score`: 'raise',
+    or a number (a unit whose fit fails on its data takes it; see the door).
+    DEFAULT SCORING: the member's own score per unit. A NAMED SCORER (one, or
+    several by name): each scorer's response method is read once per
+    operation; the units write `predict` / `predict_proba` of their test rows
+    (train rows too when train scores are asked) into placed buffers with the
+    GIL released, once per (unit, side, method) whatever the number of
+    scorers; then the metrics run here over those buffers and the fold's
+    target rows (taken once per FOLD, not per unit; X is never taken).
+    The metric calls are SERIAL BY NATURE: the connected metric entries take
+    Python arrays with the GIL held (core/metrics_entry_table.mojo holds a
+    typed entry for R^2 only), exactly as each Python unit called them.
+    A scorer that reads decision_function keeps the Python units.
+    CROSS_VAL_PREDICT (`run.method`): `predict` / `predict_proba` of each
+    fold's test rows, placed the same way; no metric runs."""
+    if rows.dev or len(rows.ranges) != 0 or rows.reuse_test:
+        return False
+    # A numeric error_score: a unit whose FIT failed takes the value in
+    # every score (the Python unit's rule: only the fit is forgiven).
+    var tolerate = not run.raise_errors
+    var failed_value = 0.0
+    if tolerate:
+        try:
+            failed_value = msel_error_value(run.error_score)
+        except:
+            return False
+    var b = msel_b()
+    var responses = List[Int]()
+    # Per scorer: the index of its response in `responses`, and its method name.
+    var slot = List[Int]()
+    var names = Python.list()
+    var model = PythonObject(None)
+    if run.method is not None:
+        # cross_val_predict: the one method, placed per unit. A method the
+        # class does not have is the Python units' to refuse.
+        try:
+            model = msel_estimator_plan(run.base, context)
+            var op = _msel_response_op(run.method)
+            if op < 0 or not py_contains(model["methods"], run.method):
+                return False
+            responses.append(op)
+        except:
+            return False
+    elif run.multi is not None or run.single is not None:
+        try:
+            model = msel_estimator_plan(run.base, context)
+            for k in range(run.n_keys):  # driver-loop: over scorer names (one response read each)
+                var sc = run.multi[run.keys[k]] if run.multi is not None else run.single
+                var method = msel_scorer_response(sc, model, context)
+                var op = _msel_response_op(method)
+                if op < 0:
+                    return False
+                var at = -1
+                for i in range(len(responses)):  # driver-loop: over the distinct responses (at most two)
+                    if responses[i] == op:
+                        at = i
+                if at < 0:
+                    at = len(responses)
+                    responses.append(op)
+                slot.append(at)
+                _ = py_call(names.append, method)
+        except:
+            return False
+    if len(responses) > 0:
+        # Placed responses are a regressor's float32 values or a classifier's
+        # codes. Any other kind (a clusterer's int32 ids, a transformer) keeps
+        # the Python units BEFORE any fit is spent on it.
+        try:
+            var kind = py_get(model, "estimator_type")
+            if py_type(kind) is not b.str:
+                return False
+            var word = String(py=kind)
+            if word != "classifier" and word != "regressor":
+                return False
+        except:
+            return False
+    var member_y = rows.y if run.y is None else run.y
+    var native = msel_member_units(run.base, run.candidates, member_y, rows.x, rows.folds, run.return_train,
+                                   run.return_estimator, workers, context, b, responses, tolerate)
+    if not native.ran:
+        return False
+    var n_ops = len(responses)
+    if run.method is not None:
+        # The fold's predictions as each Python unit left them (`_numeric_pred`
+        # of the method's output): a float32 Array the unit's worker filled,
+        # or a classifier's decoded labels.
+        try:
+            for u in range(run.n_units):  # driver-loop: over units (one prediction object each)
+                py_setitem(run.preds, PythonObject(u), _numeric_pred(native.outputs[u * native.sides], context))
+        except:
+            return False
+    elif n_ops > 0:
+        # The metrics, in unit order. A metric that refuses publishes nothing
+        # from this route: the Python units run the request and raise.
+        var test = List[Float64](length=run.n_units * run.n_keys, fill=0.0)
+        var train = List[Float64](length=run.n_units * run.n_keys, fill=0.0)
+        var seconds = List[Float64](length=run.n_units, fill=0.0)
+        try:
+            # One template per scorer for the whole operation (the options and
+            # modules are checked on every call; a candidate's own estimator
+            # prepares it again).
+            var plans = List[MselMetricPrepared]()
+            for k in range(run.n_keys):  # driver-loop: metadata-only template owner per scoring slot
+                plans.append(MselMetricPrepared(True))
+            var y_sides = Python.list()
+            for f in range(run.n_folds):  # driver-loop: over folds (the target's rows, once per fold side)
+                _ = py_call(y_sides.append, rows.yrows(run.y, rows.folds[f][1], context))
+                if run.return_train:
+                    _ = py_call(y_sides.append, rows.yrows(run.y, rows.folds[f][0], context))
+            for u in range(run.n_units):  # driver-loop: over units (metric entries, GIL held)
+                var c = u // run.n_folds
+                var f = u - c * run.n_folds
+                if tolerate and native.fit_failed[u] != UInt8(0):
+                    continue
+                var t0 = msel_seconds()
+                for side in range(native.sides):  # driver-loop: test side, then train side when asked
+                    var memo = PythonObject(None)
+                    if run.n_keys > 1:
+                        memo = Python.dict()
+                    var y_side = y_sides[f * native.sides + side]
+                    for k in range(run.n_keys):  # driver-loop: over scorer names
+                        var sc = run.multi[run.keys[k]] if run.multi is not None else run.single
+                        var predicted = native.outputs[(u * native.sides + side) * n_ops + slot[k]]
+                        var value = msel_scorer_predicted(sc, native.members[c], model, names[k], predicted, y_side,
+                                                          memo, context, plans[k])
+                        if side == 0:
+                            test[u * run.n_keys + k] = value
+                        else:
+                            train[u * run.n_keys + k] = value
+                seconds[u] = msel_seconds() - t0
+        except:
+            return False
+        run.test = test^
+        run.train = train^
+        for u in range(run.n_units):  # driver-loop: over units (one time word each)
+            native.score_time[u] += seconds[u]
+    else:
+        run.test = native.test.copy()
+        run.train = native.train.copy()
+    if tolerate:
+        for u in range(run.n_units):  # driver-loop: over units (a failed fit's scores are the given value)
+            if native.fit_failed[u] != UInt8(0):
+                for k in range(run.n_keys):  # driver-loop: over scorer names
+                    run.test[u * run.n_keys + k] = failed_value
+                    if run.return_train:
+                        run.train[u * run.n_keys + k] = failed_value
+    if run.return_estimator:
+        run.estimators = native.estimators
+    run.fit_time = native.fit_time.copy()
+    run.score_time = native.score_time.copy()
+    return True
+
+
 def msel_cv_units(base: PythonObject, candidates: PythonObject, y: PythonObject, mut rows: MselFoldRows,
                   scoring: PythonObject, return_train: Bool, return_estimator: Bool, error_score: PythonObject,
                   jobs: Int, context: PythonObject) raises -> MselUnitRun:
@@ -987,25 +1176,10 @@ def msel_cv_units(base: PythonObject, candidates: PythonObject, y: PythonObject,
     var workers = msel_unit_workers(jobs, run.n_units, context)
     comptime if MSEL_MEMBER_UNITS:
         # A member whose family published its member entry (core/member_abi.mojo)
-        # runs its units without a Python estimator: admitted once per candidate,
-        # then typed calls with the GIL released (bindings/msel_member_units_door.mojo).
-        # Asked only for the request that route runs: default scoring, errors
-        # raised, a host fold set that gathers per unit. Fitted estimators
-        # asked back are packed from the units' member states.
+        # runs its units without a Python estimator (`_msel_member_route`).
         # Any other member, and any other request, keeps the units below.
-        if (method is None and scoring is None and run.raise_errors and not rows.dev
-                and len(rows.ranges) == 0 and not rows.reuse_test):
-            var member_y = rows.y if y is None else y
-            var native = msel_member_units(base, candidates, member_y, rows.x, rows.folds, return_train,
-                                           return_estimator, workers, context, msel_b())
-            if native.ran:
-                if return_estimator:
-                    run.estimators = native.estimators
-                run.test = native.test.copy()
-                run.train = native.train.copy()
-                run.fit_time = native.fit_time.copy()
-                run.score_time = native.score_time.copy()
-                return run^
+        if _msel_member_route(run, rows, y, workers, context):
+            return run^
     if workers <= 1 or run.n_units <= 1:
         run.drain()
         run.reraise()

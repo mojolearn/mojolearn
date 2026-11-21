@@ -68,13 +68,6 @@ comptime PARALLEL_NEURAL_OPN_CLOSE = 9
 comptime PARALLEL_NEURAL_OPN_EXIT = 10
 comptime PARALLEL_NEURAL_OPN_ENTER = 11
 
-# `neural_worker` dispatcher codes (`ops_neural_worker`).
-comptime PARALLEL_NEURAL_WORKER_OPN_MLP_GRADIENT_CACHED = 0
-comptime PARALLEL_NEURAL_WORKER_OPN_SAMBA_GRADIENT_CACHED = 1
-comptime PARALLEL_NEURAL_WORKER_OPN_MLP_GRADIENT = 2
-comptime PARALLEL_NEURAL_WORKER_OPN_SAMBA_GRADIENT = 3
-comptime PARALLEL_NEURAL_WORKER_OPN_MLP_UPDATE = 4
-comptime PARALLEL_NEURAL_WORKER_OPN_SAMBA_UPDATE = 5
 
 # `forecast` dispatcher codes (`ops_forecast`).
 comptime PARALLEL_FORECAST_OPN_INITIALIZE = 0
@@ -200,7 +193,6 @@ struct ParallelKeys(Defaultable, Movable):
     var ops_byte: PythonObject
     var ops_mlp: PythonObject
     var ops_neural: PythonObject
-    var ops_neural_worker: PythonObject
     var ops_forecast: PythonObject
     var ops_forecast_worker: PythonObject
     var ops_shard: PythonObject
@@ -224,7 +216,6 @@ struct ParallelKeys(Defaultable, Movable):
     var k__causal_live_fields: PythonObject
     var k__causal_original: PythonObject
     var k__classes_list: PythonObject
-    var k__classifier: PythonObject
     var k__closed: PythonObject
     var k__components_len: PythonObject
     var k__comps: PythonObject
@@ -264,7 +255,6 @@ struct ParallelKeys(Defaultable, Movable):
     var k__offsets: PythonObject
     var k__pool: PythonObject
     var k__pools: PythonObject
-    var k__public_kind: PythonObject
     var k__resident: PythonObject
     var k__resident_holder: PythonObject
     var k__session: PythonObject
@@ -396,9 +386,7 @@ struct ParallelKeys(Defaultable, Movable):
     var k_metric: PythonObject
     var k_metric_code_: PythonObject
     var k_min_: PythonObject
-    var k_mlp_gradient_cached: PythonObject
     var k_mlp_slot: PythonObject
-    var k_mlp_update: PythonObject
     var k_mode: PythonObject
     var k_model: PythonObject
     var k_model_class: PythonObject
@@ -488,8 +476,6 @@ struct ParallelKeys(Defaultable, Movable):
     var k_rng: PythonObject
     var k_route: PythonObject
     var k_rows_per_shard: PythonObject
-    var k_samba_gradient_cached: PythonObject
-    var k_samba_update: PythonObject
     var k_scale_: PythonObject
     var k_scaler_fit: PythonObject
     var k_scaler_transform: PythonObject
@@ -541,7 +527,6 @@ struct ParallelKeys(Defaultable, Movable):
         self.ops_byte = PythonObject(None)
         self.ops_mlp = PythonObject(None)
         self.ops_neural = PythonObject(None)
-        self.ops_neural_worker = PythonObject(None)
         self.ops_forecast = PythonObject(None)
         self.ops_forecast_worker = PythonObject(None)
         self.ops_shard = PythonObject(None)
@@ -565,7 +550,6 @@ struct ParallelKeys(Defaultable, Movable):
         self.k__causal_live_fields = PythonObject(None)
         self.k__causal_original = PythonObject(None)
         self.k__classes_list = PythonObject(None)
-        self.k__classifier = PythonObject(None)
         self.k__closed = PythonObject(None)
         self.k__components_len = PythonObject(None)
         self.k__comps = PythonObject(None)
@@ -605,7 +589,6 @@ struct ParallelKeys(Defaultable, Movable):
         self.k__offsets = PythonObject(None)
         self.k__pool = PythonObject(None)
         self.k__pools = PythonObject(None)
-        self.k__public_kind = PythonObject(None)
         self.k__resident = PythonObject(None)
         self.k__resident_holder = PythonObject(None)
         self.k__session = PythonObject(None)
@@ -737,9 +720,7 @@ struct ParallelKeys(Defaultable, Movable):
         self.k_metric = PythonObject(None)
         self.k_metric_code_ = PythonObject(None)
         self.k_min_ = PythonObject(None)
-        self.k_mlp_gradient_cached = PythonObject(None)
         self.k_mlp_slot = PythonObject(None)
-        self.k_mlp_update = PythonObject(None)
         self.k_mode = PythonObject(None)
         self.k_model = PythonObject(None)
         self.k_model_class = PythonObject(None)
@@ -829,8 +810,6 @@ struct ParallelKeys(Defaultable, Movable):
         self.k_rng = PythonObject(None)
         self.k_route = PythonObject(None)
         self.k_rows_per_shard = PythonObject(None)
-        self.k_samba_gradient_cached = PythonObject(None)
-        self.k_samba_update = PythonObject(None)
         self.k_scale_ = PythonObject(None)
         self.k_scaler_fit = PythonObject(None)
         self.k_scaler_transform = PythonObject(None)
@@ -898,7 +877,6 @@ def _parallel_keys_fill(nk: UnsafePointer[ParallelKeys, MutUntrackedOrigin]) rai
     nk[].k__causal_live_fields = py_key("_causal_live_fields")
     nk[].k__causal_original = py_key("_causal_original")
     nk[].k__classes_list = py_key("_classes_list")
-    nk[].k__classifier = py_key("_classifier")
     nk[].k__closed = py_key("_closed")
     nk[].k__components_len = py_key("_components_len")
     nk[].k__comps = py_key("_comps")
@@ -938,7 +916,6 @@ def _parallel_keys_fill(nk: UnsafePointer[ParallelKeys, MutUntrackedOrigin]) rai
     nk[].k__offsets = py_key("_offsets")
     nk[].k__pool = py_key("_pool")
     nk[].k__pools = py_key("_pools")
-    nk[].k__public_kind = py_key("_public_kind")
     nk[].k__resident = py_key("_resident")
     nk[].k__resident_holder = py_key("_resident_holder")
     nk[].k__session = py_key("_session")
@@ -1070,9 +1047,7 @@ def _parallel_keys_fill(nk: UnsafePointer[ParallelKeys, MutUntrackedOrigin]) rai
     nk[].k_metric = py_key("metric")
     nk[].k_metric_code_ = py_key("metric_code_")
     nk[].k_min_ = py_key("min_")
-    nk[].k_mlp_gradient_cached = py_key("mlp_gradient_cached")
     nk[].k_mlp_slot = py_key("mlp_slot")
-    nk[].k_mlp_update = py_key("mlp_update")
     nk[].k_mode = py_key("mode")
     nk[].k_model = py_key("model")
     nk[].k_model_class = py_key("model_class")
@@ -1162,8 +1137,6 @@ def _parallel_keys_fill(nk: UnsafePointer[ParallelKeys, MutUntrackedOrigin]) rai
     nk[].k_rng = py_key("rng")
     nk[].k_route = py_key("route")
     nk[].k_rows_per_shard = py_key("rows_per_shard")
-    nk[].k_samba_gradient_cached = py_key("samba_gradient_cached")
-    nk[].k_samba_update = py_key("samba_update")
     nk[].k_scale_ = py_key("scale_")
     nk[].k_scaler_fit = py_key("scaler_fit")
     nk[].k_scaler_transform = py_key("scaler_transform")
@@ -1260,14 +1233,6 @@ def _parallel_keys_fill(nk: UnsafePointer[ParallelKeys, MutUntrackedOrigin]) rai
     py_op_add(ops_neural, "exit", PARALLEL_NEURAL_OPN_EXIT)
     py_op_add(ops_neural, "enter", PARALLEL_NEURAL_OPN_ENTER)
     nk[].ops_neural = ops_neural
-    var ops_neural_worker = Python.dict()
-    py_op_add(ops_neural_worker, "mlp_gradient_cached", PARALLEL_NEURAL_WORKER_OPN_MLP_GRADIENT_CACHED)
-    py_op_add(ops_neural_worker, "samba_gradient_cached", PARALLEL_NEURAL_WORKER_OPN_SAMBA_GRADIENT_CACHED)
-    py_op_add(ops_neural_worker, "mlp_gradient", PARALLEL_NEURAL_WORKER_OPN_MLP_GRADIENT)
-    py_op_add(ops_neural_worker, "samba_gradient", PARALLEL_NEURAL_WORKER_OPN_SAMBA_GRADIENT)
-    py_op_add(ops_neural_worker, "mlp_update", PARALLEL_NEURAL_WORKER_OPN_MLP_UPDATE)
-    py_op_add(ops_neural_worker, "samba_update", PARALLEL_NEURAL_WORKER_OPN_SAMBA_UPDATE)
-    nk[].ops_neural_worker = ops_neural_worker
     var ops_forecast = Python.dict()
     py_op_add(ops_forecast, "initialize", PARALLEL_FORECAST_OPN_INITIALIZE)
     py_op_add(ops_forecast, "predict_arima", PARALLEL_FORECAST_OPN_PREDICT_ARIMA)

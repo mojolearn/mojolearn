@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """The member boundary of the XLinear family; RUN is core/xlinear_member.mojo.
 Published kinds: 0 PoissonRegressor, 1 GammaRegressor, 2 TweedieRegressor,
-3 HuberRegressor, 4 BayesianRidge, 5 ARDRegression, 6 Lars, 7 LassoLars, 8 QuantileRegressor, 9 RidgeClassifier, 10 RidgeCV (`_mojolearn_member = (MEMBER_FAMILY_XLINEAR, kind)` on
+3 HuberRegressor, 4 BayesianRidge, 5 ARDRegression, 6 Lars, 7 LassoLars, 8 QuantileRegressor, 9 RidgeClassifier, 10 RidgeCV,
+11 LassoCV, 12 ElasticNetCV, 13 LogisticRegressionCV, 14 IsotonicRegression (`_mojolearn_member = (MEMBER_FAMILY_XLINEAR, kind)` on
 each class).
 
   * `xlinear_member_admit` (UNPACK, once per member): the estimator's own
@@ -28,14 +29,18 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.admitted_input_unpack import admit_x
 from bindings.classical_arrays_door import classical_array, classical_address
-from bindings.member_owner_unpack import MemberOwner
+from bindings.member_owner_unpack import MemberOwner, member_labels_take
+from bindings.admitted_input_unpack import admitted_array
+from bindings.py_lists import py_list_f64
 from bindings.py_lists import py_list_int
 from bindings.py_balanced import py_call
 from bindings.py_balanced import py_get, py_item, py_contains, py_setitem
 from bindings.x_linear_common_unpack import _truth, _ge, _float, _int, _name, _class_attr, _attr, _lt, _b, _xl_bayes_refuse, _xl_or
+from bindings.x_linear_common_unpack import _eq, _is_int, _isinstance
 from bindings.x_linear_keys_unpack import x_linear_keys
 from bindings.x_linear_regressors_unpack import _xl_tweedie_link
-from bindings.x_linear_cv_unpack import _xl_is_int_cv
+from bindings.x_linear_cv_unpack import _xl_is_int_cv, _is_int_plain, _xl_cs_grid
+from bindings.x_linear_isotonic_unpack import _xl_isotonic_check
 from bindings.x_linear_route_unpack import xl_route, xl_ops_require
 from core.entry_table import EntryRef, entry_ref_word
 from core.hostptr import f32_ptr
@@ -46,7 +51,8 @@ from core.member_abi import (
 from core.xlinear_member import (
     XL_MEMBER_HUBER, XL_MEMBER_BAYES, XL_MEMBER_ARD, XL_MEMBER_LARS, XL_MEMBER_LASSO_LARS, XL_MEMBER_QUANTILE, XL_MEMBER_RIDGE_CLASSIFIER, XL_MEMBER_RIDGE_CV, XL_MEMBER_BLOCK_CV_RESULTS,
     XL_MEMBER_BLOCK_OUTLIERS, XL_MEMBER_BLOCK_LAMBDA,
-    XL_MEMBER_BLOCK_ACTIVE,
+    XL_MEMBER_BLOCK_ACTIVE, XL_MEMBER_LASSO_CV, XL_MEMBER_ELASTIC_NET_CV, XL_MEMBER_LOGISTIC_CV, XL_MEMBER_ISOTONIC,
+    XL_MEMBER_BLOCK_ALPHAS, XL_MEMBER_BLOCK_MSE_PATH, XL_MEMBER_BLOCK_SCORES, XL_MEMBER_BLOCK_THRESHOLDS,
 )
 from core.metrics_entry_table import MetricsEntryKey, metrics_r2_entry, MR_OP_COUNT
 from providers.python.device_route_boundary_door import device_route_value
@@ -186,6 +192,116 @@ def _xl_ridge_cv_words(fields: PythonObject, context: PythonObject, mut admitted
     return words^
 
 
+def _xl_enetcv_words(model: PythonObject, fields: PythonObject, context: PythonObject, elastic: Bool,
+    mut admitted: Bool) raises -> List[Float64]:
+    """Kinds 11, 12: `_xl_enetcv_unpack`'s refusals (selection, the
+    l1_ratio range, the cv count, an empty grid), then 10 + L (+ G) words.
+    `admitted` is False for a splitter object as cv (its folds are made in
+    Python by the estimator's split path)."""
+    var nk = x_linear_keys()
+    var name = _name(model)
+    var b = _b()
+    if not _eq(py_item(fields, nk[].k_selection), PythonObject("cyclic")):
+        raise Error("mojolearn " + name + ": selection='random' is not implemented")
+    var ratios = Python.list(PythonObject(1.0))
+    if elastic:
+        var given = py_item(fields, nk[].k_l1_ratio)
+        var listed = py_call(b.list, given) if Bool(py=py_call(b.hasattr, given, PythonObject("__len__"))) else Python.list(given)
+        ratios = py_call(b.list, py_call(b.map, b.float, listed))
+    var L = len(ratios)
+    for i in range(L):  # driver-loop: over the l1_ratio grid
+        var r = Float64(py=ratios[i])
+        if not (r > 0 and r <= 1):
+            raise Error("mojolearn " + name + ": l1_ratio must be in (0, 1]")
+    var cv = py_item(fields, nk[].k_cv)
+    admitted = True
+    var folds = 5
+    if cv is not None:
+        if not _xl_is_int_cv(cv, context):
+            admitted = False
+            return List[Float64]()
+        var k = py_call(b.int, cv)
+        if not _is_int(k) or _lt(k, PythonObject(2)):
+            raise Error("mojolearn: cv must be None or an int in [2, n_samples]")
+        folds = _int(k)
+    var alphas = py_item(fields, nk[].k_alphas)
+    var n_alphas = _attr(model, "n_alphas", PythonObject(None))
+    var explicit = False
+    var grid = 0
+    var values = Python.list()
+    if _is_int(alphas):
+        grid = _int(alphas)
+    elif alphas is None or py_contains(Python.tuple("warn", "deprecated"), alphas):
+        grid = _int(n_alphas) if _is_int_plain(n_alphas) else 100
+    else:
+        explicit = True
+        values = py_call(b.sorted, py_call(b.map, b.float, alphas), reverse=PythonObject(True))
+        grid = len(values)
+    if grid < 1:
+        raise Error("mojolearn " + name + ": at least one alpha is required")
+    var kind = XL_MEMBER_ELASTIC_NET_CV if elastic else XL_MEMBER_LASSO_CV
+    var words: List[Float64] = [Float64(kind), _intercept_word(fields), Float64(_int(py_item(fields, nk[].k_max_iter))),
+        _float(py_item(fields, nk[].k_eps)), _float(py_item(fields, nk[].k_tol)),
+        1.0 if _truth(py_item(fields, nk[].k_positive)) else 0.0, Float64(folds), Float64(grid),
+        1.0 if explicit else 0.0, Float64(L)]
+    for i in range(L):  # driver-loop: over the l1_ratio grid
+        words.append(Float64(py=ratios[i]))
+    if explicit:
+        for i in range(grid):  # driver-loop: over the user alpha grid
+            words.append(Float64(py=values[i]))
+    return words^
+
+
+def _xl_logistic_cv_words(fields: PythonObject, context: PythonObject, mut admitted: Bool) raises -> List[Float64]:
+    """Kind 13: `xl_fit_logistic_cv_unpack`'s refusals (penalty, scoring,
+    refit, solver), then 7 + C words. `admitted` is False for a dict (or
+    any other non-word) class_weight, whose labels never cross the ABI, and
+    for a splitter object as cv."""
+    var nk = x_linear_keys()
+    if not _eq(py_item(fields, nk[].k_penalty), PythonObject("l2")) or _truth(py_item(fields, nk[].k_dual)) or py_item(fields, nk[].k_l1_ratios) is not None:
+        raise Error("mojolearn LogisticRegressionCV: only penalty='l2' (primal) is implemented")
+    if py_item(fields, nk[].k_scoring) is not None or not _truth(py_item(fields, nk[].k_refit)):
+        raise Error("mojolearn LogisticRegressionCV: scoring and refit=False are not implemented")
+    if not py_contains(Python.tuple("lbfgs", "newton-cg", "newton-cholesky"), py_item(fields, nk[].k_solver)):
+        raise Error("mojolearn LogisticRegressionCV: solver must be lbfgs (newton-* run L-BFGS too)")
+    admitted = False
+    var class_weight = py_item(fields, nk[].k_class_weight)
+    var balanced = False
+    if class_weight is not None:
+        if not _eq(class_weight, PythonObject("balanced")):
+            return List[Float64]()
+        balanced = True
+    var cv = py_item(fields, nk[].k_cv)
+    var folds = 5
+    if cv is not None:
+        if not _xl_is_int_cv(cv, context):
+            return List[Float64]()
+        folds = _int(cv)
+    admitted = True
+    var cs = _xl_cs_grid(py_item(fields, nk[].k_Cs), context)
+    var words: List[Float64] = [Float64(XL_MEMBER_LOGISTIC_CV), _intercept_word(fields),
+        Float64(_int(py_item(fields, nk[].k_max_iter))), _float(py_item(fields, nk[].k_tol)), Float64(folds),
+        1.0 if balanced else 0.0, Float64(len(cs))]
+    for i in range(len(cs)):  # driver-loop: over the Cs grid
+        words.append(cs[i])
+    return words^
+
+
+def _xl_isotonic_words(fields: PythonObject) raises -> List[Float64]:
+    """Kind 14: `xl_isotonic_fit_unpack`'s refusal (out_of_bounds), then
+    the seven words."""
+    var nk = x_linear_keys()
+    _xl_isotonic_check(fields)
+    var increasing = py_item(fields, nk[].k_increasing)
+    var direction = 2.0 if _eq(increasing, PythonObject("auto")) else (1.0 if _truth(increasing) else 0.0)
+    var y_min = py_item(fields, nk[].k_y_min)
+    var y_max = py_item(fields, nk[].k_y_max)
+    var mode = py_item(fields, nk[].k_out_of_bounds)
+    var oob = 2.0 if _eq(mode, PythonObject("raise")) else (1.0 if _eq(mode, PythonObject("clip")) else 0.0)
+    return [Float64(XL_MEMBER_ISOTONIC), direction, 0.0 if y_min is None else 1.0, _xl_or(y_min, 0.0),
+        0.0 if y_max is None else 1.0, _xl_or(y_max, 0.0), oob]
+
+
 def _intercept_word(fields: PythonObject) raises -> Float64:
     var nk = x_linear_keys()
     return 1.0 if _truth(py_item(fields, nk[].k_fit_intercept)) else 0.0
@@ -220,6 +336,23 @@ def xlinear_member_admit(model: PythonObject, fields: PythonObject, kind: Int, c
         words = _xl_ridge_cv_words(fields, context, admitted)
         if not admitted:
             return False
+    elif kind == XL_MEMBER_LASSO_CV:
+        var admitted = True
+        words = _xl_enetcv_words(model, fields, context, False, admitted)
+        if not admitted:
+            return False
+    elif kind == XL_MEMBER_ELASTIC_NET_CV:
+        var admitted = True
+        words = _xl_enetcv_words(model, fields, context, True, admitted)
+        if not admitted:
+            return False
+    elif kind == XL_MEMBER_LOGISTIC_CV:
+        var admitted = True
+        words = _xl_logistic_cv_words(fields, context, admitted)
+        if not admitted:
+            return False
+    elif kind == XL_MEMBER_ISOTONIC:
+        words = _xl_isotonic_words(fields)
     else:
         raise Error("RuntimeError: mojolearn: unknown XLinear member kind " + String(kind))
     var ops = xl_route(model, fields, context, False)
@@ -270,8 +403,18 @@ def xlinear_member_pack(model: PythonObject, fields: PythonObject, context: Pyth
     var nk = x_linear_keys()
     var kind = Int(plan.params[0])
     var call = MemberCall(plan.route, state)
-    if kind == XL_MEMBER_RIDGE_CLASSIFIER:
-        # coef_ (T, d), intercept_ (T,), n_features_in_; classes_ is the caller's PACK.
+    if kind == XL_MEMBER_ISOTONIC:
+        _xl_isotonic_pack(fields, context, plan, call)
+        return
+    if kind == XL_MEMBER_RIDGE_CLASSIFIER or kind == XL_MEMBER_LOGISTIC_CV:
+        # coef_ (T, d), intercept_ (T,), n_features_in_; classes_ is the caller's PACK
+        # (LogisticRegressionCV takes the labels: its scores_ is keyed by them).
+        var logcv = kind == XL_MEMBER_LOGISTIC_CV
+        var labels = PythonObject(None)
+        if logcv:
+            labels = member_labels_take(fields, b)
+            if labels is not None:
+                py_setitem(fields, nk[].k_classes_, labels)
         call.block = MEMBER_BLOCK_COEF
         _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
         var outputs = call.dst.rows
@@ -282,8 +425,12 @@ def xlinear_member_pack(model: PythonObject, fields: PythonObject, context: Pyth
         _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
         var offsets = classical_array(outputs, 0, context)
         unsafe_memcpy(dest=f32_ptr(Int(py=classical_address(offsets))), src=f32_ptr(call.dst.data), count=outputs)
+        var classes = call.classes
+        var blocks = call.out_cols
         py_setitem(fields, nk[].k_coef_, weights)
         py_setitem(fields, nk[].k_intercept_, offsets)
+        if logcv:
+            _xl_logistic_cv_pack(fields, context, plan, call, labels, outputs, classes, blocks)
         py_setitem(fields, nk[].k_n_features_in_, PythonObject(d))
         return
     call.block = MEMBER_BLOCK_COEF
@@ -338,6 +485,33 @@ def xlinear_member_pack(model: PythonObject, fields: PythonObject, context: Pyth
             py_setitem(fields, nk[].k_cv_results_, table)
         py_setitem(fields, nk[].k_n_features_in_, PythonObject(cols))
         return
+    if kind == XL_MEMBER_LASSO_CV or kind == XL_MEMBER_ELASTIC_NET_CV:
+        # `_xl_enetcv_pack`'s order: alpha_, n_iter_, alphas_, mse_path_, n_features_in_ (then l1_ratio_)
+        var alpha = Float64(Float32(scalars[1]))
+        var l1_ratio = scalars[2]
+        var n_iter = Int(scalars[3])
+        py_setitem(fields, nk[].k_alpha_, PythonObject(alpha))
+        py_setitem(fields, nk[].k_n_iter_, PythonObject(n_iter))
+        if blocks > 2:
+            var L = Int(plan.params[9])
+            var grid = Int(plan.params[7])
+            var folds = Int(plan.params[6])
+            call.block = XL_MEMBER_BLOCK_ALPHAS
+            _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+            var path = admitted_array(Python.tuple(grid) if L == 1 else Python.tuple(L, grid), "<f4", context)
+            unsafe_memcpy(dest=f32_ptr(Int(py=classical_address(path))), src=f32_ptr(call.dst.data), count=L * grid)
+            py_setitem(fields, nk[].k_alphas_, path)
+            call.block = XL_MEMBER_BLOCK_MSE_PATH
+            _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+            var mse = admitted_array(Python.tuple(grid, folds) if L == 1 else Python.tuple(L, grid, folds), "<f4",
+                context)
+            unsafe_memcpy(dest=f32_ptr(Int(py=classical_address(mse))), src=f32_ptr(call.dst.data),
+                count=L * grid * folds)
+            py_setitem(fields, nk[].k_mse_path_, mse)
+        py_setitem(fields, nk[].k_n_features_in_, PythonObject(cols))
+        if kind == XL_MEMBER_ELASTIC_NET_CV:
+            py_setitem(fields, nk[].k_l1_ratio_, PythonObject(l1_ratio))
+        return
     if kind == XL_MEMBER_LARS or kind == XL_MEMBER_LASSO_LARS:
         py_setitem(fields, nk[].k_n_iter_, PythonObject(Int(scalars[1])))
         py_setitem(fields, nk[].k_alpha_, PythonObject(Float64(Float32(scalars[2]))))
@@ -358,6 +532,70 @@ def xlinear_member_pack(model: PythonObject, fields: PythonObject, context: Pyth
         py_setitem(fields, nk[].k__link, PythonObject(LINK_EXP if plan.params[3] == 1.0 else LINK_IDENTITY))
 
 
+def _xl_logistic_cv_pack(fields: PythonObject, context: PythonObject, plan: MemberPlan, mut call: MemberCall,
+    labels: PythonObject, kp: Int, classes: Int, blocks: Int) raises:
+    """Kind 13 after coef_ / intercept_: `Cs_`, `C_` (one entry per fitted
+    problem), `n_iter_`, `scores_` (one (folds, Cs) table per class label;
+    the first label is skipped for two classes) as
+    `xl_fit_logistic_cv_pack` writes them. Without labels the tables are
+    keyed by the class codes."""
+    var nk = x_linear_keys()
+    var nc = Int(plan.params[6])
+    var folds = Int(plan.params[4])
+    call.block = MEMBER_BLOCK_SCALARS
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    var scalars = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call.dst.data)
+    var chosen_c = scalars[0]
+    var n_iter = Int(scalars[1])
+    var cs = List[Float64](capacity=nc)
+    for i in range(nc):  # driver-loop: over the Cs grid
+        cs.append(plan.params[7 + i])
+    py_setitem(fields, nk[].k_Cs_, py_list_f64(cs))
+    var chosen = Python.list()
+    for c in range(kp):  # driver-loop: over the fitted problems (model structure)
+        _ = py_call(chosen.append, PythonObject(chosen_c))
+    py_setitem(fields, nk[].k_C_, chosen)
+    py_setitem(fields, nk[].k_n_iter_, PythonObject(n_iter))
+    var scores = Python.dict()
+    if blocks > 3:
+        call.block = XL_MEMBER_BLOCK_SCORES
+        _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+        var names = py_call(_b().list, labels) if labels is not None else Python.list()
+        var first = 1 if kp == 1 else 0
+        for c in range(first, classes):  # driver-loop: over the class labels (one score table each)
+            var table = admitted_array(Python.tuple(folds, nc), "<f4", context)
+            unsafe_memcpy(dest=f32_ptr(Int(py=classical_address(table))), src=f32_ptr(call.dst.data),
+                count=folds * nc)
+            py_setitem(scores, names[c] if labels is not None else PythonObject(c), table)
+    py_setitem(fields, nk[].k_scores_, scores)
+
+
+def _xl_isotonic_pack(fields: PythonObject, context: PythonObject, plan: MemberPlan, mut call: MemberCall) raises:
+    """Kind 14: `increasing_`, `X_min_`, `X_max_`, `X_thresholds_`,
+    `y_thresholds_` and `n_features_in_` as `xl_isotonic_fit_pack` writes
+    them."""
+    var nk = x_linear_keys()
+    call.block = MEMBER_BLOCK_SCALARS
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    var scalars = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call.dst.data)
+    var rising = scalars[0] != 0.0
+    var x_min = scalars[1]
+    var x_max = scalars[2]
+    call.block = XL_MEMBER_BLOCK_THRESHOLDS
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    var k = call.dst.cols
+    var xs = admitted_array(Python.tuple(k), "<f4", context)
+    var ys = admitted_array(Python.tuple(k), "<f4", context)
+    unsafe_memcpy(dest=f32_ptr(Int(py=classical_address(xs))), src=f32_ptr(call.dst.data), count=k)
+    unsafe_memcpy(dest=f32_ptr(Int(py=classical_address(ys))), src=f32_ptr(call.dst.data + 4 * k), count=k)
+    py_setitem(fields, nk[].k_increasing_, PythonObject(rising))
+    py_setitem(fields, nk[].k_X_min_, PythonObject(x_min))
+    py_setitem(fields, nk[].k_X_max_, PythonObject(x_max))
+    py_setitem(fields, nk[].k_X_thresholds_, xs)
+    py_setitem(fields, nk[].k_y_thresholds_, ys)
+    py_setitem(fields, nk[].k_n_features_in_, PythonObject(1))
+
+
 def _count_word(fields: PythonObject, key: PythonObject) raises -> Float64:
     var value = py_get(fields, key)
     if value is None:
@@ -372,10 +610,12 @@ def xlinear_member_state(model: PythonObject, fields: PythonObject, context: Pyt
     The caller frees it (`member_free`)."""
     var nk = x_linear_keys()
     var kind = Int(plan.params[0])
+    if kind == XL_MEMBER_ISOTONIC:
+        return _xl_isotonic_state(fields, context, plan)
     var coefficient_source = py_get(fields, nk[].k_coef_)
     if coefficient_source is None:
         raise Error("NotFittedError: this member is not fitted yet")
-    if kind == XL_MEMBER_RIDGE_CLASSIFIER:
+    if kind == XL_MEMBER_RIDGE_CLASSIFIER or kind == XL_MEMBER_LOGISTIC_CV:
         return _xl_classifier_state(fields, context, plan, coefficient_source)
     var coef = admit_x(coefficient_source, 1, "coef_", context)
     var cols = Int(py=coef.size)
@@ -394,6 +634,11 @@ def xlinear_member_state(model: PythonObject, fields: PythonObject, context: Pyt
             0.0 if best is None else Float64(py=best)]
     elif kind == XL_MEMBER_LARS or kind == XL_MEMBER_LASSO_LARS:
         scalars = [intercept, _count_word(fields, nk[].k_n_iter_), Float64(py=py_item(fields, nk[].k_alpha_))]
+    elif kind == XL_MEMBER_LASSO_CV or kind == XL_MEMBER_ELASTIC_NET_CV:
+        var l1_ratio = 1.0
+        if kind == XL_MEMBER_ELASTIC_NET_CV:
+            l1_ratio = Float64(py=py_item(fields, nk[].k_l1_ratio_))
+        scalars = [intercept, Float64(py=py_item(fields, nk[].k_alpha_)), l1_ratio, _count_word(fields, nk[].k_n_iter_)]
     else:
         scalars = [intercept, _count_word(fields, nk[].k_n_iter_)]
     var call = member_new(plan)
@@ -424,11 +669,20 @@ def _xl_classifier_state(fields: PythonObject, context: PythonObject, plan: Memb
     var outputs = Int(py=coef.shape[0])
     var d = Int(py=coef.shape[1])
     var intercept = admit_x(py_item(fields, nk[].k_intercept_), 1, "intercept_", context)
+    var logcv = Int(plan.params[0]) == XL_MEMBER_LOGISTIC_CV
+    var scalars = List[Float64]()
+    if logcv:
+        # [C_ (the one chosen C), n_iter_]
+        scalars = [Float64(py=py_item(py_item(fields, nk[].k_C_), PythonObject(0))), _count_word(fields, nk[].k_n_iter_)]
     var call = member_new(plan)
     try:
         call.block = MEMBER_BLOCK_COEF
         call.x = MemberMatrix(Int(py=classical_address(coef)), outputs, d)
         _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+        if logcv:
+            call.block = MEMBER_BLOCK_SCALARS
+            call.x = MemberMatrix(Int(scalars.unsafe_ptr()), 1, 2, MEMBER_F64)
+            _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
         call.block = MEMBER_BLOCK_INTERCEPT
         call.x = MemberMatrix(Int(py=classical_address(intercept)), 1, Int(py=intercept.size))
         call.classes = len(classes_source)
@@ -439,4 +693,40 @@ def _xl_classifier_state(fields: PythonObject, context: PythonObject, plan: Memb
         raise error
     _ = coef
     _ = intercept
+    _ = len(scalars)
+    return call.state
+
+
+def _xl_isotonic_state(fields: PythonObject, context: PythonObject, plan: MemberPlan) raises -> Int:
+    """Kind 14: [increasing_, X_min_, X_max_] and the joined thresholds."""
+    var nk = x_linear_keys()
+    var x_source = py_get(fields, nk[].k_X_thresholds_)
+    if x_source is None:
+        raise Error("NotFittedError: this member is not fitted yet")
+    var xs = admit_x(x_source, 1, "X_thresholds_", context)
+    var ys = admit_x(py_item(fields, nk[].k_y_thresholds_), 1, "y_thresholds_", context)
+    var k = Int(py=xs.size)
+    if Int(py=ys.size) != k:
+        raise Error("ValueError: X_thresholds_ and y_thresholds_ have different lengths")
+    var knots = List[Float32](length=2 * k, fill=0.0)
+    unsafe_memcpy(dest=knots.unsafe_ptr(), src=f32_ptr(Int(py=classical_address(xs))), count=k)
+    unsafe_memcpy(dest=knots.unsafe_ptr() + k, src=f32_ptr(Int(py=classical_address(ys))), count=k)
+    var scalars: List[Float64] = [1.0 if _truth(py_item(fields, nk[].k_increasing_)) else 0.0,
+        Float64(py=py_item(fields, nk[].k_X_min_)), Float64(py=py_item(fields, nk[].k_X_max_))]
+    var call = member_new(plan)
+    try:
+        call.block = MEMBER_BLOCK_SCALARS
+        call.x = MemberMatrix(Int(scalars.unsafe_ptr()), 1, 3, MEMBER_F64)
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+        call.block = XL_MEMBER_BLOCK_THRESHOLDS
+        call.x = MemberMatrix(Int(knots.unsafe_ptr()), 2, k)
+        call.flags = MEMBER_IMPORT_DONE
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+    except error:
+        member_free(plan, call)
+        raise error
+    _ = xs
+    _ = ys
+    _ = len(knots)
+    _ = len(scalars)
     return call.state
