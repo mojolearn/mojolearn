@@ -38,7 +38,7 @@ from .randomforest import (
     RandomForestClassifier, RandomForestRegressor,
     _MODEL_FORMATS as _RF_MODEL_FORMATS, _SAVE_SCHEMA as _RF_SAVE_SCHEMA,
 )
-from . import _native_archive_bridge, _native_trees_bridge
+from . import _digest_fields, _native_archive_bridge, _native_trees_bridge
 
 # The compiled saved-model owner, connected once at import: a tree's `save`
 # is one native call.
@@ -413,6 +413,17 @@ _TREE_SAVE_SCHEMA = (
 )
 _native_archive_bridge.register(DecisionTreeClassifier, _RF_MODEL_FORMATS, _TREE_SAVE_SCHEMA)
 _native_archive_bridge.register(DecisionTreeRegressor, _RF_MODEL_FORMATS, _TREE_SAVE_SCHEMA)
+# `digest_` of a tree is hashed from its fitted tree arrays, which a
+# splitter='random' tree holds like any other (its inner forest's flat model
+# is the tree's own): the same members as the file, without the save refusal.
+# A random-splitter tree answers through the extra-trees engine, so it carries
+# one more member that says so.
+_TREE_DIGEST_SCHEMA = (
+    *_RF_SAVE_SCHEMA,
+    ("when_set", "_random_inner", (("format", "splitter", "random"),)),
+)
+_digest_fields.schema(DecisionTreeClassifier, _TREE_DIGEST_SCHEMA)
+_digest_fields.schema(DecisionTreeRegressor, _TREE_DIGEST_SCHEMA)
 _native_trees_bridge.register(DecisionTreeClassifier, "dt_classifier")
 _native_trees_bridge.register(DecisionTreeRegressor, "dt_regressor")
 

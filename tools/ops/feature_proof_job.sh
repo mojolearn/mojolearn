@@ -35,7 +35,8 @@ step() { # name, command...
 
 # D. digest_: per estimator family, fit on the GPU and with device="cpu" in ONE process; the two `digest_` strings are
 #    equal. Also per family: a second read (hashed again: nothing is kept) and a second fit give the same string, a fit on changed data and a refit
-#    change it, and an unfitted model has no digest_. A family that has no digest yet prints NOT-YET with its reason
+#    change it, an unfitted model has no digest_, and the copy loaded from the model's saved file (by its own class and
+#    by `host_model`, the CPU twin) has the digest of the model that wrote it. A family that has no digest yet prints NOT-YET with its reason
 #    and does not fail the step. The digests are left in $REC/digests.json for a second machine (FP_REPLAY), with
 #    the data. The families run one after another: the GPU is one device and each fit is a few milliseconds.
 cat > "$W/digest.py" <<'EOF'
@@ -61,6 +62,8 @@ FAMILIES = [
     ("GaussianMixture", dict(n_components=3, random_state=0), None), ("DBSCAN", {}, None),
     ("PCA", dict(n_components=3), None), ("TruncatedSVD", dict(n_components=3, random_state=0), None),
     ("StandardScaler", {}, None), ("MinMaxScaler", {}, None), ("RobustScaler", {}, None),
+    ("Nystroem", dict(n_components=16, random_state=0), None), ("RBFSampler", dict(n_components=16, random_state=0), None),
+    ("HDBSCAN", {}, None), ("AgglomerativeClustering", dict(n_clusters=3), None),
     ("DecisionTreeRegressor", dict(random_state=0), "r"), ("DecisionTreeClassifier", dict(random_state=0), "c"),
     ("RandomForestRegressor", dict(n_estimators=20, random_state=0), "r"),
     ("RandomForestClassifier", dict(n_estimators=20, random_state=0), "c"),
@@ -73,6 +76,10 @@ FAMILIES = [
     ("MLPClassifier", dict(hidden_layer_sizes=(16,), max_iter=20, random_state=0), "c"),
     ("GaussianProcessRegressor", {}, "r"),
 ]
+
+
+# the three estimators whose random draws continue from call to call: their digest changes with use, by decision
+ADVANCES = ("IterativeImputer", "LatentDirichletAllocation", "MinCovDet")
 
 
 def fitted(cls, params, target, data, device=None):
@@ -109,6 +116,14 @@ for name, params, target in FAMILIES:
             problems.append("a second fit on the same data differs")
         if fitted(cls, params, target, X2).digest_ == g:
             problems.append("a fit on changed data has the same digest (the digest does not see the fitted state)")
+        for method in ("predict", "transform"):          # using the model does not change what it is
+            if hasattr(m, method):
+                try:
+                    getattr(m, method)(X)
+                except Exception:
+                    pass
+        if name not in ADVANCES and m.digest_ != g:
+            problems.append("a predict / transform call changed the digest (a cache or a call record is hashed)")
         m.fit(*((X2,) if target is None else (X2, y if target == "r" else c)))
         if m.digest_ == g:
             problems.append("the digest was not dropped by a refit")
@@ -117,6 +132,28 @@ for name, params, target in FAMILIES:
             side = "gpu=cpu"
             if fitted(cls, params, target, X, "cpu").digest_ != g:
                 problems.append('device="cpu" gives another digest than the GPU')
+        if hasattr(cls, "save") and hasattr(cls, "load"):   # one model, one digest: the saved file's copies
+            path = d + "/digest-" + name + ".npz"
+            try:
+                fitted(cls, params, target, X).save(path)
+            except Exception as e:                           # this model has no saved form (said in words)
+                path = None; side += " no-file(" + type(e).__name__ + ")"
+            if path:
+                if cls.load(path).digest_ != g:
+                    problems.append("the model loaded from its file has another digest")
+                try:
+                    twin = ml.host_model(path)
+                except Exception as e:                       # no CPU twin for this format
+                    twin = None
+                if twin is not None and type(twin) is not cls:
+                    try:
+                        if twin.digest_ != g:
+                            problems.append("the CPU twin " + type(twin).__name__ + " of the file has another digest")
+                        side += " file=twin"
+                    except AttributeError:
+                        side += " twin-without-digest(" + type(twin).__name__ + ")"
+                else:
+                    side += " file"
         if replay and name in recorded and recorded[name] != g:
             problems.append(f"another machine recorded {recorded[name][:16]}, this one has {g[:16]}")
         out[name] = g

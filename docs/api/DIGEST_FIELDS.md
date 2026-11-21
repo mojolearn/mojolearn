@@ -9,8 +9,14 @@ item; a member estimator contributes its own digest; a layer object contributes 
 arrays. Nothing is kept between reads: the digest is hashed from the model as it is at each read.
 
 - **save schema**: the members `save` writes for the class.
+- **digest schema**: the members `save` writes, built without the refusals of `save` (a model the file format
+  does not carry still has a digest).
 - **public fitted attributes**: every stored attribute whose name ends in `_` and does not start with `_`,
   value not None, plus the private fitted fields listed (a listed name the model does not hold is passed over).
+- **own walk**: the class is hashed by its own compiled walk, described in the row.
+- A class shown as `module.Class` is public under that submodule only (`mojolearn.module.Class`).
+- A CPU twin of a class (a `Host*` class, what `host_model` loads) is hashed as that class: same name, same
+  fields, same digest.
 - Public names no class hashes (they record how a call ran, not what was fitted): `input_copied_`, `fortran_copied_`, `last_shards_`, `used_query_tile_`, `n_candidate_distances_`, `grad_weight_`, `grad_bias_`, `scorer_`.
 
 | Class | Source | Fields |
@@ -56,8 +62,8 @@ arrays. Nothing is kept between reads: the digest is hashed from the model as it
 | `DARTRegressor` | public fitted attributes | every public fitted attribute; plus `_bag_at`, `_KIND` |
 | `DBSCAN` | save schema | `format`, `estimator`, `numeric_mode`, `metric`, `algorithm`, `components`, `core_sample_indices`, `core_labels`, `labels`, `eps`, `meta` |
 | `DampedETS` | public fitted attributes | every public fitted attribute; plus `_one`, `_y`, `_season` |
-| `DecisionTreeClassifier` | save schema | `format`, `estimator`, `device`, `offsets`, `colid`, `quesval`, `left_child`, `leaves`, `meta`, `classes`, `(step forest_engine)` |
-| `DecisionTreeRegressor` | save schema | `format`, `estimator`, `device`, `offsets`, `colid`, `quesval`, `left_child`, `leaves`, `meta`, `classes`, `(step forest_engine)` |
+| `DecisionTreeClassifier` | digest schema | `format`, `estimator`, `device`, `offsets`, `colid`, `quesval`, `left_child`, `leaves`, `meta`, `classes`, `(step forest_engine)`, `splitter` (when present) |
+| `DecisionTreeRegressor` | digest schema | `format`, `estimator`, `device`, `offsets`, `colid`, `quesval`, `left_child`, `leaves`, `meta`, `classes`, `(step forest_engine)`, `splitter` (when present) |
 | `DictionaryLearning` | public fitted attributes | every public fitted attribute |
 | `Dropout2d` | no `digest_` | the class is not on the shared estimator base |
 | `DynamicOptimizedTheta` | public fitted attributes | every public fitted attribute; plus `_one`, `_y` |
@@ -115,7 +121,7 @@ arrays. Nothing is kept between reads: the digest is hashed from the model as it
 | `LassoLars` | public fitted attributes | every public fitted attribute |
 | `LatentDirichletAllocation` | public fitted attributes | every public fitted attribute; plus `_seed`, `_draw` |
 | `LinearDiscriminantAnalysis` | public fitted attributes | every public fitted attribute; plus `_coef`, `_inter`, `_rank`, `_scal_full`, `_max_components` |
-| `LinearRegression` | public fitted attributes | every public fitted attribute; plus `_x_mean`, `_y_mean` |
+| `LinearRegression` | public fitted attributes | every public fitted attribute |
 | `LinearSVC` | public fitted attributes | every public fitted attribute; plus `_w` |
 | `LinearSVR` | public fitted attributes | every public fitted attribute; plus `_w` |
 | `LocalOutlierFactor` | public fitted attributes | every public fitted attribute; plus `_fit_X`, `_fit_dist`, `_lrd` |
@@ -175,7 +181,7 @@ arrays. Nothing is kept between reads: the digest is hashed from the model as it
 | `RandomForestClassifier` | save schema | `format`, `estimator`, `device`, `offsets`, `colid`, `quesval`, `left_child`, `leaves`, `meta`, `classes`, `(step forest_engine)` |
 | `RandomForestRegressor` | save schema | `format`, `estimator`, `device`, `offsets`, `colid`, `quesval`, `left_child`, `leaves`, `meta`, `classes`, `(step forest_engine)` |
 | `RandomTreesEmbedding` | public fitted attributes | every public fitted attribute; plus `_tree_base`, `_node_col` |
-| `Ridge` | public fitted attributes | every public fitted attribute; plus `_x_mean`, `_y_mean` |
+| `Ridge` | public fitted attributes | every public fitted attribute |
 | `RidgeCV` | public fitted attributes | every public fitted attribute |
 | `RidgeClassifier` | public fitted attributes | every public fitted attribute |
 | `RobustScaler` | public fitted attributes | every public fitted attribute |
@@ -209,3 +215,8 @@ arrays. Nothing is kept between reads: the digest is hashed from the model as it
 | `VarianceThreshold` | public fitted attributes | every public fitted attribute; plus `_mask` |
 | `VotingClassifier` | public fitted attributes | every public fitted attribute |
 | `VotingRegressor` | public fitted attributes | every public fitted attribute |
+| `model_selection.GridSearchCV` | public fitted attributes | every public fitted attribute |
+| `model_selection.RandomizedSearchCV` | public fitted attributes | every public fitted attribute |
+| `models.CausalLM` | own walk | `kind`, `numeric_profile`, `norm_eps`, `max_positions`, `embed`, `norm` (when present), `head`, then per block its options and every weight (and the int15 planes of a packed model), in model order |
+| `models.ParallelCausalLM` | own walk | `kind`, `numeric_profile`, `norm_eps`, `max_positions`, `embed`, `norm` (when present), `head`, then per block its options and every weight (and the int15 planes of a packed model), in model order |
+| `ops.Program` | no `digest_` | the class is not on the shared estimator base |

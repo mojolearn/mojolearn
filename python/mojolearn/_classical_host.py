@@ -56,7 +56,7 @@ binding.
 """
 import os
 
-from . import _backend, _native_classical_bridge
+from . import _backend, _digest_fields, _native_classical_bridge
 from ._iforest_impl import IsolationForest, _IFOREST_FORMAT, _IFOREST_FORMAT_FOREST
 from ._arima_impl import ARIMA, _ARIMA_FORMAT, _ARIMA_FORMAT_EXOG
 from ._tsa_impl import ExponentialSmoothing, _HW_FORMAT
@@ -1290,6 +1290,13 @@ def _merge_expansion_doors():
 
 _merge_expansion_doors()
 CLASSICAL_FORMATS = tuple(_FORMATS)
+
+# glue: once at import, class metadata only. `digest_` hashes a CPU twin under
+# the name of the public class whose file it loads (_digest_fields.CANONICAL),
+# so a model and its loaded copy have one digest on any device.
+for _estimators in _FORMATS.values():
+    for _public_name, _host_class in _estimators.items():
+        _digest_fields.twin(_host_class, _public_name)
 
 def _host_fit_helpers():
     """The CPU decomposition and x_linear binaries the explicit host

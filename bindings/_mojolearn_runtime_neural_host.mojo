@@ -106,6 +106,7 @@ def build__mojolearn_runtime_neural_host() -> PythonObject:
         module.def_py_c_function(causal_lm_parameters_form_c[1], "causal_lm_parameter_list")
         module.def_py_c_function(causal_lm_parameters_form_c[2], "causal_lm_named_parameters")
         module.def_py_c_function(causal_lm_parameters_form_c[0], "causal_lm_state_dict")
+        module.def_py_c_function(causal_public_c[19], "causal_lm_digest")
         module.def_py_c_function(causal_public_c[14], "causal_lm_blocks")
         module.def_py_c_function(causal_public_c[15], "causal_state_init")
         module.def_py_c_function(causal_public_c[16], "causal_lm_repr")
