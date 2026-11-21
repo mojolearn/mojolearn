@@ -22,21 +22,20 @@ from core.shared_slot import SharedSlot
 
 
 struct ByteCheckpointBoundary(Defaultable, Movable):
+    # `os` (the `posix` module) left with its last user, the JSON checkpoint
+    # door's Python file calls (lane pools-frame, 2026-11-21).
     var bi: PythonObject
-    var os: PythonObject
 
     def __init__(out self):
         self.bi = PythonObject(None)
-        self.os = PythonObject(None)
 
 
-comptime BYTE_CHECKPOINT_BOUNDARY = SharedSlot[ByteCheckpointBoundary, "MojolearnByteCheckpointBoundaryV1"]
+comptime BYTE_CHECKPOINT_BOUNDARY = SharedSlot[ByteCheckpointBoundary, "MojolearnByteCheckpointBoundaryV2", 2]
 
 
 def byte_checkpoint_initialize(array_cls: PythonObject) raises:
     var c = BYTE_CHECKPOINT_BOUNDARY.get_or_create_ptr()
     c[].bi = Python.import_module("builtins")
-    c[].os = Python.import_module("posix")
     if String(Python.import_module("sys").byteorder) != "little":
         raise Error("Byte-LM streamed checkpoint requires a little-endian host")
     cv_types_initialize(array_cls)
