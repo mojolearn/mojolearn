@@ -5,9 +5,21 @@
 # `_load()` resolved; this owner makes the Python refusals in their order and
 # words, the mode and profile read-backs (`numeric_mode`, `require_identical`,
 # `_lowbit_binding`, `_int15_binding`, sharing the module's own caches), the
-# operand layout (`_operand`, `as_*_c`) and outputs, and calls the same binding
-# entries with the same address and params lists in the same order. The same
-# kernels on the same bytes: the bits do not move.
+# operand layout (`_operand`, `as_*_c`) and outputs, and runs each operation
+# through the binding's typed operations table ("mojolearn.linalg.v1",
+# gemm/linalg_dispatch.mojo and gemm/host/linalg_dispatch.mojo: the device and
+# the host image publish the same table) with the same address and parameter
+# words in the same order. The same kernels on the same bytes: the bits do not
+# move.
+# UNPACK / RUN / PACK (lane dw-decomp, 2026-11-21): the functions below admit
+# the Python arguments into AdmittedBuf pins and Int words (UNPACK), `lin_call`
+# hands two List[Int] to the table with the GIL released (RUN holds no Python
+# object), and the admitted output owner is returned (PACK). These are
+# functions with no estimator: they take no `device=` and run on the
+# installation's device.
+# Defines read here: none. The text names MOJOLEARN_AFN_GEMM_EPILOGUE (the Apple
+# fast epilogue arm, operation 15, refused in words by a build without it) and
+# MOJOLEARN_NUMERIC_MODE (in a refusal's advice).
 from providers.python.estimator_binding_pyapi_door import estimator_binding
 from std.python import Python, PythonObject
 from std.os import getenv
@@ -22,7 +34,7 @@ from bindings.tensor_view import TensorView, shape_text
 from bindings.linalg_ops_buffers_unpack import lin_truth, lin_dtype_name
 from bindings.linalg_ops_buffers_run import lin_is_f32
 from bindings.linalg_ops_lowbit_run import (
-    LIN_OP_NONE, LIN_OP_GEMM, LIN_OP_GEMM_BF16, LIN_OP_GEMM_INT8, LIN_OP_QUANTIZE_INT8, LIN_OP_DEQUANTIZE_INT8,
+    LIN_OP_GEMM_FUSED, LIN_OPERATION_COUNT, LIN_OP_GEMM, LIN_OP_GEMM_BF16, LIN_OP_GEMM_INT8, LIN_OP_QUANTIZE_INT8, LIN_OP_DEQUANTIZE_INT8,
     LIN_OP_GEMM_INT15, LIN_OP_QUANTIZE_INT15, LIN_OP_DEQUANTIZE_INT15, LIN_OP_TO_BF16, LIN_OP_FROM_BF16,
     LIN_OP_FROM_F16, LIN_OP_LINALG_NUMERIC_MODE, LIN_OP_LINALG_PROFILE_VERSION, LIN_OP_LOWBIT_PROFILE_VERSION,
     LIN_OP_INT15_PROFILE_VERSION)
@@ -61,54 +73,23 @@ def lin_attr(binding: PythonObject, name: String) raises -> PythonObject:
     return neural_descriptor_entry(binding, name, False)
 
 
-def lin_call(binding: PythonObject, context: PythonObject, op: Int, name: String, *args: PythonObject) raises -> PythonObject:
-    """`binding.name(*args)`; the binding's own exception propagates unchanged.
-    `op` is the native provider's code of the entry `name` (`LIN_OP_*`,
-    bindings/linalg_ops_lowbit_run.mojo; `LIN_OP_NONE` for an entry the
-    provider does not serve), passed by the caller (bw2-linalg: it was up to
-    fifteen String compares per call); `name` is read only by the older
-    binding door below."""
+def lin_call(context: PythonObject, op: Int, addresses: List[Int], parameters: List[Int]) raises -> Int:
+    """One operation `op` (`LIN_OP_*`, bindings/linalg_ops_lowbit_run.mojo) of
+    the connected linalg binding's operations table: buffer addresses and
+    shape words in, the operation's count out. The GIL is released around the
+    call; a refusal of the kernel's own admission propagates unchanged.
+    `lin_connected_binding` connected the table for this operation.
+    lane dw-decomp (2026-11-21): the Python-entry form is deleted (`_lin_apply`:
+    a by-name entry of the binding called with a boxed address per buffer and
+    a Python list of the shape words, which the provider path then read back
+    word by word into these two lists). The host image has had the table
+    since ne1-k-fail-b, so no binding is left without it."""
     var nk = linalg_keys()
-    var state = lin_state(context)
-    var provider = py_get(state, nk[].k__native_provider)
-    if op >= 0 and provider is not None and py_get(state, nk[].k__native_provider_binding) is binding:
-        var addresses = List[Int]()
-        var parameters = List[Int]()
-        if op < 11:
-            var last = len(args) - 1
-            for i in range(len(args[last])):  # driver-loop: over (admitted shape words)
-                parameters.append(Int(py=args[last][i]))
-            if op >= 5 and op <= 7:
-                for i in range(len(args[0])):  # driver-loop: over (int15 buffer descriptors)
-                    addresses.append(Int(py=args[0][i]))
-            else:
-                for i in range(last):  # driver-loop: over (buffer descriptor addresses)
-                    addresses.append(Int(py=args[i]))
-        return PythonObject(neural_descriptor_execute(provider, op, addresses, parameters, List[Float64]()))
-    # Older/CPU bindings retain their existing door and remain unqualified by
-    # the native-provider runtime gate until that binding gains this ABI.
-    var entry = neural_descriptor_entry(binding, name)
-    var arguments = Python.list()
-    for i in range(len(args)):  # driver-loop: over (args: positional arguments of one call): bounded by the call site
-        _ = py_call(arguments.append, args[i])
-    return _lin_apply(entry, arguments)
-
-
-def _lin_apply(entry: PythonObject, arguments: PythonObject) raises -> PythonObject:
-    var n = len(arguments)
-    if n == 0:
-        return family_call(entry)
-    if n == 1:
-        return family_call(entry, arguments[0])
-    if n == 2:
-        return family_call(entry, arguments[0], arguments[1])
-    if n == 3:
-        return family_call(entry, arguments[0], arguments[1], arguments[2])
-    if n == 4:
-        return family_call(entry, arguments[0], arguments[1], arguments[2], arguments[3])
-    if n == 5:
-        return family_call(entry, arguments[0], arguments[1], arguments[2], arguments[3], arguments[4])
-    return family_call(entry, arguments[0], arguments[1], arguments[2], arguments[3], arguments[4], arguments[5])
+    var provider = py_get(lin_state(context), nk[].k__native_provider)
+    if provider is None:
+        raise Error("RuntimeError: mojolearn.linalg: the loaded linalg extension has no native operations "
+                    + "table (linalg_native_api_v1); rebuild it with bindings/build_linalg.sh")
+    return neural_descriptor_execute(provider, op, addresses, parameters, List[Float64]())
 
 
 def lin_backend_mode(context: PythonObject) raises -> String:
@@ -138,11 +119,9 @@ def lin_connected_binding(context: PythonObject) raises -> PythonObject:
     var factory = lin_attr(binding, "linalg_native_api_v1")
     var provider = PythonObject(None)
     if factory is not None:
-        provider = neural_descriptor_reuse(py_get(state, nk[].k__native_provider), factory, "mojolearn.linalg.v1", 15)
+        provider = neural_descriptor_reuse(py_get(state, nk[].k__native_provider), factory, "mojolearn.linalg.v1", LIN_OPERATION_COUNT)
     if py_get(state, nk[].k__native_provider) is not provider:
         py_setitem(state, nk[].k__native_provider, provider)
-    if py_get(state, nk[].k__native_provider_binding) is not binding:
-        py_setitem(state, nk[].k__native_provider_binding, binding)
     return binding
 
 
@@ -156,7 +135,7 @@ def lin_mode(binding: PythonObject, context: PythonObject) raises -> String:
     var cached = py_item(state, nk[].k__mode_cache)
     if cached is not None:
         return String(py=cached)
-    var raw = family_call(b.int, lin_call(binding, context, LIN_OP_LINALG_NUMERIC_MODE, "linalg_numeric_mode"))
+    var raw = PythonObject(lin_call(context, LIN_OP_LINALG_NUMERIC_MODE, List[Int](), List[Int]()))
     var compiled = String(py=py_get(py_item(py_item(context, nk[].k_backend_fields), nk[].k__CODE_MODE), raw, PythonObject("unknown")))
     var selected = lin_backend_mode(context)
     var build = lin_text(context, nk[].k__BUILD_SCRIPT)
@@ -164,7 +143,7 @@ def lin_mode(binding: PythonObject, context: PythonObject) raises -> String:
         raise Error("RuntimeError: mojolearn.linalg: the loaded binary was compiled " + compiled
                     + " but this process selected the " + selected + " set -- a .so is in the wrong directory ("
                     + String(_lin_binary_path(binding)) + "); rebuild both sets with " + build)
-    var version = Int(py=family_call(b.int, lin_call(binding, context, LIN_OP_LINALG_PROFILE_VERSION, "linalg_profile_version")))
+    var version = lin_call(context, LIN_OP_LINALG_PROFILE_VERSION, List[Int](), List[Int]())
     var profile = py_item(state, nk[].k_PROFILE)
     var profile_version = Int(py=py_item(state, nk[].k_PROFILE_VERSION))
     var getter = lin_attr(binding, "linalg_numerical_profile")
@@ -212,15 +191,7 @@ def lin_lowbit(binding: PythonObject, context: PythonObject) raises -> PythonObj
     """`_lowbit_binding()`: the identical build with the low-bit profile version this owner expects."""
     var nk = linalg_keys()
     lin_require_identical(binding, context)
-    var v = 0
-    if py_get(lin_state(context), nk[].k__native_provider) is not None:
-        v = Int(py=lin_call(binding, context, LIN_OP_LOWBIT_PROFILE_VERSION, "lowbit_profile_version"))
-    else:
-        var got = lin_attr(binding, "lowbit_profile_version")
-        if got is None:
-            raise Error("RuntimeError: mojolearn.linalg: the loaded linalg extension predates the "
-                        + "low-bit profiles; rebuild it with bindings/build_linalg.sh")
-        v = Int(py=family_call(native_loaded_module("builtins").int, family_call(got)))
+    var v = lin_call(context, LIN_OP_LOWBIT_PROFILE_VERSION, List[Int](), List[Int]())
     var want = Int(py=py_item(lin_state(context), nk[].k_LOWBIT_PROFILE_VERSION))
     if v != want:
         raise Error("RuntimeError: mojolearn.linalg: the loaded extension implements low-bit "
@@ -232,15 +203,7 @@ def lin_int15(binding: PythonObject, context: PythonObject) raises -> PythonObje
     """`_int15_binding()`."""
     var nk = linalg_keys()
     lin_require_identical(binding, context)
-    var v = 0
-    if py_get(lin_state(context), nk[].k__native_provider) is not None:
-        v = Int(py=lin_call(binding, context, LIN_OP_INT15_PROFILE_VERSION, "int15_profile_version"))
-    else:
-        var got = lin_attr(binding, "int15_profile_version")
-        if got is None:
-            raise Error("RuntimeError: mojolearn.linalg: the loaded linalg extension predates the "
-                        + "fifteen-bit profile; rebuild it with bindings/build_linalg.sh")
-        v = Int(py=family_call(native_loaded_module("builtins").int, family_call(got)))
+    var v = lin_call(context, LIN_OP_INT15_PROFILE_VERSION, List[Int](), List[Int]())
     var want = Int(py=py_item(lin_state(context), nk[].k_INT15_PROFILE_VERSION))
     if v != want:
         raise Error("RuntimeError: mojolearn.linalg: the loaded extension implements fifteen-bit "
@@ -249,7 +212,9 @@ def lin_int15(binding: PythonObject, context: PythonObject) raises -> PythonObje
 
 
 def lin_ints(*values: Int) raises -> PythonObject:
-    """A Python list of ints (a params list)."""
+    """A Python list of ints (a params list). Read only by the decomposition
+    door's two by-name entries (`svdvals`, `qr_r`,
+    bindings/linalg_ops_decomp_door.mojo); nothing in this file builds one."""
     var out = Python.list()
     for i in range(len(values)):  # driver-loop: over (params: words of one params list): bounded by the call site
         _ = py_call(out.append, PythonObject(values[i]))
@@ -407,8 +372,7 @@ def _lin_matmul(args: PythonObject, context: PythonObject) raises -> PythonObjec
         _ = v  # keep the Python object alive through the native call above
     # ORDER MATCHES bindings/_mojolearn_linalg.mojo::gemm_binding: the output
     # address first, then a and b; params (m, n, k, op).
-    _ = lin_call(binding, context, LIN_OP_GEMM, "gemm", PythonObject(out.addr), PythonObject(a.addr), PythonObject(bb.addr),
-                 lin_ints(m, n, k, op))
+    _ = lin_call(context, LIN_OP_GEMM, [out.addr, a.addr, bb.addr], [m, n, k, op])
     _ = bb  # keep the Python object alive through the native call above
     _ = a  # keep the Python object alive through the native call above
     _ = a^
@@ -509,9 +473,9 @@ def _lin_matmul_fused(args: PythonObject, context: PythonObject) raises -> Pytho
                         + "C-contiguous float32 (" + String(m) + ", " + String(n) + ") buffer")
         out = admitted_typed_output(output, output_pin^)
     # `params` is, in this exact order (mirrored word for word in
-    # `bindings/_mojolearn_linalg.mojo::gemm_fused_binding`): m, n, k, op, epi.
-    _ = lin_call(binding, context, LIN_OP_NONE, "gemm_fused", PythonObject(out.addr), PythonObject(a.addr), PythonObject(bb.addr),
-                 PythonObject(bias.addr), PythonObject(residual.addr), lin_ints(m, n, k, op, epi))
+    # `gemm/linalg_fused_run.mojo::gemm_fused_native`): m, n, k, op, epi;
+    # addresses c, a, b, bias, residual.
+    _ = lin_call(context, LIN_OP_GEMM_FUSED, [out.addr, a.addr, bb.addr, bias.addr, residual.addr], [m, n, k, op, epi])
     _ = residual  # keep the Python object alive through the native call above
     _ = bias  # keep the Python object alive through the native call above
     _ = bb  # keep the Python object alive through the native call above
@@ -529,7 +493,8 @@ def _lin_to_bf16(args: PythonObject, context: PythonObject) raises -> PythonObje
     if n == 0:
         raise Error("mojolearn.linalg.to_bf16: x has no elements")
     var out = admitted_unfilled(a.shape, "<u2", context)
-    _ = lin_call(lin_lowbit(args[0], context), context, LIN_OP_TO_BF16, "to_bf16", PythonObject(out.addr), PythonObject(a.addr), lin_ints(n))
+    _ = lin_lowbit(args[0], context)
+    _ = lin_call(context, LIN_OP_TO_BF16, [out.addr, a.addr], [n])
     _ = out  # keep the Python object alive through the native call above
     _ = a  # keep the Python object alive through the native call above
     _ = a^
@@ -542,7 +507,8 @@ def _lin_from_bf16(args: PythonObject, context: PythonObject) raises -> PythonOb
     if n == 0:
         raise Error("mojolearn.linalg.from_bf16: bits has no elements")
     var out = admitted_unfilled(a.shape, "<f4", context)
-    _ = lin_call(lin_lowbit(args[0], context), context, LIN_OP_FROM_BF16, "from_bf16", PythonObject(out.addr), PythonObject(a.addr), lin_ints(n))
+    _ = lin_lowbit(args[0], context)
+    _ = lin_call(context, LIN_OP_FROM_BF16, [out.addr, a.addr], [n])
     _ = out  # keep the Python object alive through the native call above
     _ = a  # keep the Python object alive through the native call above
     _ = a^
@@ -555,7 +521,8 @@ def _lin_from_f16(args: PythonObject, context: PythonObject) raises -> PythonObj
     if n == 0:
         raise Error("mojolearn.linalg.from_f16: bits has no elements")
     var out = admitted_unfilled(a.shape, "<f4", context)
-    _ = lin_call(lin_lowbit(args[0], context), context, LIN_OP_FROM_F16, "from_f16", PythonObject(out.addr), PythonObject(a.addr), lin_ints(n))
+    _ = lin_lowbit(args[0], context)
+    _ = lin_call(context, LIN_OP_FROM_F16, [out.addr, a.addr], [n])
     _ = out  # keep the Python object alive through the native call above
     _ = a  # keep the Python object alive through the native call above
     _ = a^
@@ -568,8 +535,8 @@ def lin_quantize_int8(binding: PythonObject, a: AdmittedBuf, context: PythonObje
     var cols = a.dim(1)
     var codes = admitted_unfilled([rows, cols], "<i1", context)
     var exps = admitted_unfilled([rows], "<i4", context)
-    _ = lin_call(lin_lowbit(binding, context), context, LIN_OP_QUANTIZE_INT8, "quantize_int8", PythonObject(codes.addr), PythonObject(exps.addr),
-                 PythonObject(a.addr), lin_ints(rows, cols))
+    _ = lin_lowbit(binding, context)
+    _ = lin_call(context, LIN_OP_QUANTIZE_INT8, [codes.addr, exps.addr, a.addr], [rows, cols])
     _ = exps  # keep the Python object alive through the native call above
     _ = codes  # keep the Python object alive through the native call above
     return Python.tuple(codes.keep, exps.keep)
@@ -591,8 +558,8 @@ def _lin_dequantize_int8(args: PythonObject, context: PythonObject) raises -> Py
         raise Error("mojolearn.linalg.dequantize_int8: exponents has shape " + e.text() + ", want ("
                     + String(rows) + ",)")
     var out = admitted_unfilled([rows, cols], "<f4", context)
-    _ = lin_call(lin_lowbit(args[0], context), context, LIN_OP_DEQUANTIZE_INT8, "dequantize_int8", PythonObject(out.addr), PythonObject(q.addr),
-                 PythonObject(e.addr), lin_ints(rows, cols))
+    _ = lin_lowbit(args[0], context)
+    _ = lin_call(context, LIN_OP_DEQUANTIZE_INT8, [out.addr, q.addr, e.addr], [rows, cols])
     _ = out  # keep the Python object alive through the native call above
     _ = q  # keep the Python object alive through the native call above
     _ = e  # keep the Python object alive through the native call above
@@ -637,8 +604,8 @@ def _lin_matmul_int8(args: PythonObject, context: PythonObject) raises -> Python
                     + "gives k=" + String(k) + " and b gives k=" + String(kb))
     var out = lin_out(args[3], m, n, "matmul_int8", context)
     # `params` is `[m, n, k]`, mirrored in `gemm_int8_binding`.
-    _ = lin_call(lin_lowbit(binding, context), context, LIN_OP_GEMM_INT8, "gemm_int8", PythonObject(out.addr), PythonObject(qa.addr),
-                 PythonObject(ea.addr), PythonObject(qb.addr), PythonObject(eb.addr), lin_ints(m, n, k))
+    _ = lin_lowbit(binding, context)
+    _ = lin_call(context, LIN_OP_GEMM_INT8, [out.addr, qa.addr, ea.addr, qb.addr, eb.addr], [m, n, k])
     _ = out  # keep the Python object alive through the native call above
     _ = qa  # keep the Python object alive through the native call above
     _ = eb  # keep the Python object alive through the native call above
@@ -700,8 +667,8 @@ def _lin_matmul_bf16(args: PythonObject, context: PythonObject) raises -> Python
     _lin_op_and_shape(a, bb, args[3], args[4], "matmul_bf16", op, m, n, k)
     var out = lin_out(args[5], m, n, "matmul_bf16", context)
     # params (mirrored in gemm_bf16_binding): m, n, k, op, a_bf16
-    _ = lin_call(lin_lowbit(binding, context), context, LIN_OP_GEMM_BF16, "gemm_bf16", PythonObject(out.addr), PythonObject(a.addr),
-                 PythonObject(bb.addr), lin_ints(m, n, k, op, 1 if a_bits else 0))
+    _ = lin_lowbit(binding, context)
+    _ = lin_call(context, LIN_OP_GEMM_BF16, [out.addr, a.addr, bb.addr], [m, n, k, op, 1 if a_bits else 0])
     _ = out  # keep the Python object alive through the native call above
     _ = a  # keep the Python object alive through the native call above
     _ = bb  # keep the Python object alive through the native call above
@@ -718,11 +685,8 @@ def lin_quantize_int15(binding: PythonObject, a: AdmittedBuf, context: PythonObj
     var lo = admitted_unfilled([rows, cols], "<i1", context)
     var exps = admitted_unfilled([rows], "<i4", context)
     # addrs (mirrored in quantize_int15_binding): hi, lo, exponents, x
-    var addrs = Python.list(PythonObject(hi.addr), PythonObject(lo.addr), PythonObject(exps.addr), PythonObject(a.addr))
-    _ = exps  # keep the Python object alive through the native call above
-    _ = lo  # keep the Python object alive through the native call above
-    _ = hi  # keep the Python object alive through the native call above
-    _ = lin_call(lin_int15(binding, context), context, LIN_OP_QUANTIZE_INT15, "quantize_int15", addrs, lin_ints(rows, cols))
+    _ = lin_int15(binding, context)
+    _ = lin_call(context, LIN_OP_QUANTIZE_INT15, [hi.addr, lo.addr, exps.addr, a.addr], [rows, cols])
     _ = exps  # keep the Python object alive through the native call above
     _ = lo  # keep the Python object alive through the native call above
     _ = hi  # keep the Python object alive through the native call above
@@ -758,12 +722,8 @@ def _lin_dequantize_int15(args: PythonObject, context: PythonObject) raises -> P
     var cols = h.dim(1)
     var out = admitted_unfilled([rows, cols], "<f4", context)
     # addrs: y, hi, lo, exponents (mirrored in the binding)
-    var addrs = Python.list(PythonObject(out.addr), PythonObject(h.addr), PythonObject(l.addr), PythonObject(e.addr))
-    _ = out  # keep the Python object alive through the native call above
-    _ = e  # keep the Python object alive through the native call above
-    _ = l  # keep the Python object alive through the native call above
-    _ = h  # keep the Python object alive through the native call above
-    _ = lin_call(lin_int15(args[0], context), context, LIN_OP_DEQUANTIZE_INT15, "dequantize_int15", addrs, lin_ints(rows, cols))
+    _ = lin_int15(args[0], context)
+    _ = lin_call(context, LIN_OP_DEQUANTIZE_INT15, [out.addr, h.addr, l.addr, e.addr], [rows, cols])
     _ = out  # keep the Python object alive through the native call above
     _ = e  # keep the Python object alive through the native call above
     _ = l  # keep the Python object alive through the native call above
@@ -820,16 +780,8 @@ def _lin_matmul_int15(args: PythonObject, context: PythonObject) raises -> Pytho
     var out = lin_out(args[3], m, n, "matmul_int15", context)
     # addrs (mirrored in gemm_int15_binding): c, a hi, a lo, a exponents,
     # b hi, b lo, b exponents; THE OUTPUT ADDRESS COMES FIRST
-    var addrs = Python.list(PythonObject(out.addr), PythonObject(ah.addr), PythonObject(al.addr), PythonObject(ea.addr),
-                            PythonObject(bh.addr), PythonObject(bl.addr), PythonObject(eb.addr))
-    _ = out  # keep the Python object alive through the native call above
-    _ = ea  # keep the Python object alive through the native call above
-    _ = al  # keep the Python object alive through the native call above
-    _ = ah  # keep the Python object alive through the native call above
-    _ = eb  # keep the Python object alive through the native call above
-    _ = bl  # keep the Python object alive through the native call above
-    _ = bh  # keep the Python object alive through the native call above
-    _ = lin_call(lin_int15(binding, context), context, LIN_OP_GEMM_INT15, "gemm_int15", addrs, lin_ints(m, n, k))
+    _ = lin_int15(binding, context)
+    _ = lin_call(context, LIN_OP_GEMM_INT15, [out.addr, ah.addr, al.addr, ea.addr, bh.addr, bl.addr, eb.addr], [m, n, k])
     _ = out  # keep the Python object alive through the native call above
     _ = eb  # keep the Python object alive through the native call above
     _ = bl  # keep the Python object alive through the native call above

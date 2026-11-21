@@ -4,10 +4,20 @@
 # native call each (`family_rs_*`). The shell hands over the resample binding
 # selected inside the native boundary; this owner
 # makes the Python refusals in their order and words, the compiled-mode
-# cross-check (`_extension`), the input casts and outputs, calls the same
-# binding entries with the same address and params lists in the same order,
-# and builds the result objects. The same kernels on the same bytes: the bits
-# do not move.
+# cross-check (`_extension`), the input casts and outputs, runs the operation
+# through the binding's typed operations table, and builds the result objects.
+# The same kernels on the same bytes: the bits do not move.
+# UNPACK / RUN / PACK (lane dw-decomp, 2026-11-21): each function admits its
+# Python arguments into AdmittedBuf pins, Int words and Float64 scalars
+# (UNPACK), `rs_run` hands them to the table "mojolearn.resample.v1"
+# (resample/resample_native.mojo on the device image,
+# resample/host/resample_native.mojo on the host image) with the GIL released
+# (RUN holds no Python object), and the result object is built from the
+# admitted outputs (PACK). Before, each call looked a Python entry of the
+# binding up by name and called it with a Python list of boxed addresses and a
+# Python list of boxed parameters. These are functions with no estimator: they
+# take no `device=` and run on the installation's device.
+# Defines read here: none.
 from core.mode_answer import MODE_FAMILY_LINALG, answer_mode_word
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_get, py_type, py_setitem, py_item
@@ -22,7 +32,7 @@ from core.native_scalar_decode import NativeRealBits, native_scalar_real
 from bindings.mode_metadata_native_door import _fields
 from bindings.host_inference_scalars_door import host_inference_scalar
 from bindings.native_loaded_module_door import NativeModules, native_loaded_module
-from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entry
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_connect_once, neural_descriptor_execute
 from providers.python.resample_public_pyapi_pack import resample_arguments, resample_result_initialize, resample_result_layout
 from providers.python.resample_rows_operation_pyapi_pack import resample_rows_operation
 from bindings.operation_names_linops import (
@@ -49,9 +59,22 @@ from bindings.linalg_keys_unpack import linalg_keys
 
 
 
+# The operation codes of the table (the `op` column of
+# resample/resample_native.mojo) and its operation count.
+comptime RS_OP_BOOTSTRAP = 0
+comptime RS_OP_BOOTSTRAP_UNPAIRED = 1
+comptime RS_OP_PERMUTATION_TEST = 2
+comptime RS_OP_PERMUTATION_SAMPLES = 3
+comptime RS_OP_RESAMPLE_INDICES = 4
+comptime RS_OP_MONTE_CARLO = 5
+comptime RS_OP_NUMERIC_MODE = 6
+comptime RS_OPERATIONS = 7
+
+
 def rs_extension(binding: PythonObject, numeric_mode: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_extension(numeric_mode)`: the binary's own compile-time mode must be
-    the one requested."""
+    the one requested. Returns the binding's operations table (its provider),
+    connected once per process and binding."""
     var nk = linalg_keys()
     var b = native_loaded_module("builtins")
     var want = numeric_mode
@@ -64,19 +87,20 @@ def rs_extension(binding: PythonObject, numeric_mode: PythonObject, context: Pyt
     var text = String(py=want)
     if text != "fast" and text != "identical":
         want = want.strip().lower()
-    var fn_obj = neural_descriptor_entry(binding, "resample_numeric_mode", False)
-    if fn_obj is not None:
-        var got = Int(py=family_call(fn_obj))
-        var mode = String(want)
-        answer_mode_word(mode, MODE_FAMILY_LINALG)
-        if (mode != "fast" and mode != "identical") or got != (1 if mode == "identical" else 0):
-            raise Error("RuntimeError: mojolearn resample: requested mode differs from compiled mode; rebuild it with bash bindings/build_resample.sh")
-    return binding
+    var provider = neural_descriptor_connect_once(binding, "resample_native_api_v1", "mojolearn.resample.v1", RS_OPERATIONS)
+    # A constant of the image: read with the GIL held (no release for one word).
+    var got = neural_descriptor_execute(provider, RS_OP_NUMERIC_MODE, List[Int](), List[Int](), List[Float64](), False)
+    var mode = String(want)
+    answer_mode_word(mode, MODE_FAMILY_LINALG)
+    if (mode != "fast" and mode != "identical") or got != (1 if mode == "identical" else 0):
+        raise Error("RuntimeError: mojolearn resample: requested mode differs from compiled mode; rebuild it with bash bindings/build_resample.sh")
+    return provider
 
 
-
-def rs_entry(binding: PythonObject, name: String) raises -> PythonObject:
-    return neural_descriptor_entry(binding, name)
+def rs_run(provider: PythonObject, op: Int, addresses: List[Int], ints: List[Int], floats: List[Float64]) raises:
+    """One operation of the table, GIL released around it; the kernel's own
+    refusal propagates unchanged."""
+    _ = neural_descriptor_execute(provider, op, addresses, ints, floats)
 
 
 def _rs_is_int(value: PythonObject) raises -> Bool:
@@ -193,10 +217,6 @@ def _rs_permutation_result(null: AdmittedBuf, scalars: AdmittedBuf, context: Pyt
     return result
 
 
-def _rs_addr(buf: AdmittedBuf) -> PythonObject:
-    return PythonObject(buf.addr)
-
-
 # ---------------------------------------------------------------------------
 # bootstrap(data, statistic, n_resamples, confidence_level, method,
 #           alternative, random_state, q_or_prop, r_first, numeric_mode, paired)
@@ -225,19 +245,15 @@ def _rs_bootstrap_unpaired(args: PythonObject, context: PythonObject) raises -> 
     var dist = admitted_zeros([_rs_nonneg(r)], "<f4", context)
     var sdist = admitted_zeros([_rs_nonneg(r)], "<f4", context)
     var scalars = admitted_zeros([6], "<f8", context)
-    var fn_obj = rs_entry(rs_extension(args[0], args[10], context), "bootstrap_unpaired")
-    # ORDER MATCHES bindings/_mojolearn_resample.mojo::bootstrap_unpaired_binding:
-    # n_x, n_y, n_resamples, seed, method, confidence_level, alternative, r_first
-    var addrs = Python.list(_rs_addr(xx), _rs_addr(yy), _rs_addr(dist), _rs_addr(sdist), _rs_addr(scalars))
-    _ = scalars  # keep the Python object alive through the native call above
-    _ = sdist  # keep the Python object alive through the native call above
-    _ = dist  # keep the Python object alive through the native call above
-    _ = yy  # keep the Python object alive through the native call above
-    _ = xx  # keep the Python object alive through the native call above
-    var params = Python.list(PythonObject(xx.dim(0)), PythonObject(yy.dim(0)), r,
-                             rs_int(args[7], "random_state", where), meth,
-                             rs_real(args[4], "confidence_level", where), alt, rs_int(args[9], "r_first", where))
-    _ = family_call(fn_obj, addrs, params)
+    var provider = rs_extension(args[0], args[10], context)
+    # ORDER MATCHES resample/resample_native.mojo operation 1:
+    # x, y, distribution, sorted, scalars; n_x, n_y, n_resamples, seed, method,
+    # alternative, r_first; confidence_level
+    var seed = Int(py=rs_int(args[7], "random_state", where))
+    var cl = Float64(py=rs_real(args[4], "confidence_level", where))
+    var rf = Int(py=rs_int(args[9], "r_first", where))
+    rs_run(provider, RS_OP_BOOTSTRAP_UNPAIRED, [xx.addr, yy.addr, dist.addr, sdist.addr, scalars.addr],
+           [xx.dim(0), yy.dim(0), Int(py=r), seed, Int(py=meth), Int(py=alt), rf], [cl])
     _ = scalars  # keep the Python object alive through the native call above
     _ = sdist  # keep the Python object alive through the native call above
     _ = dist  # keep the Python object alive through the native call above
@@ -278,18 +294,14 @@ def _rs_bootstrap(args: PythonObject, context: PythonObject) raises -> PythonObj
     var dist = admitted_zeros([_rs_nonneg(r)], "<f4", context)
     var sdist = admitted_zeros([_rs_nonneg(r)], "<f4", context)
     var scalars = admitted_zeros([6], "<f8", context)
-    var fn_obj = rs_entry(rs_extension(args[0], args[10], context), "bootstrap")
-    # ORDER MATCHES bindings/_mojolearn_resample.mojo::bootstrap_binding.
+    var provider = rs_extension(args[0], args[10], context)
+    # ORDER MATCHES resample/resample_native.mojo operation 0.
     # x (the C-order sample, flat), distribution_out, sorted_out, scalars_out;
-    # n, d, statistic, n_resamples, seed, method, confidence_level,
-    # alternative, q_or_prop, r_first
-    var addrs = Python.list(_rs_addr(x), _rs_addr(dist), _rs_addr(sdist), _rs_addr(scalars))
-    _ = scalars  # keep the Python object alive through the native call above
-    _ = sdist  # keep the Python object alive through the native call above
-    _ = dist  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    var params = Python.list(PythonObject(n), PythonObject(d), stat, r, seed, meth, cl, alt, qp, rf)
-    _ = family_call(fn_obj, addrs, params)
+    # n, d, statistic, n_resamples, seed, method, alternative, r_first;
+    # confidence_level, q_or_prop
+    rs_run(provider, RS_OP_BOOTSTRAP, [x.addr, dist.addr, sdist.addr, scalars.addr],
+           [n, d, Int(py=stat), Int(py=r), Int(py=seed), Int(py=meth), Int(py=alt), Int(py=rf)],
+           [Float64(py=cl), Float64(py=qp)])
     _ = scalars  # keep the Python object alive through the native call above
     _ = sdist  # keep the Python object alive through the native call above
     _ = dist  # keep the Python object alive through the native call above
@@ -324,17 +336,14 @@ def _rs_permutation_samples(args: PythonObject, context: PythonObject) raises ->
     var r = rs_int(args[4], "n_resamples", where)
     var null = admitted_zeros([_rs_nonneg(r)], "<f4", context)
     var scalars = admitted_zeros([4], "<f8", context)
-    var fn_obj = rs_entry(rs_extension(args[0], args[8], context), "permutation_samples")
-    # ORDER MATCHES bindings/_mojolearn_resample.mojo::permutation_samples_binding:
-    # n, n_y, n_resamples, seed, alternative, r_first
-    var addrs = Python.list(_rs_addr(xx), _rs_addr(yy), _rs_addr(null), _rs_addr(scalars))
-    _ = scalars  # keep the Python object alive through the native call above
-    _ = null  # keep the Python object alive through the native call above
-    _ = xx  # keep the Python object alive through the native call above
-    var params = Python.list(PythonObject(xx.dim(0)), PythonObject(ny), r, rs_int(args[6], "random_state", where),
-                             rs_code("ALTERNATIVES", args[5], "alternative", where, context),
-                             rs_int(args[7], "r_first", where))
-    _ = family_call(fn_obj, addrs, params)
+    var provider = rs_extension(args[0], args[8], context)
+    # ORDER MATCHES resample/resample_native.mojo operation 3:
+    # x, y, null, scalars; n, n_y, n_resamples, seed, alternative, r_first
+    var seed = Int(py=rs_int(args[6], "random_state", where))
+    var alt = Int(py=rs_code("ALTERNATIVES", args[5], "alternative", where, context))
+    var rf = Int(py=rs_int(args[7], "r_first", where))
+    rs_run(provider, RS_OP_PERMUTATION_SAMPLES, [xx.addr, yy.addr, null.addr, scalars.addr],
+           [xx.dim(0), ny, Int(py=r), seed, alt, rf], List[Float64]())
     _ = scalars  # keep the Python object alive through the native call above
     _ = null  # keep the Python object alive through the native call above
     _ = xx  # keep the Python object alive through the native call above
@@ -373,17 +382,12 @@ def _rs_permutation_test(args: PythonObject, context: PythonObject) raises -> Py
     var seed = rs_int(args[6], "random_state", where)
     var null = admitted_zeros([_rs_nonneg(r)], "<f4", context)
     var scalars = admitted_zeros([4], "<f8", context)
-    var fn_obj = rs_entry(rs_extension(args[0], args[8], context), "permutation_test")
-    # ORDER MATCHES bindings/_mojolearn_resample.mojo::permutation_test_binding:
+    var provider = rs_extension(args[0], args[8], context)
+    # ORDER MATCHES resample/resample_native.mojo operation 2:
     # x, y, null_out, scalars_out; n_x, n_y, statistic, n_resamples, seed,
     # alternative, r_first
-    var addrs = Python.list(_rs_addr(xx), _rs_addr(yy), _rs_addr(null), _rs_addr(scalars))
-    _ = scalars  # keep the Python object alive through the native call above
-    _ = null  # keep the Python object alive through the native call above
-    _ = yy  # keep the Python object alive through the native call above
-    _ = xx  # keep the Python object alive through the native call above
-    var params = Python.list(PythonObject(xx.dim(0)), PythonObject(yy.dim(0)), stat, r, seed, alt, rf)
-    _ = family_call(fn_obj, addrs, params)
+    rs_run(provider, RS_OP_PERMUTATION_TEST, [xx.addr, yy.addr, null.addr, scalars.addr],
+           [xx.dim(0), yy.dim(0), Int(py=stat), Int(py=r), Int(py=seed), Int(py=alt), Int(py=rf)], List[Float64]())
     _ = scalars  # keep the Python object alive through the native call above
     _ = null  # keep the Python object alive through the native call above
     _ = yy  # keep the Python object alive through the native call above
@@ -457,16 +461,13 @@ def _rs_monte_carlo(args: PythonObject, context: PythonObject) raises -> PythonO
         raise Error("mojolearn " + where + ": lower and upper must each hold 2 values "
                     + "(MC_DIMS), got " + String(lo.dim(0)) + " and " + String(hi.dim(0)))
     var scalars = admitted_zeros([4], "<f8", context)
-    var fn_obj = rs_entry(rs_extension(args[0], args[7], context), "monte_carlo_integrate")
-    # ORDER MATCHES bindings/_mojolearn_resample.mojo::monte_carlo_integrate_binding:
+    var provider = rs_extension(args[0], args[7], context)
+    # ORDER MATCHES resample/resample_native.mojo operation 5:
     # lower, upper, scalars_out; f_id, n_samples, seed, i_first
-    var addrs = Python.list(_rs_addr(lo), _rs_addr(hi), _rs_addr(scalars))
-    _ = scalars  # keep the Python object alive through the native call above
-    _ = hi  # keep the Python object alive through the native call above
-    _ = lo  # keep the Python object alive through the native call above
-    var params = Python.list(f_id, rs_int(args[4], "n_samples", where), rs_int(args[5], "random_state", where),
-                             rs_int(args[6], "i_first", where))
-    _ = family_call(fn_obj, addrs, params)
+    var count = Int(py=rs_int(args[4], "n_samples", where))
+    var seed = Int(py=rs_int(args[5], "random_state", where))
+    var first = Int(py=rs_int(args[6], "i_first", where))
+    rs_run(provider, RS_OP_MONTE_CARLO, [lo.addr, hi.addr, scalars.addr], [Int(py=f_id), count, seed, first], List[Float64]())
     _ = scalars  # keep the Python object alive through the native call above
     _ = hi  # keep the Python object alive through the native call above
     _ = lo  # keep the Python object alive through the native call above
@@ -490,11 +491,10 @@ def rs_indices(binding: PythonObject, n_obj: PythonObject, n_samples: PythonObje
     var n = rs_int(n_obj, "n", where)
     var count = n if n_samples is None else rs_int(n_samples, "n_samples", where)
     var idx = admitted_zeros([_rs_nonneg(count)], "<i4", context)
-    var fn_obj = rs_entry(rs_extension(binding, numeric_mode, context), "resample_indices")
-    # ORDER MATCHES bindings/_mojolearn_resample.mojo::resample_indices_binding.
-    var params = Python.list(n, count, PythonObject(1 if lin_truth(replace) else 0),
-                             rs_int(random_state, "random_state", where))
-    _ = family_call(fn_obj, Python.list(_rs_addr(idx)), params)
+    var provider = rs_extension(binding, numeric_mode, context)
+    # ORDER MATCHES resample/resample_native.mojo operation 4: idx; n, n_samples, replace, seed.
+    var seed = Int(py=rs_int(random_state, "random_state", where))
+    rs_run(provider, RS_OP_RESAMPLE_INDICES, [idx.addr], [Int(py=n), Int(py=count), 1 if lin_truth(replace) else 0, seed], List[Float64]())
     _ = idx  # keep the Python object alive through the native call above
     return idx^
 
