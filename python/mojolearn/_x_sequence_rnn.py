@@ -622,6 +622,8 @@ class RNNRegressor(_RecurrentRegressor):
     >>> pred = model.predict(X)
     """
     _CELL = "rnn"
+    # The member ABI (core/member_abi.mojo): family 20 (Sequence), kind 0.
+    _mojolearn_member = (20, 0)
 
 
 class RNNClassifier(_RecurrentClassifier):
