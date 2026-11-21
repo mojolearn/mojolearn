@@ -170,6 +170,36 @@ def test_set_params_checks_the_device_before_the_estimator_changes(cls, answer, 
     assert est.set_params(device=None).get_params(deep=False)["device"] is None
 
 
+@pytest.mark.parametrize("cls, answer, required", [row for row in CLASSES if row.values[2]])
+@pytest.mark.parametrize("bad", ["tpu", 0])
+def test_a_class_with_required_arguments_refuses_a_bad_device_too(cls, answer, required, bad):
+    # No class that takes device= is left unchecked: the classes the tests above skip (their constructor needs
+    # arguments this file cannot invent) must still refuse a bad device at construction, whatever the other
+    # arguments are, because the device is checked before any field is written.
+    placeholders = {name: None for name in required}
+    with pytest.raises((ValueError, TypeError), match="device"):
+        cls(device=bad, **placeholders)
+
+
+def test_every_public_class_that_takes_device_is_exercised():
+    # the parametrized cases above are the wave's proof that a bad device raises at construction and at
+    # set_params for EVERY class: a public estimator that takes device=None and is not among them fails here
+    covered = {row.values[0] for row in CLASSES}
+    missing = []
+    for cls in _package_classes():
+        if cls.__name__.startswith("_") or getattr(cls, "_HOST_INFERENCE_ONLY", False):
+            continue
+        if cls.__init__ is object.__init__ or not hasattr(cls, "get_params"):
+            continue
+        try:
+            parameters = inspect.signature(cls.__init__).parameters
+        except (TypeError, ValueError):
+            continue
+        if "device" in parameters and parameters["device"].default is None and cls not in covered:
+            missing.append(cls.__module__ + "." + cls.__qualname__)
+    assert not missing, f"classes that take device= and are not exercised by this file: {missing}"
+
+
 @pytest.mark.parametrize("cls, answer, required", CLASSES)
 def test_clone_and_pickle_carry_the_device(cls, answer, required):
     _build(cls, required)
