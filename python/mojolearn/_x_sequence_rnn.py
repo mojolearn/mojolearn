@@ -527,6 +527,8 @@ class GRUClassifier(_RecurrentClassifier):
     >>> pred = model.predict(X)
     """
     _CELL = "gru"
+    # The member ABI (core/member_abi.mojo): family 20 (Sequence), kind 1.
+    _mojolearn_member = (20, 1)
 
 
 class RNNRegressor(_RecurrentRegressor):
