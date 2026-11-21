@@ -6,8 +6,12 @@ ADMIT: the estimator's own parameter checks on a scratch copy of its
 instance dictionary (the unfitted template is never written) give the
 thirteen NEW words; the route's `entry` is the native iforest entry of the
 svm image the bridge connected for the estimator's tier
-(core/iforest_entry.mojo). The route is the device plan: the member runs on
-that one device.
+(core/iforest_entry.mojo). DEVICE PLAN (item 28): on a GPU route the admit
+reads the public thread's IsolationForest plan once
+(`device_plan_current("MOJOLEARN_IFOREST_DEVICE_COUNT")`, what the
+estimator's own doors read at their entry); more than one device goes into
+`owner.plan.devices` (rank order, the first `count` ids), which every call
+carries as `call.devices`; else the member runs on the route's one device.
 
 PACK: EXPORT the six blocks (scalars, then the compact forest) and write the
 fields a LOADED estimator holds (`_if_forest`, `offset_`, `max_samples_`,
@@ -29,6 +33,7 @@ from bindings.trees_public_iforest_door import (
     iforest_export_forest, iforest_forest_words, iforest_member_pack_fields, iforest_member_words,
 )
 from core.device_route import DeviceRoute, DEVICE_CPU, DEVICE_GPU
+from core.device_plan import device_plan_current
 from core.iforest_entry import if_entry_ref
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free,
@@ -64,6 +69,15 @@ def isolation_forest_member_admit(model: PythonObject, fields: PythonObject, kin
         params.append(words[i])
     owner.plan.route = route^
     owner.plan.params = params^
+    if vendor != 0:
+        # The plan the estimator's own GPU entry reads (`_iforest_plan`),
+        # read here on the public thread; the member never asks it in a call.
+        var plan = device_plan_current("MOJOLEARN_IFOREST_DEVICE_COUNT")
+        if not plan.single():
+            var ids = List[Int](capacity=plan.count)
+            for r in range(min(plan.count, len(plan.devices))):  # driver-loop: over the plan's ranks
+                ids.append(plan.devices[r])
+            owner.plan.devices = ids^
     owner.pins = Python.list(run)
     return True
 

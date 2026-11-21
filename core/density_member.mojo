@@ -639,6 +639,8 @@ def _import(slot: _Slot, call: _Call) raises:
 def _density_member(operation: Int, address: Int) raises -> Int:
     var call = _Call(unsafe_from_address=address)
     if operation == MEMBER_OP_CAPABILITIES:
+        # No MEMBER_CAN_TEST_ROWS: X is admitted finite by the caller (the
+        # DBSCAN and KDE entries do not test it; only KDE weights are checked here).
         var dbscan = MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_CAN_SAMPLE_WEIGHT
         var kde = (MEMBER_CAN_FIT | MEMBER_CAN_SCORE_SAMPLES | MEMBER_CAN_SCORE | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
             | MEMBER_CAN_SAMPLE_WEIGHT)
@@ -676,6 +678,17 @@ def _density_member(operation: Int, address: Int) raises -> Int:
     if operation == MEMBER_OP_OUTPUTS:
         call[].out_cols = 1
         call[].classes = 0
+        # The kind: the state's, else NEW word 0. DBSCAN predict: int32
+        # labels; KernelDensity score_samples: float32 log densities.
+        var which = -1
+        if call[].state != 0:
+            which = _Slot(unsafe_from_address=_lookup(call[].state, False))[].kind
+        elif call[].params and call[].param_count >= 1:
+            which = Int(_Words(unsafe_from_address=call[].params)[0])
+        if which == _KIND_DBSCAN and call[].flags == MEMBER_OP_PREDICT:
+            call[].out_dtype = MEMBER_I32
+        elif which == _KIND_KDE and call[].flags == MEMBER_OP_SCORE_SAMPLES:
+            call[].out_dtype = MEMBER_F32
         return 0
     var slot = _Slot(unsafe_from_address=_lookup(call[].state, False))
     if slot[].kind == _KIND_KDE:

@@ -517,6 +517,8 @@ def _import(slot: _Slot, call: _Call) raises:
 def _spectral_member(operation: Int, address: Int) raises -> Int:
     var call = _Call(unsafe_from_address=address)
     if operation == MEMBER_OP_CAPABILITIES:
+        # No MEMBER_CAN_TEST_ROWS: X is admitted finite by the caller (the
+        # spectral and assignment entries do not test it).
         return MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
     if operation == MEMBER_OP_NEW:
         if not call[].params or call[].param_count != _WORDS:
@@ -538,6 +540,8 @@ def _spectral_member(operation: Int, address: Int) raises -> Int:
     if operation == MEMBER_OP_OUTPUTS:
         call[].out_cols = 1
         call[].classes = 0
+        if call[].flags == MEMBER_OP_PREDICT:
+            call[].out_dtype = MEMBER_I32  # int32 labels, with or without a state
         return 0
     var slot = _Slot(unsafe_from_address=_lookup(call[].state, False))
     if operation == MEMBER_OP_FIT:

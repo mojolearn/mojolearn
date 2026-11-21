@@ -34,9 +34,15 @@ an image without the resident route, which refits per call) refits from it,
 so the caller keeps X alive until FREE, exactly as the estimator keeps the
 caller's float32 X as `_x`. FREE drops the resident forest (IF_OP_RELEASE).
 
-DEVICE PLAN: every run is `single` (IF_P_SINGLE): one device, the route's
-(the caller's admit resolved it from the estimator's tier). The member asks
-no thread plan and no environment variable.
+DEVICE PLAN (item 28): the family's admit reads the public thread's plan
+once (`device_plan_current("MOJOLEARN_IFOREST_DEVICE_COUNT")`) into
+`plan.devices`; FIT copies `call.devices` (device ids, rank order) into the
+slot, and every run of that state (the fit, a refit after eviction, the
+export) hands them to the image (IF_P_DEVICES / IF_P_DEVICE_COUNT): more
+than one id runs the estimator's whole-tree shards over exactly those
+devices; none or one is `single` (IF_P_SINGLE), the route's device. The
+member asks no thread plan and no environment variable, so a caller's worker
+thread runs on the plan the public thread had.
 
 FITTED-STATE BLOCKS (EXPORT / IMPORT, index order):
   0 MEMBER_BLOCK_SCALARS float64 1 x 3: offset_, max_samples_, n_features_in_;
@@ -88,6 +94,9 @@ comptime _WANT_SCORE_SAMPLES = 0
 comptime _WANT_DECISION = 1
 comptime _WANT_PREDICT = 2
 comptime _WANT_WIDE_BASE = 3
+# No MEMBER_CAN_TEST_ROWS: only images with IF_CAP_DEVICE_SCAN test the
+# training X, and the host image's queries are not scanned; the caller's
+# admission scans. No sample weight, no y (the estimator takes neither).
 comptime _CAPS = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_DECISION | MEMBER_CAN_SCORE_SAMPLES
                   | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT)
 comptime _BLOCKS = 6
@@ -144,6 +153,9 @@ struct IsolationForestMemberSlot(Copyable, Defaultable, Movable):
     """True: the state holds a saved forest (IMPORT), no training view."""
     var forest: IsolationForestMemberForest
     """The compact forest (IMPORT's copy, or EXPORT's read-out; empty until then)."""
+    var devices: List[Int]
+    """The device ids of the last FIT's `call.devices` (rank order; empty or
+    one id: the route's one device)."""
 
     def __init__(out self):
         self.generation = 0
@@ -163,6 +175,7 @@ struct IsolationForestMemberSlot(Copyable, Defaultable, Movable):
         self.scratch = List[Float32](length=1, fill=0.0)
         self.imported = False
         self.forest = IsolationForestMemberForest()
+        self.devices = List[Int]()
 
 
 struct IsolationForestMemberStore(Defaultable, Movable):
@@ -280,6 +293,15 @@ def _want(slot: MutPointer[IsolationForestMemberSlot, MutUntrackedOrigin], opera
                 + (" or float64" if slot[].wide else "") + " (this image)")
 
 
+def _plan_words(slot: MutPointer[IsolationForestMemberSlot, MutUntrackedOrigin], mut r: IFRunRequest):
+    """The slot's device plan into a run's words: several ids run over those
+    devices; none or one is the route's one device (`single`)."""
+    r.single = True
+    var count = len(slot[].devices)
+    r.devices = Int(slot[].devices.unsafe_ptr()) if count > 1 else 0
+    r.device_count = count if count > 1 else 0
+
+
 def _run(slot: MutPointer[IsolationForestMemberSlot, MutUntrackedOrigin], entry: EntryRef, query: Int,
          n_query: Int, want: Int, out_f32: Int, out_i32: Int, fresh: Bool) raises:
     var r = slot[].words.copy()
@@ -294,7 +316,7 @@ def _run(slot: MutPointer[IsolationForestMemberSlot, MutUntrackedOrigin], entry:
     r.info = Int(slot[].info.unsafe_ptr())
     r.resident = slot[].resident
     r.token = 0 if fresh else slot[].token
-    r.single = True  # the route's one device; no thread plan, no environment
+    _plan_words(slot, r)  # the admit's plan (call.devices at FIT); no thread plan, no environment
     _ = if_entry_run(entry, r)
     slot[].offset = slot[].info[0]
     slot[].max_samples = Int(slot[].info[1])
@@ -337,6 +359,13 @@ def _fit(slot: MutPointer[IsolationForestMemberSlot, MutUntrackedOrigin],
     slot[].train = call[].x.data
     slot[].n_train = call[].x.rows
     slot[].n_features = call[].x.cols
+    # The plan the admit read on the public thread (item 28), kept for this
+    # state's refits and export; the slot's list keeps its capacity.
+    slot[].devices.clear()
+    if call[].device_count > 1 and call[].devices != 0:
+        var ids = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=call[].devices)
+        for k in range(call[].device_count):  # driver-loop: over the plan's ranks (at most 64)
+            slot[].devices.append(ids[k])
     var output = call[].fit_output
     if output == 0:
         # The estimator's `fit`: one fresh forest scored on one row, kept.
@@ -382,7 +411,7 @@ def _read_out(slot: MutPointer[IsolationForestMemberSlot, MutUntrackedOrigin]) r
     r.n_features = slot[].n_features
     r.info = Int(slot[].info.unsafe_ptr())
     r.token = slot[].token
-    r.single = True
+    _plan_words(slot, r)
     _ = if_entry_export(slot[].entry, r, IFForestSpans(0, 0, 0, 0, 0, 0, 0))
     var trees = Int(slot[].info[4])
     var total = Int(slot[].info[5])
@@ -547,6 +576,12 @@ def _isolation_forest_member(operation: Int, address: Int) raises -> Int:
         # a state (item 10): no width is chosen by the fit.
         call[].out_cols = 1
         call[].classes = 0
+        # predict: int32 labels (1 / -1); decision and score_samples: float32
+        # (served on every image; float64 only where the image writes it).
+        if call[].flags == MEMBER_OP_PREDICT:
+            call[].out_dtype = MEMBER_I32
+        elif call[].flags == MEMBER_OP_DECISION or call[].flags == MEMBER_OP_SCORE_SAMPLES:
+            call[].out_dtype = MEMBER_F32
         return 0
     if operation == MEMBER_OP_FREE:
         var token = 0

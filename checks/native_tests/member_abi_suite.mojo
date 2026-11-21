@@ -40,6 +40,14 @@ from core.member_abi import (
     MEMBER_BLOCK_COEF, MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
     MEMBER_F32, MEMBER_F64, MEMBER_HOME_DEVICE,
 )
+from core.dart_member import dart_member_v2
+from core.isolation_forest_member import isolation_forest_member_v2
+from core.xcluster_member import xcluster_member_v2
+from core.mixture_member import mixture_member_v2
+from core.density_member import density_member_v2
+from core.hierarchy_member import hierarchy_member_v2
+from core.spectral_member import spectral_member_v2
+from core.member_abi import member_output_dtype, MEMBER_I32, MEMBER_CAN_SCORE_SAMPLES, MEMBER_DTYPE_UNSAID
 from core.member_families import MEMBER_FAMILY_SPARE3, MEMBER_FAMILY_COUNT, member_family_name
 
 comptime _LINEAR_FIXTURES = 5
@@ -47,7 +55,11 @@ comptime _LINEAR_FIXTURES = 5
 #: XLinear 2, Neighbors 11, Tree 13, Forest 14, ExtraTrees 15, KernelSvm 6,
 #: KMeans 24, Decomposition 31, Scaler 34.
 comptime _PUBLISHED = 10
-comptime MEMBER_ABI_FIXTURES = _LINEAR_FIXTURES + _PUBLISHED
+#: Sweep-b families (2026-11-21), in `_sweep_b` order: Dart 17,
+#: IsolationForest 18, XCluster 25, Mixture 26, Density 27, Hierarchy 29,
+#: Spectral 30.
+comptime _SWEEP_B = 7
+comptime MEMBER_ABI_FIXTURES = _LINEAR_FIXTURES + _PUBLISHED + _SWEEP_B
 
 
 def require(ok: Bool, message: String) raises:
@@ -145,6 +157,9 @@ def _published_fixture(which: Int) raises:
 
 
 def _fixture(unit: Int) raises:
+    if unit >= _LINEAR_FIXTURES + _PUBLISHED:
+        _sweep_b_fixture(unit - _LINEAR_FIXTURES - _PUBLISHED)
+        return
     if unit >= _LINEAR_FIXTURES:
         _published_fixture(unit - _LINEAR_FIXTURES)
         return
@@ -329,3 +344,80 @@ def run_checks() raises:
             _fixture(unit)
             raise Error("member ABI: fixture " + String(unit) + " failed on its host task and passed alone")
     _ = len(flags)
+
+
+def _sweep_b_member(which: Int) raises -> MemberRef:
+    """The member entry of sweep-b family `which` (the entry itself)."""
+    if which == 0:
+        return MemberRef(EntryRef(dart_member_v2, 0), 0)
+    if which == 1:
+        return MemberRef(EntryRef(isolation_forest_member_v2, 0), 0)
+    if which == 2:
+        return MemberRef(EntryRef(xcluster_member_v2, 0), 0)
+    if which == 3:
+        return MemberRef(EntryRef(mixture_member_v2, 0), 0)
+    if which == 4:
+        return MemberRef(EntryRef(density_member_v2, 0), 0)
+    if which == 5:
+        return MemberRef(EntryRef(hierarchy_member_v2, 0), 0)
+    if which == 6:
+        return MemberRef(EntryRef(spectral_member_v2, 0), 0)
+    raise Error("member ABI: no sweep-b fixture " + String(which))
+
+
+def _answers(member: MemberRef, var words: List[Float64], classes: Int, operation: Int, width: Int, dtype: Int,
+    name: String) raises:
+    """OUTPUTS without a state (items 10 and 26): the width and the element
+    type of `operation`, from the parameter words alone."""
+    var plan = MemberPlan()
+    plan.member = member
+    plan.route = DeviceRoute(0)
+    plan.params = words^
+    plan.classes = classes
+    require(member_outputs(plan, operation, 3, 1) == width,
+        "member ABI: " + name + " answers the width of operation " + String(operation) + " without a state")
+    require(member_output_dtype(plan, operation, 3, 1, MEMBER_DTYPE_UNSAID) == dtype,
+        "member ABI: " + name + " answers the element type of operation " + String(operation) + " without a state")
+
+
+def _sweep_b_fixture(which: Int) raises:
+    """One sweep-b family, without a kernel and without a state: what its
+    kind is, a stateless call refused in words, OUTPUTS widths and element
+    types answered from the parameter words."""
+    var member = _sweep_b_member(which)
+    var probe = MemberCall(DeviceRoute(0))
+    member.capabilities = member_call(member, MEMBER_OP_CAPABILITIES, probe)
+    var name = String("sweep-b ") + String(which)
+    require(member.has(MEMBER_NEEDS_PREDICTOR) or member.can(MEMBER_CAN_SCORE_SAMPLES),
+        "member ABI: " + name + " fits and predicts or scores")
+    require(member.can(MEMBER_CAN_CLASSIFIER) == (which == 0),
+        "member ABI: " + name + " is a classifier family only for DART")
+    var stateless = MemberCall(DeviceRoute(0))
+    var refused = False
+    try:
+        _ = member_call(member, MEMBER_OP_PREDICT, stateless)
+    except error:
+        refused = len(String(error)) > 0
+    require(refused, "member ABI: " + name + " refuses a call without a state")
+    if which == 0:
+        # DART: kind word 0 classifier (codes int32, proba float64), 1 regressor
+        _answers(member, [0.0], 3, MEMBER_OP_PREDICT, 1, MEMBER_I32, name)
+        _answers(member, [0.0], 3, MEMBER_OP_PREDICT_PROBA, 3, MEMBER_F64, name)
+        _answers(member, [1.0], 0, MEMBER_OP_PREDICT, 1, MEMBER_F32, name)
+    elif which == 1:
+        _answers(member, List[Float64](length=13, fill=0.0), 0, MEMBER_OP_PREDICT, 1, MEMBER_I32, name)
+        _answers(member, List[Float64](length=13, fill=0.0), 0, MEMBER_OP_DECISION, 1, MEMBER_F32, name)
+    elif which == 2:
+        # MiniBatchKMeans with four clusters
+        var words: List[Float64] = [0.0, 4.0, 0.0, 1.0, 10.0, 0.0, 0.0, 16.0, -1.0, 0.0, 0.01]
+        _answers(member, words.copy(), 0, MEMBER_OP_PREDICT, 1, MEMBER_I32, name)
+        _answers(member, words^, 0, MEMBER_OP_TRANSFORM, 4, MEMBER_F32, name)
+    elif which == 3:
+        var words: List[Float64] = [3.0, 100.0, 0.001, 0.000001, 0.0, 0.0]
+        _answers(member, words.copy(), 0, MEMBER_OP_PREDICT, 1, MEMBER_I32, name)
+        _answers(member, words^, 0, MEMBER_OP_PREDICT_PROBA, 3, MEMBER_F32, name)
+    elif which == 4:
+        _answers(member, [1.0, 0.5, 5.0, 0.0, 0.0, 0.0, 0.0], 0, MEMBER_OP_PREDICT, 1, MEMBER_I32, name)
+        _answers(member, [0.0, 1.0, 0.0, 0.0], 0, MEMBER_OP_SCORE_SAMPLES, 1, MEMBER_F32, name)
+    else:
+        _answers(member, List[Float64](length=8, fill=0.0), 0, MEMBER_OP_PREDICT, 1, MEMBER_I32, name)
