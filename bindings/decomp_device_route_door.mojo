@@ -210,3 +210,30 @@ def decomp_route_keep(model: PythonObject, route: DecompRoute, mode: PythonObjec
     built.context = context
     built.images = images
     _ = device_route_keep(model, built^)
+
+
+def decomp_route_table_hit(model: PythonObject, mode: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The entries table of an estimator whose route holds one (the
+    decomposition kit: bindings/decomp_kit_native_door.mojo), or None on a
+    miss: one record read and three pointer compares. The device is not read."""
+    var owner = device_route_held(model, mode, PythonObject(None), context)
+    if owner is None:
+        return owner
+    var table = owner.downcast_value_ptr[DeviceRouteOwner]()[].table
+    _ = owner  # the owner stays alive through its final native read
+    return table
+
+
+def decomp_route_keep_table(model: PythonObject, device: Int, tier: Int, mode: PythonObject, context: PythonObject,
+    table: PythonObject) raises:
+    """Store a kit estimator's resolved route: the device, the tier and the
+    connected entries table of the image it resolved to (miss path: one
+    owner allocation)."""
+    var built = DeviceRouteOwner(device)
+    built.route.mode = tier
+    built.route.vendor = 0 if device == DEVICE_CPU else _decomp_process_vendor(context)
+    built.resolved = True
+    built.mode = mode
+    built.context = context
+    built.table = table
+    _ = device_route_keep(model, built^)
