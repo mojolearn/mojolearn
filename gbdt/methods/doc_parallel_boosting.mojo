@@ -200,6 +200,10 @@ from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
 from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
     enqueue_snap_plane_dev,
 )
+from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
+    TSynchronizedSymmetricLevelState,
+)
+from gbdt.methods.tree_ctr_search import TreeCtrFit, run_tree_ctr_tree
 from gbdt.methods.greedy_subsets_searcher.kernel.greedy_gate_walk import (
     GREEDY_STATUS_COVERAGE,
     GREEDY_STATUS_NO_FEATURE,
@@ -715,6 +719,10 @@ struct FitResult(Movable):
     var best_iteration: Int
     #: True when the detector fired before `n_estimators` was reached
     var stopped_early: Bool
+    #: the fit's tree-CTR state, handed back (the list `fit_with_test` was
+    #: given: empty, or the one entry whose `assemble` builds the model's
+    #: tree-CTR section)
+    var tree_ctr: List[TreeCtrFit]
 
 
 @fieldwise_init
@@ -3832,6 +3840,13 @@ def fit_with_test(
     # every tree searcher (`gbdt_hist_dispatch` / the scores calcer own the
     # one-vs-many choice; one device runs the unchanged launches).
     device_plan: DevicePlan = plan_for_single(),
+    # TREE CTRS (feature combinations). Empty for every fit without them,
+    # which then runs the code it ran before, launch for launch. One entry
+    # (`gbdt/train.mojo::train` builds it over a layout that carries the
+    # persist and candidate slots) sends each oblivious tree through
+    # `run_tree_ctr_tree`, the level-synchronized driver, and the entry
+    # comes back in `FitResult.tree_ctr` holding what the trees chose.
+    var tree_ctr: List[TreeCtrFit] = List[TreeCtrFit](),
 ) raises -> FitResult:
     """Their `Fit` (`doc_parallel_boosting.h:302`), one permutation.
 
@@ -3888,6 +3903,29 @@ def fit_with_test(
     # planes and the stats carry one more -- their `statCount` is
     # `1 + point.GetColumnCount()` (`pointwise_target_impl.h:186`).
     check_feature_fraction(feature_fraction)
+    if len(tree_ctr) > 1:
+        raise Error("a fit takes at most one tree-CTR state")
+    if len(tree_ctr) == 1:
+        # the level-synchronized driver grows oblivious trees with the
+        # greedy searcher over a layout pinned for the whole fit
+        if grow_policy != GROW_SYMMETRIC:
+            raise Error(
+                "max_ctr_complexity above 1 (feature combinations) is"
+                " implemented for grow_policy='SymmetricTree'; got "
+                + grow_policy_name(grow_policy)
+            )
+        if use_pointwise_searcher:
+            raise Error(
+                "max_ctr_complexity above 1 (feature combinations) is grown"
+                " by the greedy searcher; use_pointwise_searcher does not"
+                " mint combinations"
+            )
+        if feature_fraction < 1:
+            raise Error(
+                "max_ctr_complexity above 1 (feature combinations) with"
+                " feature_fraction below 1 is not implemented: the"
+                " combination slots are pinned in the fit's layout"
+            )
     if feature_fraction < 1:
         for fi in range(len(one_hot)):  # small-loop(one_hot: one flag per feature): a parameter check that only raises
             if one_hot[fi]:
@@ -4108,6 +4146,18 @@ def fit_with_test(
             # value (`doc_parallel_boosting.h:180-186`)
             enqueue_fill(ctx, c, start_value)
             cursors.append(c^)
+
+    # tree CTRs: every permutation's index as a handle, in permutation
+    # order, and the level state the trees share (empty lists otherwise)
+    var tree_cindexes = List[DeviceBuffer[DType.uint32]]()
+    var tree_states = List[TSynchronizedSymmetricLevelState]()
+    if len(tree_ctr) == 1:
+        # driver-loop: over the permutations
+        for p in range(perm_count):
+            if p == est_p or len(perm_cindexes) == 0:
+                tree_cindexes.append(cindex.copy())
+            else:
+                tree_cindexes.append(perm_cindexes[p].copy())
 
     # their der/der2 buffers, in the two-plane layout the histogram kernels
     # already read. See the DEVIATION BLOCK in `pointwise_targets.mojo`.
@@ -5327,6 +5377,35 @@ def fit_with_test(
                     _tree_tag(iteration) + ".leaves.estimated",
                     est_ws,
                 )
+        elif len(tree_ctr) == 1:
+            # ---- TREE CTRS: the level-synchronized driver --------------
+            # One drain per level (the next level's candidate combinations
+            # depend on this level's split), the fused path's score and
+            # leaf kernels, and `run_tree_layout_traced`'s contract: the
+            # splits, the Simple leaves applied to the learn cursor when
+            # nothing estimates, the leaf sizes and (for the estimators)
+            # the device's leaf offsets. A split on a chosen combination
+            # names its persist slot, which every permutation's index and
+            # the test index hold by the time this returns, so the
+            # estimation loop and the held-out apply below read it like any
+            # other column. Every fit without tree CTRs takes the fused
+            # call in the `else` below, unchanged.
+            var t_sym = loop_times.start()
+            sizes = run_tree_ctr_tree(
+                tree_ctr[0], tree_states, device_plan, ctx, learn_p,
+                tree_cindexes, approx_dim, stats, row_index, lcur,
+                splits, leaf_values, leaf_offsets,
+                trace, stage_times, _tree_tag(iteration),
+                need_estimation,
+                use_subtraction, not need_estimation,
+                learning_rate, l2_leaf_reg,
+                score_function,
+                objective == OBJECTIVE_MULTICLASS,
+                mags_opt^,
+                Float32(noise_mult * Float64(random_strength)),
+                tree_seed,
+            )
+            loop_times.stop_host("iter_tree_search", t_sym)
         else:
             var t_sym = loop_times.start()
             sizes = run_tree_layout_traced(
@@ -5695,8 +5774,10 @@ def fit_with_test(
         grow_policy_name(grow_policy) + " fit (doc-parallel boosting)"
     )
 
+    _ = tree_states^  # the level state's buffers before the context's
     return FitResult(
-        losses^, test_losses^, detector.best_iteration, stopped_early
+        losses^, test_losses^, detector.best_iteration, stopped_early,
+        tree_ctr^,
     )
 
 
