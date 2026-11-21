@@ -175,10 +175,11 @@ def test_host_reconstruction_keeps_original_setter_without_a_getter_schema():
     ns, modules, _ = fixture()
     host = modules['full_reset_fixture._classical_host'].HostKernelRidge
     original = modules['full_reset_fixture._mode'].ParamsMixin.set_params
-    metadata = {'plans': {cls: {'names': tuple(inspect.signature(cls.__init__).parameters)[1:]}
-                          for cls in ns['_CLASSES']}}
     with patch.dict('sys.modules', modules):
         ns['install']()
+        # The getter schema is read from the installed signature (the installer adds `device`).
+        metadata = {'plans': {cls: {'names': tuple(inspect.signature(cls.__init__).parameters)[1:]}
+                              for cls in ns['_CLASSES']}}
         ns['connect'](metadata, {'plans': {}}, {'plans': {}}, {'family_msel_estimators': {}})
     assert host.set_params is original
     assert host not in ns['_CONTEXT']['plans'] and host not in ns['_CONTEXT']['reconstruction_classes']
@@ -232,9 +233,10 @@ def test_nested_native_entry_requires_exact_supported_dictionary_abi(recipe, acc
     ns, modules, calls = fixture()
     cls = type('NativeChild', (), {})
     plan = {'methods': {'set_params': recipe}, 'entry': len, 'context': object()}
-    metadata = {'plans': {c: {'names': tuple(inspect.signature(c.__init__).parameters)[1:]} for c in ns['_CLASSES']}}
     with patch.dict('sys.modules', modules):
         ns['install']()
+        # The getter schema is read from the installed signature (the installer adds `device`).
+        metadata = {'plans': {c: {'names': tuple(inspect.signature(c.__init__).parameters)[1:]} for c in ns['_CLASSES']}}
         if accepted:
             ns['connect'](metadata, {}, {}, {'family_msel_estimators': {cls: plan}})
             assert ns['_CONTEXT']['native_setters'][cls]['entry'] is len
@@ -321,6 +323,25 @@ def test_constructor_resolution_and_mode_wrapper_still_match_the_audited_source(
         assert _ast_sha(helper) == digest, name
 
 
+class _InstalledGetters(dict):
+    """The parameter getter's plans for `classes`, built from the signature a class has when it is read."""
+
+    def __init__(self, classes):
+        super().__init__()
+        self._classes = tuple(classes)
+
+    def __missing__(self, cls):
+        if cls not in self._classes:
+            raise KeyError(cls)
+        return {'names': tuple(inspect.signature(cls.__init__).parameters)[1:]}
+
+    def __contains__(self, cls):
+        return cls in self._classes
+
+    def get(self, cls, default=None):
+        return self[cls] if cls in self._classes else default
+
+
 def deferred_fixture():
     """Eager classes in _CLASSES; the NumPy-backed modules' classes stay unconnected."""
     ns, modules, calls = fixture()
@@ -332,7 +353,9 @@ def deferred_fixture():
         if cls.__name__ in lazy:
             module = lazy[cls.__name__]
             namespaces.setdefault(module, {'__name__': 'full_reset_fixture.' + module})[cls.__name__] = cls
-    metadata = {'plans': {cls: {'names': tuple(inspect.signature(cls.__init__).parameters)[1:]} for cls in every}}
+    # The getter schema is read from each class's signature AS INSTALLED (the installer adds `device`),
+    # which these tests reach only after `install` / `connect_module`: read it when `connect` asks.
+    metadata = {'plans': _InstalledGetters(every)}
     order = []
     mode = modules['full_reset_fixture._mode']
     mode._PARAMS_METADATA_CONTEXT = metadata
@@ -555,8 +578,10 @@ def test_umap_validation_is_connected_without_a_python_callback():
     plan = ns['_CONTEXT']['plans'][cls]
     assert plan['validation_kind'] == 'umap'
     # UMAP's own constructor writes numeric_mode (native-public, no
-    # NumericModeMixin wrapper); validation still precedes that write.
-    assert plan['events'][-1] == ('numeric_mode', 'parameter', 'numeric_mode', False)
+    # NumericModeMixin wrapper) and then `device`, which it names itself
+    # (lane dw-gp-metrics-manifold); validation still precedes every write.
+    assert plan['events'][-2:] == (('numeric_mode', 'parameter', 'numeric_mode', False),
+                                   ('device', 'parameter', 'device', False))
     assert all('validation_kind' in p for p in ns['_CONTEXT']['plans'].values())
     constructor = (ROOT / 'bindings/full_reset_constructor_native_door.mojo').read_text()
     body = constructor.split('var validated = False', 1)[1]
