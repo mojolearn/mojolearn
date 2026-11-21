@@ -5845,6 +5845,21 @@
     "quality"
    ],
    "decides": "the same verdict on a dataset no board row has; digests must not move"
+  },
+  {
+   "id": "mcd-wide-lockstep",
+   "source": "lane sp-mcd-wide (2026-11-20; ideas-rank-shared list item 6): the lockstep promoted on 2026-11-20 (row mcd-lockstep) stopped at 32 columns, so the 220-column fits did not move (round 3: 1.000 and 1.001) while the 11-column ones went to 0.71",
+   "kind": "ab",
+   "lane": [
+    "min-cov-det",
+    "elliptic-envelope"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "mcd-lockstep-off"
+   ],
+   "decides": "A = the default: the lockstep at every width on the NVIDIA and AMD columns (x_decomp/kit_device.mojo DMcd._ls_eigh, _ls_batch, select_init_best's batched first solves; x_decomp/device.mojo eigh_batch_one_block_pays). B = arm mcd-lockstep-off, the serial candidate loop, which is what every input above 32 columns ran before this change. No new define: bits are unchanged by construction (x_decomp/mcd.mojo, note above MCD_LOCKSTEP), so digests and quality must equal B's on every cell; a difference is a bug in A, not a trade. Keep A when the wide fits (istella, 100,000 x 64 random) are faster on the NVIDIA L40S and no narrow row (taxi, 300,000 x 16 random, covtype's 10 continuous columns) is slower than its A in round 3; then row mcd-lockstep's deletion of the serial select_random / select_init bodies covers every width. A slower on the wide rows: restore the width test in kit_device.mojo _ls_applies (one line) and record the cells. Also time: 300,000 x 16 and 100,000 x 64 random float32 rows with 5 percent outliers, covtype's 10 continuous columns and covtype's 54 columns (non-board; the 54-column case has singular covariances and is below the tridiagonal route's first size, so every solve is the Jacobi's and exercises XD_EIGH_LAUNCH_PAIR_STEPS, which rests on one measurement). Run checks/mcd_step_cost_check.mojo on the A build (its drain and C-step counts change above 32 columns)"
   }
  ]
 }
