@@ -190,6 +190,9 @@ class GradientBoostingClassifier(_GBDTAdapter):
     """
     _loss = 'Logloss'
     _estimator_type = 'classifier'
+    # The native member (family 16 Gbdt, kind 0; core/gbdt_member.mojo): the
+    # learner's typed fit and the binary transform, for callers that run members.
+    _mojolearn_member = (16, 0)
 
     def fit(self, X, y, sample_weight=None, eval_set=None):
         """Fit the classifier.

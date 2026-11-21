@@ -1733,6 +1733,64 @@ def adapter_new_learner(model: PythonObject, mode: PythonObject, context: Python
     return _new_learner(model, mode, context)
 
 
+def adapter_resolved_mode(model: PythonObject, context: PythonObject) raises -> String:
+    """The numeric mode an adapter's fit runs in: its stored `numeric_mode`
+    or the process default, checked (`_check_learner_mode`), lower case and
+    answered for the gbdt family (`answer_mode_word`). Read once per fit
+    (`_fit_native`) and once per member admission or pack."""
+    var fields = py_fields(model)
+    var nk = trees_keys()
+    var raw = _field(fields, model, nk[].k_numeric_mode, "numeric_mode")
+    if raw is None:
+        raw = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
+    _check_learner_mode(raw)
+    var mode = String(py_call(py_call(raw.strip).lower))
+    answer_mode_word(mode, MODE_FAMILY_GBDT)
+    return mode
+
+
+def adapter_member_learner(model: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The learner an adapter's fit builds and runs, for the adapter's member
+    admission and pack (providers/python/member_gbdt_boundary_door.mojo):
+    `_new_learner` with the stored `numeric_mode` (the parameter check's
+    learner of `adapter_classifier_fit` / `adapter_regressor_fit`), then the
+    resolved mode written into it, as `_fit_native` writes it. A new object;
+    the adapter is only read. `context` is the adapter's typed run context
+    (the one `gbdt_adapter_public_operation` hands its fit)."""
+    var nk = trees_keys()
+    var learner = _new_learner(model, _field(py_fields(model), model, nk[].k_numeric_mode, "numeric_mode"), context)
+    var mode = adapter_resolved_mode(model, context)
+    py_setitem(py_fields(learner), nk[].k_numeric_mode, PythonObject(mode))
+    return learner
+
+
+def adapter_label_kind(labels: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
+    """`_label_kind` over class labels a member caller encoded (code c is
+    `labels[c]`): ("string" | "integer", the classes as `str` / `int`), with
+    its type refusal (in `name`'s words). The fit's `_label_kind` and the
+    member's PACK of GradientBoostingClassifier."""
+    var b = _b()
+    var nk = trees_keys()
+    var k = len(labels)
+    var all_str = True
+    var all_int = True
+    for i in range(k):  # driver-loop: over the distinct class labels
+        var c = labels[i]
+        all_str = all_str and Bool(py=py_call(b.isinstance, c, b.str))
+        all_int = all_int and (Bool(py=py_call(b.isinstance, c, py_item(context, nk[].k_trees_integral_type))) or _is_bool(c))
+    var out = Python.list()
+    if all_str and k > 0:
+        for i in range(k):  # driver-loop: over the distinct class labels
+            _ = py_call(out.append, py_call(b.str, labels[i]))
+        return Python.tuple("string", out)
+    if all_int and k > 0:
+        for i in range(k):  # driver-loop: over the distinct class labels
+            _ = py_call(out.append, py_call_typed(b.int, labels[i]))
+        return Python.tuple("integer", out)
+    raise Error("TypeError: " + name + " must contain only strings or only integers; "
+                + "floating labels, missing labels and mixed types are unsupported")
+
+
 def adapter_validate_params(model: PythonObject, context: PythonObject) raises:
     """`_GBDTAdapter._validate_params()`: `_new_learner(self.numeric_mode)`."""
     var nk = trees_keys()
@@ -1774,26 +1832,7 @@ def _label_kind(labels: TreesLabels, values: PythonObject, name: String, context
             shape_ok = True
     if not shape_ok:
         raise Error(name + " must be one-dimensional single-label data")
-    var classes = labels.classes
-    var k = len(classes)
-    var all_str = True
-    var all_int = True
-    for i in range(k):  # driver-loop: over the distinct class labels
-        var c = classes[i]
-        all_str = all_str and Bool(py=py_call(b.isinstance, c, b.str))
-        all_int = all_int and (Bool(py=py_call(b.isinstance, c, py_item(context, nk[].k_trees_integral_type))) or _is_bool(c))
-    if all_str and k > 0:
-        var out = Python.list()
-        for i in range(k):  # driver-loop: over the distinct class labels
-            _ = py_call(out.append, py_call(b.str, classes[i]))
-        return Python.tuple("string", out)
-    if all_int and k > 0:
-        var out = Python.list()
-        for i in range(k):  # driver-loop: over the distinct class labels
-            _ = py_call(out.append, py_call_typed(b.int, classes[i]))
-        return Python.tuple("integer", out)
-    raise Error("TypeError: " + name + " must contain only strings or only integers; "
-                + "floating labels, missing labels and mixed types are unsupported")
+    return adapter_label_kind(labels.classes, name, context)
 
 
 def _codes_f32(labels: TreesLabels, context: PythonObject) raises -> PythonObject:
@@ -1836,16 +1875,10 @@ def _fit_native(model: PythonObject, validated: PythonObject, X: PythonObject, y
     fitted `_` names), and that field is overwritten below. So the checked
     learner is reused and one full constructor admission per fit is saved
     (lane perf2-trees, 2026-11-06). The resolved mode keeps its refusal."""
-    var b = _b()
     var fields = py_fields(model)
     var nk = trees_keys()
-    var raw = _field(fields, model, nk[].k_numeric_mode, "numeric_mode")
-    if raw is None:
-        raw = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
-    _check_learner_mode(raw)
     var learner = validated
-    var mode = String(py_call(py_call(raw.strip).lower))
-    answer_mode_word(mode, MODE_FAMILY_GBDT)
+    var mode = adapter_resolved_mode(model, context)
     var learner_fields = py_fields(learner)
     py_setitem(learner_fields, nk[].k_numeric_mode, PythonObject(mode))
     var table = gbdt_table(learner_fields, context)

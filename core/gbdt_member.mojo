@@ -13,14 +13,25 @@ the image's resident model (XG_RESIDENT_PREPARE once per fitted state, on
 its first predict, XG_RESIDENT_PREDICT per call) where the image holds one
 (XG_CAP_RESIDENT), else the per-call parse (XG_PREDICT / XG_PREDICT_MULTI)
 of a column-major X, as `GradientBoosting.predict` / `predict_proba`. No
-kernel is touched. One kind: 1, the booster (`GradientBoosting`'s own
-predict: raw scores).
+kernel is touched. Three kinds, one fitted form (the booster's model
+text):
+  0 `GradientBoostingClassifier` (binary Logloss; y int32 class codes 0 / 1
+    with `call.classes` 2; predict int32 codes and predict_proba float32
+    rows x 2 through the image's XG_BINARY transform of the margins, as the
+    adapter's `_binary_output`; decision float32 rows x 1, the raw margin;
+    score the unweighted accuracy, float32 count / rows as the adapter's
+    metric; MEMBER_CAN_CLASSIFIER),
+  1 `GradientBoosting` (the booster: its own predict returns raw scores),
+  2 `GradientBoostingRegressor` (RMSE; predict float32 rows x 1; no score:
+    the caller predicts and runs its own R^2).
+The adapters' NEW words are their inner learner's config (the learner the
+adapter's fit builds), so their fit is the learner's fit.
 
 Route slots: `route.entry` the gbdt entry; `route.mode` / `route.vendor`
 the image's key. `I.release(handle)` returns a resident model to the
 image's registry (under the image's registry lock).
 
-MEMBER_OP_NEW parameters (Float64 words): [0] kind (1), then the
+MEMBER_OP_NEW parameters (Float64 words): [0] kind (0, 1, 2), then the
 `GbdtConfig` words in `gbdt_config_words` order (bindings/gbdt_config_run.mojo:
 ints as the bit pattern of their Int64, booleans 0/1, strings as a length
 and one word per byte, lists as a length and their words).
@@ -60,7 +71,7 @@ from core.gbdt_entry_table import gbdt_vendor_word
 from gbdt.fit_request import GbdtFitArgs, gbdt_string_at
 from gbdt.fit_calls import (
     xg_row_major, xg_model_dim, xg_fit, xg_resident, xg_resident_prepare, xg_resident_predict, xg_predict,
-    xg_predict_multi, xg_sigmoid_pair,
+    xg_predict_multi, xg_sigmoid_pair, xg_binary,
 )
 from gbdt.trees_gbdt_run import gbdt_text_has_ctr
 from gbdt.trees_gbdt_fit_run import gbdt_bias_of
@@ -71,9 +82,11 @@ from core.host_predict_threads import host_predict_task_count_work, host_predict
 from core.member_abi import (
     MemberCall, MemberMatrix, MEMBER_F32, MEMBER_F64, MEMBER_I32,
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_PREDICT,
-    MEMBER_OP_PREDICT_PROBA, MEMBER_OP_OUTPUTS, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT,
+    MEMBER_OP_PREDICT_PROBA, MEMBER_OP_OUTPUTS, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_OP_DECISION,
+    MEMBER_OP_SCORE,
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA, MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT,
-    MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_HOME_DEVICE, MEMBER_GIL_FREE,
+    MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_HOME_DEVICE, MEMBER_GIL_FREE, MEMBER_CAN_DECISION, MEMBER_CAN_SCORE,
+    MEMBER_CAN_CLASSIFIER,
     MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
 )
@@ -84,6 +97,10 @@ from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 
 comptime _STORE_NAME: StaticString = "MojolearnGbdtMemberStoreV2"
 comptime _ESTIMATOR = "GradientBoosting"
+#: the member kinds (the classes' `_mojolearn_member` words)
+comptime _KIND_CLASSIFIER = 0
+comptime _KIND_BOOSTER = 1
+comptime _KIND_REGRESSOR = 2
 comptime _CHUNK = 256
 comptime _INDEX_SPAN = 16777216
 comptime _BLOCKS = 3
@@ -112,6 +129,7 @@ trait GbdtMemberImage:
 struct GbdtMemberSlot(Copyable, Movable, Defaultable):
     var generation: Int
     var live: Bool
+    var kind: Int
     var config: GbdtConfig
     var fitted: Bool
     var text: String
@@ -132,6 +150,7 @@ struct GbdtMemberSlot(Copyable, Movable, Defaultable):
     def __init__(out self):
         self.generation = 0
         self.live = False
+        self.kind = _KIND_BOOSTER
         self.config = GbdtConfig()
         self.fitted = False
         self.text = String("")
@@ -191,12 +210,32 @@ def _clear[I: GbdtMemberImage](slot: _SlotPtr):
     slot[].classes = 0
 
 
+def _name(kind: Int) -> String:
+    if kind == _KIND_CLASSIFIER:
+        return String("GradientBoostingClassifier")
+    if kind == _KIND_REGRESSOR:
+        return String("GradientBoostingRegressor")
+    return String(_ESTIMATOR)
+
+
+def _kind_word(word: Float64) raises -> Int:
+    if word != 0.0 and word != 1.0 and word != 2.0:
+        raise Error("member ABI: a Gbdt member's kind word is 0, 1 or 2")
+    return Int(word)
+
+
 def _mint(words: _F64P, count: Int) raises -> Int:
-    if count < 2 or words[0] != 1.0:
-        raise Error("member ABI: a Gbdt member takes its kind word (1) and its config words")
+    if count < 2:
+        raise Error("member ABI: a Gbdt member takes its kind word (0, 1, 2) and its config words")
+    var kind = _kind_word(words[0])
     var copied = List[Float64](length=count, fill=0.0)
     unsafe_memcpy(dest=copied.unsafe_ptr(), src=words, count=count)
     var config = gbdt_config_of_words(copied^, 1)
+    # The adapters fix their learner's loss (`_GBDTAdapter._loss`).
+    if kind == _KIND_CLASSIFIER and config.loss != "Logloss":
+        raise Error("member ABI: a GradientBoostingClassifier member fits loss='Logloss'")
+    if kind == _KIND_REGRESSOR and config.loss != "RMSE":
+        raise Error("member ABI: a GradientBoostingRegressor member fits loss='RMSE'")
     var store = SharedSlot[GbdtMemberStore, _STORE_NAME, 2].get_or_create_ptr()
     var lock = rebind[MutPointer[Int64, MutUntrackedOrigin]](store[].synchronization.unsafe_ptr())
     shared_slot_lock(lock)
@@ -214,6 +253,7 @@ def _mint(words: _F64P, count: Int) raises -> Int:
         var slot = _SlotPtr(unsafe_from_address=_slot_address(index))
         slot[].generation += 1
         slot[].live = True
+        slot[].kind = kind
         slot[].config = config^
         slot[].fitted = False
         slot[].resident = -1
@@ -364,6 +404,38 @@ def _code_classes(src: Int, rows: Int, loss: String) raises -> Int:
     return k
 
 
+def _binary_codes(src: Int, rows: Int, classes: Int) raises -> List[Float32]:
+    """GradientBoostingClassifier's targets: the caller's int32 codes of its
+    two classes as float32 0 / 1 (the adapter's `_codes_f32`), refused in the
+    adapter's words for one class or more than two; the cast split over the
+    host workers."""
+    if classes < 2:
+        raise Error("Classifier can't train when only one class is present.")
+    if classes > 2:
+        raise Error("Only binary classification is supported. The type of the target is multiclass.")
+    var out = List[Float32](length=max(rows, 1), fill=0.0)
+    var tasks = host_predict_task_count_work(rows, rows)
+    var chunk = host_predict_chunk(rows, tasks)
+    var bads = List[UInt8](length=max(tasks, 1), fill=0)
+    var source = _I32P(unsafe_from_address=src)
+    var target = _F32P(unsafe_from_address=Int(out.unsafe_ptr()))
+    var bad_p = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(bads.unsafe_ptr()))
+
+    def task(unit: Int) {imm source, imm target, imm bad_p, imm chunk, imm rows}:
+        for i in range(unit * chunk, min((unit + 1) * chunk, rows)):  # native data loop (one host task's rows)
+            var c = source[i]
+            if c < 0 or c > 1:
+                bad_p[unit] = 1
+                return
+            target[i] = Float32(c)
+
+    host_parallelize(task, tasks)
+    for t in range(len(bads)):  # small-loop(tasks): one flag per host task
+        if bads[t] != 0:
+            raise Error("ValueError: a GradientBoostingClassifier member reads the class codes 0 and 1")
+    return out^
+
+
 def _multi_output(loss: String) -> Bool:
     return loss == "MultiClass" or loss == "MultiClassOneVsAll"
 
@@ -384,14 +456,27 @@ def _fit[I: GbdtMemberImage](slot: _SlotPtr, call: _CallPtr) raises:
     var cols = call[].x.cols
     if rows == 0 or cols == 0:
         raise Error("mojolearn: fit requires at least one row and one feature")
-    _dense(call[].y, MEMBER_F32, "y")
+    var kind = slot[].kind
+    if kind == _KIND_CLASSIFIER:
+        _dense(call[].y, MEMBER_I32, "y (class codes)")
+    else:
+        _dense(call[].y, MEMBER_F32, "y")
     if call[].y.cols != 1:
         raise Error("TypeError: a Gbdt member reads one target column")
     if call[].y.rows != rows:
         raise Error("mojolearn: y has " + String(call[].y.rows) + " values for " + String(rows) + " rows")
     ref config = slot[].config
     var multi = _multi_output(config.loss)
-    if not trees_finite_f32(call[].y.data, rows):
+    # The classifier's codes become the learner's float32 targets (the
+    # adapter's `_codes_f32`); finite by construction.
+    var codes = List[Float32]()
+    var y_addr = call[].y.data
+    if kind == _KIND_CLASSIFIER:
+        codes = _binary_codes(call[].y.data, rows, call[].classes)
+        y_addr = Int(codes.unsafe_ptr())
+    elif not trees_finite_f32(y_addr, rows):
+        if kind == _KIND_REGRESSOR:
+            raise Error("y must be finite")
         raise Error("Input y contains NaN or infinity" + (" (the class labels)" if multi else "")
                     + " (GradientBoosting).")
     if config.nan_mode == "Forbidden" and not trees_finite_f32(call[].x.data, rows * cols):
@@ -402,7 +487,7 @@ def _fit[I: GbdtMemberImage](slot: _SlotPtr, call: _CallPtr) raises:
                         + "nan_mode='Min' or 'Max', or clean the column.")
     var n_classes = 0
     if multi:
-        n_classes = _code_classes(call[].y.data, rows, config.loss)
+        n_classes = _code_classes(y_addr, rows, config.loss)
         if len(config.class_weights) != 0 and len(config.class_weights) != n_classes:
             raise Error("mojolearn: class_weights needs " + String(n_classes) + " entries for " + config.loss)
     var n_weights = 0
@@ -429,10 +514,11 @@ def _fit[I: GbdtMemberImage](slot: _SlotPtr, call: _CallPtr) raises:
     var options = gbdt_fit_options(config, rows)
     var flags = List[UInt32](length=1, fill=0)
     var rate = words.rate
-    var args = GbdtFitArgs(x_addr, call[].y.data, w_addr, Int(flags.unsafe_ptr()), x_addr, call[].y.data,
+    var args = GbdtFitArgs(x_addr, y_addr, w_addr, Int(flags.unsafe_ptr()), x_addr, y_addr,
                            words.ints^, words.floats^, words.bad^, options.strs^)
     var outcome = xg_fit(entry, row_major, args)
     _ = len(scratch)  # the column-major copy lives until the fit returned
+    _ = len(codes)  # the classifier's float32 targets too
     _ = len(flags)
     if gbdt_text_has_ctr(outcome.text):
         raise Error("RuntimeError: mojolearn: a Gbdt member fit returned a CTR model (no cat_features were given)")
@@ -500,8 +586,111 @@ def _apply(slot: _SlotPtr, call: _CallPtr, mode: Int, dst: Int) raises -> Int:
     return width
 
 
+def _binary_out(slot: _SlotPtr, call: _CallPtr, probabilities: Bool, dst: Int) raises:
+    """GradientBoostingClassifier's `_binary_output` into `dst` (int32 codes,
+    rows, or float32 `[1 - p, p]`, rows x 2): the learner's raw margins (the
+    route `_apply` takes), the adapter's finiteness refusal, then the image's
+    XG_BINARY transform. X is checked by the caller."""
+    var rows = call[].x.rows
+    if rows == 0:
+        return
+    var raw = List[Float32](length=rows, fill=0.0)
+    var width = _apply(slot, call, _PREDICT_RAW, Int(raw.unsafe_ptr()))
+    if width != 1:
+        raise Error("RuntimeError: mojolearn: a binary GBDT model wrote width " + String(width))
+    if not trees_finite_f32(Int(raw.unsafe_ptr()), rows):
+        raise Error("Classifier margins must be finite scalar Float32 values")
+    var entry = entry_ref_gil_free(call[].route.entry)
+    var wrote = xg_binary(entry, probabilities, Int(raw.unsafe_ptr()), dst, rows)
+    _ = len(raw)
+    if wrote != (2 * rows if probabilities else rows):
+        raise Error("RuntimeError: GBDT binary output returned an unexpected row count")
+
+
+def _classify(slot: _SlotPtr, call: _CallPtr, probabilities: Bool) raises:
+    """GradientBoostingClassifier's `predict` (int32 codes, rows x 1) and
+    `predict_proba` (float32 rows x 2)."""
+    _require_fitted(slot, String("predict_proba()") if probabilities else String("predict()"))
+    _x(slot, call)
+    if probabilities:
+        _dense(call[].dst, MEMBER_F32, "the predict_proba output")
+        if call[].dst.rows != call[].x.rows or call[].dst.cols != 2:
+            raise Error("TypeError: a GradientBoostingClassifier member predict_proba writes rows x 2 float32")
+    else:
+        _dense(call[].dst, MEMBER_I32, "the predict output (class codes)")
+        if call[].dst.rows != call[].x.rows or call[].dst.cols != 1:
+            raise Error("TypeError: a GradientBoostingClassifier member predict writes rows x 1 int32 codes")
+    _binary_out(slot, call, probabilities, call[].dst.data)
+
+
+def _decision(slot: _SlotPtr, call: _CallPtr) raises:
+    """GradientBoostingClassifier's `decision_function`: the learner's raw
+    float32 margin, rows x 1 (one column: a binary decision)."""
+    if slot[].kind != _KIND_CLASSIFIER:
+        member_unsupported(_name(slot[].kind), MEMBER_OP_DECISION)
+    _require_fitted(slot, "decision_function()")
+    _x(slot, call)
+    _dense(call[].dst, MEMBER_F32, "the decision output")
+    if call[].dst.rows != call[].x.rows or call[].dst.cols != 1:
+        raise Error("TypeError: a GradientBoostingClassifier member decision_function writes rows x 1 float32")
+    if call[].x.rows == 0:
+        return
+    var width = _apply(slot, call, _PREDICT_RAW, call[].dst.data)
+    if width != 1:
+        raise Error("RuntimeError: mojolearn: a binary GBDT model wrote width " + String(width))
+
+
+def _score(slot: _SlotPtr, call: _CallPtr) raises:
+    """GradientBoostingClassifier's `score` without weights: the accuracy of
+    the predicted codes against the caller's int32 codes, float32 count /
+    rows widened (the adapter's `accuracy_score`; integer counts merged
+    exactly over the host workers). A weighted score is the caller's metric
+    (no MEMBER_CAN_WEIGHTED_SCORE)."""
+    var name = _name(slot[].kind)
+    if slot[].kind != _KIND_CLASSIFIER:
+        member_unsupported(name, MEMBER_OP_SCORE)
+    if call[].weights.rows > 0:
+        raise Error("NotImplementedError: mojolearn: a weighted score of a " + name
+                    + " member is not published; the caller predicts and runs its own weighted metric")
+    _require_fitted(slot, "score()")
+    _x(slot, call)
+    _dense(call[].y, MEMBER_I32, "y (class codes)")
+    var rows = call[].x.rows
+    if call[].y.cols != 1 or call[].y.rows != rows:
+        raise Error("mojolearn metrics: y_true has " + String(call[].y.rows * call[].y.cols) + " entries and "
+                    + "y_pred has " + String(rows) + "; they must be the same length")
+    if rows <= 0:
+        raise Error("accuracy_score: n must be positive, got " + String(rows) + " (0 / 0 is refused by name)")
+    var codes = List[Int32](length=rows, fill=0)
+    _binary_out(slot, call, False, Int(codes.unsafe_ptr()))
+    var tasks = host_predict_task_count_work(rows, rows)
+    var chunk = host_predict_chunk(rows, tasks)
+    var partials = List[Int](length=max(tasks, 1), fill=0)
+    var truth = _I32P(unsafe_from_address=call[].y.data)
+    var guess = _I32P(unsafe_from_address=Int(codes.unsafe_ptr()))
+    var part_p = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=Int(partials.unsafe_ptr()))
+
+    def count(unit: Int) {imm truth, imm guess, imm part_p, imm chunk, imm rows}:
+        var hits = 0
+        for i in range(unit * chunk, min((unit + 1) * chunk, rows)):  # native data loop (one host task's rows)
+            if truth[i] == guess[i]:
+                hits += 1
+        part_p[unit] = hits
+
+    host_parallelize(count, tasks)
+    var hits = 0
+    for t in range(len(partials)):  # small-loop(tasks): one count per host task
+        hits += partials[t]
+    _ = len(codes)
+    call[].value = Float64(Float32(hits) / Float32(rows))
+
+
 def _predict(slot: _SlotPtr, call: _CallPtr) raises:
-    """`GradientBoosting.predict`: raw float32 scores, rows x approx_dim."""
+    """`GradientBoosting.predict`: raw float32 scores, rows x approx_dim
+    (the regressor's: rows x 1); the classifier's: `_classify`."""
+    if slot[].kind == _KIND_CLASSIFIER:
+        _classify(slot, call, False)
+        return
     _require_fitted(slot, "predict()")
     _x(slot, call)
     _dense(call[].dst, MEMBER_F32, "the predict output")
@@ -527,7 +716,13 @@ def _widen(src: Int, dst: Int, count: Int):
 
 
 def _proba(slot: _SlotPtr, call: _CallPtr) raises:
-    """`GradientBoosting.predict_proba`: the same routes and dtypes."""
+    """`GradientBoosting.predict_proba`: the same routes and dtypes (the
+    classifier's: `_classify`; the regressor has none)."""
+    if slot[].kind == _KIND_CLASSIFIER:
+        _classify(slot, call, True)
+        return
+    if slot[].kind == _KIND_REGRESSOR:
+        member_unsupported(_name(slot[].kind), MEMBER_OP_PREDICT_PROBA)
     ref loss = slot[].config.loss
     var rows = call[].x.rows
     if _multi_output(loss):
@@ -648,21 +843,37 @@ def _import[I: GbdtMemberImage](slot: _SlotPtr, call: _CallPtr) raises:
     slot[].ordered = slot[].x_scalars[8] != 0.0
     if slot[].features < 1 or slot[].dim < 1:
         raise Error("member ABI: a fitted Gbdt state needs its features and model dimension")
+    if slot[].kind != _KIND_BOOSTER and slot[].dim != 1:
+        raise Error("member ABI: a " + _name(slot[].kind) + " state has one model dimension")
     if gbdt_text_has_ctr(slot[].text):
         raise Error("member ABI: a Gbdt member does not hold a CTR model (cat_features fits keep their doors)")
     slot[].fitted = True
 
 
-def _capabilities(loss: String) -> Int:
+def _capabilities(kind: Int, loss: String) -> Int:
     """No `MEMBER_CAN_TEST_ROWS`: the fit tests y here and X only for
     nan_mode='Forbidden' (NaN; infinities reach the kernel), and predict
-    does not test X. No MEMBER_BORROWS_FIT: the state owns its text."""
+    does not test X (the classifier tests its margins, not X). No
+    MEMBER_BORROWS_FIT: the state owns its text (the classifier's float32
+    targets are freed when its fit returns). No MEMBER_CAN_NOTICES: the
+    fits raise no warnings (the adapters' doors raise none either)."""
     # MEMBER_GIL_FREE (THE GIL RULE): every operation of both kinds is traced
     # (fx-gil-RESULT.md, "gbdt"): the route entry is marked `entry_ref_gil_free`
     # at every operation, the image's operations never touch the GIL, and the
     # store (SharedSlot) and the resident registry have their own lock words.
+    # The adapter kinds (0, 2) reach nothing the booster's trace did not:
+    # the same entry operations (XG_FIT, XG_CAPS, XG_MODEL_DIM, the predicts
+    # and the resident prepare / predict) plus XG_BINARY, an operation of the
+    # same traced entry (`gbdt_entry_dispatch` runs it bare under the bit;
+    # `gbdt_binary_native` touches no CPython; its device context is
+    # `process_ctx`, own lock, as XG_SIGMOID_PAIR's), the same store and the
+    # same resident registry; their own work is host loops over plain words.
     var mask = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
                 | MEMBER_CAN_SAMPLE_WEIGHT | MEMBER_GIL_FREE)
+    if kind == _KIND_CLASSIFIER:
+        return mask | MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_DECISION | MEMBER_CAN_SCORE | MEMBER_CAN_CLASSIFIER
+    if kind == _KIND_REGRESSOR:
+        return mask
     if _multi_output(loss) or _binary(loss):
         mask |= MEMBER_CAN_PREDICT_PROBA
     return mask
@@ -686,9 +897,11 @@ def _member[I: GbdtMemberImage](operation: Int, address: Int) raises -> Int:
     if operation == MEMBER_OP_CAPABILITIES:
         if call[].state == 0:
             if call[].params and call[].param_count >= 2:
-                return _capabilities(_loss_of_words(call))
-            return _capabilities(String("MultiClass"))
-        return _capabilities(_SlotPtr(unsafe_from_address=_lookup(call[].state, False))[].config.loss)
+                return _capabilities(_kind_word(_F64P(unsafe_from_address=call[].params)[0]), _loss_of_words(call))
+            # The family's union: the booster's widest kind and the classifier.
+            return _capabilities(_KIND_BOOSTER, String("MultiClass")) | _capabilities(_KIND_CLASSIFIER, String("Logloss"))
+        var asked = _SlotPtr(unsafe_from_address=_lookup(call[].state, False))
+        return _capabilities(asked[].kind, asked[].config.loss)
     if operation == MEMBER_OP_NEW:
         if not call[].params:
             raise Error("member ABI: a Gbdt member needs its parameter words")
@@ -705,16 +918,41 @@ def _member[I: GbdtMemberImage](operation: Int, address: Int) raises -> Int:
         # a one-dimensional loss predicts one column, a binary proba two; the
         # width of a multi-class model is chosen by the fit (refused).
         var loss: String
+        var kind: Int
         var dim = 0
         var classes = 0
         if call[].state != 0:
             var known = _SlotPtr(unsafe_from_address=_lookup(call[].state, False))
             loss = known[].config.loss
+            kind = known[].kind
             if known[].fitted:
                 dim = known[].dim
                 classes = known[].classes
         else:
             loss = _loss_of_words(call)
+            kind = _kind_word(_F64P(unsafe_from_address=call[].params)[0])
+        if kind == _KIND_CLASSIFIER:
+            # Two classes, one model dimension, before and after a fit.
+            if call[].flags == MEMBER_OP_PREDICT:
+                call[].out_cols = 1
+                call[].out_dtype = MEMBER_I32
+            elif call[].flags == MEMBER_OP_PREDICT_PROBA:
+                call[].out_cols = 2
+                call[].out_dtype = MEMBER_F32
+            elif call[].flags == MEMBER_OP_DECISION:
+                call[].out_cols = 1
+                call[].out_dtype = MEMBER_F32
+            else:
+                member_unsupported(_name(kind), call[].flags)
+            call[].classes = 2
+            return 0
+        if kind == _KIND_REGRESSOR:
+            if call[].flags != MEMBER_OP_PREDICT:
+                member_unsupported(_name(kind), call[].flags)
+            call[].out_cols = 1
+            call[].out_dtype = MEMBER_F32
+            call[].classes = 0
+            return 0
         if dim == 0:
             if _multi_output(loss):
                 raise Error("member ABI: the output width of a " + loss + " Gbdt member is chosen by its fit")
@@ -746,14 +984,19 @@ def _member[I: GbdtMemberImage](operation: Int, address: Int) raises -> Int:
         _export(slot, call)
     elif operation == MEMBER_OP_IMPORT:
         _import[I](slot, call)
+    elif operation == MEMBER_OP_DECISION:
+        _decision(slot, call)
+    elif operation == MEMBER_OP_SCORE:
+        _score(slot, call)
     else:
-        member_unsupported(_ESTIMATOR, operation)
+        member_unsupported(_name(slot[].kind), operation)
     return 0
 
 
 def gbdt_member_v2[I: GbdtMemberImage](operation: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
     result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
-    """The member entry of GradientBoosting (schema `MEMBER_ABI`)."""
+    """The member entry of GradientBoosting and its two adapters (schema
+    `MEMBER_ABI`)."""
     try:
         var word = _member[I](operation, member_call_from_spans(operation, aa, na, np, nf))
         if result:

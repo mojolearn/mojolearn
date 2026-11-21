@@ -2,12 +2,18 @@
 """The member boundary of the Gbdt family (16): UNPACK / PACK of
 core/gbdt_member.mojo, called by `bindings/member_boundary_door.mojo`.
 
-Published class: `GradientBoosting` (kind 1, the booster: its own predict
-returns raw scores). Not published (no mark, their own doors serve them):
-`OrderedRMSE` (its fit is the text-only XG_ORDERED_FIT, not the typed fit
-request) and the adapters `GradientBoostingClassifier` /
-`GradientBoostingRegressor` (their fit encodes labels and builds an inner
-`_learner_`; their PACK is not written yet).
+Published classes: `GradientBoostingClassifier` (kind 0),
+`GradientBoosting` (kind 1, the booster: its own predict returns raw scores)
+and `GradientBoostingRegressor` (kind 2). The adapters (kinds 0 and 2) are
+their inner learner: the admission builds the learner their fit builds
+(`adapter_member_learner`, a new object; the adapter is only read) and
+takes ITS config, table and route, so the member fits exactly the learner's
+request; the pack writes one learner (`_learner_`, packed from the member
+state) and the adapter's copies of its attributes, as the adapter's fit
+door writes them. Not published: `OrderedRMSE` (no mark; its own door):
+its fit is a second algorithm, not a config word (XG_ORDERED_FIT, five
+settings, an ordered RMSE booster of its own), and it needs a per-fit
+`permutation` argument that no member call carries.
 
   * `gbdt_member_admit` (UNPACK, once per member): the fit's own option
     checks (`gbdt_check_option_tables`) and the typed config
@@ -31,6 +37,16 @@ request) and the adapters `GradientBoostingClassifier` /
     cat_features) is refused by the member's IMPORT; the caller then keeps
     the doors.
 
+  * The adapters (kinds 0, 2): admission as above over the learner, plus
+    the adapter's own refusals (`_new_learner`: numeric_mode, the
+    regressor's class_weights; the image's compiled tier against the mode).
+    False for the classifier in `fast` (its door takes the learner's class
+    kernels there). PACK: `_learner_`, `numeric_mode_`, `n_features_in_`,
+    `model_`, the five learner attributes; the classifier's `classes_`
+    (the caller's labels, normalized as the adapter's fit normalizes them),
+    `n_classes_` 2 and `_label_kind_`; `_mojolearn_fitted`. The caller's
+    PACK writes `feature_names_in_`. STATE: from the adapter's `_learner_`.
+
 SERIAL BY NATURE: one member's admission or publication (a few record reads
 and three block copies); a caller runs its members in parallel.
 """
@@ -45,7 +61,12 @@ from bindings.trees_route_boundary_door import trees_route_context
 from bindings.trees_public_gbdt_door import gbdt_table, gbdt_entry_of, _field
 from bindings.trees_public_gbdt_fit_door import (
     gbdt_config, gbdt_check_option_tables, _tables, _truthy, _in, _f64_curve,
+    adapter_member_learner, adapter_label_kind,
 )
+from bindings.native_typed_context_pack import native_typed_context
+from bindings.classifier_public_lifecycle_door import _public_labels
+from bindings.member_owner_unpack import member_labels_take
+from gbdt.fit_calls import xg_numeric_mode
 from bindings.gbdt_config_run import gbdt_config_words
 from gbdt.fit_request import gbdt_string_at
 from core.entry_table import entry_ref_mode, entry_ref_vendor
@@ -57,13 +78,40 @@ from core.member_abi import (
 )
 
 
+comptime _ADAPTER_COPIED = 5
+
+
+def _adapter_name(kind: Int) -> String:
+    return String("GradientBoostingClassifier") if kind == 0 else String("GradientBoostingRegressor")
+
+
 def gbdt_member_admit(model: PythonObject, fields: PythonObject, kind: Int, context: PythonObject,
     b: PythonObject, mut owner: MemberOwner) raises -> Bool:
     """UNPACK: fill `owner.plan.route`, `owner.plan.params` and `owner.pins`
     from the unfitted estimator (see the module docstring)."""
-    if kind != 1 or String(py=py_type(model).__name__) != "GradientBoosting":
+    var name = String(py=py_type(model).__name__)
+    if kind == 1:
+        if name != "GradientBoosting":
+            return False
+        return _learner_admit(model, 1.0, trees_route_context(model, context), owner)
+    if (kind != 0 and kind != 2) or name != _adapter_name(kind):
         return False
-    var run = trees_route_context(model, context)
+    # The adapter's typed run context, as its lifecycle door hands its fit.
+    var native = native_typed_context(trees_route_context(model, context), False, True)
+    var learner = adapter_member_learner(model, native)
+    var nk = trees_keys()
+    var mode = String(py=py_item(py_fields(learner), nk[].k_numeric_mode))
+    if kind == 0 and mode == "fast":
+        return False
+    var code = xg_numeric_mode(gbdt_entry_of(gbdt_table(py_fields(learner), native)))
+    if code != (0 if mode == "fast" else 1):
+        raise Error("RuntimeError: GBDT adapter native numeric mode disagrees with requested mode")
+    return _learner_admit(learner, Float64(kind), native, owner)
+
+
+def _learner_admit(model: PythonObject, kind: Float64, run: PythonObject, mut owner: MemberOwner) raises -> Bool:
+    """The booster's admission over `model` (GradientBoosting itself, or an
+    adapter's learner) in its run context `run`; `kind` is NEW's word 0."""
     var own = py_fields(model)
     var nk = trees_keys()
     if (_truthy(_field(own, model, nk[].k_cat_features, "cat_features"))
@@ -85,7 +133,7 @@ def gbdt_member_admit(model: PythonObject, fields: PythonObject, kind: Int, cont
     route.vendor = vendor
     route.entry = entry
     owner.plan.route = route
-    var words: List[Float64] = [1.0]
+    var words: List[Float64] = [kind]
     words.extend(gbdt_config_words(config))
     owner.plan.params = words^
     owner.pins = Python.tuple(table, run)
@@ -96,6 +144,43 @@ def gbdt_member_pack(model: PythonObject, fields: PythonObject, context: PythonO
     plan: MemberPlan, state: Int) raises:
     """PACK: write the fitted attributes of state `state` into `model`, as
     the fit door's PACK writes them."""
+    if plan.kind == 0 or plan.kind == 2:
+        _adapter_pack(model, context, b, plan, state)
+        return
+    _learner_pack(model, context, plan, state)
+
+
+def _adapter_pack(model: PythonObject, context: PythonObject, b: PythonObject, plan: MemberPlan, state: Int) raises:
+    """PACK of an adapter: ONE learner packed from the member state, then the
+    adapter's fields as `_fit_native` and `adapter_classifier_fit` write them."""
+    var own = py_fields(model)
+    var nk = trees_keys()
+    var labels = PythonObject(None)
+    if plan.kind == 0:
+        labels = member_labels_take(own, b)
+        if labels is None or len(labels) != 2:
+            raise Error("member ABI: a GradientBoostingClassifier member's pack needs its two class labels")
+    var native = native_typed_context(trees_route_context(model, context), False, True)
+    var learner = adapter_member_learner(model, native)
+    _learner_pack(learner, context, plan, state)
+    var learner_fields = py_fields(learner)
+    py_setitem(own, nk[].k__learner_, learner)
+    py_setitem(own, nk[].k_numeric_mode_, py_item(learner_fields, nk[].k_numeric_mode))
+    py_setitem(own, nk[].k_n_features_in_, py_item(learner_fields, nk[].k_n_features_in_))
+    py_setitem(own, nk[].k_model_, py_item(learner_fields, nk[].k_model_))
+    var copied = Python.tuple("loss_curve_", "test_loss_curve_", "best_iteration_", "stopped_early_", "learning_rate_")
+    for i in range(_ADAPTER_COPIED):  # driver-loop: over fixed call structure, small-loop(copied): the five learner attributes
+        py_setitem(own, copied[i], learner_fields[copied[i]])
+    if plan.kind == 0:
+        var kind = adapter_label_kind(labels, "y", native)
+        py_setitem(own, nk[].k_classes_, _public_labels(kind[1], native))
+        py_setitem(own, nk[].k_n_classes_, PythonObject(2))
+        py_setitem(own, nk[].k__label_kind_, kind[0])
+    py_setitem(own, PythonObject("_mojolearn_fitted"), PythonObject(True))
+
+
+def _learner_pack(model: PythonObject, context: PythonObject, plan: MemberPlan, state: Int) raises:
+    """The booster's fitted attributes of state `state` into `model`."""
     var run = trees_route_context(model, context)
     var nk = trees_keys()
     var own = py_fields(model)
@@ -140,10 +225,18 @@ def gbdt_member_pack(model: PythonObject, fields: PythonObject, context: PythonO
 
 def gbdt_member_state(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
     plan: MemberPlan) raises -> Int:
-    """UNPACK: a new member state holding the fitted attributes of `model`.
-    The caller frees it (`member_free`)."""
+    """UNPACK: a new member state holding the fitted attributes of `model`
+    (an adapter's: of its `_learner_`). The caller frees it (`member_free`)."""
     var nk = trees_keys()
     var own = py_fields(model)
+    if plan.kind == 0 or plan.kind == 2:
+        var learner = py_get(own, nk[].k__learner_)
+        if learner is None:
+            raise Error("NotFittedError: this member is not fitted yet")
+        var mode = py_get(own, nk[].k_numeric_mode_)
+        if plan.kind == 0 and mode is not None and Bool(py=mode == PythonObject("fast")):
+            raise Error("NotImplementedError: mojolearn: a GradientBoostingClassifier fitted in fast mode keeps its own doors")
+        own = py_fields(learner)
     var source = py_get(own, nk[].k_model_)
     if source is None:
         raise Error("NotFittedError: this member is not fitted yet")
