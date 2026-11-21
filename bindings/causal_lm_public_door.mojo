@@ -1820,9 +1820,40 @@ def _engine_admission(mut mods: NativeModules, words: CausalModelWords, held: Py
         comptime if TRANSFORMER_LEGACY_SETUP:
             raise Error("CausalLM: native generation engine requires the supported session setup")
         var call = _owner_call_layers(mods, held, model, False)
+        var model_owner = held.downcast_value_ptr[CausalModelOwner]()
         var windowed_result5 = GenerationEngineAdmission(
-            held.downcast_value_ptr[CausalModelOwner]()[].snapshot.value(), held, call^,
+            model_owner[].snapshot.value(), held, call^,
             words.limited, words.max_positions, state, batch, length)
+        # The state half (lane dw-causal, continuation 4): layer by layer, in
+        # layer order, on the state owner's words where they are current
+        # (`causal_state_layer_unpack`: one pointer compare per buffer); the
+        # object admission for any other layer. The admission holds the
+        # owner's handle (the buffers' pins) for the whole call.
+        var state_held = causal_state_owner(mods, state)
+        windowed_result5.state_owner = state_held
+        # The layer kind word of the model owner (the engine admission never
+        # resolves the snapshot's layer route).
+        var kind = words.kind
+        var unowned = Optional[CausalLayerStateWords]()
+        for i in range(windowed_result5.layer_count()):  # driver-loop: over the model's layers, once per engine forward
+            var st = windowed_result5.layer_states[i]
+            var st_fields = PythonObject(None)
+            try:
+                st_fields = causal_state_layer_unpack(mods, state_held, i, st, kind)
+            except:
+                # The object admission meets the same problem at this layer's
+                # position and defers it there.
+                st_fields = PythonObject(None)
+            if st_fields is not None:
+                var state_owner = state_held.downcast_value_ptr[CausalStateOwner]()
+                windowed_result5.admit_layer(model_owner[].snapshot.value(), i, st, st_fields,
+                    state_owner[].layers[state_owner[].slots[i]], True)
+            else:
+                if not unowned:
+                    unowned = Optional(CausalLayerStateWords())
+                windowed_result5.admit_layer(model_owner[].snapshot.value(), i, st, st_fields,
+                    unowned.value(), False)
+        _ = state_held
         mods.released()
         return windowed_result5^
     except problem:
