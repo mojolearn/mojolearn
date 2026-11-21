@@ -41,8 +41,10 @@ def connect():
     from types import BuiltinFunctionType
 
     if _ENTRY is None:
+        # `_mojolearn_metrics`: UMAP's image, taken from the estimator's
+        # binding route (bindings/mani_umap_native_door.mojo).
         _native_family_bridge.connect_bindings(
-            "_mojolearn_x_decomp", "_mojolearn_x_ann", "_mojolearn_estimators")
+            "_mojolearn_x_decomp", "_mojolearn_x_ann", "_mojolearn_estimators", "_mojolearn_metrics")
         try:
             # Replaces the same orchestration inside tokenizer._binding().
             # Numerical bindings and their resident stores keep their owners.
