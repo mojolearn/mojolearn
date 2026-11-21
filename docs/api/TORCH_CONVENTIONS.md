@@ -39,8 +39,8 @@ The neural models run float32 only, in both modes; `identical` defines its bits 
 |---|---|---|
 | `state_dict()` | new | `{name: array}`, the block's weights under the constructor's names (Hugging Face names in torch's `[out, in]` layout for `TransformerBlock`); a new dict over the same arrays, as torch returns references |
 | `load_state_dict(sd)` | new | rebuilds the block from `sd` through the constructor (the `set_params(weights=sd)` path): every key and shape checked before the block changes. Returns the block, not torch's `(missing_keys, unexpected_keys)`: an incomplete or extra key set is refused, which is torch's `strict=True` |
-| `parameters()` | new | list of the weight arrays, in `state_dict` order |
-| `named_parameters()` | new | list of `(name, array)` pairs, in `state_dict` order |
+| `parameters()` | new | iterator of the weight arrays, in `state_dict` order |
+| `named_parameters()` | new | iterator of `(name, array)` pairs, in `state_dict` order |
 | `to(device=None, dtype=None)` | new | `"gpu"` or `"cpu"`: rebuilds the block on that route (as `set_params(device=...)`); dtype: float32 only. Returns the block, like torch's in-place `Module.to` |
 | `cuda()`, `cpu()` | no | `to("gpu")` / `to("cpu")` say the same; kept to one door |
 | `train()`, `eval()`, `training` | no | the blocks have no dropout or batch statistics: forward is the same in both modes, so the flag would change nothing; `backward` is explicit |
@@ -52,10 +52,10 @@ The neural models run float32 only, in both modes; `identical` defines its bits 
 | PyTorch | Mojolearn | Note |
 |---|---|---|
 | `load_state_dict(sd)` | yes | existing: `nn.Sequential` names (`"<i>.weight"`, `"<i>.bias"`), torch layouts, float16/bfloat16/float64 converted to float32 |
-| `state_dict()` | owed | needs a native PACK entry in `bindings/sequential_*` that returns `params_` as `nn.Sequential`-named float32 arrays in torch layout (a linear weight transposed from our `(in, out)` to torch's `(out, in)` natively); `params_` holds the flat vector today |
-| `parameters()`, `named_parameters()` | owed | the same entry (views of its arrays) |
+| `state_dict()` | new (round 2) | `{"<i>.weight"/"<i>.bias": array}` in torch's layouts, a copy: one native transfer (`MODEL_EXPORT_PARAMS`, `autograd/weight_import.mojo` `model_export_params`: params_ uploaded once, each linear weight cast through its transposed view, one download); loads back with `load_state_dict` and into `torch.nn.Sequential` |
+| `parameters()`, `named_parameters()` | new (round 2) | iterators over the same export (copies: params_ is one flat vector, not per-tensor arrays) |
 | `train()`, `eval()` | no | `fit` always trains (dropout on) and `predict` never does: the mode is the method, so a flag would have no effect |
-| `to(device)` | owed | `device=` is a constructor argument today; a rebuild entry on the sequential door is needed |
+| `to(device=None, dtype=None)` | new (round 2) | `"gpu"`/`"cpu"`: the route is forgotten and resolved on the new device at the next call (params_ is host memory on every route); dtype float32 only; returns the model |
 
 ### CNN layers (`Conv2d`, `BatchNorm2d`, `Dropout2d`, `BasicBlock`, ...)
 
@@ -77,15 +77,15 @@ The neural models run float32 only, in both modes; `identical` defines its bits 
 | PyTorch | Mojolearn | Note |
 |---|---|---|
 | `state_dict()`, `load_state_dict()` | yes | existing: the full resumable snapshot (weights, optimizer moments, step, schedule), like torch's model + optimizer state together. The byte trainer state is lane byte-state's |
-| `parameters()` (`SambaStack`, `SambaInference`) | differs | existing, returns `{name: array}`; torch returns an iterator of tensors. Changing it is a behaviour change for Andrew to decide (listed in the lane result) |
+| `parameters()`, `named_parameters()` (`SambaStack`, `SambaInference`) | yes (round 2) | iterators of arrays / `(name, array)` pairs (orchestrator decision, Andrew told; was `{name: array}`: use `dict(model.named_parameters())`) |
 | `parameters()` (`SmallMLPTrainer`, byte trainer) | differs | named `weights_` / `parameters_` (fitted-attribute style) |
 
 ### `CausalLM`
 
 | PyTorch | Mojolearn | Note |
 |---|---|---|
-| `parameters()` | differs | existing `causal_lm_parameters`, returns `{name: array}` by checkpoint name |
-| `state_dict()` / `load_state_dict()` / `named_parameters()` | owed | doors are lane causal-doors'; no existing entry returns the named weights as pairs or rebuilds from a dict |
+| `parameters()`, `named_parameters()` | yes (round 2) | iterators over the existing `causal_lm_parameters` entry (unchanged; `bindings/torch_parameters_pack.mojo` shapes its result); was `{name: array}`: use `dict(model.named_parameters())` |
+| `state_dict()` / `load_state_dict()` | owed | doors are lane causal-doors'; no existing entry rebuilds from a dict |
 | `eval()` | no | inference only: there is no training mode |
 
 ### Optimizers: `SGD`, `Adam`, `AdamW`

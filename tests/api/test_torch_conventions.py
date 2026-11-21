@@ -63,7 +63,8 @@ def test_state_dict_is_the_weights_by_name_over_the_same_arrays(tmp_path, family
     assert list(sd) == list(weights)
     assert all(sd[k] is weights[k] for k in weights)
     assert [p is weights[k] for p, k in zip(block.parameters(), weights)] == [True] * len(weights)
-    named = block.named_parameters()
+    assert iter(block.parameters()) is not None and not isinstance(block.parameters(), list)
+    named = list(block.named_parameters())
     assert [n for n, _ in named] == list(weights)
     assert all(a is weights[n] for n, a in named)
 
@@ -150,3 +151,64 @@ def test_blocks_built_by_a_whole_model_say_so(tmp_path):
     model = CausalLM.load(tmp_path, device="cpu", numeric_profile="fp32_v1")
     with pytest.raises(RuntimeError, match="whole model"):
         model.blocks[0].state_dict()
+
+
+# ---- round 2: Sequential, parameters() as torch's iterators --------------------
+
+def _sequential_state():
+    rng = np.random.default_rng(0)
+    return {"0.weight": rng.standard_normal((8, 4), dtype=np.float32), "0.bias": rng.standard_normal(8, dtype=np.float32),
+            "2.weight": rng.standard_normal((3, 8), dtype=np.float32), "2.bias": np.zeros(3, dtype=np.float32)}
+
+
+def test_sequential_state_dict_round_trips_in_torch_layout():
+    state = _sequential_state()
+    model = mojolearn.Sequential().linear(8).relu().linear(3).load_state_dict(state)
+    sd = model.state_dict()
+    assert list(sd) == ["0.weight", "0.bias", "2.weight", "2.bias"]
+    for name, value in state.items():
+        assert sd[name].shape == value.shape and sd[name].dtype == np.float32
+        assert sd[name].tobytes() == value.tobytes()
+    again = mojolearn.Sequential().linear(8).relu().linear(3).load_state_dict(sd)
+    assert np.asarray(again.params_).tobytes() == np.asarray(model.params_).tobytes()
+    assert [a.shape for a in model.parameters()] == [v.shape for v in state.values()]
+    assert [n for n, _ in model.named_parameters()] == list(state)
+
+
+def test_sequential_state_dict_loads_into_torch():
+    torch = pytest.importorskip("torch")
+    model = mojolearn.Sequential().linear(8).relu().linear(3).load_state_dict(_sequential_state())
+    net = torch.nn.Sequential(torch.nn.Linear(4, 8), torch.nn.ReLU(), torch.nn.Linear(8, 3))
+    net.load_state_dict({k: torch.from_numpy(np.array(v)) for k, v in model.state_dict().items()})
+    X = np.random.default_rng(1).random((5, 4), dtype=np.float32)
+    np.testing.assert_allclose(net(torch.from_numpy(X)).detach().numpy(), np.asarray(model.predict(X)), rtol=1e-5, atol=1e-6)
+
+
+def test_sequential_state_dict_needs_parameters():
+    with pytest.raises(ValueError, match="no parameters yet"):
+        mojolearn.Sequential().linear(2).state_dict()
+
+
+def test_sequential_to_takes_gpu_cpu_and_float32_only():
+    model = mojolearn.Sequential().linear(8).relu().linear(3).load_state_dict(_sequential_state())
+    assert model.to("cpu") is model and model.vendor_used() == "cpu"
+    assert model.to(dtype="float32") is model
+    with pytest.raises(ValueError, match="float32 only"):
+        model.to(dtype="float64")
+    with pytest.raises(ValueError, match="device must be 'gpu', 'cpu' or None"):
+        model.to("cuda")
+    X = np.random.default_rng(1).random((5, 4), dtype=np.float32)
+    on_cpu = np.asarray(model.predict(X)).tobytes()
+    if HAS_GPU:
+        assert model.to("gpu").vendor_used() == mojolearn.vendor()
+        assert np.asarray(model.predict(X)).tobytes() == on_cpu
+
+
+def test_causal_lm_parameters_are_torch_iterators(tmp_path):
+    config, tensors = family_fixture("llama", False)
+    _write_checkpoint(str(tmp_path), config, tensors)
+    model = CausalLM.load(tmp_path, device="cpu", numeric_profile="fp32_v1")
+    named = dict(model.named_parameters())
+    assert "lm_head.weight" in named
+    arrays = list(model.parameters())
+    assert len(arrays) == len(named)
