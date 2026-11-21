@@ -9,6 +9,13 @@
 # fold's rows out of its own resident copy (`MselFoldRows.rows`: the same
 # device gather the driver ran per fold before, now on the worker's device).
 # The same rows reach the same estimator in the same order: no bit changes.
+#
+# UNPACK and PACK only: the worker-index and route refusals, the request
+# codes and their order rule, the wave plan and the reply order are typed in
+# bindings/parallel_cv_native_run.mojo. The frames stay the codec's (a packed
+# model carries `bytes`, which the typed frame of core/parallel_worker_frame.mojo
+# refuses); the member is fitted and scored through msel_fit / msel_score
+# (boundary calls) until member families publish entry tables.
 from std.ffi import external_call
 from bindings.native_loaded_module_door import native_loaded_module
 from std.python import Python, PythonObject
@@ -39,6 +46,11 @@ from bindings.msel_parallel_witness_pack import msel_parallel_capture
 from bindings.optimizer_public_words_unpack import PENDING_PYTHON_ERROR, PYTHON_ERROR_PENDING
 from bindings.parallel_keys_unpack import parallel_keys
 from bindings.py_balanced import py_item
+from bindings.parallel_cv_native_run import (
+    CV_REQUEST_IDENTITY, CV_REQUEST_FOLD, CV_REQUEST_DATA, CV_DEVICE_NOT_AN_INDEX,
+    cv_devices_admit, cv_vendor_admit, cv_request_code, cv_request_admit, cv_wave_count,
+    cv_batch_count_admit, cv_reply_order_admit,
+)
 
 
 def msel_parallel_initialize(context: PythonObject) raises:
@@ -54,23 +66,14 @@ def _devices(value: PythonObject, context: PythonObject) raises -> PythonObject:
     var b = native_loaded_module("builtins")
     if py_type(value) is not b.tuple and py_type(value) is not b.list:
         raise Error("TypeError: devices must be an explicit list or tuple of distinct nonnegative integers")
-    if len(value) == 0:
-        raise Error("ValueError: devices must not be empty")
     var selected = py_call(b.tuple, value)
-    var seen = Python.list()
+    var indices = List[Int](capacity=len(selected))
     for i in range(len(selected)):  # driver-loop: exact explicit worker indices, before spawn
-        if py_type(selected[i]) is not b.int or Int(py=selected[i]) < 0:
-            raise Error("ValueError: devices must contain distinct nonnegative integers")
-        if selected[i] in seen:
-            raise Error("ValueError: devices must not repeat a worker index")
-        _ = py_call(seen.append, selected[i])
+        indices.append(Int(py=selected[i]) if py_type(selected[i]) is b.int else CV_DEVICE_NOT_AN_INDEX)
+    cv_devices_admit(indices)
     var nk = parallel_keys()
     var metadata = py_item(context, nk[].k_family_msel_parallel)
-    var vendor = String(py_item(metadata, nk[].k_vendor))
-    if vendor == "metal" and (len(selected) != 1 or Int(py=selected[0]) != 0):
-        raise Error("NotImplementedError: Metal cross-validation supports devices=(0,) only")
-    if vendor != "cuda" and vendor != "hip" and vendor != "metal" and not (vendor == "cpu" and Bool(py=py_item(metadata, nk[].k_cpu_only))):
-        raise Error("NotImplementedError: parallel cross-validation requires CUDA, HIP, Metal device zero or a CPU-only install")
+    cv_vendor_admit(indices, String(py_item(metadata, nk[].k_vendor)), Bool(py=py_item(metadata, nk[].k_cpu_only)))
     return selected
 
 
@@ -184,24 +187,18 @@ def _worker_request(socket: PythonObject, envelope: PythonObject, mut inventory:
         if py_type(request) is not b.tuple or len(request) < 1 or py_type(request[0]) is not b.str:
             raise Error("ValueError: malformed native CV worker request")
         var result = PythonObject(None)
-        if String(request[0]) == "identity" and len(request) == 1:
+        var code = cv_request_code(String(request[0]), len(request))
+        cv_request_admit(code, inventory is not None)
+        if code == CV_REQUEST_IDENTITY:
             if inventory is None:
                 inventory = native_worker_inventory(String(py_item(metadata, nk[].k_vendor)), py_item(metadata, nk[].k_environ))
             result = inventory
-        elif String(request[0]) == "fold":
-            if inventory is None:
-                raise Error("RuntimeError: CV worker identity must be admitted before fitting")
+        elif code == CV_REQUEST_FOLD:
             result = _fold(request, inventory, context)
-        elif String(request[0]) == "data":
-            if inventory is None:
-                raise Error("RuntimeError: CV worker identity must be admitted before fitting")
+        elif code == CV_REQUEST_DATA:
             result = _worker_data(request, rows, context)
-        elif String(request[0]) == "fold_rows":
-            if inventory is None:
-                raise Error("RuntimeError: CV worker identity must be admitted before fitting")
-            result = _fold_rows(request, rows, inventory, context)
         else:
-            raise Error("ValueError: unknown native CV worker request")
+            result = _fold_rows(request, rows, inventory, context)
         process_send(socket, "result", sequence, result)
     except error:
         process_send(socket, "error", sequence, PythonObject(_worker_error(error, context)))
@@ -230,12 +227,12 @@ def msel_parallel_worker(argv: PythonObject, context: PythonObject) raises:
 
 def msel_parallel_require_batch(result: PythonObject, start: Int, count: Int) raises:
     var b = native_loaded_module("builtins")
-    if py_type(result) is not b.list or len(result) != count:
-        raise Error("ValueError: cross-validation workers returned an incomplete fold batch")
+    var listed = py_type(result) is b.list
+    cv_batch_count_admit(listed, len(result) if listed else 0, count)
     for i in range(len(result)):  # driver-loop: validate all reply envelopes before consuming any score
         var reply = result[i]
-        if py_type(reply) is not b.tuple or len(reply) != 3 or py_type(reply[0]) is not b.int or Int(py=reply[0]) != start + i:
-            raise Error("ValueError: cross-validation worker fold order differs")
+        var shaped = py_type(reply) is b.tuple and len(reply) == 3 and py_type(reply[0]) is b.int
+        cv_reply_order_admit(shaped, Int(py=reply[0]) if shaped else -1, start + i)
         if py_type(reply[1]) is not b.float:
             raise Error("TypeError: cross-validation worker score must be a native real scalar")
         if reply[2] is not None and py_type(reply[2]) is not b.dict:
@@ -298,8 +295,9 @@ def msel_parallel_score(args: PythonObject, capture: Bool, context: PythonObject
         var width = len(devices)
         for start in range(0, len(folds), width):  # driver-loop: bounded whole-fold waves
             requests = Python.list()
-            _ = py_call(py_item(trace, nk[].k_waves).append, min(width, len(folds) - start))
-            for i in range(start, min(start + width, len(folds))):  # driver-loop: independent fresh estimator per fold
+            var wave = cv_wave_count(width, len(folds), start)
+            _ = py_call(py_item(trace, nk[].k_waves).append, wave)
+            for i in range(start, start + wave):  # driver-loop: independent fresh estimator per fold
                 var pair = folds[i]
                 _ = py_call(py_item(trace, nk[].k_assignments).append, Python.tuple(i, devices[i - start], pids[i - start]))
                 _ = py_call(requests.append, Python.tuple("fold_rows", i, model, scorer, pair[0], pair[1], capture))
