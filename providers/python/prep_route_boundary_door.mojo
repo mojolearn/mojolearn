@@ -33,7 +33,6 @@ from std.python.bindings import PythonModuleBuilder, lookup_py_type_object
 from bindings.py_type_registry import py_type_absent, py_type_attach
 from bindings.native_owner_registry_unpack import register_native_owner_type
 from bindings.native_owner_registry_pack import borrowed_native_owner
-from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_fields
 from bindings.py_model_records import records_get, records_put, records_drop, RECORDS_PREPARED
 from bindings.prep_entry_cache_unpack import prep_entry_text
@@ -104,17 +103,20 @@ def register_prep_route_owner_identity(published: PythonObject) raises:
     register_native_owner_type[PrepRouteOwner](published, prep_route_owner_pins)
 
 
-def prep_device_unpack(value: PythonObject, b: PythonObject) raises -> Int:
+def prep_device_unpack(value: PythonObject, context: PythonObject) raises -> Int:
     """The device code of a constructor value: None (this installation's
     device), or exact `'gpu'` or `'cpu'`. Anything else is refused in the
-    pilot's words, before any state changes. `b` is the builtins module."""
+    pilot's words, before any state changes. The exact `str` type and the
+    builtin `repr` are the two cells import connected into `context`
+    (python/mojolearn/_native_prep_device.py); they are read only for a
+    value that is not None, so the default reads nothing."""
     if value is None:
         return LINEAR_DEVICE_INSTALL
-    if py_type(value) is b.str:
+    if py_type(value) is context["prep_device_str"]:
         var code = linear_device_code(String(value))
         if code >= 0:
             return code
-    linear_device_refusal(String(py_call(b.repr, value)))
+    linear_device_refusal(String(py_call(context["prep_device_repr"], value)))
     return LINEAR_DEVICE_INSTALL
 
 
@@ -140,8 +142,7 @@ def prep_device_admit(value: PythonObject, cls: PythonObject, context: PythonObj
     class and take any admitted value."""
     if value is None:
         return
-    var b = native_loaded_module("builtins")
-    var device = prep_device_unpack(value, b)
+    var device = prep_device_unpack(value, context)
     if device != LINEAR_DEVICE_GPU:
         return
     if _prep_explicit_host(cls, context) is not None:
@@ -163,11 +164,10 @@ def _prep_route_build(model: PythonObject, context: PythonObject) raises -> Prep
         owner.device = LINEAR_DEVICE_CPU
         owner.context = host
     else:
-        var b = native_loaded_module("builtins")
         # The one read of `device`. None, and an instance without the field
         # (built without its constructor, or pickled before the parameter
         # existed), run this installation's device.
-        var device = prep_device_unpack(py_get(py_fields(model), "device"), b)
+        var device = prep_device_unpack(py_get(py_fields(model), "device"), context)
         var process_vendor = _prep_process_vendor(context)
         # An explicit 'gpu' in a CPU-only process is refused in words here too
         # (an instance that reached this point without its constructor's check).
@@ -178,7 +178,7 @@ def _prep_route_build(model: PythonObject, context: PythonObject) raises -> Prep
             var cpu = py_get(context, "prep_cpu_context")
             if cpu is None:
                 raise Error("ImportError: device='cpu' is not connected in this installation")
-            if py_type(cpu) is b.str:
+            if py_type(cpu) is context["prep_device_str"]:
                 raise Error("ImportError: " + String(cpu))
             owner.context = cpu
         else:
@@ -217,18 +217,18 @@ def prep_route_vendor_used(model: PythonObject, context: PythonObject) raises ->
     or None for an image built before the read-back. A metadata operation,
     in no loop."""
     var run = prep_route_context(model, context)
-    var b = native_loaded_module("builtins")
+    var str_type = context["prep_device_str"]
     var fields = py_fields(model)
     var mode = py_get(fields, "numeric_mode")
     if mode is None:
         mode = run["backend_fields"]["_DEFAULT_MODE"]
-    if py_type(mode) is not b.str:
+    if py_type(mode) is not str_type:
         raise Error("numeric_mode must be fast, identical or None")
     var word = py_call(py_call(mode.strip).lower)
     var entries = py_get(run["scaler_bindings"], word)
     if entries is None:
         raise Error("numeric_mode must be fast, identical or None")
-    if py_type(entries) is b.str:
+    if py_type(entries) is str_type:
         raise Error("ImportError: " + String(entries))
     var text = prep_entry_text(entries, "x_prep_vendor")
     if text.byte_length() == 0:

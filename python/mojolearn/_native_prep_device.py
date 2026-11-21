@@ -22,6 +22,9 @@ def connect_cpu_device(context, cpu_entries):
     `device="cpu"` estimator first runs."""
     # glue: load the CPU images once and retain their entries beside the device ones
     from . import _backend
+    # The exact `str` type and the builtin `repr` the compiled device check
+    # uses for a value that is not None (the refusal shows the value's repr).
+    context.update(prep_device_str=str, prep_device_repr=repr)
     if context["vendor"] == "cpu" or "prep_cpu_context" in context:
         return
     try:
