@@ -433,6 +433,10 @@ from providers.python.native_execution_pyapi_door import AdmittedNativeExecution
 from providers.python.operation_lock_pyapi_door import OperationLockLease
 from core.generation_metadata import generation_transformer_addresses
 from transformer.native_generation_engine import NativeGenerationLayer, NativeGenerationModel
+from core.causal_owner import (
+    CausalLayerStateWords, causal_state_buffer_address,
+    CAUSAL_STATE_K, CAUSAL_STATE_V, CAUSAL_STATE_CONV, CAUSAL_STATE_H, CAUSAL_STATE_XBC, CAUSAL_STATE_DTRAW,
+)
 
 
 def _generation_weight_in_place(layout: BorrowedBufferLayout) -> Bool:
@@ -508,6 +512,17 @@ struct GenerationEngineAdmission(Movable):
     # snapshot whose weight addresses `native` reads, for the whole call. The
     # admission copies nothing of the snapshot (before lane dw-causal it kept
     # a deep copy of a snapshot built for this one call).
+    # Lane dw-causal, continuation 4 (2026-11-21): the state half. `__init__`
+    # admits the model half and the state's own words; each layer is then
+    # admitted by `admit_layer`, called by the public door's
+    # `_engine_admission` in layer order (the door holds the state's native
+    # owner, `CausalStateOwner`, which this provider file cannot import: the
+    # owner door imports this file). A layer whose state the owner's words
+    # describe takes its buffer addresses from those words (typed checks, no
+    # buffer object read); any other layer (no owner, a buffer that is not an
+    # Array, a failed layer capture) keeps the object admission below
+    # (`_generation_engine_state`). `state_owner` pins the owner, and so every
+    # buffer it admitted, for the whole call.
     var held: PythonObject
     var call: GenerationCallLayers
     var kind: String
@@ -521,6 +536,16 @@ struct GenerationEngineAdmission(Movable):
     var state_keys: List[PythonObject]
     var native: NativeGenerationModel
     var published: Bool
+    var state_owner: PythonObject
+    var layer_states: PythonObject
+    var provider: PythonObject
+    var cpu: Bool
+    var batch: Int
+    var length: Int
+    # Layer state identity -> index into `state_keys` (aliased layers share).
+    var state_indices: Dict[Int, Int]
+    # The state field schema, constant across layers (the object route).
+    var state_fields: PythonObject
 
     def __init__(out self, snapshot: GenerationOperationSnapshot, held: PythonObject, var call: GenerationCallLayers,
                  limited: Bool, max_positions: Int, state: PythonObject, batch: Int, length: Int) raises:
@@ -538,9 +563,18 @@ struct GenerationEngineAdmission(Movable):
         self.storage = List[List[Float32]]()
         self.state_keys = List[PythonObject]()
         self.published = False
+        self.state_owner = PythonObject(None)
+        self.layer_states = PythonObject(None)
+        self.cpu = False
+        self.batch = batch
+        self.length = length
+        self.state_indices = Dict[Int, Int]()
+        # The field schema is constant across layers; retain one tuple rather
+        # than constructing the same Python metadata for each state admission.
+        self.state_fields = Python.tuple("_resident_session", "arithmetic_profile", "cached_tokens", "max_tokens", "k_cache", "v_cache", "conv_window", "h", "profile_id", "_nn34_usable", "absolute_position", "buffer_xbc", "buffer_dtraw", "buffered_tokens")
         var entries = snapshot.entries
-        var provider = py_get(entries, "native_block_operations" if snapshot.kind == "transformer" else "native_mamba")
-        if snapshot.head.packed or snapshot.planes or provider is None or snapshot.native is None:
+        self.provider = py_get(entries, "native_block_operations" if snapshot.kind == "transformer" else "native_mamba")
+        if snapshot.head.packed or snapshot.planes or self.provider is None or snapshot.native is None:
             raise Error("CausalLM: native generation engine requires admitted nonresident fp32 model descriptors")
         self.owners.append(AdmittedNativeExecution(snapshot.native, PythonObject(None), 0, -1, -1, PythonObject(None), 0))
         self.native = NativeGenerationModel(self.owners[0].endpoint(), snapshot.embedding.addresses[0],
@@ -560,145 +594,182 @@ struct GenerationEngineAdmission(Movable):
             self.native.head = head[1]
         except problem:
             self.native.head_failure = String(problem)
-        var layers = self.state["layers"]
-        model_sequence(layers)
-        if len(layers) != len(snapshot.layers) or len(self.call.blocks) != len(snapshot.layers):
+        self.layer_states = self.state["layers"]
+        model_sequence(self.layer_states)
+        if len(self.layer_states) != len(snapshot.layers) or len(self.call.blocks) != len(snapshot.layers):
             raise Error("CausalLM: state layer count differs from the captured model")
-        var cpu = _generation_bool(entries["cpu"])
-        # The field schema is constant across layers; retain one tuple rather
-        # than constructing the same Python metadata for each state admission.
-        var state_fields = Python.tuple("_resident_session", "arithmetic_profile", "cached_tokens", "max_tokens", "k_cache", "v_cache", "conv_window", "h", "profile_id", "_nn34_usable", "absolute_position", "buffer_xbc", "buffer_dtraw", "buffered_tokens")
-        var state_indices = Dict[Int, Int]()
-        for i in range(len(snapshot.layers)):  # driver-loop: admit layer/state owners once before native execution
-            ref layer = snapshot.layers[i]
-            var st = layers[i]
-            var fields = Python.dict()
-            var identity = st
-            var native_layer = NativeGenerationLayer(self.owners[0].endpoint(), 33 if cpu else 11, [], [], 0)
-            try:
-                fields = _generation_fields(st, state_fields, True)
-                identity = py_get(fields, "_native_state_identity", py_get(fields, "_causal_original", st))
-                var admission_failure = py_get(fields, "_causal_admission_failure")
-                if admission_failure is not None:
-                    raise Error(model_string(admission_failure))
-                if py_get(fields, "_resident_session") is not None:
-                    raise Error("CausalLM: layer state is owned by a decode session (resident in it); sync_state() or close it first")
-                var cached = 0
-                if snapshot.kind == "transformer":
-                    var old_profile = model_plain(py_get(fields, "arithmetic_profile"))
-                    cached = model_integer(fields["cached_tokens"])
-                    native_layer.cached = cached
-                    if old_profile is None and cached != 0 and self.call.changed[i]:
-                        raise Error("CausalLM: cached state requires arithmetic profile metadata")
-                    if old_profile is not None and self.call.profiles[i] is not None and not Bool(py=old_profile == self.call.profiles[i]):
-                        raise Error("CausalLM: state arithmetic profile differs")
-                    native_layer.profile_admitted = True
-                    var capacity = model_integer(fields["max_tokens"])
-                    var cache_count = layer.words.cache_count(batch, capacity)
+        self.cpu = _generation_bool(entries["cpu"])
+
+    def layer_count(self) -> Int:
+        return len(self.call.blocks)
+
+    def admit_layer(mut self, snapshot: GenerationOperationSnapshot, i: Int, st: PythonObject,
+                    owned_fields: PythonObject, words: CausalLayerStateWords, owned: Bool) raises:
+        """UNPACK of layer `i`'s state, in layer order, once per engine
+        forward. `owned`: `owned_fields` is the captured layer state's field
+        dictionary and `words` the state owner's words for it (current for
+        this call: `causal_state_layer_unpack`); otherwise `words` is unread
+        and the layer state object is admitted field by field. A refusal is
+        deferred to the layer's execution position, as before."""
+        ref layer = snapshot.layers[i]
+        var entries = snapshot.entries
+        var batch = self.batch
+        var cpu = self.cpu
+        # The owned route reads the capture's own dictionary (no dictionary
+        # built per layer, as the object route's placeholder is).
+        var fields = owned_fields
+        if not owned:
+            fields = Python.dict()
+        var identity = st
+        var native_layer = NativeGenerationLayer(self.owners[0].endpoint(), 33 if cpu else 11, [], [], 0)
+        try:
+            if not owned:
+                fields = _generation_fields(st, self.state_fields, True)
+            identity = py_get(fields, "_native_state_identity", py_get(fields, "_causal_original", st))
+            var admission_failure = py_get(fields, "_causal_admission_failure")
+            if admission_failure is not None:
+                raise Error(model_string(admission_failure))
+            if py_get(fields, "_resident_session") is not None:
+                raise Error("CausalLM: layer state is owned by a decode session (resident in it); sync_state() or close it first")
+            var cached = 0
+            if snapshot.kind == "transformer":
+                var old_profile = model_plain(py_get(fields, "arithmetic_profile"))
+                cached = model_integer(fields["cached_tokens"])
+                native_layer.cached = cached
+                if old_profile is None and cached != 0 and self.call.changed[i]:
+                    raise Error("CausalLM: cached state requires arithmetic profile metadata")
+                if old_profile is not None and self.call.profiles[i] is not None and not Bool(py=old_profile == self.call.profiles[i]):
+                    raise Error("CausalLM: state arithmetic profile differs")
+                native_layer.profile_admitted = True
+                var capacity = model_integer(fields["max_tokens"])
+                var cache_count = layer.words.cache_count(batch, capacity)
+                var weights = _generation_engine_weights(layer.weights, self.storage,
+                    native_layer.refresh_layouts, native_layer.refresh_addresses)
+                var optional = _generation_engine_weights(layer.optional, self.storage,
+                    native_layer.refresh_layouts, native_layer.refresh_addresses)
+                var key_address = 0
+                var value_address = 0
+                if owned:
+                    # The owner's words: the same checks and words as the
+                    # object admission's in-place check, on typed words.
+                    var cache_shape: List[Int] = [cache_count]
+                    key_address = causal_state_buffer_address(words.buffers[CAUSAL_STATE_K], cache_shape, "k_cache")
+                    value_address = causal_state_buffer_address(words.buffers[CAUSAL_STATE_V], cache_shape, "v_cache")
+                else:
                     var key = fields["k_cache"]
                     var value = fields["v_cache"]
-                    var weights = _generation_engine_weights(layer.weights, self.storage,
-                        native_layer.refresh_layouts, native_layer.refresh_addresses)
-                    var optional = _generation_engine_weights(layer.optional, self.storage,
-                        native_layer.refresh_layouts, native_layer.refresh_addresses)
-                    var key_address = _generation_engine_state(key, [cache_count], "k_cache",
+                    key_address = _generation_engine_state(key, [cache_count], "k_cache",
                         self.pins, self.storage, self.buffers, native_layer)
-                    var value_address = _generation_engine_state(value, [cache_count], "v_cache",
+                    value_address = _generation_engine_state(value, [cache_count], "v_cache",
                         self.pins, self.storage, self.buffers, native_layer)
-                    var block = self.call.blocks[i]
-                    var lock_owner = block["_runtime_lock"]
-                    var lock = OperationLockLease(lock_owner)
-                    if lock.handle == 0:
-                        raise Error("CausalLM: native generation requires an admitted native operation lock")
-                    var session = PythonObject(None)
-                    var handle = 0
-                    if not cpu:
-                        # The block's session: a native registry handle of its
-                        # GPU image (core/transformer_block_session.mojo, lane
-                        # transformer-session-native), opened through the
-                        # neural table's block entry; its handle word is one
-                        # native read (the former Python entries
-                        # transformer_session_create and
-                        # transformer_native_session_handle_v1).
-                        if block["_native_session"] is None:
-                            py_setitem(block, "_native_session", transformer_block_session_open(neural_ref[NEURAL_TABLE_BLOCK_FORWARD](
-                                NeuralEntryKey(Int(py=entries["entry_mode"]), Int(py=entries["entry_vendor"])))))
-                        session = block["_native_session"]
-                        handle = transformer_block_session_handle(session)
-                    self.owners.append(AdmittedNativeExecution(provider, session, handle,
-                        -1 if cpu else 0, -1 if cpu else 1, lock_owner, lock.handle))
-                    native_layer.endpoint = self.owners[len(self.owners) - 1].endpoint()
-                    var addresses = generation_transformer_addresses(0, weights,
-                        key_address, value_address, 0, optional, [])
-                    native_layer.addresses = addresses^
-                    native_layer.parameters = layer.words.transformer_params(batch, length, capacity, cached)
-                else:
-                    var weights = _generation_engine_weights(layer.weights, self.storage,
-                        native_layer.refresh_layouts, native_layer.refresh_addresses)
-                    var addresses: List[Int] = [0]
-                    for address in weights:  # driver-loop: fixed Mamba weight descriptor vector
-                        addresses.append(address)
-                    self.owners.append(AdmittedNativeExecution(provider, PythonObject(None), 0,
-                        -1, -1, PythonObject(None), 0))
-                    native_layer.endpoint = self.owners[len(self.owners) - 1].endpoint()
-                    var parameters: List[Int] = [batch, length, snapshot.width]
-                    if snapshot.kind == "mamba1":
-                        native_layer.kind = 1
-                        native_layer.operation = 0
-                        native_layer.output_slot = 13
-                        var inner = layer.words.inner
-                        addresses.append(_generation_engine_state(fields["conv_window"], [batch, inner, 4], "conv_window",
-                            self.pins, self.storage, self.buffers, native_layer))
-                        addresses.append(_generation_engine_state(fields["h"], [batch, inner, 16], "h",
-                            self.pins, self.storage, self.buffers, native_layer))
-                        addresses.append(0)
-                        var profile = model_integer(entries["mamba1_profile"])
-                        if model_integer(fields["profile_id"]) != profile or not _generation_bool(fields["_nn34_usable"]):
-                            raise Error("CausalLM: incompatible or failed Mamba1 state profile")
-                        if profile != 1:
-                            raise Error("CausalLM: native generation requires the supported Mamba1 profile")
-                        cached = model_integer(fields["absolute_position"])
+                var block = self.call.blocks[i]
+                var lock_owner = block["_runtime_lock"]
+                var lock = OperationLockLease(lock_owner)
+                if lock.handle == 0:
+                    raise Error("CausalLM: native generation requires an admitted native operation lock")
+                var session = PythonObject(None)
+                var handle = 0
+                if not cpu:
+                    # The block's session: a native registry handle of its
+                    # GPU image (core/transformer_block_session.mojo, lane
+                    # transformer-session-native), opened through the
+                    # neural table's block entry; its handle word is one
+                    # native read (the former Python entries
+                    # transformer_session_create and
+                    # transformer_native_session_handle_v1).
+                    if block["_native_session"] is None:
+                        py_setitem(block, "_native_session", transformer_block_session_open(neural_ref[NEURAL_TABLE_BLOCK_FORWARD](
+                            NeuralEntryKey(Int(py=entries["entry_mode"]), Int(py=entries["entry_vendor"])))))
+                    session = block["_native_session"]
+                    handle = transformer_block_session_handle(session)
+                self.owners.append(AdmittedNativeExecution(self.provider, session, handle,
+                    -1 if cpu else 0, -1 if cpu else 1, lock_owner, lock.handle))
+                native_layer.endpoint = self.owners[len(self.owners) - 1].endpoint()
+                var addresses = generation_transformer_addresses(0, weights,
+                    key_address, value_address, 0, optional, [])
+                native_layer.addresses = addresses^
+                native_layer.parameters = layer.words.transformer_params(batch, self.length, capacity, cached)
+            else:
+                var weights = _generation_engine_weights(layer.weights, self.storage,
+                    native_layer.refresh_layouts, native_layer.refresh_addresses)
+                var addresses: List[Int] = [0]
+                for address in weights:  # driver-loop: fixed Mamba weight descriptor vector
+                    addresses.append(address)
+                self.owners.append(AdmittedNativeExecution(self.provider, PythonObject(None), 0,
+                    -1, -1, PythonObject(None), 0))
+                native_layer.endpoint = self.owners[len(self.owners) - 1].endpoint()
+                var parameters: List[Int] = [batch, self.length, snapshot.width]
+                if snapshot.kind == "mamba1":
+                    native_layer.kind = 1
+                    native_layer.operation = 0
+                    native_layer.output_slot = 13
+                    var inner = layer.words.inner
+                    var conv_shape: List[Int] = [batch, inner, 4]
+                    var h_shape: List[Int] = [batch, inner, 16]
+                    if owned:
+                        addresses.append(causal_state_buffer_address(words.buffers[CAUSAL_STATE_CONV], conv_shape, "conv_window"))
+                        addresses.append(causal_state_buffer_address(words.buffers[CAUSAL_STATE_H], h_shape, "h"))
                     else:
-                        native_layer.kind = 2
-                        native_layer.operation = 2
-                        native_layer.output_slot = 14
-                        var heads = layer.words.heads
-                        var conv = layer.words.conv
-                        addresses.append(_generation_engine_state(fields["conv_window"], [batch, conv, 4], "conv_window",
+                        addresses.append(_generation_engine_state(fields["conv_window"], conv_shape, "conv_window",
                             self.pins, self.storage, self.buffers, native_layer))
-                        addresses.append(_generation_engine_state(fields["h"], [batch, heads, 64, 128], "h",
+                        addresses.append(_generation_engine_state(fields["h"], h_shape, "h",
                             self.pins, self.storage, self.buffers, native_layer))
-                        addresses.append(_generation_engine_state(fields["buffer_xbc"], [batch, 256, conv], "buffer_xbc",
+                    addresses.append(0)
+                    var profile = model_integer(entries["mamba1_profile"])
+                    if model_integer(fields["profile_id"]) != profile or not _generation_bool(fields["_nn34_usable"]):
+                        raise Error("CausalLM: incompatible or failed Mamba1 state profile")
+                    if profile != 1:
+                        raise Error("CausalLM: native generation requires the supported Mamba1 profile")
+                    cached = model_integer(fields["absolute_position"])
+                else:
+                    native_layer.kind = 2
+                    native_layer.operation = 2
+                    native_layer.output_slot = 14
+                    var heads = layer.words.heads
+                    var conv = layer.words.conv
+                    var conv_shape: List[Int] = [batch, conv, 4]
+                    var h_shape: List[Int] = [batch, heads, 64, 128]
+                    var xbc_shape: List[Int] = [batch, 256, conv]
+                    var dt_shape: List[Int] = [batch, 256, heads]
+                    if owned:
+                        addresses.append(causal_state_buffer_address(words.buffers[CAUSAL_STATE_CONV], conv_shape, "conv_window"))
+                        addresses.append(causal_state_buffer_address(words.buffers[CAUSAL_STATE_H], h_shape, "h"))
+                        addresses.append(causal_state_buffer_address(words.buffers[CAUSAL_STATE_XBC], xbc_shape, "buffer_xbc"))
+                        addresses.append(causal_state_buffer_address(words.buffers[CAUSAL_STATE_DTRAW], dt_shape, "buffer_dtraw"))
+                    else:
+                        addresses.append(_generation_engine_state(fields["conv_window"], conv_shape, "conv_window",
                             self.pins, self.storage, self.buffers, native_layer))
-                        addresses.append(_generation_engine_state(fields["buffer_dtraw"], [batch, 256, heads], "buffer_dtraw",
+                        addresses.append(_generation_engine_state(fields["h"], h_shape, "h",
                             self.pins, self.storage, self.buffers, native_layer))
-                        addresses.append(0); addresses.append(0)
-                        cached = model_integer(fields["buffered_tokens"])
-                        parameters.append(cached)
-                        native_layer.floats = [layer.words.dt_low, layer.words.dt_high]
-                        native_layer.report_size = batch * heads * 64 * 128
-                    native_layer.cached = cached
-                    native_layer.addresses = addresses^
-                    native_layer.parameters = parameters^
-                # Pointer identity has the same alias semantics as `is`.
-                # state_keys pins every inserted owner for the whole operation,
-                # so the native map cannot collide with a recycled address.
-                var identity_key = Int(identity._obj_ptr)
-                var state_index = state_indices.get(identity_key, -1)
-                if state_index < 0:
-                    state_index = len(self.state_keys)
-                    self.state_keys.append(identity)
-                    self.native.state_counters.append(cached)
-                    state_indices[identity_key] = state_index
-                native_layer.state_index = state_index
-            except problem:
-                # Defer this refusal to its original execution position. Earlier
-                # layers must retain their normal partial progress on failure.
-                native_layer.failure = String(problem)
-            self.states.append(fields)
-            self.native.layers.append(native_layer^)
-        _ = provider
-        _ = layers
+                        addresses.append(_generation_engine_state(fields["buffer_xbc"], xbc_shape, "buffer_xbc",
+                            self.pins, self.storage, self.buffers, native_layer))
+                        addresses.append(_generation_engine_state(fields["buffer_dtraw"], dt_shape, "buffer_dtraw",
+                            self.pins, self.storage, self.buffers, native_layer))
+                    addresses.append(0); addresses.append(0)
+                    cached = model_integer(fields["buffered_tokens"])
+                    parameters.append(cached)
+                    native_layer.floats = [layer.words.dt_low, layer.words.dt_high]
+                    native_layer.report_size = batch * heads * 64 * 128
+                native_layer.cached = cached
+                native_layer.addresses = addresses^
+                native_layer.parameters = parameters^
+            # Pointer identity has the same alias semantics as `is`.
+            # state_keys pins every inserted owner for the whole operation,
+            # so the native map cannot collide with a recycled address.
+            var identity_key = Int(identity._obj_ptr)
+            var state_index = self.state_indices.get(identity_key, -1)
+            if state_index < 0:
+                state_index = len(self.state_keys)
+                self.state_keys.append(identity)
+                self.native.state_counters.append(cached)
+                self.state_indices[identity_key] = state_index
+            native_layer.state_index = state_index
+        except problem:
+            # Defer this refusal to its original execution position. Earlier
+            # layers must retain their normal partial progress on failure.
+            native_layer.failure = String(problem)
+        self.states.append(fields)
+        self.native.layers.append(native_layer^)
 
     def publish(mut self) raises:
         if self.published:
@@ -731,3 +802,4 @@ struct GenerationEngineAdmission(Movable):
         _ = self.buffers
         _ = self.owners
         _ = self.held
+        _ = self.state_owner

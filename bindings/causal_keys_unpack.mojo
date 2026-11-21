@@ -40,6 +40,7 @@ struct CausalKeys(Defaultable, Movable):
     var k__nn34_usable: PythonObject
     var k_absolute_position: PythonObject
     var k_buffered_tokens: PythonObject
+    var k_positions: PythonObject
     var k__causal_initial_layers: PythonObject
     var k__causal_live_fields: PythonObject
     var k__causal_original: PythonObject
@@ -214,6 +215,7 @@ struct CausalKeys(Defaultable, Movable):
         self.k__nn34_usable = PythonObject(None)
         self.k_absolute_position = PythonObject(None)
         self.k_buffered_tokens = PythonObject(None)
+        self.k_positions = PythonObject(None)
         self.k__causal_initial_layers = PythonObject(None)
         self.k__causal_live_fields = PythonObject(None)
         self.k__causal_original = PythonObject(None)
@@ -392,6 +394,7 @@ def _causal_keys_fill(nk: UnsafePointer[CausalKeys, MutUntrackedOrigin]) raises:
     nk[].k__nn34_usable = py_key("_nn34_usable")
     nk[].k_absolute_position = py_key("absolute_position")
     nk[].k_buffered_tokens = py_key("buffered_tokens")
+    nk[].k_positions = py_key("positions")
     nk[].k__causal_initial_layers = py_key("_causal_initial_layers")
     nk[].k__causal_live_fields = py_key("_causal_live_fields")
     nk[].k__causal_original = py_key("_causal_original")

@@ -37,7 +37,15 @@ def test_numerical_order_and_native_cached_token_publication_are_explicit():
 def test_reservations_and_outputs_remain_at_checked_boundary():
     provider = text('providers/python/generation_metadata_pyapi_door.mojo').split('struct GenerationEngineAdmission')[1]
     assert '_generation_engine_state(key, [cache_count]' in provider
-    assert 'self.owners.append(AdmittedNativeExecution(provider, session, handle,' in provider
+    assert 'self.owners.append(AdmittedNativeExecution(self.provider, session, handle,' in provider
+    # Lane dw-causal (continuation 4): a layer whose state the state owner's
+    # words describe takes its buffer addresses from them; the object
+    # admission stays for any other layer.
+    assert 'causal_state_buffer_address(words.buffers[CAUSAL_STATE_K], cache_shape, "k_cache")' in provider
+    assert 'def admit_layer(mut self, snapshot: GenerationOperationSnapshot' in provider
+    public = text('bindings/causal_lm_public_door.mojo').split('def _engine_admission(')[1].split('def _run_engine(')[0]
+    assert public.index('causal_state_owner(mods, state)') < public.index('causal_state_layer_unpack(mods, state_held, i, st, kind)')
+    assert 'windowed_result5.state_owner = state_held' in public
     assert 'OperationLockLease(lock_owner)' in provider
     assert '-1 if cpu else 0, -1 if cpu else 1, lock_owner, lock.handle)' in provider
     assert 'self.reserved' not in provider

@@ -164,14 +164,22 @@ struct CausalModelOwner(Movable, Writable):
     generation). `snapshot` is written ONCE (`causal_model_snapshot_keep`,
     GIL held) and never replaced or cleared while the owner lives, so a
     reader may hold a reference into it across a GIL release for as long as
-    it holds the owner's handle. It keeps no capture and no public object."""
+    it holds the owner's handle. It keeps no capture and no public object.
+
+    `fingerprint` (continuation 4): the checkpoint fingerprint of this
+    generation (the hash of the settings and every weight a checkpoint is
+    bound to), computed at the first snapshot or resume and kept: every
+    value it hashes is covered by the identity key of this generation. Empty
+    until computed."""
 
     var words: CausalModelWords
     var snapshot: Optional[GenerationOperationSnapshot]
+    var fingerprint: String
 
     def __init__(out self, var words: CausalModelWords):
         self.words = words^
         self.snapshot = None
+        self.fingerprint = String("")
 
     def write_to(self, mut writer: Some[Writer]):
         writer.write("CausalModelOwner(generation=", self.words.generation, ")")
@@ -214,6 +222,17 @@ def causal_model_owner_build(fields: PythonObject) raises -> PythonObject:
             words.mamba1_profile = Int(py=profile)
     words.resident = py_contains(entries, PythonObject(CAUSAL_ENTRY_RESIDENT))
     var vendor = py_get(entries, PythonObject(CAUSAL_ENTRY_RESIDENT_VENDOR))
+    var program = py_get(entries, PythonObject(CAUSAL_ENTRY_PROGRAM_READ))
+    if program is not None:
+        words.program_read = Int(py=program)
+    if words.norm:
+        # A norm_eps that is not a number reads as 0 here: the decode
+        # program then refuses the read ("a final norm with eps 0") and
+        # every other route meets the value where it reads it.
+        try:
+            words.norm_eps = Float64(py=py_item(fields, PythonObject("norm_eps")))
+        except:
+            words.norm_eps = 0.0
     if vendor is not None:
         words.resident_cuda = String(vendor) == "cuda"
     return PythonObject(alloc=CausalModelOwner(words^))

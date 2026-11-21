@@ -205,3 +205,39 @@ def test_decode_state_owner_is_native_and_the_layer_run_reads_its_words():
     assert '_causal_layer_run_owned(' in run and '_causal_layer_run_bound(' in run
     state = public.split('def _state(mut mods: NativeModules, words: CausalModelWords', 1)[1].split('\ndef ', 1)[0]
     assert 'causal_state_admit(words, state_owner[].words, b, l)' in state
+
+
+def test_stream_reads_hold_the_owners_and_take_state_words():
+    # Lane dw-causal, continuation 4: a read holds the model and state owners
+    # on its stream handle; the program read, the resident load / export and
+    # the per-layer route take state buffer addresses from the owner's words.
+    public = (ROOT / 'bindings/causal_lm_public_door.mojo').read_text()
+    handle = public.split('struct GenerationHandle(', 1)[1].split('def _options(', 1)[0]
+    assert 'var model_held: PythonObject' in handle and 'var state_held: PythonObject' in handle
+    assert 'stream[].state_held = causal_state_owner(mods, state)' in public
+    program = public.split('def _read_program(', 1)[1].split('def _resident_read_disjoint_state(', 1)[0]
+    assert 'causal_state_layer_unpack(mods, state_held, i, layer_state, kind)' in program
+    assert 'var family = mw.program_read' in program
+    refusal = public.split('def _program_refusal(', 1)[1].split('def _program_state_pieces(', 1)[0]
+    assert '_native_entries' not in refusal and 'words.norm_eps' in refusal
+    load = public.split('def _resident_load_states(', 1)[1].split('def ', 1)[0]
+    assert 'causal_state_layer_unpack(mods, state_held, i, st, CAUSAL_LAYER_TRANSFORMER)' in load
+    export = public.split('def _resident_export_states(', 1)[1].split('def _legacy_resident_export(', 1)[0]
+    assert 'causal_state_buffer_address(' in export
+    plan = public.split('struct LegacyGenerationReadPlan(', 1)[1].split('def _resident_export_states(', 1)[0]
+    assert 'k_positions' in plan and 'Int(py=state.positions)' not in plan
+    assert 'GenerationHandle' not in PROVIDER
+
+
+def test_snapshot_and_resume_use_the_owners():
+    # Lane dw-causal, continuation 4 (design 1.3): the fingerprint is a model
+    # owner word; snapshot copies state from the state owner's words; resume
+    # copies the bytes into the Arrays it allocated.
+    public = (ROOT / 'bindings/causal_lm_public_door.mojo').read_text()
+    assert 'var fingerprint: String' in OWNER
+    fingerprint = public.split('def _fingerprint(', 1)[1].split('def _fingerprint_hash(', 1)[0]
+    assert 'owner[].fingerprint = String(_fingerprint_hash(mods, model))' in fingerprint
+    snapshot = public.split('def causal_lm_snapshot_binding(mut mods: NativeModules, stream: PythonObject, native: PythonObject)', 1)[1].split('def causal_lm_snapshot_binding(', 1)[0]
+    assert '_state_owner_copy(state_owner[].layers[slot].buffers[index])' in snapshot
+    resume = public.split('def causal_lm_resume_binding(mut mods', 1)[1].split('def causal_lm_resume_binding(', 1)[0]
+    assert 'generation_bytes_copy(Int(py=expected._addr), Int(py=captured._addr), Int(py=captured.nbytes))' in resume
