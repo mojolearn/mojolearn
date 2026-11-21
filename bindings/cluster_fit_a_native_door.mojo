@@ -40,7 +40,7 @@ from bindings.cluster_pending_error_unpack import _pending, _pending_text, _drop
 from bindings.cluster_fit_public_native_unpack import (
     _attr, _attr_or_none, _truthy, _int, _float, _eq, _one_of, _set, _f32, _seed, _weights, _init_array,
 )
-from bindings.cluster_fit_public_native_pack import meanshift_fit, optics_fit
+from bindings.cluster_fit_public_native_pack import meanshift_fit, optics_fit, bisect_fit
 from cluster.cluster_fit_door_run import cluster_rows_cover
 from bindings.cluster_public_native_pack import cluster_operation, _xc_array
 from bindings.operation_names_xc import XC_OPN_FAMILY_XC_VARIANTS_TRANSFORM
@@ -254,60 +254,6 @@ def _mbk_partial_fit(model: PythonObject, binding: PythonObject, source: PythonO
     _set(model, "n_features_in_", PythonObject(d))
 
 
-# ---------------------------------------------------------------- BisectingKMeans
-
-def _bisect_fit(model: PythonObject, binding: PythonObject, source: PythonObject, sample_weight: PythonObject,
-                context: PythonObject) raises:
-    """`BisectingKMeans.fit(X, sample_weight)`."""
-    var init = _attr(model, "init")
-    if not _one_of(init, "random", "k-means++"):
-        raise Error("NotImplementedError: mojolearn BisectingKMeans: init=" + family_repr(init)
-                    + " is not implemented; 'random' or 'k-means++'")
-    var strategy = _attr(model, "bisecting_strategy")
-    if not _one_of(strategy, "biggest_inertia", "largest_cluster"):
-        raise Error("bisecting_strategy must be 'biggest_inertia' or 'largest_cluster', got " + family_repr(strategy))
-    var algorithm = _attr(model, "algorithm")
-    if not _one_of(algorithm, "lloyd", "elkan"):
-        raise Error("algorithm must be 'lloyd' or 'elkan', got " + family_repr(algorithm))
-    var x = _f32(source, "X", context)
-    var n = Int(py=x.shape[0])
-    var d = Int(py=x.shape[1])
-    var k = Int(py=_int(_attr(model, "n_clusters")))
-    cluster_rows_cover(k, n)
-    var n_init = _int(_attr(model, "n_init"))
-    if Int(py=n_init) < 1:
-        raise Error("n_init must be >= 1")
-    var random_init = _eq(init, PythonObject("random"))
-    var max_iter = _int(_attr(model, "max_iter"))
-    var seed = _seed(_attr(model, "random_state"))
-    var largest_cluster = _eq(strategy, PythonObject("largest_cluster"))
-    var w = PythonObject(None)
-    if sample_weight is not None:
-        w = _weights(sample_weight, n, context)
-    var tolerance = _float(_attr(model, "tol"))
-    var connection = variants_connection(binding)
-    var weight_span = variants_span(w)
-    var source_span = variants_span(x)
-    var request = BisectFitRequest(source_span, weight_span, n, d, k, Int(py=n_init), random_init,
-        Int(py=max_iter), seed, largest_cluster, Float64(py=tolerance))
-    var result = VariantsResultSlot()
-    try:
-        with GILReleased(Python()):
-            connection.driver.bisect_fit(request, result)
-    finally:
-        _ = connection.provider
-        _ = x
-        _ = w
-    var packed = VariantsPackedResult(result, True)
-    _set(model, "cluster_centers_", _xc_array(packed.centers, Python.tuple(k, d), "<f4", "f", context))
-    var m = len(result.storage[0].tree_nodes) // 3
-    _set(model, "_tree_centers", _xc_array(packed.tree_centers, Python.tuple(m, d), "<f4", "f", context))
-    _set(model, "tree_nodes_", _xc_array(packed.tree_nodes, Python.tuple(m, 3), "<i4", "i", context))
-    _set(model, "labels_", _xc_array(packed.labels, Python.tuple(n), "<i4", "i", context))
-    _set(model, "inertia_", PythonObject(result.storage[0].inertia))
-    _set(model, "n_features_in_", PythonObject(d))
-
-
 def _centers_fit(model: PythonObject, binding: PythonObject, source: PythonObject,
                  context: PythonObject) raises:
     """`self.fit(X)` of a centers estimator (fit_predict and fit_transform
@@ -316,7 +262,7 @@ def _centers_fit(model: PythonObject, binding: PythonObject, source: PythonObjec
     if family_isinstance(model, py_item(context, nk[].k_family_cfa_minibatch)):
         _mbk_fit(model, binding, source, PythonObject(None), context)
     else:
-        _bisect_fit(model, binding, source, PythonObject(None), context)
+        bisect_fit(model, binding, source, PythonObject(None), context)
 
 
 # ---------------------------------------------------------------- AffinityPropagation
@@ -415,7 +361,7 @@ def cluster_fit_a_operation(model: PythonObject, operation: Int, args: PythonObj
         _mbk_partial_fit(model, binding, args[1], args[2], context)
         return model
     if operation == CFA_OPN_FAMILY_CFA_BISECT_FIT:
-        _bisect_fit(model, binding, args[1], args[2], context)
+        bisect_fit(model, binding, args[1], args[2], context)
         return model
     if operation == CFA_OPN_FAMILY_CFA_FIT_PREDICT:
         _centers_fit(model, binding, args[1], context)

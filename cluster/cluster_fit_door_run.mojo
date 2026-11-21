@@ -9,7 +9,7 @@
 # core/kmeans_variants_api.mojo, core/cluster_centroid_fit_api.mojo and
 # core/optics_fit_api.mojo; this file builds their requests. Every
 # iteration, batch, bisection and seed loop runs inside the entry.
-from core.kmeans_variants_api import VariantsSpan
+from core.kmeans_variants_api import VariantsSpan, BisectFitRequest
 from std.math import isinf
 from core.cluster_centroid_fit_api import MeanShiftFitRequest
 from core.optics_fit_api import OpticsMetric, OpticsFitRequest
@@ -20,6 +20,26 @@ def cluster_rows_cover(k: Int, n: Int) raises:
     """`n_clusters` is in [1, n_samples]."""
     if k < 1 or k > n:
         raise Error("n_samples=" + String(n) + " should be >= n_clusters=" + String(k) + ".")
+
+
+def cluster_n_init_positive(n_init: Int) raises:
+    if n_init < 1:
+        raise Error("n_init must be >= 1")
+
+
+# --------------------------------------------------------- BisectingKMeans
+def bisect_fit_request(source: VariantsSpan, weights: VariantsSpan, n: Int, d: Int, k: Int, n_init: Int,
+                       random_init: Bool, max_iter: Int, seed: Int, largest_cluster: Bool,
+                       tolerance: Float64) -> BisectFitRequest:
+    """The bisecting fit's typed request (core/kmeans_variants_api.mojo
+    `bisect_fit` lays out its words)."""
+    return BisectFitRequest(source, weights, n, d, k, n_init, random_init, max_iter, seed, largest_cluster,
+                            tolerance)
+
+
+def bisect_tree_rows(words: Int) -> Int:
+    """The bisection tree's node count: three int32 words per node."""
+    return words // 3
 
 
 # --------------------------------------------------------------- MeanShift

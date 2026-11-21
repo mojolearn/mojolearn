@@ -13,16 +13,19 @@
 # Array's store. Same entries, same operands, same order: the bits do not
 # move.
 from std.python import Python, PythonObject
+from core.kmeans_variants_api import VariantsResultSlot
+from bindings.kmeans_variants_boundary_door import VariantsPackedResult
 from core.cluster_centroid_fit_api import CentroidFitResultSlot
 from bindings.cluster_centroid_fit_boundary_door import CentroidPackedResult
 from core.optics_fit_api import OpticsFitResultSlot
 from bindings.optics_fit_boundary_door import OpticsPackedResult
-from cluster.cluster_fit_door_run import optics_hierarchy_rows
+from cluster.cluster_fit_door_run import optics_hierarchy_rows, bisect_tree_rows
 from bindings.cluster_public_native_pack import _xc_array
 from bindings.cluster_fit_public_native_unpack import (
     _set,
     meanshift_fit_stage, meanshift_fit_call,
     optics_fit_stage, optics_fit_call,
+    bisect_fit_stage, bisect_fit_call,
 )
 
 
@@ -62,3 +65,23 @@ def optics_fit(model: PythonObject, binding: PythonObject, source: PythonObject,
         var rows = optics_hierarchy_rows(len(result.storage[0].hierarchy))
         _set(model, "cluster_hierarchy_", _xc_array(packed.hierarchy, Python.tuple(rows, 2), "<i4", "i", context))
     _set(model, "n_features_in_", PythonObject(stage.d))
+
+
+# ---------------------------------------------------------------- BisectingKMeans
+def bisect_fit(model: PythonObject, binding: PythonObject, source: PythonObject, sample_weight: PythonObject,
+               context: PythonObject) raises:
+    """`BisectingKMeans.fit(X, sample_weight)`."""
+    var stage = bisect_fit_stage(model, source, sample_weight, context)
+    var result = VariantsResultSlot()
+    bisect_fit_call(binding, stage, result)
+    var n = stage.n
+    var d = stage.d
+    var k = stage.k
+    var packed = VariantsPackedResult(result, True)
+    _set(model, "cluster_centers_", _xc_array(packed.centers, Python.tuple(k, d), "<f4", "f", context))
+    var m = bisect_tree_rows(len(result.storage[0].tree_nodes))
+    _set(model, "_tree_centers", _xc_array(packed.tree_centers, Python.tuple(m, d), "<f4", "f", context))
+    _set(model, "tree_nodes_", _xc_array(packed.tree_nodes, Python.tuple(m, 3), "<i4", "i", context))
+    _set(model, "labels_", _xc_array(packed.labels, Python.tuple(n), "<i4", "i", context))
+    _set(model, "inertia_", PythonObject(result.storage[0].inertia))
+    _set(model, "n_features_in_", PythonObject(d))

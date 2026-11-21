@@ -26,14 +26,15 @@ from bindings.family_common_unpack import (
 )
 from bindings.family_common_pack import family_call
 from bindings.py_cluster_resident import CRES_X_CLUSTER, cres_forget
-from core.kmeans_variants_api import VariantsSpan
+from core.kmeans_variants_api import VariantsSpan, VariantsResultSlot
 from core.cluster_centroid_fit_api import CentroidFitResultSlot
 from core.optics_fit_api import OpticsMetric, OpticsFitResultSlot
 from bindings.optics_fit_boundary_door import optics_fit_connection
 from bindings.cluster_keys_unpack import cluster_keys
 from bindings.cluster_centroid_fit_boundary_door import centroid_fit_connection
-from bindings.kmeans_variants_boundary_door import variants_span
+from bindings.kmeans_variants_boundary_door import variants_connection, variants_span
 from cluster.cluster_fit_door_run import (
+    cluster_rows_cover, cluster_n_init_positive, bisect_fit_request,
     meanshift_seed_features, meanshift_bandwidth_refused, meanshift_fit_request,
     optics_minkowski_refused, optics_minkowski_metric, optics_euclidean_metric, optics_eps_refused,
     optics_xi_range, optics_precomputed_square, optics_fit_request,
@@ -313,3 +314,74 @@ def optics_fit_call(binding: PythonObject, stage: OpticsFit, mut result: OpticsF
     finally:
         _ = connection.provider
         _ = stage.x
+
+
+# ---------------------------------------------------------------- BisectingKMeans
+@fieldwise_init
+struct BisectFit(Movable):
+    """`BisectingKMeans.fit(X, sample_weight)` as typed values. `x` is the
+    admitted float32 X and `weights` the admitted sample weights (None when
+    the fit takes none), both pinned through the fit."""
+    var x: PythonObject
+    var weights: PythonObject
+    var n: Int
+    var d: Int
+    var k: Int
+    var n_init: Int
+    var random_init: Bool
+    var max_iter: Int
+    var seed: Int
+    var largest_cluster: Bool
+    var tolerance: Float64
+
+
+def bisect_fit_stage(model: PythonObject, source: PythonObject, sample_weight: PythonObject,
+                     context: PythonObject) raises -> BisectFit:
+    """The reads of `BisectingKMeans.fit`, in its order: init,
+    bisecting_strategy, algorithm, X, n_clusters, n_init, max_iter,
+    random_state, sample_weight, tol."""
+    var init = _attr(model, "init")
+    if not _one_of(init, "random", "k-means++"):
+        raise Error("NotImplementedError: mojolearn BisectingKMeans: init=" + family_repr(init)
+                    + " is not implemented; 'random' or 'k-means++'")
+    var strategy = _attr(model, "bisecting_strategy")
+    if not _one_of(strategy, "biggest_inertia", "largest_cluster"):
+        raise Error("bisecting_strategy must be 'biggest_inertia' or 'largest_cluster', got " + family_repr(strategy))
+    var algorithm = _attr(model, "algorithm")
+    if not _one_of(algorithm, "lloyd", "elkan"):
+        raise Error("algorithm must be 'lloyd' or 'elkan', got " + family_repr(algorithm))
+    var x = _f32(source, "X", context)
+    var n = Int(py=x.shape[0])
+    var d = Int(py=x.shape[1])
+    var k = Int(py=_int(_attr(model, "n_clusters")))
+    cluster_rows_cover(k, n)
+    var n_init = Int(py=_int(_attr(model, "n_init")))
+    cluster_n_init_positive(n_init)
+    var random_init = _eq(init, PythonObject("random"))
+    var max_iter = _int(_attr(model, "max_iter"))
+    var seed = _seed(_attr(model, "random_state"))
+    var largest_cluster = _eq(strategy, PythonObject("largest_cluster"))
+    var w = PythonObject(None)
+    if sample_weight is not None:
+        w = _weights(sample_weight, n, context)
+    var tolerance = _float(_attr(model, "tol"))
+    return BisectFit(x=x, weights=w, n=n, d=d, k=k, n_init=n_init, random_init=random_init,
+                     max_iter=Int(py=max_iter), seed=seed, largest_cluster=largest_cluster,
+                     tolerance=Float64(py=tolerance))
+
+
+def bisect_fit_call(binding: PythonObject, stage: BisectFit, mut result: VariantsResultSlot) raises:
+    """The bisecting entry on the typed transport, the GIL released around
+    it."""
+    var connection = variants_connection(binding)
+    var weight_span = variants_span(stage.weights)
+    var source_span = variants_span(stage.x)
+    var request = bisect_fit_request(source_span, weight_span, stage.n, stage.d, stage.k, stage.n_init,
+        stage.random_init, stage.max_iter, stage.seed, stage.largest_cluster, stage.tolerance)
+    try:
+        with GILReleased(Python()):
+            connection.driver.bisect_fit(request, result)
+    finally:
+        _ = connection.provider
+        _ = stage.x
+        _ = stage.weights
