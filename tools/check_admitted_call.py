@@ -254,8 +254,6 @@ DEBT = {
     'bindings/linalg_ops_lowbit_door.mojo': {'native_loaded_module': 6},
     'bindings/linalg_ops_resample_door.mojo': {'native_loaded_module': 10},
     'bindings/linear_constructor_native_pack.mojo': {'native_loaded_module': 2},
-    'bindings/linear_score_native_pack.mojo': {'native_loaded_module': 1},
-    'bindings/linear_score_native_unpack.mojo': {'native_loaded_module': 1},
     'bindings/lm_corpus_files_door.mojo': {'cpython': 1, 'import_module': 5, 'native_loaded_module': 13},
     'bindings/lm_corpus_metadata_door.mojo': {'native_loaded_module': 11},
     'bindings/lm_corpus_public_native_door.mojo': {'native_loaded_module': 16},
@@ -498,6 +496,7 @@ DEBT = {
     'bindings/user_object_flatten_door.mojo': {'cpython': 5},
     'bindings/user_objects_native_door.mojo': {'cpython': 5, 'native_loaded_module': 5},
     'bindings/x_linear_native_door.mojo': {'cpython': 1, 'native_loaded_module': 6},
+    'bindings/x_linear_route_unpack.mojo': {'native_loaded_module': 2},
     'bindings/x_prep_native_inputs_door.mojo': {'cpython': 2, 'native_loaded_module': 6},
     'bindings/x_prep_native_owner_door.mojo': {'cpython': 1, 'native_loaded_module': 10},
     # cpython 1 (lane fx-rows, 2026-11-18, 2800b6340c): xcnn_tuple builds the shape tuple through the C API
