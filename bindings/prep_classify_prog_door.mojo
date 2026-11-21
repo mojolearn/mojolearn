@@ -135,8 +135,8 @@ def _resident_slot(mut resident: ClsResident, source: PythonObject, address: Int
 
 struct ClsProg(Movable):
     """The door of one x_prep program: the typed program, the Python owner
-    of each input record (None for a native constant), and after the run
-    the arena store and its base address. `model` is the estimator whose
+    of each caller-buffer input record in record order (a native constant
+    has none), and after the run the arena store and its base address. `model` is the estimator whose
     device route holds the selected image (its entries, transport entry and
     capability bits, resolved once per estimator); None for a program no
     estimator owns, whose run selects and reads them per run, as before."""
@@ -176,6 +176,12 @@ struct ClsProg(Movable):
         self.owners.append(value)
         return offset
 
+    def own(mut self, value: PythonObject):
+        """UNPACK: the owner of the next caller-buffer record a typed builder
+        (bindings/prep_classify_prog_run.mojo) created on `program`. Owners
+        are given in the order the records were created."""
+        self.owners.append(value)
+
     def put_words(mut self, words: PythonObject) raises -> Int:
         """`_Prog.put_words`: an int32 buffer's words as they are."""
         return self.put(words)
@@ -183,9 +189,7 @@ struct ClsProg(Movable):
     def put_list(mut self, values: List[Float64], context: PythonObject, in_out: Bool = False) raises -> Int:
         """`_Prog.put_list`: float32 words of a parameter list ([0.0] when
         empty), a native constant of the program."""
-        var offset = self.program.put_list(values, in_out)
-        self.owners.append(PythonObject(None))
-        return offset
+        return self.program.put_list(values, in_out)
 
     def put_scalar(mut self, value: Float64, context: PythonObject) raises -> Int:
         var one = List[Float64]()
@@ -194,9 +198,7 @@ struct ClsProg(Movable):
 
     def put_ints(mut self, values: List[Int], context: PythonObject) raises -> Int:
         """`_Prog.put_ints`: int32 words read by `ldi` ([0] when empty)."""
-        var offset = self.program.put_ints(values)
-        self.owners.append(PythonObject(None))
-        return offset
+        return self.program.put_ints(values)
 
     def put_codes(mut self, codes: PythonObject) raises -> Int:
         """`_Prog.put_codes`: int32 codes -> offset of their float values (i2f)."""
@@ -258,15 +260,20 @@ struct ClsProg(Movable):
         # leased at the first input that is.
         var resident = ClsResident()
         var resident_read = False
+        var next_owner = 0
         for k in range(len(self.program.inputs)):  # driver-loop: over the program's input records
             var record = self.program.inputs[k]
+            if record.kind != CLS_IN_BUFFER:
+                if record.words > 0:
+                    records.append(ClsRunInput(record.offset, record.words, self.program.const_address(record), -1,
+                                               False, False, -1, 0, 0, 0, 0, 0))
+                continue
+            if next_owner >= len(self.owners):
+                raise Error("RuntimeError: x_prep program: a caller buffer record has no owner")
+            var value = self.owners[next_owner]
+            next_owner += 1
             if record.words == 0:
                 continue
-            if record.kind != CLS_IN_BUFFER:
-                records.append(ClsRunInput(record.offset, record.words, self.program.const_address(record), -1,
-                                           False, False, -1, 0, 0, 0, 0, 0))
-                continue
-            var value = self.owners[k]
             var gathered = False
             var base_slot = -1
             var base_address = 0

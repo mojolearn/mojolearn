@@ -20,6 +20,7 @@ from bindings.classical_validate_unpack import classical_view
 from bindings.x_prep_native_inputs_door import _rows_fields, _values
 from bindings.classical_labels_door import ClassicalLabels, classical_encode_labels
 from bindings.prep_classify_prog_door import ClsProg, NONE, INT32_MAX, off_add, f32_array, i32_array
+from bindings.prep_classify_prog_run import cls_col_stats, cls_class_stats
 from bindings.sequential_admission_door import _one_of
 from bindings.prep_entry_cache_unpack import prep_entry_word
 from bindings.prep_keys_unpack import prep_keys
@@ -36,20 +37,11 @@ comptime OP_MATMUL = 13
 comptime OP_COL_STATS = 1
 comptime OP_CLASS_STATS = 16
 comptime OP_QDA_COV = 40
-comptime OP_CLASS_STATS_W = 86
 comptime OP_LAB_LOAD = 119
-comptime OP_COLB_PART = 124
-comptime OP_COLB_FOLD = 125
-comptime OP_COLB_SS = 126
-comptime OP_COLB_VAR = 127
-comptime OP_CSB_PART = 129
 comptime OP_CSB_FOLD = 130
-comptime OP_CSB_SS = 131
-comptime OP_CSB_VAR = 132
 comptime OP_CSB1_PART = 162
 comptime OP_CSB1_NEG = 163
 comptime OP_CSR_DENSE = 164
-comptime OP_CSB1_SS = 165
 comptime OP_F2_CLAMP0 = 235
 comptime OP_GB_PART = 236
 comptime OP_GB_PART_ROW = 237
@@ -391,18 +383,9 @@ def cls_float(value: PythonObject) raises -> Float64:
 
 def col_stats(mut pr: ClsProg, xo: Int, n: Int, d: Int, out_buf: Int, variance: Bool = True):
     """`_col_stats`: six rows of d (count, mean, variance, min, max, max |x|),
-    in the blocked order when `_blocked()`."""
-    if not blocked():
-        pr.stage(OP_COL_STATS, d, xo, n, d, out_buf)
-        return
-    var nb = (n + XB - 1) // XB
-    var part = pr.work(5 * nb * d)
-    pr.stage(OP_COLB_PART, nb * d, xo, n, d, part, nb)
-    pr.stage(OP_COLB_FOLD, d, part, nb, d, out_buf)
-    if variance:
-        var ss = pr.work(nb * d)
-        pr.stage(OP_COLB_SS, nb * d, xo, n, d, out_buf, ss, nb)
-        pr.stage(OP_COLB_VAR, d, ss, nb, d, out_buf)
+    in the blocked order when `_blocked()`: the typed group
+    (bindings/prep_classify_prog_run.mojo `cls_col_stats`)."""
+    cls_col_stats(pr.program, xo, n, d, out_buf, variance, blocked())
 
 
 def cs(mut pr: ClsProg, mode: PythonObject, xo: Int, n: Int, d: Int, out_buf: Int, context: PythonObject, variance: Bool = True) raises:
@@ -416,32 +399,12 @@ def cs(mut pr: ClsProg, mode: PythonObject, xo: Int, n: Int, d: Int, out_buf: In
 def class_stats(mut pr: ClsProg, wo: Int, total: Int, xo: Int, n: Int, d: Int, yo: Int, K: Int,
                 cnt: Int, mean_in: Int, var_: Int, sums: Int, mode: PythonObject, context: PythonObject,
                 with_mode: Bool) raises:
-    """`_class_stats` (wo NONE: unweighted; with_mode: its `mode=` was given)."""
-    var mean = mean_in
-    if blocked():
-        var nb = (n + XB - 1) // XB
-        var ps = pr.work(nb * K * d)
-        var pc = pr.work(nb * K * d)
-        var cn = pr.work(K * d)
-        if var_ != NONE and mean == NONE:
-            mean = pr.work(K * d)
-        var onepass = with_mode and (idn_fam(mode, context) & IDN_CLASS_ONEPASS) != 0
-        if onepass:
-            pr.stage(OP_CSB1_PART, nb * d, xo, n, d, yo, K, ps, pc, nb, wo, NONE, NONE)
-        else:
-            pr.stage(OP_CSB_PART, nb * K * d, xo, n, d, yo, K, ps, pc, nb, wo)
-        pr.stage(OP_CSB_FOLD, K * d, ps, pc, nb, K, d, cn, cnt, mean, sums, wo)
-        if var_ != NONE and onepass:
-            pr.stage(OP_CSB1_SS, nb * d, xo, n, d, yo, K, mean, cn, ps, nb, wo)
-            pr.stage(OP_CSB_VAR, K * d, ps, nb, K, d, cn, var_)
-        elif var_ != NONE:
-            pr.stage(OP_CSB_SS, nb * K * d, xo, n, d, yo, K, mean, cn, ps, nb, wo)
-            pr.stage(OP_CSB_VAR, K * d, ps, nb, K, d, cn, var_)
-        return
-    if wo == NONE:
-        pr.stage(OP_CLASS_STATS, total, xo, n, d, yo, K, cnt, mean, var_, sums)
-    else:
-        pr.stage(OP_CLASS_STATS_W, total, xo, n, d, yo, K, cnt, mean, var_, sums, wo)
+    """`_class_stats` (wo NONE: unweighted; with_mode: its `mode=` was given):
+    the typed group (`cls_class_stats`), the image's one-pass bit read here
+    only for a blocked group."""
+    var is_blocked = blocked()
+    var onepass = is_blocked and with_mode and (idn_fam(mode, context) & IDN_CLASS_ONEPASS) != 0
+    cls_class_stats(pr.program, wo, total, xo, n, d, yo, K, cnt, mean_in, var_, sums, is_blocked, onepass)
 
 
 def cls_stats(mut pr: ClsProg, mode: PythonObject, xo: Int, n: Int, d: Int, yo: Int, K: Int,

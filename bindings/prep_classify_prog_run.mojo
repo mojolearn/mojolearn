@@ -466,3 +466,317 @@ def cls_class_counts(mut program: ClsProgram, co: Int, n: Int, K: Int) -> Int:
     var scan_words: List[Int] = [cnt, nch, K, tot]
     program.stage(CLS_OP_P2M_CSCAN, K, scan_words)
     return tot
+
+
+# ---------------------------------------------------------------- typed programs
+# Lane ma-pub-kernel round 5 (2026-11-21): the statistics groups, the
+# GaussianNB fit and the scoring program of the seven classifiers were staged
+# by the door over its Python-holding `ClsProg` with the mode read from
+# Python objects inside each group. They are typed here: sizes and the
+# image's mode bits arrive as words read once at UNPACK, a caller buffer is an
+# input record the caller owns in record order. The door
+# (bindings/prep_classify_native_door.mojo) and the members
+# (core/naive_bayes_member.mojo) build through these: same allocations, same
+# stage words, same order as the door's builders, so no bit moves.
+comptime CLS_OP_I2F = 10
+comptime CLS_OP_BINARIZE = 12
+comptime CLS_OP_MATMUL = 13
+comptime CLS_OP_ROW_SOFTMAX = 14
+comptime CLS_OP_ROW_ARGMAX = 15
+comptime CLS_OP_COL_STATS = 1
+comptime CLS_OP_CLASS_STATS = 16
+comptime CLS_OP_GNB_EPS = 27
+comptime CLS_OP_GNB_PARAMS = 28
+comptime CLS_OP_GNB_JLL = 29
+comptime CLS_OP_CAT_JLL = 35
+comptime CLS_OP_LDA_PREP = 36
+comptime CLS_OP_QDA_DEC = 42
+comptime CLS_OP_GATHER_COLS = 61
+comptime CLS_OP_CLASS_STATS_W = 86
+comptime CLS_OP_COLB_PART = 124
+comptime CLS_OP_COLB_FOLD = 125
+comptime CLS_OP_COLB_SS = 126
+comptime CLS_OP_COLB_VAR = 127
+comptime CLS_OP_CSB_PART = 129
+comptime CLS_OP_CSB_FOLD = 130
+comptime CLS_OP_CSB_SS = 131
+comptime CLS_OP_CSB_VAR = 132
+comptime CLS_OP_CSB1_PART = 162
+comptime CLS_OP_CSB1_SS = 165
+comptime CLS_OP_Q64_SOFTMAX = 213
+# x_prep/blocked.mojo XB: the rows a block unit folds.
+comptime CLS_XB = 2048
+
+#: classifier kinds of the scoring program
+comptime CLS_KIND_GNB = 0
+comptime CLS_KIND_MNB = 1
+comptime CLS_KIND_BNB = 2
+comptime CLS_KIND_CNB = 3
+comptime CLS_KIND_CAT = 4
+comptime CLS_KIND_LDA = 5
+comptime CLS_KIND_QDA = 6
+
+#: what a scoring program reads back
+comptime CLS_W_PREDICT = 1
+comptime CLS_W_PROBA = 2
+comptime CLS_W_LOG = 4
+
+
+def cls_buffer(mut program: ClsProgram, words: Int) -> Int:
+    """One caller buffer of `words` words as an input record (the caller
+    owns its words through the run, in record order)."""
+    return program.input(words, CLS_IN_BUFFER, -1, False)
+
+
+def cls_scalar(mut program: ClsProgram, value: Float64) -> Int:
+    var one: List[Float64] = [value]
+    return program.put_list(one)
+
+
+def cls_col_stats(mut program: ClsProgram, xo: Int, n: Int, d: Int, out_buf: Int, variance: Bool, blocked: Bool):
+    """`_col_stats`: six rows of d (count, mean, variance, min, max, max |x|),
+    in the blocked order when `blocked`."""
+    if not blocked:
+        var plain: List[Int] = [xo, n, d, out_buf]
+        program.stage(CLS_OP_COL_STATS, d, plain)
+        return
+    var nb = (n + CLS_XB - 1) // CLS_XB
+    var part = program.work(5 * nb * d)
+    var part_words: List[Int] = [xo, n, d, part, nb]
+    program.stage(CLS_OP_COLB_PART, nb * d, part_words)
+    var fold_words: List[Int] = [part, nb, d, out_buf]
+    program.stage(CLS_OP_COLB_FOLD, d, fold_words)
+    if variance:
+        var ss = program.work(nb * d)
+        var ss_words: List[Int] = [xo, n, d, out_buf, ss, nb]
+        program.stage(CLS_OP_COLB_SS, nb * d, ss_words)
+        var var_words: List[Int] = [ss, nb, d, out_buf]
+        program.stage(CLS_OP_COLB_VAR, d, var_words)
+
+
+def cls_class_stats(mut program: ClsProgram, wo: Int, total: Int, xo: Int, n: Int, d: Int, yo: Int, K: Int,
+                    cnt: Int, mean_in: Int, var_: Int, sums: Int, blocked: Bool, onepass: Bool):
+    """`_class_stats` (wo CLS_NONE: unweighted). `onepass`: the image's
+    IDN_CLASS_ONEPASS bit, asked only for a blocked group given its mode."""
+    var mean = mean_in
+    if blocked:
+        var nb = (n + CLS_XB - 1) // CLS_XB
+        var ps = program.work(nb * K * d)
+        var pc = program.work(nb * K * d)
+        var cn = program.work(K * d)
+        if var_ != CLS_NONE and mean == CLS_NONE:
+            mean = program.work(K * d)
+        if onepass:
+            var part1: List[Int] = [xo, n, d, yo, K, ps, pc, nb, wo, CLS_NONE, CLS_NONE]
+            program.stage(CLS_OP_CSB1_PART, nb * d, part1)
+        else:
+            var part: List[Int] = [xo, n, d, yo, K, ps, pc, nb, wo]
+            program.stage(CLS_OP_CSB_PART, nb * K * d, part)
+        var fold: List[Int] = [ps, pc, nb, K, d, cn, cnt, mean, sums, wo]
+        program.stage(CLS_OP_CSB_FOLD, K * d, fold)
+        if var_ != CLS_NONE:
+            var ss: List[Int] = [xo, n, d, yo, K, mean, cn, ps, nb, wo]
+            if onepass:
+                program.stage(CLS_OP_CSB1_SS, nb * d, ss)
+            else:
+                program.stage(CLS_OP_CSB_SS, nb * K * d, ss)
+            var vw: List[Int] = [ps, nb, K, d, cn, var_]
+            program.stage(CLS_OP_CSB_VAR, K * d, vw)
+        return
+    if wo == CLS_NONE:
+        var plain: List[Int] = [xo, n, d, yo, K, cnt, mean, var_, sums]
+        program.stage(CLS_OP_CLASS_STATS, total, plain)
+    else:
+        var weighted: List[Int] = [xo, n, d, yo, K, cnt, mean, var_, sums, wo]
+        program.stage(CLS_OP_CLASS_STATS_W, total, weighted)
+
+
+def cls_codes(mut program: ClsProgram, n: Int) -> Int:
+    """`_Prog.put_codes`: a buffer record of n int32 class codes -> the
+    offset of their float values (i2f)."""
+    var bits = cls_buffer(program, n)
+    var dst = program.alloc(n)
+    var words: List[Int] = [bits, dst]
+    program.stage(CLS_OP_I2F, n, words)
+    return dst
+
+
+def cls_copy_block(mut program: ClsProgram, src: Int, rows: Int, cols: Int) -> Int:
+    """`_copy_block`: a bit-for-bit copy (gather_cols over every column)."""
+    var dst = program.alloc(rows * cols)
+    var index = List[Float64](capacity=cols)
+    for j in range(cols):  # driver-loop: over the feature indices (model structure)
+        index.append(Float64(j))
+    var io = program.put_list(index)
+    var words: List[Int] = [src, rows, cols, io, cols, dst]
+    program.stage(CLS_OP_GATHER_COLS, rows * cols, words)
+    return dst
+
+
+def cls_binary_difference(mut program: ClsProgram, src: Int, rows: Int, K: Int, d_cols: Int, out_buf: Int):
+    """`_binary_difference`: the second minus the first column (or row)."""
+    var pm: List[Float64] = [-1.0, 1.0]
+    var w = program.put_list(pm)
+    if rows == 1:
+        var row_words: List[Int] = [w, 0, 1, src, d_cols, 1, out_buf, d_cols, 2, CLS_NONE, CLS_NONE]
+        program.stage(CLS_OP_MATMUL, d_cols, row_words)
+    else:
+        var col_words: List[Int] = [src, K, 1, w, 1, 0, out_buf, 1, 2, CLS_NONE, CLS_NONE]
+        program.stage(CLS_OP_MATMUL, rows, col_words)
+
+
+@fieldwise_init
+struct ClsGnbFit(ImplicitlyCopyable, Movable):
+    """The offsets a GaussianNB fit program answers at."""
+    var theta: Int
+    var var_: Int
+    var cnt: Int
+    var prior: Int
+    var eps: Int
+    var cst: Int
+    var raw: Int
+
+
+def cls_gnb_fit_program(mut program: ClsProgram, n: Int, d: Int, K: Int, weighted: Bool, var_smoothing: Float64,
+                        has_priors: Bool, priors: List[Float64], blocked: Bool, onepass: Bool) -> ClsGnbFit:
+    """The GaussianNB fit program. Buffer records, in order: X (n * d
+    float32), the class codes (n int32), then the sample weights
+    (max(n, 1) float32) when `weighted`. `priors`: the checked `priors`
+    parameter when `has_priors`. `blocked`: MOJOLEARN_XPREP_BLOCKED;
+    `onepass`: the image's IDN_CLASS_ONEPASS bit."""
+    var xo = cls_buffer(program, n * d)
+    var yo = cls_codes(program, n)
+    var vs = cls_scalar(program, var_smoothing)
+    var eps = program.alloc(1)
+    var cnt = program.alloc(K)
+    var theta = program.alloc(K * d)
+    var var_ = program.alloc(K * d)
+    var prior = program.alloc(K)
+    var cst = program.alloc(K)
+    var wo = cls_buffer(program, max(n, 1)) if weighted else CLS_NONE
+    # `_gnb_stats`: epsilon and the class counts, means and variances
+    var st = program.alloc(6 * d)
+    cls_col_stats(program, xo, n, d, st, True, blocked)
+    var eps_words: List[Int] = [st + 2 * d, d, eps, vs]
+    program.stage(CLS_OP_GNB_EPS, 1, eps_words)
+    cls_class_stats(program, wo, K * d, xo, n, d, yo, K, cnt, theta, var_, CLS_NONE, blocked, onepass)
+    var raw = cls_copy_block(program, var_, K, d)
+    var given = CLS_NONE
+    if has_priors:
+        given = program.put_list(priors)
+    elif wo != CLS_NONE:
+        # class_count_ / class_count_.sum() over the weighted counts
+        given = program.alloc(K)
+        var scratch = program.alloc(d)
+        var prep_words: List[Int] = [cnt, theta, K, d, n, given, scratch, 2, cnt]
+        program.stage(CLS_OP_LDA_PREP, 1, prep_words)
+    var params: List[Int] = [cnt, var_, K, d, n, eps, prior, cst, 1 if given != CLS_NONE else 0,
+                             given if given != CLS_NONE else 0]
+    program.stage(CLS_OP_GNB_PARAMS, K, params)
+    return ClsGnbFit(theta, var_, cnt, prior, eps, cst, raw)
+
+
+@fieldwise_init
+struct ClsScore(ImplicitlyCopyable, Movable):
+    """The offsets a scoring program answers at (CLS_NONE: not asked).
+    `chk`: CategoricalNB's column statistics of X (its range refusals)."""
+    var n: Int
+    var d: Int
+    var K: Int
+    var jll: Int
+    var lp: Int
+    var pp: Int
+    var am: Int
+    var p64: Bool
+    var chk: Int
+
+
+def cls_jll_stages(mut program: ClsProgram, kind: Int, xo_in: Int, n: Int, d: Int, K: Int, out_buf: Int,
+                   a_words: Int, b_words: Int, c_words: Int, has_threshold: Bool, threshold: Float64, cmax: Int):
+    """The class's joint log likelihood stages over X at `xo_in`. The fitted
+    blocks are buffer records created here, in this order (word counts
+    `a_words`, `b_words`, `c_words`): GaussianNB theta_, var_, _const;
+    MultinomialNB feature_log_prob_, class_log_prior_; BernoulliNB _w, _bias
+    (after the binarize stage when `has_threshold`); ComplementNB
+    feature_log_prob_, then class_log_prior_ only when K == 1; CategoricalNB
+    _flp, class_log_prior_ (`cmax`: its category bound); LDA _coef, _inter;
+    QDA means_, _rot, _logc."""
+    var xo = xo_in
+    if kind == CLS_KIND_GNB:
+        var th = cls_buffer(program, a_words)
+        var va = cls_buffer(program, b_words)
+        var co = cls_buffer(program, c_words)
+        var words: List[Int] = [xo, n, d, th, va, co, K, out_buf]
+        program.stage(CLS_OP_GNB_JLL, n * K, words)
+    elif kind == CLS_KIND_CAT:
+        var fo = cls_buffer(program, a_words)
+        var co = cls_buffer(program, b_words)
+        var words: List[Int] = [xo, n, d, fo, K, cmax, co, out_buf]
+        program.stage(CLS_OP_CAT_JLL, n * K, words)
+    elif kind == CLS_KIND_QDA:
+        var m = cls_buffer(program, a_words)
+        var r = cls_buffer(program, b_words)
+        var lc = cls_buffer(program, c_words)
+        var words: List[Int] = [xo, n, d, m, r, lc, K, out_buf]
+        program.stage(CLS_OP_QDA_DEC, n * K, words)
+    else:
+        # the linear kinds: one matmul with a bias row
+        if kind == CLS_KIND_BNB and has_threshold:
+            var thr = cls_scalar(program, threshold)
+            var xb = program.work(n * d)
+            var bin_words: List[Int] = [xo, n * d, thr, xb]
+            program.stage(CLS_OP_BINARIZE, n * d, bin_words)
+            xo = xb
+        var w = cls_buffer(program, a_words)
+        var b = CLS_NONE
+        if kind != CLS_KIND_CNB or K == 1:
+            b = cls_buffer(program, b_words)
+        var words: List[Int] = [xo, d, 1, w, 1, d, out_buf, K, d, b, CLS_NONE]
+        program.stage(CLS_OP_MATMUL, n * K, words)
+
+
+def cls_tail_stages(mut program: ClsProgram, n: Int, d: Int, K: Int, jll: Int, want: Int, p64: Bool, pair: Bool,
+                    chk: Int) -> ClsScore:
+    """`_score_tail`'s stages: softmax and argmax over the scores at `jll`.
+    `p64`: the float64 probabilities (asked with CLS_W_PROBA on an image
+    that exports x_prep_proba64). `pair`: the second score minus the first,
+    its n words at `am`."""
+    var lp = program.alloc(n * K) if (want & CLS_W_LOG) != 0 else CLS_NONE
+    var pp = program.alloc((2 if p64 else 1) * n * K) if (want & CLS_W_PROBA) != 0 else CLS_NONE
+    var am = program.alloc(n) if (want & CLS_W_PREDICT) != 0 else CLS_NONE
+    if p64:
+        var q: List[Int] = [jll, n, K, pp]
+        program.stage(CLS_OP_Q64_SOFTMAX, n, q)
+        if lp != CLS_NONE:
+            var log_words: List[Int] = [jll, n, K, lp, CLS_NONE]
+            program.stage(CLS_OP_ROW_SOFTMAX, n, log_words)
+    elif lp != CLS_NONE or pp != CLS_NONE:
+        var soft: List[Int] = [jll, n, K, lp, pp]
+        program.stage(CLS_OP_ROW_SOFTMAX, n, soft)
+    if am != CLS_NONE:
+        var arg: List[Int] = [jll, n, K, am]
+        program.stage(CLS_OP_ROW_ARGMAX, n, arg)
+    if pair:
+        am = program.alloc(n)
+        cls_binary_difference(program, jll, n, K, 1, am)
+    return ClsScore(n, d, K, jll, lp, pp, am, p64, chk)
+
+
+def cls_score_program(mut program: ClsProgram, kind: Int, xo_in: Int, n: Int, d: Int, K: Int, a_words: Int,
+                      b_words: Int, c_words: Int, want: Int, p64: Bool, pair: Bool, blocked: Bool,
+                      has_threshold: Bool, threshold: Float64, cmax: Int) -> ClsScore:
+    """`_Classifier._scores`: X (a buffer record of n * d float32 created
+    here when `xo_in` is CLS_NONE, else the offset the caller staged), the
+    class's joint log likelihood (`cls_jll_stages`, whose records follow
+    X), the tail. `want` 0: the scores themselves are the answer."""
+    var xo = xo_in
+    if xo == CLS_NONE:
+        xo = cls_buffer(program, n * d)
+    var chk = CLS_NONE
+    if kind == CLS_KIND_CAT:
+        chk = program.alloc(6 * d)
+        cls_col_stats(program, xo, n, d, chk, False, blocked)
+    # the joint log likelihood stays on the device unless it is the answer
+    var jll = program.work(n * K) if want != 0 else program.alloc(n * K)
+    cls_jll_stages(program, kind, xo, n, d, K, jll, a_words, b_words, c_words, has_threshold, threshold, cmax)
+    return cls_tail_stages(program, n, d, K, jll, want, p64, pair, chk)
