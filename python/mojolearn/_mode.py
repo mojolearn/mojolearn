@@ -44,6 +44,7 @@ import sys
 
 from . import _backend
 from ._array import Array as _Array
+from ._device_table import CPU_CLASSES as _DEVICE_CPU_CLASSES, record as _device_record
 from . import _sk_validate
 
 
@@ -688,8 +689,14 @@ def _connect_application_params(cls):
         connect_subclass(context, cls)
 
 
+_OBJECT_GET = object.__getattribute__
+
+
 def _install_numeric_mode(cls, *, native_constructor=False):
     # glue: NumericModeMixin.__init_subclass__'s class-definition wrapper
+    # One row of the device table per estimator class (which classes run
+    # device="cpu" beside a GPU set; generated, _device_table.py).
+    _device_record(cls)
     if getattr(cls, "_mojolearn_native_public", False):
         return  # the constructor takes numeric_mode itself
     # The former CPU-training guard loop over the five fit names is deleted
@@ -706,19 +713,52 @@ def _install_numeric_mode(cls, *, native_constructor=False):
             raise TypeError("native constructor must explicitly accept numeric_mode")
         return
 
-    @functools.wraps(orig)
-    def __init__(self, *args, numeric_mode=None, **kwargs):
-        orig(self, *args, **kwargs)
-        if numeric_mode is not None or not hasattr(self, "numeric_mode"):
-            self.numeric_mode = numeric_mode
+    sig = inspect.signature(orig)
+    # `device=` rides the same wrapper as `numeric_mode=` (one place for every
+    # class, lane dw-core 2026-11-20), for a class whose parameters are its
+    # constructor signature (`ParamsMixin.get_params`: get_params, set_params,
+    # clone and pickle then carry it with no further code) and whose own
+    # constructor does not already name a `device`. A class with a declared
+    # parameter list (the scalers, the decompositions, the forests, the
+    # searches, the optimizers) names `device` in that list itself.
+    takes_device = ("device" not in sig.parameters
+                    and getattr(cls, "get_params", None) is ParamsMixin.get_params)
+
+    if takes_device:
+        @functools.wraps(orig)
+        def __init__(self, *args, numeric_mode=None, device=None, **kwargs):
+            # `device` is checked in compiled code where it is given, before
+            # the constructor body runs (unknown value, 'gpu' on a CPU-only
+            # installation, 'cpu' for a class that cannot run there: refused
+            # in words). The default None on a new instance calls nothing; a
+            # constructor run again on a live instance drops its route.
+            # The instance dictionary through object's own lookup: two
+            # membership tests, no attribute door and no AttributeError built
+            # for the usual case (a new instance, device=None).
+            fields = _OBJECT_GET(self, "__dict__")
+            if device is not None or "device" in fields:
+                _MODE_METADATA(self, "device_admit", _MODE_METADATA_CONTEXT, device)
+            orig(self, *args, **kwargs)
+            if numeric_mode is not None or not hasattr(self, "numeric_mode"):
+                self.numeric_mode = numeric_mode
+            if device is not None or "device" not in fields:
+                self.device = device
+    else:
+        @functools.wraps(orig)
+        def __init__(self, *args, numeric_mode=None, **kwargs):
+            orig(self, *args, **kwargs)
+            if numeric_mode is not None or not hasattr(self, "numeric_mode"):
+                self.numeric_mode = numeric_mode
 
     # The signature scikit-learn reads (`_get_param_names`, its
-    # `check_no_attributes_set_in_init`) names `numeric_mode` too.
-    sig = inspect.signature(orig)
-    if "numeric_mode" not in sig.parameters:
+    # `check_no_attributes_set_in_init`) names `numeric_mode` (and `device`) too.
+    added = [name for name in (("numeric_mode", "device") if takes_device else ("numeric_mode",))  # glue: fixed keyword names
+             if name not in sig.parameters]
+    if added:
         params = list(sig.parameters.values())
         at = next((i for i, p in enumerate(params) if p.kind is p.VAR_KEYWORD), len(params))  # glue: signature parameter position
-        params.insert(at, inspect.Parameter("numeric_mode", inspect.Parameter.KEYWORD_ONLY, default=None))
+        for offset, name in enumerate(added):  # glue: one or two fixed keyword names
+            params.insert(at + offset, inspect.Parameter(name, inspect.Parameter.KEYWORD_ONLY, default=None))
         sig = sig.replace(parameters=params)
     __init__.__signature__ = sig
     cls.__init__ = __init__
@@ -797,6 +837,10 @@ class NumericModeMixin(ParamsMixin):
 # replacing any method identities captured by other native owner layouts.
 from ._native_mode_metadata import connect as _connect_mode_metadata
 _MODE_METADATA, _MODE_METADATA_CONTEXT = _connect_mode_metadata()
+# The one table the compiled `device_admit` check reads: class -> True, or
+# why device="cpu" is refused for it (_device_table.py). The same dictionary
+# object: classes defined later add their row.
+_MODE_METADATA_CONTEXT["device_cpu"] = _DEVICE_CPU_CLASSES
 from ._native_loaded_modules import connect_module as _connect_native_module
 # GP lifecycle admission reads this initialized owner without importing or
 # invoking Python. Later class connections extend the same metadata dictionary.
