@@ -1374,7 +1374,7 @@ def _gmm_public_operation(model: PythonObject, operation: Int, args: PythonObjec
         cluster_record_drop(_GMM_OPERANDS_SLOT, model)
     # The estimator's device route: one record read and four pointer compares
     # on a hit (providers/python/device_route_dw_neighbors_cluster_door.mojo).
-    # TOMBSTONE-NOTE: the per-call `estimator_binding(model, "_mojolearn_mixture", ...)`
+    # Removed here: the per-call `estimator_binding(model, "_mojolearn_mixture", ...)`
     # and `estimator_binding(model, "_mojolearn_x_cluster", ...)` of this door
     # (mode String, offerings and connections reads, the process `_CPU_ONLY`
     # question, the live registry read) run once per estimator, at resolution.

@@ -51,7 +51,7 @@ from core.linear_route import (
 )
 from core.device_route_dw_neighbors_cluster import (
     FamilyDeviceRoute, FAMILY_ROUTE_SLOT_COUNT, family_route_binding_name, family_route_plan,
-    family_route_unresolved, family_route_cpu_unconnected, family_route_vendor_is_cpu,
+    family_route_cpu_unconnected, family_route_vendor_is_cpu,
 )
 from providers.python.estimator_binding_pyapi_door import (
     _selected_mode, estimator_binding_mode, estimator_checked_mode,
@@ -332,6 +332,10 @@ def family_route_vendor_used(model: PythonObject, context: PythonObject) raises 
     route runs the CPU images, else the vendor word of this process's GPU
     set. Resolves the route on first use, with its refusals."""
     var owner = family_route_owner(model, context)
-    if family_route_vendor_is_cpu(owner.downcast_value_ptr[FamilyRouteOwner]()[].route):
+    var cpu = family_route_vendor_is_cpu(owner.downcast_value_ptr[FamilyRouteOwner]()[].route)
+    # The owner is named past the read through its pointer (a local is freed
+    # at its last named use).
+    _ = owner
+    if cpu:
         return PythonObject("cpu")
     return py_item(context, family_route_keys()[].k_vendor)
