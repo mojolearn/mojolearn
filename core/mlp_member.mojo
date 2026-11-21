@@ -560,17 +560,40 @@ def _import(slot: _SlotP, call: _CallP) raises:
     slot[].fitted = True
 
 
-def _outputs(slot: _SlotP, call: _CallP) raises:
+def _outputs(call: _CallP) raises:
+    """OUTPUTS with or without a state (item 10): the classifier's predict
+    one int32 code column, predict_proba float32 x classes; the regressor's
+    predict float32 x targets (the fitted net's outputs, else the caller's
+    `y.cols`). Another operation is refused, never sized."""
     var asked = call[].flags
-    var outputs = Int(slot[].scalars[5]) if slot[].fitted else 0
-    var classes = Int(slot[].scalars[6]) if slot[].fitted else call[].classes
-    call[].classes = classes if slot[].classifier else 0
-    if slot[].classifier:
-        call[].out_cols = classes if asked == MEMBER_OP_PREDICT_PROBA else 1
-    elif asked == MEMBER_OP_SCORE:
-        call[].out_cols = 1
+    var classifier: Bool
+    var outputs = max(1, call[].y.cols)
+    var classes = call[].classes
+    if call[].state != 0:
+        var slot = _SlotP(unsafe_from_address=_lookup(call[].state, False))
+        classifier = slot[].classifier
+        if slot[].fitted:
+            outputs = Int(slot[].scalars[5])
+            classes = Int(slot[].scalars[6])
+    elif call[].params and call[].param_count >= 1:
+        classifier = _F64P(unsafe_from_address=call[].params)[0] == 1.0
     else:
-        call[].out_cols = outputs
+        raise Error("member ABI: an MLP member's OUTPUTS without a state needs its NEW words")
+    call[].classes = classes if classifier else 0
+    if classifier:
+        if asked == MEMBER_OP_PREDICT:
+            call[].out_cols = 1
+            call[].out_dtype = MEMBER_I32
+        elif asked == MEMBER_OP_PREDICT_PROBA:
+            call[].out_cols = classes
+            call[].out_dtype = MEMBER_F32
+        else:
+            member_unsupported(_name(True), asked)
+        return
+    if asked != MEMBER_OP_PREDICT:
+        member_unsupported(_name(False), asked)
+    call[].out_cols = outputs
+    call[].out_dtype = MEMBER_F32
 
 
 def _capabilities(classifier: Bool) -> Int:
@@ -609,6 +632,9 @@ def _mlp_member(operation: Int, address: Int) raises -> Int:
     var call = _CallP(unsafe_from_address=address)
     if operation == MEMBER_OP_CAPABILITIES:
         if call[].state == 0:
+            # Kind-exact from the NEW words when given (item 17).
+            if call[].params and call[].param_count >= 1:
+                return _capabilities(_F64P(unsafe_from_address=call[].params)[0] == 1.0)
             return _capabilities(False) | _capabilities(True)
         var probe = _SlotP(unsafe_from_address=_lookup(call[].state, False))
         return _capabilities(probe[].classifier)
@@ -619,6 +645,9 @@ def _mlp_member(operation: Int, address: Int) raises -> Int:
         _ = _lookup(call[].state, True)
         call[].state = 0
         return 0
+    if operation == MEMBER_OP_OUTPUTS:
+        _outputs(call)
+        return 0
     var slot = _SlotP(unsafe_from_address=_lookup(call[].state, False))
     if operation == MEMBER_OP_FIT:
         _fit(slot, call)
@@ -628,8 +657,6 @@ def _mlp_member(operation: Int, address: Int) raises -> Int:
         _proba(slot, call)
     elif operation == MEMBER_OP_SCORE:
         _score(slot, call)
-    elif operation == MEMBER_OP_OUTPUTS:
-        _outputs(slot, call)
     elif operation == MEMBER_OP_EXPORT:
         _export(slot, call)
     elif operation == MEMBER_OP_IMPORT:

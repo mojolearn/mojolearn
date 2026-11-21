@@ -450,9 +450,15 @@ def _import(slot: _SlotP, call: _CallP) raises:
     slot[].fitted = True
 
 
-def _outputs(slot: _SlotP, call: _CallP):
+def _outputs(call: _CallP, fitted_batch: Int) raises:
+    """OUTPUTS with or without a state: PREDICT writes float32, one column
+    per series (the fitted state's, else the caller's `y.cols`); another
+    operation is refused, never sized."""
+    if call[].flags != MEMBER_OP_PREDICT:
+        member_unsupported("a forecaster member", call[].flags)
     call[].classes = 0
-    call[].out_cols = slot[].batch if slot[].fitted else max(1, call[].y.cols)
+    call[].out_cols = fitted_batch if fitted_batch > 0 else max(1, call[].y.cols)
+    call[].out_dtype = MEMBER_F32
 
 
 def _capabilities() -> Int:
@@ -496,8 +502,7 @@ def _forecast_seq_member(operation: Int, address: Int) raises -> Int:
         return 0
     if operation == MEMBER_OP_OUTPUTS and call[].state == 0:
         # No state: one forecast column per series of the fit to come.
-        call[].classes = 0
-        call[].out_cols = max(1, call[].y.cols)
+        _outputs(call, 0)
         return 0
     if operation == MEMBER_OP_FREE:
         _ = _lookup(call[].state, True)
@@ -509,7 +514,7 @@ def _forecast_seq_member(operation: Int, address: Int) raises -> Int:
     elif operation == MEMBER_OP_PREDICT:
         _predict(slot, call)
     elif operation == MEMBER_OP_OUTPUTS:
-        _outputs(slot, call)
+        _outputs(call, slot[].batch if slot[].fitted else 0)
     elif operation == MEMBER_OP_EXPORT:
         _export(slot, call)
     elif operation == MEMBER_OP_IMPORT:

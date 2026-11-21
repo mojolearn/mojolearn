@@ -58,7 +58,7 @@ from core.member_abi import (
     MemberCall, MemberMatrix, MEMBER_F32, MEMBER_F64, MEMBER_I32,
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_TRANSFORM,
     MEMBER_OP_OUTPUTS, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT,
-    MEMBER_CAN_FIT, MEMBER_CAN_TRANSFORM, MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT,
+    MEMBER_CAN_FIT, MEMBER_CAN_TRANSFORM, MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT, MEMBER_CAN_TEST_ROWS,
     MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
 )
@@ -263,6 +263,9 @@ def _x(slot: _Slot, call: _Call) raises:
 def _fit(slot: _Slot, call: _Call) raises:
     if call[].fit_output != 0:
         member_unsupported(_name(slot), call[].fit_output)
+    if call[].weights.rows > 0:
+        # No MEMBER_CAN_SAMPLE_WEIGHT: a given weight is refused, never ignored.
+        raise Error("member ABI: a " + _name(slot) + " member takes no sample weights")
     _x(slot, call)
     var n = call[].x.rows
     var d = call[].x.cols
@@ -468,7 +471,8 @@ def _import(slot: _Slot, call: _Call) raises:
 def _kernel_approx_member(operation: Int, address: Int) raises -> Int:
     var call = _Call(unsafe_from_address=address)
     if operation == MEMBER_OP_CAPABILITIES:
-        return MEMBER_CAN_FIT | MEMBER_CAN_TRANSFORM | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
+        # TEST_ROWS: `_x` tests X at fit and transform (no y, no weights).
+        return MEMBER_CAN_FIT | MEMBER_CAN_TRANSFORM | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_CAN_TEST_ROWS
     if operation == MEMBER_OP_NEW:
         if call[].param_count != _PARAMS or not call[].params:
             raise Error("member ABI: a kernel approximation member takes " + String(_PARAMS) + " parameters")
@@ -488,11 +492,32 @@ def _kernel_approx_member(operation: Int, address: Int) raises -> Int:
         _ = _lookup(call[].state, True)
         call[].state = 0
         return 0
-    var slot = _Slot(unsafe_from_address=_lookup(call[].state, False))
     if operation == MEMBER_OP_OUTPUTS:
-        call[].out_cols = slot[].components
+        # transform: float32 x n_components. A fitted state answers its own
+        # width; without one RBFSampler answers n_components from its NEW
+        # words, while Nystroem's width is chosen by the fit
+        # (min(n_components, rows)) and is refused in words.
+        if call[].flags != MEMBER_OP_TRANSFORM:
+            member_unsupported("a kernel approximation member", call[].flags)
+        var width = 0
+        if call[].state != 0:
+            var held = _Slot(unsafe_from_address=_lookup(call[].state, False))
+            if held[].fitted:
+                width = held[].components
+            elif not _nystroem(held):
+                width = Int(held[].params[6])
+        elif call[].param_count == _PARAMS and call[].params:
+            var named = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call[].params)
+            if named[0] == 1.0:
+                width = Int(named[6])
+        if width == 0:
+            raise Error("member ABI: Nystroem's transform width is chosen by its fit (min(n_components, rows)); "
+                + "ask the fitted state")
+        call[].out_cols = width
+        call[].out_dtype = MEMBER_F32
         call[].classes = 0
         return 0
+    var slot = _Slot(unsafe_from_address=_lookup(call[].state, False))
     if operation == MEMBER_OP_FIT:
         _fit(slot, call)
     elif operation == MEMBER_OP_TRANSFORM:
