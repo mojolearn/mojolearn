@@ -2718,10 +2718,15 @@ def worker(args):
                     runner = BUILDERS[(args.lane, args.arm)](data, rec)
                     runner.sync()
                 preparation_ms = (time.perf_counter() - whole_start) * 1000.0
+                # ONE-CALL call profile runs only (no-op otherwise; tools/bench_board_small_rows.py range_open_one):
+                # the window around this first scored call, opened before its clock
+                one = r > 0 and small.range_open_one("fit")
                 t0 = time.perf_counter()
                 runner.call()
                 runner.sync()
                 ms = (time.perf_counter() - t0) * 1000.0
+                if one:
+                    small.range_close()
                 outputs = runner.outputs()
                 runner.sync()
                 operation_ms = (time.perf_counter() - whole_start) * 1000.0
@@ -2773,10 +2778,13 @@ def worker(args):
                 if inf is None:
                     inf = infer_runner(args.lane, runner, data)
                 mem.start()
+                one = r > 0 and small.range_open_one("infer")     # ONE-CALL call profile runs only (no-op otherwise)
                 t0 = time.perf_counter()
                 inf.call()
                 inf.sync()
                 ms = (time.perf_counter() - t0) * 1000.0
+                if one:
+                    small.range_close()
                 n_calls = small.calls_for(ms, ours_arm, "infer") if r > 0 else 1
                 # SMALL ROWS: the hash is the first call's output, taken before the rest of the calls (one call:
                 # after the memory probe, as before)
@@ -3281,7 +3289,7 @@ def infer_phase(args, lane, ds, arms, workers, result):
     for arm in arms:
         infer["arms"][arm] = {"warmup_ms": None, "ms": [], "digests": [], "mem": [],
                               "status": "ok" if arm in eligible else "no_fit"}
-    for r in range(args.rounds + 1):
+    for r in range(_small_rows().first_round(), args.rounds + 1):     # 1: a one-call profile run, no warmup
         live = [a for a in eligible if workers[a].alive and infer["arms"][a]["status"] == "ok"]
         if not live:
             break
@@ -3328,7 +3336,7 @@ def infer_summary(lane, ds, infer, rounds):
         a["max_ms"] = max(a["ms"]) if ok else None
         if ok:   # SMALL ROWS: the spread of every scored call when the run made more than one
             a.update(_small_rows().cell_fields(a.get("scored_calls")))
-        a["digest_stable"] = (len(set(a["digests"][1:])) == 1) if ok else None
+        a["digest_stable"] = (len(set(a["digests"][1 - _small_rows().first_round():])) == 1) if ok else None
         print("CTD-INFER lane=%s dataset=%s arm=%s call=%s rows=%s status=%s median_ms=%s "
               "digest_stable=%s quality=%s"
               % (lane, ds, arm, infer["call"], infer["rows"], a["status"], a["median_ms"],
@@ -3431,7 +3439,7 @@ def race(args):
         with open(os.path.join(args.out, tag + ".json"), "w") as fh:
             json.dump(result, fh, indent=2, sort_keys=True, default=str)
         return 3
-    for r in range(args.rounds + 1):
+    for r in range(_small_rows().first_round(), args.rounds + 1):     # 1: a one-call profile run, no warmup
         live = [a for a in arms if workers[a].alive]
         if not live:
             break
@@ -3531,7 +3539,7 @@ def race(args):
         a["max_ms"] = max(a["ms"]) if ok else None
         if ok:   # SMALL ROWS: the spread of every scored call when the run made more than one
             a.update(_small_rows().cell_fields(a.get("scored_calls")))
-        a["digest_stable"] = (len(set(a["digests"][1:])) == 1) if ok else None
+        a["digest_stable"] = (len(set(a["digests"][1 - _small_rows().first_round():])) == 1) if ok else None
         dev = (a.get("info") or {}).get("device", "?")
         qual = result.get("quality", {}).get(arm, {})
         print("CTD lane=%s dataset=%s arm=%s device=%s status=%s median_ms=%s min_ms=%s max_ms=%s "

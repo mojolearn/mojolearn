@@ -7828,15 +7828,23 @@ def worker(args):
                 # time, user time, minor and major faults); a call whose system time is above half its wall is a
                 # host stall (tools/numa_place.py summarize; tools/paper_compare.py HOST-STALL)
                 runner.prepare()                    # untimed harness setup (Runner.prepare)
+                # ONE-CALL call profile runs only (no-op otherwise; tools/bench_board_small_rows.py range_open_one):
+                # the window around this first scored call of the forced phase, opened before its clock
+                one = r > 0 and small.range_open_one("fit")
                 u0 = numa.usage()
                 t0 = time.perf_counter()
                 runner.fit()
                 ms = (time.perf_counter() - t0) * 1000.0
+                if one:
+                    small.range_close()
                 u1 = numa.usage()
                 c1 = COMPILE.read()
+                one = r > 0 and small.range_open_one("infer")
                 t1 = time.perf_counter()
                 did = runner.infer()
                 ims = (time.perf_counter() - t1) * 1000.0 if did else None
+                if one:
+                    small.range_close()
                 u2 = numa.usage()
                 c2 = COMPILE.read()
                 fit_use, inf_use = [numa.delta(u0, u1, ms)], [numa.delta(u1, u2, ims) if did else None]
@@ -8816,9 +8824,10 @@ def race(args):
     if LANES[lane]["kind"] == "layer":
         os.environ[_tool("neural_fixtures").ENV_DIR] = os.path.abspath(
             getattr(args, "neural_fixtures", None) or _tool("neural_fixtures").default_dir(args.data))
-    external_warmup_planned = (os.environ.get("MOJOLEARN_AFT_CAPTURE") == "1"
-                               and os.environ.get("MOJOLEARN_AFT_EXTERNAL_WARMUP") == "1"
-                               and _aft_full_tree_workload(lane))
+    external_warmup_planned = ((os.environ.get("MOJOLEARN_AFT_CAPTURE") == "1"
+                                and os.environ.get("MOJOLEARN_AFT_EXTERNAL_WARMUP") == "1"
+                                and _aft_full_tree_workload(lane))
+                               or _tool("bench_board_small_rows").first_round() == 1)   # one-call profile run
     scorer_pre = {}
     if not getattr(args, "params_only", False):
         try:
@@ -8957,7 +8966,7 @@ def race(args):
         os.environ.get("MOJOLEARN_AFT_CAPTURE") == "1"
         and os.environ.get("MOJOLEARN_AFT_EXTERNAL_WARMUP") == "1"
         and _aft_full_tree_workload(lane)
-    )
+    ) or _tool("bench_board_small_rows").first_round() == 1     # a one-call profile run: no warmup round
     if os.environ.get("MOJOLEARN_AFT_CAPTURE") == "1":
         result["aft_warmup_policy"] = (
             "outer queue supplies excluded warmup in a fresh isolated process; no internal warmup"

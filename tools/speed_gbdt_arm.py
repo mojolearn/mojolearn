@@ -4672,7 +4672,8 @@ def run(lane, arms, data, n_rounds, size, dev=None, *, rotate_order=False,
 
     # The AFT full queue supplies its excluded warmup as a separate capture.
     # Historical callers retain the in-process warmup by default.
-    # An attribution run of an inference row (tools/ops/attribution_job.sh) does not time the fit: no fit warmup.
+    # An attribution run of an inference row (tools/ops/attribution_job.sh) does not time the fit: no fit warmup;
+    # nor does a one-call call profile run warm up at all (tools/bench_board_small_rows.py one_call).
     skip_warmup = skip_warmup or small.fit_warmup_skipped()
     live = list(arms) if skip_warmup else []
     for arm in (() if skip_warmup else arms):
@@ -4726,11 +4727,18 @@ def run(lane, arms, data, n_rounds, size, dev=None, *, rotate_order=False,
                     operation_start = time.perf_counter() if operation_capture else None
                     if operation_prepare is not None:
                         operation_prepare(arm, data)
-                    t0 = time.perf_counter()
-                    model = arm.make()
-                    arm.fit(model, arm.data or data)
-                    arm.sync()
-                    ms = (time.perf_counter() - t0) * 1000.0
+                    # ONE-CALL call profile runs only (no-op otherwise; tools/bench_board_small_rows.py
+                    # range_open_one): the window around this first scored fit, opened before its clock
+                    one = arm.library == "mojolearn" and small.range_open_one("fit")
+                    try:
+                        t0 = time.perf_counter()
+                        model = arm.make()
+                        arm.fit(model, arm.data or data)
+                        arm.sync()
+                        ms = (time.perf_counter() - t0) * 1000.0
+                    finally:
+                        if one:
+                            small.range_close()
             except Exception as exc:               # noqa: BLE001
                 emit_refused(lane, arm.name, "%s at round %d: %s"
                              % (exc.__class__.__name__, r,
