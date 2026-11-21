@@ -1,5 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
-"""CPython container allocation used by the native generation owner.
+"""CPython container allocation used by the native generation owner: the UNPACK
+(buffer admission to an address and words) and PACK (a native store wrapped as an
+Array) of the generation family. Its RUN is typed, in
+`core/generation_buffers_impl.mojo`: id conversion, layout words, the state
+shape check and the state copy. No device or process question is asked here.
 
 Only C builtins are invoked. Array.__init__, reshape, __buffer__, and package
 helpers never run. A foreign buffer is packed inside the operation's boundary.
@@ -19,8 +23,10 @@ from bindings.native_buffer_address_unpack import native_buffer_address
 from bindings.p3nc_fitted_freeze_unpack import fitted_freeze_foreign
 from core.weight_epoch import weight_epoch_bump
 from providers.python.borrowed_buffer_pyapi_unpack import admit_native_buffer_exporter
-from core.generation_buffers_impl import generation_ids_into
-from std.memory import unsafe_memcpy
+from core.generation_buffers_impl import (
+    generation_ids_into, generation_array_layout, generation_shape_size, generation_shape_text,
+    generation_bytes_copy,
+)
 from core.shared_slot import SharedSlot
 
 
@@ -110,22 +116,44 @@ def generation_array_context() raises -> PythonObject:
     return g[].array_context
 
 
-comptime _GENERATION_SLOTS = "generation_array_slots_v1"
+comptime _GENERATION_SETTERS = "generation_array_setters_v1"
+# The order `_generation_array` writes the storage slots of a new Array in.
+comptime _SET_STORE = 0
+comptime _SET_BASE = 1
+comptime _SET_PIN = 2
+comptime _SET_MV = 3
+comptime _SET_ADDR = 4
+comptime _SET_READONLY = 5
+comptime _SET_SHAPE = 6
+comptime _SET_DTYPE = 7
+comptime _SET_NDIM = 8
+comptime _SET_SIZE = 9
+comptime _SET_NBYTES = 10
+comptime _SET_ITEMSIZE = 11
+comptime _SET_ORDER = 12
+comptime _SET_STRIDES = 13
 
 
-def _generation_slots() raises -> PythonObject:
-    # The admitted Array storage descriptors, kept per class epoch (type
-    # watcher): a class change re-runs the full descriptor admission. The
-    # descriptors reference the Array class, which the generation boundary
-    # already holds for the process lifetime.
+def _generation_setters() raises -> PythonObject:
+    # The bound `__set__` of each admitted Array storage descriptor, in the
+    # write order above, kept per class epoch (type watcher): a class change
+    # re-runs the full descriptor admission. One record read per new Array
+    # replaces fourteen by-name dictionary reads and fourteen `__set__`
+    # attribute reads. The descriptors reference the Array class, which the
+    # generation boundary already holds for the process lifetime.
     var mods = NativeModules()
     var cls = GENERATION_BOUNDARY.get_or_create_ptr()[].array_cls
-    var cached = class_record(mods, _GENERATION_SLOTS, cls)
+    var cached = class_record(mods, _GENERATION_SETTERS, cls)
     if cached is not None:
         return cached
     var slots = native_array_slots(mods, generation_array_context())
-    class_admit(mods, _GENERATION_SLOTS, cls, slots)
-    return slots
+    var setters = Python.tuple(
+        slots["_store"].__set__, slots["_base"].__set__, slots["_pin"].__set__, slots["_mv"].__set__,
+        slots["_addr"].__set__, slots["_readonly"].__set__, slots["shape"].__set__, slots["dtype"].__set__,
+        slots["ndim"].__set__, slots["size"].__set__, slots["nbytes"].__set__, slots["itemsize"].__set__,
+        slots["order"].__set__, slots["strides"].__set__)
+    class_admit(mods, _GENERATION_SETTERS, cls, setters)
+    return setters
 
 
 def generation_array_snapshot(value: PythonObject) raises -> PythonObject:
@@ -174,46 +202,35 @@ def _generation_array(dims: List[Int], code: String, unfilled: Bool) raises -> P
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
     if g[].array_cls is None:
         raise Error("RuntimeError: generation requires its import-time Array connection")
-    var slots = _generation_slots()
+    var setters = _generation_setters()
     if code != "f" and code != "i" and code != "b":
         raise Error("generation: unsupported native allocation dtype")
-    var n = 1
     var itemsize = 1 if code == "b" else 4
-    for i in range(len(dims)):  # small-loop(array shape dimension words)
-        if dims[i] < 0 or (dims[i] != 0 and n > 2147483647 // dims[i]):
-            raise Error("generation: invalid shape or signed 32-bit kernel indexing overflow")
-        n *= dims[i]
+    # RUN: the element count and the row-major strides, as words.
+    var stride_words = List[Int]()
+    var n = generation_array_layout(dims, itemsize, stride_words)
+    # PACK: one native store wrapped as an Array; each slot is set through
+    # its held setter (no intermediate dictionary or key list), in the
+    # former order.
     var store = native_array_unfilled(code, n) if unfilled else native_array_zeros(code, n)
     var result = py_call(g[].bi.object.__new__, g[].array_cls)
-    # Strides computed natively (row-major), then one tuple; each slot is set
-    # directly (no intermediate dictionary or key list), in the former order.
-    var stride_words = List[Int](length=len(dims), fill=0)
-    var stride = itemsize
-    for i in range(len(dims)):  # small-loop(array shape dimension words)
-        var axis = len(dims) - i - 1
-        stride_words[axis] = stride
-        stride *= dims[axis]
     var shape = py_call(g[].bi.tuple, py_ints(dims))
     var strides = py_call(g[].bi.tuple, py_ints(stride_words))
-    _generation_slot_set(slots, result, "_store", store)
-    _generation_slot_set(slots, result, "_base", PythonObject(None))
-    _generation_slot_set(slots, result, "_pin", PythonObject(None))
-    _generation_slot_set(slots, result, "_mv", py_call(g[].bi.memoryview, store))
-    _generation_slot_set(slots, result, "_addr", store.buffer_info()[0])
-    _generation_slot_set(slots, result, "_readonly", PythonObject(False))
-    _generation_slot_set(slots, result, "shape", shape)
-    _generation_slot_set(slots, result, "dtype", PythonObject("<f4" if code == "f" else ("<i4" if code == "i" else "<i1")))
-    _generation_slot_set(slots, result, "ndim", PythonObject(len(dims)))
-    _generation_slot_set(slots, result, "size", PythonObject(n))
-    _generation_slot_set(slots, result, "nbytes", PythonObject(n * itemsize))
-    _generation_slot_set(slots, result, "itemsize", PythonObject(itemsize))
-    _generation_slot_set(slots, result, "order", PythonObject("C"))
-    _generation_slot_set(slots, result, "strides", strides)
+    py_call(setters[_SET_STORE], result, store)
+    py_call(setters[_SET_BASE], result, PythonObject(None))
+    py_call(setters[_SET_PIN], result, PythonObject(None))
+    py_call(setters[_SET_MV], result, py_call(g[].bi.memoryview, store))
+    py_call(setters[_SET_ADDR], result, store.buffer_info()[0])
+    py_call(setters[_SET_READONLY], result, PythonObject(False))
+    py_call(setters[_SET_SHAPE], result, shape)
+    py_call(setters[_SET_DTYPE], result, PythonObject("<f4" if code == "f" else ("<i4" if code == "i" else "<i1")))
+    py_call(setters[_SET_NDIM], result, PythonObject(len(dims)))
+    py_call(setters[_SET_SIZE], result, PythonObject(n))
+    py_call(setters[_SET_NBYTES], result, PythonObject(n * itemsize))
+    py_call(setters[_SET_ITEMSIZE], result, PythonObject(itemsize))
+    py_call(setters[_SET_ORDER], result, PythonObject("C"))
+    py_call(setters[_SET_STRIDES], result, strides)
     return result
-
-
-def _generation_slot_set(slots: PythonObject, target: PythonObject, name: String, value: PythonObject) raises:
-    py_call(slots[name].__set__, target, value)
 
 
 def generation_address(value: PythonObject, mut keep: List[PythonObject]) raises -> Int:
@@ -357,9 +374,7 @@ def generation_copy(value: PythonObject) raises -> PythonObject:
     # samba-forward profile, SambaStack.state_dict -> samba_snapshot, the
     # per-round state receipt outside the clock). One allocation, one copy.
     var out = generation_array_unfilled(dims, code)
-    var dst = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=out._addr))
-    var src = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=captured._addr))
-    unsafe_memcpy(dest=dst, src=src, count=Int(py=captured.nbytes))
+    generation_bytes_copy(Int(py=out._addr), Int(py=captured._addr), Int(py=captured.nbytes))
     _ = captured
     return out
 
@@ -388,19 +403,16 @@ def generation_mutable(
         shape = view.shape
         if Bool(py=view.readonly) or not Bool(py=view.c_contiguous) or String(view.format) != "f":
             raise Error("CausalLM: " + label + " must be writable C-contiguous float32 (it is updated in place)")
-    var want = String("(")
-    for i in range(len(expected)):  # small-loop(state buffer shape dims)
-        if i > 0:
-            want += ", "
-        want += String(expected[i])
-    want += ")"
+    # UNPACK the shape words, RUN the typed compare. The expected shape is
+    # spelled only for a refusal (it was built as text on every call).
     if len(shape) != len(expected):
-        raise Error("CausalLM: " + label + " has shape " + String(shape) + ", want " + want)
-    var size = 1
+        raise Error("CausalLM: " + label + " has shape " + String(shape) + ", want " + generation_shape_text(expected))
+    var words = List[Int]()
     for i in range(len(expected)):  # small-loop(state buffer shape dims)
-        if Int(py=shape[i]) != expected[i]:
-            raise Error("CausalLM: " + label + " has shape " + String(shape) + ", want " + want)
-        size *= expected[i]
+        words.append(Int(py=shape[i]))
+    var size = generation_shape_size(words, expected)
+    if size < 0:
+        raise Error("CausalLM: " + label + " has shape " + String(shape) + ", want " + generation_shape_text(expected))
     if Int(py=view.nbytes) != size * 4:
         raise Error("CausalLM: " + label + " span differs from its shape")
     var address: Int
