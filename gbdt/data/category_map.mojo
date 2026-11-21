@@ -59,6 +59,7 @@ GPU-free: imports no device API, so the doors and the host column import it.
 
 from std.builtin.sort import sort
 from std.memory import bitcast
+from std.collections.string import atof
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from gbdt.digest.city import city_hash_64
@@ -449,6 +450,293 @@ def category_block_keys(block: CategoryKeyPtr, column: Int) -> CategoryKeyPtr:
     for i in range(column):
         at += Int(block[3 + 2 * i])
     return block + at
+
+
+comptime _CodeI8 = MutPointer[Int8, MutUntrackedOrigin]
+comptime _CodeI16 = MutPointer[Int16, MutUntrackedOrigin]
+comptime _CodeI32 = MutPointer[Int32, MutUntrackedOrigin]
+comptime _CodeI64 = MutPointer[Int64, MutUntrackedOrigin]
+comptime _FlagPtr = MutPointer[UInt8, MutUntrackedOrigin]
+
+
+@always_inline
+def category_code_at(address: Int, itemsize: Int, stride: Int, r: Int) -> Int:
+    """Row `r` of a native-order signed integer codes array (a pandas
+    Categorical's codes: int8, int16, int32 or int64; -1 is missing)."""
+    var at = address + r * stride
+    if itemsize == 1:
+        return Int(_CodeI8(unsafe_from_address=at)[0])
+    if itemsize == 2:
+        return Int(_CodeI16(unsafe_from_address=at)[0])
+    if itemsize == 4:
+        return Int(_CodeI32(unsafe_from_address=at)[0])
+    return Int(_CodeI64(unsafe_from_address=at)[0])
+
+
+def _codes_refusal(flags: List[UInt8], units: Int) raises:
+    var bad = False
+    for u in range(units):  # driver-loop: over the tasks' flags
+        if flags[u] != 0:
+            bad = True
+    if bad:
+        raise Error("mojolearn: a pandas Categorical column holds a code outside its categories;"
+                    + " the column is corrupt")
+
+
+def category_keys_from_codes(
+    codes: Int, itemsize: Int, stride: Int, n: Int, table: CategoryKeyPtr, k: Int, dst: CategoryKeyPtr
+) raises:
+    """`dst[r] = table[code r]` for the `n` codes of a categorical column
+    whose `k` categories are keyed in `table`; code -1 is the missing key.
+    Rows split across the workers; a code outside -1 .. k-1 is refused."""
+    if itemsize != 1 and itemsize != 2 and itemsize != 4 and itemsize != 8:
+        raise Error("mojolearn: a pandas Categorical's codes are not 1, 2, 4 or 8-byte integers")
+    if n <= 0:
+        return
+    var units = max(1, host_predict_task_count_work(n, n * 2))
+    var chunk = host_predict_chunk(n, units)
+    var flags = List[UInt8](length=units, fill=UInt8(0))
+    var fp = _FlagPtr(unsafe_from_address=Int(flags.unsafe_ptr()))
+
+    def gather(unit: Int) {imm chunk, imm n, imm codes, imm itemsize, imm stride, imm table, imm k, imm dst, imm fp}:
+        var bad = False
+        for r in range(unit * chunk, min((unit + 1) * chunk, n)):
+            var code = category_code_at(codes, itemsize, stride, r)
+            if code >= 0 and code < k:
+                dst[r] = table[code]
+            else:
+                dst[r] = CATEGORY_KEY_MISSING
+                if code != -1:
+                    bad = True
+        if bad:
+            fp[unit] = UInt8(1)
+
+    host_parallelize(gather, units)
+    _codes_refusal(flags, units)
+    _ = flags^
+
+
+def category_values_from_codes(
+    codes: Int, itemsize: Int, stride: Int, n: Int, table: CategoryF32Ptr, k: Int, dst: CategoryF32Ptr
+) raises:
+    """`dst[r] = table[code r]` for a categorical column given to a numeric
+    feature (its `k` categories are numbers in `table`); code -1 is NaN.
+    Rows split across the workers; a code outside -1 .. k-1 is refused."""
+    if itemsize != 1 and itemsize != 2 and itemsize != 4 and itemsize != 8:
+        raise Error("mojolearn: a pandas Categorical's codes are not 1, 2, 4 or 8-byte integers")
+    if n <= 0:
+        return
+    var units = max(1, host_predict_task_count_work(n, n * 2))
+    var chunk = host_predict_chunk(n, units)
+    var flags = List[UInt8](length=units, fill=UInt8(0))
+    var fp = _FlagPtr(unsafe_from_address=Int(flags.unsafe_ptr()))
+    var missing = bitcast[DType.float32](UInt32(0x7FC00000))
+
+    def gather(unit: Int) {imm chunk, imm n, imm codes, imm itemsize, imm stride, imm table, imm k, imm dst, imm fp, imm missing}:
+        var bad = False
+        for r in range(unit * chunk, min((unit + 1) * chunk, n)):
+            var code = category_code_at(codes, itemsize, stride, r)
+            if code >= 0 and code < k:
+                dst[r] = table[code]
+            else:
+                dst[r] = missing
+                if code != -1:
+                    bad = True
+        if bad:
+            fp[unit] = UInt8(1)
+
+    host_parallelize(gather, units)
+    _codes_refusal(flags, units)
+    _ = flags^
+
+
+comptime _ByteP = MutPointer[UInt8, MutUntrackedOrigin]
+comptime _Ucs4P = MutPointer[UInt32, MutUntrackedOrigin]
+
+#: why `category_fixed_text` refused a cell (0: it did not)
+comptime CATEGORY_TEXT_OK = 0
+comptime CATEGORY_TEXT_INVALID = 1
+comptime CATEGORY_TEXT_NOT_A_NUMBER = 2
+
+
+@always_inline
+def _is_space(c: UInt8) -> Bool:
+    return c == 32 or (c >= 9 and c <= 13)
+
+
+@always_inline
+def _lower(c: UInt8) -> UInt8:
+    return c + 32 if c >= 65 and c <= 90 else c
+
+
+def _word_is(p: _ByteP, lo: Int, hi: Int, word: StaticString) -> Bool:
+    """Whether bytes `lo..hi` are `word` (lower case ASCII), any case."""
+    var n = word.byte_length()
+    if hi - lo != n:
+        return False
+    var wp = word.unsafe_ptr()
+    for i in range(n):
+        if _lower(p[lo + i]) != wp[i]:
+            return False
+    return True
+
+
+def category_text_number(address: Int, nbytes: Int, mut ok: Bool) -> Float64:
+    """The number a numeric column's text cell spells: surrounding ASCII
+    whitespace ignored, an optional sign, then a decimal or exponent number
+    (the stdlib's correctly rounded `atof`), or `nan`, `inf` or `infinity`
+    in any case. `ok` is False (and the result 0) for anything else,
+    non-ASCII text included."""
+    ok = False
+    var p = _ByteP(unsafe_from_address=address)
+    var lo = 0
+    var hi = nbytes
+    while lo < hi and _is_space(p[lo]):
+        lo += 1
+    while hi > lo and _is_space(p[hi - 1]):
+        hi -= 1
+    if lo == hi:
+        return 0.0
+    for i in range(lo, hi):
+        if p[i] >= 128:
+            return 0.0
+    var negative = p[lo] == 45
+    var body = lo + 1 if (p[lo] == 45 or p[lo] == 43) else lo
+    if _word_is(p, body, hi, "nan"):
+        ok = True
+        return Float64(bitcast[DType.float32](UInt32(0x7FC00000)))
+    if _word_is(p, body, hi, "inf") or _word_is(p, body, hi, "infinity"):
+        ok = True
+        var big = Float64(bitcast[DType.float32](UInt32(0x7F800000)))
+        return -big if negative else big
+    var view = Span(
+        unsafe_ptr=Pointer[UInt8, ImmUntrackedOrigin](unsafe_from_address=address + lo),
+        length=hi - lo,
+    )
+    try:
+        var value = atof(StringSlice(unsafe_from_utf8=view))
+        ok = True
+        return value
+    except:
+        return 0.0
+
+
+def _ucs4_to_utf8(src: Int, chars: Int, dst: _ByteP, mut ok: Bool) -> Int:
+    """UTF-8 of `chars` native-order UCS4 code points at `src` into `dst`
+    (room for 4 bytes a code point); the byte count. `ok` is False for a
+    surrogate or a value past U+10FFFF (text CPython cannot encode)."""
+    ok = True
+    var p = _Ucs4P(unsafe_from_address=src)
+    var w = 0
+    for i in range(chars):
+        var c = p[i]
+        if c < 0x80:
+            dst[w] = c.cast[DType.uint8]()
+            w += 1
+        elif c < 0x800:
+            dst[w] = (0xC0 | (c >> 6)).cast[DType.uint8]()
+            dst[w + 1] = (0x80 | (c & 0x3F)).cast[DType.uint8]()
+            w += 2
+        elif c < 0x10000:
+            if c >= 0xD800 and c <= 0xDFFF:
+                ok = False
+                return 0
+            dst[w] = (0xE0 | (c >> 12)).cast[DType.uint8]()
+            dst[w + 1] = (0x80 | ((c >> 6) & 0x3F)).cast[DType.uint8]()
+            dst[w + 2] = (0x80 | (c & 0x3F)).cast[DType.uint8]()
+            w += 3
+        elif c <= 0x10FFFF:
+            dst[w] = (0xF0 | (c >> 18)).cast[DType.uint8]()
+            dst[w + 1] = (0x80 | ((c >> 12) & 0x3F)).cast[DType.uint8]()
+            dst[w + 2] = (0x80 | ((c >> 6) & 0x3F)).cast[DType.uint8]()
+            dst[w + 3] = (0x80 | (c & 0x3F)).cast[DType.uint8]()
+            w += 4
+        else:
+            ok = False
+            return 0
+    return w
+
+
+def category_fixed_text(
+    base: Int, itemsize: Int, wide: Bool, row_stride: Int, col_stride: Int, n_rows: Int, n_features: Int,
+    slots: Int, keys: CategoryKeyPtr, values: CategoryF32Ptr,
+) -> Tuple[Int, Int, Int]:
+    """Every cell of a fixed-width NumPy text array, natively: a unicode
+    (`wide`: UCS4, native order) or bytes array of `itemsize`-byte cells,
+    trailing NULs dropped as NumPy drops them. Column j is categorical when
+    `slots[j] >= 0` (its cells keyed as text into `keys[slot * n_rows + r]`,
+    the key a str or bytes cell of the same UTF-8 bytes gets) and numeric
+    otherwise (its text parsed by `category_text_number` into
+    `values[j * n_rows + r]`). Rows split across the workers, each with
+    its own UTF-8 scratch. Returns (row, column, why) of the first refused
+    cell in row order, or (-1, -1, CATEGORY_TEXT_OK)."""
+    if n_rows <= 0 or n_features <= 0:
+        return (Int(-1), Int(-1), Int(CATEGORY_TEXT_OK))
+    var units = max(1, host_predict_task_count_work(n_rows, n_rows * n_features * max(itemsize, 1)))
+    var chunk = host_predict_chunk(n_rows, units)
+    var room = max(itemsize, 1)
+    var scratch = List[UInt8](length=units * room, fill=UInt8(0))
+    var fail_row = List[Int](length=units, fill=-1)
+    var fail_col = List[Int](length=units, fill=-1)
+    var fail_why = List[Int](length=units, fill=CATEGORY_TEXT_OK)
+    var scratch_p = _ByteP(unsafe_from_address=Int(scratch.unsafe_ptr()))
+    var row_p = _WordPtr(unsafe_from_address=Int(fail_row.unsafe_ptr()))
+    var col_p = _WordPtr(unsafe_from_address=Int(fail_col.unsafe_ptr()))
+    var why_p = _WordPtr(unsafe_from_address=Int(fail_why.unsafe_ptr()))
+    var slot_p = _WordPtr(unsafe_from_address=slots)
+    var step = 4 if wide else 1
+    var width = itemsize // step
+
+    def cells(unit: Int) {imm chunk, imm n_rows, imm n_features, imm base, imm row_stride, imm col_stride, imm step, imm width, imm wide, imm room, imm scratch_p, imm row_p, imm col_p, imm why_p, imm slot_p, imm keys, imm values}:
+        var own = scratch_p + unit * room
+        for r in range(unit * chunk, min((unit + 1) * chunk, n_rows)):
+            for j in range(n_features):
+                var at = base + r * row_stride + j * col_stride
+                # the cell's length without NumPy's trailing NUL padding
+                var length = width
+                if wide:
+                    var cp = _Ucs4P(unsafe_from_address=at)
+                    while length > 0 and cp[length - 1] == 0:
+                        length -= 1
+                else:
+                    var bp = _ByteP(unsafe_from_address=at)
+                    while length > 0 and bp[length - 1] == 0:
+                        length -= 1
+                var text = at
+                var nbytes = length
+                if wide:
+                    var valid = True
+                    nbytes = _ucs4_to_utf8(at, length, own, valid)
+                    text = Int(own)
+                    if not valid:
+                        row_p[unit] = r
+                        col_p[unit] = j
+                        why_p[unit] = CATEGORY_TEXT_INVALID
+                        return
+                var slot = slot_p[j]
+                if slot >= 0:
+                    keys[slot * n_rows + r] = category_key_text(text, nbytes)
+                else:
+                    var parsed = False
+                    var number = category_text_number(text, nbytes, parsed)
+                    if not parsed:
+                        row_p[unit] = r
+                        col_p[unit] = j
+                        why_p[unit] = CATEGORY_TEXT_NOT_A_NUMBER
+                        return
+                    values[j * n_rows + r] = Float32(number)
+
+    host_parallelize(cells, units)
+    var result: Tuple[Int, Int, Int] = (Int(-1), Int(-1), Int(CATEGORY_TEXT_OK))
+    for u in range(units):  # driver-loop: over the tasks, in row order; the first refusal wins
+        if fail_why[u] != CATEGORY_TEXT_OK:
+            result = (fail_row[u], fail_col[u], fail_why[u])
+            break
+    _ = scratch^
+    _ = fail_row^
+    _ = fail_col^
+    _ = fail_why^
+    return result
 
 
 def category_apply_column(

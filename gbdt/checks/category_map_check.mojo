@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native check of the category encoding (`gbdt/data/category_map.mojo`):
 keys, the distinct set against a serial reference, dense codes, the unseen
-code, and the stored map searched in place. Host only; no device."""
+code, the stored map searched in place, and the new cell kinds (pandas
+Categorical codes, NumPy U / S cells, numeric text). Host only; no device."""
 from gbdt.data.category_map import (
     CategoryMaps,
     CategoryKeyPtr,
@@ -18,6 +19,13 @@ from gbdt.data.category_map import (
     category_block_feature,
     category_block_count,
     category_apply_column,
+    category_keys_from_codes,
+    category_values_from_codes,
+    category_text_number,
+    category_fixed_text,
+    CATEGORY_TEXT_OK,
+    CATEGORY_TEXT_INVALID,
+    CATEGORY_TEXT_NOT_A_NUMBER,
 )
 
 
@@ -169,6 +177,138 @@ def fit_and_apply() raises:
     _ = fresh_keys
 
 
+def _text_key(text: String) -> UInt64:
+    var bytes = text.as_bytes()
+    var key = category_key_text(Int(bytes.unsafe_ptr()), text.byte_length())
+    _ = text
+    return key
+
+
+def codes() raises:
+    """A Categorical's codes mapped through its k category keys, in several
+    tasks: every code width, -1 is missing, a corrupt code is refused."""
+    var n = 100003
+    var table: List[UInt64] = [_text_key("a"), _text_key("b"), category_key_integer(7)]
+    var numbers: List[Float32] = [1.5, -2.0, 7.0]
+    var c8 = List[Int8](length=n, fill=Int8(0))
+    var c64 = List[Int64](length=n, fill=Int64(0))
+    for r in range(n):
+        var code = (r % 4) - 1  # -1, 0, 1, 2
+        c8[r] = Int8(code)
+        c64[r] = Int64(code)
+    var got = List[UInt64](length=n, fill=UInt64(0))
+    var wide = List[UInt64](length=n, fill=UInt64(0))
+    var vals = List[Float32](length=n, fill=Float32(0.0))
+    category_keys_from_codes(Int(c8.unsafe_ptr()), 1, 1, n, _key_ptr(table), 3, _key_ptr(got))
+    category_keys_from_codes(Int(c64.unsafe_ptr()), 8, 8, n, _key_ptr(table), 3, _key_ptr(wide))
+    category_values_from_codes(Int(c8.unsafe_ptr()), 1, 1, n, _f32_ptr(numbers), 3, _f32_ptr(vals))
+    for r in range(n):
+        var code = (r % 4) - 1
+        var want = CATEGORY_KEY_MISSING if code < 0 else table[code]
+        _need(got[r] == want and wide[r] == want, "a code maps to its category's key")
+        if code < 0:
+            _need(vals[r] != vals[r], "code -1 of a numeric feature is NaN")
+        else:
+            _need(vals[r] == numbers[code], "a code maps to its category's number")
+    c8[n - 1] = Int8(3)
+    var refused = False
+    try:
+        category_keys_from_codes(Int(c8.unsafe_ptr()), 1, 1, n, _key_ptr(table), 3, _key_ptr(got))
+    except:
+        refused = True
+    _need(refused, "a code past the categories is refused")
+    _ = table
+    _ = numbers
+    _ = c8
+    _ = c64
+    _ = got
+    _ = wide
+    _ = vals
+
+
+def _number(text: String, mut ok: Bool) -> Float64:
+    var bytes = text.as_bytes()
+    var value = category_text_number(Int(bytes.unsafe_ptr()), text.byte_length(), ok)
+    _ = text
+    return value
+
+
+def numbers() raises:
+    var ok = False
+    _need(_number(" 1.5 ", ok) == 1.5 and ok, "text 1.5 with spaces")
+    _need(_number("-2e3", ok) == -2000.0 and ok, "exponent text")
+    _need(_number("7", ok) == 7.0 and ok, "whole text")
+    var nan = _number("NaN", ok)
+    _need(ok and nan != nan, "nan text")
+    _need(_number("-inf", ok) < -1.0e300 and ok, "-inf text")
+    _need(_number("Infinity", ok) > 1.0e300 and ok, "infinity text")
+    _ = _number("abc", ok)
+    _need(not ok, "letters are not a number")
+    _ = _number("", ok)
+    _need(not ok, "empty text is not a number")
+    _ = _number("1.5x", ok)
+    _need(not ok, "trailing letters are not a number")
+
+
+def fixed_text() raises:
+    """A U array (UCS4) and an S array: the categorical column's keys equal
+    the str / bytes keys of the same text, trailing NULs dropped; the
+    numeric column parsed; a bad number and a surrogate refused with their
+    cell. Row-major rows x 2 columns, column 0 categorical."""
+    var n = 5000
+    var chars = 4  # U4: 16-byte cells
+    var u = List[UInt32](length=n * 2 * chars, fill=UInt32(0))
+    var s8 = List[UInt8](length=n * 2 * chars, fill=UInt8(0))
+    var texts: List[String] = ["a", "bc", "été", "1.5"]
+    for r in range(n):
+        var cat = texts[r % 3].copy()
+        var i = 0
+        for cp in cat.codepoints():
+            u[(r * 2) * chars + i] = UInt32(Int(cp))
+            i += 1
+        var cb = cat.as_bytes()
+        for b in range(min(cat.byte_length(), chars)):
+            s8[(r * 2) * chars + b] = cb[b]
+        # the numeric column: "1.5" (ASCII, so the same bytes in U and S)
+        var num = texts[3].as_bytes()
+        for b in range(3):
+            u[(r * 2 + 1) * chars + b] = UInt32(num[b])
+            s8[(r * 2 + 1) * chars + b] = num[b]
+    var slots: List[Int] = [0, -1]
+    var ku = List[UInt64](length=n, fill=UInt64(0))
+    var ks = List[UInt64](length=n, fill=UInt64(0))
+    var vu = List[Float32](length=2 * n, fill=Float32(0.0))
+    var vs = List[Float32](length=2 * n, fill=Float32(0.0))
+    var fu = category_fixed_text(Int(u.unsafe_ptr()), 4 * chars, True, 2 * 4 * chars, 4 * chars, n, 2,
+                                 Int(slots.unsafe_ptr()), _key_ptr(ku), _f32_ptr(vu))
+    var fs = category_fixed_text(Int(s8.unsafe_ptr()), chars, False, 2 * chars, chars, n, 2,
+                                 Int(slots.unsafe_ptr()), _key_ptr(ks), _f32_ptr(vs))
+    _need(fu[2] == CATEGORY_TEXT_OK and fs[2] == CATEGORY_TEXT_OK, "clean U and S arrays are admitted")
+    for r in range(n):
+        var want = _text_key(texts[r % 3])
+        _need(ku[r] == want, "a U cell keys as the str of its text")
+        if r % 3 != 2:
+            _need(ks[r] == want, "an S cell keys as the bytes of its text")
+        _need(vu[n + r] == Float32(1.5) and vs[n + r] == Float32(1.5), "the numeric column is parsed")
+    # a letter in the numeric column of row 4321, a surrogate in row 77
+    u[(4321 * 2 + 1) * chars] = UInt32(120)
+    var bad = category_fixed_text(Int(u.unsafe_ptr()), 4 * chars, True, 2 * 4 * chars, 4 * chars, n, 2,
+                                  Int(slots.unsafe_ptr()), _key_ptr(ku), _f32_ptr(vu))
+    _need(bad[2] == CATEGORY_TEXT_NOT_A_NUMBER and bad[0] == 4321 and bad[1] == 1, "a text number is refused at its cell")
+    u[(77 * 2) * chars] = UInt32(0xD800)
+    var worse = category_fixed_text(Int(u.unsafe_ptr()), 4 * chars, True, 2 * 4 * chars, 4 * chars, n, 2,
+                                    Int(slots.unsafe_ptr()), _key_ptr(ku), _f32_ptr(vu))
+    _need(worse[2] == CATEGORY_TEXT_INVALID and worse[0] == 77 and worse[1] == 0, "the first refused cell in row order wins")
+    _ = u
+    _ = s8
+    _ = texts
+    _ = slots
+    _ = ku
+    _ = ks
+    _ = vu
+    _ = vs
+
+
 def run_checks() raises:
     keys()
     # one task, several tasks, all distinct, heavy repeats
@@ -178,3 +318,6 @@ def run_checks() raises:
     distinct(300000, UInt64(1000))
     distinct_wide(2000000)
     fit_and_apply()
+    codes()
+    numbers()
+    fixed_text()
