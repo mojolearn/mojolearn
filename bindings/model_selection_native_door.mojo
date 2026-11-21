@@ -17,6 +17,7 @@ from bindings.family_common_pack import family_call
 from bindings.msel_common_door import msel_get_scorer, msel_score, msel_admit, msel_flatten, msel_numeric_vector
 from bindings.msel_scorer_native_door import msel_metric_plan, msel_scorer_call, msel_scorer_create
 from bindings.msel_estimator_native_door import msel_estimator_call, msel_estimator_plan, msel_native_clone
+from bindings.msel_member_device_unpack import msel_own_device_admit
 from bindings.parallel_cv_native_door import msel_parallel_operation
 from bindings.msel_cv_door import msel_cross_validate, msel_cross_val_score, msel_cross_val_predict, msel_split_descriptor
 from bindings.msel_search_door import (
@@ -76,6 +77,12 @@ def msel_operation(model: PythonObject, operation: String, args: PythonObject,
         # `type(model)(**model.get_params(deep=False))` from the constructor schema.
         return msel_native_clone(model, context)
     if operation == "family_msel_search_init":
+        # The search's own `device` is the last constructor argument of the
+        # three search classes (python/mojolearn/_native_msel_search.py). An
+        # unknown value, and 'gpu' on a CPU-only install, are refused in
+        # words before any field is stored; the default None is one compare.
+        if len(args) > 0:
+            msel_own_device_admit(args[len(args) - 1], context)
         return msel_search_initialize(model, args, context)
     if operation == "family_msel_grid_init":
         var grid = msel_grid_dicts(args[0], context)
@@ -107,6 +114,11 @@ def msel_operation(model: PythonObject, operation: String, args: PythonObject,
                 raise Error("TypeError: search parameter names must be exact strings")
             if py_contains(msel_search_plan(model, context)["protected"], names[k]):
                 raise Error("TypeError: search parameters cannot override native method or storage hooks")
+        # A new `device` is checked before any field changes (the same rule
+        # and words as the constructor); a refusal leaves the search as it was.
+        var device = py_get(args[0], PythonObject("device"))
+        if device is not None:
+            msel_own_device_admit(device, context)
         msel_search_update(fields, args[0], context)
         return model
     if operation == "family_msel_search_estimator_type":

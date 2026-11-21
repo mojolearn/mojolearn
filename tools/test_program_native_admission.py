@@ -31,7 +31,7 @@ def test_embedding_reuses_admitted_descriptor_instead_of_dtype_hook():
 def test_common_context_is_connected_at_import_not_per_operation():
     source = (ROOT / 'python/mojolearn/ops.py').read_text()
     module = ast.parse(source)
-    connect = next(n for n in module.body if isinstance(n, ast.FunctionDef) and n.name == '_connect_session_mode')
+    connect = next(n for n in module.body if isinstance(n, ast.FunctionDef) and n.name == '_connect_session_module')
     text = ast.get_source_segment(source, connect)
     assert 'shared_context()' in text
     assert 'admission = shared_context()' in text

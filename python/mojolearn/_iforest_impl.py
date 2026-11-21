@@ -130,6 +130,10 @@ class IsolationForest(NumericModeMixin):
         Only False is accepted.
     output_type : None, default None
         Only None is accepted; results are `mojolearn.Array`.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the model is fitted and scores. None uses this installation's
+        device, 'cpu' runs on the CPU and 'gpu' requires a GPU installation.
+        Other values raise `ValueError` at fit.
 
     Attributes
     ----------
@@ -157,6 +161,11 @@ class IsolationForest(NumericModeMixin):
     #: answers the svm host binding here.
     _BINDING = "_mojolearn_svm"
 
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
+    vendor_used = _native_trees_bridge.device_vendor_used
+
     def __init__(
         self,
         *,
@@ -171,6 +180,7 @@ class IsolationForest(NumericModeMixin):
         n_jobs=None,
         verbose=False,
         output_type=None,
+        device=None,
     ):
         # scikit-learn's convention: the constructor stores its parameters
         # verbatim; `_validate_params` (run by `fit` and `load`) checks them.
@@ -185,6 +195,9 @@ class IsolationForest(NumericModeMixin):
         self.n_jobs = n_jobs
         self.verbose = verbose
         self.output_type = output_type
+        # Stored as given; the native owner admits it where each operation
+        # starts (bindings/trees_route_boundary_door.mojo).
+        self.device = device
 
     def __getstate__(self):
         # The fitted forest, not the training matrix; the token names a

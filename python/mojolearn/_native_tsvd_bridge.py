@@ -39,6 +39,10 @@ def connect(tsvd_class):
     context["tsvd_fold_factory"] = fold if isinstance(fold, BuiltinFunctionType) else None
     context.update(tsvd_class=tsvd_class, tsvd_bindings=connected, tsvd_decomp=decomp,
                    tsvd_host_factory="ImportError: Mojolearn host TruncatedSVD provider is unavailable")
+    # glue: the CPU images of `device="cpu"`, connected once beside the device set
+    from ._native_decomp_device_bridge import connect_cpu_device, ESTIMATORS_HOST, X_DECOMP_HOST
+    connect_cpu_device(context, ESTIMATORS_HOST, {"tsvd_native_api_v1": "tsvd_cpu_bindings"})
+    connect_cpu_device(context, X_DECOMP_HOST, {"tsvd_decomp_native_api_v1": "tsvd_cpu_decomp"})
     entry = _binding()._module.tsvd_native_call
     if not isinstance(entry, BuiltinFunctionType):
         raise TypeError("TruncatedSVD owner requires a compiled tsvd_native_call")

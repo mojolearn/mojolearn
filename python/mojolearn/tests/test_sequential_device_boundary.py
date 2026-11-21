@@ -1,0 +1,192 @@
+# SPDX-License-Identifier: Apache-2.0
+"""`device=None` (default), `device="gpu"` and `device="cpu"` on Sequential, at the Python boundary.
+
+The device is a constructor parameter (and a parameter of `from_checkpoint` / `load`). None is this installation's
+device. It is checked where it is given and resolved once, by the model's first operation, into its native route
+owner; pickle and copy carry it. An explicit `device="gpu"` on a CPU-only installation is refused in words that name
+`device="cpu"`; `device="cpu"` always runs, in identical mode. On a GPU installation both entry tables exist in one
+process; in identical mode the two devices return the same bits. Which binary ran is read from the verification
+sidecar a saved model writes (its `install.vendor` is the word the binary itself reports). What needs two devices is
+skipped by name on a CPU-only installation.
+"""
+import copy
+import json
+import pickle
+
+import numpy as np
+import pytest
+
+import mojolearn
+from mojolearn import Sequential
+
+TWO_DEVICES = mojolearn.vendor() != "cpu"
+two_devices = pytest.mark.skipif(not TWO_DEVICES, reason="a CPU-only installation has one device")
+
+
+def data(rows=96, cols=5, seed=7):
+    rng = np.random.default_rng(seed)
+    x = rng.standard_normal((rows, cols), dtype=np.float32)
+    y = (x @ np.arange(1, cols + 1, dtype=np.float32)).astype(np.float32)
+    return x, y
+
+
+def build(device=None, numeric_mode="identical"):
+    model = Sequential(numeric_mode, device=device).linear(8).tanh().linear(1)
+    return model.compile(loss="mse", optimizer="adam", lr=0.01)
+
+
+def fitted(device=None, numeric_mode="identical"):
+    x, y = data()
+    return build(device, numeric_mode).fit(x, y, epochs=3, batch_size=32, seed=0), x
+
+
+def vendor_ran(model, tmp_path, name):
+    """The vendor word of the binary that saves and runs this model."""
+    path = tmp_path / (name + ".ckpt")
+    model.save_checkpoint(str(path))
+    with open(str(path) + ".verify.json") as stream:
+        return json.load(stream)["install"]["vendor"]
+
+
+def test_device_is_a_constructor_parameter_with_default_none():
+    assert Sequential().device is None
+    assert Sequential(None, input_shape=None, device=None).device is None
+    assert Sequential(device="cpu").device == "cpu"
+
+
+@pytest.mark.parametrize("bad", ["tpu", "GPU", " cpu", "", "None", 0, False, b"cpu"])
+def test_unknown_device_is_refused_in_words_at_construction(bad):
+    with pytest.raises(ValueError, match="device must be 'gpu', 'cpu' or None, got"):
+        Sequential(device=bad)
+
+
+def test_a_refused_constructor_leaves_an_existing_model_unchanged():
+    model = Sequential("identical", device="cpu").linear(3)
+    with pytest.raises(ValueError, match="device must be"):
+        model.__init__(device="tpu")
+    assert model.device == "cpu" and model.numeric_mode == "identical" and len(model.layers()) == 1
+
+
+def test_default_device_is_this_installations_device(tmp_path):
+    model, x = fitted()
+    assert model.device is None
+    assert vendor_ran(model, tmp_path, "default") == mojolearn.vendor()
+    assert np.asarray(model.predict(x)).shape == (len(x),)
+
+
+def test_explicit_gpu_runs_on_a_gpu_installation_and_is_refused_in_words_on_a_cpu_only_one(tmp_path):
+    if TWO_DEVICES:
+        model, _ = fitted("gpu")
+        assert model.device == "gpu" and vendor_ran(model, tmp_path, "gpu") == mojolearn.vendor()
+        return
+    with pytest.raises(ValueError, match="device='gpu' needs a GPU build of mojolearn.*Use device='cpu'"):
+        Sequential(device="gpu")
+    # a model that carries 'gpu' without its constructor's check is refused by its first operation
+    carried = build()
+    carried.device = "gpu"
+    x, y = data()
+    with pytest.raises(ValueError, match="Use device='cpu'"):
+        carried.fit(x, y, epochs=1)
+
+
+def test_cpu_device_runs_the_cpu_binary(tmp_path):
+    model, x = fitted("cpu")
+    assert vendor_ran(model, tmp_path, "cpu") == "cpu"
+    assert np.all(np.isfinite(np.asarray(model.predict(x))))
+
+
+@two_devices
+def test_identical_mode_cpu_device_returns_the_gpu_bits():
+    gpu, x = fitted(None)
+    cpu, _ = fitted("cpu")
+    assert np.asarray(gpu.params_).tobytes() == np.asarray(cpu.params_).tobytes()
+    assert np.asarray(gpu.predict(x)).tobytes() == np.asarray(cpu.predict(x)).tobytes()
+    assert list(gpu.loss_curve_) == list(cpu.loss_curve_)
+
+
+@two_devices
+def test_two_models_on_two_devices_interleave_in_one_process(tmp_path):
+    gpu, x = fitted(None)
+    cpu, _ = fitted("cpu")
+    first = np.asarray(gpu.predict(x)).tobytes()
+    second = np.asarray(cpu.predict(x)).tobytes()
+    third = np.asarray(gpu.predict(x)).tobytes()
+    assert first == second == third
+    assert vendor_ran(gpu, tmp_path, "g") != "cpu" and vendor_ran(cpu, tmp_path, "c") == "cpu"
+
+
+@two_devices
+def test_an_assigned_device_is_seen_by_the_next_operation(tmp_path):
+    model, x = fitted(None)
+    before = np.asarray(model.predict(x)).tobytes()
+    model.device = "cpu"
+    assert vendor_ran(model, tmp_path, "moved") == "cpu"
+    assert np.asarray(model.predict(x)).tobytes() == before
+    model.device = None
+    assert vendor_ran(model, tmp_path, "back") == mojolearn.vendor()
+
+
+@two_devices
+def test_cpu_device_never_runs_a_fast_binary():
+    if mojolearn.vendor() != "metal":
+        pytest.skip("only an Apple installation carries a fast set")
+    x, y = data()
+    with pytest.raises(ValueError, match="device='cpu' runs in identical mode only"):
+        build("cpu", "fast").fit(x, y, epochs=1)
+
+
+@pytest.mark.parametrize("device", [None, "cpu"])
+def test_pickle_and_deepcopy_carry_the_device(device, tmp_path):
+    model, x = fitted(device)
+    wanted = np.asarray(model.predict(x)).tobytes()
+    for twin in (pickle.loads(pickle.dumps(model)), copy.deepcopy(model)):
+        assert twin.device == device
+        assert np.asarray(twin.predict(x)).tobytes() == wanted
+        assert vendor_ran(twin, tmp_path, "twin") == ("cpu" if device == "cpu" else mojolearn.vendor())
+
+
+def test_a_changed_numeric_mode_resolves_the_route_again():
+    model, x = fitted("cpu")
+    model.numeric_mode = "nonsense"
+    with pytest.raises(ValueError, match="numeric_mode must be fast, identical or None"):
+        model.predict(x)
+    model.numeric_mode = "identical"
+    assert np.asarray(model.predict(x)).shape == (len(x),)
+
+
+@pytest.mark.parametrize("device", [None, "cpu"])
+def test_a_checkpoint_loads_on_the_device_it_is_given(device, tmp_path):
+    model, x = fitted(None)
+    path = str(tmp_path / "model.ckpt")
+    model.save_checkpoint(path)
+    wanted = np.asarray(model.predict(x)).tobytes()
+    for loader in (Sequential.from_checkpoint, Sequential.load):
+        loaded = loader(path, "identical", device=device)
+        assert loaded.device == device
+        assert np.asarray(loaded.predict(x)).tobytes() == wanted
+        assert vendor_ran(loaded, tmp_path, "loaded") == ("cpu" if device == "cpu" else mojolearn.vendor())
+    with pytest.raises(ValueError, match="device must be 'gpu', 'cpu' or None, got"):
+        Sequential.load(path, device="tpu")
+
+
+@pytest.mark.parametrize("device", [None, "cpu"])
+def test_python_operations_per_predict_do_not_grow_with_rows(device):
+    import sys
+    model, _ = fitted(device)
+    counts = []
+    for rows in (64, 8192):
+        x, _ = data(rows=rows)
+        model.predict(x)                                    # the route and the admission are resolved
+        events = [0]
+
+        def count(frame, event, arg):
+            events[0] += 1
+            return None
+
+        sys.setprofile(count)
+        try:
+            model.predict(x)
+        finally:
+            sys.setprofile(None)
+        counts.append(events[0])
+    assert counts[0] == counts[1]

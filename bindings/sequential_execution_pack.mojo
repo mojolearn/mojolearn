@@ -1,67 +1,29 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native Sequential orchestration of the existing model numerical ABI."""
-from core.mode_answer import MODE_FAMILY_NEURAL, answer_mode_word
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.native_loaded_module_door import NativeModules
-from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type
+from bindings.py_balanced import py_call, py_contains, py_get, py_setitem
 from core.cast_in import CastIn
-from sequence.neural_model_dispatch import MODEL_OPERATION_COUNT
 from autograd.model_execution import model_counts_native
-from autograd.model_descriptor import MODEL_ABI_NAME, MODEL_FIT, MODEL_FIT_LABELS, MODEL_PREDICT, MODEL_PREDICT_LABELS, model_descriptor_words
+from autograd.model_descriptor import MODEL_FIT, MODEL_FIT_LABELS, MODEL_PREDICT, MODEL_PREDICT_LABELS, model_descriptor_words
 from providers.python.autograd_pyapi_door import _ints, model_float64_words, model_admit_addresses
-from providers.python.neural_descriptor_pyapi_door import neural_descriptor_reuse, neural_descriptor_execute
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_execute
 from bindings.sequential_description_unpack import sequential_fields, SequentialDescription, _integer
 from bindings.sequential_description_pack import sequential_sample_shape, sequential_native_description
 from bindings.sequential_arrays_door import sequential_array, sequential_address, sequential_input, sequential_descriptor, sequential_x_snapshot, sequential_curve
 from bindings.py_optional import py_present
 from bindings.sequential_keys_unpack import sequential_keys
+from bindings.sequential_route_door import sequential_route_entries
 from bindings.py_balanced import py_item
 
 
 def sequential_entries(model: PythonObject, context: PythonObject) raises -> PythonObject:
-    var nk = sequential_keys()
-    var b = native_loaded_module("builtins")
-    var mode = py_item(sequential_fields(model), nk[].k_numeric_mode)
-    if mode is None:
-        mode = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
-    var word = String()
-    if py_type(mode) is b.str:
-        # An exact canonical spelling needs no isinstance, strip or lower call.
-        word = String(mode)
-    if word != "identical" and word != "fast":
-        if not Bool(py=py_call(b.isinstance, mode, b.str)):
-            raise Error("numeric_mode must be fast, identical or None")
-        mode = mode.strip().lower()
-        word = String(mode)
-    if word != "identical" and word != "fast":
-        raise Error("numeric_mode must be fast, identical or None")
-    answer_mode_word(word, MODE_FAMILY_NEURAL)
-    var entries = py_item(context, nk[].k_bindings)[PythonObject(word)]
-    if py_type(entries) is not b.dict and Bool(py=py_call(b.isinstance, entries, b.str)):
-        raise Error(String(entries))
-    # The compiled mode/vendor of a connected binding cannot change within a
-    # process: read them on the first operation, then reuse the verdict
-    # stored next to the provider (two native metadata calls per predict).
-    # The verdict keeps the context's own vendor object, so the usual check
-    # is one identity compare instead of two String conversions.
-    var vendor = py_item(context, nk[].k_vendor)
-    var checked = py_get(entries, nk[].k__sequential_checked_vendor)
-    if checked is None or (checked is not vendor and String(checked) != String(vendor)):
-        var actual_mode = Int(py=py_item(entries, nk[].k_x_sequence_numeric_mode)())
-        var actual_vendor = String(py_item(entries, nk[].k_x_sequence_vendor)())
-        if actual_mode != (1 if word == "identical" else 0):
-            raise Error("RuntimeError: Sequential native numerical mode differs from the requested mode")
-        if actual_vendor != String(vendor):
-            raise Error("RuntimeError: Sequential native vendor differs from the selected execution route")
-        py_setitem(entries, nk[].k__sequential_checked_vendor, vendor)
-    # Connection/metadata admission only. Exact compiled factory/module identity
-    # owns the shared provider; no per-model pointer cache or Python callable is
-    # used by the subsequent native fit/predict execution.
-    var provider = neural_descriptor_reuse(py_get(entries, nk[].k_native_model_provider),
-        py_item(entries, nk[].k_model_native_api_v1), String(MODEL_ABI_NAME), MODEL_OPERATION_COUNT)
-    py_setitem(entries, nk[].k_native_model_provider, provider)
-    return entries
+    # The model's route owner (bindings/sequential_route_door.mojo): resolved
+    # once per model for its device and numeric mode. The former per-call
+    # selection (mode word, answered mode, bindings read, vendor verdict,
+    # provider reuse) runs at resolution only.
+    return sequential_route_entries(model, context)
 
 
 def sequential_targets(mut mods: NativeModules, model: PythonObject, source: PythonObject, n: Int, n_out: Int,

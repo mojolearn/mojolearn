@@ -5,15 +5,14 @@ bindings/qn_native.mojo; its UNPACK and PACK are bindings/qn_boundary.mojo.
 The door calls UNPACK with the GIL held, releases the GIL for the whole of a
 RUN call (docs/plans/PYTHON_AT_THE_BOUNDARY.md section 2.1), then calls PACK.
 
-The fit runs the qn_fit body through the native estimators QN table
-(core/estimators_entry_table.mojo), or, for an identical-mode
-cross-validation fold on the device, the base binding's resident-fold QN
-entry, then copies the fitted coefficients and writes the iteration count
+The fit runs the qn_fit body through the estimator's resolved QN entry
+(the route UNPACK read: core/device_route_dw_classical.mojo; the entry of
+the device image or, for `device="cpu"`, of the CPU image), or, for an
+identical-mode cross-validation fold on the device, the base binding's
+resident-fold QN entry held by the same route, then copies the fitted coefficients and writes the iteration count
 into the buffers UNPACK allocated. Same request, same entries, same bits as
 before the split (lane doorsplit-linear, 2026-11-11)."""
-from core.estimators_entry_table import (
-    EstimatorsEntryKey, estimators_table_entry, ESTIMATORS_TABLE_QN, ESTIMATORS_TABLE_QN_FOLD,
-)
+from core.entry_table import EntryRef
 from core.logistic_native_api import (
     QnNativeDriver, QnFoldDriver, QnFitRequest, QnQueryRequest, QnFoldStore, QN_NATIVE_DECISION,
 )
@@ -30,9 +29,11 @@ struct QnDoorFitRequest(Movable):
     """One QNRegressor fit, as UNPACK built it. `request` is qn_fit's typed
     request (its `status` is 0 on the fold route); `coef` (cols float32
     words) and `iterations` (one int64 word) are the public outputs UNPACK
-    allocated; `status_word` is the deferred finite word of a host X."""
-    var key: EstimatorsEntryKey
-    var fold_key: EstimatorsEntryKey
+    allocated; `status_word` is the deferred finite word of a host X.
+    `entry` and `fold` are the route's resolved entries (`fold` is called
+    only with `use_fold`); RUN reads no table."""
+    var entry: EntryRef
+    var fold: EntryRef
     var use_fold: Bool
     var store: QnFoldStore
     var request: QnFitRequest
@@ -53,8 +54,9 @@ struct QnDoorFitResult(Copyable, Movable):
 @fieldwise_init
 struct QnDoorPredictRequest(Movable):
     """One QNRegressor decision: qn_decision_function's typed request (one
-    target, no status word: X was tested by admission)."""
-    var key: EstimatorsEntryKey
+    target, no status word: X was tested by admission) and the route's
+    resolved entry."""
+    var entry: EntryRef
     var request: QnQueryRequest
 
 
@@ -91,15 +93,13 @@ def qn_door_fit_run(req: QnDoorFitRequest) raises -> QnDoorFitResult:
     var n_iter = 0
     ref r = req.request
     if req.use_fold:
-        var fold = estimators_table_entry[ESTIMATORS_TABLE_QN_FOLD](req.fold_key)
         var words = List[Int32](length=2, fill=0)
         var words_addr = Int(words.unsafe_ptr())
-        n_iter = QnFoldDriver(fold).fit(req.store, r, words_addr)
+        n_iter = QnFoldDriver(req.fold.call).fit(req.store, r, words_addr)
         door_rows_refuse(Int(words[0]), Int(words[1]), "QNRegressor", req.store.base_rows)
         _ = words^
     else:
-        var entry = estimators_table_entry[ESTIMATORS_TABLE_QN](req.key)
-        n_iter = QnNativeDriver(entry).fit(r)
+        n_iter = QnNativeDriver(req.entry.call).fit(r)
         admitted_finite_refuse(Int(_I32P(unsafe_from_address=req.status_word)[0]), "QNRegressor")
     return qn_door_fit_publish(r, n_iter, req.coef, req.iterations)
 
@@ -122,5 +122,4 @@ def qn_door_fit_publish(r: QnFitRequest, n_iter: Int, coef: Int, iterations: Int
 
 def qn_door_predict_run(req: QnDoorPredictRequest) raises:
     """X @ coef (+ intercept) into the request's output buffer."""
-    var entry = estimators_table_entry[ESTIMATORS_TABLE_QN](req.key)
-    QnNativeDriver(entry).query(QN_NATIVE_DECISION, req.request)
+    QnNativeDriver(req.entry.call).query(QN_NATIVE_DECISION, req.request)

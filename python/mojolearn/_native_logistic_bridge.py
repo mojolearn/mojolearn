@@ -87,8 +87,59 @@ def connect_host(cls, context, estimators_host, host_context):
     context.setdefault("lr_host_contexts", {})[cls] = host
 
 
+#: The constructor's parameters, in its order. `device` is last: it is stored
+#: as given, checked when it is given and read once into the estimator's
+#: native route owner (providers/python/logistic_route_boundary_door.mojo).
 _PARAMETERS = ('penalty', 'tol', 'C', 'fit_intercept', 'class_weight', 'max_iter',
-               'linesearch_max_iter', 'l1_ratio', 'solver', 'numeric_mode')
+               'linesearch_max_iter', 'l1_ratio', 'solver', 'numeric_mode', 'device')
+#: The parameters every operation admits again before it reads them. `device`
+#: is not one: no operation reads it after the route is resolved.
+_CHECKED_PARAMETERS = _PARAMETERS[:-1]
+
+#: The CPU binaries `device="cpu"` runs on a GPU installation: the estimators
+#: host (the quasi-Newton entry) and the trees expansion host (the class-weight
+#: programs of a weighted fit).
+_CPU_DEVICE_HOSTS = ("_mojolearn_estimators_host", "_mojolearn_x_trees_host")
+
+
+def connect_cpu_device(context):
+    """Connect the CPU entries of `device="cpu"` once, at import, beside the
+    device entries (`context["lr_bindings"]`).
+
+    The compiled owner resolves an estimator's route against the device
+    entries or these, once per estimator. In a CPU-only process the selected
+    entries already are the CPU entries and nothing is loaded. A host binary
+    that is not built is kept as its refusal text, said when a `device="cpu"`
+    estimator first runs (the class-weight binary: when a `device="cpu"` fit
+    first takes class weights)."""
+    # glue: load the CPU images once and retain their compiled entries
+    from types import BuiltinFunctionType
+    from . import _backend
+    if context["vendor"] == "cpu":
+        return
+    errors = (ImportError, AttributeError, TypeError, ValueError, RuntimeError)
+    estimators, x_trees = _CPU_DEVICE_HOSTS
+    try:
+        module = _backend.load_host_module(estimators)
+        entries = {}
+        for name in _ESTIMATOR_ENTRIES:  # glue: fixed native exports
+            entry = getattr(module, name, None)
+            if not isinstance(entry, BuiltinFunctionType):
+                raise TypeError(f"LogisticRegression(device='cpu') requires compiled {name}")
+            entries[name] = entry
+    except errors as error:  # recorded, raised at the first device="cpu" operation
+        entries = _refusal(error)
+    try:
+        module = _backend.load_host_module(x_trees)
+        table = {}
+        for name in _X_TREES_ENTRIES:  # glue: fixed native exports
+            entry = getattr(module, name, None)
+            if not isinstance(entry, BuiltinFunctionType):
+                raise TypeError(f"LogisticRegression(device='cpu') requires compiled {name}")
+            table[name] = entry
+    except errors as error:  # recorded, raised by the first device="cpu" fit with class weights
+        table = _refusal(error)
+    context.update(lr_cpu_bindings={"identical": entries}, lr_cpu_x_trees={"identical": table})
 
 
 def connect_public(cls, context, install=True):
@@ -114,7 +165,8 @@ def connect_public(cls, context, install=True):
                  classical_public_layouts={cls: _layout(cls, descriptor)},
                  classifier_labels_class=ClassLabels, classifier_labels_namespace=dict(vars(ClassLabels)),
                              classifier_labels_mro=type.__dict__["__mro__"].__get__(ClassLabels),
-                 lr_parameters=_PARAMETERS, lr_sorted_parameters=tuple(sorted(_PARAMETERS)),  # glue: fixed import-time parameter metadata
+                 lr_parameters=_CHECKED_PARAMETERS, lr_constructor_parameters=_PARAMETERS,
+                 lr_sorted_parameters=tuple(sorted(_PARAMETERS)),  # glue: fixed import-time parameter metadata
                  lr_consumed_fields=('_w', 'classes_', 'n_features_in_', '_l1_ratio', 'lbfgs_memory',
                                      'penalty_normalized', '_mojolearn_fitted', '_mojolearn_fitting'))
     return owner

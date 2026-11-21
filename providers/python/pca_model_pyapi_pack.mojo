@@ -14,7 +14,7 @@ from providers.python.classical_family_admission_pyapi_unpack import classical_f
 from providers.python.pca_fit_scalar_pyapi_unpack import PCAFitScalar, pca_fit_scalar_admit
 from bindings.native_prepared_owner_unpack import prepared_get, prepared_put
 from bindings.py_model_records import records_open, model_generation
-from bindings.pca_descriptor_boundary_door import pca_connection, pca_connection_matches, pca_mode_name
+from bindings.pca_descriptor_boundary_door import pca_connection_matches, pca_mode_name
 from core.pca_query_state import PCAQueryState
 from x_decomp.pca_model_run import _pca_query_decoded
 from providers.python.pca_query_cache_pyapi_unpack import PCAQueryPins, PCAQueryAdmission, PCAQueryCache

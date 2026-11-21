@@ -26,6 +26,7 @@ from bindings.decomp_public_lifecycle_pack import decomp_public_finish
 from x_decomp.decomp_public_lifecycle_run import decomp_public_method
 from bindings.public_lifecycle_owner_door import lifecycle_end
 from bindings.nmf_native_door import nmf_fit, nmf_fit_transform, nmf_inverse_transform, nmf_transform
+from bindings.nmf_descriptor_boundary_door import nmf_route_vendor
 
 
 comptime _DECOMP_FAMILY_SLOT = "decomp_family_class_v1"
@@ -108,6 +109,8 @@ def _decomp_dispatch(model: PythonObject, family: String, operation: String, arg
             result = nmf_transform(model, args[0], context)
         elif operation == "inverse_transform":
             result = nmf_inverse_transform(model, args[0], context)
+        elif operation == "vendor_used":
+            result = PythonObject(nmf_route_vendor(model, py_fields(model), context))
         else:
             raise Error("unknown private NMF operation")
     elif family == "FactorAnalysis":

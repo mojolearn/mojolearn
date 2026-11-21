@@ -69,6 +69,7 @@ struct PcaKeys(Defaultable, Movable):
     var k_noise_variance_: PythonObject
     var k_numeric_mode: PythonObject
     var k_pca_bindings: PythonObject
+    var k_pca_cpu_bindings: PythonObject
     var k_pca_class: PythonObject
     var k_pca_dictionary_descriptor: PythonObject
     var k_pca_fit_scalar_context: PythonObject
@@ -129,6 +130,7 @@ struct PcaKeys(Defaultable, Movable):
         self.k_noise_variance_ = PythonObject(None)
         self.k_numeric_mode = PythonObject(None)
         self.k_pca_bindings = PythonObject(None)
+        self.k_pca_cpu_bindings = PythonObject(None)
         self.k_pca_class = PythonObject(None)
         self.k_pca_dictionary_descriptor = PythonObject(None)
         self.k_pca_fit_scalar_context = PythonObject(None)
@@ -193,6 +195,7 @@ def _pca_keys_fill(nk: UnsafePointer[PcaKeys, MutUntrackedOrigin]) raises:
     nk[].k_noise_variance_ = py_key("noise_variance_")
     nk[].k_numeric_mode = py_key("numeric_mode")
     nk[].k_pca_bindings = py_key("pca_bindings")
+    nk[].k_pca_cpu_bindings = py_key("pca_cpu_bindings")
     nk[].k_pca_class = py_key("pca_class")
     nk[].k_pca_dictionary_descriptor = py_key("pca_dictionary_descriptor")
     nk[].k_pca_fit_scalar_context = py_key("pca_fit_scalar_context")

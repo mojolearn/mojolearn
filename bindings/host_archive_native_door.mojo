@@ -730,6 +730,9 @@ def host_archive_logistic(cls: PythonObject, arrays: PythonObject, path: PythonO
     py_setitem(fields, nk[].k_linesearch_max_iter, 50)
     py_setitem(fields, nk[].k_l1_ratio, PythonObject(None))
     py_setitem(fields, nk[].k_solver, "qn")
+    # A loaded model runs on this installation's device (`device` is a
+    # constructor parameter, not model state: `save` does not write it).
+    py_setitem(fields, "device", PythonObject(None))
     host_archive_mode(arrays, fields, context)
     if not py_contains(arrays, nk[].k_classes):
         raise Error(where + " has no classes member")
@@ -2505,7 +2508,10 @@ def host_archive_public_forest(cls: PythonObject, arrays: PythonObject, fmt: Str
         raise Error(host_archive_where(path, context) + " was saved by " + String(saved) + ", not " + String(cls.__name__))
     var model = host_archive_allocate(cls, context)
     var fields = sequential_fields(model)
-    py_setitem(fields, nk[].k_device, _archive_string(arrays, "device", context))
+    # The file's `device` member is read for its refusal only; a loaded model
+    # carries device=None, this installation's device (lane dw-trees).
+    _ = _archive_string(arrays, "device", context)
+    py_setitem(fields, nk[].k_device, PythonObject(None))
     # The 0.8.55 `ForestProtocol._restore_inference_metadata`.
     if fmt.endswith("-parallel-groves-1"):
         py_setitem(fields, nk[].k_inference_engine, "parallel_groves")
