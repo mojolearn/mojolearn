@@ -426,9 +426,16 @@ def logistic_predict(model: PythonObject, state: LogisticQueryOwners, routed: Lo
                      context: PythonObject) raises -> PythonObject:
     """`predict`: the device threshold (two classes) or row argmax (more)
     beside the scores, decoded to `classes_`."""
-    var n_targets = _n_targets(model, state)
     # The label scope of the estimator's device (labels_scope), once per call.
-    var label_context = labels_scope(model, context)
+    return logistic_predict_scoped(model, state, routed, source, context, labels_scope(model, context))
+
+
+def logistic_predict_scoped(model: PythonObject, state: LogisticQueryOwners, routed: LogisticRouteCall,
+                            source: PythonObject, context: PythonObject,
+                            label_context: PythonObject) raises -> PythonObject:
+    """`logistic_predict` with the operation's label scope already read (score
+    reads it once for the predict and the metric)."""
+    var n_targets = _n_targets(model, state)
     if n_targets == 1:
         var q = _query_x(model, routed.route.fold, source, context)
         var rows = q.rows
@@ -675,8 +682,10 @@ def logistic_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObject
                 elif operation == LOGISTIC_OPN_SCORE:
                     var target = classifier_label_list(args[1], context)
                     lda_native_labels(target, context, False, "LogisticRegression")
-                    var prediction = logistic_predict(model, query, routed, args[0], context)
-                    result = logistic_score(prediction, target, labels_scope(model, context))
+                    # One label scope read for the predict and the metric.
+                    var scope = labels_scope(model, context)
+                    var prediction = logistic_predict_scoped(model, query, routed, args[0], context, scope)
+                    result = logistic_score(prediction, target, scope)
                 else:
                     raise Error("unknown native LogisticRegression operation")
             finally:
