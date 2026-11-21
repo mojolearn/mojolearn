@@ -160,6 +160,10 @@ struct MemberSet(Movable):
     # state. Set by a caller whose predict side reads held states; else the
     # states are freed at PACK (a second copy of the model nobody reads).
     var adopt: Bool
+    # With `adopt`: also the states of tree, forest and extra-trees members
+    # whose route is the CPU. Set by a caller that predicts those through
+    # their held states when no device copy of X is staged for them (bagging).
+    var adopt_trees: Bool
 
     def __init__(out self, x: Int, rows: Int, cols: Int, y_dtype: Int, index_dtype: Int) raises:
         self.run = MemberSetRun(x, rows, cols, y_dtype, index_dtype)
@@ -169,6 +173,7 @@ struct MemberSet(Movable):
         self.pins = Python.list()
         self.class_plans = Python.list()
         self.adopt = False
+        self.adopt_trees = False
 
     def count(self) -> Int:
         return len(self.run.plans)
@@ -594,9 +599,11 @@ def member_set_pack(mut set: MemberSet, u: Int, classes: PythonObject, b: Python
     var family = set.run.plans[u].family
     # A tree, forest or extra-trees member is predicted by its own door (from
     # the one device copy of X the caller stages): its state would be a
-    # second copy of the model nobody reads.
-    var read = not (family == MEMBER_FAMILY_TREE or family == MEMBER_FAMILY_FOREST
+    # second copy of the model nobody reads, except where the caller says it
+    # reads them (`adopt_trees`, CPU routes: nothing is staged there).
+    var read = (not (family == MEMBER_FAMILY_TREE or family == MEMBER_FAMILY_FOREST
         or family == MEMBER_FAMILY_EXTRA_TREES)
+        or (set.adopt_trees and set.run.plans[u].route.device == DEVICE_CPU))
     if set.adopt and read:
         try:
             kept = member_held_adopt(estimator, set.class_plans[u], member_context, set.pins[u], set.run.plans[u],
@@ -612,6 +619,23 @@ def member_set_pack(mut set: MemberSet, u: Int, classes: PythonObject, b: Python
     if classes is not None and not py_contains(fields, "n_classes_"):
         py_setitem(fields, "n_classes_", PythonObject(len(classes)))
     return estimator
+
+
+def member_marked(estimator: PythonObject, context: PythonObject) -> Bool:
+    """True when `estimator`'s class carries a member mark (its family may
+    serve it; `member_predict_held` still answers per call). One class-plan
+    read: a caller asks once per public operation for members of one class,
+    before work only the native route needs (its finite proof of X). Never
+    raises."""
+    comptime if not MEMBER_SET_NATIVE:
+        return False
+    try:
+        var plan = prep_estimator_plan(estimator, context)
+        if plan is None:
+            return False
+        return py_get(plan, "member") is not None
+    except:
+        return False
 
 
 struct MemberOut(Movable):
