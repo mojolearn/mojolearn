@@ -195,7 +195,7 @@ def xl_classifier_predict(model: PythonObject, source: PythonObject, entries: XL
     labels decoded natively (`decode_labels(classes_, codes)`)."""
     var call = xl_classifier_predict_unpack(model, source, entries, context)
     xl_decision_released(call)
-    return xl_classifier_predict_pack(model, call, context)
+    return xl_classifier_predict_pack(model, call, _xl_scope(entries, context))
 
 
 def xl_predict_proba(model: PythonObject, source: PythonObject, lrcv: Bool, entries: XLinearOps, context: PythonObject) raises -> PythonObject:
