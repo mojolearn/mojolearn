@@ -3,7 +3,7 @@
 
 The resident session owns the device state; these tests open, step, export,
 close and restore it through the real binding and read the trainer's own
-session record (`_session_open`, `_state`) where the old fake counted session
+session record (`_session_info()`) where the old fake counted session
 objects. No numerical claim beyond finiteness and same-bits restores.
 
 DELETED (2026-11-07) with the retired Python owner mock, because each needed
@@ -53,7 +53,7 @@ def model(step_result='full'):
 
 
 def is_open(trainer):
-    return vars(trainer)['_session_open'] is True
+    return trainer._session_info()['open'] is True
 
 
 def test_lazy_reuse_close_and_restore():
@@ -80,16 +80,17 @@ def test_lazy_reuse_close_and_restore():
 
 def test_state_arrays_live_on_the_device_while_open():
     trainer = model()
-    assert trainer._state['parameters'] is not None
+    assert trainer._session_info()['host_state']
     trainer.train_step(ids())
-    assert all(trainer._state[key] is None for key in ('parameters', 'm', 'v'))
-    assert trainer._state['flags'] is not None
+    assert not trainer._session_info()['host_state']
     parameters = np.asarray(trainer.parameters_).copy()
     assert np.isfinite(parameters).all()
     trainer.close()
-    assert all(trainer._state[key] is not None for key in ('parameters', 'm', 'v'))
-    assert np.asarray(trainer._state['parameters']).tobytes() == parameters.tobytes()
-    assert np.asarray(trainer._state['m']).any()
+    assert trainer._session_info()['host_state'] and not trainer._session_info()['open']
+    closed = trainer.export_state()
+    assert not trainer._session_info()['open']
+    assert np.asarray(closed['parameters']).tobytes() == parameters.tobytes()
+    assert np.asarray(closed['m']).any()
 
 
 def test_lean_result_keys_and_export_gradients():

@@ -23,6 +23,7 @@ struct MetricsKeys(Defaultable, Movable):
     var k_bool_types: PythonObject
     var k_digits: PythonObject
     var k_family_metrics_prog_context: PythonObject
+    var k_labels_metrics_entries: PythonObject
     var k_family_metrics_undefined: PythonObject
     var k_mean_absolute_error: PythonObject
     var k_mean_squared_error: PythonObject
@@ -46,6 +47,7 @@ struct MetricsKeys(Defaultable, Movable):
         self.k_bool_types = PythonObject(None)
         self.k_digits = PythonObject(None)
         self.k_family_metrics_prog_context = PythonObject(None)
+        self.k_labels_metrics_entries = PythonObject(None)
         self.k_family_metrics_undefined = PythonObject(None)
         self.k_mean_absolute_error = PythonObject(None)
         self.k_mean_squared_error = PythonObject(None)
@@ -73,6 +75,7 @@ def _metrics_keys_fill(nk: UnsafePointer[MetricsKeys, MutUntrackedOrigin]) raise
     nk[].k_bool_types = py_key("bool_types")
     nk[].k_digits = py_key("digits")
     nk[].k_family_metrics_prog_context = py_key("family_metrics_prog_context")
+    nk[].k_labels_metrics_entries = py_key("labels_metrics_entries")
     nk[].k_family_metrics_undefined = py_key("family_metrics_undefined")
     nk[].k_mean_absolute_error = py_key("mean_absolute_error")
     nk[].k_mean_squared_error = py_key("mean_squared_error")

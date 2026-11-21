@@ -341,6 +341,9 @@ class Nystroem(_KernelMethodBase):
         warns and uses `n_samples` (the full kernel).
     random_state : int, default 0
         Seed of the basis selection.
+    n_jobs : int or None, default None
+        Accepted for scikit-learn compatibility; ignored. The work runs on the
+        device, not in host worker processes.
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this estimator; None uses the process default.
         ``'fast'`` is available on Apple GPUs only.
@@ -373,13 +376,20 @@ class Nystroem(_KernelMethodBase):
 
     _WHERE = "Nystroem"
 
-    def __init__(self, kernel="rbf", gamma=None, degree=3, coef0=1.0, n_components=100, random_state=0):
+    # scikit-learn's no-op keywords, at the class too: a model the archive door loads
+    # (`cls.__new__`, bindings/host_archive_native_door.mojo) never ran __init__, and its
+    # get_params reads these defaults (as `device` does).
+    n_jobs = None
+
+    def __init__(self, kernel="rbf", gamma=None, degree=3, coef0=1.0, n_components=100, random_state=0, *,
+                 n_jobs=None):
         self.kernel = kernel
         self.gamma = gamma
         self.degree = degree
         self.coef0 = coef0
         self.n_components = n_components
         self.random_state = random_state
+        self.n_jobs = n_jobs
 
     @_native_method
     def fit(self, X, y=None):
