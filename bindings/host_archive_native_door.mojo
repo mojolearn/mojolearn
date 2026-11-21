@@ -730,6 +730,9 @@ def host_archive_logistic(cls: PythonObject, arrays: PythonObject, path: PythonO
     py_setitem(fields, nk[].k_linesearch_max_iter, 50)
     py_setitem(fields, nk[].k_l1_ratio, PythonObject(None))
     py_setitem(fields, nk[].k_solver, "qn")
+    # A loaded model runs on this installation's device (`device` is a
+    # constructor parameter, not model state: `save` does not write it).
+    py_setitem(fields, "device", PythonObject(None))
     host_archive_mode(arrays, fields, context)
     if not py_contains(arrays, nk[].k_classes):
         raise Error(where + " has no classes member")
