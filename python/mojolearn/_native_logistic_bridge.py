@@ -140,6 +140,11 @@ def connect_cpu_device(context):
     except errors as error:  # recorded, raised by the first device="cpu" fit with class weights
         table = _refusal(error)
     context.update(lr_cpu_bindings={"identical": entries}, lr_cpu_x_trees={"identical": table})
+    # The label steps of a device="cpu" classifier run the host label kernels
+    # (bindings/labels_descriptor_boundary_door.mojo `labels_scope`): its CPU
+    # label scope, built once here, last.
+    from ._native_labels_bridge import cpu_scope
+    cpu_scope(context)
 
 
 def connect_public(cls, context, install=True):

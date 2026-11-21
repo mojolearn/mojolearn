@@ -609,7 +609,7 @@ class LongRows(unittest.TestCase):
                  "api": {"cuStreamSynchronize": {"calls": 3000.0, "ms": 465000.0, "kind": "sync"}},
                  "mem": {"h2d": {"count": 2.0, "mb": 160.0}, "d2h": {"count": 1.0, "mb": 0.4}}}))
             rc = CP.main(["report", "--res", d, "--rows-file", os.path.join(d, "rows.tsv"), "--top", "15"])
-            self.assertEqual(rc, CP.EXIT_CAPPED)
+            self.assertEqual(rc, CP.EXIT_OK)  # a capped pass still writes the report and exits 0 (nvc1-0005)
             with open(os.path.join(d, "CALL-PROFILE-nvidia.json")) as fh:
                 r = json.load(fh)["rows"][0]
             self.assertEqual(r["status"], "CAPPED")

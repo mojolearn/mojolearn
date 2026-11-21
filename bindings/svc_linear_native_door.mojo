@@ -35,7 +35,7 @@ from core.linear_svc_native_api import LinearSvcFitPlan
 from core.qn_single_fit import QnSingleFitPlan
 from core.logistic_native_api import QN_NATIVE_BINARY, QN_NATIVE_MULTICLASS, QN_NATIVE_MULTICLASS_AVAILABLE
 from core.labels_native_api import LabelsThresholdRequest
-from bindings.labels_descriptor_boundary_door import labels_threshold, labels_argmax_rows
+from bindings.labels_descriptor_boundary_door import labels_threshold, labels_argmax_rows, labels_scope
 from bindings.svc_common_unpack import svc_field, svc_has
 from bindings.svm_keys_unpack import svm_keys
 
@@ -115,12 +115,14 @@ def _linear_svc_prediction(model: PythonObject, binding: PythonObject, source: P
         # the old argmax boundary then refused its missing second dimension.
         raise Error("IndexError: tuple index out of range")
     var codes = List[Int64](length=scores.rows, fill=0)
+    # The label steps run on the estimator's device (labels_scope), once.
+    var label_context = labels_scope(model, context)
     if k == 2:
         if scores.rows > 0:
-            _ = labels_threshold(context, LabelsThresholdRequest(Int(scores.values.unsafe_ptr()),
+            _ = labels_threshold(label_context, LabelsThresholdRequest(Int(scores.values.unsafe_ptr()),
                 Int(codes.unsafe_ptr()), 0, scores.rows, True, 0, 1, 0))
     elif scores.rows > 0:
-        labels_argmax_rows(context, False, Int(scores.values.unsafe_ptr()), scores.rows, k, Int(codes.unsafe_ptr()))
+        labels_argmax_rows(label_context, False, Int(scores.values.unsafe_ptr()), scores.rows, k, Int(codes.unsafe_ptr()))
     _ = scores
     return LinearSvcPrediction(classes, codes^)
 
@@ -136,13 +138,13 @@ def svc_linear_operation(model: PythonObject, operation: Int, args: PythonObject
         return model
     if operation == SVC_OPN_FAMILY_SVC_LINEAR_SVR_SCORE:
         var pred = _linear_svr_predict(model, args[0], args[1], context)
-        return linear_svr_score_pack(pred, args[2], context)
+        return linear_svr_score_pack(pred, args[2], labels_scope(model, context))
     if operation == SVC_OPN_FAMILY_SVC_LINEAR_SVC_FIT:
         _linear_svc_fit(model, args, context)
         return model
     if operation == SVC_OPN_FAMILY_SVC_LINEAR_SVC_PREDICT:
         var prediction = _linear_svc_prediction(model, args[0], args[1], context)
-        return linear_svc_predict_pack(model, prediction, context)
+        return linear_svc_predict_pack(model, prediction, labels_scope(model, context))
     if operation == SVC_OPN_FAMILY_SVC_LINEAR_SVC_SCORE:
         var prediction = _linear_svc_prediction(model, args[0], args[1], context)
         return linear_svc_score_pack(model, prediction, args[2], context)

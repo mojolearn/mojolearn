@@ -40,6 +40,7 @@ from bindings.label_weights_boundary_unpack import label_weights_run
 from core.label_weights_native_api import LabelWeightsRequest, LABEL_WEIGHTS_MULTIPLY, LABEL_WEIGHTS_ROWS
 from providers.python.estimator_binding_pyapi_door import estimator_binding_routed
 from bindings.classical_labels_door import labels_type_name, classical_encode_labels
+from bindings.labels_descriptor_boundary_door import labels_scope
 from bindings.linear_svc_boundary_unpack import LinearSvcWeights, LinearSvcConnection, linear_svc_connection
 from core.linear_svc_native_api import LinearSvcOptions, LinearSvcFitRequest, LinearSvcWeightsState
 from core.logistic_native_api import QnFitRequest, QnQueryRequest
@@ -258,7 +259,7 @@ def linear_svc_fit_unpack(model: PythonObject, args: PythonObject, context: Pyth
     var cols = Int(py=x.shape[1])
     if len(svc_shape_of(args[2], context)) != 1:
         raise Error("mojolearn LinearSVC requires a 1-D y")
-    var encoded = classical_encode_labels(args[2], context)
+    var encoded = classical_encode_labels(args[2], labels_scope(model, context))
     if encoded.n != rows:
         raise Error("mojolearn LinearSVC X and y lengths differ")
     var classes = encoded.classes

@@ -12,6 +12,7 @@
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from bindings.admitted_family_door import admit_family, admit_family_meta
+from bindings.labels_descriptor_boundary_door import labels_scope
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.classical_arrays_door import classical_address
@@ -404,7 +405,7 @@ def _vote(model: PythonObject, distances: PythonObject, indices: PythonObject, m
         var wide = _wide(labels, Python.tuple(nq, outputs) if Bool(py=py_item(fields, nk[].k_outputs_2d_)) else Python.tuple(nq), context)
         var names = py_get(fields, nk[].k__label_names)
         if names is not None and not Bool(py=py_item(fields, nk[].k_outputs_2d_)):
-            return classical_decode_labels(names, wide, context)
+            return classical_decode_labels(names, wide, labels_scope(model, context))
         return wide
     var result = Python.list()
     offset = 0
