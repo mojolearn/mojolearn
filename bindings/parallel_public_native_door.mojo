@@ -10,8 +10,7 @@ from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.classical_pandas_door import classical_admit_value
 from bindings.admitted_input_unpack import admit_x
 from bindings.parallel_public_result_door import parallel_public_result
-from bindings.parallel_member_device_unpack import parallel_member_says_cpu
-from core.device_route_dw_msel_parallel import member_multi_gpu_refusal
+from bindings.msel_member_device_unpack import member_says_cpu, member_multi_gpu_refusal
 from bindings.native_buffer_owner_pack import native_storage_allocate
 from bindings.trees_public_forest_door import forest_effective_mode, _engine
 from core.device_plan import device_plan_logical
@@ -255,8 +254,8 @@ def parallel_public_operation(model: PythonObject, packed: PythonObject, context
     # member that says device='cpu' in a process with a GPU set is refused in
     # words, before the mode checks, the input admission and any worker; it
     # used to be run on the GPUs whatever it said. None, a class without the
-    # parameter and 'gpu' go on as before. One read with the held key.
-    if model is not None and parallel_member_says_cpu(fields):
+    # parameter and 'gpu' go on as before. The shared one read (`device_request`).
+    if model is not None and member_says_cpu(fields, b):
         if not Bool(py=py_item(meta, nk[].k_cpu_only)):
             member_multi_gpu_refusal(String(packed[0]))
     var mode = py_get(fields, nk[].k_numeric_mode)

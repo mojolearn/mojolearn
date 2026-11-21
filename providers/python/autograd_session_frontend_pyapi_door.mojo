@@ -1,9 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Session admission uses the common provider and retains its exact registry.
 from core.mode_answer import MODE_FAMILY_NEURAL, answer_mode_word
-from core.linear_route import (
-    LINEAR_DEVICE_CPU, LINEAR_DEVICE_INSTALL, linear_device_code, linear_device_refusal, linear_device_installed,
-)
+from core.device_route import DEVICE_CPU, device_cpu_fast, device_installed
+from providers.python.device_route_boundary_door import device_unpack
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_fields, py_get, py_setitem
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules, shared_dict_stamped, shared_dict_epoch, shared_dict_watch
@@ -109,18 +108,6 @@ def ops_session_fields(session: PythonObject) raises -> PythonObject:
 comptime _SESSION_LAYOUT_SLOT = "p3_autograd_session_layout_v1"
 
 
-def _session_device_unpack(value: PythonObject, b: PythonObject) raises -> Int:
-    """The device code of a non-None constructor value: exact `'gpu'` or
-    `'cpu'`; anything else is refused in the pilot's words
-    (core/linear_route.mojo), before a session exists."""
-    if py_type(value) is b.str:
-        var code = linear_device_code(String(value))
-        if code >= 0:
-            return code
-    linear_device_refusal(String(py_call(b.repr, value)))
-    return LINEAR_DEVICE_INSTALL
-
-
 def ops_session_initialize_py(session: PythonObject, record: PythonObject, mode: PythonObject,
                               connections: PythonObject, device: PythonObject, program_class: PythonObject) raises -> PythonObject:
     # `device` (None, 'gpu' or 'cpu') takes the slot of the former `backend`
@@ -171,10 +158,10 @@ def ops_session_initialize_py(session: PythonObject, record: PythonObject, mode:
         # (python/mojolearn/ops.py connects it beside the mode tables); in a
         # CPU-only process the mode table already is the CPU one.
         var cpu = py_get(context, nk[].k_ops_session_cpu_connection)
-        var resolved = linear_device_installed(_session_device_unpack(device, b), 0 if cpu is None else 1)
-        if resolved == LINEAR_DEVICE_CPU and cpu is not None:
+        var resolved = device_installed(device_unpack(device, b), 0 if cpu is None else 1)
+        if resolved == DEVICE_CPU and cpu is not None:
             if key != "identical":
-                raise Error("ValueError: device='cpu' runs in identical mode only; numeric_mode='fast' is for Apple GPUs")
+                device_cpu_fast()
             entry = cpu
         else:
             entry = connections[normalized]

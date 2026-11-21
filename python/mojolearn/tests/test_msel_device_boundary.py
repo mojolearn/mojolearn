@@ -186,8 +186,8 @@ def test_a_multi_gpu_driver_refuses_a_cpu_member_in_words():
     from mojolearn.parallel_classical import fit_gram_estimator
     x, y = data()
     member = Ridge(device="cpu")
-    with pytest.raises(ValueError, match=r"parallel fit_gram_estimator spreads its work across the GPUs listed in "
-                                         r"devices=, and this estimator has device='cpu'"):
+    with pytest.raises(ValueError, match=r"device='cpu' is not available for parallel fit_gram_estimator: .*"
+                                         r"GPUs listed in devices=.*Leave device=None"):
         fit_gram_estimator(member, x, y, devices=(0,))
     assert not hasattr(member, "coef_")                          # refused before anything was fitted
 

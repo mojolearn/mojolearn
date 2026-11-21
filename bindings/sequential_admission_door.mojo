@@ -305,9 +305,9 @@ def _read_fields_full(operation: Int) raises -> PythonObject:
     if operation == SEQUENTIAL_OPN_LAYERS or operation == SEQUENTIAL_OPN_TABLE or operation == SEQUENTIAL_OPN_PROGRAM:
         return Python.tuple("_layers")
     if operation == SEQUENTIAL_OPN_FORWARD:
-        return Python.tuple("numeric_mode", "device", "_layers", "params_", "n_features_in_", "n_outputs_", "_sample_shape")
+        return Python.tuple("numeric_mode", "_layers", "params_", "n_features_in_", "n_outputs_", "_sample_shape")
     if operation == SEQUENTIAL_OPN_PREDICT or operation == SEQUENTIAL_OPN_PREDICT_PROBA:
-        return Python.tuple("numeric_mode", "device", "_layers", "params_", "n_features_in_", "n_outputs_", "_sample_shape",
+        return Python.tuple("numeric_mode", "_layers", "params_", "n_features_in_", "n_outputs_", "_sample_shape",
                             "_fit_loss", "_y_1d", "classes_")
     return PythonObject(None)
 
