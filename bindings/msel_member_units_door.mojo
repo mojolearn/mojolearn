@@ -164,6 +164,7 @@ from core.host_finite_scan import host_all_finite_f32
 from core.host_parallel import host_parallelize
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free, member_kind_capabilities, MEMBER_I64,
+    MEMBER_BORROWS_FIT,
     MEMBER_F32, MEMBER_I32, MEMBER_CAN_EXPORT, member_outputs, member_output_dtype, MEMBER_CAN_TEST_ROWS,
     MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA,
     MEMBER_OP_FIT, MEMBER_OP_SCORE, MEMBER_CAN_FIT, MEMBER_CAN_SCORE, MEMBER_CAN_CLASSIFIER, MEMBER_CAN_ROW_INDEX,
@@ -301,7 +302,7 @@ struct MselMemberRun(Movable):
         self.pin = 0
         self.index_all = False
         self.taken = List[Int](length=n_units, fill=0)
-        self.borrows = True
+        self.borrows = False
         self.held_x = List[List[Float32]]()
         self.held_y = List[List[Float32]]()
         self.notices = List[Int](length=n_units, fill=0)
@@ -745,6 +746,9 @@ def _member_units(base: PythonObject, candidates: PythonObject, y: PythonObject,
                 return scores^
             classifier = (kind_mask & MEMBER_CAN_CLASSIFIER) != 0
             tests_rows = (kind_mask & MEMBER_CAN_TEST_ROWS) != 0
+            # THE LIFETIME RULE: only a kind that keeps a pointer into its
+            # fit buffers has a kept unit's gathered side held until PACK.
+            run.borrows = (kind_mask & MEMBER_BORROWS_FIT) != 0
             if (kind_mask & MEMBER_CAN_SCOPE) != 0:
                 # THE RESIDENT SCOPE (module note): read once per operation,
                 # only for a kind that can keep X resident. A read that

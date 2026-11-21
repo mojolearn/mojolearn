@@ -97,7 +97,7 @@ from core.member_abi import (
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA, MEMBER_CAN_DECISION,
     MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_CLASSIFIER,
     MEMBER_CAN_ROW_INDEX, MEMBER_CAN_COLUMN_INDEX, MEMBER_CAN_TEST_ROWS,
-    MEMBER_CAN_SCOPE, MEMBER_SCOPE_NONE, member_pin_settle,
+    MEMBER_CAN_SCOPE, MEMBER_SCOPE_NONE, member_pin_settle, MEMBER_BORROWS_FIT,
 )
 from core.member_families import MEMBER_FAMILY_TREE, MEMBER_FAMILY_FOREST, MEMBER_FAMILY_EXTRA_TREES
 
@@ -288,8 +288,11 @@ def member_set_admit(mut set: MemberSet, estimator: PythonObject, target: Int, w
     # earlier member of the same family, kind and route (clones of one
     # estimator: the member before it), else asked once. A family whose union
     # mask lacks the bit is never asked (no state is minted for the answer).
+    # THE LIFETIME RULE: whether this member's KIND keeps a pointer into its
+    # fit buffers (MEMBER_BORROWS_FIT), answered with the same one question.
     var tests = UInt8(0)
-    if owner.plan.member.can(MEMBER_CAN_TEST_ROWS):
+    var borrows = UInt8(0)
+    if owner.plan.member.can(MEMBER_CAN_TEST_ROWS | MEMBER_BORROWS_FIT):
         var asked = False
         var v = len(set.run.plans) - 1
         while v >= 0:  # driver-loop: over the members admitted before (one compare when they are clones)
@@ -298,15 +301,22 @@ def member_set_admit(mut set: MemberSet, estimator: PythonObject, target: Int, w
                     and set.run.plans[v].route.vendor == owner.plan.route.vendor
                     and set.run.plans[v].route.mode == owner.plan.route.mode):
                 tests = set.run.tests[v]
+                borrows = set.run.borrows[v]
                 asked = True
                 break
             v -= 1
         if not asked:
             try:
-                if (member_kind_capabilities(owner.plan) & MEMBER_CAN_TEST_ROWS) != 0:
+                var kind_mask = member_kind_capabilities(owner.plan)
+                if (kind_mask & MEMBER_CAN_TEST_ROWS) != 0:
                     tests = UInt8(1)
+                if (kind_mask & MEMBER_BORROWS_FIT) != 0:
+                    borrows = UInt8(1)
             except:
+                # No answer: the caller scans the rows, and the gathered
+                # block is held as for a borrowing kind (the safe reading).
                 tests = UInt8(0)
+                borrows = UInt8(1)
     set.run.tests.append(tests)
     set.run.plans.append(owner.plan.copy())
     set.run.targets.append(target)
@@ -322,7 +332,7 @@ def member_set_admit(mut set: MemberSet, estimator: PythonObject, target: Int, w
     set.run.errors.append(String(""))
     set.run.uncovered.append(UInt8(0))
     set.run.pin_tokens.append(0)
-    set.run.borrows.append(UInt8(1))
+    set.run.borrows.append(borrows)
     set.run.part_x.append(List[Float32]())
     set.run.part_y.append(List[Int32]())
     set.run.part_w.append(List[Float32]())

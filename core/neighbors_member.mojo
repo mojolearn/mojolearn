@@ -78,6 +78,7 @@ from core.member_abi import (
     MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
 )
+from core.member_abi import MEMBER_BORROWS_FIT, MEMBER_EXPORT_OWN
 from core.member_families import MEMBER_FAMILY_NEIGHBORS
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
@@ -501,6 +502,11 @@ def _export(slot: _SlotPtr, call: _CallPtr) raises:
     words until this state's next fit, import or free."""
     if not slot[].fitted:
         raise Error("NotFittedError: this " + _name(slot) + " member is not fitted yet")
+    if (call[].flags & MEMBER_EXPORT_OWN) != 0:
+        # THE LIFETIME RULE: both borrowed blocks, once; no view is answered.
+        _own_points(slot)
+        _own_targets(slot)
+        return
     var block = call[].block
     if (call[].flags & MEMBER_BLOCK_BY_INDEX) != 0:
         if block < 0 or block > 1:
@@ -582,7 +588,11 @@ def _out_dtype(regressor: Bool, asked: Int) -> Int:
 
 def _neighbors_member(operation: Int, address: Int) raises -> Int:
     var call = _CallPtr(unsafe_from_address=address)
-    comptime _REGRESSOR = MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
+    # MEMBER_BORROWS_FIT (both kinds): a fitted state reads the caller's X
+    # and y views until MEMBER_EXPORT_OWN, or the export of both blocks, has
+    # copied them (LIFETIME in the module docstring).
+    comptime _REGRESSOR = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
+        | MEMBER_BORROWS_FIT)
     comptime _CLASSIFIER = _REGRESSOR | MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_CLASSIFIER
     if operation == MEMBER_OP_CAPABILITIES:
         if call[].state == 0:

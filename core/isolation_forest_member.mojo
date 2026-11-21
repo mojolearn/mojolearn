@@ -82,6 +82,7 @@ from core.member_abi import (
     MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
 )
+from core.member_abi import MEMBER_BORROWS_FIT, MEMBER_EXPORT_OWN
 from core.member_families import MEMBER_FAMILY_ISOLATION_FOREST
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
@@ -447,12 +448,34 @@ def _view(forest: IsolationForestMemberForest, block: Int) raises -> MemberMatri
     raise Error("member ABI: an " + _NAME + " member has no fitted block " + String(block))
 
 
+def _own(slot: MutPointer[IsolationForestMemberSlot, MutUntrackedOrigin]) raises:
+    """THE LIFETIME RULE (MEMBER_EXPORT_OWN): the state stops reading its
+    training view WITHOUT copying X. The compact forest is read out into
+    the slot once (the read-out an export makes anyway, while the training
+    view is still valid), the forest keyed on the training view's address
+    is released, and the state becomes what an IMPORT of its own blocks
+    makes: scored through IF_OP_FOREST_RUN from the forest it owns (one
+    upload at its first score). SERIAL BY NATURE: one read-out of one forest."""
+    if slot[].imported:
+        return
+    _read_out(slot)
+    if slot[].resident and slot[].token != 0:
+        if_entry_release(slot[].entry, slot[].token)
+    slot[].token = 0
+    slot[].imported = True
+    slot[].train = 0
+    slot[].n_train = 0
+
+
 def _export(slot: MutPointer[IsolationForestMemberSlot, MutUntrackedOrigin],
             call: MutPointer[MemberCall, MutUntrackedOrigin]) raises:
     """A view of one fitted block; the slot owns the words until its next
     fit, import or free."""
     if not slot[].fitted:
         raise Error("NotFittedError: this " + _NAME + " member is not fitted yet")
+    if (call[].flags & MEMBER_EXPORT_OWN) != 0:
+        _own(slot)
+        return
     if not slot[].imported:
         _read_out(slot)
     var block = call[].block
@@ -567,7 +590,10 @@ def _new(call: MutPointer[MemberCall, MutUntrackedOrigin]) raises:
 def _isolation_forest_member(operation: Int, address: Int) raises -> Int:
     var call = MutPointer[MemberCall, MutUntrackedOrigin](unsafe_from_address=address)
     if operation == MEMBER_OP_CAPABILITIES:
-        return _CAPS
+        # MEMBER_BORROWS_FIT: a fitted (not imported) state refits from the
+        # caller's training view after an eviction, or per call on an image
+        # without the resident route, until MEMBER_EXPORT_OWN (`_own`).
+        return _CAPS | MEMBER_BORROWS_FIT
     if operation == MEMBER_OP_NEW:
         _new(call)
         return 0
