@@ -21,8 +21,13 @@ the per-context workspace lives for the process. Growth waits first, so a
 queued GEMM never loses the workspace it is using. Different device contexts
 use distinct buffers keyed by core/ctx_key.mojo.
 
-FAST builds always take
-`identical_gemm[False]`, as before.
+FAST builds take `identical_gemm[False]`, as before, except a product the
+matrix-units route takes (gemm/fast_matrix_units.mojo, the `fast` build on
+NVIDIA and AMD): the workspace-less entry allocated a workspace, waited and
+freed it for every such product (m k floats for an OP_TN), so those products
+run on the same retained workspace, grown to the route's need, and keep
+their wait (lane fx-percall-copies, 2026-11-20). Same route, same kernels,
+same result.
 """
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -33,6 +38,12 @@ from gemm.neural_dispatch import (
     identical_gemm,
     identical_gemm_into,
     identical_gemm_workspace_max_floats,
+)
+from gemm.experiments.neural_profile import neural_validate
+from gemm.fast_matrix_units import (
+    GEMM_FAST_MATRIX_UNITS,
+    matrix_units_takes,
+    matrix_units_workspace_floats,
 )
 from core.shared_slot import SharedSlot
 
@@ -64,6 +75,37 @@ struct _MambaGemmWs(Defaultable, Movable):
 comptime _MAMBA_GEMM_WS = SharedSlot[_MambaGemmWs, "MojolearnMambaGemmWsV2"]
 
 
+def _mamba_ws_gemm(
+    ctx: DeviceContext,
+    mut c: DeviceBuffer[DType.float32],
+    mut a: DeviceBuffer[DType.float32],
+    mut b: DeviceBuffer[DType.float32],
+    m: Int,
+    n: Int,
+    k: Int,
+    op: Int,
+    required: Int,
+) raises:
+    """One projection GEMM on the context's retained workspace of at least
+    `required` floats: asynchronous, no allocation, free or wait per call
+    once the workspace has grown to the largest call."""
+    var g = _MAMBA_GEMM_WS.get_or_create_ptr()
+    var si = ctx_cache_slot(g[].ids, ctx)
+    if si < 0:
+        step_count_device_alloc()
+        g[].bufs.append(ctx.enqueue_create_buffer[DType.float32](required))
+        g[].ids.append(ctx_cache_key(ctx))
+        si = len(g[].ids) - 1
+    elif len(g[].bufs[si]) < required:
+        # Queued GEMMs may still use the allocation being replaced.
+        step_count_sync()
+        ctx.synchronize()
+        step_count_device_alloc()
+        g[].bufs[si] = ctx.enqueue_create_buffer[DType.float32](required)
+    var ws = g[].bufs[si].create_sub_buffer[DType.float32](0, len(g[].bufs[si]))
+    identical_gemm_into[False](ctx, c, a, b, ws, m, n, k, op)
+
+
 def mamba_proj_gemm(
     ctx: DeviceContext,
     mut c: DeviceBuffer[DType.float32],
@@ -76,23 +118,21 @@ def mamba_proj_gemm(
 ) raises:
     """`identical_gemm[False](ctx, c, a, b, m, n, k, op)`; under
     IDN_MAMBA_GEMM_WS asynchronous on the retained workspace (the caller's
-    final wait covers it)."""
+    final wait covers it); a product the `fast` matrix-units route takes
+    runs on the same retained workspace and waits, as that entry does."""
     comptime if IDN_MAMBA_GEMM_WS:
-        var required = identical_gemm_workspace_max_floats(m, n, k)
-        var g = _MAMBA_GEMM_WS.get_or_create_ptr()
-        var si = ctx_cache_slot(g[].ids, ctx)
-        if si < 0:
-            step_count_device_alloc()
-            g[].bufs.append(ctx.enqueue_create_buffer[DType.float32](required))
-            g[].ids.append(ctx_cache_key(ctx))
-            si = len(g[].ids) - 1
-        elif len(g[].bufs[si]) < required:
-            # Queued GEMMs may still use the allocation being replaced.
-            step_count_sync()
-            ctx.synchronize()
-            step_count_device_alloc()
-            g[].bufs[si] = ctx.enqueue_create_buffer[DType.float32](required)
-        var ws = g[].bufs[si].create_sub_buffer[DType.float32](0, len(g[].bufs[si]))
-        identical_gemm_into[False](ctx, c, a, b, ws, m, n, k, op)
+        _mamba_ws_gemm(ctx, c, a, b, m, n, k, op, identical_gemm_workspace_max_floats(m, n, k))
     else:
+        comptime if GEMM_FAST_MATRIX_UNITS:
+            if matrix_units_takes(m, n, k):
+                neural_validate(m, n, k, op)
+                _mamba_ws_gemm(ctx, c, a, b, m, n, k, op,
+                               max(identical_gemm_workspace_max_floats(m, n, k),
+                                   matrix_units_workspace_floats(m, n, k, op)))
+                # The wait `identical_gemm` makes after every product stays: the `fast` forwards carry no
+                # final wait of their own (the IDENTICAL ones do, under IDN_MAMBA_GEMM_WS), so the product is
+                # complete when this returns, as before. What goes is the allocation and free per product.
+                step_count_sync()
+                ctx.synchronize()
+                return
         identical_gemm[False](ctx, c, a, b, m, n, k, op)

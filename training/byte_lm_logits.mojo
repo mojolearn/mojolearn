@@ -41,7 +41,7 @@ from training.byte_lm import (
     _bind_emb_head,
     _block_weights,
     _block_weights_dev,
-    _param_dev_copy,
+    _param_dev_view,
     _byte_check_gemm,
     _byte_recover,
     _require_profile,
@@ -116,7 +116,7 @@ def _logits_params_upload(ctx: DeviceContext, params: List[Float32], config: Byt
     """cpu3-seq: the flat parameters in ONE upload, then the non-finite
     refusal as a device scan (one partials readback and the wait that also
     completes the upload, so `params` may be released after). Every slice
-    the stateless logits call needs is then copied device to device."""
+    the stateless logits call needs is then a view of the returned buffer."""
     var n = config.n_total()
     if len(params) != n:
         raise Error("byte LM logits: expected " + String(n) + " parameters, got "
@@ -375,21 +375,23 @@ def byte_logits_from_params(ctx: DeviceContext, params: List[Float32], inputs: L
     byte_logits_validate_params(params, config)
     var offsets = config.offsets()
     var vd = config.vocab_size * config.d_model
-    # cpu3-seq: one upload of the flat parameters, the finite refusal on the
-    # device, and every block/embedding/head slice copied device to device
-    # (no host slice loops; same values in the same buffers as before).
+    # cpu3-seq: one upload of the flat parameters and the finite refusal on
+    # the device. Lane fx-percall-copies (2026-11-20): every block, embedding
+    # and head tensor is a view of that one buffer (was a device-to-device
+    # copy of every parameter byte per call); `flat` is named after the wait.
     var flat = _logits_params_upload(ctx, params, config)
     var weights = List[LlamaDeviceWeights]()
     for layer in range(config.n_layers):
         weights.append(_block_weights_dev(ctx, flat, layer, config))
     var head_base = offsets[config.n_tensors() - 1]
-    var emb_w = _param_dev_copy(ctx, flat, 0, vd)
-    var lm_w = _param_dev_copy(ctx, flat, head_base, vd)
+    var emb_w = _param_dev_view(flat, 0, vd)
+    var lm_w = _param_dev_view(flat, head_base, vd)
     var rope = LlamaRopeTable(ctx, byte_dims(config), Float32(10000), config.length)
     var sc = ByteLogitsScratch(ctx, batch, length, config)
     var out = _logits_forward(ctx, weights, emb_w, lm_w, rope, sc, inputs, batch, length, config)
     ctx.synchronize()
     _ = sc^
+    _ = flat^
     return out^
 
 
@@ -402,21 +404,23 @@ def byte_logits_from_params_into(ctx: DeviceContext, params: List[Float32], inpu
     byte_logits_validate_params(params, config)
     var offsets = config.offsets()
     var vd = config.vocab_size * config.d_model
-    # cpu3-seq: one upload of the flat parameters, the finite refusal on the
-    # device, and every block/embedding/head slice copied device to device
-    # (no host slice loops; same values in the same buffers as before).
+    # cpu3-seq: one upload of the flat parameters and the finite refusal on
+    # the device. Lane fx-percall-copies (2026-11-20): every block, embedding
+    # and head tensor is a view of that one buffer (was a device-to-device
+    # copy of every parameter byte per call); `flat` is named after the wait.
     var flat = _logits_params_upload(ctx, params, config)
     var weights = List[LlamaDeviceWeights]()
     for layer in range(config.n_layers):
         weights.append(_block_weights_dev(ctx, flat, layer, config))
     var head_base = offsets[config.n_tensors() - 1]
-    var emb_w = _param_dev_copy(ctx, flat, 0, vd)
-    var lm_w = _param_dev_copy(ctx, flat, head_base, vd)
+    var emb_w = _param_dev_view(flat, 0, vd)
+    var lm_w = _param_dev_view(flat, head_base, vd)
     var rope = LlamaRopeTable(ctx, byte_dims(config), Float32(10000), config.length)
     var sc = ByteLogitsScratch(ctx, batch, length, config)
     _logits_forward_into(ctx, weights, emb_w, lm_w, rope, sc, inputs, batch, length, config, destination)
     ctx.synchronize()
     _ = sc^
+    _ = flat^
 
 
 def byte_logits_resident(ctx: DeviceContext, mut tr: ByteTrainer, inputs: List[Int32],

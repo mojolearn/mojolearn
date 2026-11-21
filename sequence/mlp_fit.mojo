@@ -892,7 +892,9 @@ def mlp_predict[E: Exec](mut ex: E, net: MLPNet, X: FP, N: Int, Pin: FP, dst: FP
                          proba2: Bool = False, resident: Bool = False) raises:
     """The hand predict (RESTORED 2026-11-17, see the note above
     AUTOGRAD_PREDICT): each chunk of `chunk` rows runs mlp_forward, one
-    OP_GEMM_EPI launch a layer (+ OP_SOFTMAX for a softmax output). `proba2`
+    OP_GEMM_EPI launch a layer (+ OP_SOFTMAX for a softmax output), reading
+    its rows of the uploaded input and writing its rows of the output in
+    place (no per-chunk copy). `proba2`
     (cpu2-l11-neural): a one-output logistic net writes the (N, 2)
     probability `[1 - p, p]` (`OP_PROBA2` on the executor). `resident`
     (perf3-seq-neural): `Pin` is already this executor's memory (the model's
@@ -910,22 +912,23 @@ def mlp_predict[E: Exec](mut ex: E, net: MLPNet, X: FP, N: Int, Pin: FP, dst: FP
     else:
         P = ex.alloc(net.n_params())
         ex.upload(P, Pin, net.n_params())
-    var acts = List[FP]()
-    for i in range(L + 1):  # driver-loop: over layers
-        acts.append(ex.alloc(bs * net.sizes[i]))
     var dout = ex.alloc(N * O)
+    # Lane fx-percall-copies (2026-11-20): each chunk's first layer reads its rows of dX in place and its last
+    # layer writes its rows of dout in place. Before, every chunk ran two device-to-device OP_COPY launches
+    # (B x D floats in, B x O floats out) around the same forward, and held bs x (D + O) floats of staging.
+    # Same products on the same values in the same order: no bits change. Only the hidden activations are
+    # allocated; slots 0 and L of `acts` are re-pointed per chunk (two pointer stores, no allocation).
+    var acts = List[FP]()
+    acts.append(dX)
+    for i in range(1, L):  # driver-loop: over hidden layers
+        acts.append(ex.alloc(bs * net.sizes[i]))
+    acts.append(dout)
     var b0 = 0
     while b0 < N:  # driver-loop: over prediction chunks
         var B = bs if b0 + bs <= N else N - b0
-        var c = Args()
-        c.p0 = dX + b0 * D
-        c.p1 = acts[0]
-        ex.launch[OP_COPY](c, B * D)
+        acts[0] = dX + b0 * D
+        acts[L] = dout + b0 * O
         mlp_forward(ex, net, P, acts, B)
-        var d = Args()
-        d.p0 = acts[L]
-        d.p1 = dout + b0 * O
-        ex.launch[OP_COPY](d, B * O)
         b0 += B
     if proba2 and O == 1:
         var two = ex.alloc(N * 2)
