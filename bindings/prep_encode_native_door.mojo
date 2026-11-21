@@ -43,11 +43,13 @@ from bindings.prep_encode_kbins_run import (
 from bindings.prep_encode_cats_run import (
     CatFit, CatFitPlan, CatBlock, InfrequentFit, CAT_FIT_UNIQUE, CAT_FIT_SCAN, CAT_FIT_PACK_SORT,
     CAT_FIT_PACK_PRESENT, CAT_FIT_INVERSE, cat_fit_stage, cat_codes_stage, cat_i2f_stage, cat_grouped_sizes,
-    cat_infrequent_stage)
+    cat_infrequent_stage, CatAuto, cat_auto_held, cat_auto_state)
 from bindings.prep_encode_onehot_run import (
-    OneHotApply, OneHotInverse, onehot_transform_stage, onehot_inverse_stage)
+    OneHotApply, OneHotInverse, onehot_transform_stage, onehot_inverse_stage, onehot_auto_drops, OH_DROP_NONE,
+    OH_DROP_FIRST, OH_DROP_IF_BINARY)
 from bindings.prep_encode_ordinal_run import (
-    OrdinalApply, OrdinalInverse, ordinal_transform_stage, ordinal_inverse_stage)
+    OrdinalApply, OrdinalInverse, ordinal_transform_stage, ordinal_inverse_stage, ordinal_auto_clash,
+    ordinal_auto_refusal)
 from bindings.prep_encode_target_run import (
     TargetFit, TargetApply, TE_FOLDS_NONE, TE_FOLDS_STAGED, TE_FOLDS_GIVEN, target_fit_stage,
     target_transform_stage)
@@ -1274,6 +1276,112 @@ def _num_text(value: PythonObject) raises -> String:
     return String(py_call(native_loaded_module("builtins").format, value, ""))
 
 
+# ---------------------------------------------------------------- the restricted category fit
+# categories='auto' without infrequent grouping: the fit's orchestration is
+# typed (bindings/prep_encode_cats_run.mojo `cat_auto_state`, the ordinal
+# checks and one-hot drop words in their RUN files), and the Prep member
+# (core/prep_member.mojo kinds 10, 11) runs the same functions on the same
+# program. This door runs the program and PACKs the state.
+def _auto_run(values: PythonObject, entries: PythonObject, caps: XprepCaps, route: Int, context: PythonObject,
+              mut state: CatAuto) raises -> Tuple[Bool, PythonObject]:
+    """One category program on `route` over X (an owner of the program) and
+    its typed state; (False, None) when a packed plan did not hold the
+    values. The second word is the C08 (n, d) inverse on CAT_FIT_INVERSE."""
+    # UNPACK
+    var n = Int(py=values[3])
+    var d = Int(py=values[4])
+    var p = EncProg()
+    var x = p.own_x(values)
+    # RUN: the typed stages, the typed run, the typed state.
+    var plan = cat_fit_stage(p.prog, CatFit(n, d, x, NONE, route))
+    var ran = p.run_caps(entries, context, caps)
+    var arena = Int(py=ran[0][1])
+    if not cat_auto_held(arena, plan, d):
+        return (False, PythonObject(None))
+    state = cat_auto_state(arena, plan, n, d)
+    # PACK
+    var inverse = _take2(ran, plan.inverse, n, d, context) if route == CAT_FIT_INVERSE else PythonObject(None)
+    _ = ran^  # the arena the state was read from lives past the read
+    return (True, inverse)
+
+
+def _auto_fit(values: PythonObject, mode: PythonObject, entries: PythonObject, caps: XprepCaps, capture: Bool,
+              context: PythonObject, mut state: CatAuto) raises -> PythonObject:
+    """The restricted category fit: with `capture` the C08 program (its
+    inverse is returned for the transform); else the packed program first
+    where the FAST image has it, then the sort with a run scan or with
+    unique_cols (the image's route, as `_cat_fit`). None without capture."""
+    if capture:
+        var held = _auto_run(values, entries, caps, CAT_FIT_INVERSE, context, state)
+        return held[1]
+    var fast = _fast_unique(mode, entries)
+    var cls2 = _cls2_cat(mode, entries)
+    if (cls2 & 1) != 0 and fast:
+        var got = _auto_run(values, entries, caps, CAT_FIT_PACK_PRESENT if (cls2 & 2) != 0 else CAT_FIT_PACK_SORT,
+                            context, state)
+        if got[0]:
+            return PythonObject(None)
+    _ = _auto_run(values, entries, caps, CAT_FIT_SCAN if fast else CAT_FIT_UNIQUE, context, state)
+    return PythonObject(None)
+
+
+def encode_auto_categories(model: PythonObject, fields: PythonObject, state: CatAuto, context: PythonObject) raises:
+    """PACK of a restricted category fit (this door's and the Prep member's):
+    `categories_` as frozen float32 Arrays, the category record of
+    `_category_record` built from the state's block (no admission of the
+    new Arrays), `_missing`, and `_infrequent` / `_grouping` None."""
+    var b = native_loaded_module("builtins")
+    var categories = Python.list()
+    for j in range(state.d):  # driver-loop: over the per-column category arrays
+        _ = py_call(categories.append, _f32_array(state.column(j), context))
+    py_setitem(fields, "categories_", categories)
+    var frozen = _category_freeze(categories, context)  # hazard A: fitted categories are read-only (p3-prep)
+    var words = len(state.block)
+    var block = classical_typed(Python.tuple(words), "<f4", context["output_context"])
+    unsafe_memcpy(dest=F32P(unsafe_from_address=Int(py=classical_address(block))),
+                  src=F32P(unsafe_from_address=Int(state.block.unsafe_ptr())), count=words)
+    var size_list = Python.list()
+    for j in range(state.d):  # driver-loop: over the per-column category counts
+        _ = py_call(size_list.append, PythonObject(state.sizes[j]))
+    var record = Python.tuple(categories, py_call(b.tuple, categories), block, state.kmax, py_call(b.tuple, size_list),
+                              _floats(_to_floats(state.sizes), context), words)
+    prepared_put(NativeModules(), _CAT_SLOT, model, record if frozen else PythonObject(None))
+    py_setitem(fields, "_missing", _int_list(state.missing))
+    py_setitem(fields, "_infrequent", PythonObject(None))
+    py_setitem(fields, "_grouping", PythonObject(None))
+
+
+def encode_drop_word(drop: PythonObject) raises -> Int:
+    """OneHotEncoder `drop` as its word (OH_DROP_*); -1 for one category per
+    column (served by `_set_drop_idx`)."""
+    if drop is None:
+        return OH_DROP_NONE
+    if _is_str(drop):
+        var text = String(drop)
+        if text == "first":
+            return OH_DROP_FIRST
+        if text == "if_binary":
+            return OH_DROP_IF_BINARY
+    return -1
+
+
+def encode_auto_drops(fields: PythonObject, drops: List[Int], none: Bool) raises:
+    """PACK of `onehot_auto_drops`: `_drop_after` and `drop_idx_` (the same
+    indices without grouping), None for drop=None."""
+    if none:
+        py_setitem(fields, "_drop_after", PythonObject(None))
+        py_setitem(fields, "drop_idx_", PythonObject(None))
+        return
+    var after = Python.list()
+    var idx = Python.list()
+    for j in range(len(drops)):  # driver-loop: over the per-column drop indices
+        var word = PythonObject(None) if drops[j] < 0 else PythonObject(drops[j])
+        _ = py_call(after.append, word)
+        _ = py_call(idx.append, word)
+    py_setitem(fields, "_drop_after", after)
+    py_setitem(fields, "drop_idx_", idx)
+
+
 # ---------------------------------------------------------------- OrdinalEncoder
 def _ordinal_fit(model: PythonObject, values: PythonObject, capture: Bool, context: PythonObject) raises -> PythonObject:
     """OrdinalEncoder.fit; with `capture` (the C08 fit_transform) the fit's
@@ -1296,6 +1404,18 @@ def _ordinal_fit(model: PythonObject, values: PythonObject, capture: Bool, conte
     var caps = enc_caps(model, entries)
     var auto = _is_str(fields["categories"]) and String(fields["categories"]) == "auto"
     var inverse = PythonObject(None)
+    if auto and not grouping:
+        # The restricted form: the typed fit the Prep member also runs.
+        var state = CatAuto()
+        inverse = _auto_fit(values, mode, entries, caps, capture, context, state)
+        encode_auto_categories(model, fields, state, context)
+        var use = handle_text == "use_encoded_value"
+        var clash = ordinal_auto_clash(state, use, _float(unknown_value) if use else 0.0, _float(emv))
+        if len(clash) > 0:
+            raise Error(ordinal_auto_refusal(clash, _num_text(unknown_value) if use else String(""), _num_text(emv)))
+        py_setitem(fields, "numeric_mode_", mode)
+        py_setitem(fields, "n_features_in_", d)
+        return inverse
     if capture and auto:
         var got = _fit_categories_with_codes(values, entries, caps, context)
         py_setitem(fields, "categories_", got[0])
@@ -1561,6 +1681,19 @@ def _onehot_fit(model: PythonObject, values: PythonObject, capture: Bool, contex
     var caps = enc_caps(model, entries)
     var auto = _is_str(fields["categories"]) and String(fields["categories"]) == "auto"
     var inverse = PythonObject(None)
+    if auto and not grouping:
+        # The restricted form: the typed fit the Prep member also runs.
+        var state = CatAuto()
+        inverse = _auto_fit(values, mode, entries, caps, capture, context, state)
+        encode_auto_categories(model, fields, state, context)
+        var word = encode_drop_word(drop)
+        if word >= 0:
+            encode_auto_drops(fields, onehot_auto_drops(state.sizes, word), word == OH_DROP_NONE)
+        else:
+            _set_drop_idx(model, context)
+        py_setitem(fields, "numeric_mode_", mode)
+        py_setitem(fields, "n_features_in_", d)
+        return inverse
     if capture and auto:
         var got = _fit_categories_with_codes(values, entries, caps, context)
         py_setitem(fields, "categories_", got[0])

@@ -150,28 +150,37 @@ def _list_words(values: List[Int]) -> String:
     return text + "]"
 
 
-def ordinal_auto_check(state: CatAuto, use_unknown: Bool, unknown_value: Float64, unknown_text: String,
-                       encoded_missing: Float64, missing_text: String) raises:
+def ordinal_auto_clash(state: CatAuto, use_unknown: Bool, unknown_value: Float64,
+                       encoded_missing: Float64) -> List[Int]:
     """OrdinalEncoder.fit's code checks on its fitted categories (the
-    restricted form, `CatAuto`; the door and the Prep member both call it):
-    `unknown_value` (with `use_unknown`, not NaN) must not be a code of a
-    seen category of any column, and `encoded_missing` (when a column has a
-    NaN category, not NaN) must not be one either. The texts are the
-    numbers as the caller prints them."""
+    restricted form, `CatAuto`; the door and the Prep member both call it),
+    in the estimator's order: `unknown_value` (with `use_unknown`, not NaN)
+    must not be a code of a seen category of any column (a clash answers
+    [-1]), then `encoded_missing` (when a column has a NaN category, not
+    NaN) must not be one either (a clash answers the columns). Empty: no
+    clash. No text is built unless a check fails (`ordinal_auto_refusal`)."""
     var cards = state.cards()
     if use_unknown and unknown_value == unknown_value:
         for j in range(len(cards)):  # driver-loop: validates unknown_value against cardinalities
             if 0.0 <= unknown_value and unknown_value < Float64(cards[j]):
-                raise Error("mojolearn: the used value for unknown_value " + unknown_text + " is one of the "
-                            + "values already used for encoding the seen categories.")
+                var clash: List[Int] = [-1]
+                return clash^
+    var bad = List[Int]()
     var any_missing = False
     for j in range(len(state.missing)):  # driver-loop: over the per-column NaN slots (feature metadata)
         any_missing = any_missing or state.missing[j] >= 0
     if any_missing and encoded_missing == encoded_missing:
-        var bad = List[Int]()
         for j in range(len(cards)):  # driver-loop: validates encoded_missing_value argument
             if state.missing[j] >= 0 and 0.0 <= encoded_missing and encoded_missing < Float64(cards[j]):
                 bad.append(j)
-        if len(bad) > 0:
-            raise Error("mojolearn: encoded_missing_value (" + missing_text + ") is already "
-                        + "used to encode a known category in features: " + _list_words(bad))
+    return bad^
+
+
+def ordinal_auto_refusal(clash: List[Int], unknown_text: String, missing_text: String) -> String:
+    """The estimator's words for a nonempty `ordinal_auto_clash`; the texts
+    are the two parameters as the caller prints them."""
+    if len(clash) == 1 and clash[0] < 0:
+        return ("mojolearn: the used value for unknown_value " + unknown_text + " is one of the "
+                + "values already used for encoding the seen categories.")
+    return ("mojolearn: encoded_missing_value (" + missing_text + ") is already "
+            + "used to encode a known category in features: " + _list_words(clash))
