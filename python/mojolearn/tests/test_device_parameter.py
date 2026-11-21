@@ -69,6 +69,44 @@ def test_the_table_is_not_empty():
     assert all(answer is True or isinstance(answer, str) for answer in _device_table.CPU_CLASSES.values())
 
 
+def _package_classes():
+    # every class the package defines, found from `object` down: independent of the table's own derivation
+    _load_every_family()
+    found, todo = set(), list(object.__subclasses__())
+    while todo:
+        cls = todo.pop()
+        if cls in found:
+            continue
+        found.add(cls)
+        todo.extend(type.__subclasses__(cls))
+    return sorted((cls for cls in found
+                   if cls.__module__.startswith("mojolearn.") and not cls.__module__.startswith("mojolearn.tests")),
+                  key=lambda cls: cls.__module__ + "." + cls.__qualname__)
+
+
+def test_every_marked_class_is_in_the_table_whatever_its_base():
+    # `_mojolearn_device = True` is the class's own statement that it runs on both devices: the compiled
+    # constructor check reads the TABLE, so a marked class without a row would be refused `device="cpu"`.
+    missing = [cls.__module__ + "." + cls.__qualname__ for cls in _package_classes()
+               if getattr(cls, "_mojolearn_device", False) is True and _device_table.CPU_CLASSES.get(cls) is not True]
+    assert not missing, f"marked classes without a True row in the device table: {missing}"
+
+
+def test_every_estimator_that_takes_device_is_in_the_table_whatever_its_base():
+    missing = []
+    for cls in _package_classes():
+        if cls.__init__ is object.__init__ or not hasattr(cls, "get_params") or cls in _device_table.CPU_CLASSES:
+            continue
+        try:
+            parameters = inspect.signature(cls.__init__).parameters
+        except (TypeError, ValueError):
+            continue
+        if "device" in parameters and cls.__module__ in __import__("sys").modules and \
+                vars(__import__("sys").modules[cls.__module__]).get(cls.__name__) is cls:
+            missing.append(cls.__module__ + "." + cls.__qualname__)
+    assert not missing, f"estimator classes that take device= without a row in the device table: {missing}"
+
+
 def test_the_report_lists_every_class_of_the_table():
     rows = _mode.device_report()
     assert len(rows) == len(_device_table.CPU_CLASSES)

@@ -278,6 +278,11 @@ def _connect_pass(package):
     # (the installers above took the compiled constructors): before the
     # refresh and every snapshot below, which then record the final __init__.
     _mode.install_device()
+    # One row of the device table for every class that takes `device=`,
+    # whatever its base (the prep, decomp and sequence bases have no class
+    # statement hook): before any constructor of the pass can be called.
+    from ._device_table import record_loaded as _record_device_classes
+    _record_device_classes(_PKG)
     # Layouts connected at module import (neighbor queries, host inference, ...)
     # predate the installers above: rebind their replaced __init__/set_params.
     from ._native_classical_bridge import refresh_installed_members as _refresh_installed_members
