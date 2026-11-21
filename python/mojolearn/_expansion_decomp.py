@@ -501,6 +501,8 @@ class GaussianRandomProjection(_RandomProjection):
     """
     _device_door = "decomp"
     _parameters = ("n_components", "eps", "compute_inverse_components", "random_state", "numeric_mode", "device")
+    #: The member ABI mark (family 32 XDecomp, kind 5; core/xdecomp_member.mojo).
+    _mojolearn_member = (32, 5)
 
     def __init__(self, n_components="auto", *, eps=0.1, compute_inverse_components=False, random_state=None,
                  numeric_mode=None, device=None):
@@ -568,6 +570,8 @@ class SparseRandomProjection(_RandomProjection):
     _device_door = "decomp"
     _parameters = ("n_components", "density", "eps", "dense_output", "compute_inverse_components",
                    "random_state", "numeric_mode", "device")
+    #: The member ABI mark (family 32 XDecomp, kind 6; core/xdecomp_member.mojo).
+    _mojolearn_member = (32, 6)
 
     def __init__(self, n_components="auto", *, density="auto", eps=0.1, dense_output=False,
                  compute_inverse_components=False, random_state=None, numeric_mode=None, device=None):
@@ -833,6 +837,8 @@ class FastICA(_DeviceDoor, _Base):
     _parameters = ("n_components", "algorithm", "whiten", "fun", "fun_args", "max_iter", "tol", "w_init",
                    "whiten_solver", "random_state", "numeric_mode", "device")
     _device_door = "decomp"
+    #: The member ABI mark (family 32 XDecomp, kind 7; core/xdecomp_member.mojo).
+    _mojolearn_member = (32, 7)
 
     def __init__(self, n_components=None, *, algorithm="parallel", whiten="unit-variance", fun="logcosh",
                  fun_args=None, max_iter=200, tol=1e-4, w_init=None, whiten_solver="svd", random_state=None,
@@ -977,6 +983,8 @@ class FactorAnalysis(_DeviceDoor, _Base):
     _parameters = ("n_components", "tol", "copy", "max_iter", "noise_variance_init", "svd_method",
                    "iterated_power", "rotation", "random_state", "numeric_mode", "device")
     _device_door = "decomp"
+    #: The member ABI mark (family 32 XDecomp, kind 8; core/xdecomp_member.mojo).
+    _mojolearn_member = (32, 8)
 
     def __init__(self, n_components=None, *, tol=1e-2, copy=True, max_iter=1000, noise_variance_init=None,
                  svd_method="randomized", iterated_power=3, rotation=None, random_state=0, numeric_mode=None,

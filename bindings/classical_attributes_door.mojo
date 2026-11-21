@@ -15,6 +15,7 @@ from bindings.sequential_admission_door import sequential_admit_value
 from bindings.sequential_inputs_door import sequential_input
 from bindings.native_numpy_metadata_pack import native_numpy_type, native_numpy_module_fields
 from bindings.classical_keys_unpack import classical_keys
+from bindings.fitted_digest_property_pack import fitted_digest_property, fitted_digest_property_read
 from bindings.py_balanced import py_item
 
 
@@ -336,6 +337,13 @@ def _classical_getattribute_impl(mut mods: NativeModules, model: PythonObject, n
     var data_descriptor = kind == 3
     if data_descriptor:
         if not known:
+            # `digest_`, the one property of the shared estimator base, is
+            # admitted by identity and answered by its native call
+            # (bindings/fitted_digest_property_pack.mojo). Only this branch,
+            # which used to raise for every unknown property, asks.
+            var digest = fitted_digest_property(member.value())
+            if digest is not None:
+                return fitted_digest_property_read(digest, model)
             raise Error("TypeError: Python model property/descriptor hooks are not accepted")
         return _classical_descriptor_get(binding, model, cls, plan)
     var fields = py_call(py_item(plan, nk[].k_fields_get), model, cls)

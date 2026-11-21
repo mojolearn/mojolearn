@@ -1,7 +1,7 @@
 #!/bin/bash
 # tools/ops/feature_proof_job.sh -- FIRST REAL RUN, from the installed candidate wheel on a GPU box, of the user
 # features that so far only compiled (2026-11-21): the `device=` parameter and `model.check(X)` on both devices in one
-# process (Ridge, LinearRegression), `model.receipt` + `python -m mojolearn reproduce`, and the verify options
+# process (Ridge, LinearRegression), `model.digest_` per estimator family, and the verify options
 # `--self-test`, `--check`, `--fit-both`, `--cross-check quick`. Diagnostic tooling: it times nothing and decides no
 # release. It starts with two load steps (every family binary; every GPU/host image pair) and the `device=` boundary
 # test. Each step prints one line `PROOF <name> PASS|FAIL rc=<n> <seconds>s` and keeps its full output in
@@ -11,9 +11,10 @@
 #   tools/nvidia_central.sh submit ab --cap 30 --results box-out/proof-<tag> tools/ops/feature_proof_job.sh
 #
 # FP_VENV (default /root/pc-cache/venv-candidate): the venv holding the candidate wheel (a paper-compare or
-# call-profile job installs it). FP_OUT_RECEIPTS: where the receipts and their data are left for a second machine
-# (default $RES/receipts): copy that folder to a CPU box and run `FP_REPLAY=<folder> feature_proof_job.sh` there to
-# prove the same receipt reproduces on another machine.
+# call-profile job installs it). FP_OUT_RECEIPTS: where the digests and their data are left for a second machine
+# (default $RES/receipts): copy that folder to another box (a CPU box, another vendor) and run
+# `FP_REPLAY=<folder> feature_proof_job.sh` there: it fits again and every digest must be the recorded one. With
+# FP_REPLAY set only the digest step runs.
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; REPO="$(cd "$HERE/../.." && pwd)"
 RES="${MOJOLEARN_RESULTS_DIR:?feature_proof_job.sh needs MOJOLEARN_RESULTS_DIR (set by tools/box_persist_run.sh)}"
@@ -32,12 +33,109 @@ step() { # name, command...
 }
 "$PY" -I -c "import mojolearn as ml; print('PROOF wheel', ml.__version__)" 2>&1 | tail -n 1
 
+# D. digest_: per estimator family, fit on the GPU and with device="cpu" in ONE process; the two `digest_` strings are
+#    equal. Also per family: a second read and a second fit give the same string, a fit on changed data and a refit
+#    change it, and an unfitted model has no digest_. A family that has no digest yet prints NOT-YET with its reason
+#    and does not fail the step. The digests are left in $REC/digests.json for a second machine (FP_REPLAY), with
+#    the data. The families run one after another: the GPU is one device and each fit is a few milliseconds.
+cat > "$W/digest.py" <<'EOF'
+import json, sys, numpy as np, mojolearn as ml
+d, replay = sys.argv[1], (sys.argv[2] if len(sys.argv) > 2 else None)
+src = replay or d
+if replay is None:
+    r = np.random.default_rng(0); X = r.random((1000, 8), dtype=np.float32); y = X @ np.arange(1, 9, dtype=np.float32)
+    np.save(d + "/X.npy", X); np.save(d + "/y.npy", y)
+X, y = np.load(src + "/X.npy"), np.load(src + "/y.npy")
+c = (y > np.median(y)).astype(np.int32)
+X2 = X * np.float32(1.5) + np.float32(0.25)             # every training value changed
+# (class, constructor parameters, target): one or two estimators per family; r = regression target, c = classes,
+# None = no y
+FAMILIES = [
+    ("Ridge", dict(alpha=1.0), "r"), ("LinearRegression", {}, "r"), ("Lasso", dict(alpha=0.01), "r"),
+    ("ElasticNet", dict(alpha=0.01), "r"), ("BayesianRidge", {}, "r"), ("LogisticRegression", {}, "c"),
+    ("SGDClassifier", dict(random_state=0), "c"), ("LinearSVC", dict(random_state=0), "c"),
+    ("SVC", {}, "c"), ("SVR", {}, "r"), ("KernelRidge", {}, "r"),
+    ("GaussianNB", {}, "c"), ("LinearDiscriminantAnalysis", {}, "c"),
+    ("KNeighborsClassifier", {}, "c"), ("KNeighborsRegressor", {}, "r"), ("NearestNeighbors", {}, None),
+    ("KMeans", dict(n_clusters=4, random_state=0), None), ("MiniBatchKMeans", dict(n_clusters=4, random_state=0), None),
+    ("GaussianMixture", dict(n_components=3, random_state=0), None), ("DBSCAN", {}, None),
+    ("PCA", dict(n_components=3), None), ("TruncatedSVD", dict(n_components=3, random_state=0), None),
+    ("StandardScaler", {}, None), ("MinMaxScaler", {}, None), ("RobustScaler", {}, None),
+    ("DecisionTreeRegressor", dict(random_state=0), "r"), ("DecisionTreeClassifier", dict(random_state=0), "c"),
+    ("RandomForestRegressor", dict(n_estimators=20, random_state=0), "r"),
+    ("RandomForestClassifier", dict(n_estimators=20, random_state=0), "c"),
+    ("ExtraTreesRegressor", dict(n_estimators=20, random_state=0), "r"),
+    ("IsolationForest", dict(n_estimators=20, random_state=0), None),
+    ("GradientBoostingRegressor", dict(random_state=0), "r"), ("GradientBoostingClassifier", dict(random_state=0), "c"),
+    ("AdaBoostClassifier", dict(n_estimators=10, random_state=0), "c"),
+    ("BaggingRegressor", dict(n_estimators=10, random_state=0), "r"),
+    ("MLPRegressor", dict(hidden_layer_sizes=(16,), max_iter=20, random_state=0), "r"),
+    ("MLPClassifier", dict(hidden_layer_sizes=(16,), max_iter=20, random_state=0), "c"),
+    ("GaussianProcessRegressor", {}, "r"),
+]
+
+
+def fitted(cls, params, target, data, device=None):
+    kw = dict(params)
+    if device is not None:
+        kw["device"] = device
+    est = cls(**kw)
+    args = (data,) if target is None else (data, y if target == "r" else c)
+    return est.fit(*args)
+
+
+recorded = json.load(open(replay + "/digests.json")) if replay else {}
+out, bad = {}, []
+for name, params, target in FAMILIES:
+    cls = getattr(ml, name, None)
+    if cls is None:
+        print("DIGEST", name, "ABSENT"); continue
+    try:
+        try:
+            cls(**params).digest_
+            bad.append(name); print("DIGEST", name, "FAIL an unfitted model has a digest_"); continue
+        except AttributeError:
+            pass
+        m = fitted(cls, params, target, X)
+        try:
+            g = m.digest_
+        except AttributeError as e:                      # a family with no digest yet says so in words
+            print("DIGEST", name, "NOT-YET", str(e)[:200]); continue
+        assert isinstance(g, str) and len(g) == 64 and g == g.lower(), g
+        problems = []
+        if m.digest_ != g:
+            problems.append("a second read differs")
+        if fitted(cls, params, target, X).digest_ != g:
+            problems.append("a second fit on the same data differs")
+        if fitted(cls, params, target, X2).digest_ == g:
+            problems.append("a fit on changed data has the same digest (the digest does not see the fitted state)")
+        m.fit(*((X2,) if target is None else (X2, y if target == "r" else c)))
+        if m.digest_ == g:
+            problems.append("the digest was not dropped by a refit")
+        side = "gpu-only"
+        if getattr(cls, "_mojolearn_device", False) and ml.vendor() != "cpu":
+            side = "gpu=cpu"
+            if fitted(cls, params, target, X, "cpu").digest_ != g:
+                problems.append('device="cpu" gives another digest than the GPU')
+        if replay and name in recorded and recorded[name] != g:
+            problems.append(f"another machine recorded {recorded[name][:16]}, this one has {g[:16]}")
+        out[name] = g
+        if problems:
+            bad.append(name); print("DIGEST", name, "FAIL", "; ".join(problems))
+        else:
+            print("DIGEST", name, "SAME", side, g[:16], "(matches the other machine)" if replay and name in recorded else "")
+    except Exception as e:
+        bad.append(name); print("DIGEST", name, "ERROR", type(e).__name__, str(e)[:200])
+if replay is None:
+    json.dump(dict(version=str(ml.__version__), vendor=str(ml.vendor())), open(d + "/digests-info.json", "w"), sort_keys=True)
+    json.dump(out, open(d + "/digests.json", "w"), indent=1, sort_keys=True)
+print("DIGEST SUMMARY", len(out), "with a digest;", len(bad), "failed:", " ".join(bad))
+assert not bad
+EOF
 if [ -n "${FP_REPLAY:-}" ]; then
-    # second machine: replay the receipts another box wrote
-    for r in ridge rf; do
-        step "replay-$r-same" "$PY" -I -m mojolearn reproduce "$FP_REPLAY/$r.json" --X "$FP_REPLAY/X.npy" --y "$FP_REPLAY/y.npy"
-        WANT_RC=1 step "replay-$r-flipped-bit" "$PY" -I -m mojolearn reproduce "$FP_REPLAY/$r.json" --X "$FP_REPLAY/Xbad.npy" --y "$FP_REPLAY/y.npy" --json
-    done
+    # second machine (another vendor, or a CPU box): fit again here and compare with the digests the first box left
+    step digest-replay "$PY" -I "$W/digest.py" "$REC" "$FP_REPLAY"
+    grep -E '^DIGEST' "$RES/logs/digest-replay.log" | cut -c1-300
     echo "PROOF SUMMARY failed=$fails (replay)"; [ $fails = 0 ]; exit $?
 fi
 
@@ -119,21 +217,9 @@ EOF
 step device-and-check-logistic "$PY" -I "$W/device_logistic.py"
 grep -E '^(DEVICE|CHECK|REFUSAL)' "$RES/logs/device-and-check-logistic.log" | cut -c1-400
 
-# 2. receipts and reproduce (same machine); the folder is left for a second machine
-cat > "$W/receipt.py" <<'EOF'
-import sys, numpy as np, mojolearn as ml
-d = sys.argv[1]
-r = np.random.default_rng(0); X = r.random((1000, 8), dtype=np.float32); y = X @ np.arange(1, 9, dtype=np.float32)
-np.save(d + "/X.npy", X); np.save(d + "/y.npy", y); B = X.copy(); B.view(np.uint8)[0, 0] ^= 1; np.save(d + "/Xbad.npy", B)
-ml.Ridge(alpha=1.0).fit(X, y).receipt(X, y, path=d + "/ridge.json")
-ml.RandomForestRegressor(n_estimators=20, random_state=0).fit(X, y).receipt(X, y, path=d + "/rf.json")
-print("receipts written")
-EOF
-step receipt-write "$PY" -I "$W/receipt.py" "$REC"
-for r in ridge rf; do
-    step "reproduce-$r-same" "$PY" -I -m mojolearn reproduce "$REC/$r.json" --X "$REC/X.npy" --y "$REC/y.npy"
-    WANT_RC=1 step "reproduce-$r-flipped-bit" "$PY" -I -m mojolearn reproduce "$REC/$r.json" --X "$REC/Xbad.npy" --y "$REC/y.npy" --json
-done
+# 2. digest_ per estimator family (the script and its rules are at the top, section D)
+step digest-families "$PY" -I "$W/digest.py" "$REC"
+grep -E '^DIGEST' "$RES/logs/digest-families.log" | cut -c1-300
 
 # 3. verify options
 step verify-self-test "$PY" -I -m mojolearn verify --self-test
@@ -150,5 +236,5 @@ step verify-check-save "$PY" -I "$W/save.py" "$W"
 step verify-check "$PY" -I -m mojolearn verify --check "$W/rfc.model" --estimator RandomForestClassifier --inputs "$W/cx.npy"
 step verify-fit-both "$PY" -I -m mojolearn verify --fit-both --estimator Ridge --fit-params '{"alpha": 1.0}' --fit-inputs "$REC/X.npy" --fit-targets "$REC/y.npy" --inputs "$REC/X.npy"
 
-echo "PROOF SUMMARY failed=$fails receipts=$REC"
+echo "PROOF SUMMARY failed=$fails digests=$REC"
 [ $fails = 0 ]

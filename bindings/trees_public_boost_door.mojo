@@ -58,6 +58,7 @@ from bindings.admitted_input_unpack import (
 from bindings.admitted_input_run import AdmittedXView
 from bindings.member_set_door import (
     MemberSet, member_set_admit, member_set_width, member_set_run, member_set_pack, member_set_release,
+    member_set_resident,
     member_set_tests, member_set_host, member_marked, member_held_open, member_held_run, member_held_close,
 )
 from core.member_abi import MEMBER_F32, MEMBER_I32, MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA
@@ -962,6 +963,9 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
     # unpublished family never pays it); not finite = the loop below, whose
     # first fit door refuses in the forest's own words.
     var proven = False
+    # Whether `xa` is the object that owns the set's X words (read once per fit:
+    # the resident scope's pin, below).
+    var xa_owns = trees_address(xa) == x.address
     # Every member so far was fitted natively on the CPU route and kept its
     # fitted state (the out-of-bag outputs then read held states: all hits).
     var kept = True
@@ -988,6 +992,16 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
                                     n_classes, context, b):
                 native = False
                 break
+            # Inside `resident()` a member that reads a scope keeps X on the
+            # device across the bags (bindings/member_set_door.mojo, THE
+            # RESIDENT SCOPE). Only when `xa` is the object that owns the
+            # set's X words; a scope read that raises is the loop's to refuse.
+            if xa_owns:
+                try:
+                    member_set_resident(set, xa, context)
+                except:
+                    native = False
+                    break
             if not proven and not member_set_tests(set, k - done):
                 proven = trees_finite_f32(x.address, n * d) and (
                     classifier or trees_finite_f32(trees_address(y_all), n))

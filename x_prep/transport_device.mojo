@@ -11,6 +11,7 @@ from core.native_descriptor_call import native_descriptor_words, native_descript
 from core.prep_entry_table import PrepEntryKey, prep_table_publish, PREP_TABLE_X_PREP
 from core.shared_slot import SharedSlot
 from core.naive_bayes_member import naive_bayes_member_publish
+from core.discriminant_member import discriminant_member_publish
 from x_prep.device import run_program_device, run_program_device_ranges, x_prep_ctx, X_PREP_STORE
 from x_prep.transport_abi import (
     XP_TRANSPORT_ABI, XP_OP_COUNT, XP_RUN, XP_RUN_SCRATCH, XP_RUN_OUT, XP_RUN_RANGES, XP_DEV_PUT, XP_DEV_FREE,
@@ -92,3 +93,5 @@ def publish_x_prep_transport_device() raises:
     # the same key: they run their programs through the transport entry
     # their route carries, never a table.
     naive_bayes_member_publish(Int(GLOBAL_NUMERIC_MODE), word, Int(owner))
+    # The Discriminant members (core/discriminant_member.mojo), likewise.
+    discriminant_member_publish(Int(GLOBAL_NUMERIC_MODE), word, Int(owner))

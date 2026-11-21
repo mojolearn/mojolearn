@@ -16,6 +16,7 @@ from bindings.classical_archive_door import classical_archive_save, classical_ar
 from bindings.classical_archive_read_door import classical_archive_load, classical_host_model
 from bindings.archive_schema_native_door import archive_schema_save
 from bindings.archive_npz_door import archive_npz_call
+from bindings.fitted_digest_door import fitted_digest_call
 from bindings.native_operation_codes import operation_table, OP_LEAF_NONE, OP_ROUTE_CLASSICAL, OP_ROUTE_FAMILY
 from bindings.native_operation_names_unpack import operation_lookup, operation_code
 from bindings.classical_native_run import classical_coded_trees
@@ -35,7 +36,8 @@ from providers.python.device_route_boundary_door import device_route_clear
 from bindings.classical_keys_unpack import classical_keys
 from bindings.operation_names_classical import (
     CLASSICAL_TREES_FIRST, CLASSICAL_LEAF_TREES_DOOR, CLASSICAL_LEAF_FAMILY_DOOR,
-    CLASSICAL_OPN_ARCHIVE_NPZ, CLASSICAL_OPN_ARCHIVE_SAVE, CLASSICAL_OPN_GETATTRIBUTE, CLASSICAL_OPN_GET_PARAMS,
+    CLASSICAL_OPN_ARCHIVE_NPZ, CLASSICAL_OPN_ARCHIVE_SAVE, CLASSICAL_OPN_FITTED_DIGEST,
+    CLASSICAL_OPN_GETATTRIBUTE, CLASSICAL_OPN_GET_PARAMS,
     CLASSICAL_OPN_HOST_MODEL, CLASSICAL_OPN_INITIALIZE, CLASSICAL_OPN_IS_FITTED,
     CLASSICAL_OPN_LOAD, CLASSICAL_OPN_MODEL_SHA256,
     CLASSICAL_OPN_NUMERIC_MODE_USED, CLASSICAL_OPN_OLS_FIT, CLASSICAL_OPN_OPERATION_CODES,
@@ -175,6 +177,12 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
             # schema, written by the deterministic NPZ writer.
             var saved = archive_schema_save(model, args[0], context)
             return saved.steal_data()
+        if operation == CLASSICAL_OPN_FITTED_DIGEST:
+            # `model.digest_`: the hash of the fitted state, computed on the
+            # first read and kept per model generation
+            # (bindings/fitted_digest_door.mojo). Never reached by a fit.
+            var digest = fitted_digest_call(model, context)
+            return digest.steal_data()
         if operation == CLASSICAL_OPN_ARCHIVE_NPZ:
             # `mojolearn._serialize`: the npz/npy codec helpers, one native
             # call each (bindings/archive_npz_door.mojo). An uncoded string

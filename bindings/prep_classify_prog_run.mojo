@@ -511,12 +511,16 @@ def _cls_borrowed_slot(mut resident: ClsResident, source: ClsBorrowed, mut kept:
     return put.store_id
 
 
-def cls_borrowed_run(plan: ClsRunPlan, program: ClsProgram, sources: List[ClsBorrowed], scope: Int) raises -> ClsBorrowedDone:
+def cls_borrowed_run(plan: ClsRunPlan, program: ClsProgram, sources: List[ClsBorrowed], scope: Int,
+                     mut kept: Int) raises -> ClsBorrowedDone:
     """UNPACK-free run of one program for a typed caller: the route words,
     the arena, the door's input choices (`cls_input_choice`; a pinned buffer
     in an active scope stays resident there, a gathered record takes its
     rows on the device out of that resident base) and `cls_prog_run`.
     `scope`: the caller's scope handle word, negative outside a scope.
+    `kept`: written with the pin token at the moment the scope's cache takes
+    a source's pin reference (left as given otherwise), so the caller knows
+    it whether this run returns or raises (the member ABI's pin rule).
     Raises the run's failure in the door's words."""
     var route = cls_run_route(plan, program)
     var resident = ClsResident()
@@ -524,7 +528,6 @@ def cls_borrowed_run(plan: ClsRunPlan, program: ClsProgram, sources: List[ClsBor
         resident = ClsResident(scope, arena_scope_floor(scope), plan.key)
     var arena = ClsArena(cls_host_words(program, route))
     var records = List[ClsRunInput](capacity=len(program.inputs))
-    var kept = 0
     var next_source = 0
     for k in range(len(program.inputs)):  # driver-loop: over the program's input records
         var record = program.inputs[k]
@@ -568,32 +571,6 @@ def cls_borrowed_run(plan: ClsRunPlan, program: ClsProgram, sources: List[ClsBor
         raise Error("RuntimeError: x_prep slot cleanup failed: " + done.cleanup)
     _ = records^
     return ClsBorrowedDone(arena^, kept)
-
-
-# ---------------------------------------------------------------- typed stage builders
-# Lane door-run-split (2026-11-14): the class-count stages took the door's
-# Python-holding `ClsProg` twice over (bindings/prep_classify_native_door.mojo
-# `_class_counts` and an uncalled copy, bindings/prep_classify_common_door.mojo
-# `p2m_class_counts`); one typed builder on `ClsProgram` replaces both. Same
-# allocations, same stage words: the bits do not move.
-comptime CLS_OP_P2M_CCOUNT = 200
-comptime CLS_OP_P2M_CSCAN = 201
-# `_p2m_chunks`' minimum rows per chunk (_II_CH).
-comptime CLS_II_CH = 1024
-
-
-def cls_class_counts(mut program: ClsProgram, co: Int, n: Int, K: Int) -> Int:
-    """`_p2m_class_rows(pr, co, n, K, rows=False)`: the class counts' (int32
-    words) offset."""
-    var ch = max(CLS_II_CH, (n + CLS_II_CH - 1) // CLS_II_CH, (n * K + 16777215) // 16777216, 1)
-    var nch = max(1, (n + ch - 1) // ch)
-    var cnt = program.alloc(nch * K)
-    var tot = program.alloc(K)
-    var count_words: List[Int] = [co, n, K, ch, cnt]
-    program.stage(CLS_OP_P2M_CCOUNT, nch, count_words)
-    var scan_words: List[Int] = [cnt, nch, K, tot]
-    program.stage(CLS_OP_P2M_CSCAN, K, scan_words)
-    return tot
 
 
 # ---------------------------------------------------------------- typed programs
@@ -1054,3 +1031,436 @@ def cls_dnb_params(mut program: ClsProgram, kind: Int, c: ClsCounts, alpha: Floa
         var words: List[Int] = [c.fc, K, d, a, 1 if norm else 0, flp]
         program.stage(CLS_OP_CNB_PARAMS, K, words)
     return ClsDnbParams(flp, w, bias)
+
+
+# ---------------------------------------------------------------- typed discriminant analysis
+# Lane ma-pub-kernel round 7 (2026-11-21): the fit programs of
+# LinearDiscriminantAnalysis (`_lda_fit`, `_lda_cov_solver`) and
+# QuadraticDiscriminantAnalysis (`_qda_fit`), LDA's transform and its
+# two-class decision were staged by the door over its Python-holding
+# `ClsProg`, the image's mode words read from Python objects inside each
+# statistics group (`cs`, `cls_stats`, `gram`, `qda_cov` of
+# bindings/prep_classify_common_door.mojo). They are typed here: the door
+# reads the parameters and the mode words once at UNPACK (`ClsDaMode`) and
+# builds through these, as a member does (core/discriminant_member.mojo).
+# Same allocations, same stage words, same order: no bit moves.
+comptime CLS_OP_CENTER_ROWS = 17
+comptime CLS_OP_EIGH = 18
+comptime CLS_OP_LDA_W = 37
+comptime CLS_OP_LDA_STAGE2 = 38
+comptime CLS_OP_LDA_STAGE3 = 39
+comptime CLS_OP_QDA_COV = 40
+comptime CLS_OP_QDA_PREP = 41
+comptime CLS_OP_DA_SHRINK = 81
+comptime CLS_OP_DA_POOL = 82
+comptime CLS_OP_SYM_FN = 83
+comptime CLS_OP_DA_INTERCEPT = 84
+comptime CLS_OP_EVR = 85
+comptime CLS_OP_CENTERED_MATMUL = 178
+comptime CLS_OP_GB_PART = 236
+comptime CLS_OP_GB_PART_ROW = 237
+comptime CLS_OP_GB_FOLD = 238
+comptime CLS_OP_QCB_PART = 239
+comptime CLS_OP_QCB_FOLD = 240
+# The words the blocked class statistics' partials may take (a function of
+# the shape: past it the group is one class_stats stage).
+comptime CLS_BLOCK_WORDS = 67108864
+# The words a blocked Gram's partials may take.
+comptime CLS_GRAM_WORDS = 67108864
+# `x_prep_idn_fam2` bits: the blocked Gram, its row-tile partial.
+comptime CLS_F2_GRAM = 16
+comptime CLS_F2_GRAM_ROWTILE = 32
+
+#: LDA solvers
+comptime CLS_LDA_SVD = 0
+comptime CLS_LDA_LSQR = 1
+comptime CLS_LDA_EIGEN = 2
+
+
+@fieldwise_init
+struct ClsDaMode(ImplicitlyCopyable, Movable):
+    """The image's mode words a discriminant program is laid out from, read
+    once per operation. `stats_blocked`: MOJOLEARN_XPREP_BLOCKED and the
+    IDN_STATS_BLOCKED bit of `x_prep_idn_fam`; `class_onepass`: the same
+    switch and its IDN_CLASS_ONEPASS bit; `gram`: the `x_prep_idn_fam2` word
+    (0 with the switch off, or for an image without it)."""
+    var stats_blocked: Bool
+    var class_onepass: Bool
+    var gram: Int
+
+
+def cls_da_stats(mut program: ClsProgram, mode: ClsDaMode, xo: Int, n: Int, d: Int, yo: Int, K: Int, cnt: Int,
+                 mean: Int, var_: Int, sums: Int, tail: Int):
+    """`_cls`: the blocked class statistics while their partials fit, else
+    one class_stats stage (`tail` -2: no trailing parameter; else the one
+    trailing word QuadraticDiscriminantAnalysis passes)."""
+    var nb = (n + CLS_XB - 1) // CLS_XB
+    if mode.stats_blocked and nb * K * d <= CLS_BLOCK_WORDS:
+        cls_class_stats(program, CLS_NONE, K * d, xo, n, d, yo, K, cnt, mean, var_, sums, True, mode.class_onepass)
+    elif tail == -2:
+        var plain: List[Int] = [xo, n, d, yo, K, cnt, mean, var_, sums]
+        program.stage(CLS_OP_CLASS_STATS, K * d, plain)
+    else:
+        var tailed: List[Int] = [xo, n, d, yo, K, cnt, mean, var_, sums, tail]
+        program.stage(CLS_OP_CLASS_STATS, K * d, tailed)
+
+
+def cls_gram_rows(v: Int, n: Int, cells: Int) -> Int:
+    """`_gram_rows`: the rows of one Gram block (0: no blocked Gram)."""
+    if (v & CLS_F2_GRAM) == 0:
+        return 0
+    var rows = (v >> 16) if (v >> 16) != 0 else CLS_XB
+    while ((n + rows - 1) // rows) * cells > CLS_GRAM_WORDS and rows < 4194304:  # driver-loop: the block length doubles (a function of the shape only)
+        rows *= 2
+    return rows if ((n + rows - 1) // rows) * cells <= CLS_GRAM_WORDS else 0
+
+
+def cls_gram(mut program: ClsProgram, mode: ClsDaMode, z: Int, n: Int, d: Int, g: Int):
+    """`_gram`: G = Z'Z."""
+    var rows = cls_gram_rows(mode.gram, n, d * d)
+    if rows == 0:
+        var plain: List[Int] = [z, 1, d, z, d, 1, g, d, n, CLS_NONE, CLS_NONE]
+        program.stage(CLS_OP_MATMUL, d * d, plain)
+        return
+    var nb = (n + rows - 1) // rows
+    var part = program.work(nb * d * d)
+    var part_words: List[Int] = [z, n, d, part, nb, rows]
+    if (mode.gram & CLS_F2_GRAM_ROWTILE) != 0:
+        program.stage(CLS_OP_GB_PART_ROW, nb * d, part_words)
+    else:
+        program.stage(CLS_OP_GB_PART, nb * d * d, part_words)
+    var fold: List[Int] = [part, nb, d, g]
+    program.stage(CLS_OP_GB_FOLD, d * d, fold)
+
+
+def cls_qda_cov(mut program: ClsProgram, mode: ClsDaMode, xo: Int, n: Int, d: Int, yo: Int, K: Int, mean: Int,
+                cnt: Int, cov: Int):
+    """`_qda_cov`: the K class covariances (divisor the class count)."""
+    var rows = cls_gram_rows(mode.gram, n, K * d * d)
+    if rows == 0:
+        var plain: List[Int] = [xo, n, d, yo, mean, cnt, cov]
+        program.stage(CLS_OP_QDA_COV, K * d * d, plain)
+        return
+    var nb = (n + rows - 1) // rows
+    var part = program.work(nb * K * d * d)
+    var part_words: List[Int] = [xo, n, d, yo, K, mean, part, nb, rows]
+    program.stage(CLS_OP_QCB_PART, nb * d * d, part_words)
+    var fold: List[Int] = [part, nb, K, d, cnt, cov]
+    program.stage(CLS_OP_QCB_FOLD, K * d * d, fold)
+
+
+def cls_da_cov(mut program: ClsProgram, mode: ClsDaMode, xo: Int, n: Int, d: Int, yo: Int, K: Int, mean: Int,
+               var_: Int, cnt: Int, has_shrinkage: Bool, shrinkage: Float64) -> Int:
+    """`_lda_cov_blocks`: the K class covariances, shrunk when asked
+    (`shrinkage` -1.0: 'auto')."""
+    var cov = program.alloc(K * d * d)
+    cls_qda_cov(program, mode, xo, n, d, yo, K, mean, cnt, cov)
+    if has_shrinkage:
+        var so = cls_scalar(program, shrinkage)
+        var scratch = program.alloc(K)
+        var words: List[Int] = [xo, n, d, yo, mean, var_, cnt, cov, so, scratch]
+        program.stage(CLS_OP_DA_SHRINK, K, words)
+    return cov
+
+
+def _cls_lda_prep(mut program: ClsProgram, priors_given: List[Float64], cnt: Int, mean: Int, K: Int, d: Int, n: Int,
+                  priors: Int, xbar: Int):
+    # `_lda_priors` and the lda_prep stage: the user priors are renormalized
+    # by the stage (flag 2) when their binary64 left-to-right sum is off one.
+    var flag = 0
+    var given = 0
+    if len(priors_given) != 0:
+        var total = 0.0
+        for i in range(len(priors_given)):  # driver-loop: over the user prior list (class-count sized)
+            total += priors_given[i]
+        flag = 2 if abs(total - 1.0) > 1e-5 else 1
+        given = program.put_list(priors_given)
+    var words: List[Int] = [cnt, mean, K, d, n, priors, xbar, flag, given]
+    program.stage(CLS_OP_LDA_PREP, 1, words)
+
+
+@fieldwise_init
+struct ClsLdaFit(ImplicitlyCopyable, Movable):
+    """The offsets an LDA fit program answers at (CLS_NONE: not produced by
+    this solver). `scal`: the (d, d) scalings; `evr`: d words of explained
+    variance ratio; `sw`: the (d, d) covariance; `cd`, `ci`: the two-class
+    coefficient difference (d words) and intercept difference (staged only
+    with two classes); `meta`: [tol, rank1, rank2] (svd); `e`: the
+    within-class covariance eigenvalues (the covariance solvers)."""
+    var cnt: Int
+    var mean: Int
+    var priors: Int
+    var xbar: Int
+    var coef: Int
+    var inter: Int
+    var cd: Int
+    var ci: Int
+    var scal: Int
+    var evr: Int
+    var sw: Int
+    var meta: Int
+    var e: Int
+
+
+def _cls_lda_binary(mut program: ClsProgram, coef: Int, inter: Int, K: Int, d: Int, mut cd: Int, mut ci: Int):
+    # `_lda_binary`: with two classes the second minus the first row of the
+    # coefficients and of the intercepts.
+    cd = program.alloc(d)
+    ci = program.alloc(1)
+    if K == 2:
+        cls_binary_difference(program, coef, 1, K, d, cd)
+        var pm: List[Float64] = [-1.0, 1.0]
+        var w = program.put_list(pm)
+        var words: List[Int] = [w, 0, 1, inter, 1, 0, ci, 1, 2, CLS_NONE, CLS_NONE]
+        program.stage(CLS_OP_MATMUL, 1, words)
+
+
+def cls_lda_svd_program(mut program: ClsProgram, mode: ClsDaMode, n: Int, d: Int, K: Int, tol: Float64,
+                        priors_given: List[Float64], store_covariance: Bool) -> ClsLdaFit:
+    """LinearDiscriminantAnalysis.fit, solver 'svd'. Buffer records, in
+    order: X (n * d float32), the class codes (n int32). `priors_given`:
+    the checked `priors` parameter (empty: None)."""
+    var xo = cls_buffer(program, n * d)
+    var yo = cls_codes(program, n)
+    var cnt = program.alloc(K)
+    var mean = program.alloc(K * d)
+    var priors = program.alloc(K)
+    var xbar = program.alloc(d)
+    var std = program.alloc(d)
+    var w = program.alloc(d)
+    var z2 = program.work(n * d)
+    var g = program.alloc(d * d)
+    var e1 = program.alloc(d)
+    var v1 = program.alloc(d * d)
+    # lda_stage2 writes the ranks into it
+    var meta_words: List[Float64] = [tol, 0.0, 0.0]
+    var meta = program.put_list(meta_words, True)
+    var scal1 = program.alloc(d * d)
+    var g2 = program.alloc(d * d)
+    var ms = program.alloc(K * d)
+    var e2 = program.alloc(d)
+    var v2 = program.alloc(d * d)
+    var scal = program.alloc(d * d)
+    var coef = program.alloc(K * d)
+    var inter = program.alloc(K)
+    var evr = program.alloc(d)
+    var tmp = program.alloc(K * d)
+    cls_da_stats(program, mode, xo, n, d, yo, K, cnt, mean, CLS_NONE, CLS_NONE, -2)
+    _cls_lda_prep(program, priors_given, cnt, mean, K, d, n, priors, xbar)
+    var z = program.work(n * d)
+    var stz = program.alloc(6 * d)
+    var center: List[Int] = [xo, n, d, mean, yo, CLS_NONE, z]
+    program.stage(CLS_OP_CENTER_ROWS, n * d, center)
+    cls_col_stats(program, z, n, d, stz, True, mode.stats_blocked)
+    var w_words: List[Int] = [stz + 2 * d, d, n, K, std, w]
+    program.stage(CLS_OP_LDA_W, d, w_words)
+    var scaled: List[Int] = [xo, n, d, mean, yo, w, z2]
+    program.stage(CLS_OP_CENTER_ROWS, n * d, scaled)
+    cls_gram(program, mode, z2, n, d, g)
+    var eigh1: List[Int] = [g, d, 0, e1, v1]
+    program.stage(CLS_OP_EIGH, 1, eigh1)
+    var stage2: List[Int] = [e1, v1, std, mean, xbar, priors, K, d, n, meta, scal1, g2, ms]
+    program.stage(CLS_OP_LDA_STAGE2, 1, stage2)
+    var eigh2: List[Int] = [g2, d, 0, e2, v2]
+    program.stage(CLS_OP_EIGH, 1, eigh2)
+    var stage3: List[Int] = [e2, v2, scal1, mean, xbar, priors, K, d, meta, scal, coef, inter, evr, tmp]
+    program.stage(CLS_OP_LDA_STAGE3, 1, stage3)
+    var cd = CLS_NONE
+    var ci = CLS_NONE
+    _cls_lda_binary(program, coef, inter, K, d, cd, ci)
+    var sw = CLS_NONE
+    if store_covariance:
+        var cov = cls_da_cov(program, mode, xo, n, d, yo, K, mean, CLS_NONE, cnt, False, 0.0)
+        sw = program.alloc(d * d)
+        var pool: List[Int] = [cov, K, d, priors, sw, CLS_NONE, CLS_NONE]
+        program.stage(CLS_OP_DA_POOL, d * d, pool)
+    return ClsLdaFit(cnt, mean, priors, xbar, coef, inter, cd, ci, scal, evr, sw, meta, CLS_NONE)
+
+
+def cls_lda_cov_program(mut program: ClsProgram, mode: ClsDaMode, n: Int, d: Int, K: Int, eigen: Bool,
+                        has_shrinkage: Bool, shrinkage: Float64, priors_given: List[Float64]) -> ClsLdaFit:
+    """LinearDiscriminantAnalysis.fit, solver 'lsqr' or 'eigen'
+    (`_fit_cov_solver`). Buffer records, in order: X (n * d float32), the
+    class codes (n int32) and, with `eigen`, n zero float32 words (the
+    one-class code vector of the total covariance)."""
+    var xo = cls_buffer(program, n * d)
+    var yo = cls_codes(program, n)
+    var cnt = program.alloc(K)
+    var mean = program.alloc(K * d)
+    var priors = program.alloc(K)
+    var xbar = program.alloc(d)
+    var var_ = program.alloc(K * d) if has_shrinkage else CLS_NONE
+    cls_da_stats(program, mode, xo, n, d, yo, K, cnt, mean, var_, CLS_NONE, -2)
+    _cls_lda_prep(program, priors_given, cnt, mean, K, d, n, priors, xbar)
+    var tot = CLS_NONE
+    if eigen:
+        var y0 = cls_buffer(program, n)
+        var c1 = program.alloc(1)
+        var m1 = program.alloc(d)
+        var v1 = program.alloc(d) if has_shrinkage else CLS_NONE
+        cls_da_stats(program, mode, xo, n, d, y0, 1, c1, m1, v1, CLS_NONE, -2)
+        tot = cls_da_cov(program, mode, xo, n, d, y0, 1, m1, v1, c1, has_shrinkage, shrinkage)
+    var cov = cls_da_cov(program, mode, xo, n, d, yo, K, mean, var_, cnt, has_shrinkage, shrinkage)
+    var sw = program.alloc(d * d)
+    var pool: List[Int] = [cov, K, d, priors, sw, CLS_NONE, CLS_NONE]
+    program.stage(CLS_OP_DA_POOL, d * d, pool)
+    var sb = CLS_NONE
+    if eigen:
+        sb = program.alloc(d * d)
+        var one = cls_scalar(program, 1.0)
+        var scratch = program.alloc(d * d)
+        var between: List[Int] = [sw, 1, d, one, scratch, tot, sb]
+        program.stage(CLS_OP_DA_POOL, d * d, between)
+    var swc = program.alloc(d * d)
+    var one2 = cls_scalar(program, 1.0)
+    var copy_words: List[Int] = [sw, 1, d, one2, swc, CLS_NONE, CLS_NONE]
+    program.stage(CLS_OP_DA_POOL, d * d, copy_words)
+    var e = program.alloc(d)
+    var v = program.alloc(d * d)
+    var eigh: List[Int] = [swc, d, 0, e, v]
+    program.stage(CLS_OP_EIGH, 1, eigh)
+    var coef = program.alloc(K * d)
+    var inter = program.alloc(K)
+    var ev = CLS_NONE
+    var evr = CLS_NONE
+    if not eigen:
+        var P = program.alloc(d * d)
+        var inverse: List[Int] = [e, v, d, 0, P]
+        program.stage(CLS_OP_SYM_FN, d * d, inverse)
+        var solve: List[Int] = [mean, d, 1, P, 1, d, coef, d, d, CLS_NONE, CLS_NONE]
+        program.stage(CLS_OP_MATMUL, K * d, solve)
+    else:
+        var W = program.alloc(d * d)
+        var T = program.alloc(d * d)
+        var C = program.alloc(d * d)
+        var whiten: List[Int] = [e, v, d, 1, W]
+        program.stage(CLS_OP_SYM_FN, d * d, whiten)
+        var m1w: List[Int] = [W, d, 1, sb, d, 1, T, d, d, CLS_NONE, CLS_NONE]
+        program.stage(CLS_OP_MATMUL, d * d, m1w)
+        var m2w: List[Int] = [T, d, 1, W, d, 1, C, d, d, CLS_NONE, CLS_NONE]
+        program.stage(CLS_OP_MATMUL, d * d, m2w)
+        var e2 = program.alloc(d)
+        var y2 = program.alloc(d * d)
+        ev = program.alloc(d * d)
+        evr = program.alloc(d)
+        var eigh2: List[Int] = [C, d, 0, e2, y2]
+        program.stage(CLS_OP_EIGH, 1, eigh2)
+        var m3w: List[Int] = [W, d, 1, y2, d, 1, ev, d, d, CLS_NONE, CLS_NONE]
+        program.stage(CLS_OP_MATMUL, d * d, m3w)
+        var evr_words: List[Int] = [e2, d, evr]
+        program.stage(CLS_OP_EVR, 1, evr_words)
+        var t1 = program.alloc(K * d)
+        var m4w: List[Int] = [mean, d, 1, ev, d, 1, t1, d, d, CLS_NONE, CLS_NONE]
+        program.stage(CLS_OP_MATMUL, K * d, m4w)
+        var m5w: List[Int] = [t1, d, 1, ev, 1, d, coef, d, d, CLS_NONE, CLS_NONE]
+        program.stage(CLS_OP_MATMUL, K * d, m5w)
+    var icpt: List[Int] = [mean, coef, priors, d, inter]
+    program.stage(CLS_OP_DA_INTERCEPT, K, icpt)
+    var cd = CLS_NONE
+    var ci = CLS_NONE
+    _cls_lda_binary(program, coef, inter, K, d, cd, ci)
+    return ClsLdaFit(cnt, mean, priors, xbar, coef, inter, cd, ci, ev, evr, sw, CLS_NONE, e)
+
+
+def cls_lda_transform_program(mut program: ClsProgram, n: Int, d: Int, mc: Int, eigen: Bool, centered: Bool) -> Int:
+    """LinearDiscriminantAnalysis.transform -> the offset of its n x mc
+    answer. Buffer records, in order: X (n * d float32), xbar_ (d), the
+    (d, d) scalings. `centered`: the image's C04 bit (the center_rows ->
+    matmul arithmetic in one consumer; solver 'svd')."""
+    var xo = cls_buffer(program, n * d)
+    var xb = cls_buffer(program, d)
+    var sc = cls_buffer(program, d * d)
+    var dst = program.alloc(n * max(mc, 1))
+    if not eigen and centered:
+        var one: List[Int] = [xo, n, d, xb, CLS_NONE, CLS_NONE, sc, d, 1, dst, mc, CLS_NONE, CLS_NONE]
+        program.stage(CLS_OP_CENTERED_MATMUL, n * mc, one)
+        return dst
+    var cen = xo
+    if not eigen:
+        cen = program.alloc(n * d)
+        var center: List[Int] = [xo, n, d, xb, CLS_NONE, CLS_NONE, cen]
+        program.stage(CLS_OP_CENTER_ROWS, n * d, center)
+    var project: List[Int] = [cen, d, 1, sc, d, 1, dst, mc, d, CLS_NONE, CLS_NONE]
+    program.stage(CLS_OP_MATMUL, n * mc, project)
+    return dst
+
+
+def cls_lda_pair_program(mut program: ClsProgram, n: Int, d: Int) -> Int:
+    """LinearDiscriminantAnalysis' two-class decision function -> the
+    offset of its n words. Buffer records, in order: X (n * d float32),
+    coef_ (d), intercept_ (1)."""
+    var xo = cls_buffer(program, n * d)
+    var coef = cls_buffer(program, d)
+    var inter = cls_buffer(program, 1)
+    var dst = program.alloc(n)
+    var words: List[Int] = [xo, d, 1, coef, 1, 0, dst, 1, d, inter, CLS_NONE]
+    program.stage(CLS_OP_MATMUL, n, words)
+    return dst
+
+
+@fieldwise_init
+struct ClsQdaFit(ImplicitlyCopyable, Movable):
+    """The offsets a QDA fit program answers at. `evec`: K (d, d)
+    rotations; `s2`: K x d scalings; `rot`: the K (d, d) scoring rotations;
+    `keep`: the K (d, d) covariances (CLS_NONE unless stored)."""
+    var cnt: Int
+    var mean: Int
+    var priors: Int
+    var evec: Int
+    var s2: Int
+    var rot: Int
+    var logc: Int
+    var keep: Int
+
+
+def cls_qda_fit_program(mut program: ClsProgram, mode: ClsDaMode, n: Int, d: Int, K: Int, eigen: Bool,
+                        reg_param: Float64, has_shrinkage: Bool, shrinkage: Float64, priors_given: List[Float64],
+                        store_covariance: Bool) -> ClsQdaFit:
+    """QuadraticDiscriminantAnalysis.fit. Buffer records, in order: X
+    (n * d float32), the class codes (n int32). `reg_param` is read by
+    solver 'svd' only; `priors_given`: the checked `priors` (empty: None)."""
+    var xo = cls_buffer(program, n * d)
+    var yo = cls_codes(program, n)
+    var cnt = program.alloc(K)
+    var mean = program.alloc(K * d)
+    var priors = program.alloc(K)
+    var xbar = program.alloc(d)
+    var cov = program.alloc(K * d * d)
+    var ev = program.alloc(K * d)
+    var evec = program.alloc(K * d * d)
+    var reg = cls_scalar(program, 0.0 if eigen else reg_param)
+    var rot = program.alloc(K * d * d)
+    var logc = program.alloc(K)
+    var s2 = program.alloc(K * d)
+    var var_ = program.alloc(K * d) if has_shrinkage else CLS_NONE
+    # the trailing 1: FAST keeps row-order class sums here
+    cls_da_stats(program, mode, xo, n, d, yo, K, cnt, mean, var_, CLS_NONE, 1)
+    var gflag = 0
+    var gofs = 0
+    if len(priors_given) != 0:
+        gflag = 1
+        gofs = program.put_list(priors_given)
+    var prep: List[Int] = [cnt, mean, K, d, n, priors, xbar, gflag, gofs]
+    program.stage(CLS_OP_LDA_PREP, 1, prep)
+    cls_qda_cov(program, mode, xo, n, d, yo, K, mean, cnt, cov)
+    if has_shrinkage:
+        var so = cls_scalar(program, shrinkage)
+        var scratch = program.alloc(K)
+        var shrink: List[Int] = [xo, n, d, yo, mean, var_, cnt, cov, so, scratch]
+        program.stage(CLS_OP_DA_SHRINK, K, shrink)
+    var keep = CLS_NONE
+    if store_covariance and eigen:
+        keep = program.alloc(K * d * d)
+        var one = cls_scalar(program, 1.0)
+        for k in range(K):  # driver-loop: stages one pooled covariance copy per class (class count)
+            var copy_words: List[Int] = [cov + k * d * d, 1, d, one, keep + k * d * d, CLS_NONE, CLS_NONE]
+            program.stage(CLS_OP_DA_POOL, d * d, copy_words)
+    var eigh: List[Int] = [cov, d, d * d, ev, evec]
+    program.stage(CLS_OP_EIGH, K, eigh)
+    var qprep: List[Int] = [ev, evec, K, d, reg, cnt, n, rot, logc, s2, gflag, gofs]
+    program.stage(CLS_OP_QDA_PREP, K, qprep)
+    if store_covariance and not eigen:
+        keep = program.alloc(K * d * d)
+        var sym: List[Int] = [s2, evec, d, 2, keep]
+        program.stage(CLS_OP_SYM_FN, K * d * d, sym)
+    return ClsQdaFit(cnt, mean, priors, evec, s2, rot, logc, keep)

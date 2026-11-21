@@ -249,6 +249,7 @@ from checks.native_tests.decomp_entry_table import register as register_decomp_e
 from checks.native_tests.entry_table_contract import register as register_entry_table_contract
 from checks.native_tests.exec_owned_reuse import register as register_exec_owned_reuse
 from checks.native_tests.finite_scan import register as register_finite_scan
+from checks.native_tests.fitted_digest import register as register_fitted_digest
 from checks.native_tests.gp_contract import register as register_gp_contract
 from checks.native_tests.gp_label_owner import register as register_gp_label_owner
 from checks.native_tests.gp_owner import register as register_gp_owner
@@ -851,6 +852,7 @@ def all_checks() -> List[Check]:
     checks.append(register_entry_table_contract())
     checks.append(register_exec_owned_reuse())
     checks.append(register_finite_scan())
+    checks.append(register_fitted_digest())
     checks.append(register_gp_contract())
     checks.append(register_gp_label_owner())
     checks.append(register_gp_owner())
