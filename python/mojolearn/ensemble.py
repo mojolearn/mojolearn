@@ -539,8 +539,8 @@ OD_TYPES = ("None", "IncToDec", "Iter")
 #   subsample default 0.66 bootstrap_options.h:15.
 # - cat_features dispatch: binarizations_manager.cpp:106-115. CatBoost shuffles the learn pool at load
 #   when there are categorical features and no time column (preprocess.cpp:161-199), CPU-side upstream of
-#   catboost/cuda; this implementation does not, so CTRs read caller row order
-#   (gbdt/data/permutation.mojo).
+#   catboost/cuda; this implementation draws the same composition inside the fit, from random_state
+#   (gbdt/ctrs/ctr_order.mojo: a counter-based load shuffle composed with each permutation).
 # - od_type: overfitting_detector_options.cpp:24-32; IncToDec inactive when stop_pvalue is 0
 #   (IsActive() is Threshold > 0).
 # - use_best_model default: options_helper.cpp:106-108 (ShrinkToBestIteration). CatBoost warns without
@@ -665,11 +665,9 @@ class GradientBoosting(_NumericModeMixin):
         and loaded with it, and applied by ``predict``. A value that was not
         seen during ``fit`` is treated as an unknown category. As in
         CatBoost, each column is one-hot encoded when its cardinality is small
-        and otherwise uses target statistics (CTRs). CTRs are computed over
-        the rows in the order you pass them; CatBoost shuffles the pool first
-        and this does not. Rows sorted by target give a worse estimator, so
-        shuffle before fitting and record the order you used. Without
-        ``cat_features`` row order does not matter.
+        and otherwise uses target statistics (CTRs). CTRs are computed over a
+        random order of the rows drawn from ``random_state``, as CatBoost
+        does, so you do not need to shuffle the rows before fitting.
     one_hot_features : sequence of int, optional
         Column indices to one-hot encode. An index out of range raises
         ``ValueError``.
