@@ -33,7 +33,7 @@ from core.linear_route import (
     LINEAR_DEVICE_CPU, LINEAR_DEVICE_INSTALL, linear_device_code, linear_device_refusal, linear_device_installed,
 )
 from std.python import PythonObject
-from bindings.native_loaded_module_door import native_loaded_module
+from bindings.native_loaded_module_door import NativeModules
 from bindings.py_balanced import py_call, py_fields, py_get, py_item, py_setitem, py_type
 from bindings.py_model_records import records_get, records_put, records_drop, RECORDS_PREPARED
 from autograd.model_descriptor import MODEL_ABI_NAME
@@ -78,7 +78,10 @@ def sequential_device_unpack(value: PythonObject) raises -> Int:
     pilot's words, before any state changes."""
     if value is None:
         return LINEAR_DEVICE_INSTALL
-    var b = native_loaded_module("builtins")
+    # Miss path only (a given device, a resolution): the loaded-module table
+    # of this call, as the Sequential doors read it.
+    var mods = NativeModules()
+    var b = mods.module("builtins")
     if py_type(value) is b.str:
         var code = linear_device_code(String(value))
         if code >= 0:
@@ -110,7 +113,10 @@ def sequential_route_clear(model: PythonObject) raises:
 def _sequential_route_build(requested: PythonObject, mode: PythonObject, default_mode: PythonObject,
                             context: PythonObject) raises -> SequentialRouteOwner:
     var nk = sequential_keys()
-    var b = native_loaded_module("builtins")
+    # Miss path only (a given device, a resolution): the loaded-module table
+    # of this call, as the Sequential doors read it.
+    var mods = NativeModules()
+    var b = mods.module("builtins")
     var selected = mode
     if mode is None:
         selected = default_mode
