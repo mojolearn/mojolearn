@@ -204,25 +204,26 @@ def gbdt_fit_native_run(row_major: Bool, params: GbdtFitArgs) raises -> GbdtFitO
                               their EGrowPolicy order)
         32  max_leaves       (-1 = unset: 1 << depth, or 31 under Lossguide)
         33  min_data_in_leaf
-        34  n_class_weights  (0 means none)
+        34  max_ctr_complexity (1 = no feature combinations)
+        35  n_class_weights  (0 means none)
 
     Optional Float64 tails after counted weights are min_split_gain,
     min_child_hessian, then feature_fraction. Missing guards default to -1
     and missing feature_fraction defaults to 1, preserving existing layouts.
     A fit with `group_id` sends all three and then two more: the address of
     a uint32 buffer of group sizes (the pool's query runs in row order) and
-    the group count, 35 + n_class_weights + 5 values in all. A PairLogit fit
+    the group count, 36 + n_class_weights + 5 values in all. A PairLogit fit
     with `group_id` sends three more after those: the address of a uint32
     buffer of pairs (winner row then loser row per pair), the pair count, -1
     to generate the pairs from the groups and `y` (both addresses are then
     unread), and the address of a float32 buffer of one weight per pair,
-    35 + n_class_weights + 8 values in all. A MultiRMSE fit sends the three
-    float tails and then its TARGET DIMENSION, 35 + n_class_weights + 4
+    36 + n_class_weights + 8 values in all. A MultiRMSE fit sends the three
+    float tails and then its TARGET DIMENSION, 36 + n_class_weights + 4
     values in all (lane/algos-trees, 2026-09-27); `y_addr` then holds that
     many DIM-MAJOR planes of `n_rows` (`y[dim * n_rows + row]`).
 
     AND THEN `n_class_weights` MORE VALUES, the class weights themselves,
-    at `params[35 .. 35 + n_class_weights)`. They ride in this list rather
+    at `params[36 .. 36 + n_class_weights)`. They ride in this list rather
     than at a seventh buffer address for two reasons. The arity: this
     function already takes eight arguments and
     `PythonModuleBuilder.def_function` stops inferring a signature at
@@ -249,7 +250,8 @@ def gbdt_fit_native_run(row_major: Bool, params: GbdtFitArgs) raises -> GbdtFitO
     `catboost_options.cpp:273-360`. A caller that passes explicit values
     is overriding CatBoost's own defaults and should know it.
     """
-    # 35 FIXED SLOTS PLUS ONE PER CLASS WEIGHT (slot 30 grew
+    # 36 FIXED SLOTS PLUS ONE PER CLASS WEIGHT (slot 34 grew
+    # max_ctr_complexity 2026-11-21 and the count moved to 35; slot 30 grew
     # boost_from_average 2026-08-22 and the count moved to 31; slots 31-33
     # grew grow_policy / max_leaves / min_data_in_leaf 2026-08-23,
     # DEVIATION 259, and the count moved to 34 -- the count is ALWAYS the
@@ -259,22 +261,22 @@ def gbdt_fit_native_run(row_major: Bool, params: GbdtFitArgs) raises -> GbdtFitO
     # appended the wrong number of weights would otherwise read whatever
     # followed them -- and for a weight that is a wrong answer, not a
     # failure.
-    if len(params) < 35:
+    if len(params) < 36:
         raise Error(
-            "gbdt_fit: params must hold at least 35 values, got "
+            "gbdt_fit: params must hold at least 36 values, got "
             + String(len(params))
         )
-    var n_class_weights = params.i(34)
+    var n_class_weights = params.i(35)
     if n_class_weights < 0:
         raise Error(
             "gbdt_fit: n_class_weights must not be negative, got "
             + String(n_class_weights)
         )
-    var fixed_and_weights = 35 + n_class_weights
+    var fixed_and_weights = 36 + n_class_weights
     if len(params) != fixed_and_weights and len(params) != fixed_and_weights + 1 and len(params) != fixed_and_weights + 2 and len(params) != fixed_and_weights + 3 and len(params) != fixed_and_weights + 4 and len(params) != fixed_and_weights + 5 and len(params) != fixed_and_weights + 8:
         raise Error(
-            "gbdt_fit: params must hold 35 + n_class_weights, optionally min_split_gain, min_child_hessian, then feature_fraction, then the group sizes address and group count, then the pairs address, pair count and pair weights address values ("
-            + String(35 + n_class_weights)
+            "gbdt_fit: params must hold 36 + n_class_weights, optionally min_split_gain, min_child_hessian, then feature_fraction, then the group sizes address and group count, then the pairs address, pair count and pair weights address values ("
+            + String(36 + n_class_weights)
             + ") values, got "
             + String(len(params))
         )
@@ -327,7 +329,7 @@ def gbdt_fit_native_run(row_major: Bool, params: GbdtFitArgs) raises -> GbdtFitO
     # race, not a slow path.
     var class_weights = List[Float32]()
     for i in range(n_class_weights):  # small-loop(n_class_weights: one weight per class): Python parameter list, not row data
-        class_weights.append(Float32(params.f(35 + i)))
+        class_weights.append(Float32(params.f(36 + i)))
     # their `EGrowPolicy` by ORDINAL (enums.h order: SymmetricTree,
     # Depthwise, Lossguide), resolved to the spelling `train` takes
     var grow_code = params.i(31)
@@ -441,6 +443,7 @@ def gbdt_fit_native_run(row_major: Bool, params: GbdtFitArgs) raises -> GbdtFitO
         boosting_type_name,
         fold_len_multiplier,
         fold_permutation_block,
+        params.i(34),
     )
     var n_eval_rows = params.i(20)
 

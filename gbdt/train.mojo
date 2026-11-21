@@ -1720,8 +1720,7 @@ def train(
         cat_params = cat_feature_params[0].copy()
     else:
         cat_params = TCatFeatureParams.default()
-    # this fit computes feature combinations (tree CTRs) on the device
-    cat_params.check(True)
+    cat_params.check()
 
     # TREE CTRS (`max_ctr_complexity` above 1; `gbdt/methods/
     # tree_ctr_search.mojo`). `tree_configs` is empty at complexity 1, and

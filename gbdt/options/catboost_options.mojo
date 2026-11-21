@@ -854,9 +854,11 @@ struct TCatFeatureParams(Copyable, Movable):
 
     var combination_ctrs: List[TCtrDescription]
     """`combinations_ctrs`. Same pair with `CreateDefaultCounter(TreeCtr)`.
-    NOT HONORED: feature combinations are not implemented, and `check()` refuses
-    a `max_ctr_complexity` above 1 rather than accepting the descriptions
-    and computing nothing from them."""
+    HONORED when `max_tensor_complexity` is above 1: these are the CTRs a
+    tree computes over each feature combination it mints
+    (`combination_ctr_configs`; `gbdt/methods/tree_ctr_search.mojo` on the
+    device, `gbdt/host/gbdt_oracle_tree_ctr.mojo` on the host). Unread at
+    complexity 1, where no combination exists."""
 
     var target_binarization: TBinarizationOptions
     """`target_binarization`, whose plain-options spelling is
@@ -872,11 +874,13 @@ struct TCatFeatureParams(Copyable, Movable):
     `target_binarization` field that this struct's value overrides."""
 
     var max_tensor_complexity: Int
-    """`max_ctr_complexity`. CatBoost's default is 4
-    (`cat_feature_options.cpp:231`). **OURS IS 1**, because feature
-    combinations are not implemented; `check()` refuses anything larger rather
-    than silently computing simple CTRs under a name that promises
-    combinations of up to four features."""
+    """`max_ctr_complexity`: how many features one combination may hold.
+    CatBoost's default is 4 (`cat_feature_options.cpp:231`). **OURS IS 1**
+    (no combinations, the fused per-tree fit) until the A/B of the tree-CTR
+    route against that path is recorded (`docs/apple-fast/EXPERIMENTS.md`,
+    the `max_ctr_complexity` row). HONORED above 1: the trees mint
+    combinations of each categorical feature with the features already in
+    the tree, categorical features and numeric splits alike."""
 
     var one_hot_max_size: Int
     """`one_hot_max_size`. Default 2 on GPU (`cat_feature_options.cpp:232`).
@@ -918,10 +922,10 @@ struct TCatFeatureParams(Copyable, Movable):
         branch is the only one reachable here.
 
         ONE DEPARTURE, the same shape as `bootstrap_type`'s:
-        `max_tensor_complexity` is 1 rather than CatBoost's 4, because
-        combinations are not implemented and 4 is a value `check()` would refuse.
-        A default that fails its own validation is how a library ships an
-        unusable out-of-the-box configuration.
+        `max_tensor_complexity` is 1 rather than CatBoost's 4: the tree-CTR
+        route is implemented and opt-in, and does not become the default
+        before its A/B against the fused per-tree path is recorded
+        (`max_tensor_complexity`'s own note).
         """
         var simple = List[TCtrDescription]()
         simple.append(TCtrDescription.with_priors(CTR_BORDERS))
@@ -1090,21 +1094,15 @@ struct TCatFeatureParams(Copyable, Movable):
             config.ctr_binarization_config_id
         ].ctr_binarization
 
-    def check(self, tree_ctrs_implemented: Bool = False) raises:
+    def check(self) raises:
         """Refuse what is not honored, by name -- the same rule the rest of
-        this file follows.
-
-        `tree_ctrs_implemented` is passed True by the one caller whose fit
-        computes feature combinations today, the device `train()`
-        (`gbdt/train.mojo`); every other caller keeps the refusal of a
-        `max_ctr_complexity` above 1 until its own route computes them. The
-        argument goes when the last such route does."""
+        this file follows."""
         if self.max_tensor_complexity < 1:
             raise Error(
                 "max_ctr_complexity must be at least 1; got "
                 + String(self.max_tensor_complexity)
             )
-        if self.max_tensor_complexity != 1 and tree_ctrs_implemented:
+        if self.max_tensor_complexity != 1:
             for i in range(len(self.combination_ctrs)):
                 ref d = self.combination_ctrs[i]
                 if d.ctr_type != CTR_BORDERS and d.ctr_type != CTR_FEATURE_FREQ:
@@ -1123,16 +1121,6 @@ struct TCatFeatureParams(Copyable, Movable):
                         "a combination CTR grid takes 1 to 255 borders; got "
                         + String(d.ctr_binarization.border_count)
                     )
-        elif self.max_tensor_complexity != 1:
-            raise Error(
-                "max_ctr_complexity="
-                + String(self.max_tensor_complexity)
-                + " is not implemented; feature combinations (tree CTRs) need"
-                " their own tree_ctr_datasets_visitor machinery, so set it"
-                " to 1 rather than believing combinations were built."
-                " CatBoost's own default is 4, which means a defaults run"
-                " here is NOT a defaults run of CatBoost"
-            )
         if self.one_hot_max_size < 0:
             raise Error("one_hot_max_size must be non-negative")
         if self.counter_calc_method != COUNTER_CALC_SKIP_TEST and (

@@ -26,10 +26,11 @@ Two predicates in `binarizations_manager.h` gate the whole block:
     UseAsBaseTensorForTreeCtr()  tensor.GetComplexity() < MaxTensorComplexity     (:70-72)
 
 and `MaxTensorComplexity` defaults to 4 (`cat_feature_options.cpp:231`).
-**This implementation pins `max_ctr_complexity` at 1 and
-`TCatFeatureParams.check()` refuses anything larger, so the first
-predicate is false and NOTHING BELOW RUNS DURING A FIT.** That pin is not
-changed here; see the file's tail comment for what would have to move.
+**`max_ctr_complexity` defaults to 1 here, so on a default fit the first
+predicate is false and nothing below runs.** A fit that asks for more
+grows its combinations through `gbdt/methods/tree_ctr_search.mojo` (the
+level-synchronized driver over `gbdt/ctrs/tree_ctr.mojo`'s plan), which is
+the route `train()` takes; this file's builder is not on it.
 
 ## The four things a tensor is, in their order
 
@@ -213,27 +214,16 @@ COST: one extra O(rows) pass per categorical feature instead of one per
 batch. `_set_indices` below is their `SetIndices` (`:32-52`) written as a
 free function so that this lane touches no file in `gbdt/ctrs/`.
 
-## What still stands between this and a reachable tree CTR
+## Where the reachable tree CTR lives
 
-Nothing in this file is called by `train()`. To make
-`max_ctr_complexity > 1` reachable, in order:
-
-1. `gbdt/options/catboost_options.mojo:987` -- `TCatFeatureParams.check()`
-   raises on any value but 1. That guard is correct today and must be the
-   LAST thing removed, not the first.
-2. A `TBinarizedFeaturesManager` with a tensor->feature-id map
-   (`InverseCtrs`, `binarizations_manager.h:80-100`), which is what makes
-   `IsTreeCtr(featureId)` answerable and what a split on a tree CTR is
-   named by.
-3. `tree_ctrs_dataset.{h,cpp}` + `tree_ctrs.{h,cpp}` -- the per-device
-   dataset cache keyed by the hash below, and the memory estimator that
-   decides how many tensors fit.
-4. `ctr_from_tensor_calcer.h` -- the visitor this file's `visit` trait
-   stands for, which turns (tensor, bin builder) into CTR columns.
-5. `TFeatureTensorTracker` (`gpu_data/oblivious_tree_bin_builder.h:32-90`)
-   -- the thing that produces `baseTensorIndices` at all.
-6. `TFeatureParallelObliviousTreeSearcher` -- NEXT_TWO rung 2. Tree CTRs
-   live nowhere else.
+Nothing in this file is called by `train()`. `max_ctr_complexity > 1` is
+reachable through another route: `gbdt/ctrs/tree_ctr.mojo` (the plan and
+its candidates), `gbdt/models/combination_map.mojo` (a combination as a
+derived categorical column), `gbdt/methods/tree_ctr_search.mojo` (the
+level-synchronized device driver) and `gbdt/host/gbdt_oracle_tree_ctr.mojo`
+(its host column). What this file restates of CatBoost's
+`TBatchFeatureTensorBuilder` (the per-device dataset cache and its memory
+estimator) is not used by that route.
 """
 
 from gbdt.ctrs.ctr_bins_builder import TCtrBinBuilder
@@ -660,9 +650,9 @@ def is_tree_ctrs_enabled(
         !DataProviderCatFeatureIdToFeatureManagerId.empty()
         && (CatFeatureOptions.MaxTensorComplexity > 1)
 
-    **This is the switch that keeps the whole block off in this implementation.**
-    `TCatFeatureParams.check()` pins `max_ctr_complexity` at 1, so the
-    second conjunct is false on every fit `train()` can run today.
+    The second conjunct is false at this implementation's default
+    (`max_ctr_complexity` 1); `train()` reads the same condition as
+    `TreeCtrPlan.enabled()` (`gbdt/ctrs/tree_ctr.mojo`).
     """
     return has_cat_features and max_tensor_complexity > 1
 

@@ -54,8 +54,8 @@ CTR set this implementation mirrors. `TCatFeatureParams.default()` here is their
 `IsSupportedCtrType(CPU, FeatureFreq)` is FALSE
 (`private/libs/options/restrictions.h:18-48`). Their GPU arm, which does
 have it, cannot run on this machine. Feature
-combinations are a second, independent blocker: `max_ctr_complexity` is
-refused above 1 here where CatBoost defaults to 4.
+combinations are a second difference: `max_ctr_complexity` defaults to
+1 here where CatBoost defaults to 4, so the oracle is run at 1.
 `tools/catboost_cat_oracle.py` carries the full argument.
 
 A one-hot split is compared the same way a numeric one is -- per feature,
