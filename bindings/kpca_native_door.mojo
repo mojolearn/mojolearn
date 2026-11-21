@@ -16,7 +16,7 @@ from x_decomp.kpca_run import _f32_scalar
 from bindings.public_lifecycle_owner_door import lifecycle_admit_fields
 from core.kpca_native_api import KPCAEigenRequest
 from core.kpca_native_plan import (
-    KPCAKernelOptions, KPCAFitRoute, KPCAEigenRoom, KPCAScratch, KPCADenseFit,
+    KPCAKernelOptions, KPCAFitRoute, KPCAEigenRoom, KPCADenseFit,
     KPCAFitPrepareRequest, KPCAAlphaRequest, KPCAQueryRequest, KPCA_PRECOMPUTED, kpca_shape,
 )
 from bindings.decomp_device_route_door import (
@@ -208,6 +208,9 @@ def kpca_fit(model: PythonObject, source: PythonObject, context: PythonObject) r
         py_setitem(fields, "_fit_X", x.array)
         py_setitem(fields, "_fit_cols", columns)
         py_setitem(fields, "_fit_all", total)
+        # Refit drops the scaled alphas of the previous fitted state; the
+        # first transform of this state computes them (`_kpca_scaled_alphas`).
+        py_setitem(fields, "_fit_alphas", PythonObject(None))
         py_setitem(fields, "n_features_in_", PythonObject(x.cols))
     finally:
         _ = prepared
@@ -232,6 +235,61 @@ def _alpha_inputs(model: PythonObject, fields: PythonObject, context: PythonObje
     return KPCAAlphaInputs(vectors^, values^)
 
 
+struct KPCAScaledAlphas(Movable):
+    """The scaled alphas of one fitted state (eigenvectors / sqrt(eigenvalues),
+    `kpca_run_alpha` with `scale=True`), as the query kernels read them.
+    `array` pins the storage behind `address` (0 when there are no rows or no
+    kept components)."""
+    var array: PythonObject
+    var address: Int
+    var rows: Int
+    var cols: Int
+
+    def __init__(out self, array: PythonObject, address: Int, rows: Int, cols: Int):
+        self.array = array
+        self.address = address
+        self.rows = rows
+        self.cols = cols
+
+
+def _kpca_scaled_alphas(model: PythonObject, fields: PythonObject, near: Int, context: PythonObject) raises -> KPCAScaledAlphas:
+    """Once per fitted state, as the KernelPCA member keeps them
+    (core/xneighbors_member.mojo `_kp_transform`): computed at the first
+    transform after a fit and kept in `_fit_alphas` = (eigenvectors_,
+    eigenvalues_, alphas, rows, kept). A hit is one field read and two
+    identity compares against the current fitted arrays; a refit (which
+    clears the field) or a rebound `eigenvectors_` / `eigenvalues_` recomputes
+    them with the same kernel and words. Before this, every `transform` call
+    re-admitted both arrays, allocated a rows x kept scratch and ran the alpha
+    kernel (the loop: each call of a transform loop, e.g. a pipeline's predict
+    per batch or per cross-validation fold's scoring)."""
+    var vectors_object = _attr(model, fields, "eigenvectors_")
+    var values_object = _attr(model, fields, "eigenvalues_")
+    var kept = py_get(fields, "_fit_alphas")
+    if not (kept is None):
+        var kept_vectors = kept[0]
+        var kept_values = kept[1]
+        if kept_vectors is vectors_object and kept_values is values_object:
+            var array = kept[2]
+            var rows = Int(py=kept[3])
+            var cols = Int(py=kept[4])
+            var address = _address(array) if rows * cols else 0
+            return KPCAScaledAlphas(array, address, rows, cols)
+    var alpha = _alpha_inputs(model, fields, context)
+    var rows = alpha.vectors.rows
+    var count = alpha.vectors.cols
+    var array = _f32(rows, count, context)
+    var address = _address(array) if rows * count else 0
+    var scaling = KPCAAlphaRequest(alpha.vectors.address, alpha.values.address, address, rows, count, True)
+    try:
+        kpca_run_alpha(near, scaling)
+    finally:
+        _ = alpha
+    lifecycle_admit_fields(fields)
+    py_setitem(fields, "_fit_alphas", Python.tuple(vectors_object, values_object, array, PythonObject(rows), PythonObject(count)))
+    return KPCAScaledAlphas(array, address, rows, count)
+
+
 def kpca_fit_transform(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
     _ = kpca_fit(model, source, context)
     var fields = py_fields(model)
@@ -252,15 +310,8 @@ def kpca_transform(model: PythonObject, source: PythonObject, context: PythonObj
     var q = decomp_admit(source, "KernelPCA", context)
     var fitted = admit_f32(_attr(model, fields, "_fit_X"), 2, "_fit_X", context)
     var near = _kpca_route(model, fields, context).connection
-    var alpha = _alpha_inputs(model, fields, context)
-    var alphas = KPCAScratch(alpha.vectors.rows, alpha.vectors.cols)
-    var count = alpha.vectors.cols
-    var scaling = KPCAAlphaRequest(alpha.vectors.address, alpha.values.address, alphas.address(),
-        alpha.vectors.rows, count, True)
-    try:
-        kpca_run_alpha(near, scaling)
-    finally:
-        _ = alpha
+    var alphas = _kpca_scaled_alphas(model, fields, near, context)
+    var count = alphas.cols
     var kernel = _field(fields, "kernel")
     var precomputed = _name(kernel, "precomputed", context)
     if precomputed and q.cols != fitted.rows:
@@ -284,16 +335,16 @@ def kpca_transform(model: PythonObject, source: PythonObject, context: PythonObj
             var kind = KPCA_PRECOMPUTED if precomputed else _kind(kernel, context)
             var options = KPCAKernelOptions(kind, degree, gamma, coef0)
             var request = KPCAQueryRequest(q.address, fitted.address, columns.address, total.address,
-                alphas.address(), _address(dst), q.rows, fitted.rows, q.cols, count, options^)
+                alphas.address, _address(dst), q.rows, fitted.rows, q.cols, count, options^)
             kpca_run_fused(near, request)
         else:
             var kind = KPCA_PRECOMPUTED if precomputed else _kind(kernel, context)
             var options = KPCAKernelOptions(kind, degree, gamma, coef0)
             var request = KPCAQueryRequest(q.address, fitted.address, columns.address, total.address,
-                alphas.address(), 0, q.rows, fitted.rows, q.cols, count, options^)
+                alphas.address, 0, q.rows, fitted.rows, q.cols, count, options^)
             var centered = kpca_run_centered(near, request)
             dst = _f32(q.rows, count, context)
-            kpca_run_finish(near, centered, alphas.address(), _address(dst), count)
+            kpca_run_finish(near, centered, alphas.address, _address(dst), count)
             _ = centered
     finally:
         _ = q
