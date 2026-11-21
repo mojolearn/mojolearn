@@ -49,6 +49,7 @@ from core.forest_inference_run import (
 )
 from bindings.forest_fit_boundary_unpack import forest_fit_args_py
 from core.forest_fit_request import ForestFitArgs, XF_CAP_DEVICE_SCAN, forest_export_verify_lists
+from core.extra_trees_member import extra_trees_member_publish_image
 from core.forest_entry import ForestImage, forest_entry_dispatch, forest_entry_publish
 from core.forest_entry_table import FOREST_TABLE_ET
 from core.native_descriptor_abi import NativeDescriptorError
@@ -463,6 +464,8 @@ def build__mojolearn_trees() -> PythonObject:
         var m = PythonModuleBuilder("_mojolearn_trees")
         # The native forest entry (core/forest_entry_table.mojo) under this image's key.
         forest_entry_publish["MojolearnForestEntryOwnerEtGpuV1"](FOREST_TABLE_ET, COMPILED_VENDOR, et_gpu_forest_entry_v1)
+        # The families' member entries (core/member_abi.mojo) over this forest entry.
+        extra_trees_member_publish_image(COMPILED_VENDOR)
         # TOMBSTONE: the legacy-arm et fits, et_predict_gpu_parallel, trees_shap_pair_count, the forest comparison arms and probes (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_trees.patch
         m.def_function[device_plan_enter_binding]("device_plan_enter")

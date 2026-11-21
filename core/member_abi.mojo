@@ -61,6 +61,16 @@ core/member_families.mojo (generated; no family edits this file).
   * `MEMBER_OP_CAPABILITIES` with a live `call.state` answers for that
     state's kind (a regressor of a family with classifiers has no
     predict_proba); with `state == 0` it answers the family's union.
+  * `MEMBER_OP_OUTPUTS` WITHOUT A STATE (`member_outputs`): with
+    `state == 0` the call carries what a `MEMBER_OP_NEW` would (`params`,
+    `param_count`, `classes`) plus two shape words of the fit to come,
+    `x.cols` (features) and `y.cols` (targets; both views have `rows == 0`
+    and no address: they are shapes, not data). The family answers the width
+    from those words, exactly as a state made from them and fitted on such
+    data would. A family whose width is only known after a fit (a count the
+    fit chooses) refuses in words, and the caller asks a fitted state
+    (`member_outputs_of`). With a live state the state answers and the
+    shape words are ignored.
 
 SERIAL BY NATURE: publication and resolution are metadata operations with no
 independent units. The member operations themselves are the family's RUN and
@@ -347,6 +357,36 @@ def member_new(plan: MemberPlan) raises -> MemberCall:
     call.classes = plan.classes
     _ = member_call(plan.member, MEMBER_OP_NEW, call)
     return call^
+
+
+def member_outputs(plan: MemberPlan, operation: Int, features: Int, targets: Int) raises -> Int:
+    """The columns per row of `operation`'s output (`MEMBER_OP_PREDICT`,
+    `_PREDICT_PROBA`, `_DECISION`, `_TRANSFORM`, ...) for a member of this
+    plan fitted on `features` columns and `targets` target columns, asked
+    BEFORE any state exists: a caller sizes its placed output buffers once,
+    at UNPACK, and its workers write into them. No state is minted. A family
+    that cannot know the width before a fit refuses in words; ask a fitted
+    state with `member_outputs_of` then."""
+    var call = MemberCall(plan.route)
+    call.params = Int(plan.params.unsafe_ptr())
+    call.param_count = len(plan.params)
+    call.classes = plan.classes
+    call.flags = operation
+    call.x.cols = features
+    call.y.cols = targets
+    _ = member_call(plan.member, MEMBER_OP_OUTPUTS, call)
+    return call.out_cols
+
+
+def member_outputs_of(plan: MemberPlan, mut call: MemberCall, operation: Int) raises -> Int:
+    """The columns per row of `operation`'s output for the call's live
+    state (exact after its fit). `call.classes` comes back as the state's
+    class count; `call.flags` is left as the caller had it."""
+    var held = call.flags
+    call.flags = operation
+    _ = member_call(plan.member, MEMBER_OP_OUTPUTS, call)
+    call.flags = held
+    return call.out_cols
 
 
 def member_free(plan: MemberPlan, mut call: MemberCall):

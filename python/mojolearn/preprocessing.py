@@ -129,6 +129,10 @@ class MinMaxScaler(_ScalerProtocol):
     #: This class takes `device=`: the check builds its other side as the same
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
+    #: The member ABI mark (family 34 Scaler, kind 1): model selection and the
+    #: meta-estimators run this class through its native member entry
+    #: (core/scaler_member.mojo).
+    _mojolearn_member = (34, 1)
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -374,6 +378,10 @@ class StandardScaler(_ScalerProtocol):
     #: This class takes `device=`: the check builds its other side as the same
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
+    #: The member ABI mark (family 34 Scaler, kind 0): model selection and the
+    #: meta-estimators run this class through its native member entry
+    #: (core/scaler_member.mojo).
+    _mojolearn_member = (34, 0)
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)

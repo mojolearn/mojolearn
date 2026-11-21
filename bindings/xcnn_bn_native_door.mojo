@@ -22,6 +22,7 @@ from bindings.neural_block_admission_door import neural_plain_value
 from bindings.native_loaded_module_door import NativeModules
 from bindings.sequential_admission_door import sequential_admit_value
 from bindings.xcnn_common_door import xcnn_out_new, xcnn_dev_fields, xcnn_ref, xcnn_device_init
+from bindings.xcnn_common_door import xcnn_state_mapping
 from bindings.xcnn_common_door import xcnn_plain_scalar, xcnn_exact, xcnn_dev_get_f, XT_BOOL
 from std.python._cpython import GILReleased
 from x_cnn.door_run import xcnn_run_fill_f32
@@ -524,3 +525,50 @@ def xcnn_bn_layers(layer: PythonObject, operation: Int, args: PythonObject, cont
             _set(fields, "training", was)
         return layer
     raise Error("ValueError: unknown batch normalization operation")
+
+
+def xcnn_bn_state(layer: PythonObject, load: Bool, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """BatchNorm `state_dict()` / `load_state_dict(sd)` with torch's names
+    (lane api-torch round 2): `weight`, `bias` (affine), `running_mean`,
+    `running_var`, `num_batches_tracked` (track_running_stats). state_dict
+    returns copies; load_state_dict checks every name and size before any
+    field changes. Cold API call."""
+    var nk = xcnn_keys()
+    var fields = _bn_admit(layer, context)
+    _sync_running(fields, context)
+    var count = Int(py=py_item(fields, nk[].k_num_features))
+    var arrays = List[String]()
+    if _truth(py_item(fields, nk[].k_affine)):
+        arrays.append("weight")
+        arrays.append("bias")
+    var track = _truth(py_item(fields, nk[].k_track_running_stats))
+    if track:
+        arrays.append("running_mean")
+        arrays.append("running_var")
+    var b = xcnn_builtins()
+    if not load:
+        var result = b.dict()
+        for k in range(len(arrays)):  # driver-loop: over the layer's named state arrays
+            var held = xcnn_f32(py_get(fields, PythonObject(arrays[k] + "_")), arrays[k] + "_", context)
+            py_setitem(result, PythonObject(arrays[k]), xcnn_slice_f32(held, 0, count, context))
+        if track:
+            py_setitem(result, "num_batches_tracked", PythonObject(Int(py=py_item(fields, nk[].k_num_batches_tracked_))))
+        return result
+    var names = arrays.copy()
+    if track:
+        names.append("num_batches_tracked")
+    var sd = xcnn_state_mapping(args[0], names, "BatchNorm")
+    var values = List[PythonObject]()
+    for k in range(len(arrays)):  # driver-loop: over the layer's named state arrays (checked before any write)
+        var given = xcnn_f32(sd[PythonObject(arrays[k])], arrays[k], context)
+        if xcnn_size(xcnn_shape(given)) != count:
+            raise Error("ValueError: BatchNorm.load_state_dict: '" + arrays[k] + "' must hold num_features ("
+                        + String(count) + ") values")
+        values.append(xcnn_slice_f32(given, 0, count, context))
+    var tracked = Int(py=sd["num_batches_tracked"]) if track else 0
+    for k in range(len(arrays)):  # driver-loop: over the checked state arrays
+        _set(fields, arrays[k] + "_", values[k])
+    if track:
+        _set(fields, "num_batches_tracked_", PythonObject(tracked))
+        _set(fields, "_run_dev", PythonObject(None))
+    return layer

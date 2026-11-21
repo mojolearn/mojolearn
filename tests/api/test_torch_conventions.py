@@ -1,14 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 """PyTorch conventions at the Python boundary (docs/api/TORCH_CONVENTIONS.md).
 
-Device words: `cuda` / `cuda:0` on Linux and `mps` / `mps:0` on macOS name the GPU route of `device=`; the other
-OS's word, another GPU index and a `torch.device` object are refused in words. Neural blocks: `state_dict`,
+Device: only None, 'gpu' and 'cpu' (Andrew, 2026-11-21); PyTorch's device words are refused like any unknown value.
+Neural blocks: `state_dict`,
 `load_state_dict`, `parameters`, `named_parameters` and `to(device, dtype)` with PyTorch's meaning. The tests check
 the boundary only (names, refusals, identity of the returned arrays, the route after `to`); the numerics of a rebuilt
 block are the constructor's and are tested there.
 """
-import platform
-
 import numpy as np
 import pytest
 
@@ -18,9 +16,6 @@ from mojolearn.models import CausalLM
 from mojolearn.models import causal_lm
 
 FAMILIES = ["llama", "mamba", "mamba2"]
-MACOS = platform.system() == "Darwin"
-GPU_WORDS = ["mps", "mps:0"] if MACOS else ["cuda", "cuda:0"]
-OTHER_OS_WORDS = ["cuda", "cuda:0"] if MACOS else ["mps", "mps:0"]
 HAS_GPU = mojolearn.vendor() != "cpu"
 needs_gpu = pytest.mark.skipif(not HAS_GPU, reason="a CPU-only installation has no GPU route")
 
@@ -48,48 +43,13 @@ def block_inputs(tmp_path, family):
 
 # ---- device words -----------------------------------------------------------
 
-@needs_gpu
-@pytest.mark.parametrize("word", GPU_WORDS)
-def test_pytorch_gpu_word_is_the_gpu_route(tmp_path, word):
-    cls, _, weights, kwargs, x = block_inputs(tmp_path, "llama")
-    block = cls(weights, device=word, **kwargs)
-    assert block.get_params()["device"] == word
-    assert block.vendor_used() == mojolearn.vendor()
-    gpu = cls(weights, device="gpu", **kwargs)
-    assert np.asarray(block.forward(x)).tobytes() == np.asarray(gpu.forward(x)).tobytes()
-
-
-@pytest.mark.parametrize("word", OTHER_OS_WORDS + ["cuda:1", "mps:1", "xpu", "meta"])
-def test_device_words_without_a_device_are_refused_in_words(tmp_path, word):
+@pytest.mark.parametrize("word", ["cuda", "cuda:0", "mps", "mps:0", "xpu"])
+def test_pytorch_device_words_are_refused(tmp_path, word):
     cls, _, weights, kwargs, _ = block_inputs(tmp_path, "llama")
     with pytest.raises(ValueError, match="device must be 'gpu', 'cpu' or None, got"):
         cls(weights, device=word, **kwargs)
-
-
-def test_refusal_names_the_pytorch_word_of_this_os(tmp_path):
-    cls, _, weights, kwargs, _ = block_inputs(tmp_path, "llama")
-    with pytest.raises(ValueError, match="'mps'" if MACOS else "'cuda'"):
-        cls(weights, device=OTHER_OS_WORDS[0], **kwargs)
-    with pytest.raises(ValueError, match="VISIBLE_DEVICES"):
-        cls(weights, device=("mps:1" if MACOS else "cuda:1"), **kwargs)
-
-
-def test_torch_device_object_is_refused_with_the_string_hint(tmp_path):
-    torch = pytest.importorskip("torch")
-    cls, _, weights, kwargs, _ = block_inputs(tmp_path, "llama")
-    with pytest.raises(ValueError, match="str"):
-        cls(weights, device=torch.device("cpu"), **kwargs)
-
-
-@needs_gpu
-@pytest.mark.parametrize("word", GPU_WORDS)
-def test_pytorch_gpu_word_reaches_estimators(word):
-    est = mojolearn.Ridge(device=word)
-    assert est.get_params()["device"] == word
-    X = np.random.default_rng(0).random((64, 3), dtype=np.float32)
-    y = X @ np.array([1.0, -2.0, 0.5], dtype=np.float32)
-    got = np.asarray(est.fit(X, y).predict(X)).tobytes()
-    assert got == np.asarray(mojolearn.Ridge(device="gpu").fit(X, y).predict(X)).tobytes()
+    with pytest.raises(ValueError, match="device must be 'gpu', 'cpu' or None, got"):
+        cls(weights, device="cpu", **kwargs).to(word)
 
 
 # ---- neural block state ------------------------------------------------------
@@ -103,7 +63,8 @@ def test_state_dict_is_the_weights_by_name_over_the_same_arrays(tmp_path, family
     assert list(sd) == list(weights)
     assert all(sd[k] is weights[k] for k in weights)
     assert [p is weights[k] for p, k in zip(block.parameters(), weights)] == [True] * len(weights)
-    named = block.named_parameters()
+    assert iter(block.parameters()) is not None and not isinstance(block.parameters(), list)
+    named = list(block.named_parameters())
     assert [n for n, _ in named] == list(weights)
     assert all(a is weights[n] for n, a in named)
 
@@ -167,8 +128,8 @@ def test_to_moves_the_block_between_routes(tmp_path, family):
     cls, _, weights, kwargs, x = block_inputs(tmp_path, family)
     block = cls(weights, device="cpu", **kwargs)
     assert block.vendor_used() == "cpu"
-    assert block.to(GPU_WORDS[0]) is block
-    assert block.get_params()["device"] == GPU_WORDS[0]
+    assert block.to("gpu") is block
+    assert block.get_params()["device"] == "gpu"
     assert block.vendor_used() == mojolearn.vendor()
     on_gpu = np.asarray(block.forward(x)).tobytes()
     assert block.to("cpu").vendor_used() == "cpu"
@@ -190,3 +151,104 @@ def test_blocks_built_by_a_whole_model_say_so(tmp_path):
     model = CausalLM.load(tmp_path, device="cpu", numeric_profile="fp32_v1")
     with pytest.raises(RuntimeError, match="whole model"):
         model.blocks[0].state_dict()
+
+
+# ---- round 2: Sequential, parameters() as torch's iterators --------------------
+
+def _sequential_state():
+    rng = np.random.default_rng(0)
+    return {"0.weight": rng.standard_normal((8, 4), dtype=np.float32), "0.bias": rng.standard_normal(8, dtype=np.float32),
+            "2.weight": rng.standard_normal((3, 8), dtype=np.float32), "2.bias": np.zeros(3, dtype=np.float32)}
+
+
+def test_sequential_state_dict_round_trips_in_torch_layout():
+    state = _sequential_state()
+    model = mojolearn.Sequential().linear(8).relu().linear(3).load_state_dict(state)
+    sd = model.state_dict()
+    assert list(sd) == ["0.weight", "0.bias", "2.weight", "2.bias"]
+    for name, value in state.items():
+        assert sd[name].shape == value.shape and sd[name].dtype == np.float32
+        assert sd[name].tobytes() == value.tobytes()
+    again = mojolearn.Sequential().linear(8).relu().linear(3).load_state_dict(sd)
+    assert np.asarray(again.params_).tobytes() == np.asarray(model.params_).tobytes()
+    assert [a.shape for a in model.parameters()] == [v.shape for v in state.values()]
+    assert [n for n, _ in model.named_parameters()] == list(state)
+
+
+def test_sequential_state_dict_loads_into_torch():
+    torch = pytest.importorskip("torch")
+    model = mojolearn.Sequential().linear(8).relu().linear(3).load_state_dict(_sequential_state())
+    net = torch.nn.Sequential(torch.nn.Linear(4, 8), torch.nn.ReLU(), torch.nn.Linear(8, 3))
+    net.load_state_dict({k: torch.from_numpy(np.array(v)) for k, v in model.state_dict().items()})
+    X = np.random.default_rng(1).random((5, 4), dtype=np.float32)
+    np.testing.assert_allclose(net(torch.from_numpy(X)).detach().numpy(), np.asarray(model.predict(X)), rtol=1e-5, atol=1e-6)
+
+
+def test_sequential_state_dict_needs_parameters():
+    with pytest.raises(ValueError, match="no parameters yet"):
+        mojolearn.Sequential().linear(2).state_dict()
+
+
+def test_sequential_to_takes_gpu_cpu_and_float32_only():
+    model = mojolearn.Sequential().linear(8).relu().linear(3).load_state_dict(_sequential_state())
+    assert model.to("cpu") is model and model.vendor_used() == "cpu"
+    assert model.to(dtype="float32") is model
+    with pytest.raises(ValueError, match="float32 only"):
+        model.to(dtype="float64")
+    with pytest.raises(ValueError, match="device must be 'gpu', 'cpu' or None"):
+        model.to("cuda")
+    X = np.random.default_rng(1).random((5, 4), dtype=np.float32)
+    on_cpu = np.asarray(model.predict(X)).tobytes()
+    if HAS_GPU:
+        assert model.to("gpu").vendor_used() == mojolearn.vendor()
+        assert np.asarray(model.predict(X)).tobytes() == on_cpu
+
+
+def test_causal_lm_parameters_are_torch_iterators(tmp_path):
+    config, tensors = family_fixture("llama", False)
+    _write_checkpoint(str(tmp_path), config, tensors)
+    model = CausalLM.load(tmp_path, device="cpu", numeric_profile="fp32_v1")
+    named = dict(model.named_parameters())
+    assert "lm_head.weight" in named
+    arrays = list(model.parameters())
+    assert len(arrays) == len(named)
+
+
+# ---- round 2: CNN layer state_dict / load_state_dict --------------------------
+
+def test_conv_state_dict_round_trips_and_matches_torch_names():
+    conv = mojolearn.Conv2d(3, 4, 3, device="cpu")
+    sd = conv.state_dict()
+    assert sorted(sd) == ["bias", "weight"] and sd["weight"].shape == (4, 3, 3, 3)
+    other = mojolearn.Conv2d(3, 4, 3, device="cpu").load_state_dict(sd)
+    assert np.asarray(other.weight_).tobytes() == sd["weight"].tobytes()
+    with pytest.raises(ValueError, match="no entry 'bias'"):
+        other.load_state_dict({"weight": sd["weight"]})
+    with pytest.raises(ValueError, match="unexpected keys"):
+        other.load_state_dict({**sd, "extra": sd["bias"]})
+
+
+def test_conv1d_state_dict_is_torch_rank_three():
+    conv = mojolearn.Conv1d(2, 5, 3, device="cpu")
+    sd = conv.state_dict()
+    assert sd["weight"].shape == (5, 2, 3)
+    assert mojolearn.Conv1d(2, 5, 3, device="cpu").load_state_dict(sd).state_dict()["weight"].tobytes() == sd["weight"].tobytes()
+
+
+def test_batchnorm_state_dict_has_torch_names():
+    bn = mojolearn.BatchNorm2d(4, device="cpu")
+    sd = bn.state_dict()
+    assert sorted(sd) == ["bias", "num_batches_tracked", "running_mean", "running_var", "weight"]
+    sd["running_mean"] = np.full(4, 0.5, dtype=np.float32)
+    bn.load_state_dict(sd)
+    assert np.asarray(bn.running_mean_).tobytes() == sd["running_mean"].tobytes()
+    with pytest.raises(ValueError, match="num_features"):
+        bn.load_state_dict({**sd, "weight": np.ones(3, dtype=np.float32)})
+
+
+def test_basic_block_state_dict_uses_torchvision_names():
+    block = mojolearn.BasicBlock(4, 4, device="cpu")
+    sd = block.state_dict()
+    assert "conv1.weight" in sd and "bn2.running_var" in sd and "conv1.bias" not in sd
+    again = mojolearn.BasicBlock(4, 4, random_state=1, device="cpu").load_state_dict(sd)
+    assert {k: np.asarray(v).tobytes() for k, v in again.state_dict().items()} == {k: np.asarray(v).tobytes() for k, v in sd.items()}
