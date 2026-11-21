@@ -208,7 +208,7 @@ def lda_call(entry: EntryRef, r: LDARequest) raises -> LDAResult:
     var answer = LDAResult(iterations, counters[0], counters[1], value[0])
     _ = counters  # the inout words outlive the call above
     _ = value
-    return answer
+    return answer^
 
 
 def rp_fit_call(entry: EntryRef, r: RPFitRequest) raises -> Int:
