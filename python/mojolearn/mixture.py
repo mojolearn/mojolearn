@@ -171,7 +171,7 @@ class GaussianMixture(_NumericModeMixin):
             ``'metal'``, ``'cuda'`` or ``'hip'``, or ``'cpu'`` for an estimator
             that runs on the CPU.
         """
-        return _NATIVE(self, "family_mix_gmm_public_vendor_used", (), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_mix_vendor_used", (), _NATIVE_CONTEXT)
 
     def fit(self, X, y=None):
         """Fit the mixture to `X` by expectation-maximization.

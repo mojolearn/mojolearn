@@ -99,7 +99,7 @@ from bindings.operation_names_mix import (
     MIX_OPN_FAMILY_MIX_GMM_PUBLIC_SCORE_SAMPLES, MIX_OPN_FAMILY_MIX_GMM_PUBLIC_PREDICT_PROBA, MIX_OPN_FAMILY_MIX_GMM_PUBLIC_PREDICT,
     MIX_OPN_FAMILY_MIX_GMM_PUBLIC_BIC, MIX_OPN_FAMILY_MIX_GMM_PUBLIC_AIC, MIX_OPN_FAMILY_MIX_GMM_PUBLIC_SCORE,
     MIX_OPN_FAMILY_MIX_GMM_PUBLIC_INITIALIZE, MIX_OPN_FAMILY_MIX_GMM_PUBLIC_BINDING, MIX_OPN_FAMILY_MIX_GMM_PUBLIC_SAMPLE,
-    MIX_OPN_FAMILY_MIX_GMM_PUBLIC_VENDOR_USED,
+    MIX_OPN_FAMILY_MIX_VENDOR_USED,
 )
 from bindings.operation_names_svm import SVM_OPN_FAMILY_SVM_GMM_SAMPLE
 from bindings.svm_keys_unpack import svm_keys
@@ -1108,6 +1108,10 @@ def mixture_operation(model: PythonObject, operation: Int, args: PythonObject,
     classical_check_x; the BayesianGaussianMixture queries use it as is.
     `operation` is the leaf code of bindings/operation_names_mix.mojo
     (lane bw2-svm; the public block is last: one range test)."""
+    if operation == MIX_OPN_FAMILY_MIX_VENDOR_USED:
+        # `vendor_used()` of either mixture class: the estimator's own route
+        # (fitted or not), `cpu` for the CPU images. No array is read.
+        return family_route_vendor_used(model, context)
     classical_connect_numpy(context)
     if operation >= MIX_OPN_FAMILY_MIX_GMM_PUBLIC_FIT:
         return _gmm_public_operation(model, operation, args, context)
@@ -1354,9 +1358,6 @@ def _gmm_public_operation(model: PythonObject, operation: Int, args: PythonObjec
         raise Error("TypeError: GaussianMixture requires its connected native class")
     if operation == MIX_OPN_FAMILY_MIX_GMM_PUBLIC_INITIALIZE:
         return _gmm_public_initialize(model, args, context)
-    if operation == MIX_OPN_FAMILY_MIX_GMM_PUBLIC_VENDOR_USED:
-        # The estimator's own route (fitted or not): `cpu` for the CPU images.
-        return family_route_vendor_used(model, context)
     var fitting = operation == MIX_OPN_FAMILY_MIX_GMM_PUBLIC_FIT or operation == MIX_OPN_FAMILY_MIX_GMM_PUBLIC_FIT_PREDICT
     # The queries that read the fitted model and an admitted X.
     var query = (operation == MIX_OPN_FAMILY_MIX_GMM_PUBLIC_PREDICT

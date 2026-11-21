@@ -48,6 +48,9 @@ CASES = [
     Case("GaussianMixture-diag",
          lambda **kw: mojolearn.GaussianMixture(n_components=3, covariance_type="diag", random_state=0, **kw),
          ("predict", "predict_proba", "score_samples")),
+    Case("BayesianGaussianMixture",
+         lambda **kw: mojolearn.BayesianGaussianMixture(n_components=3, random_state=0, **kw),
+         ("predict", "predict_proba", "score_samples")),
 ]
 ids = [case.name for case in CASES]
 
