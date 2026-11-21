@@ -54,6 +54,7 @@ from core.causal_layer_run import (
 )
 from autograd.block_step_ops import OPS_ATTN_STEP, OPS_M1_STEP, OPS_M2_STEP, IDN_MAMBA12_FORWARD_COPIES_OLD, IDN_MAMBA12_FORWARD_DOOR_OLD
 from std.memory import unsafe_memcpy, unsafe_memset_zero
+from core.generation_buffers_impl import generation_bytes_copy
 from bindings.generation_buffers_door import (
     GENERATION_BOUNDARY, generation_array, generation_array_unfilled, generation_address, generation_weight_address, generation_copy, generation_mutable,
     generation_ids, generation_initialize_binding, generation_array_context, generation_array_snapshot, generation_buffer_view, py_ints,
@@ -3590,6 +3591,21 @@ def _hash_scalar(mut hash: Sha256, value: PythonObject) raises:
 
 
 def _fingerprint(mut mods: NativeModules, model: PythonObject) raises -> PythonObject:
+    """The checkpoint fingerprint of a captured model: the model owner's word
+    (continuation 4), hashed at the first snapshot or resume of the model
+    generation and kept (before: every weight hashed again at every snapshot
+    and every resume). A parallel model's owner is built per call, so it is
+    hashed per call, as before."""
+    var held = causal_model_owner(mods, model)
+    var owner = held.downcast_value_ptr[CausalModelOwner]()
+    if owner[].fingerprint == "":
+        owner[].fingerprint = String(_fingerprint_hash(mods, model))
+    var windowed_fingerprint = PythonObject(owner[].fingerprint)
+    _ = held
+    return windowed_fingerprint
+
+
+def _fingerprint_hash(mut mods: NativeModules, model: PythonObject) raises -> PythonObject:
     _causal_array_guard()
     var h = _hash()
     _hash_scalar(h, model.kind)
@@ -3639,6 +3655,39 @@ def _state_arrays(kind: String, profile: Int = 1) -> List[String]:
     if profile == 2:
         return [String("conv_window"), String("h"), String("affine_boundary"), String("affine_a"), String("affine_b")]
     return [String("conv_window"), String("h")]
+
+
+def _state_array_slot(name: String) -> Int:
+    # The owner's buffer slot (`CAUSAL_STATE_*`) of a checkpoint state array.
+    if name == "k_cache":
+        return CAUSAL_STATE_K
+    if name == "v_cache":
+        return CAUSAL_STATE_V
+    if name == "conv_window":
+        return CAUSAL_STATE_CONV
+    if name == "h":
+        return CAUSAL_STATE_H
+    if name == "affine_boundary":
+        return CAUSAL_STATE_AFFINE_BOUNDARY
+    if name == "affine_a":
+        return CAUSAL_STATE_AFFINE_A
+    if name == "affine_b":
+        return CAUSAL_STATE_AFFINE_B
+    if name == "buffer_xbc":
+        return CAUSAL_STATE_XBC
+    return CAUSAL_STATE_DTRAW
+
+
+def _state_owner_copy(buffer: CausalBufferWords) raises -> PythonObject:
+    """A new Array with the bytes of a state buffer the owner admitted as
+    writable C-contiguous float32 (the copy `generation_copy` makes of it:
+    one unfilled allocation, one copy). None for any other buffer: the
+    caller then copies it from the object."""
+    if not buffer.present or not buffer.contiguous or not buffer.writable:
+        return PythonObject(None)
+    var out = generation_array_unfilled(buffer.shape, "f")
+    generation_bytes_copy(Int(py=out._addr), buffer.address, buffer.nbytes)
+    return out
 
 
 def _snapshot_hash(checkpoint: PythonObject) raises -> PythonObject:
@@ -3711,28 +3760,65 @@ def causal_lm_snapshot_binding(mut mods: NativeModules, stream: PythonObject, na
     _ = py_call(options.append, py_ints(s[].eos))
     _ = py_call(options.append, s[].pad)
     py_setitem(result, "options", options)
+    # Continuation 4 (design 1.3): the layer states are copied from the state
+    # owner's words where they are current (each buffer: one allocation and
+    # one copy from the owner's address, the same bytes as `generation_copy`;
+    # counters by interned key); any other layer (a parallel model's remote
+    # state, a buffer the owner does not hold as writable C-contiguous float32)
+    # by the object route. Same keys, same bytes, same checksum.
     var layers = g[].bi.list()
+    var model_held = s[].model_held
+    if model_held is None:
+        model_held = causal_model_owner(mods, s[].model)
+    ref mw = model_held.downcast_value_ptr[CausalModelOwner]()[].words
     var kind = String(s[].model.kind)
-    var profile = Int(py=s[].model._native_entries["mamba1_profile"]) if kind == "mamba1" else 1
+    var profile = mw.mamba1_profile if mw.kind == CAUSAL_LAYER_MAMBA1 else 1
     var arrays = _state_arrays(kind, profile)
-    for i in range(len(s[].state.layers)):  # driver-loop: over model layer states
-        var st = s[].state.layers[i]
-        var parallel = py_get(s[].model._native_entries, "parallel_call")
+    var nk = causal_keys()
+    var parallel = py_get(s[].model._native_entries, "parallel_call") if mw.parallel else PythonObject(None)
+    var state_held = s[].state_held
+    if state_held is None and parallel is None:
+        state_held = causal_state_owner(mods, s[].state)
+    var layer_states = s[].state.layers
+    for i in range(len(layer_states)):  # driver-loop: over model layer states
+        var st = layer_states[i]
+        var sf = PythonObject(None)
         if parallel is not None:
             st = py_call(parallel, "state_snapshot", Python.list(causal_state_origin(mods, st), st))
             mods.released()
             st = causal_layer_capture(mods, st, s[].model.kind, _causal_context_for(mods, s[].model))
-        var entry = g[].bi.dict()
-        for j in range(len(arrays)):  # driver-loop: over layer state arrays
-            py_setitem(entry, arrays[j], generation_copy(py_call(g[].bi.getattr, st, arrays[j])))
-        if kind == "transformer":
-            py_setitem(entry, "cached_tokens", st.cached_tokens)
-        elif kind == "mamba1":
-            py_setitem(entry, "absolute_position", st.absolute_position)
-            py_setitem(entry, "profile_id", st.profile_id)
         else:
-            py_setitem(entry, "buffered_tokens", st.buffered_tokens)
+            sf = causal_state_layer_unpack(mods, state_held, i, st, mw.kind)
+        var entry = g[].bi.dict()
+        if sf is not None:
+            var state_owner = state_held.downcast_value_ptr[CausalStateOwner]()
+            var slot = state_owner[].slots[i]
+            for j in range(len(arrays)):  # driver-loop: over layer state arrays
+                var index = _state_array_slot(arrays[j])
+                var copied = _state_owner_copy(state_owner[].layers[slot].buffers[index])
+                if copied is None:
+                    copied = generation_copy(py_call(g[].bi.getattr, st, arrays[j]))
+                py_setitem(entry, arrays[j], copied)
+            if mw.kind == CAUSAL_LAYER_TRANSFORMER:
+                py_setitem(entry, "cached_tokens", py_item(sf, nk[].k_cached_tokens))
+            elif mw.kind == CAUSAL_LAYER_MAMBA1:
+                py_setitem(entry, "absolute_position", py_item(sf, nk[].k_absolute_position))
+                py_setitem(entry, "profile_id", py_item(sf, nk[].k_profile_id))
+            else:
+                py_setitem(entry, "buffered_tokens", py_item(sf, nk[].k_buffered_tokens))
+        else:
+            for j in range(len(arrays)):  # driver-loop: over layer state arrays
+                py_setitem(entry, arrays[j], generation_copy(py_call(g[].bi.getattr, st, arrays[j])))
+            if kind == "transformer":
+                py_setitem(entry, "cached_tokens", st.cached_tokens)
+            elif kind == "mamba1":
+                py_setitem(entry, "absolute_position", st.absolute_position)
+                py_setitem(entry, "profile_id", st.profile_id)
+            else:
+                py_setitem(entry, "buffered_tokens", st.buffered_tokens)
         _ = py_call(layers.append, entry)
+    _ = state_held
+    _ = model_held
     py_setitem(result, "layers", layers)
     py_setitem(result, "checksum", _snapshot_hash(result))
     return result
@@ -3807,9 +3893,9 @@ def causal_lm_resume_binding(mut mods: NativeModules, model: PythonObject, check
         var kind = String(model.kind)
         var profile = Int(py=model._native_entries["mamba1_profile"]) if kind == "mamba1" else 1
         var arrays = _state_arrays(kind, profile)
+        var parallel = py_get(model._native_entries, "parallel_call")
         for i in range(len(s[].state.layers)):  # driver-loop: over model layer states
             var dest = s[].state.layers[i]
-            var parallel = py_get(model._native_entries, "parallel_call")
             if parallel is not None:
                 dest = py_call(parallel, "state_snapshot", Python.list(causal_state_origin(mods, dest), dest))
                 mods.released()
@@ -3820,7 +3906,18 @@ def causal_lm_resume_binding(mut mods: NativeModules, model: PythonObject, check
                 var supplied = source[arrays[j]]
                 if py_type(supplied) is not g[].array_cls or String(supplied.dtype) != "<f4" or not Bool(py=supplied.shape == expected.shape):
                     raise Error("generation: checkpoint state array shape or dtype differs")
-                _ = py_call(g[].bi.setattr, dest, arrays[j], generation_copy(supplied))
+                if parallel is None:
+                    # Continuation 4 (design 1.3): the bytes go into the fresh
+                    # Arrays this resume allocated (one copy, the bytes of
+                    # `generation_copy`); before, a second Array was allocated
+                    # and replaced the fresh one. Nothing is shared with the
+                    # checkpoint afterwards.
+                    var captured = generation_array_snapshot(supplied)
+                    generation_bytes_copy(Int(py=expected._addr), Int(py=captured._addr), Int(py=captured.nbytes))
+                    _ = captured
+                    _ = expected
+                else:
+                    _ = py_call(g[].bi.setattr, dest, arrays[j], generation_copy(supplied))
             if kind == "transformer":
                 if Int(py=source["cached_tokens"]) != position:
                     raise Error("generation: checkpoint layer cache position differs")

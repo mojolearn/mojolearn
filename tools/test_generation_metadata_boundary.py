@@ -227,3 +227,17 @@ def test_stream_reads_hold_the_owners_and_take_state_words():
     plan = public.split('struct LegacyGenerationReadPlan(', 1)[1].split('def _resident_export_states(', 1)[0]
     assert 'k_positions' in plan and 'Int(py=state.positions)' not in plan
     assert 'GenerationHandle' not in PROVIDER
+
+
+def test_snapshot_and_resume_use_the_owners():
+    # Lane dw-causal, continuation 4 (design 1.3): the fingerprint is a model
+    # owner word; snapshot copies state from the state owner's words; resume
+    # copies the bytes into the Arrays it allocated.
+    public = (ROOT / 'bindings/causal_lm_public_door.mojo').read_text()
+    assert 'var fingerprint: String' in OWNER
+    fingerprint = public.split('def _fingerprint(', 1)[1].split('def _fingerprint_hash(', 1)[0]
+    assert 'owner[].fingerprint = String(_fingerprint_hash(mods, model))' in fingerprint
+    snapshot = public.split('def causal_lm_snapshot_binding(mut mods: NativeModules, stream: PythonObject, native: PythonObject)', 1)[1].split('def causal_lm_snapshot_binding(', 1)[0]
+    assert '_state_owner_copy(state_owner[].layers[slot].buffers[index])' in snapshot
+    resume = public.split('def causal_lm_resume_binding(mut mods', 1)[1].split('def causal_lm_resume_binding(', 1)[0]
+    assert 'generation_bytes_copy(Int(py=expected._addr), Int(py=captured._addr), Int(py=captured.nbytes))' in resume
