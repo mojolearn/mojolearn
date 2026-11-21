@@ -53,7 +53,7 @@ from core.member_abi import (
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_PREDICT,
     MEMBER_OP_SCORE, MEMBER_OP_OUTPUTS, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT,
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_SCORE, MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT,
-    MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_COEF, MEMBER_GIL_DOOR,
+    MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_COEF, MEMBER_GIL_FREE,
     MEMBER_BLOCK_COEF, MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
 )
@@ -327,15 +327,21 @@ def _score(slot: MutPointer[LinearMemberSlot, MutUntrackedOrigin], call: MutPoin
 def _linear_member(operation: Int, address: Int) raises -> Int:
     var call = MutPointer[MemberCall, MutUntrackedOrigin](unsafe_from_address=address)
     if operation == MEMBER_OP_CAPABILITIES:
-        # MEMBER_GIL_DOOR (core/member_abi.mojo): FIT, PREDICT and SCORE call
+        # MEMBER_GIL_FREE (core/member_abi.mojo, THE GIL RULE; the trace is in
+        # fx-gil-RESULT.md, round 4): both kinds run on parallel workers with
+        # no GIL. The store has its own lock; FIT, PREDICT and SCORE call
         # `linear_ridge_run` / `linear_ols_run`, `linear_predict_run` and
-        # `linear_score_run`, the functions the estimator's own doors call
-        # inside their GIL release (providers/python/linear_fit_, linear_ols_,
-        # linear_predict_, linear_score_boundary_unpack.mojo); the store has
-        # its own lock. NOT `MEMBER_GIL_FREE`: the images behind the route
-        # are not traced for parallel workers (fx-gil-RESULT.md).
+        # `linear_score_run` on per-call buffers; the entries behind the
+        # route (the linear fit and predict entries, the weighted solve, the
+        # decomposition entry's TSQR and kit, the metrics program) touch no
+        # CPython and never the GIL, and every process-wide state they reach
+        # has its own lock held for one list step or one first creation (the
+        # process contexts, the decomposition pool and stage, the kept TSQR
+        # state, which a temporary factor no longer touches). On a GPU route
+        # the callers run one worker (several threads enqueueing on one
+        # device context is not proven).
         return (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_SCORE | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
-            | MEMBER_CAN_SAMPLE_WEIGHT | MEMBER_CAN_COEF | MEMBER_GIL_DOOR)
+            | MEMBER_CAN_SAMPLE_WEIGHT | MEMBER_CAN_COEF | MEMBER_GIL_FREE)
     if operation == MEMBER_OP_NEW:
         if call[].param_count != 3 or not call[].params:
             raise Error("member ABI: a linear member takes three parameters (kind, fit_intercept, alpha)")

@@ -98,7 +98,7 @@ def ts_factor_dispatch(
     var npair = ts_pairs(n)
     var t_words = npan * TS_NB * TS_NB
     var t2_words = npair * TS_T2
-    var work = ts_factor_begin(ctx, m, n)
+    var work = ts_factor_begin(ctx, m, n, keep)
     ctx.synchronize()
     var shards = List[_TsShard]()
     for rank in range(active):  # driver-loop: over the plan's device shards
