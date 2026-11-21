@@ -26,7 +26,10 @@
 #      the npz codec's `_npz_value` (dtype, shape, C-order bytes).
 #      A list, tuple or dict that is not one flat run of scalars is entered:
 #      `name[i]`, `name{key}` and `name.len`. An integer wider than 64 bits
-#      is hashed as its decimal text under `name.bigint`. A member estimator contributes
+#      is hashed as its decimal text under `name.bigint`.
+#      A layer object (a class under `digest_layers`: the CNN layers) is
+#      entered: its class name, then its own public learned fields. An
+#      unfitted estimator kept beside fitted members gives its class name. A member estimator contributes
 #      its own digest, as text, in member order.
 #   3. A class named in `digest_refused` has no digest yet: the read raises
 #      AttributeError with the reason in words.
@@ -159,6 +162,7 @@ def fitted_digest_text(model: PythonObject, context: PythonObject, depth: Int) r
         var ndarray = py_get(context, "ndarray")
         var numpy_scalar = py_get(context, "scalar_type")
         var base = py_get(context, "digest_base")
+        var layers = py_get(context, "digest_layers")
         var work_names = List[String]()
         var work_values = List[PythonObject]()
         var work_depths = List[Int]()
@@ -247,10 +251,44 @@ def fitted_digest_text(model: PythonObject, context: PythonObject, depth: Int) r
                     work_depths.append(level + 1)
                 continue
             if base is not None and _npz_is(value, base):
+                if not Bool(py=_fitted(value)):
+                    # An unfitted template a fitted model keeps beside its
+                    # members (the base estimator of a batched bagging fit):
+                    # it has no fitted state; its class keeps its place.
+                    leaf_names.append(name + ".unfitted")
+                    leaf_values.append(PythonObject(_archive_class_name_unpack(kind)))
+                    continue
                 # A member estimator: its own digest, as text, under its place.
                 var inner = fitted_digest_text(value, context, depth + 1)
                 leaf_names.append(name)
                 leaf_values.append(PythonObject(inner))
+                continue
+            var is_layer = False
+            if layers is not None:
+                for i in range(len(layers)):  # driver-loop: over the declared layer base classes (one or two)
+                    if _npz_is(value, layers[i]):
+                        is_layer = True
+            if is_layer:
+                # A layer object of a layered model: its class, then its own
+                # learned fields by the same public rule (`weight_`, `bias_`,
+                # running statistics), each under `name.<field>`.
+                if level >= _DIGEST_DEPTH:
+                    raise Error("AttributeError: " + class_name + ".digest_ is not available: field '" + name
+                                + "' nests layers deeper than " + String(_DIGEST_DEPTH) + " levels")
+                leaf_names.append(name + ".layer")
+                leaf_values.append(PythonObject(_archive_class_name_unpack(kind)))
+                var layer_fields = _fields(value)
+                var layer_keys = py_call(b.list, layer_fields.keys())
+                for i in range(len(layer_keys)):  # driver-loop: over one layer's stored field names
+                    var field = String(py=layer_keys[i])
+                    if field.endswith("_") and not field.startswith("_"):
+                        if skip is not None and py_contains(skip, layer_keys[i]):
+                            continue
+                        var held = layer_fields[layer_keys[i]]
+                        if held is not None:
+                            work_names.append(name + "." + field)
+                            work_values.append(held)
+                            work_depths.append(level + 1)
                 continue
             raise Error("AttributeError: " + class_name + ".digest_ is not available yet: field '" + name
                         + "' holds a " + _archive_class_name_unpack(kind) + ", which has no canonical bytes")

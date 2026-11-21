@@ -103,24 +103,37 @@ EXTRA_BY_NAME = {
     "_Croston": ("_one", "_y"),
     "ETS": ("_one", "_y", "_season"),
     "GARCH": ("_one", "_y", "_fc"),
-    "ProphetForecaster": ("_one", "_nh"),
+    "ProphetForecaster": ("_one", "_nh", "_K"),
     "AutoARIMA": ("_fitted",),
     "_BaseMLP": ("_y_1d",),
+    # bagging: the members as one forest (`_batched` = (forest, the unfitted base)) or as a member list
+    # (`_estimators`), and each member's out-of-bag rows (bindings/trees_public_boost_door.mojo)
+    "_BaggingBase": ("_batched", "_estimators", "_oob_rows"),
+    # recurrent models: the weights are the public flat block `params_` (bindings/xseq_neural_native_door.mojo)
+    "_RecurrentBase": ("_y_1d",),
+    # Sequential: the weights are the public flat block `params_`; the layer list decides what they mean
+    # (bindings/sequential_description_unpack.mojo: one tuple of codes and sizes per layer)
+    "Sequential": ("_layers", "_sample_shape"),
+    # CNNClassifier: `layers_` and `head_` are layer objects, entered by the walk (LAYERS)
+    "CNNClassifier": ("_flat",),
 }
 
 #: Public names (ending in "_") that record how a call ran, not what was
 #: fitted: whether the input was copied on the way in, which shards or which
 #: query tile the last call used. They differ with the input's container or
 #: the machine while the fitted model is the same, so no class hashes them.
-NOT_STATE = ("input_copied_", "fortran_copied_", "last_shards_", "used_query_tile_", "n_candidate_distances_")
+NOT_STATE = ("input_copied_", "fortran_copied_", "last_shards_", "used_query_tile_", "n_candidate_distances_",
+             # a layer's gradient buffers of the last training step
+             "grad_weight_", "grad_bias_")
+
+#: Base classes of layer objects a layered model keeps in its fitted fields
+#: (`CNNClassifier.layers_`, `head_`). The walk enters such an object: its
+#: class name, then its own public learned fields (`weight_`, `bias_`, ...).
+#: Filled by `layer` when the layer module is imported.
+LAYERS = []
 
 #: class name -> why it has no digest yet, in words a user reads.
-REFUSED_BY_NAME = {
-    "_BaggingBase": "its fitted members are held as one forest by the trees owner, which the digest does not read yet",
-    "_RecurrentBase": "its fitted weights are held by the recurrent owner (state_dict), which the digest does not read yet",
-    "Sequential": "its layers hold the fitted weights, and the digest does not walk layers yet",
-    "CNNClassifier": "its layers hold the fitted weights, and the digest does not walk layers yet",
-}
+REFUSED_BY_NAME = {}
 
 #: The tables the compiled walk reads, keyed by class (filled by `declare`).
 EXTRA = {}
@@ -144,6 +157,13 @@ def declare(cls):
         REFUSED[cls] = REFUSED_BY_NAME[name]
 
 
+def layer(cls):
+    """Declare `cls` a base class of layer objects (called once, where the
+    layer classes are defined)."""
+    if cls not in LAYERS:
+        LAYERS.append(cls)
+
+
 def connect(base):
     """Connect the compiled digest entry once: `(entry, context)`. `base` is
     the shared estimator base whose `digest_` property this serves. On an
@@ -154,7 +174,8 @@ def connect(base):
     from ._native_archive_bridge import connect as connect_archive
     entry, context = connect_archive()
     if "archive_unavailable" not in context:
-        context.update(digest_base=base, digest_extra=EXTRA, digest_refused=REFUSED, digest_skip=NOT_STATE)
+        context.update(digest_base=base, digest_extra=EXTRA, digest_refused=REFUSED, digest_skip=NOT_STATE,
+                       digest_layers=LAYERS)
         CONNECTION["entry"] = entry
     CONNECTION["context"] = context
     return entry, context
