@@ -29,6 +29,57 @@ def _unavailable(error):
     return unavailable
 
 
+def _sequence_image(module):
+    # glue: once per image at import: its fixed compiled entries, and its
+    # (tier, vendor) key of the sequence table (lane calltable-xseq); the
+    # native owner reads the image's published entries with the key.
+    from types import BuiltinFunctionType
+    symbols = {}
+    for name in _SEQUENCE_ENTRIES:  # glue: fixed compiled entry names
+        symbol = getattr(module, name)
+        if not isinstance(symbol, BuiltinFunctionType):
+            raise TypeError(f"the sequence estimators require a compiled {name}")
+        symbols[name] = symbol
+    vendor = _NATIVE_VENDORS.get(str(symbols["x_sequence_vendor"]()), -1)  # import-time: the image's vendor
+    return symbols, (int(symbols["x_sequence_numeric_mode"]()), vendor)  # import-time: the image's compiled tier
+
+
+def _metrics_image(module):
+    # glue: once per image at import, the metrics image's (tier, vendor) key
+    # of its native R^2 table (core/metrics_entry_table.mojo, lane
+    # calltable-xseq); the sequence scores call that entry, not the image's
+    # Python r2_score entries. The module is kept to pin the image.
+    vendor = _NATIVE_VENDORS.get(str(module.metrics_vendor()), -1)  # import-time: the image's vendor
+    return (int(module.metrics_numeric_mode()), vendor, module)  # import-time: the compiled tier
+
+
+def _connect_cpu_device(context):
+    # glue: `device="cpu"` beside a GPU set: the CPU identical images of the
+    # sequence and metrics bindings, loaded once at import; a recurrent or
+    # MLP estimator's route holds them (bindings/xseq_native_common_door.mojo
+    # `xseq_route`). A CPU-only installation has no second set: its one set
+    # is the CPU's. An image that does not load records why, and the
+    # estimator that asks for it says so.
+    from . import _backend
+    if _backend._CPU_ONLY is not None:
+        return
+    errors = (ImportError, AttributeError, ValueError, RuntimeError, TypeError, OSError, KeyError)
+    bindings = {}
+    keys = {}
+    metrics = {}
+    try:
+        module = _backend.load_host_module(_backend._HOST_MODULES["_mojolearn_x_sequence"])  # import-time: the CPU image
+        bindings["identical"], keys["identical"] = _sequence_image(module)
+    except errors as error:
+        bindings["identical"] = keys["identical"] = type(error).__name__ + ": " + str(error)
+    try:
+        metrics["identical"] = _metrics_image(
+            _backend.load_host_module(_backend._HOST_MODULES["_mojolearn_metrics"]))  # import-time: the CPU image
+    except errors as error:
+        metrics["identical"] = type(error).__name__ + ": " + str(error)
+    context.update(xseq_cpu_bindings=bindings, xseq_cpu_native_keys=keys, xseq_cpu_metrics=metrics)
+
+
 def connect():
     """`(entry, context)`: the compiled owner and the context every
     connected class shares. Connected once; later calls return the same pair."""
@@ -58,19 +109,7 @@ def connect():
     keys = {}
     for mode in (selected, "fast" if selected == "identical" else "identical"):  # glue: the two numeric modes, connected once
         try:
-            module = _backend.binding("_mojolearn_x_sequence", mode)
-            symbols = {}
-            for name in _SEQUENCE_ENTRIES:  # glue: fixed compiled entry names
-                symbol = getattr(module, name)
-                if not isinstance(symbol, BuiltinFunctionType):
-                    raise TypeError(f"the sequence estimators require a compiled {name}")
-                symbols[name] = symbol
-            bindings[mode] = symbols
-            # glue: once at import, the connected image's (tier, vendor) key of
-            # the sequence table (lane calltable-xseq); the native owner reads
-            # the image's published entries with it instead of its Python ones
-            vendor = _NATIVE_VENDORS.get(str(symbols["x_sequence_vendor"]()), -1)  # import-time: the image's vendor
-            keys[mode] = (int(symbols["x_sequence_numeric_mode"]()), vendor)  # import-time: the image's compiled tier
+            bindings[mode], keys[mode] = _sequence_image(_backend.binding("_mojolearn_x_sequence", mode))
         except (ImportError, AttributeError, ValueError, RuntimeError, TypeError) as error:
             bindings[mode] = type(error).__name__ + ": " + str(error)
             keys[mode] = bindings[mode]
@@ -90,13 +129,7 @@ def connect():
     metrics = {}
     for mode in (selected, "fast" if selected == "identical" else "identical"):  # glue: the two numeric modes, connected once
         try:
-            module = _backend.binding("_mojolearn_metrics", mode)
-            # glue: once at import, the metrics image's (tier, vendor) key of its
-            # native R^2 table (core/metrics_entry_table.mojo, lane
-            # calltable-xseq); the sequence scores call that entry, not the
-            # image's Python r2_score entries. The module is kept to pin the image.
-            vendor = _NATIVE_VENDORS.get(str(module.metrics_vendor()), -1)  # import-time: the image's vendor
-            metrics[mode] = (int(module.metrics_numeric_mode()), vendor, module)  # import-time: the compiled tier
+            metrics[mode] = _metrics_image(_backend.binding("_mojolearn_metrics", mode))
         except (ImportError, AttributeError, ValueError, RuntimeError, TypeError) as error:
             metrics[mode] = type(error).__name__ + ": " + str(error)
     r2_options = None
@@ -121,6 +154,7 @@ def connect():
                    xseq_ndarray=np.ndarray,
                    xseq_metrics=metrics, xseq_r2_options=r2_options, xseq_lifecycle_context=lifecycle,
                    xseq_forecast_ownership=ownership)
+    _connect_cpu_device(context)
     _ENTRY, _CONTEXT = entry, context
     return _ENTRY, _CONTEXT
 

@@ -29,7 +29,7 @@ from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_setitem, py_contains, py_type
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.admitted_family_door import admit_family_meta
-from providers.python.estimator_binding_pyapi_door import estimator_binding_mode
+from providers.python.estimator_binding_pyapi_door import estimator_binding_routed
 from bindings.manifold_settings_native_door import ManifoldSettings, mani_field
 from bindings.operation_names_mani import (
     MANI_OPN_FAMILY_MANI_CMDS_FIT,
@@ -589,19 +589,23 @@ def _lle_transform(model: PythonObject, settings: ManifoldSettings, args: Python
         mk_finish(run, context)
 
 
-def _mani_arguments(settings: ManifoldSettings, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def _mani_arguments(model: PythonObject, settings: ManifoldSettings, args: PythonObject,
+                    context: PythonObject) raises -> PythonObject:
     # Public shells hand over settings and buffers only. Resolve both legacy
     # binding slots after crossing the native boundary. Explicit modules remain
     # supported for internal/legacy callers and are admitted by mk_image.
+    # The images are the ESTIMATOR'S: its binding route (the shared estimator
+    # door) holds the x_decomp module of its device per mode object, so a
+    # `device="cpu"` estimator beside a GPU set runs the CPU image.
     if len(args) < 2:
         raise Error("TypeError: manifold operation requires two binding slots")
     var requested = settings.mode
     var binding = args[0]
     if binding is None:
-        binding = estimator_binding_mode(requested, "_mojolearn_x_decomp", context)
+        binding = estimator_binding_routed(model, requested, "_mojolearn_x_decomp", context)
     var default_binding = args[1]
     if default_binding is None:
-        default_binding = estimator_binding_mode(settings.default_mode, "_mojolearn_x_decomp", context)
+        default_binding = estimator_binding_routed(model, settings.default_mode, "_mojolearn_x_decomp", context)
     var resolved = Python.list(binding, default_binding)
     for i in range(2, len(args)):  # driver-loop: over (args: fixed public operation argument envelope): bounded by the public signature
         _ = py_call(resolved.append, args[i])
@@ -611,7 +615,7 @@ def _mani_arguments(settings: ManifoldSettings, args: PythonObject, context: Pyt
 def mani_decomp_operation(model: PythonObject, settings: ManifoldSettings, operation: Int, var args: PythonObject,
                           x: Optional[ArrayMetadata], context: PythonObject) raises -> PythonObject:
     """args = (optional decomp binding, optional default binding, X[, init])."""
-    args = _mani_arguments(settings, args, context)
+    args = _mani_arguments(model, settings, args, context)
     if operation == MANI_OPN_FAMILY_MANI_CMDS_FIT:
         _ = _cmds_fit(model, settings, args, x.value(), context)
         return model

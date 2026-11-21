@@ -242,6 +242,7 @@ from checks.native_tests.dbscan_door_run import register as register_dbscan_door
 from checks.native_tests.dbscan_options import register as register_dbscan_options
 from checks.native_tests.dbscan_state import register as register_dbscan_state
 from checks.native_tests.decomp_device_route import register as register_decomp_device_route
+from checks.native_tests.device_route_dw_neighbors_cluster import register as register_device_route_dw_neighbors_cluster
 from checks.native_tests.decomp_entry_table import register as register_decomp_entry_table
 from checks.native_tests.entry_table_contract import register as register_entry_table_contract
 from checks.native_tests.exec_owned_reuse import register as register_exec_owned_reuse
@@ -823,6 +824,7 @@ def all_checks() -> List[Check]:
     checks.append(register_dbscan_options())
     checks.append(register_dbscan_state())
     checks.append(register_decomp_device_route())
+    checks.append(register_device_route_dw_neighbors_cluster())
     checks.append(register_decomp_entry_table())
     checks.append(register_entry_table_contract())
     checks.append(register_exec_owned_reuse())

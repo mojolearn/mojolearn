@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
-"""The CPU metrics program entry of a `device="cpu"` estimator's route.
+"""The CPU metrics program entry of a `device="cpu"` estimator's route: the ONE
+metrics route of every family (`device_route_metrics_cells`,
+`device_route_metrics_cpu`; lane dw-core round 2).
 
 `score` of Ridge and LinearRegression runs its R^2 program on a metrics
 table. A `device="cpu"` estimator in a GPU installation resolves that table
@@ -35,13 +37,16 @@ def _metrics_cpu_absent(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
     return 1
 
 
-def linear_route_metrics_cpu(mut route: DeviceRoute, entries: PythonObject, b: PythonObject) raises:
-    """Give a CPU route resolved in a GPU installation its CPU metrics entry.
-    `entries` is the CPU entry family the route was resolved from (the route
-    owner pins it, and with it the metrics connection owner and its image);
-    `b` is the builtins module the calling door already admitted."""
+def device_route_metrics_cells(mut route: DeviceRoute, cells: PythonObject, b: PythonObject) raises:
+    """Give a CPU route resolved in a GPU installation its CPU metrics entry
+    (`fifth`), for ANY family: `cells` is the CPU metrics connection
+    (`_native_table_cells(_mojolearn_x_metrics_host, "x_metrics")`, connected
+    at import), or the text of why it is not connected. The route's owner
+    pins `cells` (and with it the metrics connection owner and its image);
+    `b` is the builtins module the calling door already admitted. The score
+    of the family then calls `route.fifth` when `route.has_fifth`, and reads
+    the process's metrics table (the GPU one) only when it is False."""
     route.has_fifth = True
-    var cells = py_get(entries, "metrics")
     if py_type(cells) is not b.dict:
         route.fifth = EntryRef(_metrics_cpu_absent, 0)
         return
@@ -52,3 +57,19 @@ def linear_route_metrics_cpu(mut route: DeviceRoute, entries: PythonObject, b: P
         MP_OPERATION_COUNT)
     route.fifth = EntryRef(entry, entry_ref_word(connection.key.mode, connection.key.vendor, MP_OPERATION_COUNT))
     _ = connection
+
+
+def device_route_metrics_cpu(mut route: DeviceRoute, context: PythonObject, b: PythonObject) raises -> PythonObject:
+    """`device_route_metrics_cells` from the shared family context: the CPU
+    metrics connection every family shares (`context["metrics_cpu_cells"]`,
+    python/mojolearn/_native_family_bridge.py `shared_context`). Returns the
+    cells: the caller stores them among its owner's `images` pins."""
+    var cells = py_get(context, "metrics_cpu_cells")
+    device_route_metrics_cells(route, cells, b)
+    return cells
+
+
+def linear_route_metrics_cpu(mut route: DeviceRoute, entries: PythonObject, b: PythonObject) raises:
+    """Ridge and LinearRegression: the cells of the CPU entry family the
+    route was resolved from (the route owner pins `entries`)."""
+    device_route_metrics_cells(route, py_get(entries, "metrics"), b)

@@ -31,6 +31,7 @@ from bindings.ipca_descriptor_boundary_door import (
     ipca_run_free,
 )
 from x_decomp.ipca_descriptor_boundary_run import ipca_resident
+from bindings.decomp_device_route_door import decomp_device_admit, decomp_route_clear
 from bindings.ipca_owner_boundary_door import ipca_owner_drop, ipca_owner_adopt, ipca_owner_cached, ipca_owner_operand, ipca_owner_handle
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -314,6 +315,11 @@ def _ipca_dispatch(model: PythonObject, operation: String, args: PythonObject, c
         _ = x
     elif operation == "vendor_used":
         result = PythonObject(ipca_route_vendor(model, py_fields(model), context))
+    elif operation == "device_set":
+        # The constructor and `set_params`: checked where it is given, and
+        # the estimator's route dropped (its next operation reads the device once).
+        decomp_device_admit(args[0], context)
+        decomp_route_clear(model)
     else:
         raise Error("unknown private IncrementalPCA operation")
     return result

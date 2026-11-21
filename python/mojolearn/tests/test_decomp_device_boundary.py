@@ -6,9 +6,9 @@ The device is a constructor parameter with the Ridge pilot's rule and words. Non
 GPU where the installation has a GPU set, else the CPU. `get_params` returns what was passed (None stays None). An
 explicit `device="gpu"` on a CPU-only installation is refused in words that name `device="cpu"`; `device="cpu"`
 always runs. These four classes have a field-only constructor and `set_params`, so the value is stored as given and
-refused by the estimator's first operation, which reads it once into the native route owner
-(bindings/decomp_device_route_door.mojo); `get_params`, `set_params`, clone and pickle carry it, and a changed
-`device` resolves again. On a GPU installation both images exist in one process and `device="cpu"` runs the CPU
+checked where it is given (the constructor, `set_params`) and read once, when the estimator's route is resolved,
+into the one native route owner (providers/python/device_route_boundary_door.mojo); `get_params`, `set_params`,
+clone and pickle carry it, and `set_params(device=...)` resolves again. No public call reads the device. On a GPU installation both images exist in one process and `device="cpu"` runs the CPU
 binaries (`vendor_used() == "cpu"`); in `identical` mode it returns the bits the GPU returns. These tests run on a GPU
 installation and on a CPU-only one; what needs two devices is skipped by name on the CPU-only one.
 """
@@ -53,11 +53,23 @@ def test_device_is_a_constructor_parameter_with_default_none(cls):
 
 @pytest.mark.parametrize("cls", CLASSES)
 @pytest.mark.parametrize("bad", ["tpu", "GPU", " cpu", "", "None", 0, False, b"cpu"])
-def test_unknown_device_is_refused_in_words_by_the_first_operation(cls, bad):
-    model = build(cls, device=bad)
+def test_unknown_device_is_refused_in_words_at_construction_and_by_set_params(cls, bad):
+    with pytest.raises(ValueError, match="device must be 'gpu', 'cpu' or None, got"):
+        build(cls, device=bad)
+    model = build(cls)
+    with pytest.raises(ValueError, match="device must be 'gpu', 'cpu' or None, got"):
+        model.set_params(device=bad)
+    assert model.get_params()["device"] is None               # refused before anything changed
+
+
+@pytest.mark.parametrize("cls", CLASSES)
+def test_a_carried_bad_device_is_refused_when_the_route_is_resolved(cls):
+    # an instance that carries a bad value without its constructor's check (a direct assignment is not a supported
+    # way to set the device) is refused by the one read of the device, at its first operation
+    model = build(cls)
+    model.device = "tpu"
     with pytest.raises(ValueError, match="device must be 'gpu', 'cpu' or None, got"):
         model.fit(data())
-    assert not hasattr(model, "components_")              # refused before anything was fitted
 
 
 @pytest.mark.parametrize("cls", CLASSES)
@@ -77,7 +89,7 @@ def test_explicit_gpu_runs_on_a_gpu_installation_and_is_refused_in_words_on_a_cp
         assert model.vendor_used() == mojolearn.vendor() and model.get_params()["device"] == "gpu"
         return
     with pytest.raises(ValueError, match="device='gpu' needs a GPU build of mojolearn.*Use device='cpu'"):
-        build(cls, device="gpu").fit(x)
+        build(cls, device="gpu")
 
 
 @pytest.mark.parametrize("cls", CLASSES)

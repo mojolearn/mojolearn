@@ -38,8 +38,9 @@ from bindings.minmax_keys_unpack import (
     MINMAX_OPN_VENDOR_USED,
 )
 from bindings.py_keys import py_op_code
-from providers.python.prep_route_boundary_door import (
-    prep_route_context, prep_route_clear, prep_device_admit, prep_route_vendor_used,
+from bindings.scaler_route_unpack import (
+    scaler_route_context, scaler_route_clear, scaler_device_admit, scaler_route_vendor_used, scaler_selection_held,
+    scaler_selection_keep, scaler_route_refuse_fast,
 )
 from bindings.py_balanced import py_item
 # TOMBSTONE: P1_NATIVE_SKLEARN_TAGS (removed: native code importing sklearn.utils._tags and building its Tag dataclasses; the tags are built by the Python compatibility layer, _mode.sklearn_tags) deleted 2026-11-09 by lane p1-python-callbacks-worst; code recoverable at e68654a757.
@@ -136,6 +137,21 @@ def _minmax_entries(mode: PythonObject, context: PythonObject) raises -> PythonO
     return _entries(mode,context)
 
 
+def _minmax_entries(model: PythonObject, mode: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`_minmax_entries` of an estimator's operation: the selection its device
+    route holds for `mode` (one record read and pointer compares), or the
+    selection made here by the same checks, in their order and words, and
+    kept in the route. A scratch model without a route (partial_fit's batch)
+    selects as before."""
+    var held = scaler_selection_held(model, mode, context)
+    if held is not None:
+        return held
+    scaler_route_refuse_fast(model, mode, context)
+    var entries = _minmax_entries(mode, context)
+    scaler_selection_keep(model, mode, entries, context)
+    return entries
+
+
 def minmax_initialize(model: PythonObject, args: PythonObject) raises -> PythonObject:
     var fields = _fields(model)
     var names = Python.tuple("feature_range","copy","clip","numeric_mode")
@@ -186,11 +202,11 @@ def minmax_fit(model: PythonObject, source: PythonObject, context: PythonObject,
     for k in range(len(names)):  # driver-loop: stale fitted attribute names on refit
         if String(names[k]).endswith("_"):
             _ = py_call(fields.pop,names[k])
-    var entries = _minmax_entries(mode,context)
+    var entries = _minmax_entries(model,mode,context)
     var nk = minmax_keys()
     if py_get(entries,nk[].k_minmax_fit) is None:
         raise Error("ImportError: HostMinMaxScaler training requires _mojolearn_preprocessing_host: " + String(py_get(entries,nk[].k_scaler_training_error,"minmax_fit is unavailable")))
-    var calls = scaler_door_calls(entries)
+    var calls = scaler_door_calls(model, entries, context)
     var snapshot = scaler_operation_input(source, context, input_cache)
     var captured = snapshot.downcast_value_ptr[ScalerInputSnapshot]()
     var values = captured[].values
@@ -229,7 +245,7 @@ def minmax_fit_transform(model: PythonObject, source: PythonObject, context: Pyt
     if configuration is None:
         configuration = _configuration(fields,context)
     var mode = configuration[0]
-    var entries = _minmax_entries(mode,context)
+    var entries = _minmax_entries(model,mode,context)
     var entry = _direct(entries,"minmax_fit_transform")
     var nk = minmax_keys()
     if entry is None or py_get(entries,nk[].k_minmax_fit) is None:
@@ -298,7 +314,7 @@ def minmax_partial_fit(model: PythonObject, source: PythonObject, context: Pytho
         unsafe_memcpy(dest=ap+k*d,src=_ptr(value),count=d)
         _ = value  # keep the Python object alive through the native call above
         _ = value^
-    var entries = _minmax_entries(fitted_mode,context)
+    var entries = _minmax_entries(model,fitted_mode,context)
     var program = List[Int32]()
     _stage(program,268,d,0,d,2*d,3*d,d,4*d,8*d)
     _run(arena,program,entries)
@@ -336,8 +352,8 @@ def minmax_transform(model: PythonObject, source: PythonObject, inverse: Bool, c
         _ = classical_not_fitted_class(context)
         raise Error("NotFittedError: MinMaxScaler is not fitted")
     var mode = py_item(fields, nk[].k_numeric_mode_) if configuration is None else configuration[0]
-    var entries = _minmax_entries(mode, context)
-    var calls = scaler_transform_calls(entries, context)
+    var entries = _minmax_entries(model, mode, context)
+    var calls = scaler_transform_calls(model, entries, context)
     var snapshot = scaler_operation_input(source, context, input_cache)
     var captured = snapshot.downcast_value_ptr[ScalerInputSnapshot]()
     var values = captured[].values
@@ -403,11 +419,11 @@ def minmax_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
         if not is_class and (operation == MINMAX_OPN_FIT or operation == MINMAX_OPN_PARTIAL_FIT
                 or operation == MINMAX_OPN_FIT_TRANSFORM or operation == MINMAX_OPN_TRANSFORM):
             # A data operation runs in the estimator's route
-            # (providers/python/prep_route_boundary_door.mojo): the process's
+            # (bindings/scaler_route_unpack.mojo): the process's
             # context, the CPU one of `device="cpu"`, or an explicit Host*
             # class's own. One record read and one pointer compare; the
             # route's first resolution reads `device` and the host table.
-            context = prep_route_context(model, root)
+            context = scaler_route_context(model, root)
         else:
             # Parameter, archive and class-level operations compute nothing
             # on a device: the explicit host table by class, as before.
@@ -425,10 +441,10 @@ def minmax_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
             var device = PythonObject(None)
             if len(args) > 4:
                 device = args[4]
-            prep_device_admit(device, cls, root)
+            scaler_device_admit(device, cls, root)
             result = py_present(minmax_initialize(model,args))
             py_setitem(_fields(model), nk[].k_device, device)
-            prep_route_clear(model)
+            scaler_route_clear(model)
         elif operation == MINMAX_OPN_GET_PARAMS:
             var fields = _fields(model)
             var params = Python.dict(feature_range=py_item(fields, nk[].k_feature_range),copy=py_item(fields, nk[].k_copy),clip=py_item(fields, nk[].k_clip),numeric_mode=py_item(fields, nk[].k_numeric_mode))
@@ -436,7 +452,7 @@ def minmax_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
             py_setitem(params, nk[].k_device, py_get(fields, nk[].k_device))
             result = params
         elif operation == MINMAX_OPN_VENDOR_USED:
-            result = py_present(prep_route_vendor_used(model, root))
+            result = py_present(scaler_route_vendor_used(model, root))
         elif operation == MINMAX_OPN_SET_PARAMS:
             var fields = _fields(model)
             var options = args[0]
@@ -450,12 +466,12 @@ def minmax_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
             if len(names):
                 var device = py_get(options,nk[].k_device,py_get(fields, nk[].k_device))
                 # Refused in words before the estimator changes.
-                prep_device_admit(device, cls, root)
+                scaler_device_admit(device, cls, root)
                 var values = Python.tuple(py_get(options,nk[].k_feature_range,py_item(fields, nk[].k_feature_range)),py_get(options,nk[].k_copy,py_item(fields, nk[].k_copy)),py_get(options,nk[].k_clip,py_item(fields, nk[].k_clip)),py_get(options,nk[].k_numeric_mode,py_item(fields, nk[].k_numeric_mode)))
                 _ = py_call(fields.clear)
                 _ = minmax_initialize(model,values)
                 py_setitem(fields, nk[].k_device, device)
-                prep_route_clear(model)
+                scaler_route_clear(model)
             result = py_present(model)
         elif operation == MINMAX_OPN_IS_FITTED:
             result = PythonObject(_fitted(_fields(model)))

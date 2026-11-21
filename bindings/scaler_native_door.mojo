@@ -33,7 +33,10 @@ from bindings.sequential_admission_door import _ordinary_torch, _one_of
 from bindings.native_torch_admission_door import native_torch_numpy
 from bindings.prep_entry_cache_unpack import prep_mode_checked
 from bindings.scaler_keys_unpack import scaler_keys
-from providers.python.prep_route_boundary_door import prep_route_context
+from bindings.scaler_route_unpack import (
+    scaler_route_context, scaler_selection_held, scaler_selection_keep, scaler_route_refuse_fast, scaler_route_held,
+    ScalerHeld, SCALER_CAP_TRANSPORT, SCALER_CAP_KERNEL, SCALER_CAP_KERNEL_DIRECT, SCALER_CAP_STANDARD_FIT,
+)
 from bindings.py_balanced import py_item
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -126,6 +129,16 @@ struct ScalerDoorCalls(ScalerCalls, Movable):
         self.has_table = table_kernels
         self.entries = entries
 
+    def __init__(out self, entries: PythonObject, held: ScalerHeld, table_kernels: Bool):
+        """From an estimator's device route (bindings/scaler_route_unpack.mojo):
+        the two table entries and the image's direct answer were resolved
+        once per estimator; only the run-time switch is read here."""
+        var direct = (table_kernels and (held.flags & SCALER_CAP_KERNEL_DIRECT) != 0
+                      and String(getenv("MOJOLEARN_SCALER_DIRECT", "1").strip()) != "0")
+        self.table = ScalerTableCalls(held.kernel, held.transport, direct)
+        self.has_table = table_kernels
+        self.entries = entries
+
     def direct(self) -> Bool:
         return self.table.use_direct
 
@@ -178,6 +191,32 @@ def scaler_transform_calls(entries: PythonObject, context: PythonObject) raises 
     estimators-host transform entry (ScalerDoorCalls)."""
     var nk = scaler_keys()
     return ScalerDoorCalls(entries, not Bool(py=py_get(context, nk[].k_scaler_explicit_host, False)))
+
+
+def scaler_route_calls(model: PythonObject, entries: PythonObject, context: PythonObject,
+                       table_kernels: Bool) raises -> ScalerDoorCalls:
+    """UNPACK: the calls of an estimator's operation from its device route
+    (one record read, one pointer compare): the table entries held for
+    `entries`. An estimator whose route does not hold this selection, or an
+    image whose table entry the route could not resolve, constructs them as
+    before (the table reads, and their refusals, per operation)."""
+    var held = scaler_route_held(model, entries)
+    if (held.held and (held.flags & SCALER_CAP_TRANSPORT) != 0
+            and (not table_kernels or (held.flags & SCALER_CAP_KERNEL) != 0)):
+        return ScalerDoorCalls(entries, held, table_kernels)
+    return ScalerDoorCalls(entries, table_kernels)
+
+
+def scaler_door_calls(model: PythonObject, entries: PythonObject, context: PythonObject) raises -> ScalerDoorCalls:
+    """`scaler_door_calls` of an estimator's operation, from its route."""
+    return scaler_route_calls(model, entries, context, True)
+
+
+def scaler_transform_calls(model: PythonObject, entries: PythonObject, context: PythonObject) raises -> ScalerDoorCalls:
+    """`scaler_transform_calls` of an estimator's operation, from its route."""
+    var nk = scaler_keys()
+    return scaler_route_calls(model, entries, context,
+                              not Bool(py=py_get(context, nk[].k_scaler_explicit_host, False)))
 
 
 def scaler_standard_publish(fields: PythonObject, fit: ScalerStandardFit, d: Int, with_mean: Bool, with_std: Bool,
@@ -256,6 +295,20 @@ def scaler_fit_entries(mode: PythonObject, context: PythonObject) raises -> Pyth
     return entries
 
 
+def scaler_fit_entries(model: PythonObject, mode: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`scaler_fit_entries` of an estimator's operation: the selection its
+    device route holds for `mode` (one record read and pointer compares), or
+    the selection made here by the same checks and kept in the route."""
+    var held = scaler_selection_held(model, mode, context)
+    if held is not None:
+        if (scaler_route_held(model, held).flags & SCALER_CAP_STANDARD_FIT) != 0:
+            return held
+    scaler_route_refuse_fast(model, mode, context)
+    var entries = scaler_fit_entries(mode, context)
+    scaler_selection_keep(model, mode, entries, context)
+    return entries
+
+
 def scaler_fit_input(source: PythonObject, weight_source: PythonObject, context: PythonObject,
                      input_cache: PythonObject) raises -> ScalerFitInput:
     """UNPACK: X's snapshot and the admitted weights (refusals in the order
@@ -329,9 +382,9 @@ def scaler_fit(model: PythonObject, source: PythonObject, weight_source: PythonO
     for i in range(len(names)):  # driver-loop: over the fitted attribute names being invalidated
         if String(names[i]).endswith("_"):
             _ = py_call(fields.pop, names[i])
-    var entries = scaler_fit_entries(mode, context)
+    var entries = scaler_fit_entries(model, mode, context)
     var batch = scaler_fit_input(source, weight_source, context, input_cache)
-    var calls = scaler_door_calls(entries)
+    var calls = scaler_door_calls(model, entries, context)
     var x = batch.x
     var n = batch.n
     var d = batch.d
@@ -353,11 +406,11 @@ def scaler_fit_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObje
         if len(args) != 5:
             raise Error("TypeError: StandardScaler.fit requires model, X, y, sample_weight and context")
         classical_check_layout(args[0], args[4])
-        # The estimator's route (providers/python/prep_route_boundary_door.mojo): the
+        # The estimator's route (bindings/scaler_route_unpack.mojo): the
         # process's context, the CPU one of `device="cpu"`, or an explicit Host*
         # class's own. One record read and one pointer compare; the route's
         # first resolution reads `device` and the host table by class.
-        var context = prep_route_context(args[0], args[4])
+        var context = scaler_route_context(args[0], args[4])
         return scaler_fit(args[0], args[1], args[3], context).steal_data()
     except error:
         if String(error).startswith("TypeError:"):
