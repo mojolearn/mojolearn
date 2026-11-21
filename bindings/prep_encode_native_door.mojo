@@ -53,6 +53,9 @@ from bindings.prep_encode_ordinal_run import (
 from bindings.prep_encode_target_run import (
     TargetFit, TargetApply, TE_FOLDS_NONE, TE_FOLDS_STAGED, TE_FOLDS_GIVEN, target_fit_stage,
     target_transform_stage)
+from bindings.prep_encode_spline_run import (
+    SplineFit, SplineApply, SPL_KNOTS_GIVEN, SPL_KNOTS_QUANTILE, SPL_KNOTS_UNIFORM, spline_features,
+    spline_fit_stage, spline_transform_stage)
 from bindings.x_prep_native_owner_run import xprep_r3, XprepCaps
 from bindings.public_lifecycle_owner_door import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result
 from bindings.classical_validate_unpack import classical_estimator_name
@@ -69,11 +72,6 @@ comptime I32P = MutPointer[Int32, MutUntrackedOrigin]
 comptime I64P = MutPointer[Int64, MutUntrackedOrigin]
 
 # x_prep stage codes (_expansion_prep._OPS).
-comptime OP_SORT_COLS = 0
-comptime OP_COL_STATS = 1
-comptime OP_QUANTILE = 2
-comptime OP_UNIQUE_COLS = 5
-comptime OP_LOOKUP = 7
 comptime OP_CLASS_STATS = 16
 comptime OP_F_CLASSIF = 63
 comptime OP_F_REGRESSION = 64
@@ -96,15 +94,6 @@ comptime IDN_CLASS_ONEPASS = 2
 comptime IDN_SELECT_BLOCKED = 4
 # `_CLS_BLOCK_WORDS`: the most partial words a blocked class_stats keeps.
 comptime CLS_BLOCK_WORDS = 67108864
-comptime OP_KBINS_GW = 96
-comptime OP_KBINS_WQ = 97
-comptime OP_COLB_PART = 124
-comptime OP_COLB_FOLD = 125
-comptime OP_SPLINE_KNOTS = 49
-comptime OP_SPLINE_APPLY = 50
-comptime OP_RGATHER = 204
-comptime OP_TRANSPOSE = 209
-comptime OP_GRID = 263
 # `_NONE`: a stage's "no operand" word.
 comptime NONE = -1
 # x_prep_idn_fam bit 1: IDN_STATS_BLOCKED.
@@ -181,22 +170,6 @@ struct EncProg(Movable):
     def put_x(mut self, values: PythonObject) raises -> Int:
         # X as `xprep_values` converted it (host words or device rows).
         return self._record(values, Int(py=values[3]) * Int(py=values[4]))
-
-    def put_array2(mut self, value: PythonObject) raises -> Int:
-        # A float32 C-order (n, d) Array this owner produced (the C08 inverse).
-        return self.put(value, Int(py=value.size))
-
-    def put_array(mut self, value: PythonObject, context: PythonObject) raises -> Int:
-        # A fitted float32 vector (`_Prog.put` of an Array).
-        var flat = _input(value, 1, False, context)
-        return self.put(flat, Int(py=flat.size))
-
-    def put_fitted(mut self, owner: PythonObject, name: String, value: PythonObject, context: PythonObject) raises -> Int:
-        # `put_array` of the fitted field `name` of `owner`: the admitted flat
-        # float32 vector is kept per model (`_fitted_flat`), so a transform
-        # re-admits it only after the field was reassigned (refit, load).
-        var flat = _fitted_flat(owner, name, value, context)
-        return self.put(flat[1], Int(py=flat[2]))
 
     def put_floats(mut self, values: List[Float64], context: PythonObject) raises -> Int:
         # `_Prog.put_list`: the values rounded to float32 ([0.0] when empty),
@@ -1819,18 +1792,6 @@ def _spline_fused(mode: PythonObject, entries: PythonObject) raises -> Bool:
     return py_get(entries, "x_prep_spline_fused") is not None
 
 
-def _col_stats_blocked(mut p: EncProg, xo: Int, n: Int, d: Int, out_buf: Int) raises:
-    # `_col_stats(..., var=False)`: the blocked order whenever
-    # MOJOLEARN_XPREP_BLOCKED is on, else one thread per column.
-    if String(getenv("MOJOLEARN_XPREP_BLOCKED", "1").strip()) == "0":
-        _stage(p.prog.program, OP_COL_STATS, d, xo, n, d, out_buf)
-        return
-    var nb = (n + ROW_BLOCK - 1) // ROW_BLOCK
-    var part = p.work(5 * nb * d)
-    _stage(p.prog.program, OP_COLB_PART, nb * d, xo, n, d, part, nb)
-    _stage(p.prog.program, OP_COLB_FOLD, d, part, nb, d, out_buf)
-
-
 def _extrapolation(value: PythonObject) raises -> Int:
     # `SplineTransformer._EXTRAP`.
     if _is_str(value):
@@ -1909,6 +1870,8 @@ def _spline_fit(model: PythonObject, values: PythonObject, weight_source: Python
     """SplineTransformer `_fit`: the knots program (col_stats, the given,
     quantile or uniform base knots, spline_knots) and, with `fuse`, the
     spline_apply of X in the same program; returns the output or None."""
+    # UNPACK: the parameters, read once into the typed request; the route's
+    # image and capabilities; X and the weights as owners of the program.
     var b = native_loaded_module("builtins")
     var fields = py_fields(model)
     _spline_checks(fields)
@@ -1964,81 +1927,21 @@ def _spline_fit(model: PythonObject, values: PythonObject, weight_source: Python
     if periodic and nk <= k:
         raise Error("mojolearn: Periodic splines require degree < n_knots. Got n_knots=" + String(nk) + " and "
                     + "degree=" + String(k) + ".")
-    var p = EncProg()
-    var xo = p.put_x(values)
-    var sorts = not given and knot_kind == "quantile" and not weighted
-    # MOJOLEARN_SPLINE_FAST_FUSED: no n*d block when nothing sorts, and the
-    # count / min / max rows by the blocked units
-    var fused = _spline_fused(mode, entries)
-    var so = 0
-    if sorts:
-        so = p.work(n * d)
-    elif not fused:
-        so = p.alloc(n * d)
-    var st = p.alloc(6 * d)
-    var wd = nk + 2 * k
-    var knots = p.alloc(d * wd)
-    if fused:
-        _col_stats_blocked(p, xo, n, d, st)
-    else:
-        _cs(p, mode, entries, xo, n, d, st, False)
-    var uniform = 0
-    var kst = st
-    var base = 0
-    if given:
-        base = p.put_floats(cols, context)
-    elif knot_kind == "quantile":
-        base = p.alloc(d * nk)
-        if not weighted:
-            # `_grid(pr, [nk - 1], nk, 1)`
-            var qf = p.alloc(nk)
-            var levels = List[Float64]()
-            levels.append(Float64(nk - 1))
-            var lo = p.put_floats(levels, context)
-            _stage(p.prog.program, OP_GRID, nk, lo, nk, 1, qf)
-            _stage(p.prog.program, OP_SORT_COLS, d, xo, n, d, so, 0)
-            _stage(p.prog.program, OP_QUANTILE, d * nk, so, n, d, qf, nk, base, st)
-        else:
-            # `_weighted_groups` over the X input already in the arena, then
-            # `_weighted_levels` at the levels c2_grid KIND 2 writes
-            var gs = p.work(n * d)
-            var ug = p.alloc(2 * n * d)
-            var ucnt = p.alloc(d)
-            var codes = p.alloc(n * d)
-            _stage(p.prog.program, OP_SORT_COLS, d, xo, n, d, gs, 1)
-            _stage(p.prog.program, OP_UNIQUE_COLS, d, gs, n, d, ug, ucnt)
-            _stage(p.prog.program, OP_LOOKUP, n * d, xo, n, d, ug, n, ucnt, codes)
-            var wo = p.put(w, n)
-            _stage(p.prog.program, OP_KBINS_GW, d, codes, n, d, wo, ug + n * d)
-            var nb = List[Int]()
-            for _ in range(d):  # driver-loop: one level row per column
-                nb.append(nk - 1)
-            var lv = p.alloc(d * nk)
-            var grid_nb = p.put_floats(_to_floats(nb), context)
-            _stage(p.prog.program, OP_GRID, d * nk, grid_nb, nk, 2, lv)
-            var wq_nb = p.put_floats(_to_floats(nb), context)
-            _stage(p.prog.program, OP_KBINS_WQ, d, ug, n, d, ucnt, wq_nb, nk - 1, lv, 0, base)
-    else:
-        base = p.alloc(d * nk)
-        uniform = 1
-        if weighted and wl < n:
-            # the positive-weight rows on the device
-            kst = p.alloc(6 * d)
-            var wo = p.put(w, n)
-            var ro = p.alloc(n)
-            _ = enc_sel(p.prog, wo, n, 1, 1, ro)
-            var xz = p.alloc(wl * d)
-            _stage(p.prog.program, OP_RGATHER, wl * d, xo, d, ro, xz)
-            _cs(p, mode, entries, xz, wl, d, kst, False)
-    _stage(p.prog.program, OP_SPLINE_KNOTS, d, base, nk, d, k, knots, uniform, kst, 1 if periodic else 0)
-    var nspl = nk - 1 if periodic else nk + k - 1
     var bias = _truth(fields["include_bias"])
-    var W = d * (nspl if bias else nspl - 1)
-    var out = 0
-    if fuse:
-        out = p.output(n * W, entries)
-        _stage(p.prog.program, OP_SPLINE_APPLY, n * d, xo, n, d, knots, nk, k, extrap, W, 1 if bias else 0, out)
-    var ran = p.run(entries, context, model)
+    var W = spline_features(d, nk, k, periodic, bias)
+    var wd = nk + 2 * k
+    var kind = SPL_KNOTS_GIVEN if given else (SPL_KNOTS_QUANTILE if knot_kind == "quantile" else SPL_KNOTS_UNIFORM)
+    var p = EncProg()
+    var x = p.own_x(values)
+    var request = SplineFit(n, d, x, k, nk, kind, cols^, extrap, bias, weighted, p.own(w, n) if weighted else NONE, wl,
+                            _spline_fused(mode, entries), (_fam(mode, entries) & IDN_STATS_BLOCKED) != 0, fuse)
+    # RUN: the typed stages (bindings/prep_encode_spline_run.mojo), then the typed run.
+    var plan = spline_fit_stage(p.prog, request, caps.has_out)
+    var st = plan.stats
+    var knots = plan.knots
+    var out = plan.applied
+    var ran = p.run_caps(entries, context, caps)
+    # PACK: the missing-value refusal, then the fitted knots.
     _no_nan(fields, ran, st, d, n)
     var output = context["output_context"]
     py_setitem(fields, "_knots", _take1(ran, knots, d * wd, context))
@@ -2067,36 +1970,34 @@ def _spline_transform(model: PythonObject, values: PythonObject, context: Python
     """SplineTransformer.transform: spline_apply over the fitted knots (with
     the column statistics when a refusal reads them) and, for order 'F',
     p2m_transpose into the output."""
+    # UNPACK: the parameters and fitted fields, read once into the typed
+    # request; X and the fitted knots as owners of the program.
     var fields = py_fields(model)
     var n = Int(py=values[3])
     var d = Int(py=values[4])
     _check_width(model, d)
     var mode = fields["numeric_mode_"]
     var entries = scaler_entries(model, mode, context)
+    var caps = enc_caps(model, entries)
     var W = Int(py=fields["n_features_out_"])
     var extrap = _extrapolation(fields["extrapolation"])
     var fortran = _is_str(fields["order"]) and String(fields["order"]) == "F"
     var missing_error = _is_str(fields["handle_missing"]) and String(fields["handle_missing"]) == "error"
     var extrap_error = _is_str(fields["extrapolation"]) and String(fields["extrapolation"]) == "error"
-    var p = EncProg()
-    var xo = p.put_x(values)
-    var ko = p.put_fitted(model, "_knots", fields["_knots"], context)
-    var out = p.alloc(n * W) if fortran else p.output(n * W, entries)
-    var st = p.alloc(6 * d)
     var check = extrap_error or missing_error
-    if check:
-        if _spline_fused(mode, entries):
-            _col_stats_blocked(p, xo, n, d, st)
-        else:
-            _cs(p, mode, entries, xo, n, d, st, False)
-    _stage(p.prog.program, OP_SPLINE_APPLY, n * d, xo, n, d, ko, Int(py=fields["_nk"]), Int(py=fields["_k"]), extrap, W,
-           1 if _truth(fields["include_bias"]) else 0, out)
-    var fo = 0
-    var transposed = fortran and n * W > 0
-    if transposed:
-        fo = p.output(n * W, entries)
-        _stage(p.prog.program, OP_TRANSPOSE, n * W, out, n, W, fo)
-    var ran = p.run(entries, context, model)
+    var knots = _fitted_flat(model, "_knots", fields["_knots"], context)
+    var knots_words = Int(py=knots[2])
+    var p = EncProg()
+    var x = p.own_x(values)
+    var request = SplineApply(n, d, x, p.own(knots[1], knots_words), knots_words, Int(py=fields["_nk"]),
+                              Int(py=fields["_k"]), extrap, W, _truth(fields["include_bias"]), fortran, check,
+                              check and _spline_fused(mode, entries),
+                              check and (_fam(mode, entries) & IDN_STATS_BLOCKED) != 0)
+    # RUN: the typed stages (bindings/prep_encode_spline_run.mojo), then the typed run.
+    var plan = spline_transform_stage(p.prog, request, caps.has_out)
+    var ran = p.run_caps(entries, context, caps)
+    # PACK: the refusals, then the block in the requested order.
+    var st = plan.stats
     if check:
         _no_nan(fields, ran, st, d, n)
     if extrap_error:
@@ -2105,14 +2006,14 @@ def _spline_transform(model: PythonObject, values: PythonObject, context: Python
         for j in range(d):  # driver-loop: over the per-column knot limits (feature metadata)
             if Float64(_word(ran, st + 3 * d + j)) < Float64(py=lows[j]) or Float64(_word(ran, st + 4 * d + j)) > Float64(py=highs[j]):
                 raise Error("mojolearn: X contains values beyond the limits of the knots")
-    if transposed:
-        if fo == OUT_MARK:
+    if plan.transposed != NONE:
+        if plan.transposed == OUT_MARK:
             return _take_f(ran[1][0], 0, n, W, context)
-        return _take_f(ran[0][0], fo, n, W, context)
+        return _take_f(ran[0][0], plan.transposed, n, W, context)
     if fortran:
         # an empty block
         return classical_wrap_array(py_call(context["array_type"], "f"), Python.tuple(n, W), "<f4", "F", context["output_context"])
-    return _take2(ran, out, n, W, context)
+    return _take2(ran, plan.applied, n, W, context)
 
 
 # ---------------------------------------------------------------- targets
