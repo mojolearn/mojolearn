@@ -394,6 +394,11 @@ VERIFICATION_DOORS = {
                                     # `estimator.receipt(X, y)` (2026-11-20): the same kind of door, onto
                                     # the receipt and `reproduce` tool; no lane runs it
                                     ("CheckMixin", "receipt"): ("_reproduce",)},
+    # `search.check(X)` (2026-11-18, the searches' check of their fitted `best_estimator_`): the same
+    # door on the search base, importing the same module; no lane runs it. Without this entry the
+    # import put `_verify_reference.py`, and with it verify_reference/table.json, in every lane's reach
+    # (tools/test_lane_select.py::test_package_modules_the_verifier_alone_uses_are_unreachable, 2026-11-21).
+    os.path.join(PKG, "model_selection.py"): {("_BaseSearch", "check"): ("_verify_check",)},
 }
 
 _BINDING_RE = re.compile(r"_mojolearn[a-z0-9_]*")
