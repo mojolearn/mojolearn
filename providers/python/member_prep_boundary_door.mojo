@@ -69,7 +69,7 @@ from core.prep_member import (
     PREP_POLY_PARAM_COUNT, PREP_QUANTILE_PARAM_COUNT, PREP_POWER_PARAM_COUNT,
     PREP_BLOCK_EXTRA, PREP_BLOCK_ANCHOR, PREP_BLOCK_ANCHOR_KIND,
     PREP_KIND_IMPUTER, PREP_IMPUTER_PARAM_COUNT,
-    PREP_ROUTE_OUT, PREP_ROUTE_SCRATCH, PREP_ROUTE_RANGES, PREP_ROUTE_DEV_PUT,
+    PREP_ROUTE_OUT, PREP_ROUTE_SCRATCH, PREP_ROUTE_RANGES, PREP_ROUTE_DEV_PUT, PREP_ROUTE_TAKE_ROWS,
 )
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free,
@@ -135,6 +135,10 @@ def _route_admit(model: PythonObject, entries: PythonObject, context: PythonObje
         flags |= PREP_ROUTE_RANGES
     if caps.dev_put:
         flags |= PREP_ROUTE_DEV_PUT
+        # The device row gather of a fold (the door's DeviceRows test, read
+        # once here; the door per run).
+        if py_get(entries, "x_prep_dev_take_rows") is not None:
+            flags |= PREP_ROUTE_TAKE_ROWS
     # The image words of the preprocessing route (the scaler member's): the
     # member table key this family is published under.
     var calls = scaler_door_calls(model, entries, context) if scaler_route else scaler_door_calls(entries)

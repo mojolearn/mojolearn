@@ -90,8 +90,22 @@ PREP3_MAXABS) is not a member route: the admit answers False there and the
 caller keeps the door.
 
 Views: X dense row-major host float32 (NaN allowed, as the estimator allows
-it); no y (ignored), no sample weights (refused), no row or column index,
-no device-home view. `call.fit_output = MEMBER_OP_TRANSFORM` writes the
+it); no y (ignored), no sample weights (refused), no column index, no
+device-home view. ROW INDEX (MEMBER_CAN_ROW_INDEX): `call.row_index` a
+dense host int32 / int64 vector of rows of the WHOLE X in `call.x` (bounds
+checked; repeats allowed); the operation reads those rows, `dst` has one
+row per index. On a device route whose image has the range runner, the put
+and the device row gather, the whole X is put (or found resident) and the
+fold is taken on the device; elsewhere the fold's rows are gathered on the
+host. SCOPE (MEMBER_CAN_SCOPE): with `call.scope` >= 0 and `call.pin` != 0
+on such a route, the whole X (a fold's base at any size, a plain X from the
+scope's floor up) is kept resident in the caller's scope cache: one scope
+read, one cache lease and one typed lookup per operation, as the door.
+When the cache publishes X it keeps `call.pin` as the entry's pin (one
+reference the scope drops at its close) and the call answers
+`call.value = 1.0`; otherwise `call.value = 0.0` and the pin stays the
+caller's. A caller hands `pin` only for X's own buffer, never for a
+gathered fold. `call.fit_output = MEMBER_OP_TRANSFORM` writes the
 training rows' transform to `dst` (rows x features): in the fit's own
 program when rows * features < 2^27 (the door's fused fit_transform), else
 the fit then the transform program, as the door.
@@ -150,7 +164,8 @@ from bindings.prep_encode_imputer_run import (
     ImputerFit, ImputerApply, imputer_fit_stage, imputer_transform_stage, IMP_CONSTANT,
 )
 from core.member_abi import (
-    MemberCall, MemberMatrix, MEMBER_F32, MEMBER_F64,
+    MemberCall, MemberMatrix, MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_I64,
+    MEMBER_CAN_SCOPE, MEMBER_CAN_ROW_INDEX,
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_OUTPUTS,
     MEMBER_OP_TRANSFORM, MEMBER_OP_INVERSE_TRANSFORM, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT,
     MEMBER_CAN_FIT, MEMBER_CAN_TRANSFORM, MEMBER_CAN_INVERSE_TRANSFORM, MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT,
@@ -161,6 +176,9 @@ from core.member_families import MEMBER_FAMILY_PREP
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
+from core.host_parallel import host_parallelize
+from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
+from bindings.arena_cache_run import arena_scope_floor, arena_scope_cache, arena_cache_find_or_put
 
 comptime PREP_KIND_ROBUST = 0
 comptime PREP_KIND_MAXABS = 1
@@ -195,6 +213,8 @@ comptime PREP_ROUTE_OUT = 1
 comptime PREP_ROUTE_SCRATCH = 2
 comptime PREP_ROUTE_RANGES = 4
 comptime PREP_ROUTE_DEV_PUT = 8
+#: The image exports the device row gather (`x_prep_dev_take_rows`).
+comptime PREP_ROUTE_TAKE_ROWS = 16
 
 #: The door's limits: the fused fit_transform and the output region
 #: (bindings/robust_native_pack.mojo), the direct put (x_prep_native_owner_door).
@@ -374,13 +394,145 @@ def _dense(view: MemberMatrix, what: String, estimator: String) raises:
 
 
 def _whole(call: _Call, estimator: String) raises:
-    if call[].row_index.rows > 0 or call[].column_index.rows > 0:
-        raise Error("TypeError: a " + estimator + " member reads whole host views (no row or column index)")
+    """Every column of X; a row index is a dense host int32 / int64 vector
+    (the fold's rows of the WHOLE X the caller hands, MEMBER_CAN_ROW_INDEX)."""
+    if call[].column_index.rows > 0:
+        raise Error("member ABI: a " + estimator + " member reads every column of X (no column index)")
+    var index = call[].row_index
+    if index.rows > 0 and not ((index.dtype == MEMBER_I32 or index.dtype == MEMBER_I64) and index.cols == 1
+                               and index.dense_host(index.dtype)):
+        raise Error("member ABI: a " + estimator + " member reads a dense host int32 / int64 row index vector")
+
+
+def _rows(call: _Call) -> Int:
+    """The rows an operation reads: the row index's length, else X's."""
+    return call[].row_index.rows if call[].row_index.rows > 0 else call[].x.rows
+
+
+struct PrepXHeld(Movable):
+    """Words X's input record addresses beyond the caller's views, owned by
+    one operation and named again after its program ran: the fold's rows
+    gathered on the host (a route without the device row gather) and an
+    int32 row index widened to the int64 numbers the device gather reads."""
+    var gathered: List[Float32]
+    var indices: List[Int64]
+
+    def __init__(out self):
+        self.gathered = List[Float32]()
+        self.indices = List[Int64]()
+
+
+def _fold_rows(call: _Call, mut held: PrepXHeld, gather: Bool) raises -> Int:
+    """The fold's row numbers, bounds-checked against X's rows, split across
+    the host's workers: with `gather`, its rows copied into `held.gathered`
+    (0 returned); else the address of int64 numbers (the caller's, or an
+    int32 index widened into `held.indices`). Once per operation."""
+    var n = call[].row_index.rows
+    var base = call[].x.rows
+    var d = call[].x.cols
+    var wide = call[].row_index.dtype == MEMBER_I64
+    var widen = not gather and not wide
+    if gather and len(held.gathered) == 0:
+        held.gathered = List[Float32](length=max(n * d, 1), fill=Float32(0))
+    if widen and len(held.indices) == 0:
+        held.indices = List[Int64](length=n, fill=Int64(0))
+    var tasks = host_predict_task_count_work(n, n * d if gather else n)
+    var chunk = host_predict_chunk(n, tasks)
+    var bad = List[Int](length=tasks, fill=0)
+    var flags = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=Int(bad.unsafe_ptr()))
+    var source = call[].row_index.data
+    var x = _F32P(unsafe_from_address=call[].x.data)
+    var into = _F32P(unsafe_from_address=Int(held.gathered.unsafe_ptr()))
+    var wider = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(held.indices.unsafe_ptr()))
+
+    def task(worker: Int) {imm chunk, imm n, imm base, imm d, imm wide, imm gather, imm widen, imm source, imm flags,
+                           imm x, imm into, imm wider}:
+        var begin = worker * chunk
+        var end = min(begin + chunk, n)
+        var out_of_range = 0
+        for r in range(begin, end):
+            var row = Int(MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=source)[r]) if wide else Int(
+                MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=source)[r])
+            if row < 0 or row >= base:
+                out_of_range = 1
+                continue
+            if gather:
+                unsafe_memcpy(dest=into + r * d, src=x + row * d, count=d)
+            elif widen:
+                wider[r] = Int64(row)
+        flags[worker] = out_of_range
+
+    host_parallelize(task, tasks)
+    for w in range(tasks):  # driver-loop: over the workers' range flags
+        if bad[w] != 0:
+            raise Error("IndexError: a row index is out of range for X's " + String(base) + " rows")
+    if gather:
+        return 0
+    return Int(held.indices.unsafe_ptr()) if widen else source
+
+
+def _resident(call: _Call, words: Int, rows: Bool) raises -> Int:
+    """The store id of X's resident copy in the caller's scope (found, or put
+    once and published with `call.pin` as the entry's pin), -1 when the call
+    keeps nothing resident: no scope, nothing pinned, or below the scope's
+    floor (a row-gathered base at any size, as the door). `call.value` = 1
+    when the cache KEPT `call.pin` (the scope drops that reference at its
+    close); 0 left as is otherwise (found, lost a race, or not kept)."""
+    if call[].scope < 0 or call[].pin == 0:
+        return -1
+    if not rows and words < arena_scope_floor(call[].scope):
+        return -1
+    var store = call[].route.second
+    var cache = arena_scope_cache(call[].scope, store, "x_prep")
+    var put = arena_cache_find_or_put(cache, store, call[].x.data, words, call[].pin)
+    if put.pinned:
+        call[].value = 1.0
+    return put.store_id
+
+
+def _x_record(call: _Call, offset: Int, words: Int, mut held: PrepXHeld, inout: Bool) raises -> XprepRunInput:
+    """X as a program's input record at `offset` (`words` = the rows the
+    operation reads times X's width). The door's rules
+    (bindings/x_prep_native_owner_door.mojo `xprep_run_records`), from the
+    route words read at admit: on a device route with the range runner a
+    whole X stays resident in the caller's scope when it is pinned, and a
+    fold (`call.row_index`) is taken on the device out of the resident (or
+    put) whole X; without the device gather the fold's rows are gathered on
+    the host; otherwise X is copied into the arena, or put on the device
+    directly when the image has the put and X is large. An in-out input is
+    never resident nor device-gathered."""
+    var flags = call[].route.flags
+    # The range runner is certain for any scratch only with an output or a
+    # scratch entry (`_execute_ranges`): a resident or gathered record needs it.
+    var device = ((flags & PREP_ROUTE_DEV_PUT) != 0 and (flags & PREP_ROUTE_RANGES) != 0
+                  and (flags & (PREP_ROUTE_OUT | PREP_ROUTE_SCRATCH)) != 0 and not inout)
+    var d = call[].x.cols
+    var base_words = call[].x.rows * d
+    if call[].row_index.rows > 0:
+        var n = call[].row_index.rows
+        if device and (flags & PREP_ROUTE_TAKE_ROWS) != 0:
+            var indices = _fold_rows(call, held, False)
+            var source = _resident(call, base_words, True)
+            return XprepRunInput(offset, words, call[].x.data, source, source < 0, base_words, True, indices, n, d)
+        _ = _fold_rows(call, held, True)
+        var put_rows = (flags & PREP_ROUTE_DEV_PUT) != 0 and words >= _PUT_WORDS
+        return XprepRunInput(offset, words, Int(held.gathered.unsafe_ptr()), -1, put_rows, words, False, 0, 0, 0)
+    if device:
+        var source = _resident(call, base_words, False)
+        if source >= 0:
+            return XprepRunInput(offset, words, 0, source, False, 0, False, 0, 0, 0)
+    var put = (flags & PREP_ROUTE_DEV_PUT) != 0 and words >= _PUT_WORDS
+    return XprepRunInput(offset, words, call[].x.data, -1, put, words, False, 0, 0, 0)
+
+
+def _x_input(call: _Call, words: Int, mut held: PrepXHeld) raises -> XprepRunInput:
+    return _x_record(call, 0, words, held, False)
 
 
 def _x_input(call: _Call, words: Int) -> XprepRunInput:
-    # The door's record of X: copied into the arena by the transport, or put
-    # on the device directly when the image has the put and X is large.
+    # A whole X of a member that reads neither a scope nor a row index (the
+    # Select family): copied into the arena by the transport, or put on the
+    # device directly when the image has the put and X is large.
     var put = (call[].route.flags & PREP_ROUTE_DEV_PUT) != 0 and words >= _PUT_WORDS
     return XprepRunInput(0, words, call[].x.data, -1, put, words, False, 0, 0, 0)
 
@@ -400,6 +552,10 @@ def _execute_ranges(call: _Call, mut arena: List[Float32], host: Int, scratch: I
     var has_scratch = (flags & PREP_ROUTE_SCRATCH) != 0
     var device_scratch = scratch > 0 and (has_out or has_scratch)
     var ranges = (scratch == 0 or has_out or has_scratch) and (flags & PREP_ROUTE_RANGES) != 0
+    if not ranges:
+        for i in range(len(inputs)):  # driver-loop: over the program's input records
+            if inputs[i].source >= 0 or inputs[i].rows:
+                raise Error("RuntimeError: x_prep member: a resident or row-gathered input needs the range runner")
     var key = call[].route.second
     var owned = List[Int](capacity=2 * len(inputs))
     try:
@@ -424,7 +580,7 @@ def _fit_robust(slot: _Slot, call: _Call) raises:
         raise Error("TypeError: a " + estimator + " member takes no sample_weight")
     if call[].fit_output != 0 and call[].fit_output != MEMBER_OP_TRANSFORM:
         member_unsupported(estimator, call[].fit_output)
-    var n = call[].x.rows
+    var n = _rows(call)
     var d = call[].x.cols
     var project = call[].fit_output == MEMBER_OP_TRANSFORM
     if project:
@@ -466,12 +622,14 @@ def _fit_robust(slot: _Slot, call: _Call) raises:
     var arena = List[Float32](length=max(host + (0 if device_scratch else scratch), 1), fill=Float32(0))
     var fraction_values: List[Float32] = [Float32(lo / 100.0), Float32(0.5), Float32(hi / 100.0)]
     var inputs = List[XprepRunInput](capacity=2)
-    inputs.append(_x_input(call, n * d))
+    var held = PrepXHeld()
+    inputs.append(_x_input(call, n * d, held))
     inputs.append(XprepRunInput(fractions, 3, Int(fraction_values.unsafe_ptr()), -1, False, 0, False, 0, 0, 0))
     var program = List[Int32]()
     robust_fit_program(program, select, blocked, unit, fused, centering, scaling, n, d, blocks, sorted, part, stats,
         fractions, q, center, scale, dest)
     _execute(call, arena, host, scratch, 0, 0, program, inputs)
+    _ = held^  # the fold words X's record addresses live past the run
     _ = fraction_values^
     slot[].clear()
     var ap = _F32P(unsafe_from_address=Int(arena.unsafe_ptr()))
@@ -499,7 +657,7 @@ def _transform_robust(slot: _Slot, call: _Call) raises:
     _whole(call, estimator)
     _dense(call[].x, "X", estimator)
     _dense(call[].dst, "the output buffer", estimator)
-    var n = call[].x.rows
+    var n = _rows(call)
     var d = slot[].features
     if call[].x.cols != d:
         raise Error("RobustScaler input feature count differs from fit")
@@ -517,7 +675,8 @@ def _transform_robust(slot: _Slot, call: _Call) raises:
     var host = dest + (0 if dev_out else n * d)
     var arena = List[Float32](length=max(host, 1), fill=Float32(0))
     var inputs = List[XprepRunInput](capacity=3)
-    inputs.append(_x_input(call, n * d))
+    var held = PrepXHeld()
+    inputs.append(_x_input(call, n * d, held))
     if has_center:
         inputs.append(XprepRunInput(center_at, d, Int(slot[].center.unsafe_ptr()), -1, False, 0, False, 0, 0, 0))
     if has_scale:
@@ -527,6 +686,7 @@ def _transform_robust(slot: _Slot, call: _Call) raises:
     # A large output comes back through the image's output region straight
     # into the caller's buffer (the door's output store).
     _execute(call, arena, host, 0, call[].dst.data if dev_out else 0, n * d if dev_out else 0, program, inputs)
+    _ = held^  # the fold words X's record addresses live past the run
     if not dev_out:
         unsafe_memcpy(dest=_F32P(unsafe_from_address=call[].dst.data),
             src=_F32P(unsafe_from_address=Int(arena.unsafe_ptr())) + dest, count=n * d)
@@ -543,7 +703,7 @@ def _fit_maxabs(slot: _Slot, call: _Call) raises:
         raise Error("TypeError: a " + estimator + " member takes no sample_weight")
     if call[].fit_output != 0 and call[].fit_output != MEMBER_OP_TRANSFORM:
         member_unsupported(estimator, call[].fit_output)
-    var n = call[].x.rows
+    var n = _rows(call)
     var d = call[].x.cols
     var project = call[].fit_output == MEMBER_OP_TRANSFORM
     if project:
@@ -571,8 +731,10 @@ def _fit_maxabs(slot: _Slot, call: _Call) raises:
     var program = List[Int32]()
     var ma = maxabs_fit_program(program, blocked, work, fused, n, d, blocks, host, sc, dest)
     var inputs = List[XprepRunInput](capacity=1)
-    inputs.append(_x_input(call, n * d))
+    var held = PrepXHeld()
+    inputs.append(_x_input(call, n * d, held))
     _execute(call, arena, host, scratch, 0, 0, program, inputs)
+    _ = held^  # the fold words X's record addresses live past the run
     var ap = _F32P(unsafe_from_address=Int(arena.unsafe_ptr()))
     # scikit-learn refuses an infinite input (NaN alone is allowed); the
     # column maxima of |X| are infinite exactly for those columns.
@@ -601,7 +763,7 @@ def _transform_maxabs(slot: _Slot, call: _Call) raises:
     _whole(call, estimator)
     _dense(call[].x, "X", estimator)
     _dense(call[].dst, "the output buffer", estimator)
-    var n = call[].x.rows
+    var n = _rows(call)
     var d = slot[].features
     if call[].x.cols != d:
         raise Error("MaxAbsScaler input feature count differs from fit")
@@ -614,13 +776,15 @@ def _transform_maxabs(slot: _Slot, call: _Call) raises:
     var host = dest + (0 if dev_out else n * d)
     var arena = List[Float32](length=max(host, 1), fill=Float32(0))
     var inputs = List[XprepRunInput](capacity=2)
-    inputs.append(_x_input(call, n * d))
+    var held = PrepXHeld()
+    inputs.append(_x_input(call, n * d, held))
     inputs.append(XprepRunInput(n * d, d, Int(slot[].scale.unsafe_ptr()), -1, False, 0, False, 0, 0, 0))
     var program = List[Int32]()
     _stage(program, 3, n * d, 0, n * d, d, -1, n * d, dest)
     # A large output comes back through the image's output region straight
     # into the caller's buffer (the door's output store).
     _execute(call, arena, host, 0, call[].dst.data if dev_out else 0, n * d if dev_out else 0, program, inputs)
+    _ = held^  # the fold words X's record addresses live past the run
     if not dev_out:
         unsafe_memcpy(dest=_F32P(unsafe_from_address=call[].dst.data),
             src=_F32P(unsafe_from_address=Int(arena.unsafe_ptr())) + dest, count=n * d)
@@ -652,7 +816,7 @@ def _transform_stateless(slot: _Slot, call: _Call) raises:
     _whole(call, estimator)
     _dense(call[].x, "X", estimator)
     _dense(call[].dst, "the output buffer", estimator)
-    var n = call[].x.rows
+    var n = _rows(call)
     var d = slot[].features
     if call[].x.cols != d:
         raise Error("mojolearn: X has " + String(call[].x.cols) + " features, " + estimator + " was fitted with "
@@ -662,7 +826,8 @@ def _transform_stateless(slot: _Slot, call: _Call) raises:
     var words = n * d
     var program = List[Int32]()
     var inputs = List[XprepRunInput](capacity=2)
-    inputs.append(_x_input(call, words))
+    var held = PrepXHeld()
+    inputs.append(_x_input(call, words, held))
     if slot[].kind() == PREP_KIND_BINARIZER:
         # X, the threshold word, then the output as arena words (the door's
         # binarizer branch; no output region).
@@ -675,6 +840,7 @@ def _transform_stateless(slot: _Slot, call: _Call) raises:
         _stage(program, OP_BINARIZE, words, 0, words, words, out)
         var arena = List[Float32](length=max(host, 1), fill=Float32(0))
         _execute(call, arena, host, 0, 0, 0, program, inputs)
+        _ = held^  # the fold words X's record addresses live past the run
         _ = threshold^
         unsafe_memcpy(dest=_F32P(unsafe_from_address=call[].dst.data),
             src=_F32P(unsafe_from_address=Int(arena.unsafe_ptr())) + out, count=words)
@@ -689,6 +855,7 @@ def _transform_stateless(slot: _Slot, call: _Call) raises:
     _stage(program, OP_NORMALIZE, n, 0, n, d, Int(slot[].words[1]), host if dev_out else words)
     var arena = List[Float32](length=max(host, 1), fill=Float32(0))
     _execute(call, arena, host, 0, call[].dst.data if dev_out else 0, words if dev_out else 0, program, inputs)
+    _ = held^  # the fold words X's record addresses live past the run
     if not dev_out:
         unsafe_memcpy(dest=_F32P(unsafe_from_address=call[].dst.data),
             src=_F32P(unsafe_from_address=Int(arena.unsafe_ptr())) + words, count=words)
@@ -719,7 +886,7 @@ def _apply_begin(slot: _Slot, call: _Call, out_cols: Int) raises:
     if call[].x.cols != d:
         raise Error("mojolearn: X has " + String(call[].x.cols) + " features, " + estimator + " was fitted with "
                     + String(d))
-    if call[].dst.rows != call[].x.rows or call[].dst.cols != out_cols:
+    if call[].dst.rows != _rows(call) or call[].dst.cols != out_cols:
         raise Error("ValueError: the output buffer holds " + String(out_cols) + " values per row of X")
 
 
@@ -777,7 +944,7 @@ def _transform_poly(slot: _Slot, call: _Call) raises:
     term starts, the products) into the caller's row-major dst."""
     var nout = Int(slot[].scalars[1]) if slot[].fitted else 0
     _apply_begin(slot, call, nout)
-    var n = call[].x.rows
+    var n = _rows(call)
     var d = slot[].features
     if len(slot[].scale) != nout + 1:
         raise Error("RuntimeError: PolynomialFeatures term table does not match n_output_features_")
@@ -791,13 +958,15 @@ def _transform_poly(slot: _Slot, call: _Call) raises:
     if host > _INT32_BOUND:
         raise Error("ValueError: x_prep: the program exceeds the native Int32 indexing bound")
     var inputs = List[XprepRunInput](capacity=3)
-    inputs.append(_x_input(call, n * d))
+    var held = PrepXHeld()
+    inputs.append(_x_input(call, n * d, held))
     inputs.append(XprepRunInput(io, len(slot[].center), Int(slot[].center.unsafe_ptr()), -1, False, 0, False, 0, 0, 0))
     inputs.append(XprepRunInput(so, len(slot[].scale), Int(slot[].scale.unsafe_ptr()), -1, False, 0, False, 0, 0, 0))
     var program = List[Int32]()
     _stage(program, OP_POLY, words, 0, n, d, io, so, nout, out)
     var arena = List[Float32](length=host, fill=Float32(0))
     _execute(call, arena, host, 0, 0, 0, program, inputs)
+    _ = held^  # the fold words X's record addresses live past the run
     unsafe_memcpy(dest=_F32P(unsafe_from_address=call[].dst.data),
         src=_F32P(unsafe_from_address=Int(arena.unsafe_ptr())) + out, count=words)
     _ = arena^
@@ -807,7 +976,7 @@ def _fit_quantile(slot: _Slot, call: _Call) raises:
     """The door's `_quantile_fit`: the optional keyed row subsample
     (f2_perm_rows, p2m_rgather), then `_quantile_program`."""
     _fit_begin(slot, call)
-    var n_all = call[].x.rows
+    var n_all = _rows(call)
     var d = call[].x.cols
     var n = n_all
     var subsample = Int(slot[].words[3])
@@ -818,7 +987,8 @@ def _fit_quantile(slot: _Slot, call: _Call) raises:
     var layout = PrepLayout(n_all * d, slot[].words[7] != 0.0)
     var program = List[Int32]()
     var inputs = List[XprepRunInput](capacity=3)
-    inputs.append(_x_input(call, n_all * d))
+    var held = PrepXHeld()
+    inputs.append(_x_input(call, n_all * d, held))
     var xo = 0
     # The uint64 seed's (low, high) 32-bit words (`_seed_words`).
     var seed_words = List[Float32](length=2, fill=Float32(0))
@@ -841,6 +1011,7 @@ def _fit_quantile(slot: _Slot, call: _Call) raises:
     var level: List[Float32] = [Float32(nq - 1)]
     inputs.append(XprepRunInput(nb, 1, Int(level.unsafe_ptr()), -1, False, 0, False, 0, 0, 0))
     var arena = _run_layout(call, program, layout, inputs)
+    _ = held^  # the fold words X's record addresses live past the run
     _ = seed_words^
     _ = level^
     slot[].clear()
@@ -858,7 +1029,7 @@ def _fit_quantile(slot: _Slot, call: _Call) raises:
 def _apply_quantile(slot: _Slot, call: _Call, inverse: Bool) raises:
     """The door's `_quantile_apply`: one qt_apply / qt_inverse stage."""
     _apply_begin(slot, call, slot[].features)
-    var n = call[].x.rows
+    var n = _rows(call)
     var d = slot[].features
     var nq = Int(slot[].scalars[1])
     if len(slot[].center) != nq * d or len(slot[].scale) != nq:
@@ -873,7 +1044,8 @@ def _apply_quantile(slot: _Slot, call: _Call, inverse: Bool) raises:
     if host + (words if dev_out else 0) > _INT32_BOUND:
         raise Error("ValueError: x_prep: the program exceeds the native Int32 indexing bound")
     var inputs = List[XprepRunInput](capacity=3)
-    inputs.append(_x_input(call, words))
+    var held = PrepXHeld()
+    inputs.append(_x_input(call, words, held))
     inputs.append(XprepRunInput(qo, nq * d, Int(slot[].center.unsafe_ptr()), -1, False, 0, False, 0, 0, 0))
     inputs.append(XprepRunInput(ro, nq, Int(slot[].scale.unsafe_ptr()), -1, False, 0, False, 0, 0, 0))
     var program = List[Int32]()
@@ -882,6 +1054,7 @@ def _apply_quantile(slot: _Slot, call: _Call, inverse: Bool) raises:
     # A large output comes back through the image's output region straight
     # into the caller's buffer (the door's output store).
     _execute(call, arena, host, 0, call[].dst.data if dev_out else 0, words if dev_out else 0, program, inputs)
+    _ = held^  # the fold words X's record addresses live past the run
     if not dev_out:
         unsafe_memcpy(dest=_F32P(unsafe_from_address=call[].dst.data),
             src=_F32P(unsafe_from_address=Int(arena.unsafe_ptr())) + out, count=words)
@@ -893,7 +1066,7 @@ def _fit_power(slot: _Slot, call: _Call) raises:
     reads per fit (family word, fast flags, host-column binding, tier),
     then the Box-Cox refusal on the column minima, in the door's words."""
     _fit_begin(slot, call)
-    var n = call[].x.rows
+    var n = _rows(call)
     var d = call[].x.cols
     var method = Int(slot[].words[1])
     var standardize = slot[].words[2] != 0.0
@@ -909,8 +1082,10 @@ def _fit_power(slot: _Slot, call: _Call) raises:
     var scale = placed[5]
     var centered = placed[6]
     var inputs = List[XprepRunInput](capacity=1)
-    inputs.append(_x_input(call, n * d))
+    var held = PrepXHeld()
+    inputs.append(_x_input(call, n * d, held))
     var arena = _run_layout(call, program, layout, inputs)
+    _ = held^  # the fold words X's record addresses live past the run
     if method == 1:
         var base = _F32P(unsafe_from_address=Int(arena.unsafe_ptr()))
         for j in range(d):  # driver-loop: over the per-column minima (feature metadata)
@@ -936,13 +1111,14 @@ def _apply_power(slot: _Slot, call: _Call, inverse: Bool) raises:
     """The door's `_power_apply`: one pt_apply / pt_inverse stage over the
     fitted lambdas, standardization and anchors, in the door's layout."""
     _apply_begin(slot, call, slot[].features)
-    var n = call[].x.rows
+    var n = _rows(call)
     var d = slot[].features
     var standardize = len(slot[].center) > 0
     var anchored = len(slot[].anchor) > 0
     var words = n * d
     var inputs = List[XprepRunInput](capacity=6)
-    inputs.append(_x_input(call, words))
+    var held = PrepXHeld()
+    inputs.append(_x_input(call, words, held))
     var host = words
     var lo = host
     host += d
@@ -978,6 +1154,7 @@ def _apply_power(slot: _Slot, call: _Call, inverse: Bool) raises:
         ao, ko)
     var arena = List[Float32](length=max(host, 1), fill=Float32(0))
     _execute(call, arena, host, 0, call[].dst.data if dev_out else 0, words if dev_out else 0, program, inputs)
+    _ = held^  # the fold words X's record addresses live past the run
     if not dev_out:
         unsafe_memcpy(dest=_F32P(unsafe_from_address=call[].dst.data),
             src=_F32P(unsafe_from_address=Int(arena.unsafe_ptr())) + out, count=words)
@@ -986,18 +1163,24 @@ def _apply_power(slot: _Slot, call: _Call, inverse: Bool) raises:
 
 def _enc_run(call: _Call, mut prog: EncProgram, second: Int, output: Int) raises -> List[Float32]:
     """The encode door's `EncProg.run_caps` over the member's own input
-    records: owner 0 is the caller's X (put on the device when the image has
-    the put and X is large, as `_x_input`), owner 1 the second buffer at
+    records: owner 0 is the caller's X (`_x_record`: resident in the caller's
+    scope, gathered by the fold's row index, or put on the device when the
+    image has the put and X is large), owner 1 the second buffer at
     `second` (a fitted vector, or y), -1 the program's own words. `output`: the caller's buffer for the
     program's output region (0: none). Returns the host arena."""
     prog.check_bound()
+    var held = PrepXHeld()
     var inputs = List[XprepRunInput](capacity=len(prog.inputs))
     for i in range(len(prog.inputs)):  # driver-loop: over the program's input records
         var record = prog.inputs[i]
         if record.owner == 0:
-            var put = (call[].route.flags & PREP_ROUTE_DEV_PUT) != 0 and record.words >= _PUT_WORDS
-            inputs.append(XprepRunInput(record.offset, record.words, call[].x.data, -1, put, record.words, False, 0, 0,
-                0))
+            # X: a resident or gathered record never for an input a stage
+            # rewrites (the door's rule: in-out inputs are copied up).
+            var inout = False
+            for j in range(len(prog.inout_ranges) // 2):  # driver-loop: over the program's in-out input ranges
+                if prog.inout_ranges[2 * j] == record.offset and prog.inout_ranges[2 * j + 1] == record.offset + record.words:
+                    inout = True
+            inputs.append(_x_record(call, record.offset, record.words, held, inout))
         else:
             var address = record.address if record.owner < 0 else second
             inputs.append(XprepRunInput(record.offset, record.words, address, -1, False, 0, False, 0, 0, 0))
@@ -1007,6 +1190,7 @@ def _enc_run(call: _Call, mut prog: EncProgram, second: Int, output: Int) raises
     var arena = List[Float32](length=max(host + (0 if device_scratch else scratch), 1), fill=Float32(0))
     _execute_ranges(call, arena, host, scratch, output if prog.out_words > 0 else 0, prog.out_words,
         prog.stage_words(), inputs, prog.inout_ranges)
+    _ = held^  # the fold words X's record addresses live past the run
     return arena^
 
 
@@ -1021,7 +1205,7 @@ def _fit_imputer(slot: _Slot, call: _Call) raises:
     """The door's `_imputer_fit` over the caller's X: `imputer_fit_stage`,
     then the kept and indicator columns from the per-column counts."""
     _fit_begin(slot, call)
-    var n = call[].x.rows
+    var n = _rows(call)
     var d = call[].x.cols
     var w = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(slot[].words.unsafe_ptr()))
     var strategy = Int(w[1])
@@ -1066,7 +1250,7 @@ def _transform_imputer(slot: _Slot, call: _Call) raises:
     into the caller's dst when the image has one and the output is large."""
     var cols = len(slot[].extra) + len(slot[].anchor)
     _apply_begin(slot, call, cols)
-    var n = call[].x.rows
+    var n = _rows(call)
     var d = slot[].features
     if n * cols == 0:
         return
@@ -1251,11 +1435,14 @@ def _new_count(kind: Int) raises -> Int:
 def _prep_member(operation: Int, address: Int) raises -> Int:
     var call = _Call(unsafe_from_address=address)
     if operation == MEMBER_OP_CAPABILITIES:
-        var mask = MEMBER_CAN_FIT | MEMBER_CAN_TRANSFORM | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
+        # Every kind reads a fold's row index of the whole X and keeps a
+        # pinned X resident in the caller's scope (`_x_record`).
+        var mask = (MEMBER_CAN_FIT | MEMBER_CAN_TRANSFORM | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
+                    | MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE)
         if call[].state == 0:
             return mask | MEMBER_CAN_INVERSE_TRANSFORM  # the family's union
         # Kind-exact: only QuantileTransformer and PowerTransformer invert;
-        # no kind reads weights or index views.
+        # no kind reads weights or a column index.
         var held = _Slot(unsafe_from_address=_lookup(call[].state, False))
         if _invertible(held[].kind()):
             mask |= MEMBER_CAN_INVERSE_TRANSFORM
@@ -1292,6 +1479,8 @@ def _prep_member(operation: Int, address: Int) raises -> Int:
         return 0
     var slot = _Slot(unsafe_from_address=_lookup(call[].state, False))
     var kind = slot[].kind()
+    if operation == MEMBER_OP_FIT or operation == MEMBER_OP_TRANSFORM or operation == MEMBER_OP_INVERSE_TRANSFORM:
+        call[].value = 0.0  # 1 when the caller's scope kept `call.pin` (`_resident`)
     if operation == MEMBER_OP_FIT:
         if kind == PREP_KIND_BINARIZER or kind == PREP_KIND_NORMALIZER:
             _fit_stateless(slot, call)
