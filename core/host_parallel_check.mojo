@@ -21,7 +21,10 @@ from max.algorithm import sync_parallelize
 
 from core.host_parallel import (
     host_fp_env,
+    host_in_region,
+    host_nested_units,
     host_parallelize,
+    host_parallelize_items,
     host_parallelize_pool_env,
 )
 
@@ -85,6 +88,55 @@ def main() raises:
             if envs[i] & ~UInt64(0x3F) != env & ~UInt64(0x3F):
                 # the low six MXCSR bits are sticky exception FLAGS, not modes
                 print("  tasks", tasks, "task", i, "env", hex(envs[i]), "!= caller", hex(env))
+                bad += 1
+    # NESTED REGIONS (lane gbdt-host-par): no region is open outside a split;
+    # inside a task one is, the caller's own count becomes one, and a nested
+    # item split and a nested pool-env split run every item (on the task's
+    # thread) with the bits of their top-level forms.
+    comptime OUTER = 4
+    comptime INNER = 3
+    if host_in_region():
+        print("  a region reads open before any split")
+        bad += 1
+    var seen = List[Int](length=OUTER, fill=0)
+    var counts = List[Int](length=OUTER, fill=0)
+    var inner = List[Float64](length=OUTER * INNER, fill=Float64(-1.0))
+    var inner_pool = List[Float64](length=OUTER * INNER, fill=Float64(-1.0))
+    var n_seen = seen.unsafe_ptr()
+    var n_counts = counts.unsafe_ptr()
+    var n_inner = inner.unsafe_ptr()
+    var n_pool = inner_pool.unsafe_ptr()
+
+    def outer(o: Int) {imm n_seen, imm n_counts, imm n_inner, imm n_pool, imm a, imm b}:
+        n_seen.store(o, 1 if host_in_region() else 0)
+        n_counts.store(o, host_nested_units(16))
+
+        def item(i: Int) {imm n_inner, imm o, imm a, imm b}:
+            n_inner.store(o * INNER + i, a / b)
+
+        def pool_item(i: Int) {imm n_pool, imm o, imm a, imm b}:
+            n_pool.store(o * INNER + i, a / b)
+
+        host_parallelize_items(item, INNER)
+        host_parallelize_pool_env(pool_item, INNER)
+
+    host_parallelize(outer, OUTER)
+    if host_in_region():
+        print("  a region reads open after the join")
+        bad += 1
+    if host_nested_units(16) != 16:
+        print("  the caller's count is not kept outside a region")
+        bad += 1
+    for o in range(OUTER):
+        if seen[o] != 1 or counts[o] != 1:
+            print("  outer task", o, "in_region", seen[o], "nested units", counts[o])
+            bad += 1
+        for i in range(INNER):
+            if _bits(inner[o * INNER + i]) != _bits(oracle):
+                print("  nested item", o, i, "result", inner[o * INNER + i], "!= oracle", oracle)
+                bad += 1
+            if _bits(inner_pool[o * INNER + i]) != _bits(pool[0]):
+                print("  nested pool item", o, i, "result", inner_pool[o * INNER + i], "!= pool", pool[0])
                 bad += 1
     if bad:
         abort("host_parallel_check: FAIL (DEVIATION 5900): " + String(bad)

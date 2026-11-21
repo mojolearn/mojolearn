@@ -128,7 +128,11 @@ tools/identity_break.py on the gbdt-symmetric lane is the measurement.
 from std.math import exp, floor, fma, isfinite, log, log2, sqrt
 from std.memory import bitcast
 from std.sys.compile import is_defined
-from core.host_parallel import host_parallelize, host_parallelize_pool_env
+from core.host_parallel import (
+    host_nested_units,
+    host_parallelize,
+    host_parallelize_pool_env,
+)
 from core.host_predict_threads import (
     HostF32Ptr,
     HostU32Ptr,
@@ -1075,8 +1079,26 @@ def _gbdt_units(items: Int, work: Int) -> Int:
     `HOST_MIN_TASK_WORK` operations (below twice that the call stays on the
     calling thread). Every unit's fold is its own, so the count moves no
     bit; the tasks run in the calling thread's floating-point environment
-    (`host_parallelize`), the one these statements always ran in."""
-    return max(1, host_predict_task_count_work(items, work))
+    (`host_parallelize`), the one these statements always ran in.
+
+    THE NESTED RULE. A host fit is also run from inside a pool task: the
+    member set and the model-selection units fit their members on one host
+    task per core (`bindings/member_set_door.mojo`,
+    `bindings/msel_member_units_door.mojo`: bagging, stacking, voting,
+    cross-validation and search on a CPU route). A split launched from a
+    pool task is not run inline by the pool: its tasks are queued behind the
+    outer ones and the calling worker blocks until they finish
+    (`core/host_parallel.mojo`, NESTED REGIONS). So while any region is open
+    (`host_nested_units`) the count is ONE: the split's whole range runs on the
+    calling worker, in the environment the outer task installed. The outer
+    split already has one runnable task per core, so no core is given up,
+    there is never a second launch from inside a task (no deadlock) and
+    never more runnable threads than cores. Every split of the host GBDT fit
+    takes its count here or through `host_nested_units` (the ordered and
+    tree-CTR files), or launches through `host_parallelize_items` /
+    `host_parallelize_pool_env`, which apply the same rule themselves, so
+    the rule holds for the whole fit."""
+    return host_nested_units(host_predict_task_count_work(items, work))
 
 
 def _one_byte_rows(

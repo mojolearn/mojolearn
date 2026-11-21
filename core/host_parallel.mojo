@@ -57,14 +57,87 @@ on `dupes` (infer, batch), CPU column only; it now equals the CUDA column.
 
 `host_fp_env` / `host_fp_env_set` are exported for a caller that owns its
 own threads.
+
+NESTED REGIONS (lane gbdt-host-par, 2026-11-21). What `sync_parallelize`
+does when it is called from inside a task of the same pool, read from the
+published sources (`max/algorithm/backend/cpu/parallelize.mojo`, the
+runtime's `TaskGroup.wait`), not from a run: with more than one work item
+it never runs them inline. It queues every item on the one process pool
+and BLOCKS the calling worker in the runtime's wait until they are done.
+So an inner split from a pool task parks that worker; when the outer split
+holds every worker (one task per core, the member set's plan) no worker is
+left to run the inner items unless the runtime's wait helps, which nothing
+documents, and a pool that does help still runs outer and inner tasks
+interleaved on the same threads. Only one work item runs on the caller.
+
+`host_in_region()` is how a split learns that it may be inside a pool
+task: both entries count the regions that are open on the pool (a split
+with more than one task, from the launch to the join) in one process-wide
+word shared by every binding. A caller that sizes its own split asks it
+and takes ONE task when a region is open, which both entries run on the
+calling thread, in the environment the outer task already installed (the
+caller's, the one the inner tasks would have been pinned to). The count is
+per process, not per thread: it is never zero inside a pool task (no
+deadlock, never more runnable threads than cores), and a top-level split
+on another thread that overlaps an open region also runs on its caller
+(serial for that one split, the same bits).
 """
 from std.sys import llvm_intrinsic
 from std.sys.info import CompilationTarget
 from std.memory import stack_allocation
 
+from std.atomic import Atomic, Ordering
+
 from max.algorithm import sync_parallelize
 
 from core.launch_log import activity_host_split
+from core.shared_slot import SharedSlot
+
+
+struct _HostRegions(Defaultable, Movable):
+    """`open[0]`: how many host splits of more than one task are between
+    their launch and their join, in the whole process (module note, NESTED
+    REGIONS). One word, read and written with atomic operations only."""
+
+    var open: List[Int64]
+
+    def __init__(out self):
+        self.open = List[Int64](length=1, fill=Int64(0))
+
+
+comptime _HOST_REGIONS = SharedSlot[_HostRegions, "MojolearnHostRegionsV1"]
+
+
+def _host_regions_word() -> Int:
+    """The address of the open-region word, or 0 when the process slot could
+    not be made (then no region is counted and none is seen)."""
+    try:
+        var st = _HOST_REGIONS.get_or_create_ptr()
+        return Int(st[].open.unsafe_ptr())
+    except:
+        return 0
+
+
+@always_inline
+def _host_region_step(word: Int, step: Int64):
+    if word != 0:
+        _ = Atomic[Int64].fetch_add(
+            MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=word), step
+        )
+
+
+def host_in_region() -> Bool:
+    """True while any host split of more than one task is open in the
+    process, so always True on a thread that is running a pool task. A
+    caller that sizes its own split takes one task when it is True (module
+    note, NESTED REGIONS). One slot read and one atomic load per call: ask
+    once per split, never per row."""
+    var word = _host_regions_word()
+    if word == 0:
+        return False
+    return Atomic.load[ordering=Ordering.ACQUIRE](
+        MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=word)
+    ) != Int64(0)
 
 
 @always_inline
@@ -120,16 +193,68 @@ def host_parallelize[FuncType: def(Int) -> None](ref func: FuncType, n: Int):
         func(i)
         host_fp_env_set(saved)
 
+    # the region is open from the launch to the join (NESTED REGIONS);
+    # sync_parallelize does not raise, so the word is always stepped back
+    var regions = _host_regions_word()
+    _host_region_step(regions, Int64(1))
     sync_parallelize(task, n)
+    _host_region_step(regions, Int64(-1))
+
+
+def host_nested_units(units: Int) -> Int:
+    """The task count a caller's own rule gave, under the nested rule
+    (module note, NESTED REGIONS): one while a region is open, else `units`
+    (at least one). For a split whose tasks each take a share of a range, so
+    one task takes all of it."""
+    if host_in_region():
+        return 1
+    return max(units, 1)
+
+
+def host_parallelize_items[FuncType: def(Int) -> None](ref func: FuncType, n: Int):
+    """`host_parallelize(func, n)` for a split whose task count IS its item
+    count (one column, one permutation per task), under the nested rule:
+    while a region is open the items run one after another on the calling
+    thread, which is already in the environment the tasks would be pinned
+    to (module note, NESTED REGIONS)."""
+    if n > 1 and host_in_region():
+        for i in range(n):  # driver-loop: over the work items of one nested split
+            func(i)
+        return
+    host_parallelize(func, n)
 
 
 def host_parallelize_pool_env[FuncType: def(Int) -> None](ref func: FuncType, n: Int):
     """`sync_parallelize(func, n)` with the runtime WORKER's environment
     (FTZ+DAZ on x86), for the GBDT fit's host regions only; see the module
-    note. Every other host loop uses `host_parallelize`."""
+    note. Every other host loop uses `host_parallelize`. While another
+    region is open (the caller may be a pool task: a member's fit) the items
+    run one after another on the calling thread, in the same environment
+    (module note, NESTED REGIONS)."""
     if n > 0:
         activity_host_split(n)
+    if n <= 1:
+        # one work item runs on the caller with the pool's flush-to-zero
+        # scope (sync_parallelize's own one-item arm); no region is open
+        sync_parallelize(func, n)
+        return
+    if host_in_region():
+        # NESTED REGIONS: a region is open, so this caller may be a pool
+        # task. Every item runs on the calling thread, each through
+        # sync_parallelize's one-item arm, which runs it on the caller with
+        # the pool's flush-to-zero scope: the bits of a pool task, no
+        # second launch on the pool.
+        for i in range(n):  # driver-loop: over the work items of one nested split
+
+            def one(unit: Int) {imm func, imm i}:
+                func(i)
+
+            sync_parallelize(one, 1)
+        return
+    var regions = _host_regions_word()
+    _host_region_step(regions, Int64(1))
     sync_parallelize(func, n)
+    _host_region_step(regions, Int64(-1))
 
 
 comptime HOST_NARROW_CHUNK = 65536
