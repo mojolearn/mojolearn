@@ -53,7 +53,6 @@ from bindings.gp_classifier_native_door import (
     gpc_validate, gpc_validate_fields, _gpc_ext, _gpc_binary_result, _gpc_set_fitted, GPCFitPublication,
 )
 from bindings.member_owner_unpack import MemberOwner, member_labels_take
-from bindings.metrics_native_support_door import metric_warn
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_item, py_setitem, py_fields
 from core.device_route import DeviceRoute, DEVICE_CPU, DEVICE_GPU
@@ -291,18 +290,11 @@ def gp_member_pack(model: PythonObject, fields: PythonObject, context: PythonObj
     var normalize = s[10] != 0.0
     var alpha_used = s[11]
     var optimized = s[12] != 0.0
-    # `_gpr_fit`'s ridge retries: one RuntimeWarning per tenfold step, the
-    # private `_alpha` left at the ridge used.
-    var alpha = Float64(py=py_item(fields, nk[].k__alpha))
-    while alpha < alpha_used and alpha > 0.0:  # driver-loop: over the tenfold ridge retries
-        var raised = min(alpha * 10.0, 1.0)
-        py_setitem(fields, nk[].k__alpha, PythonObject(raised))
-        var message = (String(_GPR) + ": K + alpha*I is not positive "
-                       + "definite in float32 with alpha=" + String(py_call(b_mod.format, PythonObject(alpha), "g"))
-                       + "; refitting with alpha=" + String(py_call(b_mod.format, PythonObject(raised), "g"))
-                       + ". Pass a larger alpha to skip this step.")
-        metric_warn(message, b_mod.RuntimeWarning, context)
-        alpha = raised
+    # `_gpr_fit`'s ridge retries: the private `_alpha` left at the ridge used
+    # (the same tenfold chain the member fit ran). Their RuntimeWarnings are
+    # the state's fit notices, raised by the caller (core/member_notices.mojo).
+    if alpha_used > Float64(py=py_item(fields, nk[].k__alpha)):
+        py_setitem(fields, nk[].k__alpha, PythonObject(alpha_used))
     var x = _f32_array(plan, call, _B_X, Python.tuple(n, d), n * d, context)
     var y = _f32_array(plan, call, _B_Y, Python.tuple(n), n, context)
     var lf = _f32_array(plan, call, _B_L, Python.tuple(n, n), n * n, context)

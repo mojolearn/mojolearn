@@ -356,6 +356,12 @@ def _predict_into(slot: _SlotP, call: _CallP, codes: Bool) raises:
     if not slot[].fitted:
         raise Error("NotFittedError: this CNNClassifier member is not fitted yet")
     _whole(call)
+    if call[].x.rows == 0:
+        # The door returns the empty result before any session (lane
+        # fx-audit 17): no open, no CNN_PREDICT, nothing written.
+        if call[].x.cols != _features(slot):
+            raise Error("ValueError: images do not match the model input_shape")
+        return
     _images(slot, call[].x)
     var n = call[].x.rows
     if codes:

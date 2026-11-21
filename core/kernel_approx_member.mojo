@@ -29,8 +29,9 @@ is refused in words (a device-home view, a row or column index, a nonzero
 `fit_output`: the caller fits, then transforms). The chi2 kernels refuse
 negative X (`_km_chi2_input`), X is tested for NaN or infinity on the host
 (the estimator's admission test). Nystroem's n_components above the rows
-becomes the rows (scikit-learn's rule; its warning is the estimator's own
-door's, not the member's).
+becomes the rows (scikit-learn's rule); its UserWarning is the state's FIT
+NOTICE (`MEMBER_BLOCK_NOTICES` by name, one `MEMBER_NOTICE_NYSTROEM_COMPONENTS`),
+raised by the caller (core/member_notices.mojo).
 
 FITTED-STATE BLOCKS, in index order:
  0 `MEMBER_BLOCK_SCALARS` float64 1 x 12 [kind, kernel, degree, gamma
@@ -59,10 +60,11 @@ from core.member_abi import (
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_TRANSFORM,
     MEMBER_OP_OUTPUTS, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT,
     MEMBER_CAN_FIT, MEMBER_CAN_TRANSFORM, MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT, MEMBER_CAN_TEST_ROWS,
-    MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
-    member_publish, member_call_from_spans, member_unsupported,
+    MEMBER_CAN_NOTICES, MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_BLOCK_NOTICES,
+    MEMBER_IMPORT_DONE, member_publish, member_call_from_spans, member_unsupported,
 )
 from core.member_families import MEMBER_FAMILY_KERNEL_APPROX
+from core.member_notices import member_notice_add, MEMBER_NOTICE_NYSTROEM_COMPONENTS, MEMBER_NOTICE_WORDS
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report, native_descriptor_leased_call
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
@@ -103,6 +105,8 @@ struct KernelApproxMemberSlot(Copyable, Movable, Defaultable):
     var fourth: List[Float32]
     var indices: List[Int32]
     var scalars: List[Float64]
+    # FIT NOTICES (core/member_notices.mojo), set by `_fit`.
+    var notices: List[Float64]
 
     def __init__(out self):
         self.generation = 0
@@ -121,6 +125,7 @@ struct KernelApproxMemberSlot(Copyable, Movable, Defaultable):
         self.fourth = List[Float32]()
         self.indices = List[Int32]()
         self.scalars = List[Float64]()
+        self.notices = List[Float64]()
 
     def clear(mut self):
         self.fitted = False
@@ -135,6 +140,7 @@ struct KernelApproxMemberSlot(Copyable, Movable, Defaultable):
         self.fourth = List[Float32]()
         self.indices = List[Int32]()
         self.scalars = List[Float64]()
+        self.notices = List[Float64]()
 
 
 struct KernelApproxMemberStore(Defaultable, Movable):
@@ -293,8 +299,10 @@ def _fit(slot: _Slot, call: _Call) raises:
     slot[].gamma = gamma
     slot[].cols = d
     if _nystroem(slot):
-        # scikit-learn's rule: n_components above the rows becomes the rows.
+        # scikit-learn's rule: n_components above the rows becomes the rows,
+        # with the estimator's UserWarning (a fit notice: the caller raises it).
         if q > n:
+            member_notice_add(slot[].notices, MEMBER_NOTICE_NYSTROEM_COMPONENTS, Float64(q), Float64(n))
             q = n
         var components = List[Float32](length=max(1, q * d), fill=Float32(0))
         var indices = List[Int32](length=max(1, q), fill=Int32(0))
@@ -472,7 +480,9 @@ def _kernel_approx_member(operation: Int, address: Int) raises -> Int:
     var call = _Call(unsafe_from_address=address)
     if operation == MEMBER_OP_CAPABILITIES:
         # TEST_ROWS: `_x` tests X at fit and transform (no y, no weights).
-        return MEMBER_CAN_FIT | MEMBER_CAN_TRANSFORM | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_CAN_TEST_ROWS
+        # NOTICES: Nystroem's n_components clamp (RBFSampler's are always empty).
+        return (MEMBER_CAN_FIT | MEMBER_CAN_TRANSFORM | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_CAN_TEST_ROWS
+            | MEMBER_CAN_NOTICES)
     if operation == MEMBER_OP_NEW:
         if call[].param_count != _PARAMS or not call[].params:
             raise Error("member ABI: a kernel approximation member takes " + String(_PARAMS) + " parameters")
@@ -522,6 +532,10 @@ def _kernel_approx_member(operation: Int, address: Int) raises -> Int:
         _fit(slot, call)
     elif operation == MEMBER_OP_TRANSFORM:
         _transform(slot, call)
+    elif operation == MEMBER_OP_EXPORT and call[].block == MEMBER_BLOCK_NOTICES and (
+            call[].flags & MEMBER_BLOCK_BY_INDEX) == 0:
+        call[].dst = MemberMatrix(Int(slot[].notices.unsafe_ptr()), len(slot[].notices) // MEMBER_NOTICE_WORDS,
+                                  MEMBER_NOTICE_WORDS, MEMBER_F64)
     elif operation == MEMBER_OP_EXPORT:
         _export(slot, call)
     elif operation == MEMBER_OP_IMPORT:

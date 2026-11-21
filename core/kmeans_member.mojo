@@ -26,8 +26,12 @@ X may also be a DEVICE-home view (`data` = the base store id, `rows` = the
 base's rows, `offset` 0) with a device-home int64 `row_index` (the store of
 the fold's row numbers): the member gathers on the device, as the
 estimator's own door does for a model-selection fold. Such a fit takes no
-weights. A host-home row or column index, a device view on a host image, a
-weighted device fit: refused in words (the caller hands gathered host words).
+weights. A HOST-home X with a host int32 / int64 `row_index` (a caller's host
+fold or drawn rows: MEMBER_CAN_ROW_INDEX means both homes) is gathered here
+once per call, rows (and the weights' rows) in row tasks across the host's
+cores (core/admitted_rows_gather.mojo), then runs the host route as gathered
+host words would (lane fx-audit 7). A column index, a device view on a host
+image, a weighted device fit: refused in words.
 X is tested finite by the kernel over its own upload (fit and every query,
 host and device images: `test_finite` is always set); a NaN or an infinity is
 refused in admit_x's wording. Given sample weights are scanned here (one
@@ -67,7 +71,7 @@ from core.member_abi import (
     MEMBER_OP_TRANSFORM, MEMBER_OP_OUTPUTS, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT,
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_TRANSFORM, MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT,
     MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_DEVICE_VIEWS, MEMBER_CAN_ROW_INDEX, MEMBER_CAN_TEST_ROWS,
-    MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
+    MEMBER_HOME_HOST, MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
 )
 from core.member_families import MEMBER_FAMILY_KMEANS
@@ -75,6 +79,7 @@ from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 from core.host_finite_scan import host_all_finite_f32
+from core.admitted_rows_gather import admitted_gather_rows_f32, ARG_OUT_OF_RANGE
 
 comptime _CHUNK = 256
 comptime _INDEX_SPAN = 16777216
@@ -225,9 +230,7 @@ def _fold(call: _Call) raises -> KMeansFoldStore:
     if call[].column_index.rows > 0:
         raise Error("TypeError: a KMeans member reads every column of X (no column index)")
     if call[].x.home != MEMBER_HOME_DEVICE:
-        if call[].row_index.rows > 0:
-            raise Error("TypeError: a KMeans member reads a row index only over a device-home X"
-                + " (a host fold is handed over as gathered host words)")
+        # A host row index never reaches here: `_host_indexed` gathered it.
         if not call[].x.dense_host(MEMBER_F32):
             raise Error("TypeError: a KMeans member reads X as a dense host float32 view")
         return KMeansFoldStore()
@@ -418,6 +421,62 @@ def _capabilities(call: _Call) -> Int:
     return mask
 
 
+def _gather_host(source: MemberMatrix, index: MemberMatrix, width: Int, mut dst: List[Float32]) raises:
+    # Rows `index` of the dense host float32 `source` (`width` words a row)
+    # into `dst`, in row tasks across the host's cores. Non-finite words are
+    # the operation's own test (TEST_ROWS); an index outside X is refused.
+    var rows = index.rows
+    dst = List[Float32](unsafe_uninit_length=max(rows * width, 1))
+    var status: Int
+    if index.dtype == MEMBER_I64:
+        status = admitted_gather_rows_f32[DType.int64](source.data, source.rows, width, index.data, rows,
+                                                       Int(dst.unsafe_ptr()))
+    else:
+        status = admitted_gather_rows_f32[DType.int32](source.data, source.rows, width, index.data, rows,
+                                                       Int(dst.unsafe_ptr()))
+    if status == ARG_OUT_OF_RANGE:
+        raise Error("IndexError: a KMeans member's row index holds a row outside X's " + String(source.rows)
+            + " rows")
+
+
+def _host_indexed(slot: _Slot, call: _Call, operation: Int) raises:
+    """FIT / PREDICT / TRANSFORM over a host-home X with a host row index:
+    the indexed rows of X (and of the weights) gathered once into this call's
+    own words, the plain host route run on them, the caller's views restored
+    (whether the operation returns or raises)."""
+    var index = call[].row_index
+    if index.home != MEMBER_HOME_HOST or index.data == 0 or index.cols != 1 or (
+            index.dtype != MEMBER_I64 and index.dtype != MEMBER_I32):
+        raise Error("TypeError: a KMeans member reads a host row index as one host int32 or int64 column")
+    var x = call[].x
+    var weights = call[].weights
+    if not x.dense_host(MEMBER_F32):
+        raise Error("TypeError: a KMeans member reads X as a dense host float32 view")
+    var x_rows = List[Float32]()
+    _gather_host(x, index, x.cols, x_rows)
+    var w_rows = List[Float32]()
+    if weights.rows > 0:
+        if not weights.dense_host(MEMBER_F32) or weights.cols != 1 or weights.rows != x.rows:
+            raise Error("TypeError: a KMeans member reads sample_weight as a dense host float32 view of X's rows")
+        _gather_host(weights, index, 1, w_rows)
+    call[].x = MemberMatrix(Int(x_rows.unsafe_ptr()), index.rows, x.cols)
+    if weights.rows > 0:
+        call[].weights = MemberMatrix(Int(w_rows.unsafe_ptr()), index.rows, 1)
+    call[].row_index = MemberMatrix()
+    try:
+        if operation == MEMBER_OP_FIT:
+            _fit(slot, call)
+        else:
+            _query(slot, call, operation == MEMBER_OP_TRANSFORM)
+    finally:
+        call[].x = x
+        call[].weights = weights
+        call[].row_index = index
+    # The gathered words outlive the operation above.
+    _ = x_rows^
+    _ = w_rows^
+
+
 def _kmeans_member(operation: Int, address: Int) raises -> Int:
     var call = _Call(unsafe_from_address=address)
     if operation == MEMBER_OP_CAPABILITIES:
@@ -458,7 +517,10 @@ def _kmeans_member(operation: Int, address: Int) raises -> Int:
             call[].out_dtype = MEMBER_F32
         return 0
     var slot = _Slot(unsafe_from_address=_lookup(call[].state, False))
-    if operation == MEMBER_OP_FIT:
+    if ((operation == MEMBER_OP_FIT or operation == MEMBER_OP_PREDICT or operation == MEMBER_OP_TRANSFORM)
+            and call[].x.home != MEMBER_HOME_DEVICE and call[].row_index.rows > 0):
+        _host_indexed(slot, call, operation)
+    elif operation == MEMBER_OP_FIT:
         _fit(slot, call)
     elif operation == MEMBER_OP_PREDICT:
         _query(slot, call, False)

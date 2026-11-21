@@ -177,6 +177,14 @@ comptime MEMBER_CAN_SCOPE = 16777216         # reads call.scope / call.pin: keep
 #: member only a kind with this bit (else its plain owner call, as before);
 #: with one device the bit is not asked at all.
 comptime MEMBER_CAN_DEVICE_PLAN = 33554432   # splits over call.devices as its plain owner does under the bound plan
+#: A fitted state carries FIT NOTICES: the warnings its family's own fit door
+#: raises at fit, kept as words by FIT and exported BY NAME as
+#: `MEMBER_BLOCK_NOTICES` (never in a `MEMBER_BLOCK_BY_INDEX` walk, never
+#: imported). Every caller takes them once per fitted unit and raises them on
+#: the public thread, in the door's words and category, whether or not it packs
+#: the unit (core/member_notices.mojo, bindings/member_fit_notices_pack.mojo).
+#: A family without the bit is never asked: one mask test per unit.
+comptime MEMBER_CAN_NOTICES = 134217728      # 2^27 (2^26 is MEMBER_BORROWS_FIT)
 
 #: KIND-EXACT (answered with `call.state != 0`; the family's union with 0).
 #: A fitted state of this kind keeps a pointer into a buffer its FIT was
@@ -206,6 +214,7 @@ comptime MEMBER_BLOCK_COEF = 1                 # float32, outputs (or classes, o
 comptime MEMBER_BLOCK_INTERCEPT = 2            # float32, 1 x outputs (or classes, or 1)
 comptime MEMBER_BLOCK_FEATURE_IMPORTANCES = 3  # float32, 1 x features
 comptime MEMBER_BLOCK_SCALARS = 4              # float64 words in the family's documented order
+comptime MEMBER_BLOCK_NOTICES = 5              # float64 notices x MEMBER_NOTICE_WORDS (core/member_notices.mojo); rows 0: none
 comptime MEMBER_BLOCK_FAMILY = 64
 
 #: `call.flags` of MEMBER_OP_EXPORT: `call.block` is an index 0 .. count-1

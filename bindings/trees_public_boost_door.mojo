@@ -58,7 +58,7 @@ from bindings.admitted_input_unpack import (
 from bindings.admitted_input_run import AdmittedXView
 from bindings.member_set_door import (
     MemberSet, member_set_admit, member_set_width, member_set_run, member_set_pack, member_set_release,
-    member_set_resident,
+    member_set_notices, member_set_resident,
     member_set_tests, member_set_host, member_marked, member_held_open, member_held_run, member_held_close,
 )
 from core.member_abi import MEMBER_F32, MEMBER_I32, MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA
@@ -1043,6 +1043,8 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
                 _ = py_call(features.append, wave_cols[i])
                 if oob:
                     _ = py_call(oob_rows.append, _unseen_rows(xt, wave_rows[i], n, context))
+            # This wave's fit notices, once the whole wave is published.
+            member_set_notices(set)
         finally:
             member_set_release(set)  # a failing publication leaves no state behind
             # THE LIFETIME RULE (core/member_abi.mojo): X, the targets, the
@@ -1570,7 +1572,9 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
     var errors = Python.list()
     var glue = _xr(xt)
     if classifier:
-        var labels = trees_encode_labels(args[1], labels_scope(model, context))
+        # The label scope, read once per fit (both encodes below use it).
+        var label_scope = labels_scope(model, context)
+        var labels = trees_encode_labels(args[1], label_scope)
         py_setitem(fields, "classes_", labels.classes)
         var k = len(labels.classes)
         py_setitem(fields, "n_classes_", _P(k))
@@ -1600,7 +1604,7 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
             # The labels are encoded ONCE for every member and round.
             # TOMBSTONE: MOJOLEARN_TREES_FAST_ADABOOST_REENCODE (NOISE: B re-encoded the labels per member; A/B abn9 NVIDIA L40S, 4 cells 0.98-1.04 arm/base) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
             # Restore: git apply experiments/removed/MOJOLEARN_TREES_FAST_ADABOOST_REENCODE.patch; record in docs/TOMBSTONES.md.
-            encoded = trees_encode_labels(codes, labels_scope(model, context))
+            encoded = trees_encode_labels(codes, label_scope)
             # the session open tests the column-major words it uploads
             # (lane a8c: the host scan of cm before it is deleted)
             session = _member_session(base, cm.view(), False, _ada_session_choice(fields, xt, context), context)

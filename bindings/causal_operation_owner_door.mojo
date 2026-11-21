@@ -165,21 +165,16 @@ struct CausalModelOwner(Movable, Writable):
     GIL held) and never replaced or cleared while the owner lives, so a
     reader may hold a reference into it across a GIL release for as long as
     it holds the owner's handle. It keeps no capture and no public object.
-
-    `fingerprint` (continuation 4): the checkpoint fingerprint of this
-    generation (the hash of the settings and every weight a checkpoint is
-    bound to), computed at the first snapshot or resume and kept: every
-    value it hashes is covered by the identity key of this generation. Empty
-    until computed."""
+    It keeps no checkpoint fingerprint: that hash covers weight CONTENTS, which
+    the identity key does not watch, so it is taken at every snapshot and
+    resume (fx-audit 21)."""
 
     var words: CausalModelWords
     var snapshot: Optional[GenerationOperationSnapshot]
-    var fingerprint: String
 
     def __init__(out self, var words: CausalModelWords):
         self.words = words^
         self.snapshot = None
-        self.fingerprint = String("")
 
     def write_to(self, mut writer: Some[Writer]):
         writer.write("CausalModelOwner(generation=", self.words.generation, ")")

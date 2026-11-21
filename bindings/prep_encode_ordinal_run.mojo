@@ -14,7 +14,7 @@ the same order as the door's former builders, so the bits do not move. No
 Python import (tools/python_free_dirs.sh)."""
 from bindings.prep_encode_prog_run import EncProgram, enc_floats_of, enc_bad_rows_stages
 from bindings.prep_encode_cats_run import (
-    CatBlock, CatCodes, CatTable, cat_codes_stage, cat_held_codes_stage, cat_gather_stage, cat_grouping_table,
+    CatAuto, CatBlock, CatCodes, CatTable, cat_codes_stage, cat_held_codes_stage, cat_gather_stage, cat_grouping_table,
     cat_remap_stage)
 from core.preprocessing_program import prep_program_stage
 
@@ -132,3 +132,55 @@ def ordinal_inverse_stage(mut prog: EncProgram, r: OrdinalInverse) -> OrdinalInv
     var dst = cat_gather_stage(prog, codes, n, d, r.cats)
     var staged = enc_bad_rows_stages(prog, codes, n, d, -2, ORD_NONE)
     return OrdinalInversePlan(dst, staged[0], staged[1])
+
+
+# ---------------------------------------------------------------- the restricted fit's checks
+def ord_number_text(value: Float64, integral: Bool) -> String:
+    """A parameter number as the estimator prints it: an integer parameter
+    in integer digits, a float in its shortest decimal form."""
+    if integral:
+        return String(Int(value))
+    return String(value)
+
+
+def _list_words(values: List[Int]) -> String:
+    var text = String("[")
+    for i in range(len(values)):  # driver-loop: over reported column indices
+        text += (", " if i > 0 else "") + String(values[i])
+    return text + "]"
+
+
+def ordinal_auto_clash(state: CatAuto, use_unknown: Bool, unknown_value: Float64,
+                       encoded_missing: Float64) -> List[Int]:
+    """OrdinalEncoder.fit's code checks on its fitted categories (the
+    restricted form, `CatAuto`; the door and the Prep member both call it),
+    in the estimator's order: `unknown_value` (with `use_unknown`, not NaN)
+    must not be a code of a seen category of any column (a clash answers
+    [-1]), then `encoded_missing` (when a column has a NaN category, not
+    NaN) must not be one either (a clash answers the columns). Empty: no
+    clash. No text is built unless a check fails (`ordinal_auto_refusal`)."""
+    var cards = state.cards()
+    if use_unknown and unknown_value == unknown_value:
+        for j in range(len(cards)):  # driver-loop: validates unknown_value against cardinalities
+            if 0.0 <= unknown_value and unknown_value < Float64(cards[j]):
+                var clash: List[Int] = [-1]
+                return clash^
+    var bad = List[Int]()
+    var any_missing = False
+    for j in range(len(state.missing)):  # driver-loop: over the per-column NaN slots (feature metadata)
+        any_missing = any_missing or state.missing[j] >= 0
+    if any_missing and encoded_missing == encoded_missing:
+        for j in range(len(cards)):  # driver-loop: validates encoded_missing_value argument
+            if state.missing[j] >= 0 and 0.0 <= encoded_missing and encoded_missing < Float64(cards[j]):
+                bad.append(j)
+    return bad^
+
+
+def ordinal_auto_refusal(clash: List[Int], unknown_text: String, missing_text: String) -> String:
+    """The estimator's words for a nonempty `ordinal_auto_clash`; the texts
+    are the two parameters as the caller prints them."""
+    if len(clash) == 1 and clash[0] < 0:
+        return ("mojolearn: the used value for unknown_value " + unknown_text + " is one of the "
+                + "values already used for encoding the seen categories.")
+    return ("mojolearn: encoded_missing_value (" + missing_text + ") is already "
+            + "used to encode a known category in features: " + _list_words(clash))
