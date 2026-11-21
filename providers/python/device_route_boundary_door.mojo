@@ -189,7 +189,7 @@ def device_admit(value: PythonObject, process_vendor: Int, b: PythonObject) rais
 
 
 def device_admit_class(model: PythonObject, value: PythonObject, cpu_only: Bool, cpu_classes: PythonObject,
-    b: PythonObject) raises:
+    b: PythonObject, connect: PythonObject) raises:
     """`device_admit` for a class whose constructor is the shared wrapper
     (python/mojolearn/_mode.py `_install_numeric_mode`), and the drop of the
     estimator's binding route (a constructor run again on a live estimator).
@@ -200,7 +200,13 @@ def device_admit_class(model: PythonObject, value: PythonObject, cpu_only: Bool,
     sentence why not: its family has no CPU implementation, or its door is
     not routed yet), generated at class definition from the host surface
     manifest (python/mojolearn/_device_table.py). A class the table does not
-    hold is refused: nothing runs on a device its caller did not name."""
+    hold is refused: nothing runs on a device its caller did not name.
+
+    `connect` (the context's `device_cpu_connect`,
+    python/mojolearn/_native_family_bridge.py `connect_cpu`) loads the host
+    label and metrics images of the shared family context: called on the
+    admitted CPU branch only, so a process with no device="cpu" estimator
+    never loads them; once per process (it returns at a flag after)."""
     var device = device_unpack(value, b)
     records_drop(RECORDS_PREPARED, model, DEVICE_BINDINGS_SLOT)
     if device == DEVICE_INSTALL:
@@ -216,6 +222,8 @@ def device_admit_class(model: PythonObject, value: PythonObject, cpu_only: Bool,
         device_cpu_absent(String(cls.__name__), String("its CPU route is not connected in this installation"))
     if py_type(answer) is b.str:
         device_cpu_absent(String(cls.__name__), String(answer))
+    if connect is not None:
+        _ = py_call(connect)
 
 
 def device_route_clear(model: PythonObject) raises:

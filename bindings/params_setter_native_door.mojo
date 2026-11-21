@@ -157,7 +157,8 @@ def _set_inner(model: PythonObject, params: PythonObject, context: PythonObject)
         # on a CPU-only installation, 'cpu' for a class that cannot run there
         # beside a GPU set) before any nested or parent mutation.
         device_admit_class(model, params["device"], py_get(context["backend_fields"], "_CPU_ONLY") is not None,
-                           py_get(context, "device_cpu"), b)
+                           py_get(context, "device_cpu"), b,
+                               py_get(context, "device_cpu_connect"))
     var names = py_call(b.list, nested.keys())
     for i in range(len(names)):  # driver-loop: nested updates retain the original child object and argument order
         _ = _set(values[names[i]], nested[names[i]], context)
