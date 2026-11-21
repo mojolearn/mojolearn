@@ -4,7 +4,7 @@
 core/xdecomp_member.mojo). Published: IncrementalPCA (kind 0,
 `_mojolearn_member = (32, 0)`), NMF (kind 3, `(32, 3)`),
 GaussianRandomProjection (kind 5, `(32, 5)`), SparseRandomProjection (kind 6,
-`(32, 6)`), FastICA (kind 7, `(32, 7)`). The family's other classes (FactorAnalysis
+`(32, 6)`), FastICA (kind 7, `(32, 7)`), FactorAnalysis (kind 8, `(32, 8)`). The family's other classes (
 DictionaryLearning MiniBatchDictionaryLearning SparsePCA MiniBatchSparsePCA
 SparseCoder LatentDirichletAllocation Isomap MDS ClassicalMDS
 LocallyLinearEmbedding MinCovDet EllipticEnvelope) carry no mark yet: a
@@ -52,6 +52,7 @@ from core.xdecomp_member import (
     XDECOMP_KIND_IPCA, XDECOMP_KIND_NMF, XDECOMP_ROUTE_RESIDENT, XDECOMP_ROUTE_NMF_INVERSE, XDECOMP_BLOCK_COMPONENTS, XDECOMP_BLOCK_SINGULAR,
     XDECOMP_BLOCK_MEAN, XDECOMP_BLOCK_VAR, XDECOMP_BLOCK_VARIANCE, XDECOMP_BLOCK_RATIO,
     XDECOMP_KIND_GRP, XDECOMP_KIND_SRP, XDECOMP_ROUTE_POOL, XDECOMP_BLOCK_RP_INVERSE, XDECOMP_KIND_ICA,
+    XDECOMP_KIND_FA,
 )
 from bindings.ica_native_unpack import _whiten_code as ica_whiten_code
 from bindings.native_loaded_module_door import native_loaded_module
@@ -269,6 +270,9 @@ def xdecomp_member_admit(model: PythonObject, fields: PythonObject, kind: Int, c
         return True
     if kind == XDECOMP_KIND_ICA:
         return _ica_admit(model, fields, context, owner)
+    if kind == XDECOMP_KIND_FA:
+        _fa_admit(model, fields, context, owner)
+        return True
     raise Error("ValueError: mojolearn: XDecomp member kind " + String(kind) + " is not published")
 
 
@@ -301,6 +305,9 @@ def xdecomp_member_pack(model: PythonObject, fields: PythonObject, context: Pyth
         return
     if plan.kind == XDECOMP_KIND_ICA:
         _ica_pack(fields, context, plan, state)
+        return
+    if plan.kind == XDECOMP_KIND_FA:
+        _fa_pack(fields, context, plan, state)
         return
     if plan.kind != XDECOMP_KIND_IPCA:
         raise Error("ValueError: mojolearn: XDecomp member kind " + String(plan.kind) + " is not published")
@@ -382,6 +389,8 @@ def xdecomp_member_state(model: PythonObject, fields: PythonObject, context: Pyt
         return _rp_state(fields, context, plan)
     if plan.kind == XDECOMP_KIND_ICA:
         return _ica_state(fields, context, plan)
+    if plan.kind == XDECOMP_KIND_FA:
+        return _fa_state(fields, context, plan)
     if plan.kind != XDECOMP_KIND_IPCA:
         raise Error("ValueError: mojolearn: XDecomp member kind " + String(plan.kind) + " is not published")
     var count = py_get(fields, "n_components_")
@@ -547,6 +556,87 @@ def _ica_state(fields: PythonObject, context: PythonObject, plan: MemberPlan) ra
             if py_get(fields, "whitening_") is not None:
                 _import(plan, call, fields, "whitening_", 2, XDECOMP_BLOCK_COMPONENTS + 2, context)
             _import(plan, call, fields, "mean_", 1, XDECOMP_BLOCK_COMPONENTS + 3, context)
+        call.block = MEMBER_BLOCK_SCALARS
+        call.x = MemberMatrix(Int(scalars.unsafe_ptr()), 1, len(scalars), MEMBER_F64)
+        call.flags = MEMBER_IMPORT_DONE
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+    except error:
+        member_free(plan, call)
+        raise error
+    _ = len(scalars)
+    return call.state
+
+
+def _fa_admit(model: PythonObject, fields: PythonObject, context: PythonObject, mut owner: MemberOwner) raises:
+    # bindings/fa_native_unpack.mojo `fa_fit`: its two option checks first,
+    # in its words; noise_variance_init read as `_psi_init` reads it (its
+    # length checked against n_features in RUN, with the door's words).
+    var operator = native_loaded_module("operator")
+    if not Bool(py=py_call(operator.contains, Python.tuple("lapack", "randomized"), fields["svd_method"])):
+        raise Error("svd_method must be 'lapack' or 'randomized'")
+    var rotation = fields["rotation"]
+    if not Bool(py=py_call(operator.contains, Python.tuple(None, "varimax", "quartimax"), rotation)):
+        raise Error("rotation must be None, 'varimax' or 'quartimax'")
+    _ = _table_route(model, fields, context, owner)
+    var words = List[Float64](length=6, fill=0.0)
+    words[0] = Float64(XDECOMP_KIND_FA)
+    var requested = fields["n_components"]
+    words[1] = Float64(decomp_int(requested)) if Bool(py=requested) else -1.0
+    words[2] = Float64(decomp_int(fields["max_iter"]))
+    var code = 0
+    if rotation is not None:
+        code = 1 if decomp_eq(rotation, PythonObject("varimax")) else 2
+    words[3] = Float64(code)
+    words[4] = decomp_float(fields["tol"])
+    words[5] = -1.0
+    var given = fields["noise_variance_init"]
+    if given is not None:
+        var values = py_call(native_loaded_module("builtins").list, given)
+        var count = len(values)
+        words[5] = Float64(count)
+        for j in range(count):  # driver-loop: over the caller's noise_variance_init entries (model structure)
+            words.append(decomp_float(values[j]))
+    owner.plan.params = words^
+
+
+def _fa_pack(fields: PythonObject, context: PythonObject, plan: MemberPlan, state: Int) raises:
+    # bindings/fa_native_unpack.mojo `fa_fit`, in its order: numeric_mode_,
+    # components_, noise_variance_, mean_, loglike_, n_iter_, n_features_in_.
+    decomp_set_mode(fields, context)
+    var call = MemberCall(plan.route, state)
+    var scalars_view = _export(plan, call, MEMBER_BLOCK_SCALARS)
+    var scalars = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=scalars_view.data)
+    var words = scalars_view.rows * scalars_view.cols
+    var features = Int(scalars[1])
+    var iterations = Int(scalars[2])
+    var loglike = Python.list()
+    for k in range(3, words):  # driver-loop: over the EM iterations' log-likelihoods
+        _ = py_call(loglike.append, PythonObject(scalars[k]))
+    py_setitem(fields, "components_", _rp_matrix(_export(plan, call, XDECOMP_BLOCK_COMPONENTS), context))
+    for block in range(2):  # driver-loop: noise_variance_ and mean_
+        var view = _export(plan, call, XDECOMP_BLOCK_COMPONENTS + 1 + block)
+        var vector = decomp_f32(Python.tuple(features), context)
+        if features > 0:
+            unsafe_memcpy(dest=f32_ptr(Int(py=classical_address(vector))), src=f32_ptr(view.data), count=features)
+        py_setitem(fields, PythonObject("noise_variance_") if block == 0 else PythonObject("mean_"), vector)
+    py_setitem(fields, "loglike_", loglike)
+    py_setitem(fields, "n_iter_", PythonObject(iterations))
+    py_setitem(fields, "n_features_in_", PythonObject(features))
+
+
+def _fa_state(fields: PythonObject, context: PythonObject, plan: MemberPlan) raises -> Int:
+    # What the door's queries read: components_, noise_variance_, mean_.
+    var components = py_get(fields, "components_")
+    if (components is None or py_get(fields, "noise_variance_") is None or py_get(fields, "mean_") is None):
+        raise Error("NotFittedError: this member is not fitted yet")
+    var iterations = py_get(fields, "n_iter_")
+    var scalars: List[Float64] = [Float64(Int(py=components.shape[0])), Float64(Int(py=components.shape[1])),
+        Float64(decomp_int(iterations)) if iterations is not None else 0.0]
+    var call = member_new(plan)
+    try:
+        _import(plan, call, fields, "components_", 2, XDECOMP_BLOCK_COMPONENTS, context)
+        _import(plan, call, fields, "noise_variance_", 1, XDECOMP_BLOCK_COMPONENTS + 1, context)
+        _import(plan, call, fields, "mean_", 1, XDECOMP_BLOCK_COMPONENTS + 2, context)
         call.block = MEMBER_BLOCK_SCALARS
         call.x = MemberMatrix(Int(scalars.unsafe_ptr()), 1, len(scalars), MEMBER_F64)
         call.flags = MEMBER_IMPORT_DONE

@@ -983,6 +983,8 @@ class FactorAnalysis(_DeviceDoor, _Base):
     _parameters = ("n_components", "tol", "copy", "max_iter", "noise_variance_init", "svd_method",
                    "iterated_power", "rotation", "random_state", "numeric_mode", "device")
     _device_door = "decomp"
+    #: The member ABI mark (family 32 XDecomp, kind 8; core/xdecomp_member.mojo).
+    _mojolearn_member = (32, 8)
 
     def __init__(self, n_components=None, *, tol=1e-2, copy=True, max_iter=1000, noise_variance_init=None,
                  svd_method="randomized", iterated_power=3, rotation=None, random_state=0, numeric_mode=None,
