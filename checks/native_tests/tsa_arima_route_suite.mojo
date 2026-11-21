@@ -122,7 +122,7 @@ def series() -> List[Float32]:
     # level plus a small fixed pattern, different per series.
     var data = List[Float32](length=_B * _N, fill=0)
     for s in range(_B):  # small-loop(fixture construction, two short series)
-        var previous = Float32(0.5 + s)
+        var previous = Float32(0.5) + Float32(s)
         for t in range(_N):
             var shock = Float32(((t * 7 + s * 3) % 11) - 5) * Float32(0.1)
             var value = Float32(0.6) * previous + shock + Float32(1 + s)
