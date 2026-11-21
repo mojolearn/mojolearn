@@ -17,12 +17,7 @@ from bindings.admitted_family_door import admit_family
 from bindings.classical_arrays_door import classical_address
 from bindings.classical_labels_door import classical_score_from_codes
 from bindings.metrics_reg_run import _Reg, _RE_DIV
-from bindings.arena_prog_run import MetricArenaOwner
 from bindings.metrics_program_door import metric_plan_run
-from bindings.arena_prog_native_door import metrics_run_plan_entries
-from bindings.classical_attributes_door import classical_connect_numpy
-from bindings.metrics_keys_unpack import metrics_keys
-from bindings.py_balanced import py_get, py_item, py_type
 from core.metrics_program_plan import metric_term
 from bindings.svc_common_run import svc_r2_check
 from bindings.svc_common_unpack import svc_shape_of
@@ -58,25 +53,12 @@ def svc_r2_sums(pred: PythonObject, y: PythonObject, context: PythonObject) rais
     var den = r.fin(tot_sums, 0)
     _ = r.plan.want(num, 2, -1, 1)
     _ = r.plan.want(den, 2, -1, 1)
-    # The scope's CPU x_metrics entries, or None (the process image): one
-    # dictionary read per score.
-    var entries = py_get(context, "labels_metrics_entries")
-    if entries is None:
-        var arena = metric_plan_run(r.plan, pins, PythonObject(None), context)
-        return _svc_r2_pack(arena, num, den, t, p)
-    if py_type(entries) is py_type(PythonObject("")):
-        raise Error(String(entries))
-    var prog_context = py_item(context, metrics_keys()[].k_family_metrics_prog_context)
-    classical_connect_numpy(prog_context)
-    var arena = metrics_run_plan_entries(r.plan, pins, entries, prog_context)
-    return _svc_r2_pack(arena, num, den, t, p)
-
-
-def _svc_r2_pack(arena: MetricArenaOwner, num: Int, den: Int, t: PythonObject, p: PythonObject) raises -> PythonObject:
+    # The image of the context's device (metric_plan_run reads the scope).
+    var arena = metric_plan_run(r.plan, pins, PythonObject(None), context)
     var ss_res = arena.f64(num)
     var ss_tot = arena.f64(den)
-    _ = t
-    _ = p
+    _ = t^
+    _ = p^
     return Python.tuple(PythonObject(ss_res), PythonObject(ss_tot))
 
 
