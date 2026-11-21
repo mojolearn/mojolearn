@@ -87,8 +87,10 @@ def pca_archive_load(cls: PythonObject, path: PythonObject, context: PythonObjec
         raise Error("PCA model noise_variance must hold one value")
     var solver = _archive_string(arrays, "svd_solver", context)
     var model = py_call(native_loaded_module("builtins").object.__new__, cls)
+    # A loaded model runs this installation's device (`device=None`): the
+    # device is a constructor parameter, not model state, and is not saved.
     _ = pca_initialize(model, Python.tuple(nc, True, _meta_word(meta, 3) != 0, solver, 0.0,
-                                          "auto", 10, "auto", PythonObject(None), mode))
+                                          "auto", 10, "auto", PythonObject(None), mode, PythonObject(None)), context)
     var fields = sequential_fields(model)
     py_setitem(fields, nk[].k_components_, components)
     py_setitem(fields, nk[].k_mean_, mean)

@@ -8,7 +8,8 @@ from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_ty
 from bindings.sequential_admission_door import sequential_admit_value
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
 from providers.python.pca_fit_scalar_pyapi_unpack import PCAFitScalar, pca_fit_scalar_admit
-from bindings.pca_descriptor_boundary_door import pca_connection, pca_mode_name
+from bindings.pca_descriptor_boundary_door import pca_route, pca_mode_name
+from core.device_route_dw_decomp import DecompRoute
 from bindings.pca_keys_unpack import pca_keys
 from bindings.py_balanced import py_item
 
@@ -38,9 +39,12 @@ def pca_fit_preflight(fields: PythonObject, operation: String, context: PythonOb
     return (text, whiten.truth(operation, context))
 
 
-def pca_fit_entries(fields: PythonObject, context: PythonObject) raises -> Int:
+def pca_fit_route(model: PythonObject, fields: PythonObject, context: PythonObject) raises -> DecompRoute:
+    """The estimator's resolved route for a fit: `fields` is the fit's
+    snapshot, whose `numeric_mode` already is the mode object (the process
+    default object when the estimator's is None)."""
     var nk = pca_keys()
-    return pca_connection(pca_mode_name(py_item(fields, nk[].k_numeric_mode)), context)
+    return pca_route(model, fields, py_item(fields, nk[].k_numeric_mode), context)
 
 
 def pca_fit_host_only(model: PythonObject) raises -> Bool:

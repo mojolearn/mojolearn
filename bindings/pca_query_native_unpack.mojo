@@ -13,7 +13,7 @@ from providers.python.array_layout_boundary_unpack import native_shape_unpack
 from providers.python.array_layout_boundary_pack import native_shape_pack
 from bindings.pca_exact_run import pca_refusal
 from bindings.pca_descriptor_boundary_door import pca_fold_connection, pca_run_query
-from x_decomp.pca_descriptor_boundary_run import pca_mode, pca_whiten_capability
+from x_decomp.pca_descriptor_boundary_run import pca_mode, pca_vendor, pca_whiten_capability
 from core.pca_native_api import PCAQueryRequest, PCAFoldStore
 from providers.python.pca_model_pyapi_unpack import pca_query_admitted
 from providers.python.pca_input_pyapi_unpack import pca_state_snapshot
@@ -68,7 +68,10 @@ def pca_query_operation(model: PythonObject, source: PythonObject, inverse: Bool
     # on every identical transform of a plain array. Same refusals, same
     # route for a fold.
     var fold_connection = -1
-    if not inverse and not whiten and pca_mode(connection) == 1 and door_is_device_rows(source, context):
+    # A `device="cpu"` model takes the fold's host rows (the fold entry is the
+    # device image's); the vendor word is read for a DeviceRows fold only.
+    if (not inverse and not whiten and pca_mode(connection) == 1 and door_is_device_rows(source, context)
+            and pca_vendor(connection) != "cpu"):
         fold_connection = pca_fold_connection(context)
     var fold_ok = fold_connection >= 0
     # The plain transform's entry tests a borrowed X on the device after its
