@@ -15,7 +15,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_fields
 from bindings.mode_answer_door import fast_answers_compiled_code
 from core.mode_answer import MODE_FAMILY_MIXTURE
 from bindings.classical_arrays_door import classical_address
-from bindings.linear_svc_boundary_unpack import LinearSvcConnection, linear_svc_connection, linear_svc_run_query
+from bindings.linear_svc_boundary_unpack import LinearSvcConnection, linear_svc_route, linear_svc_run_query
 from core.linear_svc_native_api import LinearSvcScores
 from core.logistic_native_api import QnQueryRequest, QN_NATIVE_DECISION
 from bindings.classical_attributes_door import classical_connect_numpy
@@ -58,12 +58,14 @@ def _qn_score_input(model: PythonObject, source: PythonObject, context: PythonOb
     return QnScoreInput(x, n, d, intercept)
 
 
-def _qn_scores(model: PythonObject, binding: PythonObject, source: PythonObject, n_targets: Int,
+def _qn_scores(model: PythonObject, source: PythonObject, n_targets: Int,
                context: PythonObject) raises -> PythonObject:
+    """LinearSVC decision / LinearSVR predict scores; the driver is the
+    estimator's held route (`linear_svc_route`), not a per-call binding."""
     var inputs = _qn_score_input(model, source, context)
     var result = family_array(Python.tuple(inputs.rows, n_targets), "<f4", context) if n_targets > 1 else family_array(Python.tuple(inputs.rows), "<f4", context)
     var w = family_raw_get(model, "_w")
-    var connection = linear_svc_connection(binding)
+    var connection = linear_svc_route(model, py_fields(model), context)
     var request = QnQueryRequest(Int(py=classical_address(inputs.source)), Int(py=classical_address(w)),
         Int(py=classical_address(result)), 0, inputs.rows, inputs.features,
         n_targets if n_targets > 1 else 1, inputs.intercept, False)
@@ -177,18 +179,20 @@ def _gmm_sample(model: PythonObject, binding: PythonObject, n_samples: PythonObj
 
 def _svm_mixture_operation_route(model: PythonObject, operation: Int, args: PythonObject,
                                  context: PythonObject) raises -> PythonObject:
-    """args[0] is the resolved binding."""
+    """args[0] is the resolved binding for GaussianMixture.sample; the
+    linear machines take their driver from the estimator's route (args[0]
+    is None for them)."""
     classical_connect_numpy(context)
     var b = native_loaded_module("builtins")
     if operation == SVM_OPN_FAMILY_SVM_LINEAR_SVC_DECISION:
         if not Bool(py=family_call(b.hasattr, model, PythonObject("_w"))):
             raise Error("mojolearn LinearSVC: call fit first")
         var n_classes = _class_count(py_call(b.getattr, model, PythonObject("classes_")))
-        return _qn_scores(model, args[0], args[1], 1 if n_classes == 2 else n_classes, context)
+        return _qn_scores(model, args[1], 1 if n_classes == 2 else n_classes, context)
     if operation == SVM_OPN_FAMILY_SVM_LINEAR_SVR_PREDICT:
         if not Bool(py=family_call(b.hasattr, model, PythonObject("_w"))):
             raise Error("mojolearn LinearSVR: call fit before predict")
-        return _qn_scores(model, args[0], args[1], 1, context)
+        return _qn_scores(model, args[1], 1, context)
     if operation == SVM_OPN_FAMILY_SVM_GMM_SAMPLE:
         return _gmm_sample(model, args[0], args[1], context)
     raise Error("RuntimeError: unknown svm/mixture operation " + String(operation))

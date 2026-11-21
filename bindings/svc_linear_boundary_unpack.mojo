@@ -41,7 +41,7 @@ from core.label_weights_native_api import LabelWeightsRequest, LABEL_WEIGHTS_MUL
 from providers.python.estimator_binding_pyapi_door import estimator_binding_routed
 from bindings.classical_labels_door import labels_type_name, classical_encode_labels
 from bindings.labels_descriptor_boundary_door import labels_scope
-from bindings.linear_svc_boundary_unpack import LinearSvcWeights, LinearSvcConnection, linear_svc_connection
+from bindings.linear_svc_boundary_unpack import LinearSvcWeights, LinearSvcConnection, linear_svc_route
 from core.linear_svc_native_api import LinearSvcOptions, LinearSvcFitRequest, LinearSvcWeightsState
 from core.logistic_native_api import QnFitRequest, QnQueryRequest
 from bindings.svc_common_unpack import (
@@ -174,9 +174,9 @@ struct LinearSvrFitUnpacked(Movable):
 
 
 def linear_svr_fit_unpack(model: PythonObject, args: PythonObject, context: PythonObject) raises -> LinearSvrFitUnpacked:
-    """`LinearSVR.fit(X, y, sample_weight)`; args = (binding, X, y, sample_weight)."""
+    """`LinearSVR.fit(X, y, sample_weight)`; args = (None, X, y, sample_weight); the
+    driver comes from the estimator's held route (`linear_svc_route`)."""
     var operator = native_loaded_module("operator")
-    var binding = args[0]
     var fields = py_fields(model)
     var nk = svm_keys()
     var epsilon = svc_field(fields, nk[].k_epsilon, "epsilon")
@@ -216,7 +216,7 @@ def linear_svr_fit_unpack(model: PythonObject, args: PythonObject, context: Pyth
         Int(py=classical_address(weights)), 0, sw_address, 0, rows, cols, 1,
         max_iter, linesearch, memory, intercept, penalty_normalized, loss,
         strengths[0], strengths[1], tol, 0.1 * tol, svr_eps)
-    var connection = linear_svc_connection(binding)
+    var connection = linear_svc_route(model, fields, context)
     return LinearSvrFitUnpacked(fields, x, t, sw, weights, connection^, request^, cols, intercept)
 
 
@@ -242,9 +242,9 @@ struct LinearSvcFitUnpacked(Movable):
 
 
 def linear_svc_fit_unpack(model: PythonObject, args: PythonObject, context: PythonObject) raises -> LinearSvcFitUnpacked:
-    """`LinearSVC.fit(X, y, sample_weight)`; args = (binding, X, y, sample_weight)."""
+    """`LinearSVC.fit(X, y, sample_weight)`; args = (None, X, y, sample_weight); the
+    driver comes from the estimator's held route (`linear_svc_route`)."""
     var operator = native_loaded_module("operator")
-    var binding = args[0]
     var fields = py_fields(model)
     var nk = svm_keys()
     var multi_class = svc_field(fields, nk[].k_multi_class, "multi_class")
@@ -278,7 +278,7 @@ def linear_svc_fit_unpack(model: PythonObject, args: PythonObject, context: Pyth
     var pn = 1 if svc_truthy(svc_attr(model, nk[].k_penalty_normalized)) else 0
     var tol = svc_float(svc_field(fields, nk[].k_tol, "tol"))
     var loss = Int(py=svc_attr(model, nk[].k__LOSSES)[svc_field(fields, nk[].k_loss, "loss")])
-    var connection = linear_svc_connection(binding)
+    var connection = linear_svc_route(model, fields, context)
     var options = LinearSvcOptions(rows, cols, first, n_fits,
         svc_int(svc_field(fields, nk[].k_max_iter, "max_iter")),
         svc_int(svc_field(fields, nk[].k_linesearch_max_iter, "linesearch_max_iter")),
