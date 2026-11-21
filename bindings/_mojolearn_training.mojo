@@ -59,7 +59,6 @@ from core.experiment_guards_neural import NEURAL_GUARDS_OK
 from training.neural_arithmetic_profile import neural_training_profile
 from bindings.residual_dropout_boundary_pack import (
     residual_dropout_binding, residual_dropout_backward_binding,
-    residual_dropout_dev_binding, residual_dropout_backward_dev_binding,
 )
 from training.neural_session_mlp import nn_mlp_sessions_device
 
@@ -970,8 +969,8 @@ def build__mojolearn_training() -> PythonObject:
             m.def_function[linear_backward_dev_binding]("linear_backward_dev")
             m.def_function[ce_loss_dev_binding]("ce_loss_dev")
             # lane ne3-c-blocks-embedding (row N117): residual dropout on device arrays
-            m.def_function[residual_dropout_dev_binding]("residual_dropout_dev")
-            m.def_function[residual_dropout_backward_dev_binding]("residual_dropout_backward_dev")
+            # TOMBSTONE: residual_dropout_dev, residual_dropout_backward_dev exports (dead native entries: the door calls OPT_NATIVE_RESIDUAL_DROPOUT_DEV / _BACKWARD_DEV of optimizer_native_api_v1, training/optimizer_native_extra_gpu.mojo) deleted 2026-11-21 by lane/dw-autograd-seq; code recoverable at 6184091ce8.
+            # Restore: git show 6184091ce8:bindings/residual_dropout_boundary_pack.mojo (the two `_dev_binding` functions) and bindings/residual_dropout_boundary_unpack.mojo.
             # TOMBSTONE: clip_grad_norm, clip_pool_fault_available, optimizer_resident_copy_dev exports (dead native entries: no live caller; clip_grad_norm_ runs optimizer_door_clip) deleted 2026-10-26 by c76141c5c; code recoverable at a88745022.
             # Restore: git apply experiments/removed/dead_entries_training.patch
         # TOMBSTONE: clip_grad_norm, clip_pool_fault_available, optimizer_resident_copy_dev exports (dead native entries: no live caller; clip_grad_norm_ runs optimizer_door_clip) deleted 2026-10-26 by c76141c5c; code recoverable at a88745022.
