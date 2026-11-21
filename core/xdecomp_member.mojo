@@ -1,15 +1,40 @@
 # SPDX-License-Identifier: Apache-2.0
 """The XDecomp family as MEMBERS (core/member_abi.mojo): IncrementalPCA
-(kind 0) so far; the family's other classes are not published yet.
+(kind 0) and NMF (kind 3) so far; the family's other classes are not
+published yet.
 
 One entry, `xdecomp_member_v2`, published by each x_decomp image
 (`xdecomp_member_publish`, beside its linear entry table publication:
 x_decomp/publish_device_run.mojo, x_decomp/publish_host_run.mojo). It runs
 the family's existing typed RUN, the IncrementalPCA native driver
 (core/ipca_native_api.mojo `IPCANativeDriver`: IPCA_FIT, IPCA_QUERY,
-IPCA_PREPARE, IPCA_FREE) over the entry of the `DeviceRoute` it is handed,
-the entry the estimator's own door calls (bindings/ipca_native_door.mojo).
-No kernel is touched. No score (the class has none).
+IPCA_PREPARE, IPCA_FREE) and the NMF native driver (core/nmf_native_api.mojo
+`NMFNativeDriver`: NMF_FIT, NMF_INVERSE) over the entry of the `DeviceRoute`
+it is handed, the entry the estimator's own door calls
+(bindings/ipca_native_door.mojo, bindings/nmf_native_door.mojo). No kernel
+is touched. No score (neither class has one).
+
+NMF: route `entry` the x_decomp image's NMF entry; `flags` bit
+XDECOMP_ROUTE_NMF_INVERSE (the entry exports the inverse, NMF_CAP_INVERSE;
+an inverse_transform without it is refused in the door's words). The fit
+with `fit_output = MEMBER_OP_TRANSFORM` writes W into `dst` in the ONE fit
+call (the door's fit_transform returns the fit's own W); a transform is the
+door's solver run with H fixed (NMF_TRANSFORM), the regularization scaled by
+the transform's rows as the door scales it. X is tested finite in the kernel
+over its own upload, as the door's deferred admission does.
+
+MEMBER_OP_NEW parameters, NMF (12):
+  [0] kind: 3 NMF
+  [1] n_components: -1 None or 'auto' (n_features at fit), else the count
+  [2] init: -1 None (nndsvda when n_components <= min(rows, features), else
+      random, at fit), 0 random, 1 nndsvd, 2 nndsvda, 3 nndsvdar ('custom'
+      takes W and H: refused at admission, not a member)
+  [3] solver: 0 'cd', 1 'mu'     [4] beta: 2 frobenius, 1 kullback-leibler, 0 itakura-saito
+  [5] max_iter   [6] tol   [7] alpha_W   [8] alpha_H (alpha_W for 'same')
+  [9] l1_ratio   [10] shuffle 0 / 1   [11] seed: random_state & 0xFFFFFFFF, 0 for None
+NMF blocks: 0 `MEMBER_BLOCK_SCALARS` float64 [n_components_, n_features_in_,
+n_iter_, reconstruction_err_]; 1 `XDECOMP_BLOCK_COMPONENTS` float32
+n_components_ x n_features_in_ (components_).
 
 Route slots read (IncrementalPCA): `entry` the x_decomp image's
 IncrementalPCA entry; `flags` bit XDECOMP_ROUTE_RESIDENT (the entry keeps
@@ -64,6 +89,13 @@ from core.member_abi import (
     MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
 )
+from core.nmf_native_api import (
+    NMFNativeDriver, NMFFitRequest, NMFInverseRequest, nmf_regularization,
+)
+from core.admitted_refusals import admitted_finite_refuse
+from x_decomp.nmf import NmfArgs
+from x_decomp.nmf_owner import NMF_INIT_RANDOM, NMF_INIT_NNDSVDA, NMF_INIT_NNDSVDAR, NMF_TRANSFORM
+from x_decomp.decomp_owner_common_run import decomp_gemm_check
 from core.member_families import MEMBER_FAMILY_XDECOMP
 from core.entry_table import EntryRef, entry_ref_unresolved
 from core.native_descriptor_abi import NativeDescriptorError
@@ -72,6 +104,8 @@ from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 
 comptime XDECOMP_KIND_IPCA = 0
 comptime XDECOMP_IPCA_PARAM_COUNT = 4
+comptime XDECOMP_KIND_NMF = 3
+comptime XDECOMP_NMF_PARAM_COUNT = 12
 
 comptime XDECOMP_BLOCK_COMPONENTS = MEMBER_BLOCK_FAMILY
 comptime XDECOMP_BLOCK_SINGULAR = MEMBER_BLOCK_FAMILY + 1
@@ -81,8 +115,10 @@ comptime XDECOMP_BLOCK_VARIANCE = MEMBER_BLOCK_FAMILY + 4
 comptime XDECOMP_BLOCK_RATIO = MEMBER_BLOCK_FAMILY + 5
 
 comptime XDECOMP_ROUTE_RESIDENT = 1
+comptime XDECOMP_ROUTE_NMF_INVERSE = 2
 
 comptime _IPCA_SCALARS = 5
+comptime _NMF_SCALARS = 4
 comptime _HANDLES = 5
 comptime _CHUNK = 256
 comptime _INDEX_SPAN = 16777216
@@ -241,7 +277,7 @@ def _release(slot: _Slot) raises:
 
 
 def _name(slot: _Slot) -> String:
-    return String("IncrementalPCA")
+    return String("NMF") if slot[].kind() == XDECOMP_KIND_NMF else String("IncrementalPCA")
 
 
 def _dense(view: MemberMatrix, what: String, estimator: String) raises:
@@ -344,6 +380,149 @@ def _query(slot: _Slot, call: _Call, inverse: Bool) raises:
     IPCANativeDriver(call[].route.entry.call).query(request)
 
 
+# ---------------------------------------------------------------- NMF
+
+
+def _nmf_args(slot: _Slot, rows: Int, features: Int, update_h: Bool) -> NmfArgs:
+    # The door's `_regs` (scaled by this call's rows) and `NmfArgs`.
+    var regs = nmf_regularization(rows, features, slot[].words[7], slot[].words[8], slot[].words[9])
+    return NmfArgs(slot[].words[4], update_h, Int(slot[].words[5]), slot[].words[6], regs.l1w, regs.l1h,
+        regs.l2w, regs.l2h, slot[].words[10] != 0.0, Int(slot[].words[11]))
+
+
+def _fit_nmf(slot: _Slot, call: _Call) raises:
+    var estimator = _name(slot)
+    _whole(call, estimator)
+    _dense(call[].x, "X", estimator)
+    if call[].weights.rows > 0:
+        raise Error("TypeError: a " + estimator + " member takes no sample_weight")
+    if call[].fit_output != 0 and call[].fit_output != MEMBER_OP_TRANSFORM:
+        member_unsupported(estimator, call[].fit_output)
+    var n = call[].x.rows
+    var d = call[].x.cols
+    var nc = d if slot[].words[1] < 0.0 else Int(slot[].words[1])
+    var smaller = min(n, d)
+    var init = Int(slot[].words[2])
+    if init < 0:
+        init = NMF_INIT_NNDSVDA if nc <= smaller else NMF_INIT_RANDOM
+    if init > NMF_INIT_NNDSVDAR:
+        raise Error("member ABI: unknown NMF init code " + String(init))
+    if init != NMF_INIT_RANDOM and nc > smaller:
+        raise Error("init = 'nndsvd' can only be used when n_components <= min(n_samples, n_features)")
+    var w_output = 0
+    var w_scratch = List[Float32]()
+    if call[].fit_output == MEMBER_OP_TRANSFORM:
+        # W of the fit itself, written in the fit call (the door's fit_transform).
+        _dense(call[].dst, "the output buffer", estimator)
+        if call[].dst.rows != n or call[].dst.cols != nc:
+            raise Error("ValueError: the output buffer holds n_components values per row of X")
+        w_output = call[].dst.data
+    else:
+        w_scratch = List[Float32](length=max(n * nc, 1), fill=Float32(0))
+        w_output = Int(w_scratch.unsafe_ptr())
+    _release(slot)
+    slot[].clear()
+    slot[].blocks.append(List[Float32](length=max(nc * d, 1), fill=Float32(0)))
+    var h_output = _address(slot, 0)
+    var request = NMFFitRequest(call[].x.data, h_output, h_output, w_output, h_output, n, d, nc, init,
+        Int(slot[].words[3]), _nmf_args(slot, n, d, True), True)
+    var result = NMFNativeDriver(call[].route.entry.call).fit(request)
+    _ = w_scratch^
+    admitted_finite_refuse(result.finite, estimator)
+    slot[].count = nc
+    slot[].features = d
+    slot[].scalars = [Float64(nc), Float64(d), Float64(result.iterations), result.error]
+    slot[].fitted = True
+
+
+def _query_nmf(slot: _Slot, call: _Call, inverse: Bool) raises:
+    """transform (the solver with H fixed: X -> W, rows x n_components_) or
+    inverse_transform (W H: rows x n_components_ -> rows x n_features_in_)."""
+    var estimator = _name(slot)
+    if not slot[].fitted:
+        raise Error("NotFittedError: this " + estimator + " member is not fitted yet")
+    _whole(call, estimator)
+    _dense(call[].x, "X", estimator)
+    _dense(call[].dst, "the output buffer", estimator)
+    var rows = call[].x.rows
+    var nc = slot[].count
+    var d = slot[].features
+    var width = d if inverse else nc
+    if inverse:
+        if (call[].route.flags & XDECOMP_ROUTE_NMF_INVERSE) == 0:
+            raise Error("NotImplementedError: mojolearn NMF: this build of _mojolearn_x_decomp does not export "
+                        + "x_decomp_nmf_inverse; rebuild it with bindings/build_x_decomp.sh")
+        decomp_gemm_check(call[].x.cols, nc)
+    elif call[].x.cols != d:
+        raise Error("X has " + String(call[].x.cols) + " features, but NMF is expecting " + String(d))
+    if call[].dst.rows != rows or call[].dst.cols != width:
+        raise Error("ValueError: the output buffer holds " + String(width) + " values per row of X")
+    var driver = NMFNativeDriver(call[].route.entry.call)
+    if inverse:
+        driver.inverse(NMFInverseRequest(call[].x.data, _address(slot, 0), call[].dst.data, rows, d, nc))
+        return
+    # The H output of a transform is the door's scratch (NMFScratch): kept
+    # in the slot, sized once per fitted state.
+    if len(slot[].blocks) < 2:
+        slot[].blocks.append(List[Float32](length=max(nc * d, 1), fill=Float32(0)))
+    var scratch = _address(slot, 1)
+    var request = NMFFitRequest(call[].x.data, scratch, _address(slot, 0), call[].dst.data, scratch, rows, d, nc,
+        NMF_TRANSFORM, Int(slot[].words[3]), _nmf_args(slot, rows, d, False), True)
+    var result = driver.fit(request)
+    admitted_finite_refuse(result.finite, estimator)
+
+
+def _export_nmf(slot: _Slot, call: _Call) raises:
+    var block = call[].block
+    if (call[].flags & MEMBER_BLOCK_BY_INDEX) != 0:
+        if block < 0 or block > 1:
+            raise Error("member ABI: an NMF member has no fitted block index " + String(block))
+        block = MEMBER_BLOCK_SCALARS if block == 0 else XDECOMP_BLOCK_COMPONENTS
+    if block == MEMBER_BLOCK_SCALARS:
+        call[].dst = MemberMatrix(Int(slot[].scalars.unsafe_ptr()), 1, len(slot[].scalars), MEMBER_F64)
+    elif block == XDECOMP_BLOCK_COMPONENTS:
+        call[].dst = MemberMatrix(_address(slot, 0), slot[].count, slot[].features)
+    else:
+        raise Error("member ABI: an NMF member has no fitted block " + String(block))
+    call[].block = block
+    call[].out_cols = 2
+
+
+def _import_nmf(slot: _Slot, call: _Call) raises:
+    var estimator = _name(slot)
+    var block = call[].block
+    if slot[].fitted or len(slot[].blocks) != 1:
+        slot[].clear()
+        slot[].blocks.append(List[Float32]())
+    if block == MEMBER_BLOCK_SCALARS:
+        if not call[].x.dense_host(MEMBER_F64) or call[].x.rows * call[].x.cols != _NMF_SCALARS:
+            raise Error("member ABI: the NMF scalars block is four host float64 words")
+        var source = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call[].x.data)
+        slot[].scalars = List[Float64](length=_NMF_SCALARS, fill=0.0)
+        for index in range(_NMF_SCALARS):  # driver-loop: four fitted scalars
+            slot[].scalars[index] = source[index]
+    elif block == XDECOMP_BLOCK_COMPONENTS:
+        var size = call[].x.rows * call[].x.cols
+        var words = List[Float32](length=size, fill=0.0)
+        if size > 0:
+            _dense(call[].x, "a fitted block", estimator)
+            unsafe_memcpy(dest=words.unsafe_ptr(), src=_F32P(unsafe_from_address=call[].x.data), count=size)
+        slot[].blocks[0] = words^
+    elif block != 0 or (call[].flags & MEMBER_IMPORT_DONE) == 0:
+        raise Error("member ABI: an NMF member has no fitted block " + String(block))
+    if (call[].flags & MEMBER_IMPORT_DONE) == 0:
+        return
+    if len(slot[].scalars) != _NMF_SCALARS:
+        raise Error("member ABI: a fitted NMF state needs its scalars block")
+    var nc = Int(slot[].scalars[0])
+    var d = Int(slot[].scalars[1])
+    if nc < 1 or d < 1 or len(slot[].blocks[0]) != nc * d:
+        raise Error("member ABI: a fitted NMF state needs every fitted block, of the fitted sizes")
+    slot[].count = nc
+    slot[].features = d
+    slot[].fitted = True
+
+
 def _block_index(index: Int) raises -> Int:
     if index == 0:
         return MEMBER_BLOCK_SCALARS
@@ -357,6 +536,9 @@ def _export(slot: _Slot, call: _Call) raises:
     until this state's next fit, import or free."""
     if not slot[].fitted:
         raise Error("NotFittedError: this " + _name(slot) + " member is not fitted yet")
+    if slot[].kind() == XDECOMP_KIND_NMF:
+        _export_nmf(slot, call)
+        return
     var block = call[].block
     if (call[].flags & MEMBER_BLOCK_BY_INDEX) != 0:
         block = _block_index(block)
@@ -381,6 +563,9 @@ def _import(slot: _Slot, call: _Call) raises:
     var estimator = _name(slot)
     var block = call[].block
     _release(slot)
+    if slot[].kind() == XDECOMP_KIND_NMF:
+        _import_nmf(slot, call)
+        return
     if slot[].fitted or len(slot[].blocks) != 6:
         slot[].clear()
         for _ in range(6):  # driver-loop: six fitted blocks
@@ -429,6 +614,8 @@ def _outputs(call: _Call) raises:
     if slot[].fitted:
         call[].out_cols = slot[].count if asked == MEMBER_OP_TRANSFORM else slot[].features
         return
+    if asked == MEMBER_OP_INVERSE_TRANSFORM and slot[].kind() == XDECOMP_KIND_NMF:
+        raise Error("NotFittedError: this NMF member's output width is known after its fit")
     if asked == MEMBER_OP_TRANSFORM and slot[].words[1] >= 0.0:
         call[].out_cols = Int(slot[].words[1])
         return
@@ -443,10 +630,14 @@ def _xdecomp_member(operation: Int, address: Int) raises -> Int:
         if call[].param_count < 1 or not call[].params:
             raise Error("member ABI: an XDecomp member takes its parameter words")
         var source = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call[].params)
-        if source[0] != Float64(XDECOMP_KIND_IPCA):
+        if source[0] == Float64(XDECOMP_KIND_IPCA):
+            if call[].param_count != XDECOMP_IPCA_PARAM_COUNT:
+                raise Error("member ABI: an IncrementalPCA member takes four parameters")
+        elif source[0] == Float64(XDECOMP_KIND_NMF):
+            if call[].param_count != XDECOMP_NMF_PARAM_COUNT:
+                raise Error("member ABI: an NMF member takes twelve parameters")
+        else:
             raise Error("member ABI: unknown or unpublished XDecomp member kind")
-        if call[].param_count != XDECOMP_IPCA_PARAM_COUNT:
-            raise Error("member ABI: an IncrementalPCA member takes four parameters")
         var words = List[Float64](length=call[].param_count, fill=0.0)
         for index in range(call[].param_count):  # driver-loop: the parameter words
             words[index] = source[index]
@@ -460,12 +651,17 @@ def _xdecomp_member(operation: Int, address: Int) raises -> Int:
         _outputs(call)
         return 0
     var slot = _Slot(unsafe_from_address=_lookup(call[].state, False))
+    var nmf = slot[].kind() == XDECOMP_KIND_NMF
     if operation == MEMBER_OP_FIT:
-        _fit_ipca(slot, call)
-    elif operation == MEMBER_OP_TRANSFORM:
-        _query(slot, call, False)
-    elif operation == MEMBER_OP_INVERSE_TRANSFORM:
-        _query(slot, call, True)
+        if nmf:
+            _fit_nmf(slot, call)
+        else:
+            _fit_ipca(slot, call)
+    elif operation == MEMBER_OP_TRANSFORM or operation == MEMBER_OP_INVERSE_TRANSFORM:
+        if nmf:
+            _query_nmf(slot, call, operation == MEMBER_OP_INVERSE_TRANSFORM)
+        else:
+            _query(slot, call, operation == MEMBER_OP_INVERSE_TRANSFORM)
     elif operation == MEMBER_OP_EXPORT:
         _export(slot, call)
     elif operation == MEMBER_OP_IMPORT:
