@@ -1205,6 +1205,9 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_BF16_UNITS.patch; record in docs/TOMBSTONES.md.
     comptime assert not is_defined["MOJOLEARN_GEMM_FAST_BF16_UNITS"](), "removed 2026-11-20 (lane/fx-verdicts6, A/B abf2 NVIDIA L40S, wheel e41b5148b24d, job nvc-ab-20261120T224801Z-458a59, one run per arm; DOMINATED: median 0.96 but mlp-clf/taxi infer 8.49 -> 15.82 ms, 1.86, gemm max_rel_err 2.2e-3; slower than the TF32 route on every cell): the bf16 matrix-unit products of a fast build; the TF32 matrix-units route is the default; see docs/TOMBSTONES.md"
     # ---- end lane fx-verdicts6
+    # ---- lane inv-bf16-kernel (2026-11-20): MOJOLEARN_GEMM_FAST_BF16_RESIDENT (gemm/fast_bf16_resident.mojo: bf16 matrix-unit products over resident bf16 operands; default off, A/B owed on the kernel-clock rows) is a relaxation of `fast` only.
+    comptime assert (not is_defined["MOJOLEARN_GEMM_FAST_BF16_RESIDENT"]()) or (is_defined["MOJOLEARN_MODE_FAST_ROWS"]() and not is_defined["MOJOLEARN_GEMM_FAST_MATRIX_UNITS_OFF"]()), "MOJOLEARN_GEMM_FAST_BF16_RESIDENT is legal only in a fast build with the matrix-units route (-D MOJOLEARN_MODE_FAST_ROWS, without MOJOLEARN_GEMM_FAST_MATRIX_UNITS_OFF); a build that promises identical bits never takes bf16 operands"
+    # ---- end lane inv-bf16-kernel
     return True
 
 
