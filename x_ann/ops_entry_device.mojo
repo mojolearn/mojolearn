@@ -4,7 +4,8 @@
 Python exports (bindings/_mojolearn_x_ann.mojo `x_ann_ivf_pq_search`,
 `x_ann_ivf_sq_search`, `x_ann_ivf_rabitq_search`, `x_ann_cagra_search`,
 `x_ann_filter_topk`, `x_ann_tsne_fit`) and the resident index operations
-(x_ann/resident.mojo). The exports UNPACK their lists, release the GIL and
+(x_ann/resident.mojo). The fit operations' bodies are in
+x_ann/ops_entry_device_fit.mojo. The exports UNPACK their lists, release the GIL and
 call the same `*_run` body the table entry calls: the same checks, the same
 copies, the same kernels and the same words, so the bits are unchanged. The
 table entry is called with the GIL already released by its caller (the
@@ -20,7 +21,13 @@ from core.abs_sum_blocked import device_any_index_out_of_range
 from core.neighbors_entry_table_ann import (
     ANN_OP_INDEX_PREPARE, ANN_OP_INDEX_SEARCH, ANN_OP_INDEX_RELEASE, ANN_OP_INDEX_EXPORT_CODES,
     ANN_OP_IVF_PQ_SEARCH, ANN_OP_IVF_SQ_SEARCH, ANN_OP_IVF_RABITQ_SEARCH, ANN_OP_CAGRA_SEARCH,
-    ANN_OP_FILTER_TOPK, ANN_OP_TSNE_FIT, ann_ops_check_spans, ann_span_list,
+    ANN_OP_FILTER_TOPK, ANN_OP_TSNE_FIT, ANN_OP_IVF_PQ_BUILD, ANN_OP_IVF_PQ_BUILD_RESIDENT,
+    ANN_OP_IVF_PQ_REGISTER_BUILT, ANN_OP_IVF_SQ_BUILD, ANN_OP_IVF_RABITQ_BUILD, ANN_OP_CAGRA_BUILD,
+    ann_ops_check_spans, ann_span_list,
+)
+from x_ann.ops_entry_device_fit import (
+    ann_ivf_pq_build_device_run, ann_ivf_pq_build_resident_device_run, ann_ivf_pq_register_built_device_run,
+    ann_ivf_sq_build_device_run, ann_ivf_rabitq_build_device_run, ann_cagra_build_device_run,
 )
 from x_ann.abi import check_search, out_f32_to, out_i32_to
 from x_ann.abi_shell_impl import rabitq_padded_dim
@@ -325,7 +332,21 @@ def ann_ops_device_run(operation: Int, pa: MutPointer[Int, MutUntrackedOrigin], 
     if operation == ANN_OP_INDEX_EXPORT_CODES:
         x_ann_index_export_codes(pp[0], a[0], pp[1])
         return 0
+    if operation == ANN_OP_IVF_PQ_REGISTER_BUILT:
+        # GIL held by the caller (the resident registry); every other fit
+        # operation below is called with it released.
+        return ann_ivf_pq_register_built_device_run(pp[0])
     var p = ann_span_list(pp, 0, np)
+    if operation == ANN_OP_IVF_PQ_BUILD:
+        return ann_ivf_pq_build_device_run(a, p)
+    if operation == ANN_OP_IVF_PQ_BUILD_RESIDENT:
+        return ann_ivf_pq_build_resident_device_run(a, p)
+    if operation == ANN_OP_IVF_SQ_BUILD:
+        return ann_ivf_sq_build_device_run(a, p)
+    if operation == ANN_OP_IVF_RABITQ_BUILD:
+        return ann_ivf_rabitq_build_device_run(a, p)
+    if operation == ANN_OP_CAGRA_BUILD:
+        return ann_cagra_build_device_run(a, p)
     if operation == ANN_OP_IVF_PQ_SEARCH:
         return ann_ivf_pq_search_device_run(a, p)
     if operation == ANN_OP_IVF_SQ_SEARCH:

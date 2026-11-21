@@ -13,19 +13,16 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from x_ann.mojolearn_x_ann_run import ivf_pq_build_run, ivf_pq_build_resident_run
-from providers.python.x_ann_abi_pyapi_unpack import a_int, in_f32, p_int, py_int_list
-from x_ann.switches import IVF_PQ_ONE_UPLOAD, IVF_PQ_RESIDENT_FIT
-from ivf.impl.neighbors.ivf_flat.ivf_flat_build import IVF_BUILD_FROM_POINTER
-from x_ann.ivf_pq_core import IvfPqIndex
-from x_ann.stage_timer import AnnStages
-from x_ann.cagra_device import cagra_build_device_ptr
-from x_ann.device_ctx import x_ann_ctx
+from x_ann.ops_entry_device_fit import (
+    ann_ivf_pq_build_device_run, ann_ivf_pq_build_resident_device_run, ann_ivf_pq_register_built_device_run,
+    ann_ivf_sq_build_device_run, ann_ivf_rabitq_build_device_run, ann_cagra_build_device_run,
+)
+from providers.python.x_ann_abi_pyapi_unpack import a_int, p_int, py_int_list
+from x_ann.switches import IVF_PQ_RESIDENT_FIT
 from providers.python.x_ann_resident_pyapi_pack import x_ann_index_release_binding
 from providers.python.x_ann_resident_pyapi_pack import x_ann_index_export_codes_binding
 from bindings.archive_x_ann_entry import publish_archive_x_ann
-from x_ann.resident import x_ann_register_pq_built
-from x_ann.ivf_pq_device import ivf_sq_build_device_ptr, refine_device_ptr, ivf_rabitq_build_device_ptr
+from x_ann.ivf_pq_device import refine_device_ptr
 from core.hostptr import f32_ptr, i32_ptr
 from x_ann.ops_entry_device import (
     ANN_OPS_DEVICE_API, ann_ops_device_v1, ann_ivf_pq_search_device_run, ann_ivf_sq_search_device_run,
@@ -35,7 +32,6 @@ from x_ann.ops_entry_device import (
 from core.neighbors_entry_table import NeighborsEntryKey, neighbors_vendor_word
 from core.neighbors_entry_table_ann import ann_ops_publish
 from bindings.py_balanced import py_setattr
-from x_ann.ivf_pq_device import IvfPqDevice
 # TOMBSTONE: MOJOLEARN_IVF_REFINE_TEAM (DROPPED-noise) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
 # Tried: ivf refine with one threadgroup per query and the dataset uploaded from the caller's array (refine_team_kernel, refine_device_team); ivf-refine taxi 1,208.3 -> 1,201.8 ms (-0.5%, noise).
 # Restore: git apply experiments/removed/MOJOLEARN_IVF_REFINE_TEAM.patch; record in docs/TOMBSTONES.md.
@@ -43,23 +39,12 @@ from x_ann.ivf_pq_device import IvfPqDevice
 
 def ivf_pq_build_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     """addrs: x, centers, offsets, list_indices, codebooks, codes.
-    params: n, dim, n_lists, kmeans_n_iters, seed, pq_dim, pq_bits, pq_kmeans_n_iters."""
-    var n = p_int(params, 0)
-    var dim = p_int(params, 1)
-    var bst = AnnStages("ivf_pq_binding")
+    params: n, dim, n_lists, kmeans_n_iters, seed, pq_dim, pq_bits, pq_kmeans_n_iters.
+    UNPACK and PACK only (lane dw-neighbors, 2026-11-21): the body is
+    x_ann/ops_entry_device_fit.mojo `ann_ivf_pq_build_device_run`, which the
+    ANN operations table (core/neighbors_entry_table_ann.mojo) also calls."""
     # lane fg-ivf A3: where the coarse build reads the caller's rows in place
     # (IVF_PQ_ONE_UPLOAD with IVF_BUILD_FROM_POINTER) the n x dim copy is gone
-    var x_addr = a_int(addrs, 0)
-    var x = List[Float32]()
-    comptime if not (IVF_PQ_ONE_UPLOAD and IVF_BUILD_FROM_POINTER):
-        x = in_f32(addrs, 0, n * dim)
-    bst.host("copy_in")
-    var n_lists = p_int(params, 2)
-    var iters = p_int(params, 3)
-    var seed = p_int(params, 4)
-    var pq_dim = p_int(params, 5)
-    var pq_bits = p_int(params, 6)
-    var pq_iters = p_int(params, 7)
     # The codes go from the device straight into the caller's array (lane
     # fx-ann-fit-nocopy, 2026-11-20: the default; before, a result list the
     # size of the codes and a copy out of it). The opt-in `ANN3_DIRECT_OUT`
@@ -69,21 +54,13 @@ def ivf_pq_build_binding(addrs: PythonObject, params: PythonObject) raises -> Py
     # TOMBSTONE: MOJOLEARN_ANN3_DIRECT_OUT (unmeasured opt-in arm: codes written by the device into the caller's array) deleted 2026-11-15 by lane/expdel2-01-base; code recoverable at 418bb3c6c3.
     # Restore: git apply experiments/removed/MOJOLEARN_ANN3_DIRECT_OUT.expdel2-01-base.patch
     # RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
-    var codes_addr = a_int(addrs, 5)
-    if codes_addr == 0:
-        raise Error("mojolearn: null int32 buffer address")
-    # p3-neighbors-cluster: the output addresses are Python items, so they are
-    # read here with the GIL held; the released block below touches no
-    # PythonObject (the host binding's pattern).
-    var centers_out = a_int(addrs, 1)
-    var offsets_out = a_int(addrs, 2)
-    var indices_out = a_int(addrs, 3)
-    var codebooks_out = a_int(addrs, 4)
+    # p3-neighbors-cluster: the addresses are Python items, so they are read
+    # here with the GIL held; the released body touches no PythonObject.
+    var a = py_int_list(addrs)
+    var p = py_int_list(params)
+    var n = 0
     with GILReleased(Python()):
-        ivf_pq_build_run(
-            x, n, dim, n_lists, iters, seed, pq_dim, pq_bits, pq_iters, codes_addr, x_addr,
-            bst, centers_out, offsets_out, indices_out, codebooks_out,
-        )
+        n = ann_ivf_pq_build_device_run(a, p)
     return PythonObject(n)
 
 
@@ -93,44 +70,19 @@ def ivf_pq_build_resident_binding(addrs: PythonObject, params: PythonObject) rai
     `x_ann/resident.mojo` handle (returned); the codes are not downloaded
     (`x_ann_index_export_codes` writes them on first read of `codes_`).
     addrs: x, centers, offsets, list_indices, codebooks.
-    params: n, dim, n_lists, kmeans_n_iters, seed, pq_dim, pq_bits, pq_kmeans_n_iters."""
-    if len(addrs) != 5 or len(params) != 8:
-        raise Error("x_ann_ivf_pq_build_resident: need 5 addresses and 8 parameters")
-    var n = p_int(params, 0)
-    var dim = p_int(params, 1)
-    var bst = AnnStages("ivf_pq_binding_resident")
-    var x_addr = a_int(addrs, 0)
-    var x = List[Float32]()
-    comptime if not (IVF_PQ_ONE_UPLOAD and IVF_BUILD_FROM_POINTER):
-        x = in_f32(addrs, 0, n * dim)
-    bst.host("copy_in")
-    var n_lists = p_int(params, 2)
-    var iters = p_int(params, 3)
-    var seed = p_int(params, 4)
-    var pq_dim = p_int(params, 5)
-    var pq_bits = p_int(params, 6)
-    var pq_iters = p_int(params, 7)
-    var ctx = x_ann_ctx()
-    var dev = IvfPqDevice(ctx)
-    # a placeholder the build below replaces (assigned inside the GIL release)
-    var index = IvfPqIndex(
-        0, 0, 0, 0, 0, 0, List[Float32](), List[Int32](), List[Int32](), List[Float32](), List[Int32]()
-    )
-    # p3-neighbors-cluster: output addresses read with the GIL held.
-    var centers_out = a_int(addrs, 1)
-    var offsets_out = a_int(addrs, 2)
-    var indices_out = a_int(addrs, 3)
-    var codebooks_out = a_int(addrs, 4)
+    params: n, dim, n_lists, kmeans_n_iters, seed, pq_dim, pq_bits, pq_kmeans_n_iters.
+    UNPACK and PACK only (lane dw-neighbors, 2026-11-21): the two phases are
+    the two table operations' bodies (x_ann/ops_entry_device_fit.mojo): the
+    build with the GIL released, then the registration with it held (the
+    resident registry is guarded by it)."""
+    var a = py_int_list(addrs)
+    var p = py_int_list(params)
+    var ticket = 0
     with GILReleased(Python()):
-        ivf_pq_build_resident_run(
-            x, x_addr, n, dim, n_lists, iters, seed, pq_dim, pq_bits, pq_iters, dev,
-            index, bst, centers_out, offsets_out, indices_out, codebooks_out,
-        )
-    _ = x^
-    var handle = x_ann_register_pq_built(index^, dev^)
-    bst.host("register")
-    _ = ctx^
-    return PythonObject(handle)
+        ticket = ann_ivf_pq_build_resident_device_run(a, p)
+    if ticket == 0:
+        raise Error("x_ann_ivf_pq_build_resident: this image keeps no resident fit")
+    return PythonObject(ann_ivf_pq_register_built_device_run(ticket))
 
 
 def ivf_pq_search_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -150,22 +102,19 @@ def ivf_pq_search_binding(addrs: PythonObject, params: PythonObject) raises -> P
 
 
 def cagra_build_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
-    """addrs: x, graph_out. params: n, d, intermediate_graph_degree, graph_degree."""
-    var n = p_int(params, 0)
-    var d = p_int(params, 1)
-    var kdeg = p_int(params, 2)
-    var deg = p_int(params, 3)
-    if n < 2 or d <= 0 or kdeg < 1 or kdeg > n - 1 or deg < 1 or deg > kdeg:
-        raise Error("CAGRA: need 1 <= graph_degree <= intermediate_graph_degree <= n - 1")
+    """addrs: x, graph_out. params: n, d, intermediate_graph_degree, graph_degree.
+    UNPACK and PACK only (lane dw-neighbors, 2026-11-21): the body is
+    x_ann/ops_entry_device_fit.mojo `ann_cagra_build_device_run`."""
     # The caller's arrays themselves (lane fx-ann-fit-nocopy, 2026-11-20):
     # the rows are uploaded from where they are and the graph is downloaded
     # where the caller wants it. Gone: a list copy of the n x d rows and a
     # graph list with a copy out of it. The door keeps both arrays alive
     # through this call.
-    var xp = f32_ptr(a_int(addrs, 0))
-    var gp = i32_ptr(a_int(addrs, 1))
+    var a = py_int_list(addrs)
+    var p = py_int_list(params)
+    var n = 0
     with GILReleased(Python()):
-        cagra_build_device_ptr(xp, n, d, kdeg, deg, gp)
+        n = ann_cagra_build_device_run(a, p)
     return PythonObject(n)
 
 
@@ -188,14 +137,9 @@ def cagra_search_binding(addrs: PythonObject, params: PythonObject) raises -> Py
 def ivf_sq_build_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     """addrs: x, centers, offsets, list_indices, vmin, delta, codes.
     params: n, dim, n_lists, kmeans_n_iters, seed[, train_rows_per_list] (release-0845:
-    IVFSQIndex max_train_points_per_cluster; 0 or absent keeps the default training rows)."""
-    var n = p_int(params, 0)
-    var dim = p_int(params, 1)
-    var n_lists = p_int(params, 2)
-    var iters = p_int(params, 3)
-    var seed = p_int(params, 4)
-    var train_rows_per_list = p_int(params, 5) if len(params) > 5 else 0
-    var bst = AnnStages("ivf_sq_binding")
+    IVFSQIndex max_train_points_per_cluster; 0 or absent keeps the default training rows).
+    UNPACK and PACK only (lane dw-neighbors, 2026-11-21): the body is
+    x_ann/ops_entry_device_fit.mojo `ann_ivf_sq_build_device_run`."""
     # The caller's arrays themselves (lane fx-ann-fit-nocopy, 2026-11-20).
     # Where the coarse build reads the caller's rows in place
     # (IVF_PQ_ONE_UPLOAD with IVF_BUILD_FROM_POINTER, as IVF-PQ's fit) the
@@ -207,23 +151,11 @@ def ivf_sq_build_binding(addrs: PythonObject, params: PythonObject) raises -> Py
     # Restore: git apply experiments/removed/MOJOLEARN_ANN3_DIRECT_OUT.expdel2-01-base.patch
     # RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
     # (2026-11-20, lane fx-ann-fit-nocopy: the arm's read moved into x_ann/ivf_pq_device.mojo `ivf_sq_build_device_ptr`.)
-    var x_addr = a_int(addrs, 0)
-    if x_addr == 0:
-        raise Error("mojolearn: null float32 buffer address")
-    var x = List[Float32]()
-    comptime if not (IVF_PQ_ONE_UPLOAD and IVF_BUILD_FROM_POINTER):
-        x = in_f32(addrs, 0, n * dim)
-    bst.host("copy_in")
-    var centers_p = f32_ptr(a_int(addrs, 1))
-    var offsets_p = i32_ptr(a_int(addrs, 2))
-    var indices_p = i32_ptr(a_int(addrs, 3))
-    var vmin_p = f32_ptr(a_int(addrs, 4))
-    var delta_p = f32_ptr(a_int(addrs, 5))
-    var codes_p = i32_ptr(a_int(addrs, 6))
+    var a = py_int_list(addrs)
+    var p = py_int_list(params)
+    var n = 0
     with GILReleased(Python()):
-        ivf_sq_build_device_ptr(x, x_addr, n, dim, n_lists, iters, seed, centers_p, offsets_p, indices_p,
-                                vmin_p, delta_p, codes_p, train_rows_per_list)
-    bst.host("build")
+        n = ann_ivf_sq_build_device_run(a, p)
     return PythonObject(n)
 
 
@@ -273,34 +205,18 @@ def refine_binding(addrs: PythonObject, params: PythonObject) raises -> PythonOb
 
 def ivf_rabitq_build_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     """addrs: x, centers, offsets, list_indices, codes (n x words int32 bit words), norms, ips.
-    params: n, dim, n_lists, kmeans_n_iters, seed."""
-    var n = p_int(params, 0)
-    var dim = p_int(params, 1)
-    var n_lists = p_int(params, 2)
-    var iters = p_int(params, 3)
-    var seed = p_int(params, 4)
-    var bst = AnnStages("ivf_rabitq_binding")
+    params: n, dim, n_lists, kmeans_n_iters, seed.
+    UNPACK and PACK only (lane dw-neighbors, 2026-11-21): the body is
+    x_ann/ops_entry_device_fit.mojo `ann_ivf_rabitq_build_device_run`."""
     # The caller's arrays themselves (lane fx-ann-fit-nocopy, 2026-11-20;
     # `ivf_sq_build_binding`'s form): no list copy of the rows where the
     # coarse build reads them in place, and the six results written where
     # the caller wants them.
-    var x_addr = a_int(addrs, 0)
-    if x_addr == 0:
-        raise Error("mojolearn: null float32 buffer address")
-    var x = List[Float32]()
-    comptime if not (IVF_PQ_ONE_UPLOAD and IVF_BUILD_FROM_POINTER):
-        x = in_f32(addrs, 0, n * dim)
-    bst.host("copy_in")
-    var centers_p = f32_ptr(a_int(addrs, 1))
-    var offsets_p = i32_ptr(a_int(addrs, 2))
-    var indices_p = i32_ptr(a_int(addrs, 3))
-    var codes_p = i32_ptr(a_int(addrs, 4))
-    var norms_p = f32_ptr(a_int(addrs, 5))
-    var ips_p = f32_ptr(a_int(addrs, 6))
+    var a = py_int_list(addrs)
+    var p = py_int_list(params)
+    var n = 0
     with GILReleased(Python()):
-        ivf_rabitq_build_device_ptr(x, x_addr, n, dim, n_lists, iters, seed, centers_p, offsets_p, indices_p,
-                                    codes_p, norms_p, ips_p)
-    bst.host("build")
+        n = ann_ivf_rabitq_build_device_run(a, p)
     return PythonObject(n)
 
 

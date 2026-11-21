@@ -18,7 +18,7 @@ from bindings.admitted_finite_wording import admitted_finite_wording
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
 from bindings.native_prepared_owner_unpack import prepared_drop
 from bindings.native_buffer_owner_pack import native_storage_allocate, native_buffer_view
-from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem, py_setattr
+from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_setattr
 from bindings.classical_arrays_door import classical_address, classical_is_array
 from bindings.classical_attributes_door import classical_connect_numpy, classical_check_layout
 from bindings.classical_validate_unpack import classical_view, classical_refuse_sparse, classical_estimator_name
@@ -42,6 +42,16 @@ from bindings.parallel_public_result_door import parallel_public_result
 from bindings.ivf_ops_native_door import ivf_ops_key, ivf_ops_key_probe, ivf_door_build, ivf_door_release
 from core.ivf_entry_table import IvfIndexSpans, IvfIndexWords
 from ivf.ivf_query_run import IvfBuildRequest, ivf_borrowed
+from bindings.native_ops_key_ann_unpack import ann_ops_key
+from bindings.ann_fit_ops_native_door import (
+    ANN_NO_HANDLE, ann_ops_key_probe, ann_door_pq_fit, ann_door_pq_fit_resident, ann_door_sq_fit,
+    ann_door_rabitq_fit, ann_door_cagra_fit, ann_door_release,
+)
+from core.neighbors_entry_table import NeighborsEntryKey
+from core.neighbors_entry_table_ann import ann_ops_entry
+from x_ann.neighbors_ann_fit_run import (
+    AnnPqFitRequest, AnnSqFitRequest, AnnRabitqFitRequest, AnnCagraFitRequest, ann_borrowed, ann_on_device,
+)
 from bindings.neighbors_ann_query_native_door import neighbors_ann_search, ann_pq_materialize, ann_stored_drop
 from bindings.mode_metadata_native_door import _fields
 from bindings.p3nc_fitted_freeze_unpack import fitted_freeze
@@ -152,21 +162,23 @@ def _ann_entry(binding: PythonObject, name: String) raises -> PythonObject:
     return neural_descriptor_entry(binding, name)
 
 
-def _ann_borrowed(minter: PythonObject, binding: PythonObject, release: String) raises -> Bool:
-    """Whether a resident handle minted by `minter` is BORROWED by the
-    estimator whose device image is `binding`: the two images are different
+def _ann_borrowed(minter: NeighborsEntryKey, own: NeighborsEntryKey) -> Bool:
+    """Whether a resident handle minted by the image `minter` is BORROWED by
+    the estimator whose device image is `own`: the two images are different
     DEVICE columns (one is the CPU host image, the other a GPU image). The
     estimator that minted the handle is then another estimator, on the other
     device, that was handed this fitted state in memory
     (`_check_both.on_device`: `model.check`, `verify --cross-check`) and
-    still owns it. For the x_ann kinds the device column is told by the
-    release entry itself, which only a GPU image publishes (their host image
-    keeps no resident index). IVF-Flat tells it by the two images' table
-    keys (`ivf_release_held`, ivf/ivf_query_run.mojo `ivf_borrowed`): both
-    its columns mint handles.
+    still owns it. The device column is told by the two images' table keys
+    (`x_ann_native_key`, vendor word 0 = the CPU column;
+    x_ann/neighbors_ann_fit_run.mojo `ann_borrowed`), as IVF-Flat tells it
+    (`ivf_release_held`, `ivf_borrowed`). An own image that records no key
+    counts as not a GPU image, as it did when the test was the presence of
+    the release export (lane dw-neighbors, 2026-11-21: that export is no
+    longer read by name).
     Two images of ONE device (identical and fast, or a module and its
     import-time query alias) are never borrowed from each other."""
-    return (py_get(py_fields(minter), release) is None) != (py_get(py_fields(binding), release) is None)
+    return ann_borrowed(minter, own)
 
 
 def ivf_release_held(fields: PythonObject, binding: PythonObject, b: PythonObject) raises:
@@ -202,15 +214,22 @@ def ivf_release_held(fields: PythonObject, binding: PythonObject, b: PythonObjec
         pass
 
 
-def _ann_release(fields: PythonObject, release: String, binding: PythonObject) raises:
+def _ann_release(fields: PythonObject, binding: PythonObject) raises:
     """`_release_resident`: pop the held `(key, handle, binding)`, if any,
-    and release it through the minting binding's `release` entry. Quiet on a
-    binding that cannot be reached any more or a handle already gone.
+    and release the handle through the MINTING image's operations table
+    (core/neighbors_entry_table_ann.mojo ANN_OP_INDEX_RELEASE), GIL held.
+    Quiet on a minter that records no table key or is the CPU column (which
+    keeps no resident index), and on a handle already gone.
 
     `binding` is the image of the estimator's own device. A handle the other
     device's image minted is borrowed (`_ann_borrowed`): this estimator
     forgets it and builds its own, and never releases it, because its owner
-    still searches through it."""
+    still searches through it.
+
+    Before (lane dw-neighbors, 2026-11-21): the minter's `x_ann_index_release`
+    export read by name from its module dictionary, a second by-name read of
+    the estimator's own image for the borrowed test, and a Python call. Now
+    two key reads and one table call. Once per fit, never per query."""
     var cached = py_call(fields.pop, PythonObject("_resident"), PythonObject(None))
     if cached is None:
         return
@@ -219,17 +238,15 @@ def _ann_release(fields: PythonObject, release: String, binding: PythonObject) r
         raise Error("TypeError: ANN resident state requires its native key, handle and module")
     if py_type(cached[2]) is not py_type(b):
         raise Error("TypeError: ANN resident state requires its compiled module owner")
-    # Import-connected query aliases hold entries minted by the original
-    # module. Read only the exact module dictionary, never __getattr__.
-    var entry = py_get(py_fields(cached[2]), release)
-    if entry is None:
+    # Import-connected query aliases hold the key of the original module.
+    # Read only the exact module dictionary, never __getattr__.
+    var minter = ann_ops_key_probe(cached[2])
+    if not ann_on_device(minter):
         return
-    if py_type(entry) is not py_type(b.len) or py_type(entry.__self__) is not py_type(b):
-        raise Error("TypeError: ANN release requires a compiled module entry")
-    if py_type(binding) is py_type(b) and _ann_borrowed(cached[2], binding, release):
+    if py_type(binding) is py_type(b) and _ann_borrowed(minter, ann_ops_key_probe(binding)):
         return
     try:
-        _ = py_call(entry, cached[1])
+        ann_door_release(ann_ops_entry(minter), Int(py=cached[1]))
     except:
         pass
 
@@ -420,8 +437,8 @@ def _ivf_fit(model: PythonObject, args: PythonObject, context: PythonObject,
 
 def _pq_fit(model: PythonObject, args: PythonObject, context: PythonObject,
                x_snapshot: ArrayMetadata, x_pin: ArrayPin) raises -> PythonObject:
-    """`IVFPQIndex.fit(X)`: `x_ann_ivf_pq_build_resident` when the binding
-    has it (`codes_` stays in its handle), else `x_ann_ivf_pq_build`."""
+    """`IVFPQIndex.fit(X)`: the resident build when the image keeps one
+    (`codes_` stays in its handle), else the build that writes the codes."""
     var b = native_loaded_module("builtins")
     var binding = args[0]
     var fields = _fields(model)
@@ -431,7 +448,7 @@ def _pq_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     # `self._NAME`, the class's name in `_p`'s refusals (read off the class).
     var owner = String("IVFPQIndex")
     _ = py_call(fields.pop, PythonObject("_device_codes"), PythonObject(None))
-    _ann_release(fields, "x_ann_index_release", binding)
+    _ann_release(fields, binding)
     var x = x_pin.keep
     var n = x_snapshot.shape[0]
     var dim = x_snapshot.shape[1]
@@ -448,18 +465,31 @@ def _pq_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     var offsets = _ann_empty(plan.offsets, "<i4", context)
     var indices = _ann_empty(plan.indices, "<i4", context)
     var codebooks = _ann_empty(plan.codebooks, "<f4", context)
-    var resident_build = neural_descriptor_entry(binding, "x_ann_ivf_pq_build_resident", False)
-    if resident_build is not None:
-        # x, centers, offsets, list_indices, codebooks (bindings/_mojolearn_x_ann.mojo);
-        # n, dim, n_lists, kmeans_n_iters, seed, pq_dim, pq_bits, pq_kmeans_n_iters.
-        var addrs = Python.list(PythonObject(x_snapshot.source.addr), classical_address(centers), classical_address(offsets),
-                                classical_address(indices), classical_address(codebooks))
-        var iters = _ann_param(fields, owner, "kmeans_n_iters")
-        var seed = _ann_param(fields, owner, "random_state")
-        var pq_iters = _ann_param(fields, owner, "pq_kmeans_n_iters")
-        var handle = family_call(b.int, family_call(
-            resident_build, addrs,
-            Python.list(PythonObject(n), PythonObject(dim), n_lists_o, iters, seed, pq_dim_o, pq_bits_o, pq_iters)))
+    # RUN (x_ann/neighbors_ann_fit_run.mojo): the image's ANN operations
+    # table under the key read here, once per fit. Before (lane dw-neighbors,
+    # 2026-11-21): a by-name probe of `x_ann_ivf_pq_build_resident`, a by-name
+    # read of `x_ann_ivf_pq_build`, a five- or six-address and an eight-word
+    # Python list, a Python call and, in the export, thirteen or fourteen
+    # boxed-word reads.
+    var ops_key = ann_ops_key(binding)
+    var ops = ann_ops_entry(ops_key)
+    var iters = Int(py=_ann_param(fields, owner, "kmeans_n_iters"))
+    var seed = Int(py=_ann_param(fields, owner, "random_state"))
+    var pq_iters = Int(py=_ann_param(fields, owner, "pq_kmeans_n_iters"))
+    # The resident build (a GPU image that keeps a resident fit; the CPU
+    # column keeps no resident index and is not asked): x, centers, offsets,
+    # list_indices, codebooks; the codes stay in the image's handle. The
+    # build runs with the GIL released and the handle is registered with it
+    # held (bindings/ann_fit_ops_native_door.mojo). An image without the
+    # resident fit answers ANN_NO_HANDLE before any work.
+    var resident = ANN_NO_HANDLE
+    if ann_on_device(ops_key):
+        resident = ann_door_pq_fit_resident(ops, AnnPqFitRequest(
+            x_snapshot.source.addr, Int(py=classical_address(centers)), Int(py=classical_address(offsets)),
+            Int(py=classical_address(indices)), Int(py=classical_address(codebooks)), 0,
+            n, dim, n_lists, iters, seed, pq_dim, pq_bits, pq_iters))
+    if resident != ANN_NO_HANDLE:
+        var handle = PythonObject(resident)
         _ = x_snapshot  # retain the captured storage owners through native execution
         _ = x_pin
         _ = centers  # keep the Python object alive through the native call above
@@ -491,16 +521,11 @@ def _pq_fit(model: PythonObject, args: PythonObject, context: PythonObject,
         _ = fitted_freeze(fields["codebooks_"], context)
         return model
     var codes = _ann_empty(plan.codes, "<i4", context)
-    var build = _ann_entry(binding, "x_ann_ivf_pq_build")
-    # x, centers, offsets, list_indices, codebooks, codes;
-    # n, dim, n_lists, kmeans_n_iters, seed, pq_dim, pq_bits, pq_kmeans_n_iters.
-    var addrs = Python.list(PythonObject(x_snapshot.source.addr), classical_address(centers), classical_address(offsets),
-                            classical_address(indices), classical_address(codebooks), classical_address(codes))
-    var iters = _ann_param(fields, owner, "kmeans_n_iters")
-    var seed = _ann_param(fields, owner, "random_state")
-    var pq_iters = _ann_param(fields, owner, "pq_kmeans_n_iters")
-    _ = family_call(build, addrs,
-                    Python.list(PythonObject(n), PythonObject(dim), n_lists_o, iters, seed, pq_dim_o, pq_bits_o, pq_iters))
+    # x, centers, offsets, list_indices, codebooks, codes.
+    ann_door_pq_fit(ops, AnnPqFitRequest(
+        x_snapshot.source.addr, Int(py=classical_address(centers)), Int(py=classical_address(offsets)),
+        Int(py=classical_address(indices)), Int(py=classical_address(codebooks)), Int(py=classical_address(codes)),
+        n, dim, n_lists, iters, seed, pq_dim, pq_bits, pq_iters))
     _ = x_snapshot  # retain the captured storage owners through native execution
     _ = x_pin
     _ = centers  # keep the Python object alive through the native call above
@@ -534,14 +559,14 @@ def _pq_fit(model: PythonObject, args: PythonObject, context: PythonObject,
 
 def _sq_fit(model: PythonObject, args: PythonObject, context: PythonObject,
                x_snapshot: ArrayMetadata, x_pin: ArrayPin) raises -> PythonObject:
-    """`IVFSQIndex.fit(X)` through `x_ann_ivf_sq_build`."""
+    """`IVFSQIndex.fit(X)`: the image's IVF-SQ build operation."""
     var binding = args[0]
     var fields = _fields(model)
     # A refit replaces the fitted arrays: drop the search's stored-array
     # stamp (and the arrays it retains) now, not at the next search.
     ann_stored_drop(model)
     var owner = String("IVFSQIndex")
-    _ann_release(fields, "x_ann_index_release", binding)
+    _ann_release(fields, binding)
     var x = x_pin.keep
     var n = x_snapshot.shape[0]
     var dim = x_snapshot.shape[1]
@@ -558,15 +583,17 @@ def _sq_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     var vmin = _ann_empty(dim, "<f4", context)
     var delta = _ann_empty(dim, "<f4", context)
     var codes = _ann_empty(n * dim, "<i4", context)
-    var build = _ann_entry(binding, "x_ann_ivf_sq_build")
+    # RUN: one table call under the key read here, GIL released (before: the
+    # export by name, a seven-address and a six-word Python list).
     # x, centers, offsets, list_indices, vmin, delta, codes;
     # n, dim, n_lists, kmeans_n_iters, seed, train_rows_per_list.
-    var addrs = Python.list(PythonObject(x_snapshot.source.addr), classical_address(centers), classical_address(offsets),
-                            classical_address(indices), classical_address(vmin), classical_address(delta),
-                            classical_address(codes))
-    var iters = _ann_param(fields, owner, "kmeans_n_iters")
-    var seed = _ann_param(fields, owner, "random_state")
-    _ = family_call(build, addrs, Python.list(PythonObject(n), PythonObject(dim), n_lists_o, iters, seed, train_per_list))
+    var ops = ann_ops_entry(ann_ops_key(binding))
+    var iters = Int(py=_ann_param(fields, owner, "kmeans_n_iters"))
+    var seed = Int(py=_ann_param(fields, owner, "random_state"))
+    ann_door_sq_fit(ops, AnnSqFitRequest(
+        x_snapshot.source.addr, Int(py=classical_address(centers)), Int(py=classical_address(offsets)),
+        Int(py=classical_address(indices)), Int(py=classical_address(vmin)), Int(py=classical_address(delta)),
+        Int(py=classical_address(codes)), n, dim, n_lists, iters, seed, Int(py=train_per_list)))
     _ = x_snapshot  # retain the captured storage owners through native execution
     _ = x_pin
     _ = centers  # keep the Python object alive through the native call above
@@ -600,14 +627,14 @@ def _sq_fit(model: PythonObject, args: PythonObject, context: PythonObject,
 
 def _rabitq_fit(model: PythonObject, args: PythonObject, context: PythonObject,
                x_snapshot: ArrayMetadata, x_pin: ArrayPin) raises -> PythonObject:
-    """`IVFRaBitQIndex.fit(X)` through `x_ann_ivf_rabitq_build`."""
+    """`IVFRaBitQIndex.fit(X)`: the image's IVF-RaBitQ build operation."""
     var binding = args[0]
     var fields = _fields(model)
     # A refit replaces the fitted arrays: drop the search's stored-array
     # stamp (and the arrays it retains) now, not at the next search.
     ann_stored_drop(model)
     var owner = String("IVFRaBitQIndex")
-    _ann_release(fields, "x_ann_index_release", binding)
+    _ann_release(fields, binding)
     var x = x_pin.keep
     var n = x_snapshot.shape[0]
     var dim = x_snapshot.shape[1]
@@ -621,14 +648,16 @@ def _rabitq_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     var codes = _ann_empty(n * words, "<i4", context)
     var norms = _ann_empty(n, "<f4", context)
     var ips = _ann_empty(n, "<f4", context)
-    var build = _ann_entry(binding, "x_ann_ivf_rabitq_build")
+    # RUN: one table call under the key read here, GIL released (before: the
+    # export by name, a seven-address and a five-word Python list).
     # x, centers, offsets, list_indices, codes, norms, ips; n, dim, n_lists, kmeans_n_iters, seed.
-    var addrs = Python.list(PythonObject(x_snapshot.source.addr), classical_address(centers), classical_address(offsets),
-                            classical_address(indices), classical_address(codes), classical_address(norms),
-                            classical_address(ips))
-    var iters = _ann_param(fields, owner, "kmeans_n_iters")
-    var seed = _ann_param(fields, owner, "random_state")
-    _ = family_call(build, addrs, Python.list(PythonObject(n), PythonObject(dim), n_lists_o, iters, seed))
+    var ops = ann_ops_entry(ann_ops_key(binding))
+    var iters = Int(py=_ann_param(fields, owner, "kmeans_n_iters"))
+    var seed = Int(py=_ann_param(fields, owner, "random_state"))
+    ann_door_rabitq_fit(ops, AnnRabitqFitRequest(
+        x_snapshot.source.addr, Int(py=classical_address(centers)), Int(py=classical_address(offsets)),
+        Int(py=classical_address(indices)), Int(py=classical_address(codes)), Int(py=classical_address(norms)),
+        Int(py=classical_address(ips)), n, dim, n_lists, iters, seed))
     _ = x_snapshot  # retain the captured storage owners through native execution
     _ = x_pin
     _ = centers  # keep the Python object alive through the native call above
@@ -663,14 +692,14 @@ def _rabitq_fit(model: PythonObject, args: PythonObject, context: PythonObject,
 
 def _cagra_fit(model: PythonObject, args: PythonObject, context: PythonObject,
                x_snapshot: ArrayMetadata, x_pin: ArrayPin) raises -> PythonObject:
-    """`CagraIndex.fit(X)` through `x_ann_cagra_build`; the index keeps X."""
+    """`CagraIndex.fit(X)`: the image's CAGRA build operation; the index keeps X."""
     var binding = args[0]
     var fields = _fields(model)
     # A refit replaces the fitted arrays: drop the search's stored-array
     # stamp (and the arrays it retains) now, not at the next search.
     ann_stored_drop(model)
     var owner = String("CagraIndex")
-    _ann_release(fields, "x_ann_index_release", binding)
+    _ann_release(fields, binding)
     var x = x_pin.keep
     var n = x_snapshot.shape[0]
     var d = x_snapshot.shape[1]
@@ -681,10 +710,11 @@ def _cagra_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     var kdeg = degrees[0]
     var deg = degrees[1]
     var graph = _ann_empty(n * deg, "<i4", context)
-    var build = _ann_entry(binding, "x_ann_cagra_build")
+    # RUN: one table call under the key read here, GIL released (before: the
+    # export by name, a two-address and a four-word Python list).
     # x, graph_out; n, d, intermediate_graph_degree, graph_degree
-    _ = family_call(build, Python.list(PythonObject(x_snapshot.source.addr), classical_address(graph)),
-                    Python.list(PythonObject(n), PythonObject(d), PythonObject(kdeg), PythonObject(deg)))
+    ann_door_cagra_fit(ann_ops_entry(ann_ops_key(binding)), AnnCagraFitRequest(
+        x_snapshot.source.addr, Int(py=classical_address(graph)), n, d, kdeg, deg))
     _ = x_snapshot  # retain the captured storage owners through native execution
     _ = x_pin
     _ = graph  # keep the Python object alive through the native call above

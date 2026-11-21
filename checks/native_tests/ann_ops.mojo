@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """The ANN operations table (core/neighbors_entry_table_ann.mojo), one case
-per entry the ANN search and TSNE owners call (bindings/neighbors_ann_query_native.mojo,
-bindings/mani_tsne_native.mojo), with expectations known by construction
+per entry the ANN search, fit and TSNE owners call (bindings/neighbors_ann_query_native.mojo,
+bindings/ann_fit_ops_native_door.mojo, bindings/mani_tsne_native.mojo), with expectations known by construction
 (one-feature points in two far groups, a complete CAGRA graph seeded at every
 node, a filter over known ids, a non-finite X), not by another call into the
 implementation. No Python objects.
@@ -13,6 +13,12 @@ from core.neighbors_entry_table import NeighborsEntryKey, neighbors_vendor_word
 from core.neighbors_entry_table_ann import (
     ANN_OP_CAGRA_SEARCH,
     ANN_OP_FILTER_TOPK,
+    ANN_OP_IVF_PQ_BUILD,
+    ANN_OP_IVF_PQ_BUILD_RESIDENT,
+    ANN_OP_IVF_PQ_REGISTER_BUILT,
+    ANN_OP_CAGRA_BUILD,
+    ann_build_call,
+    ann_pq_register_built_call,
     ann_ops_publish,
     ann_ops_entry,
     ann_search_call,
@@ -29,8 +35,8 @@ from x_ann.ops_entry_device import ann_ops_device_v1, ANN_OPS_DEVICE_API
 from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
 
 
-comptime ANN_SHARED_CASES = 4
-comptime ANN_DEVICE_CASES = 1
+comptime ANN_SHARED_CASES = 7
+comptime ANN_DEVICE_CASES = 2
 comptime _KIND_CAGRA = 3
 comptime _TSNE_INIT_RANDOM = 1
 
@@ -136,6 +142,83 @@ def case_refuses_bad_spans(entry: NativeDescriptorCall) raises:
     require(unknown, "spans: an unknown operation was not refused")
 
 
+def _pq_words() -> List[Int]:
+    # n 4, dim 1, n_lists 2, kmeans_n_iters 5, seed 0, pq_dim 1, pq_bits 1,
+    # pq_kmeans_n_iters 5.
+    var words: List[Int] = [4, 1, 2, 5, 0, 1, 1, 5]
+    return words^
+
+
+def _require_lists(offsets: List[Int32], indices: List[Int32], what: String) raises:
+    # Two lists over four rows: offsets start at 0 and end at 4, and the
+    # list order holds every row once.
+    require(offsets[0] == 0 and offsets[2] == 4 and offsets[1] >= 0 and offsets[1] <= 4,
+            what + ": offsets " + String(offsets[0]) + ", " + String(offsets[1]) + ", " + String(offsets[2]))
+    var seen = List[Int](length=4, fill=0)
+    for i in range(4):  # small-loop(no: four fixture rows)
+        var row = Int(indices[i])
+        require(row >= 0 and row < 4, what + ": row id " + String(row))
+        seen[row] += 1
+    for i in range(4):  # small-loop(no: four fixture rows)
+        require(seen[i] == 1, what + ": row " + String(i) + " listed " + String(seen[i]) + " times")
+
+
+def case_ivf_pq_build(entry: NativeDescriptorCall) raises:
+    # The plain IVF-PQ fit (operation 10) on the two far groups: every row
+    # in exactly one of the two lists, every code in [0, 2) (pq_bits 1).
+    var x = _dataset()
+    var centers = List[Float32](length=2, fill=-7.0)
+    var offsets = List[Int32](length=3, fill=-7)
+    var indices = List[Int32](length=4, fill=-7)
+    var codebooks = List[Float32](length=2, fill=-7.0)
+    var codes = List[Int32](length=4, fill=-7)
+    var addrs: List[Int] = [_f(x), _f(centers), _i(offsets), _i(indices), _f(codebooks), _i(codes)]
+    var n = ann_build_call(entry, ANN_OP_IVF_PQ_BUILD, addrs, _pq_words())
+    require(n == 4, "ivf_pq build: returned " + String(n))
+    _require_lists(offsets, indices, "ivf_pq build")
+    for i in range(4):  # small-loop(no: four fixture rows)
+        require(codes[i] == 0 or codes[i] == 1, "ivf_pq build: code " + String(codes[i]))
+    _ = x
+    _ = centers
+    _ = codebooks
+
+
+def case_cagra_build(entry: NativeDescriptorCall) raises:
+    # CAGRA fit (operation 15), graph degree 3 over four rows: every edge
+    # names another row, never the row itself.
+    var x = _dataset()
+    var g = List[Int32](length=12, fill=-7)
+    var addrs: List[Int] = [_f(x), _i(g)]
+    var words: List[Int] = [4, 1, 3, 3]
+    var n = ann_build_call(entry, ANN_OP_CAGRA_BUILD, addrs, words)
+    require(n == 4, "cagra build: returned " + String(n))
+    for i in range(12):  # small-loop(no: twelve fixture edges)
+        var to = Int(g[i])
+        require(to >= 0 and to < 4 and to != i // 3, "cagra build: edge " + String(i) + " -> " + String(to))
+    _ = x
+
+
+def case_build_refuses_bad_spans(entry: NativeDescriptorCall) raises:
+    # The plain IVF-PQ build with the resident build's five addresses, and a
+    # registration that carries an address: both refused before any read.
+    var addrs: List[Int] = [8, 8, 8, 8, 8]
+    var floats = List[Float64]()
+    var short = False
+    try:
+        _ = native_descriptor_call(entry, ANN_OP_IVF_PQ_BUILD, addrs, _pq_words(), floats)
+    except:
+        short = True
+    require(short, "spans: a five-address IVF-PQ build was not refused")
+    var one: List[Int] = [8]
+    var ticket: List[Int] = [1]
+    var extra = False
+    try:
+        _ = native_descriptor_call(entry, ANN_OP_IVF_PQ_REGISTER_BUILT, one, ticket, floats)
+    except:
+        extra = True
+    require(extra, "spans: a registration with an address was not refused")
+
+
 def run_shared_case(entry: NativeDescriptorCall, case_id: Int) raises:
     if case_id == 0:
         case_filter_topk(entry)
@@ -145,6 +228,12 @@ def run_shared_case(entry: NativeDescriptorCall, case_id: Int) raises:
         case_tsne_refuses_non_finite(entry)
     elif case_id == 3:
         case_refuses_bad_spans(entry)
+    elif case_id == 4:
+        case_ivf_pq_build(entry)
+    elif case_id == 5:
+        case_build_refuses_bad_spans(entry)
+    elif case_id == 6:
+        case_cagra_build(entry)
     else:
         raise Error("ann ops: unknown shared case " + String(case_id))
 
@@ -156,6 +245,31 @@ def case_host_refuses_resident(entry: NativeDescriptorCall) raises:
     except:
         refused = True
     require(refused, "host column: a resident release was not refused")
+    # The resident IVF-PQ fit's two operations: the CPU column keeps no
+    # resident index and refuses both.
+    var x = _dataset()
+    var centers = List[Float32](length=2, fill=-7.0)
+    var offsets = List[Int32](length=3, fill=-7)
+    var indices = List[Int32](length=4, fill=-7)
+    var codebooks = List[Float32](length=2, fill=-7.0)
+    var addrs: List[Int] = [_f(x), _f(centers), _i(offsets), _i(indices), _f(codebooks)]
+    var build = False
+    try:
+        _ = ann_build_call(entry, ANN_OP_IVF_PQ_BUILD_RESIDENT, addrs, _pq_words())
+    except:
+        build = True
+    require(build, "host column: a resident IVF-PQ build was not refused")
+    require(offsets[0] == -7, "host column: a refused resident build wrote an output")
+    var register = False
+    try:
+        _ = ann_pq_register_built_call(entry, 1)
+    except:
+        register = True
+    require(register, "host column: a resident IVF-PQ registration was not refused")
+    _ = x
+    _ = centers
+    _ = indices
+    _ = codebooks
 
 
 def case_resident_cagra(entry: NativeDescriptorCall) raises:
@@ -192,9 +306,43 @@ def case_resident_cagra(entry: NativeDescriptorCall) raises:
     _ = status
 
 
+def case_resident_ivf_pq_fit(entry: NativeDescriptorCall) raises:
+    # The resident IVF-PQ fit as its two operations: the build (11) writes
+    # the four small arrays and parks the index under a ticket; the
+    # registration (12) turns the ticket into a handle, which releases once;
+    # the same ticket does not register twice. Ticket 0 is an image built
+    # without the resident fit: nothing was built and nothing is written.
+    var x = _dataset()
+    var centers = List[Float32](length=2, fill=-7.0)
+    var offsets = List[Int32](length=3, fill=-7)
+    var indices = List[Int32](length=4, fill=-7)
+    var codebooks = List[Float32](length=2, fill=-7.0)
+    var addrs: List[Int] = [_f(x), _f(centers), _i(offsets), _i(indices), _f(codebooks)]
+    var ticket = ann_build_call(entry, ANN_OP_IVF_PQ_BUILD_RESIDENT, addrs, _pq_words())
+    _ = x
+    _ = centers
+    _ = codebooks
+    if ticket == 0:
+        require(offsets[0] == -7, "resident ivf_pq: an image without the resident fit wrote an output")
+        return
+    require(ticket > 0, "resident ivf_pq: ticket " + String(ticket))
+    _require_lists(offsets, indices, "resident ivf_pq")
+    var handle = ann_pq_register_built_call(entry, ticket)
+    require(handle > 0, "resident ivf_pq: handle " + String(handle))
+    var twice = False
+    try:
+        _ = ann_pq_register_built_call(entry, ticket)
+    except:
+        twice = True
+    require(twice, "resident ivf_pq: a ticket registered twice")
+    ann_index_release_call(entry, handle)
+
+
 def run_device_case(entry: NativeDescriptorCall, case_id: Int) raises:
     if case_id == 0:
         case_resident_cagra(entry)
+    elif case_id == 1:
+        case_resident_ivf_pq_fit(entry)
     else:
         raise Error("ann ops: unknown device case " + String(case_id))
 
