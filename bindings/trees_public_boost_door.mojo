@@ -51,15 +51,16 @@ from bindings.trees_public_inputs_door import (
     trees_call,
     trees_class_rows_only,
 )
-from bindings.trees_public_inputs_run import TREES_NONFINITE
+from bindings.trees_public_inputs_run import TREES_NONFINITE, trees_finite_f32
 from bindings.admitted_input_unpack import (
     AdmittedX, admit_f32, admit_weight_words, admitted_words, admitted_array, admitted_vector,
 )
 from bindings.admitted_input_run import AdmittedXView
 from bindings.member_set_door import (
     MemberSet, member_set_admit, member_set_width, member_set_run, member_set_pack, member_set_release,
+    member_marked, member_predict_held,
 )
-from core.member_abi import MEMBER_F32, MEMBER_I32
+from core.member_abi import MEMBER_F32, MEMBER_I32, MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA
 # TOMBSTONE: TreesView / _view_of_array / trees_f32 / trees_all_finite / trees_check_sample_weight / trees_vector / trees_empty uses (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
 from xtrees.trees_forest_run import ForestFit, trees_check_features, forest_export_dtype
@@ -949,9 +950,21 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
         w_address = sw.value().address
     var native = count > 0
     var jobs = native_unit_jobs(fields["n_jobs"], "Bagging")
+    # The member entries read admitted words; X (and a regressor's targets)
+    # reach this door untested because each member's fit door tests what it
+    # is given. Proven once, when the first member is admitted natively (an
+    # unpublished family never pays the scan): not finite = the loop below,
+    # whose first fit door refuses in the forest's own words.
+    var proven = False
     while native and done < count:  # driver-loop: over the waves of member estimators
         var set = MemberSet(x.address, n, d, MEMBER_I32 if classifier else MEMBER_F32, MEMBER_I32)
         set.run.cap = jobs
+        # A member on a CPU route keeps its fitted state: this door's
+        # predicts read it there (`_bagging_held`), so the first predict
+        # imports nothing. On a GPU route the members predict from the staged
+        # device copy of X through their doors and the states are freed.
+        set.adopt = True
+        set.adopt_trees = True
         var wave_rows = Python.list()
         var wave_cols = Python.list()
         var width = 1
@@ -966,6 +979,13 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
                                     n_classes, context, b):
                 native = False
                 break
+            if not proven:
+                proven = trees_finite_f32(x.address, n * d) and (
+                    classifier or trees_finite_f32(trees_address(y_all), n))
+                _ = y_all  # keep the Python object alive through the scan above
+                if not proven:
+                    native = False
+                    break
             _ = py_call(wave_rows.append, rows)
             _ = py_call(wave_cols.append, cols)
             if k == done:
@@ -977,6 +997,9 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
         # A member that refuses its fit publishes nothing: this wave and the
         # rest are fitted by the loop below (same draws, same seeds), whose
         # fit door raises the estimator's own words if the request is wrong.
+        # So does a wave with a draw that lacks a class of the ensemble
+        # (bindings/member_set_door.mojo, the class-cover pass, before any
+        # fit): the member's own door fits it on the classes it drew.
         var ran = False
         try:
             member_set_run(set)   # a failing member releases every state
@@ -1065,6 +1088,27 @@ def _sub_x(xt: PythonObject, x: AdmittedXView, xa: PythonObject, cols: PythonObj
 def _members(fields: PythonObject) raises -> PythonObject:
     """The fitted member list (`estimators_`) of the per-member path."""
     return fields["_estimators"]
+
+
+def _bagging_held(members: PythonObject, staged: PythonObject, x_address: Int, words: Int,
+                  context: PythonObject) -> Bool:
+    """True when this prediction's members predict through the member states
+    they hold (bindings/member_set_door.mojo `member_predict_held`) and not
+    through their doors: no device copy of X is staged for them (`staged`
+    empty: a CPU route, or a binary that cannot stage; with one staged the
+    doors read it and a member call would upload X once per member), the
+    member class carries a member mark, and X is finite (the member entries
+    read admitted words; the doors test what they are given, so a non-finite
+    X goes to them and is refused in their words). One class-plan read and at
+    most one scan of X per public prediction; an unmarked class pays neither."""
+    try:
+        if len(staged) != 0 or len(members) == 0:
+            return False
+        if not member_marked(members[0], context):
+            return False
+        return trees_finite_f32(x_address, words)
+    except:
+        return False
 
 
 def _bagging_member_scores(xt: PythonObject, member: PythonObject, xs: PythonObject, m: Int, k: Int,
@@ -1200,10 +1244,29 @@ def _bagging_proba(model: PythonObject, fields: PythonObject, X: PythonObject, c
     var features = fields["estimators_features_"]
     # One device copy of X for the full-width members (trees_staged_input).
     var staged = trees_stage_members(members, trees_address(xa), n, x.cols, context)
+    # Members of a published family predict through the states they hold
+    # when nothing is staged (`_bagging_held`); the element type the first
+    # one wrote is asked of the rest (clones of one estimator). A member that
+    # is not served ends the native route for this call: its door, and the
+    # doors of the members after it, answer as before.
+    var held = _bagging_held(members, staged, x.address, n * x.cols, context)
+    var known = -1
     try:
         for i in range(len(members)):  # driver-loop: over the member estimators
             var xs = _sub_x(xt, x.view(), xa, features[i], rows_all, context)
-            _acc_cols(xt, acc, _member_proba(members[i], xs, context), _sub_cols(members[i], context), n, k, context)
+            var sub = _sub_cols(members[i], context)
+            var proba = PythonObject(None)
+            if held:
+                var out = member_predict_held(members[i], trees_address(xs), n, Int(py=xs.shape[1]),
+                                              MEMBER_OP_PREDICT_PROBA, True, Int(py=sub.shape[0]), known, False,
+                                              context, trees_builtins())
+                _ = xs  # the rows are read through the whole member call
+                known = out.dtype
+                proba = out.array
+                held = proba is not None
+            if proba is None:
+                proba = _member_proba(members[i], xs, context)
+            _acc_cols(xt, acc, proba, sub, n, k, context)
     finally:
         trees_unstage(staged)
     _scale(xt, acc, Float64(len(members)))
@@ -1244,9 +1307,23 @@ def bagging_predict(model: PythonObject, args: PythonObject, classifier: Bool, c
     var members = _members(fields)
     var features = fields["estimators_features_"]
     var staged = trees_stage_members(members, trees_address(xa), n, x.cols, context)
+    # As `_bagging_proba`: members of a published family predict through the
+    # states they hold when nothing is staged; a regressor writes float32.
+    var held = _bagging_held(members, staged, x.address, n * x.cols, context)
     try:
         for i in range(len(members)):  # driver-loop: over the member estimators
-            _acc(xt, acc, _member_predict(members[i], _sub_x(xt, x.view(), xa, features[i], rows_all, context), context), n, context)
+            var xs = _sub_x(xt, x.view(), xa, features[i], rows_all, context)
+            var p = PythonObject(None)
+            if held:
+                var out = member_predict_held(members[i], trees_address(xs), n, Int(py=xs.shape[1]),
+                                              MEMBER_OP_PREDICT, False, 1, MEMBER_F32, False, context,
+                                              trees_builtins())
+                _ = xs  # the rows are read through the whole member call
+                p = out.array
+                held = p is not None
+            if p is None:
+                p = _member_predict(members[i], xs, context)
+            _acc(xt, acc, p, n, context)
     finally:
         trees_unstage(staged)
     _scale(xt, acc, Float64(len(members)))

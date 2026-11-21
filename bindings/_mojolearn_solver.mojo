@@ -55,6 +55,7 @@ from solver.ops_entry_device import (
     sv_cd_fit_device_run, sv_cd_predict_device_run,
 )
 from core.solver_entry_table import SolverEntryKey, solver_ops_publish, solver_vendor_word
+from core.cd_member import cd_member_publish
 
 
 from hierarchy.estimator import linkage_fit_host
@@ -275,6 +276,8 @@ def _publish_solver_ops() raises:
         return
     var api = SOLVER_OPS_DEVICE_API.get_or_create_ptr()
     solver_ops_publish(SolverEntryKey(Int(_DEVCTX_MODE), word), Int(api[].entries.unsafe_ptr()), solver_ops_device_v1)
+    # The Cd family's member entry (core/cd_member.mojo), beside the table.
+    cd_member_publish(Int(_DEVCTX_MODE), word, Int(api[].entries.unsafe_ptr()))
 
 
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_solver.mojo

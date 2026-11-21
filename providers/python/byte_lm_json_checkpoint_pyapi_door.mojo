@@ -1,19 +1,23 @@
 # SPDX-License-Identifier: Apache-2.0
 # Existing bounded JSON checkpoint format at the shared native I/O boundary.
-# Parsing, canonical metadata, hashing and control flow are native. Exact native
-# buffers and builtin file methods retain ownership; no Python model/helper runs.
+# Parsing, canonical metadata, hashing and control flow are native. The file
+# read and the atomic file write are typed (bindings/byte_checkpoint_native_run.mojo
+# `byte_file_read` / `byte_file_write`), the GIL released: no Python file
+# object, no `os` call, no Python model/helper runs.
 from std.python import Python, PythonObject
+from std.python._cpython import GILReleased
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.native_json_door import native_json_parse_unique
 from bindings.native_transport_door import _transport_json
 from bindings.byte_checkpoint_io_unpack import ByteCheckpointIOError
-from bindings.byte_checkpoint_io_pack import byte_checkpoint_io
-from bindings.byte_checkpoint_native_door import BYTE_CHECKPOINT_BOUNDARY, byte_checkpoint_raw
+from bindings.byte_checkpoint_native_door import byte_checkpoint_raw, byte_checkpoint_file_error
+from bindings.byte_checkpoint_native_run import ByteCheckpointWriteFailure, byte_file_read, byte_file_write
+from bindings.py_cpython_table import cpython_table
+from providers.python.borrowed_buffer_pyapi_unpack import AdmittedBorrowedBuffer
 from bindings.cross_vendor_admission_pack import cv_path
 from bindings.generation_buffers_door import generation_array
 from bindings.sha256_door import sha256_hexdigest
-from bindings.py_optional import py_present
 
 comptime BYTE_JSON_LIMIT = 2097152
 comptime BYTE_JSON_SCHEMA = "mojolearn.small-byte-lm-json-checkpoint.v1"
@@ -94,50 +98,52 @@ def byte_json_encode(state: PythonObject) raises -> PythonObject:
 
 
 def byte_json_read(path: PythonObject, mut failure: ByteCheckpointIOError) raises -> PythonObject:
-    var bi = native_loaded_module("builtins")
-    var stream = byte_checkpoint_io(failure, bi.open, [cv_path(path), PythonObject("rb")])
-    var encoded = PythonObject(None)
+    """UNPACK the path; RUN the typed bounded read
+    (bindings/byte_checkpoint_native_run.mojo `byte_file_read`), the GIL
+    released; PACK the bytes read (at most one byte over the limit, which
+    `byte_json_payload` refuses). No Python file object. A failed file call
+    is the exact OSError subclass of its errno (`byte_checkpoint_file_error`)."""
+    var target = String(cv_path(path))
+    var file_failure = ByteCheckpointWriteFailure()
+    var data = List[UInt8](length=BYTE_JSON_LIMIT + 1, fill=UInt8(0))
+    var got = 0
+    var py = Python()
     try:
-        encoded = byte_checkpoint_io(failure, stream.read, [PythonObject(BYTE_JSON_LIMIT + 1)])
+        with GILReleased(py):
+            got = byte_file_read(target, Int(data.unsafe_ptr()), BYTE_JSON_LIMIT + 1, file_failure)
     except error:
-        try:
-            _ = byte_checkpoint_io(failure, stream.close, List[PythonObject]())
-        except:
-            pass
+        if file_failure.number != 0:
+            byte_checkpoint_file_error(failure, file_failure)
         raise error
-    _ = byte_checkpoint_io(failure, stream.close, List[PythonObject]())
-    return encoded
+    var result = cpython_table()[].PyBytes_FromStringAndSize(Int(data.unsafe_ptr()), got)
+    _ = len(data)  # the bytes read stay alive through the copy above
+    if not result:
+        # The allocation's own exception, kept for the C entry to raise.
+        failure.capture()
+        raise Error("Byte-LM checkpoint bytes allocation failed")
+    return PythonObject(from_owned=result)
 
 
 def byte_json_write(path: PythonObject, encoded: PythonObject, mut failure: ByteCheckpointIOError) raises:
-    var c = BYTE_CHECKPOINT_BOUNDARY.get_or_create_ptr()
-    var normalized = cv_path(path)
-    var temporary = normalized + PythonObject(".tmp-") + py_call(c[].os.urandom, 16).hex()
-    var flags = Int(py=c[].os.O_WRONLY) | Int(py=c[].os.O_CREAT) | Int(py=c[].os.O_EXCL)
-    var fd = byte_checkpoint_io(failure, c[].os.open, [temporary, PythonObject(flags), PythonObject(384)])
-    var descriptor_open = True
-    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
-    var stream = Optional[PythonObject]()
+    """UNPACK the path and the encoded bytes (one read-only export held
+    through the write); RUN the typed atomic write (`byte_file_write`: a
+    temporary beside the target, fsync, one rename), the GIL released. No
+    Python file object and no `os` call."""
+    var target = String(cv_path(path))
+    var file_failure = ByteCheckpointWriteFailure()
+    var pin = AdmittedBorrowedBuffer(encoded)
+    var layout = pin.layout.value().copy()
+    var total = layout.count * layout.itemsize
+    if not layout.contiguous():
+        raise Error("Byte-LM checkpoint bytes must be contiguous")
+    var address = layout.address
+    var py = Python()
     try:
-        stream = py_present(byte_checkpoint_io(failure, c[].bi.open, [fd, PythonObject("wb")]))
-        if Int(py=byte_checkpoint_io(failure, stream.value().write, [encoded])) != len(encoded):
-            raise Error("Byte-LM checkpoint short write")
-        _ = byte_checkpoint_io(failure, stream.value().flush, List[PythonObject]())
-        _ = byte_checkpoint_io(failure, c[].os.fsync, [fd])
-        _ = byte_checkpoint_io(failure, stream.value().close, List[PythonObject]())
-        descriptor_open = False
-        stream = Optional[PythonObject]()
-        _ = byte_checkpoint_io(failure, c[].os.replace, [temporary, normalized])
+        with GILReleased(py):
+            byte_file_write(target, address, total, file_failure)
     except error:
-        try:
-            if Bool(stream):
-                _ = byte_checkpoint_io(failure, stream.value().close, List[PythonObject]())
-            elif descriptor_open:
-                _ = byte_checkpoint_io(failure, c[].os.close, [fd])
-        except:
-            pass
-        try:
-            _ = byte_checkpoint_io(failure, c[].os.unlink, [temporary])
-        except:
-            pass
+        if file_failure.number != 0:
+            byte_checkpoint_file_error(failure, file_failure)
         raise error
+    # The export pinned the written bytes to here.
+    pin.release()
