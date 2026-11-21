@@ -12,14 +12,13 @@ against y on the metrics binding of the model's numeric mode, the kernel
 
 The same kernels in the same order, so the score keeps its bits.
 """
-from core.mode_answer import MODE_FAMILY_XSEQ, answer_mode_word
-from bindings.mode_answer_door import answer_mode_object
+from core.device_route import device_mode_word, device_cpu_absent
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_contains
 from std.python._cpython import GILReleased
 from core.metrics_entry_table import MetricsEntryKey, MR_R2, MR_R2_WEIGHTED
-from bindings.xseq_native_common_door import xseq_addr, xseq_reshape
+from bindings.xseq_native_common_door import xseq_addr, xseq_reshape, xseq_route, XseqRoute
 from bindings.xseq_neural_native_door import xseq_as_f32_c
 from core.xseq_marshal import xseq_min_max_f32
 from core.host_finite_scan import host_all_finite_f32
@@ -68,33 +67,36 @@ def _vector(value: PythonObject, name: String) raises -> PythonObject:
     return out
 
 
-def _metrics_key(model: PythonObject, context: PythonObject) raises -> MetricsEntryKey:
-    """`_metrics_impl._get_binding(model.numeric_mode)`: the metrics image of
-    that mode (or the process default), as its native R^2 table key (the
-    bridge records it at import), checked against its compiled mode."""
+# TOMBSTONE: the per-score metrics image selection of `_metrics_key` (the mode read, its strip and
+# lower, the two mode answers, the `xseq_metrics` read by that word) deleted 2026-11-21 by lane
+# dw-neural-b; the estimator's route holds the metrics record of its device (`xseq_route`). Code
+# recoverable at 5d94a5ad5d.
+
+
+def _metrics_key(route: XseqRoute) raises -> MetricsEntryKey:
+    """The metrics image of the estimator's route (its device and numeric
+    mode), as its native R^2 table key (the bridge records it at import),
+    checked against its compiled mode."""
     var b = native_loaded_module("builtins")
-    var nk = xseq_keys()
-    var mode = py_get(py_fields(model), nk[].k_numeric_mode)
-    if mode is not None:
-        if py_type(mode) is not b.str:
-            raise Error("ValueError: numeric_mode must be 'fast' or 'identical'")
-        var clean = String(py=py_call(py_call(mode.strip).lower))  # one strip/lower, not two
-        if clean != "fast" and clean != "identical":
-            raise Error("ValueError: numeric_mode must be 'fast' or 'identical'")
-    var expected = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE) if mode is None else mode
-    expected = py_call(py_call(expected.strip).lower)
-    var expected_word = String(py=expected)
-    answer_mode_object(expected, expected_word, MODE_FAMILY_XSEQ)
-    answer_mode_word(expected_word, MODE_FAMILY_XSEQ)
-    var table = py_item(context, nk[].k_xseq_metrics)
-    var record = table[expected]
-    if py_type(record) is b.str:
-        raise Error("ImportError: " + String(py=record))
+    if route.metrics is None:
+        raise Error("ImportError: device='cpu' is not connected in this installation")
+    if py_type(route.metrics) is b.str:
+        raise Error("ImportError: " + String(py=route.metrics))
     # The compiled-mode word the bridge read once at import replaced the
     # per-call `metrics_numeric_mode` Python call (lane calltable-xseq).
-    var actual = Int(py=record[0])
-    xseq_run_metrics_mode(expected_word, actual)
-    return MetricsEntryKey(actual, Int(py=record[1]))
+    var actual = Int(py=route.metrics[0])
+    xseq_run_metrics_mode(device_mode_word(route.mode), actual)
+    return MetricsEntryKey(actual, Int(py=route.metrics[1]))
+
+
+def _score_on_route(model: PythonObject, route: XseqRoute, what: String) raises:
+    """The metrics family's own operations (the classifier accuracy, the
+    multi-output R^2) select their image by numeric mode alone: this
+    process's device. An estimator on `device="cpu"` beside a GPU set does
+    not run them there; it says so in the shared words."""
+    if route.cpu_table:
+        device_cpu_absent(String(py_type(model).__name__) + ".score",
+                          what + " of the metrics family is not routed by device yet")
 
 
 def _r2_native(key: MetricsEntryKey, operation: Int, var addresses: List[Int], n: Int) raises -> Float64:
@@ -122,8 +124,11 @@ def xseq_regressor_score(model: PythonObject, prediction: PythonObject, args: Py
     var truth = xseq_as_f32_c(args[1], 0, "y", context)
     var pred = xseq_as_f32_c(prediction, 0, "prediction", context)
     var sample_weight = args[2]
+    # A hit: the model's own predict resolved the route before this call.
+    var route = xseq_route(model, py_fields(model), context)
     if Int(py=truth.ndim) == 2 and Int(py=truth.shape[1]) != 1:
         # multi-output targets: the x_metrics program of `r2_score_options`
+        _score_on_route(model, route, String("the multi-output R^2"))
         var nk = xseq_keys()
         var options = py_get(context, nk[].k_xseq_r2_options)
         if options is None:
@@ -140,7 +145,7 @@ def xseq_regressor_score(model: PythonObject, prediction: PythonObject, args: Py
     var yh = _vector(pred, "y_pred")
     var n = Int(py=y.shape[0])
     xseq_run_lengths_check(n, Int(py=yh.shape[0]))
-    var key = _metrics_key(model, context)
+    var key = _metrics_key(route)
     if sample_weight is not None:
         var w = _weights(sample_weight, n, context)
         var weighted = _r2_native(key, MR_R2_WEIGHTED, [Int(py=xseq_addr(y)), Int(py=xseq_addr(yh)), Int(py=xseq_addr(w))], n)
@@ -170,6 +175,7 @@ def xseq_classifier_score(model: PythonObject, prediction: PythonObject, args: P
     `family_mcls_accuracy_fraction`, the same entry with the same arguments,
     so the score keeps its bits."""
     var nk = xseq_keys()
+    _score_on_route(model, xseq_route(model, py_fields(model), context), String("the accuracy"))
     var owner = py_get(context, nk[].k_xseq_r2_options)
     if owner is None:
         raise Error("NotImplementedError: mojolearn: the classifier score needs the native metrics owner "

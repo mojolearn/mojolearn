@@ -14,7 +14,7 @@ from bindings.py_balanced import py_call, py_get, py_type, py_fields
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.ica_native_unpack import ica_fit, ica_project
 from bindings.fa_native_unpack import fa_fit, fa_query
-from bindings.kpca_native_door import kpca_fit, kpca_fit_transform, kpca_transform
+from bindings.kpca_native_door import kpca_fit, kpca_fit_transform, kpca_transform, kpca_route_vendor
 from bindings.classical_error_boundary_pack import classical_python_error
 from providers.python.family_public_lifecycle_pyapi_door import family_lifecycle_begin, family_lifecycle_finish
 from providers.python.family_public_lifecycle_run import kpca_lifecycle_spec
@@ -27,6 +27,7 @@ from x_decomp.decomp_public_lifecycle_run import decomp_public_method
 from bindings.public_lifecycle_owner_door import lifecycle_end
 from bindings.nmf_native_door import nmf_fit, nmf_fit_transform, nmf_inverse_transform, nmf_transform
 from bindings.nmf_descriptor_boundary_door import nmf_route_vendor
+from bindings.decomp_device_route_door import decomp_device_admit, decomp_route_clear
 
 
 comptime _DECOMP_FAMILY_SLOT = "decomp_family_class_v1"
@@ -91,6 +92,14 @@ def _kpca_public(model: PythonObject, operation: String, args: PythonObject,
 def _decomp_dispatch(model: PythonObject, family: String, operation: String, args: PythonObject,
                      context: PythonObject) raises -> PythonObject:
     var result = PythonObject(None)
+    if operation == "device_set":
+        # The constructor and `set_params` of a class with a Python
+        # constructor: the device is checked where it is given (shared words,
+        # refused before the estimator changes) and the estimator's route is
+        # dropped, so its next operation reads the device once.
+        decomp_device_admit(args[0], context)
+        decomp_route_clear(model)
+        return result
     if family == "FastICA":
         if operation == "fit":
             result = ica_fit(model, args[0], False, context)
@@ -194,7 +203,9 @@ def decomp_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPt
             raise Error("TypeError: the native decomposition owner requires a connected estimator")
         classical_connect_numpy(context)
         var result = PythonObject(None)
-        if family == "KernelPCA":
+        if family == "KernelPCA" and operation == "vendor_used":
+            result = PythonObject(kpca_route_vendor(model, context))
+        elif family == "KernelPCA":
             # KernelPCA runs its own public lifecycle (family_public_lifecycle_pyapi);
             # every other family runs the decomposition lifecycle here.
             result = _kpca_public(model, operation, args, context)

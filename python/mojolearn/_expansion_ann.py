@@ -399,8 +399,12 @@ class TSNE(NumericModeMixin):
     _BINDING = "_mojolearn_x_ann"
     _EXPLORATION_MAX_ITER = 250
 
+    # Takes `device=`: both images of a fit come from the estimator's binding
+    # route (bindings/mani_tsne_native_unpack.mojo `_tsne_fit`).
+    _mojolearn_device = True
+
     def __init__(self, n_components=2, perplexity=30.0, early_exaggeration=12.0, learning_rate="auto",
-                 max_iter=1000, init="pca", random_state=0, post_exaggeration_learning_rate_factor=1.0):
+                 max_iter=1000, init="pca", random_state=0, post_exaggeration_learning_rate_factor=1.0, device=None):
         self.n_components = n_components
         self.perplexity = perplexity
         self.early_exaggeration = early_exaggeration
@@ -413,6 +417,7 @@ class TSNE(NumericModeMixin):
         self.max_iter = max_iter
         self.init = init
         self.random_state = random_state
+        self.device = device
 
     @_native_runtime_manifold_bridge.native_lifecycle
     def fit(self, X, y=None):

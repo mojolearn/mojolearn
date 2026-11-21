@@ -74,6 +74,21 @@ struct XprepRunInput(ImplicitlyCopyable, Movable):
 
 
 @fieldwise_init
+struct XprepCaps(ImplicitlyCopyable, Movable):
+    """What a run needs to know about the selected x_prep image, resolved
+    once per estimator by its device route (bindings/scaler_route_unpack.mojo):
+    the transport entry and which optional entries the image exports.
+    `held` False: nothing is resolved and the door reads the image's entry
+    dictionary by name, as before (`xprep_caps`)."""
+    var held: Bool
+    var key: EntryRef
+    var has_out: Bool
+    var has_scratch: Bool
+    var has_ranges: Bool
+    var dev_put: Bool
+
+
+@fieldwise_init
 struct XprepRoute(ImplicitlyCopyable, Movable):
     """The run's route words, read by the door from the selected image:
     the range runner, device scratch, the `x_prep_run_out` entry."""

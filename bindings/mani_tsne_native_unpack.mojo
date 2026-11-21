@@ -20,7 +20,7 @@ from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_setitem
 from bindings.classical_arrays_door import classical_address, classical_word
 from bindings.classical_attributes_door import classical_connect_numpy
-from providers.python.estimator_binding_pyapi_door import estimator_binding_mode
+from providers.python.estimator_binding_pyapi_door import estimator_binding_routed
 from bindings.manifold_settings_native_door import ManifoldSettings, mani_field
 from bindings.operation_names_mani import MANI_OPN_FAMILY_MANI_TSNE_FIT, MANI_OPN_FAMILY_MANI_TSNE_FIT_TRANSFORM
 from bindings.manifold_scalar_native_door import manifold_number
@@ -113,8 +113,8 @@ def _tsne_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
     classical_connect_numpy(context)
     var b = native_loaded_module("builtins")
     var op = native_loaded_module("operator")
-    var binding = estimator_binding_mode(settings.mode, "_mojolearn_x_ann", context) if args[0] is None else args[0]
-    var estimators = estimator_binding_mode(settings.mode, "_mojolearn_estimators", context) if args[1] is None else args[1]
+    var binding = estimator_binding_routed(model, settings.mode, "_mojolearn_x_ann", context) if args[0] is None else args[0]
+    var estimators = estimator_binding_routed(model, settings.mode, "_mojolearn_estimators", context) if args[1] is None else args[1]
     var fields = settings.values
     # TSNE's public input refusal for every init mode, tested on the device
     # (lane a8d): the PCA start's pca_fit_owned returns X's finite status

@@ -32,10 +32,6 @@ comptime GP_OPN_FAMILY_GP_GPC_PREDICT = 14
 comptime GP_OPN_FAMILY_GP_GPC_PREDICT_PROBA = 15
 comptime GP_OPN_FAMILY_GP_GPC_LATENT = 16
 comptime GP_OPN_FAMILY_GP_GPC_SCORE = 17
-# The device read-backs (lane dw-gp-metrics-manifold): above every owner's
-# range, tested first by `gp_operation`.
-comptime GP_OPN_FAMILY_GP_GPR_VENDOR_USED = 18
-comptime GP_OPN_FAMILY_GP_GPC_VENDOR_USED = 19
 
 
 def operation_names_gp(mut names: List[String], mut leaves: List[Int]):
@@ -76,7 +72,3 @@ def operation_names_gp(mut names: List[String], mut leaves: List[Int]):
     leaves.append(GP_OPN_FAMILY_GP_GPC_LATENT)
     names.append("family_gp_gpc_score")
     leaves.append(GP_OPN_FAMILY_GP_GPC_SCORE)
-    names.append("family_gp_gpr_vendor_used")
-    leaves.append(GP_OPN_FAMILY_GP_GPR_VENDOR_USED)
-    names.append("family_gp_gpc_vendor_used")
-    leaves.append(GP_OPN_FAMILY_GP_GPC_VENDOR_USED)

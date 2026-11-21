@@ -33,6 +33,15 @@ struct GPNative(Movable):
         self.mode = key.mode
         self.capabilities = capabilities
 
+    def __init__(out self, entry: EntryRef, mode: Int, capabilities: Int):
+        # An entry an estimator's route resolved once (its table read, key
+        # check and capability call ran then): no slot lookup, schema String
+        # or metadata call here.
+        self.entry = entry
+        self.driver = GPDriver(entry.call)
+        self.mode = mode
+        self.capabilities = capabilities
+
 
 def gp_require(native: GPNative, capability: Int, entry: String) raises:
     if (native.capabilities & capability) == 0:

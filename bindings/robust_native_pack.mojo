@@ -24,13 +24,14 @@ from bindings.scaler_native_door import _input, _ptr
 from core.preprocessing_program import prep_program_stage as _stage
 from x_prep.robust_native_run import _robust_fit_program
 from bindings.p3_prep_fitted_unpack import prep_fitted_vector
-from bindings.scaler_lifecycle_native_door import _entries, _public_result, scaler_requested_mode
+from bindings.scaler_lifecycle_native_door import scaler_entries, _public_result, scaler_requested_mode
 from bindings.x_prep_native_owner_run import xprep_r3
-from bindings.x_prep_native_owner_door import xprep_storage, xprep_take, xprep_values, xprep_run
+from bindings.x_prep_native_owner_door import xprep_storage, xprep_take, xprep_values, xprep_run_caps
 from gemm.f16_widen import f16_bits_to_f32
 from bindings.py_optional import py_or_none, py_present
-from providers.python.prep_route_boundary_door import (
-    prep_route_context, prep_route_clear, prep_device_admit, prep_route_vendor_used,
+from bindings.scaler_route_unpack import (
+    scaler_route_context, scaler_route_clear, scaler_device_admit, scaler_route_vendor_used, scaler_route_held,
+    scaler_held_flags, scaler_held_caps, ScalerHeld, SCALER_CAP_RUN_OUT, SCALER_CAP_RUN_SCRATCH,
 )
 
 from bindings.robust_native_unpack import (
@@ -103,7 +104,12 @@ def robust_fit(model: PythonObject, source: PythonObject, target: PythonObject, 
     var fields = py_fields(model)
     # Preserve the public wrapper's input/target validation before fit begins.
     var mode = scaler_requested_mode(fields,context)
-    var entries = _entries(mode,context)
+    # The selection, the image's capability bits and its transport entry
+    # come from the estimator's device route, resolved once per estimator
+    # (bindings/scaler_route_unpack.mojo): two record reads in place of the
+    # dictionary reads, mode probes and by-name capability reads per fit.
+    var entries = scaler_entries(model,mode,context)
+    var held = scaler_route_held(model,entries)
     var values = xprep_values(source,entries,context)
     var n = Int(py=values[3])
     var d = Int(py=values[4])
@@ -160,7 +166,7 @@ def robust_fit(model: PythonObject, source: PythonObject, target: PythonObject, 
         part = host+sort_words
     if host+scratch > 2147483647:
         raise Error("x_prep: the program exceeds the native Int32 indexing bound")
-    var device_scratch = scratch > 0 and (py_get(entries,"x_prep_run_out") is not None or py_get(entries,"x_prep_run_scratch") is not None)
+    var device_scratch = scratch > 0 and (scaler_held_flags(held,entries) & (SCALER_CAP_RUN_OUT | SCALER_CAP_RUN_SCRATCH)) != 0
     var arena = xprep_storage(host+(0 if device_scratch else scratch),context)
     var fraction_values = classical_typed(Python.tuple(3),"<f4",context["output_context"])
     var fp = _ptr(fraction_values)
@@ -174,7 +180,7 @@ def robust_fit(model: PythonObject, source: PythonObject, target: PythonObject, 
     var inputs = Python.tuple(Python.tuple(0,values),Python.tuple(fractions,Python.tuple(0,fraction_values,PythonObject(None),3,1)))
     var program = List[Int32]()
     _robust_fit_program(program,select,blocked,unit,fused,centering,scaling,n,d,blocks,sorted,part,stats,fractions,q,center,scale,dest)
-    xprep_run(arena,host,scratch,PythonObject(None),0,program^,inputs,entries,context)
+    xprep_run_caps(arena,host,scratch,PythonObject(None),0,program^,inputs,entries,context,scaler_held_caps(held))
     var scaled = xprep_take(arena[0],dest,n,d,context["output_context"]) if fused else PythonObject(None)
     py_setitem(fields,"center_",xprep_take(arena[0],center,d,0,context["output_context"]) if centering else PythonObject(None))
     py_setitem(fields,"scale_",xprep_take(arena[0],scale,d,0,context["output_context"]) if scaling else PythonObject(None))
@@ -195,7 +201,8 @@ def robust_transform(model: PythonObject, source: PythonObject, context: PythonO
     var fields = py_fields(model)
     if not py_contains(fields,"n_features_in_"):
         raise Error("RuntimeError: mojolearn: this RobustScaler instance is not fitted yet")
-    var entries = _entries(fields["numeric_mode_"],context)
+    var entries = scaler_entries(model,fields["numeric_mode_"],context)
+    var held = scaler_route_held(model,entries)
     var values = xprep_values(source,entries,context)
     var n = Int(py=values[3])
     var d = Int(py=values[4])
@@ -218,7 +225,7 @@ def robust_transform(model: PythonObject, source: PythonObject, context: PythonO
         raise Error("x_prep: the program exceeds the native Int32 indexing bound")
     # TOMBSTONE: MOJOLEARN_XPREP_FAST_OUT_OFF (NOISE: B kept large outputs as host words on a binding with an output region; A/B abn9 NVIDIA L40S, 48 cells 0.91-1.13 arm/base, median 1.00) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
     # Restore: git apply experiments/removed/MOJOLEARN_XPREP_FAST_OUT_OFF.patch; record in docs/TOMBSTONES.md.
-    var dev_out = n*d >= 134217728 and py_get(entries,"x_prep_run_out") is not None
+    var dev_out = n*d >= 134217728 and (scaler_held_flags(held,entries) & SCALER_CAP_RUN_OUT) != 0
     var host = dest+(0 if dev_out else n*d)
     var arena = xprep_storage(host,context)
     var output_store = xprep_storage(n*d,context) if dev_out else PythonObject(None)
@@ -230,7 +237,7 @@ def robust_transform(model: PythonObject, source: PythonObject, context: PythonO
         _ = py_call(inputs.append,Python.tuple(scale_at,Python.tuple(0,scale,PythonObject(None),d,1)))
     var program = List[Int32]()
     _stage(program,3,n*d,0,n*d,d,center_at,scale_at,dest)
-    xprep_run(arena,host,0,output_store,n*d if dev_out else 0,program^,inputs,entries,context,n*d if n*d >= 134217728 else 0)
+    xprep_run_caps(arena,host,0,output_store,n*d if dev_out else 0,program^,inputs,entries,context,scaler_held_caps(held),n*d if n*d >= 134217728 else 0)
     var output = xprep_take(output_store[0] if dev_out else arena[0],0 if dev_out else dest,n,d,context["output_context"])
     _ = arena^
     _ = values^
@@ -257,12 +264,12 @@ def robust_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
             var device = PythonObject(None)
             if len(args) > 6:
                 device = args[6]
-            prep_device_admit(device,py_type(model),context)
+            scaler_device_admit(device,py_type(model),context)
             for k in range(5):  # small-loop(params: the five stored constructor parameters)
                 py_setitem(fields,names[k],args[k])
             py_setitem(fields,"numeric_mode",args[5])
             py_setitem(fields,"device",device)
-            prep_route_clear(model)
+            scaler_route_clear(model)
         elif operation == "get_params":
             result = Python.dict()
             for k in range(5):  # small-loop(params: the five constructor parameters)
@@ -271,20 +278,20 @@ def robust_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
             py_setitem(result.value(),"numeric_mode",py_get(fields,"numeric_mode"))
             py_setitem(result.value(),"device",py_get(fields,"device"))
         elif operation == "vendor_used":
-            result = py_present(prep_route_vendor_used(model,context))
+            result = py_present(scaler_route_vendor_used(model,context))
         elif operation == "set_params":
             var options = args[0]
             var builtins = native_loaded_module("builtins")
             var string_type = builtins.str
             var keys = py_call(builtins.list,options)
             # A given `device` is refused in words before the estimator changes.
-            prep_device_admit(py_get(options,"device"),py_type(model),context)
+            scaler_device_admit(py_get(options,"device"),py_type(model),context)
             for k in range(len(keys)):  # driver-loop: proposed parameter names in caller order
                 if py_type(keys[k]) is not string_type or (not py_contains(names,keys[k]) and String(keys[k]) != "numeric_mode" and String(keys[k]) != "device"):
                     raise Error("mojolearn: invalid parameter for RobustScaler")
                 py_setitem(fields,keys[k],options[keys[k]])
             if len(keys):
-                prep_route_clear(model)
+                scaler_route_clear(model)
             result = py_present(model)
         elif operation == "is_fitted":
             result = py_present(classical_is_fitted(model))
@@ -300,17 +307,17 @@ def robust_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
                     raise Error("TypeError: native fit_transform requires native fit and transform; call application operations explicitly")
                 if fit.__func__ is not context["robust_fit_method"] or transform.__func__ is not context["robust_transform_method"]:
                     raise Error("TypeError: native fit_transform cannot invoke Python estimator overrides; call application operations explicitly")
-            # The estimator's route (providers/python/prep_route_boundary_door.mojo):
+            # The estimator's route (bindings/scaler_route_unpack.mojo):
             # the process's context or the CPU one of `device="cpu"`. One
             # record read and one pointer compare per data operation.
-            var run = prep_route_context(model,context)
+            var run = scaler_route_context(model,context)
             result = py_present(robust_fit(model,args[0],args[1],run,operation == "fit_transform"))
             if operation == "fit_transform":
                 if not result:
                     result = py_present(robust_transform(model,args[0],run))
                 result = py_present(_public_result(py_or_none(result),run))
         elif operation == "transform":
-            var run = prep_route_context(model,context)
+            var run = scaler_route_context(model,context)
             result = py_present(_public_result(robust_transform(model,args[0],run),run))
         else:
             raise Error("unknown native RobustScaler operation")

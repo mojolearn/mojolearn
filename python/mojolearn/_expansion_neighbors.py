@@ -857,11 +857,15 @@ class KernelPCA(_XNeighbors):
     # One-call native public methods: the family owner runs the whole lifecycle
     # (providers/python/family_public_lifecycle_pyapi_door.mojo); no _mode wrappers.
     _mojolearn_native_public = True
+    #: `device=None | "gpu" | "cpu"`: a field of the compiled field-only constructor, read once into
+    #: the estimator's native route (bindings/kpca_native_door.mojo); the check
+    #: runs the same estimator on the other device, in this process.
+    _mojolearn_device = True
 
     def __init__(self, n_components=None, *, kernel="linear", gamma=None, degree=3, coef0=1,
                  kernel_params=None, alpha=1.0, fit_inverse_transform=False, eigen_solver="auto",
                  tol=0, max_iter=None, iterated_power="auto", remove_zero_eig=False,
-                 random_state=None, copy_X=True, n_jobs=None, numeric_mode=None):
+                 random_state=None, copy_X=True, n_jobs=None, numeric_mode=None, device=None):
         self.n_components = n_components
         self.kernel = kernel
         self.gamma = gamma
@@ -879,6 +883,7 @@ class KernelPCA(_XNeighbors):
         self.copy_X = copy_X
         self.n_jobs = n_jobs
         self.numeric_mode = numeric_mode
+        self.device = device
 
     def fit(self, X, y=None):
         """Fit the model on the training data.
@@ -897,6 +902,16 @@ class KernelPCA(_XNeighbors):
             The fitted estimator.
         """
         return _KPCA_CALL(self, "fit", (X,), _KPCA_CONTEXT)
+
+    def vendor_used(self):
+        """The backend this estimator runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``.
+        """
+        return _KPCA_CALL(self, "vendor_used", (), _KPCA_CONTEXT)
 
     def fit_transform(self, X, y=None, **params):
         """Fit the model and return the projection of the training data.
@@ -1000,9 +1015,8 @@ class PolynomialCountSketch(_XNeighbors):
     >>> Z = mojolearn.PolynomialCountSketch(n_components=64, random_state=0).fit_transform(X)
     """
 
-    #: This class takes `device=`: its doors take every compiled module from the
-    #: estimator's device route, and the check builds its other side as the same
-    #: estimator on the other device, in this process (`_check_both.on_device`).
+    #: `device=None | "gpu" | "cpu"`: every operation takes its image from the estimator's binding route
+    #: (providers/python/estimator_binding_pyapi_door.mojo); the check runs both devices in this process.
     _mojolearn_device = True
 
     def __init__(self, *, gamma=1.0, degree=2, coef0=0, n_components=100, random_state=None, device=None):

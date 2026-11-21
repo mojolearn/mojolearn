@@ -70,7 +70,12 @@ def connect(classes, neighbors=False, metadata=None):
     context.update(metadata or {})
     # glue: the CPU image of `device="cpu"`, connected once beside the device set
     from ._native_decomp_device_bridge import connect_cpu_device, X_DECOMP_HOST
-    connect_cpu_device(context, X_DECOMP_HOST, {"nmf_native_api_v1": "nmf_cpu_bindings"})
+    connect_cpu_device(context, X_DECOMP_HOST, {"nmf_native_api_v1": "nmf_cpu_bindings",
+                                                "kpca_decomp_native_api_v1": "kpca_decomp_cpu_bindings"})
+    if neighbors:
+        connect_cpu_device(context, "_mojolearn_x_neighbors_host",
+                           {"x_neighbors_native_api_v1": "kpca_neighbors_cpu_bindings",
+                            "kpca_neighbors_native_api_v1": "kpca_info_cpu_bindings"})
     entry = _binding()._module.decomp_native_call
     if not isinstance(entry, BuiltinFunctionType):
         raise TypeError("the decomposition owner requires a compiled decomp_native_call")

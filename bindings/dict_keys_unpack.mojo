@@ -24,6 +24,8 @@ comptime DICT_OPN_SPCA_FIT_TRANSFORM = 11
 comptime DICT_OPN_SPCA_TRANSFORM = 12
 comptime DICT_OPN_SPCA_INVERSE = 13
 comptime DICT_OPN_SPARSE_ENCODE = 14
+comptime DICT_OPN_DEVICE_SET = 15
+comptime DICT_OPN_VENDOR_USED = 16
 
 
 struct DictKeys(Defaultable, Movable):
@@ -166,6 +168,8 @@ def _dict_keys_fill(nk: UnsafePointer[DictKeys, MutUntrackedOrigin]) raises:
     py_op_add(ops, "spca_transform", DICT_OPN_SPCA_TRANSFORM)
     py_op_add(ops, "spca_inverse", DICT_OPN_SPCA_INVERSE)
     py_op_add(ops, "sparse_encode", DICT_OPN_SPARSE_ENCODE)
+    py_op_add(ops, "device_set", DICT_OPN_DEVICE_SET)
+    py_op_add(ops, "vendor_used", DICT_OPN_VENDOR_USED)
     nk[].ops = ops
     nk[].ready = True
 
