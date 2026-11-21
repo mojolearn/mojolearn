@@ -1050,6 +1050,10 @@ class ARDRegression(_LinearRegressorMixin, NumericModeMixin):
 
     _BINDING = _BINDING
 
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_XLINEAR = 2) and core/xlinear_member.mojo.
+    _mojolearn_member = (2, 5)
+
     def __init__(self, *, max_iter=300, tol=1e-3, alpha_1=1e-6, alpha_2=1e-6, lambda_1=1e-6,
                  lambda_2=1e-6, compute_score=False, threshold_lambda=1e4, fit_intercept=True,
                  copy_X=True, verbose=False, numeric_mode=None, device=None):

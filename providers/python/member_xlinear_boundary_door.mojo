@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """The member boundary of the XLinear family; RUN is core/xlinear_member.mojo.
 Published kinds: 0 PoissonRegressor, 1 GammaRegressor, 2 TweedieRegressor,
-3 HuberRegressor, 4 BayesianRidge (`_mojolearn_member = (MEMBER_FAMILY_XLINEAR, kind)` on
+3 HuberRegressor, 4 BayesianRidge, 5 ARDRegression (`_mojolearn_member = (MEMBER_FAMILY_XLINEAR, kind)` on
 each class).
 
   * `xlinear_member_admit` (UNPACK, once per member): the estimator's own
@@ -40,7 +40,9 @@ from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free,
     MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_BLOCK_COEF, MEMBER_BLOCK_SCALARS, MEMBER_IMPORT_DONE, MEMBER_F64,
 )
-from core.xlinear_member import XL_MEMBER_HUBER, XL_MEMBER_BAYES, XL_MEMBER_BLOCK_OUTLIERS
+from core.xlinear_member import (
+    XL_MEMBER_HUBER, XL_MEMBER_BAYES, XL_MEMBER_ARD, XL_MEMBER_BLOCK_OUTLIERS, XL_MEMBER_BLOCK_LAMBDA,
+)
 from core.metrics_entry_table import MetricsEntryKey, metrics_r2_entry, MR_OP_COUNT
 from providers.python.device_route_boundary_door import device_route_value
 from x_linear.door_run import LINK_IDENTITY, LINK_EXP
@@ -86,6 +88,17 @@ def _xl_bayes_words(model: PythonObject, fields: PythonObject) raises -> List[Fl
         _xl_or(py_item(fields, nk[].k_lambda_init), -1.0)]
 
 
+def _xl_ard_words(model: PythonObject, fields: PythonObject) raises -> List[Float64]:
+    """Kind 5: `xl_fit_ard_unpack`'s refusals (the two-sample rule runs at
+    the member's fit), then the nine words."""
+    var nk = x_linear_keys()
+    _xl_bayes_refuse(model, fields, PythonObject(False))
+    return [Float64(XL_MEMBER_ARD), _intercept_word(fields), Float64(_int(py_item(fields, nk[].k_max_iter))),
+        _float(py_item(fields, nk[].k_tol)), _float(py_item(fields, nk[].k_alpha_1)),
+        _float(py_item(fields, nk[].k_alpha_2)), _float(py_item(fields, nk[].k_lambda_1)),
+        _float(py_item(fields, nk[].k_lambda_2)), _float(py_item(fields, nk[].k_threshold_lambda))]
+
+
 def _intercept_word(fields: PythonObject) raises -> Float64:
     var nk = x_linear_keys()
     return 1.0 if _truth(py_item(fields, nk[].k_fit_intercept)) else 0.0
@@ -103,6 +116,8 @@ def xlinear_member_admit(model: PythonObject, fields: PythonObject, kind: Int, c
         words = _xl_huber_words(fields)
     elif kind == XL_MEMBER_BAYES:
         words = _xl_bayes_words(model, fields)
+    elif kind == XL_MEMBER_ARD:
+        words = _xl_ard_words(model, fields)
     else:
         raise Error("RuntimeError: mojolearn: unknown XLinear member kind " + String(kind))
     var ops = xl_route(model, fields, context, False)
@@ -181,6 +196,18 @@ def xlinear_member_pack(model: PythonObject, fields: PythonObject, context: Pyth
         py_setitem(fields, nk[].k_n_iter_, PythonObject(Int(scalars[3])))
         py_setitem(fields, nk[].k_n_features_in_, PythonObject(cols))
         return
+    if kind == XL_MEMBER_ARD:
+        py_setitem(fields, nk[].k_alpha_, PythonObject(Float64(Float32(scalars[1]))))
+        py_setitem(fields, nk[].k_n_iter_, PythonObject(Int(scalars[2])))
+        py_setitem(fields, nk[].k_n_features_in_, PythonObject(cols))
+        if blocks > 2:
+            call.block = XL_MEMBER_BLOCK_LAMBDA
+            _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+            var lam = classical_array(call.dst.cols, 0, context)
+            unsafe_memcpy(dest=f32_ptr(Int(py=classical_address(lam))), src=f32_ptr(call.dst.data),
+                count=call.dst.cols)
+            py_setitem(fields, nk[].k_lambda_, lam)
+        return
     py_setitem(fields, nk[].k_n_iter_, PythonObject(Int(scalars[1])))
     py_setitem(fields, nk[].k_n_features_in_, PythonObject(cols))
     py_setitem(fields, nk[].k__link, PythonObject(LINK_EXP if plan.params[3] == 1.0 else LINK_IDENTITY))
@@ -212,6 +239,8 @@ def xlinear_member_state(model: PythonObject, fields: PythonObject, context: Pyt
     elif kind == XL_MEMBER_BAYES:
         scalars = [intercept, Float64(py=py_item(fields, nk[].k_alpha_)), Float64(py=py_item(fields, nk[].k_lambda_)),
             _count_word(fields, nk[].k_n_iter_)]
+    elif kind == XL_MEMBER_ARD:
+        scalars = [intercept, Float64(py=py_item(fields, nk[].k_alpha_)), _count_word(fields, nk[].k_n_iter_)]
     else:
         scalars = [intercept, _count_word(fields, nk[].k_n_iter_)]
     var call = member_new(plan)
