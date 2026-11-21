@@ -323,7 +323,7 @@ DEBT = {
     'bindings/native_numpy_metadata_pack.mojo': {'cpython': 1, 'native_loaded_module': 1},
     'bindings/native_ops_key_ann_unpack.mojo': {'native_loaded_module': 1},
     'bindings/native_owner_lifetime_door.mojo': {'cpython': 1},
-    'bindings/native_posix_transport_unpack.mojo': {'cpython': 5},
+    'bindings/native_posix_transport_unpack.mojo': {'cpython': 2},
     'bindings/native_process_pool_door.mojo': {'import_module': 1, 'native_loaded_module': 1},
     'bindings/native_resident_capsule_pack.mojo': {'cpython': 1},
     'bindings/native_resident_capsule_unpack.mojo': {'cpython': 1},
