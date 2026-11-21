@@ -40,7 +40,7 @@ from std.python.bindings import PythonModuleBuilder, lookup_py_type_object
 from bindings.py_type_registry import py_type_absent, py_type_attach
 from bindings.native_owner_registry_unpack import register_native_owner_type
 from bindings.native_owner_registry_pack import borrowed_native_owner
-from bindings.native_loaded_module_door import native_loaded_module
+from bindings.native_loaded_module_door import NativeModules
 from bindings.mode_metadata_native_door import _fields
 from bindings.py_balanced import py_call, py_get, py_item, py_type
 from bindings.py_keys import py_key
@@ -106,6 +106,13 @@ def family_route_keys() raises -> UnsafePointer[FamilyRouteKeys, MutUntrackedOri
     if not nk[].ready:
         _family_route_keys_fill(nk)
     return nk
+
+
+def _route_builtins() raises -> PythonObject:
+    """The admitted builtins module, for a resolution or a device check
+    (never on a route hit): the operation-local admission `_fields` uses."""
+    var mods = NativeModules()
+    return mods.module("builtins")
 
 
 struct FamilyRouteOwner(Movable, Writable):
@@ -215,7 +222,7 @@ def family_route_device_admit(value: PythonObject, context: PythonObject) raises
     one identity compare and reads nothing."""
     if value is None:
         return
-    var device = family_route_device_unpack(value, native_loaded_module("builtins"))
+    var device = family_route_device_unpack(value, _route_builtins())
     _ = linear_device_installed(device, 0 if _family_route_cpu_only(context) else 1)
 
 
@@ -227,7 +234,7 @@ def family_route_clear(model: PythonObject) raises:
 
 def _family_route_build(device: PythonObject, mode: PythonObject, default_mode: PythonObject,
                         context: PythonObject) raises -> FamilyRouteOwner:
-    var b = native_loaded_module("builtins")
+    var b = _route_builtins()
     # The one decode of `device`. None, and an instance without the field
     # (unpickled from an older version, or loaded from a file), run this
     # installation's device.
@@ -250,7 +257,7 @@ def _family_route_slot(owner: PythonObject, slot: Int, check_mode: Bool) raises 
         # same name, loaded and read back at import
         # (python/mojolearn/_native_device_bindings.py connect_cpu_device).
         var nk = family_route_keys()
-        var b = native_loaded_module("builtins")
+        var b = _route_builtins()
         var table = py_get(context, nk[].k_family_cpu_binding_connections)
         if table is None:
             family_route_cpu_unconnected(name)
