@@ -11,11 +11,11 @@
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from core.linear_entry_table_ext import (
-    XL_OP_FLAGS, XL_OP_DECISION, XL_OP_DECISION_CODES, XL_OP_CLASS_PREP, XL_HAS_FIT_FOLD,
+    XL_OP_FLAGS, XL_OP_DECISION, XL_OP_DECISION_CODES, XL_OP_DECISION_ROWS, XL_OP_CLASS_PREP, XL_HAS_FIT_FOLD,
 )
 from x_linear.door_run import (
-    LINK_IDENTITY, xl_run_call, xl_run_fit, xl_run_fit_fold, xl_run_status_refuse, xl_run_word, xl_run_copy,
-    xl_run_join, xl_block_dims, xl_run_block,
+    XlDecisionRequest, xl_decision_run, xl_run_call, xl_run_fit, xl_run_fit_fold, xl_run_status_refuse,
+    xl_run_word, xl_run_copy, xl_run_join, xl_block_dims, xl_run_block,
 )
 from bindings.x_linear_route_unpack import XLinearOps
 from bindings.py_balanced import py_call, py_type, py_contains
@@ -287,43 +287,74 @@ def _xl_width(x: AdmittedXView, fields: PythonObject, model: PythonObject) raise
                     + _str(fitted))
 
 
+struct XlDecision(Movable):
+    """One admitted decision call: the typed request RUN reads
+    (x_linear/door_run.mojo `xl_decision_run`) and the objects whose words
+    it addresses, kept alive until PACK returns: X, the [coef | intercept]
+    block, the deferred finite status word (None when X was tested at
+    admission) and the result."""
+    var request: XlDecisionRequest
+    var x: PythonObject
+    var block: PythonObject
+    var status: PythonObject
+    var result: PythonObject
+
+    def __init__(out self, var request: XlDecisionRequest, var x: PythonObject, var block: PythonObject,
+                 var status: PythonObject, var result: PythonObject):
+        self.request = request^
+        self.x = x^
+        self.block = block^
+        self.status = status^
+        self.result = result^
+
+
+def xl_decision_build(operation: Int, x: AdmittedXView, x_keep: PythonObject, coef: PythonObject,
+                      intercept: PythonObject, link: Int, squeeze: Bool, strict: Bool, below: Int, above: Int,
+                      rows_mode: Int, ops: XLinearOps, context: PythonObject) raises -> XlDecision:
+    """UNPACK of one decision over an X already read: the coefficient
+    block, the result (XL_OP_DECISION: (n, k) float32, or (n,) when
+    `squeeze` and k == 1; XL_OP_DECISION_CODES: (n,) int32;
+    XL_OP_DECISION_ROWS: (n, 2 if k == 1 else k) float32) and the status
+    word. `x_keep` owns X's words (None when the caller keeps them)."""
+    var block = _xl_block(coef, intercept, context)
+    var wb = block[0]
+    var k = block[1]
+    var result: PythonObject
+    if operation == XL_OP_DECISION_CODES:
+        result = admitted_vector(x.rows, "<i4", context)
+    elif operation == XL_OP_DECISION_ROWS:
+        result = admitted_array(Python.tuple(x.rows, 2 if k == 1 else k), "<f4", context)
+    else:
+        result = admitted_array(Python.tuple(x.rows) if squeeze and k == 1 else Python.tuple(x.rows, k), "<f4",
+                                context)
+    var status = _xl_status(x, context)
+    var request = XlDecisionRequest(ops.entry, operation, x.address, labels_address(wb), labels_address(result),
+                                    x.rows, x.cols, k, link, strict, below, above, rows_mode, status[1])
+    return XlDecision(request^, x_keep, wb, status[0], result)
+
+
+def xl_decision_released(call: XlDecision) raises:
+    """RUN of one decision request with the GIL released."""
+    var py = Python()
+    with GILReleased(py):
+        xl_decision_run(call.request)
+
+
+def xl_decision_refuse(call: XlDecision, model: PythonObject) raises:
+    """Refuse a non-finite X the decision entry found (after RUN)."""
+    _xl_status_refuse(call.status, model)
+
+
 def _xl_decision(model: PythonObject, x: AdmittedXView, coef: PythonObject, intercept: PythonObject, link: Int,
                  squeeze: Bool, ops: XLinearOps, context: PythonObject) raises -> PythonObject:
-    """`_decision(est, X, coef, intercept, link)` over an X already read:
-    link(X @ W^T + b) on the binding, (n, k) float32, or (n,) when
-    `squeeze` and k == 1 (the `reshape` the callers applied)."""
-    var block = _xl_block(coef, intercept, context)
-    var wb = block[0]
-    var k = block[1]
-    var shape = Python.tuple(x.rows) if squeeze and k == 1 else Python.tuple(x.rows, k)
-    var out = admitted_array(shape, "<f4", context)
-    var status = _xl_status(x, context)
-    var word = status[0]
-    _ = _xl_call(ops, XL_OP_DECISION, [x.address, labels_address(wb), labels_address(out)],
-                 [x.rows, x.cols, k, link, status[1]], List[Float64]())
-    _xl_status_refuse(word, model)
-    _ = wb  # keep the Python object alive through the native call above
-    _ = out  # keep the Python object alive through the native call above
-    _ = wb^
-    return out
+    """`_decision(est, X, coef, intercept, link)` inside a fit, over an X
+    the caller keeps alive: build, run, refuse; the float32 scores."""
+    var call = xl_decision_build(XL_OP_DECISION, x, PythonObject(None), coef, intercept, link, squeeze, False, 0, 0,
+                                 0, ops, context)
+    xl_decision_released(call)
+    xl_decision_refuse(call, model)
+    return call.result
 
-
-def _xl_codes(model: PythonObject, x: AdmittedXView, coef: PythonObject, intercept: PythonObject, strict: Bool,
-              below: Int, above: Int, ops: XLinearOps, context: PythonObject) raises -> PythonObject:
-    """`_decision_codes`: each row's int32 class code on the binding."""
-    var block = _xl_block(coef, intercept, context)
-    var wb = block[0]
-    var k = block[1]
-    var out = admitted_vector(x.rows, "<i4", context)
-    var status = _xl_status(x, context)
-    var word = status[0]
-    _ = _xl_call(ops, XL_OP_DECISION_CODES, [x.address, labels_address(wb), labels_address(out)],
-                 [x.rows, x.cols, k, LINK_IDENTITY, 1 if strict else 0, below, above, status[1]], List[Float64]())
-    _xl_status_refuse(word, model)
-    _ = wb  # keep the Python object alive through the native call above
-    _ = out  # keep the Python object alive through the native call above
-    _ = wb^
-    return out
 
 
 def _xl_run(ops: XLinearOps, algo: Int, x_addr: Int, x_size: Int, n: Int, d: Int, y_addr: Int, y_size: Int,
@@ -473,3 +504,13 @@ def _xl_class_prep(model: PythonObject, entries: XLinearOps, class_weight: Pytho
     _ = cw  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
     return (cw, out, largest)
+
+
+def _xl_bayes_refuse(model: PythonObject, fields: PythonObject, return_std: PythonObject) raises:
+    """`_bayes_refuse`."""
+    var nk = x_linear_keys()
+    var name = _name(model)
+    if _truth(py_item(fields, nk[].k_compute_score)):
+        raise Error("mojolearn " + name + ": compute_score is not implemented")
+    if _truth(return_std):
+        raise Error("mojolearn " + name + ": predict(return_std=True) is not implemented")

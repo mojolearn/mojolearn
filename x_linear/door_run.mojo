@@ -10,7 +10,9 @@ Same operands in the same order, so the bits are unchanged."""
 from std.memory import unsafe_memcpy
 from core.native_descriptor_abi import NativeDescriptorCall
 from core.native_descriptor_call import native_descriptor_call
-from core.linear_entry_table_ext import XL_OP_FIT, XL_OP_FIT_FOLD
+from core.linear_entry_table_ext import (
+    XL_OP_FIT, XL_OP_FIT_FOLD, XL_OP_DECISION, XL_OP_DECISION_CODES, XL_OP_DECISION_ROWS,
+)
 from core.solver_entry_table import solver_cd_fit_call, solver_cd_predict_call
 from core.admitted_refusals import admitted_finite_refuse
 from core.entry_table import EntryRef
@@ -321,3 +323,73 @@ def xl_cd_predict_run(request: XlCdPredictRequest) raises:
     `request.dst`."""
     solver_cd_predict_call(request.entry, request.x, request.coef, request.dst, request.n_rows, request.n_cols,
                            request.intercept)
+
+
+# ------------------------------------------------------------ decisions
+# RUN of the inference operations (predict, decision_function,
+# predict_proba, the one-class scores; UNPACK:
+# bindings/x_linear_infer_unpack.mojo, PACK: bindings/x_linear_infer_pack.mojo).
+
+# core/py2mojo_rows.mojo row modes of XL_OP_DECISION_ROWS.
+comptime ROWS_SGD_PROBA = 2
+comptime ROWS_LRCV_PROBA = 3
+
+
+struct XlDecisionRequest(Movable):
+    """One decision call of the x_linear operations entry. `operation` is
+    XL_OP_DECISION (link(X @ W^T + b), float32 scores), XL_OP_DECISION_CODES
+    (each row's int32 class code; `strict`, `below`, `above`) or
+    XL_OP_DECISION_ROWS (the decision and the row link `rows_mode` in one
+    call). `x` addresses rows x cols float32 words, `block` k rows of
+    [coef | intercept], `dst` the result words; `status` is the deferred
+    finite status word of X (0: X was tested at admission)."""
+    var entry: NativeDescriptorCall
+    var operation: Int
+    var x: Int
+    var block: Int
+    var dst: Int
+    var rows: Int
+    var cols: Int
+    var k: Int
+    var link: Int
+    var strict: Bool
+    var below: Int
+    var above: Int
+    var rows_mode: Int
+    var status: Int
+
+    def __init__(out self, entry: NativeDescriptorCall, operation: Int, x: Int, block: Int, dst: Int, rows: Int,
+                 cols: Int, k: Int, link: Int, strict: Bool, below: Int, above: Int, rows_mode: Int, status: Int):
+        self.entry = entry
+        self.operation = operation
+        self.x = x
+        self.block = block
+        self.dst = dst
+        self.rows = rows
+        self.cols = cols
+        self.k = k
+        self.link = link
+        self.strict = strict
+        self.below = below
+        self.above = above
+        self.rows_mode = rows_mode
+        self.status = status
+
+
+def xl_decision_run(request: XlDecisionRequest) raises:
+    """One decision call into `request.dst` (the same operands, in the same
+    order, each operation always took)."""
+    var addresses: List[Int] = [request.x, request.block, request.dst]
+    var ints: List[Int] = [request.rows, request.cols, request.k]
+    if request.operation == XL_OP_DECISION_CODES:
+        ints.append(LINK_IDENTITY)
+        ints.append(1 if request.strict else 0)
+        ints.append(request.below)
+        ints.append(request.above)
+    elif request.operation == XL_OP_DECISION_ROWS:
+        ints.append(request.link)
+        ints.append(request.rows_mode)
+    else:
+        ints.append(request.link)
+    ints.append(request.status)
+    _ = native_descriptor_call(request.entry, request.operation, addresses, ints, List[Float64]())

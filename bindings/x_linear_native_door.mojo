@@ -25,23 +25,28 @@ from std.python._cpython import PyObjectPtr, GILReleased
 from core.linear_entry_table_ext import XL_OP_DECISION_ROWS, XL_OP_HUBER_OUT, XL_OP_SPEARMAN, XL_OP_BEST_ALPHA
 from x_linear.door_run import (
     ALGO_SGD, ALGO_GLM, ALGO_HUBER, ALGO_BAYES, ALGO_ARD, ALGO_LARS, ALGO_QUANTILE, ALGO_RIDGE, ALGO_ENETCV,
-    ALGO_LOGCV, ALGO_ISOTONIC, ALGO_ISOTONIC_PREDICT, ALGO_RIDGE_KFOLD, LINK_IDENTITY, LINK_EXP, LINK_SIGMOID,
-    xl_run_parts, xl_parts_total, xl_seed_halves, xl_lbfgs_work, xl_sgd_class_floats, XlSplitWords,
-    xl_cv_fold_ids_run, xl_cv_roles_limit, xl_cv_roles_run,
+    ALGO_LOGCV, ALGO_ISOTONIC, ALGO_ISOTONIC_PREDICT, ALGO_RIDGE_KFOLD, LINK_IDENTITY, LINK_EXP, xl_run_parts,
+    xl_parts_total, xl_seed_halves, xl_lbfgs_work, xl_sgd_class_floats, XlSplitWords, xl_cv_fold_ids_run,
+    xl_cv_roles_limit, xl_cv_roles_run,
 )
 from bindings.x_linear_route_unpack import (
     XLinearOps, xl_route, xl_route_host, xl_ops_require, xl_device_admit, xl_route_drop,
 )
 from bindings.x_linear_common_unpack import (
     _b, _op, _truth, _float, _int, _repr, _str, _gt, _ge, _lt, _le, _eq, _isinstance, _is_int, _name, _class_attr,
-    _attr, _sorted_repr, _xl_scope, _xl_call, _xl_check_fitted, _xl_word, _xl_float, _xl_count, _xl_slice, _xl_join,
-    _xl_matrix, _xl_status, _xl_status_refuse, _xl_vector, _xl_column, _xl_words, _xl_block, _xl_width,
-    _xl_decision, _xl_codes, _xl_run, _xl_fold_matrix, _xl_run_x, _xl_with_weights, _xl_owned, _xl_reals,
-    _xl_class_prep,
+    _attr, _sorted_repr, _xl_scope, _xl_call, _xl_word, _xl_float, _xl_count, _xl_slice, _xl_join, _xl_matrix,
+    _xl_vector, _xl_column, _xl_words, _xl_block, _xl_decision, _xl_run, _xl_fold_matrix, _xl_run_x,
+    _xl_with_weights, _xl_owned, _xl_reals, _xl_class_prep,
 )
 from x_linear.door_run import xl_cd_fit_run, xl_cd_predict_run
 from bindings.x_linear_cd_unpack import xl_cd_fit_unpack, xl_cd_predict_unpack, xl_cd_host_prediction_unpack
 from bindings.x_linear_cd_pack import xl_cd_fit_pack, xl_cd_predict_pack
+from bindings.x_linear_common_unpack import xl_decision_released, _xl_bayes_refuse
+from bindings.x_linear_infer_unpack import (
+    xl_regressor_predict_unpack, xl_decision_function_unpack, xl_classifier_predict_unpack,
+    xl_predict_proba_unpack, xl_one_class_unpack,
+)
+from bindings.x_linear_infer_pack import xl_scores_pack, xl_classifier_predict_pack, xl_one_class_predict_pack
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.optimizer_public_words_unpack import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.native_error_class import error_without_class
@@ -121,13 +126,10 @@ from bindings.py_keys import py_op_code
 from bindings.py_balanced import py_item
 from bindings.classical_labels_door import (
     ClassicalLabels, labels_full_f32, labels_address, labels_cast, labels_reshape, classical_encode_labels,
-    classical_decode_labels, classical_accuracy, labels_r2, labels_real_type, labels_integral_type,
+    classical_accuracy, labels_r2, labels_real_type, labels_integral_type,
 )
 
-comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
-
 # x_linear/dispatch.mojo algorithm codes (`_expansion_linear.ALGO_*`).
-# core/py2mojo_rows.mojo modes (`_ROWS_*`).
 # The public method an operation serves (`_xl_method`).
 comptime _XL_M_NONE = 0
 comptime _XL_M_FIT = 1
@@ -138,8 +140,6 @@ comptime _XL_M_SCORE = 5
 comptime _XL_M_PREDICT_PROBA = 6
 comptime _XL_M_SCORE_SAMPLES = 7
 comptime _XL_M_TRANSFORM = 8
-comptime _ROWS_SGD_PROBA = 2
-comptime _ROWS_LRCV_PROBA = 3
 # `_lbfgs_work`'s memory.
 
 
@@ -347,133 +347,63 @@ def xl_fit_one_class(model: PythonObject, args: PythonObject, entries: XLinearOp
     return model
 
 
-def _xl_offset(fields: PythonObject, context: PythonObject) raises -> Float64:
-    """`float(self.offset_[0])`."""
-    var nk = x_linear_keys()
-    var off = _xl_words(py_item(fields, nk[].k_offset_), "offset_", context)
-    var value = Float64(_F32P(unsafe_from_address=off.address)[0])
-    _ = off  # keep the Python object alive through the native call above
-    _ = off^
-    return value
-
-
 def xl_one_class(model: PythonObject, operation: Int, source: PythonObject, entries: XLinearOps, context: PythonObject) raises -> PythonObject:
-    """SGDOneClassSVM.decision_function / score_samples / predict."""
-    var nk = x_linear_keys()
-    var fields = py_fields(model)
-    _xl_check_fitted(fields, model)
-    xl_ops_require(entries)
-    var x = _xl_matrix(source, _name(model), context)
-    _xl_width(x.view(), fields, model)
-    var offset = _xl_offset(fields, context)
-    var result = PythonObject(None)
+    """SGDOneClassSVM.decision_function / score_samples / predict: UNPACK,
+    RUN, PACK (bindings/x_linear_infer_unpack.mojo, _pack.mojo)."""
+    var call = xl_one_class_unpack(model, operation, source, entries, context)
+    xl_decision_released(call)
     if operation == X_LINEAR_OPN_ONE_CLASS_PREDICT:
-        # `Array.from_list([-offset], '<f4')`; codes -1 / +1, as int64
-        var icpt = labels_full_f32(1, -offset, context)
-        var codes = _xl_codes(model, x.view(), py_item(fields, nk[].k_coef_), icpt, False, -1, 1, entries, context)
-        var wide = admitted_vector(x.rows, "<i8", context)
-        labels_cast(labels_address(codes), "<i4", labels_address(wide), "<i8", x.rows, context)
-        _ = wide  # keep the Python object alive through the native call above
-        _ = codes  # keep the Python object alive through the native call above
-        result = wide
-    else:
-        var intercept = PythonObject(-offset) if operation == X_LINEAR_OPN_ONE_CLASS_DECISION_FUNCTION else PythonObject(0.0)
-        result = _xl_decision(model, x.view(), py_item(fields, nk[].k_coef_), intercept, LINK_IDENTITY, True, entries, context)
-    _ = x^
-    return result
+        return xl_one_class_predict_pack(model, call, context)
+    return xl_scores_pack(model, call)
 
 
 # -------------------------------------------------------------- predict
+# Each inference operation is UNPACK (bindings/x_linear_infer_unpack.mojo:
+# the fitted and width checks, X through the one admission, the typed
+# XlDecisionRequest), RUN (x_linear/door_run.mojo `xl_decision_run`, GIL
+# released, no Python object) and PACK (bindings/x_linear_infer_pack.mojo).
 
 
 def xl_regressor_predict(model: PythonObject, args: PythonObject, entries: XLinearOps, context: PythonObject) raises -> PythonObject:
     """`_LinearRegressorMixin.predict(X)` (BayesianRidge and ARDRegression
     pass return_std and refuse first)."""
-    var nk = x_linear_keys()
-    var fields = py_fields(model)
-    if len(args) > 1:
-        _xl_bayes_refuse(model, fields, args[1])
-    _xl_check_fitted(fields, model)
-    xl_ops_require(entries)
-    var x = _xl_matrix(args[0], _name(model), context)
-    _xl_width(x.view(), fields, model)
-    var link = LINK_IDENTITY
-    var stored = py_get(fields, nk[].k__link)
-    if stored is None:
-        stored = _attr(model, "_link", PythonObject(LINK_IDENTITY))
-    link = _int(stored)
-    var out = _xl_decision(model, x.view(), py_item(fields, nk[].k_coef_), py_item(fields, nk[].k_intercept_), link, True, entries, context)
-    _ = x^
-    return out
+    var call = xl_regressor_predict_unpack(model, args, entries, context)
+    xl_decision_released(call)
+    return xl_scores_pack(model, call)
 
 
 def xl_classifier_decision(model: PythonObject, source: PythonObject, entries: XLinearOps, context: PythonObject) raises -> PythonObject:
     """`_LinearClassifierMixin.decision_function(X)`."""
-    var nk = x_linear_keys()
-    var fields = py_fields(model)
-    _xl_check_fitted(fields, model)
-    xl_ops_require(entries)
-    var x = _xl_matrix(source, _name(model), context)
-    _xl_width(x.view(), fields, model)
-    var out = _xl_decision(model, x.view(), py_item(fields, nk[].k_coef_), py_item(fields, nk[].k_intercept_), LINK_IDENTITY, True, entries, context)
-    _ = x^
-    return out
+    var call = xl_decision_function_unpack(model, source, entries, context)
+    xl_decision_released(call)
+    return xl_scores_pack(model, call)
 
 
 def xl_classifier_predict(model: PythonObject, source: PythonObject, entries: XLinearOps, context: PythonObject) raises -> PythonObject:
     """`_LinearClassifierMixin.predict(X)`: the codes on the binding, the
     labels decoded natively (`decode_labels(classes_, codes)`)."""
-    var nk = x_linear_keys()
-    var fields = py_fields(model)
-    _xl_check_fitted(fields, model)
-    xl_ops_require(entries)
-    var x = _xl_matrix(source, _name(model), context)
-    _xl_width(x.view(), fields, model)
-    var codes = _xl_codes(model, x.view(), py_item(fields, nk[].k_coef_), py_item(fields, nk[].k_intercept_), True, 0, 1, entries, context)
-    _ = x^
-    return classical_decode_labels(py_item(fields, nk[].k_classes_), codes, context)
+    var call = xl_classifier_predict_unpack(model, source, entries, context)
+    xl_decision_released(call)
+    return xl_classifier_predict_pack(model, call, context)
 
 
 def xl_predict_proba(model: PythonObject, source: PythonObject, lrcv: Bool, entries: XLinearOps, context: PythonObject) raises -> PythonObject:
     """SGDClassifier.predict_proba (the sigmoid scores) and
     LogisticRegressionCV.predict_proba (the decision scores), finished per
-    row on the binding (`py2mojo_rows`)."""
-    var nk = x_linear_keys()
-    var fields = py_fields(model)
-    if not lrcv and not _eq(py_item(fields, nk[].k_loss), PythonObject("log_loss")):
-        raise Error("AttributeError: probability estimates are not available for loss=" + _repr(py_item(fields, nk[].k_loss)))
-    _xl_check_fitted(fields, model)
-    xl_ops_require(entries)
-    var x = _xl_matrix(source, _name(model), context)
-    _xl_width(x.view(), fields, model)
-    var n = x.rows
-    var link = LINK_IDENTITY if lrcv else LINK_SIGMOID
-    var rows_mode = _ROWS_LRCV_PROBA if lrcv else _ROWS_SGD_PROBA
-    # ne2-g-linear (N362): decision and row link in one call (XL_OP_DECISION_ROWS,
-    # the same two kernels' words). Both x_linear bindings publish it, so the
-    # former two-call path (decision, then `py2mojo_rows`) is deleted.
-    var block = _xl_block(py_item(fields, nk[].k_coef_), py_item(fields, nk[].k_intercept_), context)
-    var wb = block[0]
-    var kb = block[1]
-    var res = admitted_array(Python.tuple(n, 2 if kb == 1 else kb), "<f4", context)
-    var status = _xl_status(x.view(), context)
-    var word = status[0]
-    _ = _xl_call(entries, XL_OP_DECISION_ROWS, [x.address, labels_address(wb), labels_address(res)],
-                 [n, x.cols, kb, link, rows_mode, status[1]], List[Float64]())
-    _xl_status_refuse(word, model)
-    _ = wb  # keep the Python object alive through the native call above
-    _ = res  # keep the Python object alive through the native call above
-    _ = wb^
-    _ = x^
-    return res
+    row on the binding in the one call (XL_OP_DECISION_ROWS)."""
+    var call = xl_predict_proba_unpack(model, source, lrcv, entries, context)
+    xl_decision_released(call)
+    return xl_scores_pack(model, call)
 
 
 def xl_classifier_score(model: PythonObject, args: PythonObject, entries: XLinearOps, context: PythonObject) raises -> PythonObject:
     """`_LinearClassifierMixin.score(X, y)`: predict, then
-    `accuracy_fraction(y, prediction)` in the same call."""
+    `accuracy_fraction(y, prediction)` in the same call (the labels door's
+    own operation, in the scope of the route's device)."""
     var prediction = xl_classifier_predict(model, args[0], entries, context)
     return PythonObject(classical_accuracy(args[1], prediction, PythonObject(None), PythonObject(None),
                                            _xl_scope(entries, context)))
+
 
 
 # ------------------------------------------------------------ regressors
@@ -667,16 +597,6 @@ def xl_regressor_score(model: PythonObject, args: PythonObject, entries: XLinear
                            _xl_scope(entries, context))
     _ = target^
     return PythonObject(result)
-
-
-def _xl_bayes_refuse(model: PythonObject, fields: PythonObject, return_std: PythonObject) raises:
-    """`_bayes_refuse`."""
-    var nk = x_linear_keys()
-    var name = _name(model)
-    if _truth(py_item(fields, nk[].k_compute_score)):
-        raise Error("mojolearn " + name + ": compute_score is not implemented")
-    if _truth(return_std):
-        raise Error("mojolearn " + name + ": predict(return_std=True) is not implemented")
 
 
 def _xl_or(value: PythonObject, default: Float64) raises -> Float64:
