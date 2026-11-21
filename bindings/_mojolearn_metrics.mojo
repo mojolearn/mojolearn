@@ -1327,6 +1327,7 @@ def metrics_vendor_binding() raises -> PythonObject:
 from core.shared_slot import SharedSlot
 from core.spectral_native_provider import SpectralProviderAPI
 from core.spectral_member import spectral_member_publish
+from core.manifold_member import manifold_member_publish
 from core.spectral_native_device import SpectralDeviceKernels
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from checks.numerics import NUMERIC_IDENTICAL as _SPECTRAL_IDENTICAL
@@ -1354,6 +1355,8 @@ def _publish_umap_ops(module: PythonObject) raises:
     umap_ops_publish(NeighborsEntryKey(Int(GLOBAL_NUMERIC_MODE), word), Int(api[].entries.unsafe_ptr()),
                      umap_ops_device_v1)
     py_setattr(module, "umap_native_key", Python.tuple(PythonObject(Int(GLOBAL_NUMERIC_MODE)), PythonObject(word)))
+    # UMAP's member entry (core/manifold_member.mojo, family 33): its fit and transform run on this table.
+    manifold_member_publish(Int(GLOBAL_NUMERIC_MODE), word, Int(api[].entries.unsafe_ptr()))
 
 
 def build__mojolearn_metrics() -> PythonObject:

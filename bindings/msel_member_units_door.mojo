@@ -53,6 +53,26 @@ only when the answer is the one its Python units give:
     is one pass per fold over its train rows, in parallel with the fold
     shapes, and stops at the row that completes the classes.
 
+WHO REFUSES A NON-FINITE X. Model selection holds X with its finite test
+deferred to the member doors (bindings/msel_cv_door.mojo), and this route
+runs no member door. A member whose KIND has `MEMBER_CAN_TEST_ROWS` refuses
+non-finite rows in its own fit and score, from the pass its kernel already
+makes: nothing is scanned here; its refusal fails the unit, nothing is
+published (or, with a numeric `error_score`, the unit is reported as its
+failing fit was) and the Python units raise the estimator's own words. Any
+other member reads admitted words: X's verdict is read ONCE per operation at
+UNPACK (the held block's recorded verdict, `admitted_held_verify`, which
+scans at most once per held X and records it for every later door; an unheld
+X is scanned once across the host cores); not finite = `ran == False` and
+the Python units' member doors refuse it. y is admitted finite either way
+(`classical_check_y`, or the label encode).
+
+RESPONSE ELEMENT TYPE: the member's own OUTPUTS answer
+(`member_output_dtype`, once per operation at UNPACK). The placed buffers
+are int32 codes and float32 values; a member that writes another type
+(int64 codes, float64 probabilities) answers `ran == False` BEFORE any fit
+is spent, where its first response call used to refuse after the fits.
+
 WHEN IT RUNS (`msel_member_units` answers `ran == False` otherwise and the
 caller keeps its Python units): the member's class carries a member mark and
 its family's admit fills it; a host float32 C-order X with a target; the
@@ -110,10 +130,13 @@ from bindings.msel_estimator_native_door import (
 )
 from bindings.native_unit_os_threads_run import native_unit_cores
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
+from bindings.py_admitted_registry import admitted_held_index
+from bindings.admitted_meta_scope_unpack import admitted_held_verify
+from core.host_finite_scan import host_all_finite_f32
 from core.host_parallel import host_parallelize
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free, member_kind_capabilities, MEMBER_I64,
-    MEMBER_F32, MEMBER_I32, MEMBER_CAN_EXPORT, member_outputs,
+    MEMBER_F32, MEMBER_I32, MEMBER_CAN_EXPORT, member_outputs, member_output_dtype, MEMBER_CAN_TEST_ROWS,
     MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA,
     MEMBER_OP_FIT, MEMBER_OP_SCORE, MEMBER_CAN_FIT, MEMBER_CAN_SCORE, MEMBER_CAN_CLASSIFIER, MEMBER_CAN_ROW_INDEX,
 )
@@ -546,6 +569,7 @@ def _member_units(base: PythonObject, candidates: PythonObject, y: PythonObject,
     # index arrays, the admitted target) until the units have joined.
     var pins = Python.list()
     var classifier = False
+    var tests_rows = False
     var run = MselMemberRun(msel_addr(x), 0, rows, cols, n_folds, n_units, workers, return_train, keep)
     # Per candidate: its estimator and its admission's pins (PACK reads them).
     var members = Python.list()
@@ -589,9 +613,29 @@ def _member_units(base: PythonObject, candidates: PythonObject, y: PythonObject,
             if (kind_mask & asked) != asked:
                 return scores^
             classifier = (kind_mask & MEMBER_CAN_CLASSIFIER) != 0
+            tests_rows = (kind_mask & MEMBER_CAN_TEST_ROWS) != 0
         run.plans.append(owner.plan.copy())
         _ = py_call(members.append, est)
         _ = py_call(member_pins.append, owner.pins)
+    # X's finite verdict, once per operation, only for a member kind that
+    # does not test its rows itself (module note): the held block's recorded
+    # verdict (one scan per held X at most, then recorded), else one scan
+    # across the host cores. Not finite: the Python units, whose member doors
+    # refuse it in the estimator's own words.
+    if not tests_rows:
+        var finite = False
+        try:
+            var held_x = admitted_held_index(x)
+            if held_x >= 0:
+                finite = admitted_held_verify(held_x)
+            else:
+                finite = host_all_finite_f32(
+                    MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=msel_addr(x)), rows * cols)
+            _ = x  # keep the Python object alive through the scan above
+        except:
+            finite = False
+        if not finite:
+            return scores^
     # The target once, as the member's own fit door admits it (present,
     # real, one column, finite, as long as X): float32 words.
     # A target that check refuses (several columns, not real) is not this
@@ -665,9 +709,15 @@ def _member_units(base: PythonObject, candidates: PythonObject, y: PythonObject,
                     return scores^
                 if responses[k] == MEMBER_OP_PREDICT and width != 1:
                     return scores^
+                # The element type is the member's own answer; one that does
+                # not say it is read as the placed type (as before the word
+                # existed). Any other type is the Python units' (module note).
+                var placed = MEMBER_I32 if coded else MEMBER_F32
+                if member_output_dtype(run.plans[0], responses[k], cols, 1, placed) != placed:
+                    return scores^
                 run.ops.append(responses[k])
                 run.widths.append(width)
-                run.words.append(MEMBER_I32 if coded else MEMBER_F32)
+                run.words.append(placed)
             for u in range(n_units):  # driver-loop: over units (their placed buffers, allocated once each)
                 var f = u - (u // n_folds) * n_folds
                 for side in range(run.sides):  # driver-loop: test side, then train side when asked

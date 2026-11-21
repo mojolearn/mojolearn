@@ -164,6 +164,10 @@ class UMAP(NumericModeMixin):
     # from the estimator's binding route (bindings/mani_umap_native_door.mojo).
     _mojolearn_device = True
 
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_MANIFOLD = 33) and core/manifold_member.mojo.
+    _mojolearn_member = (33, 0)
+
     def __init__(self, n_neighbors=15, n_components=2, *, min_dist=0.1,
                  spread=1.0, n_epochs=None, random_state=0,
                  set_op_mix_ratio=1.0, local_connectivity=1.0,
