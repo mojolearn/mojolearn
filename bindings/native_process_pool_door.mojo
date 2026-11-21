@@ -9,10 +9,16 @@ State (lane pools-frame, 2026-11-21). A pool's state is a typed record
 (`ProcessPoolRecord`, bindings/native_process_pool_run.mojo: devices, worker
 process ids, socket descriptors, sequence, closed) held by one native owner,
 `ProcessPoolOwner`, stored in the pool dictionary under `record`. Every
-operation reads the record. The dictionary's other entries are of two kinds:
-`module` and `environment` are a caller's configuration, UNPACKed when the
-workers are spawned; `devices`, `cooperative`, `workers`, `closed`, `sequence`
-and `timing` are a mirror this door publishes for readers and never reads back.
+operation reads the record, through one dictionary read per operation (a
+start, a map, an addressed request, a close), never per frame. The
+dictionary's other entries are of two kinds: `module` and `environment` are a
+caller's configuration, UNPACKed when the workers are spawned; `devices`,
+`cooperative`, `workers`, `closed` and `timing` are a mirror this door
+publishes at a start and at a close for readers and never reads back.
+REMOVED 2026-11-21 (lane pools-frame): the `sequence` mirror entry (a Python
+int built and stored into the dictionary after every map and every addressed
+request; nothing read it) and the shard doors' `trace_record` entry (now the
+record's `trace` word, `process_pool_trace`).
 
 Wire. Every request and reply is one typed frame
 (bindings/native_process_wire_door.mojo, core/parallel_worker_frame.mojo).
@@ -226,12 +232,11 @@ def process_pool_create(devices: PythonObject, cooperative: Bool, child_module: 
     py_setitem(result, nk[].k_cooperative, cooperative)
     py_setitem(result, nk[].k_workers, bi.list())
     py_setitem(result, nk[].k_closed, False)
-    py_setitem(result, nk[].k_sequence, 0)
     return result
 
 
 def _pool_publish(pool: PythonObject) raises:
-    """PACK: the mirror of the record (`workers`, `closed`, `sequence`)."""
+    """PACK: the mirror of the record (`workers`, `closed`)."""
     var bi = PROCESS_BOUNDARY.get_or_create_ptr()[].bi
     var nk = native_keys()
     var record = py_item(pool, nk[].k_record)
@@ -252,7 +257,6 @@ def _pool_publish(pool: PythonObject) raises:
         _ = py_call(workers.append, worker)
     py_setitem(pool, nk[].k_workers, workers)
     py_setitem(pool, nk[].k_closed, PythonObject(rec[].native.closed))
-    py_setitem(pool, nk[].k_sequence, PythonObject(rec[].native.sequence))
     _ = record
 
 
@@ -279,6 +283,21 @@ def process_pool_closed(pool: PythonObject) raises -> Bool:
     var closed = rec[].native.closed
     _ = record
     return closed
+
+
+def process_pool_trace(pool: PythonObject) raises -> Int:
+    """The id of the shard trace record the pool's requests go to (0: none)."""
+    var record = py_item(pool, native_keys()[].k_record)
+    var trace = record.downcast_value_ptr[ProcessPoolOwner]()[].native.trace
+    _ = record
+    return trace
+
+
+def process_pool_trace_set(pool: PythonObject, trace: Int) raises:
+    """Names the shard trace record of the pool's next requests."""
+    var record = py_item(pool, native_keys()[].k_record)
+    record.downcast_value_ptr[ProcessPoolOwner]()[].native.trace = trace
+    _ = record
 
 
 def process_pool_devices(pool: PythonObject) raises -> List[Int]:
@@ -592,10 +611,13 @@ def _process_pool_wave(pool: PythonObject, inputs: PythonObject, words: List[Lis
     var outgoing = List[WireOutgoing](capacity=total)
     for i in range(total):  # driver-loop: over the requests of one map (UNPACK, before any worker is addressed)
         outgoing.append(wire_unpack(inputs[i]))
-    process_pool_start(pool)
     var nk = native_keys()
     var record = py_item(pool, nk[].k_record)
     var rec = record.downcast_value_ptr[ProcessPoolOwner]()
+    # One record read per map: a started open pool is not looked up again by
+    # a start (the start refuses a closed pool and returns on a started one).
+    if rec[].native.closed or not rec[].native.started():
+        process_pool_start(pool)
     # The descriptors are copied out once per map: no reference into the
     # record is held across a socket wait.
     var fds = rec[].native.fds.copy()
@@ -631,8 +653,6 @@ def _process_pool_wave(pool: PythonObject, inputs: PythonObject, words: List[Lis
     except error:
         _pool_abandon(pool, String(error), "request")
         raise error
-    # The mirror's sequence, once per map (the record has it per wave).
-    py_setitem(pool, nk[].k_sequence, PythonObject(sequence))
     _ = record
     _ = outgoing^
     return result
@@ -665,7 +685,8 @@ def process_pool_request(pool: PythonObject, worker_index: Int, request: List[In
     var record = py_item(pool, nk[].k_record)
     var rec = record.downcast_value_ptr[ProcessPoolOwner]()
     pool_index_admit(rec[].native.width(), worker_index)
-    process_pool_start(pool)
+    if rec[].native.closed or not rec[].native.started():
+        process_pool_start(pool)
     if worker_index >= len(rec[].native.fds):
         # Only workers whose reap failed are left (a close that could not finish).
         raise Error("transport: socket is closed")
@@ -679,7 +700,6 @@ def process_pool_request(pool: PythonObject, worker_index: Int, request: List[In
         failed = pool_reply_failed(reply.kind, reply.sequence, sequence, True)
         value = reply.value
         rec[].native.sequence = sequence + 1
-        py_setitem(pool, nk[].k_sequence, PythonObject(sequence + 1))
     except error:
         _pool_abandon(pool, String(error), "request")
         raise error

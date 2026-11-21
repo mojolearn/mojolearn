@@ -42,6 +42,7 @@ from bindings.classical_arrays_door import classical_address
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.native_process_pool_door import (
     process_pool_create, process_pool_map_typed, process_pool_close, process_pool_closed, process_pool_pids, PROCESS_BOUNDARY,
+    process_pool_trace, process_pool_trace_set,
 )
 from bindings.native_worker_inventory_door import native_worker_inventory, native_require_worker_inventory
 from bindings.tsa_hw_native_door import tsa_array
@@ -345,7 +346,7 @@ def _shard_admit(pool: PythonObject, devices: PythonObject) raises -> PythonObje
     t[].next_id = id + 1
     t[].records.append(ShardTraceRecord(id, device_words^))
     t[].inventories.append(identities)
-    py_setitem(pool, nk[].k_trace_record, PythonObject(id))
+    process_pool_trace_set(pool, id)
     if len(t[].records) > SHARD_TRACE_RECORDS:
         _ = t[].records.pop(0)
         _ = t[].inventories.pop(0)
@@ -395,11 +396,14 @@ def shard_map(pool: PythonObject, wave: ShardWave) raises -> PythonObject:
     var results = process_pool_map_typed(pool, wave.words, wave.payloads)
     var requests = wave.count()
     var nk = parallel_keys()
-    var traced = py_get(pool, nk[].k_trace_record, PythonObject(None))
+    # The pool's trace word is in its typed record (it was a `trace_record`
+    # entry of the pool dictionary: a dictionary read, a type test and an
+    # int conversion per map).
+    var traced = process_pool_trace(pool)
     var workers = process_pool_pids(pool)
-    if traced is not None and py_type(traced) is b.int and len(workers) > 0:
+    if traced != 0 and len(workers) > 0:
         var t = SHARD_TRACE.get_or_create_ptr()
-        var at = shard_trace_find(t[].records, Int(py=traced))
+        var at = shard_trace_find(t[].records, traced)
         if at >= 0:
             # Two words per request into the typed record (it was a new
             # dictionary per request, then a name String per request).

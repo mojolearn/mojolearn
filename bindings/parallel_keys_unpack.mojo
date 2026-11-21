@@ -430,7 +430,6 @@ struct ParallelKeys(Defaultable, Movable):
     var k_svd_solver: PythonObject
     var k_t: PythonObject
     var k_token: PythonObject
-    var k_trace_record: PythonObject
     var k_training_numeric_mode: PythonObject
     var k_training_vendor: PythonObject
     var k_trees_context: PythonObject
@@ -740,7 +739,6 @@ struct ParallelKeys(Defaultable, Movable):
         self.k_svd_solver = PythonObject(None)
         self.k_t = PythonObject(None)
         self.k_token = PythonObject(None)
-        self.k_trace_record = PythonObject(None)
         self.k_training_numeric_mode = PythonObject(None)
         self.k_training_vendor = PythonObject(None)
         self.k_trees_context = PythonObject(None)
@@ -1046,7 +1044,6 @@ def _parallel_keys_fill(nk: UnsafePointer[ParallelKeys, MutUntrackedOrigin]) rai
     nk[].k_svd_solver = py_key("svd_solver")
     nk[].k_t = py_key("t")
     nk[].k_token = py_key("token")
-    nk[].k_trace_record = py_key("trace_record")
     nk[].k_training_numeric_mode = py_key("training_numeric_mode")
     nk[].k_training_vendor = py_key("training_vendor")
     nk[].k_trees_context = py_key("trees_context")
