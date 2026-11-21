@@ -22,7 +22,7 @@ from providers.python.neural_descriptor_pyapi_door import (
 from bindings.pca_keys_unpack import pca_keys
 from bindings.py_balanced import py_item
 from bindings.decomp_device_route_door import (
-    decomp_route_hit, decomp_route_keep, decomp_route_resolve_device, decomp_route_on_cpu_image,
+    decomp_route_hit, decomp_route_keep, decomp_route_resolve_device, decomp_route_on_cpu_image, decomp_cpu_table,
     decomp_route_expected_vendor, DecompRoute,
 )
 
@@ -100,7 +100,7 @@ def pca_route(model: PythonObject, fields: PythonObject, mode: PythonObject, con
     var device = decomp_route_resolve_device(fields, tier, context)
     var bindings = PythonObject(None)
     if decomp_route_on_cpu_image(device, context):
-        bindings = py_get(context, nk[].k_pca_cpu_bindings)
+        bindings = decomp_cpu_table(context, nk[].k_pca_cpu_bindings)
         if bindings is None:
             raise Error("ImportError: device='cpu' is not connected in this installation")
     else:
