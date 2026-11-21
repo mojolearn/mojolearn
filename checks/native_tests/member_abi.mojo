@@ -4,7 +4,7 @@ from checks.native_tests.runner import Check, Column, Report
 
 
 # Host column: the member ABI's call envelope and the linear member state
-# store's lifetime are host metadata work (three fixtures across host cores
+# store's lifetime are host metadata work (five fixtures across host cores
 # inside run_checks; the check counts as one case).
 def run_cases(column: Column, mut report: Report):
     try:
