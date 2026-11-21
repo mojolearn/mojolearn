@@ -1,0 +1,92 @@
+# SPDX-License-Identifier: Apache-2.0
+"""What `model.digest_` hashes, per class, and its one native connection.
+
+`digest_` is the hash of a fitted model's state (bindings/fitted_digest_door.mojo
+has the walk, core/fitted_digest.mojo the format). The compiled walk reads the
+tables below; `tools/gen_digest_fields.py` writes docs/api/DIGEST_FIELDS.md
+from the same tables and the save schemas, so the table and the code cannot
+disagree.
+
+The field source of a class, first match in its ancestry:
+
+1. `REFUSED`: no digest yet; the read raises AttributeError with the reason.
+2. A connected save schema (`_native_archive_bridge.register`): the members
+   `save` writes.
+3. Otherwise: every public fitted attribute (an instance field whose name ends
+   in "_" and does not start with "_", value not None), minus the names in
+   `SKIP`, plus the private fields in `EXTRA`.
+
+This module holds declarations and import-time glue only: nothing here runs
+when a model is fitted, and the read itself is one native call.
+"""
+import sys
+
+#: class name -> the private instance fields that are fitted state (they
+#: decide the model's answers and no public attribute carries them).
+EXTRA_BY_NAME = {}
+
+#: class name -> the public trailing-underscore fields that are not fitted
+#: state: wall times, which differ between two equal fits.
+SKIP_BY_NAME = {
+    "GridSearchCV": ("cv_results_", "refit_time_"),
+    "RandomizedSearchCV": ("cv_results_", "refit_time_"),
+    "HalvingGridSearchCV": ("cv_results_", "refit_time_"),
+    "HalvingRandomSearchCV": ("cv_results_", "refit_time_"),
+}
+
+#: class name -> why it has no digest yet, in words a user reads.
+REFUSED_BY_NAME = {}
+
+#: The tables the compiled walk reads, keyed by class (filled by `declare`).
+EXTRA = {}
+SKIP = {}
+REFUSED = {}
+
+#: The one connection of the `digest_` property: the property object, the
+#: compiled entry and its context. Filled in place by `connect`; read by
+#: bindings/fitted_digest_property_pack.mojo through the module registry.
+CONNECTION = {"property": None, "entry": None, "context": None}
+
+
+def declare(cls):
+    """Enter `cls` in the class-keyed tables when a table above names it
+    (called once per class, at its definition, by the shared estimator
+    base)."""
+    name = cls.__name__
+    if name in EXTRA_BY_NAME:
+        EXTRA[cls] = EXTRA_BY_NAME[name]
+    if name in SKIP_BY_NAME:
+        SKIP[cls] = SKIP_BY_NAME[name]
+    if name in REFUSED_BY_NAME:
+        REFUSED[cls] = REFUSED_BY_NAME[name]
+
+
+def connect(base):
+    """Connect the compiled digest entry once: `(entry, context)`. `base` is
+    the shared estimator base whose `digest_` property this serves. On an
+    installation without the saved-model owner the entry raises
+    ModuleNotFoundError in words, as `save` does there."""
+    if CONNECTION["context"] is not None:
+        return CONNECTION["entry"], CONNECTION["context"]
+    from ._native_archive_bridge import connect as connect_archive
+    entry, context = connect_archive()
+    if "archive_unavailable" not in context:
+        context.update(digest_base=base, digest_extra=EXTRA, digest_skip=SKIP, digest_refused=REFUSED)
+        CONNECTION["entry"] = entry
+    CONNECTION["context"] = context
+    return entry, context
+
+
+def read(model):
+    """`model.digest_`: one native call."""
+    entry = CONNECTION["entry"]
+    if entry is None:
+        from ._mode import CheckMixin
+        entry = connect(CheckMixin)[0]
+    return entry(model, "fitted_digest", (), CONNECTION["context"])
+
+
+from ._native_loaded_modules import connect_module  # noqa: E402
+
+# glue: import-time native module connection; CONNECTION is filled in place, never reassigned.
+connect_module(__name__, sys.modules[__name__], ("CONNECTION",))
