@@ -104,6 +104,7 @@ from dbscan.impl.edge_free import (
     ef_label_kernel,
 )
 from dbscan.impl.neighbors.epsilon_neighborhood import (
+    DBSCAN_METRIC_L1,
     DBSCAN_METRIC_PRECOMPUTED,
     EPS_MBLK,
     EPS_NBLK,
@@ -121,6 +122,17 @@ from dbscan.impl.neighbors.epsilon_neighborhood import (
     _eps_acc,
     dbscan_metric_threshold,
 )
+from dbscan.impl.brute_eps_filter import (
+    DBF_DECLINE_DEN,
+    DBF_G_SHARE_PCT,
+    DBSCAN_BRUTE_EPS_FILTER,
+    dbf_band_scale,
+    dbf_filter_serves,
+    dbf_gemm_rows,
+    dbf_prepare,
+    dbf_range_launch,
+)
+from gemm.checks.gemm_identical import GemmWorkspace
 from neighbors.impl.ball_cover.scan import rbc_exclusive_scan_launch
 
 
@@ -429,6 +441,248 @@ def bef_union_kernel(
                 _ef_union(parent, gi, Int32(j))
 
 
+def bef_filtered_fit[
+    metric: Int
+](
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    mut core: DeviceBuffer[DType.uint8],
+    mut labels: DeviceBuffer[DType.int32],
+    n_rows: Int,
+    n_features: Int,
+    eps: Float64,
+    min_pts: Int,
+    phase_timing: Bool,
+) raises -> Int:
+    """`dbscan_brute_edge_free_fit` with both distance passes on the GEMM filter of `brute_eps_filter.mojo`
+    (experiment MOJOLEARN_DBSCAN_FAST_BRUTE_EPS_FILTER, default off). Steps A-D, the union-find, the border
+    lists and the labels are that function's, statement for statement; only the launch that fills the degrees
+    (A) and the range's bit matrix (B) differs, and it writes the same degrees and the same words (the filter
+    decides a pair only where its bound proves the reference accumulator's compare; the rest run `_eps_acc`).
+
+    Returns the number of bit-matrix ranges, or 0 with NOTHING written when the centred copy or one GEMM range
+    does not fit the device (the caller then runs the reference passes). When the probe range of pass A needs
+    the recheck for more than 1 / DBF_DECLINE_DEN of its pairs, the rest of the fit runs `bef_eps_kernel`.
+
+    Launch sites (the loops they sit in): `dbf_prepare` once a fit; `dbf_range_launch` once per GEMM-sized
+    query range of A and of B (driver loops over the memory plan, about n / gemm_rows iterations each); one
+    scalar readback after the first range of A. Nothing is added per row or per pair on the host."""
+    var thresh = dbscan_metric_threshold(metric, eps)
+    var n_words = bef_words(n_rows)
+    var blocks_n = (n_rows + EF_TPB - 1) // EF_TPB
+    var t0 = perf_counter_ns()
+
+    # --- the filter's plan: the centred copy, then one GEMM range ----------
+    var free0 = Int(ctx.get_memory_info()[0])
+    if 4 * n_rows * (n_features + 1) > free0 * DBF_G_SHARE_PCT // 100:
+        if phase_timing:
+            print(
+                "PHASE plan.brute_eps_filter not taken: the centred copy does not fit "
+                + String(DBF_G_SHARE_PCT) + " percent of " + String(free0) + " free bytes"
+            )
+        return 0
+    var xc = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
+    var nc = ctx.enqueue_create_buffer[DType.float32](n_rows)
+    ctx.synchronize()
+    var g_rows = dbf_gemm_rows(
+        Int(ctx.get_memory_info()[0]), n_rows, n_features
+    )
+    if g_rows < 1:
+        if phase_timing:
+            print(
+                "PHASE plan.brute_eps_filter not taken: no GEMM range (one query row against "
+                + String(n_rows) + " rows, with the GEMM's scratch) fits the device"
+            )
+        _ = xc^
+        _ = nc^
+        return 0
+    dbf_prepare(ctx, x, xc, nc, n_rows, n_features)
+    var g = ctx.enqueue_create_buffer[DType.float32](g_rows * n_rows)
+    var gws = GemmWorkspace(ctx)
+    var unc = ctx.enqueue_create_buffer[DType.int32](1)
+    var h_unc = ctx.enqueue_create_host_buffer[DType.int32](1)
+    ctx.enqueue_memset(unc, Int32(0))
+    var band = dbf_band_scale(n_features)
+    var use_filter = True
+    var probe_pairs = 0
+    var probe_unc = 0
+
+    # --- A: degrees over every row -----------------------------------------
+    var deg = ctx.enqueue_create_buffer[DType.int32](n_rows)
+    # the degree instantiation writes no bits; one word stands in for `bm`
+    var bm_none = ctx.enqueue_create_buffer[DType.uint64](1)
+    ctx.enqueue_memset(deg, Int32(0))
+    var deg_range = min(n_rows, BEF_MAX_RANGE_ROWS)
+    var st_a = 0
+    while st_a < n_rows:  # driver-loop: over GEMM-sized (filter) or grid-sized (reference) query ranges (the plan, no row data)
+        if use_filter:
+            var np_f = min(n_rows - st_a, g_rows)
+            dbf_range_launch[metric, False](
+                ctx, gws, g, xc, nc, x, bm_none, deg, unc, st_a, np_f,
+                n_rows, n_features, np_f, 0, thresh, band, st_a == 0,
+            )
+            if st_a == 0:
+                # the probe: how many pairs of the first range the band left to the recheck
+                ctx.enqueue_copy(dst_ptr=h_unc.unsafe_ptr(), src_buf=unc)
+                ctx.synchronize()
+                probe_unc = Int(h_unc.unsafe_ptr().unsafe_load(0))
+                probe_pairs = np_f * n_rows
+                if probe_unc * DBF_DECLINE_DEN > probe_pairs:
+                    use_filter = False
+            st_a += np_f
+        else:
+            var np_a = min(n_rows - st_a, deg_range)
+            var xa = x.create_sub_buffer[DType.float32](
+                st_a * n_features, np_a * n_features
+            )
+            var da = deg.create_sub_buffer[DType.int32](st_a, np_a)
+            ctx.enqueue_function[bef_eps_kernel[metric, False]](
+                bm_none.unsafe_ptr(), da.unsafe_ptr(),
+                xa.unsafe_ptr(), x.unsafe_ptr(), Int32(np_a), Int32(n_rows),
+                Int32(n_features), thresh,
+                grid_dim=(n_words, (np_a + EPS_MBLK - 1) // EPS_MBLK, 1),
+                block_dim=(EPS_THREADS, 1, 1),
+            )
+            st_a += np_a
+    core_points_compute(ctx, deg, core, min_pts, 0, n_rows)
+    if phase_timing:
+        print(
+            "PHASE plan.brute_eps_filter gemm_rows " + String(g_rows)
+            + " band " + String(Float64(band)) + " probe_uncertain "
+            + String(probe_unc) + " of " + String(probe_pairs) + " filter "
+            + String(use_filter)
+        )
+
+    # --- C (sizing): the border lists of the non-core rows -----------------
+    var bdeg = ctx.enqueue_create_buffer[DType.int32](n_rows)
+    var boff = ctx.enqueue_create_buffer[DType.int32](n_rows + 1)
+    ctx.enqueue_function[ef_border_deg_kernel](
+        deg.unsafe_ptr(), core.unsafe_ptr(), bdeg.unsafe_ptr(), Int32(n_rows),
+        grid_dim=(blocks_n, 1, 1), block_dim=(EF_TPB, 1, 1),
+    )
+    rbc_exclusive_scan_launch(ctx, boff, bdeg, n_rows)
+    var h_tot = ctx.enqueue_create_host_buffer[DType.int32](1)
+    ctx.enqueue_copy(
+        dst_ptr=h_tot.unsafe_ptr(),
+        src_buf=boff.create_sub_buffer[DType.int32](n_rows, 1),
+    )
+    ctx.synchronize()
+    var t_a = perf_counter_ns()
+    var n_border = Int(h_tot.unsafe_ptr().unsafe_load(0))
+    var blist = ctx.enqueue_create_buffer[DType.int32](
+        n_border if n_border > 0 else 1
+    )
+    var parent = ctx.enqueue_create_buffer[DType.int32](n_rows)
+    var broot = ctx.enqueue_create_buffer[DType.int32](n_words)
+    ctx.enqueue_function[ef_init_parent_kernel](
+        parent.unsafe_ptr(), Int32(n_rows),
+        grid_dim=(blocks_n, 1, 1), block_dim=(EF_TPB, 1, 1),
+    )
+    ctx.synchronize()
+
+    # --- B: the memory plan, then bits + unions range by range -------------
+    # As the reference fit: BEF_BM_SHARE_PCT of the free memory measured now
+    # (the centred copy and the GEMM range already exist).
+    var bm_free = Int(ctx.get_memory_info()[0])
+    var range_rows = (bm_free * BEF_BM_SHARE_PCT // 100) // (n_words * 8)
+    if range_rows < 1:
+        range_rows = 1
+    if range_rows > BEF_MAX_RANGE_ROWS:
+        range_rows = BEF_MAX_RANGE_ROWS
+    if range_rows > n_rows:
+        range_rows = n_rows
+    var bm = ctx.enqueue_create_buffer[DType.uint64](range_rows * n_words)
+    var n_ranges = (n_rows + range_rows - 1) // range_rows
+    if phase_timing:
+        print(
+            "PHASE plan.brute_edge_free words " + String(n_words)
+            + " range_rows " + String(range_rows) + " ranges "
+            + String(n_ranges) + " border_ids " + String(n_border)
+        )
+    var root_blocks = (n_words + EF_TPB - 1) // EF_TPB
+    for kr in range(n_ranges):  # driver-loop: over memory-sized query ranges (the plan, no row data)
+        var st = kr * range_rows
+        var np = min(n_rows - st, range_rows)
+        if use_filter:
+            var s0 = 0
+            while s0 < np:  # driver-loop: over GEMM-sized query sub-ranges of the bit range (the plan, no row data)
+                var ns = min(np - s0, g_rows)
+                dbf_range_launch[metric, True](
+                    ctx, gws, g, xc, nc, x, bm, deg, unc, st + s0, ns,
+                    n_rows, n_features, np, s0, thresh, band, False,
+                )
+                s0 += ns
+        else:
+            var xb = x.create_sub_buffer[DType.float32](
+                st * n_features, np * n_features
+            )
+            ctx.enqueue_function[bef_eps_kernel[metric, True]](
+                bm.unsafe_ptr(), deg.unsafe_ptr(), xb.unsafe_ptr(), x.unsafe_ptr(),
+                Int32(np), Int32(n_rows), Int32(n_features), thresh,
+                grid_dim=(n_words, (np + EPS_MBLK - 1) // EPS_MBLK, 1),
+                block_dim=(EPS_THREADS, 1, 1),
+            )
+        var q0 = 0
+        var chunk = BEF_CHUNK0
+        while q0 < np:  # driver-loop: over doubling union chunks of the range (log2(range / BEF_CHUNK0) + 1 of them)
+            var nc_rows = min(np - q0, chunk)
+            ctx.enqueue_function[ef_compress_kernel](
+                parent.unsafe_ptr(), Int32(n_rows),
+                grid_dim=(blocks_n, 1, 1), block_dim=(EF_TPB, 1, 1),
+            )
+            ctx.enqueue_function[bef_block_root_kernel](
+                core.unsafe_ptr(), parent.unsafe_ptr(), broot.unsafe_ptr(),
+                Int32(n_rows),
+                grid_dim=(root_blocks, 1, 1), block_dim=(EF_TPB, 1, 1),
+            )
+            ctx.enqueue_function[bef_union_kernel](
+                bm.unsafe_ptr(), Int32(np), Int32(q0), Int32(nc_rows), Int32(st),
+                Int32(n_words), core.unsafe_ptr(), parent.unsafe_ptr(),
+                broot.unsafe_ptr(), boff.unsafe_ptr(), blist.unsafe_ptr(),
+                grid_dim=((nc_rows + EF_TPB - 1) // EF_TPB, 1, 1),
+                block_dim=(EF_TPB, 1, 1),
+            )
+            q0 += nc_rows
+            chunk *= 2
+    ctx.synchronize()
+    var t_b = perf_counter_ns()
+
+    # --- C, D: labels -------------------------------------------------------
+    ctx.enqueue_function[ef_compress_kernel](
+        parent.unsafe_ptr(), Int32(n_rows),
+        grid_dim=(blocks_n, 1, 1), block_dim=(EF_TPB, 1, 1),
+    )
+    ctx.enqueue_function[ef_label_kernel](
+        core.unsafe_ptr(), parent.unsafe_ptr(), boff.unsafe_ptr(),
+        blist.unsafe_ptr(), labels.unsafe_ptr(), Int32(n_rows),
+        grid_dim=(blocks_n, 1, 1), block_dim=(EF_TPB, 1, 1),
+    )
+    ctx.synchronize()
+    if phase_timing:
+        print(
+            "PHASE brute_edge_free ranges " + String(n_ranges) + " degrees "
+            + String(Float64(t_a - t0) / 1.0e6) + " unions "
+            + String(Float64(t_b - t_a) / 1.0e6) + " labels "
+            + String(Float64(perf_counter_ns() - t_b) / 1.0e6)
+        )
+    _ = deg^
+    _ = bm_none^
+    _ = bdeg^
+    _ = boff^
+    _ = blist^
+    _ = parent^
+    _ = broot^
+    _ = bm^
+    _ = h_tot^
+    _ = xc^
+    _ = nc^
+    _ = g^
+    _ = gws^
+    _ = unc^
+    _ = h_unc^
+    return n_ranges
+
+
 def dbscan_brute_edge_free_fit[
     metric: Int
 ](
@@ -444,6 +698,17 @@ def dbscan_brute_edge_free_fit[
 ) raises -> Int:
     """Steps A-D of the module docstring. Writes `core` and the merged-stage
     `labels`; returns the number of bit-matrix ranges."""
+    # MOJOLEARN_DBSCAN_FAST_BRUTE_EPS_FILTER (default off, A/B owed; `brute_eps_filter.mojo`): the two distance
+    # passes as a GEMM filter with this kernel's own recheck; the same degrees, bits and labels. It returns 0,
+    # with nothing written, when its buffers do not fit the device, and the passes below run.
+    comptime if DBSCAN_BRUTE_EPS_FILTER and metric != DBSCAN_METRIC_L1:
+        if dbf_filter_serves(metric, n_features):
+            var filtered_ranges = bef_filtered_fit[metric](
+                ctx, x, core, labels, n_rows, n_features, eps, min_pts,
+                phase_timing,
+            )
+            if filtered_ranges > 0:
+                return filtered_ranges
     var thresh = dbscan_metric_threshold(metric, eps)
     var n_words = bef_words(n_rows)
     var blocks_n = (n_rows + EF_TPB - 1) // EF_TPB
