@@ -1023,10 +1023,11 @@ def _fit_imputer(slot: _Slot, call: _Call) raises:
     _fit_begin(slot, call)
     var n = call[].x.rows
     var d = call[].x.cols
-    var w = slot[].words.copy()
+    var w = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(slot[].words.unsafe_ptr()))
     var strategy = Int(w[1])
     var konst = strategy == IMP_CONSTANT
     var keep_empty = w[7] != 0.0
+    var indicators = w[8] != 0.0
     var prog = EncProgram(w[9] != 0.0)
     var request = ImputerFit(n, d, 0, w[2] != 0.0, w[3], strategy, w[4] != 0.0, w[5] != 0.0, w[6], keep_empty)
     var plan = imputer_fit_stage(prog, request)
@@ -1046,7 +1047,7 @@ def _fit_imputer(slot: _Slot, call: _Call) raises:
     for j in range(d):  # driver-loop: over the kept columns (feature metadata)
         if keep_empty or Int(ap[plan.stats + j]) != 0:
             slot[].extra.append(Float32(j))
-    if w[8] != 0.0:
+    if indicators:
         for j in range(d):  # driver-loop: over the indicator columns (feature metadata)
             if Int(ap[plan.stats + j]) < n:
                 slot[].anchor.append(Float32(j))
