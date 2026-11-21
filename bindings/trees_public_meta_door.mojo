@@ -23,6 +23,7 @@
 # kernels stay in place for the prep family.
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_setattr, py_fields
+from bindings.labels_descriptor_boundary_door import labels_scope
 from bindings.py_attr import py_attr
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_typed_call import py_call_typed
@@ -811,7 +812,7 @@ def _voting_fit(model: PythonObject, X: PythonObject, y: PythonObject, sample_we
     var Xa = _x_array(X, context)
     var target = y
     if classifier:
-        var labels = trees_encode_labels(y, context)
+        var labels = trees_encode_labels(y, labels_scope(model, context))
         _set(model, "classes_", labels.classes)
         _set(model, "n_classes_", PythonObject(len(labels.classes)))
         target = labels.codes
@@ -1158,7 +1159,7 @@ def _stacking_transform(model: PythonObject, X: PythonObject, context: PythonObj
 def _stacking_classifier_fit(model: PythonObject, X: PythonObject, y: PythonObject, sample_weight: PythonObject,
                              context: PythonObject) raises -> PythonObject:
     _stacking_validate(model, context)
-    var labels = trees_encode_labels(y, context)
+    var labels = trees_encode_labels(y, labels_scope(model, context))
     _set(model, "classes_", labels.classes)
     var k = len(labels.classes)
     _set(model, "_binary", PythonObject(k == 2))
@@ -1502,6 +1503,8 @@ def _multioutput_classifier_fit(model: PythonObject, X: PythonObject, y: PythonO
     var weights = _member_weights(Python.list(PythonObject(None)), Python.list(est), sample_weight, n, context)
     var fitted = Python.list()
     var classes = Python.list()
+    # The label steps run on the estimator's device (labels_scope), read once.
+    var label_context = labels_scope(model, context)
     var columns = _label_columns(target, _xt(py_fields(model), context), context)
     if columns is not None:
         var T = columns[0]
@@ -1512,7 +1515,7 @@ def _multioutput_classifier_fit(model: PythonObject, X: PythonObject, y: PythonO
         _set(model, "estimators_", fitted)
         _set(model, "classes_", classes)
         for j in range(m):  # driver-loop: over the output columns (one member each)
-            var labels = trees_encode_labels(_copy_block(T, j * rows_n, (j + 1) * rows_n, String(T.dtype), context), context)
+            var labels = trees_encode_labels(_copy_block(T, j * rows_n, (j + 1) * rows_n, String(T.dtype), context), label_context)
             var e = _clone(est, context)
             _fit_member(e, Xa, labels.codes, weights, context)
             _ = py_call(fitted.append, e)
@@ -1533,7 +1536,7 @@ def _multioutput_classifier_fit(model: PythonObject, X: PythonObject, y: PythonO
         var getter = native_loaded_module("operator").itemgetter
         for j in range(m):  # driver-loop: over the output columns (one member each)
             var column = py_call(b.list, py_call(b.map, py_call(getter, PythonObject(j)), rows))  # cpu-route: label objects (str/mixed) no Array holds, one output column at a time
-            var labels = trees_encode_labels(column, context)
+            var labels = trees_encode_labels(column, label_context)
             var e = _clone(est, context)
             _fit_member(e, Xa, labels.codes, weights, context)
             _ = py_call(fitted.append, e)
@@ -1723,7 +1726,7 @@ def _multioutput_rows_score(model: PythonObject, eq: PythonObject, n: Int, m: In
     var zero = admitted_vector(n, "<i4", context)
     var nk = trees_keys()
     var mode = py_get(py_fields(model), nk[].k_numeric_mode)
-    return PythonObject(labels_accuracy(zero, miss, sample_weight, mode, context))
+    return PythonObject(labels_accuracy(zero, miss, sample_weight, mode, labels_scope(model, context)))
 
 
 def _multioutput_score_codes(model: PythonObject, codes: PythonObject, n: Int, y: PythonObject,
@@ -1747,6 +1750,8 @@ def _multioutput_score_codes(model: PythonObject, codes: PythonObject, n: Int, y
     if len(rows) != n or width != m:
         raise Error("y has shape " + _repr(Python.tuple(len(rows), width)) + ", the predictions have shape "
                     + _repr(Python.tuple(n, m)))
+    # The label steps run on the estimator's device (labels_scope), read once.
+    var label_context = labels_scope(model, context)
     var eq = py_call(py_item(context, nk[].k_array_type), PythonObject("B"), py_call(py_item(context, nk[].k_native_bytes_type), n * m))
     var base = Int(py=py_call(eq.buffer_info)[0])
     var bkey = base_helpers_key(py_item(context, nk[].k_trees_helpers))
@@ -1756,7 +1761,7 @@ def _multioutput_score_codes(model: PythonObject, codes: PythonObject, n: Int, y
         var listed = classifier_label_list(classes[j], context)
         if py_type(listed) is not b.list and py_type(listed) is not b.tuple:
             listed = _label_list(listed, context)
-        var truth = trees_class_codes(score_classification_encoded(column, "y", context), listed, context)
+        var truth = trees_class_codes(score_classification_encoded(column, "y", context), listed, label_context)
         var pred = codes[j]
         _ = base_equal_elements(bkey, trees_address(truth), trees_address(pred), 2, n, base + j * n)
         _ = eq  # keep the flag store alive through the native call above
@@ -1784,7 +1789,7 @@ def _ovr_fit(model: PythonObject, X: PythonObject, y: PythonObject, context: Pyt
     _refuse_jobs(model, True, "the classes fit one after another.")
     var xt = _xt(py_fields(model), context)
     var Xa = _x_array(X, context)
-    var labels = trees_encode_labels(y, context)
+    var labels = trees_encode_labels(y, labels_scope(model, context))
     _set(model, "classes_", labels.classes)
     var k = len(labels.classes)
     if k < 2:
@@ -2286,7 +2291,7 @@ def _calibrated_fit(model: PythonObject, X: PythonObject, y: PythonObject, conte
     var Xa = _x_array(X, context)
     var n = _rows(Xa)
     var d = _cols(Xa)
-    var labels = trees_encode_labels(y, context)
+    var labels = trees_encode_labels(y, labels_scope(model, context))
     _set(model, "classes_", labels.classes)
     var k = len(labels.classes)
     if k < 2:
@@ -2706,5 +2711,5 @@ def _meta_dispatch(model: PythonObject, kind: String, operation: String, args: P
         var mode = py_get(py_fields(model), nk[].k_numeric_mode)
         var codes = _meta_class_codes(model, kind, X, context)
         return PythonObject(classical_score_from_codes(y, _attr(model, nk[].k_classes_, PythonObject(None)), codes,
-                                                       sample_weight, mode, context))
+                                                       sample_weight, mode, labels_scope(model, context)))
     raise Error("unknown meta-estimator operation " + operation)

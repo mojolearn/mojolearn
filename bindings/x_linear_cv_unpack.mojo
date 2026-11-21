@@ -720,7 +720,7 @@ def xl_fit_logistic_cv_unpack(model: PythonObject, fields: PythonObject, args: P
     var x = _xl_matrix(args[0], _name(model), context)
     var n = x.rows
     var d = x.cols
-    var labels = _xl_class_codes(model, args[1], n, context)
+    var labels = _xl_class_codes(model, args[1], n, _xl_scope(entries, context))
     var K = len(labels.classes)
     var kp = 1 if K == 2 else K
     var Cs = _xl_cs_grid(py_item(fields, nk[].k_Cs), context)

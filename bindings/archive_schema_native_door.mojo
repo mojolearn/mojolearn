@@ -150,7 +150,7 @@
 # ("noneflag", field) is 1 when field is None, ("setflag", field) 1 when it
 # is not. Messages may name the class as {cls}.
 from std.python import Python, PythonObject
-from std.python._cpython import GILReleased, PyObjectPtr
+from std.python._cpython import PyObjectPtr
 from core.archive_entry_table import archive_export_family, archive_ref, archive_resident_export
 from core.parallel_entry_table import ParallelEntryKey
 from bindings.native_loaded_module_door import native_loaded_module
@@ -979,8 +979,12 @@ def _schema_device_array(fields: PythonObject, step: PythonObject, name: String,
     var export_entry = archive_ref(family, ParallelEntryKey(Int(py=key[0]), Int(py=key[1])))
     var handle = Int(py=held[1])
     var dst = Int(py=py_call(store.buffer_info)[0])
-    with GILReleased(Python()):
-        _ = archive_resident_export(export_entry, handle, dst, count)
+    # GIL HELD (lane fx-small, 2026-11-21): the export reads the image's
+    # resident registry (x_ann/resident.mojo ANN_REGISTRY, ivf/resident.mojo
+    # IVF_FLAT_REGISTRY), an unlocked dictionary that every other reader and
+    # writer (prepare, register, search, release) touches with the GIL held;
+    # releasing it here let a concurrent release pop the entry mid-copy.
+    _ = archive_resident_export(export_entry, handle, dst, count)
     _ = held  # keep the resident index's owner alive through the native copy above
     return classical_wrap_array(store, py_call(b.tuple, dims), dtype, "C", context)
 

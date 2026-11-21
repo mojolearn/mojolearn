@@ -195,6 +195,20 @@ def test_only_named_sabotage_kernels_may_carry_an_approximate_instruction():
     assert r["approx_refused"] == ["gbdt_sabotage_free_kernel6A_1: sqrt.approx.f32"]
 
 
+def test_vendor_math_measurement_build_allows_approximate_instructions(monkeypatch):
+    # arm fast-vendor-math (run 44876740092): the vendor-math row puts vendor math in every kernel on purpose;
+    # only a fast-rows build carrying the row is exempt, and a plain build is still refused.
+    k = blob(_kernel(b"x_prep_device_p2m_kernel_SIM6A6A_819a", b"sqrt.approx.ftz.f32"))
+    assert pc.vendor_math_build("MOJOLEARN_MODE_FAST_ROWS,MOJOLEARN_MODE_FAST_VENDOR_MATH")
+    assert not pc.vendor_math_build("MOJOLEARN_MODE_FAST_VENDOR_MATH")
+    assert not pc.vendor_math_build("MOJOLEARN_MODE_FAST_ROWS,MOJOLEARN_MODE_FAST_FOLD_FREE")
+    monkeypatch.setenv("MOJOLEARN_BUILD_DEFINES", "MOJOLEARN_MODE_FAST_ROWS,MOJOLEARN_MODE_FAST_VENDOR_MATH")
+    r = pc.audit_bytes(k)
+    assert r["approx_refused"] == [] and list(r["approx_allowed"]) == ["x_prep_device_p2m_kernel_SIM6A6A_819a"]
+    monkeypatch.setenv("MOJOLEARN_BUILD_DEFINES", "MOJOLEARN_MODE_FAST_ROWS")
+    assert pc.audit_bytes(k)["approx_refused"] == ["x_prep_device_p2m_kernel_SIM6A6A_819a: sqrt.approx.ftz.f32"]
+
+
 def test_approximate_instruction_is_attributed_to_its_function():
     text = _kernel(b"entry_a", b"sqrt.approx.f32").replace(b"\tret;\n}\n.visible", b"\tsin.approx.f32 %r1, %r2;\n\tret;\n}\n.visible")
     assert pc.approx_sites(text) == [("helper", "sin.approx.f32"), ("entry_a", "sqrt.approx.f32")]

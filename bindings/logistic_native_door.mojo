@@ -64,6 +64,7 @@ from bindings.prep_lda_admission_door import lda_native_context, lda_native_labe
 from bindings.classifier_public_lifecycle_door import classifier_after_fit, classifier_label_list
 from bindings.scaler_lifecycle_native_door import _public_result
 from bindings.classical_labels_door import _flatten_labels
+from bindings.labels_descriptor_boundary_door import labels_scope
 from bindings.classical_arrays_door import classical_address
 from bindings.admitted_input_unpack import admit_x, admit_x_unrecorded, admitted_finite_refuse
 from bindings.device_rows_door import door_is_device_rows, door_rows_refuse
@@ -156,7 +157,8 @@ def _row_weights(model: PythonObject, sample_weight: PythonObject, class_weight:
     # The class-weight table the route resolved (a table that is not
     # connected is refused here, in its recorded words).
     var xtrees = logistic_route_xtrees(route_owner)
-    var cw = labels_class_weight_rows(class_weight, labels, xtrees, context)
+    # The label scope of the estimator's device (labels_scope), once per fit.
+    var cw = labels_class_weight_rows(class_weight, labels, xtrees, labels_scope(model, context))
     if cw is None:  # every class weight is 1
         return sw^
     var out = admitted_storage_native([n], "<f4", context, as_array=True)
@@ -230,7 +232,7 @@ def logistic_fit(model: PythonObject, source_x: PythonObject, source_y: PythonOb
     var y_shape = labels_shape_of(y, context)
     if len(y_shape) != 1 and not _logistic_buffer_column(y, y_shape, context):
         raise Error("mojolearn LogisticRegression requires a 1-D y")
-    var labels = classical_encode_labels(y, context)
+    var labels = classical_encode_labels(y, labels_scope(model, context))
     py_setitem(fields, nk[].k_classes_, labels.classes)
     if labels.n != rows:
         raise Error("mojolearn LogisticRegression X and y lengths differ")
@@ -425,6 +427,8 @@ def logistic_predict(model: PythonObject, state: LogisticQueryOwners, routed: Lo
     """`predict`: the device threshold (two classes) or row argmax (more)
     beside the scores, decoded to `classes_`."""
     var n_targets = _n_targets(model, state)
+    # The label scope of the estimator's device (labels_scope), once per call.
+    var label_context = labels_scope(model, context)
     if n_targets == 1:
         var q = _query_x(model, routed.route.fold, source, context)
         var rows = q.rows
@@ -434,7 +438,7 @@ def logistic_predict(model: PythonObject, state: LogisticQueryOwners, routed: Lo
         var w = _fitted_w(model, state)
         if q.fold():
             _infer_fold(model, state, q, codes, _FOLD_CODES, 1, False, context)
-            return classical_decode_labels(state.classes, codes, context)
+            return classical_decode_labels(state.classes, codes, label_context)
         var request = QnQueryRequest(Int(py=classical_address(q.x)), Int(py=classical_address(w)),
             labels_address(codes), q.status_address(), rows, cols, 1, Bool(py=state.intercept_owner), False)
         logistic_route_query(routed, QN_NATIVE_BINARY, request)
@@ -442,7 +446,7 @@ def logistic_predict(model: PythonObject, state: LogisticQueryOwners, routed: Lo
         _ = q.x  # keep the Python object alive through the native call above
         _ = codes  # keep the Python object alive through the native call above
         q.refuse(model)
-        return classical_decode_labels(state.classes, codes, context)
+        return classical_decode_labels(state.classes, codes, label_context)
     if routed.route.multiclass:
         if not state.has_weights:
             raise Error("mojolearn LogisticRegression: call fit first")
@@ -453,7 +457,7 @@ def logistic_predict(model: PythonObject, state: LogisticQueryOwners, routed: Lo
         var codes = admitted_storage_native([rows], "<i8", context, as_array=True)
         if q.fold():
             _infer_fold(model, state, q, codes, _FOLD_CODES, n_targets, False, context)
-            return classical_decode_labels(state.classes, codes, context)
+            return classical_decode_labels(state.classes, codes, label_context)
         if rows:
             var request = QnQueryRequest(Int(py=classical_address(q.x)), Int(py=classical_address(state.weights)),
                 labels_address(codes), q.status_address(), rows, cols, n_targets, Bool(py=state.intercept_owner), False)
@@ -461,14 +465,14 @@ def logistic_predict(model: PythonObject, state: LogisticQueryOwners, routed: Lo
             _ = q.x  # keep the Python object alive through the native call above
             _ = codes  # keep the Python object alive through the native call above
             q.refuse(model)
-        return classical_decode_labels(state.classes, codes, context)
+        return classical_decode_labels(state.classes, codes, label_context)
     # A binding without the device argmax keeps the host scan, the same
     # first-maximum rule (`_labels.argmax_rows`).
     var scores = logistic_decision(model, state, routed, source, context)
     var rows = Int(py=scores.shape[0])
-    var codes = labels_argmax_rows(scores, rows, n_targets, False, context)
+    var codes = labels_argmax_rows(scores, rows, n_targets, False, label_context)
     _ = scores^
-    return classical_decode_labels(state.classes, codes, context)
+    return classical_decode_labels(state.classes, codes, label_context)
 
 
 def _logistic_proba_fused(model: PythonObject, state: LogisticQueryOwners, routed: LogisticRouteCall,
@@ -672,7 +676,7 @@ def logistic_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObject
                     var target = classifier_label_list(args[1], context)
                     lda_native_labels(target, context, False, "LogisticRegression")
                     var prediction = logistic_predict(model, query, routed, args[0], context)
-                    result = logistic_score(prediction, target, context)
+                    result = logistic_score(prediction, target, labels_scope(model, context))
                 else:
                     raise Error("unknown native LogisticRegression operation")
             finally:

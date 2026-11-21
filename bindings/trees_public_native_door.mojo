@@ -23,6 +23,7 @@ from providers.python.tree_boost_public_lifecycle_pyapi_pack import tree_boost_p
 from bindings.trees_public_auxiliary_door import tree_export_state
 from bindings.trees_gbdt_adapter_lifecycle_door import gbdt_adapter_public_operation, gbdt_model_public_operation
 from bindings.trees_gbdt_parameters_pack import gbdt_adapter_construct, gbdt_adapter_set_params
+from bindings.trees_gbdt_parameter_names_unpack import gbdt_init_arguments
 from bindings.trees_public_meta_door import meta_operation
 from bindings.trees_public_meta_lifecycle_pack import meta_public_operation
 from bindings.trees_public_mixin_score_unpack import gbdt_adapter_score
@@ -227,7 +228,9 @@ def _gbdt_operation(model: PythonObject, operation: Int, name: String, args: Pyt
     the scikit-learn GBDT adapters (bindings/trees_public_gbdt.mojo), by
     leaf code; `name` is for the unknown-operation text only."""
     if operation == TREES_OPN_TREES_GBDT_INIT:
-        return gbdt_initialize(model, args, context)
+        # CatBoost / XGBoost / LightGBM names resolve to canonical ones before
+        # the constructor reads its arguments (lane api-boost).
+        return gbdt_initialize(model, gbdt_init_arguments(args, context), context)
     if operation == TREES_OPN_TREES_GBDT_ORDERED_INIT:
         return gbdt_ordered_construct(model, args, context)
     if operation == TREES_OPN_TREES_GBDT_FEATURE_FREQ_INIT:

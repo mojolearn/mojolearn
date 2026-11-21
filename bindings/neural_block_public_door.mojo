@@ -650,6 +650,129 @@ def neural_block_set_params_binding(mut mods: NativeModules, block: PythonObject
     return block
 
 
+# ---- PyTorch names (lane api-torch, 2026-11-21; docs/api/TORCH_CONVENTIONS.md) ----
+# `state_dict`, `parameters`, `named_parameters`, `load_state_dict` and `to`
+# of a standalone block. Each is one call over state the block already holds
+# (its constructor `weights` dictionary, the one `get_params` returns) or the
+# existing rebuild through the constructor (`set_params`); nothing is copied
+# and no route is resolved here. Metadata only: no independent units to split.
+
+def neural_block_weights_binding(mut mods: NativeModules, block: PythonObject, form: Int, context: PythonObject) raises -> PythonObject:
+    # form 0: `state_dict()` -> a new {name: array} over the same arrays;
+    # 1: `parameters()` -> [array, ...]; 2: `named_parameters()` -> [(name, array), ...].
+    var bi = mods.module("builtins")
+    var fields = neural_block_fields(mods, block, context)
+    var weights = py_get(fields, "weights")
+    if weights is None:
+        raise Error("RuntimeError: neural block: this block holds no weights of its own (a whole model built it); read the weights from that model")
+    if form == 0:
+        return py_call(bi.dict, weights)
+    if form == 1:
+        return py_call(bi.list, py_call(bi.dict.values, weights))
+    return py_call(bi.list, py_call(bi.dict.items, weights))
+
+
+def neural_block_load_state_dict_binding(mut mods: NativeModules, block: PythonObject, state: PythonObject, strict: PythonObject,
+    context: PythonObject) raises -> PythonObject:
+    # `load_state_dict(state, strict=True)`: the `set_params(weights=state)`
+    # rebuild, so every name and shape is admitted by the constructor before
+    # the live block changes. A block is built from one complete weight set:
+    # torch's `strict=False` (keep the unlisted weights) has no meaning here.
+    var bi = mods.module("builtins")
+    if py_type(strict) is not bi.bool or not Bool(py=strict):
+        raise Error("ValueError: neural block: load_state_dict needs strict=True: the block is rebuilt from one complete set of weights (call state_dict(), update it, and load the whole dictionary)")
+    if py_type(state) is not bi.dict:
+        raise Error("TypeError: neural block: load_state_dict requires an ordinary dictionary of float32 arrays")
+    var updates = bi.dict()
+    py_setitem(updates, "weights", state)
+    return neural_block_set_params_binding(mods, block, updates, context)
+
+
+def _neural_float32_word(mut mods: NativeModules, value: PythonObject) raises -> Bool:
+    # True for `torch.float32`, NumPy's float32 dtype or the word "float32";
+    # False for any other dtype. Exact-type admission: a str, or a dtype
+    # class named `dtype` (torch.dtype; NumPy's `dtype[float32]` or, from
+    # NumPy 2, `Float32DType`: C types whose str is their name); nothing
+    # else is read.
+    var bi = mods.module("builtins")
+    var kind = py_type(value)
+    if kind is bi.str:
+        var word = String(value)
+        return word == "float32" or word == "torch.float32"
+    var kind_name = String(py_call(bi.type.__dict__["__name__"].__get__, kind))
+    if kind_name != "dtype" and not kind_name.startswith("dtype[") and not kind_name.endswith("DType"):
+        raise Error("TypeError: neural block: dtype must be torch.float32, numpy.float32's dtype or 'float32'")
+    var word = String(py_call(bi.str, value))
+    return word == "float32" or word == "torch.float32"
+
+
+def neural_block_to_binding(mut mods: NativeModules, block: PythonObject, args: PythonObject, kwargs: PythonObject,
+    context: PythonObject) raises -> PythonObject:
+    # `to(device=None, dtype=None)` as torch spells it: a str positional is the
+    # device, a dtype positional is the dtype. A new device rebuilds the block
+    # on that route through the constructor (as `set_params(device=...)`); the
+    # device word is admitted there by the one rule (core/device_route.mojo).
+    # Blocks are float32 only, so the dtype is admitted or refused, never
+    # converted.
+    var bi = mods.module("builtins")
+    if py_type(args) is not bi.tuple or py_type(kwargs) is not bi.dict:
+        raise Error("TypeError: neural block: to() requires ordinary positional and keyword arguments")
+    if len(args) > 2:
+        raise Error("TypeError: neural block: to() takes a device and a dtype")
+    var device = PythonObject(None)
+    var dtype = PythonObject(None)
+    var has_device = False
+    for i in range(len(args)):  # driver-loop: over at most two positional arguments
+        var item = args[i]
+        if item is None:
+            continue
+        if py_type(item) is bi.str and String(item) != "float32" and String(item) != "torch.float32":
+            if has_device:
+                raise Error("TypeError: neural block: to() got two devices")
+            device = item
+            has_device = True
+        else:
+            dtype = item
+    var keys = py_call(bi.list, kwargs)
+    for i in range(len(keys)):  # driver-loop: over the keyword names given
+        var key = keys[i]
+        if py_type(key) is not bi.str:
+            raise Error("TypeError: neural block: to() keywords must be names")
+        var name = String(key)
+        if name == "device":
+            if has_device:
+                raise Error("TypeError: neural block: to() got two devices")
+            device = kwargs[key]
+            has_device = device is not None
+        elif name == "dtype":
+            dtype = kwargs[key]
+        elif name == "non_blocking" or name == "copy":
+            # Accepted for PyTorch code that passes them: a rebuild is
+            # synchronous and never shares the old block's device storage.
+            continue
+        else:
+            raise Error("TypeError: neural block: to() got an unexpected keyword argument '" + name + "'")
+    if dtype is not None and not _neural_float32_word(mods, dtype):
+        raise Error("ValueError: neural block: the blocks run float32 only (identical mode defines its bits in float32), got dtype " + String(py_call(bi.repr, dtype)))
+    if not has_device:
+        return block
+    var fields = neural_block_fields(mods, block, context)
+    var held = py_get(fields, "device")
+    if held is not None and py_type(held) is bi.str and String(held) == String(device):
+        return block
+    # The `*Inference` classes are the CPU side by class (`_neural_block_route`):
+    # a GPU word would rebuild them on the CPU again, so it is refused.
+    ref cpy = Python().cpython()
+    var kind = fields["_native_kind"]
+    var cpu_class = cpy.lib.get_function[Int32]("PyType_IsSubtype")(py_type(block)._obj_ptr, context["block_classes"]["cpu"][kind]._obj_ptr) != 0
+    if cpu_class and (py_type(device) is not bi.str or String(device) != "cpu"):
+        raise Error("ValueError: neural block: " + String(py_call(bi.type.__dict__["__name__"].__get__, py_type(block)))
+            + " runs on the CPU only; build the GPU block class to run on the GPU")
+    var updates = bi.dict()
+    py_setitem(updates, "device", device)
+    return neural_block_set_params_binding(mods, block, updates, context)
+
+
 def _neural_block_rebuild(mut mods: NativeModules, block: PythonObject, fields: PythonObject, updates: PythonObject, context: PythonObject) raises:
     # The block rebuilt through its constructor door from its stored
     # constructor parameters with `updates` applied (`set_params`; the device
@@ -1798,6 +1921,16 @@ def neural_block_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr) 
             result = neural_block_used_binding(mods, args[0], True, args[1])
         elif operation == 9:
             result = neural_block_used_binding(mods, args[0], False, args[1])
+        elif operation == 10:
+            result = neural_block_weights_binding(mods, args[0], 0, args[1])
+        elif operation == 11:
+            result = neural_block_weights_binding(mods, args[0], 1, args[1])
+        elif operation == 12:
+            result = neural_block_weights_binding(mods, args[0], 2, args[1])
+        elif operation == 13:
+            result = neural_block_load_state_dict_binding(mods, args[0], args[1], args[2], args[3])
+        elif operation == 14:
+            result = neural_block_to_binding(mods, args[0], args[1], args[2], args[3])
         else:
             result = neural_block_backward_binding(mods, args[0], args[1], args[2], args[3])
         return result.steal_data()

@@ -1170,6 +1170,11 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(runtime_classical_unavailable_c, "neural_block_inference_backward")
         module.def_py_c_function(runtime_classical_unavailable_c, "neural_block_vendor_used")
         module.def_py_c_function(runtime_classical_unavailable_c, "neural_block_numeric_mode_used")
+        module.def_py_c_function(runtime_classical_unavailable_c, "neural_block_state_dict")
+        module.def_py_c_function(runtime_classical_unavailable_c, "neural_block_parameters")
+        module.def_py_c_function(runtime_classical_unavailable_c, "neural_block_named_parameters")
+        module.def_py_c_function(runtime_classical_unavailable_c, "neural_block_load_state_dict")
+        module.def_py_c_function(runtime_classical_unavailable_c, "neural_block_to")
         # TOMBSTONE: bpe_decode, causal_lm_admit, neural_prefill_call, optimizer_finalize exports (dead native entries: no live caller of the export) deleted 2026-10-26 by 5206fc31b; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_tokenizer_host.patch
         module.def_py_c_function(runtime_classical_unavailable_c, "transformer_decode_native_call")

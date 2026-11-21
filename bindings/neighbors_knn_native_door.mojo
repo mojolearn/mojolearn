@@ -48,6 +48,7 @@ from core.neighbors_entry_table import (
     nb_fold_ready_call,
 )
 from bindings.admitted_family_door import admit_family, admit_family_meta, admit_family_owned
+from bindings.labels_descriptor_boundary_door import labels_scope
 from bindings.py_cpython_table import cpython_table
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.mode_metadata_native_door import _fields
@@ -866,12 +867,14 @@ def _clf_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     var fields = py_fields(model)
     var y = args[2]
     var shape = _y_shape(y, fields, context)
+    # The label steps run on the estimator's device (labels_scope), read once.
+    var label_context = labels_scope(model, context)
     # whole-number float labels convert exactly to the integer labels below
     py_setitem(fields, "_label_names", PythonObject(None))
-    if len(shape) == 1 and not mc_is_integer_labels(y, context) and not _whole_float_labels(y, context):
+    if len(shape) == 1 and not mc_is_integer_labels(y, context) and not _whole_float_labels(y, label_context):
         # Labels of any other kind (str labels) vote as their dense codes in
         # `classes_` order; `predict` decodes the voted codes.
-        var encoded = classical_encode_labels(y, context)
+        var encoded = classical_encode_labels(y, label_context)
         var names = encoded.classes
         for i in range(len(names)):  # driver-loop: over kind test of the class labels (classes-sized: distinct classes)
             if not family_is_str(names[i]):
@@ -879,7 +882,7 @@ def _clf_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
                             + mc_dtype_name(y, context) + "; cast your labels")
         py_setitem(fields, "_label_names", names)
         y = encoded.codes
-    if not mc_is_integer_labels(y, context) and not _whole_float_labels(y, context):
+    if not mc_is_integer_labels(y, context) and not _whole_float_labels(y, label_context):
         raise Error("mojolearn: y must be integer class labels, got "
                     + mc_dtype_name(y, context) + "; cuML converts to int32 "
                     + "(check_dtype=np.int32) and so does this surface -- cast "
@@ -912,12 +915,12 @@ def _clf_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
             labels_cast(Int(py=classical_address(view)), y_typestr, wide_addr, "<i8", count, context)
             _ = wide  # keep the Python object alive through the native call above
         _ = view  # keep the Python object alive through the native call above
-        var low = _reduce(wide_addr, KNN_CODE_I64, count, KNN_REDUCE_MIN, context).i
+        var low = _reduce(wide_addr, KNN_CODE_I64, count, KNN_REDUCE_MIN, label_context).i
         _ = wide  # keep the Python object alive through the native call above
         _ = view  # keep the Python object alive through the native call above
         var high = 0
         if knn_int32_low_fits(low):
-            high = _reduce(wide_addr, KNN_CODE_I64, count, KNN_REDUCE_MAX, context).i
+            high = _reduce(wide_addr, KNN_CODE_I64, count, KNN_REDUCE_MAX, label_context).i
             _ = wide  # keep the Python object alive through the native call above
             _ = view  # keep the Python object alive through the native call above
         knn_check_int32_labels(low, high)
@@ -935,7 +938,7 @@ def _clf_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
         _ = wide  # keep the Python object alive through the native call above
         _ = view  # keep the Python object alive through the native call above
         py_setitem(fields, "_y_cols", labels_reshape(y32, Python.tuple(1, n), context))
-        py_setitem(fields, "_classes_list", Python.list(classical_encode_labels(y32, context).classes))
+        py_setitem(fields, "_classes_list", Python.list(classical_encode_labels(y32, label_context).classes))
         knn_door_clock_mark("fit_labels_cast_classes")
         return
     var yc = family_array(Python.tuple(n_out, n), "<i4", context)
@@ -961,7 +964,7 @@ def _clf_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     py_setitem(fields, "_y_cols", yc)
     var classes = Python.list()
     for j in range(n_out):  # driver-loop: over output columns, one native encoding each
-        _ = py_call(classes.append, _encode_column(yc, j, n, context))
+        _ = py_call(classes.append, _encode_column(yc, j, n, label_context))
     py_setitem(fields, "_classes_list", classes)
     knn_door_clock_mark("fit_labels_cast_classes")
 
@@ -1256,7 +1259,7 @@ def _clf_predict(model: PythonObject, binding: PythonObject, x_source: PythonObj
     _ = codes  # keep the Python object alive through the native call above
     var names = py_get(fields, PythonObject("_label_names"), PythonObject(None))
     if names is not None:
-        var decoded = classical_decode_labels(names, codes, context)
+        var decoded = classical_decode_labels(names, codes, labels_scope(model, context))
         knn_door_clock_mark("predict_output_cast")
         return decoded
     knn_door_clock_mark("predict_output_cast")
@@ -1357,7 +1360,7 @@ def _clf_score(model: PythonObject, args: PythonObject, context: PythonObject) r
     `predict(X)` against `y` (the x_metrics binding's grouped sums)."""
     var prediction = _clf_predict(model, args[0], args[1], context)
     var mode = py_get(py_fields(model), PythonObject("numeric_mode"), PythonObject(None))
-    return PythonObject(classical_accuracy(args[2], prediction, args[3], mode, context))
+    return PythonObject(classical_accuracy(args[2], prediction, args[3], mode, labels_scope(model, context)))
 
 
 def _reg_score(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
