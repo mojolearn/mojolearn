@@ -54,7 +54,7 @@ from bindings.trees_public_inputs_door import (
 from bindings.admitted_input_run import AdmittedXView
 from bindings.admitted_input_unpack import (
     AdmittedX, admit_f32, admit_weight_words, admit_ids, admitted_words, admitted_array, admitted_vector,
-    admit_c_view, admitted_dtype, admitted_storage,
+    admit_c_view, admitted_dtype, admitted_storage, admitted_unfilled,
 )
 from bindings.classical_arrays_door import classical_address
 # TOMBSTONE: TreesView / _view_of_array / trees_view / trees_check_rank / trees_f32 / trees_check_sample_weight / trees_all_finite / trees_vector / trees_empty uses and _place_view (the trees admission aliases; internal Arrays are read as themselves) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
@@ -83,7 +83,12 @@ from bindings.classical_labels_door import labels_accuracy, _classification_enco
 from bindings.member_set_door import (
     MemberSet, member_set_admit, member_set_own_block, member_set_run, member_set_pack, member_set_release,
 )
-from core.member_abi import MEMBER_F32, MEMBER_I32
+from core.member_abi import (
+    MEMBER_F32, MEMBER_I32, MemberCall, MemberMatrix, member_call, member_outputs_of, MEMBER_OP_PREDICT,
+    MEMBER_CAN_PREDICT,
+)
+from bindings.member_set_door import MEMBER_SET_NATIVE
+from bindings.member_held_door import member_held, member_held_release
 from bindings.prep_native_estimator_door import (
     prep_estimator_admit, prep_estimator_clone, prep_estimator_call, prep_estimator_has,
     prep_estimator_plan, prep_native_context, prep_native_split, prep_estimator_predict_internal,
@@ -565,6 +570,10 @@ def _fit_units_native(clones: PythonObject, xs: PythonObject, d: Int, targets: P
     var set = MemberSet(trees_address(xs[0]), Int(py=xs[0].shape[0]), d, MEMBER_F32 if float_targets else MEMBER_I32,
                         MEMBER_I32)
     set.run.cap = jobs
+    # Regressor members keep their fitted state: this door's regressor
+    # predict sites read it (`_predict32`). Classifier members' predict
+    # sites still run their doors, so their states are freed at PACK.
+    set.adopt = float_targets
     for i in range(m):  # driver-loop: over the units (admission, once each)
         var classes = 0
         if counts is not None:
@@ -627,6 +636,60 @@ def _fit_members(clones: PythonObject, X: PythonObject, n: Int, d: Int, targets:
     one sample-weight Array (or None)."""
     var m = len(clones)
     _fit_units(clones, _repeat(X, m), d, targets, float_targets, _repeat(weights, m), counts, jobs, context)
+
+
+def _predict32_native(member: PythonObject, X: PythonObject, context: PythonObject) -> PythonObject:
+    """A fitted single-output REGRESSOR member's predictions of X through
+    its held member state (bindings/member_held_door.mojo: a hit after the
+    first use; the state a native fit left with the estimator), as a float32
+    (n,) Array: one member call, the GIL released, written in place. None,
+    with nothing changed, when the member is not served this way (no mark, a
+    classifier, another output width, an X that is not a float32 C-order
+    Array, a refusal of any kind): the fallback rule, the caller runs the
+    member's own door. Never raises."""
+    var result = PythonObject(None)
+    try:
+        var plan = prep_estimator_plan(member, context)
+        if plan is None or py_get(plan, "member") is None or Bool(py=plan["classifier"]):
+            return result
+        var n = _rows(X)
+        var d = _cols(X)
+        if n <= 0 or d <= 0 or String(py=X.dtype) != "<f4" or String(py=X.order) != "C":
+            return result
+        var b = trees_builtins()
+        var member_context = plan["context"]
+        var fields = py_call(plan["fields_get"], member, py_type(member))
+        var held = member_held(member, fields, plan, member_context, b, MEMBER_CAN_PREDICT)
+        if not held.published:
+            return result
+        var call = MemberCall(held.plan.route, held.state)
+        try:
+            if member_outputs_of(held.plan, call, MEMBER_OP_PREDICT) == 1:
+                # Unfilled: the member writes every cell before anything reads it.
+                var dst = admitted_unfilled([n], "<f4", context)
+                call.x = MemberMatrix(trees_address(X), n, d)
+                call.dst = MemberMatrix(dst.addr, n, 1)
+                with GILReleased(Python()):
+                    _ = member_call(held.plan.member, MEMBER_OP_PREDICT, call)
+                result = dst.keep
+        except:
+            result = PythonObject(None)
+        _ = X  # the rows are read through the whole member call
+        member_held_release(held)   # after the call: a kept state stays with the estimator
+    except:
+        return PythonObject(None)
+    return result
+
+
+def _predict32(member: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
+    """A fitted regressor member's float32 predictions of X: through its held
+    native member state when its family serves it, else its internal
+    float32 predict door (`meta_member_call`)."""
+    comptime if MEMBER_SET_NATIVE:
+        var native = _predict32_native(member, X, context)
+        if native is not None:
+            return native
+    return meta_member_call(member, Python.tuple(X), context)
 
 
 def _repeat(value: PythonObject, m: Int) raises -> PythonObject:
@@ -1061,7 +1124,7 @@ def _voting_transform(model: PythonObject, X: PythonObject, classifier: Bool, co
             _ = _place(xt, out, n, width, blk.view(), rows, j * k)
             _ = blk^
         else:
-            var blk = _out2d(meta_member_call(e, Python.tuple(Xa), context), n, context)
+            var blk = _out2d(_predict32(e, Xa, context), n, context)
             _ = _place(xt, out, n, width, blk.view(), rows, j)
             _ = blk^
     return trees_reshape(out, Python.tuple(n, width), context)
@@ -1090,7 +1153,7 @@ def _voting_regress(model: PythonObject, X: PythonObject, context: PythonObject)
         raise Error("weights has " + String(len(w)) + " entries, there are " + String(m) + " estimators")
     var acc = _zeros(n, context)
     for i in range(m):  # driver-loop: over members
-        _acc_w(xt, acc, meta_member_call(members[i], Python.tuple(Xa), context), n, Float64(py=w[i]), context)
+        _acc_w(xt, acc, _predict32(members[i], Xa, context), n, Float64(py=w[i]), context)
     _scale(xt, acc, _fsum(w, context))
     return acc
 
@@ -1124,7 +1187,7 @@ def _stack_method(model: PythonObject, est: PythonObject, classifier: Bool, cont
 def _stack_out(xt: PythonObject, est: PythonObject, method: String, Xs: PythonObject, n: Int, binary: Bool,
                context: PythonObject) raises -> PythonObject:
     """`_StackingBase._out`: a binary predict_proba keeps its second column."""
-    var out = (meta_member_call(est, Python.tuple(Xs), context) if method == "predict"
+    var out = (_predict32(est, Xs, context) if method == "predict"
                else meta_member_call(est, method, Python.tuple(Xs), context))
     if method == "predict_proba" and binary:
         var p = _out2d(out, n, context)
@@ -1595,7 +1658,7 @@ def _multioutput_regressor_predict(model: PythonObject, X: PythonObject, context
     # member per call. The widening is exact, so the placed values (and
     # bits) are the same.
     for j in range(m):  # driver-loop: over members
-        var blk = _out2d(meta_member_call(members[j], Python.tuple(Xa), context), n, context)
+        var blk = _out2d(_predict32(members[j], Xa, context), n, context)
         _ = _place(xt, out, n, m, blk.view(), rows, j)
         _ = blk^
     return trees_reshape(out, Python.tuple(n, m), context)

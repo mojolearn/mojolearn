@@ -41,6 +41,7 @@ from std.python import Python, PythonObject
 from std.sys.compile import is_defined
 from std.python._cpython import GILReleased
 from bindings.member_boundary_door import member_admit_serving, member_pack, member_pack_labeled
+from bindings.member_held_door import member_held_adopt
 from bindings.native_unit_os_threads_run import native_unit_cores
 from bindings.prep_native_estimator_door import prep_estimator_plan
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
@@ -124,6 +125,12 @@ struct MemberSet(Movable):
     var contexts: PythonObject
     var fields: PythonObject
     var pins: PythonObject
+    # Each member's import-time class plan (the held state's key at PACK).
+    var class_plans: PythonObject
+    # PACK leaves each fitted state with its estimator as its held member
+    # state. Set by a caller whose predict side reads held states; else the
+    # states are freed at PACK (a second copy of the model nobody reads).
+    var adopt: Bool
 
     def __init__(out self, x: Int, rows: Int, cols: Int, y_dtype: Int, index_dtype: Int) raises:
         self.run = MemberSetRun(x, rows, cols, y_dtype, index_dtype)
@@ -131,6 +138,8 @@ struct MemberSet(Movable):
         self.contexts = Python.list()
         self.fields = Python.list()
         self.pins = Python.list()
+        self.class_plans = Python.list()
+        self.adopt = False
 
     def count(self) -> Int:
         return len(self.run.plans)
@@ -186,6 +195,7 @@ def member_set_admit(mut set: MemberSet, estimator: PythonObject, target: Int, w
     _ = py_call(set.contexts.append, member_context)
     _ = py_call(set.fields.append, fields)
     _ = py_call(set.pins.append, owner.pins)
+    _ = py_call(set.class_plans.append, plan)
     _ = owner.published
     return True
 
@@ -419,10 +429,25 @@ def member_set_pack(mut set: MemberSet, u: Int, classes: PythonObject, b: Python
             member_pack(estimator, fields, member_context, b, set.run.plans[u], set.run.states[u])
         else:
             member_pack_labeled(estimator, fields, member_context, b, set.run.plans[u], set.run.states[u], classes)
-    finally:
+    except error:
+        var failed = MemberCall(set.run.plans[u].route, set.run.states[u])
+        member_free(set.run.plans[u], failed)
+        set.run.states[u] = 0
+        raise error^
+    # `adopt`: the fitted state stays with the estimator as its held member
+    # state (bindings/member_held_door.mojo), so the caller's predict side
+    # reads it without an import. Not kept: freed here, as before.
+    var kept = False
+    if set.adopt:
+        try:
+            kept = member_held_adopt(estimator, set.class_plans[u], member_context, set.pins[u], set.run.plans[u],
+                                     set.run.states[u])
+        except:
+            kept = False
+    if not kept:
         var call = MemberCall(set.run.plans[u].route, set.run.states[u])
         member_free(set.run.plans[u], call)
-        set.run.states[u] = 0
+    set.run.states[u] = 0
     # A family whose pack does not write the class count yet (the tree
     # families: owed by their publication lane) gets it here, as round 1 did.
     if classes is not None and not py_contains(fields, "n_classes_"):
