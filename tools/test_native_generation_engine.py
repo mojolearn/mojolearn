@@ -108,7 +108,9 @@ def test_mamba_engine_keeps_local_forward_route_report_and_counter_semantics():
     assert 'def forward_to(mut self, ids: Int, length: Int, address: Int, count: Int)' in native
     original=public.split('def _run_snapshot(')[1].split('\ndef ')[0]
     # the original per-layer route (stateful, not a step); fe44134875 dropped the deleted mamba_workspace argument
-    assert 'x, state.layers[i], False,\n            snapshot.layer_entry, snapshot.layer_vendor)' in original
+    # dw-neural-models (2026-11-21): the snapshot's typed layer route replaces layer_entry / layer_vendor
+    assert '_causal_layer_run_prepared(mods, snapshot.layer_route, snapshot.entries, snapshot.width, b, l,' in original
+    assert 'x, state.layers[i], False)' in original
     assert 'addresses[layer.output_slot]' in native
     assert 'layer.addresses[15] = _generation_zero_workspace(layer.report_workspace, layer.report_size)' in native
     assert 'layer.cached + length if kind == 1 else result' in native

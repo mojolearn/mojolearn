@@ -27,7 +27,7 @@ _PROJECTIONS = {
     "mamba2": ("in_proj.weight", "out_proj.weight"),
 }
 
-# The device route ("auto" -> cpu/gpu by vendor), the per-route block classes,
+# The device route (None or "auto" -> cpu/gpu by vendor), the per-route block classes,
 # the integer-weight refusal and the last-position argmax run in Mojo
 # (`_model_route`, `context["block_classes"]`, the checkpoint reader and the
 # generation entries in bindings/causal_lm_construct_door.mojo and
@@ -123,7 +123,7 @@ class CausalLM:
     directly from a `ModelPlan` and a weight dict shaped like
     `_read_weights` returns."""
 
-    def __init__(self, plan, weights, *, weight_format="float32", max_positions=None, device="auto",
+    def __init__(self, plan, weights, *, weight_format="float32", max_positions=None, device=None,
                  numeric_profile=None):
         return _NATIVE.causal_model_init(self, plan, weights,
                                         (weight_format, max_positions, device, numeric_profile),
@@ -136,9 +136,12 @@ class CausalLM:
 
     # ------------------------------------------------------------ loading
     @classmethod
-    def load(cls, path, *, weight_format="float32", max_positions=None, device="auto", numeric_profile=None):
+    def load(cls, path, *, weight_format="float32", max_positions=None, device=None, numeric_profile=None):
         """A checkpoint directory (`config.json` plus `model.safetensors` or
-        `model.safetensors.index.json` and its shards)."""
+        `model.safetensors.index.json` and its shards).
+
+        `device` is None (this installation's device), ``"gpu"`` or ``"cpu"``;
+        ``"auto"`` means the same as None."""
         return _NATIVE.causal_model_load(cls, path,
                                         (weight_format, max_positions, device, numeric_profile),
                                         _NATIVE_CONTEXT)

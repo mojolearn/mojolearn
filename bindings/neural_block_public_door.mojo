@@ -25,7 +25,7 @@ from std.memory import unsafe_memcpy
 from std.sys.compile import is_defined
 from bindings.generation_buffers_door import generation_initialize_binding, generation_array, py_ints
 from bindings.causal_lm_construct_door import _model_block, _model_profile, _model_bindings, _model_f32, _model_shape, model_recurrent_weights_check
-from bindings.causal_lm_public_door import causal_lm_admit_binding, causal_layer_allocate, causal_layer_run, causal_layer_allocate_fields, causal_layer_run_fields, causal_layer_stateless_plan, _addr, _weight_addr, _native_function, _native_has_entry, _native_entry_fields, _standalone_record_fields, causal_prepared_layer
+from bindings.causal_lm_public_door import causal_lm_admit_binding, causal_layer_allocate, causal_layer_allocate_fields, causal_layer_run_fields, causal_layer_stateless_plan, _addr, _weight_addr, _native_function, _native_has_entry, _native_entry_fields, _standalone_record_fields, causal_prepared_layer
 from core.hostptr import f32_ptr
 from core.host_helpers_impl import all_finite_f32
 from core.native_descriptor_abi import TRANSFORMER_BLOCK_ABI_NAME, MAMBA_BLOCK_ABI_NAME, MAMBA_STATE_ABI_NAME
@@ -46,6 +46,8 @@ from bindings.causal_lm_public_door import _causal_array_guard
 from bindings.causal_lm_public_door import causal_mamba_entry, causal_mamba_stateless_run
 from autograd.block_step_ops import IDN_MAMBA12_FORWARD_DOOR_OLD
 from core.entry_table import EntryRef, entry_ref_unresolved, entry_ref_call
+from core.causal_layer_run import CausalLayerRoute
+from providers.python.generation_metadata_pyapi_door import causal_layer_route
 from core.device_route import DEVICE_CPU, DEVICE_GPU, device_name, device_route_plan, device_cpu_absent
 from providers.python.device_route_boundary_door import (
     DeviceRouteOwner, device_unpack, device_route_keep, device_route_owner, device_route_value,
@@ -114,6 +116,21 @@ struct NativeBlockPlan(Movable, Writable):
     # block in a GPU installation says `cpu` (lane dw-neural-models).
     var vendor: String
     var mode: Int
+    # Lane dw-neural-models (2026-11-21): the words of the entry dictionary a
+    # forward read by name on every call, fixed for a plan and read once
+    # here: whether the packed (fixed15) planes run (`forward15`), whether the
+    # route has a block session (`block_session`: a GPU Transformer route)
+    # and which fresh-forward entries its image has.
+    var planes: Bool
+    var block_session: Bool
+    var session_fresh: Bool
+    var forward_fresh: Bool
+    # The layer run's typed route (core/causal_layer_run.mojo): the CausalLM
+    # table entry and the host/device and Mamba-1 profile words. Resolved at
+    # the plan's first layer run (`_neural_layer_run`) and held; unbound
+    # until then, as `mamba_entry` is, so a plan whose kind never runs a
+    # CausalLM layer (Mamba-3) resolves nothing.
+    var layer_route: CausalLayerRoute
 
     def __init__(out self, owner: PythonObject, layer: PythonObject) raises:
         self.context = owner._native_context
@@ -129,6 +146,11 @@ struct NativeBlockPlan(Movable, Writable):
         self.d_model = Int(py=owner.d_model)
         self.numeric_profile = owner.numeric_profile
         self.packed = owner._head_int15 is not None
+        self.planes = self.kind == "transformer" and self.packed and py_contains(self.entries, "forward15")
+        self.block_session = py_contains(self.entries, "block_session")
+        self.session_fresh = py_contains(self.entries, "transformer_session_forward_fresh")
+        self.forward_fresh = py_contains(self.entries, "transformer_forward_fresh")
+        self.layer_route = CausalLayerRoute()
         self.layer = layer
         self.stateless_forward = causal_layer_stateless_plan(self.kind, self.entries)
         self.mamba_entry = entry_ref_unresolved()
@@ -621,9 +643,14 @@ def _neural_layer_run(mut mods: NativeModules, owner: NativeBlockExecution, x: P
     # Restore: git apply experiments/removed/X5_MAMBA_PER_CALL_BODIES.patch
     # Every Mamba step and forward reaches the cached block program through
     # the one native Mamba descriptor (mamba/native_state_dispatch.mojo).
+    # The call is UNPACK / RUN / PACK inside `_causal_layer_run_bound`
+    # (bindings/causal_lm_public_door.mojo): RUN takes a typed request; the
+    # operation's fields dictionary serves UNPACK and PACK only.
     ref plan = owner.plan.downcast_value_ptr[NativeBlockPlan]()[]
-    var result = causal_layer_run_fields(mods, owner.fields, plan.entries, plan.kind, plan.d_model,
-        plan.packed, plan.layer, x, state, step, stateless)
+    if not plan.layer_route.bound:
+        plan.layer_route = causal_layer_route(plan.kind, plan.entries)
+    var result = causal_layer_run_fields(mods, owner.fields, plan.entries, plan.layer_route, plan.kind, plan.d_model,
+        plan.packed, plan.planes, plan.layer, x, state, step, stateless)
     _ = owner
     return result
 
@@ -874,7 +901,11 @@ def _neural_plain(mut mods: NativeModules, owner: NativeBlockExecution, x: Pytho
     # session. Only a failure after entering execution can invalidate it.
     if supplied_state is not None and py_get(_fields(mods, supplied_state), "_resident_session") is not None:
         raise Error("neural block: state is owned by a resident decode session")
-    var e = owner.plan.downcast_value_ptr[NativeBlockPlan]()[].entries
+    # Plan words, read once at plan construction (they were three by-name
+    # reads of the entry dictionary on every forward).
+    var route_session = owner.plan.downcast_value_ptr[NativeBlockPlan]()[].block_session
+    var entry_session_fresh = owner.plan.downcast_value_ptr[NativeBlockPlan]()[].session_fresh
+    var entry_forward_fresh = owner.plan.downcast_value_ptr[NativeBlockPlan]()[].forward_fresh
     # TOMBSTONE: MOJOLEARN_TRANSFORMER_LEGACY_SETUP / MOJOLEARN_TRANSFORMER_SESSION_FRESH (runtime switches, SUPERSEDED by the block session) deleted 2026-11-09 by lane x4-transformer-on-executor; code recoverable at f59d913b0b.
     # Restore: git apply experiments/removed/MOJOLEARN_TRANSFORMER_FRESH_PREFILL.patch
     # restored 2026-11-09 by lane r1-restore-measured-winners (the switches came back with the fresh prefill arm;
@@ -885,7 +916,7 @@ def _neural_plain(mut mods: NativeModules, owner: NativeBlockExecution, x: Pytho
     # transformer-session-native): "block_session" marks a GPU Transformer
     # route (the former "forward_session" Python entry's presence).
     var forward = owner.plan.downcast_value_ptr[NativeBlockPlan]()[].forward_entry
-    var reuse = transformer and py_contains(e, "block_session") and not TRANSFORMER_LEGACY_SETUP
+    var reuse = transformer and route_session and not TRANSFORMER_LEGACY_SETUP
     var lock = py_get(fields, "_runtime_lock") if transformer else PythonObject(None)
     var lock_lease = OperationLockLease(lock)
     var locked = transformer and (reuse or fields["_native_session"] is not None or fields["_int15"] is not None)
@@ -897,8 +928,8 @@ def _neural_plain(mut mods: NativeModules, owner: NativeBlockExecution, x: Pytho
             transformer_block_session_close(fields["_native_session"])
             py_setitem(fields, "_native_session", PythonObject(None))
         if transformer and supplied_state is None and not step and fields["_int15"] is None:
-            var fresh_session = reuse and py_contains(e, "transformer_session_forward_fresh") and TRANSFORMER_SESSION_FRESH
-            if fresh_session or py_contains(e, "transformer_forward_fresh"):
+            var fresh_session = reuse and entry_session_fresh and TRANSFORMER_SESSION_FRESH
+            if fresh_session or entry_forward_fresh:
                 var y = generation_array([b, l, d])
                 var keep = List[PythonObject]()
                 var addresses: List[Int] = [_addr(x, keep)]

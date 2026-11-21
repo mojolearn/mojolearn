@@ -1,20 +1,27 @@
 # SPDX-License-Identifier: Apache-2.0
 # FactorAnalysis's native operations (dispatched by bindings/decomp_native.mojo):
 # the parameter checks `fit` made, X converted once, then one compiled driver
-# (x_decomp/fa_owner.mojo: x_decomp_fa_fit / x_decomp_fa_query, the kit steps
-# the Python shell sequenced, the same entries, operands and order, so the
+# (x_decomp/fa_owner.mojo: fa_fit_run / fa_query_run, the kit steps
+# the Python shell sequenced, the same operands and order, so the
 # same bits), and the fitted attributes stored as the shell stored them.
+# UNPACK reads the estimator's fields and arrays into one typed request
+# (core/decomp_factor_api.mojo); RUN is one call through the operations table
+# of the estimator's image (`decomp_entries_routed`: the device image, or the
+# CPU image for `device="cpu"`), the GIL released; PACK stores the fitted
+# fields. No Python parameter list and no Python-callable driver entry.
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_type, py_fields, py_setitem, py_contains
-from bindings.py_typed_call import py_call_typed
+from std.python._cpython import GILReleased
 from bindings.classical_arrays_door import classical_address
 from bindings.admitted_input_unpack import admit_x
 from bindings.decomp_inputs_unpack import decomp_input
 from bindings.py_optional import py_or_none
 from bindings.decomp_owner_common_unpack import (
-    F32P, decomp_attr, decomp_check, decomp_entries, decomp_eq, decomp_f32, decomp_float, decomp_int, decomp_set_mode,
+    F32P, decomp_attr, decomp_check, decomp_eq, decomp_f32, decomp_float, decomp_int, decomp_set_mode,
 )
+from bindings.decomp_kit_native_door import decomp_entries_routed, decomp_entries_ref
+from core.decomp_factor_api import FAFitRequest, FAQueryRequest, fa_fit_call, fa_query_call
 
 from bindings.fa_native_pack import (
     _psi_init,
@@ -26,6 +33,10 @@ comptime _COVARIANCE = 1
 comptime _PRECISION = 2
 comptime _SCORE_SAMPLES = 3
 comptime _SCORE = 4
+
+
+def _address(array: PythonObject) raises -> Int:
+    return Int(py=classical_address(array))
 
 
 def _contains(options: PythonObject, value: PythonObject) raises -> Bool:
@@ -42,7 +53,8 @@ def fa_fit(model: PythonObject, source: PythonObject, context: PythonObject) rai
     var rotation = fields["rotation"]
     if not _contains(Python.tuple(None, "varimax", "quartimax"), rotation):
         raise Error("rotation must be None, 'varimax' or 'quartimax'")
-    var entries = decomp_entries(model, fields, Python.tuple("x_decomp_fa_fit"), context)
+    var entry = decomp_entries_ref(
+        decomp_entries_routed(model, fields, decomp_attr(model, fields, "numeric_mode_"), context))
     var x = decomp_input(source, "FactorAnalysis", context)
     var n = Int(py=x.shape[0])
     var d = Int(py=x.shape[1])
@@ -57,9 +69,11 @@ def fa_fit(model: PythonObject, source: PythonObject, context: PythonObject) rai
     var code = 0
     if rotation is not None:
         code = 1 if decomp_eq(rotation, PythonObject("varimax")) else 2
-    var it = Int(py=py_call_typed(entries["x_decomp_fa_fit"], Python.list(
-        classical_address(x), n, d, nc, max_iter, classical_address(psi0), code, classical_address(components),
-        classical_address(psi), classical_address(mean), Int(ll.unsafe_ptr())), Python.list(decomp_float(fields["tol"]))))
+    var request = FAFitRequest(_address(x), _address(psi0), _address(components), _address(psi), _address(mean),
+                               Int(ll.unsafe_ptr()), n, d, nc, max_iter, code, decomp_float(fields["tol"]))
+    var it = 0
+    with GILReleased(Python()):
+        it = fa_fit_call(entry, request)
     _ = components  # keep the Python object alive through the native call above
     _ = psi0  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
@@ -102,7 +116,8 @@ def fa_query(model: PythonObject, source: PythonObject, op: Int, context: Python
     """transform / get_covariance / get_precision / score_samples / score."""
     var fields = py_fields(model)
     decomp_check(model, fields, "components_")
-    var entries = decomp_entries(model, fields, Python.tuple("x_decomp_fa_query"), context)
+    var entry = decomp_entries_ref(
+        decomp_entries_routed(model, fields, decomp_attr(model, fields, "numeric_mode_"), context))
     var w = admit_x(fields["components_"], 2, "components_", context)
     var nc = Int(py=w.shape[0])
     var d = Int(py=w.shape[1])
@@ -125,11 +140,12 @@ def fa_query(model: PythonObject, source: PythonObject, op: Int, context: Python
         out = decomp_f32(Python.tuple(d, d), context)
     elif op == _SCORE_SAMPLES:
         out = decomp_f32(Python.tuple(n), context)
-    var spare = classical_address(w)
-    _ = w  # keep the Python object alive through the native call above
-    var value = py_call_typed(entries["x_decomp_fa_query"], Python.list(
-        op, classical_address(x.value()) if Bool(x) else spare, n, d, nc, classical_address(w), classical_address(psi),
-        classical_address(mean), classical_address(out.value()) if Bool(out) else spare))
+    var spare = _address(w)
+    var request = FAQueryRequest(op, _address(x.value()) if Bool(x) else spare, spare, _address(psi),
+                                 _address(mean), _address(out.value()) if Bool(out) else spare, n, d, nc)
+    var value = Float64(0.0)
+    with GILReleased(Python()):
+        value = fa_query_call(entry, request)
     _ = x  # keep the Python object alive through the native call above
     _ = psi  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
@@ -140,7 +156,7 @@ def fa_query(model: PythonObject, source: PythonObject, op: Int, context: Python
     _ = mean^
     _ = x^
     if op == _SCORE:
-        var _keep_ret_out = PythonObject(Float64(py=value))
+        var _keep_ret_out = PythonObject(value)
         _ = out  # keep the Python object alive through the native call above
         return _keep_ret_out^
     return py_or_none(out)

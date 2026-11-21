@@ -9,7 +9,9 @@ from bindings.classical_pandas_door import classical_admit_value
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays_door import classical_address, classical_typed
-from bindings.tsa_arima_native_door import arima_fit, _adopt, _no_exog
+from bindings.tsa_arima_native_door import arima_fit_routed, _adopt, _no_exog
+from bindings.tsa_arima_route_unpack import autoarima_route
+from bindings.tsa_hw_route_unpack import TsaHwCall
 from bindings.tsa_hw_native_door import tsa_array
 from providers.python.array_metadata_pyapi_door import ArrayMetadata, ArrayPin
 from bindings.tsa_keys_unpack import tsa_keys
@@ -21,10 +23,13 @@ def _b() raises -> PythonObject:
     return native_loaded_module("builtins")
 
 
-def _new_arima(order: PythonObject, sorder: PythonObject, k: Int, maxiter: Int, context: PythonObject) raises -> PythonObject:
+def _new_arima(order: PythonObject, sorder: PythonObject, k: Int, maxiter: Int, device: PythonObject,
+               context: PythonObject) raises -> PythonObject:
     """`ARIMA(order=..., seasonal_order=..., trend="c" if k else "n",
-    maxiter=...)` for a search order: the constructor's fields, written
-    natively (a search order is already the normalized integer tuple)."""
+    maxiter=..., device=...)` for a search order: the constructor's fields,
+    written natively (a search order is already the normalized integer
+    tuple; `device` is its AutoARIMA's admitted value, so the model routes
+    as its AutoARIMA does when it is used on its own)."""
     var nk = tsa_keys()
     var b = _b()
     var model = py_call(b.object.__new__, autoarima_model_class(context))
@@ -43,6 +48,7 @@ def _new_arima(order: PythonObject, sorder: PythonObject, k: Int, maxiter: Int, 
     var complexity = Int(py=o[0]) + Int(py=o[2]) + Int(py=so[0]) + Int(py=so[2]) + k + 1
     py_setitem(fields, nk[].k_complexity_, complexity)
     py_setitem(fields, nk[].k_numeric_mode, PythonObject(None))
+    py_setitem(fields, nk[].k_device, device)
     return model
 
 
@@ -78,6 +84,9 @@ def autoarima_fit(model: PythonObject, args: PythonObject, context: PythonObject
     var search_maxiter = py_get(fields, nk[].k__search_maxiter)
     var iterations = -1 if search_maxiter is None else _integer(search_maxiter, context)
     var block_cache = Optional[_SearchBlock]()
+    # The AutoARIMA's one route serves every per-group fit and adoption.
+    var call = autoarima_route(model, fields, context, _b())
+    var device = py_get(fields, nk[].k_device)
     for i in range(len(models)):  # driver-loop: over chosen order groups
         var spec = models[i]
         if py_type(spec) is not py_type(Python.tuple()) or len(spec) != 3:
@@ -92,7 +101,7 @@ def autoarima_fit(model: PythonObject, args: PythonObject, context: PythonObject
             _ = py_call(ordinary.append, _integer(order[k], context))
         for k in range(4):  # small-loop(selected seasonal order words)
             _ = py_call(seasonal_words.append, _integer(seasonal[k], context))
-        var m = _new_arima(ordinary, seasonal_words, _integer(spec[2], context), maxiter, context)
+        var m = _new_arima(ordinary, seasonal_words, _integer(spec[2], context), maxiter, device, context)
         var ids_pin = ArrayPin()
         var ids = _packed(ids_all[i], "group indices", context, ids_pin, True)
         if len(ids.shape) != 1:
@@ -103,9 +112,10 @@ def autoarima_fit(model: PythonObject, args: PythonObject, context: PythonObject
         var saved = PythonObject(None) if reuse is None else reuse[i]
         if saved is not None and maxiter == iterations:
             _adopt_reuse(m, y, saved, block_cache, ids.count, width,
-                         Int(py=py_item(_fields(m, py_item(context, nk[].k_arima_class)), nk[].k_complexity_)), context)
+                         Int(py=py_item(_fields(m, py_item(context, nk[].k_arima_class)), nk[].k_complexity_)), context,
+                         call)
         else:
-            _ = arima_fit(m, Python.tuple(y, PythonObject(None)), context)
+            _ = arima_fit_routed(m, Python.tuple(y, PythonObject(None)), context, call)
         _ = py_call(fitted.append, m)
         _ = ids
         _ = ids_pin^
@@ -168,7 +178,7 @@ struct _SearchBlock(Movable):
 
 
 def _adopt_reuse(model: PythonObject, y: PythonObject, saved: PythonObject, mut cache: Optional[_SearchBlock],
-                 count: Int, n_obs: Int, complexity: Int, context: PythonObject) raises:
+                 count: Int, n_obs: Int, complexity: Int, context: PythonObject, call: TsaHwCall) raises:
     var nk = tsa_keys()
     var tuple_type = py_type(Python.tuple())
     if py_type(saved) is not tuple_type or len(saved) != 3:
@@ -219,7 +229,7 @@ def _adopt_reuse(model: PythonObject, y: PythonObject, saved: PythonObject, mut 
     _ = py_call_typed(gather, flags.source.addr + 4 * (2 * rows * trial + rows), fa + 4 * count,
                       local.source.addr, rows, count, 4)
     _adopt(model, _fields(model, py_item(context, nk[].k_arima_class)), y, False, 2, count, n_obs, _no_exog(context), 0,
-           complexity, params, x, x0, stats, result_flags, PythonObject(None), context)
+           complexity, params, x, x0, stats, result_flags, PythonObject(None), context, call.route, call.owner)
     _ = local
     _ = local_pin^
     _ = block

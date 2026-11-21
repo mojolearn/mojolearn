@@ -25,11 +25,11 @@ from bindings.mode_answer_door import answer_mode_object
 from bindings.native_loaded_module_door import native_interpreter_finalizing
 from bindings.native_owner_registry_pack import borrowed_native_owner
 from bindings.native_owner_registry_unpack import register_native_owner_type
-from bindings.py_balanced import py_call, py_type, py_get, py_item
+from bindings.py_balanced import py_call, py_type, py_get, py_item, py_setitem
 from bindings.py_type_registry import py_type_absent, py_type_attach
 from bindings.tsa_keys_unpack import tsa_keys
 from core.device_route import (
-    DeviceRoute, DEVICE_CPU, device_mode_code, device_route_plan, device_vendor_code,
+    DeviceRoute, DEVICE_CPU, DEVICE_INSTALL, device_mode_code, device_route_plan, device_vendor_code,
 )
 from core.entry_table import EntryRef, entry_ref_call, entry_ref_same
 from core.mode_answer import MODE_FAMILY_TSA, fast_is_answered_by_identical
@@ -41,14 +41,19 @@ from providers.python.device_route_boundary_door import (
 
 
 struct TsaHwResidentOwner(Movable, Writable):
-    """One resident handle and the entry that minted it. `images` pins the
-    extension image the entry lives in until the handle is released."""
+    """One resident handle and the entry that minted it. `release` is the
+    operation id of that entry's table that returns the handle (the
+    Holt-Winters table's, or the ARIMA table's: bindings/tsa_arima_route_unpack.mojo).
+    `images` pins the extension image the entry lives in until the handle is
+    released."""
     var ops: EntryRef
+    var release: Int
     var handle: Int
     var images: PythonObject
 
-    def __init__(out self, ops: EntryRef, handle: Int, images: PythonObject):
+    def __init__(out self, ops: EntryRef, release: Int, handle: Int, images: PythonObject):
         self.ops = ops
+        self.release = release
         self.handle = handle
         self.images = images
 
@@ -66,7 +71,7 @@ struct TsaHwResidentOwner(Movable, Writable):
             # binding is being torn down and has nothing left to release.
             if not native_interpreter_finalizing():
                 var words: List[Int] = [self.handle]
-                _ = entry_ref_call(self.ops, TSA_OP_HW_RESIDENT_RELEASE, List[Int](), words, List[Float64]())
+                _ = entry_ref_call(self.ops, self.release, List[Int](), words, List[Float64]())
         except:
             pass
 
@@ -105,7 +110,18 @@ def register_tsa_hw_resident_owner_identity(published: PythonObject) raises:
 
 def tsa_hw_resident_new(route: DeviceRoute, handle: Int, images: PythonObject) raises -> PythonObject:
     """The lifetime owner of `handle`, minted through `route`'s entry."""
-    return PythonObject(alloc=TsaHwResidentOwner(route.entry, handle, images))
+    return PythonObject(alloc=TsaHwResidentOwner(route.entry, TSA_OP_HW_RESIDENT_RELEASE, handle, images))
+
+
+def tsa_resident_new(ops: EntryRef, release: Int, handle: Int, images: PythonObject) raises -> PythonObject:
+    """The lifetime owner of a `handle` minted through `ops`, returned by
+    that entry's `release` operation (`p [handle]`)."""
+    return PythonObject(alloc=TsaHwResidentOwner(ops, release, handle, images))
+
+
+def tsa_resident_same_entry(resident: PythonObject, ops: EntryRef) raises -> Bool:
+    """The handle was minted through this very entry."""
+    return entry_ref_same(resident.downcast_value_ptr[TsaHwResidentOwner]()[].ops, ops)
 
 
 def tsa_hw_resident_matches(resident: PythonObject, route: DeviceRoute) raises -> Bool:
@@ -227,4 +243,34 @@ def tsa_hw_route(model: PythonObject, fields: PythonObject, host_class: Bool,
     if owner is None:
         owner = device_route_keep(model,
             _tsa_hw_route_build(device_request(fields, b), host_class, mode, default_mode, context, b))
+    return TsaHwCall(device_route_value(owner), owner)
+
+
+def tsa_function_route(context: PythonObject, want_cpu: Bool, b: PythonObject) raises -> TsaHwCall:
+    """The route of the stationarity functions (`kpss_test`, `select_d`):
+    no estimator holds it, so the resolved owner is kept per mode object in
+    the connection context's `tsa_function_routes` table. A hit is the
+    default-mode read and one table read (what the former by-name entry
+    table cost, without its entry lookup). `want_cpu` (AutoARIMA with
+    `device="cpu"`) takes the CPU table loaded beside a GPU set; in a
+    CPU-only process the selected table already is the CPU one."""
+    var nk = tsa_keys()
+    var routes = py_item(context, nk[].k_tsa_function_routes)
+    var key = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
+    var cpu = PythonObject(None)
+    if want_cpu:
+        cpu = py_get(context, nk[].k_hw_cpu_bindings)
+        if cpu is not None:
+            key = nk[].k_hw_cpu_bindings
+    var owner = py_get(routes, key)
+    if owner is None:
+        var built = DeviceRouteOwner(DEVICE_INSTALL)
+        if cpu is not None:
+            _tsa_hw_cells_route(DEVICE_CPU, True, 0, 1, py_item(cpu, PythonObject("identical")), b, built)
+        else:
+            _tsa_hw_cells_route(DEVICE_INSTALL, False, -1, -1, py_item(py_item(context, nk[].k_hw_bindings), key), b, built)
+        built.context = context
+        built.resolved = True
+        owner = PythonObject(alloc=built^)
+        py_setitem(routes, key, owner)
     return TsaHwCall(device_route_value(owner), owner)

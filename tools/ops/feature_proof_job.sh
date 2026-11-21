@@ -3,7 +3,8 @@
 # features that so far only compiled (2026-11-21): the `device=` parameter and `model.check(X)` on both devices in one
 # process (Ridge, LinearRegression), `model.receipt` + `python -m mojolearn reproduce`, and the verify options
 # `--self-test`, `--check`, `--fit-both`, `--cross-check quick`. Diagnostic tooling: it times nothing and decides no
-# release. Each step prints one line `PROOF <name> PASS|FAIL rc=<n> <seconds>s` and keeps its full output in
+# release. It starts with two load steps (every family binary; every GPU/host image pair) and the `device=` boundary
+# test. Each step prints one line `PROOF <name> PASS|FAIL rc=<n> <seconds>s` and keeps its full output in
 # logs/<name>.log; the job exits 1 when any step failed. Steps are independent and short, the GPU is one device, so
 # they run one after another (a GPU step owns the device); nothing here is a loop over heavy independent units.
 #
@@ -14,6 +15,7 @@
 # (default $RES/receipts): copy that folder to a CPU box and run `FP_REPLAY=<folder> feature_proof_job.sh` there to
 # prove the same receipt reproduces on another machine.
 set -u
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; REPO="$(cd "$HERE/../.." && pwd)"
 RES="${MOJOLEARN_RESULTS_DIR:?feature_proof_job.sh needs MOJOLEARN_RESULTS_DIR (set by tools/box_persist_run.sh)}"
 mkdir -p "$RES/logs" && RES="$(cd "$RES" && pwd)"
 VENV="${FP_VENV:-/root/pc-cache/venv-candidate}"
@@ -37,6 +39,25 @@ if [ -n "${FP_REPLAY:-}" ]; then
         WANT_RC=1 step "replay-$r-flipped-bit" "$PY" -I -m mojolearn reproduce "$FP_REPLAY/$r.json" --X "$FP_REPLAY/Xbad.npy" --y "$FP_REPLAY/y.npy" --json
     done
     echo "PROOF SUMMARY failed=$fails (replay)"; [ $fails = 0 ]; exit $?
+fi
+
+# 0. FIRST: does the installed build load at all? Every family binary in one process, then every (GPU image, host
+# image) pair of the CPU training routes, each pair in its own child across all cores of the allocation (the smoke
+# sizes its own pool; it prints one line per pair). A failure here explains every later step, so its lines are shown.
+step load-all "$PY" -I -c "import mojolearn; mojolearn._families.load_all(); print('LOADED every family binary of', mojolearn.__version__)"
+step device-pair-load "$PY" -I "$HERE/device_pair_load_smoke.py"
+grep -E '^FAIL' "$RES/logs/device-pair-load.log" | head -n 12 | cut -c1-300
+tail -n 1 "$RES/logs/device-pair-load.log" | cut -c1-300
+
+# 0b. the Python boundary test of `device=` for every class of the generated table, against the INSTALLED wheel:
+# the one test file is copied out of the checkout so that `import mojolearn` is the venv's package, never the source
+# tree. Runs only when the venv has pytest; nothing is installed here.
+if "$PY" -I -c "import pytest" > /dev/null 2>&1; then
+    mkdir -p "$W/device_test" && cp "$REPO/python/mojolearn/tests/test_device_parameter.py" "$W/device_test/"
+    step device-parameter-test "$PY" -I -m pytest -q -p no:cacheprovider --import-mode=importlib --rootdir "$W/device_test" "$W/device_test/test_device_parameter.py"
+    tail -n 1 "$RES/logs/device-parameter-test.log" | cut -c1-300
+else
+    echo "PROOF device-parameter-test SKIPPED rc=- 0s: pytest is not importable in $VENV (python/mojolearn/tests/test_device_parameter.py not run; install nothing here, run it where the wheel tests run)"
 fi
 
 # 1. device= and check on both devices in one process (the pilot's completion test)

@@ -442,6 +442,14 @@ def _decomp_key(entries: PythonObject) raises -> EntryRef:
     return decomp_ref(LinearEntryKey(Int(py=key[0]), Int(py=key[1])))
 
 
+def decomp_entries_ref(entries: PythonObject) raises -> EntryRef:
+    """The operations entry of the image a connected entries dict names (the
+    estimator's, from `decomp_entries_routed`), resolved once per operation at
+    UNPACK for a door that calls typed table operations outside a kit
+    (core/decomp_factor_api.mojo)."""
+    return _decomp_key(entries)
+
+
 def _decomp_dev(key: EntryRef, op: Int, addresses: List[Int], ints: List[Int], release: Bool) raises -> Int:
     """One pool operation (XD_DEV_ALLOC / _FREE / _UPLOAD) of the image `key`
     names, outside a kit; `release` as the door the call replaces."""

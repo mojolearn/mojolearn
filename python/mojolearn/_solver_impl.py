@@ -223,6 +223,11 @@ class ElasticNet(ParamsMixin):
     # lifecycle (`_xl_public_operation`: NotFittedError, fit bookkeeping,
     # feature checks, NumPy/float64 results) replaces the `_mode` wrappers.
     _mojolearn_native_public = True
+    # Runs on both devices: fit, predict and score call through the
+    # estimator's own route (bindings/x_linear_route_unpack.mojo). The
+    # constructor and the setter are the shared full-reset door's, which
+    # gives the class `device=` and checks it (lane dw-core).
+    _mojolearn_device = True
 
     def __init__(self, alpha=1.0, *, l1_ratio=0.5, fit_intercept=True,
                  max_iter=1000, tol=1e-3, solver="auto", selection="cyclic",

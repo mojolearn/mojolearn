@@ -13,6 +13,7 @@ from core.tsa_entry_table import (
     TSA_OP_FLAGS, TSA_OP_VENDOR, TSA_OP_MODE, TSA_HAS_FIT, TSA_HAS_RESIDENT, tsa_ops_resolve,
     TSA_OP_HW_FIT, TSA_OP_HW_FORECAST, TSA_OP_HW_PREDICT, TSA_OP_HW_RESIDENT_PREPARE,
     TSA_OP_HW_RESIDENT_RELEASE, TSA_OP_HW_RESIDENT_COUNT, TSA_OP_HW_QUERY_RESIDENT,
+    TSA_OP_KPSS_TEST, TSA_OP_SELECT_D,
 )
 from core.device_route import DeviceRoute
 
@@ -98,3 +99,22 @@ def tsa_hw_query_resident_run(route: DeviceRoute, handle: Int, dst: Int, start: 
     var a: List[Int] = [dst]
     var p: List[Int] = [handle, start, end, seasonal]
     return entry_ref_call(route.entry, TSA_OP_HW_QUERY_RESIDENT, a, p, List[Float64]())
+
+
+def tsa_kpss_run(route: DeviceRoute, y: Int, flags: Int, stat: Int, batch: Int, n_obs: Int, d: Int,
+    seasonal_d: Int, period: Int, pval_threshold: Float64) raises -> Int:
+    """`kpss_test`: `batch` int32 flags (1 stationary) at `flags` and
+    `batch` float32 statistics at `stat` from the series-major float32 `y`."""
+    var a: List[Int] = [y, flags, stat]
+    var p: List[Int] = [batch, n_obs, d, seasonal_d, period]
+    var f: List[Float64] = [pval_threshold]
+    return entry_ref_call(route.entry, TSA_OP_KPSS_TEST, a, p, f)
+
+
+def tsa_select_d_run(route: DeviceRoute, y: Int, dst: Int, batch: Int, n_obs: Int, seasonal_d: Int,
+    period: Int, d_max: Int, pval_threshold: Float64) raises -> Int:
+    """`select_d`: `batch` int32 differencing orders at `dst`."""
+    var a: List[Int] = [y, dst]
+    var p: List[Int] = [batch, n_obs, seasonal_d, period, d_max]
+    var f: List[Float64] = [pval_threshold]
+    return entry_ref_call(route.entry, TSA_OP_SELECT_D, a, p, f)

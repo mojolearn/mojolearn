@@ -25,6 +25,12 @@ _TREES, _TREES_CONTEXT = _native_trees_bridge.connect()
 
 class _GBDTAdapter(PublicOutputsMixin):
     _loss = None
+    #: Takes `device=`: every operation runs in the estimator's run context (its
+    #: device route, bindings/trees_route_boundary_door.mojo) and the learner a
+    #: fit builds stores the adapter's device; the check builds the other side
+    #: as the same estimator on the other device, in this process.
+    _mojolearn_device = True
+    vendor_used = _native_trees_bridge.device_vendor_used
     # NaN in X takes the learner's nan_mode branch ('Min' by default)
     _sklearn_input_tags = {"allow_nan": True}
 
@@ -59,7 +65,7 @@ class _GBDTAdapter(PublicOutputsMixin):
                  min_data_in_leaf=1, min_split_gain=None, min_child_hessian=None,
                  feature_fraction=1.0, feature_border_type='GreedyLogSum',
                  boosting_type=None, fold_len_multiplier=2.0,
-                 fold_permutation_block=None, numeric_mode=None):
+                 fold_permutation_block=None, numeric_mode=None, device=None):
         values = locals().copy()
         values.pop('self')
         for name, value in values.items():  # glue: stores constructor keyword arguments
@@ -139,6 +145,10 @@ class GradientBoostingClassifier(_GBDTAdapter):
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this estimator (``'fast'`` on Apple GPUs); None uses
         the process default. Any other value raises ``ValueError``.
+    device : {None, "gpu", "cpu"}, default=None
+        Where the model is fitted and predicts. None uses this
+        installation's device, ``"cpu"`` runs on the CPU and ``"gpu"``
+        requires a GPU installation. Other values raise ``ValueError``.
 
     All parameters are keyword-only.
 
@@ -248,6 +258,10 @@ class GradientBoostingRegressor(_GBDTAdapter):
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this estimator (``'fast'`` on Apple GPUs); None uses
         the process default. Any other value raises ``ValueError``.
+    device : {None, "gpu", "cpu"}, default=None
+        Where the model is fitted and predicts. None uses this
+        installation's device, ``"cpu"`` runs on the CPU and ``"gpu"``
+        requires a GPU installation. Other values raise ``ValueError``.
 
     All parameters are keyword-only.
 

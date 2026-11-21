@@ -5,21 +5,26 @@ only connects the compiled `_mojolearn_tsa` entries of both tiers (the lane
 is identical only: a tier without a binary keeps its refusal, raised by the
 call that asks for it) and the shared context, once, at import."""
 
-_ENTRIES = ("kpss_test", "select_d")
-
 #: `(metadata prefix, table family)` of the binaries the `_mojolearn_tsa` name
 #: resolves to: the device binding, the CPU binding with the fit, and the
 #: forecast inference binding (core/tsa_entry_table.mojo TSA_TABLE_*).
 _HW_IMAGES = (("tsa", 0), ("tsa_host", 0), ("forecast_host", 1))
 
 
-def _hw_cells(module):
-    """One connected Holt-Winters binding: the module and the table key it
+#: The same for the binaries the `_mojolearn_arima` name resolves to: the
+#: forecast inference binding, the CPU reference binding with the fit, and the
+#: device binding (core/arima_entry_table.mojo ARIMA_TABLE_*). The host
+#: prefixes are probed first: both host images also answer `arima_vendor`.
+_ARIMA_IMAGES = (("forecast_host", 1), ("arima_host", 0), ("arima", 0))
+
+
+def _hw_cells(module, images=_HW_IMAGES, what="Holt-Winters"):
+    """One connected binding: the module and the operations-table key it
     reports (`family`, `mode` 1 identical / 0 fast, `vendor` word)."""
     # glue: read the compiled image's own metadata once, at import
     from types import BuiltinFunctionType
     from . import _backend
-    for prefix, family in _HW_IMAGES:  # glue: fixed compiled metadata names
+    for prefix, family in images:  # glue: fixed compiled metadata names
         vendor = getattr(module, prefix + "_vendor", None)
         mode = getattr(module, prefix + "_numeric_mode", None)
         if isinstance(vendor, BuiltinFunctionType) and isinstance(mode, BuiltinFunctionType):
@@ -27,8 +32,9 @@ def _hw_cells(module):
             image = getattr(vendor, "__self__", None)
             if type(image) is not type(_backend):
                 image = module
-            return {"module": image, "family": family, "mode": int(mode()), "vendor": str(vendor())}
-    raise TypeError("the Holt-Winters binding reports no vendor and numeric mode")
+            return {"module": image, "family": family, "mode": int(mode()), "vendor": str(vendor()),
+                    "module_name": getattr(module, "__name__", prefix)}
+    raise TypeError("the " + what + " binding reports no vendor and numeric mode")
 
 
 def connect():
@@ -53,20 +59,6 @@ def connect():
     context["arena_half_copy_canonical"] = struct.pack("<e", struct.unpack("<e", b"\x01\x7c")[0]) == b"\x00\x7e"
 
     selected = _backend.default_mode()
-    bindings = {}
-    for mode in (selected, "fast" if selected == "identical" else "identical"):  # glue: the two numeric modes, connected once
-        try:
-            module = _backend.binding("_mojolearn_tsa", mode)
-            symbols = {}
-            for name in _ENTRIES:  # glue: fixed compiled entry names
-                fn = getattr(module, name)
-                if not isinstance(fn, BuiltinFunctionType):
-                    raise TypeError(f"the stationarity functions require a compiled {name}")
-                symbols[name] = fn
-            bindings[mode] = symbols
-        except (ImportError, AttributeError, ValueError, RuntimeError, TypeError, OSError) as error:
-            bindings[mode] = type(error).__name__ + ": " + str(error)
-    context["tsa_bindings"] = bindings
     # ExponentialSmoothing's device route (bindings/tsa_hw_native_door.mojo):
     # each connected binding is its module (the image pin) and the key of the
     # Holt-Winters operations table it published at initialization
@@ -79,6 +71,10 @@ def connect():
         except (ImportError, AttributeError, ValueError, RuntimeError, TypeError, OSError) as error:
             hw[mode] = type(error).__name__ + ": " + str(error)
     context["hw_bindings"] = hw
+    # The stationarity functions' resolved routes (kpss_test, select_d: no
+    # estimator holds one), filled by the compiled owner at first use, per
+    # mode (bindings/tsa_hw_route_unpack.mojo `tsa_function_route`).
+    context["tsa_function_routes"] = {}
     chosen = hw[selected]
     # "none": the selected binding did not load; its own refusal is said by
     # the first operation, not by the constructor's device check.
@@ -97,28 +93,34 @@ def connect():
     # the host inference class reads its loaded forecast binding from the
     # module table at call time (its own load loads it)
     context["hw_host_module"] = "mojolearn._host._mojolearn_forecast_host"
+    # ARIMA's and AutoARIMA's device route (bindings/tsa_arima_route_unpack.mojo):
+    # as for Holt-Winters above, each connected binding is its module and
+    # the key of the ARIMA operations table it published at initialization
+    # (core/arima_entry_table.mojo). No entry is looked up by name.
     arima = {}
-    arima_names = ("arima_fit", "arima_predict", "arima_forecast", "arima_ic_from_loglike", "arima_numeric_mode",
-                   "arima_fast_search_mode", "arima_order_caps", "arima_ndiffs_kpss",
-                   "arima_order_batch_enabled", "arima_order_search_device", "arima_order_search",
-                   "arima_search_reuse_enabled", "arima_order_search_fit",
-                   # resident fitted state (bindings/tsa_arima_resident_unpack.mojo); absent on the host binding
-                   "arima_resident_prepare", "arima_resident_release",  # glue: fixed compiled entry names
-                   "arima_resident_count", "arima_predict_resident",  # glue: fixed compiled entry names
-                   "arima_forecast_resident")  # glue: fixed compiled entry names
     for mode in (selected, "fast" if selected == "identical" else "identical"):  # glue: the two numeric modes, connected once
         try:
-            module = _backend.binding("_mojolearn_arima", mode)
-            symbols = {"module_name": module.__name__}
-            for name in arima_names:  # glue: fixed compiled entry names
-                fn = getattr(module, name, None)
-                if isinstance(fn, BuiltinFunctionType):
-                    symbols[name] = fn
-            arima[mode] = symbols
+            arima[mode] = _hw_cells(_backend.binding("_mojolearn_arima", mode), _ARIMA_IMAGES, "ARIMA")
         except (ImportError, AttributeError, ValueError, RuntimeError, TypeError, OSError) as error:
             arima[mode] = type(error).__name__ + ": " + str(error)
     context["arima_bindings"] = arima
-    context["arima_entry_names"] = arima_names
+    chosen = arima[selected]
+    context["arima_install_vendor"] = chosen["vendor"] if type(chosen) is dict else "none"
+    # device="cpu" on a GPU installation: the CPU reference binding (with the
+    # fit) where it is built, else the forecast inference binding (prediction
+    # and forecast; its table holds no fit and the fit is refused in words).
+    # A CPU binary that is not built is kept as its refusal text, said when a
+    # device="cpu" estimator first runs.
+    if context["arima_install_vendor"] not in ("cpu", "none"):
+        cpu = None
+        for name in ("_mojolearn_arima_host", "_mojolearn_forecast_host"):  # glue: the two CPU images, the one with the fit first
+            try:
+                cpu = _hw_cells(_backend.load_host_module(name), _ARIMA_IMAGES, "ARIMA")
+                break
+            except (ImportError, AttributeError, ValueError, RuntimeError, TypeError, OSError) as error:
+                if cpu is None:
+                    cpu = type(error).__name__ + ": " + str(error)
+        context["arima_cpu_bindings"] = {"identical": cpu}
     from ._buffer import _native
     for name in ("gather_rows_bytes", "scatter_rows_bytes", "cast_elements", "bincount_i64",  # glue: fixed compiled registration names
                  "select_fold_i64", "ic_running_min_f32", "ic_running_min_f64", "strided_copy_bytes"):  # glue: fixed compiled row moves, integer casts and IC/group helpers

@@ -31,9 +31,12 @@ def test_cpu_session_and_causal_frontdoors_use_the_common_provider():
     causal=(ROOT/'bindings/causal_lm_public_door.mojo').read_text()
     # Every CPU layer runs the host image's block entry through the CausalLM entry table (op 34
     # under fixed15_v1, else 33), named constants since the Python-entry arms were removed.
-    cpu = causal[causal.index('if Bool(py=e["cpu"]):'):]
-    assert cpu.index('_causal_table_call(') < cpu.index('elif ')
-    assert 'CAUSAL_BLOCK_HOST_FORWARD_INT15 if head_profile else CAUSAL_BLOCK_HOST_FORWARD, a_words, p_words' in cpu
+    # dw-neural-models (2026-11-21): the arm tests the typed route (resolved once) and fills a typed request; the
+    # one table call is the request's RUN.
+    cpu = causal[causal.index('        if route.cpu:'):]
+    assert cpu.index('request.entry = route.entry') < cpu.index('elif ')
+    assert 'request.operation = CAUSAL_BLOCK_HOST_FORWARD_INT15 if head_profile else CAUSAL_BLOCK_HOST_FORWARD' in cpu
+    assert '_causal_table_call(request.entry, request.operation, request.addresses, request.words, request.floats)' in causal
     mamba=(ROOT/'bindings/mamba_public_native_door.mojo').read_text()
     assert 'neural_descriptor_execute(h[].provider, 2 * kind - 1, addresses, p, f)' in mamba
     transformer=(ROOT/'providers/python/transformer_decode_pyapi_door.mojo').read_text()

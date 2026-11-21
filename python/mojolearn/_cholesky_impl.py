@@ -135,14 +135,17 @@ class Cholesky(NumericModeMixin):
 
     #: This class's GPU binding: the GP's, which already links `cholesky/`.
     _mojolearn_native_public = True
+    # Every public operation takes its compiled image from the estimator's
+    # binding route (bindings/linalg_native_door.mojo `_chol_image`).
+    _mojolearn_device = True
     _BINDING = _GPU_BINDING
 
     #: `fit` factors a given matrix; that is inference, so a CPU-only
     #: install runs it publicly.
     _CPU_FIT_IS_INFERENCE = True
 
-    def __init__(self, jitter=None, *, numeric_mode=None):
-        return _NATIVE(self, "family_chol_initialize", (jitter, numeric_mode), _NATIVE_CONTEXT)
+    def __init__(self, jitter=None, *, numeric_mode=None, device=None):
+        return _NATIVE(self, "family_chol_initialize", (jitter, numeric_mode, device), _NATIVE_CONTEXT)
 
     # -- the binding, and the tier it really is -----------------------------
 

@@ -2,19 +2,28 @@
 # LatentDirichletAllocation's native operations (dispatched by
 # bindings/decomp_native.mojo): the parameter checks the shell made, the
 # priors `_init` set, X converted once, then one compiled driver
-# (x_decomp/lda_owner.mojo: x_decomp_lda_owner, the kit steps the Python shell
-# sequenced, the same entries, operands, draws and order, so the same bits),
+# (x_decomp/lda_owner.mojo: lda_run, the kit steps the Python shell
+# sequenced, the same operands, draws and order, so the same bits),
 # and the fitted attributes and the draw counters stored as the shell stored them.
+# UNPACK reads the estimator's fields and arrays into one typed request
+# (core/decomp_factor_api.mojo); RUN is one call through the operations table
+# of the estimator's image (`decomp_entries_routed`: the device image, or the
+# CPU image for `device="cpu"`), the GIL released; PACK stores the fitted
+# fields. No Python parameter list and no Python-callable driver entry.
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_type, py_fields, py_setitem, py_contains
-from bindings.py_typed_call import py_call_typed
+from std.python._cpython import GILReleased
 from bindings.classical_arrays_door import classical_address
 from bindings.admitted_input_unpack import admit_x
 from bindings.decomp_inputs_unpack import decomp_input
 from bindings.decomp_owner_common_unpack import (
-    decomp_attr, decomp_check, decomp_entries, decomp_eq, decomp_f32, decomp_float, decomp_int, decomp_seed,
+    decomp_attr, decomp_check, decomp_eq, decomp_f32, decomp_float, decomp_int, decomp_seed,
     decomp_set_mode,
+)
+from bindings.decomp_kit_native_door import decomp_entries_routed, decomp_entries_ref
+from core.decomp_factor_api import (
+    LDARequest, lda_call, LDA_REFUSAL_FIT, LDA_REFUSAL_PARTIAL_FIT, LDA_REFUSAL_TRANSFORM,
 )
 from bindings.lda_keys_unpack import lda_keys
 from bindings.py_balanced import py_item
@@ -24,6 +33,10 @@ comptime _PARTIAL = 1
 comptime _TRANSFORM = 2
 comptime _SCORE = 3
 comptime _PERPLEXITY = 4
+
+
+def _address(array: PythonObject) raises -> Int:
+    return Int(py=classical_address(array))
 
 
 def _batch_size(fields: PythonObject) raises -> Int:
@@ -56,11 +69,13 @@ def _init_fields(fields: PythonObject) raises:
 
 
 def _run(model: PythonObject, fields: PythonObject, op: Int, x: PythonObject, fresh: Bool, flag: Bool,
-         total: Float64, message: String, context: PythonObject) raises -> PythonObject:
-    """One x_decomp_lda_owner call: (n_iter_, draw, n_batch_iter, value,
-    components, exp_dir, out)."""
+         total: Float64, refusal: Int, context: PythonObject) raises -> PythonObject:
+    """One LDA driver call: (n_iter_, draw, n_batch_iter, value, components,
+    exp_dir, out). `refusal` names the public method in the negativity
+    refusal (LDA_REFUSAL_*)."""
     var nk = lda_keys()
-    var entries = decomp_entries(model, fields, Python.tuple("x_decomp_lda_owner"), context)
+    var entry = decomp_entries_ref(
+        decomp_entries_routed(model, fields, decomp_attr(model, fields, "numeric_mode_"), context))
     var n = Int(py=x.shape[0])
     var v = Int(py=x.shape[1])
     var nc = decomp_int(py_item(fields, nk[].k_n_components))
@@ -76,49 +91,40 @@ def _run(model: PythonObject, fields: PythonObject, op: Int, x: PythonObject, fr
     var comps = decomp_f32(Python.tuple(nc, v), context)
     var exp_dir = decomp_f32(Python.tuple(nc, v), context)
     var out = decomp_f32(Python.tuple(n, nc), context) if op == _TRANSFORM else PythonObject(None)
-    var spare = classical_address(comps)
-    _ = comps  # keep the Python object alive through the native call above
+    var spare = _address(comps)
     var online = decomp_eq(py_item(fields, nk[].k_learning_method), PythonObject("online"))
     var bs = 1
     if op == _PARTIAL or (op == _FIT and online):
         bs = _batch_size(fields)
-    var params = Python.list(
-        op, classical_address(x), n, v, nc, 1 if fresh else 0, 1 if flag else 0,
-        classical_address(state_c.value()) if Bool(state_c) else spare,
-        classical_address(state_e.value()) if Bool(state_e) else spare, classical_address(comps),
-        classical_address(exp_dir), classical_address(out) if out is not None else spare,
-        decomp_int(py_item(fields, nk[].k_max_iter)), 1 if (op == _FIT and online) else 0, bs,
+    var request = LDARequest(
+        op, _address(x),
+        _address(state_c.value()) if Bool(state_c) else spare,
+        _address(state_e.value()) if Bool(state_e) else spare,
+        spare, _address(exp_dir), _address(out) if out is not None else spare,
+        n, v, nc, fresh, flag,
+        decomp_int(py_item(fields, nk[].k_max_iter)), op == _FIT and online, bs,
         decomp_int(py_item(fields, nk[].k_max_doc_update_iter)),
-        decomp_seed(decomp_attr(model, fields, "_seed")))
-    _ = state_c  # keep the Python object alive through the native call above
-    _ = state_e  # keep the Python object alive through the native call above
-    _ = out  # keep the Python object alive through the native call above
-    _ = exp_dir  # keep the Python object alive through the native call above
-    _ = comps  # keep the Python object alive through the native call above
-    _ = py_call(params.append, py_get(fields, nk[].k__draw, PythonObject(0)))
-    _ = out  # keep the Python object alive through the native call above
-    _ = exp_dir  # keep the Python object alive through the native call above
-    _ = comps  # keep the Python object alive through the native call above
-    _ = state_e  # keep the Python object alive through the native call above
-    _ = state_c  # keep the Python object alive through the native call above
-    _ = py_call(params.append, py_get(fields, nk[].k_n_batch_iter_, PythonObject(1)))
-    _ = out  # keep the Python object alive through the native call above
-    _ = exp_dir  # keep the Python object alive through the native call above
-    _ = comps  # keep the Python object alive through the native call above
-    _ = state_e  # keep the Python object alive through the native call above
-    _ = state_c  # keep the Python object alive through the native call above
-    _ = py_call(params.append, decomp_int(py_item(fields, nk[].k_evaluate_every)))
-    _ = out  # keep the Python object alive through the native call above
-    _ = exp_dir  # keep the Python object alive through the native call above
-    _ = comps  # keep the Python object alive through the native call above
-    _ = state_e  # keep the Python object alive through the native call above
-    _ = state_c  # keep the Python object alive through the native call above
-    var floats = Python.list(
+        decomp_seed(decomp_attr(model, fields, "_seed")),
+        decomp_int(py_item(fields, nk[].k_evaluate_every)), refusal,
+        Int(py=py_get(fields, nk[].k__draw, PythonObject(0))),
+        Int(py=py_get(fields, nk[].k_n_batch_iter_, PythonObject(1))),
         decomp_float(decomp_attr(model, fields, "doc_topic_prior_")),
-        decomp_float(decomp_attr(model, fields, "topic_word_prior_")), decomp_float(py_item(fields, nk[].k_learning_offset)),
-        decomp_float(py_item(fields, nk[].k_learning_decay)), decomp_float(py_item(fields, nk[].k_mean_change_tol)), total,
+        decomp_float(decomp_attr(model, fields, "topic_word_prior_")),
+        decomp_float(py_item(fields, nk[].k_learning_offset)),
+        decomp_float(py_item(fields, nk[].k_learning_decay)),
+        decomp_float(py_item(fields, nk[].k_mean_change_tol)), total,
         decomp_float(py_item(fields, nk[].k_perp_tol)))
-    var got = py_call_typed(py_item(entries, nk[].k_x_decomp_lda_owner), params, floats, PythonObject(message))
+    var draw = 0
+    var n_batch_iter = 0
+    var iterations = 0
+    var value = Float64(0.0)
+    with GILReleased(Python()):
+        var answer = lda_call(entry, request)
+        iterations = answer.iterations
+        draw = answer.draw
+        n_batch_iter = answer.n_batch_iter
+        value = answer.value
+    _ = x  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
     _ = exp_dir  # keep the Python object alive through the native call above
     _ = comps  # keep the Python object alive through the native call above
@@ -126,7 +132,8 @@ def _run(model: PythonObject, fields: PythonObject, op: Int, x: PythonObject, fr
     _ = state_c  # keep the Python object alive through the native call above
     _ = state_c^
     _ = state_e^
-    return Python.tuple(got[0], got[1], got[2], got[3], comps, exp_dir, out)
+    return Python.tuple(PythonObject(iterations), PythonObject(draw), PythonObject(n_batch_iter),
+                        PythonObject(value), comps, exp_dir, out)
 
 
 def lda_fit(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -142,7 +149,7 @@ def lda_fit(model: PythonObject, source: PythonObject, context: PythonObject) ra
     _init_fields(fields)
     var n = Int(py=x.shape[0])
     var got = _run(model, fields, _FIT, x, True, False, Float64(n),
-                   "Negative values in data passed to LatentDirichletAllocation.fit", context)
+                   LDA_REFUSAL_FIT, context)
     py_setitem(fields, nk[].k__draw, got[1])
     py_setitem(fields, nk[].k_n_batch_iter_, got[2])
     py_setitem(fields, nk[].k_n_iter_, PythonObject(Int(py=got[0])))
@@ -164,7 +171,7 @@ def lda_partial_fit(model: PythonObject, source: PythonObject, context: PythonOb
     if fresh:
         _init_fields(fields)
     var got = _run(model, fields, _PARTIAL, x, fresh, False, decomp_float(py_item(fields, nk[].k_total_samples)),
-                   "Negative values in data passed to LatentDirichletAllocation.partial_fit", context)
+                   LDA_REFUSAL_PARTIAL_FIT, context)
     py_setitem(fields, nk[].k__draw, got[1])
     py_setitem(fields, nk[].k_n_batch_iter_, got[2])
     py_setitem(fields, nk[].k_components_, got[4])
@@ -186,7 +193,7 @@ def lda_project(model: PythonObject, fields: PythonObject, x: PythonObject, op: 
                 context: PythonObject) raises -> PythonObject:
     var nk = lda_keys()
     var got = _run(model, fields, op, x, False, flag, decomp_float(py_item(fields, nk[].k_total_samples)),
-                   "Negative values in data passed to LatentDirichletAllocation.transform", context)
+                   LDA_REFUSAL_TRANSFORM, context)
     if op == _TRANSFORM:
         return got[6]
     return PythonObject(Float64(py=got[3]))
