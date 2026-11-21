@@ -88,8 +88,7 @@ from gbdt.host.gbdt_oracle import (
     _snap_plane,
     _partition_stats_level,
     _pinned_partition_stats,
-    _partition_for_model,
-    _HostLeafPartition,
+    _partition_for_tree,
     _oracle_move_to,
     _logloss_value,
     _gather_rows,
@@ -643,19 +642,9 @@ def gbdt_pointwise_host_fit(
         for level in range(len(splits)):  # driver-loop: over the tree's levels
             tree_features.append(splits[level].feature)
             tree_bins.append(splits[level].bin)
-        var partition: _HostLeafPartition
-        if len(splits) > 0:
-            partition = _partition_for_model(
-                cindex, layout, tree_features, tree_bins, len(splits), n_rows
-            )
-        else:
-            # a tree with no split: one leaf, the rows in their order
-            var whole = List[Int](length=n_rows, fill=0)
-            _identity_rows(whole, n_rows)
-            partition = _HostLeafPartition(
-                whole^, List[Int](length=1, fill=0),
-                List[Int](length=1, fill=n_rows),
-            )
+        var partition = _partition_for_tree(
+            cindex, layout, tree_features, tree_bins, n_rows
+        )
         # ---- the estimator and `add_model_value_kernel` ----
         var estimated = _estimate_logloss_leaves(
             y, w, cursor, partition.row_index, partition.offsets,

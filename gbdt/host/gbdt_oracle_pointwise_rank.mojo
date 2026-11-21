@@ -28,8 +28,13 @@ from gbdt.data.permutation import TRandom
 from gbdt.data.yeti_rank_tasks import YetiRankTasks, yeti_rank_tasks
 from gbdt.gpu_data.compressed_index_builder import build_layout
 from gbdt.gpu_data.feature_blocks import blocks_for
+from core.host_parallel import host_parallelize
+from core.host_predict_threads import HostF32Ptr, host_predict_chunk
 from gbdt.host.gbdt_oracle import (
     apply_scaled_leaves_host,
+    _gbdt_units,
+    _identity_rows,
+    _partition_for_tree,
     GBDT_MSE_BLOCK,
     GbdtHostModel,
     GbdtHostParams,
@@ -73,20 +78,57 @@ def _pointwise_target_std_dev(stats: List[Float32], n_rows: Int) -> Float64:
     comptime BLOCK = 512
     var blocks = min(128, max(1, (n_rows + BLOCK - 1) // BLOCK))
     var partials = List[Float32](length=blocks, fill=Float32(0))
-    for b in range(blocks):
+    # THE SPLIT (lane gbdt-host-par): the unit is one 512-thread device
+    # block: each thread's strided `ftz` chain ascending in its rows and the
+    # block's halving tree. Blocks go round robin to `_gbdt_units` tasks; a
+    # task holds one slab, every lane rewritten per block.
+    var stride = blocks * BLOCK
+    var units = _gbdt_units(blocks, 8 * n_rows)
+    var stats_p = rebind[HostF32Ptr](stats.unsafe_ptr())
+    var part_p = rebind[HostF32Ptr](partials.unsafe_ptr())
+
+    def block_sums(unit: Int) {imm units, imm blocks, imm stride, imm n_rows, imm stats_p, imm part_p}:
         var slab = List[Float32](length=BLOCK, fill=Float32(0))
-        for t in range(BLOCK):
-            var r = b * BLOCK + t
-            var acc = Float32(0)
-            while r < n_rows:
-                var w = stats[r]
-                var q = ftz(stats[n_rows + r] / w)
-                acc = ftz(identical_mul_add(ftz(w * q), q, acc))
-                r += blocks * BLOCK
-            slab[t] = acc
-        partials[b] = _halving_fold(slab)
+        var b = unit
+        while b < blocks:
+            for t in range(BLOCK):
+                var r = b * BLOCK + t
+                var acc = Float32(0)
+                while r < n_rows:
+                    var w = stats_p[r]
+                    var q = ftz(stats_p[n_rows + r] / w)
+                    acc = ftz(identical_mul_add(ftz(w * q), q, acc))
+                    r += stride
+                slab[t] = acc
+            part_p[b] = _halving_fold(slab)
+            b += units
+
+    host_parallelize(block_sums, units)
+    _ = len(stats)
     var sum2 = _deterministic_sum_lanes(partials, 1, blocks)[0]
     return sqrt(Float64(sum2) / (Float64(n_rows) + 1e-100))
+
+
+def _split_planes(
+    stats: List[Float32], n_rows: Int, mut sw: List[Float32], mut sg: List[Float32]
+):
+    """The two search planes of `stats` as the structure search's two
+    lists: a move per row, the rows in `_gbdt_units` contiguous ranges."""
+    var units = _gbdt_units(n_rows, 2 * n_rows)
+    var chunk = host_predict_chunk(n_rows, units)
+    var stats_p = rebind[HostF32Ptr](stats.unsafe_ptr())
+    var sw_p = rebind[HostF32Ptr](sw.unsafe_ptr())
+    var sg_p = rebind[HostF32Ptr](sg.unsafe_ptr())
+
+    def rows(unit: Int) {imm chunk, imm n_rows, imm stats_p, imm sw_p, imm sg_p}:
+        for r in range(unit * chunk, min(n_rows, (unit + 1) * chunk)):
+            sw_p[r] = stats_p[r]
+            sg_p[r] = stats_p[n_rows + r]
+
+    host_parallelize(rows, units)
+    _ = len(stats)
+    _ = len(sw)
+    _ = len(sg)
 
 
 def gbdt_ranking_pointwise_host_fit(
@@ -124,6 +166,8 @@ def gbdt_ranking_pointwise_host_fit(
         grouped_rows += group_sizes[g]
     if grouped_rows != n_rows:
         raise Error("pointwise ranking queries must cover every row")
+    # KEPT SERIAL: admission, once per fit, a compare per row and the
+    # refusal at the first bad row
     for r in range(n_rows):
         if not isfinite(y[r]):
             raise Error("pointwise ranking targets must be finite")
@@ -193,8 +237,7 @@ def gbdt_ranking_pointwise_host_fit(
         feat_shift[f] = layout.features[f].shift
         feat_mask[f] = layout.features[f].mask
     var doc_ids = List[Int](length=n_rows, fill=0)
-    for r in range(n_rows):
-        doc_ids[r] = r
+    _identity_rows(doc_ids, n_rows)
     var part_bounds = List[Int]()
     part_bounds.append(0)
     part_bounds.append(n_rows)
@@ -253,9 +296,7 @@ def gbdt_ranking_pointwise_host_fit(
             scale = _choose_scale_from_magnitudes(mags[0], mags[1], n_rows)
         var sw = List[Float32](length=n_rows, fill=Float32(0))
         var sg = List[Float32](length=n_rows, fill=Float32(0))
-        for r in range(n_rows):
-            sw[r] = stats[r]
-            sg[r] = stats[n_rows + r]
+        _split_planes(stats, n_rows, sw, sg)
         _snap_plane(sg, n_rows, scale)
         var splits = _ordered_tree_structure(
             cindex, helpers, params.max_depth, sw, sg, doc_ids, part_bounds,
@@ -264,39 +305,31 @@ def gbdt_ranking_pointwise_host_fit(
             tree_seed, cosine_score,
         )
         var n_leaves = 1 << len(splits)
-        var bins = List[Int](length=n_rows, fill=0)
-        var sizes = List[Int](length=n_leaves, fill=0)
-        for r in range(n_rows):
-            var leaf = 0
-            for level in range(len(splits)):
-                var fid = splits[level].feature
-                var mask = feat_mask[fid] << feat_shift[fid]
-                var value = UInt32(splits[level].bin) << feat_shift[fid]
-                if (cindex[feat_offset[fid] + r] & mask) > value:
-                    leaf += 1 << level
-            bins[r] = leaf
-            sizes[leaf] += 1
-        var offsets = List[Int](length=n_leaves, fill=0)
-        var running = 0
-        for leaf in range(n_leaves):
-            offsets[leaf] = running
-            running += sizes[leaf]
-        var fill = offsets.copy()
-        var row_index = List[Int](length=n_rows, fill=0)
-        for r in range(n_rows):
-            row_index[fill[bins[r]]] = r
-            fill[bins[r]] += 1
+        # `compute_bins_for_model` + `partition_from_bins`: the rows' leaves
+        # and the stable counting sort across the cores (lane gbdt-host-par)
+        var tree_features = List[Int]()
+        var tree_bins = List[Int]()
+        for level in range(len(splits)):  # driver-loop: over the tree's levels
+            tree_features.append(splits[level].feature)
+            tree_bins.append(splits[level].bin)
+        var partition = _partition_for_tree(
+            cindex, layout, tree_features, tree_bins, n_rows
+        )
         var yeti_seed = UInt64(0)
         if loss.objective == GBDT_OBJ_YETI_RANK:
             yeti_seed = yeti_rand.next_uniform_l()
         var estimated = _estimate_leaves_for_loss(
-            loss, y, cursor, row_index, offsets, sizes, n_rows,
-            params.l2_leaf_reg, group_sizes, pairs, yeti_tasks, yeti_seed,
+            loss, y, cursor, partition.row_index, partition.offsets,
+            partition.sizes, n_rows, params.l2_leaf_reg, group_sizes, pairs,
+            yeti_tasks, yeti_seed,
         )
         if loss.objective == GBDT_OBJ_PAIR_LOGIT or loss.objective == GBDT_OBJ_YETI_RANK:
             _zero_average_host(estimated)
         var scaled = rescaled_leaves(estimated, params.learning_rate)
-        apply_scaled_leaves_host(cursor, scaled, row_index, offsets, sizes, n_leaves)
+        apply_scaled_leaves_host(
+            cursor, scaled, partition.row_index, partition.offsets,
+            partition.sizes, n_leaves,
+        )
         # one computation feeds the cursor and the stored model
         for leaf in range(n_leaves):
             model_leaves.append(scaled[leaf])

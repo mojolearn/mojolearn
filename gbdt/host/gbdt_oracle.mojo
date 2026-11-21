@@ -3562,6 +3562,28 @@ def _partition_for_model(
     return _HostLeafPartition(rows^, offsets^, sizes^)
 
 
+def _partition_for_tree(
+    cindex: List[UInt32],
+    layout: CompressedIndexLayout,
+    tree_features: List[Int],
+    tree_bins: List[Int],
+    n_rows: Int,
+) raises -> _HostLeafPartition:
+    """`_partition_for_model` at the tree's own depth; a tree with no split
+    is one leaf holding the rows in their order (the pointwise fits grow
+    such trees; `_partition_for_model` refuses depth 0 as the device does)."""
+    var depth = len(tree_features)
+    if depth > 0:
+        return _partition_for_model(
+            cindex, layout, tree_features, tree_bins, depth, n_rows
+        )
+    var whole = List[Int](length=n_rows, fill=0)
+    _identity_rows(whole, n_rows)
+    return _HostLeafPartition(
+        whole^, List[Int](length=1, fill=0), List[Int](length=1, fill=n_rows)
+    )
+
+
 def gbdt_host_fit(
     x_colmajor: List[Float32],
     y: List[Float32],
