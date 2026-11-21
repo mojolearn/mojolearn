@@ -1,5 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Whole public corpus preparation, cache validation and lazy batch operations."""
+"""Whole public corpus preparation, cache validation and lazy batch operations.
+
+Every operation is UNPACK (Python objects to strings, words and native JSON
+nodes) / RUN (`bindings/lm_corpus_prepare_run.mojo`, `core/lm_batch_run.mojo`:
+no Python) / PACK (the public records). The metadata read-backs
+(`vocabulary`, `n_vocab`, `describe`, `data_schedule`, `repr`) compute
+nothing: they are UNPACK of stored fields and PACK of a dictionary or text.
+"""
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
@@ -8,13 +15,19 @@ from bindings.native_error_class import error_without_class
 from bindings.mode_metadata_native_door import _fields, _class_fields
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.lm_corpus_metadata_door import (corpus_context, corpus_connect, corpus_int, corpus_dict,
-    corpus_plain, corpus_fields, corpus_new, corpus_empty, corpus_mapped, corpus_ids_snapshot, corpus_batch_base)
-from bindings.lm_corpus_files_door import (corpus_env_lm_cache, corpus_path, corpus_path_object, corpus_read, corpus_write,
-    corpus_hash_bytes, corpus_hash_file, corpus_read_json, corpus_write_json, corpus_exists,
-    corpus_atomic_begin, corpus_atomic_commit, corpus_atomic_abort, corpus_seconds, corpus_file_size)
-from bindings.tokenizer_public_native_door import (tokenizer_bpe_identity_file,
-    tokenizer_bpe_encode_corpus, tokenizer_bpe_train_corpus, tokenizer_bpe_export, tokenizer_bpe_for,
-    tokenizer_bpe_identity, tokenizer_trained_info)
+    corpus_plain, corpus_fields, corpus_new, corpus_empty, corpus_mapped, corpus_ids_snapshot, corpus_batch_base,
+    corpus_json_node)
+from bindings.lm_corpus_files_door import corpus_path, corpus_path_object, corpus_bytes_object, corpus_os_error_pending
+from bindings.lm_corpus_files_run import (CORPUS_OS_ERROR, corpus_env_lm_cache, corpus_run_expand, corpus_run_normalize,
+    corpus_run_join, corpus_run_file_size)
+from bindings.lm_corpus_prepare_run import (TOKENS_SCHEMA, SCHEDULE, CorpusRange, CorpusPrepareRequest, TokensManifest,
+    corpus_prepare_run, corpus_tokenize_run, tokens_manifest_read, tokens_manifest_sha, tokens_manifest_digest,
+    tokens_manifest_payload, tokens_manifest_range)
+from bindings.tokenizer_public_native_door import (tokenizer_bpe_export, tokenizer_bpe_for, tokenizer_bpe_identity,
+    tokenizer_bpe_handle)
+from bindings.py_cpython_table import cpython_table
+from core.native_json_value import JsonDoc
+from tokenizer.impl.tokenizer_host_shell_impl import BpeHandle
 from core.lm_batch_run import LmBatchRequest, lm_batch_dims, lm_batch_run, lm_batch_steps_run
 from bindings.native_json_door import native_json_parse
 from core.sha256 import sha256_hex_addr
@@ -47,16 +60,6 @@ from bindings.lm_keys_unpack import (
 )
 from bindings.py_balanced import py_item
 
-comptime TOKENS_SCHEMA = "mojolearn.byte-lm.tokens.v1"
-comptime CORPUS_SCHEMA = "mojolearn.byte-lm.corpus.v1"
-comptime VOCABULARY_SCHEMA = "mojolearn.bpe-vocabulary.v1"
-comptime SCHEDULE = "train-range-modulo.v1"
-
-
-def _join(path: PythonObject, leaf: String) raises -> PythonObject:
-    return py_call(path.rstrip, "/") + PythonObject("/" + leaf)
-
-
 def _prefix(value: PythonObject) raises -> String:
     if py_type(value) is not native_loaded_module("builtins").str:
         raise Error("TypeError: corpus fingerprints require ordinary strings")
@@ -77,176 +80,27 @@ def _progress(value: PythonObject) raises:
         raise Error("NotImplementedError: corpus preparation cannot invoke Python progress callbacks; inspect the returned manifest's native timing and document counters")
 
 
-def _default_cache() raises -> PythonObject:
+def _default_cache() raises -> String:
     var configured = corpus_env_lm_cache()
-    return corpus_path(PythonObject(configured if configured != "" else "~/.cache/mojolearn/lm"), True)
+    return corpus_run_normalize(corpus_run_expand(configured if configured != "" else String("~/.cache/mojolearn/lm")))
 
 
-def _source(path_value: PythonObject) raises -> PythonObject:
-    var nk = lm_keys()
-    # pass 3 (N174): the corpus is hashed by the native streamed digest and
-    # sized by stat; its bytes are read only when a cache miss needs them
-    # (`_source_data`). A cache hit read the whole file through 1 MiB posix
-    # chunks into a bytearray and copied it to bytes, only to hash it.
-    var path = corpus_path(path_value, True, True)
-    var sha = corpus_hash_file(path)
-    var size = corpus_file_size(path)
-    var source = Python.dict(path=path, sha256=sha, bytes=PythonObject(size), schema=PythonObject(None))
-    var ranges = Python.dict()
-    var parts = py_call(path.rsplit, "/", 1)
-    var manifest = _join(parts[0], "manifest.json")
-    if corpus_exists(manifest):
-        var raw = corpus_read(manifest)
-        var record = native_json_parse(raw)
-        if py_type(record) is native_loaded_module("builtins").dict and Bool(py=py_get(record, nk[].k_schema) == PythonObject(CORPUS_SCHEMA)):
-            if not Bool(py=py_get(record, nk[].k_sha256) == sha) or not Bool(py=py_get(record, nk[].k_bytes) == PythonObject(size)):
-                raise Error("ValueError: mojolearn: pinned corpus length/SHA mismatch for " + String(path))
-            py_setitem(source, nk[].k_schema, PythonObject(CORPUS_SCHEMA))
-            py_setitem(source, nk[].k_manifest_sha256, corpus_hash_bytes(raw))
-            py_setitem(source, nk[].k_source_url, py_get(record, nk[].k_source_url))
-            for key in [String("train_range"), String("validation_range"), String("test_range")]:  # small-loop(three named corpus ranges)
-                var span = py_get(record, key)
-                if span is not None and Bool(py=span):
-                    if py_type(span) is not native_loaded_module("builtins").list or len(span) != 2:
-                        raise Error("ValueError: corpus ranges require two offsets")
-                    py_setitem(ranges, key, Python.list(corpus_int(span[0], "range start"), corpus_int(span[1], "range end")))
-    if not py_contains(ranges, nk[].k_train_range):
-        ranges = Python.dict(train_range=Python.list(0, size))
-    return Python.tuple(PythonObject(None), source, ranges)
-
-
-def _source_data(mut data: PythonObject, source: PythonObject) raises:
-    var nk = lm_keys()
-    # The corpus bytes, read once, on the first cache miss that needs them.
-    # They must be the bytes `_source` hashed: a file changed in between is
-    # refused (the vocabulary and token files are keyed by that hash).
-    if data is not None:
-        return
-    var read = corpus_read(py_item(source, nk[].k_path))
-    if not Bool(py=PythonObject(len(read)) == py_item(source, nk[].k_bytes)) or not Bool(py=corpus_hash_bytes(read) == py_item(source, nk[].k_sha256)):
-        raise Error("ValueError: mojolearn: the corpus changed while it was being prepared; run prepare again")
-    data = read
-
-
-def _split_points(ranges: PythonObject, count: Int) raises -> PythonObject:
+def _ranges_unpack(value: PythonObject) raises -> List[CorpusRange]:
+    """UNPACK: the named byte ranges of the private tokenize step, in the
+    dictionary's order."""
     var bi = native_loaded_module("builtins")
-    var points = Python.list(0, count)
-    var keys = py_call(bi.list, ranges.keys())
+    corpus_dict(value)
+    var result = List[CorpusRange]()
+    var keys = py_call(bi.list, value.keys())
     for i in range(len(keys)):  # driver-loop: declared train/validation/test boundaries
-        var span = ranges[keys[i]]
+        var span = value[keys[i]]
         if py_type(span) is not bi.list and py_type(span) is not bi.tuple:
             raise Error("TypeError: corpus ranges require ordinary offset pairs")
         if len(span) != 2:
             raise Error("ValueError: corpus ranges require two offsets")
-        for j in range(2):  # small-loop(two range endpoints)
-            var value = corpus_int(span[j], "range offset", True)
-            if value >= 0 and value <= count:
-                py_call(points.append, value)
-    points = py_call(bi.sorted, points)
-    var result = Python.list()
-    var previous = -1
-    for i in range(len(points)):  # small-loop(unique sorted manifest split points)
-        var value = Int(py=points[i])
-        if value != previous:
-            py_call(result.append, value)
-            previous = value
-    return result
-
-
-def _vocabulary_record(identity: PythonObject, recipe: PythonObject) raises -> PythonObject:
-    return Python.dict(schema=PythonObject(VOCABULARY_SCHEMA), identity=identity, recipe=recipe,
-        scope=PythonObject("trained on or loaded for the caller's corpus; never shipped with mojolearn"))
-
-
-def _check_vocab(directory: PythonObject) raises -> PythonObject:
-    var nk = lm_keys()
-    var record = corpus_read_json(_join(directory, "vocabulary.json"))
-    var identity = tokenizer_bpe_identity_file(_join(directory, "ranks.tsv"))
-    if not Bool(py=py_item(identity, nk[].k_sha256) == py_item(py_item(record, nk[].k_identity), nk[].k_sha256)):
-        raise Error("ValueError: mojolearn: cached vocabulary does not match its vocabulary.json; remove it to rebuild")
-    return record
-
-
-def _trained_vocabulary(mut data: PythonObject, source: PythonObject, ranges: PythonObject, sha: PythonObject,
-    cache: PythonObject, size: Int, frequency: Int, sample: Int, document_bytes: Int) raises -> PythonObject:
-    var nk = lm_keys()
-    var lo = Int(py=py_item(ranges, nk[].k_train_range)[0])
-    var hi = min(Int(py=py_item(ranges, nk[].k_train_range)[1]), lo + sample)
-    var key = _prefix(sha) + "-v" + String(size) + "-f" + String(frequency) + "-s" + String(hi - lo)
-    var final = _join(_join(cache, "vocab"), key)
-    if corpus_exists(_join(final, "vocabulary.json")):
-        return Python.tuple(final, _check_vocab(final))
-    _source_data(data, source)
-    var temporary = corpus_atomic_begin(final)
-    try:
-        var began = corpus_seconds()
-        var trained = tokenizer_bpe_train_corpus(data, _split_points(ranges, len(data)), PythonObject(lo), PythonObject(hi),
-            PythonObject(document_bytes), PythonObject(size), PythonObject(frequency))
-        var seconds = corpus_seconds() - began
-        var exported = tokenizer_bpe_export(trained)
-        var info = tokenizer_trained_info(trained)
-        corpus_write(_join(temporary, "ranks.tsv"), py_call(exported[0].encode, "ascii"))
-        var recipe = Python.dict(trainer=PythonObject("mojolearn.tokenizer.BpeVocabularyTrainer"), backend=py_item(info, nk[].k_backend),
-            format=py_item(info, nk[].k_format), tie_break=py_item(info, nk[].k_tie_break), vocab_size=PythonObject(size), min_frequency=PythonObject(frequency),
-            corpus_sha256=sha, sample=Python.list(lo, hi), document_bytes=PythonObject(document_bytes),
-            n_tokens=py_item(info, nk[].k_n_tokens), n_merges=py_item(info, nk[].k_n_merges), n_ties_broken=py_item(info, nk[].k_n_ties_broken), train_seconds=PythonObject(seconds))
-        corpus_write_json(_join(temporary, "vocabulary.json"), _vocabulary_record(exported[3], recipe))
-        corpus_atomic_commit(temporary, final)
-    except error:
-        corpus_atomic_abort(temporary)
-        raise error^
-    return Python.tuple(final, _check_vocab(final))
-
-
-def _user_vocabulary(value: PythonObject, cache: PythonObject) raises -> PythonObject:
-    var nk = lm_keys()
-    var exported = tokenizer_bpe_export(value)
-    var identity = exported[3]
-    var final = _join(_join(cache, "vocab"), "user-" + _prefix(py_item(identity, nk[].k_sha256)))
-    if not corpus_exists(_join(final, "vocabulary.json")):
-        var temporary = corpus_atomic_begin(final)
-        try:
-            corpus_write(_join(temporary, "ranks.tsv"), py_call(exported[0].encode, "ascii"))
-            corpus_write_json(_join(temporary, "vocabulary.json"), _vocabulary_record(identity,
-                Python.dict(source=exported[2], trainer=PythonObject(None))))
-            corpus_atomic_commit(temporary, final)
-        except error:
-            corpus_atomic_abort(temporary)
-            raise error^
-    return Python.tuple(final, _check_vocab(final))
-
-
-def _tokenize(data: PythonObject, source: PythonObject, ranges: PythonObject, tokenizer: PythonObject,
-    identity: PythonObject, output: PythonObject, document_bytes: Int) raises:
-    var nk = lm_keys()
-    var began = corpus_seconds()
-    var encoded = tokenizer_bpe_encode_corpus(tokenizer, data, _split_points(ranges, len(data)), PythonObject(document_bytes))
-    var seconds = corpus_seconds() - began
-    var ids = encoded[0]
-    var boundaries = encoded[1]
-    var count = len(ids)
-    # Supported targets are little endian; preserve the on-disk int32 stream.
-    var payload = py_call(ids.tobytes)
-    var token_ranges = Python.dict()
-    var keys = py_call(native_loaded_module("builtins").list, ranges.keys())
-    for i in range(len(keys)):  # small-loop(three named byte ranges mapped to token offsets)
-        var span = ranges[keys[i]]
-        py_setitem(token_ranges, keys[i], Python.list(boundaries[span[0]], boundaries[span[1]]))
-    var manifest = Python.dict(schema=PythonObject(TOKENS_SCHEMA), source=source, vocabulary=identity,
-        encoder=PythonObject("mojolearn.tokenizer.BpeTokenizer.encode_batch (host binding _mojolearn_tokenizer_host, tokenizer/encoding.mojo); integers and tables only"),
-        endoftext=PythonObject("not inserted and not recognized (allow_endoftext=False)"),
-        document_rule=PythonObject("no document spans a declared range boundary; at most " + String(document_bytes) + " bytes, ending at the last 0x0A at or before the limit (or at the limit when the window holds none); each encoded alone, ids concatenated in document order"),
-        document_bytes=PythonObject(document_bytes), n_documents=encoded[2], dtype=PythonObject("int32"), byte_order=PythonObject("little"),
-        sha256=corpus_hash_bytes(payload), bytes=PythonObject(len(payload)), tokens=PythonObject(count),
-        bytes_per_token=PythonObject(Float64(len(data)) / Float64(count)) if count else PythonObject(None),
-        max_id=encoded[3], ids_above_255=encoded[4])
-    py_call(manifest.update, token_ranges)
-    py_setitem(manifest, nk[].k_schedule, PythonObject(SCHEDULE))
-    py_setitem(manifest, nk[].k_tokenize_seconds, PythonObject(seconds))
-    py_setitem(manifest, nk[].k_encode_seconds, PythonObject(seconds))
-    py_setitem(manifest, nk[].k_encode_bytes_per_second, PythonObject(Float64(len(data)) / seconds) if seconds != 0 else PythonObject(None))
-    corpus_write(_join(output, "tokens.i32"), payload)
-    corpus_write_json(_join(output, "manifest.json"), manifest)
+        result.append(CorpusRange(String(py=keys[i]), corpus_int(span[0], "range offset", True),
+                                  corpus_int(span[1], "range offset", True)))
+    return result^
 
 
 def _corpus_fields(value: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -254,31 +108,37 @@ def _corpus_fields(value: PythonObject, context: PythonObject) raises -> PythonO
     return corpus_fields(value, py_item(context, nk[].k_corpus_class), Python.tuple("tokens_dir", "vocabulary_path", "manifest"))
 
 
-def _corpus_init(value: PythonObject, directory: PythonObject, ranks: PythonObject, context: PythonObject) raises -> PythonObject:
+def _manifest_object(manifest: TokensManifest) raises -> PythonObject:
+    """PACK: the public manifest dictionary, from the bytes RUN read once."""
+    return native_json_parse(corpus_bytes_object(manifest.raw))
+
+
+def _corpus_publish(value: PythonObject, directory: String, ranks: String, manifest: TokensManifest,
+                    context: PythonObject) raises:
+    """PACK: the fields of a TokenizedCorpus."""
     var nk = lm_keys()
     var fields = _corpus_fields(value, context)
+    py_setitem(fields, nk[].k_tokens_dir, corpus_path_object(directory))
+    py_setitem(fields, nk[].k_vocabulary_path, corpus_path_object(ranks))
+    py_setitem(fields, nk[].k_manifest, _manifest_object(manifest))
+    py_setitem(fields, nk[].k__tokens_verified, PythonObject(None))
+
+
+def _corpus_init(value: PythonObject, directory: PythonObject, ranks: PythonObject, context: PythonObject) raises -> PythonObject:
+    # UNPACK
+    _ = _corpus_fields(value, context)
     var path = corpus_path(directory)
     var vocabulary = corpus_path(ranks)
-    var manifest = corpus_read_json(_join(path, "manifest.json"))
-    corpus_dict(manifest)
-    if not Bool(py=py_get(manifest, nk[].k_schema) == PythonObject(TOKENS_SCHEMA)):
-        raise Error("ValueError: mojolearn: corpus manifest is not " + String(TOKENS_SCHEMA))
-    py_setitem(fields, nk[].k_tokens_dir, corpus_path_object(path))
-    py_setitem(fields, nk[].k_vocabulary_path, corpus_path_object(vocabulary))
-    py_setitem(fields, nk[].k_manifest, manifest)
-    py_setitem(fields, nk[].k__tokens_verified, PythonObject(None))
+    # RUN
+    var manifest = tokens_manifest_read(path, "corpus")
+    # PACK
+    _corpus_publish(value, path, vocabulary, manifest, context)
     return PythonObject(None)
-
-
-def _corpus_construct(directory: PythonObject, ranks: PythonObject, context: PythonObject) raises -> PythonObject:
-    var nk = lm_keys()
-    var result = corpus_new(py_item(context, nk[].k_corpus_class))
-    _corpus_init(result, directory, ranks, context)
-    return result
 
 
 def _prepare(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var nk = lm_keys()
+    # UNPACK
     var size = _positive(args[3], "vocab_size")
     var frequency = _positive(args[4], "min_frequency")
     var sample = _positive(args[5], "vocab_sample_bytes")
@@ -290,49 +150,35 @@ def _prepare(args: PythonObject, context: PythonObject) raises -> PythonObject:
     if py_type(vocab) is bi.str and String(vocab) == "bytes":
         raise Error("ValueError: mojolearn: byte training has no vocabulary to prepare; use the byte schedule instead of lm_corpus.prepare")
     var cache = _default_cache() if args[2] is None else corpus_path(args[2], True)
-    var source = _source(args[0])
-    var data = source[0]
-    var src = source[1]
-    var ranges = source[2]
-    var vocabulary = PythonObject(None)
-    if vocab is None:
-        vocabulary = _trained_vocabulary(data, src, ranges, py_item(src, nk[].k_sha256), cache, size, frequency, sample, document_bytes)
-    else:
-        vocabulary = _user_vocabulary(vocab, cache)
-    var identity = py_item(vocabulary[1], nk[].k_identity)
-    var ranks = _join(vocabulary[0], "ranks.tsv")
-    var key = _prefix(py_item(src, nk[].k_sha256)) + "-" + _prefix(py_item(identity, nk[].k_sha256)) + "-d" + String(document_bytes)
-    var final = _join(_join(cache, "tokens"), key)
-    if corpus_exists(_join(final, "manifest.json")):
-        var result = _corpus_construct(final, ranks, context)
-        var manifest = py_item(_fields(result), nk[].k_manifest)
-        if not Bool(py=py_item(py_item(manifest, nk[].k_source), nk[].k_sha256) == py_item(src, nk[].k_sha256)) or not Bool(py=py_item(py_item(manifest, nk[].k_vocabulary), nk[].k_sha256) == py_item(identity, nk[].k_sha256)):
-            raise Error("ValueError: mojolearn: cached tokens were made from another corpus or vocabulary; remove the directory to rebuild")
+    var corpus = corpus_path(args[0], True, True)
+    var request = CorpusPrepareRequest(corpus, cache, size, frequency, sample, document_bytes)
+    if vocab is not None:
+        # The caller's vocabulary as its canonical rank text (the tokenizer
+        # door's export): text, rank count, where it came from.
+        var exported = tokenizer_bpe_export(vocab)
+        request.user = True
+        request.user_ranks = String(py=exported[0])
+        request.user_count = Int(py=exported[1])
+        request.user_source = String(py=exported[2])
+    # RUN: files, hashing, training and encoding; no Python object.
+    var prepared = corpus_prepare_run(request)
+    # PACK
+    var result = corpus_new(py_item(context, nk[].k_corpus_class))
+    _corpus_publish(result, prepared.tokens_dir, prepared.ranks, prepared.manifest, context)
+    if prepared.cached:
         # pass 3 (N174): the cached token file is mapped and its mapping
         # hashed once here; the verified mapping rides on the corpus, so
         # batches() reuses it instead of mapping and hashing the file again
         # (it re-checks the path, size and manifest hash before trusting it).
-        # The token path as batches() spells it (from the corpus's tokens_dir).
-        var token_file = _join(corpus_path(py_item(_fields(result), nk[].k_tokens_dir)), "tokens.i32")
-        var token_size = corpus_file_size(token_file)
-        var mapped = corpus_mapped(token_file, token_size, context)
-        var token_sha = PythonObject(sha256_hex_addr(Int(py=mapped._addr), token_size))
-        if not Bool(py=token_sha == py_item(manifest, nk[].k_sha256)):
+        var token_file = corpus_run_join(prepared.tokens_dir, "tokens.i32")
+        var token_size = corpus_run_file_size(token_file)
+        var mapped = corpus_mapped(PythonObject(token_file), token_size, context)
+        var token_sha = sha256_hex_addr(Int(py=mapped._addr), token_size)
+        if token_sha != tokens_manifest_sha(prepared.manifest):
             raise Error("ValueError: mojolearn: cached token hash differs from its manifest; remove the directory to rebuild")
-        py_setitem(_fields(result), nk[].k__tokens_verified, Python.tuple(token_file, PythonObject(token_size), token_sha, mapped))
-        return result
-    var tokenizer = tokenizer_bpe_for(ranks)
-    if not Bool(py=py_item(tokenizer_bpe_identity(tokenizer), nk[].k_sha256) == py_item(identity, nk[].k_sha256)):
-        raise Error("ValueError: mojolearn: cached rank file identity differs from its vocabulary manifest")
-    _source_data(data, src)
-    var temporary = corpus_atomic_begin(final)
-    try:
-        _tokenize(data, src, ranges, tokenizer, identity, temporary, document_bytes)
-        corpus_atomic_commit(temporary, final)
-    except error:
-        corpus_atomic_abort(temporary)
-        raise error^
-    return _corpus_construct(final, ranks, context)
+        py_setitem(_fields(result), nk[].k__tokens_verified,
+                   Python.tuple(PythonObject(token_file), PythonObject(token_size), PythonObject(token_sha), mapped))
+    return result
 
 
 def _batch_fields(value: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -356,8 +202,7 @@ def _batch_method(owner: PythonObject, fields: PythonObject, context: PythonObje
     raise Error("TypeError: native batch operation connection changed")
 
 
-def _batch_verified(verified: PythonObject, token_file: PythonObject, size: Int, manifest: PythonObject) raises -> Bool:
-    var nk = lm_keys()
+def _batch_verified(verified: PythonObject, token_file: String, size: Int, pinned: String) raises -> Bool:
     # A verdict carried from prepare (N174) is used only for the same token
     # file, at the same size, against the manifest just read, and only in the
     # exact form prepare stored; anything else is verified afresh.
@@ -366,52 +211,43 @@ def _batch_verified(verified: PythonObject, token_file: PythonObject, size: Int,
         return False
     if py_type(verified[0]) is not bi.str or py_type(verified[1]) is not bi.int or py_type(verified[2]) is not bi.str:
         return False
-    if not Bool(py=verified[0] == token_file) or Int(py=verified[1]) != size:
+    if String(py=verified[0]) != token_file or Int(py=verified[1]) != size:
         return False
-    if not Bool(py=verified[2] == py_get(manifest, nk[].k_sha256)):
-        return False
-    return True
+    return String(py=verified[2]) == pinned
 
 
 def _batch_init(value: PythonObject, directory: PythonObject, batch_value: PythonObject,
                  length_value: PythonObject, context: PythonObject, verified: PythonObject) raises -> PythonObject:
     var nk = lm_keys()
+    # UNPACK
     var fields = _batch_fields(value, context)
     var path = corpus_path(directory)
-    var raw = corpus_read(_join(path, "manifest.json"))
-    var manifest = native_json_parse(raw)
-    corpus_dict(manifest)
-    if not Bool(py=py_get(manifest, nk[].k_schema) == PythonObject(TOKENS_SCHEMA)):
-        raise Error("ValueError: mojolearn: token manifest is not " + String(TOKENS_SCHEMA))
-    var token_file = _join(path, "tokens.i32")
-    var size = corpus_file_size(token_file)
+    # RUN: the manifest, read once and admitted.
+    var manifest = tokens_manifest_read(path, "token")
+    var token_file = corpus_run_join(path, "tokens.i32")
+    var size = corpus_run_file_size(token_file)
     if size % 4:
         raise Error("ValueError: mojolearn: token payload is not an int32 stream")
+    # The mapping is the public `ids_all` (PACK storage); RUN hashes it in place.
     var mapped = PythonObject(None)
-    var sha = PythonObject(None)
-    if _batch_verified(verified, token_file, size, manifest):
+    var sha = String("")
+    if _batch_verified(verified, token_file, size, tokens_manifest_sha(manifest)):
         mapped = verified[3]
-        sha = verified[2]
+        sha = String(py=verified[2])
     else:
-        mapped = corpus_mapped(token_file, size, context)
-        sha = PythonObject(sha256_hex_addr(Int(py=mapped._addr), size))
-    if not Bool(py=sha == py_item(manifest, nk[].k_sha256)) or not Bool(py=PythonObject(size) == py_item(manifest, nk[].k_bytes)):
-        raise Error("ValueError: mojolearn: pinned tokens length/SHA mismatch for " + String(token_file))
+        mapped = corpus_mapped(PythonObject(token_file), size, context)
+        sha = sha256_hex_addr(Int(py=mapped._addr), size)
+    tokens_manifest_payload(manifest, token_file, size, sha)
     var batch = corpus_int(batch_value, "batch")
     var length = corpus_int(length_value, "length")
-    var span = py_get(manifest, nk[].k_train_range)
-    if span is None or not Bool(py=span):
-        span = Python.list(0, size // 4)
-    if py_type(span) is not native_loaded_module("builtins").list or len(span) != 2:
-        raise Error("ValueError: corpus train_range requires two token offsets")
-    var lo = corpus_int(span[0], "train range start")
-    var hi = corpus_int(span[1], "train range end")
-    if length < 0 or length > 2147483645 or hi - lo < length + 2:
-        raise Error("ValueError: mojolearn: the train range is shorter than one batch row")
+    var lo = 0
+    var hi = 0
+    tokens_manifest_range(manifest, size, length, lo, hi)
+    # PACK
     py_setitem(fields, nk[].k_dir, corpus_path_object(path))
-    py_setitem(fields, nk[].k_manifest, manifest)
-    py_setitem(fields, nk[].k_manifest_sha256, corpus_hash_bytes(raw))
-    py_setitem(fields, nk[].k_sha256, sha)
+    py_setitem(fields, nk[].k_manifest, _manifest_object(manifest))
+    py_setitem(fields, nk[].k_manifest_sha256, PythonObject(tokens_manifest_digest(manifest)))
+    py_setitem(fields, nk[].k_sha256, PythonObject(sha))
     py_setitem(fields, nk[].k_ids_all, mapped)
     py_setitem(fields, nk[].k_batch, batch)
     py_setitem(fields, nk[].k_length, length)
@@ -600,7 +436,7 @@ def _batch_describe(owner: PythonObject, context: PythonObject) raises -> Python
     var source = corpus_ids_snapshot(py_item(fields, nk[].k_ids_all), context)
     var lo = corpus_int(py_item(fields, nk[].k_lo), "lo", True)
     var hi = corpus_int(py_item(fields, nk[].k_hi), "hi", True)
-    return Python.dict(path=_join(corpus_path(py_item(fields, nk[].k_dir)), "tokens.i32"), sha256=corpus_plain(py_item(fields, nk[].k_sha256)),
+    return Python.dict(path=PythonObject(corpus_run_join(corpus_path(py_item(fields, nk[].k_dir)), "tokens.i32")), sha256=corpus_plain(py_item(fields, nk[].k_sha256)),
         manifest_sha256=corpus_plain(py_item(fields, nk[].k_manifest_sha256)), tokens=source.size, train_range=Python.list(lo, hi),
         corpus_sha256=py_item(py_item(manifest, nk[].k_source), nk[].k_sha256), vocabulary_sha256=py_item(vocabulary, nk[].k_sha256), n_vocab=py_item(vocabulary, nk[].k_n_vocab),
         schedule=PythonObject("step k row b: ids[lo + (k*batch*length + b*length) % (hi - lo - length - 1) : +length+1] over the TRAIN range [lo, hi) in tokens; targets shifted one id"))
@@ -692,13 +528,25 @@ def lm_corpus_public_call(name: PythonObject, args: PythonObject) raises -> Pyth
         _ = _positive(args[7], "batch_documents")
         if py_type(args[0]) is not bi.bytes:
             raise Error("TypeError: corpus tokenization requires an immutable bytes snapshot")
-        var source = corpus_plain(args[1])
-        var ranges = corpus_plain(args[2])
-        var identity = corpus_plain(args[4])
-        corpus_dict(source)
-        corpus_dict(ranges)
-        corpus_dict(identity)
-        _tokenize(args[0], source, ranges, args[3], identity, corpus_path(args[5]), document_bytes)
+        # UNPACK: the caller's source and vocabulary records as native JSON
+        # nodes, the ranges as words, the tokenizer's native handle, the
+        # snapshot's address.
+        var data = args[0]
+        corpus_dict(args[1])
+        corpus_dict(args[2])
+        corpus_dict(args[4])
+        var doc = JsonDoc()
+        var source = corpus_json_node(doc, args[1])
+        var ranges = _ranges_unpack(args[2])
+        var identity = corpus_json_node(doc, args[4])
+        var handle = tokenizer_bpe_handle(args[3])
+        var output = corpus_path(args[5])
+        var address = cpython_table()[].PyBytes_AsString(data._obj_ptr)
+        # RUN
+        corpus_tokenize_run(doc, address, len(data), source, ranges, handle.downcast_value_ptr[BpeHandle]()[],
+                            identity, output, document_bytes)
+        _ = handle
+        _ = data
         return PythonObject(None)
     if operation == LM_OPN_CORPUS_INIT:
         _arity(args, 3)
@@ -725,7 +573,7 @@ def lm_corpus_public_call(name: PythonObject, args: PythonObject) raises -> Pyth
         var n_vocab = corpus_int(py_item(vocabulary, nk[].k_n_vocab), "n_vocab")
         var path = corpus_path(py_item(fields, nk[].k_tokens_dir))
         return PythonObject("TokenizedCorpus(tokens=" + String(count) + ", n_vocab=" + String(n_vocab)
-            + ", sha256=" + _prefix(py_item(manifest, nk[].k_sha256)) + ", dir=" + String(py_call(bi.repr, path)) + ")")
+            + ", sha256=" + _prefix(py_item(manifest, nk[].k_sha256)) + ", dir=" + String(py_call(bi.repr, PythonObject(path))) + ")")
     if operation == LM_OPN_BATCHES_INIT:
         _arity(args, 4)
         return _batch_init(args[0], args[1], args[2], args[3], context, PythonObject(None))
@@ -785,6 +633,16 @@ def lm_corpus_public_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
         var message = String(error)
         if message == PYTHON_ERROR_PENDING:
             return optimizer_python_error(error)
+        if message.startswith(CORPUS_OS_ERROR):
+            # PACK of a native file failure: OSError(errno, strerror, path).
+            try:
+                return optimizer_python_error(corpus_os_error_pending(message))
+            except:
+                return raise_python_exception(Error(message), ExceptionType("PyExc_OSError"))
+        if message.startswith("KeyError:"):
+            return raise_python_exception(error_without_class(error, "KeyError"), ExceptionType("PyExc_KeyError"))
+        if message.startswith("OverflowError:"):
+            return raise_python_exception(error_without_class(error, "OverflowError"), ExceptionType("PyExc_OverflowError"))
         if message.startswith("StopIteration:"):
             return raise_python_exception(error_without_class(error, "StopIteration"), ExceptionType("PyExc_StopIteration"))
         if message.startswith("TypeError:"):

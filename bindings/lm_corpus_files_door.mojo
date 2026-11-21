@@ -1,99 +1,53 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Native filesystem, path storage and JSON for the complete corpus operation.
+"""UNPACK and PACK of the corpus operations' paths, bytes and file errors.
 
-Connection runs once during package import. Product calls use retained native
-posix entries with exact strings/bytes, never pathlib, tempfile, shutil, hashlib
-or json Python functions. Paths returned to callers have native slots populated
-directly; their Python convenience methods run only when the caller uses them.
+UNPACK: a caller's path (str, bytes, PosixPath; never a path protocol) to a
+native string, expanded, normalised and resolved by
+`bindings/lm_corpus_files_run.mojo`. PACK: a native path string to the
+`PosixPath` the public fields hold (native slots populated directly; its
+Python convenience methods run only when the caller uses them), file bytes to
+a `bytes` object, and a native file failure to the `OSError` subclass CPython
+picks for its errno.
+
+The file work itself (read, write, hash, directories, the clock) is in the
+RUN file: this door holds no posix entry, no user-database entry, no JSON
+quoting entry and no clock entry any more.
 """
 from std.python import Python, PythonObject
-from std.python._cpython import PyObjectPtr
-from std.os import getenv
-from std.math import isfinite
-from core.sha256 import Sha256, sha256_hex_addr
-from core.sha256_file import sha256_file
 from bindings.py_cpython_table import cpython_table
 from bindings.native_loaded_module_door import native_loaded_module
-from bindings.native_json_door import native_path, native_json_parse
+from bindings.native_json_door import native_path
 from bindings.mode_metadata_native_door import _class_fields
+from bindings.optimizer_public_words_unpack import stash_python_error
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
+from bindings.lm_corpus_files_run import (
+    CORPUS_OS_ERROR, corpus_run_expand, corpus_run_normalize, corpus_run_resolve,
+)
 from core.shared_slot import SharedSlot
 from bindings.lm_keys_unpack import lm_keys
 from bindings.py_balanced import py_item
 
 
 struct CorpusFileConnection(Defaultable, Movable):
-    var entries: PythonObject
     var path_class: PythonObject
     var path_slots: PythonObject
 
     def __init__(out self):
-        self.entries = PythonObject(None)
         self.path_class = PythonObject(None)
         self.path_slots = PythonObject(None)
 
 
-comptime CORPUS_FILES = SharedSlot[CorpusFileConnection, "MojolearnCorpusFileConnectionV1"]
-
-
-struct CorpusEnvironment(Defaultable, Movable):
-    """The corpus doors' user settings, read ONCE per process on first use
-    (lane envgate-neural-lm, 2026-11-15: `HOME` was a getenv per
-    `corpus_path` call and `MOJOLEARN_LM_CACHE` one per corpus call). Set
-    them before the process starts; a change after the first corpus call is
-    not seen."""
-    var home: String
-    var lm_cache: String
-
-    def __init__(out self):
-        self.home = String(getenv("HOME", ""))
-        self.lm_cache = String(getenv("MOJOLEARN_LM_CACHE", ""))
-
-
-comptime CORPUS_ENVIRONMENT = SharedSlot[CorpusEnvironment, "MojolearnCorpusEnvironmentV1"]
-
-
-def corpus_env_home() raises -> String:
-    """`HOME` as the process started (empty when unset)."""
-    return CORPUS_ENVIRONMENT.get_or_create_ptr()[].home.copy()
-
-
-def corpus_env_lm_cache() raises -> String:
-    """`MOJOLEARN_LM_CACHE` as the process started (empty when unset)."""
-    return CORPUS_ENVIRONMENT.get_or_create_ptr()[].lm_cache.copy()
+comptime CORPUS_FILES = SharedSlot[CorpusFileConnection, "MojolearnCorpusFileConnectionV2"]
 
 
 def corpus_files_initialize() raises:
-    """Import-only native API connection; never called by a product operation."""
+    """Import-only connection of the public path class's native storage;
+    never called by a product operation."""
     var nk = lm_keys()
     var s = CORPUS_FILES.get_or_create_ptr()
-    if s[].entries is not None:
+    if s[].path_slots is not None:
         return
     var bi = native_loaded_module("builtins")
-    var entries = Python.dict()
-    var posix = Python.import_module("posix")
-    for name in ["open", "read", "write", "close", "stat", "lstat", "readlink", "getcwd", "mkdir", "rename", "rmdir", "unlink", "listdir", "urandom", "getuid"]:  # small-loop(import-time native filesystem entries)
-        var entry = py_call(bi.getattr, posix, name)
-        if py_type(entry) is not py_type(bi.len):
-            raise Error("TypeError: corpus filesystem connection requires native posix entries")
-        py_setitem(entries, PythonObject(name), entry)
-    for name in ["O_RDONLY", "O_WRONLY", "O_CREAT", "O_TRUNC"]:  # small-loop(import-time native open flags)
-        var flag = py_call(bi.getattr, posix, name)
-        if py_type(flag) is not bi.int:
-            raise Error("TypeError: corpus filesystem flags require exact integers")
-        py_setitem(entries, PythonObject(name), flag)
-    var clock = Python.import_module("time").perf_counter
-    var escape = Python.import_module("_json").encode_basestring_ascii
-    var pwd = Python.import_module("pwd")
-    for name in ["getpwnam", "getpwuid"]:  # small-loop(import-time native user directory entries)
-        var entry = py_call(bi.getattr, pwd, name)
-        if py_type(entry) is not py_type(bi.len):
-            raise Error("TypeError: corpus user lookup requires native entries")
-        py_setitem(entries, PythonObject(name), entry)
-    if py_type(clock) is not py_type(bi.len) or py_type(escape) is not py_type(bi.len):
-        raise Error("TypeError: corpus clock and JSON quoting require native entries")
-    py_setitem(entries, nk[].k_clock, clock)
-    py_setitem(entries, nk[].k_escape, escape)
     var cls = Python.import_module("pathlib").PosixPath
     var slots = Python.dict()
     var member = native_loaded_module("types").MemberDescriptorType
@@ -110,98 +64,21 @@ def corpus_files_initialize() raises:
         raise Error("TypeError: corpus path storage is unsupported by this interpreter")
     s[].path_class = cls
     s[].path_slots = slots
-    s[].entries = entries
 
 
-def _file_entries() raises -> PythonObject:
-    var value = CORPUS_FILES.get_or_create_ptr()[].entries
-    if value is None:
-        raise Error("RuntimeError: corpus requires its import-time native filesystem connection")
-    return value
+def corpus_path(value: PythonObject, expand: Bool = False, resolve: Bool = False) raises -> String:
+    """UNPACK: the caller's path as a native string."""
+    var text = String(py=native_path(value))
+    if expand:
+        text = corpus_run_expand(text)
+    text = corpus_run_normalize(text)
+    return corpus_run_resolve(text) if resolve else text
 
 
-def _file_string(value: PythonObject) raises -> PythonObject:
-    if py_type(value) is not native_loaded_module("builtins").str:
-        raise Error("TypeError: native corpus filesystem requires an admitted string path")
-    return value
-
-
-def _normalize_path(text: PythonObject) raises -> PythonObject:
-    var bi = native_loaded_module("builtins")
-    var parts = py_call(text.split, "/")
-    var clean = bi.list()
-    for i in range(len(parts)):  # driver-loop: normalize admitted path components without path protocols
-        if len(parts[i]) != 0 and parts[i] != PythonObject("."):
-            _ = py_call(clean.append, parts[i])
-    var prefix = ""
-    if Bool(py=py_call(text.startswith, "/")):
-        prefix = "//" if Bool(py=py_call(text.startswith, "//")) and not Bool(py=py_call(text.startswith, "///")) else "/"
-    var result = PythonObject(prefix) + py_call(PythonObject("/").join, clean)
-    return PythonObject(".") if len(result) == 0 else result
-
-
-def _resolved_path(text: PythonObject, depth: Int = 0) raises -> PythonObject:
+def corpus_path_object(path: String) raises -> PythonObject:
+    """PACK: the `PosixPath` of a native path string."""
     var nk = lm_keys()
-    if depth > 40:
-        raise Error("RuntimeError: corpus path contains a symbolic-link loop")
-    var f = _file_entries()
-    var bi = native_loaded_module("builtins")
-    var source = text
-    if not Bool(py=py_call(source.startswith, "/")):
-        source = py_call(py_item(f, nk[].k_getcwd)) + PythonObject("/") + source
-    var parts = py_call(source.split, "/")
-    # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
-    var walked = Optional[PythonObject](PythonObject("/"))
-    for i in range(len(parts)):  # driver-loop: resolve admitted filesystem components and native symlinks
-        var part = parts[i]
-        if len(part) == 0 or part == PythonObject("."):
-            continue
-        var current = walked.value()
-        if part == PythonObject(".."):
-            var parent = py_call(current.rsplit, "/", 1)[0]
-            walked = Optional[PythonObject](parent if len(parent) else PythonObject("/"))
-            continue
-        var next = py_call(current.rstrip, "/") + PythonObject("/") + part
-        var link = False
-        try:
-            link = (Int(py=py_call(py_item(f, nk[].k_lstat), next)[0]) & 0o170000) == 0o120000
-        except:
-            pass  # Path.resolve(strict=False) also retains missing components.
-        if link:
-            var target = py_call(py_item(f, nk[].k_readlink), next)
-            if not Bool(py=py_call(target.startswith, "/")):
-                target = current + PythonObject("/") + target
-            walked = Optional[PythonObject](_resolved_path(target, depth + 1))
-        else:
-            walked = Optional[PythonObject](next)
-    return walked.value()
-
-
-def corpus_path(value: PythonObject, expand: Bool = False, resolve: Bool = False) raises -> PythonObject:
-    var nk = lm_keys()
-    var text = native_path(value)
-    var f = _file_entries()
-    if expand and Bool(py=py_call(text.startswith, "~")):
-        var parts = py_call(text.split, "/", 1)
-        var name = parts[0][py_call(native_loaded_module("builtins").slice, 1, PythonObject(None))]
-        var home = PythonObject("")
-        if len(name) == 0:
-            var env_home = corpus_env_home()
-            home = PythonObject(env_home)
-            if len(home) == 0:
-                home = py_call(py_item(f, nk[].k_getpwuid), py_call(py_item(f, nk[].k_getuid)))[5]
-        else:
-            home = py_call(py_item(f, nk[].k_getpwnam), name)[5]
-        text = home
-        if len(parts) == 2:
-            text = text + PythonObject("/") + parts[1]
-    text = _normalize_path(text)
-    return _resolved_path(text) if resolve else text
-
-
-def corpus_path_object(value: PythonObject) raises -> PythonObject:
-    var nk = lm_keys()
-    var text = _normalize_path(_file_string(value))
+    var text = PythonObject(corpus_run_normalize(path))
     var s = CORPUS_FILES.get_or_create_ptr()
     var bi = native_loaded_module("builtins")
     var slots = s[].path_slots
@@ -250,212 +127,30 @@ def corpus_path_object(value: PythonObject) raises -> PythonObject:
     return result
 
 
-def corpus_read(path: PythonObject) raises -> PythonObject:
-    var nk = lm_keys()
-    var f = _file_entries()
-    var fd = py_call(py_item(f, nk[].k_open), _file_string(path), py_item(f, nk[].k_O_RDONLY))
-    var data = native_loaded_module("builtins").bytearray()
-    try:
-        while True:  # driver-loop: read the corpus or metadata file through native posix chunks
-            var part = py_call(py_item(f, nk[].k_read), fd, 1 << 20)
-            if len(part) == 0:
-                break
-            _ = py_call(data.extend, part)
-    finally:
-        py_call(py_item(f, nk[].k_close), fd)
-    return py_call(native_loaded_module("builtins").bytes, data)
+def corpus_bytes_object(values: List[UInt8]) raises -> PythonObject:
+    """PACK: file bytes read by RUN as one `bytes` object (one copy)."""
+    var raw = cpython_table()[].PyBytes_FromStringAndSize(Int(values.unsafe_ptr()), len(values))
+    _ = len(values)
+    if not raw:
+        # CPython set MemoryError; it is the pending exception the door restores.
+        raise stash_python_error()
+    return PythonObject(from_owned=raw)
 
 
-def corpus_write(path: PythonObject, data: PythonObject) raises:
-    var nk = lm_keys()
-    var f = _file_entries()
-    var bi = native_loaded_module("builtins")
-    if py_type(data) is not bi.bytes and py_type(data) is not bi.bytearray:
-        raise Error("TypeError: corpus write requires exact bytes or bytearray")
-    var flags = Int(py=py_item(f, nk[].k_O_WRONLY)) | Int(py=py_item(f, nk[].k_O_CREAT)) | Int(py=py_item(f, nk[].k_O_TRUNC))
-    var fd = py_call(py_item(f, nk[].k_open), _file_string(path), flags, 0o666)
-    var view = py_call(bi.memoryview, data)
-    try:
-        var at = 0
-        while at < len(data):  # driver-loop: native file writes may complete partially
-            var count = Int(py=py_call(py_item(f, nk[].k_write), fd, view[py_call(bi.slice, at, PythonObject(None))]))
-            if count <= 0:
-                raise Error("OSError: corpus native write did not advance")
-            at += count
-    finally:
-        py_call(py_item(f, nk[].k_close), fd)
-
-
-def corpus_hash_bytes(data: PythonObject) raises -> PythonObject:
-    var bi = native_loaded_module("builtins")
-    if py_type(data) is not bi.bytes and py_type(data) is not bi.bytearray:
-        raise Error("TypeError: corpus hash requires exact bytes or bytearray")
+def corpus_os_error_pending(message: String) raises -> Error:
+    """PACK: `OSError[<errno>]: <path>` of the RUN as the pending Python
+    exception `OSError(errno, strerror, path)` (CPython picks the subclass:
+    FileNotFoundError, PermissionError, ...)."""
+    var view = message.as_bytes()
+    var at = String(CORPUS_OS_ERROR).byte_length()
+    var number = 0
+    while at < len(view) and Int(view[at]) >= 48 and Int(view[at]) <= 57:  # small-loop(digits of one errno)
+        number = number * 10 + Int(view[at]) - 48
+        at += 1
+    var path = message[byte=at + 3:]
+    var b = native_loaded_module("builtins")
+    var text = py_call(native_loaded_module("os").strerror, PythonObject(number))
+    var raised = py_call(b.OSError, PythonObject(number), text, PythonObject(String(path)))
     ref cpy = Python().cpython()
-    var address: Int
-    if py_type(data) is bi.bytes:
-        address = cpython_table()[].PyBytes_AsString(data._obj_ptr)
-    else:
-        address = Int(cpy.lib.get_function[UnsafePointer[Int8, MutUntrackedOrigin]]("PyByteArray_AsString")(data._obj_ptr))
-    var digest = sha256_hex_addr(address, len(data))
-    _ = data
-    return PythonObject(digest)
-
-
-def corpus_hash_file(path: PythonObject) raises -> PythonObject:
-    var nk = lm_keys()
-    # Native streamed digest (core/sha256_file.mojo): the file is read in
-    # native chunks straight into the hasher, with no Python bytes object or
-    # symbol lookup per chunk. Same bytes, same order, same digest. A failure
-    # (missing or unreadable file) falls through to the posix route below,
-    # which raises the original Python error.
-    var text = _file_string(path)
-    try:
-        return PythonObject(sha256_file(String(py=text)))
-    except:
-        pass
-    var f = _file_entries()
-    var fd = py_call(py_item(f, nk[].k_open), _file_string(path), py_item(f, nk[].k_O_RDONLY))
-    var hash = Sha256()
-    try:
-        while True:  # driver-loop: retain bounded native hash chunks for a potentially large token file
-            var part = py_call(py_item(f, nk[].k_read), fd, 1 << 22)
-            if len(part) == 0:
-                break
-            hash.update(cpython_table()[].PyBytes_AsString(part._obj_ptr), len(part))
-            _ = part
-    finally:
-        py_call(py_item(f, nk[].k_close), fd)
-    return PythonObject(hash.hexdigest())
-
-
-def corpus_file_size(path: PythonObject) raises -> Int:
-    var nk = lm_keys()
-    return Int(py=py_call(py_item(_file_entries(), nk[].k_stat), _file_string(path))[6])
-
-
-def corpus_exists(path: PythonObject, directory: Bool = False) raises -> Bool:
-    var nk = lm_keys()
-    try:
-        var mode = Int(py=py_call(py_item(_file_entries(), nk[].k_stat), _file_string(path))[0])
-        return (mode & 0o170000) == (0o040000 if directory else 0o100000)
-    except:
-        return False
-
-
-def _corpus_json(value: PythonObject, depth: Int = 0) raises -> String:
-    var nk = lm_keys()
-    if depth > 128:
-        raise Error("ValueError: corpus metadata exceeds supported JSON nesting")
-    var bi = native_loaded_module("builtins")
-    var cls = py_type(value)
-    if value is None:
-        return "null"
-    if cls is bi.str:
-        return String(py_call(py_item(_file_entries(), nk[].k_escape), value))
-    if cls is bi.bool:
-        return "true" if Bool(py=value) else "false"
-    if cls is bi.int:
-        return String(value)
-    if cls is bi.float:
-        var number = Float64(py=value)
-        if not isfinite(number):
-            return "NaN" if number != number else ("Infinity" if number > 0 else "-Infinity")
-        return String(value)
-    var mapping = cls is bi.dict
-    if not mapping and cls is not bi.list and cls is not bi.tuple:
-        raise Error("TypeError: corpus metadata requires native JSON containers and scalar values")
-    var keys = py_call(bi.list, value.keys()) if mapping else PythonObject(None)
-    if mapping:
-        for i in range(len(keys)):  # driver-loop: admit all dictionary keys before native JSON item lookup
-            if py_type(keys[i]) is not bi.str:
-                raise Error("TypeError: corpus JSON object keys must be exact strings")
-    var count = len(value)
-    if count == 0:
-        return "{}" if mapping else "[]"
-    var result = "{\n" if mapping else "[\n"
-    var indent = String()
-    for _ in range(depth + 1):  # driver-loop: indentation follows serialized JSON nesting
-        indent += "  "
-    for i in range(count):  # driver-loop: serialize admitted JSON items in insertion order
-        if i:
-            result += ",\n"
-        result += indent
-        if mapping:
-            result += String(py_call(py_item(_file_entries(), nk[].k_escape), keys[i])) + ": "
-            result += _corpus_json(value[keys[i]], depth + 1)
-        else:
-            result += _corpus_json(value[i], depth + 1)
-    var close_indent = String()
-    for _ in range(depth):  # driver-loop: closing indentation follows serialized JSON nesting
-        close_indent += "  "
-    return result + "\n" + close_indent + ("}" if mapping else "]")
-
-
-def corpus_read_json(path: PythonObject) raises -> PythonObject:
-    return native_json_parse(corpus_read(path))
-
-
-def corpus_write_json(path: PythonObject, value: PythonObject) raises:
-    var text = PythonObject(_corpus_json(value) + "\n")
-    corpus_write(path, py_call(text.encode, "utf-8"))
-
-
-def _corpus_mkdir(path: PythonObject) raises:
-    var nk = lm_keys()
-    if corpus_exists(path, True):
-        return
-    var parts = py_call(path.rsplit, "/", 1)
-    if len(parts) == 2 and len(parts[0]):
-        _corpus_mkdir(parts[0])
-    try:
-        py_call(py_item(_file_entries(), nk[].k_mkdir), path, 0o777)
-    except err:
-        if not corpus_exists(path, True):
-            raise err
-
-
-def _corpus_remove(path: PythonObject) raises:
-    var nk = lm_keys()
-    var f = _file_entries()
-    var mode = Int(py=py_call(py_item(f, nk[].k_lstat), path)[0])
-    if (mode & 0o170000) != 0o040000:
-        py_call(py_item(f, nk[].k_unlink), path)
-        return
-    var entries = py_call(py_item(f, nk[].k_listdir), path)
-    for i in range(len(entries)):  # driver-loop: remove only the unpublished corpus temporary tree
-        _corpus_remove(path + PythonObject("/") + entries[i])
-    py_call(py_item(f, nk[].k_rmdir), path)
-
-
-def corpus_atomic_begin(final: PythonObject) raises -> PythonObject:
-    var nk = lm_keys()
-    _ = _file_string(final)
-    var parts = py_call(final.rsplit, "/", 1)
-    var parent = parts[0] if len(parts) == 2 and len(parts[0]) else PythonObject(".")
-    if len(parts) == 2 and len(parts[0]) == 0:
-        parent = PythonObject("/")
-    _corpus_mkdir(parent)
-    var f = _file_entries()
-    var temporary = final + PythonObject(".partial-") + py_call(py_call(py_item(f, nk[].k_urandom), 12).hex)
-    py_call(py_item(f, nk[].k_mkdir), temporary, 0o700)
-    return temporary
-
-
-def corpus_atomic_commit(temporary: PythonObject, final: PythonObject) raises:
-    var nk = lm_keys()
-    if corpus_exists(final, True):
-        _corpus_remove(_file_string(temporary))
-    else:
-        py_call(py_item(_file_entries(), nk[].k_rename), _file_string(temporary), _file_string(final))
-
-
-def corpus_atomic_abort(temporary: PythonObject) raises:
-    try:
-        _corpus_remove(_file_string(temporary))
-    except:
-        pass
-
-
-def corpus_seconds() raises -> Float64:
-    var nk = lm_keys()
-    return Float64(py=py_call(py_item(_file_entries(), nk[].k_clock)))
+    cpy.lib.get_function[NoneType]("PyErr_SetObject")(py_type(raised)._obj_ptr, raised._obj_ptr)
+    return stash_python_error()
