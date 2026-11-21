@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """The member boundary of the XNeighbors family (UNPACK / PACK of
 core/xneighbors_member.mojo). Published: NearestCentroid (kind 0),
-LocalOutlierFactor (kind 1). Not yet published (admit refuses with the kind): OneClassSVM
-KernelPCA PolynomialCountSketch AdditiveChi2Sampler SkewedChi2Sampler
+LocalOutlierFactor (kind 1), OneClassSVM (kind 2). Not yet published (admit
+refuses with the kind): KernelPCA PolynomialCountSketch AdditiveChi2Sampler SkewedChi2Sampler
 LabelPropagation LabelSpreading KNNImputer SVGP.
 
   * `xneighbors_member_admit` (UNPACK): the estimator's own parameter checks
@@ -23,6 +23,11 @@ LabelPropagation LabelSpreading KNNImputer SVGP.
     LocalOutlierFactor: `_fit_X` (a new Array: the member's copy of the rows
     it borrowed), `_fit_dist`, `_lrd`, `negative_outlier_factor_`, `offset_`,
     `n_neighbors_`, `n_features_in_`, `n_samples_fit_`, as `_lof_fit_pack`.
+    OneClassSVM: admit = `oc_fit_unpack`'s checks and words with the door's
+    own helpers on the shared family context (a precomputed kernel answers
+    False: the caller keeps the doors), the solve the door picks for the
+    image (the resident solve's entry in `route.second`), the image's fused
+    labels and `family_svc_xn_old_items`; pack = `oc_fit_pack`'s fields.
   * `xneighbors_member_state` (UNPACK): a member state from a fitted
     estimator's arrays (NearestCentroid: the class count is `class_prior_`'s
     length).
@@ -41,6 +46,17 @@ from bindings.classical_labels_door import labels_cast
 from bindings.family_common_pack import family_field
 from bindings.member_owner_unpack import MemberOwner, member_labels_take
 from bindings.nearest_centroid_provider_unpack import NcConnection
+from bindings.ocsvm_provider_unpack import OcConnection
+from bindings.ocsvm_scalar_boundary_door import oc_kernel_admit, oc_parameter_repr, oc_precomputed, oc_name
+from bindings.svc_ocsvm_boundary_unpack import (
+    _oc_float, _oc_int, _oc_kernel_code, _fast_tier_native, _ocsvm_labels_available,
+)
+from bindings.svc_common_pack import svc_scalar_array
+from bindings.svc_common_unpack import svc_truthy
+from core.ocsvm_resident_api import OCSVM_RESIDENT_COUNT
+from svm.svc_ocsvm_native_run import OC_SOLVE_GRAM, OC_SOLVE_RESIDENT, OC_SOLVE_DESCRIPTOR
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entry
+from providers.python.x_neighbors_admission_pyapi_door import xn_is_module, xn_capabilities
 from bindings.neighbors_local_native_door import _lof_check
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_contains, py_fields, py_get, py_setitem, py_type
@@ -48,10 +64,11 @@ from core.device_route import DeviceRoute, DEVICE_CPU, DEVICE_GPU, device_vendor
 from core.entry_table import EntryRef, entry_ref_word
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free,
-    MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_IMPORT_DONE, MEMBER_F64,
+    MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_IMPORT_DONE, MEMBER_F64, MEMBER_I32,
 )
 from core.xneighbors_member import (
-    XNEIGHBORS_KIND_NEAREST_CENTROID, XNEIGHBORS_KIND_LOF,
+    XNEIGHBORS_KIND_NEAREST_CENTROID, XNEIGHBORS_KIND_LOF, XNEIGHBORS_KIND_OCSVM,
+    OC_BLOCK_VECTORS, OC_BLOCK_DUAL, OC_BLOCK_SUPPORT, OC_BLOCK_SCALARS, OC_GAMMA_VALUE, OC_GAMMA_SCALE, OC_GAMMA_AUTO,
     NC_BLOCK_CENTROIDS, NC_BLOCK_STD, NC_BLOCK_DEVIATIONS, NC_BLOCK_PRIOR,
     LOF_BLOCK_ROWS, LOF_BLOCK_DISTANCES, LOF_BLOCK_DENSITIES, LOF_BLOCK_SCORES, LOF_BLOCK_OFFSET,
 )
@@ -97,6 +114,18 @@ def _route(model: PythonObject, context: PythonObject, b: PythonObject, mut owne
     return True
 
 
+def _family_context() raises -> PythonObject:
+    """The shared family context every x_neighbors door is called with
+    (`_native_family_bridge._CONTEXT`, the estimator modules' `_NATIVE_CONTEXT`):
+    the tables and A/B arms the doors read come from here, never from a
+    caller's context."""
+    var bridge = py_fields(native_loaded_module("mojolearn._native_family_bridge"))
+    var family = py_get(bridge, PythonObject("_CONTEXT"), PythonObject(None))
+    if family is None:
+        raise Error("ImportError: mojolearn: the family bridge is not connected")
+    return family
+
+
 def _loc_flags() raises -> PythonObject:
     """The LocalOutlierFactor A/B arms exactly where the estimator's own door
     reads them (bindings/neighbors_local_native_door.mojo `_flag`): the
@@ -104,7 +133,7 @@ def _loc_flags() raises -> PythonObject:
     x_neighbors door is called with (`_native_family_bridge._CONTEXT`, filled
     at `_expansion_neighbors` import). Never a default: a missing table is
     the same KeyError the door raises, so the caller falls back."""
-    var family = py_fields(native_loaded_module("mojolearn._native_family_bridge"))["_CONTEXT"]
+    var family = _family_context()
     var flags = py_get(family, PythonObject("family_xn_loc_flags"), PythonObject(None))
     if flags is None:
         raise Error("KeyError: 'family_xn_loc_flags'")
@@ -129,10 +158,79 @@ def _lof_admit(fields: PythonObject, context: PythonObject, b: PythonObject, mut
     owner.plan.params = words^
 
 
+def _ocsvm_admit(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
+    mut owner: MemberOwner) raises -> Bool:
+    """`oc_fit_unpack`'s parameter checks and words, in its order, read with
+    the door's own helpers on the shared family context; the solve and the
+    query path the door would pick for this image. False (not a member, the
+    caller keeps the estimator's doors): a precomputed kernel (its queries
+    index the Gram columns), or an image that publishes no member entry."""
+    var family = _family_context()
+    var kernel = family_field(fields, "kernel")
+    if Bool(py=py_call(b.callable, kernel)):
+        raise Error("NotImplementedError: OneClassSVM callable kernels require a native kernel name")
+    if not oc_kernel_admit(kernel, family):
+        raise Error("NotImplementedError: OneClassSVM: kernel=" + oc_parameter_repr(kernel, family)
+            + " is not implemented")
+    var nu = _oc_float(family_field(fields, "nu"), family)
+    if not (0.0 < nu and nu <= 1.0):
+        raise Error("nu must be in (0, 1]")
+    if oc_precomputed(kernel, family):
+        return False
+    var degree = _oc_int(family_field(fields, "degree"), family)
+    var coef0 = _oc_float(family_field(fields, "coef0"), family)
+    var gamma = family_field(fields, "gamma")
+    var gamma_mode = OC_GAMMA_VALUE
+    var gamma_value = 0.0
+    if gamma is None or oc_name(gamma, "auto", family):
+        gamma_mode = OC_GAMMA_AUTO
+    elif oc_name(gamma, "scale", family):
+        gamma_mode = OC_GAMMA_SCALE
+    else:
+        gamma_value = _oc_float(gamma, family)
+    var max_iter = _oc_int(family_field(fields, "max_iter"), family)
+    var tol = _oc_float(family_field(fields, "tol"), family)
+    var code = _oc_kernel_code(kernel, family)
+    if not _route(model, context, b, owner):
+        return False
+    var admitted = owner.pins[1]
+    var connection = OcConnection(admitted)
+    # The door's resident probe, once per member (the fit asks it per call).
+    var fast = False
+    var resident_available = False
+    if xn_is_module(admitted):
+        fast = _fast_tier_native(connection, admitted, family)
+        var entry = "x_neighbors_ocsvm_resident" if fast else "x_neighbors_ocsvm_resident_idn"
+        resident_available = neural_descriptor_entry(xn_module(admitted), entry, False) is not None
+    else:
+        resident_available = (xn_capabilities(admitted) & 1) != 0
+    var solve = OC_SOLVE_GRAM
+    if resident_available:
+        if xn_is_module(admitted):
+            solve = OC_SOLVE_RESIDENT
+            var resident = connection.resident_driver()
+            owner.plan.route.second = EntryRef(resident.entry,
+                entry_ref_word(owner.plan.route.mode, owner.plan.route.vendor, OCSVM_RESIDENT_COUNT))
+            owner.plan.route.has_second = True
+        else:
+            solve = OC_SOLVE_DESCRIPTOR
+    var fused_labels = _ocsvm_labels_available(admitted)
+    var old_items = svc_truthy(family["family_svc_xn_old_items"])
+    var words: List[Float64] = [Float64(XNEIGHBORS_KIND_OCSVM), Float64(code), nu, Float64(degree), coef0,
+        Float64(gamma_mode), gamma_value, Float64(10000000 if max_iter < 0 else max_iter), tol, Float64(solve),
+        1.0 if fast else 0.0, 1.0 if fused_labels else 0.0, 1.0 if old_items else 0.0]
+    owner.plan.params = words^
+    owner.pins = Python.tuple(owner.pins, connection.provider, connection.resident_provider)
+    _ = connection^
+    return True
+
+
 def xneighbors_member_admit(model: PythonObject, fields: PythonObject, kind: Int, context: PythonObject,
     b: PythonObject, mut owner: MemberOwner) raises -> Bool:
     """UNPACK: fill `owner.plan.route`, `owner.plan.params` and `owner.pins`
     from the unfitted estimator. False: its image publishes no member entry."""
+    if kind == XNEIGHBORS_KIND_OCSVM:
+        return _ocsvm_admit(model, fields, context, b, owner)
     if kind != XNEIGHBORS_KIND_NEAREST_CENTROID and kind != XNEIGHBORS_KIND_LOF:
         raise Error("ValueError: mojolearn: XNeighbors member kind " + String(kind) + " is not published")
     if kind == XNEIGHBORS_KIND_LOF:
@@ -345,12 +443,87 @@ def _lof_state(fields: PythonObject, context: PythonObject, b: PythonObject, pla
     return call.state
 
 
+def _ocsvm_pack(fields: PythonObject, context: PythonObject, plan: MemberPlan, state: Int) raises:
+    """`oc_fit_pack`'s fields (an unweighted, kernel fit), in its order."""
+    var call = MemberCall(plan.route, state)
+    call.block = OC_BLOCK_SCALARS
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    var scalars = _F64P(unsafe_from_address=call.dst.data)
+    var gamma = scalars[0]
+    var rho = scalars[1]
+    var iterations = Int(scalars[2])
+    var features = Int(scalars[3])
+    call.block = OC_BLOCK_SUPPORT
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    var support = _publish_block(call, "<i4", context, 4, True)
+    call.block = OC_BLOCK_VECTORS
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    var vectors = _publish_block(call, "<f4", context, 4, False)
+    call.block = OC_BLOCK_DUAL
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    var dual = _publish_block(call, "<f4", context, 4, False)
+    py_setitem(fields, "_gamma", PythonObject(gamma))
+    py_setitem(fields, "support_", support)
+    py_setitem(fields, "support_vectors_", vectors)
+    py_setitem(fields, "dual_coef_", dual)
+    py_setitem(fields, "intercept_", svc_scalar_array(-rho, "<f4", context))
+    py_setitem(fields, "offset_", PythonObject(rho))
+    py_setitem(fields, "n_iter_", PythonObject(iterations))
+    py_setitem(fields, "n_features_in_", PythonObject(features))
+    py_setitem(fields, "fit_status_", PythonObject(0))
+
+
+def _ocsvm_state(fields: PythonObject, context: PythonObject, b: PythonObject, plan: MemberPlan) raises -> Int:
+    var vectors = _f32_block(fields, "support_vectors_", 2, context)
+    var dual = _f32_block(fields, "dual_coef_", 2, context)
+    var support_source = py_get(fields, PythonObject("support_"))
+    var gamma_source = py_get(fields, PythonObject("_gamma"))
+    var offset_source = py_get(fields, PythonObject("offset_"))
+    var iterations_source = py_get(fields, PythonObject("n_iter_"))
+    if support_source is None or gamma_source is None or offset_source is None or iterations_source is None:
+        raise Error("NotFittedError: this member is not fitted yet")
+    var support_view = admit_c_view(support_source, "support_", context)
+    var supports = Int(py=support_view.size)
+    var support = admitted_storage_native([supports], "<i4", context, as_array=True)
+    labels_cast(Int(py=classical_address(support_view)), admitted_dtype(support_view, context),
+        Int(py=classical_address(support)), "<i4", supports, context)
+    var scalars: List[Float64] = [Float64(py=py_call(b.float, gamma_source)),
+        Float64(py=py_call(b.float, offset_source)), Float64(Int(py=py_call(b.int, iterations_source))),
+        Float64(Int(py=vectors.shape[1]))]
+    var call = member_new(plan)
+    try:
+        call.block = OC_BLOCK_VECTORS
+        call.x = MemberMatrix(Int(py=classical_address(vectors)), Int(py=vectors.shape[0]), Int(py=vectors.shape[1]))
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+        call.block = OC_BLOCK_DUAL
+        call.x = MemberMatrix(Int(py=classical_address(dual)), 1, Int(py=dual.size))
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+        call.block = OC_BLOCK_SUPPORT
+        call.x = MemberMatrix(Int(py=classical_address(support)), 1, supports, MEMBER_I32)
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+        call.block = OC_BLOCK_SCALARS
+        call.x = MemberMatrix(Int(scalars.unsafe_ptr()), 1, 4, MEMBER_F64)
+        call.flags = MEMBER_IMPORT_DONE
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+    except error:
+        member_free(plan, call)
+        raise error
+    _ = vectors
+    _ = dual
+    _ = support_view
+    _ = support
+    _ = scalars^
+    return call.state
+
+
 def xneighbors_member_pack(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
     plan: MemberPlan, state: Int) raises:
     """PACK: write the fitted attributes of state `state` into `model`, as
     the estimator's own fit does."""
     if plan.kind == XNEIGHBORS_KIND_LOF:
         _lof_pack(fields, context, plan, state)
+    elif plan.kind == XNEIGHBORS_KIND_OCSVM:
+        _ocsvm_pack(fields, context, plan, state)
     else:
         _nc_pack(fields, context, b, plan, state)
 
@@ -361,4 +534,6 @@ def xneighbors_member_state(model: PythonObject, fields: PythonObject, context: 
     The caller frees it (`member_free`)."""
     if plan.kind == XNEIGHBORS_KIND_LOF:
         return _lof_state(fields, context, b, plan)
+    if plan.kind == XNEIGHBORS_KIND_OCSVM:
+        return _ocsvm_state(fields, context, b, plan)
     return _nc_state(fields, context, plan)

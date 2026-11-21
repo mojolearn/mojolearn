@@ -9,9 +9,11 @@ it reads: `entry` = the x_neighbors native operations entry of the image the
 route resolved to (`x_neighbors_native_api_v1`, the `XnDriver` entry every
 x_neighbors door uses). No kernel is touched.
 
-Kinds (MEMBER_OP_NEW word 0): 0 NearestCentroid, 1 LocalOutlierFactor. The
-other classes of the family are not published yet (MEMBER-ABI-V2.md family
-12).
+Kinds (MEMBER_OP_NEW word 0): 0 NearestCentroid, 1 LocalOutlierFactor,
+2 OneClassSVM. The other classes of the family are not published yet
+(MEMBER-ABI-V2.md family 12). OUTPUTS with no state answers from the kind
+word and `call.classes` (NearestCentroid: proba `classes`, decision 1 for two
+classes else `classes`, predict 1; the outlier detectors: 1 column).
 
 NearestCentroid (kind 0). RUN: neighbors/nearest_centroid_run.mojo
 (`nc_fit_count_run`, `nc_fit_priors_run`, `nc_fit_run`, `nc_labels_run`,
@@ -56,6 +58,29 @@ Blocks: 64 the fitted rows float32 rows x features, 65 their k-distances
 float32 rows x k, 66 local reachability densities float32 1 x rows, 67
 negative_outlier_factor float32 1 x rows, 68 the offset (float64 1 x 1).
 
+OneClassSVM (kind 2). RUN: svm/svc_ocsvm_native_run.mojo (`oc_fit_run`,
+`oc_query_run`, `oc_decision_run`, `oc_labels_run`) and
+core/ocsvm_plan.mojo `oc_take_rows_into`, as the estimator's door
+(bindings/svc_ocsvm_native_door.mojo) runs them. Route slots: `entry` = the
+x_neighbors native operations entry; `second` = the image's resident
+OneClassSVM solve (`ocsvm_resident_native_api_v1`, read only when word 9 is
+the resident solve). MEMBER_OP_NEW parameters (count 13): [0] kind 2, [1]
+kernel code (the family's `family_svc_xn_kernels` code), [2] nu, [3] degree,
+[4] coef0, [5] gamma (0 the value in word 6, 1 'scale', 2 'auto' = 1 /
+features), [6] gamma value, [7] the solve's iteration cap (max_iter, or
+10000000 for -1), [8] tol, [9] the solve (svm/svc_ocsvm_native_run.mojo
+OC_SOLVE_*), [10] the resident solve's fast tier (0 / 1), [11] the image's
+fused labels (0 / 1), [12] the old-items switch (`family_svc_xn_old_items`).
+A precomputed kernel is not a member (admit answers False). Views: X float32
+rows x features (host, dense; no y, no weights: MEMBER_CAN_SAMPLE_WEIGHT is
+not set, no index, no device view). FIT with `fit_output = MEMBER_OP_PREDICT`
+also writes fit_predict's int64 labels. PREDICT int64 (-1 / 1), DECISION and
+SCORE_SAMPLES float32, rows x 1. Blocks: 64 support vectors float32
+supports x features, 65 dual coefficients float32 1 x supports, 66 support
+indices int32 1 x supports, 67 scalars float64 1 x 4 (gamma used, offset
+(rho), n_iter, features). A fit reads X only during the call (the support
+vectors it keeps are gathered into the slot).
+
 LIFETIME: a NearestCentroid fit reads X and y only during the call (its
 fitted state is the centroids it computes); nothing of X is kept or copied.
 A LocalOutlierFactor fit BORROWS X as its fitted rows, as the estimator's
@@ -94,6 +119,12 @@ from neighbors.lof_run import (
     LofFitRequest, LofFitOutcome, LofQueryRequest, lof_fit_run, lof_fit_labels_run, lof_query_run,
 )
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
+from core.ocsvm_resident_api import OcResidentDriver
+from core.ocsvm_plan import oc_take_rows_into
+from svm.svc_ocsvm_native_run import (
+    OC_SOLVE_RESIDENT, OC_QUERY_FUSED_LABELS, OC_QUERY_KERNEL_PRODUCT, OC_QUERY_GRAM_KERNEL,
+    OcFitRequest, OcQueryRequest, oc_fit_run, oc_query_run, oc_decision_run, oc_labels_run,
+)
 from core.neighbors_native_driver import XnDriver
 from neighbors.nearest_centroid_run import (
     NC_PRIORS_EMPIRICAL, NC_PRIORS_UNIFORM, NC_PRIORS_GIVEN,
@@ -110,7 +141,8 @@ comptime _CHUNK = 256
 comptime _INDEX_SPAN = 16777216
 comptime XNEIGHBORS_KIND_NEAREST_CENTROID = 0
 comptime XNEIGHBORS_KIND_LOF = 1
-comptime XNEIGHBORS_KIND_COUNT = 2
+comptime XNEIGHBORS_KIND_OCSVM = 2
+comptime XNEIGHBORS_KIND_COUNT = 3
 comptime NC_BLOCK_CENTROIDS = MEMBER_BLOCK_FAMILY
 comptime NC_BLOCK_STD = MEMBER_BLOCK_FAMILY + 1
 comptime NC_BLOCK_DEVIATIONS = MEMBER_BLOCK_FAMILY + 2
@@ -122,6 +154,15 @@ comptime LOF_BLOCK_DENSITIES = MEMBER_BLOCK_FAMILY + 2
 comptime LOF_BLOCK_SCORES = MEMBER_BLOCK_FAMILY + 3
 comptime LOF_BLOCK_OFFSET = MEMBER_BLOCK_FAMILY + 4
 comptime _LOF_BLOCKS = 5
+comptime OC_BLOCK_VECTORS = MEMBER_BLOCK_FAMILY
+comptime OC_BLOCK_DUAL = MEMBER_BLOCK_FAMILY + 1
+comptime OC_BLOCK_SUPPORT = MEMBER_BLOCK_FAMILY + 2
+comptime OC_BLOCK_SCALARS = MEMBER_BLOCK_FAMILY + 3
+comptime _OC_BLOCKS = 4
+#: OneClassSVM gamma words (MEMBER_OP_NEW word 5).
+comptime OC_GAMMA_VALUE = 0
+comptime OC_GAMMA_SCALE = 1
+comptime OC_GAMMA_AUTO = 2
 comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
 comptime _I64P = MutPointer[Int64, MutUntrackedOrigin]
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -168,6 +209,27 @@ struct XNeighborsMemberSlot(Copyable, Movable, Defaultable):
     var densities: List[Float32]
     var scores: List[Float32]
     var offset_word: List[Float64]
+    # OneClassSVM words (kind 2) and its fitted state (owned: the support
+    # vectors are gathered from X by the fit, as the door's PACK allocates them).
+    var oc_kernel: Int
+    var oc_nu: Float64
+    var oc_degree: Int
+    var oc_coef0: Float64
+    var oc_gamma_mode: Int
+    var oc_gamma_given: Float64
+    var oc_cap: Int
+    var oc_tol: Float64
+    var oc_solve: Int
+    var oc_fast: Bool
+    var oc_labels: Bool
+    var oc_old_items: Bool
+    var oc_gamma: Float64
+    var oc_rho: Float64
+    var oc_iterations: Int
+    var oc_support: List[Int32]
+    var oc_vectors: List[Float32]
+    var oc_dual: List[Float32]
+    var oc_scalars: List[Float64]
 
     def __init__(out self):
         self.generation = 0
@@ -204,6 +266,25 @@ struct XNeighborsMemberSlot(Copyable, Movable, Defaultable):
         self.densities = List[Float32]()
         self.scores = List[Float32]()
         self.offset_word = List[Float64](length=1, fill=0.0)
+        self.oc_kernel = 0
+        self.oc_nu = 0.5
+        self.oc_degree = 3
+        self.oc_coef0 = 0.0
+        self.oc_gamma_mode = OC_GAMMA_SCALE
+        self.oc_gamma_given = 0.0
+        self.oc_cap = 10000000
+        self.oc_tol = 0.001
+        self.oc_solve = 0
+        self.oc_fast = False
+        self.oc_labels = False
+        self.oc_old_items = False
+        self.oc_gamma = 0.0
+        self.oc_rho = 0.0
+        self.oc_iterations = 0
+        self.oc_support = List[Int32]()
+        self.oc_vectors = List[Float32]()
+        self.oc_dual = List[Float32]()
+        self.oc_scalars = List[Float64](length=4, fill=0.0)
 
 
 struct XNeighborsMemberStore(Defaultable, Movable):
@@ -246,6 +327,9 @@ def _clear(slot: _SlotPtr):
     slot[].distances = List[Float32]()
     slot[].densities = List[Float32]()
     slot[].scores = List[Float32]()
+    slot[].oc_support = List[Int32]()
+    slot[].oc_vectors = List[Float32]()
+    slot[].oc_dual = List[Float32]()
 
 
 def _mint(words: _F64P, count: Int) raises -> Int:
@@ -276,6 +360,19 @@ def _mint(words: _F64P, count: Int) raises -> Int:
             slot[].wide = words[5] != 0.0
             for i in range(6, count):  # driver-loop: over the given priors (one word per class)
                 slot[].given.append(words[i])
+        elif slot[].kind == XNEIGHBORS_KIND_OCSVM:
+            slot[].oc_kernel = Int(words[1])
+            slot[].oc_nu = words[2]
+            slot[].oc_degree = Int(words[3])
+            slot[].oc_coef0 = words[4]
+            slot[].oc_gamma_mode = Int(words[5])
+            slot[].oc_gamma_given = words[6]
+            slot[].oc_cap = Int(words[7])
+            slot[].oc_tol = words[8]
+            slot[].oc_solve = Int(words[9])
+            slot[].oc_fast = words[10] != 0.0
+            slot[].oc_labels = words[11] != 0.0
+            slot[].oc_old_items = words[12] != 0.0
         else:
             slot[].k = Int(words[1])
             slot[].novelty = words[2] != 0.0
@@ -312,8 +409,11 @@ def _lookup(handle: Int, release: Bool) raises -> Int:
 
 
 def _name(slot: _SlotPtr) -> String:
-    return String("NearestCentroid") if slot[].kind == XNEIGHBORS_KIND_NEAREST_CENTROID else String(
-        "LocalOutlierFactor")
+    if slot[].kind == XNEIGHBORS_KIND_NEAREST_CENTROID:
+        return String("NearestCentroid")
+    if slot[].kind == XNEIGHBORS_KIND_OCSVM:
+        return String("OneClassSVM")
+    return String("LocalOutlierFactor")
 
 
 def _whole(call: _CallPtr, estimator: String) raises:
@@ -715,6 +815,200 @@ def _lof_import(slot: _SlotPtr, call: _CallPtr) raises:
     slot[].fitted = True
 
 
+# ------------------------------------------------------------ OneClassSVM
+
+
+def _oc_fit(slot: _SlotPtr, call: _CallPtr) raises:
+    """`OneClassSVM.fit` (bindings/svc_ocsvm_native_door.mojo `_ocsvm_fit`):
+    the request the door's UNPACK builds, `oc_fit_run`, the support prefix
+    and the support vectors gathered from X, in the door's order."""
+    var estimator = _name(slot)
+    _whole(call, estimator)
+    if call[].weights.rows > 0:
+        raise Error("TypeError: a " + estimator + " member fits no sample_weight")
+    var labels = call[].fit_output == MEMBER_OP_PREDICT
+    if call[].fit_output != 0 and not labels:
+        member_unsupported(estimator, call[].fit_output)
+    _dense(call[].x, MEMBER_F32, "X", estimator)
+    var rows = call[].x.rows
+    var features = call[].x.cols
+    if labels:
+        _dense(call[].dst, MEMBER_I64, "the label buffer", estimator)
+        if call[].dst.rows != rows or call[].dst.cols != 1:
+            raise Error("ValueError: the label buffer holds one label per row of X")
+    var request = OcFitRequest()
+    request.x = call[].x.data
+    request.rows = rows
+    request.features = features
+    request.precomputed = False
+    request.nu = slot[].oc_nu
+    request.degree = slot[].oc_degree
+    request.coef0 = slot[].oc_coef0
+    if slot[].oc_gamma_mode == OC_GAMMA_SCALE:
+        request.gamma_scale = True  # 1 / (features * variance of X), read by RUN
+    elif slot[].oc_gamma_mode == OC_GAMMA_AUTO:
+        request.gamma = 1.0 / Float64(features)
+    else:
+        request.gamma = slot[].oc_gamma_given
+    request.cap = slot[].oc_cap
+    request.tol = slot[].oc_tol
+    request.kernel = slot[].oc_kernel
+    request.solve = slot[].oc_solve
+    request.resident_fast = slot[].oc_fast
+    var driver = XnDriver(call[].route.entry.call)
+    var resident = Optional[OcResidentDriver]()
+    if slot[].oc_solve == OC_SOLVE_RESIDENT:
+        if not call[].route.has_second:
+            raise Error("member ABI: a OneClassSVM member's resident solve needs the route's second entry")
+        resident = Optional(OcResidentDriver(call[].route.second.call))
+    slot[].fitted = False
+    var run = oc_fit_run(driver, resident, request)
+    var supports = run.state.supports
+    # Unweighted: the support is the solve's compacted prefix (the door's
+    # `svc_prefix`); the vectors are those rows of X (`oc_take_rows_into`).
+    slot[].oc_support = List[Int32](length=supports, fill=Int32(0))
+    slot[].oc_dual = List[Float32](length=supports, fill=Float32(0.0))
+    if supports > 0:
+        unsafe_memcpy(dest=slot[].oc_support.unsafe_ptr(), src=run.state.support_rows.unsafe_ptr(), count=supports)
+        unsafe_memcpy(dest=slot[].oc_dual.unsafe_ptr(), src=run.state.support_values.unsafe_ptr(), count=supports)
+    slot[].oc_vectors = List[Float32](length=supports * features, fill=Float32(0.0))
+    oc_take_rows_into(driver, call[].x.data, rows, features, Int(slot[].oc_support.unsafe_ptr()), supports,
+        Int(slot[].oc_vectors.unsafe_ptr()))
+    slot[].oc_gamma = run.gamma
+    slot[].oc_rho = run.rho
+    slot[].oc_iterations = Int(run.state.iterations[0])
+    _ = run^
+    slot[].rows = rows
+    slot[].features = features
+    slot[].fitted = True
+    if labels:
+        # fit_predict: the door's fit, then its predict on the same rows.
+        _oc_query(slot, call, LOF_RESULT_LABELS, "predict")
+
+
+def _oc_query(slot: _SlotPtr, call: _CallPtr, result: Int, what: String) raises:
+    """score_samples / decision_function / predict, the request as the door's
+    `oc_query_unpack` builds it (labels: predict; offset: decision and
+    predict) and its RUN (`oc_query_run`, `oc_decision_run`,
+    `oc_labels_run`). `result` is the LOF result word of the same meaning."""
+    var estimator = _name(slot)
+    if not slot[].fitted:
+        raise Error("NotFittedError: mojolearn: call fit before " + what)
+    _whole(call, estimator)
+    _dense(call[].x, MEMBER_F32, "X", estimator)
+    if call[].x.cols != slot[].features:
+        raise Error("ValueError: X has " + String(call[].x.cols) + " features, but " + estimator
+            + " is expecting " + String(slot[].features) + " features as input.")
+    var rows = call[].x.rows
+    var labels = result == LOF_RESULT_LABELS
+    var offset = result != LOF_RESULT_SCORES
+    _dense(call[].dst, MEMBER_I64 if labels else MEMBER_F32, "the result buffer", estimator)
+    if call[].dst.rows != rows or call[].dst.cols != 1:
+        raise Error("ValueError: the result buffer holds one value per row of X")
+    var supports = len(slot[].oc_dual)
+    var request = OcQueryRequest()
+    request.rows = rows
+    request.supports = supports
+    request.kernel = slot[].oc_kernel
+    request.degree = slot[].oc_degree
+    request.gamma = slot[].oc_gamma
+    request.coef0 = slot[].oc_coef0
+    request.features = call[].x.cols
+    request.query = call[].x.data
+    request.references = Int(slot[].oc_vectors.unsafe_ptr())
+    request.coefficients = Int(slot[].oc_dual.unsafe_ptr())
+    if supports > 0 and rows > 0 and not slot[].oc_old_items:
+        request.path = OC_QUERY_KERNEL_PRODUCT
+        if labels and slot[].oc_labels:
+            request.offset = slot[].oc_rho
+            request.path = OC_QUERY_FUSED_LABELS
+    else:
+        request.path = OC_QUERY_GRAM_KERNEL
+        request.reference_rows = supports
+    if offset and request.path != OC_QUERY_FUSED_LABELS:
+        request.offset = slot[].oc_rho
+    var driver = XnDriver(call[].route.entry.call)
+    if labels:
+        oc_labels_run(driver, request, call[].dst.data)
+    elif offset:
+        oc_decision_run(driver, request, call[].dst.data)
+    else:
+        oc_query_run(driver, request, call[].dst.data)
+
+
+def _oc_export(slot: _SlotPtr, call: _CallPtr) raises:
+    """A view of one fitted block; the slot owns the words until this
+    state's next fit, import or free."""
+    if not slot[].fitted:
+        raise Error("NotFittedError: this OneClassSVM member is not fitted yet")
+    var block = call[].block
+    if (call[].flags & MEMBER_BLOCK_BY_INDEX) != 0:
+        if block < 0 or block >= _OC_BLOCKS:
+            raise Error("member ABI: a OneClassSVM member has four fitted blocks")
+        block = OC_BLOCK_VECTORS + block
+    var supports = len(slot[].oc_dual)
+    if block == OC_BLOCK_VECTORS:
+        call[].dst = MemberMatrix(Int(slot[].oc_vectors.unsafe_ptr()), supports, slot[].features)
+    elif block == OC_BLOCK_DUAL:
+        call[].dst = MemberMatrix(Int(slot[].oc_dual.unsafe_ptr()), 1, supports)
+    elif block == OC_BLOCK_SUPPORT:
+        call[].dst = MemberMatrix(Int(slot[].oc_support.unsafe_ptr()), 1, supports, MEMBER_I32)
+    elif block == OC_BLOCK_SCALARS:
+        slot[].oc_scalars[0] = slot[].oc_gamma
+        slot[].oc_scalars[1] = slot[].oc_rho
+        slot[].oc_scalars[2] = Float64(slot[].oc_iterations)
+        slot[].oc_scalars[3] = Float64(slot[].features)
+        call[].dst = MemberMatrix(Int(slot[].oc_scalars.unsafe_ptr()), 1, 4, MEMBER_F64)
+    else:
+        raise Error("member ABI: a OneClassSVM member has no fitted block " + String(block))
+    call[].block = block
+    call[].out_cols = _OC_BLOCKS
+
+
+def _oc_import(slot: _SlotPtr, call: _CallPtr) raises:
+    """Copy one fitted block in; MEMBER_IMPORT_DONE completes the state."""
+    var estimator = _name(slot)
+    var block = call[].block
+    var count = call[].x.rows * call[].x.cols
+    if block == OC_BLOCK_SCALARS:
+        _dense(call[].x, MEMBER_F64, "the scalars (gamma, offset, n_iter, features)", estimator)
+        if count != 4:
+            raise Error("member ABI: a OneClassSVM member's scalars are four float64 words")
+        slot[].fitted = False
+        var words = _F64P(unsafe_from_address=call[].x.data)
+        slot[].oc_gamma = words[0]
+        slot[].oc_rho = words[1]
+        slot[].oc_iterations = Int(words[2])
+        slot[].features = Int(words[3])
+    elif block == OC_BLOCK_SUPPORT:
+        _dense(call[].x, MEMBER_I32, "the support indices", estimator)
+        slot[].fitted = False
+        slot[].oc_support = List[Int32](length=count, fill=Int32(0))
+        if count > 0:
+            unsafe_memcpy(dest=slot[].oc_support.unsafe_ptr(), src=_I32P(unsafe_from_address=call[].x.data),
+                count=count)
+    elif block == OC_BLOCK_VECTORS or block == OC_BLOCK_DUAL:
+        _dense(call[].x, MEMBER_F32, "a fitted block", estimator)
+        slot[].fitted = False
+        var words = List[Float32](length=count, fill=Float32(0.0))
+        if count > 0:
+            unsafe_memcpy(dest=words.unsafe_ptr(), src=_F32P(unsafe_from_address=call[].x.data), count=count)
+        if block == OC_BLOCK_VECTORS:
+            slot[].oc_vectors = words^
+        else:
+            slot[].oc_dual = words^
+    elif block != 0 or (call[].flags & MEMBER_IMPORT_DONE) == 0:
+        raise Error("member ABI: a OneClassSVM member has no fitted block " + String(block))
+    if (call[].flags & MEMBER_IMPORT_DONE) == 0:
+        return
+    var supports = len(slot[].oc_dual)
+    if (slot[].features < 1 or len(slot[].oc_support) != supports
+            or len(slot[].oc_vectors) != supports * slot[].features):
+        raise Error("member ABI: a fitted OneClassSVM state needs its support vectors, dual coefficients, "
+            + "support indices and scalars")
+    slot[].fitted = True
+
+
 # ------------------------------------------------------------ dispatch
 
 
@@ -726,11 +1020,15 @@ comptime _NC_MANHATTAN = MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT
 comptime _LOF_NOVELTY = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_DECISION | MEMBER_CAN_SCORE_SAMPLES
     | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT)
 comptime _LOF_OUTLIER = MEMBER_CAN_FIT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT   # fit_predict: FIT + fit_output
+comptime _OCSVM = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_DECISION | MEMBER_CAN_SCORE_SAMPLES
+    | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT)
 
 
 def _capabilities(slot: _SlotPtr) -> Int:
     if slot[].kind == XNEIGHBORS_KIND_LOF:
         return _LOF_NOVELTY if slot[].novelty else _LOF_OUTLIER
+    if slot[].kind == XNEIGHBORS_KIND_OCSVM:
+        return _OCSVM
     return _NC_EUCLIDEAN if slot[].euclidean else _NC_MANHATTAN
 
 
@@ -751,6 +1049,12 @@ def _new(call: _CallPtr) raises:
             raise Error("member ABI: unknown NearestCentroid priors code")
         if (words[2] == 2.0) != (call[].param_count > 6):
             raise Error("member ABI: NearestCentroid given priors come as words 6 .. 6 + classes")
+    elif kind == XNEIGHBORS_KIND_OCSVM:
+        if call[].param_count != 13:
+            raise Error("member ABI: a OneClassSVM member takes thirteen parameters (kind, kernel, nu, degree, "
+                + "coef0, gamma mode, gamma, max_iter cap, tol, solve, fast, fused labels, old_items)")
+        if words[5] != 0.0 and words[5] != 1.0 and words[5] != 2.0:
+            raise Error("member ABI: unknown OneClassSVM gamma code")
     else:
         if call[].param_count != 7:
             raise Error("member ABI: a LocalOutlierFactor member takes seven parameters (kind, n_neighbors, "
@@ -759,11 +1063,30 @@ def _new(call: _CallPtr) raises:
     call[].state = _mint(words, call[].param_count)
 
 
+def _outputs(kind: Int, classes: Int, call: _CallPtr) raises:
+    """OUTPUTS of a kind: NearestCentroid answers `classes` (proba),
+    1 or `classes` (decision), 1 (predict); the outlier detectors one column
+    and no classes."""
+    if kind == XNEIGHBORS_KIND_NEAREST_CENTROID:
+        call[].classes = classes
+        if call[].flags == MEMBER_OP_PREDICT_PROBA:
+            call[].out_cols = classes
+        elif call[].flags == MEMBER_OP_DECISION:
+            call[].out_cols = 1 if classes == 2 else classes
+        else:
+            call[].out_cols = 1
+        return
+    if kind < 0 or kind >= XNEIGHBORS_KIND_COUNT:
+        raise Error("member ABI: unknown XNeighbors member kind")
+    call[].classes = 0
+    call[].out_cols = 1
+
+
 def _xneighbors_member(operation: Int, address: Int) raises -> Int:
     var call = _CallPtr(unsafe_from_address=address)
     if operation == MEMBER_OP_CAPABILITIES:
         if call[].state == 0:
-            return _NC_EUCLIDEAN | _LOF_NOVELTY
+            return _NC_EUCLIDEAN | _LOF_NOVELTY | _OCSVM
         return _capabilities(_SlotPtr(unsafe_from_address=_lookup(call[].state, False)))
     if operation == MEMBER_OP_NEW:
         _new(call)
@@ -772,12 +1095,35 @@ def _xneighbors_member(operation: Int, address: Int) raises -> Int:
         _ = _lookup(call[].state, True)
         call[].state = 0
         return 0
+    if operation == MEMBER_OP_OUTPUTS and call[].state == 0:
+        # No state (member_outputs): answer from the NEW words (the kind)
+        # and `call.classes`, as a state made from them and fitted would.
+        if call[].param_count < 1 or not call[].params:
+            raise Error("member ABI: an XNeighbors member takes its kind as the first parameter")
+        _outputs(Int(_F64P(unsafe_from_address=call[].params)[0]), call[].classes, call)
+        return 0
     var slot = _SlotPtr(unsafe_from_address=_lookup(call[].state, False))
+    if operation == MEMBER_OP_OUTPUTS:
+        _outputs(slot[].kind, slot[].classes if slot[].fitted else call[].classes, call)
+        return 0
+    if slot[].kind == XNEIGHBORS_KIND_OCSVM:
+        if operation == MEMBER_OP_FIT:
+            _oc_fit(slot, call)
+        elif operation == MEMBER_OP_PREDICT:
+            _oc_query(slot, call, LOF_RESULT_LABELS, "predict")
+        elif operation == MEMBER_OP_DECISION:
+            _oc_query(slot, call, LOF_RESULT_DECISION, "decision_function")
+        elif operation == MEMBER_OP_SCORE_SAMPLES:
+            _oc_query(slot, call, LOF_RESULT_SCORES, "score_samples")
+        elif operation == MEMBER_OP_EXPORT:
+            _oc_export(slot, call)
+        elif operation == MEMBER_OP_IMPORT:
+            _oc_import(slot, call)
+        else:
+            member_unsupported(_name(slot), operation)
+        return 0
     if slot[].kind == XNEIGHBORS_KIND_LOF:
-        if operation == MEMBER_OP_OUTPUTS:
-            call[].classes = 0
-            call[].out_cols = 1
-        elif operation == MEMBER_OP_FIT:
+        if operation == MEMBER_OP_FIT:
             _lof_fit(slot, call)
         elif operation == MEMBER_OP_PREDICT:
             _lof_query(slot, call, LOF_RESULT_LABELS, "predict")
@@ -791,16 +1137,6 @@ def _xneighbors_member(operation: Int, address: Int) raises -> Int:
             _lof_import(slot, call)
         else:
             member_unsupported(_name(slot), operation)
-        return 0
-    if operation == MEMBER_OP_OUTPUTS:
-        var classes = slot[].classes if slot[].fitted else call[].classes
-        call[].classes = classes
-        if call[].flags == MEMBER_OP_PREDICT_PROBA:
-            call[].out_cols = classes
-        elif call[].flags == MEMBER_OP_DECISION:
-            call[].out_cols = 1 if classes == 2 else classes
-        else:
-            call[].out_cols = 1
         return 0
     if operation == MEMBER_OP_FIT:
         _nc_fit(slot, call)
