@@ -51,6 +51,7 @@ from core.shared_slot import SharedSlot
 from bindings.native_process_pool_run import (
     ReapOutcome, ProcessPoolRecord, pool_index_admit, pool_wave_width, pool_reply_failed,
 )
+from core.parallel_worker_request import WorkerRequest, WORKER_ECHO_OP
 from bindings.native_keys_unpack import native_keys
 from bindings.native_keys_unpack import (
     NATIVE_PROCESS_OPN_INITIALIZE, NATIVE_PROCESS_OPN_CREATE, NATIVE_PROCESS_OPN_MAP, NATIVE_PROCESS_OPN_CLOSE, NATIVE_PROCESS_OPN_WORKER_ECHO, NATIVE_PROCESS_OPN_ENVIRONMENT,
@@ -571,13 +572,13 @@ def process_pool_start(pool: PythonObject) raises:
 
 def _process_pool_wave(pool: PythonObject, inputs: PythonObject, words: List[List[Int64]]) raises -> PythonObject:
     """Ordered request waves over the pool's workers: request `i` of a wave
-    goes to worker `i` as one typed frame (its words, when `words` has them,
-    and the record UNPACKed from `inputs[i]`), then the replies are read in
+    goes to worker `i` as one typed frame (its request words `words[i]` and
+    the record UNPACKed from `inputs[i]`), then the replies are read in
     request order. Every worker of a wave has its request before the first
     reply is awaited, so the workers compute at the same time."""
     var bi = PROCESS_BOUNDARY.get_or_create_ptr()[].bi
     var total = len(inputs)
-    if len(words) != 0 and len(words) != total:
+    if len(words) != total:
         raise Error("process: typed request words differ from their payloads")
     process_pool_start(pool)
     var nk = native_keys()
@@ -587,7 +588,6 @@ def _process_pool_wave(pool: PythonObject, inputs: PythonObject, words: List[Lis
     # record is held across a socket wait.
     var fds = rec[].native.fds.copy()
     var sequence = rec[].native.sequence
-    var no_request = List[Int64]()
     var result = bi.list()
     var offset = 0
     try:
@@ -595,10 +595,7 @@ def _process_pool_wave(pool: PythonObject, inputs: PythonObject, words: List[Lis
             var width = pool_wave_width(len(fds), total - offset)
             for i in range(width):  # driver-loop: over independent requests launched before consuming wave results
                 var outgoing = wire_unpack(inputs[offset + i])
-                if len(words) != 0:
-                    wire_send_fd(fds[i], -1.0, WIRE_REQUEST, sequence + i, words[offset + i], outgoing)
-                else:
-                    wire_send_fd(fds[i], -1.0, WIRE_REQUEST, sequence + i, no_request, outgoing)
+                wire_send_fd(fds[i], -1.0, WIRE_REQUEST, sequence + i, words[offset + i], outgoing)
             var failure = String()
             for i in range(width):  # driver-loop: over worker replies in fixed logical request order
                 try:
@@ -625,16 +622,15 @@ def _process_pool_wave(pool: PythonObject, inputs: PythonObject, words: List[Lis
     return result
 
 
-def process_pool_map(pool: PythonObject, requests: PythonObject) raises -> PythonObject:
-    """One reply per request, in request order; each request is a value the
-    typed frame carries (its record), with no request words."""
-    var inputs = py_call(PROCESS_BOUNDARY.get_or_create_ptr()[].bi.list, requests)
-    var no_words = List[List[Int64]]()
-    return _process_pool_wave(pool, inputs, no_words)
-
+# Removed (lane pools-frame, 2026-11-21): the untyped `process_pool_map`
+# (requests without request words, the operation as a name inside the value)
+# is gone with its last senders, the shard and forecast doors
+# (bindings/parallel_shard_common_door.mojo `ShardWave`). Every model request
+# is `process_pool_map_typed`; the private "map" operation of `process_call`
+# (the echo worker's protocol probe) sends `WORKER_ECHO_OP` words.
 
 def process_pool_map_typed(pool: PythonObject, words: List[List[Int64]], payloads: PythonObject) raises -> PythonObject:
-    """`process_pool_map` for typed requests: `words[i]` is one encoded
+    """One reply per request, in request order: `words[i]` is one encoded
     `WorkerRequest` (core/parallel_worker_request.mojo) and `payloads[i]` the
     value that rides with it (None for none). `payloads` is an exact list."""
     if py_type(payloads) is not PROCESS_BOUNDARY.get_or_create_ptr()[].bi.list:
@@ -701,7 +697,7 @@ struct WorkerTurn(Movable):
     """One request a worker received: `open` is False for the coordinator's
     close (the worker then leaves its loop), `sequence` is echoed in the
     reply, `request` holds the frame's request words (one encoded
-    `WorkerRequest`; empty for a request sent without words) and `value` is
+    `WorkerRequest`) and `value` is
     the request's PACKed record."""
     var open: Bool
     var sequence: Int
@@ -766,7 +762,15 @@ def process_call(operation: Int, name: PythonObject, args: PythonObject) raises 
     elif operation == NATIVE_PROCESS_OPN_CREATE:
         return process_pool_create(args[0], Bool(py=args[1]), String(args[2]))
     elif operation == NATIVE_PROCESS_OPN_MAP:
-        return process_pool_map(args[0], args[1])
+        # The protocol probe of the echo worker (the installed verifier's and
+        # the pool tests' only use): every value rides beside the echo
+        # operation word, which a model worker refuses as an unknown code.
+        var values = py_call(PROCESS_BOUNDARY.get_or_create_ptr()[].bi.list, args[1])
+        var echo = WorkerRequest(WORKER_ECHO_OP).encode()
+        var echoes = List[List[Int64]]()
+        for i in range(len(values)):  # driver-loop: one echo request word list per probe value
+            echoes.append(echo.copy())
+        return process_pool_map_typed(args[0], echoes, values)
     elif operation == NATIVE_PROCESS_OPN_CLOSE:
         process_pool_close(args[0])
     elif operation == NATIVE_PROCESS_OPN_WORKER_ECHO:
