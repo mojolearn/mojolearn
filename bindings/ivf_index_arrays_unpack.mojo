@@ -52,10 +52,12 @@ from core.hostptr import f32_ptr, i32_ptr, read_i32
 # rs-decomposition, 2026-11-12).
 from ivf.index_arrays_impl import ivf_store_search_result
 from ivf.ivf_index_arrays_run import (
-    IVF_ARRAYS_MAX_ROWS,
     IvfIndexArrays,
+    ivf_admit_index_arrays_run,
     ivf_arrays_check_cells,
-    ivf_read_index_arrays_run,
+    ivf_extend_count_word,
+    ivf_extent_word,
+    ivf_search_extent_words,
     ivf_write_extended_arrays_run,
     ivf_write_index_arrays_run,
     ivf_write_search_result_run,
@@ -66,12 +68,7 @@ def ivf_arrays_extent(value: PythonObject, name: String) raises -> Int:
     var type_name = String(py=value.__class__.__name__)
     if type_name == "bool" or type_name == "bool_":
         raise Error("ivf_flat: " + name + " must be an integer, not a boolean")
-    var v = Int(py=value)
-    if v < 0 or v > IVF_ARRAYS_MAX_ROWS:
-        raise Error(
-            "ivf_flat: " + name + " must be in [0, 2^31), got " + String(v)
-        )
-    return v
+    return ivf_extent_word(Int(py=value), name)
 
 
 def ivf_read_index_arrays(
@@ -101,16 +98,9 @@ def ivf_read_index_arrays(
     var dim = ivf_arrays_extent(params[1], String("dim"))
     var n_lists = ivf_arrays_extent(params[2], String("n_lists"))
     var metric = Int(py=params[3])
-    ivf_arrays_check_cells(n, dim, String("n * dim"))
-    ivf_arrays_check_cells(n_lists, dim, String("n_lists * dim"))
-    if n < 1 or dim < 1 or n_lists < 1:
-        raise Error(
-            what + ": n, dim and n_lists must all be at least 1, got n="
-            + String(n) + " dim=" + String(dim) + " n_lists=" + String(n_lists)
-        )
-    return ivf_read_index_arrays_run(
+    return ivf_admit_index_arrays_run(
         Int(py=addrs[0]), Int(py=addrs[1]), Int(py=addrs[2]), Int(py=addrs[3]), Int(py=addrs[4]),
-        n_lists, dim, n, metric, partial_storage,
+        n_lists, dim, n, metric, partial_storage, what,
     )
 
 
@@ -128,7 +118,7 @@ def ivf_search_extents(params: PythonObject) raises -> Tuple[Int, Int, Int]:
     var m = ivf_arrays_extent(params[4], String("m"))
     var k = ivf_arrays_extent(params[5], String("k"))
     var n_probes = ivf_arrays_extent(params[6], String("n_probes"))
-    ivf_arrays_check_cells(m, k, String("m * k"))
+    ivf_search_extent_words(m, k, n_probes)
     return (m, k, n_probes)
 
 
@@ -196,16 +186,7 @@ def ivf_extend_count(params: PythonObject, n_rows: Int, dim: Int) raises -> Int:
     """`ivf_flat_extend`'s param 4, `n_new`: at least one row, the extended
     row count below 2^31 (the ids cross as int32) and `(n + n_new) * dim`
     below 2^40."""
-    var n_new = ivf_arrays_extent(params[4], String("n_new"))
-    if n_new < 1:
-        raise Error("ivf_flat_extend: n_new must be at least 1, got " + String(n_new))
-    if n_new > IVF_ARRAYS_MAX_ROWS - n_rows:
-        raise Error(
-            "ivf_flat_extend: n + n_new = " + String(n_rows) + " + " + String(n_new)
-            + " would carry an id past 2^31 - 1"
-        )
-    ivf_arrays_check_cells(n_rows + n_new, dim, String("(n + n_new) * dim"))
-    return n_new
+    return ivf_extend_count_word(ivf_arrays_extent(params[4], String("n_new")), n_rows, dim)
 
 
 def ivf_write_extended_arrays(

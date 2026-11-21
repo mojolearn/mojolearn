@@ -43,6 +43,8 @@ from bindings.ivf_host_search_door import (
     ivf_flat_search_binding,
 )
 from ivf.host.ivf_host import IVF_HOST_SABOTAGE
+from bindings.py_balanced import py_setattr
+from ivf.ops_entry_host import publish_ivf_ops_search_host
 
 
 def ivf_search_host_numeric_mode_binding() raises -> PythonObject:
@@ -105,6 +107,12 @@ def build__mojolearn_ivf_search_host() -> PythonObject:
         # ivf_merge_shards: no Python door (lane calltable-parallel-archive,
         # 2026-11-11); the distributed IVF owner reads the parallel IVF table
         # `_mojolearn_ivf_host` publishes.
-        return module.finalize()
+        var published_module = module.finalize()
+        # The IVF-Flat operations table (core/ivf_entry_table.mojo), the
+        # search-only CPU image (no build): the key the IVF doors read.
+        var ops_key = publish_ivf_ops_search_host()
+        py_setattr(published_module, "ivf_native_key", Python.tuple(
+            PythonObject(ops_key.mode), PythonObject(ops_key.vendor), PythonObject(ops_key.image)))
+        return published_module
     except error:
         abort(String("failed to create _mojolearn_ivf_search_host: ", error))

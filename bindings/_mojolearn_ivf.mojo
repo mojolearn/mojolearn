@@ -28,6 +28,8 @@ from std.python.bindings import PythonModuleBuilder
 from bindings.parallel_ivf_entry_device import (
     ivf_finalize_distances_device_run, ivf_flat_index_export_device_run, publish_parallel_ivf_device,
 )
+from bindings.py_balanced import py_setattr
+from ivf.ops_entry_device import publish_ivf_ops_device
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
 from bindings.ivf_index_arrays_unpack import (
@@ -276,6 +278,14 @@ def build__mojolearn_ivf() -> PythonObject:
         # The parallel IVF and archive export tables: the distributed IVF
         # owner and the archive writer call these entries natively.
         publish_parallel_ivf_device()
+        # The IVF-Flat operations table (core/ivf_entry_table.mojo): the IVF
+        # doors call this image's entry with plain words and read its key
+        # from the module attribute `ivf_native_key` (mode, vendor, image).
+        # A build with no GPU vendor publishes nothing and records no key.
+        var ops_key = publish_ivf_ops_device()
+        if ops_key.vendor > 0:
+            py_setattr(published_module, "ivf_native_key", Python.tuple(
+                PythonObject(ops_key.mode), PythonObject(ops_key.vendor), PythonObject(ops_key.image)))
         return published_module
     except e:
         abort(String("failed to create _mojolearn_ivf: ", e))
