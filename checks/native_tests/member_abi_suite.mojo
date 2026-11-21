@@ -60,7 +60,7 @@ from core.density_member import density_member_v2
 from core.hierarchy_member import hierarchy_member_v2
 from core.spectral_member import spectral_member_v2
 from core.member_abi import member_output_dtype, MEMBER_I32, MEMBER_CAN_SCORE_SAMPLES, MEMBER_DTYPE_UNSAID
-from core.member_abi import MEMBER_BORROWS_FIT, member_own
+from core.member_abi import MEMBER_BORROWS_FIT, MEMBER_GIL_FREE, member_own
 from core.member_families import MEMBER_FAMILY_SPARE3, MEMBER_FAMILY_COUNT, member_family_name
 
 comptime _LINEAR_FIXTURES = 5
@@ -472,7 +472,7 @@ def _fixture(unit: Int) raises:
         var call = MemberCall(DeviceRoute(0))
         var mask = member_call(_member(), MEMBER_OP_CAPABILITIES, call)
         require(mask == (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_SCORE | MEMBER_CAN_EXPORT
-            | MEMBER_CAN_IMPORT | MEMBER_CAN_SAMPLE_WEIGHT | MEMBER_CAN_COEF), "member ABI: linear capability mask")
+            | MEMBER_CAN_IMPORT | MEMBER_CAN_SAMPLE_WEIGHT | MEMBER_CAN_COEF | MEMBER_GIL_FREE), "member ABI: linear capability mask")
         require((mask & (MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_TRANSFORM | MEMBER_CAN_WEIGHTED_SCORE
             | MEMBER_CAN_DEVICE_VIEWS | MEMBER_CAN_CLASSIFIER)) == 0,
             "member ABI: a linear regressor has no predict_proba, transform, weighted score, device views or classes")
