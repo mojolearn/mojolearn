@@ -6,6 +6,7 @@ from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
+from bindings.native_process_pool_type import register_process_pool_owner
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from bindings.runtime_model_selection_entry_pack import (
@@ -39,6 +40,8 @@ def build__mojolearn_runtime_model_selection_host() -> PythonObject:
     comptime assert LINEAR_GUARDS_OK, "invalid integrated experiment configuration (linear guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_runtime_model_selection_host")
+        # The process pool's record type (bindings/native_process_pool_type.mojo).
+        register_process_pool_owner(module)
         module.def_py_c_function(runtime_model_selection_c, "model_selection_native_call")
         module.def_function[runtime_model_selection_host_numeric_mode_binding]("runtime_model_selection_host_numeric_mode")
         module.def_function[runtime_model_selection_host_vendor_binding]("runtime_model_selection_host_vendor")
