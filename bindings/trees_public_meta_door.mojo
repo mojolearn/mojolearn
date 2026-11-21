@@ -107,7 +107,8 @@ from bindings.base_helpers_released_unpack import (
     base_check_indices_i64, base_bincount_i64, base_reduce_stat_int, base_equal_elements,
 )
 from core.linear_entry_table import LinearEntryKey
-from core.linear_multi_calls import ridge_multi_ref, ridge_multi_available, rm_col_sums, rm_means_finish, rm_center, rm_fit, rm_predict
+from core.linear_multi_calls import ridge_multi_ref, ridge_multi_available, rm_predict
+from bindings.trees_meta_ridge_run import RidgeMultiFit, ridge_multi_fit_run
 from bindings.py_optional import py_or_none
 from xtrees.glue_calls import (
     xt_accumulate, xt_accumulate_cols, xt_accumulate_onehot, xt_scatter, xt_device_folds, xt_transpose_f64,
@@ -1275,58 +1276,51 @@ def _multioutput_ridge_fit(model: PythonObject, table: PythonObject, Xa: PythonO
                            context: PythonObject) raises -> PythonObject:
     """`MultiOutputRegressor._fit_ridge_multi`: every target in one ridge
     program (glm/impl/ridge_multi.mojo)."""
+    # UNPACK: the dimensions, the member's two parameters, the image's entry
+    # and the buffers RUN writes (allocated here, published in PACK).
     var n = _rows(Xa)
     var d = _cols(Xa)
     var m = _cols(Ya)
     var nk = trees_keys()
     var est = _attr(model, nk[].k_estimator, PythonObject(None))
     var intercept = _truthy(_attr(est, nk[].k_fit_intercept, PythonObject(True)))
+    # the member's alpha as Python's float() reads it
+    var alpha = Float64(py=py_call_typed(trees_builtins().float, _attr(est, nk[].k_alpha, PythonObject(1.0))))
     var key = ridge_multi_ref(_estimators_key(table))  # resolved once for the fit
-    var xm: PythonObject
-    var work_x = Xa
-    if intercept:
-        # `_column_means(b, Xa, None)` (`_means`: lm_col_sums, lm_means_finish)
-        # then `_center` (lm_center), through the ridge multi table.
-        var sums = _zeros(d, context)
-        var xa_addr = trees_address(Xa)
-        var sums_addr = trees_address(sums)
-        with GILReleased(Python()):  # the former ridge exports released it (lane perf-audit-20261111)
-            rm_col_sums(key, xa_addr, sums_addr, n, d)
-        var m64 = _zeros(d, context)
-        xm = admitted_vector(d, "<f4", context)
-        var m64_addr = trees_address(m64)
-        var xm_addr = trees_address(xm)
-        with GILReleased(Python()):
-            rm_means_finish(key, sums_addr, m64_addr, xm_addr, d, n, False, 0.0)
-        _ = m64  # keep the store alive through the native call above
-        _ = sums  # keep the store alive through the native calls above
-        work_x = admitted_array(Python.tuple(n, d), "<f4", context)
-        var work_addr = trees_address(work_x)
-        with GILReleased(Python()):
-            rm_center(key, xa_addr, xm_addr, work_addr, n, d)
-        _ = work_x  # keep the store alive through the native call above
-        _ = Xa  # keep the store alive through the native calls above
-    else:
-        xm = admitted_vector(d, "<f4", context)
+    var request = RidgeMultiFit(trees_address(Xa), trees_address(Ya), n, d, m, alpha, intercept)
+    var xm = admitted_vector(d, "<f4", context)
     var coef = admitted_vector(m * d, "<f4", context)
     var ymean = admitted_vector(m, "<f4", context)
     var icpt32 = admitted_vector(m, "<f4", context)
-    # UNPACK: the member's alpha as Python's float() reads it.
-    var alpha = Float64(py=py_call_typed(trees_builtins().float, _attr(est, nk[].k_alpha, PythonObject(1.0))))
-    var fit_x = trees_address(work_x)
-    var fit_y = trees_address(Ya)
-    var fit_coef = trees_address(coef)
-    var fit_ymean = trees_address(ymean)
-    var fit_xm = trees_address(xm) if intercept else 0
-    var fit_icpt = trees_address(icpt32) if intercept else 0
-    with GILReleased(Python()):  # the device ridge program over every target (data-sized)
-        rm_fit(key, fit_x, fit_y, fit_coef, fit_ymean, n, d, m, alpha, intercept, fit_xm, fit_icpt)
-    _ = xm  # keep the store alive through the native call above
-    _ = Ya  # keep the store alive through the native call above
-    _ = icpt32  # keep the Python object alive through the native call above
-    _ = ymean  # keep the Python object alive through the native call above
-    _ = coef  # keep the Python object alive through the native call above
-    _ = work_x  # keep the Python object alive through the native call above
+    request.x_mean = trees_address(xm)
+    request.coef = trees_address(coef)
+    request.y_mean = trees_address(ymean)
+    request.icpt = trees_address(icpt32)
+    # the centering scratch, only with an intercept (`_column_means`, `_center`)
+    var sums = PythonObject(None)
+    var m64 = PythonObject(None)
+    var work_x = PythonObject(None)
+    if intercept:
+        sums = _zeros(d, context)
+        m64 = _zeros(d, context)
+        work_x = admitted_array(Python.tuple(n, d), "<f4", context)
+        request.sums = trees_address(sums)
+        request.means64 = trees_address(m64)
+        request.work = trees_address(work_x)
+    # RUN: the image's four programs on plain values, the GIL released once
+    # for all of them (it was released and retaken around each)
+    with GILReleased(Python()):
+        ridge_multi_fit_run(key, request)
+    _ = sums  # keep the stores alive through the native calls above
+    _ = m64
+    _ = work_x
+    _ = xm
+    _ = Xa
+    _ = Ya
+    _ = icpt32
+    _ = ymean
+    _ = coef
+    # PACK: one fitted ridge per output column and the batched state
     var fitted = Python.list()
     var ym = _F32P(unsafe_from_address=trees_address(ymean))
     _ = ymean  # keep the Python object alive through the native call above
