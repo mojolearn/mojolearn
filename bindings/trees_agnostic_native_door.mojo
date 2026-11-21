@@ -22,7 +22,7 @@ from bindings.member_set_door import MEMBER_SET_NATIVE
 from core.member_abi import (
     MemberCall, MemberMatrix, MemberPlan, member_call, member_call_of, member_outputs_of,
     MEMBER_OP_CAPABILITIES, MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA,
-    MEMBER_CAN_TEST_ROWS, MEMBER_GIL_FREE, MEMBER_F32, MEMBER_DTYPE_UNSAID,
+    MEMBER_CAN_TEST_ROWS, MEMBER_GIL_FREE, MEMBER_GIL_DOOR, MEMBER_F32, MEMBER_DTYPE_UNSAID,
 )
 from bindings.trees_public_inputs_run import trees_finite_f32
 from bindings.trees_public_inputs_door import trees_table, trees_call, trees_address, trees_reshape, trees_cast
@@ -433,10 +433,12 @@ def _member_open(mut em: _Member, s: _State, x: PythonObject, n: Int, context: P
             # lacks the bit is not asked.
             # THE GIL RULE: the same answer says whether a chunk's call may
             # run released.
-            if held.plan.member.can(MEMBER_CAN_TEST_ROWS | MEMBER_GIL_FREE):
+            if held.plan.member.can(MEMBER_CAN_TEST_ROWS | MEMBER_GIL_FREE | MEMBER_GIL_DOOR):
                 var kind_mask = member_call(held.plan.member, MEMBER_OP_CAPABILITIES, probe)
                 tests = (kind_mask & MEMBER_CAN_TEST_ROWS) != 0
-                gil_free = (kind_mask & MEMBER_GIL_FREE) != 0
+                # one call per chunk on this thread either way (MEMBER_GIL_DOOR:
+                # released as the family's own door releases)
+                gil_free = (kind_mask & (MEMBER_GIL_FREE | MEMBER_GIL_DOOR)) != 0
         except:
             cols = -1
         var served = cols == s.k and dtype == MEMBER_F32

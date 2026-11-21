@@ -30,7 +30,7 @@ from core.member_abi import (
     MemberCall, MemberMatrix, MemberPlan, member_call, member_new, member_free, member_kind_capabilities,
     MEMBER_OP_FIT, MEMBER_OP_EXPORT, MEMBER_CAN_FIT, MEMBER_CAN_EXPORT, MEMBER_CAN_COEF, MEMBER_CAN_IMPORTANCES,
     MEMBER_CAN_CLASSIFIER, MEMBER_BLOCK_COEF, MEMBER_BLOCK_FEATURE_IMPORTANCES, MEMBER_F32, MEMBER_I32,
-    MEMBER_GIL_FREE,
+    MEMBER_GIL_FREE, MEMBER_GIL_DOOR,
 )
 from core.member_families import MEMBER_FAMILY_TREE, MEMBER_FAMILY_FOREST
 from bindings.native_loaded_module_door import native_loaded_module
@@ -335,7 +335,9 @@ def _rfe_member(estimator: PythonObject, y: PythonObject, n: Int, g: PythonObjec
             return member^
         # THE GIL RULE (core/member_abi.mojo): the same answer says whether
         # this kind's fit may run with the GIL released by this door.
-        member.gil_free = (mask & MEMBER_GIL_FREE) != 0
+        # One fit on this thread either way: released too for a kind whose
+        # own door releases around the same work (MEMBER_GIL_DOOR).
+        member.gil_free = (mask & (MEMBER_GIL_FREE | MEMBER_GIL_DOOR)) != 0
     except:
         return member^
     member.y_address = Int(py=classical_address(member.y))
