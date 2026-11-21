@@ -12,7 +12,9 @@ from core.mode_answer import MODE_FAMILY_DECOMP_KIT, answer_mode_word
 from std.python import Python, PythonObject
 from bindings.decomp_device_route_door import (
     decomp_route_table_hit, decomp_route_keep_table, decomp_route_resolve_device, decomp_route_on_cpu_image,
+    decomp_device_admit, decomp_route_clear, decomp_route_mode,
 )
+from core.device_route import device_vendor_word
 from core.resident_upload_count import RUC_DECOMP_KIT, resident_upload_note
 from bindings.py_cpython_table import cpython_table
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
@@ -22,7 +24,7 @@ from bindings.py_model_records import records_open, model_generation
 from bindings.p3nc_fitted_freeze_unpack import fitted_is_freezable_any, fitted_freeze_any
 from std.memory import unsafe_memcpy
 from providers.python.array_metadata_pyapi_door import ArrayMetadata, ArrayPin
-from bindings.py_balanced import py_call, py_get, py_type, py_contains, py_setitem, py_setattr
+from bindings.py_balanced import py_call, py_get, py_type, py_contains, py_setitem, py_setattr, py_fields
 from bindings.classical_arrays_door import classical_typed, classical_address, classical_kind
 from bindings.classical_arrays_door import classical_wrap_layout
 from bindings.native_array_storage_door import native_array_unfilled
@@ -181,6 +183,31 @@ def decomp_entries_routed(model: PythonObject, fields: PythonObject, mode_value:
         raise Error(String(py=entries))
     decomp_route_keep_table(model, device, tier, mode, context, entries)
     return entries
+
+
+def decomp_entries_vendor(entries: PythonObject) raises -> String:
+    """`vendor_used` of a kit estimator: the vendor word of the image its
+    entries table names (its published table key), `cpu` for the CPU image."""
+    var key = py_get(entries, "x_decomp_native_key")
+    if key is None:
+        raise Error("ImportError: mojolearn: the x_decomp binding publishes no native entry table")
+    return device_vendor_word(Int(py=key[1]))
+
+
+def decomp_kit_device_operation(model: PythonObject, set_device: Bool, args: PythonObject,
+                                context: PythonObject) raises -> PythonObject:
+    """The two device operations every kit door serves the same way.
+    `device_set` (the constructor and `set_params` of a class with a Python
+    constructor): the device is checked where it is given, in the shared
+    words, before the estimator changes, and its route is dropped.
+    `vendor_used`: the vendor of the image the estimator's route names."""
+    if set_device:
+        decomp_device_admit(args[0], context)
+        decomp_route_clear(model)
+        return PythonObject(None)
+    var fields = py_fields(model)
+    return PythonObject(decomp_entries_vendor(
+        decomp_entries_routed(model, fields, decomp_route_mode(fields, context), context)))
 
 
 def decomp_input(source: PythonObject, name: String, context: PythonObject,

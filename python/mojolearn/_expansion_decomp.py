@@ -96,6 +96,51 @@ class _Base(SklearnTagsMixin):
             raise RuntimeError(f"{type(self).__name__} is not fitted; call fit first")
 
 
+class _DeviceDoor:
+    """`device=None | "gpu" | "cpu"` for a decomposition class with a Python
+    constructor: the value is checked in compiled code where it is given (the
+    constructor, `set_params`), which also drops the estimator's native route,
+    and is read once when the route is next resolved. No public call reads it."""
+    # The check runs the same estimator on the other device, in this process.
+    _mojolearn_device = True
+    #: The key of this class's compiled door in `_DEVICE_DOORS`.
+    _device_door = None
+
+    def _device_set(self, device):
+        # glue: one native call; refused in words before anything changes
+        call, context = _DEVICE_DOORS[self._device_door]
+        call(self, "device_set", (device,), context)
+
+    def set_params(self, **params):
+        """Set constructor parameters by keyword.
+
+        Raises
+        ------
+        ValueError
+            If a keyword is not a parameter of this estimator, or ``device``
+            is not ``None``, ``"gpu"`` or ``"cpu"``.
+
+        Returns
+        -------
+        self
+        """
+        if "device" in params:
+            self._device_set(params["device"])
+        return super().set_params(**params)
+
+    def vendor_used(self):
+        """The backend this estimator runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the
+            compiled binary the estimator uses.
+        """
+        call, context = _DEVICE_DOORS[self._device_door]
+        return call(self, "vendor_used", (), context)
+
+
 # ================================================================ IncrementalPCA
 # Every public IncrementalPCA operation is one call into the compiled owner
 # (bindings/ipca_native_door.mojo, drivers x_decomp/ipca_owner.mojo).
@@ -105,7 +150,7 @@ class _Base(SklearnTagsMixin):
 # computed as the eigendecomposition of its d x d Gram matrix (the Jacobi
 # eigh of decomposition/, device or host), then sklearn's `svd_flip` with
 # `u_based_decision=False`.
-class IncrementalPCA(_Base):
+class IncrementalPCA(_DeviceDoor, _Base):
     """Incremental principal component analysis, fitted batch by batch.
 
     Follows scikit-learn's ``IncrementalPCA``: the mean, variance and
@@ -161,49 +206,16 @@ class IncrementalPCA(_Base):
     # (bindings/decomp_public_lifecycle_unpack.mojo), so `_mode` installs no wrappers.
     _mojolearn_native_public = True
 
+    _device_door = "ipca"
     _parameters = ("n_components", "whiten", "copy", "batch_size", "numeric_mode", "device")
 
-    # `device=None | "gpu" | "cpu"`: read once into the estimator's native route
-    # owner (bindings/decomp_device_route_door.mojo); the check runs both devices.
-    _mojolearn_device = True
 
     def __init__(self, n_components=None, *, whiten=False, copy=True, batch_size=None, numeric_mode=None,
                  device=None):
-        # glue: a given device is checked in compiled code before any field is stored
         if device is not None:
-            _IPCA_CALL(self, "device_set", (device,), _IPCA_CONTEXT)
+            self._device_set(device)
         self.n_components, self.whiten, self.copy = n_components, whiten, copy
         self.batch_size, self.numeric_mode, self.device = batch_size, numeric_mode, device
-
-    def set_params(self, **params):
-        """Set constructor parameters by keyword.
-
-        Raises
-        ------
-        ValueError
-            If a keyword is not a parameter of this estimator, or ``device``
-            is not ``None``, ``"gpu"`` or ``"cpu"``.
-
-        Returns
-        -------
-        self
-        """
-        # glue: a given device is checked in compiled code before anything
-        # changes, and the estimator's native route is dropped
-        if "device" in params:
-            _IPCA_CALL(self, "device_set", (params["device"],), _IPCA_CONTEXT)
-        return _Base.set_params(self, **params)
-
-    def vendor_used(self):
-        """The backend this estimator runs on.
-
-        Returns
-        -------
-        str
-            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the
-            compiled binary the estimator uses.
-        """
-        return _IPCA_CALL(self, "vendor_used", (), _IPCA_CONTEXT)
 
     def fit(self, X, y=None):
         """Fit the model on X in batches of ``batch_size`` rows.
@@ -563,7 +575,7 @@ class SparseRandomProjection(_RandomProjection):
 # the Gram eigh) where sklearn calls randomized_svd. 'random' init and
 # shuffle use the lane's Philox stream, not numpy's. A general float beta
 # is refused by name.
-class NMF(_Base):
+class NMF(_DeviceDoor, _Base):
     """Non-negative matrix factorization ``X ~ W @ H``.
 
     Follows scikit-learn's ``NMF``: finds non-negative ``W`` (n_samples,
@@ -643,54 +655,21 @@ class NMF(_Base):
 
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _sklearn_input_tags = {"positive_only": True}
+    _device_door = "decomp"
     _parameters = ("n_components", "init", "solver", "beta_loss", "tol", "max_iter", "random_state",
                    "alpha_W", "alpha_H", "l1_ratio", "verbose", "shuffle", "numeric_mode", "device")
 
-    # `device=None | "gpu" | "cpu"`: read once into the estimator's native route
-    # owner (bindings/decomp_device_route_door.mojo); the check runs both devices.
-    _mojolearn_device = True
 
     def __init__(self, n_components="auto", *, init=None, solver="cd", beta_loss="frobenius", tol=1e-4,
                  max_iter=200, random_state=None, alpha_W=0.0, alpha_H="same", l1_ratio=0.0, verbose=0,
                  shuffle=False, numeric_mode=None, device=None):
-        # glue: a given device is checked in compiled code before any field is stored
         if device is not None:
-            _DECOMP_CALL(self, "device_set", (device,), _DECOMP_CONTEXT)
+            self._device_set(device)
         self.n_components, self.init, self.solver, self.beta_loss = n_components, init, solver, beta_loss
         self.tol, self.max_iter, self.random_state = tol, max_iter, random_state
         self.alpha_W, self.alpha_H, self.l1_ratio = alpha_W, alpha_H, l1_ratio
         self.verbose, self.shuffle, self.numeric_mode = verbose, shuffle, numeric_mode
         self.device = device
-
-    def set_params(self, **params):
-        """Set constructor parameters by keyword.
-
-        Raises
-        ------
-        ValueError
-            If a keyword is not a parameter of this estimator, or ``device``
-            is not ``None``, ``"gpu"`` or ``"cpu"``.
-
-        Returns
-        -------
-        self
-        """
-        # glue: a given device is checked in compiled code before anything
-        # changes, and the estimator's native route is dropped
-        if "device" in params:
-            _DECOMP_CALL(self, "device_set", (params["device"],), _DECOMP_CONTEXT)
-        return _Base.set_params(self, **params)
-
-    def vendor_used(self):
-        """The backend this estimator runs on.
-
-        Returns
-        -------
-        str
-            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the
-            compiled binary the estimator uses.
-        """
-        return _DECOMP_CALL(self, "vendor_used", (), _DECOMP_CONTEXT)
 
     # ---- setup
     # ---- solvers
@@ -1696,9 +1675,11 @@ def sparse_encode(X, dictionary, *, algorithm="lasso_lars", n_nonzero_coefs=None
                                             positive, numeric_mode), _DL_CONTEXT)
 
 
-class _SparseCoding(_Base):
+class _SparseCoding(_DeviceDoor, _Base):
     # One native call per public method; its owner runs the whole lifecycle
     # (bindings/decomp_public_lifecycle_unpack.mojo), so `_mode` installs no wrappers.
+    _device_door = "dl"
+
     _mojolearn_native_public = True
 
     def transform(self, X):
@@ -1814,12 +1795,14 @@ class DictionaryLearning(_SparseCoding):
     _parameters = ("n_components", "alpha", "max_iter", "tol", "fit_algorithm", "transform_algorithm",
                    "transform_n_nonzero_coefs", "transform_alpha", "split_sign", "random_state",
                    "positive_code", "positive_dict", "transform_max_iter", "numeric_mode",
-                   "callback", "code_init", "dict_init", "n_jobs", "verbose")
+                   "callback", "code_init", "dict_init", "n_jobs", "verbose", "device")
 
     def __init__(self, n_components=None, *, alpha=1, max_iter=1000, tol=1e-8, fit_algorithm="lars",
                  transform_algorithm="omp", transform_n_nonzero_coefs=None, transform_alpha=None, n_jobs=None,
                  code_init=None, dict_init=None, callback=None, verbose=False, split_sign=False, random_state=None,
-                 positive_code=False, positive_dict=False, transform_max_iter=1000, numeric_mode=None):
+                 positive_code=False, positive_dict=False, transform_max_iter=1000, numeric_mode=None, device=None):
+        if device is not None:
+            self._device_set(device)
         self.n_components, self.alpha, self.max_iter, self.tol = n_components, alpha, max_iter, tol
         self.fit_algorithm, self.transform_algorithm = fit_algorithm, transform_algorithm
         self.transform_n_nonzero_coefs, self.transform_alpha = transform_n_nonzero_coefs, transform_alpha
@@ -1827,6 +1810,7 @@ class DictionaryLearning(_SparseCoding):
         self.verbose, self.split_sign, self.random_state = verbose, split_sign, random_state
         self.positive_code, self.positive_dict = positive_code, positive_dict
         self.transform_max_iter, self.numeric_mode = transform_max_iter, numeric_mode
+        self.device = device
 
     def fit(self, X, y=None):
         """Fit the dictionary to X.
@@ -1940,13 +1924,15 @@ class MiniBatchDictionaryLearning(_SparseCoding):
                    "transform_algorithm", "transform_n_nonzero_coefs", "transform_alpha", "split_sign",
                    "random_state", "positive_code", "positive_dict", "transform_max_iter", "tol",
                    "max_no_improvement", "numeric_mode",
-                   "callback", "dict_init", "n_jobs", "verbose")
+                   "callback", "dict_init", "n_jobs", "verbose", "device")
 
     def __init__(self, n_components=None, *, alpha=1, max_iter=1000, fit_algorithm="lars", n_jobs=None,
                  batch_size=256, shuffle=True, dict_init=None, transform_algorithm="omp",
                  transform_n_nonzero_coefs=None, transform_alpha=None, verbose=False, split_sign=False,
                  random_state=None, positive_code=False, positive_dict=False, transform_max_iter=1000,
-                 callback=None, tol=1e-3, max_no_improvement=10, numeric_mode=None):
+                 callback=None, tol=1e-3, max_no_improvement=10, numeric_mode=None, device=None):
+        if device is not None:
+            self._device_set(device)
         self.n_components, self.alpha, self.max_iter, self.fit_algorithm = n_components, alpha, max_iter, fit_algorithm
         self.n_jobs, self.batch_size, self.shuffle, self.dict_init = n_jobs, batch_size, shuffle, dict_init
         self.transform_algorithm, self.transform_n_nonzero_coefs = transform_algorithm, transform_n_nonzero_coefs
@@ -1954,6 +1940,7 @@ class MiniBatchDictionaryLearning(_SparseCoding):
         self.random_state, self.positive_code, self.positive_dict = random_state, positive_code, positive_dict
         self.transform_max_iter, self.callback, self.tol = transform_max_iter, callback, tol
         self.max_no_improvement, self.numeric_mode = max_no_improvement, numeric_mode
+        self.device = device
 
     def fit(self, X, y=None):
         """Fit the dictionary to X.
@@ -1984,9 +1971,11 @@ class MiniBatchDictionaryLearning(_SparseCoding):
         return _DL_CALL(self, "mbdl_fit_transform", (X,), _DL_CONTEXT)
 
 
-class _BaseSparsePCA(_Base):
+class _BaseSparsePCA(_DeviceDoor, _Base):
     # One native call per public method; its owner runs the whole lifecycle
     # (bindings/decomp_public_lifecycle_unpack.mojo), so `_mode` installs no wrappers.
+    _device_door = "dl"
+
     _mojolearn_native_public = True
 
     # fit is one call into the same owner, for both subclasses.
@@ -2115,14 +2104,17 @@ class SparsePCA(_BaseSparsePCA):
     """
     _parameters = ("n_components", "alpha", "ridge_alpha", "max_iter", "tol", "method", "random_state",
                    "numeric_mode",
-                   "U_init", "V_init", "n_jobs", "verbose")
+                   "U_init", "V_init", "n_jobs", "verbose", "device")
 
     def __init__(self, n_components=None, *, alpha=1, ridge_alpha=0.01, max_iter=1000, tol=1e-8, method="lars",
-                 n_jobs=None, U_init=None, V_init=None, verbose=False, random_state=None, numeric_mode=None):
+                 n_jobs=None, U_init=None, V_init=None, verbose=False, random_state=None, numeric_mode=None, device=None):
+        if device is not None:
+            self._device_set(device)
         self.n_components, self.alpha, self.ridge_alpha = n_components, alpha, ridge_alpha
         self.max_iter, self.tol, self.method, self.n_jobs = max_iter, tol, method, n_jobs
         self.U_init, self.V_init, self.verbose, self.random_state = U_init, V_init, verbose, random_state
         self.numeric_mode = numeric_mode
+        self.device = device
 
 
 # MiniBatchDictionaryLearning on the centered X^T, the components its
@@ -2183,15 +2175,18 @@ class MiniBatchSparsePCA(_BaseSparsePCA):
     """
     _parameters = ("n_components", "alpha", "ridge_alpha", "max_iter", "batch_size", "shuffle", "method",
                    "random_state", "tol", "max_no_improvement", "numeric_mode",
-                   "callback", "n_jobs", "verbose")
+                   "callback", "n_jobs", "verbose", "device")
 
     def __init__(self, n_components=None, *, alpha=1, ridge_alpha=0.01, max_iter=1000, callback=None,
                  batch_size=3, verbose=False, shuffle=True, n_jobs=None, method="lars", random_state=None,
-                 tol=1e-3, max_no_improvement=10, numeric_mode=None):
+                 tol=1e-3, max_no_improvement=10, numeric_mode=None, device=None):
+        if device is not None:
+            self._device_set(device)
         self.n_components, self.alpha, self.ridge_alpha, self.max_iter = n_components, alpha, ridge_alpha, max_iter
         self.callback, self.batch_size, self.verbose, self.shuffle = callback, batch_size, verbose, shuffle
         self.n_jobs, self.method, self.random_state, self.tol = n_jobs, method, random_state, tol
         self.max_no_improvement, self.numeric_mode = max_no_improvement, numeric_mode
+        self.device = device
 
 
 # ================================================================ LatentDirichletAllocation
@@ -2909,7 +2904,7 @@ _native_family_bridge.tables(family_mani_pd_kind=dict(_PD_KIND))
 # Philox permutations (a sort of counter draws, ties to the lower index)
 # and every argsort breaks ties by index. chi2 quantiles by bisection of
 # the incomplete gamma; one feature takes sklearn's 1-D shortcut.
-class MinCovDet(_Base):
+class MinCovDet(_DeviceDoor, _Base):
     """Minimum covariance determinant: a robust covariance estimator.
 
     Follows scikit-learn's ``MinCovDet`` (FastMCD), including the
@@ -2959,14 +2954,19 @@ class MinCovDet(_Base):
     """
     # One native call per public method; its owner runs the whole lifecycle
     # (bindings/decomp_public_lifecycle_unpack.mojo), so `_mode` installs no wrappers.
+    _device_door = "mcd"
+
     _mojolearn_native_public = True
 
-    _parameters = ("store_precision", "assume_centered", "support_fraction", "random_state", "numeric_mode")
+    _parameters = ("store_precision", "assume_centered", "support_fraction", "random_state", "numeric_mode", "device")
 
     def __init__(self, *, store_precision=True, assume_centered=False, support_fraction=None, random_state=None,
-                 numeric_mode=None):
+                 numeric_mode=None, device=None):
+        if device is not None:
+            self._device_set(device)
         self.store_precision, self.assume_centered = store_precision, assume_centered
         self.support_fraction, self.random_state, self.numeric_mode = support_fraction, random_state, numeric_mode
+        self.device = device
 
     # Every operation is one call into the native MinCovDet owner
     # (bindings/mcd_native_door.mojo). A covariance estimator has no transform,
@@ -3084,12 +3084,12 @@ class EllipticEnvelope(MinCovDet):
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _estimator_type = "outlier_detector"
     _parameters = ("store_precision", "assume_centered", "support_fraction", "contamination", "random_state",
-                   "numeric_mode")
+                   "numeric_mode", "device")
 
     def __init__(self, *, store_precision=True, assume_centered=False, support_fraction=None, contamination=0.1,
-                 random_state=None, numeric_mode=None):
+                 random_state=None, numeric_mode=None, device=None):
         super().__init__(store_precision=store_precision, assume_centered=assume_centered,
-                         support_fraction=support_fraction, random_state=random_state, numeric_mode=numeric_mode)
+                         support_fraction=support_fraction, random_state=random_state, numeric_mode=numeric_mode, device=device)
         self.contamination = contamination
 
     def fit(self, X, y=None):
@@ -3390,14 +3390,17 @@ class SparseCoder(_SparseCoding):
     _sklearn_requires_fit = False
     _parameters = ("dictionary", "transform_algorithm", "transform_n_nonzero_coefs", "transform_alpha",
                    "split_sign", "positive_code", "transform_max_iter", "numeric_mode",
-                   "n_jobs")
+                   "n_jobs", "device")
 
     def __init__(self, dictionary, *, transform_algorithm="omp", transform_n_nonzero_coefs=None, transform_alpha=None,
-                 split_sign=False, n_jobs=None, positive_code=False, transform_max_iter=1000, numeric_mode=None):
+                 split_sign=False, n_jobs=None, positive_code=False, transform_max_iter=1000, numeric_mode=None, device=None):
+        if device is not None:
+            self._device_set(device)
         self.dictionary, self.transform_algorithm = dictionary, transform_algorithm
         self.transform_n_nonzero_coefs, self.transform_alpha = transform_n_nonzero_coefs, transform_alpha
         self.split_sign, self.n_jobs, self.positive_code = split_sign, n_jobs, positive_code
         self.transform_max_iter, self.numeric_mode = transform_max_iter, numeric_mode
+        self.device = device
 
     # Nothing is learned: `transform` works without `fit` (scikit-learn tags
     # SparseCoder requires_fit=False). `__init__` stores the parameters
@@ -3511,3 +3514,8 @@ _DECOMP_CALL, _DECOMP_CONTEXT = _native_decomp_bridge.connect_public({
     "FastICA": FastICA, "NMF": NMF, "FactorAnalysis": FactorAnalysis,
     "LatentDirichletAllocation": LatentDirichletAllocation,
     "GaussianRandomProjection": GaussianRandomProjection, "SparseRandomProjection": SparseRandomProjection})
+
+# glue: the compiled door of each class that takes `device=` here (`_DeviceDoor`),
+# connected above; read by the constructor, `set_params` and `vendor_used`.
+_DEVICE_DOORS = {"ipca": (_IPCA_CALL, _IPCA_CONTEXT), "decomp": (_DECOMP_CALL, _DECOMP_CONTEXT),
+                 "mcd": (_MCD_CALL, _MCD_CONTEXT), "dl": (_DL_CALL, _DL_CONTEXT)}

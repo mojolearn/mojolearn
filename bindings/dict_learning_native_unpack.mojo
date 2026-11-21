@@ -30,7 +30,7 @@ from x_decomp.decomp_public_lifecycle_run import decomp_public_method
 from bindings.public_lifecycle_owner_door import lifecycle_end
 from bindings.decomp_kit_native_door import (
     DecompDoor, DecompF32, decomp_int, decomp_float, decomp_seed, decomp_seed_word, decomp_mode,
-    decomp_entries, decomp_input, decomp_shape, XD_SPARSE_ALGOS, decomp_kit_unpack, decomp_kit_publish,
+    decomp_entries, decomp_entries_routed, decomp_input, decomp_shape, XD_SPARSE_ALGOS, decomp_kit_unpack, decomp_kit_publish,
     decomp_kit_out_shape, decomp_door_borrow, decomp_door_input, decomp_door_resident_hit,
     decomp_door_resident_input, decomp_door_resident_derived, decomp_door_resident_keep,
 )
@@ -255,7 +255,7 @@ def coding_transform(model: PythonObject, args: PythonObject, inverse: Bool, con
     # DictionaryLearning / MiniBatchDictionaryLearning transform and inverse_transform.
     var fields = py_fields(model)
     _check_fitted(model, fields)
-    var entries = decomp_entries(py_get(fields, nk[].k_numeric_mode_), context)
+    var entries = decomp_entries_routed(model, fields, py_get(fields, nk[].k_numeric_mode_), context)
     var door = DecompDoor(entries, py_item(context, nk[].k_output_context))
     # A query: the fitted dictionary stays on the device across calls.
     door.owner = model
@@ -299,7 +299,7 @@ def sparse_pca_transform(model: PythonObject, args: PythonObject, inverse: Bool,
     # `_BaseSparsePCA.transform` / `inverse_transform`.
     var fields = py_fields(model)
     _check_fitted(model, fields)
-    var entries = decomp_entries(py_get(fields, nk[].k_numeric_mode_), context)
+    var entries = decomp_entries_routed(model, fields, py_get(fields, nk[].k_numeric_mode_), context)
     var door = DecompDoor(entries, py_item(context, nk[].k_output_context))
     # A query: the fitted mean and components stay on the device across calls.
     door.owner = model
