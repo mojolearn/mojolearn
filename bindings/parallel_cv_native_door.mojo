@@ -73,7 +73,9 @@ def _devices(value: PythonObject, context: PythonObject) raises -> PythonObject:
     cv_devices_admit(indices)
     var nk = parallel_keys()
     var metadata = py_item(context, nk[].k_family_msel_parallel)
-    cv_vendor_admit(indices, String(py_item(metadata, nk[].k_vendor)), Bool(py=py_item(metadata, nk[].k_cpu_only)))
+    var vendor = String(py_item(metadata, nk[].k_vendor))
+    # `cpu_only` is read only on the CPU vendor, as before.
+    cv_vendor_admit(indices, vendor, vendor == "cpu" and Bool(py=py_item(metadata, nk[].k_cpu_only)))
     return selected
 
 
