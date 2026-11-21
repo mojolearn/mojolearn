@@ -1572,7 +1572,9 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
     var errors = Python.list()
     var glue = _xr(xt)
     if classifier:
-        var labels = trees_encode_labels(args[1], labels_scope(model, context))
+        # The label scope, read once per fit (both encodes below use it).
+        var label_scope = labels_scope(model, context)
+        var labels = trees_encode_labels(args[1], label_scope)
         py_setitem(fields, "classes_", labels.classes)
         var k = len(labels.classes)
         py_setitem(fields, "n_classes_", _P(k))
@@ -1602,7 +1604,7 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
             # The labels are encoded ONCE for every member and round.
             # TOMBSTONE: MOJOLEARN_TREES_FAST_ADABOOST_REENCODE (NOISE: B re-encoded the labels per member; A/B abn9 NVIDIA L40S, 4 cells 0.98-1.04 arm/base) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
             # Restore: git apply experiments/removed/MOJOLEARN_TREES_FAST_ADABOOST_REENCODE.patch; record in docs/TOMBSTONES.md.
-            encoded = trees_encode_labels(codes, labels_scope(model, context))
+            encoded = trees_encode_labels(codes, label_scope)
             # the session open tests the column-major words it uploads
             # (lane a8c: the host scan of cm before it is deleted)
             session = _member_session(base, cm.view(), False, _ada_session_choice(fields, xt, context), context)

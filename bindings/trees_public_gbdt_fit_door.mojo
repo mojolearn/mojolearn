@@ -1897,7 +1897,9 @@ def adapter_classifier_fit(model: PythonObject, args: PythonObject, context: Pyt
     var learner = _new_learner(model, _field(fields, model, nk[].k_numeric_mode, "numeric_mode"), context)
     _clear_fit(fields, context)
     var y = args[1]
-    var labels = trees_encode_labels(y, labels_scope(model, context))
+    # The label scope, read once per fit (the eval_set encode uses it too).
+    var label_scope = labels_scope(model, context)
+    var labels = trees_encode_labels(y, label_scope)
     var seen = len(labels.classes)
     if seen < 2:
         raise Error("Classifier can't train when only one class is present.")
@@ -1910,7 +1912,7 @@ def adapter_classifier_fit(model: PythonObject, args: PythonObject, context: Pyt
     var eval_set = args[3]
     if eval_set is not None:
         var pair = _adapter_eval(eval_set)
-        var eval_labels = trees_encode_labels(pair[1], labels_scope(model, context))
+        var eval_labels = trees_encode_labels(pair[1], label_scope)
         var eval_kind = _label_kind(eval_labels, pair[1], "eval_set y", context)
         if not Bool(py=eval_kind[0] == kind[0]):
             raise Error("eval_set contains labels outside the training vocabulary")
