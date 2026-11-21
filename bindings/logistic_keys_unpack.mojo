@@ -19,6 +19,8 @@ comptime LOGISTIC_OPN_PREDICT = 6
 comptime LOGISTIC_OPN_PREDICT_PROBA = 7
 comptime LOGISTIC_OPN_PREDICT_LOG_PROBA = 8
 comptime LOGISTIC_OPN_SCORE = 9
+comptime LOGISTIC_OPN_VENDOR_USED = 10
+comptime LOGISTIC_OPN_NUMERIC_MODE_USED = 11
 
 
 struct LogisticKeys(Defaultable, Movable):
@@ -50,6 +52,7 @@ struct LogisticKeys(Defaultable, Movable):
     var k_lr_bindings: PythonObject
     var k_lr_complex_type: PythonObject
     var k_lr_consumed_fields: PythonObject
+    var k_lr_constructor_parameters: PythonObject
     var k_lr_host_contexts: PythonObject
     var k_lr_host_model: PythonObject
     var k_lr_host_score_context: PythonObject
@@ -101,6 +104,7 @@ struct LogisticKeys(Defaultable, Movable):
         self.k_lr_bindings = PythonObject(None)
         self.k_lr_complex_type = PythonObject(None)
         self.k_lr_consumed_fields = PythonObject(None)
+        self.k_lr_constructor_parameters = PythonObject(None)
         self.k_lr_host_contexts = PythonObject(None)
         self.k_lr_host_model = PythonObject(None)
         self.k_lr_host_score_context = PythonObject(None)
@@ -156,6 +160,7 @@ def _logistic_keys_fill(nk: UnsafePointer[LogisticKeys, MutUntrackedOrigin]) rai
     nk[].k_lr_bindings = py_key("lr_bindings")
     nk[].k_lr_complex_type = py_key("lr_complex_type")
     nk[].k_lr_consumed_fields = py_key("lr_consumed_fields")
+    nk[].k_lr_constructor_parameters = py_key("lr_constructor_parameters")
     nk[].k_lr_host_contexts = py_key("lr_host_contexts")
     nk[].k_lr_host_model = py_key("lr_host_model")
     nk[].k_lr_host_score_context = py_key("lr_host_score_context")
@@ -189,6 +194,8 @@ def _logistic_keys_fill(nk: UnsafePointer[LogisticKeys, MutUntrackedOrigin]) rai
     py_op_add(ops, "predict_proba", LOGISTIC_OPN_PREDICT_PROBA)
     py_op_add(ops, "predict_log_proba", LOGISTIC_OPN_PREDICT_LOG_PROBA)
     py_op_add(ops, "score", LOGISTIC_OPN_SCORE)
+    py_op_add(ops, "vendor_used", LOGISTIC_OPN_VENDOR_USED)
+    py_op_add(ops, "numeric_mode_used", LOGISTIC_OPN_NUMERIC_MODE_USED)
     nk[].ops = ops
     nk[].ready = True
 
