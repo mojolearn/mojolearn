@@ -210,6 +210,25 @@ def enc_ii_rows(mut prog: EncProgram, mo: Int, n: Int, dk: Int, j: Int, missing:
     return (rows, tot)
 
 
+def enc_input(mut prog: EncProgram, words: Int, owner: Int) -> Int:
+    """`EncProg.put` of a caller buffer the door holds as owner `owner`: an
+    input record of `words` arena words; an empty buffer is no record."""
+    if words <= 0:
+        return prog.alloc(words)
+    return prog.input(words, owner)
+
+
+def enc_label_chunk(n: Int) -> Int:
+    # `_label_chunk`: max(1024, isqrt(n) + 1) by integer Newton steps.
+    var r = n
+    if n > 1:
+        var y = (r + 1) // 2
+        while y < r:  # driver-loop: over integer Newton steps of a row count
+            r = y
+            y = (y + n // y) // 2
+    return max(1024, r + 1)
+
+
 def enc_label_load(mut prog: EncProgram, n: Int, words: Int, kind: Int, x: Int):
     # `_label_load`'s stage: the float32 word of each of the n labels at
     # `words` (raw words of dtype `kind`) into x (NaN when float32 cannot hold it).

@@ -35,7 +35,8 @@ from bindings.prep_owner_route_unpack import (
 from bindings.prep_entry_cache_unpack import prep_entry_word, prep_entry_text
 from bindings.x_prep_native_owner_door import xprep_storage, xprep_take, xprep_values, xprep_run_records, xprep_caps
 from bindings.prep_encode_prog_run import (
-    EncProgram, OUT_MIN_WORDS, OUT_MARK, enc_sel, enc_bad_rows_stages, enc_assign_fold_i64, enc_check_train_i64)
+    EncProgram, OUT_MIN_WORDS, OUT_MARK, enc_sel, enc_bad_rows_stages, enc_assign_fold_i64, enc_check_train_i64,
+    enc_label_chunk)
 from bindings.x_prep_native_owner_run import xprep_r3, XprepCaps
 from bindings.public_lifecycle_owner_door import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result
 from bindings.classical_validate_unpack import classical_estimator_name
@@ -201,6 +202,20 @@ struct EncProg(Movable):
             return self.prog.alloc(words)
         return self._record(Python.tuple(0, value, PythonObject(None), words, 1), words)
 
+    def own(mut self, value: PythonObject, words: Int) raises -> Int:
+        """UNPACK of a caller buffer for a typed stage builder: the float32
+        (or int32-word) contiguous buffer `value` of `words` words becomes
+        an owner of this program, held for the run. Returns its owner index;
+        the builder records it (`enc_input`, bindings/prep_encode_prog_run.mojo)
+        where `put` recorded it, so the arena layout is the builder's."""
+        self.owners.append(Python.tuple(0, value, PythonObject(None), words, 1))
+        return len(self.owners) - 1
+
+    def own_x(mut self, values: PythonObject) -> Int:
+        # `own` of X as `xprep_values` converted it (host words or device rows).
+        self.owners.append(values)
+        return len(self.owners) - 1
+
     def put_inout(mut self, value: PythonObject, words: Int) raises -> Int:
         # `_Prog.put(arr, inout=True)`: a stage rewrites these words and the
         # caller reads them after the run, so they come back from the device.
@@ -262,6 +277,19 @@ struct EncProg(Movable):
         xprep_run_records(arena, host, scratch, store, out_words, self.prog.stage_words(), self.prog.inputs,
                           self.owners, entries, context, out_words, self.prog.inout_ranges, caps)
         return Python.tuple(arena, store)
+
+
+def enc_caps(model: PythonObject, entries: PythonObject) raises -> XprepCaps:
+    """The run capabilities of an estimator's operation, once per operation
+    at UNPACK: from its device route when the route holds this selection
+    (one record read, one pointer compare), else read from `entries` by name
+    (`xprep_caps`). These are the reads `EncProg.run(entries, context, model)`
+    makes; an operation that takes them here runs with `run_caps`, and its
+    typed stage builder gets `has_out` as the plain `region` value."""
+    var caps = prep_route_caps(model, entries)
+    if caps.held:
+        return caps
+    return xprep_caps(entries)
 
 
 def _fitted_flat(owner: PythonObject, name: String, value: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -963,14 +991,10 @@ def _cls2_cat(mode: PythonObject, entries: PythonObject) raises -> Int:
 
 
 def _label_chunk(n: Int) -> Int:
-    # `_label_chunk`: max(1024, isqrt(n) + 1) by integer Newton steps.
-    var r = n
-    if n > 1:
-        var y = (r + 1) // 2
-        while y < r:  # driver-loop: over integer Newton steps of a row count
-            r = y
-            y = (y + n // y) // 2
-    return max(1024, r + 1)
+    # The rule is `enc_label_chunk` (bindings/prep_encode_prog_run.mojo, where
+    # the typed stage builders read it); this name stays for the doors that
+    # import it from here.
+    return enc_label_chunk(n)
 
 
 def _uniq_scans(mut p: EncProg, base: Int, rows: Int, d: Int, stride: Int, counts: Int, out_buf: Int, presence: Bool):
