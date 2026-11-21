@@ -547,7 +547,7 @@ def _resident(call: _Call, words: Int, rows: Bool) raises -> Int:
     return put.store_id
 
 
-def _x_record(call: _Call, offset: Int, words: Int, mut held: PrepXHeld, inout: Bool,
+def _x_record(call: _Call, offset: Int, words: Int, mut held: PrepXHeld, in_out: Bool,
     scoped: Bool = True) raises -> XprepRunInput:
     """X as a program's input record at `offset` (`words` = the rows the
     operation reads times X's width). The door's rules
@@ -563,7 +563,7 @@ def _x_record(call: _Call, offset: Int, words: Int, mut held: PrepXHeld, inout: 
     # The range runner is certain for any scratch only with an output or a
     # scratch entry (`_execute_ranges`): a resident or gathered record needs it.
     var device = ((flags & PREP_ROUTE_DEV_PUT) != 0 and (flags & PREP_ROUTE_RANGES) != 0
-                  and (flags & (PREP_ROUTE_OUT | PREP_ROUTE_SCRATCH)) != 0 and not inout)
+                  and (flags & (PREP_ROUTE_OUT | PREP_ROUTE_SCRATCH)) != 0 and not in_out)
     var d = call[].x.cols
     var base_words = call[].x.rows * d
     if call[].row_index.rows > 0:
@@ -1242,11 +1242,11 @@ def _enc_run(call: _Call, mut prog: EncProgram, seconds: List[Int], output: Int,
         if record.owner == 0:
             # X: a resident or gathered record never for an input a stage
             # rewrites (the door's rule: in-out inputs are copied up).
-            var inout = False
+            var in_out = False
             for j in range(len(prog.inout_ranges) // 2):  # driver-loop: over the program's in-out input ranges
                 if prog.inout_ranges[2 * j] == record.offset and prog.inout_ranges[2 * j + 1] == record.offset + record.words:
-                    inout = True
-            inputs.append(_x_record(call, record.offset, record.words, held, inout, scoped))
+                    in_out = True
+            inputs.append(_x_record(call, record.offset, record.words, held, in_out, scoped))
         else:
             var address = record.address if record.owner < 0 else seconds[record.owner - 1]
             inputs.append(XprepRunInput(record.offset, record.words, address, -1, False, 0, False, 0, 0, 0))
