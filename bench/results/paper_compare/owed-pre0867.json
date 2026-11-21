@@ -942,6 +942,11 @@
    "define": "MOJOLEARN_ANN3_DIRECT_OUT",
    "status": "define in code (x_ann/ivf_pq_device.mojo ivf_sq_build_device_ptr and _ivf_pq_build_impl): A = the default since lane fx-ann-fit-nocopy, the IVF-SQ codes (n x dim int32) downloaded into the caller's array through the pooled pinned stages (download_i32_into); B = one raw device copy into the caller's pageable array. Plain copies: no bit moves. The arm was written for Apple fast (lane ann-apple3, paused, never run); since 2026-11-20 it is only this choice of copy and compiles in every mode.",
    "owed": "RUN"
+  },
+  "fast-bf16-resident": {
+   "define": "MOJOLEARN_GEMM_FAST_BF16_RESIDENT,MOJOLEARN_MODE_FAST_ROWS",
+   "status": "define in code (gemm/fast_bf16_resident.mojo GEMM_FAST_BF16_RESIDENT; refused outside a fast-rows build with the matrix-units route, core/experiment_guards_neural.mojo), lane inv-bf16-kernel 2026-11-20: bf16 matrix-unit products over RESIDENT bf16 operands (a weight narrowed once and kept until its owner reports a rewrite; an activation stored in bf16 by the epilogue launch that produces it; FP32 accumulation, FP32 at the public boundary; one launch a product). A new define: the per-call arm MOJOLEARN_GEMM_FAST_BF16_UNITS stays deleted (docs/TOMBSTONES.md). No product route reads it yet: its only consumer is bench/gemm_units_kernel_clock_main.mojo, whose arms fp32-exact, tf32-unit, bf16-percall and bf16-resident are four calls inside this ONE build (A and B are lines of one program run, not two wheels). The product wiring (sequence executor inference chain, neural dispatch) is decided by the kernel-clock rows.",
+   "owed": "RUN"
   }
  },
  "rows": [
@@ -5561,6 +5566,182 @@
     "ann3-direct-out"
    ],
    "decides": "which copy brings the n x dim codes into the caller's array: B (one raw copy into pageable memory) becomes the default and the switch goes if it is faster than A (pooled pinned stages) beyond noise on ivf-sq fit; otherwise the arm stays opt-in for the paused Apple fast programme (not deleted on this NVIDIA row: its programme is paused)"
+  },
+  {
+   "id": "kernel-clock-units-square",
+   "source": "lane inv-bf16-kernel (2026-11-20; Andrew: 'shouldn't bf16 be faster than tf32?'): the board's gemm row is a transport row (two 64 MB uploads, one 64 MB download into fresh pages, one product of about a tenth of the clock), so A/B abf2 could not separate the units; these rows time the product alone on device-resident operands, transport beside it",
+   "kind": "driver",
+   "driver": "bench/gemm_units_kernel_clock_main.mojo (MOJOLEARN_KCLOCK_ONLY=square), one process on the L40S, a fast-rows sm_89 build with -D MOJOLEARN_GEMM_FAST_BF16_RESIDENT; lines KCLOCK <row> arm <arm>",
+   "shapes": [
+    {
+     "m": 2048,
+     "n": 2048,
+     "k": 2048,
+     "side": "an eighth of the public gemm row's work: about 0.2 ms of TF32 arithmetic, near the launch floor"
+    },
+    {
+     "m": 4096,
+     "n": 4096,
+     "k": 4096,
+     "side": "the public gemm row's product, without its 192 MB of transport"
+    },
+    {
+     "m": 8192,
+     "n": 8192,
+     "k": 8192,
+     "side": "eight times the work: arithmetic-bound on every unit"
+    }
+   ],
+   "b_arms": [
+    "fast-bf16-resident"
+   ],
+   "columns": [
+    "median_ms of 20 consecutive calls (min, max)",
+    "tflops",
+    "launches_per_call",
+    "max_rel_diff_vs_fp32",
+    "transport beside the product: upload_ms, download_fresh_ms, download_ms (the row's upload_ms_separate)",
+    "narrow_once_ms"
+   ],
+   "decides": "whether the half-precision unit is faster than the TF32 unit on the multiply itself (bf16-resident against tf32-unit, expected about 2x from the stored torch kernel rates 102.9 / 186.0 TFLOP/s of bench/results/gemm-ceiling-20260930), what the per-call narrowing of the deleted arm cost (bf16-percall against bf16-resident), and how the public gemm row's clock splits into transport and product; a bf16-resident line slower than tf32-unit at 8192 means the MAX bf16 product does not reach the half-precision unit and is reported to Modular, not worked around"
+  },
+  {
+   "id": "kernel-clock-units-aspect",
+   "source": "lane inv-bf16-kernel (2026-11-20; Andrew: 'shouldn't bf16 be faster than tf32?'): the board's gemm row is a transport row (two 64 MB uploads, one 64 MB download into fresh pages, one product of about a tenth of the clock), so A/B abf2 could not separate the units; these rows time the product alone on device-resident operands, transport beside it",
+   "kind": "driver",
+   "driver": "bench/gemm_units_kernel_clock_main.mojo (MOJOLEARN_KCLOCK_ONLY=aspect), same build and process",
+   "shapes": [
+    {
+     "m": 1024,
+     "n": 1024,
+     "k": 65536,
+     "side": "the work of 4096^3 as a long K (a weight gradient's form)"
+    },
+    {
+     "m": 65536,
+     "n": 1024,
+     "k": 1024,
+     "side": "the same work as a tall batch against a narrow layer"
+    },
+    {
+     "m": 2048,
+     "n": 32768,
+     "k": 1024,
+     "side": "the same work as a wide output (a head)"
+    }
+   ],
+   "b_arms": [
+    "fast-bf16-resident"
+   ],
+   "columns": [
+    "median_ms of 20 consecutive calls (min, max)",
+    "tflops",
+    "launches_per_call",
+    "max_rel_diff_vs_fp32"
+   ],
+   "decides": "that the square ladder's verdict is not a property of the square: the unit ranking must hold at equal work in three aspects; an aspect where bf16-resident loses to tf32-unit is excluded from any later route by a size reason stated in the code, never by a shape list"
+  },
+  {
+   "id": "kernel-clock-units-layer",
+   "source": "lane inv-bf16-kernel (2026-11-20; Andrew: 'shouldn't bf16 be faster than tf32?'): the board's gemm row is a transport row (two 64 MB uploads, one 64 MB download into fresh pages, one product of about a tenth of the clock), so A/B abf2 could not separate the units; these rows time the product alone on device-resident operands, transport beside it",
+   "kind": "driver",
+   "driver": "bench/gemm_units_kernel_clock_main.mojo (MOJOLEARN_KCLOCK_ONLY=layer), same build and process",
+   "shapes": [
+    {
+     "m": 4096,
+     "n": 256,
+     "k": 256,
+     "side": "a hidden layer at a 4096-row chunk: microseconds of unit arithmetic, launch-bound"
+    },
+    {
+     "m": 4096,
+     "n": 1024,
+     "k": 1024,
+     "side": "the same layer form at 16 times the work"
+    },
+    {
+     "m": 8192,
+     "n": 1024,
+     "k": 384,
+     "side": "a feed-forward up-projection at 8192 tokens, small width"
+    },
+    {
+     "m": 8192,
+     "n": 3072,
+     "k": 768,
+     "side": "the same form at 12 times the work"
+    },
+    {
+     "m": 512,
+     "n": 4096,
+     "k": 4096,
+     "side": "the projection of the stored kernel-only torch table (gemm-ceiling-20260930)"
+    }
+   ],
+   "b_arms": [
+    "fast-bf16-resident"
+   ],
+   "columns": [
+    "median_ms of 20 consecutive calls (min, max)",
+    "tflops",
+    "launches_per_call",
+    "max_rel_diff_vs_fp32"
+   ],
+   "decides": "the work below which a product is launch-bound on both units (tf32-unit and bf16-resident equal within the spread): under it bf16 cannot gain in any product route and the TF32 default stays; above it the ratio is the gain a resident route can deliver to a model whose layers are that size"
+  },
+  {
+   "id": "kernel-clock-units-chain",
+   "source": "lane inv-bf16-kernel (2026-11-20; Andrew: 'shouldn't bf16 be faster than tf32?'): the board's gemm row is a transport row (two 64 MB uploads, one 64 MB download into fresh pages, one product of about a tenth of the clock), so A/B abf2 could not separate the units; these rows time the product alone on device-resident operands, transport beside it",
+   "kind": "driver",
+   "driver": "bench/gemm_units_kernel_clock_main.mojo (MOJOLEARN_KCLOCK_ONLY=chain), same build and process: a three-product MLP inference chain on resident weights; arms chain-fp32, chain-tf32, chain-bf16-resident",
+   "shape": [
+    {
+     "rows": 4096,
+     "features": 128,
+     "hidden": [
+      256,
+      256
+     ],
+     "outputs": 64
+    },
+    {
+     "rows": 4096,
+     "features": 512,
+     "hidden": [
+      1024,
+      1024
+     ],
+     "outputs": 64
+    },
+    {
+     "rows": 262144,
+     "features": 128,
+     "hidden": [
+      256,
+      256
+     ],
+     "outputs": 64
+    },
+    {
+     "rows": 65536,
+     "features": 512,
+     "hidden": [
+      1024,
+      1024
+     ],
+     "outputs": 64
+    }
+   ],
+   "b_arms": [
+    "fast-bf16-resident"
+   ],
+   "columns": [
+    "median_ms of 20 consecutive calls (min, max)",
+    "launches_per_call",
+    "max_rel_diff_vs_fp32 of the chain's output",
+    "weight_narrows_total (3: one a weight, however many calls)"
+   ],
+   "decides": "whether the resident bf16 arm is wired into the sequence executor's inference chain (sequence/mlp_fit.mojo::mlp_predict: weight images kept with the resident fitted block, the chunk copy narrowing the batch, the epilogue tail storing the next layer's image): only if chain-bf16-resident is faster than chain-tf32 beyond the spread with max_rel_diff_vs_fp32 inside 0.01 at a size and its neighbour; the 4096-row chunks against the whole-batch rows also price the 4096-row chunking of mlp_predict itself on both units"
   }
  ]
 }
