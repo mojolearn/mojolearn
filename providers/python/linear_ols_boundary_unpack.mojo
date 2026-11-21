@@ -13,13 +13,13 @@ from core.linear_fit_types import LinearFitRequest, LinearFitResult, LinearOlsPl
 from core.admitted_refusals import admitted_finite_refuse
 from core.host_finite_scan import host_all_finite_f32
 from core.linear_ols_run import linear_ols_plan, linear_ols_run, linear_ols_one_entry
-from core.linear_route import LinearRoute
+from core.device_route import DeviceRoute
 from providers.python.linear_state_boundary_door import linear_state_publish
 from providers.python.linear_route_boundary_door import linear_route_decomp_refuse
 
 
 def classical_ols_fit(model: PythonObject, args: PythonObject,
-    route: LinearRoute, pins: PythonObject, context: PythonObject) raises -> PythonObject:
+    route: DeviceRoute, pins: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = sequential_fields(model)
     classical_fit_replacements_admit(fields, False, context)
     var intercept = Bool(py=fields["fit_intercept"])
@@ -47,7 +47,7 @@ def classical_ols_fit(model: PythonObject, args: PythonObject,
     # The estimator's resolved entries (core/linear_route.mojo): the device
     # table's or the CPU table's, read once per estimator. This fit admits no
     # connection owner and reads no table slot.
-    var entry = route.fit.call
+    var entry = route.entry.call
     var plan = LinearOlsPlan(0, False, 0)
     var py = Python()
     try:
@@ -60,11 +60,11 @@ def classical_ols_fit(model: PythonObject, args: PythonObject,
     var mean = classical_array(cols, 0, context)
     var decomp_entry = entry
     if plan.tsqr:
-        if not route.has_decomp:
+        if not route.has_fourth:
             # The route's own words: the TSQR table is unbuilt, or it belongs
             # to another tier or vendor than the fit entry.
             linear_route_decomp_refuse(pins)
-        decomp_entry = route.decomp.call
+        decomp_entry = route.fourth.call
     var entry_tests_x = plan.tsqr and intercept and weights is None
     if entry_tests_x:
         try:

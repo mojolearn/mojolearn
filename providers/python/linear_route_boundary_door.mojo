@@ -1,130 +1,40 @@
 # SPDX-License-Identifier: Apache-2.0
-"""UNPACK of an estimator's device and numeric mode into its native route owner.
+"""The Ridge and LinearRegression resolver of the shared device route owner.
 
-`device=None` (default: this installation's device), `device="gpu"` or
-`device="cpu"` is a constructor parameter of Ridge and LinearRegression. Its
-value is stored as given, checked when it is given (constructor,
-`set_params`) and read ONCE, at the estimator's first operation, into a
-`LinearRouteOwner` kept in the weak model-record table. The owner holds the
-resolved entries of the device table or of the CPU table (core/linear_route.mojo)
-and the image pins of those tables. Every later fit, predict and score reads
-the owner and calls through it: no per-call device read, table slot lookup,
-schema String or vendor question.
+The owner, its slot, its hit test, the device reader and every device word
+are the shared ones (providers/python/device_route_boundary_door.mojo,
+core/device_route.mojo). This file is only what the family resolves on a
+miss: the device table (`context["classical_bindings"][mode]`) or the CPU
+table (`context["classical_cpu_bindings"]`), the fit and predict entries,
+Ridge's weighted solve and LinearRegression's TSQR table
+(core/linear_route.mojo names the slots).
 
-What a call still compares, as before this owner existed: the estimator's
-`numeric_mode` object and, when that is None, the process default mode
-object (two pointer compares against the owner's pins). A changed mode
-resolves again; `set_params` and a new `__init__` drop the owner.
+`device` is checked when it is given (constructor, `set_params`) and read
+ONCE, at the estimator's first operation. Every later fit, predict and score
+reads the owner (one record read and three pointer compares: the
+`numeric_mode` object, the process default mode object when that is None,
+the connection context) and calls through it.
 
-The owner replaces `classical_entries` (bindings/classical_native_pack.mojo)
-and `classical_host_entries` (bindings/classical_host_owner_unpack.mojo): the
-per-call mode String, the bindings and verdict dictionary reads, the
-connection-owner admission and the four `linear_table_entry` slot reads of
-fit, predict and score.
+# TOMBSTONE: `LinearRouteOwner` (its pins, registration, slot `linear_route_v1`, `linear_device_unpack`,
+# `linear_route_clear`) deleted 2026-11-20 by lane dw-core: one owner for every family
+# (`DeviceRouteOwner`). Code recoverable at 3a99eaa0dc.
 """
 from std.python import Python, PythonObject
-from std.python.bindings import PythonModuleBuilder, lookup_py_type_object
-from bindings.py_type_registry import py_type_absent, py_type_attach
-from bindings.native_owner_registry_unpack import register_native_owner_type
-from bindings.native_owner_registry_pack import borrowed_native_owner
-from bindings.py_balanced import py_call, py_type, py_get, py_item
-from bindings.py_model_records import records_get, records_put, records_drop, RECORDS_PREPARED
+from bindings.py_balanced import py_type, py_get, py_item
 from bindings.classical_keys_unpack import classical_keys
 from core.entry_table import EntryRef, entry_ref_word
 from core.linear_entry_table import LINEAR_TABLE_X_LINEAR, LINEAR_TABLE_DECOMP, linear_table_entry
 from core.linear_metadata import linear_mode_name, linear_vendor_code
-from core.linear_route import (
-    LinearRoute, LINEAR_DEVICE_CPU, LINEAR_DEVICE_INSTALL, linear_device_code, linear_device_refusal,
-    linear_device_installed, linear_route_resolve, linear_route_weighted,
+from core.device_route import (
+    DeviceRoute, DEVICE_CPU, DEVICE_INSTALL, device_installed, device_cpu_fast,
+)
+from core.linear_route import linear_route_resolve, linear_route_weighted
+from providers.python.device_route_boundary_door import (
+    DeviceRouteOwner, device_unpack, device_request, device_route_held, device_route_keep, device_route_value,
+    device_route_refuse,
 )
 from providers.python.linear_entry_boundary_door import linear_entry_connection
 from x_decomp.descriptor_schema import XD_ABI_NAME, XD_OPERATION_COUNT
-
-comptime _LINEAR_ROUTE_SLOT = "linear_route_v1"
-
-
-struct LinearRouteOwner(Movable, Writable):
-    var route: LinearRoute
-    var resolved: Bool
-    # Why LinearRegression's TSQR entry is not held (said when a fit needs it).
-    var decomp_refusal: String
-    # The objects the route was resolved for. Held, so their addresses stay
-    # theirs while this owner lives; a call compares identities only.
-    var mode: PythonObject
-    var default_mode: PythonObject
-    var context: PythonObject
-    # The entry dictionary and the connection owners of every resolved table:
-    # the extension images stay loaded while a call runs with the GIL released.
-    var images: PythonObject
-
-    def __init__(out self, device: Int):
-        self.route = LinearRoute(device)
-        self.resolved = False
-        self.decomp_refusal = String("")
-        self.mode = PythonObject(None)
-        self.default_mode = PythonObject(None)
-        self.context = PythonObject(None)
-        self.images = PythonObject(None)
-
-    def write_to(self, mut writer: Some[Writer]):
-        writer.write("LinearRouteOwner(device=", self.route.device, ", vendor=", self.route.vendor, ")")
-
-    def write_repr_to(self, mut writer: Some[Writer]):
-        self.write_to(writer)
-
-
-def linear_route_owner_pins(value: Int, index: Int) abi("C") -> Int:
-    if not value or index < -1 or index > 3:
-        return -1
-    try:
-        var owner = borrowed_native_owner(value)
-        var native = owner.downcast_value_ptr[LinearRouteOwner]()
-        var result = 4
-        if index == 0:
-            result = Int(native[].mode._obj_ptr)
-        elif index == 1:
-            result = Int(native[].default_mode._obj_ptr)
-        elif index == 2:
-            result = Int(native[].context._obj_ptr)
-        elif index == 3:
-            result = Int(native[].images._obj_ptr)
-        _ = owner
-        return result
-    except:
-        return -1
-
-
-def register_linear_route_owner(mut module: PythonModuleBuilder) raises:
-    var existing = PythonObject(None)
-    try:
-        existing = lookup_py_type_object[LinearRouteOwner]()
-    except error:
-        if not py_type_absent(error):
-            raise error
-        _ = module.add_type[LinearRouteOwner]("_LinearRouteOwner")
-        return
-    py_type_attach(module.module, "_LinearRouteOwner", existing)
-
-
-def register_linear_route_owner_identity(published: PythonObject) raises:
-    # After PythonModuleBuilder.finalize() only: Mojo 1.2 creates the type
-    # object in finalize() (bindings/native_owner_registry.mojo).
-    register_native_owner_type[LinearRouteOwner](published, linear_route_owner_pins)
-
-
-def linear_device_unpack(value: PythonObject, b: PythonObject) raises -> Int:
-    """The device code of a constructor value: None (this installation's
-    device), or exact `'gpu'` or `'cpu'`. Anything else is refused in words,
-    before any state changes. `b` is the builtins module the calling door
-    already admitted."""
-    if value is None:
-        return LINEAR_DEVICE_INSTALL
-    if py_type(value) is b.str:
-        var code = linear_device_code(String(value))
-        if code >= 0:
-            return code
-    linear_device_refusal(String(py_call(b.repr, value)))
-    return LINEAR_DEVICE_INSTALL
 
 
 def linear_device_admit(value: PythonObject, context: PythonObject, b: PythonObject) raises:
@@ -133,25 +43,19 @@ def linear_device_admit(value: PythonObject, context: PythonObject, b: PythonObj
     in words before the estimator changes. The default None reads nothing
     here. The explicit Host* classes run on the CPU by class and take any
     admitted value."""
-    var device = linear_device_unpack(value, b)
-    if device == LINEAR_DEVICE_INSTALL or device == LINEAR_DEVICE_CPU:
+    var device = device_unpack(value, b)
+    if device == DEVICE_INSTALL or device == DEVICE_CPU:
         return
     var nk = classical_keys()
     if Bool(py=py_get(context, nk[].k_classical_explicit_cpu, False)):
         return
-    _ = linear_device_installed(device, linear_vendor_code(String(py_item(context, nk[].k_vendor))))
-
-
-def linear_route_clear(model: PythonObject) raises:
-    """Forget the estimator's route (a new `__init__`, `set_params`): its next
-    operation reads the device and the mode again."""
-    records_drop(RECORDS_PREPARED, model, _LINEAR_ROUTE_SLOT)
+    _ = device_installed(device, linear_vendor_code(String(py_item(context, nk[].k_vendor))))
 
 
 def _linear_route_build(device: Int, ridge: Bool, mode: PythonObject,
-    default_mode: PythonObject, context: PythonObject, b: PythonObject) raises -> LinearRouteOwner:
+    default_mode: PythonObject, context: PythonObject, b: PythonObject) raises -> DeviceRouteOwner:
     var nk = classical_keys()
-    var owner = LinearRouteOwner(device)
+    var owner = DeviceRouteOwner(device)
     var selected = mode
     if mode is None:
         selected = default_mode
@@ -165,7 +69,7 @@ def _linear_route_build(device: Int, ridge: Bool, mode: PythonObject,
         # helper family is selected by the raw mode object, as before.
         if mode is not None and (py_type(mode) is not b.str or String(mode) != "identical"):
             raise Error("the host model runs identical only; this model was saved with a different numeric_mode")
-        owner.route.device = LINEAR_DEVICE_CPU
+        owner.route.device = DEVICE_CPU
         entries = py_item(py_item(context, nk[].k_classical_bindings), selected)
     else:
         if py_type(selected) is not b.str:
@@ -176,13 +80,13 @@ def _linear_route_build(device: Int, ridge: Bool, mode: PythonObject,
         # None is this installation's device; an explicit 'gpu' in a CPU-only
         # process is refused in words (an instance that reached here without
         # its constructor's check: unpickled, or its field assigned).
-        owner.route.device = linear_device_installed(device, process_vendor)
-        if owner.route.device == LINEAR_DEVICE_CPU and process_vendor != 0:
+        owner.route.device = device_installed(device, process_vendor)
+        if owner.route.device == DEVICE_CPU and process_vendor != 0:
             # A GPU installation: the CPU table of the host binaries, loaded
             # beside the device table at import
             # (python/mojolearn/_native_classical_bridge.py connect_cpu_device).
             if expected_mode != 1:
-                raise Error("ValueError: device='cpu' runs in identical mode only; numeric_mode='fast' is for Apple GPUs")
+                device_cpu_fast()
             var cpu = py_get(context, "classical_cpu_bindings")
             if cpu is None:
                 raise Error("ImportError: device='cpu' is not connected in this installation")
@@ -208,22 +112,22 @@ def _linear_route_build(device: Int, ridge: Bool, mode: PythonObject,
         # only by a fit whose plan takes the TSQR route, in the same words.
         var decomp = py_get(entries, "decomp")
         if py_type(decomp) is not b.dict:
-            owner.decomp_refusal = "ImportError: native LinearRegression TSQR entries unavailable: " + String(decomp)
+            owner.refusal = "ImportError: native LinearRegression TSQR entries unavailable: " + String(decomp)
         else:
             try:
                 var decomp_connection = linear_entry_connection(decomp, LINEAR_TABLE_DECOMP)
                 if (decomp_connection.key.mode != connection.key.mode
                         or decomp_connection.key.vendor != connection.key.vendor):
-                    owner.decomp_refusal = "native LinearRegression TSQR execution key differs"
+                    owner.refusal = "native LinearRegression TSQR execution key differs"
                 else:
                     var entry = linear_table_entry[LINEAR_TABLE_DECOMP](decomp_connection.key, 0,
                         String(XD_ABI_NAME), XD_OPERATION_COUNT)
-                    owner.route.decomp = EntryRef(entry, entry_ref_word(decomp_connection.key.mode,
+                    owner.route.fourth = EntryRef(entry, entry_ref_word(decomp_connection.key.mode,
                         decomp_connection.key.vendor, XD_OPERATION_COUNT))
-                    owner.route.has_decomp = True
+                    owner.route.has_fourth = True
                     decomp_images = decomp_connection.images
             except error:
-                owner.decomp_refusal = String(error)
+                owner.refusal = String(error)
     owner.mode = mode
     owner.default_mode = default_mode
     owner.context = context
@@ -236,7 +140,7 @@ def _linear_route_build(device: Int, ridge: Bool, mode: PythonObject,
 struct LinearRouteCall(Movable):
     """One operation's route: the resolved entries by value, and the owner
     whose pins keep their images loaded until the operation returns."""
-    var route: LinearRoute
+    var route: DeviceRoute
     var owner: PythonObject
 
 
@@ -252,26 +156,16 @@ def linear_route_call(model: PythonObject, fields: PythonObject, ridge: Bool,
     var default_mode = PythonObject(None)
     if mode is None:
         default_mode = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
-    var owner = records_get(RECORDS_PREPARED, model, _LINEAR_ROUTE_SLOT)
-    if owner is not None:
-        var native = owner.downcast_value_ptr[LinearRouteOwner]()
-        if (native[].resolved and native[].mode is mode and native[].default_mode is default_mode
-                and native[].context is context):
-            return LinearRouteCall(native[].route, owner)
-    # The one read of `device`. None, and an instance without the field
-    # (built without its constructor), run this installation's device.
-    var device = linear_device_unpack(py_get(fields, "device"), b)
-    var fresh = PythonObject(alloc=_linear_route_build(device, ridge, mode, default_mode, context, b))
-    # An estimator that takes no weak reference keeps no owner: it resolves
-    # at every operation (records_put answers False and stores nothing).
-    _ = records_put(RECORDS_PREPARED, model, _LINEAR_ROUTE_SLOT, fresh)
-    return LinearRouteCall(fresh.downcast_value_ptr[LinearRouteOwner]()[].route, fresh)
+    var owner = device_route_held(model, mode, default_mode, context)
+    if owner is None:
+        # The one read of `device`. None, and an instance without the field
+        # (built without its constructor), run this installation's device.
+        var device = device_request(fields, b)
+        owner = device_route_keep(model, _linear_route_build(device, ridge, mode, default_mode, context, b))
+    return LinearRouteCall(device_route_value(owner), owner)
 
 
 def linear_route_decomp_refuse(owner: PythonObject) raises:
     """Raise why this estimator's route holds no TSQR entry (failure path of
     a LinearRegression fit whose plan takes the TSQR route)."""
-    var text = owner.downcast_value_ptr[LinearRouteOwner]()[].decomp_refusal.copy()
-    if text.byte_length() == 0:
-        text = String("ImportError: native LinearRegression TSQR entries unavailable")
-    raise Error(text)
+    device_route_refuse(owner, String("ImportError: native LinearRegression TSQR entries unavailable"))
