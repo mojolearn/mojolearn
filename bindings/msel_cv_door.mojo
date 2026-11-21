@@ -70,7 +70,7 @@ from bindings.msel_split_door import msel_split, msel_check_cv, msel_default_fol
 from bindings.msel_cv_run import msel_seconds, _numeric_dtype
 from bindings.msel_member_units_door import msel_member_units
 from bindings.msel_scorer_native_door import msel_scorer_response, msel_scorer_predicted
-from core.member_abi import MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA
+from core.member_abi import MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA, MEMBER_OP_DECISION
 
 #: model_selection's CV_FAST bits of the resample binding's define mask.
 comptime MSEL_CV_SLICE_BIT = 32
@@ -983,13 +983,15 @@ struct MselUnitRun(Movable):
 
 def _msel_response_op(method: PythonObject) raises -> Int:
     """The member operation of a response method name the native member units
-    place (`predict`, `predict_proba`), else -1: decision_function and any
-    other response keep the Python units."""
+    place (`predict`, `predict_proba`, `decision_function`), else -1: any
+    other response keeps the Python units."""
     var name = String(py=method)
     if name == "predict":
         return MEMBER_OP_PREDICT
     if name == "predict_proba":
         return MEMBER_OP_PREDICT_PROBA
+    if name == "decision_function":
+        return MEMBER_OP_DECISION
     return -1
 
 
@@ -1013,7 +1015,8 @@ def _msel_member_route(mut run: MselUnitRun, mut rows: MselFoldRows, y: PythonOb
     The metric calls are SERIAL BY NATURE: the connected metric entries take
     Python arrays with the GIL held (core/metrics_entry_table.mojo holds a
     typed entry for R^2 only), exactly as each Python unit called them.
-    A scorer that reads decision_function keeps the Python units.
+    A scorer that reads decision_function is placed the same way when the
+    member's decision is the estimator's own shape (the door's RESPONSES note).
     CROSS_VAL_PREDICT (`run.method`): `predict` / `predict_proba` of each
     fold's test rows, placed the same way; no metric runs."""
     if rows.dev or len(rows.ranges) != 0 or rows.reuse_test:

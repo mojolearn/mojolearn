@@ -68,10 +68,15 @@ the Python units' member doors refuse it. y is admitted finite either way
 (`classical_check_y`, or the label encode).
 
 RESPONSE ELEMENT TYPE: the member's own OUTPUTS answer
-(`member_output_dtype`, once per operation at UNPACK). The placed buffers
-are int32 codes and float32 values; a member that writes another type
-(int64 codes, float64 probabilities) answers `ran == False` BEFORE any fit
-is spent, where its first response call used to refuse after the fits.
+(`member_output_dtype`, once per operation at UNPACK), and every buffer is
+placed in THAT type, so the worker's words are the result with no cast or
+copy pass and no precision change: a classifier's predict as int32 codes
+(the unit's own typed list) or int64 codes (an int64 Array), decoded to
+labels at PACK by the one encode's classes; values, probabilities and
+decision scores as a float32 or a float64 Array, which is the prediction
+object itself. A member that does not say its type is read as int32 codes /
+float32 values (as before the word existed). Any other answer (a float
+code, an integer score) is `ran == False` BEFORE any fit is spent.
 
 WHEN IT RUNS (`msel_member_units` answers `ran == False` otherwise and the
 caller keeps its Python units): the member's class carries a member mark and
@@ -83,18 +88,21 @@ tests those before calling).
 
 RESPONSES (`responses` not empty: a named scorer, or cross_val_predict). A
 unit then fits and, instead of the member's own score, writes
-`MEMBER_OP_PREDICT` / `MEMBER_OP_PREDICT_PROBA` of its test rows (and of its
-train rows when train scores are asked) into buffers placed at UNPACK: one
-float32 Array per (unit, side, response), sized from `member_outputs` before
-any state exists, which the unit's worker fills with the GIL released (no
-copy afterwards); a classifier's predict writes int32 codes into the unit's
-own typed list and PACK decodes them to labels with the classes of the one
-encode (`labels_decode_i32_codes`). `scores.outputs[(unit * sides + side) *
+`MEMBER_OP_PREDICT` / `MEMBER_OP_PREDICT_PROBA` / `MEMBER_OP_DECISION` (a
+classifier's `decision_function`) of its test rows (and of its train rows
+when train scores are asked) into buffers placed at UNPACK: one buffer per
+(unit, side, response) in the member's own element type (above), sized from
+`member_outputs` before any state exists, which the unit's worker fills with
+the GIL released (no copy afterwards); a classifier's predict writes codes
+and PACK decodes them to labels with the classes of the one encode. `scores.outputs[(unit * sides + side) *
 len(responses) + k]` is the prediction object (side 0 test, 1 train). The
 CALLER runs its metric over them (bindings/msel_cv_door.mojo): this file
 knows no scorer. Served only where the width is the plain one: predict one
-column, predict_proba one column per class; anything else takes the Python
-units.
+column, predict_proba one column per class, decision_function one column
+(the estimator's 1-D margin) or, with more than two classes, one column per
+class; anything else (a one-vs-one decision, a two-column binary decision)
+takes the Python units, because the shape the estimator's own method returns
+is then not the member's columns.
 
 THE RESIDENT SCOPE (MEMBER-ABI-V2.md item 27, THE PIN RULE at
 core/member_abi.mojo `MemberCall.pin`). For a member KIND with
@@ -140,7 +148,7 @@ from bindings.member_boundary_door import member_admit_serving, member_pack, mem
 from bindings.member_held_door import member_held_adopt
 from bindings.member_scope_door import member_scope_word, member_pin_take, member_pin_return
 from bindings.classifier_public_lifecycle_door import _public_labels
-from bindings.classical_labels_door import labels_decode_i32_codes
+from bindings.classical_labels_door import labels_decode_i32_codes, labels_decode_labels
 from bindings.family_common_pack import family_array
 from bindings.msel_common_door import msel_is_array, msel_addr, msel_index_i64, msel_encode
 from bindings.msel_cv_run import msel_seconds
@@ -159,6 +167,7 @@ from core.member_abi import (
     MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA,
     MEMBER_OP_FIT, MEMBER_OP_SCORE, MEMBER_CAN_FIT, MEMBER_CAN_SCORE, MEMBER_CAN_CLASSIFIER, MEMBER_CAN_ROW_INDEX,
     MEMBER_CAN_SCOPE, MEMBER_SCOPE_NONE, member_pin_settle,
+    MEMBER_OP_DECISION, MEMBER_CAN_DECISION, MEMBER_F64,
 )
 
 #: Rows below which a fold gather is not split (a task costs more than the
@@ -642,6 +651,8 @@ def _member_units(base: PythonObject, candidates: PythonObject, y: PythonObject,
             asked = asked | MEMBER_CAN_PREDICT
         elif responses[k] == MEMBER_OP_PREDICT_PROBA:
             asked = asked | MEMBER_CAN_PREDICT_PROBA
+        elif responses[k] == MEMBER_OP_DECISION:
+            asked = asked | MEMBER_CAN_DECISION
         else:
             return scores^
     var needs = asked
@@ -777,11 +788,21 @@ def _member_units(base: PythonObject, candidates: PythonObject, y: PythonObject,
                     return scores^
                 if responses[k] == MEMBER_OP_PREDICT and width != 1:
                     return scores^
-                # The element type is the member's own answer; one that does
-                # not say it is read as the placed type (as before the word
-                # existed). Any other type is the Python units' (module note).
-                var placed = MEMBER_I32 if coded else MEMBER_F32
-                if member_output_dtype(run.plans[0], responses[k], cols, 1, placed) != placed:
+                # decision_function: the 1-D margin, or one column per class
+                # with more than two classes (module note, RESPONSES).
+                if responses[k] == MEMBER_OP_DECISION and (not classifier or not (
+                        width == 1 or (run.classes > 2 and width == run.classes))):
+                    return scores^
+                # The element type is the member's own answer and the buffer
+                # is placed in it (module note); one that does not say it is
+                # read as int32 codes / float32 values, as before the word
+                # existed. Codes are integers, everything else floats.
+                var placed = member_output_dtype(run.plans[0], responses[k], cols, 1,
+                                                 MEMBER_I32 if coded else MEMBER_F32)
+                if coded:
+                    if placed != MEMBER_I32 and placed != MEMBER_I64:
+                        return scores^
+                elif placed != MEMBER_F32 and placed != MEMBER_F64:
                     return scores^
                 run.ops.append(responses[k])
                 run.widths.append(width)
@@ -796,9 +817,16 @@ def _member_units(base: PythonObject, candidates: PythonObject, y: PythonObject,
                             _ = py_call(outputs.append, PythonObject(None))
                             run.dst.append(0)
                         else:
+                            # int64 codes, float32 or float64 words: an Array
+                            # of that type, written in place by the worker.
                             run.codes.append(List[Int32]())
                             var shape = Python.tuple(count) if run.widths[k] == 1 else Python.tuple(count, run.widths[k])
-                            var placed = family_array(shape, "<f4", context)
+                            var typestr = "<f4"
+                            if run.words[k] == MEMBER_F64:
+                                typestr = "<f8"
+                            elif run.words[k] == MEMBER_I64:
+                                typestr = "<i8"
+                            var placed = family_array(shape, typestr, context)
                             _ = py_call(outputs.append, placed)
                             run.dst.append(msel_addr(placed) if count > 0 else 0)
             # The code lists' words are addressed once every list is in place.
@@ -910,8 +938,12 @@ def _member_units(base: PythonObject, candidates: PythonObject, y: PythonObject,
         # GIL held; the estimator's own predict made the same decode per unit.
         try:
             for i in range(len(run.codes)):  # driver-loop: over the placed code buffers
-                if run.words[i - (i // n_ops) * n_ops] == MEMBER_I32:
+                var word = run.words[i - (i // n_ops) * n_ops]
+                if word == MEMBER_I32:
                     py_setitem(outputs, PythonObject(i), labels_decode_i32_codes(classes, run.codes[i], member_context))
+                elif word == MEMBER_I64:
+                    # the worker's int64 code Array, read in place by the decode
+                    py_setitem(outputs, PythonObject(i), labels_decode_labels(classes, outputs[i], member_context))
         except:
             _free_kept(run)
             return scores^
