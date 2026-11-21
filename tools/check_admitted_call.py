@@ -128,7 +128,6 @@ DEBT = {
     'bindings/causal_model_config_door.mojo': {'cpython': 1},
     'bindings/causal_operation_owner_door.mojo': {'cpython': 3},
     'bindings/cfb_agglo_door.mojo': {'native_loaded_module': 5},
-    'bindings/cfb_dbscan_door.mojo': {'native_loaded_module': 1},
     'bindings/cfb_sparse_read_unpack.mojo': {'native_loaded_module': 1},
     'bindings/cfb_spectral_door.mojo': {'native_loaded_module': 6},
     'bindings/class_weight_boundary_unpack.mojo': {'cpython': 1, 'native_loaded_module': 1},
