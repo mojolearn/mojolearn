@@ -16,6 +16,8 @@ from core.native_scalar_decode import native_scalar_real
 from core.cast_in import CAST_KIND_BOOL, CAST_KIND_SIGNED, CAST_KIND_UNSIGNED
 from bindings.tsa_keys_unpack import tsa_keys
 from bindings.py_balanced import py_item
+from bindings.tsa_arima_route_unpack import arima_device_admit
+from providers.python.device_route_boundary_door import device_route_clear
 
 
 def arima_order(value: PythonObject, width: Int, name: String, context: PythonObject) raises -> PythonObject:
@@ -63,6 +65,10 @@ def arima_initialize(model: PythonObject, args: PythonObject, context: PythonObj
     var nk = tsa_keys()
     var fields = _fields(model)
     var b = native_loaded_module("builtins")
+    # `device` is checked before any field changes (an unknown value, or an
+    # explicit "gpu" on a CPU-only installation, is refused in words); it is
+    # read into the route owner at the estimator's first operation.
+    arima_device_admit(args[8], context, b)
     var order = arima_order(args[0], 3, "order", context)
     var seasonal = arima_order(args[1], 4, "seasonal_order", context)
     var trend = args[2]
@@ -108,6 +114,9 @@ def arima_initialize(model: PythonObject, args: PythonObject, context: PythonObj
     # NumericModeMixin wrapper): stored as given, checked when fit selects
     # the binary (bindings/tsa_arima_native.mojo).
     py_setitem(updates, nk[].k_numeric_mode, args[7])
+    py_setitem(updates, nk[].k_device, args[8])
+    # The route of an estimator constructed again is forgotten.
+    device_route_clear(model)
     forecast_commit(fields, updates, py_item(context, nk[].k_tsa_owner_context))
     return PythonObject(None)
 

@@ -336,6 +336,15 @@ def _handle(fields: PythonObject, kind: Int, binding: PythonObject, entry: Nativ
         arrays.append(_export_codes(fields, cached, n, pq_dim, context))
         key = _key(arrays, False, binding)
     if not resident:
+        # DEVICE (lane dw-neighbors): the CPU column mints no handle, so one
+        # found here was minted by a GPU image for the estimator on the other
+        # device that handed this one its fitted state in memory
+        # (`_check_both.on_device`). It was read above where the codes lived
+        # only on the device; this estimator now forgets it and never
+        # releases it: its owner still searches through it. Without this the
+        # CPU estimator's finalizer released the owner's live index.
+        if cached is not None:
+            _ = py_call(fields.pop, "_resident", PythonObject(None))
         return PythonObject(None)
     # p3-neighbors-cluster (hazard class A): the key holds identity, address
     # and shape, never values, so the fitted arrays become read-only when the

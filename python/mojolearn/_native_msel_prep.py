@@ -68,7 +68,7 @@ def connect(context, register, registry):
             methods = {
                 'fit': (fit, (arg(0), arg(1)) + ((keyword('sample_weight'),) if weighted else ())),
                 'predict': ('classifier_predict' if classifier else 'regressor_predict', (arg(0),)),
-                'score': ('classifier_score' if classifier else 'linear_regressor_score', (arg(0), arg(1))),
+                'score': ('classifier_score' if classifier else 'regressor_score', (arg(0), arg(1))),
             }
             if classifier:
                 methods['decision_function'] = ('decision_function', (arg(0),))
@@ -76,7 +76,6 @@ def connect(context, register, registry):
                 methods['predict_proba'] = ('sgd_predict_proba' if name == 'SGDClassifier' else 'lrcv_predict_proba', (arg(0),))
             plan = add(getattr(linear, name), linear._XL_CALL, linear._XL_CONTEXT, methods)
             if not classifier:
-                plan['method_entries'] = {'score': (linear._LINEAR_SCORE, linear._LINEAR_SCORE_CONTEXT)}
                 # A compiled caller that reads float32 words (an explainer, a meta
                 # estimator, a native scorer) takes the kernel's float32 output, as
                 # Ridge and LinearRegression's 'predict_score'; the public predict
