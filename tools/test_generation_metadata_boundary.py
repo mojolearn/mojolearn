@@ -30,6 +30,29 @@ def test_layer_request_and_route_types_are_native():
     assert 'PythonObject' not in source and 'std.python' not in source
 
 
+def test_model_owner_words_are_native_and_decide_the_forward_route():
+    # dw-causal (2026-11-21): the model owner's words and rules import no Python; forward, step and the
+    # per-token legacy read decide the route and check the state on them, not on the model record.
+    result = audit(roots=('core.causal_owner',))
+    assert result['passed'], result['failures']
+    source = (ROOT / 'core/causal_owner.mojo').read_text()
+    assert 'PythonObject' not in source and 'std.python' not in source
+    for name in ('_run', '_run_prepared', '_use_native_generation_engine', '_resident_forward_ok', '_positions'):
+        body = function(name)
+        for read in ('model.kind', 'model._head_int15', 'model.max_positions', 'model.vocab_size', 'len(model._blocks)',
+                     '"parallel_call") is not None', '"native_primitives"'):
+            assert read not in body, (name, read)
+    forward = function('causal_lm_forward_binding')
+    assert forward.index('causal_model_owner(mods, model)') < forward.index('_run(mods, owner.words, model, ids, state, one)')
+    assert 'model.vocab_size' not in forward
+    read = function('_read')
+    assert read.index('causal_model_owner(mods, s.model)') < read.index('while wrote')
+    owner = (ROOT / 'bindings/causal_operation_owner_door.mojo').read_text()
+    template = owner.index('var template = py_call(bi.dict, fields)')
+    assert owner.index('native_owner = causal_model_owner_build(fields)') < template
+    assert 'add_type[CausalModelOwner]("_CausalModelOwner")' in (ROOT / 'bindings/_mojolearn_tokenizer_host.mojo').read_text()
+
+
 def test_layer_inner_execution_uses_native_dimensions_and_weight_addresses():
     body = function('_causal_layer_run_bound')
     assert 'return _causal_layer_run_bound(' in function('_causal_layer_run_prepared')
