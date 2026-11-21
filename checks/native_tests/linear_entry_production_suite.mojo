@@ -22,6 +22,7 @@ from core.linear_route import (
     LinearRoute, LINEAR_DEVICE_CPU, LINEAR_DEVICE_GPU, LINEAR_DEVICE_INSTALL,
     linear_device_code, linear_device_installed, linear_route_resolve,
 )
+from core.native_descriptor_call import native_descriptor_call
 from glm.host.linear_fit_native import LINEAR_FIT_HOST_API, linear_fit_host_v1
 from glm.host.linear_predict_native import linear_predict_host_v1
 
@@ -65,6 +66,23 @@ def device_rules() raises:
         require(String(problem).find("device='cpu'") >= 0, "the gpu refusal does not name device='cpu'")
         refused = True
     require(refused, "an explicit gpu ran on a CPU-only process")
+
+
+def route_metrics_default() raises:
+    # Only a CPU route resolved beside a GPU set is given a metrics entry
+    # (providers/python/metrics_route_boundary_door.mojo). Every other route
+    # scores on the process's table: it claims none, and its metrics ref
+    # refuses a call instead of calling anything.
+    for device in range(LINEAR_DEVICE_GPU, LINEAR_DEVICE_INSTALL + 1):  # the three device words
+        var route = LinearRoute(device)
+        require(not route.has_metrics, "a new route claims a metrics entry")
+        var refused = False
+        try:
+            _ = native_descriptor_call(route.metrics.call, 0, List[Int](), List[Int](), List[Float64]())
+        except problem:
+            require(String(problem).find("not resolved") >= 0, "wrong unresolved metrics entry refusal")
+            refused = True
+        require(refused, "an unresolved metrics entry answered")
 
 
 def missing_before_publication() raises:
@@ -165,6 +183,7 @@ def fixture(wide: Bool) raises:
 
 def run_checks() raises:
     device_rules()
+    route_metrics_default()
     missing_before_publication()
     # Same native publication, schema, endpoint order and publisher identity
     # as _mojolearn_estimators_host initialization, with no Python import.
