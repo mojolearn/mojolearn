@@ -124,9 +124,21 @@ def test_a_sample_of_public_estimators_inherits_it():
     index = _index()
     missing = [name for name in SAMPLE if not _reaches(index, lazy[name].lstrip("."), name)]
     assert missing == []
+    searches = PKG / "model_selection.py"
     for path in PKG.rglob("*.py"):    # the families with their own base mix in the same class, never a copy
-        if "tests" not in path.relative_to(PKG).parts and path != MODE:
+        if "tests" not in path.relative_to(PKG).parts and path not in (MODE, searches):
             assert "def check(self, X" not in path.read_text(), path
+    # The one other definition (2026-11-18): a search has no device of its own, so `_BaseSearch.check` is the
+    # check of its fitted `best_estimator_` (the same `_verify_check.check`, imported on the call), defined once
+    # on the search base and nowhere else in that module.
+    tree = _tree(searches)
+    defined = [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "check"]
+    assert len(defined) == 1, "one search check, no copies"
+    assert defined[0] in _class(tree, "_BaseSearch").body
+    body = ast.unparse(defined[0])
+    assert "from ._verify_check import check, format_check" in body
+    assert "check(best, X, method=method)" in body
+    assert "best_estimator_" in body
 
 
 # --------------------------------------------------------------------------

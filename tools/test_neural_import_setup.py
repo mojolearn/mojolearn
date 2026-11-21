@@ -13,16 +13,25 @@ PACKAGE = ROOT / "python/mojolearn"
 
 def mode_declarations():
     source = ast.parse((PACKAGE / "_mode.py").read_text())
-    constants = {"_FITS", "_LOADS", "_NEEDS_FIT", "_OUTPUTS"}
+    # The device-table state lane dw-core added (2026-11-20): the wrapper
+    # queues its class on _DEVICE_PENDING for install_device.
+    constants = {"_FITS", "_LOADS", "_NEEDS_FIT", "_OUTPUTS",
+                 "_DEVICE_PENDING", "_DEVICE_INSTALLED", "_DEVICE_SKIPPED", "_OBJECT_GET"}
     nodes = [node for node in source.body if isinstance(node, (ast.FunctionDef, ast.ClassDef))
              or (isinstance(node, ast.Assign)
                  and any(isinstance(target, ast.Name) and target.id in constants for target in node.targets))]
     namespace = {"__name__": "mojolearn._mode", "functools": functools, "inspect": inspect,
                  "_PARAMS_METADATA_CONTEXT": None,
+                 # _mode.py imports `record as _device_record` from _device_table
+                 # (one device-table row per class statement). Only the defs are
+                 # executed here, so the import is supplied: it records the class
+                 # in a list the tests can read; the table's answer is not under test.
+                 "_DEVICE_RECORDED": [],
                  # Validation is never executed: only wrapper creation/identity
                  # is checked, with inert argument-slot admission metadata.
                  "_sk_validate": types.SimpleNamespace(FIT_METHODS={"fit"},
                      arg_slots=lambda method: (None, None, None))}
+    namespace["_device_record"] = namespace["_DEVICE_RECORDED"].append
     exec(compile(ast.Module(body=nodes, type_ignores=[]), "_mode setup declarations", "exec"), namespace)
     # The real import installs a native generic slot here. Its behavior is not
     # under test; this sentinel proves the selected classes own their final slot.
@@ -58,6 +67,8 @@ class ImportSetup(unittest.TestCase):
                 mode = inspect.signature(initializer).parameters["numeric_mode"]
                 self.assertEqual(mode.kind, inspect.Parameter.KEYWORD_ONLY)
                 self.assertIsNone(mode.default)
+                # Every class statement still writes its one device-table row.
+                self.assertIn(cls, self.namespace["_DEVICE_RECORDED"])
                 self.assertIs(vars(cls)["__getattribute__"], object.__getattribute__)
                 self.assertNotIn("_mojolearn_native_public", vars(cls))
                 self.assertNotIn("_native_constructor", vars(cls))

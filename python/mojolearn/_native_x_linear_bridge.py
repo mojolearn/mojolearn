@@ -139,14 +139,18 @@ def _connect_cpu_device(context, with_solver):
     `device="cpu"` estimator first needs it."""
     # glue: load the CPU images once and retain their tables; nothing here runs per call
     from types import BuiltinFunctionType
-    from . import _backend
+    from . import _backend, host_surface
     if context["vendor"] == "cpu" or _backend._CPU_ONLY is not None:
         return
     errors = (ImportError, AttributeError, TypeError, ValueError, RuntimeError, OSError, KeyError)
+    # The manifest's route table, read once here (as _native_trees_bridge does):
+    # `_backend._HOST_MODULES` is read only by the CPU-only selector
+    # (tools/test_lane_select_narrowing.py).
+    routed = host_surface.routed_modules()
 
     def host(name):
         # glue: the CPU identical image of one device binding (read back as CPU and identical when loaded)
-        return _backend.load_host_module(_backend._HOST_MODULES[name])
+        return _backend.load_host_module(routed[name])
 
     linear_name, solver_name, x_metrics_name, metrics_name = _CPU_DEVICE_BINDINGS
     try:
