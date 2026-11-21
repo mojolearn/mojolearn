@@ -527,11 +527,13 @@ def _rf_regressor_fit_dart(params: ForestFitArgs) raises -> Int:
         var c = params.cls
         var rows_a = params.x
         var cols_a = params.y
+        # held for this member fit (the registry's lock word covers the
+        # lookup only; lane fx-gil)
         var dreg = DART_HOST_SESSIONS.get_or_create_ptr()
-        var di = dreg[].find(hid)
-        var n = dreg[].sessions[di].n
-        var d = dreg[].sessions[di].d
-        var k = dreg[].sessions[di].k
+        var dsess = dreg[].lease(hid)
+        var n = dsess[].n
+        var d = dsess[].d
+        var k = dsess[].k
         if c < 0 or c >= k:
             raise Error(entry + ": class out of range")
         if n_rows <= 0 or n_cols <= 0:
@@ -549,14 +551,20 @@ def _rf_regressor_fit_dart(params: ForestFitArgs) raises -> Int:
         var y = List[Float32]()
         rf_host_dart_member_xy(
             entry, rows_a, cols_a, n_rows, n_cols, n, d, c,
-            dreg[].sessions[di].x_addr, dreg[].sessions[di].target, x, y,
+            dsess[].x_addr, dsess[].target, x, y,
         )
         var y_address = Int(y.unsafe_ptr())
         var forest: RfHostForest
-        with GILReleased(Python()):
+        if params.gil_free:
+            # a member's worker: no GIL to release (core/forest_entry.mojo)
             forest = _rf_fit_colmajor[False](
                 x^, y_address, n_rows, n_cols, 0, p, List[Float32](), 0
             )
+        else:
+            with GILReleased(Python()):
+                forest = _rf_fit_colmajor[False](
+                    x^, y_address, n_rows, n_cols, 0, p, List[Float32](), 0
+                )
         # y is read through its address inside the fit: keep it alive past it
         _ = y^
         return _retain_rf_handle(forest^)

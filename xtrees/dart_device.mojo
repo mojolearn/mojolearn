@@ -56,7 +56,7 @@ from xtrees.dart_units import (
     IDN_DART_DEVICE, DART_CHUNK, F32P, I32P, I64P, U16P, dart_init_unit, dart_drop_unit, dart_row_unit, dart_apply_unit,
     dart_leaf_sum_unit, dart_leaf_sum_rows_unit, dart_newton_unit, dart_add_unit, U64P, dart_predict_unit,
 )
-from std.memory import bitcast
+from std.memory import bitcast, ArcPointer
 
 # fam2-forests (2026-10-04), IDENTICAL, every vendor, default ON: the round
 # below is DART's IDENTICAL route too (`IDN_DART_DEVICE`). Before, an
@@ -89,7 +89,7 @@ comptime DART_DEVICE = (
 ) or IDN_DART_DEVICE
 
 from core.apple_fast_tree_experiments import AFT_DART_ROWS, AFT_DART_ADD_ROWS
-from core.shared_slot import SharedSlot
+from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 
 comptime TPB = 256
 comptime GRID_MAX = 65535 * 16
@@ -341,21 +341,60 @@ struct DartSession(Movable):
 
 
 struct DartRegistry(Defaultable, Movable):
-    var sessions: List[DartSession]
+    """The open DART sessions. `lock` guards the list and `next_id` for one list step
+    (mint, keep, lease, retire); an operation holds its entry by a copy of
+    the `ArcPointer` and launches with no lock, so nothing here relies on
+    the GIL (lane fx-gil, 2026-11-21: a bare List another thread's open
+    could reallocate under a running round)."""
+    var lock: List[Int64]
+    var sessions: List[ArcPointer[DartSession]]
     var next_id: Int
 
     def __init__(out self):
-        self.sessions = List[DartSession]()
+        self.lock = List[Int64](length=1, fill=Int64(0))
+        self.sessions = List[ArcPointer[DartSession]]()
         self.next_id = 1
 
-    def find(self, id: Int) raises -> Int:
-        for i in range(len(self.sessions)):  # small-loop(self.sessions: open DART sessions): a handle lookup over live fits
-            if self.sessions[i].id == id:
-                return i
-        raise Error("x_trees dart: unknown or closed session handle")
+    def mint(mut self) -> Int:
+        var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](self.lock.unsafe_ptr())
+        shared_slot_lock(word)
+        var id = self.next_id
+        self.next_id += 1
+        shared_slot_unlock(word)
+        return id
+
+    def keep(mut self, entry: ArcPointer[DartSession]):
+        var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](self.lock.unsafe_ptr())
+        shared_slot_lock(word)
+        self.sessions.append(entry.copy())
+        shared_slot_unlock(word)
+
+    def lease(mut self, id: Int) raises -> ArcPointer[DartSession]:
+        var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](self.lock.unsafe_ptr())
+        shared_slot_lock(word)
+        try:
+            for i in range(len(self.sessions)):  # small-loop(live handles): a handle lookup over live fits
+                if self.sessions[i][].id == id:
+                    return self.sessions[i].copy()
+            raise Error("x_trees dart: unknown or closed session handle")
+        finally:
+            shared_slot_unlock(word)
+
+    def retire(mut self, id: Int) raises -> ArcPointer[DartSession]:
+        """The entry leaves the registry; it is freed when the caller and
+        every operation still holding it let go."""
+        var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](self.lock.unsafe_ptr())
+        shared_slot_lock(word)
+        try:
+            for i in range(len(self.sessions)):  # small-loop(live handles): a handle lookup over live fits
+                if self.sessions[i][].id == id:
+                    return self.sessions.pop(i)
+            raise Error("x_trees dart: unknown or closed session handle")
+        finally:
+            shared_slot_unlock(word)
 
 
-comptime DART_SESSIONS = SharedSlot[DartRegistry, "MojolearnXTreesDartSessionsV1"]
+comptime DART_SESSIONS = SharedSlot[DartRegistry, "MojolearnXTreesDartSessionsV2", 2]
 
 
 @always_inline
@@ -436,12 +475,11 @@ def dart_open(
         _ = x_status^
         _ = x_word^
         var reg = DART_SESSIONS.get_or_create_ptr()
-        var id = reg[].next_id
-        reg[].next_id += 1
-        reg[].sessions.append(DartSession(
+        var id = reg[].mint()
+        reg[].keep(ArcPointer[DartSession](DartSession(
             id, n, d, k, kind, cap_iters, node_cap, n_chunks, x^, y^, score^, dsum^, target^, h^, nodes^, values^, cached^,
             coef^, thr^, flags^, bad^, part^, colid^, quesval^, left^, rows^,
-        ))
+        )))
         return id
     else:
         raise Error("x_trees dart_open: built without DART_DEVICE (no accelerator)")
@@ -459,37 +497,37 @@ def dart_step(
     word (int32 1), then waits: the round's one sync."""
     comptime if DART_DEVICE:
         var reg = DART_SESSIONS.get_or_create_ptr()
-        var idx = reg[].find(id)
-        var n = reg[].sessions[idx].n
-        var k = reg[].sessions[idx].k
+        var sess = reg[].lease(id)
+        var n = sess[].n
+        var k = sess[].k
         # cpu4-forest: the member fits read the `target` plane on the
         # device (`rf_regressor_fit_dart_export`); no target crosses to the
         # host, so `targets` must be empty (kept in the signature only)
-        if t < 0 or t > reg[].sessions[idx].cap_iters or len(targets) != 0:
+        if t < 0 or t > sess[].cap_iters or len(targets) != 0:
             raise Error("x_trees dart_step: iteration count or targets out of range")
         var ctx = process_ctx[_DART_CTX]()
         if t > 0:
-            var csub = reg[].sessions[idx].coef.create_sub_buffer[DType.float32](0, t * k)
+            var csub = sess[].coef.create_sub_buffer[DType.float32](0, t * k)
             ctx.enqueue_copy(dst_buf=csub, src_ptr=F32P(unsafe_from_address=coef_addr))
-            var tsub = reg[].sessions[idx].thr.create_sub_buffer[DType.int64](0, t)
+            var tsub = sess[].thr.create_sub_buffer[DType.int64](0, t)
             ctx.enqueue_copy(dst_buf=tsub, src_ptr=I64P(unsafe_from_address=thr_addr))
             ctx.enqueue_function[dart_drop_kernel](
-                Int64(t), Int64(seed), Int64(stream), Int64(skip_thr), _i64(reg[].sessions[idx].thr),
-                _i(reg[].sessions[idx].flags),
+                Int64(t), Int64(seed), Int64(stream), Int64(skip_thr), _i64(sess[].thr),
+                _i(sess[].flags),
                 grid_dim=(_blocks(t), 1, 1), block_dim=(TPB, 1, 1),
             )
         ctx.enqueue_function[dart_row_kernel_reference](
-            Int64(n), Int64(n), Int32(k), Int32(t), Int32(reg[].sessions[idx].kind),
-            Int32(reg[].sessions[idx].node_cap), _i(reg[].sessions[idx].flags), _f(reg[].sessions[idx].coef),
-            _u16(reg[].sessions[idx].nodes), _f(reg[].sessions[idx].values), _f(reg[].sessions[idx].y),
-            _f(reg[].sessions[idx].score), _f(reg[].sessions[idx].dsum), _f(reg[].sessions[idx].target),
-            _f(reg[].sessions[idx].h),
+            Int64(n), Int64(n), Int32(k), Int32(t), Int32(sess[].kind),
+            Int32(sess[].node_cap), _i(sess[].flags), _f(sess[].coef),
+            _u16(sess[].nodes), _f(sess[].values), _f(sess[].y),
+            _f(sess[].score), _f(sess[].dsum), _f(sess[].target),
+            _f(sess[].h),
             grid_dim=(_blocks((n + AFT_DART_ROWS - 1) // AFT_DART_ROWS), 1, 1), block_dim=(TPB, 1, 1),
         )
         if t > 0:
-            var fsub = reg[].sessions[idx].flags.create_sub_buffer[DType.int32](0, t)
+            var fsub = sess[].flags.create_sub_buffer[DType.int32](0, t)
             ctx.enqueue_copy(dst_ptr=I32P(unsafe_from_address=flags_out), src_buf=fsub)
-        ctx.enqueue_copy(dst_ptr=I32P(unsafe_from_address=bad_out), src_buf=reg[].sessions[idx].bad)
+        ctx.enqueue_copy(dst_ptr=I32P(unsafe_from_address=bad_out), src_buf=sess[].bad)
         ctx.synchronize()
     else:
         raise Error("x_trees dart_step: built without DART_DEVICE (no accelerator)")
@@ -513,62 +551,62 @@ def dart_add(
     lands by that sync)."""
     comptime if DART_DEVICE:
         var reg = DART_SESSIONS.get_or_create_ptr()
-        var idx = reg[].find(id)
-        var n = reg[].sessions[idx].n
-        var k = reg[].sessions[idx].k
-        var node_cap = reg[].sessions[idx].node_cap
-        var n_chunks = reg[].sessions[idx].n_chunks
-        if j < 0 or j >= reg[].sessions[idx].cap_iters * k or c < 0 or c >= k:
+        var sess = reg[].lease(id)
+        var n = sess[].n
+        var k = sess[].k
+        var node_cap = sess[].node_cap
+        var n_chunks = sess[].n_chunks
+        if j < 0 or j >= sess[].cap_iters * k or c < 0 or c >= k:
             raise Error("x_trees dart_add: tree or class index out of range")
         if n_nodes < 1 or n_nodes > node_cap or lo < 0:
             raise Error("x_trees dart_add: a tree with more nodes than 2 * num_leaves - 1")
         if m < 0 or m > n:
             raise Error("x_trees dart_add: bag row count out of range")
         var ctx = process_ctx[_DART_CTX]()
-        var csub = reg[].sessions[idx].colid.create_sub_buffer[DType.int32](0, n_nodes)
+        var csub = sess[].colid.create_sub_buffer[DType.int32](0, n_nodes)
         ctx.enqueue_copy(dst_buf=csub, src_ptr=I32P(unsafe_from_address=colid_addr + 4 * lo))
-        var qsub = reg[].sessions[idx].quesval.create_sub_buffer[DType.float32](0, n_nodes)
+        var qsub = sess[].quesval.create_sub_buffer[DType.float32](0, n_nodes)
         ctx.enqueue_copy(dst_buf=qsub, src_ptr=F32P(unsafe_from_address=quesval_addr + 4 * lo))
-        var lsub = reg[].sessions[idx].left.create_sub_buffer[DType.int32](0, n_nodes)
+        var lsub = sess[].left.create_sub_buffer[DType.int32](0, n_nodes)
         ctx.enqueue_copy(dst_buf=lsub, src_ptr=I32P(unsafe_from_address=left_addr + 4 * lo))
         var row_off = Int64(j * n)
         var class_off = Int64(c * n)
         var voff = Int64(j * node_cap)
         ctx.enqueue_function[dart_apply_kernel](
-            Int64(n), Int32(reg[].sessions[idx].d), Int32(n_nodes), _i(reg[].sessions[idx].colid),
-            _f(reg[].sessions[idx].quesval), _i(reg[].sessions[idx].left), _f(reg[].sessions[idx].x), row_off,
-            _u16(reg[].sessions[idx].nodes), _i(reg[].sessions[idx].bad),
+            Int64(n), Int32(sess[].d), Int32(n_nodes), _i(sess[].colid),
+            _f(sess[].quesval), _i(sess[].left), _f(sess[].x), row_off,
+            _u16(sess[].nodes), _i(sess[].bad),
             grid_dim=(_blocks(n), 1, 1), block_dim=(TPB, 1, 1),
         )
         if m > 0:
             n_chunks = (m + DART_CHUNK - 1) // DART_CHUNK
-            var rsub = reg[].sessions[idx].rows.create_sub_buffer[DType.int32](0, m)
+            var rsub = sess[].rows.create_sub_buffer[DType.int32](0, m)
             ctx.enqueue_copy(dst_buf=rsub, src_ptr=I32P(unsafe_from_address=rows_addr))
             var units = n_nodes * n_chunks
             ctx.enqueue_function[dart_leaf_sum_rows_kernel](
-                Int64(units), Int64(n), Int64(m), Int32(n_nodes), row_off, class_off, _i(reg[].sessions[idx].rows),
-                _u16(reg[].sessions[idx].nodes), _f(reg[].sessions[idx].target), _f(reg[].sessions[idx].h),
-                _f(reg[].sessions[idx].part), _i(reg[].sessions[idx].bad),
+                Int64(units), Int64(n), Int64(m), Int32(n_nodes), row_off, class_off, _i(sess[].rows),
+                _u16(sess[].nodes), _f(sess[].target), _f(sess[].h),
+                _f(sess[].part), _i(sess[].bad),
                 grid_dim=(_blocks(units), 1, 1), block_dim=(TPB, 1, 1),
             )
         else:
             var units = n_nodes * n_chunks
             ctx.enqueue_function[dart_leaf_sum_kernel](
-                Int64(units), Int64(n), Int32(n_nodes), row_off, class_off, _u16(reg[].sessions[idx].nodes),
-                _f(reg[].sessions[idx].target), _f(reg[].sessions[idx].h), _f(reg[].sessions[idx].part),
+                Int64(units), Int64(n), Int32(n_nodes), row_off, class_off, _u16(sess[].nodes),
+                _f(sess[].target), _f(sess[].h), _f(sess[].part),
                 grid_dim=(_blocks(units), 1, 1), block_dim=(TPB, 1, 1),
             )
         ctx.enqueue_function[dart_newton_kernel](
-            Int64(n_nodes), Int32(n_nodes), Int32(n_chunks), _f(reg[].sessions[idx].part), Float32(lam),
-            Float32(l1), Float32(mds), voff, _f(reg[].sessions[idx].values),
+            Int64(n_nodes), Int32(n_nodes), Int32(n_chunks), _f(sess[].part), Float32(lam),
+            Float32(l1), Float32(mds), voff, _f(sess[].values),
             grid_dim=(_blocks(n_nodes), 1, 1), block_dim=(TPB, 1, 1),
         )
         ctx.enqueue_function[dart_add_kernel_reference](
-            Int64(n), class_off, row_off, voff, Float32(factor), Float32(shrink), _u16(reg[].sessions[idx].nodes),
-            _f(reg[].sessions[idx].values), _f(reg[].sessions[idx].dsum), _f(reg[].sessions[idx].score),
+            Int64(n), class_off, row_off, voff, Float32(factor), Float32(shrink), _u16(sess[].nodes),
+            _f(sess[].values), _f(sess[].dsum), _f(sess[].score),
             grid_dim=(_blocks((n + AFT_DART_ADD_ROWS - 1) // AFT_DART_ADD_ROWS), 1, 1), block_dim=(TPB, 1, 1),
         )
-        var vsub = reg[].sessions[idx].values.create_sub_buffer[DType.float32](j * node_cap, n_nodes)
+        var vsub = sess[].values.create_sub_buffer[DType.float32](j * node_cap, n_nodes)
         ctx.enqueue_copy(dst_ptr=F32P(unsafe_from_address=values_out), src_buf=vsub)
     else:
         raise Error("x_trees dart_add: built without DART_DEVICE (no accelerator)")
@@ -579,12 +617,13 @@ def dart_close(id: Int, bad_out: Int) raises:
     write the bad word, and free the session."""
     comptime if DART_DEVICE:
         var reg = DART_SESSIONS.get_or_create_ptr()
-        var idx = reg[].find(id)
+        var sess = reg[].lease(id)
         var ctx = process_ctx[_DART_CTX]()
-        ctx.enqueue_copy(dst_ptr=I32P(unsafe_from_address=bad_out), src_buf=reg[].sessions[idx].bad)
+        ctx.enqueue_copy(dst_ptr=I32P(unsafe_from_address=bad_out), src_buf=sess[].bad)
         ctx.synchronize()
-        var gone = reg[].sessions.pop(idx)
+        var gone = reg[].retire(id)
         _ = gone^
+        _ = sess^
     else:
         raise Error("x_trees dart_close: built without DART_DEVICE (no accelerator)")
 
@@ -638,21 +677,60 @@ struct DartForest(Movable):
 
 
 struct DartForests(Defaultable, Movable):
-    var forests: List[DartForest]
+    """The kept DART forests. `lock` guards the list and `next_id` for one list step
+    (mint, keep, lease, retire); an operation holds its entry by a copy of
+    the `ArcPointer` and launches with no lock, so nothing here relies on
+    the GIL (lane fx-gil, 2026-11-21: a bare List another thread's open
+    could reallocate under a running round)."""
+    var lock: List[Int64]
+    var forests: List[ArcPointer[DartForest]]
     var next_id: Int
 
     def __init__(out self):
-        self.forests = List[DartForest]()
+        self.lock = List[Int64](length=1, fill=Int64(0))
+        self.forests = List[ArcPointer[DartForest]]()
         self.next_id = 1
 
-    def find(self, id: Int) raises -> Int:
-        for i in range(len(self.forests)):  # driver-loop: over kept DART forests (a handle lookup, bounded by the door resident cap)
-            if self.forests[i].id == id:
-                return i
-        raise Error("x_trees dart: unknown or released forest handle")
+    def mint(mut self) -> Int:
+        var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](self.lock.unsafe_ptr())
+        shared_slot_lock(word)
+        var id = self.next_id
+        self.next_id += 1
+        shared_slot_unlock(word)
+        return id
+
+    def keep(mut self, entry: ArcPointer[DartForest]):
+        var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](self.lock.unsafe_ptr())
+        shared_slot_lock(word)
+        self.forests.append(entry.copy())
+        shared_slot_unlock(word)
+
+    def lease(mut self, id: Int) raises -> ArcPointer[DartForest]:
+        var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](self.lock.unsafe_ptr())
+        shared_slot_lock(word)
+        try:
+            for i in range(len(self.forests)):  # small-loop(live handles): a handle lookup over live fits
+                if self.forests[i][].id == id:
+                    return self.forests[i].copy()
+            raise Error("x_trees dart: unknown or released forest handle")
+        finally:
+            shared_slot_unlock(word)
+
+    def retire(mut self, id: Int) raises -> ArcPointer[DartForest]:
+        """The entry leaves the registry; it is freed when the caller and
+        every operation still holding it let go."""
+        var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](self.lock.unsafe_ptr())
+        shared_slot_lock(word)
+        try:
+            for i in range(len(self.forests)):  # small-loop(live handles): a handle lookup over live fits
+                if self.forests[i][].id == id:
+                    return self.forests.pop(i)
+            raise Error("x_trees dart: unknown or released forest handle")
+        finally:
+            shared_slot_unlock(word)
 
 
-comptime DART_FORESTS = SharedSlot[DartForests, "MojolearnXTreesDartForestsV2"]
+comptime DART_FORESTS = SharedSlot[DartForests, "MojolearnXTreesDartForestsV3", 3]
 
 
 def dart_forest_prepare(
@@ -710,16 +788,17 @@ def dart_forest_prepare(
     _ = cw^
     _ = iw^
     var registry = DART_FORESTS.get_or_create_ptr()
-    var id = registry[].next_id
-    registry[].next_id += 1
-    registry[].forests.append(DartForest(id, nt, d, k, total, toff_d^, coef_d^, inits_d^, colid^, quesval^, left^, values^))
+    var id = registry[].mint()
+    registry[].keep(ArcPointer[DartForest](
+        DartForest(id, nt, d, k, total, toff_d^, coef_d^, inits_d^, colid^, quesval^, left^, values^)))
     return id
 
 
 def dart_forest_bytes(id: Int) raises -> Int:
     """The device bytes a kept forest holds (the door's resident cap)."""
     var registry = DART_FORESTS.get_or_create_ptr()
-    return registry[].forests[registry[].find(id)].bytes()
+    var kept = registry[].lease(id)
+    return kept[].bytes()
 
 
 def dart_forest_predict(id: Int, x_addr: Int, out_addr: Int, n: Int, d: Int, k: Int) raises:
@@ -730,10 +809,12 @@ def dart_forest_predict(id: Int, x_addr: Int, out_addr: Int, n: Int, d: Int, k: 
     if n <= 0:
         return
     var registry = DART_FORESTS.get_or_create_ptr()
-    var i = registry[].find(id)
-    if registry[].forests[i].d != d or registry[].forests[i].k != k:
+    # held for this predict: a release on another thread frees the buffers
+    # only after the launch below has finished and this copy is dropped
+    var kept = registry[].lease(id)
+    if kept[].d != d or kept[].k != k:
         raise Error("x_trees dart_predict: the forest was prepared for another feature or class count")
-    var nt = registry[].forests[i].nt
+    var nt = kept[].nt
     var ctx = process_ctx[_DART_CTX]()
     var x = ctx.enqueue_create_buffer[DType.float32](n * d)
     ctx.enqueue_copy(dst_buf=x, src_ptr=F32P(unsafe_from_address=x_addr))
@@ -741,9 +822,9 @@ def dart_forest_predict(id: Int, x_addr: Int, out_addr: Int, n: Int, d: Int, k: 
     var bad = ctx.enqueue_create_buffer[DType.int32](1)
     enqueue_fill[DType.int32](ctx, bad, Int32(0))
     ctx.enqueue_function[dart_predict_kernel](
-        Int64(k * n), Int64(n), Int32(d), Int32(k), Int32(nt), _i(registry[].forests[i].toff),
-        _i(registry[].forests[i].colid), _f(registry[].forests[i].quesval), _i(registry[].forests[i].left),
-        _f(registry[].forests[i].values), _u64(registry[].forests[i].coef), _u64(registry[].forests[i].inits),
+        Int64(k * n), Int64(n), Int32(d), Int32(k), Int32(nt), _i(kept[].toff),
+        _i(kept[].colid), _f(kept[].quesval), _i(kept[].left),
+        _f(kept[].values), _u64(kept[].coef), _u64(kept[].inits),
         _f(x), _u64(out), _i(bad),
         grid_dim=(_blocks((k * n + AFT_DART_ROWS - 1) // AFT_DART_ROWS), 1, 1), block_dim=(TPB, 1, 1),
     )
@@ -751,18 +832,22 @@ def dart_forest_predict(id: Int, x_addr: Int, out_addr: Int, n: Int, d: Int, k: 
     var bad_h = List[Int32](length=1, fill=0)
     ctx.enqueue_copy(dst_ptr=bad_h.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin](), src_buf=bad)
     ctx.synchronize()
+    # the forest's buffers stay held until the launch above has finished
+    _ = kept[].nt
     if bad_h[0] != Int32(0):
         raise Error("x_trees dart_predict: a tree walk left its tree (child or column out of range)")
 
 
 def dart_forest_release(id: Int) raises:
     var registry = DART_FORESTS.get_or_create_ptr()
-    for i in range(len(registry[].forests)):  # driver-loop: over kept DART forests (a handle lookup)
-        if registry[].forests[i].id == id:
-            # Queued launches on it finished at their own sync (every predict
-            # synchronizes before it returns).
-            _ = registry[].forests.pop(i)
-            return
+    # An unknown handle is already released. Queued launches on a kept
+    # forest finished at their own sync (every predict synchronizes before
+    # it returns, holding its own copy of the entry).
+    try:
+        var gone = registry[].retire(id)
+        _ = gone^
+    except:
+        pass
 
 
 def dart_predict(

@@ -384,11 +384,13 @@ def _rf_regressor_fit_dart(params: ForestFitArgs) raises -> Int:
     var c = params.cls
     var rows_a = params.x
     var cols_a = params.y
+    # The session is held for this member fit by its own reference (the
+    # registry's lock word covers the lookup only; lane fx-gil).
     var dreg = DART_SESSIONS.get_or_create_ptr()
-    var di = dreg[].find(hid)
-    var n = dreg[].sessions[di].n
-    var d = dreg[].sessions[di].d
-    var k = dreg[].sessions[di].k
+    var dsess = dreg[].lease(hid)
+    var n = dsess[].n
+    var d = dsess[].d
+    var k = dsess[].k
     if c < 0 or c >= k:
         raise Error("rf_regressor_fit_dart: class out of range")
     if n_rows <= 0 or n_cols <= 0:
@@ -406,13 +408,19 @@ def _rf_regressor_fit_dart(params: ForestFitArgs) raises -> Int:
     # member fit runs with the GIL released. Take the session's buffer
     # HANDLES (reference counted; the device memory is shared) under the GIL
     # and never index the registry inside the released block.
-    var dart_x = dreg[].sessions[di].x.copy()
-    var dart_target = dreg[].sessions[di].target.copy()
+    var dart_x = dsess[].x.copy()
+    var dart_target = dsess[].target.copy()
     var forest: RandomForestMetaData[DT, RLT]
-    with GILReleased(Python()):
+    if params.gil_free:
+        # a member's worker: no GIL to release (core/forest_entry.mojo)
         forest = _rf_dart_member_forest(
             dart_x, dart_target, rows_a, cols_a, n_rows, n_cols, n, d, c, rf_params,
         )
+    else:
+        with GILReleased(Python()):
+            forest = _rf_dart_member_forest(
+                dart_x, dart_target, rows_a, cols_a, n_rows, n_cols, n, d, c, rf_params,
+            )
     var export_trees = forest.trees^
     forest.trees = RFExportTrees()
     return _retain_rf_handle(export_trees^, forest.notices)
