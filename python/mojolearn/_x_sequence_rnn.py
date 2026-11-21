@@ -236,6 +236,8 @@ class LSTMRegressor(_RecurrentRegressor):
     >>> pred = model.predict(X)
     """
     _CELL = "lstm"
+    # The member ABI (core/member_abi.mojo): family 20 (Sequence), kind 0.
+    _mojolearn_member = (20, 0)
 
 
 class LSTMClassifier(_RecurrentClassifier):
@@ -332,6 +334,8 @@ class LSTMClassifier(_RecurrentClassifier):
     >>> pred = model.predict(X)
     """
     _CELL = "lstm"
+    # The member ABI (core/member_abi.mojo): family 20 (Sequence), kind 1.
+    _mojolearn_member = (20, 1)
 
 
 class GRURegressor(_RecurrentRegressor):
@@ -425,6 +429,8 @@ class GRURegressor(_RecurrentRegressor):
     >>> pred = model.predict(X)
     """
     _CELL = "gru"
+    # The member ABI (core/member_abi.mojo): family 20 (Sequence), kind 0.
+    _mojolearn_member = (20, 0)
 
 
 class GRUClassifier(_RecurrentClassifier):
@@ -521,6 +527,8 @@ class GRUClassifier(_RecurrentClassifier):
     >>> pred = model.predict(X)
     """
     _CELL = "gru"
+    # The member ABI (core/member_abi.mojo): family 20 (Sequence), kind 1.
+    _mojolearn_member = (20, 1)
 
 
 class RNNRegressor(_RecurrentRegressor):
@@ -614,6 +622,8 @@ class RNNRegressor(_RecurrentRegressor):
     >>> pred = model.predict(X)
     """
     _CELL = "rnn"
+    # The member ABI (core/member_abi.mojo): family 20 (Sequence), kind 0.
+    _mojolearn_member = (20, 0)
 
 
 class RNNClassifier(_RecurrentClassifier):
@@ -711,6 +721,8 @@ class RNNClassifier(_RecurrentClassifier):
     >>> pred = model.predict(X)
     """
     _CELL = "rnn"
+    # The member ABI (core/member_abi.mojo): family 20 (Sequence), kind 1.
+    _mojolearn_member = (20, 1)
 
 
 def _state_layout(cls):
