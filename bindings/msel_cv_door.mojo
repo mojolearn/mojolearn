@@ -298,7 +298,7 @@ def msel_device_rows_ok(estimator: PythonObject, scoring_in: PythonObject, conte
     # members that run there. Once per cross-validation call, after the
     # scorer refusals above (same order as before); the default member
     # (no `device`, or None) costs one dictionary read.
-    if msel_member_host_folds(py_call(plan["fields_get"], estimator, py_type(estimator)), context):
+    if msel_member_host_folds(py_call(plan["fields_get"], estimator, py_type(estimator)), msel_b(), context):
         return False
     return True
 

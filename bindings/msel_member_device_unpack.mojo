@@ -1,39 +1,33 @@
 # SPDX-License-Identifier: Apache-2.0
 """UNPACK of a member estimator's `device` for the orchestration owners
-(model selection, the multi-GPU drivers): the stored constructor value read
-out of the member's instance dictionary into the rule's code
-(core/device_route_dw_msel_parallel.mojo).
+(model selection, the multi-GPU drivers), through the ONE route: the rule
+and the words are core/device_route.mojo, the read and the checks are the
+shared door's (providers/python/device_route_boundary_door.mojo
+`device_request`, `device_admit`). This file holds no rule and no refusal
+text of its own; it only says what an orchestration owner does with the
+answer:
 
-A member is never asked through a Python method. Its `device` is the plain
-stored value: None, `'gpu'` or `'cpu'`; a class that has no `device`
-parameter yet has no such key and reads as None. Any other value is refused
-in the pilot's words (core/linear_route.mojo `linear_device_refusal`).
+* model selection gathers the fold rows of a member that says
+  `device="cpu"` beside a GPU set on the host (rows resident on the device
+  are for members that run there);
+* a multi-GPU driver, which has no CPU form, refuses such a member with the
+  shared `device_cpu_absent` words.
 
-Each read is once per public operation of the owner (one cross-validation,
-one search fit, one driver call), never per fold, candidate or row.
+A member is never asked through a Python method, and a member whose class
+has no `device` parameter reads as None (`device_request`). The owners have
+no estimator of their own to hold a route for a member they are handed per
+call, so each read is once per public operation of the owner (one
+cross-validation, one search fit, one driver call), never per fold,
+candidate or row.
 """
 from std.python import PythonObject
-from bindings.family_common_unpack import family_repr
 from bindings.py_balanced import py_call, py_get, py_type
-from core.linear_route import linear_device_code, linear_device_refusal
-from core.device_route_dw_msel_parallel import (
-    MEMBER_DEVICE_INSTALL, MEMBER_VENDOR_UNKNOWN, member_folds_on_host, member_own_device_admit,
-)
+from core.device_route import DEVICE_CPU, device_cpu_absent
+from providers.python.device_route_boundary_door import device_admit, device_request
 
-
-def member_device_unpack(value: PythonObject) raises -> Int:
-    """The code of a stored `device` value: None is this installation's
-    device; exact `'gpu'` or `'cpu'`; anything else is refused in words."""
-    if value is None:
-        return MEMBER_DEVICE_INSTALL
-    # An exact str only (no subclass, no conversion hook); the class is read
-    # off a literal, and only for a value that is not None.
-    if py_type(value) is py_type(PythonObject("")):
-        var code = linear_device_code(String(value))
-        if code >= 0:
-            return code
-    linear_device_refusal(family_repr(value))
-    return MEMBER_DEVICE_INSTALL
+# The vendor word of a process whose base binding recorded no table key: it
+# is not 0, so nothing is treated as CPU only on a guess.
+comptime MEMBER_VENDOR_UNKNOWN = -1
 
 
 def msel_process_vendor(context: PythonObject) raises -> Int:
@@ -50,29 +44,41 @@ def msel_process_vendor(context: PythonObject) raises -> Int:
     return Int(py=key[1])
 
 
-def msel_member_host_folds(fields: PythonObject, context: PythonObject) raises -> Bool:
-    """True when the estimator whose instance dictionary is `fields` takes
-    its fold rows gathered on the host: its `device` is `'cpu'` and this
-    process has a GPU set. The default (no key, or None) is one dictionary
-    read and one compare, and reads nothing else."""
-    var value = py_get(fields, PythonObject("device"))
-    if value is None:
-        return False
-    var device = member_device_unpack(value)
-    if device == MEMBER_DEVICE_INSTALL:
-        return False
-    return member_folds_on_host(device, msel_process_vendor(context))
+def member_says_cpu(fields: PythonObject, b: PythonObject) raises -> Bool:
+    """True when the estimator whose instance dictionary is `fields` says
+    `device='cpu'` (the shared one read: no key, None and `'gpu'` answer
+    False; any other value is refused in the shared words). `b` is the
+    builtins module the calling door already admitted."""
+    return device_request(fields, b) == DEVICE_CPU
 
 
-def msel_own_device_admit(value: PythonObject, context: PythonObject) raises:
+def msel_member_host_folds(fields: PythonObject, b: PythonObject, context: PythonObject) raises -> Bool:
+    """True when the estimator (or search) whose instance dictionary is
+    `fields` takes its fold rows gathered on the host: its `device` is
+    `'cpu'` and this process has a GPU set. The process vendor is read only
+    for one that says `'cpu'`."""
+    if not member_says_cpu(fields, b):
+        return False
+    return msel_process_vendor(context) != 0
+
+
+def msel_own_device_admit(value: PythonObject, b: PythonObject, context: PythonObject) raises:
     """Check a search's own `device` where it is given (constructor,
-    `set_params`): an unknown value, and an explicit `'gpu'` in a CPU-only
-    process, are refused in words before the search changes. The default
-    None is one compare and reads nothing."""
+    `set_params`) with the shared `device_admit`: an unknown value, and an
+    explicit `'gpu'` in a CPU-only process, are refused in the shared words
+    before the search changes. The default None is one compare and reads
+    nothing."""
     if value is None:
         return
-    var device = member_device_unpack(value)
-    member_own_device_admit(device, msel_process_vendor(context))
+    device_admit(value, msel_process_vendor(context), b)
+
+
+def member_multi_gpu_refusal(driver: String) raises:
+    """A multi-GPU driver has no CPU form: the shared refusal of an explicit
+    `device="cpu"` (core/device_route.mojo `device_cpu_absent`), with the
+    driver as the thing that cannot run there and this sentence as why."""
+    device_cpu_absent("parallel " + driver, "it spreads one fit or query across the GPUs listed in devices= "
+        + "and has no CPU form; call the estimator's own method to run it on the CPU")
 
 
 def msel_params_name_device(params: PythonObject, b: PythonObject) raises -> Bool:
