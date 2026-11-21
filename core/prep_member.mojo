@@ -1812,7 +1812,7 @@ def _transform_imputer(slot: _Slot, call: _Call) raises:
 # `center`, the sizes in `scale`, the NaN slots in `extra` (float32 words,
 # the words the door's programs read), [d, kmax] in `scalars`. The state
 # OWNS them (copied from the fit's arena): MEMBER_BORROWS_FIT clear.
-def _cat_fit(slot: _Slot, call: _Call, capture: Bool, mut arena: List[Float32]) raises -> CatFitPlan:
+def _cat_fit(slot: _Slot, call: _Call, capture: Bool, mut arena: Optional[HostZeroArena]) raises -> CatFitPlan:
     """The restricted category program over the caller's X (owner 0), its
     host words left in `arena`."""
     var n = _rows(call)
@@ -1820,9 +1820,9 @@ def _cat_fit(slot: _Slot, call: _Call, capture: Bool, mut arena: List[Float32]) 
     var w = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(slot[].words.unsafe_ptr()))
     var prog = EncProgram(w[3] != 0.0)
     var plan = cat_fit_stage(prog, CatFit(n, d, 0, -1, CAT_FIT_INVERSE if capture else Int(w[1])))
-    arena = _enc_run(call, prog, List[Int](), 0)
+    arena = Optional[HostZeroArena](_enc_run(call, prog, List[Int](), 0))
     _ = len(prog.consts_f)  # the program's own input words live past the run
-    return plan
+    return plan^
 
 
 def _cat_keep(slot: _Slot, state: CatAuto):
@@ -1852,7 +1852,7 @@ def _cat_words(values: List[Float32]) -> List[Int]:
     return out^
 
 
-def _unknown_text(arena: List[Float32], offset: Int, d: Int) -> String:
+def _unknown_text(arena: HostZeroArena, offset: Int, d: Int) -> String:
     # The columns whose unknown count the program set, as the door prints them ("" when none).
     var ap = _F32P(unsafe_from_address=Int(arena.unsafe_ptr()))
     var text = String("")
@@ -1875,15 +1875,15 @@ def _fit_ordinal(slot: _Slot, call: _Call) raises:
     var capture = call[].fit_output == MEMBER_OP_TRANSFORM and w[2] != 0.0
     var n = _rows(call)
     var d = call[].x.cols
-    var arena = List[Float32]()
+    var arena = Optional[HostZeroArena](None)
     var plan = _cat_fit(slot, call, capture, arena)
-    var state = cat_auto_state(Int(arena.unsafe_ptr()), plan, n, d)
+    var state = cat_auto_state(arena.value().address, plan, n, d)
     var clash = ordinal_auto_clash(state, w[4] != 0.0, w[5], w[7])
     if len(clash) > 0:
         raise Error(ordinal_auto_refusal(clash, ord_number_text(w[5], w[6] != 0.0), ord_number_text(w[7], w[8] != 0.0)))
     _cat_keep(slot, state)
     if call[].fit_output == MEMBER_OP_TRANSFORM:
-        _transform_ordinal(slot, call, Int(arena.unsafe_ptr()) + 4 * plan.inverse if capture else 0)
+        _transform_ordinal(slot, call, arena.value().address + 4 * plan.inverse if capture else 0)
     _ = arena^  # the C08 inverse the transform read lives past it
 
 
@@ -1975,15 +1975,15 @@ def _fit_onehot(slot: _Slot, call: _Call) raises:
     var capture = call[].fit_output == MEMBER_OP_TRANSFORM and w[2] != 0.0
     var n = _rows(call)
     var d = call[].x.cols
-    var arena = List[Float32]()
+    var arena = Optional[HostZeroArena](None)
     var plan = _cat_fit(slot, call, capture, arena)
-    var state = cat_auto_state(Int(arena.unsafe_ptr()), plan, n, d)
+    var state = cat_auto_state(arena.value().address, plan, n, d)
     var drops = onehot_auto_drops(state.sizes, Int(w[5]))
     _cat_keep(slot, state)
     for j in range(d):  # driver-loop: over the per-column drop indices (feature metadata)
         slot[].anchor.append(Float32(drops[j]))
     if call[].fit_output == MEMBER_OP_TRANSFORM:
-        _transform_onehot(slot, call, Int(arena.unsafe_ptr()) + 4 * plan.inverse if capture else 0)
+        _transform_onehot(slot, call, arena.value().address + 4 * plan.inverse if capture else 0)
     _ = arena^  # the C08 inverse the transform read lives past it
 
 
