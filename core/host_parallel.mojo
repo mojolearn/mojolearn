@@ -185,6 +185,17 @@ def host_parallelize[FuncType: def(Int) -> None](ref func: FuncType, n: Int):
     if n == 1:
         func(0)
         return
+    # THE NESTED RULE, FOR EVERY CALLER (orchestrator, 2026-11-25): while a
+    # region is open the tasks run one after another on the calling thread,
+    # which is already in the environment they would be pinned to. An inner
+    # split queued on the same pool parks its worker (module note, NESTED
+    # REGIONS), and the member route now runs fits of every family inside
+    # pool tasks, so the rule cannot be left to each family's own sizing.
+    # One slot read and one atomic load per split, never per row.
+    if host_in_region():
+        for i in range(n):  # driver-loop: over the tasks of one nested split
+            func(i)
+        return
     var env = host_fp_env()
 
     def task(i: Int) {imm func, imm env}:
@@ -217,10 +228,8 @@ def host_parallelize_items[FuncType: def(Int) -> None](ref func: FuncType, n: In
     while a region is open the items run one after another on the calling
     thread, which is already in the environment the tasks would be pinned
     to (module note, NESTED REGIONS)."""
-    if n > 1 and host_in_region():
-        for i in range(n):  # driver-loop: over the work items of one nested split
-            func(i)
-        return
+    # `host_parallelize` applies the nested rule itself (2026-11-25); this name
+    # stays for the callers that state "one item per task".
     host_parallelize(func, n)
 
 
