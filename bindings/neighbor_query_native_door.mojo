@@ -33,6 +33,7 @@ from bindings.parallel_public_result_door import parallel_public_result
 from bindings.scaler_lifecycle_native_door import _outside
 from bindings.p3nc_fitted_freeze_unpack import fitted_is_freezable, fitted_freeze
 from bindings.py_optional import py_present
+from providers.python.estimator_binding_pyapi_door import estimator_binding_routed
 
 
 def _query_kind(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -48,6 +49,9 @@ def _query_route(model: PythonObject, kind: PythonObject, group: String, context
     var b = native_loaded_module("builtins")
     var fields = py_fields(model)
     var mode = py_get(fields, "numeric_mode")
+    # The mode object as the estimator holds it (None: the process default):
+    # the estimator's binding route pins this exact object.
+    var requested = mode
     var host = Bool(py=kind[1])
     if host and mode is None:
         mode = PythonObject("identical")
@@ -67,7 +71,33 @@ def _query_route(model: PythonObject, kind: PythonObject, group: String, context
     if mode_word != "identical" and mode_word != "fast":
         raise Error("ValueError: numeric_mode must be identical or fast")
     answer_mode_object(mode, mode_word, MODE_FAMILY_NEIGHBORS)
-    var routes = context["neighbor_query_host_routes"] if host else context["neighbor_query_routes"]
+    if not host:
+        # DEVICE (lane dw-neighbors, 2026-11-21). The image is the one of the
+        # ESTIMATOR'S device, from its binding route (the shared estimator
+        # door, slot `device_bindings_v1`): resolved once per estimator,
+        # binding name and mode object, with the compile-time mode check done
+        # at that resolution; a later query is one record read and pointer
+        # compares, then the import-time alias of that module (the captured
+        # export table the query entries are read from, connected for the
+        # device module and for the CPU module of `device="cpu"` by
+        # python/mojolearn/_native_neighbor_queries.py `_connect_devices`).
+        # Before: the PROCESS set, selected on every query from
+        # `neighbor_query_routes[group][mode]` (two dictionary reads, an
+        # `id()` call, a tuple build and a third read of the checked-route
+        # table); a `device="cpu"` estimator would have queried the GPU.
+        # The route is read under the family owners' shared context, the one
+        # this estimator's fit and predict doors resolve under, so fit and
+        # query share one route record. No device is read or compared here.
+        var name = String("_mojolearn") if group == "base" else (
+            String("_mojolearn_x_neighbors") if group == "sort" else String("_mojolearn_ivf"))
+        var module = estimator_binding_routed(model, requested, name, context["neighbor_query_family_context"])
+        var connected = py_get(context["neighbor_query_binding_aliases"], py_call(b.id, module))
+        if connected is None or connected[0] is not module:
+            raise Error("ImportError: mojolearn: " + name + " is not connected to neighbor queries on this estimator's device")
+        return connected[1]
+    # A saved CPU model class (`mojolearn.host_model`): its explicit host
+    # routes, connected when the host module loads.
+    var routes = context["neighbor_query_host_routes"]
     var result = routes[group][mode]
     if py_type(result) is b.str:
         raise Error("ImportError: " + String(result))

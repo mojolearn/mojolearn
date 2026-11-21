@@ -1056,6 +1056,11 @@ _native_archive_bridge.register(KNeighborsRegressor, _KNN_FORMAT, _knn_schema(
 _native_archive_bridge.lifetime(NearestNeighbors, "knn_index_release", "_resident_holder")
 
 
+# Runtime binding selection belongs to the native family owner. Connected
+# before the query owner below, which gives each connected module (this
+# installation's device and the CPU module of device="cpu") its query alias.
+_native_family_bridge.connect_bindings("_mojolearn", "_mojolearn_x_neighbors", "_mojolearn_metrics")
+
 from ._native_neighbor_queries import connect as _connect_queries
 _NATIVE_QUERY, _QUERY_CONTEXT = _connect_queries(
     {NearestNeighbors: "knn", KNeighborsClassifier: "knn", KNeighborsRegressor: "knn", RadiusNeighbors: "radius"},
@@ -1069,6 +1074,3 @@ _native_family_bridge.tables(family_xn_radius_attributes=_QUERY_CONTEXT)
 # takes the same names as scikit-learn's module.
 from ._sklearn_modules import LAYOUT as _SKLEARN_LAYOUT, lazy_exports as _lazy_exports  # noqa: E402
 __getattr__ = _lazy_exports("neighbors")
-
-# Runtime binding selection belongs to the native family owner.
-_native_family_bridge.connect_bindings("_mojolearn", "_mojolearn_x_neighbors", "_mojolearn_metrics")

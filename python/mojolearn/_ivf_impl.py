@@ -391,6 +391,11 @@ _native_archive_bridge.register(IVFIndex, _IVF_FORMAT, (
 _native_archive_bridge.lifetime(IVFIndex, "ivf_flat_index_release")
 
 
+# Import-time connection; native operations select the estimator's device
+# binding. Connected before the query owner below, which gives each connected
+# module its query alias.
+_native_family_bridge.connect_bindings("_mojolearn_ivf")
+
 from ._native_neighbor_queries import connect as _connect_queries
 _NATIVE_QUERY, _QUERY_CONTEXT = _connect_queries(
     {IVFIndex: "ivf"}, _FAMILY_CONTEXT, _ARCHIVE_CONTEXT, ("ivf",))
@@ -398,6 +403,3 @@ _NATIVE_QUERY, _QUERY_CONTEXT = _connect_queries(
 IVFFlat = IVFIndex
 
 __all__ = ["IVFIndex", "IVFFlat"]
-
-# Import-time connection; native operations select the live configured binding.
-_native_family_bridge.connect_bindings("_mojolearn_ivf")
