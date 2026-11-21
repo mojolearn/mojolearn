@@ -34,7 +34,7 @@ from bindings.prep_owner_route_unpack import (
 from bindings.prep_entry_cache_unpack import prep_entry_word, prep_entry_text
 from bindings.x_prep_native_owner_door import xprep_storage, xprep_take, xprep_values, xprep_run_records, xprep_caps
 from bindings.prep_encode_prog_run import (
-    EncProgram, OUT_MIN_WORDS, OUT_MARK, enc_sel, enc_bad_rows_stages, enc_assign_fold_i64, enc_check_train_i64,
+    EncProgram, OUT_MIN_WORDS, OUT_MARK, enc_assign_fold_i64, enc_check_train_i64,
     enc_col_stats, enc_mark_missing)
 from bindings.prep_encode_imputer_run import (
     ImputerFit, ImputerApply, IMP_MEAN, IMP_MEDIAN, IMP_MOST_FREQUENT, IMP_CONSTANT,
