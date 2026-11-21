@@ -11,6 +11,7 @@ from sequence.neural_model_dispatch import PROGRAM_HOST_RUN, PROGRAM_IMPORT, PRO
 from sequence.neural_model_dispatch import CNN_FIT, CNN_PREDICT, CNN_OPEN
 from sequence.neural_model_dispatch import MODEL_IMPORT_PARAMS
 from sequence.model_file_dispatch import model_file_operation, model_file_execute, model_import_execute
+from sequence.sequence_ops_dispatch import sequence_ops_operation, sequence_ops_execute, sequence_ops_host_refusal
 from sequence.cnn_classifier_program import cnn_fit_program, cnn_open_program, cnn_predict_program
 from sequence.model_outputs_host import model_output_host
 from sequence.exec import HostExec
@@ -33,6 +34,16 @@ def model_native_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: In
         if op == MODEL_IMPORT_PARAMS:
             var import_ex = HostExec()
             var value = model_import_execute(import_ex, aa, na, pp, np, ff, nf)
+            MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[0] = value
+            return 0
+        # lane dw-autograd-seq: the sequence layer operations
+        # (sequence/sequence_ops_dispatch.mojo). This image serves LayerNorm
+        # and the MoE forward / backward on the host executor; the eleven
+        # that need device tensors are refused in words.
+        if sequence_ops_operation(op):
+            sequence_ops_host_refusal(op, np, pp)
+            var sequence_ex = HostExec()
+            var value = sequence_ops_execute(sequence_ex, op, aa, na, pp, np, ff, nf)
             MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[0] = value
             return 0
         if op == PROGRAM_HOST_RUN:
