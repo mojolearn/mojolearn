@@ -42,6 +42,7 @@ from bindings.dict_learning_run import (
     dl_inverse_run, dl_dict_learning, dl_minibatch_fit, dl_spca_project, dl_spca_inverse, dl_spca_fit_run,
 )
 from bindings.py_lists import py_list_f64
+from bindings.p3nc_fitted_freeze_unpack import fitted_owns_store_any
 from std.python._cpython import GILReleased
 from bindings.dict_keys_unpack import (
     dict_keys,
@@ -69,11 +70,15 @@ from bindings.py_balanced import py_item
 
 from bindings.dict_learning_native_unpack import (
     _check_algos,
+    _coder_check,
     _coder_dictionary,
     _coding_words,
     _dict_words,
     _encode_words,
     _fit_index,
+    _fitted_matrix,
+    _gram,
+    _keep_gram,
     _is_a,
     _is_str,
     _matrix,
@@ -212,12 +217,38 @@ def sparse_coder(model: PythonObject, operation: Int, args: PythonObject, contex
         py_setitem(fields, nk[].k_n_components_, PythonObject(rows))
         py_setitem(fields, nk[].k_n_features_in_, PythonObject(cols))
         return model
-    var dictionary = _coder_dictionary(fields, context)
+    # The dictionary is the coder's fitted operand (SparseCoder learns
+    # nothing). When it is an exact Array owning its words, its device copy
+    # and its Gram D D^T stay in the model's resident record across calls,
+    # as DictionaryLearning's components_ do (`coding_transform`) and as the
+    # member keeps them per state (core/xdecomp_member.mojo handles[0] /
+    # [2]): dropped when the dictionary object is replaced (set_params, a
+    # new fit) or the model's generation moves; the Array is made read-only
+    # at its first query (the read-only rule, decomp_resident_freeze). The
+    # door recomputed the Gram per call (lane ma-pub-transform round 9).
+    # Any other storage (NumPy, a view) keeps the per-call admission and
+    # Gram exactly as before: one type check added, no record lookup. Same
+    # RUN, same words: bits unchanged. The Gram entry's name is the one
+    # `_gram` uses; a SparseCoder record holds no components_ entry.
+    var source = py_item(fields, nk[].k_dictionary)
+    var held = fitted_owns_store_any(source)
+    var dictionary = PythonObject(None)
+    if held:
+        _coder_check(fields)
+    else:
+        dictionary = _coder_dictionary(fields, context)
     var entries = decomp_entries_routed(model, fields, py_item(fields, nk[].k_numeric_mode), context)
     var door = DecompDoor(entries, py_item(context, nk[].k_output_context))
+    if held:
+        door.owner = model
+    var gram_source = source if held else PythonObject(None)
     var kit = decomp_kit_unpack(entries)
     try:
-        var d = decomp_door_borrow(door, kit, dictionary, Int(py=dictionary.shape[0]), Int(py=dictionary.shape[1]))
+        var d = -1
+        if held:
+            d = _fitted_matrix(door, kit, source, "dictionary", context)
+        else:
+            d = decomp_door_borrow(door, kit, dictionary, Int(py=dictionary.shape[0]), Int(py=dictionary.shape[1]))
         var py = Python()
         var out = -1
         if operation == DICT_OPN_CODER_INVERSE:
@@ -228,9 +259,10 @@ def sparse_coder(model: PythonObject, operation: Int, args: PythonObject, contex
             return decomp_kit_publish(door, kit, out)
         var x = _matrix(door, kit, args[0], "X", context)
         var words = _coding_words(kit.ncols(x), kit.nrows(d), fields)
+        var gram = _gram(door, kit, gram_source, words)
         with GILReleased(py):
-            var gram = Gram(-1)
             out = dl_encode_run(kit, x, d, words, gram)
+        _keep_gram(door, kit, gram_source, gram)
         return decomp_kit_publish(door, kit, out)
     finally:
         kit.close()
