@@ -328,3 +328,14 @@ def test_basic_block_parameters_follow_torch():
 def test_conv_and_batchnorm_parameters_exclude_buffers():
     assert [n for n, _ in mojolearn.Conv2d(3, 4, 3, device="cpu").named_parameters()] == ["weight", "bias"]
     assert [n for n, _ in mojolearn.BatchNorm2d(4, device="cpu").named_parameters()] == ["weight", "bias"]
+
+
+def test_basic_block_load_state_dict_is_all_or_nothing():
+    block = mojolearn.BasicBlock(4, 4, device="cpu")
+    before = {k: np.asarray(v).tobytes() for k, v in block.state_dict().items()}
+    other = mojolearn.BasicBlock(4, 4, random_state=1, device="cpu").state_dict()
+    # A wrong shape in the LAST sublayer: no earlier sublayer may change.
+    other["bn2.weight"] = np.ones(3, dtype=np.float32)
+    with pytest.raises(ValueError, match="num_features"):
+        block.load_state_dict(other)
+    assert {k: np.asarray(v).tobytes() for k, v in block.state_dict().items()} == before
