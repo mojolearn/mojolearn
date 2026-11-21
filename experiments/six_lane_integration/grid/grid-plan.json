@@ -8803,20 +8803,20 @@
    }
   },
   "guards": {
-   "asserts": 1628,
+   "asserts": 1643,
    "modules": {
-    "core/experiment_guards_base.mojo": "c854ca169fc7846e3ea0af063cd8981fc5bf130e8c63a174145307e04ca178e1",
-    "core/experiment_guards_cluster.mojo": "df366411312d3926145a7965451081462a2e66ba42ceac17d2e2d211f3fe2295",
-    "core/experiment_guards_decomposition.mojo": "748f20ec4b109c10e768fdf9ef45cf572a5d4822e8c430d35e6a0fe0c56b27a8",
+    "core/experiment_guards_base.mojo": "a15b10d43416ad0bd4480f339f1efdae93da0990acb959d4764a6235bc09053d",
+    "core/experiment_guards_cluster.mojo": "73f5e36d6ca503cf592b58654a8980e11c045bf2ea284d4bd60f97503978f2a1",
+    "core/experiment_guards_decomposition.mojo": "d2ea77b52936e13ec3b5f0936a7c6278a480e0d46fa3561075b6455d8bb8aba3",
     "core/experiment_guards_kernel.mojo": "55a65b34b89882107e19d458c21a301f6252355efc3795d5cf72c7dacd75a32c",
     "core/experiment_guards_linear.mojo": "0089b485bc0d26b1e88897ea7977db843dc49331e0f1db66ff269ab884847a71",
-    "core/experiment_guards_neural.mojo": "0de4d5ae4daf4a1de2fb727612f2b1e858c448a67b49fbe8081e3df31bfefdb6",
+    "core/experiment_guards_neural.mojo": "58ddd3fcb98f657aa76e8c2704b4a956205a36336b853996877bb253757890c6",
     "core/experiment_guards_series.mojo": "bd3d0e9299e3bd1157b4d04dfab58081fdd98e3a8a278428eaac79847bb574c5",
-    "core/experiment_guards_trees.mojo": "f4b078c84d939ec3db80a3b41cffbe6646c493c6127bd30181cda6d5ed3a1d6e",
-    "core/six_lane_experiment_guards.mojo": "67e9393bbc17a831f17fbd86f572a0ed3bd020b7648fb1c1d16fb83c8fbdcd91"
+    "core/experiment_guards_trees.mojo": "353af953fb96495baf01d158f6604c0edefaac2421065f741676092f2bb3d6c9",
+    "core/six_lane_experiment_guards.mojo": "c3bb0b4a7eaa4cba4ef66e20377fd2d17aa0d53c707afc60342745fe5fab2a75"
    },
    "path": "core/six_lane_experiment_guards.mojo",
-   "sha256": "67e9393bbc17a831f17fbd86f572a0ed3bd020b7648fb1c1d16fb83c8fbdcd91"
+   "sha256": "c3bb0b4a7eaa4cba4ef66e20377fd2d17aa0d53c707afc60342745fe5fab2a75"
   },
   "stale_not_used": [
    "experiments/six_lane_integration/catalog.json (define lists)",
@@ -8995,7 +8995,7 @@
   "deferred_cross_configs": 65,
   "deferred_cross_groups": 4,
   "excluded_controls": 19,
-  "guard_asserts": 1628,
+  "guard_asserts": 1643,
   "mapped_algorithms": 25,
   "packed_multi_member": 7,
   "packs": 101,
