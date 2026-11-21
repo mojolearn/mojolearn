@@ -157,6 +157,8 @@ class MLPRegressor(_BaseMLP):
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _estimator_type = "regressor"
     _LOSS_CODE = 0
+    # The member ABI (core/member_abi.mojo): family 19 (Mlp), kind 0.
+    _mojolearn_member = (19, 0)
 
     def fit(self, X, y):
         """Train on `X` (n_samples, n_features) float32 and targets `y`; returns self."""
@@ -291,6 +293,8 @@ class MLPClassifier(_BaseMLP):
     """
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _estimator_type = "classifier"
+    # The member ABI (core/member_abi.mojo): family 19 (Mlp), kind 1.
+    _mojolearn_member = (19, 1)
 
     def fit(self, X, y):
         """Train on `X` (n_samples, n_features) float32 and 1-D labels `y`; returns self."""

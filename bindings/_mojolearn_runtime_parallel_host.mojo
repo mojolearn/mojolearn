@@ -18,7 +18,7 @@ from bindings.neighbor_query_native_door import neighbor_query_c, neighbor_query
 from bindings.parallel_forecast_native_door import parallel_forecast_c
 from bindings.tsa_public_native_door import tsa_c
 from bindings.tsa_hw_route_unpack import register_tsa_hw_resident_owner, register_tsa_hw_resident_owner_identity
-from bindings.parallel_neural_native_door import parallel_neural_c
+from bindings.parallel_neural_native_door import parallel_neural_c, ParallelNeuralOwner
 from bindings.parallel_mlp_native_door import parallel_mlp_c
 from bindings.small_mlp_native_door import small_mlp_c, small_mlp_finalize_c
 from bindings.parallel_causal_native_door import parallel_causal_c, RemoteStateLifetime
@@ -67,12 +67,27 @@ def register_remotestatelifetime(mut module: PythonModuleBuilder) raises:
     py_type_attach(module.module, "_RemoteStateLifetime", existing)
 
 
+# The neural trainer's native owner (bindings/parallel_neural_native_door.mojo):
+# this binding is the only one that compiles that door and allocates the type.
+def register_parallelneuralowner(mut module: PythonModuleBuilder) raises:
+    var existing = PythonObject(None)
+    try:
+        existing = lookup_py_type_object[ParallelNeuralOwner]()
+    except error:
+        if not py_type_absent(error):
+            raise error
+        _ = module.add_type[ParallelNeuralOwner]("_ParallelNeuralOwner")
+        return
+    py_type_attach(module.module, "_ParallelNeuralOwner", existing)
+
+
 def build__mojolearn_runtime_parallel_host() -> PythonObject:
     comptime assert NEURAL_GUARDS_OK, "invalid integrated experiment configuration (neural guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_runtime_parallel_host")
         # The process pool's record type (bindings/native_process_pool_type_door.mojo).
         register_process_pool_owner(module)
+        register_parallelneuralowner(module)
         # The transport boundary these entries reach, set up as the tokenizer host does
         # (the same values; the tokenizer host initializes it first in one process).
         transport_initialize()

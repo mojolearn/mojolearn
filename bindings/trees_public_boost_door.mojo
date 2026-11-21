@@ -56,6 +56,10 @@ from bindings.admitted_input_unpack import (
     AdmittedX, admit_f32, admit_weight_words, admitted_words, admitted_array, admitted_vector,
 )
 from bindings.admitted_input_run import AdmittedXView
+from bindings.member_set_door import (
+    MemberSet, member_set_admit, member_set_width, member_set_run, member_set_pack, member_set_release,
+)
+from core.member_abi import MEMBER_F32, MEMBER_I32
 # TOMBSTONE: TreesView / _view_of_array / trees_f32 / trees_all_finite / trees_check_sample_weight / trees_vector / trees_empty uses (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
 from xtrees.trees_forest_run import ForestFit, trees_check_features, forest_export_dtype
@@ -921,7 +925,65 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
     var count = Int(py=_int(fields["n_estimators"]))
     var template = forest_get_params(base, context) if count > 0 else Python.dict()
     py_setitem(template, "device", device)
-    for k in range(count):  # driver-loop: over the member estimators
+    # NATIVE MEMBERS (core/member_abi.mojo, bindings/member_set_door.mojo): a
+    # member class whose family has published its member entry is fitted
+    # without its fit door, in waves of independent members run in parallel
+    # with the GIL released (wave width: the host cores for a CPU route, one
+    # on a GPU). A wave holds its own draws; each worker gathers its drawn
+    # block (or hands the draw over as an index view when the family reads
+    # one); a member over every row and column reads X by view. `done`
+    # counts the members fitted this way; a member the family does not admit
+    # (and every member after it) keeps the loop below. Same draws, same
+    # seeds, same member order as that loop.
+    var done = 0
+    var b = trees_builtins()
+    var n_classes = len(fields["classes_"]) if classifier else 0
+    var codes = py_call(b.list, py_call(b.range, PythonObject(n_classes))) if classifier else PythonObject(None)
+    var w_address = 0
+    if sw:
+        w_address = sw.value().address
+    var native = count > 0
+    while native and done < count:  # driver-loop: over the waves of member estimators
+        var set = MemberSet(x.address, n, d, MEMBER_I32 if classifier else MEMBER_F32, MEMBER_I32)
+        var wave_rows = Python.list()
+        var wave_cols = Python.list()
+        var width = 1
+        var k = done
+        while k < count and k < done + width:  # driver-loop: over this wave's members (draws and admission)
+            var rows = _arange(xt, n, context) if all_rows else _indices(xt, n, n_rows, bootstrap, seed, 2 * k, context)
+            var cols = _arange(xt, d, context) if all_cols else _indices(xt, d, n_feat, bootstrap_features, seed, 2 * k + 1, context)
+            var member = _clone_from(base, template, _sub_seed(seed, k), context)
+            if not member_set_admit(set, member, trees_address(y_all), w_address,
+                                    0 if all_rows else trees_address(rows), 0 if all_rows else n_rows,
+                                    0 if all_cols else trees_address(cols), 0 if all_cols else n_feat,
+                                    n_classes, context, b):
+                native = False
+                break
+            _ = py_call(wave_rows.append, rows)
+            _ = py_call(wave_cols.append, cols)
+            if k == done:
+                width = member_set_width(set)
+            k += 1
+        if not native:
+            # Nothing of this wave ran: its members are fitted by the loop below.
+            break
+        member_set_run(set)
+        _ = x  # keep the admitted X alive through the member fits above
+        _ = y_all
+        _ = sample_weight
+        _ = wave_rows
+        _ = wave_cols
+        try:
+            for i in range(set.count()):  # driver-loop: over this wave's fitted members (publication)
+                _ = py_call(members.append, member_set_pack(set, i, codes, b))
+                _ = py_call(features.append, wave_cols[i])
+                if oob:
+                    _ = py_call(oob_rows.append, _unseen_rows(xt, wave_rows[i], n, context))
+        finally:
+            member_set_release(set)  # a failing publication leaves no state behind
+        done += set.count()
+        _ = set.count()
+    for k in range(done, count):  # driver-loop: over the member estimators
         var rows = _arange(xt, n, context) if all_rows else _indices(xt, n, n_rows, bootstrap, seed, 2 * k, context)
         var cols = _arange(xt, d, context) if all_cols else _indices(xt, d, n_feat, bootstrap_features, seed, 2 * k + 1, context)
         var xs = xa if (all_rows and all_cols) else _gather(xt, x.address, n, d, rows, cols, context)

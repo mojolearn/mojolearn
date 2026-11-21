@@ -5,6 +5,8 @@ points of x_decomp/api.mojo on the device executor (x_decomp/device.mojo).
 bindings/_mojolearn_x_decomp_host.mojo registers the same names on the host
 executor."""
 from x_decomp.publish_device_run import _publish_linear_entry_table
+from core.pls_member import pls_member_publish
+from checks.vendor import COMPILED_VENDOR
 from core.experiment_guards_decomposition import DECOMPOSITION_GUARDS_OK
 from bindings.device_plan_binding_pack import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from std.os import abort
@@ -278,6 +280,8 @@ def build__mojolearn_x_decomp() -> PythonObject:
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
         var published_module = m.finalize()
         _publish_linear_entry_table()
+        # The member entries (core/member_abi.mojo): these estimators run as members of a meta-estimator.
+        pls_member_publish(Int(GLOBAL_NUMERIC_MODE), (1 if COMPILED_VENDOR == "metal" else 2 if COMPILED_VENDOR == "cuda" else 3 if COMPILED_VENDOR == "hip" else -1), Int(X_DECOMP_DEVICE_API.get_or_create_ptr()))
         return published_module
     except e:
         abort(String("failed to create _mojolearn_x_decomp: ", e))
