@@ -45,7 +45,7 @@ Resolution is a metadata operation with no independent numerical work to
 split; it runs once per public call, never per row.
 """
 from std.python import PythonObject
-from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
+from bindings.py_balanced import py_call, py_type, py_get, py_item, py_setitem, py_fields
 from bindings.trees_keys_unpack import trees_keys
 from bindings.trees_public_inputs_door import trees_builtins
 from core.linear_route import (
@@ -86,7 +86,8 @@ def _route_lifecycle(name: String) -> Bool:
     """Operations that read or replace parameters and never use fitted
     state: they run whatever the stored device and marker say."""
     return (name.find("params") >= 0 or name.find("construct") >= 0 or name.find("_init") >= 0
-            or name.find("refresh") >= 0 or name.find("is_fitted") >= 0 or name.find("setstate") >= 0)
+            or name.find("refresh") >= 0 or name.find("is_fitted") >= 0 or name.find("setstate") >= 0
+            or name.find("vendor_used") >= 0)
 
 
 def trees_device_unpack(value: PythonObject, strict: Bool) raises -> Int:
@@ -221,3 +222,24 @@ def trees_route_leave(route: TreesRouteCall) raises:
         return
     var nk = trees_keys()
     py_setitem(route.fields, nk[].k_device_fit_cpu, PythonObject(route.cpu))
+
+
+def trees_route_vendor(context: PythonObject) raises -> PythonObject:
+    """`vendor_used()`: the vendor the compiled x_trees image of the
+    operation's table set reports about itself (`'cpu'` for the CPU table
+    set). Without that image's probe: `'cpu'` in the CPU run context, else
+    the process's selected vendor."""
+    var nk = trees_keys()
+    try:
+        var tables = py_get(py_item(context, nk[].k_trees_bindings), PythonObject("identical"))
+        if tables is not None:
+            var table = py_get(tables, PythonObject("_mojolearn_x_trees"))
+            if table is not None and py_type(table) is trees_builtins().dict:
+                var probe = py_get(table, PythonObject("x_trees_vendor"))
+                if probe is not None:
+                    return py_call(probe)
+    except:
+        pass
+    if py_get(context, nk[].k_device_cpu_context) is context:
+        return PythonObject("cpu")
+    return py_item(context, nk[].k_device_vendor)

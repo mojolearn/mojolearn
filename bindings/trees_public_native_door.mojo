@@ -38,7 +38,7 @@ from bindings.trees_public_gbdt_door import (
     feature_freq_fit, adapter_decision_function, adapter_predict, adapter_predict_proba,
 )
 from bindings.trees_keys_unpack import trees_keys
-from bindings.trees_route_boundary_door import trees_route_enter, trees_route_leave
+from bindings.trees_route_boundary_door import trees_route_enter, trees_route_leave, trees_route_vendor
 from bindings.native_operation_codes import OP_LEAF_NONE
 from bindings.operation_names_trees import (
     TREES_OPN_TREES_RESIDENT_STATS, TREES_OPN_TREES_GBDT_ADAPTER_CONSTRUCT, TREES_OPN_TREES_GBDT_ADAPTER_PUBLIC_SET_PARAMS,
@@ -171,6 +171,10 @@ def _trees_prefixed(model: PythonObject, operation: String, args: PythonObject,
     """A `trees_*` name the operation table does not hold: the prefix tests
     of the former chain, in its order (every exact name is in the table), so
     the owner a prefix reaches raises its own unknown-operation text."""
+    if operation == "trees_device_vendor_used":
+        # `vendor_used()` of an estimator that takes `device=`: asked of the
+        # table set its operations run on (never on a fit or predict path).
+        return trees_route_vendor(context)
     if operation.startswith("trees_public_iforest_"):
         return iforest_public_operation(model, operation, args, context)
     if operation.startswith("trees_public_forest_"):

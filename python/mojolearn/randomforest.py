@@ -235,6 +235,10 @@ _MAX_LEAF_NODES_WHY = (
 class _RandomForestBase(_ForestProtocol, _NumericModeMixin):
     #: This family's binding, for `NumericModeMixin._bind`.
     _BINDING = "_mojolearn_rf"
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
+    vendor_used = _native_trees_bridge.device_vendor_used
     save = _ForestArchive.save
     load = vars(_ForestArchive)["load"]
 
@@ -254,7 +258,9 @@ _SAVE_SCHEMA = (
     _native_archive_bridge.fitted("_offsets"),
     ("format", "format", _MODEL_FORMAT),
     ("estimator", "estimator"),
-    ("array", "device", "device"),
+    # The member is the constant the format has always held: `device` is a
+    # constructor parameter, not model state (equal models, equal files).
+    ("format", "device", "gpu"),
     ("array", "offsets", "_offsets"),
     ("array", "colid", "_colid"),
     ("array", "quesval", "_quesval"),
@@ -345,9 +351,10 @@ class RandomForestClassifier(_RandomForestBase):
         cuML's stream count parameter.
     max_batch_size : int, default 4096
         cuML's node batch size for the tree builder.
-    device : {'gpu'}, default 'gpu'
-        Only 'gpu' is accepted. On a CPU-only install the same setting runs
-        the host build of the forest.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the model is fitted and predicts. None uses this
+        installation's device, 'cpu' runs on the CPU and 'gpu' requires a
+        GPU installation. Other values raise `ValueError` at fit.
     inference_engine : {'auto', 'sequential', 'parallel_groves'}, default 'auto'
         How `predict` reduces over trees. 'auto' uses 'parallel_groves' in
         `fast` mode and 'sequential' otherwise.
@@ -413,7 +420,7 @@ class RandomForestClassifier(_RandomForestBase):
         n_bins=_CUML_DEFAULT_N_BINS,
         n_streams=_CUML_DEFAULT_N_STREAMS,
         max_batch_size=_CUML_DEFAULT_MAX_BATCH,
-        device="gpu",
+        device=None,
         inference_engine="auto",
     ):
         # Signature only: `forest_estimator` installs the native constructor
@@ -530,9 +537,10 @@ class RandomForestRegressor(_RandomForestBase):
         cuML's stream count parameter.
     max_batch_size : int, default 4096
         cuML's node batch size for the tree builder.
-    device : {'gpu'}, default 'gpu'
-        Only 'gpu' is accepted. On a CPU-only install the same setting runs
-        the host build of the forest.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the model is fitted and predicts. None uses this
+        installation's device, 'cpu' runs on the CPU and 'gpu' requires a
+        GPU installation. Other values raise `ValueError` at fit.
     inference_engine : {'auto', 'sequential', 'parallel_groves'}, default 'auto'
         How `predict` reduces over trees. 'auto' uses 'parallel_groves' in
         `fast` mode and 'sequential' otherwise.
@@ -590,7 +598,7 @@ class RandomForestRegressor(_RandomForestBase):
         n_bins=_CUML_DEFAULT_N_BINS,
         n_streams=_CUML_DEFAULT_N_STREAMS,
         max_batch_size=_CUML_DEFAULT_MAX_BATCH,
-        device="gpu",
+        device=None,
         inference_engine="auto",
     ):
         # Signature only: `forest_estimator` installs the native constructor
