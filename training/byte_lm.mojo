@@ -847,7 +847,9 @@ def _block_offsets(o: List[Int], base: Int) raises -> List[Int]:
 # per-tensor buffers (one launch a layer plus two copies: every parameter byte, 4 x n_total B a call), and every
 # train step copied the nine gradients of each block, the embedding gradient and the head gradient back into the
 # flat `grad` (4 x n_total B a step). Now each tensor IS its range of the flat owner: no launch, no bytes moved,
-# and the per-tensor weight and gradient allocations are dropped at the first bind (2 x 4 x n_total B less held).
+# and the per-tensor weight and gradient buffers built by the constructors are released at the first bind (where
+# they were carved from the session arena, their chunk stays reserved until the trainer goes). Nothing new is
+# held resident: a view owns no memory and goes with its struct; the flat owners are freed with ByteBuffers.
 # A copy moves no float through an operation, so no bits change.
 # What invalidates a view is a change of the flat owner's HANDLE, never of its contents (a view reads and writes
 # the owner's memory): the out-of-place optimizer's swap of `param` with `shadow_p` (byte_optimizer_device). The
