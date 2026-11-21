@@ -1327,16 +1327,34 @@ class _PLS(_Base):
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _estimator_type = "regressor"
     _sklearn_target_tags = {"multi_output": True}
-    _parameters = ("n_components", "scale", "max_iter", "tol", "copy", "numeric_mode")
+    _parameters = ("n_components", "scale", "max_iter", "tol", "copy", "numeric_mode", "device")
     _deflation = "regression"
     _pmode = "A"
+    # Takes `device=`: the x_decomp entries of every operation and the metrics
+    # module of `score` are the estimator's (bindings/pls_native_door.mojo).
+    # The value is checked in compiled code by the declared constructor and
+    # the declared `set_params`; no public call reads it.
+    _mojolearn_device = True
 
     # fit, fit_transform, transform, inverse_transform and predict are one
     # call each into the native PLS owner (bindings/pls_native_door.mojo), which
     # reads `_deflation` / `_pmode` from the class.
-    def __init__(self, n_components=2, *, scale=True, max_iter=500, tol=1e-06, copy=True, numeric_mode=None):
+    def __init__(self, n_components=2, *, scale=True, max_iter=500, tol=1e-06, copy=True, numeric_mode=None,
+                 device=None):
         self.n_components, self.scale, self.max_iter, self.tol, self.copy = n_components, scale, max_iter, tol, copy
         self.numeric_mode = numeric_mode
+        self.device = device
+
+    def vendor_used(self):
+        """The backend this estimator runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the
+            compiled binary the estimator uses.
+        """
+        return _PLS_CALL(self, "vendor_used", (), _PLS_CONTEXT)
 
     def __sklearn_tags__(self):
         # scikit-learn's _PLS tags: a projection model, not scored as a
@@ -1477,6 +1495,10 @@ class PLSRegression(_PLS):
         (``"identical"`` unless changed). In ``identical`` mode, mojolearn returns
         the same bits on Apple, NVIDIA and AMD GPUs. ``"fast"`` is available on
         Apple GPUs only.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the model is fitted and predicts. None uses this
+        installation's device, 'cpu' runs on the CPU and 'gpu' requires a
+        GPU installation. Other values raise `ValueError`.
 
     Attributes
     ----------
@@ -1545,6 +1567,10 @@ class PLSCanonical(_PLS):
         (``"identical"`` unless changed). In ``identical`` mode, mojolearn returns
         the same bits on Apple, NVIDIA and AMD GPUs. ``"fast"`` is available on
         Apple GPUs only.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the model is fitted and predicts. None uses this
+        installation's device, 'cpu' runs on the CPU and 'gpu' requires a
+        GPU installation. Other values raise `ValueError`.
 
     Attributes
     ----------
@@ -1565,12 +1591,13 @@ class PLSCanonical(_PLS):
     >>> xs, ys = mojolearn.PLSCanonical(n_components=2).fit(X, Y).transform(X, Y)
     """
     _deflation, _pmode = "canonical", "A"
-    _parameters = ("n_components", "scale", "algorithm", "max_iter", "tol", "copy", "numeric_mode")
+    _parameters = ("n_components", "scale", "algorithm", "max_iter", "tol", "copy", "numeric_mode", "device")
 
     def __init__(self, n_components=2, *, scale=True, algorithm="nipals", max_iter=500, tol=1e-06, copy=True,
-                 numeric_mode=None):
+                 numeric_mode=None, device=None):
         self.algorithm = algorithm
-        super().__init__(n_components, scale=scale, max_iter=max_iter, tol=tol, copy=copy, numeric_mode=numeric_mode)
+        super().__init__(n_components, scale=scale, max_iter=max_iter, tol=tol, copy=copy, numeric_mode=numeric_mode,
+                         device=device)
 
 
 # NIPALS, mode B (the pseudo-inverses of X and Y), canonical deflation.
@@ -1598,6 +1625,10 @@ class CCA(_PLS):
         (``"identical"`` unless changed). In ``identical`` mode, mojolearn returns
         the same bits on Apple, NVIDIA and AMD GPUs. ``"fast"`` is available on
         Apple GPUs only.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the model is fitted and predicts. None uses this
+        installation's device, 'cpu' runs on the CPU and 'gpu' requires a
+        GPU installation. Other values raise `ValueError`.
 
     Attributes
     ----------

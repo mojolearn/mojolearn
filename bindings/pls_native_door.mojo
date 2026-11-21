@@ -43,7 +43,7 @@ from bindings.host_sparse_native_door import host_sparse_format, host_sparse_den
 from providers.python.array_metadata_pyapi_door import array_shape_once, array_metadata_once
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entry
 from bindings.decomp_kit_native_door import (
-    DecompDoor, decomp_int, decomp_float, decomp_entries, decomp_is_a, decomp_class_attr, decomp_kit_unpack,
+    DecompDoor, decomp_int, decomp_float, decomp_entries_routed, decomp_kit_device_operation, decomp_is_a, decomp_class_attr, decomp_kit_unpack,
     decomp_kit_publish, decomp_kit_out_shape, decomp_door_snapshot, decomp_door_tested, decomp_door_resident_hit,
     decomp_door_resident_input,
 )
@@ -58,6 +58,7 @@ from bindings.pls_keys_unpack import (
     PLS_OPN_PREDICT,
     PLS_OPN_TRANSFORM,
     PLS_OPN_INVERSE_TRANSFORM,
+    PLS_OPN_VENDOR_USED,
 )
 from bindings.py_keys import py_op_code
 from bindings.py_balanced import py_item
@@ -239,14 +240,16 @@ def _x(mut door: DecompDoor, mut kit: DKit, args: PythonObject, captured_x: Opti
     return _matrix(door, kit, args[0], "X", context)
 
 
-def _pls_defers(fields: PythonObject, fitting: Bool, context: PythonObject) -> Bool:
+def _pls_defers(model: PythonObject, fields: PythonObject, fitting: Bool, context: PythonObject) -> Bool:
     """Whether the operation's kit tests X on its upload (the x_decomp GPU
     binding's kernel-call op XD_DEV_UPLOAD_FINITE, lane a8c): then the door admits a
     borrowed X with no host pass. False when the entries cannot be resolved
-    here; the kit then raises its own refusal as before."""
+    here; the kit then raises its own refusal as before. The entries are the
+    ESTIMATOR'S (its device route): the operation's own resolution below is
+    then a route hit."""
     try:
         var mode = fields["numeric_mode"] if fitting else py_get(fields, "numeric_mode_")
-        var entries = decomp_entries(mode, context)
+        var entries = decomp_entries_routed(model, fields, mode, context)
         return py_get(entries, "x_decomp_dev_ew") is not None and py_get(entries, "x_decomp_module") is not None
     except error:
         _ = error^
@@ -324,7 +327,7 @@ def _pls_fit(model: PythonObject, x_source: PythonObject, y_source: PythonObject
     # `_PLS.fit` reads the captured settings and publishes into separate
     # state: one UNPACK, one RUN (bindings/pls_run.mojo), one PACK.
     # `x_pin`/`y_pin` are the door's pins of `captured_x`/`captured_y`.
-    var entries = decomp_entries(py_item(fields, nk[].k_numeric_mode), context)
+    var entries = decomp_entries_routed(model, fields, py_item(fields, nk[].k_numeric_mode), context)
     var door = DecompDoor(entries, py_item(context, nk[].k_output_context))
     var kit = decomp_kit_unpack(entries)
     try:
@@ -478,7 +481,7 @@ def pls_operation(model: PythonObject, operation: Int, args: PythonObject, conte
         _ = truth^
         return r2
     _check_fitted(model, fields)
-    var entries = decomp_entries(py_get(fields, nk[].k_numeric_mode_), context)
+    var entries = decomp_entries_routed(model, fields, py_get(fields, nk[].k_numeric_mode_), context)
     var door = DecompDoor(entries, py_item(context, nk[].k_output_context))
     # A query: the fitted operands stay on the device across calls.
     door.owner = model
@@ -568,7 +571,7 @@ def pls_public_operation(model: PythonObject, operation: Int, operation_name: Py
     var x_deferred = False
     var x_pin = ArrayPin()
     var x = _pls_input_deferred(args[0], "X", context, x_pin, 2, name, False, sparse,
-                                _pls_defers(fields, fitting, context), x_deferred)
+                                _pls_defers(model, fields, fitting, context), x_deferred)
     var y = Optional[ArrayMetadata]()
     var y_pin = Optional[ArrayPin]()
     if fitting:
@@ -638,7 +641,11 @@ def pls_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
         var context = call[3]
         classical_connect_numpy(context)
         var nk = pls_keys()
-        var result = pls_public_operation(call[0], py_op_code(nk[].ops, call[1]), call[1], call[2], context)
+        var operation = py_op_code(nk[].ops, call[1])
+        if operation == PLS_OPN_VENDOR_USED:
+            # Metadata, no input: the vendor of the image the estimator's route names.
+            return decomp_kit_device_operation(call[0], False, call[2], context).steal_data()
+        var result = pls_public_operation(call[0], operation, call[1], call[2], context)
         return result.steal_data()
     except error:
         return classical_python_error(error^, args_ptr)
