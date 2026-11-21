@@ -49,13 +49,13 @@ def test_cache_live_refuses_a_foreign_object_before_any_hook(kind):
     if kind == "foreign_slots":
         class Foreign:
             __slots__ = ("_owner", "_live")
-        cache = Foreign()
-        cache._live = foreign
+        held = Foreign()
+        held._live = foreign
     else:
         class Foreign:
             __getattribute__ = foreign
-        cache = Foreign()
-    audit = audit_native_call(arena.DeviceCache.live.__get__(cache))
+        held = Foreign()
+    audit = audit_native_call(arena.DeviceCache.live.__get__(held))
     _refused(audit)
     assert "DeviceCache holds no native state" in str(audit.exception)
     assert touched == []
@@ -97,7 +97,7 @@ def test_cache_live_uses_captured_native_entry_and_ignores_mutable_int(monkeypat
     assert audit.assert_native() == expected
     assert touched == []
     with pytest.raises(AttributeError):
-        cache._live = foreign
+        setattr(cache, "_live", foreign)
     assert touched == []
 
 

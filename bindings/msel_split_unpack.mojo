@@ -61,7 +61,7 @@ def msel_split_route(context: PythonObject, base: Bool, program: Bool) raises ->
     """The entries of one split operation. `base`: the splitter calls the
     base helper table; `program`: it runs x_metrics programs. (An x_metrics
     image has no resident store, so the thread's resident scope is not
-    consulted; the unread `program_inputs` flag went in arena unit E.)
+    consulted; its unread third flag went in arena unit E.)
 
     The program runner is the default-mode x_metrics image's, connected
     once per factory: what `metric_door_run(prog, None, context)` resolved
