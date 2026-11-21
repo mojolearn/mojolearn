@@ -2186,11 +2186,11 @@ FAMILIES = (
             "dbscan_fit_core", "labeled_reference_predict",
             "dbscan_core_arrays",
             "ols_predict", "tsvd_transform", "pca_transform",
-            # perf lanes: the wide-matrix OLS predict and the fused
-            # QN probability epilogue (one native call per predict_proba)
-            "ols_predict_wide", "linear_predict_native_api_v1", "linear_fit_native_api_v1", "qn_proba",
-            # ne2-g-linear: the general-route OLS/Ridge preparation in one call
-            "lm_ols_prep",
+            # perf lanes: the linear native tables and the fused QN probability
+            # epilogue (one native call per predict_proba). The Python exports
+            # ols_predict_wide and lm_ols_prep left with lane pilot-ridge-device
+            # (2026-11-20): the linear owner calls the native table.
+            "linear_predict_native_api_v1", "linear_fit_native_api_v1", "qn_proba",
             "pca_whiten_transform", "pca_whiten_inverse_transform",
             # lane cpu (2026-09-27): PCA (whiten=False) and TruncatedSVD
             # inverse_transform refused on a CPU-only install; the
@@ -2200,9 +2200,7 @@ FAMILIES = (
             "standard_transform", "minmax_transform", "cd_predict",
             "kernel_ridge_predict", "nystroem_transform", "rbf_sampler_transform",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
-            "py2mojo_rows", "py2mojo_linear_flags", "lm_classical_stats",
-            "lm_col_sums_pair", "lm_means_finish", "lm_intercept",
-            "linear_gram_fit", "linear_gram_solve_default",
+            "py2mojo_rows", "py2mojo_linear_flags", "lm_means_finish",
             # lane activate-pca-owner (2026-10-21): PCA.fit / fit_transform in one call
             "pca_fit_owned", "pca_fit_randomized",
         ),
