@@ -364,6 +364,11 @@ class TSNE(NumericModeMixin):
         used as given.
     random_state : int, default 0
         Seed for the 'random' initialization.
+    verbose : int, default 0
+        Accepted for scikit-learn compatibility; ignored. Nothing is printed.
+    n_jobs : int or None, default None
+        Accepted for scikit-learn compatibility; ignored. The work runs on the
+        device, not in host worker processes.
     numeric_mode : str or None, default None
         Numeric mode for this estimator; None uses the package default set
         with `mojolearn.set_numeric_mode`.
@@ -403,8 +408,15 @@ class TSNE(NumericModeMixin):
     # route (bindings/mani_tsne_native_unpack.mojo `_tsne_fit`).
     _mojolearn_device = True
 
+    # scikit-learn's no-op keywords, at the class too: a model the archive door loads
+    # (`cls.__new__`, bindings/host_archive_native_door.mojo) never ran __init__, and its
+    # get_params reads these defaults (as `device` does).
+    verbose = 0
+    n_jobs = None
+
     def __init__(self, n_components=2, perplexity=30.0, early_exaggeration=12.0, learning_rate="auto",
-                 max_iter=1000, init="pca", random_state=0, post_exaggeration_learning_rate_factor=1.0, device=None):
+                 max_iter=1000, init="pca", random_state=0, post_exaggeration_learning_rate_factor=1.0, *,
+                 verbose=0, n_jobs=None, device=None):
         self.n_components = n_components
         self.perplexity = perplexity
         self.early_exaggeration = early_exaggeration
@@ -417,6 +429,8 @@ class TSNE(NumericModeMixin):
         self.max_iter = max_iter
         self.init = init
         self.random_state = random_state
+        self.verbose = verbose
+        self.n_jobs = n_jobs
         self.device = device
 
     @_native_runtime_manifold_bridge.native_lifecycle

@@ -174,7 +174,7 @@ def test_host_checkpoint_reuses_native_codec_and_full_state_validator():
     assert '_decode_checkpoint' not in body
     native = (ROOT / 'bindings/byte_lm_host_trainer_native_door.mojo').read_text()
     assert 'byte_json_payload(byte_json_read(args[0], io_error))' in native
-    assert '_validated_state(mods, source, state_context, tier)' in native
+    assert 'byte_state_unpack(mods, source, state_context, tier)' in native
     assert 'if io_error.pending:' in native and 'return io_error^.restore()' in native
 
 
@@ -207,7 +207,7 @@ def test_cpu_byte_lm_owner_uses_same_native_transport_without_python_proxy():
     assert 'getattr' not in owner
     # lane dw-neural-c: the typed call lives in the door's RUN file (no Python import)
     run = (ROOT / 'bindings/byte_lm_trainer_native_run.mojo').read_text()
-    assert 'byte_lm_resident_run(entry, handle, operation,' in run and 'byte_lm_run_resident(native[], operation,' in owner
+    assert 'byte_lm_resident_run(entry, handle, operation,' in run and '_session_run(s, 1, a,' in run and 'byte_trainer_step(s, token_address,' in owner
     assert 'std.python' not in run and 'PythonObject' not in run
 
 

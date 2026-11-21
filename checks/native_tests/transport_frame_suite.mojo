@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 """The typed transport frame and the typed byte-LM archive write.
 
-Three independent fixtures, one host task each: the header text, the header
-readers, one frame through a socket pair. The archive fixture runs after them
+Four independent fixtures, one host task each: the header text, the header
+readers, one frame through a socket pair, and the worker frame's byte-string
+node (core/parallel_worker_frame.mojo) through its words and back. The archive fixture runs after them
 on the calling thread, because the write splits its own array digests across
 host tasks and a host split is not entered from inside another.
 """
@@ -16,9 +17,17 @@ from core.transport_header import (
 )
 from bindings.native_posix_transport_run import posix_close, posix_clock, posix_socket_prepare
 from bindings.native_transport_run import transport_send_words, transport_receive_into
-from bindings.byte_checkpoint_native_run import byte_checkpoint_write, ByteCheckpointWriteFailure
+from bindings.byte_checkpoint_native_run import (
+    byte_checkpoint_write, ByteCheckpointWriteFailure, byte_checkpoint_read_header, byte_checkpoint_read_arrays,
+)
 
-comptime TRANSPORT_FRAME_FIXTURES = 3
+from core.parallel_worker_frame import (
+    WireRecord, WireTensor, wire_frame_words, wire_frame_header, wire_frame_body,
+    WIRE_FRAME_HEADER_WORDS, WIRE_REQUEST, WIRE_MAP, WIRE_TEXT, WIRE_BYTES, WIRE_BYTEARRAY, WIRE_TENSOR,
+    WIRE_U1, WIRE_F4,
+)
+
+comptime TRANSPORT_FRAME_FIXTURES = 4
 
 
 def require(ok: Bool, message: String) raises:
@@ -167,6 +176,36 @@ def _archive() raises:
     var failure = ByteCheckpointWriteFailure()
     var digest = byte_checkpoint_write(path, Int(metadata.unsafe_ptr()), len(metadata), addresses, counts, failure)
     require(failure.number == 0 and digest.byte_length() == 64, "byte checkpoint: write reported a file failure")
+    # The typed read of the file just written: the header's words, then the
+    # four arrays into fresh storage, the same bytes.
+    var read_failure = ByteCheckpointWriteFailure()
+    var archive = byte_checkpoint_read_header(path, read_failure)
+    require(archive.metadata == state and len(archive.counts) == 4 and archive.counts[0] == 300000
+            and archive.counts[3] == 7, "byte checkpoint: the typed read's header differs from the state written")
+    var got_parameters = List[Float32](length=300000, fill=Float32(-1.0))
+    var got_first = List[Float32](length=300000, fill=Float32(-1.0))
+    var got_second = List[Float32](length=300000, fill=Float32(-1.0))
+    var got_flags = List[Int32](length=7, fill=Int32(-1))
+    var got_addresses: List[Int] = [Int(got_parameters.unsafe_ptr()), Int(got_first.unsafe_ptr()),
+                                    Int(got_second.unsafe_ptr()), Int(got_flags.unsafe_ptr())]
+    byte_checkpoint_read_arrays(path, archive, got_addresses, read_failure)
+    var equal = read_failure.number == 0 and got_flags[6] == Int32(1) and got_first[299999] == Float32(0.25) and got_second[0] == Float32(0.5)
+    for i in range(300000):  # small-loop(fixture parameter values)
+        if got_parameters[i] != parameters[i]:
+            equal = False
+    require(equal, "byte checkpoint: the typed read's arrays differ from the arrays written")
+    # A header that promises other bytes is refused by its array's name.
+    archive.digests[8] = archive.digests[8] ^ UInt32(1)
+    var caught = String("")
+    try:
+        byte_checkpoint_read_arrays(path, archive, got_addresses, read_failure)
+    except error:
+        caught = String(error)
+    require(caught == "Byte-LM checkpoint array integrity mismatch: m", "byte checkpoint: a wrong digest was not refused by name")
+    _ = len(got_parameters)
+    _ = len(got_first)
+    _ = len(got_second)
+    _ = len(got_flags)
     var cwd = -100
     comptime if CompilationTarget.is_macos():
         cwd = -2
@@ -213,13 +252,69 @@ def _archive() raises:
     _ = len(metadata)
 
 
+def _worker_byte_strings() raises:
+    """A record of {"state": bytes(5), "scratch": bytearray(0), "x": float32
+    tensor [2, 3]} with two request words: the byte strings are one-dimensional
+    uint8 descriptors in node order, the immutable one read-only, and the
+    frame's tensor byte total counts them."""
+    var record = WireRecord()
+    record.node(WIRE_MAP, 3)
+    record.text(String("state"))
+    record.byte_string(5, False)
+    record.text(String("scratch"))
+    record.byte_string(0, True)
+    record.text(String("x"))
+    var shape: List[Int] = [2, 3]
+    var index = record.tensor(WireTensor(WIRE_F4, 0, False, shape^))
+    record.node(WIRE_TENSOR, index)
+    var request: List[Int64] = [7, 9]
+    var words = wire_frame_words(WIRE_REQUEST, 41, request, record)
+    var head = List[Int64]()
+    for i in range(WIRE_FRAME_HEADER_WORDS):  # small-loop(the frame's header words)
+        head.append(words[i])
+    var body = List[Int64]()
+    for i in range(WIRE_FRAME_HEADER_WORDS, len(words)):  # small-loop(the frame's body words)
+        body.append(words[i])
+    var header = wire_frame_header(head, 1 << 20)
+    require(header.kind == WIRE_REQUEST and header.sequence == 41 and header.tensor_count == 3
+            and header.tensor_bytes == 5 + 0 + 24, "worker frame: header differs from the record sent")
+    var frame = wire_frame_body(header, body)
+    require(len(frame.request) == 2 and Int(frame.request[0]) == 7 and Int(frame.request[1]) == 9,
+            "worker frame: request words differ")
+    require(frame.record.node_count() == 7 and frame.record.tag(0) == WIRE_MAP and frame.record.value(0) == 3,
+            "worker frame: record nodes differ")
+    require(frame.record.tag(1) == WIRE_TEXT and frame.record.text_value(1) == "state"
+            and frame.record.tag(2) == WIRE_BYTES and frame.record.value(2) == 0,
+            "worker frame: the bytes node differs")
+    require(frame.record.tag(4) == WIRE_BYTEARRAY and frame.record.value(4) == 1
+            and frame.record.tag(6) == WIRE_TENSOR and frame.record.value(6) == 2,
+            "worker frame: the bytearray or tensor node differs")
+    require(frame.record.tensors[0].dtype == WIRE_U1 and len(frame.record.tensors[0].shape) == 1
+            and frame.record.tensors[0].byte_count == 5 and frame.record.tensors[0].readonly,
+            "worker frame: the bytes descriptor differs")
+    require(frame.record.tensors[1].byte_count == 0 and not frame.record.tensors[1].readonly,
+            "worker frame: the bytearray descriptor differs")
+    require(frame.record.tensors[2].dtype == WIRE_F4 and frame.record.tensors[2].byte_count == 24,
+            "worker frame: the tensor descriptor differs")
+    # A frame of another layout is refused before its body is read.
+    head[1] = Int64(1)
+    var refused = False
+    try:
+        _ = wire_frame_header(head, 1 << 20)
+    except:
+        refused = True
+    require(refused, "worker frame: an older frame layout was accepted")
+
+
 def _fixture(which: Int) raises:
     if which == 0:
         _header_text()
     elif which == 1:
         _header_read()
-    else:
+    elif which == 2:
         _frame_pair()
+    else:
+        _worker_byte_strings()
 
 
 def run_checks() raises:

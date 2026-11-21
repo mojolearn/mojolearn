@@ -505,11 +505,11 @@ class TransformerBlock(NumericModeMixin, _native_constructor=True):
         return _native_neural_bridge.RUNTIME.neural_block_load_state_dict(self, state_dict, strict, _native_neural_bridge.CONTEXT)
 
     def parameters(self):
-        """The weight arrays, in :meth:`state_dict` order.
+        """An iterator over the weight arrays, in :meth:`state_dict` order.
 
         Returns
         -------
-        list of array
+        iterator of array
 
         Examples
         --------
@@ -518,11 +518,11 @@ class TransformerBlock(NumericModeMixin, _native_constructor=True):
         return _native_neural_bridge.RUNTIME.neural_block_parameters(self, _native_neural_bridge.CONTEXT)
 
     def named_parameters(self):
-        """The weights as ``(name, array)`` pairs, in :meth:`state_dict` order.
+        """An iterator over the weights as ``(name, array)`` pairs, in :meth:`state_dict` order.
 
         Returns
         -------
-        list of (str, array)
+        iterator of (str, array)
 
         Examples
         --------
@@ -531,9 +531,10 @@ class TransformerBlock(NumericModeMixin, _native_constructor=True):
         return _native_neural_bridge.RUNTIME.neural_block_named_parameters(self, _native_neural_bridge.CONTEXT)
 
     def to(self, *args, **kwargs):
-        """Move the block to a device, with PyTorch's spelling.
+        """Move the block to a device, as ``torch.nn.Module.to`` does.
 
-        ``to("cuda")``, ``to("mps")``, ``to("cpu")`` or ``to(device=...)``
+        ``to("gpu")``, ``to("cpu")`` or ``to(device=...)`` (the device is
+        ``"gpu"`` or ``"cpu"``, as the constructor takes it)
         rebuild the block on that device, as ``set_params(device=...)`` does.
         A dtype (``torch.float32`` or ``"float32"``) is accepted; the blocks
         run in float32 only, so any other dtype raises ``ValueError``.

@@ -177,6 +177,7 @@ from checks.mode_policy import mode_policy_mask
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.neighbors_entry_table import NeighborsEntryKey, neighbors_ops_publish
 from neighbors.ops_entry_host import NEIGHBORS_OPS_HOST_API, neighbors_ops_host_v1
+from core.neighbors_member import neighbors_member_publish
 from bindings.py_balanced import py_setattr, py_setitem
 from core.activity_record import ACTIVITY_KIND_LAUNCH
 from core.launch_log import activity_begin, activity_end
@@ -201,6 +202,7 @@ from core.shared_slot import SharedSlot
 # wave 8 run split: the int-type slot, the host KMeans table and the host
 # KMeans fit body live in core/mojolearn_core_host_run.mojo.
 from core.mojolearn_core_host_run import _CORE_HOST_INT_TYPE, KMEANS_NATIVE_TABLE, kmeans_fit_host_run
+from core.kmeans_member import kmeans_member_publish
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 
 
@@ -1054,6 +1056,8 @@ def _publish_neighbors_ops(module: PythonObject) raises:
     var api = NEIGHBORS_OPS_HOST_API.get_or_create_ptr()
     neighbors_ops_publish(NeighborsEntryKey(Int(GLOBAL_NUMERIC_MODE), 0), Int(api[].entries.unsafe_ptr()),
                           neighbors_ops_host_v1)
+    # The k-NN member entry (core/neighbors_member.mojo), CPU column.
+    neighbors_member_publish(Int(GLOBAL_NUMERIC_MODE), 0, Int(api[].entries.unsafe_ptr()))
     py_setattr(module, "neighbors_native_key", Python.tuple(PythonObject(Int(GLOBAL_NUMERIC_MODE)), PythonObject(0)))
 
 
@@ -1169,6 +1173,8 @@ def build__mojolearn_core_host() -> PythonObject:
         module.def_function[class_ratio_f64_host_binding]("class_ratio_f64")
         var published_module = module.finalize()
         _publish_neighbors_ops(published_module)
+        # The KMeans member entry (core/kmeans_member.mojo) beside its host kernel table.
+        kmeans_member_publish(Int(GLOBAL_NUMERIC_MODE), 0, Int(KMEANS_NATIVE_TABLE.get_or_create_ptr()[].entries.unsafe_ptr()))
         # The base helper table (core/base_entry_table.mojo): the same
         # helpers for native callers in other extension modules.
         publish_base_helpers_host()

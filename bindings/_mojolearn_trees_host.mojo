@@ -98,6 +98,7 @@ from core.forest_host_groves_run import (
 )
 from bindings.forest_fit_boundary_unpack import forest_fit_args_py
 from core.forest_fit_request import ForestFitArgs, XF_CAP_STRICT, forest_export_verify_lists
+from core.extra_trees_member import extra_trees_member_publish_image
 from core.forest_entry import ForestImage, forest_entry_dispatch, forest_entry_publish
 from core.forest_entry_table import FOREST_TABLE_ET
 from core.native_descriptor_abi import NativeDescriptorError
@@ -680,6 +681,8 @@ def build__mojolearn_trees_host() -> PythonObject:
         var module = PythonModuleBuilder("_mojolearn_trees_host")
         # The native forest entry (core/forest_entry_table.mojo) under the cpu key.
         forest_entry_publish["MojolearnForestEntryOwnerEtHostV1"](FOREST_TABLE_ET, "cpu", et_host_forest_entry_v1)
+        # The families' member entries (core/member_abi.mojo) over this forest entry.
+        extra_trees_member_publish_image("cpu")
         module.def_function[trees_host_numeric_mode_binding]("trees_host_numeric_mode")
         module.def_function[trees_host_vendor_binding]("trees_host_vendor")
         module.def_function[trees_host_column_binding]("trees_host_column")

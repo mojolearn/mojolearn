@@ -10,6 +10,7 @@ from core.experiment_guards_neural import NEURAL_GUARDS_OK
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
+from bindings.native_process_pool_type_door import register_process_pool_owner
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from std.sys.compile import is_defined
@@ -23,6 +24,7 @@ from providers.python.samba_program_handle_pyapi_unpack import samba_program_han
 from bindings.neural_block_public_door import neural_block_c
 from bindings.causal_lm_construct_door import causal_model_c
 from bindings.causal_lm_public_door import causal_public_c
+from bindings.torch_parameters_pack import causal_lm_parameters_form_c
 
 comptime RUNTIME_NEURAL_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
@@ -53,6 +55,8 @@ def build__mojolearn_runtime_neural_host() -> PythonObject:
     comptime assert NEURAL_GUARDS_OK, "invalid integrated experiment configuration (neural guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_runtime_neural_host")
+        # The process pool's record type (bindings/native_process_pool_type_door.mojo).
+        register_process_pool_owner(module)
         # The transport boundary these entries reach, set up as the tokenizer host does
         # (the same values; the tokenizer host initializes it first in one process).
         transport_initialize()
@@ -97,6 +101,9 @@ def build__mojolearn_runtime_neural_host() -> PythonObject:
         module.def_py_c_function(causal_public_c[11], "causal_lm_snapshot")
         module.def_py_c_function(causal_public_c[12], "causal_lm_resume")
         module.def_py_c_function(causal_public_c[13], "causal_lm_parameters")
+        # lane api-torch round 2: CausalLM.parameters() / named_parameters() in torch's form
+        module.def_py_c_function(causal_lm_parameters_form_c[1], "causal_lm_parameter_list")
+        module.def_py_c_function(causal_lm_parameters_form_c[2], "causal_lm_named_parameters")
         module.def_py_c_function(causal_public_c[14], "causal_lm_blocks")
         module.def_py_c_function(causal_public_c[15], "causal_state_init")
         module.def_py_c_function(causal_public_c[16], "causal_lm_repr")

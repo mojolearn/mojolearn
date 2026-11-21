@@ -99,6 +99,12 @@ def connect(door, **classes):
     # The shared native label and accuracy steps (EllipticEnvelope.score).
     from ._native_labels_bridge import label_context
     context.update(label_context())
+    # EllipticEnvelope.score's label steps on a device="cpu" estimator beside
+    # a GPU set run the host label kernels (bindings/mcd_native_door.mojo
+    # `elliptic_score`, `labels_scope`); the scope is built at the first
+    # device="cpu" admission, never at import.
+    from ._native_family_bridge import cpu_scope_later
+    cpu_scope_later(context)
     entry = getattr(_binding()._module, door)
     if not isinstance(entry, BuiltinFunctionType):
         raise TypeError(f"the native decomposition owner requires a compiled {door}")
