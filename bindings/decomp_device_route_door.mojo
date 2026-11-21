@@ -31,7 +31,7 @@ WANTED: one route owner for every family, holding a family-typed payload.
 """
 from std.python import Python, PythonObject
 from std.python.bindings import PythonModuleBuilder, lookup_py_type_object
-from bindings.native_loaded_module_door import native_loaded_module
+from bindings.decomp_scalar_admission_unpack import decomp_scalar_repr
 from bindings.py_type_registry import py_type_absent, py_type_attach
 from bindings.py_balanced import py_call, py_get, py_item, py_type
 from bindings.py_keys import py_key
@@ -121,18 +121,20 @@ def register_decomp_route_owner(mut module: PythonModuleBuilder) raises:
     py_type_attach(module.module, "_DecompRouteOwner", existing)
 
 
-def decomp_device_unpack(value: PythonObject) raises -> Int:
+def decomp_device_unpack(value: PythonObject, context: PythonObject) raises -> Int:
     """The device code of a constructor value: None (this installation's
     device), or exact `'gpu'` or `'cpu'`. Anything else is refused in the
-    pilot's words (core/linear_route.mojo), before any state changes."""
+    pilot's words (core/linear_route.mojo), before any state changes. The
+    refused value is shown by the decomposition doors' scalar repr
+    (bindings/decomp_scalar_admission_unpack.mojo): an admitted native scalar
+    only, never a user object's `__repr__`."""
     if value is None:
         return LINEAR_DEVICE_INSTALL
-    var b = native_loaded_module("builtins")
-    if py_type(value) is b.str:
+    if py_type(value) is py_type(PythonObject("")):
         var code = linear_device_code(String(value))
         if code >= 0:
             return code
-    linear_device_refusal(String(py_call(b.repr, value)))
+    linear_device_refusal(decomp_scalar_repr(value, context))
     return LINEAR_DEVICE_INSTALL
 
 
@@ -143,7 +145,7 @@ def decomp_device_admit(value: PythonObject, context: PythonObject) raises:
     None is one identity compare and reads nothing."""
     if value is None:
         return
-    var device = decomp_device_unpack(value)
+    var device = decomp_device_unpack(value, context)
     if device == LINEAR_DEVICE_CPU:
         return
     var rk = decomp_route_keys()
@@ -196,7 +198,7 @@ def decomp_route_resolve_device(device: PythonObject, context: PythonObject) rai
     only): None is this installation's device, an explicit `'gpu'` in a
     CPU-only process and an unknown value are refused in words."""
     var rk = decomp_route_keys()
-    return decomp_route_device(decomp_device_unpack(device), String(py_item(context, rk[].k_vendor)))
+    return decomp_route_device(decomp_device_unpack(device, context), String(py_item(context, rk[].k_vendor)))
 
 
 def decomp_route_on_cpu_image(device: Int, context: PythonObject) raises -> Bool:
