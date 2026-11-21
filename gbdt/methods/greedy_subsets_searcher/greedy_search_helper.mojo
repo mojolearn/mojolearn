@@ -5319,6 +5319,42 @@ def run_synchronized_symmetric_level[
     A caller may regenerate and replace the active pinned cindex after this
     returns. Baseline tree search does not call this entry.
     """
+    if not search_synchronized_symmetric_level[hist2_smem_mode](
+        state, ctx, row_index, stats, out_splits, score_function,
+        multiclass_optimization, l2_leaf_reg, score_std_dev, level_seed,
+        use_subtraction, trace, times, tree_tag,
+    ):
+        return False
+    _ = state.enqueue_post_winner(ctx, row_index, stats)
+    return True
+
+
+def search_synchronized_symmetric_level[
+    hist2_smem_mode: Int = HIST2_SMEM_MODE
+](
+    mut state: TSynchronizedSymmetricLevelState,
+    ctx: DeviceContext,
+    mut row_index: DeviceBuffer[DType.uint32],
+    mut stats: DeviceBuffer[DType.float32],
+    mut out_splits: List[TBinarySplit],
+    score_function: Int,
+    multiclass_optimization: Bool,
+    l2_leaf_reg: Float32,
+    score_std_dev: Float32,
+    level_seed: UInt64,
+    use_subtraction: Bool,
+    mut trace: IdentityTrace,
+    mut times: StageTimes,
+    tree_tag: String,
+) raises -> Bool:
+    """The search half of one synchronized level: histograms, scores, the
+    winner, its one drain and the gates. On True the accepted split is the
+    last entry of `out_splits` and NOTHING of the partition is enqueued yet:
+    the caller may inspect (or refuse) the winner, then calls
+    `state.enqueue_post_winner`. `run_synchronized_symmetric_level` is this
+    followed by that call; the tree-CTR driver
+    (`gbdt/methods/tree_ctr_search.mojo`) puts its own winner bookkeeping
+    between the two."""
     _ = state.enqueue_pre_score[hist2_smem_mode](
         ctx, row_index, stats, use_subtraction, trace, times, tree_tag
     )
@@ -5332,10 +5368,186 @@ def run_synchronized_symmetric_level[
         l2_leaf_reg, score_std_dev, level_seed,
     )
     state.enqueue_winner_reduction(ctx, argmax_blocks)
-    if not state.drain_and_accept_current_winner(ctx, out_splits):
-        return False
-    _ = state.enqueue_post_winner(ctx, row_index, stats)
-    return True
+    return state.drain_and_accept_current_winner(ctx, out_splits)
+
+
+def new_synchronized_symmetric_state[
+    hist2_smem_mode: Int = HIST2_SMEM_MODE
+](
+    device_plan: DevicePlan,
+    ctx: DeviceContext,
+    layout: CompressedIndexLayout,
+    cindex: DeviceBuffer[DType.uint32],
+    n_rows: Int,
+    stat_count: Int,
+    max_depth: Int,
+) raises -> TSynchronizedSymmetricLevelState:
+    """A level state over a pinned layout and a caller-owned compressed
+    index (the handle is copied, not the words), bound to the fit's device
+    plan. Built once per fit: the workspace inside it is the tree pool."""
+    var blocks = blocks_for(layout, n_rows)
+    var state = TSynchronizedSymmetricLevelState(
+        ctx, layout.copy(), blocks^, cindex.copy(), n_rows, stat_count,
+        max_depth, tensor_acc_live_for[hist2_smem_mode](),
+    )
+    state.set_device_plan(device_plan)
+    return state^
+
+
+def begin_synchronized_symmetric_tree[
+    hist2_smem_mode: Int = HIST2_SMEM_MODE
+](
+    mut state: TSynchronizedSymmetricLevelState,
+    ctx: DeviceContext,
+    mut stats: DeviceBuffer[DType.float32],
+    var mags_dev: Optional[DeviceBuffer[DType.float32]],
+    random_strength: Float32,
+    multiclass_optimization: Bool,
+) raises -> Float32:
+    """What `run_tree_layout_traced` does before its first level, for a tree
+    grown level by level on `state`: the root partition, the fixed-point
+    scale (derived on the device from `mags_dev` when the fit hands it, the
+    same `choose_scale_kernel` launch), the gradient planes snapped onto
+    that scale where a histogram quantizes, and the score noise's std dev
+    (returned; 0 when `random_strength` is 0). Enqueued; no drain unless the
+    std dev is asked for."""
+    state.initialize_tree(ctx, Float32(0.0), Float32(0.0))
+    var fixed_scale = rebind[MutPointer[Float32, MutAnyOrigin]](
+        state.workspace[0].scale_dev.unsafe_ptr()
+    )
+    if mags_dev:
+        # behind `initialize_tree`'s upload on the one in-order queue, so
+        # the device-derived scale is the one the level kernels read
+        ctx.enqueue_function[choose_scale_kernel](  # small-launch(n_rows: a scalar operand of the scale snap): one thread of control plane reading two magnitudes, no walk
+            rebind[MutPointer[Float32, MutAnyOrigin]](
+                mags_dev.value().unsafe_ptr()
+            ),
+            Int32(state.n_rows), fixed_scale,
+            grid_dim=(1, 1, 1),
+            block_dim=(1, 1, 1),
+        )
+    comptime _SYNC_ACC_LIVE = tensor_acc_live_for[hist2_smem_mode]()
+    comptime if _SYNC_ACC_LIVE:
+        enqueue_snap_gradients(
+            ctx, stats, state.n_rows, state.stat_count, fixed_scale
+        )
+    var score_std_dev = Float32(0.0)
+    if random_strength != Float32(0.0):
+        score_std_dev = Float32(
+            Float64(random_strength)
+            * compute_target_std_dev(
+                ctx, stats, state.n_rows, state.stat_count, state.n_rows,
+                multiclass_optimization, state.workspace[0].sm_count,
+            )
+        )
+    return score_std_dev
+
+
+def finish_synchronized_symmetric_tree(
+    mut state: TSynchronizedSymmetricLevelState,
+    ctx: DeviceContext,
+    mut stats: DeviceBuffer[DType.float32],
+    mut row_index: DeviceBuffer[DType.uint32],
+    mut cursor: DeviceBuffer[DType.float32],
+    apply_to_cursor: Bool,
+    export_offsets: Bool,
+    learning_rate: Float32,
+    l2_leaf_reg: Float32,
+    mut out_leaf_values: List[Float32],
+    mut out_leaf_offsets: List[Int],
+    mut trace: IdentityTrace,
+    tree_tag: String,
+) raises -> List[Int]:
+    """The leaf tail of a tree grown level by level on `state`, the launches
+    of `run_tree_layout_traced`'s unspeculated tail in its order: the final
+    leaves' statistics, `compute_leaf_values_kernel`, the leaf values home
+    and `add_model_value_kernel` on `cursor` (all four only when
+    `apply_to_cursor`), the row-coverage sum, the leaf sizes and offsets,
+    ONE drain. The gates ran per level, so there is no rollback here: the
+    final leaves are `state.live_leaves` (one leaf for a tree no level of
+    which was accepted). Returns the leaf sizes; fills `out_leaf_values`
+    when `apply_to_cursor` and `out_leaf_offsets` when `export_offsets`
+    (the device's offsets: the partitions sit in bit-reversed leaf order,
+    see `run_tree_layout_traced`)."""
+    ref workspace = state.workspace[0]
+    var n_live = state.live_leaves
+    var n_rows = state.n_rows
+    var sm_count = workspace.sm_count
+    if apply_to_cursor:
+        comptime if SYM_RIDX_SPLITS_2031:
+            compute_partition_stats_gather(
+                ctx, n_live, n_rows, state.stat_count, n_rows,
+                workspace.dense_ids, workspace.p_off, workspace.p_sz,
+                stats, row_index, workspace.stat_partials,
+                workspace.part_stats, sm_count=sm_count,
+            )
+        else:
+            compute_partition_stats(
+                ctx, n_live, n_rows, state.stat_count, n_rows,
+                workspace.dense_ids, workspace.p_off, workspace.p_sz,
+                stats, workspace.stat_partials, workspace.part_stats,
+                sm_count=sm_count,
+            )
+        ctx.enqueue_function[compute_leaf_values_kernel](
+            workspace.part_stats.unsafe_ptr(), Int32(state.stat_count),
+            Int32(n_live), l2_leaf_reg, workspace.leaf_values.unsafe_ptr(),
+            grid_dim=(n_live + LEAF_BLOCK - 1) // LEAF_BLOCK,
+            block_dim=LEAF_BLOCK,
+        )
+        ctx.enqueue_copy(
+            dst_ptr=workspace.h_leaf_values.unsafe_ptr(),
+            src_buf=workspace.leaf_values,
+        )
+        ctx.enqueue_function[add_model_value_kernel](
+            workspace.p_off.unsafe_ptr(), workspace.p_sz.unsafe_ptr(),
+            row_index.unsafe_ptr(), workspace.leaf_values.unsafe_ptr(),
+            learning_rate, cursor.unsafe_ptr(), Int32(1), Int32(0),
+            grid_dim=(split_points_grid_x(n_live, sm_count), n_live, 1),
+            block_dim=(256, 1, 1),
+        )
+    # DEVIATION 2002's root-coverage sum, as the fused tail takes it: the
+    # poisoned host word changes only if the copy lands
+    workspace.h_cover.unsafe_ptr().unsafe_store(0, DEAD_DEVICE_POISON)
+    enqueue_leaf_size_reduce(
+        ctx, workspace.p_sz, n_live, LEAF_REDUCE_SUM, workspace.cover_dev, 0
+    )
+    ctx.enqueue_copy(
+        dst_ptr=workspace.h_cover.unsafe_ptr(), src_buf=workspace.cover_dev
+    )
+    ctx.enqueue_copy(dst_ptr=workspace.h_sz.unsafe_ptr(), src_buf=workspace.p_sz)
+    if export_offsets:
+        ctx.enqueue_copy(
+            dst_ptr=workspace.h_off.unsafe_ptr(), src_buf=workspace.p_off
+        )
+    ctx.synchronize()
+    var covered_rows = Int(workspace.h_cover.unsafe_ptr().unsafe_load(0))
+    if covered_rows != n_rows:
+        raise Error(
+            "DEVIATION 2002: refusing to return this tree -- the final leaf"
+            " partitions cover " + String(covered_rows) + " of "
+            + String(n_rows) + " rows across " + String(n_live)
+            + " leaves (level-synchronized driver). Either the device stopped"
+            " delivering readbacks or rows were not conserved; the fit raises"
+            " instead of returning a model whose leaves do not cover the data."
+        )
+    if apply_to_cursor:
+        for i in range(n_live):  # small-loop(n_live: final leaves, at most 2^max_depth): model leaf values, copy only
+            out_leaf_values.append(
+                workspace.h_leaf_values.unsafe_ptr().unsafe_load(i)
+            )
+        trace.record_host(
+            tree_tag + ".leaves", workspace.h_leaf_values.unsafe_ptr(), n_live
+        )
+    var sizes = List[Int]()
+    for i in range(n_live):  # small-loop(n_live: final leaves, at most 2^max_depth): leaf sizes for the model, copy only
+        sizes.append(Int(workspace.h_sz.unsafe_ptr().unsafe_load(i)))
+    if export_offsets:
+        out_leaf_offsets.clear()
+        for i in range(n_live):  # small-loop(n_live: final leaves, at most 2^max_depth): leaf offsets for the estimator, copy only
+            out_leaf_offsets.append(
+                Int(workspace.h_off.unsafe_ptr().unsafe_load(i))
+            )
+    return sizes^
 
 
 @fieldwise_init
