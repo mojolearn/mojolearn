@@ -261,9 +261,9 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
         if operation == CLASSICAL_OPN_SET_PARAMS:
             if py_type(args[0]) is b.dict:
                 # A new device is refused in words before the estimator changes.
-                var device = py_get(args[0], "device")
-                if device is not None:
-                    _ = linear_device_unpack(device, b)
+                var device_key = PythonObject("device")
+                if py_contains(args[0], device_key):
+                    _ = linear_device_unpack(py_item(args[0], device_key), b)
             result = classical_set_params(model, args[0], ridge, context)
             # The device or the numeric mode may have changed: the next
             # operation resolves the route again.
