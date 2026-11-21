@@ -58,6 +58,7 @@ from std.python.bindings import PythonModuleBuilder
 
 from checks.vendor import COMPILED_VENDOR
 from svm.native_descriptor_dispatch import SVC_NATIVE_API
+from core.kernel_svm_member import kernel_svm_member_publish
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from svm.svr_native_device import SVR_DEVICE_API
 from svm.svc_native_device import SVC_DEVICE_API
@@ -1148,6 +1149,12 @@ def build__mojolearn_svm() -> PythonObject:
         m.def_function[svm_resident_stats_binding]("svm_resident_stats")
         m.def_function[svc_predict_resident_binding]("svc_predict_resident")
         m.def_function[svr_predict_resident_binding]("svr_predict_resident")
+        # The family's member entry (core/member_abi.mojo): SVC and SVR run
+        # as members of a meta-estimator through it. A build with no GPU
+        # vendor ("none") publishes nothing.
+        var member_vendor = (1 if COMPILED_VENDOR == "metal" else 2 if COMPILED_VENDOR == "cuda" else 3 if COMPILED_VENDOR == "hip" else -1)
+        if member_vendor > 0:
+            kernel_svm_member_publish(GLOBAL_NUMERIC_MODE, member_vendor, Int(SVC_NATIVE_API.get_or_create_ptr()))
         # The owner identity needs the finalized type object (Mojo 1.2 creates
         # it in finalize(); see bindings/native_owner_registry.mojo).
         var published = m.finalize()
