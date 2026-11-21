@@ -379,6 +379,9 @@ class Nystroem(_KernelMethodBase):
 
     _WHERE = "Nystroem"
 
+    # Member ABI family 8 (KernelApprox), kind 0: core/kernel_approx_member.mojo.
+    _mojolearn_member = (8, 0)
+
     # scikit-learn's no-op keywords, at the class too: a model the archive door loads
     # (`cls.__new__`, bindings/host_archive_native_door.mojo) never ran __init__, and its
     # get_params reads these defaults (as `device` does).

@@ -63,6 +63,7 @@ from kernel_methods.host.kernel_methods_host_run import (
 from providers.python.svm_host_scale_gamma_host_pyapi_pack import scale_gamma_limbs_host_binding, py2mojo_linear_flags_binding
 from kernel_methods.descriptor_host import KERNEL_METHOD_HOST_API
 from core.kernel_ridge_member import kernel_ridge_member_publish
+from core.kernel_approx_member import kernel_approx_member_publish
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 
 
@@ -375,6 +376,7 @@ def build__mojolearn_kernel_methods_host() -> PythonObject:
         module.def_function[py2mojo_linear_flags_binding]("py2mojo_linear_flags")
         # The family's member entries (core/member_abi.mojo), vendor 0 (CPU).
         kernel_ridge_member_publish(GLOBAL_NUMERIC_MODE, 0, Int(KERNEL_METHOD_HOST_API.get_or_create_ptr()))
+        kernel_approx_member_publish(GLOBAL_NUMERIC_MODE, 0, Int(KERNEL_METHOD_HOST_API.get_or_create_ptr()))
         return module.finalize()
     except e:
         abort(String("failed to create _mojolearn_kernel_methods_host: ", e))
