@@ -42,6 +42,9 @@ def gbdt_resolve_one_hot(
     error, a categorical column must be densely coded with at least two
     categories, and one above `one_hot_max_size` refuses by name."""
     var one_hot = List[Bool](length=n_features, fill=False)
+    # KEPT SERIAL: admission, once per fit. Every refusal (and
+    # `dense_category_code`'s own) is raised at the first column and row
+    # that earns it, and a host task cannot raise.
     for f in range(n_features):
         var is_cat = (flags[f] & UInt32(1)) != UInt32(0)
         var flagged_one_hot = (flags[f] & UInt32(2)) != UInt32(0)
