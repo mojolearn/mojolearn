@@ -18,9 +18,9 @@ core/logistic_member.mojo.
     feature_names_in_ are the caller's PACK (labels never cross the ABI).
   * `logistic_member_state` (UNPACK): a member state from a fitted estimator.
 
-QNRegressor (the table's second class) is not published: its route is its
-own owner (bindings/qn_boundary_unpack.mojo `qn_route`, the estimators QN
-table), not the DeviceRoute form a member plan carries.
+QNRegressor is kind 1 (`_mojolearn_member = (MEMBER_FAMILY_LOGISTIC, 1)`):
+its admit / pack / state are providers/python/member_qn_regressor_boundary_door.mojo,
+over the same held DeviceRoute its own doors read (`qn_route`).
 
 SERIAL BY NATURE: one member's admission or publication (a few record reads
 and one block copy); a caller runs its members in parallel.
@@ -50,6 +50,9 @@ from core.member_abi import (
     MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_IMPORT_DONE, MEMBER_F64,
 )
 from providers.python.device_route_boundary_door import device_route_value
+from providers.python.member_qn_regressor_boundary_door import (
+    qn_regressor_member_admit, qn_regressor_member_pack, qn_regressor_member_state,
+)
 from providers.python.logistic_route_boundary_door import (
     logistic_route_held, logistic_route_context, logistic_route_current, logistic_route_resolve,
 )
@@ -71,6 +74,8 @@ def logistic_member_admit(model: PythonObject, fields: PythonObject, kind: Int, 
     b: PythonObject, mut owner: MemberOwner) raises -> Bool:
     """UNPACK: fill `owner.plan.route`, `owner.plan.params` and `owner.pins`
     from the unfitted estimator. False for an instance with class weights."""
+    if kind == 1:
+        return qn_regressor_member_admit(model, fields, context, b, owner)
     if kind != 0:
         raise Error("RuntimeError: mojolearn: unknown Logistic member kind " + String(kind))
     var nk = logistic_keys()
@@ -121,6 +126,9 @@ def logistic_member_pack(model: PythonObject, fields: PythonObject, context: Pyt
     """PACK: write the fitted attributes of state `state` into `model`, as
     the estimator's own fit does (the same names and buffers its own
     decision_function / predict / predict_proba / score read)."""
+    if plan.params[0] == 1.0:
+        qn_regressor_member_pack(model, fields, context, b, plan, state)
+        return
     var call = MemberCall(plan.route, state)
     call.block = MEMBER_BLOCK_SCALARS
     _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
@@ -150,6 +158,8 @@ def logistic_member_state(model: PythonObject, fields: PythonObject, context: Py
     plan: MemberPlan) raises -> Int:
     """UNPACK: a new member state holding the fitted attributes of `model`.
     The caller frees it (`member_free`)."""
+    if plan.params[0] == 1.0:
+        return qn_regressor_member_state(model, fields, context, b, plan)
     var weight_source = py_get(fields, "_w")
     var classes_source = py_get(fields, "classes_")
     if weight_source is None or classes_source is None:

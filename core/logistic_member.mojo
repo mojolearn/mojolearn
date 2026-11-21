@@ -9,6 +9,9 @@ route LogisticRegression's own doors resolve, packed by
 `logistic_route_pack`; its flag bits say whether the image has the row-argmax
 entry). No kernel is touched; no other route slot is read.
 
+Kind 1, QNRegressor, is core/qn_regressor_member.mojo (its own words, views
+and blocks; this entry hands it every kind-1 NEW and every state it minted).
+
 MEMBER_OP_NEW parameters (Float64 words, count 10): [0] kind (0
 LogisticRegression), [1] fit_intercept (0 / 1), [2] l1 strength, [3] l2
 strength (both as the estimator's own C / penalty / l1_ratio checks produce
@@ -67,6 +70,7 @@ from core.member_abi import (
     member_publish, member_call_from_spans, member_unsupported,
 )
 from core.member_families import MEMBER_FAMILY_LOGISTIC
+from core.qn_regressor_member import qn_regressor_member, qn_regressor_member_owns
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
@@ -531,6 +535,10 @@ def _outputs(call: _CallP) raises:
 
 def _logistic_member(operation: Int, address: Int) raises -> Int:
     var call = _CallP(unsafe_from_address=address)
+    # Kind 1, QNRegressor (core/qn_regressor_member.mojo): its NEW words and
+    # its tagged states go there; one bit test per call.
+    if qn_regressor_member_owns(operation, call):
+        return qn_regressor_member(operation, address)
     if operation == MEMBER_OP_CAPABILITIES:
         return (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_DECISION
             | MEMBER_CAN_SCORE | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_CAN_SAMPLE_WEIGHT

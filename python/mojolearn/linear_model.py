@@ -1086,6 +1086,10 @@ class QNRegressor(_NumericModeMixin):
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
 
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_LOGISTIC = 1) and core/qn_regressor_member.mojo.
+    _mojolearn_member = (1, 1)
+
     def __init__(self, *, loss="squared_error", fit_intercept=True,
                  l1_strength=0.0, l2_strength=0.0, max_iter=1000, tol=1e-4,
                  delta=None, linesearch_max_iter=50, lbfgs_memory=5,
