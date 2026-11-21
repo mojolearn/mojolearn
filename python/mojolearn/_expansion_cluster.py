@@ -38,7 +38,7 @@ _E_NEAREST, _E_DISTANCES, _E_MINIBATCH, _E_BISECT, _E_BISECT_PREDICT, _E_MEANSHI
 
 # The input, aux-block, weight and seed admission and the shared call
 # (`_f32`, `_aux`, `_weights`, `_seed`, `_XCluster._call`) are native:
-# bindings/mixture_native_door.mojo and bindings/cluster_fit_a_native_door.mojo
+# bindings/mixture_public_native_pack.mojo and bindings/cluster_fit_a_native_door.mojo
 # (lane pyout-small-families deleted the uncalled Python copies).
 
 

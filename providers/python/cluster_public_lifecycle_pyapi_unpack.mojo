@@ -1,43 +1,35 @@
 # SPDX-License-Identifier: Apache-2.0
-# Public cluster lifecycle formerly implemented by _mode's Python decorators.
-# Validation, fitted tracking, feature metadata and final output wrapping stay
-# inside this one native operation. The existing algorithm owners are retained;
-# their legacy extension dispatch remains separately tracked migration debt.
+# UNPACK part of the public cluster lifecycle (MiniBatchKMeans,
+# BisectingKMeans, MeanShift, OPTICS, AffinityPropagation, the x_cluster
+# queries and BayesianGaussianMixture's): the model admission, its per-class
+# and per-model records, the replaced-state admission of a fit, X and the
+# public arguments, read once into `ClusterLifecycleCall`. The operator and
+# PACK are providers/python/cluster_public_lifecycle_pyapi_pack.mojo; the
+# method classification is RUN's (cluster/cluster_public_lifecycle_run.mojo).
 from bindings.py_cpython_table import cpython_table
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import NativeModules, native_loaded_module
-from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
+from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields, py_item
 from bindings.mode_metadata_native_door import _fields, _class_fields
 from bindings.native_class_admission_door import class_record, class_admit
-from bindings.cluster_side_records_unpack import cluster_record_put, cluster_record_drop
+from bindings.cluster_side_records_unpack import cluster_record_drop
 from bindings.cluster_side_records_pack import cluster_record_key, cluster_record_get
 from bindings.public_attributes_native_door import _plan, _lookup, _string_keys
-from bindings.classical_attributes_door import _type_mro, classical_connect_numpy
+from bindings.classical_attributes_door import _type_mro
 from bindings.classical_pandas_door import classical_admit_value
-from bindings.classical_arrays_door import classical_kind
-from bindings.classical_validate_unpack import classical_check_x, classical_view, classical_estimator_name
+from bindings.classical_validate_unpack import classical_check_x, classical_estimator_name
 from bindings.classical_validate_run import classical_check_width
-from bindings.classical_labels_door import labels_shape_of
-from bindings.classical_warnings_unpack import classical_warn_column
 from bindings.classical_exceptions_door import classical_require_fitted
-from bindings.native_array_view_pack import native_array_ndarray_view
 from bindings.native_owner_lifetime_door import native_release_admit
 from bindings.host_inference_scalars_door import host_inference_scalar
-from bindings.cluster_fit_a_native_door import cluster_fit_a_operation, cluster_fit_a_unknown_operation, _pending, _pending_text, _drop_pending
-from bindings.optimizer_public_words_unpack import PYTHON_ERROR_PENDING
-from bindings.cluster_native_door import cluster_operation, cluster_unknown_operation
-from bindings.mixture_native_door import mixture_operation, mixture_unknown_operation
 from providers.python.estimator_binding_pyapi_door import estimator_binding
-from providers.python.estimator_lifecycle_pyapi_unpack import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
-from providers.python.cluster_constructor_pyapi_pack import cluster_initialize_py
-from providers.python.estimator_tabular_boundary_pyapi_unpack import _target, _refusal
+from providers.python.estimator_lifecycle_pyapi_unpack import estimator_feature_check
+from providers.python.estimator_tabular_boundary_pyapi_unpack import _target
 from bindings.py_optional import py_present
 from cluster.cluster_public_lifecycle_run import (
-    _method, _method_text, CLUSTER_METHOD_PARTIAL_FIT, CLUSTER_METHOD_FIT_TRANSFORM)
-from bindings.native_operation_codes import FR_CFA, FR_XC, OP_LEAF_NONE
-from bindings.operation_names_xc import XC_OPN_FAMILY_XC_INITIALIZE
+    _method, _method_text, cluster_method_fitting, cluster_depth_nested, cluster_width_applies,
+    cluster_argument_stop)
 from bindings.cluster_keys_unpack import cluster_keys
-from bindings.py_balanced import py_item
 
 
 def _scalar_state(value: PythonObject, context: PythonObject, depth: Int = 0) raises:
@@ -201,28 +193,31 @@ def _admit_replaced_state(model: PythonObject, fields: PythonObject, context: Py
             native_release_admit(fields[name], context)
 
 
-def cluster_public_operation(model: PythonObject, owner: Int, operation: Int, operation_name: String, args: PythonObject,
-                             context: PythonObject) raises -> PythonObject:
-    """The public lifecycle of the flagged cluster operations (the family
-    door's FR_CFA, FR_XC and `family_mix_bgmm_*` names called with no
-    binding). `owner` is the route owner and `operation` the name's leaf
-    code in that owner's numbering (lane bw2-cluster: it was the name, with a
-    method String built per call from suffix tests and two prefix tests to
-    pick the owner); `operation_name` is read only for a name the table does not hold
-    (OP_LEAF_NONE), whose owner's unknown-operation text is raised."""
-    if operation == OP_LEAF_NONE:
-        if owner == FR_CFA:
-            cluster_fit_a_unknown_operation(operation_name)
-        elif owner == FR_XC:
-            cluster_unknown_operation(operation_name)
-        else:
-            classical_connect_numpy(context)
-            mixture_unknown_operation(operation_name)
-    if owner == FR_XC and operation == XC_OPN_FAMILY_XC_INITIALIZE:
-        return cluster_initialize_py(model, args[1], context)
-    classical_connect_numpy(context)
+@fieldwise_init
+struct ClusterLifecycleCall(Movable):
+    """One admitted public call: the instance dictionary, the record key of a
+    query (None for a fit), X as given and as admitted, the owners' argument
+    tuple (the x_cluster image of the estimator's route first), and the typed
+    facts the operator and the refusal rewriting need."""
+    var fields: PythonObject
+    var key: PythonObject
+    var source: PythonObject
+    var prepared: PythonObject
+    var name: String
+    var rows: Int
+    var columns: Int
+    var fitting: Bool
+    var nested: Bool
+    var recorded: Bool
+    var direct: Bool
+
+
+def cluster_lifecycle_unpack(model: PythonObject, owner: Int, operation: Int, args: PythonObject,
+                             context: PythonObject) raises -> ClusterLifecycleCall:
+    """Admission, fitted check, X, the width and feature checks and the
+    owners' arguments, in the order the public methods refused them."""
     var method = _method(owner, operation)
-    var fitting = method <= CLUSTER_METHOD_FIT_TRANSFORM
+    var fitting = cluster_method_fitting(method)
     var key = PythonObject(None)
     var recorded = False
     var direct = False
@@ -249,7 +244,7 @@ def cluster_public_operation(model: PythonObject, owner: Int, operation: Int, op
     var depth_value = py_get(fields, nk[].k__mojolearn_fitting, PythonObject(0))
     if py_type(depth_value) is not py_type(PythonObject(0)):
         raise Error("TypeError: native fit depth must be an exact integer")
-    var nested = Int(py=depth_value) > 0
+    var nested = cluster_depth_nested(Int(py=depth_value))
     if not fitting:
         classical_require_fitted(model, False, _method_text(method), context)
     var name = classical_estimator_name(model)
@@ -263,7 +258,7 @@ def cluster_public_operation(model: PythonObject, owner: Int, operation: Int, op
             # All six classes retain their y argument, including fit_predict.
             # It follows the old owner arguments in the public call envelope.
             _target(args[len(args) - 1], rows, name, context)
-        if not fitting or method == CLUSTER_METHOD_PARTIAL_FIT:
+        if cluster_width_applies(fitting, method):
             var precomputed = False
             # The loop name differs from the record `key` above so the two never share a binding.
             for setting in ["metric", "affinity"]:  # driver-loop: two supported precomputed-mode settings
@@ -276,7 +271,7 @@ def cluster_public_operation(model: PythonObject, owner: Int, operation: Int, op
                 estimator_feature_check(model, fields, source, context)
     var values = Python.list(PythonObject(None), x)
     # The trailing y belongs to lifecycle validation, not the algorithm ABI.
-    var stop = len(args) - 1 if fitting else len(args)
+    var stop = cluster_argument_stop(len(args), fitting)
     for i in range(2, stop):  # driver-loop: fixed public argument positions
         classical_admit_value(args[i], context)
         _ = py_call(values.append, args[i])
@@ -287,32 +282,5 @@ def cluster_public_operation(model: PythonObject, owner: Int, operation: Int, op
     # list, its appends, and the registry walk of every public call).
     py_setitem(values, PythonObject(0), estimator_binding(model, "_mojolearn_x_cluster", context))
     var prepared = py_call(py_type(Python.tuple()), values)
-    var outside = estimator_outside()
-    var depth = estimator_fit_begin(fields) if fitting else 0
-    var result = PythonObject(None)
-    try:
-        if owner == FR_CFA:
-            result = cluster_fit_a_operation(model, operation, prepared, context)
-        elif owner == FR_XC:
-            # prepared[1] is the X classical_check_x admitted above (finite,
-            # float32 C order): the cluster queries skip a second scan.
-            result = cluster_operation(model, operation, prepared, context, True)
-        else:
-            # X is the one classical_check_x admitted above (2-D, non-empty,
-            # finite, float32 C order): the BayesianGaussianMixture queries
-            # skip a second finite scan of it.
-            result = mixture_operation(model, operation, prepared, context, True)
-    except error:
-        var refused = _refusal(error, fitting, nested, rows, columns, name)
-        raise refused^
-    finally:
-        if fitting:
-            estimator_fit_end(model, depth)
-    if fitting:
-        estimator_fit_complete(model, source, False, context)
-    elif direct and not recorded:
-        # Written only after the full admission and the query succeeded.
-        cluster_record_put(_XC_ADMIT_SLOT, model, key, PythonObject(True))
-    if outside and py_type(result) is py_item(context, nk[].k_array_class) and py_get(context, nk[].k_ndarray) is not None:
-        return native_array_ndarray_view(result, context)
-    return result
+    return ClusterLifecycleCall(fields=fields, key=key, source=source, prepared=prepared, name=name, rows=rows,
+                                columns=columns, fitting=fitting, nested=nested, recorded=recorded, direct=direct)
