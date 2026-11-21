@@ -50,7 +50,10 @@ from bindings.classical_arrays_door import classical_address, classical_c_order
 # TOMBSTONE: TreesView / trees_view / trees_check_rank / trees_f32 / trees_f32_view / trees_forest_layout / trees_all_finite / trees_check_sample_weight / trees_vector uses (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
 from bindings.trees_public_gbdt_door import gbdt_table, gbdt_entry_of, _field, _int, _repr, ordered_option_values
-from bindings.gbdt_fit_boundary_unpack import gbdt_fit_params_py, gbdt_fit_strs_py
+from bindings.gbdt_config_run import (
+    GbdtConfig, GbdtWords, GBDT_UNSET, GBDT_RATE_AUTO, gbdt_fit_words, gbdt_pad_tail, gbdt_push_int,
+    gbdt_fit_options, gbdt_resolved_rate, gbdt_resolved_boosting, gbdt_slot_is_float,
+)
 from std.memory import unsafe_memcpy
 from gbdt.fit_request import GbdtFitArgs, GbdtFitOutcome
 from core.entry_table import EntryRef, entry_ref_vendor
@@ -75,9 +78,6 @@ from bindings.operation_names_trees import TREES_OPN_TREES_GBDT_BOOSTING_TYPE, T
 from bindings.py_balanced import py_item
 from bindings.trees_route_boundary_door import trees_device_admit
 from providers.python.device_route_boundary_door import device_route_clear
-
-comptime _UNSET = -1.0
-
 
 def _b() raises -> PythonObject:
     return trees_builtins()
@@ -146,50 +146,6 @@ def catboost_auto_learning_rate_op(args: PythonObject, context: PythonObject) ra
                                    _truthy(args[4]), args[5] if _truthy(args[5]) else PythonObject(None), context)
 
 
-def _resolved_learning_rate(fields: PythonObject, model: PythonObject, n_rows: Int, n_eval_rows: Int,
-                            eval_constant: Bool, context: PythonObject) raises -> Float64:
-    """`GradientBoosting._resolved_learning_rate`."""
-    var t = _tables(context)
-    var nk = trees_keys()
-    var lr = _field(fields, model, nk[].k_learning_rate, "learning_rate")
-    if lr is not None:
-        return _float(lr)
-    if not _eq(_field(fields, model, nk[].k_grow_policy, "grow_policy"), "SymmetricTree"):
-        return _float(py_item(t, nk[].k_legacy_learning_rate))
-    if (_field(fields, model, nk[].k_l2_leaf_reg, "l2_leaf_reg") is not None or _field(fields, model, nk[].k_leaf_estimation_method, "leaf_estimation_method") is not None
-            or _field(fields, model, nk[].k_leaf_estimation_iterations, "leaf_estimation_iterations") is not None):
-        return _float(py_item(t, nk[].k_catboost_learning_rate))
-    var use_best_obj = _field(fields, model, nk[].k_use_best_model, "use_best_model")
-    var use_best = (n_eval_rows > 0 and not eval_constant) if use_best_obj is None else _truthy(use_best_obj)
-    var bfa_obj = _field(fields, model, nk[].k_boost_from_average, "boost_from_average")
-    var bfa = _in(_field(fields, model, nk[].k_loss, "loss"), py_item(t, nk[].k_boost_from_average_losses)) if bfa_obj is None else _truthy(bfa_obj)
-    var table = py_item(t, nk[].k_cpu_auto_learning_rate) if _sabotaged() else PythonObject(None)
-    var rate = gbdt_auto_learning_rate(_field(fields, model, nk[].k_loss, "loss"), Float64(n_rows),
-                                       Float64(Int(py=py_call_typed(_b().int, _field(fields, model, nk[].k_n_estimators, "n_estimators")))),
-                                       use_best, bfa, table, context)
-    return _float(py_item(t, nk[].k_catboost_learning_rate)) if rate is None else _float(rate)
-
-
-def _resolved_boosting_type(fields: PythonObject, model: PythonObject, n_rows: Int, context: PythonObject) raises -> String:
-    """`GradientBoosting._resolved_boosting_type`."""
-    var t = _tables(context)
-    var nk = trees_keys()
-    var explicit = _field(fields, model, nk[].k_boosting_type, "boosting_type")
-    if explicit is not None:
-        return _str(explicit)
-    var loss = _field(fields, model, nk[].k_loss, "loss")
-    var fraction = py_get(fields, nk[].k_feature_fraction, PythonObject(1.0))
-    var score = _field(fields, model, nk[].k_score_function, "score_function")
-    if (not _eq(_field(fields, model, nk[].k_grow_policy, "grow_policy"), "SymmetricTree") or _in(loss, py_item(t, nk[].k_multi_output_losses))
-            or _in(loss, py_item(t, nk[].k_multi_regression_losses))
-            or not (_eq(score, "Cosine") or _eq(score, "NewtonCosine"))
-            or _truthy(_field(fields, model, nk[].k_use_pointwise_searcher, "use_pointwise_searcher")) or Bool(py=fraction < PythonObject(1.0))):
-        return "Plain"
-    if n_rows >= Int(py=py_item(t, nk[].k_ordered_max_rows)) or Int(py=py_call_typed(_b().int, _field(fields, model, nk[].k_n_estimators, "n_estimators"))) < Int(py=py_item(t, nk[].k_ordered_min_iterations)):
-        return "Plain"
-    return "Ordered"
-
-
 def _check_ordered_options(boosting: String, fields: PythonObject, model: PythonObject, context: PythonObject) raises:
     """`ensemble._check_ordered_options`: UNPACK of its facts (read only
     for an Ordered fit, as before), then the RUN check
@@ -250,108 +206,162 @@ def _validate_search_options(fields: PythonObject, model: PythonObject, context:
         return gbdt_validate_search_options(facts)
 
 
-def _f(value: PythonObject) raises -> PythonObject:
-    """`_params`' `f`: the unset sentinel, else `float(value)`."""
-    if value is None:
-        return PythonObject(_UNSET)
-    return py_call_typed(_b().float, value)
-
-
-def _tri(value: PythonObject) raises -> PythonObject:
-    """`ensemble._tri`."""
-    if value is None:
-        return PythonObject(-1)
-    return PythonObject(1 if _truthy(value) else 0)
-
-
-def _int_or(value: PythonObject, unset: Int) raises -> PythonObject:
-    if value is None:
-        return PythonObject(unset)
-    return py_call_typed(_b().int, value)
-
-
-def _params(fields: PythonObject, model: PythonObject, n_rows: Int, n_features: Int, n_flags: Int, n_weights: Int,
-            n_eval_rows: Int, eval_constant: Bool, context: PythonObject) raises -> PythonObject:
-    """`GradientBoosting._params`: the 36-slot list in the binding's order,
-    the class weights, then the optional min_split_gain /
-    min_child_hessian / feature_fraction tail."""
+def gbdt_config(fields: PythonObject, model: PythonObject, texts: Bool, context: PythonObject) raises -> GbdtConfig:
+    """UNPACK of the fit's settings (bindings/gbdt_config_run.mojo): every
+    field and option-table value the former `_params`,
+    `_resolved_learning_rate` and `_resolved_boosting_type` read, read once,
+    in `_params`' order (the search-option check first). The parts that
+    depend on the rows are resolved in RUN (`gbdt_fit_words`,
+    `gbdt_fit_options`). `texts`: also take the Ordered checks' texts (the
+    member's admit, once per member; the fit door builds them only for an
+    Ordered fit, `_check_ordered_options`)."""
     var b = _b()
     var t = _tables(context)
-    var strength = _validate_search_options(fields, model, context)
     var nk = trees_keys()
+    var c = GbdtConfig()
+    c.strength = _validate_search_options(fields, model, context)
+    var loss = _field(fields, model, nk[].k_loss, "loss")
+    c.loss = String(py=loss)
+    var grow = _field(fields, model, nk[].k_grow_policy, "grow_policy")
+    c.grow_symmetric = _eq(grow, "SymmetricTree")
     var cw = _field(fields, model, nk[].k_class_weights, "class_weights")
-    var weights = Python.list() if cw is None or not _truthy(cw) else py_call(b.list, cw)
+    if cw is not None and _truthy(cw):
+        var listed = py_call(b.list, cw)
+        for k in range(len(listed)):  # small-loop(class weights): one per class, once per fit
+            c.class_weights.append(Float64(py=listed[k]))
     var method = _field(fields, model, nk[].k_leaf_estimation_method, "leaf_estimation_method")
-    var method_code = PythonObject(-1) if method is None else py_item(t, nk[].k_leaf_estimation_names)[method]
+    c.method_code = -1 if method is None else Int(py=py_item(t, nk[].k_leaf_estimation_names)[method])
     var iters = _field(fields, model, nk[].k_leaf_estimation_iterations, "leaf_estimation_iterations")
-    if (iters is None and _eq(_field(fields, model, nk[].k_grow_policy, "grow_policy"), "SymmetricTree")
-            and Int(py=py_call_typed(b.int, _field(fields, model, nk[].k_n_estimators, "n_estimators"))) < 200 and n_features < 20):
-        iters = PythonObject(1)
-    var rate = _resolved_learning_rate(fields, model, n_rows, n_eval_rows, eval_constant, context)
-    var tail = Python.list()
+    c.leaf_iters = -1 if iters is None else Int(py=py_call_typed(b.int, iters))
+    c.n_estimators = Int(py=py_call_typed(b.int, _field(fields, model, nk[].k_n_estimators, "n_estimators")))
+    var l2 = _field(fields, model, nk[].k_l2_leaf_reg, "l2_leaf_reg")
+    # The learning rate (`_resolved_learning_rate`): fixed, or the automatic
+    # table rows for both use_best_model answers (the rows decide which).
+    var lr = _field(fields, model, nk[].k_learning_rate, "learning_rate")
+    if lr is not None:
+        c.rate = _float(lr)
+    elif not c.grow_symmetric:
+        c.rate = _float(py_item(t, nk[].k_legacy_learning_rate))
+    elif l2 is not None or method is not None or iters is not None:
+        c.rate = _float(py_item(t, nk[].k_catboost_learning_rate))
+    else:
+        c.rate_form = GBDT_RATE_AUTO
+        c.catboost_rate = _float(py_item(t, nk[].k_catboost_learning_rate))
+        if _eq(loss, "Logloss") or _eq(loss, "MultiClass") or _eq(loss, "RMSE"):
+            var bfa_obj = _field(fields, model, nk[].k_boost_from_average, "boost_from_average")
+            var bfa = _in(loss, py_item(t, nk[].k_boost_from_average_losses)) if bfa_obj is None else _truthy(bfa_obj)
+            var source = py_item(t, nk[].k_cpu_auto_learning_rate) if _sabotaged() else py_item(t, nk[].k_gpu_auto_learning_rate)
+            for u in range(2):  # small-loop(use_best_model): the two table rows
+                var coeffs = py_get(source, Python.tuple(PythonObject(String(py=loss)), PythonObject(u == 1), PythonObject(bfa)))
+                if coeffs is not None:
+                    c.auto_have[u] = True
+                    for k in range(4):  # small-loop(four coefficients)
+                        c.auto_coef[4 * u + k] = _float(coeffs[k])
     var fraction = py_get(fields, nk[].k_feature_fraction, PythonObject(1.0))
     var gain = _field(fields, model, nk[].k_min_split_gain, "min_split_gain")
     var hessian = _field(fields, model, nk[].k_min_child_hessian, "min_child_hessian")
     if not Bool(py=fraction == PythonObject(1.0)):
-        _ = py_call(tail.append, PythonObject(-1.0) if gain is None else py_call_typed(b.float, gain))
-        _ = py_call(tail.append, PythonObject(-1.0) if hessian is None else py_call_typed(b.float, hessian))
-        _ = py_call(tail.append, py_call_typed(b.float, fraction))
+        c.tail.append(GBDT_UNSET if gain is None else _float(gain))
+        c.tail.append(GBDT_UNSET if hessian is None else _float(hessian))
+        c.tail.append(_float(fraction))
     elif hessian is not None:
-        _ = py_call(tail.append, PythonObject(-1.0) if gain is None else py_call_typed(b.float, gain))
-        _ = py_call(tail.append, py_call_typed(b.float, hessian))
+        c.tail.append(GBDT_UNSET if gain is None else _float(gain))
+        c.tail.append(_float(hessian))
     elif gain is not None:
-        _ = py_call(tail.append, py_call_typed(b.float, gain))
-    var l2 = _field(fields, model, nk[].k_l2_leaf_reg, "l2_leaf_reg")
-    var l2_value = PythonObject(0.0 if _eq(_field(fields, model, nk[].k_loss, "loss"), "YetiRank") else 3.0) if l2 is None else l2
-    var params = Python.list(
-        PythonObject(n_rows), PythonObject(n_features), PythonObject(n_weights), PythonObject(n_flags),
-        py_call_typed(b.int, _field(fields, model, nk[].k_border_count, "border_count")),
-        py_call_typed(b.int, _field(fields, model, nk[].k_n_estimators, "n_estimators")),
-        py_call_typed(b.int, _field(fields, model, nk[].k_max_depth, "max_depth")),
-        PythonObject(rate),
-        py_call_typed(b.float, l2_value),
-        py_call_typed(b.int, _field(fields, model, nk[].k_random_state, "random_state")),
-        py_item(t, nk[].k_score_function_names)[_field(fields, model, nk[].k_score_function, "score_function")],
-        _f(_field(fields, model, nk[].k_loss_alpha, "loss_alpha")), _f(_field(fields, model, nk[].k_loss_q, "loss_q")),
-        _f(_field(fields, model, nk[].k_loss_delta, "loss_delta")), _f(_field(fields, model, nk[].k_loss_variance_power, "loss_variance_power")),
-        _f(_field(fields, model, nk[].k_loss_border, "loss_border")),
-        PythonObject(-1) if iters is None else py_call_typed(b.int, iters),
-        method_code,
-        py_call_typed(b.float, _field(fields, model, nk[].k_bagging_temperature, "bagging_temperature")),
-        _f(_field(fields, model, nk[].k_subsample, "subsample")),
-        PythonObject(n_eval_rows),
-        _f(_field(fields, model, nk[].k_od_pvalue, "od_pvalue")),
-        _int_or(_field(fields, model, nk[].k_od_wait, "od_wait"), -1),
-        _tri(_field(fields, model, nk[].k_use_best_model, "use_best_model")),
-        py_call_typed(b.int, _field(fields, model, nk[].k_best_model_min_trees, "best_model_min_trees")),
-        PythonObject(strength),
-        PythonObject(1 if _truthy(_field(fields, model, nk[].k_use_pointwise_searcher, "use_pointwise_searcher")) else 0),
-        py_call_typed(b.int, _field(fields, model, nk[].k_border_build_max_samples, "border_build_max_samples")),
-        _int_or(_field(fields, model, nk[].k_permutation_count, "permutation_count"), -1),
-        _int_or(_field(fields, model, nk[].k_ctr_estimation_permutation_id, "ctr_estimation_permutation_id"), -1),
-        _tri(_field(fields, model, nk[].k_boost_from_average, "boost_from_average")),
-        py_item(t, nk[].k_grow_policy_codes)[_field(fields, model, nk[].k_grow_policy, "grow_policy")],
-        _int_or(_field(fields, model, nk[].k_max_leaves, "max_leaves"), -1),
-        py_call_typed(b.int, _field(fields, model, nk[].k_min_data_in_leaf, "min_data_in_leaf")),
-        py_call_typed(b.int, py_get(fields, nk[].k_max_ctr_complexity, PythonObject(1))),
-        PythonObject(len(weights)),
-    )
-    _ = py_call(params.extend, weights)
-    _ = py_call(params.extend, tail)
-    return params
+        c.tail.append(_float(gain))
+    c.l2 = (0.0 if _eq(loss, "YetiRank") else 3.0) if l2 is None else _float(l2)
+    c.border_count = Int(py=py_call_typed(b.int, _field(fields, model, nk[].k_border_count, "border_count")))
+    c.max_depth = Int(py=py_call_typed(b.int, _field(fields, model, nk[].k_max_depth, "max_depth")))
+    c.random_state = Int(py=py_call_typed(b.int, _field(fields, model, nk[].k_random_state, "random_state")))
+    var score = _field(fields, model, nk[].k_score_function, "score_function")
+    c.score_code = Int(py=py_item(t, nk[].k_score_function_names)[score])
+    c.loss_alpha = _unset_or(_field(fields, model, nk[].k_loss_alpha, "loss_alpha"))
+    c.loss_q = _unset_or(_field(fields, model, nk[].k_loss_q, "loss_q"))
+    c.loss_delta = _unset_or(_field(fields, model, nk[].k_loss_delta, "loss_delta"))
+    c.loss_variance_power = _unset_or(_field(fields, model, nk[].k_loss_variance_power, "loss_variance_power"))
+    c.loss_border = _unset_or(_field(fields, model, nk[].k_loss_border, "loss_border"))
+    c.bagging_temperature = _float(_field(fields, model, nk[].k_bagging_temperature, "bagging_temperature"))
+    c.subsample = _unset_or(_field(fields, model, nk[].k_subsample, "subsample"))
+    c.od_pvalue = _unset_or(_field(fields, model, nk[].k_od_pvalue, "od_pvalue"))
+    c.od_wait = _int_unset(_field(fields, model, nk[].k_od_wait, "od_wait"))
+    c.use_best = _tri_word(_field(fields, model, nk[].k_use_best_model, "use_best_model"))
+    c.best_model_min_trees = Int(py=py_call_typed(b.int, _field(fields, model, nk[].k_best_model_min_trees, "best_model_min_trees")))
+    c.pointwise = _truthy(_field(fields, model, nk[].k_use_pointwise_searcher, "use_pointwise_searcher"))
+    c.border_build_max_samples = Int(py=py_call_typed(b.int, _field(fields, model, nk[].k_border_build_max_samples, "border_build_max_samples")))
+    var permutation = _field(fields, model, nk[].k_permutation_count, "permutation_count")
+    c.permutation_set = permutation is not None
+    c.permutation_count = _int_unset(permutation)
+    c.ctr_permutation_id = _int_unset(_field(fields, model, nk[].k_ctr_estimation_permutation_id, "ctr_estimation_permutation_id"))
+    c.boost_from_average = _tri_word(_field(fields, model, nk[].k_boost_from_average, "boost_from_average"))
+    c.grow_code = Int(py=py_item(t, nk[].k_grow_policy_codes)[grow])
+    c.max_leaves = _int_unset(_field(fields, model, nk[].k_max_leaves, "max_leaves"))
+    c.min_data_in_leaf = Int(py=py_call_typed(b.int, _field(fields, model, nk[].k_min_data_in_leaf, "min_data_in_leaf")))
+    c.max_ctr_complexity = Int(py=py_call_typed(b.int, py_get(fields, nk[].k_max_ctr_complexity, PythonObject(1))))
+    # The boosting type (`_resolved_boosting_type`) and the Plain-only checks.
+    var multi_output = _in(loss, py_item(t, nk[].k_multi_output_losses))
+    var multi_regression = _in(loss, py_item(t, nk[].k_multi_regression_losses))
+    var cosine = _eq(score, "Cosine") or _eq(score, "NewtonCosine")
+    var below_one = Bool(py=fraction < PythonObject(1.0))
+    var explicit = _field(fields, model, nk[].k_boosting_type, "boosting_type")
+    if explicit is not None:
+        c.explicit = _str(explicit)
+    c.plain_forced = (not c.grow_symmetric or multi_output or multi_regression or not cosine or c.pointwise
+                      or below_one)
+    c.ordered_max_rows = Int(py=py_item(t, nk[].k_ordered_max_rows))
+    c.ordered_min_iterations = Int(py=py_item(t, nk[].k_ordered_min_iterations))
+    c.fold_len = _float(py_get(fields, nk[].k_fold_len_multiplier, PythonObject(2.0)))
+    var fold_block = py_get(fields, nk[].k_fold_permutation_block, PythonObject(None))
+    c.fold_block_set = fold_block is not None
+    if c.fold_block_set:
+        c.fold_block = Int(py=py_call_typed(b.int, fold_block))
+    c.has_cat = _truthy(_field(fields, model, nk[].k_cat_features, "cat_features"))
+    # The option strings.
+    var bootstrap = _field(fields, model, nk[].k_bootstrap_type, "bootstrap_type")
+    c.bootstrap = String("") if not _truthy(bootstrap) else String(py=bootstrap)
+    var od = _field(fields, model, nk[].k_od_type, "od_type")
+    c.od = String("") if not _truthy(od) else String(py=od)
+    c.nan_mode = String(py=_field(fields, model, nk[].k_nan_mode, "nan_mode"))
+    c.border = String(py=py_get(fields, nk[].k_feature_border_type, PythonObject("GreedyLogSum")))
+    c.ordered_texts = texts
+    c.ordered = GbdtOrderedFacts(
+        c.grow_symmetric, multi_output, multi_regression, _in(loss, py_item(t, nk[].k_querywise_losses)), cosine,
+        _eq(method, "Exact"), c.pointwise, below_one,
+        _str(loss) if texts else String(""), _repr(loss) if texts else String(""),
+        _str(score) if texts else String(""))
+    return c^
 
 
-def _padded_tail(params: PythonObject) raises -> PythonObject:
-    """The slots past the class weights padded to their three defaults
-    (`[-1.0, -1.0, 1.0][len(tail):]`), so a later slot lands in place."""
-    var b = _b()
-    var fixed = 36 + Int(py=py_call_typed(b.int, params[35]))
-    var out = py_call(b.list, params)
-    var defaults = Python.list(PythonObject(-1.0), PythonObject(-1.0), PythonObject(1.0))
-    var have = len(params) - fixed
-    for i in range(have, 3):  # driver-loop: over fixed call structure, small-loop(defaults): at most three tail defaults
-        _ = py_call(out.append, defaults[i])
-    return out
+def _unset_or(value: PythonObject) raises -> Float64:
+    """`_params`' `f`: the unset sentinel, else `float(value)`."""
+    if value is None:
+        return GBDT_UNSET
+    return _float(value)
+
+
+def _tri_word(value: PythonObject) raises -> Int:
+    """`ensemble._tri`."""
+    if value is None:
+        return -1
+    return 1 if _truthy(value) else 0
+
+
+def _int_unset(value: PythonObject) raises -> Int:
+    if value is None:
+        return -1
+    return Int(py=py_call_typed(_b().int, value))
+
+
+def gbdt_check_option_tables(fields: PythonObject, model: PythonObject, context: PythonObject) raises:
+    """The od_type and feature_border_type table checks of the fit, in its
+    words (the fit door at its place in the fit's order; the member's admit)."""
+    var t = _tables(context)
+    var nk = trees_keys()
+    var od = _field(fields, model, nk[].k_od_type, "od_type")
+    if od is not None and not _in(od, py_item(t, nk[].k_od_types)):
+        raise Error("mojolearn: od_type must be one of " + _repr(py_item(t, nk[].k_od_types)) + ", got " + _repr(od))
+    var border = py_get(fields, nk[].k_feature_border_type, PythonObject("GreedyLogSum"))
+    if not _in(border, py_item(t, nk[].k_border_types)):
+        raise Error("mojolearn: feature_border_type must be one of " + _repr(py_item(t, nk[].k_border_types)) + ", got " + _repr(border))
 
 
 # ---------------------------------------------------------- labels/codes
@@ -1101,11 +1111,15 @@ def gbdt_fit_unpack(model: PythonObject, args: PythonObject, context: PythonObje
         var lo = py_call_typed(helper, held[3], PythonObject(0), PythonObject(n_eval_rows), PythonObject(0))
         var hi = py_call_typed(helper, held[3], PythonObject(0), PythonObject(n_eval_rows), PythonObject(1))
         eval_constant = Bool(py=lo == hi)
-    var params = _params(fields, model, n_rows, n_features, n_flags, n_weights, n_eval_rows, eval_constant, context)
-    py_setitem(fields, nk[].k_learning_rate_, py_call_typed(b.float, params[7]))
+    # The settings read once into the typed config (bindings/gbdt_config_run.mojo),
+    # the request slots resolved from the rows there (RUN): the same words the
+    # Gbdt member builds (core/gbdt_member.mojo).
+    var config = gbdt_config(fields, model, False, context)
+    var words = gbdt_fit_words(config, n_rows, n_features, n_flags, n_weights, n_eval_rows, eval_constant)
+    py_setitem(fields, nk[].k_learning_rate_, PythonObject(words.rate))
     if target_dim != 1:
-        params = _padded_tail(params)
-        _ = py_call(params.append, PythonObject(target_dim))
+        gbdt_pad_tail(words)
+        gbdt_push_int(words, target_dim)
     if subgroup_id is not None:
         raise Error("NotImplementedError: mojolearn: subgroup_id is read by no loss this implementation "
                     + "trains; the ranking losses that read CatBoost's subgroup ids "
@@ -1125,65 +1139,28 @@ def gbdt_fit_unpack(model: PythonObject, args: PythonObject, context: PythonObje
     var pair_holders = PythonObject(None)
     if group_id is not None:
         group_holder = _group_sizes(group_id, n_rows, context)
-        params = _padded_tail(params)
-        _ = py_call(params.append, PythonObject(trees_address(group_holder)))
-        _ = group_holder  # keep the Python object alive through the native call above
-        _ = py_call(params.append, PythonObject(Int(py=group_holder.size)))
+        gbdt_pad_tail(words)
+        gbdt_push_int(words, trees_address(group_holder))
+        gbdt_push_int(words, Int(py=group_holder.size))
         if _eq(loss, "PairLogit"):
             if pairs is None:
-                _ = py_call(params.append, PythonObject(trees_address(group_holder)))
-                _ = group_holder  # keep the Python object alive through the native call above
-                _ = py_call(params.append, PythonObject(-1))
-                _ = group_holder  # keep the Python object alive through the native call above
-                _ = py_call(params.append, PythonObject(trees_address(group_holder)))
-                _ = group_holder  # keep the Python object alive through the native call above
+                gbdt_push_int(words, trees_address(group_holder))
+                gbdt_push_int(words, -1)
+                gbdt_push_int(words, trees_address(group_holder))
             else:
                 pair_holders = _pairs_arrays(pairs, pairs_weight, n_rows, context)
-                _ = py_call(params.append, PythonObject(trees_address(pair_holders[0])))
-                _ = group_holder  # keep the Python object alive through the native call above
-                _ = py_call(params.append, PythonObject(Int(py=pair_holders[1].size)))
-                _ = group_holder  # keep the Python object alive through the native call above
-                _ = py_call(params.append, PythonObject(trees_address(pair_holders[1])))
-                _ = group_holder  # keep the Python object alive through the native call above
-    var od = _field(fields, model, nk[].k_od_type, "od_type")
-    if od is not None and not _in(od, py_item(t, nk[].k_od_types)):
-        raise Error("mojolearn: od_type must be one of " + _repr(py_item(t, nk[].k_od_types)) + ", got " + _repr(od))
-    var bootstrap = _field(fields, model, nk[].k_bootstrap_type, "bootstrap_type")
-    var strs = Python.list(loss, PythonObject("") if not _truthy(bootstrap) else bootstrap,
-                           PythonObject("") if not _truthy(od) else od, _field(fields, model, nk[].k_nan_mode, "nan_mode"))
-    var border = py_get(fields, nk[].k_feature_border_type, PythonObject("GreedyLogSum"))
-    if not _in(border, py_item(t, nk[].k_border_types)):
-        raise Error("mojolearn: feature_border_type must be one of " + _repr(py_item(t, nk[].k_border_types)) + ", got " + _repr(border))
-    var boosting = _resolved_boosting_type(fields, model, n_rows, context)
-    _check_ordered_options(boosting, fields, model, context)
-    var fold_len = _float(py_get(fields, nk[].k_fold_len_multiplier, PythonObject(2.0)))
-    var fold_block = py_get(fields, nk[].k_fold_permutation_block, PythonObject(None))
-    if boosting == "Plain":
-        if fold_len != 2.0 or fold_block is not None:
-            raise Error("mojolearn: fold_len_multiplier and fold_permutation_block "
-                        + "are read only by Ordered boosting, and this fit resolved "
-                        + "to Plain; they would be accepted and ignored")
-        if _field(fields, model, nk[].k_permutation_count, "permutation_count") is not None and not _truthy(cat):
-            raise Error("mojolearn: permutation_count is read only by the "
-                        + "categorical path and by Ordered boosting, and this fit "
-                        + "resolved to Plain with no cat_features; it would be "
-                        + "accepted and ignored")
-    if not _eq(border, "GreedyLogSum") or boosting == "Ordered":
-        _ = py_call(strs.append, border)
-    if boosting == "Ordered":
-        _ = py_call(strs.append, PythonObject("Ordered"))
-        _ = py_call(strs.append, PythonObject(String(bitcast[DType.uint64](fold_len))))
-        _ = py_call(strs.append, PythonObject(String(0 if fold_block is None else Int(py=py_call_typed(b.int, fold_block)))))
-    py_setitem(fields, nk[].k_boosting_type_, PythonObject(boosting))
+                gbdt_push_int(words, trees_address(pair_holders[0]))
+                gbdt_push_int(words, Int(py=pair_holders[1].size))
+                gbdt_push_int(words, trees_address(pair_holders[1]))
+        # (group_holder and pair_holders stay alive in `pins` until PACK.)
+    gbdt_check_option_tables(fields, model, context)
+    var options = gbdt_fit_options(config, n_rows)
+    _check_ordered_options(options.boosting, fields, model, context)
+    py_setitem(fields, nk[].k_boosting_type_, PythonObject(options.boosting))
     var ex_addr = x.address if held is None else Int(py=held[1])
     var ey_addr = ya.address if held is None else Int(py=held[3])
-    # The params and strs lists, read once into the request's plain views.
-    var p_ints = List[Int]()
-    var p_floats = List[Float64]()
-    var p_bad = List[UInt8]()
-    gbdt_fit_params_py(params, p_ints, p_floats, p_bad)
     var fit_args = GbdtFitArgs(x.address, ya.address, w_addr, trees_address(flags_holder), ex_addr, ey_addr,
-                               p_ints^, p_floats^, p_bad^, gbdt_fit_strs_py(strs))
+                               words.ints^, words.floats^, words.bad^, options.strs^)
     var classes = GBDT_CLASSES_NONE
     if _eq(loss, "MultiClass"):
         classes = GBDT_CLASSES_DIM_PLUS_ONE
@@ -1224,16 +1201,23 @@ def gbdt_fit_pack(model: PythonObject, call: GbdtFitCall, outcome: GbdtFitOutcom
 
 
 def gbdt_inspect(model: PythonObject, operation: Int, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    """The fit's resolved settings, for inspection: `_params(...)`,
-    `_resolved_learning_rate(...)`, `_resolved_boosting_type(n_rows)`, by
-    the leaf code of `trees_gbdt_params` / `_learning_rate` / `_boosting_type`."""
+    """The fit's resolved settings, for inspection, from the same typed
+    config and RUN resolution the fit uses (bindings/gbdt_config_run.mojo):
+    the parameter slots (the former `_params` list: integers and floats by
+    slot), the learning rate and the boosting type, by the leaf code of
+    `trees_gbdt_params` / `_learning_rate` / `_boosting_type`."""
     var fields = py_fields(model)
+    var config = gbdt_config(fields, model, False, context)
     if operation == TREES_OPN_TREES_GBDT_BOOSTING_TYPE:
-        return PythonObject(_resolved_boosting_type(fields, model, _int(args[0]), context))
+        return PythonObject(gbdt_resolved_boosting(config, _int(args[0])))
     if operation == TREES_OPN_TREES_GBDT_LEARNING_RATE:
-        return PythonObject(_resolved_learning_rate(fields, model, _int(args[0]), _int(args[1]), _truthy(args[2]), context))
-    return _params(fields, model, _int(args[0]), _int(args[1]), _int(args[2]), _int(args[3]), _int(args[4]),
-                   _truthy(args[5]), context)
+        return PythonObject(gbdt_resolved_rate(config, _int(args[0]), _int(args[1]), _truthy(args[2])))
+    var words = gbdt_fit_words(config, _int(args[0]), _int(args[1]), _int(args[2]), _int(args[3]), _int(args[4]),
+                               _truthy(args[5]))
+    var out = Python.list()
+    for k in range(len(words.ints)):  # small-loop(params): the fixed slots, class weights and tail, PACK of an inspection
+        _ = py_call(out.append, PythonObject(words.floats[k]) if gbdt_slot_is_float(k) else PythonObject(words.ints[k]))
+    return out
 
 
 # ------------------------------------------------------------ constructor

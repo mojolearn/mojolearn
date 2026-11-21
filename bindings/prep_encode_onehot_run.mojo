@@ -131,3 +131,38 @@ def onehot_inverse_stage(mut prog: EncProgram, r: OneHotInverse) -> OneHotInvers
     var sto = prog.put_floats(r.strict)
     var staged = enc_bad_rows_stages(prog, grouped, n, d, -1, sto)
     return OneHotInversePlan(dst, staged[0], staged[1])
+
+
+# ---------------------------------------------------------------- the restricted fit's drops
+#: OneHotEncoder `drop` as a word (a per-column category array is not a word:
+#: the door's `_set_drop_idx` serves it).
+comptime OH_DROP_NONE = 0
+comptime OH_DROP_FIRST = 1
+comptime OH_DROP_IF_BINARY = 2
+
+
+def onehot_auto_drops(sizes: List[Int], drop: Int) -> List[Int]:
+    """`_set_drop_idx` without infrequent grouping for a drop word: column
+    j's dropped category index (-1: none), which is also its `_drop_after`
+    (no grouping remaps it). 'first' drops category 0 of every column,
+    'if_binary' of the two-category columns only. The door and the Prep
+    member both call it (one path)."""
+    var drops = List[Int](capacity=len(sizes))
+    for j in range(len(sizes)):  # driver-loop: over the per-column drop indices (feature metadata)
+        if drop == OH_DROP_FIRST or (drop == OH_DROP_IF_BINARY and sizes[j] == 2):
+            drops.append(0)
+        else:
+            drops.append(OH_NONE)
+    return drops^
+
+
+def onehot_widths(sizes: List[Int], drops: List[Int]) -> List[Int]:
+    # `_widths`: per-column block widths (a dropped category takes no column).
+    var widths = List[Int](capacity=len(sizes))
+    for j in range(len(sizes)):  # driver-loop: per-column one-hot block widths
+        widths.append(sizes[j] - (0 if drops[j] < 0 else 1))
+    return widths^
+
+
+def onehot_total(widths: List[Int]) -> Int:
+    return _total(widths)

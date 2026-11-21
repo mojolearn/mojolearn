@@ -320,3 +320,99 @@ def cat_infrequent_stage(mut prog: EncProgram, r: InfrequentFit) -> InfrequentPl
     prep_program_stage(prog.program, CAT_OP_INF_M1, d * kmax, cnt, kc, kmax, m0, r.max_categories, m1)
     prep_program_stage(prog.program, CAT_OP_INF_MAP, d * kmax, kc, kmax, m1, mp)
     return InfrequentPlan(m1, mp)
+
+
+# ---------------------------------------------------------------- the restricted category fit
+# categories='auto' without infrequent grouping (min_frequency and
+# max_categories None): the fitted category state is a function of the
+# category program's arena alone. The encode door (OrdinalEncoder /
+# OneHotEncoder `_auto_fit`) and the Prep member (core/prep_member.mojo
+# kinds 10, 11) both build it here, from the same program, so the two
+# routes hold the same words (one path).
+struct CatAuto(Copyable, Movable):
+    """The fitted categories of a restricted fit: the (d, kmax) float32
+    `block` (row j's first `sizes[j]` words are column j's sorted distinct
+    values, -0.0 folded into 0.0, NaN last when seen; `max(d * kmax, 1)`
+    words), the per-column `sizes` and `missing`, column j's NaN slot
+    (`sizes[j] - 1`) or -1 when column j holds no NaN category."""
+    var d: Int
+    var kmax: Int
+    var block: List[Float32]
+    var sizes: List[Int]
+    var missing: List[Int]
+
+    def __init__(out self):
+        self.d = 0
+        self.kmax = 0
+        self.block = List[Float32](length=1, fill=Float32(0))
+        self.sizes = List[Int]()
+        self.missing = List[Int]()
+
+    def cards(self) -> List[Int]:
+        """Column j's code count without its NaN slot (the cardinalities
+        the unknown / missing code checks compare against)."""
+        var out = List[Int](capacity=self.d)
+        for j in range(self.d):  # driver-loop: over the per-column category counts (feature metadata)
+            out.append(self.sizes[j] - (1 if self.missing[j] >= 0 else 0))
+        return out^
+
+    def column(self, j: Int) -> List[Float32]:
+        # Column j's category words.
+        var out = List[Float32](capacity=self.sizes[j])
+        for i in range(self.sizes[j]):  # driver-loop: over one column's fitted categories
+            out.append(self.block[j * self.kmax + i])
+        return out^
+
+
+def _arena_word(arena: Int, offset: Int) -> Float32:
+    return MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=arena)[offset]
+
+
+def _arena_iword(arena: Int, offset: Int) -> Int:
+    return Int(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=arena)[offset])
+
+
+def cat_auto_held(arena: Int, plan: CatFitPlan, d: Int) -> Bool:
+    """False when a packed plan (CAT_FIT_PACK_*) did not hold the values (a
+    column that does not suit the presence flags, or more values than the
+    packed region): the caller runs the sorted route instead. An unpacked
+    plan always holds. `arena`: the address of the run's host words."""
+    if not plan.packed:
+        return True
+    if plan.flags >= 0:
+        for j in range(d):  # driver-loop: over the per-column overflow flags (feature metadata)
+            if _arena_iword(arena, plan.flags + j) != 0:
+                return False
+    var total = 0
+    for c in range(d):  # driver-loop: over the per-column category counts (feature metadata)
+        total += Int(_arena_word(arena, plan.counts + c))
+    return total <= plan.cap
+
+
+def cat_auto_state(arena: Int, plan: CatFitPlan, n: Int, d: Int) -> CatAuto:
+    """The fitted categories of a category program that held its values
+    (`cat_auto_held`): the (d, kmax) block, the sizes and the NaN slots,
+    read from the run's host words at `arena`. The words are the program's
+    (the door formerly sliced them into per-column Arrays and rebuilt the
+    same block from those), so no bit moves."""
+    var state = CatAuto()
+    state.d = d
+    var counts = List[Int](capacity=d)
+    var starts = List[Int](capacity=d)
+    var o = 0
+    for c in range(d):  # driver-loop: over the per-column category counts (feature metadata)
+        var count = Int(_arena_word(arena, plan.counts + c))
+        counts.append(count)
+        starts.append(plan.values + (o if plan.packed else c * n))
+        o += count
+        state.kmax = max(state.kmax, count)
+    state.block = List[Float32](length=max(d * state.kmax, 1), fill=Float32(0))
+    var source = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=arena)
+    for j in range(d):  # driver-loop: over the columns' category words (feature metadata)
+        for i in range(counts[j]):  # driver-loop: over one column's categories
+            state.block[j * state.kmax + i] = source[starts[j] + i]
+        var size = counts[j]
+        var last = state.block[j * state.kmax + size - 1] if size > 0 else Float32(0)
+        state.missing.append(size - 1 if size > 0 and last != last else -1)
+    state.sizes = counts^
+    return state^
