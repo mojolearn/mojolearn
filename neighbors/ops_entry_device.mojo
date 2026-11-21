@@ -8,7 +8,7 @@ the same kernels and the same words. The table entry is called with the GIL
 already released by its caller.
 """
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from core.hostptr import f32_ptr, i32_ptr
+from core.hostptr import f32_ptr, i32_ptr, u32_ptr
 from core.neural_context import process_ctx
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
@@ -17,14 +17,19 @@ from core.neighbors_entry_table import (
     NB_OP_INDEX_PREPARE, NB_OP_INDEX_RELEASE, NB_OP_FOLD_READY, NB_OP_CLASSIFY, NB_OP_REGRESS,
     NB_OP_CLASSIFY_RESIDENT, NB_OP_REGRESS_RESIDENT, NB_CLASSIFY_FIXED, NB_CLASSIFY_RESIDENT_FIXED,
     NB_OP_RADIUS_COUNT, NB_OP_RADIUS_FILL,
+    NB_OP_SEARCH, NB_OP_SEARCH_RESIDENT, NB_OP_RBC_SEARCH, NB_OP_CLASSIFY_NEIGHBORS, NB_OP_REGRESS_NEIGHBORS,
+    NB_CLASSIFY_NEIGHBORS_FIXED,
     nb_ops_check_spans, nb_class_counts, nb_status_word, nb_fold_words,
 )
 from neighbors.impl.multi_gpu import neighbors_device_plan
 from neighbors.resident_index import (
     knn_fold_ready, knn_index_classify, knn_index_prepare, knn_index_regress, knn_index_release,
+    knn_index_search,
 )
+from neighbors.impl.detail.knn_brute_force import KNN_METHOD_AUTO
 from neighbors.estimator import (
     knn_classifier_predict, knn_regressor_predict, radius_neighbors_count, radius_neighbors_fill,
+    knn_search, rbc_knn_search, knn_classifier_from_neighbors, knn_regressor_from_neighbors,
 )
 
 #: The base binding's ONE process-lifetime DeviceContext: the same slot name
@@ -142,6 +147,61 @@ def nb_ops_device_run(operation: Int, a: MutPointer[Int, MutUntrackedOrigin], p:
                                         p[4] != 0, p[5], Float32(f[1]))
         ctx.synchronize()
         return nnz
+    if operation == NB_OP_SEARCH:
+        # The export's body (bindings/_mojolearn.mojo knn_search_binding).
+        var ip = _f32(a[0])
+        var qp = _f32(a[1])
+        var dp = _f32(a[2])
+        var xp = u32_ptr(a[3])
+        var ctx = process_ctx[NEIGHBORS_DEVCTX_SLOT]()
+        var used = knn_search(ctx, ip, p[0], qp, p[1], p[2], p[3], dp, xp, p[4] != 0, p[5], KNN_METHOD_AUTO,
+                              p[6], Float32(f[0]), True)
+        ctx.synchronize()
+        return used
+    if operation == NB_OP_SEARCH_RESIDENT:
+        # The export's body (knn_search_resident_binding); a fold is taken
+        # by the resident classify / regress operations only.
+        var ip = _f32(a[0])
+        var qp = _f32(a[1])
+        var dp = _f32(a[2])
+        var xp = u32_ptr(a[3])
+        var status = nb_status_word(a[4])
+        return knn_index_search(p[0], ip, p[1], qp, p[2], p[3], p[4], dp, xp, p[5] != 0, p[6], KNN_METHOD_AUTO,
+                                p[7], Float32(f[0]), True, status)
+    if operation == NB_OP_RBC_SEARCH:
+        # The export's body (rbc_knn_search_binding).
+        var ip = _f32(a[0])
+        var qp = _f32(a[1])
+        var xp = _i32(a[2])
+        var dp = _f32(a[3])
+        var ctx = process_ctx[NEIGHBORS_DEVCTX_SLOT]()
+        var n_dists = rbc_knn_search(ctx, ip, p[0], qp, p[1], p[2], p[3], xp, dp, p[4], Float32(f[0]))
+        ctx.synchronize()
+        return n_dists
+    if operation == NB_OP_CLASSIFY_NEIGHBORS:
+        # The export's body (knn_classify_neighbors_binding).
+        var n_classes = nb_class_counts(p, NB_CLASSIFY_NEIGHBORS_FIXED, np, p[3])
+        var dp = _f32(a[0])
+        var xp = u32_ptr(a[1])
+        var yp = _i32(a[2])
+        var lp = _i32(a[3])
+        var pp = _f32(a[4])
+        var up = _i32(a[5])
+        var ctx = process_ctx[NEIGHBORS_DEVCTX_SLOT]()
+        knn_classifier_from_neighbors(ctx, dp, xp, p[0], p[1], p[2], yp, p[3], n_classes, lp, pp, up,
+                                      p[4] != 0, p[5])
+        ctx.synchronize()
+        return 0
+    if operation == NB_OP_REGRESS_NEIGHBORS:
+        # The export's body (knn_regress_neighbors_binding).
+        var dp = _f32(a[0])
+        var xp = u32_ptr(a[1])
+        var yp = _f32(a[2])
+        var op = _f32(a[3])
+        var ctx = process_ctx[NEIGHBORS_DEVCTX_SLOT]()
+        knn_regressor_from_neighbors(ctx, dp, xp, p[0], p[1], p[2], yp, p[3], op, p[4])
+        ctx.synchronize()
+        return 0
     # NB_OP_REGRESS_RESIDENT (nb_ops_check_spans refused any other id)
     var ip = _f32(a[0])
     var qp = _resident_queries(ip, a[1], p[9])

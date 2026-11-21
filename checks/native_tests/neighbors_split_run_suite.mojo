@@ -13,11 +13,16 @@ and by the installed-wheel tests.
 from core.host_parallel import host_parallelize
 from core.neighbors_entry_table import (
     NB_OP_RADIUS_COUNT, NB_OP_RADIUS_FILL, NB_OPERATION_COUNT, nb_ops_check_spans,
+    NB_OP_SEARCH, NB_OP_SEARCH_RESIDENT, NB_OP_RBC_SEARCH, NB_OP_CLASSIFY_NEIGHBORS, NB_OP_REGRESS_NEIGHBORS,
+    NbFold,
 )
 from neighbors.neighbors_local_run import LOF_RESULT_LABELS, LOF_AUTO_OFFSET
 from neighbors.nearest_centroid_run import (
     NC_PRIORS_EMPIRICAL, NC_PRIORS_UNIFORM, NC_PRIORS_GIVEN,
     NcFitRequest, NcFitOutcome, NcQueryRequest, nc_fit_priors_run, nc_proba_wide,
+)
+from neighbors.neighbors_knn_run import (
+    KnnDistWords, KnnQueryRequest, KnnQueryOutcome, knn_check_fold_entry,
 )
 from neighbors.lof_run import LofFitRequest, LofFitOutcome, LofQueryRequest
 from neighbors.radius_run import (
@@ -27,7 +32,7 @@ from bindings.parallel_neighbor_worker_run import (
     neighbor_radius_admit, neighbor_sort_admit, neighbor_features_admit,
 )
 
-comptime NEIGHBORS_SPLIT_RUN_FIXTURES = 7
+comptime NEIGHBORS_SPLIT_RUN_FIXTURES = 9
 
 
 def require(ok: Bool, message: String) raises:
@@ -64,7 +69,7 @@ def fixture(unit: Int) raises:
             require(String(e) == "ValueError: input feature count differs from fit", "feature refusal wording")
     elif unit == 1:
         # the two radius operations: their spans are accepted, any other refused
-        require(NB_OP_RADIUS_COUNT == 7 and NB_OP_RADIUS_FILL == 8 and NB_OPERATION_COUNT == 9, "operation ids")
+        require(NB_OP_RADIUS_COUNT == 7 and NB_OP_RADIUS_FILL == 8 and NB_OPERATION_COUNT == 14, "operation ids")
         var words = List[Int](length=8, fill=0)
         var reals = List[Float64](length=2, fill=0)
         var result = List[Int](length=1, fill=0)
@@ -143,6 +148,61 @@ def fixture(unit: Int) raises:
                 and request.radius == 0.5 and request.metric_arg == 2.0 and request.device_status, "radius request")
         var count = RadiusCount()
         require(count.edges == 0 and count.status == 0, "radius count default")
+    elif unit == 7:
+        # the k-NN query and vote operations: ids and spans
+        require(NB_OP_SEARCH == 9 and NB_OP_SEARCH_RESIDENT == 10 and NB_OP_RBC_SEARCH == 11
+                and NB_OP_CLASSIFY_NEIGHBORS == 12 and NB_OP_REGRESS_NEIGHBORS == 13, "k-NN operation ids")
+        var words = List[Int](length=8, fill=0)
+        var reals = List[Float64](length=1, fill=0)
+        var result = List[Int](length=1, fill=0)
+        var aa = Int(words.unsafe_ptr())
+        var ff = Int(reals.unsafe_ptr())
+        var rr = Int(result.unsafe_ptr())
+        nb_ops_check_spans(NB_OP_SEARCH, aa, 4, aa, 7, ff, 1, rr)
+        nb_ops_check_spans(NB_OP_SEARCH_RESIDENT, aa, 5, aa, 8, ff, 1, rr)
+        nb_ops_check_spans(NB_OP_RBC_SEARCH, aa, 4, aa, 5, ff, 1, rr)
+        nb_ops_check_spans(NB_OP_CLASSIFY_NEIGHBORS, aa, 6, aa, 8, 0, 0, rr)
+        nb_ops_check_spans(NB_OP_REGRESS_NEIGHBORS, aa, 4, aa, 5, 0, 0, rr)
+        try:
+            nb_ops_check_spans(NB_OP_SEARCH, aa, 4, aa, 6, ff, 1, rr)
+            raise Error("accepted")
+        except e:
+            require(String(e) == "neighbors ops: request spans differ from operation 9", "search span refusal")
+        try:
+            nb_ops_check_spans(NB_OP_CLASSIFY_NEIGHBORS, aa, 6, aa, 5, 0, 0, rr)
+            raise Error("accepted")
+        except e:
+            require(String(e) == "neighbors ops: classify neighbors needs at least 6 words", "vote span refusal")
+        try:
+            nb_ops_check_spans(NB_OP_REGRESS_NEIGHBORS, aa, 4, aa, 5, ff, 1, rr)
+            raise Error("accepted")
+        except e:
+            require(String(e) == "neighbors ops: request spans differ from operation 13", "mean span refusal")
+        _ = words^
+        _ = reals^
+        _ = result^
+    elif unit == 8:
+        # the k-NN query request: its words, no handle and no scan by default; a fold needs a resident index
+        var request = KnnQueryRequest(1, 2, 10, 4, 6, 3, 0, KnnDistWords(9, 1.5, 1))
+        require(request.index == 1 and request.queries == 2 and request.n_index == 10 and request.n_queries == 4
+                and request.n_features == 6 and request.k == 3 and request.query_tile == 0 and request.metric == 9
+                and request.metric_arg == 1.5 and request.weights == 1, "k-NN request words")
+        require(not request.resident and request.handle == 0 and not request.scan_index
+                and not request.scan_queries and not request.device_status and request.fold.has_fold == 0,
+                "k-NN request defaults")
+        knn_check_fold_entry(request)
+        request.fold = NbFold(1, 0, 10, 1)
+        try:
+            knn_check_fold_entry(request)
+            raise Error("accepted")
+        except e:
+            require(String(e) == "RuntimeError: a resident k-NN fold needs the binding's resident entries",
+                    "fold refusal wording")
+        request.resident = True
+        knn_check_fold_entry(request)
+        var outcome = KnnQueryOutcome()
+        require(outcome.used == 0 and outcome.index_status == 0 and outcome.status == 0
+                and outcome.range_status == 0 and not outcome.ran, "k-NN outcome default")
     else:
         # the public int64 ids are the int32 ids, widened
         var ids = List[Int32](length=3, fill=Int32(1))

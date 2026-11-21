@@ -6,8 +6,9 @@ from ._native_robust_bridge import native_method
 _CONTEXTS = {}
 _BINDING_ALIASES = {}
 _SYMBOLS = {
-    "base": ("_mojolearn", ("mojolearn_numeric_mode", "knn_search", "rbc_knn_search", "knn_index_prepare",
-        "knn_index_release", "knn_search_resident")),
+    # The k-NN and radius queries call the image's neighbors operations table
+    # (its `neighbors_native_key`, captured below), not exports by name.
+    "base": ("_mojolearn", ("mojolearn_numeric_mode", "knn_index_prepare", "knn_index_release")),
     "sort": ("_mojolearn_x_neighbors", ("x_neighbors_numeric_mode", "x_neighbors_native_api_v1",)),
     "ivf": ("_mojolearn_ivf", ("ivf_numeric_mode", "ivf_flat_search", "ivf_flat_index_prepare",
         "ivf_flat_index_search", "ivf_flat_index_release", "ivf_flat_index_export", "ivf_flat_extend")),

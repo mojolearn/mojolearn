@@ -1983,7 +1983,6 @@ FAMILIES = (
             "state_file_sha256",
             "knn_search", "knn_classify", "knn_regress", "kmeans_fit", "kmeans_predict", "kmeans_transform",
             "kmeans_native_api_v1",
-            "knn_classify_neighbors", "knn_regress_neighbors",
             "radius_neighbors_count", "radius_neighbors_fill", "rbc_knn_search", "transpose_f32",
             "cast_colmajor_f64_to_f32", "spectral_preparation_native_api_v1", "nonzero_f64_count", "nonzero_f64_fill", "cast_f64_to_f32", "all_finite_f32",
             "all_finite_f64", "gather_i64", "gather_f64", "gather_rows_bytes", "argmax_rows_f32",

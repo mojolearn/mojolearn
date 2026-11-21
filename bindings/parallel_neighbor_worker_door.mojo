@@ -4,12 +4,11 @@
 # UNPACK and PACK only: every refusal that compares a count, a shape, a
 # radius or a mode word, the method codes and keywords, the sort network's
 # shape and the class-set check are typed in
-# bindings/parallel_neighbor_worker_run.mojo. The radius query is typed end
-# to end: neighbors/radius_run.mojo (operations 7 and 8 of the neighbors
-# table, the x_neighbors row sort), no `family_call`. The other compiled
-# entries of the neighbor family (k-NN search and vote, IVF) are still
-# reached through `family_call` (boundary calls) until they are table
-# operations.
+# bindings/parallel_neighbor_worker_run.mojo. The radius query and the k-NN
+# query and vote are typed end to end: neighbors/radius_run.mojo and
+# neighbors/neighbors_knn_run.mojo (operations 7 to 13 of the neighbors
+# table, the x_neighbors row sort), no `family_call`. The IVF entries are
+# still reached through `family_call` (boundary calls).
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from bindings.admitted_family_door import admit_family, admit_family_meta
@@ -26,12 +25,18 @@ from bindings.arena_materialize_native_door import arena_ragged_rows
 from bindings.host_archive_native_door import host_archive_rbc_metric_object
 from providers.python.array_metadata_pyapi_door import ArrayPin
 from bindings.neighbors_knn_native_door import (
-    _nn_fit, knn_index_finite_once, _dist_params, _check_metric_input, _resident_handle, _report, knn_release,
+    _nn_fit, _check_metric_input, _report, knn_release,
+    knn_dist_words, knn_index_scan_due, knn_query_unpack, knn_query_refuse,
     _clf_predict, _clf_predict_proba, _reg_predict, knn_door, _reduce,
-    knn_admit_x, knn_x_tested, knn_device_tests, knn_host_finite, knn_with_status, knn_ops_key,
+    knn_admit_x, knn_x_tested, knn_host_finite, knn_ops_key,
 )
 from bindings.lof_provider_unpack import LofConnection
 from core.neighbors_entry_table import neighbors_ops_entry
+from neighbors.neighbors_knn_run import (
+    KnnDistWords, KnnQueryRequest, KnnQueryOutcome, knn_search_run, knn_rbc_search_run,
+    knn_vote_classify_run, knn_vote_regress_run,
+)
+from bindings.device_rows_door_run import DoorRowsStore
 from neighbors.radius_run import (
     RadiusRequest, RadiusCount,
     radius_count_run, radius_fill_run, radius_sort_run, radius_widen_run,
@@ -143,49 +148,60 @@ def neighbor_kneighbors(model: PythonObject, source: PythonObject, k_arg: Python
     var query_pin = ArrayPin()
     var query = knn_admit_x(source, model, context, query_pin)
     var rbc = String(py_item(fields, nk[].k_algorithm)) == "rbc"
-    var params = PythonObject(None)
+    var cls_name = String(py_type(model).__name__)
+    # UNPACK: every public value once, into the typed request of
+    # neighbors/neighbors_knn_run.mojo. RUN is that module (no Python import):
+    # the host scans the ball cover and the CPU column need, then one
+    # operation of the neighbors table, with the GIL released once. PACK is
+    # the refusals, the query report and the two arrays.
+    var words = KnnDistWords(0, 0.0, 0)
     if not rbc:
-        params = _dist_params(model, context)
-        _check_metric_input(String(py_type(model).__name__), Int(py=params[0]), query)
+        words = knn_dist_words(model, context)
+        _check_metric_input(cls_name, words.metric, query)
     neighbor_features_admit(query.shape[1], Int(py=py_item(fields, nk[].k_n_features_in_)))
     neighbor_k_admit(k, Int(py=py_item(fields, nk[].k_n_samples_fit_)))
     var return_distance = _flag(distance_arg, "return_distance", context)
     var nq = query.shape[0]
     var dist = family_array(Python.tuple(nq, k), "<f4", context)
     var ids = family_array(Python.tuple(nq, k), "<i4" if rbc else "<u4", context)
+    var dist_address = Int(py=classical_address(dist))
+    var ids_address = Int(py=classical_address(ids))
     # Lane a7b: a borrowed query is tested behind the resident entry's upload
     # (status word); RBC and the CPU column scan it on the host.
     var tested = knn_x_tested(query, source, context)
-    var status = List[Int32](length=1, fill=Int32(0))
+    var ops = knn_ops_key(binding)
+    var entry = neighbors_ops_entry(ops)
+    var outcome = KnnQueryOutcome()
+    var scan_key = PythonObject(None)
     try:
-        if not tested and (rbc or not knn_device_tests(binding)):
-            knn_host_finite(model, query)
         if rbc:
-            knn_index_finite_once(model, index)  # the index test, first query only (`_nn_fit`)
-            var metric = host_archive_rbc_metric_object(String(py_type(model).__name__), py_item(fields, nk[].k_metric), py_item(fields, nk[].k_p), context)
-            var count = family_call(family_entry(binding, "rbc_knn_search", context),
-                classical_address(index), PythonObject(query.source.addr), classical_address(ids), classical_address(dist),
-                Python.list(index.shape[0], nq, index.shape[1], k, metric[0], metric[1]))
-            _report(fields, "n_candidate_distances_", count)
+            var metric = host_archive_rbc_metric_object(cls_name, py_item(fields, nk[].k_metric), py_item(fields, nk[].k_p), context)
+            words = KnnDistWords(Int(py=metric[0]), Float64(py=metric[1]), 0)
+            # The ball cover reads host rows on every image: no resident
+            # handle; the index test at the first query only (`_nn_fit`).
+            var request = KnnQueryRequest(Int(py=classical_address(index)), query.source.addr,
+                Int(py=index.shape[0]), nq, Int(py=index.shape[1]), k, 0, words)
+            request.scan_index = knn_index_scan_due(fields, index, scan_key)
+            request.scan_queries = not tested
+            with GILReleased(Python()):
+                outcome = knn_rbc_search_run(entry, request, ids_address, dist_address)
+            knn_query_refuse(model, request, outcome, DoorRowsStore.none(), scan_key)
+            _report(fields, "n_candidate_distances_", PythonObject(outcome.used))
             _report(fields, "used_query_tile_", PythonObject(None))
             # The old Array.min() uses this same native int32 reduction helper.
-            neighbor_filled_admit(Int(_reduce(Int(py=classical_address(ids)), 2, nq * k, 0, context).i))
+            neighbor_filled_admit(Int(_reduce(ids_address, 2, nq * k, 0, context).i))
         else:
-            var handle = _resident_handle(model, binding, index)
-            var sizes = Python.list(index.shape[0], nq, index.shape[1], k, 1, py_item(fields, nk[].k_query_tile))
-            var used: PythonObject
-            if handle is None:
-                knn_index_finite_once(model, index)  # the CPU column's index test, first query only
-                used = family_call(family_entry(binding, "knn_search", context), classical_address(index), PythonObject(query.source.addr),
-                    classical_address(dist), classical_address(ids), sizes, params)
-            else:
-                used = family_call(family_entry(binding, "knn_search_resident", context), handle,
-                    classical_address(index), PythonObject(query.source.addr), classical_address(dist), classical_address(ids), sizes,
-                    params if tested else knn_with_status(params, status))
-            admitted_finite_refuse(Int(status[0]), String(py_type(model).__name__))
-            _report(fields, "used_query_tile_", used)
+            # The resident reference rows: the handle the GPU image minted
+            # (`knn_query_unpack` -> `_resident_handle`); the CPU column mints
+            # none and scans and searches the host rows.
+            var request = knn_query_unpack(model, binding, ops, index, query.source.addr, nq, k, tested,
+                DoorRowsStore.none(), words, scan_key)
+            with GILReleased(Python()):
+                outcome = knn_search_run(entry, request, dist_address, ids_address)
+            knn_query_refuse(model, request, outcome, DoorRowsStore.none(), scan_key)
+            _report(fields, "used_query_tile_", PythonObject(outcome.used))
     finally:
-        # family_call may release the GIL or raise; keep the admitted source
+        # RUN released the GIL and may raise; keep the admitted source
         # owner alive until every consumer of its captured address has left.
         _ = query
         _ = query_pin
@@ -334,12 +350,20 @@ def _vote(model: PythonObject, distances: PythonObject, indices: PythonObject, m
     var targets = py_item(fields, nk[].k__y_cols)
     var outputs = Int(py=targets.shape[0])
     var binding = neighbor_binding(tables, "neighbors_base")
-    var sizes = Python.list(py_item(fields, nk[].k_n_samples_fit_), nq, 0, k, 0, outputs)
-    var dist_params = _dist_params(model, context)
+    # UNPACK: plain words for the two vote operations of the neighbors table
+    # (neighbors/neighbors_knn_run.mojo); no parameter list.
+    var entry = neighbors_ops_entry(knn_ops_key(binding))
+    var n_fit = Int(py=py_item(fields, nk[].k_n_samples_fit_))
+    var weights = knn_dist_words(model, context).weights
+    var distances_address = Int(py=classical_address(distances))
+    var indices_address = Int(py=classical_address(indices))
+    var targets_address = Int(py=classical_address(targets))
     if py_type(model) is py_item(tables, nk[].k_knr_class) and method == "predict":
         var out = family_array(Python.tuple(nq, outputs), "<f4", context)
-        _ = family_call(family_entry(binding, "knn_regress_neighbors", context), classical_address(distances),
-            classical_address(indices), classical_address(targets), classical_address(out), sizes, dist_params)
+        var out_address = Int(py=classical_address(out))
+        with GILReleased(Python()):
+            knn_vote_regress_run(entry, distances_address, indices_address, targets_address, out_address,
+                                 n_fit, nq, k, outputs, weights)
         _ = targets
         _ = distances
         _ = indices
@@ -348,21 +372,26 @@ def _vote(model: PythonObject, distances: PythonObject, indices: PythonObject, m
         raise Error("ValueError: unsupported reference-sharded vote")
     var classes = py_item(fields, nk[].k__classes_list)
     var total = 0
-    _ = py_call(sizes.append, 1 if method == "predict_proba" else 0)
+    var class_counts = List[Int](capacity=len(classes))
     for i in range(len(classes)):  # driver-loop: class counts per output
         total += len(classes[i])
-        _ = py_call(sizes.append, len(classes[i]))
+        class_counts.append(len(classes[i]))
     var labels = family_array(Python.tuple(nq, outputs), "<i4", context)
     var proba = family_array(Python.tuple(nq * total), "<f4", context)
     var unique = family_array(Python.tuple(total), "<i4", context)
-    _ = family_call(family_entry(binding, "knn_classify_neighbors", context), classical_address(distances),
-        classical_address(indices), classical_address(targets), classical_address(labels), classical_address(proba),
-        classical_address(unique), sizes, dist_params)
+    var labels_address = Int(py=classical_address(labels))
+    var proba_address = Int(py=classical_address(proba))
+    var unique_address = Int(py=classical_address(unique))
+    var want_proba = method == "predict_proba"
+    with GILReleased(Python()):
+        knn_vote_classify_run(entry, distances_address, indices_address, targets_address, labels_address,
+                              proba_address, unique_address, n_fit, nq, k, want_proba, class_counts, weights)
+    _ = class_counts^
     var fitted = List[Int](capacity=total)
     for i in range(len(classes)):  # driver-loop: fitted class ids per output
         for j in range(len(classes[i])):  # driver-loop: class metadata
             fitted.append(Int(py=classes[i][j]))
-    neighbor_class_sets_admit(Int(py=classical_address(unique)), fitted)
+    neighbor_class_sets_admit(unique_address, fitted)
     var offset = 0
     _ = unique
     _ = targets

@@ -35,8 +35,9 @@ classifier's p ends with `n_outputs` class counts.
                            f [metric_arg]                                             -> query tile used
 The float word is rounded to Float32 by the entry, the same
 `Float32(Float64(py=...))` rounding the Python exports apply, so the bits
-are unchanged. The CPU column answers NB_OP_CLASSIFY, NB_OP_REGRESS and the
-two radius passes (the host binding never had the resident entries); every
+are unchanged. The CPU column answers NB_OP_CLASSIFY, NB_OP_REGRESS, the
+two radius passes, the search, the ball-cover search and the two votes on
+merged neighbors (the host binding never had the resident entries); every
 other operation is refused there.
 """
 from core.entry_table import entry_table_publish, entry_table_read
@@ -64,10 +65,39 @@ comptime NB_OP_REGRESS_RESIDENT = 6
 #                 f: radius, metric_arg            -> the edge count found
 comptime NB_OP_RADIUS_COUNT = 7
 comptime NB_OP_RADIUS_FILL = 8
-comptime NB_OPERATION_COUNT = 9
+# The k-NN query and the vote on merged neighbors (lane dw-neighbors,
+# 2026-11-21): the bodies of the base bindings' `knn_search`,
+# `knn_search_resident`, `rbc_knn_search`, `knn_classify_neighbors` and
+# `knn_regress_neighbors` exports, so the k-NN RUN
+# (neighbors/neighbors_knn_run.mojo) calls them with plain words and no
+# Python list.
+#   SEARCH             a: index, queries, distances (float32 [nq * k]), ids (uint32 [nq * k])
+#                      p: n_index, n_queries, n_features, k, return_sqrt, query_tile, metric
+#                      f: metric_arg                -> the query tile that ran
+#   SEARCH_RESIDENT    a: index, queries, distances, ids, finite status word (int32; 0 = none)
+#                      p: handle, n_index, n_queries, n_features, k, return_sqrt, query_tile, metric
+#                      f: metric_arg                -> the query tile that ran
+#   RBC_SEARCH         a: index, queries, ids (int32 [nq * k], -1 unfilled), distances (float32)
+#                      p: n_index, n_queries, n_features, k, metric
+#                      f: metric_arg                -> candidate distances computed
+#   CLASSIFY_NEIGHBORS a: distances, ids (uint32), y, labels, proba, uniq
+#                      p: n_index, n_queries, k, n_outputs, want_proba, weights, n_classes...
+#                      f: (none)                    -> 0
+#   REGRESS_NEIGHBORS  a: distances, ids (uint32), y, out
+#                      p: n_index, n_queries, k, n_outputs, weights
+#                      f: (none)                    -> 0
+# The CPU column answers all but SEARCH_RESIDENT (it keeps no resident index).
+comptime NB_OP_SEARCH = 9
+comptime NB_OP_SEARCH_RESIDENT = 10
+comptime NB_OP_RBC_SEARCH = 11
+comptime NB_OP_CLASSIFY_NEIGHBORS = 12
+comptime NB_OP_REGRESS_NEIGHBORS = 13
+comptime NB_OPERATION_COUNT = 14
 #: The fixed p words before the classifier's class counts.
 comptime NB_CLASSIFY_FIXED = 9
 comptime NB_CLASSIFY_RESIDENT_FIXED = 14
+#: The fixed p words before the neighbor vote's class counts.
+comptime NB_CLASSIFY_NEIGHBORS_FIXED = 6
 
 
 @fieldwise_init
@@ -144,6 +174,29 @@ def nb_ops_check_spans(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
         want_a = 5
         want_p = 6
         want_f = 2
+    elif operation == NB_OP_SEARCH:
+        want_a = 4
+        want_p = 7
+        want_f = 1
+    elif operation == NB_OP_SEARCH_RESIDENT:
+        want_a = 5
+        want_p = 8
+        want_f = 1
+    elif operation == NB_OP_RBC_SEARCH:
+        want_a = 4
+        want_p = 5
+        want_f = 1
+    elif operation == NB_OP_CLASSIFY_NEIGHBORS:
+        want_a = 6
+        want_p = -1
+        want_f = 0
+        if np < NB_CLASSIFY_NEIGHBORS_FIXED:
+            raise Error("neighbors ops: classify neighbors needs at least "
+                        + String(NB_CLASSIFY_NEIGHBORS_FIXED) + " words")
+    elif operation == NB_OP_REGRESS_NEIGHBORS:
+        want_a = 4
+        want_p = 5
+        want_f = 0
     else:
         raise Error("neighbors ops: unknown operation " + String(operation))
     if na != want_a or (want_p >= 0 and np != want_p) or nf != want_f:
@@ -331,3 +384,49 @@ def nb_radius_fill_call(entry: NativeDescriptorCall, index: Int, queries: Int, r
     var ints: List[Int] = [n_index, n_queries, n_features, capacity, 1, metric]
     var floats: List[Float64] = [radius, metric_arg]
     return native_descriptor_call(entry, NB_OP_RADIUS_FILL, addresses, ints, floats)
+
+
+def nb_search_call(entry: NativeDescriptorCall, index: Int, queries: Int, distances: Int, ids: Int,
+                   n_index: Int, n_queries: Int, n_features: Int, k: Int, return_sqrt: Bool, query_tile: Int,
+                   metric: Int, metric_arg: Float64) raises -> Int:
+    var addresses: List[Int] = [index, queries, distances, ids]
+    var ints: List[Int] = [n_index, n_queries, n_features, k, Int(return_sqrt), query_tile, metric]
+    var floats: List[Float64] = [metric_arg]
+    return native_descriptor_call(entry, NB_OP_SEARCH, addresses, ints, floats)
+
+
+def nb_search_resident_call(entry: NativeDescriptorCall, handle: Int, index: Int, queries: Int, distances: Int,
+                            ids: Int, status: Int, n_index: Int, n_queries: Int, n_features: Int, k: Int,
+                            return_sqrt: Bool, query_tile: Int, metric: Int, metric_arg: Float64) raises -> Int:
+    var addresses: List[Int] = [index, queries, distances, ids, status]
+    var ints: List[Int] = [handle, n_index, n_queries, n_features, k, Int(return_sqrt), query_tile, metric]
+    var floats: List[Float64] = [metric_arg]
+    return native_descriptor_call(entry, NB_OP_SEARCH_RESIDENT, addresses, ints, floats)
+
+
+def nb_rbc_search_call(entry: NativeDescriptorCall, index: Int, queries: Int, ids: Int, distances: Int,
+                       n_index: Int, n_queries: Int, n_features: Int, k: Int, metric: Int,
+                       metric_arg: Float64) raises -> Int:
+    var addresses: List[Int] = [index, queries, ids, distances]
+    var ints: List[Int] = [n_index, n_queries, n_features, k, metric]
+    var floats: List[Float64] = [metric_arg]
+    return native_descriptor_call(entry, NB_OP_RBC_SEARCH, addresses, ints, floats)
+
+
+def nb_classify_neighbors_call(entry: NativeDescriptorCall, distances: Int, ids: Int, y: Int, labels: Int,
+                               proba: Int, uniq: Int, n_index: Int, n_queries: Int, k: Int, want_proba: Bool,
+                               n_classes: List[Int], weights: Int) raises:
+    var addresses: List[Int] = [distances, ids, y, labels, proba, uniq]
+    var ints: List[Int] = [n_index, n_queries, k, len(n_classes), Int(want_proba), weights]
+    for i in range(len(n_classes)):  # small-loop(no: model outputs, one class count each): parameter list, not data
+        ints.append(n_classes[i])
+    var floats = List[Float64]()
+    _ = native_descriptor_call(entry, NB_OP_CLASSIFY_NEIGHBORS, addresses, ints, floats)
+
+
+def nb_regress_neighbors_call(entry: NativeDescriptorCall, distances: Int, ids: Int, y: Int, dst: Int,
+                              n_index: Int, n_queries: Int, k: Int, n_outputs: Int, weights: Int) raises:
+    var addresses: List[Int] = [distances, ids, y, dst]
+    var ints: List[Int] = [n_index, n_queries, k, n_outputs, weights]
+    var floats = List[Float64]()
+    _ = native_descriptor_call(entry, NB_OP_REGRESS_NEIGHBORS, addresses, ints, floats)
