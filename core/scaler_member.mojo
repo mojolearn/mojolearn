@@ -415,8 +415,9 @@ def _scaler_member(operation: Int, address: Int) raises -> Int:
         call[].state = 0
         return 0
     if operation == MEMBER_OP_OUTPUTS:
-        # transform and inverse_transform keep the width of X.
+        # transform and inverse_transform keep the width of X, float32.
         call[].classes = 0
+        call[].out_dtype = MEMBER_F32
         if call[].flags != MEMBER_OP_TRANSFORM and call[].flags != MEMBER_OP_INVERSE_TRANSFORM:
             member_unsupported("scaler", call[].flags)
         if call[].state == 0:

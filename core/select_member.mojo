@@ -499,6 +499,8 @@ def _import(slot: _Slot, call: _Call) raises:
 def _outputs(call: _Call) raises:
     """`call.out_cols` of transform: the kept column count, known after the fit."""
     call[].classes = 0
+    # Every transform / inverse_transform of the family writes float32.
+    call[].out_dtype = MEMBER_F32
     var kind = SELECT_KIND_VARIANCE
     var source = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call[].params)
     if call[].state == 0 and call[].param_count >= 1 and call[].params:
