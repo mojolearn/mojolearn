@@ -53,6 +53,15 @@ THE ABI (`GBDT_ENTRY_ABI`, one `abi("C")` entry per gbdt image, published in
                     row_major] (modes 0..2 as XG_PREDICT_MULTI, 3 the float64
                     sigmoid pair, 4..6 int64 class codes). Returns the width
                     written per row. Images with XG_CAP_RESIDENT only.
+  XG_ORDERED_FIT    addrs [x, y, weights, permutation]; ints [n_rows,
+                    n_features, n_weights, n_permutation, n_estimators,
+                    max_depth, border_count, 0, 0]; floats [7] learning_rate,
+                    [8] l2_leaf_reg. The OrderedRMSE fit; returns an outcome
+                    handle whose text is the model (no curves).
+  XG_FEATURE_FREQ_FIT  addrs [x, y, weights, sources]; ints [n_rows,
+                    n_features, n_weights, n_sources, 0, 0, random_seed];
+                    floats [4] learning_rate, [5] l2_leaf_reg. The two-level
+                    FeatureFreq fit; returns an outcome handle likewise.
 
 An image method that computes releases the GIL around its work itself (the
 caller holds it); the caller owns every buffer until the synchronous call
@@ -76,7 +85,9 @@ comptime XG_BINARY = 10
 comptime XG_SIGMOID_PAIR = 11
 comptime XG_RESIDENT_PREPARE = 12
 comptime XG_RESIDENT_PREDICT = 13
-comptime XG_OP_COUNT = 14
+comptime XG_ORDERED_FIT = 14
+comptime XG_FEATURE_FREQ_FIT = 15
+comptime XG_OP_COUNT = 16
 
 comptime XG_CAP_ROW_MAJOR = 1
 #: the image holds device-resident parsed models (XG_RESIDENT_*)

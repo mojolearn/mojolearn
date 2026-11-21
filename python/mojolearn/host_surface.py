@@ -2934,7 +2934,6 @@ FAMILIES = (
             "gbdt_host_sabotage", "gbdt_vendor", "gbdt_numeric_mode",
             "gbdt_mode_policy_mask",
             "gbdt_fit", "gbdt_model_dim",
-            "gbdt_fit_ordered_rmse", "gbdt_fit_two_level_feature_freq",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(

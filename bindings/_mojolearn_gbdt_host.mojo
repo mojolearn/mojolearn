@@ -259,71 +259,38 @@ def gbdt_model_dim_binding(model: PythonObject) raises -> PythonObject:
     return PythonObject(_parse_model(String(py=model)).dim)
 
 
-def gbdt_fit_two_level_feature_freq_binding(
-    x_addr: PythonObject,
-    y_addr: PythonObject,
-    weights_addr: PythonObject,
-    sources_addr: PythonObject,
-    params: PythonObject,
-) raises -> PythonObject:
-    """`gbdt_fit_two_level_feature_freq_binding`
-    (`bindings/_mojolearn_gbdt.mojo:499-532`): the same seven params in the
-    same order, `[n_rows, n_features, n_weights, n_sources, learning_rate,
-    l2_leaf_reg, random_seed]`, the model text back, through
+def gbdt_fit_two_level_feature_freq_native(
+    x_address: Int, y_address: Int, weights_address: Int, sources_address: Int, n_rows: Int, n_features: Int,
+    n_weights: Int, n_sources: Int, learning_rate: Float32, l2_leaf_reg: Float32,
+) raises -> String:
+    """XG_FEATURE_FREQ_FIT (the GPU image's
+    `gbdt_fit_two_level_feature_freq_native`): the model text back, through
     `gbdt/host/gbdt_oracle_feature_freq.mojo::gbdt_feature_freq_host_fit`
     (the gbdt-feature-freq lane). `sample_weight` refuses by name. The seed
-    is read and, as on the device (`gbdt/estimator.mojo:220-226` hands it to
-    a searcher that draws no noise at `score_std_dev` 0), reaches no bit."""
-    if len(params) != 7:
-        raise Error("two-level FeatureFreq params must have seven values")
-    var x_address = Int(py=x_addr)
-    var y_address = Int(py=y_addr)
+    is not passed: as on the device (`gbdt/estimator.mojo:220-226` hands it
+    to a searcher that draws no noise at `score_std_dev` 0) it reaches no bit."""
     _ = f32_ptr(x_address)
     _ = f32_ptr(y_address)
-    _ = f32_ptr(Int(py=weights_addr))
-    var sp = u32_ptr(Int(py=sources_addr))
-    var n_rows = Int(py=params[0])
-    var n_features = Int(py=params[1])
-    var n_weights = Int(py=params[2])
-    var n_sources = Int(py=params[3])
-    var learning_rate = Float32(Float64(py=params[4]))
-    var l2_leaf_reg = Float32(Float64(py=params[5]))
-    _ = UInt64(Int(py=params[6]))
+    _ = f32_ptr(weights_address)
+    var sp = u32_ptr(sources_address)
     var text = String("")
     with GILReleased(Python()):
         text = gbdt_fit_two_level_feature_freq_run(
             x_address, y_address, sp, n_rows, n_features, n_weights,
             n_sources, learning_rate, l2_leaf_reg,
         )
-    return PythonObject(text)
+    return text^
 
 
-def gbdt_fit_ordered_rmse_binding(
-    x_addr: PythonObject, y_addr: PythonObject,
-    weights_addr: PythonObject, permutation_addr: PythonObject,
-    params: PythonObject,
-) raises -> PythonObject:
-    """`gbdt_fit_ordered_rmse_binding` (`bindings/_mojolearn_gbdt.mojo:
-    535-591`): the same nine params in the same order, `[n_rows,
-    n_features, n_weights, n_permutation, n_estimators, max_depth,
-    border_count, learning_rate, l2_leaf_reg]`, the model text back, through
+def gbdt_fit_ordered_rmse_native(
+    x_address: Int, y_address: Int, weights_address: Int, permutation_address: Int, n_rows: Int, n_features: Int,
+    n_weights: Int, n_permutation: Int, n_estimators: Int, max_depth: Int, border_count: Int,
+    learning_rate: Float32, l2_leaf_reg: Float32,
+) raises -> String:
+    """XG_ORDERED_FIT (the GPU image's `gbdt_fit_ordered_rmse_native`): the
+    model text back, through
     `gbdt/host/gbdt_oracle_ordered.mojo::gbdt_ordered_rmse_host_fit` (the
     gbdt-ordered-rmse lane). `sample_weight` refuses by name."""
-    if len(params) != 9:
-        raise Error("ordered RMSE params must have nine values")
-    var n_rows = Int(py=params[0])
-    var n_features = Int(py=params[1])
-    var n_weights = Int(py=params[2])
-    var n_permutation = Int(py=params[3])
-    var n_estimators = Int(py=params[4])
-    var max_depth = Int(py=params[5])
-    var border_count = Int(py=params[6])
-    var learning_rate = Float32(Float64(py=params[7]))
-    var l2_leaf_reg = Float32(Float64(py=params[8]))
-    var x_address = Int(py=x_addr)
-    var y_address = Int(py=y_addr)
-    var weights_address = Int(py=weights_addr)
-    var permutation_address = Int(py=permutation_addr)
     var text = String("")
     with GILReleased(Python()):
         text = gbdt_fit_ordered_rmse_run(
@@ -331,7 +298,11 @@ def gbdt_fit_ordered_rmse_binding(
             n_rows, n_features, n_weights, n_permutation, n_estimators,
             max_depth, border_count, learning_rate, l2_leaf_reg,
         )
-    return PythonObject(text)
+    return text^
+
+
+# TOMBSTONE: gbdt_fit_ordered_rmse, gbdt_fit_two_level_feature_freq (Python entries of this image: no caller left, the GBDT door calls the typed operations XG_ORDERED_FIT, XG_FEATURE_FREQ_FIT of this image's native entry; host fits unchanged) deleted 2026-11-21 by lane/dw-trees-boost; code recoverable at 9c65b76827.
+# Restore: git apply experiments/removed/dead_entries_gbdt_text_fit_calls.patch
 
 
 # TOMBSTONE: gbdt_sigmoid (dead native entry: no live caller) deleted 2026-10-26 by 7c1201602; code recoverable at 485ba9cc1.
@@ -431,6 +402,20 @@ struct _GbdtHostImage(GbdtImage):
     def resident_predict(handle: Int, x: Int, n_rows: Int, dst: Int, mode: Int, row_major: Bool) raises -> Int:
         raise Error("AttributeError: mojolearn: this gbdt binding has no gbdt_resident_predict")
 
+    @staticmethod
+    def ordered_fit(x: Int, y: Int, weights: Int, permutation: Int, n_rows: Int, n_features: Int, n_weights: Int,
+                    n_permutation: Int, n_estimators: Int, max_depth: Int, border_count: Int,
+                    learning_rate: Float32, l2_leaf_reg: Float32) raises -> String:
+        return gbdt_fit_ordered_rmse_native(x, y, weights, permutation, n_rows, n_features, n_weights,
+            n_permutation, n_estimators, max_depth, border_count, learning_rate, l2_leaf_reg)
+
+    @staticmethod
+    def feature_freq_fit(x: Int, y: Int, weights: Int, sources: Int, n_rows: Int, n_features: Int, n_weights: Int,
+                         n_sources: Int, learning_rate: Float32, l2_leaf_reg: Float32,
+                         random_seed: Int) raises -> String:
+        return gbdt_fit_two_level_feature_freq_native(x, y, weights, sources, n_rows, n_features, n_weights,
+            n_sources, learning_rate, l2_leaf_reg)
+
 
 def gbdt_host_entry_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
     ff: Int, nf: Int, result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
@@ -458,8 +443,6 @@ def build__mojolearn_gbdt_host() -> PythonObject:
         module.def_function[gbdt_model_dim_binding]("gbdt_model_dim")
         # TOMBSTONE: gbdt_sigmoid (dead native entry: no live caller) deleted 2026-10-26 by 7c1201602; code recoverable at 485ba9cc1.
         # Restore: git apply experiments/removed/gbdt_sigmoid.patch
-        module.def_function[gbdt_fit_two_level_feature_freq_binding]("gbdt_fit_two_level_feature_freq")
-        module.def_function[gbdt_fit_ordered_rmse_binding]("gbdt_fit_ordered_rmse")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_gbdt_host: ", error))

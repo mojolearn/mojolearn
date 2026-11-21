@@ -21,7 +21,7 @@ from gbdt.fit_request import (
     XG_OUTCOME_SIZES, XG_OUTCOME_COPY, XG_OUTCOME_FREE, XG_MODEL_DIM, XG_CAP_ROW_MAJOR, gbdt_outcome_box,
     gbdt_outcome_sizes, gbdt_outcome_copy, gbdt_outcome_free, gbdt_string_at,
     XG_PREDICT, XG_PREDICT_MULTI, XG_BINARY, XG_SIGMOID_PAIR, XG_RESIDENT_PREPARE, XG_RESIDENT_PREDICT,
-    XG_CAP_RESIDENT,
+    XG_CAP_RESIDENT, XG_ORDERED_FIT, XG_FEATURE_FREQ_FIT,
 )
 
 
@@ -67,6 +67,19 @@ trait GbdtImage:
 
     @staticmethod
     def resident_predict(handle: Int, x: Int, n_rows: Int, dst: Int, mode: Int, row_major: Bool) raises -> Int:
+        ...
+
+    # The OrderedRMSE and two-level FeatureFreq fits: the model text.
+    @staticmethod
+    def ordered_fit(x: Int, y: Int, weights: Int, permutation: Int, n_rows: Int, n_features: Int, n_weights: Int,
+                    n_permutation: Int, n_estimators: Int, max_depth: Int, border_count: Int,
+                    learning_rate: Float32, l2_leaf_reg: Float32) raises -> String:
+        ...
+
+    @staticmethod
+    def feature_freq_fit(x: Int, y: Int, weights: Int, sources: Int, n_rows: Int, n_features: Int, n_weights: Int,
+                         n_sources: Int, learning_rate: Float32, l2_leaf_reg: Float32,
+                         random_seed: Int) raises -> String:
         ...
 
 
@@ -132,11 +145,35 @@ def _run_predict[I: GbdtImage](op: Int, aa: Int, na: Int, pp: Int, np: Int) rais
     return I.resident_predict(_int(pp, 0), _addr(aa, 0), _int(pp, 1), _addr(aa, 1), _int(pp, 2), _int(pp, 3) != 0)
 
 
+def _float(ff: Int, k: Int) -> Float64:
+    return MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=ff)[k]
+
+
+def _text_outcome(var text: String) -> Int:
+    """A text-only fit's outcome handle (read and freed as XG_FIT's)."""
+    return gbdt_outcome_box(GbdtFitOutcome(text^, 0, False, List[Float64](), List[Float64]()))
+
+
+def _run_text_fit[I: GbdtImage](op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int) raises -> Int:
+    """The OrderedRMSE and FeatureFreq fits: the request words read, the
+    image's method, the model text boxed as an outcome."""
+    if op == XG_ORDERED_FIT:
+        _spans("ordered RMSE fit", na, 4, np, 9)
+        return _text_outcome(I.ordered_fit(_addr(aa, 0), _addr(aa, 1), _addr(aa, 2), _addr(aa, 3), _int(pp, 0),
+            _int(pp, 1), _int(pp, 2), _int(pp, 3), _int(pp, 4), _int(pp, 5), _int(pp, 6),
+            Float32(_float(ff, 7)), Float32(_float(ff, 8))))
+    _spans("two-level FeatureFreq fit", na, 4, np, 7)
+    return _text_outcome(I.feature_freq_fit(_addr(aa, 0), _addr(aa, 1), _addr(aa, 2), _addr(aa, 3), _int(pp, 0),
+        _int(pp, 1), _int(pp, 2), _int(pp, 3), Float32(_float(ff, 4)), Float32(_float(ff, 5)), _int(pp, 6)))
+
+
 def _run[I: GbdtImage](op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int) raises -> Int:
     if op == XG_CAPS:
         return (XG_CAP_ROW_MAJOR if I.row_major() else 0) | (XG_CAP_RESIDENT if I.resident() else 0)
     if op >= XG_PREDICT and op <= XG_RESIDENT_PREDICT:
         return _run_predict[I](op, aa, na, pp, np)
+    if op == XG_ORDERED_FIT or op == XG_FEATURE_FREQ_FIT:
+        return _run_text_fit[I](op, aa, na, pp, np, ff)
     if op == XG_NUMERIC_MODE:
         return Int(GLOBAL_NUMERIC_MODE)
     if op == XG_FIT or op == XG_FIT_ROWMAJOR:

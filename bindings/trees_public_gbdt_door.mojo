@@ -36,7 +36,6 @@ from bindings.trees_public_inputs_door import (
     trees_builtins,
     trees_table,
     trees_entry,
-    trees_need,
     trees_helper,
     trees_reshape,
     trees_address,
@@ -54,7 +53,7 @@ from core.trees_entry_table import TreesEntryKey
 from core.entry_table import EntryRef, entry_ref_vendor, entry_ref_mode
 from gbdt.fit_calls import (
     xg_ref, xg_resident, xg_predict, xg_predict_multi, xg_binary, xg_sigmoid_pair, xg_resident_prepare,
-    xg_resident_predict,
+    xg_resident_predict, xg_ordered_fit, xg_feature_freq_fit,
 )
 from bindings.trees_keys_unpack import trees_keys
 from bindings.py_balanced import py_item
@@ -656,8 +655,91 @@ def _fitted_text(fields: PythonObject, model: PythonObject, n_features: Int, ite
     py_setitem(fields, nk[].k_test_loss_curve_, PythonObject(None))
 
 
+struct GbdtTextFit(Movable):
+    """An OrderedRMSE or two-level FeatureFreq fit as UNPACK leaves it. RUN
+    (`xg_ordered_fit` / `xg_feature_freq_fit`, gbdt/fit_calls.mojo) reads
+    the plain words only; the `held_*` fields own what the addresses point
+    into until PACK returns.
+
+    Fields:
+        entry: the native entry of the gbdt image of the estimator's run
+            context.
+        x, y, weights: float32 blocks (X column-major); `weights` is y's
+            address when `n_weights` is 0, as the entries always took it.
+        extra, n_extra: the UInt32 permutation (one id per row) or the
+            UInt32 source columns.
+        n_estimators, max_depth, border_count: OrderedRMSE's settings.
+        random_seed: FeatureFreq's `random_state`.
+    """
+    var entry: EntryRef
+    var x: Int
+    var y: Int
+    var weights: Int
+    var extra: Int
+    var n_rows: Int
+    var n_features: Int
+    var n_weights: Int
+    var n_extra: Int
+    var n_estimators: Int
+    var max_depth: Int
+    var border_count: Int
+    var learning_rate: Float64
+    var l2_leaf_reg: Float64
+    var random_seed: Int
+    var held_x: AdmittedX
+    var held_y: AdmittedX
+    var held_weights: Optional[AdmittedX]
+    var held_extra: PythonObject
+
+    def __init__(out self, entry: EntryRef, weights: Int, n_weights: Int, extra: Int, n_extra: Int,
+                 var held_x: AdmittedX, var held_y: AdmittedX, var held_weights: Optional[AdmittedX],
+                 held_extra: PythonObject):
+        self.entry = entry
+        self.x = held_x.address
+        self.y = held_y.address
+        self.weights = weights
+        self.extra = extra
+        self.n_rows = held_x.rows
+        self.n_features = held_x.cols
+        self.n_weights = n_weights
+        self.n_extra = n_extra
+        self.n_estimators = 0
+        self.max_depth = 0
+        self.border_count = 0
+        self.learning_rate = 0.0
+        self.l2_leaf_reg = 0.0
+        self.random_seed = 0
+        self.held_x = held_x^
+        self.held_y = held_y^
+        self.held_weights = held_weights^
+        self.held_extra = held_extra
+
+
+def _real_setting(fields: PythonObject, model: PythonObject, key: PythonObject, name: String) raises -> Float64:
+    """`float(self.<name>)` of a stored setting."""
+    return Float64(py=py_call_typed(trees_builtins().float, _field(fields, model, key, name)))
+
+
 def ordered_rmse_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`OrderedRMSE.fit(X, y, permutation=, sample_weight=)`."""
+    """`OrderedRMSE.fit(X, y, permutation=, sample_weight=)`: UNPACK
+    (`ordered_rmse_unpack`: every check in the former order and words), RUN
+    (the fit in the gbdt image of the estimator's run context, through its
+    native entry: plain words, no Python object), PACK (the model text and
+    the fitted attributes)."""
+    var call = ordered_rmse_unpack(model, args, context)
+    var text = xg_ordered_fit(call.entry, call.x, call.y, call.weights, call.extra, call.n_rows, call.n_features,
+                              call.n_weights, call.n_estimators, call.max_depth, call.border_count,
+                              call.learning_rate, call.l2_leaf_reg)
+    var fields = py_fields(model)
+    var nk = trees_keys()
+    py_setitem(fields, nk[].k_model_, PythonObject(text))
+    _fitted_text(fields, model, call.n_features, PythonObject(None))
+    return model
+
+
+def ordered_rmse_unpack(model: PythonObject, args: PythonObject, context: PythonObject) raises -> GbdtTextFit:
+    """UNPACK of `OrderedRMSE.fit`: the settings, X, y, the permutation and
+    the weights admitted and checked, the request's plain words."""
     var b = trees_builtins()
     var fields = py_fields(model)
     _ordered_options(fields, model, context)
@@ -734,31 +816,21 @@ def ordered_rmse_fit(model: PythonObject, args: PythonObject, context: PythonObj
         weights = _checked_weights(args[3], n, True, context)
         w_addr = weights.value().address
         n_weights = n
-    var table = gbdt_table(fields, context)
-    var entry = trees_entry(table, "gbdt_fit_ordered_rmse")
-    if entry is None:
-        raise Error("RuntimeError: mojolearn: this GBDT binary predates OrderedRMSE; "
-                    + "install or build a matching native extension")
-    var params = Python.list(PythonObject(n), PythonObject(x.cols), PythonObject(n_weights), PythonObject(n),
-                             py_call_typed(b.int, _field(fields, model, nk[].k_n_estimators, "n_estimators")),
-                             py_call_typed(b.int, _field(fields, model, nk[].k_max_depth, "max_depth")),
-                             py_call_typed(b.int, _field(fields, model, nk[].k_border_count, "border_count")),
-                             py_call_typed(b.float, _field(fields, model, nk[].k_learning_rate, "learning_rate")),
-                             py_call_typed(b.float, _field(fields, model, nk[].k_l2_leaf_reg, "l2_leaf_reg")))
-    var text = py_call_typed(entry, PythonObject(x.address), PythonObject(y.address), PythonObject(w_addr),
-                             PythonObject(trees_address(order)), params)
-    _ = x  # keep the Python object alive through the native call above
-    # y owns the float32 target copy (y.array) whose address the fit reads;
-    # without this its last named use was the argument list and Mojo freed
-    # it before the native read (garbage targets: "must be finite" on HIP).
-    _ = y  # keep the Python object alive through the native call above
-    _ = order  # keep the Python object alive through the native call above
-    _ = weights^
-    py_setitem(fields, nk[].k_model_, text)
-    _ = order  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    _fitted_text(fields, model, x.cols, PythonObject(None))
-    return model
+    var entry = gbdt_entry_of(gbdt_table(fields, context))
+    var n_estimators = _int(_field(fields, model, nk[].k_n_estimators, "n_estimators"))
+    var max_depth = _int(_field(fields, model, nk[].k_max_depth, "max_depth"))
+    var border_count = _int(_field(fields, model, nk[].k_border_count, "border_count"))
+    var learning_rate = _real_setting(fields, model, nk[].k_learning_rate, "learning_rate")
+    var l2_leaf_reg = _real_setting(fields, model, nk[].k_l2_leaf_reg, "l2_leaf_reg")
+    # x, y (the float32 target copy the fit reads), the weights and the
+    # UInt32 order stay alive in the request until PACK returns.
+    var call = GbdtTextFit(entry, w_addr, n_weights, trees_address(order), n, x^, y^, weights^, order)
+    call.n_estimators = n_estimators
+    call.max_depth = max_depth
+    call.border_count = border_count
+    call.learning_rate = learning_rate
+    call.l2_leaf_reg = l2_leaf_reg
+    return call^
 
 
 def trees_view_i64(source: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -794,11 +866,26 @@ def _int_list_text(values: List[Int]) -> String:
 
 
 def feature_freq_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`ExperimentalTwoLevelFeatureFreq.fit(X, y, sample_weight=)`.
-    UNPACK reads X, `sources`, y and sample_weight into native values; every
-    admission check after it runs on those typed values (column numbers,
-    pointers and `HpStat` answers), never on Python objects."""
-    var b = trees_builtins()
+    """`ExperimentalTwoLevelFeatureFreq.fit(X, y, sample_weight=)`: UNPACK
+    (`feature_freq_unpack`), RUN (the fit in the gbdt image of the
+    estimator's run context, through its native entry), PACK (the model
+    text and the fitted attributes)."""
+    var call = feature_freq_unpack(model, args, context)
+    var text = xg_feature_freq_fit(call.entry, call.x, call.y, call.weights, call.extra, call.n_rows,
+                                   call.n_features, call.n_weights, call.n_extra, call.learning_rate,
+                                   call.l2_leaf_reg, call.random_seed)
+    var fields = py_fields(model)
+    var nk = trees_keys()
+    py_setitem(fields, nk[].k_model_, PythonObject(text))
+    _fitted_text(fields, model, call.n_features, PythonObject(0))
+    return model
+
+
+def feature_freq_unpack(model: PythonObject, args: PythonObject, context: PythonObject) raises -> GbdtTextFit:
+    """UNPACK of the FeatureFreq fit: reads X, `sources`, y and
+    sample_weight into native values; every admission check after it runs
+    on those typed values (column numbers, pointers and `HpStat` answers),
+    never on Python objects."""
     var fields = py_fields(model)
     var x = admit_f32(args[0], 2, "X", context, order="F", finite=False)
     var n = x.rows
@@ -873,22 +960,14 @@ def feature_freq_fit(model: PythonObject, args: PythonObject, context: PythonObj
     for i in range(k):  # driver-loop: over the named source columns
         sp[i] = UInt32(sources[i])
         _ = source_array  # keep the Python object alive through the native call above
-    var table = gbdt_table(fields, context)
-    var entry = trees_need(table, "gbdt_fit_two_level_feature_freq",
-                           "mojolearn: this gbdt binding has no gbdt_fit_two_level_feature_freq", "AttributeError")
-    var params = Python.list(PythonObject(n), PythonObject(d), PythonObject(n_weights), PythonObject(k),
-                             py_call_typed(b.float, _field(fields, model, nk[].k_learning_rate, "learning_rate")),
-                             py_call_typed(b.float, _field(fields, model, nk[].k_l2_leaf_reg, "l2_leaf_reg")),
-                             py_call_typed(b.int, _field(fields, model, nk[].k_random_state, "random_state")))
-    var text = py_call_typed(entry, PythonObject(x.address), PythonObject(y.address), PythonObject(w_addr),
-                             PythonObject(trees_address(source_array)), params)
-    _ = y  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    _ = source_array  # keep the Python object alive through the native call above
-    _ = weights^
-    py_setitem(fields, nk[].k_model_, text)
-    _ = source_array  # keep the Python object alive through the native call above
-    _ = y  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    _fitted_text(fields, model, d, PythonObject(0))
-    return model
+    var entry = gbdt_entry_of(gbdt_table(fields, context))
+    var learning_rate = _real_setting(fields, model, nk[].k_learning_rate, "learning_rate")
+    var l2_leaf_reg = _real_setting(fields, model, nk[].k_l2_leaf_reg, "l2_leaf_reg")
+    var random_seed = _int(_field(fields, model, nk[].k_random_state, "random_state"))
+    # x, y, the weights and the UInt32 source columns stay alive in the
+    # request until PACK returns.
+    var call = GbdtTextFit(entry, w_addr, n_weights, trees_address(source_array), k, x^, y^, weights^, source_array)
+    call.learning_rate = learning_rate
+    call.l2_leaf_reg = l2_leaf_reg
+    call.random_seed = random_seed
+    return call^

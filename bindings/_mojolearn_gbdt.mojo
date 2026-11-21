@@ -145,7 +145,20 @@ def gbdt_binary_native(probabilities: Bool, raw_address: Int, address: Int, n: I
     return 2 * n if probabilities else n
 
 
-# TOMBSTONE: gbdt_binary_probabilities, gbdt_binary_classes, gbdt_sigmoid_pair, gbdt_predict, gbdt_predict_multi, gbdt_resident_predict, gbdt_resident_binary_classes (Python entries of this image: no caller left, the GBDT door calls the typed operations XG_BINARY, XG_SIGMOID_PAIR, XG_PREDICT, XG_PREDICT_MULTI, XG_RESIDENT_PREDICT of this image's native entry; kernels unchanged) deleted 2026-11-21 by lane/dw-trees-boost; code recoverable at 5544c66aae.
+def gbdt_binary_prediction_binding[probabilities: Bool](
+    raw_addr: PythonObject, out_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    # The Python form of XG_BINARY, kept for the direct kernel check
+    # checks/gbdt_binary_prediction_smoke.py (tools/check_gbdt_adapters.sh),
+    # which loads this image alone: params=[n]; UNPACK only. No product
+    # operation calls it.
+    if len(params) != 1:
+        raise Error("binary prediction: params must contain n")
+    var n = Int(py=params[0])
+    return PythonObject(gbdt_binary_native(probabilities, Int(py=raw_addr), Int(py=out_addr), n))
+
+
+# TOMBSTONE: gbdt_sigmoid_pair, gbdt_predict, gbdt_predict_multi, gbdt_resident_predict, gbdt_resident_binary_classes (Python entries of this image: no caller left, the GBDT door calls the typed operations XG_BINARY, XG_SIGMOID_PAIR, XG_PREDICT, XG_PREDICT_MULTI, XG_RESIDENT_PREDICT of this image's native entry; kernels unchanged) deleted 2026-11-21 by lane/dw-trees-boost; code recoverable at 5544c66aae.
 # Restore: git apply experiments/removed/dead_entries_gbdt_predict_calls.patch
 
 
@@ -402,32 +415,19 @@ def gbdt_vendor_binding() raises -> PythonObject:
     return PythonObject(String(COMPILED_VENDOR))
 
 
-def gbdt_fit_two_level_feature_freq_binding(
-    x_addr: PythonObject,
-    y_addr: PythonObject,
-    weights_addr: PythonObject,
-    sources_addr: PythonObject,
-    params: PythonObject,
-) raises -> PythonObject:
-    """Explicit mixed numeric/categorical two-level FeatureFreq fit.
-
-    `params` is `[n_rows, n_features, n_weights, n_sources, learning_rate,
-    l2_leaf_reg, random_seed]`; UInt32 source indices identify the dense
-    categorical columns and every other column is numeric.
-    """
-    if len(params) != 7:
-        raise Error("two-level FeatureFreq params must have seven values")
-    var xp = _f32_ptr(Int(py=x_addr))
-    var yp = _f32_ptr(Int(py=y_addr))
-    var wp = _f32_ptr(Int(py=weights_addr))
-    var sp = _u32_ptr(Int(py=sources_addr))
-    var n_rows = Int(py=params[0])
-    var n_features = Int(py=params[1])
-    var n_weights = Int(py=params[2])
-    var n_sources = Int(py=params[3])
-    var learning_rate = Float32(Float64(py=params[4]))
-    var l2_leaf_reg = Float32(Float64(py=params[5]))
-    var random_seed = UInt64(Int(py=params[6]))
+def gbdt_fit_two_level_feature_freq_native(
+    x_address: Int, y_address: Int, weights_address: Int, sources_address: Int, n_rows: Int, n_features: Int,
+    n_weights: Int, n_sources: Int, learning_rate: Float32, l2_leaf_reg: Float32, seed: Int,
+) raises -> String:
+    """Explicit mixed numeric/categorical two-level FeatureFreq fit
+    (XG_FEATURE_FREQ_FIT): UInt32 source indices identify the dense
+    categorical columns and every other column is numeric. Returns the
+    model text. Buffers are borrowed from the caller for the call."""
+    var xp = _f32_ptr(x_address)
+    var yp = _f32_ptr(y_address)
+    var wp = _f32_ptr(weights_address)
+    var sp = _u32_ptr(sources_address)
+    var random_seed = UInt64(seed)
     var text: String
     var device_plan = _gbdt_device_plan()
     with GILReleased(Python()):
@@ -435,43 +435,27 @@ def gbdt_fit_two_level_feature_freq_binding(
             xp, n_rows, n_features, yp, wp, n_weights, sp, n_sources,
             learning_rate, l2_leaf_reg, random_seed, device_plan,
         )
-    return PythonObject(text)
+    return text^
 
 
-def gbdt_fit_ordered_rmse_binding(
-    x_addr: PythonObject, y_addr: PythonObject,
-    weights_addr: PythonObject, permutation_addr: PythonObject,
-    params: PythonObject,
-) raises -> PythonObject:
-    """Numeric, single-permutation ordered RMSE; return normal model text.
-
-    params: [n_rows, n_features, n_weights, n_permutation, n_estimators,
-             max_depth, border_count, learning_rate, l2_leaf_reg].
-    The permutation buffer holds UInt32 original row ids. All Python
-    conversions finish before releasing the GIL; buffers remain borrowed
-    from live arrays held by the wrapper for the duration of this call.
-    """
-    if len(params) != 9:
-        raise Error("ordered RMSE params must have nine values")
-    var n_rows = Int(py=params[0])
-    var n_features = Int(py=params[1])
-    var n_weights = Int(py=params[2])
-    var n_permutation = Int(py=params[3])
-    var n_estimators = Int(py=params[4])
-    var max_depth = Int(py=params[5])
-    var border_count = Int(py=params[6])
-    var learning_rate = Float32(Float64(py=params[7]))
-    var l2_leaf_reg = Float32(Float64(py=params[8]))
+def gbdt_fit_ordered_rmse_native(
+    x_address: Int, y_address: Int, weights_address: Int, permutation_address: Int, n_rows: Int, n_features: Int,
+    n_weights: Int, n_permutation: Int, n_estimators: Int, max_depth: Int, border_count: Int,
+    learning_rate: Float32, l2_leaf_reg: Float32,
+) raises -> String:
+    """Numeric, single-permutation ordered RMSE (XG_ORDERED_FIT); returns
+    normal model text. The permutation buffer holds UInt32 original row
+    ids. Buffers remain borrowed from live arrays held by the caller for
+    the duration of this call."""
     if n_rows < 4 or n_features < 1 or n_permutation != n_rows:
         raise Error("ordered RMSE requires >=4 rows, features and a full permutation")
     if n_weights != 0 and n_weights != n_rows:
         raise Error("ordered RMSE sample weight shape mismatch")
-    _ = _f32_ptr(Int(py=x_addr))
-    var yp = _f32_ptr(Int(py=y_addr))
-    var wp = _f32_ptr(Int(py=weights_addr))
-    var pp = _u32_ptr(Int(py=permutation_addr))
+    _ = _f32_ptr(x_address)
+    var yp = _f32_ptr(y_address)
+    var wp = _f32_ptr(weights_address)
+    var pp = _u32_ptr(permutation_address)
     var text: String
-    var x_address = Int(py=x_addr)
     var device_plan = _gbdt_device_plan()
     with GILReleased(Python()):
         text = gbdt_fit_ordered_rmse_run(
@@ -479,7 +463,11 @@ def gbdt_fit_ordered_rmse_binding(
             n_estimators, max_depth, border_count, learning_rate,
             l2_leaf_reg, device_plan,
         )
-    return PythonObject(text)
+    return text^
+
+
+# TOMBSTONE: gbdt_fit_ordered_rmse, gbdt_fit_two_level_feature_freq (Python entries of this image: no caller left, the GBDT door calls the typed operations XG_ORDERED_FIT, XG_FEATURE_FREQ_FIT of this image's native entry; fits unchanged) deleted 2026-11-21 by lane/dw-trees-boost; code recoverable at 9c65b76827.
+# Restore: git apply experiments/removed/dead_entries_gbdt_text_fit_calls.patch
 
 
 # ---- The image's native gbdt entry (lane calltable-gbdt-forest-dart,
@@ -534,6 +522,20 @@ struct _GbdtGpuImage(GbdtImage):
     def resident_predict(handle: Int, x: Int, n_rows: Int, dst: Int, mode: Int, row_major: Bool) raises -> Int:
         return gbdt_resident_predict_native(handle, x, n_rows, dst, mode, row_major)
 
+    @staticmethod
+    def ordered_fit(x: Int, y: Int, weights: Int, permutation: Int, n_rows: Int, n_features: Int, n_weights: Int,
+                    n_permutation: Int, n_estimators: Int, max_depth: Int, border_count: Int,
+                    learning_rate: Float32, l2_leaf_reg: Float32) raises -> String:
+        return gbdt_fit_ordered_rmse_native(x, y, weights, permutation, n_rows, n_features, n_weights,
+            n_permutation, n_estimators, max_depth, border_count, learning_rate, l2_leaf_reg)
+
+    @staticmethod
+    def feature_freq_fit(x: Int, y: Int, weights: Int, sources: Int, n_rows: Int, n_features: Int, n_weights: Int,
+                         n_sources: Int, learning_rate: Float32, l2_leaf_reg: Float32,
+                         random_seed: Int) raises -> String:
+        return gbdt_fit_two_level_feature_freq_native(x, y, weights, sources, n_rows, n_features, n_weights,
+            n_sources, learning_rate, l2_leaf_reg, random_seed)
+
 
 def gbdt_gpu_entry_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
     ff: Int, nf: Int, result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
@@ -566,14 +568,13 @@ def build__mojolearn_gbdt() -> PythonObject:
             m.def_function[gbdt_fit_row_major_available_binding](
                 "gbdt_fit_row_major_available"
             )
-        m.def_function[gbdt_fit_ordered_rmse_binding]("gbdt_fit_ordered_rmse")
-        m.def_function[gbdt_fit_two_level_feature_freq_binding](
-            "gbdt_fit_two_level_feature_freq"
-        )
         m.def_function[gbdt_model_dim_binding]("gbdt_model_dim")
         m.def_function[gbdt_numeric_mode_binding]("gbdt_numeric_mode")
         m.def_function[gbdt_mode_policy_mask_binding]("gbdt_mode_policy_mask")
         m.def_function[gbdt_per_round_paths_binding]("gbdt_per_round_paths")
+        # the direct kernel check's two entries (checks/gbdt_binary_prediction_smoke.py)
+        m.def_function[gbdt_binary_prediction_binding[True]]("gbdt_binary_probabilities")
+        m.def_function[gbdt_binary_prediction_binding[False]]("gbdt_binary_classes")
         # TOMBSTONE: gbdt_sigmoid (dead native entry: no live caller) deleted 2026-10-26 by 7c1201602; code recoverable at 485ba9cc1.
         # Restore: git apply experiments/removed/gbdt_sigmoid.patch
         # DEVIATION 2980: the device-resident parsed model (predict is the

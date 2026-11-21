@@ -15,7 +15,7 @@ from gbdt.fit_request import (
     GbdtFitArgs, GbdtFitOutcome, GBDT_ENTRY_ABI, XG_OP_COUNT, XG_CAPS, XG_NUMERIC_MODE, XG_FIT, XG_FIT_ROWMAJOR,
     XG_OUTCOME_SIZES, XG_OUTCOME_COPY, XG_OUTCOME_FREE, XG_MODEL_DIM, XG_CAP_ROW_MAJOR, gbdt_string_at,
     XG_PREDICT, XG_PREDICT_MULTI, XG_BINARY, XG_SIGMOID_PAIR, XG_RESIDENT_PREPARE, XG_RESIDENT_PREDICT,
-    XG_CAP_RESIDENT,
+    XG_CAP_RESIDENT, XG_ORDERED_FIT, XG_FEATURE_FREQ_FIT,
 )
 
 
@@ -114,6 +114,43 @@ def xg_resident_predict(entry: EntryRef, handle: Int, x: Int, n_rows: Int, dst: 
     var p: Array[Int, 4] = [handle, n_rows, mode, 1 if row_major else 0]
     var f: Array[Float64, 4] = [0.0, 0.0, 0.0, 0.0]
     return entry_ref_call(entry, XG_RESIDENT_PREDICT, a, p, f)
+
+
+def _xg_outcome_text(entry: EntryRef, handle: Int) raises -> String:
+    """The model text of a text-only fit's outcome, copied once from the
+    image's String, the outcome freed in that image."""
+    var sizes: List[Int] = [0, 0, 0, 0, 0, 0]
+    var outcome_addrs: List[Int] = [handle, Int(sizes.unsafe_ptr())]
+    var none = List[Int]()
+    try:
+        _ = entry_ref_call(entry, XG_OUTCOME_SIZES, outcome_addrs, none, _none_f())
+        return gbdt_string_at(sizes[5], sizes[0])
+    finally:
+        var free_addrs: List[Int] = [handle]
+        _ = entry_ref_call(entry, XG_OUTCOME_FREE, free_addrs, none, _none_f())
+        _ = sizes
+
+
+def xg_ordered_fit(entry: EntryRef, x: Int, y: Int, weights: Int, permutation: Int, n_rows: Int, n_features: Int,
+                   n_weights: Int, n_estimators: Int, max_depth: Int, border_count: Int, learning_rate: Float64,
+                   l2_leaf_reg: Float64) raises -> String:
+    """The OrderedRMSE fit (the former `gbdt_fit_ordered_rmse` entry): the
+    model text. The permutation holds one UInt32 row id per row."""
+    var a: Array[Int, 4] = [x, y, weights, permutation]
+    var p: Array[Int, 9] = [n_rows, n_features, n_weights, n_rows, n_estimators, max_depth, border_count, 0, 0]
+    var f: Array[Float64, 9] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, learning_rate, l2_leaf_reg]
+    return _xg_outcome_text(entry, entry_ref_call(entry, XG_ORDERED_FIT, a, p, f))
+
+
+def xg_feature_freq_fit(entry: EntryRef, x: Int, y: Int, weights: Int, sources: Int, n_rows: Int, n_features: Int,
+                        n_weights: Int, n_sources: Int, learning_rate: Float64, l2_leaf_reg: Float64,
+                        random_seed: Int) raises -> String:
+    """The two-level FeatureFreq fit (the former
+    `gbdt_fit_two_level_feature_freq` entry): the model text."""
+    var a: Array[Int, 4] = [x, y, weights, sources]
+    var p: Array[Int, 7] = [n_rows, n_features, n_weights, n_sources, 0, 0, random_seed]
+    var f: Array[Float64, 7] = [0.0, 0.0, 0.0, 0.0, learning_rate, l2_leaf_reg, 0.0]
+    return _xg_outcome_text(entry, entry_ref_call(entry, XG_FEATURE_FREQ_FIT, a, p, f))
 
 
 def xg_fit(entry: EntryRef, row_major: Bool, args: GbdtFitArgs) raises -> GbdtFitOutcome:
