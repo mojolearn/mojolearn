@@ -58,7 +58,7 @@ from bindings.admitted_input_unpack import (
 from bindings.admitted_input_run import AdmittedXView
 from bindings.member_set_door import (
     MemberSet, member_set_admit, member_set_width, member_set_run, member_set_pack, member_set_release,
-    member_marked, member_predict_held,
+    member_set_tests, member_marked, member_held_open, member_held_run, member_held_close,
 )
 from core.member_abi import MEMBER_F32, MEMBER_I32, MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA
 # TOMBSTONE: TreesView / _view_of_array / trees_f32 / trees_all_finite / trees_check_sample_weight / trees_vector / trees_empty uses (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
@@ -950,11 +950,16 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
         w_address = sw.value().address
     var native = count > 0
     var jobs = native_unit_jobs(fields["n_jobs"], "Bagging")
-    # The member entries read admitted words; X (and a regressor's targets)
-    # reach this door untested because each member's fit door tests what it
-    # is given. Proven once, when the first member is admitted natively (an
-    # unpublished family never pays the scan): not finite = the loop below,
-    # whose first fit door refuses in the forest's own words.
+    # WHO REFUSES A NON-FINITE X OR y. X (and a regressor's targets) reach
+    # this door untested because each member's fit door tests what it is
+    # given. A member whose kind tests its rows (`member_set_tests`,
+    # MEMBER_CAN_TEST_ROWS) refuses them in its own fit, from the pass its
+    # kernel already makes: no host scan here; its refusal fails the wave and
+    # the loop below raises the forest's own words. Any other member (the
+    # tree families today) reads admitted words: X and a regressor's targets
+    # are proven by one host scan when the first such member is admitted (an
+    # unpublished family never pays it); not finite = the loop below, whose
+    # first fit door refuses in the forest's own words.
     var proven = False
     while native and done < count:  # driver-loop: over the waves of member estimators
         var set = MemberSet(x.address, n, d, MEMBER_I32 if classifier else MEMBER_F32, MEMBER_I32)
@@ -979,7 +984,7 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
                                     n_classes, context, b):
                 native = False
                 break
-            if not proven:
+            if not proven and not member_set_tests(set, k - done):
                 proven = trees_finite_f32(x.address, n * d) and (
                     classifier or trees_finite_f32(trees_address(y_all), n))
                 _ = y_all  # keep the Python object alive through the scan above
@@ -1090,25 +1095,50 @@ def _members(fields: PythonObject) raises -> PythonObject:
     return fields["_estimators"]
 
 
-def _bagging_held(members: PythonObject, staged: PythonObject, x_address: Int, words: Int,
-                  context: PythonObject) -> Bool:
-    """True when this prediction's members predict through the member states
-    they hold (bindings/member_set_door.mojo `member_predict_held`) and not
-    through their doors: no device copy of X is staged for them (`staged`
-    empty: a CPU route, or a binary that cannot stage; with one staged the
-    doors read it and a member call would upload X once per member), the
-    member class carries a member mark, and X is finite (the member entries
-    read admitted words; the doors test what they are given, so a non-finite
-    X goes to them and is refused in their words). One class-plan read and at
-    most one scan of X per public prediction; an unmarked class pays neither."""
+def _bagging_held(members: PythonObject, staged: PythonObject, context: PythonObject) -> Bool:
+    """True when this prediction's members may predict through the member
+    states they hold (`_bagging_member_out`) and not through their doors: no
+    device copy of X is staged for them (`staged` empty: a CPU route, or a
+    binary that cannot stage; with one staged the doors read it and a member
+    call would upload X once per member) and the member class carries a
+    member mark. One class-plan read per public prediction."""
     try:
         if len(staged) != 0 or len(members) == 0:
             return False
-        if not member_marked(members[0], context):
-            return False
-        return trees_finite_f32(x_address, words)
+        return member_marked(members[0], context)
     except:
         return False
+
+
+def _bagging_member_out(member: PythonObject, xs: PythonObject, m: Int, operation: Int, classifier: Bool,
+                        width: Int, x_address: Int, x_words: Int, mut proven: Int, host_only: Bool,
+                        context: PythonObject) -> PythonObject:
+    """A fitted member's `operation` over its `m` rows `xs` (float32 C-order,
+    rows and columns of the admitted X at `x_address`, `x_words` values)
+    through the member state it holds, or None: its door runs (the fallback
+    rule). Never raises.
+
+    WHO REFUSES A NON-FINITE X: a member whose kind tests its rows
+    (MEMBER_CAN_TEST_ROWS) refuses in its own kernel pass, the call answers
+    None and the member's door raises its words: no host scan. For any other
+    member the whole admitted X is scanned ONCE per public operation, when
+    the first such member is served (`proven`: 0 not known, 1 finite, -1 not
+    finite; the caller keeps it across its members); not finite = None for
+    every such member, whose door refuses. `host_only`: a member whose
+    route is a GPU is not served (the caller's doors upload its rows)."""
+    var opened = member_held_open(member, operation, classifier, width, False, context, trees_builtins())
+    var out = PythonObject(None)
+    try:
+        if opened.served and (opened.host or not host_only):
+            if not opened.tests and proven == 0:
+                proven = 1 if trees_finite_f32(x_address, x_words) else -1
+            if opened.tests or proven == 1:
+                out = member_held_run(opened, trees_address(xs), m, Int(py=xs.shape[1]), context)
+    except:
+        out = PythonObject(None)
+    member_held_close(opened)
+    _ = xs  # the rows are read through the whole member call
+    return out
 
 
 def _bagging_member_scores(xt: PythonObject, member: PythonObject, xs: PythonObject, m: Int, k: Int,
@@ -1245,24 +1275,19 @@ def _bagging_proba(model: PythonObject, fields: PythonObject, X: PythonObject, c
     # One device copy of X for the full-width members (trees_staged_input).
     var staged = trees_stage_members(members, trees_address(xa), n, x.cols, context)
     # Members of a published family predict through the states they hold
-    # when nothing is staged (`_bagging_held`); the element type the first
-    # one wrote is asked of the rest (clones of one estimator). A member that
-    # is not served ends the native route for this call: its door, and the
-    # doors of the members after it, answer as before.
-    var held = _bagging_held(members, staged, x.address, n * x.cols, context)
-    var known = -1
+    # when nothing is staged (`_bagging_held`, `_bagging_member_out`). A
+    # member that is not served ends the native route for this call: its
+    # door, and the doors of the members after it, answer as before.
+    var held = _bagging_held(members, staged, context)
+    var proven = 0
     try:
         for i in range(len(members)):  # driver-loop: over the member estimators
             var xs = _sub_x(xt, x.view(), xa, features[i], rows_all, context)
             var sub = _sub_cols(members[i], context)
             var proba = PythonObject(None)
             if held:
-                var out = member_predict_held(members[i], trees_address(xs), n, Int(py=xs.shape[1]),
-                                              MEMBER_OP_PREDICT_PROBA, True, Int(py=sub.shape[0]), known, False,
-                                              context, trees_builtins())
-                _ = xs  # the rows are read through the whole member call
-                known = out.dtype
-                proba = out.array
+                proba = _bagging_member_out(members[i], xs, n, MEMBER_OP_PREDICT_PROBA, True, Int(py=sub.shape[0]),
+                                            x.address, n * x.cols, proven, False, context)
                 held = proba is not None
             if proba is None:
                 proba = _member_proba(members[i], xs, context)
@@ -1308,18 +1333,16 @@ def bagging_predict(model: PythonObject, args: PythonObject, classifier: Bool, c
     var features = fields["estimators_features_"]
     var staged = trees_stage_members(members, trees_address(xa), n, x.cols, context)
     # As `_bagging_proba`: members of a published family predict through the
-    # states they hold when nothing is staged; a regressor writes float32.
-    var held = _bagging_held(members, staged, x.address, n * x.cols, context)
+    # states they hold when nothing is staged.
+    var held = _bagging_held(members, staged, context)
+    var proven = 0
     try:
         for i in range(len(members)):  # driver-loop: over the member estimators
             var xs = _sub_x(xt, x.view(), xa, features[i], rows_all, context)
             var p = PythonObject(None)
             if held:
-                var out = member_predict_held(members[i], trees_address(xs), n, Int(py=xs.shape[1]),
-                                              MEMBER_OP_PREDICT, False, 1, MEMBER_F32, False, context,
-                                              trees_builtins())
-                _ = xs  # the rows are read through the whole member call
-                p = out.array
+                p = _bagging_member_out(members[i], xs, n, MEMBER_OP_PREDICT, False, 1, x.address, n * x.cols,
+                                        proven, False, context)
                 held = p is not None
             if p is None:
                 p = _member_predict(members[i], xs, context)
