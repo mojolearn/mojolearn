@@ -528,6 +528,9 @@ class MeanShift(_XCluster):
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
 
+    #: Member ABI family 25 (XCluster), kind 2 (core/xcluster_member.mojo).
+    _mojolearn_member = (25, 2)
+
     def __init__(self, *, bandwidth=None, seeds=None, bin_seeding=False, min_bin_freq=1,
                  cluster_all=True, n_jobs=None, max_iter=300, numeric_mode=None, device=None):
         return _NATIVE(self, "family_xc_initialize", (None, (bandwidth, seeds, bin_seeding, min_bin_freq, cluster_all, n_jobs, max_iter, numeric_mode, device,)), _NATIVE_CONTEXT)

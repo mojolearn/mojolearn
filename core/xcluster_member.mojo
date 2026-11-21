@@ -10,12 +10,13 @@ existing typed RUN over the entries of the `DeviceRoute` it is handed:
 (core/kmeans_variants_api.mojo `KMeansVariantsDriver`: the bisecting fit and
 tree descent, the centers queries, the resident centers), `route.flags` that
 entry's capability word (`VARIANTS_CAP_*`, read once by the caller's
-UNPACK). No other route slot is read by the kinds published here. No kernel
-is touched.
+UNPACK). `route.second` (MeanShift) is the image's centroid-fit entry
+(core/cluster_centroid_fit_api.mojo `CentroidFitDriver`). No other route
+slot is read by the kinds published here. No kernel is touched.
 
-Kinds (MEMBER_OP_NEW word [0]): 0 MiniBatchKMeans, 1 BisectingKMeans. Kinds
-2 MeanShift, 3 OPTICS, 4 AffinityPropagation, 5 BayesianGaussianMixture are
-reserved for this family and refused until published.
+Kinds (MEMBER_OP_NEW word [0]): 0 MiniBatchKMeans, 1 BisectingKMeans,
+2 MeanShift. Kinds 3 OPTICS, 4 AffinityPropagation, 5 BayesianGaussianMixture
+are reserved for this family and refused until published.
 
 MEMBER_OP_NEW parameters (Float64 words):
   kind 0 MiniBatchKMeans (11 words): [0] 0, [1] n_clusters, [2] init
@@ -30,6 +31,11 @@ MEMBER_OP_NEW parameters (Float64 words):
   [6] random_state as the BITS of an int64 (`bitcast[DType.float64](Int64(seed))`,
   the estimator's own seed rule: None is 0, the low 63 bits of an int),
   [7] bisecting_strategy (0 'biggest_inertia', 1 'largest_cluster').
+  kind 2 MeanShift (6 words): [0] 2, [1] bandwidth (0 for None: the entry
+  estimates it), [2] cluster_all (0/1), [3] max_iter, [4] bin_seeding (0/1),
+  [5] min_bin_freq. Explicit seeds are not words: the class keeps its own
+  doors for them. MeanShift takes no sample weights and has no transform or
+  score (refused in words).
 A clusterer, not a classifier: `y` is not read, `classes` is 0.
 
 Views: X dense row-major host float32, BORROWED for the call (never copied:
@@ -57,6 +63,8 @@ kind 1 [inertia];
 an import that did not give them);
 kind 0: 3 `MEMBER_BLOCK_FAMILY + 4` float32 1 x n_clusters, the counts
 (empty after an import that did not give them). An import needs 0 and 1.
+kind 2: SCALARS [bandwidth, n_iter]; centers are n_found x features. An
+import needs 0 and 1.
 kind 1: 3 `MEMBER_BLOCK_FAMILY + 2` float32 nodes x features, the tree
 centers; 4 `MEMBER_BLOCK_FAMILY + 3` int32 nodes x 3, the tree (left, right,
 label). An import needs blocks 0, 1, 3 and 4.
@@ -76,6 +84,7 @@ from core.kmeans_variants_api import (
     KMeansVariantsDriver, VariantsSpan, VariantsResultSlot, VariantsQueryRequest, BisectFitRequest,
     BisectPredictRequest, MiniBatchFitRequest, VARIANTS_CAP_RESIDENT, VARIANTS_CAP_DEVSCAN,
 )
+from core.cluster_centroid_fit_api import CentroidFitDriver, CentroidFitResultSlot, MeanShiftFitRequest
 from core.member_abi import (
     MemberCall, MemberMatrix, MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_HOME_DEVICE,
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_PREDICT,
@@ -94,6 +103,7 @@ comptime _CHUNK = 256
 comptime _INDEX_SPAN = 16777216
 comptime _KIND_MINIBATCH = 0
 comptime _KIND_BISECT = 1
+comptime _KIND_MEANSHIFT = 2
 comptime _BLOCK_CENTERS = MEMBER_BLOCK_FAMILY
 comptime _BLOCK_LABELS = MEMBER_BLOCK_FAMILY + 1
 comptime _BLOCK_TREE_CENTERS = MEMBER_BLOCK_FAMILY + 2
@@ -172,6 +182,8 @@ def _name(kind: Int) -> String:
         return "MiniBatchKMeans"
     if kind == _KIND_BISECT:
         return "BisectingKMeans"
+    if kind == _KIND_MEANSHIFT:
+        return "MeanShift"
     return "an x_cluster estimator"
 
 
@@ -181,6 +193,8 @@ def _param_count(kind: Int) raises -> Int:
         return 11
     if kind == _KIND_BISECT:
         return 8
+    if kind == _KIND_MEANSHIFT:
+        return 6
     raise Error("member ABI: x_cluster member kind " + String(kind) + " is not published")
 
 
@@ -355,6 +369,37 @@ def _minibatch_fit(slot: _Slot, call: _Call) raises:
     _fit_done(slot, call, output, rows)
 
 
+# ---------------------------------------------------------------- MeanShift
+def _meanshift_fit(slot: _Slot, call: _Call) raises:
+    var kind = slot[].kind
+    _whole_x(call, kind)
+    if call[].weights.rows > 0:
+        raise Error("TypeError: MeanShift takes no sample_weight")
+    var output = call[].fit_output
+    if output == MEMBER_OP_PREDICT:
+        _destination(call, call[].x.rows, 1, MEMBER_I32, "the label buffer")
+    elif output != 0:
+        member_unsupported(_name(kind), output)
+    if not call[].route.has_second:
+        raise Error("member ABI: a MeanShift member's route holds no centroid-fit entry")
+    var rows = call[].x.rows
+    var cols = call[].x.cols
+    var w = slot[].words.unsafe_ptr()
+    _release_resident(slot, call)
+    slot[].clear()
+    var request = MeanShiftFitRequest(VariantsSpan(call[].x.data, rows * cols), VariantsSpan(0, 0), rows, cols, 0,
+        w[2] != 0.0, Int(w[3]), w[4] != 0.0, Int(w[5]), w[1])
+    var result = CentroidFitResultSlot()
+    CentroidFitDriver(call[].route.second.call).meanshift(request, result)
+    swap(slot[].centers, result.storage[0].centers)
+    swap(slot[].labels, result.storage[0].labels)
+    var scalars: List[Float64] = [result.storage[0].bandwidth, Float64(result.storage[0].iterations)]
+    slot[].scalars = scalars^
+    slot[].features = cols
+    slot[].fitted = True
+    _fit_done(slot, call, output, rows)
+
+
 # ---------------------------------------------------------------- BisectingKMeans
 def _bisect_fit(slot: _Slot, call: _Call) raises:
     var kind = slot[].kind
@@ -448,12 +493,16 @@ def _centers_query(slot: _Slot, call: _Call, query: Int) raises:
 
 # ---------------------------------------------------------------- fitted blocks
 def _block_count(kind: Int) -> Int:
+    if kind == _KIND_MEANSHIFT:
+        return 3
     if kind == _KIND_MINIBATCH:
         return 4
     return 5 if kind == _KIND_BISECT else 0
 
 
 def _scalar_count(kind: Int) -> Int:
+    if kind == _KIND_MEANSHIFT:
+        return 2
     return 3 if kind == _KIND_MINIBATCH else 1
 
 
@@ -570,8 +619,9 @@ def _import(slot: _Slot, call: _Call) raises:
     if (call[].flags & MEMBER_IMPORT_DONE) == 0:
         return
     var d = slot[].features
-    var k = Int(slot[].words[1])
-    if d == 0 or len(slot[].centers) != k * d or len(slot[].scalars) != _scalar_count(kind):
+    # MeanShift finds its own center count; the k-means kinds fix it.
+    var k = len(slot[].centers) // d if (kind == _KIND_MEANSHIFT and d > 0) else Int(slot[].words[1])
+    if d == 0 or k < 1 or len(slot[].centers) != k * d or len(slot[].scalars) != _scalar_count(kind):
         raise Error("member ABI: a fitted " + _name(kind) + " state needs its centers and scalars blocks")
     if kind == _KIND_BISECT and (len(slot[].tree_nodes) == 0
             or len(slot[].tree_centers) != (len(slot[].tree_nodes) // 3) * d):
@@ -581,8 +631,9 @@ def _import(slot: _Slot, call: _Call) raises:
 
 # ---------------------------------------------------------------- the entry
 def _capabilities(kind: Int) -> Int:
-    # Every published kind (state 0: the family's union, today kinds 0 and 1).
-    _ = kind
+    # A state's kind, or (kind -1, state 0) the family's union.
+    if kind == _KIND_MEANSHIFT:
+        return MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
     return (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_TRANSFORM | MEMBER_CAN_SCORE | MEMBER_CAN_EXPORT
         | MEMBER_CAN_IMPORT | MEMBER_CAN_SAMPLE_WEIGHT)
 
@@ -601,9 +652,9 @@ def _xcluster_member(operation: Int, address: Int) raises -> Int:
         var count = _param_count(kind)
         if call[].param_count != count:
             raise Error("member ABI: a " + _name(kind) + " member takes " + String(count) + " parameter words")
-        if words[1] < 1.0:
+        if kind != _KIND_MEANSHIFT and words[1] < 1.0:
             raise Error("ValueError: n_clusters must be at least 1, got " + String(Int(words[1])))
-        if words[3] < 1.0:
+        if kind != _KIND_MEANSHIFT and words[3] < 1.0:
             raise Error("ValueError: n_init must be at least 1, got " + String(Int(words[3])))
         call[].state = _mint(words, count)
         return 0
@@ -616,11 +667,16 @@ def _xcluster_member(operation: Int, address: Int) raises -> Int:
         call[].state = 0
         return 0
     if operation == MEMBER_OP_OUTPUTS:
+        # Only the k-means kinds transform, with n_clusters columns.
         var clusters = 0
         if call[].state != 0:
-            clusters = Int(_Slot(unsafe_from_address=_lookup(call[].state, False))[].words[1])
+            var held = _Slot(unsafe_from_address=_lookup(call[].state, False))
+            if held[].kind == _KIND_MINIBATCH or held[].kind == _KIND_BISECT:
+                clusters = Int(held[].words[1])
         elif call[].params and call[].param_count >= 2:
-            clusters = Int(_Words(unsafe_from_address=call[].params)[1])
+            var words = _Words(unsafe_from_address=call[].params)
+            if Int(words[0]) == _KIND_MINIBATCH or Int(words[0]) == _KIND_BISECT:
+                clusters = Int(words[1])
         call[].out_cols = clusters if call[].flags == MEMBER_OP_TRANSFORM else 1
         call[].classes = 0
         return 0
@@ -630,13 +686,17 @@ def _xcluster_member(operation: Int, address: Int) raises -> Int:
         _minibatch_fit(slot, call)
     elif operation == MEMBER_OP_PREDICT and kind == _KIND_MINIBATCH:
         _centers_query(slot, call, _RES_PREDICT)
+    elif operation == MEMBER_OP_FIT and kind == _KIND_MEANSHIFT:
+        _meanshift_fit(slot, call)
+    elif operation == MEMBER_OP_PREDICT and kind == _KIND_MEANSHIFT:
+        _centers_query(slot, call, _RES_PREDICT)
     elif operation == MEMBER_OP_FIT and kind == _KIND_BISECT:
         _bisect_fit(slot, call)
     elif operation == MEMBER_OP_PREDICT and kind == _KIND_BISECT:
         _bisect_predict(slot, call)
-    elif operation == MEMBER_OP_TRANSFORM:
+    elif operation == MEMBER_OP_TRANSFORM and kind != _KIND_MEANSHIFT:
         _centers_query(slot, call, _RES_TRANSFORM)
-    elif operation == MEMBER_OP_SCORE:
+    elif operation == MEMBER_OP_SCORE and kind != _KIND_MEANSHIFT:
         _centers_query(slot, call, _RES_SCORE)
     elif operation == MEMBER_OP_EXPORT:
         _export(slot, call)
