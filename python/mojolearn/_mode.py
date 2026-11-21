@@ -689,9 +689,6 @@ def _connect_application_params(cls):
         connect_subclass(context, cls)
 
 
-_OBJECT_GET = object.__getattribute__
-
-
 def _install_numeric_mode(cls, *, native_constructor=False):
     # glue: NumericModeMixin.__init_subclass__'s class-definition wrapper
     # One row of the device table per estimator class (which classes run
@@ -713,55 +710,135 @@ def _install_numeric_mode(cls, *, native_constructor=False):
             raise TypeError("native constructor must explicitly accept numeric_mode")
         return
 
-    sig = inspect.signature(orig)
-    # `device=` rides the same wrapper as `numeric_mode=` (one place for every
-    # class, lane dw-core 2026-11-20), for a class whose parameters are its
-    # constructor signature (`ParamsMixin.get_params`: get_params, set_params,
-    # clone and pickle then carry it with no further code) and whose own
-    # constructor does not already name a `device`. A class with a declared
-    # parameter list (the scalers, the decompositions, the forests, the
-    # searches, the optimizers) names `device` in that list itself.
-    takes_device = ("device" not in sig.parameters
-                    and getattr(cls, "get_params", None) is ParamsMixin.get_params)
-
-    if takes_device:
-        @functools.wraps(orig)
-        def __init__(self, *args, numeric_mode=None, device=None, **kwargs):
-            # `device` is checked in compiled code where it is given, before
-            # the constructor body runs (unknown value, 'gpu' on a CPU-only
-            # installation, 'cpu' for a class that cannot run there: refused
-            # in words). The default None on a new instance calls nothing; a
-            # constructor run again on a live instance drops its route.
-            # The instance dictionary through object's own lookup: two
-            # membership tests, no attribute door and no AttributeError built
-            # for the usual case (a new instance, device=None).
-            fields = _OBJECT_GET(self, "__dict__")
-            if device is not None or "device" in fields:
-                _MODE_METADATA(self, "device_admit", _MODE_METADATA_CONTEXT, device)
-            orig(self, *args, **kwargs)
-            if numeric_mode is not None or not hasattr(self, "numeric_mode"):
-                self.numeric_mode = numeric_mode
-            if device is not None or "device" not in fields:
-                self.device = device
-    else:
-        @functools.wraps(orig)
-        def __init__(self, *args, numeric_mode=None, **kwargs):
-            orig(self, *args, **kwargs)
-            if numeric_mode is not None or not hasattr(self, "numeric_mode"):
-                self.numeric_mode = numeric_mode
+    @functools.wraps(orig)
+    def __init__(self, *args, numeric_mode=None, **kwargs):
+        orig(self, *args, **kwargs)
+        if numeric_mode is not None or not hasattr(self, "numeric_mode"):
+            self.numeric_mode = numeric_mode
 
     # The signature scikit-learn reads (`_get_param_names`, its
-    # `check_no_attributes_set_in_init`) names `numeric_mode` (and `device`) too.
-    added = [name for name in (("numeric_mode", "device") if takes_device else ("numeric_mode",))  # glue: fixed keyword names
-             if name not in sig.parameters]
-    if added:
+    # `check_no_attributes_set_in_init`) names `numeric_mode` too.
+    sig = inspect.signature(orig)
+    if "numeric_mode" not in sig.parameters:
         params = list(sig.parameters.values())
         at = next((i for i, p in enumerate(params) if p.kind is p.VAR_KEYWORD), len(params))  # glue: signature parameter position
-        for offset, name in enumerate(added):  # glue: one or two fixed keyword names
-            params.insert(at + offset, inspect.Parameter(name, inspect.Parameter.KEYWORD_ONLY, default=None))
+        params.insert(at, inspect.Parameter("numeric_mode", inspect.Parameter.KEYWORD_ONLY, default=None))
         sig = sig.replace(parameters=params)
     __init__.__signature__ = sig
     cls.__init__ = __init__
+    # `device=` joins this wrapper when the package connects the class
+    # (`install_device`), once the compiled-constructor installers have
+    # taken the classes that are theirs.
+    _DEVICE_PENDING.append((cls, __init__, orig))
+
+
+#: (class, its numeric-mode wrapper, its own constructor): the classes whose
+#: wrapper may take `device=`, decided by `install_device`.
+_DEVICE_PENDING = []
+
+
+def install_device():
+    """Give `device=None | "gpu" | "cpu"` to every class whose constructor is
+    still the shared numeric-mode wrapper, in the one place that wrapper is
+    made (lane dw-core, 2026-11-20).
+
+    Called by the package's connection pass (`_families._connect_pass`) after
+    the compiled-constructor installers and before any constructor identity
+    is recorded. A class takes the keyword here when ALL of this holds, so
+    that the parameter is carried by code that already exists:
+      * its constructor is still this module's wrapper (no installer replaced
+        it with a compiled constructor, whose argument schema is fixed);
+      * its parameters are its constructor signature (`ParamsMixin.get_params`)
+        and `set_params` is the generic rebuild through the constructor
+        (`ParamsMixin.set_params`): get_params, set_params, clone and pickle
+        then carry `device`, and `set_params` runs the constructor's check
+        before the estimator changes;
+      * it has no compiled constructor recipe (`_connect_native_init`, the
+        mode-reconstruction recipes), whose argument list is fixed;
+      * its own constructor does not already name a `device`.
+    Every other class names `device` in its own compiled constructor schema
+    (its family's work); it is listed by `device_report()`.
+
+    The value is checked in compiled code where it is given
+    (bindings/mode_metadata_native_door.mojo, operation `device_admit`):
+    an unknown value, 'gpu' on a CPU-only installation and 'cpu' for a class
+    that cannot run there beside a GPU set (`_device_table.CPU_CLASSES`) are
+    refused in words before the constructor body runs."""
+    from ._native_mode_reconstruction import _NATIVE_RECIPES
+    pending, _DEVICE_PENDING[:] = list(_DEVICE_PENDING), []
+    native_inits = _GENERIC_PARAMS_CONTEXT["native_inits"]
+    package = __name__.rsplit(".", 1)[0] + "."
+    for cls, wrapper, orig in pending:  # glue: class connection, once per class, never product execution
+        if _application_subclass(cls):
+            # A caller's own subclass keeps the constructor it wrote; its
+            # parameter schema was built from that signature at its class
+            # statement (`_connect_application_params`).
+            _DEVICE_SKIPPED[cls] = "an application subclass"
+            continue
+        if cls.__dict__.get("__init__") is not wrapper:
+            _DEVICE_SKIPPED[cls] = "its constructor is compiled"
+            continue
+        if (getattr(cls, "get_params", None) is not ParamsMixin.get_params
+                or getattr(cls, "set_params", None) is not ParamsMixin.set_params):
+            _DEVICE_SKIPPED[cls] = "its parameters are a declared list"
+            continue
+        if cls in native_inits or any(  # glue: fixed recipe owners in the class's ancestry
+                base.__module__.removeprefix(package) + "." + base.__name__ in _NATIVE_RECIPES
+                for base in cls.__mro__):
+            _DEVICE_SKIPPED[cls] = "its constructor has a compiled recipe"
+            continue
+        sig = inspect.signature(wrapper)
+        if "device" in sig.parameters:
+            _DEVICE_SKIPPED[cls] = "its own constructor names device"
+            continue
+        cls.__init__ = _device_wrapper(wrapper, orig, sig)
+        _DEVICE_INSTALLED.append(cls)
+
+
+#: The classes `install_device` gave the keyword, and for each class it did
+#: not, why (`device_report`).
+_DEVICE_INSTALLED = []
+_DEVICE_SKIPPED = {}
+_OBJECT_GET = object.__getattribute__
+
+
+def _device_wrapper(wrapper, orig, sig):
+    # glue: the numeric-mode wrapper of `_install_numeric_mode`, with `device`
+    @functools.wraps(orig)
+    def __init__(self, *args, numeric_mode=None, device=None, **kwargs):
+        # `device` is checked in compiled code where it is given, before the
+        # constructor body runs. The default None on a new instance calls
+        # nothing; a constructor run again on a live instance drops its
+        # route. The instance dictionary is read through object's own lookup:
+        # two membership tests, no attribute door and no AttributeError built.
+        fields = _OBJECT_GET(self, "__dict__")
+        if device is not None or "device" in fields:
+            _MODE_METADATA(self, "device_admit", _MODE_METADATA_CONTEXT, device)
+        orig(self, *args, **kwargs)
+        if numeric_mode is not None or not hasattr(self, "numeric_mode"):
+            self.numeric_mode = numeric_mode
+        if device is not None or "device" not in fields:
+            self.device = device
+
+    params = list(sig.parameters.values())
+    at = next((i for i, p in enumerate(params) if p.kind is p.VAR_KEYWORD), len(params))  # glue: signature parameter position
+    params.insert(at, inspect.Parameter("device", inspect.Parameter.KEYWORD_ONLY, default=None))
+    __init__.__signature__ = sig.replace(parameters=params)
+    return __init__
+
+
+def device_report():
+    """One row per estimator class of the loaded families: `(class name,
+    takes device=, the device="cpu" answer beside a GPU set)`. The answer is
+    True, or the sentence the constructor's refusal carries; for a class that
+    does not take the keyword through the shared wrapper the second field is
+    why. Sorted by class name; for reports and tests, never product code."""
+    rows = []
+    for cls, answer in _DEVICE_CPU_CLASSES.items():  # glue: report over the class table
+        takes = (cls in _DEVICE_INSTALLED or "device" in inspect.signature(cls.__init__).parameters
+                 if cls.__init__ is not object.__init__ else False)
+        rows.append((cls.__module__ + "." + cls.__name__, takes if takes else _DEVICE_SKIPPED.get(cls, False), answer))
+    return sorted(rows, key=lambda row: row[0])  # glue: report order
 
 
 class NumericModeMixin(ParamsMixin):

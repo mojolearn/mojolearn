@@ -21,6 +21,7 @@ from bindings.declared_params_native_door import _assign as _declared_set, _rele
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.optimizer_public_words_unpack import stash_python_error, optimizer_python_error, PYTHON_ERROR_PENDING
 from bindings.py_model_records import bump_model_generation
+from providers.python.device_route_boundary_door import device_route_clear
 from bindings.py_optional import py_present
 
 
@@ -340,6 +341,10 @@ def _generic_reset(model: PythonObject, params: PythonObject, context: PythonObj
     _ = py_call(fields.clear)
     _ = py_call(fields.update, fresh)
     _ = previous
+    # The device or the numeric mode may have changed: the estimator's next
+    # operation resolves its device route again (the replacement's
+    # constructor checked the new device before anything changed here).
+    device_route_clear(model)
     return model
 
 

@@ -274,6 +274,10 @@ def _connect_pass(package):
                                                 connect as _connect_declared_constructors)
     _collect_declared_constructors()
     _install_declared_constructors()
+    # `device=` on every class whose constructor is still the shared wrapper
+    # (the installers above took the compiled constructors): before the
+    # refresh and every snapshot below, which then record the final __init__.
+    _mode.install_device()
     # Layouts connected at module import (neighbor queries, host inference, ...)
     # predate the installers above: rebind their replaced __init__/set_params.
     from ._native_classical_bridge import refresh_installed_members as _refresh_installed_members
