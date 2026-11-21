@@ -2138,6 +2138,93 @@ def _ordered_estimate_and_apply(
 # ===========================================================================
 
 
+def _ord_all_finite(values: List[Float32]) -> Bool:
+    """Whether every value is finite: a test per element (any non-finite
+    element gives the caller's one refusal), the elements in `_gbdt_units`
+    contiguous ranges, one flag a task."""
+    var n = len(values)
+    var units = _gbdt_units(n, n)
+    var chunk = host_predict_chunk(n, units)
+    var bad = List[Int](length=max(units, 1), fill=0)
+    var v_p = rebind[HostF32Ptr](values.unsafe_ptr())
+    var bad_p = rebind[GbdtIntPtr](bad.unsafe_ptr())
+
+    def scan(unit: Int) {imm chunk, imm n, imm v_p, imm bad_p}:
+        var found = 0
+        for i in range(unit * chunk, min(n, (unit + 1) * chunk)):
+            if not isfinite(v_p[i]):
+                found = 1
+        bad_p[unit] = found
+
+    host_parallelize(scan, units)
+    var any_bad = 0
+    for u in range(len(bad)):  # driver-loop: over the tasks' flags
+        any_bad += bad[u]
+    _ = len(values)
+    return any_bad == 0
+
+
+def _ord_fold_doc_ids(
+    permutation: List[Int], size: Int, offset: Int, mut doc_ids: List[Int]
+):
+    """`make_fold_doc_indices` for one fold: `doc_ids[offset + p] =
+    permutation[p]` over the fold's prefix (a move per position), the
+    positions in `_gbdt_units` contiguous ranges."""
+    var units = _gbdt_units(size, 2 * size)
+    var chunk = host_predict_chunk(size, units)
+    var perm_p = rebind[GbdtIntPtr](permutation.unsafe_ptr())
+    var doc_p = rebind[GbdtIntPtr](doc_ids.unsafe_ptr())
+
+    def rows(unit: Int) {imm chunk, imm size, imm offset, imm perm_p, imm doc_p}:
+        for i in range(unit * chunk, min(size, (unit + 1) * chunk)):
+            doc_p[offset + i] = perm_p[i]
+
+    host_parallelize(rows, units)
+    _ = len(permutation)
+    _ = len(doc_ids)
+
+
+def _ord_rmse_fold_targets(
+    y: List[Float32],
+    w: List[Float32],
+    permutation: List[Int],
+    cursor: List[Float32],
+    size: Int,
+    offset: Int,
+    mut sw: List[Float32],
+    mut sg: List[Float32],
+):
+    """`_ordered_target_kernel` (`dynamic_boosting.mojo:44-60`) for one
+    fold: position `i` of the fold's prefix takes the row's weight and
+    `ftz(identical_mul(w, y - cursor[i]))`. One device thread a position,
+    the positions in `_gbdt_units` contiguous ranges. (The folds are the
+    caller's driver loop: a fold's prefix is the unit of the fit's plan,
+    its positions are the units here.)"""
+    var units = _gbdt_units(size, 6 * size)
+    var chunk = host_predict_chunk(size, units)
+    var y_p = rebind[HostF32Ptr](y.unsafe_ptr())
+    var w_p = rebind[HostF32Ptr](w.unsafe_ptr())
+    var perm_p = rebind[GbdtIntPtr](permutation.unsafe_ptr())
+    var cursor_p = rebind[HostF32Ptr](cursor.unsafe_ptr())
+    var sw_p = rebind[HostF32Ptr](sw.unsafe_ptr())
+    var sg_p = rebind[HostF32Ptr](sg.unsafe_ptr())
+
+    def rows(unit: Int) {imm chunk, imm size, imm offset, imm y_p, imm w_p, imm perm_p, imm cursor_p, imm sw_p, imm sg_p}:
+        for i in range(unit * chunk, min(size, (unit + 1) * chunk)):
+            var row = perm_p[i]
+            var wi = w_p[row]
+            sw_p[offset + i] = wi
+            sg_p[offset + i] = ftz(identical_mul(wi, y_p[row] - cursor_p[i]))
+
+    host_parallelize(rows, units)
+    _ = len(y)
+    _ = len(w)
+    _ = len(permutation)
+    _ = len(cursor)
+    _ = len(sw)
+    _ = len(sg)
+
+
 def gbdt_ordered_rmse_host_fit(
     x_colmajor: List[Float32],
     y: List[Float32],
@@ -2164,18 +2251,21 @@ def gbdt_ordered_rmse_host_fit(
         # lane/fam-gbdt: the device fit takes `device_float_borders` over
         # every row at NaN mode Forbidden; `gbdt_host_grid` is that build on
         # host memory (no subsample at `border_build_max_samples = 0`).
-        for i in range(n_rows * n_features):
-            if not isfinite(x_colmajor[i]):
-                raise Error("train_ordered_rmse requires finite numeric features")
+        if not _ord_all_finite(x_colmajor):
+            raise Error("train_ordered_rmse requires finite numeric features")
         var dev_grid = gbdt_host_grid(
             x_colmajor, n_rows, n_features, border_count, 0, UInt64(0),
             NAN_MODE_FORBIDDEN,
         )
-        for f in range(n_features):
+        for f in range(n_features):  # driver-loop: over the features, the grid's borders
             fold_counts.append(len(dev_grid.borders[f]))
             borders.append(dev_grid.borders[f].copy())
             nan_treatment.append(NAN_TREATMENT_AS_IS)
     else:
+        # KEPT SERIAL, named (lane gbdt-host-par): the grid of the build
+        # with IDN_ORDERED_RMSE_DEVICE_GRID off, which no shipped build
+        # compiles (`best_split` per column on the calling thread, a
+        # refusal at the first non-finite value in column order)
         for f in range(n_features):
             var column = List[Float32]()
             for r in range(n_rows):
@@ -2232,6 +2322,9 @@ def gbdt_ordered_rmse_host_fit(
     var weight_sum = Float64(0)
     var max_weight = Float64(0)
     var residual_bound = Float64(0)
+    # SERIAL BY NATURE (admission, once per fit): the bijection test is a
+    # running set (a row is refused when an EARLIER position named it) and
+    # the weight total is one Float64 chain in position order
     for i in range(n):
         var row = Int(permutation_u32[i])
         if row >= n or seen[row]:
@@ -2253,19 +2346,21 @@ def gbdt_ordered_rmse_host_fit(
     if fold_bits + max_depth >= 32:
         raise Error("1 << (FoldBits + maxDepth) does not fit a ui32 bin")
     var part_bounds = List[Int]()
-    var doc_ids = List[Int]()
     var total = 0
     part_bounds.append(0)
-    for f in range(n_folds):
+    for f in range(n_folds):  # driver-loop: over the folds, the running part bounds
         var est_right = bounds[2 * f]
         var qe_right = bounds[2 * f + 1]
         total += qe_right
         part_bounds.append(part_bounds[len(part_bounds) - 1] + est_right)
         part_bounds.append(part_bounds[len(part_bounds) - 1] + (qe_right - est_right))
-        for p in range(qe_right):
-            doc_ids.append(permutation[p])
+    var doc_ids = List[Int](length=total, fill=0)
+    var doc_at = 0
+    for f in range(n_folds):  # driver-loop: over the folds, each prefix's positions across the tasks
+        _ord_fold_doc_ids(permutation, bounds[2 * f + 1], doc_at, doc_ids)
+        doc_at += bounds[2 * f + 1]
     var cursors = List[List[Float32]]()
-    for f in range(n_folds):
+    for f in range(n_folds):  # driver-loop: over the folds, one cursor each
         cursors.append(List[Float32](length=bounds[2 * f + 1], fill=Float32(0.0)))
     var estimation = List[Float32](length=n, fill=Float32(0.0))
 
@@ -2284,13 +2379,11 @@ def gbdt_ordered_rmse_host_fit(
         var sw = List[Float32](length=total, fill=Float32(0.0))
         var sg = List[Float32](length=total, fill=Float32(0.0))
         var offset = 0
-        for f in range(n_folds):
+        for f in range(n_folds):  # driver-loop: over the folds, each prefix's positions across the tasks
             var size = bounds[2 * f + 1]
-            for i in range(size):
-                var row = permutation[i]
-                var wi = w[row]
-                sw[offset + i] = wi
-                sg[offset + i] = ftz(identical_mul(wi, y[row] - cursors[f][i]))
+            _ord_rmse_fold_targets(
+                y, w, permutation, cursors[f], size, offset, sw, sg
+            )
             offset += size
         # lane/sym-quality: `enqueue_snap_plane` (dynamic_boosting.
         # fit_ordered_rmse), the gradient plane onto the tree's grid
@@ -2300,19 +2393,14 @@ def gbdt_ordered_rmse_host_fit(
             fold_count, fold_bits, scale, l2_leaf_reg, feat_offset,
             feat_shift, feat_mask, List[Bool](),
         )
-        # `compute_bins_for_model` (level d is bit d)
+        # `compute_bins_for_model` (level d is bit d), rows across the tasks
         var bins = List[Int](length=n, fill=0)
-        for r in range(n):
-            var leaf = 0
-            for level in range(len(splits)):
-                var fid = splits[level].feature
-                var mask = feat_mask[fid] << feat_shift[fid]
-                var value = UInt32(splits[level].bin) << feat_shift[fid]
-                if (cindex[feat_offset[fid] + r] & mask) > value:
-                    leaf += 1 << level
-            bins[r] = leaf
+        _ordered_leaf_bins(
+            cindex, splits, feat_offset, feat_shift, feat_mask, List[Bool](),
+            n, bins,
+        )
         var n_leaves = 1 << len(splits)
-        for f in range(n_folds):
+        for f in range(n_folds):  # driver-loop: over the folds (each fold's estimation splits its positions inside)
             _ = _ordered_estimate_and_apply(
                 bounds[2 * f], bounds[2 * f + 1], n_leaves, y, w, permutation,
                 bins, cursors[f], learning_rate, l2_leaf_reg,
@@ -2902,6 +2990,197 @@ def _ordered_leaf_bins(
     _ = len(values)
 
 
+def _ord_widen_perm(src: List[UInt32], mut dst: List[Int]):
+    """`dst[i] = Int(src[i])`: one permutation's positions (a move), in
+    `_gbdt_units` contiguous ranges."""
+    var n = len(dst)
+    var units = _gbdt_units(n, n)
+    var chunk = host_predict_chunk(n, units)
+    var src_p = _u32_ptr(src)
+    var dst_p = rebind[GbdtIntPtr](dst.unsafe_ptr())
+
+    def rows(unit: Int) {imm chunk, imm n, imm src_p, imm dst_p}:
+        for i in range(unit * chunk, min(n, (unit + 1) * chunk)):
+            dst_p[i] = Int(src_p[i])
+
+    host_parallelize(rows, units)
+    _ = len(src)
+    _ = len(dst)
+
+
+def _ord_fold_planes(
+    objective: Int,
+    alpha: Float32,
+    newton: Bool,
+    y: List[Float32],
+    permutation: List[Int],
+    cursor: List[Float32],
+    size: Int,
+    offset: Int,
+    mut sw: List[Float32],
+    mut sg: List[Float32],
+    mut doc_ids: List[Int],
+):
+    """The fold planes of one fold of the learn permutation: position `i`
+    of the fold's prefix files its row, the row's derivative at the fold
+    cursor (`_loss_row`, unit weight) and the weight plane (the second
+    derivative under a Newton score function, else 1). One device thread a
+    position, the positions in `_gbdt_units` contiguous ranges; the folds
+    are the caller's driver loop."""
+    var units = _gbdt_units(size, 16 * size)
+    var chunk = host_predict_chunk(size, units)
+    var y_p = rebind[HostF32Ptr](y.unsafe_ptr())
+    var perm_p = rebind[GbdtIntPtr](permutation.unsafe_ptr())
+    var cursor_p = rebind[HostF32Ptr](cursor.unsafe_ptr())
+    var sw_p = rebind[HostF32Ptr](sw.unsafe_ptr())
+    var sg_p = rebind[HostF32Ptr](sg.unsafe_ptr())
+    var doc_p = rebind[GbdtIntPtr](doc_ids.unsafe_ptr())
+
+    def rows(unit: Int) {imm chunk, imm size, imm offset, imm objective, imm alpha, imm newton, imm y_p, imm perm_p, imm cursor_p, imm sw_p, imm sg_p, imm doc_p}:
+        for i in range(unit * chunk, min(size, (unit + 1) * chunk)):
+            var row = perm_p[i]
+            doc_p[offset + i] = row
+            # `kernel_alpha` carries Logloss's border (the binding builds
+            # the loss that way, as `_loss_row` reads it)
+            var lr_row = _loss_row(objective, y_p[row], cursor_p[i], alpha)
+            var weight = Float32(1.0)
+            if newton:
+                weight = lr_row.der2
+            sw_p[offset + i] = weight
+            sg_p[offset + i] = lr_row.der
+
+    host_parallelize(rows, units)
+    _ = len(y)
+    _ = len(permutation)
+    _ = len(cursor)
+    _ = len(sw)
+    _ = len(sg)
+    _ = len(doc_ids)
+
+
+def _ord_noise_terms_range(
+    lo: Int,
+    hi: Int,
+    n_folds: Int,
+    bounds: GbdtIntPtr,
+    offsets: GbdtIntPtr,
+    sw: HostF32Ptr,
+    sg: HostF32Ptr,
+    terms: HostF32Ptr,
+):
+    for f in range(n_folds):
+        var first = max(lo, offsets[f] + bounds[2 * f])
+        var last = min(hi, offsets[f] + bounds[2 * f + 1])
+        for i in range(first, last):
+            var w = sw[i]
+            if w > Float32(0.0):
+                var q = ftz(sg[i] / w)
+                terms[i] = ftz(ftz(q * q) * w)
+
+
+def _ord_noise_terms(
+    sw: List[Float32],
+    sg: List[Float32],
+    bounds: List[Int],
+    offsets: List[Int],
+    n_folds: Int,
+    total: Int,
+) -> List[Float32]:
+    """The score noise's terms: `ftz(ftz(q * q) * w)` with `q = ftz(g / w)`
+    on every QUALITY position with a positive weight (fold `f`'s positions
+    `[bounds[2f], bounds[2f + 1])` at its offset), +0.0 elsewhere. One
+    statement per position; a task owns a run of positions and visits each
+    fold's quality slice clipped to it. The fold of the terms is the
+    caller's (`_deterministic_sum_lanes` / the grid fold)."""
+    var terms = List[Float32](length=total, fill=Float32(0.0))
+    var units = _gbdt_units(total, 6 * total)
+    var chunk = host_predict_chunk(total, units)
+    var bounds_p = rebind[GbdtIntPtr](bounds.unsafe_ptr())
+    var offsets_p = rebind[GbdtIntPtr](offsets.unsafe_ptr())
+    var sw_p = rebind[HostF32Ptr](sw.unsafe_ptr())
+    var sg_p = rebind[HostF32Ptr](sg.unsafe_ptr())
+    var terms_p = rebind[HostF32Ptr](terms.unsafe_ptr())
+
+    def rows(unit: Int) {imm chunk, imm total, imm n_folds, imm bounds_p, imm offsets_p, imm sw_p, imm sg_p, imm terms_p}:
+        _ord_noise_terms_range(
+            unit * chunk, min(total, (unit + 1) * chunk), n_folds, bounds_p,
+            offsets_p, sw_p, sg_p, terms_p,
+        )
+
+    host_parallelize(rows, units)
+    _ = len(sw)
+    _ = len(sg)
+    _ = len(bounds)
+    _ = len(offsets)
+    _ = len(terms)
+    return terms^
+
+
+def _ord_boot_abs_range(
+    lo: Int,
+    hi: Int,
+    n_folds: Int,
+    bounds: GbdtIntPtr,
+    offsets: GbdtIntPtr,
+    boot: Bool,
+    draws: HostF32Ptr,
+    sw: HostF32Ptr,
+    sg: HostF32Ptr,
+    absv: HostF32Ptr,
+):
+    for f in range(n_folds):
+        var quality_from = offsets[f] + bounds[2 * f]
+        var first = max(lo, offsets[f])
+        var last = min(hi, offsets[f] + bounds[2 * f + 1])
+        for i in range(first, last):
+            if boot and i >= quality_from:
+                sw[i] = ftz(sw[i] * draws[i])
+                sg[i] = ftz(sg[i] * draws[i])
+            absv[2 * i] = abs(sw[i])
+            absv[2 * i + 1] = abs(sg[i])
+
+
+def _ord_boot_abs(
+    mut sw: List[Float32],
+    mut sg: List[Float32],
+    draws: List[Float32],
+    boot: Bool,
+    bounds: List[Int],
+    offsets: List[Int],
+    n_folds: Int,
+    total: Int,
+) -> List[Float32]:
+    """The bootstrap on the quality slices (`ftz(plane * draw)`, under
+    `boot`; `draws` is never read otherwise), then the two magnitudes
+    `|sw|`, `|sg|` interleaved for the scale's fold. Per position, the
+    multiply before the magnitude as the device orders them; a task owns a
+    run of positions and visits each fold clipped to it."""
+    var absv = List[Float32](length=2 * total, fill=Float32(0.0))
+    var units = _gbdt_units(total, 6 * total)
+    var chunk = host_predict_chunk(total, units)
+    var bounds_p = rebind[GbdtIntPtr](bounds.unsafe_ptr())
+    var offsets_p = rebind[GbdtIntPtr](offsets.unsafe_ptr())
+    var draws_p = rebind[HostF32Ptr](draws.unsafe_ptr())
+    var sw_p = rebind[HostF32Ptr](sw.unsafe_ptr())
+    var sg_p = rebind[HostF32Ptr](sg.unsafe_ptr())
+    var absv_p = rebind[HostF32Ptr](absv.unsafe_ptr())
+
+    def rows(unit: Int) {imm chunk, imm total, imm n_folds, imm boot, imm bounds_p, imm offsets_p, imm draws_p, imm sw_p, imm sg_p, imm absv_p}:
+        _ord_boot_abs_range(
+            unit * chunk, min(total, (unit + 1) * chunk), n_folds, bounds_p,
+            offsets_p, boot, draws_p, sw_p, sg_p, absv_p,
+        )
+
+    host_parallelize(rows, units)
+    _ = len(sw)
+    _ = len(sg)
+    _ = len(draws)
+    _ = len(bounds)
+    _ = len(offsets)
+    _ = len(absv)
+    return absv^
+
+
 def gbdt_ordered_host_fit(
     x_colmajor: List[Float32],
     y: List[Float32],
@@ -3042,10 +3321,9 @@ def gbdt_ordered_host_fit(
     )
     var perm_count = len(perms_u32)
     var perms = List[List[Int]]()
-    for p in range(perm_count):
-        var one = List[Int](capacity=n)
-        for i in range(n):
-            one.append(Int(perms_u32[p][i]))
+    for p in range(perm_count):  # driver-loop: over the permutations, each one's positions across the tasks
+        var one = List[Int](length=n, fill=0)
+        _ord_widen_perm(perms_u32[p], one)
         perms.append(one^)
     var est_p = perm_count - 1
     var learn_count = est_p if est_p > 0 else 1
@@ -3082,29 +3360,28 @@ def gbdt_ordered_host_fit(
     var offsets = List[Int]()
     var total = 0
     part_bounds.append(0)
-    for f in range(n_folds):
+    # fold f's QUALITY slice is its positions `[bounds[2f], bounds[2f + 1])`
+    # at `offsets[f]`: the per-tree passes read the slice off the bounds
+    # (the per-position flag plane this replaced held the same test)
+    var quality_count = 0
+    for f in range(n_folds):  # driver-loop: over the folds, the running offsets and part bounds
         var est_right = bounds[2 * f]
         var qe_right = bounds[2 * f + 1]
         offsets.append(total)
         total += qe_right
+        if qe_right > est_right:
+            quality_count += qe_right - est_right
         part_bounds.append(part_bounds[len(part_bounds) - 1] + est_right)
         part_bounds.append(part_bounds[len(part_bounds) - 1] + (qe_right - est_right))
-    var quality = List[Bool](length=total, fill=False)
-    var quality_count = 0
-    for f in range(n_folds):
-        for i in range(bounds[2 * f], bounds[2 * f + 1]):
-            quality[offsets[f] + i] = True
-            quality_count += 1
     var cursors = List[List[List[Float32]]]()
-    for _ in range(learn_count):
+    for _ in range(learn_count):  # driver-loop: over the learn permutations and folds, one cursor each
         var per = List[List[Float32]]()
         for f in range(n_folds):
             per.append(List[Float32](length=bounds[2 * f + 1], fill=start_value))
         cursors.append(per^)
     var est_cursor = List[Float32](length=n, fill=start_value)
     var est_y = List[Float32](length=n, fill=Float32(0.0))
-    for i in range(n):
-        est_y[i] = y[perms[est_p][i]]
+    _gather_rows(y, perms[est_p], n, est_y)
     var bootstrap_on = opts.bootstrap_kind >= 0
     var seeds = List[UInt64]()
     if bootstrap_on:
@@ -3147,30 +3424,17 @@ def gbdt_ordered_host_fit(
         # ---- the fold planes ----
         var sw = List[Float32](length=total, fill=Float32(0.0))
         var sg = List[Float32](length=total, fill=Float32(0.0))
-        var doc_ids = List[Int](capacity=total)
-        for f in range(n_folds):
-            var r = bounds[2 * f + 1]
-            for i in range(r):
-                var row = perms[learn_p][i]
-                doc_ids.append(row)
-                # `kernel_alpha` carries Logloss's border (the binding
-                # builds the loss that way, as `_loss_row` reads it)
-                var lr_row = _loss_row(
-                    loss.objective, y[row], cursors[learn_p][f][i],
-                    loss.kernel_alpha,
-                )
-                sw[offsets[f] + i] = lr_row.der2 if opts.score_function_newton else Float32(1.0)
-                sg[offsets[f] + i] = lr_row.der
+        var doc_ids = List[Int](length=total, fill=0)
+        for f in range(n_folds):  # driver-loop: over the folds, each prefix's positions across the tasks
+            _ord_fold_planes(
+                loss.objective, loss.kernel_alpha, opts.score_function_newton,
+                y, perms[learn_p], cursors[learn_p][f], bounds[2 * f + 1],
+                offsets[f], sw, sg, doc_ids,
+            )
         # ---- the score noise ----
         var score_std = Float32(0.0)
         if opts.random_strength != Float32(0.0):
-            var terms = List[Float32](length=total, fill=Float32(0.0))
-            for i in range(total):
-                if quality[i]:
-                    var w = sw[i]
-                    if w > Float32(0.0):
-                        var q = ftz(sg[i] / w)
-                        terms[i] = ftz(ftz(q * q) * w)
+            var terms = _ord_noise_terms(sw, sg, bounds, offsets, n_folds, total)
             var s2: Float32
             comptime if ORD_STD_GRIDFOLD:
                 if not bootstrap_on:
@@ -3188,19 +3452,16 @@ def gbdt_ordered_host_fit(
                 * Float64(opts.random_strength)
             )
         # ---- the bootstrap, quality slices only ----
+        var draws = List[Float32]()
         if bootstrap_on:
-            var draws = _ordered_bootstrap_draws(
+            draws = _ordered_bootstrap_draws(
                 opts.bootstrap_kind, seeds, total, opts.bootstrap_param
             )
-            for i in range(total):
-                if quality[i]:
-                    sw[i] = ftz(sw[i] * draws[i])
-                    sg[i] = ftz(sg[i] * draws[i])
-        # ---- the scale ----
-        var absv = List[Float32](length=2 * total, fill=Float32(0.0))
-        for i in range(total):
-            absv[2 * i] = abs(sw[i])
-            absv[2 * i + 1] = abs(sg[i])
+        # ---- the scale (the bootstrap's multiply and the magnitudes are
+        # one pass over the positions) ----
+        var absv = _ord_boot_abs(
+            sw, sg, draws, bootstrap_on, bounds, offsets, n_folds, total
+        )
         var mags: List[Float32]
         comptime if ORD_STD_GRIDFOLD:
             # the device's fused arm (noise on, no bootstrap) takes the
@@ -3239,7 +3500,7 @@ def gbdt_ordered_host_fit(
         )
         var n_leaves = 1 << len(splits)
         # ---- the leaves ----
-        for lp in range(learn_count):
+        for lp in range(learn_count):  # driver-loop: over the (learn permutation, fold) tasks; each task's estimation splits its positions inside
             if dep_on:
                 # this learn permutation's leaves from its own index (a
                 # learn permutation is never the estimation one here)
