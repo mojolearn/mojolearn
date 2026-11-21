@@ -118,6 +118,12 @@ def _assign(model: PythonObject, keywords: PythonObject, context: PythonObject) 
                     or _resolved(descriptor_type, PythonObject("__delete__"), context["missing"]) is not context["missing"]):
                 raise Error("TypeError: native parameter assignment cannot invoke Python parameter descriptors")
         var value = pairs[i][1]
+        if String(name) == "device":
+            # A new device is refused in the shared words before it is
+            # written; an admitted one drops the estimator's device route.
+            device_admit_class(model, value, py_get(context["backend_fields"], "_CPU_ONLY") is not None,
+                               py_get(context, "device_cpu"), b)
+            device_route_clear(model)
         if py_contains(fields, name):
             var previous = native_instance_item(fields, name)
             if previous is not value:

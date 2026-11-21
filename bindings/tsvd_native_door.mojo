@@ -45,11 +45,10 @@ from bindings.tsvd_descriptor_boundary_door import (
 )
 from x_decomp.tsvd_descriptor_boundary_run import tsvd_capabilities, tsvd_qfix, tsvd_vendor
 from core.pca_native_api import pca_vendor_name
-from core.linear_route import LINEAR_DEVICE_CPU
-from core.device_route_dw_decomp import DecompRoute, decomp_route_cpu_identical
+from core.device_route import DEVICE_CPU
 from bindings.decomp_device_route_door import (
     decomp_route_hit, decomp_route_keep, decomp_route_resolve_device, decomp_route_on_cpu_image,
-    decomp_route_expected_vendor,
+    decomp_route_expected_vendor, DecompRoute,
 )
 from bindings.tsvd_owner_boundary_unpack import tsvd_owner_drop, tsvd_owner_lease, TSVDLeasePin
 from bindings.tsvd_keys_unpack import (
@@ -159,18 +158,16 @@ def _host_connection(model: PythonObject, fields: PythonObject, context: PythonO
 struct TSVDRouted(Movable):
     """The estimator's route as one operation reads it. `found`: `route` is
     resolved. Otherwise `route` holds the device and tier the resolution
-    will use (connection -1), and `mode` / `device` are the objects it is
-    stored for."""
+    will use (connection -1), and `mode` is the object it is stored for."""
     var found: Bool
     var route: DecompRoute
     var mode: PythonObject
-    var device: PythonObject
 
 
 def _route_read(model: PythonObject, fields: PythonObject, context: PythonObject) raises -> TSVDRouted:
     """The per-call read (bindings/decomp_device_route_door.mojo): the mode
-    object (the process default when None), one `device` read, one record
-    read and three pointer compares. A miss validates the mode word and the
+    object (the process default when None), one record read and three
+    pointer compares; the device is not read. A miss validates the mode word and the
     device where the old code validated the mode (before X is admitted); the
     binding tables are read by `_route_resolve`, where the old code
     connected."""
@@ -178,12 +175,12 @@ def _route_read(model: PythonObject, fields: PythonObject, context: PythonObject
     var mode = py_get(fields, nk[].k_numeric_mode)
     if mode is None:
         mode = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
-    var hit = decomp_route_hit(model, fields, mode, context)
+    var hit = decomp_route_hit(model, mode, context)
     if hit.found:
-        return TSVDRouted(True, hit.route, mode, hit.device)
+        return TSVDRouted(True, hit.route, mode)
     var tier = 1 if _mode(fields, context) == "identical" else 0
-    var device = decomp_route_resolve_device(hit.device, context)
-    return TSVDRouted(False, DecompRoute(device, -1, tier), mode, hit.device)
+    var device = decomp_route_resolve_device(fields, tier, context)
+    return TSVDRouted(False, DecompRoute(device, -1, tier), mode)
 
 
 def _route_tables(route: DecompRoute, context: PythonObject) raises -> Bool:
@@ -191,7 +188,6 @@ def _route_tables(route: DecompRoute, context: PythonObject) raises -> Bool:
     `tsvd_cpu_decomp`: a `cpu` route of a GPU installation, identical only)."""
     var cpu_image = decomp_route_on_cpu_image(route.device, context)
     if cpu_image:
-        decomp_route_cpu_identical(route.mode == 1)
         if py_get(context, "tsvd_cpu_bindings") is None or py_get(context, "tsvd_cpu_decomp") is None:
             raise Error("ImportError: device='cpu' is not connected in this installation")
     return cpu_image
@@ -218,7 +214,7 @@ def _route_resolve(model: PythonObject, routed: TSVDRouted, context: PythonObjec
             route.extra = tsvd_connect(decomp, route.mode, vendor)
         except ignored:
             route.extra = -1
-    decomp_route_keep(model, route, routed.mode, routed.device, context, Python.tuple(factory, decomp))
+    decomp_route_keep(model, route, routed.mode, context, Python.tuple(factory, decomp))
     return route
 
 
@@ -444,7 +440,7 @@ def tsvd_fit(model: PythonObject, source: PythonObject, context: PythonObject, f
     var routed = _route_read(model, fields, context)
     var fold_entry = py_get(context, nk[].k_tsvd_fold_factory)
     var fold_ok = (fold and fold_entry is not None and not host and routed.route.mode == 1
-                   and routed.route.device != LINEAR_DEVICE_CPU and algorithm != "randomized")
+                   and routed.route.device != DEVICE_CPU and algorithm != "randomized")
     var admitted = decomp_admit(source, "TruncatedSVD", context, device_x=fold_ok, defer_finite=True)
     py_setitem(fields, nk[].k_input_copied_, PythonObject(decomp_input_copied(admitted, context)))
     var rows = admitted.rows

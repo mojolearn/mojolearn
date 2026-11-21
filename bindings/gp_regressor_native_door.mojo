@@ -7,7 +7,7 @@
 from core.gp_native_api import GPRFitRequest, GPRQueryRequest, GPRCovarianceRequest, GPRSampleRequest, GPRGradientRequest, GPROptimizeRequest, GPThetaRequest, GP_CAP_GRADIENT, GP_CAP_OPTIMIZE, GP_CAP_SAMPLE, GP_CAP_THETA, GP_CAP_COVARIANCE
 from core.gp_native_storage import GPRFitScratch, GPRGradientScratch, GPRGradientResult, GPOptimizerScratch, GPFreeParameters
 from bindings.gp_score_boundary_door import GPRPredictionRoom, gpr_score_result
-from bindings.gp_native_boundary_door import GPConnection, gp_kernel_view, gp_run, gp_seed_word
+from bindings.gp_native_boundary_door import GPConnection, gp_kernel_view, gp_run, gp_seed_word, gp_route_cpu_metrics
 from gaussian_process.gp_native_boundary_run import gp_require
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
@@ -728,7 +728,7 @@ def _gpr_score(model: PythonObject, args: GPArgumentPins, context: PythonObject)
     """`score(X, y)`: R^2 from `linear_model._r2_sums`' one program (the y
     mean rounded to float32 on the device, both sums of squares binary64);
     1.0 for a constant target predicted exactly, else 0.0 when SS_tot is 0.
-    args = (binding, X, y) or (binding, X, y, CPU metrics factory)."""
+    args = (binding, X, y)."""
     classical_connect_numpy(context)
     var fields = py_fields(model)
     var pred = _gpr_predict_result(model, fields, args[0], args[1], False, True, context)
@@ -745,12 +745,9 @@ def _gpr_score(model: PythonObject, args: GPArgumentPins, context: PythonObject)
     # row 629): y is not viewed and converted a second time.
     var t = admit_family(view, 1, "y", context).array
     _ = view^
-    # A CPU route in a GPU installation hands its CPU metrics factory behind
-    # (binding, X, y) (providers/python/gp_public_lifecycle_pyapi_door.mojo);
-    # every other caller passes three arguments.
-    var cpu_metrics = PythonObject(None)
-    if len(args) > 3:
-        cpu_metrics = args[3]
+    # A CPU route resolved beside a GPU set scores on the CPU metrics image
+    # its route holds; every other route and every module scores as before.
+    var cpu_metrics = gp_route_cpu_metrics(args[0])
     var result = gpr_score_result(pred.score.value(), t, cpu_metrics, context)
     _ = pred
     _ = t

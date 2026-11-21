@@ -70,6 +70,18 @@ def _labels_pin(context: PythonObject) raises -> _LabelsPin:
     return _LabelsPin(_LABELS_PROVIDER_PIN.get_or_create_ptr()[].provider, labels_route_driver())
 
 
+def _labels_pin_on(host: Bool, context: PythonObject) raises -> _LabelsPin:
+    """The pin of a caller that holds its estimator's device route: `host`
+    True (the route resolved to the CPU: `device="cpu"` beside a GPU set, or
+    a CPU-only process) runs the host kernels of this image and reads
+    neither the process route word nor the provider; `host` False is the
+    process route (`_labels_pin`). The caller read its device once, into its
+    route owner; nothing here reads or compares a device."""
+    if host:
+        return _LabelsPin(PythonObject(None), Optional[LabelsNativeDriver]())
+    return _labels_pin(context)
+
+
 def labels_prepare_targets(context: PythonObject, y_addr: Int, y_code: Int, n: Int,
     classes_addr: Int, codes_addr: Int, w_addr: Int, w_code: Int, w_flags: Int) raises -> Int:
     var request = LabelsPrepareRequest(y_addr, classes_addr, codes_addr, w_addr, y_code, n, w_code, w_flags)
@@ -143,3 +155,80 @@ def labels_class_ratio_f64(context: PythonObject, counts_addr: Int, k: Int, n: I
 def labels_fsum_f64(src_addr: Int, n: Int, out_addr: Int) raises -> Int:
     with GILReleased(Python()):
         return labels_host_fsum(src_addr, n, out_addr)
+
+
+# ---------------------------------------------------------------- routed forms
+# The same six label steps for a caller that holds its estimator's device
+# route (providers/python/device_route_boundary_door.mojo): `host` is the
+# route's answer (`route.device == DEVICE_CPU`), resolved once per estimator.
+# The typed requests, the RUN functions and the kernels are the ones above.
+
+
+def labels_prepare_targets_on(host: Bool, context: PythonObject, y_addr: Int, y_code: Int, n: Int,
+    classes_addr: Int, codes_addr: Int, w_addr: Int, w_code: Int, w_flags: Int) raises -> Int:
+    var request = LabelsPrepareRequest(y_addr, classes_addr, codes_addr, w_addr, y_code, n, w_code, w_flags)
+    var pin = _labels_pin_on(host, context)
+    var driver = pin.driver.copy()
+    try:
+        with GILReleased(Python()):
+            return labels_prepare_run(driver^, request)
+    finally:
+        _ = pin
+
+
+def labels_reduce_stat_on(host: Bool, context: PythonObject, addr: Int, code: Int, n: Int, what: Int) raises -> HpStat:
+    var request = LabelsReduceRequest(addr, code, n, what)
+    var pin = _labels_pin_on(host, context)
+    var driver = pin.driver.copy()
+    try:
+        with GILReleased(Python()):
+            return labels_reduce_run(driver^, request)
+    finally:
+        _ = pin
+
+
+def labels_threshold_on(host: Bool, context: PythonObject, request: LabelsThresholdRequest) raises -> Int:
+    var pin = _labels_pin_on(host, context)
+    var driver = pin.driver.copy()
+    try:
+        with GILReleased(Python()):
+            return labels_threshold_run(driver^, request)
+    finally:
+        _ = pin
+
+
+def labels_argmax_rows_on(host: Bool, context: PythonObject, wide: Bool, scores_addr: Int, rows: Int, cols: Int,
+    dst_addr: Int) raises:
+    var request = LabelsArgmaxRequest(scores_addr, dst_addr, rows, cols)
+    var pin = _labels_pin_on(host, context)
+    var driver = pin.driver.copy()
+    try:
+        with GILReleased(Python()):
+            labels_argmax_run(driver^, wide, request)
+    finally:
+        _ = pin
+
+
+def labels_gather_on(host: Bool, context: PythonObject, kind: Int, table_addr: Int, n_table: Int,
+    codes_addr: Int, n: Int, dst_addr: Int) raises:
+    var native_kind = kind if kind == 0 or kind == 1 else 2
+    var request = LabelsGatherRequest(table_addr, codes_addr, dst_addr, n_table, n)
+    var pin = _labels_pin_on(host, context)
+    var driver = pin.driver.copy()
+    try:
+        with GILReleased(Python()):
+            labels_gather_run(driver^, native_kind, request)
+    finally:
+        _ = pin
+
+
+def labels_class_ratio_f64_on(host: Bool, context: PythonObject, counts_addr: Int, k: Int, n: Int,
+    mode: Int, out_addr: Int) raises -> Int:
+    var request = LabelsRatioRequest(counts_addr, out_addr, k, n, mode)
+    var pin = _labels_pin_on(host, context)
+    var driver = pin.driver.copy()
+    try:
+        with GILReleased(Python()):
+            return labels_ratio_run(driver^, request)
+    finally:
+        _ = pin

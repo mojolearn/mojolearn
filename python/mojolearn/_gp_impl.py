@@ -375,11 +375,8 @@ _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 # GaussianProcessRegressor's fit, predict, sample_y, log_marginal_likelihood
 # and score are one native call each (bindings/gp_regressor_native_door.mojo).
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
-_native_family_bridge.connect_bindings("_mojolearn_gp")
-# The CPU images a `device="cpu"` estimator runs beside a GPU set, connected
-# once at import (providers/python/gp_device_route_pyapi_door.mojo).
-from ._native_gp_device_bridge import connect_cpu_device as _connect_cpu_device
-_connect_cpu_device(_NATIVE_CONTEXT, "_mojolearn_gp")
+# `_mojolearn_x_metrics`: the program image `score` of a device="cpu" estimator runs beside a GPU set.
+_native_family_bridge.connect_bindings("_mojolearn_gp", "_mojolearn_x_metrics")
 
 #: Each kernel class's postfix node layout, the fields its `_nodes()` reads:
 #: ("leaf", kind, param field or None for 0.0, length-scale field or None),
@@ -604,18 +601,6 @@ class GaussianProcessRegressor(NumericModeMixin):
 
     # -- the binding, and the tier it really is -----------------------------
 
-    # The route's read-back (providers/python/gp_public_lifecycle_pyapi_door.mojo
-    # gp_public_vendor_used): 'cpu' for a device="cpu" estimator beside a GPU set.
-    def vendor_used(self):
-        """The backend this estimator runs on.
-
-        Returns
-        -------
-        str
-            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the compiled
-            binary the estimator uses.
-        """
-        return _NATIVE(self, "family_gp_gpr_vendor_used", (), _NATIVE_CONTEXT)
 
 
     # -- fit ----------------------------------------------------------------

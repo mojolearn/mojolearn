@@ -35,6 +35,10 @@ _LR = {"constant": 0, "invscaling": 1, "adaptive": 2}
 class _BaseMLP(ParamsMixin):
     # The xseq public native lifecycle owns the former fit/validation/output wrappers.
     _mojolearn_native_public = True
+    #: `device=None | "gpu" | "cpu"`: every operation runs on the estimator's
+    #: one native route (bindings/xseq_native_common_door.mojo `xseq_route`);
+    #: its check runs the same estimator on the other device, in this process.
+    _mojolearn_device = True
     _LOSS = None
 
     def __init__(self, hidden_layer_sizes=(100,), activation="relu", *, solver="adam", alpha=0.0001,
@@ -113,6 +117,9 @@ class MLPRegressor(_BaseMLP):
         Accepted for compatibility (lbfgs only); unused.
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the model is fitted and predicts. None uses this installation's device, 'cpu'
+        runs on the CPU and 'gpu' requires a GPU installation. Other values raise `ValueError`.
 
     Attributes
     ----------
@@ -243,6 +250,9 @@ class MLPClassifier(_BaseMLP):
         Accepted for compatibility (lbfgs only); unused.
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the model is fitted and predicts. None uses this installation's device, 'cpu'
+        runs on the CPU and 'gpu' requires a GPU installation. Other values raise `ValueError`.
 
     Attributes
     ----------

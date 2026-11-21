@@ -16,6 +16,18 @@ def _layout(cls):
     return dict(cls=cls, mro=mro, fields_get=descriptor.__get__, hooks=hooks)
 
 
+def _entry_set(binding):
+    # glue: the fixed native import exports of one compiled x_sequence image, admitted at import.
+    connected = {name: getattr(binding, name) for name in  # glue: fixed native import exports
+                 ('ops_import_model', 'onnx_import_file', 'onnx_import', 'onnx_buffers',  # cpu-route: import-time connection of existing native artifact I/O entries
+                  'ops_imported_run', 'ops_torch_program_run')}
+    connected['ops_imported_run_device'] = getattr(binding, 'ops_imported_run_device', None)
+    for name, function in connected.items():  # glue: compiled export admission at import
+        if function is not None and type(function) is not BuiltinFunctionType:
+            raise TypeError('native artifact import requires compiled ' + name)
+    return connected
+
+
 def connect(session, program, imported, graph, unsupported):
     from .._native_program_save_bridge import connect_imported
     connect_imported(imported)
@@ -50,14 +62,7 @@ def connect(session, program, imported, graph, unsupported):
             modes[mode] = connection
             continue
         try:
-            binding = connection.binding
-            connected = {name: getattr(binding, name) for name in  # glue: fixed native import exports
-                         ('ops_import_model', 'onnx_import_file', 'onnx_import', 'onnx_buffers',  # cpu-route: import-time connection of existing native artifact I/O entries
-                          'ops_imported_run', 'ops_torch_program_run')}
-            connected['ops_imported_run_device'] = getattr(binding, 'ops_imported_run_device', None)
-            for name, function in connected.items():  # glue: compiled export admission at import
-                if function is not None and type(function) is not BuiltinFunctionType:
-                    raise TypeError('native artifact import requires compiled ' + name)
+            connected = _entry_set(connection.binding)
             modes[mode] = connected
             if entry is None:
                 entry = connected['ops_import_model']
@@ -65,12 +70,27 @@ def connect(session, program, imported, graph, unsupported):
                 torch_entry = connected['ops_torch_program_run']
         except (ImportError, AttributeError, TypeError) as error:
             modes[mode] = type(error).__name__ + ': ' + str(error)
+    # The CPU image's entry set, for `import_model(..., device="cpu")` on an
+    # installation with a GPU set: connected once here from the CPU session
+    # connection ops.py made at import. The import's private Session selects
+    # its image by the shared device rule; the native import door then takes
+    # this set when that session belongs to `cpu_binding`. Absent in a
+    # CPU-only process (the mode sets already are the CPU ones).
+    cpu_binding = cpu_entries = None
+    from .._native_family_bridge import shared_context
+    cpu_connection = shared_context().get('ops_session_cpu_connection')
+    if cpu_connection is not None and not isinstance(cpu_connection, str):
+        cpu_binding = cpu_connection.binding
+        try:
+            cpu_entries = _entry_set(cpu_binding)
+        except (ImportError, AttributeError, TypeError) as error:
+            cpu_entries = type(error).__name__ + ': ' + str(error)
     if entry is None:
         from .._native_family_bridge import _unavailable
         entry = _unavailable(ImportError('rebuild x_sequence with ops_import_model'))
         run_entry = torch_entry = entry
     return entry, dict(run_entry=run_entry, torch_entry=torch_entry, shape_scalars=scalars, shape_names=scalars, shape_containers=containers,
-        shape_mappings=(dict, OrderedDict, defaultdict), modes=modes, connections=ops._SESSION_CONNECTIONS, backend=_backend,
+        shape_mappings=(dict, OrderedDict, defaultdict), modes=modes, import_cpu_binding=cpu_binding, import_cpu_entries=cpu_entries, connections=ops._SESSION_CONNECTIONS, backend=_backend,
         session=session, program=program, imported=imported, graph=graph, reader=_Native,
         unsupported=unsupported, layouts={cls: _layout(cls) for cls in  # glue: fixed native object layouts
             (session, program, imported, graph, _Native)},

@@ -25,6 +25,7 @@ from bindings.mode_metadata_native_door import _fields, _class_fields
 from bindings.neural_block_admission_door import admit_block_f32, BLOCK_OPERATION, neural_array_snapshot, neural_array_slots, neural_record_fields, neural_native_scalar, neural_plain_value, neural_string_keys, neural_metadata_snapshot, neural_model_weights, neural_block_fields, neural_block_weight_names
 from providers.python.borrowed_buffer_pyapi_unpack import AdmittedBorrowedBuffer, admit_native_buffer_exporter
 from core.native_descriptor_abi import MAMBA_STATE_ABI_NAME
+from core.device_route import DEVICE_INSTALL, device_code, device_name, device_installed
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_cached, NEURAL_NATIVE_DISPATCH
 from core.hostptr import f32_ptr
 from transformer.causal_lm_construct_impl import causal_lm_gather_f32, causal_lm_check_finite
@@ -275,15 +276,30 @@ def _model_profile_named(mut mods: NativeModules, requested: PythonObject, conte
 
 
 def _model_route(mut mods: NativeModules, device: PythonObject, context: PythonObject) raises -> PythonObject:
-    if py_type(device) is not mods.module("builtins").str:
-        raise Error("TypeError: CausalLM device requires an ordinary route name")
-    var route = String(device)
-    if route == "auto":
-        var nk = causal_keys()
-        route = "cpu" if py_item(context, nk[].k_selected_vendor) is None or String(py_item(context, nk[].k_selected_vendor)) == "cpu" else "gpu"
-    if route != "cpu" and route != "gpu":
-        raise Error("CausalLM: device must be 'auto', 'cpu' or 'gpu'")
-    return PythonObject(route)
+    # The one place a CausalLM's `device` becomes its route word, at
+    # construction and load (no forward, step or generate reads the device:
+    # they read the entries admitted for this route). The rule is the shared
+    # one (core/device_route.mojo `device_installed`, lane dw-neural-models
+    # 2026-11-21): None is this installation's device; an explicit 'gpu' in a
+    # CPU-only process is refused in the shared words (before, it failed
+    # later as a missing binding connection); 'cpu' always runs (the neural
+    # host image is connected beside every GPU set). 'auto' is CausalLM's
+    # older spelling of None and stays accepted.
+    var code = DEVICE_INSTALL
+    if device is not None:
+        if py_type(device) is not mods.module("builtins").str:
+            raise Error("TypeError: CausalLM device requires an ordinary route name")
+        var word = String(device)
+        if word != "auto":
+            code = device_code(word)
+            if code < 0:
+                raise Error("CausalLM: device must be 'auto', 'cpu', 'gpu' or None")
+    var nk = causal_keys()
+    var selected = py_item(context, nk[].k_selected_vendor)
+    var process_vendor = 1
+    if selected is None or String(selected) == "cpu":
+        process_vendor = 0
+    return PythonObject(device_name(device_installed(code, process_vendor)))
 
 
 def _model_bindings(mut mods: NativeModules, route: PythonObject, kind: String, context: PythonObject, requested_mode: PythonObject) raises -> PythonObject:
@@ -391,7 +407,8 @@ def _model_options_snapshot(mut mods: NativeModules, options: PythonObject, cont
         raise Error("TypeError: CausalLM constructor requires its four native options")
     neural_plain_value(mods, options, 0, context)
     var captured = neural_metadata_snapshot(mods, options)
-    if py_type(captured[0]) is not bi.str or py_type(captured[2]) is not bi.str:
+    # `device` may be None (this installation's device); `_model_route` reads it.
+    if py_type(captured[0]) is not bi.str or (captured[2] is not None and py_type(captured[2]) is not bi.str):
         raise Error("TypeError: CausalLM weight format and device require ordinary strings")
     if captured[1] is not None and py_type(captured[1]) is not bi.str and not neural_native_scalar(mods, captured[1], context):
         raise Error("TypeError: CausalLM maximum positions require a native scalar")
