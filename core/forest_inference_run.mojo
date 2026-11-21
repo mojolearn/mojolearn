@@ -2,8 +2,9 @@
 """RUN of `bindings/forest_inference_binding.mojo` (wave 8 run split): the
 typed prepare and predict of the owned RF/ET GPU inference snapshots and the
 resident capability bits. Imports no Python; the binding keeps the UNPACK
-doors. The calling extension holds the GIL throughout prepare, predict and
-release, so no native handle is released while another call uses it."""
+doors. Nothing here relies on the GIL: the registry has its own lock word and
+a prediction holds its snapshot for the call (core/forest_inference_model.mojo),
+so a handle released on another thread stays alive until that call returns."""
 from core.hostptr import list_f32, list_i32
 from core.forest_inference_model import resident_prepare, resident_predict_into, resident_predict_labels, FOREST_ORDERED_RESIDENT
 
@@ -23,8 +24,8 @@ def _f32_ptr(address: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
 def forest_prepare_gpu_native[RF_INPUT: Bool](model: List[Int], features: Int, trees: Int, outputs: Int,
                                              ordered_word: Int) raises -> Int:
     """Prepare an owned immutable GPU snapshot (XF_RESIDENT_PREPARE; lane
-    calltable-forest). `model` holds the five array addresses. The caller
-    holds the GIL, which serializes registry access.
+    calltable-forest). `model` holds the five array addresses. The registry
+    insert takes the registry's own lock word.
 
     `ordered_word` picks the snapshot's aggregation: 1 the strict
     increasing-tree kernel (the sequential route's bits), 0 the 32-grove
