@@ -886,7 +886,7 @@ def _loss_of_words(call: _CallPtr) raises -> String:
     var n = Int(words[1])
     if n < 0 or 2 + n > call[].param_count:
         raise Error("member ABI: a Gbdt member's parameter words end early")
-    var out = String(capacity=n)
+    var out = String(capacity_bytes=n)
     for k in range(n):  # small-loop(loss name bytes)
         out += chr(Int(words[2 + k]))
     return out^

@@ -389,7 +389,7 @@ struct _Reader:
 
     def text(mut self) raises -> String:
         var n = self.count()
-        var out = String(capacity=n)
+        var out = String(capacity_bytes=n)
         for _ in range(n):  # small-loop(option text): a short setting name, once per state
             out += chr(Int(self.take()))
         return out^
