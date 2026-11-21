@@ -627,7 +627,10 @@ def _nc_query_unpack(fields: PythonObject, q: PythonObject, euclidean: Bool,
 
 
 def _nc_predict_values(model: PythonObject, binding: PythonObject, source: PythonObject,
-                       context: PythonObject, labels: PythonObject) raises -> PythonObject:
+                       context: PythonObject, labels: PythonObject,
+                       label_context: PythonObject) raises -> PythonObject:
+    # `label_context`: the estimator's label scope (labels_scope), read once
+    # by the public operation and shared by predict's decode and score.
     var fields = py_fields(model)
     var q = _f32(source, context)
     var classes = labels if labels is not None else classifier_label_list(family_field(fields, "classes_"), context)
@@ -642,14 +645,14 @@ def _nc_predict_values(model: PythonObject, binding: PythonObject, source: Pytho
         admitted_finite_refuse(status, String(py_type(model).__name__))
     _ = call^
     _ = connection^
-    var result = _class_array(classes, codes.values, labels_scope(model, context))
+    var result = _class_array(classes, codes.values, label_context)
     _ = codes^  # code storage survives kernels, widening/gather and final label packing
     return result
 
 
 def _nc_predict(model: PythonObject, args: PythonObject, context: PythonObject,
                 labels: PythonObject) raises -> PythonObject:
-    return _nc_predict_values(model, args[0], args[1], context, labels)
+    return _nc_predict_values(model, args[0], args[1], context, labels, labels_scope(model, context))
 
 
 def _nc_scored_unpack(model: PythonObject, args: PythonObject, context: PythonObject,
@@ -710,8 +713,9 @@ def _nc_predict_log_proba(model: PythonObject, args: PythonObject, context: Pyth
 
 def _nc_score(model: PythonObject, args: PythonObject, context: PythonObject,
               labels: PythonObject) raises -> PythonObject:
-    var prediction = _nc_predict_values(model, args[0], args[1], context, labels)
-    return PythonObject(classical_accuracy(args[2], prediction, args[3], PythonObject(None), labels_scope(model, context)))
+    var label_context = labels_scope(model, context)
+    var prediction = _nc_predict_values(model, args[0], args[1], context, labels, label_context)
+    return PythonObject(classical_accuracy(args[2], prediction, args[3], PythonObject(None), label_context))
 
 
 # ------------------------------------------------------------- KNNImputer

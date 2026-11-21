@@ -95,9 +95,21 @@ def record_loaded(package):
                 record(cls)
 
 
+def connect_cpu():
+    """Load the CPU route's host label and metrics images into the shared
+    family context, once per process: the compiled device check calls it
+    when an estimator is given `device="cpu"` beside a GPU set, so a process
+    without one never loads them (python/mojolearn/_native_family_bridge.py
+    `connect_cpu`)."""
+    # glue: lazy connection, once; later calls return at the bridge's flag
+    from ._native_family_bridge import connect_cpu as connect
+    return connect()
+
+
 def connect_context(context):
     """Give a compiled constructor or setter door's context what its device
-    check reads: this table and the backend's fields (CPU-only or not)."""
+    check reads: this table, the backend's fields (CPU-only or not) and the
+    lazy CPU-image connection."""
     # glue: import-time context of a shared constructor door
     from . import _backend
-    context.update(device_cpu=CPU_CLASSES, backend_fields=vars(_backend))
+    context.update(device_cpu=CPU_CLASSES, backend_fields=vars(_backend), device_cpu_connect=connect_cpu)
