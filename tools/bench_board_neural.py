@@ -2099,7 +2099,10 @@ def ours_lm_held_shape(trainer):
     uses, _byte_lm_impl.py _validate_state). Reads host metadata only: no device download."""
     import importlib
     mod = importlib.import_module(type(trainer).__module__.rsplit(".", 1)[0] + "._byte_lm_config")
-    return mod.state_shape(trainer._state).to_dict()
+    # The state is a native owner since lane byte-state (2026-11-21): `_state_metadata()` returns its
+    # metadata with no array. Older wheels (the on-box priors) still hold the `_state` dictionary.
+    state = trainer._state_metadata() if hasattr(trainer, "_state_metadata") else trainer._state
+    return mod.state_shape(state).to_dict()
 
 
 def ours_samba_arch(config):

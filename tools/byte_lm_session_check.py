@@ -108,10 +108,11 @@ def main():
     first = resident_trainer()
     lean = step_and_compare(first, 0)
     assert set(lean) == {'loss', 'step', 'completed_steps', 'next_batch_index', 'flags'}
-    assert all(first._state[key] is None for key in ('parameters', 'm', 'v'))
-    owner = first._native_session
+    # The state is a native owner (lane byte-state): the lifecycle is read through `_session_info()`.
+    assert not first._session_info()['host_state']
+    owner = first._session_info()['session_id']
     step_and_compare(first, 1)
-    assert first._native_session is owner
+    assert first._session_info()['session_id'] == owner
     step_and_compare(first, 2)
     state_at_3 = first.export_state()
     with tempfile.TemporaryDirectory() as tmp:
@@ -121,11 +122,11 @@ def main():
             checkpoint_at_3 = stream.read()
     first.close()
     first.close()
-    assert first._native_session is None
-    assert all(first._state[key] is not None for key in ('parameters', 'm', 'v'))
+    assert first._session_info()['session_id'] is None
+    assert first._session_info()['host_state']
     same_state(first.state_dict(), control_states[2])
     step_and_compare(first, 3)
-    assert first._native_session is not None and first._native_session is not owner
+    assert first._session_info()['session_id'] is not None and first._session_info()['session_id'] != owner
     before_eval = first.export_state()
     loss = first.evaluate(eval_ids)
     after_eval = first.export_state()
@@ -148,7 +149,7 @@ def main():
         assert 'nonnegative' in str(error), str(error)
     else:
         raise AssertionError('mutated export was admitted')
-    assert first._native_session is not None
+    assert first._session_info()['session_id'] is not None
     step_and_compare(first, 6)
     checks.append('G3: export and ids mutation cannot reach the device; mutated import refused, session untouched')
     step_and_compare(first, 7)
@@ -192,7 +193,7 @@ def main():
     k = n_gate
     for name, expected in faults:
         before = second.export_state()
-        owner = second._native_session
+        owner = second._session_info()['session_id']
         os.environ['MOJOLEARN_BYTE_LM_FAULT'] = name
         try:
             try:
@@ -206,7 +207,7 @@ def main():
                 raise AssertionError('%s: the faulted step did not raise' % name)
         finally:
             os.environ.pop('MOJOLEARN_BYTE_LM_FAULT', None)
-        assert second._native_session is owner, name
+        assert second._session_info()['session_id'] == owner, name
         after = second.export_state()
         same_state(before, after)
         try:
@@ -226,24 +227,14 @@ def main():
     fresh = Trainer(np.zeros(other_shape.n_total, np.float32), shape=other_shape,
                     data_schedule={'fixture': 'shape-change'})
     first.load_state_dict(fresh.state_dict())
-    assert first._native_session is None
+    assert first._session_info()['session_id'] is None
     other_ids = np.zeros((1, 6), np.int32)
     assert f32(first.evaluate(other_ids)) == f32(fresh.evaluate(other_ids))
     checks.append('shape-changing restore and evaluation')
-    edge = Trainer(parameters, shape=shape, resident=True, betas=(0., .999),
-                   data_schedule={'fixture': 'signed-zero-config'})
-    edge.evaluate(batches[0])
-    owner = edge._native_session
-    edge._state['config']['beta1'] = -0.0
-    try:
-        edge.evaluate(batches[0])
-    except Exception as error:
-        assert 'optimizer mismatch' in str(error), str(error)
-    else:
-        raise AssertionError('signed-zero optimizer mismatch was ignored')
-    assert edge._native_session is owner
-    checks.append('optimizer admission distinguishes signed zero; nothing written, session kept')
-    for trainer in (edge, first, second, continued, from_bytes, control, fresh):
+    # The signed-zero optimizer edge wrote `-0.0` into the trainer's Python-held `_state['config']` under an
+    # open session. The optimizer scalars now live in the native state owner and change only through
+    # `load_state_dict()`, which drops the session, so that mismatch can no longer be produced from Python.
+    for trainer in (first, second, continued, from_bytes, control, fresh):
         trainer.close()
     print(json.dumps({'passed': True, 'checks': checks, 'witnesses_fixture_a': witnesses,
                       'fault_inject_build': fault_inject,
