@@ -597,6 +597,10 @@ class PoissonRegressor(_GLMBase):
     # y >= 0 (scikit-learn's positive_only target tag)
     _sklearn_target_tags = {"positive_only": True}
 
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_XLINEAR = 2) and core/xlinear_member.mojo.
+    _mojolearn_member = (2, 0)
+
     def __init__(self, *, alpha=1.0, fit_intercept=True, solver="lbfgs", max_iter=100, tol=1e-4,
                  warm_start=False, verbose=0, numeric_mode=None, device=None):
         _glm_init(self, alpha, fit_intercept, solver, max_iter, tol, warm_start, verbose)
@@ -656,6 +660,10 @@ class GammaRegressor(_GLMBase):
     _power = 2.0
     # y > 0 (scikit-learn's positive_only target tag)
     _sklearn_target_tags = {"positive_only": True}
+
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_XLINEAR = 2) and core/xlinear_member.mojo.
+    _mojolearn_member = (2, 1)
 
     def __init__(self, *, alpha=1.0, fit_intercept=True, solver="lbfgs", max_iter=100, tol=1e-4,
                  warm_start=False, verbose=0, numeric_mode=None, device=None):
@@ -721,6 +729,10 @@ class TweedieRegressor(_GLMBase):
     >>> y = rng.poisson(np.exp(X[:, 0])).astype(np.float32)
     >>> model = mojolearn.TweedieRegressor(power=1.5, alpha=0.01).fit(X, y)
     """
+
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_XLINEAR = 2) and core/xlinear_member.mojo.
+    _mojolearn_member = (2, 2)
 
     def __init__(self, *, power=0.0, alpha=1.0, fit_intercept=True, link="auto", solver="lbfgs",
                  max_iter=100, tol=1e-4, warm_start=False, verbose=0, numeric_mode=None, device=None):
