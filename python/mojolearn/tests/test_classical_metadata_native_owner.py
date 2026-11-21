@@ -10,12 +10,13 @@ from mojolearn._verify_native_runtime import audit_native_call
 ENTRY, CONTEXT = connect(Ridge, LinearRegression)
 
 
-def ridge_initialize(model, alpha=1.0, solver="auto", fit_intercept=True, normalize=False, numeric_mode=None):
-    return ENTRY(model, "initialize", (alpha, solver, fit_intercept, normalize, numeric_mode), CONTEXT)
+def ridge_initialize(model, alpha=1.0, solver="auto", fit_intercept=True, normalize=False, numeric_mode=None,
+                     device="gpu"):
+    return ENTRY(model, "initialize", (alpha, solver, fit_intercept, normalize, numeric_mode, device), CONTEXT)
 
 
-def linear_initialize(model, fit_intercept=True, numeric_mode=None):
-    return ENTRY(model, "initialize", (fit_intercept, numeric_mode), CONTEXT)
+def linear_initialize(model, fit_intercept=True, numeric_mode=None, device="gpu"):
+    return ENTRY(model, "initialize", (fit_intercept, numeric_mode, device), CONTEXT)
 
 
 def native_get(model, deep=True):
