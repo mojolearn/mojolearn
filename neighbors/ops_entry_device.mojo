@@ -16,13 +16,16 @@ from core.shared_slot import SharedSlot
 from core.neighbors_entry_table import (
     NB_OP_INDEX_PREPARE, NB_OP_INDEX_RELEASE, NB_OP_FOLD_READY, NB_OP_CLASSIFY, NB_OP_REGRESS,
     NB_OP_CLASSIFY_RESIDENT, NB_OP_REGRESS_RESIDENT, NB_CLASSIFY_FIXED, NB_CLASSIFY_RESIDENT_FIXED,
+    NB_OP_RADIUS_COUNT, NB_OP_RADIUS_FILL,
     nb_ops_check_spans, nb_class_counts, nb_status_word, nb_fold_words,
 )
 from neighbors.impl.multi_gpu import neighbors_device_plan
 from neighbors.resident_index import (
     knn_fold_ready, knn_index_classify, knn_index_prepare, knn_index_regress, knn_index_release,
 )
-from neighbors.estimator import knn_classifier_predict, knn_regressor_predict
+from neighbors.estimator import (
+    knn_classifier_predict, knn_regressor_predict, radius_neighbors_count, radius_neighbors_fill,
+)
 
 #: The base binding's ONE process-lifetime DeviceContext: the same slot name
 #: bindings/_mojolearn.mojo `_DEVCTX_SLOT` names, so the table entry and the
@@ -115,6 +118,30 @@ def nb_ops_device_run(operation: Int, a: MutPointer[Int, MutUntrackedOrigin], p:
             p[0], ip, p[1], qp, p[2], p[3], p[4], yp, p[6], n_classes, lp, pp, up,
             p[7] != 0, p[5], p[8], Float32(f[0]), p[9], status, fold[0], fold[1], fold[2],
         )
+    if operation == NB_OP_RADIUS_COUNT:
+        # The export's body (bindings/_mojolearn.mojo radius_neighbors_count_binding).
+        var ip = _f32(a[0])
+        var qp = _f32(a[1])
+        var ap = _i32(a[2])
+        var status = a[3]
+        if status < 0 or status % 4 != 0:
+            raise Error("radius_neighbors_count: the status address must be a positive int32-aligned address")
+        var ctx = process_ctx[NEIGHBORS_DEVCTX_SLOT]()
+        var nnz = radius_neighbors_count(ctx, ip, p[0], qp, p[1], p[2], Float32(f[0]), ap, p[3], Float32(f[1]), status)
+        ctx.synchronize()
+        return nnz
+    if operation == NB_OP_RADIUS_FILL:
+        # The export's body (bindings/_mojolearn.mojo radius_neighbors_fill_binding).
+        var ip = _f32(a[0])
+        var qp = _f32(a[1])
+        var ap = _i32(a[2])
+        var xp = _i32(a[3])
+        var dp = _f32(a[4])
+        var ctx = process_ctx[NEIGHBORS_DEVCTX_SLOT]()
+        var nnz = radius_neighbors_fill(ctx, ip, p[0], qp, p[1], p[2], Float32(f[0]), ap, xp, dp, p[3],
+                                        p[4] != 0, p[5], Float32(f[1]))
+        ctx.synchronize()
+        return nnz
     # NB_OP_REGRESS_RESIDENT (nb_ops_check_spans refused any other id)
     var ip = _f32(a[0])
     var qp = _resident_queries(ip, a[1], p[9])

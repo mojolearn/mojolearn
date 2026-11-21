@@ -14,8 +14,11 @@ from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot
 from core.neighbors_entry_table import (
     NB_OP_CLASSIFY, NB_OP_REGRESS, NB_CLASSIFY_FIXED, nb_ops_check_spans, nb_class_counts,
+    NB_OP_RADIUS_COUNT, NB_OP_RADIUS_FILL,
 )
-from core.core_host_impl import knn_classify_host, knn_regress_host
+from core.core_host_impl import (
+    knn_classify_host, knn_regress_host, radius_neighbors_count_host, radius_neighbors_fill_host,
+)
 
 #: The query tile the host entries report: the value of
 #: bindings/_mojolearn_core_host.mojo `KNN_HOST_QUERY_TILE` (one query at a time).
@@ -37,6 +40,19 @@ def nb_ops_host_run(operation: Int, a: MutPointer[Int, MutUntrackedOrigin], p: M
             a[0], a[1], a[2], f32_ptr(a[3]), p[0], p[1], p[2], p[3], p[5], p[6], Float32(f[0]), p[7],
         )
         return KNN_HOST_QUERY_TILE
+    if operation == NB_OP_RADIUS_COUNT:
+        # The export's body (bindings/_mojolearn_core_host.mojo
+        # radius_neighbors_count_binding). The host pass returns no finite
+        # word: the radius RUN scans a borrowed query on the host first.
+        return radius_neighbors_count_host(a[0], a[1], i32_ptr(a[2]), p[0], p[1], p[2], Float32(f[0]),
+                                           p[3], Float32(f[1]))
+    if operation == NB_OP_RADIUS_FILL:
+        # The export's body (radius_neighbors_fill_binding): the id and
+        # distance addresses are read only for a non-empty result.
+        var capacity = p[3]
+        return radius_neighbors_fill_host(a[0], a[1], i32_ptr(a[2]), a[3] if capacity > 0 else 0,
+                                          a[4] if capacity > 0 else 0, p[0], p[1], p[2], Float32(f[0]),
+                                          capacity, p[4] != 0, p[5], Float32(f[1]))
     raise Error("neighbors ops: operation " + String(operation)
                 + " needs a resident index, which the CPU column does not keep")
 

@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native handlers for the neighbor/IVF shard protocol. The same compiled
 # search/vote entries as the plain API; no estimator Python method is invoked.
-from std.math import isfinite
 from std.python import Python, PythonObject
+from std.python._cpython import GILReleased
 from bindings.admitted_family_door import admit_family, admit_family_meta
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
@@ -19,7 +19,13 @@ from providers.python.array_metadata_pyapi_door import ArrayPin
 from bindings.neighbors_knn_native_door import (
     _nn_fit, knn_index_finite_once, _dist_params, _check_metric_input, _resident_handle, _report, knn_release,
     _clf_predict, _clf_predict_proba, _reg_predict, knn_door, _reduce,
-    knn_admit_x, knn_x_tested, knn_device_tests, knn_host_finite, knn_with_status,
+    knn_admit_x, knn_x_tested, knn_device_tests, knn_host_finite, knn_with_status, knn_ops_key,
+)
+from bindings.lof_provider_unpack import LofConnection
+from core.neighbors_entry_table import neighbors_ops_entry
+from neighbors.radius_run import (
+    RadiusRequest, RadiusCount, radius_check, radius_check_options, radius_check_features,
+    radius_count_run, radius_fill_run, radius_sort_run, radius_widen_run,
 )
 from bindings.admitted_input_unpack import admitted_finite_refuse
 from bindings.neighbors_kde_native_door import _kde_scores, _kde_release
@@ -66,6 +72,19 @@ def neighbor_binding(tables: PythonObject, name: String) raises -> PythonObject:
     if py_type(result) is py_type(PythonObject("")):
         raise Error("ImportError: " + String(result))
     return result
+
+
+def _sort_connection(tables: PythonObject) raises -> LofConnection:
+    """The x_neighbors driver of the row sort. A public query hands the
+    import-time alias of its route (python/mojolearn/_native_neighbor_queries.py
+    `_capture`), which holds the image's factory entry but does not own it;
+    the provider admits only the module that does, so the connection is made
+    on the entry's owner (the module itself when a worker hands its module)."""
+    # `knn_door` admits an exact module and a compiled entry owned by one.
+    var factory = knn_door(neighbor_binding(tables, "_mojolearn_x_neighbors"), "x_neighbors_native_api_v1")
+    if factory is None:
+        raise Error("TypeError: neighbor execution requires compiled entry x_neighbors_native_api_v1")
+    return LofConnection(factory.__self__)
 
 
 def _flag(value: PythonObject, name: String, context: PythonObject) raises -> Bool:
@@ -176,75 +195,82 @@ def _radius(model: PythonObject, source: PythonObject, kwargs: PythonObject,
     var index = py_get(fields, nk[].k__index)
     if index is None:
         raise Error("ValueError: fit the estimator before radius_neighbors")
+    # UNPACK: every public value once, into the typed request of
+    # neighbors/radius_run.mojo. RUN is that module (no Python import), in two
+    # stages with the GIL released, around the one allocation whose size the
+    # first stage returns. PACK is the CSR triple below.
     var radius = py_get(kwargs, nk[].k_radius)
     radius = py_item(fields, nk[].k_radius) if radius is None else radius
     host_inference_scalar(radius, context)
     var r = Float64(py=radius)
-    if not isfinite(r) or r <= 0:
-        raise Error("ValueError: radius must be positive and finite")
+    radius_check(r)
     var distances = _flag(py_get(kwargs, nk[].k_return_distance, True), "return_distance", context)
     var sort = _flag(py_get(kwargs, nk[].k_sort_results, False), "sort_results", context)
-    if sort and not distances:
-        raise Error("ValueError: sort_results=True requires return_distance=True")
+    radius_check_options(sort, distances)
     # Lane a8b-device-x-neighbors-rest: the index was tested ONCE, at fit
     # (radius_public_lifecycle_pyapi.mojo radius_fit) or at archive load
     # (host_archive_native.mojo host_archive_radius); only a borrowed query
-    # is tested here, behind radius_neighbors_count's query upload (one
-    # status word) on the GPU binding, by one parallel host scan on the CPU
-    # column. A query of the index itself (source None) is not tested again.
+    # is tested here, behind the count pass's query upload (one status word)
+    # on the GPU image, by one parallel host scan on the CPU column. A query
+    # of the index itself (source None) is not tested again.
+    var ops = knn_ops_key(binding)
     var q = index
-    var status = List[Int32](length=1, fill=Int32(0))
-    var count_params = Python.list(index.shape[0], PythonObject(0), index.shape[1], r, py_item(fields, nk[].k__metric_value),
-                                   py_item(fields, nk[].k__metric_arg))
+    var device_status = False
     if source is not None:
         var query_pin = ArrayPin()
         var query = knn_admit_x(source, model, context, query_pin)
         q = query_pin.keep
         if not knn_x_tested(query, source, context):
-            if knn_device_tests(binding):
-                _ = py_call(count_params.append, PythonObject(Int(status.unsafe_ptr())))
+            if ops.vendor != 0:
+                device_status = True
             else:
                 knn_host_finite(model, query)
         _ = query^
         _ = query_pin
-    if Int(py=q.shape[1]) != Int(py=index.shape[1]):
-        raise Error("ValueError: input feature count differs from fit")
+    var features = Int(py=index.shape[1])
+    radius_check_features(Int(py=q.shape[1]), features)
     var nq = Int(py=q.shape[0])
-    py_setitem(count_params, PythonObject(1), PythonObject(nq))
     var ptr = family_array(Python.tuple(nq + 1), "<i4", context)
-    var nnz = Int(py=family_call(family_entry(binding, "radius_neighbors_count", context),
-        classical_address(index), classical_address(q), classical_address(ptr), count_params))
-    admitted_finite_refuse(Int(status[0]), String(py_type(model).__name__))
-    _ = status^
+    var request = RadiusRequest(Int(py=classical_address(index)), Int(py=classical_address(q)),
+        Int(py=classical_address(ptr)), Int(py=index.shape[0]), nq, features,
+        Int(py=py_item(fields, nk[].k__metric_value)), r, Float64(py=py_item(fields, nk[].k__metric_arg)),
+        device_status)
+    var entry = neighbors_ops_entry(ops)
+    var count = RadiusCount()
+    with GILReleased(Python()):
+        count = radius_count_run(entry, request)
+    if count.status != 0:
+        admitted_finite_refuse(count.status, String(py_type(model).__name__))
+    var nnz = count.edges
     var ids = family_array(Python.tuple(nnz), "<i4", context)
     var dist = family_array(Python.tuple(nnz), "<f4", context)
-    if nnz > 0:
-        var got = Int(py=family_call(family_entry(binding, "radius_neighbors_fill", context),
-            classical_address(index), classical_address(q), classical_address(ptr), classical_address(ids), classical_address(dist),
-            Python.list(index.shape[0], nq, index.shape[1], r, nnz, 1, py_item(fields, nk[].k__metric_value), py_item(fields, nk[].k__metric_arg))))
-        if got != nnz:
-            raise Error("RuntimeError: radius counting and filling passes disagree")
-    _ = index
-    _ = q
+    var wide = family_array(Python.tuple(nnz), "<i8", context)
+    var ids_address = Int(py=classical_address(ids))
+    var dist_address = Int(py=classical_address(dist))
+    var wide_address = Int(py=classical_address(wide))
     if sort and nnz > 0:
-        var sort_binding = neighbor_binding(tables, "_mojolearn_x_neighbors")
-        var power = 1
-        var lg = 0
-        while power < nnz:  # driver-loop: segmented sorting network shape
-            power *= 2
-            lg += 1
+        var sorter = _sort_connection(tables)
         var sorted_ids = family_array(Python.tuple(nnz), "<i4", context)
         var sorted_dist = family_array(Python.tuple(nnz), "<f4", context)
-        _ = family_call(family_entry(sort_binding, "xn_p2m_row_sort", context),
-            Python.list(classical_address(ptr), classical_address(ids), classical_address(dist),
-                        classical_address(sorted_ids), classical_address(sorted_dist)),
-            Python.list(nq, nnz, power, lg * (lg + 1) // 2), Python.list())
-        _ = ptr
+        var sorted_ids_address = Int(py=classical_address(sorted_ids))
+        var sorted_dist_address = Int(py=classical_address(sorted_dist))
+        with GILReleased(Python()):
+            radius_fill_run(entry, request, nnz, ids_address, dist_address)
+            radius_sort_run(sorter.driver, request, nnz, ids_address, dist_address,
+                            sorted_ids_address, sorted_dist_address)
+            radius_widen_run(sorted_ids_address, wide_address, nnz)
+        _ = sorter^
         _ = ids
         _ = dist
-        ids = sorted_ids
+        _ = sorted_ids
         dist = sorted_dist
-    var wide = _wide(ids, Python.tuple(nnz), context)
+    else:
+        with GILReleased(Python()):
+            radius_fill_run(entry, request, nnz, ids_address, dist_address)
+            radius_widen_run(ids_address, wide_address, nnz)
+        _ = ids
+    _ = index
+    _ = q
     return Python.tuple(ptr, wide, dist, distances)
 
 

@@ -47,9 +47,9 @@ _WORKER_BINDINGS = {
         "_mojolearn", ("prepare_targets", "gather_i64", "gather_f64")),
     "neighbors_base": _connect_binding(
         "_mojolearn", ("knn_search", "knn_classify", "knn_regress", "rbc_knn_search",
-                       "knn_classify_neighbors", "knn_regress_neighbors", "radius_neighbors_count", "radius_neighbors_fill"),
+                       "knn_classify_neighbors", "knn_regress_neighbors"),
         ("knn_index_prepare", "knn_index_release", "knn_search_resident", "knn_classify_resident", "knn_regress_resident")),
-    "_mojolearn_x_neighbors": _connect_binding("_mojolearn_x_neighbors", ("xn_p2m_row_sort",)),
+    "_mojolearn_x_neighbors": _connect_binding("_mojolearn_x_neighbors", ("x_neighbors_native_api_v1",)),
     "neighbor_density": _connect_binding("_mojolearn_estimators", ("kde_score_samples",),
         ("kde_fit_prepare", "kde_fit_release", "kde_score_samples_resident")),
     "_mojolearn_ivf": _connect_binding("_mojolearn_ivf",

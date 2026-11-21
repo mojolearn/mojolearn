@@ -35,9 +35,9 @@ classifier's p ends with `n_outputs` class counts.
                            f [metric_arg]                                             -> query tile used
 The float word is rounded to Float32 by the entry, the same
 `Float32(Float64(py=...))` rounding the Python exports apply, so the bits
-are unchanged. The CPU column answers NB_OP_CLASSIFY and NB_OP_REGRESS only
-(the host binding never had the resident entries); every other operation is
-refused there.
+are unchanged. The CPU column answers NB_OP_CLASSIFY, NB_OP_REGRESS and the
+two radius passes (the host binding never had the resident entries); every
+other operation is refused there.
 """
 from core.entry_table import entry_table_publish, entry_table_read
 from core.native_descriptor_abi import NativeDescriptorCall
@@ -51,7 +51,20 @@ comptime NB_OP_CLASSIFY = 3
 comptime NB_OP_REGRESS = 4
 comptime NB_OP_CLASSIFY_RESIDENT = 5
 comptime NB_OP_REGRESS_RESIDENT = 6
-comptime NB_OPERATION_COUNT = 7
+# The two passes of a radius query (lane dw-neighbors, 2026-11-21): the bodies
+# of the base bindings' `radius_neighbors_count` / `radius_neighbors_fill`
+# exports, so the radius RUN (neighbors/radius_run.mojo) calls them with plain
+# words and no Python list.
+#   RADIUS_COUNT  a: index, queries, row starts (int32 [n_queries + 1]),
+#                    finite status word (int32; 0 = none)
+#                 p: n_index, n_queries, n_features, metric
+#                 f: radius, metric_arg            -> the edge count
+#   RADIUS_FILL   a: index, queries, row starts, ids (int32), distances (float32)
+#                 p: n_index, n_queries, n_features, nnz capacity, return_sqrt, metric
+#                 f: radius, metric_arg            -> the edge count found
+comptime NB_OP_RADIUS_COUNT = 7
+comptime NB_OP_RADIUS_FILL = 8
+comptime NB_OPERATION_COUNT = 9
 #: The fixed p words before the classifier's class counts.
 comptime NB_CLASSIFY_FIXED = 9
 comptime NB_CLASSIFY_RESIDENT_FIXED = 14
@@ -123,6 +136,14 @@ def nb_ops_check_spans(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
         want_a = 5
         want_p = 13
         want_f = 1
+    elif operation == NB_OP_RADIUS_COUNT:
+        want_a = 4
+        want_p = 4
+        want_f = 2
+    elif operation == NB_OP_RADIUS_FILL:
+        want_a = 5
+        want_p = 6
+        want_f = 2
     else:
         raise Error("neighbors ops: unknown operation " + String(operation))
     if na != want_a or (want_p >= 0 and np != want_p) or nf != want_f:
@@ -292,3 +313,21 @@ def nb_regress_resident_call(entry: NativeDescriptorCall, handle: Int, index: In
                            fold.has_fold, fold.base, fold.rows, fold.index]
     var floats: List[Float64] = [metric_arg]
     return native_descriptor_call(entry, NB_OP_REGRESS_RESIDENT, addresses, ints, floats)
+
+
+def nb_radius_count_call(entry: NativeDescriptorCall, index: Int, queries: Int, row_starts: Int, status: Int,
+                         n_index: Int, n_queries: Int, n_features: Int, metric: Int,
+                         radius: Float64, metric_arg: Float64) raises -> Int:
+    var addresses: List[Int] = [index, queries, row_starts, status]
+    var ints: List[Int] = [n_index, n_queries, n_features, metric]
+    var floats: List[Float64] = [radius, metric_arg]
+    return native_descriptor_call(entry, NB_OP_RADIUS_COUNT, addresses, ints, floats)
+
+
+def nb_radius_fill_call(entry: NativeDescriptorCall, index: Int, queries: Int, row_starts: Int, ids: Int,
+                        distances: Int, n_index: Int, n_queries: Int, n_features: Int, capacity: Int,
+                        metric: Int, radius: Float64, metric_arg: Float64) raises -> Int:
+    var addresses: List[Int] = [index, queries, row_starts, ids, distances]
+    var ints: List[Int] = [n_index, n_queries, n_features, capacity, 1, metric]
+    var floats: List[Float64] = [radius, metric_arg]
+    return native_descriptor_call(entry, NB_OP_RADIUS_FILL, addresses, ints, floats)

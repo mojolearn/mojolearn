@@ -7,8 +7,8 @@ _CONTEXTS = {}
 _BINDING_ALIASES = {}
 _SYMBOLS = {
     "base": ("_mojolearn", ("mojolearn_numeric_mode", "knn_search", "rbc_knn_search", "knn_index_prepare",
-        "knn_index_release", "knn_search_resident", "radius_neighbors_count", "radius_neighbors_fill")),
-    "sort": ("_mojolearn_x_neighbors", ("x_neighbors_numeric_mode", "xn_p2m_row_sort",)),
+        "knn_index_release", "knn_search_resident")),
+    "sort": ("_mojolearn_x_neighbors", ("x_neighbors_numeric_mode", "x_neighbors_native_api_v1",)),
     "ivf": ("_mojolearn_ivf", ("ivf_numeric_mode", "ivf_flat_search", "ivf_flat_index_prepare",
         "ivf_flat_index_search", "ivf_flat_index_release", "ivf_flat_index_export", "ivf_flat_extend")),
 }
