@@ -153,7 +153,7 @@ from autograd.generation_ops import (
     OPS_LM_PICK, OPS_LM_ALIVE, is_generation_op, generation_op_check, generation_op_name, lm_pick_run,
     lm_alive_run, LM_PICK_SAMPLE,
 )
-from core.shared_slot import SharedSlot
+from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 
 # Executor kinds of a session (the binding that opened it).
 # Lane ag-pass6-host (2026-10-19, PASS6_IDEAS idea G): the packed argument
@@ -3099,21 +3099,39 @@ def _keeps_shape(code: Int) -> Bool:
 
 
 # ---------------------------------------------------------------- the session table
+# One lock word guards the table (ids, addr, kind, next_id): open, close and the
+# lookup take it, nothing else. A session's storage is allocated once and never
+# moves, so the pointer a lookup returns stays valid after the lock is released
+# until that session is closed; its owner (a door's prepared record, a member
+# state) serializes its own calls. Every caller looks a session up once per
+# public operation and runs its forwards, layers, batches and tokens through
+# the returned pointer: no loop takes the lock. The table used to rely on the
+# GIL, which member workers (GIL released, in parallel) do not hold.
+# (partition_entries and distributed_entries reuse this struct for their own
+# tables; they carry the word and do not take it yet.)
 struct _OpsStore(Defaultable, Movable):
     var ids: List[Int]
     var addr: List[Int]
     var kind: List[Int]
     var next_id: Int
+    var synchronization: List[Int64]
 
     def __init__(out self):
         self.ids = List[Int]()
         self.addr = List[Int]()
         self.kind = List[Int]()
         self.next_id = 1
+        self.synchronization = List[Int64](length=2, fill=0)
 
 
 comptime _OPS_NAME = "MojolearnAutogradOpsSessionsIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnAutogradOpsSessionsFastV1"
-comptime _OPS_SESSIONS = SharedSlot[_OpsStore, _OPS_NAME]
+comptime _OPS_SESSIONS = SharedSlot[_OpsStore, _OPS_NAME, 2]
+
+
+@always_inline
+def _ops_lock_word(s: UnsafePointer[_OpsStore, MutUntrackedOrigin]) -> MutPointer[Int64, MutUntrackedOrigin]:
+    # The list's buffer is allocated once at creation and never grows.
+    return rebind[MutPointer[Int64, MutUntrackedOrigin]](s[].synchronization.unsafe_ptr())
 
 
 def ops_session_registry_token() raises -> Int:
@@ -3127,39 +3145,66 @@ def ops_session_open[E: Exec & Movable & Deinitable, KIND: Int](var ex: E, recor
     var p = alloc[OpsSession[E]](1)
     p.unsafe_write(OpsSession[E](ex^, record))
     var s = _OPS_SESSIONS.get_or_create_ptr()
+    var lock = _ops_lock_word(s)
+    shared_slot_lock(lock)
     var sid = s[].next_id
     s[].next_id += 1
     s[].ids.append(sid)
     s[].addr.append(Int(p))
     s[].kind.append(KIND)
+    shared_slot_unlock(lock)
     return sid
 
 
-def _find(sid: Int, kind: Int) raises -> Int:
-    var s = _OPS_SESSIONS.get_or_create_ptr()
+def _find_held(s: UnsafePointer[_OpsStore, MutUntrackedOrigin], sid: Int, kind: Int) -> Int:
+    # Under the table's lock. -1: not open; -2: another binding's session.
     for i in range(len(s[].ids)):  # small-loop(ids: open sessions): a session lookup, no data
         if s[].ids[i] == sid:
             if s[].kind[i] != kind:
-                raise Error("ops: session " + String(sid) + " belongs to another binding")
+                return -2
             return i
-    raise Error("ops: session " + String(sid) + " is not open")
+    return -1
+
+
+def _find_refused(sid: Int, found: Int) -> Error:
+    if found == -2:
+        return Error("ops: session " + String(sid) + " belongs to another binding")
+    return Error("ops: session " + String(sid) + " is not open")
 
 
 def ops_session[E: Exec & Movable & Deinitable, KIND: Int](sid: Int) raises -> UnsafePointer[OpsSession[E], MutUntrackedOrigin]:
-    """The open session `sid` of this executor kind."""
+    """The open session `sid` of this executor kind. One lookup per public
+    operation: everything that operation runs goes through the pointer."""
     var s = _OPS_SESSIONS.get_or_create_ptr()
-    var i = _find(sid, KIND)
-    return UnsafePointer[OpsSession[E], MutUntrackedOrigin](unsafe_from_address=s[].addr[i])
+    var lock = _ops_lock_word(s)
+    shared_slot_lock(lock)
+    var i = _find_held(s, sid, KIND)
+    var address = 0
+    if i >= 0:
+        address = s[].addr[i]
+    shared_slot_unlock(lock)
+    if i < 0:
+        raise _find_refused(sid, i)
+    return UnsafePointer[OpsSession[E], MutUntrackedOrigin](unsafe_from_address=address)
 
 
 def ops_session_close[E: Exec & Movable & Deinitable, KIND: Int](sid: Int) raises:
     """Release session `sid`'s storage and drop it from the table."""
-    var i = _find(sid, KIND)
     var s = _OPS_SESSIONS.get_or_create_ptr()
-    var p = UnsafePointer[OpsSession[E], MutUntrackedOrigin](unsafe_from_address=s[].addr[i])
-    _ = s[].ids.pop(i)
-    _ = s[].addr.pop(i)
-    _ = s[].kind.pop(i)
+    var lock = _ops_lock_word(s)
+    shared_slot_lock(lock)
+    var i = _find_held(s, sid, KIND)
+    var address = 0
+    if i >= 0:
+        address = s[].addr[i]
+        _ = s[].ids.pop(i)
+        _ = s[].addr.pop(i)
+        _ = s[].kind.pop(i)
+    shared_slot_unlock(lock)
+    if i < 0:
+        raise _find_refused(sid, i)
+    # Out of the table: no lookup reaches it while it closes.
+    var p = UnsafePointer[OpsSession[E], MutUntrackedOrigin](unsafe_from_address=address)
     try:
         p[].close()
     except e:
