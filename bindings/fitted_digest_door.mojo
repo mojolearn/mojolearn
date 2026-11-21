@@ -1,0 +1,291 @@
+# SPDX-License-Identifier: Apache-2.0
+# `model.digest_`: the hash of a fitted model's state, one native call
+# (`classical_native_call(model, "fitted_digest", (), context)`, the context
+# of python/mojolearn/_native_archive_bridge.py `connect()`).
+#
+# LAZY. Nothing here runs at fit. The first read of `digest_` describes the
+# fitted fields (UNPACK), hashes them with the GIL released across the host
+# cores (RUN, core/fitted_digest.mojo) and returns the hex string (PACK). The
+# string is kept in the model's record table (bindings/py_model_records.mojo,
+# outside the instance dictionary), stamped with the model's generation word
+# and the content of its containers and member estimators: `fit`,
+# `set_params`, `__setstate__`, `load_state_dict` and any attribute
+# assignment change the generation, so the next read hashes again. Python
+# 3.10 / 3.11 keep no generation: every read hashes.
+#
+# WHICH FIELDS (one walk, the saved-model writer's describers; the table
+# docs/api/DIGEST_FIELDS.md is generated from the same three sources):
+#   1. A class with a connected save schema (`archive_save_schemas`, the
+#      schema `save` writes): the schema's members, built by `_schema_run`
+#      and described by `_archive_unpack_member`, exactly as `save` does
+#      before it writes. Nothing is written.
+#   2. Any other class: its public fitted attributes, the rule `is_fitted`
+#      reads (instance fields whose name ends in "_" and does not start with
+#      "_", value not None), plus the private fields its class names in
+#      `digest_extra` (python/mojolearn/_digest_fields.py), each described by
+#      the npz codec's `_npz_value` (dtype, shape, C-order bytes).
+#      A list, tuple or dict that is not one flat run of scalars is entered:
+#      `name[i]`, `name{key}` and `name.len`. A member estimator contributes
+#      its own digest, as text, in member order.
+#   3. A class named in `digest_refused` has no digest yet: the read raises
+#      AttributeError with the reason in words.
+# A field holding a value with no canonical bytes (an object that is not an
+# array, a scalar, text, a container of those or an estimator) is refused by
+# name: never skipped, never hashed by address or repr.
+#
+# Refusals are AttributeError, in words: an unfitted model (like any fitted
+# attribute), a model in `fast` mode (fast promises no identical bits), and
+# the two above. `hasattr(model, "digest_")` is then False.
+#
+# No mutual recursion (AGENTS.md part 6): `fitted_digest_text` calls only
+# itself, for a member estimator; containers are walked with an explicit
+# stack.
+from std.builtin.sort import sort
+from std.python import Python, PythonObject
+from std.python._cpython import GILReleased
+from bindings.py_cpython_table import cpython_table
+from bindings.py_balanced import py_call, py_type, py_get, py_item, py_contains
+from bindings.native_loaded_module_door import native_loaded_module
+from bindings.optimizer_public_words_unpack import PYTHON_ERROR_PENDING
+from bindings.mode_metadata_native_door import _fields, _fitted
+from bindings.classical_arrays_door import classical_is_array
+from bindings.classical_attributes_door import classical_connect_numpy
+from bindings.classical_archive_door import _archive_unpack_member, _archive_class_name_unpack
+from bindings.archive_npz_door import _npz_value, _npz_is
+from bindings.archive_schema_native_door import archive_schema_lookup, _schema_run, _schema_gp_state, _schema_mode
+from bindings.py_model_records import (
+    RECORDS_PREPARED, ContentRecord, content_fields, content_object, records_stamped_get, records_stamped_put,
+)
+from providers.python.classical_family_admission_pyapi_unpack import classical_family_admit
+from core.native_archive_write import NativeArchiveMember
+from core.fitted_digest import fitted_digest_hex
+
+#: The record name of the kept digest (a format change renames it with the format word).
+comptime _DIGEST_RECORD = "fitted_digest_v1"
+#: Member estimators inside member estimators, and containers inside containers.
+comptime _DIGEST_DEPTH = 8
+
+
+def _digest_unfitted(name: String) -> Error:
+    return Error("AttributeError: '" + name + "' object has no attribute 'digest_': the model is not fitted yet")
+
+
+def _digest_scalar(value: PythonObject, b: PythonObject, bytes_type: PythonObject) raises -> Int:
+    """1 for a str, 2 for bytes, 3 for a bool / int / float, 0 otherwise
+    (PyType_IsSubtype on the value's type: no Python hook)."""
+    if _npz_is(value, b.str):
+        return 1
+    if _npz_is(value, bytes_type):
+        return 2
+    if _npz_is(value, b.bool) or _npz_is(value, b.int) or _npz_is(value, b.float):
+        return 3
+    return 0
+
+
+def _digest_flat(value: PythonObject, is_list: Bool, b: PythonObject, bytes_type: PythonObject) raises -> Bool:
+    """True when an exact list / tuple is one flat run of scalars of one kind
+    (or empty): the npz codec describes it as one member."""
+    var t = cpython_table()
+    var n = t[].PyList_Size(value._obj_ptr) if is_list else t[].PyTuple_Size(value._obj_ptr)
+    var kind = 0
+    for i in range(n):  # driver-loop: over one stored metadata sequence's items (type words only)
+        var item = value[i]
+        var found = _digest_scalar(item, b, bytes_type)
+        if found == 0 or (kind != 0 and found != kind):
+            return False
+        kind = found
+    return True
+
+
+def fitted_digest_text(model: PythonObject, context: PythonObject, depth: Int) raises -> String:
+    """The digest of the fitted `model` (64 lowercase hex digits), from its
+    record when the model has not changed since it was hashed."""
+    var kept = records_stamped_get(RECORDS_PREPARED, model, _DIGEST_RECORD)
+    if kept is not None:
+        return String(py=kept)
+    if depth > _DIGEST_DEPTH:
+        raise Error("AttributeError: digest_ is not available: member estimators are nested deeper than "
+                    + String(_DIGEST_DEPTH) + " levels")
+    var b = native_loaded_module("builtins")
+    var cls = py_type(model)
+    var class_name = _archive_class_name_unpack(cls)
+    var refused = py_get(context, "digest_refused")
+    if refused is not None:
+        var reason = archive_schema_lookup(cls, refused)
+        if reason is not None:
+            raise Error("AttributeError: " + class_name + " has no digest_ yet: " + String(py=reason))
+    # A fitted field may be an ndarray when the caller loaded NumPy.
+    classical_connect_numpy(context)
+    var steps = archive_schema_lookup(cls, context["archive_save_schemas"])
+    var schema = steps is not None and py_type(steps) is not b.str
+    var pins = List[PythonObject]()
+    var members = List[NativeArchiveMember]()
+    var nested = List[PythonObject]()
+    var own = PythonObject(None)
+    if schema:
+        # 1. The saved-model schema's members, as `save` builds them.
+        var values = Python.dict()
+        var failure = String("")
+        try:
+            var admitted = classical_family_admit(model)
+            own = admitted
+            var fields = py_call(b.dict, admitted)
+            if String(py=_schema_mode(fields, PythonObject("mojolearn: "), context)) == "fast":
+                failure = "fast"
+            else:
+                _schema_gp_state(fields, steps, context)
+                _schema_run(model, fields, steps, values, class_name, context)
+        except problem:
+            failure = String(problem)
+            if failure == PYTHON_ERROR_PENDING:
+                raise Error(failure)
+            if failure.byte_length() == 0:
+                failure = "the saved-model schema refused this model"
+        if failure == "fast":
+            raise Error("AttributeError: digest_ exists in identical mode only: fast mode promises no identical "
+                        + "bits, so a fast model has no digest")
+        if failure.byte_length() > 0:
+            if not Bool(py=_fitted(model)):
+                raise _digest_unfitted(class_name)
+            raise Error("AttributeError: " + class_name + ".digest_ is not available for this model: " + failure)
+        var keys = py_call(b.list, values.keys())
+        var names = List[String]()
+        for i in range(len(keys)):  # driver-loop: over the schema's member names (model fields)
+            names.append(String(py=keys[i]))
+        sort(names)
+        for name in names:  # driver-loop: over the schema's members (model fields), described once
+            members.append(_archive_unpack_member(name, values[PythonObject(name)], context, pins))
+        pins.append(values)
+    else:
+        # 2. The public fitted attributes (the `is_fitted` rule) and the
+        #    class's declared private fitted fields.
+        if not Bool(py=_fitted(model)):
+            raise _digest_unfitted(class_name)
+        var fields = _fields(model)
+        own = fields
+        if String(py=_schema_mode(fields, PythonObject("mojolearn: "), context)) == "fast":
+            raise Error("AttributeError: digest_ exists in identical mode only: fast mode promises no identical "
+                        + "bits, so a fast model has no digest")
+        var bytes_type = context["archive_bytes_type"]
+        var ndarray = py_get(context, "ndarray")
+        var numpy_scalar = py_get(context, "scalar_type")
+        var base = py_get(context, "digest_base")
+        var work_names = List[String]()
+        var work_values = List[PythonObject]()
+        var work_depths = List[Int]()
+        var keys = py_call(b.list, fields.keys())
+        for i in range(len(keys)):  # driver-loop: over the model's stored field names
+            var name = String(py=keys[i])
+            if name.endswith("_") and not name.startswith("_"):
+                var value = fields[keys[i]]
+                if value is not None:
+                    work_names.append(name)
+                    work_values.append(value)
+                    work_depths.append(0)
+        var extra = py_get(context, "digest_extra")
+        if extra is not None:
+            var declared = archive_schema_lookup(cls, extra)
+            if declared is not None:
+                for i in range(len(declared)):  # driver-loop: over the class's declared private fitted fields
+                    if py_contains(fields, declared[i]):
+                        var value = fields[declared[i]]
+                        if value is not None:
+                            work_names.append(String(py=declared[i]))
+                            work_values.append(value)
+                            work_depths.append(0)
+        var leaf_names = List[String]()
+        var leaf_values = List[PythonObject]()
+        while len(work_names) > 0:  # driver-loop: over the model's fitted fields and their containers (structure only)
+            var name = work_names.pop()
+            var value = work_values.pop()
+            var level = work_depths.pop()
+            if value is None:
+                # None inside a container keeps its place.
+                leaf_names.append(name + ".none")
+                leaf_values.append(PythonObject(True))
+                continue
+            var kind = py_type(value)
+            var leaf = classical_is_array(value, context) or _digest_scalar(value, b, bytes_type) != 0
+            if not leaf and ndarray is not None and kind is ndarray:
+                leaf = True
+            if not leaf and numpy_scalar is not None and _npz_is(value, numpy_scalar):
+                leaf = True
+            var is_list = kind is b.list
+            if not leaf and (is_list or kind is b.tuple):
+                leaf = _digest_flat(value, is_list, b, bytes_type)
+                if not leaf:
+                    if level >= _DIGEST_DEPTH:
+                        raise Error("AttributeError: " + class_name + ".digest_ is not available: field '" + name
+                                    + "' nests containers deeper than " + String(_DIGEST_DEPTH) + " levels")
+                    var n = len(value)
+                    leaf_names.append(name + ".len")
+                    leaf_values.append(PythonObject(n))
+                    for i in range(n):  # driver-loop: over one stored sequence's items (member estimators, per-layer arrays)
+                        work_names.append(name + "[" + String(i) + "]")
+                        work_values.append(value[i])
+                        work_depths.append(level + 1)
+                    continue
+            if leaf:
+                leaf_names.append(name)
+                leaf_values.append(value)
+                continue
+            if kind is b.dict:
+                if level >= _DIGEST_DEPTH:
+                    raise Error("AttributeError: " + class_name + ".digest_ is not available: field '" + name
+                                + "' nests containers deeper than " + String(_DIGEST_DEPTH) + " levels")
+                # items() of an exact dict never hashes or compares keys.
+                var items = py_call(b.list, py_call(value.items))
+                leaf_names.append(name + ".len")
+                leaf_values.append(PythonObject(len(items)))
+                for i in range(len(items)):  # driver-loop: over one stored mapping's entries
+                    var key = items[i][0]
+                    if py_type(key) is not b.str:
+                        raise Error("AttributeError: " + class_name + ".digest_ is not available: field '" + name
+                                    + "' is a dictionary with keys that are not text")
+                    work_names.append(name + "{" + String(py=key) + "}")
+                    work_values.append(items[i][1])
+                    work_depths.append(level + 1)
+                continue
+            if base is not None and _npz_is(value, base):
+                # A member estimator: its own digest, as text, under its place.
+                var inner = fitted_digest_text(value, context, depth + 1)
+                nested.append(value)
+                leaf_names.append(name)
+                leaf_values.append(PythonObject(inner))
+                continue
+            raise Error("AttributeError: " + class_name + ".digest_ is not available yet: field '" + name
+                        + "' holds a " + _archive_class_name_unpack(kind) + ", which has no canonical bytes")
+        # Name order, whatever order the dictionary or the walk gave.
+        var place = Dict[String, Int]()
+        for i in range(len(leaf_names)):  # driver-loop: over the described fields (name index)
+            place[leaf_names[i]] = i
+        var names = leaf_names.copy()
+        sort(names)
+        for name in names:  # driver-loop: over the model's fitted fields, described once (no bytes copied)
+            var described = _npz_value(name, leaf_values[place[name]], True, context, pins)
+            members.append(described^.take())
+        for i in range(len(leaf_values)):  # driver-loop: keep every described value alive to the end of the hash
+            pins.append(leaf_values[i])
+    # RUN: typed members only, the interpreter lock released.
+    var result = String("")
+    try:
+        with GILReleased(Python()):
+            result = fitted_digest_hex(class_name, members)
+    finally:
+        _ = pins
+    # Keep it for the next read of the unchanged model. The record holds no
+    # reference to the model; a model without a generation keeps nothing.
+    var content = ContentRecord()
+    content_fields(content, own, 4)
+    for i in range(len(nested)):  # driver-loop: over the member estimators the digest depends on
+        content_object(content, nested[i], 4)
+    _ = records_stamped_put(RECORDS_PREPARED, model, _DIGEST_RECORD, content^, PythonObject(result))
+    _ = nested
+    _ = members
+    return result
+
+
+def fitted_digest_call(model: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`model.digest_`: see the module note."""
+    var text = fitted_digest_text(model, context, 0)
+    return PythonObject(text)

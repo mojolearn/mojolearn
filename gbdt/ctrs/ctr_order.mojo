@@ -36,8 +36,7 @@ and the host column agree.
 THE CALLER NO LONGER SHUFFLES. Until this lane the CTR order of permutation
 0 was the identity over the rows as passed, so rows sorted by target leaked
 into the statistic and the caller had to shuffle and record a seed. Every
-order is now drawn from `random_state`, which is a constructor parameter:
-a receipt (`estimator.receipt`) records it with the other parameters.
+order is now drawn from `random_state`, which is a constructor parameter.
 
 BITS MOVE on every column together for every fit that builds a CTR and for
 every Ordered fit (the orders are different, equally uniform permutations).

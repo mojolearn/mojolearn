@@ -11,12 +11,6 @@
                                          run your saved model on your rows on
                                          the GPU and on the CPU of this machine
                                          and compare the bits (_verify_check.py)
-    python -m mojolearn reproduce RECEIPT.json --X X.npy [--y y.npy]
-                                         fit again on your data and compare
-                                         with the receipt of a recorded fit
-                                         (`estimator.receipt`): exit 0 the same
-                                         fit, exit 1 different, and which part
-                                         (_reproduce.py)
     python -m mojolearn env              what this process loaded, no GPU
     python -m mojolearn check-fixture    rebuild and hash the pinned fixture,
                                          no GPU and no extension call
@@ -197,41 +191,6 @@ def _cross_validation_dispatch(args):
     return cv_main(argv)
 
 
-def _reproduce_dispatch(args):
-    from . import _reproduce
-    return _reproduce.cmd_reproduce(args)
-
-
-def _add_reproduce(sub):
-    r = sub.add_parser(
-        "reproduce",
-        help="fit again on your data and compare with the receipt of a recorded fit",
-        description=(
-            "Fit the estimator a receipt records (estimator.receipt(X, y) after fit) on the data "
-            "given now, and compare: Mojolearn version, parameters, data fingerprint, fitted state, "
-            "predictions. In identical mode the answer is exact: one hash, no tolerance, on any "
-            "machine. A receipt holds within one Mojolearn version. No interactive output: made "
-            "for a scheduled job, for example a regression test of a data pipeline (exit 1 means "
-            "the training data changed)."),
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=(
-            "exit codes\n"
-            "  0 the same fit   1 different (the part is named)   2 usage\n"
-            "  3 refused (fast)   4 could not run\n"))
-    r.add_argument("receipt", metavar="RECEIPT.json", help="the receipt estimator.receipt saved")
-    r.add_argument("--X", required=True, metavar="FILE",
-                   help="the training rows: a .npy file, or a .npz file (its array X, else its first; "
-                        "its array y is used as the targets when --y is not given)")
-    r.add_argument("--y", metavar="FILE", default=None,
-                   help="the targets: a .npy file, or a .npz file (its array y, else its first)")
-    r.add_argument("--params", metavar="JSON", default=None,
-                   help="constructor parameters your job uses today, as a JSON object; they are "
-                        "applied over the receipt's and any that differ are named")
-    r.add_argument("--json", action="store_true",
-                   help="print the whole answer as one JSON line and nothing else")
-    r.set_defaults(func=_reproduce_dispatch)
-
-
 def build_parser():
     parser = argparse.ArgumentParser(
         prog="python -m mojolearn",
@@ -284,8 +243,6 @@ def build_parser():
     lm.add_argument('--layer-devices', nargs='+', type=int,
                     help='experimental GPU layer-owner map, one device index per fixture layer')
     lm.set_defaults(func=_causal_lm_dispatch)
-
-    _add_reproduce(sub)
 
     v = sub.add_parser(
         "verify",
