@@ -179,3 +179,53 @@ def test_python_operations_per_predict_do_not_grow_with_rows(device):
             sys.setprofile(None)
         counts.append(events[0])
     assert counts[0] == counts[1]
+
+
+def test_vendor_used_answers_for_the_models_own_device():
+    gpu, _ = fitted(None)
+    assert gpu.vendor_used() == mojolearn.vendor()
+    if TWO_DEVICES:
+        cpu, _ = fitted("cpu")
+        assert cpu.vendor_used() == "cpu"
+        # the first model still answers for its own device
+        assert gpu.vendor_used() == mojolearn.vendor()
+
+
+def test_check_runs_both_devices_in_this_process(capsys):
+    model, x = fitted(None)
+    before = np.asarray(model.params_).tobytes()
+    result = model.check(x)
+    capsys.readouterr()
+    if not TWO_DEVICES:
+        assert not result["ran"]
+        return
+    assert result["ran"] and result["transfer"] == "device"
+    gpu, cpu = result["sides"]["gpu"], result["sides"]["cpu"]
+    assert gpu["route"]["vendor_used"] == mojolearn.vendor()
+    assert cpu["route"]["vendor_used"] == "cpu"
+    assert result["verdict"]["match"]
+    assert gpu["outputs"][0]["sha256"] == cpu["outputs"][0]["sha256"]
+    # the given model is untouched: same device, same binary, same parameters
+    assert model.device is None and model.vendor_used() == mojolearn.vendor()
+    assert np.asarray(model.params_).tobytes() == before
+
+
+@two_devices
+def test_the_check_twin_is_another_model_on_the_other_device_with_the_same_fitted_state():
+    from mojolearn._check_both import on_device, takes_device
+    model, x = fitted(None)
+    assert takes_device(model)
+    assert on_device(model, "gpu") is model
+    twin = on_device(model, "cpu")
+    assert type(twin) is Sequential and twin is not model
+    assert twin.device == "cpu" and twin.vendor_used() == "cpu" and model.vendor_used() == mojolearn.vendor()
+    assert twin._layers == model._layers and twin._layers is not model._layers
+    assert np.asarray(twin.params_).tobytes() == np.asarray(model.params_).tobytes()
+    assert np.asarray(twin.predict(x)).tobytes() == np.asarray(model.predict(x)).tobytes()
+    # a layer added to the twin never reaches the checked model
+    count = len(model._layers)
+    twin.relu()
+    assert len(model._layers) == count and len(twin._layers) == count + 1
+    # an unfitted twin carries the description and no fitted state
+    bare = on_device(model, "cpu", fitted=False)
+    assert bare._layers == model._layers and getattr(bare, "params_", None) is None
