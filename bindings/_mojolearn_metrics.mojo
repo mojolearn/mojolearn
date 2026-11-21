@@ -1326,6 +1326,7 @@ def metrics_vendor_binding() raises -> PythonObject:
 # writes from bindings/merged_groups.json (one shared file per directory set).
 from core.shared_slot import SharedSlot
 from core.spectral_native_provider import SpectralProviderAPI
+from core.spectral_member import spectral_member_publish
 from core.spectral_native_device import SpectralDeviceKernels
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from checks.numerics import NUMERIC_IDENTICAL as _SPECTRAL_IDENTICAL
@@ -1421,6 +1422,10 @@ def build__mojolearn_metrics() -> PythonObject:
         m.def_function[spectral_embedding_dense_binding]("spectral_embedding_dense")
         var published_module = m.finalize()
         _publish_umap_ops(published_module)
+        # SpectralClustering's member entry (core/spectral_member.mojo): its predict runs on this
+        # image's spectral queries. A build with no GPU vendor ("none") publishes nothing.
+        spectral_member_publish(Int(GLOBAL_NUMERIC_MODE), neighbors_vendor_word(COMPILED_VENDOR),
+                                Int(SPECTRAL_API.get_or_create_ptr()[].entries.unsafe_ptr()))
         return published_module
     except e:
         abort(String("failed to create _mojolearn_metrics: ", e))
