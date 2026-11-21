@@ -2462,6 +2462,9 @@ struct _CalUnits(Movable):
     var mctx: PythonObject
     var rows_class: PythonObject
     var rows_take: PythonObject
+    # The ensemble's class count (set by _calibrated_fit; 0: the member
+    # doors fit every fold): what a fold's native member is fitted with.
+    var k: Int
 
     def __init__(out self, model: PythonObject, xt: PythonObject, base: PythonObject, Xa: PythonObject,
                  splits: PythonObject, codes: PythonObject, cols: PythonObject, n: Int, d: Int, ensemble: Bool,
@@ -2490,6 +2493,7 @@ struct _CalUnits(Movable):
         self.mctx = PythonObject(None)
         self.rows_class = PythonObject(None)
         self.rows_take = PythonObject(None)
+        self.k = 0
 
     def fold_side(self, idx: PythonObject) raises -> PythonObject:
         """Fold side `idx` (cv row indices) of X for the member: a resident
@@ -2536,7 +2540,24 @@ struct _CalUnits(Movable):
                 ytr = _gather_codes(self.xt, self.codes, tr, self.context)
             finally:
                 native_unit_gate_leave(self.gate)
-            _fit_member(e, xtr, ytr, PythonObject(None), self.context)
+            # A member of a published family is fitted through its member
+            # entry on the fold's host rows (one unit: admitted once, the GIL
+            # released for the fit, its fitted state left with the clone for
+            # the scores below), with the ensemble's class count. A fold that
+            # lacks a class is refused by the set before any fit
+            # (bindings/member_set_door.mojo, the class-cover pass: one pass
+            # over the fold's codes) and takes the member's fit door, which
+            # fits the classes present, as does every unpublished family and
+            # the resident DeviceRows route (the member program gathers its
+            # rows on the device: tuned, untouched). Outside the gate: the
+            # fits of different folds overlap, as the door fits do.
+            var native = False
+            if not self.dev and self.k > 0:
+                native = _fit_units_native(_repeat(e, 1), _repeat(xtr, 1), self.d, _repeat(ytr, 1), False,
+                                           _repeat(PythonObject(None), 1), _repeat(PythonObject(self.k), 1), 1,
+                                           self.context)
+            if not native:
+                _fit_member(e, xtr, ytr, PythonObject(None), self.context)
             self._enter()
             try:
                 var Xte = self.fold_side(te)
@@ -2656,6 +2677,7 @@ def _calibrated_fit(model: PythonObject, X: PythonObject, y: PythonObject, conte
     # calibrators per fold: no bits change.
     var jobs = native_unit_jobs(_attr(model, nk[].k_n_jobs, PythonObject(None)), "CalibratedClassifierCV")
     var units = _CalUnits(model, xt, base, Xa, splits, labels.codes, cols, n, d, ensemble, context)
+    units.k = k
     # fb12-rows (2026-11-17): the folds' X stays on the GPU. Each fold side
     # was `_gather` (xtrees gather_f32_device): all of X uploaded, the rows
     # gathered and DOWNLOADED, twice per fold, then each member uploaded its
@@ -2729,9 +2751,8 @@ def _calibrated_fit(model: PythonObject, X: PythonObject, y: PythonObject, conte
         var e = _clone(base, context)
         # The one member over every row sees every class (the codes were
         # encoded from this y): a native member fit when its family has
-        # published, else its fit door. The per-fold fits of `_CalUnits`
-        # keep the member doors: a fold may lack a class and its member is
-        # fitted on the classes present, which the door's own encoding does.
+        # published, else its fit door. (A fold of `_CalUnits` may lack a
+        # class: that fold's member takes its fit door, `_CalUnits.unit`.)
         _fit_members(_repeat(e, 1), Xa, n, d, _repeat(labels.codes, 1), False, PythonObject(None),
                      _repeat(PythonObject(k), 1), jobs, context)
         _ = py_call(pairs.append, Python.tuple(e, _fit_calibrators(model, xt, trees_reshape(S, Python.tuple(n, c), context),
