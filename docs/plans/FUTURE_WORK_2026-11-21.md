@@ -42,7 +42,22 @@ Work, in order:
 - CausalLM checkpoint, construct and config doors; the CausalLM resident session lease (stale-capture window:
   Andrew to decide).
 
-## 3. Owed small items (not projects)
+## 3. Public API matches what users already know (Andrew, 2026-11-21)
+
+Goal: someone who knows scikit-learn, PyTorch or CatBoost/XGBoost/LightGBM can use Mojolearn without reading our
+docs. Work:
+1. A generated table, per public class, of its scikit-learn twin: constructor parameter names, defaults and
+   accepted values; methods (`fit`, `predict`, `predict_proba`, `transform`, `score`, `partial_fit`, ...); fitted
+   attributes (`coef_`, `classes_`, `n_features_in_`, `feature_importances_`, ...). Every difference is listed and
+   either fixed or written down with its reason (an identity requirement, a feature we do not have).
+2. Run scikit-learn's own estimator checks (`check_estimator`) on every class that claims a twin, as a test of the
+   Python boundary.
+3. Gradient boosting: CatBoost / XGBoost / LightGBM parameter names accepted where the meaning is the same.
+4. Neural models and the Torch adapter: PyTorch conventions (`state_dict`, `train()`/`eval()`, device names,
+   dtype names) where the meaning is the same.
+5. Nothing here may add Python work inside a call: renames and defaults are resolved at construction.
+
+## 4. Owed small items (not projects)
 
 - A/B `abb1b` never ran (`mcd-lockstep-off`, `sgd-ps-preload`).
 - Arm batch b2: `fast-vendor-math` fails to compile on sm_89 (twice); b3 never built.
