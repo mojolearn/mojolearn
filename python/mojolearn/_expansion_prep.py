@@ -1818,11 +1818,15 @@ class Normalizer(_PrepBase):
     >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
     >>> Xt = mojolearn.Normalizer(norm="l1").fit_transform(X)
     """
-    _parameters = ("norm", "copy")
+    _parameters = ("norm", "copy", "device")
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
-    def __init__(self, norm="l2", *, copy=True):
+    def __init__(self, norm="l2", *, copy=True, device=None):
         self.norm = norm
         self.copy = copy
+        self.device = device
 
     @_native_robust_method
     def fit(self, X, y=None):
