@@ -12,7 +12,6 @@ import numpy as np
 import pytest
 
 from mojolearn import Array, GaussianNB, LinearRegression, model_selection as ms, _backend
-from mojolearn._native_process import _native_process
 from mojolearn._verify_native_runtime import audit_native_call
 
 
@@ -100,34 +99,53 @@ report['audit_events'] = events
 Path(os.environ['NATIVE_CV_AUDIT_DIR'], str(os.getpid()) + '.json').write_text(json.dumps(report, indent=2))
 if mode == 'profile': result.assert_native()
 ''')
-    monkeypatch.setenv('NATIVE_CV_AUDIT_DIR', str(tmp_path))
+    # The worker speaks the typed protocol only (request words beside each
+    # payload: identity, the run's X and y, one fold per request), which the
+    # public driver sends. The driver starts `mojolearn._native_parallel_cv_worker`
+    # by name, so a fixture-owned startup module serves that one name from the
+    # audited bootstrap above: the real driver, the real protocol and the real
+    # worker loop, with the whole worker call under the audit.
+    (tmp_path / 'sitecustomize.py').write_text(
+        'import sys, importlib.abc, importlib.util\n'
+        'class AuditedWorker(importlib.abc.MetaPathFinder):\n'
+        '    def find_spec(self, fullname, path=None, target=None):\n'
+        '        if fullname == "mojolearn._native_parallel_cv_worker":\n'
+        '            return importlib.util.spec_from_file_location(fullname, ' + repr(str(module)) + ')\n'
+        'sys.meta_path.insert(0, AuditedWorker())\n')
     monkeypatch.setenv('PYTHONPATH', str(tmp_path) + os.pathsep + os.environ.get('PYTHONPATH', ''))
+    from mojolearn.parallel_model_selection import cross_val_score
     x = Array.from_list([[0., 0.], [1., 0.], [0., 1.], [1., 1.], [2., 0.], [0., 2.]], '<f4')
     y = Array.from_list([0, 1, 0, 1, 1, 0], '<i4')
     reports = []
     for use_numpy, audit_mode in ((False, 'profile'), (False, 'hooks'), (True, 'profile'), (True, 'hooks')):
+        audit_dir = tmp_path / ('audit-%d-%s' % (use_numpy, audit_mode))
+        audit_dir.mkdir()
+        monkeypatch.setenv('NATIVE_CV_AUDIT_DIR', str(audit_dir))
         monkeypatch.setenv('NATIVE_CV_AUDIT_MODE', audit_mode)
+        # NumPy constructor metadata makes the driver ask its worker for
+        # NumPy (MOJOLEARN_NATIVE_CV_NUMPY in the worker environment); a
+        # plain list leaves the worker without it.
         priors = np.array([.5, .5], dtype='f8') if use_numpy else [.5, .5]
-        model = clean(entry, 'family_msel_parallel_model_pack', (GaussianNB(priors=priors),))
-        pool = clean(_native_process, 'create', ((0,), False, module.stem))
-        pool['environment'] = {'MOJOLEARN_NATIVE_CV_NUMPY': '1' if use_numpy else '0'}
-        try:
-            identities = clean(_native_process, 'map', (pool, [('identity',)]))
-            pid = pool['workers'][0]['pid']
-            clean(entry, 'family_msel_parallel_require_inventory', (identities, _backend.vendor(), [pid], os.getpid()))
-            result = clean(_native_process, 'map', (pool, [('fold', 0, model, None, x, y, x, y, False)]))
-            assert result[0][0] == 0 and type(result[0][1]) is float and result[0][2] is None
-        finally:
-            clean(_native_process, 'close', (pool,))
+        scores = clean(cross_val_score, GaussianNB(priors=priors), x, y, devices=(0,), cv=2)
+        trace = entry('family_msel_parallel_last_run')
+        assert trace['closed'] and trace['status'] == 'COMPLETE', trace
+        scores = list(scores)
+        assert len(scores) == 2 and all(type(score) is float for score in scores), scores
+        # One worker served the identity, data and both fold requests, and
+        # the driver closed and reaped it.
+        written = sorted(audit_dir.glob('*.json'))
+        assert len(written) == 1, written
+        pid = int(written[0].stem)
         with pytest.raises(ChildProcessError):
             os.waitpid(pid, os.WNOHANG)
-        report = json.loads((tmp_path / (str(pid) + '.json')).read_text())
+        report = json.loads(written[0].read_text())
         assert report['exception'] is None, report
+        assert report['audit_mode'] == audit_mode, report
         assert report['numpy_loaded'] is use_numpy, report
         for key in ('python_frames', 'forbidden_native_calls', 'unresolved_native_calls', 'wrapper_work', 'unobserved_existing_threads'):
             assert not report.get(key, []), report
         assert report['audit_events'] == [], report
-        reports.append(result[0][1])
+        reports.append(tuple(scores))
     assert len(set(reports)) == 1
 
 
