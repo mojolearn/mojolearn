@@ -55,6 +55,7 @@ from bindings.py_balanced import py_call as _balanced_call, py_type as _svm_host
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from svm.host.native_descriptor_dispatch import SVC_HOST_NATIVE_API
+from core.kernel_svm_member import kernel_svm_member_publish
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from svm.host.svr_native_host import SVR_HOST_API
 
@@ -791,6 +792,9 @@ def build__mojolearn_svm_host() -> PythonObject:
         module.def_function[py2mojo_linear_flags_binding]("py2mojo_linear_flags")
         module.def_function[svc_ovo_layout_host_binding]("svc_ovo_layout")
         module.def_function[svc_dual_gemv_host_binding]("svc_dual_gemv")
+        # The family's member entry (core/member_abi.mojo): SVC and SVR run
+        # as members of a meta-estimator through it (CPU, vendor 0).
+        kernel_svm_member_publish(GLOBAL_NUMERIC_MODE, 0, Int(SVC_HOST_NATIVE_API.get_or_create_ptr()))
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_svm_host: ", error))

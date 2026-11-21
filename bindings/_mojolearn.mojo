@@ -193,6 +193,8 @@ from bindings.labels_legacy_boundary_unpack import labels_legacy_prepare, labels
 from bindings.labels_legacy_boundary_pack import labels_legacy_unique
 
 from checks.vendor import COMPILED_VENDOR
+from core.device_route import device_vendor_code
+from core.kmeans_member import kmeans_member_publish
 from core.base_helpers_device import publish_base_helpers_device
 
 from max.gpu.host import DeviceContext
@@ -233,6 +235,7 @@ from neighbors.estimator import (
 from core.shared_slot import SharedSlot
 from core.neighbors_entry_table import NeighborsEntryKey, neighbors_ops_publish, neighbors_vendor_word
 from neighbors.ops_entry_device import NEIGHBORS_OPS_DEVICE_API, neighbors_ops_device_v1
+from core.neighbors_member import neighbors_member_publish
 from bindings.py_balanced import py_setattr
 # wave 8 run split: the RUN half of this binding (address helpers, the
 # KMeans/labels native tables, the QN fold publish, the KMeans fits and the
@@ -1875,6 +1878,9 @@ def _publish_neighbors_ops(module: PythonObject) raises:
     var api = NEIGHBORS_OPS_DEVICE_API.get_or_create_ptr()
     neighbors_ops_publish(NeighborsEntryKey(Int(GLOBAL_NUMERIC_MODE), word), Int(api[].entries.unsafe_ptr()),
                           neighbors_ops_device_v1)
+    # The k-NN member entry (core/neighbors_member.mojo): KNeighborsClassifier and
+    # KNeighborsRegressor run as members of a meta-estimator through it.
+    neighbors_member_publish(Int(GLOBAL_NUMERIC_MODE), word, Int(api[].entries.unsafe_ptr()))
     py_setattr(module, "neighbors_native_key", Python.tuple(PythonObject(Int(GLOBAL_NUMERIC_MODE)), PythonObject(word)))
 
 
@@ -2006,6 +2012,8 @@ def build__mojolearn() -> PythonObject:
         # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
         var published_module = m.finalize()
         _publish_qn_fold_table()
+        # The KMeans member entry (core/kmeans_member.mojo) beside its kernel table.
+        kmeans_member_publish(Int(GLOBAL_NUMERIC_MODE), device_vendor_code(String(COMPILED_VENDOR)), Int(KMEANS_NATIVE_TABLE.get_or_create_ptr()[].entries.unsafe_ptr()))
         _publish_neighbors_ops(published_module)
         # The base helper table (core/base_entry_table.mojo): the same
         # helpers for native callers in other extension modules.

@@ -752,6 +752,9 @@ class LogisticRegression(_NumericModeMixin):
     #: This class takes `device=`: the check builds its other side as the same
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_LOGISTIC = 1) and core/logistic_member.mojo.
+    _mojolearn_member = (1, 0)
 
     # `device` (None: this installation's device; "gpu"; "cpu") is checked
     # here when it is given (an unknown value, and 'gpu' on an installation
