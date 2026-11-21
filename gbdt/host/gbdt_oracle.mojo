@@ -136,6 +136,7 @@ from core.host_parallel import (
 from core.host_predict_threads import (
     HostF32Ptr,
     HostU32Ptr,
+    host_predict_chunk,
     host_predict_task_count_work,
 )
 
@@ -463,28 +464,53 @@ def _logloss_search_pass(
     empty is the unit weight; otherwise one weight per row, the kernel's
     `has_weights` arm (plane 0 the row's weight, the direction and score
     scaled by it): sample weights and/or binary class weights, as in `train`."""
+    # THE SPLIT (lane gbdt-host-par): the unit is one 256-thread device
+    # block: it owns its rows' two planes and its three partials, and its
+    # halving trees are the kernel's. Blocks go round robin to `_gbdt_units`
+    # tasks over the rows' loss terms; a task holds three block slabs.
     var blocks = (n_rows + GBDT_MSE_BLOCK - 1) // GBDT_MSE_BLOCK
     var has_weights = len(weights) > 0
-    var weight = Float32(1.0)
-    for b in range(blocks):
+    var units = _gbdt_units(blocks, 16 * n_rows)
+    var targets_p = rebind[HostF32Ptr](targets.unsafe_ptr())
+    var cursor_p = rebind[HostF32Ptr](cursor.unsafe_ptr())
+    # an empty `weights` is never read (`has_weights` guards it)
+    var weights_p = rebind[HostF32Ptr](weights.unsafe_ptr())
+    var stats_p = rebind[HostF32Ptr](stats.unsafe_ptr())
+    var fv_p = rebind[HostF32Ptr](fv_partials.unsafe_ptr())
+    var mag_p = rebind[HostF32Ptr](mag_partials.unsafe_ptr())
+
+    def score_blocks(unit: Int) {imm units, imm blocks, imm n_rows, imm border, imm has_weights, imm targets_p, imm cursor_p, imm weights_p, imm stats_p, imm fv_p, imm mag_p}:
         var s_score = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
         var s_w = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
         var s_g = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
-        for t in range(GBDT_MSE_BLOCK):
-            var i = b * GBDT_MSE_BLOCK + t
-            if i < n_rows:
-                if has_weights:
-                    weight = weights[i]
-                var r = _cross_entropy_row(targets[i], cursor[i], border, weight)
-                var plane0 = weight
-                stats[i] = plane0
-                stats[n_rows + i] = r.weighted_direction
-                s_score[t] = r.score
-                s_w[t] = abs(plane0)
-                s_g[t] = abs(r.weighted_direction_raw)
-        fv_partials[b] = _halving_fold(s_score)
-        mag_partials[2 * b] = _halving_fold(s_w)
-        mag_partials[2 * b + 1] = _halving_fold(s_g)
+        var weight = Float32(1.0)
+        var b = unit
+        while b < blocks:
+            for t in range(GBDT_MSE_BLOCK):
+                var i = b * GBDT_MSE_BLOCK + t
+                # an out-of-range thread adds 0.0 (the slab is reused)
+                s_score[t] = Float32(0.0)
+                s_w[t] = Float32(0.0)
+                s_g[t] = Float32(0.0)
+                if i < n_rows:
+                    if has_weights:
+                        weight = weights_p[i]
+                    var r = _cross_entropy_row(targets_p[i], cursor_p[i], border, weight)
+                    var plane0 = weight
+                    stats_p[i] = plane0
+                    stats_p[n_rows + i] = r.weighted_direction
+                    s_score[t] = r.score
+                    s_w[t] = abs(plane0)
+                    s_g[t] = abs(r.weighted_direction_raw)
+            fv_p[b] = _halving_fold(s_score)
+            mag_p[2 * b] = _halving_fold(s_w)
+            mag_p[2 * b + 1] = _halving_fold(s_g)
+            b += units
+
+    host_parallelize(score_blocks, units)
+    _ = len(stats)
+    _ = len(fv_partials)
+    _ = len(mag_partials)
 
 
 def _logloss_value(
@@ -497,18 +523,35 @@ def _logloss_value(
     var blocks = (n_rows + GBDT_MSE_BLOCK - 1) // GBDT_MSE_BLOCK
     var fv_partials = List[Float32](length=blocks, fill=Float32(0.0))
     var has_weights = len(weights) > 0
-    var weight = Float32(1.0)
-    for b in range(blocks):
+    # THE SPLIT (lane gbdt-host-par): one 256-thread device block per unit
+    # (its own halving tree), round robin to `_gbdt_units` tasks; the lane
+    # fold over the blocks runs after the join in block order.
+    var units = _gbdt_units(blocks, 16 * n_rows)
+    var targets_p = rebind[HostF32Ptr](targets.unsafe_ptr())
+    var cursor_p = rebind[HostF32Ptr](cursor.unsafe_ptr())
+    # an empty `weights` is never read (`has_weights` guards it)
+    var weights_p = rebind[HostF32Ptr](weights.unsafe_ptr())
+    var fv_p = rebind[HostF32Ptr](fv_partials.unsafe_ptr())
+
+    def score_blocks(unit: Int) {imm units, imm blocks, imm n_rows, imm border, imm has_weights, imm targets_p, imm cursor_p, imm weights_p, imm fv_p}:
         var s_score = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
-        for t in range(GBDT_MSE_BLOCK):
-            var i = b * GBDT_MSE_BLOCK + t
-            if i < n_rows:
-                if has_weights:
-                    weight = weights[i]
-                s_score[t] = _cross_entropy_row(
-                    targets[i], cursor[i], border, weight
-                ).score
-        fv_partials[b] = _halving_fold(s_score)
+        var weight = Float32(1.0)
+        var b = unit
+        while b < blocks:
+            for t in range(GBDT_MSE_BLOCK):
+                var i = b * GBDT_MSE_BLOCK + t
+                # an out-of-range thread adds 0.0 (the slab is reused)
+                s_score[t] = Float32(0.0)
+                if i < n_rows:
+                    if has_weights:
+                        weight = weights_p[i]
+                    s_score[t] = _cross_entropy_row(
+                        targets_p[i], cursor_p[i], border, weight
+                    ).score
+            fv_p[b] = _halving_fold(s_score)
+            b += units
+
+    host_parallelize(score_blocks, units)
     return _deterministic_sum_lanes(fv_partials, 1, blocks)[0]
 
 
@@ -584,26 +627,46 @@ def _snap_gradients(
     position (the row), dequantized as `fixed_to_float_kernel` does. The
     device launches it right after the tree's scale and before the score
     std dev and the first histogram; every host twin calls this there."""
-    for pos in range(n_rows):
-        var u = _hist2_dither(pos)
-        for st in range(1, stat_count):
-            var q = _hist2_quantize(stats[st * n_rows + pos], fixed_scale, u)
-            var v = Float32(0.0)
-            if q != Int32(0):
-                v = ftz(Float32(Int(q)) / fixed_scale)
-            stats[st * n_rows + pos] = v
+    # THE SPLIT (lane gbdt-host-par): every (row, plane) is its own
+    # statement (the device thread's); rows in `_gbdt_units` contiguous
+    # ranges.
+    var units = _gbdt_units(n_rows, 8 * n_rows * max(stat_count - 1, 1))
+    var chunk = host_predict_chunk(n_rows, units)
+    var stats_p = rebind[HostF32Ptr](stats.unsafe_ptr())
+
+    def rows(unit: Int) {imm chunk, imm n_rows, imm stat_count, imm fixed_scale, imm stats_p}:
+        for pos in range(unit * chunk, min(n_rows, (unit + 1) * chunk)):
+            var u = _hist2_dither(pos)
+            for st in range(1, stat_count):
+                var q = _hist2_quantize(stats_p[st * n_rows + pos], fixed_scale, u)
+                var v = Float32(0.0)
+                if q != Int32(0):
+                    v = ftz(Float32(Int(q)) / fixed_scale)
+                stats_p[st * n_rows + pos] = v
+
+    host_parallelize(rows, units)
+    _ = len(stats)
 
 
 def _snap_plane(mut plane: List[Float32], n: Int, fixed_scale: Float32):
     """`snap_plane_to_scale_kernel` (`kernel/histogram_utils.mojo`,
     lane/sym-quality): the pointwise searcher's gradient plane onto the
-    tree's fixed-point grid, keyed on the plane index."""
-    for i in range(n):
-        var q = _hist2_quantize(plane[i], fixed_scale, _hist2_dither(i))
-        var v = Float32(0.0)
-        if q != Int32(0):
-            v = ftz(Float32(Int(q)) / fixed_scale)
-        plane[i] = v
+    tree's fixed-point grid, keyed on the plane index. Every index is its
+    own statement; the indices run in `_gbdt_units` contiguous ranges."""
+    var units = _gbdt_units(n, 8 * n)
+    var chunk = host_predict_chunk(n, units)
+    var plane_p = rebind[HostF32Ptr](plane.unsafe_ptr())
+
+    def rows(unit: Int) {imm chunk, imm n, imm fixed_scale, imm plane_p}:
+        for i in range(unit * chunk, min(n, (unit + 1) * chunk)):
+            var q = _hist2_quantize(plane_p[i], fixed_scale, _hist2_dither(i))
+            var v = Float32(0.0)
+            if q != Int32(0):
+                v = ftz(Float32(Int(q)) / fixed_scale)
+            plane_p[i] = v
+
+    host_parallelize(rows, units)
+    _ = len(plane)
 
 
 # ===========================================================================
