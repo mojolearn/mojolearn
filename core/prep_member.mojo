@@ -984,11 +984,11 @@ def _apply_power(slot: _Slot, call: _Call, inverse: Bool) raises:
     _ = arena^
 
 
-def _enc_run(call: _Call, mut prog: EncProgram, fill: Int, output: Int) raises -> List[Float32]:
+def _enc_run(call: _Call, mut prog: EncProgram, second: Int, output: Int) raises -> List[Float32]:
     """The encode door's `EncProg.run_caps` over the member's own input
     records: owner 0 is the caller's X (put on the device when the image has
-    the put and X is large, as `_x_input`), owner 1 the fitted vector at
-    `fill`, -1 the program's own words. `output`: the caller's buffer for the
+    the put and X is large, as `_x_input`), owner 1 the second buffer at
+    `second` (a fitted vector, or y), -1 the program's own words. `output`: the caller's buffer for the
     program's output region (0: none). Returns the host arena."""
     prog.check_bound()
     var inputs = List[XprepRunInput](capacity=len(prog.inputs))
@@ -999,7 +999,7 @@ def _enc_run(call: _Call, mut prog: EncProgram, fill: Int, output: Int) raises -
             inputs.append(XprepRunInput(record.offset, record.words, call[].x.data, -1, put, record.words, False, 0, 0,
                 0))
         else:
-            var address = record.address if record.owner < 0 else fill
+            var address = record.address if record.owner < 0 else second
             inputs.append(XprepRunInput(record.offset, record.words, address, -1, False, 0, False, 0, 0, 0))
     var host = prog.host
     var scratch = prog.scratch_size
