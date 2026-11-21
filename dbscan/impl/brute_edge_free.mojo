@@ -475,6 +475,11 @@ def bef_filtered_fit[
     # --- the filter's plan: the centred copy, then one GEMM range ----------
     var free0 = Int(ctx.get_memory_info()[0])
     if 4 * n_rows * (n_features + 1) > free0 * DBF_G_SHARE_PCT // 100:
+        if phase_timing:
+            print(
+                "PHASE plan.brute_eps_filter not taken: the centred copy does not fit "
+                + String(DBF_G_SHARE_PCT) + " percent of " + String(free0) + " free bytes"
+            )
         return 0
     var xc = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
     var nc = ctx.enqueue_create_buffer[DType.float32](n_rows)
@@ -483,6 +488,11 @@ def bef_filtered_fit[
         Int(ctx.get_memory_info()[0]), n_rows, n_features
     )
     if g_rows < 1:
+        if phase_timing:
+            print(
+                "PHASE plan.brute_eps_filter not taken: no GEMM range (one query row against "
+                + String(n_rows) + " rows, with the GEMM's scratch) fits the device"
+            )
         _ = xc^
         _ = nc^
         return 0
