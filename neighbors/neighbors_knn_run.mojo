@@ -618,7 +618,7 @@ def knn_search_run(entry: NativeDescriptorCall, request: KnnQueryRequest, distan
     ascending per row; through the resident index when one is held."""
     var outcome = KnnQueryOutcome()
     if not _knn_host_scans(request, outcome):
-        return outcome
+        return outcome^
     if request.resident:
         var status = List[Int32](length=2, fill=Int32(0))
         outcome.used = nb_search_resident_call(
@@ -632,7 +632,7 @@ def knn_search_run(entry: NativeDescriptorCall, request: KnnQueryRequest, distan
             entry, request.index, request.queries, distances, ids, request.n_index, request.n_queries,
             request.n_features, request.k, True, request.query_tile, request.metric, request.metric_arg)
     outcome.ran = True
-    return outcome
+    return outcome^
 
 
 def knn_rbc_search_run(entry: NativeDescriptorCall, request: KnnQueryRequest, ids: Int,
@@ -641,12 +641,12 @@ def knn_rbc_search_run(entry: NativeDescriptorCall, request: KnnQueryRequest, id
     slot) and float32 true distances; `used` is the candidate count."""
     var outcome = KnnQueryOutcome()
     if not _knn_host_scans(request, outcome):
-        return outcome
+        return outcome^
     outcome.used = nb_rbc_search_call(
         entry, request.index, request.queries, ids, distances, request.n_index, request.n_queries,
         request.n_features, request.k, request.metric, request.metric_arg)
     outcome.ran = True
-    return outcome
+    return outcome^
 
 
 def knn_classify_run(entry: NativeDescriptorCall, request: KnnQueryRequest, y: Int, labels: Int, proba: Int,
@@ -655,7 +655,7 @@ def knn_classify_run(entry: NativeDescriptorCall, request: KnnQueryRequest, y: I
     knn_check_fold_entry(request)
     var outcome = KnnQueryOutcome()
     if not _knn_host_scans(request, outcome):
-        return outcome
+        return outcome^
     if request.resident:
         # Two words: the finite word, and for a fold the index-range word.
         var status = List[Int32](length=2, fill=Int32(0))
@@ -673,7 +673,7 @@ def knn_classify_run(entry: NativeDescriptorCall, request: KnnQueryRequest, y: I
             request.n_features, request.k, request.query_tile, want_proba, class_counts, request.metric,
             request.metric_arg, request.weights)
     outcome.ran = True
-    return outcome
+    return outcome^
 
 
 def knn_regress_run(entry: NativeDescriptorCall, request: KnnQueryRequest, y: Int, dst: Int,
@@ -682,7 +682,7 @@ def knn_regress_run(entry: NativeDescriptorCall, request: KnnQueryRequest, y: In
     knn_check_fold_entry(request)
     var outcome = KnnQueryOutcome()
     if not _knn_host_scans(request, outcome):
-        return outcome
+        return outcome^
     if request.resident:
         var status = List[Int32](length=2, fill=Int32(0))
         outcome.used = nb_regress_resident_call(
@@ -699,7 +699,7 @@ def knn_regress_run(entry: NativeDescriptorCall, request: KnnQueryRequest, y: In
             request.n_features, request.k, request.query_tile, n_outputs, request.metric, request.metric_arg,
             request.weights)
     outcome.ran = True
-    return outcome
+    return outcome^
 
 
 def knn_vote_classify_run(entry: NativeDescriptorCall, distances: Int, ids: Int, y: Int, labels: Int, proba: Int,

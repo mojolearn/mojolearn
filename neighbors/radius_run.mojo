@@ -73,7 +73,7 @@ def radius_count_run(entry: NativeDescriptorCall, request: RadiusRequest) raises
         request.radius, request.metric_arg)
     result.status = Int(status[0])
     _ = status^
-    return result
+    return result^
 
 
 def radius_fill_run(entry: NativeDescriptorCall, request: RadiusRequest, edges: Int,

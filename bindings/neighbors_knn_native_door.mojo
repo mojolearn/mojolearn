@@ -1066,7 +1066,7 @@ def _knn_fold(model: PythonObject, binding: PythonObject, x_source: PythonObject
     if not store.active():
         return DoorRowsStore.none()
     _query_checks(fields, store.row_words)
-    dist = resolved
+    dist = resolved^
     return store
 
 
@@ -1102,7 +1102,7 @@ def knn_query_unpack(model: PythonObject, binding: PythonObject, ops: NeighborsE
         # The CPU column's index test, first query only (see `_nn_fit`).
         request.scan_index = knn_index_scan_due(fields, idx, scan_key)
         request.scan_queries = not tested
-    return request
+    return request^
 
 
 def knn_query_refuse(model: PythonObject, request: KnnQueryRequest, outcome: KnnQueryOutcome,
