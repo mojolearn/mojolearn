@@ -99,6 +99,11 @@ from gbdt.models.ctr_value_table import (
     dense_category_code,
     expand_raw_columns,
 )
+from gbdt.models.combination_map import (
+    CombF32Ptr,
+    TCombinationCtrs,
+    expand_combination_columns,
+)
 from gbdt.models.tensor_ctr_value_table import TTensorCtrRegistry
 from std.math import isfinite, log2
 from std.os import getenv
@@ -3069,6 +3074,7 @@ def train(
             ctr_column_count,
             ctr_tables^,
             TTensorCtrRegistry(len(fold_counts)),
+            TCombinationCtrs(),
         )
 
 
@@ -3174,6 +3180,7 @@ def train(
         ctr_column_count,
         ctr_tables^,
         TTensorCtrRegistry(len(fold_counts)),
+        TCombinationCtrs(),
     )
 
 
@@ -3618,6 +3625,7 @@ def train_ordered_rmse_ptr(
         exported_model^, fold_counts^, one_hot^, borders^, nan_treatment^,
         List[Float64](), List[Float64](), -1, False, 0,
         List[TCtrValueTable](), TTensorCtrRegistry(n_features),
+        TCombinationCtrs(),
     )
 
 
@@ -3631,11 +3639,61 @@ def model_input_features(tm: TrainedModel) raises -> Int:
     told."""
     if len(tm.tensor_ctr_registry.features) != 0:
         return tm.tensor_ctr_registry.first_model_column
+    # tree-CTR columns are the model's last columns and read the same raw
+    # inputs as the columns before them: they add no input feature
+    var n_base = len(tm.fold_counts) - len(tm.combination_ctrs.tables)
+    if n_base < 0:
+        raise Error("more combination tables than model columns")
     if len(tm.ctr_tables) == 0:
-        return len(tm.fold_counts)
-    return column_plan(
-        tm.ctr_tables, len(tm.fold_counts)
-    ).n_input_features
+        return n_base
+    return column_plan(tm.ctr_tables, n_base).n_input_features
+
+
+def _expand_model_columns(
+    tm: TrainedModel, x_colmajor: List[Float32], n_rows: Int
+) raises -> List[Float32]:
+    """RAW input columns in, MODEL columns out, column-major both sides
+    (the host statement; the resident model runs the same one on the
+    device): the raw and simple-CTR columns first (`expand_raw_columns`),
+    then the tree-CTR columns (`expand_combination_columns`), which are the
+    model's last columns."""
+    var n_features = len(tm.fold_counts)
+    if len(tm.tensor_ctr_registry.features) != 0:
+        if not tm.combination_ctrs.is_empty():
+            raise Error(
+                "a model carries either a tensor CTR registry or combination"
+                " maps, never both"
+            )
+        return tm.tensor_ctr_registry.expand_for_model_apply(
+            x_colmajor, n_rows, tm.borders, tm.one_hot
+        )
+    var n_comb = len(tm.combination_ctrs.tables)
+    var n_base = n_features - n_comb
+    if n_base < 0:
+        raise Error("more combination tables than model columns")
+    var expanded: List[Float32]
+    var n_raw = n_base
+    if len(tm.ctr_tables) == 0:
+        if len(x_colmajor) != n_rows * n_base:
+            raise Error("x_colmajor size mismatch")
+        expanded = x_colmajor.copy()
+    else:
+        # their CalcCtrs, then the ordinary quantizer
+        n_raw = column_plan(tm.ctr_tables, n_base).n_input_features
+        expanded = expand_raw_columns(tm.ctr_tables, n_base, x_colmajor, n_rows)
+    if n_comb == 0 or n_rows <= 0:
+        return expanded^
+    expanded.resize(n_features * n_rows, Float32(0.0))
+    expand_combination_columns(
+        tm.combination_ctrs,
+        CombF32Ptr(unsafe_from_address=Int(x_colmajor.unsafe_ptr())),
+        n_rows,
+        n_raw,
+        False,
+        n_features,
+        CombF32Ptr(unsafe_from_address=Int(expanded.unsafe_ptr())),
+    )
+    return expanded^
 
 
 def predict_floats(
@@ -3670,7 +3728,6 @@ def predict_floats(
     every declared CTR column -- never merely because the count went
     missing, which is why `ctr_column_count` travels through save and load
     beside them."""
-    var n_features = len(tm.fold_counts)
     if len(tm.tensor_ctr_registry.features) != 0 and len(tm.ctr_tables) != 0:
         raise Error(
             "combined simple-CTR and tensor-CTR model apply needs a composed"
@@ -3688,20 +3745,7 @@ def predict_floats(
             "). Refused rather than scored against a grid the rows were"
             " never mapped onto"
         )
-    var expanded: List[Float32]
-    if len(tm.tensor_ctr_registry.features) != 0:
-        expanded = tm.tensor_ctr_registry.expand_for_model_apply(
-            x_colmajor, n_rows, tm.borders, tm.one_hot
-        )
-    elif len(tm.ctr_tables) == 0:
-        if len(x_colmajor) != n_rows * n_features:
-            raise Error("x_colmajor size mismatch")
-        expanded = x_colmajor.copy()
-    else:
-        # their CalcCtrs, then the ordinary quantizer
-        expanded = expand_raw_columns(
-            tm.ctr_tables, n_features, x_colmajor, n_rows
-        )
+    var expanded = _expand_model_columns(tm, x_colmajor, n_rows)
     var cindex = _build_cindex_from_floats(
         ctx, expanded, n_rows, tm.borders, tm.fold_counts,
         tm.nan_treatment,
@@ -3795,14 +3839,10 @@ def predict_multi_linked_into(
             "combined simple-CTR and tensor-CTR model apply needs a composed"
             " column plan and is not wired yet"
         )
-    if len(tm.tensor_ctr_registry.features) != 0:
-        expanded_x = tm.tensor_ctr_registry.expand_for_model_apply(
-            x_colmajor, n_rows, tm.borders, tm.one_hot
-        )
-    elif len(tm.ctr_tables) != 0:
-        expanded_x = expand_raw_columns(
-            tm.ctr_tables, len(tm.fold_counts), x_colmajor, n_rows
-        )
+    if len(tm.tensor_ctr_registry.features) != 0 or len(tm.ctr_tables) != 0 or (
+        not tm.combination_ctrs.is_empty()
+    ):
+        expanded_x = _expand_model_columns(tm, x_colmajor, n_rows)
     else:
         expanded_x = x_colmajor.copy()
     var cindex = _build_cindex_from_floats(

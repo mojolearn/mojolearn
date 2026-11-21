@@ -143,9 +143,9 @@ def case_forest() raises:
 def case_boost() raises:
     require(boost_ada_session_choice("fast", 4) == "share", "share session")
     require(boost_ada_session_choice("identical", 4) == "exact", "exact session")
-    boost_bagging_validate(True, True, False, False, False)
+    boost_bagging_validate(True, True, False, False)
     try:
-        boost_bagging_validate(True, False, False, False, False)
+        boost_bagging_validate(True, False, False, False)
         raise Error("no refusal")
     except problem:
         refuses(problem, "Out of bag estimation only available if bootstrap=True")

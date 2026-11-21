@@ -30,7 +30,6 @@ from bindings.metrics_keys_unpack import metrics_keys
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.arena_prog_native_door import _family_entries
 from bindings.arena_prog_run import _switch
-from bindings.x_prep_native_owner_door import _resident_scope
 from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
 from x_metrics.descriptor_schema import METRICS_PROGRAM_ABI, MP_OPERATION_COUNT
 from bindings.base_helpers_key_unpack import base_helpers_key
@@ -62,9 +61,9 @@ def msel_split_route(context: PythonObject, base: Bool, program: Bool,
                      program_inputs: Bool) raises -> MselRoutePin:
     """The entries of one split operation. `base`: the splitter calls the
     base helper table; `program`: it runs x_metrics programs;
-    `program_inputs`: one of them reads a caller-sized buffer (the thread's
-    resident scope is then admitted once, as the shared runner admitted it
-    before the first such input).
+    `program_inputs`: one of them reads a caller-sized buffer (no longer
+    read: an x_metrics image has no resident store, so the thread's resident
+    scope is not consulted; the parameter goes with its callers' next change).
 
     The program runner is the default-mode x_metrics image's, connected
     once per factory: what `metric_door_run(prog, None, context)` resolved
@@ -84,11 +83,6 @@ def msel_split_route(context: PythonObject, base: Bool, program: Bool,
         pin.route.program = provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry
         pin.route.ranges = _switch("MOJOLEARN_ARENA_RANGES") and py_get(entries, "x_metrics_run_ranges") is not None
         pin.route.output_ranges = py_get(entries, "x_metrics_run_out") is not None
-        if pin.route.ranges and program_inputs:
-            # The thread's resident scope keeps its admission checks; an
-            # x_metrics image has no resident store, so no scope applies.
-            if _resident_scope(entries, prog_context, "x_metrics") is not None:
-                raise Error("RuntimeError: arena family x_metrics has no resident store")
         pin.provider = provider
         pin.entries = entries
     return pin^

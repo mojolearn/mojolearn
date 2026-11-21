@@ -8,9 +8,13 @@ store already has first-upload snapshot semantics. Public _Resident/DeviceRows
 remain on their separately checked, mutable lifecycle path.
 """
 from std.python import Python, PythonObject
+from std.python._cpython import GILReleased
 from bindings.py_balanced import py_call, py_type, py_get
 from bindings.arena_cache_release_door import FirstFailure
-from bindings.arena_materialize_native_door import _native_call, _prepare, _prepared_info, _cast, _slot, _empty
+from bindings.arena_materialize_native_door import _prepare, _prepared_info, _cast, _slot, _empty
+from bindings.msel_helpers_key_unpack import msel_helpers_key
+from core.entry_table import EntryRef
+from core.msel_helpers_calls import msel_store_put, msel_store_free, msel_store_take_rows
 from bindings.msel_inputs_unpack import msel_input
 from providers.python.borrowed_buffer_pyapi_unpack import AdmittedBorrowedBuffer
 
@@ -39,9 +43,10 @@ struct ResidentRecord(Copyable, Movable):
 
 struct ArenaResidentPlan(Movable):
     var context: PythonObject
-    var put: PythonObject
-    var free: PythonObject
-    var gather: PythonObject
+    #: The fold store's helper entry (put / take_rows / free), resolved once
+    #: for the operation (lane arena, 2026-11-21: formerly three Python
+    #: builtins called through CPython).
+    var store: EntryRef
     var records: Dict[Int, ResidentRecord]
 
     def __init__(out self, context: PythonObject) raises:
@@ -49,9 +54,10 @@ struct ArenaResidentPlan(Movable):
         # as a public _Resident pins _put/_free/_take at initialization. No
         # _Resident Python instance or mutable class namespace is involved.
         self.context = context
-        self.put = context["arena_msel_put"]
-        self.free = context["arena_msel_free"]
-        self.gather = context["arena_msel_take_rows"]
+        var inputs = py_get(context, "arena_msel_input_context")
+        if inputs is None:
+            raise Error("RuntimeError: native resident rows require the model-selection input connection")
+        self.store = msel_helpers_key(inputs)
         self.records = Dict[Int, ResidentRecord]()
 
     def entry(mut self, values: PythonObject, indices: Bool = False) raises -> Int:
@@ -81,7 +87,13 @@ struct ArenaResidentPlan(Movable):
             # throughout the GIL-releasing upload, including non-C conversions.
             var pin = AdmittedBorrowedBuffer(_slot(array, "_mv", context))
             try:
-                record.sid = Int(py=_native_call(self.put, Python.tuple(pin.layout.value().address, record.nbytes)))
+                var source_address = pin.layout.value().address
+                var source_bytes = record.nbytes
+                var store = self.store
+                var put_id = -1
+                with GILReleased(Python()):
+                    put_id = msel_store_put(store, source_address, source_bytes)
+                record.sid = put_id
             finally:
                 pin.release()
         var sid = record.sid
@@ -92,7 +104,7 @@ struct ArenaResidentPlan(Movable):
             # without replacing the primary pending-error receipt.
             if sid >= 0:
                 try:
-                    _ = py_call(self.free, sid)
+                    _ = msel_store_free(self.store, sid)
                 except cleanup_error:
                     pass
             raise problem^
@@ -116,7 +128,13 @@ struct ArenaResidentPlan(Movable):
         var n = Int(py=base.shape[0])
         var row_bytes = base.nbytes // n if n else 0
         if indices.size and row_bytes:
-            _ = _native_call(self.gather, Python.tuple(base.sid, n, row_bytes, indices.sid, indices.size, _slot(output, "_addr", self.context)))
+            var dst = Int(py=_slot(output, "_addr", self.context))
+            var store = self.store
+            var base_id = base.sid
+            var index_id = indices.sid
+            var count = indices.size
+            with GILReleased(Python()):
+                _ = msel_store_take_rows(store, base_id, n, row_bytes, index_id, count, dst)
         return output
 
     def release(mut self, values: PythonObject) raises:
@@ -129,7 +147,10 @@ struct ArenaResidentPlan(Movable):
         var first = FirstFailure()
         try:
             if record.sid >= 0:
-                _ = _native_call(self.free, Python.tuple(record.sid))
+                var store = self.store
+                var freed_id = record.sid
+                with GILReleased(Python()):
+                    _ = msel_store_free(store, freed_id)
         except problem:
             first.keep(problem)
             try:
@@ -149,7 +170,10 @@ struct ArenaResidentPlan(Movable):
         for item in pending.items():  # driver-loop: attempt every independent native store release
             try:
                 if item.value.sid >= 0:
-                    _ = _native_call(self.free, Python.tuple(item.value.sid))
+                    var store = self.store
+                    var freed_id = item.value.sid
+                    with GILReleased(Python()):
+                        _ = msel_store_free(store, freed_id)
             except problem:
                 first.keep(problem)
                 failed.append(item.key)

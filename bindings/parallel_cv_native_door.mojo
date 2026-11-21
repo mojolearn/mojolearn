@@ -23,8 +23,8 @@ from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.native_codec_door import codec_initialize
 from bindings.native_process_pool_door import (
-    process_initialize, process_pool_create, process_pool_start, process_pool_map, process_pool_close,
-    process_worker_connect, process_worker_next, process_worker_reply, process_worker_refuse,
+    process_initialize, process_pool_create, process_pool_start, process_pool_map_typed, process_pool_close,
+    process_worker_connect, process_worker_next, process_worker_reply, process_worker_refuse, WorkerTurn,
     process_pool_pids,
 )
 from bindings.native_transport_door import transport_close
@@ -46,10 +46,12 @@ from bindings.msel_parallel_wire_pack import (
 from bindings.msel_parallel_witness_pack import msel_parallel_capture
 from bindings.optimizer_public_words_unpack import PENDING_PYTHON_ERROR, PYTHON_ERROR_PENDING
 from bindings.parallel_keys_unpack import parallel_keys
+from core.parallel_worker_request import WorkerRequest, worker_request_decode
 from bindings.py_balanced import py_item
 from bindings.parallel_cv_native_run import (
-    CV_REQUEST_IDENTITY, CV_REQUEST_FOLD, CV_REQUEST_DATA, CV_DEVICE_NOT_AN_INDEX,
-    cv_devices_admit, cv_vendor_admit, cv_request_code, cv_request_admit, cv_wave_count,
+    CV_REQUEST_IDENTITY, CV_REQUEST_DATA, CV_DEVICE_NOT_AN_INDEX,
+    cv_devices_admit, cv_vendor_admit, cv_request_admit, cv_wave_count,
+    cv_plain_words, cv_fold_request, cv_fold_admit,
     cv_batch_count_admit, cv_reply_order_admit,
     CvTrace, cv_stage_name, cv_status_name, CV_STATUS_RUNNING, CV_STATUS_FAILED, CV_STATUS_COMPLETE,
     CV_STAGE_VALIDATED, CV_STAGE_START, CV_STAGE_IDENTITY, CV_STAGE_DATA, CV_STAGE_WAVE,
@@ -119,33 +121,19 @@ def _worker_error(error: Error, context: PythonObject) raises -> String:
     return name + ": native fold failed (non-string exception payload retained by its native boundary)"
 
 
-def _fold(request: PythonObject, inventory: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = native_loaded_module("builtins")
-    if py_type(request) is not b.tuple or len(request) != 9 or py_type(request[1]) is not b.int or py_type(request[8]) is not b.bool:
-        raise Error("ValueError: malformed native CV fold request")
-    var estimator = msel_parallel_model_unpack(request[2], context)
-    var scorer = msel_parallel_scorer_unpack(request[3], context)
-    msel_fit(estimator, request[4], request[5], context)
-    var score = msel_score(estimator, request[6], request[7], scorer, context)
-    var captured = PythonObject(None)
-    if Bool(py=request[8]):
-        # The capture operation is a native verification mode of this same
-        # fold path. Completed artifacts are consumed by the testing caller.
-        captured = msel_parallel_capture(estimator, request[6], request[7], score, inventory, context)
-    return Python.tuple(request[1], score, captured)
-
-
-def _fold_rows(request: PythonObject, mut rows: MselFoldRows, inventory: PythonObject,
+def _fold_rows(typed: WorkerRequest, request: PythonObject, mut rows: MselFoldRows, inventory: PythonObject,
                context: PythonObject) raises -> PythonObject:
-    # ("fold_rows", i, model, scorer, train, test, capture): the fold's rows
-    # are gathered here out of the run's X and y the "data" request left.
+    # The typed request holds the fold index (handle) and the capture flag
+    # (its word); the payload is (model, scorer, train, test). The fold's
+    # rows are gathered here out of the run's X and y the data request left.
     var b = native_loaded_module("builtins")
-    if py_type(request) is not b.tuple or len(request) != 7 or py_type(request[1]) is not b.int or py_type(request[6]) is not b.bool:
+    cv_fold_admit(typed)
+    if py_type(request) is not b.tuple or len(request) != 4:
         raise Error("ValueError: malformed native CV fold request")
     if rows.x is None:
         raise Error("RuntimeError: CV worker fold rows require the run's X and y first")
-    var train = request[4]
-    var test = request[5]
+    var train = request[2]
+    var test = request[3]
     var x = rows.x
     var y = rows.y
     var x_train = rows.rows(x, train, context)
@@ -156,27 +144,28 @@ def _fold_rows(request: PythonObject, mut rows: MselFoldRows, inventory: PythonO
     # copies now (X and y stay resident for the next fold).
     rows.resident_release(train, context)
     rows.resident_release(test, context)
-    var estimator = msel_parallel_model_unpack(request[2], context)
-    var scorer = msel_parallel_scorer_unpack(request[3], context)
+    var estimator = msel_parallel_model_unpack(request[0], context)
+    var scorer = msel_parallel_scorer_unpack(request[1], context)
     msel_fit(estimator, x_train, y_train, context)
     var score = msel_score(estimator, x_test, y_test, scorer, context)
     var captured = PythonObject(None)
-    if Bool(py=request[6]):
+    if typed.words[0] != 0:
         captured = msel_parallel_capture(estimator, x_test, y_test, score, inventory, context)
-    return Python.tuple(request[1], score, captured)
+    return Python.tuple(PythonObject(typed.handle), score, captured)
 
 
 def _worker_data(request: PythonObject, mut rows: MselFoldRows, context: PythonObject) raises -> PythonObject:
-    # ("data", X, y): this run's X and y, kept for every later fold request.
+    # The data request's payload (X, y): this run's X and y, kept for every
+    # later fold request.
     var b = native_loaded_module("builtins")
-    if py_type(request) is not b.tuple or len(request) != 3 or request[1] is None or request[2] is None:
+    if py_type(request) is not b.tuple or len(request) != 2 or request[0] is None or request[1] is None:
         raise Error("ValueError: malformed native CV data request")
     rows.close(context)
-    rows = MselFoldRows(request[1], request[2], Python.list(), False, context)
+    rows = MselFoldRows(request[0], request[1], Python.list(), False, context)
     return PythonObject(True)
 
 
-def _worker_request(socket: PythonObject, sequence: Int, request: PythonObject, mut inventory: PythonObject,
+def _worker_request(socket: PythonObject, turn: WorkerTurn, mut inventory: PythonObject,
                     mut rows: MselFoldRows, metadata: PythonObject, context: PythonObject) raises:
     # One authenticated request owns its result/error response, but never the
     # socket lifetime. A broken envelope or error-response send still raises
@@ -185,23 +174,21 @@ def _worker_request(socket: PythonObject, sequence: Int, request: PythonObject, 
     # The pinned parser rejects this handler as the final nested statement of
     # the worker's try/finally (https://github.com/modular/modular/issues/6718).
     var nk = parallel_keys()
+    var sequence = turn.sequence
     try:
-        var b = native_loaded_module("builtins")
-        if py_type(request) is not b.tuple or len(request) < 1 or py_type(request[0]) is not b.str:
-            raise Error("ValueError: malformed native CV worker request")
+        # The typed request (a frame without request words is refused here).
+        var typed = worker_request_decode(Int(turn.request.unsafe_ptr()), len(turn.request) * 8)
         var result = PythonObject(None)
-        var code = cv_request_code(String(request[0]), len(request))
+        var code = typed.op
         cv_request_admit(code, inventory is not None)
         if code == CV_REQUEST_IDENTITY:
             if inventory is None:
                 inventory = native_worker_inventory(String(py_item(metadata, nk[].k_vendor)), py_item(metadata, nk[].k_environ))
             result = inventory
-        elif code == CV_REQUEST_FOLD:
-            result = _fold(request, inventory, context)
         elif code == CV_REQUEST_DATA:
-            result = _worker_data(request, rows, context)
+            result = _worker_data(turn.value, rows, context)
         else:
-            result = _fold_rows(request, rows, inventory, context)
+            result = _fold_rows(typed, turn.value, rows, inventory, context)
         process_worker_reply(socket, sequence, result)
     except error:
         process_worker_refuse(socket, sequence, _worker_error(error, context))
@@ -220,7 +207,7 @@ def msel_parallel_worker(argv: PythonObject, context: PythonObject) raises:
             var turn = process_worker_next(socket)
             if not turn.open:
                 break
-            _worker_request(socket, turn.sequence, turn.value, inventory, rows, metadata, context)
+            _worker_request(socket, turn, inventory, rows, metadata, context)
         rows.close(context)
     finally:
         # A worker that stops on an error exits with its process; the device
@@ -304,8 +291,8 @@ def msel_parallel_score(args: PythonObject, capture: Bool, context: PythonObject
         trace.stage(CV_STAGE_START)
         var requests = Python.list()
         for i in range(len(devices)):  # driver-loop: one pre-fit identity request per selected worker
-            _ = py_call(requests.append, Python.tuple("identity"))
-        var identities = process_pool_map(pool, requests)
+            _ = py_call(requests.append, PythonObject(None))
+        var identities = process_pool_map_typed(pool, cv_plain_words(CV_REQUEST_IDENTITY, len(devices)), requests)
         # The spawned process ids, from the pool's record.
         trace.workers = process_pool_pids(pool)
         var pids = Python.list()
@@ -319,8 +306,8 @@ def msel_parallel_score(args: PythonObject, capture: Bool, context: PythonObject
         # carry only index arrays.
         requests = Python.list()
         for i in range(len(devices)):  # driver-loop: one data request per selected worker
-            _ = py_call(requests.append, Python.tuple("data", prepared[0], prepared[1]))
-        var loaded = process_pool_map(pool, requests)
+            _ = py_call(requests.append, Python.tuple(prepared[0], prepared[1]))
+        var loaded = process_pool_map_typed(pool, cv_plain_words(CV_REQUEST_DATA, len(devices)), requests)
         if py_type(loaded) is not native_loaded_module("builtins").list or len(loaded) != len(devices):
             raise Error("ValueError: cross-validation workers did not all receive the run's X and y")
         trace.stage(CV_STAGE_DATA)
@@ -328,14 +315,16 @@ def msel_parallel_score(args: PythonObject, capture: Bool, context: PythonObject
         var width = len(device_words)
         for start in range(0, len(folds), width):  # driver-loop: bounded whole-fold waves
             requests = Python.list()
+            var words = List[List[Int64]]()
             var wave = cv_wave_count(width, len(folds), start)
             trace.waves.append(wave)
             for i in range(start, start + wave):  # driver-loop: independent fresh estimator per fold
                 var pair = folds[i]
                 trace.assign(i, device_words[i - start], trace.workers[i - start])
-                _ = py_call(requests.append, Python.tuple("fold_rows", i, model, scorer, pair[0], pair[1], capture))
+                words.append(cv_fold_request(i, capture))
+                _ = py_call(requests.append, Python.tuple(model, scorer, pair[0], pair[1]))
             trace.stage(CV_STAGE_WAVE)
-            var result = process_pool_map(pool, requests)
+            var result = process_pool_map_typed(pool, words, requests)
             msel_parallel_require_batch(result, start, len(requests))
             for i in range(len(result)):  # driver-loop: consume in logical fold order, never completion order
                 scores.append(Float64(py=result[i][1]))

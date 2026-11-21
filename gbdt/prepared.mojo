@@ -17,6 +17,7 @@ from gbdt.train import (
 )
 from gbdt.ctrs.ctr_binarization import TBinarizationOptions
 from gbdt.models.ctr_value_table import TCtrValueTable
+from gbdt.models.combination_map import TCombinationCtrs
 from gbdt.models.tensor_ctr_value_table import TTensorCtrRegistry
 from gbdt.methods.doc_parallel_boosting import TAdditiveModel, fit_with_test
 from gbdt.options.loss_description import make_loss_description
@@ -147,6 +148,7 @@ struct PreparedNumericDataset(Movable):
             result.learn_losses.copy(), result.test_losses.copy(),
             result.best_iteration, result.stopped_early, 0,
             List[TCtrValueTable](), TTensorCtrRegistry(self.n_features),
+            TCombinationCtrs(),
         )
 
 

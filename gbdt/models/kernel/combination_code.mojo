@@ -48,6 +48,7 @@ from gbdt.models.combination_map import (
 )
 from gbdt.models.kernel.resident_ctr import (
     CTR_BLOCK,
+    ResidentCtrPlan,
     SIMPLE_F,
     SIMPLE_I,
     _flag_bad,
@@ -339,3 +340,24 @@ def enqueue_combination_columns(
                 Int32(t), Int32(plan.table_column[t]), d_out.unsafe_ptr(),
                 grid_dim=_grid(n_rows), block_dim=CTR_BLOCK,
             )
+
+
+def enqueue_combination_columns_resident(
+    ctx: DeviceContext,
+    mut plan: ResidentCombinationPlan,
+    mut simple: ResidentCtrPlan,
+    n_rows: Int,
+    row_major: Bool,
+    mut d_out: DeviceBuffer[DType.float32],
+) raises:
+    """The resident predict's call: the tree-CTR columns after the simple
+    expansion on the same queue (`enqueue_resident_ctr_expand(...,
+    read_bad=False)`, which uploaded the raw input into `simple.d_in` and
+    filled `simple.d_bad`), then the ONE copy home of the refusal words both
+    wrote. `resident_ctr_raise_if_bad` reads them after the caller's drain."""
+    if simple.rows != n_rows or simple.n_raw != plan.n_raw:
+        raise Error("combination columns: the simple expansion did not stage this call")
+    enqueue_combination_columns(
+        ctx, plan, simple.d_in.value(), n_rows, row_major, d_out, simple.d_bad
+    )
+    ctx.enqueue_copy(dst_ptr=simple.h_bad.unsafe_ptr(), src_buf=simple.d_bad)

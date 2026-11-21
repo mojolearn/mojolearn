@@ -631,11 +631,15 @@ def enqueue_resident_ctr_expand(
     row_major: Bool,
     mut d_borders: DeviceBuffer[DType.float32],
     mut d_out: DeviceBuffer[DType.float32],
+    read_bad: Bool = True,
 ) raises:
     """The raw input up in ONE copy (as handed over), the expansion into
     `d_out` (`n_cols * n_rows`, column-major), and the refusal words' copy
     home, ENQUEUED. `resident_ctr_raise_if_bad` reads them after the
-    caller's drain."""
+    caller's drain. `read_bad=False` leaves the refusal words on the device:
+    the tree-CTR launches that follow on the same queue flag into them too
+    and enqueue the one copy home themselves
+    (`combination_code.enqueue_combination_columns_resident`)."""
     if plan.rows != n_rows:
         plan.d_bins = None
         plan.d_in = None
@@ -686,7 +690,8 @@ def enqueue_resident_ctr_expand(
                 plan.d_bad.unsafe_ptr(),
                 grid_dim=_grid(n_rows), block_dim=CTR_BLOCK,
             )
-    ctx.enqueue_copy(dst_ptr=plan.h_bad.unsafe_ptr(), src_buf=plan.d_bad)
+    if read_bad:
+        ctx.enqueue_copy(dst_ptr=plan.h_bad.unsafe_ptr(), src_buf=plan.d_bad)
 
 
 def resident_ctr_raise_if_bad(

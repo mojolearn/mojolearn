@@ -110,7 +110,8 @@ from bindings.py_admitted_registry import (
     admitted_held_index, admitted_held_address, admitted_held_rows, admitted_held_cols, admitted_held_finite,
 )
 from bindings.admitted_meta_scope_unpack import admitted_held_verify
-from bindings.device_rows_door import door_is_device_rows, DoorRows, door_rows_store
+from bindings.device_rows_door import door_is_device_rows, DoorRows
+from bindings.device_rows_store_door import door_rows_store_of
 from bindings.device_rows_door_run import DoorRowsStore
 from core.admitted_f32_plan import (
     AdmittedInputShape, admitted_numeric_kind, admitted_f32_column, admitted_f32_shape_check, admitted_f32_byte_order,
@@ -665,7 +666,8 @@ def _admitted_rows(source: PythonObject, est: String, context: PythonObject, dev
     var tested = False
     var store = DoorRowsStore.none()
     if device_x:
-        store = door_rows_store(source, context)
+        # the fold view `door` already holds: no second read of the instance
+        store = door_rows_store_of(door, context)
         admitted_rows_store(store.active(), store.rows, store.row_words, store.base_rows, rows, columns, base_rows)
     if not store.active():
         array = admitted_storage_f32(rows, columns, context)

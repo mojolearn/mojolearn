@@ -7,10 +7,14 @@ arguments, moves the frames and packs the scores; no Python object reaches
 this file. The folds run in the workers; what is here is a few words per
 wave: nothing to split across cores."""
 
-# A CV worker request, by its name on the wire.
-comptime CV_REQUEST_UNKNOWN = 0
+from core.parallel_worker_request import WorkerRequest
+
+# A CV worker request: the `op` of its typed request
+# (core/parallel_worker_request.mojo). A fold request's handle is the fold
+# index and its one word is the capture flag; the others carry no word.
+# REMOVED: the request names on the wire and code 2, the "fold" request that
+# carried a fold's rows (no coordinator sent it since the rows became resident).
 comptime CV_REQUEST_IDENTITY = 1
-comptime CV_REQUEST_FOLD = 2
 comptime CV_REQUEST_DATA = 3
 comptime CV_REQUEST_FOLD_ROWS = 4
 
@@ -40,24 +44,32 @@ def cv_vendor_admit(devices: List[Int], vendor: String, cpu_only: Bool) raises:
         raise Error("NotImplementedError: parallel cross-validation requires CUDA, HIP, Metal device zero or a CPU-only install")
 
 
-def cv_request_code(name: String, length: Int) -> Int:
-    """The request a worker received, from its name and its field count
-    (an identity request has no field)."""
-    if name == "identity" and length == 1:
-        return CV_REQUEST_IDENTITY
-    if name == "fold":
-        return CV_REQUEST_FOLD
-    if name == "data":
-        return CV_REQUEST_DATA
-    if name == "fold_rows":
-        return CV_REQUEST_FOLD_ROWS
-    return CV_REQUEST_UNKNOWN
+def cv_plain_words(op: Int, count: Int) -> List[List[Int64]]:
+    """`count` typed requests of one wordless operation (identity, data):
+    one per worker."""
+    var wire = WorkerRequest(op).encode()
+    var words = List[List[Int64]]()
+    for _ in range(count):  # small-loop(one request per selected worker)
+        words.append(wire.copy())
+    return words^
+
+
+def cv_fold_request(fold: Int, capture: Bool) -> List[Int64]:
+    """The typed request of one fold: its index and the capture flag."""
+    var request = WorkerRequest(CV_REQUEST_FOLD_ROWS, fold)
+    request.words.append(1 if capture else 0)
+    return request.encode()
+
+
+def cv_fold_admit(request: WorkerRequest) raises:
+    if request.handle < 0 or len(request.words) != 1 or (request.words[0] != 0 and request.words[0] != 1):
+        raise Error("ValueError: malformed native CV fold request")
 
 
 def cv_request_admit(code: Int, identified: Bool) raises:
     """A worker fits nothing and keeps no rows before its identity was
     admitted; an unknown request is refused."""
-    if code == CV_REQUEST_UNKNOWN:
+    if code != CV_REQUEST_IDENTITY and code != CV_REQUEST_DATA and code != CV_REQUEST_FOLD_ROWS:
         raise Error("ValueError: unknown native CV worker request")
     if code != CV_REQUEST_IDENTITY and not identified:
         raise Error("RuntimeError: CV worker identity must be admitted before fitting")
