@@ -69,6 +69,7 @@ from checks.native_tests.core_safetensors_f16 import register as register_core_s
 from checks.native_tests.core_stratified_group_fp64 import register as register_core_stratified_group_fp64
 from checks.native_tests.core_verifier_gap_methods import register as register_core_verifier_gap_methods
 from checks.native_tests.core_vjp_rank import register as register_core_vjp_rank
+from checks.native_tests.dbscan_eps_filter_gpu import register as register_dbscan_eps_filter_gpu
 from checks.native_tests.dbscan_native import register as register_dbscan_native
 from checks.native_tests.dbscan_ownership import register as register_dbscan_ownership
 from checks.native_tests.decomp_classical_infer_one_call import register as register_decomp_classical_infer_one_call
@@ -651,6 +652,7 @@ def all_checks() -> List[Check]:
     checks.append(register_core_stratified_group_fp64())
     checks.append(register_core_verifier_gap_methods())
     checks.append(register_core_vjp_rank())
+    checks.append(register_dbscan_eps_filter_gpu())
     checks.append(register_dbscan_native())
     checks.append(register_dbscan_ownership())
     checks.append(register_decomp_classical_infer_one_call())
