@@ -25,6 +25,8 @@ comptime NATIVE_PROCESS_OPN_MAP = 2
 comptime NATIVE_PROCESS_OPN_CLOSE = 3
 comptime NATIVE_PROCESS_OPN_WORKER_ECHO = 4
 comptime NATIVE_PROCESS_OPN_ENVIRONMENT = 5
+comptime NATIVE_PROCESS_OPN_MIRROR = 6
+comptime NATIVE_PROCESS_OPN_MODULE = 7
 # `transport` dispatcher codes (`ops_transport`).
 comptime NATIVE_TRANSPORT_OPN_INITIALIZE = 0
 comptime NATIVE_TRANSPORT_OPN_IDNA = 1
@@ -113,7 +115,6 @@ struct NativeKeys(Defaultable, Movable):
     var k_dict: PythonObject
     var k_driver_library: PythonObject
     var k_dtype: PythonObject
-    var k_environment: PythonObject
     var k_exponents: PythonObject
     var k_float: PythonObject
     var k_from_buffer_slots: PythonObject
@@ -128,7 +129,6 @@ struct NativeKeys(Defaultable, Movable):
     var k_labels_real_type: PythonObject
     var k_list: PythonObject
     var k_memoryview: PythonObject
-    var k_module: PythonObject
     var k_modules: PythonObject
     var k_name: PythonObject
     var k_native_scalar_promotion_getter: PythonObject
@@ -159,7 +159,6 @@ struct NativeKeys(Defaultable, Movable):
     var k_pid: PythonObject
     var k_ppid: PythonObject
     var k_readonly: PythonObject
-    var k_record: PythonObject
     var k_scalar_types: PythonObject
     var k_shape: PythonObject
     var k_size: PythonObject
@@ -253,7 +252,6 @@ struct NativeKeys(Defaultable, Movable):
         self.k_dict = PythonObject(None)
         self.k_driver_library = PythonObject(None)
         self.k_dtype = PythonObject(None)
-        self.k_environment = PythonObject(None)
         self.k_exponents = PythonObject(None)
         self.k_float = PythonObject(None)
         self.k_from_buffer_slots = PythonObject(None)
@@ -268,7 +266,6 @@ struct NativeKeys(Defaultable, Movable):
         self.k_labels_real_type = PythonObject(None)
         self.k_list = PythonObject(None)
         self.k_memoryview = PythonObject(None)
-        self.k_module = PythonObject(None)
         self.k_modules = PythonObject(None)
         self.k_name = PythonObject(None)
         self.k_native_scalar_promotion_getter = PythonObject(None)
@@ -299,7 +296,6 @@ struct NativeKeys(Defaultable, Movable):
         self.k_pid = PythonObject(None)
         self.k_ppid = PythonObject(None)
         self.k_readonly = PythonObject(None)
-        self.k_record = PythonObject(None)
         self.k_scalar_types = PythonObject(None)
         self.k_shape = PythonObject(None)
         self.k_size = PythonObject(None)
@@ -395,7 +391,6 @@ def _native_keys_fill(nk: UnsafePointer[NativeKeys, MutUntrackedOrigin]) raises:
     nk[].k_dict = py_key("dict")
     nk[].k_driver_library = py_key("driver_library")
     nk[].k_dtype = py_key("dtype")
-    nk[].k_environment = py_key("environment")
     nk[].k_exponents = py_key("exponents")
     nk[].k_float = py_key("float")
     nk[].k_from_buffer_slots = py_key("from_buffer_slots")
@@ -410,7 +405,6 @@ def _native_keys_fill(nk: UnsafePointer[NativeKeys, MutUntrackedOrigin]) raises:
     nk[].k_labels_real_type = py_key("labels_real_type")
     nk[].k_list = py_key("list")
     nk[].k_memoryview = py_key("memoryview")
-    nk[].k_module = py_key("module")
     nk[].k_modules = py_key("modules")
     nk[].k_name = py_key("name")
     nk[].k_native_scalar_promotion_getter = py_key("native_scalar_promotion_getter")
@@ -441,7 +435,6 @@ def _native_keys_fill(nk: UnsafePointer[NativeKeys, MutUntrackedOrigin]) raises:
     nk[].k_pid = py_key("pid")
     nk[].k_ppid = py_key("ppid")
     nk[].k_readonly = py_key("readonly")
-    nk[].k_record = py_key("record")
     nk[].k_scalar_types = py_key("scalar_types")
     nk[].k_shape = py_key("shape")
     nk[].k_size = py_key("size")
@@ -478,6 +471,8 @@ def _native_keys_fill(nk: UnsafePointer[NativeKeys, MutUntrackedOrigin]) raises:
     py_op_add(ops_process, "close", NATIVE_PROCESS_OPN_CLOSE)
     py_op_add(ops_process, "worker_echo", NATIVE_PROCESS_OPN_WORKER_ECHO)
     py_op_add(ops_process, "environment", NATIVE_PROCESS_OPN_ENVIRONMENT)
+    py_op_add(ops_process, "mirror", NATIVE_PROCESS_OPN_MIRROR)
+    py_op_add(ops_process, "module", NATIVE_PROCESS_OPN_MODULE)
     nk[].ops_process = ops_process
     var ops_transport = Python.dict()
     py_op_add(ops_transport, "initialize", NATIVE_TRANSPORT_OPN_INITIALIZE)

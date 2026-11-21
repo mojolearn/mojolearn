@@ -26,6 +26,7 @@ def main():
     import numpy as np
     from mojolearn import KNeighborsClassifier
     from mojolearn.parallel_neighbors_reference import ReferenceShardedNeighbors
+    from mojolearn._native_process import _native_process
 
     rng = np.random.default_rng(0)
     X = rng.standard_normal((512, 8)).astype(np.float32)
@@ -39,8 +40,9 @@ def main():
             rs.kneighbors(X[:32])
             t2 = time.perf_counter()
         t3 = time.perf_counter()
-        pool = vars(rs).get("_pool") or {}
-        timing = pool.get("timing") if isinstance(pool, dict) else None
+        # The pool handle is a native owner; its published mirror holds the timing.
+        pool = vars(rs).get("_pool")
+        timing = _native_process("mirror", (pool,)).get("timing") if pool is not None else None
         row = dict(open=i, devices=list(devices), wall_s=round(t3 - t0, 3), enter_s=round(t1 - t0, 3),
                    first_call_s=round(t2 - t1, 3), exit_s=round(t3 - t2, 3), timing=timing)
         rows.append(row)

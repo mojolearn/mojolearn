@@ -26,10 +26,12 @@ from bindings.parallel_mlp_native_door import (
 )
 from bindings.native_process_pool_door import (
     process_pool_create, process_pool_map_typed, process_pool_close,
-    process_worker_connect, process_worker_next, process_worker_value, process_worker_reply, process_worker_refuse,
+    process_worker_connect, process_worker_next, process_worker_value, process_worker_reply_typed, process_worker_refuse,
     process_pool_devices,
 )
 from bindings.native_transport_door import transport_close
+from bindings.native_process_wire_door import WireOutgoing, wire_unpack, wire_append
+from core.parallel_worker_frame import WIRE_TUPLE
 from bindings.py_balanced import py_call, py_fields, py_get, py_setitem, py_type
 from bindings.parallel_neural_admission_unpack import neural_admit
 from core.sha256 import Sha256
@@ -519,12 +521,17 @@ def _neural_train(owner: PythonObject, record: PythonObject, supplied: PythonObj
         # the committed step as a delta the workers replay: the ordered-sum
         # gradient and the generator state the update read. The requests
         # that carried the list have been answered, so it is extended in
-        # place (the per-step list copy is gone).
+        # place (the per-step list copy is gone). The committed digest is
+        # taken BEFORE the delta is appended (lane fx-audit, audit-neural
+        # finding 2): a raise in the snapshot or digest then leaves no delta
+        # for a step that never committed, so no worker replays it; the
+        # append, the trim and the commit after it do not fail on a live list.
+        var committed = _state_digest(_neural_snapshot(record))
         var history = rec[].history
         _ = py_call(history.append, Python.tuple(neural_step_version(rec[].native), updated[1], next_rng))
         for _ in range(neural_history_excess(len(history))):  # driver-loop: over retained committed steps beyond the bound (at most one)
             _ = py_call(history.pop, 0)
-        neural_step_commit(rec[].native, _state_digest(_neural_snapshot(record)))
+        neural_step_commit(rec[].native, committed)
         var result = b[].bi.dict()
         py_setitem(result, nk[].k_losses, py_call(b[].bi.tuple, losses))
         py_setitem(result, nk[].k_completed_steps, updated[2])
@@ -587,7 +594,7 @@ def _neural_close(record: PythonObject) raises:
         raise Error(failure)
 
 
-def neural_worker_dispatch(request: WorkerRequest, payload: PythonObject) raises -> PythonObject:
+def neural_worker_dispatch(request: WorkerRequest, payload: PythonObject) raises -> WireOutgoing:
     """One worker request: `request` is the typed operation (and, for a
     gradient, the owner's cache epoch and version); `payload` is the pair
     (model slot, arguments). REMOVED: the operation string in the payload
@@ -616,7 +623,7 @@ def neural_worker_dispatch(request: WorkerRequest, payload: PythonObject) raises
             slot = PythonObject(opened)
             py_setitem(cache, nk[].k_mlp_slot, slot)
             py_setitem(cache, nk[].k_checked_of, resident)
-        return mlp_gradients_on(Int(py=slot), args[0], args[1])
+        return wire_unpack(mlp_gradients_on(Int(py=slot), args[0], args[1]))
     if operation == PN_SAMBA_GRADIENT_CACHED:
         neural_gradient_words_admit(request)
         var cache = _worker_model(state, True, request.words[0], request.words[1])
@@ -626,7 +633,7 @@ def neural_worker_dispatch(request: WorkerRequest, payload: PythonObject) raises
         _ = py_call(values.append, PythonObject(None))
         _ = py_call(values.append, args[2])
         _ = py_call(values.append, args[3])
-        return _neural_samba("model_gradients", values)
+        return wire_unpack(_neural_samba("model_gradients", values))
     if operation != PN_MLP_UPDATE and operation != PN_SAMBA_UPDATE:
         raise Error("parallel neural: unsupported worker operation")
     neural_cooperative_admit()
@@ -641,11 +648,17 @@ def neural_worker_dispatch(request: WorkerRequest, payload: PythonObject) raises
         _ = py_call(values.append, grads)
         updated = _neural_samba("apply", values)
         step = Int(py=py_item(updated, nk[].k_t))
-    var result = b[].bi.list()
-    _ = py_call(result.append, updated)
-    _ = py_call(result.append, grads)
-    _ = py_call(result.append, step)
-    return py_call(b[].bi.tuple, result)
+    # The reply record (updated state, summed gradients, step), written as
+    # typed nodes: the two values are UNPACKed once each, as they were inside
+    # the tuple. REMOVED 2026-11-21 (lane pools-frame): the list, its three
+    # appends, the Python int of the step and the tuple copy, built per
+    # update only to be UNPACKed again by the reply.
+    var reply = WireOutgoing()
+    reply.record.node(WIRE_TUPLE, 3)
+    wire_append(updated, reply)
+    wire_append(grads, reply)
+    reply.record.integer(step)
+    return reply^
 
 
 def neural_worker(argv: PythonObject) raises:
@@ -657,8 +670,11 @@ def neural_worker(argv: PythonObject) raises:
                 break
             try:
                 var typed = worker_request_decode(Int(turn.request.unsafe_ptr()), len(turn.request) * 8)
+                # The request's PACK stays: the worker's resident state, its
+                # step deltas and the shard's Arrays are Python values of the
+                # MLP and Samba doors (mlp_gradients_on, samba "apply").
                 var result = neural_worker_dispatch(typed, process_worker_value(turn))
-                process_worker_reply(socket, turn.sequence, result)
+                process_worker_reply_typed(socket, turn.sequence, result)
             except error:
                 process_worker_refuse(socket, turn.sequence, String(error))
     except error:

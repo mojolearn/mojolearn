@@ -19,7 +19,14 @@ except NameError:  # Python 3.10: the builtin is 3.11+; keep every cleanup failu
             super().__init__(message, list(exceptions))
             self.exceptions = list(exceptions)
 from mojolearn._verify_native_runtime import audit_native_call
+from mojolearn._native_process import _native_process
 from mojolearn.tests.test_parallel_mlp_native import model_fixture
+
+
+def pool_mirror(pool):
+    # The pool handle is a native owner; its published mirror (devices,
+    # cooperative, workers, closed, timing) is read through the process door.
+    return _native_process("mirror", (pool,))
 
 
 # Test-side float64 oracle of the small-MLP softmax cross-entropy gradient. It
@@ -133,8 +140,8 @@ def test_complete_training_oracle_checkpoint_replay_and_child_audit(tmp_path, mo
         audit_native_call(owner.train_step, shards).assert_native()
         audit_native_call(replay.train_step, shards).assert_native()
         assert training_state(audit_native_call(owner.checkpoint).assert_native()) == training_state(audit_native_call(replay.checkpoint).assert_native())
-        gradient_pids = [worker['pid'] for worker in owner._pool['workers']]
-        update_pid = owner._update_pool['workers'][0]['pid']
+        gradient_pids = [worker['pid'] for worker in pool_mirror(owner._pool)['workers']]
+        update_pid = pool_mirror(owner._update_pool)['workers'][0]['pid']
         pids = gradient_pids + [update_pid]
         # one device: the update runs on the gradient worker (one pool)
         assert len(set(pids)) == len(devices) + (0 if len(devices) == 1 else 1)
@@ -143,7 +150,7 @@ def test_complete_training_oracle_checkpoint_replay_and_child_audit(tmp_path, mo
         cleanup_errors = []
         # Capture identities even when training or the independent oracle
         # fails, then give every child time to retain its complete audit.
-        workers = owner._pool['workers'] + owner._update_pool['workers']
+        workers = pool_mirror(owner._pool)['workers'] + pool_mirror(owner._update_pool)['workers']
         pids = sorted(set(pids + [worker['pid'] for worker in workers]))
         for active in (owner, replay):
             if active is not None:
@@ -196,8 +203,8 @@ def test_worker_failure_rolls_back_and_retry_restarts_owned_processes():
         for key in ('python_frames', 'forbidden_native_calls', 'wrapper_work', 'unobserved_existing_threads'):
             assert not failed.report()[key], failed.report()
         assert training_state(audit_native_call(owner.checkpoint).assert_native()) == training_state(before)
-        assert owner._pool['workers'] == []
-        assert owner._pool['closed'] is False
+        assert pool_mirror(owner._pool)['workers'] == []
+        assert pool_mirror(owner._pool)['closed'] is False
         x[0, 0] = 1
         assert audit_native_call(owner.train_step, [(x, y)]).assert_native()['completed_steps'] == 1
     finally:
@@ -267,7 +274,7 @@ def test_samba_parallel_dropout_clipping_schedule_and_checkpoint_replay(tmp_path
         # one device: the update runs on the gradient worker (one shared
         # pool, one process; bindings/parallel_neural_native_door.mojo)
         assert owner._update_pool is owner._pool
-        pids = sorted({row['pid'] for row in owner._pool['workers'] + owner._update_pool['workers']})
+        pids = sorted({row['pid'] for row in pool_mirror(owner._pool)['workers'] + pool_mirror(owner._update_pool)['workers']})
     finally:
         primary = sys.exc_info()[1]
         cleanup_errors = []

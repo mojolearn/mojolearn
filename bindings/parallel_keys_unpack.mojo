@@ -272,7 +272,6 @@ struct ParallelKeys(Defaultable, Movable):
     var k_entry_mode: PythonObject
     var k_entry_vendor: PythonObject
     var k_environ: PythonObject
-    var k_environment: PythonObject
     var k_epoch: PythonObject
     var k_eps: PythonObject
     var k_error: PythonObject
@@ -400,7 +399,6 @@ struct ParallelKeys(Defaultable, Movable):
     var k_radius: PythonObject
     var k_random_weights_: PythonObject
     var k_recipe: PythonObject
-    var k_record: PythonObject
     var k_reduction: PythonObject
     var k_reference_bytes: PythonObject
     var k_reference_end: PythonObject
@@ -579,7 +577,6 @@ struct ParallelKeys(Defaultable, Movable):
         self.k_entry_mode = PythonObject(None)
         self.k_entry_vendor = PythonObject(None)
         self.k_environ = PythonObject(None)
-        self.k_environment = PythonObject(None)
         self.k_epoch = PythonObject(None)
         self.k_eps = PythonObject(None)
         self.k_error = PythonObject(None)
@@ -707,7 +704,6 @@ struct ParallelKeys(Defaultable, Movable):
         self.k_radius = PythonObject(None)
         self.k_random_weights_ = PythonObject(None)
         self.k_recipe = PythonObject(None)
-        self.k_record = PythonObject(None)
         self.k_reduction = PythonObject(None)
         self.k_reference_bytes = PythonObject(None)
         self.k_reference_end = PythonObject(None)
@@ -884,7 +880,6 @@ def _parallel_keys_fill(nk: UnsafePointer[ParallelKeys, MutUntrackedOrigin]) rai
     nk[].k_entry_mode = py_key("entry_mode")
     nk[].k_entry_vendor = py_key("entry_vendor")
     nk[].k_environ = py_key("environ")
-    nk[].k_environment = py_key("environment")
     nk[].k_epoch = py_key("epoch")
     nk[].k_eps = py_key("eps")
     nk[].k_error = py_key("error")
@@ -1012,7 +1007,6 @@ def _parallel_keys_fill(nk: UnsafePointer[ParallelKeys, MutUntrackedOrigin]) rai
     nk[].k_radius = py_key("radius")
     nk[].k_random_weights_ = py_key("random_weights_")
     nk[].k_recipe = py_key("recipe")
-    nk[].k_record = py_key("record")
     nk[].k_reduction = py_key("reduction")
     nk[].k_reference_bytes = py_key("reference_bytes")
     nk[].k_reference_end = py_key("reference_end")
