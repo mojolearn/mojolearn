@@ -11,7 +11,7 @@ from bindings.sequence_array_native_unpack import sequence_array_cast
 from bindings.xcnn_common_door import (
     xcnn_builtins, xcnn_tensor, xcnn_tensor_slot, xcnn_tensor_set, xcnn_tensor_admit,
     xcnn_shape, xcnn_size, xcnn_tuple, xcnn_new, xcnn_out_new, xcnn_wrap,
-    xcnn_host_of, xcnn_f32, xcnn_entries, xcnn_module_entries, xcnn_device_io_off,
+    xcnn_host_of, xcnn_f32, xcnn_mode_entries, xcnn_module_entries, xcnn_device_io_off,
     xcnn_is_t, xcnn_reshape_t, xcnn_tensor_layout, _xcnn_set_raw, _xcnn_slot_raw, xcnn_ref,
     xcnn_exact, xcnn_item, XT_INT, XK_TENSOR_CLASS,
 )
@@ -74,7 +74,7 @@ def xcnn_tensor_operation(owner: PythonObject, operation: Int, args: PythonObjec
             return args[0]
         var array = xcnn_f32(args[0], "x", context)
         var settings = Python.dict(numeric_mode=args[1])
-        var entries = xcnn_entries(settings, context)
+        var entries = xcnn_mode_entries(settings, context)
         if xcnn_device_io_off(entries, context):
             return array
         return xcnn_wrap(entries, array, context)

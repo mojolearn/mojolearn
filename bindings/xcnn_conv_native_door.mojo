@@ -237,7 +237,7 @@ def _conv_set_weights(layer: PythonObject, fields: PythonObject, args: PythonObj
     _set(fields, "weight_", new_w)
     _set(fields, "bias_", new_b)
     if py_get(fields, nk[].k__pins) is not None:
-        _pin_weights(layer, fields, xcnn_entries(fields, context), context)
+        _pin_weights(layer, fields, xcnn_entries(layer, fields, context), context)
     return layer
 
 
@@ -475,7 +475,7 @@ def _conv_backward_fields(layer: PythonObject, fields: PythonObject, args: Pytho
         grad = _to_four(grad, context)
     if one and args[1] is not None:
         source = _to_four(source, context)
-    var entries = xcnn_entries(fields, context)
+    var entries = xcnn_entries(layer, fields, context)
     var out = PythonObject(None)
     if xcnn_is_t(grad, context) or xcnn_is_t(source, context):
         out = _conv_backward_tensor(layer, fields, entries, grad, source, context)
@@ -779,7 +779,7 @@ def xcnn_conv2d_forward(layer: PythonObject, x: PythonObject, context: PythonObj
     # The tensor test stays ahead of the admission, as before.
     if xcnn_is_t(x, context):
         var admitted = _conv_admit(layer, context)
-        return _conv_forward_t(layer, admitted, xcnn_entries(admitted, context), x, context)
+        return _conv_forward_t(layer, admitted, xcnn_entries(layer, admitted, context), x, context)
     return xcnn_conv2d_forward_fields(layer, _conv_admit(layer, context), x, context)
 
 
@@ -787,11 +787,11 @@ def xcnn_conv2d_forward_fields(layer: PythonObject, fields: PythonObject, x: Pyt
                                context: PythonObject) raises -> PythonObject:
     """`Conv2d.forward(x)` on fields the caller admitted once."""
     if xcnn_is_t(x, context):
-        return _conv_forward_t(layer, fields, xcnn_entries(fields, context), x, context)
+        return _conv_forward_t(layer, fields, xcnn_entries(layer, fields, context), x, context)
     var a = x
     var xs = xcnn_shape(a)
     _check_x(fields, xs)
-    var entries = xcnn_entries(fields, context)
+    var entries = xcnn_entries(layer, fields, context)
     if _group_dev(fields, entries):
         var out = xcnn_host_of(_conv_forward_t(layer, fields, entries, xcnn_wrap(entries, a, context), context), context)
         _set(fields, "_x", a)
@@ -869,7 +869,7 @@ def xcnn_relu_forward(layer: PythonObject, x: PythonObject, context: PythonObjec
     var entries = Optional[PythonObject]()   # resolved once per call (N136)
     var py = Python()
     if xcnn_is_t(x, context):
-        var b = xcnn_entries(fields, context)
+        var b = xcnn_entries(layer, fields, context)
         entries = py_present(b)
         var xs = xcnn_shape(x)
         if xcnn_on_dev(b, x, context) and xcnn_idn(b, XCNN_F_LAYER_IO) and xcnn_size(xs) > 0:
@@ -885,7 +885,7 @@ def xcnn_relu_forward(layer: PythonObject, x: PythonObject, context: PythonObjec
     var xs = xcnn_shape(a)
     var out = xcnn_host_f32(xs, context)
     if not entries:
-        entries = py_present(xcnn_entries(fields, context))
+        entries = py_present(xcnn_entries(layer, fields, context))
     var addrs: List[Int] = [xcnn_ptr(a), xcnn_ptr(out)]
     var key = xcnn_ref(entries.value())
     with GILReleased(py):
@@ -1007,7 +1007,7 @@ def _relu_backward(layer: PythonObject, gradient: PythonObject, context: PythonO
     var stored = py_get(fields, nk[].k__x)
     if stored is None:
         raise Error("RuntimeError: ReLU backward requires a prior forward")
-    var entries = xcnn_entries(fields, context)
+    var entries = xcnn_entries(layer, fields, context)
     var py = Python()
     if xcnn_on_dev(entries, stored, context) and xcnn_on_dev(entries, gradient, context):
         var shape = xcnn_shape(stored)
@@ -1127,7 +1127,7 @@ def _block_backward_chain(block: PythonObject, fields: PythonObject, entries: Py
 
 def _block_backward(block: PythonObject, gradient: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = _block_fields(block, context)
-    var entries = xcnn_entries(fields, context)
+    var entries = xcnn_entries(block, fields, context)
     var nk = xcnn_keys()
     var dev = py_get(fields, nk[].k__dev)
     if py_get(fields, nk[].k__chain) is not None and dev is not None:
@@ -1206,7 +1206,7 @@ def _conv_dev(block: PythonObject, entries: PythonObject, conv: PythonObject, cf
     `_chain_fields` admitted them."""
     # The conv's own mode check and `numeric_mode_` record stay (they were a
     # side effect of resolving its entries for the shape crossing).
-    _ = xcnn_entries(cf, context)
+    _ = xcnn_entries(conv, cf, context)
     var oshape = _conv_out(cf, xshape)
     var yh = xcnn_dev_get(block, entries, name, xcnn_size(oshape), context)
     var values = _weight_pair(cf, context)
@@ -1336,7 +1336,7 @@ def _forward_chain(block: PythonObject, fields: PythonObject, entries: PythonObj
 def xcnn_block_forward(block: PythonObject, x: PythonObject, context: PythonObject) raises -> PythonObject:
     """`BasicBlock.forward(x)`."""
     var fields = _block_fields(block, context)
-    var entries = xcnn_entries(fields, context)
+    var entries = xcnn_entries(block, fields, context)
     if xcnn_is_t(x, context):
         var tconvf = _chain_fields(fields, entries, context)
         if tconvf is not None and xcnn_on_dev(entries, x, context):
@@ -1418,7 +1418,7 @@ def xcnn_conv_layers(layer: PythonObject, operation: Int, name: PythonObject, ar
     if operation == XCNN_OPN_CONV_SET_WEIGHTS or operation == XCNN_OPN_CONV_SET_WEIGHTS1D:
         return _conv_set_weights(layer, fields, args, operation == XCNN_OPN_CONV_SET_WEIGHTS1D, context)
     if operation == XCNN_OPN_CONV_PIN:
-        _pin_weights(layer, fields, xcnn_entries(fields, context), context)
+        _pin_weights(layer, fields, xcnn_entries(layer, fields, context), context)
         return layer
     var nk = xcnn_keys()
     if operation == XCNN_OPN_CONV_UNPIN:

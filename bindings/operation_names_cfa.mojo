@@ -26,7 +26,6 @@ comptime CFA_OPN_FAMILY_CFA_OPTICS_FIT_PREDICT = 8
 comptime CFA_OPN_FAMILY_CFA_AP_FIT = 9
 comptime CFA_OPN_FAMILY_CFA_AP_FIT_PREDICT = 10
 comptime CFA_OPN_FAMILY_CFA_HDBSCAN_FIT = 11
-comptime CFA_OPN_FAMILY_CFA_HDBSCAN_FIT_PREDICT = 12
 
 def operation_names_cfa(mut names: List[String], mut leaves: List[Int]):
     """Straight-line appends, once per process."""
@@ -42,8 +41,6 @@ def operation_names_cfa(mut names: List[String], mut leaves: List[Int]):
     leaves.append(CFA_OPN_FAMILY_CFA_FIT_TRANSFORM)
     names.append("family_cfa_hdbscan_fit")
     leaves.append(CFA_OPN_FAMILY_CFA_HDBSCAN_FIT)
-    names.append("family_cfa_hdbscan_fit_predict")
-    leaves.append(CFA_OPN_FAMILY_CFA_HDBSCAN_FIT_PREDICT)
     names.append("family_cfa_mbk_fit")
     leaves.append(CFA_OPN_FAMILY_CFA_MBK_FIT)
     names.append("family_cfa_mbk_partial_fit")

@@ -30,6 +30,12 @@ from bindings.prep_classify_prog_run import (
 )
 from bindings.x_prep_native_owner_door import xprep_take, xprep_address
 from bindings.x_prep_native_owner_run import xprep_r3
+from core.entry_table import entry_ref_unresolved
+from bindings.scaler_route_unpack import (
+    scaler_selection_held, scaler_selection_keep, scaler_route_refuse_fast, scaler_route_held,
+    SCALER_CAP_TRANSPORT, SCALER_CAP_RUN_OUT, SCALER_CAP_RUN_SCRATCH, SCALER_CAP_RUN_RANGES,
+    SCALER_CAP_DEV_PUT, SCALER_CAP_DEV_FREE,
+)
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime I32P = MutPointer[Int32, MutUntrackedOrigin]
@@ -77,17 +83,29 @@ def f32_input(value: PythonObject, context: PythonObject) raises -> PythonObject
 struct ClsProg(Movable):
     """The door of one x_prep program: the typed program, the Python owner
     of each input record (None for a native constant), and after the run
-    the arena store and its base address."""
+    the arena store and its base address. `model` is the estimator whose
+    device route holds the selected image (its entries, transport entry and
+    capability bits, resolved once per estimator); None for a program no
+    estimator owns, whose run selects and reads them per run, as before."""
     var program: ClsProgram
     var owners: List[PythonObject]
     var store: PythonObject
     var base: Int
+    var model: PythonObject
 
     def __init__(out self) raises:
         self.program = ClsProgram(xprep_r3("work"))
         self.owners = List[PythonObject]()
         self.store = PythonObject(None)
         self.base = 0
+        self.model = PythonObject(None)
+
+    def __init__(out self, model: PythonObject) raises:
+        self.program = ClsProgram(xprep_r3("work"))
+        self.owners = List[PythonObject]()
+        self.store = PythonObject(None)
+        self.base = 0
+        self.model = model
 
     def alloc(mut self, n: Int) -> Int:
         return self.program.alloc(n)
@@ -152,12 +170,34 @@ struct ClsProg(Movable):
         classical_connect_numpy(pc)
         var profile = String(getenv("MOJOLEARN_XPREP_PROFILE", "0")) == "1"
         var t_run = Int(perf_counter_ns()) if profile else 0
-        var entries = _family_entries(mode, "x_prep", pc)
-        var key = xprep_key(entries)
+        # The selection of the estimator's device route for `mode` in this
+        # run context (one record read and pointer compares), or the shared
+        # runner's own selection, kept in the route. `device="cpu"` with the
+        # fast mode is refused in the shared words before the CPU table is read.
+        var entries = PythonObject(None)
+        var routed = self.model is not None
+        if routed:
+            entries = scaler_selection_held(self.model, mode, context)
+        if entries is None:
+            if routed:
+                scaler_route_refuse_fast(self.model, mode, context)
+            entries = _family_entries(mode, "x_prep", pc)
+            if routed:
+                scaler_selection_keep(self.model, mode, entries, context)
+        var flags = -1  # the image's capability bits from the route; -1: read by name below
+        var key = entry_ref_unresolved()
+        if routed:
+            var held = scaler_route_held(self.model, entries)
+            if held.held and (held.flags & SCALER_CAP_TRANSPORT) != 0:
+                flags = held.flags
+                key = held.transport
+        if flags < 0:
+            key = xprep_key(entries)
         var H = self.program.size
         var sc = self.program.scratch_size
-        var has_out = py_get(entries, "x_prep_run_out") is not None
-        var has_scratch_entry = sc > 0 and not has_out and py_get(entries, "x_prep_run_scratch") is not None
+        var has_out = (flags & SCALER_CAP_RUN_OUT) != 0 if flags >= 0 else py_get(entries, "x_prep_run_out") is not None
+        var has_scratch_entry = sc > 0 and not has_out and (
+            (flags & SCALER_CAP_RUN_SCRATCH) != 0 if flags >= 0 else py_get(entries, "x_prep_run_scratch") is not None)
         var dev_scratch = sc > 0 and (has_out or has_scratch_entry)
         if H + sc > INT32_MAX:
             raise Error("ValueError: x_prep: the program exceeds the native Int32 indexing bound")
@@ -165,10 +205,12 @@ struct ClsProg(Movable):
         var arena = _store(host_words, "f", True, pc)
         var base = Int(py=arena[1])
         var t_alloc = Int(perf_counter_ns()) if profile else 0
-        var ranges = (dev_scratch or sc == 0) and _switch("MOJOLEARN_ARENA_RANGES") and py_get(entries, "x_prep_run_ranges") is not None
+        var ranges = (dev_scratch or sc == 0) and _switch("MOJOLEARN_ARENA_RANGES") and (
+            (flags & SCALER_CAP_RUN_RANGES) != 0 if flags >= 0 else py_get(entries, "x_prep_run_ranges") is not None)
         # TOMBSTONE: MOJOLEARN_XPREP_FAST_DIRECT_OFF (B arm loses: host-arena staging of large inputs; A/B abn9 NVIDIA L40S, 48 cells 0.96-17.38 arm/base, median 1.75, 34 slower) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
         # Restore: git apply experiments/removed/MOJOLEARN_XPREP_FAST_DIRECT_OFF.patch; record in docs/TOMBSTONES.md.
-        var direct_ok = py_get(entries, "x_prep_dev_put") is not None and py_get(entries, "x_prep_dev_free") is not None
+        var direct_ok = (((flags & SCALER_CAP_DEV_PUT) != 0 and (flags & SCALER_CAP_DEV_FREE) != 0) if flags >= 0
+                         else py_get(entries, "x_prep_dev_put") is not None and py_get(entries, "x_prep_dev_free") is not None)
         var gather_ok = ranges and _can_gather(entries, "x_prep")
         var records = List[ClsRunInput](capacity=len(self.program.inputs))
         var held = List[PythonObject](capacity=2 * len(self.program.inputs))

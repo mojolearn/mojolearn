@@ -16,7 +16,6 @@ from bindings.classical_archive_door import classical_archive_save, classical_ar
 from bindings.classical_archive_read_door import classical_archive_load, classical_host_model
 from bindings.archive_schema_native_door import archive_schema_save
 from bindings.archive_npz_door import archive_npz_call
-from bindings.linear_score_native_unpack import linear_regressor_score
 from bindings.native_operation_codes import operation_table, OP_LEAF_NONE, OP_ROUTE_CLASSICAL, OP_ROUTE_FAMILY
 from bindings.native_operation_names_unpack import operation_lookup, operation_code
 from bindings.classical_native_run import classical_coded_trees
@@ -38,7 +37,7 @@ from bindings.operation_names_classical import (
     CLASSICAL_TREES_FIRST, CLASSICAL_LEAF_TREES_DOOR, CLASSICAL_LEAF_FAMILY_DOOR,
     CLASSICAL_OPN_ARCHIVE_NPZ, CLASSICAL_OPN_ARCHIVE_SAVE, CLASSICAL_OPN_GETATTRIBUTE, CLASSICAL_OPN_GET_PARAMS,
     CLASSICAL_OPN_HOST_MODEL, CLASSICAL_OPN_INITIALIZE, CLASSICAL_OPN_IS_FITTED,
-    CLASSICAL_OPN_LINEAR_REGRESSOR_SCORE, CLASSICAL_OPN_LOAD, CLASSICAL_OPN_MODEL_SHA256,
+    CLASSICAL_OPN_LOAD, CLASSICAL_OPN_MODEL_SHA256,
     CLASSICAL_OPN_NUMERIC_MODE_USED, CLASSICAL_OPN_OLS_FIT, CLASSICAL_OPN_OPERATION_CODES,
     CLASSICAL_OPN_PARAM_NAMES, CLASSICAL_OPN_PREDICT, CLASSICAL_OPN_PREDICT_PUBLIC, CLASSICAL_OPN_PREDICT_SCORE,
     CLASSICAL_OPN_REDUCE_NOT_FITTED, CLASSICAL_OPN_RESTORE_NOT_FITTED, CLASSICAL_OPN_RIDGE_FIT, CLASSICAL_OPN_SAVE,
@@ -165,11 +164,12 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
         if operation == CLASSICAL_OPN_REDUCE_NOT_FITTED:
             var reduced = classical_error_reduce(model, context)
             return reduced.steal_data()
-        if operation == CLASSICAL_OPN_LINEAR_REGRESSOR_SCORE:
-            # The linear expansion regressors' one-call score: predict and
-            # R^2 in one native operation.
-            var scored = linear_regressor_score(model, args, context)
-            return scored.steal_data()
+        # TOMBSTONE (lane dw-xlinear, 2026-11-20): operation
+        # "linear_regressor_score" (bindings/linear_score_native_unpack.mojo:
+        # the linear expansion regressors' score, which selected the process
+        # images by name on every call) is the x_linear door's
+        # "regressor_score", on the estimator's route. Code recoverable at
+        # 0121caad3d.
         if operation == CLASSICAL_OPN_ARCHIVE_SAVE:
             # The public estimators' one-call save: the class's connected
             # schema, written by the deterministic NPZ writer.

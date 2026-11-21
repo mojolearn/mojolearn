@@ -186,3 +186,81 @@ def test_dart_refuses_an_unknown_device_at_construction_and_set_params(cls):
         model.set_params(device="tpu")
     assert model.get_params()["device"] is None
     assert cls(**cls(device="cpu").get_params()).get_params()["device"] == "cpu"
+
+
+# ---- gradient boosting (the same route: one table set per estimator; the adapters' learner stores their device)
+from mojolearn.ensemble import (  # noqa: E402
+    ExperimentalTwoLevelFeatureFreq, GradientBoosting, GradientBoostingClassifier, GradientBoostingRegressor,
+    OrderedRMSE,
+)
+
+GBDT = [GradientBoosting, GradientBoostingRegressor, GradientBoostingClassifier]
+
+
+def gbdt_build(cls, **params):
+    if cls is GradientBoosting:
+        return cls(loss="RMSE", n_estimators=8, max_depth=3, learning_rate=0.1, **params)
+    return cls(n_estimators=8, max_depth=3, learning_rate=0.1, **params)
+
+
+def gbdt_fit(cls, **params):
+    x, y = data(BaggingClassifier if cls is GradientBoostingClassifier else BaggingRegressor)
+    model = gbdt_build(cls, **params).fit(x, y)
+    if cls is GradientBoostingClassifier:
+        return model, np.asarray(model.predict_proba(x)), x
+    return model, np.asarray(model.predict(x)), x
+
+
+@pytest.mark.parametrize("cls", GBDT)
+def test_gradient_boosting_cpu_device_runs_on_the_cpu(cls):
+    model, out, x = gbdt_fit(cls, device="cpu")
+    assert model.vendor_used() == "cpu"
+    assert len(out) == len(x)
+    assert model.get_params()["device"] == "cpu"
+
+
+@two_devices
+@pytest.mark.parametrize("cls", GBDT)
+def test_gradient_boosting_two_devices_return_the_same_bits(cls):
+    gpu, on_gpu, _ = gbdt_fit(cls, numeric_mode="identical")
+    cpu, on_cpu, _ = gbdt_fit(cls, numeric_mode="identical", device="cpu")
+    assert gpu.vendor_used() != "cpu" and cpu.vendor_used() == "cpu"
+    assert on_gpu.tobytes() == on_cpu.tobytes()
+
+
+@pytest.mark.parametrize("cls", [GradientBoostingRegressor, GradientBoostingClassifier])
+def test_the_adapters_learner_stores_the_adapters_device(cls):
+    learner = gbdt_build(cls, device="cpu")._new_learner(None)
+    assert learner.get_params()["device"] == "cpu"
+
+
+@pytest.mark.parametrize("cls", GBDT + [OrderedRMSE, ExperimentalTwoLevelFeatureFreq])
+def test_gradient_boosting_refuses_an_unknown_device_at_construction_and_set_params(cls):
+    first = {"sources": (0, 1)} if cls is ExperimentalTwoLevelFeatureFreq else {}
+    with pytest.raises(ValueError, match="device must be 'gpu', 'cpu' or None, got"):
+        cls(device="tpu", **first)
+    model = cls(**first)
+    with pytest.raises(ValueError, match="device must be 'gpu', 'cpu' or None, got"):
+        model.set_params(device="tpu")
+    assert model.get_params()["device"] is None
+    assert cls(**cls(device="cpu", **first).get_params()).get_params()["device"] == "cpu"
+
+
+@pytest.mark.parametrize("cls", GBDT)
+def test_gradient_boosting_pickle_carries_the_device_and_no_resident_copy(cls):
+    model, out, x = gbdt_fit(cls, device="cpu")
+    again = pickle.loads(pickle.dumps(model))
+    assert again.get_params()["device"] == "cpu" and again.vendor_used() == "cpu"
+    back = again.predict_proba(x) if cls is GradientBoostingClassifier else again.predict(x)
+    assert np.asarray(back).tobytes() == out.tobytes()
+
+
+@two_devices
+@pytest.mark.parametrize("cls", GBDT)
+def test_gradient_boosting_set_params_moves_the_next_fit_to_the_other_device(cls):
+    model, _, x = gbdt_fit(cls)
+    assert model.vendor_used() != "cpu"
+    model.set_params(device="cpu")
+    y = data(BaggingClassifier if cls is GradientBoostingClassifier else BaggingRegressor)[1]
+    model.fit(x, y)
+    assert model.vendor_used() == "cpu"

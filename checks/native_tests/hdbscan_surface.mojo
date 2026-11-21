@@ -140,7 +140,7 @@ def _same_i32(a: List[Int32], b: List[Int32]) -> Bool:
 
 struct Fitted(Movable):
     """One HDBSCAN fit, plus its prediction data when asked, as the public
-    door (`bindings/cluster_fit_a_native_door.mojo` `_hdbscan_fit` and
+    door (`bindings/hdbscan_fit_boundary_pack.mojo` `hdbscan_fit` and
     `_hdbscan_prediction_data`) builds them."""
     var n: Int
     var d: Int
@@ -227,7 +227,7 @@ struct Approx(Movable):
 def _query(driver: HdbscanQueryDriver, f: Fitted, operation: Int, query: List[Float32], nq: Int,
            batch: Int, mut labels_out: List[Int32], mut values_out: List[Float32]) raises:
     """One query through the typed query entry, with the spans the public
-    door (`providers/python/hdbscan_public_lifecycle_pyapi_door.mojo`) passes."""
+    door (`providers/python/hdbscan_public_lifecycle_pyapi_unpack.mojo` `hdbscan_query_buffers`) passes."""
     var host = driver.metadata(HDBSCAN_QUERY_HOST) != 0
     var approximate = operation == HDBSCAN_QUERY_APPROXIMATE
     var c = f.clusters
