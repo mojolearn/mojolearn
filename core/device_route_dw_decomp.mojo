@@ -31,20 +31,24 @@ from core.linear_route import LINEAR_DEVICE_CPU, LINEAR_DEVICE_GPU, linear_devic
 struct DecompRoute(ImplicitlyCopyable, Movable):
     """One estimator's resolved route. `device` is LINEAR_DEVICE_GPU or
     LINEAR_DEVICE_CPU (never the request None); `connection` is the family's
-    typed connection index; `extra` is a second connection of the same family
-    where it has one (-1 otherwise)."""
+    typed connection index; `mode` is the tier the estimator selected (1
+    identical, 0 fast; the connection's image reports the same); `extra` is a
+    second connection of the same family where it has one (-1 otherwise)."""
     var device: Int
     var connection: Int
+    var mode: Int
     var extra: Int
 
     def __init__(out self):
         self.device = LINEAR_DEVICE_GPU
         self.connection = -1
+        self.mode = -1
         self.extra = -1
 
-    def __init__(out self, device: Int, connection: Int, extra: Int = -1):
+    def __init__(out self, device: Int, connection: Int, mode: Int, extra: Int = -1):
         self.device = device
         self.connection = connection
+        self.mode = mode
         self.extra = extra
 
 

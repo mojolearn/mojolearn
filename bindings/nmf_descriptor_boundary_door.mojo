@@ -100,7 +100,7 @@ def _nmf_route(model: PythonObject, fields: PythonObject, mode: PythonObject, co
     if nmf_mode(index) != (1 if name == "identical" else 0):
         raise Error("RuntimeError: NMF native mode differs from selected execution")
     _nmf_capability(model, index, capability, legacy_name)
-    decomp_route_keep(model, DecompRoute(device, index), mode, hit.device, context, factory)
+    decomp_route_keep(model, DecompRoute(device, index, 1 if name == "identical" else 0), mode, hit.device, context, factory)
     return index
 
 

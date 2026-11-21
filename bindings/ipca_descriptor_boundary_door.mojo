@@ -102,7 +102,7 @@ def _ipca_route(model: PythonObject, mode: PythonObject, fields: PythonObject, c
         raise Error("NotImplementedError: mojolearn IncrementalPCA: this build of "
                     + "_mojolearn_x_decomp does not export the x_decomp_ipca_* drivers"
                     + "; rebuild it with bindings/build_x_decomp.sh")
-    decomp_route_keep(model, DecompRoute(device, index), mode, hit.device, context, factory)
+    decomp_route_keep(model, DecompRoute(device, index, 1 if name == "identical" else 0), mode, hit.device, context, factory)
     return index
 
 
