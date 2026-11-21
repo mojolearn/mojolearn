@@ -15,6 +15,8 @@ from providers.python.forecast_initialize_pyapi_unpack import (
 )
 from bindings.forecast_keys_unpack import forecast_keys
 from bindings.py_balanced import py_item
+from bindings.forecast_device_door import forecast_device_admit
+from providers.python.device_route_boundary_door import device_route_clear
 
 
 def forecast_initialize(model: PythonObject, kind: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -32,13 +34,23 @@ def forecast_initialize(model: PythonObject, kind: String, args: PythonObject, c
     var fields = _fields(model, cls)
     var updates = Python.dict()
     var lifecycle = py_item(context, nk[].k_xseq_lifecycle_context)
-    for i in range(len(args)):  # driver-loop: over constructor scalar argument words
-        _scalar(args[i], lifecycle)
     if kind == "croston":
+        for i in range(len(args)):  # driver-loop: over constructor scalar argument words
+            _scalar(args[i], lifecycle)
         py_setitem(updates, nk[].k_alias, args[0])
         py_setitem(updates, nk[].k_numeric_mode, args[1])
         forecast_commit(fields, updates, py_item(context, nk[].k_xseq_forecast_ownership))
         return PythonObject(None)
+    # `device` is the last constructor argument of every other kind: None
+    # (this installation's device), "gpu" or "cpu". Checked first, before any
+    # field changes (the shared refusal words); stored as passed; the
+    # estimator's route is dropped below so its next operation reads it once.
+    var settings = len(args) - 1
+    var device = args[settings]
+    forecast_device_admit(device, context)
+    for i in range(settings):  # driver-loop: over constructor scalar argument words
+        _scalar(args[i], lifecycle)
+    py_setitem(updates, "device", device)
     var b = native_loaded_module("builtins")
     if kind == "theta":
         var decomposition = args[1]
@@ -55,6 +67,7 @@ def forecast_initialize(model: PythonObject, kind: String, args: PythonObject, c
         py_setitem(updates, nk[].k_theta, args[5])
         py_setitem(updates, nk[].k_numeric_mode, args[6])
         forecast_commit(fields, updates, py_item(context, nk[].k_xseq_forecast_ownership))
+        device_route_clear(model)
         return PythonObject(None)
     if kind == "garch":
         if not Bool(py=args[3] == "Constant") and not Bool(py=args[3] == "Zero"):
@@ -78,9 +91,10 @@ def forecast_initialize(model: PythonObject, kind: String, args: PythonObject, c
         py_setitem(updates, nk[].k_power, args[5])
         py_setitem(updates, nk[].k_numeric_mode, args[6])
         forecast_commit(fields, updates, py_item(context, nk[].k_xseq_forecast_ownership))
+        device_route_clear(model)
         return PythonObject(None)
     # ETS and its DampedETS constructor share the same complete normalization.
-    var damped_ctor = len(args) == 6
+    var damped_ctor = len(args) == 7  # season_length, error, alpha, beta, phi, numeric_mode, device
     var error = args[1]
     if damped_ctor and py_type(error) is not py_type(PythonObject("")):
         raise Error("TypeError: DampedETS error requires a native string")
@@ -125,4 +139,5 @@ def forecast_initialize(model: PythonObject, kind: String, args: PythonObject, c
     if damped_ctor:
         py_setitem(updates, nk[].k_error, error)
     forecast_commit(fields, updates, py_item(context, nk[].k_xseq_forecast_ownership))
+    device_route_clear(model)
     return PythonObject(None)

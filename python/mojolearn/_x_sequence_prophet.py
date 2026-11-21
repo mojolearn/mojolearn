@@ -68,6 +68,10 @@ class ProphetForecaster(ParamsMixin):
         Numeric mode for this model (``'identical'``
         or ``'fast'``); None uses the process default (see
         :func:`mojolearn.set_numeric_mode`). ``'fast'`` is available on Apple GPUs only.
+    device : {None, "gpu", "cpu"}, default=None
+        Where the model is fitted and forecasts. None uses this installation's
+        device, ``"cpu"`` runs on the CPU and ``"gpu"`` requires a GPU
+        installation. Other values raise ``ValueError``.
 
     Attributes
     ----------
@@ -99,15 +103,18 @@ class ProphetForecaster(ParamsMixin):
     # lifecycle (fit bookkeeping and the NotFittedError of predict in
     # bindings/xseq_prophet_native_door.mojo), so no `_mode` class-creation wrappers are installed.
     _mojolearn_native_public = True
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
     def __init__(self, growth="linear", changepoints=None, n_changepoints=25, changepoint_range=0.8,
                  yearly_seasonality="auto", weekly_seasonality="auto", daily_seasonality="auto",
                  seasonality_mode="additive", seasonality_prior_scale=10.0, holidays_prior_scale=10.0,
-                 changepoint_prior_scale=0.05, max_iter=2000, numeric_mode=None):
+                 changepoint_prior_scale=0.05, max_iter=2000, numeric_mode=None, device=None):
         return _XSEQ(self, "prophet_initialize", (growth, changepoints, n_changepoints, changepoint_range,
                      yearly_seasonality, weekly_seasonality, daily_seasonality, seasonality_mode,
                      seasonality_prior_scale, holidays_prior_scale, changepoint_prior_scale, max_iter,
-                     numeric_mode), _XSEQ_CONTEXT)
+                     numeric_mode, device), _XSEQ_CONTEXT)
 
     def add_seasonality(self, name, period, fourier_order, prior_scale=None):
         """Add a custom seasonality before :meth:`fit`.

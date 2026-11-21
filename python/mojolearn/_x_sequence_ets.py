@@ -56,6 +56,10 @@ class ETS(ParamsMixin):
         Numeric mode for this model (``'identical'``
         or ``'fast'``); None uses the process default (see
         :func:`mojolearn.set_numeric_mode`). ``'fast'`` is available on Apple GPUs only.
+    device : {None, "gpu", "cpu"}, default=None
+        Where the model is fitted and forecasts. None uses this installation's
+        device, ``"cpu"`` runs on the CPU and ``"gpu"`` requires a GPU
+        installation. Other values raise ``ValueError``.
 
     Attributes
     ----------
@@ -98,10 +102,13 @@ class ETS(ParamsMixin):
     # lifecycle (fit bookkeeping and the NotFittedError of predict in
     # bindings/xseq_forecast_native_door.mojo), so no `_mode` class-creation wrappers are installed.
     _mojolearn_native_public = True
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
     def __init__(self, season_length=1, model="AAN", damped=True, alpha=None, beta=None, phi=None,
-                 gamma=None, numeric_mode=None):
-        _XSEQ(self, "ets_initialize", (season_length, model, damped, alpha, beta, phi, gamma, numeric_mode), _XSEQ_CONTEXT)
+                 gamma=None, numeric_mode=None, device=None):
+        _XSEQ(self, "ets_initialize", (season_length, model, damped, alpha, beta, phi, gamma, numeric_mode, device), _XSEQ_CONTEXT)
 
     def fit(self, y, X=None):
         """Check and store one series or a batch of series.
@@ -188,6 +195,10 @@ class DampedETS(ETS):
         Numeric mode for this model (``'identical'``
         or ``'fast'``); None uses the process default (see
         :func:`mojolearn.set_numeric_mode`). ``'fast'`` is available on Apple GPUs only.
+    device : {None, "gpu", "cpu"}, default=None
+        Where the model is fitted and forecasts. None uses this installation's
+        device, ``"cpu"`` runs on the CPU and ``"gpu"`` requires a GPU
+        installation. Other values raise ``ValueError``.
 
     Attributes
     ----------
@@ -202,7 +213,7 @@ class DampedETS(ETS):
     (10,)
     """
 
-    def __init__(self, season_length=1, error="A", alpha=None, beta=None, phi=None, numeric_mode=None):
-        _XSEQ(self, "ets_initialize", (season_length, error, alpha, beta, phi, numeric_mode), _XSEQ_CONTEXT)
+    def __init__(self, season_length=1, error="A", alpha=None, beta=None, phi=None, numeric_mode=None, device=None):
+        _XSEQ(self, "ets_initialize", (season_length, error, alpha, beta, phi, numeric_mode, device), _XSEQ_CONTEXT)
 
 _native_xseq_bridge.register(xseq_ets_classes=((ETS, None), (DampedETS, None)))

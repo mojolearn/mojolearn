@@ -43,8 +43,8 @@ class VARResults:
         Residual degrees of freedom.
     """
 
-    def __init__(self, endog, params, sigma_u, resid, k_ar, k_trend, numeric_mode):
-        return _XSEQ(self, "var_results_initialize", (endog, params, sigma_u, resid, k_ar, k_trend, numeric_mode), _XSEQ_CONTEXT)
+    def __init__(self, endog, params, sigma_u, resid, k_ar, k_trend, numeric_mode, device=None):
+        return _XSEQ(self, "var_results_initialize", (endog, params, sigma_u, resid, k_ar, k_trend, numeric_mode, device), _XSEQ_CONTEXT)
 
     def forecast(self, y, steps):
         """Forecast ``steps`` ahead from the last ``k_ar`` rows of ``y``.
@@ -85,6 +85,10 @@ class VAR(ParamsMixin):
         Numeric mode for this model (``'identical'``
         or ``'fast'``); None uses the process default (see
         :func:`mojolearn.set_numeric_mode`). ``'fast'`` is available on Apple GPUs only.
+    device : {None, "gpu", "cpu"}, default=None
+        Where the model is fitted and forecasts. None uses this installation's
+        device, ``"cpu"`` runs on the CPU and ``"gpu"`` requires a GPU
+        installation. Other values raise ``ValueError``.
 
     Examples
     --------
@@ -99,9 +103,12 @@ class VAR(ParamsMixin):
     # guard (the native forecast refuses an unfitted model itself), so no
     # `_mode` class-creation wrappers are installed.
     _mojolearn_native_public = True
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
-    def __init__(self, endog, exog=None, numeric_mode=None):
-        return _XSEQ(self, "var_initialize", (endog, exog, numeric_mode), _XSEQ_CONTEXT)
+    def __init__(self, endog, exog=None, numeric_mode=None, device=None):
+        return _XSEQ(self, "var_initialize", (endog, exog, numeric_mode, device), _XSEQ_CONTEXT)
 
     def fit(self, maxlags=1, method="ols", ic=None, trend="c"):
         """Estimate the VAR with a fixed lag order.
