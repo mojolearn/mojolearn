@@ -20,16 +20,15 @@ CPU = {
         "test_device_loss_scalar_conversion_and_failure_remain_native[num_items-g-3.75-swapped]": "training device pool requires GPU",
         "test_device_loss_scalar_conversion_and_failure_remain_native[num_items-g-nan-scalar]": "training device pool requires GPU",
     },
-    "test_cache_lifecycle_native.py": {
-        'test_cache_live_matches_real_store_count_after_consumed_allocations[0-x_prep]': 'requires an actual native device store',
-        'test_cache_live_matches_real_store_count_after_consumed_allocations[0-x_metrics]': 'requires an actual native device store',
-        'test_cache_live_matches_real_store_count_after_consumed_allocations[1-x_prep]': 'requires an actual native device store',
-        'test_cache_live_matches_real_store_count_after_consumed_allocations[1-x_metrics]': 'requires an actual native device store',
-        'test_cache_live_matches_real_store_count_after_consumed_allocations[2-x_prep]': 'requires an actual native device store',
-        'test_cache_live_matches_real_store_count_after_consumed_allocations[2-x_metrics]': 'requires an actual native device store',
-        'test_cache_live_uses_captured_native_entry_and_ignores_mutable_int[x_prep]': 'requires an actual native device store',
-        'test_cache_live_uses_captured_native_entry_and_ignores_mutable_int[x_metrics]': 'requires an actual native device store',
-    },
+    # The x_prep word-store cases (arena unit E, 2026-11-21: one prefix, the
+    # skip reason of tests/test_device_cache_native_state.py `_real()`).
+    "test_cache_lifecycle_native.py": {name: "real word-store slots require a GPU package; explicitly excluded from CPU selection"
+                                       for name in (
+        "test_cache_context_entry_preserves_identity[normal]",
+        "test_cache_context_entry_preserves_identity[subclass]",
+        *(f"test_cache_live_matches_real_store_count_after_consumed_allocations[{slots}]" for slots in (0, 1, 2)),
+        "test_cache_live_uses_captured_native_entry_and_ignores_mutable_int",
+    )},
 }
 PRE_PY312 = {
     "test_robust_scaler_native_lifecycle.py": {
