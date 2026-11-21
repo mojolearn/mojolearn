@@ -23,8 +23,9 @@ from bindings.p3_samba_caps_door import samba_caps, SAMBA_CAP_RESIDENT_ABI, SAMB
 from std.memory import unsafe_memcpy
 from bindings.generation_buffers_door import generation_initialize_binding, generation_array
 from bindings.generator_state_native_pack import generator_next
-from bindings.samba_state_native_door import samba_fields, samba_entries, samba_schedule_snapshot, samba_schedule_rate, samba_moment_view, samba_entry_key, samba_primitive
-from core.samba_entry_table import samba_ref, SAMBA_TABLE_TRAINING, SAMBA_PRIM_ACCUMULATE
+from bindings.samba_state_native_door import samba_fields, samba_schedule_snapshot, samba_schedule_rate, samba_moment_view, samba_primitive
+from bindings.samba_route_unpack import samba_route
+from core.samba_entry_table import SAMBA_PRIM_ACCUMULATE
 from training.samba_state_run import samba_optimizer_device_plan
 from core.device_plan import DevicePlan
 from bindings.samba_training_native_door import samba_ids, samba_gradients_admitted, _samba_count
@@ -269,7 +270,10 @@ def _samba_train_step_admitted(model: PythonObject, inputs: PythonObject, target
     var fields = samba_fields(model)
     var config = samba_fields(py_item(fields, nk[].k_config))
     var opt = samba_fields(py_item(fields, nk[].k_optimizer))
-    var entries = samba_entries(context, py_item(fields, nk[].k_numeric_mode))
+    # The stack's one route (bindings/samba_route_unpack.mojo): the entries
+    # of its device, resolved once; the resident optimizer opens on them.
+    var route = samba_route(model, fields, context)
+    var entries = route.entries
     # Admit the built-in schedule before consuming a stream or changing state.
     var schedule = samba_schedule_snapshot(py_item(opt, nk[].k_lr_schedule), context)
     var ids = samba_ids(inputs, Int(py=py_item(config, nk[].k_vocab)), False, context)
@@ -349,7 +353,7 @@ def _samba_train_step_admitted(model: PythonObject, inputs: PythonObject, target
                 _ = neural_descriptor_execute_id(provider_id, 9, [Int(py=gradient._addr), Int(py=stacked._addr)], [n, a, b * length], [])
             else:
                 # Primitive op 9 (the former `accumulate` entry), resolved for the admitted key.
-                _ = samba_primitive(samba_ref[SAMBA_TABLE_TRAINING](samba_entry_key(context, py_item(fields, nk[].k_numeric_mode))),
+                _ = samba_primitive(route.primitives(),
                     SAMBA_PRIM_ACCUMULATE, [Int(py=gradient._addr), Int(py=stacked._addr)], [n, a, b * length], [])
             _ = gradient  # keep the Python object alive through the native call above
             _ = stacked  # keep the Python object alive through the native call above
@@ -357,7 +361,7 @@ def _samba_train_step_admitted(model: PythonObject, inputs: PythonObject, target
             if provider is not None:
                 _ = neural_descriptor_execute_id(provider_id, 9, [Int(py=total._addr), Int(py=losses._addr)], [1, a, -1], [])
             else:
-                _ = samba_primitive(samba_ref[SAMBA_TABLE_TRAINING](samba_entry_key(context, py_item(fields, nk[].k_numeric_mode))),
+                _ = samba_primitive(route.primitives(),
                     SAMBA_PRIM_ACCUMULATE, [Int(py=total._addr), Int(py=losses._addr)], [1, a, -1], [])
             _ = total  # keep the Python object alive through the native call above
             _ = losses  # keep the Python object alive through the native call above

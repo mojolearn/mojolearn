@@ -190,7 +190,7 @@ def samba_public_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyOb
         elif operation == SAMBA_OPN_CHECKPOINT_SAVE:
             result = samba_checkpoint_save(values[0], values[1], context)
         elif operation == SAMBA_OPN_CHECKPOINT_LOAD:
-            result = samba_checkpoint_load(values[0], values[1], values[2], context)
+            result = samba_checkpoint_load(values[0], values[1], values[2], values[3], context)
         elif operation == SAMBA_OPN_CHECKPOINT_READ:
             result = samba_checkpoint_read(values[0], context)
         elif operation == SAMBA_OPN_INFERENCE_CONSTRUCT:

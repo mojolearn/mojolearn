@@ -33,7 +33,7 @@ def test_public_boundary_uses_native_model_and_preserves_partial_publication():
     # lane restore-samba-resident-forward: the stateless device forward is the
     # resident forward (op 16), unconditionally: the program B arm's switch
     # was deleted by lane fx-verdicts7 (A/B abn9).
-    route=public.split('if samba_program_arm(fields, key):')[1]
+    route=public.split('if model_route.program():')[1]
     assert 'comptime if' not in route.split('samba_resident_native_forward(')[0]
     assert route.index('samba_resident_native_forward(') < route.index('_samba_program_call(')
 

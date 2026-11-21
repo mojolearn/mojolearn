@@ -432,6 +432,7 @@ DEBT = {
     'bindings/samba_inference_native_door.mojo': {'native_loaded_module': 7},
     'bindings/samba_public_native_pack.mojo': {'native_loaded_module': 2},
     'bindings/samba_state_native_door.mojo': {'native_loaded_module': 12},
+    'bindings/samba_route_unpack.mojo': {'native_loaded_module': 2},
     'bindings/samba_step_native_door.mojo': {'native_loaded_module': 4},
     'bindings/samba_training_native_door.mojo': {'native_loaded_module': 1},
     'bindings/scaler_lifecycle_native_door.mojo': {'cpython': 1, 'native_loaded_module': 9},

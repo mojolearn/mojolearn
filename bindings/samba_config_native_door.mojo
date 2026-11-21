@@ -1,5 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Native Samba configuration and ordered parameter registry metadata."""
+"""Native Samba configuration and ordered parameter registry metadata.
+
+UNPACK (`_samba_config_unpack`, `_samba_shape_of`) turns the constructor
+arguments or a constructed configuration into the typed `SambaShape`; RUN
+(training/samba_config_run.mojo, no Python) checks it and derives the block
+schemas; PACK (`_samba_config_pack`, `_samba_block_pack`, `samba_registry`)
+writes the public objects. `samba_config_dict` / `samba_config_from_dict` are
+field copies between two Python forms with no RUN step."""
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from std.python._cpython import PyObjectPtr
@@ -9,55 +16,67 @@ from bindings.samba_admission_door import samba_admit
 from bindings.py_balanced import py_call, py_item, py_setattr, py_setitem
 from bindings.samba_keys_unpack import samba_keys, SAMBA_OPN_BLOCK_SHAPES, SAMBA_OPN_DICT, SAMBA_OPN_FROM_DICT, SAMBA_OPN_INITIALIZE, SAMBA_OPN_REGISTRY
 from bindings.py_keys import py_op_code
+# RUN: typed check and block schemas, no Python import.
+from training.samba_config_run import (
+    SambaShape, SAMBA_LAYER_MAMBA3, SAMBA_LAYER_ATTENTION, samba_layer_code, samba_layer_name,
+    samba_shape_check, samba_block_names, samba_block_dims,
+)
+
+
+def _optional_int(value: PythonObject, bi: PythonObject) raises -> Tuple[Int, Bool]:
+    """UNPACK: one optional integer constructor argument."""
+    if value is None:
+        return (0, False)
+    return (Int(py=py_call(bi.int, value)), True)
+
+
+def _samba_config_unpack(args: PythonObject, mut layers: List[Int], bi: PythonObject) raises -> SambaShape:
+    """UNPACK: the ten constructor arguments as typed words, converted in
+    the constructor's order (each conversion's own Python error, then the
+    layer-kind refusal, exactly where they were raised before)."""
+    var vocab = Int(py=py_call(bi.int, args[0]))
+    var d_model = Int(py=py_call(bi.int, args[1]))
+    var kinds = py_call(bi.list, args[2])
+    for i in range(len(kinds)):  # driver-loop: over configured model layer kinds
+        layers.append(samba_layer_code(String(py_call(bi.str, kinds[i]))))
+    var n_heads = _optional_int(args[3], bi)
+    var n_kv_heads = _optional_int(args[4], bi)
+    var head_dim = _optional_int(args[5], bi)
+    var intermediate = _optional_int(args[6], bi)
+    var tie = Bool(py=py_call(bi.bool, args[7]))
+    var norm_eps = Float64(py=py_call(bi.float, args[8]))
+    var dropout = Float64(py=py_call(bi.float, args[9]))
+    return SambaShape(vocab, d_model, n_heads[0], n_kv_heads[0], head_dim[0], intermediate[0],
+        n_heads[1], n_kv_heads[1], head_dim[1], intermediate[1], tie, norm_eps, dropout)
+
+
+def _samba_config_pack(config: PythonObject, shape: SambaShape, layers: List[Int], bi: PythonObject) raises:
+    """PACK: publish a checked configuration on its object. Nothing is
+    written before the check passed."""
+    var kinds = bi.list()
+    for i in range(len(layers)):  # driver-loop: over configured model layer kinds
+        _ = py_call(kinds.append, PythonObject(samba_layer_name(layers[i])))
+    py_setattr(config, "vocab", PythonObject(shape.vocab))
+    py_setattr(config, "d_model", PythonObject(shape.d_model))
+    py_setattr(config, "layers", py_call(bi.tuple, kinds))
+    py_setattr(config, "n_heads", PythonObject(shape.n_heads) if shape.has_n_heads else PythonObject(None))
+    py_setattr(config, "n_kv_heads", PythonObject(shape.n_kv_heads) if shape.has_n_kv_heads else PythonObject(None))
+    py_setattr(config, "head_dim", PythonObject(shape.head_dim) if shape.has_head_dim else PythonObject(None))
+    py_setattr(config, "intermediate", PythonObject(shape.intermediate) if shape.has_intermediate else PythonObject(None))
+    py_setattr(config, "tie_embeddings", PythonObject(shape.tie_embeddings))
+    py_setattr(config, "norm_eps", PythonObject(shape.norm_eps))
+    py_setattr(config, "dropout", PythonObject(shape.dropout))
 
 
 def samba_config_init(config: PythonObject, args: PythonObject) raises -> PythonObject:
+    # UNPACK
     var bi = native_loaded_module("builtins")
-    py_setattr(config, "vocab", py_call(bi.int, args[0]))
-    py_setattr(config, "d_model", py_call(bi.int, args[1]))
-    var kinds = py_call(bi.list, args[2])
-    var layers = bi.list()
-    var attention = False
-    var mamba = False
-    for i in range(len(kinds)):  # driver-loop: over configured model layer kinds
-        var kind = py_call(bi.str, kinds[i])
-        if String(kind) != "mamba3" and String(kind) != "attention":
-            raise Error("SambaConfig: layer kind must be mamba3 or attention")
-        attention = attention or String(kind) == "attention"
-        mamba = mamba or String(kind) == "mamba3"
-        _ = py_call(layers.append, kind)
-    py_setattr(config, "layers", py_call(bi.tuple, layers))
-    py_setattr(config, "n_heads", PythonObject(None) if args[3] is None else py_call(bi.int, args[3]))
-    py_setattr(config, "n_kv_heads", PythonObject(None) if args[4] is None else py_call(bi.int, args[4]))
-    py_setattr(config, "head_dim", PythonObject(None) if args[5] is None else py_call(bi.int, args[5]))
-    py_setattr(config, "intermediate", PythonObject(None) if args[6] is None else py_call(bi.int, args[6]))
-    py_setattr(config, "tie_embeddings", py_call(bi.bool, args[7]))
-    py_setattr(config, "norm_eps", PythonObject(Float64(Float32(Float64(py=py_call(bi.float, args[8]))))))
-    py_setattr(config, "dropout", PythonObject(Float64(Float32(Float64(py=py_call(bi.float, args[9]))))))
-    var dm = Int(py=config.d_model)
-    if Int(py=config.vocab) < 2 or dm < 1 or len(layers) < 1:
-        raise Error("SambaConfig: vocab >= 2, d_model >= 1 and at least one layer are required")
-    # Mamba3's published profile fixes head width 64 and expansion 2;
-    # this shape constraint is unrelated to benchmark dimensions.
-    if mamba and dm % 32 != 0:
-        raise Error("SambaConfig: a mamba3 layer needs d_model to be a multiple of 32")
-    if attention:
-        if config.n_heads is None or config.intermediate is None:
-            raise Error("SambaConfig: an attention layer needs n_heads and intermediate")
-        var heads = Int(py=config.n_heads)
-        if heads < 1:
-            raise Error("SambaConfig: n_heads must be positive")
-        if config.head_dim is None:
-            py_setattr(config, "head_dim", PythonObject(dm // heads))
-        if config.n_kv_heads is None:
-            py_setattr(config, "n_kv_heads", config.n_heads)
-        if heads * Int(py=config.head_dim) != dm:
-            raise Error("SambaConfig: d_model must equal n_heads * head_dim")
-    var drop = Float64(py=config.dropout)
-    if not (drop >= 0.0 and drop < 1.0):
-        raise Error("SambaConfig: dropout must be in [0, 1)")
-    if not (Float64(py=config.norm_eps) >= 0.0):
-        raise Error("SambaConfig: norm_eps must be >= 0")
+    var layers = List[Int]()
+    var shape = _samba_config_unpack(args, layers, bi)
+    # RUN (training/samba_config_run.mojo): the check and the defaults.
+    samba_shape_check(shape, layers)
+    # PACK
+    _samba_config_pack(config, shape, layers, bi)
     return PythonObject(None)
 
 
@@ -105,73 +124,81 @@ def _samba_registry_item(name: String, dims: List[Int], tuple_type: PythonObject
     return Python.tuple(PythonObject(name), py_call(tuple_type, values))
 
 
-def samba_block_shapes(config: PythonObject, kind: String) raises -> PythonObject:
-    return _samba_block_shapes(config, kind, native_loaded_module("builtins").tuple)
+def _samba_shape_of(config: PythonObject, attention: Bool, whole: Bool, mut layers: List[Int]) raises -> SambaShape:
+    """UNPACK: the typed words of a constructed configuration that one
+    operation reads. A mamba3 block reads `d_model` only; the attention
+    fields are read (and their conversion refused) only when an attention
+    block is asked for, as before; `whole` adds the registry's fields."""
+    var shape = SambaShape(0, Int(py=config.d_model), 0, 0, 0, 0, False, False, False, False, True, 0.0, 0.0)
+    var wants_attention = attention
+    if whole:
+        shape.vocab = Int(py=config.vocab)
+        var kinds = config.layers
+        for i in range(len(kinds)):  # driver-loop: over configured model layers
+            # Any kind that is not mamba3 has the attention schema, as before.
+            var code = SAMBA_LAYER_MAMBA3 if String(kinds[i]) == "mamba3" else SAMBA_LAYER_ATTENTION
+            wants_attention = wants_attention or code == SAMBA_LAYER_ATTENTION
+            layers.append(code)
+    if wants_attention:
+        shape.n_heads = Int(py=config.n_heads)
+        shape.head_dim = Int(py=config.head_dim)
+        shape.n_kv_heads = Int(py=config.n_kv_heads)
+        shape.intermediate = Int(py=config.intermediate)
+    if whole:
+        shape.tie_embeddings = Bool(py=config.tie_embeddings)
+    return shape.copy()
 
 
-def _samba_block_shapes(config: PythonObject, kind: String, tuple_type: PythonObject) raises -> PythonObject:
+def _samba_block_pack(shape: SambaShape, kind: Int, tuple_type: PythonObject) raises -> PythonObject:
+    """RUN + PACK of one block schema: the typed names and shapes
+    (training/samba_config_run.mojo) as the public list of (name, shape)."""
+    var names = samba_block_names(kind)
+    var dims = samba_block_dims(shape, kind)
     var result = Python.list()
-    var dm = Int(py=config.d_model)
-    if kind == "mamba3":
-        var di = 2 * dm
-        var heads = di // 64
-        _ = py_call(result.append, _samba_registry_item("block_norm.weight", [dm], tuple_type))
-        _ = py_call(result.append, _samba_registry_item("in_proj.weight", [2 * di + 256 + 3 * heads + 32, dm], tuple_type))
-        _ = py_call(result.append, _samba_registry_item("dt_bias", [heads], tuple_type))
-        _ = py_call(result.append, _samba_registry_item("B_norm.weight", [128], tuple_type))
-        _ = py_call(result.append, _samba_registry_item("C_norm.weight", [128], tuple_type))
-        _ = py_call(result.append, _samba_registry_item("B_bias", [heads, 128], tuple_type))
-        _ = py_call(result.append, _samba_registry_item("C_bias", [heads, 128], tuple_type))
-        _ = py_call(result.append, _samba_registry_item("D", [heads], tuple_type))
-        _ = py_call(result.append, _samba_registry_item("out_proj.weight", [dm, di], tuple_type))
-    else:
-        var qw = Int(py=config.n_heads) * Int(py=config.head_dim)
-        var kw = Int(py=config.n_kv_heads) * Int(py=config.head_dim)
-        var it = Int(py=config.intermediate)
-        _ = py_call(result.append, _samba_registry_item("input_layernorm.weight", [dm], tuple_type))
-        _ = py_call(result.append, _samba_registry_item("post_attention_layernorm.weight", [dm], tuple_type))
-        _ = py_call(result.append, _samba_registry_item("q_proj.weight", [qw, dm], tuple_type))
-        _ = py_call(result.append, _samba_registry_item("k_proj.weight", [kw, dm], tuple_type))
-        _ = py_call(result.append, _samba_registry_item("v_proj.weight", [kw, dm], tuple_type))
-        _ = py_call(result.append, _samba_registry_item("o_proj.weight", [dm, qw], tuple_type))
-        _ = py_call(result.append, _samba_registry_item("gate_proj.weight", [it, dm], tuple_type))
-        _ = py_call(result.append, _samba_registry_item("up_proj.weight", [it, dm], tuple_type))
-        _ = py_call(result.append, _samba_registry_item("down_proj.weight", [dm, it], tuple_type))
+    for j in range(len(names)):  # driver-loop: over one block's tensor registry metadata
+        _ = py_call(result.append, _samba_registry_item(names[j], dims[j], tuple_type))
     return result
+
+
+def samba_block_shapes(config: PythonObject, kind: String) raises -> PythonObject:
+    var unused = List[Int]()
+    var code = SAMBA_LAYER_MAMBA3 if kind == "mamba3" else SAMBA_LAYER_ATTENTION
+    var shape = _samba_shape_of(config, code == SAMBA_LAYER_ATTENTION, False, unused)
+    return _samba_block_pack(shape, code, native_loaded_module("builtins").tuple)
 
 
 def samba_registry(config: PythonObject) raises -> PythonObject:
     # Shared by every registry item and both lazily prepared block schemas.
     var tuple_type = native_loaded_module("builtins").tuple
-    var dm = Int(py=config.d_model)
-    var vocab = Int(py=config.vocab)
+    # UNPACK: the configuration's words, once for the whole registry.
+    var layers = List[Int]()
+    var shape = _samba_shape_of(config, False, True, layers)
+    var dm = shape.d_model
+    var vocab = shape.vocab
     var result = Python.list(_samba_registry_item("embed.weight", [vocab, dm], tuple_type))
-    var layers = config.layers
-    # Admission fixes the native configuration for this GIL-held operation.
     # Every layer of one kind has the same parameter schema; build each kind
-    # on first use, preserving first-use failures and avoiding unused schemas.
-    # Only immutable shape tuples escape into distinct per-layer records. A
-    # later public call builds new schemas from its newly admitted config.
+    # on first use. Only immutable shape tuples escape into distinct
+    # per-layer records. A later public call builds new schemas from its
+    # newly admitted config.
     # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
     var mamba_shapes = Optional[PythonObject]()
     var attention_shapes = Optional[PythonObject]()
     for i in range(len(layers)):  # driver-loop: over configured model layers
-        var kind = String(layers[i])
         var entries = PythonObject(None)
-        if kind == "mamba3":
+        if layers[i] == SAMBA_LAYER_MAMBA3:
             if not mamba_shapes:
-                mamba_shapes = _samba_block_shapes(config, kind, tuple_type)
+                mamba_shapes = _samba_block_pack(shape, SAMBA_LAYER_MAMBA3, tuple_type)
             entries = mamba_shapes.value()
         else:
             if not attention_shapes:
-                attention_shapes = _samba_block_shapes(config, kind, tuple_type)
+                attention_shapes = _samba_block_pack(shape, SAMBA_LAYER_ATTENTION, tuple_type)
             entries = attention_shapes.value()
         var prefix = "layers." + String(i) + "."
         for j in range(len(entries)):  # driver-loop: over per-layer tensor registry metadata
             var entry = entries[j]
             _ = py_call(result.append, Python.tuple(PythonObject(prefix + String(entry[0])), entry[1]))
     _ = py_call(result.append, _samba_registry_item("norm_f.weight", [dm], tuple_type))
-    if not Bool(py=config.tie_embeddings):
+    if not shape.tie_embeddings:
         _ = py_call(result.append, _samba_registry_item("lm_head.weight", [vocab, dm], tuple_type))
     return result
 
