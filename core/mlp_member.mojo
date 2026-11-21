@@ -79,6 +79,7 @@ from core.device_route import DeviceRoute
 from core.metrics_entry_table import MR_R2, MR_R2_WEIGHTED
 from core.native_descriptor_call import native_descriptor_call
 from core.member_abi import (
+    MEMBER_GIL_DOOR,
     MemberCall, MemberMatrix, MEMBER_F32, MEMBER_F64, MEMBER_I32,
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_PREDICT,
     MEMBER_OP_PREDICT_PROBA, MEMBER_OP_SCORE, MEMBER_OP_OUTPUTS, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT,
@@ -596,7 +597,17 @@ def _outputs(call: _CallP) raises:
 
 
 def _capabilities(classifier: Bool) -> Int:
-    var common = MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
+    # MEMBER_GIL_DOOR (THE GIL RULE, core/member_abi.mojo; fx-gil-RESULT.md,
+    # round 4): still one member operation at a time on the public
+    # thread; the caller releases the GIL around it, as the family's own
+    # door does around the same RUN functions (bindings/xseq_neural_native_door.mojo:
+    # `xseq_run_mlp_glorot`, `xseq_run_mlp_fit`, `xseq_run_mlp_predict`, `xseq_run_threshold`,
+    # `xseq_run_argmax`, `xseq_run_curve_min`; the R^2 entry is host arithmetic). The helpers
+    # the door runs with the GIL held are
+    # shape and value checks on the call's own words (no process state),
+    # and the store has its own lock. NOT `MEMBER_GIL_FREE`: the images
+    # behind the route are not traced for parallel workers.
+    var common = MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_GIL_DOOR
     if classifier:
         return common | MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_CLASSIFIER
     return common | MEMBER_CAN_SCORE | MEMBER_CAN_WEIGHTED_SCORE | MEMBER_CAN_MULTI_OUTPUT

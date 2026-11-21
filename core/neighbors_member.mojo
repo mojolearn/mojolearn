@@ -78,7 +78,7 @@ from core.member_abi import (
     MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
 )
-from core.member_abi import MEMBER_BORROWS_FIT, MEMBER_EXPORT_OWN
+from core.member_abi import MEMBER_BORROWS_FIT, MEMBER_EXPORT_OWN, MEMBER_GIL_DOOR
 from core.member_families import MEMBER_FAMILY_NEIGHBORS
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
@@ -591,8 +591,17 @@ def _neighbors_member(operation: Int, address: Int) raises -> Int:
     # MEMBER_BORROWS_FIT (both kinds): a fitted state reads the caller's X
     # and y views until MEMBER_EXPORT_OWN, or the export of both blocks, has
     # copied them (LIFETIME in the module docstring).
+    # MEMBER_GIL_DOOR (THE GIL RULE, core/member_abi.mojo; fx-gil-RESULT.md,
+    # round 4): still one member operation at a time on the public thread;
+    # the caller releases the GIL around it, as the family's own door
+    # (bindings/neighbors_knn_native_door.mojo) does around the same RUN
+    # functions (`nb_index_prepare_call`, `nb_index_release_call`,
+    # `knn_classify_run`, `knn_regress_run`). The two checks the door runs
+    # with the GIL held read the call's own words; the store has its own
+    # lock. NOT `MEMBER_GIL_FREE`: the resident index and the images behind
+    # the route are not traced for parallel workers.
     comptime _REGRESSOR = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
-        | MEMBER_BORROWS_FIT)
+        | MEMBER_BORROWS_FIT | MEMBER_GIL_DOOR)
     comptime _CLASSIFIER = _REGRESSOR | MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_CLASSIFIER
     if operation == MEMBER_OP_CAPABILITIES:
         if call[].state == 0:

@@ -61,6 +61,7 @@ from x_decomp.descriptor_schema import XD_DEV_FREE
 from bindings.pls_run import PlsFitWords, pls_fit_run, pls_project, pls_rebuild, pls_predict_run
 from core.device_route import DeviceRoute
 from core.member_abi import (
+    MEMBER_GIL_DOOR,
     MemberCall, MemberMatrix, MEMBER_F32, MEMBER_F64,
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_PREDICT,
     MEMBER_OP_TRANSFORM, MEMBER_OP_INVERSE_TRANSFORM, MEMBER_OP_OUTPUTS, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT,
@@ -549,8 +550,18 @@ def _new(call: _CallP) raises:
 def _pls_member(operation: Int, address: Int) raises -> Int:
     var call = _CallP(unsafe_from_address=address)
     if operation == MEMBER_OP_CAPABILITIES:
+        # MEMBER_GIL_DOOR (THE GIL RULE, core/member_abi.mojo; fx-gil-RESULT.md,
+        # round 4): still one member operation at a time on the public
+        # thread; the caller releases the GIL around it, as the family's own
+        # door does around the same RUN functions (bindings/pls_native_door.mojo:
+        # `pls_fit_run`, `pls_project`, `pls_rebuild`, `pls_predict_run`). The helpers the
+        # door runs with the GIL held are
+        # shape and value checks on the call's own words (no process state),
+        # and the store has its own lock. NOT `MEMBER_GIL_FREE`: the images
+        # behind the route are not traced for parallel workers.
         return (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_TRANSFORM | MEMBER_CAN_INVERSE_TRANSFORM
-            | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_CAN_COEF | MEMBER_CAN_MULTI_OUTPUT | MEMBER_CAN_NOTICES)
+            | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_CAN_COEF | MEMBER_CAN_MULTI_OUTPUT | MEMBER_CAN_NOTICES
+            | MEMBER_GIL_DOOR)
     if operation == MEMBER_OP_NEW:
         _new(call)
         return 0

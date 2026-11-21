@@ -75,6 +75,7 @@ from core.hotpath_impl import HP_F32, HP_F64, HP_I32, HP_I64
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from core.member_abi import (
+    MEMBER_GIL_DOOR,
     MemberCall, MemberMatrix, MEMBER_F32, MEMBER_F64, MEMBER_I32,
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_PREDICT,
     MEMBER_OP_PREDICT_PROBA, MEMBER_OP_DECISION, MEMBER_OP_SCORE, MEMBER_OP_OUTPUTS,
@@ -1018,7 +1019,17 @@ def _import(slot: _Slot, call: _Call) raises:
 def _kernel_svm_member(operation: Int, address: Int) raises -> Int:
     var call = _Call(unsafe_from_address=address)
     if operation == MEMBER_OP_CAPABILITIES:
-        var common = MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_CAN_SAMPLE_WEIGHT
+        # MEMBER_GIL_DOOR (THE GIL RULE, core/member_abi.mojo; fx-gil-RESULT.md,
+        # round 4): still one member operation at a time on the public
+        # thread; the caller releases the GIL around it, as the family's own
+        # door does around the same RUN functions (bindings/svc_kernel_native_door.mojo:
+        # `svc_fit_run`, `svc_fit_finish_run`, `svc_gamma_run`, `svc_bounds_run`,
+        # `svc_query_run`). The helpers the door runs with the GIL held are
+        # shape and value checks on the call's own words (no process state),
+        # and the store has its own lock. NOT `MEMBER_GIL_FREE`: the images
+        # behind the route are not traced for parallel workers.
+        var common = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_CAN_SAMPLE_WEIGHT
+            | MEMBER_GIL_DOOR)
         var svc = (MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_DECISION | MEMBER_CAN_SCORE | MEMBER_CAN_CLASSIFIER)
         if call[].state == 0:
             if call[].param_count == _PARAMS and call[].params:
