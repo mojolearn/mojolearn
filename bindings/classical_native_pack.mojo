@@ -240,9 +240,10 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
             # refused in words before any field is published. It is stored
             # verbatim like every constructor parameter and read once, by the
             # estimator's first operation, into its route owner
-            # (providers/python/linear_route_boundary_door.mojo). Checking it
-            # allocates nothing; a default-device construction costs one
-            # type compare and one string compare more than before.
+            # (providers/python/linear_route_boundary_door.mojo). A construction
+            # costs, more than before: one type compare, the three-byte word
+            # compare, and one lookup of the estimator's address in the model
+            # record table (the route clear below). No owner is allocated here.
             linear_constructor_check(len(args), ridge)
             _ = linear_device_unpack(args[linear_constructor_device(ridge)], b)
             result = classical_initialize(model, args, ridge, context)
