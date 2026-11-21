@@ -2,6 +2,30 @@
 # Whole-operation tokenizer admission, orchestration and result conversion.
 # Public wrappers connect once at import. No user iterator, scalar conversion,
 # descriptor, path or buffer callback is used to admit product inputs.
+#
+# Every operation is UNPACK / RUN / PACK (audit of lane dw-neural-models,
+# 2026-11-21). The fitted state is native (`BpeHandle`, `VocabHandle`,
+# `TrainedVocabulary`); RUN is typed code of `tokenizer/` with no Python:
+#   per call    bpe_encode / bpe_decode (bpe_encode_into, bpe_encode_batch_into,
+#               bpe_check_ids, bpe_decode_seq_bytes), vocab_encode /
+#               vocab_decode / vocab_pretokenize / vocab_cut (vocab_encode_ids,
+#               vocab_decode_ids, pretokenize), gather_rows (core/lm_batch_run):
+#               UNPACK copies the caller's text or ids into native lists once,
+#               PACK boxes the ids or bytes.
+#   training    trainer_train (bpe_train_fill), trained_render / trained_write
+#               (render_ranks, render_tokenizer_json; the file is written here).
+#   building    bpe_init / bpe_ranks / bpe_tokens / bpe_files / bpe_adopt,
+#               vocab_init / vocab_spelled / vocab_json / vocab_pretrained,
+#               trained_init / trainer_init / trained_tokenizer: UNPACK of a
+#               caller's vocabulary definition (once per tokenizer), RUN builds
+#               the rank table, PACK stores the handle and the public fields.
+#   read-backs  bpe_fact / trained_fact / trainer_repr / vocab_fact /
+#               vocab_pattern, the connects: UNPACK and PACK only.
+# Not typed, stated: the opt-in fast provider arm of bpe_encode and
+# trainer_train calls the fast binding's own entries (kept intact, undecided);
+# NFC normalisation of a str for a tokenizer that declares it is CPython's
+# unicodedata entry at UNPACK (a native NFC needs the Unicode composition
+# tables in Mojo first).
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr, GILReleased
 from std.python.bindings import ExceptionType, raise_python_exception
@@ -55,6 +79,13 @@ struct TokenizerPublicConnection(Defaultable, Movable):
     var range_iter: PythonObject
     var reversed_iter: PythonObject
     var owner_names: PythonObject
+    # The state-field names the per-call operations read, as str objects held
+    # for the process (each was a new str built on every call).
+    var k_handle: PythonObject
+    var k_fast: PythonObject
+    var k_normalizer: PythonObject
+    var k_bos_ids: PythonObject
+    var k_eos_ids: PythonObject
 
     def __init__(out self):
         self.vocab = PythonObject(None)
@@ -66,9 +97,41 @@ struct TokenizerPublicConnection(Defaultable, Movable):
         self.range_iter = PythonObject(None)
         self.reversed_iter = PythonObject(None)
         self.owner_names = PythonObject(None)
+        self.k_handle = PythonObject(None)
+        self.k_fast = PythonObject(None)
+        self.k_normalizer = PythonObject(None)
+        self.k_bos_ids = PythonObject(None)
+        self.k_eos_ids = PythonObject(None)
 
 
-comptime TOKENIZER_PUBLIC_CONNECTION = SharedSlot[TokenizerPublicConnection, "MojolearnTokenizerPublicConnectionV1"]
+comptime TOKENIZER_PUBLIC_CONNECTION = SharedSlot[TokenizerPublicConnection, "MojolearnTokenizerPublicConnectionV2"]
+
+
+comptime _K_HANDLE = 0
+comptime _K_FAST = 1
+comptime _K_NORMALIZER = 2
+comptime _K_BOS_IDS = 3
+comptime _K_EOS_IDS = 4
+
+
+def _key(which: Int) raises -> PythonObject:
+    """UNPACK: one held state-field name of the per-call operations."""
+    var state = TOKENIZER_PUBLIC_CONNECTION.get_or_create_ptr()
+    if state[].k_handle is None:
+        state[].k_fast = PythonObject("_fast")
+        state[].k_normalizer = PythonObject("normalizer")
+        state[].k_bos_ids = PythonObject("bos_ids")
+        state[].k_eos_ids = PythonObject("eos_ids")
+        state[].k_handle = PythonObject("_handle")
+    if which == _K_HANDLE:
+        return state[].k_handle
+    if which == _K_FAST:
+        return state[].k_fast
+    if which == _K_NORMALIZER:
+        return state[].k_normalizer
+    if which == _K_BOS_IDS:
+        return state[].k_bos_ids
+    return state[].k_eos_ids
 
 
 def _vocab_context() raises -> PythonObject:
@@ -594,7 +657,7 @@ def _bpe_init(tokenizer: PythonObject, path: PythonObject, context: PythonObject
 
 def _bpe_encode(tokenizer: PythonObject, data: PythonObject, allow_value: PythonObject, bytes_only: Bool, batch: Bool, context: PythonObject) raises -> PythonObject:
     var fields = _owner(tokenizer, context[0])
-    var handle = native_instance_item(fields, PythonObject("_handle"))
+    var handle = native_instance_item(fields, _key(_K_HANDLE))
     var owner = handle.downcast_value_ptr[BpeHandle]()
     if not owner[].tok:
         raise Error("ValueError: tokenizer handle is not loaded")
@@ -616,7 +679,7 @@ def _bpe_encode(tokenizer: PythonObject, data: PythonObject, allow_value: Python
     elif len(lengths) > 0:
         # Retain the existing optional fast batch route. The imported module
         # and handle are read from the operation snapshot, never self._m.
-        var fast = native_instance_item(fields, PythonObject("_fast"))
+        var fast = native_instance_item(fields, _key(_K_FAST))
         if fast is not None and not allow:
             _sequence(fast, "fast provider")
             if len(fast) != 2 or fast[0] is not context[4][0]:
@@ -660,7 +723,7 @@ def _bpe_encode(tokenizer: PythonObject, data: PythonObject, allow_value: Python
 
 def _bpe_decode(tokenizer: PythonObject, data: PythonObject, bytes_only: Bool, batch: Bool, errors: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = _owner(tokenizer, context[0])
-    var handle = native_instance_item(fields, PythonObject("_handle"))
+    var handle = native_instance_item(fields, _key(_K_HANDLE))
     var owner = handle.downcast_value_ptr[BpeHandle]()
     if not owner[].tok:
         raise Error("ValueError: tokenizer handle is not loaded")
@@ -1087,13 +1150,13 @@ def vocab_spelled_public_binding(cls: PythonObject, vocab: PythonObject, merges:
 
 def _vocab_encode(tokenizer: PythonObject, data: PythonObject, add_special: PythonObject, allow_special: PythonObject, bytes_only: Bool, context: PythonObject) raises -> PythonObject:
     var fields = _owner(tokenizer, context[0])
-    var handle = native_instance_item(fields, PythonObject("_handle"))
+    var handle = native_instance_item(fields, _key(_K_HANDLE))
     var owner = handle.downcast_value_ptr[VocabHandle]()
     if not owner[].tok:
         raise Error("ValueError: tokenizer vocabulary is not loaded")
     var add = _bool(add_special, "add_special_tokens")
     var allow = _bool(allow_special, "allow_special")
-    var normalizer = native_instance_item(fields, PythonObject("normalizer"))
+    var normalizer = native_instance_item(fields, _key(_K_NORMALIZER))
     if normalizer is not None and _str(normalizer, "normalizer") != "NFC":
         raise Error("ValueError: tokenizer normalizer must be null or NFC")
     var text = data
@@ -1105,8 +1168,8 @@ def _vocab_encode(tokenizer: PythonObject, data: PythonObject, add_special: Pyth
     var bos = List[Int]()
     var eos = List[Int]()
     if add:
-        bos = _ids(native_instance_item(fields, PythonObject("bos_ids")))
-        eos = _ids(native_instance_item(fields, PythonObject("eos_ids")))
+        bos = _ids(native_instance_item(fields, _key(_K_BOS_IDS)))
+        eos = _ids(native_instance_item(fields, _key(_K_EOS_IDS)))
     var ids = vocab_encode_ids(owner[].tok.value(), bytes, allow)
     var result = _tokenizer_result_list(len(bos) + len(ids) + len(eos))
     ref cpy = Python().cpython()
@@ -1142,7 +1205,7 @@ def _vocab_encode(tokenizer: PythonObject, data: PythonObject, add_special: Pyth
 
 def _vocab_decode(tokenizer: PythonObject, data: PythonObject, bytes_only: Bool, errors: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = _owner(tokenizer, context[0])
-    var handle = native_instance_item(fields, PythonObject("_handle"))
+    var handle = native_instance_item(fields, _key(_K_HANDLE))
     var owner = handle.downcast_value_ptr[VocabHandle]()
     if not owner[].tok:
         raise Error("ValueError: tokenizer vocabulary is not loaded")
@@ -1162,7 +1225,7 @@ def _vocab_decode(tokenizer: PythonObject, data: PythonObject, bytes_only: Bool,
 
 def _vocab_pretokenize(tokenizer: PythonObject, data: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = _owner(tokenizer, context[0])
-    var handle = native_instance_item(fields, PythonObject("_handle"))
+    var handle = native_instance_item(fields, _key(_K_HANDLE))
     var owner = handle.downcast_value_ptr[VocabHandle]()
     if not owner[].tok:
         raise Error("ValueError: tokenizer vocabulary is not loaded")
@@ -1199,13 +1262,13 @@ def tokenizer_vocab_decode(tokenizer: PythonObject, ids: PythonObject, bytes_onl
 def tokenizer_vocab_fingerprint(tokenizer: PythonObject) raises -> PythonObject:
     var context = _vocab_context()
     var fields = _owner(tokenizer, context[0])
-    var handle = native_instance_item(fields, PythonObject("_handle"))
+    var handle = native_instance_item(fields, _key(_K_HANDLE))
     var owner = handle.downcast_value_ptr[VocabHandle]()
     if not owner[].tok:
         raise Error("ValueError: tokenizer vocabulary is not loaded")
     var pattern = native_instance_item(fields, PythonObject("pattern"))
     _ = _vocab_pattern(pattern)
-    var normalizer = native_instance_item(fields, PythonObject("normalizer"))
+    var normalizer = native_instance_item(fields, _key(_K_NORMALIZER))
     var unicode_version = PythonObject(UNICODE_VERSION_PINNED)
     if normalizer is not None:
         if _str(normalizer, "normalizer") != "NFC":
@@ -1213,8 +1276,8 @@ def tokenizer_vocab_fingerprint(tokenizer: PythonObject) raises -> PythonObject:
         var namespace = _class_fields(context[0])
         var version = py_get(fields, "unicode_version", py_get(namespace, "unicode_version"))
         unicode_version = PythonObject(String(UNICODE_VERSION_PINNED) + "/normalizer:" + _str(version, "unicode_version"))
-    var bos = native_instance_item(fields, PythonObject("bos_ids"))
-    var eos = native_instance_item(fields, PythonObject("eos_ids"))
+    var bos = native_instance_item(fields, _key(_K_BOS_IDS))
+    var eos = native_instance_item(fields, _key(_K_EOS_IDS))
     _sequence(bos, "bos_ids")
     _sequence(eos, "eos_ids")
     _plain(bos)
@@ -1425,7 +1488,7 @@ def vocab_pretrained_public_binding(cls: PythonObject, path: PythonObject, modul
 
 def tokenizer_bpe_identity(tokenizer: PythonObject) raises -> PythonObject:
     var fields = _owner(tokenizer, _bpe_context()[0])
-    var handle = native_instance_item(fields, PythonObject("_handle"))
+    var handle = native_instance_item(fields, _key(_K_HANDLE))
     var owner = handle.downcast_value_ptr[BpeHandle]()
     if not owner[].tok:
         raise Error("ValueError: tokenizer handle is not loaded")
@@ -1439,7 +1502,7 @@ def tokenizer_bpe_handle(tokenizer: PythonObject) raises -> PythonObject:
     loaded native handle object of a connected BpeTokenizer. The caller keeps
     the returned object alive past its RUN and reads it as a `BpeHandle`."""
     var fields = _owner(tokenizer, _bpe_context()[0])
-    var handle = native_instance_item(fields, PythonObject("_handle"))
+    var handle = native_instance_item(fields, _key(_K_HANDLE))
     var owner = handle.downcast_value_ptr[BpeHandle]()
     if not owner[].tok:
         raise Error("ValueError: tokenizer handle is not loaded")
@@ -1474,7 +1537,7 @@ def tokenizer_bpe_export(vocabulary: PythonObject) raises -> PythonObject:
         return Python.tuple(text, value.n_tokens(), "TrainedBpeVocabulary", _identity(text, value.n_tokens()))
     var tokenizer = tokenizer_bpe_for(vocabulary)
     var fields = _owner(tokenizer, context[0])
-    var handle = native_instance_item(fields, PythonObject("_handle"))
+    var handle = native_instance_item(fields, _key(_K_HANDLE))
     var owner = handle.downcast_value_ptr[BpeHandle]()
     if not owner[].tok:
         raise Error("ValueError: tokenizer handle is not loaded")
@@ -1562,10 +1625,6 @@ def tokenizer_public_call(operation: String, args: PythonObject, context: Python
         return _bpe_files(args[0], args[1], args[2], context)
     if operation == "bpe_adopt":
         return _bpe_adopt(args[0], args[1], args[2], context)
-    if operation == "bpe_encode":
-        return _bpe_encode(args[0], args[1], args[2], _bool(args[3], "bytes_only"), _bool(args[4], "batch"), context)
-    if operation == "bpe_decode":
-        return _bpe_decode(args[0], args[1], _bool(args[2], "bytes_only"), _bool(args[3], "batch"), args[4], context)
     if operation == "bpe_fact":
         var fields = _owner(args[0], context[0])
         var name = _str(args[1], "fact")
@@ -1632,10 +1691,6 @@ def tokenizer_public_call(operation: String, args: PythonObject, context: Python
         return vocab_pretrained_public_binding(args[0], args[1], context, context[2])
     if operation == "vocab_json":
         return vocab_json_public_binding(args[0], args[1], args[2], args[3], context, context[2])
-    if operation == "vocab_encode":
-        return _vocab_encode(args[0], args[1], args[2], args[3], _bool(args[4], "bytes_only"), context)
-    if operation == "vocab_decode":
-        return _vocab_decode(args[0], args[1], _bool(args[2], "bytes_only"), args[3], context)
     if operation == "vocab_pretokenize":
         return _vocab_pretokenize(args[0], args[1], context)
     if operation == "vocab_pattern":
