@@ -84,11 +84,6 @@ FAMILIES = (
     dict(site="providers/python/x_neighbors_descriptor_pyapi_door.mojo", literal='var export_name = "xn_" + name',
          strict=True, prefixes=["xn_"], suffixes=_src(r"\.mojo$", r"""\bxn_execute\(\s*[a-z_]+\s*,\s*"([a-z0-9_]+)\""""),
          note="xn_execute(binding, name, ...) calls the export xn_<name> of a module binding"),
-    dict(site="bindings/neighbors_local_native_door.mojo", literal="xn_execute(binding, name, addrs, ints, floats)",
-         strict=True, prefixes=["xn_"],
-         suffixes=_src(r"^(bindings/neighbors_[a-z_]+_door|neighbors/neighbors_[a-z_]+)\.mojo$",
-                       r"""(?:\b_op\(\s*[a-z_]+\s*,\s*"([a-z0-9_]+)"|^\s*return ("[a-z0-9_]+" if [a-z_]+ else "[a-z0-9_]+")$)"""),
-         note="the neighbors doors' _op(binding, name, ...) (and imp_cells_operation's two names) -> xn_execute"),
     dict(site="x_neighbors/gen.py", literal="def _add_ops(mut m: PythonModuleBuilder)", strict=False,
          prefixes=["xn_", "x_neighbors_"],
          suffixes=_src(r"^(core|neighbors|bindings)/[a-z0-9_/]+\.mojo$",
@@ -137,6 +132,10 @@ FAMILIES = (
 KEEP = {
     "x_neighbors_kfeat_schi2_draw": "paused Apple fast arm (lane apple-fast-w3-kfeat, XN_FAST_SCHI2_LAZYW, opt-in): "
                                     "kept until Andrew reopens Apple fast",
+    "xn_knn_impute_tiled": "the packed wrapper is the source row of descriptor operation knn_impute_tiled "
+                           "(tools/gen_x_neighbors_provider.py); KNNImputer's typed RUN calls the descriptor (lane dw-neighbors-b)",
+    "x_neighbors_kfeat_schi2_weights": "paused Apple fast arm (XN_FAST_SCHI2_LAZYW): the door reaches its owner through "
+                                       "descriptor operation schi2_weights (lane dw-neighbors-b); the export goes with the arm",
     "x_cluster_mbk_devscan": "paused Apple fast read-back (MiniBatchKMeans' FAST + Apple NaN/inf device scan)",
     "x_cluster_mbk_policy": "paused Apple fast read-back (MINIBATCH_FAST_DEV policies, x_cluster/minibatch_fast.mojo)",
     "x_decomp_lu_resid": "paused Apple fast arm (lane apple-fast-q-linalg, LU_QFIX)",

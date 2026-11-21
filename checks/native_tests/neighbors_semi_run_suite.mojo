@@ -9,10 +9,15 @@ across the host's cores.
 """
 from core.host_parallel import host_parallelize
 from neighbors.neighbors_graph_run import XnOpRequest
+from neighbors.label_propagation_run import LpFitRequest, LpFitOutcome, LpQueryRequest, lp_query_fused
+from neighbors.xn_request_run import xn_scratch_f32, xn_scratch_i32
+from neighbors.chi2_run import (
+    Achi2FitRequest, Achi2Request, Schi2FitRequest, Schi2Request, achi2_interval_check, chi2_minimum,
+    schi2_check_run,
+)
 from neighbors.neighbors_semi_run import (
-    XN_SEMI_U_LOG, xn_achi2_negative_check, xn_achi2_fit_negative, xn_achi2_width, xn_achi2_request,
-    xn_achi2_csr_count, xn_achi2_csr_fill, xn_schi2_skew_check, xn_schi2_missing_fit, xn_schi2_log_request,
-    xn_schi2_transform_request, xn_semi_knn_k, xn_semi_sqdist_request, xn_semi_knn_select_request,
+    XN_SEMI_U_LOG, xn_achi2_negative_check, xn_achi2_fit_negative, xn_achi2_width,
+    xn_achi2_csr_count, xn_achi2_csr_fill, xn_schi2_skew_check, xn_schi2_missing_fit, xn_semi_knn_k, xn_semi_sqdist_request, xn_semi_knn_select_request,
     xn_semi_knn_sq_request, xn_lp_knn_graph_request, xn_lp_knn_product_request, xn_semi_matmul_request,
     xn_semi_rbf_request, xn_semi_row_normalize_request, xn_semi_row_argmax_request, xn_lp_laplacian_request,
     xn_lp_col_degree_request, xn_lp_laplacian_deg_request, xn_lp_alpha_check, xn_lp_static_weight,
@@ -20,7 +25,7 @@ from neighbors.neighbors_semi_run import (
     xn_lp_iterations, xn_lp_dense_proba_request,
 )
 
-comptime NEIGHBORS_SEMI_RUN_FIXTURES = 10
+comptime NEIGHBORS_SEMI_RUN_FIXTURES = 11
 
 
 def require(ok: Bool, message: String) raises:
@@ -65,8 +70,23 @@ def fixture(unit: Int) raises:
         require(not xn_achi2_fit_negative(-2, 0, -1.0), "an empty X has no negative value")
         require(xn_achi2_width(3, 2) == 9, "achi2 width")
     elif unit == 1:
-        require(same(xn_achi2_request(1, 2, 3, 4, 2, 0.1), "achi2", [1, 2], [3, 4, 2], [Float64(Float32(0.1))]),
-                "achi2 request")
+        var fit = Achi2FitRequest(1, 6, False)
+        require(fit.x == 1 and fit.count == 6 and not fit.device_scan, "achi2 fit request")
+        var request = Achi2Request(1, 2, 3, 4, 2, 0.1, True, False, True)
+        require(request.x == 1 and request.dst == 2 and request.rows == 3 and request.features == 4
+                and request.steps == 2 and request.interval == 0.1 and request.interval_valid
+                and not request.checked and request.sparse, "achi2 request")
+        achi2_interval_check(True)
+        try:
+            achi2_interval_check(False)
+            raise Error("accepted")
+        except e:
+            require(String(e) == "If sample_steps is not in [1, 2, 3], you need to provide sample_interval",
+                    "achi2 interval wording")
+        var low = List[Float32](length=5, fill=Float32(2.0))
+        low[3] = Float32(-0.25)
+        require(chi2_minimum(Int(low.unsafe_ptr()), 5) == -0.25, "chi2 minimum")
+        _ = low^
         var dense: List[Float32] = [0.0, 1.0, -0.0, 2.0, 0.0, 3.0]
         var nnz = xn_achi2_csr_count(Int(dense.unsafe_ptr()), 6)
         require(nnz == 3, "achi2 csr count (-0.0 dropped)")
@@ -103,10 +123,25 @@ def fixture(unit: Int) raises:
                     + "x_neighbors_kfeat_schi2_fit_idn (rebuild without -D MOJOLEARN_IDN_XN_SKETCH_CTR_OFF)",
                     "schi2 missing entry wording")
     elif unit == 3:
-        require(same(xn_schi2_log_request(1, 2, 6, 0.1), "unary", [1, 2], [6, XN_SEMI_U_LOG],
-                     [1.0, Float64(Float32(0.1))]), "schi2 log request")
-        require(same(xn_schi2_transform_request(1, 2, 3, 4, 5, 6, 7), "skew_transform", [1, 2, 3, 4], [5, 6, 7],
-                     List[Float64]()), "schi2 transform request")
+        require(XN_SEMI_U_LOG == 1, "the log code of the unary operation")
+        var fit = Schi2FitRequest(7, 2, 3, 10, 11)
+        require(fit.seed == 7 and fit.features == 2 and fit.components == 3 and fit.weights == 10
+                and fit.offset == 11, "schi2 fit request")
+        var request = Schi2Request(1, 2, 0, 3, 4, 5, 6, 7, 8, 0.5, False, False)
+        require(request.x == 1 and request.weights == 2 and request.weights_out == 0 and request.offset == 3
+                and request.scratch == 4 and request.dst == 5 and request.rows == 6 and request.features == 7
+                and request.components == 8 and request.skewedness == 0.5 and not request.lazy
+                and not request.pending, "schi2 request")
+        var rows = List[Float32](length=4, fill=Float32(1.0))
+        rows[2] = Float32(-0.5)
+        schi2_check_run(Int(rows.unsafe_ptr()), 4, 1.0)
+        schi2_check_run(Int(rows.unsafe_ptr()), 0, 0.25)
+        try:
+            schi2_check_run(Int(rows.unsafe_ptr()), 4, 0.5)
+            raise Error("accepted")
+        except e:
+            require(String(e) == "X may not contain entries smaller than -skewedness.", "schi2 check wording")
+        _ = rows^
     elif unit == 4:
         require(xn_semi_knn_k(7, 5) == 5 and xn_semi_knn_k(3, 5) == 3, "knn k")
         require(same(xn_semi_sqdist_request(1, 2, 3, 4, 5, 6, 7), "sqdist", [1, 2, 3], [4, 5, 6, 7], List[Float64]()),
@@ -160,12 +195,41 @@ def fixture(unit: Int) raises:
         var info: List[Int32] = [17, 0]
         require(xn_lp_iterations(Int(info.unsafe_ptr())) == 17, "iterations")
         _ = info
-    else:
+    elif unit == 9:
         require(same(xn_lp_dense_proba_request(1, 2, 3, 4, 5, 6, 7, 8, 9, 2, True, 11, 0.1), "lp_dense_proba",
                      [1, 2, 3, 4, 5], [6, 7, 8, 9, 2, 1, 11], [Float64(Float32(0.1)), 0.0]),
                 "dense proba request")
         require(xn_lp_dense_proba_request(1, 2, 3, 4, 5, 6, 7, 8, 9, 2, False, 11, 0.1).p[5] == 0,
                 "proba wants no codes")
+    else:
+        # label propagation RUN (neighbors/label_propagation_run.mojo): the
+        # requests, the outcome's defaults, when the one-session query serves,
+        # and the scratch an empty span still gets
+        var fit = LpFitRequest(1, 2, 3, 4, 5, 6, 7, 8, True, False, 0, 2, 0.5, False, 0.25, 0.75, 1e-3, 30, False,
+                               True)
+        require(fit.x == 1 and fit.codes == 2 and fit.final == 3 and fit.labels == 4 and fit.rows == 5
+                and fit.features == 6 and fit.classes == 7 and fit.marker == 8 and fit.spreading and not fit.knn
+                and fit.neighbors == 0 and fit.kind == 2 and fit.gamma == 0.5 and not fit.raw
+                and fit.weight == 0.25 and fit.alpha == 0.75 and fit.tol == 1e-3 and fit.max_iter == 30
+                and not fit.unfused and fit.old_items, "fit request")
+        var outcome = LpFitOutcome()
+        require(outcome.status == 0 and outcome.iterations == 0, "fit outcome default")
+        var query = LpQueryRequest(1, 2, 3, 4, 0, 5, 6, 7, 8, False, 0, 2, 0.5, True, False, False, False)
+        require(query.q == 1 and query.fit_x == 2 and query.distributions == 3 and query.dst == 4
+                and query.labels == 0 and query.rows == 5 and query.fit_rows == 6 and query.features == 7
+                and query.classes == 8 and not query.knn and query.kind == 2 and query.fused
+                and not query.want_labels, "query request")
+        require(lp_query_fused(query), "rbf with the fused operation and no empty side")
+        query.knn = True
+        require(not lp_query_fused(query), "the kNN graph takes the operation chain")
+        query.knn = False
+        query.rows = 0
+        require(not lp_query_fused(query), "an empty side takes the operation chain")
+        query.rows = 5
+        query.fused = False
+        require(not lp_query_fused(query), "an image without the fused operation takes the chain")
+        require(len(xn_scratch_f32(0)) == 1 and len(xn_scratch_i32(0)) == 1 and len(xn_scratch_f32(6)) == 6
+                and len(xn_scratch_i32(3)) == 3, "an empty span still has an address")
 
 
 def run_checks() raises:

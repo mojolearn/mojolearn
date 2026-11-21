@@ -17,12 +17,8 @@
 # shells' `empty` / `_empty_out`, zero-filled: every element is written by
 # the kernel). MOJOLEARN_XN_LAZY_OUT (an opt-in memory-map A/B arm for
 # outputs of 64 MB or more, same zeros and the same bits) is not consulted.
-from providers.python.x_neighbors_descriptor_pyapi_door import xn_admit_arguments, xn_execute, xn_module, xn_is_module, xn_capabilities
-from providers.python.neural_descriptor_pyapi_door import neural_descriptor_execute
-from providers.python.compiled_binding_snapshot_pyapi_door import CompiledBindingSnapshot
-from x_neighbors.descriptor_schema import xn_operation_id
+from providers.python.x_neighbors_descriptor_pyapi_door import xn_admit_arguments
 from std.python import Python, PythonObject
-from std.python._cpython import PyObjectPtr
 from bindings.admitted_family_door import admit_family
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
@@ -36,29 +32,34 @@ from bindings.cfb_sparse_read_unpack import cfb_sparse_triples
 from bindings.neighbors_ann_native_door import ann_keep_array
 from bindings.mcls_cluster_door import mcls_cluster_operation
 from bindings.operation_names_mcls import MCLS_OPN_FAMILY_MCLS_R2
-from bindings.optimizer_public_words_unpack import PYTHON_ERROR_PENDING, PENDING_PYTHON_ERROR
 from neighbors.neighbors_graph_run import (
-    XnOpRequest, xn_rows_match_check, xn_relabel_request, xn_relabel_decode, xn_fill_request,
-    xn_iota_request, xn_graph_square_check, xn_graph_triples_check, xn_graph_weights_check,
+    xn_rows_match_check, xn_graph_square_check, xn_graph_triples_check, xn_graph_weights_check,
     xn_graph_merge_triples, xn_graph_merged_copy, xn_graph_dense_counts, xn_graph_dense_fill, xn_graph_csr_check,
-    xn_unit_length_check, xn_unit_request, xn_unit_check, xn_unit_missing, xn_pagerank_csr_request,
-    xn_pagerank_dense_request, xn_pagerank_decode, xn_pagerank_converged_check, xn_cc_csr_request,
-    xn_cc_dense_request, xn_cc_csr_components, xn_cc_relabel_check, xn_louvain_csr_request, xn_louvain_request,
-    xn_graph_symmetry_request, xn_louvain_symmetry_check, xn_louvain_device_message, xn_louvain_relabel_check,
-    xn_louvain_decode, xn_svgp_zero_denominator, xn_svgp_gamma, xn_svgp_even_rows, xn_take_rows_request, xn_svgp_fit_request,
-    xn_svgp_fit_decode, xn_svgp_definite_check, xn_svgp_predict_request, xn_kernel_rbf_request,
-    xn_unary_scale_request, xn_unary_shift_request, xn_matmul_request, xn_svgp_var_request,
+    xn_unit_length_check, xn_unit_missing, xn_pagerank_converged_check, xn_svgp_zero_denominator, xn_svgp_gamma,
+    xn_svgp_definite_check,
 )
 from providers.python.estimator_binding_pyapi_door import estimator_binding, estimator_binding_mode
 from providers.python.family_public_lifecycle_pyapi_door import family_lifecycle_begin, family_lifecycle_finish
 from providers.python.family_public_lifecycle_run import family_lifecycle_spec
 from providers.python.neighbors_public_lifecycle_pyapi_door import neighbors_public_end, neighbors_public_refusal
 from bindings.py_optional import py_or_none, py_present
+from std.python._cpython import GILReleased
+from bindings.lof_provider_unpack import LofConnection
+from neighbors.svgp_run import (
+    SVGP_VARIANCE_NONE, SVGP_VARIANCE_LATENT, SVGP_VARIANCE_NOISY, SvgpFitRequest, SvgpQueryRequest, svgp_fit_run,
+    svgp_query_run,
+)
+from neighbors.graph_fit_run import (
+    XN_CAPABILITY_UNIT, PageRankRequest, ComponentsRequest, LouvainRequest, LouvainOutcome, xn_capabilities_run,
+    pagerank_fit_run, components_run, louvain_fit_run,
+)
 
-# The typed checks, the operation requests (their word order and float32
-# rounding) and the info-word decoding are RUN in
-# neighbors/neighbors_graph_run.mojo; this file is UNPACK/PACK: Python reads,
-# admission, array allocation, publication and the binding call.
+# Each operation is UNPACK (this file: Python reads, admission, the published
+# arrays), RUN (neighbors/graph_fit_run.mojo, neighbors/svgp_run.mojo: typed
+# requests on the image's native descriptor entry, no Python object, the GIL
+# released once) and PACK (this file: publication). The typed checks, the
+# operation requests and the info-word decoding are
+# neighbors/neighbors_graph_run.mojo's.
 
 
 # ---------------------------------------------------------------- glue
@@ -108,76 +109,6 @@ def _addr(array: PythonObject) raises -> Int:
 def _float_of(model: PythonObject, name: String) raises -> Float64:
     """`float(model.<name>)`."""
     return _float(_attr(model, name))
-
-
-def _py_ints(values: List[Int]) raises -> PythonObject:
-    var result = Python.list()
-    var append = result.append  # resolved once, not per word
-    for value in values:  # driver-loop: over (named operation's fixed integer schema)
-        _ = py_call(append, PythonObject(value))
-    return result
-
-
-def _py_floats(values: List[Float64]) raises -> PythonObject:
-    var result = Python.list()
-    var append = result.append  # resolved once, not per word
-    for value in values:  # driver-loop: over (named operation's fixed scalar schema)
-        _ = py_call(append, PythonObject(value))
-    return result
-
-
-def _op(binding: PythonObject, request: XnOpRequest) raises:
-    """`_XNeighbors._op(name, bufs, ints, floats)` of a RUN request. A
-    compiled-binding snapshot's native descriptor provider takes the typed
-    words (the call `xn_execute` makes for it, with its GIL release and call
-    count); a loaded module's `xn_<name>` export takes them as Python lists,
-    the entry looked up as `getattr` looked it up."""
-    if xn_is_module(binding):
-        xn_execute(binding, request.name, _py_ints(request.a), _py_ints(request.p), _py_floats(request.f))
-        return
-    var snapshot = binding.downcast_value_ptr[CompiledBindingSnapshot]()
-    _ = neural_descriptor_execute(snapshot[].provider, xn_operation_id(request.name), request.a, request.p,
-                                  request.f)
-
-
-def _pending_value() raises -> PythonObject:
-    """A new reference to the value of the Python exception `family_call`
-    stashed, or None. The stash is kept."""
-    var pending = PENDING_PYTHON_ERROR.get_or_create_ptr()
-    var address = pending[].words[1]
-    if address == 0:
-        return PythonObject(None)
-    ref cpy = Python().cpython()
-    var pointer = cpy.lib.get_function[PyObjectPtr]("Py_NewRef")(address)
-    return PythonObject(from_owned=pointer)
-
-
-def _drop_pending() raises:
-    """Release the stashed exception: the caller raises its own instead."""
-    ref cpy = Python().cpython()
-    var release = cpy.lib.get_function[NoneType]("Py_DecRef")
-    var pending = PENDING_PYTHON_ERROR.get_or_create_ptr()
-    for t in range(3):  # small-loop(the stashed exception's three references)
-        var address = pending[].words[t]
-        if address:
-            release(address)
-            pending[].words[t] = 0
-
-
-def _p2m_relabel(binding: PythonObject, lab: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_expansion_neighbors._p2m_relabel(est, lab)`: `(count, labels)`
-    renumbered by first occurrence (`xn_p2m_relabel`), or None when a label
-    falls outside [0, n)."""
-    var n = Int(py=lab.shape[0])
-    var out = family_array(Python.tuple(max(n, 1)), "<i4", context)
-    var info = family_array(Python.tuple(2), "<i4", context)
-    _op(binding, xn_relabel_request(_addr(lab), _addr(out), _addr(info), n))
-    _ = lab  # keep the Python object alive through the native call above
-    var got = xn_relabel_decode(_addr(info))
-    _ = info  # keep the Python object alive through the read above
-    if not got[1]:
-        return PythonObject(None)
-    return Python.tuple(PythonObject(got[0]), out)
 
 
 def _adjacency(source: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -399,51 +330,29 @@ def _csr_lists(source: PythonObject, graph: Bool, context: PythonObject) raises 
 
 
 # ---------------------------------------------------------------- PageRank
+#
+# Door split (lane dw-neighbors-b, 2026-11-21) of PageRank, Louvain and
+# connected_components: UNPACK reads the fields, admits the adjacency and
+# the caller's vectors and allocates the published array; RUN is
+# neighbors/graph_fit_run.mojo (no Python object; one GIL release around
+# it); PACK publishes. The image is reached through its native descriptor
+# entry, never through a Python export.
 
 
-def _unit(binding: PythonObject, v: PythonObject, n: Int, what: String,
-          context: PythonObject) raises -> PythonObject:
-    """`PageRank._unit(v, n, what)`: a caller's length-n non-negative vector
-    divided by its sum on the device (`x_neighbors_unit_ff`)."""
-    var b = _b()
-    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
-    var unit_fn = Optional[PythonObject]()
-    var available = False
-    if xn_is_module(binding):
-        unit_fn = py_present(py_call(b.getattr, xn_module(binding), PythonObject("x_neighbors_unit_ff"), PythonObject(None)))
-        available = Bool(unit_fn)
-    else:
-        available = (xn_capabilities(binding) & 4) != 0
-    if not available:
+def _unit_admit(connection: LofConnection, v: PythonObject, n: Int, what: String,
+                context: PythonObject) raises -> PythonObject:
+    """UNPACK of `PageRank._unit(v, n, what)`: the image must carry the
+    `unit_ff` operation; the caller's vector as float32, of length n."""
+    if (xn_capabilities_run(connection.driver) & XN_CAPABILITY_UNIT) == 0:
         xn_unit_missing(what)
     var wv = admit_family(v, 1, what, context).array
     xn_unit_length_check(Int(py=wv.shape[0]), n, what)
-    var out = family_array(Python.tuple(n), "<f4", context)
-    var uinfo = family_array(Python.tuple(2), "<i4", context)
-    var request = xn_unit_request(_addr(wv), _addr(out), _addr(uinfo), n)
-    if xn_is_module(binding):
-        _ = family_call(unit_fn.value(), _py_ints(request.a), _py_ints(request.p), _py_floats(request.f))
-    else:
-        _op(binding, request)
-    _ = wv  # keep the Python object alive through the native call above
-    _ = out  # keep the Python object alive through the native call above
-    xn_unit_check(_addr(uinfo), what)
-    _ = uinfo  # keep the Python object alive through the read above
-    return out
-
-
-def _uniform(binding: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
-    """PageRank.fit's `uniform()`: [1/n] * n, 1/n in IEEE double handed to
-    `xn_p2m_fill` (which rounds it once to float32)."""
-    var u = family_array(Python.tuple(n), "<f4", context)
-    if n != 0:
-        _op(binding, xn_fill_request(_addr(u), n))
-        _ = u  # keep the Python object alive through the native call above
-    return u
+    return wv
 
 
 def _pagerank_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises:
     """`PageRank.fit(A)`."""
+    # UNPACK
     classical_connect_numpy(context)
     var b = _b()
     var binding = args[0]
@@ -458,52 +367,42 @@ def _pagerank_fit(model: PythonObject, args: PythonObject, context: PythonObject
     else:
         a = _adjacency(args[1], context)
         n = Int(py=a.shape[0])
-    var info = family_array(Python.tuple(2), "<i4", context)
     # `n * float(tol)`: its IEEE words are RUN's (xn_pagerank_threshold).
     var tol = _float_of(model, "tol")
     var personalization = _attr(model, "personalization")
     var dangling = _attr(model, "dangling")
     var nstart = _attr(model, "nstart")
-    var x: PythonObject
-    if csr.present:
-        var p_uniform = personalization is None
-        var p = family_array(Python.tuple(n), "<f4", context) if p_uniform else _unit(
-            binding, personalization, n, "personalization", context)
-        var dw_uniform = dangling is None and p_uniform
-        var dw = p if dangling is None else _unit(binding, dangling, n, "dangling", context)
-        var x_uniform = nstart is None
-        x = family_array(Python.tuple(n), "<f4", context) if x_uniform else _unit(
-            binding, nstart, n, "nstart", context)
-        var has_vals = csr.vals is not None
-        var vals = csr.vals if has_vals else family_array(Python.tuple(1), "<f4", context)
-        var max_iter = Int(py=_int(_attr(model, "max_iter")))
-        var alpha = _float_of(model, "alpha")
-        _op(binding, xn_pagerank_csr_request(_addr(csr.indptr), _addr(csr.indices), _addr(vals), _addr(x), _addr(p),
-                                             _addr(dw), _addr(info), n, Int(py=csr.indices.shape[0]), has_vals,
-                                             max_iter, tol, binary, x_uniform, p_uniform, dw_uniform, alpha))
-        _ = vals  # keep the Python object alive through the native call above
-        _ = p  # keep the Python object alive through the native call above
-        _ = dw  # keep the Python object alive through the native call above
-        _ = x  # keep the Python object alive through the native call above
-        _ = info  # keep the Python object alive through the native call above
-    else:
-        var p = _uniform(binding, n, context) if personalization is None else _unit(
-            binding, personalization, n, "personalization", context)
-        var dw = p if dangling is None else _unit(binding, dangling, n, "dangling", context)
-        # `x.copy()` of a vector this call made: a fresh Array either way.
-        x = _uniform(binding, n, context) if nstart is None else _unit(binding, nstart, n, "nstart", context)
-        var max_iter = Int(py=_int(_attr(model, "max_iter")))
-        var alpha = _float_of(model, "alpha")
-        _op(binding, xn_pagerank_dense_request(_addr(a), _addr(x), _addr(p), _addr(dw), _addr(info), n, max_iter,
-                                               tol, binary, alpha))
-        _ = a  # keep the Python object alive through the native call above
-        _ = p  # keep the Python object alive through the native call above
-        _ = dw  # keep the Python object alive through the native call above
-        _ = x  # keep the Python object alive through the native call above
-        _ = info  # keep the Python object alive through the native call above
-    _ = csr^
-    var got = xn_pagerank_decode(_addr(info))
-    _ = info  # keep the Python object alive through the read above
+    var connection = LofConnection(binding)
+    var p = PythonObject(None)
+    var dw = PythonObject(None)
+    var start = PythonObject(None)
+    if personalization is not None:
+        p = _unit_admit(connection, personalization, n, "personalization", context)
+    if dangling is not None:
+        dw = _unit_admit(connection, dangling, n, "dangling", context)
+    if nstart is not None:
+        start = _unit_admit(connection, nstart, n, "nstart", context)
+    var max_iter = Int(py=_int(_attr(model, "max_iter")))
+    var alpha = _float_of(model, "alpha")
+    var x = family_array(Python.tuple(n), "<f4", context)
+    var has_vals = csr.present and csr.vals is not None
+    var request = PageRankRequest(csr.present, _addr(csr.indptr) if csr.present else 0,
+                                  _addr(csr.indices) if csr.present else 0, _addr(csr.vals) if has_vals else 0,
+                                  Int(py=csr.indices.shape[0]) if csr.present else 0,
+                                  0 if csr.present else _addr(a), _addr(x), n,
+                                  0 if p is None else _addr(p), 0 if dw is None else _addr(dw),
+                                  0 if start is None else _addr(start), max_iter, tol, binary, alpha)
+    var got = (0, False)
+    # RUN
+    with GILReleased(Python()):
+        got = pagerank_fit_run(connection.driver, request)
+    _ = csr^  # keep the admitted lists alive through the native call above
+    _ = a  # keep the Python object alive through the native call above
+    _ = p  # keep the Python object alive through the native call above
+    _ = dw  # keep the Python object alive through the native call above
+    _ = start  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
+    # PACK
     if got[1]:
         py_setitem(fields, "pagerank_", x)
         py_setitem(fields, "n_iter_", PythonObject(got[0]))
@@ -514,29 +413,11 @@ def _pagerank_fit(model: PythonObject, args: PythonObject, context: PythonObject
 # ---------------------------------------------------------------- connected components
 
 
-def _cc_relabel(binding: PythonObject, lab: PythonObject, return_labels: Bool,
-                context: PythonObject) raises -> PythonObject:
-    """`_cc_relabel(lab, return_labels, est)`."""
-    if Int(py=lab.shape[0]) == 0:
-        return Python.tuple(PythonObject(0), lab) if return_labels else PythonObject(0)
-    var got = _p2m_relabel(binding, lab, context)
-    xn_cc_relabel_check(got is not None)
-    return got if return_labels else got[0]
-
-
-def _p2m_iota(binding: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
-    """`_p2m_iota(est, n)`: [0, 1, ..., n - 1] as int32 (`xn_p2m_iota`)."""
-    var lab = family_array(Python.tuple(max(n, 0)), "<i4", context)
-    if n > 0:
-        _op(binding, xn_iota_request(_addr(lab), n))
-        _ = lab  # keep the Python object alive through the native call above
-    return lab
-
-
 def _connected_components(args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`connected_components(A, directed, connection, return_labels,
     numeric_mode)`: args = (binding, A, directed, connection,
     return_labels)."""
+    # UNPACK
     classical_connect_numpy(context)
     var binding = args[0]
     var connection = args[3]
@@ -545,31 +426,30 @@ def _connected_components(args: PythonObject, context: PythonObject) raises -> P
     if not py_contains(Python.tuple(PythonObject("weak"), PythonObject("strong")), connection):
         raise Error("connection must be 'weak' or 'strong'")
     var csr = _csr_lists(args[1], False, context)
+    var a = PythonObject(None)
+    var n: Int
     if csr.present:
-        var n = csr.n
-        var lab = _p2m_iota(binding, n, context)
-        var info = family_array(Python.tuple(2), "<i4", context)
-        _op(binding, xn_cc_csr_request(_addr(csr.indptr), _addr(csr.indices), _addr(lab), _addr(info), n,
-                                       Int(py=csr.indices.shape[0])))
-        _ = lab  # keep the Python object alive through the native call above
-        _ = csr^
-        var components = xn_cc_csr_components(_addr(info))
-        _ = info  # keep the Python object alive through the read above
-        if components >= 0:
-            if _truth(args[4]):
-                return Python.tuple(PythonObject(components), lab)
-            return PythonObject(components)
-        return _cc_relabel(binding, lab, _truth(args[4]), context)
-    _ = csr^
-    var a = _adjacency(args[1], context)
-    var n = Int(py=a.shape[0])
-    var lab = _p2m_iota(binding, n, context)
-    var info = family_array(Python.tuple(1), "<i4", context)
-    _op(binding, xn_cc_dense_request(_addr(a), _addr(lab), _addr(info), n))
+        n = csr.n
+    else:
+        a = _adjacency(args[1], context)
+        n = Int(py=a.shape[0])
+    var labels = family_array(Python.tuple(max(n, 0)), "<i4", context)
+    var request = ComponentsRequest(csr.present, _addr(csr.indptr) if csr.present else 0,
+                                    _addr(csr.indices) if csr.present else 0,
+                                    Int(py=csr.indices.shape[0]) if csr.present else 0,
+                                    0 if csr.present else _addr(a), _addr(labels), n)
+    var image = LofConnection(binding)
+    var components = 0
+    # RUN
+    with GILReleased(Python()):
+        components = components_run(image.driver, request)
+    _ = csr^  # keep the admitted lists alive through the native call above
     _ = a  # keep the Python object alive through the native call above
-    _ = lab  # keep the Python object alive through the native call above
-    _ = info  # keep the Python object alive through the native call above
-    return _cc_relabel(binding, lab, _truth(args[4]), context)
+    _ = labels  # keep the Python object alive through the native call above
+    # PACK
+    if _truth(args[4]):
+        return Python.tuple(PythonObject(components), labels)
+    return PythonObject(components)
 
 
 # ---------------------------------------------------------------- Louvain
@@ -577,6 +457,7 @@ def _connected_components(args: PythonObject, context: PythonObject) raises -> P
 
 def _louvain_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises:
     """`Louvain.fit(A)`."""
+    # UNPACK
     classical_connect_numpy(context)
     var binding = args[0]
     var fields = py_fields(model)
@@ -585,65 +466,45 @@ def _louvain_fit(model: PythonObject, args: PythonObject, context: PythonObject)
     if max_level is not None and _truth(family_call(native_loaded_module("operator").lt, ml, PythonObject(1))):
         raise Error("max_level must be a positive integer or None")
     var csr = _csr_lists(args[1], True, context)
+    var a = PythonObject(None)
     var n: Int
-    var labels: PythonObject
-    var info: PythonObject
     if csr.present:
         n = csr.n
-        var has_vals = csr.vals is not None
-        var vals = csr.vals if has_vals else family_array(Python.tuple(1), "<f4", context)
-        labels = family_array(Python.tuple(n), "<i4", context)
-        info = family_array(Python.tuple(2), "<f4", context)
-        try:
-            var resolution = _float_of(model, "resolution")
-            var threshold = _float_of(model, "threshold")
-            _op(binding, xn_louvain_csr_request(_addr(csr.indptr), _addr(csr.indices), _addr(vals), _addr(labels),
-                                                _addr(info), n, Int(py=csr.indices.shape[0]), has_vals,
-                                                Int(py=ml), resolution, threshold))
-            _ = vals  # keep the Python object alive through the native call above
-            _ = labels  # keep the Python object alive through the native call above
-            _ = info  # keep the Python object alive through the native call above
-        except error:
-            # `except Exception as e`: the device checks' messages as
-            # ValueErrors, from "Louvain:" on; anything else unchanged.
-            if String(error) != PYTHON_ERROR_PENDING:
-                raise error^
-            var value = _pending_value()
-            var message = String("") if value is None else family_str(value)
-            var refusal = xn_louvain_device_message(message)
-            if refusal.byte_length() == 0:
-                raise error^
-            _drop_pending()
-            raise Error(refusal)
     else:
-        var a = _adjacency(args[1], context)
+        a = _adjacency(args[1], context)
         n = Int(py=a.shape[0])
-        # The symmetry and no-edge checks run natively (`xn_graph_symmetry`).
-        var flags = family_array(Python.tuple(2), "<i4", context)
-        _op(binding, xn_graph_symmetry_request(_addr(a), _addr(flags), n))
-        _ = a  # keep the Python object alive through the native call above
-        xn_louvain_symmetry_check(_addr(flags))
-        _ = flags  # keep the Python object alive through the read above
-        labels = family_array(Python.tuple(n), "<i4", context)
-        info = family_array(Python.tuple(2), "<f4", context)
-        var resolution = _float_of(model, "resolution")
-        var threshold = _float_of(model, "threshold")
-        _op(binding, xn_louvain_request(_addr(a), _addr(labels), _addr(info), n, Int(py=ml), resolution, threshold))
-        _ = a  # keep the Python object alive through the native call above
-        _ = labels  # keep the Python object alive through the native call above
-        _ = info  # keep the Python object alive through the native call above
-    _ = csr^
-    var got = _p2m_relabel(binding, labels, context)
-    xn_louvain_relabel_check(got is not None)
-    var decoded = xn_louvain_decode(_addr(info))
-    _ = info  # keep the Python object alive through the read above
-    py_setitem(fields, "n_communities_", got[0])
-    py_setitem(fields, "labels_", got[1])
-    py_setitem(fields, "modularity_", PythonObject(decoded[0]))
-    py_setitem(fields, "n_levels_", _int(PythonObject(decoded[1])))
+    var resolution = _float_of(model, "resolution")
+    var threshold = _float_of(model, "threshold")
+    # `_p2m_relabel`'s answer: one word for an empty graph, as before.
+    var labels = family_array(Python.tuple(max(n, 1)), "<i4", context)
+    var has_vals = csr.present and csr.vals is not None
+    var request = LouvainRequest(csr.present, _addr(csr.indptr) if csr.present else 0,
+                                 _addr(csr.indices) if csr.present else 0, _addr(csr.vals) if has_vals else 0,
+                                 Int(py=csr.indices.shape[0]) if csr.present else 0,
+                                 0 if csr.present else _addr(a), _addr(labels), n, Int(py=ml), resolution,
+                                 threshold)
+    var connection = LofConnection(binding)
+    var outcome = LouvainOutcome()
+    # RUN
+    with GILReleased(Python()):
+        outcome = louvain_fit_run(connection.driver, request)
+    _ = csr^  # keep the admitted lists alive through the native call above
+    _ = a  # keep the Python object alive through the native call above
+    _ = labels  # keep the Python object alive through the native call above
+    # PACK
+    py_setitem(fields, "n_communities_", PythonObject(outcome.communities))
+    py_setitem(fields, "labels_", labels)
+    py_setitem(fields, "modularity_", PythonObject(outcome.modularity))
+    py_setitem(fields, "n_levels_", _int(PythonObject(outcome.levels)))
 
 
 # ---------------------------------------------------------------- SVGP
+#
+# Door split (lane dw-neighbors-b, 2026-11-21): UNPACK reads the fields,
+# admits X, y and the caller's inducing points and allocates the published
+# arrays; RUN is neighbors/svgp_run.mojo (no Python object; one GIL release
+# around it); PACK publishes. The kernel helper (`_k(Q, Z_)`: the rbf kernel,
+# then the kernel variance scale) is RUN's, on the estimator's image.
 
 
 def _svgp_gamma(model: PythonObject) raises -> Float64:
@@ -661,6 +522,7 @@ def _svgp_gamma(model: PythonObject) raises -> Float64:
 
 def _svgp_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises:
     """`SVGP.fit(X, y)`."""
+    # UNPACK
     classical_connect_numpy(context)
     var b = _b()
     var binding = args[0]
@@ -672,7 +534,8 @@ def _svgp_fit(model: PythonObject, args: PythonObject, context: PythonObject) ra
     xn_rows_match_check(Int(py=yv.shape[0]), n)
     var inducing = _attr(model, "inducing_points")
     var z: PythonObject
-    if inducing is not None:
+    var pick_rows = inducing is None
+    if not pick_rows:
         z = ann_keep_array(inducing, admit_family(inducing, 2, "inducing_points", context, dense=True).array, context)
     else:
         var m_obj = family_call(b.min, _int(_attr(model, "n_inducing")), PythonObject(n))
@@ -680,37 +543,31 @@ def _svgp_fit(model: PythonObject, args: PythonObject, context: PythonObject) ra
             # `as_i32_c` of the empty row list.
             raise Error("mojolearn: rows is empty, shape (0,): Found array with 0 sample(s) (shape=(0,)) "
                         + "while a minimum of 1 is required.")
-        var m = Int(py=m_obj)
-        var rows = family_array(Python.tuple(m), "<i4", context)
-        xn_svgp_even_rows(_addr(rows), n, m)
-        _ = rows  # keep the Python object alive through the native call above
-        z = family_array(Python.tuple(m, d), "<f4", context)
-        _op(binding, xn_take_rows_request(_addr(x), _addr(rows), _addr(z), m, d, n))
-        _ = x  # keep the Python object alive through the native call above
-        _ = rows  # keep the Python object alive through the native call above
-        _ = z  # keep the Python object alive through the native call above
+        z = family_array(Python.tuple(Int(py=m_obj), d), "<f4", context)
     var mz = Int(py=z.shape[0])
     var alpha = family_array(Python.tuple(mz), "<f4", context)
     var c = family_array(Python.tuple(mz, mz), "<f4", context)
     var qmu = family_array(Python.tuple(mz), "<f4", context)
     var qsqrt = family_array(Python.tuple(mz, mz), "<f4", context)
-    var info = family_array(Python.tuple(2), "<f4", context)
     var gamma = _svgp_gamma(model)
     var kernel_variance = _float_of(model, "kernel_variance")
     var noise_variance = _float_of(model, "noise_variance")
     var jitter = _float_of(model, "jitter")
-    _op(binding, xn_svgp_fit_request(_addr(x), _addr(z), _addr(yv), _addr(alpha), _addr(c), _addr(qmu), _addr(qsqrt),
-                                     _addr(info), n, mz, d, gamma, kernel_variance, noise_variance, jitter))
+    var request = SvgpFitRequest(_addr(x), _addr(yv), _addr(z), _addr(alpha), _addr(c), _addr(qmu), _addr(qsqrt),
+                                 n, mz, d, pick_rows, gamma, kernel_variance, noise_variance, jitter)
+    var connection = LofConnection(binding)
+    var fitted = (Float64(0.0), False)
+    # RUN
+    with GILReleased(Python()):
+        fitted = svgp_fit_run(connection.driver, request)
     _ = x  # keep the Python object alive through the native call above
-    _ = z  # keep the Python object alive through the native call above
     _ = yv  # keep the Python object alive through the native call above
+    _ = z  # keep the Python object alive through the native call above
     _ = alpha  # keep the Python object alive through the native call above
     _ = c  # keep the Python object alive through the native call above
     _ = qmu  # keep the Python object alive through the native call above
     _ = qsqrt  # keep the Python object alive through the native call above
-    var fitted = xn_svgp_fit_decode(_addr(info))
-    _ = info  # keep the Python object alive through the read above
-    var elbo = fitted[0]
+    # PACK
     py_setitem(fields, "precision_", PythonObject("float-float"))
     xn_svgp_definite_check(fitted[1])
     py_setitem(fields, "Z_", z)
@@ -718,31 +575,16 @@ def _svgp_fit(model: PythonObject, args: PythonObject, context: PythonObject) ra
     py_setitem(fields, "_C", c)
     py_setitem(fields, "q_mu_", qmu)
     py_setitem(fields, "q_sqrt_", qsqrt)
-    py_setitem(fields, "elbo_", PythonObject(elbo))
+    py_setitem(fields, "elbo_", PythonObject(fitted[0]))
     py_setitem(fields, "n_features_in_", PythonObject(d))
 
 
-def _svgp_predict(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`SVGP.predict(X)`: the mean of `predict_f(X)` (its variance is computed
-    as `predict_f` computed it)."""
-    return _svgp_predict_f(model, args, context)[0]
-
-
-def _svgp_predict_y(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`SVGP.predict_y(X)`: `predict_f`'s mean, and its variance plus
-    `noise_variance` (`_unary(var, _U_IDENTITY, 1.0, f32(noise_variance))`)."""
-    var latent = _svgp_predict_f(model, args, context)
-    var var_ = latent[1]
-    var size = Int(py=var_.size)
-    var out = family_array(Python.tuple(size), "<f4", context)
-    _op(args[0], xn_unary_shift_request(_addr(var_), _addr(out), size, _float_of(model, "noise_variance")))
-    _ = var_  # keep the Python object alive through the native call above
-    _ = out  # keep the Python object alive through the native call above
-    return Python.tuple(latent[0], out)
-
-
-def _svgp_predict_f(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`SVGP.predict_f(X)`: (mean, var) of the latent function."""
+def _svgp_query(model: PythonObject, args: PythonObject, kind: Int,
+                context: PythonObject) raises -> PythonObject:
+    """The mean (SVGP_VARIANCE_NONE: the variance is computed as `predict_f`
+    computed it and dropped), or `(mean, variance)`: the latent function's,
+    or with `noise_variance` added (`predict_y`)."""
+    # UNPACK
     classical_connect_numpy(context)
     var binding = args[0]
     var q = admit_family(args[1], 2, "X", context, dense=True).array
@@ -753,46 +595,49 @@ def _svgp_predict_f(model: PythonObject, args: PythonObject, context: PythonObje
     var old_items = _truth(context["family_svc_xn_old_items"])
     var alpha = _attr(model, "_alpha")
     var c = _attr(model, "_C")
-    if not old_items and nq != 0:
-        # the fused chain: Ksu, the mean and the variance per row tile
-        # (`xn_svgp_predict`)
-        var mean = family_array(Python.tuple(nq), "<f4", context)
-        var var_ = family_array(Python.tuple(nq), "<f4", context)
-        var gamma = _svgp_gamma(model)
-        var kernel_variance = _float_of(model, "kernel_variance")
-        _op(binding, xn_svgp_predict_request(_addr(q), _addr(z), _addr(alpha), _addr(c), _addr(mean), _addr(var_),
-                                             nq, m, d, gamma, kernel_variance))
-        _ = q  # keep the Python object alive through the native call above
-        _ = z  # keep the Python object alive through the native call above
-        _ = alpha  # keep the Python object alive through the native call above
-        _ = c  # keep the Python object alive through the native call above
-        _ = var_  # keep the Python object alive through the native call above
-        _ = mean  # keep the Python object alive through the native call above
-        return Python.tuple(mean, var_)
-    # `_k(Q, Z_)`: the rbf kernel, then the kernel variance scale.
-    var g = _svgp_gamma(model)
-    var k = family_array(Python.tuple(nq, m), "<f4", context)
-    _op(binding, xn_kernel_rbf_request(_addr(q), _addr(z), _addr(k), nq, m, d, g))
+    var gamma = _svgp_gamma(model)
+    var kernel_variance = _float_of(model, "kernel_variance")
+    var noise_variance = Float64(0.0)
+    if kind == SVGP_VARIANCE_NOISY:
+        noise_variance = _float_of(model, "noise_variance")
+    var mean = family_array(Python.tuple(nq), "<f4", context)
+    var variance = PythonObject(None)
+    var variance_at = 0
+    if kind != SVGP_VARIANCE_NONE:
+        variance = family_array(Python.tuple(nq), "<f4", context)
+        variance_at = _addr(variance)
+    var request = SvgpQueryRequest(_addr(q), _addr(z), _addr(alpha), _addr(c), _addr(mean), variance_at, nq, m, d,
+                                   gamma, kernel_variance, noise_variance, kind, old_items)
+    var connection = LofConnection(binding)
+    # RUN
+    with GILReleased(Python()):
+        svgp_query_run(connection.driver, request)
     _ = q  # keep the Python object alive through the native call above
     _ = z  # keep the Python object alive through the native call above
-    _ = k  # keep the Python object alive through the native call above
-    var ksu = family_array(Python.tuple(nq, m), "<f4", context)
-    _op(binding, xn_unary_scale_request(_addr(k), _addr(ksu), nq * m, _float_of(model, "kernel_variance")))
-    _ = k  # keep the Python object alive through the native call above
-    _ = ksu  # keep the Python object alive through the native call above
-    # `matmul(Ksu, alpha.reshape((M, 1))).reshape((nq,))`: an (nq, 1) product
-    # written into the (nq,) vector it is reshaped to.
-    var mean = family_array(Python.tuple(nq), "<f4", context)
-    _op(binding, xn_matmul_request(_addr(ksu), _addr(alpha), _addr(mean), nq, m, 1))
-    _ = ksu  # keep the Python object alive through the native call above
     _ = alpha  # keep the Python object alive through the native call above
-    _ = mean  # keep the Python object alive through the native call above
-    var var_ = family_array(Python.tuple(nq), "<f4", context)
-    _op(binding, xn_svgp_var_request(_addr(ksu), _addr(c), _addr(var_), nq, m, _float_of(model, "kernel_variance")))
-    _ = ksu  # keep the Python object alive through the native call above
     _ = c  # keep the Python object alive through the native call above
-    _ = var_  # keep the Python object alive through the native call above
-    return Python.tuple(mean, var_)
+    _ = mean  # keep the Python object alive through the native call above
+    _ = variance  # keep the Python object alive through the native call above
+    # PACK
+    if kind == SVGP_VARIANCE_NONE:
+        return mean
+    return Python.tuple(mean, variance)
+
+
+def _svgp_predict(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`SVGP.predict(X)`: the mean of `predict_f(X)`."""
+    return _svgp_query(model, args, SVGP_VARIANCE_NONE, context)
+
+
+def _svgp_predict_y(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`SVGP.predict_y(X)`: `predict_f`'s mean, and its variance plus
+    `noise_variance`."""
+    return _svgp_query(model, args, SVGP_VARIANCE_NOISY, context)
+
+
+def _svgp_predict_f(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`SVGP.predict_f(X)`: (mean, var) of the latent function."""
+    return _svgp_query(model, args, SVGP_VARIANCE_LATENT, context)
 
 
 def _svgp_score(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:

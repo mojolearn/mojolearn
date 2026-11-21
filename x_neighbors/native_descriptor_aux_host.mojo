@@ -3,8 +3,8 @@
 # moves between devices. The common descriptor provider controls GIL/lifetimes.
 from x_neighbors.ocsvm_init import XN_OCSVM_DEV_INIT, XN_UNIT_DEV, oci_nu_hi, oci_nu_lo
 from x_neighbors.ocsvm_host import op_ocsvm_alpha_init, op_unit_ff
-from x_neighbors.kfeat_rng import XN_IDN_SKETCH_CTR, op_kfeat_pcs_draw_idn_host
-from x_neighbors.items import IP
+from x_neighbors.kfeat_rng import XN_IDN_SKETCH_CTR, op_kfeat_pcs_draw_idn_host, op_kfeat_schi2_fit_idn_host
+from x_neighbors.items import IP, FP
 from x_neighbors.iter_host import op_ocsvm_labels
 # Capability bit 4: this binary carries the ocsvm_labels auxiliary operation.
 comptime XN_AUX_OCSVM_LABELS = True
@@ -125,4 +125,28 @@ def xn_aux_execute(op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises
         op_lp_dense_proba(a[0], a[1], a[2], a[3], a[4], p[0], p[1], p[2], p[3], p[4], Float32(f[0]), Float32(f[1]),
                           p[5], status)
         return 0
+    # Operations 9 to 12 (lane dw-neighbors-b, 2026-11-21): the chi2 samplers'
+    # typed RUN (neighbors/chi2_run.mojo).
+    if op == 9:
+        # schi2_fit: addresses (random_weights_ d x nc, random_offset_ nc),
+        # ints (seed & 2^32 - 1, d, n_components): the retained host
+        # wrapper's admission and its owner.
+        var seed = UInt32(p[0] & 0xFFFFFFFF)
+        var d = p[1]
+        var nc = p[2]
+        if d <= 0 or nc <= 0:
+            raise Error("x_neighbors_kfeat_schi2_fit_idn: sizes must be positive")
+        if d * nc > 2147483647:
+            raise Error("x_neighbors_kfeat_schi2_fit_idn: more than 2^31 - 1 draws")
+        if a[0] == 0 or a[1] == 0:
+            raise Error("x_neighbors_kfeat_schi2_fit_idn: null buffer address")
+        op_kfeat_schi2_fit_idn_host(seed, d, nc, FP(unsafe_from_address=a[0]), FP(unsafe_from_address=a[1]))
+        return 0
+    if op == 10:
+        # The FAST + Apple kfeat entries exist only in the device image.
+        raise Error("AttributeError: x_neighbors_kfeat_first_negative is not exported by this binding")
+    if op == 11:
+        raise Error("AttributeError: x_neighbors_kfeat_schi2_weights is not exported by this binding")
+    if op == 12:
+        raise Error("AttributeError: x_neighbors_kfeat_schi2_transform is not exported by this binding")
     raise Error("x_neighbors auxiliary native ABI: unknown operation")

@@ -29,6 +29,19 @@ def _f32_scalar(v):
     return Array.from_list([float(v)], "<f4").tolist()[0]
 
 
+def _gamma_value(self):
+    # oracle copy of the SVGP helper deleted by lane dw-neighbors-b (the product's door computes it natively)
+    ls = float(self.lengthscale)
+    return 1.0 / (2.0 * (ls * ls))  # ls ** 2 as one product, not the platform pow
+
+
+def _k(self, A, B):
+    # oracle copy of the SVGP kernel helper deleted by lane dw-neighbors-b (product: neighbors/svgp_run.mojo)
+    g = _gamma_value(self)
+    K = self._kernel(A, B, "rbf", g, 0.0, 0)
+    return self._unary(K, _U_IDENTITY, _f32_scalar(self.kernel_variance), 0.0)
+
+
 def _p2m_relabel(est, lab, name=None):
     """(count, labels): lab renumbered by first occurrence on the device
     (`xn_p2m_relabel`), or None when a label falls outside [0, n)."""
@@ -433,7 +446,7 @@ def svgp_fit(self, X, y):
     info = _empty_out((2,), "<f4")
     self._op("svgp_fit_ff", [(X, 0), (Z, 0), (yv, 0), (alpha, 1), (C, 1), (qmu, 1), (qsqrt, 1), (info, 1)],
              (n, M, d),
-             (_f32_scalar(self._gamma_value()), _f32_scalar(self.kernel_variance),
+             (_f32_scalar(_gamma_value(self)), _f32_scalar(self.kernel_variance),
               _f32_scalar(self.noise_variance), _f32_scalar(self.jitter), _f32_scalar(self.kernel_variance)))
     elbo, ok = info.tolist()
     self.precision_ = "float-float"
@@ -470,10 +483,10 @@ def svgp_predict_f(self, X):
         var = _empty_out((nq,), "<f4")
         self._op("svgp_predict", [(Q, 0), (self.Z_, 0), (self._alpha, 0), (self._C, 0), (mean, 1), (var, 1)],
                  (nq, M, Q.shape[1]),
-                 (_f32_scalar(self._gamma_value()), _f32_scalar(self.kernel_variance),
+                 (_f32_scalar(_gamma_value(self)), _f32_scalar(self.kernel_variance),
                   _f32_scalar(self.kernel_variance)))
         return mean, var
-    Ksu = self._k(Q, self.Z_)
+    Ksu = _k(self, Q, self.Z_)
     mean = self._matmul(Ksu, self._alpha.reshape((M, 1))).reshape((Q.shape[0],))
     var = _empty_out((Q.shape[0],), "<f4")
     self._op("svgp_var", [(Ksu, 0), (self._C, 0), (var, 1)], (Q.shape[0], M), (_f32_scalar(self.kernel_variance),))
