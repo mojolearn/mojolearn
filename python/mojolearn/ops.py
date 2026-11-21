@@ -158,8 +158,8 @@ class Session:
     ...     grad_w = s.grad(w)
     """
 
-    def __init__(self, record=False, numeric_mode=None):
-        return _SESSION_INITIALIZE(self, record, numeric_mode, _SESSION_CONNECTIONS, _backend, Program)
+    def __init__(self, record=False, numeric_mode=None, device=None):
+        return _SESSION_INITIALIZE(self, record, numeric_mode, _SESSION_CONNECTIONS, device, Program)
 
     # ------------------------------------------------------------ lifetime
     def close(self):
@@ -1820,6 +1820,10 @@ del _connect_program_save
 # attributes while importing this connector. Session construction and every
 # later operation use cached native entries; no backend Python is called.
 def _connect_session_mode(mode):
+    return _connect_session_module(_backend.exact_host_module(_backend.binding("_mojolearn_x_sequence", mode)))
+
+
+def _connect_session_module(module):
     # Import-time registration of common native provider/resource owner types.
     from .tokenizer import _binding
     _binding()
@@ -1828,7 +1832,6 @@ def _connect_session_mode(mode):
     # provider's exact-module check) refuses the CPU `_HostBinding` facade
     # ("native provider requires an exact compiled module": every imported
     # program and Session on a CPU-only install, smoke 2026-11-15).
-    module = _backend.exact_host_module(_backend.binding("_mojolearn_x_sequence", mode))
     distributed = _SimpleNamespace(
         ops_distributed_open=getattr(module, "ops_distributed_open", None),
         ops_distributed_load=getattr(module, "ops_distributed_load", None),
@@ -1889,6 +1892,22 @@ if isinstance(_session_connected, str):
     # error; an unavailable optional tier must not hide the missing owner.
     raise ImportError(_SESSION_CONNECTIONS["identical"])
 _SESSION_INITIALIZE = _session_connected.initialize
+
+# The CPU connection of `Session(device="cpu")`, connected once here beside
+# the mode connections on an installation with a GPU set (the session
+# initializer selects one connection per session, once, and every operation of
+# the session and of its Programs runs through it). In a CPU-only process the
+# mode connection already is the CPU one and nothing more is loaded. A host
+# binary that is not built is kept as its refusal text, said when a
+# `device="cpu"` session is opened.
+if _backend.vendor() != "cpu":
+    from ._native_family_bridge import shared_context as _session_shared_context
+    try:
+        _session_cpu = _connect_session_module(_backend.load_host_module("_mojolearn_x_sequence_host"))  # import-time: the CPU connection of device="cpu"
+    except (ImportError, ValueError, AttributeError, TypeError, RuntimeError, OSError) as _session_error:
+        _session_cpu = "ImportError: device='cpu' is not connected in this installation (" + type(_session_error).__name__ + ": " + str(_session_error) + ")"
+    _session_shared_context()["ops_session_cpu_connection"] = _session_cpu
+    del _session_shared_context, _session_cpu
 
 _SESSION_CALL = _session_connected.call
 

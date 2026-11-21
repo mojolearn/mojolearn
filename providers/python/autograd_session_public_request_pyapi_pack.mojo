@@ -20,8 +20,9 @@
 # change. The B arm (every call through the descriptor) lost A/B abn9 and is
 # deleted; a Session of another image still takes the descriptor below.
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_type
+from bindings.py_balanced import py_item, py_type
 from sequence.exec_trait import Exec
+from bindings.autograd_keys_unpack import autograd_keys
 from autograd.ops_api import ops_session_registry_token
 from providers.python.neural_descriptor_pyapi_door import (
     NeuralDescriptorProvider, NativeDescriptorResource, neural_descriptor_execute,
@@ -53,7 +54,10 @@ def ops_session_public_call_py[E: Exec & Movable & Deinitable, KIND: Int](
     if py_type(operation) is not types[].str_type or py_type(args) is not types[].tuple_type:
         raise Error("TypeError: Session requires an exact operation string and argument tuple")
     var fields = ops_session_fields(session)
-    var lifetime = fields["_lifetime"]
+    # Held keys (bindings/autograd_keys_unpack.mojo): the three reads below
+    # each built, hashed and freed a Python str per Session operation.
+    var nk = autograd_keys()
+    var lifetime = py_item(fields, nk[].k__lifetime)
     var resource = lifetime.downcast_value_ptr[NativeDescriptorResource]()
     # TOMBSTONE: MOJOLEARN_SESSION_CALL_DESCRIPTOR (B arm loses: every same-image Session call through the descriptor, zero-filled read-back arrays; A/B abn9 NVIDIA L40S, ops-session-step 2.63 -> 2.93 ms 1.11, program-run 1.00 arm/base) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
     # Restore: git apply experiments/removed/MOJOLEARN_SESSION_CALL_DESCRIPTOR.fx-verdicts7.patch; record in docs/TOMBSTONES.md.
@@ -67,7 +71,7 @@ def ops_session_public_call_py[E: Exec & Movable & Deinitable, KIND: Int](
         # and no public-provider read: the descriptor below is the only
         # user of `_public_provider`, so its downcasts, ABI-name string
         # compare and module identity check run only on that route.
-        var sid = fields["_id"]
+        var sid = py_item(fields, nk[].k__id)
         if sid is not None:
             if py_type(sid) is not types[].int_type:
                 raise Error("TypeError: Session handle must be a native integer")
@@ -77,7 +81,7 @@ def ops_session_public_call_py[E: Exec & Movable & Deinitable, KIND: Int](
         var answer = ops_session_call_admitted_py[E, KIND](session, operation, args, fields)
         _ = lifetime  # the resource owner stays pinned through the call
         return answer
-    var provider = fields["_public_provider"]
+    var provider = py_item(fields, nk[].k__public_provider)
     var public_owner = provider.downcast_value_ptr[NeuralDescriptorProvider]()
     var model_owner = resource[].provider.downcast_value_ptr[NeuralDescriptorProvider]()
     if public_owner[].record[0].name != SESSION_PUBLIC_ABI_NAME or public_owner[].module is not model_owner[].module:

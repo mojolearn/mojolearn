@@ -9,7 +9,7 @@ from bindings.native_class_admission_door import class_record, class_admit
 from bindings.sequential_description_unpack import sequential_fields
 from bindings.sequential_admission_door import sequential_admit_value
 from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type
-from bindings.pca_descriptor_boundary_door import pca_connection
+from bindings.pca_descriptor_boundary_door import pca_route
 from bindings.pca_keys_unpack import pca_keys
 from bindings.py_balanced import py_item
 
@@ -77,5 +77,12 @@ def pca_mode(fields: PythonObject, context: PythonObject) raises -> PythonObject
     return mode
 
 
-def pca_entries(fields: PythonObject, context: PythonObject) raises -> Int:
-    return pca_connection(String(pca_mode(fields, context)), context)
+def pca_entries(model: PythonObject, fields: PythonObject, context: PythonObject) raises -> Int:
+    """The connection of the estimator's resolved route (metadata reads:
+    `numeric_mode_used`, `vendor_used`), keyed by the mode object as a fit
+    and a query key it (the estimator's own, or the process default object)."""
+    var nk = pca_keys()
+    var mode = py_get(fields, nk[].k_numeric_mode)
+    if mode is None:
+        mode = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
+    return pca_route(model, fields, mode, context).connection

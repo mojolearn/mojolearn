@@ -320,16 +320,32 @@ class RobustScaler(_PrepBase):
     """
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _sklearn_input_tags = {"allow_nan": True}
-    _parameters = ("with_centering", "with_scaling", "quantile_range", "copy", "unit_variance", "numeric_mode")
+    _parameters = ("with_centering", "with_scaling", "quantile_range", "copy", "unit_variance", "numeric_mode", "device")
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
         _register_robust_scaler(cls, _ROBUST_CONTEXT)
 
     def __init__(self, *, with_centering=True, with_scaling=True, quantile_range=(25.0, 75.0), copy=True,
-                 unit_variance=False, numeric_mode=None):
-        return _ROBUST_CALL(self, "init", (with_centering, with_scaling, quantile_range, copy, unit_variance, numeric_mode),
-                            _ROBUST_CONTEXT)
+                 unit_variance=False, numeric_mode=None, device=None):
+        # `device` alone is checked here: an unknown value, and 'gpu' on a CPU-only installation,
+        # are refused in words. None is this installation's device.
+        return _ROBUST_CALL(self, "init", (with_centering, with_scaling, quantile_range, copy, unit_variance, numeric_mode,
+                                           device), _ROBUST_CONTEXT)
+
+    def vendor_used(self):
+        """The backend this scaler runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the compiled
+            binary the scaler uses.
+        """
+        return _ROBUST_CALL(self, "vendor_used", (), _ROBUST_CONTEXT)
 
     def get_params(self, deep=True):
         """Return this scaler's constructor parameters as a dictionary."""
@@ -400,16 +416,32 @@ class MaxAbsScaler(_PrepBase):
     """
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _sklearn_input_tags = {"allow_nan": True}
-    _parameters = ("copy", "numeric_mode")
+    _parameters = ("copy", "numeric_mode", "device")
 
     _mojolearn_native_public = True
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
         _register_maxabs_scaler(cls, _MAXABS_CONTEXT)
 
-    def __init__(self, *, copy=True, numeric_mode=None):
-        return _MAXABS_CALL(self, "init", (copy, numeric_mode), _MAXABS_CONTEXT)
+    def __init__(self, *, copy=True, numeric_mode=None, device=None):
+        # `device` alone is checked here: an unknown value, and 'gpu' on a CPU-only installation,
+        # are refused in words. None is this installation's device.
+        return _MAXABS_CALL(self, "init", (copy, numeric_mode, device), _MAXABS_CONTEXT)
+
+    def vendor_used(self):
+        """The backend this scaler runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the compiled
+            binary the scaler uses.
+        """
+        return _MAXABS_CALL(self, "vendor_used", (), _MAXABS_CONTEXT)
 
     def get_params(self, deep=True):
         """Return this scaler's constructor parameters as a dictionary."""

@@ -16,10 +16,11 @@ native owner) and every later public operation calls through the held
 entries: no operation tests the device, builds a mode word, reads a table
 slot or compares a vendor name.
 
-`DeviceRoute` holds up to four resolved thin C entries of the images the
+`DeviceRoute` holds up to five resolved thin C entries of the images the
 route resolved to, and one word of family flags. What each slot means is the
 family's (its resolver names them): Ridge and LinearRegression hold fit,
-predict, the weighted solve and the TSQR table (core/linear_route.mojo);
+predict, the weighted solve, the TSQR table and the CPU metrics program of
+a CPU route beside a GPU set (core/linear_route.mojo);
 LogisticRegression holds the quasi-Newton entry and two flags
 (core/logistic_route.mojo); QNRegressor holds the QN entry and the
 resident-fold entry (bindings/qn_boundary_unpack.mojo).
@@ -144,9 +145,11 @@ struct DeviceRoute(ImplicitlyCopyable, Movable):
     var second: EntryRef
     var third: EntryRef
     var fourth: EntryRef
+    var fifth: EntryRef
     var has_second: Bool
     var has_third: Bool
     var has_fourth: Bool
+    var has_fifth: Bool
     # Family words (bit meanings are the family resolver's).
     var flags: Int
 
@@ -158,9 +161,11 @@ struct DeviceRoute(ImplicitlyCopyable, Movable):
         self.second = entry_ref_unresolved()
         self.third = entry_ref_unresolved()
         self.fourth = entry_ref_unresolved()
+        self.fifth = entry_ref_unresolved()
         self.has_second = False
         self.has_third = False
         self.has_fourth = False
+        self.has_fifth = False
         self.flags = 0
 
 

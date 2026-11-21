@@ -11,7 +11,9 @@ from bindings.admitted_family_door import admit_family_f64
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.admitted_call_door import AdmittedCall
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
-from bindings.mode_metadata_native_door import _fields, _class_fields, _plan, _configuration_value
+from bindings.mode_metadata_native_door import _fields, _class_fields, _plan, _configuration_value, _readback
+from bindings.mode_keys_unpack import MODE_OPN_VENDOR_USED
+from bindings.gp_native_boundary_door import gp_entry_key
 from bindings.classical_attributes_door import _type_mro, classical_connect_numpy
 from bindings.classical_pandas_door import classical_admit_value
 from bindings.classical_validate_unpack import classical_check_y, classical_estimator_name
@@ -39,6 +41,10 @@ from bindings.gp_svm_gp_state_door import gp_state_forget, gp_state_admitted, gp
 from bindings.optimizer_public_words_unpack import stash_python_error
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entry
 from providers.python.estimator_binding_pyapi_door import estimator_binding, estimator_binding_mode
+from providers.python.gp_device_route_pyapi_door import (
+    GP_ROUTE_BINDING, GP_ROUTE_BASE, GP_ROUTE_METRICS, GP_ROUTE_VENDOR, gp_route_hit, gp_route_keep, gp_route_item,
+    gp_route_device, gp_route_cpu_images,
+)
 from providers.python.estimator_lifecycle_pyapi_unpack import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
 from providers.python.cluster_public_lifecycle_pyapi_door import _refusal
 from bindings.py_optional import py_present
@@ -229,19 +235,10 @@ def _gp_finished(value: PythonObject, context: PythonObject) raises -> PythonObj
     return result
 
 
-def _gp_public_arguments(mut call: AdmittedCall, model: PythonObject, fields: PythonObject, var args: GPArgumentPins,
-                         context: PythonObject) raises -> GPArgumentPins:
-    # `call`: the door's admission record (modules, fields, the resolved
-    # binding), so the binding is resolved once per public call (N219).
+def _gp_host_class_binding(mut call: AdmittedCall, model: PythonObject, fields: PythonObject, plan: PythonObject,
+                           context: PythonObject) raises -> PythonObject:
     var b = call.builtins()
     var nk = gp_keys()
-    var metadata = py_item(py_fields(call.module("mojolearn._mode")), nk[].k__MODE_METADATA_CONTEXT)
-    var plan = _plan(call.modules, model, fields, metadata)
-    var route = String(py_item(plan, nk[].k_route))
-    if route != "host" and route != "host_gp":
-        if len(args) > 0 and args[0] is None:
-            args.binding(estimator_binding(call, model, "_mojolearn_gp", context))
-        return args^
     # cpu-route: inherited methods of explicit HostGaussianProcess* classes
     # retain their import-connected host route, even in a GPU installation.
     # This is never a fallback from a GPU estimator or process-selected mode.
@@ -273,8 +270,77 @@ def _gp_public_arguments(mut call: AdmittedCall, model: PythonObject, fields: Py
     var live_reader = neural_descriptor_entry(live, String(reader.__name__))
     if py_get(connected, nk[].k_mode) is not None and Int(py=py_call(live_reader)) != 1:
         raise Error("RuntimeError: GP host binding must report identical mode")
-    args.binding(live)
-    return args^
+    return live
+
+
+def _gp_route(mut call: AdmittedCall, model: PythonObject, fields: PythonObject, need_base: Bool,
+              context: PythonObject) raises -> PythonObject:
+    """The estimator's route record for this operation
+    (providers/python/gp_device_route_pyapi_door.mojo). A hit is the mode,
+    default-mode and device reads, one record read and four pointer compares;
+    a miss (first operation, a changed mode or device, a classifier's first
+    operation that needs its base image) resolves and stores it. `call` is
+    the door's admission record (read on a miss only)."""
+    var nk = gp_keys()
+    var mode = py_get(fields, nk[].k_numeric_mode)
+    var default_mode = PythonObject(None)
+    if mode is None:
+        default_mode = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
+    # None, and an instance without the field (built without its
+    # constructor, or pickled by an older version), run this installation's
+    # device.
+    var device = py_get(fields, nk[].k_device)
+    var record = gp_route_hit(model, mode, default_mode, device, context)
+    if record is not None:
+        if not need_base or gp_route_item(record, GP_ROUTE_BASE) is not None:
+            return record
+    var b = call.builtins()
+    var metadata = py_item(py_fields(call.module("mojolearn._mode")), nk[].k__MODE_METADATA_CONTEXT)
+    var plan = _plan(call.modules, model, fields, metadata)
+    var route = String(py_item(plan, nk[].k_route))
+    var binding = PythonObject(None)
+    var base = PythonObject(None)
+    var metrics = PythonObject(None)
+    var beside = False
+    if route == "host" or route == "host_gp":
+        # The explicit HostGaussianProcess* classes: CPU identical by class,
+        # whatever `device` their inherited constructor stored.
+        binding = _gp_host_class_binding(call, model, fields, plan, context)
+    else:
+        beside = gp_route_device(device, context, b)
+        if beside:
+            # A GPU installation: the CPU images, loaded beside the device
+            # images at import.
+            var images = gp_route_cpu_images(mode, default_mode, need_base, context, b)
+            binding = images.binding
+            base = images.base
+            metrics = images.metrics
+            var key = gp_entry_key(binding)
+            if key.vendor != 0 or key.mode != 1:
+                raise Error("RuntimeError: device='cpu' requires the CPU identical GP binding")
+        else:
+            binding = estimator_binding(call, model, "_mojolearn_gp", context)
+    if need_base and base is None:
+        base = estimator_binding_mode(call, PythonObject("identical"), "_mojolearn", context)
+    return gp_route_keep(model, mode, default_mode, device, context, binding, base, metrics, beside)
+
+
+def gp_public_vendor_used(model: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`vendor_used()`: `'cpu'` for an estimator whose route holds the CPU
+    images beside this installation's GPU set (the vendor word of the key the
+    CPU image published, checked when the route resolved); for every other
+    estimator the read-back of its class's connected binary, as before."""
+    var fields = _fields(model)
+    var call = AdmittedCall()
+    call.admit_fields(fields)
+    var routed = _gp_route(call, model, fields, False, context)
+    var vendor = gp_route_item(routed, GP_ROUTE_VENDOR)
+    if vendor is not None:
+        return vendor
+    var nk = gp_keys()
+    var metadata = py_item(py_fields(call.module("mojolearn._mode")), nk[].k__MODE_METADATA_CONTEXT)
+    return _readback(model, MODE_OPN_VENDOR_USED, metadata)
+
 
 def _gp_query_operation(operation: Int) -> Bool:
     """The public queries whose owner admits X through gp_query (lane a7a):
@@ -316,6 +382,9 @@ def gp_public_operation(model: PythonObject, operation: Int, args: PythonObject,
     # base binding) read it instead of resolving per helper (N219, N256).
     var call = AdmittedCall()
     call.admit_fields(fields)
+    # The estimator's route: the images it runs on, resolved once per
+    # estimator. Read before X is admitted: a CPU route takes host arrays.
+    var routed = _gp_route(call, model, fields, double_binding, context)
     var name = classical_estimator_name(model)
     var source = args[x_index] if guarded else PythonObject(None)
     var values = GPArgumentPins(args)
@@ -335,6 +404,8 @@ def gp_public_operation(model: PythonObject, operation: Int, args: PythonObject,
         # keeps the scan here: it keeps X as X_train_.
         var query = not fitting and _gp_query_operation(operation)
         if query and door_is_device_rows(source, context):
+            if gp_route_item(routed, GP_ROUTE_VENDOR) is not None:
+                raise Error("TypeError: " + name + "(device='cpu') takes host arrays; this X is rows held on the GPU")
             var fx = admit_x_unrecorded(source, name, context, device_x=True, finite=False)
             rows = fx.rows
             columns = fx.cols
@@ -374,10 +445,17 @@ def gp_public_operation(model: PythonObject, operation: Int, args: PythonObject,
     # The X / y admissions above may run in GIL release windows and take no
     # record: re-admit the record's modules before resolving the bindings.
     call.released()
-    var prepared = _gp_public_arguments(call, model, fields, values^, context)
+    var prepared = values^
+    prepared.binding(gp_route_item(routed, GP_ROUTE_BINDING))
     if double_binding and prepared[1] is None:
-        var base = estimator_binding_mode(call, PythonObject("identical"), "_mojolearn", context)
-        prepared.set(1, base)
+        prepared.set(1, gp_route_item(routed, GP_ROUTE_BASE))
+    if scoring:
+        # A CPU route in a GPU installation scores on the CPU metrics image:
+        # its program factory rides behind the public arguments. Every other
+        # route holds none and scores on the process's metrics table.
+        var cpu_metrics = gp_route_item(routed, GP_ROUTE_METRICS)
+        if cpu_metrics is not None:
+            prepared.values.append(cpu_metrics)
     var outside = estimator_outside()
     var depth = estimator_fit_begin(fields) if fitting else 0
     var result = PythonObject(None)

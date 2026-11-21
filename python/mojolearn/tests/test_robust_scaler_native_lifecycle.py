@@ -37,7 +37,7 @@ def test_constructor_parameter_and_fitted_state_lifecycle_is_native():
     model = audit_native_call(ml.RobustScaler, copy=False).assert_native()
     assert audit_native_call(model.get_params).assert_native() == dict(
         copy=False, with_centering=True, with_scaling=True,
-        quantile_range=(25., 75.), unit_variance=False, numeric_mode=None)
+        quantile_range=(25., 75.), unit_variance=False, numeric_mode=None, device=None)
     assert not audit_native_call(model.__sklearn_is_fitted__).assert_native()
     audit_native_call(model.fit, _data()).assert_native()
     before = model.scale_.tobytes()

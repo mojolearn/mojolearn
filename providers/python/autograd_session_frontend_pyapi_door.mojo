@@ -1,6 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # Session admission uses the common provider and retains its exact registry.
 from core.mode_answer import MODE_FAMILY_NEURAL, answer_mode_word
+from core.linear_route import (
+    LINEAR_DEVICE_CPU, LINEAR_DEVICE_INSTALL, linear_device_code, linear_device_refusal, linear_device_installed,
+)
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_fields, py_get, py_setitem
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules, shared_dict_stamped, shared_dict_epoch, shared_dict_watch
@@ -106,8 +109,29 @@ def ops_session_fields(session: PythonObject) raises -> PythonObject:
 comptime _SESSION_LAYOUT_SLOT = "p3_autograd_session_layout_v1"
 
 
+def _session_device_unpack(value: PythonObject, b: PythonObject) raises -> Int:
+    """The device code of a non-None constructor value: exact `'gpu'` or
+    `'cpu'`; anything else is refused in the pilot's words
+    (core/linear_route.mojo), before a session exists."""
+    if py_type(value) is b.str:
+        var code = linear_device_code(String(value))
+        if code >= 0:
+            return code
+    linear_device_refusal(String(py_call(b.repr, value)))
+    return LINEAR_DEVICE_INSTALL
+
+
 def ops_session_initialize_py(session: PythonObject, record: PythonObject, mode: PythonObject,
-                              connections: PythonObject, backend: PythonObject, program_class: PythonObject) raises -> PythonObject:
+                              connections: PythonObject, device: PythonObject, program_class: PythonObject) raises -> PythonObject:
+    # `device` (None, 'gpu' or 'cpu') takes the slot of the former `backend`
+    # argument, which no path read. It is read ONCE, here: the session keeps
+    # the connection of the selected compiled image (its registry, its public
+    # provider, its program entries), and every later operation, and every
+    # Program made from the session, runs through that connection. A session
+    # of the CPU image on a GPU installation is the same "session owned by
+    # another compiled image" the public door already forwards
+    # (autograd_session_public_request_pyapi_pack.mojo); no public call tests
+    # the device.
     if session is None:
         # Import-time setup: the sixth slot supplies the common admission
         # context, and the fourth supplies this exact compiled module.
@@ -137,7 +161,23 @@ def ops_session_initialize_py(session: PythonObject, record: PythonObject, mode:
     if py_type(connections) is not py_type(Python.dict()):
         raise Error("TypeError: Session connections require a native dictionary")
     _session_string_keys(connections)
-    var entry = connections[normalized]
+    var entry = PythonObject(None)
+    if device is None:
+        # The default: this installation's device, the table of the mode.
+        # Nothing about the device is read.
+        entry = connections[normalized]
+    else:
+        # The CPU connection exists only where the installation has a GPU set
+        # (python/mojolearn/ops.py connects it beside the mode tables); in a
+        # CPU-only process the mode table already is the CPU one.
+        var cpu = py_get(context, nk[].k_ops_session_cpu_connection)
+        var resolved = linear_device_installed(_session_device_unpack(device, b), 0 if cpu is None else 1)
+        if resolved == LINEAR_DEVICE_CPU and cpu is not None:
+            if key != "identical":
+                raise Error("ValueError: device='cpu' runs in identical mode only; numeric_mode='fast' is for Apple GPUs")
+            entry = cpu
+        else:
+            entry = connections[normalized]
     if py_type(entry) is py_type(PythonObject("")):
         raise Error(String(entry))
     if py_type(entry) is not py_item(context, nk[].k_ops_connection_type):
@@ -173,6 +213,7 @@ def ops_session_initialize_py(session: PythonObject, record: PythonObject, mode:
     py_setitem(fields, nk[].k__public_provider, py_item(connection, nk[].k_public_provider))
     py_setitem(fields, nk[].k_record, recording)
     py_setitem(fields, nk[].k_numeric_mode, mode)
+    py_setitem(fields, nk[].k_device, device)
     py_setitem(fields, nk[].k__b, py_item(connection, nk[].k_binding))
     py_setitem(fields, nk[].k__program_execute, py_item(connection, nk[].k_execute))
     py_setitem(fields, nk[].k__program_inspect, py_item(connection, nk[].k_inspect))

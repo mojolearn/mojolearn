@@ -506,9 +506,18 @@ class ExponentialSmoothing:
         ts_num=1,
         eps=2.24e-3,
         initialization_method="estimated",
+        device=None,
     ):
+        # `device`: None (this installation's device), "gpu" or "cpu"; checked
+        # natively here, read once into the estimator's route owner at its
+        # first operation (bindings/tsa_hw_native_door.mojo).
         return _TSA(self, "hw_initialize", (endog, seasonal, seasonal_periods,
-                    start_periods, ts_num, eps, initialization_method), _TSA_CONTEXT)
+                    start_periods, ts_num, eps, initialization_method, device), _TSA_CONTEXT)
+
+    def vendor_used(self):
+        # The vendor of the compiled binary this estimator runs on ("cpu",
+        # "metal", "cuda" or "hip"), as its resolved entry reports it.
+        return _TSA(self, "hw_vendor_used", (), _TSA_CONTEXT)
 
     #: The GPU family this estimator binds; `_classical_host.py`'s host
     #: subclass answers the forecast inference binding for it instead.

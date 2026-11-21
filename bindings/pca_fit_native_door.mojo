@@ -18,7 +18,8 @@ from bindings.decomp_inputs_unpack import decomp_admit
 from bindings.admitted_input_unpack import admitted_finite_refuse
 from bindings.device_rows_door import door_rows_refuse, door_is_device_rows
 from providers.python.pca_fit_scalar_pyapi_unpack import PCAFitScalar, pca_fit_scalar_capture
-from providers.python.pca_fit_model_pyapi_unpack import pca_fit_entries, pca_fit_host_only, pca_fit_preflight
+from providers.python.pca_fit_model_pyapi_unpack import pca_fit_route, pca_fit_host_only, pca_fit_preflight
+from core.linear_route import LINEAR_DEVICE_CPU
 from providers.python.pca_fit_model_pyapi_pack import pca_fit_fields
 from bindings.pca_keys_unpack import pca_keys
 from bindings.py_balanced import py_item
@@ -57,7 +58,8 @@ def pca_fit_operation(model: PythonObject, args: PythonObject, project: Bool,
                     + 'python -m pip install "mojolearn[numpy]" ("mojolearn[verify]" also includes NumPy).')
     var operation = String("fit_transform") if project else String("fit")
     var fields = pca_fit_fields(state, operation, context)
-    var connection = pca_fit_entries(fields, context)
+    var route = pca_fit_route(model, fields, context)
+    var connection = route.connection
     var capabilities = pca_capabilities(connection)
     if pca_fit_host_only(model):
         raise Error("ImportError: mojolearn: no CPU implementation of the PCA fit on the host class; "
@@ -92,7 +94,10 @@ def pca_fit_operation(model: PythonObject, args: PythonObject, project: Bool,
     var fold_connection = -1
     # fix-classical-infer-xq: the fold provider (lookup, vendor and mode
     # refusals) is connected only for a DeviceRows fold, never per plain fit.
-    if pca_mode(connection) == 1 and not project and solver != "randomized" and door_is_device_rows(source, context):
+    # A `device="cpu"` estimator takes the fold's host rows: the fold entry
+    # is the device image's.
+    if (pca_mode(connection) == 1 and not project and solver != "randomized"
+            and route.device != LINEAR_DEVICE_CPU and door_is_device_rows(source, context)):
         fold_connection = pca_fold_connection(context)
     var fold_ok = fold_connection >= 0
     var x = decomp_admit(source, "PCA", context, device_x=fold_ok, defer_finite=True)

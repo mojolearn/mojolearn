@@ -5,14 +5,16 @@ from types import FunctionType, GetSetDescriptorType
 
 def connect(context, selection):
     # glue: fixed class storage and hook metadata, connected once at import
+    # `device` is the LAST constructor parameter of the three search classes
+    # (bindings/model_selection_native_door.mojo checks args[-1] at construction).
     schemas = (
         (selection._BaseSearch, ('estimator', 'scoring', 'n_jobs', 'refit', 'cv', 'verbose',
-                                 'pre_dispatch', 'error_score', 'return_train_score')),
+                                 'pre_dispatch', 'error_score', 'return_train_score', 'device')),
         (selection.GridSearchCV, ('estimator', 'param_grid', 'scoring', 'n_jobs', 'refit', 'cv',
-                                  'verbose', 'pre_dispatch', 'error_score', 'return_train_score')),
+                                  'verbose', 'pre_dispatch', 'error_score', 'return_train_score', 'device')),
         (selection.RandomizedSearchCV, ('estimator', 'param_distributions', 'n_iter', 'scoring',
                                         'n_jobs', 'refit', 'cv', 'verbose', 'pre_dispatch',
-                                        'random_state', 'error_score', 'return_train_score')),
+                                        'random_state', 'error_score', 'return_train_score', 'device')),
         (selection.ParameterGrid, ('param_grid',)),
         (selection.ParameterSampler, ('param_distributions', 'n_iter', 'random_state')),
     )

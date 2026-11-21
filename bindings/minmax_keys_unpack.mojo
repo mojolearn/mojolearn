@@ -19,6 +19,7 @@ comptime MINMAX_OPN_FIT_TRANSFORM = 6
 comptime MINMAX_OPN_TRANSFORM = 7
 comptime MINMAX_OPN_SAVE = 8
 comptime MINMAX_OPN_LOAD = 9
+comptime MINMAX_OPN_VENDOR_USED = 10
 
 
 struct MinMaxKeys(Defaultable, Movable):
@@ -38,6 +39,7 @@ struct MinMaxKeys(Defaultable, Movable):
     var k_clip_: PythonObject
     var k_close: PythonObject
     var k_copy: PythonObject
+    var k_device: PythonObject
     var k_data_max_: PythonObject
     var k_data_min_: PythonObject
     var k_feature_range: PythonObject
@@ -76,6 +78,7 @@ struct MinMaxKeys(Defaultable, Movable):
         self.k_clip_ = PythonObject(None)
         self.k_close = PythonObject(None)
         self.k_copy = PythonObject(None)
+        self.k_device = PythonObject(None)
         self.k_data_max_ = PythonObject(None)
         self.k_data_min_ = PythonObject(None)
         self.k_feature_range = PythonObject(None)
@@ -118,6 +121,7 @@ def _minmax_keys_fill(nk: UnsafePointer[MinMaxKeys, MutUntrackedOrigin]) raises:
     nk[].k_clip_ = py_key("clip_")
     nk[].k_close = py_key("close")
     nk[].k_copy = py_key("copy")
+    nk[].k_device = py_key("device")
     nk[].k_data_max_ = py_key("data_max_")
     nk[].k_data_min_ = py_key("data_min_")
     nk[].k_feature_range = py_key("feature_range")
@@ -150,6 +154,7 @@ def _minmax_keys_fill(nk: UnsafePointer[MinMaxKeys, MutUntrackedOrigin]) raises:
     py_op_add(ops, "transform", MINMAX_OPN_TRANSFORM)
     py_op_add(ops, "save", MINMAX_OPN_SAVE)
     py_op_add(ops, "load", MINMAX_OPN_LOAD)
+    py_op_add(ops, "vendor_used", MINMAX_OPN_VENDOR_USED)
     nk[].ops = ops
     nk[].ready = True
 

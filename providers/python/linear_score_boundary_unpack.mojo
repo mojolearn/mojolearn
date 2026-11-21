@@ -58,22 +58,33 @@ def classical_linear_score(model: PythonObject, args: PythonObject,
     var x_address = admitted_x.address
     # The estimator's resolved prediction entry (device table or CPU table).
     var predict = route.second.call
-    var metric_mode = context["backend_fields"]["_DEFAULT_MODE"]
-    var metric_pins = context["classical_metrics"][metric_mode]
-    if py_type(metric_pins) is native_loaded_module("builtins").str:
-        raise Error("ImportError: " + String(metric_pins))
-    var metric_connection = linear_entry_connection(metric_pins, LINEAR_TABLE_METRICS)
-    var metric_key = metric_connection.key.copy()
-    var vendor = xd_vendor_code(String(py_get(context, "classical_metric_vendor", context["vendor"])))
-    var mode = 1 if String(context["backend_fields"]["_DEFAULT_MODE"]) == "identical" else 0
-    # A canonical metrics owner can still belong to another selected route.
-    # Explicit CPU estimators may intentionally use the context's GPU metrics,
-    # so compare against metric selection, not the estimator connection key.
-    if metric_key.vendor != vendor:
-        raise Error("RuntimeError: native linear score metrics vendor differs from selected execution")
-    if metric_key.mode != mode:
-        raise Error("RuntimeError: native linear score metrics mode differs from selected execution")
-    var metrics = linear_table_entry[LINEAR_TABLE_METRICS](metric_key, 0, String(METRICS_PROGRAM_ABI), MP_OPERATION_COUNT)
+    # A CPU route resolved in a GPU installation holds its own CPU identical
+    # metrics entry (providers/python/metrics_route_boundary_door.mojo): the
+    # process's metrics table is the GPU one and is not read for it.
+    var metrics = route.fifth.call
+    var vendor = 0
+    var mode = 1
+    var metric_pins = PythonObject(None)
+    var metric_owner = PythonObject(None)
+    if not route.has_fifth:
+        var metric_mode = context["backend_fields"]["_DEFAULT_MODE"]
+        metric_pins = context["classical_metrics"][metric_mode]
+        if py_type(metric_pins) is native_loaded_module("builtins").str:
+            raise Error("ImportError: " + String(metric_pins))
+        var metric_connection = linear_entry_connection(metric_pins, LINEAR_TABLE_METRICS)
+        var metric_key = metric_connection.key.copy()
+        metric_owner = metric_connection.images
+        vendor = xd_vendor_code(String(py_get(context, "classical_metric_vendor", context["vendor"])))
+        mode = 1 if String(context["backend_fields"]["_DEFAULT_MODE"]) == "identical" else 0
+        # A canonical metrics owner can still belong to another selected route.
+        # The explicit Host* classes may intentionally use the context's GPU
+        # metrics, so compare against metric selection, not the estimator
+        # connection key.
+        if metric_key.vendor != vendor:
+            raise Error("RuntimeError: native linear score metrics vendor differs from selected execution")
+        if metric_key.mode != mode:
+            raise Error("RuntimeError: native linear score metrics mode differs from selected execution")
+        metrics = linear_table_entry[LINEAR_TABLE_METRICS](metric_key, 0, String(METRICS_PROGRAM_ABI), MP_OPERATION_COUNT)
     var result = Float64(0.0)
     var py = Python()
     try:
@@ -87,5 +98,5 @@ def classical_linear_score(model: PythonObject, args: PythonObject,
         _ = target
         _ = pins
         _ = metric_pins
-        _ = metric_connection
+        _ = metric_owner
     return PythonObject(result)

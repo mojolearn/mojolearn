@@ -22,8 +22,12 @@ def test_sequential_no_longer_dispatches_whole_model_through_cpython():
                   'model_predict', 'model_predict_labels'):
         assert f'entries["{entry}"]' not in text
     assert 'model_counts_native(native_program, native_table)' in text
-    assert 'neural_descriptor_reuse(' in text
-    assert 'String(MODEL_ABI_NAME), MODEL_OPERATION_COUNT)' in text
+    # The shared provider is connected where the model's route is resolved,
+    # once per model (bindings/sequential_route_door.mojo), not per call.
+    route = (ROOT / 'bindings/sequential_route_door.mojo').read_text()
+    assert 'neural_descriptor_reuse(' in route and 'neural_descriptor_reuse(' not in text
+    assert 'String(MODEL_ABI_NAME), MODEL_OPERATION_COUNT)' in route
+    assert 'return sequential_route_entries(model, context)' in text
     for operation in ('MODEL_FIT', 'MODEL_FIT_LABELS', 'MODEL_PREDICT', 'MODEL_PREDICT_LABELS'):
         assert f'neural_descriptor_execute(provider, {operation},' in text
 

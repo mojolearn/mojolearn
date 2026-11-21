@@ -60,6 +60,16 @@ def connect(context, package):
             raise TypeError('native CV requires an ordinary native instance dictionary')
         hooks = tuple((base, name, row.get(name)) for base, row in zip(mro, fields)  # glue: retain method/layout identities once
                       for name in protected + class_fields)  # glue: fixed import-time method identity inventory
+        # The member's own device travels with it (device wave): a class that
+        # takes `device=` (it declares `_mojolearn_device`, the pilot's
+        # marker) has `device` as its LAST constructor parameter, so every
+        # clone, candidate and worker copy built from this schema carries the
+        # member's device unchanged. A recipe that already names it is kept;
+        # a class without the marker has no such parameter and its members
+        # read as device=None (bindings/msel_member_device_unpack.mojo).
+        parameters = tuple(parameters)
+        if getattr(cls, '_mojolearn_device', False) and 'device' not in parameters:
+            parameters += ('device',)
         registry[cls] = dict(entry=entry if type(entry) is BuiltinFunctionType else None,
                              context=owner_context, parameters=tuple(parameters), init=init,
                              methods=methods, forest=forest, mro=mro, hooks=hooks,
@@ -91,18 +101,18 @@ def connect(context, package):
     if decomposition is not None:
         register(decomposition.PCA, decomposition._PCA_ENTRY, decomposition._PCA_CONTEXT,
                  ('n_components', 'copy', 'whiten', 'svd_solver', 'tol', 'iterated_power', 'n_oversamples',
-                  'power_iteration_normalizer', 'random_state', 'numeric_mode'), 'initialize', {
+                  'power_iteration_normalizer', 'random_state', 'numeric_mode', 'device'), 'initialize', {
                      'fit': ('fit', (arg(0), arg(1))), 'transform': ('transform', (arg(0),)),
                      'get_params': ('get_params', (const(False),)),
                      'set_params': ('set_params', (arg(0),)),
                  })
     scalers = ()
     if preprocessing is not None:
-        scalers += ((preprocessing.StandardScaler, 'STANDARD', ('copy', 'with_mean', 'with_std', 'numeric_mode'), (arg(0), const(False), const(None))),
-                    (preprocessing.MinMaxScaler, 'MINMAX', ('feature_range', 'copy', 'clip', 'numeric_mode'), (arg(0), const(False))))
+        scalers += ((preprocessing.StandardScaler, 'STANDARD', ('copy', 'with_mean', 'with_std', 'numeric_mode', 'device'), (arg(0), const(False), const(None))),
+                    (preprocessing.MinMaxScaler, 'MINMAX', ('feature_range', 'copy', 'clip', 'numeric_mode', 'device'), (arg(0), const(False))))
     if _expansion_prep is not None:
-        scalers += ((_expansion_prep.MaxAbsScaler, 'MAXABS', ('copy', 'numeric_mode'), (arg(0),)),
-                    (_expansion_prep.RobustScaler, 'ROBUST', ('with_centering', 'with_scaling', 'quantile_range', 'copy', 'unit_variance', 'numeric_mode'), (arg(0),)))
+        scalers += ((_expansion_prep.MaxAbsScaler, 'MAXABS', ('copy', 'numeric_mode', 'device'), (arg(0),)),
+                    (_expansion_prep.RobustScaler, 'ROBUST', ('with_centering', 'with_scaling', 'quantile_range', 'copy', 'unit_variance', 'numeric_mode', 'device'), (arg(0),)))
     for cls, owner, names, transform in scalers:  # glue: fixed native scaler schemas
         module = preprocessing if owner in ('STANDARD', 'MINMAX') else _expansion_prep
         register(cls, vars(module)['_' + owner + '_CALL'], vars(module)['_' + owner + '_CONTEXT'], names, 'init', {

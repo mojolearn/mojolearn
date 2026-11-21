@@ -13,7 +13,15 @@ schema String or compares an ABI name.
 
 The family's slots of `DeviceRoute`: `entry` is the fit entry, `second` the
 predict entry, `third` Ridge's weighted and one-column solve (`has_third`),
-`fourth` LinearRegression's TSQR table (`has_fourth`).
+`fourth` LinearRegression's TSQR table (`has_fourth`), `fifth` the R^2
+metrics program of a CPU route resolved beside a GPU set (`has_fifth`,
+providers/python/metrics_route_boundary_door.mojo).
+
+FORWARDING NAMES, for the lanes of the 2026-11-21 wave that were briefed to
+reuse this module's device words while it still held them: `LINEAR_DEVICE_*`
+and `linear_device_*` below forward to core/device_route.mojo. They hold no
+rule of their own; they go when the wave's last importer moves
+(`rg 'LINEAR_DEVICE_|linear_device_' bindings providers core checks`).
 
 Resolution is a metadata operation with no independent numerical work to
 split; it runs at an estimator's first operation, never per row.
@@ -27,7 +35,34 @@ from core.linear_fit_types import (
     LINEAR_FIT_ABI, LINEAR_FIT_OPERATION_COUNT, RIDGE_FIT_ABI, LF_MODE, LF_VENDOR,
 )
 from core.native_descriptor_call import native_descriptor_call
-from core.device_route import DeviceRoute
+from core.device_route import (
+    DeviceRoute, DEVICE_GPU, DEVICE_CPU, DEVICE_INSTALL, device_code, device_name, device_refusal,
+    device_gpu_absent, device_installed,
+)
+
+comptime LINEAR_DEVICE_GPU = DEVICE_GPU
+comptime LINEAR_DEVICE_CPU = DEVICE_CPU
+comptime LINEAR_DEVICE_INSTALL = DEVICE_INSTALL
+
+
+def linear_device_code(word: String) -> Int:
+    return device_code(word)
+
+
+def linear_device_name(code: Int) -> String:
+    return device_name(code)
+
+
+def linear_device_refusal(shown: String) raises:
+    device_refusal(shown)
+
+
+def linear_device_gpu_absent() raises:
+    device_gpu_absent()
+
+
+def linear_device_installed(device: Int, process_vendor: Int) raises -> Int:
+    return device_installed(device, process_vendor)
 
 
 def linear_route_resolve(device: Int, key: LinearEntryKey, expected_vendor: Int,

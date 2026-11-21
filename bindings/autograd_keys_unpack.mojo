@@ -200,6 +200,7 @@ struct AutogradKeys(Defaultable, Movable):
     var k_ops_imported_run_device: PythonObject
     var k_ops_program_class: PythonObject
     var k_ops_session_class: PythonObject
+    var k_ops_session_cpu_connection: PythonObject
     var k_ops_session_layout: PythonObject
     var k_ops_torch_program_run: PythonObject
     var k_optimizer: PythonObject
@@ -424,6 +425,7 @@ struct AutogradKeys(Defaultable, Movable):
         self.k_ops_imported_run_device = PythonObject(None)
         self.k_ops_program_class = PythonObject(None)
         self.k_ops_session_class = PythonObject(None)
+        self.k_ops_session_cpu_connection = PythonObject(None)
         self.k_ops_session_layout = PythonObject(None)
         self.k_ops_torch_program_run = PythonObject(None)
         self.k_optimizer = PythonObject(None)
@@ -652,6 +654,7 @@ def _autograd_keys_fill(nk: UnsafePointer[AutogradKeys, MutUntrackedOrigin]) rai
     nk[].k_ops_imported_run_device = py_key("ops_imported_run_device")
     nk[].k_ops_program_class = py_key("ops_program_class")
     nk[].k_ops_session_class = py_key("ops_session_class")
+    nk[].k_ops_session_cpu_connection = py_key("ops_session_cpu_connection")
     nk[].k_ops_session_layout = py_key("ops_session_layout")
     nk[].k_ops_torch_program_run = py_key("ops_torch_program_run")
     nk[].k_optimizer = py_key("optimizer")

@@ -166,9 +166,10 @@ class DecisionTreeClassifier(RandomForestClassifier):
         ``NotImplementedError``.
     n_bins : int, default=128
         Number of quantile bins per feature used for the split search.
-    device : {"gpu"}, default="gpu"
-        Only ``"gpu"`` is accepted. On a CPU-only install the same fit runs
-        on the host binding.
+    device : {None, "gpu", "cpu"}, default=None
+        Where the tree is fitted and predicts. None uses this installation's
+        device, ``"cpu"`` runs on the CPU and ``"gpu"`` requires a GPU
+        installation. Other values raise ``ValueError`` at fit.
     inference_engine : {"auto", "sequential", "parallel_groves"}, default="auto"
         Prediction kernel. ``"auto"`` lets the library choose; in identical
         mode it predicts as ``"sequential"``.
@@ -214,7 +215,7 @@ class DecisionTreeClassifier(RandomForestClassifier):
         ccp_alpha=0.0,
         monotonic_cst=None,
         n_bins=128,
-        device="gpu",
+        device=None,
         inference_engine="auto",
         numeric_mode=None,
     ):
@@ -315,9 +316,10 @@ class DecisionTreeRegressor(RandomForestRegressor):
     n_bins : int or None, default=None
         Number of quantile bins per feature used for the split search. None
         uses the numeric mode's default: 128, or 256 in fast mode.
-    device : {"gpu"}, default="gpu"
-        Only ``"gpu"`` is accepted. On a CPU-only install the same fit runs
-        on the host binding.
+    device : {None, "gpu", "cpu"}, default=None
+        Where the tree is fitted and predicts. None uses this installation's
+        device, ``"cpu"`` runs on the CPU and ``"gpu"`` requires a GPU
+        installation. Other values raise ``ValueError`` at fit.
     inference_engine : {"auto", "sequential", "parallel_groves"}, default="auto"
         Prediction kernel. ``"auto"`` lets the library choose; in identical
         mode it predicts as ``"sequential"``.
@@ -358,7 +360,7 @@ class DecisionTreeRegressor(RandomForestRegressor):
         ccp_alpha=0.0,
         monotonic_cst=None,
         n_bins=None,
-        device="gpu",
+        device=None,
         inference_engine="auto",
         numeric_mode=None,
     ):

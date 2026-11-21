@@ -11,6 +11,7 @@ from bindings.native_owner_lifetime_door import native_release_admit
 from bindings.py_optional import py_present
 from bindings.cluster_keys_unpack import cluster_keys
 from bindings.py_balanced import py_item
+from providers.python.device_route_dw_neighbors_cluster_door import family_route_device_admit
 
 
 def cluster_initialize_py(model: PythonObject, values: PythonObject,
@@ -40,6 +41,12 @@ def cluster_initialize_py(model: PythonObject, values: PythonObject,
         raise Error("TypeError: cluster constructor argument count differs from its parameter schema")
     classical_connect_numpy(context)
     var fields = _fields(model)
+    # `device` is the last constructor parameter of a class that takes it:
+    # an unknown value, and 'gpu' without a GPU set, are refused in words
+    # before any field changes.
+    var count = len(values)
+    if count > 0 and String(names.value()[count - 1]) == "device":
+        family_route_device_admit(values[count - 1], context)
     for i in range(len(names.value())):  # driver-loop: admit every released owner before changing constructor state
         if py_type(names.value()[i]) is not b.str:
             raise Error("TypeError: cluster constructor parameter names require exact strings")

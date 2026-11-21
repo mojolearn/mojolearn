@@ -40,13 +40,21 @@ from core.tsvd_native_api import (
 from bindings.tsvd_descriptor_boundary_door import (
     tsvd_factory,
     tsvd_connect,
-    tsvd_connection,
     tsvd_run_fit,
     tsvd_run_query,
 )
-from x_decomp.tsvd_descriptor_boundary_run import tsvd_capabilities, tsvd_qfix
+from x_decomp.tsvd_descriptor_boundary_run import tsvd_capabilities, tsvd_qfix, tsvd_vendor
+from core.pca_native_api import pca_vendor_name
+from core.linear_route import LINEAR_DEVICE_CPU
+from core.device_route_dw_decomp import DecompRoute, decomp_route_cpu_identical
+from bindings.decomp_device_route_door import (
+    decomp_route_hit, decomp_route_keep, decomp_route_resolve_device, decomp_route_on_cpu_image,
+    decomp_route_expected_vendor,
+)
 from bindings.tsvd_owner_boundary_unpack import tsvd_owner_drop, tsvd_owner_lease, TSVDLeasePin
-from bindings.tsvd_keys_unpack import tsvd_keys, TSVD_OPN_FIT, TSVD_OPN_FIT_TRANSFORM, TSVD_OPN_TRANSFORM
+from bindings.tsvd_keys_unpack import (
+    tsvd_keys, TSVD_OPN_FIT, TSVD_OPN_FIT_TRANSFORM, TSVD_OPN_TRANSFORM, TSVD_OPN_VENDOR_USED,
+)
 from bindings.py_keys import py_op_code
 from bindings.py_balanced import py_item
 
@@ -147,8 +155,89 @@ def _host_connection(model: PythonObject, fields: PythonObject, context: PythonO
     return tsvd_connect(py_item(context, nk[].k_tsvd_host_factory), 1, "cpu")
 
 
-def _decomp(mode: String, context: PythonObject) raises -> PythonObject:
-    return tsvd_factory(context, "tsvd_decomp", mode)
+@fieldwise_init
+struct TSVDRouted(Movable):
+    """The estimator's route as one operation reads it. `found`: `route` is
+    resolved. Otherwise `route` holds the device and tier the resolution
+    will use (connection -1), and `mode` / `device` are the objects it is
+    stored for."""
+    var found: Bool
+    var route: DecompRoute
+    var mode: PythonObject
+    var device: PythonObject
+
+
+def _route_read(model: PythonObject, fields: PythonObject, context: PythonObject) raises -> TSVDRouted:
+    """The per-call read (bindings/decomp_device_route_door.mojo): the mode
+    object (the process default when None), one `device` read, one record
+    read and three pointer compares. A miss validates the mode word and the
+    device where the old code validated the mode (before X is admitted); the
+    binding tables are read by `_route_resolve`, where the old code
+    connected."""
+    var nk = tsvd_keys()
+    var mode = py_get(fields, nk[].k_numeric_mode)
+    if mode is None:
+        mode = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
+    var hit = decomp_route_hit(model, fields, mode, context)
+    if hit.found:
+        return TSVDRouted(True, hit.route, mode, hit.device)
+    var tier = 1 if _mode(fields, context) == "identical" else 0
+    var device = decomp_route_resolve_device(hit.device, context)
+    return TSVDRouted(False, DecompRoute(device, -1, tier), mode, hit.device)
+
+
+def _route_tables(route: DecompRoute, context: PythonObject) raises -> Bool:
+    """True when the route reads the CPU image's tables (`tsvd_cpu_bindings`,
+    `tsvd_cpu_decomp`: a `cpu` route of a GPU installation, identical only)."""
+    var cpu_image = decomp_route_on_cpu_image(route.device, context)
+    if cpu_image:
+        decomp_route_cpu_identical(route.mode == 1)
+        if py_get(context, "tsvd_cpu_bindings") is None or py_get(context, "tsvd_cpu_decomp") is None:
+            raise Error("ImportError: device='cpu' is not connected in this installation")
+    return cpu_image
+
+
+def _route_resolve(model: PythonObject, routed: TSVDRouted, context: PythonObject) raises -> DecompRoute:
+    """The estimator's resolved route: on a miss, the estimators image's
+    connection and (when it connects) the x_decomp image's, of the device
+    tables or of the CPU tables, stored for the estimator's later calls."""
+    if routed.found:
+        return routed.route
+    var b = native_loaded_module("builtins")
+    var route = routed.route
+    var cpu_image = _route_tables(route, context)
+    var name = String("identical") if route.mode == 1 else String("fast")
+    var vendor = decomp_route_expected_vendor(route.device, context)
+    var factory = tsvd_factory(context, String("tsvd_cpu_bindings") if cpu_image else String("tsvd_bindings"), name)
+    route.connection = tsvd_connect(factory, route.mode, vendor)
+    # The x_decomp image (randomized, TSQR). One that is unbuilt or foreign
+    # is refused by the fit that needs it, in the old words (`_decomp_refuse`).
+    var decomp = tsvd_factory(context, String("tsvd_cpu_decomp") if cpu_image else String("tsvd_decomp"), name)
+    if py_type(decomp) is not b.str:
+        try:
+            route.extra = tsvd_connect(decomp, route.mode, vendor)
+        except ignored:
+            route.extra = -1
+    decomp_route_keep(model, route, routed.mode, routed.device, context, Python.tuple(factory, decomp))
+    return route
+
+
+def _route(model: PythonObject, fields: PythonObject, context: PythonObject) raises -> DecompRoute:
+    var routed = _route_read(model, fields, context)
+    return _route_resolve(model, routed, context)
+
+
+def _decomp(route: DecompRoute, context: PythonObject) raises -> PythonObject:
+    """The x_decomp factory of a route whose `extra` did not connect (the
+    refusal path of a fit that needs it)."""
+    var name = String("identical") if route.mode == 1 else String("fast")
+    return tsvd_factory(context, String("tsvd_cpu_decomp") if _route_tables(route, context) else String("tsvd_decomp"), name)
+
+
+def tsvd_route_vendor(model: PythonObject, fields: PythonObject, context: PythonObject) raises -> String:
+    """`vendor_used`: the vendor word the estimator's compiled image reports
+    (`cpu` for a `device="cpu"` estimator), read from its resolved route."""
+    return pca_vendor_name(tsvd_vendor(_route(model, fields, context).connection))
 
 
 def _components(fields: PythonObject, rows: Int, cols: Int, context: PythonObject) raises -> Int:
@@ -186,19 +275,24 @@ def _algorithm(fields: PythonObject) raises -> String:
 
 
 def _randomized(model: PythonObject, fields: PythonObject, x: PythonObject, rows: Int, cols: Int, nc: Int,
-                mode: String, context: PythonObject, test: Bool) raises:
+                route: DecompRoute, context: PythonObject, test: Bool) raises:
     """algorithm='randomized': `_randomized_decompose(x, nc, center=False,
     ...)` as one x_decomp call, its arrays stored as the shell stored them."""
     var nk = tsvd_keys()
     var b = native_loaded_module("builtins")
-    var decomp = _decomp(mode, context)
-    if py_type(decomp) is b.str:
-        raise Error(String(decomp))
+    # The route's x_decomp connection; one that did not connect is refused
+    # here and below at the stages the per-call connection refused it.
+    var connection = route.extra
+    if connection < 0:
+        var decomp = _decomp(route, context)
+        if py_type(decomp) is b.str:
+            raise Error(String(decomp))
     var normalizer = py_item(fields, nk[].k_power_iteration_normalizer)
     var name = String(normalizer) if py_type(normalizer) is b.str else String("")
     if name != "auto" and name != "QR" and name != "LU" and name != "none":
         raise Error("power_iteration_normalizer must be 'auto', 'QR', 'LU' or 'none'")
-    var connection = tsvd_connect(decomp, 1 if mode == "identical" else 0, String(py_item(context, nk[].k_vendor)))
+    if connection < 0:
+        connection = tsvd_connect(_decomp(route, context), route.mode, decomp_route_expected_vendor(route.device, context))
     var n_iter = py_item(fields, nk[].k_n_iter)
     var auto = py_type(n_iter) is b.str and String(n_iter) == "auto"
     var iterations = 0 if auto else _int(n_iter, context)
@@ -236,24 +330,21 @@ def _randomized(model: PythonObject, fields: PythonObject, x: PythonObject, rows
     py_setitem(fields, nk[].k_explained_variance_ratio_, ratio)
 
 
-def _tsqr_connection(decomp: PythonObject, mode: String, context: PythonObject,
-                     rows: Int, cols: Int, nc: Int) raises -> Int:
-    var nk = tsvd_keys()
+def _tsqr_connection(route: DecompRoute, rows: Int, cols: Int, nc: Int) raises -> Int:
     # The old kit treats an unavailable flag entry as zero. Keep that refusal
-    # order: an unavailable decomposition image does not disable the Gram fit.
-    if py_type(decomp) is native_loaded_module("builtins").str:
+    # order: an unavailable decomposition image (the route's `extra` did not
+    # connect) does not disable the Gram fit.
+    if route.extra < 0:
         return -1
-    var connection = -1
     var flags = 0
     try:
-        connection = tsvd_connect(decomp, 1 if mode == "identical" else 0, String(py_item(context, nk[].k_vendor)))
-        flags = tsvd_qfix(connection)
+        flags = tsvd_qfix(route.extra)
     except ignored:
         return -1
     if (flags & _QFIX_TSVD) == 0:
         return -1
     if cols >= 1 and cols <= _TS_MAX_N and rows >= cols and nc >= 1 and nc <= cols:
-        return connection
+        return route.extra
     return -1
 
 
@@ -266,12 +357,11 @@ comptime _TSVD_EST = "TruncatedSVD"
 
 
 def _exact(model: PythonObject, fields: PythonObject, admitted: AdmittedX, rows: Int, cols: Int, nc: Int,
-           mode: String, connection: Int, context: PythonObject) raises:
+           route: DecompRoute, connection: Int, context: PythonObject) raises:
     """Existing TSQR/Gram/fused route, preserving each public publication stage."""
     var nk = tsvd_keys()
     var x = admitted.array
     var test = not admitted.finite
-    var decomp = _decomp(mode, context)
     var variance = _f32(Python.tuple(nc), context)
     var ratio = _f32(Python.tuple(nc), context)
     py_setitem(fields, nk[].k_explained_variance_, variance)
@@ -281,7 +371,7 @@ def _exact(model: PythonObject, fields: PythonObject, admitted: AdmittedX, rows:
     var request = TSVDFitRequest(_address(x, context), _address(components, context), _address(singular, context),
         _address(variance, context), _address(ratio, context), rows, cols, nc, 0, 0, False, 0, test,
         TSVD_GRAM, PCAFoldStore())
-    var tsqr = _tsqr_connection(decomp, mode, context, rows, cols, nc)
+    var tsqr = _tsqr_connection(route, rows, cols, nc)
     if tsqr >= 0:
         if (tsvd_capabilities(tsqr) & TSVD_CAP_TSQR) == 0:
             raise Error("NotImplementedError: mojolearn TruncatedSVD: this build of _mojolearn_x_decomp does not export "
@@ -348,10 +438,13 @@ def tsvd_fit(model: PythonObject, source: PythonObject, context: PythonObject, f
     # `tsvd_fit_fold` (no host gather, no upload of X); the TSQR route is
     # `fast` only and the randomized driver uploads X itself, so those (and
     # the host class) get the fold's host rows.
+    # A `device="cpu"` estimator takes the fold's host rows too: the fold
+    # entry is the device image's.
     var host = _host_only(model)
-    var mode = _mode(fields, context)
+    var routed = _route_read(model, fields, context)
     var fold_entry = py_get(context, nk[].k_tsvd_fold_factory)
-    var fold_ok = fold and fold_entry is not None and not host and mode == "identical" and algorithm != "randomized"
+    var fold_ok = (fold and fold_entry is not None and not host and routed.route.mode == 1
+                   and routed.route.device != LINEAR_DEVICE_CPU and algorithm != "randomized")
     var admitted = decomp_admit(source, "TruncatedSVD", context, device_x=fold_ok, defer_finite=True)
     py_setitem(fields, nk[].k_input_copied_, PythonObject(decomp_input_copied(admitted, context)))
     var rows = admitted.rows
@@ -382,11 +475,20 @@ def tsvd_fit(model: PythonObject, source: PythonObject, context: PythonObject, f
         py_setitem(fields, nk[].k_n_features_in_, PythonObject(cols))
         return admitted^
     var x = admitted.array
-    var connection = _host_connection(model, fields, context) if host else tsvd_connection(mode, context)
-    if algorithm == "randomized":
-        _randomized(model, fields, x, rows, cols, nc, mode, context, not admitted.finite)
+    # The explicit host class keeps its own CPU connection and its late mode
+    # refusal; its route stays unresolved (the x_decomp image is connected by
+    # the fit that needs it, as before).
+    var route = routed.route
+    var connection = -1
+    if host:
+        connection = _host_connection(model, fields, context)
     else:
-        _exact(model, fields, admitted, rows, cols, nc, mode, connection, context)
+        route = _route_resolve(model, routed, context)
+        connection = route.connection
+    if algorithm == "randomized":
+        _randomized(model, fields, x, rows, cols, nc, route, context, not admitted.finite)
+    else:
+        _exact(model, fields, admitted, rows, cols, nc, route, connection, context)
     py_setitem(fields, nk[].k_n_components_, PythonObject(nc))
     py_setitem(fields, nk[].k_n_features_in_, PythonObject(cols))
     return admitted^
@@ -417,8 +519,7 @@ def _project(model: PythonObject, fields: PythonObject, admitted: AdmittedX, con
         raise Error("mojolearn TruncatedSVD feature count differs from fit")
     var nc = _int(_attr(model, fields, "n_components_"), context)
     var out = _f32(Python.tuple(rows, nc), context)
-    var mode = _mode(fields, context)
-    var connection = tsvd_connection(mode, context)
+    var connection = _route(model, fields, context).connection
     var stored = py_item(fields, nk[].k_components_)
     var components = admit_x(stored, 2, "components_", context)
     var lease = _resident_lease(model, connection, stored, components)
@@ -461,8 +562,7 @@ def tsvd_inverse_transform(model: PythonObject, source: PythonObject, context: P
         raise Error("mojolearn TruncatedSVD component count differs from fit")
     var nf = _int(_attr(model, fields, "n_features_in_"), context)
     var out = _f32(Python.tuple(rows, nf), context)
-    var mode = _mode(fields, context)
-    var connection = tsvd_connection(mode, context)
+    var connection = _route(model, fields, context).connection
     var stored = _attr(model, fields, "components_")
     var components = admit_x(stored, 2, "components_", context)
     var lease = _resident_lease(model, connection, stored, components)
@@ -499,6 +599,9 @@ def tsvd_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
         classical_connect_numpy(context)
         if operation < 0:
             raise Error("unknown private TruncatedSVD operation")
+        if operation == TSVD_OPN_VENDOR_USED:
+            # A metadata read: no lifecycle, no X.
+            return PythonObject(tsvd_route_vendor(model, py_fields(model), context)).steal_data()
         # The shared lifecycle owner takes the method name: built once, as before.
         var method = String(py=call[1])
         # The whole public lifecycle (the former `_mode` wrappers): fitted

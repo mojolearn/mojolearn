@@ -12,7 +12,7 @@ from providers.python.classical_family_admission_pyapi_unpack import classical_f
 from providers.python.pca_fit_scalar_pyapi_unpack import PCAFitScalar, pca_fit_scalar_admit
 from bindings.native_prepared_owner_unpack import prepared_get, prepared_put
 from bindings.py_model_records import records_open, model_generation
-from bindings.pca_descriptor_boundary_door import pca_connection, pca_connection_matches, pca_mode_name
+from bindings.pca_descriptor_boundary_door import pca_route, pca_connection_matches, pca_mode_name
 from core.pca_query_state import PCAQueryState
 from x_decomp.pca_model_run import _pca_query_decoded
 from providers.python.pca_query_cache_pyapi_unpack import PCAQueryPins, PCAQueryAdmission, PCAQueryCache
@@ -131,8 +131,11 @@ def pca_query_admitted(model: PythonObject, context: PythonObject, operation: St
     if py_get(context, nk[].k_ndarray) is None:
         raise Error("ImportError: mojolearn: PCA requires optional NumPy support. Install it with: "
                     + 'python -m pip install "mojolearn[numpy]" ("mojolearn[verify]" also includes NumPy).')
+    # The estimator's route (device image or CPU image), resolved once per
+    # estimator and shared with its fit; the admission record below keeps
+    # its connection for the later queries.
     var mode = pca_mode_name(py_item(fields, nk[].k_numeric_mode))
-    var connection = pca_connection(mode, context)
+    var connection = pca_route(model, fields, py_item(fields, nk[].k_numeric_mode), context).connection
     var decoded = _pca_query_state(fields, connection)
     if key.identity.valid:
         # Only the lifecycle-flagged models were cached before. The attribute

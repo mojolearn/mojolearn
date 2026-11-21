@@ -191,6 +191,32 @@ class Mamba2State:
 class _MambaBase(NumericModeMixin):
     _BINDING = "_mojolearn_mamba"
 
+    #: The block takes `device=`; its check runs the same block on the other
+    #: device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
+
+    def vendor_used(self):
+        """The backend this block runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'`` or ``'hip'``, or ``'cpu'`` for a block that
+            runs on the CPU, read from the compiled binary the block uses.
+        """
+        return _native_neural_bridge.RUNTIME.neural_block_vendor_used(self, _native_neural_bridge.CONTEXT)
+
+    def numeric_mode_used(self):
+        """The numeric mode this block runs in.
+
+        Returns
+        -------
+        str
+            ``'identical'`` or ``'fast'`` (Apple only), read from the compiled
+            binary the block uses.
+        """
+        return _native_neural_bridge.RUNTIME.neural_block_numeric_mode_used(self, _native_neural_bridge.CONTEXT)
+
     def set_params(self, **params):
         """Update constructor parameters and rebuild the block.
 
@@ -332,9 +358,9 @@ class Mamba1Block(_MambaBase, _native_constructor=True):
         "out_proj.weight",
     )
 
-    def __init__(self, weights, *, numeric_mode=None):
+    def __init__(self, weights, *, numeric_mode=None, device=None):
         return _native_neural_bridge.RUNTIME.neural_block_init(
-            self, weights, "mamba1", (None, numeric_mode), _native_neural_bridge.CONTEXT)
+            self, weights, "mamba1", (device, numeric_mode), _native_neural_bridge.CONTEXT)
 
     def allocate_state(self, batch_size):
         """Return a zero `Mamba1State` for `batch_size` sequences.
@@ -623,9 +649,9 @@ class Mamba2Block(_MambaBase, _native_constructor=True):
         "out_proj.weight",
     )
 
-    def __init__(self, weights, *, dt_limit=(0.0, float("inf")), numeric_mode=None):
+    def __init__(self, weights, *, dt_limit=(0.0, float("inf")), numeric_mode=None, device=None):
         return _native_neural_bridge.RUNTIME.neural_block_init(
-            self, weights, "mamba2", (None, numeric_mode, dt_limit), _native_neural_bridge.CONTEXT)
+            self, weights, "mamba2", (device, numeric_mode, dt_limit), _native_neural_bridge.CONTEXT)
 
     def allocate_state(self, batch_size):
         """Return a zero `Mamba2State` for `batch_size` sequences.
@@ -985,9 +1011,9 @@ class Mamba3Block(_MambaBase, _native_constructor=True):
         "out_proj.weight",
     )
 
-    def __init__(self, weights, *, numeric_mode=None):
+    def __init__(self, weights, *, numeric_mode=None, device=None):
         return _native_neural_bridge.RUNTIME.neural_block_init(
-            self, weights, "mamba3", (None, numeric_mode), _native_neural_bridge.CONTEXT)
+            self, weights, "mamba3", (device, numeric_mode), _native_neural_bridge.CONTEXT)
 
     def allocate_state(self, batch_size):
         """Return a zero `Mamba3State` for `batch_size` sequences.

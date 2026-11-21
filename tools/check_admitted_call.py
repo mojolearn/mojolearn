@@ -445,7 +445,7 @@ DEBT = {
     'bindings/sequence_print_options_unpack.mojo': {'native_loaded_module': 1},
     'bindings/sequence_string_storage_door.mojo': {'cpython': 3},
     'bindings/sequential_checkpoint_door.mojo': {'native_loaded_module': 1},
-    'bindings/sequential_execution_pack.mojo': {'native_loaded_module': 3},
+    'bindings/sequential_execution_pack.mojo': {'native_loaded_module': 2},
     'bindings/sequential_inputs_door.mojo': {'cpython': 1},
     'bindings/sequential_native_pack.mojo': {'native_loaded_module': 1},
     'bindings/sequential_weights_pack.mojo': {'native_loaded_module': 1},

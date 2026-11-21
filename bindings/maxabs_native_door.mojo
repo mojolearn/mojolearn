@@ -24,6 +24,9 @@ from bindings.x_prep_native_owner_run import xprep_r3
 from bindings.x_prep_native_owner_door import xprep_storage, xprep_take, xprep_values, xprep_run
 from core.scaler_fit_impl import scaler_refuse_infinite
 from bindings.py_optional import py_or_none, py_present
+from providers.python.prep_route_boundary_door import (
+    prep_route_context, prep_route_clear, prep_device_admit, prep_route_vendor_used,
+)
 
 
 def maxabs_fit(model: PythonObject, source: PythonObject, target: PythonObject, context: PythonObject,
@@ -172,36 +175,57 @@ def maxabs_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
         # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
         var result = Optional[PythonObject]()
         if operation == "init":
+            # `device` is the third constructor argument (absent from a
+            # two-argument caller: this installation's device). Refused in
+            # words before any field changes.
+            var device = PythonObject(None)
+            if len(args) > 2:
+                device = args[2]
+            prep_device_admit(device,py_type(model),context)
             py_setitem(fields,"copy",args[0])
             py_setitem(fields,"numeric_mode",args[1])
+            py_setitem(fields,"device",device)
+            prep_route_clear(model)
         elif operation == "get_params":
-            # `numeric_mode` reads None on an instance pickled before the
-            # parameter existed.
+            # `numeric_mode` and `device` read None on an instance pickled
+            # before the parameter existed.
             var params = Python.dict(copy=fields["copy"])
             py_setitem(params,"numeric_mode",py_get(fields,"numeric_mode"))
+            py_setitem(params,"device",py_get(fields,"device"))
             result = params
+        elif operation == "vendor_used":
+            result = py_present(prep_route_vendor_used(model,context))
         elif operation == "set_params":
             var options = args[0]
             var builtins = native_loaded_module("builtins")
             var string_type = builtins.str
             var names = py_call(builtins.list,options)
+            # A given `device` is refused in words before the estimator changes.
+            prep_device_admit(py_get(options,"device"),py_type(model),context)
             for k in range(len(names)):  # driver-loop: proposed parameter names, in declared order
-                if py_type(names[k]) is not string_type or (String(names[k]) != "copy" and String(names[k]) != "numeric_mode"):
+                if py_type(names[k]) is not string_type or (String(names[k]) != "copy" and String(names[k]) != "numeric_mode" and String(names[k]) != "device"):
                     raise Error("mojolearn: invalid parameter for MaxAbsScaler")
                 py_setitem(fields,names[k],options[names[k]])
+            if len(names):
+                prep_route_clear(model)
             result = py_present(model)
         elif operation == "is_fitted":
             result = py_present(classical_is_fitted(model))
         elif operation == "fit" or operation == "fit_transform":
             if operation == "fit_transform" and len(args[2]) != 0:
                 raise Error("TypeError: MaxAbsScaler.fit got an unexpected keyword argument")
-            result = py_present(maxabs_fit(model,args[0],args[1],context,operation == "fit_transform"))
+            # The estimator's route (providers/python/prep_route_boundary_door.mojo):
+            # the process's context or the CPU one of `device="cpu"`. One
+            # record read and one pointer compare per data operation.
+            var run = prep_route_context(model,context)
+            result = py_present(maxabs_fit(model,args[0],args[1],run,operation == "fit_transform"))
             if operation == "fit_transform":
                 if not result:
-                    result = py_present(maxabs_transform(model,args[0],context))
-                result = py_present(_public_result(py_or_none(result),context))
+                    result = py_present(maxabs_transform(model,args[0],run))
+                result = py_present(_public_result(py_or_none(result),run))
         elif operation == "transform":
-            result = py_present(_public_result(maxabs_transform(model,args[0],context),context))
+            var run = prep_route_context(model,context)
+            result = py_present(_public_result(maxabs_transform(model,args[0],run),run))
         else:
             raise Error("unknown native MaxAbsScaler operation")
         return py_or_none(result).steal_data()

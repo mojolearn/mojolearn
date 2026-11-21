@@ -30,7 +30,7 @@ def _bits(value):
 
 def test_constructor_params_and_fitted_state_are_native():
     m = audit_native_call(ml.MaxAbsScaler, copy=False).assert_native()
-    assert audit_native_call(m.get_params).assert_native() == {"copy": False, "numeric_mode": None}
+    assert audit_native_call(m.get_params).assert_native() == {"copy": False, "numeric_mode": None, "device": None}
     assert not audit_native_call(m.__sklearn_is_fitted__).assert_native()
     audit_native_call(m.fit, _data()).assert_native()
     assert audit_native_call(m.__sklearn_is_fitted__).assert_native()

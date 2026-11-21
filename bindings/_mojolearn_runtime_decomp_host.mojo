@@ -14,6 +14,7 @@ from bindings.py_type_registry import py_type_absent, py_type_attach
 from providers.python.pca_query_cache_pyapi_unpack import PCAQueryCache
 from bindings.tsvd_owner_boundary_unpack import TSVDResidentOwner
 from bindings.ipca_owner_boundary_door import IPCAResidentOwner
+from bindings.decomp_device_route_door import register_decomp_route_owner
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from std.sys.compile import is_defined
@@ -96,6 +97,8 @@ def build__mojolearn_runtime_decomp_host() -> PythonObject:
         register_pca_query_cache(module)
         register_tsvd_resident_owner(module)
         register_ipca_resident_owner(module)
+        # The per-estimator device route owner (device=None | "gpu" | "cpu") of the decomposition doors.
+        register_decomp_route_owner(module)
         module.def_py_c_function(pca_c, "pca_native_call")
         module.def_py_c_function(decomp_c, "decomp_native_call")
         module.def_py_c_function(linalg_decomp_c, "linalg_decomp_native_call")
