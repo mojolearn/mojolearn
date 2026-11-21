@@ -773,35 +773,32 @@ def _block_weights(ctx: DeviceContext, params: List[Float32], block: Int, config
     return w^
 
 
-def _param_dev_copy(ctx: DeviceContext, mut flat: DeviceBuffer[DType.float32], lo: Int, n: Int) raises -> DeviceBuffer[DType.float32]:
-    """cpu3-seq: `flat[lo:lo+n]` copied device to device into its own buffer
-    (no host slice). Enqueue only; the in-order context orders its readers."""
-    if lo < 0 or n < 0 or lo + n > len(flat):
+def _param_dev_view(mut flat: DeviceBuffer[DType.float32], lo: Int, n: Int) raises -> DeviceBuffer[DType.float32]:
+    """`flat[lo:lo+n]` as a view of the flat device parameters: no launch, no
+    bytes moved. Was `_param_dev_copy` (its own buffer and a device-to-device
+    copy of every parameter byte on every stateless logits call); lane
+    fx-percall-copies, 2026-11-20. The caller keeps `flat` named past the
+    last read through the view."""
+    if lo < 0 or n < 1 or lo + n > len(flat):
         raise Error("byte LM: parameter tensor outside the flat device parameters")
-    if n < 1:
-        return _zeros(ctx, 1)
-    var buf = ctx.enqueue_create_buffer[DType.float32](n)
-    var view = flat.create_sub_buffer[DType.float32](lo, n)
-    ctx.enqueue_copy(dst_buf=buf, src_buf=view)
-    _ = view^
-    return buf^
+    return flat.create_sub_buffer[DType.float32](lo, n)
 
 
 def _block_weights_dev(ctx: DeviceContext, mut flat: DeviceBuffer[DType.float32], block: Int, config: ByteConfig) raises -> LlamaDeviceWeights:
     """`_block_weights` from the flat parameters already on the device: the
-    nine tensors in the same constructor order, copied device to device."""
+    nine tensors in the same constructor order, each a view of `flat`."""
     var base = 1 + 9 * block
     var o = byte_offsets(config)
     return LlamaDeviceWeights(ctx, byte_dims(config), Float32(1e-6),
-        _param_dev_copy(ctx, flat, o[base], o[base + 1] - o[base]),
-        _param_dev_copy(ctx, flat, o[base + 5], o[base + 6] - o[base + 5]),
-        _param_dev_copy(ctx, flat, o[base + 1], o[base + 2] - o[base + 1]),
-        _param_dev_copy(ctx, flat, o[base + 2], o[base + 3] - o[base + 2]),
-        _param_dev_copy(ctx, flat, o[base + 3], o[base + 4] - o[base + 3]),
-        _param_dev_copy(ctx, flat, o[base + 4], o[base + 5] - o[base + 4]),
-        _param_dev_copy(ctx, flat, o[base + 6], o[base + 7] - o[base + 6]),
-        _param_dev_copy(ctx, flat, o[base + 7], o[base + 8] - o[base + 7]),
-        _param_dev_copy(ctx, flat, o[base + 8], o[base + 9] - o[base + 8]))
+        _param_dev_view(flat, o[base], o[base + 1] - o[base]),
+        _param_dev_view(flat, o[base + 5], o[base + 6] - o[base + 5]),
+        _param_dev_view(flat, o[base + 1], o[base + 2] - o[base + 1]),
+        _param_dev_view(flat, o[base + 2], o[base + 3] - o[base + 2]),
+        _param_dev_view(flat, o[base + 3], o[base + 4] - o[base + 3]),
+        _param_dev_view(flat, o[base + 4], o[base + 5] - o[base + 4]),
+        _param_dev_view(flat, o[base + 6], o[base + 7] - o[base + 6]),
+        _param_dev_view(flat, o[base + 7], o[base + 8] - o[base + 7]),
+        _param_dev_view(flat, o[base + 8], o[base + 9] - o[base + 8]))
 
 
 def _block_offsets(o: List[Int], base: Int) raises -> List[Int]:
