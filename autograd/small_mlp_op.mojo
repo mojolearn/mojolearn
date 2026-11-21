@@ -90,12 +90,12 @@ comptime SMALL_MLP_TAG = 116
 # body (the measured winner) is untouched.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF.patch
 # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
-# lane fx-gemm-leaf512 (2026-11-19): under -D MOJOLEARN_GEMM_FAST_LEAF512 (the contract's leaf 512,
-# gemm/contract.mojo) this op KEEPS leaf 128: the device names it (neural_model_leaf_into[128]) and so does the
-# host arm (autograd/small_mlp_host.mojo, neural_partition[128]); neither reads CONTRACT_K_LEAF_MIN. Its words
-# then differ from a contract GEMM of the same operands at k > 128, on device and host alike. The _OFF
-# dispatch below would take the contract's leaf, so LEAF512 with _OFF is refused
-# (core/six_lane_experiment_guards.mojo).
+# This op names its leaf 128 (neural_model_leaf_into[128]; the host arm neural_partition[128],
+# autograd/small_mlp_host.mojo); neither reads CONTRACT_K_LEAF_MIN.
+# TOMBSTONE: MOJOLEARN_GEMM_FAST_LEAF512 (NOISE, A/B abf2 and round 3; the contract's leaf is 128 again, so the note on
+# this op under that arm and the refusal of the arm with the _OFF dispatch are gone) deleted 2026-11-20 by
+# lane/fx-verdicts6; code recoverable at 06d1e8ff34.
+# Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_LEAF512.patch
 comptime SMALL_MLP_GEMM_LEAF128 = (
     NEURAL_EXPERIMENTS_ALLOWED
     and not NEURAL_GEMM_EXPERIMENT_ENABLED

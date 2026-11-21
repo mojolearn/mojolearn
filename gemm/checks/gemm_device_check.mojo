@@ -920,13 +920,9 @@ def check_device_matches_oracle() raises:
         _oracle_case(ctx, OP_NT, 2, 2, 131073, String("k131073.P1017.past.crossover"), False, cases, fails)
         _oracle_case(ctx, OP_NT, 1, 1, 4000000, String("k4M.P1024.cap"), False, cases, fails)
         # lane fx-gemm-leaf512 (2026-11-19): the same comparison on both
-        # sides of 512 and at non-multiples of it. Under v1 these are more
-        # P cases (L = 128); under -D MOJOLEARN_GEMM_FAST_LEAF512 (L = 512)
-        # they are the profile's own edges: 511 and 512 one chain with no
-        # fold, 513 two leaves with a one-element tail, 1500 = 512 + 512 +
-        # 476 (P = 3, odd, ragged: the carry), 2049 (P = 5, carries twice,
-        # tail 1), 2600 (P = 6), 4096 (P = 8, exact). The label carries no P:
-        # the line prints L and P from contract_partition.
+        # sides of 512 and at non-multiples of it: more P cases of v1
+        # (L = 128). The label carries no P: the line prints L and P from
+        # contract_partition.
         print("  -- synthetic: below, at and above 512, and non-multiples of it --")
         _oracle_case(ctx, OP_NT, 4, 4, 511, String("k511"), False, cases, fails)
         _oracle_case(ctx, OP_TN, 4, 4, 512, String("k512"), False, cases, fails)

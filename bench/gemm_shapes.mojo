@@ -124,16 +124,10 @@ def _mode_name() -> String:
 #: assertion is an instruction to a human is not a check. It now recomputes
 #: the rule and asserts the crossover behaviour, so a change to either
 #: constant fails here instead of being confirmed by eye and believed.
-# -D MOJOLEARN_GEMM_FAST_LEAF512 (lane fx-gemm-leaf512, 2026-11-19, default
-# off): this independent transcription follows the same define as
-# gemm/contract.mojo's CONTRACT_K_LEAF_MIN (profile v2-leaf512), so the
-# printed leaf counts are the build's own.
-comptime K_LEAF_MIN = (
-    512 if (
-        GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-        and is_defined["MOJOLEARN_GEMM_FAST_LEAF512"]()
-    ) else 128
-)
+# TOMBSTONE: MOJOLEARN_GEMM_FAST_LEAF512 (NOISE, A/B abf2 and round 3) deleted 2026-11-20 by lane/fx-verdicts6; this
+# independent transcription is the v1 literal again; code recoverable at 06d1e8ff34.
+# Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_LEAF512.patch
+comptime K_LEAF_MIN = 128
 comptime MAX_LEAVES = 1024
 
 

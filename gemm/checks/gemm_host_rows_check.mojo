@@ -96,9 +96,8 @@ def main() raises:
     var ns: List[Int] = [1, 7, 8, 31, 32, 33, 40, 100]
     # 511..2049 (lane fx-gemm-leaf512, 2026-11-19): below, at and above 512,
     # a non-multiple of it (1500 = 512 + 512 + 476) and a one-element tail
-    # (2049), so the host column is held to the oracle on both sides of the
-    # leaf under -D MOJOLEARN_GEMM_FAST_LEAF512 (L = 512) as it is under v1
-    # (L = 128: 128, 129, 300). Both profiles run every k.
+    # (2049): more leaf counts of v1 (L = 128) for the host column against
+    # the oracle.
     var ks: List[Int] = [0, 1, 5, 128, 129, 256, 300, 384, 511, 512, 513, 1000, 1500, 2049]
     var ops: List[Int] = [OP_NN, OP_NT, OP_TN]
     var cases = 0

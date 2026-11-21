@@ -891,7 +891,14 @@ measurement finds the staged tree slow, the answer is to fuse levels into one
 block, which is legal and produces the same bits. It is never to change the
 pairing.
 
-## 14. Profile `mojolearn.identical.gemm.fp32.v2-leaf512` (an ARM, default off, not measured)
+## 14. Profile `mojolearn.identical.gemm.fp32.v2-leaf512` (DELETED 2026-11-20; kept as the record of the arm)
+
+**Deleted 2026-11-20 (lane fx-verdicts6).** `-D MOJOLEARN_GEMM_FAST_LEAF512` was timed twice on the NVIDIA L40S and
+read noise both times (A/B abf2 on wheel e41b5148b24d: lm-forward 0.96, lm-train-step 0.99, mlp-train-step 1.08,
+median 0.99; round 3 on wheel 28a780604c: 0.990, 1.024, 1.12). The define is refused
+(`core/six_lane_experiment_guards.mojo`), the contract's shortest leaf is 128 and profile version 4 is retired.
+Tombstone: `docs/TOMBSTONES.md`; restore patch `experiments/removed/MOJOLEARN_GEMM_FAST_LEAF512.patch`. The text
+below describes the arm as it was.
 
 Everything above is v1 and stays the shipped profile. This section describes the arm
 `-D MOJOLEARN_GEMM_FAST_LEAF512` (lane fx-gemm-leaf512, 2026-11-19): the v1 contract with
