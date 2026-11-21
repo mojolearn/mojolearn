@@ -204,7 +204,7 @@ def labels_scope(model: PythonObject, context: PythonObject) raises -> PythonObj
     var entries = py_get(context, "labels_cpu_entries")
     if entries is None:
         return scope
-    var fresh = py_call(context.copy)
+    var fresh = py_call(py_get(context, "copy"))
     _ = py_call(fresh.pop, PythonObject("labels_cpu_scope"), PythonObject(None))
     _ = py_call(fresh.update, entries)
     py_setitem(fresh, PythonObject("labels_cpu_source"), context)
