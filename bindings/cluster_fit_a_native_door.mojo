@@ -40,7 +40,7 @@ from bindings.cluster_pending_error_unpack import _pending, _pending_text, _drop
 from bindings.cluster_fit_public_native_unpack import (
     _attr, _attr_or_none, _truthy, _int, _float, _eq, _one_of, _set, _f32, _seed, _weights, _init_array,
 )
-from bindings.cluster_fit_public_native_pack import meanshift_fit
+from bindings.cluster_fit_public_native_pack import meanshift_fit, optics_fit
 from cluster.cluster_fit_door_run import cluster_rows_cover
 from bindings.cluster_public_native_pack import cluster_operation, _xc_array
 from bindings.operation_names_xc import XC_OPN_FAMILY_XC_VARIANTS_TRANSFORM
@@ -68,9 +68,6 @@ from bindings.py_optional import py_or_none, py_present
 from bindings.cluster_keys_unpack import cluster_keys
 from bindings.py_balanced import py_item
 
-# x_cluster/entries.mojo: the entry numbers of `x_cluster_call`
-# OPTICS metric codes (x_cluster/optics.mojo)
-comptime _OPTICS_PRECOMPUTED = 5
 
 
 # ---------------------------------------------------------------- MiniBatchKMeans
@@ -322,116 +319,6 @@ def _centers_fit(model: PythonObject, binding: PythonObject, source: PythonObjec
         _bisect_fit(model, binding, source, PythonObject(None), context)
 
 
-# ---------------------------------------------------------------- OPTICS
-
-def _optics_metric(model: PythonObject, context: PythonObject) raises -> OpticsMetric:
-    """`OPTICS._metric_code`: (code, p); euclidean at p=2 keeps the
-    squared-distance route (-1)."""
-    var b = native_loaded_module("builtins")
-    var metric = _attr(model, "metric")
-    var params = _attr(model, "metric_params")
-    var p_field = _attr(model, "p")
-    var p: PythonObject
-    if _truthy(params):
-        p = _float(family_call(params.get, PythonObject("p"), p_field))
-    else:
-        p = _float(p_field) if p_field is not None else PythonObject(2.0)
-    var pv = Float64(py=p)
-    if _eq(metric, PythonObject("minkowski")):
-        if not pv >= 1:
-            raise Error("p must be >= 1 for minkowski, got " + family_str(p))
-        if pv == 2:
-            return OpticsMetric(-1, 2.0)
-        if pv == 1:
-            return OpticsMetric(1, 1.0)
-        if isinf(pv) and pv > 0:
-            return OpticsMetric(2, pv)
-        return OpticsMetric(3, pv)
-    if _one_of(metric, "euclidean", "l2"):
-        return OpticsMetric(-1, 2.0)
-    var nk = cluster_keys()
-    var table = py_item(context, nk[].k_family_cfa_optics_metrics)
-    if not py_contains(table, metric):
-        var names = py_call(native_loaded_module("operator").add, py_call(b.sorted, table),
-                            Python.list(PythonObject("minkowski")))
-        raise Error("NotImplementedError: mojolearn OPTICS: metric=" + family_repr(metric)
-                    + " is not implemented; one of " + family_repr(names) + " (x_cluster/NOT_IMPLEMENTED.tsv)")
-    return OpticsMetric(Int(py=table[metric]), pv)
-
-
-def _optics_size(value: PythonObject, n: Int, name: String) raises -> Int:
-    """`OPTICS._size`: an int count in [2, n], or a fraction in (0, 1] of n
-    (at least 2)."""
-    var b = native_loaded_module("builtins")
-    var op = native_loaded_module("operator")
-    if family_isinstance(value, b.bool) or value is None:
-        raise Error(name + " must be an int >= 2 or a float in (0, 1]")
-    if family_isinstance(value, b.int) or (family_isinstance(value, b.float)
-                                           and _truthy(family_call(op.gt, value, PythonObject(1)))):
-        if (_truthy(family_call(op.ne, _int(value), value)) or _truthy(family_call(op.lt, value, PythonObject(2)))
-                or _truthy(family_call(op.gt, value, PythonObject(n)))):
-            raise Error(name + " must be no greater than the number of samples (" + String(n) + ") and >= 2, got "
-                        + family_str(value))
-        return Int(py=_int(value))
-    if not (_truthy(family_call(op.lt, PythonObject(0), value)) and _truthy(family_call(op.le, value, PythonObject(1)))):
-        raise Error(name + " must be in (0, 1], got " + family_str(value))
-    return max(2, Int(py=_int(family_call(op.mul, value, PythonObject(n)))))
-
-
-def _optics_fit(model: PythonObject, binding: PythonObject, source: PythonObject,
-                context: PythonObject) raises:
-    """`OPTICS.fit(X)`."""
-    var code = _optics_metric(model, context)
-    var metric = code.code
-    var method = _attr(model, "cluster_method")
-    if not _one_of(method, "xi", "dbscan"):
-        raise Error("cluster_method must be 'xi' or 'dbscan', got " + family_repr(method))
-    var x = _f32(source, "X", context)
-    var n = Int(py=x.shape[0])
-    var d = Int(py=x.shape[1])
-    var ms = _optics_size(_attr(model, "min_samples"), n, "min_samples")
-    var mcs_field = _attr(model, "min_cluster_size")
-    var mcs = ms if mcs_field is None else _optics_size(mcs_field, n, "min_cluster_size")
-    var max_eps = _float(_attr(model, "max_eps"))
-    var eps_field = _attr(model, "eps")
-    var eps = max_eps if eps_field is None else _float(eps_field)
-    var is_xi = _eq(method, PythonObject("xi"))
-    if _eq(method, PythonObject("dbscan")) and Float64(py=eps) > Float64(py=max_eps):
-        raise Error("Specify an epsilon smaller than " + family_str(max_eps) + ". Got " + family_str(eps) + ".")
-    var xi = _float(_attr(model, "xi"))
-    if not (Float64(py=xi) >= 0 and Float64(py=xi) <= 1):
-        raise Error("xi must be in [0, 1]")
-    if metric == _OPTICS_PRECOMPUTED and n != d:
-        raise Error("metric='precomputed' needs a square distance matrix, got (" + String(n) + ", " + String(d) + ")")
-    # ORDER MATCHES x_cluster/entries.mojo::optics_entry: n, d, min_samples,
-    # min_cluster_size, method (0 xi), predecessor_correction, metric;
-    # max_eps, xi, eps, p.
-    var predecessor_correction = _truthy(_attr(model, "predecessor_correction"))
-    # Preserve the second xi read at its original stage after the flag.
-    var repeated_xi = Float64(py=_float(_attr(model, "xi")))
-    var connection = optics_fit_connection(binding)
-    var request = OpticsFitRequest(variants_span(x), n, d, ms, mcs,
-        0 if is_xi else 1, predecessor_correction, code.copy(),
-        Float64(py=max_eps), repeated_xi, Float64(py=eps))
-    var result = OpticsFitResultSlot()
-    try:
-        with GILReleased(Python()):
-            connection.driver.fit(request, result)
-    finally:
-        _ = connection.provider
-        _ = x
-    var packed = OpticsPackedResult(result)
-    _set(model, "core_distances_", _xc_array(packed.core_distances, Python.tuple(n), "<f4", "f", context))
-    _set(model, "reachability_", _xc_array(packed.reachability, Python.tuple(n), "<f4", "f", context))
-    _set(model, "ordering_", _xc_array(packed.ordering, Python.tuple(n), "<i4", "i", context))
-    _set(model, "predecessor_", _xc_array(packed.predecessor, Python.tuple(n), "<i4", "i", context))
-    _set(model, "labels_", _xc_array(packed.labels, Python.tuple(n), "<i4", "i", context))
-    if is_xi:
-        var rows = len(result.storage[0].hierarchy) // 2
-        _set(model, "cluster_hierarchy_", _xc_array(packed.hierarchy, Python.tuple(rows, 2), "<i4", "i", context))
-    _set(model, "n_features_in_", PythonObject(d))
-
-
 # ---------------------------------------------------------------- AffinityPropagation
 
 def _affinity_fit(model: PythonObject, binding: PythonObject, source: PythonObject,
@@ -543,10 +430,10 @@ def cluster_fit_a_operation(model: PythonObject, operation: Int, args: PythonObj
         meanshift_fit(model, binding, args[1], context)
         return _attr(model, "labels_")
     if operation == CFA_OPN_FAMILY_CFA_OPTICS_FIT:
-        _optics_fit(model, binding, args[1], context)
+        optics_fit(model, binding, args[1], context)
         return model
     if operation == CFA_OPN_FAMILY_CFA_OPTICS_FIT_PREDICT:
-        _optics_fit(model, binding, args[1], context)
+        optics_fit(model, binding, args[1], context)
         return _attr(model, "labels_")
     if operation == CFA_OPN_FAMILY_CFA_AP_FIT:
         _affinity_fit(model, binding, args[1], context)

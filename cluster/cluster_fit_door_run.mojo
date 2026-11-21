@@ -10,7 +10,9 @@
 # core/optics_fit_api.mojo; this file builds their requests. Every
 # iteration, batch, bisection and seed loop runs inside the entry.
 from core.kmeans_variants_api import VariantsSpan
+from std.math import isinf
 from core.cluster_centroid_fit_api import MeanShiftFitRequest
+from core.optics_fit_api import OpticsMetric, OpticsFitRequest
 
 
 # ------------------------------------------------------------------ shared
@@ -40,3 +42,60 @@ def meanshift_fit_request(source: VariantsSpan, seeds: VariantsSpan, n: Int, d: 
     estimate it)."""
     return MeanShiftFitRequest(source, seeds, n, d, n_seeds, cluster_all, max_iter, bin_seeding,
                                min_bin_freq, bandwidth)
+
+
+# ------------------------------------------------------------------ OPTICS
+# OPTICS metric codes (x_cluster/optics.mojo).
+comptime OPTICS_PRECOMPUTED = 5
+
+
+def optics_minkowski_refused(p: Float64) -> Bool:
+    """A minkowski power that is not >= 1 (a NaN is refused too)."""
+    return not p >= 1
+
+
+def optics_minkowski_metric(p: Float64) -> OpticsMetric:
+    """`OPTICS._metric_code` for minkowski: (code, p); p=2 keeps the
+    squared-distance euclidean route (-1), p=1 is manhattan, +inf chebyshev."""
+    if p == 2:
+        return OpticsMetric(-1, 2.0)
+    if p == 1:
+        return OpticsMetric(1, 1.0)
+    if isinf(p) and p > 0:
+        return OpticsMetric(2, p)
+    return OpticsMetric(3, p)
+
+
+def optics_euclidean_metric() -> OpticsMetric:
+    """'euclidean' and 'l2': the squared-distance route."""
+    return OpticsMetric(-1, 2.0)
+
+
+def optics_eps_refused(dbscan: Bool, eps: Float64, max_eps: Float64) -> Bool:
+    """cluster_method='dbscan' with eps above max_eps."""
+    return dbscan and eps > max_eps
+
+
+def optics_xi_range(xi: Float64) raises:
+    if not (xi >= 0 and xi <= 1):
+        raise Error("xi must be in [0, 1]")
+
+
+def optics_precomputed_square(metric: Int, n: Int, d: Int) raises:
+    if metric == OPTICS_PRECOMPUTED and n != d:
+        raise Error("metric='precomputed' needs a square distance matrix, got (" + String(n) + ", " + String(d) + ")")
+
+
+def optics_fit_request(source: VariantsSpan, n: Int, d: Int, min_samples: Int, min_cluster_size: Int,
+                       is_xi: Bool, predecessor_correction: Bool, metric: OpticsMetric, max_eps: Float64,
+                       xi: Float64, eps: Float64) -> OpticsFitRequest:
+    """ORDER MATCHES x_cluster/entries.mojo::optics_entry: n, d, min_samples,
+    min_cluster_size, method (0 xi), predecessor_correction, metric;
+    max_eps, xi, eps, p."""
+    return OpticsFitRequest(source, n, d, min_samples, min_cluster_size, 0 if is_xi else 1,
+                            predecessor_correction, metric.copy(), max_eps, xi, eps)
+
+
+def optics_hierarchy_rows(words: Int) -> Int:
+    """The xi hierarchy's (start, end) row count."""
+    return words // 2

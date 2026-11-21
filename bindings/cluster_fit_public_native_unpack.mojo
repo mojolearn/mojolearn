@@ -16,8 +16,11 @@ from bindings.admitted_family_door import admit_family, admit_family_weights
 from providers.python.array_metadata_pyapi_door import ArrayPin
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.family_raw_attr_pack import family_raw_get, family_raw_get_or
-from bindings.py_balanced import py_call, py_type, py_contains, py_setattr
+from bindings.py_balanced import py_call, py_type, py_contains, py_setattr, py_item
 from bindings.family_common_unpack import (
+    family_repr,
+    family_str,
+    family_isinstance,
     family_nonfinite,
     family_shape_repr,
 )
@@ -25,10 +28,15 @@ from bindings.family_common_pack import family_call
 from bindings.py_cluster_resident import CRES_X_CLUSTER, cres_forget
 from core.kmeans_variants_api import VariantsSpan
 from core.cluster_centroid_fit_api import CentroidFitResultSlot
+from core.optics_fit_api import OpticsMetric, OpticsFitResultSlot
+from bindings.optics_fit_boundary_door import optics_fit_connection
+from bindings.cluster_keys_unpack import cluster_keys
 from bindings.cluster_centroid_fit_boundary_door import centroid_fit_connection
 from bindings.kmeans_variants_boundary_door import variants_span
 from cluster.cluster_fit_door_run import (
     meanshift_seed_features, meanshift_bandwidth_refused, meanshift_fit_request,
+    optics_minkowski_refused, optics_minkowski_metric, optics_euclidean_metric, optics_eps_refused,
+    optics_xi_range, optics_precomputed_square, optics_fit_request,
 )
 
 
@@ -195,3 +203,113 @@ def meanshift_fit_call(binding: PythonObject, stage: MeanShiftFit, mut result: C
         _ = connection.provider
         _ = stage.x
         _ = stage.seeds
+
+
+# ---------------------------------------------------------------- OPTICS
+def _optics_metric(model: PythonObject, context: PythonObject) raises -> OpticsMetric:
+    """`OPTICS._metric_code`: (code, p); euclidean at p=2 keeps the
+    squared-distance route (-1)."""
+    var metric = _attr(model, "metric")
+    var params = _attr(model, "metric_params")
+    var p_field = _attr(model, "p")
+    var p: PythonObject
+    if _truthy(params):
+        p = _float(family_call(params.get, PythonObject("p"), p_field))
+    else:
+        p = _float(p_field) if p_field is not None else PythonObject(2.0)
+    var pv = Float64(py=p)
+    if _eq(metric, PythonObject("minkowski")):
+        if optics_minkowski_refused(pv):
+            raise Error("p must be >= 1 for minkowski, got " + family_str(p))
+        return optics_minkowski_metric(pv)
+    if _one_of(metric, "euclidean", "l2"):
+        return optics_euclidean_metric()
+    var nk = cluster_keys()
+    var table = py_item(context, nk[].k_family_cfa_optics_metrics)
+    if not py_contains(table, metric):
+        var names = py_call(native_loaded_module("operator").add,
+                            py_call(native_loaded_module("builtins").sorted, table),
+                            Python.list(PythonObject("minkowski")))
+        raise Error("NotImplementedError: mojolearn OPTICS: metric=" + family_repr(metric)
+                    + " is not implemented; one of " + family_repr(names) + " (x_cluster/NOT_IMPLEMENTED.tsv)")
+    return OpticsMetric(Int(py=table[metric]), pv)
+
+
+def _optics_size(value: PythonObject, n: Int, name: String) raises -> Int:
+    """`OPTICS._size`: an int count in [2, n], or a fraction in (0, 1] of n
+    (at least 2)."""
+    var b = native_loaded_module("builtins")
+    var op = native_loaded_module("operator")
+    if family_isinstance(value, b.bool) or value is None:
+        raise Error(name + " must be an int >= 2 or a float in (0, 1]")
+    if family_isinstance(value, b.int) or (family_isinstance(value, b.float)
+                                           and _truthy(family_call(op.gt, value, PythonObject(1)))):
+        if (_truthy(family_call(op.ne, _int(value), value)) or _truthy(family_call(op.lt, value, PythonObject(2)))
+                or _truthy(family_call(op.gt, value, PythonObject(n)))):
+            raise Error(name + " must be no greater than the number of samples (" + String(n) + ") and >= 2, got "
+                        + family_str(value))
+        return Int(py=_int(value))
+    if not (_truthy(family_call(op.lt, PythonObject(0), value)) and _truthy(family_call(op.le, value, PythonObject(1)))):
+        raise Error(name + " must be in (0, 1], got " + family_str(value))
+    return max(2, Int(py=_int(family_call(op.mul, value, PythonObject(n)))))
+
+
+@fieldwise_init
+struct OpticsFit(Movable):
+    """`OPTICS.fit(X)` as typed values. `x` is the admitted float32 X,
+    pinned through the fit; `metric` is (code, p); the two sizes are row
+    counts; `xi` is the value of the model's second read."""
+    var x: PythonObject
+    var n: Int
+    var d: Int
+    var min_samples: Int
+    var min_cluster_size: Int
+    var is_xi: Bool
+    var predecessor_correction: Bool
+    var metric: OpticsMetric
+    var max_eps: Float64
+    var xi: Float64
+    var eps: Float64
+
+
+def optics_fit_stage(model: PythonObject, source: PythonObject, context: PythonObject) raises -> OpticsFit:
+    """The reads of `OPTICS.fit`, in its order: metric, cluster_method, X,
+    the two sizes, max_eps, eps, xi, predecessor_correction."""
+    var code = _optics_metric(model, context)
+    var method = _attr(model, "cluster_method")
+    if not _one_of(method, "xi", "dbscan"):
+        raise Error("cluster_method must be 'xi' or 'dbscan', got " + family_repr(method))
+    var x = _f32(source, "X", context)
+    var n = Int(py=x.shape[0])
+    var d = Int(py=x.shape[1])
+    var ms = _optics_size(_attr(model, "min_samples"), n, "min_samples")
+    var mcs_field = _attr(model, "min_cluster_size")
+    var mcs = ms if mcs_field is None else _optics_size(mcs_field, n, "min_cluster_size")
+    var max_eps = _float(_attr(model, "max_eps"))
+    var eps_field = _attr(model, "eps")
+    var eps = max_eps if eps_field is None else _float(eps_field)
+    var is_xi = _eq(method, PythonObject("xi"))
+    if optics_eps_refused(_eq(method, PythonObject("dbscan")), Float64(py=eps), Float64(py=max_eps)):
+        raise Error("Specify an epsilon smaller than " + family_str(max_eps) + ". Got " + family_str(eps) + ".")
+    optics_xi_range(Float64(py=_float(_attr(model, "xi"))))
+    optics_precomputed_square(code.code, n, d)
+    var predecessor_correction = _truthy(_attr(model, "predecessor_correction"))
+    # Preserve the second xi read at its original stage after the flag.
+    var repeated_xi = Float64(py=_float(_attr(model, "xi")))
+    return OpticsFit(x=x, n=n, d=d, min_samples=ms, min_cluster_size=mcs, is_xi=is_xi,
+                     predecessor_correction=predecessor_correction, metric=code.copy(),
+                     max_eps=Float64(py=max_eps), xi=repeated_xi, eps=Float64(py=eps))
+
+
+def optics_fit_call(binding: PythonObject, stage: OpticsFit, mut result: OpticsFitResultSlot) raises:
+    """The OPTICS entry on the typed transport, the GIL released around it."""
+    var connection = optics_fit_connection(binding)
+    var request = optics_fit_request(variants_span(stage.x), stage.n, stage.d, stage.min_samples,
+        stage.min_cluster_size, stage.is_xi, stage.predecessor_correction, stage.metric, stage.max_eps,
+        stage.xi, stage.eps)
+    try:
+        with GILReleased(Python()):
+            connection.driver.fit(request, result)
+    finally:
+        _ = connection.provider
+        _ = stage.x
