@@ -562,6 +562,16 @@ def on_device(est, device, fitted=True):
         for key, value in state.items():
             if key not in keep:
                 target[key] = _moved(value, device, True)
+        # A resident index handle handed over with the state was minted by
+        # `est`'s image and stays `est`'s: the twin BORROWS it. The mark names
+        # that exact handle and binding, so the native finalizer
+        # (bindings/host_archive_lifetime_door.mojo) never releases it for a
+        # twin collected before its first operation; a handle the twin mints
+        # later is another handle and is released as usual.
+        for held in [state.get("_resident")] + [value.get("index") for value in state.values() if type(value) is dict]:
+            if type(held) is tuple and len(held) == 3 and type(held[1]) is int:
+                target["_mojolearn_resident_borrowed"] = (held[1], held[2])
+                break
     return twin
 
 
