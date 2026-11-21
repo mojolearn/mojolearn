@@ -721,6 +721,8 @@ class RNNClassifier(_RecurrentClassifier):
     >>> pred = model.predict(X)
     """
     _CELL = "rnn"
+    # The member ABI (core/member_abi.mojo): family 20 (Sequence), kind 1.
+    _mojolearn_member = (20, 1)
 
 
 def _state_layout(cls):
