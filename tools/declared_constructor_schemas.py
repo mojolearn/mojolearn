@@ -74,6 +74,31 @@ def _bind_super(call, base_init, value_of):
     return bound
 
 
+# THE DEVICE ADMISSION (2026-11-21, lane fx-wave-tooltests). A declared class
+# that takes `device=` may check it before writing fields, in the form the
+# decomposition `_DeviceDoor` classes use. The native constructor that replaces
+# the source one does the same check itself before any field is written (the
+# connector's `device_admit`, bindings/full_reset_constructor_native_door.mojo
+# `_construct`), so this one statement is not a write event. Anything else
+# conditional still keeps the class out.
+_DEVICE_ADMISSION = "if device is not None:\n    self._device_set(device)"
+# A device mixin's `set_params` that checks `device` and then hands every
+# keyword to the family's declared setter (`_DeviceDoor.set_params`): the
+# family setter still owns the assignment.
+_DEVICE_SETTER = ("if 'device' in params:\n    self._device_set(params['device'])\n"
+                  "return super().set_params(**params)")
+
+
+def _device_setter(cls):
+    method = _defines(cls, "set_params")
+    if method is None:
+        return False
+    body = list(method.body)
+    if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant):
+        body = body[1:]
+    return "\n".join(ast.unparse(n) for n in body) == _DEVICE_SETTER
+
+
 def _events(init, params, base=None):
     """The ordered write events of a field-only body, or (None, reason).
 
@@ -103,6 +128,8 @@ def _events(init, params, base=None):
     if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant) and isinstance(body[0].value.value, str):
         body = body[1:]
     for statement in body:
+        if isinstance(statement, ast.If) and "device" in params and ast.unparse(statement) == _DEVICE_ADMISSION:
+            continue
         call = statement.value if isinstance(statement, ast.Expr) else None
         if (isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute) and call.func.attr == "__init__"
                 and isinstance(call.func.value, ast.Call) and isinstance(call.func.value.func, ast.Name)
@@ -148,7 +175,7 @@ def _candidates(index):
             if not target or target[0] != "class":
                 continue
             cls = target[1]
-            owner = next((c for c in index.mro(cls) if _defines(c, "set_params")), None)
+            owner = next((c for c in index.mro(cls) if _defines(c, "set_params") and not _device_setter(c)), None)
             if owner is not base or _defines(owner, "set_params") is not setter:
                 continue
             yield modname, name, cls
