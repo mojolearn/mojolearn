@@ -37,7 +37,7 @@ from bindings.family_common_pack import (
     family_array,
 )
 from bindings.optimizer_public_words_unpack import PYTHON_ERROR_PENDING, PENDING_PYTHON_ERROR
-from bindings.cluster_native_door import cluster_operation, _xc_array
+from bindings.cluster_public_native_pack import cluster_operation, _xc_array
 from bindings.operation_names_xc import XC_OPN_FAMILY_XC_VARIANTS_TRANSFORM
 from bindings.operation_names_cfa import (
     CFA_OPN_FAMILY_CFA_MBK_FIT, CFA_OPN_FAMILY_CFA_MBK_PARTIAL_FIT, CFA_OPN_FAMILY_CFA_BISECT_FIT,

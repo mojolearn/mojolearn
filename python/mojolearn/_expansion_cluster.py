@@ -23,7 +23,7 @@ from . import _native_family_bridge
 
 # The compiled family owners, connected once at import: the centers'
 # predict/transform/score, MeanShift and AffinityPropagation predict and
-# BisectingKMeans' tree predict (bindings/cluster_native_door.mojo), and the fits,
+# BisectingKMeans' tree predict (bindings/cluster_public_native_pack.mojo), and the fits,
 # partial_fit, fit_predict and fit_transform of MiniBatchKMeans,
 # BisectingKMeans, MeanShift, OPTICS and AffinityPropagation
 # (bindings/cluster_fit_a_native_door.mojo) are one native call each, handed the
