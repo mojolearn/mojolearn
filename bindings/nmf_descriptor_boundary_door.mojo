@@ -19,7 +19,7 @@ from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvid
 from bindings.nmf_keys_unpack import nmf_keys
 from bindings.decomp_device_route_door import (
     decomp_route_hit, decomp_route_keep, decomp_route_resolve_device, decomp_route_on_cpu_image,
-    decomp_route_expected_vendor,
+    decomp_route_expected_vendor, decomp_route_mode,
 )
 from core.device_route_dw_decomp import DecompRoute, decomp_route_cpu_identical
 from bindings.py_balanced import py_item
@@ -29,7 +29,8 @@ comptime NMF_PROVIDER_PINS = SharedSlot[ProviderPins, "MojolearnNMFProviderPinsV
 
 
 def _nmf_capability(model: PythonObject, index: Int, capability: Int, legacy_name: String) raises:
-    if (nmf_capabilities(index) & capability) == 0:
+    # capability 0: a metadata read (`vendor_used`) needs no driver.
+    if capability != 0 and (nmf_capabilities(index) & capability) == 0:
         raise Error("NotImplementedError: mojolearn " + String(py_type(model).__name__) + ": this build of "
                     + "_mojolearn_x_decomp does not export " + legacy_name
                     + "; rebuild it with bindings/build_x_decomp.sh")
@@ -37,13 +38,17 @@ def _nmf_capability(model: PythonObject, index: Int, capability: Int, legacy_nam
 
 def nmf_connection(model: PythonObject, fields: PythonObject, context: PythonObject,
                    capability: Int, legacy_name: String) raises -> Int:
+    return _nmf_route(model, fields, decomp_attr(model, fields, "numeric_mode_"), context, capability, legacy_name)
+
+
+def _nmf_route(model: PythonObject, fields: PythonObject, mode: PythonObject, context: PythonObject,
+               capability: Int, legacy_name: String) raises -> Int:
     var nk = nmf_keys()
     # The estimator's resolved route (bindings/decomp_device_route_door.mojo):
     # the connection of the device image or of the CPU image, resolved once
     # per estimator. A hit is one `device` read, one record read and three
     # pointer compares; the selection below runs at the estimator's first
     # operation and after its mode or device object changed.
-    var mode = decomp_attr(model, fields, "numeric_mode_")
     var hit = decomp_route_hit(model, fields, mode, context)
     if hit.found:
         _nmf_capability(model, hit.route.connection, capability, legacy_name)
@@ -60,7 +65,7 @@ def nmf_connection(model: PythonObject, fields: PythonObject, context: PythonObj
     # (python/mojolearn/_native_decomp_device_bridge.py), identical only.
     var device = decomp_route_resolve_device(hit.device, context)
     var cpu_image = decomp_route_on_cpu_image(device, context)
-    var table: PythonObject
+    var table = PythonObject(None)
     if cpu_image:
         decomp_route_cpu_identical(name == "identical")
         table = py_get(context, nk[].k_nmf_cpu_bindings)
@@ -102,7 +107,7 @@ def nmf_connection(model: PythonObject, fields: PythonObject, context: PythonObj
 def nmf_route_vendor(model: PythonObject, fields: PythonObject, context: PythonObject) raises -> String:
     """`vendor_used`: the vendor word the estimator's compiled image reports
     (`cpu` for a `device="cpu"` estimator), read from its resolved route."""
-    var index = nmf_connection(model, fields, context, 0, "x_decomp_nmf_fit")
+    var index = _nmf_route(model, fields, decomp_route_mode(fields, context), context, 0, "x_decomp_nmf_fit")
     return pca_vendor_name(nmf_vendor(index))
 
 

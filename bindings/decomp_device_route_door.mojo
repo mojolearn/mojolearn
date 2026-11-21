@@ -179,6 +179,18 @@ def decomp_route_hit(model: PythonObject, fields: PythonObject, mode: PythonObje
     return DecompRouteHit(False, DecompRoute(), device)
 
 
+def decomp_route_mode(fields: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The mode object a metadata read (`vendor_used`) selects by: the fitted
+    `numeric_mode_` when the estimator has one, else its `numeric_mode`, else
+    the process default. Not on a fit or query path."""
+    var mode = py_get(fields, "numeric_mode_")
+    if mode is None:
+        mode = py_get(fields, "numeric_mode")
+    if mode is None:
+        mode = context["backend_fields"]["_DEFAULT_MODE"]
+    return mode
+
+
 def decomp_route_resolve_device(device: PythonObject, context: PythonObject) raises -> Int:
     """The device a stored `device` object runs on in this process (miss path
     only): None is this installation's device, an explicit `'gpu'` in a
