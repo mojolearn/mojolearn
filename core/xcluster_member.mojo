@@ -13,11 +13,18 @@ entry's capability word (`VARIANTS_CAP_*`, read once by the caller's
 UNPACK). No other route slot is read by the kinds published here. No kernel
 is touched.
 
-Kinds (MEMBER_OP_NEW word [0]): 1 BisectingKMeans. Kinds 0 MiniBatchKMeans,
+Kinds (MEMBER_OP_NEW word [0]): 0 MiniBatchKMeans, 1 BisectingKMeans. Kinds
 2 MeanShift, 3 OPTICS, 4 AffinityPropagation, 5 BayesianGaussianMixture are
 reserved for this family and refused until published.
 
 MEMBER_OP_NEW parameters (Float64 words):
+  kind 0 MiniBatchKMeans (11 words): [0] 0, [1] n_clusters, [2] init
+  (0 'k-means++', 1 'random'; explicit starting centers are not a word and
+  the class keeps its own doors for them), [3] n_init ('auto' resolved by
+  the caller's UNPACK with the estimator's own rule), [4] max_iter, [5] tol,
+  [6] random_state as int64 BITS (as kind 1), [7] batch_size,
+  [8] max_no_improvement (-1 for None), [9] init_size (0 for None),
+  [10] reassignment_ratio.
   kind 1 BisectingKMeans (8 words): [0] 1, [1] n_clusters, [2] init
   (0 'random', 1 'k-means++'), [3] n_init, [4] max_iter, [5] tol,
   [6] random_state as the BITS of an int64 (`bitcast[DType.float64](Int64(seed))`,
@@ -33,8 +40,9 @@ X is admitted finite by the caller's UNPACK, as by the estimator's own door.
 No row or column index and no device-home view: refused in words (the caller
 hands gathered host words).
 
-Outputs: predict writes the leaf cluster ids as int32 (MEMBER_I32, rows x 1;
-the bisection-tree descent of `BisectingKMeans.predict`); transform writes
+Outputs: predict writes cluster ids as int32 (MEMBER_I32, rows x 1): the
+nearest center for kind 0, the bisection-tree descent of
+`BisectingKMeans.predict` for kind 1; transform writes
 float32 distances to the leaf centers (rows x n_clusters); score sets
 `call.value` to minus the inertia of X under the leaf centers (no weights:
 the class's score counts every row once, so a weight is refused).
@@ -42,13 +50,18 @@ the class's score counts every row once, so a weight is refused).
 call (fit_predict); `MEMBER_OP_TRANSFORM` the fitted rows' distances.
 
 Fitted-state blocks (MEMBER_OP_EXPORT / MEMBER_OP_IMPORT), in index order:
-0 `MEMBER_BLOCK_FAMILY` float32 n_clusters x features, the leaf centers;
-1 `MEMBER_BLOCK_SCALARS` float64 [inertia];
+0 `MEMBER_BLOCK_FAMILY` float32 n_clusters x features, the (leaf) centers;
+1 `MEMBER_BLOCK_SCALARS` float64: kind 0 [inertia, n_steps, n_iter],
+kind 1 [inertia];
 2 `MEMBER_BLOCK_FAMILY + 1` int32 1 x rows, the training labels (empty after
 an import that did not give them);
-3 `MEMBER_BLOCK_FAMILY + 2` float32 nodes x features, the tree centers;
-4 `MEMBER_BLOCK_FAMILY + 3` int32 nodes x 3, the tree (left, right, label).
-An import needs blocks 0, 1, 3 and 4.
+kind 0: 3 `MEMBER_BLOCK_FAMILY + 4` float32 1 x n_clusters, the counts
+(empty after an import that did not give them). An import needs 0 and 1.
+kind 1: 3 `MEMBER_BLOCK_FAMILY + 2` float32 nodes x features, the tree
+centers; 4 `MEMBER_BLOCK_FAMILY + 3` int32 nodes x 3, the tree (left, right,
+label). An import needs blocks 0, 1, 3 and 4.
+Not published: MEMBER_OP_PARTIAL_FIT of kind 0 (the class's own
+`partial_fit` door keeps its stream state on the model).
 
 The fitted state is OWNED here, in a process-wide store of fixed chunks: a
 slot never moves once minted, so an operation runs on its slot without the
@@ -61,7 +74,7 @@ from std.memory import bitcast, unsafe_memcpy
 from std.sys.info import size_of
 from core.kmeans_variants_api import (
     KMeansVariantsDriver, VariantsSpan, VariantsResultSlot, VariantsQueryRequest, BisectFitRequest,
-    BisectPredictRequest, VARIANTS_CAP_RESIDENT,
+    BisectPredictRequest, MiniBatchFitRequest, VARIANTS_CAP_RESIDENT, VARIANTS_CAP_DEVSCAN,
 )
 from core.member_abi import (
     MemberCall, MemberMatrix, MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_HOME_DEVICE,
@@ -79,11 +92,13 @@ from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 
 comptime _CHUNK = 256
 comptime _INDEX_SPAN = 16777216
+comptime _KIND_MINIBATCH = 0
 comptime _KIND_BISECT = 1
 comptime _BLOCK_CENTERS = MEMBER_BLOCK_FAMILY
 comptime _BLOCK_LABELS = MEMBER_BLOCK_FAMILY + 1
 comptime _BLOCK_TREE_CENTERS = MEMBER_BLOCK_FAMILY + 2
 comptime _BLOCK_TREE_NODES = MEMBER_BLOCK_FAMILY + 3
+comptime _BLOCK_COUNTS = MEMBER_BLOCK_FAMILY + 4
 # The query kinds of the resident centers query (x_cluster/resident.mojo XC_RES_*).
 comptime _RES_PREDICT = 0
 comptime _RES_SCORE = 1
@@ -103,6 +118,7 @@ struct XClusterMemberSlot(Copyable, Movable, Defaultable):
     var labels: List[Int32]
     var tree_centers: List[Float32]
     var tree_nodes: List[Int32]
+    var counts: List[Float32]
     var scalars: List[Float64]
 
     def __init__(out self):
@@ -117,6 +133,7 @@ struct XClusterMemberSlot(Copyable, Movable, Defaultable):
         self.labels = List[Int32]()
         self.tree_centers = List[Float32]()
         self.tree_nodes = List[Int32]()
+        self.counts = List[Float32]()
         self.scalars = List[Float64]()
 
     def clear(mut self):
@@ -126,6 +143,7 @@ struct XClusterMemberSlot(Copyable, Movable, Defaultable):
         self.labels = List[Int32]()
         self.tree_centers = List[Float32]()
         self.tree_nodes = List[Int32]()
+        self.counts = List[Float32]()
         self.scalars = List[Float64]()
 
 
@@ -150,6 +168,8 @@ comptime _Words = MutPointer[Float64, MutUntrackedOrigin]
 
 
 def _name(kind: Int) -> String:
+    if kind == _KIND_MINIBATCH:
+        return "MiniBatchKMeans"
     if kind == _KIND_BISECT:
         return "BisectingKMeans"
     return "an x_cluster estimator"
@@ -157,6 +177,8 @@ def _name(kind: Int) -> String:
 
 def _param_count(kind: Int) raises -> Int:
     """The NEW word count of a published kind; every other kind is refused."""
+    if kind == _KIND_MINIBATCH:
+        return 11
     if kind == _KIND_BISECT:
         return 8
     raise Error("member ABI: x_cluster member kind " + String(kind) + " is not published")
@@ -266,29 +288,84 @@ def _copy_f32(dst: Int, values: List[Float32], count: Int):
             src=values.unsafe_ptr(), count=count)
 
 
+# ---------------------------------------------------------------- shared fit checks
+def _fit_weights(call: _Call, kind: Int, rows: Int) raises -> VariantsSpan:
+    """The caller's sample weights as a borrowed span (no copy), or none."""
+    if call[].weights.rows == 0:
+        return VariantsSpan(0, 0)
+    if not call[].weights.dense_host(MEMBER_F32):
+        raise Error("TypeError: a " + _name(kind) + " member reads sample_weight as a dense host float32 view")
+    if call[].weights.rows * call[].weights.cols != rows:
+        raise Error("ValueError: sample_weight and X have different numbers of rows")
+    return VariantsSpan(call[].weights.data, rows)
+
+
+def _fit_output(call: _Call, kind: Int, rows: Int, k: Int) raises -> Int:
+    var output = call[].fit_output
+    if output == MEMBER_OP_PREDICT:
+        _destination(call, rows, 1, MEMBER_I32, "the label buffer")
+    elif output == MEMBER_OP_TRANSFORM:
+        _destination(call, rows, k, MEMBER_F32, "the distance buffer")
+    elif output != 0:
+        member_unsupported(_name(kind), output)
+    return output
+
+
+def _fit_done(slot: _Slot, call: _Call, output: Int, rows: Int) raises:
+    if output == MEMBER_OP_PREDICT:
+        _copy_i32(call[].dst.data, slot[].labels, rows)
+    elif output == MEMBER_OP_TRANSFORM:
+        _centers_query(slot, call, _RES_TRANSFORM)
+
+
+# ---------------------------------------------------------------- MiniBatchKMeans
+def _minibatch_fit(slot: _Slot, call: _Call) raises:
+    var kind = slot[].kind
+    _whole_x(call, kind)
+    var rows = call[].x.rows
+    var cols = call[].x.cols
+    var w = slot[].words.unsafe_ptr()
+    var k = Int(w[1])
+    if k > rows:
+        raise Error("mojolearn: n_clusters=" + String(k) + " exceeds n_samples=" + String(rows))
+    # No explicit starting centers (admit refused them), so the entry's
+    # auxiliary words are the weights alone: the caller's span, borrowed.
+    var weights = _fit_weights(call, kind, rows)
+    var output = _fit_output(call, kind, rows, k)
+    _release_resident(slot, call)
+    slot[].clear()
+    var request = MiniBatchFitRequest(VariantsSpan(call[].x.data, rows * cols), weights, rows, cols, k,
+        Int(w[4]), Int(w[7]), Int(w[8]), Int(w[9]), Int(w[3]), False, Int(bitcast[DType.int64](w[6])),
+        w[2] != 0.0, weights.count > 0, (call[].route.flags & VARIANTS_CAP_DEVSCAN) != 0, w[5], w[10])
+    var result = VariantsResultSlot()
+    try:
+        _driver(call).minibatch_fit(request, result)
+    except error:
+        if String(error).find("contains NaN or infinity") >= 0:
+            raise Error("mojolearn: X contains NaN or infinity")
+        raise error
+    swap(slot[].centers, result.storage[0].centers)
+    swap(slot[].counts, result.storage[0].counts)
+    swap(slot[].labels, result.storage[0].labels)
+    var scalars: List[Float64] = [result.storage[0].inertia, Float64(result.storage[0].steps),
+        Float64(result.storage[0].iterations)]
+    slot[].scalars = scalars^
+    slot[].features = cols
+    slot[].fitted = True
+    _fit_done(slot, call, output, rows)
+
+
 # ---------------------------------------------------------------- BisectingKMeans
 def _bisect_fit(slot: _Slot, call: _Call) raises:
     var kind = slot[].kind
     _whole_x(call, kind)
-    var output = call[].fit_output
-    if output != 0 and output != MEMBER_OP_PREDICT and output != MEMBER_OP_TRANSFORM:
-        member_unsupported(_name(kind), output)
     var rows = call[].x.rows
     var cols = call[].x.cols
     var k = Int(slot[].words[1])
     if k > rows:
         raise Error("mojolearn: n_clusters=" + String(k) + " exceeds n_samples=" + String(rows))
-    var weights = VariantsSpan(0, 0)
-    if call[].weights.rows > 0:
-        if not call[].weights.dense_host(MEMBER_F32):
-            raise Error("TypeError: a BisectingKMeans member reads sample_weight as a dense host float32 view")
-        if call[].weights.rows * call[].weights.cols != rows:
-            raise Error("ValueError: sample_weight and X have different numbers of rows")
-        weights = VariantsSpan(call[].weights.data, rows)
-    if output == MEMBER_OP_PREDICT:
-        _destination(call, rows, 1, MEMBER_I32, "the label buffer")
-    elif output == MEMBER_OP_TRANSFORM:
-        _destination(call, rows, k, MEMBER_F32, "the distance buffer")
+    var weights = _fit_weights(call, kind, rows)
+    var output = _fit_output(call, kind, rows, k)
     _release_resident(slot, call)
     slot[].clear()
     var w = slot[].words.unsafe_ptr()
@@ -305,10 +382,7 @@ def _bisect_fit(slot: _Slot, call: _Call) raises:
     slot[].scalars = scalars^
     slot[].features = cols
     slot[].fitted = True
-    if output == MEMBER_OP_PREDICT:
-        _copy_i32(call[].dst.data, slot[].labels, rows)
-    elif output == MEMBER_OP_TRANSFORM:
-        _centers_query(slot, call, _RES_TRANSFORM)
+    _fit_done(slot, call, output, rows)
 
 
 def _bisect_predict(slot: _Slot, call: _Call) raises:
@@ -374,7 +448,13 @@ def _centers_query(slot: _Slot, call: _Call, query: Int) raises:
 
 # ---------------------------------------------------------------- fitted blocks
 def _block_count(kind: Int) -> Int:
+    if kind == _KIND_MINIBATCH:
+        return 4
     return 5 if kind == _KIND_BISECT else 0
+
+
+def _scalar_count(kind: Int) -> Int:
+    return 3 if kind == _KIND_MINIBATCH else 1
 
 
 def _block_at(kind: Int, index: Int) raises -> Int:
@@ -387,6 +467,8 @@ def _block_at(kind: Int, index: Int) raises -> Int:
         return MEMBER_BLOCK_SCALARS
     if index == 2:
         return _BLOCK_LABELS
+    if kind == _KIND_MINIBATCH:
+        return _BLOCK_COUNTS
     if index == 3:
         return _BLOCK_TREE_CENTERS
     return _BLOCK_TREE_NODES
@@ -424,6 +506,8 @@ def _export(slot: _Slot, call: _Call) raises:
         call[].dst = _f32_view(slot[].tree_centers, len(slot[].tree_centers) // d, d)
     elif block == _BLOCK_TREE_NODES and kind == _KIND_BISECT:
         call[].dst = _i32_view(slot[].tree_nodes, len(slot[].tree_nodes) // 3, 3)
+    elif block == _BLOCK_COUNTS and kind == _KIND_MINIBATCH:
+        call[].dst = _f32_view(slot[].counts, 1, len(slot[].counts))
     else:
         raise Error("member ABI: a " + _name(kind) + " member has no fitted block " + String(block))
     call[].block = block
@@ -463,10 +547,14 @@ def _import(slot: _Slot, call: _Call) raises:
         slot[].features = call[].x.cols
         slot[].labels = List[Int32]()
     elif block == MEMBER_BLOCK_SCALARS:
-        if not call[].x.dense_host(MEMBER_F64) or call[].x.rows * call[].x.cols != 1:
-            raise Error("member ABI: the " + _name(kind) + " scalars block is one host float64 word (inertia)")
-        var scalars: List[Float64] = [_Words(unsafe_from_address=call[].x.data)[0]]
-        slot[].scalars = scalars^
+        var count = _scalar_count(kind)
+        if not call[].x.dense_host(MEMBER_F64) or call[].x.rows * call[].x.cols != count:
+            raise Error("member ABI: the " + _name(kind) + " scalars block is " + String(count)
+                + " host float64 words")
+        var source = _Words(unsafe_from_address=call[].x.data)
+        slot[].scalars = List[Float64](length=count, fill=0.0)
+        for i in range(count):  # driver-loop: at most three scalar words
+            slot[].scalars[i] = source[i]
     elif block == _BLOCK_LABELS:
         slot[].labels = _take_i32(call, "labels")
     elif block == _BLOCK_TREE_CENTERS and kind == _KIND_BISECT:
@@ -475,13 +563,15 @@ def _import(slot: _Slot, call: _Call) raises:
         if call[].x.cols != 3:
             raise Error("member ABI: the BisectingKMeans tree block holds three int32 words per node")
         slot[].tree_nodes = _take_i32(call, "tree")
+    elif block == _BLOCK_COUNTS and kind == _KIND_MINIBATCH:
+        slot[].counts = _take_f32(call, "counts")
     elif block != 0 or (call[].flags & MEMBER_IMPORT_DONE) == 0:
         raise Error("member ABI: a " + _name(kind) + " member has no fitted block " + String(block))
     if (call[].flags & MEMBER_IMPORT_DONE) == 0:
         return
     var d = slot[].features
     var k = Int(slot[].words[1])
-    if d == 0 or len(slot[].centers) != k * d or len(slot[].scalars) != 1:
+    if d == 0 or len(slot[].centers) != k * d or len(slot[].scalars) != _scalar_count(kind):
         raise Error("member ABI: a fitted " + _name(kind) + " state needs its centers and scalars blocks")
     if kind == _KIND_BISECT and (len(slot[].tree_nodes) == 0
             or len(slot[].tree_centers) != (len(slot[].tree_nodes) // 3) * d):
@@ -491,7 +581,7 @@ def _import(slot: _Slot, call: _Call) raises:
 
 # ---------------------------------------------------------------- the entry
 def _capabilities(kind: Int) -> Int:
-    # Every published kind (state 0: the family's union, today kind 1 only).
+    # Every published kind (state 0: the family's union, today kinds 0 and 1).
     _ = kind
     return (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_TRANSFORM | MEMBER_CAN_SCORE | MEMBER_CAN_EXPORT
         | MEMBER_CAN_IMPORT | MEMBER_CAN_SAMPLE_WEIGHT)
@@ -513,7 +603,7 @@ def _xcluster_member(operation: Int, address: Int) raises -> Int:
             raise Error("member ABI: a " + _name(kind) + " member takes " + String(count) + " parameter words")
         if words[1] < 1.0:
             raise Error("ValueError: n_clusters must be at least 1, got " + String(Int(words[1])))
-        if kind == _KIND_BISECT and words[3] < 1.0:
+        if words[3] < 1.0:
             raise Error("ValueError: n_init must be at least 1, got " + String(Int(words[3])))
         call[].state = _mint(words, count)
         return 0
@@ -536,7 +626,11 @@ def _xcluster_member(operation: Int, address: Int) raises -> Int:
         return 0
     var slot = _Slot(unsafe_from_address=_lookup(call[].state, False))
     var kind = slot[].kind
-    if operation == MEMBER_OP_FIT and kind == _KIND_BISECT:
+    if operation == MEMBER_OP_FIT and kind == _KIND_MINIBATCH:
+        _minibatch_fit(slot, call)
+    elif operation == MEMBER_OP_PREDICT and kind == _KIND_MINIBATCH:
+        _centers_query(slot, call, _RES_PREDICT)
+    elif operation == MEMBER_OP_FIT and kind == _KIND_BISECT:
         _bisect_fit(slot, call)
     elif operation == MEMBER_OP_PREDICT and kind == _KIND_BISECT:
         _bisect_predict(slot, call)

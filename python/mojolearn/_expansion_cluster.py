@@ -261,6 +261,8 @@ class MiniBatchKMeans(_CentersMixin, _XCluster):
     #: This class takes `device=`: the check builds its other side as the same
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
+    #: Member ABI family 25 (XCluster), kind 0 (core/xcluster_member.mojo).
+    _mojolearn_member = (25, 0)
 
     def __init__(self, n_clusters=8, *, init="k-means++", max_iter=100, batch_size=1024,
                  verbose=0, compute_labels=True, random_state=None, tol=0.0,
