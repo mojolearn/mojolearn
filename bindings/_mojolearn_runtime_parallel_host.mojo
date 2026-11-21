@@ -13,7 +13,7 @@ from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from std.sys.compile import is_defined
 from bindings.native_transport_door import transport_initialize
-from bindings.parallel_shard_native_door import parallel_shard_c
+from bindings.parallel_shard_native_door import parallel_shard_c, ParallelIvfOwner, ParallelNeighborOwner
 from bindings.neighbor_query_native_door import neighbor_query_c, neighbor_query_attribute_c
 from bindings.parallel_forecast_native_door import parallel_forecast_c
 from bindings.tsa_public_native_door import tsa_c
@@ -81,6 +81,33 @@ def register_parallelneuralowner(mut module: PythonModuleBuilder) raises:
     py_type_attach(module.module, "_ParallelNeuralOwner", existing)
 
 
+# The distributed IVF index's and the neighbor holders' native owners
+# (bindings/parallel_shard_native_door.mojo): this binding is the only one
+# that compiles that door and allocates the types.
+def register_parallelivfowner(mut module: PythonModuleBuilder) raises:
+    var existing = PythonObject(None)
+    try:
+        existing = lookup_py_type_object[ParallelIvfOwner]()
+    except error:
+        if not py_type_absent(error):
+            raise error
+        _ = module.add_type[ParallelIvfOwner]("_ParallelIvfOwner")
+        return
+    py_type_attach(module.module, "_ParallelIvfOwner", existing)
+
+
+def register_parallelneighborowner(mut module: PythonModuleBuilder) raises:
+    var existing = PythonObject(None)
+    try:
+        existing = lookup_py_type_object[ParallelNeighborOwner]()
+    except error:
+        if not py_type_absent(error):
+            raise error
+        _ = module.add_type[ParallelNeighborOwner]("_ParallelNeighborOwner")
+        return
+    py_type_attach(module.module, "_ParallelNeighborOwner", existing)
+
+
 # The causal model's native owner (bindings/parallel_causal_native_door.mojo).
 def register_parallelcausalowner(mut module: PythonModuleBuilder) raises:
     var existing = PythonObject(None)
@@ -102,6 +129,8 @@ def build__mojolearn_runtime_parallel_host() -> PythonObject:
         register_process_pool_owner(module)
         register_parallelneuralowner(module)
         register_parallelcausalowner(module)
+        register_parallelivfowner(module)
+        register_parallelneighborowner(module)
         # The transport boundary these entries reach, set up as the tokenizer host does
         # (the same values; the tokenizer host initializes it first in one process).
         transport_initialize()

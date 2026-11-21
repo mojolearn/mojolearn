@@ -605,6 +605,8 @@ def _outputs(call: _Call) raises:
     """`call.out_cols` of transform / inverse_transform. Before a fit the
     transform width is known only for an integer n_components."""
     call[].classes = 0
+    # Every transform / inverse_transform of the family writes float32.
+    call[].out_dtype = MEMBER_F32
     if call[].state == 0:
         # Asked before any state (`member_outputs`): from the parameter words.
         if call[].param_count < 2 or not call[].params:
