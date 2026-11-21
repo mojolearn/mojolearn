@@ -22,7 +22,7 @@ from bindings.member_set_door import MEMBER_SET_NATIVE
 from core.member_abi import (
     MemberCall, MemberMatrix, MemberPlan, member_call, member_call_of, member_outputs_of,
     MEMBER_OP_CAPABILITIES, MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA,
-    MEMBER_CAN_TEST_ROWS, MEMBER_F32, MEMBER_DTYPE_UNSAID,
+    MEMBER_CAN_TEST_ROWS, MEMBER_GIL_FREE, MEMBER_F32, MEMBER_DTYPE_UNSAID,
 )
 from bindings.trees_public_inputs_run import trees_finite_f32
 from bindings.trees_public_inputs_door import trees_table, trees_call, trees_address, trees_reshape, trees_cast
@@ -354,16 +354,21 @@ struct _Member(Movable):
     the estimator keeps (bindings/member_held_door.mojo: imported at its
     first use, a hit on every later call until the estimator changes) and
     `operation` the member operation of the explained method; each chunk is
-    one member call with the GIL released, written straight into the float32
+    one member call (the GIL released around it only when `gil_free`), written straight into the float32
     (rows, k) Array the kernels read. Released on every exit of the values
     call (`_member_release`)."""
     var native: Bool
     var held: MemberHeld
     var call: MemberCall
     var operation: Int
+    # THE GIL RULE (core/member_abi.mojo): the held state's kind has
+    # `MEMBER_GIL_FREE`: a chunk's member call runs with the GIL released by
+    # this door. False: it is made with the GIL held.
+    var gil_free: Bool
 
     def __init__(out self):
         var plan = MemberPlan()
+        self.gil_free = False
         self.native = False
         self.held = MemberHeld()
         self.call = MemberCall(plan.route)
@@ -417,6 +422,7 @@ def _member_open(mut em: _Member, s: _State, x: PythonObject, n: Int, context: P
         var cols = -1
         var dtype = MEMBER_DTYPE_UNSAID
         var tests = False
+        var gil_free = False
         try:
             var probe = member_call_of(held.plan, held.state)
             cols = member_outputs_of(held.plan, probe, operation)
@@ -425,8 +431,12 @@ def _member_open(mut em: _Member, s: _State, x: PythonObject, n: Int, context: P
                 dtype = MEMBER_F32   # a regressor writes float32 (every published regressor documents it)
             # Kind-exact, asked of the held state; a family whose union mask
             # lacks the bit is not asked.
-            if held.plan.member.can(MEMBER_CAN_TEST_ROWS):
-                tests = (member_call(held.plan.member, MEMBER_OP_CAPABILITIES, probe) & MEMBER_CAN_TEST_ROWS) != 0
+            # THE GIL RULE: the same answer says whether a chunk's call may
+            # run released.
+            if held.plan.member.can(MEMBER_CAN_TEST_ROWS | MEMBER_GIL_FREE):
+                var kind_mask = member_call(held.plan.member, MEMBER_OP_CAPABILITIES, probe)
+                tests = (kind_mask & MEMBER_CAN_TEST_ROWS) != 0
+                gil_free = (kind_mask & MEMBER_GIL_FREE) != 0
         except:
             cols = -1
         var served = cols == s.k and dtype == MEMBER_F32
@@ -443,6 +453,7 @@ def _member_open(mut em: _Member, s: _State, x: PythonObject, n: Int, context: P
         # addresses of its plan's parameter and device words.
         em.call = member_call_of(em.held.plan, em.held.state)
         em.operation = operation
+        em.gil_free = gil_free
         em.native = True
     except:
         return
@@ -451,7 +462,8 @@ def _member_open(mut em: _Member, s: _State, x: PythonObject, n: Int, context: P
 def _member_rows(mut em: _Member, x: PythonObject, n: Int, d: Int, k: Int,
                  context: PythonObject) raises -> PythonObject:
     """The member on rows x (an (n, d) float32 C-order Array this door built)
-    as a float32 (n, k) Array: one member call, the GIL released, the output
+    as a float32 (n, k) Array: one member call (the GIL released around it
+    only for a kind with `MEMBER_GIL_FREE`, THE GIL RULE), the output
     written in place (no output admission, no cast, no snapshot). None when
     the member refuses the call: the member is released and the caller runs
     the model's own door for this and every later chunk."""
@@ -461,8 +473,11 @@ def _member_rows(mut em: _Member, x: PythonObject, n: Int, d: Int, k: Int,
     em.call.dst = MemberMatrix(dst.addr, n, k)
     var done = False
     try:
-        var py = Python()
-        with GILReleased(py):
+        if em.gil_free:
+            var py = Python()
+            with GILReleased(py):
+                _ = member_call(em.held.plan.member, em.operation, em.call)
+        else:
             _ = member_call(em.held.plan.member, em.operation, em.call)
         done = True
     except:

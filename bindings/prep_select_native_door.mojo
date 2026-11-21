@@ -30,6 +30,7 @@ from core.member_abi import (
     MemberCall, MemberMatrix, MemberPlan, member_call, member_new, member_free, member_kind_capabilities,
     MEMBER_OP_FIT, MEMBER_OP_EXPORT, MEMBER_CAN_FIT, MEMBER_CAN_EXPORT, MEMBER_CAN_COEF, MEMBER_CAN_IMPORTANCES,
     MEMBER_CAN_CLASSIFIER, MEMBER_BLOCK_COEF, MEMBER_BLOCK_FEATURE_IMPORTANCES, MEMBER_F32, MEMBER_I32,
+    MEMBER_GIL_FREE,
 )
 from core.member_families import MEMBER_FAMILY_TREE, MEMBER_FAMILY_FOREST
 from bindings.native_loaded_module_door import native_loaded_module
@@ -239,9 +240,12 @@ struct RfeMember(Movable):
     var block: Int
     var squared: Bool
     var importance_word: Bool
+    # THE GIL RULE (core/member_abi.mojo): the member's kind has MEMBER_GIL_FREE.
+    var gil_free: Bool
 
     def __init__(out self):
         self.native = False
+        self.gil_free = False
         self.owner = MemberOwner()
         self.template = PythonObject(None)
         self.fields = PythonObject(None)
@@ -329,6 +333,9 @@ def _rfe_member(estimator: PythonObject, y: PythonObject, n: Int, g: PythonObjec
             member.squared = not auto
         else:
             return member^
+        # THE GIL RULE (core/member_abi.mojo): the same answer says whether
+        # this kind's fit may run with the GIL released by this door.
+        member.gil_free = (mask & MEMBER_GIL_FREE) != 0
     except:
         return member^
     member.y_address = Int(py=classical_address(member.y))
@@ -342,16 +349,21 @@ def _rfe_member(estimator: PythonObject, y: PythonObject, n: Int, g: PythonObjec
 
 def _rfe_member_fit(member: RfeMember, plan: MemberPlan, block: PythonObject, n: Int, k: Int) raises -> MemberCall:
     """One member state of `plan` (the member's own plan, or the final fit's
-    copy of it) fitted on the round's (n, k) float32 host block, the GIL
-    released for the fit. The caller frees it (`member_free`) and keeps
+    copy of it) fitted on the round's (n, k) float32 host block. THE GIL RULE:
+    the GIL is released around the fit only for a kind with `MEMBER_GIL_FREE`;
+    any other kind is fitted with the GIL held (its route's entries release
+    inside, as for the estimator's own door). The caller frees it (`member_free`) and keeps
     `plan` alive until then (the call holds the address of its words)."""
     var call = member_new(plan)
     var done = False
     try:
         call.x = MemberMatrix(Int(py=classical_address(block)), n, k)
         call.y = MemberMatrix(member.y_address, n, 1, member.y_dtype)
-        var py = Python()
-        with GILReleased(py):
+        if member.gil_free:
+            var py = Python()
+            with GILReleased(py):
+                _ = member_call(plan.member, MEMBER_OP_FIT, call)
+        else:
             _ = member_call(plan.member, MEMBER_OP_FIT, call)
         done = True
     finally:

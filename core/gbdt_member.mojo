@@ -73,7 +73,7 @@ from core.member_abi import (
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_PREDICT,
     MEMBER_OP_PREDICT_PROBA, MEMBER_OP_OUTPUTS, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT,
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA, MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT,
-    MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_HOME_DEVICE,
+    MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_HOME_DEVICE, MEMBER_GIL_FREE,
     MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
 )
@@ -657,8 +657,12 @@ def _capabilities(loss: String) -> Int:
     """No `MEMBER_CAN_TEST_ROWS`: the fit tests y here and X only for
     nan_mode='Forbidden' (NaN; infinities reach the kernel), and predict
     does not test X. No MEMBER_BORROWS_FIT: the state owns its text."""
+    # MEMBER_GIL_FREE (THE GIL RULE): every operation of both kinds is traced
+    # (fx-gil-RESULT.md, "gbdt"): the route entry is marked `entry_ref_gil_free`
+    # at every operation, the image's operations never touch the GIL, and the
+    # store (SharedSlot) and the resident registry have their own lock words.
     var mask = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
-                | MEMBER_CAN_SAMPLE_WEIGHT)
+                | MEMBER_CAN_SAMPLE_WEIGHT | MEMBER_GIL_FREE)
     if _multi_output(loss) or _binary(loss):
         mask |= MEMBER_CAN_PREDICT_PROBA
     return mask

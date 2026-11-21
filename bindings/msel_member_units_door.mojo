@@ -14,9 +14,14 @@ step with the GIL held. Here:
     fitted, so it needs no clone) is admitted as a member
     (`member_admit`: route, parameter words, resolved entry); X, y and the
     fold indices are read once as addresses.
-  * RUN (GIL released): the units run on `workers` host tasks
-    (`host_parallelize` over lanes; a lane takes units lane, lane + workers,
-    ...). X is NOT copied per fold: a fold side that is one run of rows (a
+  * RUN, TWO MODES (THE GIL RULE, core/member_abi.mojo `MEMBER_GIL_FREE`).
+    A member kind WITH the bit: the GIL released, the units on `workers`
+    host tasks (`host_parallelize` over lanes; a lane takes units lane,
+    lane + workers, ...). A kind WITHOUT it: the units one after the other
+    on the public thread with the GIL held (its route's entries release
+    inside as for the family's own door and may rely on the GIL as their
+    lock): what the Python units did, without their Python. The fold-shape
+    scans run released and in parallel either way. X is NOT copied per fold: a fold side that is one run of rows (a
     test fold of an unshuffled KFold, a time-series split's sides) is a view
     of X; a scattered side goes to a member that reads row numbers
     (`MEMBER_CAN_ROW_INDEX`) as the whole X plus the fold's index array.
@@ -165,7 +170,7 @@ from core.host_finite_scan import host_all_finite_f32
 from core.host_parallel import host_parallelize
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free, member_kind_capabilities, MEMBER_I64,
-    MEMBER_BORROWS_FIT,
+    MEMBER_BORROWS_FIT, MEMBER_GIL_FREE,
     MEMBER_F32, MEMBER_I32, MEMBER_CAN_EXPORT, member_outputs, member_output_dtype, MEMBER_CAN_TEST_ROWS,
     MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA,
     MEMBER_OP_FIT, MEMBER_OP_SCORE, MEMBER_CAN_FIT, MEMBER_CAN_SCORE, MEMBER_CAN_CLASSIFIER, MEMBER_CAN_ROW_INDEX,
@@ -280,6 +285,10 @@ struct MselMemberRun(Movable):
     # `borrows`: the member kind keeps a pointer into a FIT buffer
     # (MEMBER_BORROWS_FIT); a kind that owns its state never uses them.
     var borrows: Bool
+    # THE GIL RULE: the member kind has `MEMBER_GIL_FREE` (its units run on
+    # workers with no GIL). False: every unit runs on the public thread with
+    # the GIL held, one at a time (`workers` is then 1).
+    var gil_free: Bool
     var held_x: List[List[Float32]]
     var held_y: List[List[Float32]]
     # Per unit, the FIT NOTICES of its fitted state (core/member_notices.mojo;
@@ -302,6 +311,7 @@ struct MselMemberRun(Movable):
         self.index_all = False
         self.taken = List[Int](length=n_units, fill=0)
         self.borrows = False
+        self.gil_free = False
         self.held_x = List[List[Float32]]()
         self.held_y = List[List[Float32]]()
         self.notices = List[List[Float64]](length=n_units, fill=List[Float64]())
@@ -583,7 +593,10 @@ def _msel_member_unit(run: MutPointer[MselMemberRun, MutUntrackedOrigin], u: Int
 
 
 def _msel_member_lane(address: Int, lane: Int):
-    """One worker: units lane, lane + workers, ... A failing unit records
+    """One worker: units lane, lane + workers, ... THE GIL RULE: on a worker
+    with no GIL for a kind with `MEMBER_GIL_FREE`; else called once, lane 0
+    of one, on the public thread with the GIL held. Nothing a unit does here
+    touches CPython in either mode. A failing unit records
     its words in its own slot; the other units still run (each is
     independent), and the caller raises the first in unit order."""
     var run = MutPointer[MselMemberRun, MutUntrackedOrigin](unsafe_from_address=address)
@@ -731,6 +744,12 @@ def _member_units(base: PythonObject, candidates: PythonObject, y: PythonObject,
             # THE LIFETIME RULE: only a kind that keeps a pointer into its
             # fit buffers has a kept unit's gathered side held until PACK.
             run.borrows = (kind_mask & MEMBER_BORROWS_FIT) != 0
+            # THE GIL RULE: a kind without the bit runs its units on this
+            # thread with the GIL held, one at a time (below).
+            run.gil_free = (kind_mask & MEMBER_GIL_FREE) != 0
+            if not run.gil_free:
+                workers = 1
+                run.workers = 1
             if (kind_mask & MEMBER_CAN_SCOPE) != 0:
                 # THE RESIDENT SCOPE (module note): read once per operation,
                 # only for a kind that can keep X resident. A read that
@@ -916,8 +935,13 @@ def _member_units(base: PythonObject, candidates: PythonObject, y: PythonObject,
                     whole = False
             if not whole:
                 lanes = 0
-            if lanes > 0:
+            if lanes > 0 and run.gil_free:
                 host_parallelize(_lane, lanes)
+        # GIL held again: the units of a kind that may not run without it,
+        # one at a time on this thread. SERIAL BY RULE (THE GIL RULE), not by
+        # nature: the kind becomes parallel when its trace earns the bit.
+        if lanes > 0 and not run.gil_free:
+            _msel_member_lane(address, 0)
     finally:
         if run.pin != 0:
             var took = 0

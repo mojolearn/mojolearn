@@ -193,6 +193,26 @@ comptime MEMBER_CAN_NOTICES = 134217728      # 2^27 (2^26 is MEMBER_BORROWS_FIT)
 #: with the bit answers `MEMBER_OP_EXPORT` + `MEMBER_EXPORT_OWN`.
 comptime MEMBER_BORROWS_FIT = 67108864       # the fitted state reads its FIT buffers after FIT returned
 
+#: KIND-EXACT (answered with `call.state != 0`; the family's union with 0).
+#: THE GIL RULE (MEMBER-ABI-V2.md). Not a "can": the caller's MODE.
+#:   * WITH the bit: every member operation of this kind has been traced to
+#:     its kernel entries and may be called from several threads at once on
+#:     threads that hold NO GIL: it never releases or takes the GIL, touches
+#:     no CPython, and every registry, session table and shared workspace it
+#:     reaches has its own lock. The caller runs it on its parallel workers
+#:     with the GIL released by the coordinator. Called with the GIL held
+#:     (PACK, admit) it runs through and releases nothing.
+#:   * WITHOUT it (every kind until its trace is recorded): the caller makes
+#:     each member call ONE AT A TIME ON THE PUBLIC THREAD WITH THE GIL HELD.
+#:     The member's route entries may release the GIL inside around their
+#:     heavy work, as they do for the family's own door, and may rely on the
+#:     GIL to serialize their registries. Never on a worker, never under a
+#:     release of the caller.
+#: A caller reads it where it already asks the kind's mask (one question per
+#: member class at UNPACK, or of the held state); a family whose union lacks
+#: it is not asked. A caller that does not read it must take the second mode.
+comptime MEMBER_GIL_FREE = 268435456         # 2^28: safe on parallel workers with no GIL (traced; own locks)
+
 #: `call.out_dtype` after MEMBER_OP_OUTPUTS: the member did not say.
 comptime MEMBER_DTYPE_UNSAID = -1
 #: `call.scope` when the caller runs in no resident scope (the value of
