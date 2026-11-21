@@ -589,9 +589,10 @@ def _gbdt_fit_ordered_arm(
     # CATEGORICAL COLUMNS (lane cat-ctr, 2026-11-21): the Ordered oracle
     # takes the flags and builds single-column CTRs over its fold
     # permutations, as `train` does. What stays refused, by name: an
-    # estimation permutation that is not the last and feature combinations
-    # (`train`'s own two refusals, its words). A one-hot column is fitted
-    # (the fold searcher's take-bin arm), as on the device.
+    # estimation permutation that is not the last (`train`'s own refusal,
+    # its words). A one-hot column is fitted (the fold searcher's take-bin
+    # arm) and feature combinations are grown by the level driver, as on
+    # the device.
     var ctr_permutation_id = params.i(29)
     var max_ctr_complexity = params.i(34)
     if max_ctr_complexity < 1:
@@ -750,19 +751,11 @@ def _gbdt_fit_ordered_arm(
     var flags = List[UInt32]()
     if n_flags != 0:
         flags = gbdt_host_load_u32(u32_ptr(flags_address), n_flags)
-        # `train` refuses feature combinations when an Ordered fit has a
-        # CTR-bearing column (one pass over the categorical columns, once
-        # per fit, as the Plain arm's own dispatch)
-        if max_ctr_complexity > 1 and gbdt_has_ctr_columns(
-            gbdt_ctr_column_kinds(flags, x, n_rows, n_features)
-        ):
-            raise Error(
-                "max_ctr_complexity above 1 (feature combinations) with"
-                " boosting_type='Ordered' is not implemented; use"
-                " boosting_type='Plain' or max_ctr_complexity=1"
-            )
+    # feature combinations (`max_ctr_complexity` above 1) are grown by the
+    # Ordered fit's level driver, as on the device
     var fit = gbdt_ordered_host_fit(
-        x, y, n_rows, n_features, p, hloss, opts, ev, flags
+        x, y, n_rows, n_features, p, hloss, opts, ev, flags,
+        max_ctr_complexity,
     )
     text = fit.text
     losses = fit.losses.copy()

@@ -555,10 +555,10 @@ def fit_oblivious_tree_structure_levels(
 
       * `TreeCtrFit.begin_tree` clears the slots an earlier tree left on
         this index before anything reads it;
-      * every level's histograms are built from scratch (no subtraction
-        from the parent: a candidate slot holds another column after each
-        mint, and the host column builds the same levels the same way, so
-        the Float32 cells agree);
+      * every level's histograms are built from scratch over a zeroed
+        buffer (no subtraction from the parent: a candidate slot holds
+        another column after each mint, and the host column builds the same
+        levels the same way, so the Float32 cells agree);
       * the gate walk runs after each level over the levels so far and its
         record is read home: ONE drain per level. A kept level goes through
         `TreeCtrFit.take_winner` (a won candidate slot becomes the tree's
@@ -1002,11 +1002,14 @@ def fit_oblivious_tree_structure_levels(
                 GATHER_NO_MASK,
             )
             docs = d_observations.copy()
-        if level_driver:
+        if level_driver and depth > 0:
             # every level from scratch: the parent's cells of a slot are
-            # another column's after a mint (the host column does the same)
-            for hi in range(len(calcer.helpers)):  # small-loop(helpers: policy helpers, at most three): sets one flag per helper
-                calcer.helpers[hi].hist_helper.build_from_scratch = True
+            # another column's after a mint. `reset_for_tree` is the zero
+            # fill a from-scratch build needs (its writeback adds onto the
+            # buffer) and puts the plan back at "build from scratch", which
+            # `plan` then takes at this depth with every partition. The
+            # host column zeroes and rebuilds the same levels.
+            calcer.reset_for_tree(ctx)
         var dither_ids = Optional[MutPointer[UInt32, MutAnyOrigin]]()
         comptime if ORD_DOC_ID_STORAGE:
             if fold_order:dither_ids = d_doc_ids.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
