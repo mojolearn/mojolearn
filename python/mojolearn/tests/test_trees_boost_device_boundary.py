@@ -143,3 +143,46 @@ def test_check_fits_both_devices_in_this_process(cls):
     assert gpu is model and cpu is not model and cpu.get_params()["device"] == "cpu"
     x, y = data(cls)
     assert answer(gpu.fit(x, y), cls, x).tobytes() == answer(cpu.fit(x, y), cls, x).tobytes()
+
+
+# ---- RandomTreesEmbedding and DART (the same route; their trees store the ensemble's device)
+from mojolearn import DARTClassifier, DARTRegressor, RandomTreesEmbedding  # noqa: E402
+
+LATER = [DARTRegressor, DARTClassifier, RandomTreesEmbedding]
+
+
+def later_fit(cls, **params):
+    x, y = data(BaggingClassifier if cls is DARTClassifier else BaggingRegressor)
+    if cls is RandomTreesEmbedding:
+        model = cls(n_estimators=6, max_depth=3, random_state=5, **params)
+        return model, np.asarray(model.fit_transform(x)), x
+    model = cls(n_estimators=8, num_leaves=7, random_state=5, **params).fit(x, y)
+    return model, np.asarray(model.predict(x)), x
+
+
+@pytest.mark.parametrize("cls", LATER)
+def test_later_families_cpu_device_runs_on_the_cpu(cls):
+    model, out, x = later_fit(cls, device="cpu")
+    assert model.vendor_used() == "cpu"
+    assert len(out) == len(x)
+    assert model.get_params()["device"] == "cpu"
+
+
+@two_devices
+@pytest.mark.parametrize("cls", LATER)
+def test_later_families_two_devices_return_the_same_bits(cls):
+    gpu, on_gpu, _ = later_fit(cls, numeric_mode="identical")
+    cpu, on_cpu, _ = later_fit(cls, numeric_mode="identical", device="cpu")
+    assert gpu.vendor_used() != "cpu" and cpu.vendor_used() == "cpu"
+    assert on_gpu.tobytes() == on_cpu.tobytes()
+
+
+@pytest.mark.parametrize("cls", [DARTRegressor, DARTClassifier])
+def test_dart_refuses_an_unknown_device_at_construction_and_set_params(cls):
+    with pytest.raises(ValueError, match="device must be 'gpu', 'cpu' or None, got"):
+        cls(device="tpu")
+    model = cls()
+    with pytest.raises(ValueError, match="device must be 'gpu', 'cpu' or None, got"):
+        model.set_params(device="tpu")
+    assert model.get_params()["device"] is None
+    assert cls(**cls(device="cpu").get_params()).get_params()["device"] == "cpu"

@@ -78,6 +78,9 @@ def trees_public_operation(model: PythonObject, operation: Int, name: String, ar
     if operation == TREES_OPN_TREES_FOREST_CONSTRUCT:
         classical_connect_numpy(context)
         return forest_construct(model, args, context)
+    if operation == TREES_OPN_TREES_DART_CONSTRUCT:
+        classical_connect_numpy(context)
+        return dart_construct(model, args, context)
     # The estimator's route (bindings/trees_route_boundary_door.mojo): the
     # context this operation runs in names the device table set or the CPU
     # table set. One record read; no operation reads the device.
@@ -100,8 +103,6 @@ def trees_public_operation(model: PythonObject, operation: Int, name: String, ar
         return iforest_getstate(model, context)
     if operation == TREES_OPN_TREES_FOREST_GETSTATE or operation == TREES_OPN_TREES_GBDT_GETSTATE:
         return tree_export_state(model, operation == TREES_OPN_TREES_FOREST_GETSTATE)
-    if operation == TREES_OPN_TREES_DART_CONSTRUCT:
-        return dart_construct(model, args, context)
     if operation < TREES_FIRST_LATE:
         # The public lifecycles and the explainers (groups in chain order).
         if operation < TREES_END_PUBLIC_IFOREST:

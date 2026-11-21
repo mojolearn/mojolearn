@@ -1067,6 +1067,11 @@ class AdaBoostRegressor(_AdaBoostBase):
 # log-prior start is a constant outside the trees (never dropped), where
 # LightGBM folds it into tree 0's bias.
 class _DARTBase(_TreesEnsembleBase):
+    #: Takes `device=`: every operation runs in the estimator's run context (its
+    #: device route, bindings/trees_route_boundary_door.mojo); the check builds
+    #: the other side as the same estimator on the other device, in this process.
+    _mojolearn_device = True
+    vendor_used = _native_trees_bridge.device_vendor_used
     _KIND = 0
 
     # -------------------------------------------- lane/apple-fast-dart
@@ -1145,6 +1150,10 @@ class DARTRegressor(_DARTBase):
         Numeric mode for this estimator. None uses the process default (see
         ``mojolearn.set_numeric_mode``). ``"fast"`` applies on Apple GPUs
         only.
+    device : {None, "gpu", "cpu"}, default=None
+        Where the model is fitted and predicts. None uses this
+        installation's device, ``"cpu"`` runs on the CPU and ``"gpu"``
+        requires a GPU installation. Other values raise ``ValueError``.
 
     Attributes
     ----------
@@ -1175,14 +1184,14 @@ class DARTRegressor(_DARTBase):
                  min_child_samples=20, reg_lambda=0.0, max_bin=255, drop_rate=0.1, max_drop=50,
                  skip_drop=0.5, xgboost_dart_mode=False, uniform_drop=False, drop_seed=4, random_state=None,
                  reg_alpha=0.0, max_delta_step=0.0, colsample_bytree=1.0, subsample=1.0, subsample_freq=0,
-                 feature_fraction_seed=2, bagging_seed=3, numeric_mode=None):
+                 feature_fraction_seed=2, bagging_seed=3, numeric_mode=None, device=None):
         # The checks and the stored parameters are the native owner's
-        # (bindings/trees_boost_constructor_native_unpack.mojo `dart_construct`).
+        # (bindings/trees_boost_constructor_native_pack.mojo `dart_construct`).
         _TREES(self, _OP.trees_dart_construct, (
             n_estimators, learning_rate, num_leaves, max_depth, min_child_samples, reg_lambda, max_bin,
             drop_rate, max_drop, skip_drop, xgboost_dart_mode, uniform_drop, drop_seed, random_state,
             reg_alpha, max_delta_step, colsample_bytree, subsample, subsample_freq, feature_fraction_seed,
-            bagging_seed, numeric_mode), _TREES_CONTEXT)
+            bagging_seed, numeric_mode, device), _TREES_CONTEXT)
 
     def fit(self, X, y):
         """Fit the boosted trees on ``X`` (n_samples, n_features) and target ``y``.
@@ -1263,6 +1272,10 @@ class DARTClassifier(_DARTBase):
         Numeric mode for this estimator. None uses the process default (see
         ``mojolearn.set_numeric_mode``). ``"fast"`` applies on Apple GPUs
         only.
+    device : {None, "gpu", "cpu"}, default=None
+        Where the model is fitted and predicts. None uses this
+        installation's device, ``"cpu"`` runs on the CPU and ``"gpu"``
+        requires a GPU installation. Other values raise ``ValueError``.
 
     Attributes
     ----------
@@ -1295,14 +1308,14 @@ class DARTClassifier(_DARTBase):
                  min_child_samples=20, reg_lambda=0.0, max_bin=255, drop_rate=0.1, max_drop=50,
                  skip_drop=0.5, xgboost_dart_mode=False, uniform_drop=False, drop_seed=4, random_state=None,
                  reg_alpha=0.0, max_delta_step=0.0, colsample_bytree=1.0, subsample=1.0, subsample_freq=0,
-                 feature_fraction_seed=2, bagging_seed=3, numeric_mode=None):
+                 feature_fraction_seed=2, bagging_seed=3, numeric_mode=None, device=None):
         # The checks and the stored parameters are the native owner's
-        # (bindings/trees_boost_constructor_native_unpack.mojo `dart_construct`).
+        # (bindings/trees_boost_constructor_native_pack.mojo `dart_construct`).
         _TREES(self, _OP.trees_dart_construct, (
             n_estimators, learning_rate, num_leaves, max_depth, min_child_samples, reg_lambda, max_bin,
             drop_rate, max_drop, skip_drop, xgboost_dart_mode, uniform_drop, drop_seed, random_state,
             reg_alpha, max_delta_step, colsample_bytree, subsample, subsample_freq, feature_fraction_seed,
-            bagging_seed, numeric_mode), _TREES_CONTEXT)
+            bagging_seed, numeric_mode, device), _TREES_CONTEXT)
 
     def fit(self, X, y):
         """Fit the boosted trees on ``X`` (n_samples, n_features) and labels ``y``.
@@ -1385,6 +1398,10 @@ class RandomTreesEmbedding(_TreesEnsembleBase):
         Numeric mode for this estimator. None uses the process default (see
         ``mojolearn.set_numeric_mode``). ``"fast"`` applies on Apple GPUs
         only.
+    device : {None, "gpu", "cpu"}, default=None
+        Where the model is fitted and predicts. None uses this
+        installation's device, ``"cpu"`` runs on the CPU and ``"gpu"``
+        requires a GPU installation. Other values raise ``ValueError``.
 
     Attributes
     ----------
@@ -1404,6 +1421,11 @@ class RandomTreesEmbedding(_TreesEnsembleBase):
     >>> emb = mojolearn.RandomTreesEmbedding(n_estimators=10, random_state=0).fit_transform(X)
     """
 
+    #: Takes `device=`: every operation runs in the estimator's run context (its
+    #: device route, bindings/trees_route_boundary_door.mojo) and its forest
+    #: stores the same device.
+    _mojolearn_device = True
+    vendor_used = _native_trees_bridge.device_vendor_used
     #: the native lifecycle owner (trees_public_boost_*) tracks fits and validates inputs;
     #: no Python fit-tracking or output wrappers are installed
     _mojolearn_native_public = True
@@ -2763,7 +2785,7 @@ _DART_INIT_ARGS = (
     "n_estimators", "learning_rate", "num_leaves", "max_depth", "min_child_samples", "reg_lambda", "max_bin",
     "drop_rate", "max_drop", "skip_drop", "xgboost_dart_mode", "uniform_drop", "drop_seed", "random_state",
     "reg_alpha", "max_delta_step", "colsample_bytree", "subsample", "subsample_freq", "feature_fraction_seed",
-    "bagging_seed", "numeric_mode")
+    "bagging_seed", "numeric_mode", "device")
 _connect_native_init(DARTRegressor, _TREES, _OP.trees_dart_construct, _DART_INIT_ARGS, _TREES_CONTEXT)
 _connect_native_init(DARTClassifier, _TREES, _OP.trees_dart_construct, _DART_INIT_ARGS, _TREES_CONTEXT)
 _connect_native_init(TreeExplainer, _TREES, _OP.trees_explainer_init,

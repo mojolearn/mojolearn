@@ -1700,6 +1700,9 @@ def _dart_first_member(fields: PythonObject, max_depth: PythonObject, seed: Int,
     py_setitem(settings, "min_samples_leaf", _int(fields["min_child_samples"]))
     py_setitem(settings, "n_bins", _int(fields["max_bin"]))
     py_setitem(settings, "random_state", _P(_sub_seed(seed, 0)))
+    # Every one-tree member stores the ensemble's device (the later members
+    # copy this member's validated fields, `_member_like`).
+    py_setitem(settings, "device", py_get(fields, "device"))
     py_setitem(settings, "n_streams", _P(1))
     py_setitem(settings, "numeric_mode", py_get(fields, "numeric_mode"))
     var tree = _new_member(context["trees_rf_regressor"], settings, context)
@@ -2212,6 +2215,9 @@ def _rte_fit(model: PythonObject, fields: PythonObject, x: AdmittedX, context: P
     py_setitem(settings, "min_impurity_decrease", fields["min_impurity_decrease"])
     py_setitem(settings, "random_state", _P(seed))
     py_setitem(settings, "numeric_mode", py_get(fields, "numeric_mode"))
+    # The embedding's forest stores the embedding's device (it runs in the
+    # embedding's run context either way; trees_route_boundary_door).
+    py_setitem(settings, "device", py_get(fields, "device"))
     var forest = _new_member(context["trees_et_regressor"], settings, context)
     # fb-infer/D (2026-11-17): the member fit takes the admitted X itself (the
     # caller's float32 C-order array when borrowed, else the door's own), as

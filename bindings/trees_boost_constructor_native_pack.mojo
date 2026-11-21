@@ -13,6 +13,8 @@ from bindings.params_metadata_native_door import _resolved
 from bindings.trees_constructor_native_unpack import tree_parameter_storage
 
 
+from bindings.trees_route_boundary_door import trees_device_admit
+from providers.python.device_route_boundary_door import device_route_clear
 from bindings.trees_boost_constructor_native_unpack import (
     _float,
     _int_below,
@@ -23,16 +25,19 @@ from bindings.trees_boost_constructor_native_unpack import (
 
 def dart_construct(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`DARTRegressor.__init__` / `DARTClassifier.__init__`: `args` holds the
-    22 constructor values in the stored order below. The class is native
-    public, so NumericModeMixin injects no numeric_mode: it is the last
-    constructor value and is stored as given."""
+    23 constructor values in the stored order below. The class is native
+    public, so NumericModeMixin injects no numeric_mode: it is stored as
+    given. `device` is the last value: checked here, where it is given, in
+    the shared words before any field is published; the estimator's device
+    route is dropped once the parameters are stored (this constructor is
+    also `set_params`' rebuild)."""
     var names = Python.tuple(
         "n_estimators", "learning_rate", "num_leaves", "max_depth", "min_child_samples", "reg_lambda",
         "max_bin", "drop_rate", "max_drop", "skip_drop", "xgboost_dart_mode", "uniform_drop", "drop_seed",
         "random_state", "reg_alpha", "max_delta_step", "colsample_bytree", "subsample", "subsample_freq",
-        "feature_fraction_seed", "bagging_seed", "numeric_mode")
+        "feature_fraction_seed", "bagging_seed", "numeric_mode", "device")
     if py_type(args) is not native_loaded_module("builtins").tuple or len(args) != len(names):
-        raise Error("TypeError: the DART constructor takes its 22 parameters")
+        raise Error("TypeError: the DART constructor takes its 23 parameters")
     if _int_below(args[0], 1):
         raise Error("n_estimators must be >= 1")
     if not _float(args[1]) > 0:
@@ -58,10 +63,12 @@ def dart_construct(model: PythonObject, args: PythonObject, context: PythonObjec
         raise Error("colsample_bytree and subsample must be in (0, 1]")
     if _int_below(args[18], 0):
         raise Error("subsample_freq must be >= 0")
+    trees_device_admit(args[22], context)
     tree_constructor_storage(model, names)
     var fields = py_fields(model)
-    for i in range(len(names)):  # driver-loop: over the constructor's 22 stored parameters
+    for i in range(len(names)):  # driver-loop: over the constructor's 23 stored parameters
         py_setitem(fields, names[i], args[i])
+    device_route_clear(model)
     # The seeds are checked after they are stored, as the constructor did.
     trees_seed_check(args[13], context)
     trees_seed_check(args[12], context)
