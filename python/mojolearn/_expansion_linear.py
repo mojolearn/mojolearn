@@ -833,6 +833,10 @@ class HuberRegressor(_LinearRegressorMixin, NumericModeMixin):
 
     _BINDING = _BINDING
 
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_XLINEAR = 2) and core/xlinear_member.mojo.
+    _mojolearn_member = (2, 3)
+
     def __init__(self, *, epsilon=1.35, max_iter=100, alpha=0.0001, warm_start=False,
                  fit_intercept=True, tol=1e-05, numeric_mode=None, device=None):
         self.epsilon, self.max_iter, self.alpha = epsilon, max_iter, alpha
