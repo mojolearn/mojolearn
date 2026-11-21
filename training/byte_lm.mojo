@@ -52,7 +52,7 @@ from checks.vendor import COMPILED_VENDOR
 # Restore: git apply experiments/removed/MOJOLEARN_AFN_LM_PARAM_VIEWS.patch
 # RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
 from training.byte_lm_afn import (
-    AFN_LM_PARAM_VIEWS, BYTE_LM_FAST_APPLE, afn_upload_ids,
+    BYTE_LM_FAST_APPLE, afn_upload_ids,
 )
 from training.checkpoint import Checkpoint
 from training.byte_lm_config import ByteConfig
@@ -635,21 +635,21 @@ struct ByteBuffers(Movable):
         self.sab_partials = _zeros(ctx, SAB_CHUNKS)
 
         # Views of the flat parameters (`_bind_emb_head`), not copies.
-        comptime if BYTE_LM_EMB_HEAD_VIEWS:
-            self.emb_w = self.param.create_sub_buffer[DType.float32](0, V * DM)
-            self.lm_w = self.param.create_sub_buffer[DType.float32](
-                self.offsets[config.n_tensors() - 1], V * DM
-            )
-        else:
-            self.emb_w = _zeros(ctx, V * DM)
-            self.lm_w = _zeros(ctx, V * DM)
+        self.emb_w = self.param.create_sub_buffer[DType.float32](0, V * DM)
+        self.lm_w = self.param.create_sub_buffer[DType.float32](
+            self.offsets[config.n_tensors() - 1], V * DM
+        )
         # TOMBSTONE: dw_emb / dw_lm (the hand backward's embedding and head gradients, copies or, under MOJOLEARN_IDN_PARAM_GRAD_VIEWS, views of `grad`) deleted 2026-11-09 by lane x7b-step-ops-host-arm: the program's gradient scratch is the gradient (2 x V x d_model floats freed). Code recoverable at the deletion commit's parent.
         # Restore: git apply experiments/removed/BYTE_LM_X7_LEFTOVERS.patch
         # Restored 2026-11-13 (lane restore-byte-lm-hand-step) as plain buffers
         # with the hand step: `_byte_backward_tape` writes them and copies them
         # into `grad` (the IDN_PARAM_GRAD_VIEWS view arm stays deleted).
-        self.dw_emb = _zeros(ctx, V * DM)
-        self.dw_lm = _zeros(ctx, V * DM)
+        # Lane fx-percall-copies (2026-11-20): views of `grad` (`_bind_emb_head_grads`); the two per-step copies
+        # into `grad` and the two V x d_model allocations are gone.
+        self.dw_emb = self.grad.create_sub_buffer[DType.float32](0, V * DM)
+        self.dw_lm = self.grad.create_sub_buffer[DType.float32](
+            self.offsets[config.n_tensors() - 1], V * DM
+        )
 
         self.ids = _zeros_i32(ctx, M)
         self.targets = _zeros_i32(ctx, M)
@@ -844,8 +844,22 @@ def _block_offsets(o: List[Int], base: Int) raises -> List[Int]:
 # they were False; the block-view arms of _unpack_block / _byte_backward_tape and _afn_bind_grad_views went with them.)
 # RESTORED 2026-11-15 (lane/restore-apple-fast-neural): BYTE_LM_BLOCK_VIEWS and its block-view arms back for the Apple
 # fast opt-in MOJOLEARN_AFN_LM_PARAM_VIEWS only (the IDENTICAL NN60 / IDN_LM_PARAM_VIEWS terms stay deleted).
-comptime BYTE_LM_BLOCK_VIEWS = AFN_LM_PARAM_VIEWS
-comptime BYTE_LM_EMB_HEAD_VIEWS = TARGET_COLUMN == COLUMN_APPLE
+# Lane fx-percall-copies (2026-11-20; Andrew: "why do we convert on every call?"): the views are the one form on
+# every column and in both modes. Before, on NVIDIA, AMD and the host column, every forward (each train step and
+# each logits call) copied every block's nine weights and the embedding and head out of the flat `param` into
+# per-tensor buffers (one launch a layer plus two copies: every parameter byte, 4 x n_total B a call), and every
+# train step copied the nine gradients of each block, the embedding gradient and the head gradient back into the
+# flat `grad` (4 x n_total B a step). Now each tensor IS its range of the flat owner: no launch, no bytes moved,
+# and the per-tensor weight and gradient allocations are dropped at the first bind (2 x 4 x n_total B less held).
+# A copy moves no float through an operation, so no bits change.
+# What invalidates a view is a change of the flat owner's HANDLE, never of its contents (a view reads and writes
+# the owner's memory): the out-of-place optimizer's swap of `param` with `shadow_p` (byte_optimizer_device). The
+# in-place writers (rollback, the stateless restore, the pooled and in-place optimizers, set-state uploads) need
+# nothing. The binds are therefore redone from the CURRENT owner at the top of every forward (`_unpack_block`,
+# `_bind_emb_head`) and of every backward (`_bind_grad_views`): handle creation only, no launch, and proof against
+# a handle change this list missed. `grad` is never swapped.
+# MOJOLEARN_AFN_LM_PARAM_VIEWS (Apple fast opt-in) selected exactly this for the block tensors; it now selects
+# nothing here.
 # TOMBSTONE: MOJOLEARN_IDN_PARAM_GRAD_VIEWS (every parameter and gradient of the hand train step a view of the flat owners; default off, never promoted; its step went with lane x7) deleted 2026-11-09 by lane x7b-step-ops-host-arm; code recoverable at the deletion commit's parent.
 # Restore: git apply experiments/removed/BYTE_LM_X7_LEFTOVERS.patch
 
@@ -859,59 +873,39 @@ comptime BYTE_LM_EMB_HEAD_VIEWS = TARGET_COLUMN == COLUMN_APPLE
 
 def _bind_emb_head(ctx: DeviceContext, mut tb: ByteBuffers, config: ByteConfig) raises:
     """`emb_w` and `lm_w` read the CURRENT flat parameters: fresh views of
-    `param` (after any handle swap), or the two copies where the views are not taken."""
+    `param` (after any handle swap). No launch, no bytes moved."""
     var n = config.vocab_size * config.d_model
-    comptime if BYTE_LM_EMB_HEAD_VIEWS:
-        tb.emb_w = tb.param.create_sub_buffer[DType.float32](0, n)
-        tb.lm_w = tb.param.create_sub_buffer[DType.float32](tb.offsets[config.n_tensors() - 1], n)
-    else:
-        _copy_into(ctx, tb.emb_w, tb.param, 0, 0, n)
-        _copy_into(ctx, tb.lm_w, tb.param, 0, tb.offsets[config.n_tensors() - 1], n)
+    tb.emb_w = tb.param.create_sub_buffer[DType.float32](0, n)
+    tb.lm_w = tb.param.create_sub_buffer[DType.float32](tb.offsets[config.n_tensors() - 1], n)
 
 
 def _unpack_block(ctx: DeviceContext, mut tb: ByteBuffers, mut w: LlamaDeviceWeights, block: Int) raises:
-    """Flat parameters -> the block's nine tensors, in ONE launch.
-
-    Was nine `_copy_into` launches and one `ctx.synchronize()`. The nine
-    became one through `byte_block_copy` (commit 1895b0287, which carries
-    its own Metal receipt); the wait went because it enforced nothing.
-    Every caller queues further work on
-    the SAME in-order context and reads no host memory in between, and each
-    one already waits after its loop over the blocks (`byte_lm.mojo`
-    forward and gradient, `byte_lm_logits.mojo`). A wait that only delays
-    the host is a Metal round trip for nothing.
+    """The block's nine tensors become views of the CURRENT flat `param`
+    (re-bound every call, as `_bind_emb_head` does, because the out-of-place
+    optimizer swaps the `param` handle each step): no launch and no separate
+    allocation. Was one `byte_block_copy` launch a layer moving every block
+    parameter byte on every forward (lane fx-percall-copies, 2026-11-20).
     """
     var base = 1 + 9 * block
-    comptime if BYTE_LM_BLOCK_VIEWS:
-        # FAST Apple or opt-in NN60 IDENTICAL: the nine weights become
-        # views of the CURRENT flat `param` (re-bound every call, as
-        # `_bind_emb_head` does), so no launch and no separate allocation.
-        ref vo = tb.offsets
-        w.norm1_w = tb.param.create_sub_buffer[DType.float32](vo[base], vo[base + 1] - vo[base])
-        w.w_q = tb.param.create_sub_buffer[DType.float32](vo[base + 1], vo[base + 2] - vo[base + 1])
-        w.w_k = tb.param.create_sub_buffer[DType.float32](vo[base + 2], vo[base + 3] - vo[base + 2])
-        w.w_v = tb.param.create_sub_buffer[DType.float32](vo[base + 3], vo[base + 4] - vo[base + 3])
-        w.w_o = tb.param.create_sub_buffer[DType.float32](vo[base + 4], vo[base + 5] - vo[base + 4])
-        w.norm2_w = tb.param.create_sub_buffer[DType.float32](vo[base + 5], vo[base + 6] - vo[base + 5])
-        w.w_gate = tb.param.create_sub_buffer[DType.float32](vo[base + 6], vo[base + 7] - vo[base + 6])
-        w.w_up = tb.param.create_sub_buffer[DType.float32](vo[base + 7], vo[base + 8] - vo[base + 7])
-        w.w_down = tb.param.create_sub_buffer[DType.float32](vo[base + 8], vo[base + 9] - vo[base + 8])
-        return
-    var o = tb.offsets.copy()
-    step_count_launch()
-    byte_block_copy[False](ctx, tb.param,
-        w.norm1_w, w.w_q, w.w_k, w.w_v, w.w_o,
-        w.norm2_w, w.w_gate, w.w_up, w.w_down,
-        _block_offsets(o, base))
+    ref vo = tb.offsets
+    w.norm1_w = tb.param.create_sub_buffer[DType.float32](vo[base], vo[base + 1] - vo[base])
+    w.w_q = tb.param.create_sub_buffer[DType.float32](vo[base + 1], vo[base + 2] - vo[base + 1])
+    w.w_k = tb.param.create_sub_buffer[DType.float32](vo[base + 2], vo[base + 3] - vo[base + 2])
+    w.w_v = tb.param.create_sub_buffer[DType.float32](vo[base + 3], vo[base + 4] - vo[base + 3])
+    w.w_o = tb.param.create_sub_buffer[DType.float32](vo[base + 4], vo[base + 5] - vo[base + 4])
+    w.norm2_w = tb.param.create_sub_buffer[DType.float32](vo[base + 5], vo[base + 6] - vo[base + 5])
+    w.w_gate = tb.param.create_sub_buffer[DType.float32](vo[base + 6], vo[base + 7] - vo[base + 6])
+    w.w_up = tb.param.create_sub_buffer[DType.float32](vo[base + 7], vo[base + 8] - vo[base + 7])
+    w.w_down = tb.param.create_sub_buffer[DType.float32](vo[base + 8], vo[base + 9] - vo[base + 8])
 
 
 def _pack_block(ctx: DeviceContext, mut tb: ByteBuffers, mut bst: LlamaBackwardStages, block: Int) raises:
     """The block's nine gradients -> the flat `grad`, in ONE launch.
 
-    The mirror of `_unpack_block`, same order, same reasoning about the
-    removed wait. `byte_lm_layer_pool_check.mojo` was the one caller that
-    read the device right after without a wait of its own, and it now
-    carries that wait at its own call site.
+    No longer on the train step (lane fx-percall-copies, 2026-11-20: the
+    step's gradients are views of `grad`, `_bind_grad_views`). Kept for
+    `byte_lm_layer_pool_check.mojo`, which packs stages that own their
+    gradient buffers and waits at its own call site.
     """
     var base = 1 + 9 * block
     var o = tb.offsets.copy()
@@ -922,12 +916,21 @@ def _pack_block(ctx: DeviceContext, mut tb: ByteBuffers, mut bst: LlamaBackwardS
         _block_offsets(o, base))
 
 
-def _afn_bind_grad_views(mut tb: ByteBuffers, mut bst: LlamaBackwardStages, block: Int) raises:
-    """FAST Apple / NN60 IDENTICAL: the block's nine weight
-    gradients become views of the flat `grad` at the offsets `_pack_block`
-    copies them to. Every one is written whole, once, by the block backward
-    (a GEMM or the norm weight GEMM), so the flat buffer ends holding what
-    the pack would have copied, and the pack launch goes."""
+def _bind_emb_head_grads(mut tb: ByteBuffers, config: ByteConfig) raises:
+    """`dw_emb` and `dw_lm` are views of the CURRENT flat `grad` at the
+    embedding's and the head's ranges: the backward writes them in place and
+    the two per-step copies into `grad` are gone."""
+    var n = config.vocab_size * config.d_model
+    tb.dw_emb = tb.grad.create_sub_buffer[DType.float32](0, n)
+    tb.dw_lm = tb.grad.create_sub_buffer[DType.float32](tb.offsets[config.n_tensors() - 1], n)
+
+
+def _bind_grad_views(mut tb: ByteBuffers, mut bst: LlamaBackwardStages, block: Int) raises:
+    """The block's nine weight gradients become views of the flat `grad` at
+    the offsets `_pack_block` copies them to. Each is written by the block
+    backward and read by nothing else before the step's gradient is
+    complete, so the flat buffer ends holding what the pack would have
+    copied, and the pack launch goes."""
     var base = 1 + 9 * block
     ref o = tb.offsets
     bst.dw_norm1 = tb.grad.create_sub_buffer[DType.float32](o[base], o[base + 1] - o[base])
@@ -1492,13 +1495,10 @@ def _byte_forward_loss(ctx: DeviceContext, mut tr: ByteTrainer,
     # No wait: the embedding forward below is the next thing queued on this
     # same in-order context and reads no host memory.
     # A host round trip costs about a dozen kernel launches on Metal.
-    # Device-to-device: every parameter byte copied once (blocks, emb, head).
+    # Views of the flat parameters: no parameter byte is copied (lane fx-percall-copies). The two timing
+    # names stay so stored profiles line up; the bytes are 0.
     timing_tick(ctx, ton, tk, "step.unpack_weights")
-    var head_param_cells = 2 * config.vocab_size * config.d_model
-    var unpack_cells = 0 if BYTE_LM_BLOCK_VIEWS else config.n_total() - head_param_cells
-    if not BYTE_LM_EMB_HEAD_VIEWS:
-        unpack_cells += head_param_cells
-    timing_bytes(ton, "step.unpack_weights_bytes", unpack_cells * 4)
+    timing_bytes(ton, "step.unpack_weights_bytes", 0)
     var emb = EmbConfig.llama(config.vocab_size, config.d_model)
     var ce = CeConfig.causal_lm(config.vocab_size)
     identical_embedding_forward_into(ctx, tr.buffers.x, tr.buffers.emb_w, tr.buffers.ids, M, emb)
@@ -1726,10 +1726,10 @@ def _byte_backward_tape(ctx: DeviceContext, mut tr: ByteTrainer) raises:
     var M = config.batch * config.length
     var ton = timing_on()
     var tk = Int(perf_counter_ns())
-    comptime if BYTE_LM_BLOCK_VIEWS:
-        # The weight gradients land in the current flat `grad` owner.
-        for layer in range(config.n_layers):  # driver-loop: over decoder layers
-            _afn_bind_grad_views(tr.buffers, tr.backward[layer], layer)
+    # Every weight gradient lands in the current flat `grad` owner (views, re-bound each backward).
+    for layer in range(config.n_layers):  # driver-loop: over decoder layers
+        _bind_grad_views(tr.buffers, tr.backward[layer], layer)
+    _bind_emb_head_grads(tr.buffers, config)
     # PLAN_SCAN performs 2 * vocab * positions integer probes before the
     # identical row fold; PLAN_SORT is a total-key sort over the positions
     # alone and builds the same ascending-position runs (contract 6 clause (d):
@@ -1758,13 +1758,10 @@ def _byte_backward_tape(ctx: DeviceContext, mut tr: ByteTrainer) raises:
         comptime if BYTE_LM_RELEASE_EAGER:
             tr.released_eager_cells += _byte_release_eager(ctx, tr.forward[layer], tr.backward[layer])
     timing_tick(ctx, ton, tk, "envelope.backward_tape")
-    for layer in range(0 if BYTE_LM_BLOCK_VIEWS else config.n_layers):  # driver-loop: over decoder layers
-        _pack_block(ctx, tr.buffers, tr.backward[layer], layer)
-    _copy_into(ctx, tr.buffers.grad, tr.buffers.dw_emb, 0, 0, config.vocab_size * config.d_model)
-    _copy_into(ctx, tr.buffers.grad, tr.buffers.dw_lm, tr.buffers.offsets[config.n_tensors() - 1], 0, config.vocab_size * config.d_model)
+    # No pack: every gradient was written into its range of `grad` (lane fx-percall-copies). The two timing
+    # names stay so stored profiles line up; the bytes are 0.
     timing_tick(ctx, ton, tk, "step.pack_grads")
-    var packed_cells = 2 * config.vocab_size * config.d_model if BYTE_LM_BLOCK_VIEWS else config.n_total()
-    timing_bytes(ton, "step.pack_grads_bytes", packed_cells * 4)
+    timing_bytes(ton, "step.pack_grads_bytes", 0)
 
 
 def byte_gradient_device(ctx: DeviceContext, mut tr: ByteTrainer,
