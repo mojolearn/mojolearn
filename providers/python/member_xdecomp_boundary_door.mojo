@@ -56,8 +56,20 @@ from core.xdecomp_member import (
     XDECOMP_KIND_FA, XDECOMP_KIND_DL, XDECOMP_KIND_MBDL, XDECOMP_KIND_CODER, XDECOMP_KIND_SPCA, XDECOMP_KIND_MBSPCA,
     XDECOMP_DL_PARAM_COUNT, XDECOMP_MBDL_PARAM_COUNT, XDECOMP_CODER_PARAM_COUNT, XDECOMP_SPCA_PARAM_COUNT,
     XDECOMP_MBSPCA_PARAM_COUNT, XDECOMP_ROUTE_KIT_RESIDENT, XDECOMP_ROUTE_KIT_SHIFT, XDECOMP_KIND_ENVELOPE,
-    XDECOMP_ENVELOPE_PARAM_COUNT, XDECOMP_KIND_LDA, XDECOMP_LDA_PARAM_COUNT,
+    XDECOMP_ENVELOPE_PARAM_COUNT, XDECOMP_KIND_LDA, XDECOMP_LDA_PARAM_COUNT, XDECOMP_KIND_ISOMAP,
+    XDECOMP_ISOMAP_PARAM_COUNT, XDECOMP_KIND_LLE, XDECOMP_LLE_PARAM_COUNT,
 )
+from bindings.manifold_settings_native_door import ManifoldSettings
+from bindings.manifold_storage_native_unpack import ManifoldMatrix
+from bindings.operation_names_mani import MANI_OPN_FAMILY_MANI_ISO_FIT, MANI_OPN_FAMILY_MANI_LLE_FIT
+from bindings.mani_decomp_native_door import mani_iso_plan, mani_lle_plan
+from bindings.mani_kit_door import mk_image, mk_fitted, mk_keep
+from bindings.mani_kit_run import MRun, MImage
+from bindings.family_common_pack import family_array
+from bindings.metrics_native_support_door import metric_warn
+from providers.python.estimator_binding_pyapi_door import estimator_binding_routed
+from x_decomp.descriptor_schema import XD_CAP_RESIDENT, XD_CAP_DEV_SVD
+from x_decomp.descriptor_mani_schema import XD_CAP_DEV_LU, XD_CAP_DEV_EIGH, XD_CAP_LLE_ORDERED
 from bindings.lda_native_door import _batch_size as lda_batch_size
 from bindings.mcd_native_door import _typed as mcd_typed
 from core.decomp_native_impl import decomp_f32_to_u8
@@ -299,6 +311,10 @@ def xdecomp_member_admit(model: PythonObject, fields: PythonObject, kind: Int, c
     if kind == XDECOMP_KIND_LDA:
         _lda_admit(model, fields, context, owner)
         return True
+    if kind == XDECOMP_KIND_ISOMAP:
+        return _iso_admit(model, fields, context, owner)
+    if kind == XDECOMP_KIND_LLE:
+        return _lle_admit(model, fields, context, owner)
     raise Error("ValueError: mojolearn: XDecomp member kind " + String(kind) + " is not published")
 
 
@@ -343,6 +359,12 @@ def xdecomp_member_pack(model: PythonObject, fields: PythonObject, context: Pyth
         return
     if plan.kind == XDECOMP_KIND_LDA:
         _lda_pack(fields, context, plan, state)
+        return
+    if plan.kind == XDECOMP_KIND_ISOMAP:
+        _iso_pack(model, fields, context, plan, state)
+        return
+    if plan.kind == XDECOMP_KIND_LLE:
+        _lle_pack(model, fields, context, plan, state)
         return
     if plan.kind != XDECOMP_KIND_IPCA:
         raise Error("ValueError: mojolearn: XDecomp member kind " + String(plan.kind) + " is not published")
@@ -432,6 +454,10 @@ def xdecomp_member_state(model: PythonObject, fields: PythonObject, context: Pyt
         return _mcd_state(fields, context, plan)
     if plan.kind == XDECOMP_KIND_LDA:
         return _lda_state(fields, context, plan)
+    if plan.kind == XDECOMP_KIND_ISOMAP:
+        return _iso_state(fields, context, plan)
+    if plan.kind == XDECOMP_KIND_LLE:
+        return _lle_state(fields, context, plan)
     if plan.kind != XDECOMP_KIND_IPCA:
         raise Error("ValueError: mojolearn: XDecomp member kind " + String(plan.kind) + " is not published")
     var count = py_get(fields, "n_components_")
@@ -1097,3 +1123,243 @@ def _lda_state(fields: PythonObject, context: PythonObject, plan: MemberPlan) ra
         raise error
     _ = len(scalars)
     return call.state
+
+
+# ---------------------------------------------------------------- Isomap (16), LocallyLinearEmbedding (17)
+# The manifold doors (bindings/mani_decomp_native_door.mojo) over the typed
+# manifold kit. Their fitted attributes are `_ManifoldMatrix` owners
+# (bindings/mani_kit_door.mojo); PACK writes them as host-word owners (the
+# door's first query uploads and keeps their device copies, as for a loaded
+# model), the public embedding_ / dist_matrix_ as float32 Arrays (`mk_out2`).
+
+def _mani_route(model: PythonObject, fields: PythonObject, settings: ManifoldSettings, same_default: Bool,
+    context: PythonObject, mut owner: MemberOwner, mut words: List[Float64]) raises -> Bool:
+    """The family's route (`_table_route`) plus what `mk_image` reads from the
+    estimator's x_decomp binding: its entry, capability word, ordered-LLE word
+    and key, into params [1 .. 3]. `same_default`: LocallyLinearEmbedding's
+    fit also runs a helper image (the default mode's binding); the member
+    takes the estimator only when that is the same binding (False: the
+    caller keeps the door)."""
+    var binding = estimator_binding_routed(model, settings.mode, "_mojolearn_x_decomp", context)
+    if same_default:
+        var helper = estimator_binding_routed(model, settings.default_mode, "_mojolearn_x_decomp", context)
+        if not (helper is binding):
+            return False
+    var entries = _table_route(model, fields, context, owner)
+    var run = MRun()
+    try:
+        var k = mk_image(run, String(py=py_call(native_loaded_module("builtins").str, settings.mode)), binding,
+                         context)
+        var caps = 0
+        if run.images[k].resident:
+            caps |= XD_CAP_RESIDENT
+        if run.images[k].dev_svd:
+            caps |= XD_CAP_DEV_SVD
+        if run.images[k].dev_lu:
+            caps |= XD_CAP_DEV_LU
+        if run.images[k].dev_eigh:
+            caps |= XD_CAP_DEV_EIGH
+        if run.images[k].lle_ordered:
+            caps |= XD_CAP_LLE_ORDERED
+        words[1] = Float64(caps)
+        words[2] = 1.0 if run.images[k].lle_ordered else 0.0
+        words[3] = Float64(run.images[k].key)
+        owner.plan.route.entry = run.images[k].entry
+    finally:
+        run.close()
+    owner.pins = Python.tuple(entries, binding)
+    return True
+
+
+def _iso_admit(model: PythonObject, fields: PythonObject, context: PythonObject, mut owner: MemberOwner) raises -> Bool:
+    # `Isomap.fit`'s checks in its words (`mani_iso_plan`, shared with the
+    # door). A radius model is not a member (its transform refusal names
+    # the radius in Python's words): False, the door serves it.
+    var settings = ManifoldSettings(model, MANI_OPN_FAMILY_MANI_ISO_FIT, context)
+    var plan = mani_iso_plan(settings.values, context)
+    if plan.use_radius:
+        return False
+    var words = List[Float64](length=XDECOMP_ISOMAP_PARAM_COUNT, fill=0.0)
+    words[0] = Float64(XDECOMP_KIND_ISOMAP)
+    if not _mani_route(model, fields, settings, False, context, owner, words):
+        return False
+    words[4] = Float64(plan.nn)
+    words[5] = Float64(plan.kind)
+    words[6] = plan.pw
+    words[7] = 1.0 if plan.topk else 0.0
+    words[8] = Float64(plan.nc)
+    owner.plan.params = words^
+    return True
+
+
+def _lle_admit(model: PythonObject, fields: PythonObject, context: PythonObject, mut owner: MemberOwner) raises -> Bool:
+    # `LocallyLinearEmbedding.fit`'s data-independent checks in its words
+    # (`mani_lle_plan`, shared with the door); the n-dependent ones run in
+    # the member's fit, in the same words.
+    var settings = ManifoldSettings(model, MANI_OPN_FAMILY_MANI_LLE_FIT, context)
+    var plan = mani_lle_plan(settings.values, context)
+    var words = List[Float64](length=XDECOMP_LLE_PARAM_COUNT, fill=0.0)
+    words[0] = Float64(XDECOMP_KIND_LLE)
+    if not _mani_route(model, fields, settings, True, context, owner, words):
+        return False
+    words[4] = Float64(plan.method)
+    words[5] = Float64(plan.nn)
+    words[6] = Float64(plan.nc)
+    words[7] = plan.reg
+    words[8] = plan.tol
+    words[9] = 1.0 if plan.auto_solver else 0.0
+    words[10] = Float64(plan.max_iter)
+    words[11] = Float64(plan.seed)
+    owner.plan.params = words^
+    return True
+
+
+def _mani_owner(view: MemberMatrix) raises -> PythonObject:
+    # `mk_owner` of a host matrix: a `_ManifoldMatrix` holding a copy.
+    var owner = ManifoldMatrix(view.rows, view.cols)
+    var count = view.rows * view.cols
+    owner.words = List[Float32](length=max(count, 1), fill=0.0)
+    if count > 0:
+        unsafe_memcpy(dest=owner.words.unsafe_ptr(), src=f32_ptr(view.data), count=count)
+    owner.has_words = True
+    return PythonObject(alloc=owner^)
+
+
+def _mani_public(view: MemberMatrix, context: PythonObject) raises -> PythonObject:
+    # `mk_out2`: a public float32 Array (C order) holding a copy.
+    var out = family_array(Python.tuple(view.rows, view.cols), "<f4", context)
+    var count = view.rows * view.cols
+    if count > 0:
+        unsafe_memcpy(dest=f32_ptr(Int(py=classical_address(out))), src=f32_ptr(view.data), count=count)
+    return out
+
+
+def _iso_pack(model: PythonObject, fields: PythonObject, context: PythonObject, plan: MemberPlan,
+    state: Int) raises:
+    # `_iso_fit`'s PACK, in its order. Its UserWarning for a disconnected
+    # graph is raised here (the member's fit cannot warn; fx-audit's notice
+    # word is not on the integration branch).
+    var call = MemberCall(plan.route, state)
+    var scalars_view = _export(plan, call, MEMBER_BLOCK_SCALARS)
+    var scalars = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=scalars_view.data)
+    var components = Int(scalars[3])
+    var features = Int(scalars[1])
+    if components > 1:
+        metric_warn("The number of connected components of the neighbors graph is " + String(components)
+                    + " > 1. Completing the graph to fit Isomap might be slow.",
+                    native_loaded_module("builtins").UserWarning, context)
+    var settings = ManifoldSettings(model, MANI_OPN_FAMILY_MANI_ISO_FIT, context)
+    # Matrix blocks (core/xdecomp_member.mojo): 0 d, 1 col, 2 allm, 3 w,
+    # 4 v, 5 em, 6 kc, 7 iv, 8 fit_x.
+    var d = _export(plan, call, XDECOMP_BLOCK_COMPONENTS)
+    var dist = _mani_public(d, context)
+    var em = _export(plan, call, XDECOMP_BLOCK_COMPONENTS + 5)
+    var embedding = _mani_public(em, context)
+    py_setitem(fields, "numeric_mode_", settings.mode)
+    py_setitem(fields, "_kind", PythonObject(Int(plan.params[5])))
+    py_setitem(fields, "_pw", PythonObject(plan.params[6]))
+    py_setitem(fields, "n_connected_components_", PythonObject(components))
+    py_setitem(fields, "dist_matrix_m_", _mani_owner(d))
+    py_setitem(fields, "dist_matrix_", dist)
+    py_setitem(fields, "_k_col", _mani_owner(_export(plan, call, XDECOMP_BLOCK_COMPONENTS + 1)))
+    py_setitem(fields, "_k_all", _mani_owner(_export(plan, call, XDECOMP_BLOCK_COMPONENTS + 2)))
+    py_setitem(fields, "eigenvalues_m_", _mani_owner(_export(plan, call, XDECOMP_BLOCK_COMPONENTS + 3)))
+    py_setitem(fields, "eigenvectors_m_", _mani_owner(_export(plan, call, XDECOMP_BLOCK_COMPONENTS + 4)))
+    py_setitem(fields, "embedding_m_", _mani_owner(_export(plan, call, XDECOMP_BLOCK_COMPONENTS + 5)))
+    py_setitem(fields, "embedding_", embedding)
+    py_setitem(fields, "_fit_X", _mani_owner(_export(plan, call, XDECOMP_BLOCK_COMPONENTS + 8)))
+    py_setitem(fields, "_knn", PythonObject(Int(plan.params[4])))
+    py_setitem(fields, "n_features_in_", PythonObject(features))
+    py_setitem(fields, "_Kc", _mani_owner(_export(plan, call, XDECOMP_BLOCK_COMPONENTS + 6)))
+    py_setitem(fields, "_iso_v_m_", _mani_owner(_export(plan, call, XDECOMP_BLOCK_COMPONENTS + 7)))
+
+
+def _lle_pack(model: PythonObject, fields: PythonObject, context: PythonObject, plan: MemberPlan,
+    state: Int) raises:
+    # `_lle_fit`'s PACK, in its order. Matrix blocks: 0 em, 1 fit_x.
+    var call = MemberCall(plan.route, state)
+    var scalars_view = _export(plan, call, MEMBER_BLOCK_SCALARS)
+    var scalars = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=scalars_view.data)
+    var features = Int(scalars[1])
+    var error = scalars[3]
+    var settings = ManifoldSettings(model, MANI_OPN_FAMILY_MANI_LLE_FIT, context)
+    var em = _export(plan, call, XDECOMP_BLOCK_COMPONENTS)
+    var embedding = _mani_public(em, context)
+    py_setitem(fields, "numeric_mode_", settings.mode)
+    py_setitem(fields, "embedding_m_", _mani_owner(em))
+    py_setitem(fields, "embedding_", embedding)
+    py_setitem(fields, "reconstruction_error_", PythonObject(error))
+    py_setitem(fields, "_fit_X", _mani_owner(_export(plan, call, XDECOMP_BLOCK_COMPONENTS + 1)))
+    py_setitem(fields, "_knn", PythonObject(Int(plan.params[5])))
+    py_setitem(fields, "n_features_in_", PythonObject(features))
+
+
+def _mani_state(fields: PythonObject, context: PythonObject, plan: MemberPlan, names: List[String],
+    blocks: List[Int], matrices: Int, width_of: Int, fourth: Float64) raises -> Int:
+    # IMPORT what the kind's transform reads, from its `_ManifoldMatrix`
+    # owners (`mk_fitted`; a device-only owner comes down once and keeps the
+    # host copy, `mk_keep`), then the scalars and shapes. `blocks[j]` is the
+    # member's matrix index of `names[j]`; fit_x (the training rows) is
+    # names[0]; `width_of` the index into names of the n_components source.
+    var owners = List[PythonObject]()
+    for j in range(len(names)):  # driver-loop: the kind's fitted matrices (at most five)
+        var held = py_get(fields, names[j])
+        if held is None:
+            raise Error("NotFittedError: this member is not fitted yet")
+        owners.append(held)
+    var scalars = List[Float64](length=4 + 2 * matrices, fill=0.0)
+    var run = MRun()
+    _ = run.image(MImage(plan.route.entry, Int(plan.params[3]), Int(plan.params[1]), plan.params[2] != 0.0, -1))
+    var call = member_new(plan)
+    try:
+        for j in range(len(names)):  # driver-loop: the kind's fitted matrices (at most five)
+            var a = mk_fitted(run, owners[j], names[j])
+            var address = run.addr(a)
+            var rows = run.r(a)
+            var cols = run.c(a)
+            scalars[4 + 2 * blocks[j]] = Float64(rows)
+            scalars[5 + 2 * blocks[j]] = Float64(cols)
+            if j == 0:
+                scalars[0] = Float64(rows)
+                scalars[1] = Float64(cols)
+            if j == width_of:
+                scalars[2] = Float64(cols)
+            call.block = XDECOMP_BLOCK_COMPONENTS + blocks[j]
+            call.x = MemberMatrix(address, rows, cols)
+            call.flags = 0
+            _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+            mk_keep(run, a, owners[j])
+        scalars[3] = fourth
+        call.block = MEMBER_BLOCK_SCALARS
+        call.x = MemberMatrix(Int(scalars.unsafe_ptr()), 1, len(scalars), MEMBER_F64)
+        call.flags = MEMBER_IMPORT_DONE
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+    except error:
+        run.close()
+        member_free(plan, call)
+        raise error
+    run.close()
+    _ = len(scalars)
+    _ = len(owners)
+    return call.state
+
+
+def _iso_state(fields: PythonObject, context: PythonObject, plan: MemberPlan) raises -> Int:
+    # What `_iso_transform` reads: _fit_X, dist_matrix_m_, _k_col, _k_all,
+    # _iso_v_m_ (a model fitted before _iso_v_m_ was kept keeps its door).
+    if py_get(fields, "_iso_v_m_") is None:
+        raise Error("NotImplementedError: member ABI: an Isomap fitted without _iso_v_m_ is served by its door")
+    var components = py_get(fields, "n_connected_components_")
+    var names: List[String] = ["_fit_X", "dist_matrix_m_", "_k_col", "_k_all", "_iso_v_m_"]
+    var blocks: List[Int] = [8, 0, 1, 2, 7]
+    return _mani_state(fields, context, plan, names, blocks, 9, 4,
+                       Float64(decomp_int(components)) if components is not None else 1.0)
+
+
+def _lle_state(fields: PythonObject, context: PythonObject, plan: MemberPlan) raises -> Int:
+    # What `_lle_transform` reads: _fit_X, embedding_m_.
+    var error = py_get(fields, "reconstruction_error_")
+    var names: List[String] = ["_fit_X", "embedding_m_"]
+    var blocks: List[Int] = [1, 0]
+    return _mani_state(fields, context, plan, names, blocks, 2, 1,
+                       decomp_float(error) if error is not None else 0.0)

@@ -128,7 +128,12 @@ tools/identity_break.py on the gbdt-symmetric lane is the measurement.
 from std.math import exp, floor, fma, isfinite, log, log2, sqrt
 from std.memory import bitcast
 from std.sys.compile import is_defined
-from core.host_parallel import host_parallelize_pool_env
+from core.host_parallel import host_parallelize, host_parallelize_pool_env
+from core.host_predict_threads import (
+    HostF32Ptr,
+    HostU32Ptr,
+    host_predict_task_count_work,
+)
 
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
@@ -1055,6 +1060,272 @@ def _binarize_columns(
 # ===========================================================================
 
 
+#: The pointers a host task reads the fit's lists through (the task of a
+#: `host_parallelize` split captures addresses, never a list); the owner is
+#: named again after the join.
+comptime GbdtIntPtr = MutPointer[Int, MutUntrackedOrigin]
+comptime GbdtI32Ptr = MutPointer[Int32, MutUntrackedOrigin]
+
+
+def _gbdt_units(items: Int, work: Int) -> Int:
+    """The task count of a host GBDT split over `items` independent units
+    whose whole work is `work` scalar element operations: one task per core
+    (`host_predict_workers`: MOJOLEARN_CPU_THREADS, else the physical cores
+    under the cgroup quota), never more than `items`, every task at least
+    `HOST_MIN_TASK_WORK` operations (below twice that the call stays on the
+    calling thread). Every unit's fold is its own, so the count moves no
+    bit; the tasks run in the calling thread's floating-point environment
+    (`host_parallelize`), the one these statements always ran in."""
+    return max(1, host_predict_task_count_work(items, work))
+
+
+def _one_byte_rows(
+    lo: Int,
+    hi: Int,
+    n_f: Int,
+    total: Int,
+    stat_count: Int,
+    n_rows: Int,
+    fixed_scale: Float32,
+    row_index: GbdtIntPtr,
+    stats: HostF32Ptr,
+    cindex: HostU32Ptr,
+    f_base: GbdtIntPtr,
+    f_shift: HostU32Ptr,
+    f_mask: HostU32Ptr,
+    folds: HostU32Ptr,
+    fold_offset: HostU32Ptr,
+    q: GbdtI32Ptr,
+    acc: GbdtI32Ptr,
+):
+    """Positions `[lo, hi)` of one leaf added to `acc[stat * total + cell]`:
+    every (row, stat) is `hist2_quantize(stat, scale, hist2_dither(position))`
+    and every add is an Int32 add (`q` is `stat_count` scratch words)."""
+    for pos in range(lo, hi):
+        var row = row_index[pos]
+        var u = _hist2_dither(pos)
+        for s in range(stat_count):
+            q[s] = _hist2_quantize(stats[s * n_rows + pos], fixed_scale, u)
+        for k in range(n_f):
+            var word = cindex[f_base[k] + row]
+            var bin = Int((word >> f_shift[k]) & f_mask[k])
+            if bin < Int(folds[k]):
+                var at = Int(fold_offset[k]) + bin
+                for s in range(stat_count):
+                    acc[s * total + at] = acc[s * total + at] + q[s]
+
+
+def _one_byte_cells(
+    acc: GbdtI32Ptr, cells: Int, fixed_scale: Float32, dst: HostF32Ptr
+):
+    """`write_reduces_from_fixed_kernel[False]` over `cells` Int32 sums:
+    `ftz(Float32(Int(q)) / scale)` when `q != 0`, else 0.0."""
+    for c in range(cells):
+        var qq = acc[c]
+        var val = Float32(0.0)
+        if qq != Int32(0):
+            val = ftz(Float32(Int(qq)) / fixed_scale)
+        dst[c] = val
+
+
+def _one_byte_block_n(
+    blk: PolicyBlock,
+    block_first_bin: Int,
+    hist_cells: Int,
+    stat_count: Int,
+    compute_ids: List[Int],
+    p_off: List[Int],
+    p_sz: List[Int],
+    row_index: List[Int],
+    stats: List[Float32],
+    cindex: List[UInt32],
+    layout: CompressedIndexLayout,
+    n_rows: Int,
+    fixed_scale: Float32,
+    mut hist: List[Float32],
+):
+    """A ONE-BYTE block on the IDENTICAL shared-Int32 route
+    (`launch_one_byte_arms[False, True, ...]`, `greedy_search_helper.mojo:
+    2013-2107`, `hist2_one_byte_gather_kernel` at 5/6/7 bits and
+    `hist2_8bit_gather_kernel` at 8) at `stat_count` planes: every
+    (row, stat) is `hist2_quantize(stat, scale, hist2_dither(position))`,
+    added to its (stat, feature, bin) cell when the bin is one the writeback
+    reads (`bin < folds`; a `bin == 1 << bits` skip mark is never below
+    `folds`), and every add is an Int32 add, so the replica and group layout
+    moves no bit. The cell is `write_reduces_from_fixed_kernel[False]`'s
+    (`histogram_utils.mojo:774-805`): `ftz(Float32(Int(q)) / scale)` when
+    `q != 0`, else 0.0.
+
+    THE SPLIT (lane gbdt-host-par). The unit is a PIECE: a run of at most
+    `ceil(level rows / tasks)` consecutive positions of one computed leaf.
+    A leaf that is one piece is summed and written by its task. A leaf cut
+    into several pieces sums each piece into that piece's own Int32 cells,
+    and a second split adds a leaf's pieces cell by cell and writes them.
+    The device adds the same Int32 words in whatever order its threads and
+    replicas meet (wrapping adds commute and associate), so the piece
+    boundaries, like the device's replica layout, move no bit; the float
+    conversion is one statement per cell after the last add. The task count
+    is `_gbdt_units` over the pieces at `rows x (features + planes)`
+    operations; the pieces of the cut leaves are at most twice the task
+    count, so the piece cells stay within `2 x tasks x planes x block bins`
+    Int32 words."""
+    var n_f = blk.count()
+    var total = 0
+    for k in range(n_f):
+        total += Int(blk.folds[k])
+    var n_compute = len(compute_ids)
+    if n_compute == 0 or total == 0:
+        return
+    var f_base = List[Int](length=n_f, fill=0)
+    var f_shift = List[UInt32](length=n_f, fill=UInt32(0))
+    var f_mask = List[UInt32](length=n_f, fill=UInt32(0))
+    for k in range(n_f):
+        ref cf = layout.features[blk.feature_ids[k]]
+        f_base[k] = Int(cf.offset) * n_rows
+        f_shift[k] = UInt32(cf.shift)
+        f_mask[k] = UInt32(cf.mask)
+    var level_rows = 0
+    for j in range(n_compute):
+        level_rows += p_sz[compute_ids[j]]
+    var units = _gbdt_units(
+        max(level_rows, n_compute), level_rows * (n_f + stat_count)
+    )
+    var piece_rows = max(1, (level_rows + units - 1) // units)
+    # the pieces: (computed leaf, first position, end position, cut slot or
+    # -1 for a leaf that is one piece)
+    var pc_leaf = List[Int]()
+    var pc_lo = List[Int]()
+    var pc_hi = List[Int]()
+    var pc_cut = List[Int]()
+    # the cut leaves: (computed leaf, first cut slot, cut slots)
+    var cut_leaf = List[Int]()
+    var cut_first = List[Int]()
+    var cut_count = List[Int]()
+    var n_cut = 0
+    for j in range(n_compute):
+        var slot = compute_ids[j]
+        var off = p_off[slot]
+        var sz = p_sz[slot]
+        var n_pc = (sz + piece_rows - 1) // piece_rows
+        if n_pc <= 1:
+            pc_leaf.append(j)
+            pc_lo.append(off)
+            pc_hi.append(off + sz)
+            pc_cut.append(-1)
+            continue
+        cut_leaf.append(j)
+        cut_first.append(n_cut)
+        cut_count.append(n_pc)
+        for c in range(n_pc):
+            pc_leaf.append(j)
+            pc_lo.append(off + c * piece_rows)
+            pc_hi.append(min(off + (c + 1) * piece_rows, off + sz))
+            pc_cut.append(n_cut + c)
+        n_cut += n_pc
+    var n_pieces = len(pc_leaf)
+    var plane = stat_count * total
+    var cut_acc = List[Int32](length=max(1, n_cut * plane), fill=Int32(0))
+    var task_units = min(units, n_pieces)
+
+    var ids_p = rebind[GbdtIntPtr](compute_ids.unsafe_ptr())
+    var row_p = rebind[GbdtIntPtr](row_index.unsafe_ptr())
+    var stats_p = rebind[HostF32Ptr](stats.unsafe_ptr())
+    var cindex_p = rebind[HostU32Ptr](cindex.unsafe_ptr())
+    var base_p = rebind[GbdtIntPtr](f_base.unsafe_ptr())
+    var shift_p = rebind[HostU32Ptr](f_shift.unsafe_ptr())
+    var mask_p = rebind[HostU32Ptr](f_mask.unsafe_ptr())
+    var folds_p = rebind[HostU32Ptr](blk.folds.unsafe_ptr())
+    var fold_off_p = rebind[HostU32Ptr](blk.fold_offset.unsafe_ptr())
+    var leaf_p = rebind[GbdtIntPtr](pc_leaf.unsafe_ptr())
+    var lo_p = rebind[GbdtIntPtr](pc_lo.unsafe_ptr())
+    var hi_p = rebind[GbdtIntPtr](pc_hi.unsafe_ptr())
+    var cut_p = rebind[GbdtIntPtr](pc_cut.unsafe_ptr())
+    var acc_p = rebind[GbdtI32Ptr](cut_acc.unsafe_ptr())
+    var hist_p = rebind[HostF32Ptr](hist.unsafe_ptr())
+
+    def pieces(unit: Int) {imm task_units, imm n_pieces, imm n_f, imm total, imm plane, imm stat_count, imm n_rows, imm fixed_scale, imm hist_cells, imm block_first_bin, imm ids_p, imm row_p, imm stats_p, imm cindex_p, imm base_p, imm shift_p, imm mask_p, imm folds_p, imm fold_off_p, imm leaf_p, imm lo_p, imm hi_p, imm cut_p, imm acc_p, imm hist_p}:
+        # the task's own cells, for the leaves that are one piece
+        var own = List[Int32](length=plane, fill=Int32(0))
+        var q = List[Int32](length=stat_count, fill=Int32(0))
+        var own_p = rebind[GbdtI32Ptr](own.unsafe_ptr())
+        var q_p = rebind[GbdtI32Ptr](q.unsafe_ptr())
+        var piece = unit
+        while piece < n_pieces:
+            var cut = cut_p[piece]
+            if cut >= 0:
+                _one_byte_rows(
+                    lo_p[piece], hi_p[piece], n_f, total, stat_count, n_rows,
+                    fixed_scale, row_p, stats_p, cindex_p, base_p, shift_p,
+                    mask_p, folds_p, fold_off_p, q_p, acc_p + cut * plane,
+                )
+            else:
+                for c in range(plane):
+                    own_p[c] = Int32(0)
+                _one_byte_rows(
+                    lo_p[piece], hi_p[piece], n_f, total, stat_count, n_rows,
+                    fixed_scale, row_p, stats_p, cindex_p, base_p, shift_p,
+                    mask_p, folds_p, fold_off_p, q_p, own_p,
+                )
+                var slot = ids_p[leaf_p[piece]]
+                for z in range(stat_count):
+                    _one_byte_cells(
+                        own_p + z * total, total, fixed_scale,
+                        hist_p + (
+                            slot * stat_count * hist_cells + z * hist_cells
+                            + block_first_bin
+                        ),
+                    )
+            piece += task_units
+        _ = len(own)
+        _ = len(q)
+
+    host_parallelize(pieces, task_units)
+
+    # the cut leaves: (leaf, plane) is the unit; a cell is the Int32 sum of
+    # its pieces, then the one conversion
+    var n_cut_leaves = len(cut_leaf)
+    if n_cut_leaves > 0:
+        var merge_items = n_cut_leaves * stat_count
+        var merge_units = _gbdt_units(merge_items, n_cut * plane)
+        var cl_p = rebind[GbdtIntPtr](cut_leaf.unsafe_ptr())
+        var cf_p = rebind[GbdtIntPtr](cut_first.unsafe_ptr())
+        var cc_p = rebind[GbdtIntPtr](cut_count.unsafe_ptr())
+
+        def merge(unit: Int) {imm merge_units, imm merge_items, imm total, imm plane, imm stat_count, imm fixed_scale, imm hist_cells, imm block_first_bin, imm ids_p, imm cl_p, imm cf_p, imm cc_p, imm acc_p, imm hist_p}:
+            var item = unit
+            while item < merge_items:
+                var leaf = item // stat_count
+                var z = item % stat_count
+                var first = acc_p + (cf_p[leaf] * plane + z * total)
+                for c in range(1, cc_p[leaf]):
+                    var more = acc_p + ((cf_p[leaf] + c) * plane + z * total)
+                    for cell in range(total):
+                        first[cell] = first[cell] + more[cell]
+                var slot = ids_p[cl_p[leaf]]
+                _one_byte_cells(
+                    first, total, fixed_scale,
+                    hist_p + (
+                        slot * stat_count * hist_cells + z * hist_cells
+                        + block_first_bin
+                    ),
+                )
+                item += merge_units
+
+        host_parallelize(merge, merge_units)
+        _ = len(cut_leaf)
+        _ = len(cut_first)
+        _ = len(cut_count)
+    # the tasks read these through pointers: named again past the joins
+    _ = len(f_base)
+    _ = len(f_shift)
+    _ = len(f_mask)
+    _ = len(pc_leaf)
+    _ = len(pc_lo)
+    _ = len(pc_hi)
+    _ = len(pc_cut)
+    _ = len(cut_acc)
+
+
 def _one_byte_block(
     blk: PolicyBlock,
     block_first_bin: Int,
@@ -1070,46 +1341,11 @@ def _one_byte_block(
     fixed_scale: Float32,
     mut hist: List[Float32],
 ):
-    """A ONE-BYTE block on the IDENTICAL shared-Int32 route
-    (`launch_one_byte_arms[False, True, ...]`, `greedy_search_helper.mojo:
-    2013-2107`, `hist2_one_byte_gather_kernel` at 5/6/7 bits and
-    `hist2_8bit_gather_kernel` at 8): every (row, stat) is
-    `hist2_quantize(stat, scale, hist2_dither(position))`, added to its
-    (stat, feature, bin) cell when the bin is one the writeback reads
-    (`bin < folds`; a `bin == 1 << bits` skip mark is never below `folds`),
-    and every add is an Int32 add, so the replica and group layout moves no
-    bit. The cell is `write_reduces_from_fixed_kernel[False]`'s
-    (`histogram_utils.mojo:774-805`): `ftz(Float32(Int(q)) / scale)` when
-    `q != 0`, else 0.0."""
-    var n_f = blk.count()
-    var total = 0
-    for k in range(n_f):
-        total += Int(blk.folds[k])
-    for j in range(len(compute_ids)):
-        var slot = compute_ids[j]
-        var off = p_off[slot]
-        var sz = p_sz[slot]
-        var acc = List[Int32](length=2 * total, fill=Int32(0))
-        for pos in range(off, off + sz):
-            var row = row_index[pos]
-            var u = _hist2_dither(pos)
-            var q0 = _hist2_quantize(stats[pos], fixed_scale, u)
-            var q1 = _hist2_quantize(stats[n_rows + pos], fixed_scale, u)
-            for k in range(n_f):
-                ref cf = layout.features[blk.feature_ids[k]]
-                var word = cindex[Int(cf.offset) * n_rows + row]
-                var bin = Int((word >> cf.shift) & cf.mask)
-                if bin < Int(blk.folds[k]):
-                    var at = Int(blk.fold_offset[k]) + bin
-                    acc[at] = acc[at] + q0
-                    acc[total + at] = acc[total + at] + q1
-        for z in range(2):
-            for c in range(total):
-                var q = acc[z * total + c]
-                var val = Float32(0.0)
-                if q != Int32(0):
-                    val = ftz(Float32(Int(q)) / fixed_scale)
-                hist[slot * 2 * hist_cells + z * hist_cells + block_first_bin + c] = val
+    """`_one_byte_block_n` at the two search planes."""
+    _one_byte_block_n(
+        blk, block_first_bin, hist_cells, 2, compute_ids, p_off, p_sz,
+        row_index, stats, cindex, layout, n_rows, fixed_scale, hist,
+    )
 
 
 def _half_byte_slot(ci: UInt32, tid: Int, i: Int) -> Int:
@@ -1129,15 +1365,17 @@ def _half_byte_one_block(
     p_size: Int,
     stat_id: Int,
     column: Int,
-    row_index: List[Int],
-    stats: List[Float32],
-    cindex: List[UInt32],
+    row_index: GbdtIntPtr,
+    stats: HostF32Ptr,
+    cindex: HostU32Ptr,
     n_rows: Int,
-) -> List[Float32]:
+    dst: HostF32Ptr,
+):
     """ONE grid block of `half_byte_hist_gather_kernel` (`hist_half_byte.mojo:
     592-930`; the direct kernel at depth 0 is the same arithmetic over the
-    identity index), up to its `Reduce()`: returns the 128 stage-2 cells,
-    `[feature + 8 * fold]`.
+    identity index), up to its `Reduce()`: writes the 128 stage-2 cells,
+    `dst[feature + 8 * fold]`. It reads the fit's lists through pointers and
+    writes `dst` only, so one grid block is one task of `_hist_stage2`.
 
     THE ORDER OF THE FLOAT ADDS IS THE ONE THE BARRIERS FIX. Every thread of
     the block makes the same number of turn syncs (DEVIATION 2600's peel
@@ -1226,13 +1464,204 @@ def _half_byte_one_block(
             i2 += GBDT_HB_REDUCE_WIDTH
         smem[s] = acc
     # stage 2 (`:920-930`): every read precedes every write
-    var stage2 = List[Float32](length=128, fill=Float32(0.0))
     for t in range(128):
         var acc2 = Float32(0.0)
         for group in range(4):
             acc2 = ftz(acc2 + smem[32 * ((t >> 3) & 15) + (t & 7) + 8 * group])
-        stage2[t] = acc2
-    return stage2^
+        dst[t] = acc2
+
+
+def _hist_replicas(base_count: Int, depth: Int) -> Int:
+    """`replication_for`'s pinned grid (`greedy_search_helper.mojo:2547-
+    2641`): the blocks one (leaf, plane, group) may spread over."""
+    var max_active_blocks = 2 * GBDT_PINNED_SM
+    if depth > 0:
+        max_active_blocks = 2 * max_active_blocks
+    var base = base_count
+    if base < 1:
+        base = 1
+    var replicas = (max_active_blocks + base - 1) // base
+    if replicas < 1:
+        replicas = 1
+    return replicas
+
+
+def _hist_stage2(
+    binary: Bool,
+    n_compute: Int,
+    stat_count: Int,
+    groups: Int,
+    replicas: Int,
+    min_docs_per_block: Int,
+    first_column: Int,
+    compute_ids: List[Int],
+    p_off: List[Int],
+    p_sz: List[Int],
+    row_index: List[Int],
+    stats: List[Float32],
+    cindex: List[UInt32],
+    n_rows: Int,
+) -> List[Float32]:
+    """Every grid block of a half-byte or binary launch, up to its
+    `Reduce()`: the 128 stage-2 cells of block `lb` of (computed leaf `j`,
+    plane `z`, group `g`) at `128 * (((j * stat_count + z) * groups + g) *
+    replicas + lb)`; a block past the leaf's active count stays 0.0 and is
+    never read.
+
+    THE SPLIT (lane gbdt-host-par). The unit is ONE GRID BLOCK, the unit the
+    device runs concurrently: a block reads the leaf's rows and writes its
+    own shared memory and its own 128 cells, and every float add of a block
+    stays in the window order `_half_byte_one_block` / `_binary_one_block`
+    spell (the barriers' order). Nothing is folded across blocks here. The
+    blocks are dealt to `_gbdt_units` tasks round robin (a large leaf's
+    blocks are consecutive, so they land on different tasks); the work is 8
+    turns per row per plane per group."""
+    var per_leaf = stat_count * groups * replicas
+    var n_blocks = n_compute * per_leaf
+    var vals = List[Float32](length=max(1, 128 * n_blocks), fill=Float32(0.0))
+    if n_blocks == 0:
+        return vals^
+    var level_rows = 0
+    for j in range(n_compute):
+        level_rows += p_sz[compute_ids[j]]
+    var units = _gbdt_units(n_blocks, 8 * level_rows * stat_count * groups)
+    var ids_p = rebind[GbdtIntPtr](compute_ids.unsafe_ptr())
+    var off_p = rebind[GbdtIntPtr](p_off.unsafe_ptr())
+    var sz_p = rebind[GbdtIntPtr](p_sz.unsafe_ptr())
+    var row_p = rebind[GbdtIntPtr](row_index.unsafe_ptr())
+    var stats_p = rebind[HostF32Ptr](stats.unsafe_ptr())
+    var cindex_p = rebind[HostU32Ptr](cindex.unsafe_ptr())
+    var vals_p = rebind[HostF32Ptr](vals.unsafe_ptr())
+
+    def blocks(unit: Int) {imm units, imm n_blocks, imm binary, imm stat_count, imm groups, imm replicas, imm min_docs_per_block, imm first_column, imm n_rows, imm ids_p, imm off_p, imm sz_p, imm row_p, imm stats_p, imm cindex_p, imm vals_p}:
+        var block = unit
+        while block < n_blocks:
+            var lb = block % replicas
+            var rest = block // replicas
+            var g = rest % groups
+            rest = rest // groups
+            var z = rest % stat_count
+            var slot = ids_p[rest // stat_count]
+            var p_size = sz_p[slot]
+            var active = (p_size + min_docs_per_block - 1) // min_docs_per_block
+            if active > replicas:
+                active = replicas
+            if lb < active:
+                if binary:
+                    _binary_one_block(
+                        lb, active, off_p[slot], p_size, z, first_column + g,
+                        row_p, stats_p, cindex_p, n_rows, vals_p + 128 * block,
+                    )
+                else:
+                    _half_byte_one_block(
+                        lb, active, off_p[slot], p_size, z, first_column + g,
+                        row_p, stats_p, cindex_p, n_rows, vals_p + 128 * block,
+                    )
+            block += units
+
+    host_parallelize(blocks, units)
+    return vals^
+
+
+def _half_byte_block_n(
+    blk: PolicyBlock,
+    block_first_bin: Int,
+    hist_cells: Int,
+    stat_count: Int,
+    compute_ids: List[Int],
+    depth: Int,
+    p_off: List[Int],
+    p_sz: List[Int],
+    row_index: List[Int],
+    stats: List[Float32],
+    cindex: List[UInt32],
+    n_rows: Int,
+    fixed_scale: Float32,
+    mut hist: List[Float32],
+):
+    """A HALF-BYTE block at `stat_count` planes: `launch_histograms_for_
+    blocks`' half-byte arm (`greedy_search_helper.mojo:2907-2990`) over
+    `replication_for`'s pinned grid (`:2547-2641`, the replication base
+    `groups * n_compute * stat_count`, every plane its own grid z), then the
+    flush of `AddToGlobalMemory` (`hist_half_byte.mojo:932-1040`) and the
+    bridge `write_reduces_from_fixed_kernel[True]` (`histogram_utils.mojo:
+    774-805`):
+
+      active blocks > 1   q = sum over blocks with |val| > 1e-20 of
+                          Int32(val * scale); the cell is
+                          ftz(Float32(Int(q)) / scale) when q != 0, else the
+                          memset scratch's 0.0
+      one active block    val when |val| > 1e-20, else 0.0
+      none (empty leaf)   0.0
+
+    THE SPLIT (lane gbdt-host-par): the grid blocks run across the cores in
+    `_hist_stage2`; the flush is split over (leaf, plane, group), each of
+    which owns its features' cells and adds its blocks' Int32 words
+    ascending in the block index, as before."""
+    var n_f = blk.count()
+    var n_compute = len(compute_ids)
+    var groups = (n_f + 7) // 8
+    var replicas = _hist_replicas(groups * n_compute * stat_count, depth)
+    var min_docs_per_block = GBDT_HB_LANES * 1 * GBDT_HB_LOAD * (
+        GBDT_HB_BLOCK // GBDT_HB_LANES
+    )
+    var vals = _hist_stage2(
+        False, n_compute, stat_count, groups, replicas, min_docs_per_block,
+        blk.first_column, compute_ids, p_off, p_sz, row_index, stats, cindex,
+        n_rows,
+    )
+    var items = n_compute * stat_count * groups
+    if items == 0:
+        return
+    var units = _gbdt_units(items, 128 * items * replicas)
+    var ids_p = rebind[GbdtIntPtr](compute_ids.unsafe_ptr())
+    var sz_p = rebind[GbdtIntPtr](p_sz.unsafe_ptr())
+    var folds_p = rebind[HostU32Ptr](blk.folds.unsafe_ptr())
+    var fold_off_p = rebind[HostU32Ptr](blk.fold_offset.unsafe_ptr())
+    var vals_p = rebind[HostF32Ptr](vals.unsafe_ptr())
+    var hist_p = rebind[HostF32Ptr](hist.unsafe_ptr())
+
+    def flush(unit: Int) {imm units, imm items, imm n_f, imm stat_count, imm groups, imm replicas, imm min_docs_per_block, imm fixed_scale, imm hist_cells, imm block_first_bin, imm ids_p, imm sz_p, imm folds_p, imm fold_off_p, imm vals_p, imm hist_p}:
+        var item = unit
+        while item < items:
+            var g = item % groups
+            var z = (item // groups) % stat_count
+            var slot = ids_p[item // (groups * stat_count)]
+            var active_block_count = (
+                sz_p[slot] + min_docs_per_block - 1
+            ) // min_docs_per_block
+            if active_block_count > replicas:
+                active_block_count = replicas
+            var feature_offset = g * 8
+            var f_count = n_f - feature_offset
+            if f_count > 8:
+                f_count = 8
+            var v_p = vals_p + 128 * item * replicas
+            for fid in range(f_count):
+                var folds = Int(folds_p[feature_offset + fid])
+                var fold_off = Int(fold_off_p[feature_offset + fid])
+                for fold in range(folds):
+                    var cell = Float32(0.0)
+                    if active_block_count == 1:
+                        var v = v_p[fid + 8 * fold]
+                        if abs(v) > Float32(1e-20):
+                            cell = v
+                    elif active_block_count > 1:
+                        var q = Int32(0)
+                        for lb in range(active_block_count):
+                            var v = v_p[lb * 128 + fid + 8 * fold]
+                            if abs(v) > Float32(1e-20):
+                                q = q + Int32(v * fixed_scale)
+                        if q != Int32(0):
+                            cell = ftz(Float32(Int(q)) / fixed_scale)
+                    hist_p[
+                        slot * stat_count * hist_cells + z * hist_cells
+                        + block_first_bin + fold_off + fold
+                    ] = cell
+            item += units
+
+    host_parallelize(flush, units)
+    _ = len(vals)
 
 
 def _half_byte_block(
@@ -1250,79 +1679,11 @@ def _half_byte_block(
     fixed_scale: Float32,
     mut hist: List[Float32],
 ):
-    """A HALF-BYTE block: `launch_histograms_for_blocks`' half-byte arm
-    (`greedy_search_helper.mojo:2907-2990`) over `replication_for`'s pinned
-    grid (`:2547-2641`), then the flush of `AddToGlobalMemory`
-    (`hist_half_byte.mojo:932-1040`) and the bridge
-    `write_reduces_from_fixed_kernel[True]` (`histogram_utils.mojo:774-805`):
-
-      active blocks > 1   q = sum over blocks with |val| > 1e-20 of
-                          Int32(val * scale); the cell is
-                          ftz(Float32(Int(q)) / scale) when q != 0, else the
-                          memset scratch's 0.0
-      one active block    val when |val| > 1e-20, else 0.0
-      none (empty leaf)   0.0
-    """
-    var n_f = blk.count()
-    var n_compute = len(compute_ids)
-    var groups = (n_f + 7) // 8
-    var max_active_blocks = 2 * GBDT_PINNED_SM
-    if depth > 0:
-        max_active_blocks = 2 * max_active_blocks
-    var base_count = groups * n_compute * 2
-    if base_count < 1:
-        base_count = 1
-    var replicas = (max_active_blocks + base_count - 1) // base_count
-    if replicas < 1:
-        replicas = 1
-    var min_docs_per_block = GBDT_HB_LANES * 1 * GBDT_HB_LOAD * (
-        GBDT_HB_BLOCK // GBDT_HB_LANES
+    """`_half_byte_block_n` at the two search planes."""
+    _half_byte_block_n(
+        blk, block_first_bin, hist_cells, 2, compute_ids, depth, p_off, p_sz,
+        row_index, stats, cindex, n_rows, fixed_scale, hist,
     )
-    for j in range(n_compute):
-        var slot = compute_ids[j]
-        var p_offset = p_off[slot]
-        var p_size = p_sz[slot]
-        var active_block_count = (p_size + min_docs_per_block - 1) // min_docs_per_block
-        if active_block_count > replicas:
-            active_block_count = replicas
-        for z in range(2):
-            for g in range(groups):
-                var feature_offset = g * 8
-                var f_count = n_f - feature_offset
-                if f_count > 8:
-                    f_count = 8
-                var column = blk.first_column + g
-                var vals = List[Float32](
-                    length=128 * active_block_count, fill=Float32(0.0)
-                )
-                for lb in range(active_block_count):
-                    var stage2 = _half_byte_one_block(
-                        lb, active_block_count, p_offset, p_size, z, column,
-                        row_index, stats, cindex, n_rows,
-                    )
-                    for t in range(128):
-                        vals[lb * 128 + t] = stage2[t]
-                for fid in range(f_count):
-                    var folds = Int(blk.folds[feature_offset + fid])
-                    var fold_off = Int(blk.fold_offset[feature_offset + fid])
-                    for fold in range(folds):
-                        var cell = Float32(0.0)
-                        if active_block_count == 1:
-                            var v = vals[fid + 8 * fold]
-                            if abs(v) > Float32(1e-20):
-                                cell = v
-                        elif active_block_count > 1:
-                            var q = Int32(0)
-                            for lb in range(active_block_count):
-                                var v = vals[lb * 128 + fid + 8 * fold]
-                                if abs(v) > Float32(1e-20):
-                                    q = q + Int32(v * fixed_scale)
-                            if q != Int32(0):
-                                cell = ftz(Float32(Int(q)) / fixed_scale)
-                        hist[
-                            slot * 2 * hist_cells + z * hist_cells
-                            + block_first_bin + fold_off + fold
-                        ] = cell
 
 
 #: the binary family under IDENTICAL: the half-byte accumulator
@@ -1338,15 +1699,17 @@ def _binary_one_block(
     p_size: Int,
     stat_id: Int,
     column: Int,
-    row_index: List[Int],
-    stats: List[Float32],
-    cindex: List[UInt32],
+    row_index: GbdtIntPtr,
+    stats: HostF32Ptr,
+    cindex: HostU32Ptr,
     n_rows: Int,
-) -> List[Float32]:
+    dst: HostF32Ptr,
+):
     """ONE grid block of `binary_hist_gather_kernel` (`hist_binary.mojo:
     551-948`; the direct `binary_hist_kernel` at depth 0 is the same
-    arithmetic over the identity index), up to its `Reduce()`: returns the
-    128 stage-2 cells `[nibble + 8 * nibble value]`.
+    arithmetic over the identity index), up to its `Reduce()`: writes the
+    128 stage-2 cells `dst[nibble + 8 * nibble value]` (pointer inputs, `dst`
+    the only write: one grid block is one task of `_hist_stage2`).
 
     The accumulator is the half-byte one (`add_half_byte_point`,
     `add_point_slot`), so the argument of `_half_byte_one_block` holds
@@ -1447,13 +1810,11 @@ def _binary_one_block(
             acc = ftz(acc + smem[i2])
             i2 += GBDT_HB_REDUCE_WIDTH
         smem[s] = acc
-    var stage2 = List[Float32](length=128, fill=Float32(0.0))
     for t in range(128):
         var acc2 = Float32(0.0)
         for group in range(4):
             acc2 = ftz(acc2 + smem[32 * ((t >> 3) & 15) + (t & 7) + 8 * group])
-        stage2[t] = acc2
-    return stage2^
+        dst[t] = acc2
 
 
 def _binary_block_n(
@@ -1494,71 +1855,81 @@ def _binary_block_n(
     At `stat_count` planes (the multi-output and pointwise oracles) the
     replication base is `groups * n_compute * stat_count` (`replication_for`)
     and every plane is its own grid z, as `_half_byte_block_n`.
+
+    THE SPLIT (lane gbdt-host-par): the grid blocks run across the cores in
+    `_hist_stage2`; the nibble sum and the flush are split over (leaf, plane,
+    group), each of which owns its features' cells, sums a block's eight
+    stage-2 cells ascending in the nibble value and adds the blocks' Int32
+    words ascending in the block index, as before.
     """
     var n_f = blk.count()
     var n_compute = len(compute_ids)
     var groups = (n_f + 31) // 32
-    var max_active_blocks = 2 * GBDT_PINNED_SM
-    if depth > 0:
-        max_active_blocks = 2 * max_active_blocks
-    var base_count = groups * n_compute * stat_count
-    if base_count < 1:
-        base_count = 1
-    var replicas = (max_active_blocks + base_count - 1) // base_count
-    if replicas < 1:
-        replicas = 1
+    var replicas = _hist_replicas(groups * n_compute * stat_count, depth)
     var min_docs_per_block = GBDT_HB_LANES * GBDT_BIN_UNROLL * GBDT_HB_LOAD * (
         GBDT_HB_BLOCK // GBDT_HB_LANES
     )
-    for j in range(n_compute):
-        var slot = compute_ids[j]
-        var p_offset = p_off[slot]
-        var p_size = p_sz[slot]
-        var active_block_count = (p_size + min_docs_per_block - 1) // min_docs_per_block
-        if active_block_count > replicas:
-            active_block_count = replicas
-        for z in range(stat_count):
-            for g in range(groups):
-                var feature_offset = g * 32
-                var f_count = n_f - feature_offset
-                if f_count > 32:
-                    f_count = 32
-                var column = blk.first_column + g
-                var vals = List[Float32](
-                    length=128 * active_block_count, fill=Float32(0.0)
-                )
-                for lb in range(active_block_count):
-                    var stage2 = _binary_one_block(
-                        lb, active_block_count, p_offset, p_size, z, column,
-                        row_index, stats, cindex, n_rows,
-                    )
-                    for t in range(128):
-                        vals[lb * 128 + t] = stage2[t]
-                for fid in range(f_count):
-                    if Int(blk.folds[feature_offset + fid]) == 0:
-                        continue
-                    var fold_off = Int(blk.fold_offset[feature_offset + fid])
-                    var group_id = fid // 4
-                    var f_mask = 1 << (3 - (fid & 3))
-                    var cell = Float32(0.0)
-                    if active_block_count >= 1:
-                        var q = Int32(0)
-                        for lb in range(active_block_count):
-                            var v = Float32(0.0)
-                            for i in range(16):
-                                if (i & f_mask) == 0 and not (GBDT_HOST_BINARY_SABOTAGE and i == 0):
-                                    v += vals[lb * 128 + 8 * i + group_id]
-                            if abs(v) > Float32(1e-20):
-                                if active_block_count == 1:
-                                    cell = v
-                                else:
-                                    q = q + Int32(v * fixed_scale)
-                        if active_block_count > 1 and q != Int32(0):
-                            cell = ftz(Float32(Int(q)) / fixed_scale)
-                    hist[
-                        slot * stat_count * hist_cells + z * hist_cells
-                        + block_first_bin + fold_off
-                    ] = cell
+    var vals = _hist_stage2(
+        True, n_compute, stat_count, groups, replicas, min_docs_per_block,
+        blk.first_column, compute_ids, p_off, p_sz, row_index, stats, cindex,
+        n_rows,
+    )
+    var items = n_compute * stat_count * groups
+    if items == 0:
+        return
+    var units = _gbdt_units(items, 512 * items * replicas)
+    var ids_p = rebind[GbdtIntPtr](compute_ids.unsafe_ptr())
+    var sz_p = rebind[GbdtIntPtr](p_sz.unsafe_ptr())
+    var folds_p = rebind[HostU32Ptr](blk.folds.unsafe_ptr())
+    var fold_off_p = rebind[HostU32Ptr](blk.fold_offset.unsafe_ptr())
+    var vals_p = rebind[HostF32Ptr](vals.unsafe_ptr())
+    var hist_p = rebind[HostF32Ptr](hist.unsafe_ptr())
+
+    def flush(unit: Int) {imm units, imm items, imm n_f, imm stat_count, imm groups, imm replicas, imm min_docs_per_block, imm fixed_scale, imm hist_cells, imm block_first_bin, imm ids_p, imm sz_p, imm folds_p, imm fold_off_p, imm vals_p, imm hist_p}:
+        var item = unit
+        while item < items:
+            var g = item % groups
+            var z = (item // groups) % stat_count
+            var slot = ids_p[item // (groups * stat_count)]
+            var active_block_count = (
+                sz_p[slot] + min_docs_per_block - 1
+            ) // min_docs_per_block
+            if active_block_count > replicas:
+                active_block_count = replicas
+            var feature_offset = g * 32
+            var f_count = n_f - feature_offset
+            if f_count > 32:
+                f_count = 32
+            var v_p = vals_p + 128 * item * replicas
+            for fid in range(f_count):
+                if Int(folds_p[feature_offset + fid]) == 0:
+                    continue
+                var fold_off = Int(fold_off_p[feature_offset + fid])
+                var group_id = fid // 4
+                var f_mask = 1 << (3 - (fid & 3))
+                var cell = Float32(0.0)
+                if active_block_count >= 1:
+                    var q = Int32(0)
+                    for lb in range(active_block_count):
+                        var v = Float32(0.0)
+                        for i in range(16):
+                            if (i & f_mask) == 0 and not (GBDT_HOST_BINARY_SABOTAGE and i == 0):
+                                v += v_p[lb * 128 + 8 * i + group_id]
+                        if abs(v) > Float32(1e-20):
+                            if active_block_count == 1:
+                                cell = v
+                            else:
+                                q = q + Int32(v * fixed_scale)
+                    if active_block_count > 1 and q != Int32(0):
+                        cell = ftz(Float32(Int(q)) / fixed_scale)
+                hist_p[
+                    slot * stat_count * hist_cells + z * hist_cells
+                    + block_first_bin + fold_off
+                ] = cell
+            item += units
+
+    host_parallelize(flush, units)
+    _ = len(vals)
 
 
 def _binary_block(
@@ -1583,6 +1954,11 @@ def _binary_block(
     )
 
 
+#: `partition_stats_chunks` pinned at the two search planes:
+#: (2 * 32 + n_stats - 1) // n_stats = 32 chunks.
+comptime GBDT_PARTITION_CHUNKS = (2 * GBDT_PINNED_SM + 2 - 1) // 2
+
+
 def _partition_stat(
     stats: List[Float32], line_size: Int, stat_id: Int, offset: Int, size: Int
 ) -> Float32:
@@ -1591,10 +1967,60 @@ def _partition_stat(
     (2 * 32 + n_stats - 1) // n_stats = 32 chunks at 2 stats): phase 1 strides
     each 512-thread block over the leaf, phase 2 folds one partial per chunk,
     each through the 512-lane halving tree."""
-    comptime MAX_CHUNKS = (2 * GBDT_PINNED_SM + 2 - 1) // 2
     return _pinned_partition_stat(
-        stats, stat_id * line_size + offset, size, MAX_CHUNKS
+        stats, stat_id * line_size + offset, size, GBDT_PARTITION_CHUNKS
     )
+
+
+def _partition_chunk_partial(
+    stats: HostF32Ptr, base: Int, size: Int, max_chunks: Int, chunk: Int
+) -> Float32:
+    """Phase 1 of the pinned `compute_partition_stats` launch for ONE chunk
+    (one 512-thread block): thread `tid` folds `stats[base + chunk * 512 +
+    tid + k * stride]` ascending in `k` from 0.0, then the block's 512-lane
+    halving tree over its live lanes (`_halving_fold_live`). A chunk reads
+    the leaf and writes its own partial only, so chunks are independent."""
+    var stride = max_chunks * GBDT_STATS_BLOCK
+    var slab = List[Float32](length=GBDT_STATS_BLOCK, fill=Float32(0.0))
+    var live = min(size - chunk * GBDT_STATS_BLOCK, GBDT_STATS_BLOCK)
+    var p = 1
+    while p < live:
+        p <<= 1
+    for tid in range(p):
+        var v = Float32(0.0)
+        var i = chunk * GBDT_STATS_BLOCK + tid
+        while i < size:
+            v += stats[base + i]
+            i += stride
+        slab[tid] = v
+    return _halving_fold_live(slab, live, GBDT_STATS_BLOCK)
+
+
+def _partition_phase2(
+    partials: HostF32Ptr, live_chunks: Int, max_chunks: Int
+) -> Float32:
+    """Phase 2: lane `t < max_chunks` holds `0.0 + partials[t] (+ ...)`, the
+    dead chunks' +0.0 included; lanes past the live chunks hold +0.0; then
+    the 512-lane halving tree over the live lanes."""
+    var slab = List[Float32](length=GBDT_STATS_BLOCK, fill=Float32(0.0))
+    var p2 = 1
+    while p2 < live_chunks:
+        p2 <<= 1
+    for tid in range(p2):
+        var acc = Float32(0.0)
+        var c = tid
+        while c < max_chunks:
+            acc += partials[c] if c < live_chunks else Float32(0.0)
+            c += GBDT_STATS_BLOCK
+        slab[tid] = acc
+    return _halving_fold_live(slab, live_chunks, GBDT_STATS_BLOCK)
+
+
+def _partition_live_chunks(size: Int, max_chunks: Int) -> Int:
+    var live_chunks = (size + GBDT_STATS_BLOCK - 1) // GBDT_STATS_BLOCK
+    if live_chunks > max_chunks:
+        live_chunks = max_chunks
+    return live_chunks
 
 
 def _pinned_partition_stat(
@@ -1607,41 +2033,208 @@ def _pinned_partition_stat(
     512-lane halving tree. Chunk `c` has `size - 512 c` live threads (none
     past the leaf; a chunk with none holds +0.0 and its tree folds +0.0), so
     each tree runs through `_halving_fold_live` over its live lanes: the same
-    adds on every lane that can hold a value."""
+    adds on every lane that can hold a value.
+
+    One sum on the calling thread, for a caller that needs a single one; a
+    caller with several (a level's leaves) uses `_pinned_partition_stats`,
+    which runs the same two functions with the chunks across the cores."""
     if size <= 0:
         return Float32(0.0)
-    var stride = max_chunks * GBDT_STATS_BLOCK
-    var live_chunks = (size + GBDT_STATS_BLOCK - 1) // GBDT_STATS_BLOCK
-    if live_chunks > max_chunks:
-        live_chunks = max_chunks
-    var slab = List[Float32](length=GBDT_STATS_BLOCK, fill=Float32(0.0))
+    var live_chunks = _partition_live_chunks(size, max_chunks)
     var partials = List[Float32](length=GBDT_STATS_BLOCK, fill=Float32(0.0))
-    for chunk in range(live_chunks):
-        var live = min(size - chunk * GBDT_STATS_BLOCK, GBDT_STATS_BLOCK)
-        var p = 1
-        while p < live:
-            p <<= 1
-        for tid in range(p):
-            var v = Float32(0.0)
-            var i = chunk * GBDT_STATS_BLOCK + tid
-            while i < size:
-                v += stats[base + i]
-                i += stride
-            slab[tid] = v
-        partials[chunk] = _halving_fold_live(slab, live, GBDT_STATS_BLOCK)
-    # phase 2: lane `t < max_chunks` holds `0.0 + partials[t] (+ ...)`, the
-    # dead chunks' +0.0 included; lanes past the live chunks hold +0.0
-    var p2 = 1
-    while p2 < live_chunks:
-        p2 <<= 1
-    for tid in range(p2):
-        var acc = Float32(0.0)
-        var c = tid
-        while c < max_chunks:
-            acc += partials[c] if c < live_chunks else Float32(0.0)
-            c += GBDT_STATS_BLOCK
-        slab[tid] = acc
-    return _halving_fold_live(slab, live_chunks, GBDT_STATS_BLOCK)
+    var sp = rebind[HostF32Ptr](stats.unsafe_ptr())
+    for chunk in range(live_chunks):  # driver-loop: the chunks of one sum (the many-sum form splits them)
+        partials[chunk] = _partition_chunk_partial(
+            sp, base, size, max_chunks, chunk
+        )
+    var total = _partition_phase2(
+        rebind[HostF32Ptr](partials.unsafe_ptr()), live_chunks, max_chunks
+    )
+    # the fold read the partials through a pointer: named again past it
+    _ = len(partials)
+    return total
+
+
+def _pinned_partition_stats(
+    stats: List[Float32],
+    bases: List[Int],
+    sizes: List[Int],
+    max_chunks: Int,
+    mut dst: List[Float32],
+):
+    """`_pinned_partition_stat(stats, bases[k], sizes[k], max_chunks)` into
+    `dst[k]` for every `k`: the (leaf, stat) launches of one
+    `compute_partition_stats` (`partitions_reduce.mojo:104-227`).
+
+    THE SPLIT (lane gbdt-host-par). Phase 1's unit is one (sum, chunk): the
+    device's 512-thread block, which folds its strided rows and its own
+    halving tree and meets no other block. They are dealt round robin to
+    `_gbdt_units` tasks (a large leaf's chunks land on different tasks; the
+    work is the rows read). Phase 2's unit is one sum: the fold of its
+    chunks' partials in the device's lane order. Both phases are the two
+    functions `_pinned_partition_stat` runs, so every sum's adds are in the
+    same order whatever the task count."""
+    var n = len(sizes)
+    if n == 0:
+        return
+    var partials = List[Float32](length=n * max_chunks, fill=Float32(0.0))
+    var work = 0
+    for k in range(n):
+        work += sizes[k]
+    var items = n * max_chunks
+    var units = _gbdt_units(items, work)
+    var sp = rebind[HostF32Ptr](stats.unsafe_ptr())
+    var bp = rebind[GbdtIntPtr](bases.unsafe_ptr())
+    var zp = rebind[GbdtIntPtr](sizes.unsafe_ptr())
+    var pp = rebind[HostF32Ptr](partials.unsafe_ptr())
+    var dp = rebind[HostF32Ptr](dst.unsafe_ptr())
+
+    def chunks(unit: Int) {imm units, imm items, imm max_chunks, imm sp, imm bp, imm zp, imm pp}:
+        var item = unit
+        while item < items:
+            var k = item // max_chunks
+            var chunk = item % max_chunks
+            if chunk < _partition_live_chunks(zp[k], max_chunks):
+                pp[item] = _partition_chunk_partial(
+                    sp, bp[k], zp[k], max_chunks, chunk
+                )
+            item += units
+
+    host_parallelize(chunks, units)
+    var fold_units = _gbdt_units(n, n * (GBDT_STATS_BLOCK + max_chunks))
+
+    def folds(unit: Int) {imm fold_units, imm n, imm max_chunks, imm zp, imm pp, imm dp}:
+        var k = unit
+        while k < n:
+            var value = Float32(0.0)
+            if zp[k] > 0:
+                value = _partition_phase2(
+                    pp + k * max_chunks,
+                    _partition_live_chunks(zp[k], max_chunks), max_chunks,
+                )
+            dp[k] = value
+            k += fold_units
+
+    host_parallelize(folds, fold_units)
+    _ = len(partials)
+
+
+def _partition_stats_level(
+    stats: List[Float32],
+    n_rows: Int,
+    stat_count: Int,
+    max_chunks: Int,
+    p_off: List[Int],
+    p_sz: List[Int],
+    n_live: Int,
+) -> List[Float32]:
+    """`compute_partition_stats` over the live leaves: `[leaf * stat_count +
+    stat]`, each `_pinned_partition_stat` over the leaf's range of plane
+    `stat`, the launches split by `_pinned_partition_stats`."""
+    var bases = List[Int](capacity=n_live * stat_count)
+    var sizes = List[Int](capacity=n_live * stat_count)
+    for i in range(n_live):
+        for z in range(stat_count):
+            bases.append(z * n_rows + p_off[i])
+            sizes.append(p_sz[i])
+    var part_stats = List[Float32](
+        length=n_live * stat_count, fill=Float32(0.0)
+    )
+    _pinned_partition_stats(stats, bases, sizes, max_chunks, part_stats)
+    return part_stats^
+
+
+def _scan_histograms(
+    mut hist: List[Float32],
+    hist_cells: Int,
+    stat_count: Int,
+    compute: List[Int],
+    layout: CompressedIndexLayout,
+    n_features: Int,
+):
+    """`scan_histograms_kernel` (`histogram_utils.mojo:364`) over the
+    computed leaves: one device thread per (feature, leaf, stat), a running
+    `ftz` sum ascending in the fold; one-hot features and features of one
+    fold or none are skipped.
+
+    THE SPLIT (lane gbdt-host-par): the unit is the device thread's, one
+    (leaf, stat, feature), which owns its feature's cells; the prefix inside
+    a unit is serial by nature (each cell is the sum of the ones before it,
+    in that order) and stays so. Units go round robin to `_gbdt_units` tasks
+    over `leaves x stats x cells` adds."""
+    var first = List[Int]()
+    var folds = List[Int]()
+    for f in range(n_features):
+        ref cf = layout.features[f]
+        if cf.one_hot_feature or Int(cf.folds) <= 1:
+            continue
+        first.append(Int(cf.first_fold_index))
+        folds.append(Int(cf.folds))
+    var n_scan = len(first)
+    var n_compute = len(compute)
+    var items = n_compute * stat_count * n_scan
+    if items == 0:
+        return
+    var units = _gbdt_units(items, n_compute * stat_count * hist_cells)
+    var ids_p = rebind[GbdtIntPtr](compute.unsafe_ptr())
+    var first_p = rebind[GbdtIntPtr](first.unsafe_ptr())
+    var folds_p = rebind[GbdtIntPtr](folds.unsafe_ptr())
+    var hist_p = rebind[HostF32Ptr](hist.unsafe_ptr())
+
+    def scan(unit: Int) {imm units, imm items, imm n_scan, imm stat_count, imm hist_cells, imm ids_p, imm first_p, imm folds_p, imm hist_p}:
+        var item = unit
+        while item < items:
+            var f = item % n_scan
+            var z = (item // n_scan) % stat_count
+            var slot = ids_p[item // (n_scan * stat_count)]
+            var base = (
+                slot * stat_count * hist_cells + z * hist_cells + first_p[f]
+            )
+            var running = Float32(0.0)
+            for i in range(folds_p[f]):
+                running = ftz(running + hist_p[base + i])
+                hist_p[base + i] = running
+            item += units
+
+    host_parallelize(scan, units)
+    _ = len(first)
+    _ = len(folds)
+
+
+def _subtract_histograms(
+    mut hist: List[Float32],
+    hist_cells: Int,
+    sub_from: List[Int],
+    sub_what: List[Int],
+    half: Int,
+):
+    """`substract_histograms_kernel` at the two search planes: the larger
+    sibling in place, `ftz(from - what)` per cell, the weight plane (0)
+    clamped at 0.0. Every cell is its own statement; the unit is one
+    (sibling pair, plane), dealt round robin to `_gbdt_units` tasks."""
+    var items = 2 * half
+    if items <= 0:
+        return
+    var units = _gbdt_units(items, items * hist_cells)
+    var from_p = rebind[GbdtIntPtr](sub_from.unsafe_ptr())
+    var what_p = rebind[GbdtIntPtr](sub_what.unsafe_ptr())
+    var hist_p = rebind[HostF32Ptr](hist.unsafe_ptr())
+
+    def subtract(unit: Int) {imm units, imm items, imm hist_cells, imm from_p, imm what_p, imm hist_p}:
+        var item = unit
+        while item < items:
+            var j = item // 2
+            var z = item % 2
+            var from_base = from_p[j] * 2 * hist_cells + z * hist_cells
+            var what_base = what_p[j] * 2 * hist_cells + z * hist_cells
+            for bf in range(hist_cells):
+                var new_val = ftz(hist_p[from_base + bf] - hist_p[what_base + bf])
+                if z == 0:
+                    new_val = max(new_val, Float32(0.0))
+                hist_p[from_base + bf] = new_val
+            item += units
+
+    host_parallelize(subtract, units)
 
 
 def _add_leaf_cosine(
@@ -1718,6 +2311,172 @@ def _ftz_lanes[w: Int](x: SIMD[DType.float32, w]) -> SIMD[DType.float32, w]:
     return x
 
 
+def _split_level(
+    cindex: List[UInt32],
+    word_base: Int,
+    field: UInt32,
+    value: UInt32,
+    one_hot: Bool,
+    n_rows: Int,
+    n_live: Int,
+    hist_cells: Int,
+    mut row_index: List[Int],
+    mut stats: List[Float32],
+    mut p_off: List[Int],
+    mut p_sz: List[Int],
+    mut hist: List[Float32],
+    mut ids_compute: List[Int],
+    mut sub_from: List[Int],
+    mut sub_what: List[Int],
+):
+    """The split chain of one symmetric level, every live leaf: a row goes
+    right when its feature bits (`word & field`) exceed `value`, or equal it
+    for a one-hot feature; a leaf's rows are reordered zeros then ones, each
+    side in its old order (the device's stable partition, `enqueue_post_
+    winner`), with both stat planes; `copy_histograms_kernel` copies the
+    parent's histogram into the right child's slot; `update_partitions_and_
+    plan_kernel` writes the sizes, offsets and the next level's plan.
+
+    No float is folded here: rows and stats are moved, sizes are counted.
+    THE SPLIT (lane gbdt-host-par). The unit is a PIECE, a run of at most
+    `ceil(rows / tasks)` consecutive positions of one leaf. Pass 1 counts
+    each piece's zeros; the pieces' first zero and first one slots are then
+    running sums along the leaf (a loop over pieces, at most leaves + tasks
+    of them); pass 2 moves each piece's rows to those slots, which no other
+    piece writes. A row's slot is its leaf's offset plus the zeros (or the
+    leaf's zeros plus the ones) before it, exactly the stable order. The
+    histogram copy's unit is one leaf. Task counts are `_gbdt_units`."""
+    var live_rows = 0
+    for i in range(n_live):
+        live_rows += p_sz[i]
+    var units = _gbdt_units(max(live_rows, n_live), 4 * live_rows)
+    var piece_rows = max(1, (live_rows + units - 1) // units)
+    var pc_lo = List[Int]()
+    var pc_hi = List[Int]()
+    var leaf_first = List[Int](capacity=n_live + 1)
+    for i in range(n_live):
+        leaf_first.append(len(pc_lo))
+        var off = p_off[i]
+        var sz = p_sz[i]
+        var c = 0
+        while c * piece_rows < sz:
+            pc_lo.append(off + c * piece_rows)
+            pc_hi.append(min(off + (c + 1) * piece_rows, off + sz))
+            c += 1
+    leaf_first.append(len(pc_lo))
+    var n_pieces = len(pc_lo)
+    var pc_zeros = List[Int](length=max(1, n_pieces), fill=0)
+    var pc_zero_at = List[Int](length=max(1, n_pieces), fill=0)
+    var pc_one_at = List[Int](length=max(1, n_pieces), fill=0)
+    var new_rows = row_index.copy()
+    var new_stats = stats.copy()
+    var task_units = max(1, min(units, n_pieces))
+    var lo_p = rebind[GbdtIntPtr](pc_lo.unsafe_ptr())
+    var hi_p = rebind[GbdtIntPtr](pc_hi.unsafe_ptr())
+    var zeros_p = rebind[GbdtIntPtr](pc_zeros.unsafe_ptr())
+    var zero_at_p = rebind[GbdtIntPtr](pc_zero_at.unsafe_ptr())
+    var one_at_p = rebind[GbdtIntPtr](pc_one_at.unsafe_ptr())
+    var row_p = rebind[GbdtIntPtr](row_index.unsafe_ptr())
+    var stats_p = rebind[HostF32Ptr](stats.unsafe_ptr())
+    var new_row_p = rebind[GbdtIntPtr](new_rows.unsafe_ptr())
+    var new_stats_p = rebind[HostF32Ptr](new_stats.unsafe_ptr())
+    var cindex_p = rebind[HostU32Ptr](cindex.unsafe_ptr())
+    var hist_p = rebind[HostF32Ptr](hist.unsafe_ptr())
+
+    def count_zeros(unit: Int) {imm task_units, imm n_pieces, imm word_base, imm field, imm value, imm one_hot, imm lo_p, imm hi_p, imm zeros_p, imm row_p, imm cindex_p}:
+        var piece = unit
+        while piece < n_pieces:
+            var zeros = 0
+            for pos in range(lo_p[piece], hi_p[piece]):
+                var feature_val = cindex_p[word_base + row_p[pos]] & field
+                var goes_right = feature_val > value
+                if one_hot:
+                    goes_right = feature_val == value
+                if not goes_right:
+                    zeros += 1
+            zeros_p[piece] = zeros
+            piece += task_units
+
+    host_parallelize(count_zeros, task_units)
+
+    # `update_partitions_and_plan_kernel`, and each piece's first slots
+    for i in range(n_live):  # driver-loop: over the live leaves and their pieces
+        var off = p_off[i]
+        var sz = p_sz[i]
+        var left_sz = 0
+        for piece in range(leaf_first[i], leaf_first[i + 1]):
+            left_sz += pc_zeros[piece]
+        var zero_at = off
+        var one_at = off + left_sz
+        for piece in range(leaf_first[i], leaf_first[i + 1]):
+            pc_zero_at[piece] = zero_at
+            pc_one_at[piece] = one_at
+            zero_at += pc_zeros[piece]
+            one_at += (pc_hi[piece] - pc_lo[piece]) - pc_zeros[piece]
+        var right_sz = sz - left_sz
+        p_sz[i] = left_sz
+        p_off[n_live + i] = off + left_sz
+        p_sz[n_live + i] = right_sz
+        var small = n_live + i
+        var big = i
+        if left_sz < right_sz:
+            small = i
+            big = n_live + i
+        ids_compute[i] = small
+        sub_from[i] = big
+        sub_what[i] = small
+
+    def scatter(unit: Int) {imm task_units, imm n_pieces, imm n_rows, imm word_base, imm field, imm value, imm one_hot, imm lo_p, imm hi_p, imm zero_at_p, imm one_at_p, imm row_p, imm stats_p, imm new_row_p, imm new_stats_p, imm cindex_p}:
+        var piece = unit
+        while piece < n_pieces:
+            var zero_at = zero_at_p[piece]
+            var one_at = one_at_p[piece]
+            for pos in range(lo_p[piece], hi_p[piece]):
+                var row = row_p[pos]
+                var feature_val = cindex_p[word_base + row] & field
+                var goes_right = feature_val > value
+                if one_hot:
+                    goes_right = feature_val == value
+                var slot = zero_at
+                if goes_right:
+                    slot = one_at
+                    one_at += 1
+                else:
+                    zero_at += 1
+                new_row_p[slot] = row
+                new_stats_p[slot] = stats_p[pos]
+                new_stats_p[n_rows + slot] = stats_p[n_rows + pos]
+            piece += task_units
+
+    host_parallelize(scatter, task_units)
+
+    # `copy_histograms_kernel`: parent into the right slot
+    var copy_units = _gbdt_units(n_live, 2 * n_live * hist_cells)
+
+    def copy_parent(unit: Int) {imm copy_units, imm n_live, imm hist_cells, imm hist_p}:
+        var i = unit
+        while i < n_live:
+            var src_base = i * 2 * hist_cells
+            var dst_base = (n_live + i) * 2 * hist_cells
+            for c in range(2 * hist_cells):
+                hist_p[dst_base + c] = hist_p[src_base + c]
+            i += copy_units
+
+    host_parallelize(copy_parent, copy_units)
+    # the tasks read these through pointers: named again past the joins
+    _ = len(pc_lo)
+    _ = len(pc_hi)
+    _ = len(pc_zeros)
+    _ = len(pc_zero_at)
+    _ = len(pc_one_at)
+    row_index = new_rows^
+    stats = new_stats^
+
+
+#: the SIMD width of `_cosine_gains`' candidate step
+comptime _COSINE_W = 8
+
+
 def _cosine_gains(
     hist: List[Float32],
     hist_cells: Int,
@@ -1733,21 +2492,70 @@ def _cosine_gains(
     the leaf is the outer loop and 8 candidates run a step, lane by lane
     the scalar expressions (`_add_leaf_cosine`'s pinned fmas, `ftz` as bit
     operations); then the normalization and the noise per candidate, the
-    noise drawn once per feature (it depends on the feature only)."""
-    comptime W = 8
+    noise drawn once per feature (it depends on the feature only).
+
+    THE SPLIT (lane gbdt-host-par): the unit is one candidate, the device's
+    thread (`compute_optimal_splits_kernel`, one bin-feature per thread, its
+    leaves in dense order); a task takes a run of whole SIMD steps
+    (`_cosine_gains_range`), the count from `_gbdt_units` over `8 x leaves x
+    candidates` operations. A task draws a feature's noise again at its
+    first candidate: the draw is a function of (level seed, feature)."""
+    var gains = List[Float32](length=hist_cells, fill=Float32(0.0))
+    if hist_cells == 0:
+        return gains^
     var score = List[Float32](length=hist_cells, fill=Float32(0.0))
     var denum = List[Float32](length=hist_cells, fill=Float32(1e-10))
-    var hp = hist.unsafe_ptr()
-    var sp = score.unsafe_ptr()
-    var dp = denum.unsafe_ptr()
+    # whole SIMD steps per task, so a candidate takes the vector statements
+    # or the tail's scalar ones exactly as it does on one task
+    var steps = (hist_cells + _COSINE_W - 1) // _COSINE_W
+    var units = _gbdt_units(steps, 8 * n_live * hist_cells)
+    var chunk = _COSINE_W * ((steps + units - 1) // units)
+    var hp = rebind[HostF32Ptr](hist.unsafe_ptr())
+    var pp = rebind[HostF32Ptr](part_stats.unsafe_ptr())
+    var sp = rebind[HostF32Ptr](score.unsafe_ptr())
+    var dp = rebind[HostF32Ptr](denum.unsafe_ptr())
+    var gp = rebind[HostF32Ptr](gains.unsafe_ptr())
+    var fp = rebind[GbdtIntPtr](bf_feature.unsafe_ptr())
+
+    def candidates(unit: Int) {imm chunk, imm hist_cells, imm n_live, imm lambda_l2, imm score_std_dev, imm level_seed, imm hp, imm pp, imm sp, imm dp, imm gp, imm fp}:
+        _cosine_gains_range(
+            hp, hist_cells, pp, n_live, lambda_l2, score_std_dev, level_seed,
+            fp, sp, dp, gp, unit * chunk, min((unit + 1) * chunk, hist_cells),
+        )
+
+    host_parallelize(candidates, units)
+    _ = len(score)
+    _ = len(denum)
+    return gains^
+
+
+def _cosine_gains_range(
+    hp: HostF32Ptr,
+    hist_cells: Int,
+    part_stats: HostF32Ptr,
+    n_live: Int,
+    lambda_l2: Float32,
+    score_std_dev: Float32,
+    level_seed: UInt64,
+    bf_feature: GbdtIntPtr,
+    sp: HostF32Ptr,
+    dp: HostF32Ptr,
+    gains: HostF32Ptr,
+    lo: Int,
+    hi: Int,
+):
+    """Candidates `[lo, hi)` of `_cosine_gains` (`lo` a multiple of the SIMD
+    width; `hi` one too, or `hist_cells`): the leaf is the outer loop, so
+    each candidate folds its leaves in dense leaf order."""
+    comptime W = _COSINE_W
     var zero = SIMD[DType.float32, W](0.0)
     var lam_v = SIMD[DType.float32, W](lambda_l2)
     for i in range(n_live):
         var leaf_base = i * 2 * hist_cells
         var ps0 = part_stats[i * 2]
         var ps1 = part_stats[i * 2 + 1]
-        var bf = 0
-        while bf + W <= hist_cells:
+        var bf = lo
+        while bf + W <= hi:
             var wl = max(hp.unsafe_load[width=W](leaf_base + bf), zero)
             var wr = _ftz_lanes[W](max(SIMD[DType.float32, W](ps0) - wl, zero))
             var sl = hp.unsafe_load[width=W](leaf_base + hist_cells + bf)
@@ -1763,24 +2571,23 @@ def _cosine_gains(
             sp.unsafe_store(bf, sc)
             dp.unsafe_store(bf, dn)
             bf += W
-        while bf < hist_cells:
-            var weight_left = max(hist[leaf_base + bf], Float32(0.0))
+        while bf < hi:
+            var weight_left = max(hp[leaf_base + bf], Float32(0.0))
             var weight_right = ftz(max(ps0 - weight_left, Float32(0.0)))
-            var sum_left = hist[leaf_base + hist_cells + bf]
+            var sum_left = hp[leaf_base + hist_cells + bf]
             var sum_right = ftz(ps1 - sum_left)
-            var sc = score[bf]
-            var dn = denum[bf]
+            var sc = sp[bf]
+            var dn = dp[bf]
             _add_leaf_cosine(sum_left, weight_left, lambda_l2, sc, dn)
             _add_leaf_cosine(sum_right, weight_right, lambda_l2, sc, dn)
-            score[bf] = sc
-            denum[bf] = dn
+            sp[bf] = sc
+            dp[bf] = dn
             bf += 1
-    var gains = List[Float32](length=hist_cells, fill=Float32(0.0))
     var last_feature = -1
     var neg_draw = Float32(0.0)
-    for bf in range(hist_cells):
-        var final_score = score[bf]
-        var denum_sqr = denum[bf]
+    for bf in range(lo, hi):
+        var final_score = sp[bf]
+        var denum_sqr = dp[bf]
         var score_before = Float32(0.0)
         if denum_sqr > Float32(1e-15):
             final_score = ftz(final_score / identical_sqrt(denum_sqr))
@@ -1794,7 +2601,6 @@ def _cosine_gains(
             final_score = ftz(identical_mul_add(neg_draw, score_std_dev, final_score))
             score_before = ftz(identical_mul_add(neg_draw, score_std_dev, score_before))
         gains[bf] = ftz(ftz(final_score - score_before) * Float32(1.0))
-    return gains^
 
 
 # ===========================================================================
@@ -1970,11 +2776,22 @@ def _oracle_move_to(
     then `add_bin_model_value_kernel` (`kernel_add_model_value.mojo:
     114-183`), a plain add per row."""
     var shift = List[Float32](length=len(new_point), fill=Float32(0.0))
-    for i in range(len(new_point)):
+    for i in range(len(new_point)):  # driver-loop: over the leaves
         shift[i] = new_point[i] - current_point[i]
-    for pos in range(n_rows):
-        g_cursor[pos] = g_cursor[pos] + shift[bins[pos]]
-    for i in range(len(new_point)):
+    # rows are the units (one device thread a row, one add each)
+    var units = _gbdt_units(n_rows, 2 * n_rows)
+    var chunk = (n_rows + units - 1) // units
+    var shift_p = rebind[HostF32Ptr](shift.unsafe_ptr())
+    var bins_p = rebind[GbdtIntPtr](bins.unsafe_ptr())
+    var cursor_p = rebind[HostF32Ptr](g_cursor.unsafe_ptr())
+
+    def rows(unit: Int) {imm chunk, imm n_rows, imm shift_p, imm bins_p, imm cursor_p}:
+        for pos in range(unit * chunk, min((unit + 1) * chunk, n_rows)):
+            cursor_p[pos] = cursor_p[pos] + shift_p[bins_p[pos]]
+
+    host_parallelize(rows, units)
+    _ = len(shift)
+    for i in range(len(new_point)):  # driver-loop: over the leaves
         current_point[i] = new_point[i]
 
 
@@ -2001,29 +2818,44 @@ def _oracle_eval(
     var stats = List[Float32](length=2 * n_rows, fill=Float32(0.0))
     var fv = List[Float32](length=blocks, fill=Float32(0.0))
     var has_weights = len(g_weights) > 0
-    var weight = Float32(1.0)
-    for b in range(blocks):
+    # THE SPLIT (lane gbdt-host-par): the unit is the kernel's 256-thread
+    # block, which writes its rows' two planes and folds its own score
+    # partial through its own halving tree; a task takes a run of blocks
+    var units = _gbdt_units(blocks, 16 * n_rows)
+    var chunk = (blocks + units - 1) // max(units, 1)
+    var target_p = rebind[HostF32Ptr](g_target.unsafe_ptr())
+    var cursor_p = rebind[HostF32Ptr](g_cursor.unsafe_ptr())
+    var weights_p = rebind[HostF32Ptr](g_weights.unsafe_ptr())
+    var stats_p = rebind[HostF32Ptr](stats.unsafe_ptr())
+    var fv_p = rebind[HostF32Ptr](fv.unsafe_ptr())
+
+    def score_blocks(unit: Int) {imm chunk, imm blocks, imm n_rows, imm border, imm has_weights, imm target_p, imm cursor_p, imm weights_p, imm stats_p, imm fv_p}:
         var s_score = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
-        for t in range(GBDT_MSE_BLOCK):
-            var i = b * GBDT_MSE_BLOCK + t
-            if i < n_rows:
-                if has_weights:
-                    weight = g_weights[i]
-                var r = _cross_entropy_row(g_target[i], g_cursor[i], border, weight)
-                stats[i] = r.weighted_direction
-                stats[n_rows + i] = r.weighted_scale
-                s_score[t] = r.score
-        fv[b] = _halving_fold(s_score)
+        for b in range(unit * chunk, min((unit + 1) * chunk, blocks)):
+            for t in range(GBDT_MSE_BLOCK):
+                var i = b * GBDT_MSE_BLOCK + t
+                var score = Float32(0.0)
+                if i < n_rows:
+                    var weight = Float32(1.0)
+                    if has_weights:
+                        weight = weights_p[i]
+                    var r = _cross_entropy_row(target_p[i], cursor_p[i], border, weight)
+                    stats_p[i] = r.weighted_direction
+                    stats_p[n_rows + i] = r.weighted_scale
+                    score = r.score
+                s_score[t] = score
+            fv_p[b] = _halving_fold(s_score)
+
+    host_parallelize(score_blocks, units)
     gradient.clear()
     cached_der2.clear()
-    for leaf in range(len(sizes)):
-        gradient.append(
-            Float64(_partition_stat(stats, n_rows, 0, offsets[leaf], sizes[leaf]))
-        )
-        cached_der2.append(
-            Float64(_partition_stat(stats, n_rows, 1, offsets[leaf], sizes[leaf]))
-            + lambda_reg
-        )
+    # `compute_partition_stats` per leaf, the chunks across the cores
+    var leaf_stats = _partition_stats_level(
+        stats, n_rows, 2, GBDT_PARTITION_CHUNKS, offsets, sizes, len(sizes)
+    )
+    for leaf in range(len(sizes)):  # driver-loop: over the leaves
+        gradient.append(Float64(leaf_stats[2 * leaf]))
+        cached_der2.append(Float64(leaf_stats[2 * leaf + 1]) + lambda_reg)
     # lane cpu4-gbdt: the oracle's value fold is the device's
     # `deterministic_sum_lanes_kernel[1]` order (was an ascending chain)
     value = Float64(_deterministic_sum_lanes(fv, 1, blocks)[0])
@@ -2080,31 +2912,56 @@ def _estimate_leaves(
     var n_leaves = len(sizes)
     var g_target = List[Float32](length=n_rows, fill=Float32(0.0))
     var g_cursor = List[Float32](length=n_rows, fill=Float32(0.0))
-    for pos in range(n_rows):
-        g_target[pos] = targets[row_index[pos]]
-        g_cursor[pos] = cursor[row_index[pos]]
     # the weighted arm gathers the weights in the same bin order
     var has_weights = len(weights) > 0
     var g_weights = List[Float32]()
     if has_weights:
         g_weights = List[Float32](length=n_rows, fill=Float32(0.0))
-        for pos in range(n_rows):
-            g_weights[pos] = weights[row_index[pos]]
-    # `fill_bins_from_partition_kernel` (`kernel_add_model_value.mojo:186-204`)
     var bins = List[Int](length=n_rows, fill=0)
-    for leaf in range(n_leaves):
-        for k in range(sizes[leaf]):
-            bins[offsets[leaf] + k] = leaf
+    # THE SPLIT (lane gbdt-host-par): the gathers and
+    # `fill_bins_from_partition_kernel` (`kernel_add_model_value.mojo:186-
+    # 204`) move values, one position a device thread; a task owns a run of
+    # positions and writes the leaf of each (a leaf's range clipped to it)
+    var units = _gbdt_units(n_rows, 6 * n_rows)
+    var chunk = (n_rows + units - 1) // units
+    var targets_p = rebind[HostF32Ptr](targets.unsafe_ptr())
+    var cursor_p = rebind[HostF32Ptr](cursor.unsafe_ptr())
+    var weights_p = rebind[HostF32Ptr](weights.unsafe_ptr())
+    var row_p = rebind[GbdtIntPtr](row_index.unsafe_ptr())
+    var off_p = rebind[GbdtIntPtr](offsets.unsafe_ptr())
+    var sz_p = rebind[GbdtIntPtr](sizes.unsafe_ptr())
+    var gt_p = rebind[HostF32Ptr](g_target.unsafe_ptr())
+    var gc_p = rebind[HostF32Ptr](g_cursor.unsafe_ptr())
+    var gw_p = rebind[HostF32Ptr](g_weights.unsafe_ptr())
+    var bins_p = rebind[GbdtIntPtr](bins.unsafe_ptr())
+
+    def gather(unit: Int) {imm chunk, imm n_rows, imm n_leaves, imm has_weights, imm targets_p, imm cursor_p, imm weights_p, imm row_p, imm off_p, imm sz_p, imm gt_p, imm gc_p, imm gw_p, imm bins_p}:
+        var lo = unit * chunk
+        var hi = min(lo + chunk, n_rows)
+        for pos in range(lo, hi):
+            var row = row_p[pos]
+            gt_p[pos] = targets_p[row]
+            gc_p[pos] = cursor_p[row]
+            if has_weights:
+                gw_p[pos] = weights_p[row]
+        for leaf in range(n_leaves):
+            for pos in range(max(off_p[leaf], lo), min(off_p[leaf] + sz_p[leaf], hi)):
+                bins_p[pos] = leaf
+
+    host_parallelize(gather, units)
     # WeightsCpu (`pointwise_oracle.mojo`, `make_bin_optimized_oracle`): the
     # exact leaf sizes unweighted; weighted, `compute_partition_stats` of the
     # gathered weights at ONE stat, (2 * 32 + 1 - 1) // 1 = 64 chunks
     var weights_cpu = List[Float64]()
-    for leaf in range(n_leaves):
-        if has_weights:
-            weights_cpu.append(Float64(_pinned_partition_stat(
-                g_weights, offsets[leaf], sizes[leaf], 2 * GBDT_PINNED_SM
-            )))
-        else:
+    if has_weights:
+        var weight_sums = List[Float32](length=n_leaves, fill=Float32(0.0))
+        _pinned_partition_stats(
+            g_weights, offsets, sizes, 2 * GBDT_PINNED_SM, weight_sums
+        )
+        for leaf in range(n_leaves):  # driver-loop: over the leaves
+            weights_cpu.append(Float64(weight_sums[leaf]))
+    else:
+        for leaf in range(n_leaves):  # driver-loop: over the leaves
             weights_cpu.append(Float64(sizes[leaf]))
     var lambda_reg = Float64(l2_leaf_reg)
     comptime if GBDT_ORACLE_HOST_SABOTAGE:
@@ -2159,6 +3016,40 @@ def _estimate_leaves(
         if not accepted:
             break
     return cur_point^
+
+
+def _apply_leaves(
+    mut cursor: List[Float32],
+    row_index: List[Int],
+    offsets: List[Int],
+    sizes: List[Int],
+    leaves: List[Float32],
+    rate: Float32,
+    n_rows: Int,
+):
+    """`cursor[row] = identical_mul_add(leaves[leaf], rate, cursor[row])`
+    for every row of every leaf of a partition (the weak model onto a
+    cursor, one device thread a row, one pinned fma each). A row is in one
+    leaf, so rows are the units: a task owns a run of positions and visits
+    each leaf's range clipped to it; `_gbdt_units` tasks."""
+    var n_leaves = len(sizes)
+    var units = _gbdt_units(n_rows, 4 * n_rows)
+    var chunk = (n_rows + units - 1) // units
+    var cursor_p = rebind[HostF32Ptr](cursor.unsafe_ptr())
+    var row_p = rebind[GbdtIntPtr](row_index.unsafe_ptr())
+    var off_p = rebind[GbdtIntPtr](offsets.unsafe_ptr())
+    var sz_p = rebind[GbdtIntPtr](sizes.unsafe_ptr())
+    var leaves_p = rebind[HostF32Ptr](leaves.unsafe_ptr())
+
+    def rows(unit: Int) {imm chunk, imm n_rows, imm n_leaves, imm rate, imm cursor_p, imm row_p, imm off_p, imm sz_p, imm leaves_p}:
+        var lo = unit * chunk
+        var hi = min(lo + chunk, n_rows)
+        for leaf in range(n_leaves):
+            for pos in range(max(off_p[leaf], lo), min(off_p[leaf] + sz_p[leaf], hi)):
+                var row = row_p[pos]
+                cursor_p[row] = identical_mul_add(leaves_p[leaf], rate, cursor_p[row])
+
+    host_parallelize(rows, units)
 
 
 # ===========================================================================
@@ -2452,42 +3343,16 @@ def _tree_ctr_levels_host(
             block_first_bin += total
 
         # `scan_histograms_kernel` over the computed leaves
-        for j in range(len(compute)):
-            var slot = compute[j]
-            for z in range(2):
-                for f in range(n_features):
-                    ref cf = layout.features[f]
-                    var folds = Int(cf.folds)
-                    if cf.one_hot_feature or folds <= 1:
-                        continue
-                    var base = (
-                        slot * 2 * hist_cells + z * hist_cells
-                        + Int(cf.first_fold_index)
-                    )
-                    var running = Float32(0.0)
-                    for i in range(folds):
-                        running = ftz(running + hist[base + i])
-                        hist[base + i] = running
+        _scan_histograms(hist, hist_cells, 2, compute, layout, n_features)
 
         # `substract_histograms_kernel`: the larger sibling, in place
         if planned and half > 0:
-            for j in range(half):
-                var from_slot = sub_from[j]
-                var what_slot = sub_what[j]
-                for z in range(2):
-                    var from_base = from_slot * 2 * hist_cells + z * hist_cells
-                    var what_base = what_slot * 2 * hist_cells + z * hist_cells
-                    for bf in range(hist_cells):
-                        var new_val = ftz(hist[from_base + bf] - hist[what_base + bf])
-                        if z == 0:
-                            new_val = max(new_val, Float32(0.0))
-                        hist[from_base + bf] = new_val
+            _subtract_histograms(hist, hist_cells, sub_from, sub_what, half)
 
         # `compute_partition_stats` over the live leaves
-        var part_stats = List[Float32](length=2 * n_live, fill=Float32(0.0))
-        for i in range(n_live):
-            part_stats[2 * i] = _partition_stat(stats, n_rows, 0, p_off[i], p_sz[i])
-            part_stats[2 * i + 1] = _partition_stat(stats, n_rows, 1, p_off[i], p_sz[i])
+        var part_stats = _partition_stats_level(
+            stats, n_rows, 2, GBDT_PARTITION_CHUNKS, p_off, p_sz, n_live
+        )
 
         # the score and the device winner
         var best_gain = -GBDT_FLOAT32_MAX
@@ -2536,61 +3401,12 @@ def _tree_ctr_levels_host(
         # the split chain, every live leaf (`enqueue_post_winner`); a won
         # candidate's persist slot holds the candidate slot's bins
         ref sfeat = layout.features[split_f]
-        var new_rows = row_index.copy()
-        var new_stats = stats.copy()
-        for i in range(n_live):
-            var off = p_off[i]
-            var sz = p_sz[i]
-            var zeros = List[Int]()
-            var ones = List[Int]()
-            for k in range(sz):
-                var row = row_index[off + k]
-                var word = cindexes[learn_p][Int(sfeat.offset) * n_rows + row]
-                var feature_val = word & (sfeat.mask << sfeat.shift)
-                var value = UInt32(split_b) << sfeat.shift
-                var goes_right: Bool
-                if sfeat.one_hot_feature:
-                    goes_right = feature_val == value
-                else:
-                    goes_right = feature_val > value
-                if goes_right:
-                    ones.append(k)
-                else:
-                    zeros.append(k)
-            var dst = 0
-            for k in range(len(zeros)):
-                var src = off + zeros[k]
-                new_rows[off + dst] = row_index[src]
-                new_stats[off + dst] = stats[src]
-                new_stats[n_rows + off + dst] = stats[n_rows + src]
-                dst += 1
-            for k in range(len(ones)):
-                var src = off + ones[k]
-                new_rows[off + dst] = row_index[src]
-                new_stats[off + dst] = stats[src]
-                new_stats[n_rows + off + dst] = stats[n_rows + src]
-                dst += 1
-            # `copy_histograms_kernel`: parent into the right slot
-            var src_base = i * 2 * hist_cells
-            var dst_base = (n_live + i) * 2 * hist_cells
-            for c in range(2 * hist_cells):
-                hist[dst_base + c] = hist[src_base + c]
-            # `update_partitions_and_plan_kernel`
-            var left_sz = len(zeros)
-            var right_sz = sz - left_sz
-            p_sz[i] = left_sz
-            p_off[n_live + i] = off + left_sz
-            p_sz[n_live + i] = right_sz
-            var small = n_live + i
-            var big = i
-            if left_sz < right_sz:
-                small = i
-                big = n_live + i
-            ids_compute[i] = small
-            sub_from[i] = big
-            sub_what[i] = small
-        row_index = new_rows^
-        stats = new_stats^
+        _split_level(
+            cindexes[learn_p], Int(sfeat.offset) * n_rows, sfeat.mask << sfeat.shift,
+            UInt32(split_b) << sfeat.shift, sfeat.one_hot_feature, n_rows,
+            n_live, hist_cells, row_index, stats, p_off, p_sz, hist,
+            ids_compute, sub_from, sub_what,
+        )
         n_live = n_live * 2
         if depth + 1 < max_depth:
             tc.mint_level(learn_p, cindexes[learn_p])
@@ -2837,42 +3653,16 @@ def gbdt_host_boost(
                 block_first_bin += total
 
             # `scan_histograms_kernel` over the computed leaves
-            for j in range(len(compute)):
-                var slot = compute[j]
-                for z in range(2):
-                    for f in range(n_features):
-                        ref cf = layout.features[f]
-                        var folds = Int(cf.folds)
-                        if cf.one_hot_feature or folds <= 1:
-                            continue
-                        var base = (
-                            slot * 2 * hist_cells + z * hist_cells
-                            + Int(cf.first_fold_index)
-                        )
-                        var running = Float32(0.0)
-                        for i in range(folds):
-                            running = ftz(running + hist[base + i])
-                            hist[base + i] = running
+            _scan_histograms(hist, hist_cells, 2, compute, layout, n_features)
 
             # `substract_histograms_kernel`: the larger sibling, in place
             if planned and half > 0:
-                for j in range(half):
-                    var from_slot = sub_from[j]
-                    var what_slot = sub_what[j]
-                    for z in range(2):
-                        var from_base = from_slot * 2 * hist_cells + z * hist_cells
-                        var what_base = what_slot * 2 * hist_cells + z * hist_cells
-                        for bf in range(hist_cells):
-                            var new_val = ftz(hist[from_base + bf] - hist[what_base + bf])
-                            if z == 0:
-                                new_val = max(new_val, Float32(0.0))
-                            hist[from_base + bf] = new_val
+                _subtract_histograms(hist, hist_cells, sub_from, sub_what, half)
 
             # `compute_partition_stats` over the live leaves
-            var part_stats = List[Float32](length=2 * n_live, fill=Float32(0.0))
-            for i in range(n_live):
-                part_stats[2 * i] = _partition_stat(stats, n_rows, 0, p_off[i], p_sz[i])
-                part_stats[2 * i + 1] = _partition_stat(stats, n_rows, 1, p_off[i], p_sz[i])
+            var part_stats = _partition_stats_level(
+                stats, n_rows, 2, GBDT_PARTITION_CHUNKS, p_off, p_sz, n_live
+            )
 
             # the score and the device winner
             var best_gain = -GBDT_FLOAT32_MAX
@@ -2899,61 +3689,12 @@ def gbdt_host_boost(
             var split_f = bf_feature[bf_split] if hist_cells > 0 else 0
             var split_b = bf_bin[bf_split] if hist_cells > 0 else 0
             ref sfeat = layout.features[split_f]
-            var new_rows = row_index.copy()
-            var new_stats = stats.copy()
-            for i in range(n_live):
-                var off = p_off[i]
-                var sz = p_sz[i]
-                var zeros = List[Int]()
-                var ones = List[Int]()
-                for k in range(sz):
-                    var row = row_index[off + k]
-                    var word = cindex[Int(sfeat.offset) * n_rows + row]
-                    var feature_val = word & (sfeat.mask << sfeat.shift)
-                    var value = UInt32(split_b) << sfeat.shift
-                    var goes_right: Bool
-                    if sfeat.one_hot_feature:
-                        goes_right = feature_val == value
-                    else:
-                        goes_right = feature_val > value
-                    if goes_right:
-                        ones.append(k)
-                    else:
-                        zeros.append(k)
-                var dst = 0
-                for k in range(len(zeros)):
-                    var src = off + zeros[k]
-                    new_rows[off + dst] = row_index[src]
-                    new_stats[off + dst] = stats[src]
-                    new_stats[n_rows + off + dst] = stats[n_rows + src]
-                    dst += 1
-                for k in range(len(ones)):
-                    var src = off + ones[k]
-                    new_rows[off + dst] = row_index[src]
-                    new_stats[off + dst] = stats[src]
-                    new_stats[n_rows + off + dst] = stats[n_rows + src]
-                    dst += 1
-                # `copy_histograms_kernel`: parent into the right slot
-                var src_base = i * 2 * hist_cells
-                var dst_base = (n_live + i) * 2 * hist_cells
-                for c in range(2 * hist_cells):
-                    hist[dst_base + c] = hist[src_base + c]
-                # `update_partitions_and_plan_kernel`
-                var left_sz = len(zeros)
-                var right_sz = sz - left_sz
-                p_sz[i] = left_sz
-                p_off[n_live + i] = off + left_sz
-                p_sz[n_live + i] = right_sz
-                var small = n_live + i
-                var big = i
-                if left_sz < right_sz:
-                    small = i
-                    big = n_live + i
-                ids_compute[i] = small
-                sub_from[i] = big
-                sub_what[i] = small
-            row_index = new_rows^
-            stats = new_stats^
+            _split_level(
+                cindex, Int(sfeat.offset) * n_rows, sfeat.mask << sfeat.shift,
+                UInt32(split_b) << sfeat.shift, sfeat.one_hot_feature, n_rows,
+                n_live, hist_cells, row_index, stats, p_off, p_sz, hist,
+                ids_compute, sub_from, sub_what,
+            )
             n_live = n_live * 2
 
         # ---- the gates, post-tree, and the rollback ----
@@ -3025,12 +3766,10 @@ def gbdt_host_boost(
                     params.l2_leaf_reg, params.leaf_estimation_iterations,
                     weights,
                 )
-                for leaf in range(n_live):
-                    for k in range(sizes[leaf]):
-                        var row = row_index[offsets[leaf] + k]
-                        cursors[p][row] = identical_mul_add(
-                            est_p_leaves[leaf], lr, cursors[p][row]
-                        )
+                _apply_leaves(
+                    cursors[p], row_index, offsets, sizes, est_p_leaves, lr,
+                    n_rows,
+                )
             else:
                 var part = _partition_for_model(
                     cindexes[p], layout, tree_features, tree_bins, grown,
@@ -3041,12 +3780,10 @@ def gbdt_host_boost(
                     n_rows, border, params.l2_leaf_reg,
                     params.leaf_estimation_iterations, weights,
                 )
-                for leaf in range(len(part.sizes)):
-                    for k in range(part.sizes[leaf]):
-                        var row = part.row_index[part.offsets[leaf] + k]
-                        cursors[p][row] = identical_mul_add(
-                            est_p_leaves[leaf], lr, cursors[p][row]
-                        )
+                _apply_leaves(
+                    cursors[p], part.row_index, part.offsets, part.sizes,
+                    est_p_leaves, lr, n_rows,
+                )
             # the EXPORTED ensemble is the estimation permutation's
             if p == est_p:
                 estimated = est_p_leaves.copy()
