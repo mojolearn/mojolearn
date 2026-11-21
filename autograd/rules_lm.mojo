@@ -34,8 +34,8 @@
 #   embed   identical_embedding_backward[_prerefused]_into (E0-E4) or the
 #           NN50 owned runs (match / rebuild, then backward_into): the
 #           fixed-order scatter-add of bst[0].d_x into tb.dw_emb
-#   pack    _pack_block per layer (none under BYTE_LM_BLOCK_VIEWS) and the
-#           two copies of dw_emb and dw_lm into tb.grad
+#   pack    none since lane fx-percall-copies (2026-11-20): the nine dw of every
+#           layer, dw_emb and dw_lm are views of tb.grad, written in place
 #
 # Glue (moved to the tape): the order of the stages, the chaining of the
 # layers (which buffer is d_out of layer k, which is x), the head and

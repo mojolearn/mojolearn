@@ -2968,6 +2968,41 @@ def _spw_fold(v: Float32, nb: Int) -> Float32:
     return acc
 
 
+# lane/sp-online-linear (2026-11-20): SGD_FAST_PS_PRELOAD, opt-in
+# (-D MOJOLEARN_SGD_FAST_PS_PRELOAD), default off, A/B owed (arm
+# `sgd-ps-preload`, rows `sgd-ps-preload-*` of owed-pre0867.json).
+# General cause it addresses: a device load per step on the serial chain.
+# The warp form reads sample r's order word, then (at an address that word
+# gives) its row, label, |x|^2 and sample weight when sample r starts, and a
+# GPU lane does not run ahead of a load it waits for: with a shuffled order
+# every row is a miss in device memory, so its latency is added to every one
+# of the n * epochs steps (the block's columns are read one by one inside the
+# predictor's chain, so a block that spans several lines waits once a line).
+# 0.8.25's warp form (6cdbd32abe, deleted with the whole-fit warp kernel by
+# 91ed689d87 on 2026-10-02 for its lane-0 serial shuffle; the per-sample fit
+# came back as launches of this kernel without it) read sample r + 1's words
+# while sample r computed. Here the same: at the start of sample r every
+# lane issues sample r + 1's loads (its MB_DBLK columns, the label, the PA
+# norm, the sample weight) into registers, and the order word of r + 2, then
+# computes r from the registers filled one sample earlier; the weight step
+# reuses the row's registers. The cost is one unpipelined sample at the
+# start of a launch. The same loads' words in the same statements: no bit
+# moves, on any column or the host. The rule holds for any n and d: it is
+# the order of loads, with no threshold.
+comptime SGD_FAST_PS_PRELOAD = is_defined["MOJOLEARN_SGD_FAST_PS_PRELOAD"]()
+
+
+@always_inline
+def _spw_row(x: FP, base: Int, j0: Int, d: Int) -> SIMD[DType.float32, MB_DBLK]:
+    """Columns j0 .. j0 + MB_DBLK - 1 (those below d) of the row at word
+    `base`, every load issued before any is used."""
+    var xv = SIMD[DType.float32, MB_DBLK](0)
+    comptime for up in range(MB_DBLK):
+        if j0 + up < d:
+            xv[up] = ld(x, base + j0 + up)
+    return xv
+
+
 def _sgd_ps_warp_body(
     x: FP, lab: FP, swp: FP, idx: IP, w: FP, q: FP, sqp: FP, part: FP,
     ps: FP, pt: IP, act: IP, pf: FP, ci: IP, cf: FP, start: Int32, cnt: Int32,
@@ -3026,8 +3061,52 @@ def _sgd_ps_warp_body(
             wv[uu] = ld(w, woff + j)
             if do_l1:
                 qv[uu] = ld(q, woff + j)
-    for r in range(Int(start), Int(start) + Int(cnt)):
-        var i = ldi(idx, c * nn + r)
+    # SGD_FAST_PS_PRELOAD: the next sample's words, loaded one sample early
+    # (ni its row, nxv / nlab / nsq / nsw its words; n2i the row after it)
+    var r_end = Int(start) + Int(cnt)
+    var obase = c * nn
+    var ni = 0
+    var n2i = 0
+    var nxv = SIMD[DType.float32, MB_DBLK](0)
+    var nlab = Float32(0)
+    var nsq = Float32(0)
+    var nsw = Float32(1)
+    comptime if SGD_FAST_PS_PRELOAD:
+        if Int(cnt) > 0:
+            ni = ldi(idx, obase + Int(start))
+            if Int(cnt) > 1:
+                n2i = ldi(idx, obase + Int(start) + 1)
+            nxv = _spw_row(x, ni * d, j0, d)
+            nlab = ld(lab, ni)
+            if pa_rate:
+                nsq = ld(sqp, ni)
+            if has_sw:
+                nsw = ld(swp, ni)
+    for r in range(Int(start), r_end):
+        var i = 0
+        var xv = SIMD[DType.float32, MB_DBLK](0)
+        var labv = Float32(0)
+        var sqv = Float32(0)
+        var swv = Float32(1)
+        comptime if SGD_FAST_PS_PRELOAD:
+            # this sample from the registers; the next one's loads go out now
+            i = ni
+            xv = nxv
+            labv = nlab
+            sqv = nsq
+            swv = nsw
+            if r + 1 < r_end:
+                ni = n2i
+                if r + 2 < r_end:
+                    n2i = ldi(idx, obase + r + 2)
+                nxv = _spw_row(x, ni * d, j0, d)
+                nlab = ld(lab, ni)
+                if pa_rate:
+                    nsq = ld(sqp, ni)
+                if has_sw:
+                    nsw = ld(swp, ni)
+        comptime if not SGD_FAST_PS_PRELOAD:
+            i = ldi(idx, obase + r)
         # A: lane l's block (`mb_block_dot`'s chain, the weights from the
         # registers); the blocks' partials folded ascending in every lane
         var ixd = i * d
@@ -3035,9 +3114,14 @@ def _sgd_ps_warp_body(
         comptime for ua in range(MB_DBLK):
             var j = j0 + ua
             if j < d:
-                accd = fmad(ld(x, ixd + j), wv[ua], accd)
+                comptime if SGD_FAST_PS_PRELOAD:
+                    accd = fmad(xv[ua], wv[ua], accd)
+                comptime if not SGD_FAST_PS_PRELOAD:
+                    accd = fmad(ld(x, ixd + j), wv[ua], accd)
         var dot = _spw_fold(accd, nb)
-        var y = _sgd_target(k, c, ld(lab, i))
+        comptime if not SGD_FAST_PS_PRELOAD:
+            labv = ld(lab, i)
+        var y = _sgd_target(k, c, labv)
         var dotw = ws_mul(dot, whi, wlo)
         var p = fa(fa(dotw, il), intercept) if one_class else fa(dotw, intercept)
         if lr == LR_OPTIMAL:
@@ -3068,7 +3152,9 @@ def _sgd_ps_warp_body(
         var skip = False
         var update = Float32(0)
         if pa_rate:
-            var sq = ld(sqp, i)
+            var sq = sqv
+            comptime if not SGD_FAST_PS_PRELOAD:
+                sq = ld(sqp, i)
             if lr == LR_PA1:
                 if sq == 0:
                     skip = True
@@ -3093,7 +3179,9 @@ def _sgd_ps_warp_body(
                 var cwv = Float32(1)
                 if has_cw:
                     cwv = wpos if y > 0 else wneg
-                var swi = ld(swp, i) if has_sw else Float32(1)
+                var swi = swv
+                comptime if not SGD_FAST_PS_PRELOAD:
+                    swi = ld(swp, i) if has_sw else Float32(1)
                 update = fm(update, fm(cwv, swi))
             # their w.scale on wscale, the fold into v below 1e-9 (C)
             var fold = False
@@ -3133,7 +3221,10 @@ def _sgd_ps_warp_body(
                     if fold:
                         wj = ws_mul(wj, fhi, flo)
                     if update != 0:
-                        wj = fmad(cu, ld(x, ixd + j), wj)
+                        comptime if SGD_FAST_PS_PRELOAD:
+                            wj = fmad(cu, xv[uu], wj)
+                        comptime if not SGD_FAST_PS_PRELOAD:
+                            wj = fmad(cu, ld(x, ixd + j), wj)
                     if do_l1:
                         var rq = ws_clip(wj, u, qv[uu], whi)
                         qv[uu] = rq[1]

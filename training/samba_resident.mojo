@@ -735,7 +735,7 @@ def _fpb(mut buf: DeviceBuffer[DType.float32]) -> FP:
 
 def _bind_attention_grad_views(mut s: SambaResidentSession) raises:
     """Each attention layer's nine weight gradients become views of `grad`
-    at their registry offsets (`training/byte_lm.mojo::_afn_bind_grad_views`,
+    at their registry offsets (`training/byte_lm.mojo::_bind_grad_views`,
     in Samba's registry order: norm1, norm2, q, k, v, o, gate, up, down).
     Each is written whole, once, by the layer backward, so `grad` ends
     holding them with no copy. Bound once per shape (`_ensure_shape`
