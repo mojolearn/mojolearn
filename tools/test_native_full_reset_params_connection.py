@@ -90,10 +90,11 @@ def fixture():
 def connected():
     ns, modules, calls = fixture()
     host = modules['full_reset_fixture._classical_host'].HostKernelRidge
-    metadata = {'plans': {cls: {'names': tuple(inspect.signature(cls.__init__).parameters)[1:]}
-                          for cls in ns['_CLASSES'] + (host,)}}
     with patch.dict('sys.modules', modules):
         ns['install']()
+        # The getter schema is read from the installed signature (the installer adds `device`).
+        metadata = {'plans': {cls: {'names': tuple(inspect.signature(cls.__init__).parameters)[1:]}
+                              for cls in ns['_CLASSES'] + (host,)}}
         ns['connect'](metadata, {'plans': {}}, {'plans': {}}, {'family_msel_estimators': {}})
     return ns, modules, calls
 
@@ -115,14 +116,21 @@ def test_install_preserves_78_signatures_defaults_and_one_call_boundary():
         assert not hasattr(cls.__init__, '__wrapped__')
         assert cls.__init__.__qualname__ == cls.__qualname__ + '.__init__'
         current = inspect.signature(cls.__init__)
-        assert tuple(current.parameters) == tuple(signature.parameters)
+        # The installer adds `device=None`, keyword-only and last, to a class whose own constructor has none.
+        added = ('device',) if 'device' not in signature.parameters else ()
+        assert tuple(current.parameters) == tuple(signature.parameters) + added
         for name, parameter in signature.parameters.items():
             assert current.parameters[name].kind is parameter.kind
             assert current.parameters[name].default is parameter.default
         plan = ns['_CONTEXT']['plans'][cls]
-        assert plan['names'] == tuple(signature.parameters)[1:]
+        assert plan['device_admit'] is bool(added)
+        if added:
+            assert current.parameters['device'].kind is inspect.Parameter.KEYWORD_ONLY
+            assert current.parameters['device'].default is None and plan['defaults']['device'] is None
+            assert plan['events'][-1] == ('device', 'parameter', 'device', False) and plan['kwonly'][-1] == 'device'
+        assert plan['names'] == tuple(signature.parameters)[1:] + added
         for name, default in plan['defaults'].items():
-            assert default is signature.parameters[name].default
+            assert default is current.parameters[name].default
         obj = object.__new__(cls)
         marker = object()
         obj.set_params(z=marker, a=marker)

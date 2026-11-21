@@ -158,7 +158,7 @@ def gpc_score_result(truth: PythonObject, prediction: GPDecodedScoreLabels, cpu_
                      context: PythonObject) raises -> Float64:
     # `cpu_metrics`: None (the process's metrics image), or what a CPU route
     # in a GPU installation holds: the accuracy program factory of the CPU
-    # metrics image, or the text of why that image is not connected.
+    # metrics image.
     mc_refuse_multilabel(truth, "y_true", "accuracy_score", context, True)
     var nested = _gp_score_prediction_admit(prediction, context)
     var true_labels = _gp_score_truth(truth, context)
@@ -180,8 +180,6 @@ def gpc_score_result(truth: PythonObject, prediction: GPDecodedScoreLabels, cpu_
     if cpu_metrics is None:
         entries = _family_entries(PythonObject(None), "x_metrics", py_item(context, nk[].k_family_metrics_prog_context))
         factory = py_item(entries, nk[].k_metrics_program_native_api_v1)
-    elif py_type(cpu_metrics) is py_type(PythonObject("")):
-        raise Error("ImportError: " + String(cpu_metrics))
     var provider = neural_descriptor_connect_factory_once(factory, String(METRICS_PROGRAM_ABI), MP_OPERATION_COUNT)
     var entry = provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry
     var ranges = String(getenv("MOJOLEARN_ARENA_RANGES", "1").strip()) != "0"

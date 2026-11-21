@@ -69,7 +69,7 @@ def gp_extension(model: PythonObject, binding: PythonObject, prefix: String, reb
         if (wanted is None or Int(py=wanted) != got) and not fast_answers_compiled_code(
                 want, py_item(context, nk[].k_family_gp_mode_codes), got, MODE_FAMILY_GP):
             raise Error("RuntimeError: " + prefix + ": numeric_mode=" + family_repr(want) + " was requested but "
-                        + String(py_item(py_fields(binding), nk[].k___name__)) + " reports compile-time mode code "
+                        + String(py_item(py_fields(connection.image), nk[].k___name__)) + " reports compile-time mode code "
                         + String(got) + "; " + rebuild)
     return binding
 

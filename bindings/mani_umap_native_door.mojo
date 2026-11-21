@@ -43,7 +43,7 @@ from bindings.family_common_unpack import (
 from bindings.family_common_pack import (
     family_array,
 )
-from bindings.spectral_umap_routes_pack import spectral_umap_route
+from providers.python.estimator_binding_pyapi_door import estimator_binding_routed
 from core.mode_answer import fast_is_answered_by_identical, MODE_FAMILY_SPECTRAL
 from core.neighbors_entry_table import NeighborsEntryKey
 from core.neighbors_entry_table_umap import (
@@ -134,7 +134,7 @@ def _umap_state(value: PythonObject, name: String, context: PythonObject, mut pi
     return snapshot^
 
 
-def _umap_initial(settings: ManifoldSettings, x: ArrayMetadata, n: Int, nc: Int, seed: PythonObject,
+def _umap_initial(model: PythonObject, settings: ManifoldSettings, x: ArrayMetadata, n: Int, nc: Int, seed: PythonObject,
                   context: PythonObject, mut pin: ArrayPin) raises -> Optional[ArrayMetadata]:
     """`_initial(x, n, nc, seed)`: None for 'spectral'; 'random' uniform(-10,
     10) on the Philox stream; 'pca' umap-learn's PCA of the data scaled to
@@ -150,10 +150,10 @@ def _umap_initial(settings: ManifoldSettings, x: ArrayMetadata, n: Int, nc: Int,
         # PACK it into the `init` Array (lane entangled-mkit, 2026-11-12).
         var run = MRun()
         try:
-            var k = mk_image(run, "identical", spectral_umap_route(context, "decomp", PythonObject("identical")),
+            var k = mk_image(run, "identical", estimator_binding_routed(model, PythonObject("identical"), "_mojolearn_x_decomp", context),
                              context)
             var hk = mk_image(run, String(settings.default_mode),
-                              spectral_umap_route(context, "decomp", settings.default_mode), context)
+                              estimator_binding_routed(model, settings.default_mode, "_mojolearn_x_decomp", context), context)
             var seed_word = mk_seed_word(seed)
             var start = -1
             if String(py=init) == "random":
@@ -360,7 +360,10 @@ def _umap_target(settings: ManifoldSettings, y: PythonObject, n: Int, context: P
 def _umap_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`UMAP.fit(X, y)`; returns the embedding."""
     classical_connect_numpy(context)
-    var binding = spectral_umap_route(context, "metrics", settings.mode)
+    # The estimator's metrics image (its binding route: the module of its
+    # device, resolved once per estimator and mode object). The compiled tier
+    # is compared below through the UMAP table key the image published.
+    var binding = estimator_binding_routed(model, settings.mode, "_mojolearn_metrics", context, False)
     var source = args[0]
     var y = args[1]
     var validated = umap_parameters_fields(settings.values, context)
@@ -385,7 +388,7 @@ def _umap_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
     var nc = Int(py=config[1])
     umap_check_neighbors(Int(py=config[0]), n)
     var initial_pin = ArrayPin()
-    var initial = _umap_initial(settings, x, n, nc, config[7], context, initial_pin)
+    var initial = _umap_initial(model, settings, x, n, nc, config[7], context, initial_pin)
     umap_check_spectral_samples(True if initial else False, n, nc)
     var target = PythonObject(None)
     if not (y is None):
@@ -465,7 +468,7 @@ def _umap_transform(model: PythonObject, settings: ManifoldSettings, args: Pytho
         raise Error("UMAP parameters or numeric mode changed after fit; refit before transform")
     # The fitted route is selected only after the live-mode/refit refusal,
     # so changing a fitted identical model to unavailable fast still says refit.
-    var binding = spectral_umap_route(context, "metrics", fitted_mode)
+    var binding = estimator_binding_routed(model, fitted_mode, "_mojolearn_metrics", context, False)
     var x_pin = ArrayPin()
     var training_pin = ArrayPin()
     var fitted_pin = ArrayPin()

@@ -455,7 +455,7 @@ DEBT = {
     'bindings/str_labels_native_door.mojo': {'cpython': 3, 'native_loaded_module': 3},
     'bindings/svc_common_door.mojo': {'import_module': 1, 'native_loaded_module': 1},
     'bindings/svc_kernel_native_door.mojo': {'native_loaded_module': 6},
-    'bindings/svc_linear_native_door.mojo': {'native_loaded_module': 3},
+    'bindings/svc_linear_boundary_unpack.mojo': {'native_loaded_module': 3},
     'bindings/svc_score_boundary_door.mojo': {'cpython': 1},
     'bindings/svm_mixture_native_door.mojo': {'native_loaded_module': 5},
     'bindings/tokenizer_public_native_door.mojo': {'cpython': 11, 'native_loaded_module': 35},

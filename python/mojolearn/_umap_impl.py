@@ -18,9 +18,8 @@ _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 # The compiled family owner, connected once at import: `fit`,
 # `fit_transform` and `transform` are one native call each
 # (bindings/mani_umap_native_door.mojo).
-from . import _native_runtime_manifold_bridge, _native_spectral_umap_bridge
+from . import _native_runtime_manifold_bridge
 _NATIVE, _NATIVE_CONTEXT = _native_runtime_manifold_bridge.connect()
-_NATIVE_CONTEXT["family_spectral_umap_bindings"] = _native_spectral_umap_bridge.connect()
 
 
 #: scikit-learn / umap-learn metric names -> the kNN's cuVS DistanceType
@@ -161,13 +160,18 @@ class UMAP(NumericModeMixin):
     #: leave this class unwrapped.
     _mojolearn_native_public = True
 
+    # Takes `device=`: the metrics and x_decomp images of an operation come
+    # from the estimator's binding route (bindings/mani_umap_native_door.mojo).
+    _mojolearn_device = True
+
     def __init__(self, n_neighbors=15, n_components=2, *, min_dist=0.1,
                  spread=1.0, n_epochs=None, random_state=0,
                  set_op_mix_ratio=1.0, local_connectivity=1.0,
                  metric="euclidean", init="spectral", learning_rate=1.0,
                  repulsion_strength=1.0, negative_sample_rate=5, a=None, b=None,
                  metric_kwds=None, target_n_neighbors=-1, target_metric="categorical",
-                 target_weight=0.5, densmap=False, output_metric="euclidean", numeric_mode=None):
+                 target_weight=0.5, densmap=False, output_metric="euclidean", numeric_mode=None,
+                 device=None):
         self.n_neighbors = n_neighbors
         self.n_components = n_components
         self.min_dist = min_dist
@@ -190,6 +194,7 @@ class UMAP(NumericModeMixin):
         self.densmap = densmap
         self.output_metric = output_metric
         self.numeric_mode = numeric_mode
+        self.device = device
 
     def fit(self, X, y=None):
         """Fit the embedding to ``X``.

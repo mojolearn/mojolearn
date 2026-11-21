@@ -482,6 +482,10 @@ class SVC(NumericModeMixin):
     #: so the host subclass in `_classical_host.py` answers the CPU binding by
     #: overriding one method and the Python around it is this class's own).
     _BINDING = _EXT_NAME
+    # The kernel door takes its svm module from the estimator's binding
+    # route and asks that module for its resident entries: device="cpu" runs
+    # beside a GPU set.
+    _mojolearn_device = True
 
     def __init__(
         self,
@@ -1010,6 +1014,10 @@ class SVR(NumericModeMixin):
     #: `self._bind`, which resolves what `_extension` resolves, so
     #: `_classical_host.HostSVR` answers the CPU binding as `HostSVC` does.
     _BINDING = _EXT_NAME
+    # The kernel door takes its svm module from the estimator's binding
+    # route and asks that module for its resident entries: device="cpu" runs
+    # beside a GPU set.
+    _mojolearn_device = True
 
     def __init__(
         self,
