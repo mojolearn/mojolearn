@@ -39,6 +39,7 @@ from bindings.classical_pandas_door import classical_admit_value
 from bindings.msel_fixed_owner_unpack import fixed_owner_context, fixed_owner_fields
 from bindings.msel_fixed_owner_pack import fixed_owner_set_params
 from bindings.scaler_lifecycle_native_door import _public_result
+from bindings.scaler_route_unpack import scaler_route_context, scaler_route_clear
 from bindings.classical_labels_door import classical_encode_labels, classical_decode_labels, classical_score_from_codes
 from bindings.admitted_input_unpack import admit_weight_words
 from bindings.x_prep_native_inputs_door import _values, _rows_fields
@@ -402,13 +403,13 @@ def _scores(mut pr: ClsProg, model: PythonObject, fields: PythonObject, kind: St
 
 def _predict(model: PythonObject, fields: PythonObject, kind: String, X: PythonObject, context: PythonObject) raises -> PythonObject:
     var nk = prep_keys()
-    var pr = ClsProg()
+    var pr = ClsProg(model)
     var o = _scores(pr, model, fields, kind, X, W_PREDICT, context)
     return classical_decode_labels(py_item(fields, nk[].k_classes_), pr.get_i32(o.am, o.n, context), context)
 
 
 def _predict_proba(model: PythonObject, fields: PythonObject, kind: String, X: PythonObject, context: PythonObject) raises -> PythonObject:
-    var pr = ClsProg()
+    var pr = ClsProg(model)
     var o = _scores(pr, model, fields, kind, X, W_PROBA, context)
     if o.p64:
         return pr.get_f64(o.pp, o.n, o.K, context)
@@ -416,13 +417,13 @@ def _predict_proba(model: PythonObject, fields: PythonObject, kind: String, X: P
 
 
 def _predict_log_proba(model: PythonObject, fields: PythonObject, kind: String, X: PythonObject, context: PythonObject) raises -> PythonObject:
-    var pr = ClsProg()
+    var pr = ClsProg(model)
     var o = _scores(pr, model, fields, kind, X, W_LOG, context)
     return pr.get(o.lp, o.n, o.K, context)
 
 
 def _joint_log_proba(model: PythonObject, fields: PythonObject, kind: String, X: PythonObject, context: PythonObject) raises -> PythonObject:
-    var pr = ClsProg()
+    var pr = ClsProg(model)
     var o = _scores(pr, model, fields, kind, X, 0, context)
     return pr.get(o.jll, o.n, o.K, context)
 
@@ -435,7 +436,7 @@ def _score(model: PythonObject, fields: PythonObject, kind: String, X: PythonObj
     and its re-encode in `classical_accuracy` (str / bool classes: one
     Python object per row each way) are gone."""
     var nk = prep_keys()
-    var pr = ClsProg()
+    var pr = ClsProg(model)
     var o = _scores(pr, model, fields, kind, X, W_PREDICT, context)
     var codes = pr.get_i32(o.am, o.n, context)
     return PythonObject(classical_score_from_codes(y, py_item(fields, nk[].k_classes_), codes, PythonObject(None),
@@ -456,7 +457,7 @@ def _decision_function(model: PythonObject, fields: PythonObject, kind: String, 
         check_width(model, fields, arr.d)
         var n = arr.n
         var d = arr.d
-        var pl = ClsProg()
+        var pl = ClsProg(model)
         var xo = pl.put(arr.value)
         var coef = _put_attr(pl, fields, "coef_", context)
         var inter = _put_attr(pl, fields, "intercept_", context)
@@ -464,7 +465,7 @@ def _decision_function(model: PythonObject, fields: PythonObject, kind: String, 
         pl.stage(OP_MATMUL, n, xo, d, 1, coef, 1, 0, out, 1, d, inter, NONE)
         pl.run(mode, context)
         return pl.get(out, n, 0, context)
-    var pr = ClsProg()
+    var pr = ClsProg(model)
     if K != 2:
         var oj = _scores(pr, model, fields, kind, X, 0, context)
         return pr.get(oj.jll, oj.n, K, context)
@@ -517,7 +518,7 @@ def _gnb_fit(model: PythonObject, fields: PythonObject, args: PythonObject, cont
     var codes = encode_y(model, fields, args[1], n, context)
     var K = _n_classes(fields)
     var mode = cls_requested_mode(fields, context)
-    var pr = ClsProg()
+    var pr = ClsProg(model)
     var xo = pr.put(arr.value)
     var yo = pr.put_codes(codes)
     var vs = pr.put_scalar(cls_float(py_item(fields, nk[].k_var_smoothing)), context)
@@ -556,7 +557,7 @@ def _gnb_partial_fit(model: PythonObject, fields: PythonObject, args: PythonObje
     if not pc.first:
         check_width(model, fields, d)
         mode = py_item(fields, nk[].k_numeric_mode_)
-    var pr = ClsProg()
+    var pr = ClsProg(model)
     var xo = pr.put(arr.value)
     var coded = stage_partial_codes(pr, pc, context)
     var yo = coded[0]
@@ -791,17 +792,17 @@ def _dnb_fit(model: PythonObject, fields: PythonObject, kind: String, args: Pyth
     var binarize = _binarize(kind, fields)
     if sample_weight is None and is_sparse(X) and _csr_ready(kind, context):
         var csr = csr_input(X, context)
-        var pc_ = ClsProg()
+        var pc_ = ClsProg(model)
         var done = False
         var cc = _fit_counts_csr(pc_, model, fields, csr, y, done, context)
         if done:
             return _params(pc_, model, fields, kind, cc, NONE, _no_partial(), context)
         # IDENTICAL only: the dense program, its block built on the device
         # from the CSR arrays (lane idn-all)
-        var q = ClsProg()
+        var q = ClsProg(model)
         var cq = _fit_counts(q, model, fields, kind, X, y, binarize, PythonObject(None), csr, True, context)
         return _params(q, model, fields, kind, cq, NONE, _no_partial(), context)
-    var pr = ClsProg()
+    var pr = ClsProg(model)
     var c = _fit_counts(pr, model, fields, kind, X, y, binarize, sample_weight, _no_csr(context), False, context)
     return _params(pr, model, fields, kind, c, NONE, _no_partial(), context)
 
@@ -819,7 +820,7 @@ def _dnb_partial_fit(model: PythonObject, fields: PythonObject, kind: String, ar
     if not pc.first:
         check_width(model, fields, d)
         mode = py_item(fields, nk[].k_numeric_mode_)
-    var pr = ClsProg()
+    var pr = ClsProg(model)
     var xo = pr.put(arr.value)
     var wo = _put_weights(pr, _weights(args[3], n, context))
     var onepass = nb_onepass(mode, context)
@@ -919,7 +920,7 @@ def _cat_fit_programs(model: PythonObject, fields: PythonObject, arr: XIn, pc: P
     var n = arr.n
     var d = arr.d
     var K = _n_classes(fields)
-    var pr = ClsProg()
+    var pr = ClsProg(model)
     var xo = pr.put(arr.value)
     var coded = stage_partial_codes(pr, pc, context)
     var yo = coded[0]
@@ -967,7 +968,7 @@ def _cat_fit_programs(model: PythonObject, fields: PythonObject, arr: XIn, pc: P
     var cmax = 0
     for j in range(d):  # driver-loop: over the feature columns (model structure)
         cmax = max(cmax, ncat[j])
-    var q = ClsProg()
+    var q = ClsProg(model)
     var xq = q.put(arr.value)
     var qcoded = stage_partial_codes(q, pc, context)
     var yq = qcoded[0]
@@ -1174,7 +1175,7 @@ def _lda_fit(model: PythonObject, fields: PythonObject, X: PythonObject, y: Pyth
     if not _solver_is(fields, "svd"):
         _lda_cov_solver(model, fields, arr, codes, K, d, n, mode, shr, context)
         return arr^
-    var pr = ClsProg()
+    var pr = ClsProg(model)
     var xo = pr.put(arr.value)
     var yo = pr.put_codes(codes)
     var cnt = pr.alloc(K)
@@ -1257,7 +1258,7 @@ def _lda_cov_solver(model: PythonObject, fields: PythonObject, arr: XIn, codes: 
     """solver 'lsqr' / 'eigen' (`_fit_cov_solver`)."""
     var nk = prep_keys()
     var b = cls_builtins()
-    var pr = ClsProg()
+    var pr = ClsProg(model)
     var xo = pr.put(arr.value)
     var yo = pr.put_codes(codes)
     var cnt = pr.alloc(K)
@@ -1363,7 +1364,7 @@ def _lda_transform(model: PythonObject, fields: PythonObject, arr: XIn, context:
     var mc = min(Int(py=py_item(fields, nk[].k__max_components)), Int(py=py_item(fields, nk[].k__rank)))
     var mode = py_item(fields, nk[].k_numeric_mode_)
     var eigen = _solver_is(fields, "eigen")
-    var pr = ClsProg()
+    var pr = ClsProg(model)
     var xo = pr.put(arr.value)
     var xb = _put_attr(pr, fields, "xbar_", context)
     var sc = _put_attr(pr, fields, "_scal_full", context)
@@ -1414,7 +1415,7 @@ def _qda_fit(model: PythonObject, fields: PythonObject, X: PythonObject, y: Pyth
     # the build, so its check stays first (`cls_class_counts`, a p2m program)
     var late = est is None
     if not late:
-        var cp = ClsProg()
+        var cp = ClsProg(model)
         var co = cp.put_codes(codes)
         var tot = 0
         tot = cls_class_counts(cp.program, co, n, K)
@@ -1427,7 +1428,7 @@ def _qda_fit(model: PythonObject, fields: PythonObject, X: PythonObject, y: Pyth
         # above: Mojo releases it at its last named use, which was the
         # `cp.base` read, so the counts were read from freed words.
         _ = cp.base
-    var pr = ClsProg()
+    var pr = ClsProg(model)
     var xo = pr.put(arr.value)
     var yo = pr.put_codes(codes)
     var cnt = pr.alloc(K)
@@ -1530,7 +1531,11 @@ def _dispatch(model: PythonObject, op: Int, operation: String, var args: PythonO
     if kind == "lda":
         context = lda_native_context(context)
         if op == PREP_OPN_INITIALIZE:
-            return lda_native_initialize(model, args, context)
+            var built = lda_native_initialize(model, args, context)
+            # A constructor run again on a live instance: its next data
+            # operation resolves the device route from the new `device`.
+            scaler_route_clear(model)
+            return built
         # One admission pass per fitted state (a per-model record), and the
         # plain classes_ list it read is reused below instead of a second copy.
         var admitted = lda_native_fields_plain(model, context, op == PREP_OPN_IS_FITTED or op == PREP_OPN_GET_PARAMS or op == PREP_OPN_SET_PARAMS)
@@ -1540,7 +1545,11 @@ def _dispatch(model: PythonObject, op: Int, operation: String, var args: PythonO
         if op == PREP_OPN_GET_PARAMS:
             return lda_native_get_params(fields, context)
         if op == PREP_OPN_SET_PARAMS:
-            return lda_native_set_params(model, fields, args[0], context)
+            var updated = lda_native_set_params(model, fields, args[0], context)
+            # The device may have changed (checked before it was stored):
+            # the next data operation resolves the route again.
+            scaler_route_clear(model)
+            return updated
         if op == PREP_OPN_FIT or op == PREP_OPN_FIT_TRANSFORM or op == PREP_OPN_SCORE:
             args = Python.tuple(args[0], prep_plain_classes(args[1], context))
             lda_native_labels(args[1], context, op != PREP_OPN_SCORE)
@@ -1611,11 +1620,11 @@ def _dispatch(model: PythonObject, op: Int, operation: String, var args: PythonO
 
 def _public_kind(model: PythonObject, context: PythonObject) raises -> String:
     """The kind of a naive Bayes / QDA model whose public operation runs the
-    native lifecycle here ("" for LDA, which keeps its own, the CV fixed
-    owner's private calls, and a metaclass the door refuses)."""
-    var nk = prep_keys()
+    native lifecycle here ("" for LDA, which keeps its own, and a metaclass
+    the door refuses). The caller answers "" itself for the CV fixed owner's
+    private calls (its one read of that context key)."""
     var b = native_loaded_module("builtins")
-    if py_type(py_type(model)) is not b.type or py_get(context, nk[].k_cv_fixed_owner) is not None:
+    if py_type(py_type(model)) is not b.type:
         return ""
     var kind = _kind_of(model, context)
     if kind == "gnb" or kind == "mnb" or kind == "bnb" or kind == "cnb" or kind == "cat" or kind == "qda":
@@ -1685,8 +1694,20 @@ def prep_classify_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyO
         if op == PREP_OPN_NB_CSR_READY:
             # a class-level probe: `model` is the class, args[0] its `_csr_ok`
             return PythonObject(_nb_csr_ready_op(Bool(py=args[0]), context)).steal_data()
+        # The connected context of the estimator's device route: the
+        # owner's own, or the CPU one import connected beside it on a GPU
+        # installation (resolved once per estimator; a hit is one record
+        # read and one pointer compare). The door reads no device and no
+        # process vendor; every image below is selected from this context.
+        # Not routed: the CV fixed owner's private calls (its own context;
+        # the member's device is that owner's), the constructor (the device
+        # is not stored yet) and set_params (a new device is checked against
+        # the installation, not the route); the route is cleared after both.
+        var fixed = py_get(context, nk[].k_cv_fixed_owner) is not None
+        if not fixed and op != PREP_OPN_INITIALIZE and op != PREP_OPN_SET_PARAMS:
+            context = scaler_route_context(model, context)
         classical_connect_numpy(context)
-        var public_kind = _public_kind(model, context)
+        var public_kind = String("") if fixed else _public_kind(model, context)
         if public_kind != "":
             return _classifier_public(model, public_kind, op, operation, args, context).steal_data()
         var result = _dispatch(model, op, operation, args, context)

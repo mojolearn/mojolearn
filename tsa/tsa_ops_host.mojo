@@ -46,7 +46,7 @@ def tsa_hw_ops_host_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
                 f32_ptr(a[1]), f32_ptr(a[2]), i32_ptr(a[3]))
         elif operation == TSA_OP_HW_RESIDENT_COUNT:
             r[] = 0
-        elif not tsa_hw_ops_host_inference(operation, aa, pp, result):
+        elif not tsa_hw_ops_host_inference(operation, aa, pp, ff, result):
             raise Error("tsa ops: the CPU binding keeps no resident device copy (operation " + String(operation) + ")")
         return 0
     except problem:

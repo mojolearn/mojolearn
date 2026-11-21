@@ -5,6 +5,60 @@ the selectors' transform) and its fixed ABI."""
 
 CONTEXT_CONNECTION = None
 
+#: What the CPU template's `scaler_bindings["fast"]` holds: the doors say a
+#: text entry as the reason the mode is not connected.
+_FAST_ON_CPU = "device='cpu' runs in identical mode only; numeric_mode='fast' is for Apple GPUs"
+
+
+def _entries(module):
+    # glue: the fixed x_prep exports of one compiled image, connected during import
+    from types import BuiltinFunctionType
+    entries = {}
+    for name in ("x_prep_run", "x_prep_numeric_mode", "x_prep_vendor", "x_prep_idn_fam",  # glue: fixed native exports connected during import
+                 "x_prep_run_out", "x_prep_run_scratch", "x_prep_run_ranges",
+                 "x_prep_dev_put", "x_prep_dev_free", "x_prep_dev_live", "x_prep_dev_take_rows",
+                 "x_prep_host_column", "x_prep_ptimpute_flags"):
+        try:
+            entry = getattr(module, name)
+        except (AttributeError, ImportError):
+            if name not in ("x_prep_run", "x_prep_numeric_mode"):
+                continue
+            raise
+        if not isinstance(entry, BuiltinFunctionType):
+            raise TypeError(f"the stateless prep owner requires compiled {name}")
+        entries[name] = entry
+    entries["preprocessing_numeric_mode"] = entries["x_prep_numeric_mode"]
+    entries.update(arena_binding=module, arena_binding_id=id(module))
+    return entries
+
+
+def _identities(connected):
+    # glue: immutable identities of the compiled exports actually selected;
+    # no assumed function name/module-owner convention is required.
+    return tuple(
+        (mode, tuple(table.items()) if type(table) is dict else None)
+        for mode, table in connected.items()  # glue: freeze fixed import-time native ABI identities
+    )
+
+
+def _cpu_records(context):
+    """The frozen records of the CPU template for `device="cpu"`: the
+    owner's context with the host x_prep image as its identical binding and
+    `vendor="cpu"`. None in a CPU-only process (its own template already is
+    the CPU one); the refusal text when the host image is not built, said
+    when a `device="cpu"` estimator first runs."""
+    # glue: load the CPU image once at import and freeze its records beside the device ones
+    from . import _backend
+    if context["vendor"] == "cpu":
+        return None
+    try:
+        table = {"identical": _entries(_backend.load_host_module("_mojolearn_x_prep_host")), "fast": _FAST_ON_CPU}
+    except (ImportError, AttributeError, TypeError, ValueError, RuntimeError, OSError) as error:
+        return type(error).__name__ + ": " + str(error)
+    cpu = dict(context)
+    cpu.update(vendor="cpu", scaler_bindings=table, prep_stateless_entry_identities=_identities(table))
+    return tuple(cpu.items())
+
 
 def connect(kinds):
     global CONTEXT_CONNECTION
@@ -24,24 +78,7 @@ def connect(kinds):
     connected = {}
     for mode in ("identical", "fast"):  # glue: fixed numeric-mode ABI setup
         try:
-            module = _backend.binding("_mojolearn_x_prep", mode)
-            entries = {}
-            for name in ("x_prep_run", "x_prep_numeric_mode", "x_prep_vendor", "x_prep_idn_fam",  # glue: fixed native exports connected during import
-                         "x_prep_run_out", "x_prep_run_scratch", "x_prep_run_ranges",
-                         "x_prep_dev_put", "x_prep_dev_free", "x_prep_dev_live", "x_prep_dev_take_rows",
-                         "x_prep_host_column", "x_prep_ptimpute_flags"):
-                try:
-                    entry = getattr(module, name)
-                except (AttributeError, ImportError):
-                    if name not in ("x_prep_run", "x_prep_numeric_mode"):
-                        continue
-                    raise
-                if not isinstance(entry, BuiltinFunctionType):
-                    raise TypeError(f"the stateless prep owner requires compiled {name}")
-                entries[name] = entry
-            entries["preprocessing_numeric_mode"] = entries["x_prep_numeric_mode"]
-            entries.update(arena_binding=module, arena_binding_id=id(module))
-            connected[mode] = entries
+            connected[mode] = _entries(_backend.binding("_mojolearn_x_prep", mode))
         except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
             connected[mode] = type(error).__name__ + ": " + str(error)
     gather = _backend.binding("_mojolearn", "identical").gather_rows_bytes
@@ -56,12 +93,7 @@ def connect(kinds):
                    scaler_bindings=connected, scaler_host_contexts={},
                    maxabs_rows_class=DeviceRows, maxabs_rows_dict=vars(DeviceRows)['__dict__'], maxabs_gather_rows=gather,
                    classical_getframe=sys._getframe, prep_stateless_kinds=dict(kinds))
-    # glue: immutable identities of the compiled exports actually selected
-    # above; no assumed function name/module-owner convention is required.
-    context["prep_stateless_entry_identities"] = tuple(
-        (mode, tuple(table.items()) if type(table) is dict else None)
-        for mode, table in connected.items()  # glue: freeze fixed import-time native ABI identities
-    )
+    context["prep_stateless_entry_identities"] = _identities(connected)
     # glue: freeze native class/descriptor references and fixed mapping contents
     # during package connection. Native operations copy these records and never
     # execute this setup helper. Process namespaces keep their pinned identity.
@@ -75,6 +107,9 @@ def connect(kinds):
         output, tuple(output.items()),
         tuple((key, output[key], tuple(output[key].items()))
               for key in static_names if key in output),  # glue: fixed import-time output provider maps
+        # The CPU template's records (`device="cpu"` beside a GPU set): the
+        # fixed maps and the output context above are shared with it.
+        _cpu_records(context),
     )
     connect_module(__name__, sys.modules[__name__], ("CONTEXT_CONNECTION",))
     return call, context

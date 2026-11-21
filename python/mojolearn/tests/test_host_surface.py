@@ -422,22 +422,24 @@ def test_the_analysis_functions_are_reachable_on_a_cpu_only_install():
     # Holt-Winters model answering from a binary with no fit in it.
     assert host_surface.family("tsa")["ships_in_wheel"], "every family ships since 2026-09-16"
     forecast = host_surface.family("forecast")
-    assert forecast["ships_in_wheel"] and "kpss_test" in forecast["exports"]
-    assert "kpss_test" in _exports_in_source("forecast"), (
-        "the shipped forecast binding does not register kpss_test")
+    # kpss_test is an operation of the tsa operations table the forecast
+    # binding publishes (core/tsa_entry_table.mojo TSA_OP_KPSS_TEST), not a
+    # Python export: the stationarity owner calls it through the table.
+    assert forecast["ships_in_wheel"]
+    assert "publish_tsa_hw_ops_forecast_host()" in _read("bindings/_mojolearn_forecast_host.mojo"), (
+        "the shipped forecast binding does not publish the tsa operations table that holds kpss_test")
     assert host_surface.inference_routes()["_mojolearn_tsa"] == "_mojolearn_forecast_host"
 
-    # ONE SOURCE: both bindings register kpss_test from the shared module, so
-    # the reference binary and the shipped binary cannot drift apart.
-    shared = "bindings/kpss_host_test_unpack.mojo"
+    # ONE SOURCE: both CPU images answer kpss_test from the shared host
+    # operations module, so the reference binary and the shipped binary
+    # cannot drift apart.
+    shared = "tsa/tsa_ops_host_inference.mojo"
     assert (ROOT / shared).is_file(), f"{shared} is missing"
-    for binding in ("_mojolearn_tsa_host", "_mojolearn_forecast_host"):
-        src = _read(f"bindings/{binding}.mojo")
-        assert "from bindings.kpss_host_test_unpack import" in src, (
-            f"{binding} does not register kpss_test from the shared module")
-    assert "def kpss_test_binding(" not in _read("bindings/_mojolearn_tsa_host.mojo"), (
-        "the tsa binding still defines its own kpss_test_binding; the two binaries would drift")
-    assert shared in forecast["host_modules"]
+    assert "TSA_OP_KPSS_TEST" in _read(shared), f"{shared} does not hold the kpss_test operation"
+    for entry in ("tsa/tsa_ops_host.mojo", "tsa/tsa_ops_forecast_host.mojo"):
+        assert "from tsa.tsa_ops_host_inference import" in _read(entry), (
+            f"{entry} does not answer kpss_test from the shared module")
+    assert "core/kpss_host_test_impl.mojo" in forecast["host_modules"]
 
 
 def test_promoted_reference_lanes_still_carry_the_classes_that_promoted_them():
