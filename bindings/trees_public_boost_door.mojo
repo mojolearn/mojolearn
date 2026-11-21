@@ -51,7 +51,7 @@ from bindings.trees_public_inputs_door import (
     trees_call,
     trees_class_rows_only,
 )
-from bindings.trees_public_inputs_run import TREES_NONFINITE
+from bindings.trees_public_inputs_run import TREES_NONFINITE, trees_finite_f32
 from bindings.admitted_input_unpack import (
     AdmittedX, admit_f32, admit_weight_words, admitted_words, admitted_array, admitted_vector,
 )
@@ -949,6 +949,12 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
         w_address = sw.value().address
     var native = count > 0
     var jobs = native_unit_jobs(fields["n_jobs"], "Bagging")
+    # The member entries read admitted words; X (and a regressor's targets)
+    # reach this door untested because each member's fit door tests what it
+    # is given. Proven once, when the first member is admitted natively (an
+    # unpublished family never pays the scan): not finite = the loop below,
+    # whose first fit door refuses in the forest's own words.
+    var proven = False
     while native and done < count:  # driver-loop: over the waves of member estimators
         var set = MemberSet(x.address, n, d, MEMBER_I32 if classifier else MEMBER_F32, MEMBER_I32)
         set.run.cap = jobs
@@ -966,6 +972,13 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
                                     n_classes, context, b):
                 native = False
                 break
+            if not proven:
+                proven = trees_finite_f32(x.address, n * d) and (
+                    classifier or trees_finite_f32(trees_address(y_all), n))
+                _ = y_all  # keep the Python object alive through the scan above
+                if not proven:
+                    native = False
+                    break
             _ = py_call(wave_rows.append, rows)
             _ = py_call(wave_cols.append, cols)
             if k == done:
@@ -977,6 +990,9 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
         # A member that refuses its fit publishes nothing: this wave and the
         # rest are fitted by the loop below (same draws, same seeds), whose
         # fit door raises the estimator's own words if the request is wrong.
+        # So does a wave with a draw that lacks a class of the ensemble
+        # (bindings/member_set_door.mojo, the class-cover pass, before any
+        # fit): the member's own door fits it on the classes it drew.
         var ran = False
         try:
             member_set_run(set)   # a failing member releases every state
