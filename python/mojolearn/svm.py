@@ -113,6 +113,8 @@ class LinearSVC(_LinearSVMBase):
         Number of past updates kept by L-BFGS.
     multi_class : {'ovr'}, default 'ovr'
         One-vs-rest, the only supported value.
+    verbose : int, default 0
+        Accepted for scikit-learn compatibility; ignored. Nothing is printed.
     numeric_mode : {'identical', 'fast'} or None, default None
         The numeric mode for this estimator; None uses the process default
         (see ``mojolearn.set_numeric_mode``). ``'fast'`` is for Apple GPUs.
@@ -157,14 +159,20 @@ class LinearSVC(_LinearSVMBase):
 
     _LOSSES = {"hinge": _QN_LOSS_SVC_L1, "squared_hinge": _QN_LOSS_SVC_L2}
 
+    # scikit-learn's no-op keywords, at the class too: a model the archive door loads
+    # (`cls.__new__`, bindings/host_archive_native_door.mojo) never ran __init__, and its
+    # get_params reads these defaults (as `device` does).
+    verbose = 0
+
     def __init__(self, penalty="l2", loss="squared_hinge", *, C=1.0,
                  fit_intercept=True, penalized_intercept=False,
                  class_weight=None, tol=1e-4, max_iter=1000,
-                 linesearch_max_iter=100, lbfgs_memory=5, multi_class="ovr", numeric_mode=None):
+                 linesearch_max_iter=100, lbfgs_memory=5, multi_class="ovr", verbose=0, numeric_mode=None):
         self._init_common(penalty, loss, C, fit_intercept, penalized_intercept,
                           tol, max_iter, linesearch_max_iter, lbfgs_memory)
         self.class_weight = class_weight
         self.multi_class = multi_class
+        self.verbose = verbose
         self.numeric_mode = numeric_mode
 
     def fit(self, X, y, sample_weight=None):
@@ -285,6 +293,8 @@ class LinearSVR(_LinearSVMBase):
         Maximum number of line-search steps per iteration.
     lbfgs_memory : int, default 5
         Number of past updates kept by L-BFGS.
+    verbose : int, default 0
+        Accepted for scikit-learn compatibility; ignored. Nothing is printed.
     numeric_mode : {'identical', 'fast'} or None, default None
         The numeric mode for this estimator; None uses the process default
         (see ``mojolearn.set_numeric_mode``). ``'fast'`` is for Apple GPUs.
@@ -326,13 +336,19 @@ class LinearSVR(_LinearSVMBase):
     _LOSSES = {"epsilon_insensitive": _QN_LOSS_SVR_L1,
                "squared_epsilon_insensitive": _QN_LOSS_SVR_L2}
 
+    # scikit-learn's no-op keywords, at the class too: a model the archive door loads
+    # (`cls.__new__`, bindings/host_archive_native_door.mojo) never ran __init__, and its
+    # get_params reads these defaults (as `device` does).
+    verbose = 0
+
     def __init__(self, *, epsilon=0.0, penalty="l1", loss="epsilon_insensitive",
                  C=1.0, fit_intercept=True, penalized_intercept=False,
                  tol=1e-4, max_iter=1000, linesearch_max_iter=100,
-                 lbfgs_memory=5, numeric_mode=None):
+                 lbfgs_memory=5, verbose=0, numeric_mode=None):
         self._init_common(penalty, loss, C, fit_intercept, penalized_intercept,
                           tol, max_iter, linesearch_max_iter, lbfgs_memory)
         self.epsilon = epsilon
+        self.verbose = verbose
         self.numeric_mode = numeric_mode
 
     def fit(self, X, y, sample_weight=None):

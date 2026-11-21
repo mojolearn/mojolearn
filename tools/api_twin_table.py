@@ -358,6 +358,7 @@ def classify(rules, cls, kind, name, ours, theirs):
         kinds = r["kind"] if isinstance(r["kind"], list) else [r["kind"]]
         if (kind in kinds and hit(r.get("class", "*"), cls) and hit(r.get("name", "*"), name)
                 and hit(r.get("ours", "*"), ours) and hit(r.get("sklearn", "*"), theirs)):
+            r["_used"] = r.get("_used", 0) + 1
             return r["reason"]
     return None
 
@@ -450,9 +451,12 @@ def main(argv):
           f"scikit-learn {sk['sklearn_version']} ({source})")
     if by_kind:
         print("unclassified by kind:", json.dumps(by_kind, sort_keys=True))
+    unused = [r for r in rules if not r.get("_used")]
+    for r in unused:
+        print("rule matches nothing (a fixed difference? delete it):", json.dumps({k: v for k, v in r.items() if k != "reason"}))
     if missing_class:
         print("public names whose class was not found in the source:", ", ".join(missing_class))
-    if "--check" in argv and (open_rows or missing_class):
+    if "--check" in argv and (open_rows or missing_class or unused):
         return 1
     return 0
 

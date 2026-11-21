@@ -8748,6 +8748,13 @@
           "source": "python/mojolearn/svm.py:156"
         },
         {
+          "field": "verbose",
+          "value": {
+            "parameter": "verbose"
+          },
+          "source": "python/mojolearn/svm.py:156"
+        },
+        {
           "field": "numeric_mode",
           "value": {
             "parameter": "numeric_mode"
@@ -8760,7 +8767,7 @@
         "python/mojolearn/svm.py:55"
       ],
       "constructor": "python/mojolearn/svm.py:156",
-      "signature_source": "def __init__(self, penalty='l2', loss='squared_hinge', *, C=1.0, fit_intercept=True, penalized_intercept=False, class_weight=None, tol=0.0001, max_iter=1000, linesearch_max_iter=100, lbfgs_memory=5, multi_class='ovr', numeric_mode=None)",
+      "signature_source": "def __init__(self, penalty='l2', loss='squared_hinge', *, C=1.0, fit_intercept=True, penalized_intercept=False, class_weight=None, tol=0.0001, max_iter=1000, linesearch_max_iter=100, lbfgs_memory=5, multi_class='ovr', verbose=0, numeric_mode=None)",
       "parameters": [
         "penalty",
         "loss",
@@ -8773,9 +8780,10 @@
         "linesearch_max_iter",
         "lbfgs_memory",
         "multi_class",
+        "verbose",
         "numeric_mode"
       ],
-      "constructor_ast_sha256": "afd0eb79f93db9a169c5c49c5aab2ebcc7edd97d9b489be62f6cfd4addd3adcb",
+      "constructor_ast_sha256": "1d5f0ba5b02754d0b6e546870252826d4b1ce1ead660b305ea7d8077973eb20f",
       "field_order": [
         "penalty",
         "loss",
@@ -8788,6 +8796,7 @@
         "lbfgs_memory",
         "class_weight",
         "multi_class",
+        "verbose",
         "numeric_mode"
       ],
       "final_fields": {
@@ -8824,6 +8833,9 @@
         "multi_class": {
           "parameter": "multi_class"
         },
+        "verbose": {
+          "parameter": "verbose"
+        },
         "numeric_mode": {
           "parameter": "numeric_mode"
         }
@@ -8840,6 +8852,7 @@
         "linesearch_max_iter": "100",
         "lbfgs_memory": "5",
         "multi_class": "'ovr'",
+        "verbose": "0",
         "numeric_mode": "None"
       },
       "numeric_mode_injection": false,
@@ -8849,13 +8862,13 @@
         {
           "path": "python/mojolearn/svm.py",
           "name": "__init__",
-          "line": 160,
-          "ast_sha256": "afd0eb79f93db9a169c5c49c5aab2ebcc7edd97d9b489be62f6cfd4addd3adcb"
+          "line": 167,
+          "ast_sha256": "1d5f0ba5b02754d0b6e546870252826d4b1ce1ead660b305ea7d8077973eb20f"
         },
         {
           "path": "python/mojolearn/svm.py",
           "name": "_init_common",
-          "line": 55,
+          "line": 59,
           "ast_sha256": "ea110b1dcaaa7818b6ea19f80829c332b0213c52017363c81f7a105b6f8c567a"
         }
       ],
@@ -8991,6 +9004,13 @@
           "source": "python/mojolearn/svm.py:325"
         },
         {
+          "field": "verbose",
+          "value": {
+            "parameter": "verbose"
+          },
+          "source": "python/mojolearn/svm.py:325"
+        },
+        {
           "field": "numeric_mode",
           "value": {
             "parameter": "numeric_mode"
@@ -9003,7 +9023,7 @@
         "python/mojolearn/svm.py:55"
       ],
       "constructor": "python/mojolearn/svm.py:325",
-      "signature_source": "def __init__(self, *, epsilon=0.0, penalty='l1', loss='epsilon_insensitive', C=1.0, fit_intercept=True, penalized_intercept=False, tol=0.0001, max_iter=1000, linesearch_max_iter=100, lbfgs_memory=5, numeric_mode=None)",
+      "signature_source": "def __init__(self, *, epsilon=0.0, penalty='l1', loss='epsilon_insensitive', C=1.0, fit_intercept=True, penalized_intercept=False, tol=0.0001, max_iter=1000, linesearch_max_iter=100, lbfgs_memory=5, verbose=0, numeric_mode=None)",
       "parameters": [
         "epsilon",
         "penalty",
@@ -9015,9 +9035,10 @@
         "max_iter",
         "linesearch_max_iter",
         "lbfgs_memory",
+        "verbose",
         "numeric_mode"
       ],
-      "constructor_ast_sha256": "d23dee999c54a1fda2fe5a345b9b72c5ad108bb860c1213619b08719695615cf",
+      "constructor_ast_sha256": "07399f3aefa04b0e398ae066c1f976152f4430f259a994c6336759fa0536930a",
       "field_order": [
         "penalty",
         "loss",
@@ -9029,6 +9050,7 @@
         "linesearch_max_iter",
         "lbfgs_memory",
         "epsilon",
+        "verbose",
         "numeric_mode"
       ],
       "final_fields": {
@@ -9062,6 +9084,9 @@
         "epsilon": {
           "parameter": "epsilon"
         },
+        "verbose": {
+          "parameter": "verbose"
+        },
         "numeric_mode": {
           "parameter": "numeric_mode"
         }
@@ -9077,6 +9102,7 @@
         "max_iter": "1000",
         "linesearch_max_iter": "100",
         "lbfgs_memory": "5",
+        "verbose": "0",
         "numeric_mode": "None"
       },
       "numeric_mode_injection": false,
@@ -9086,13 +9112,13 @@
         {
           "path": "python/mojolearn/svm.py",
           "name": "__init__",
-          "line": 325,
-          "ast_sha256": "d23dee999c54a1fda2fe5a345b9b72c5ad108bb860c1213619b08719695615cf"
+          "line": 344,
+          "ast_sha256": "07399f3aefa04b0e398ae066c1f976152f4430f259a994c6336759fa0536930a"
         },
         {
           "path": "python/mojolearn/svm.py",
           "name": "_init_common",
-          "line": 55,
+          "line": 59,
           "ast_sha256": "ea110b1dcaaa7818b6ea19f80829c332b0213c52017363c81f7a105b6f8c567a"
         }
       ],
@@ -14103,7 +14129,7 @@
         "python/mojolearn/_expansion_linear.py:1723"
       ],
       "constructor": "python/mojolearn/_expansion_linear.py:1723",
-      "signature_source": "def __init__(self, nu=0.5, fit_intercept=True, max_iter=1000, tol=0.001, shuffle=True, verbose=0, random_state=None, learning_rate='optimal', eta0=0.0, power_t=0.5, warm_start=False, average=False, batch_size=None, *, numeric_mode=None)",
+      "signature_source": "def __init__(self, nu=0.5, fit_intercept=True, max_iter=1000, tol=0.001, shuffle=True, verbose=0, random_state=None, learning_rate='optimal', eta0=0.01, power_t=0.5, warm_start=False, average=False, batch_size=None, *, numeric_mode=None)",
       "parameters": [
         "nu",
         "fit_intercept",
@@ -14120,7 +14146,7 @@
         "batch_size",
         "numeric_mode"
       ],
-      "constructor_ast_sha256": "53e75dfc2074be0b258e0e50af4345648d8c0e6064a60357383f8e7680a7a36e",
+      "constructor_ast_sha256": "e1d33737b9ca63226f96141fa8812f0fd11bf3b6e511545bede2b2f72b3773be",
       "field_order": [
         "batch_size",
         "nu",
@@ -14190,7 +14216,7 @@
         "verbose": "0",
         "random_state": "None",
         "learning_rate": "'optimal'",
-        "eta0": "0.0",
+        "eta0": "0.01",
         "power_t": "0.5",
         "warm_start": "False",
         "average": "False",
@@ -14204,8 +14230,8 @@
         {
           "path": "python/mojolearn/_expansion_linear.py",
           "name": "__init__",
-          "line": 1723,
-          "ast_sha256": "53e75dfc2074be0b258e0e50af4345648d8c0e6064a60357383f8e7680a7a36e"
+          "line": 1765,
+          "ast_sha256": "e1d33737b9ca63226f96141fa8812f0fd11bf3b6e511545bede2b2f72b3773be"
         }
       ],
       "constructor_ancestry": [

@@ -3447,7 +3447,7 @@
      "name": "leaf_size",
      "ours": "",
      "sklearn": "30",
-     "reason": null
+     "reason": "Its constructor is one call into the compiled classical owner, which stores exactly its declared fields; accepting a no-op keyword needs that native constructor to take it (Mojo work, not a rename). X is never modified, the work runs on the device and the neighbor search builds no tree."
     },
     {
      "kind": "param_missing",
@@ -3461,7 +3461,7 @@
      "name": "n_jobs",
      "ours": "",
      "sklearn": "None",
-     "reason": null
+     "reason": "Its constructor is one call into the compiled classical owner, which stores exactly its declared fields; accepting a no-op keyword needs that native constructor to take it (Mojo work, not a rename). X is never modified, the work runs on the device and the neighbor search builds no tree."
     },
     {
      "kind": "param_extra",
@@ -6748,7 +6748,7 @@
      "name": "verbose",
      "ours": "",
      "sklearn": "0",
-     "reason": null
+     "reason": "Its constructor is one call into the compiled classical owner, which stores exactly its declared fields; accepting a no-op keyword needs that native constructor to take it (Mojo work, not a rename). X is never modified, the work runs on the device and the neighbor search builds no tree."
     },
     {
      "kind": "param_missing",
@@ -9557,14 +9557,14 @@
      "name": "leaf_size",
      "ours": "",
      "sklearn": "40",
-     "reason": null
+     "reason": "Its constructor is one call into the compiled classical owner, which stores exactly its declared fields; accepting a no-op keyword needs that native constructor to take it (Mojo work, not a rename). X is never modified, the work runs on the device and the neighbor search builds no tree."
     },
     {
      "kind": "param_missing",
      "name": "n_jobs",
      "ours": "",
      "sklearn": "None",
-     "reason": null
+     "reason": "Its constructor is one call into the compiled classical owner, which stores exactly its declared fields; accepting a no-op keyword needs that native constructor to take it (Mojo work, not a rename). X is never modified, the work runs on the device and the neighbor search builds no tree."
     },
     {
      "kind": "param_missing",
@@ -14448,7 +14448,7 @@
      "name": "copy_X",
      "ours": "",
      "sklearn": "True",
-     "reason": "Its constructor is one call into the compiled classical owner, which stores exactly its declared fields; accepting a no-op keyword needs that native constructor to take it (Mojo work, not a rename). X is never modified and the work runs on the device."
+     "reason": "Its constructor is one call into the compiled classical owner, which stores exactly its declared fields; accepting a no-op keyword needs that native constructor to take it (Mojo work, not a rename). X is never modified, the work runs on the device and the neighbor search builds no tree."
     },
     {
      "kind": "param_missing",
@@ -14462,7 +14462,7 @@
      "name": "n_jobs",
      "ours": "",
      "sklearn": "None",
-     "reason": "Its constructor is one call into the compiled classical owner, which stores exactly its declared fields; accepting a no-op keyword needs that native constructor to take it (Mojo work, not a rename). X is never modified and the work runs on the device."
+     "reason": "Its constructor is one call into the compiled classical owner, which stores exactly its declared fields; accepting a no-op keyword needs that native constructor to take it (Mojo work, not a rename). X is never modified, the work runs on the device and the neighbor search builds no tree."
     },
     {
      "kind": "param_missing",
@@ -14610,6 +14610,10 @@
       "default": "'ovr'",
       "accepts": "{'ovr'}, default 'ovr'"
      },
+     "verbose": {
+      "default": "0",
+      "accepts": "int, default 0"
+     },
      "numeric_mode": {
       "default": "None",
       "accepts": "{'identical', 'fast'} or None, default None"
@@ -14733,13 +14737,6 @@
      "ours": "",
      "sklearn": "1",
      "reason": "The GPU quasi-Newton solver works on the primal only and fits the intercept as its own unpenalized weight (penalized_intercept=True penalizes it), so liblinear's dual, intercept_scaling and seed have no meaning."
-    },
-    {
-     "kind": "param_missing",
-     "name": "verbose",
-     "ours": "",
-     "sklearn": "0",
-     "reason": null
     },
     {
      "kind": "param_missing",
@@ -14895,6 +14892,10 @@
       "default": "5",
       "accepts": "int, default 5"
      },
+     "verbose": {
+      "default": "0",
+      "accepts": "int, default 0"
+     },
      "numeric_mode": {
       "default": "None",
       "accepts": "{'identical', 'fast'} or None, default None"
@@ -15002,13 +15003,6 @@
      "ours": "",
      "sklearn": "'auto'",
      "reason": "The GPU quasi-Newton solver works on the primal only and fits the intercept as its own unpenalized weight (penalized_intercept=True penalizes it), so liblinear's dual, intercept_scaling and seed have no meaning."
-    },
-    {
-     "kind": "param_missing",
-     "name": "verbose",
-     "ours": "",
-     "sklearn": "0",
-     "reason": null
     },
     {
      "kind": "param_missing",
@@ -15760,7 +15754,7 @@
      "name": "verbose",
      "ours": "",
      "sklearn": "0",
-     "reason": "Its constructor is one call into the compiled classical owner, which stores exactly its declared fields; accepting a no-op keyword needs that native constructor to take it (Mojo work, not a rename). X is never modified and the work runs on the device."
+     "reason": "Its constructor is one call into the compiled classical owner, which stores exactly its declared fields; accepting a no-op keyword needs that native constructor to take it (Mojo work, not a rename). X is never modified, the work runs on the device and the neighbor search builds no tree."
     },
     {
      "kind": "param_missing",
@@ -15774,7 +15768,7 @@
      "name": "n_jobs",
      "ours": "",
      "sklearn": "None",
-     "reason": "Its constructor is one call into the compiled classical owner, which stores exactly its declared fields; accepting a no-op keyword needs that native constructor to take it (Mojo work, not a rename). X is never modified and the work runs on the device."
+     "reason": "Its constructor is one call into the compiled classical owner, which stores exactly its declared fields; accepting a no-op keyword needs that native constructor to take it (Mojo work, not a rename). X is never modified, the work runs on the device and the neighbor search builds no tree."
     },
     {
      "kind": "param_extra",
@@ -16407,7 +16401,7 @@
      "name": "init",
      "ours": "'random'",
      "sklearn": "'warn'",
-     "reason": "scikit-learn 1.9's default is a deprecation or warning sentinel; Mojolearn's default is the explicit value the sentinel stands for (or the only value supported)."
+     "reason": "scikit-learn 1.9's 'warn' announces a change of default to 'classical_mds'; Mojolearn keeps 'random', the current scikit-learn behavior, and accepts 'classical_mds'."
     },
     {
      "kind": "param_missing",
@@ -24905,7 +24899,7 @@
      "name": "copy_X",
      "ours": "",
      "sklearn": "True",
-     "reason": "Its constructor is one call into the compiled classical owner, which stores exactly its declared fields; accepting a no-op keyword needs that native constructor to take it (Mojo work, not a rename). X is never modified and the work runs on the device."
+     "reason": "Its constructor is one call into the compiled classical owner, which stores exactly its declared fields; accepting a no-op keyword needs that native constructor to take it (Mojo work, not a rename). X is never modified, the work runs on the device and the neighbor search builds no tree."
     },
     {
      "kind": "param_missing",
@@ -25610,8 +25604,8 @@
       "accepts": "{'constant', 'optimal', 'invscaling', 'adaptive'}, default 'optimal'"
      },
      "eta0": {
-      "default": "0.0",
-      "accepts": "float, default 0.0"
+      "default": "0.01",
+      "accepts": "float, default 0.01"
      },
      "power_t": {
       "default": "0.5",
@@ -25640,6 +25634,14 @@
      "batch_size": {
       "default": "'auto'",
       "accepts": "'auto' or int, default 'auto'"
+     },
+     "verbose": {
+      "default": "0",
+      "accepts": "int, default 0"
+     },
+     "n_jobs": {
+      "default": "None",
+      "accepts": "int or None, default None"
      },
      "numeric_mode": {
       "default": "None",
@@ -25805,27 +25807,6 @@
    "differences": [
     {
      "kind": "param_missing",
-     "name": "verbose",
-     "ours": "",
-     "sklearn": "0",
-     "reason": null
-    },
-    {
-     "kind": "param_missing",
-     "name": "n_jobs",
-     "ours": "",
-     "sklearn": "None",
-     "reason": null
-    },
-    {
-     "kind": "default",
-     "name": "eta0",
-     "ours": "0.0",
-     "sklearn": "0.01",
-     "reason": "Unused by the default learning_rate='optimal'."
-    },
-    {
-     "kind": "param_missing",
      "name": "validation_fraction",
      "ours": "",
      "sklearn": "0.1",
@@ -25965,9 +25946,9 @@
       "accepts": "{'constant', 'optimal', 'invscaling', 'adaptive'}, default 'optimal'"
      },
      "eta0": {
-      "default": "0.0",
+      "default": "0.01",
       "positional": true,
-      "accepts": "float, default 0.0"
+      "accepts": "float, default 0.01"
      },
      "power_t": {
       "default": "0.5",
@@ -26098,13 +26079,6 @@
     ]
    },
    "differences": [
-    {
-     "kind": "default",
-     "name": "eta0",
-     "ours": "0.0",
-     "sklearn": "0.01",
-     "reason": "Unused by the default learning_rate='optimal'."
-    },
     {
      "kind": "param_extra",
      "name": "batch_size",
@@ -26264,6 +26238,10 @@
       "default": "'auto'",
       "accepts": "'auto' or int, default 'auto'"
      },
+     "verbose": {
+      "default": "0",
+      "accepts": "int, default 0"
+     },
      "numeric_mode": {
       "default": "None",
       "accepts": "str or None, default None"
@@ -26409,13 +26387,6 @@
     ]
    },
    "differences": [
-    {
-     "kind": "param_missing",
-     "name": "verbose",
-     "ours": "",
-     "sklearn": "0",
-     "reason": null
-    },
     {
      "kind": "param_missing",
      "name": "validation_fraction",
