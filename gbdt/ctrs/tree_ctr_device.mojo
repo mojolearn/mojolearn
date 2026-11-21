@@ -344,3 +344,195 @@ def launch_tree_median_words(
         grid_dim=(1, 1, 1),
         block_dim=(TREE_CTR_BLOCK, 1, 1),
     )
+
+
+# ===========================================================================
+# THE FIT ARM'S SLOT LAUNCHES (`gbdt/methods/tree_ctr_search.mojo`)
+# ===========================================================================
+
+
+def tree_ctr_bins_kernel(
+    values: TreeF32Any,
+    n_in: Int32,
+    borders: TreeF32Any,
+    border_base_in: Int32,
+    border_count_in: Int32,
+    dst: MutPointer[UInt32, MutAnyOrigin],
+):
+    """Per row, the number of borders the value strictly exceeds
+    (`tree_ctr.tree_ctr_bins_into`, the host column's statement): the
+    column's bin under `borders[border_base : border_base + border_count]`,
+    ascending. Comparisons only."""
+    var n = Int(n_in)
+    var base = Int(border_base_in)
+    var count = Int(border_count_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(block_dim.x) * Int(grid_dim.x)
+    while i < n:
+        var v = values.unsafe_load(i)
+        var bin = UInt32(0)
+        var b = 0
+        while b < count:
+            if v > borders.unsafe_load(base + b):
+                bin += UInt32(1)
+            b += 1
+        dst.unsafe_store(i, bin)
+        i += stride
+
+
+def launch_tree_ctr_bins(
+    ctx: DeviceContext,
+    mut values: DeviceBuffer[DType.float32],
+    n_rows: Int,
+    mut borders: DeviceBuffer[DType.float32],
+    border_base: Int,
+    border_count: Int,
+    mut dst: DeviceBuffer[DType.uint32],
+) raises:
+    """ENQUEUED: `dst[0:n_rows]` = the bins of `values[0:n_rows]` under one
+    grid of the level's borders buffer."""
+    if n_rows <= 0:
+        return
+    if border_base < 0 or border_count < 0 or (
+        border_base + border_count > len(borders)
+    ):
+        raise Error("tree CTR bins: the grid is outside the borders buffer")
+    if len(values) < n_rows or len(dst) < n_rows:
+        raise Error("tree CTR bins: a column is shorter than the row count")
+    ctx.enqueue_function[tree_ctr_bins_kernel](
+        values.unsafe_ptr(),
+        Int32(n_rows),
+        borders.unsafe_ptr(),
+        Int32(border_base),
+        Int32(border_count),
+        dst.unsafe_ptr(),
+        grid_dim=(_tree_ctr_blocks(n_rows), 1, 1),
+        block_dim=(TREE_CTR_BLOCK, 1, 1),
+    )
+
+
+def tree_slot_copy_kernel(
+    src: MutPointer[UInt32, MutAnyOrigin],
+    src_base_in: Int32,
+    src_mask: UInt32,
+    src_shift: UInt32,
+    dst: MutPointer[UInt32, MutAnyOrigin],
+    dst_base_in: Int32,
+    dst_mask: UInt32,
+    dst_shift: UInt32,
+    n_in: Int32,
+):
+    """Per row, copy one feature's bin from a compressed index into another
+    feature's bits (of the same index or of another one). One thread owns
+    one row: when both features share a word, the thread reads it before it
+    writes it."""
+    var n = Int(n_in)
+    var src_base = Int(src_base_in)
+    var dst_base = Int(dst_base_in)
+    var field = dst_mask << dst_shift
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(block_dim.x) * Int(grid_dim.x)
+    while i < n:
+        var bin = (src.unsafe_load(src_base + i) >> src_shift) & src_mask
+        var word = dst.unsafe_load(dst_base + i) & ~field
+        dst.unsafe_store(dst_base + i, word | ((bin & dst_mask) << dst_shift))
+        i += stride
+
+
+def launch_tree_slot_copy(
+    ctx: DeviceContext,
+    mut src: DeviceBuffer[DType.uint32],
+    src_feature: CFeature,
+    mut dst: DeviceBuffer[DType.uint32],
+    dst_feature: CFeature,
+    n_rows: Int,
+) raises:
+    """ENQUEUED: the column of layout entry `src_feature` in `src` becomes
+    the column of `dst_feature` in `dst` (a won candidate slot into the
+    tree's next persist slot, on the search index or on another
+    permutation's)."""
+    if n_rows <= 0:
+        return
+    ctx.enqueue_function[tree_slot_copy_kernel](
+        src.unsafe_ptr(),
+        Int32(Int(src_feature.offset) * n_rows),
+        src_feature.mask,
+        src_feature.shift,
+        dst.unsafe_ptr(),
+        Int32(Int(dst_feature.offset) * n_rows),
+        dst_feature.mask,
+        dst_feature.shift,
+        Int32(n_rows),
+        grid_dim=(_tree_ctr_blocks(n_rows), 1, 1),
+        block_dim=(TREE_CTR_BLOCK, 1, 1),
+    )
+
+
+def tree_slot_clear_kernel(
+    cindex: MutPointer[UInt32, MutAnyOrigin],
+    base_in: Int32,
+    mask: UInt32,
+    shift: UInt32,
+    n_in: Int32,
+):
+    """Per row, zero one feature's bits of its compressed-index word (bin 0
+    for every row: a slot no candidate holds offers no split)."""
+    var n = Int(n_in)
+    var base = Int(base_in)
+    var field = mask << shift
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(block_dim.x) * Int(grid_dim.x)
+    while i < n:
+        cindex.unsafe_store(base + i, cindex.unsafe_load(base + i) & ~field)
+        i += stride
+
+
+def launch_tree_slot_clear(
+    ctx: DeviceContext,
+    mut cindex: DeviceBuffer[DType.uint32],
+    feature: CFeature,
+    n_rows: Int,
+) raises:
+    """ENQUEUED: every row of layout entry `feature` in `cindex` to bin 0."""
+    if n_rows <= 0:
+        return
+    ctx.enqueue_function[tree_slot_clear_kernel](
+        cindex.unsafe_ptr(),
+        Int32(Int(feature.offset) * n_rows),
+        feature.mask,
+        feature.shift,
+        Int32(n_rows),
+        grid_dim=(_tree_ctr_blocks(n_rows), 1, 1),
+        block_dim=(TREE_CTR_BLOCK, 1, 1),
+    )
+
+
+def tree_group_count_kernel(
+    scanned: MutPointer[UInt32, MutAnyOrigin],
+    n_in: Int32,
+    dst: MutPointer[UInt32, MutAnyOrigin],
+):
+    """One thread: the number of segments of a bin builder whose
+    `compute_current_bins` just ran. `scanned` is the builder's `bins`, which
+    that call leaves holding the exclusive scan of the segment-end flags in
+    sorted order, so its last word is the last segment's id."""
+    if Int(block_idx.x) == 0 and Int(thread_idx.x) == 0:
+        dst.unsafe_store(0, scanned.unsafe_load(Int(n_in) - 1) + UInt32(1))
+
+
+def launch_tree_group_count(
+    ctx: DeviceContext,
+    mut builder: TCtrBinBuilderGpu,
+    mut dst: DeviceBuffer[DType.uint32],
+) raises:
+    """ENQUEUED: `builder.compute_current_bins` (after which
+    `builder.current_bins` is every original row's group id under the
+    members added so far) and the group count into `dst[0]`."""
+    builder.compute_current_bins(ctx)
+    ctx.enqueue_function[tree_group_count_kernel](  # small-launch(1: one word): the group count of one combination
+        builder.bins.unsafe_ptr(),
+        Int32(builder.size),
+        dst.unsafe_ptr(),
+        grid_dim=(1, 1, 1),
+        block_dim=(1, 1, 1),
+    )
