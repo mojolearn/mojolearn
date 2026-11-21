@@ -21,7 +21,10 @@ from neighbors.nearest_centroid_run import (
 )
 from neighbors.lof_run import LofFitRequest, LofFitOutcome, LofQueryRequest
 from neighbors.radius_run import (
-    RadiusRequest, RadiusCount, radius_check, radius_check_options, radius_check_features, radius_widen_run,
+    RadiusRequest, RadiusCount, radius_widen_run,
+)
+from bindings.parallel_neighbor_worker_run import (
+    neighbor_radius_admit, neighbor_sort_admit, neighbor_features_admit,
 )
 
 comptime NEIGHBORS_SPLIT_RUN_FIXTURES = 7
@@ -39,23 +42,23 @@ def _near(a: Float64, b: Float64) -> Bool:
 def fixture(unit: Int) raises:
     if unit == 0:
         # radius: accepted values pass, refusals keep their wording
-        radius_check(0.5)
-        radius_check_options(True, True)
-        radius_check_options(False, False)
-        radius_check_features(3, 3)
+        neighbor_radius_admit(0.5)
+        neighbor_sort_admit(True, True)
+        neighbor_sort_admit(False, False)
+        neighbor_features_admit(3, 3)
         try:
-            radius_check(0.0)
+            neighbor_radius_admit(0.0)
             raise Error("accepted")
         except e:
             require(String(e) == "ValueError: radius must be positive and finite", "radius refusal wording")
         try:
-            radius_check_options(True, False)
+            neighbor_sort_admit(True, False)
             raise Error("accepted")
         except e:
             require(String(e) == "ValueError: sort_results=True requires return_distance=True",
                     "sort refusal wording")
         try:
-            radius_check_features(2, 3)
+            neighbor_features_admit(2, 3)
             raise Error("accepted")
         except e:
             require(String(e) == "ValueError: input feature count differs from fit", "feature refusal wording")

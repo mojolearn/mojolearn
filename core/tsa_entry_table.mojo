@@ -36,6 +36,13 @@ same words before the call).
   TSA_OP_HW_RESIDENT_RELEASE  -          p [handle]                        -> 0
   TSA_OP_HW_RESIDENT_COUNT    -                                            -> live handles
   TSA_OP_HW_QUERY_RESIDENT    a [out]    p [handle, start, end, seasonal]  -> written
+  TSA_OP_KPSS_TEST         a [y, flags, stat]  p [batch, n_obs, d, D, s]      f [pval_threshold]  -> batch
+  TSA_OP_SELECT_D          a [y, out]          p [batch, n_obs, D, s, d_max]  f [pval_threshold]  -> batch
+
+The two stationarity operations (`kpss_test`, `select_d`; every image holds
+them) are functions with no estimator: bindings/tsa_public_native_door.mojo
+calls them on the process default tier's entry, and AutoARIMA's search on
+the entry of its own device.
 """
 from core.entry_table import EntryRef, entry_table_publish, entry_table_resolve
 from core.native_descriptor_abi import NativeDescriptorCall
@@ -55,7 +62,9 @@ comptime TSA_OP_HW_RESIDENT_PREPARE = 6
 comptime TSA_OP_HW_RESIDENT_RELEASE = 7
 comptime TSA_OP_HW_RESIDENT_COUNT = 8
 comptime TSA_OP_HW_QUERY_RESIDENT = 9
-comptime TSA_OPERATION_COUNT = 10
+comptime TSA_OP_KPSS_TEST = 10
+comptime TSA_OP_SELECT_D = 11
+comptime TSA_OPERATION_COUNT = 12
 
 # TSA_OP_FLAGS bits.
 comptime TSA_HAS_FIT = 1
@@ -95,6 +104,14 @@ def tsa_ops_check_spans(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
     elif operation == TSA_OP_HW_QUERY_RESIDENT:
         want_a = 1
         want_p = 4
+    elif operation == TSA_OP_KPSS_TEST:
+        want_a = 3
+        want_p = 5
+        want_f = 1
+    elif operation == TSA_OP_SELECT_D:
+        want_a = 2
+        want_p = 5
+        want_f = 1
     else:
         raise Error("tsa ops: unknown operation " + String(operation))
     if na != want_a or np != want_p or nf != want_f:

@@ -13,8 +13,15 @@ record, the worker rebuilds the shard's model natively and runs the
 native `predict` (bindings/tsa_arima_native.mojo, tsa_hw_native.mojo), and
 each shard's block is placed at its own offset in range order. The same
 compiled entries on the same words, so no bit moves.
+
+UNPACK and PACK only: the span, step, index and mode refusals, the shard
+bounds and the block copies are typed, in
+bindings/parallel_forecast_native_run.mojo and
+bindings/parallel_shard_common_run.mojo. The worker rebuilds the member and
+calls its native fit / predict (`arima_predict`, `hw_predict`, `arima_fit`,
+`hw_fit`: boundary calls of the TSA family) until that family publishes an
+entry table; the frames are the codec's.
 """
-from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from std.python._cpython import PyObjectPtr
@@ -31,7 +38,6 @@ from bindings.native_process_pool_door import (
 from bindings.native_transport_door import transport_close
 from bindings.tsa_hw_native_door import tsa_array, hw_predict, hw_fit, _check_dims, _set_fitted, _commit
 from bindings.tsa_admission_door import tsa_hw_fields
-from core.mode_answer import MODE_FAMILY_TSA, fast_is_answered_by_identical
 from bindings.tsa_arima_native_door import arima_predict, arima_fit, _series_major
 from bindings.parallel_shard_common_door import (
     shard_ranges,
@@ -44,7 +50,14 @@ from bindings.parallel_shard_common_door import (
     shard_array,
     shard_identity,
 )
-from bindings.parallel_shard_common_run import shard_read_shift
+from bindings.parallel_shard_common_run import (
+    shard_read_shift, shard_width_admit, shard_bounds, shard_indices_admit, shard_block_copy, SHARD_DEVICE_NOT_AN_INDEX,
+)
+from bindings.parallel_forecast_native_run import (
+    forecast_arima_mode_admit, forecast_process_mode_admit, forecast_exog_admit, forecast_span_admit,
+    forecast_positive_admit, forecast_out_of_sample_admit, forecast_index_admit, forecast_batch_admit,
+    forecast_length_admit, forecast_envelope_admit, forecast_rows_copy, forecast_rows_place, forecast_words_place,
+)
 from core.parallel_forecast_impl import forecast_gather_cols, forecast_scatter_cols
 from core.shared_slot import SharedSlot
 from bindings.parallel_keys_unpack import (
@@ -91,38 +104,22 @@ def _b() raises -> PythonObject:
     return native_loaded_module("builtins")
 
 
-def _tsa_mode_runs_identical(mode: PythonObject) raises -> Bool:
-    """The parallel ARIMA driver's identical-only admission of the model's own
-    word: None, `identical`, or `fast` where the identical set answers it for
-    TSA (core/mode_answer.mojo; lane fx-fast-mask), so a model fitted under an
-    answered `fast` shards as its own fit ran. Once per driver call, no loop.
-    (It compared `mode == "identical"` through Python before: one rich
-    compare; now one type test and one String read.)"""
-    if mode is None:
-        return True
-    if py_type(mode) is not _b().str:
-        return False
-    var word = String(py=mode)
-    if word == "identical":
-        return True
-    return word == "fast" and fast_is_answered_by_identical(MODE_FAMILY_TSA)
+def _arima_mode(mode: PythonObject) raises:
+    """UNPACK of the model's own mode word for `forecast_arima_mode_admit`.
+    Once per driver call, no loop: one type test and one String read."""
+    var exact = mode is not None and py_type(mode) is _b().str
+    forecast_arima_mode_admit(mode is not None, exact, String(py=mode) if exact else String(""))
 
+
+def _width(width: PythonObject) raises -> Int:
+    var exact = py_type(width) is _b().int
+    shard_width_admit(exact, Int(py=width) if exact else 0, "series_per_shard")
+    return Int(py=width)
 
 
 def _ranges(count: Int, width: PythonObject) raises -> List[Int]:
     """`_ranges(count, width)`: the shard bounds [lo0, hi0, lo1, hi1, ...]."""
-    if py_type(width) is not _b().int or Int(py=width) < 1:
-        raise Error("ValueError: series_per_shard must be a positive integer")
-    if count < 1:
-        raise Error("ValueError: at least one series is required")
-    var w = Int(py=width)
-    var out = List[Int]()
-    var i = 0
-    while i < count:  # driver-loop: over the shard boundaries for the device pool
-        out.append(i)
-        out.append(min(i + w, count))
-        i += w
-    return out^
+    return shard_bounds(count, _width(width), "at least one series is required")
 
 
 def _member_device(estimator: PythonObject, driver: String) raises:
@@ -142,13 +139,10 @@ def _devices(devices: PythonObject) raises:
     """`DevicePool`'s admission of the device list, in its words."""
     var b = _b()
     var selected = py_call(b.tuple, devices)
-    var seen = b.set()
-    if len(selected) == 0:
-        raise Error("ValueError: devices must be distinct nonnegative integer indices")
+    var indices = List[Int](capacity=len(selected))
     for i in range(len(selected)):  # driver-loop: over the admitted device indices
-        if py_type(selected[i]) is not b.int or Int(py=selected[i]) < 0 or Bool(py=py_call(py_attr(seen, "__contains__"), selected[i])):
-            raise Error("ValueError: devices must be distinct nonnegative integer indices")
-        _ = py_call(seen.add, selected[i])
+        indices.append(Int(py=selected[i]) if py_type(selected[i]) is b.int else SHARD_DEVICE_NOT_AN_INDEX)
+    shard_indices_admit(indices)
 
 
 def _run(requests: PythonObject, devices: PythonObject) raises -> PythonObject:
@@ -161,11 +155,7 @@ def _rows(source: PythonObject, lo: Int, hi: Int, width: Int, context: PythonObj
     """`source[lo:hi]` of a C-ordered (rows, width) float32 Array, a copy."""
     var out = tsa_array("f", "<f4", Python.tuple(hi - lo, width), (hi - lo) * width, 4, context)
     if (hi - lo) * width > 0:
-        unsafe_memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out))),
-               # The source address is in bytes; advance the typed pointer in
-               # Float32 elements so every shard starts at its own series.
-               src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(source))) + lo * width,
-               count=(hi - lo) * width)
+        forecast_rows_copy(Int(py=classical_address(out)), Int(py=classical_address(source)), lo, hi, width)
         _ = out  # keep the Python object alive through the native call above
         _ = source
     return out
@@ -184,15 +174,12 @@ def _predict_arima(estimator: PythonObject, start_obj: PythonObject, end_obj: Py
     var nk = parallel_keys()
     if not py_contains(fields, nk[].k_params_):
         raise Error("ValueError: mojolearn ARIMA: call fit() before predict")
-    if not _tsa_mode_runs_identical(py_get(fields, nk[].k_numeric_mode)):
-        raise Error("ValueError: parallel ARIMA requires IDENTICAL numeric mode")
-    if Int(py=py_get(fields, nk[].k_n_exog_, PythonObject(0))) != 0 or exog is not None:
-        raise Error("NotImplementedError: parallel ARIMA prediction does not shard exogenous regressors")
+    _arima_mode(py_get(fields, nk[].k_numeric_mode))
+    forecast_exog_admit(Int(py=py_get(fields, nk[].k_n_exog_, PythonObject(0))), exog is not None)
     var n_obs = Int(py=py_item(fields, nk[].k_n_obs_))
     var start = Int(py=py_call(b.int, start_obj))
     var end = n_obs if end_obj is None else Int(py=py_call(b.int, end_obj))
-    if start < 0 or end <= start:
-        raise Error("ValueError: need 0 <= start < end; end is exclusive")
+    forecast_span_admit(start, end, "need 0 <= start < end; end is exclusive")
     var batch = Int(py=py_item(fields, nk[].k_batch_size_))
     var ranges = _ranges(batch, sps)
     _devices(devices)
@@ -222,9 +209,7 @@ def _predict_arima(estimator: PythonObject, start_obj: PythonObject, end_obj: Py
         var value = parts[r]
         if not Bool(py=py_call(b.tuple, value.shape) == Python.tuple(hi - lo, width)) or not Bool(py=value.dtype == "<f4"):
             raise Error("ValueError: ARIMA worker returned an invalid prediction shape or dtype")
-        unsafe_memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(result))) + lo * width,
-               src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(value))),
-               count=(hi - lo) * width)
+        forecast_rows_place(Int(py=classical_address(result)), Int(py=classical_address(value)), lo, hi, width)
         _ = result  # keep the Python object alive through the native call above
         _ = value  # keep the Python object alive through the native call above
     return result
@@ -237,8 +222,7 @@ def _forecast_arima(estimator: PythonObject, steps_obj: PythonObject, exog: Pyth
     if not py_contains(fields, nk[].k_params_):
         raise Error("ValueError: mojolearn ARIMA: call fit() before forecast")
     var steps = Int(py=py_call(_b().int, steps_obj))
-    if steps < 1:
-        raise Error("ValueError: steps must be positive")
+    forecast_positive_admit(steps, "steps")
     var n_obs = Int(py=py_item(fields, nk[].k_n_obs_))
     return _predict_arima(estimator, PythonObject(n_obs), PythonObject(n_obs + steps), exog, devices, sps)
 
@@ -256,23 +240,20 @@ def _predict_hw(estimator: PythonObject, start_obj: PythonObject, end_obj: Pytho
     var nk = parallel_keys()
     if not Bool(py=py_item(fields, nk[].k_fit_executed_flag)):
         raise Error("ValueError: fit the model before prediction")
-    if String(py=py_item(f[].backend, nk[].k__DEFAULT_MODE)) != "identical":
-        raise Error("ValueError: parallel forecasting requires IDENTICAL numeric mode")
+    forecast_process_mode_admit(String(py=py_item(f[].backend, nk[].k__DEFAULT_MODE)),
+                                "parallel forecasting requires IDENTICAL numeric mode")
     if py_type(start_obj) is not b.int or py_type(end_obj) is not b.int:
         raise Error("TypeError: start and end must be integers")
     var start = Int(py=start_obj)
     var end = Int(py=end_obj)
-    if start < 0 or end <= start:
-        raise Error("ValueError: need 0 <= start < end")
+    forecast_span_admit(start, end, "need 0 <= start < end")
     var n = Int(py=py_item(fields, nk[].k_n))
-    if start < n:
-        raise Error("NotImplementedError: in-sample Holt-Winters prediction uses host arithmetic")
+    forecast_out_of_sample_admit(start, n)
     var batch = Int(py=py_item(fields, nk[].k_ts_num))
     if index is not None:
         if py_type(index) is not b.int:
             raise Error("TypeError: index must be int or None")
-        if not (0 <= Int(py=index) and Int(py=index) < batch):
-            raise Error("IndexError: series index outside fitted batch")
+        forecast_index_admit(Int(py=index), batch)
     var ranges = _ranges(batch, sps)
     _devices(devices)
     var context = f[].hw_context
@@ -326,9 +307,7 @@ def _predict_hw(estimator: PythonObject, start_obj: PythonObject, end_obj: Pytho
     if batch == 1:
         return result
     var block = tsa_array("f", "<f4", Python.tuple(width, batch), width * batch, 4, context)
-    unsafe_memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(block))),
-           src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(result))),
-           count=width * batch)
+    shard_block_copy(Int(py=classical_address(block)), Int(py=classical_address(result)), width * batch * 4)
     _ = block  # keep the Python object alive through the native call above
     _ = result  # keep the Python object alive through the native call above
     return block
@@ -338,8 +317,7 @@ def _forecast_hw(estimator: PythonObject, h: PythonObject, index: PythonObject, 
                  sps: PythonObject) raises -> PythonObject:
     if py_type(h) is not _b().int:
         raise Error("TypeError: h must be an integer")
-    if Int(py=h) < 1:
-        raise Error("ValueError: h must be positive")
+    forecast_positive_admit(Int(py=h), "h")
     var nk = parallel_keys()
     var n = Int(py=py_item(py_fields(estimator), nk[].k_n))
     return _predict_hw(estimator, PythonObject(n), PythonObject(n + Int(py=h)), index, devices, sps)
@@ -373,10 +351,8 @@ def _fit_arima(estimator: PythonObject, y: PythonObject, devices: PythonObject, 
                     + "them on one device")
     var fields = py_fields(estimator)
     var nk = parallel_keys()
-    if not _tsa_mode_runs_identical(py_get(fields, nk[].k_numeric_mode)):
-        raise Error("ValueError: parallel ARIMA requires IDENTICAL numeric mode")
-    if py_type(sps) is not b.int or Int(py=sps) < 1:
-        raise Error("ValueError: series_per_shard must be a positive integer")
+    _arima_mode(py_get(fields, nk[].k_numeric_mode))
+    _ = _width(sps)
     var context = f[].arima_context
     var series = _series_major(y, context)
     var data = series[0]
@@ -428,14 +404,12 @@ def _fit_hw(estimator: PythonObject, devices: PythonObject, sps: PythonObject) r
         raise Error("TypeError: requires mojolearn.ExponentialSmoothing")
     _member_device(estimator, "fit_exponential_smoothing")
     var nk = parallel_keys()
-    if String(py=py_item(f[].backend, nk[].k__DEFAULT_MODE)) != "identical":
-        raise Error("ValueError: ExponentialSmoothing requires IDENTICAL numeric mode")
-    if py_type(sps) is not b.int or Int(py=sps) < 1:
-        raise Error("ValueError: series_per_shard must be a positive integer")
+    forecast_process_mode_admit(String(py=py_item(f[].backend, nk[].k__DEFAULT_MODE)),
+                                "ExponentialSmoothing requires IDENTICAL numeric mode")
+    _ = _width(sps)
     var fields = py_fields(estimator)
     var batch = Int(py=py_item(fields, nk[].k_ts_num))
-    if batch < 1:
-        raise Error("ValueError: at least one series is required")
+    forecast_batch_admit(batch)
     var context = f[].hw_context
     var checked = _check_dims(fields, py_item(fields, nk[].k_endog), context)
     var data = checked[0]
@@ -469,8 +443,7 @@ def _fit_hw(estimator: PythonObject, devices: PythonObject, sps: PythonObject) r
         var lo = ranges[2 * r]
         var w = ranges[2 * r + 1] - lo
         var part = parts[r]
-        if Int(py=py_item(part, nk[].k_n)) != n:
-            raise Error("ValueError: Holt-Winters worker returned a different series length")
+        forecast_length_admit(Int(py=py_item(part, nk[].k_n)), n)
         var shard_comps = py_item(part, nk[].k__comps)
         if steps > 0 and w > 0:
             forecast_scatter_cols(Int(py=classical_address(comps)), Int(py=classical_address(shard_comps)),
@@ -479,20 +452,13 @@ def _fit_hw(estimator: PythonObject, devices: PythonObject, sps: PythonObject) r
             _ = shard_comps  # keep the Python object alive through the native call above
         for i in range(4):  # small-loop(the four per-series statistics)
             var value = part[stat_names[i]]
-            unsafe_memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(stats)))
-                   + i * batch + lo,
-                   src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(value))),
-                   count=w)
+            forecast_words_place(Int(py=classical_address(stats)), Int(py=classical_address(value)), i, batch, lo, w)
             _ = stats  # keep the Python object alive through the native call above
             _ = value  # keep the Python object alive through the native call above
         var iters = py_item(part, nk[].k_n_iter_)
         var criteria = py_item(part, nk[].k_criterion_)
-        unsafe_memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(flags))) + lo,
-               src=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(iters))), count=w)
-        unsafe_memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(flags)))
-               + batch + lo,
-               src=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(criteria))),
-               count=w)
+        forecast_words_place(Int(py=classical_address(flags)), Int(py=classical_address(iters)), 0, batch, lo, w)
+        forecast_words_place(Int(py=classical_address(flags)), Int(py=classical_address(criteria)), 1, batch, lo, w)
         _ = flags  # keep the Python object alive through the native call above
         _ = iters  # keep the Python object alive through the native call above
         _ = criteria  # keep the Python object alive through the native call above
@@ -526,8 +492,7 @@ def forecast_worker_dispatch(request: PythonObject) raises -> PythonObject:
     var nk = parallel_keys()
     if len(request) == 1 and py_op_code(nk[].ops_forecast_worker, request[0]) == PARALLEL_FORECAST_WORKER_OPN_IDENTITY:
         return shard_identity()
-    if len(request) != 3:
-        raise Error("parallel forecasting: invalid worker request envelope")
+    forecast_envelope_admit(len(request))
     var operation = py_op_code(nk[].ops_forecast_worker, request[0])
     var state = request[1]
     var args = request[2]

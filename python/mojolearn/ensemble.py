@@ -787,6 +787,10 @@ class GradientBoosting(_NumericModeMixin):
     fold_permutation_block : int or None, default None
         Ordered only. None or 0 means 64 from 50,000 rows up (halved while
         ``block * 128 > rows``) and 1 below 50,000 rows.
+    device : {None, "gpu", "cpu"}, default=None
+        Where the model is fitted and predicts. None uses this
+        installation's device, ``"cpu"`` runs on the CPU and ``"gpu"``
+        requires a GPU installation. Other values raise ``ValueError``.
 
     Attributes
     ----------
@@ -841,6 +845,12 @@ class GradientBoosting(_NumericModeMixin):
         # refuses it by name (n_targets >= 2)
         return {"multi_output": getattr(self, "loss", None) in MULTI_REGRESSION_LOSSES}
 
+    #: Takes `device=`: every operation runs in the estimator's run context (its
+    #: device route, bindings/trees_route_boundary_door.mojo); the check builds
+    #: the other side as the same estimator on the other device, in this process.
+    _mojolearn_device = True
+    vendor_used = _native_trees_bridge.device_vendor_used
+
     def __init__(
         self,
         loss="RMSE",
@@ -888,6 +898,7 @@ class GradientBoosting(_NumericModeMixin):
         fold_permutation_block=None,
         *,
         numeric_mode=None,
+        device=None,
     ):
         # The constructor's checks and its stored state are the native
         # owner's (bindings/trees_public_gbdt_fit_door.mojo `gbdt_initialize`),
@@ -900,7 +911,8 @@ class GradientBoosting(_NumericModeMixin):
             score_function, nan_mode, random_strength, use_pointwise_searcher, boost_from_average,
             border_build_max_samples, class_weights, permutation_count, ctr_estimation_permutation_id,
             grow_policy, max_leaves, min_data_in_leaf, min_split_gain, min_child_hessian, feature_fraction,
-            feature_border_type, boosting_type, fold_len_multiplier, fold_permutation_block, numeric_mode,
+            feature_border_type, boosting_type, fold_len_multiplier, fold_permutation_block, device,
+            numeric_mode,
         ), _TREES_CONTEXT)
 
     # -- the parameter list, in the ONE order both sides name --------------
@@ -1169,7 +1181,7 @@ _native_trees_bridge.register(GradientBoosting, "gbdt", trees_gbdt_tables=dict(
     legacy_learning_rate=_LEGACY_LEARNING_RATE, catboost_learning_rate=_CATBOOST_LEARNING_RATE,
     catboost_random_strength=_CATBOOST_RANDOM_STRENGTH, legacy_random_strength=_LEGACY_RANDOM_STRENGTH,
     ordered_max_rows=_ORDERED_MAX_ROWS, ordered_min_iterations=_ORDERED_MIN_ITERATIONS,
-    init_names=('loss', 'n_estimators', 'max_depth', 'learning_rate', 'l2_leaf_reg', 'border_count', 'random_state', 'loss_alpha', 'loss_q', 'loss_delta', 'loss_variance_power', 'loss_border', 'leaf_estimation_method', 'leaf_estimation_iterations', 'bootstrap_type', 'bagging_temperature', 'subsample', 'cat_features', 'one_hot_features', 'od_type', 'od_pvalue', 'od_wait', 'use_best_model', 'best_model_min_trees', 'score_function', 'nan_mode', 'random_strength', 'use_pointwise_searcher', 'boost_from_average', 'border_build_max_samples', 'class_weights', 'permutation_count', 'ctr_estimation_permutation_id', 'grow_policy', 'max_leaves', 'min_data_in_leaf', 'min_split_gain', 'min_child_hessian', 'feature_fraction', 'feature_border_type', 'boosting_type', 'fold_len_multiplier', 'fold_permutation_block'),
+    init_names=('loss', 'n_estimators', 'max_depth', 'learning_rate', 'l2_leaf_reg', 'border_count', 'random_state', 'loss_alpha', 'loss_q', 'loss_delta', 'loss_variance_power', 'loss_border', 'leaf_estimation_method', 'leaf_estimation_iterations', 'bootstrap_type', 'bagging_temperature', 'subsample', 'cat_features', 'one_hot_features', 'od_type', 'od_pvalue', 'od_wait', 'use_best_model', 'best_model_min_trees', 'score_function', 'nan_mode', 'random_strength', 'use_pointwise_searcher', 'boost_from_average', 'border_build_max_samples', 'class_weights', 'permutation_count', 'ctr_estimation_permutation_id', 'grow_policy', 'max_leaves', 'min_data_in_leaf', 'min_split_gain', 'min_child_hessian', 'feature_fraction', 'feature_border_type', 'boosting_type', 'fold_len_multiplier', 'fold_permutation_block', 'device'),
     losses=LOSSES, required_param=_REQUIRED_PARAM, bootstrap_types=BOOTSTRAP_TYPES,
     grow_policies=GROW_POLICIES, non_symmetric_losses=_NON_SYMMETRIC_LOSSES,
     unsupported_score_functions=_UNSUPPORTED_SCORE_FUNCTIONS, score_functions=SCORE_FUNCTIONS,
@@ -1197,16 +1209,21 @@ class ExperimentalTwoLevelFeatureFreq(GradientBoosting):
     numeric_mode : {'identical', 'fast'} or None, default None
         ``'identical'`` or ``'fast'`` (Apple GPUs only); None uses the
         process default.
+    device : {None, "gpu", "cpu"}, default=None
+        Where the model is fitted and predicts. None uses this
+        installation's device, ``"cpu"`` runs on the CPU and ``"gpu"``
+        requires a GPU installation. Other values raise ``ValueError``.
     """
 
     def __init__(
-        self, sources, learning_rate=0.03, l2_leaf_reg=3.0, random_state=0, *, numeric_mode=None
+        self, sources, learning_rate=0.03, l2_leaf_reg=3.0, random_state=0, *, numeric_mode=None,
+        device=None,
     ):
         # The GradientBoosting constructor and the sources checks are the
         # native owner's (bindings/trees_public_gbdt_fit_door.mojo
         # `gbdt_feature_freq_construct`).
         _TREES(self, "trees_gbdt_feature_freq_init",
-               (sources, learning_rate, l2_leaf_reg, random_state, numeric_mode), _TREES_CONTEXT)
+               (sources, learning_rate, l2_leaf_reg, random_state, numeric_mode, device), _TREES_CONTEXT)
 
     def fit(self, X, y, sample_weight=None):
         """Fit the tree.
@@ -1249,17 +1266,22 @@ class OrderedRMSE(GradientBoosting):
     numeric_mode : {'identical', 'fast'} or None, default None
         ``'identical'`` or ``'fast'`` (Apple GPUs only); None uses the
         process default.
+    device : {None, "gpu", "cpu"}, default=None
+        Where the model is fitted and predicts. None uses this
+        installation's device, ``"cpu"`` runs on the CPU and ``"gpu"``
+        requires a GPU installation. Other values raise ``ValueError``.
     """
 
     def __init__(
         self, n_estimators=100, max_depth=6, learning_rate=0.03,
-        l2_leaf_reg=3.0, border_count=128, *, numeric_mode=None,
+        l2_leaf_reg=3.0, border_count=128, *, numeric_mode=None, device=None,
     ):
         # The ordered settings' checks and the GradientBoosting constructor
         # are the native owner's (bindings/trees_public_gbdt_fit_door.mojo
         # `gbdt_ordered_construct`).
         _TREES(self, "trees_gbdt_ordered_init",
-               (n_estimators, max_depth, learning_rate, l2_leaf_reg, border_count, numeric_mode), _TREES_CONTEXT)
+               (n_estimators, max_depth, learning_rate, l2_leaf_reg, border_count, numeric_mode, device),
+               _TREES_CONTEXT)
 
     def fit(self, X, y, *, permutation, sample_weight=None):
         """Fit with the ordering given by ``permutation``.
@@ -1285,9 +1307,10 @@ class OrderedRMSE(GradientBoosting):
 # Python __init__ frame; the argument tuples mirror the __init__ bodies above.
 from ._mode import _connect_native_init  # noqa: E402
 _connect_native_init(ExperimentalTwoLevelFeatureFreq, _TREES, "trees_gbdt_feature_freq_init",
-                     ("sources", "learning_rate", "l2_leaf_reg", "random_state", "numeric_mode"), _TREES_CONTEXT)
+                     ("sources", "learning_rate", "l2_leaf_reg", "random_state", "numeric_mode", "device"),
+                     _TREES_CONTEXT)
 _connect_native_init(OrderedRMSE, _TREES, "trees_gbdt_ordered_init",
-                     ("n_estimators", "max_depth", "learning_rate", "l2_leaf_reg", "border_count", "numeric_mode"),
+                     ("n_estimators", "max_depth", "learning_rate", "l2_leaf_reg", "border_count", "numeric_mode", "device"),
                      _TREES_CONTEXT)
 
 # Separate sklearn prediction contracts; legacy GradientBoosting stays unchanged.

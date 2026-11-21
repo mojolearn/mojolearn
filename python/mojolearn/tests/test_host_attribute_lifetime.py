@@ -134,7 +134,7 @@ def test_host_availability_does_not_admit_replaced_descriptor(tmp_path, monkeypa
 
 # The saved host models' predict reaches the CPU module through its native
 # descriptor factory (DBSCAN and Agglomerative: `dbscan_native_api_v1`,
-# bindings/dbscan_native_boundary_door.mojo; Spectral: `spectral_native_api_v1`,
+# bindings/dbscan_native_boundary_unpack.mojo; Spectral: `spectral_native_api_v1`,
 # bindings/spectral_native_boundary_unpack.mojo), read from the connected
 # module's live namespace on every call. The legacy argument-list exports
 # (`labeled_reference_predict`, `spectral_predict`) are no longer called, so

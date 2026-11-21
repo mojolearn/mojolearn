@@ -1,6 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native handlers for the neighbor/IVF shard protocol. The same compiled
 # search/vote entries as the plain API; no estimator Python method is invoked.
+# UNPACK and PACK only: every refusal that compares a count, a shape, a
+# radius or a mode word, the method codes and keywords, the sort network's
+# shape and the class-set check are typed in
+# bindings/parallel_neighbor_worker_run.mojo. The radius query is typed end
+# to end: neighbors/radius_run.mojo (operations 7 and 8 of the neighbors
+# table, the x_neighbors row sort), no `family_call`. The other compiled
+# entries of the neighbor family (k-NN search and vote, IVF) are still
+# reached through `family_call` (boundary calls) until they are table
+# operations.
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from bindings.admitted_family_door import admit_family, admit_family_meta
@@ -24,11 +33,11 @@ from bindings.neighbors_knn_native_door import (
 from bindings.lof_provider_unpack import LofConnection
 from core.neighbors_entry_table import neighbors_ops_entry
 from neighbors.radius_run import (
-    RadiusRequest, RadiusCount, radius_check, radius_check_options, radius_check_features,
+    RadiusRequest, RadiusCount,
     radius_count_run, radius_fill_run, radius_sort_run, radius_widen_run,
 )
 from bindings.admitted_input_unpack import admitted_finite_refuse
-from bindings.neighbors_kde_native_door import _kde_scores, _kde_release
+from bindings.kde_public_native_pack import _kde_scores, _kde_release
 from bindings.neighbors_ann_native_door import _ivf_metric, _ann_key_entry
 from bindings.host_inference_scalars_door import host_inference_scalar
 from core.shared_slot import SharedSlot
@@ -45,6 +54,14 @@ from bindings.parallel_keys_unpack import (
     PARALLEL_SHARD_WORKER_OPN_RELEASE,
 )
 from bindings.py_balanced import py_item
+from bindings.parallel_neighbor_worker_run import (
+    NEIGHBOR_METHOD_KNEIGHBORS, NEIGHBOR_METHOD_RADIUS, NEIGHBOR_METHOD_PREDICT, NEIGHBOR_METHOD_PREDICT_PROBA,
+    NEIGHBOR_METHOD_SCORE_SAMPLES, neighbor_method_code, neighbor_keyword_admit, neighbor_features_admit,
+    neighbor_k_admit, neighbor_filled_admit, neighbor_radius_admit, neighbor_sort_admit,
+    neighbor_radius_offsets_admit, neighbor_class_sets_admit, neighbor_ivf_features_admit,
+    neighbor_ivf_mode_admit, neighbor_ivf_metric_admit, neighbor_ivf_counts_admit, neighbor_ivf_binding_admit,
+    neighbor_ivf_data_admit, neighbor_ivf_lists_admit,
+)
 
 
 struct NeighborSnapshots(Defaultable, Movable):
@@ -130,10 +147,8 @@ def neighbor_kneighbors(model: PythonObject, source: PythonObject, k_arg: Python
     if not rbc:
         params = _dist_params(model, context)
         _check_metric_input(String(py_type(model).__name__), Int(py=params[0]), query)
-    if query.shape[1] != Int(py=py_item(fields, nk[].k_n_features_in_)):
-        raise Error("ValueError: input feature count differs from fit")
-    if k < 1 or k > Int(py=py_item(fields, nk[].k_n_samples_fit_)):
-        raise Error("ValueError: n_neighbors must be in [1, reference rows]")
+    neighbor_features_admit(query.shape[1], Int(py=py_item(fields, nk[].k_n_features_in_)))
+    neighbor_k_admit(k, Int(py=py_item(fields, nk[].k_n_samples_fit_)))
     var return_distance = _flag(distance_arg, "return_distance", context)
     var nq = query.shape[0]
     var dist = family_array(Python.tuple(nq, k), "<f4", context)
@@ -154,8 +169,7 @@ def neighbor_kneighbors(model: PythonObject, source: PythonObject, k_arg: Python
             _report(fields, "n_candidate_distances_", count)
             _report(fields, "used_query_tile_", PythonObject(None))
             # The old Array.min() uses this same native int32 reduction helper.
-            if _reduce(Int(py=classical_address(ids)), 2, nq * k, 0, context).i < 0:
-                raise Error("RuntimeError: RBC returned an unfilled neighbor slot")
+            neighbor_filled_admit(Int(_reduce(Int(py=classical_address(ids)), 2, nq * k, 0, context).i))
         else:
             var handle = _resident_handle(model, binding, index)
             var sizes = Python.list(index.shape[0], nq, index.shape[1], k, 1, py_item(fields, nk[].k_query_tile))
@@ -203,10 +217,10 @@ def _radius(model: PythonObject, source: PythonObject, kwargs: PythonObject,
     radius = py_item(fields, nk[].k_radius) if radius is None else radius
     host_inference_scalar(radius, context)
     var r = Float64(py=radius)
-    radius_check(r)
+    neighbor_radius_admit(r)
     var distances = _flag(py_get(kwargs, nk[].k_return_distance, True), "return_distance", context)
     var sort = _flag(py_get(kwargs, nk[].k_sort_results, False), "sort_results", context)
-    radius_check_options(sort, distances)
+    neighbor_sort_admit(sort, distances)
     # Lane a8b-device-x-neighbors-rest: the index was tested ONCE, at fit
     # (radius_public_lifecycle_pyapi.mojo radius_fit) or at archive load
     # (host_archive_native.mojo host_archive_radius); only a borrowed query
@@ -228,7 +242,7 @@ def _radius(model: PythonObject, source: PythonObject, kwargs: PythonObject,
         _ = query^
         _ = query_pin
     var features = Int(py=index.shape[1])
-    radius_check_features(Int(py=q.shape[1]), features)
+    neighbor_features_admit(Int(py=q.shape[1]), features)
     var nq = Int(py=q.shape[0])
     var ptr = family_array(Python.tuple(nq + 1), "<i4", context)
     var request = RadiusRequest(Int(py=classical_address(index)), Int(py=classical_address(q)),
@@ -286,9 +300,7 @@ def neighbor_radius_rows(triple: PythonObject, context: PythonObject) raises -> 
     var wide = triple[1]
     var dist = triple[2]
     var distances = Bool(py=triple[3])
-    var nq = Int(py=ptr.shape[0]) - 1
-    if nq < 0:
-        raise Error("RuntimeError: radius worker returned no row offsets")
+    var nq = neighbor_radius_offsets_admit(Int(py=ptr.shape[0]))
     var rows = _ragged_rows(wide, ptr, nq, context)
     var drows = _ragged_rows(dist, ptr, nq, context) if distances else Python.list()
     _ = ptr
@@ -346,13 +358,12 @@ def _vote(model: PythonObject, distances: PythonObject, indices: PythonObject, m
     _ = family_call(family_entry(binding, "knn_classify_neighbors", context), classical_address(distances),
         classical_address(indices), classical_address(targets), classical_address(labels), classical_address(proba),
         classical_address(unique), sizes, dist_params)
-    var up = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(unique)))
-    var offset = 0
-    for i in range(len(classes)):  # driver-loop: original native/fitted class-set check
+    var fitted = List[Int](capacity=total)
+    for i in range(len(classes)):  # driver-loop: fitted class ids per output
         for j in range(len(classes[i])):  # driver-loop: class metadata
-            if Int(up[offset + j]) != Int(py=classes[i][j]):
-                raise Error("RuntimeError: native and fitted class sets differ")
-        offset += len(classes[i])
+            fitted.append(Int(py=classes[i][j]))
+    neighbor_class_sets_admit(Int(py=classical_address(unique)), fitted)
+    var offset = 0
     _ = unique
     _ = targets
     _ = distances
@@ -394,8 +405,7 @@ def _ivf_partial(model: PythonObject, source: PythonObject, tables: PythonObject
     var fields = py_fields(model)
     var q = admit_family(source, 2, "queries", context, dense=True).array
     var nk = parallel_keys()
-    if Int(py=q.shape[1]) != Int(py=py_item(fields, nk[].k_n_features_in_)):
-        raise Error("ValueError: query features differ from index")
+    neighbor_ivf_features_admit(Int(py=q.shape[1]), Int(py=py_item(fields, nk[].k_n_features_in_)))
     var m = Int(py=q.shape[0])
     var k = Int(py=py_item(fields, nk[].k_n_neighbors))
     var dist = family_array(Python.tuple(m, k), "<f4", context)
@@ -481,31 +491,27 @@ def parallel_neighbor_worker(operation: Int, args: PythonObject, tables: PythonO
     var kwargs = args[3]
     if py_type(kwargs) is not b.dict:
         raise Error("TypeError: query keywords require an ordinary dict")
-    var allowed = Python.tuple()
-    if method == "kneighbors":
-        allowed = Python.tuple("n_neighbors", "return_distance")
-    elif method == "radius_neighbors":
-        allowed = Python.tuple("radius", "return_distance", "sort_results")
+    var code = neighbor_method_code(method)
     var keys = py_call(b.list, kwargs)
     for i in range(len(keys)):  # driver-loop: explicit query keyword admission
-        if py_type(keys[i]) is not b.str or not py_contains(allowed, keys[i]):
-            raise Error("TypeError: unsupported keyword for " + method)
+        var exact = py_type(keys[i]) is b.str
+        neighbor_keyword_admit(code, method, exact, String(keys[i]) if exact else String(""))
     var binding = PythonObject(None)
-    if method != "score_samples":
+    if code != NEIGHBOR_METHOD_SCORE_SAMPLES:
         binding = neighbor_binding(tables, "neighbors_base")
     var result: PythonObject
-    if method == "kneighbors":
+    if code == NEIGHBOR_METHOD_KNEIGHBORS:
         result = neighbor_kneighbors(model, args[1], py_get(kwargs, nk[].k_n_neighbors),
             py_get(kwargs, nk[].k_return_distance, True), binding, context)
-    elif method == "radius_neighbors":
+    elif code == NEIGHBOR_METHOD_RADIUS:
         result = _radius(model, args[1], kwargs, binding, tables, context)
-    elif method == "predict_proba":
+    elif code == NEIGHBOR_METHOD_PREDICT_PROBA:
         result = _clf_predict_proba(model, binding, args[1], context)
-    elif method == "predict" and py_type(model) is py_item(tables, nk[].k_knr_class):
+    elif code == NEIGHBOR_METHOD_PREDICT and py_type(model) is py_item(tables, nk[].k_knr_class):
         result = _reg_predict(model, binding, args[1], context)
-    elif method == "predict":
+    elif code == NEIGHBOR_METHOD_PREDICT:
         result = _clf_predict(model, binding, args[1], context)
-    elif method == "score_samples" and py_type(model) is py_item(tables, nk[].k_kde_class):
+    elif code == NEIGHBOR_METHOD_SCORE_SAMPLES and py_type(model) is py_item(tables, nk[].k_kde_class):
         result = _kde_scores(model, Python.tuple(neighbor_binding(tables, "neighbor_density"), args[1]), False, context)
     else:
         raise Error("ValueError: unsupported native neighbor query method")
@@ -536,23 +542,22 @@ def parallel_ivf_admit(index: PythonObject, tables: PythonObject, context: Pytho
     var mode = py_get(fields, nk[].k_numeric_mode)
     if mode is None or (py_type(mode) is b.str and String(mode) == ""):
         mode = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
-    if py_type(mode) is not b.str or String(mode) != "identical":
-        raise Error("ValueError: distributed IVF requires IDENTICAL numeric mode")
+    var exact_mode = py_type(mode) is b.str
+    neighbor_ivf_mode_admit(exact_mode, String(mode) if exact_mode else String(""))
     var metric = py_item(fields, nk[].k_metric)
     if py_type(metric) is not b.str and py_type(metric) is not b.int and py_type(metric) is not b.float:
         raise Error("TypeError: IVF metric requires an ordinary name or numeric code")
-    if Int(py=_ivf_metric(fields, context)) != Int(py=py_item(fields, nk[].k_metric_code_)):
-        raise Error("ValueError: metric differs from the fitted index")
+    neighbor_ivf_metric_admit(Int(py=_ivf_metric(fields, context)), Int(py=py_item(fields, nk[].k_metric_code_)))
     var names = Python.tuple("n_lists", "n_probes", "n_neighbors")
     for i in range(len(names)):  # small-loop(three integer parameters)
         if py_type(fields[names[i]]) is not b.int:
             raise Error("TypeError: " + String(names[i]) + " must be an int")
-    if Int(py=py_item(fields, nk[].k_n_probes)) < 1 or Int(py=py_item(fields, nk[].k_n_probes)) > Int(py=py_item(fields, nk[].k_n_lists_)) or Int(py=py_item(fields, nk[].k_n_neighbors)) < 1:
-        raise Error("ValueError: invalid IVF probe or neighbor count")
+    neighbor_ivf_counts_admit(Int(py=py_item(fields, nk[].k_n_probes)), Int(py=py_item(fields, nk[].k_n_lists_)),
+                              Int(py=py_item(fields, nk[].k_n_neighbors)))
     var binding = neighbor_binding(tables, "_mojolearn_ivf")
     var getter = knn_door(binding, "ivf_numeric_mode")
-    if getter is not None and Int(py=family_call(getter)) != 1:
-        raise Error("RuntimeError: IVF binding reports another compile-time mode")
+    if getter is not None:
+        neighbor_ivf_binding_admit(Int(py=family_call(getter)))
     var n = Int(py=py_item(fields, nk[].k_n_rows_))
     var dim = Int(py=py_item(fields, nk[].k_n_features_in_))
     if py_contains(fields, nk[].k__device_list_data):
@@ -568,12 +573,9 @@ def parallel_ivf_admit(index: PythonObject, tables: PythonObject, context: Pytho
         var key = Python.tuple(arrays, n, dim, py_item(fields, nk[].k_n_lists_), py_item(fields, nk[].k_metric_code_), False, py_call(b.id, cached[2]))
         py_setitem(fields, nk[].k__resident, Python.tuple(key, cached[1], cached[2]))
     var data = py_item(fields, nk[].k_list_data_)
-    if Int(py=data.ndim) != 2 or Int(py=data.shape[0]) != n or Int(py=data.shape[1]) != dim:
-        raise Error("ValueError: IVF stored data shape differs from index metadata")
+    var matrix = Int(py=data.ndim) == 2
+    neighbor_ivf_data_admit(Int(py=data.ndim), Int(py=data.shape[0]) if matrix else -1, Int(py=data.shape[1]) if matrix else -1, n, dim)
     var ids = _i32_vector(py_item(fields, nk[].k_list_indices_), "list_indices_", context)
     var offsets = _i32_vector(py_item(fields, nk[].k_list_offsets_), "list_offsets_", context)
-    if Int(py=ids.shape[0]) != n:
-        raise Error("ValueError: IVF original IDs must be a permutation of stored row IDs")
-    if Int(py=offsets.shape[0]) != Int(py=py_item(fields, nk[].k_n_lists_)) + 1:
-        raise Error("ValueError: invalid global IVF list offsets")
+    neighbor_ivf_lists_admit(Int(py=ids.shape[0]), n, Int(py=offsets.shape[0]), Int(py=py_item(fields, nk[].k_n_lists_)))
     return Python.tuple(binding, ids, offsets)

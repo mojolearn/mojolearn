@@ -45,6 +45,12 @@ comptime X_LINEAR_OPN_FIT_LOGISTIC_CV = 32
 comptime X_LINEAR_OPN_CD_FIT = 33
 comptime X_LINEAR_OPN_CD_PREDICT = 34
 comptime X_LINEAR_OPN_CD_SCORE = 35
+# Lane dw-xlinear (2026-11-20). "regressor_score": the regressors' score in
+# this door, on the estimator's route (it was a second door that selected the
+# process images by name). "device_admit": a `device` checked where it is
+# given (a constructor, `set_params`) and the estimator's route dropped.
+comptime X_LINEAR_OPN_REGRESSOR_SCORE = 36
+comptime X_LINEAR_OPN_DEVICE_ADMIT = 37
 
 
 struct XLinearKeys(Defaultable, Movable):
@@ -436,6 +442,8 @@ def _x_linear_keys_fill(nk: UnsafePointer[XLinearKeys, MutUntrackedOrigin]) rais
     py_op_add(ops, "cd_fit", X_LINEAR_OPN_CD_FIT)
     py_op_add(ops, "cd_predict", X_LINEAR_OPN_CD_PREDICT)
     py_op_add(ops, "cd_score", X_LINEAR_OPN_CD_SCORE)
+    py_op_add(ops, "regressor_score", X_LINEAR_OPN_REGRESSOR_SCORE)
+    py_op_add(ops, "device_admit", X_LINEAR_OPN_DEVICE_ADMIT)
     nk[].ops = ops
     nk[].ready = True
 

@@ -10,7 +10,6 @@ edge buffers between the stages, releases the GIL for each stage and packs
 the result. The passes are the neighbors operations table's
 (core/neighbors_entry_table.mojo), the sort is the x_neighbors driver's.
 """
-from std.math import isfinite
 from core.native_descriptor_abi import NativeDescriptorCall
 from core.neighbors_entry_table import nb_radius_count_call, nb_radius_fill_call
 from core.neighbors_native_driver import XnDriver
@@ -59,19 +58,9 @@ struct RadiusCount(Copyable, Movable):
         self.status = 0
 
 
-def radius_check(radius: Float64) raises:
-    if not isfinite(radius) or radius <= 0:
-        raise Error("ValueError: radius must be positive and finite")
-
-
-def radius_check_options(sort: Bool, distances: Bool) raises:
-    if sort and not distances:
-        raise Error("ValueError: sort_results=True requires return_distance=True")
-
-
-def radius_check_features(query_features: Int, index_features: Int) raises:
-    if query_features != index_features:
-        raise Error("ValueError: input feature count differs from fit")
+# The radius, option and feature-count refusals of the query are the typed
+# admits of bindings/parallel_neighbor_worker_run.mojo (neighbor_radius_admit,
+# neighbor_sort_admit, neighbor_features_admit): one set of checks.
 
 
 def radius_count_run(entry: NativeDescriptorCall, request: RadiusRequest) raises -> RadiusCount:

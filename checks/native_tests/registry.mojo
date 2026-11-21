@@ -231,6 +231,7 @@ from checks.native_tests.training_small_mlp_relations import register as registe
 from checks.native_tests.affinity_preference_plan import register as register_affinity_preference_plan
 from checks.native_tests.agglo_contract import register as register_agglo_contract
 from checks.native_tests.agglo_state import register as register_agglo_state
+from checks.native_tests.transport_frame import register as register_transport_frame
 from checks.native_tests.base_helpers_entry import register as register_base_helpers_entry
 from checks.native_tests.boundary_layout import register as register_boundary_layout
 from checks.native_tests.byte_lm_entry import register as register_byte_lm_entry
@@ -241,8 +242,6 @@ from checks.native_tests.dbscan_contract import register as register_dbscan_cont
 from checks.native_tests.dbscan_door_run import register as register_dbscan_door_run
 from checks.native_tests.dbscan_options import register as register_dbscan_options
 from checks.native_tests.dbscan_state import register as register_dbscan_state
-from checks.native_tests.decomp_device_route import register as register_decomp_device_route
-from checks.native_tests.device_route_dw_neighbors_cluster import register as register_device_route_dw_neighbors_cluster
 from checks.native_tests.decomp_entry_table import register as register_decomp_entry_table
 from checks.native_tests.entry_table_contract import register as register_entry_table_contract
 from checks.native_tests.exec_owned_reuse import register as register_exec_owned_reuse
@@ -261,6 +260,7 @@ from checks.native_tests.kde_state import register as register_kde_state
 from checks.native_tests.kmeans_contract import register as register_kmeans_contract
 from checks.native_tests.kmeans_variants_contract import register as register_kmeans_variants_contract
 from checks.native_tests.kmeans_variants_lease import register as register_kmeans_variants_lease
+from checks.native_tests.parallel_byte_session import register as register_parallel_byte_session
 from checks.native_tests.kpca_contract import register as register_kpca_contract
 from checks.native_tests.kpca_state import register as register_kpca_state
 from checks.native_tests.label_score_keys_stress import register as register_label_score_keys_stress
@@ -279,6 +279,7 @@ from checks.native_tests.lr_schedule_check import register as register_lr_schedu
 from checks.native_tests.mani_tsne_run import register as register_mani_tsne_run
 from checks.native_tests.mani_umap_run import register as register_mani_umap_run
 from checks.native_tests.msel_helpers_entry import register as register_msel_helpers_entry
+from checks.native_tests.msel_split_plan import register as register_msel_split_plan
 from checks.native_tests.native_array_layout_check import register as register_native_array_layout_check
 from checks.native_tests.native_device_concurrency import register as register_native_device_concurrency
 from checks.native_tests.nearest_centroid_plan import register as register_nearest_centroid_plan
@@ -815,6 +816,7 @@ def all_checks() -> List[Check]:
     checks.append(register_affinity_preference_plan())
     checks.append(register_agglo_contract())
     checks.append(register_agglo_state())
+    checks.append(register_transport_frame())
     checks.append(register_base_helpers_entry())
     checks.append(register_boundary_layout())
     checks.append(register_byte_lm_entry())
@@ -825,8 +827,6 @@ def all_checks() -> List[Check]:
     checks.append(register_dbscan_door_run())
     checks.append(register_dbscan_options())
     checks.append(register_dbscan_state())
-    checks.append(register_decomp_device_route())
-    checks.append(register_device_route_dw_neighbors_cluster())
     checks.append(register_decomp_entry_table())
     checks.append(register_entry_table_contract())
     checks.append(register_exec_owned_reuse())
@@ -845,6 +845,7 @@ def all_checks() -> List[Check]:
     checks.append(register_kmeans_contract())
     checks.append(register_kmeans_variants_contract())
     checks.append(register_kmeans_variants_lease())
+    checks.append(register_parallel_byte_session())
     checks.append(register_kpca_contract())
     checks.append(register_kpca_state())
     checks.append(register_label_score_keys_stress())
@@ -863,6 +864,7 @@ def all_checks() -> List[Check]:
     checks.append(register_mani_tsne_run())
     checks.append(register_mani_umap_run())
     checks.append(register_msel_helpers_entry())
+    checks.append(register_msel_split_plan())
     checks.append(register_native_array_layout_check())
     checks.append(register_native_device_concurrency())
     checks.append(register_nearest_centroid_plan())

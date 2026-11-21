@@ -446,7 +446,15 @@ def _metrics_run_plan(plan: MetricProgramPlan, inputs: List[PythonObject], mode:
     no row gather or resident store). RUN: `metrics_plan_execute`, typed, the
     GIL released, every input owner held across it. The arena is native."""
     classical_connect_numpy(context)
-    var entries = _family_entries(mode, "x_metrics", context)
+    return metrics_run_plan_entries(plan, inputs, _family_entries(mode, "x_metrics", context), context)
+
+
+def metrics_run_plan_entries(plan: MetricProgramPlan, inputs: List[PythonObject], entries: PythonObject,
+                             context: PythonObject) raises -> MetricArenaOwner:
+    """`_metrics_run_plan` on the connected entries of one x_metrics image the
+    caller already holds: the selected mode's (above), or the CPU image a
+    `device="cpu"` estimator's route names beside a device set (lane
+    dw-decomp, 2026-11-21: EllipticEnvelope.score). Same UNPACK and RUN."""
     var provider = neural_descriptor_connect_factory_once(entries["metrics_program_native_api_v1"],
         String(METRICS_PROGRAM_ABI), MP_OPERATION_COUNT)
     var entry = provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry

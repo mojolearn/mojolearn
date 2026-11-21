@@ -10,7 +10,7 @@ from bindings.operation_names_xc import XC_OPN_FAMILY_XC_VARIANTS_TRANSFORM, XC_
 from bindings.operation_names_cfa import (
     CFA_OPN_FAMILY_CFA_MBK_PARTIAL_FIT, CFA_OPN_FAMILY_CFA_FIT_PREDICT, CFA_OPN_FAMILY_CFA_FIT_TRANSFORM,
     CFA_OPN_FAMILY_CFA_MEANSHIFT_FIT_PREDICT, CFA_OPN_FAMILY_CFA_OPTICS_FIT_PREDICT,
-    CFA_OPN_FAMILY_CFA_AP_FIT_PREDICT, CFA_OPN_FAMILY_CFA_HDBSCAN_FIT_PREDICT)
+    CFA_OPN_FAMILY_CFA_AP_FIT_PREDICT)
 from bindings.operation_names_mix import (
     MIX_OPN_FAMILY_MIX_BGMM_FIT, MIX_OPN_FAMILY_MIX_BGMM_FIT_PREDICT, MIX_OPN_FAMILY_MIX_BGMM_PREDICT,
     MIX_OPN_FAMILY_MIX_BGMM_PREDICT_PROBA, MIX_OPN_FAMILY_MIX_BGMM_SCORE_SAMPLES)
@@ -35,8 +35,7 @@ def _method(owner: Int, operation: Int) -> Int:
         if operation == CFA_OPN_FAMILY_CFA_MBK_PARTIAL_FIT:
             return CLUSTER_METHOD_PARTIAL_FIT
         if (operation == CFA_OPN_FAMILY_CFA_FIT_PREDICT or operation == CFA_OPN_FAMILY_CFA_MEANSHIFT_FIT_PREDICT
-                or operation == CFA_OPN_FAMILY_CFA_OPTICS_FIT_PREDICT or operation == CFA_OPN_FAMILY_CFA_AP_FIT_PREDICT
-                or operation == CFA_OPN_FAMILY_CFA_HDBSCAN_FIT_PREDICT):
+                or operation == CFA_OPN_FAMILY_CFA_OPTICS_FIT_PREDICT or operation == CFA_OPN_FAMILY_CFA_AP_FIT_PREDICT):
             return CLUSTER_METHOD_FIT_PREDICT
         if operation == CFA_OPN_FAMILY_CFA_FIT_TRANSFORM:
             return CLUSTER_METHOD_FIT_TRANSFORM
@@ -79,3 +78,25 @@ def _method_text(method: Int) -> String:
     if method == CLUSTER_METHOD_TRANSFORM:
         return "transform"
     return "score"
+
+
+def cluster_method_fitting(method: Int) -> Bool:
+    """fit, partial_fit, fit_predict and fit_transform replace fitted state."""
+    return method <= CLUSTER_METHOD_FIT_TRANSFORM
+
+
+def cluster_depth_nested(depth: Int) -> Bool:
+    """A call made inside another fit of the same estimator."""
+    return depth > 0
+
+
+def cluster_width_applies(fitting: Bool, method: Int) -> Bool:
+    """The fitted width and feature names are checked by every query and by
+    partial_fit (a first fit and a refit set them)."""
+    return not fitting or method == CLUSTER_METHOD_PARTIAL_FIT
+
+
+def cluster_argument_stop(count: Int, fitting: Bool) -> Int:
+    """One past the last public argument the algorithm takes: a fit's
+    trailing y belongs to lifecycle validation, not the algorithm ABI."""
+    return count - 1 if fitting else count

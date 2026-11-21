@@ -33,7 +33,7 @@ def tsa_hw_ops_forecast_host_v1(operation: Int, aa: Int, na: Int, pp: Int, np: I
             raise Error("holtwinters_fit: the forecast inference binding holds no fit")
         elif operation == TSA_OP_HW_RESIDENT_COUNT:
             r[] = 0
-        elif not tsa_hw_ops_host_inference(operation, aa, pp, result):
+        elif not tsa_hw_ops_host_inference(operation, aa, pp, ff, result):
             raise Error("tsa ops: the CPU binding keeps no resident device copy (operation " + String(operation) + ")")
         return 0
     except problem:

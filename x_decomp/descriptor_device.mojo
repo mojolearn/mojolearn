@@ -37,6 +37,9 @@ from x_decomp.descriptor_schema import (
 )
 from x_decomp.descriptor_owner_ops import xd_is_owner_op
 from x_decomp.descriptor_owner_device import xd_owner_device_op
+from x_decomp.descriptor_factor_ops import xd_is_factor_op, xd_factor_op
+from x_decomp.pca_randomized_dev import DevRDev
+from x_decomp.decomp_owner_dev import DevDecomp
 from x_decomp.descriptor_mani_device import xd_mani_device_op
 from x_decomp.descriptor_mani_schema import xd_is_mani_op, XD_CAP_DEV_LU, XD_CAP_DEV_EIGH, XD_CAP_LLE_ORDERED
 from gemm.afn_apple_fast import AFN_GEMM_APPLE
@@ -206,6 +209,8 @@ def x_decomp_device_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
             answer = xd_address_op[DevExec](operation, a, p, ff)
         elif xd_is_owner_op(operation):
             answer = xd_owner_device_op(operation, a, p, ff)
+        elif xd_is_factor_op(operation):
+            answer = xd_factor_op[DevExec, DevRDev, True, DevDecomp](operation, a, p, ff)
         elif xd_is_mani_op(operation):
             answer = xd_mani_device_op(operation, a, p, ff)
         else:
