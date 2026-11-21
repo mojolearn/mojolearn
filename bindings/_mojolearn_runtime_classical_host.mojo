@@ -33,9 +33,7 @@ from providers.python.preprocessing_input_pyapi_door import register_scaler_snap
 from bindings.admitted_input_unpack import register_admitted_buffer_pin
 from providers.python.linear_entry_boundary_door import register_linear_entry_owner, register_linear_entry_owner_identity, linear_entry_connect_c
 from providers.python.linear_state_boundary_door import register_linear_state_owner, register_linear_state_owner_identity
-from providers.python.linear_route_boundary_door import register_linear_route_owner, register_linear_route_owner_identity
-from providers.python.logistic_route_boundary_door import register_logistic_route_owner, register_logistic_route_owner_identity
-from providers.python.device_route_dw_classical_door import register_family_route_owner, register_family_route_owner_identity
+from providers.python.device_route_boundary_door import register_device_route_owner, register_device_route_owner_identity
 
 comptime RUNTIME_CLASSICAL_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
@@ -137,12 +135,11 @@ def build__mojolearn_runtime_classical_host() -> PythonObject:
         register_admitted_buffer_pin(module)
         register_linear_entry_owner(module)
         register_linear_state_owner(module)
-        # The per-estimator device route owner (device="gpu" | "cpu"), allocated by classical_native_call.
-        register_linear_route_owner(module)
-        # LogisticRegression's device route owner, allocated by logistic_native_call (the runtime linear host,
-        # which registers no types: this module is loaded first and owns the type object).
-        register_logistic_route_owner(module)
-        register_family_route_owner(module)  # the route owner of the dw-classical families (QNRegressor, ...), allocated by their doors
+        # The ONE per-estimator device route owner (device=None | "gpu" | "cpu") of every family: allocated by
+        # classical_native_call here, by logistic_native_call and qn_native_call (the runtime linear host) and by
+        # the shared estimator door in every runtime host that compiles it. Those register no types: this
+        # module is loaded first and owns the type object.
+        register_device_route_owner(module)
         module.def_py_c_function(linear_entry_connect_c, "linear_entry_connection_v1")
         module.def_function[runtime_classical_host_numeric_mode_binding]("runtime_classical_host_numeric_mode")
         module.def_function[runtime_classical_host_vendor_binding]("runtime_classical_host_vendor")
@@ -155,9 +152,7 @@ def build__mojolearn_runtime_classical_host() -> PythonObject:
         register_native_owner_type[TreesResidentDeath](published, native_owner_no_pins)
         register_linear_entry_owner_identity(published)
         register_linear_state_owner_identity(published)
-        register_linear_route_owner_identity(published)
-        register_logistic_route_owner_identity(published)
-        register_family_route_owner_identity(published)
+        register_device_route_owner_identity(published)
         return published
     except error:
         abort(String("failed to create _mojolearn_runtime_classical_host: ", error))

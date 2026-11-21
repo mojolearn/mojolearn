@@ -4920,6 +4920,15 @@ def routed_modules():
     return {f["routes"]: f["binding"] for f in FAMILIES if f["routes"]}
 
 
+def cpu_training_routes():
+    """`_MODULES` name -> host binding basename, for the families whose host
+    binding TRAINS on the CPU (it covers at least one training lane). The
+    answer behind `device="cpu"`: an estimator whose GPU binding is not a key
+    here has no CPU implementation to run (python/mojolearn/_device_table.py
+    builds the one class table from it; nothing lists classes by hand)."""
+    return {f["routes"]: f["binding"] for f in FAMILIES if f["routes"] and f["training_lanes"]}
+
+
 def routed_families():
     """The families with a route, the phase 1 set the gate builds in a loop."""
     return [f["family"] for f in FAMILIES if f["routes"]]

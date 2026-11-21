@@ -18,10 +18,10 @@ from core.linear_entry_table import LinearEntryKey, LINEAR_TABLE_ESTIMATORS, lin
 from core.linear_fit_types import LINEAR_FIT_ABI, LINEAR_FIT_OPERATION_COUNT
 from core.linear_model_state import LinearModelState
 from core.linear_registry import LINEAR_STATES, linear_lease_predict
-from core.linear_route import (
-    LinearRoute, LINEAR_DEVICE_CPU, LINEAR_DEVICE_GPU, LINEAR_DEVICE_INSTALL,
-    linear_device_code, linear_device_installed, linear_route_resolve,
+from core.device_route import (
+    DeviceRoute, DEVICE_CPU, DEVICE_GPU, DEVICE_INSTALL, device_code, device_installed,
 )
+from core.linear_route import linear_route_resolve
 from core.native_descriptor_call import native_descriptor_call
 from glm.host.linear_fit_native import LINEAR_FIT_HOST_API, linear_fit_host_v1
 from glm.host.linear_predict_native import linear_predict_host_v1
@@ -48,20 +48,20 @@ def model_state(address: Int) -> LinearModelState:
 def device_rules() raises:
     # `device=None` is the installation's device; an explicit gpu without a
     # GPU set is refused in words that name the CPU; cpu always runs.
-    require(linear_device_code("gpu") == LINEAR_DEVICE_GPU and linear_device_code("cpu") == LINEAR_DEVICE_CPU
-        and linear_device_code("GPU") < 0 and linear_device_code("") < 0, "device words are not exact")
-    require(linear_device_installed(LINEAR_DEVICE_INSTALL, 0) == LINEAR_DEVICE_CPU,
+    require(device_code("gpu") == DEVICE_GPU and device_code("cpu") == DEVICE_CPU
+        and device_code("GPU") < 0 and device_code("") < 0, "device words are not exact")
+    require(device_installed(DEVICE_INSTALL, 0) == DEVICE_CPU,
         "the default device of a CPU-only process is not the CPU")
     for vendor in range(1, 4):  # the three GPU vendor words
-        require(linear_device_installed(LINEAR_DEVICE_INSTALL, vendor) == LINEAR_DEVICE_GPU,
+        require(device_installed(DEVICE_INSTALL, vendor) == DEVICE_GPU,
             "the default device of a GPU process is not the GPU")
-        require(linear_device_installed(LINEAR_DEVICE_GPU, vendor) == LINEAR_DEVICE_GPU
-            and linear_device_installed(LINEAR_DEVICE_CPU, vendor) == LINEAR_DEVICE_CPU,
+        require(device_installed(DEVICE_GPU, vendor) == DEVICE_GPU
+            and device_installed(DEVICE_CPU, vendor) == DEVICE_CPU,
             "an explicit device did not keep its word on a GPU process")
-    require(linear_device_installed(LINEAR_DEVICE_CPU, 0) == LINEAR_DEVICE_CPU, "cpu did not run on a CPU-only process")
+    require(device_installed(DEVICE_CPU, 0) == DEVICE_CPU, "cpu did not run on a CPU-only process")
     var refused = False
     try:
-        _ = linear_device_installed(LINEAR_DEVICE_GPU, 0)
+        _ = device_installed(DEVICE_GPU, 0)
     except problem:
         require(String(problem).find("device='cpu'") >= 0, "the gpu refusal does not name device='cpu'")
         refused = True
@@ -73,12 +73,12 @@ def route_metrics_default() raises:
     # (providers/python/metrics_route_boundary_door.mojo). Every other route
     # scores on the process's table: it claims none, and its metrics ref
     # refuses a call instead of calling anything.
-    for device in range(LINEAR_DEVICE_GPU, LINEAR_DEVICE_INSTALL + 1):  # the three device words
-        var route = LinearRoute(device)
-        require(not route.has_metrics, "a new route claims a metrics entry")
+    for device in range(DEVICE_GPU, DEVICE_INSTALL + 1):  # the three device words
+        var route = DeviceRoute(device)
+        require(not route.has_fifth, "a new route claims a metrics entry")
         var refused = False
         try:
-            _ = native_descriptor_call(route.metrics.call, 0, List[Int](), List[Int](), List[Float64]())
+            _ = native_descriptor_call(route.fifth.call, 0, List[Int](), List[Int](), List[Float64]())
         except problem:
             require(String(problem).find("not resolved") >= 0, "wrong unresolved metrics entry refusal")
             refused = True
@@ -94,9 +94,9 @@ def missing_before_publication() raises:
         var lease = LINEAR_STATES.acquire(handle)
         var refused = False
         try:
-            var early = linear_route_resolve(LINEAR_DEVICE_CPU, LinearEntryKey(GLOBAL_NUMERIC_MODE, 0),
+            var early = linear_route_resolve(DEVICE_CPU, LinearEntryKey(GLOBAL_NUMERIC_MODE, 0),
                 0, GLOBAL_NUMERIC_MODE, False)
-            _ = linear_lease_predict(early.predict.call, lease,
+            _ = linear_lease_predict(early.second.call, lease,
                 Int(source.unsafe_ptr()), Int(destination.unsafe_ptr()), 1, 3, False, String("Ridge"))
         except problem:
             require(String(problem).find("not published") >= 0, "wrong missing production table refusal")
@@ -104,10 +104,10 @@ def missing_before_publication() raises:
         require(refused and destination[0] == Float32(-37), "missing production table wrote a prediction")
         # A route that was never resolved holds a refusing entry, not a null
         # pointer: a call through it raises and writes nothing.
-        var unresolved = LinearRoute(LINEAR_DEVICE_GPU)
+        var unresolved = DeviceRoute(DEVICE_GPU)
         refused = False
         try:
-            _ = linear_lease_predict(unresolved.predict.call, lease,
+            _ = linear_lease_predict(unresolved.second.call, lease,
                 Int(source.unsafe_ptr()), Int(destination.unsafe_ptr()), 1, 3, False, String("Ridge"))
         except problem:
             require(String(problem).find("not resolved") >= 0, "wrong unresolved route refusal")
@@ -132,19 +132,19 @@ def fixture(wide: Bool) raises:
     var destination = Int(wider.unsafe_ptr()) if wide else Int(narrow.unsafe_ptr())
     # Each fixture resolves its own route, as each estimator does: concurrent
     # resolutions of one published table give the same entries.
-    var route = linear_route_resolve(LINEAR_DEVICE_CPU, LinearEntryKey(GLOBAL_NUMERIC_MODE, 0),
+    var route = linear_route_resolve(DEVICE_CPU, LinearEntryKey(GLOBAL_NUMERIC_MODE, 0),
         0, GLOBAL_NUMERIC_MODE, False)
-    require(route.device == LINEAR_DEVICE_CPU and route.vendor == 0 and route.mode == GLOBAL_NUMERIC_MODE,
+    require(route.device == DEVICE_CPU and route.vendor == 0 and route.mode == GLOBAL_NUMERIC_MODE,
         "CPU route does not report the host entries' vendor and tier")
     var foreign = False
     try:
-        _ = linear_route_resolve(LINEAR_DEVICE_GPU, LinearEntryKey(GLOBAL_NUMERIC_MODE, 0),
+        _ = linear_route_resolve(DEVICE_GPU, LinearEntryKey(GLOBAL_NUMERIC_MODE, 0),
             2, GLOBAL_NUMERIC_MODE, False)
     except problem:
         require(String(problem).find("vendor differs") >= 0, "wrong foreign vendor refusal")
         foreign = True
     require(foreign, "a route resolved for a vendor its compiled entry does not report")
-    var entry = route.predict.call
+    var entry = route.second.call
     var handle = LINEAR_STATES.insert(model_state(Int(coefficients.unsafe_ptr())))
     var released = False
     try:

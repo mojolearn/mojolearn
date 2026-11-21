@@ -31,7 +31,8 @@ from bindings.classical_caller_unpack import classical_caller_outside
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
 from bindings.admitted_call_door import AdmittedCall
 from core.linear_metadata import linear_vendor_name, linear_constructor_check, linear_constructor_device
-from providers.python.linear_route_boundary_door import linear_route_call, linear_route_clear, linear_device_admit
+from providers.python.linear_route_boundary_door import linear_route_call, linear_device_admit
+from providers.python.device_route_boundary_door import device_route_clear
 from bindings.classical_keys_unpack import classical_keys
 from bindings.operation_names_classical import (
     CLASSICAL_TREES_FIRST, CLASSICAL_LEAF_TREES_DOOR, CLASSICAL_LEAF_FAMILY_DOOR,
@@ -251,7 +252,7 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
             result = classical_initialize(model, args, ridge, context)
             # A constructor run again on a live estimator: its next operation
             # reads the device and the mode again.
-            linear_route_clear(model)
+            device_route_clear(model)
             return result.steal_data()
         if operation == CLASSICAL_OPN_VALIDATE_PARAMS:
             if not ridge:
@@ -270,7 +271,7 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
             result = classical_set_params(model, args[0], ridge, context)
             # The device or the numeric mode may have changed: the next
             # operation resolves the route again.
-            linear_route_clear(model)
+            device_route_clear(model)
             return result.steal_data()
         if operation == CLASSICAL_OPN_IS_FITTED:
             result = classical_is_fitted(model)

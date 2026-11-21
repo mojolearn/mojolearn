@@ -84,6 +84,25 @@ def tables(**fixed):
     context.update(fixed)
 
 
+def _connect_cpu_binding(_backend, name):
+    # glue: import-time connection of one binding name's CPU identical module
+    # on a GPU installation: `(module, module name, mode reader name)`, or a
+    # one-item tuple holding the refusal a device="cpu" estimator of the
+    # family raises. A CPU-only process connects nothing here: its own set is
+    # already the CPU one (`family_binding_connections`).
+    if _backend._CPU_ONLY is not None:
+        return ('ImportError: this installation is CPU only; its own bindings are the CPU bindings',)
+    basename = _backend._HOST_MODULES.get(name)
+    if basename is None:
+        return ("ValueError: device='cpu' is not available: " + name + ' has no CPU implementation. '
+                "Leave device=None to run on this installation's device",)
+    try:
+        module = _backend.load_host_module(basename)  # import-time: the CPU module beside the device module, never a GPU fallback
+        return (module, module.__name__, _backend._host_prefix(basename) + '_numeric_mode')
+    except (ImportError, AttributeError, ValueError, RuntimeError, TypeError, OSError) as error:
+        return (type(error).__name__ + ': ' + str(error),)
+
+
 def connect_bindings(*names):
     """Connect estimator bindings during module import, never during execution."""
     from . import _backend
@@ -91,6 +110,12 @@ def connect_bindings(*names):
     connections = context.setdefault('family_binding_connections', {})
     offerings = context.setdefault('family_binding_offerings', {})
     readers = context.setdefault('family_binding_readers', {})
+    # The CPU identical module of each binding name, beside the device one: what
+    # an estimator constructed with device="cpu" resolves to on a GPU
+    # installation (providers/python/estimator_binding_pyapi_door.mojo
+    # `_estimator_binding_cpu`). Connected here, at import, because a public
+    # operation never calls back into Python to load a module.
+    cpu_connections = context.setdefault('family_binding_connections_cpu', {})
     context['family_mode_set_type'] = _backend._ModeSet
     context['family_mode_set_fields'] = vars(_backend._ModeSet)['__dict__'].__get__
     for name in names:  # glue: fixed module-import binding names, never user data or product execution
@@ -115,3 +140,5 @@ def connect_bindings(*names):
             except (ImportError, AttributeError, ValueError, RuntimeError, TypeError, OSError) as error:
                 modes[mode] = (type(error).__name__ + ': ' + str(error),)
         connections[name] = modes
+        if name not in cpu_connections:
+            cpu_connections[name] = _connect_cpu_binding(_backend, name)

@@ -15,11 +15,11 @@ from bindings.sequential_description_unpack import sequential_fields
 from core.linear_fit_types import LinearFitRequest, LinearFitResult
 from core.linear_fit_run import linear_ridge_run
 from providers.python.linear_state_boundary_door import linear_state_publish
-from core.linear_route import LinearRoute
+from core.device_route import DeviceRoute
 
 
 def classical_ridge_fit(model: PythonObject, args: PythonObject,
-    route: LinearRoute, pins: PythonObject, context: PythonObject) raises -> PythonObject:
+    route: DeviceRoute, pins: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = sequential_fields(model)
     classical_fit_replacements_admit(fields, True, context)
     var alpha_source = fields["alpha"]
@@ -44,10 +44,10 @@ def classical_ridge_fit(model: PythonObject, args: PythonObject,
     # The estimator's resolved entries (core/linear_route.mojo): the device
     # table's or the CPU table's, read once per estimator. This fit admits no
     # connection owner and reads no table slot.
-    if not route.has_weighted:
+    if not route.has_third:
         raise Error("native Ridge weighted execution key differs")
-    var entry = route.fit.call
-    var weighted_entry = route.weighted.call
+    var entry = route.entry.call
+    var weighted_entry = route.third.call
     var result = LinearFitResult()
     var py = Python()
     try:

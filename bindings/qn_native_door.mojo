@@ -28,9 +28,9 @@ from providers.python.estimator_tabular_boundary_pyapi_unpack import _refusal
 from std.python._cpython import PyObjectPtr, GILReleased
 from glm.qn_door_run import QnDoorFitResult, qn_door_fit_run, qn_door_predict_run
 from bindings.qn_boundary_unpack import qn_fit_unpack, qn_predict_unpack, qn_predict_pack, qn_route
-from core.device_route_dw_classical import family_vendor_word, family_mode_word
+from core.device_route import device_vendor_word, device_mode_word
 from core.estimators_entry_table import estimators_vendor_word
-from providers.python.device_route_dw_classical_door import family_device_admit, family_route_clear
+from providers.python.device_route_boundary_door import device_admit, device_route_clear
 from bindings.qn_boundary_pack import qn_fit_pack
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.optimizer_public_words_unpack import PYTHON_ERROR_PENDING, optimizer_python_error
@@ -189,7 +189,7 @@ def _qn_initialize(model: PythonObject, args: PythonObject, context: PythonObjec
             raise Error("mojolearn QNRegressor: " + name + " must be a positive integer, got " + String(py_call(b.str, value)))
     # `device`: an unknown value, and 'gpu' on a CPU-only installation, are
     # refused in words here, before any field changes; None reads nothing.
-    family_device_admit(py_item(values, nk[].k_device), estimators_vendor_word(String(py_item(context, nk[].k_vendor))), b)
+    device_admit(py_item(values, nk[].k_device), estimators_vendor_word(String(py_item(context, nk[].k_vendor))), b)
     py_setitem(values, nk[].k_warm_start, PythonObject(False))
     var fields = py_fields(model)
     if py_item(values, nk[].k_numeric_mode) is None:
@@ -201,7 +201,7 @@ def _qn_initialize(model: PythonObject, args: PythonObject, context: PythonObjec
         py_setitem(fields, names[i], values[names[i]])
     # A new constructor run (`set_params` rebuilds through it): the next
     # operation reads the device and the mode again.
-    family_route_clear(model)
+    device_route_clear(model)
     return PythonObject(None)
 
 
@@ -274,7 +274,7 @@ def qn_public_operation(model: PythonObject, operation: Int, operation_name: Pyt
         # What the estimator runs on, from its route (resolved here when it
         # has not run yet): the compiled image's own vendor and tier words.
         var used = qn_route(model, py_fields(model), context)
-        var word = family_vendor_word(used.route.vendor) if operation == QN_OPN_VENDOR_USED else family_mode_word(used.route.mode)
+        var word = device_vendor_word(used.route.vendor) if operation == QN_OPN_VENDOR_USED else device_mode_word(used.route.mode)
         _ = used^
         return PythonObject(word)
     var fitting = operation == QN_OPN_FIT

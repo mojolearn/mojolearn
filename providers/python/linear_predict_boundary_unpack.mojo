@@ -17,11 +17,11 @@ from bindings.sequential_description_unpack import sequential_fields
 from core.linear_model_state import LinearModelState, linear_state_require_coef, linear_state_check_width, linear_state_check_coefficients
 from providers.python.linear_state_boundary_door import LinearStateOwner, linear_state_owner, linear_state_refresh
 from core.linear_registry import LINEAR_STATES, linear_lease_predict
-from core.linear_route import LinearRoute
+from core.device_route import DeviceRoute
 
 
 def _linear_predict_boundary(model: PythonObject, value: PythonObject,
-    route: LinearRoute, pins: PythonObject, context: PythonObject, wide: Bool) raises -> PythonObject:
+    route: DeviceRoute, pins: PythonObject, context: PythonObject, wide: Bool) raises -> PythonObject:
     var fields = sequential_fields(model)
     var owner = linear_state_owner(model)
     var state = LinearModelState()
@@ -68,7 +68,7 @@ def _linear_predict_boundary(model: PythonObject, value: PythonObject,
     var lease = native_call.lease.copy()
     # The estimator's resolved prediction entry (device table or CPU table):
     # no connection admission and no table slot read per call.
-    var entry = route.predict.call
+    var entry = route.second.call
     var destination = Int(py=classical_address(dst))
     var py = Python()
     var status = 0
@@ -92,10 +92,10 @@ def _linear_predict_boundary(model: PythonObject, value: PythonObject,
 
 
 def classical_linear_predict(model: PythonObject, value: PythonObject,
-    route: LinearRoute, pins: PythonObject, context: PythonObject) raises -> PythonObject:
+    route: DeviceRoute, pins: PythonObject, context: PythonObject) raises -> PythonObject:
     return _linear_predict_boundary(model, value, route, pins, context, False)
 
 
 def classical_linear_predict_public(model: PythonObject, value: PythonObject,
-    route: LinearRoute, pins: PythonObject, context: PythonObject) raises -> PythonObject:
+    route: DeviceRoute, pins: PythonObject, context: PythonObject) raises -> PythonObject:
     return _linear_predict_boundary(model, value, route, pins, context, True)

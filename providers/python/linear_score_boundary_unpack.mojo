@@ -8,7 +8,7 @@ from bindings.classical_validate_unpack import classical_check_x_snapshot, class
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_get, py_type
 from bindings.sequential_description_unpack import sequential_fields
-from core.linear_route import LinearRoute
+from core.device_route import DeviceRoute
 from core.linear_model_state import LinearModelState, linear_state_require_coef, linear_state_check_width, linear_state_check_coefficients
 from core.linear_score_run import linear_score_run, linear_r2_run, linear_r2_check_target
 from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
@@ -29,7 +29,7 @@ def _linear_metrics_provider(context: PythonObject) raises -> PythonObject:
 
 
 def classical_linear_score(model: PythonObject, args: PythonObject,
-    route: LinearRoute, pins: PythonObject, context: PythonObject) raises -> PythonObject:
+    route: DeviceRoute, pins: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = sequential_fields(model)
     var state = LinearModelState()
     var coefficient_source = py_get(fields, "coef_")
@@ -57,16 +57,16 @@ def classical_linear_score(model: PythonObject, args: PythonObject,
     var target_address = Int(py=classical_address(target))
     var x_address = admitted_x.address
     # The estimator's resolved prediction entry (device table or CPU table).
-    var predict = route.predict.call
+    var predict = route.second.call
     # A CPU route resolved in a GPU installation holds its own CPU identical
     # metrics entry (providers/python/metrics_route_boundary_door.mojo): the
     # process's metrics table is the GPU one and is not read for it.
-    var metrics = route.metrics.call
+    var metrics = route.fifth.call
     var vendor = 0
     var mode = 1
     var metric_pins = PythonObject(None)
     var metric_owner = PythonObject(None)
-    if not route.has_metrics:
+    if not route.has_fifth:
         var metric_mode = context["backend_fields"]["_DEFAULT_MODE"]
         metric_pins = context["classical_metrics"][metric_mode]
         if py_type(metric_pins) is native_loaded_module("builtins").str:

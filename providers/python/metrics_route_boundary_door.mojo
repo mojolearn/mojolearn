@@ -7,7 +7,7 @@ here, ONCE, beside its fit and predict entries
 (providers/python/linear_route_boundary_door.mojo): the CPU identical image
 `_mojolearn_x_metrics_host`, connected at import under the CPU entry family
 (python/mojolearn/_native_classical_bridge.py connect_cpu_device, key
-`metrics`). Every later `score` calls through the route's `metrics` entry;
+`metrics`). Every later `score` calls through the route's `fifth` entry (core/linear_route.mojo names the slots);
 no call reads the process's metrics table, which is the GPU one.
 
 A CPU metrics image that is not built is not refused when the estimator
@@ -21,7 +21,7 @@ from std.python import PythonObject
 from bindings.py_balanced import py_get, py_type
 from core.entry_table import EntryRef, entry_ref_word
 from core.linear_entry_table import LINEAR_TABLE_METRICS, linear_table_entry
-from core.linear_route import LinearRoute
+from core.device_route import DeviceRoute
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from providers.python.linear_entry_boundary_door import linear_entry_connection
@@ -35,20 +35,20 @@ def _metrics_cpu_absent(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
     return 1
 
 
-def linear_route_metrics_cpu(mut route: LinearRoute, entries: PythonObject, b: PythonObject) raises:
+def linear_route_metrics_cpu(mut route: DeviceRoute, entries: PythonObject, b: PythonObject) raises:
     """Give a CPU route resolved in a GPU installation its CPU metrics entry.
     `entries` is the CPU entry family the route was resolved from (the route
     owner pins it, and with it the metrics connection owner and its image);
     `b` is the builtins module the calling door already admitted."""
-    route.has_metrics = True
+    route.has_fifth = True
     var cells = py_get(entries, "metrics")
     if py_type(cells) is not b.dict:
-        route.metrics = EntryRef(_metrics_cpu_absent, 0)
+        route.fifth = EntryRef(_metrics_cpu_absent, 0)
         return
     var connection = linear_entry_connection(cells, LINEAR_TABLE_METRICS)
     if connection.key.vendor != 0 or connection.key.mode != 1:
         raise Error("RuntimeError: device='cpu' score requires the CPU identical metrics binding")
     var entry = linear_table_entry[LINEAR_TABLE_METRICS](connection.key, 0, String(METRICS_PROGRAM_ABI),
         MP_OPERATION_COUNT)
-    route.metrics = EntryRef(entry, entry_ref_word(connection.key.mode, connection.key.vendor, MP_OPERATION_COUNT))
+    route.fifth = EntryRef(entry, entry_ref_word(connection.key.mode, connection.key.vendor, MP_OPERATION_COUNT))
     _ = connection
