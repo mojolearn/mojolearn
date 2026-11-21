@@ -16,6 +16,7 @@ from bindings.label_admission_native_unpack import labels_primitive_kind
 from bindings.py_balanced import py_call, py_type, py_get, py_fields
 from bindings.classical_arrays_door import classical_address
 from bindings.classical_labels_door import classical_encode_labels
+from bindings.labels_descriptor_boundary_door import labels_scope
 from bindings.family_common_unpack import FAMILY_F32P, family_repr
 from bindings.family_common_pack import family_call
 from bindings.svc_common_unpack import svc_field, svc_float, svc_shape_of
@@ -142,7 +143,7 @@ def svc_fit_unpack(model: PythonObject, args: PythonObject, context: PythonObjec
     var x_meta = _svm_fit_admit(args[1], "SVC", entry, context, fold, x_pin)
     var nk = svm_keys()
     var copied = True if fold.active() else admit_family_copied(x_meta, args[1])
-    var parsed = svc_labels_unpack(args[2], context)
+    var parsed = svc_labels_unpack(args[2], labels_scope(model, context))
     var binary = parsed.labels is not None
     var n_rows = x_meta.shape[0]
     var n_cols = x_meta.shape[1]

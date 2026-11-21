@@ -23,6 +23,7 @@ from bindings.optimizer_public_words_unpack import stash_python_error, optimizer
 from bindings.py_model_records import bump_model_generation
 from providers.python.device_route_boundary_door import device_route_clear, device_admit_class
 from bindings.py_optional import py_present
+from bindings.parameter_names_unpack import resolve_parameter_names
 
 
 def _plan(model: PythonObject, fields: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -159,22 +160,42 @@ def _merge(model: PythonObject, params: PythonObject, values: PythonObject,
     var b = native_loaded_module("builtins")
     var pairs = py_call(b.list, params.items())
     var nested = Python.dict()
-    for i in range(len(pairs)):  # driver-loop: validate every root before any nested or parent mutation
-        var key = pairs[i][0]
+    var at = 0
+    var renamed = False
+    while at < len(pairs):  # driver-loop: validate every root before any nested or parent mutation
+        var key = pairs[at][0]
         if py_type(key) is not b.str:
             raise Error("TypeError: native parameter names must be exact strings")
         var parts = py_call(key.partition, "__")
         var name = parts[0]
         if not py_contains(values, name):
+            # Another library's name for one of this class's parameters (lane
+            # api-boost; the gradient-boosting table, python/mojolearn/
+            # _boosting_param_names.py): read only when a name is not a
+            # parameter. The whole update is resolved onto canonical names (or
+            # refused in the table's words) and validated again from the
+            # start; `values` is the parameter read, not the model, so the
+            # roots already set are set again with the same objects.
+            var tables = py_get(context, PythonObject("parameter_names"))
+            var table = PythonObject(None)
+            if tables is not None:
+                table = py_get(tables, py_type(model))
+            if not renamed and table is not None and py_contains(table, name):
+                pairs = py_call(b.list, resolve_parameter_names(params, table).items())
+                nested = Python.dict()
+                renamed = True
+                at = 0
+                continue
             raise Error("ValueError: Invalid parameter " + String(py_call(b.repr, name)) + " for estimator "
                         + String(py_type(model).__name__) + ". Valid parameters are: "
                         + String(py_call(b.repr, py_call(b.sorted, values))) + ".")
         if String(parts[1]) == "":
-            py_setitem(values, name, pairs[i][1])
+            py_setitem(values, name, pairs[at][1])
         else:
             if not py_contains(nested, name):
                 py_setitem(nested, name, Python.dict())
-            py_setitem(nested[name], parts[2], pairs[i][1])
+            py_setitem(nested[name], parts[2], pairs[at][1])
+        at += 1
     var names = py_call(b.list, nested.keys())
     for i in range(len(names)):  # driver-loop: earlier successful nested changes remain if a later child refuses
         _ = _set(values[names[i]], nested[names[i]], context, depth + 1)

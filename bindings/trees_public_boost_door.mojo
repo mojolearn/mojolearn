@@ -27,6 +27,7 @@
 # converts X once for the fit and the transform.
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields, py_item
+from bindings.labels_descriptor_boundary_door import labels_scope
 from bindings.native_f32_view_pack import native_f32_view_array
 from bindings.py_attr import py_attr
 from bindings.py_typed_call import py_call_typed
@@ -1038,7 +1039,7 @@ def bagging_fit(model: PythonObject, args: PythonObject, classifier: Bool, conte
     var X = args[0]
     var sample_weight = args[2]
     if classifier:
-        var labels = trees_encode_labels(args[1], context)
+        var labels = trees_encode_labels(args[1], labels_scope(model, context))
         py_setitem(fields, "classes_", labels.classes)
         var k = len(labels.classes)
         py_setitem(fields, "n_classes_", _P(k))
@@ -1329,7 +1330,7 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
     var errors = Python.list()
     var glue = _xr(xt)
     if classifier:
-        var labels = trees_encode_labels(args[1], context)
+        var labels = trees_encode_labels(args[1], labels_scope(model, context))
         py_setitem(fields, "classes_", labels.classes)
         var k = len(labels.classes)
         py_setitem(fields, "n_classes_", _P(k))
@@ -1359,7 +1360,7 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
             # The labels are encoded ONCE for every member and round.
             # TOMBSTONE: MOJOLEARN_TREES_FAST_ADABOOST_REENCODE (NOISE: B re-encoded the labels per member; A/B abn9 NVIDIA L40S, 4 cells 0.98-1.04 arm/base) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
             # Restore: git apply experiments/removed/MOJOLEARN_TREES_FAST_ADABOOST_REENCODE.patch; record in docs/TOMBSTONES.md.
-            encoded = trees_encode_labels(codes, context)
+            encoded = trees_encode_labels(codes, labels_scope(model, context))
             # the session open tests the column-major words it uploads
             # (lane a8c: the host scan of cm before it is deleted)
             session = _member_session(base, cm.view(), False, _ada_session_choice(fields, xt, context), context)
@@ -1903,7 +1904,7 @@ def dart_fit(model: PythonObject, args: PythonObject, classifier: Bool, context:
         _ = x  # owner pins: the views above read their words
         _ = y32
         return fitted
-    var labels = trees_encode_labels(args[1], context)
+    var labels = trees_encode_labels(args[1], labels_scope(model, context))
     py_setitem(fields, "classes_", labels.classes)
     var K = len(labels.classes)
     if K < 2:

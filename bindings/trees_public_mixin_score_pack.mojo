@@ -10,6 +10,7 @@
 # the UNPACK half is `bindings/trees_public_mixin_score_unpack.mojo`.
 from std.python import Python, PythonObject
 from bindings.base_helpers_key_unpack import base_helpers_key
+from bindings.labels_descriptor_boundary_door import labels_scope
 from bindings.base_helpers_released_unpack import base_reduce_stat_int
 from bindings.py_balanced import py_call, py_get, py_fields, py_contains
 from bindings.classifier_public_lifecycle_door import classifier_label_list
@@ -48,7 +49,7 @@ def boost_score(model: PythonObject, args: PythonObject, context: PythonObject) 
         # (bindings/classical_labels_door.mojo `classical_score_from_codes`, the
         # forest door's route now), so this door calls it too (lesson 8).
         var pair = boost_predict_codes(model, kind, X, context)
-        return PythonObject(classical_score_from_codes(y, pair[0], pair[1], sample_weight, mode, context))
+        return PythonObject(classical_score_from_codes(y, pair[0], pair[1], sample_weight, mode, labels_scope(model, context)))
     var prediction = boost_operation(model, "trees_boost_predict", Python.tuple(X), context)
     # `as_f32_c(y, ndim=None)` and `as_f32_c(prediction, ndim=None)`, then
     # `r2_score`'s 1-D path.

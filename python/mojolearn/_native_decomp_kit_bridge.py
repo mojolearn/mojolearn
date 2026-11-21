@@ -57,31 +57,6 @@ def _native_key(entries):
         entries["x_decomp_native_key"] = (mode, vendor)
 
 
-def _cpu_metrics_entries(backend):
-    # glue: once at import, the connected entries of the CPU metrics image in
-    # the program runner's form (python/mojolearn/_native_arena_prog.py), or
-    # the text of why it is not connected; `score` of a `device="cpu"`
-    # estimator runs its accuracy step on it
-    from types import BuiltinFunctionType
-    from ._native_arena_prog import _FAMILIES, _error_text
-    _, mandatory, optional, _ = _FAMILIES["x_metrics"]
-    try:
-        module = backend.load_host_module("_mojolearn_x_metrics_host")
-        entries = {mandatory: getattr(module, mandatory)}
-        for name in optional:  # glue: fixed optional native exports connected during import
-            try:
-                entries[name] = getattr(module, name)
-            except (AttributeError, ImportError):
-                continue
-        for name, entry in entries.items():  # glue: admit only compiled entries
-            if not isinstance(entry, BuiltinFunctionType):
-                raise TypeError(f"arena programs require compiled {name}")
-        entries.update(prog_family="x_metrics", arena_binding=module, arena_binding_id=id(module))
-        return entries
-    except Exception as error:  # noqa: BLE001 - raised by the score that needs the image
-        return _error_text(error)
-
-
 def connect(door, **classes):
     # glue: compiled entries and plain metadata are retained during import;
     # `door` names the tokenizer-host export, `classes` the classes the
@@ -118,7 +93,8 @@ def connect(door, **classes):
         if isinstance(cpu, dict):
             # the CPU image's own metrics image, held by the entries the
             # estimator's route names: EllipticEnvelope.score reads it there
-            cpu["x_metrics_entries"] = _cpu_metrics_entries(_backend)
+            from ._native_labels_bridge import cpu_metrics_entries
+            cpu["x_metrics_entries"] = cpu_metrics_entries()
         context["decomp_cpu_bindings"] = {"identical": cpu}
     # The shared native label and accuracy steps (EllipticEnvelope.score).
     from ._native_labels_bridge import label_context

@@ -84,6 +84,13 @@ def install(context, setter, modules=None):
                 continue
             signature = inspect.signature(initializer)
             parameters = tuple(signature.parameters.values())[1:]
+            # A trailing **aliases holds only other libraries' names for these
+            # parameters (python/mojolearn/_boosting_param_names.py): the
+            # constructor stores them under the canonical names, so the
+            # recipe's canonical arguments rebuild the same estimator.
+            if (parameters and parameters[-1].kind is parameters[-1].VAR_KEYWORD
+                    and getattr(owner, '_mojolearn_parameter_names', False)):
+                parameters = parameters[:-1]
             if any(p.kind not in (p.POSITIONAL_OR_KEYWORD, p.KEYWORD_ONLY) for p in parameters):  # glue: ordinary native constructor argument words
                 pending[cls] = 'constructor requires an explicit variadic native recipe'
                 continue
