@@ -554,10 +554,13 @@ class OrdinalEncoder(_PrepBase):
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _sklearn_input_tags = {"allow_nan": True, "categorical": True}
     _parameters = ("categories", "dtype", "handle_unknown", "unknown_value", "encoded_missing_value",
-                   "min_frequency", "max_categories")
+                   "min_frequency", "max_categories", "device")
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
     def __init__(self, *, categories="auto", dtype=None, handle_unknown="error", unknown_value=None,
-                 encoded_missing_value=float("nan"), min_frequency=None, max_categories=None):
+                 encoded_missing_value=float("nan"), min_frequency=None, max_categories=None, device=None):
         self.categories = categories
         self.dtype = dtype
         self.handle_unknown = handle_unknown
@@ -565,6 +568,7 @@ class OrdinalEncoder(_PrepBase):
         self.encoded_missing_value = encoded_missing_value
         self.min_frequency = min_frequency
         self.max_categories = max_categories
+        self.device = device
 
     def fit(self, X, y=None):
         return _ENCODE_CALL(self, "fit", (X, y), _ENCODE_CONTEXT)
@@ -642,10 +646,13 @@ class OneHotEncoder(_PrepBase):
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _sklearn_input_tags = {"allow_nan": True, "categorical": True}
     _parameters = ("categories", "drop", "sparse_output", "dtype", "handle_unknown", "min_frequency",
-                   "max_categories", "feature_name_combiner")
+                   "max_categories", "feature_name_combiner", "device")
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
     def __init__(self, *, categories="auto", drop=None, sparse_output=True, dtype=None, handle_unknown="error",
-                 min_frequency=None, max_categories=None, feature_name_combiner="concat"):
+                 min_frequency=None, max_categories=None, feature_name_combiner="concat", device=None):
         self.categories = categories
         self.drop = drop
         self.sparse_output = sparse_output
@@ -654,6 +661,7 @@ class OneHotEncoder(_PrepBase):
         self.min_frequency = min_frequency
         self.max_categories = max_categories
         self.feature_name_combiner = feature_name_combiner
+        self.device = device
 
     def fit(self, X, y=None):
         return _ENCODE_CALL(self, "fit", (X, y), _ENCODE_CONTEXT)
@@ -738,16 +746,20 @@ class TargetEncoder(_PrepBase):
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _sklearn_input_tags = {"allow_nan": True, "categorical": True}
     _sklearn_target_tags = {"required": True}
-    _parameters = ("categories", "target_type", "smooth", "cv", "shuffle", "random_state")
+    _parameters = ("categories", "target_type", "smooth", "cv", "shuffle", "random_state", "device")
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
     def __init__(self, categories="auto", target_type="auto", smooth="auto", cv=5, shuffle=True,
-                 random_state=None):
+                 random_state=None, device=None):
         self.categories = categories
         self.target_type = target_type
         self.smooth = smooth
         self.cv = cv
         self.shuffle = shuffle
         self.random_state = random_state
+        self.device = device
 
     def fit(self, X, y):
         return _ENCODE_CALL(self, "fit", (X, y), _ENCODE_CONTEXT)
@@ -818,16 +830,21 @@ class SimpleImputer(_PrepBase):
     _mojolearn_native_public = True
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _sklearn_input_tags = {"allow_nan": True}
-    _parameters = ("missing_values", "strategy", "fill_value", "copy", "add_indicator", "keep_empty_features")
+    _parameters = ("missing_values", "strategy", "fill_value", "copy", "add_indicator", "keep_empty_features",
+                   "device")
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
     def __init__(self, *, missing_values=float("nan"), strategy="mean", fill_value=None, copy=True,
-                 add_indicator=False, keep_empty_features=False):
+                 add_indicator=False, keep_empty_features=False, device=None):
         self.missing_values = missing_values
         self.strategy = strategy
         self.fill_value = fill_value
         self.copy = copy
         self.add_indicator = add_indicator
         self.keep_empty_features = keep_empty_features
+        self.device = device
 
     def fit(self, X, y=None):
         return _ENCODE_CALL(self, "fit", (X, y), _ENCODE_CONTEXT)
@@ -901,10 +918,13 @@ class KBinsDiscretizer(_PrepBase):
     # One native call per public method; the native owner runs the whole
     # lifecycle (bindings/public_lifecycle_owner_door.mojo), so no `_mode` wrappers.
     _mojolearn_native_public = True
-    _parameters = ("n_bins", "encode", "strategy", "quantile_method", "dtype", "subsample", "random_state")
+    _parameters = ("n_bins", "encode", "strategy", "quantile_method", "dtype", "subsample", "random_state", "device")
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
     def __init__(self, n_bins=5, *, encode="onehot", strategy="quantile", quantile_method="averaged_inverted_cdf",
-                 dtype=None, subsample=200_000, random_state=None):
+                 dtype=None, subsample=200_000, random_state=None, device=None):
         self.n_bins = n_bins
         self.encode = encode
         self.strategy = strategy
@@ -912,6 +932,7 @@ class KBinsDiscretizer(_PrepBase):
         self.dtype = dtype
         self.subsample = subsample
         self.random_state = random_state
+        self.device = device
 
     def fit(self, X, y=None, sample_weight=None):
         return _ENCODE_CALL(self, "fit", (X, y, sample_weight), _ENCODE_CONTEXT)
@@ -1852,11 +1873,14 @@ class SplineTransformer(_PrepBase):
     # lifecycle (bindings/public_lifecycle_owner_door.mojo), so no `_mode` wrappers.
     _mojolearn_native_public = True
     _parameters = ("n_knots", "degree", "knots", "extrapolation", "include_bias", "order", "handle_missing",
-                   "sparse_output")
+                   "sparse_output", "device")
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
     _EXTRAP = {"constant": 0, "continue": 1, "error": 1, "linear": 2, "periodic": 3}
 
     def __init__(self, n_knots=5, degree=3, *, knots="uniform", extrapolation="constant", include_bias=True,
-                 order="C", handle_missing="error", sparse_output=False):
+                 order="C", handle_missing="error", sparse_output=False, device=None):
         self.n_knots = n_knots
         self.degree = degree
         self.knots = knots
@@ -1865,6 +1889,7 @@ class SplineTransformer(_PrepBase):
         self.order = order
         self.handle_missing = handle_missing
         self.sparse_output = sparse_output
+        self.device = device
 
 
     #: handle_missing='zeros' takes NaN (its rows' spline features are 0): a
@@ -1968,7 +1993,13 @@ class LabelEncoder(_PrepBase):
     # scikit-learn tags: transforms a 1-D label vector, not an X matrix
     _sklearn_input_tags = {"one_d_array": True, "two_d_array": False}
     _sklearn_target_tags = {"one_d_labels": True}
-    _parameters = ()
+    _parameters = ("device",)
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
+
+    def __init__(self, *, device=None):
+        self.device = device
 
     def fit(self, y):
         return _ENCODE_CALL(self, "fit", (y,), _ENCODE_CONTEXT)
@@ -2034,12 +2065,16 @@ class LabelBinarizer(_PrepBase):
     # scikit-learn tags: transforms a 1-D label vector, not an X matrix
     _sklearn_input_tags = {"one_d_array": True, "two_d_array": False}
     _sklearn_target_tags = {"one_d_labels": True}
-    _parameters = ("neg_label", "pos_label", "sparse_output")
+    _parameters = ("neg_label", "pos_label", "sparse_output", "device")
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
-    def __init__(self, *, neg_label=0, pos_label=1, sparse_output=False):
+    def __init__(self, *, neg_label=0, pos_label=1, sparse_output=False, device=None):
         self.neg_label = neg_label
         self.pos_label = pos_label
         self.sparse_output = sparse_output
+        self.device = device
 
     def fit(self, y):
         return _ENCODE_CALL(self, "fit", (y,), _ENCODE_CONTEXT)
@@ -2096,11 +2131,15 @@ class MultiLabelBinarizer(_PrepBase):
     # scikit-learn tags: transforms label collections, not an X matrix
     _sklearn_input_tags = {"two_d_array": False}
     _sklearn_target_tags = {"two_d_labels": True}
-    _parameters = ("classes", "sparse_output")
+    _parameters = ("classes", "sparse_output", "device")
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
-    def __init__(self, *, classes=None, sparse_output=False):
+    def __init__(self, *, classes=None, sparse_output=False, device=None):
         self.classes = classes
         self.sparse_output = sparse_output
+        self.device = device
 
     def fit(self, y):
         return _ENCODE_CALL(self, "fit", (y,), _ENCODE_CONTEXT)

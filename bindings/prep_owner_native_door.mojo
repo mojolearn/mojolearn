@@ -20,6 +20,7 @@ from bindings.py_balanced import py_call, py_type, py_get
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.prep_encode_native_door import prep_encode_c, prep_encode_scores_call
 from bindings.prep_labels_native_door import prep_labels_call
+from bindings.prep_owner_route_unpack import prep_route_context
 from bindings.prep_iterimp_native_door import prep_iterimp_call
 from bindings.prep_select_native_door import prep_rfe_call, prep_mutual_info_call
 from bindings.prep_composition_lifecycle_door import composition_before, composition_after_fit
@@ -99,15 +100,23 @@ def prep_owner_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObje
             # their input is y, so no X table checks.
             var public = (op == PREP_OPN_FIT or op == PREP_OPN_FIT_TRANSFORM or op == PREP_OPN_TRANSFORM
                           or op == PREP_OPN_INVERSE_TRANSFORM)
-            var depth = lifecycle_begin(model, operation, args[0], False, False, True, context) if public else 0
+            # The connected context of this estimator's device route (one
+            # record read and one pointer compare; resolved once per
+            # estimator, bindings/prep_owner_route_unpack.mojo). The label
+            # owner reads no `device`.
+            var run = prep_route_context(model, context)
+            if run is not context:
+                # the CPU context beside a device set: its own NumPy cells
+                classical_connect_numpy(run)
+            var depth = lifecycle_begin(model, operation, args[0], False, False, True, run) if public else 0
             try:
-                result = prep_labels_call(model, kind, op, operation, args, context)
+                result = prep_labels_call(model, kind, op, operation, args, run)
             finally:
                 if public:
                     lifecycle_end(model, operation, depth)
             if public:
-                lifecycle_complete(model, operation, PythonObject(None), False, context)
-                result = lifecycle_result(model, operation, result, "", context)
+                lifecycle_complete(model, operation, PythonObject(None), False, run)
+                result = lifecycle_result(model, operation, result, "", run)
         elif kind == "iterative_imputer":
             var prepared = composition_before(model, kind, op, operation, args, context)
             result = prep_iterimp_call(model, op, operation, prepared, context)
