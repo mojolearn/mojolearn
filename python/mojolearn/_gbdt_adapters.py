@@ -315,6 +315,8 @@ class GradientBoostingRegressor(_GBDTAdapter):
     """
     _loss = 'RMSE'
     _estimator_type = 'regressor'
+    # The native member (family 16 Gbdt, kind 2; core/gbdt_member.mojo).
+    _mojolearn_member = (16, 2)
 
     def fit(self, X, y, sample_weight=None, eval_set=None):
         """Fit the regressor.
