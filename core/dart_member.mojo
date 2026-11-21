@@ -780,6 +780,11 @@ def _import(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin]) ra
 
 
 def _capabilities(classifier: Bool) -> Int:
+    """No `MEMBER_CAN_TEST_ROWS`: the fit tests X at the x_trees open
+    (xtrees/dart_host.mojo:125, xtrees/dart_device.mojo:429) and y at
+    `dart_starts`, but the predict ops (XD_PREDICT, XD_FOREST_PREDICT) do
+    not test X, and a fit of zero trees opens no session. No sample weight:
+    the estimator's fit takes none."""
     var mask = MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_DECISION | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
     if classifier:
         mask |= MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_SCORE | MEMBER_CAN_CLASSIFIER
@@ -804,21 +809,34 @@ def _member(operation: Int, address: Int) raises -> Int:
         call[].state = 0
         return 0
     if operation == MEMBER_OP_OUTPUTS:
+        # With a state the state answers; with none, the kind word of the NEW
+        # parameters (word 0) and the caller's `call.classes` (item 10).
         var classes = call[].classes
-        var classifier = True
+        var classifier: Bool
         if call[].state != 0:
             var known = _SlotPtr(unsafe_from_address=_lookup(call[].state, False))
             classifier = known[].classifier
             if known[].fitted or known[].classes > 0:
                 classes = known[].classes
+        else:
+            if not call[].params or call[].param_count < 1:
+                raise Error("member ABI: a DART member answers OUTPUTS without a state from its parameter words")
+            classifier = _F64P(unsafe_from_address=call[].params)[0] == 0.0
         call[].classes = classes
         var multi = classifier and classes > 2
         if call[].flags == MEMBER_OP_PREDICT_PROBA:
             call[].out_cols = classes
+            if classifier:
+                call[].out_dtype = MEMBER_F64
         elif call[].flags == MEMBER_OP_DECISION:
             call[].out_cols = classes if multi else 1
+            call[].out_dtype = MEMBER_F64
         else:
             call[].out_cols = 1
+            # predict: int32 codes; a regressor writes float64 or float32
+            # (`_predict`): float32 is said, the type callers place.
+            if call[].flags == MEMBER_OP_PREDICT:
+                call[].out_dtype = MEMBER_I32 if classifier else MEMBER_F32
         return 0
     var slot = _SlotPtr(unsafe_from_address=_lookup(call[].state, False))
     if operation == MEMBER_OP_FIT:

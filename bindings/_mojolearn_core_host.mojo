@@ -81,7 +81,6 @@ comparison and one narrowing per kept value, no fold to sabotage.
 from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from bindings.parallel_base_entry_host import publish_parallel_base_host
 from bindings.msel_host_pack import (
-    msel_free_binding,
     msel_live_binding,
 )
 # lane calltable-msel: the same model-selection helpers as one native entry
@@ -179,7 +178,6 @@ from core.neighbors_member import neighbors_member_publish
 from bindings.py_balanced import py_setattr, py_setitem
 from core.activity_record import ACTIVITY_KIND_LAUNCH
 from core.launch_log import activity_begin, activity_end
-from core.sha256_file import sha256_file
 from core.base_helpers_host import publish_base_helpers_host
 from cluster.host.kmeans_oracle import KMEANS_ORACLE_HOST_SABOTAGE
 from core.knn_host_predict import KNN_HOST_SABOTAGE
@@ -326,19 +324,10 @@ def activity_end_binding() raises -> PythonObject:
     return record
 
 
-# The fitted-state hash (lane feat-reproduce, 2026-11-20): verification
-# tooling's one native digest of a saved model file. A receipt
-# (`estimator.receipt`) and `python -m mojolearn reproduce` save the fitted
-# model with the estimator's own native save and hand the file's path here;
-# the bytes are read and hashed in Mojo (core/sha256_file.mojo, the SHA-256
-# the stored records already use). No product call reaches it.
-
-
-def state_file_sha256_binding(path: PythonObject) raises -> PythonObject:
-    """SHA-256 of the file at `path`, 64 lowercase hex digits. Serial by
-    nature: SHA-256 chains every block on the one before it, so one file is
-    one stream; it runs on the calling thread and rents nothing."""
-    return PythonObject(sha256_file(String(py=path)))
+# TOMBSTONE: `state_file_sha256` (lane feat-reproduce, 2026-11-20: the SHA-256 of a saved model file, the
+# fitted-state hash of `estimator.receipt` / `python -m mojolearn reproduce`) deleted 2026-11-21 by lane digest with the
+# receipt and reproduce feature (Andrew: a user fits and compares `model.digest_`, bindings/fitted_digest_door.mojo).
+# Code recoverable at d1f505845c.
 
 
 # The base binding's names, same contract.
@@ -1072,7 +1061,6 @@ def build__mojolearn_core_host() -> PythonObject:
         module.def_function[core_host_sabotage_binding]("core_host_sabotage")
         module.def_function[activity_begin_binding]("activity_begin")
         module.def_function[activity_end_binding]("activity_end")
-        module.def_function[state_file_sha256_binding]("state_file_sha256")
         module.def_function[mojolearn_vendor_binding]("mojolearn_vendor")
         module.def_function[mojolearn_numeric_mode_binding]("mojolearn_numeric_mode")
         module.def_function[mojolearn_mode_policy_mask_binding]("mojolearn_mode_policy_mask")
@@ -1102,7 +1090,6 @@ def build__mojolearn_core_host() -> PythonObject:
         # lane calltable-msel: the model-selection helper table, for the
         # native model-selection doors in another extension module.
         publish_msel_helpers_host()
-        module.def_function[msel_free_binding]("msel_free")
         module.def_function[msel_live_binding]("msel_live")
         module.def_function[argmax_rows_f32_binding]("argmax_rows_f32")
         module.def_function[argmax_rows_f64_binding]("argmax_rows_f64")

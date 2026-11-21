@@ -480,17 +480,43 @@ def _import(slot: _SlotP, call: _CallP) raises:
     slot[].fitted = True
 
 
-def _outputs(slot: _SlotP, call: _CallP):
+def _outputs(call: _CallP) raises:
+    """OUTPUTS with or without a state (item 10): the classifier's predict
+    one int32 code column, predict_proba float32 x classes; the regressor's
+    predict float32 x outputs (the fitted state's, else the caller's
+    `y.cols`) and score one value. Another operation is refused."""
     var asked = call[].flags
-    var outputs = Int(slot[].scalars[3]) if slot[].fitted else 0
-    var classes = Int(slot[].scalars[4]) if slot[].fitted else call[].classes
-    call[].classes = classes if slot[].classifier else 0
-    if slot[].classifier:
-        call[].out_cols = classes if asked == MEMBER_OP_PREDICT_PROBA else 1
-    elif asked == MEMBER_OP_SCORE:
-        call[].out_cols = 1
+    var classifier: Bool
+    var outputs = max(1, call[].y.cols)
+    var classes = call[].classes
+    if call[].state != 0:
+        var slot = _SlotP(unsafe_from_address=_lookup(call[].state, False))
+        classifier = slot[].classifier
+        if slot[].fitted:
+            outputs = Int(slot[].scalars[3])
+            classes = Int(slot[].scalars[4])
+    elif call[].param_count == _WORDS and call[].params:
+        classifier = _F64P(unsafe_from_address=call[].params)[0] == 1.0
     else:
+        raise Error("member ABI: a recurrent member's OUTPUTS without a state needs its NEW words")
+    call[].classes = classes if classifier else 0
+    if classifier:
+        if asked == MEMBER_OP_PREDICT:
+            call[].out_cols = 1
+            call[].out_dtype = MEMBER_I32
+        elif asked == MEMBER_OP_PREDICT_PROBA:
+            call[].out_cols = classes
+            call[].out_dtype = MEMBER_F32
+        else:
+            member_unsupported("a recurrent classifier member", asked)
+        return
+    if asked == MEMBER_OP_SCORE:
+        call[].out_cols = 1
+    elif asked == MEMBER_OP_PREDICT:
         call[].out_cols = outputs
+        call[].out_dtype = MEMBER_F32
+    else:
+        member_unsupported("a recurrent regressor member", asked)
 
 
 def _capabilities(classifier: Bool) -> Int:
@@ -519,21 +545,17 @@ def _sequence_member(operation: Int, address: Int) raises -> Int:
     var call = _CallP(unsafe_from_address=address)
     if operation == MEMBER_OP_CAPABILITIES:
         if call[].state == 0:
+            # Kind-exact from the NEW words when given (item 17).
+            if call[].param_count == _WORDS and call[].params:
+                return _capabilities(_F64P(unsafe_from_address=call[].params)[0] == 1.0)
             return _capabilities(False) | _capabilities(True)
         var probe = _SlotP(unsafe_from_address=_lookup(call[].state, False))
         return _capabilities(probe[].classifier)
     if operation == MEMBER_OP_NEW:
         _new(call)
         return 0
-    if operation == MEMBER_OP_OUTPUTS and call[].state == 0:
-        # No state: from the kind word and the shape words.
-        var w = _F64P(unsafe_from_address=call[].params)
-        var classifier = call[].param_count == _WORDS and w[0] == 1.0
-        if classifier:
-            call[].out_cols = call[].classes if call[].flags == MEMBER_OP_PREDICT_PROBA else 1
-        else:
-            call[].classes = 0
-            call[].out_cols = 1 if call[].flags == MEMBER_OP_SCORE else max(1, call[].y.cols)
+    if operation == MEMBER_OP_OUTPUTS:
+        _outputs(call)
         return 0
     if operation == MEMBER_OP_FREE:
         _ = _lookup(call[].state, True)
@@ -548,8 +570,6 @@ def _sequence_member(operation: Int, address: Int) raises -> Int:
         _proba(slot, call)
     elif operation == MEMBER_OP_SCORE:
         _score(slot, call)
-    elif operation == MEMBER_OP_OUTPUTS:
-        _outputs(slot, call)
     elif operation == MEMBER_OP_EXPORT:
         _export(slot, call)
     elif operation == MEMBER_OP_IMPORT:

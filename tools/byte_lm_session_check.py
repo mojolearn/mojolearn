@@ -231,10 +231,34 @@ def main():
     other_ids = np.zeros((1, 6), np.int32)
     assert f32(first.evaluate(other_ids)) == f32(fresh.evaluate(other_ids))
     checks.append('shape-changing restore and evaluation')
-    # The signed-zero optimizer edge wrote `-0.0` into the trainer's Python-held `_state['config']` under an
-    # open session. The optimizer scalars now live in the native state owner and change only through
-    # `load_state_dict()`, which drops the session, so that mismatch can no longer be produced from Python.
-    for trainer in (first, second, continued, from_bytes, control, fresh):
+    # Signed-zero optimizer edge (lane fx-leftovers item 5). It used to write `-0.0` into the Python-held
+    # `_state['config']` under an open session; the optimizer scalars now live in the native state owner and change
+    # only through `load_state_dict()`, which drops the session. The resident admission's by-bits rule (-0.0 is not
+    # 0.0, for every scalar, device and host session forms) is checked natively by
+    # training/checks/byte_lm_optimizer_bits_check.mojo. Here, through the supported entries: a restored -0.0
+    # beta1 survives as -0.0 (not normalized to 0.0), the restore drops the open session, the next call opens one
+    # from the -0.0 state, and the call after that is admitted by that session and keeps it.
+    import math
+    edge = Trainer(parameters, shape=shape, resident=True, betas=(0., .999),
+                   data_schedule={'fixture': 'signed-zero-config'})
+    edge.evaluate(batches[0])
+    owner = edge._session_info()['session_id']
+    assert owner is not None
+    state = edge.export_state()
+    assert math.copysign(1.0, state['config']['beta1']) == 1.0
+    state['config']['beta1'] = -0.0
+    edge.load_state_dict(state)
+    assert edge._session_info()['session_id'] is None, 'a restored optimizer configuration kept the old session'
+    restored = edge._state_metadata()['config']['beta1']
+    assert restored == 0.0 and math.copysign(1.0, restored) == -1.0, 'restore normalized -0.0 beta1 to %r' % restored
+    edge.evaluate(batches[0])
+    reopened = edge._session_info()['session_id']
+    assert reopened is not None and reopened != owner
+    edge.evaluate(batches[0])
+    assert edge._session_info()['session_id'] == reopened, 'the -0.0 session refused its own configuration'
+    assert math.copysign(1.0, edge.export_state()['config']['beta1']) == -1.0
+    checks.append('optimizer signed zero survives restore; restore drops the session; the -0.0 session is reused')
+    for trainer in (edge, first, second, continued, from_bytes, control, fresh):
         trainer.close()
     print(json.dumps({'passed': True, 'checks': checks, 'witnesses_fixture_a': witnesses,
                       'fault_inject_build': fault_inject,

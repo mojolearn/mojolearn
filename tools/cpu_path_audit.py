@@ -51,7 +51,7 @@ SUBMODULES = ("metrics", "linalg", "manifold", "resample", "hdbscan", "model_sel
 #: result records): listed in the table as NOT AN ALGORITHM, never probed.
 NOT_ALGORITHMS = {
     "__version__", "numeric_mode", "set_numeric_mode", "vendor", "gpu_arch", "gpu_arch_how",
-    "runtime_report", "check", "reproduce",
+    "runtime_report", "check",
     "Array", "ByteLanguageModelConfig", "LanguageModelConfig", "SambaConfig",
     "Mamba1State", "Mamba2State", "Mamba3State", "TransformerState",
     "ConstantKernel", "Matern", "RBF", "WhiteKernel",

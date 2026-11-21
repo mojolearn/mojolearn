@@ -951,7 +951,9 @@ def _import(slot: _Slot, call: _Call) raises:
 
 # ---------------------------------------------------------------- the entry
 def _capabilities(kind: Int) -> Int:
-    # A state's kind, or (kind -1, state 0) the family's union.
+    # A state's kind, or (kind -1, state 0) the family's union. No
+    # MEMBER_CAN_TEST_ROWS for any kind: X is admitted finite by the caller
+    # (module docstring); the variants, centroid and BGMM entries do not test it.
     if kind == _KIND_MEANSHIFT or kind == _KIND_AFFINITY:
         return MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
     var bgmm = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_SCORE_SAMPLES
@@ -1017,6 +1019,17 @@ def _xcluster_member(operation: Int, address: Int) raises -> Int:
             asked = MEMBER_OP_PREDICT_PROBA
         call[].out_cols = clusters if call[].flags == asked else 1
         call[].classes = 0
+        # predict: int32 cluster ids (every kind); transform (the k-means
+        # kinds) float32 distances; predict_proba and score_samples
+        # (BayesianGaussianMixture) float32. An unknown kind stays unsaid.
+        var op = call[].flags
+        if which >= 0:
+            if op == MEMBER_OP_PREDICT:
+                call[].out_dtype = MEMBER_I32
+            elif op == MEMBER_OP_TRANSFORM and _fixed_k(which):
+                call[].out_dtype = MEMBER_F32
+            elif (op == MEMBER_OP_PREDICT_PROBA or op == MEMBER_OP_SCORE_SAMPLES) and which == _KIND_BGMM:
+                call[].out_dtype = MEMBER_F32
         return 0
     var slot = _Slot(unsafe_from_address=_lookup(call[].state, False))
     var kind = slot[].kind

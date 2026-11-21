@@ -568,6 +568,9 @@ OD_TYPES = ("None", "IncToDec", "Iter")
 #   64 (cuda/train_lib/train.cpp:115-118), halved while block*128 > rows (dynamic_boosting.h:115-128).
 # - permutation_count: boosting_options.cpp:14 (UpdateGpuSpecificDefaults).
 # - ctr_estimation_permutation_id: doc_parallel_boosting.h:101-103.
+# - max_ctr_complexity: cat_feature_options.cpp:231 (their default 4). Ours stays 1 until the NVIDIA A/B
+#   of the tree-CTR route against the fused per-tree path is recorded (docs/apple-fast/EXPERIMENTS.md,
+#   the max_ctr_complexity row); gbdt/methods/tree_ctr_search.mojo and gbdt/host/gbdt_oracle_tree_ctr.mojo.
 # - model_: the text format check-model-io gates bit-for-bit; floats carry hex bits beside the decimal
 #   because String(Float32) on this toolchain is one ULP wrong for 0.46% of values.
 # - loss_curve_: CatBoost's functionValue negated and divided by the row count.
@@ -790,6 +793,16 @@ class GradientBoosting(_NumericModeMixin):
     fold_permutation_block : int or None, default None
         Ordered only. None or 0 means 64 from 50,000 rows up (halved while
         ``block * 128 > rows``) and 1 below 50,000 rows.
+    max_ctr_complexity : int, default 1
+        The largest number of features one feature combination may hold.
+        Above 1, each tree combines every categorical feature with the
+        features its earlier splits already use (categorical features and
+        numeric splits) and may split on the combination, so the model
+        learns interactions between categorical features without a
+        hand-built column. 1 builds no combinations. A value above 1 needs
+        ``cat_features``, ``grow_policy='SymmetricTree'``,
+        ``use_pointwise_searcher=False`` and ``feature_fraction=1.0``, and
+        is refused otherwise. CatBoost's default for this parameter is 4.
     device : {None, "gpu", "cpu"}, default=None
         Where the model is fitted and predicts. None uses this
         installation's device, ``"cpu"`` runs on the CPU and ``"gpu"``
@@ -916,6 +929,7 @@ class GradientBoosting(_NumericModeMixin):
         boosting_type=None,
         fold_len_multiplier=2.0,
         fold_permutation_block=None,
+        max_ctr_complexity=1,
         *,
         numeric_mode=None,
         device=None,
@@ -936,7 +950,8 @@ class GradientBoosting(_NumericModeMixin):
             score_function, nan_mode, random_strength, use_pointwise_searcher, boost_from_average,
             border_build_max_samples, class_weights, permutation_count, ctr_estimation_permutation_id,
             grow_policy, max_leaves, min_data_in_leaf, min_split_gain, min_child_hessian, feature_fraction,
-            feature_border_type, boosting_type, fold_len_multiplier, fold_permutation_block, device,
+            feature_border_type, boosting_type, fold_len_multiplier, fold_permutation_block,
+            max_ctr_complexity, device,
             numeric_mode, aliases,
         ), _TREES_CONTEXT)
 
@@ -946,7 +961,7 @@ class GradientBoosting(_NumericModeMixin):
     # the same words. A silent reordering here is a wrong answer, not a
     # failure, which is why it is spelled out in both places.
     #
-    # SLOTS 0..34 ARE FIXED AND SLOT 34 IS A COUNT: everything after it is
+    # SLOTS 0..35 ARE FIXED AND SLOT 35 IS A COUNT: everything after it is
     # the class-weight tail, and the binding checks the length against it
     # rather than trusting it. Optional ordered tails AFTER the counted
     # weights are min_split_gain, min_child_hessian, then feature_fraction.
@@ -1200,7 +1215,7 @@ _native_archive_bridge.register(GradientBoosting, _MODEL_FORMAT, (
 
 #: The `trees_gbdt_init` argument order: the constructor's parameters with
 #: `device` last; `numeric_mode` follows them in the call.
-_INIT_NAMES = ('loss', 'n_estimators', 'max_depth', 'learning_rate', 'l2_leaf_reg', 'border_count', 'random_state', 'loss_alpha', 'loss_q', 'loss_delta', 'loss_variance_power', 'loss_border', 'leaf_estimation_method', 'leaf_estimation_iterations', 'bootstrap_type', 'bagging_temperature', 'subsample', 'cat_features', 'one_hot_features', 'od_type', 'od_pvalue', 'od_wait', 'use_best_model', 'best_model_min_trees', 'score_function', 'nan_mode', 'random_strength', 'use_pointwise_searcher', 'boost_from_average', 'border_build_max_samples', 'class_weights', 'permutation_count', 'ctr_estimation_permutation_id', 'grow_policy', 'max_leaves', 'min_data_in_leaf', 'min_split_gain', 'min_child_hessian', 'feature_fraction', 'feature_border_type', 'boosting_type', 'fold_len_multiplier', 'fold_permutation_block', 'device')
+_INIT_NAMES = ('loss', 'n_estimators', 'max_depth', 'learning_rate', 'l2_leaf_reg', 'border_count', 'random_state', 'loss_alpha', 'loss_q', 'loss_delta', 'loss_variance_power', 'loss_border', 'leaf_estimation_method', 'leaf_estimation_iterations', 'bootstrap_type', 'bagging_temperature', 'subsample', 'cat_features', 'one_hot_features', 'od_type', 'od_pvalue', 'od_wait', 'use_best_model', 'best_model_min_trees', 'score_function', 'nan_mode', 'random_strength', 'use_pointwise_searcher', 'boost_from_average', 'border_build_max_samples', 'class_weights', 'permutation_count', 'ctr_estimation_permutation_id', 'grow_policy', 'max_leaves', 'min_data_in_leaf', 'min_split_gain', 'min_child_hessian', 'feature_fraction', 'feature_border_type', 'boosting_type', 'fold_len_multiplier', 'fold_permutation_block', 'max_ctr_complexity', 'device')
 
 # The fixed option tables `fit` reads natively (bindings/trees_public_gbdt_fit_door.mojo).
 _native_trees_bridge.register(GradientBoosting, "gbdt", trees_gbdt_tables=dict(

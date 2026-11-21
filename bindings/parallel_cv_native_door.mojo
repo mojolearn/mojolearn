@@ -24,7 +24,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.native_codec_door import codec_initialize
 from bindings.native_process_pool_door import (
     process_initialize, process_pool_create, process_pool_start, process_pool_map_typed, process_pool_close,
-    process_worker_connect, process_worker_next, process_worker_reply, process_worker_refuse, WorkerTurn,
+    process_worker_connect, process_worker_next, process_worker_value, process_worker_reply, process_worker_refuse, WorkerTurn,
     process_pool_pids,
 )
 from bindings.native_transport_door import transport_close
@@ -186,9 +186,9 @@ def _worker_request(socket: PythonObject, turn: WorkerTurn, mut inventory: Pytho
                 inventory = native_worker_inventory(String(py_item(metadata, nk[].k_vendor)), py_item(metadata, nk[].k_environ))
             result = inventory
         elif code == CV_REQUEST_DATA:
-            result = _worker_data(turn.value, rows, context)
+            result = _worker_data(process_worker_value(turn), rows, context)
         else:
-            result = _fold_rows(typed, turn.value, rows, inventory, context)
+            result = _fold_rows(typed, process_worker_value(turn), rows, inventory, context)
         process_worker_reply(socket, sequence, result)
     except error:
         process_worker_refuse(socket, sequence, _worker_error(error, context))

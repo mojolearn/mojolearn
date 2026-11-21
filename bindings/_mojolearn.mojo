@@ -167,7 +167,6 @@ from bindings.msel_device_unpack import (
     kmeans_transform_fold_binding,
 )
 from bindings.msel_device_pack import (
-    msel_free_binding,
     msel_live_binding,
 )
 # lane calltable-msel: the same model-selection helpers as one native entry
@@ -1938,7 +1937,6 @@ def build__mojolearn() -> PythonObject:
         # lane calltable-msel: the model-selection helper table, for the
         # native model-selection doors in another extension module.
         publish_msel_helpers_device()
-        m.def_function[msel_free_binding]("msel_free")
         m.def_function[msel_live_binding]("msel_live")
         m.def_function[logistic_fold_native_api_v1_binding]("logistic_fold_native_api_v1")
         m.def_function[pca_fold_native_api_v1_binding]("pca_fold_native_api_v1")

@@ -405,17 +405,37 @@ def _import(slot: _SlotP, call: _CallP) raises:
     slot[].fitted = True
 
 
-def _outputs(slot: _SlotP, call: _CallP) raises:
+def _outputs(call: _CallP) raises:
+    """OUTPUTS with or without a state (item 10), float32 for every
+    operation: predict = targets, transform = components, inverse_transform
+    = features. A fitted state answers its own; otherwise the NEW words'
+    n_components and the caller's shape words (`y.cols`, `x.cols`) do.
+    Another operation is refused, never sized."""
     var asked = call[].flags
-    call[].classes = 0
-    if not slot[].fitted:
-        call[].out_cols = 0
-    elif asked == MEMBER_OP_TRANSFORM:
-        call[].out_cols = slot[].cols[_I_XROT]
-    elif asked == MEMBER_OP_INVERSE_TRANSFORM:
-        call[].out_cols = Int(slot[].scalars[1])
+    var targets = max(1, call[].y.cols)
+    var features = call[].x.cols
+    var components = 0
+    if call[].state != 0:
+        var slot = _SlotP(unsafe_from_address=_lookup(call[].state, False))
+        components = Int(slot[].words[1])
+        if slot[].fitted:
+            targets = Int(slot[].scalars[2])
+            features = Int(slot[].scalars[1])
+            components = slot[].cols[_I_XROT]
+    elif call[].param_count == 8 and call[].params:
+        components = Int(_F64P(unsafe_from_address=call[].params)[1])
     else:
-        call[].out_cols = Int(slot[].scalars[2])
+        raise Error("member ABI: a PLS member's OUTPUTS without a state needs its NEW words")
+    call[].classes = 0
+    call[].out_dtype = MEMBER_F32
+    if asked == MEMBER_OP_PREDICT:
+        call[].out_cols = targets
+    elif asked == MEMBER_OP_TRANSFORM:
+        call[].out_cols = components
+    elif asked == MEMBER_OP_INVERSE_TRANSFORM:
+        call[].out_cols = features
+    else:
+        member_unsupported("a PLS member", asked)
 
 
 def _new(call: _CallP) raises:
@@ -441,13 +461,14 @@ def _pls_member(operation: Int, address: Int) raises -> Int:
         _ = _lookup(call[].state, True)
         call[].state = 0
         return 0
+    if operation == MEMBER_OP_OUTPUTS:
+        _outputs(call)
+        return 0
     var slot = _SlotP(unsafe_from_address=_lookup(call[].state, False))
     if operation == MEMBER_OP_FIT:
         _fit(slot, call)
     elif operation == MEMBER_OP_PREDICT or operation == MEMBER_OP_TRANSFORM or operation == MEMBER_OP_INVERSE_TRANSFORM:
         _query(slot, call, operation)
-    elif operation == MEMBER_OP_OUTPUTS:
-        _outputs(slot, call)
     elif operation == MEMBER_OP_EXPORT:
         _export(slot, call)
     elif operation == MEMBER_OP_IMPORT:

@@ -33,7 +33,7 @@ PUBLIC_TESTS = {
     "test_cache_lifecycle_native.py": "Public DeviceCache.live from the store resolved at construction, foreign-object refusal and context entry",
     "test_cache_upload_native.py": "Public DeviceCache.id_of real uploads, native scalar key metadata, retained owners, refusals and concurrent publication",
     "test_cache_release_native.py": "Public DeviceCache constructor/reinitialization, release, close and context exit, and resident scope enter/exit, with first-failure error order and owners released after every free",
-    "test_resident_lifecycle_native.py": "model_selection resident constructor/reinitialization, take, release, close and context exit for NumPy, pandas and Arrow-backed pandas owners, with first-failure error order",
+    "test_resident_lifecycle_native.py": "model_selection resident constructor/reinitialization, take, release, close and context exit for NumPy, pandas and Arrow-backed pandas owners (the first-failure error order is checked natively: checks/native_tests/arena_state_suite.mojo)",
     "test_archive_unicode_native.py": "Public archive strict Unicode errors, loaded state, partial save bytes and connected codec identity refusals",
     "test_classical_archive_reader_native.py": "Public linear archive loading, compressed state, native helper identities, file errors and input/output ownership",
     "test_host_density_save_native.py": "Public host KDE and IsolationForest save bytes, native configuration, partial state, loaded state and callback refusals",

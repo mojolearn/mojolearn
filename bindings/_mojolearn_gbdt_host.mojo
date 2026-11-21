@@ -26,7 +26,7 @@ recorded GPU predictions, over the model text parsed here.
 THE EXPORTED NAMES ARE THE GPU BINDING'S NAMES for what this covers, so
 `python/mojolearn/ensemble.py` runs unchanged on a CPU-only install through
 `_backend._HOST_MODULES` (`"_mojolearn_gbdt": "_mojolearn_gbdt_host"`):
-`gbdt_fit` (the same eight arguments, the same 35-slot params list with its
+`gbdt_fit` (the same eight arguments, the same 36-slot params list with its
 counted class-weight tail and optional float tail, the same four strings,
 the same five-element return), `gbdt_predict` and `gbdt_model_dim` (the
 model text in, as `bindings/_mojolearn_gbdt.mojo:410-450`), `gbdt_sigmoid_pair`

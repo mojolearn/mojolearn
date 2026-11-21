@@ -16,7 +16,7 @@ FAMILIES = [
     ("runtime", "Runtime and numeric modes",
      "Process-wide numeric mode, device and backend queries.",
      ("mojolearn._backend", "mojolearn._numeric_profile"),
-     {"set_numeric_mode", "numeric_mode", "vendor", "gpu_arch", "gpu_arch_how", "__version__", "Array", "check", "reproduce"}),
+     {"set_numeric_mode", "numeric_mode", "vendor", "gpu_arch", "gpu_arch_how", "__version__", "Array", "check"}),
     ("boosting", "Gradient boosting", "Gradient-boosted decision trees: classification, regression and ranking losses.",
      ("mojolearn._gbdt_adapters", "mojolearn.gbdt"),
      {"GradientBoosting", "GradientBoostingClassifier", "GradientBoostingRegressor", "OrderedRMSE",

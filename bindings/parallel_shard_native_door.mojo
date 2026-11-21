@@ -49,7 +49,7 @@ from bindings.parallel_public_result_door import parallel_public_result
 from bindings.msel_member_device_unpack import member_says_cpu, member_multi_gpu_refusal
 from bindings.parallel_neighbor_worker_door import parallel_neighbor_worker, parallel_ivf_admit, neighbor_radius_rows
 from bindings.native_process_pool_door import (
-    process_worker_connect, process_worker_next, process_worker_reply, process_worker_refuse,
+    process_worker_connect, process_worker_next, process_worker_value, process_worker_reply, process_worker_refuse,
     process_pool_create, process_pool_close, process_pool_closed, process_pool_pids, process_pool_devices,
 )
 from bindings.native_transport_door import transport_close
@@ -1682,7 +1682,7 @@ def shard_worker(argv: PythonObject) raises:
                 # The typed request: one decode of the frame's words (a frame
                 # without request words is refused), then the code's branch.
                 var operation = shard_request_op(Int(turn.request.unsafe_ptr()), len(turn.request) * 8)
-                process_worker_reply(socket, turn.sequence, shard_worker_dispatch(operation, turn.value))
+                process_worker_reply(socket, turn.sequence, shard_worker_dispatch(operation, process_worker_value(turn)))
             except error:
                 process_worker_refuse(socket, turn.sequence, String(error))
     except error:

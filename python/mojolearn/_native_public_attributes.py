@@ -209,6 +209,17 @@ def connect_classes(package):
         context['svm_owner'] = (svm._NATIVE, svm._NATIVE_CONTEXT)
     from ._native_mode_properties import connect as connect_mode_properties
     connect_mode_properties(context, package)
+    # glue: `digest_`, the one property of the shared estimator base
+    # (_mode.CheckMixin), read as a native property recipe: the compiled
+    # fitted_digest operation of the saved-model owner. The kind is always
+    # registered, so the property never makes a class ineligible for its
+    # native attribute plan; without the saved-model owner the read refuses.
+    from . import _digest_fields
+    context['property_schemas'].setdefault(vars(_mode.CheckMixin)['digest_'], 'fitted_digest')
+    digest_entry, digest_context = _digest_fields.connect(_mode.CheckMixin)
+    if type(digest_entry) is BuiltinFunctionType:
+        context.setdefault('native_property_recipes', {}).setdefault('fitted_digest', dict(
+            entry=digest_entry, operation='fitted_digest', arguments=(), context=digest_context))
     archives = _archive_finalizers(package)
     prep_availability = _prep_availability(package, context['missing'])
     neighbor_availability = _neighbor_availability(package)

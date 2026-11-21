@@ -1992,9 +1992,6 @@ FAMILIES = (
             # lane fx-verify-trace: the activity record's switch and read-back
             # (verification tooling; core/activity_record.mojo)
             "activity_begin", "activity_end",
-            # lane feat-reproduce: the native digest of a saved model file (the
-            # fitted-state hash of a receipt; verification tooling)
-            "state_file_sha256",
             "knn_search", "knn_classify", "knn_regress", "kmeans_fit", "kmeans_predict", "kmeans_transform",
             "kmeans_native_api_v1",
             "radius_neighbors_count", "radius_neighbors_fill", "rbc_knn_search", "transpose_f32",
@@ -2017,7 +2014,8 @@ FAMILIES = (
             # fold-row gather, prediction scatter, proba column and forest
             # offset merge (bindings/msel_host_pack.mojo, the host column)
             # (msel_put and msel_take_rows deleted, arena unit E 2026-11-21: no caller)
-            "msel_free", "msel_live",
+            # (msel_free deleted, lane fx-leftovers 2026-11-21: the failure order is checked natively)
+            "msel_live",
             # lane p3 (2026-11-09): the fold store's free bytes (host column: -1)
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "unique_inverse", "arange_i64", "leave_range_i64",
