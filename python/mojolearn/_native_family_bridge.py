@@ -38,6 +38,23 @@ def cpu_scope_later(context, load=None):
         _CPU_LATER.append((context, load))
 
 
+def cpu_load_later(context, load):
+    """Run `load()` at the first device="cpu" admission beside a GPU set, or
+    now when that already happened: a family module's host-image load that
+    must not run at import (lane fx-audit item 9: `import mojolearn` on a GPU
+    box loads no host image until then). `context` is the family context
+    the loaded tables go into; it gets `device_cpu_connect` so an estimator
+    restored without construction connects the same way at its first CPU
+    route (`device_cpu_connect_late`). A CPU-only installation loads
+    nothing: its own images already are the CPU ones."""
+    # glue: import-time registration, once per family context
+    if _CPU_DONE:
+        load()
+    else:
+        _hold_cpu_connect(context)
+        _CPU_LATER.append((None, load))
+
+
 def _hold_cpu_connect(context):
     """Give a lazily connected family context `device_cpu_connect`
     (`connect_cpu`): a device="cpu" estimator restored without construction
@@ -84,6 +101,10 @@ def connect_cpu():
     _CPU_DONE = True
     from ._native_labels_bridge import cpu_scope
     for context, load in _CPU_LATER:  # glue: once, over the registered family contexts (at most a few)
+        if context is None:
+            # `cpu_load_later`: a host-image load, no label scope.
+            load()
+            continue
         if load is not None:
             load(context)
         cpu_scope(context)

@@ -265,8 +265,27 @@ _CPU_DEVICE_METRICS_HOST = "_mojolearn_x_metrics_host"
 
 
 def connect_cpu_device(context):
-    """Connect the CPU entry family of `device="cpu"` once, at import, beside
-    the device family (`context["classical_bindings"]`).
+    """Register the CPU entry family of `device="cpu"` beside the device
+    family (`context["classical_bindings"]`): its host images load at the
+    first device="cpu" admission beside a GPU set (fx-audit 9), never at
+    import (`_native_family_bridge.cpu_load_later`); an estimator restored
+    without construction connects it at its first CPU route
+    (providers/python/linear_route_boundary_door.mojo). Nothing in a CPU-only
+    process."""
+    # glue: import-time registration, once
+    if "classical_bindings" not in context or context["vendor"] == "cpu":
+        return
+    # The table is one dictionary made now and filled in place by the load:
+    # the family contexts copied from this one at import (decomposition, PCA,
+    # IPCA, TSVD: `dict(shared)`) hold the same dictionary, so they see it.
+    holder = context.setdefault("classical_cpu_bindings", {})
+    from ._native_family_bridge import cpu_load_later
+    cpu_load_later(context, lambda: _load_cpu_device(holder))
+
+
+def _load_cpu_device(holder):
+    """Connect the CPU entry family of `device="cpu"` once, into `holder`
+    (the context's `classical_cpu_bindings`), beside the device family.
 
     Each host binary publishes its native entry table when it initializes;
     the compiled owner resolves an estimator's route against the device
@@ -277,7 +296,7 @@ def connect_cpu_device(context):
     `device="cpu"` estimator first runs."""
     # glue: load the CPU images once and retain their canonical connection owners
     from . import _backend
-    if "classical_bindings" not in context or context["vendor"] == "cpu":
+    if "identical" in holder:
         return
     errors = (ImportError, AttributeError, TypeError, ValueError, RuntimeError)
     estimators, linear, decomp = _CPU_DEVICE_HOSTS
@@ -297,7 +316,7 @@ def connect_cpu_device(context):
             cpu["metrics"] = type(error).__name__ + ": " + str(error)
     except errors as error:
         cpu = type(error).__name__ + ": " + str(error)
-    context["classical_cpu_bindings"] = {"identical": cpu}
+    holder["identical"] = cpu
 
 
 def _layout(cls, attribute_descriptor):

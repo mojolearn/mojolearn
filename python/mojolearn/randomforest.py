@@ -271,6 +271,10 @@ _SAVE_SCHEMA = (
     ("forest_engine", _MODEL_FORMAT),
 )
 _native_archive_bridge.register(_RandomForestBase, _MODEL_FORMATS, _SAVE_SCHEMA)
+# `digest_`: the save schema's members, written once in _digest_fields so the
+# CPU twin HostForest is hashed by the same steps (fx-audit 32).
+from . import _digest_fields  # noqa: E402
+_digest_fields.schema(_RandomForestBase, _digest_fields.forest_steps(_MODEL_FORMAT, ("forest_engine", _MODEL_FORMAT)))
 
 
 # Maintainer notes (moved from the docstring): criteria cross as cuML's

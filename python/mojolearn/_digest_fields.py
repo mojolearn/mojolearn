@@ -197,6 +197,71 @@ def twin(cls, name):
         CANONICAL[cls] = name
 
 
+def twin_field(cls, field):
+    """Declare `cls` a CPU twin of several public classes: each instance is
+    hashed under the public class name its field `field` holds (the
+    `estimator` a saved file names; HostForest, HostGBDT)."""
+    CANONICAL[cls] = (field,)
+
+
+#: The groves suffix of a forest format (`<format>-parallel-groves-1`).
+GROVES_SUFFIX = "-parallel-groves-1"
+
+
+def forest_steps(fmt, engine):
+    """The digest steps of a forest saved in the format `fmt` (a random
+    forest, extra trees, or the CPU twin HostForest): the members `save`
+    writes that decide the answers. `engine` is the step that adds the
+    groves format and its numeric mode for a model predicting with the
+    'parallel_groves' engine (its fold order changes the answers' bits).
+    Not hashed: the fit settings an extra-trees file also records in `meta`
+    (`depth_cap_bound_`, `max_depth_resolved_`, `max_features_`), which no
+    prediction reads and a HostForest does not hold."""
+    return (
+        ("need", "_offsets", "RuntimeError", "this estimator is not fitted yet"),
+        ("format", "format", fmt),
+        ("estimator", "estimator"),
+        ("format", "device", "gpu"),
+        ("array", "offsets", "_offsets"),
+        ("array", "colid", "_colid"),
+        ("array", "quesval", "_quesval"),
+        ("array", "left_child", "_left_child"),
+        ("array", "leaves", "_leaves"),
+        ("i8", "meta", (("int", "n_features_in_"), ("int", "_n_trees"), ("int", "_num_outputs"))),
+        ("classes", "classes", "classes_"),
+        engine,
+    )
+
+
+def host_forest_engine(fmt):
+    """The `engine` step of `forest_steps` for a HostForest: it holds the
+    engine its file named (`_inference_engine`); a groves file is refused
+    at load unless it was saved under numeric_mode='identical'."""
+    return ("when", "_inference_engine", "parallel_groves",
+            (("format", "format", fmt + GROVES_SUFFIX), ("format", "numeric_mode", "identical")))
+
+
+def gbdt_steps(fmt):
+    """The digest steps of a gradient-boosting model saved in the format
+    `fmt` (GradientBoosting and the CPU twin HostGBDT): the model text, the
+    loss, the output shape, the bias and the category map. Not hashed: the
+    fit records `best_iteration_` and `stopped_early_`, which the file keeps
+    in `meta` but no prediction reads (the model text is already the model
+    that predicts)."""
+    return (
+        ("need", "model_", "AttributeError", "'{cls}' object has no attribute 'model_'"),
+        ("need_set", "model_", "RuntimeError", "mojolearn: digest_ before fit()"),
+        ("format", "format", fmt),
+        ("mode", "numeric_mode", "mojolearn: "),
+        ("estimator", "estimator"),
+        ("array", "loss", "loss"),
+        ("utf8", "model", "model_"),
+        ("i8", "meta", (("int", "n_features_in_"), ("int", "approx_dim_"), ("none", "n_classes_", -1))),
+        ("f8", "bias", (("float", "bias_"),)),
+        ("when_set", "category_map_", (("array", "category_map", "category_map_"),)),
+    )
+
+
 def layer(cls):
     """Declare `cls` a base class of layer objects (called once, where the
     layer classes are defined)."""

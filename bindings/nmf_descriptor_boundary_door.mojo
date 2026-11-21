@@ -22,6 +22,7 @@ from bindings.decomp_device_route_door import (
     decomp_route_expected_vendor, decomp_route_mode, DecompRoute,
 )
 from bindings.py_balanced import py_item
+from providers.python.device_route_boundary_door import device_cpu_connect_late
 
 
 comptime NMF_PROVIDER_PINS = SharedSlot[ProviderPins, "MojolearnNMFProviderPinsV1"]
@@ -67,6 +68,10 @@ def _nmf_route(model: PythonObject, fields: PythonObject, mode: PythonObject, co
     var table = PythonObject(None)
     if cpu_image:
         table = py_get(context, nk[].k_nmf_cpu_bindings)
+        # Connected at the first device="cpu" admission (fx-audit 9); an
+        # estimator restored without construction connects it here, once.
+        if table is None and device_cpu_connect_late(context):
+            table = py_get(context, nk[].k_nmf_cpu_bindings)
         if table is None:
             raise Error("ImportError: device='cpu' is not connected in this installation")
     else:

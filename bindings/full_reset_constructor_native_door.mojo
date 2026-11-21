@@ -32,7 +32,7 @@ from bindings.declared_params_native_door import _release as _declared_release
 from bindings.umap_parameters_native_door import umap_parameters_fields
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.optimizer_public_words_unpack import optimizer_python_error, PYTHON_ERROR_PENDING
-from providers.python.device_route_boundary_door import device_admit_class, device_route_clear
+from providers.python.device_route_boundary_door import device_admit_class
 
 
 def _quoted_names(names: PythonObject) raises -> String:
@@ -201,7 +201,8 @@ def _construct(model: PythonObject, positional: PythonObject, keywords: PythonOb
             device_admit_class(model, device, py_get(context["backend_fields"], "_CPU_ONLY") is not None,
                                py_get(context, "device_cpu"), b,
                                py_get(context, "device_cpu_connect"))
-            device_route_clear(model)
+            # The admission drops both held routes (fx-audit 29); the second
+            # drop that stood here is gone.
     if py_get(plan, "validation_kind") is not None and String(plan["validation_kind"]) == "umap":
         if py_contains(fields, "_parameters") or py_contains(fields, "_extras"):
             raise Error("TypeError: native UMAP construction refuses instance validation callbacks")

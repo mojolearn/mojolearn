@@ -7,7 +7,8 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.classical_attributes_door import classical_connect_numpy
 from core.shared_slot import SharedSlot
 from bindings.prep_keys_unpack import prep_keys
-from bindings.py_balanced import py_item
+from bindings.py_balanced import py_item, py_contains
+from providers.python.device_route_boundary_door import device_cpu_connect_late
 
 
 def _exact_dict(mapping: PythonObject, b: PythonObject) raises:
@@ -109,14 +110,33 @@ def _connection(source: PythonObject, b: PythonObject) raises -> PythonObject:
     return connection
 
 
+def _cpu_template_records(connection: PythonObject, b: PythonObject) raises -> PythonObject:
+    """The CPU template's records from the connection's cell (python/mojolearn/
+    _native_prep_stateless_bridge.py `_cpu_cell`): None in a CPU-only
+    process, the refusal text when the host x_prep image is not built, else
+    the frozen records. The cell is filled at the first device="cpu"
+    admission (fx-audit 9: never at import); an estimator restored without
+    construction connects it here, once (`device_cpu_connect_late`). Read
+    only for a CPU route of a GPU process, once per estimator."""
+    var cell = connection[6]
+    if py_type(cell) is not b.dict:
+        raise Error("TypeError: preprocessing requires its originally connected CPU template cell")
+    var key = PythonObject("records")
+    if not py_contains(cell, key):
+        _ = device_cpu_connect_late(cell)
+    if not py_contains(cell, key):
+        raise Error("ImportError: device='cpu' is not connected in this installation")
+    return py_item(cell, key)
+
+
 def prep_cpu_connected(source: PythonObject, b: PythonObject) raises -> Bool:
     """True when this installation holds a CPU template beside its own (a GPU
-    installation whose host x_prep image loaded at import). False in a
+    installation whose host x_prep image is connected). False in a
     CPU-only process: its own template already is the CPU one. A host image
     that is not built is refused here in its import words. Read once per
     estimator, when its device route is resolved; never per call. `b` is
     the caller's admitted builtins module."""
-    var records = _connection(source, b)[6]
+    var records = _cpu_template_records(_connection(source, b), b)
     if records is None:
         return False
     if py_type(records) is b.str:
@@ -144,7 +164,7 @@ def prep_operation_context(source: PythonObject, cpu: Bool) raises -> PythonObje
     var template = g[].context
     if cpu:
         if g[].cpu_context is None:
-            var records = connection[6]
+            var records = _cpu_template_records(connection, b)
             if py_type(records) is b.str:
                 raise Error("ImportError: " + String(records))
             if records is not None:

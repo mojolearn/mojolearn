@@ -1220,6 +1220,11 @@ _native_archive_bridge.register(GradientBoosting, _MODEL_FORMAT, (
     # The category map of a fit with cat_features (int64 words); absent otherwise.
     ("when_set", "category_map_", (("array", "category_map", "category_map_"),)),
 ), host_archive_gbdt_bindings=_native_trees_bridge.bindings("_mojolearn_gbdt"))
+# `digest_` hashes the members that decide the answers, the same steps the
+# CPU twin HostGBDT is hashed by (_digest_fields.gbdt_steps): the file's fit
+# records `best_iteration_` and `stopped_early_` are not among them.
+from . import _digest_fields  # noqa: E402
+_digest_fields.schema(GradientBoosting, _digest_fields.gbdt_steps(_MODEL_FORMAT))
 
 #: The `trees_gbdt_init` argument order: the constructor's parameters with
 #: `device` last; `numeric_mode` follows them in the call.

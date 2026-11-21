@@ -44,6 +44,8 @@ import weakref
 from . import _backend
 from ._array import Array
 from ._buffer import addr, addr_ro, empty
+from . import _digest_fields
+from ._mode import CheckMixin as _CheckMixin
 
 _EXTENSION = '_mojolearn_forest_host'
 _MODULE_NAME = 'mojolearn._host.' + _EXTENSION
@@ -110,6 +112,9 @@ class HostForest:
         Number of features the model expects.
     device : str or None
         The device recorded in the file.
+    digest_ : str
+        The hash of the model: the `digest_` of the estimator that saved
+        the file.
 
     Examples
     --------
@@ -148,6 +153,12 @@ class HostForest:
         HostForest
         """
         return _native_host_archive(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
+
+    # `digest_`: the shared estimator property (python/mojolearn/_mode.py
+    # `CheckMixin.digest_`, one native call), hashed under the public class
+    # the file was written by and from the steps that class is hashed by, so
+    # a forest and this CPU copy of its file have one digest (fx-audit 32).
+    digest_ = _CheckMixin.__dict__["digest_"]
 
     @property
     def n_trees(self):
@@ -283,3 +294,18 @@ from . import _classical_host as _archive_registry
 from . import _native_trees_bridge as _explainer_bridge
 _explainer_bridge.connect()[1].setdefault("trees_explainer_host_forest", HostForest)
 del _explainer_bridge
+
+# glue: once at import, class metadata only. `digest_` of a HostForest is the
+# digest of the forest that wrote its file: hashed under the `estimator` the
+# file names, through the forest steps of that family, with the engine the
+# file named (_digest_fields.forest_steps; fx-audit 32).
+_digest_fields.twin_field(HostForest, "estimator")
+_digest_fields.schema(HostForest, tuple(
+    ("when", "family", family, _digest_fields.forest_steps(fmt, _digest_fields.host_forest_engine(fmt)))
+    for fmt, family in _FORMATS.items()))  # glue: the two saved forest families
+# The digest reads the instance through the shared family admission, which
+# holds the classes connected when their module was loaded: this module loads
+# on first touch of HostForest, after the package's connection.
+from ._native_family_layouts import connect as _connect_family_layouts  # noqa: E402
+_connect_family_layouts(sys.modules[__package__], only=(HostForest,))
+del _connect_family_layouts

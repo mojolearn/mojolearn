@@ -18,6 +18,11 @@ _CLASSIFICATION_LOSSES = _PROBA_LOSSES + _MULTI_LOSSES
 #: The types `TCtrValueTable.value_for` has apply-time arithmetic for; the
 #: others raise there and are refused here by name.
 
+import sys
+
+from . import _digest_fields
+from ._mode import CheckMixin as _CheckMixin
+
 
 def parse_model_text(text):
     """Parse saved gradient-boosting model text into native CPU inference buffers."""
@@ -74,6 +79,9 @@ class HostGBDT:
     bias_ : float
     n_classes_ : int or None
     model_ : str
+    digest_ : str
+        The hash of the model: the `digest_` of the estimator that saved
+        the file.
 
     Examples
     --------
@@ -110,6 +118,12 @@ class HostGBDT:
             If the file was saved by another class or is corrupt.
         """
         return _native_host_archive(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
+
+    # `digest_`: the shared estimator property (python/mojolearn/_mode.py
+    # `CheckMixin.digest_`), hashed under the class the file was written by
+    # and from the steps GradientBoosting is hashed by, so a model and this
+    # CPU copy of its file have one digest (fx-audit 32).
+    digest_ = _CheckMixin.__dict__["digest_"]
 
     @property
     def n_trees(self):
@@ -193,3 +207,11 @@ from ._forest_host import _load, _native_host_archive, _ARCHIVE_CONTEXT
 # table (bindings/native_operation_codes.mojo), read once at import.
 from ._native_ops import codes as _operation_codes  # noqa: E402
 _OP = _operation_codes()
+
+# glue: once at import, class metadata only (fx-audit 32): hashed under the
+# `estimator` its file names, by the gradient-boosting digest steps.
+_digest_fields.twin_field(HostGBDT, "estimator")
+_digest_fields.schema(HostGBDT, _digest_fields.gbdt_steps(GBDT_FORMAT))
+from ._native_family_layouts import connect as _connect_family_layouts  # noqa: E402
+_connect_family_layouts(sys.modules[__package__], only=(HostGBDT,))
+del _connect_family_layouts
