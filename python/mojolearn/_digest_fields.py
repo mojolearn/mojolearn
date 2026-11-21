@@ -75,6 +75,20 @@ EXTRA_BY_NAME = {
     "MDS": ("_norm",),
     "ClassicalMDS": ("_norm",),
     "MinCovDet": ("_precision", "_seed", "_draws"),
+    # clustering (bindings/cluster_fit_public_native_pack.mojo, providers/python/member_xcluster_boundary_door.mojo)
+    "BisectingKMeans": ("_tree_centers",),
+    "BayesianGaussianMixture": ("_full_pchol", "_log_consts", "_score_words"),
+    # neighbors, outliers, kernel maps, semi-supervised, sparse GP (bindings/neighbors_*_native_door.mojo,
+    # kpca_native_door.mojo, svc_ocsvm_boundary_pack.mojo). KernelPCA's `_fit_alphas` is a cache the
+    # first transform fills: not fitted state.
+    "LocalOutlierFactor": ("_fit_X", "_fit_dist", "_lrd"),
+    "NearestCentroid": ("_codes_classes",),
+    "KNNImputer": ("_fit_X", "_valid", "_miss_cols"),
+    "OneClassSVM": ("_gamma",),
+    "KernelPCA": ("_gamma", "_fit_X", "_fit_cols", "_fit_all"),
+    "SkewedChi2Sampler": ("_random_weights",),
+    "_LabelPropagationBase": ("_classical_raw_graph",),
+    "SVGP": ("_alpha", "_C"),
 }
 
 #: Public names (ending in "_") that record how a call ran, not what was
