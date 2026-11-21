@@ -1013,10 +1013,25 @@ struct TCatFeatureParams(Copyable, Movable):
         is why a fit with no target grid produces frequency columns only
         rather than raising.
         """
+        return self._configs_from(self.simple_ctrs)
+
+    def combination_ctr_configs(self) raises -> List[TCtrConfig]:
+        """The tree-CTR (feature combination) configs: the same fan-out as
+        `simple_ctr_configs`, over the `combination_ctrs` descriptions. One
+        column per config is computed for every candidate combination of a
+        level (`gbdt/methods/tree_ctr_search.mojo`). A config's
+        `ctr_binarization_config_id` indexes `combination_ctrs`."""
+        return self._configs_from(self.combination_ctrs)
+
+    def _configs_from(
+        self, descriptions: List[TCtrDescription]
+    ) raises -> List[TCtrConfig]:
+        """`CreateCtrConfigsFromDescription` over one description list (the
+        statement `simple_ctr_configs` documents)."""
         var target_border_count = self.target_binarization.border_count
         var out = List[TCtrConfig]()
-        for d in range(len(self.simple_ctrs)):
-            ref desc = self.simple_ctrs[d]
+        for d in range(len(descriptions)):
+            ref desc = descriptions[d]
             if need_target_classifier(desc.ctr_type) and (
                 target_border_count == 0
             ):
@@ -1064,10 +1079,51 @@ struct TCatFeatureParams(Copyable, Movable):
             config.ctr_binarization_config_id
         ].ctr_binarization
 
-    def check(self) raises:
+    def combination_ctr_binarization_for(
+        self, config: TCtrConfig
+    ) -> TBinarizationOptions:
+        """The grid description of a tree-CTR config (one of
+        `combination_ctr_configs`): its border count is what the fit asks
+        of the grid. The border RULE is the CTR type's (Median for
+        FeatureFreq, Uniform for Borders; `gbdt/ctrs/tree_ctr.mojo`)."""
+        return self.combination_ctrs[
+            config.ctr_binarization_config_id
+        ].ctr_binarization
+
+    def check(self, tree_ctrs_implemented: Bool = False) raises:
         """Refuse what is not honored, by name -- the same rule the rest of
-        this file follows."""
-        if self.max_tensor_complexity != 1:
+        this file follows.
+
+        `tree_ctrs_implemented` is passed True by the one caller whose fit
+        computes feature combinations today, the device `train()`
+        (`gbdt/train.mojo`); every other caller keeps the refusal of a
+        `max_ctr_complexity` above 1 until its own route computes them. The
+        argument goes when the last such route does."""
+        if self.max_tensor_complexity < 1:
+            raise Error(
+                "max_ctr_complexity must be at least 1; got "
+                + String(self.max_tensor_complexity)
+            )
+        if self.max_tensor_complexity != 1 and tree_ctrs_implemented:
+            for i in range(len(self.combination_ctrs)):
+                ref d = self.combination_ctrs[i]
+                if d.ctr_type != CTR_BORDERS and d.ctr_type != CTR_FEATURE_FREQ:
+                    raise Error(
+                        "combinations_ctr="
+                        + ctr_type_name(d.ctr_type)
+                        + " is not implemented; only Borders and FeatureFreq"
+                        " have a calcer in gbdt/ctrs/"
+                    )
+                if len(d.priors) == 0:
+                    raise Error("Provide at least one prior for CTR")
+                if d.ctr_binarization.border_count < 1 or (
+                    d.ctr_binarization.border_count > 255
+                ):
+                    raise Error(
+                        "a combination CTR grid takes 1 to 255 borders; got "
+                        + String(d.ctr_binarization.border_count)
+                    )
+        elif self.max_tensor_complexity != 1:
             raise Error(
                 "max_ctr_complexity="
                 + String(self.max_tensor_complexity)

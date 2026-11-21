@@ -46,33 +46,42 @@ classifier unit's codes first (`_set_cover_unit`: one pass over its int32
 codes, the units across the host cores, a lone unit's rows split across
 them) and raises before any fit when a unit lacks a class or holds a code
 outside 0 .. classes-1: nothing is published and the caller's own loop runs,
-whose doors decide as they always did. The caller hands over rows it has
-admitted as its doors would (finite X and float targets): the member entries
-read admitted words.
+whose doors decide as they always did.
 
-THE PREDICT SIDE (`member_predict_held`): one member call on the fitted state
-the estimator holds (bindings/member_held_door.mojo), written into a new
-Array; not served = the caller's door.
+WHO REFUSES A NON-FINITE ROW. A member kind with `MEMBER_CAN_TEST_ROWS`
+refuses non-finite X, y and weights itself, from the pass its kernel already
+makes: the caller makes NO host scan for it (`member_set_tests`,
+`MemberHeldCall.tests`); its refusal fails the set or the call, the caller's
+door runs and raises the estimator's own words. A kind without the bit reads
+admitted words: the caller proves the rows finite first (one host scan per
+distinct block) and takes its doors when they are not.
+
+THE PREDICT SIDE (`member_held_open` / `member_held_run` /
+`member_held_close`): one member call on the
+fitted state the estimator holds (bindings/member_held_door.mojo), written
+into a new Array of the element type the member's OUTPUTS answers
+(`call.out_dtype`); not served = the caller's door.
 """
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.sys.compile import is_defined
 from std.python._cpython import GILReleased
 from bindings.member_boundary_door import member_admit_serving, member_pack, member_pack_labeled
-from bindings.member_held_door import member_held, member_held_release, member_held_adopt
+from bindings.member_held_door import MemberHeld, member_held, member_held_release, member_held_adopt
 from bindings.admitted_input_unpack import admitted_unfilled
 from bindings.native_unit_os_threads_run import native_unit_cores
 from bindings.prep_native_estimator_door import prep_estimator_plan
-from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
+from bindings.py_balanced import py_call, py_type, py_get
 from core.device_route import DEVICE_CPU
 from core.host_parallel import host_parallelize
 from core.member_abi import (
-    MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free, member_outputs_of,
-    MEMBER_OP_FIT, MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA, MEMBER_OP_DECISION,
-    MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_I64,
+    MemberPlan, MemberCall, MemberMatrix, member_call, member_call_of, member_new, member_free, member_outputs_of,
+    member_kind_capabilities,
+    MEMBER_OP_CAPABILITIES, MEMBER_OP_FIT, MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA, MEMBER_OP_DECISION,
+    MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_I64, MEMBER_DTYPE_UNSAID,
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA, MEMBER_CAN_DECISION,
     MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_CLASSIFIER,
-    MEMBER_CAN_ROW_INDEX, MEMBER_CAN_COLUMN_INDEX,
+    MEMBER_CAN_ROW_INDEX, MEMBER_CAN_COLUMN_INDEX, MEMBER_CAN_TEST_ROWS,
 )
 from core.member_families import MEMBER_FAMILY_TREE, MEMBER_FAMILY_FOREST, MEMBER_FAMILY_EXTRA_TREES
 
@@ -123,6 +132,10 @@ struct MemberSetRun(Movable):
     # when its codes lack a class or hold a code out of range.
     var cover_units: List[Int]
     var uncovered: List[UInt8]
+    # Per member: 1 when its KIND has `MEMBER_CAN_TEST_ROWS` (its entry
+    # refuses non-finite X, y and weights itself: the caller scans nothing
+    # for it). Read once per member class at admission.
+    var tests: List[UInt8]
 
     def __init__(out self, x: Int, rows: Int, cols: Int, y_dtype: Int, index_dtype: Int):
         self.plans = List[MemberPlan]()
@@ -143,6 +156,7 @@ struct MemberSetRun(Movable):
         self.errors = List[String]()
         self.cover_units = List[Int]()
         self.uncovered = List[UInt8]()
+        self.tests = List[UInt8]()
 
 
 struct MemberSet(Movable):
@@ -164,6 +178,9 @@ struct MemberSet(Movable):
     # whose route is the CPU. Set by a caller that predicts those through
     # their held states when no device copy of X is staged for them (bagging).
     var adopt_trees: Bool
+    # After PACK: every packed member's state stayed with its estimator (a
+    # later `member_held_open` of it is a hit: no admission, no IMPORT).
+    var kept_all: Bool
 
     def __init__(out self, x: Int, rows: Int, cols: Int, y_dtype: Int, index_dtype: Int) raises:
         self.run = MemberSetRun(x, rows, cols, y_dtype, index_dtype)
@@ -174,6 +191,7 @@ struct MemberSet(Movable):
         self.class_plans = Python.list()
         self.adopt = False
         self.adopt_trees = False
+        self.kept_all = True
 
     def count(self) -> Int:
         return len(self.run.plans)
@@ -213,6 +231,30 @@ def member_set_admit(mut set: MemberSet, estimator: PythonObject, target: Int, w
     if not owner.published:
         return False
     owner.plan.classes = classes
+    # Whether this member's KIND tests the rows it reads: the answer of an
+    # earlier member of the same family, kind and route (clones of one
+    # estimator: the member before it), else asked once. A family whose union
+    # mask lacks the bit is never asked (no state is minted for the answer).
+    var tests = UInt8(0)
+    if owner.plan.member.can(MEMBER_CAN_TEST_ROWS):
+        var asked = False
+        var v = len(set.run.plans) - 1
+        while v >= 0:  # driver-loop: over the members admitted before (one compare when they are clones)
+            if (set.run.plans[v].family == owner.plan.family and set.run.plans[v].kind == owner.plan.kind
+                    and set.run.plans[v].route.device == owner.plan.route.device
+                    and set.run.plans[v].route.vendor == owner.plan.route.vendor
+                    and set.run.plans[v].route.mode == owner.plan.route.mode):
+                tests = set.run.tests[v]
+                asked = True
+                break
+            v -= 1
+        if not asked:
+            try:
+                if (member_kind_capabilities(owner.plan) & MEMBER_CAN_TEST_ROWS) != 0:
+                    tests = UInt8(1)
+            except:
+                tests = UInt8(0)
+    set.run.tests.append(tests)
     set.run.plans.append(owner.plan.copy())
     set.run.targets.append(target)
     set.run.weights.append(weights)
@@ -248,6 +290,22 @@ def member_set_own_block(mut set: MemberSet, x: Int, rows: Int):
     set.run.own_rows[last] = rows
 
 
+def member_set_tests(set: MemberSet, u: Int) -> Bool:
+    """Member `u`'s kind refuses non-finite X, y and weights itself
+    (`MEMBER_CAN_TEST_ROWS`): the caller makes no finite scan of what that
+    member reads. False: the member reads admitted words and the caller
+    proves them finite before `member_set_run`."""
+    return u >= 0 and u < len(set.run.tests) and set.run.tests[u] != UInt8(0)
+
+
+def member_set_host(set: MemberSet) -> Bool:
+    """Every member admitted so far runs on the CPU route."""
+    for u in range(len(set.run.plans)):  # driver-loop: over the members (their resolved routes)
+        if set.run.plans[u].route.device != DEVICE_CPU:
+            return False
+    return True
+
+
 def _set_cores(set: MemberSet) -> Int:
     """The host cores, bounded by the caller's worker bound when it gave one."""
     var cores = native_unit_cores()
@@ -260,11 +318,9 @@ def member_set_workers(set: MemberSet) -> Int:
     """The host cores (bounded by the caller's `cap`) bounded by the member
     count when every member's route is the CPU; one when any member runs on
     a GPU (module note)."""
-    var count = len(set.run.plans)
-    for u in range(count):  # driver-loop: over the members (their resolved routes)
-        if set.run.plans[u].route.device != DEVICE_CPU:
-            return 1
-    return max(min(_set_cores(set), count), 1)
+    if not member_set_host(set):
+        return 1
+    return max(min(_set_cores(set), len(set.run.plans)), 1)
 
 
 def member_set_width(set: MemberSet) -> Int:
@@ -272,9 +328,8 @@ def member_set_width(set: MemberSet) -> Int:
     host cores when every member admitted so far runs on the CPU, else one.
     A wave bounds what is held at once (the draws and the gathered blocks of
     one wave) to the worker count."""
-    for u in range(len(set.run.plans)):  # driver-loop: over the members (their resolved routes)
-        if set.run.plans[u].route.device != DEVICE_CPU:
-            return 1
+    if not member_set_host(set):
+        return 1
     return _set_cores(set)
 
 
@@ -611,19 +666,16 @@ def member_set_pack(mut set: MemberSet, u: Int, classes: PythonObject, b: Python
         except:
             kept = False
     if not kept:
+        set.kept_all = False
         var call = MemberCall(set.run.plans[u].route, set.run.states[u])
         member_free(set.run.plans[u], call)
     set.run.states[u] = 0
-    # A family whose pack does not write the class count yet (the tree
-    # families: owed by their publication lane) gets it here, as round 1 did.
-    if classes is not None and not py_contains(fields, "n_classes_"):
-        py_setitem(fields, "n_classes_", PythonObject(len(classes)))
     return estimator
 
 
 def member_marked(estimator: PythonObject, context: PythonObject) -> Bool:
     """True when `estimator`'s class carries a member mark (its family may
-    serve it; `member_predict_held` still answers per call). One class-plan
+    serve it; `member_held_open` still answers per call). One class-plan
     read: a caller asks once per public operation for members of one class,
     before work only the native route needs (its finite proof of X). Never
     raises."""
@@ -638,17 +690,31 @@ def member_marked(estimator: PythonObject, context: PythonObject) -> Bool:
         return False
 
 
-struct MemberOut(Movable):
-    """`member_predict_held`'s answer. `array`: the member's output, or None
-    when it is not served (the caller's door runs). `dtype`: the element
-    type the member wrote (MEMBER_F32 / F64 / I32 / I64), -1 when unknown:
-    a caller that asks the same member again hands it back as `known`."""
-    var array: PythonObject
+struct MemberHeldCall(Movable):
+    """One public operation's opened call on a fitted member's held state
+    (`member_held_open`). `served` False: nothing is held, the caller's door
+    runs. `tests`: the member's kind refuses non-finite rows itself
+    (`MEMBER_CAN_TEST_ROWS`): the caller scans nothing; False: the caller
+    proves the rows finite before `member_held_run`, or closes and takes its
+    door. `cols` / `dtype`: the columns per row and the element type
+    (MEMBER_F32 / F64 / I32 / I64) the member writes for `operation`.
+    `host`: the member's route is the CPU."""
+    var held: MemberHeld
+    var served: Bool
+    var tests: Bool
+    var host: Bool
+    var operation: Int
+    var cols: Int
     var dtype: Int
 
     def __init__(out self):
-        self.array = PythonObject(None)
-        self.dtype = -1
+        self.held = MemberHeld()
+        self.served = False
+        self.tests = False
+        self.host = False
+        self.operation = MEMBER_OP_PREDICT
+        self.cols = 0
+        self.dtype = MEMBER_F32
 
 
 def _out_typestr(dtype: Int) -> String:
@@ -661,20 +727,18 @@ def _out_typestr(dtype: Int) -> String:
     return "<f4"
 
 
-def _member_predict_held(member: PythonObject, x: Int, n: Int, d: Int, operation: Int, classifier: Bool,
-    width: Int, known: Int, skip_trees: Bool, context: PythonObject, b: PythonObject) raises -> MemberOut:
-    var out = MemberOut()
-    out.dtype = known
+def _member_held_open(mut opened: MemberHeldCall, member: PythonObject, operation: Int, classifier: Bool,
+    width: Int, skip_trees: Bool, context: PythonObject, b: PythonObject) raises:
     var plan = prep_estimator_plan(member, context)
     if plan is None:
-        return out^
+        return
     var mark = py_get(plan, "member")
     if mark is None or Bool(py=plan["classifier"]) != classifier:
-        return out^
+        return
     if skip_trees:
         var family = Int(py=mark[0])
         if family == MEMBER_FAMILY_TREE or family == MEMBER_FAMILY_FOREST or family == MEMBER_FAMILY_EXTRA_TREES:
-            return out^
+            return
     var needs = MEMBER_CAN_PREDICT
     if operation == MEMBER_OP_PREDICT_PROBA:
         needs = MEMBER_CAN_PREDICT_PROBA
@@ -682,80 +746,105 @@ def _member_predict_held(member: PythonObject, x: Int, n: Int, d: Int, operation
         needs = MEMBER_CAN_DECISION
     var member_context = plan["context"]
     var fields = py_call(plan["fields_get"], member, py_type(member))
-    var held = member_held(member, fields, plan, member_context, b, needs)
-    if not held.published:
-        return out^
-    var call = MemberCall(held.plan.route, held.state)
-    try:
-        var cols = member_outputs_of(held.plan, call, operation)
-        if cols >= 1 and (width == 0 or cols == width):
-            var codes = classifier and operation == MEMBER_OP_PREDICT
-            # The element type a family writes is its own (codes int32 or
-            # int64, scores and probabilities float32 or float64) and the ABI
-            # has no word for it yet: an unknown type is learned by asking
-            # for the narrow one, then the wide one. A regressor writes float32.
-            var attempts = 2 if (known < 0 and classifier) else 1
-            for attempt in range(attempts):  # driver-loop: over the two element types (first use only)
-                var dtype = known
-                if dtype < 0:
-                    if codes:
-                        dtype = MEMBER_I32 if attempt == 0 else MEMBER_I64
-                    else:
-                        dtype = MEMBER_F32 if attempt == 0 else MEMBER_F64
-                var shape = List[Int](length=1, fill=n)
-                if cols > 1:
-                    shape.append(cols)
-                # Unfilled: the member writes every cell before anything reads it.
-                var dst = admitted_unfilled(shape, _out_typestr(dtype), context)
-                call.x = MemberMatrix(x, n, d)
-                call.dst = MemberMatrix(dst.addr, n, cols, dtype)
-                var written = False
-                try:
-                    with GILReleased(Python()):
-                        _ = member_call(held.plan.member, operation, call)
-                    written = True
-                except:
-                    written = False
-                if written:
-                    out.array = dst.keep
-                    out.dtype = dtype
-                    break
-                out.dtype = -1
-    except:
-        out.array = PythonObject(None)
-        out.dtype = -1
-    member_held_release(held)   # after the call: a kept state stays with the estimator
-    return out^
+    opened.held = member_held(member, fields, plan, member_context, b, needs)
+    if not opened.held.published:
+        return
+    opened.operation = operation
+    var call = member_call_of(opened.held.plan, opened.held.state)
+    var cols = member_outputs_of(opened.held.plan, call, operation)
+    if cols < 1 or (width != 0 and cols != width):
+        return
+    # The element type is the member's own answer (`call.out_dtype`, written
+    # by the OUTPUTS call above): codes int32 or int64, scores and
+    # probabilities float32 or float64. A member that does not say it
+    # (published before the word existed): a regressor writes float32 (every
+    # published regressor documents it); a classifier is not served and its
+    # door runs. Nothing is learned from a refused call.
+    var dtype = call.out_dtype
+    var codes = classifier and operation == MEMBER_OP_PREDICT
+    if dtype == MEMBER_DTYPE_UNSAID:
+        if classifier:
+            return
+        dtype = MEMBER_F32
+    if codes:
+        if dtype != MEMBER_I32 and dtype != MEMBER_I64:
+            return
+    elif dtype != MEMBER_F32 and dtype != MEMBER_F64:
+        return
+    # Kind-exact, asked of the held state (no state is minted); a family
+    # whose union mask lacks the bit is not asked.
+    if opened.held.plan.member.can(MEMBER_CAN_TEST_ROWS):
+        opened.tests = (member_call(opened.held.plan.member, MEMBER_OP_CAPABILITIES, call) & MEMBER_CAN_TEST_ROWS) != 0
+    opened.host = opened.held.plan.route.device == DEVICE_CPU
+    opened.cols = cols
+    opened.dtype = dtype
+    opened.served = True
 
 
-def member_predict_held(member: PythonObject, x: Int, n: Int, d: Int, operation: Int, classifier: Bool,
-    width: Int, known: Int, skip_trees: Bool, context: PythonObject, b: PythonObject) -> MemberOut:
-    """PREDICT SIDE: the fitted estimator `member`'s `operation`
-    (MEMBER_OP_PREDICT, _PREDICT_PROBA or _DECISION) over the `n` x `d`
-    float32 C-order host rows at `x`, through the member state the estimator
+def member_held_open(member: PythonObject, operation: Int, classifier: Bool, width: Int, skip_trees: Bool,
+    context: PythonObject, b: PythonObject) -> MemberHeldCall:
+    """PREDICT SIDE, UNPACK: open the fitted estimator `member`'s `operation`
+    (MEMBER_OP_PREDICT, _PREDICT_PROBA or _DECISION) on the member state it
     holds (bindings/member_held_door.mojo: a hit after the first use, and the
-    state a native fit left with it): one member call, the GIL released,
-    written into a new Array, (n,) for one column per row, else (n, columns).
-    A classifier's predict writes its class CODES (code c is the member's
-    c-th class); the caller maps them.
+    state a native fit left with it). Once per member per public operation.
+    The answer says whether the member is served, how wide and of which
+    element type its output is, and whether its kind tests the rows itself
+    (`tests`): the caller makes its finite scan of X only when it does not.
+    Close it with `member_held_close` on every path.
 
-    `array` None, with nothing changed, when the member is not served: its
-    class has no member mark, it is not of the asked kind (`classifier`),
-    its output has not `width` columns (0: any), its family lacks the
-    operation, admits or imports nothing, or the call refuses. The caller
-    then runs the member's own door, which raises the estimator's own words
-    (the fallback rule). Never raises.
-
-    THE CALLER has admitted the rows as the member's door would (finite) and
-    keeps them alive through the call. `known`: the element type this member
-    wrote before for this operation, or -1 (`MemberOut.dtype`). `skip_trees`:
-    a tree, forest or extra-trees member is not served: the caller's door
-    predicts those from the one device copy of X it staged for all of them.
-    Once per member per public operation; serial by nature (one state, one
-    call at a time; the member splits its own rows)."""
+    `served` False, with nothing changed, when: the class has no member
+    mark, it is not of the asked kind (`classifier`), its output has not
+    `width` columns (0: any), its family lacks the operation, admits or
+    imports nothing, or a classifier's member does not say its element type.
+    The caller then runs the member's own door, which raises the estimator's
+    own words (the fallback rule). Never raises. `skip_trees`: a tree,
+    forest or extra-trees member is not served (the caller's door predicts
+    those from the one device copy of X it staged for all of them)."""
+    var opened = MemberHeldCall()
     comptime if not MEMBER_SET_NATIVE:
-        return MemberOut()
+        return opened^
     try:
-        return _member_predict_held(member, x, n, d, operation, classifier, width, known, skip_trees, context, b)
+        _member_held_open(opened, member, operation, classifier, width, skip_trees, context, b)
     except:
-        return MemberOut()
+        opened.served = False
+    return opened^
+
+
+def member_held_run(mut opened: MemberHeldCall, x: Int, n: Int, d: Int, context: PythonObject) -> PythonObject:
+    """PREDICT SIDE, RUN: the opened member's operation over the `n` x `d`
+    float32 C-order host rows at `x`: ONE member call, the GIL released,
+    written into a new Array of the member's element type, (n,) for one
+    column per row, else (n, columns). A classifier's predict writes its
+    class CODES (code c is the member's c-th class); the caller maps them.
+    None when the call refuses (a member that tests its rows refuses a
+    non-finite one here): the caller's door runs and raises the estimator's
+    own words. Never raises. THE CALLER keeps the rows alive through the
+    call and, for a member that does not test them (`tests` False), has
+    proven them finite. Serial by nature: one state, one call at a time (the
+    member splits its own rows)."""
+    if not opened.served:
+        return PythonObject(None)
+    try:
+        var call = member_call_of(opened.held.plan, opened.held.state)
+        var shape = List[Int](length=1, fill=n)
+        if opened.cols > 1:
+            shape.append(opened.cols)
+        # Unfilled: the member writes every cell before anything reads it.
+        var dst = admitted_unfilled(shape, _out_typestr(opened.dtype), context)
+        call.x = MemberMatrix(x, n, d)
+        call.dst = MemberMatrix(dst.addr, n, opened.cols, opened.dtype)
+        var plan_member = opened.held.plan.member
+        var operation = opened.operation
+        with GILReleased(Python()):
+            _ = member_call(plan_member, operation, call)
+        _ = opened.served   # the hold (its plan words, its owner pin) outlives the call
+        return dst.keep
+    except:
+        return PythonObject(None)
+
+
+def member_held_close(mut opened: MemberHeldCall):
+    """End of the opened call, every path, after `member_held_run` returned:
+    a kept state stays with the estimator. Never raises."""
+    member_held_release(opened.held)
+    opened.served = False
