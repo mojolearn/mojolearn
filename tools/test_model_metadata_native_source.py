@@ -103,6 +103,7 @@ class ModelMetadataSource(unittest.TestCase):
         # decisions run in typed RUN files that hold no Python object.
         for run, door, entry in (
             ("bindings/causal_model_config_run.mojo", "bindings/causal_model_config_door.mojo", "causal_config_plan("),
+            ("bindings/causal_lm_construct_run.mojo", "bindings/causal_lm_construct_door.mojo", "causal_transformer_block("),
         ):
             body = (ROOT / run).read_text()
             for word in ("PythonObject", "std.python", "py_call", "py_get", "GIL"):
