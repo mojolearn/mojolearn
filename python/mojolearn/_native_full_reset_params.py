@@ -278,7 +278,8 @@ def _install(classes):
         # before anything changes (`plan['device_admit']`,
         # bindings/full_reset_constructor_native_door.mojo `_construct`,
         # bindings/full_reset_params_native_door.mojo `_reset`). A class whose
-        # own constructor names `device` (its family wrote it) is left as is.
+        # own constructor names `device` keeps its own parameter and write event
+        # and gets the same compiled check.
         device_added = 'device' not in signature.parameters
         if device_added:
             signature = signature.replace(parameters=tuple(signature.parameters.values()) + (
@@ -310,7 +311,12 @@ def _install(classes):
         if device_added:
             kwonly += ('device',)
         _CONTEXT['plans'][cls] = dict(names=names, events=events, signature=signature,
-            device_admit=device_added,
+            # Checked for EVERY class that takes the parameter, whether this
+            # installer added it or the class's own constructor names it (a
+            # class that named it was left unchecked until round 4). Only an
+            # older keyword of another meaning (a default that is not None)
+            # stays out.
+            device_admit=device_added or signature.parameters['device'].default is None,
             defaults={p.name: p.default for p in parameters if p.default is not p.empty},  # glue: exact default reference identities
             class_name=cls.__name__,
             validation_kind='umap' if cls.__name__ == 'UMAP' else None,
