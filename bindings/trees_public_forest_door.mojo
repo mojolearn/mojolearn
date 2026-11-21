@@ -25,7 +25,7 @@ from core.mode_answer import MODE_FAMILY_FOREST
 from std.math import sqrt
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields, py_item
-from bindings.trees_route_boundary_door import trees_device_unpack
+from providers.python.device_route_boundary_door import device_unpack
 from bindings.py_typed_call import py_call_typed
 from bindings.trees_public_inputs_door import (
     TreesLabels,
@@ -176,8 +176,8 @@ def forest_kind(model: PythonObject, context: PythonObject) raises -> String:
 
 # TOMBSTONE: forest_check_fit_device (Extra Trees' fit-time `device must be
 # 'gpu'` test) deleted 2026-11-20 by lane dw-trees: the estimator's device is
-# admitted where every operation starts (bindings/trees_route_boundary_door.mojo
-# `trees_route_enter`: a fit refuses an unknown device before any input is read).
+# admitted where it is given: the constructor and `set_params`
+# (bindings/trees_route_boundary_door.mojo `trees_device_admit`).
 
 
 def forest_get_params(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -312,9 +312,9 @@ def _rf_base(params: PythonObject, criterion_code: PythonObject, class_weight: P
     configuration `_cfg`. `params` hold the base's arguments by name."""
     var b = trees_builtins()
     var nk = trees_keys()
-    # `device`: None, 'gpu' or 'cpu' (the pilot's rule and words); which table
-    # set runs is the route's question, answered where the operation starts.
-    _ = trees_device_unpack(py_item(params, nk[].k_device), True)
+    # `device`: None, 'gpu' or 'cpu' (the shared rule and words); an instance
+    # whose field was written past its constructor is refused here.
+    _ = device_unpack(py_item(params, nk[].k_device), b)
     if py_item(params, nk[].k_max_leaf_nodes) is not None:
         _refuse("max_leaf_nodes", String(py_item(tables, nk[].k_max_leaf_nodes_why)))
     var oob = py_item(params, nk[].k_oob_score)
@@ -427,7 +427,7 @@ def _et_derive(model: PythonObject, params: PythonObject, kind: String, context:
     var nk = trees_keys()
     var tables = py_item(context, nk[].k_trees_et_tables)
     var device = py_item(params, nk[].k_device)
-    _ = trees_device_unpack(device, True)
+    _ = device_unpack(device, b)
     if py_item(params, nk[].k_n_jobs) is not None:
         raise Error("NotImplementedError: n_jobs is not implemented: there is no CPU thread pool here -- the"
                     + " fit runs one host thread driving the GPU (device='gpu')."
@@ -797,7 +797,7 @@ def _et_params(fields: PythonObject, cfg: PythonObject, rows: Int, cols: Int, cl
     """`extratrees._fit_params`: the 22-slot list in _mojolearn_trees.mojo's
     order."""
     var nk = trees_keys()
-    _ = trees_device_unpack(py_item(fields, nk[].k_device), True)
+    _ = device_unpack(py_item(fields, nk[].k_device), trees_builtins())
     var slots = _et_max_features(py_item(cfg, nk[].k_max_features), context)
     var depth = py_item(cfg, nk[].k_max_depth)
     var seed = py_item(cfg, nk[].k_random_state)

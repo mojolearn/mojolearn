@@ -254,7 +254,7 @@ class ExtraTreesClassifier(_ExtraTreesBase):
     device : {None, 'gpu', 'cpu'}, default None
         Where the model is fitted and predicts. None uses this
         installation's device, 'cpu' runs on the CPU and 'gpu' requires a
-        GPU installation. Other values raise `ValueError` at fit.
+        GPU installation. Other values raise `ValueError`.
     inference_engine : {'auto', 'sequential', 'parallel_groves'}, default 'auto'
         How `predict` reduces over trees. 'auto' uses 'parallel_groves' in
         `fast` mode and 'sequential' otherwise.
@@ -418,7 +418,7 @@ class ExtraTreesRegressor(_ExtraTreesBase):
     device : {None, 'gpu', 'cpu'}, default None
         Where the model is fitted and predicts. None uses this
         installation's device, 'cpu' runs on the CPU and 'gpu' requires a
-        GPU installation. Other values raise `ValueError` at fit.
+        GPU installation. Other values raise `ValueError`.
     inference_engine : {'auto', 'sequential', 'parallel_groves'}, default 'auto'
         How `predict` reduces over trees. 'auto' uses 'parallel_groves' in
         `fast` mode and 'sequential' otherwise.
