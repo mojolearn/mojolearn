@@ -138,6 +138,9 @@ class DBSCAN(_NumericModeMixin):
 
     #: This family's binding, for `NumericModeMixin._bind`.
     _BINDING = "_mojolearn_estimators"
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
     #: `algorithm` names the eps-NEIGHBORHOOD SEARCH, and the two values
     #: are the two structures this library implements for it. scikit-learn's
@@ -181,8 +184,9 @@ class DBSCAN(_NumericModeMixin):
         max_iterations=None,
         prediction_data=False,
         numeric_mode=None,
+        device=None,
     ):
-        return _NATIVE(self, "family_density_dbscan_initialize", (eps, min_samples, metric, algorithm, max_mbytes_per_batch, max_iterations, prediction_data, numeric_mode,), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_density_dbscan_initialize", (eps, min_samples, metric, algorithm, max_mbytes_per_batch, max_iterations, prediction_data, numeric_mode, device,), _NATIVE_CONTEXT)
 
     def fit(self, X, y=None, sample_weight=None):
         """Cluster ``X``.
@@ -413,6 +417,9 @@ class KernelDensity(_NumericModeMixin):
 
     #: This family's binding, for `NumericModeMixin._bind`.
     _BINDING = "_mojolearn_estimators"
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
     _mojolearn_native_public = True
 
@@ -429,9 +436,10 @@ class KernelDensity(_NumericModeMixin):
         leaf_size=40,
         metric_params=None,
         numeric_mode=None,
+        device=None,
     ):
         # Stored verbatim; native fit/score own parameter admission.
-        return _NATIVE(self, "family_density_kde_initialize", (bandwidth, algorithm, kernel, metric, atol, rtol, breadth_first, leaf_size, metric_params, numeric_mode,), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_density_kde_initialize", (bandwidth, algorithm, kernel, metric, atol, rtol, breadth_first, leaf_size, metric_params, numeric_mode, device,), _NATIVE_CONTEXT)
 
     # The constructor checks (`_validate_params`), the device-resident fit
     # handle and its release live in the native owner
