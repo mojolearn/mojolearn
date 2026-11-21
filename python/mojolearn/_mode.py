@@ -46,6 +46,7 @@ from . import _backend
 from ._array import Array as _Array
 from ._device_table import CPU_CLASSES as _DEVICE_CPU_CLASSES, record as _device_record
 from . import _sk_validate
+from ._digest_fields import CONNECTION as _DIGEST_CONNECTION, declare as _digest_declare, read as _digest_read
 
 
 def _guard_cpu_training(method):
@@ -473,6 +474,50 @@ class CheckMixin:
     # the MRO) exactly what it was before this base was added.
     __slots__ = ()
 
+    def __init_subclass__(cls, **kw):
+        super().__init_subclass__(**kw)
+        # glue: once per class definition, the class's rows of the digest
+        # field tables (_digest_fields.py); nothing per instance or per fit.
+        _digest_declare(cls)
+
+    @property
+    def digest_(self):
+        """The hash of this fitted model, as one lower-case hex string.
+
+        In `identical` mode, Mojolearn returns the same bits on Apple, NVIDIA
+        and AMD GPUs, and the CPU binaries are held to the same bits. So the
+        same estimator fitted on the same data has the same `digest_` on any
+        of those machines and with ``device="cpu"``, within one Mojolearn
+        version: fit twice, compare the two strings, and any difference means
+        the data, the parameters or the version changed.
+
+        The digest covers the fitted state that decides the model's answers:
+        the class name and every fitted array and value, by name, type, shape
+        and bytes. It is computed the first time it is read, not during
+        `fit`, and read again after another `fit` or `set_params` it is
+        computed again. A meta-estimator's digest includes the digests of its
+        fitted members.
+
+        Raises
+        ------
+        AttributeError
+            If the model is not fitted, if it runs in `fast` mode (Apple
+            only), which promises no identical bits, or if the model holds a
+            fitted value that cannot be hashed.
+
+        Examples
+        --------
+        >>> import numpy as np, mojolearn
+        >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+        >>> a = mojolearn.Ridge(alpha=1.0).fit(X, X[:, 0])
+        >>> b = mojolearn.Ridge(alpha=1.0, device="cpu").fit(X, X[:, 0])
+        >>> a.digest_ == b.digest_    # doctest: +SKIP
+        True
+        """
+        # One native call (bindings/fitted_digest_door.mojo); nothing is
+        # hashed or looked up at fit.
+        return _digest_read(self)
+
     def check(self, X, *, method=None, fit=None):
         """Run this fitted model on the GPU and on the CPU, print both sides'
         reports and whether their answers are the same bits.
@@ -529,55 +574,11 @@ class CheckMixin:
         print(format_check(result))
         return result
 
-    def receipt(self, X, y=None, *, path=None, method=None):
-        """Write down this fit so that it can be compared with a later one.
 
-        Call it after `fit`, with the data the model was fitted on. In
-        `identical` mode, Mojolearn returns the same bits on Apple, NVIDIA and
-        AMD GPUs, so the same estimator fitted on the same data is the same
-        model on any machine. The receipt records what that model is;
-        `mojolearn.reproduce(receipt, X, y)` and `python -m mojolearn
-        reproduce RECEIPT.json --X X.npy --y y.npy` fit again and say whether
-        the new fit is the recorded one, and which part differs when it is
-        not. It runs in `identical` mode only, and a receipt holds within one
-        Mojolearn version.
-
-        Parameters
-        ----------
-        X : array-like
-            The training rows this model was fitted on.
-        y : array-like, optional
-            The targets it was fitted with.
-        path : str, optional
-            Also save the receipt to this file, as JSON.
-        method : str, optional
-            The method whose answer for `X` is recorded, for example
-            `'predict_proba'`. Default: `predict` when the estimator has it,
-            else `transform`.
-
-        Returns
-        -------
-        dict
-            `mojolearn_version`, `numeric_mode`, `estimator` (the class
-            name), `parameters` (every constructor parameter), `data` (shape,
-            dtype and SHA-256 of the bytes of `X` and of `y`),
-            `fitted_state` (the SHA-256 of the saved model; `present` is
-            False, with the reason, for an estimator that cannot be saved)
-            and `predictions` (the method and the SHA-256 of its answer for
-            `X`).
-
-        Examples
-        --------
-        >>> import numpy as np, mojolearn
-        >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
-        >>> model = mojolearn.Ridge(alpha=1.0).fit(X, X[:, 0])
-        >>> receipt = model.receipt(X, X[:, 0], path="ridge-receipt.json")    # doctest: +SKIP
-        >>> mojolearn.reproduce(receipt, X, X[:, 0])["same"]    # doctest: +SKIP
-        True
-        """
-        # Loaded here, on the first call only, like the check above.
-        from ._reproduce import receipt
-        return receipt(self, X, y, method=method, path=path)
+# glue: the one `digest_` property object, for the native attribute lookups
+# that admit it by identity (bindings/fitted_digest_property_pack.mojo and the
+# property recipe of _native_public_attributes.connect_classes).
+_DIGEST_CONNECTION["property"] = vars(CheckMixin)["digest_"]
 
 
 class PublicOutputsMixin(CheckMixin):
@@ -588,7 +589,7 @@ class PublicOutputsMixin(CheckMixin):
     view of the same memory when NumPy is loaded and the reader is not
     mojolearn's own code; the instance keeps the `Array`.
 
-    Every estimator also gets `check(X)` and `receipt(X, y)` from here
+    Every estimator also gets `check(X)` and `digest_` from here
     (`CheckMixin`)."""
 
     def __init_subclass__(cls, **kw):
@@ -922,6 +923,9 @@ _MODE_METADATA, _MODE_METADATA_CONTEXT = _connect_mode_metadata()
 # why device="cpu" is refused for it (_device_table.py). The same dictionary
 # object: classes defined later add their row.
 _MODE_METADATA_CONTEXT["device_cpu"] = _DEVICE_CPU_CLASSES
+# The `digest_` connection (the property object, the compiled entry and its
+# context; _digest_fields.py), for the classical layouts' native lookup.
+_MODE_METADATA_CONTEXT["digest_connection"] = _DIGEST_CONNECTION
 # The lazy CPU-image connection the same check calls on an admitted
 # device="cpu" beside a GPU set (_device_table.connect_cpu).
 from ._device_table import connect_cpu as _device_connect_cpu
