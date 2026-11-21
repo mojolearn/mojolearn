@@ -224,7 +224,6 @@ struct ParallelKeys(Defaultable, Movable):
     var k__causal_live_fields: PythonObject
     var k__causal_original: PythonObject
     var k__classes_list: PythonObject
-    var k__classifier: PythonObject
     var k__closed: PythonObject
     var k__components_len: PythonObject
     var k__comps: PythonObject
@@ -264,7 +263,6 @@ struct ParallelKeys(Defaultable, Movable):
     var k__offsets: PythonObject
     var k__pool: PythonObject
     var k__pools: PythonObject
-    var k__public_kind: PythonObject
     var k__resident: PythonObject
     var k__resident_holder: PythonObject
     var k__session: PythonObject
@@ -565,7 +563,6 @@ struct ParallelKeys(Defaultable, Movable):
         self.k__causal_live_fields = PythonObject(None)
         self.k__causal_original = PythonObject(None)
         self.k__classes_list = PythonObject(None)
-        self.k__classifier = PythonObject(None)
         self.k__closed = PythonObject(None)
         self.k__components_len = PythonObject(None)
         self.k__comps = PythonObject(None)
@@ -605,7 +602,6 @@ struct ParallelKeys(Defaultable, Movable):
         self.k__offsets = PythonObject(None)
         self.k__pool = PythonObject(None)
         self.k__pools = PythonObject(None)
-        self.k__public_kind = PythonObject(None)
         self.k__resident = PythonObject(None)
         self.k__resident_holder = PythonObject(None)
         self.k__session = PythonObject(None)
@@ -898,7 +894,6 @@ def _parallel_keys_fill(nk: UnsafePointer[ParallelKeys, MutUntrackedOrigin]) rai
     nk[].k__causal_live_fields = py_key("_causal_live_fields")
     nk[].k__causal_original = py_key("_causal_original")
     nk[].k__classes_list = py_key("_classes_list")
-    nk[].k__classifier = py_key("_classifier")
     nk[].k__closed = py_key("_closed")
     nk[].k__components_len = py_key("_components_len")
     nk[].k__comps = py_key("_comps")
@@ -938,7 +933,6 @@ def _parallel_keys_fill(nk: UnsafePointer[ParallelKeys, MutUntrackedOrigin]) rai
     nk[].k__offsets = py_key("_offsets")
     nk[].k__pool = py_key("_pool")
     nk[].k__pools = py_key("_pools")
-    nk[].k__public_kind = py_key("_public_kind")
     nk[].k__resident = py_key("_resident")
     nk[].k__resident_holder = py_key("_resident_holder")
     nk[].k__session = py_key("_session")
