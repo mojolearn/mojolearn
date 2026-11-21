@@ -1233,7 +1233,10 @@ def read_units(path):
     with open(path) as fh:
         for ln in fh:
             f = ln.rstrip("\n").split("\t")
-            if len(f) == 3 and f[0] not in ("candidate", "prior") and os.path.isfile(f[2]):
+            if len(f) == 3 and f[0] not in ("candidate", "prior") and not os.path.isfile(f[2]):
+                # its ids file is gone: the unit stays in the table as races=0, never dropped (lane fx-tools-round3)
+                out.append((f[0], f[1], [], set()))
+            elif len(f) == 3 and f[0] not in ("candidate", "prior"):
                 with open(f[2]) as ih:
                     ids = [x.strip() for x in ih if x.strip()]
                 cf = os.path.splitext(f[2])[0] + ".cap.txt"

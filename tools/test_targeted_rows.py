@@ -225,6 +225,9 @@ class Summary(unittest.TestCase):
             Path(d, "ids-x-full.cap.txt").write_text(B + "\n")
             Path(d, "units.tsv").write_text("candidate\tfull\t%s\nx\tfull\t%s\n" % (ids, ids))
             self.assertEqual(TR.read_units(os.path.join(d, "units.tsv")), [("x", "full", [B, C], {B})])
+            # a unit whose ids file is gone stays, with no race (lane fx-tools-round3: never dropped silently)
+            Path(d, "units.tsv").write_text("x\tfull\t%s\ny\tfull\t%s\n" % (ids, os.path.join(d, "gone.txt")))
+            self.assertEqual(TR.read_units(os.path.join(d, "units.tsv"))[1], ("y", "full", [], set()))
 
 
 class PriorWheel(unittest.TestCase):
@@ -824,6 +827,102 @@ class PodJob2(unittest.TestCase):
         self.assertEqual([x for x in got if x], ["b1 r1", "b1 r2", "b2 r1", "b2 r2", "candidate r1", "candidate r2"])
         self.assertIn("PHASE_END 2", p.stdout)                  # a failed driver case fails the phase
         self.assertIn("driver cases: 6", p.stdout)
+
+class AbReading(unittest.TestCase):
+    """lane fx-tools-round3 (2026-11-20, A/B abf2): tf32-all had 12 of 13 cells faster and none slower and read
+    'median 0.93 SAME'; gemm-leaf512's arm lost neural/gemm to the profile admission and its line read 'arm - ms
+    ratio -'. The direction reading and a named reason for every untimed cell and lost row."""
+
+    def test_direction_counts_and_one_way(self):
+        tf32_all = [0.96, 0.85, 0.97, 0.95, 0.96, 0.93, 0.97, 0.90, 0.93, 0.90, 0.82, 1.00, 0.91]
+        text = TR.direction(tf32_all)
+        self.assertIn("faster 12 flat 1 slower 0 min 0.82 max 1.00", text)
+        self.assertIn("ONE-WAY faster", text)
+        # one cell beyond 1.05 the other way: no ONE-WAY
+        self.assertNotIn("ONE-WAY", TR.direction(tf32_all[:-1] + [1.06]))
+        # under 80%: no ONE-WAY; under five cells: no ONE-WAY
+        self.assertNotIn("ONE-WAY", TR.direction([0.9] * 7 + [1.0] * 3))
+        self.assertNotIn("ONE-WAY", TR.direction([0.9] * 4))
+        self.assertIn("ONE-WAY slower", TR.direction([1.02] * 5 + [0.97]))
+        self.assertEqual(TR.direction([]), "")
+
+    def boards(self, res, arm, base_races, arm_races, arm_extra=None):
+        cell = lambda ms: {"arm": "ours", "status": "ok", "median_ms": ms}  # noqa: E731
+        for sub, races, extra in (("board-tg-ab-%s-base-full" % arm, base_races, None),
+                                  ("board-tg-ab-%s-full" % arm, arm_races, arm_extra)):
+            doc = {"races": {rid: {"status": "done", "cells": [cell(ms)]} for rid, ms in races.items()}}
+            doc.update(extra or {})
+            os.makedirs(os.path.join(res, sub))
+            Path(res, sub, "board.json").write_text(json.dumps(doc))
+
+    def test_summary_names_a_lost_row_and_reads_direction(self):
+        why = {"failed_preflight_recipes": {D: {"status": "FAILED", "problems": [
+            "probe refused mojolearn.linalg: binary numerical profile v2-leaf512 (version 4) does not match"]}}}
+        with tempfile.TemporaryDirectory() as res:
+            self.boards(res, "x", {A: 10.0, B: 10.0, C: 10.0, D: 10.0}, {A: 9.0, B: 9.0, C: 9.5}, why)
+            text = TR.summary(compare_doc(), [], res, [], [("x", "full", [A, B, C, D], set())])
+        table = [ln for ln in text.splitlines() if ln.startswith("  x ")][0]
+        self.assertIn("median arm/base 0.90 SAME; faster 3 flat 0 slower 0 min 0.90 max 0.95", table)
+        self.assertIn("untimed cells 1", table)
+        self.assertIn("rows differ 1", table)
+        self.assertIn("AB-ROWS-DIFFER arm=x rows=full %s missing on the arm: preflight FAILED: probe refused" % D, text)
+        line_d = [ln for ln in text.splitlines() if ln.startswith("AB x rows=full %s fit" % D)][0]
+        self.assertIn("base 10.00 -> arm - ms ratio - NOT-TIMED (arm: preflight FAILED: probe refused", line_d)
+        self.assertIn("version 4", line_d)
+        # the AB-ROWS-DIFFER line sits before this arm's own cell lines
+        lines = text.splitlines()
+        self.assertLess(lines.index([ln for ln in lines if ln.startswith("AB-ROWS-DIFFER")][0]),
+                        lines.index([ln for ln in lines if ln.startswith("AB x rows=full %s" % A)][0]))
+
+    def test_untimed_cell_names_its_status(self):
+        with tempfile.TemporaryDirectory() as res:
+            self.boards(res, "y", {A: 10.0}, {})
+            Path(res, "board-tg-ab-y-full", "board.json").write_text(json.dumps({"races": {A: {
+                "status": "failed", "failure": "PARAMS REFUSED: n_iter differs",
+                "cells": [{"arm": "ours", "status": "crash(rc=1)", "median_ms": None}]}}}))
+            text = TR.summary(compare_doc(), [], res, [], [("y", "full", [A], set())])
+        line = [ln for ln in text.splitlines() if ln.startswith("AB y rows=full %s fit" % A)][0]
+        self.assertIn("NOT-TIMED (arm: race failed: PARAMS REFUSED: n_iter differs; cell crash(rc=1))", line)
+
+    def test_ab_gaps_cli_and_partial_in_timed_check(self):
+        import io
+        from contextlib import redirect_stdout
+        with tempfile.TemporaryDirectory() as td:
+            res = os.path.join(td, "res")
+            self.boards(res, "z", {A: 10.0, B: 10.0}, {A: 9.0})
+            ids = os.path.join(td, "ids-z-full.txt")
+            Path(ids).write_text(A + "\n" + B + "\n")
+            Path(ids + ".pass").write_text(A + "\n" + B + "\n")
+            units = os.path.join(td, "units.tsv")
+            Path(units).write_text("z\tfull\t%s\n" % ids)
+            Path(td, "listed.txt").write_text("")
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                rc = TR.main(["ab-gaps", "--arm", "z", "--rows", "full", "--ids", ids + ".pass",
+                              "--base", os.path.join(res, "board-tg-ab-z-base-full", "board.json"),
+                              "--board", os.path.join(res, "board-tg-ab-z-full", "board.json")])
+            self.assertEqual(rc, 0)
+            self.assertIn("AB-ROWS-DIFFER arm=z rows=full %s missing on the arm: race not in the board" % B,
+                          buf.getvalue())
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                rc = TR.main(["timed-check", "--results", res, "--ids", os.path.join(td, "listed.txt"),
+                              "--units", units])
+            self.assertEqual(rc, 0, buf.getvalue())                    # a reading: the exit is unchanged
+            self.assertIn("PARTIAL z: AB-ROWS-DIFFER arm=z rows=full %s missing on the arm" % B, buf.getvalue())
+            # matching rows: the SAME line, no PARTIAL
+            Path(ids + ".pass").write_text(A + "\n")
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                TR.main(["ab-gaps", "--arm", "z", "--rows", "full", "--ids", ids + ".pass",
+                         "--base", os.path.join(res, "board-tg-ab-z-base-full", "board.json"),
+                         "--board", os.path.join(res, "board-tg-ab-z-full", "board.json")])
+            self.assertIn("AB-ROWS-SAME arm=z rows=full (1 race(s))", buf.getvalue())
+
+    def test_job_names_lost_rows_per_unit(self):
+        text = Path(JOB).read_text()
+        self.assertIn("tools/ops/targeted_rows.py ab-gaps --arm \"$arm\"", text)
+        self.assertIn("grep -m 20 '^PAPER-PASS-IDS-FAILED' \"$RES/logs/pass-ids-tg-ab-$arm.log\"", text)
 
 
 if __name__ == "__main__":
