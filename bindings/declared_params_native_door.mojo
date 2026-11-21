@@ -14,6 +14,7 @@ from bindings.params_metadata_native_door import _plan, _connected_plan, _resolv
 from bindings.params_setter_native_door import _constructor_layout
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.optimizer_public_words_unpack import optimizer_python_error, PYTHON_ERROR_PENDING
+from providers.python.device_route_boundary_door import device_admit_class, device_route_clear
 
 
 def _assignment_plan(model: PythonObject, fields: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -102,6 +103,10 @@ def _assign(model: PythonObject, keywords: PythonObject, context: PythonObject) 
     # hashing supplied keys. Validate each key immediately before its write:
     # an invalid later keyword must not roll back earlier valid assignments.
     var pairs = py_call(b.list, keywords.items())
+    # A parameter changed: the estimator's device route is dropped once, before
+    # the first write (a later invalid keyword does not roll earlier writes
+    # back), so the next operation resolves the device and the mode again.
+    device_route_clear(model)
     for i in range(len(pairs)):  # driver-loop: ordered shallow keyword assignments, never nested updates
         var name = pairs[i][0]
         if py_type(name) is not b.str:
@@ -120,10 +125,9 @@ def _assign(model: PythonObject, keywords: PythonObject, context: PythonObject) 
         var value = pairs[i][1]
         if String(name) == "device":
             # A new device is refused in the shared words before it is
-            # written; an admitted one drops the estimator's device route.
+            # written (the route was dropped above).
             device_admit_class(model, value, py_get(context["backend_fields"], "_CPU_ONLY") is not None,
                                py_get(context, "device_cpu"), b)
-            device_route_clear(model)
         if py_contains(fields, name):
             var previous = native_instance_item(fields, name)
             if previous is not value:
