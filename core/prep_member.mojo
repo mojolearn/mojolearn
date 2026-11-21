@@ -97,13 +97,24 @@ this kind only): a dense host float32 vector, one weight per row of X (of
 the whole X with a row index). Transform: ordinal codes (features columns)
 or one-hot blocks (sum of n_bins_ columns), float32; inverse_transform: the
 bin centers (features columns).
+MEMBER_OP_NEW parameters, SplineTransformer (Float64 words, 14 + r * c): [0]
+kind 9, [1] degree, [2] knots 0 given / 1 'quantile' / 2 'uniform', [3]
+n_knots (not given), [4] extrapolation 0 'constant', 1 'continue' or
+'error', 2 'linear', 3 'periodic', [5] extrapolation is 'error' 0 / 1, [6]
+handle_missing is 'error' 0 / 1, [7] include_bias 0 / 1, [8] the image's
+fused route (`x_prep_spline_fused` on the fast build) 0 / 1, [9] blocked
+column statistics 0 / 1, [10] R3 work region 0 / 1, [11] order 'F' 0 / 1
+(the caller's layout; the member writes row-major dst), [12] r given knot
+rows, [13] c their columns (-1: rows of unequal lengths), then the r x c
+knots row-major (float32 values). sample_weight as KBinsDiscretizer's.
+Transform: n_features_out_ columns, float32.
 
 The Apple fast direct fit entry (`x_prep_maxabs_fit_direct`, opt-in
 PREP3_MAXABS) is not a member route: the admit answers False there and the
 caller keeps the door.
 
 Views: X dense row-major host float32 (NaN allowed, as the estimator allows
-it); no y (ignored), no sample weights (refused, except KBinsDiscretizer), no column index, no
+it); no y (ignored), no sample weights (refused, except KBinsDiscretizer and SplineTransformer), no column index, no
 device-home view. ROW INDEX (MEMBER_CAN_ROW_INDEX): `call.row_index` a
 dense host int32 / int64 vector of rows of the WHOLE X in `call.x` (bounds
 checked; repeats allowed); the operation reads those rows, `dst` has one
@@ -158,6 +169,9 @@ KBinsDiscretizer:
   0 `MEMBER_BLOCK_SCALARS` float64 [n_features_in_, `_stride` (max n_bins + 1)]
   1 `PREP_BLOCK_CENTER` float32 features x `_stride` (`_edges`, each row's first n_bins_ + 1 words used)
   2 `PREP_BLOCK_SCALE` float32 features (`_ne`, the edge counts = n_bins_ + 1)
+SplineTransformer:
+  0 `MEMBER_BLOCK_SCALARS` float64 [n_features_in_, `_nk`, `_k`, n_features_out_]
+  1 `PREP_BLOCK_CENTER` float32 features x (`_nk` + 2 `_k`) (`_knots`; bsplines_, `_lo`, `_hi` are its words)
 
 The fitted state is OWNED here, in a process-wide store of fixed chunks (the
 linear member's store): a slot never moves once minted, the lock covers only
@@ -180,6 +194,10 @@ from bindings.prep_encode_prog_run import EncProgram
 from bindings.prep_encode_kbins_run import (
     KBinsFit, KBinsApply, KBinsInverse, kbins_fit_stage, kbins_transform_stage, kbins_inverse_stage,
     enc_weights_stage, KB_DRAW_NONE, KB_DRAW_PLAIN, KB_DRAW_WEIGHTED,
+)
+from bindings.prep_encode_spline_run import (
+    SplineFit, SplineApply, spline_fit_stage, spline_transform_stage, spline_features,
+    SPL_KNOTS_GIVEN, SPL_PERIODIC,
 )
 from bindings.prep_encode_imputer_run import (
     ImputerFit, ImputerApply, imputer_fit_stage, imputer_transform_stage, IMP_CONSTANT,
@@ -223,6 +241,9 @@ comptime PREP_KBINS_HEADER = 10
 comptime PREP_KBINS_ONEHOT = 0
 comptime PREP_KBINS_ONEHOT_DENSE = 1
 comptime PREP_KBINS_ORDINAL = 2
+comptime PREP_KIND_SPLINE = 9
+#: SplineTransformer's fixed words; `words[12] * words[13]` given knot words follow.
+comptime PREP_SPLINE_HEADER = 14
 
 comptime PREP_BLOCK_CENTER = MEMBER_BLOCK_FAMILY
 comptime PREP_BLOCK_SCALE = MEMBER_BLOCK_FAMILY + 1
@@ -387,6 +408,8 @@ def _kind_name(kind: Int) -> String:
         return String("SimpleImputer")
     if kind == PREP_KIND_KBINS:
         return String("KBinsDiscretizer")
+    if kind == PREP_KIND_SPLINE:
+        return String("SplineTransformer")
     return String("RobustScaler")
 
 
@@ -394,6 +417,8 @@ def _block_count(kind: Int) -> Int:
     # Fitted blocks, the scalars block included (the docstring's table).
     if kind == PREP_KIND_BINARIZER or kind == PREP_KIND_NORMALIZER:
         return 1
+    if kind == PREP_KIND_SPLINE:
+        return 2
     if kind == PREP_KIND_QUANTILE:
         return 4
     if kind == PREP_KIND_POWER:
@@ -407,6 +432,8 @@ def _scalar_count(kind: Int) -> Int:
     if (kind == PREP_KIND_MAXABS or kind == PREP_KIND_POLYNOMIAL or kind == PREP_KIND_QUANTILE
             or kind == PREP_KIND_IMPUTER or kind == PREP_KIND_KBINS):
         return 2
+    if kind == PREP_KIND_SPLINE:
+        return 4
     return 1
 
 
@@ -1273,6 +1300,56 @@ def _fold_weights(call: _Call) raises -> List[Float32]:
     return out^
 
 
+struct PrepWeights(Movable):
+    """A fit's checked sample weights: `address` of n float32 words (the
+    caller's, or the fold's gathered into `fold`), `positive` of them
+    positive; `given` False: none."""
+    var given: Bool
+    var fold: List[Float32]
+    var address: Int
+    var positive: Int
+
+    def __init__(out self):
+        self.given = False
+        self.fold = List[Float32]()
+        self.address = 0
+        self.positive = 0
+
+
+def _weights_check(call: _Call, n: Int, estimator: String, blocked: Bool, work: Bool) raises -> PrepWeights:
+    """The encode door's `_check_weights` over `call.weights` (the fold's
+    rows of the whole X's weights with a row index): its program
+    (`enc_weights_stage` on owner 1) and its two refusals, in its words."""
+    var out = PrepWeights()
+    if call[].weights.rows == 0:
+        return out^
+    if not call[].weights.dense_host(MEMBER_F32) or call[].weights.cols != 1:
+        raise Error("member ABI: a " + estimator + " member reads sample_weight as a dense host float32 vector")
+    if call[].weights.rows != call[].x.rows:
+        raise Error("mojolearn: sample_weight has " + String(call[].weights.rows) + " entries; X has "
+                    + String(call[].x.rows) + " rows")
+    out.given = True
+    out.address = call[].weights.data
+    if call[].row_index.rows > 0:
+        out.fold = _fold_weights(call)
+        out.address = Int(out.fold.unsafe_ptr())
+    var check = EncProgram(work)
+    var plan = enc_weights_stage(check, 1, n, blocked)
+    var ran = _enc_run(call, check, out.address, 0)
+    var ap = _F32P(unsafe_from_address=Int(ran.unsafe_ptr()))
+    var count = ap[plan.stats]
+    var low = ap[plan.stats + 3]
+    out.positive = _iword(ran, plan.positives)
+    _ = ran^
+    _ = len(check.consts_f)  # the program's own input words live past the run
+    # a NaN is not counted by col_stats
+    if Int(count) != n or low < 0:
+        raise Error("mojolearn: " + estimator + " sample_weight must be nonnegative")
+    if out.positive == 0:
+        raise Error("mojolearn: " + estimator + " sample_weight is all zero")
+    return out^
+
+
 def _kbins_method(strategy: Int) -> String:
     # The quantile_method a strategy code stands for (the door's `_kbins_strategy`).
     if strategy == 1:
@@ -1328,34 +1405,8 @@ def _fit_kbins(slot: _Slot, call: _Call) raises:
     var strat = Int(w[2])
     var blocked = w[6] != 0.0
     var work = w[7] != 0.0
-    var given = call[].weights.rows > 0
-    var fold_weights = List[Float32]()
-    var weights_at = 0
-    var positive = 0
-    if given:
-        if not call[].weights.dense_host(MEMBER_F32) or call[].weights.cols != 1:
-            raise Error("member ABI: a KBinsDiscretizer member reads sample_weight as a dense host float32 vector")
-        if call[].weights.rows != call[].x.rows:
-            raise Error("mojolearn: sample_weight has " + String(call[].weights.rows) + " entries; X has "
-                        + String(call[].x.rows) + " rows")
-        weights_at = call[].weights.data
-        if call[].row_index.rows > 0:
-            fold_weights = _fold_weights(call)
-            weights_at = Int(fold_weights.unsafe_ptr())
-        var check = EncProgram(work)
-        var plan = enc_weights_stage(check, 1, n, blocked)
-        var ran = _enc_run(call, check, weights_at, 0)
-        var ap = _F32P(unsafe_from_address=Int(ran.unsafe_ptr()))
-        var count = ap[plan.stats]
-        var low = ap[plan.stats + 3]
-        positive = _iword(ran, plan.positives)
-        _ = ran^
-        _ = len(check.consts_f)  # the program's own input words live past the run
-        # a NaN is not counted by col_stats
-        if Int(count) != n or low < 0:
-            raise Error("mojolearn: KBinsDiscretizer sample_weight must be nonnegative")
-        if positive == 0:
-            raise Error("mojolearn: KBinsDiscretizer sample_weight is all zero")
+    var weights = _weights_check(call, n, estimator, blocked, work)
+    var given = weights.given
     var subsample = Int(w[3])
     var resample = subsample >= 0 and n > subsample
     var draw = KB_DRAW_NONE
@@ -1387,10 +1438,10 @@ def _fit_kbins(slot: _Slot, call: _Call) raises:
                     + "quantile_method='" + _kbins_method(strat) + "' instead.")
     var prog = EncProgram(work)
     var request = KBinsFit(n, d, 0, strat, bins^, nbmax, draw, draws, Int(w[4]), Int(w[5]), weighted,
-                           1 if given else -1, positive, blocked)
+                           1 if given else -1, weights.positive, blocked)
     var plan = kbins_fit_stage(prog, request)
-    var arena = _enc_run(call, prog, weights_at, 0)
-    _ = fold_weights^  # the fold's weights live past the run
+    var arena = _enc_run(call, prog, weights.address, 0)
+    _ = weights^  # the fold's weights live past the run
     _ = len(prog.consts_f)  # the program's own input words live past the run
     var stride = nbmax + 1
     slot[].clear()
@@ -1471,6 +1522,147 @@ def _inverse_kbins(slot: _Slot, call: _Call) raises:
     if prog.out_words == 0:
         unsafe_memcpy(dest=_F32P(unsafe_from_address=call[].dst.data),
             src=_F32P(unsafe_from_address=Int(arena.unsafe_ptr())) + plan.centers, count=n * d)
+    _ = arena^
+
+
+def _spline_width(words: MutPointer[Float64, MutUntrackedOrigin], d: Int) -> Int:
+    # n_features_out_ from the words: the given knots' rows, else n_knots.
+    var nk = Int(words[12]) if Int(words[2]) == SPL_KNOTS_GIVEN else Int(words[3])
+    return spline_features(d, nk, Int(words[1]), Int(words[4]) == SPL_PERIODIC, words[7] != 0.0)
+
+
+def _fit_spline(slot: _Slot, call: _Call) raises:
+    """The encode door's `_spline_fit`: the weights check, the knots program
+    (col_stats, the given / quantile / uniform base knots, spline_knots) and,
+    on the image's fused route, the spline_apply of X in the same program
+    (the door's fused fit_transform); the missing-value refusal, in the
+    door's words and order."""
+    var estimator = _name(slot)
+    _whole(call, estimator)
+    _dense(call[].x, "X", estimator)
+    if call[].fit_output != 0 and call[].fit_output != MEMBER_OP_TRANSFORM:
+        member_unsupported(estimator, call[].fit_output)
+    var n = _rows(call)
+    var d = call[].x.cols
+    if n < 2:
+        raise Error("Found array with " + String(n) + " sample(s) (shape=(" + String(n) + ", " + String(d)
+                    + ")) while a minimum of 2 is required by SplineTransformer.")
+    var w = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(slot[].words.unsafe_ptr()))
+    var k = Int(w[1])
+    var kind = Int(w[2])
+    var extrap = Int(w[4])
+    var bias = w[7] != 0.0
+    var fused = w[8] != 0.0
+    var blocked = w[9] != 0.0
+    var weights = _weights_check(call, n, estimator, blocked, w[10] != 0.0)
+    var nk = Int(w[3])
+    var cols = List[Float64]()
+    if kind == SPL_KNOTS_GIVEN:
+        # The user's knots (rows x columns, float32 words; columns -1: rows
+        # of unequal lengths), checked and packed column-major as the door.
+        nk = Int(w[12])
+        var given_cols = Int(w[13])
+        if nk < 2:
+            raise Error("mojolearn: Number of knots, knots.shape[0], must be >= 2.")
+        if given_cols != d:
+            raise Error("mojolearn: knots.shape[1] == n_features is violated.")
+        var table = w + PREP_SPLINE_HEADER
+        for c in range(d):  # driver-loop: over the knots columns (feature count)
+            for i in range(1, nk):  # driver-loop: over one knots column
+                if not (Float32(table[i * d + c]) > Float32(table[(i - 1) * d + c])):
+                    raise Error("mojolearn: knots must be sorted without duplicates.")
+        cols = List[Float64](capacity=d * nk)
+        for c in range(d):  # driver-loop: packs the user knots column-major (feature count)
+            for i in range(nk):  # driver-loop: over one knots column
+                cols.append(table[i * d + c])
+    elif nk < 2:
+        raise Error("mojolearn: SplineTransformer needs n_knots >= 2")
+    var periodic = extrap == SPL_PERIODIC
+    if periodic and nk <= k:
+        raise Error("mojolearn: Periodic splines require degree < n_knots. Got n_knots=" + String(nk) + " and "
+                    + "degree=" + String(k) + ".")
+    var features = spline_features(d, nk, k, periodic, bias)
+    var wd = nk + 2 * k
+    # The door fuses fit_transform only on the image's fused route and
+    # without extrapolation='error' (whose limits the transform checks).
+    var apply = call[].fit_output == MEMBER_OP_TRANSFORM and fused and w[5] == 0.0
+    if apply:
+        _dense(call[].dst, "the output buffer", estimator)
+        if call[].dst.rows != n or call[].dst.cols != features:
+            raise Error("ValueError: the output buffer holds " + String(features) + " values per row of X")
+    var prog = EncProgram(w[10] != 0.0)
+    var request = SplineFit(n, d, 0, k, nk, kind, cols^, extrap, bias, weights.given, 1 if weights.given else -1,
+                            weights.positive, fused, blocked, apply)
+    var plan = spline_fit_stage(prog, request, (call[].route.flags & PREP_ROUTE_OUT) != 0)
+    var arena = _enc_run(call, prog, weights.address, call[].dst.data if apply else 0)
+    _ = weights^  # the fold's weights live past the run
+    _ = len(prog.consts_f)  # the program's own input words live past the run
+    if w[6] != 0.0:
+        _spline_no_nan(arena, plan.stats, d, n)
+    slot[].clear()
+    slot[].center = _take(arena, plan.knots, d * wd)
+    slot[].features = d
+    slot[].scalars = [Float64(d), Float64(nk), Float64(k), Float64(features)]
+    slot[].fitted = True
+    if apply:
+        if prog.out_words == 0 and n * features > 0:
+            unsafe_memcpy(dest=_F32P(unsafe_from_address=call[].dst.data),
+                src=_F32P(unsafe_from_address=Int(arena.unsafe_ptr())) + plan.applied, count=n * features)
+        _ = arena^
+        return
+    _ = arena^
+    if call[].fit_output == MEMBER_OP_TRANSFORM:
+        _transform_spline(slot, call)
+
+
+def _spline_no_nan(arena: List[Float32], stats: Int, d: Int, n: Int) raises:
+    # The door's `_no_nan`: handle_missing='error' refuses a column with a NaN.
+    var ap = _F32P(unsafe_from_address=Int(arena.unsafe_ptr()))
+    for j in range(d):  # driver-loop: over the per-column non-NaN counts (feature metadata)
+        if Int(ap[stats + j]) != n:
+            raise Error("mojolearn: Input X contains NaN values and `SplineTransformer` is configured to "
+                        + "error in this case (handle_missing='error'). To avoid this error, set "
+                        + "handle_missing='zeros' to encode missing values as splines with value 0 or ensure "
+                        + "no missing values in X.")
+
+
+def _transform_spline(slot: _Slot, call: _Call) raises:
+    """The encode door's `_spline_transform`: spline_apply over the fitted
+    knots (the column statistics staged when a refusal reads them), the
+    refusals in its words, the C-order block into the caller's dst (its
+    output region when the image has one and the block is large; order 'F'
+    is the caller's layout: no transpose stage)."""
+    var features = Int(slot[].scalars[3]) if slot[].fitted else 0
+    _apply_begin(slot, call, features)
+    var n = _rows(call)
+    var d = slot[].features
+    if n * features == 0:
+        return
+    var w = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(slot[].words.unsafe_ptr()))
+    var nk = Int(slot[].scalars[1])
+    var k = Int(slot[].scalars[2])
+    var extrap_error = w[5] != 0.0
+    var missing_error = w[6] != 0.0
+    var check = extrap_error or missing_error
+    var prog = EncProgram(w[10] != 0.0)
+    var request = SplineApply(n, d, 0, 1, len(slot[].center), nk, k, Int(w[4]), features, w[7] != 0.0, False, check,
+                              check and w[8] != 0.0, check and w[9] != 0.0)
+    var plan = spline_transform_stage(prog, request, (call[].route.flags & PREP_ROUTE_OUT) != 0)
+    var arena = _enc_run(call, prog, Int(slot[].center.unsafe_ptr()), call[].dst.data)
+    _ = len(prog.consts_f)  # the program's own input words live past the run
+    if missing_error:
+        _spline_no_nan(arena, plan.stats, d, n)
+    if extrap_error:
+        var ap = _F32P(unsafe_from_address=Int(arena.unsafe_ptr()))
+        var wd = nk + 2 * k
+        for j in range(d):  # driver-loop: over the per-column knot limits (feature metadata)
+            var low = Float64(slot[].center[j * wd + k])
+            var high = Float64(slot[].center[j * wd + k + nk - 1])
+            if Float64(ap[plan.stats + 3 * d + j]) < low or Float64(ap[plan.stats + 4 * d + j]) > high:
+                raise Error("mojolearn: X contains values beyond the limits of the knots")
+    if prog.out_words == 0:
+        unsafe_memcpy(dest=_F32P(unsafe_from_address=call[].dst.data),
+            src=_F32P(unsafe_from_address=Int(arena.unsafe_ptr())) + plan.applied, count=n * features)
     _ = arena^
 
 
@@ -1633,6 +1825,10 @@ def _import(slot: _Slot, call: _Call) raises:
     elif kind == PREP_KIND_IMPUTER:
         complete = (complete and len(slot[].center) == d and len(slot[].scale) == d and len(slot[].extra) <= d
                     and len(slot[].anchor) <= d)
+    elif kind == PREP_KIND_SPLINE:
+        var nk = Int(slot[].scalars[1])
+        var k = Int(slot[].scalars[2])
+        complete = complete and nk >= 2 and k >= 0 and Int(slot[].scalars[3]) >= 0 and len(slot[].center) == d * (nk + 2 * k)
     elif kind == PREP_KIND_KBINS:
         var stride = Int(slot[].scalars[1])
         complete = complete and stride >= 2 and len(slot[].center) == d * stride and len(slot[].scale) == d
@@ -1682,6 +1878,11 @@ def _outputs(call: _Call) raises:
             # fitted bins (duplicate edges are dropped by the fit).
             if call[].param_count < PREP_KBINS_HEADER or source[1] != Float64(PREP_KBINS_ORDINAL):
                 raise Error("member ABI: a one-hot KBinsDiscretizer member's output width is known after its fit")
+        if kind == PREP_KIND_SPLINE and call[].flags == MEMBER_OP_TRANSFORM:
+            if call[].param_count < PREP_SPLINE_HEADER:
+                raise Error("member ABI: a SplineTransformer member's output width needs its parameter words")
+            call[].out_cols = _spline_width(source, call[].x.cols)
+            return
         if kind == PREP_KIND_IMPUTER:
             # keep_empty_features without add_indicator keeps every column;
             # otherwise the width is chosen by the fit.
@@ -1704,6 +1905,9 @@ def _outputs(call: _Call) raises:
     if slot[].kind() == PREP_KIND_KBINS and call[].flags == MEMBER_OP_TRANSFORM:
         call[].out_cols = _kbins_cols(slot)
         return
+    if slot[].kind() == PREP_KIND_SPLINE:
+        call[].out_cols = Int(slot[].scalars[3])
+        return
     call[].out_cols = slot[].features
 
 
@@ -1724,6 +1928,8 @@ def _new_count(kind: Int) raises -> Int:
         return PREP_IMPUTER_PARAM_COUNT
     if kind == PREP_KIND_KBINS:
         return PREP_KBINS_HEADER  # plus words[8] per-column n_bins words
+    if kind == PREP_KIND_SPLINE:
+        return PREP_SPLINE_HEADER  # plus words[12] * words[13] given knot words
     raise Error("member ABI: unknown or unpublished Prep member kind")
 
 
@@ -1737,12 +1943,12 @@ def _prep_member(operation: Int, address: Int) raises -> Int:
         if call[].state == 0:
             return mask | MEMBER_CAN_INVERSE_TRANSFORM | MEMBER_CAN_SAMPLE_WEIGHT  # the family's union
         # Kind-exact: QuantileTransformer, PowerTransformer and
-        # KBinsDiscretizer invert; only KBinsDiscretizer reads weights; no
-        # kind reads a column index.
+        # KBinsDiscretizer invert; KBinsDiscretizer and SplineTransformer
+        # read weights; no kind reads a column index.
         var held = _Slot(unsafe_from_address=_lookup(call[].state, False))
         if _invertible(held[].kind()):
             mask |= MEMBER_CAN_INVERSE_TRANSFORM
-        if held[].kind() == PREP_KIND_KBINS:
+        if held[].kind() == PREP_KIND_KBINS or held[].kind() == PREP_KIND_SPLINE:
             mask |= MEMBER_CAN_SAMPLE_WEIGHT
         return mask
     if operation == MEMBER_OP_NEW:
@@ -1753,6 +1959,8 @@ def _prep_member(operation: Int, address: Int) raises -> Int:
         var expected = _new_count(kind)
         if kind == PREP_KIND_KBINS and call[].param_count >= PREP_KBINS_HEADER and source[8] >= 0.0:
             expected += Int(source[8])
+        if kind == PREP_KIND_SPLINE and call[].param_count >= PREP_SPLINE_HEADER and source[12] >= 0.0:
+            expected += Int(source[12]) * max(Int(source[13]), 0)
         if Float64(kind) != source[0] or call[].param_count != expected:
             raise Error("member ABI: a " + _kind_name(kind) + " member takes " + String(_new_count(kind))
                         + " parameter words")
@@ -1768,6 +1976,9 @@ def _prep_member(operation: Int, address: Int) raises -> Int:
             raise Error("member ABI: unknown SimpleImputer strategy code")
         if kind == PREP_KIND_KBINS and (source[1] < 0.0 or source[1] > 2.0 or source[2] < 0.0 or source[2] > 10.0):
             raise Error("member ABI: invalid KBinsDiscretizer encode or strategy code")
+        if kind == PREP_KIND_SPLINE and (source[1] < 0.0 or source[1] > 7.0 or source[2] < 0.0 or source[2] > 2.0
+                                         or source[4] < 0.0 or source[4] > 3.0):
+            raise Error("member ABI: invalid SplineTransformer degree, knots or extrapolation code")
         var words = List[Float64](length=call[].param_count, fill=0.0)
         for index in range(call[].param_count):  # driver-loop: the parameter words
             words[index] = source[index]
@@ -1799,6 +2010,8 @@ def _prep_member(operation: Int, address: Int) raises -> Int:
             _fit_imputer(slot, call)
         elif kind == PREP_KIND_KBINS:
             _fit_kbins(slot, call)
+        elif kind == PREP_KIND_SPLINE:
+            _fit_spline(slot, call)
         else:
             _fit_robust(slot, call)
     elif operation == MEMBER_OP_TRANSFORM:
@@ -1816,6 +2029,8 @@ def _prep_member(operation: Int, address: Int) raises -> Int:
             _transform_imputer(slot, call)
         elif kind == PREP_KIND_KBINS:
             _transform_kbins(slot, call)
+        elif kind == PREP_KIND_SPLINE:
+            _transform_spline(slot, call)
         else:
             _transform_robust(slot, call)
     elif operation == MEMBER_OP_INVERSE_TRANSFORM and kind == PREP_KIND_QUANTILE:
