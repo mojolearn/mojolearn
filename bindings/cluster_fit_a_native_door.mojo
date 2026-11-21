@@ -40,7 +40,7 @@ from bindings.cluster_pending_error_unpack import _pending, _pending_text, _drop
 from bindings.cluster_fit_public_native_unpack import (
     _attr, _attr_or_none, _truthy, _int, _float, _eq, _one_of, _set, _f32, _seed, _weights, _init_array,
 )
-from bindings.cluster_fit_public_native_pack import meanshift_fit, optics_fit, bisect_fit, affinity_fit
+from bindings.cluster_fit_public_native_pack import meanshift_fit, optics_fit, bisect_fit, affinity_fit, minibatch_fit
 from cluster.cluster_fit_door_run import cluster_rows_cover
 from bindings.cluster_public_native_pack import cluster_operation, _xc_array
 from bindings.operation_names_xc import XC_OPN_FAMILY_XC_VARIANTS_TRANSFORM
@@ -71,81 +71,6 @@ from bindings.py_balanced import py_item
 
 
 # ---------------------------------------------------------------- MiniBatchKMeans
-
-def _mbk_fit(model: PythonObject, binding: PythonObject, source: PythonObject, sample_weight: PythonObject,
-             context: PythonObject) raises:
-    """`MiniBatchKMeans.fit(X, sample_weight)`."""
-    var connection = variants_connection(binding)
-    var devscan = (connection.capabilities & VARIANTS_CAP_DEVSCAN) != 0
-    var x: PythonObject
-    if devscan:
-        x = admit_family(source, 2, "X", context).array
-    else:
-        x = _f32(source, "X", context)
-    var n = Int(py=x.shape[0])
-    var d = Int(py=x.shape[1])
-    var k = Int(py=_int(_attr(model, "n_clusters")))
-    cluster_rows_cover(k, n)
-    var weights = _weights(sample_weight, n, context)
-    var init = _attr(model, "init")
-    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
-    var init_arr = Optional[PythonObject]()
-    var init_random = False
-    if family_is_str(init):
-        if not _one_of(init, "k-means++", "random"):
-            raise Error("init must be 'k-means++', 'random' or an array, got " + family_repr(init))
-        init_random = _eq(init, PythonObject("random"))
-    else:
-        init_arr = py_present(_init_array(init, k, d, context))
-    var n_init_field = _attr(model, "n_init")
-    var n_init: Int
-    if _eq(n_init_field, PythonObject("auto")):
-        n_init = 3 if (not init_arr and init_random) else 1
-    else:
-        n_init = Int(py=_int(n_init_field))
-    if n_init < 1:
-        raise Error("n_init must be >= 1")
-    var mni_field = _attr(model, "max_no_improvement")
-    var mni = PythonObject(-1) if mni_field is None else _int(mni_field)
-    var max_iter = _int(_attr(model, "max_iter"))
-    var batch_size = _int(_attr(model, "batch_size"))
-    var init_size_field = _attr(model, "init_size")
-    var init_size = PythonObject(0) if init_size_field is None else _int(init_size_field)
-    var seed = _seed(_attr(model, "random_state"))
-    var parts: List[PythonObject] = [py_or_none(init_arr), weights]
-    var auxiliary = VariantsAuxiliaryPins(parts, context)
-    var tolerance = _float(_attr(model, "tol"))
-    var ratio = _float(_attr(model, "reassignment_ratio"))
-    var source_span = variants_span(x)
-    # Preserve native-word narrowing after auxiliary and float admission.
-    var request = MiniBatchFitRequest(source_span, auxiliary.plan.span(), n, d, k,
-        Int(py=max_iter), Int(py=batch_size), Int(py=mni), Int(py=init_size), n_init,
-        Bool(init_arr), seed, not init_arr and init_random, weights is not None,
-        devscan, Float64(py=tolerance), Float64(py=ratio))
-    var result = VariantsResultSlot()
-    try:
-        with GILReleased(Python()):
-            connection.driver.minibatch_fit(request, result)
-    except error:
-        if devscan and _pending_text(error).find("contains NaN or infinity") >= 0:
-            _drop_pending()
-            raise Error("mojolearn: X contains NaN or infinity")
-        raise Error(String(error))
-    finally:
-        _ = connection.provider
-        _ = auxiliary
-        _ = x
-        _ = init_arr
-        _ = weights
-    var packed = VariantsPackedResult(result, False)
-    _set(model, "cluster_centers_", _xc_array(packed.centers, Python.tuple(k, d), "<f4", "f", context))
-    _set(model, "counts_", _xc_array(packed.counts, Python.tuple(k), "<f4", "f", context))
-    _set(model, "labels_", _xc_array(packed.labels, Python.tuple(n), "<i4", "i", context))
-    _set(model, "inertia_", PythonObject(result.storage[0].inertia))
-    _set(model, "n_steps_", PythonObject(result.storage[0].steps))
-    _set(model, "n_iter_", PythonObject(result.storage[0].iterations))
-    _set(model, "n_features_in_", PythonObject(d))
-
 
 def _mbk_partial_fit(model: PythonObject, binding: PythonObject, source: PythonObject,
                      sample_weight: PythonObject, context: PythonObject) raises:
@@ -260,7 +185,7 @@ def _centers_fit(model: PythonObject, binding: PythonObject, source: PythonObjec
     pass no sample_weight)."""
     var nk = cluster_keys()
     if family_isinstance(model, py_item(context, nk[].k_family_cfa_minibatch)):
-        _mbk_fit(model, binding, source, PythonObject(None), context)
+        minibatch_fit(model, binding, source, PythonObject(None), context)
     else:
         bisect_fit(model, binding, source, PythonObject(None), context)
 
@@ -289,7 +214,7 @@ def cluster_fit_a_operation(model: PythonObject, operation: Int, args: PythonObj
     classical_connect_numpy(context)
     var binding = args[0]
     if operation == CFA_OPN_FAMILY_CFA_MBK_FIT:
-        _mbk_fit(model, binding, args[1], args[2], context)
+        minibatch_fit(model, binding, args[1], args[2], context)
         return model
     if operation == CFA_OPN_FAMILY_CFA_MBK_PARTIAL_FIT:
         _mbk_partial_fit(model, binding, args[1], args[2], context)

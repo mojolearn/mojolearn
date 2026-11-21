@@ -20,13 +20,14 @@ from bindings.py_balanced import py_call, py_type, py_contains, py_setattr, py_i
 from bindings.family_common_unpack import (
     family_repr,
     family_str,
+    family_is_str,
     family_isinstance,
     family_nonfinite,
     family_shape_repr,
 )
 from bindings.family_common_pack import family_call
 from bindings.py_cluster_resident import CRES_X_CLUSTER, cres_forget
-from core.kmeans_variants_api import VariantsSpan, VariantsResultSlot
+from core.kmeans_variants_api import VariantsSpan, VariantsResultSlot, VARIANTS_CAP_DEVSCAN
 from core.cluster_centroid_fit_api import CentroidFitResultSlot
 from core.optics_fit_api import OpticsMetric, OpticsFitResultSlot
 from core.affinity_preference_plan import AffinityPreferencePlan
@@ -34,9 +35,13 @@ from bindings.affinity_preference_boundary_door import affinity_preference_prepa
 from bindings.optics_fit_boundary_door import optics_fit_connection
 from bindings.cluster_keys_unpack import cluster_keys
 from bindings.cluster_centroid_fit_boundary_door import centroid_fit_connection
-from bindings.kmeans_variants_boundary_door import variants_connection, variants_span
+from bindings.kmeans_variants_boundary_door import (
+    KMeansVariantsConnection, VariantsAuxiliaryPins, variants_connection, variants_span,
+)
+from bindings.cluster_pending_error_unpack import _pending_text, _drop_pending
 from cluster.cluster_fit_door_run import (
     cluster_rows_cover, cluster_n_init_positive, bisect_fit_request,
+    minibatch_auto_n_init, minibatch_fit_request,
     meanshift_seed_features, meanshift_bandwidth_refused, meanshift_fit_request,
     optics_minkowski_refused, optics_minkowski_metric, optics_euclidean_metric, optics_eps_refused,
     optics_xi_range, optics_precomputed_square, optics_fit_request,
@@ -464,3 +469,115 @@ def affinity_fit_call(binding: PythonObject, stage: AffinityFit, mut result: Cen
         _ = connection.provider
         _ = stage.x
         _ = stage.preference.count  # the preference words stay alive through the entry
+
+
+# ---------------------------------------------------------------- MiniBatchKMeans
+@fieldwise_init
+struct MiniBatchFit(Movable):
+    """`MiniBatchKMeans.fit(X, sample_weight)` as typed values. `x` is the
+    admitted float32 X; `auxiliary` owns the explicit initial centers and the
+    sample weights as float32 words and pins their admitted arrays; `init`
+    and `weights` are those arrays (None when absent), pinned through the
+    fit. `scan_input`: the entry refuses a non-finite X on the device."""
+    var x: PythonObject
+    var init: PythonObject
+    var weights: PythonObject
+    var auxiliary: VariantsAuxiliaryPins
+    var n: Int
+    var d: Int
+    var k: Int
+    var max_iter: Int
+    var batch_size: Int
+    var max_no_improvement: Int
+    var init_size: Int
+    var n_init: Int
+    var has_init: Bool
+    var seed: Int
+    var init_random: Bool
+    var has_weights: Bool
+    var scan_input: Bool
+    var tolerance: Float64
+    var reassignment_ratio: Float64
+
+
+def minibatch_fit_stage(model: PythonObject, source: PythonObject, sample_weight: PythonObject,
+                        capabilities: Int, context: PythonObject) raises -> MiniBatchFit:
+    """The reads of `MiniBatchKMeans.fit`, in its order: X, n_clusters,
+    sample_weight, init, n_init, max_no_improvement, max_iter, batch_size,
+    init_size, random_state, the auxiliary words, tol, reassignment_ratio.
+    `capabilities` is the connected provider's: with VARIANTS_CAP_DEVSCAN the
+    finite refusal of X is the entry's."""
+    var devscan = (capabilities & VARIANTS_CAP_DEVSCAN) != 0
+    var x: PythonObject
+    if devscan:
+        x = admit_family(source, 2, "X", context).array
+    else:
+        x = _f32(source, "X", context)
+    var n = Int(py=x.shape[0])
+    var d = Int(py=x.shape[1])
+    var k = Int(py=_int(_attr(model, "n_clusters")))
+    cluster_rows_cover(k, n)
+    var weights = _weights(sample_weight, n, context)
+    var has_weights = weights is not None
+    var init = _attr(model, "init")
+    var init_arr = PythonObject(None)
+    var has_init = False
+    var init_random = False
+    if family_is_str(init):
+        if not _one_of(init, "k-means++", "random"):
+            raise Error("init must be 'k-means++', 'random' or an array, got " + family_repr(init))
+        init_random = _eq(init, PythonObject("random"))
+    else:
+        init_arr = _init_array(init, k, d, context)
+        has_init = True
+    var n_init_field = _attr(model, "n_init")
+    var n_init: Int
+    if _eq(n_init_field, PythonObject("auto")):
+        n_init = minibatch_auto_n_init(has_init, init_random)
+    else:
+        n_init = Int(py=_int(n_init_field))
+    cluster_n_init_positive(n_init)
+    var mni_field = _attr(model, "max_no_improvement")
+    var mni = PythonObject(-1) if mni_field is None else _int(mni_field)
+    var max_iter = _int(_attr(model, "max_iter"))
+    var batch_size = _int(_attr(model, "batch_size"))
+    var init_size_field = _attr(model, "init_size")
+    var init_size = PythonObject(0) if init_size_field is None else _int(init_size_field)
+    var seed = _seed(_attr(model, "random_state"))
+    var parts: List[PythonObject] = [init_arr, weights]
+    var auxiliary = VariantsAuxiliaryPins(parts, context)
+    var tolerance = _float(_attr(model, "tol"))
+    var ratio = _float(_attr(model, "reassignment_ratio"))
+    # Preserve native-word narrowing after auxiliary and float admission.
+    return MiniBatchFit(x=x, init=init_arr, weights=weights, auxiliary=auxiliary^, n=n, d=d, k=k,
+                        max_iter=Int(py=max_iter), batch_size=Int(py=batch_size),
+                        max_no_improvement=Int(py=mni), init_size=Int(py=init_size), n_init=n_init,
+                        has_init=has_init, seed=seed, init_random=init_random, has_weights=has_weights,
+                        scan_input=devscan, tolerance=Float64(py=tolerance),
+                        reassignment_ratio=Float64(py=ratio))
+
+
+def minibatch_fit_call(connection: KMeansVariantsConnection, stage: MiniBatchFit,
+                       mut result: VariantsResultSlot) raises:
+    """The mini-batch entry on the typed transport, the GIL released around
+    it. The entry's own non-finite refusal of X (`scan_input`) is restated
+    in the public wording."""
+    var source_span = variants_span(stage.x)
+    var request = minibatch_fit_request(source_span, stage.auxiliary.plan.span(), stage.n, stage.d, stage.k,
+        stage.max_iter, stage.batch_size, stage.max_no_improvement, stage.init_size, stage.n_init,
+        stage.has_init, stage.seed, stage.init_random, stage.has_weights, stage.scan_input, stage.tolerance,
+        stage.reassignment_ratio)
+    try:
+        with GILReleased(Python()):
+            connection.driver.minibatch_fit(request, result)
+    except error:
+        if stage.scan_input and _pending_text(error).find("contains NaN or infinity") >= 0:
+            _drop_pending()
+            raise Error("mojolearn: X contains NaN or infinity")
+        raise Error(String(error))
+    finally:
+        _ = connection.provider
+        _ = len(stage.auxiliary.owners)  # the auxiliary words and their arrays outlive the entry
+        _ = stage.x
+        _ = stage.init
+        _ = stage.weights

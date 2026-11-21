@@ -9,7 +9,7 @@
 # core/kmeans_variants_api.mojo, core/cluster_centroid_fit_api.mojo and
 # core/optics_fit_api.mojo; this file builds their requests. Every
 # iteration, batch, bisection and seed loop runs inside the entry.
-from core.kmeans_variants_api import VariantsSpan, BisectFitRequest
+from core.kmeans_variants_api import VariantsSpan, BisectFitRequest, MiniBatchFitRequest
 from std.math import isinf
 from core.cluster_centroid_fit_api import MeanShiftFitRequest, AffinityFitRequest
 from core.optics_fit_api import OpticsMetric, OpticsFitRequest
@@ -25,6 +25,26 @@ def cluster_rows_cover(k: Int, n: Int) raises:
 def cluster_n_init_positive(n_init: Int) raises:
     if n_init < 1:
         raise Error("n_init must be >= 1")
+
+
+# --------------------------------------------------------- MiniBatchKMeans
+def minibatch_auto_n_init(has_init: Bool, init_random: Bool) -> Int:
+    """n_init='auto': three restarts for init='random', one for
+    'k-means++' or explicit centers."""
+    return 3 if (not has_init and init_random) else 1
+
+
+def minibatch_fit_request(source: VariantsSpan, auxiliary: VariantsSpan, n: Int, d: Int, k: Int,
+                          max_iter: Int, batch_size: Int, max_no_improvement: Int, init_size: Int,
+                          n_init: Int, has_init: Bool, seed: Int, init_random: Bool, has_weights: Bool,
+                          scan_input: Bool, tolerance: Float64, reassignment_ratio: Float64) -> MiniBatchFitRequest:
+    """The mini-batch fit's typed request (core/kmeans_variants_api.mojo
+    `minibatch_fit` lays out its words). `auxiliary` holds the explicit
+    initial centers, then the sample weights, end to end; the random init
+    flag is set only when no centers were given."""
+    return MiniBatchFitRequest(source, auxiliary, n, d, k, max_iter, batch_size, max_no_improvement, init_size,
+                               n_init, has_init, seed, not has_init and init_random, has_weights, scan_input,
+                               tolerance, reassignment_ratio)
 
 
 # --------------------------------------------------------- BisectingKMeans

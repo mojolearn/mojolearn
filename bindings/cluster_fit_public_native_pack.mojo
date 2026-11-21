@@ -14,7 +14,7 @@
 # move.
 from std.python import Python, PythonObject
 from core.kmeans_variants_api import VariantsResultSlot
-from bindings.kmeans_variants_boundary_door import VariantsPackedResult
+from bindings.kmeans_variants_boundary_door import VariantsPackedResult, variants_connection
 from core.cluster_centroid_fit_api import CentroidFitResultSlot
 from bindings.cluster_centroid_fit_boundary_door import CentroidPackedResult
 from core.optics_fit_api import OpticsFitResultSlot
@@ -27,6 +27,7 @@ from bindings.cluster_fit_public_native_unpack import (
     optics_fit_stage, optics_fit_call,
     bisect_fit_stage, bisect_fit_call,
     affinity_fit_stage, affinity_fit_call,
+    minibatch_fit_stage, minibatch_fit_call,
 )
 
 
@@ -108,3 +109,25 @@ def affinity_fit(model: PythonObject, binding: PythonObject, source: PythonObjec
     _set(model, "n_features_in_", PythonObject(d))
     if not stage.precomputed:
         _set(model, "cluster_centers_", _xc_array(packed.centers, Python.tuple(k, d), "<f4", "f", context))
+
+
+# ---------------------------------------------------------------- MiniBatchKMeans
+def minibatch_fit(model: PythonObject, binding: PythonObject, source: PythonObject, sample_weight: PythonObject,
+                  context: PythonObject) raises:
+    """`MiniBatchKMeans.fit(X, sample_weight)`. The provider is connected
+    first, once: its capabilities decide who refuses a non-finite X."""
+    var connection = variants_connection(binding)
+    var stage = minibatch_fit_stage(model, source, sample_weight, connection.capabilities, context)
+    var result = VariantsResultSlot()
+    minibatch_fit_call(connection, stage, result)
+    var n = stage.n
+    var d = stage.d
+    var k = stage.k
+    var packed = VariantsPackedResult(result, False)
+    _set(model, "cluster_centers_", _xc_array(packed.centers, Python.tuple(k, d), "<f4", "f", context))
+    _set(model, "counts_", _xc_array(packed.counts, Python.tuple(k), "<f4", "f", context))
+    _set(model, "labels_", _xc_array(packed.labels, Python.tuple(n), "<i4", "i", context))
+    _set(model, "inertia_", PythonObject(result.storage[0].inertia))
+    _set(model, "n_steps_", PythonObject(result.storage[0].steps))
+    _set(model, "n_iter_", PythonObject(result.storage[0].iterations))
+    _set(model, "n_features_in_", PythonObject(d))
