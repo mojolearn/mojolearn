@@ -94,13 +94,18 @@ def _number(value: PythonObject, context: PythonObject) raises -> Float64:
     var cls = py_type(value)
     if cls is not py_type(PythonObject(0)) and cls is not py_type(PythonObject(0.0)) and cls is not py_type(PythonObject(True)) and not _one_of(cls, py_item(context, nk[].k_scalar_types)):
         raise Error("TypeError: AutoARIMA numeric settings require native scalar values")
-    return Float64(py=py_call(native_loaded_module("builtins").float, value))
+    return Float64(py=py_call(_builtins().float, value))
 
 
 def _buffer(value: PythonObject, name: String, context: PythonObject, mut pin: ArrayPin) raises -> ArrayMetadata:
     classical_admit_value(value, context)
     var prepared = classical_input(value, context, name)
     return array_metadata_once(prepared, array_shape_once(prepared, context), name, context, pin)
+
+
+def _builtins() raises -> PythonObject:
+    # The import-time builtins connection: no __import__ hook can run.
+    return native_loaded_module("builtins")
 
 
 def _series_buffer(value: PythonObject, name: String, refusal: String, context: PythonObject,
@@ -121,7 +126,7 @@ def autoarima_initialize(model: PythonObject, args: PythonObject, context: Pytho
     # `device` is checked before any field changes (an unknown value, or an
     # explicit "gpu" on a CPU-only installation, is refused in words); it is
     # read into the route owner at the estimator's first operation.
-    arima_device_admit(args[1], context, native_loaded_module("builtins"))
+    arima_device_admit(args[1], context, _builtins())
     var source_pin = ArrayPin()
     var source = _series_buffer(args[0], "endog", _REFUSE_DOUBLE, context, source_pin)
     var rank = len(source.shape)
@@ -238,7 +243,7 @@ def autoarima_forecast(model: PythonObject, args: PythonObject, context: PythonO
         if y.count != rows * n_obs or params.count != rows * complexity or ids.count != rows:
             raise Error("ValueError: AutoARIMA fitted buffer dimensions disagree")
         if not routed:
-            call = autoarima_route(model, fields, context, native_loaded_module("builtins"))
+            call = autoarima_route(model, fields, context, _builtins())
             routed = True
         var part = classical_typed(Python.tuple(rows, steps), "<f4", context)
         var part_address = Int(py=classical_address(part))

@@ -18,7 +18,7 @@ from core.arima_run import (
     arima_order_search_fit_run, arima_order_search_run, arima_route_searches, arima_search_switches_run,
 )
 from core.arima_entry_table import ARIMA_SWITCH_ORDER_BATCH, ARIMA_SWITCH_SEARCH_REUSE
-from providers.python.autoarima_lifecycle_pyapi_door import _fields, _integer, _integer_object, _number, _packed, _buffer
+from providers.python.autoarima_lifecycle_pyapi_door import _fields, _integer, _integer_object, _number, _packed, _buffer, _builtins
 from providers.python.array_metadata_pyapi_door import ArrayPin
 from arima.autoarima_search_run import _penalty
 from providers.python.autoarima_owner_pyapi_unpack import autoarima_commit
@@ -183,7 +183,7 @@ def autoarima_search(model: PythonObject, args: PythonObject, context: PythonObj
     # per-group models carry) serves the whole search. Its search words are
     # read once per search: the fast-search arms, the search capabilities
     # and the two switches an identity trace turns off.
-    var call = autoarima_route(model, fields, context, native_loaded_module("builtins"))
+    var call = autoarima_route(model, fields, context, _builtins())
     var route = call.route
     var device = py_get(fields, nk[].k_device)
     var fast_mode = arima_fast_search_mode_run(route)
