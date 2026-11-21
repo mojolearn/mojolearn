@@ -27,7 +27,7 @@ from core.msel_helpers_calls import (
     msel_leave_range_i64, msel_indices_overlap_i64, msel_fold_ids, msel_select_fold_i64, msel_select_folds_i64,
     msel_gather_i32, msel_gather_i64, msel_first_seen_i32, msel_strat_fold_assign_i32, msel_store_alloc,
     msel_store_read, msel_store_free, msel_scatter_rows, msel_proba_column, msel_split_table_i32,
-    msel_group_fold_perm_i32, msel_store_free_bytes,
+    msel_group_fold_perm_i32, msel_store_free_bytes, msel_store_put, msel_store_take_rows,
 )
 
 comptime MSEL_HELPER_CASES = 18
@@ -271,6 +271,23 @@ def run_case(unit: Int) raises:
         require(out[0] == 2.5 and out[1] == 0.0, "store scatter and read")
         _ = msel_store_free(k, idx)
         _ = msel_store_free(k, block)
+        # Layout V2: a resident copy of host rows and a gather of two of them.
+        var rows: List[Float64] = [1.0, 2.0, 3.0]
+        var picks: List[Int64] = [2, 0]
+        var rows_id = msel_store_put(k, Int(rows.unsafe_ptr()), 24)
+        var picks_id = msel_store_put(k, Int(picks.unsafe_ptr()), 16)
+        var taken: List[Float64] = [9.0, 9.0]
+        _ = msel_store_take_rows(k, rows_id, 3, 8, picks_id, 2, Int(taken.unsafe_ptr()))
+        require(taken[0] == 3.0 and taken[1] == 1.0, "store put and take rows")
+        try:
+            _ = msel_store_take_rows(k, rows_id, 2, 8, picks_id, 2, Int(taken.unsafe_ptr()))
+            raise Error("a row index past the source did not refuse")
+        except problem:
+            _refuses(problem, "row index out of bounds")
+        _ = msel_store_free(k, picks_id)
+        _ = msel_store_free(k, rows_id)
+        _ = rows
+        _ = picks
         try:
             _ = msel_store_read(k, block, Int(out.unsafe_ptr()), 16)
             raise Error("a freed block did not refuse")

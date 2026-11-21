@@ -87,6 +87,7 @@ from bindings.causal_model_config_door import model_config_c
 from bindings.causal_checkpoint_door import checkpoint_c
 from bindings.causal_operation_owner_door import CausalExecutionEntries, CausalModelOwner, CausalStateOwner
 from bindings.native_identity_type_unpack import native_identity_type
+from bindings.arena_owner_door import arena_owner_type
 from bindings.neural_block_public_door import NativeBlockPlan
 from bindings.lm_corpus_public_native_door import LmCorpusIteratorHandle
 from bindings.tokenizer_public_native_door import (
@@ -1214,6 +1215,9 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         _ = module.add_type[CausalModelOwner]("_CausalModelOwner")
         _ = module.add_type[CausalStateOwner]("_CausalStateOwner")
         native_identity_type(module)
+        # model_selection._Resident holds PythonObject(alloc=ArenaOwner(...)); the
+        # ONE registration of the type (bindings/arena_owner_door.mojo).
+        arena_owner_type(module)
         _ = module.add_type[NativeBlockPlan]("_NativeBlockPlan")
         # neural_block_owner pins PythonObject(alloc=PreparedGenerationLayer(...)).
         _ = module.add_type[PreparedGenerationLayer]("_PreparedGenerationLayer")

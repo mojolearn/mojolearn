@@ -25,6 +25,7 @@ from core.msel_entry_table import (
     MH_INDICES_OVERLAP_I64, MH_FOLD_IDS, MH_SELECT_FOLD_I64, MH_SELECT_FOLDS_I64, MH_GATHER_I32, MH_GATHER_I64,
     MH_FIRST_SEEN_I32, MH_STRAT_FOLD_ASSIGN_I32, MH_STORE_ALLOC, MH_STORE_READ, MH_STORE_FREE, MH_SCATTER_ROWS,
     MH_PROBA_COLUMN, MH_SPLIT_TABLE_I32, MH_GROUP_FOLD_PERM_I32, MH_STORE_FREE_BYTES,
+    MH_STORE_PUT, MH_STORE_TAKE_ROWS,
 )
 from core.msel_helpers_host import (
     select_folds_i64_host_run, msel_scatter_rows_check, msel_proba_column_check, msel_split_table_check,
@@ -45,6 +46,7 @@ from core.labels_native_api import LabelsGatherRequest
 from core.labels_native_device import LabelsDeviceKernels
 from core.msel_device import (
     device_group_fold_perm_i32, device_proba_column, device_scatter_rows, device_split_table_i32,
+    device_take_rows,
 )
 from core.msel_device_x import msel_store, MSEL_CONTEXT_SLOT
 from core.native_descriptor_abi import NativeDescriptorError
@@ -247,6 +249,24 @@ def msel_store_free_device_run(id: Int) raises -> Int:
     return 0
 
 
+def msel_store_put_device_run(src: Int, n: Int) raises -> Int:
+    """A resident copy of n host bytes at src; returns its id."""
+    var ctx = process_ctx[MSEL_CONTEXT_SLOT]()
+    return msel_store()[].put(ctx, src, n)
+
+
+def msel_store_take_rows_device_run(src_id: Int, n_src: Int, row_bytes: Int, idx_id: Int, n_idx: Int,
+                                    dst: Int) raises -> Int:
+    """Rows idx of the resident source into host memory (a fold's rows): one
+    device gather and one download, the body of the `msel_take_rows` export."""
+    if n_src < 0 or row_bytes < 0 or n_idx < 0:
+        raise Error("msel_take_rows: dimensions must be non-negative")
+    var ctx = process_ctx[MSEL_CONTEXT_SLOT]()
+    if not device_take_rows(ctx, msel_store()[], src_id, n_src, row_bytes, idx_id, n_idx, dst):
+        raise Error("msel_take_rows: row index out of bounds")
+    return 0
+
+
 def msel_store_free_bytes_device_run() raises -> Int:
     """Free bytes of the device the fold store lives on: the measured bound
     of how many cross-validation units run at once (bindings/msel_cv_door.mojo
@@ -350,6 +370,11 @@ def msel_helpers_device_dispatch(op: Int, aa: Int, pp: Int) raises -> Int:
                                                msel_word(aa, 1), msel_word(aa, 2), msel_word(aa, 3))
     if op == MH_STORE_FREE_BYTES:
         return msel_store_free_bytes_device_run()
+    if op == MH_STORE_PUT:
+        return msel_store_put_device_run(msel_word(aa, 0), msel_word(pp, 0))
+    if op == MH_STORE_TAKE_ROWS:
+        return msel_store_take_rows_device_run(msel_word(pp, 0), msel_word(pp, 1), msel_word(pp, 2),
+                                               msel_word(pp, 3), msel_word(pp, 4), msel_word(aa, 0))
     raise Error("model-selection helpers: unknown operation " + String(op))
 
 

@@ -36,6 +36,7 @@ from bindings.py_attr import py_attr
 from bindings.py_slice_native import py_slice, py_slice_from
 from bindings.native_buffer_owner_pack import native_storage_allocate
 from bindings.arena_resident_plan_unpack import ArenaResidentPlan
+from bindings.arena_owner_door import arena_rows_host_taken
 from bindings.py_admitted_registry import admitted_scope_begin, admitted_scope_end, admitted_hold_rows_of, admitted_is_held
 from bindings.admitted_meta_scope_unpack import admitted_hold_array_f32_deferred
 from bindings.metrics_native_support_door import metric_float
@@ -377,7 +378,7 @@ struct MselFoldRows(Movable):
     # (that object, its DeviceRows)}. The index object is held, so its
     # address cannot be reused while the entry lives.
     var rows_cache: PythonObject
-    var rows_dict: PythonObject
+    var rows_owner: PythonObject
     # S4 (lane s1): the admitted-registry hold scope of the fold set. A host
     # float32 C-order X is held for the whole set, and each fold's X rows
     # (gathered out of it) are held in a nested scope while that fold runs:
@@ -424,7 +425,7 @@ struct MselFoldRows(Movable):
         self.rows_class = PythonObject(None)
         self.rows_take = PythonObject(None)
         self.rows_cache = Python.dict()
-        self.rows_dict = PythonObject(None)
+        self.rows_owner = PythonObject(None)
         if self.dev:
             # DeviceRows exposes a bound take owner to its materializer. Keep
             # that separately mutable public boundary on its existing checks.
@@ -433,9 +434,9 @@ struct MselFoldRows(Movable):
             # size floor); no other program input is kept across folds
             var scope = native_storage_allocate(family_call(msel_b().getattr, context["family_msel_arena_io"],
                                                             PythonObject("resident")))
-            py_setattr(scope, "min_words", PythonObject(1 << 62))
-            py_setattr(scope, "_scope", PythonObject(None))
-            _ = _arena_rows_call(scope, "scope_enter", Python.tuple(), context)
+            # the floor goes to the native scope state with the enter call;
+            # no Python attribute of the `resident` object is written
+            _ = _arena_rows_call(scope, "scope_enter", Python.tuple(PythonObject(1 << 62)), context)
             self.scope = scope
             # perf2-msel: the DeviceRows class and the resident store's bound
             # `take` are read once per fold set, not once per fold side. The
@@ -443,7 +444,8 @@ struct MselFoldRows(Movable):
             # `_arena_io` connection read once at the start of the run.
             self.rows_class = family_call(msel_b().getattr, context["family_msel_arena_io"], PythonObject("DeviceRows"))
             self.rows_take = family_call(msel_b().getattr, self.res, PythonObject("take"))
-            self.rows_dict = context["family_msel_rows_context"]["maxabs_rows_dict"]
+            # the bound getter of DeviceRows' `_owner` slot (its native fold view)
+            self.rows_owner = context["family_msel_rows_context"]["maxabs_rows_owner"]
         self.scope_mark = -1
         self.fold_mark = -1
         self.x_held = False
@@ -500,8 +502,7 @@ struct MselFoldRows(Movable):
             # snapshot an estimator was handed may since have been written
             # (an in-place transform), so a materialized one is replaced.
             var dr = hit[1]
-            var fields = py_call(self.rows_dict.__get__, dr, self.rows_class)
-            if py_get(fields, "_host") is None:
+            if not arena_rows_host_taken(dr, self.rows_owner, self.rows_class):
                 return dr
         var idx = msel_index_i64(idx_in, context)
         var dr = native_storage_allocate(self.rows_class)
