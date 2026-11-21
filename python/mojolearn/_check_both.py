@@ -67,7 +67,7 @@ HEAD_VALUES = 4
 #: save method and file suffix an estimator may offer, in the order tried
 SAVE_FORMS = (("save", ".npz"), ("save_checkpoint", ".json"))
 #: the method checked when none is named: the first of these the estimator has
-DEFAULT_METHODS = ("predict", "transform")
+DEFAULT_METHODS = ("predict", "transform", "forward")
 
 #: the host binding whose `activity_begin` / `activity_end` switch and read the
 #: runtime's process-wide activity record (core/activity_record.mojo)
@@ -431,39 +431,114 @@ def takes_device(est):
     return bool(getattr(cls, "_mojolearn_device", False)) and not getattr(cls, "_HOST_INFERENCE_ONLY", False)
 
 
+def _raw_fields(est):
+    # the instance dictionary through object's own lookup: the estimator's
+    # attribute door is not entered
+    return object.__getattribute__(est, "__dict__")
+
+
+def _moved(value, device, fitted):
+    """`value` with every estimator in it that takes `device=` put on
+    `device`: the estimator itself, or the members of a list, tuple or dict
+    (one level: `estimators=[("name", est), ...]`, `best_estimator_`,
+    a pipeline's steps). Anything else is returned as it is (the same object)."""
+    if takes_device(value):
+        return on_device(value, device, fitted=fitted)
+    kind = type(value)
+    if kind in (list, tuple):
+        items = [_moved(item, device, fitted) if takes_device(item) or type(item) in (list, tuple) else item
+                 for item in value]
+        if all(new is old for new, old in zip(items, value)):
+            return value
+        return kind(items)
+    if kind is dict:
+        items = {key: _moved(item, device, fitted) if takes_device(item) else item for key, item in value.items()}
+        if all(items[key] is value[key] for key in value):
+            return value
+        return items
+    return value
+
+
 def on_device(est, device, fitted=True):
     """The same estimator on `device` ('gpu' or 'cpu'): `est` itself when it
-    already runs there, else a new estimator of its class with its constructor
-    parameters and `device=device`. With `fitted`, the new estimator is handed
-    the fitted attributes of `est` (the same objects, in memory), so both
-    answer from one fitted model.
+    already runs there, else a twin of its class on that device. With
+    `fitted`, the twin is handed the fitted state of `est`, so both answer
+    from one fitted model.
+
+    ONE design, two steps, each with a default and one class hook:
+
+    1. THE TWIN (unfitted). Default: `type(est)(**params)` with the
+       constructor parameters of `get_params(deep=False)`, `device=device`,
+       and every parameter value that itself takes `device=` (a wrapped
+       estimator, the members of `estimators=[...]`) moved to `device` too,
+       so a meta-estimator's members follow it. A class whose twin cannot be
+       built that way defines `_mojolearn_device_twin(self, device)` and
+       returns it: a model without `get_params` (Sequential), an estimator
+       whose constructor takes its data (ExponentialSmoothing), a search
+       that must rebuild its candidates.
+    2. THE FITTED STATE. Default: every entry of the instance dictionary that
+       is not a constructor parameter is handed to the twin (the same
+       objects, in memory), and an entry that takes `device=` (a fitted
+       member, `best_estimator_`, `estimators_`) is moved to `device` with
+       its own state. A class whose fitted state is not its instance
+       dictionary defines `_mojolearn_device_state(self, twin, device)` and
+       fills the twin (trees: the fitted model lives in a native owner). A
+       class that has no fitted state to hand over, or must not share it
+       (the neural blocks: weights are constructor data), sets
+       `_mojolearn_device_state = None`.
 
     `device=None` on `est` is the installation's device. The check runs only
     where the installation has a GPU (a CPU-only one is refused before this),
     so None is the GPU here."""
-    name = type(est).__name__
-    try:
-        params = dict(est.get_params(deep=False))
-    except TypeError:
-        params = dict(est.get_params())
-    if "device" not in params:
-        raise NotChecked(f"{name} declares device= but get_params does not return it")
-    if (params["device"] or "gpu") == device:
+    cls = type(est)
+    name = cls.__name__
+    build = getattr(cls, "_mojolearn_device_twin", None)
+    params = None
+    if build is None:
+        try:
+            params = dict(est.get_params(deep=False))
+        except TypeError:
+            params = dict(est.get_params())
+        if "device" not in params:
+            raise NotChecked(f"{name} declares device= but get_params does not return it")
+        current = params["device"]
+    else:
+        current = _raw_fields(est).get("device")
+    if (current or "gpu") == device:
         return est
-    params["device"] = device
     try:
-        twin = type(est)(**params)
+        if build is None:
+            params = {key: _moved(value, device, False) for key, value in params.items()}
+            params["device"] = device
+            twin = cls(**params)
+        else:
+            twin = build(est, device)
+    except NotChecked:
+        raise
     except Exception as exc:
         raise NotChecked(f"{name}(device={device!r}) cannot be built here: "
                          f"{type(exc).__name__}: {exc}"[:400]) from exc
+    if twin is None or type(twin) is not cls:
+        raise NotChecked(f"{name}._mojolearn_device_twin did not return a {name}")
     if fitted:
-        # the instance dictionary is the estimator's state; object's own
-        # lookup reads it without the estimator's attribute door
-        state = object.__getattribute__(est, "__dict__")
-        target = object.__getattribute__(twin, "__dict__")
+        hand = getattr(cls, "_mojolearn_device_state", _raw_fields)
+        if hand is None:
+            return twin
+        if hand is not _raw_fields:
+            try:
+                hand(est, twin, device)
+            except NotChecked:
+                raise
+            except Exception as exc:
+                raise NotChecked(f"the fitted state of {name} cannot be handed to its device={device!r} twin: "
+                                 f"{type(exc).__name__}: {exc}"[:400]) from exc
+            return twin
+        state = _raw_fields(est)
+        target = _raw_fields(twin)
+        keep = params if params is not None else target
         for key, value in state.items():
-            if key not in params:
-                target[key] = value
+            if key not in keep:
+                target[key] = _moved(value, device, True)
     return twin
 
 
@@ -727,7 +802,7 @@ def check_estimator(ml, est, X, method=None, fit=None, saved=None, describe_devi
         result["method"] = method
     if method is None or not callable(getattr(est, method, None)):
         result.update(reason=f"{name} has no method {method!r}" if method else
-                      f"{name} has neither predict nor transform; name the method to check")
+                      f"{name} has none of predict, transform, forward; name the method to check")
         return result
     if fit_both and fit is None:
         result.update(reason="fit_both needs the fit arguments: there is nothing to fit on each side")

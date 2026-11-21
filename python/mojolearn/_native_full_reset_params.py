@@ -16,6 +16,10 @@ if type(_INIT_ENTRY) is not BuiltinFunctionType:
 # (_mode._GENERIC_PARAMS_CONTEXT): one native owner for both setters.
 from ._mode import ParamsMixin as _ParamsMixin, _GENERIC_PARAMS_CONTEXT as _CONTEXT
 _CONTEXT['generic_setter'] = _ParamsMixin.set_params
+# What the compiled device check of this door's constructors and setters reads:
+# the generated class table (_device_table.py) and the backend's fields (CPU-only or not).
+from ._device_table import connect_context as _connect_device_context
+_connect_device_context(_CONTEXT)
 # Instance lookup/assignment protocols a native constructor write must not bypass.
 _CONSTRUCTOR_HOOKS = ('__getattribute__', '__getattr__', '__setattr__')
 # Whole public neighbor operations have native validation, fitted-state,
@@ -164,7 +168,7 @@ _EVENTS = {
     'IVFPQIndex': (('n_lists', 'parameter', 'n_lists', False), ('n_probes', 'parameter', 'n_probes', False), ('pq_dim', 'parameter', 'pq_dim', False), ('pq_bits', 'parameter', 'pq_bits', False), ('n_neighbors', 'parameter', 'n_neighbors', False), ('kmeans_n_iters', 'parameter', 'kmeans_n_iters', False), ('pq_kmeans_n_iters', 'parameter', 'pq_kmeans_n_iters', False), ('random_state', 'parameter', 'random_state', False), ('numeric_mode', 'parameter', 'numeric_mode', True)),
     'IVFRaBitQIndex': (('n_lists', 'parameter', 'n_lists', False), ('n_probes', 'parameter', 'n_probes', False), ('n_neighbors', 'parameter', 'n_neighbors', False), ('kmeans_n_iters', 'parameter', 'kmeans_n_iters', False), ('random_state', 'parameter', 'random_state', False), ('numeric_mode', 'parameter', 'numeric_mode', True)),
     'IVFSQIndex': (('n_lists', 'parameter', 'n_lists', False), ('n_probes', 'parameter', 'n_probes', False), ('n_neighbors', 'parameter', 'n_neighbors', False), ('kmeans_n_iters', 'parameter', 'kmeans_n_iters', False), ('random_state', 'parameter', 'random_state', False), ('max_train_points_per_cluster', 'parameter', 'max_train_points_per_cluster', False), ('numeric_mode', 'parameter', 'numeric_mode', True)),
-    'IsolationForest': (('n_estimators', 'parameter', 'n_estimators', False), ('max_samples', 'parameter', 'max_samples', False), ('max_depth', 'parameter', 'max_depth', False), ('max_features', 'parameter', 'max_features', False), ('bootstrap', 'parameter', 'bootstrap', False), ('contamination', 'parameter', 'contamination', False), ('random_state', 'parameter', 'random_state', False), ('warm_start', 'parameter', 'warm_start', False), ('n_jobs', 'parameter', 'n_jobs', False), ('verbose', 'parameter', 'verbose', False), ('output_type', 'parameter', 'output_type', False), ('numeric_mode', 'parameter', 'numeric_mode', True)),
+    'IsolationForest': (('n_estimators', 'parameter', 'n_estimators', False), ('max_samples', 'parameter', 'max_samples', False), ('max_depth', 'parameter', 'max_depth', False), ('max_features', 'parameter', 'max_features', False), ('bootstrap', 'parameter', 'bootstrap', False), ('contamination', 'parameter', 'contamination', False), ('random_state', 'parameter', 'random_state', False), ('warm_start', 'parameter', 'warm_start', False), ('n_jobs', 'parameter', 'n_jobs', False), ('verbose', 'parameter', 'verbose', False), ('output_type', 'parameter', 'output_type', False), ('device', 'parameter', 'device', False), ('numeric_mode', 'parameter', 'numeric_mode', True)),
     'IsotonicRegression': (('y_min', 'parameter', 'y_min', False), ('y_max', 'parameter', 'y_max', False), ('increasing', 'parameter', 'increasing', False), ('out_of_bounds', 'parameter', 'out_of_bounds', False), ('numeric_mode', 'parameter', 'numeric_mode', False)),
     'KMeans': (('n_clusters', 'parameter', 'n_clusters', False), ('init', 'parameter', 'init', False), ('n_init', 'parameter', 'n_init', False), ('max_iter', 'parameter', 'max_iter', False), ('tol', 'parameter', 'tol', False), ('random_state', 'parameter', 'random_state', False), ('init_centroids', 'parameter', 'init_centroids', False), ('metric', 'parameter', 'metric', False), ('oversampling_factor', 'parameter', 'oversampling_factor', False), ('numeric_mode', 'parameter', 'numeric_mode', False), ('device', 'parameter', 'device', False)),
     'KNNImputer': (('missing_values', 'parameter', 'missing_values', False), ('n_neighbors', 'parameter', 'n_neighbors', False), ('weights', 'parameter', 'weights', False), ('metric', 'parameter', 'metric', False), ('copy', 'parameter', 'copy', False), ('add_indicator', 'parameter', 'add_indicator', False), ('keep_empty_features', 'parameter', 'keep_empty_features', False), ('numeric_mode', 'parameter', 'numeric_mode', True)),
@@ -264,8 +268,32 @@ def _install(classes):
         parameters = tuple(signature.parameters.values())[1:]
         if any(p.kind not in (p.POSITIONAL_OR_KEYWORD, p.KEYWORD_ONLY) for p in parameters):  # glue: import-time signature admission
             raise TypeError('field-only setter requires an ordinary declared constructor signature')
-        names = tuple(p.name for p in parameters)  # glue: exact parameter metadata, borrowed defaults
         events = _EVENTS[cls.__name__]
+        # `device=None | "gpu" | "cpu"` for every class of this door, in the one
+        # place their constructors are made (lane dw-core round 2, 2026-11-21):
+        # a keyword-only parameter after the class's own, default None, stored
+        # like every other parameter (one more write event, last), so
+        # get_params, set_params, clone and pickle carry it through the same
+        # schema. The compiled constructor and the compiled setter check it
+        # before anything changes (`plan['device_admit']`,
+        # bindings/full_reset_constructor_native_door.mojo `_construct`,
+        # bindings/full_reset_params_native_door.mojo `_reset`). A class whose
+        # own constructor names `device` (its family wrote it) is left as is.
+        device_added = 'device' not in signature.parameters
+        if device_added:
+            signature = signature.replace(parameters=tuple(signature.parameters.values()) + (
+                inspect.Parameter('device', inspect.Parameter.KEYWORD_ONLY, default=None),))
+            parameters = tuple(signature.parameters.values())[1:]
+            events = events + (('device', 'parameter', 'device', False),)
+            # A model that never ran this constructor (loaded from a file by
+            # the archive door, unpickled from an older version) reads
+            # device=None, this installation's device: the parameter reader
+            # and the route's one read fall back to the class default
+            # (bindings/params_metadata_native_door.mojo `_value`), so no
+            # loader has to write the field.
+            if 'device' not in vars(cls):
+                cls.device = None
+        names = tuple(p.name for p in parameters)  # glue: exact parameter metadata, borrowed defaults
         if any(kind == 'parameter' and value not in names for _, kind, value, _ in events):  # glue: refuse stale constructor schemas
             raise TypeError('field-only setter schema differs from its constructor signature')
         # The original initializer that raises the argument errors: the
@@ -279,7 +307,10 @@ def _install(classes):
             raise TypeError('native constructor requires the injected keyword-only numeric_mode')
         kwonly = tuple(p.name for p in inspect.signature(inner).parameters.values()  # glue: import-time constructor metadata
                        if p.kind is p.KEYWORD_ONLY and not (wrapped and p.name == 'numeric_mode'))
+        if device_added:
+            kwonly += ('device',)
         _CONTEXT['plans'][cls] = dict(names=names, events=events, signature=signature,
+            device_admit=device_added,
             defaults={p.name: p.default for p in parameters if p.default is not p.empty},  # glue: exact default reference identities
             class_name=cls.__name__,
             validation_kind='umap' if cls.__name__ == 'UMAP' else None,

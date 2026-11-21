@@ -21,7 +21,7 @@ from bindings.declared_params_native_door import _assign as _declared_set, _rele
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.optimizer_public_words_unpack import stash_python_error, optimizer_python_error, PYTHON_ERROR_PENDING
 from bindings.py_model_records import bump_model_generation
-from providers.python.device_route_boundary_door import device_route_clear
+from providers.python.device_route_boundary_door import device_route_clear, device_admit_class
 from bindings.py_optional import py_present
 
 
@@ -189,6 +189,11 @@ def _reset(model: PythonObject, params: PythonObject, context: PythonObject, dep
     var plan = _plan(model, fields, context)
     var values = _read(model, False, context["parameter_metadata"], Python.list())
     _merge(model, params, values, context, depth)
+    if Bool(py=py_get(plan, "device_admit", False)):
+        # The new `device` is refused in the shared words before the
+        # estimator changes (the constructor door's check, same table).
+        device_admit_class(model, values["device"], py_get(context["backend_fields"], "_CPU_ONLY") is not None,
+                           py_get(context, "device_cpu"), b)
     # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
     var replacement = Optional[PythonObject]()
     var fresh: PythonObject
@@ -212,6 +217,9 @@ def _reset(model: PythonObject, params: PythonObject, context: PythonObject, dep
         # Move ownership into the live model before the temporary's native
         # finalizer runs; do not leave it aliases of transferred handles.
         _ = py_call(fresh.clear)
+    # The device or the numeric mode may have changed: the next operation
+    # resolves the estimator's device route again.
+    device_route_clear(model)
     return model
 
 

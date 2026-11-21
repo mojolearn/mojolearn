@@ -2469,7 +2469,12 @@ def host_archive_forest(cls: PythonObject, arrays: PythonObject, fmt: String,
     py_setitem(fields, nk[].k_estimator, estimator)
     py_setitem(fields, nk[].k_family, metadata[0])
     py_setitem(fields, nk[].k_is_classifier, classifier)
-    py_setitem(fields, nk[].k_device, _archive_string(arrays, "device", context) if py_contains(arrays, nk[].k_device) else PythonObject(None))
+    # The file's `device` member is read for its refusal only; a loaded model
+    # carries device=None, this installation's device, as every other loader
+    # of this door writes it (lane dw-core round 2).
+    if py_contains(arrays, nk[].k_device):
+        _ = _archive_string(arrays, "device", context)
+    py_setitem(fields, nk[].k_device, PythonObject(None))
     py_setitem(fields, nk[].k__inference_engine, "parallel_groves" if groves else "sequential")
     py_setitem(fields, nk[].k__groves, PythonObject(None))
     py_setitem(fields, nk[].k__offsets, offsets)

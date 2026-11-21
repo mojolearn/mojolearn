@@ -19,6 +19,9 @@ _ENTRY = _binding()._module.full_reset_constructor_native_call
 if type(_ENTRY) is not BuiltinFunctionType:
     raise TypeError('declared constructors require a compiled native entry')
 _CONTEXT = dict(plans={}, missing=object(), ready=False, originals={}, release_declared=True)
+# The compiled device check of a declared constructor that names `device`.
+from ._device_table import connect_context as _connect_device_context
+_connect_device_context(_CONTEXT)
 _CONSTRUCTOR_HOOKS = ('__getattribute__', '__getattr__', '__setattr__')
 # Class name -> the package module that defines it (lane lazy-family-import,
 # 2026-11-12): a family is connected when it loads, never imported here.
@@ -177,6 +180,11 @@ def install():
         if any(kind == 'parameter' and value not in names for _, kind, value, _ in events):  # glue: refuse stale constructor schemas
             raise TypeError('declared constructor schema differs from its constructor signature')
         _CONTEXT['plans'][cls] = dict(names=names, events=events, signature=signature,
+            # A declared class that names `device` (its family lists it in
+            # `_parameters` and writes it in its constructor) gets the shared
+            # compiled check before any field is written
+            # (bindings/full_reset_constructor_native_door.mojo `_construct`).
+            device_admit='device' in names,
             defaults={p.name: p.default for p in parameters if p.default is not p.empty},  # glue: exact default reference identities
             positional=tuple(p.name for p in parameters if p.kind is p.POSITIONAL_OR_KEYWORD),  # glue: native argument schema
             kwonly=tuple(p.name for p in parameters if p.kind is p.KEYWORD_ONLY),  # glue: native argument schema
