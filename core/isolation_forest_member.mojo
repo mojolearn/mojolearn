@@ -1,0 +1,367 @@
+# SPDX-License-Identifier: Apache-2.0
+"""IsolationForest as a MEMBER (core/member_abi.mojo; family 18,
+`MEMBER_FAMILY_ISOLATION_FOREST`).
+
+One entry, `isolation_forest_member_v2`, published by each svm image
+(`_mojolearn_svm` on a GPU vendor, `_mojolearn_svm_host` on the CPU column)
+beside its iforest entry. It runs the family's typed RUN, the iforest entry of
+core/iforest_entry.mojo, through the route slot it is handed: `entry` = that
+image's iforest entry (the caller's admit resolves it from the estimator's
+tier). No kernel is touched; the fit and the scores are the estimator's own
+(`fit` is one fresh forest scored on one row and kept resident under its
+token, as the estimator's door does; `fit_output` PREDICT / DECISION /
+SCORE_SAMPLES is its `fit_predict`: one fresh forest that scores X).
+
+MEMBER_OP_NEW parameters (Float64 words, 13): [0] kind (0 IsolationForest),
+[1] n_estimators, [2] max_samples mode (0 'auto', 1 an int, 2 a fraction),
+[3] max_samples int, [4] max_samples fraction, [5] max_depth (-1 None),
+[6] max_features mode (0 a fraction, 1 an int), [7] max_features int,
+[8] max_features fraction, [9] bootstrap (0 / 1), [10] random_state (None 0),
+[11] contamination 'auto' (0 / 1), [12] contamination (read when [11] is 0).
+The words are the ones the estimator's own parameter checks resolve; the
+admit runs those checks.
+
+Views: X dense host row-major float32 (fit and every query). FIT reads no y
+and no sample weights (the estimator takes neither): a given y or weights
+view is refused. PREDICT writes host int32 labels (1 inlier, -1 outlier);
+DECISION and SCORE_SAMPLES write host float32, or float64 where the image
+writes the float64 scores itself (IF_CAP_SCORES_F64 on the resident route).
+Row and column indexes and device-home views are refused.
+
+THE TRAINING VIEW IS BORROWED, NOT COPIED (ADDED 18:35Z): the forest is keyed
+on the training matrix's address and a resident forest the store evicted (or
+an image without the resident route, which refits per call) refits from it,
+so the caller keeps X alive until FREE, exactly as the estimator keeps the
+caller's float32 X as `_x`. FREE drops the resident forest (IF_OP_RELEASE).
+
+No fitted-state blocks yet: EXPORT / IMPORT are not published (the forest's
+node arrays leave the image through `iforest_forest_export`, still a
+Python-argument binding), so the class carries no member mark.
+
+The member state lives in a process-wide store of fixed chunks: a slot never
+moves once minted, so a call runs on its slot without the store's lock; the
+lock covers mint, free and the handle lookup. Members are independent; the
+image entry is thread-safe (its resident store holds its own lock), so a
+caller runs one handle per worker. Serial by nature here: the store's
+bookkeeping.
+"""
+from std.sys.info import size_of
+from core.entry_table import EntryRef, entry_ref_unresolved
+from core.iforest_entry import (
+    IFRunRequest, IF_CAP_RESIDENT, IF_CAP_SCORES_F64, if_entry_caps, if_entry_release, if_entry_run,
+)
+from core.member_abi import (
+    MemberCall, MemberMatrix, MEMBER_F32, MEMBER_F64, MEMBER_I32,
+    MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_PREDICT,
+    MEMBER_OP_DECISION, MEMBER_OP_SCORE_SAMPLES, MEMBER_OP_OUTPUTS,
+    MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_DECISION, MEMBER_CAN_SCORE_SAMPLES,
+    member_publish, member_call_from_spans, member_unsupported,
+)
+from core.member_families import MEMBER_FAMILY_ISOLATION_FOREST
+from core.native_descriptor_abi import NativeDescriptorError
+from core.native_descriptor_call import native_descriptor_report
+from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
+
+comptime _CHUNK = 256
+comptime _INDEX_SPAN = 16777216
+comptime _NAME = "IsolationForest"
+comptime _WANT_SCORE_SAMPLES = 0
+comptime _WANT_DECISION = 1
+comptime _WANT_PREDICT = 2
+comptime _WANT_WIDE_BASE = 3
+comptime _CAPS = MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_DECISION | MEMBER_CAN_SCORE_SAMPLES
+
+
+struct IsolationForestMemberSlot(Copyable, Defaultable, Movable):
+    var generation: Int
+    var live: Bool
+    var words: IFRunRequest
+    """The knobs from NEW; addresses, shapes and the resident form per call."""
+    var entry: EntryRef
+    """The iforest entry the fit ran through (FREE releases through it)."""
+    var fitted: Bool
+    var resident: Bool
+    var wide: Bool
+    var token: Int
+    var train: Int
+    var n_train: Int
+    var n_features: Int
+    var offset: Float64
+    var max_samples: Int
+    var info: List[Float64]
+    var scratch: List[Float32]
+
+    def __init__(out self):
+        self.generation = 0
+        self.live = False
+        self.words = IFRunRequest()
+        self.entry = entry_ref_unresolved()
+        self.fitted = False
+        self.resident = False
+        self.wide = False
+        self.token = 0
+        self.train = 0
+        self.n_train = 0
+        self.n_features = 0
+        self.offset = -0.5
+        self.max_samples = 0
+        self.info = List[Float64](length=4, fill=0.0)
+        self.scratch = List[Float32](length=1, fill=0.0)
+
+
+struct IsolationForestMemberStore(Defaultable, Movable):
+    var synchronization: List[Int64]
+    var chunks: List[List[IsolationForestMemberSlot]]
+    var free: List[Int]
+    var count: Int
+
+    def __init__(out self):
+        # Side-effect-free even when the process slot's initializers race.
+        self.synchronization = List[Int64](length=2, fill=0)
+        self.chunks = List[List[IsolationForestMemberSlot]]()
+        self.free = List[Int]()
+        self.count = 0
+
+
+comptime _STORE = SharedSlot[IsolationForestMemberStore, "MojolearnIsolationForestMemberStoreV2", 2]
+
+
+def _slot_address(index: Int) raises -> Int:
+    # Under the store's lock. A chunk's buffer is allocated once and never
+    # grows, so the address stays valid after the lock is released.
+    var store = _STORE.get_or_create_ptr()
+    return Int(store[].chunks[index // _CHUNK].unsafe_ptr()) + (index % _CHUNK) * size_of[IsolationForestMemberSlot]()
+
+
+def _mint(words: IFRunRequest) raises -> Int:
+    var store = _STORE.get_or_create_ptr()
+    var lock = rebind[MutPointer[Int64, MutUntrackedOrigin]](store[].synchronization.unsafe_ptr())
+    shared_slot_lock(lock)
+    try:
+        var index = -1
+        if len(store[].free) > 0:
+            index = store[].free.pop()
+        else:
+            if store[].count >= _INDEX_SPAN - 1:
+                raise Error("RuntimeError: mojolearn: too many live IsolationForest member states")
+            if store[].count == len(store[].chunks) * _CHUNK:
+                store[].chunks.append(List[IsolationForestMemberSlot](length=_CHUNK, fill=IsolationForestMemberSlot()))
+            index = store[].count
+            store[].count += 1
+        var slot = MutPointer[IsolationForestMemberSlot, MutUntrackedOrigin](unsafe_from_address=_slot_address(index))
+        slot[].generation += 1
+        slot[].live = True
+        slot[].words = words.copy()
+        slot[].entry = entry_ref_unresolved()
+        slot[].fitted = False
+        slot[].token = 0
+        slot[].train = 0
+        return slot[].generation * _INDEX_SPAN + index + 1
+    finally:
+        shared_slot_unlock(lock)
+
+
+def _lookup(handle: Int, release: Bool, mut token: Int, mut entry: EntryRef) raises -> Int:
+    """The slot address of a live handle. A released handle, a handle of
+    another store or a made-up integer is refused: never a stale read. On
+    release, `token` / `entry` receive the resident forest to drop (after
+    the lock)."""
+    var store = _STORE.get_or_create_ptr()
+    var lock = rebind[MutPointer[Int64, MutUntrackedOrigin]](store[].synchronization.unsafe_ptr())
+    shared_slot_lock(lock)
+    try:
+        var index = handle % _INDEX_SPAN - 1
+        if handle <= 0 or index < 0 or index >= store[].count:
+            raise Error("NotFittedError: this member state was released or never created")
+        var address = _slot_address(index)
+        var slot = MutPointer[IsolationForestMemberSlot, MutUntrackedOrigin](unsafe_from_address=address)
+        if not slot[].live or slot[].generation != handle // _INDEX_SPAN:
+            raise Error("NotFittedError: this member state was released or never created")
+        if release:
+            token = slot[].token if slot[].resident else 0
+            entry = slot[].entry
+            slot[].live = False
+            slot[].fitted = False
+            slot[].token = 0
+            slot[].train = 0
+            store[].free.append(index)
+        return address
+    finally:
+        shared_slot_unlock(lock)
+
+
+def _whole(call: MutPointer[MemberCall, MutUntrackedOrigin]) raises:
+    if call[].row_index.rows > 0 or call[].column_index.rows > 0:
+        raise Error("TypeError: an " + _NAME + " member reads whole host views (no row or column index)")
+
+
+def _x(view: MemberMatrix, what: String) raises:
+    if not view.dense_host(MEMBER_F32):
+        raise Error("TypeError: an " + _NAME + " member reads " + what + " as a dense host float32 view")
+    if view.rows <= 0 or view.cols <= 0:
+        raise Error("ValueError: an " + _NAME + " member needs at least one row and one feature in " + what)
+
+
+def _want(slot: MutPointer[IsolationForestMemberSlot, MutUntrackedOrigin], operation: Int, dst: MemberMatrix,
+          rows: Int) raises -> Int:
+    """The run's `want` for `operation` into `dst` (one value per row)."""
+    if dst.rows != rows or dst.cols != 1:
+        raise Error("ValueError: the output buffer holds one value per row of X")
+    if operation == MEMBER_OP_PREDICT:
+        if not dst.dense_host(MEMBER_I32):
+            raise Error("TypeError: an " + _NAME + " member writes predict as host int32 labels")
+        return _WANT_PREDICT
+    var want = _WANT_DECISION if operation == MEMBER_OP_DECISION else _WANT_SCORE_SAMPLES
+    if dst.dense_host(MEMBER_F32):
+        return want
+    if dst.dense_host(MEMBER_F64) and slot[].wide:
+        return want + _WANT_WIDE_BASE
+    raise Error("TypeError: an " + _NAME + " member writes scores as host float32"
+                + (" or float64" if slot[].wide else "") + " (this image)")
+
+
+def _run(slot: MutPointer[IsolationForestMemberSlot, MutUntrackedOrigin], entry: EntryRef, query: Int,
+         n_query: Int, want: Int, out_f32: Int, out_i32: Int, fresh: Bool) raises:
+    var r = slot[].words.copy()
+    r.train = slot[].train
+    r.n_train = slot[].n_train
+    r.n_features = slot[].n_features
+    r.query = query
+    r.n_query = n_query
+    r.want = want
+    r.out_f32 = out_f32
+    r.out_i32 = out_i32
+    r.info = Int(slot[].info.unsafe_ptr())
+    r.resident = slot[].resident
+    r.token = 0 if fresh else slot[].token
+    _ = if_entry_run(entry, r)
+    slot[].offset = slot[].info[0]
+    slot[].max_samples = Int(slot[].info[1])
+    if slot[].resident:
+        slot[].token = Int(slot[].info[3])
+
+
+def _fit(slot: MutPointer[IsolationForestMemberSlot, MutUntrackedOrigin],
+         call: MutPointer[MemberCall, MutUntrackedOrigin]) raises:
+    _whole(call)
+    _x(call[].x, "X")
+    if call[].y.rows > 0:
+        raise Error("TypeError: an " + _NAME + " member fits no y (an unsupervised estimator)")
+    if call[].weights.rows > 0:
+        raise Error("TypeError: an " + _NAME + " member takes no sample_weight")
+    var entry = call[].route.entry
+    var caps = if_entry_caps(entry)
+    # A refit of this state drops the forest the previous fit kept.
+    if slot[].fitted and slot[].resident and slot[].token != 0:
+        if_entry_release(slot[].entry, slot[].token)
+    slot[].fitted = False
+    slot[].entry = entry
+    slot[].resident = (caps & IF_CAP_RESIDENT) != 0
+    slot[].wide = slot[].resident and (caps & IF_CAP_SCORES_F64) != 0
+    slot[].token = 0
+    slot[].train = call[].x.data
+    slot[].n_train = call[].x.rows
+    slot[].n_features = call[].x.cols
+    var output = call[].fit_output
+    if output == 0:
+        # The estimator's `fit`: one fresh forest scored on one row, kept.
+        _run(slot, entry, call[].x.data, 1, _WANT_SCORE_SAMPLES, Int(slot[].scratch.unsafe_ptr()), 0, True)
+    elif output == MEMBER_OP_PREDICT or output == MEMBER_OP_DECISION or output == MEMBER_OP_SCORE_SAMPLES:
+        # Its `fit_predict`: one fresh forest that scores X.
+        var want = _want(slot, output, call[].dst, call[].x.rows)
+        _run(slot, entry, call[].x.data, call[].x.rows, want,
+             call[].dst.data if want != _WANT_PREDICT else 0, call[].dst.data if want == _WANT_PREDICT else 0, True)
+    else:
+        member_unsupported(_NAME, output)
+    slot[].fitted = True
+
+
+def _query(slot: MutPointer[IsolationForestMemberSlot, MutUntrackedOrigin],
+           call: MutPointer[MemberCall, MutUntrackedOrigin], operation: Int) raises:
+    if not slot[].fitted:
+        raise Error("NotFittedError: this " + _NAME + " member is not fitted yet")
+    _whole(call)
+    _x(call[].x, "X")
+    if call[].x.cols != slot[].n_features:
+        raise Error("ValueError: X has " + String(call[].x.cols) + " features, but this " + _NAME
+                    + " member was fitted with " + String(slot[].n_features))
+    var want = _want(slot, operation, call[].dst, call[].x.rows)
+    _run(slot, slot[].entry, call[].x.data, call[].x.rows, want,
+         call[].dst.data if want != _WANT_PREDICT else 0, call[].dst.data if want == _WANT_PREDICT else 0, False)
+
+
+def _new(call: MutPointer[MemberCall, MutUntrackedOrigin]) raises:
+    if call[].param_count != 13 or not call[].params:
+        raise Error("member ABI: an IsolationForest member takes thirteen parameters")
+    var w = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call[].params)
+    if w[0] != 0.0:
+        raise Error("member ABI: unknown IsolationForest member kind")
+    var r = IFRunRequest()
+    r.n_estimators = Int(w[1])
+    r.max_samples_mode = Int(w[2])
+    r.max_samples_int = Int(w[3])
+    r.max_samples_frac = w[4]
+    r.max_depth = Int(w[5])
+    r.max_features_mode = Int(w[6])
+    r.max_features_int = Int(w[7])
+    r.max_features_frac = w[8]
+    r.bootstrap = w[9] != 0.0
+    r.random_state = Int(w[10])
+    r.contamination_auto = w[11] != 0.0
+    r.contamination = w[12]
+    if r.n_estimators < 1:
+        raise Error("mojolearn IsolationForest: n_estimators must be at least 1, got " + String(r.n_estimators))
+    call[].state = _mint(r)
+
+
+def _isolation_forest_member(operation: Int, address: Int) raises -> Int:
+    var call = MutPointer[MemberCall, MutUntrackedOrigin](unsafe_from_address=address)
+    if operation == MEMBER_OP_CAPABILITIES:
+        return _CAPS
+    if operation == MEMBER_OP_NEW:
+        _new(call)
+        return 0
+    if operation == MEMBER_OP_OUTPUTS:
+        # One value per row on every published operation, with or without
+        # a state (item 10): no width is chosen by the fit.
+        call[].out_cols = 1
+        call[].classes = 0
+        return 0
+    if operation == MEMBER_OP_FREE:
+        var token = 0
+        var entry = entry_ref_unresolved()
+        _ = _lookup(call[].state, True, token, entry)
+        call[].state = 0
+        if token != 0:
+            if_entry_release(entry, token)
+        return 0
+    var token = 0
+    var entry = entry_ref_unresolved()
+    var slot = MutPointer[IsolationForestMemberSlot, MutUntrackedOrigin](
+        unsafe_from_address=_lookup(call[].state, False, token, entry))
+    if operation == MEMBER_OP_FIT:
+        _fit(slot, call)
+    elif operation == MEMBER_OP_PREDICT or operation == MEMBER_OP_DECISION or operation == MEMBER_OP_SCORE_SAMPLES:
+        _query(slot, call, operation)
+    else:
+        member_unsupported(_NAME, operation)
+    return 0
+
+
+def isolation_forest_member_v2(operation: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
+    result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
+    """The member entry of IsolationForest (schema `MEMBER_ABI`)."""
+    try:
+        var word = _isolation_forest_member(operation, member_call_from_spans(operation, aa, na, np, nf))
+        if result:
+            MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[] = word
+        return 0
+    except error:
+        native_descriptor_report(error, context, sink)
+        return 1
+
+
+def isolation_forest_member_publish(mode: Int, vendor: Int, publisher: Int) raises:
+    """Publish this image's IsolationForest member entry. One line in each
+    svm image's module initialization, after its iforest entry."""
+    member_publish[MEMBER_FAMILY_ISOLATION_FOREST](mode, vendor, publisher, isolation_forest_member_v2)

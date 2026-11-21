@@ -69,6 +69,7 @@ from bindings.trees_dart_rounds_run import (
     dart_round_admit, dart_rounds_run, dart_member_into, DART_M_OFF_N, DART_M_NODES,
     DART_M_LEAF_N, DART_M_VAL_N, DART_M_COLS, DART_M_TREES, DART_M_OUTPUTS,
 )
+from bindings.native_unit_threads_unpack import native_unit_jobs
 from xtrees.trees_boost_run import (
     _sub_seed, _dart_thr,
     boost_ada_session_choice, boost_bagging_validate, boost_check_n_estimators, boost_check_learning_rate,
@@ -795,7 +796,10 @@ def _bagging_validate(fields: PythonObject, context: PythonObject) raises:
     """`_BaggingBase._validate_params`."""
     var oob = _truthy(fields["oob_score"])
     boost_bagging_validate(oob, oob and _truthy(fields["bootstrap"]), _truthy(fields["warm_start"]),
-                           fields["n_jobs"] is not None, _truthy(fields["verbose"]))
+                           _truthy(fields["verbose"]))
+    # n_jobs is the worker bound of the member fits (None and -1: every core):
+    # published members fit in parallel waves (`_bagging_fit_bags`).
+    _ = native_unit_jobs(fields["n_jobs"], "Bagging")
     boost_check_n_estimators(Int(py=_int(fields["n_estimators"])))
     _ = _seed(fields["random_state"], context)
 
@@ -944,8 +948,10 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
     if sw:
         w_address = sw.value().address
     var native = count > 0
+    var jobs = native_unit_jobs(fields["n_jobs"], "Bagging")
     while native and done < count:  # driver-loop: over the waves of member estimators
         var set = MemberSet(x.address, n, d, MEMBER_I32 if classifier else MEMBER_F32, MEMBER_I32)
+        set.run.cap = jobs
         var wave_rows = Python.list()
         var wave_cols = Python.list()
         var width = 1
@@ -968,7 +974,18 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
         if not native:
             # Nothing of this wave ran: its members are fitted by the loop below.
             break
-        member_set_run(set)
+        # A member that refuses its fit publishes nothing: this wave and the
+        # rest are fitted by the loop below (same draws, same seeds), whose
+        # fit door raises the estimator's own words if the request is wrong.
+        var ran = False
+        try:
+            member_set_run(set)   # a failing member releases every state
+            ran = True
+        except:
+            ran = False
+        if not ran:
+            native = False
+            break
         _ = x  # keep the admitted X alive through the member fits above
         _ = y_all
         _ = sample_weight

@@ -40,15 +40,19 @@ comptime _CheckpointBytes = UnsafePointer[UInt8, MutUntrackedOrigin]
 
 
 struct ByteCheckpointWriteFailure(Movable):
-    """The file call that failed (`number` is errno; 0 when no file call failed)."""
+    """The file call that failed (`number` is errno; 0 when no file call
+    failed). `second` is the destination of a failed rename (`path` is then
+    the temporary file), empty otherwise."""
     var number: Int
     var operation: String
     var path: String
+    var second: String
 
     def __init__(out self):
         self.number = 0
         self.operation = String("")
         self.path = String("")
+        self.second = String("")
 
 
 def _checkpoint_fail(mut failure: ByteCheckpointWriteFailure, operation: String, path: String, number: Int) raises:
@@ -56,6 +60,14 @@ def _checkpoint_fail(mut failure: ByteCheckpointWriteFailure, operation: String,
     failure.operation = operation
     failure.path = path
     raise Error("OSError: Byte-LM checkpoint " + operation + " failed (errno " + String(number) + "): " + path)
+
+
+def _checkpoint_fail_read(mut failure: ByteCheckpointWriteFailure, path: String, number: Int) raises:
+    """A failed read. A directory opens read-only without complaint and
+    refuses the first read (EISDIR, 21 on Linux and macOS): that is reported
+    as the failed open it is to the caller, so the error names the file, as
+    opening a directory for reading always did."""
+    _checkpoint_fail(failure, "open" if number == 21 else "read", path, number)
 
 
 def _checkpoint_append(mut dst: List[UInt8], text: String):
@@ -210,7 +222,9 @@ def byte_checkpoint_write(var path: String, metadata_address: Int, metadata_byte
         if external_call["close", c_int](c_int(fd)) != 0:
             _checkpoint_fail(failure, "close", temporary, posix_errno())
         if external_call["renameat", c_int](c_int(cwd), temporary.as_c_string_slice().unsafe_ptr(), c_int(cwd), path.as_c_string_slice().unsafe_ptr()) != 0:
-            _checkpoint_fail(failure, "replace", path, posix_errno())
+            # Both names, as the rename's own error carries them.
+            failure.second = path
+            _checkpoint_fail(failure, "replace", temporary, posix_errno())
     except error:
         if opened:
             _ = external_call["close", c_int](c_int(fd))
@@ -315,7 +329,7 @@ def byte_checkpoint_read_header(path: String, mut failure: ByteCheckpointWriteFa
         var lead = List[UInt8](length=27, fill=UInt8(0))
         var got = _checkpoint_pread(fd, Int(lead.unsafe_ptr()), 27, 0)
         if got < 0:
-            _checkpoint_fail(failure, "read", path, -got)
+            _checkpoint_fail_read(failure, path, -got)
         var magic_text = String("MOJOLEARN-BYTE-LM")
         var magic = magic_text.as_bytes()
         var same = got >= 19 and Int(lead[17]) == 1 and Int(lead[18]) == 10
@@ -338,7 +352,7 @@ def byte_checkpoint_read_header(path: String, mut failure: ByteCheckpointWriteFa
         var header = List[UInt8](length=length + 32, fill=UInt8(0))
         got = _checkpoint_pread(fd, Int(header.unsafe_ptr()), length + 32, 27)
         if got < 0:
-            _checkpoint_fail(failure, "read", path, -got)
+            _checkpoint_fail_read(failure, path, -got)
         var hasher = Sha256()
         hasher.update(Int(header.unsafe_ptr()), length)
         var words = hasher.digest_words()
@@ -411,9 +425,9 @@ def byte_checkpoint_read_header(path: String, mut failure: ByteCheckpointWriteFa
             var beyond = _checkpoint_pread(fd, Int(probe.unsafe_ptr()), 1, archive.data_offset + total)
             _ = len(probe)
             if last < 0:
-                _checkpoint_fail(failure, "read", path, -last)
+                _checkpoint_fail_read(failure, path, -last)
             if beyond < 0:
-                _checkpoint_fail(failure, "read", path, -beyond)
+                _checkpoint_fail_read(failure, path, -beyond)
             archive.complete = last == 1 and beyond == 0
     except error:
         _ = external_call["close", c_int](c_int(fd))
@@ -486,7 +500,7 @@ def byte_checkpoint_read_arrays(path: String, archive: ByteCheckpointArchive, ad
     _ = len(expected)
     for i in range(4):  # small-loop(the four checkpoint arrays, refused in file order)
         if status[i] < 0:
-            _checkpoint_fail(failure, "read", path, -status[i])
+            _checkpoint_fail_read(failure, path, -status[i])
         if status[i] == 1:
             raise Error("Byte-LM checkpoint truncated array")
         if status[i] == 2:
