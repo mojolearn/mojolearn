@@ -978,6 +978,10 @@ class KBinsDiscretizer(_PrepBase):
     #: This class takes `device=`: the check builds its other side as the same
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
+    #: The member ABI mark (family 35 Prep, kind 8): model selection and the
+    #: meta-estimators run this class through its native member entry
+    #: (core/prep_member.mojo).
+    _mojolearn_member = (35, 8)
 
     def __init__(self, n_bins=5, *, encode="onehot", strategy="quantile", quantile_method="averaged_inverted_cdf",
                  dtype=None, subsample=200_000, random_state=None, device=None):
@@ -1999,6 +2003,10 @@ class SplineTransformer(_PrepBase):
     #: This class takes `device=`: the check builds its other side as the same
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
+    #: The member ABI mark (family 35 Prep, kind 9): model selection and the
+    #: meta-estimators run this class through its native member entry
+    #: (core/prep_member.mojo).
+    _mojolearn_member = (35, 9)
     _EXTRAP = {"constant": 0, "continue": 1, "error": 1, "linear": 2, "periodic": 3}
 
     def __init__(self, n_knots=5, degree=3, *, knots="uniform", extrapolation="constant", include_bias=True,

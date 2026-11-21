@@ -27,12 +27,15 @@ from bindings.native_loaded_module_door import native_loaded_module
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
-from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_fields, py_contains
+from std.ffi import external_call
+from bindings.native_prepared_owner_unpack import prepared_key_fields, prepared_key_same
+from bindings.native_loaded_module_door import NativeModules
 from bindings.msel_member_device_unpack import member_says_cpu, member_multi_gpu_refusal
 from bindings.py_attr import py_attr
 from bindings.classical_arrays_door import classical_address
 from bindings.native_process_pool_door import (
-    process_pool_create, process_pool_close,
+    process_pool_create, process_pool_close, process_pool_closed, process_pool_pids,
     process_worker_connect, process_worker_next, process_worker_reply, process_worker_refuse,
 )
 from bindings.native_transport_door import transport_close
@@ -43,6 +46,9 @@ from bindings.parallel_shard_common_door import (
     shard_ranges,
     shard_devices,
     shard_run,
+    shard_map,
+    _shard_acquire,
+    _shard_keep,
     shard_rows,
     shard_concat,
     shard_state,
@@ -54,8 +60,9 @@ from bindings.parallel_shard_common_door import (
 )
 from bindings.parallel_shard_common_run import (
     shard_read_shift, shard_width_admit, shard_bounds, shard_indices_admit, shard_block_copy, SHARD_DEVICE_NOT_AN_INDEX,
-    shard_request_op,
+    shard_request_op, shard_batch_admit,
     PARALLEL_SHARD_WORKER_OPN_IDENTITY,
+    PARALLEL_FORECAST_WORKER_OPN_GENERATION_STORE,
     PARALLEL_FORECAST_WORKER_OPN_ARIMA_FIT_SHARD,
     PARALLEL_FORECAST_WORKER_OPN_ARIMA_PREDICT_SHARD,
     PARALLEL_FORECAST_WORKER_OPN_HW_FIT_SHARD,
@@ -85,12 +92,47 @@ from bindings.py_balanced import py_item
 comptime _CHILD = "mojolearn._native_parallel_forecast_worker"
 
 
+struct ForecastGeneration(Movable):
+    """One fitted estimator's predict state as the forecast workers hold it
+    (a "generation"), for one kind (ARIMA or exponential smoothing).
+
+    In the coordinating process: `token` names the generation the workers of
+    the pool with process ids `pids` hold ("" for none), `width` is its
+    series-per-shard word, and `key` pins the estimator and the fitted
+    objects the generation was cut from, compared by identity. A predict
+    whose key, width and pool processes match sends no fitted state: each
+    worker answers from the models it built once. A refit, a replaced
+    attribute, another estimator, another shard width or other worker
+    processes store a new generation, which replaces the old one on every
+    worker.
+
+    In a worker process: `token` and `models` (a list, one model per shard
+    this worker answers, built once at the store) are the generation it
+    holds; `key`, `pids` and `width` are unused there."""
+    var token: String
+    var issued: Int
+    var width: Int
+    var pids: List[Int]
+    var key: PythonObject
+    var models: PythonObject
+
+    def __init__(out self):
+        self.token = String()
+        self.issued = 0
+        self.width = 0
+        self.pids = List[Int]()
+        self.key = PythonObject(None)
+        self.models = PythonObject(None)
+
+
 struct ParallelForecastBoundary(Defaultable, Movable):
     var arima_cls: PythonObject
     var hw_cls: PythonObject
     var arima_context: PythonObject
     var hw_context: PythonObject
     var backend: PythonObject
+    var arima_generation: ForecastGeneration
+    var hw_generation: ForecastGeneration
 
     def __init__(out self):
         self.arima_cls = PythonObject(None)
@@ -98,9 +140,16 @@ struct ParallelForecastBoundary(Defaultable, Movable):
         self.arima_context = PythonObject(None)
         self.hw_context = PythonObject(None)
         self.backend = PythonObject(None)
+        self.arima_generation = ForecastGeneration()
+        self.hw_generation = ForecastGeneration()
 
 
-comptime PARALLEL_FORECAST_BOUNDARY = SharedSlot[ParallelForecastBoundary, "MojolearnParallelForecastOwnerV1"]
+# V2 (lane pools-frame, 2026-11-21): the two predict generations.
+comptime PARALLEL_FORECAST_BOUNDARY = SharedSlot[ParallelForecastBoundary, "MojolearnParallelForecastOwnerV2"]
+
+#: The generation kinds a store request names.
+comptime _GENERATION_ARIMA = 0
+comptime _GENERATION_HW = 1
 
 
 def _b() raises -> PythonObject:
@@ -148,10 +197,89 @@ def _devices(devices: PythonObject) raises:
     shard_indices_admit(indices)
 
 
-def _run(requests: ShardWave, devices: PythonObject) raises -> PythonObject:
-    """`_run`: the pool's results in request order (an admitted, traced pool,
-    bindings/parallel_shard_common_door.mojo `shard_run`); the pool always closes."""
-    return shard_run(requests, devices, _CHILD)
+def _generation_same(generation: ForecastGeneration, key: PythonObject, width: Int, pool: PythonObject) raises -> Bool:
+    """Whether the workers of `pool` hold the generation cut from `key`:
+    the same worker processes, the same shard width, and every key object
+    the same object (identity only; nothing is hashed or compared by value)."""
+    if len(generation.token) == 0 or generation.width != width or generation.key is None or process_pool_closed(pool):
+        return False
+    var pids = process_pool_pids(pool)
+    if len(pids) == 0 or len(pids) != len(generation.pids):
+        return False
+    for i in range(len(pids)):  # small-loop(the pool's worker processes)
+        if pids[i] != generation.pids[i]:
+            return False
+    return prepared_key_same(generation.key, key)
+
+
+def _generation_store(mut generation: ForecastGeneration, kind: Int, key: PythonObject, width: Int,
+                      states: PythonObject, pool: PythonObject, workers: Int) raises -> String:
+    """Store a new generation on the workers of `pool`: worker j receives,
+    once, the states of the shards it answers (r = j mod workers, the order
+    of `shard_map`'s waves) and builds their models. The claim is recorded
+    only after every worker stored; a failed store leaves none."""
+    var b = _b()
+    generation.token = String()
+    generation.key = PythonObject(None)
+    generation.issued += 1
+    var token = (String("fg-") + String(kind) + "-" + String(Int(external_call["getpid", Int32]())) + "-"
+                 + String(generation.issued))
+    var shards = len(states)
+    var count = min(workers, shards)
+    if count > 0:
+        var held = Python.tuple(PythonObject(kind), PythonObject(token))
+        var stores = shard_wave()
+        for j in range(count):  # driver-loop: one generation store per worker
+            var mine = b.list()
+            var r = j
+            while r < shards:  # driver-loop: the shards worker j answers
+                _ = py_call(mine.append, states[r])
+                r += workers
+            stores.add(PARALLEL_FORECAST_WORKER_OPN_GENERATION_STORE, held, mine)
+        var stored = shard_map(pool, stores)
+        shard_batch_admit(len(stored), count)
+    generation.width = width
+    generation.pids = process_pool_pids(pool)
+    generation.key = key
+    generation.token = token.copy()
+    return token
+
+
+def _generation_predict(op: Int, token: String, shards: Int, workers: Int, start: Int, end: Int,
+                        pool: PythonObject) raises -> PythonObject:
+    """One predict request per shard, naming the worker's held model by
+    (token, slot): shard r is slot r // workers of worker r mod workers."""
+    var requests = shard_wave()
+    var name = PythonObject(token)
+    var span = Python.tuple(start, end)
+    for r in range(shards):  # driver-loop: one worker request per device shard
+        requests.add(op, Python.tuple(name, PythonObject(r // workers)), span)
+    var parts = shard_map(pool, requests)
+    shard_batch_admit(len(parts), shards)
+    return parts
+
+
+def _generation_freeze(value: PythonObject, context: PythonObject) raises:
+    """A fitted Array a generation was cut from is made read-only (the
+    Array's own `_readonly` flag): an in-place write raises, where it would
+    leave the workers' copy stale; a replaced attribute or a refit is seen
+    by the key."""
+    var array_class = py_get(context, parallel_keys()[].k_array_class)
+    if array_class is not None and py_type(value) is array_class:
+        py_setattr(value, "_readonly", PythonObject(True))
+
+
+def _generation_model(generation: ForecastGeneration, state: PythonObject) raises -> PythonObject:
+    """A worker's held model for a predict request's `(token, slot)`."""
+    var b = _b()
+    if py_type(state) is not b.tuple or len(state) != 2:
+        raise Error("parallel forecasting: a predict request names a held model")
+    if generation.models is None or String(state[0]) != generation.token:
+        raise Error("parallel forecasting: this worker does not hold the requested fitted state")
+    var slot = Int(py=state[1])
+    if slot < 0 or slot >= len(generation.models):
+        raise Error("parallel forecasting: this worker holds no model for the requested shard")
+    return generation.models[slot]
 
 
 def _rows(source: PythonObject, lo: Int, hi: Int, width: Int, context: PythonObject) raises -> PythonObject:
@@ -189,21 +317,50 @@ def _predict_arima(estimator: PythonObject, start_obj: PythonObject, end_obj: Py
     var complexity = Int(py=py_item(fields, nk[].k_complexity_))
     var keep = Python.tuple("order", "seasonal_order", "trend", "k_", "method", "maxiter", "n_exog_", "complexity_",
                             "n_obs_", "_y_ndim", "numeric_mode")
-    var requests = shard_wave()
     var context = f[].arima_context
-    for r in range(len(ranges) // 2):  # driver-loop: one worker request per device shard
-        var lo = ranges[2 * r]
-        var hi = ranges[2 * r + 1]
-        # only the two series-major arrays the prediction kernel reads travel
-        var state = b.dict()
-        for k in range(len(keep)):  # driver-loop: over the scalar fields a shard's predict reads
-            if py_contains(fields, keep[k]):
-                py_setitem(state, keep[k], fields[keep[k]])
-        py_setitem(state, nk[].k_batch_size_, hi - lo)
-        py_setitem(state, nk[].k__y, _rows(py_item(fields, nk[].k__y), lo, hi, n_obs, context))
-        py_setitem(state, nk[].k_params_, _rows(py_item(fields, nk[].k_params_), lo, hi, complexity, context))
-        requests.add(PARALLEL_FORECAST_WORKER_OPN_ARIMA_PREDICT_SHARD, state, Python.tuple(start, end))
-    var parts = _run(requests, devices)
+    var shards = len(ranges) // 2
+    var workers = len(py_call(b.tuple, devices))
+    var shard_width = ranges[1] - ranges[0] if shards > 0 else 0
+    # The generation key: the estimator and every object a shard's state is
+    # cut from, by identity (once per public call; no row is read).
+    var key = b.list()
+    _ = py_call(key.append, estimator)
+    for k in range(len(keep)):  # small-loop(the scalar fields a shard's predict reads)
+        _ = py_call(key.append, py_get(fields, keep[k]))
+    _ = py_call(key.append, py_item(fields, nk[].k__y))
+    _ = py_call(key.append, py_item(fields, nk[].k_params_))
+    var acquired = _shard_acquire(devices, _CHILD)
+    var pool = acquired.pool
+    var parts = PythonObject(None)
+    try:
+        var token = String()
+        if _generation_same(f[].arima_generation, key, shard_width, pool):
+            token = f[].arima_generation.token.copy()
+        else:
+            var states = b.list()
+            for r in range(shards):  # driver-loop: one stored state per device shard
+                var lo = ranges[2 * r]
+                var hi = ranges[2 * r + 1]
+                # only the two series-major arrays the prediction kernel reads travel
+                var state = b.dict()
+                for k in range(len(keep)):  # driver-loop: over the scalar fields a shard's predict reads
+                    if py_contains(fields, keep[k]):
+                        py_setitem(state, keep[k], fields[keep[k]])
+                py_setitem(state, nk[].k_batch_size_, hi - lo)
+                py_setitem(state, nk[].k__y, _rows(py_item(fields, nk[].k__y), lo, hi, n_obs, context))
+                py_setitem(state, nk[].k_params_, _rows(py_item(fields, nk[].k_params_), lo, hi, complexity, context))
+                _ = py_call(states.append, state)
+            _generation_freeze(py_item(fields, nk[].k__y), context)
+            _generation_freeze(py_item(fields, nk[].k_params_), context)
+            token = _generation_store(f[].arima_generation, _GENERATION_ARIMA, key, shard_width, states, pool, workers)
+        parts = _generation_predict(PARALLEL_FORECAST_WORKER_OPN_ARIMA_PREDICT_SHARD, token, shards, workers,
+                                    start, end, pool)
+    except error:
+        # A failed call leaves no claim: the pool closes (its workers and their models end with it).
+        f[].arima_generation.token = String()
+        process_pool_close(pool)
+        raise error^
+    _shard_keep(acquired^)
     var width = end - start
     var result = tsa_array("f", "<f4", Python.tuple(batch, width), batch * width, 4, context)
     for r in range(len(ranges) // 2):  # driver-loop: places one result buffer per device shard
@@ -268,25 +425,53 @@ def _predict_hw(estimator: PythonObject, start_obj: PythonObject, end_obj: Pytho
     # numeric_mode, ...): every carried scalar field, without the batch's
     # fitted arrays, then each shard's slice. The carried fields are walked
     # once; each shard takes a shallow copy and sets its own words.
-    var base = shard_state(fields, drop, context)
-    var requests = shard_wave()
-    for r in range(len(ranges) // 2):  # driver-loop: one worker request per device shard
-        var lo = ranges[2 * r]
-        var hi = ranges[2 * r + 1]
-        var w = hi - lo
-        var state = py_call(b.dict, base)
-        py_setitem(state, nk[].k_n, n)
-        py_setitem(state, nk[].k_fit_executed_flag, py_item(fields, nk[].k_fit_executed_flag))
-        py_setitem(state, nk[].k_ts_num, w)
-        py_setitem(state, nk[].k__components_len, steps * w)
-        var part = tsa_array("f", "<f4", Python.tuple(3 * steps * w), 3 * steps * w, 4, context)
-        # rows r = component * steps + step: dst[r * w + j] = src[r * batch + lo + j]
-        forecast_gather_cols(Int(py=classical_address(part)), Int(py=classical_address(comps)), 3 * steps, batch, lo, w)
-        _ = part  # keep the Python object alive through the native call above
-        _ = comps  # keep the Python object alive through the native call above
-        py_setitem(state, nk[].k__comps, part)
-        requests.add(PARALLEL_FORECAST_WORKER_OPN_HW_PREDICT_SHARD, state, Python.tuple(start, end))
-    var parts = _run(requests, devices)
+    var shards = len(ranges) // 2
+    var workers = len(py_call(b.tuple, devices))
+    var shard_width = ranges[1] - ranges[0] if shards > 0 else 0
+    # The generation key: the estimator and every field of its instance
+    # dictionary, names and values by identity (once per public call; the
+    # carried-field walk and the shard cuts below run only for a new
+    # generation).
+    var mods = NativeModules()
+    var key = b.list()
+    _ = py_call(key.append, estimator)
+    prepared_key_fields(mods, key, fields, List[String]())
+    var acquired = _shard_acquire(devices, _CHILD)
+    var pool = acquired.pool
+    var parts = PythonObject(None)
+    try:
+        var token = String()
+        if _generation_same(f[].hw_generation, key, shard_width, pool):
+            token = f[].hw_generation.token.copy()
+        else:
+            var base = shard_state(fields, drop, context)
+            var states = b.list()
+            for r in range(shards):  # driver-loop: one stored state per device shard
+                var lo = ranges[2 * r]
+                var hi = ranges[2 * r + 1]
+                var w = hi - lo
+                var state = py_call(b.dict, base)
+                py_setitem(state, nk[].k_n, n)
+                py_setitem(state, nk[].k_fit_executed_flag, py_item(fields, nk[].k_fit_executed_flag))
+                py_setitem(state, nk[].k_ts_num, w)
+                py_setitem(state, nk[].k__components_len, steps * w)
+                var part = tsa_array("f", "<f4", Python.tuple(3 * steps * w), 3 * steps * w, 4, context)
+                # rows r = component * steps + step: dst[r * w + j] = src[r * batch + lo + j]
+                forecast_gather_cols(Int(py=classical_address(part)), Int(py=classical_address(comps)), 3 * steps, batch, lo, w)
+                _ = part  # keep the Python object alive through the native call above
+                _ = comps  # keep the Python object alive through the native call above
+                py_setitem(state, nk[].k__comps, part)
+                _ = py_call(states.append, state)
+            _generation_freeze(comps, context)
+            token = _generation_store(f[].hw_generation, _GENERATION_HW, key, shard_width, states, pool, workers)
+        parts = _generation_predict(PARALLEL_FORECAST_WORKER_OPN_HW_PREDICT_SHARD, token, shards, workers,
+                                    start, end, pool)
+    except error:
+        # A failed call leaves no claim: the pool closes (its workers and their models end with it).
+        f[].hw_generation.token = String()
+        process_pool_close(pool)
+        raise error^
+    _shard_keep(acquired^)
     var width = end - start
     var result = tsa_array("f", "<f4", Python.tuple(width * batch), width * batch, 4, context)
     for r in range(len(ranges) // 2):  # driver-loop: places one result buffer per device shard
@@ -500,14 +685,40 @@ def forecast_worker_dispatch(operation: Int, request: PythonObject) raises -> Py
     forecast_envelope_admit(py_type(request) is b.tuple, len(request) if py_type(request) is b.tuple else 0)
     var state = request[0]
     var args = request[1]
+    if operation == PARALLEL_FORECAST_WORKER_OPN_GENERATION_STORE:
+        # `state` is (kind, token), `args` the states of the shards this
+        # worker answers. The models are built here, once per generation;
+        # the kind's previous generation (and whatever the plain owners held
+        # for its models) is dropped by the replacement.
+        if py_type(state) is not b.tuple or len(state) != 2 or py_type(args) is not b.list:
+            raise Error("parallel forecasting: a generation store carries (kind, token) and a list of states")
+        var kind = Int(py=state[0])
+        if kind != _GENERATION_ARIMA and kind != _GENERATION_HW:
+            raise Error("parallel forecasting: unknown generation kind")
+        var models = b.list()
+        for i in range(len(args)):  # driver-loop: one model per shard this worker answers
+            if kind == _GENERATION_ARIMA:
+                var built = shard_model(f[].arima_cls, args[i])
+                py_setitem(py_fields(built), nk[].k__exog, PythonObject(None))
+                _ = py_call(models.append, built)
+            else:
+                _ = py_call(models.append, shard_model(f[].hw_cls, args[i]))
+        # The slot is read again: building a model can run a collection.
+        f = PARALLEL_FORECAST_BOUNDARY.get_or_create_ptr()
+        if kind == _GENERATION_ARIMA:
+            f[].arima_generation.token = String(state[1])
+            f[].arima_generation.models = models
+        else:
+            f[].hw_generation.token = String(state[1])
+            f[].hw_generation.models = models
+        return PythonObject(len(models))
     if operation == PARALLEL_FORECAST_WORKER_OPN_ARIMA_PREDICT_SHARD:
-        # One instance-dictionary update (`shard_model`); it was a key list
-        # and one read and one store per state field.
-        var model = shard_model(f[].arima_cls, state)
-        py_setitem(py_fields(model), nk[].k__exog, PythonObject(None))
+        # The model this worker built at the generation's store (it was one
+        # model, and with it one resident device copy, per request).
+        var model = _generation_model(f[].arima_generation, state)
         return arima_predict(model, Python.tuple(args[0], args[1], PythonObject(None)), f[].arima_context)
     if operation == PARALLEL_FORECAST_WORKER_OPN_HW_PREDICT_SHARD:
-        var model = shard_model(f[].hw_cls, state)
+        var model = _generation_model(f[].hw_generation, state)
         return hw_predict(model, Python.tuple(args[0], args[1], PythonObject(None)), f[].hw_context)
     if operation == PARALLEL_FORECAST_WORKER_OPN_ARIMA_FIT_SHARD:
         var model = shard_model(f[].arima_cls, state)
