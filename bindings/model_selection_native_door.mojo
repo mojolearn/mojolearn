@@ -82,7 +82,7 @@ def msel_operation(model: PythonObject, operation: String, args: PythonObject,
         # unknown value, and 'gpu' on a CPU-only install, are refused in
         # words before any field is stored; the default None is one compare.
         if len(args) > 0:
-            msel_own_device_admit(args[len(args) - 1], context)
+            msel_own_device_admit(args[len(args) - 1], b, context)
         return msel_search_initialize(model, args, context)
     if operation == "family_msel_grid_init":
         var grid = msel_grid_dicts(args[0], context)
@@ -118,7 +118,7 @@ def msel_operation(model: PythonObject, operation: String, args: PythonObject,
         # and words as the constructor); a refusal leaves the search as it was.
         var device = py_get(args[0], PythonObject("device"))
         if device is not None:
-            msel_own_device_admit(device, context)
+            msel_own_device_admit(device, b, context)
         msel_search_update(fields, args[0], context)
         return model
     if operation == "family_msel_search_estimator_type":
