@@ -46,7 +46,7 @@ struct ArenaResidentPlan(Movable):
     #: The fold store's helper entry (put / take_rows / free), resolved once
     #: for the operation (lane arena, 2026-11-21: formerly three Python
     #: builtins called through CPython).
-    var store: EntryRef
+    var store_entry: EntryRef
     var records: Dict[Int, ResidentRecord]
 
     def __init__(out self, context: PythonObject) raises:
@@ -57,7 +57,7 @@ struct ArenaResidentPlan(Movable):
         var inputs = py_get(context, "arena_msel_input_context")
         if inputs is None:
             raise Error("RuntimeError: native resident rows require the model-selection input connection")
-        self.store = msel_helpers_key(inputs)
+        self.store_entry = msel_helpers_key(inputs)
         self.records = Dict[Int, ResidentRecord]()
 
     def entry(mut self, values: PythonObject, indices: Bool = False) raises -> Int:
@@ -89,7 +89,7 @@ struct ArenaResidentPlan(Movable):
             try:
                 var source_address = pin.layout.value().address
                 var source_bytes = record.nbytes
-                var store = self.store
+                var store = self.store_entry
                 var put_id = -1
                 with GILReleased(Python()):
                     put_id = msel_store_put(store, source_address, source_bytes)
@@ -104,7 +104,7 @@ struct ArenaResidentPlan(Movable):
             # without replacing the primary pending-error receipt.
             if sid >= 0:
                 try:
-                    _ = msel_store_free(self.store, sid)
+                    _ = msel_store_free(self.store_entry, sid)
                 except cleanup_error:
                     pass
             raise problem^
@@ -129,7 +129,7 @@ struct ArenaResidentPlan(Movable):
         var row_bytes = base.nbytes // n if n else 0
         if indices.size and row_bytes:
             var dst = Int(py=_slot(output, "_addr", self.context))
-            var store = self.store
+            var store = self.store_entry
             var base_id = base.sid
             var index_id = indices.sid
             var count = indices.size
@@ -147,7 +147,7 @@ struct ArenaResidentPlan(Movable):
         var first = FirstFailure()
         try:
             if record.sid >= 0:
-                var store = self.store
+                var store = self.store_entry
                 var freed_id = record.sid
                 with GILReleased(Python()):
                     _ = msel_store_free(store, freed_id)
@@ -170,7 +170,7 @@ struct ArenaResidentPlan(Movable):
         for item in pending.items():  # driver-loop: attempt every independent native store release
             try:
                 if item.value.sid >= 0:
-                    var store = self.store
+                    var store = self.store_entry
                     var freed_id = item.value.sid
                     with GILReleased(Python()):
                         _ = msel_store_free(store, freed_id)
