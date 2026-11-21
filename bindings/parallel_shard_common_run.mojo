@@ -325,6 +325,8 @@ comptime PARALLEL_FORECAST_WORKER_OPN_ARIMA_PREDICT_SHARD = 32
 comptime PARALLEL_FORECAST_WORKER_OPN_HW_PREDICT_SHARD = 33
 comptime PARALLEL_FORECAST_WORKER_OPN_ARIMA_FIT_SHARD = 34
 comptime PARALLEL_FORECAST_WORKER_OPN_HW_FIT_SHARD = 35
+# Bookkeeping, not numerical: a worker stores one fitted estimator's predict models (a "generation").
+comptime PARALLEL_FORECAST_WORKER_OPN_GENERATION_STORE = 36
 
 
 def shard_worker_op_name(op: Int) -> String:
@@ -374,6 +376,8 @@ def shard_worker_op_name(op: Int) -> String:
         return "arima_fit_shard"
     if op == PARALLEL_FORECAST_WORKER_OPN_HW_FIT_SHARD:
         return "hw_fit_shard"
+    if op == PARALLEL_FORECAST_WORKER_OPN_GENERATION_STORE:
+        return "forecast_generation_store"
     return "unknown"
 
 

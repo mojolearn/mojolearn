@@ -1154,6 +1154,9 @@ def umap_transform_binding(addrs: PythonObject, params: PythonObject) raises -> 
     return PythonObject(columns)
 
 
+from core.manifold_member import manifold_member_publish
+
+
 def _publish_umap_ops(module: PythonObject) raises:
     # The CPU column of the UMAP operations table
     # (core/neighbors_entry_table_umap.mojo): UMAP's owner
@@ -1164,6 +1167,8 @@ def _publish_umap_ops(module: PythonObject) raises:
     umap_ops_publish(NeighborsEntryKey(Int(GLOBAL_NUMERIC_MODE), 0), Int(api[].entries.unsafe_ptr()),
                      umap_ops_host_v1)
     py_setattr(module, "umap_native_key", Python.tuple(PythonObject(Int(GLOBAL_NUMERIC_MODE)), PythonObject(0)))
+    # UMAP's member entry (core/manifold_member.mojo, family 33): its fit and transform run on this table.
+    manifold_member_publish(Int(GLOBAL_NUMERIC_MODE), 0, Int(api[].entries.unsafe_ptr()))
 
 
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_metrics_host.mojo

@@ -193,6 +193,7 @@ from gbdt.gpu_data.compressed_index_builder import (
     build_layout,
 )
 from gbdt.gpu_data.feature_blocks import PolicyBlock, blocks_for
+from gbdt.host.gbdt_oracle_tree_ctr import GbdtTreeCtrHost
 from gbdt.host.gbdt_oracle_eval import (
     GbdtHostEval,
     GbdtHostEvalFit,
@@ -2341,15 +2342,264 @@ def gbdt_host_fit_eval(
         )
     var cindexes = List[List[UInt32]]()
     cindexes.append(cindex^)
+    # no tree CTRs on this arm: the fused per-tree loop
+    var no_tree_ctr = List[GbdtTreeCtrHost]()
     return gbdt_host_boost(
         cindexes, 0, y, n_rows, n_features, grid^, layout, params,
         bootstrap_kind, bootstrap_param, random_strength, eval, test_cindex,
-        weights,
+        no_tree_ctr, weights,
     )
 
 
+def _tree_ctr_levels_host(
+    mut tc: GbdtTreeCtrHost,
+    mut cindexes: List[List[UInt32]],
+    mut test_cindex: List[UInt32],
+    learn_p: Int,
+    layout: CompressedIndexLayout,
+    blocks: List[PolicyBlock],
+    bf_feature: List[Int],
+    bf_bin: List[Int],
+    n_rows: Int,
+    n_features: Int,
+    max_depth: Int,
+    l2_leaf_reg: Float32,
+    score_std_dev: Float32,
+    fixed_scale: Float32,
+    mut level_rand: TRandom,
+    mut row_index: List[Int],
+    mut stats: List[Float32],
+    mut p_off: List[Int],
+    mut p_sz: List[Int],
+    mut out_features: List[Int],
+    mut out_bins: List[Int],
+) raises -> Int:
+    """One oblivious tree with tree CTRs (feature combinations) on
+    permutation `learn_p`'s index: the host column of `run_tree_ctr_tree`
+    (`gbdt/methods/tree_ctr_search.mojo`), level by level in its order.
+
+      1. `search_synchronized_symmetric_level`: the histograms over the
+         whole layout (every live leaf when a slot of the index changed
+         since the last histograms, `cindex_changed_since_histogram`;
+         otherwise the smaller siblings and the subtraction), the scan, the
+         partition stats, the scores, the winner, then the gates
+         (`accept_symmetric_level_winner`) BEFORE the next level exists.
+      2. `GbdtTreeCtrHost.take_winner`: the winner into the tree's tensor;
+         a won candidate becomes the tree's next persist slot.
+      3. `enqueue_post_winner`: the partition.
+      4. `GbdtTreeCtrHost.mint_level`: the next level's candidates.
+
+    The histogram, scan, subtraction, score and partition statements are
+    the fused loop's own (`gbdt_host_boost`), called in the level's order,
+    so a level's cells are the device's by the same argument as there. They
+    run on the calling thread, as they do for every host GBDT fit: this
+    loop adds no serial pass of its own, and the tree-CTR work between the
+    levels is split across the workers (`gbdt_oracle_tree_ctr.mojo`).
+    Serial by nature: the levels of one tree.
+
+    Returns the live leaf count; `out_features` / `out_bins` are the
+    accepted splits (a combination names its persist slot) and `row_index`,
+    `stats`, `p_off`, `p_sz` the final partition. No level is speculated, so
+    there is nothing to roll back."""
+    var hist_cells = layout.hist_cells
+    var max_leaves = 1 << max_depth
+    var hist = List[Float32](
+        length=max_leaves * 2 * hist_cells, fill=Float32(0.0)
+    )
+    var ids_compute = List[Int](length=max_leaves, fill=0)
+    var sub_from = List[Int](length=max_leaves, fill=0)
+    var sub_what = List[Int](length=max_leaves, fill=0)
+    var n_live = 1
+    tc.begin_tree(learn_p, cindexes[learn_p])
+    for depth in range(max_depth):
+        # `Random.NextUniformL()`, one draw per level before the launch
+        var level_seed = level_rand.next_uniform_l()
+        var half = n_live // 2
+        var planned = depth > 0 and not tc.learn_changed
+        tc.learn_changed = False
+        var compute = List[Int]()
+        if planned:
+            for j in range(half):
+                compute.append(ids_compute[j])
+        else:
+            for j in range(n_live):
+                compute.append(j)
+
+        var block_first_bin = 0
+        for b in range(len(blocks)):
+            ref blk = blocks[b]
+            var total = 0
+            for k in range(blk.count()):
+                total += Int(blk.folds[k])
+            if blk.policy == POLICY_BINARY:
+                _binary_block(
+                    blk, block_first_bin, hist_cells, compute, depth,
+                    p_off, p_sz, row_index, stats, cindexes[learn_p], n_rows,
+                    fixed_scale, hist,
+                )
+            elif blk.policy == POLICY_HALF_BYTE:
+                _half_byte_block(
+                    blk, block_first_bin, hist_cells, compute, depth,
+                    p_off, p_sz, row_index, stats, cindexes[learn_p], n_rows,
+                    fixed_scale, hist,
+                )
+            elif blk.policy == POLICY_ONE_BYTE:
+                _one_byte_block(
+                    blk, block_first_bin, hist_cells, compute, p_off, p_sz,
+                    row_index, stats, cindexes[learn_p], layout, n_rows,
+                    fixed_scale, hist,
+                )
+            block_first_bin += total
+
+        # `scan_histograms_kernel` over the computed leaves
+        for j in range(len(compute)):
+            var slot = compute[j]
+            for z in range(2):
+                for f in range(n_features):
+                    ref cf = layout.features[f]
+                    var folds = Int(cf.folds)
+                    if cf.one_hot_feature or folds <= 1:
+                        continue
+                    var base = (
+                        slot * 2 * hist_cells + z * hist_cells
+                        + Int(cf.first_fold_index)
+                    )
+                    var running = Float32(0.0)
+                    for i in range(folds):
+                        running = ftz(running + hist[base + i])
+                        hist[base + i] = running
+
+        # `substract_histograms_kernel`: the larger sibling, in place
+        if planned and half > 0:
+            for j in range(half):
+                var from_slot = sub_from[j]
+                var what_slot = sub_what[j]
+                for z in range(2):
+                    var from_base = from_slot * 2 * hist_cells + z * hist_cells
+                    var what_base = what_slot * 2 * hist_cells + z * hist_cells
+                    for bf in range(hist_cells):
+                        var new_val = ftz(hist[from_base + bf] - hist[what_base + bf])
+                        if z == 0:
+                            new_val = max(new_val, Float32(0.0))
+                        hist[from_base + bf] = new_val
+
+        # `compute_partition_stats` over the live leaves
+        var part_stats = List[Float32](length=2 * n_live, fill=Float32(0.0))
+        for i in range(n_live):
+            part_stats[2 * i] = _partition_stat(stats, n_rows, 0, p_off[i], p_sz[i])
+            part_stats[2 * i + 1] = _partition_stat(stats, n_rows, 1, p_off[i], p_sz[i])
+
+        # the score and the device winner
+        var best_gain = -GBDT_FLOAT32_MAX
+        var best_bin = GBDT_SENTINEL
+        var gains = _cosine_gains(
+            hist, hist_cells, part_stats, n_live, l2_leaf_reg,
+            score_std_dev, level_seed, bf_feature,
+        )
+        for bf in range(hist_cells):
+            var gain = gains[bf]
+            if gain > best_gain:
+                best_gain = gain
+                best_bin = UInt32(bf)
+
+        # ---- the gates (`accept_symmetric_level_winner`), this level ----
+        if best_bin == GBDT_SENTINEL or Int(best_bin) >= hist_cells:
+            raise Error(
+                "All splits have infinite score. Probably, numerical"
+                " overflow occurs in loss function and/or split score"
+                " calculation. Try increasing l2_leaf_reg, and/or"
+                " decreasing learning_rate, etc."
+                " [level " + String(depth) + ", live leaves "
+                + String(n_live) + "]"
+            )
+        var best_score = ftz(best_gain)
+        if not (best_score > Float32(0.0)):
+            break
+        var won_f = bf_feature[Int(best_bin)]
+        var won_b = bf_bin[Int(best_bin)]
+        var repeated = False
+        for i in range(len(out_features)):
+            if out_features[i] == won_f and out_bins[i] == won_b:
+                repeated = True
+        if repeated:
+            break
+        # a winner on a slot holding no column ends the tree
+        var split_f = tc.take_winner(
+            learn_p, cindexes, test_cindex, won_f, won_b
+        )
+        if split_f < 0:
+            break
+        var split_b = won_b
+        out_features.append(split_f)
+        out_bins.append(split_b)
+
+        # the split chain, every live leaf (`enqueue_post_winner`); a won
+        # candidate's persist slot holds the candidate slot's bins
+        ref sfeat = layout.features[split_f]
+        var new_rows = row_index.copy()
+        var new_stats = stats.copy()
+        for i in range(n_live):
+            var off = p_off[i]
+            var sz = p_sz[i]
+            var zeros = List[Int]()
+            var ones = List[Int]()
+            for k in range(sz):
+                var row = row_index[off + k]
+                var word = cindexes[learn_p][Int(sfeat.offset) * n_rows + row]
+                var feature_val = word & (sfeat.mask << sfeat.shift)
+                var value = UInt32(split_b) << sfeat.shift
+                var goes_right: Bool
+                if sfeat.one_hot_feature:
+                    goes_right = feature_val == value
+                else:
+                    goes_right = feature_val > value
+                if goes_right:
+                    ones.append(k)
+                else:
+                    zeros.append(k)
+            var dst = 0
+            for k in range(len(zeros)):
+                var src = off + zeros[k]
+                new_rows[off + dst] = row_index[src]
+                new_stats[off + dst] = stats[src]
+                new_stats[n_rows + off + dst] = stats[n_rows + src]
+                dst += 1
+            for k in range(len(ones)):
+                var src = off + ones[k]
+                new_rows[off + dst] = row_index[src]
+                new_stats[off + dst] = stats[src]
+                new_stats[n_rows + off + dst] = stats[n_rows + src]
+                dst += 1
+            # `copy_histograms_kernel`: parent into the right slot
+            var src_base = i * 2 * hist_cells
+            var dst_base = (n_live + i) * 2 * hist_cells
+            for c in range(2 * hist_cells):
+                hist[dst_base + c] = hist[src_base + c]
+            # `update_partitions_and_plan_kernel`
+            var left_sz = len(zeros)
+            var right_sz = sz - left_sz
+            p_sz[i] = left_sz
+            p_off[n_live + i] = off + left_sz
+            p_sz[n_live + i] = right_sz
+            var small = n_live + i
+            var big = i
+            if left_sz < right_sz:
+                small = i
+                big = n_live + i
+            ids_compute[i] = small
+            sub_from[i] = big
+            sub_what[i] = small
+        row_index = new_rows^
+        stats = new_stats^
+        n_live = n_live * 2
+        if depth + 1 < max_depth:
+            tc.mint_level(learn_p, cindexes[learn_p])
+    tc.end_tree()
+    return n_live
+
+
 def gbdt_host_boost(
-    cindexes: List[List[UInt32]],
+    mut cindexes: List[List[UInt32]],
     est_p: Int,
     y: List[Float32],
     n_rows: Int,
@@ -2361,7 +2611,8 @@ def gbdt_host_boost(
     bootstrap_param: Float32,
     random_strength: Float32,
     eval: GbdtHostEval,
-    test_cindex: List[UInt32],
+    mut test_cindex: List[UInt32],
+    mut tree_ctr: List[GbdtTreeCtrHost],
     weights: List[Float32] = List[Float32](),
 ) raises -> GbdtHostFitWithEval:
     """`fit_with_test`'s Plain SymmetricTree Logloss loop over ONE compressed
@@ -2382,7 +2633,20 @@ def gbdt_host_boost(
     ONE permutation (every caller but the CTR arm,
     gbdt/host/gbdt_oracle_ctr.mojo) is `learn_p == est_p == 0` on every
     tree, which is the loop this function held before the permutations
-    existed, statement for statement."""
+    existed, statement for statement.
+
+    TREE CTRS. `tree_ctr` is empty for every fit without feature
+    combinations, and then nothing here differs from the loop above: the
+    indexes are only read. With one entry (the CTR arm at
+    `max_ctr_complexity` above 1) each tree's structure is grown by
+    `_tree_ctr_levels_host`, the level-synchronized form of the device's
+    `run_tree_ctr_tree`, which writes the tree-CTR slots of `cindexes` and
+    `test_cindex` in place; the fused level loop and its gates then run
+    zero levels, and the estimation, the held-out apply and the losses
+    below are the same statements for both."""
+    if len(tree_ctr) > 1:
+        raise Error("a fit takes at most one tree-CTR state")
+    var tree_on = len(tree_ctr) == 1
     var perm_count = len(cindexes)
     if perm_count < 1:
         raise Error("gbdt host: no compressed index")
@@ -2464,7 +2728,6 @@ def gbdt_host_boost(
             var rnd = TRandom(UInt64(iteration) + params.random_seed)
             rnd.advance(10)
             learn_p = Int(rnd.next_uniform_l() % UInt64(learn_perm_count - 1))
-        ref cindex = cindexes[learn_p]
         # ---- the gradients, the learn loss and the magnitudes ----
         _logloss_search_pass(
             y, cursors[learn_p], n_rows, border, stats, fv_part, mag_part,
@@ -2520,7 +2783,21 @@ def gbdt_host_boost(
         var winners_score = List[Float32]()
         var winners_bf = List[UInt32]()
         var n_live = 1
-        for depth in range(max_depth):
+        # TREE CTRS: the level-synchronized levels (a drain per level on
+        # the device), which leave the tree's splits in `tc_features` /
+        # `tc_bins` and the partition in `row_index`, `stats`, `p_off`,
+        # `p_sz`; the fused loop below then runs no level
+        var tc_features = List[Int]()
+        var tc_bins = List[Int]()
+        if tree_on:
+            n_live = _tree_ctr_levels_host(
+                tree_ctr[0], cindexes, test_cindex, learn_p, layout, blocks,
+                bf_feature, bf_bin, n_rows, n_features, max_depth,
+                params.l2_leaf_reg, score_std_dev, fixed_scale, level_rand,
+                row_index, stats, p_off, p_sz, tc_features, tc_bins,
+            )
+        ref cindex = cindexes[learn_p]
+        for depth in range(0 if tree_on else max_depth):
             # `Random.NextUniformL()`, one draw per level before the launch
             var level_seed = level_rand.next_uniform_l()
             var half = n_live // 2
@@ -2683,7 +2960,14 @@ def gbdt_host_boost(
         var tree_features = List[Int]()
         var tree_bins = List[Int]()
         var grown = 0
-        for d in range(max_depth):
+        if tree_on:
+            # accepted level by level, each gate applied before the next
+            # level was searched: nothing was speculated, nothing rolls back
+            for i in range(len(tc_features)):
+                tree_features.append(tc_features[i])
+                tree_bins.append(tc_bins[i])
+            grown = len(tc_features)
+        for d in range(0 if tree_on else max_depth):
             var best_score = winners_score[d]
             var best_bin_u = winners_bf[d]
             if best_bin_u == GBDT_SENTINEL or Int(best_bin_u) >= hist_cells:
@@ -2708,7 +2992,7 @@ def gbdt_host_boost(
             tree_features.append(cf_)
             tree_bins.append(cb_)
             grown += 1
-        if grown < max_depth:
+        if grown < max_depth and not tree_on:
             var live = n_live
             for _ in range(max_depth - grown):
                 var h2 = live // 2

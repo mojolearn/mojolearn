@@ -105,6 +105,13 @@ from gbdt.models.combination_map import (
     expand_combination_columns,
 )
 from gbdt.models.tensor_ctr_value_table import TTensorCtrRegistry
+from gbdt.ctrs.tree_ctr import (
+    TREE_COL_FLOAT,
+    TREE_COL_ONE_HOT,
+    TREE_COL_SIMPLE_CTR,
+    TreeCtrPlan,
+)
+from gbdt.methods.tree_ctr_search import TreeCtrFit
 from std.math import isfinite, log2
 from std.os import getenv
 
@@ -313,6 +320,7 @@ from gbdt.data.pairs import (
 from gbdt.targets.kernel.pair_logit_group import PAIRLOGIT_GROUP_FUSED
 from gbdt.data.quantization import (
     NAN_TREATMENT_AS_IS,
+    NAN_TREATMENT_AS_TRUE,
     nan_substitution,
     nan_value_treatment,
 )
@@ -1712,7 +1720,21 @@ def train(
         cat_params = cat_feature_params[0].copy()
     else:
         cat_params = TCatFeatureParams.default()
-    cat_params.check()
+    # this fit computes feature combinations (tree CTRs) on the device
+    cat_params.check(True)
+
+    # TREE CTRS (`max_ctr_complexity` above 1; `gbdt/methods/
+    # tree_ctr_search.mojo`). `tree_configs` is empty at complexity 1, and
+    # then nothing below this line differs from a fit without them: no
+    # slot, no retained code column, the fused per-tree search.
+    var tree_configs = List[TCtrConfig]()
+    if cat_params.max_tensor_complexity > 1:
+        tree_configs = cat_params.combination_ctr_configs()
+    #: the CTR-bearing categorical features (ascending), their
+    #: cardinalities and their dense codes, resident for the whole fit
+    var tree_cat_features = List[Int]()
+    var tree_cat_cards = List[Int]()
+    var tree_cat_codes = List[DeviceBuffer[DType.uint32]]()
 
     # --- the categorical pass, host side, over `x_colmajor` -------------
     #
@@ -1769,6 +1791,20 @@ def train(
         else:
             independent_slots.append(c)
             independent_configs.append(configs[c])
+
+    # driver-loop: over the tree-CTR configs
+    for c in range(len(tree_configs)):
+        if is_permutation_dependent_ctr_type(tree_configs[c].ctr_type) and (
+            len(dependent_configs) == 0
+        ):
+            # the binarized target, the permutations and their estimation
+            # orders are built for the simple Borders CTRs; a combination
+            # Borders CTR reads the same ones
+            raise Error(
+                "a Borders combination CTR (combinations_ctr) needs a Borders"
+                " simple CTR (simple_ctr) in the same fit: both read the"
+                " fit's binarized target and its permutations"
+            )
 
     # `BuildCtrTarget` -> `BuildBinarizedTarget`
     # (`gpu_data/dataset_helpers.cpp:137-151`), the grid every
@@ -2028,6 +2064,13 @@ def train(
     var symctr_pre_folds = List[Int]()
     comptime if SYM_CTR_ANY:
         symctr_walk_main = False
+        if len(tree_configs) > 0:
+            raise Error(
+                "max_ctr_complexity above 1 (feature combinations) is not"
+                " served by this build's categorical walk (the FAST Apple"
+                " SYM_CTR prep, which does not keep the code columns"
+                " resident); build without the SYM_CTR defines"
+            )
         # driver-loop: over the permutations
         for _ in range(perm_count):
             symctr_dep_dev.append(List[Int]())
@@ -2432,6 +2475,12 @@ def train(
                         slot_dev[dependent_slots[c]] = len(ctr_dev_cols)
                         ctr_dev_cols.append(dep[c])
                     dep_dev_by_perm[p].append(dep[c])
+        if len(tree_configs) > 0:
+            # a handle on the resident codes: the levels of every tree
+            # group the rows by them
+            tree_cat_features.append(f)
+            tree_cat_cards.append(unique_values)
+            tree_cat_codes.append(d_codes.copy())
         _ = d_codes^
         # the APPLY-TIME half of the same statistic: their
         # `CalcFinalCtrs` writes a `TCtrValueTable` beside every CTR the
@@ -2465,6 +2514,48 @@ def train(
             ctr_grids.append(cat_params.ctr_binarization_for(configs[c]))
             column_ctr_grid.append(len(ctr_grids) - 1)
             ctr_column_count += 1
+
+    # TREE CTRS: the layout's slots, after every base column. `max_depth`
+    # persist slots (the combinations a tree chose) and one candidate slot
+    # per (CTR-bearing categorical feature, tree-CTR config), each a column
+    # of zeros with a synthetic grid at the tree-CTR fold capacity, so
+    # every row starts in bin 0 and the fit writes the bins in place.
+    var n_base_columns = len(columns)
+    var tree_on = len(tree_configs) > 0 and len(tree_cat_features) > 0
+    #: per column, a slot's fold capacity (0 for a base column); empty
+    #: without tree CTRs
+    var tree_slot_folds = List[Int]()
+    var tree_border_counts = List[Int]()
+    if tree_on:
+        var tree_fold_cap = 1
+        # driver-loop: over the tree-CTR configs
+        for c in range(len(tree_configs)):
+            var asked = cat_params.combination_ctr_binarization_for(
+                tree_configs[c]
+            ).border_count
+            tree_border_counts.append(asked)
+            if asked > tree_fold_cap:
+                tree_fold_cap = asked
+        var d_zero_column = ctx.enqueue_create_buffer[DType.float32](n_rows)
+        enqueue_fill(ctx, d_zero_column, Float32(0.0))
+        var zero_dev_slot = len(ctr_dev_cols)
+        ctr_dev_cols.append(d_zero_column)
+        var tree_grid = len(ctr_grids)
+        ctr_grids.append(
+            cat_params.combination_ctr_binarization_for(tree_configs[0])
+        )
+        # driver-loop: over the base columns
+        for _ in range(n_base_columns):
+            tree_slot_folds.append(0)
+        var n_tree_slots = max_depth + len(tree_cat_features) * len(tree_configs)
+        # driver-loop: over the tree-CTR slots (levels + features x configs)
+        for _ in range(n_tree_slots):
+            columns.append(List[Float32]())
+            column_src_feature.append(-1)
+            column_one_hot.append(False)
+            column_ctr_grid.append(tree_grid)
+            column_dev_slot.append(zero_dev_slot)
+            tree_slot_folds.append(tree_fold_cap)
 
     var n_columns = len(columns)
 
@@ -2558,6 +2649,7 @@ def train(
         pre_has=symctr_pre_has,
         pre_borders=symctr_pre_b,
         pre_folds=symctr_pre_f,
+        tree_slot_folds=tree_slot_folds,
     )
     var borders = grid[0].copy()
     var fold_counts = grid[1].copy()
@@ -2972,9 +3064,13 @@ def train(
 
     var eval_expanded: List[Float32]
     if eval_rows > 0 and ctr_column_count != 0:
+        # the base columns from the tables; a tree-CTR slot starts at
+        # zero on the held-out rows too (the fit writes its bins)
         eval_expanded = expand_raw_columns(
-            ctr_tables, len(fold_counts), eval_x_colmajor, eval_rows
+            ctr_tables, n_base_columns, eval_x_colmajor, eval_rows
         )
+        if tree_on:
+            eval_expanded.resize(len(fold_counts) * eval_rows, Float32(0.0))
     elif eval_rows > 0:
         eval_expanded = eval_x_colmajor.copy()
     else:
@@ -2995,6 +3091,8 @@ def train(
     elif objective == OBJECTIVE_MULTIRMSE:
         approx_dim = num_classes
 
+    # tree CTRS: a handle on the held-out index for the persist-slot writes
+    var tree_test_cindex = test_cindex.copy()
     var test_arm = make_test_arm(
         ctx, eval_rows, test_cindex^, test_targets^,
         approx_dim, 1 + approx_dim, max_depth,
@@ -3078,6 +3176,68 @@ def train(
         )
 
 
+    # TREE CTRS: the fit's state (`TreeCtrFit`), one entry when on.
+    var tree_fit = List[TreeCtrFit]()
+    if tree_on:
+        var tree_col_kind = List[Int]()
+        var tree_col_cat = List[Int]()
+        var tree_col_raw = List[Int]()
+        var tree_col_borders = List[List[Float32]]()
+        var tree_col_nan = List[Int]()
+        # driver-loop: over the base columns
+        for c in range(n_base_columns):
+            if column_one_hot[c]:
+                tree_col_kind.append(TREE_COL_ONE_HOT)
+            elif column_ctr_grid[c] >= 0:
+                tree_col_kind.append(TREE_COL_SIMPLE_CTR)
+            else:
+                tree_col_kind.append(TREE_COL_FLOAT)
+            tree_col_cat.append(-1)
+            tree_col_raw.append(column_src_feature[c])
+            tree_col_borders.append(borders[c].copy())
+            # the side of a `bin >` split a NaN lands on: the last bin
+            # under AsTrue, bin 0 otherwise
+            tree_col_nan.append(
+                1 if column_nan_treatment[c] == NAN_TREATMENT_AS_TRUE else 0
+            )
+        # driver-loop: over the simple-CTR tables (one per CTR column)
+        for t in range(len(ctr_tables)):
+            tree_col_cat[ctr_tables[t].column] = ctr_tables[t].source_feature
+        var tree_plan = TreeCtrPlan(
+            tree_col_kind^, tree_col_cat^, tree_cat_features.copy(),
+            tree_cat_cards.copy(), cat_params.max_tensor_complexity,
+        )
+        var tree_orders = List[DeviceBuffer[DType.uint32]]()
+        if len(d_orders) > 0:
+            # driver-loop: over the permutations
+            for p in range(len(d_orders)):
+                tree_orders.append(d_orders[p].copy())
+        else:
+            # no permutation-dependent CTR in the fit: one order for the
+            # builders to walk (the groups do not depend on it)
+            var d_ord0 = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+            launch_ctr_estimation_order(ctx, d_ord0, n_rows, 0, random_seed)
+            tree_orders.append(d_ord0^)
+        # the raw eval input, resident once: a chosen combination's column
+        # on the held-out rows is the model's own predict launches over it
+        var d_eval_x = ctx.enqueue_create_buffer[DType.float32](1)
+        if eval_rows > 0:
+            d_eval_x = transfer_upload_list[DType.float32](
+                ctx, eval_x_colmajor, eval_rows * n_features,
+                eval_rows * n_features,
+            )
+        tree_fit.append(
+            TreeCtrFit(
+                ctx, tree_plan^, tree_configs.copy(),
+                tree_border_counts.copy(), n_rows, n_base_columns, max_depth,
+                build_layout(fold_counts, column_one_hot),
+                tree_col_raw^, tree_col_borders^, tree_col_nan^,
+                tree_cat_codes^, tree_orders^, d_btarget.copy(),
+                target_classes_count, perm_count, eval_rows, n_features,
+                d_eval_x^, tree_test_cindex^,
+            )
+        )
+
     host_times.stop_host("train_pre_fit", t_phase)
     t_phase = host_times.start()
     var model = TAdditiveModel()
@@ -3133,6 +3293,7 @@ def train(
         pair_losers=pair_list.losers.copy(),
         pair_weights=pair_list.weights.copy(),
         device_plan=device_plan,
+        tree_ctr=tree_fit^,
     )
     host_times.stop_host("train_fit_with_test", t_phase)
     t_phase = host_times.start()
@@ -3164,6 +3325,38 @@ def train(
         if 0 < best_iter and best_iter < model.size():
             model.shrink(best_iter)
 
+    # TREE CTRS: the model's columns are the base columns followed by one
+    # column per combination the trees chose (its map, its table, the
+    # borders it won under); the layout's slots do not reach the model, and
+    # the trees' persist-slot splits are renumbered to those columns.
+    var model_combinations = TCombinationCtrs()
+    if tree_on:
+        var chosen = fit_result.tree_ctr.pop()
+        var section = chosen.assemble()
+        chosen.rewrite_model(model, section.column_of)
+        var m_folds = List[Int]()
+        var m_one_hot = List[Bool]()
+        var m_borders = List[List[Float32]]()
+        var m_nan = List[Int]()
+        # driver-loop: over the base columns
+        for c in range(n_base_columns):
+            m_folds.append(fold_counts[c])
+            m_one_hot.append(column_one_hot[c])
+            m_borders.append(borders[c].copy())
+            m_nan.append(column_nan_treatment[c])
+        # driver-loop: over the chosen combination columns (model structure)
+        for i in range(len(section.borders)):
+            m_folds.append(len(section.borders[i]))
+            m_one_hot.append(False)
+            m_borders.append(section.borders[i].copy())
+            m_nan.append(NAN_TREATMENT_AS_IS)
+        fold_counts = m_folds^
+        column_one_hot = m_one_hot^
+        borders = m_borders^
+        column_nan_treatment = m_nan^
+        model_combinations = section.ctrs.copy()
+        _ = chosen^  # the fit's resident buffers, before the context's
+
     host_times.stop_host("train_post_fit", t_phase)
     host_times.stop_host("train_total", t_train)
     host_times.report()
@@ -3180,7 +3373,7 @@ def train(
         ctr_column_count,
         ctr_tables^,
         TTensorCtrRegistry(len(fold_counts)),
-        TCombinationCtrs(),
+        model_combinations^,
     )
 
 
@@ -3272,6 +3465,10 @@ def _quantize_training_columns(
     pre_has: List[Bool] = List[Bool](),
     pre_borders: List[List[Float32]] = List[List[Float32]](),
     pre_folds: List[Int] = List[Int](),
+    # tree CTRs: per column, the fold capacity of a tree-CTR slot (0 for
+    # every other column); empty when the fit has none. A slot is not read:
+    # it takes the synthetic grid 0.5, 1.5, ... of that many borders.
+    tree_slot_folds: List[Int] = List[Int](),
 ) raises -> Tuple[List[List[Float32]], List[Int], List[Int]]:
     """Shared grid builder for ordinary training and reusable numeric pools.
 
@@ -3370,6 +3567,16 @@ def _quantize_training_columns(
     for _ in range(n_columns):  # small-loop(n_columns: column plan entries): one AsIs code per column, no data
         column_nan_treatment.append(NAN_TREATMENT_AS_IS)
     for f in range(n_columns):
+        if len(tree_slot_folds) == n_columns and tree_slot_folds[f] > 0:
+            # a tree-CTR slot: the fit writes bins into it, so its grid
+            # only has to give it `tree_slot_folds[f]` folds and send the
+            # initial zeros to bin 0
+            var slot_borders = List[Float32]()
+            for c in range(tree_slot_folds[f]):  # small-loop(folds: borders of one slot grid, at most 255): synthetic borders
+                slot_borders.append(Float32(c) + Float32(0.5))
+            fold_counts.append(len(slot_borders))
+            borders.append(slot_borders^)
+            continue
         comptime if SYM_CTR_ANY:
             if len(pre_has) == n_columns and pre_has[f]:
                 fold_counts.append(pre_folds[f])
