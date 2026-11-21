@@ -11,10 +11,12 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from providers.python.x_ann_abi_pyapi_unpack import a_int, in_f32, out_f32, out_i32, p_int, ptr_f32, ptr_i32, py_int_list
-from x_ann.abi import out_f32_to, out_i32_to
-from x_ann.host.cagra_host import cagra_build_host
-from x_ann.host.ivf_pq_host import X_ANN_HOST_SABOTAGE, ivf_pq_build_host, ivf_sq_build_host, refine_host, ivf_rabitq_build_host
+from providers.python.x_ann_abi_pyapi_unpack import a_int, p_int, ptr_f32, ptr_i32, py_int_list
+from x_ann.host.ivf_pq_host import X_ANN_HOST_SABOTAGE, refine_host
+from x_ann.ops_entry_host_fit import (
+    ann_ivf_pq_build_host_run, ann_ivf_sq_build_host_run, ann_ivf_rabitq_build_host_run,
+    ann_cagra_build_host_run,
+)
 from x_ann.ops_entry_host import (
     ANN_OPS_HOST_API, ann_ops_host_v1, ann_ivf_pq_search_host_run, ann_ivf_sq_search_host_run,
     ann_ivf_rabitq_search_host_run, ann_cagra_search_host_run, ann_filter_topk_host_run, ann_tsne_fit_host_run,
@@ -52,29 +54,16 @@ def _query_status(params: PythonObject, at: Int, queries: Int, n: Int,
 
 def ivf_pq_build_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     """addrs: x, centers, offsets, list_indices, codebooks, codes.
-    params: n, dim, n_lists, kmeans_n_iters, seed, pq_dim, pq_bits, pq_kmeans_n_iters."""
-    var n = p_int(params, 0)
-    var dim = p_int(params, 1)
-    var x = in_f32(addrs, 0, n * dim)
-    var n_lists = p_int(params, 2)
-    var iters = p_int(params, 3)
-    var seed = p_int(params, 4)
-    var pq_dim = p_int(params, 5)
-    var pq_bits = p_int(params, 6)
-    var pq_iters = p_int(params, 7)
+    params: n, dim, n_lists, kmeans_n_iters, seed, pq_dim, pq_bits, pq_kmeans_n_iters.
+    UNPACK and PACK only (lane dw-neighbors, 2026-11-21): the body is
+    x_ann/ops_entry_host_fit.mojo `ann_ivf_pq_build_host_run`, which the ANN operations table
+    (core/neighbors_entry_table_ann.mojo) also calls."""
     # Admit Python addresses while holding the GIL; released work uses native values.
-    var centers_addr = a_int(addrs, 1)
-    var offsets_addr = a_int(addrs, 2)
-    var indices_addr = a_int(addrs, 3)
-    var codebooks_addr = a_int(addrs, 4)
-    var codes_addr = a_int(addrs, 5)
+    var a = py_int_list(addrs)
+    var p = py_int_list(params)
+    var n = 0
     with GILReleased(Python()):
-        var index = ivf_pq_build_host(x, n, dim, n_lists, iters, seed, pq_dim, pq_bits, pq_iters)
-        out_f32_to(index.centers, centers_addr)
-        out_i32_to(index.offsets, offsets_addr)
-        out_i32_to(index.list_indices, indices_addr)
-        out_f32_to(index.codebooks, codebooks_addr)
-        out_i32_to(index.codes, codes_addr)
+        n = ann_ivf_pq_build_host_run(a, p)
     return PythonObject(n)
 
 
@@ -95,18 +84,16 @@ def ivf_pq_search_binding(addrs: PythonObject, params: PythonObject) raises -> P
 
 
 def cagra_build_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
-    """addrs: x, graph_out. params: n, d, intermediate_graph_degree, graph_degree."""
-    var n = p_int(params, 0)
-    var d = p_int(params, 1)
-    var kdeg = p_int(params, 2)
-    var deg = p_int(params, 3)
-    if n < 2 or d <= 0 or kdeg < 1 or kdeg > n - 1 or deg < 1 or deg > kdeg:
-        raise Error("CAGRA: need 1 <= graph_degree <= intermediate_graph_degree <= n - 1")
-    var x = ptr_f32(addrs, 0)
-    var g = List[Int32]()
+    """addrs: x, graph_out. params: n, d, intermediate_graph_degree, graph_degree.
+    UNPACK and PACK only (lane dw-neighbors, 2026-11-21): the body is
+    x_ann/ops_entry_host_fit.mojo `ann_cagra_build_host_run`, which the ANN operations table
+    (core/neighbors_entry_table_ann.mojo) also calls."""
+    # Admit Python addresses while holding the GIL; released work uses native values.
+    var a = py_int_list(addrs)
+    var p = py_int_list(params)
+    var n = 0
     with GILReleased(Python()):
-        g = cagra_build_host(x, n, d, kdeg, deg)
-    out_i32(g, addrs, 1)
+        n = ann_cagra_build_host_run(a, p)
     return PythonObject(n)
 
 
@@ -129,31 +116,16 @@ def cagra_search_binding(addrs: PythonObject, params: PythonObject) raises -> Py
 def ivf_sq_build_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     """addrs: x, centers, offsets, list_indices, vmin, delta, codes.
     params: n, dim, n_lists, kmeans_n_iters, seed[, train_rows_per_list] (release-0845:
-    IVFSQIndex max_train_points_per_cluster; 0 or absent keeps the default training rows)."""
-    var n = p_int(params, 0)
-    var dim = p_int(params, 1)
-    var n_lists = p_int(params, 2)
-    var iters = p_int(params, 3)
-    var seed = p_int(params, 4)
-    var train_rows_per_list = p_int(params, 5) if len(params) > 5 else 0
-    var x = in_f32(addrs, 0, n * dim)
-    var centers = List[Float32]()
-    var offsets = List[Int32]()
-    var list_indices = List[Int32]()
-    var vmin = List[Float32]()
-    var delta = List[Float32]()
-    var codes = List[Int32]()
+    IVFSQIndex max_train_points_per_cluster; 0 or absent keeps the default training rows).
+    UNPACK and PACK only (lane dw-neighbors, 2026-11-21): the body is
+    x_ann/ops_entry_host_fit.mojo `ann_ivf_sq_build_host_run`, which the ANN operations table
+    (core/neighbors_entry_table_ann.mojo) also calls."""
+    # Admit Python addresses while holding the GIL; released work uses native values.
+    var a = py_int_list(addrs)
+    var p = py_int_list(params)
+    var n = 0
     with GILReleased(Python()):
-        ivf_sq_build_host(
-            x, n, dim, n_lists, iters, seed, centers, offsets, list_indices, vmin, delta, codes,
-            train_rows_per_list=train_rows_per_list,
-        )
-    out_f32(centers, addrs, 1)
-    out_i32(offsets, addrs, 2)
-    out_i32(list_indices, addrs, 3)
-    out_f32(vmin, addrs, 4)
-    out_f32(delta, addrs, 5)
-    out_i32(codes, addrs, 6)
+        n = ann_ivf_sq_build_host_run(a, p)
     return PythonObject(n)
 
 
@@ -198,27 +170,16 @@ def refine_binding(addrs: PythonObject, params: PythonObject) raises -> PythonOb
 
 def ivf_rabitq_build_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     """addrs: x, centers, offsets, list_indices, codes (n x words int32 bit words), norms, ips.
-    params: n, dim, n_lists, kmeans_n_iters, seed."""
-    var n = p_int(params, 0)
-    var dim = p_int(params, 1)
-    var n_lists = p_int(params, 2)
-    var iters = p_int(params, 3)
-    var seed = p_int(params, 4)
-    var x = in_f32(addrs, 0, n * dim)
-    var centers = List[Float32]()
-    var offsets = List[Int32]()
-    var list_indices = List[Int32]()
-    var codes = List[Int32]()
-    var norms = List[Float32]()
-    var ips = List[Float32]()
+    params: n, dim, n_lists, kmeans_n_iters, seed.
+    UNPACK and PACK only (lane dw-neighbors, 2026-11-21): the body is
+    x_ann/ops_entry_host_fit.mojo `ann_ivf_rabitq_build_host_run`, which the ANN operations table
+    (core/neighbors_entry_table_ann.mojo) also calls."""
+    # Admit Python addresses while holding the GIL; released work uses native values.
+    var a = py_int_list(addrs)
+    var p = py_int_list(params)
+    var n = 0
     with GILReleased(Python()):
-        ivf_rabitq_build_host(x, n, dim, n_lists, iters, seed, centers, offsets, list_indices, codes, norms, ips)
-    out_f32(centers, addrs, 1)
-    out_i32(offsets, addrs, 2)
-    out_i32(list_indices, addrs, 3)
-    out_i32(codes, addrs, 4)
-    out_f32(norms, addrs, 5)
-    out_f32(ips, addrs, 6)
+        n = ann_ivf_rabitq_build_host_run(a, p)
     return PythonObject(n)
 
 
