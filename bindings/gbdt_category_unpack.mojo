@@ -12,8 +12,9 @@ map), at the boundary, before RUN:
     (`admit_f32`, column-major) and the categorical columns' Float32 words
     are keyed natively;
   * an X that holds text or None in a categorical column (an exact list or
-    tuple of exact list or tuple rows, or an exact object / unicode / bytes
-    ndarray through its own `tolist`) is read cell by cell with exact-type
+    tuple of exact list or tuple rows, an exact object ndarray through its
+    own object words, or a unicode / bytes ndarray through its own `tolist`)
+    is read cell by cell (`_read_cell`, the one cell reader) with exact-type
     C-API reads into one column-major float32 block (the numeric columns)
     and one key block (the categorical columns). That read is one pass
     under the GIL over Python objects, which is what the input is; it is
@@ -35,11 +36,13 @@ the stored map), saved and loaded with the model, and searched in place at
 predict.
 """
 
-from std.memory import unsafe_memcpy
+from std.memory import unsafe_memcpy, bitcast
 from std.python import Python, PythonObject
+from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get
 from bindings.py_typed_call import py_call_typed
-from bindings.py_cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table, CPythonTable
+from bindings.sequential_arrays_door import sequential_address
 from bindings.cpython_borrowed_unpack import borrowed_type_word
 from bindings.classical_pandas_door import _pd_class_word
 from bindings.trees_public_inputs_door import trees_builtins, trees_address
@@ -70,6 +73,13 @@ comptime _CELL_BOOL = 3
 comptime _CELL_FLOAT = 4
 comptime _CELL_STR = 5
 comptime _CELL_BYTES = 6
+#: pandas' `NA` (`pandas._libs.missing.NAType`): the missing category, NaN in
+#: a numeric column
+comptime _CELL_MISSING = 7
+
+comptime _Table = UnsafePointer[CPythonTable, MutAnyOrigin]
+comptime _ViewPtr = UnsafePointer[Int, MutUntrackedOrigin]
+comptime _ObjectWordPtr = MutPointer[PyObjectPtr, MutUntrackedOrigin]
 
 comptime _CellI8 = MutPointer[Int8, MutUntrackedOrigin]
 comptime _CellI16 = MutPointer[Int16, MutUntrackedOrigin]
@@ -189,6 +199,12 @@ struct _CellWords(Movable):
             if np_bytes_word != 0:
                 words.append(np_bytes_word)
                 kinds.append(_CELL_BYTES)
+            # pandas.NA, the missing cell of pandas' object and string
+            # storage (pandas not loaded = no word)
+            var na_word = _pd_class_word(modules, "pandas._libs.missing", "NAType")
+            if na_word != 0:
+                words.append(na_word)
+                kinds.append(_CELL_MISSING)
         self.bytes_word = bytes_word
         self.np_words = words^
         self.np_kinds = kinds^
@@ -249,6 +265,161 @@ def _rows_hold_text(rows: PythonObject, columns: List[Int], w: _CellWords, name:
     return found
 
 
+def _at(r: Int, j: Int) -> String:
+    """The `[r][j]` of a refusal (built only when one is raised)."""
+    return "[" + String(r) + "][" + String(j) + "]"
+
+
+def _cell_text(t: _Table, cell: PyObjectPtr, name: String, r: Int, j: Int) raises -> UInt64:
+    """The key of an exact str cell (or `numpy.str_`, which is a str)."""
+    var size = 0
+    var utf8 = t[].PyUnicode_AsUTF8AndSize(cell, Int(MutPointer(to=size)))
+    if utf8 == 0:
+        t[].PyErr_Clear()
+        raise Error("mojolearn: " + name + _at(r, j) + " is not valid text (it cannot be encoded as UTF-8)")
+    # CPython's UTF-8 cache lives as long as the cell, which its container holds
+    return category_key_text(utf8, size)
+
+
+def _read_cell(t: _Table, w: _CellWords, cell: PyObjectPtr, categorical: Bool, view_ptr: _ViewPtr,
+               name: String, r: Int, j: Int) raises -> Tuple[UInt64, Float32]:
+    """One cell of an X given as Python cells, read by its exact class with
+    C reads only (no method of the cell runs): its key when `categorical`
+    (the value slot is 0), else its Float32 value (the key slot is 0). The
+    one reader of every container of cells: list or tuple rows, an object
+    ndarray's words, a pandas object or string column, a Categorical's
+    categories."""
+    if not cell:
+        raise Error("TypeError: mojolearn: " + name + _at(r, j) + " is an empty object slot")
+    var cw = borrowed_type_word(cell)
+    if cw == w.float_word:
+        var f = t[].PyFloat_AsDouble(cell)
+        if categorical:
+            return (category_key_f64(f), Float32(0.0))
+        return (UInt64(0), Float32(f))
+    if cw == w.int_word or cw == w.bool_word:
+        var v = Int(t[].PyLong_AsLongLong(cell))
+        if v == -1 and t[].PyErr_Occurred():
+            t[].PyErr_Clear()
+            raise Error("mojolearn: " + name + _at(r, j) + " is an integer outside the 64-bit range")
+        if categorical:
+            if not category_integer_in_range(v):
+                raise Error("mojolearn: " + name + _at(r, j)
+                            + " is an integer category outside -2**61 .. 2**61; pass it as text")
+            return (category_key_integer(v), Float32(0.0))
+        return (UInt64(0), Float32(v))
+    if cw == w.str_word and categorical:
+        return (_cell_text(t, cell, name, r, j), Float32(0.0))
+    if cw == w.none_word and categorical:
+        return (CATEGORY_KEY_MISSING, Float32(0.0))
+    var kind = w.buffer_kind(cw)
+    if kind == 0 and categorical:
+        raise Error("TypeError: mojolearn: " + name + _at(r, j)
+                    + " is not an int, float, bool, str, bytes, None, pandas.NA or a NumPy scalar of "
+                    + "those; a categorical cell is admitted by its exact type")
+    if kind == 0 or ((kind == _CELL_STR or kind == _CELL_BYTES) and not categorical):
+        raise Error("TypeError: mojolearn: " + name + _at(r, j)
+                    + " is not a number; only the cat_features columns may hold text or None")
+    if kind == _CELL_MISSING:
+        if categorical:
+            return (CATEGORY_KEY_MISSING, Float32(0.0))
+        return (UInt64(0), bitcast[DType.float32](UInt32(0x7FC00000)))
+    if kind == _CELL_STR:
+        return (_cell_text(t, cell, name, r, j), Float32(0.0))
+    # the value the cell exports (bytes, or a NumPy scalar's own storage,
+    # native byte order): read, then released at once
+    if t[].PyObject_GetBuffer(cell, view_ptr, Int32(0)) != 0:
+        t[].PyErr_Clear()
+        raise Error("TypeError: mojolearn: " + name + _at(r, j) + " does not export its value as a buffer")
+    var at = view_ptr[0]
+    var nbytes = view_ptr[2]
+    var key = UInt64(0)
+    var whole = 0
+    var real = Float64(0.0)
+    var is_real = False
+    var too_wide = False
+    var known = True
+    if kind == _CELL_BYTES:
+        key = category_key_text(at, nbytes)
+    elif kind == _CELL_BOOL and nbytes == 1:
+        whole = 1 if _CellU8(unsafe_from_address=at)[0] != UInt8(0) else 0
+    elif kind == _CELL_SIGNED and nbytes == 1:
+        whole = Int(_CellI8(unsafe_from_address=at)[0])
+    elif kind == _CELL_SIGNED and nbytes == 2:
+        whole = Int(_CellI16(unsafe_from_address=at)[0])
+    elif kind == _CELL_SIGNED and nbytes == 4:
+        whole = Int(_CellI32(unsafe_from_address=at)[0])
+    elif kind == _CELL_SIGNED and nbytes == 8:
+        whole = Int(_CellI64(unsafe_from_address=at)[0])
+    elif kind == _CELL_UNSIGNED and nbytes == 1:
+        whole = Int(_CellU8(unsafe_from_address=at)[0])
+    elif kind == _CELL_UNSIGNED and nbytes == 2:
+        whole = Int(_CellU16(unsafe_from_address=at)[0])
+    elif kind == _CELL_UNSIGNED and nbytes == 4:
+        whole = Int(_CellU32(unsafe_from_address=at)[0])
+    elif kind == _CELL_UNSIGNED and nbytes == 8:
+        var wide = _CellU64(unsafe_from_address=at)[0]
+        if wide >= (UInt64(1) << UInt64(63)):
+            too_wide = True
+            real = Float64(wide)
+        else:
+            whole = Int(wide)
+    elif kind == _CELL_FLOAT and nbytes == 4:
+        is_real = True
+        real = Float64(_CellF32(unsafe_from_address=at)[0])
+    elif kind == _CELL_FLOAT and nbytes == 8:
+        is_real = True
+        real = _CellF64(unsafe_from_address=at)[0]
+    else:
+        known = False
+    t[].PyBuffer_Release(view_ptr)
+    if not known:
+        raise Error("TypeError: mojolearn: " + name + _at(r, j) + " is a NumPy scalar of "
+                    + String(nbytes) + " bytes this reader does not hold")
+    if kind == _CELL_BYTES:
+        return (key, Float32(0.0))
+    if is_real:
+        if categorical:
+            return (category_key_f64(real), Float32(0.0))
+        return (UInt64(0), Float32(real))
+    if categorical:
+        if too_wide or not category_integer_in_range(whole):
+            raise Error("mojolearn: " + name + _at(r, j)
+                        + " is an integer category outside -2**61 .. 2**61; pass it as text")
+        return (category_key_integer(whole), Float32(0.0))
+    if too_wide:
+        return (UInt64(0), Float32(real))
+    return (UInt64(0), Float32(whole))
+
+
+def _cat_slots(columns: List[Int], n_features: Int) raises -> List[Int]:
+    """`slot[j]` = the index of column j in `columns`, or -1 (a numeric
+    column); every index checked against the width."""
+    var slot_of = List[Int](length=n_features, fill=-1)
+    for c in range(len(columns)):  # driver-loop: over the categorical columns
+        if columns[c] < 0 or columns[c] >= n_features:
+            raise Error("mojolearn: cat_features index " + String(columns[c]) + " out of range for "
+                        + String(n_features) + " features")
+        slot_of[columns[c]] = c
+    return slot_of^
+
+
+def _object_column(t: _Table, w: _CellWords, base: Int, stride: Int, n_rows: Int, j: Int, slot: Int,
+                   kp: CategoryKeyPtr, mp: CategoryF32Ptr, view_ptr: _ViewPtr, name: String) raises:
+    """Column j of X given as borrowed object words (row r's cell at
+    `base + r * stride`): its keys to `kp[slot * n_rows + r]` when `slot >= 0`,
+    else its values to `mp[j * n_rows + r]`. Serial: every cell is a CPython
+    object read under the GIL."""
+    var categorical = slot >= 0
+    for r in range(n_rows):  # boundary-read: one exact-type read per object word of a user column (no numbers to view)
+        var cell = _ObjectWordPtr(unsafe_from_address=base + r * stride)[0]
+        var got = _read_cell(t, w, cell, categorical, view_ptr, name, r, j)
+        if categorical:
+            kp[slot * n_rows + r] = got[0]
+        else:
+            mp[j * n_rows + r] = got[1]
+
+
 def _object_rows(rows: PythonObject, name: String, columns: List[Int], mut keys: List[UInt64],
                  context: PythonObject) raises -> AdmittedX:
     """An X given as rows of Python cells: the numeric columns as one
@@ -265,16 +436,11 @@ def _object_rows(rows: PythonObject, name: String, columns: List[Int], mut keys:
     var fw = borrowed_type_word(first)
     if fw != w.list_word and fw != w.tuple_word:
         raise Error("TypeError: mojolearn: " + name + " with text categories must be rows of cells "
-                    + "(a list or tuple of lists or tuples, or a NumPy object array)")
+                    + "(a list or tuple of lists or tuples, a NumPy array or a pandas DataFrame)")
     var n_features = Int(t[].PyList_Size(first)) if fw == w.list_word else Int(t[].PyTuple_Size(first))
     if n_features == 0:
         raise Error("mojolearn: " + name + " has no features")
-    var slot_of = List[Int](length=n_features, fill=-1)
-    for c in range(len(columns)):  # driver-loop: over the categorical columns
-        if columns[c] < 0 or columns[c] >= n_features:
-            raise Error("mojolearn: cat_features index " + String(columns[c]) + " out of range for "
-                        + String(n_features) + " features")
-        slot_of[columns[c]] = c
+    var slot_of = _cat_slots(columns, n_features)
     var matrix = admitted_vector(n_rows * n_features, "<f4", context)
     var mp = CategoryF32Ptr(unsafe_from_address=trees_address(matrix))
     keys.resize(len(columns) * n_rows, UInt64(0))
@@ -295,125 +461,46 @@ def _object_rows(rows: PythonObject, name: String, columns: List[Int], mut keys:
                         + String(n_features) + " features")
         for j in range(n_features):  # boundary-read: the cells of one row
             var cell = t[].PyList_GetItem(row, j) if row_list else t[].PyTuple_GetItem(row, j)
-            var cw = borrowed_type_word(cell)
             var slot = sp[j]
-            if cw == w.float_word:
-                var f = t[].PyFloat_AsDouble(cell)
-                if slot >= 0:
-                    kp[slot * n_rows + r] = category_key_f64(f)
-                else:
-                    mp[j * n_rows + r] = Float32(f)
-            elif cw == w.int_word or cw == w.bool_word:
-                var v = Int(t[].PyLong_AsLongLong(cell))
-                if v == -1 and t[].PyErr_Occurred():
-                    t[].PyErr_Clear()
-                    raise Error("mojolearn: " + name + "[" + String(r) + "][" + String(j)
-                                + "] is an integer outside the 64-bit range")
-                if slot >= 0:
-                    if not category_integer_in_range(v):
-                        raise Error("mojolearn: " + name + "[" + String(r) + "][" + String(j)
-                                    + "] is an integer category outside -2**61 .. 2**61; pass it as text")
-                    kp[slot * n_rows + r] = category_key_integer(v)
-                else:
-                    mp[j * n_rows + r] = Float32(v)
-            elif cw == w.str_word and slot >= 0:
-                var size = 0
-                var utf8 = t[].PyUnicode_AsUTF8AndSize(cell, Int(MutPointer(to=size)))
-                if utf8 == 0:
-                    t[].PyErr_Clear()
-                    raise Error("mojolearn: " + name + "[" + String(r) + "][" + String(j)
-                                + "] is not valid text (it cannot be encoded as UTF-8)")
-                # CPython's UTF-8 cache lives as long as the cell, which its row holds
-                kp[slot * n_rows + r] = category_key_text(utf8, size)
-            elif cw == w.none_word and slot >= 0:
-                kp[slot * n_rows + r] = CATEGORY_KEY_MISSING
+            var got = _read_cell(t, w, cell, slot >= 0, view_ptr, name, r, j)
+            if slot >= 0:
+                kp[slot * n_rows + r] = got[0]
             else:
-                var kind = w.buffer_kind(cw)
-                if kind == 0 and slot >= 0:
-                    raise Error("TypeError: mojolearn: " + name + "[" + String(r) + "][" + String(j)
-                                + "] is not an int, float, bool, str, bytes, None or a NumPy scalar of "
-                                + "those; a categorical cell is admitted by its exact type")
-                if kind == 0 or ((kind == _CELL_STR or kind == _CELL_BYTES) and slot < 0):
-                    raise Error("TypeError: mojolearn: " + name + "[" + String(r) + "][" + String(j)
-                                + "] is not a number; only the cat_features columns may hold text or None")
-                if kind == _CELL_STR:
-                    # numpy.str_ is a str: the same C read, no method of the cell
-                    var size = 0
-                    var utf8 = t[].PyUnicode_AsUTF8AndSize(cell, Int(MutPointer(to=size)))
-                    if utf8 == 0:
-                        t[].PyErr_Clear()
-                        raise Error("mojolearn: " + name + "[" + String(r) + "][" + String(j)
-                                    + "] is not valid text (it cannot be encoded as UTF-8)")
-                    kp[slot * n_rows + r] = category_key_text(utf8, size)
-                    continue
-                # the value the cell exports (bytes, or a NumPy scalar's own
-                # storage, native byte order): read, then released at once
-                if t[].PyObject_GetBuffer(cell, view_ptr, Int32(0)) != 0:
-                    t[].PyErr_Clear()
-                    raise Error("TypeError: mojolearn: " + name + "[" + String(r) + "][" + String(j)
-                                + "] does not export its value as a buffer")
-                var at = view[0]
-                var nbytes = view[2]
-                var key = UInt64(0)
-                var whole = 0
-                var real = Float64(0.0)
-                var is_real = False
-                var too_wide = False
-                var known = True
-                if kind == _CELL_BYTES:
-                    key = category_key_text(at, nbytes)
-                elif kind == _CELL_BOOL and nbytes == 1:
-                    whole = 1 if _CellU8(unsafe_from_address=at)[0] != UInt8(0) else 0
-                elif kind == _CELL_SIGNED and nbytes == 1:
-                    whole = Int(_CellI8(unsafe_from_address=at)[0])
-                elif kind == _CELL_SIGNED and nbytes == 2:
-                    whole = Int(_CellI16(unsafe_from_address=at)[0])
-                elif kind == _CELL_SIGNED and nbytes == 4:
-                    whole = Int(_CellI32(unsafe_from_address=at)[0])
-                elif kind == _CELL_SIGNED and nbytes == 8:
-                    whole = Int(_CellI64(unsafe_from_address=at)[0])
-                elif kind == _CELL_UNSIGNED and nbytes == 1:
-                    whole = Int(_CellU8(unsafe_from_address=at)[0])
-                elif kind == _CELL_UNSIGNED and nbytes == 2:
-                    whole = Int(_CellU16(unsafe_from_address=at)[0])
-                elif kind == _CELL_UNSIGNED and nbytes == 4:
-                    whole = Int(_CellU32(unsafe_from_address=at)[0])
-                elif kind == _CELL_UNSIGNED and nbytes == 8:
-                    var wide = _CellU64(unsafe_from_address=at)[0]
-                    if wide >= (UInt64(1) << UInt64(63)):
-                        too_wide = True
-                        real = Float64(wide)
-                    else:
-                        whole = Int(wide)
-                elif kind == _CELL_FLOAT and nbytes == 4:
-                    is_real = True
-                    real = Float64(_CellF32(unsafe_from_address=at)[0])
-                elif kind == _CELL_FLOAT and nbytes == 8:
-                    is_real = True
-                    real = _CellF64(unsafe_from_address=at)[0]
-                else:
-                    known = False
-                t[].PyBuffer_Release(view_ptr)
-                if not known:
-                    raise Error("TypeError: mojolearn: " + name + "[" + String(r) + "][" + String(j)
-                                + "] is a NumPy scalar of " + String(nbytes) + " bytes this reader does not hold")
-                if kind == _CELL_BYTES:
-                    kp[slot * n_rows + r] = key
-                elif is_real:
-                    if slot >= 0:
-                        kp[slot * n_rows + r] = category_key_f64(real)
-                    else:
-                        mp[j * n_rows + r] = Float32(real)
-                elif slot >= 0:
-                    if too_wide or not category_integer_in_range(whole):
-                        raise Error("mojolearn: " + name + "[" + String(r) + "][" + String(j)
-                                    + "] is an integer category outside -2**61 .. 2**61; pass it as text")
-                    kp[slot * n_rows + r] = category_key_integer(whole)
-                elif too_wide:
-                    mp[j * n_rows + r] = Float32(real)
-                else:
-                    mp[j * n_rows + r] = Float32(whole)
+                mp[j * n_rows + r] = got[1]
     _ = rows  # keep the Python object alive through the borrowed reads above
+    _ = view^
+    _ = slot_of^
+    var block_address = trees_address(matrix)
+    return admitted_words(matrix, block_address, n_rows, n_features, False)
+
+
+def _object_array(X: PythonObject, name: String, columns: List[Int], mut keys: List[UInt64],
+                  context: PythonObject) raises -> AdmittedX:
+    """An exact 2-D object ndarray: its cells read from the array's own
+    object words (any strides), column by column, by `_object_column`. The
+    array holds every cell, so the borrowed words stay live through the
+    read; no list of the cells is built."""
+    var t = cpython_table()
+    var w = _CellWords()
+    var n_rows = Int(py=X.shape[0])
+    var n_features = Int(py=X.shape[1])
+    if n_rows == 0:
+        raise Error("mojolearn: " + name + " has no rows")
+    if n_features == 0:
+        raise Error("mojolearn: " + name + " has no features")
+    var slot_of = _cat_slots(columns, n_features)
+    var address = Int(py=sequential_address(X))
+    var row_stride = Int(py=X.strides[0])
+    var col_stride = Int(py=X.strides[1])
+    var matrix = admitted_vector(n_rows * n_features, "<f4", context)
+    var mp = CategoryF32Ptr(unsafe_from_address=trees_address(matrix))
+    keys.resize(len(columns) * n_rows, UInt64(0))
+    var kp = CategoryKeyPtr(unsafe_from_address=Int(keys.unsafe_ptr()))
+    var view = List[Int](length=10, fill=0)
+    var view_ptr = view.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+    for j in range(n_features):  # driver-loop: over the columns of X (each column's cells read by _object_column)
+        _object_column(t, w, address + j * col_stride, row_stride, n_rows, j, slot_of[j], kp, mp, view_ptr, name)
+    _ = X  # keep the array (and so every cell) alive through the borrowed reads above
     _ = view^
     _ = slot_of^
     var block_address = trees_address(matrix)
@@ -434,11 +521,15 @@ def gbdt_category_admit(X: PythonObject, name: String, columns: List[Int], mut k
     if ndarray is not None and cls is ndarray:
         # an exact ndarray: its dtype kind is a C slot read, `tolist` its own C method
         var kind = String(py=X.dtype.kind)
-        # object, unicode and bytes arrays: their cells through the array's
-        # own C `tolist` (str for U, bytes for S), then the exact-type read
         if kind == "O" or kind == "U" or kind == "S":
             if Int(py=X.ndim) != 2:
                 raise Error("mojolearn: " + name + " must be 2-D, got " + String(Int(py=X.ndim)) + "-D")
+        # an object array: its cells read from its own object words
+        if kind == "O":
+            return _object_array(X, name, columns, keys, context)
+        # unicode and bytes arrays: their cells through the array's own C
+        # `tolist` (str for U, bytes for S), then the exact-type read
+        if kind == "U" or kind == "S":
             var listed = py_call(ndarray.tolist, X)
             return _object_rows(listed, name, columns, keys, context)
     elif cls is b.list or cls is b.tuple:
