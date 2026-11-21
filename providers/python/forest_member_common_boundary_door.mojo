@@ -20,8 +20,10 @@ these with the kind prefix its classes connect under ("dt_", "rf_", "et_").
   * `forest_member_pack_common` (PACK): the fitted attributes and model
     arrays the estimator's own fit writes, from the state's blocks, and
     `feature_importances_` when the state holds them (else removed, as the
-    estimator's fit removes it). The caller publishes `classes_` (labels
-    never cross the ABI).
+    estimator's fit removes it), and `classes_` / `n_classes_` of a
+    classifier: the caller's labels (`member_pack_labeled`) are TAKEN before
+    the refresh (which clears the instance dictionary, the held key with it)
+    and written after it, as the estimator's own fit writes them.
   * `forest_member_state_common` (UNPACK): a member state from a fitted
     estimator's five model arrays and, when it has them, its
     `feature_importances_`.
@@ -31,7 +33,7 @@ and five block copies); a caller runs its members in parallel.
 """
 from std.memory import unsafe_memcpy, bitcast
 from std.python import Python, PythonObject
-from bindings.member_owner_unpack import MemberOwner
+from bindings.member_owner_unpack import MemberOwner, member_labels_take
 from bindings.py_balanced import py_call, py_get, py_item, py_setitem, py_fields
 from bindings.admitted_input_unpack import admitted_vector, classical_view, admitted_dtype
 from bindings.classical_arrays_door import classical_address
@@ -134,13 +136,17 @@ def forest_member_admit_common(model: PythonObject, kind_word: Int, prefix: Stri
     return True
 
 
-def forest_member_pack_common(model: PythonObject, context: PythonObject, plan: MemberPlan, state: Int) raises:
+def forest_member_pack_common(model: PythonObject, context: PythonObject, b: PythonObject, plan: MemberPlan,
+    state: Int) raises:
     """PACK: write the fitted attributes of state `state` into `model`, as
     the estimator's own fit does (the refreshed configuration, the fit mode,
-    the five frozen model arrays and the dimensions). The fit notices of a
-    RandomForest fit are not raised again here."""
+    the five frozen model arrays, the dimensions and a classifier's
+    `classes_`). The fit notices of a RandomForest fit are not raised again
+    here."""
     var run = trees_route_context(model, context)
     var kind = forest_kind(model, run)
+    # Taken before `forest_refresh` clears the instance dictionary.
+    var labels = member_labels_take(py_fields(model), b)
     var fields = forest_refresh(model, kind, run)
     _ = forest_capture_mode(fields, run)
     var names = _model_names()
@@ -168,6 +174,8 @@ def forest_member_pack_common(model: PythonObject, context: PythonObject, plan: 
     py_setitem(fields, "_resident_holder", Python.dict())
     if classes > 0:
         py_setitem(fields, "n_classes_", PythonObject(classes))
+        if labels is not None:
+            py_setitem(fields, "classes_", labels)
     if _family_of(kind) == "et" and len(meta) >= 6:
         py_setitem(fields, "depth_cap_bound_", PythonObject(meta[2] != 0))
         py_setitem(fields, "max_depth_resolved_", PythonObject(meta[3]))
