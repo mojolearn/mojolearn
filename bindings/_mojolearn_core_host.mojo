@@ -81,10 +81,8 @@ comparison and one narrowing per kept value, no fold to sabotage.
 from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from bindings.parallel_base_entry_host import publish_parallel_base_host
 from bindings.msel_host_pack import (
-    msel_put_binding,
     msel_free_binding,
     msel_live_binding,
-    msel_take_rows_binding,
 )
 # lane calltable-msel: the same model-selection helpers as one native entry
 # for the model-selection doors (core/msel_entry_table.mojo).
@@ -1104,10 +1102,8 @@ def build__mojolearn_core_host() -> PythonObject:
         # lane calltable-msel: the model-selection helper table, for the
         # native model-selection doors in another extension module.
         publish_msel_helpers_host()
-        module.def_function[msel_put_binding]("msel_put")
         module.def_function[msel_free_binding]("msel_free")
         module.def_function[msel_live_binding]("msel_live")
-        module.def_function[msel_take_rows_binding]("msel_take_rows")
         module.def_function[argmax_rows_f32_binding]("argmax_rows_f32")
         module.def_function[argmax_rows_f64_binding]("argmax_rows_f64")
         # lane/python-hotpath (2026-09-17, DEVIATIONS 3100-3104): the helpers
