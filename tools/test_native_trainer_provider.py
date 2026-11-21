@@ -5,10 +5,19 @@ ROOT=Path(__file__).resolve().parents[1]
 
 def test_small_mlp_runs_one_captured_program():
     src=(ROOT/'bindings/small_mlp_native_door.mojo').read_text()
-    operation=src.split('def _mode_entries(')[1].split('def _mode_name(')[0]
-    # The door reads through held keys (bindings/small_mlp_keys_unpack.mojo).
+    operation=src.split('def _route_build(')[1].split('def _owner_of(')[0]
+    # The door reads through held keys (bindings/small_mlp_keys_unpack.mojo);
+    # the entries are resolved once per trainer into the one route owner.
     assert 'nk[].k_small_mlp_program' in operation
-    assert 'MlpOperationMetadata(entries, String(py=mode))' in operation
+    assert 'neural_ref[NEURAL_TABLE_MLP_PROGRAM]' in operation
+    assert 'device_route_plan(' in operation
+    hit=src.split('def _owner_of(')[1].split('def _program_of(')[0]
+    assert 'device_route_held(' in hit and 'device_route_keep(' in hit
+    for gone in ('SMALL_MLP_MODE_VERIFIED.get', 'def _mode_entries(', 'def _program_ref('):
+        assert gone not in src
+    run=(ROOT/'bindings/small_mlp_native_run.mojo').read_text()
+    for forbidden in ('PythonObject', 'std.python', 'providers.'):
+        assert forbidden not in run
     code='\n'.join(line for line in src.splitlines() if not line.lstrip().startswith('#'))
     for gone in ('mlp_train_step', 'mlp_resident_', 'small_mlp_api_v1', 'neural_descriptor_execute'):
         assert gone not in code
@@ -24,8 +33,10 @@ def test_small_mlp_runs_one_captured_program():
 
 
 def test_small_mlp_rejects_hooks_before_admission():
-    src=(ROOT/'bindings/small_mlp_native_door.mojo').read_text().split('def small_mlp_call(')[1]
+    src=(ROOT/'bindings/small_mlp_native_door.mojo').read_text().split('def _call(')[1]
     assert src.index('sequential_admit_value(args,') < src.index('return small_mlp_create(args)')
+    owner=(ROOT/'bindings/small_mlp_native_door.mojo').read_text().split('if operation == SMALL_MLP_OPN_OWNER_CREATE:')[1]
+    assert owner.index('device_admit(device,') < owner.index('sequential_admit_value(values,') < owner.index('_create_state(values)')
 
 
 def test_byte_lm_frontdoors_and_native_state_share_provider():

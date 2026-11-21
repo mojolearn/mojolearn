@@ -3,13 +3,21 @@
 
 The Python class keeps one integer handle (`_handle`) into the typed store in
 `core/small_mlp_state_impl.mojo`. This door unpacks the caller's arguments,
-selects the numeric mode and runs the trainer's ONE path: its captured
+takes the trainer's route and runs the trainer's ONE path: its captured
 program on the executor (autograd/small_mlp_program.mojo, the x_sequence
-binding's `small_mlp_program` entry). The program opens from the host state
-on first use and then holds the weights and moments as its session
+image's published `small_mlp_program` entry). The program opens from the host
+state on first use and then holds the weights and moments as its session
 parameters; the host copy comes down only when it is read (state_dict,
 weights, save, inference sessions) and the program closes when the host copy
 becomes the truth again (load_state_dict, close). It adds no arithmetic.
+
+UNPACK and PACK are this file (buffer admission, typed copies, the result
+objects); RUN is bindings/small_mlp_native_run.mojo (the program calls over
+the typed store: no Python object). The trainer's device
+(`device=None | "gpu" | "cpu"`) and the process tier are resolved ONCE into
+the trainer's `DeviceRouteOwner` (`_route_build`): the program entry of the
+image that pair selects and the training entries of the same device. No
+operation reads or compares the device.
 
 The public class hands the owner and arguments to this door once. Native
 admission checks passive class storage and reads its handle without invoking
@@ -53,7 +61,6 @@ from core.small_mlp_state_impl import (
     mlp_require_finite,
     mlp_require_moments,
     mlp_require_result_finite,
-    mlp_require_state,
     mlp_store_create,
     mlp_store_index,
     mlp_store_release,
@@ -61,7 +68,21 @@ from core.small_mlp_state_impl import (
 from training.parallel_byte_impl import parallel_copy_words
 from core.shared_slot import SharedSlot
 from core.entry_table import EntryRef
-from core.neural_entry_table import NeuralEntryKey, neural_entry_vendor, neural_entry_call, neural_ref, NEURAL_TABLE_MLP_PROGRAM
+from core.neural_entry_table import NeuralEntryKey, neural_entry_vendor, neural_ref, NEURAL_TABLE_MLP_PROGRAM
+from core.device_route import DEVICE_INSTALL, device_mode_code, device_mode_word, device_route_plan, device_route_admit
+from providers.python.device_route_boundary_door import (
+    DeviceRouteOwner, device_admit, device_request, device_unpack, device_route_clear, device_route_held,
+    device_route_keep,
+)
+from bindings.small_mlp_native_run import (
+    SMALL_MLP_RUN_FORWARD,
+    SMALL_MLP_RUN_GRADS,
+    SMALL_MLP_RUN_TRAIN,
+    small_mlp_run_apply,
+    small_mlp_run_close,
+    small_mlp_run_settle,
+    small_mlp_run_steps,
+)
 from bindings.sha256_door import sha256_hexdigest
 from bindings.py_keys import py_op_code
 from bindings.small_mlp_keys_unpack import (
@@ -96,10 +117,6 @@ from bindings.small_mlp_keys_unpack import (
 )
 from bindings.py_balanced import py_item
 
-# The program's STEP modes (autograd/small_mlp_program.mojo).
-comptime _FORWARD = 0
-comptime _GRADS = 1
-comptime _TRAIN = 2
 comptime _STATE_SCHEMA = "mojolearn.small-mlp-trainer.v1"
 comptime _FILE_SCHEMA = "mojolearn.small-mlp-checkpoint.v1"
 comptime _BASE_PROFILE = "mojolearn.neural-training.fp32.v1"
@@ -115,6 +132,11 @@ struct SmallMlpBoundary(Defaultable, Movable):
     var rlock: PythonObject
     var locks: PythonObject
     var modes: PythonObject
+    # `device="cpu"` beside a GPU set: the mode -> entries (or connection
+    # error) table of the CPU identical training image, connected at import;
+    # None on a CPU-only installation (its one table is the CPU's).
+    var modes_cpu: PythonObject
+    var cpu_only: Bool
     var backend: PythonObject
     var environ: PythonObject
     var posix: PythonObject
@@ -131,6 +153,8 @@ struct SmallMlpBoundary(Defaultable, Movable):
         self.rlock = PythonObject(None)
         self.locks = PythonObject(None)
         self.modes = PythonObject(None)
+        self.modes_cpu = PythonObject(None)
+        self.cpu_only = False
         self.backend = PythonObject(None)
         self.environ = PythonObject(None)
         self.posix = PythonObject(None)
@@ -170,6 +194,8 @@ def small_mlp_initialize(context: PythonObject) raises:
     b[].rlock = Python.import_module("_thread").RLock
     b[].locks = b[].bi.dict()
     b[].modes = py_item(context, nk[].k_modes)
+    b[].modes_cpu = py_get(context, "modes_cpu")
+    b[].cpu_only = Bool(py=py_item(context, PythonObject("cpu_only")))
     b[].backend = py_item(context, nk[].k_backend)
     b[].environ = py_item(context, nk[].k_environ)
     b[].admission = py_item(context, nk[].k_admission)
@@ -185,90 +211,124 @@ def small_mlp_initialize(context: PythonObject) raises:
     g[].array_cls = b[].array_cls
 
 
-struct MlpOperationMetadata(Movable):
-    # One admission per public operation: the selected mode's connected
-    # entries (the training binding's mode word, the x_sequence binding's
-    # `small_mlp_program`) and the mode's name.
-    var legacy: PythonObject
-    var mode: String
+# ------------------------------------------------------------ the device route
+#
+# A trainer's device and the process tier are resolved ONCE into the one
+# `DeviceRouteOwner` (providers/python/device_route_boundary_door.mojo) with
+# the rule and words of core/device_route.mojo: `route.entry` is the program
+# entry of the image they select (core/neural_entry_table.mojo family
+# NEURAL_TABLE_MLP_PROGRAM), `images` the training entries of the same device
+# (`mlp_sessions`, the arithmetic profile). A hit is the process mode read,
+# one record read and three pointer compares. Operations that hold no trainer
+# (a bare state handle: the parallel owner's worker slots) take the route
+# record of the connected trainer class: this installation's device.
+#
+# TOMBSTONE: `_mode_entries`, `MlpOperationMetadata`, `SmallMlpModeVerified` /
+# `SMALL_MLP_MODE_VERIFIED` and `_program_ref` (the per-operation mode word
+# built and compared, the entries table read by that word, the process-wide
+# vendor word per mode and the program entry read from the neural table at
+# every program call) deleted 2026-11-21 by lane dw-forecast-tail; the
+# trainer's route owner holds the resolved program entry. Code recoverable at
+# 9ec4ba3940.
 
-    def __init__(out self, legacy: PythonObject, var mode: String):
-        self.legacy = legacy
-        self.mode = mode^
+def _route_build(requested: Int, mode: PythonObject) raises -> DeviceRouteOwner:
+    """Resolve a trainer's images once (construction, a restore, the first
+    operation after the process mode object changed): the tier, the device,
+    the training entries of that pair checked against the selected tier, and
+    the program entry of the same image set. A metadata step with no
+    independent units to split."""
+    var nk = small_mlp_keys()
+    var b = SMALL_MLP_BOUNDARY.get_or_create_ptr()
+    if mode is None or py_type(mode) is not b[].bi.str:
+        raise Error(_MODE_REFUSAL)
+    var mode_code = device_mode_code(String(py=mode))
+    if mode_code < 0:
+        raise Error(_MODE_REFUSAL)
+    var plan = device_route_plan(requested, 0 if b[].cpu_only else 1, mode_code)
+    var entries = PythonObject(None)
+    if plan.cpu_table:
+        # A GPU installation running `device="cpu"`: the CPU identical images
+        # loaded beside the device images at import (python/mojolearn/_mlp_impl.py).
+        if b[].modes_cpu is None:
+            raise Error("ImportError: device='cpu' is not connected in this installation")
+        entries = py_get(b[].modes_cpu, mode)
+        if entries is None:
+            raise Error("ImportError: device='cpu' is not connected in this installation")
+        if py_type(entries) is b[].bi.str:
+            raise Error(String(py=entries))
+    else:
+        entries = py_get(b[].modes, mode)
+        if entries is None or py_type(entries) is b[].bi.str:
+            raise Error(String(_MODE_REFUSAL) + " (" + String(entries) + ")")
+    var compiled = Int(py=py_item(entries, nk[].k_training_numeric_mode)())
+    if compiled != mode_code:
+        raise Error(_MODE_REFUSAL)
+    if not py_contains(entries, nk[].k_small_mlp_program):
+        raise Error("ImportError: SmallMLPTrainer requires updated x_sequence binding: missing small_mlp_program")
+    if not py_contains(entries, nk[].k_training_vendor):
+        raise Error("ImportError: SmallMLPTrainer requires updated training binding: missing training_vendor")
+    # The neural entry table key's vendor word (core/neural_entry_table.mojo):
+    # the training and x_sequence images of one mode and device come from the
+    # same selection, so they share the vendor.
+    var vendor = neural_entry_vendor(String(py=py_item(entries, nk[].k_training_vendor)()))
+    if vendor < 0:
+        raise Error(_MODE_REFUSAL)
+    if plan.cpu_table:
+        device_route_admit("SmallMLPTrainer", plan, compiled, vendor, mode_code)
+    var owner = DeviceRouteOwner(requested)
+    owner.route.device = plan.device
+    owner.route.mode = mode_code
+    owner.route.vendor = vendor
+    owner.route.flags = 1 if plan.cpu_table else 0
+    # The program entry of that image; the table's refusals raise here.
+    owner.route.entry = neural_ref[NEURAL_TABLE_MLP_PROGRAM](NeuralEntryKey(mode_code, vendor))
+    owner.mode = mode
+    owner.default_mode = mode
+    owner.context = b[].modes
+    owner.images = entries
+    owner.resolved = True
+    return owner^
 
 
-def _mode_entries() raises -> MlpOperationMetadata:
-    """The process-selected numeric mode's entries (identical or fast), read
-    back from the compiled bindings; checked once per connected table."""
+def _owner_of(trainer: PythonObject) raises -> PythonObject:
+    """The route owner of this operation: the trainer's, or (trainer None: an
+    operation on a bare state handle) the connected class's, which is this
+    installation's device. The device is read only on a miss."""
     var nk = small_mlp_keys()
     var b = SMALL_MLP_BOUNDARY.get_or_create_ptr()
     var mode = py_item(b[].backend, nk[].k__DEFAULT_MODE)
-    if mode is None or py_type(mode) is not b[].bi.str or (String(py=mode) != "identical" and String(py=mode) != "fast"):
-        raise Error(_MODE_REFUSAL)
-    var entries = py_get(b[].modes, mode)
-    if entries is None or py_type(entries) is b[].bi.str:
-        raise Error(String(_MODE_REFUSAL) + " (" + String(entries) + ")")
-    # The compiled mode word and the required entry are fixed per connected
-    # entries table and mode: verify them once per (entries, mode).
-    var v = SMALL_MLP_MODE_VERIFIED.get_or_create_ptr()
-    var verified = v[].entries is not None and v[].entries is entries and v[].mode == String(py=mode)
-    if not verified:
-        var compiled = Int(py=py_item(entries, nk[].k_training_numeric_mode)())
-        if compiled != (1 if String(py=mode) == "identical" else 0):
-            raise Error(_MODE_REFUSAL)
-        if not py_contains(entries, nk[].k_small_mlp_program):
-            raise Error("ImportError: SmallMLPTrainer requires updated x_sequence binding: missing small_mlp_program")
-        if not py_contains(entries, nk[].k_training_vendor):
-            raise Error("ImportError: SmallMLPTrainer requires updated training binding: missing training_vendor")
-        # The neural entry table key's vendor word (core/neural_entry_table.mojo):
-        # the training and x_sequence bindings of one mode come from the same
-        # backend selection, so they share the vendor. Asked once per table.
-        var vendor = neural_entry_vendor(String(py=py_item(entries, nk[].k_training_vendor)()))
-        if vendor < 0:
-            raise Error(_MODE_REFUSAL)
-        v = SMALL_MLP_MODE_VERIFIED.get_or_create_ptr()
-        if String(py=mode) == "identical":
-            v[].identical_vendor = vendor
-        else:
-            v[].fast_vendor = vendor
-        v[].entries = entries
-        v[].mode = String(py=mode)
-    return MlpOperationMetadata(entries, String(py=mode))
+    var target = trainer
+    if trainer is None:
+        target = b[].trainer_cls
+    var owner = device_route_held(target, mode, mode, b[].modes)
+    if owner is None:
+        var requested = DEVICE_INSTALL
+        if trainer is not None:
+            requested = device_request(_fields(trainer), b[].bi)
+        owner = device_route_keep(target, _route_build(requested, mode))
+    return owner
 
 
-struct SmallMlpModeVerified(Defaultable, Movable):
-    # The last (entries table, mode) whose compiled mode word and required
-    # entry passed. Holds a strong reference, so the table's address cannot
-    # be recycled while it is the key.
-    var entries: PythonObject
-    var mode: String
-    # The vendor word of each mode's verified bindings (-1: not verified yet),
-    # the neural entry table key the program calls read.
-    var identical_vendor: Int
-    var fast_vendor: Int
-
-    def __init__(out self):
-        self.entries = PythonObject(None)
-        self.mode = String()
-        self.identical_vendor = -1
-        self.fast_vendor = -1
+def _program_of(trainer: PythonObject) raises -> EntryRef:
+    """The resolved program entry of this operation's route (two words, by
+    value). The owner stays in the trainer's (or the class's) records."""
+    var owner = _owner_of(trainer)
+    var program = owner.downcast_value_ptr[DeviceRouteOwner]()[].route.entry
+    _ = owner
+    return program
 
 
-comptime SMALL_MLP_MODE_VERIFIED = SharedSlot[SmallMlpModeVerified, "MojolearnP3SmallMlpModeVerifiedV3", 3]
+def _mode_word(owner: PythonObject) raises -> String:
+    """The numeric-mode word a state of this route carries."""
+    return device_mode_word(owner.downcast_value_ptr[DeviceRouteOwner]()[].route.mode)
 
 
-def _program_ref(mode: String) raises -> EntryRef:
-    """`mode`'s program image entry, resolved once per operation (lane
-    entry-table-zero-alloc); the table refusals raise here."""
-    var v = SMALL_MLP_MODE_VERIFIED.get_or_create_ptr()
-    var vendor = v[].identical_vendor if mode == "identical" else v[].fast_vendor
-    if vendor < 0:
-        raise Error(_MODE_REFUSAL)
-    return neural_ref[NEURAL_TABLE_MLP_PROGRAM](NeuralEntryKey(1 if mode == "identical" else 0, vendor))
-
-
-def _mode_name(entries: MlpOperationMetadata) raises -> String:
-    return entries.mode
+def _training_entries(owner: PythonObject) raises -> PythonObject:
+    """The training entries of the route's device (`mlp_sessions`, the
+    arithmetic profile)."""
+    var entries = owner.downcast_value_ptr[DeviceRouteOwner]()[].images
+    _ = owner
+    return entries
 
 
 # TOMBSTONE: MOJOLEARN_MLP_FUSED=0 per-operation route, the fused one-call step and the Apple FAST resident session doors (superseded by the captured program, plan row X2) deleted 2026-11-09 by lane/x2-small-mlp-on-executor; code recoverable at f59d913b0b.
@@ -600,104 +660,19 @@ def _state_out(state: MlpState, mode: String) raises -> PythonObject:
 
 
 # ------------------------------------------------------------ the captured program
-# autograd/small_mlp_program.mojo, reached through the x_sequence binding's
-# `small_mlp_program` entry: (op, addresses, ints[, floats]).
-comptime _P_OPEN = 0
-comptime _P_STEP = 1
-comptime _P_DOWNLOAD = 2
-comptime _P_APPLY = 3
-comptime _P_CLOSE = 4
+# RUN is bindings/small_mlp_native_run.mojo (open, step, download, apply,
+# close over the typed store). `_steps` is the PACK side of a step: it
+# allocates the result arrays, hands their addresses to RUN and builds the
+# result objects.
 
-
-def _program_addresses(index: Int) raises -> List[Int]:
-    var store = MLP_STORE.get_or_create_ptr()
-    return [
-        store[].slots[index].state.params_addr(0), store[].slots[index].state.params_addr(1),
-        store[].slots[index].state.params_addr(2), store[].slots[index].state.params_addr(3),
-        store[].slots[index].state.m_addr(), store[].slots[index].state.v_addr()]
-
-
-def _program_call(program: EntryRef, op: Int, addresses: List[Int], ints: List[Int],
-                  floats: List[Float64]) raises -> Int:
-    # One call of the program image's `small_mlp_program` descriptor entry
-    # through the neural entry table (core/neural_entry_table.mojo family
-    # NEURAL_TABLE_MLP_PROGRAM): plain words, no CPython call. The GIL stays
-    # held, as it was across the former Python entry.
-    try:
-        return neural_entry_call(program, op, addresses, ints, floats)
-    except error:
-        raise _step_error(error)
-
-
-def _program_sync(index: Int) raises:
-    """Bring an open program's weights and moments into the store."""
-    var store = MLP_STORE.get_or_create_ptr()
-    var handle = store[].slots[index].program
-    if handle < 0:
-        return
-    if _program_call(_program_ref(store[].slots[index].program_mode), _P_DOWNLOAD, _program_addresses(index),
-                     [handle], List[Float64]()) != MLP_TOTAL:
-        raise Error("RuntimeError: SmallMLPTrainer state download returned an invalid result")
-
-
-def _program_close(index: Int) raises:
-    var store = MLP_STORE.get_or_create_ptr()
-    var handle = store[].slots[index].program
-    if handle < 0:
-        return
-    var mode = store[].slots[index].program_mode
-    store[].slots[index].program = -1
-    store[].slots[index].program_mode = String()
-    _ = _program_call(_program_ref(mode), _P_CLOSE, List[Int](), [handle], List[Float64]())
-
-
-def _settle(index: Int, close: Bool) raises:
-    """Before the host state is read (or replaced): sync an open program,
-    and close it when the host copy becomes the truth again."""
-    _program_sync(index)
-    if close:
-        _program_close(index)
-
-
-def _program_open(index: Int, entries: MlpOperationMetadata) raises -> Int:
-    """The trainer's program in the selected mode, opened from the host
-    state on first use (the weights and moments upload once)."""
-    var store = MLP_STORE.get_or_create_ptr()
-    var mode = _mode_name(entries)
-    if store[].slots[index].program >= 0:
-        if store[].slots[index].program_mode == mode:
-            return store[].slots[index].program
-        _settle(index, True)
-    mlp_require_state(store[].slots[index].state)
-    ref s = store[].slots[index].state
-    var handle = _program_call(_program_ref(mode), _P_OPEN, _program_addresses(index), [s.step],
-        [s.lr, s.beta1, s.beta2, s.eps, s.weight_decay])
-    store[].slots[index].program = handle
-    store[].slots[index].program_mode = mode
-    return handle
-
-
-def _step_error(error: Error) -> Error:
-    """The program refuses a non-finite loss on the device; that refusal
-    surfaces as a RuntimeError naming the step."""
-    var message = String(error)
-    if message.startswith("RuntimeError: ") or message.startswith("ImportError: ") or message.startswith("ValueError: "):
-        return Error(message)
-    if message.find("nonfinite") >= 0 or message.find("not finite") >= 0:
-        return Error("RuntimeError: SmallMLPTrainer step returned an invalid result: " + message)
-    return Error("RuntimeError: " + message)
-
-
-def _program_steps(index: Int, entries: MlpOperationMetadata, x: List[Float32], y: List[Int32],
-                   rows: Int, k: Int, mode: Int, want_dx: Bool) raises -> PythonObject:
+def _steps(index: Int, program: EntryRef, x: List[Float32], y: List[Int32],
+           rows: Int, k: Int, mode: Int, want_dx: Bool) raises -> PythonObject:
     """`k` runs of the program (mode 0 forward, 1 loss and gradients, 2 the
     whole step); `[losses, logits, gradients, input_grad]` (the logits and
     gradients are the last step's). The step counter advances under mode 2."""
     var bi = SMALL_MLP_BOUNDARY.get_or_create_ptr()[].bi
-    var store = MLP_STORE.get_or_create_ptr()
-    var handle = _program_open(index, entries)
     var losses = List[Float32](length=k, fill=Float32(0))
-    var grads = mode != _FORWARD
+    var grads = mode != SMALL_MLP_RUN_FORWARD
     var logits = generation_array([rows, 3])
     var g0 = generation_array(_dims(0)) if grads else PythonObject(None)
     var g1 = generation_array(_dims(1)) if grads else PythonObject(None)
@@ -713,21 +688,18 @@ def _program_steps(index: Int, entries: MlpOperationMetadata, x: List[Float32], 
         Int(py=g2._addr) if grads else sa + 4 * mlp_offset(2),
         Int(py=g3._addr) if grads else sa + 4 * mlp_offset(3),
         Int(py=dx._addr) if want_dx else sa]
-    var t = store[].slots[index].state.step + 1
-    var written = _program_call(_program_ref(_mode_name(entries)), _P_STEP, addresses,
-                                [handle, rows, mode, 1 if want_dx else 0, k], List[Float64]())
+    # The GIL stays held across the program call, as it always was here.
+    small_mlp_run_steps(index, program, addresses, rows, k, mode, want_dx)
     _ = dx  # keep the Python objects alive through the native call above
     _ = g3
     _ = g2
     _ = g1
     _ = g0
     _ = scratch^
-    if written != rows * 3:
-        raise Error("RuntimeError: SmallMLPTrainer step returned an invalid result")
     # TOMBSTONE: mlp_require_result_finite scans of the step's logits, gradients and input gradient (superseded by the
     # program's device OP_MLP_NONFINITE flags, autograd/small_mlp_program.mojo) deleted 2026-11-09 by lane/m1-followups-misc; code recoverable at 5b5490960d.
     _ = logits
-    if mode == _FORWARD:
+    if mode == SMALL_MLP_RUN_FORWARD:
         _ = losses^
         return Python.list(PythonObject(None), logits, PythonObject(None), PythonObject(None))
     var values = bi.list()
@@ -735,8 +707,6 @@ def _program_steps(index: Int, entries: MlpOperationMetadata, x: List[Float32], 
     for i in range(k):  # driver-loop: over the k step losses the program returned
         _ = py_call(append, mlp_read_f32(Int(losses.unsafe_ptr()) + 4 * i))
     _ = losses^
-    if mode == _TRAIN:
-        store[].slots[index].state.step = t + k - 1
     return Python.list(values, logits, Python.list(g0, g1, g2, g3), dx)
 
 
@@ -766,10 +736,9 @@ def _gradients_dict(grads: PythonObject) raises -> PythonObject:
 
 # ------------------------------------------------------------ public methods
 
-def small_mlp_create(args: PythonObject) raises -> PythonObject:
-    """`__init__`: weight1, bias1, weight2, bias2, data_schedule, lr, betas,
-    eps, weight_decay. Returns the handle the Python constructor stores."""
-    var b = SMALL_MLP_BOUNDARY.get_or_create_ptr()
+def _create_state(args: PythonObject) raises -> MlpState:
+    """UNPACK of `__init__`: weight1, bias1, weight2, bias2, data_schedule,
+    lr, betas, eps, weight_decay as a validated typed state."""
     var state = MlpState()
     var names = _names()
     for i in range(4):  # driver-loop: over the fixed MLP parameter registry
@@ -777,10 +746,22 @@ def small_mlp_create(args: PythonObject) raises -> PythonObject:
         mlp_require_finite(state.params_addr(i), mlp_size(i), names[i])
     _config_into(state, args[5], args[6], args[7], args[8])
     state.schedule = _schedule_text(args[4])
-    _ = _mode_entries()
+    return state^
+
+
+def _create_handle(var state: MlpState) raises -> PythonObject:
+    var b = SMALL_MLP_BOUNDARY.get_or_create_ptr()
     var handle = mlp_store_create(state^)
     py_setitem(b[].locks, handle, b[].rlock())
     return PythonObject(handle)
+
+
+def small_mlp_create(args: PythonObject) raises -> PythonObject:
+    """A state handle with no trainer object, on this installation's device
+    (the route of the connected class)."""
+    var state = _create_state(args)
+    _ = _owner_of(PythonObject(None))
+    return _create_handle(state^)
 
 
 def small_mlp_from_state(cls: PythonObject, state: PythonObject, mode: String) raises -> PythonObject:
@@ -808,26 +789,26 @@ def small_mlp_close(handle: PythonObject) raises:
     var h = Int(py=handle)
     try:
         var index = mlp_store_index(h)
-        _program_close(index)
+        small_mlp_run_close(index)
     except:
         pass
     _ = mlp_store_release(h)
     _ = py_call(b[].locks.pop, h, PythonObject(None))
 
 
-def small_mlp_state_dict(handle: Int) raises -> PythonObject:
-    var entries = _mode_entries()
+def small_mlp_state_dict(handle: Int, trainer: PythonObject) raises -> PythonObject:
+    var owner = _owner_of(trainer)
     var index = mlp_store_index(handle)
-    _settle(index, False)
+    small_mlp_run_settle(index, False)
     var store = MLP_STORE.get_or_create_ptr()
-    return _state_out(store[].slots[index].state, _mode_name(entries))
+    return _state_out(store[].slots[index].state, _mode_word(owner))
 
 
 def small_mlp_load_state(handle: Int, state: PythonObject, mode: String) raises:
     """Validate and copy `state`, then replace the live state in one move."""
     var typed = _state_from_dict(state, mode)
     var index = mlp_store_index(handle)
-    _program_close(index)
+    small_mlp_run_close(index)
     var store = MLP_STORE.get_or_create_ptr()
     store[].slots[index].state = typed^
 
@@ -837,15 +818,15 @@ def _step_count(handle: Int) raises -> PythonObject:
     return PythonObject(store[].slots[mlp_store_index(handle)].state.step)
 
 
-def _weights(handle: Int) raises -> PythonObject:
-    _ = _mode_entries()
+def _weights(handle: Int, trainer: PythonObject) raises -> PythonObject:
+    _ = _owner_of(trainer)
     var index = mlp_store_index(handle)
-    _settle(index, False)
+    small_mlp_run_settle(index, False)
     var store = MLP_STORE.get_or_create_ptr()
     return _weights_out(store[].slots[index].state)
 
 
-def _train_step(handle: Int, X: PythonObject, targets: PythonObject, want: PythonObject) raises -> PythonObject:
+def _train_step(handle: Int, trainer: PythonObject, X: PythonObject, targets: PythonObject, want: PythonObject) raises -> PythonObject:
     var nk = small_mlp_keys()
     var b = SMALL_MLP_BOUNDARY.get_or_create_ptr()
     var x = _batch_in(X)
@@ -854,13 +835,13 @@ def _train_step(handle: Int, X: PythonObject, targets: PythonObject, want: Pytho
     if want.__class__ is not b[].bi.bool:
         raise Error("TypeError: SmallMLPTrainer return_input_grad must be a bool")
     var want_dx = Bool(py=want)
-    var entries = _mode_entries()
+    var program = _program_of(trainer)
     var index = mlp_store_index(handle)
     var store = MLP_STORE.get_or_create_ptr()
     if store[].slots[index].state.step == MLP_MAX_STEP:
         raise Error("SmallMLPTrainer step counter is exhausted")
     # The weights stay on the program; a refused step updates nothing.
-    var out = _program_steps(index, entries, x, y, rows, 1, _TRAIN, want_dx)
+    var out = _steps(index, program, x, y, rows, 1, SMALL_MLP_RUN_TRAIN, want_dx)
     var result = b[].bi.dict()
     py_setitem(result, nk[].k_step, PythonObject(store[].slots[index].state.step))
     py_setitem(result, nk[].k_loss, out[0][0])
@@ -871,13 +852,13 @@ def _train_step(handle: Int, X: PythonObject, targets: PythonObject, want: Pytho
     return result
 
 
-def _train_steps(handle: Int, X: PythonObject, targets: PythonObject, k_value: PythonObject) raises -> PythonObject:
+def _train_steps(handle: Int, trainer: PythonObject, X: PythonObject, targets: PythonObject, k_value: PythonObject) raises -> PythonObject:
     var nk = small_mlp_keys()
     var b = SMALL_MLP_BOUNDARY.get_or_create_ptr()
     if k_value.__class__ is not b[].bi.int or Int(py=k_value) < 1:
         raise Error("SmallMLPTrainer train_steps k must be a positive int")
     var k = Int(py=k_value)
-    var entries = _mode_entries()
+    var program = _program_of(trainer)
     var view = _view(X, "SmallMLPTrainer train_steps X must have shape (k * batch, 8)")
     var shape = _shape(X, view)
     if len(shape) != 2 or Int(py=shape[1]) != 8 or Int(py=shape[0]) % k != 0:
@@ -894,7 +875,7 @@ def _train_steps(handle: Int, X: PythonObject, targets: PythonObject, k_value: P
     var store = MLP_STORE.get_or_create_ptr()
     if store[].slots[index].state.step + k > MLP_MAX_STEP:
         raise Error("SmallMLPTrainer step counter is exhausted")
-    var res = _program_steps(index, entries, x, y, batch, k, _TRAIN, False)
+    var res = _steps(index, program, x, y, batch, k, SMALL_MLP_RUN_TRAIN, False)
     var result = b[].bi.dict()
     py_setitem(result, nk[].k_step, PythonObject(store[].slots[index].state.step))
     py_setitem(result, nk[].k_losses, res[0])
@@ -904,49 +885,46 @@ def _train_steps(handle: Int, X: PythonObject, targets: PythonObject, k_value: P
     return result
 
 
-def _predict_logits(handle: Int, X: PythonObject) raises -> PythonObject:
+def _predict_logits(handle: Int, trainer: PythonObject, X: PythonObject) raises -> PythonObject:
     """The same program with recording off."""
     var x = _batch_in(X)
     var rows = len(x) // 8
-    var entries = _mode_entries()
+    var program = _program_of(trainer)
     var index = mlp_store_index(handle)
     var zeros = List[Int32](length=rows, fill=Int32(0))
-    return _program_steps(index, entries, x, zeros, rows, 1, _FORWARD, False)[1]
+    var res = _steps(index, program, x, zeros, rows, 1, SMALL_MLP_RUN_FORWARD, False)
+    var logits = py_item(res, PythonObject(1))
+    return logits
 
 
-def _loss_and_grads(handle: Int, X: PythonObject, targets: PythonObject) raises -> PythonObject:
+def _loss_and_grads(handle: Int, trainer: PythonObject, X: PythonObject, targets: PythonObject) raises -> PythonObject:
     var x = _batch_in(X)
     var rows = len(x) // 8
     var y = _targets_in(targets, rows)
-    var entries = _mode_entries()
+    var program = _program_of(trainer)
     var index = mlp_store_index(handle)
-    var res = _program_steps(index, entries, x, y, rows, 1, _GRADS, False)
+    var res = _steps(index, program, x, y, rows, 1, SMALL_MLP_RUN_GRADS, False)
     return Python.tuple(res[0][0], res[2])
 
 
-def _apply_gradients(handle: Int, gradients: PythonObject) raises -> PythonObject:
+def _apply_gradients(handle: Int, trainer: PythonObject, gradients: PythonObject) raises -> PythonObject:
     var listed = _items(gradients, 5, "SmallMLPTrainer requires exactly four gradients")
     if len(listed) != 4:
         raise Error("SmallMLPTrainer requires exactly four gradients")
     var grads = _pack_gradients(listed)
-    var entries = _mode_entries()
+    var program = _program_of(trainer)
     var index = mlp_store_index(handle)
     var store = MLP_STORE.get_or_create_ptr()
     if store[].slots[index].state.step == MLP_MAX_STEP:
         raise Error("SmallMLPTrainer step counter is exhausted")
     # One AdamW update on the program's weights and moments (the update a
     # train_step applies); the host copy comes down only on export.
-    var program = _program_open(index, entries)
-    var applied = _program_call(_program_ref(_mode_name(entries)), _P_APPLY,
-                                [Int(grads.unsafe_ptr())], [program], List[Float64]())
+    var step = small_mlp_run_apply(index, program, Int(grads.unsafe_ptr()))
     _ = grads^
-    if applied != MLP_TOTAL:
-        raise Error("RuntimeError: SmallMLPTrainer optimizer did not advance exactly one step")
-    store[].slots[index].state.step += 1
-    return PythonObject(store[].slots[index].state.step)
+    return PythonObject(step)
 
 
-def _predict_sessions(handle: Int, inputs: PythonObject) raises -> PythonObject:
+def _predict_sessions(handle: Int, trainer: PythonObject, inputs: PythonObject) raises -> PythonObject:
     """Logits of several independent batches with the current model,
     concatenated in the order given (`mlp_sessions`)."""
     var nk = small_mlp_keys()
@@ -959,9 +937,11 @@ def _predict_sessions(handle: Int, inputs: PythonObject) raises -> PythonObject:
     # Restore: git apply experiments/removed/MOJOLEARN_MLP_SESSIONS_PACKED.patch; record in docs/TOMBSTONES.md.
     var b = SMALL_MLP_BOUNDARY.get_or_create_ptr()
     var bi = b[].bi
-    var entries = _mode_entries()
+    # The training entries of the trainer's device: a CPU route beside a GPU
+    # set runs its sessions on the CPU image.
+    var legacy = _training_entries(_owner_of(trainer))
     var index = mlp_store_index(handle)
-    _settle(index, False)
+    small_mlp_run_settle(index, False)
     var listed = _items(inputs, -1, "mojolearn.mlp_inference_sessions: inputs must be a list of arrays")
     # Mojo-owned row-major copies, alive across the call.
     var sessions = List[List[Float32]]()
@@ -987,13 +967,13 @@ def _predict_sessions(handle: Int, inputs: PythonObject) raises -> PythonObject:
         sessions.append(owned^)
     var total: Int
     try:
-        total = Int(py=py_call_typed(py_item(entries.legacy, nk[].k_mlp_sessions_rows), shapes, 8))
+        total = Int(py=py_call_typed(py_item(legacy, nk[].k_mlp_sessions_rows), shapes, 8))
     except error:
         raise Error(String(error))
     var out = generation_array([total, 3])
     var store = MLP_STORE.get_or_create_ptr()
     ref s = store[].slots[index].state
-    var wrote = Int(py=py_call_typed(py_item(entries.legacy, nk[].k_mlp_sessions),
+    var wrote = Int(py=py_call_typed(py_item(legacy, nk[].k_mlp_sessions),
         Python.list(out._addr, s.params_addr(0), s.params_addr(1), s.params_addr(2), s.params_addr(3)),
         addresses, shapes, py_ints([8, 16, 3])))
     _ = out  # keep the Python object alive through the native call above
@@ -1028,9 +1008,10 @@ def small_mlp_grads_rows(handle: Int, x_addr: Int, y_addr: Int, rows: Int) raise
            src=Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=x_addr), count=rows * 8)
     unsafe_memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(y.unsafe_ptr())),
            src=Pointer[Int32, ImmUntrackedOrigin](unsafe_from_address=y_addr), count=rows)
-    var entries = _mode_entries()
+    # A worker slot holds no trainer: this installation's device.
+    var program = _program_of(PythonObject(None))
     var index = mlp_store_index(handle)
-    var res = _program_steps(index, entries, x, y, rows, 1, _GRADS, False)
+    var res = _steps(index, program, x, y, rows, 1, SMALL_MLP_RUN_GRADS, False)
     return Python.tuple(res[0][0], res[2])
 
 
@@ -1116,7 +1097,7 @@ def _canonical_bytes(value: PythonObject) raises -> PythonObject:
     return py_call(PythonObject(_transport_json(value)).encode, "ascii")
 
 
-def _save_checkpoint(handle: Int, path: PythonObject) raises:
+def _save_checkpoint(handle: Int, trainer: PythonObject, path: PythonObject) raises:
     """Atomically write the full state to `path`: a canonical JSON envelope
     with the payload's SHA-256, written to a private temporary file beside
     the target, flushed to disk, then renamed over it."""
@@ -1124,8 +1105,8 @@ def _save_checkpoint(handle: Int, path: PythonObject) raises:
     var b = SMALL_MLP_BOUNDARY.get_or_create_ptr()
     var bi = b[].bi
     var posix = b[].posix
-    var state = small_mlp_state_dict(handle)
-    var entries = _mode_entries()
+    var state = small_mlp_state_dict(handle, trainer)
+    var legacy = _training_entries(_owner_of(trainer))
     var names = _names()
     var weights = py_item(state, nk[].k_weights)
     var encoded_weights = bi.dict()
@@ -1143,7 +1124,7 @@ def _save_checkpoint(handle: Int, path: PythonObject) raises:
     # In-image call (bindings/sha256_door.mojo over core/sha256.mojo), the same
     # SHA-256 the training binding's `sha256_hex` entry computed: no crossing.
     py_setitem(envelope, nk[].k_payload_sha256, sha256_hexdigest(_canonical_bytes(state)))
-    var profile = py_call(bi.str, py_item(entries.legacy, nk[].k_neural_arithmetic_profile)())
+    var profile = py_call(bi.str, py_item(legacy, nk[].k_neural_arithmetic_profile)())
     if String(py=profile) != _BASE_PROFILE:
         py_setitem(envelope, nk[].k_arithmetic_profile, profile)
     var data = py_call(PythonObject(_transport_json(envelope) + "\n").encode, "ascii")
@@ -1241,9 +1222,25 @@ def _checkpoint_state(path: PythonObject, entries: PythonObject) raises -> Pytho
 
 
 
-def _from_checkpoint(cls: PythonObject, path: PythonObject) raises -> PythonObject:
-    var entries = _mode_entries()
-    return small_mlp_from_state(cls, _checkpoint_state(path, entries.legacy), _mode_name(entries))
+def _process_vendor() raises -> Int:
+    """This process's vendor word for the device rule: 0 on a CPU-only
+    installation."""
+    return 0 if SMALL_MLP_BOUNDARY.get_or_create_ptr()[].cpu_only else 1
+
+
+def _from_checkpoint(cls: PythonObject, path: PythonObject, device: PythonObject) raises -> PythonObject:
+    """A trainer restored on `device` (already admitted by the caller): its
+    route is resolved before the file is read, the checkpoint's arithmetic
+    profile is checked against the image of that device, and the restored
+    trainer keeps the route."""
+    var nk = small_mlp_keys()
+    var b = SMALL_MLP_BOUNDARY.get_or_create_ptr()
+    var built = _route_build(device_unpack(device, b[].bi), py_item(b[].backend, nk[].k__DEFAULT_MODE))
+    var legacy = built.images
+    var instance = small_mlp_from_state(cls, _checkpoint_state(path, legacy), device_mode_word(built.route.mode))
+    py_setitem(_fields(instance), "device", device)
+    _ = device_route_keep(instance, built^)
+    return instance
 
 
 # ------------------------------------------------------------ passive public owners
@@ -1319,13 +1316,28 @@ def _owner_operation(operation: Int, name: PythonObject, args: PythonObject) rai
     var fields = _small_fields(args[0], b[].trainer_cls)
     classical_connect_numpy(b[].admission)
     if operation == SMALL_MLP_OPN_OWNER_CREATE:
-        sequential_admit_value(args[1], b[].admission)
-        var handle = small_mlp_create(args[1])
+        # `device` is checked first, by the shared admission, before any
+        # field is read or published; None is one identity compare.
+        var values = args[1]
+        var device = PythonObject(None)
+        if len(values) > 9:
+            device = values[9]
+        device_admit(device, _process_vendor(), b[].bi)
+        sequential_admit_value(values, b[].admission)
+        var state = _create_state(values)
+        # The route is resolved here, once (so `device="cpu"` with fast mode,
+        # or without its CPU image, refuses at construction), and kept: the
+        # trainer's first step is already a hit.
+        var built = _route_build(device_unpack(device, b[].bi), py_item(b[].backend, nk[].k__DEFAULT_MODE))
+        var handle = _create_handle(state^)
         try:
             var previous = py_get(fields, nk[].k__handle)
             if previous is not None:
                 small_mlp_close(previous)
             py_setitem(fields, nk[].k__handle, handle)
+            py_setitem(fields, "device", device)
+            device_route_clear(args[0])
+            _ = device_route_keep(args[0], built^)
         except error:
             small_mlp_close(handle)
             raise error^
@@ -1346,7 +1358,7 @@ def _owner_operation(operation: Int, name: PythonObject, args: PythonObject) rai
         var full = String(name)
         inner_name = PythonObject(String(full[byte=6:]))
         inner = py_op_code(nk[].ops, inner_name)
-    var result = small_mlp_call(inner, inner_name, values)
+    var result = _call(inner, inner_name, values, args[0])
     return args[0] if operation == SMALL_MLP_OPN_OWNER_LOAD_STATE_DICT else result
 
 
@@ -1486,7 +1498,8 @@ def _inference_operation(operation: Int, args: PythonObject) raises -> PythonObj
 
 # ------------------------------------------------------------ dispatch
 
-def _locked(operation: Int, name: PythonObject, handle_value: PythonObject, args: PythonObject) raises -> PythonObject:
+def _locked(operation: Int, name: PythonObject, handle_value: PythonObject, args: PythonObject,
+            trainer: PythonObject) raises -> PythonObject:
     var b = SMALL_MLP_BOUNDARY.get_or_create_ptr()
     var handle = _handle_of(handle_value)
     _ = mlp_store_index(handle)
@@ -1495,27 +1508,27 @@ def _locked(operation: Int, name: PythonObject, handle_value: PythonObject, args
     var result = PythonObject(None)
     try:
         if operation == SMALL_MLP_OPN_TRAIN_STEP:
-            result = _train_step(handle, args[1], args[2], args[3])
+            result = _train_step(handle, trainer, args[1], args[2], args[3])
         elif operation == SMALL_MLP_OPN_TRAIN_STEPS:
-            result = _train_steps(handle, args[1], args[2], args[3])
+            result = _train_steps(handle, trainer, args[1], args[2], args[3])
         elif operation == SMALL_MLP_OPN_PREDICT_LOGITS:
-            result = _predict_logits(handle, args[1])
+            result = _predict_logits(handle, trainer, args[1])
         elif operation == SMALL_MLP_OPN_PREDICT_LOGITS_SESSIONS:
-            result = _predict_sessions(handle, args[1])
+            result = _predict_sessions(handle, trainer, args[1])
         elif operation == SMALL_MLP_OPN_LOSS_AND_GRADS:
-            result = _loss_and_grads(handle, args[1], args[2])
+            result = _loss_and_grads(handle, trainer, args[1], args[2])
         elif operation == SMALL_MLP_OPN_APPLY_GRADIENTS:
-            result = _apply_gradients(handle, args[1])
+            result = _apply_gradients(handle, trainer, args[1])
         elif operation == SMALL_MLP_OPN_STATE_DICT:
-            result = small_mlp_state_dict(handle)
+            result = small_mlp_state_dict(handle, trainer)
         elif operation == SMALL_MLP_OPN_LOAD_STATE_DICT:
-            small_mlp_load_state(handle, args[1], _mode_name(_mode_entries()))
+            small_mlp_load_state(handle, args[1], _mode_word(_owner_of(trainer)))
         elif operation == SMALL_MLP_OPN_STEP:
             result = _step_count(handle)
         elif operation == SMALL_MLP_OPN_WEIGHTS:
-            result = _weights(handle)
+            result = _weights(handle, trainer)
         elif operation == SMALL_MLP_OPN_SAVE_CHECKPOINT:
-            _save_checkpoint(handle, args[1])
+            _save_checkpoint(handle, trainer, args[1])
         else:
             raise Error("SmallMLPTrainer: unknown operation " + String(name))
     finally:
@@ -1539,7 +1552,14 @@ def _locked(operation: Int, name: PythonObject, handle_value: PythonObject, args
 def small_mlp_call(operation: Int, name: PythonObject, args: PythonObject) raises -> PythonObject:
     """Dispatch one trainer/inference operation by its code
     (bindings/small_mlp_keys_unpack.mojo). `name` is the caller's operation
-    object, read only for an unknown name's routes and message."""
+    object, read only for an unknown name's routes and message. An operation
+    on a bare state handle runs on this installation's device."""
+    return _call(operation, name, args, PythonObject(None))
+
+
+def _call(operation: Int, name: PythonObject, args: PythonObject, trainer: PythonObject) raises -> PythonObject:
+    """`small_mlp_call` with the trainer object whose route the operation
+    takes (None: a bare state handle)."""
     if operation == SMALL_MLP_OPN_INITIALIZE:
         small_mlp_initialize(args[0])
         return PythonObject(None)
@@ -1562,7 +1582,13 @@ def small_mlp_call(operation: Int, name: PythonObject, args: PythonObject) raise
     classical_connect_numpy(boundary[].admission)
     # Shared exact-native-type admission precedes every protocol/attribute read.
     # No caller-defined __buffer__, iterator, descriptor or scalar hook runs.
+    var device = PythonObject(None)
     if operation == SMALL_MLP_OPN_FROM_CHECKPOINT:
+        # `device` first, by the shared admission, before the class or the
+        # file is read.
+        if len(args) > 2:
+            device = args[2]
+        device_admit(device, _process_vendor(), boundary[].bi)
         _small_class(args[0], boundary[].trainer_cls)
         _ = native_path(args[1])
     elif operation == SMALL_MLP_OPN_SAVE_CHECKPOINT:
@@ -1572,7 +1598,7 @@ def small_mlp_call(operation: Int, name: PythonObject, args: PythonObject) raise
         sequential_admit_value(args, boundary[].admission)
     if operation == SMALL_MLP_OPN_NATIVE_PROVIDER_INFO:
         # TOMBSTONE: the small_mlp_api_v1 provider (the per-operation and fused routes' descriptor) deleted 2026-11-09 by lane/x2-small-mlp-on-executor; code recoverable at f59d913b0b.
-        _ = _mode_entries()
+        _ = _owner_of(PythonObject(None))
         return PythonObject(None)
     if operation == SMALL_MLP_OPN_CREATE:
         return small_mlp_create(args)
@@ -1580,8 +1606,8 @@ def small_mlp_call(operation: Int, name: PythonObject, args: PythonObject) raise
         small_mlp_close(args[0])
         return PythonObject(None)
     if operation == SMALL_MLP_OPN_FROM_CHECKPOINT:
-        return _from_checkpoint(args[0], args[1])
-    return _locked(operation, name, args[0], args)
+        return _from_checkpoint(args[0], args[1], device)
+    return _locked(operation, name, args[0], args, trainer)
 
 
 def small_mlp_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
