@@ -277,11 +277,47 @@ def connect(ridge_class, linear_class=None):
                    ridge_name=ridge_class.__name__, linear_name="LinearRegression" if linear_class is None else linear_class.__name__,
                    ridge_saved_names=tuple(cls.__name__ for cls in ridge_class.__mro__),  # glue: preserve the declared saved-estimator ancestry
                    linear_saved_names=() if linear_class is None else tuple(cls.__name__ for cls in linear_class.__mro__),  # glue: preserve the declared saved-estimator ancestry
-                   classical_fields=("numeric_mode", "fit_intercept", "alpha", "solver", "normalize",
+                   classical_fields=("numeric_mode", "device", "fit_intercept", "alpha", "solver", "normalize",
                                      "coef_", "intercept_", "n_features_in_",
                                      "_mojolearn_fitted", "_mojolearn_fitting"))
     _ERROR_ENTRY, _ERROR_CONTEXT = _binding()._module.classical_native_call, context
     return _ERROR_ENTRY, context
+
+
+#: The CPU binaries `device="cpu"` runs on a GPU installation: the estimators
+#: host (fit and predict entries), the x_linear host (Ridge's weighted solve)
+#: and the decomposition host (LinearRegression's TSQR).
+_CPU_DEVICE_HOSTS = ("_mojolearn_estimators_host", "_mojolearn_x_linear_host", "_mojolearn_x_decomp_host")
+
+
+def connect_cpu_device(context):
+    """Connect the CPU entry family of `device="cpu"` once, at import, beside
+    the device family (`context["classical_bindings"]`).
+
+    Each host binary publishes its native entry table when it initializes;
+    the compiled owner resolves an estimator's route against the device
+    table or this one, once per estimator
+    (providers/python/linear_route_boundary_door.mojo). In a CPU-only process
+    the selected family already is the CPU family and nothing is loaded.
+    A host binary that is not built is kept as its refusal text, said when a
+    `device="cpu"` estimator first runs."""
+    # glue: load the CPU images once and retain their canonical connection owners
+    from . import _backend
+    if "classical_bindings" not in context or context["vendor"] == "cpu":
+        return
+    errors = (ImportError, AttributeError, TypeError, ValueError, RuntimeError)
+    estimators, linear, decomp = _CPU_DEVICE_HOSTS
+    try:
+        cpu = _native_table_cells(_backend.load_host_module(estimators), "estimators")
+        weighted = _native_table_cells(_backend.load_host_module(linear), "x_linear")
+        cpu["_native_weighted_connection"] = weighted["_native_entry_connection"]
+        try:
+            cpu["decomp"] = _decomp_cells(_backend.load_host_module(decomp))
+        except errors as error:
+            cpu["decomp"] = type(error).__name__ + ": " + str(error)
+    except errors as error:
+        cpu = type(error).__name__ + ": " + str(error)
+    context["classical_cpu_bindings"] = {"identical": cpu}
 
 
 def _layout(cls, attribute_descriptor):

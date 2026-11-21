@@ -321,8 +321,8 @@ class LinearRegression(_NumericModeMixin):
         super().__init_subclass__(**kw)
         _native_classical_bridge.register_subclass(cls, globals().get("_CLASSICAL"))
 
-    def __init__(self, *, fit_intercept=True, numeric_mode=None):
-        _native_classical(self, "initialize", (fit_intercept, numeric_mode), _CLASSICAL)
+    def __init__(self, *, fit_intercept=True, numeric_mode=None, device="gpu"):
+        _native_classical(self, "initialize", (fit_intercept, numeric_mode, device), _CLASSICAL)
 
     def fit(self, X, y, sample_weight=None):
         """Fit the linear model.
@@ -501,9 +501,10 @@ class Ridge(_NumericModeMixin):
         _native_classical_bridge.register_subclass(cls, globals().get("_CLASSICAL"))
 
     def __init__(self, *, alpha=1.0, solver="auto", fit_intercept=True,
-                 normalize=False, numeric_mode=None):
+                 normalize=False, numeric_mode=None, device="gpu"):
         # Stored verbatim (scikit-learn's convention); fit checks them.
-        _native_classical(self, "initialize", (alpha, solver, fit_intercept, normalize, numeric_mode), _CLASSICAL)
+        # `device` alone is checked here: an unknown value is refused in words.
+        _native_classical(self, "initialize", (alpha, solver, fit_intercept, normalize, numeric_mode, device), _CLASSICAL)
 
     def _validate_params(self):
         """The constructor checks fit runs, for routes that fit Ridge's
