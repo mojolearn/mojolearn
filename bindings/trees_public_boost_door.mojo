@@ -1156,7 +1156,7 @@ def _bagging_held(members: PythonObject, staged: PythonObject, context: PythonOb
 
 def _bagging_member_out(member: PythonObject, xs: PythonObject, m: Int, operation: Int, classifier: Bool,
                         width: Int, x_address: Int, x_words: Int, mut proven: Int, host_only: Bool,
-                        context: PythonObject) -> PythonObject:
+                        context: PythonObject) raises -> PythonObject:
     """A fitted member's `operation` over its `m` rows `xs` (float32 C-order,
     rows and columns of the admitted X at `x_address`, `x_words` values)
     through the member state it holds, or None: its door runs (the fallback
