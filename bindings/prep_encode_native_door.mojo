@@ -36,13 +36,19 @@ from bindings.prep_entry_cache_unpack import prep_entry_word, prep_entry_text
 from bindings.x_prep_native_owner_door import xprep_storage, xprep_take, xprep_values, xprep_run_records, xprep_caps
 from bindings.prep_encode_prog_run import (
     EncProgram, OUT_MIN_WORDS, OUT_MARK, enc_sel, enc_bad_rows_stages, enc_assign_fold_i64, enc_check_train_i64,
-    enc_label_chunk, enc_col_stats, enc_mark_missing)
+    enc_col_stats, enc_mark_missing)
 from bindings.prep_encode_imputer_run import (
     ImputerFit, ImputerApply, IMP_MEAN, IMP_MEDIAN, IMP_MOST_FREQUENT, IMP_CONSTANT,
     imputer_fit_stage, imputer_transform_stage)
 from bindings.prep_encode_kbins_run import (
     KBinsFit, KBinsApply, KBinsInverse, KB_DRAW_NONE, KB_DRAW_PLAIN, KB_DRAW_WEIGHTED,
     enc_weights_stage, kbins_fit_stage, kbins_transform_stage, kbins_inverse_stage, enc_seed_words, enc_prefix)
+from bindings.prep_encode_cats_run import (
+    CatFit, CatFitPlan, CatBlock, InfrequentFit, CAT_FIT_UNIQUE, CAT_FIT_SCAN, CAT_FIT_PACK_SORT,
+    CAT_FIT_PACK_PRESENT, CAT_FIT_INVERSE, cat_fit_stage, cat_codes_stage, cat_gather_stage, cat_grouping_table,
+    cat_grouped_sizes, cat_list_max, cat_infrequent_stage)
+from bindings.prep_encode_ordinal_run import (
+    OrdinalApply, OrdinalInverse, ordinal_transform_stage, ordinal_inverse_stage)
 from bindings.x_prep_native_owner_run import xprep_r3, XprepCaps
 from bindings.public_lifecycle_owner_door import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result
 from bindings.classical_validate_unpack import classical_estimator_name
@@ -105,34 +111,18 @@ comptime IDN_SELECT_BLOCKED = 4
 # `_CLS_BLOCK_WORDS`: the most partial words a blocked class_stats keeps.
 comptime CLS_BLOCK_WORDS = 67108864
 comptime OP_ONEHOT = 9
-comptime OP_WHERE_NEG = 19
 comptime OP_TE_APPLY = 22
 comptime OP_BLOCK_ARGMAX = 76
-comptime OP_ORD_INVERSE = 77
-comptime OP_CAT_GATHER = 78
-comptime OP_WHERE_CODE = 79
-comptime OP_CODE_COUNTS = 88
 comptime OP_REMAP_CODES = 89
 comptime OP_KBINS_GW = 96
 comptime OP_KBINS_WQ = 97
-comptime OP_UNIQ_COUNT = 120
-comptime OP_UNIQ_SCAN = 121
-comptime OP_UNIQ_WRITE = 122
 comptime OP_COLB_PART = 124
 comptime OP_COLB_FOLD = 125
 comptime OP_SPLINE_KNOTS = 49
 comptime OP_SPLINE_APPLY = 50
 comptime OP_CAT_ZERO = 157
-comptime OP_CAT_PRESENT = 158
-comptime OP_PRES_COUNT = 159
-comptime OP_PRES_WRITE = 160
-comptime OP_CAT_PACK = 161
-comptime OP_UNIQUE_INVERSE = 177
 comptime OP_RGATHER = 204
 comptime OP_TRANSPOSE = 209
-comptime OP_INF_M0 = 249
-comptime OP_INF_M1 = 250
-comptime OP_INF_MAP = 251
 comptime OP_GRID = 263
 # `_NONE`: a stage's "no operand" word.
 comptime NONE = -1
@@ -142,11 +132,6 @@ comptime IDN_STATS_BLOCKED = 1
 comptime ROW_BLOCK = 2048
 # `_II_CH`: the most chunks of a chunk-parallel p2m selection.
 comptime SEL_CHUNKS = 1024
-# `_CAT_CAP`, `_CAT_R`, `_CAT_CH` (x_prep/cat_cls2.mojo): the packed distinct
-# values' host region (words), the presence flags per column, flags per chunk.
-comptime CAT_CAP = 65536
-comptime CAT_R = 4096
-comptime CAT_CH = 64
 
 
 # ---------------------------------------------------------------- programs
@@ -861,116 +846,98 @@ def _cls2_cat(mode: PythonObject, entries: PythonObject) raises -> Int:
     return prep_entry_word(entries, "x_prep_cls2_cat")  # read once per binding
 
 
-def _label_chunk(n: Int) -> Int:
-    # The rule is `enc_label_chunk` (bindings/prep_encode_prog_run.mojo, where
-    # the typed stage builders read it); this name stays for the doors that
-    # import it from here.
-    return enc_label_chunk(n)
-
-
-def _uniq_scans(mut p: EncProg, base: Int, rows: Int, d: Int, stride: Int, counts: Int, out_buf: Int, presence: Bool):
-    """One device run scan per column (uniq_count or pres_count, uniq_scan,
-    uniq_write or pres_write) over the column at base + c * stride."""
-    var ch = CAT_CH if presence else _label_chunk(rows)
-    var nch = (rows + ch - 1) // ch
-    for c in range(d):  # driver-loop: stages one device scan per column (feature count)
-        var cnt = p.work(nch)
-        var off = p.work(nch)
-        _stage(p.prog.program, OP_PRES_COUNT if presence else OP_UNIQ_COUNT, nch, base + c * stride, rows, ch, cnt)
-        _stage(p.prog.program, OP_UNIQ_SCAN, 1, cnt, nch, off, counts + c)
-        _stage(p.prog.program, OP_PRES_WRITE if presence else OP_UNIQ_WRITE, nch, base + c * stride, rows, ch, off, out_buf + c * stride)
-
-
-def _fit_categories_cls2(values: PythonObject, mode: PythonObject, entries: PythonObject, bits: Int, context: PythonObject) raises -> PythonObject:
-    """`_fit_categories_cls2`: the lists packed into a small host region;
-    None when a column does not suit PRESENT or the values do not fit."""
-    var n = Int(py=values[3])
-    var d = Int(py=values[4])
-    var p = EncProg()
-    var xo = p.put_x(values)
-    var co = p.alloc(d)
-    var cap = min(n * d, CAT_CAP)
-    var pk = p.alloc(cap)
-    var bad = -1
-    if (bits & 2) != 0:
-        bad = p.alloc(d)
-        var fl = p.work(d * CAT_R)
-        var uo = p.work(d * CAT_R)
-        _stage(p.prog.program, OP_CAT_ZERO, d * CAT_R, fl)
-        _stage(p.prog.program, OP_CAT_PRESENT, n * d, xo, n, d, CAT_R, fl, bad)
-        _uniq_scans(p, fl, CAT_R, d, CAT_R, co, uo, True)
-        _stage(p.prog.program, OP_CAT_PACK, d * CAT_R, uo, CAT_R, d, co, cap, pk)
-    else:
-        var so = p.work(n * d)
-        var uo = p.work(n * d)
-        _stage(p.prog.program, OP_SORT_COLS, d, xo, n, d, so, 1)
-        _uniq_scans(p, so, n, d, n, co, uo, False)
-        _stage(p.prog.program, OP_CAT_PACK, n * d, uo, n, d, co, cap, pk)
-    var ran = p.run(entries, context)
-    if bad >= 0:
+def _cat_fit_pack(ran: PythonObject, plan: CatFitPlan, n: Int, d: Int, context: PythonObject) raises -> PythonObject:
+    """PACK of a category fit: the list of the d float32 category Arrays;
+    None when a packed plan did not hold the values (a column that does not
+    suit the presence flags, or more values than the packed region)."""
+    var out = Python.list()
+    if not plan.packed:
+        for c in range(d):  # driver-loop: slices the per-column category outputs (feature count)
+            _ = py_call(out.append, _take1(ran, plan.values + c * n, Int(_word(ran, plan.counts + c)), context))
+        return out
+    if plan.flags >= 0:
         for j in range(d):  # driver-loop: over the per-column overflow flags (feature metadata)
-            if _iword(ran, bad + j) != 0:
+            if _iword(ran, plan.flags + j) != 0:
                 return PythonObject(None)
     var counts = List[Int]()
     var total = 0
     for c in range(d):  # driver-loop: over the per-column category counts (feature metadata)
-        counts.append(Int(_word(ran, co + c)))
+        counts.append(Int(_word(ran, plan.counts + c)))
         total += counts[c]
-    if total > cap:
+    if total > plan.cap:
         return PythonObject(None)
-    var out = Python.list()
     var o = 0
     for c in range(d):  # driver-loop: slices the per-column category outputs (feature count)
-        _ = py_call(out.append, _take1(ran, pk + o, counts[c], context))
+        _ = py_call(out.append, _take1(ran, plan.values + o, counts[c], context))
         o += counts[c]
     return out
 
 
-def _fit_categories(values: PythonObject, mode: PythonObject, entries: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_fit_categories`: per column the sorted distinct values (-0.0 folded
-    into 0.0), by a sort per column and a run scan."""
-    var n = Int(py=values[3])
-    var d = Int(py=values[4])
+def _cat_fit_try(values: PythonObject, words: List[Float64], n: Int, d: Int, route: Int, entries: PythonObject,
+                 caps: XprepCaps, context: PythonObject) raises -> PythonObject:
+    """One category fit program on `route`: X as `xprep_values` converted it
+    (an owner of the program), or, when `values` is None, the n label words
+    `words` as program-owned float32 words (one column)."""
+    # UNPACK
+    var p = EncProg()
+    var x = NONE
+    var held = NONE
+    if values is None:
+        held = p.prog.put_floats(words)
+    else:
+        x = p.own_x(values)
+    # RUN: the typed stages (bindings/prep_encode_cats_run.mojo), then the typed run.
+    var plan = cat_fit_stage(p.prog, CatFit(n, d, x, held, route))
+    var ran = p.run_caps(entries, context, caps)
+    # PACK
+    return _cat_fit_pack(ran, plan, n, d, context)
+
+
+def _cat_fit(values: PythonObject, words: List[Float64], n: Int, d: Int, mode: PythonObject, entries: PythonObject,
+             caps: XprepCaps, context: PythonObject) raises -> PythonObject:
+    # The image's route, read once: the packed program first where the FAST
+    # image has it, then the sort with a run scan or with unique_cols.
+    var fast = _fast_unique(mode, entries)
     var cls2 = _cls2_cat(mode, entries)
-    if (cls2 & 1) != 0 and _fast_unique(mode, entries):
-        var got = _fit_categories_cls2(values, mode, entries, cls2, context)
+    if (cls2 & 1) != 0 and fast:
+        var got = _cat_fit_try(values, words, n, d, CAT_FIT_PACK_PRESENT if (cls2 & 2) != 0 else CAT_FIT_PACK_SORT,
+                               entries, caps, context)
         if got is not None:
             return got
-    var p = EncProg()
-    var xo = p.put_x(values)
-    var so = p.work(n * d)
-    var uo = p.alloc(n * d)
-    var co = p.alloc(d)
-    _stage(p.prog.program, OP_SORT_COLS, d, xo, n, d, so, 1)
-    if _fast_unique(mode, entries):
-        _uniq_scans(p, so, n, d, n, co, uo, False)
-    else:
-        _stage(p.prog.program, OP_UNIQUE_COLS, d, so, n, d, uo, co)
-    var ran = p.run(entries, context)
-    var out = Python.list()
-    for c in range(d):  # driver-loop: slices the per-column category outputs (feature count)
-        _ = py_call(out.append, _take1(ran, uo + c * n, Int(_word(ran, co + c)), context))
-    return out
+    return _cat_fit_try(values, words, n, d, CAT_FIT_SCAN if fast else CAT_FIT_UNIQUE, entries, caps, context)
 
 
-def _fit_categories_with_codes(values: PythonObject, entries: PythonObject, context: PythonObject) raises -> Tuple[PythonObject, PythonObject]:
+def _fit_categories_caps(values: PythonObject, mode: PythonObject, entries: PythonObject, caps: XprepCaps,
+                         context: PythonObject) raises -> PythonObject:
+    """`_fit_categories`: per column the sorted distinct values (-0.0 folded
+    into 0.0), on the image and capabilities of the estimator's operation."""
+    return _cat_fit(values, List[Float64](), Int(py=values[3]), Int(py=values[4]), mode, entries, caps, context)
+
+
+def _fit_category_words(words: List[Float64], mode: PythonObject, entries: PythonObject, caps: XprepCaps,
+                        context: PythonObject) raises -> PythonObject:
+    """`_fit_categories` of one column of label words (a numeric Python
+    list's values, rounded to float32 as program-owned words): the float32
+    Array of its sorted distinct values."""
+    return _cat_fit(PythonObject(None), words, len(words), 1, mode, entries, caps, context)[0]
+
+
+def _fit_categories(values: PythonObject, mode: PythonObject, entries: PythonObject, context: PythonObject) raises -> PythonObject:
+    # `_fit_categories_caps` for a stateless caller (no estimator route): the
+    # image's capabilities read from `entries` by name.
+    return _fit_categories_caps(values, mode, entries, xprep_caps(entries), context)
+
+
+def _fit_categories_with_codes(values: PythonObject, entries: PythonObject, caps: XprepCaps,
+                               context: PythonObject) raises -> Tuple[PythonObject, PythonObject]:
     """`_fit_categories_with_codes` (C08): the categories and the (n, d)
     inverse from one program (sort_cols, unique_inverse)."""
     var n = Int(py=values[3])
     var d = Int(py=values[4])
     var p = EncProg()
-    var xo = p.put_x(values)
-    var sorted = p.work(n * d)
-    var dictionary = p.alloc(n * d)
-    var counts = p.alloc(d)
-    var inverse = p.alloc(n * d)
-    _stage(p.prog.program, OP_SORT_COLS, d, xo, n, d, sorted, 1)
-    _stage(p.prog.program, OP_UNIQUE_INVERSE, d, sorted, n, d, dictionary, counts, xo, inverse)
-    var ran = p.run(entries, context)
-    var out = Python.list()
-    for c in range(d):  # driver-loop: over the features' fitted category dictionaries (model metadata per feature)
-        _ = py_call(out.append, _take1(ran, dictionary + c * n, Int(_word(ran, counts + c)), context))
-    return (out, _take2(ran, inverse, n, d, context))
+    var plan = cat_fit_stage(p.prog, CatFit(n, d, p.own_x(values), NONE, CAT_FIT_INVERSE))
+    var ran = p.run_caps(entries, context, caps)
+    return (_cat_fit_pack(ran, plan, n, d, context), _take2(ran, plan.inverse, n, d, context))
 
 
 def _c08_route(mode: PythonObject, entries: PythonObject, bit: Int) raises -> Bool:
@@ -1134,11 +1101,26 @@ def _category_record(owner: PythonObject, categories: PythonObject, context: Pyt
     return record
 
 
-def _category_block(mut p: EncProg, categories: PythonObject, context: PythonObject,
-                    owner: PythonObject) raises -> Tuple[Int, Int]:
-    # `_category_block`: every column's categories in one (d, kmax) block.
-    var record = _category_record(owner, categories, context)
-    return (p.put(record[2], Int(py=record[6])), Int(py=record[3]))
+def _cat_block(mut p: EncProg, record: PythonObject, sizes: Bool) raises -> CatBlock:
+    """UNPACK of a category record (`_category_record`) for a typed stage
+    builder: its (d, kmax) block and, with `sizes`, its per-column size
+    words become owners of this program."""
+    var words = Int(py=record[6])
+    var block = p.own(record[2], words)
+    var count = max(len(record[4]), 1)
+    return CatBlock(block, words, Int(py=record[3]), p.own(record[5], count) if sizes else NONE, count if sizes else 0)
+
+
+def _group_lists(grouping: PythonObject) raises -> List[List[Int]]:
+    # The fitted `_grouping` as native lists: column j's grouped code of each
+    # category, empty for a column that is not grouped (None).
+    var groups = List[List[Int]]()
+    for j in range(len(grouping)):  # driver-loop: over the per-column grouping lists (feature metadata)
+        if grouping[j] is None:
+            groups.append(List[Int]())
+        else:
+            groups.append(_index_list(grouping[j]))
+    return groups^
 
 
 def _sizes(categories: PythonObject) raises -> List[Int]:
@@ -1182,20 +1164,13 @@ def _codes(mut p: EncProg, values: PythonObject, categories: PythonObject, conte
     """`_codes`: each element's category index (or -1) and, unless
     device_only, each column's unknown count. Returns (codes, neg).
     `owner`: the fitted model whose `categories_` these are (its category
-    record is reused), or None."""
-    var n = Int(py=values[3])
-    var d = Int(py=values[4])
-    var xo = p.put_x(values)
+    record is reused), or None. UNPACK of X and the record, then the typed
+    stages (bindings/prep_encode_cats_run.mojo `cat_codes_stage`)."""
     var record = _category_record(owner, categories, context)
-    var block = (p.put(record[2], Int(py=record[6])), Int(py=record[3]))
-    var co = p.put(record[5], max(len(record[4]), 1))
-    var codes = p.scratch(n * d) if device_only else p.alloc(n * d)
-    _stage(p.prog.program, OP_LOOKUP, n * d, xo, n, d, block[0], block[1], co, codes)
-    if device_only:
-        return (codes, -1)
-    var neg = p.alloc(d)
-    _stage(p.prog.program, OP_COUNT_NEG, d, codes, n, d, neg)
-    return (codes, neg)
+    var x = p.own_x(values)
+    var staged = cat_codes_stage(p.prog, Int(py=values[3]), Int(py=values[4]), x, _cat_block(p, record, True),
+                                 device_only)
+    return (staged.codes, staged.unknown)
 
 
 def _unknown_columns(ran: PythonObject, neg: Int, d: Int) raises -> List[Int]:
@@ -1207,7 +1182,7 @@ def _unknown_columns(ran: PythonObject, neg: Int, d: Int) raises -> List[Int]:
     return bad^
 
 
-def _given_categories(categories: PythonObject, values: PythonObject, mode: PythonObject, entries: PythonObject,
+def _given_categories(categories: PythonObject, values: PythonObject, entries: PythonObject, caps: XprepCaps,
                       check_unknown: Bool, who: String, context: PythonObject) raises -> PythonObject:
     """`_given_categories`: one numeric list per column, sorted ascending with
     at most a NaN last, stored as float32; with check_unknown a training
@@ -1247,7 +1222,7 @@ def _given_categories(categories: PythonObject, values: PythonObject, mode: Pyth
     if check_unknown:
         var p = EncProg()
         var staged = _codes(p, values, out, context, False, PythonObject(None))
-        var ran = p.run(entries, context)
+        var ran = p.run_caps(entries, context, caps)
         var bad = _unknown_columns(ran, staged[1], d)
         if len(bad) > 0:
             raise Error("mojolearn: " + who + " found unknown categories in column(s) " + _list_text(bad) + " during fit")
@@ -1297,16 +1272,12 @@ def _infrequent_threshold(n: Int, min_frequency: PythonObject, context: PythonOb
     return Int(ceil(Float64(n) * _float(min_frequency)))
 
 
-def _last_is_nan(cats: PythonObject, context: PythonObject) raises -> Bool:
-    var values = _cat_values(cats, context)
-    return len(values) > 0 and values[len(values) - 1] != values[len(values) - 1]
-
-
-def _fit_infrequent(model: PythonObject, values: PythonObject, mode: PythonObject, entries: PythonObject,
+def _fit_infrequent(model: PythonObject, values: PythonObject, entries: PythonObject, caps: XprepCaps,
                     ignore_missing: Bool, inverse: PythonObject, context: PythonObject) raises:
     """`_fit_infrequent`: one program (code_counts, c2_inf_m0, c2_inf_m1,
     c2_inf_map) whose masks and codes come back as the fitted per-column
     `_infrequent`, `_grouping` and `infrequent_categories_`."""
+    # UNPACK
     var fields = py_fields(model)
     var n = Int(py=values[3])
     var d = Int(py=values[4])
@@ -1322,24 +1293,26 @@ def _fit_infrequent(model: PythonObject, values: PythonObject, mode: PythonObjec
         var size = sizes[j]
         ks.append(size - 1 if (ignore_missing and size > 0 and _record_last_is_nan(record, j)) else size)
         kmax = max(kmax, size)
-    var p = EncProg()
-    var codes = 0
-    if inverse is None:
-        codes = _codes(p, values, cats_all, context, False, model)[0]
-    else:
-        codes = p.put_array2(inverse)
-    var cnt = p.alloc(d * kmax)
-    var kc = p.put_floats(_to_floats(ks), context)
-    var m0 = p.work(d * kmax)
-    var m1 = p.alloc(d * kmax)
-    var mp = p.alloc(d * kmax)
     var max_categories = fields["max_categories"]
     var maxc = -1 if max_categories is None else Int(py=py_call(native_loaded_module("builtins").int, max_categories))
-    _stage(p.prog.program, OP_CODE_COUNTS, d, codes, n, d, kmax, cnt)
-    _stage(p.prog.program, OP_INF_M0, d * kmax, cnt, kc, kmax, _infrequent_threshold(n, fields["min_frequency"], context), m0)
-    _stage(p.prog.program, OP_INF_M1, d * kmax, cnt, kc, kmax, m0, maxc, m1)
-    _stage(p.prog.program, OP_INF_MAP, d * kmax, kc, kmax, m1, mp)
-    var ran = p.run(entries, context, model)
+    var threshold = _infrequent_threshold(n, fields["min_frequency"], context)
+    var p = EncProg()
+    var from_inverse = inverse is not None
+    var x = NONE
+    var held = NONE
+    var block = CatBlock(NONE, 0, 0, NONE, 0)
+    if from_inverse:
+        held = p.own(inverse, n * d)
+    else:
+        x = p.own_x(values)
+        block = _cat_block(p, record, True)
+    var request = InfrequentFit(n, d, x, block.copy(), from_inverse, held, ks.copy(), kmax, threshold, maxc)
+    # RUN
+    var plan = cat_infrequent_stage(p.prog, request)
+    var ran = p.run_caps(entries, context, caps)
+    # PACK
+    var m1 = plan.mask
+    var mp = plan.map
     var infrequent = Python.list()
     var grouping = Python.list()
     var categories = Python.list()
@@ -1370,44 +1343,14 @@ def _fit_infrequent(model: PythonObject, values: PythonObject, mode: PythonObjec
 
 
 def _list_max(values: List[Int]) -> Int:
-    var top = values[0] if len(values) > 0 else 0
-    for i in range(len(values)):  # driver-loop: over one column grouping
-        top = max(top, values[i])
-    return top
+    return cat_list_max(values)
 
 
 def _grouping_table(mut p: EncProg, grouping: PythonObject, inverse: Bool, context: PythonObject) raises -> Tuple[Int, Int, Int]:
-    """`_grouping_table`: (MAP, MSTRIDE, NMAP) for remap_codes: category ->
-    grouped code, or (inverse) grouped code -> category index with the
-    infrequent code -> -3."""
-    var tables = List[List[Int]]()
-    for j in range(len(grouping)):  # driver-loop: builds the category grouping table (per-column category groupings)
-        if grouping[j] is None:
-            tables.append(List[Int]())
-            continue
-        var g = _index_list(grouping[j])
-        if not inverse:
-            tables.append(g^)
-            continue
-        var nf = _list_max(g)
-        var back = List[Int](length=nf + 1, fill=0)
-        for i in range(len(g)):  # driver-loop: inverts one column grouping table
-            if g[i] < nf:
-                back[g[i]] = i
-        back[nf] = -3
-        tables.append(back^)
-    var stride = 1
-    for j in range(len(tables)):  # driver-loop: over the per-column grouping tables
-        stride = max(stride, len(tables[j]))
-    var flat = List[Float64]()
-    var lens = List[Float64]()
-    for j in range(len(tables)):  # driver-loop: pads the per-column grouping tables
-        for i in range(stride):  # driver-loop: over one padded grouping table
-            flat.append(Float64(tables[j][i]) if i < len(tables[j]) else Float64(0.0))
-        lens.append(Float64(len(tables[j])))
-    var mo = p.put_floats(flat, context)
-    var no = p.put_floats(lens, context)
-    return (mo, stride, no)
+    # `_grouping_table`: UNPACK of the fitted grouping lists, then the typed
+    # table (bindings/prep_encode_cats_run.mojo `cat_grouping_table`).
+    var table = cat_grouping_table(p.prog, _group_lists(grouping), inverse)
+    return (table.map, table.stride, table.lens)
 
 
 def _remap(mut p: EncProg, codes: Int, n: Int, d: Int, table: Tuple[Int, Int, Int], neg: Int) -> Int:
@@ -1418,10 +1361,7 @@ def _remap(mut p: EncProg, codes: Int, n: Int, d: Int, table: Tuple[Int, Int, In
 
 def _gather_categories(mut p: EncProg, codes: Int, n: Int, d: Int, categories: PythonObject, context: PythonObject,
                        owner: PythonObject) raises -> Int:
-    var block = _category_block(p, categories, context, owner)
-    var out = p.alloc(n * d)
-    _stage(p.prog.program, OP_CAT_GATHER, n * d, codes, n, d, block[0], block[1], out)
-    return out
+    return cat_gather_stage(p.prog, codes, n, d, _cat_block(p, _category_record(owner, categories, context), False))
 
 
 def _scalar(mut p: EncProg, value: Float64, context: PythonObject) raises -> Int:
@@ -1454,37 +1394,39 @@ def _ordinal_fit(model: PythonObject, values: PythonObject, capture: Bool, conte
     var d = Int(py=values[4])
     var mode = _default_mode(context)
     var entries = scaler_entries(model, mode, context)
+    var caps = enc_caps(model, entries)
     var auto = _is_str(fields["categories"]) and String(fields["categories"]) == "auto"
     var inverse = PythonObject(None)
     if capture and auto:
-        var got = _fit_categories_with_codes(values, entries, context)
+        var got = _fit_categories_with_codes(values, entries, caps, context)
         py_setitem(fields, "categories_", got[0])
         inverse = got[1]
     elif auto:
-        py_setitem(fields, "categories_", _fit_categories(values, mode, entries, context))
+        py_setitem(fields, "categories_", _fit_categories_caps(values, mode, entries, caps, context))
     else:
-        py_setitem(fields, "categories_", _given_categories(fields["categories"], values, mode, entries, handle_text == "error", "OrdinalEncoder", context))
+        py_setitem(fields, "categories_", _given_categories(fields["categories"], values, entries, caps, handle_text == "error", "OrdinalEncoder", context))
     var cats = fields["categories_"]
     _ = _category_freeze(cats, context)  # hazard A: fitted categories are read-only (p3-prep)
+    # The fitted category record, built here once (the transforms reuse it):
+    # the sizes and the NaN slots come from it, not from an admission of
+    # every category array.
+    var record = _category_record(model, cats, context)
+    var sizes = _record_sizes(record)
     var missing = List[Int]()
     var any_missing = False
-    for j in range(len(cats)):  # driver-loop: per-column NaN category slot (fitted per-column category arrays)
-        var size = Int(py=cats[j].size)
-        missing.append(size - 1 if size > 0 and _last_is_nan(cats[j], context) else -1)
+    for j in range(len(sizes)):  # driver-loop: per-column NaN category slot (fitted per-column category counts)
+        missing.append(sizes[j] - 1 if sizes[j] > 0 and _record_last_is_nan(record, j) else -1)
         any_missing = any_missing or missing[j] >= 0
     py_setitem(fields, "_missing", _int_list(missing))
     py_setitem(fields, "_infrequent", PythonObject(None))
     py_setitem(fields, "_grouping", PythonObject(None))
     if grouping:
-        _fit_infrequent(model, values, mode, entries, True, inverse, context)
+        _fit_infrequent(model, values, entries, caps, True, inverse, context)
     var cards = List[Int]()
-    for j in range(len(cats)):  # driver-loop: per-column category cardinalities (fitted per-column category arrays)
-        cards.append(Int(py=cats[j].size) - (1 if missing[j] >= 0 else 0))
+    for j in range(len(sizes)):  # driver-loop: per-column category cardinalities (fitted per-column category counts)
+        cards.append(sizes[j] - (1 if missing[j] >= 0 else 0))
     if grouping:
-        var groups = fields["_grouping"]
-        for j in range(len(cards)):  # driver-loop: grouped per-column cardinalities
-            if groups[j] is not None:
-                cards[j] = _list_max(_index_list(groups[j])) + 1
+        cards = cat_grouped_sizes(cards, _group_lists(fields["_grouping"]))
     if handle_text == "use_encoded_value" and not _is_nan_value(unknown_value):
         for j in range(len(cards)):  # driver-loop: validates unknown_value against cardinalities
             if _cmp("le", PythonObject(0), unknown_value) and _cmp("lt", unknown_value, PythonObject(cards[j])):
@@ -1506,88 +1448,88 @@ def _ordinal_fit(model: PythonObject, values: PythonObject, capture: Bool, conte
 def _ordinal_transform(model: PythonObject, values: PythonObject, inverse: PythonObject, context: PythonObject) raises -> PythonObject:
     """OrdinalEncoder `_transform_encoded`: lookup (or the C08 fit's
     inverse), the grouping remap, where_neg and where_code."""
+    # UNPACK: the parameters and fitted fields, read once into the typed
+    # request; X (or the fit's inverse) and the category block as owners.
     var fields = py_fields(model)
     var n = Int(py=values[3])
     var d = Int(py=values[4])
     var entries = scaler_entries(model, fields["numeric_mode_"], context)
-    var p = EncProg()
-    var codes = 0
-    var neg = 0
-    if inverse is None:
-        var staged = _codes(p, values, fields["categories_"], context, False, model)
-        codes = staged[0]
-        neg = staged[1]
-    else:
-        codes = p.put_array2(inverse)
-        neg = p.alloc(d)
-        _stage(p.prog.program, OP_COUNT_NEG, d, codes, n, d, neg)
-    var out = codes
-    if fields["_grouping"] is not None:
-        var table = _grouping_table(p, fields["_grouping"], False, context)
-        out = _remap(p, codes, n, d, table, NONE)
+    var caps = enc_caps(model, entries)
     var handle = fields["handle_unknown"]
     var handle_text = String(handle) if _is_str(handle) else String("")
-    if handle_text == "use_encoded_value":
-        var val = _scalar(p, _float(fields["unknown_value"]), context)
-        var src = out
-        out = p.alloc(n * d)
-        _stage(p.prog.program, OP_WHERE_NEG, n * d, src, n * d, val, out)
+    var use_unknown = handle_text == "use_encoded_value"
+    var unknown_value = _float(fields["unknown_value"]) if use_unknown else 0.0
     var missing = _index_list(fields["_missing"])
     var any_missing = False
     for j in range(len(missing)):  # driver-loop: checks for a NaN category slot (per-column NaN category slots)
         any_missing = any_missing or missing[j] >= 0
-    if any_missing:
-        var src = out
-        out = p.alloc(n * d)
-        var mo = p.put_floats(_to_floats(missing), context)
-        var eo = _scalar(p, _float(fields["encoded_missing_value"]), context)
-        _stage(p.prog.program, OP_WHERE_CODE, n * d, codes, n, d, mo, eo, src, out)
-    var ran = p.run(entries, context, model)
+    var encoded_missing = _float(fields["encoded_missing_value"]) if any_missing else 0.0
+    var grouping = fields["_grouping"]
+    var grouped = grouping is not None
+    var groups = List[List[Int]]()
+    if grouped:
+        groups = _group_lists(grouping)
+    var p = EncProg()
+    var from_inverse = inverse is not None
+    var x = NONE
+    var held = NONE
+    var block = CatBlock(NONE, 0, 0, NONE, 0)
+    if from_inverse:
+        held = p.own(inverse, Int(py=inverse.size))
+    else:
+        var record = _category_record(model, fields["categories_"], context)
+        x = p.own_x(values)
+        block = _cat_block(p, record, True)
+    var request = OrdinalApply(n, d, x, block.copy(), from_inverse, held, grouped, groups^, use_unknown, unknown_value,
+                               any_missing, missing^, encoded_missing)
+    # RUN: the typed stages (bindings/prep_encode_ordinal_run.mojo), then the typed run.
+    var plan = ordinal_transform_stage(p.prog, request)
+    var ran = p.run_caps(entries, context, caps)
+    # PACK
     if handle_text == "error":
-        var bad = _unknown_columns(ran, neg, d)
+        var bad = _unknown_columns(ran, plan.unknown, d)
         if len(bad) > 0:
             raise Error("mojolearn: OrdinalEncoder found unknown categories in column(s) " + _list_text(bad) + " during transform")
-    return _take2(ran, out, n, d, context)
+    return _take2(ran, plan.encoded, n, d, context)
 
 
 def _ordinal_inverse(model: PythonObject, values: PythonObject, context: PythonObject) raises -> PythonObject:
     """OrdinalEncoder.inverse_transform: ord_inverse (`_inverse_codes`), the
     inverse grouping remap, cat_gather and the bad-row compaction."""
+    # UNPACK: the parameters and fitted fields, read once into the typed
+    # request; X and the category block as owners.
     var fields = py_fields(model)
     var n = Int(py=values[3])
     var d = Int(py=values[4])
     _check_width(model, d)
     var entries = scaler_entries(model, fields["numeric_mode_"], context)
-    var cats = fields["categories_"]
+    var caps = enc_caps(model, entries)
     var handle = fields["handle_unknown"]
     var encoded = _is_str(handle) and String(handle) == "use_encoded_value"
+    var record = _category_record(model, fields["categories_"], context)
+    var sizes = _record_sizes(record)
+    var grouping = fields["_grouping"]
+    var grouped = grouping is not None
+    var groups = List[List[Int]]()
+    if grouped:
+        groups = _group_lists(grouping)
+        sizes = cat_grouped_sizes(sizes, groups)
+    var missing = _index_list(fields["_missing"])
+    var encoded_missing = _float(fields["encoded_missing_value"])
+    var unknown_value = _float(fields["unknown_value"]) if encoded else 0.0
     var p = EncProg()
-    var ncat = _record_sizes(_category_record(model, cats, context))
-    var grouped = fields["_grouping"] is not None
-    var back = (0, 0, 0)
-    if grouped:
-        var groups = fields["_grouping"]
-        for j in range(len(ncat)):  # driver-loop: per-column grouped category counts
-            if groups[j] is not None:
-                ncat[j] = _list_max(_index_list(groups[j])) + 1
-        back = _grouping_table(p, groups, True, context)
-    # `_inverse_codes`
-    var xo = p.put_x(values)
-    var mo = p.put_floats(_to_floats(_index_list(fields["_missing"])), context)
-    var eo = _scalar(p, _float(fields["encoded_missing_value"]), context)
-    var uo = _scalar(p, _float(fields["unknown_value"]) if encoded else Float64(0.0), context)
-    var no = p.put_floats(_to_floats(ncat), context)
-    var codes = p.alloc(n * d)
-    _stage(p.prog.program, OP_ORD_INVERSE, n * d, xo, n, d, mo, eo, 1 if encoded else 0, uo, no, codes)
-    if grouped:
-        codes = _remap(p, codes, n, d, back, NONE)
-    var out = _gather_categories(p, codes, n, d, cats, context, model)
-    var staged = enc_bad_rows_stages(p.prog, codes, n, d, -2, NONE)
-    var ran = p.run(entries, context, model)
-    var bad = _bad_rows(ran, staged, 10)
+    var x = p.own_x(values)
+    var block = _cat_block(p, record, False)
+    var request = OrdinalInverse(n, d, x, block.copy(), grouped, groups^, sizes^, missing^, encoded_missing, encoded,
+                                 unknown_value)
+    # RUN: the typed stages, then the typed run.
+    var plan = ordinal_inverse_stage(p.prog, request)
+    var ran = p.run_caps(entries, context, caps)
+    # PACK: the refusal's first rows, or the category values.
+    var bad = _bad_rows(ran, (plan.bad_rows, plan.bad_count), 10)
     if len(bad) > 0:
         raise Error("mojolearn: rows " + _list_text(bad) + " hold codes that name no category")
-    return _take2(ran, out, n, d, context)
+    return _take2(ran, plan.values, n, d, context)
 
 
 # ---------------------------------------------------------------- OneHotEncoder
@@ -1719,21 +1661,22 @@ def _onehot_fit(model: PythonObject, values: PythonObject, capture: Bool, contex
     var d = Int(py=values[4])
     var mode = _default_mode(context)
     var entries = scaler_entries(model, mode, context)
+    var caps = enc_caps(model, entries)
     var auto = _is_str(fields["categories"]) and String(fields["categories"]) == "auto"
     var inverse = PythonObject(None)
     if capture and auto:
-        var got = _fit_categories_with_codes(values, entries, context)
+        var got = _fit_categories_with_codes(values, entries, caps, context)
         py_setitem(fields, "categories_", got[0])
         inverse = got[1]
     elif auto:
-        py_setitem(fields, "categories_", _fit_categories(values, mode, entries, context))
+        py_setitem(fields, "categories_", _fit_categories_caps(values, mode, entries, caps, context))
     else:
-        py_setitem(fields, "categories_", _given_categories(fields["categories"], values, mode, entries, handle_text == "error", "OneHotEncoder", context))
+        py_setitem(fields, "categories_", _given_categories(fields["categories"], values, entries, caps, handle_text == "error", "OneHotEncoder", context))
     _ = _category_freeze(fields["categories_"], context)  # hazard A: fitted categories are read-only (p3-prep)
     py_setitem(fields, "_infrequent", PythonObject(None))
     py_setitem(fields, "_grouping", PythonObject(None))
     if grouping:
-        _fit_infrequent(model, values, mode, entries, False, inverse, context)
+        _fit_infrequent(model, values, entries, caps, False, inverse, context)
     _set_drop_idx(model, context)
     py_setitem(fields, "numeric_mode_", mode)
     py_setitem(fields, "n_features_in_", d)
@@ -2469,19 +2412,20 @@ def _target_run(model: PythonObject, values: PythonObject, info: TargetInfo, fol
         raise Error("mojolearn: X and y have different numbers of rows")
     var mode = _default_mode(context)
     var entries = scaler_entries(model, mode, context)
+    var caps = enc_caps(model, entries)
     var auto = _is_str(fields["categories"]) and String(fields["categories"]) == "auto"
     # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
     var inverse = Optional[PythonObject]()
     var cats = PythonObject(None)
     if _c08_route(mode, entries, 1) and auto:
         # C08 reuses only unsupervised category IDs
-        var got = _fit_categories_with_codes(values, entries, context)
+        var got = _fit_categories_with_codes(values, entries, caps, context)
         cats = got[0]
         inverse = py_present(got[1])
     elif auto:
-        cats = _fit_categories(values, mode, entries, context)
+        cats = _fit_categories_caps(values, mode, entries, caps, context)
     else:
-        cats = _given_categories(fields["categories"], values, mode, entries, False, "TargetEncoder", context)
+        cats = _given_categories(fields["categories"], values, entries, caps, False, "TargetEncoder", context)
     var sizes = _sizes(cats)
     var cmax = 0
     for j in range(len(sizes)):  # driver-loop: largest category count (per-column category arrays)
