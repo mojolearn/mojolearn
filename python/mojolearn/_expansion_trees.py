@@ -608,9 +608,9 @@ class BaggingClassifier(_BaggingBase):
         ``bootstrap=True`` (``ValueError`` otherwise).
     warm_start : bool, default=False
         Only False is accepted; True raises ``NotImplementedError``.
-    n_jobs : None, default=None
-        Only None is accepted; members are fitted one after another on the
-        device.
+    n_jobs : int or None, default=None
+        The most members fitted at the same time. None and -1 use every
+        core; the results do not depend on it.
     random_state : int or None, default=None
         Seed for the row and feature draws and the members' seeds. None means
         seed 0, so repeated fits are the same (unlike scikit-learn). A
@@ -733,9 +733,9 @@ class BaggingRegressor(_BaggingBase):
         ``bootstrap=True`` (``ValueError`` otherwise).
     warm_start : bool, default=False
         Only False is accepted; True raises ``NotImplementedError``.
-    n_jobs : None, default=None
-        Only None is accepted; members are fitted one after another on the
-        device.
+    n_jobs : int or None, default=None
+        The most members fitted at the same time. None and -1 use every
+        core; the results do not depend on it.
     random_state : int or None, default=None
         Seed for the row and feature draws and the members' seeds. None means
         seed 0, so repeated fits are the same (unlike scikit-learn). A
@@ -1591,7 +1591,7 @@ class _TreesWrapperBase(_TreesEnsembleBase):
 # :200 -- fit on the label-encoded y, 'hard' = weighted bincount argmax,
 # 'soft' = weighted np.average of predict_proba --, VotingRegressor :500 --
 # weighted np.average of predict). Members are cloned, never refitted in
-# place; n_jobs and verbose are refused by name.
+# place; verbose is refused by name; n_jobs bounds the member fits.
 class VotingClassifier(_MetaClassifierScore, _FitTransformMixin, _TreesWrapperBase):
     """Combine classifiers by a weighted majority vote or averaged probabilities.
 
@@ -1616,8 +1616,9 @@ class VotingClassifier(_MetaClassifierScore, _FitTransformMixin, _TreesWrapperBa
     weights : sequence of float, default None
         One weight per active estimator; None weighs them equally. A length
         that does not match the active estimators raises ``ValueError``.
-    n_jobs : None
-        Only None is accepted; any other value raises ``NotImplementedError``.
+    n_jobs : int or None, default None
+        The most members fitted at the same time. None and -1 use every
+        core; the results do not depend on it.
     flatten_transform : bool, default True
         Kept for scikit-learn compatibility; ``transform`` always returns a 2-D
         array.
@@ -1720,8 +1721,7 @@ class VotingRegressor(_MetaRegressorScore, _FitTransformMixin, _TreesWrapperBase
 
     Follows scikit-learn's ``VotingRegressor``. ``fit`` clones every estimator
     and fits the clones; the estimators you pass are never fitted in place.
-    ``predict`` is the weighted average of the members' predictions. The
-    members fit one after another.
+    ``predict`` is the weighted average of the members' predictions.
 
     Parameters
     ----------
@@ -1734,8 +1734,9 @@ class VotingRegressor(_MetaRegressorScore, _FitTransformMixin, _TreesWrapperBase
         One weight per active estimator; None weighs them equally. A length
         that does not match the active estimators raises ``ValueError`` in
         ``predict``.
-    n_jobs : None
-        Only None is accepted; any other value raises ``NotImplementedError``.
+    n_jobs : int or None, default None
+        The most members fitted at the same time. None and -1 use every
+        core; the results do not depend on it.
     verbose : bool, default False
         Only False is accepted; True raises ``NotImplementedError``.
 
@@ -1874,8 +1875,9 @@ class StackingClassifier(_MetaClassifierScore, _StackingBase):
         of ``predict_proba``, ``decision_function``, ``predict`` the member has.
         For a binary problem ``predict_proba`` contributes only its second
         column.
-    n_jobs : None
-        Only None is accepted; any other value raises ``NotImplementedError``.
+    n_jobs : int or None, default None
+        The most members fitted at the same time. None and -1 use every
+        core; the results do not depend on it.
     passthrough : bool, default False
         Also give the final estimator the original features.
     verbose : int, default 0
@@ -1984,8 +1986,9 @@ class StackingRegressor(_MetaRegressorScore, _StackingBase):
         means 5. A splitter from ``mojolearn.model_selection`` or a list of
         (train, test) index pairs is used as given, but its test sets must cover every row exactly
         once, else ``ValueError``.
-    n_jobs : None
-        Only None is accepted; any other value raises ``NotImplementedError``.
+    n_jobs : int or None, default None
+        The most members fitted at the same time. None and -1 use every
+        core; the results do not depend on it.
     passthrough : bool, default False
         Also give the final estimator the original features.
     verbose : int, default 0
@@ -2066,15 +2069,16 @@ class MultiOutputRegressor(_MetaRegressorScore, _TreesWrapperBase):
 
     Follows scikit-learn's ``MultiOutputRegressor``: ``fit`` clones
     ``estimator`` once per column of ``Y`` and fits each clone on that column;
-    ``predict`` stacks their predictions. The columns fit one after another.
+    ``predict`` stacks their predictions.
 
     Parameters
     ----------
     estimator : estimator
         A mojolearn regressor; it is cloned, never fitted in place.
         Must be a mojolearn estimator; any other estimator raises ``NotImplementedError``.
-    n_jobs : None
-        Only None is accepted; any other value raises ``NotImplementedError``.
+    n_jobs : int or None, default None
+        The most members fitted at the same time. None and -1 use every
+        core; the results do not depend on it.
 
     Attributes
     ----------
@@ -2138,15 +2142,15 @@ class MultiOutputClassifier(_TreesWrapperBase):
     ``estimator`` once per column of ``Y``, encodes that column's labels and
     fits the clone on them; ``predict`` stacks the decoded predictions and
     ``predict_proba`` returns a list with one probability array per output.
-    The columns fit one after another.
 
     Parameters
     ----------
     estimator : estimator
         A mojolearn classifier; it is cloned, never fitted in place.
         Must be a mojolearn estimator; any other estimator raises ``NotImplementedError``.
-    n_jobs : None
-        Only None is accepted; any other value raises ``NotImplementedError``.
+    n_jobs : int or None, default None
+        The most members fitted at the same time. None and -1 use every
+        core; the results do not depend on it.
 
     Attributes
     ----------
@@ -2265,8 +2269,9 @@ class OneVsRestClassifier(_MetaClassifierScore, _TreesWrapperBase):
     estimator : estimator
         A mojolearn binary classifier; it is cloned, never fitted in place.
         Must be a mojolearn estimator; any other estimator raises ``NotImplementedError``.
-    n_jobs : None
-        Only None is accepted; any other value raises ``NotImplementedError``.
+    n_jobs : int or None, default None
+        The most members fitted at the same time. None and -1 use every
+        core; the results do not depend on it.
     verbose : int, default 0
         Only 0 is accepted; any other value raises ``NotImplementedError``.
 
@@ -2365,7 +2370,7 @@ class CalibratedClassifierCV(_MetaClassifierScore, _TreesWrapperBase):
     column for a binary problem), and fits one calibrator per class
     (one-vs-rest): Platt's sigmoid or isotonic regression (clipped outside the
     fitted range). Multiclass probabilities are normalized per row; a row of
-    zeros becomes uniform. The folds fit one after another.
+    zeros becomes uniform.
 
     Differs from scikit-learn: Platt's sigmoid minimizes scikit-learn's
     objective with Newton steps and a backtracking line search instead of

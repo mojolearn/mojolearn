@@ -10,7 +10,7 @@ sklearn/tree/_classes.py::DecisionTreeRegressor sample_weight	not yet	sklearn	th
 sklearn/ensemble/_bagging.py::oob_score	IMPLEMENTED	sklearn	2026-09-27: oob_score_, oob_decision_function_ / oob_prediction_ (lane trees-oob-cv-link); a row no member left out is uniform 1 / k (DEVIATION 5605) where sklearn divides 0 / 0
 sklearn/ensemble/_bagging.py::warm_start	not yet	sklearn	no incremental fit
 sklearn/ensemble/_bagging.py::sample_weight as bootstrap counts	deliberate	sklearn	rows are gathered by index for every member (the regressor tree takes no weights); one spelling for every base estimator
-sklearn/ensemble/_*.py::n_jobs / verbose	deliberate	sklearn	members fit one after another on the device
+sklearn/ensemble/_*.py::verbose	deliberate	sklearn	nothing logs per member (n_jobs is accepted: it bounds the member fits)
 sklearn/ensemble/_weight_boosting.py::algorithm='SAMME.R'	deliberate	sklearn	removed from the reference in 1.6
 LightGBM/src/boosting/dart.hpp::multiclass (num_tree_per_iteration > 1)	IMPLEMENTED	LightGBM	2026-09-27: MulticlassSoftmax, one tree per class per iteration, drops by iteration (lane trees-dart-options)
 LightGBM/src/treelearner/serial_tree_learner.cpp::leaf-wise growth on the g/h gain	not yet	LightGBM	DART's trees are the RF builder's, fitted to -g by squared error; leaf values are LightGBM's Newton step
