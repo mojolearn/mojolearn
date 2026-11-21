@@ -52,6 +52,10 @@ def logistic_mode(connection: Int) raises -> Int:
     return LOGISTIC_CONNECTIONS.get_or_create_ptr()[].records[connection].mode
 
 
+def logistic_host(connection: Int) raises -> Bool:
+    return LOGISTIC_CONNECTIONS.get_or_create_ptr()[].records[connection].host
+
+
 def logistic_multiclass(connection: Int) raises -> Bool:
     return LOGISTIC_CONNECTIONS.get_or_create_ptr()[].records[connection].multiclass
 

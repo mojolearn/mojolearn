@@ -396,6 +396,32 @@ class TransformerBlock(NumericModeMixin, _native_constructor=True):
 
     _BINDING = "_mojolearn_transformer"
 
+    #: The block takes `device=`; its check runs the same block on the other
+    #: device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
+
+    def vendor_used(self):
+        """The backend this block runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'`` or ``'hip'``, or ``'cpu'`` for a block that
+            runs on the CPU, read from the compiled binary the block uses.
+        """
+        return _native_neural_bridge.RUNTIME.neural_block_vendor_used(self, _native_neural_bridge.CONTEXT)
+
+    def numeric_mode_used(self):
+        """The numeric mode this block runs in.
+
+        Returns
+        -------
+        str
+            ``'identical'`` or ``'fast'`` (Apple only), read from the compiled
+            binary the block uses.
+        """
+        return _native_neural_bridge.RUNTIME.neural_block_numeric_mode_used(self, _native_neural_bridge.CONTEXT)
+
     # Final slot from class creation; native public operations own field admission.
     __getattribute__ = object.__getattribute__
 
@@ -410,10 +436,11 @@ class TransformerBlock(NumericModeMixin, _native_constructor=True):
                  rope_dim=None, max_positions=8192, qkv_bias=False,
                  o_bias=False, norm="rmsnorm", norm_eps=1e-6,
                  norm_bias=False, mlp="swiglu", mlp_bias=False,
-                 qk_norm=False, attn_softcap=None, numeric_profile=None, numeric_mode=None):
+                 qk_norm=False, attn_softcap=None, numeric_profile=None, numeric_mode=None,
+                 device=None):
         return _native_neural_bridge.RUNTIME.neural_block_init(
             self, weights, "transformer",
-            (None, numeric_mode, numeric_profile, n_heads, n_kv_heads, head_dim,
+            (device, numeric_mode, numeric_profile, n_heads, n_kv_heads, head_dim,
              window, rope_theta, rope_scaling, rope_dim, max_positions,
              qkv_bias, o_bias, norm, norm_eps, norm_bias, mlp, mlp_bias,
              qk_norm, attn_softcap), _native_neural_bridge.CONTEXT)

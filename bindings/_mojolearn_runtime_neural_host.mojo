@@ -72,6 +72,8 @@ def build__mojolearn_runtime_neural_host() -> PythonObject:
         module.def_py_c_function(neural_block_c[2], "neural_block_forward")
         module.def_py_c_function(neural_block_c[3], "neural_block_backward")
         module.def_py_c_function(neural_block_c[7], "neural_block_inference_backward")
+        module.def_py_c_function(neural_block_c[8], "neural_block_vendor_used")
+        module.def_py_c_function(neural_block_c[9], "neural_block_numeric_mode_used")
         module.def_py_c_function(causal_model_c[0], "causal_model_init")
         module.def_py_c_function(causal_model_c[1], "causal_model_load")
         module.def_py_c_function(causal_model_c[2], "causal_model_read_weights")
