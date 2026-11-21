@@ -349,10 +349,6 @@ def cholesky_solve_binding(
 # ===========================================================================
 
 
-def lowbit_profile_version_binding() raises -> PythonObject:
-    return PythonObject(LOWBIT_PROFILE_VERSION)
-
-
 def gemm_bf16_binding(
     c_addr: PythonObject,
     a_addr: PythonObject,
@@ -609,10 +605,6 @@ def svdvals_binding(addrs: PythonObject, params: PythonObject) raises -> PythonO
 # ===========================================================================
 
 
-def int15_profile_version_binding() raises -> PythonObject:
-    return PythonObject(INT15_PROFILE_VERSION)
-
-
 def gemm_int15_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     """`addrs`: 0 c, 1 a hi, 2 a lo, 3 a exponents, 4 b hi, 5 b lo,
     6 b exponents. `params`: 0 m, 1 n, 2 k. OP_NT only."""
@@ -714,12 +706,10 @@ def build__mojolearn_linalg_host() -> PythonObject:
         module.def_function[cholesky_profile_jitter_binding]("cholesky_profile_jitter")
         module.def_function[cholesky_factor_binding]("cholesky_factor")
         module.def_function[cholesky_solve_binding]("cholesky_solve")
-        module.def_function[lowbit_profile_version_binding]("lowbit_profile_version")
         module.def_function[gemm_bf16_binding]("gemm_bf16")
         module.def_function[gemm_int8_binding]("gemm_int8")
         module.def_function[quantize_int8_binding]("quantize_int8")
         module.def_function[dequantize_int8_binding]("dequantize_int8")
-        module.def_function[int15_profile_version_binding]("int15_profile_version")
         module.def_function[gemm_int15_binding]("gemm_int15")
         module.def_function[quantize_int15_binding]("quantize_int15")
         module.def_function[dequantize_int15_binding]("dequantize_int15")

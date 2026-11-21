@@ -2086,11 +2086,11 @@ FAMILIES = (
             "cholesky_factor", "cholesky_solve",
             # lane/identical-lowbit-inference (2026-09-17): the bf16f32.v1 and
             # int8i32.v1 profiles, gemm/IDENTICAL_LOWBIT_CONTRACT.md.
-            "lowbit_profile_version", "gemm_bf16", "gemm_int8", "quantize_int8",
+            "gemm_bf16", "gemm_int8", "quantize_int8",
             "dequantize_int8", "to_bf16", "from_bf16",
             # lane/lowbit-int15 (2026-09-29): the int15i64.v1 profile,
             # gemm/IDENTICAL_LOWBIT_CONTRACT.md section 6.
-            "int15_profile_version", "gemm_int15", "quantize_int15", "dequantize_int15",
+            "gemm_int15", "quantize_int15", "dequantize_int15",
             # lane/linalg-public (2026-09-19)
             "qr_r", "eigh", "svdvals",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
