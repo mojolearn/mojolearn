@@ -392,7 +392,10 @@ def qn_regressor_member(operation: Int, address: Int) raises -> Int:
     if operation == MEMBER_OP_OUTPUTS:
         if call[].state != 0:
             _ = _lookup(call[].state, False)
+        if call[].flags != MEMBER_OP_PREDICT:
+            member_unsupported(_ESTIMATOR, call[].flags)
         call[].out_cols = 1
+        call[].out_dtype = MEMBER_F32
         call[].classes = 0
         return 0
     var slot = _SlotP(unsafe_from_address=_lookup(call[].state, False))

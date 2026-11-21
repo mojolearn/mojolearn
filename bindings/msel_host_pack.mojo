@@ -19,11 +19,9 @@ from core.msel_helpers_host import (
 
 # `msel_put` and `msel_take_rows` deleted (arena unit E, 2026-11-21): no
 # caller; the resident owner calls the helper table as typed RUN.
-def msel_free_binding(id: PythonObject) raises -> PythonObject:
-    MSEL_HOST_STORE.get_or_create_ptr()[].free(Int(py=id))
-    return PythonObject(0)
-
-
+# `msel_free` deleted (lane fx-leftovers item 9, 2026-11-21): it existed only
+# as the resident tests' fault injection; the close / release failure order
+# is checked natively (checks/native_tests/arena_state_suite.mojo).
 def msel_live_binding() raises -> PythonObject:
     return PythonObject(MSEL_HOST_STORE.get_or_create_ptr()[].live)
 

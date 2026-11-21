@@ -28,8 +28,11 @@ the fold's row numbers): the member gathers on the device, as the
 estimator's own door does for a model-selection fold. Such a fit takes no
 weights. A host-home row or column index, a device view on a host image, a
 weighted device fit: refused in words (the caller hands gathered host words).
-X is tested finite by the kernel over its own upload; a NaN or an infinity is
-refused in admit_x's wording.
+X is tested finite by the kernel over its own upload (fit and every query,
+host and device images: `test_finite` is always set); a NaN or an infinity is
+refused in admit_x's wording. Given sample weights are scanned here (one
+parallel host scan) and refused in the estimator's words, so the kind has
+MEMBER_CAN_TEST_ROWS: a caller makes no finite scan of X for it.
 
 Outputs: predict writes the cluster ids as int32 (MEMBER_I32, rows x 1);
 transform writes float32 distances (rows x n_clusters) in the model's metric.
@@ -63,7 +66,7 @@ from core.member_abi import (
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_PREDICT,
     MEMBER_OP_TRANSFORM, MEMBER_OP_OUTPUTS, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT,
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_TRANSFORM, MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT,
-    MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_DEVICE_VIEWS, MEMBER_CAN_ROW_INDEX,
+    MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_DEVICE_VIEWS, MEMBER_CAN_ROW_INDEX, MEMBER_CAN_TEST_ROWS,
     MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
 )
@@ -71,6 +74,7 @@ from core.member_families import MEMBER_FAMILY_KMEANS
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
+from core.host_finite_scan import host_all_finite_f32
 
 comptime _CHUNK = 256
 comptime _INDEX_SPAN = 16777216
@@ -267,6 +271,10 @@ def _fit(slot: _Slot, call: _Call) raises:
             raise Error("TypeError: a KMeans member reads sample_weight as a dense host float32 view")
         if call[].weights.rows != rows or call[].weights.cols != 1:
             raise Error("ValueError: sample_weight and X have different numbers of rows")
+        if not host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=call[].weights.data),
+                rows):
+            # The estimator's own words (bindings/admitted_family_door.mojo FAMILY_NONFINITE_WEIGHTS).
+            raise Error("Input sample_weight contains NaN or infinity.")
         weights = call[].weights.data
         weight_count = rows
     var distances = 0
@@ -404,7 +412,7 @@ def _import(slot: _Slot, call: _Call) raises:
 
 def _capabilities(call: _Call) -> Int:
     var mask = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_TRANSFORM | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
-        | MEMBER_CAN_SAMPLE_WEIGHT)
+        | MEMBER_CAN_SAMPLE_WEIGHT | MEMBER_CAN_TEST_ROWS)
     if (call[].route.flags & KMEANS_CAP_FOLD) != 0:
         mask |= MEMBER_CAN_DEVICE_VIEWS | MEMBER_CAN_ROW_INDEX
     return mask
@@ -443,6 +451,11 @@ def _kmeans_member(operation: Int, address: Int) raises -> Int:
             clusters = Int(MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call[].params)[0])
         call[].out_cols = clusters if call[].flags == MEMBER_OP_TRANSFORM else 1
         call[].classes = 0
+        # predict: int32 cluster ids; transform: float32 distances.
+        if call[].flags == MEMBER_OP_PREDICT:
+            call[].out_dtype = MEMBER_I32
+        elif call[].flags == MEMBER_OP_TRANSFORM:
+            call[].out_dtype = MEMBER_F32
         return 0
     var slot = _Slot(unsafe_from_address=_lookup(call[].state, False))
     if operation == MEMBER_OP_FIT:

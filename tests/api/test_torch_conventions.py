@@ -231,6 +231,22 @@ def test_causal_lm_state_dict_is_named_parameters(tmp_path, family):
     assert sorted(sd) == sorted(dict(model.named_parameters()))
 
 
+def test_causal_lm_state_dict_is_copies_and_keeps_the_model_unexposed(tmp_path):
+    config, tensors = family_fixture("llama", False)
+    _write_checkpoint(str(tmp_path), config, tensors)
+    model = CausalLM.load(tmp_path, device="cpu", numeric_profile="fp32_v1")
+    before = _causal_logits(model)
+    sd = model.state_dict()
+    # Editing a state-dict array never reaches the model.
+    for value in sd.values():
+        np.asarray(value)[...] = 0
+    assert _causal_logits(model) == before
+    # A read leaves the exposure mark unset (the kept resident session stays).
+    assert not getattr(model, "__dict__", {}).get("_parameters_exposed", False)
+    # The next state dict still holds the model's weights, not the zeros.
+    assert any(np.asarray(v).any() for v in model.state_dict().values())
+
+
 @pytest.mark.parametrize("family", FAMILIES)
 def test_causal_lm_load_state_dict_round_trips_and_moves_the_weights(tmp_path, family):
     config, tensors = family_fixture(family, False)
@@ -368,6 +384,19 @@ def test_sage_state_dict_uses_pyg_names_and_round_trips():
     other = mojolearn.SAGEConv(4, 3, project=True, random_state=5, device="cpu").load_state_dict(sd)
     assert np.asarray(other.forward(x, edge_index)).tobytes() == np.asarray(conv.forward(x, edge_index)).tobytes()
     assert list(mojolearn.SAGEConv(4, 3, root_weight=False, bias=False, device="cpu").state_dict()) == ["lin_l.weight"]
+
+
+@pytest.mark.parametrize("make", [lambda: mojolearn.GCNConv(4, 3, device="cpu"),
+                                  lambda: mojolearn.SAGEConv(4, 3, project=True, device="cpu")])
+def test_graph_parameters_are_torch_iterators(make):
+    conv = make()
+    sd = conv.state_dict()
+    named = list(conv.named_parameters())
+    assert [name for name, _ in named] == list(sd)
+    assert all(np.asarray(a).tobytes() == np.asarray(sd[n]).tobytes() for n, a in named)
+    arrays = list(conv.parameters())
+    assert len(arrays) == len(sd)
+    assert iter(conv.parameters()) is not None and not isinstance(conv.parameters(), (list, dict))
 
 
 def test_graph_load_state_dict_is_strict_and_all_or_nothing():

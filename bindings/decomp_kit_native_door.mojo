@@ -10,6 +10,7 @@
 # Python, is bindings/decomp_kit_run.mojo (DKit).
 from core.mode_answer import MODE_FAMILY_DECOMP_KIT, answer_mode_word
 from std.python import Python, PythonObject
+from providers.python.device_route_boundary_door import device_cpu_connect_late
 from bindings.decomp_device_route_door import (
     decomp_route_table_hit, decomp_route_keep_table, decomp_route_resolve_device, decomp_route_on_cpu_image,
     decomp_device_admit, decomp_route_clear, decomp_route_mode,
@@ -171,9 +172,14 @@ def decomp_entries_routed(model: PythonObject, fields: PythonObject, mode_value:
     var device = decomp_route_resolve_device(fields, tier, context)
     var entries = PythonObject(None)
     if decomp_route_on_cpu_image(device, context):
-        # The CPU image loaded beside the device set at import
-        # (python/mojolearn/_native_decomp_kit_bridge.py `decomp_cpu_bindings`).
+        # The CPU image beside the device set
+        # (python/mojolearn/_native_decomp_kit_bridge.py `_connect_cpu_image`).
+        # Connected at the first device="cpu" admission (lane fx-leftovers
+        # item 4: no longer at import); an estimator restored without
+        # construction connects it here, once, at its first route.
         var cpu = py_get(context, "decomp_cpu_bindings")
+        if cpu is None and device_cpu_connect_late(context):
+            cpu = py_get(context, "decomp_cpu_bindings")
         if cpu is None:
             raise Error("ImportError: device='cpu' is not connected in this installation")
         entries = cpu[name]

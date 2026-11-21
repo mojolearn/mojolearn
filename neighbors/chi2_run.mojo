@@ -119,12 +119,9 @@ def schi2_fit_run(driver: XnDriver, request: Schi2FitRequest) raises:
     _ = driver.run("schi2_fit", a, p, f)
 
 
-def schi2_weights_run(driver: XnDriver, z: Int, weights: Int, count: Int) raises:
-    """The weights of a pending z (FAST + Apple, XN_FAST_SCHI2_LAZYW)."""
-    var a: Array[Int, 2] = [z, weights]
-    var p: Array[Int, 1] = [count]
-    var f: Array[Float64, 0] = []
-    _ = driver.run("schi2_weights", a, p, f)
+# `schi2_weights_run` (the weights of a pending z) deleted with the door's
+# pending-z paths (lane fx-leftovers item 10, 2026-11-21: no producer of a
+# pending z since 5a2b5cecb9); `Schi2Request.pending` is always False there.
 
 
 @fieldwise_init

@@ -4,8 +4,11 @@
 UNPACK / PACK of core/spectral_member.mojo, in the family's place in
 `bindings/member_boundary_door.mojo`. Admit answers True only for the form
 with a predict: affinity='nearest_neighbors' and prediction_data=True,
-after the class's own checks (`_sc_validate`, which writes the instance's
-`_n_clusters` / `_n_neighbors` as the class's fit does). Every other
+after the class's own checks (`_sc_validate`, run on a SCRATCH copy of the
+instance dictionary: the derived `_n_clusters`, `_n_neighbors`, `_n_init`,
+`_eigen_tol`, `_gamma`, `_seed` it writes land in the copy, so the template
+estimator a caller holds is never written; PACK runs it again on the clone,
+which receives them as the class's fit writes them). Every other
 instance (an affinity matrix, 'rbf', 'precomputed_nearest_neighbors', no
 prediction data) answers False and keeps the class's own doors.
 SpectralEmbedding is not a member (fit / fit_transform only, no
@@ -74,9 +77,11 @@ def spectral_member_admit(model: PythonObject, fields: PythonObject, kind: Int, 
     var affinity = py_get(fields, PythonObject("affinity"), PythonObject(None))
     if not family_is_str(affinity) or String(py=affinity) != "nearest_neighbors":
         return False
-    # The class's fit checks, in its order (`_sc_fit`).
-    var config = _sc_validate(fields, context)
+    # The class's fit checks, in its order (`_sc_fit`), on a scratch copy:
+    # `_sc_validate` writes its derived fields into the dictionary it reads.
     var builtins = native_loaded_module("builtins")
+    var scratch = py_call(builtins.dict, fields)
+    var config = _sc_validate(scratch, context)
     var prediction_data = py_get(fields, PythonObject("prediction_data"), PythonObject(None))
     if py_type(prediction_data) is not builtins.bool:
         raise Error("TypeError: mojolearn SpectralClustering: prediction_data must be a bool, "
@@ -142,8 +147,11 @@ def spectral_member_pack(model: PythonObject, fields: PythonObject, context: Pyt
     classical_connect_numpy(context)
     var model_fields = py_fields(model)
     lifecycle_admit_fields(model_fields)
+    # The derived fields the class's fit writes (`_n_clusters`, `_n_neighbors`,
+    # `_n_init`, `_eigen_tol`, `_gamma`, `_seed`), into the clone, by the
+    # class's own checks (the admit ran them on a scratch copy).
+    _ = _sc_validate(model_fields, context)
     var clusters = Int(plan.params[1])
-    var neighbors = Int(plan.params[4])
     var assignment = Int(plan.params[7])
     var call = MemberCall(plan.route, state)
     _export(plan, call, MEMBER_BLOCK_SCALARS)
@@ -173,8 +181,6 @@ def spectral_member_pack(model: PythonObject, fields: PythonObject, context: Pyt
         "affinity_matrix_"]
     for i in range(len(dropped)):  # small-loop(prediction data and affinity: six cached attribute names)
         _ = py_call(model_fields.pop, PythonObject(dropped[i]), PythonObject(None))
-    py_setitem(model_fields, "_n_clusters", PythonObject(clusters))
-    py_setitem(model_fields, "_n_neighbors", PythonObject(neighbors))
     py_setitem(model_fields, "input_copied_", PythonObject(False))
     py_setitem(model_fields, "_fit_X", fit_x)
     py_setitem(model_fields, "n_features_in_", PythonObject(d))

@@ -436,6 +436,70 @@ struct ArenaResidentState(Movable):
         return drained^
 
 
+trait ArenaStoreFree:
+    """The fold store's free as the resident close and release see it
+    (lane fx-leftovers item 9, 2026-11-21): `free` releases one store id
+    (it may release the GIL; an id < 0, an empty buffer, frees nothing),
+    `failed` keeps a failure (the first one is the one raised). The door's
+    form calls the model-selection store; the native check's form fails
+    chosen ids and records the order (checks/native_tests/arena_state_suite.mojo)."""
+
+    def free(mut self, store_id: Int) raises:
+        ...
+
+    def failed(mut self, error: Error) raises:
+        ...
+
+
+def arena_resident_close_entries[F: ArenaStoreFree](
+    mut state: ArenaResidentState, mut store: F, mut drained: List[ArenaResidentEntry],
+) raises -> List[Bool]:
+    """The resident close's failure order, one definition: every entry is
+    unlinked first (`drain`: no other thread finds an entry being freed),
+    every slot's free is attempted in entry order, each failure goes to
+    `store.failed` (the first is retained), and a failed entry is published
+    again for a retry. Returns which drained entries are kept; the caller
+    releases the pins of the others after this returns, after every free
+    and publication, so an owner's finalizer never sees a half-closed
+    resident."""
+    drained = state.drain()
+    var kept = List[Bool](length=len(drained), fill=False)
+    for i in range(len(drained)):  # driver-loop: attempt every independent release (one small device free each)
+        try:
+            store.free(drained[i].store_id)
+        except error:
+            store.failed(error)
+            # A failed entry stays owned for a retry.
+            try:
+                _ = state.publish(drained[i])
+                kept[i] = True
+            except publish_error:
+                store.failed(publish_error)
+    return kept^
+
+
+def arena_resident_release_entry[F: ArenaStoreFree](
+    mut state: ArenaResidentState, mut store: F, owner: Int, mut removed: ArenaResidentEntry,
+) raises -> Bool:
+    """The resident release of one owner, the same order: unlink, free,
+    on a failure keep it and publish the entry again for a retry. Returns
+    True when the entry is kept (its pins stay); `removed.store_id` is -2
+    when the owner was never put (nothing to do)."""
+    removed = state.remove(owner)
+    if removed.store_id == -2:
+        return False
+    try:
+        store.free(removed.store_id)
+    except error:
+        store.failed(error)
+        try:
+            _ = state.publish(removed)
+            return True
+        except publish_error:
+            store.failed(publish_error)
+    return False
+
+
 comptime ARENA_ROWS = StateRegistry[DeviceRowsState, "MojolearnArenaRowsStatesV1"]
 comptime ARENA_CACHES = StateRegistry[DeviceCacheState, "MojolearnArenaCacheStatesV1"]
 comptime ARENA_SCOPES = StateRegistry[ArenaScopeState, "MojolearnArenaScopeStatesV2"]

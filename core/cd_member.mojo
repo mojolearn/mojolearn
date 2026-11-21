@@ -342,6 +342,10 @@ def _cd_member(operation: Int, address: Int) raises -> Int:
     if operation == MEMBER_OP_CAPABILITIES:
         if call[].state != 0:
             _ = _lookup(call[].state, False)
+            if not call[].route.has_fifth:
+                # score is the metrics image's R^2 entry: refused at RUN
+                # without it on the route, so not advertised.
+                return _capabilities() & ~MEMBER_CAN_SCORE
         return _capabilities()
     if operation == MEMBER_OP_NEW:
         if not call[].params or call[].param_count < 1:
@@ -364,7 +368,10 @@ def _cd_member(operation: Int, address: Int) raises -> Int:
         # One target column for every kind, with or without a state.
         if call[].state != 0:
             _ = _lookup(call[].state, False)
+        if call[].flags != MEMBER_OP_PREDICT:
+            member_unsupported("Lasso / ElasticNet", call[].flags)
         call[].out_cols = 1
+        call[].out_dtype = MEMBER_F32
         call[].classes = 0
         return 0
     var slot = _SlotP(unsafe_from_address=_lookup(call[].state, False))

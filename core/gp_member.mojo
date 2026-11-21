@@ -88,7 +88,7 @@ from core.member_abi import (
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_PREDICT,
     MEMBER_OP_PREDICT_STD, MEMBER_OP_PREDICT_PROBA, MEMBER_OP_OUTPUTS, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT,
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_STD, MEMBER_CAN_PREDICT_PROBA, MEMBER_CAN_CLASSIFIER,
-    MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT,
+    MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT, MEMBER_CAN_TEST_ROWS,
     MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
 )
@@ -1075,15 +1075,46 @@ def _gpc(slot: _Slot) -> Bool:
     return Int(slot[].params[0]) == _KIND_GPC
 
 
-comptime _CAN_COMMON = MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
+# MEMBER_CAN_TEST_ROWS (both kinds): FIT tests X and the regressor's y
+# (`_fit`, `_gpc_fit`: `_finite`); every query tests X, through the resident
+# entry's status word or here (`_query`, `_gpc_query`). Codes are integers.
+comptime _CAN_COMMON = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
+    | MEMBER_CAN_TEST_ROWS)
 comptime _CAN_GPR = _CAN_COMMON | MEMBER_CAN_PREDICT_STD
 comptime _CAN_GPC = _CAN_COMMON | MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_CLASSIFIER
+
+
+def _gp_outputs(call: _Call, classifier: Bool, classes: Int) raises:
+    """OUTPUTS of either kind, with or without a state: the regressor's
+    predict / predict_std one float32 column; the classifier's predict one
+    int32 code column, predict_proba float64 x classes. Another operation is
+    refused, never sized."""
+    var op = call[].flags
+    if classifier:
+        if op == MEMBER_OP_PREDICT:
+            call[].out_cols = 1
+            call[].out_dtype = MEMBER_I32
+        elif op == MEMBER_OP_PREDICT_PROBA:
+            call[].out_cols = classes
+            call[].out_dtype = MEMBER_F64
+        else:
+            member_unsupported(_GPC, op)
+        call[].classes = classes
+        return
+    if op != MEMBER_OP_PREDICT and op != MEMBER_OP_PREDICT_STD:
+        member_unsupported(_GPR, op)
+    call[].out_cols = 1
+    call[].out_dtype = MEMBER_F32
+    call[].classes = 0
 
 
 def _gp_member(operation: Int, address: Int) raises -> Int:
     var call = _Call(unsafe_from_address=address)
     if operation == MEMBER_OP_CAPABILITIES:
         if call[].state == 0:
+            # Kind-exact from the NEW words when given (item 17).
+            if call[].params and call[].param_count >= 1:
+                return _CAN_GPC if Int(_F64P(unsafe_from_address=call[].params)[0]) == _KIND_GPC else _CAN_GPR
             return _CAN_GPR | _CAN_GPC
         # A live state answers for its own kind.
         var held = _Slot(unsafe_from_address=_lookup(call[].state, False))
@@ -1099,8 +1130,7 @@ def _gp_member(operation: Int, address: Int) raises -> Int:
         if call[].params and call[].param_count >= 1:
             kind = Int(_F64P(unsafe_from_address=call[].params)[0])
         var classifier = kind == _KIND_GPC
-        call[].out_cols = call[].classes if classifier and call[].flags == MEMBER_OP_PREDICT_PROBA else 1
-        call[].classes = call[].classes if classifier else 0
+        _gp_outputs(call, classifier, call[].classes)
         return 0
     if operation == MEMBER_OP_FREE:
         _ = _lookup(call[].state, True)
@@ -1109,8 +1139,7 @@ def _gp_member(operation: Int, address: Int) raises -> Int:
     var slot = _Slot(unsafe_from_address=_lookup(call[].state, False))
     var classifier = _gpc(slot)
     if operation == MEMBER_OP_OUTPUTS:
-        call[].out_cols = slot[].classes if classifier and call[].flags == MEMBER_OP_PREDICT_PROBA else 1
-        call[].classes = slot[].classes if classifier else 0
+        _gp_outputs(call, classifier, slot[].classes if slot[].classes > 0 else call[].classes)
         return 0
     if classifier:
         if operation == MEMBER_OP_FIT:

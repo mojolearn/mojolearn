@@ -519,9 +519,12 @@ def _forecast_member(operation: Int, address: Int) raises -> Int:
         _new(call)
         return 0
     if operation == MEMBER_OP_OUTPUTS and call[].state == 0:
-        # No state: one forecast column per series of the fit to come.
+        # No state: one float32 forecast column per series of the fit to come.
+        if call[].flags != MEMBER_OP_PREDICT:
+            member_unsupported("ARIMA", call[].flags)
         call[].classes = 0
         call[].out_cols = max(1, call[].y.cols)
+        call[].out_dtype = MEMBER_F32
         return 0
     if operation == MEMBER_OP_FREE:
         var dying = _SlotP(unsafe_from_address=_lookup(call[].state, False))
@@ -535,8 +538,11 @@ def _forecast_member(operation: Int, address: Int) raises -> Int:
     elif operation == MEMBER_OP_PREDICT:
         _predict(slot, call)
     elif operation == MEMBER_OP_OUTPUTS:
+        if call[].flags != MEMBER_OP_PREDICT:
+            member_unsupported("ARIMA", call[].flags)
         call[].classes = 0
         call[].out_cols = Int(slot[].scalars[1]) if slot[].fitted else max(1, call[].y.cols)
+        call[].out_dtype = MEMBER_F32
     elif operation == MEMBER_OP_EXPORT:
         _export(slot, call)
     elif operation == MEMBER_OP_IMPORT:
