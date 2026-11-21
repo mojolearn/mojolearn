@@ -171,6 +171,11 @@ class NearestNeighbors(_NumericModeMixin):
     #: Whether `load` hands the file's `weights` to the constructor.
     _HAS_WEIGHTS = False
 
+    #: This class takes `device=`: its doors take every compiled module from the
+    #: estimator's device route, and the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
+
     def __init__(
         self,
         n_neighbors=5,
@@ -179,6 +184,7 @@ class NearestNeighbors(_NumericModeMixin):
         metric="euclidean",
         algorithm="brute",
         p=2,
+        device=None,
     ):
         self.n_neighbors = n_neighbors
         self.query_tile = query_tile
@@ -186,6 +192,7 @@ class NearestNeighbors(_NumericModeMixin):
         self.algorithm = algorithm
         self.p = p
         self._index = None
+        self.device = device
         # `used_query_tile_` is set by the first query, not here: a public
         # attribute ending in an underscore marks a fitted estimator.
 
@@ -441,9 +448,10 @@ class KNeighborsClassifier(NearestNeighbors):
         metric="euclidean",
         algorithm="brute",
         p=2,
+        device=None,
     ):
         super().__init__(
-            n_neighbors, query_tile, metric=metric, algorithm=algorithm, p=p
+            n_neighbors, query_tile, metric=metric, algorithm=algorithm, p=p, device=device
         )
         self.weights = weights
         self._y_cols = None
@@ -659,9 +667,10 @@ class KNeighborsRegressor(NearestNeighbors):
         metric="euclidean",
         algorithm="brute",
         p=2,
+        device=None,
     ):
         super().__init__(
-            n_neighbors, query_tile, metric=metric, algorithm=algorithm, p=p
+            n_neighbors, query_tile, metric=metric, algorithm=algorithm, p=p, device=device
         )
         self.weights = weights
         self._y_cols = None
@@ -843,6 +852,11 @@ class RadiusNeighbors(_NumericModeMixin):
 
     _BINDING = "_mojolearn"
 
+    #: This class takes `device=`: its doors take every compiled module from the
+    #: estimator's device route, and the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
+
     def __init__(
         self,
         radius=1.0,
@@ -850,6 +864,7 @@ class RadiusNeighbors(_NumericModeMixin):
         metric="euclidean",
         algorithm="auto",
         p=2,
+        device=None,
     ):
         self.radius = radius
         self.metric = metric
@@ -858,6 +873,7 @@ class RadiusNeighbors(_NumericModeMixin):
         self._index = None
         self._metric_value = None
         self._metric_arg = None
+        self.device = device
 
     def _check_refusals(self):
         """Every refusal is BY NAME with the reason, raised at fit.

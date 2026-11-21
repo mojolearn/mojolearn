@@ -286,8 +286,13 @@ class LocalOutlierFactor(_XNeighbors):
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _estimator_type = "outlier_detector"
 
+    #: This class takes `device=`: its doors take every compiled module from the
+    #: estimator's device route, and the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
+
     def __init__(self, n_neighbors=20, *, algorithm="auto", leaf_size=30, metric="minkowski", p=2,
-                 metric_params=None, contamination="auto", novelty=False, n_jobs=None):
+                 metric_params=None, contamination="auto", novelty=False, n_jobs=None, device=None):
         self.n_neighbors = n_neighbors
         self.algorithm = algorithm
         self.leaf_size = leaf_size
@@ -297,6 +302,7 @@ class LocalOutlierFactor(_XNeighbors):
         self.contamination = contamination
         self.novelty = novelty
         self.n_jobs = n_jobs
+        self.device = device
 
     @_native_local_method
     def fit(self, X, y=None):
@@ -460,10 +466,16 @@ class NearestCentroid(_XNeighbors):
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _estimator_type = "classifier"
 
-    def __init__(self, metric="euclidean", *, shrink_threshold=None, priors="uniform"):
+    #: This class takes `device=`: its doors take every compiled module from the
+    #: estimator's device route, and the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
+
+    def __init__(self, metric="euclidean", *, shrink_threshold=None, priors="uniform", device=None):
         self.metric = metric
         self.shrink_threshold = shrink_threshold
         self.priors = priors
+        self.device = device
 
     @_native_local_method
     def fit(self, X, y):

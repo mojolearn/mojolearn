@@ -697,6 +697,9 @@ def _ivf_clone(model: PythonObject, kind: PythonObject, context: PythonObject) r
     var params = Python.tuple("n_lists", "n_probes", "n_neighbors", "kmeans_n_iters", "metric", "random_state")
     for i in range(len(params)):  # small-loop(six constructor parameters)
         py_setitem(keywords, params[i], py_get(fields, params[i]))
+    # The clone runs on the source's device (None where the source holds no
+    # `device`: a model loaded from an older file): the constructor admits it.
+    py_setitem(keywords, "device", py_get(fields, "device"))
     # The class's own constructor (constructor-time parameter handling).
     var clone = family_call_kw(py_type(model), keywords)
     var target = py_fields(clone)

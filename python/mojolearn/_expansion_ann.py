@@ -228,8 +228,13 @@ class IVFPQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
     _SAVE_ARRAYS = (("centers_", "<f4"), ("list_offsets_", "<i4"), ("list_indices_", "<i4"),
                     ("codebooks_", "<f4"), ("codes_", "<i4"))
 
+    #: This class takes `device=`: its doors take every compiled module from the
+    #: estimator's device route, and the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
+
     def __init__(self, n_lists, n_probes, pq_dim=4, pq_bits=8, n_neighbors=8, kmeans_n_iters=20,
-                 pq_kmeans_n_iters=20, random_state=0):
+                 pq_kmeans_n_iters=20, random_state=0, *, device=None):
         self.n_lists = n_lists
         self.n_probes = n_probes
         self.pq_dim = pq_dim
@@ -238,6 +243,7 @@ class IVFPQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
         self.kmeans_n_iters = kmeans_n_iters
         self.pq_kmeans_n_iters = pq_kmeans_n_iters
         self.random_state = random_state
+        self.device = device
 
     _KIND = 0
 
@@ -544,8 +550,13 @@ class CagraIndex(_AnnResident, _AnnSaved, NumericModeMixin):
     _SAVE_FITTED = ("n_features_in_", "n_rows_", "graph_degree_")
     _SAVE_ARRAYS = (("dataset_", "<f4"), ("graph_", "<i4"))
 
+    #: This class takes `device=`: its doors take every compiled module from the
+    #: estimator's device route, and the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
+
     def __init__(self, graph_degree=32, intermediate_graph_degree=64, n_neighbors=8, itopk_size=64,
-                 search_width=1, max_iterations=0, n_seeds=0, random_state=None):
+                 search_width=1, max_iterations=0, n_seeds=0, random_state=None, *, device=None):
         self.graph_degree = graph_degree
         self.intermediate_graph_degree = intermediate_graph_degree
         self.n_neighbors = n_neighbors
@@ -554,6 +565,7 @@ class CagraIndex(_AnnResident, _AnnSaved, NumericModeMixin):
         self.max_iterations = max_iterations
         self.n_seeds = n_seeds
         self.random_state = random_state
+        self.device = device
 
     _KIND = 3
 
@@ -712,8 +724,13 @@ class IVFSQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
     _SAVE_ARRAYS = (("centers_", "<f4"), ("list_offsets_", "<i4"), ("list_indices_", "<i4"),
                     ("sq_vmin_", "<f4"), ("sq_delta_", "<f4"), ("codes_", "<i4"))
 
+    #: This class takes `device=`: its doors take every compiled module from the
+    #: estimator's device route, and the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
+
     def __init__(self, n_lists, n_probes, n_neighbors=8, kmeans_n_iters=20, random_state=0,
-                 max_train_points_per_cluster=None):
+                 max_train_points_per_cluster=None, *, device=None):
         self.n_lists = n_lists
         self.n_probes = n_probes
         self.n_neighbors = n_neighbors
@@ -723,6 +740,7 @@ class IVFSQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
         # binding's train_rows_per_list (x_ann/ivf_pq_device.mojo ivf_sq_build_device). Not in
         # _SAVE_PARAMS: it shapes only the build, and files saved before it still load.
         self.max_train_points_per_cluster = max_train_points_per_cluster
+        self.device = device
 
     _KIND = 1
 
@@ -861,12 +879,18 @@ class IVFRaBitQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
     _SAVE_ARRAYS = (("centers_", "<f4"), ("list_offsets_", "<i4"), ("list_indices_", "<i4"),
                     ("codes_", "<i4"), ("norms_", "<f4"), ("ip_factors_", "<f4"))
 
-    def __init__(self, n_lists, n_probes, n_neighbors=8, kmeans_n_iters=20, random_state=0):
+    #: This class takes `device=`: its doors take every compiled module from the
+    #: estimator's device route, and the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
+
+    def __init__(self, n_lists, n_probes, n_neighbors=8, kmeans_n_iters=20, random_state=0, *, device=None):
         self.n_lists = n_lists
         self.n_probes = n_probes
         self.n_neighbors = n_neighbors
         self.kmeans_n_iters = kmeans_n_iters
         self.random_state = random_state
+        self.device = device
 
     _KIND = 2
 
