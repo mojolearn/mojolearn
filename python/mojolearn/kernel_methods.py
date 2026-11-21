@@ -541,6 +541,9 @@ class RBFSampler(_KernelMethodBase):
 
     _WHERE = "RBFSampler"
 
+    # Member ABI family 8 (KernelApprox), kind 1: core/kernel_approx_member.mojo.
+    _mojolearn_member = (8, 1)
+
     def __init__(self, gamma=1.0, n_components=100, random_state=0):
         self.gamma = gamma
         self.n_components = n_components
