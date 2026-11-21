@@ -38,6 +38,7 @@ from core.linear_route import (
     linear_device_installed, linear_route_resolve, linear_route_weighted,
 )
 from providers.python.linear_entry_boundary_door import linear_entry_connection
+from providers.python.metrics_route_boundary_door import linear_route_metrics_cpu
 from x_decomp.descriptor_schema import XD_ABI_NAME, XD_OPERATION_COUNT
 
 comptime _LINEAR_ROUTE_SLOT = "linear_route_v1"
@@ -159,6 +160,7 @@ def _linear_route_build(device: Int, ridge: Bool, mode: PythonObject,
     var entries = PythonObject(None)
     var expected_vendor = 0
     var expected_mode = 1
+    var cpu_beside_gpu = False
     if explicit:
         # The explicit Host* classes (mojolearn.host_model): CPU identical by
         # class, whatever `device` their inherited constructor stored. Their
@@ -187,6 +189,7 @@ def _linear_route_build(device: Int, ridge: Bool, mode: PythonObject,
             if cpu is None:
                 raise Error("ImportError: device='cpu' is not connected in this installation")
             entries = py_item(cpu, PythonObject(mode_name))
+            cpu_beside_gpu = True
         else:
             # The process's own table: the GPU table for a GPU request, the
             # CPU table in a CPU-only process (where every request that got
@@ -197,6 +200,10 @@ def _linear_route_build(device: Int, ridge: Bool, mode: PythonObject,
         raise Error("ImportError: " + String(entries))
     var connection = linear_entry_connection(entries)
     owner.route = linear_route_resolve(owner.route.device, connection.key, expected_vendor, expected_mode, explicit)
+    if cpu_beside_gpu:
+        # `score` of this estimator runs its R^2 program on the CPU metrics
+        # table too (it ran on the process's GPU one).
+        linear_route_metrics_cpu(owner.route, entries, b)
     var weighted_images = PythonObject(None)
     var decomp_images = PythonObject(None)
     if ridge:

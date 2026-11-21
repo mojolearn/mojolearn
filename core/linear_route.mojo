@@ -79,8 +79,13 @@ struct LinearRoute(ImplicitlyCopyable, Movable):
     var predict: EntryRef
     var weighted: EntryRef
     var decomp: EntryRef
+    # The R^2 program entry of a CPU route in a GPU installation
+    # (providers/python/metrics_route_boundary_door.mojo). Every other route
+    # scores on the process's metrics table and holds none.
+    var metrics: EntryRef
     var has_weighted: Bool
     var has_decomp: Bool
+    var has_metrics: Bool
 
     def __init__(out self, device: Int):
         self.device = device
@@ -90,8 +95,10 @@ struct LinearRoute(ImplicitlyCopyable, Movable):
         self.predict = entry_ref_unresolved()
         self.weighted = entry_ref_unresolved()
         self.decomp = entry_ref_unresolved()
+        self.metrics = entry_ref_unresolved()
         self.has_weighted = False
         self.has_decomp = False
+        self.has_metrics = False
 
 
 def linear_route_resolve(device: Int, key: LinearEntryKey, expected_vendor: Int,
