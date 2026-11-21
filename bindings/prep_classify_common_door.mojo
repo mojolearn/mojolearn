@@ -347,6 +347,13 @@ def given_priors(values: PythonObject, K: Int, who: String, check_sum: Bool, con
     var vals = float_list(values, context)
     if len(vals) != K:
         raise Error("mojolearn: " + who + ": number of priors must match number of classes")
+    check_priors(vals, who, check_sum)
+    return vals^
+
+
+def check_priors(vals: List[Float64], who: String, check_sum: Bool) raises:
+    """The value checks of `_given_priors` (its count check needs the class
+    count, which a member's admission does not have yet)."""
     for i in range(len(vals)):  # driver-loop: over the user prior list (class-count sized)
         if vals[i] < 0:
             raise Error("mojolearn: " + who + ": priors must be non-negative")
@@ -354,7 +361,15 @@ def given_priors(values: PythonObject, K: Int, who: String, check_sum: Bool, con
         var total = prior_sum(vals)
         if abs(total - 1.0) > 1e-8 * max(1.0, abs(total)) and abs(total - 1.0) > 1e-5:
             raise Error("mojolearn: " + who + ": the sum of the priors should be 1")
-    return vals^
+
+
+def gnb_refuse(fields: PythonObject, context: PythonObject) raises:
+    """GaussianNB's `var_smoothing` check, in the reference's words."""
+    var nk = prep_keys()
+    var vs = py_item(fields, nk[].k_var_smoothing)
+    var b = cls_builtins()
+    if py_type(vs) is b.bool or not is_real(vs, context) or not (cls_float(vs) >= 0):
+        raise Error("The 'var_smoothing' parameter of GaussianNB must be a float in the range [0.0, inf). Got " + cls_repr(vs) + " instead.")
 
 
 def prior_sum(vals: List[Float64]) -> Float64:

@@ -54,7 +54,7 @@ from bindings.prep_classify_common_door import (
     idn_int, classical_shared, blocked, check_fitted, check_width, cls_x2d, is_sparse, csr_input, csr_dense_x,
     float_list, given_priors, prior_sum, is_real, cls_float, col_stats, cs, class_stats, cls_stats, qda_cov, gram,
     nb_onepass, nb_counts, encode_y, partial_codes, stage_partial_codes, partial_refuse,
-    IDN_NB_CSR, XB, idn_fam, IDN_CLASS_ONEPASS,
+    IDN_NB_CSR, XB, idn_fam, IDN_CLASS_ONEPASS, gnb_refuse,
 )
 from bindings.prep_keys_unpack import (
     prep_keys,
@@ -492,14 +492,6 @@ def _decision_function(model: PythonObject, fields: PythonObject, kind: String, 
 # ---------------------------------------------------------------- GaussianNB
 
 
-def _gnb_refuse(fields: PythonObject, context: PythonObject) raises:
-    var nk = prep_keys()
-    var vs = py_item(fields, nk[].k_var_smoothing)
-    var b = cls_builtins()
-    if py_type(vs) is b.bool or not is_real(vs, context) or not (cls_float(vs) >= 0):
-        raise Error("The 'var_smoothing' parameter of GaussianNB must be a float in the range [0.0, inf). Got " + cls_repr(vs) + " instead.")
-
-
 def _gnb_stats(mut pr: ClsProg, mode: PythonObject, wo: Int, xo: Int, n: Int, d: Int, yo: Int, K: Int, cnt: Int,
                theta: Int, var_: Int, eps: Int, vs: Int, context: PythonObject) raises:
     """`_gnb_stats`: epsilon and the class counts, means and variances."""
@@ -527,7 +519,7 @@ def _gnb_fit(model: PythonObject, fields: PythonObject, args: PythonObject, cont
     parameters, the image's mode words. RUN: the typed fit program
     (`cls_gnb_fit_program`) through `ClsProg.run`. PACK: `_gnb_publish`."""
     var nk = prep_keys()
-    _gnb_refuse(fields, context)
+    gnb_refuse(fields, context)
     var arr = cls_x2d(args[0], context)
     var n = arr.n
     var d = arr.d
@@ -556,7 +548,7 @@ def _gnb_fit(model: PythonObject, fields: PythonObject, args: PythonObject, cont
 
 def _gnb_partial_fit(model: PythonObject, fields: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     var nk = prep_keys()
-    _gnb_refuse(fields, context)
+    gnb_refuse(fields, context)
     var arr = cls_x2d(args[0], context)
     var n = arr.n
     var d = arr.d

@@ -105,6 +105,39 @@ def _plan_held(model: PythonObject, entries: PythonObject, scratch: Int) raises 
                       (flags & SCALER_CAP_RUN_RANGES) != 0, dev_store, dev_store and (flags & SCALER_CAP_DEV_TAKE) != 0)
 
 
+def cls_selection(model: PythonObject, mode: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The selected x_prep image (its entries) for `mode`: the selection the
+    estimator's device route holds for this run context (one record read and
+    pointer compares), else the shared runner's own selection, kept in the
+    route. `device="cpu"` with the fast mode is refused in the shared words
+    before the CPU table is read. `model` None: a program no estimator owns."""
+    var routed = model is not None
+    var entries = PythonObject(None)
+    if routed:
+        entries = scaler_selection_held(model, mode, context)
+    if entries is None:
+        if routed:
+            scaler_route_refuse_fast(model, mode, context)
+        entries = _family_entries(mode, "x_prep", context["prog_context"])
+        if routed:
+            scaler_selection_keep(model, mode, entries, context)
+    return entries
+
+
+def cls_image_plan(model: PythonObject, entries: PythonObject) raises -> ClsRunPlan:
+    """Every capability of the selected image, whatever one program uses
+    (UNPACK of a member's admission, once per member): the estimator's held
+    bits, else each entry read by name."""
+    var held = scaler_route_held(model, entries)
+    if held.held and (held.flags & SCALER_CAP_TRANSPORT) != 0:
+        return _plan_held(model, entries, 0)
+    var has_out = py_get(entries, "x_prep_run_out") is not None
+    var dev_store = py_get(entries, "x_prep_dev_put") is not None and py_get(entries, "x_prep_dev_free") is not None
+    return ClsRunPlan(xprep_key(entries), has_out, py_get(entries, "x_prep_run_scratch") is not None,
+                      py_get(entries, "x_prep_run_ranges") is not None, dev_store,
+                      dev_store and py_get(entries, "x_prep_dev_take_rows") is not None)
+
+
 def _thread_resident(context: PythonObject, plan: ClsRunPlan) raises -> ClsResident:
     """The calling thread's `resident()` scope for one run (the thread-local
     read, once per run), as the typed run's value."""
@@ -230,16 +263,8 @@ struct ClsProg(Movable):
         # run context (one record read and pointer compares), or the shared
         # runner's own selection, kept in the route. `device="cpu"` with the
         # fast mode is refused in the shared words before the CPU table is read.
-        var entries = PythonObject(None)
         var routed = self.model is not None
-        if routed:
-            entries = scaler_selection_held(self.model, mode, context)
-        if entries is None:
-            if routed:
-                scaler_route_refuse_fast(self.model, mode, context)
-            entries = _family_entries(mode, "x_prep", pc)
-            if routed:
-                scaler_selection_keep(self.model, mode, entries, context)
+        var entries = cls_selection(self.model, mode, context)
         var plan = _plan_by_name(entries, self.program.scratch_size) if not routed else _plan_held(self.model, entries, self.program.scratch_size)
         var route = cls_run_route(plan, self.program)
         var H = self.program.size

@@ -1193,6 +1193,9 @@ class GaussianNB(_Classifier):
     #: This class takes `device=`: the check builds its other side as the same
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
+    #: the meta-estimators run this class through its native member entry
+    #: (core/naive_bayes_member.mojo).
+    _mojolearn_member = (9, 0)
 
     def __init__(self, *, priors=None, var_smoothing=1e-9, numeric_mode=None, device=None):
         self.priors = priors

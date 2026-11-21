@@ -20,6 +20,7 @@ entry presence words, the resident cache slots, DeviceRows fields) in UNPACK
 and releases the GIL around this call. No bit moves.
 """
 from std.memory import unsafe_memcpy, ArcPointer
+from std.ffi import external_call, c_size_t
 from core.entry_table import EntryRef
 from core.prep_entry_table import xp_transport_call
 from x_prep.transport_abi import XP_RUN, XP_RUN_SCRATCH, XP_RUN_OUT, XP_RUN_RANGES, XP_DEV_PUT, XP_DEV_FREE, XP_DEV_TAKE_ROWS
@@ -28,6 +29,7 @@ from core.entry_table import entry_ref_unresolved
 from core.arena_state import ARENA_CACHES, ARENA_HANDLE_NONE, DeviceCacheState, arena_handle
 from bindings.arena_cache_run import (
     ArenaCachePut, arena_cache_upload, arena_cache_drop, arena_scope_cache, arena_scope_cache_found,
+    arena_scope_floor,
 )
 
 comptime CLS_F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -440,6 +442,132 @@ def cls_prog_run(plan: ClsRunPlan, program: ClsProgram, records: List[ClsRunInpu
         except drop_error:
             done.keep_cleanup("resident in-out drop: " + String(drop_error))
     return done^
+
+
+# ---------------------------------------------------------------- a typed caller's run
+# A caller without Python owners (a member): its buffers are borrowed
+# addresses in record order, the arena is native, the resident scope is the
+# handle word its own caller read at UNPACK.
+comptime _ClsBytes = MutPointer[UInt8, MutUntrackedOrigin]
+
+
+struct ClsArena(Movable):
+    """max(words, 1) zeroed float32 words for one run. libc `calloc`: a
+    large block is fresh zero pages the system maps on first touch, as the
+    door's anonymous mapping, so arena words a run never touches on the host
+    (an input that went up from its own buffer, device scratch) cost nothing."""
+    var address: Int
+
+    def __init__(out self, words: Int) raises:
+        var raw = external_call["calloc", Optional[_ClsBytes]](c_size_t(max(words, 1)), c_size_t(4))
+        if not raw:
+            raise Error("MemoryError: x_prep: the program arena could not be allocated")
+        self.address = Int(raw.value())
+
+    def __del__(deinit self):
+        if self.address:
+            external_call["free", NoneType](_ClsBytes(unsafe_from_address=self.address))
+
+    def f32(self, offset: Int) -> CLS_F32P:
+        return CLS_F32P(unsafe_from_address=self.address + 4 * offset)
+
+
+@fieldwise_init
+struct ClsBorrowed(ImplicitlyCopyable, Movable):
+    """One caller buffer of a typed caller, in record order. `words`: the
+    words of the whole buffer at `address` (its identity in a resident
+    cache). `pin`: the pin token of the object that owns those words, 0 when
+    nothing pins them (the buffer is then never kept resident: a later
+    buffer could reuse its address). `index` nonzero: the record is the
+    rows `index[0 .. n_index)` (int64) of the buffer, `row_words` words
+    each, gathered on the device."""
+    var address: Int
+    var words: Int
+    var pin: Int
+    var index: Int
+    var n_index: Int
+    var row_words: Int
+
+
+struct ClsBorrowedDone(Movable):
+    """The arena after a typed caller's run, and the pin token the scope's
+    cache took (0: none; the caller's reference now belongs to the cache)."""
+    var arena: ClsArena
+    var kept_pin: Int
+
+    def __init__(out self, var arena: ClsArena, kept_pin: Int):
+        self.arena = arena^
+        self.kept_pin = kept_pin
+
+
+def _cls_borrowed_slot(mut resident: ClsResident, source: ClsBorrowed, mut kept: Int) raises -> Int:
+    # The resident copy of a pinned buffer: found, or put once and published.
+    var found = resident.find(source.address, source.words)
+    if found >= 0:
+        return found
+    var put = resident.put(source.address, source.words, source.pin)
+    if put.pinned:
+        kept = source.pin
+    return put.store_id
+
+
+def cls_borrowed_run(plan: ClsRunPlan, program: ClsProgram, sources: List[ClsBorrowed], scope: Int) raises -> ClsBorrowedDone:
+    """UNPACK-free run of one program for a typed caller: the route words,
+    the arena, the door's input choices (`cls_input_choice`; a pinned buffer
+    in an active scope stays resident there, a gathered record takes its
+    rows on the device out of that resident base) and `cls_prog_run`.
+    `scope`: the caller's scope handle word, negative outside a scope.
+    Raises the run's failure in the door's words."""
+    var route = cls_run_route(plan, program)
+    var resident = ClsResident()
+    if scope >= 0 and plan.dev_store and route.ranges:
+        resident = ClsResident(scope, arena_scope_floor(scope), plan.key)
+    var arena = ClsArena(cls_host_words(program, route))
+    var records = List[ClsRunInput](capacity=len(program.inputs))
+    var kept = 0
+    var next_source = 0
+    for k in range(len(program.inputs)):  # driver-loop: over the program's input records
+        var record = program.inputs[k]
+        if record.kind != CLS_IN_BUFFER:
+            if record.words > 0:
+                records.append(ClsRunInput(record.offset, record.words, program.const_address(record), -1,
+                                           False, False, -1, 0, 0, 0, 0, 0))
+            continue
+        if next_source >= len(sources):
+            raise Error("RuntimeError: x_prep program: a caller buffer record has no source")
+        var source = sources[next_source]
+        next_source += 1
+        if record.words == 0:
+            continue
+        if source.index != 0:
+            if not (route.ranges and plan.take_rows):
+                raise Error("RuntimeError: x_prep: this image gathers no rows on the device")
+            var base_slot = -1
+            if resident.active() and source.pin != 0:
+                base_slot = _cls_borrowed_slot(resident, source, kept)
+            records.append(ClsRunInput(record.offset, record.words, 0, -1, False, True, base_slot, source.address,
+                                       source.words, source.index, source.n_index, source.row_words))
+            continue
+        var choice = cls_input_choice(record, route, plan, resident)
+        var slot = -1
+        var direct = choice == CLS_INPUT_DIRECT
+        if choice == CLS_INPUT_RESIDENT:
+            if source.pin != 0:
+                slot = _cls_borrowed_slot(resident, source, kept)
+            else:
+                # nothing pins the words: this run's own slot, as outside a scope
+                direct = plan.dev_store and record.words >= CLS_DIRECT_MIN_WORDS
+        records.append(ClsRunInput(record.offset, record.words, 0 if slot >= 0 else source.address, slot, direct,
+                                   False, -1, 0, 0, 0, 0, 0))
+    var done = cls_prog_run(plan, program, records, arena.address, route, resident, List[Int](), List[Int]())
+    if done.failed:
+        if done.cleanup.byte_length() > 0:
+            raise Error("RuntimeError: x_prep operation failed: " + done.error + "; cleanup also failed: " + done.cleanup)
+        raise Error(done.error)
+    if done.cleanup.byte_length() > 0:
+        raise Error("RuntimeError: x_prep slot cleanup failed: " + done.cleanup)
+    _ = records^
+    return ClsBorrowedDone(arena^, kept)
 
 
 # ---------------------------------------------------------------- typed stage builders
