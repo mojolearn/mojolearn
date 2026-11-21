@@ -49,6 +49,7 @@ from core.solver_entry_table import SolverEntryKey, solver_ops_entry, SV_OPERATI
 from providers.python.linear_entry_boundary_door import linear_entry_connection
 from providers.python.device_route_boundary_door import (
     DeviceRouteOwner, device_route_held, device_route_keep, device_request, device_admit, device_route_clear,
+    device_cpu_connect_late,
 )
 from bindings.x_linear_keys_unpack import x_linear_keys
 
@@ -100,10 +101,23 @@ def _xl_process_vendor(context: PythonObject) raises -> Int:
     return code
 
 
+def _xl_cpu_table(context: PythonObject, key: String) raises -> PythonObject:
+    """One CPU key of a GPU installation (`xl_cpu_bindings`, `cd_solver_cpu`,
+    `xl_cpu_scope`), or None when it is not connected. The CPU images load
+    at the first device="cpu" admission (fx-host-import:
+    python/mojolearn/_native_x_linear_bridge.py, no longer at import); an
+    estimator restored without construction connects them here, once (the
+    three keys are written by one load). Route resolution only."""
+    var table = py_get(context, PythonObject(key))
+    if table is None and device_cpu_connect_late(context):
+        table = py_get(context, PythonObject(key))
+    return table
+
+
 def _xl_cpu_scope(context: PythonObject, b: PythonObject) raises -> PythonObject:
     """The CPU scope of a GPU installation, or the refusal recorded at
-    import."""
-    var scope = py_get(context, PythonObject("xl_cpu_scope"))
+    its load."""
+    var scope = _xl_cpu_table(context, String("xl_cpu_scope"))
     if scope is None:
         raise Error("ImportError: device='cpu' is not connected in this installation")
     if py_type(scope) is b.str:
@@ -124,7 +138,7 @@ def _xl_resolve_ops(mut owner: DeviceRouteOwner, requested: Int, mode: PythonObj
     var plan = device_route_plan(requested, _xl_process_vendor(context), mode_code)
     var entries = PythonObject(None)
     if plan.cpu_table:
-        var cpu = py_get(context, PythonObject("xl_cpu_bindings"))
+        var cpu = _xl_cpu_table(context, String("xl_cpu_bindings"))
         if cpu is None:
             raise Error("ImportError: device='cpu' is not connected in this installation")
         entries = py_item(cpu, PythonObject(mode_name))
@@ -175,7 +189,7 @@ def _xl_resolve_cd(mut owner: DeviceRouteOwner, requested: Int, mode: PythonObje
         mode_code = 1
     var plan = device_route_plan(requested, process_vendor, mode_code)
     if plan.cpu_table:
-        var cpu = py_get(context, PythonObject("cd_solver_cpu"))
+        var cpu = _xl_cpu_table(context, String("cd_solver_cpu"))
         if cpu is None:
             raise Error("ImportError: device='cpu' is not connected in this installation")
         key = cpu
@@ -240,9 +254,11 @@ def xl_route(model: PythonObject, fields: PythonObject, context: PythonObject, c
 def xl_route_host(context: PythonObject) raises -> XLinearOps:
     """The route of an explicit host inference class (it predicts a saved
     model on the CPU and resolves no entry): only its scope, which is the CPU
-    scope on a GPU installation. A CPU scope that is not connected leaves the
+    scope on a GPU installation (connected here once when the first CPU
+    admission has not run yet: the key is missing only then; a CPU-only
+    process holds a text). A CPU scope that is not connected leaves the
     door's own context, as before the scope existed."""
-    var scope = py_get(context, PythonObject("xl_cpu_scope"))
+    var scope = _xl_cpu_table(context, String("xl_cpu_scope"))
     if scope is None or py_type(scope) is py_type(PythonObject("")):
         scope = context
     return XLinearOps(entry_ref_unresolved().call, False, True, PythonObject(None), scope)

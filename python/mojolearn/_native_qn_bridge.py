@@ -71,8 +71,22 @@ def connect(losses):
 
 
 def connect_cpu_device(context):
-    """Connect the CPU QN entry of `device="cpu"` once, at import, beside the
-    device image (`context["qn_bindings"]`).
+    """Register the CPU QN entry of `device="cpu"` beside the device image:
+    it loads at the first device="cpu" admission beside a GPU set
+    (fx-host-import, `_native_family_bridge.cpu_load_later`), never at
+    import; an estimator restored without construction connects it at its
+    first CPU route (bindings/qn_boundary_unpack.mojo). Nothing is
+    registered in a CPU-only process."""
+    # glue: import-time registration, once
+    if "qn_bindings" not in context or context["vendor"] == "cpu":
+        return
+    from ._native_family_bridge import cpu_load_later
+    cpu_load_later(context, lambda: _load_cpu_device(context))
+
+
+def _load_cpu_device(context):
+    """Connect the CPU QN entry of `device="cpu"` once, beside the device
+    image (`context["qn_bindings"]`).
 
     The host estimators binary publishes its native QN table when it
     initializes; the compiled owner resolves an estimator's route against the
@@ -83,7 +97,7 @@ def connect_cpu_device(context):
     `device="cpu"` estimator first runs."""
     # glue: load the CPU image once and retain it with its table key
     from . import _backend
-    if "qn_bindings" not in context or context["vendor"] == "cpu":
+    if "qn_cpu_bindings" in context:
         return
     try:
         host = _backend.load_host_module("_mojolearn_estimators_host")

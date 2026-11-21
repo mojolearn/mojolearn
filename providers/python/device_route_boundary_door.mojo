@@ -16,6 +16,21 @@ that is None, the process default mode object (pointer compares against the
 owner's pins), and the connection context. A changed mode resolves again; a
 new `__init__` and `set_params` drop the owner.
 
+A direct `model.device = ...` (lane fx-device-attr, 2026-11-21) is seen
+without reading `device` per operation: the record table already watches the
+estimator's instance dictionary (CPython 3.12+ dictionary watchers,
+bindings/native_loaded_module_door.mojo), and the watcher counts the writes
+of the key `device` in one process word. An owner holds the count it was
+resolved at and the `device` object it was resolved for; a hit compares the
+owner's count with the process word (two words reached from the owner that
+is already loaded: no lookup). Only when some estimator's `device` was
+written since does the next operation of each estimator read its own
+`device` once and compare the object: the same one restamps the owner, a
+new one is a miss, which resolves again and refuses a bad value in the
+shared words. Python 3.10 / 3.11 have no dictionary watcher: there every
+operation keeps the full check (the instance dictionary and one read of
+`device`), as every other user of the watcher does.
+
 One owner type serves both forms of a family door:
   * an entry route (slot `device_route_v1`): the family's resolver fills
     `route` with its resolved thin C entries (Ridge, LinearRegression,
@@ -34,7 +49,8 @@ from std.python.bindings import PythonModuleBuilder, lookup_py_type_object
 from bindings.py_type_registry import py_type_absent, py_type_attach
 from bindings.native_owner_registry_unpack import register_native_owner_type
 from bindings.native_owner_registry_pack import borrowed_native_owner
-from bindings.py_balanced import py_call, py_type, py_get, py_setitem
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, _is_exact_dict
+from bindings.native_loaded_module_door import shared_device_writes
 from bindings.py_model_records import records_get, records_put, records_drop, records_open, RECORDS_PREPARED
 from core.device_route import (
     DeviceRoute, DEVICE_CPU, DEVICE_GPU, DEVICE_INSTALL, device_code, device_refusal, device_installed,
@@ -45,7 +61,13 @@ from core.device_route import (
 comptime DEVICE_ROUTE_SLOT = "device_route_v1"
 # An estimator's binding route (the shared estimator door).
 comptime DEVICE_BINDINGS_SLOT = "device_bindings_v1"
-comptime _DEVICE_ROUTE_FIXED_PINS = 7
+comptime _DEVICE_ROUTE_FIXED_PINS = 8
+# How an owner learns that `device` was assigned directly (`guard`):
+# no instance dictionary (nothing can be assigned: a class-level owner);
+# the process count of `device` writes; the full check at every operation.
+comptime _DEVICE_GUARD_NONE = 0
+comptime _DEVICE_GUARD_COUNT = 1
+comptime _DEVICE_GUARD_READ = 2
 
 
 struct DeviceRouteOwner(Movable, Writable):
@@ -75,6 +97,14 @@ struct DeviceRouteOwner(Movable, Writable):
     var modes: List[PythonObject]
     var defaults: List[PythonObject]
     var modules: List[PythonObject]
+    # The `device` object the route was resolved for (pinned: its address
+    # stays its own), how a direct assignment is seen (`guard`), the address
+    # of the process count of `device` writes and the count this owner was
+    # stamped at. Set where the owner is kept (`_device_route_stamp`).
+    var requested: PythonObject
+    var guard: Int
+    var watch: Int
+    var stamp: Int
 
     def __init__(out self, device: Int):
         self.route = DeviceRoute(device)
@@ -92,6 +122,10 @@ struct DeviceRouteOwner(Movable, Writable):
         self.modes = List[PythonObject]()
         self.defaults = List[PythonObject]()
         self.modules = List[PythonObject]()
+        self.requested = PythonObject(None)
+        self.guard = _DEVICE_GUARD_NONE
+        self.watch = 0
+        self.stamp = 0
 
     def write_to(self, mut writer: Some[Writer]):
         writer.write("DeviceRouteOwner(device=", self.route.device, ", vendor=", self.route.vendor, ")")
@@ -124,6 +158,8 @@ def device_route_owner_pins(value: Int, index: Int) abi("C") -> Int:
             result = Int(native[].scope._obj_ptr)
         elif index == 6:
             result = Int(native[].table._obj_ptr)
+        elif index == 7:
+            result = Int(native[].requested._obj_ptr)
         elif index < _DEVICE_ROUTE_FIXED_PINS + held:
             result = Int(native[].modules[index - _DEVICE_ROUTE_FIXED_PINS]._obj_ptr)
         elif index < _DEVICE_ROUTE_FIXED_PINS + 2 * held:
@@ -255,6 +291,45 @@ def device_cpu_connect_late(context: PythonObject) raises -> Bool:
     return True
 
 
+def _device_route_stamp(model: PythonObject, mut built: DeviceRouteOwner):
+    """Record on an owner that is about to be kept what it was resolved for:
+    the estimator's `device` object, and the process count of `device`
+    writes (the estimator's instance dictionary joins the watch). A route
+    miss only. An owner of something without an instance dictionary (a
+    class) is never rechecked; where no dictionary watcher exists the owner
+    is rechecked at every operation."""
+    try:
+        var fields = py_fields(model)
+        if not _is_exact_dict(fields):
+            # A class (its mappingproxy): no instance field to assign.
+            built.guard = _DEVICE_GUARD_NONE
+            return
+        built.requested = py_get(fields, "device")
+        built.watch = shared_device_writes(fields)
+        if built.watch != 0:
+            built.stamp = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=built.watch)[0]
+            built.guard = _DEVICE_GUARD_COUNT
+        else:
+            built.guard = _DEVICE_GUARD_READ
+    except:
+        built.requested = PythonObject(None)
+        built.guard = _DEVICE_GUARD_NONE
+
+
+def _device_route_reread(model: PythonObject, owner: PythonObject) raises -> Bool:
+    """The full check of a held owner: the estimator's `device` is still the
+    object the route was resolved for. Reached when the process count moved
+    (some estimator's `device` was written since the stamp) and, where no
+    dictionary watcher exists, at every operation. The same object restamps
+    the owner; another one is a miss."""
+    var native = owner.downcast_value_ptr[DeviceRouteOwner]()
+    if py_get(py_fields(model), "device") is not native[].requested:
+        return False
+    if native[].guard == _DEVICE_GUARD_COUNT:
+        native[].stamp = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=native[].watch)[0]
+    return True
+
+
 def device_route_clear(model: PythonObject) raises:
     """Forget the estimator's routes (a new `__init__`, `set_params`): its
     next operation reads the device and the mode again."""
@@ -265,21 +340,37 @@ def device_route_clear(model: PythonObject) raises:
 def device_route_owner(model: PythonObject) raises -> PythonObject:
     """The estimator's entry-route owner, or None: one record read. For a
     family whose hit test is its own (LogisticRegression compares its class
-    and its public context before the fields are admitted)."""
-    return records_get(RECORDS_PREPARED, model, DEVICE_ROUTE_SLOT)
+    and its public context before the fields are admitted). None too when
+    `device` was assigned directly since the route was resolved: the family
+    resolves again."""
+    var owner = records_get(RECORDS_PREPARED, model, DEVICE_ROUTE_SLOT)
+    if owner is not None:
+        var native = owner.downcast_value_ptr[DeviceRouteOwner]()
+        var current = native[].guard == _DEVICE_GUARD_NONE
+        if native[].guard == _DEVICE_GUARD_COUNT:
+            current = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=native[].watch)[0] == native[].stamp
+        if not current and not _device_route_reread(model, owner):
+            return PythonObject(None)
+    return owner
 
 
 def device_route_held(model: PythonObject, mode: PythonObject, default_mode: PythonObject,
     context: PythonObject) raises -> PythonObject:
     """The estimator's resolved route owner for this operation, or None on a
     miss (first operation, a changed numeric mode, another connection
-    context). A hit is one record read and three pointer compares."""
+    context, a `device` assigned directly). A hit is one record read, three
+    pointer compares and the compare of the owner's stamp with the process
+    count of `device` writes (no read of `device`)."""
     var owner = records_get(RECORDS_PREPARED, model, DEVICE_ROUTE_SLOT)
     if owner is not None:
         var native = owner.downcast_value_ptr[DeviceRouteOwner]()
         if (native[].resolved and native[].mode is mode and native[].default_mode is default_mode
                 and native[].context is context):
-            return owner
+            var current = native[].guard == _DEVICE_GUARD_NONE
+            if native[].guard == _DEVICE_GUARD_COUNT:
+                current = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=native[].watch)[0] == native[].stamp
+            if current or _device_route_reread(model, owner):
+                return owner
     return PythonObject(None)
 
 
@@ -287,6 +378,7 @@ def device_route_keep(model: PythonObject, var built: DeviceRouteOwner) raises -
     """Store a freshly resolved owner for the estimator and return it. An
     estimator that takes no weak reference keeps no owner: it resolves at
     every operation (records_put answers False and stores nothing)."""
+    _device_route_stamp(model, built)
     var fresh = PythonObject(alloc=built^)
     _ = records_put(RECORDS_PREPARED, model, DEVICE_ROUTE_SLOT, fresh)
     return fresh
@@ -311,13 +403,22 @@ def device_binding_held(model: PythonObject, name: String, check_mode: Bool, mod
     default_mode: PythonObject, context: PythonObject) raises -> PythonObject:
     """The compiled module the estimator's binding route holds for `name`,
     or None on a miss. A hit is one record read, one pointer compare of the
-    context and, per held binding (one or two per estimator), a name compare
-    and two pointer compares."""
+    context, the compare of the owner's stamp with the process count of
+    `device` writes (no read of `device`) and, per held binding (one or two
+    per estimator), a name compare and two pointer compares."""
     var owner = records_get(RECORDS_PREPARED, model, DEVICE_BINDINGS_SLOT)
     if owner is None:
         return owner
     var native = owner.downcast_value_ptr[DeviceRouteOwner]()
     if native[].context is not context:
+        return PythonObject(None)
+    var current = native[].guard == _DEVICE_GUARD_NONE
+    if native[].guard == _DEVICE_GUARD_COUNT:
+        current = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=native[].watch)[0] == native[].stamp
+    if not current and not _device_route_reread(model, owner):
+        # `device` was assigned directly: the route of the old device goes,
+        # so the miss reads the new value and keeps a new route.
+        records_drop(RECORDS_PREPARED, model, DEVICE_BINDINGS_SLOT)
         return PythonObject(None)
     for i in range(len(native[].names)):  # small-loop(binding names of one estimator: one or two, never data)
         if (native[].modes[i] is mode and native[].defaults[i] is default_mode
@@ -384,6 +485,9 @@ def device_binding_keep(model: PythonObject, device: Int, name: String, check_mo
         # A retained fitted mode and the constructor's mode are two objects:
         # both stay held. Past a small bound (a caller that builds a new mode
         # object per call) the route starts again.
+        # The held owner was checked against `device` by the miss that
+        # brought the call here (`device_binding_held` drops a route whose
+        # device was assigned over).
         if native[].context is context and native[].route.device == device and len(native[].names) < 16:
             native[].names.append(name.copy())
             native[].checked.append(check_mode)
@@ -402,5 +506,6 @@ def device_binding_keep(model: PythonObject, device: Int, name: String, check_mo
     built.modes.append(mode)
     built.defaults.append(default_mode)
     built.modules.append(module)
+    _device_route_stamp(model, built)
     var fresh = PythonObject(alloc=built^)
     _ = records_put(RECORDS_PREPARED, model, DEVICE_BINDINGS_SLOT, fresh)

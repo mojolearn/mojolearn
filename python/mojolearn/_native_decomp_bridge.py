@@ -74,12 +74,12 @@ def connect(classes, neighbors=False, metadata=None):
 def _load_cpu_images(context, neighbors):
     # glue: once, at the first device="cpu" admission beside a GPU set
     from . import _backend
-    from ._native_decomp_device_bridge import connect_cpu_device, X_DECOMP_HOST
+    from ._native_decomp_device_bridge import load_cpu_device, X_DECOMP_HOST
     from ._native_decomp_kit_bridge import _entries as _kit_entries
     if "decomp_cpu_bindings" in context:
         return
-    connect_cpu_device(context, X_DECOMP_HOST, {"nmf_native_api_v1": "nmf_cpu_bindings",
-                                                "kpca_decomp_native_api_v1": "kpca_decomp_cpu_bindings"})
+    load_cpu_device(context, X_DECOMP_HOST, {"nmf_native_api_v1": "nmf_cpu_bindings",
+                                             "kpca_decomp_native_api_v1": "kpca_decomp_cpu_bindings"})
     # The same CPU image in the kit's entries form (its published table key
     # is (identical, cpu)).
     try:
@@ -87,9 +87,9 @@ def _load_cpu_images(context, neighbors):
     except (ImportError, AttributeError, TypeError, ValueError, RuntimeError, OSError) as error:
         cpu = type(error).__name__ + ": " + str(error)
     if neighbors:
-        connect_cpu_device(context, "_mojolearn_x_neighbors_host",
-                           {"x_neighbors_native_api_v1": "kpca_neighbors_cpu_bindings",
-                            "kpca_neighbors_native_api_v1": "kpca_info_cpu_bindings"})
+        load_cpu_device(context, "_mojolearn_x_neighbors_host",
+                        {"x_neighbors_native_api_v1": "kpca_neighbors_cpu_bindings",
+                         "kpca_neighbors_native_api_v1": "kpca_info_cpu_bindings"})
     # Written last: decomp_cpu_bindings present means every table above is.
     context["decomp_cpu_bindings"] = {"identical": cpu}
 

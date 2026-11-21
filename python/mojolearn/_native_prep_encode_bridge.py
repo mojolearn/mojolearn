@@ -81,12 +81,13 @@ def connect(kinds, qselect, scores, owner_kinds=None, owner_classes=None):
     import builtins
     from ._native_prep_device import _FAST_ON_CPU
     context["prep_builtins"] = builtins
+    # The host image loads at the first device="cpu" admission beside a GPU
+    # set (fx-host-import, `_native_family_bridge.cpu_load_later`), never at
+    # import; an estimator restored without construction connects it at its
+    # first CPU route (bindings/prep_owner_route_unpack.mojo `_prep_cpu_scope`).
     if context["vendor"] != "cpu":
-        try:
-            context["prep_cpu_bindings"] = {
-                "identical": image_entries(_backend.load_host_module("_mojolearn_x_prep_host")), "fast": _FAST_ON_CPU}
-        except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
-            context["prep_cpu_bindings"] = type(error).__name__ + ": " + str(error)
+        from ._native_family_bridge import cpu_load_later
+        cpu_load_later(context, lambda: _load_cpu_bindings(context, image_entries, _FAST_ON_CPU))
     # mutual_info's discrete_features indices (bindings/prep_select_native_door.mojo
     # `_discrete_mask`): an exact int matches `int` by CPython's type test and
     # never enters numbers.Integral's Python ABCMeta.__instancecheck__ (census
@@ -103,3 +104,18 @@ def connect(kinds, qselect, scores, owner_kinds=None, owner_classes=None):
         if kind in ('rfe', 'iterative_imputer')
     }
     return call, context
+
+
+def _load_cpu_bindings(context, image_entries, fast_on_cpu):
+    # glue: once, at the first device="cpu" admission beside a GPU set: the
+    # host image's entry table as the identical binding of the CPU route. A
+    # host image that is not built is kept as its refusal text, said when a
+    # `device="cpu"` estimator first runs.
+    from . import _backend
+    if "prep_cpu_bindings" in context:
+        return
+    try:
+        context["prep_cpu_bindings"] = {
+            "identical": image_entries(_backend.load_host_module("_mojolearn_x_prep_host")), "fast": fast_on_cpu}
+    except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
+        context["prep_cpu_bindings"] = type(error).__name__ + ": " + str(error)
