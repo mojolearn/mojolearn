@@ -79,3 +79,82 @@ def cv_reply_order_admit(shaped: Bool, index: Int, expected: Int) raises:
     (`index`). Replies are consumed in fold order, never completion order."""
     if not shaped or index != expected:
         raise Error("ValueError: cross-validation worker fold order differs")
+
+
+# The stages of one run, in the order a complete run passes them.
+comptime CV_STAGE_VALIDATE = 0
+comptime CV_STAGE_VALIDATED = 1
+comptime CV_STAGE_START = 2
+comptime CV_STAGE_IDENTITY = 3
+comptime CV_STAGE_DATA = 4
+comptime CV_STAGE_WAVE = 5
+comptime CV_STAGE_CLOSE = 6
+
+comptime CV_STATUS_VALIDATING = 0
+comptime CV_STATUS_RUNNING = 1
+comptime CV_STATUS_FAILED = 2
+comptime CV_STATUS_COMPLETE = 3
+
+
+def cv_stage_name(stage: Int) -> String:
+    if stage == CV_STAGE_VALIDATE:
+        return "validate"
+    if stage == CV_STAGE_VALIDATED:
+        return "validated"
+    if stage == CV_STAGE_START:
+        return "start"
+    if stage == CV_STAGE_IDENTITY:
+        return "identity"
+    if stage == CV_STAGE_DATA:
+        return "data"
+    if stage == CV_STAGE_WAVE:
+        return "wave"
+    return "close"
+
+
+def cv_status_name(status: Int) -> String:
+    if status == CV_STATUS_VALIDATING:
+        return "VALIDATING"
+    if status == CV_STATUS_RUNNING:
+        return "RUNNING"
+    if status == CV_STATUS_FAILED:
+        return "FAILED"
+    return "COMPLETE"
+
+
+struct CvTrace(Movable):
+    """The record of one whole-fold run, kept as words while the run is in
+    progress: the stages passed, the workers' process ids, the size of each
+    wave, one (fold, device, process id) triple per assigned fold, the status,
+    whether the pool is closed and the failure text. The door publishes it as
+    the `last_run` mapping when validation ends and when the run ends."""
+    var stages: List[Int]
+    var workers: List[Int]
+    var waves: List[Int]
+    var assignments: List[Int]
+    var status: Int
+    var closed: Bool
+    var error: String
+
+    def __init__(out self):
+        self.stages = List[Int]()
+        self.stages.append(CV_STAGE_VALIDATE)
+        self.workers = List[Int]()
+        self.waves = List[Int]()
+        self.assignments = List[Int]()
+        self.status = CV_STATUS_VALIDATING
+        self.closed = True
+        self.error = String()
+
+    def stage(mut self, stage: Int):
+        self.stages.append(stage)
+
+    def assign(mut self, fold: Int, device: Int, pid: Int):
+        self.assignments.append(fold)
+        self.assignments.append(device)
+        self.assignments.append(pid)
+
+    def finish(mut self, status: Int, closed: Bool):
+        self.closed = closed
+        self.status = status
+        self.stages.append(CV_STAGE_CLOSE)

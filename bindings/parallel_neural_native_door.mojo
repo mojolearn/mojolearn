@@ -24,7 +24,8 @@ from bindings.parallel_mlp_native_door import (
 )
 from bindings.native_process_pool_door import (
     process_pool_create, process_pool_map, process_pool_close,
-    process_worker_connect, process_worker_next, process_send,
+    process_worker_connect, process_worker_next, process_worker_reply, process_worker_refuse,
+    process_pool_devices,
 )
 from bindings.native_transport_door import transport_close
 from bindings.py_balanced import py_call, py_get, py_setattr, py_setitem, py_type
@@ -153,7 +154,8 @@ def _neural_init(owner: PythonObject, model: PythonObject, devices: PythonObject
     else:
         raise Error("TypeError: ParallelNeuralTrainer supports SmallMLPTrainer and SambaStack")
     var pool = process_pool_create(devices, False, child_module)
-    neural_devices_admit(len(py_item(pool, nk[].k_devices)), shards)
+    var pool_devices = process_pool_devices(pool)
+    neural_devices_admit(len(pool_devices), shards)
     # One device (lane perf-trees-misc, 2026-11-05): the cooperative update
     # group IS the gradient worker's group (the same device, the same worker
     # environment: `_process_environment` sees the same devices and group),
@@ -163,8 +165,11 @@ def _neural_init(owner: PythonObject, model: PythonObject, devices: PythonObject
     # worker dispatch takes gradient and update requests alike; the update
     # reads only the request's state, never the worker's resident cache.
     var update_pool = pool
-    if len(py_item(pool, nk[].k_devices)) != 1:
-        update_pool = process_pool_create(py_item(pool, nk[].k_devices), True, child_module)
+    if len(pool_devices) != 1:
+        var admitted = b[].bi.list()
+        for i in range(len(pool_devices)):  # small-loop(the devices the gradient pool admitted)
+            _ = py_call(admitted.append, PythonObject(pool_devices[i]))
+        update_pool = process_pool_create(admitted, True, child_module)
     py_setattr(owner, "_operation", operation)
     py_setattr(owner, "_pool", pool)
     py_setattr(owner, "_update_pool", update_pool)
@@ -577,18 +582,16 @@ def neural_worker_dispatch(request: PythonObject) raises -> PythonObject:
 
 def neural_worker(argv: PythonObject) raises:
     var socket = process_worker_connect(argv)
-    var nk = parallel_keys()
     try:
         while True:  # driver-loop: over complete native local model training requests
-            var request = process_worker_next(socket)
-            if request is None:
+            var turn = process_worker_next(socket)
+            if not turn.open:
                 break
-            var sequence = Int(py=py_get(request[0], nk[].k_sequence, -1))
             try:
-                var result = neural_worker_dispatch(request[1])
-                process_send(socket, "result", sequence, result)
+                var result = neural_worker_dispatch(turn.value)
+                process_worker_reply(socket, turn.sequence, result)
             except error:
-                process_send(socket, "error", sequence, PythonObject(String(error)))
+                process_worker_refuse(socket, turn.sequence, String(error))
     except error:
         transport_close(socket)
         raise error
