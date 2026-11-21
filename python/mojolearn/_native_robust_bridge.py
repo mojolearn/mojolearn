@@ -2,6 +2,27 @@
 """Import-time connection of RobustScaler's native owner and fixed ABI."""
 
 
+def _entries(module):
+    # glue: the fixed x_prep exports of one compiled image, connected during import
+    from types import BuiltinFunctionType
+    entries = {}
+    for name in ("x_prep_run", "x_prep_numeric_mode", "x_prep_vendor", "x_prep_host_column",  # glue: fixed native exports connected during import
+                 "x_prep_run_out", "x_prep_run_scratch", "x_prep_run_ranges",
+                 "x_prep_dev_put", "x_prep_dev_free", "x_prep_dev_live", "x_prep_dev_take_rows"):
+        try:
+            entry = getattr(module, name)
+        except (AttributeError, ImportError):
+            if name not in ("x_prep_run", "x_prep_numeric_mode"):
+                continue
+            raise
+        if not isinstance(entry, BuiltinFunctionType):
+            raise TypeError(f"RobustScaler requires compiled {name}")
+        entries[name] = entry
+    entries["preprocessing_numeric_mode"] = entries["x_prep_numeric_mode"]
+    entries.update(arena_binding=module, arena_binding_id=id(module))
+    return entries
+
+
 def connect(scaler_class, qselect):
     # glue: compiled entries and plain metadata are retained during import
     import sys
@@ -17,23 +38,7 @@ def connect(scaler_class, qselect):
     connected = {}
     for mode in ("identical", "fast"):  # glue: fixed numeric-mode ABI setup
         try:
-            module = _backend.binding("_mojolearn_x_prep", mode)
-            entries = {}
-            for name in ("x_prep_run", "x_prep_numeric_mode", "x_prep_vendor", "x_prep_host_column",  # glue: fixed native exports connected during import
-                         "x_prep_run_out", "x_prep_run_scratch", "x_prep_run_ranges",
-                         "x_prep_dev_put", "x_prep_dev_free", "x_prep_dev_live", "x_prep_dev_take_rows"):
-                try:
-                    entry = getattr(module, name)
-                except (AttributeError, ImportError):
-                    if name not in ("x_prep_run", "x_prep_numeric_mode"):
-                        continue
-                    raise
-                if not isinstance(entry, BuiltinFunctionType):
-                    raise TypeError(f"RobustScaler requires compiled {name}")
-                entries[name] = entry
-            entries["preprocessing_numeric_mode"] = entries["x_prep_numeric_mode"]
-            entries.update(arena_binding=module, arena_binding_id=id(module))
-            connected[mode] = entries
+            connected[mode] = _entries(_backend.binding("_mojolearn_x_prep", mode))
         except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
             connected[mode] = type(error).__name__ + ": " + str(error)
     base = _backend.binding("_mojolearn", "identical")
@@ -55,6 +60,9 @@ def connect(scaler_class, qselect):
     context.update(classical_attribute_descriptor=descriptor, classical_public_layouts={},
                    classical_public_installed=True)
     context["classical_public_layouts"][scaler_class] = _layout(scaler_class, descriptor)
+    # The CPU context of `device="cpu"`: the host x_prep image beside the device one.
+    from ._native_prep_device import connect_cpu_device
+    connect_cpu_device(context, lambda load: _entries(load("_mojolearn_x_prep_host")))
     return call, context
 
 
