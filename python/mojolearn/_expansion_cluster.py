@@ -400,6 +400,8 @@ class BisectingKMeans(_CentersMixin, _XCluster):
     #: This class takes `device=`: the check builds its other side as the same
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
+    #: Member ABI family 25 (XCluster), kind 1 (core/xcluster_member.mojo).
+    _mojolearn_member = (25, 1)
 
     def __init__(self, n_clusters=8, *, init="random", n_init=1, random_state=None, max_iter=300,
                  verbose=0, tol=1e-4, copy_x=True, algorithm="lloyd", bisecting_strategy="biggest_inertia", numeric_mode=None, device=None):
