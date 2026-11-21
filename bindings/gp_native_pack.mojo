@@ -4,7 +4,7 @@
 # The regressor's operations are bindings/gp_regressor_native_door.mojo's, the
 # classifier's bindings/gp_classifier_native_door.mojo's.
 from std.python import PythonObject
-from providers.python.estimator_binding_pyapi_door import estimator_binding, estimator_binding_mode
+from providers.python.estimator_binding_pyapi_door import estimator_binding_mode
 from bindings.gp_argument_pins_unpack import GPArgumentPins
 from bindings.gp_regressor_native_door import gp_regressor_operation
 from bindings.gp_classifier_native_door import gp_classifier_operation
@@ -46,8 +46,9 @@ def gp_operation(model: PythonObject, operation: Int, var args: PythonObject,
     # Internal/archive/worker calls retain their explicit provider pins in
     # the same native envelope used by the public lifecycle door.
     var values = GPArgumentPins(args)
-    if operation != GP_OPN_FAMILY_GP_GPC_LML and len(values) > 0 and values[0] is None:
-        values.set(0, estimator_binding(model, "_mojolearn_gp", context))
+    # (A None binding never reaches here: the public sentinel above took it.
+    # The per-call `estimator_binding` this line used to make is the route
+    # record's, providers/python/gp_device_route_pyapi_door.mojo.)
     if operation == GP_OPN_FAMILY_GP_GPC_FIT or operation == GP_OPN_FAMILY_GP_GPC_PREDICT or operation == GP_OPN_FAMILY_GP_GPC_SCORE:
         if values[1] is None:
             values.set(1, estimator_binding_mode(PythonObject("identical"), "_mojolearn", context))
