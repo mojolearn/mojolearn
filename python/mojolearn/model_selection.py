@@ -1493,6 +1493,48 @@ class _BaseSearch:
         """
         return _NATIVE(self, "family_msel_search_fit", (X, y, groups), _NATIVE_CONTEXT)
 
+    def check(self, X, *, method=None, fit=None):
+        """Run the search's best estimator on the GPU and on the CPU, print
+        both sides' reports and whether their answers are the same bits.
+
+        A fitted search answers ``predict`` and ``transform`` with
+        ``best_estimator_``, so this is that estimator's own check: the same
+        fitted model answers ``X`` on each device, in ``identical`` mode only.
+
+        Parameters
+        ----------
+        X : array-like
+            The rows to answer for.
+        method : str, optional
+            The method to check, for example ``'predict'`` or ``'transform'``.
+            Default: ``predict`` when the best estimator has it, else
+            ``transform``.
+        fit : tuple, optional
+            Arguments for ``fit``. When given, the search is fitted first.
+
+        Returns
+        -------
+        dict
+            The result of ``mojolearn.check(search.best_estimator_, X)``.
+            ``ran`` is False, with a ``reason``, when nothing was compared.
+        """
+        # The check modules load here, on the first call only. A search holds
+        # a member estimator: the member keeps its own `device`, and its check
+        # builds its other side on the other device in this process
+        # (`_check_both.on_device`). No saved model, no child process.
+        from ._verify_check import check, format_check
+        if fit is not None:
+            self.fit(*fit)
+        best = object.__getattribute__(self, "__dict__").get("best_estimator_")
+        if best is None:
+            result = dict(ran=False, estimator=type(self).__name__, method=method,
+                          reason="the search was initialized with refit=False or is not fitted, "
+                                 "so there is no fitted estimator to check")
+        else:
+            result = check(best, X, method=method)
+        print(format_check(result))
+        return result
+
     # The delegations and `score` are one native call each
     # (bindings/model_selection_native_door.mojo): the refit check, then the
     # best estimator's own method (or the search's scorer) on X.
