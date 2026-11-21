@@ -332,7 +332,7 @@ def gbdt_predict(model: PythonObject, X: PythonObject, context: PythonObject) ra
     if entry_ref_vendor(entry) == 0 and gbdt_has_ctr(text):
         # The CPU restatement of a CTR model's apply (`HostGBDT`).
         var args = Python.tuple(X, py_item(fields, nk[].k_loss), text, py_item(fields, nk[].k_n_features_in_), py_item(fields, nk[].k_approx_dim_),
-                                py_item(fields, nk[].k_n_classes_), py_type(model).__name__)
+                                py_item(fields, nk[].k_n_classes_), py_type(model).__name__, py_get(fields, nk[].k_category_map_))
         return host_tree_operation(PythonObject(None), "host_tree_ctr_predict", args, gbdt_host_tree_context(context))
     var dim = _int(py_item(fields, nk[].k_approx_dim_))
     var call = gbdt_apply_unpack(fields, X, entry, gbdt_resident(fields, table, entry), context)
