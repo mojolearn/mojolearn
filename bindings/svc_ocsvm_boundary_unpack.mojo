@@ -28,9 +28,7 @@ from bindings.family_common_pack import (
 from core.admitted_convert import admitted_convert_vector
 from bindings.gp_svm_records_door import ocsvm_coef_reused, ocsvm_coef_remember
 from bindings.gp_svm_gp_state_door import gp_x_known
-from bindings.svc_common_door import (
-    svc_builtins, svc_field, svc_float, svc_int, svc_truthy,
-)
+from bindings.svc_common_unpack import svc_builtins, svc_field, svc_float, svc_int, svc_truthy
 from svm.svc_ocsvm_native_run import (
     OcFitRequest, OcQueryRequest, OC_SOLVE_GRAM, OC_SOLVE_RESIDENT, OC_SOLVE_DESCRIPTOR,
     OC_QUERY_FUSED_LABELS, OC_QUERY_KERNEL_PRODUCT, OC_QUERY_GRAM_PRECOMPUTED, OC_QUERY_GRAM_KERNEL,

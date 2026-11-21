@@ -10,7 +10,7 @@ from core.ocsvm_plan import oc_f32_address, oc_i32_address
 from bindings.py_balanced import py_setitem
 from bindings.classical_arrays_door import classical_address
 from bindings.family_common_pack import family_array
-from bindings.svc_common_door import svc_prefix, svc_scalar_array
+from bindings.svc_common_pack import svc_prefix, svc_scalar_array
 from svm.svc_ocsvm_native_run import OcFitRun
 from bindings.svc_ocsvm_boundary_unpack import OcFitUnpacked
 from bindings.svm_keys_unpack import svm_keys

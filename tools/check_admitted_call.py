@@ -455,7 +455,7 @@ DEBT = {
     'bindings/small_mlp_native_door.mojo': {'cpython': 1, 'import_module': 4},
     'bindings/spectral_umap_routes_pack.mojo': {'native_loaded_module': 2},
     'bindings/str_labels_native_door.mojo': {'cpython': 3, 'native_loaded_module': 3},
-    'bindings/svc_common_door.mojo': {'import_module': 1, 'native_loaded_module': 1},
+    'bindings/svc_common_unpack.mojo': {'import_module': 1, 'native_loaded_module': 1},
     'bindings/svc_kernel_native_door.mojo': {'native_loaded_module': 6},
     'bindings/svc_linear_boundary_unpack.mojo': {'native_loaded_module': 3},
     'bindings/svc_score_boundary_door.mojo': {'cpython': 1},
