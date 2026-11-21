@@ -1830,6 +1830,10 @@ class Normalizer(_PrepBase):
     #: This class takes `device=`: the check builds its other side as the same
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
+    #: The member ABI mark (family 35 Prep, kind 3): model selection and the
+    #: meta-estimators run this class through its native member entry
+    #: (core/prep_member.mojo).
+    _mojolearn_member = (35, 3)
 
     def __init__(self, norm="l2", *, copy=True, device=None):
         self.norm = norm
@@ -2059,6 +2063,10 @@ class Binarizer(_PrepBase):
     #: This class takes `device=`: the check builds its other side as the same
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
+    #: The member ABI mark (family 35 Prep, kind 2): model selection and the
+    #: meta-estimators run this class through its native member entry
+    #: (core/prep_member.mojo).
+    _mojolearn_member = (35, 2)
 
     def __init__(self, *, threshold=0.0, copy=True, device=None):
         self.threshold = threshold

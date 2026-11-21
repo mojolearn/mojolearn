@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
-"""The Prep family as MEMBERS (core/member_abi.mojo): RobustScaler (kind 0)
-and MaxAbsScaler (kind 1) so far; the family's other classes are not
-published yet.
+"""The Prep family as MEMBERS (core/member_abi.mojo): RobustScaler (kind 0),
+MaxAbsScaler (kind 1), Binarizer (kind 2) and Normalizer (kind 3) so far;
+the family's other classes are not published yet.
 
 One entry, `prep_member_v2`, published by each preprocessing image beside
 the scaler member (`prep_member_publish`, bindings/_mojolearn_preprocessing.mojo
@@ -16,7 +16,11 @@ scratch and output region the door (bindings/robust_native_pack.mojo
 touched. MaxAbsScaler runs its door's x_prep programs the same way
 (x_prep/maxabs_native_run.mojo `_maxabs_fit_program`, the affine stage 3;
 door bindings/maxabs_native_door.mojo `maxabs_fit` / `_maxabs_apply`). No
-score, no inverse_transform (neither class publishes one).
+score, no inverse_transform (no published class has one). Binarizer and
+Normalizer are stateless: their fit records X's width only (X is not
+uploaded), their transform is the door's one-stage program
+(bindings/prep_stateless_native_door.mojo `_transform` binarizer branch,
+bindings/prep_normalizer_lifecycle_pack.mojo `_normalizer_apply`).
 
 Route slots read: `second` the x_prep transport entry; `flags`
 PREP_ROUTE_OUT (x_prep_run_out), PREP_ROUTE_SCRATCH (x_prep_run_scratch),
@@ -38,6 +42,11 @@ MEMBER_OP_NEW parameters, MaxAbsScaler (Float64 words, 3):
   [0] kind: 1 MaxAbsScaler
   [1] 2048-row statistics blocks 0 / 1 (MOJOLEARN_XPREP_BLOCKED)
   [2] R3 work region 0 / 1 (`xprep_r3("work")`, read only with [1])
+MEMBER_OP_NEW parameters, Binarizer (Float64 words, 2): [0] kind 2,
+[1] threshold (rounded to float32 at transform, as the door).
+MEMBER_OP_NEW parameters, Normalizer (Float64 words, 2): [0] kind 3,
+[1] norm: 0 'l1', 1 'l2', 2 'max'.
+
 The Apple fast direct fit entry (`x_prep_maxabs_fit_direct`, opt-in
 PREP3_MAXABS) is not a member route: the admit answers False there and the
 caller keeps the door.
@@ -57,6 +66,7 @@ MaxAbsScaler:
   0 `MEMBER_BLOCK_SCALARS` float64 [n_features_in_, n_samples_seen_]
   1 `PREP_BLOCK_MAX_ABS` (= PREP_BLOCK_CENTER) float32 1 x features (max_abs_)
   2 `PREP_BLOCK_SCALE` float32 1 x features (scale_)
+Binarizer, Normalizer: 0 `MEMBER_BLOCK_SCALARS` float64 [n_features_in_] only.
 
 The fitted state is OWNED here, in a process-wide store of fixed chunks (the
 linear member's store): a slot never moves once minted, the lock covers only
@@ -69,6 +79,7 @@ from bindings.x_prep_native_owner_run import XprepRunInput, XprepRoute, xprep_ex
 from x_prep.robust_native_run import _robust_fit_program as robust_fit_program
 from x_prep.maxabs_native_run import _maxabs_fit_program as maxabs_fit_program
 from core.scaler_fit_impl import scaler_refuse_infinite
+from x_prep.prep_stateless_native_run import OP_BINARIZE, OP_NORMALIZE, OUT_MIN_WORDS
 from core.preprocessing_program import prep_program_stage as _stage
 from core.member_abi import (
     MemberCall, MemberMatrix, MEMBER_F32, MEMBER_F64,
@@ -87,6 +98,9 @@ comptime PREP_KIND_ROBUST = 0
 comptime PREP_KIND_MAXABS = 1
 comptime PREP_ROBUST_PARAM_COUNT = 9
 comptime PREP_MAXABS_PARAM_COUNT = 3
+comptime PREP_KIND_BINARIZER = 2
+comptime PREP_KIND_NORMALIZER = 3
+comptime PREP_STATELESS_PARAM_COUNT = 2
 
 comptime PREP_BLOCK_CENTER = MEMBER_BLOCK_FAMILY
 comptime PREP_BLOCK_SCALE = MEMBER_BLOCK_FAMILY + 1
@@ -216,7 +230,17 @@ def _lookup(handle: Int, release: Bool) raises -> Int:
 
 
 def _kind_name(kind: Int) -> String:
-    return String("MaxAbsScaler") if kind == PREP_KIND_MAXABS else String("RobustScaler")
+    if kind == PREP_KIND_MAXABS:
+        return String("MaxAbsScaler")
+    if kind == PREP_KIND_BINARIZER:
+        return String("Binarizer")
+    if kind == PREP_KIND_NORMALIZER:
+        return String("Normalizer")
+    return String("RobustScaler")
+
+
+def _stateless(slot: _Slot) -> Bool:
+    return slot[].kind() == PREP_KIND_BINARIZER or slot[].kind() == PREP_KIND_NORMALIZER
 
 
 def _name(slot: _Slot) -> String:
@@ -476,6 +500,74 @@ def _transform_maxabs(slot: _Slot, call: _Call) raises:
     _ = arena^
 
 
+def _fit_stateless(slot: _Slot, call: _Call) raises:
+    """Binarizer / Normalizer fit: X's width, as the doors' fit records it
+    (nothing is uploaded or computed); fit_transform then transforms."""
+    var estimator = _name(slot)
+    _whole(call, estimator)
+    _dense(call[].x, "X", estimator)
+    if call[].weights.rows > 0:
+        raise Error("TypeError: a " + estimator + " member takes no sample_weight")
+    if call[].fit_output != 0 and call[].fit_output != MEMBER_OP_TRANSFORM:
+        member_unsupported(estimator, call[].fit_output)
+    slot[].clear()
+    slot[].features = call[].x.cols
+    slot[].scalars = [Float64(call[].x.cols)]
+    slot[].fitted = True
+    if call[].fit_output == MEMBER_OP_TRANSFORM:
+        _transform_stateless(slot, call)
+
+
+def _transform_stateless(slot: _Slot, call: _Call) raises:
+    var estimator = _name(slot)
+    if not slot[].fitted:
+        raise Error("RuntimeError: mojolearn: this " + estimator + " instance is not fitted yet")
+    _whole(call, estimator)
+    _dense(call[].x, "X", estimator)
+    _dense(call[].dst, "the output buffer", estimator)
+    var n = call[].x.rows
+    var d = slot[].features
+    if call[].x.cols != d:
+        raise Error("mojolearn: X has " + String(call[].x.cols) + " features, " + estimator + " was fitted with "
+                    + String(d))
+    if call[].dst.rows != n or call[].dst.cols != d:
+        raise Error("ValueError: the output buffer holds one value per element of X")
+    var words = n * d
+    var program = List[Int32]()
+    var inputs = List[XprepRunInput](capacity=2)
+    inputs.append(_x_input(call, words))
+    if slot[].kind() == PREP_KIND_BINARIZER:
+        # X, the threshold word, then the output as arena words (the door's
+        # binarizer branch; no output region).
+        var threshold: List[Float32] = [Float32(slot[].words[1])]
+        var out = words + 1
+        var host = out + words
+        if host > _INT32_BOUND:
+            raise Error("ValueError: x_prep: the program exceeds the native Int32 indexing bound")
+        inputs.append(XprepRunInput(words, 1, Int(threshold.unsafe_ptr()), -1, False, 0, False, 0, 0, 0))
+        _stage(program, OP_BINARIZE, words, 0, words, words, out)
+        var arena = List[Float32](length=max(host, 1), fill=Float32(0))
+        _execute(call, arena, host, 0, 0, 0, program, inputs)
+        _ = threshold^
+        unsafe_memcpy(dest=_F32P(unsafe_from_address=call[].dst.data),
+            src=_F32P(unsafe_from_address=Int(arena.unsafe_ptr())) + out, count=words)
+        _ = arena^
+        return
+    # Normalizer (the door's _normalizer_apply): a large output comes back
+    # through the image's output region straight into the caller's buffer.
+    var dev_out = words >= OUT_MIN_WORDS and (call[].route.flags & PREP_ROUTE_OUT) != 0
+    var host = words + (0 if dev_out else words)
+    if host + (words if dev_out else 0) > _INT32_BOUND:
+        raise Error("ValueError: x_prep: the program exceeds the native Int32 indexing bound")
+    _stage(program, OP_NORMALIZE, n, 0, n, d, Int(slot[].words[1]), host if dev_out else words)
+    var arena = List[Float32](length=max(host, 1), fill=Float32(0))
+    _execute(call, arena, host, 0, call[].dst.data if dev_out else 0, words if dev_out else 0, program, inputs)
+    if not dev_out:
+        unsafe_memcpy(dest=_F32P(unsafe_from_address=call[].dst.data),
+            src=_F32P(unsafe_from_address=Int(arena.unsafe_ptr())) + words, count=words)
+    _ = arena^
+
+
 def _export(slot: _Slot, call: _Call) raises:
     """A view of one fitted block. The slot owns the words; they stay valid
     until this state's next fit, import or free."""
@@ -483,11 +575,13 @@ def _export(slot: _Slot, call: _Call) raises:
         raise Error("NotFittedError: this " + _name(slot) + " member is not fitted yet")
     var block = call[].block
     if (call[].flags & MEMBER_BLOCK_BY_INDEX) != 0:
-        if block < 0 or block > 2:
+        if block < 0 or block > (0 if _stateless(slot) else 2):
             raise Error("member ABI: a " + _name(slot) + " member has no fitted block index " + String(block))
         block = MEMBER_BLOCK_SCALARS if block == 0 else (PREP_BLOCK_CENTER if block == 1 else PREP_BLOCK_SCALE)
     if block == MEMBER_BLOCK_SCALARS:
         call[].dst = MemberMatrix(Int(slot[].scalars.unsafe_ptr()), 1, len(slot[].scalars), MEMBER_F64)
+    elif _stateless(slot):
+        raise Error("member ABI: a " + _name(slot) + " member has no fitted block " + String(block))
     elif block == PREP_BLOCK_CENTER:
         call[].dst = MemberMatrix(Int(slot[].center.unsafe_ptr()), 1, len(slot[].center))
     elif block == PREP_BLOCK_SCALE:
@@ -495,7 +589,7 @@ def _export(slot: _Slot, call: _Call) raises:
     else:
         raise Error("member ABI: a " + _name(slot) + " member has no fitted block " + String(block))
     call[].block = block
-    call[].out_cols = 3
+    call[].out_cols = 1 if _stateless(slot) else 3
 
 
 def _import(slot: _Slot, call: _Call) raises:
@@ -512,7 +606,7 @@ def _import(slot: _Slot, call: _Call) raises:
         slot[].scalars = List[Float64](length=count, fill=0.0)
         for index in range(count):  # driver-loop: one or two scalar words
             slot[].scalars[index] = given[index]
-    elif block == PREP_BLOCK_CENTER or block == PREP_BLOCK_SCALE:
+    elif (block == PREP_BLOCK_CENTER or block == PREP_BLOCK_SCALE) and not _stateless(slot):
         var size = call[].x.rows * call[].x.cols
         var words = List[Float32](length=size, fill=Float32(0))
         if size > 0:
@@ -575,6 +669,11 @@ def _prep_member(operation: Int, address: Int) raises -> Int:
         elif source[0] == Float64(PREP_KIND_MAXABS):
             if call[].param_count != PREP_MAXABS_PARAM_COUNT:
                 raise Error("member ABI: a MaxAbsScaler member takes three parameters")
+        elif source[0] == Float64(PREP_KIND_BINARIZER) or source[0] == Float64(PREP_KIND_NORMALIZER):
+            if call[].param_count != PREP_STATELESS_PARAM_COUNT:
+                raise Error("member ABI: a " + _kind_name(Int(source[0])) + " member takes two parameters")
+            if source[0] == Float64(PREP_KIND_NORMALIZER) and source[1] != 0.0 and source[1] != 1.0 and source[1] != 2.0:
+                raise Error("member ABI: unknown Normalizer norm code")
         else:
             raise Error("member ABI: unknown or unpublished Prep member kind")
         var words = List[Float64](length=call[].param_count, fill=0.0)
@@ -591,12 +690,16 @@ def _prep_member(operation: Int, address: Int) raises -> Int:
         return 0
     var slot = _Slot(unsafe_from_address=_lookup(call[].state, False))
     if operation == MEMBER_OP_FIT:
-        if slot[].kind() == PREP_KIND_MAXABS:
+        if _stateless(slot):
+            _fit_stateless(slot, call)
+        elif slot[].kind() == PREP_KIND_MAXABS:
             _fit_maxabs(slot, call)
         else:
             _fit_robust(slot, call)
     elif operation == MEMBER_OP_TRANSFORM:
-        if slot[].kind() == PREP_KIND_MAXABS:
+        if _stateless(slot):
+            _transform_stateless(slot, call)
+        elif slot[].kind() == PREP_KIND_MAXABS:
             _transform_maxabs(slot, call)
         else:
             _transform_robust(slot, call)
