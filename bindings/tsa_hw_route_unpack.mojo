@@ -25,11 +25,11 @@ from bindings.mode_answer_door import answer_mode_object
 from bindings.native_loaded_module_door import native_interpreter_finalizing
 from bindings.native_owner_registry_pack import borrowed_native_owner
 from bindings.native_owner_registry_unpack import register_native_owner_type
-from bindings.py_balanced import py_call, py_type, py_get, py_item
+from bindings.py_balanced import py_call, py_type, py_get, py_item, py_setitem
 from bindings.py_type_registry import py_type_absent, py_type_attach
 from bindings.tsa_keys_unpack import tsa_keys
 from core.device_route import (
-    DeviceRoute, DEVICE_CPU, device_mode_code, device_route_plan, device_vendor_code,
+    DeviceRoute, DEVICE_CPU, DEVICE_INSTALL, device_mode_code, device_route_plan, device_vendor_code,
 )
 from core.entry_table import EntryRef, entry_ref_call, entry_ref_same
 from core.mode_answer import MODE_FAMILY_TSA, fast_is_answered_by_identical
@@ -243,4 +243,34 @@ def tsa_hw_route(model: PythonObject, fields: PythonObject, host_class: Bool,
     if owner is None:
         owner = device_route_keep(model,
             _tsa_hw_route_build(device_request(fields, b), host_class, mode, default_mode, context, b))
+    return TsaHwCall(device_route_value(owner), owner)
+
+
+def tsa_function_route(context: PythonObject, want_cpu: Bool, b: PythonObject) raises -> TsaHwCall:
+    """The route of the stationarity functions (`kpss_test`, `select_d`):
+    no estimator holds it, so the resolved owner is kept per mode object in
+    the connection context's `tsa_function_routes` table. A hit is the
+    default-mode read and one table read (what the former by-name entry
+    table cost, without its entry lookup). `want_cpu` (AutoARIMA with
+    `device="cpu"`) takes the CPU table loaded beside a GPU set; in a
+    CPU-only process the selected table already is the CPU one."""
+    var nk = tsa_keys()
+    var routes = py_item(context, nk[].k_tsa_function_routes)
+    var key = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
+    var cpu = PythonObject(None)
+    if want_cpu:
+        cpu = py_get(context, nk[].k_hw_cpu_bindings)
+        if cpu is not None:
+            key = nk[].k_hw_cpu_bindings
+    var owner = py_get(routes, key)
+    if owner is None:
+        var built = DeviceRouteOwner(DEVICE_INSTALL)
+        if cpu is not None:
+            _tsa_hw_cells_route(DEVICE_CPU, True, 0, 1, py_item(cpu, PythonObject("identical")), b, built)
+        else:
+            _tsa_hw_cells_route(DEVICE_INSTALL, False, -1, -1, py_item(py_item(context, nk[].k_hw_bindings), key), b, built)
+        built.context = context
+        built.resolved = True
+        owner = PythonObject(alloc=built^)
+        py_setitem(routes, key, owner)
     return TsaHwCall(device_route_value(owner), owner)

@@ -17,7 +17,7 @@ from core.shared_slot import SharedSlot
 from core.tsa_entry_table import (
     TSA_OP_FLAGS, TSA_OP_VENDOR, TSA_OP_MODE, TSA_OP_HW_FIT, TSA_OP_HW_FORECAST, TSA_OP_HW_PREDICT,
     TSA_OP_HW_RESIDENT_PREPARE, TSA_OP_HW_RESIDENT_RELEASE, TSA_OP_HW_RESIDENT_COUNT,
-    TSA_OP_HW_QUERY_RESIDENT, TSA_HAS_FIT, TSA_HAS_RESIDENT, TSA_TABLE_TSA,
+    TSA_OP_HW_QUERY_RESIDENT, TSA_OP_KPSS_TEST, TSA_OP_SELECT_D, TSA_HAS_FIT, TSA_HAS_RESIDENT, TSA_TABLE_TSA,
     tsa_ops_check_spans, tsa_ops_publish,
 )
 from holtwinters.estimator import holtwinters_fit_ptr, holtwinters_forecast_ptr, holtwinters_predict_ptr
@@ -26,6 +26,9 @@ from holtwinters.resident_state import (
     holtwinters_resident_prepare, holtwinters_resident_release, holtwinters_resident_count,
     holtwinters_query_resident,
 )
+
+from tsa.estimator import kpss_test_host, select_d_host
+from tsa.mojolearn_tsa_run import _f32_ptr, _i32_ptr
 
 comptime _VENDOR_CODE = (1 if COMPILED_VENDOR == "metal" else 2 if COMPILED_VENDOR == "cuda" else 3 if COMPILED_VENDOR == "hip" else -1)
 
@@ -62,6 +65,11 @@ def tsa_hw_ops_device_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
             r[] = holtwinters_resident_count()
         elif operation == TSA_OP_HW_QUERY_RESIDENT:
             r[] = holtwinters_query_resident(p[0], f32_ptr(a[0]), seasonal_name(p[3]), p[1], p[2])
+        elif operation == TSA_OP_KPSS_TEST:
+            r[] = kpss_test_host(_f32_ptr(a[0]), _i32_ptr(a[1]), _f32_ptr(a[2]), p[0], p[1], p[2], p[3], p[4],
+                Float32(f[0]))
+        elif operation == TSA_OP_SELECT_D:
+            r[] = select_d_host(_f32_ptr(a[0]), _i32_ptr(a[1]), p[0], p[1], p[2], p[3], p[4], Float32(f[0]))
         else:
             raise Error("tsa ops: unknown operation " + String(operation))
         return 0

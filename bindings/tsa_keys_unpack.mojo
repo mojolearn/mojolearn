@@ -84,6 +84,7 @@ struct TsaKeys(Defaultable, Movable):
     var k_fit_executed_flag: PythonObject
     var k_fx_: PythonObject
     var k_hw_bindings: PythonObject
+    var k_tsa_function_routes: PythonObject
     var k_device: PythonObject
     var k_hw_cpu_bindings: PythonObject
     var k_hw_install_vendor: PythonObject
@@ -99,7 +100,6 @@ struct TsaKeys(Defaultable, Movable):
     var k_input_copied_: PythonObject
     var k_integer_types: PythonObject
     var k_k_: PythonObject
-    var k_kpss_test: PythonObject
     var k_llf_: PythonObject
     var k_maxiter: PythonObject
     var k_meta: PythonObject
@@ -124,12 +124,10 @@ struct TsaKeys(Defaultable, Movable):
     var k_seasonal: PythonObject
     var k_seasonal_order: PythonObject
     var k_seasonal_periods: PythonObject
-    var k_select_d: PythonObject
     var k_sse_: PythonObject
     var k_start_periods: PythonObject
     var k_trend: PythonObject
     var k_ts_num: PythonObject
-    var k_tsa_bindings: PythonObject
     var k_tsa_owner_context: PythonObject
     var k_verbose: PythonObject
     var k_x0_: PythonObject
@@ -185,6 +183,7 @@ struct TsaKeys(Defaultable, Movable):
         self.k_fit_executed_flag = PythonObject(None)
         self.k_fx_ = PythonObject(None)
         self.k_hw_bindings = PythonObject(None)
+        self.k_tsa_function_routes = PythonObject(None)
         self.k_device = PythonObject(None)
         self.k_hw_cpu_bindings = PythonObject(None)
         self.k_hw_install_vendor = PythonObject(None)
@@ -200,7 +199,6 @@ struct TsaKeys(Defaultable, Movable):
         self.k_input_copied_ = PythonObject(None)
         self.k_integer_types = PythonObject(None)
         self.k_k_ = PythonObject(None)
-        self.k_kpss_test = PythonObject(None)
         self.k_llf_ = PythonObject(None)
         self.k_maxiter = PythonObject(None)
         self.k_meta = PythonObject(None)
@@ -225,12 +223,10 @@ struct TsaKeys(Defaultable, Movable):
         self.k_seasonal = PythonObject(None)
         self.k_seasonal_order = PythonObject(None)
         self.k_seasonal_periods = PythonObject(None)
-        self.k_select_d = PythonObject(None)
         self.k_sse_ = PythonObject(None)
         self.k_start_periods = PythonObject(None)
         self.k_trend = PythonObject(None)
         self.k_ts_num = PythonObject(None)
-        self.k_tsa_bindings = PythonObject(None)
         self.k_tsa_owner_context = PythonObject(None)
         self.k_verbose = PythonObject(None)
         self.k_x0_ = PythonObject(None)
@@ -290,6 +286,7 @@ def _tsa_keys_fill(nk: UnsafePointer[TsaKeys, MutUntrackedOrigin]) raises:
     nk[].k_fit_executed_flag = py_key("fit_executed_flag")
     nk[].k_fx_ = py_key("fx_")
     nk[].k_hw_bindings = py_key("hw_bindings")
+    nk[].k_tsa_function_routes = py_key("tsa_function_routes")
     nk[].k_device = py_key("device")
     nk[].k_hw_cpu_bindings = py_key("hw_cpu_bindings")
     nk[].k_hw_install_vendor = py_key("hw_install_vendor")
@@ -305,7 +302,6 @@ def _tsa_keys_fill(nk: UnsafePointer[TsaKeys, MutUntrackedOrigin]) raises:
     nk[].k_input_copied_ = py_key("input_copied_")
     nk[].k_integer_types = py_key("integer_types")
     nk[].k_k_ = py_key("k_")
-    nk[].k_kpss_test = py_key("kpss_test")
     nk[].k_llf_ = py_key("llf_")
     nk[].k_maxiter = py_key("maxiter")
     nk[].k_meta = py_key("meta")
@@ -330,12 +326,10 @@ def _tsa_keys_fill(nk: UnsafePointer[TsaKeys, MutUntrackedOrigin]) raises:
     nk[].k_seasonal = py_key("seasonal")
     nk[].k_seasonal_order = py_key("seasonal_order")
     nk[].k_seasonal_periods = py_key("seasonal_periods")
-    nk[].k_select_d = py_key("select_d")
     nk[].k_sse_ = py_key("sse_")
     nk[].k_start_periods = py_key("start_periods")
     nk[].k_trend = py_key("trend")
     nk[].k_ts_num = py_key("ts_num")
-    nk[].k_tsa_bindings = py_key("tsa_bindings")
     nk[].k_tsa_owner_context = py_key("tsa_owner_context")
     nk[].k_verbose = py_key("verbose")
     nk[].k_x0_ = py_key("x0_")

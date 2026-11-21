@@ -5,8 +5,6 @@ only connects the compiled `_mojolearn_tsa` entries of both tiers (the lane
 is identical only: a tier without a binary keeps its refusal, raised by the
 call that asks for it) and the shared context, once, at import."""
 
-_ENTRIES = ("kpss_test", "select_d")
-
 #: `(metadata prefix, table family)` of the binaries the `_mojolearn_tsa` name
 #: resolves to: the device binding, the CPU binding with the fit, and the
 #: forecast inference binding (core/tsa_entry_table.mojo TSA_TABLE_*).
@@ -61,20 +59,6 @@ def connect():
     context["arena_half_copy_canonical"] = struct.pack("<e", struct.unpack("<e", b"\x01\x7c")[0]) == b"\x00\x7e"
 
     selected = _backend.default_mode()
-    bindings = {}
-    for mode in (selected, "fast" if selected == "identical" else "identical"):  # glue: the two numeric modes, connected once
-        try:
-            module = _backend.binding("_mojolearn_tsa", mode)
-            symbols = {}
-            for name in _ENTRIES:  # glue: fixed compiled entry names
-                fn = getattr(module, name)
-                if not isinstance(fn, BuiltinFunctionType):
-                    raise TypeError(f"the stationarity functions require a compiled {name}")
-                symbols[name] = fn
-            bindings[mode] = symbols
-        except (ImportError, AttributeError, ValueError, RuntimeError, TypeError, OSError) as error:
-            bindings[mode] = type(error).__name__ + ": " + str(error)
-    context["tsa_bindings"] = bindings
     # ExponentialSmoothing's device route (bindings/tsa_hw_native_door.mojo):
     # each connected binding is its module (the image pin) and the key of the
     # Holt-Winters operations table it published at initialization
@@ -87,6 +71,10 @@ def connect():
         except (ImportError, AttributeError, ValueError, RuntimeError, TypeError, OSError) as error:
             hw[mode] = type(error).__name__ + ": " + str(error)
     context["hw_bindings"] = hw
+    # The stationarity functions' resolved routes (kpss_test, select_d: no
+    # estimator holds one), filled by the compiled owner at first use, per
+    # mode (bindings/tsa_hw_route_unpack.mojo `tsa_function_route`).
+    context["tsa_function_routes"] = {}
     chosen = hw[selected]
     # "none": the selected binding did not load; its own refusal is said by
     # the first operation, not by the constructor's device check.

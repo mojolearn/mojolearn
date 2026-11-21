@@ -51,7 +51,8 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from arima.host.arima_oracle import ARIMA_ORACLE_PREDICT_SABOTAGE
 from arima.arima_ops_forecast_host import publish_arima_ops_forecast_host
 from core.holtwinters_host_predict_impl import HW_PREDICT_SABOTAGE
-from bindings.kpss_host_test_unpack import KPSS_DECISION_SABOTAGE, KPSS_ORACLE_HOST_SABOTAGE, kpss_test_binding, select_d_host_binding
+from core.kpss_host_test_impl import KPSS_DECISION_SABOTAGE
+from tsa.checks.kpss_oracle import KPSS_ORACLE_HOST_SABOTAGE
 from tsa.tsa_ops_forecast_host import publish_tsa_hw_ops_forecast_host
 
 
@@ -126,8 +127,8 @@ def build__mojolearn_forecast_host() -> PythonObject:
         # 2026-09-16). It trains no model, so it belongs on the shipped side;
         # the `_mojolearn_tsa` route reaches it here when the reference
         # binding, which holds holtwinters_fit, is not built.
-        module.def_function[kpss_test_binding]("kpss_test")
-        module.def_function[select_d_host_binding]("select_d")
+        # TOMBSTONE: dead Python exports kpss_test, select_d (no product caller: the stationarity functions and AutoARIMA's search reach these kernels through the published tsa operations table, core/tsa_entry_table.mojo TSA_OP_KPSS_TEST / TSA_OP_SELECT_D; lane dw-forecast-tail) deleted 2026-11-21; code recoverable at SHA_PLACEHOLDER.
+        # Restore: git apply experiments/removed/dead_entries_tsa_kpss_calls.patch
         # The Holt-Winters operations table of this inference image
         # (core/tsa_entry_table.mojo, family TSA_TABLE_FORECAST): the explicit
         # host class's route resolves it once per estimator.

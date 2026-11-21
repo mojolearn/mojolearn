@@ -13,6 +13,8 @@ from bindings.sequential_arrays_door import sequential_array
 from bindings.tsa_autoarima_native_door import _new_arima
 from bindings.tsa_arima_native_door import arima_fit_routed
 from bindings.tsa_arima_route_unpack import autoarima_route
+from bindings.tsa_hw_route_unpack import tsa_function_route
+from core.tsa_hw_run import tsa_select_d_run
 from core.arima_run import (
     arima_fast_search_mode_run, arima_ndiffs_run, arima_order_caps_run, arima_order_search_device_run,
     arima_order_search_fit_run, arima_order_search_run, arima_route_searches, arima_search_switches_run,
@@ -224,11 +226,19 @@ def autoarima_search(model: PythonObject, args: PythonObject, context: PythonObj
             if written != batch:
                 raise Error("RuntimeError: AutoARIMA: incomplete ndiffs output")
         else:
-            var tsa = py_item(context, nk[].k_tsa_bindings)[py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)]
-            if py_type(tsa) is py_type(PythonObject("")):
-                raise Error(String(tsa))
-            _ = py_call_typed(py_item(tsa, nk[].k_select_d), y.source.addr, classical_address(d32),
-                              Python.list(batch, n_obs, seasonal_d, period, ds[len(ds) - 1], 0.05))
+            # `select_d` on the stationarity entry of this AutoARIMA's
+            # device (the CPU table for device="cpu" beside a GPU set).
+            var tsa_call = tsa_function_route(context, route.vendor == 0, _builtins())
+            var tsa_route = tsa_call.route
+            var y_address = y.source.addr
+            var d32_address = Int(py=classical_address(d32))
+            var d_max = ds[len(ds) - 1]
+            try:
+                with GILReleased(py):
+                    _ = tsa_select_d_run(tsa_route, y_address, d32_address, batch, n_obs, seasonal_d, period, d_max, 0.05)
+            finally:
+                _ = d32  # keep the Python object alive through the native call above
+                _ = tsa_call.owner  # the route owner pins the image through the call
     var dser = _cast(d32, 2, 3, batch, context)
     var dcounts = _counts(d32, 2, batch, 3, context)
     # These options are invariant across differencing groups. Keep the native
