@@ -51,6 +51,12 @@ CASES = [
     Case("BayesianGaussianMixture",
          lambda **kw: mojolearn.BayesianGaussianMixture(n_components=3, random_state=0, **kw),
          ("predict", "predict_proba", "score_samples")),
+    Case("MiniBatchKMeans", lambda **kw: mojolearn.MiniBatchKMeans(n_clusters=3, random_state=0, **kw),
+         ("predict", "transform")),
+    Case("BisectingKMeans", lambda **kw: mojolearn.BisectingKMeans(n_clusters=3, random_state=0, **kw), ("predict",)),
+    Case("MeanShift", lambda **kw: mojolearn.MeanShift(bandwidth=4.0, **kw), ("predict",)),
+    Case("OPTICS", lambda **kw: mojolearn.OPTICS(min_samples=5, **kw), ("fit_predict",)),
+    Case("AffinityPropagation", lambda **kw: mojolearn.AffinityPropagation(random_state=0, **kw), ("predict",)),
 ]
 ids = [case.name for case in CASES]
 
