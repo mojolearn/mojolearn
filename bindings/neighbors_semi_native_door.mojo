@@ -39,7 +39,6 @@ from bindings.family_common_pack import (
     family_array,
     family_field,
 )
-from providers.python.estimator_binding_pyapi_door import estimator_arguments
 from bindings.classical_labels_door import classical_encode_labels, classical_decode_labels, classical_accuracy
 from providers.python.family_public_lifecycle_pyapi_door import family_lifecycle_begin, family_lifecycle_finish
 from providers.python.family_public_lifecycle_run import family_lifecycle_spec
@@ -50,7 +49,7 @@ from std.python._cpython import GILReleased
 from bindings.lof_provider_unpack import LofConnection
 from neighbors.chi2_run import (
     Achi2FitRequest, Achi2Request, Schi2FitRequest, Schi2Request, achi2_fit_run, achi2_interval_check,
-    achi2_transform_run, achi2_csr_run, schi2_fit_run, schi2_weights_run, schi2_check_run, schi2_transform_run,
+    achi2_transform_run, achi2_csr_run, schi2_fit_run, schi2_check_run, schi2_transform_run,
 )
 from neighbors.neighbors_semi_run import (
     xn_achi2_width, xn_schi2_missing_fit, xn_semi_knn_k, xn_lp_alpha_check, xn_lp_static_weight,
@@ -336,29 +335,21 @@ def _achi2_transform(model: PythonObject, args: PythonObject, context: PythonObj
 # ---------------------------------------------------------------- SkewedChi2Sampler
 
 
+# The pending-z paths are deleted (lane fx-leftovers item 10, 2026-11-21):
+# `_schi2_z` (the FAST + Apple SCHI2_LAZYW fit's host-drawn z, expanded to
+# the weights at the first read or transform) has had no producer since lane
+# cpu3-python (5a2b5cecb9, 2026-10-04) made every fit take the counter-based
+# draw (`schi2_fit`); the getter, the setter, the fit's pop, the transform's
+# pending arm and `schi2_weights_run` existed only for it. The SCHI2_LAZYW
+# one-call transform over the stored weights (kfeat bit 4) is unchanged.
+# Plain deletion: no define; recoverable at this commit's parent.
 def _schi2_set_weights(fields: PythonObject, w: PythonObject) raises:
-    """The `random_weights_` setter: drop a pending z, store the weights."""
-    _ = py_call(fields.pop, PythonObject("_schi2_z"), PythonObject(None))
+    """The `random_weights_` setter: store the weights."""
     py_setitem(fields, "_random_weights", w)
 
 
-def _schi2_weights(fields: PythonObject, binding: PythonObject, context: PythonObject) raises -> PythonObject:
-    """The `random_weights_` getter: weights made from a pending z on the
-    first read (the `schi2_weights` operation), else the stored ones."""
-    var b = _semi_b()
-    var z = py_get(fields, PythonObject("_schi2_z"), PythonObject(None))
-    if z is not None:
-        var w = _semi_out(py_call(b.tuple, z.shape), "<f4", context)
-        var z_at = _semi_at(z)
-        var w_at = _semi_at(w)
-        var count = Int(py=z.size)
-        var connection = LofConnection(binding)
-        with GILReleased(Python()):
-            schi2_weights_run(connection.driver, z_at, w_at, count)
-        _ = z  # keep the Python object alive through the native call above
-        _ = w  # keep the Python object alive through the native call above
-        py_setitem(fields, "_random_weights", w)
-        _ = py_call(fields.pop, PythonObject("_schi2_z"))
+def _schi2_weights(fields: PythonObject) raises -> PythonObject:
+    """The `random_weights_` getter: the stored weights."""
     if py_contains(fields, PythonObject("_random_weights")):
         return fields["_random_weights"]
     if py_contains(fields, PythonObject("random_weights_")):
@@ -367,17 +358,9 @@ def _schi2_weights(fields: PythonObject, binding: PythonObject, context: PythonO
 
 
 def schi2_public_weights(model: PythonObject, context: PythonObject) raises -> PythonObject:
-    """The public `random_weights_` getter as one native call: the model's
-    x_neighbors binding is resolved only when a pending z must be expanded
-    (as `self._bind()` was called only then)."""
+    """The public `random_weights_` getter as one native call."""
     classical_connect_numpy(context)
-    var fields = py_fields(model)
-    var binding = PythonObject(None)
-    if py_get(fields, PythonObject("_schi2_z"), PythonObject(None)) is not None:
-        var reserved = Python.list(PythonObject(None))
-        binding = xn_admit_arguments(estimator_arguments(model, "_mojolearn_x_neighbors", reserved, context),
-                                     context)[0]
-    return _schi2_weights(fields, binding, context)
+    return _schi2_weights(py_fields(model))
 
 
 def schi2_public_set_weights(model: PythonObject, value: PythonObject) raises:
@@ -396,7 +379,6 @@ def _schi2_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
     var nc = _semi_int(family_field(fields, "n_components"))
     var seed = _semi_seed(family_field(fields, "random_state"), context)
     var usable = family_is_int(seed) and d > 0 and nc > 0
-    _ = py_call(fields.pop, PythonObject("_schi2_z"), PythonObject(None))
     if not usable:
         xn_schi2_missing_fit(d, nc)
         return
@@ -434,22 +416,15 @@ def _schi2_transform(model: PythonObject, args: PythonObject, context: PythonObj
         with GILReleased(Python()):
             schi2_check_run(x_at, count, skew)
     var nc = _semi_int(family_field(fields, "n_components"))
-    var z = py_get(fields, PythonObject("_schi2_z"), PythonObject(None))
-    var lazy = z is not None
-    if not lazy:
-        lazy = (_semi_kfeat_flags(binding, context) & 4) != 0
-    # SCHI2_LAZYW (FAST + Apple): log, the pending weights, the map: one operation.
+    var lazy = (_semi_kfeat_flags(binding, context) & 4) != 0
+    # SCHI2_LAZYW (FAST + Apple): log and the map over the stored weights: one operation.
     lazy = lazy and _semi_eq(PythonObject(d), py_get(fields, PythonObject("n_features_in_"), PythonObject(None)))
-    var pending = lazy and z is not None
     var w = PythonObject(None)
     var scratch = PythonObject(None)
     var scratch_at = 0
     var dst: PythonObject
     if lazy:
-        if pending:
-            w = _semi_out(Python.tuple(d, nc), "<f4", context)
-        else:
-            w = _schi2_weights(fields, binding, context)
+        w = _schi2_weights(fields)
         dst = _semi_out(Python.tuple(n, nc), "<f4", context)
     else:
         if count == 0:
@@ -458,27 +433,21 @@ def _schi2_transform(model: PythonObject, args: PythonObject, context: PythonObj
         scratch = _semi_out(py_call(b.tuple, x.shape), "<f4", context)
         scratch_at = _semi_at(scratch)
         dst = _semi_out(Python.tuple(n, nc), "<f4", context)
-        w = _schi2_weights(fields, binding, context)
+        w = _schi2_weights(fields)
     var offset = family_field(fields, "random_offset_")
     if lazy and count == 0:
         skew = _semi_float(family_field(fields, "skewedness"))
-    var weights_at = _semi_at(z) if pending else _semi_at(w)
-    var weights_out = _semi_at(w) if pending else 0
-    var request = Schi2Request(x_at, weights_at, weights_out, _semi_at(offset), scratch_at, _semi_at(dst), n, d, nc,
-                               skew, lazy, pending)
+    var request = Schi2Request(x_at, _semi_at(w), 0, _semi_at(offset), scratch_at, _semi_at(dst), n, d, nc,
+                               skew, lazy, False)
     var connection = LofConnection(binding)
     # RUN
     with GILReleased(Python()):
         schi2_transform_run(connection.driver, request)
     _ = x  # keep the Python object alive through the native call above
-    _ = z  # keep the Python object alive through the native call above
     _ = w  # keep the Python object alive through the native call above
     _ = scratch  # keep the Python object alive through the native call above
     _ = offset  # keep the Python object alive through the native call above
     _ = dst  # keep the Python object alive through the native call above
-    # PACK
-    if pending:
-        _schi2_set_weights(fields, w)
     return dst
 
 
