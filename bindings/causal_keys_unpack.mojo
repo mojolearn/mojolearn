@@ -32,6 +32,14 @@ struct CausalKeys(Defaultable, Movable):
     var k__causal_entries_owner: PythonObject
     var k__causal_initial_buffers: PythonObject
     var k__causal_native_model: PythonObject
+    var k__causal_native_state: PythonObject
+    var k_cached_tokens: PythonObject
+    var k_max_tokens: PythonObject
+    var k_arithmetic_profile: PythonObject
+    var k_profile_id: PythonObject
+    var k__nn34_usable: PythonObject
+    var k_absolute_position: PythonObject
+    var k_buffered_tokens: PythonObject
     var k__causal_initial_layers: PythonObject
     var k__causal_live_fields: PythonObject
     var k__causal_original: PythonObject
@@ -198,6 +206,14 @@ struct CausalKeys(Defaultable, Movable):
         self.k__causal_entries_owner = PythonObject(None)
         self.k__causal_initial_buffers = PythonObject(None)
         self.k__causal_native_model = PythonObject(None)
+        self.k__causal_native_state = PythonObject(None)
+        self.k_cached_tokens = PythonObject(None)
+        self.k_max_tokens = PythonObject(None)
+        self.k_arithmetic_profile = PythonObject(None)
+        self.k_profile_id = PythonObject(None)
+        self.k__nn34_usable = PythonObject(None)
+        self.k_absolute_position = PythonObject(None)
+        self.k_buffered_tokens = PythonObject(None)
         self.k__causal_initial_layers = PythonObject(None)
         self.k__causal_live_fields = PythonObject(None)
         self.k__causal_original = PythonObject(None)
@@ -368,6 +384,14 @@ def _causal_keys_fill(nk: UnsafePointer[CausalKeys, MutUntrackedOrigin]) raises:
     nk[].k__causal_entries_owner = py_key("_causal_entries_owner")
     nk[].k__causal_initial_buffers = py_key("_causal_initial_buffers")
     nk[].k__causal_native_model = py_key("_causal_native_model")
+    nk[].k__causal_native_state = py_key("_causal_native_state")
+    nk[].k_cached_tokens = py_key("cached_tokens")
+    nk[].k_max_tokens = py_key("max_tokens")
+    nk[].k_arithmetic_profile = py_key("arithmetic_profile")
+    nk[].k_profile_id = py_key("profile_id")
+    nk[].k__nn34_usable = py_key("_nn34_usable")
+    nk[].k_absolute_position = py_key("absolute_position")
+    nk[].k_buffered_tokens = py_key("buffered_tokens")
     nk[].k__causal_initial_layers = py_key("_causal_initial_layers")
     nk[].k__causal_live_fields = py_key("_causal_live_fields")
     nk[].k__causal_original = py_key("_causal_original")

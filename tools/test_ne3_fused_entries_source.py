@@ -90,8 +90,8 @@ def test_svc_score_compares_codes():
     # The door switches on leaf codes (lane bw2-svm): read its by-name form.
     svc = plain('bindings/svc_kernel_native_door.mojo', _read('bindings/svc_kernel_native_door.mojo'))
     body = svc[svc.index('if operation == "family_svc_svc_score":'):]
-    body = body[:body.index('if operation == "family_svc_svr_fit":')]
-    assert '_svc_predict_codes(' in body and 'svc_decode' not in body
+    body = body[:body.index('if operation == "family_svc_svr_predict":')]
+    assert 'SVC_QUERY_CODES' in body and 'svc_decode' not in body
 
 
 def test_host_lp_resident_loop_runs_the_door_ops():

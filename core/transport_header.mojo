@@ -286,16 +286,25 @@ def _header_integer(text: _HeaderBytes, start: Int, end: Int, key: String) raise
     var negative = i < end and Int(text[i]) == 45
     if negative:
         i += 1
-    if i >= end or end - i > 18:
+    if i >= end or end - i > 19:
         raise Error("transport: header field " + key + " is not an integer")
+    # The whole signed 64-bit range reads back (a float's bit word has up to
+    # 19 digits). The digits accumulate as a negative value, whose range is
+    # the wider one; a value outside 64 bits is refused, never wrapped.
     var value = 0
     while i < end:  # small-loop(digits of one integer)
         var d = Int(text[i]) - 48
         if d < 0 or d > 9:
             raise Error("transport: header field " + key + " is not an integer")
-        value = value * 10 + d
+        if value < -922337203685477580 or (value == -922337203685477580 and d > 8):
+            raise Error("transport: header field " + key + " is not an integer")
+        value = value * 10 - d
         i += 1
-    return -value if negative else value
+    if negative:
+        return value
+    if value < -9223372036854775807:
+        raise Error("transport: header field " + key + " is not an integer")
+    return -value
 
 
 def transport_header_has(address: Int, count: Int, key: String) raises -> Bool:

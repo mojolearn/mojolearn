@@ -123,6 +123,13 @@ def _cross_int_is(address: Int, count: Int, key: String, expected: Int) -> Bool:
         return False
 
 
+def _cross_need(address: Int, count: Int, key: String) raises:
+    """A field the frame must carry. Its absence is refused in the words the
+    subscript read gave (the missing key, quoted), as a ValueError."""
+    if not transport_header_has(address, count, key):
+        raise Error("'" + key + "'")
+
+
 def _cross_send(fd: Int, timeout: Float64, header: TransportHeader, payload_address: Int, payload_bytes: Int) raises:
     var text = header.encode(payload_bytes)
     transport_send_words(fd, timeout, Int(text.unsafe_ptr()), len(text), payload_address, payload_bytes)
@@ -446,6 +453,7 @@ def cross_coordinator_step(mut c: CrossCoordinatorState, step: Int) raises:
                 answered = False
         if not answered:
             cross_coordinator_refuse(c, c.names[p] + " answered the wrong step or shards")
+        _cross_need(head, got[0], "losses")
         var values = List[Float64]()
         var counted = True
         try:
@@ -506,6 +514,7 @@ def cross_coordinator_step(mut c: CrossCoordinatorState, step: Int) raises:
         var got = transport_receive_into(c.fds[p], c.timeouts[p], head, capacity, 0, 0)
         if not _cross_int_is(head, got[0], "completed", step + 1):
             cross_coordinator_refuse(c, c.names[p] + " did not commit step " + String(step + 1))
+        _cross_need(head, got[0], "state")
         var state = transport_header_text(head, got[0], "state")
         if i == 0:
             c.row_agreed = state
@@ -731,6 +740,7 @@ def _cross_fold_reply(mut w: CrossWorkerState) raises:
     w.on_device = False
     w.has_total = True
     var reply = TransportHeader()
+    _cross_need(Int(w.head.unsafe_ptr()), w.head_bytes, "step")
     reply.put_int("step", transport_header_int(Int(w.head.unsafe_ptr()), w.head_bytes, "step"))
     _cross_reply(w, reply, Int(w.total.unsafe_ptr()), w.n * 4)
 
@@ -759,9 +769,18 @@ def _cross_commit(mut w: CrossWorkerState, session: ParallelByteSession, done: I
     w.applied_address = source
     w.commit_step = done
     w.commit_state = cross_state_hash(w.snapshot, w.n, w.nt)
-    if not transport_header_has(head, w.head_bytes, "losses"):
+    # The refusal words of the boundary reads this replaced: a `losses` that
+    # is absent, null or not a list; then an entry that is not a number.
+    var listed = transport_header_find(head, w.head_bytes, "losses")
+    if listed[0] < 0 or Int(_CrossBytes(unsafe_from_address=head)[listed[0]]) != 91:
         raise Error("committed losses requires list, tuple or range; Python iteration hooks are not accepted")
-    w.commit_losses = cross_header_floats(head, w.head_bytes, "losses")
+    var numbers = True
+    try:
+        w.commit_losses = cross_header_floats(head, w.head_bytes, "losses")
+    except:
+        numbers = False
+    if not numbers:
+        raise Error("recorded float32 requires a native number; Python conversion hooks are not accepted")
     if w.scheme == CROSS_SCHEME_V1:
         w.commit_state_sha = w.commit_state
         w.commit_has_gradient_sha = w.commit_has_total_hash
@@ -827,6 +846,7 @@ def cross_worker_command(mut w: CrossWorkerState, mut session: ParallelByteSessi
         command = transport_header_text(head, count, "cmd")
     if command == "step":
         w.step_started = transport_clock()
+        _cross_need(head, count, "step")
         var step = transport_header_int(head, count, "step")
         if session.completed != step:
             raise Error("CrossVendorMismatch: worker completed step differs from coordinator")

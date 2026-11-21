@@ -60,6 +60,7 @@ from checks.vendor import COMPILED_VENDOR
 from svm.native_descriptor_dispatch import SVC_NATIVE_API
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from svm.svr_native_device import SVR_DEVICE_API
+from svm.svc_native_device import SVC_DEVICE_API
 from isolation_forest.impl.isolation_forest import (
     IF_DEVICE_TRANSPOSE,
     IDN_IF_QUERY_DEVICE,
@@ -155,6 +156,13 @@ def svr_native_api_binding() raises -> PythonObject:
 
 def svm_native_api_binding() raises -> PythonObject:
     var table = SVC_NATIVE_API.get_or_create_ptr()
+    return neural_descriptor_capsule(table[].name, table[].entries)
+
+
+def svc_device_api_binding() raises -> PythonObject:
+    """The SVC device table (svm/svc_native_device.mojo): the device-X solve
+    and the resident query the kernel SVM door runs without a Python call."""
+    var table = SVC_DEVICE_API.get_or_create_ptr()
     return neural_descriptor_capsule(table[].name, table[].entries)
 
 
@@ -1113,6 +1121,7 @@ def build__mojolearn_svm() -> PythonObject:
         m.def_function[svc_fit_binding]("svc_fit")
         m.def_function[svm_native_api_binding]("svm_binary_api_v1")
         m.def_function[svr_native_api_binding]("svr_native_api_v1")
+        m.def_function[svc_device_api_binding]("svc_device_api_v1")
         m.def_function[svc_predict_binding]("svc_predict")
         m.def_function[svc_pair_epilogue_device_binding]("svc_pair_epilogue")
         m.def_function[svc_platt_train_device_binding]("svc_platt_train")

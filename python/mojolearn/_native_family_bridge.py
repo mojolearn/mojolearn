@@ -103,6 +103,21 @@ def tables(**fixed):
     context.update(fixed)
 
 
+_CPU_ROUTES = None
+
+
+def _cpu_routes():
+    # glue: the manifest's route table (binding name -> its CPU identical
+    # module), built once per process. `_backend._HOST_MODULES` is the same
+    # table, read only by the CPU-only selector
+    # (tools/test_lane_select_narrowing.py).
+    global _CPU_ROUTES
+    if _CPU_ROUTES is None:
+        from . import host_surface
+        _CPU_ROUTES = host_surface.routed_modules()
+    return _CPU_ROUTES
+
+
 #: Binding names the host surface routes no CPU module for, whose CPU
 #: identical image is loaded by name beside the device one (the metrics
 #: programs a device="cpu" estimator scores on beside a GPU set). One place:
@@ -118,7 +133,7 @@ def _connect_cpu_binding(_backend, name):
     # already the CPU one (`family_binding_connections`).
     if _backend._CPU_ONLY is not None:
         return ('ImportError: this installation is CPU only; its own bindings are the CPU bindings',)
-    basename = _backend._HOST_MODULES.get(name) or _CPU_DEVICE_IMAGES.get(name)
+    basename = _cpu_routes().get(name) or _CPU_DEVICE_IMAGES.get(name)
     if basename is None:
         return ("ValueError: device='cpu' is not available: " + name + ' has no CPU implementation. '
                 "Leave device=None to run on this installation's device",)

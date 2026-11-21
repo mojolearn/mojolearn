@@ -69,13 +69,17 @@ def test_program_input_reads_provider_fields_before_native_rank_loop():
 
 
 def test_samba_dropout_consumes_native_metadata_in_both_directions():
-    source = function('bindings/samba_training_native_door.mojo', '_samba_dropout')
-    for token in ('samba_fields(', 'config[', 'value.shape', 'value.size', 'fields['):
+    # The mask is RUN (training/samba_training_run.mojo): typed words only.
+    run = (ROOT / 'training/samba_training_run.mojo').read_text()
+    source = re.search(r'^def samba_dropout_run\(.*?(?=^def |^struct |\Z)', run, flags=re.M | re.S).group()
+    for token in ('samba_fields(', 'config[', 'value.shape', 'value.size', 'fields[', 'PythonObject'):
         assert token not in source
+    assert 'PythonObject' not in run and 'std.python' not in run
     # The public samba_gradients is a thin wrapper; the body is _samba_gradients (admitted flag).
     whole = function('bindings/samba_training_native_door.mojo', '_samba_gradients')
-    assert whole.count('SambaDropoutMetadata(fields, dropout_probability, stream)') == 1
-    assert whole.count('dropout_metadata.value()') == 2
+    # The mask's words are unpacked once per gradient operation and used forward and backward.
+    assert whole.count('_samba_dropout_unpack(fields, dropout_probability, stream)') == 1
+    assert whole.count(', False)') == 1 and whole.count('dropout_metadata.value(), rows * d, offset, True)') == 3
     assert 'var i = layer_count - reverse - 1' in whole
 
 

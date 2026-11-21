@@ -243,11 +243,16 @@ def _connect_cpu_device():
     # does not load records why, and the trainer that asks for it says so.
     if _backend._CPU_ONLY is not None:
         return None
+    # The route table is the manifest's (`host_surface.routed_modules()`, read
+    # once here): `_backend._HOST_MODULES` is read only by the CPU-only
+    # selector (tools/test_lane_select_narrowing.py).
+    from . import host_surface
+    routed = host_surface.routed_modules()
     try:
         entries = _image_entries(
             'identical',
-            lambda: _backend.load_host_module(_backend._HOST_MODULES['_mojolearn_training']),  # import-time: the CPU image
-            lambda: _backend.load_host_module(_backend._HOST_MODULES['_mojolearn_x_sequence']))  # import-time: the CPU image
+            lambda: _backend.load_host_module(routed['_mojolearn_training']),  # import-time: the CPU image
+            lambda: _backend.load_host_module(routed['_mojolearn_x_sequence']))  # import-time: the CPU image
     except Exception as error:
         entries = type(error).__name__ + ': ' + str(error)
     return {'identical': entries}

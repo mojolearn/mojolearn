@@ -165,3 +165,43 @@ def test_existing_standalone_and_profile_routes_remain_available():
     # Resident session setup retains its original, separate metadata admission.
     assert '_transformer_params(' in BINDING
     assert 'self.planes = self.head.packed and py_contains(entries, "forward15")' in PROVIDER
+
+
+def test_decode_state_owner_is_native_and_the_layer_run_reads_its_words():
+    """Lane dw-causal, 2026-11-21 (design 1.2 B): the decode state has a
+    native owner behind a handle with a generation check; a whole-model
+    layer call takes its state buffers from the owner's words."""
+    core = (ROOT / 'core/causal_owner.mojo').read_text()
+    assert 'from std.python' not in core and 'PythonObject' not in core
+    for name in ('struct CausalStateWords', 'struct CausalLayerStateWords', 'struct CausalBufferWords',
+                 'def causal_state_admit(', 'def causal_state_buffer_address('):
+        assert name in core
+    owner = (ROOT / 'bindings/causal_operation_owner_door.mojo').read_text()
+    assert 'struct CausalStateOwner(Movable, Writable):' in owner
+    bind = owner.split('def causal_state_owner_bind(', 1)[1].split('\ndef ', 1)[0]
+    # the handle: a weakly keyed record; the generation check before reuse
+    assert bind.index('prepared_get(mods, _CAUSAL_STATE_SLOT, state)') < bind.index('_causal_state_owner_kept(record, generation, layers)')
+    assert 'prepared_put(mods, _CAUSAL_STATE_SLOT, state, held)' in bind
+    kept = owner.split('def _causal_state_owner_kept(', 1)[1].split('\ndef ', 1)[0]
+    assert 'words.model_generation != generation' in kept and 'originals[i] is not layers[i]' in kept
+    capture = owner.split('def causal_state_capture(', 1)[1].split('\ndef ', 1)[0]
+    assert 'causal_state_owner_bind(mods, state, fields, layers,' in capture
+    unpack = owner.split('def causal_state_layer_unpack(', 1)[1].split('\ndef ', 1)[0]
+    # a buffer is read only when its storage pin changed; a foreign exporter takes the object route
+    assert 'value is owner[].pins[base + j]' in unpack and 'generation_array_snapshot' not in unpack
+    assert 'if py_type(value) is not g[].array_cls:\n                return PythonObject(None)' in unpack
+    assert 'add_type[CausalStateOwner]("_CausalStateOwner")' in (ROOT / 'bindings/_mojolearn_tokenizer_host.mojo').read_text()
+    public = (ROOT / 'bindings/causal_lm_public_door.mojo').read_text()
+    owned = public.split('def _causal_layer_run_owned(', 1)[1].split('\ndef ', 1)[0]
+    # no state buffer object, no per-call metadata snapshot of state, no write-back
+    for gone in ('_mutable(', '_writeback(', 'st.k_cache', 'st.conv_window', 'py_setattr(', 'getattr'):
+        assert gone not in owned, gone
+    assert owned.count('causal_state_buffer_address(state.buffers[') == 11
+    # the arms of the bound run are intact in the owned one
+    assert 'comptime if not IDN_MAMBA12_FORWARD_COPIES_OLD:' in owned
+    assert 'not TRANSFORMER_LEGACY_SETUP and route.block_session' in owned
+    run = public.split('def _run_snapshot(', 1)[1].split('\ndef ', 1)[0]
+    assert run.index('causal_state_owner(mods, state)') < run.index('for i in range(len(snapshot.layers))')
+    assert '_causal_layer_run_owned(' in run and '_causal_layer_run_bound(' in run
+    state = public.split('def _state(mut mods: NativeModules, words: CausalModelWords', 1)[1].split('\ndef ', 1)[0]
+    assert 'causal_state_admit(words, state_owner[].words, b, l)' in state

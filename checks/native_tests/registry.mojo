@@ -226,6 +226,7 @@ from checks.native_tests.gbdt_feature_freq_experimental import register as regis
 from checks.native_tests.gbdt_host_archive_text import register as register_gbdt_host_archive_text
 # lane tests-to-mojo-neural (2026-11-15)
 from checks.native_tests.generator_draw import register as register_generator_draw
+from checks.native_tests.lm_corpus_prepare import register as register_lm_corpus_prepare
 from checks.native_tests.training_small_mlp_relations import register as register_training_small_mlp_relations
 # lane checks-register (2026-11-16): the standalone main() checks no CI job ran, now registered
 from checks.native_tests.affinity_preference_plan import register as register_affinity_preference_plan
@@ -263,6 +264,7 @@ from checks.native_tests.kmeans_variants_contract import register as register_km
 from checks.native_tests.kmeans_variants_lease import register as register_kmeans_variants_lease
 from checks.native_tests.parallel_byte_session import register as register_parallel_byte_session
 from checks.native_tests.cross_vendor_run import register as register_cross_vendor_run
+from checks.native_tests.cross_vendor_loopback import register as register_cross_vendor_loopback
 from checks.native_tests.kpca_contract import register as register_kpca_contract
 from checks.native_tests.kpca_state import register as register_kpca_state
 from checks.native_tests.label_score_keys_stress import register as register_label_score_keys_stress
@@ -818,6 +820,7 @@ def all_checks() -> List[Check]:
     checks.append(register_gbdt_host_archive_text())
     # lane tests-to-mojo-neural (2026-11-15)
     checks.append(register_generator_draw())
+    checks.append(register_lm_corpus_prepare())
     checks.append(register_training_small_mlp_relations())
     # lane checks-register (2026-11-16)
     checks.append(register_affinity_preference_plan())
@@ -855,6 +858,7 @@ def all_checks() -> List[Check]:
     checks.append(register_kmeans_variants_lease())
     checks.append(register_parallel_byte_session())
     checks.append(register_cross_vendor_run())
+    checks.append(register_cross_vendor_loopback())
     checks.append(register_kpca_contract())
     checks.append(register_kpca_state())
     checks.append(register_label_score_keys_stress())

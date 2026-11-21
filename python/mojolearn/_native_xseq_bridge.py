@@ -60,21 +60,24 @@ def _connect_cpu_device(context):
     # `xseq_route`). A CPU-only installation has no second set: its one set
     # is the CPU's. An image that does not load records why, and the
     # estimator that asks for it says so.
-    from . import _backend
+    from . import _backend, host_surface
     if _backend._CPU_ONLY is not None:
         return
     errors = (ImportError, AttributeError, ValueError, RuntimeError, TypeError, OSError, KeyError)
+    # The manifest's route table, read once here: `_backend._HOST_MODULES` is
+    # read only by the CPU-only selector (tools/test_lane_select_narrowing.py).
+    routed = host_surface.routed_modules()
     bindings = {}
     keys = {}
     metrics = {}
     try:
-        module = _backend.load_host_module(_backend._HOST_MODULES["_mojolearn_x_sequence"])  # import-time: the CPU image
+        module = _backend.load_host_module(routed["_mojolearn_x_sequence"])  # import-time: the CPU image
         bindings["identical"], keys["identical"] = _sequence_image(module)
     except errors as error:
         bindings["identical"] = keys["identical"] = type(error).__name__ + ": " + str(error)
     try:
         metrics["identical"] = _metrics_image(
-            _backend.load_host_module(_backend._HOST_MODULES["_mojolearn_metrics"]))  # import-time: the CPU image
+            _backend.load_host_module(routed["_mojolearn_metrics"]))  # import-time: the CPU image
     except errors as error:
         metrics["identical"] = type(error).__name__ + ": " + str(error)
     context.update(xseq_cpu_bindings=bindings, xseq_cpu_native_keys=keys, xseq_cpu_metrics=metrics)
