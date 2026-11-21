@@ -135,6 +135,18 @@ def test_a_model_and_its_loaded_copies_have_one_digest(name, params, target, tmp
         assert twin.digest_ == model.digest_
 
 
+def test_a_random_splitter_tree_has_a_digest_from_its_tree_arrays(tmp_path):
+    # `save` refuses a splitter='random' tree; its digest needs no file.
+    random_tree = _fit("DecisionTreeRegressor", dict(splitter="random", random_state=0), "r")
+    with pytest.raises(NotImplementedError):
+        random_tree.save(str(tmp_path / "tree.npz"))
+    first = random_tree.digest_
+    assert len(first) == 64
+    assert _fit("DecisionTreeRegressor", dict(splitter="random", random_state=0), "r").digest_ == first
+    assert _fit("DecisionTreeRegressor", dict(splitter="random", random_state=0), "r", X_OTHER).digest_ != first
+    assert _fit("DecisionTreeRegressor", dict(random_state=0), "r").digest_ != first
+
+
 @pytest.mark.parametrize("name,params,target", [case for case in CASES if case[0] in ("Ridge", "LinearRegression")])
 def test_cpu_device_gives_the_gpu_digest(name, params, target):
     if mojolearn.vendor() == "cpu":

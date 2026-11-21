@@ -134,7 +134,14 @@ def parse(path_text):
               and len(node.args) >= 3 and isinstance(node.args[0], ast.Name)):
             steps = literal(node.args[2], constants)
             if isinstance(steps, tuple):
-                schemas.append((node.args[0].id, schema_members(steps)))
+                schemas.append((node.args[0].id, schema_members(steps), False))
+        elif (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "schema"
+              and isinstance(node.func.value, ast.Name) and node.func.value.id == "_digest_fields"
+              and len(node.args) >= 2 and isinstance(node.args[0], ast.Name)):
+            # a digest schema: run in place of the class's save schema
+            steps = literal(node.args[1], constants)
+            if isinstance(steps, tuple):
+                schemas.append((node.args[0].id, schema_members(steps), True))
     return path.name, classes, schemas
 
 
@@ -198,11 +205,15 @@ def rows(jobs):
             parsed = list(pool.map(parse, files, chunksize=8))
     classes = {}
     schemas = {}
+    digest_schemas = {}
     for _, found, registered in parsed:
         for name, bases, own_digest, has_fit in found:
             classes.setdefault(name, (bases, own_digest, has_fit))
-        for name, listed in registered:
-            schemas[name] = listed
+        for name, listed, for_digest in registered:
+            if for_digest:
+                digest_schemas[name] = listed
+            else:
+                schemas[name] = listed
 
     def ancestry(name, seen):
         """The class and its ancestors, nearest first (the order the walk looks tables up in)."""
@@ -227,10 +238,14 @@ def rows(jobs):
         if reason is not None:
             out.append((name, "not yet", reason))
             continue
-        listed = next((schemas[c] for c in line if c in schemas), None)
+        source = "digest schema"
+        listed = next((digest_schemas[c] for c in line if c in digest_schemas), None)
+        if listed is None:
+            source = "save schema"
+            listed = next((schemas[c] for c in line if c in schemas), None)
         if listed is not None:
             text = ", ".join(f"`{m}`" + (" (when present)" if cond else "") for m, cond in listed)
-            out.append((name, "save schema", text))
+            out.append((name, source, text))
             continue
         added = next((extra[c] for c in line if c in extra), ())
         text = "every public fitted attribute"
@@ -254,6 +269,8 @@ def render(table):
         "arrays. Nothing is kept between reads: the digest is hashed from the model as it is at each read.",
         "",
         "- **save schema**: the members `save` writes for the class.",
+        "- **digest schema**: the members `save` writes, built without the refusals of `save` (a model the file format",
+        "  does not carry still has a digest).",
         "- **public fitted attributes**: every stored attribute whose name ends in `_` and does not start with `_`,",
         "  value not None, plus the private fitted fields listed (a listed name the model does not hold is passed over).",
         "- Public names no class hashes (they record how a call ran, not what was fitted): "

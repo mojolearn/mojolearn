@@ -16,7 +16,10 @@
 #   1. A class with a connected save schema (`archive_save_schemas`, the
 #      schema `save` writes): the schema's members, built by `_schema_run`
 #      and described by `_archive_unpack_member`, exactly as `save` does
-#      before it writes. Nothing is written.
+#      before it writes. Nothing is written. A class may declare a digest
+#      schema (`digest_schemas`) that is run in its place: a decision tree's
+#      is its save schema without the refusal of a splitter='random' tree,
+#      whose fitted arrays need no file to be hashed.
 #   2. Any other class: its public fitted attributes, the rule `is_fitted`
 #      reads (instance fields whose name ends in "_" and does not start with
 #      "_", value not None, name not in `digest_skip`: the few public names
@@ -127,7 +130,14 @@ def fitted_digest_text(model: PythonObject, context: PythonObject, depth: Int) r
             raise Error("AttributeError: " + class_name + " has no digest_ yet: " + String(py=reason))
     # A fitted field may be an ndarray when the caller loaded NumPy.
     classical_connect_numpy(context)
-    var steps = archive_schema_lookup(cls, context["archive_save_schemas"])
+    # The class's digest schema when it declares one (a tree: its fitted
+    # arrays without the save refusal), else the schema `save` writes.
+    var steps = PythonObject(None)
+    var own_schemas = py_get(context, "digest_schemas")
+    if own_schemas is not None:
+        steps = archive_schema_lookup(cls, own_schemas)
+    if steps is None:
+        steps = archive_schema_lookup(cls, context["archive_save_schemas"])
     var schema = steps is not None and py_type(steps) is not b.str
     var pins = List[PythonObject]()
     var members = List[NativeArchiveMember]()
