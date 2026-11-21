@@ -12,7 +12,7 @@ from bindings.lm_corpus_metadata_door import (corpus_context, corpus_connect, co
 from bindings.lm_corpus_files_door import (corpus_env_lm_cache, corpus_path, corpus_path_object, corpus_read, corpus_write,
     corpus_hash_bytes, corpus_hash_file, corpus_read_json, corpus_write_json, corpus_exists,
     corpus_atomic_begin, corpus_atomic_commit, corpus_atomic_abort, corpus_seconds, corpus_file_size)
-from bindings.tokenizer_public_native_door import (tokenizer_bpe_identity_file, tokenizer_bpe_identity_text,
+from bindings.tokenizer_public_native_door import (tokenizer_bpe_identity_file,
     tokenizer_bpe_encode_corpus, tokenizer_bpe_train_corpus, tokenizer_bpe_export, tokenizer_bpe_for,
     tokenizer_bpe_identity, tokenizer_trained_info)
 from core.lm_batch_run import LmBatchRequest, lm_batch_dims, lm_batch_run, lm_batch_steps_run

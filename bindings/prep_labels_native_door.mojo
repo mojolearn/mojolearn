@@ -528,7 +528,7 @@ def _list_codes(mut p: EncProg, classes: PythonObject, cats: PythonObject, value
     var unused_ints = False
     if cats is not None and _numeric_label_words(values, words, unused_ints, False, context):
         var known = _own_cats(p, cats, context)
-        return LabelCodes(LAB_CODES_LOOKUP, n, NONE, words^, known)
+        return LabelCodes(LAB_CODES_LOOKUP, n, NONE, words^, known^)
     var native = _str_codes(classes, values, True, context) if n > 0 else PythonObject(None)
     if native is not None:
         var owner = p.own(native[0], n)
@@ -1266,7 +1266,7 @@ def _lb_inverse(model: PythonObject, y: PythonObject, threshold: PythonObject, c
         known = _own_cats(p, table, context)
     var x = p.own_x(values)
     # RUN: the typed stages, then the typed run.
-    var plan = lab_unbinarize_stage(p.prog, LabelUnbinarize(target, n, W, K, x, t, gather, known, ints))
+    var plan = lab_unbinarize_stage(p.prog, LabelUnbinarize(target, n, W, K, x, t, gather, known^, ints))
     var ran = p.run_caps(entries, context, caps)
     # PACK
     if target == LAB_Y_MULTILABEL:
