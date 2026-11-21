@@ -13,7 +13,12 @@ or random_state that is not an integer), SplineTransformer (kind 9,
 `(35, 9)`), OrdinalEncoder (kind 10, `(35, 10)`; admit answers False for
 categories other than 'auto', for infrequent grouping (min_frequency or
 max_categories set) and on the FAST image whose packed category route the
-door tries first: the caller keeps the door). The family's other classes
+door tries first: the caller keeps the door), OneHotEncoder (kind 11,
+`(35, 11)`; False for the same settings, for a `drop` given per column and
+for every setting whose transform warns: handle_unknown='warn', or
+'ignore' / 'infrequent_if_exist' with a drop; the door's UserWarning is
+raised only on its own route, since a member transform has no PACK here
+and the notice word of lane fx-audit is not on integration). The family's other classes
 (TargetEncoder IterativeImputer) carry no mark (each blocker in the lane's
 RESULT file): a caller keeps their own doors, and admit refuses their kinds
 in words.
@@ -56,9 +61,10 @@ from bindings.prep_encode_native_door import (
     _knot_rows as enc_knot_rows, _f32 as enc_f32,
     _check_infrequent_params as enc_check_infrequent, _fast_unique as enc_fast_unique, _cls2_cat as enc_cls2_cat,
     _c08_route as enc_c08_route, _category_record as enc_category_record, _index_list as enc_index_list,
-    encode_auto_categories,
+    encode_auto_categories, encode_drop_word, encode_auto_drops,
 )
 from bindings.prep_encode_cats_run import CatAuto
+from bindings.prep_encode_onehot_run import onehot_auto_drops, OH_DROP_NONE
 from bindings.prep_stateless_native_door import _int_like as stateless_int_like
 from bindings.py_typed_call import py_call_typed
 from bindings.prep_encode_imputer_run import IMP_MEAN, IMP_MEDIAN, IMP_MOST_FREQUENT, IMP_CONSTANT
@@ -84,6 +90,7 @@ from core.prep_member import (
     PREP_KIND_IMPUTER, PREP_IMPUTER_PARAM_COUNT,
     PREP_KIND_KBINS, PREP_KBINS_HEADER, PREP_KBINS_ONEHOT, PREP_KBINS_ONEHOT_DENSE, PREP_KBINS_ORDINAL,
     PREP_KIND_SPLINE, PREP_SPLINE_HEADER, PREP_KIND_ORDINAL, PREP_ORDINAL_PARAM_COUNT,
+    PREP_KIND_ONEHOT, PREP_ONEHOT_PARAM_COUNT, PREP_ONEHOT_ERROR, PREP_ONEHOT_IGNORE, PREP_ONEHOT_INFREQUENT,
     PREP_ROUTE_OUT, PREP_ROUTE_SCRATCH, PREP_ROUTE_RANGES, PREP_ROUTE_DEV_PUT, PREP_ROUTE_TAKE_ROWS,
 )
 from core.member_abi import (
@@ -448,6 +455,44 @@ def _ordinal_admit(model: PythonObject, fields: PythonObject, context: PythonObj
     return True
 
 
+def _onehot_admit(model: PythonObject, fields: PythonObject, context: PythonObject, mut owner: MemberOwner) raises -> Bool:
+    # The encode door's `_precheck` and `_onehot_fit` UNPACK, in its order
+    # and words, read once here. False (the caller keeps the door): the
+    # ordinal admit's settings, a drop given per column, and every setting
+    # whose transform warns.
+    var grouping = enc_check_infrequent(fields, context)
+    var handle = fields["handle_unknown"]
+    var text = String(handle) if enc_is_str(handle) else String("")
+    if text != "error" and text != "ignore" and text != "infrequent_if_exist" and text != "warn":
+        raise Error("mojolearn: OneHotEncoder handle_unknown=" + stateless_repr(handle) + " is not valid")
+    var drop = fields["drop"]
+    if enc_is_str(drop) and String(drop) != "first" and String(drop) != "if_binary":
+        raise Error("mojolearn: OneHotEncoder drop must be None, 'first', 'if_binary' or one category "
+                    + "per feature")
+    var categories = fields["categories"]
+    if grouping or not (enc_is_str(categories) and String(categories) == "auto"):
+        return False
+    var word = encode_drop_word(drop)
+    if word < 0 or text == "warn" or (word != OH_DROP_NONE and text != "error"):
+        return False
+    var mode = context["backend_fields"]["_DEFAULT_MODE"]
+    var entries = scaler_entries(model, mode, context)
+    var fast = enc_fast_unique(mode, entries)
+    if (enc_cls2_cat(mode, entries) & 1) != 0 and fast:
+        return False
+    var words = List[Float64](length=PREP_ONEHOT_PARAM_COUNT, fill=0.0)
+    words[0] = Float64(PREP_KIND_ONEHOT)
+    words[1] = 1.0 if fast else 0.0  # CAT_FIT_SCAN, else CAT_FIT_UNIQUE
+    words[2] = 1.0 if enc_c08_route(mode, entries, 2) else 0.0
+    words[3] = 1.0 if xprep_r3("work") else 0.0
+    words[4] = Float64(PREP_ONEHOT_ERROR if text == "error" else (
+        PREP_ONEHOT_IGNORE if text == "ignore" else PREP_ONEHOT_INFREQUENT))
+    words[5] = Float64(word)
+    _route_admit(model, entries, context, owner, enc_caps(model, entries), False)
+    owner.plan.params = words^
+    return True
+
+
 def prep_member_admit(model: PythonObject, fields: PythonObject, kind: Int, context: PythonObject,
     b: PythonObject, mut owner: MemberOwner) raises -> Bool:
     """UNPACK: fill `owner.plan.route`, `owner.plan.params` and `owner.pins`
@@ -478,6 +523,8 @@ def prep_member_admit(model: PythonObject, fields: PythonObject, kind: Int, cont
         return True
     if kind == PREP_KIND_ORDINAL:
         return _ordinal_admit(model, fields, context, owner)
+    if kind == PREP_KIND_ONEHOT:
+        return _onehot_admit(model, fields, context, owner)
     raise Error("ValueError: mojolearn: Prep member kind " + String(kind) + " is not published")
 
 
@@ -502,7 +549,7 @@ def prep_member_pack(model: PythonObject, fields: PythonObject, context: PythonO
     plan: MemberPlan, state: Int) raises:
     """PACK: write the fitted attributes of state `state` into `model`, as
     the door's fit does."""
-    if plan.kind < PREP_KIND_ROBUST or plan.kind > PREP_KIND_ORDINAL:
+    if plan.kind < PREP_KIND_ROBUST or plan.kind > PREP_KIND_ONEHOT:
         raise Error("ValueError: mojolearn: Prep member kind " + String(plan.kind) + " is not published")
     var call = MemberCall(plan.route, state)
     var scalars = _export(plan, call, MEMBER_BLOCK_SCALARS)
@@ -517,7 +564,7 @@ def prep_member_pack(model: PythonObject, fields: PythonObject, context: PythonO
     if plan.kind == PREP_KIND_SPLINE:
         _pack_spline(fields, context, plan, call, d, Int(words[1]), Int(words[2]), Int(words[3]))
         return
-    if plan.kind == PREP_KIND_ORDINAL:
+    if plan.kind == PREP_KIND_ORDINAL or plan.kind == PREP_KIND_ONEHOT:
         _pack_encoder(model, fields, context, plan, call, d, Int(words[1]))
         return
     if plan.kind == PREP_KIND_POLYNOMIAL or plan.kind == PREP_KIND_QUANTILE or plan.kind == PREP_KIND_POWER:
@@ -607,9 +654,15 @@ def _pack_encoder(model: PythonObject, fields: PythonObject, context: PythonObje
     mut call: MemberCall, d: Int, kmax: Int) raises:
     """The encode door's restricted fit PACK (bindings/prep_encode_native_door.mojo
     `encode_auto_categories`: categories_, the category record, `_missing`,
-    `_infrequent` / `_grouping` None), then its fields, in its order."""
+    `_infrequent` / `_grouping` None; OneHotEncoder's `_drop_after` /
+    `drop_idx_`), then its fields, in its order."""
     var state = _encoder_state_of(plan, call, d, kmax)
     encode_auto_categories(model, fields, state, context)
+    if plan.kind == PREP_KIND_ONEHOT:
+        # `_onehot_fit`'s drops: the drop word's indices (the RUN the member's
+        # fit ran on the same sizes), as `_drop_after` / `drop_idx_`.
+        var word = Int(plan.params[5])
+        encode_auto_drops(fields, onehot_auto_drops(state.sizes, word), word == OH_DROP_NONE)
     py_setitem(fields, "numeric_mode_", context["backend_fields"]["_DEFAULT_MODE"])
     py_setitem(fields, "n_features_in_", d)
 
@@ -703,6 +756,18 @@ def _encoder_state(model: PythonObject, fields: PythonObject, context: PythonObj
     var missing = List[Float32](capacity=d)
     for j in range(d):  # driver-loop: over the per-column NaN slots (feature metadata)
         missing.append(Float32(missing_list[j]))
+    # OneHotEncoder: `_drop_after` (None: no drop), as the door's `_onehot_drops`.
+    var drops = List[Float32](length=d, fill=Float32(-1))
+    if plan.kind == PREP_KIND_ONEHOT:
+        if not py_contains(fields, "_drop_after"):
+            raise Error("NotFittedError: this member is not fitted yet")
+        var after = fields["_drop_after"]
+        if after is not None:
+            if len(after) != d:
+                raise Error("RuntimeError: mojolearn: a fitted attribute does not match the fitted sizes")
+            for j in range(d):  # driver-loop: over the per-column drop indices (feature metadata)
+                if after[j] is not None:
+                    drops[j] = Float32(Int(py=after[j]))
     var scalars: List[Float64] = [Float64(d), Float64(kmax)]
     var call = member_new(plan)
     try:
@@ -712,6 +777,10 @@ def _encoder_state(model: PythonObject, fields: PythonObject, context: PythonObj
         call.flags = 0
         call.x = MemberMatrix(Int(missing.unsafe_ptr()), 1, d)
         _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+        if plan.kind == PREP_KIND_ONEHOT:
+            call.block = PREP_BLOCK_ANCHOR
+            call.x = MemberMatrix(Int(drops.unsafe_ptr()), 1, d)
+            _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
         call.block = MEMBER_BLOCK_SCALARS
         call.x = MemberMatrix(Int(scalars.unsafe_ptr()), 1, len(scalars), MEMBER_F64)
         call.flags = MEMBER_IMPORT_DONE
@@ -721,6 +790,7 @@ def _encoder_state(model: PythonObject, fields: PythonObject, context: PythonObj
         raise error
     _ = len(scalars)
     _ = len(missing)
+    _ = len(drops)
     _ = record
     return call.state
 
@@ -853,7 +923,7 @@ def prep_member_state(model: PythonObject, fields: PythonObject, context: Python
         return _kbins_state(fields, context, plan)
     if plan.kind == PREP_KIND_SPLINE:
         return _spline_state(fields, context, plan)
-    if plan.kind == PREP_KIND_ORDINAL:
+    if plan.kind == PREP_KIND_ORDINAL or plan.kind == PREP_KIND_ONEHOT:
         return _encoder_state(model, fields, context, plan)
     if plan.kind != PREP_KIND_ROBUST and not maxabs:
         raise Error("ValueError: mojolearn: Prep member kind " + String(plan.kind) + " is not published")
