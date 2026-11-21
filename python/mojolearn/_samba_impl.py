@@ -244,8 +244,20 @@ class SambaStack(object):
         return _native_samba_bridge.RUNTIME.samba_native_call("load_weights", (self, weights), _native_samba_bridge.CONTEXT)
 
     def parameters(self):
-        """The parameters as ``{name: array}``, views of the flat buffer in registry order."""
-        return _native_samba_bridge.RUNTIME.samba_native_call("parameters", (self,), _native_samba_bridge.CONTEXT)
+        """An iterator over the weight arrays, in registry order, as ``torch.nn.Module.parameters``.
+
+        The arrays are views of the model's flat parameter buffer: an edit in
+        place changes the model.
+        """
+        return _native_samba_bridge.RUNTIME.samba_native_call("parameters", (self, 1), _native_samba_bridge.CONTEXT)
+
+    def named_parameters(self):
+        """An iterator over ``(name, array)`` pairs, in registry order.
+
+        ``dict(model.named_parameters())`` is the ``{name: array}`` mapping
+        :meth:`load_weights` takes.
+        """
+        return _native_samba_bridge.RUNTIME.samba_native_call("parameters", (self, 2), _native_samba_bridge.CONTEXT)
 
     # -- forward ------------------------------------------------------------
     def forward(self, inputs, state=None, *, lengths=None):

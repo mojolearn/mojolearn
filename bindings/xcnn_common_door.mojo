@@ -1539,3 +1539,20 @@ def xcnn_put_f32(dest: PythonObject, offset: Int, source: PythonObject, count: I
     if count:
         xcnn_run_copy_f32(Int(py=xcnn_addr(dest)) + 4 * offset, Int(py=xcnn_addr(a)), count)
         _ = a  # keep the Python object alive through the native call above
+
+
+def xcnn_state_mapping(value: PythonObject, names: List[String], what: String) raises -> PythonObject:
+    """`load_state_dict`'s argument checked as torch's `strict=True` checks it
+    (lane api-torch round 2): an exact dict whose keys are exactly `names`.
+    Exact-type admission: no mapping protocol of a caller object runs."""
+    var b = xcnn_builtins()
+    if py_type(value) is not b.dict:
+        raise Error("TypeError: " + what + ".load_state_dict requires a dict of name to array")
+    for k in range(len(names)):  # driver-loop: over the layer's parameter names
+        if not py_contains(value, PythonObject(names[k])):
+            raise Error("ValueError: " + what + ".load_state_dict: no entry '" + names[k] + "'")
+    if len(value) != len(names):
+        raise Error("ValueError: " + what + ".load_state_dict: unexpected keys in "
+                    + String(py_call(b.repr, py_call(b.list, value.keys()))) + "; the layer takes "
+                    + String(len(names)) + " entries")
+    return value

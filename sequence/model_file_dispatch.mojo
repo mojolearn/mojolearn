@@ -41,6 +41,9 @@
 #                           pp [n_prog, n_recs, n_names, prog..., recs...,
 #                               one byte count per name...]   ff table
 #                           counts = [parameter count, output width, inputs]
+#   MODEL_EXPORT_PARAMS     aa [params, dst (n_params floats), shapes out]
+#                           pp [n_prog, shapes capacity, prog...]  ff table
+#                           result = tensor count (8 shape words each)
 # Not split across cores: each operation is one file read or write, one
 # digest fold in a fixed order, or one weight transfer; none loops over
 # independent units.
@@ -50,7 +53,7 @@ from autograd.model import parse_model
 from autograd.model_execution import model_counts_native, model_float_words
 from autograd.model_checkpoint import model_save_checkpoint, model_checkpoint_info, model_load_checkpoint
 from autograd.model_verify import verify_digest, verify_fill, verify_file_sha256, verify_model_info
-from autograd.weight_import import model_import_params
+from autograd.weight_import import model_import_params, model_export_params
 from sequence.exec_trait import Exec
 from sequence.neural_model_dispatch import (
     MODEL_SAVE_CHECKPOINT, MODEL_CHECKPOINT_INFO, MODEL_LOAD_CHECKPOINT, MODEL_VERIFY_DIGEST,
@@ -222,3 +225,18 @@ def model_import_execute[E: Exec](mut ex: E, aa: Int, na: Int, pp: Int, np: Int,
     counted[1] = spec.out_features()
     counted[2] = spec.n_inputs
     return spec.n_params
+
+
+def model_export_execute[E: Exec](mut ex: E, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int) raises -> Int:
+    """MODEL_EXPORT_PARAMS: Sequential.state_dict's transfer out of params_
+    (autograd/weight_import.mojo model_export_params) on the image's
+    executor."""
+    var addresses = native_descriptor_words(aa, na)
+    var ints = native_descriptor_words(pp, np)
+    if na != 3 or np < 2:
+        raise Error("native model file: invalid weight export descriptor")
+    var n_prog = ints[0]
+    if n_prog < 0 or np != 2 + n_prog:
+        raise Error("native model file: invalid weight export descriptor")
+    var spec = parse_model(_file_words(ints, 2, n_prog), model_float_words(_file_floats(ff, nf)))
+    return model_export_params(ex, spec, addresses[0], addresses[1], addresses[2], ints[1])

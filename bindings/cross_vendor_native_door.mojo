@@ -19,10 +19,8 @@ they always were: a Worker's collaborators (`trainer`, `batches`,
 GIL: released around every socket transfer and the host fold, held around
 the trainer's session calls, exactly as before the split.
 """
-from std.ffi import c_int, external_call
 from std.math import isfinite
 from std.memory import unsafe_memcpy
-from core.native_string import unsafe_string_from_utf8_cstr
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr, GILReleased
 from std.python.bindings import ExceptionType, raise_python_exception
@@ -63,7 +61,7 @@ from bindings.cross_vendor_admission_unpack import (
 from bindings.cross_vendor_admission_pack import (
     cv_path,
 )
-from bindings.byte_checkpoint_native_door import byte_checkpoint_initialize, byte_checkpoint_save, byte_checkpoint_load, byte_checkpoint_raw, byte_checkpoint_validate
+from bindings.byte_checkpoint_native_door import byte_checkpoint_initialize, byte_checkpoint_save, byte_checkpoint_load, byte_checkpoint_raw, byte_checkpoint_validate, byte_checkpoint_file_error
 from bindings.byte_checkpoint_native_run import byte_checkpoint_write, ByteCheckpointWriteFailure
 from bindings.byte_checkpoint_io_unpack import ByteCheckpointIOError
 from bindings.py_balanced import py_call, py_contains, py_fields, py_get, py_setattr, py_setitem, py_type
@@ -1005,24 +1003,6 @@ def cross_vendor_worker_connect(owner: PythonObject) raises -> PythonObject:
             transport_sleep(2.0)
 
 
-def _cross_file_error(mut io_error: ByteCheckpointIOError, failure: ByteCheckpointWriteFailure) raises:
-    """PACK a failed file call as the exact OSError subclass of its errno,
-    with its filename, for the C entry to raise."""
-    var bi = CROSS_VENDOR_BOUNDARY.get_or_create_ptr()[].bi
-    var message = unsafe_string_from_utf8_cstr(external_call["strerror", Pointer[Int8, ImmUntrackedOrigin]](c_int(failure.number)))
-    # The words the Python file calls gave: `open` names the temporary file;
-    # a failed write, fsync or close carries no file name. (`replace` named
-    # both files; the typed failure holds the target only.)
-    var value = py_call(bi.OSError, failure.number, PythonObject(message))
-    if failure.operation == "open" or failure.operation == "replace":
-        value = py_call(bi.OSError, failure.number, PythonObject(message), PythonObject(failure.path))
-    io_error.pending = True
-    io_error.has_value = True
-    io_error.has_traceback = False
-    io_error.kind = py_type(value)
-    io_error.value = value
-
-
 def cross_vendor_commit(record: PythonObject, trainer: PythonObject, events: PythonObject,
                         witness: PythonObject, mut io_error: ByteCheckpointIOError) raises:
     """PACK the step RUN just committed: the event, the configured
@@ -1108,7 +1088,7 @@ def cross_vendor_commit(record: PythonObject, trainer: PythonObject, events: Pyt
                 digest = byte_checkpoint_write(target, Int(text.unsafe_ptr()), text.byte_length(), addresses, counts, failure)
         except error:
             if failure.number != 0:
-                _cross_file_error(io_error, failure)
+                byte_checkpoint_file_error(io_error, failure)
             raise error
         _ = text.byte_length()
         # PACK

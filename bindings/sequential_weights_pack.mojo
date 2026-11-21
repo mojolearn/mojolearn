@@ -13,7 +13,7 @@ from providers.python.autograd_weight_frontend_pyapi_pack import _checkpoint, _r
 from autograd.program_io import ProgramInput
 from bindings.sequential_description_unpack import sequential_fields, SequentialDescription
 from bindings.sequential_description_pack import sequential_native_description
-from bindings.sequential_model_file_door import sequential_file_counts, sequential_file_import
+from bindings.sequential_model_file_door import sequential_file_counts, sequential_file_import, sequential_file_export
 from providers.python.sequence_pyapi_door import py_ints
 from bindings.sequential_execution_pack import sequential_entries
 from bindings.sequential_arrays_door import sequential_array, sequential_address, sequential_input
@@ -179,3 +179,66 @@ def sequential_load_weights(mut mods: NativeModules, model: PythonObject, args: 
     py_setitem(fields, nk[].k__fit_state, PythonObject(None))
     py_setitem(fields, nk[].k__imported, True)
     return model
+
+
+# Sequential.state_dict / parameters / named_parameters (lane api-torch round
+# 2, 2026-11-21): one native transfer of params_ into PyTorch's layouts
+# (MODEL_EXPORT_PARAMS, autograd/weight_import.mojo model_export_params), then
+# PACK builds the result over that one buffer: per tensor a view of it shaped
+# as torch shapes it, named "<layer index>.weight" / ".bias" as
+# `nn.Sequential` names it, so `load_state_dict(model.state_dict())` gives
+# the same params_ back.
+comptime SEQUENTIAL_EXPORT_STATE_DICT = 0
+comptime SEQUENTIAL_EXPORT_PARAMETERS = 1
+comptime SEQUENTIAL_EXPORT_NAMED_PARAMETERS = 2
+comptime SEQUENTIAL_EXPORT_SHAPE_WORDS = 8
+
+
+def sequential_export_weights(mut mods: NativeModules, model: PythonObject, form: Int, context: PythonObject) raises -> PythonObject:
+    var nk = sequential_keys()
+    var b = native_loaded_module("builtins")
+    var fields = sequential_fields(model)
+    if not py_contains(fields, nk[].k_params_) or not py_contains(fields, nk[].k_n_features_in_):
+        raise Error("state_dict: the model has no parameters yet; fit it or load_state_dict first")
+    var params = py_item(fields, nk[].k_params_)
+    var description_owner = sequential_native_description(
+        mods, model, PythonObject(Int(py=py_item(fields, nk[].k_n_features_in_))), py_get(fields, nk[].k__sample_shape))
+    var description = description_owner.downcast_value_ptr[SequentialDescription]()
+    var program = description[].program.copy()
+    var table = description[].scalars.copy()
+    _ = description_owner^
+    var entries = sequential_entries(model, context)
+    mods.released()
+    var n_params = len(params)
+    var exported = sequential_array(mods, Python.tuple(n_params), py_item(context, nk[].k_float32), context)
+    var shapes = List[Int](length=2 * len(py_item(fields, nk[].k__layers)) * SEQUENTIAL_EXPORT_SHAPE_WORDS, fill=0)
+    var count = sequential_file_export(entries, program, table, Int(py=sequential_address(params)),
+                                       Int(py=sequential_address(exported)), shapes)
+    mods.released()
+    _ = params^
+    var named = Python.dict()
+    var arrays = Python.list()
+    var pairs = Python.list()
+    for t in range(count):  # driver-loop: over the model's parameter tensors
+        var base = t * SEQUENTIAL_EXPORT_SHAPE_WORDS
+        var off = shapes[base + 2]
+        var rank = shapes[base + 3]
+        var size = 1
+        var dims = Python.list()
+        for k in range(rank):  # small-loop(rank: at most 4): shape metadata, no data
+            size *= shapes[base + 4 + k]
+            _ = py_call(dims.append, shapes[base + 4 + k])
+        var window = exported[py_call(b.slice, off, off + size)]
+        var value = py_call(window.reshape, py_call(b.tuple, dims))
+        var name = String(shapes[base]) + (".bias" if shapes[base + 1] == 1 else ".weight")
+        if form == SEQUENTIAL_EXPORT_STATE_DICT:
+            py_setitem(named, PythonObject(name), value)
+        elif form == SEQUENTIAL_EXPORT_PARAMETERS:
+            _ = py_call(arrays.append, value)
+        else:
+            _ = py_call(pairs.append, Python.tuple(PythonObject(name), value))
+    if form == SEQUENTIAL_EXPORT_STATE_DICT:
+        return named
+    if form == SEQUENTIAL_EXPORT_PARAMETERS:
+        return py_call(b.iter, arrays)
+    return py_call(b.iter, pairs)

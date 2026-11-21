@@ -8,7 +8,6 @@ from bindings.py_balanced import py_call, py_type
 from bindings.parallel_keys_unpack import (
     parallel_keys,
     PARALLEL_NEURAL_OPN_CHECKPOINT,
-    PARALLEL_NEURAL_OPN_EXPORT_GRADIENTS,
     PARALLEL_NEURAL_OPN_INIT,
     PARALLEL_NEURAL_OPN_INIT_WITH_WORKER,
     PARALLEL_NEURAL_OPN_ORDERED_SUM,
@@ -82,5 +81,6 @@ def neural_admit(operation: Int, args: PythonObject, owner_cls: PythonObject,
     samba_admit_value(py_item(fields, nk[].k__lock), admission)
     samba_admit_value(py_item(fields, nk[].k__pool), admission)
     samba_admit_value(py_item(fields, nk[].k__update_pool), admission)
-    if operation == PARALLEL_NEURAL_OPN_EXPORT_GRADIENTS:
-        samba_admit_value(py_item(fields, nk[].k__gradients), admission)
+    # The committed gradient buffers are no instance field: they are the
+    # native arrays of the update worker's reply, held by the owner record
+    # (bindings/parallel_neural_native_door.mojo), which no caller can replace.

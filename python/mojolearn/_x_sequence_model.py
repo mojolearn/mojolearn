@@ -392,6 +392,70 @@ class Sequential(_CheckMixin):
         """
         return _SEQUENTIAL_ENTRY(self, "load_weights", (state, source, names, prefix, strict), _SEQUENTIAL_CONTEXT)
 
+    def state_dict(self):
+        """The model's weights by name, as ``torch.nn.Sequential`` names them.
+
+        Each layer with parameters gives ``"<i>.weight"`` and, when it has
+        one, ``"<i>.bias"``, where ``<i>`` is the layer's index in the model
+        (activations included). The arrays use PyTorch's layouts: a
+        ``linear`` weight is ``(out_features, in_features)``, a ``conv2d``
+        weight ``(out_channels, in_channels // groups, kernel_size,
+        kernel_size)``. ``model.load_state_dict(model.state_dict())`` gives
+        the same parameters back, and the mapping loads into the PyTorch
+        module of the same layers.
+
+        Returns
+        -------
+        dict of str to ndarray of float32
+            A copy of the parameters, in layer order.
+
+        Examples
+        --------
+        >>> import numpy as np, mojolearn
+        >>> state = {"0.weight": np.ones((8, 4), dtype=np.float32), "0.bias": np.zeros(8, dtype=np.float32)}
+        >>> model = mojolearn.Sequential().linear(8).load_state_dict(state)
+        >>> model.state_dict()["0.weight"].shape
+        (8, 4)
+        """
+        return _SEQUENTIAL_ENTRY(self, "export_weights", (0,), _SEQUENTIAL_CONTEXT)
+
+    def parameters(self):
+        """An iterator over the weight arrays, in :meth:`state_dict` order.
+
+        Returns
+        -------
+        iterator of ndarray of float32
+        """
+        return _SEQUENTIAL_ENTRY(self, "export_weights", (1,), _SEQUENTIAL_CONTEXT)
+
+    def named_parameters(self):
+        """An iterator over ``(name, array)`` pairs, in :meth:`state_dict` order.
+
+        Returns
+        -------
+        iterator of (str, ndarray of float32)
+        """
+        return _SEQUENTIAL_ENTRY(self, "export_weights", (2,), _SEQUENTIAL_CONTEXT)
+
+    def to(self, *args, **kwargs):
+        """Move the model to a device, as ``torch.nn.Module.to`` does.
+
+        Parameters
+        ----------
+        device : str, optional
+            ``"gpu"`` or ``"cpu"``, as the ``device`` constructor argument
+            takes them.
+        dtype : optional
+            ``torch.float32``, NumPy's float32 or ``"float32"``. The model
+            runs float32 only; any other dtype is refused.
+
+        Returns
+        -------
+        Sequential
+            The model itself, with its parameters, on the new device.
+        """
+        return _SEQUENTIAL_ENTRY(self, "to", (args, kwargs), _SEQUENTIAL_CONTEXT)
+
     # ------------------------------------------------------------ checkpoints
     def _save(self, path, export):
         return _SEQUENTIAL_ENTRY(self, "save", (path, export), _SEQUENTIAL_CONTEXT)
