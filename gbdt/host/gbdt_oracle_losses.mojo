@@ -144,6 +144,8 @@ from gbdt.host.gbdt_oracle import (
     _cosine_gains,
     _gain_winner,
     _gbdt_units,
+    _gather_rows,
+    _leaf_bins,
     GbdtIntPtr,
     _deterministic_sum_lanes,
     _diagonal_direction,
@@ -675,6 +677,10 @@ def _walker_estimate(
     return cur_point^
 
 
+#: A host task's view of a `List[Bool]` (the scan's flags).
+comptime _BoolPtr = MutPointer[Bool, MutUntrackedOrigin]
+
+
 def _float_to_sortable(bits: UInt32) -> UInt32:
     """`float_to_sortable` (`segmented_sort.mojo:88-93`)."""
     if (bits & UInt32(0x80000000)) != UInt32(0):
@@ -696,33 +702,59 @@ def _segmented_inclusive_scan(
     var has_flag = List[Bool](length=n, fill=False)
     var block_sums = List[Float32](length=n_blocks, fill=Float32(0.0))
     var block_flags = List[Bool](length=n_blocks, fill=False)
-    for b in range(n_blocks):
+    # THE SPLIT (lane gbdt-host-par). Phase 1's unit is one 768-thread
+    # device block: its doubling scan reads and writes its own elements and
+    # its own aggregate. Blocks go round robin to `_gbdt_units` tasks; a
+    # task holds the block's value / flag slabs and their snapshots (the
+    # snapshot lanes `d..B` are rewritten before each step reads them).
+    var units = _gbdt_units(n_blocks, 24 * n)
+    var values_p = rebind[HostF32Ptr](values.unsafe_ptr())
+    var flags_p = rebind[_BoolPtr](flags.unsafe_ptr())
+    var scanned_p = rebind[HostF32Ptr](scanned.unsafe_ptr())
+    var has_p = rebind[_BoolPtr](has_flag.unsafe_ptr())
+    var sums_p = rebind[HostF32Ptr](block_sums.unsafe_ptr())
+    var bflags_p = rebind[_BoolPtr](block_flags.unsafe_ptr())
+
+    def scan_blocks(unit: Int) {imm units, imm n_blocks, imm n, imm values_p, imm flags_p, imm scanned_p, imm has_p, imm sums_p, imm bflags_p}:
         var s_val = List[Float32](length=B, fill=Float32(0.0))
         var s_flg = List[Int](length=B, fill=0)
-        for tid in range(B):
-            var i = b * B + tid
-            if i < n:
-                s_val[tid] = values[i]
-                s_flg[tid] = 1 if flags[i] else 0
-        var d = 1
-        while d < B:
-            var lv = List[Float32](length=B, fill=Float32(0.0))
-            var lf = List[Int](length=B, fill=0)
-            for tid in range(d, B):
-                lv[tid] = s_val[tid - d]
-                lf[tid] = s_flg[tid - d]
-            for tid in range(d, B):
-                if s_flg[tid] == 0:
-                    s_val[tid] = s_val[tid] + lv[tid]
-                    s_flg[tid] = lf[tid]
-            d *= 2
-        for tid in range(B):
-            var i = b * B + tid
-            if i < n:
-                scanned[i] = s_val[tid]
-                has_flag[i] = s_flg[tid] != 0
-        block_sums[b] = s_val[B - 1]
-        block_flags[b] = s_flg[B - 1] != 0
+        var lv = List[Float32](length=B, fill=Float32(0.0))
+        var lf = List[Int](length=B, fill=0)
+        var b = unit
+        while b < n_blocks:
+            for tid in range(B):
+                var i = b * B + tid
+                # an out-of-range thread holds 0.0 and no flag (reused slabs)
+                s_val[tid] = Float32(0.0)
+                s_flg[tid] = 0
+                if i < n:
+                    s_val[tid] = values_p[i]
+                    s_flg[tid] = 1 if flags_p[i] else 0
+            var d = 1
+            while d < B:
+                for tid in range(d, B):
+                    lv[tid] = s_val[tid - d]
+                    lf[tid] = s_flg[tid - d]
+                for tid in range(d, B):
+                    if s_flg[tid] == 0:
+                        s_val[tid] = s_val[tid] + lv[tid]
+                        s_flg[tid] = lf[tid]
+                d *= 2
+            for tid in range(B):
+                var i = b * B + tid
+                if i < n:
+                    scanned_p[i] = s_val[tid]
+                    has_p[i] = s_flg[tid] != 0
+            sums_p[b] = s_val[B - 1]
+            bflags_p[b] = s_flg[B - 1] != 0
+            b += units
+
+    host_parallelize(scan_blocks, units)
+    _ = len(values)
+    _ = len(flags)
+    # KEPT SERIAL, by nature: phase 2 is the device's serial scan of the
+    # block aggregates, each block's carry the running value of the blocks
+    # before it (one add per 768 elements).
     var running = Float32(0.0)
     for b in range(n_blocks):
         var v = block_sums[b]
@@ -732,9 +764,18 @@ def _segmented_inclusive_scan(
             running = v
         else:
             running = running + v
-    for i in range(n):
-        if not has_flag[i]:
-            scanned[i] = scanned[i] + block_sums[i // B]
+    # phase 3: one statement per element, in `_gbdt_units` ranges
+    var c_units = _gbdt_units(n, 2 * n)
+    var c_chunk = host_predict_chunk(n, c_units)
+
+    def carry(unit: Int) {imm c_chunk, imm n, imm scanned_p, imm has_p, imm sums_p}:
+        for i in range(unit * c_chunk, min(n, (unit + 1) * c_chunk)):
+            if not has_p[i]:
+                scanned_p[i] = scanned_p[i] + sums_p[i // B]
+
+    host_parallelize(carry, c_units)
+    _ = len(has_flag)
+    _ = len(block_sums)
     return scanned^
 
 
@@ -753,65 +794,113 @@ def _exact_estimate(
     on bits [10, 32) of the sortable key, the prefix weights, the need
     weights and the binary search, then `RegularizeImpl`."""
     var n_leaves = len(sizes)
-    var residuals = List[Float32](length=n_rows, fill=Float32(0.0))
-    var weights = List[Float32](length=n_rows, fill=Float32(1.0))
-    for pos in range(n_rows):
-        residuals[pos] = ftz(g_target[pos] - g_cursor[pos])
-    if loss.objective == GBDT_OBJ_MAPE:
-        for pos in range(n_rows):
-            var delta = max(Float32(1.0), abs(residuals[pos]))
-            weights[pos] = ftz(Float32(1.0) / delta)
-    elif loss.objective != GBDT_OBJ_MAE and loss.objective != GBDT_OBJ_QUANTILE:
+    var is_mape = loss.objective == GBDT_OBJ_MAPE
+    if (not is_mape) and loss.objective != GBDT_OBJ_MAE and loss.objective != GBDT_OBJ_QUANTILE:
         raise Error(
             "Only MAPE, MAE and Quantile are supported for Exact leaves"
             " estimation on GPU"
         )
+    var residuals = List[Float32](length=n_rows, fill=Float32(0.0))
+    var weights = List[Float32](length=n_rows, fill=Float32(1.0))
+    # THE SPLITS (lane gbdt-host-par). The residual and the MAPE quotient
+    # are one statement per position (`_gbdt_units` ranges). The sort's and
+    # the need-weights' unit is one LEAF: the device's segmented sort orders
+    # each leaf's range on its own keys and the need weight is the leaf's
+    # own 1024-lane strided fold, so leaves go round robin to the tasks.
+    var r_units = _gbdt_units(n_rows, 6 * n_rows)
+    var r_chunk = host_predict_chunk(n_rows, r_units)
+    var gt_p = rebind[HostF32Ptr](g_target.unsafe_ptr())
+    var gc_p = rebind[HostF32Ptr](g_cursor.unsafe_ptr())
+    var res_p = rebind[HostF32Ptr](residuals.unsafe_ptr())
+    var w_p = rebind[HostF32Ptr](weights.unsafe_ptr())
+
+    def residual_rows(unit: Int) {imm r_chunk, imm n_rows, imm is_mape, imm gt_p, imm gc_p, imm res_p, imm w_p}:
+        for pos in range(unit * r_chunk, min(n_rows, (unit + 1) * r_chunk)):
+            var r = ftz(gt_p[pos] - gc_p[pos])
+            res_p[pos] = r
+            if is_mape:
+                var delta = max(Float32(1.0), abs(r))
+                w_p[pos] = ftz(Float32(1.0) / delta)
+
+    host_parallelize(residual_rows, r_units)
+    _ = len(g_target)
+    _ = len(g_cursor)
     var ordered_targets = List[Float32](length=n_rows, fill=Float32(0.0))
     var ordered_weights = List[Float32](length=n_rows, fill=Float32(0.0))
     var flags = List[Bool](length=n_rows, fill=False)
-    for leaf in range(n_leaves):
-        var base = offsets[leaf]
-        var size = sizes[leaf]
-        if size <= 0:
-            continue
-        var keys = List[UInt64](capacity=size)
-        for k in range(size):
-            var key = _float_to_sortable(bitcast[DType.uint32](residuals[base + k]))
-            keys.append((UInt64(key >> UInt32(GBDT_EXACT_FIRST_BIT)) << UInt64(32)) | UInt64(k))
-        sort(keys)
-        for k in range(size):
-            var src = base + Int(keys[k] & UInt64(0xFFFFFFFF))
-            ordered_targets[base + k] = residuals[src]
-            ordered_weights[base + k] = weights[src]
-        flags[base] = True
+    # 20 operations a row stands for the sort's compares at a leaf's size
+    var l_units = _gbdt_units(n_leaves, 20 * n_rows)
+    var off_p = rebind[GbdtIntPtr](offsets.unsafe_ptr())
+    var sz_p = rebind[GbdtIntPtr](sizes.unsafe_ptr())
+    var ot_p = rebind[HostF32Ptr](ordered_targets.unsafe_ptr())
+    var ow_p = rebind[HostF32Ptr](ordered_weights.unsafe_ptr())
+    var flags_p = rebind[_BoolPtr](flags.unsafe_ptr())
+
+    def sort_leaves(unit: Int) {imm l_units, imm n_leaves, imm off_p, imm sz_p, imm res_p, imm w_p, imm ot_p, imm ow_p, imm flags_p}:
+        var leaf = unit
+        while leaf < n_leaves:
+            var base = off_p[leaf]
+            var size = sz_p[leaf]
+            if size > 0:
+                var keys = List[UInt64](capacity=size)
+                for k in range(size):
+                    var key = _float_to_sortable(bitcast[DType.uint32](res_p[base + k]))
+                    keys.append((UInt64(key >> UInt32(GBDT_EXACT_FIRST_BIT)) << UInt64(32)) | UInt64(k))
+                sort(keys)
+                for k in range(size):
+                    var src = base + Int(keys[k] & UInt64(0xFFFFFFFF))
+                    ot_p[base + k] = res_p[src]
+                    ow_p[base + k] = w_p[src]
+                flags_p[base] = True
+            leaf += l_units
+
+    host_parallelize(sort_leaves, l_units)
+    _ = len(residuals)
+    _ = len(weights)
     var prefix = _segmented_inclusive_scan(ordered_weights, flags, n_rows)
 
     var point = List[Float32](length=n_leaves, fill=Float32(0.0))
     var eps = Float32(1.1920929e-07)
-    for leaf in range(n_leaves):
-        var base = offsets[leaf]
-        var size = sizes[leaf]
-        if size <= 0:
-            point[leaf] = Float32(0.0)
-            continue
+    var alpha = loss.estimator_alpha
+    var n_units = _gbdt_units(n_leaves, 2 * n_rows + 1024 * n_leaves)
+    var prefix_p = rebind[HostF32Ptr](prefix.unsafe_ptr())
+    var point_p = rebind[HostF32Ptr](point.unsafe_ptr())
+
+    def need_leaves(unit: Int) {imm n_units, imm n_leaves, imm alpha, imm eps, imm off_p, imm sz_p, imm ot_p, imm ow_p, imm prefix_p, imm point_p}:
+        # every lane is rewritten per leaf (the slab is reused)
         var slab = List[Float32](length=GBDT_NEED_WEIGHTS_BLOCK, fill=Float32(0.0))
-        for tid in range(GBDT_NEED_WEIGHTS_BLOCK):
-            var total_sum = Float32(0.0)
-            var idx = tid
-            while idx < size:
-                total_sum = ftz(total_sum + ordered_weights[base + idx])
-                idx += GBDT_NEED_WEIGHTS_BLOCK
-            slab[tid] = total_sum
-        var need = ftz(_halving_fold(slab) * loss.estimator_alpha)
-        var left = base
-        var right = base + size - 1
-        for _ in range(GBDT_QUANTILE_ITERATIONS):
-            var middle = left + (right - left) // 2
-            if prefix[middle] < need - eps:
-                left = middle
+        var leaf = unit
+        while leaf < n_leaves:
+            var base = off_p[leaf]
+            var size = sz_p[leaf]
+            if size <= 0:
+                point_p[leaf] = Float32(0.0)
             else:
-                right = middle
-        point[leaf] = ordered_targets[right]
+                for tid in range(GBDT_NEED_WEIGHTS_BLOCK):
+                    var total_sum = Float32(0.0)
+                    var idx = tid
+                    while idx < size:
+                        total_sum = ftz(total_sum + ow_p[base + idx])
+                        idx += GBDT_NEED_WEIGHTS_BLOCK
+                    slab[tid] = total_sum
+                var need = ftz(_halving_fold(slab) * alpha)
+                var left = base
+                var right = base + size - 1
+                for _ in range(GBDT_QUANTILE_ITERATIONS):
+                    var middle = left + (right - left) // 2
+                    if prefix_p[middle] < need - eps:
+                        left = middle
+                    else:
+                        right = middle
+                point_p[leaf] = ot_p[right]
+            leaf += n_units
+
+    host_parallelize(need_leaves, n_units)
+    _ = len(offsets)
+    _ = len(sizes)
+    _ = len(ordered_targets)
+    _ = len(ordered_weights)
+    _ = len(prefix)
     comptime if GBDT_ORACLE_HOST_SABOTAGE:
         for leaf in range(n_leaves):
             point[leaf] = point[leaf] + Float32(0.25)
@@ -838,13 +927,12 @@ def _estimate_leaves_for_loss(
     var n_leaves = len(sizes)
     var g_target = List[Float32](length=n_rows, fill=Float32(0.0))
     var g_cursor = List[Float32](length=n_rows, fill=Float32(0.0))
-    for pos in range(n_rows):
-        g_target[pos] = targets[row_index[pos]]
-        g_cursor[pos] = cursor[row_index[pos]]
+    # the gathers and the bins move values, one position a device thread:
+    # `_gbdt_units` ranges of positions each (lane gbdt-host-par)
+    _gather_rows(targets, row_index, n_rows, g_target)
+    _gather_rows(cursor, row_index, n_rows, g_cursor)
     var bins = List[Int](length=n_rows, fill=0)
-    for leaf in range(n_leaves):
-        for k in range(sizes[leaf]):
-            bins[offsets[leaf] + k] = leaf
+    _leaf_bins(offsets, sizes, n_rows, bins)
     var weights_cpu = List[Float64]()
     # Both CPU searcher callers compiled on Apple M1 at O0 (2026-10-28);
     # runtime/identity remain pending. GPU setup replaces row weights with per-row
@@ -853,11 +941,13 @@ def _estimate_leaves_for_loss(
     var pair_row_weights = List[Float32]()
     if loss.objective == GBDT_OBJ_PAIR_LOGIT:
         pair_row_weights = List[Float32](length=n_rows, fill=Float32(0))
-        for pos in range(n_rows):
-            var row = row_index[pos]
-            pair_row_weights[pos] = (
-                pairs.value().group_row_weights[row] if pairs.value().group_layout
-                else pairs.value().prep.row_weights[row]
+        if pairs.value().group_layout:
+            _gather_rows(
+                pairs.value().group_row_weights, row_index, n_rows, pair_row_weights
+            )
+        else:
+            _gather_rows(
+                pairs.value().prep.row_weights, row_index, n_rows, pair_row_weights
             )
     if loss.objective == GBDT_OBJ_PAIR_LOGIT:
         # the leaves' weight sums, the launches across the cores (lane
@@ -1258,7 +1348,10 @@ def _zero_average_host(mut estimated: List[Float32]):
     `[256 b, 256 b + 256)` as doubles (absent ones +0.0) through the 256-lane
     halving tree. Level 2: lane `t` of 256 adds partials `t, t + 256, ...`
     ascending from +0.0, then the halving tree. `bias = -sum / count`;
-    `leaf = float(double(leaf) + bias)`."""
+    `leaf = float(double(leaf) + bias)`.
+
+    KEPT SERIAL: the units are one tree's leaf values, a few adds each,
+    far below one host task's work; the fold orders are the kernel's."""
     var n = len(estimated)
     if n == 0:
         return
