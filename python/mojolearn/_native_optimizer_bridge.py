@@ -188,7 +188,10 @@ def connect_sequence_device(training, device):
                 "adafactor_resident_open", "adafactor_resident_step", "adafactor_resident_step_dev",
                 "lamb_resident_open", "lamb_resident_step", "lamb_resident_step_dev",
                 "layer_norm", "layer_norm_dev", "layer_norm_dev_alloc", "moe_forward", "moe_backward", "moe_forward_dev",
-                "moe_forward_dev_alloc", "moe_weights_put", "moe_weights_free")
+                "moe_forward_dev_alloc", "moe_weights_put", "moe_weights_free",
+                # the whole-model descriptor: the sequence layer and resident-tensor operations run on it
+                # (bindings/sequence_ops_door.mojo); the fourteen entry names above are no longer read by a door
+                "model_native_api_v1")
     for mode in ("identical", "fast"):  # glue: connect supported sequence numeric-mode ABI symbols at import
         try:
             binding = _backend.binding("_mojolearn_x_sequence", mode)

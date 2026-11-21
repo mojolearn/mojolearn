@@ -7,7 +7,6 @@ from bindings.optimizer_container_boundary_unpack import OptimizerInputOwners
 from std.python._cpython import PyObjectPtr
 from bindings.optimizer_public_words_unpack import optimizer_python_error
 from bindings.py_balanced import py_call, py_type, py_get
-from bindings.py_typed_call import py_call_typed
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.optimizer_admission_door import opt_scalar, opt_value
 from bindings.optimizer_device_native_door import device_shape, shape_count
@@ -43,16 +42,38 @@ from bindings.optimizer_keys_unpack import (
     OPTIMIZER_OPN_SEQDEV_WRAP,
 )
 from bindings.py_balanced import py_item
+from bindings.sequence_ops_door import (
+    SEQ_ROUTE_NATIVE, seq_ops_route, seq_tensor_new, seq_tensor_release, seq_tensor_put, seq_tensor_get,
+    seq_tensor_clone,
+)
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_execute
+from sequence.neural_model_dispatch import SEQ_TENSOR_FREE
 
 
 def seq_device_entries(binding: PythonObject, context: PythonObject, required: Bool = True) raises -> PythonObject:
+    # lane dw-autograd-seq (2026-11-21): the image's route word, held in its
+    # entry dictionary (bindings/sequence_ops_door.mojo), answers whether it
+    # has device tensors. Before: four entry-name lookups per operation. The
+    # host x_sequence image is the only connected owner without them (the
+    # Embedding owner is connected only with its tensor entries).
     var entries = seq_binding(PythonObject(None), context, binding)
-    for name in ["seq_tensor_alloc", "seq_tensor_free", "seq_tensor_upload", "seq_tensor_download"]:  # driver-loop: over fixed sequence buffer ABI entries
-        if py_get(entries, PythonObject(name)) is None:
-            if required:
-                raise Error("RuntimeError: this native sequence binding has no device tensors")
-            return PythonObject(None)
+    if seq_ops_route(entries) == SEQ_ROUTE_NATIVE:
+        if required:
+            raise Error("RuntimeError: this native sequence binding has no device tensors")
+        return PythonObject(None)
     return entries
+
+
+def _seq_owner(entries: PythonObject, shape: List[Int], handle: Int, context: PythonObject) raises -> PythonObject:
+    """Wrap a handle this door just allocated in its Python owner. Until the
+    owner exists the handle is this door's: if the owner cannot be made the
+    handle is released here, so no tensor is left without an owner."""
+    var nk = sequence_keys()
+    try:
+        return seq_device_make(py_item(entries, nk[].k_module), shape, PythonObject(handle), PythonObject(None), context)
+    except error:
+        seq_tensor_release(entries, handle)
+        raise error^
 
 
 def sequence_device_finalize(owner: PythonObject, values: PythonObject,
@@ -103,11 +124,38 @@ def sequence_device_finalize(owner: PythonObject, values: PythonObject,
     if not connected:
         raise Error("TypeError: sequence device/state requires its connected native binding")
     var entries = connected.value()
-    var release = py_get(entries, "seq_tensor_free")
-    if py_type(release) is not types[3]:
-        raise Error("TypeError: sequence tensor cleanup requires its compiled release entry")
+    # OWNERSHIP (lane dw-autograd-seq, 2026-11-21). The owner holds exactly
+    # one pool handle while its binding slot is set and it is not a view
+    # (`_base` is None, tested above): this finalizer is the only release of
+    # it, and it clears the binding slot afterwards so a second run releases
+    # nothing. The handle is released in the image that made it:
+    #   an x_sequence image: SEQ_TENSOR_FREE on the provider that
+    #     `seq_ops_route` connected and stored in this dictionary before any
+    #     tensor of the image could be wrapped. The GIL stays held (the pool
+    #     is not locked, and a finalizer must not yield during shutdown).
+    #     Nothing is connected, imported or looked up in a key table here;
+    #   another family's owner (the Embedding image; no whole-model
+    #     descriptor): its retained compiled release entry, as before.
+    # If the release fails the binding slot is kept, so ownership stays
+    # exact and a later attempt can retry.
+    var provider = py_get(entries, "native_model_provider")
+    var release = PythonObject(None)
+    if provider is None:
+        if py_get(entries, "model_native_api_v1") is not None:
+            # An x_sequence tensor whose image was never routed cannot have
+            # been wrapped by a door; keep ownership intact, release nothing.
+            return PythonObject(None)
+        release = py_get(entries, "seq_tensor_free")
+        if py_type(release) is not types[3]:
+            raise Error("TypeError: sequence tensor cleanup requires its compiled release entry")
     try:
-        _ = py_call(release, handle)
+        if provider is None:
+            _ = py_call(release, handle)
+        else:
+            var addresses = List[Int]()
+            var ints: List[Int] = [Int(py=handle)]
+            var floats = List[Float64]()
+            _ = neural_descriptor_execute(provider, SEQ_TENSOR_FREE, addresses, ints, floats, False)
     except:
         # Keep ownership intact if release fails; a subsequent attempt can retry.
         return PythonObject(None)
@@ -157,8 +205,8 @@ def sequence_device_operation(operation: Int, owner: PythonObject, values: Pytho
             var entries = seq_device_entries(values[0], context)
             var shape = device_shape(values[1], context)
             opt_scalar(values[2], context)
-            var handle = py_call_typed(py_item(entries, nk[].k_seq_tensor_alloc), max(1, shape_count(shape)), Int(Bool(py=values[2])))
-            return seq_device_make(py_item(entries, nk[].k_module), shape, handle, PythonObject(None), context)
+            var handle = seq_tensor_new(entries, max(1, shape_count(shape)), Bool(py=values[2]))
+            return _seq_owner(entries, shape, handle, context)
         if operation == OPTIMIZER_OPN_SEQDEV_TO or operation == OPTIMIZER_OPN_SEQDEV_WRAP:
             var source = values[0] if operation == OPTIMIZER_OPN_SEQDEV_TO else values[1]
             if operation == OPTIMIZER_OPN_SEQDEV_TO and seq_device(source, context):
@@ -172,15 +220,15 @@ def sequence_device_operation(operation: Int, owner: PythonObject, values: Pytho
                 return input
             var shape = device_shape(input.shape, context)
             var n = shape_count(shape)
-            var handle = py_call_typed(py_item(entries, nk[].k_seq_tensor_alloc), max(n, 1), 0)
+            var handle = seq_tensor_new(entries, max(n, 1), False)
             try:
                 if n > 0:
-                    _ = py_call_typed(py_item(entries, nk[].k_seq_tensor_upload), handle, classical_address(input), n)
+                    seq_tensor_put(entries, handle, Int(py=classical_address(input)), n)
             except error:
-                _ = py_call_typed(py_item(entries, nk[].k_seq_tensor_free), handle)
+                seq_tensor_release(entries, handle)
                 raise error^
             _ = input^
-            return seq_device_make(py_item(entries, nk[].k_module), shape, handle, PythonObject(None), context)
+            return _seq_owner(entries, shape, handle, context)
         if py_type(owner) is not py_item(context, nk[].k_sequence_device_class):
             raise Error("TypeError: sequence device operation requires its exact native owner")
         _ = seq_device(owner, context)
@@ -188,7 +236,7 @@ def sequence_device_operation(operation: Int, owner: PythonObject, values: Pytho
         var entries = seq_device_entries(binding, context)
         var shape = device_shape(seq_device_get(owner, "shape", context), context)
         var n = shape_count(shape)
-        var handle = seq_device_get(owner, "h", context)
+        var handle_owner = seq_device_get(owner, "h", context)
         if operation == OPTIMIZER_OPN_SEQDEV_SIZE:
             return PythonObject(n)
         if operation == OPTIMIZER_OPN_SEQDEV_NDIM:
@@ -202,27 +250,28 @@ def sequence_device_operation(operation: Int, owner: PythonObject, values: Pytho
             classical_connect_numpy(input)
             var result = classical_typed(native_shape_pack(shape), "<f4", input)
             if n > 0:
-                _ = py_call_typed(py_item(entries, nk[].k_seq_tensor_download), handle, classical_address(result), n)
+                seq_tensor_get(entries, Int(py=handle_owner), Int(py=classical_address(result)), n)
             return result if operation == OPTIMIZER_OPN_SEQDEV_HOST else sequence_array_cast(result, values[0], context)
         if operation == OPTIMIZER_OPN_SEQDEV_UPLOAD:
             var input = seq_device_input(values[0], False, context, buffer_pins)
             if not same_shape(device_shape(input.shape, context), shape):
                 raise Error("ValueError: uploaded array shape does not match the device tensor")
             if n > 0:
-                _ = py_call_typed(py_item(entries, nk[].k_seq_tensor_upload), handle, classical_address(input), n)
+                seq_tensor_put(entries, Int(py=handle_owner), Int(py=classical_address(input)), n)
             _ = input^
             return owner
         if operation == OPTIMIZER_OPN_SEQDEV_COPY:
-            if py_get(entries, nk[].k_seq_tensor_copy) is None:
-                raise Error("RuntimeError: native binding has no device-to-device tensor copy")
-            var result_handle = py_call_typed(py_item(entries, nk[].k_seq_tensor_alloc), max(n, 1), 0)
+            # An x_sequence device image always has the copy; another
+            # family's owner answers for itself inside `seq_tensor_clone`
+            # (the same words when it has none).
+            var result_handle = seq_tensor_new(entries, max(n, 1), False)
             try:
                 if n > 0:
-                    _ = py_call_typed(py_item(entries, nk[].k_seq_tensor_copy), result_handle, handle, n)
+                    seq_tensor_clone(entries, result_handle, Int(py=handle_owner), n)
             except error:
-                _ = py_call_typed(py_item(entries, nk[].k_seq_tensor_free), result_handle)
+                seq_tensor_release(entries, result_handle)
                 raise error^
-            return seq_device_make(binding, shape, result_handle, PythonObject(None), context)
+            return _seq_owner(entries, shape, result_handle, context)
         if operation == OPTIMIZER_OPN_SEQDEV_RESHAPE:
             var requested = values[0]
             opt_scalar(requested, context)
@@ -244,7 +293,7 @@ def sequence_device_operation(operation: Int, owner: PythonObject, values: Pytho
                 dims[infer] = n // known if known != 0 else 0
             if shape_count(dims) != n:
                 raise Error("ValueError: reshape dimensions do not match the device tensor size")
-            return seq_device_make(binding, dims, handle, owner, context)
+            return seq_device_make(binding, dims, handle_owner, owner, context)
         raise Error("TypeError: unknown sequence device operation")
     finally:
         _ = buffer_pins^

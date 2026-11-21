@@ -30,9 +30,12 @@ from bindings.optimizer_keys_unpack import (
     OPTIMIZER_OPN_SEQLN_TO_DEVICE,
 )
 from core.scaler_fit_impl import scaler_fill
-from bindings.py_optional import py_present
 from bindings.sequence_keys_unpack import sequence_keys
 from bindings.py_balanced import py_item
+from bindings.sequence_ops_door import (
+    seq_ops_call, seq_ops_device, seq_ops_native, seq_tensor_new, seq_tensor_release, seq_tensor_put,
+)
+from sequence.neural_model_dispatch import SEQ_LAYER_NORM, SEQ_LAYER_NORM_DEV, SEQ_LAYER_NORM_DEV_ALLOC
 
 
 def _b() raises -> PythonObject:
@@ -41,8 +44,25 @@ def _b() raises -> PythonObject:
 
 def _new(entries: PythonObject, shape: List[Int], context: PythonObject) raises -> PythonObject:
     var nk = sequence_keys()
-    var handle = py_call_typed(py_item(entries, nk[].k_seq_tensor_alloc), PythonObject(max(1, shape_count(shape))), PythonObject(0))
-    return seq_device_make(py_item(entries, nk[].k_module), shape, handle, PythonObject(None), context)
+    # The handle is this door's until its owner exists: released here if
+    # the owner cannot be made.
+    var handle = seq_tensor_new(entries, max(1, shape_count(shape)), False)
+    try:
+        return seq_device_make(py_item(entries, nk[].k_module), shape, PythonObject(handle), PythonObject(None), context)
+    except error:
+        seq_tensor_release(entries, handle)
+        raise error^
+
+
+def _release_made(entries: PythonObject, made: List[Int]):
+    """Release the tensors a fused forward made that no owner took (a slot
+    is zeroed when its owner exists)."""
+    for i in range(len(made)):  # driver-loop: over one layer call's handle slots (at most six)
+        if made[i] != 0:
+            try:
+                seq_tensor_release(entries, made[i])
+            except:
+                pass
 
 
 def _handle(value: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -95,8 +115,7 @@ struct LayerInput(Movable):
 def _upload(input: LayerInput, entries: PythonObject, context: PythonObject) raises -> PythonObject:
     var output = _new(entries, input.shape, context)
     if input.count > 0:
-        var nk = sequence_keys()
-        _ = py_call_typed(py_item(entries, nk[].k_seq_tensor_upload), _handle(output, context), PythonObject(input.address), PythonObject(input.count))
+        seq_tensor_put(entries, Int(py=_handle(output, context)), input.address, input.count)
     return output
 def _norm_shape(normalized_shape: PythonObject, context: PythonObject) raises -> List[Int]:
     opt_scalar(normalized_shape, context)
@@ -170,9 +189,10 @@ def _ln_device_entries(fields: PythonObject, context: PythonObject) raises -> Py
         return PythonObject(None)
     try:
         var entries = seq_binding(py_get(fields, nk[].k_numeric_mode), context, PythonObject(None))
-        for name in ["seq_tensor_alloc", "seq_tensor_free", "seq_tensor_upload", "seq_tensor_download", "layer_norm_dev"]:  # small-loop(required resident native entries)
-            if py_get(entries, name) is None:
-                return PythonObject(None)
+        # The image's route word (bindings/sequence_ops_door.mojo); was five
+        # entry-name lookups.
+        if not seq_ops_device(entries):
+            return PythonObject(None)
         return entries
     except:
         # Preserve the existing class-level host fallback on installations
@@ -218,12 +238,15 @@ def _run(input: LayerInput, d: Int, weight: PythonObject, bias: PythonObject, ep
     if backward and not same_shape(gradient.shape, input.shape):
         raise Error("ValueError: layer_norm_backward: dy must have x's shape")
     var m = input.count // d
-    var flags = Python.list(m, d, 0 if w.absent else 1, 0 if b.absent else 1, 1 if backward else 0)
-    var fp = Python.list(eps)
+    var flags: List[Int] = [m, d, 0 if w.absent else 1, 0 if b.absent else 1, 1 if backward else 0]
+    var floats: List[Float64] = [eps]
     var nk = sequence_keys()
     if input.device:
-        var entry = py_get(input.entries, nk[].k_layer_norm_dev)
-        if entry is None:
+        # lane dw-autograd-seq (2026-11-21): the image's route word answers
+        # (was a lookup of the entry name `layer_norm_dev`); the operations
+        # are descriptor calls on typed words (were CPython calls on Python
+        # lists of handles, addresses, flags and scalars).
+        if not seq_ops_device(input.entries):
             raise Error("RuntimeError: layer_norm: this binding has no device LayerNorm; pass a host input")
         var means = PythonObject(None)
         var inverse = PythonObject(None)
@@ -234,83 +257,119 @@ def _run(input: LayerInput, d: Int, weight: PythonObject, bias: PythonObject, ep
             inverse = stats[1]
         var mean = LayerInput(means, context)
         var rstd = LayerInput(inverse, context)
-        var handles = Python.list()
+        var stat_handles = List[Int]()
         if stats is not None:
             if not mean.device or not rstd.device or mean.count != m or rstd.count != m:
                 raise Error("ValueError: layer_norm: stats must be two resident tensors of M floats")
             if py_item(mean.entries, nk[].k_module) is not py_item(input.entries, nk[].k_module) or py_item(rstd.entries, nk[].k_module) is not py_item(input.entries, nk[].k_module):
                 raise Error("ValueError: layer_norm: stats must use x's native binding")
-            handles = Python.list(mean.handle, rstd.handle)
-            _ = py_call(flags.append, PythonObject(1))
-        # Lane ne3-c-blocks-embedding (row N162): a device forward allocates
-        # y (and, with `alloc_stats`, the kept mean and rstd) inside the one
-        # `layer_norm_dev_alloc` crossing instead of one `seq_tensor_alloc`
-        # crossing per tensor. The same handles, the same launches: no bit
-        # moves. The result then carries the kept stats as a fifth item.
-        # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
-        var fused = Optional[PythonObject]()
+            stat_handles.append(Int(py=mean.handle))
+            stat_handles.append(Int(py=rstd.handle))
+            flags.append(1)
+        var module = py_item(input.entries, nk[].k_module)
+        var x_handle = Int(py=input.handle)
         if not backward:
-            fused = py_present(py_get(input.entries, nk[].k_layer_norm_dev_alloc))
-        if Bool(fused):
+            # Lane ne3-c-blocks-embedding (row N162): a device forward
+            # allocates y (and, with `alloc_stats`, the kept mean and rstd)
+            # inside the one SEQ_LAYER_NORM_DEV_ALLOC call. The result then
+            # carries the kept stats as a fifth item. Every device image
+            # serves this form, so the forward that allocated y in a separate
+            # crossing (taken only when the entry name was absent) is gone.
             var out_count = max(1, shape_count(input.shape))
-            var fused_hs = Python.list(input.handle, PythonObject(0), PythonObject(0), PythonObject(0))
-            var sizes = Python.list(0, out_count, 0, 0)
             var make_stats = stats is None and alloc_stats
+            var slots = 6 if (stats is not None or make_stats) else 4
+            # made = the handles the layer ran on, written by the operation.
+            var made = List[Int](length=slots, fill=0)
+            var ints = List[Int](capacity=2 * slots + 8)
+            ints.append(slots)
+            ints.append(x_handle)
+            ints.append(0)
+            ints.append(0)
+            ints.append(0)
             if stats is not None:
-                _ = py_call(fused_hs.extend, handles)
-                _ = py_call(sizes.extend, Python.list(0, 0))
+                ints.append(stat_handles[0])
+                ints.append(stat_handles[1])
             elif make_stats:
-                _ = py_call(fused_hs.extend, Python.list(0, 0))
-                _ = py_call(sizes.extend, Python.list(m, m))
-                _ = py_call(flags.append, PythonObject(1))
-            var fused_addrs = Python.list(w.address, b.address, PythonObject(0), PythonObject(0))
-            var made = py_call_typed(fused.value(), fused_hs, fused_addrs, flags, fp, sizes)
-            var module = py_item(input.entries, nk[].k_module)
-            var fused_output = seq_device_make(module, input.shape, made[1], PythonObject(None), context)
+                ints.append(0)
+                ints.append(0)
+                flags.append(1)
+            ints.append(0)
+            ints.append(out_count)
+            ints.append(0)
+            ints.append(0)
+            if slots == 6:
+                ints.append(m if make_stats else 0)
+                ints.append(m if make_stats else 0)
+            for i in range(len(flags)):  # driver-loop: over the layer's option words (at most six)
+                ints.append(flags[i])
+            var fused_addresses: List[Int] = [Int(made.unsafe_ptr()), w.address, b.address, 0, 0]
+            _ = seq_ops_call(input.entries, SEQ_LAYER_NORM_DEV_ALLOC, fused_addresses, ints, floats)
+            # The tensors the call made are this door's until each has its
+            # owner: slot 1 (y) and, with make_stats, slots 4 and 5. Slots 0
+            # and caller-given stats are not ours and are never released here.
+            made[0] = 0
+            if slots == 6 and not make_stats:
+                made[4] = 0
+                made[5] = 0
+            var fused_output = PythonObject(None)
             var kept = PythonObject(None)
-            if make_stats:
-                kept = Python.tuple(seq_device_make(module, [m], made[4], PythonObject(None), context),
-                                    seq_device_make(module, [m], made[5], PythonObject(None), context))
+            try:
+                fused_output = seq_device_make(module, input.shape, PythonObject(made[1]), PythonObject(None), context)
+                made[1] = 0
+                if make_stats:
+                    var kept_mean = seq_device_make(module, [m], PythonObject(made[4]), PythonObject(None), context)
+                    made[4] = 0
+                    var kept_rstd = seq_device_make(module, [m], PythonObject(made[5]), PythonObject(None), context)
+                    made[5] = 0
+                    kept = Python.tuple(kept_mean, kept_rstd)
+            except error:
+                _release_made(input.entries, made)
+                raise error^
             _ = mean^
             _ = rstd^
             _ = gradient^
             _ = w^
             _ = b^
             return Python.tuple(fused_output, PythonObject(None), PythonObject(None), PythonObject(None), kept)
+        # backward: dx is a new resident tensor; dweight and dbias are host arrays.
         var output = _new(input.entries, input.shape, context)
         var dy_owner = PythonObject(None)
-        var dy_handle = PythonObject(0)
-        var dw = PythonObject(None)
-        var db = PythonObject(None)
-        if backward:
-            if gradient.device:
-                if py_item(gradient.entries, nk[].k_module) is not py_item(input.entries, nk[].k_module):
-                    raise Error("ValueError: layer_norm_backward: dy must use x's native binding")
-                dy_handle = gradient.handle
-            else:
-                dy_owner = _upload(gradient, input.entries, context)
-                dy_handle = _handle(dy_owner, context)
-            dw = _array(grad_shape, context)
-            db = _array(grad_shape, context)
-        var hs = Python.list(input.handle, PythonObject(0) if backward else _handle(output, context),
-                             dy_handle, _handle(output, context) if backward else PythonObject(0))
-        _ = py_call(hs.extend, handles)
-        var addrs = Python.list(w.address, b.address, classical_address(dw) if backward else PythonObject(0),
-                                classical_address(db) if backward else PythonObject(0))
-        _ = py_call_typed(entry, hs, addrs, flags, fp)
+        var dy_handle = 0
+        if gradient.device:
+            if py_item(gradient.entries, nk[].k_module) is not py_item(input.entries, nk[].k_module):
+                raise Error("ValueError: layer_norm_backward: dy must use x's native binding")
+            dy_handle = Int(py=gradient.handle)
+        else:
+            dy_owner = _upload(gradient, input.entries, context)
+            dy_handle = Int(py=_handle(dy_owner, context))
+        var dw = _array(grad_shape, context)
+        var db = _array(grad_shape, context)
+        var ints = List[Int](capacity=14)
+        ints.append(4 + len(stat_handles))
+        ints.append(x_handle)
+        ints.append(0)
+        ints.append(dy_handle)
+        ints.append(Int(py=_handle(output, context)))
+        for i in range(len(stat_handles)):  # driver-loop: over the two kept statistics
+            ints.append(stat_handles[i])
+        for i in range(len(flags)):  # driver-loop: over the layer's option words (at most six)
+            ints.append(flags[i])
+        var addresses: List[Int] = [w.address, b.address, Int(py=classical_address(dw)), Int(py=classical_address(db))]
+        _ = seq_ops_call(input.entries, SEQ_LAYER_NORM_DEV, addresses, ints, floats)
         _ = dy_owner^
         _ = mean^
         _ = rstd^
         _ = gradient^
         _ = w^
         _ = b^
-        return Python.tuple(PythonObject(None) if backward else output, output if backward else PythonObject(None),
+        return Python.tuple(PythonObject(None), output,
             dw if had_weight else PythonObject(None), db if had_bias else PythonObject(None))
     if gradient.device:
         raise Error("TypeError: layer_norm host input requires a host output gradient")
     var entries = seq_binding(mode, context, PythonObject(None))
-    var entry = py_get(entries, nk[].k_layer_norm)
-    if entry is None:
+    # Every x_sequence image serves SEQ_LAYER_NORM on its own executor (was a
+    # lookup of the entry name `layer_norm`).
+    if not seq_ops_native(entries):
         raise Error("ImportError: the sequence binding lacks layer_norm; rebuild it")
     # y (forward) or dx (backward): the entry downloads every word, so the
     # output is unfilled NumPy storage (lane fb-neural; see _array_unfilled)
@@ -318,14 +377,19 @@ def _run(input: LayerInput, d: Int, weight: PythonObject, bias: PythonObject, ep
     var scratch = _array([1], context) if not backward else PythonObject(None)
     var dw = _array(grad_shape, context)
     var db = _array(grad_shape, context)
-    var addrs = Python.list(input.address, w.address, b.address,
-        PythonObject(0) if backward else classical_address(output), gradient.address,
-        classical_address(output) if backward else classical_address(scratch), classical_address(dw), classical_address(db))
-    _ = py_call_typed(entry, addrs, flags, fp)
+    var output_address = Int(py=classical_address(output))
+    var addresses: List[Int] = [input.address, w.address, b.address,
+        0 if backward else output_address, gradient.address,
+        output_address if backward else Int(py=classical_address(scratch)),
+        Int(py=classical_address(dw)), Int(py=classical_address(db))]
+    _ = seq_ops_call(entries, SEQ_LAYER_NORM, addresses, flags, floats)
     _ = scratch^
     _ = gradient^
     _ = w^
     _ = b^
+    _ = output
+    _ = dw
+    _ = db
     return Python.tuple(PythonObject(None) if backward else output, output if backward else PythonObject(None),
             dw if had_weight else PythonObject(None), db if had_bias else PythonObject(None))
 
@@ -419,12 +483,12 @@ def sequence_layer_norm(operation: Int, owner: PythonObject, values: PythonObjec
         raise Error("ValueError: LayerNorm input trailing shape differs from normalized_shape")
     var stats = PythonObject(None)
     var keep_stats = input.device and not Bool(py=py_item(context, nk[].k_seqln_keep_stats_off))
-    # Row N162: with the fused entry the kept stats are made inside the
-    # forward's one crossing (`_run`, alloc_stats) and published after it.
-    var fused = keep_stats and py_get(input.entries, nk[].k_layer_norm_dev_alloc) is not None
-    if keep_stats and not fused:
-        var m = input.count // d
-        stats = Python.tuple(_new(input.entries, [m], context), _new(input.entries, [m], context))
+    # Row N162: the kept stats are made inside the forward's one call
+    # (`_run`, alloc_stats) and published after it. Every device image serves
+    # that form (`_run` refuses an image without device LayerNorm), so the
+    # two separate stat allocations, taken only when the entry name
+    # `layer_norm_dev_alloc` was absent, are gone.
+    var fused = keep_stats
     # Keep the same normalized input owner and resident statistics for the
     # next public backward; its metadata is refreshed at that next operation.
     py_setitem(fields, nk[].k__x, input.owner)
