@@ -17,11 +17,11 @@ from bindings.sequential_description_unpack import sequential_fields
 from core.linear_model_state import LinearModelState, linear_state_require_coef, linear_state_check_width, linear_state_check_coefficients
 from providers.python.linear_state_boundary_door import LinearStateOwner, linear_state_owner, linear_state_refresh
 from core.linear_registry import LINEAR_STATES, linear_lease_predict
-from providers.python.linear_entry_boundary_door import linear_entry_connection
+from core.linear_route import LinearRoute
 
 
 def _linear_predict_boundary(model: PythonObject, value: PythonObject,
-    entries: PythonObject, context: PythonObject, wide: Bool) raises -> PythonObject:
+    route: LinearRoute, pins: PythonObject, context: PythonObject, wide: Bool) raises -> PythonObject:
     var fields = sequential_fields(model)
     var owner = linear_state_owner(model)
     var state = LinearModelState()
@@ -66,14 +66,15 @@ def _linear_predict_boundary(model: PythonObject, value: PythonObject,
     var dst = classical_array(rows, 0, context, wide)
     var native_call = linear_state_refresh(model, owner, state, coef, prior)
     var lease = native_call.lease.copy()
-    var connection = linear_entry_connection(entries)
-    var key = connection.key.copy()
+    # The estimator's resolved prediction entry (device table or CPU table):
+    # no connection admission and no table slot read per call.
+    var entry = route.predict.call
     var destination = Int(py=classical_address(dst))
     var py = Python()
     var status = 0
     try:
         with GILReleased(py):
-            status = linear_lease_predict(key, lease, admitted_x.address, destination, rows, cols, wide, est, test_x)
+            status = linear_lease_predict(entry, lease, admitted_x.address, destination, rows, cols, wide, est, test_x)
     finally:
         # Raw addresses and the copied native function pointer do not retain
         # the admitted arrays or the extension image that owns the endpoint.
@@ -81,8 +82,7 @@ def _linear_predict_boundary(model: PythonObject, value: PythonObject,
         _ = admitted_x
         _ = coef
         _ = dst
-        _ = entries
-        _ = connection
+        _ = pins
         _ = owner
         _ = lease
         _ = native_call
@@ -92,10 +92,10 @@ def _linear_predict_boundary(model: PythonObject, value: PythonObject,
 
 
 def classical_linear_predict(model: PythonObject, value: PythonObject,
-    entries: PythonObject, context: PythonObject) raises -> PythonObject:
-    return _linear_predict_boundary(model, value, entries, context, False)
+    route: LinearRoute, pins: PythonObject, context: PythonObject) raises -> PythonObject:
+    return _linear_predict_boundary(model, value, route, pins, context, False)
 
 
 def classical_linear_predict_public(model: PythonObject, value: PythonObject,
-    entries: PythonObject, context: PythonObject) raises -> PythonObject:
-    return _linear_predict_boundary(model, value, entries, context, True)
+    route: LinearRoute, pins: PythonObject, context: PythonObject) raises -> PythonObject:
+    return _linear_predict_boundary(model, value, route, pins, context, True)

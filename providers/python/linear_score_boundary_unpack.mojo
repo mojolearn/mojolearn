@@ -8,7 +8,7 @@ from bindings.classical_validate_unpack import classical_check_x_snapshot, class
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_get, py_type
 from bindings.sequential_description_unpack import sequential_fields
-from core.linear_boundary_types import LINEAR_PREDICT_ABI
+from core.linear_route import LinearRoute
 from core.linear_model_state import LinearModelState, linear_state_require_coef, linear_state_check_width, linear_state_check_coefficients
 from core.linear_score_run import linear_score_run, linear_r2_run, linear_r2_check_target
 from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
@@ -16,7 +16,7 @@ from x_decomp.descriptor_schema import xd_vendor_code
 from x_metrics.descriptor_schema import METRICS_PROGRAM_ABI, MP_OPERATION_COUNT
 
 from providers.python.linear_entry_boundary_door import linear_entry_connection
-from core.linear_entry_table import LINEAR_TABLE_ESTIMATORS, LINEAR_TABLE_METRICS, linear_table_entry
+from core.linear_entry_table import LINEAR_TABLE_METRICS, linear_table_entry
 
 
 def _linear_metrics_provider(context: PythonObject) raises -> PythonObject:
@@ -29,7 +29,7 @@ def _linear_metrics_provider(context: PythonObject) raises -> PythonObject:
 
 
 def classical_linear_score(model: PythonObject, args: PythonObject,
-    entries: PythonObject, context: PythonObject) raises -> PythonObject:
+    route: LinearRoute, pins: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = sequential_fields(model)
     var state = LinearModelState()
     var coefficient_source = py_get(fields, "coef_")
@@ -56,9 +56,8 @@ def classical_linear_score(model: PythonObject, args: PythonObject,
     linear_r2_check_target(rows, target_rows)
     var target_address = Int(py=classical_address(target))
     var x_address = admitted_x.address
-    var connection = linear_entry_connection(entries)
-    var key = connection.key.copy()
-    var predict = linear_table_entry[LINEAR_TABLE_ESTIMATORS](key, 1, String(LINEAR_PREDICT_ABI), 1)
+    # The estimator's resolved prediction entry (device table or CPU table).
+    var predict = route.predict.call
     var metric_mode = context["backend_fields"]["_DEFAULT_MODE"]
     var metric_pins = context["classical_metrics"][metric_mode]
     if py_type(metric_pins) is native_loaded_module("builtins").str:
@@ -86,8 +85,7 @@ def classical_linear_score(model: PythonObject, args: PythonObject,
         _ = admitted_x
         _ = coef
         _ = target
-        _ = entries
-        _ = connection
+        _ = pins
         _ = metric_pins
         _ = metric_connection
     return PythonObject(result)
