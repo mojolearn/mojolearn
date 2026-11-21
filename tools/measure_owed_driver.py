@@ -491,11 +491,51 @@ def case_rnn_shapes(row, arm_cases):
     return out
 
 
+def case_dbscan_shapes(row, arm_cases):
+    """DBSCAN(algorithm='brute') on generated Gaussian mixtures (16 centres, unit spread, float32), one per entry of
+    the row's "shapes": the neighbouring-shape and non-board cells of an A/B on the brute distance pass (lane
+    sp-dbscan-filter, 2026-11-20). eps is the 1 % quantile of the pair distances of a 2,000-row sample, so every
+    width has the same neighbour density (about n / 100 neighbours a row); min_samples 5. The label digest, the
+    cluster count and the noise fraction ride beside the time: the arms' digests must be equal. The brute edge-free
+    route is taken only by a fit of more than one reference batch (above 46,340 rows: 2^31 / n < n), so a smaller
+    shape is a control on which every arm of that route must read the same time."""
+    import hashlib
+    import numpy as np
+    ml = _ml()
+    out = []
+    for index, sh in enumerate(row["shapes"]):  # serial by nature: timed fits on one GPU
+        n, d = int(sh["rows"]), int(sh["features"])
+        rng = np.random.default_rng(20261120 + index)
+        centres = rng.normal(0.0, 4.0, size=(16, d))
+        X = np.ascontiguousarray(centres[rng.integers(0, 16, size=n)] + rng.normal(0.0, 1.0, size=(n, d)),
+                                 dtype=np.float32)
+        sample = X[:: max(1, n // 2000)][:2000].astype(np.float64)
+        n2 = (sample * sample).sum(axis=1)
+        d2 = np.maximum(n2[:, None] + n2[None, :] - 2.0 * (sample @ sample.T), 0.0)
+        eps = float(np.sqrt(np.quantile(d2[np.triu_indices(sample.shape[0], k=1)], 0.01)))
+        box = {}
+
+        def fit(X=X, eps=eps, box=box):
+            est = ml.DBSCAN(eps=eps, min_samples=5, metric="euclidean", algorithm="brute")
+            est.fit(X)
+            box["est"] = est
+
+        ms, why = timed(fit)
+        extra = {"eps": eps}
+        if why is None:
+            labels = np.asarray(box["est"].labels_, dtype=np.int32).reshape(-1)
+            extra.update(clusters=int(labels.max()) + 1, noise_fraction=float((labels < 0).mean()),
+                         labels_sha256=hashlib.sha256(labels.tobytes()).hexdigest())
+        out.append(("DBSCAN brute n=%d d=%d" % (n, d), ms, why, extra))
+    return out
+
+
 DRIVERS = {"rnn_shapes": case_rnn_shapes, "gemm_shapes": case_gemm_shapes, "f16_widen": case_f16_widen, "while_loop": case_while_loop, "pandas_input": case_pandas_input, "mlp_fit": case_mlp_fit,
            "kde_widths": case_kde_widths, "mamba_backward": case_mamba_backward, "cnn_widths": case_cnn_widths,
            "samba_train_step": case_samba_train_step,
            "samba_step": case_samba_step,
-           "transformer_forward": case_transformer_forward, "lm_logits": case_lm_logits}
+           "transformer_forward": case_transformer_forward, "lm_logits": case_lm_logits,
+           "dbscan_shapes": case_dbscan_shapes}
 
 
 def arm_cases(row, arm):

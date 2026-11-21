@@ -947,6 +947,11 @@
    "define": "MOJOLEARN_GEMM_FAST_BF16_RESIDENT,MOJOLEARN_MODE_FAST_ROWS",
    "status": "define in code (gemm/fast_bf16_resident.mojo GEMM_FAST_BF16_RESIDENT; refused outside a fast-rows build with the matrix-units route, core/experiment_guards_neural.mojo), lane inv-bf16-kernel 2026-11-20: bf16 matrix-unit products over RESIDENT bf16 operands (a weight narrowed once and kept until its owner reports a rewrite; an activation stored in bf16 by the epilogue launch that produces it; FP32 accumulation, FP32 at the public boundary; one launch a product). A new define: the per-call arm MOJOLEARN_GEMM_FAST_BF16_UNITS stays deleted (docs/TOMBSTONES.md). No product route reads it yet: its only consumer is bench/gemm_units_kernel_clock_main.mojo, whose arms fp32-exact, tf32-unit, bf16-percall and bf16-resident are four calls inside this ONE build (A and B are lines of one program run, not two wheels). The product wiring (sequence executor inference chain, neural dispatch) is decided by the kernel-clock rows.",
    "owed": "RUN"
+  },
+  "dbscan-brute-eps-filter": {
+   "define": "MOJOLEARN_DBSCAN_FAST_BRUTE_EPS_FILTER",
+   "status": "define in code (dbscan/impl/brute_eps_filter.mojo DBSCAN_BRUTE_EPS_FILTER, read by dbscan/impl/brute_edge_free.mojo dbscan_brute_edge_free_fit), lane sp-dbscan-filter 2026-11-20: B = both distance passes of the brute edge-free route as one identical GEMM per query range on centred rows plus a filter launch, pairs inside the error band (M = (4k + 16) u (1 + 1/16) relative to the two centred norms, plus 2^-100) recomputed by the reference _eps_acc chain; A = the default (bef_eps_kernel on every pair). Same degrees, bit words and labels by construction: bits unchanged on every column. IDENTICAL NVIDIA/AMD only (inert elsewhere); euclidean and cosine. Build with the bindings that compile DBSCAN (_mojolearn_estimators, _mojolearn_hdbscan, _mojolearn_hdbscan_host and the binding of core/dbscan_native_device.mojo). Before timing: native check dbscan_eps_filter_gpu (device column) must pass.",
+   "owed": "RUN"
   }
  },
  "rows": [
@@ -5742,6 +5747,84 @@
     "weight_narrows_total (3: one a weight, however many calls)"
    ],
    "decides": "whether the resident bf16 arm is wired into the sequence executor's inference chain (sequence/mlp_fit.mojo::mlp_predict: weight images kept with the resident fitted block, the chunk copy narrowing the batch, the epilogue tail storing the next layer's image): only if chain-bf16-resident is faster than chain-tf32 beyond the spread with max_rel_diff_vs_fp32 inside 0.01 at a size and its neighbour; the 4096-row chunks against the whole-batch rows also price the 4096-row chunking of mlp_predict itself on both units"
+  },
+  {
+   "id": "dbscan-brute-eps-filter-istella",
+   "source": "lane sp-dbscan-filter (2026-11-20; ~/mojolearn-evidence/briefs-20261118/ideas-rank-shared-RESULT.md list item 2: the brute distance pass is 1,638 s of the board, about 0.74 TFLOP/s against the identical GEMM's 19.5-25 on the L40S; docs/apple-fast/EXPERIMENTS.md MOJOLEARN_DBSCAN_FAST_BRUTE_EPS_FILTER row; dbscan/impl/brute_eps_filter.mojo)",
+   "kind": "ab",
+   "lane": "dbscan",
+   "dataset": "istella",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "dbscan-brute-eps-filter"
+   ],
+   "cap_base": true,
+   "decides": "promote B (the GEMM filter with the exact recheck) where it is faster than A at equal quality on the NVIDIA L40S; the label digest, clusters and noise fraction MUST be equal on both arms (the filter decides a pair only inside a proven error bound, the rest run the reference accumulation; native check dbscan_eps_filter_gpu); record from the PHASE plan.brute_eps_filter line of each fit: gemm_rows, probe_uncertain of pairs, filter True/False"
+  },
+  {
+   "id": "dbscan-brute-eps-filter-taxi",
+   "source": "lane sp-dbscan-filter (2026-11-20; ~/mojolearn-evidence/briefs-20261118/ideas-rank-shared-RESULT.md list item 2: the brute distance pass is 1,638 s of the board, about 0.74 TFLOP/s against the identical GEMM's 19.5-25 on the L40S; docs/apple-fast/EXPERIMENTS.md MOJOLEARN_DBSCAN_FAST_BRUTE_EPS_FILTER row; dbscan/impl/brute_eps_filter.mojo)",
+   "kind": "ab",
+   "lane": "dbscan",
+   "dataset": "taxi",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "dbscan-brute-eps-filter"
+   ],
+   "cap_base": true,
+   "decides": "promote B (the GEMM filter with the exact recheck) where it is faster than A at equal quality on the NVIDIA L40S; the label digest, clusters and noise fraction MUST be equal on both arms (the filter decides a pair only inside a proven error bound, the rest run the reference accumulation; native check dbscan_eps_filter_gpu); record from the PHASE plan.brute_eps_filter line of each fit: gemm_rows, probe_uncertain of pairs, filter True/False"
+  },
+  {
+   "id": "dbscan-brute-eps-filter-taxi-250k",
+   "source": "lane sp-dbscan-filter (2026-11-20; ~/mojolearn-evidence/briefs-20261118/ideas-rank-shared-RESULT.md list item 2: the brute distance pass is 1,638 s of the board, about 0.74 TFLOP/s against the identical GEMM's 19.5-25 on the L40S; docs/apple-fast/EXPERIMENTS.md MOJOLEARN_DBSCAN_FAST_BRUTE_EPS_FILTER row; dbscan/impl/brute_eps_filter.mojo)",
+   "kind": "ab",
+   "lane": "dbscan",
+   "dataset": "taxi",
+   "rows": 250000,
+   "vendor": "nvidia",
+   "b_arms": [
+    "dbscan-brute-eps-filter"
+   ],
+   "decides": "promote B (the GEMM filter with the exact recheck) where it is faster than A at equal quality on the NVIDIA L40S; the label digest, clusters and noise fraction MUST be equal on both arms (the filter decides a pair only inside a proven error bound, the rest run the reference accumulation; native check dbscan_eps_filter_gpu); record from the PHASE plan.brute_eps_filter line of each fit: gemm_rows, probe_uncertain of pairs, filter True/False"
+  },
+  {
+   "id": "dbscan-brute-eps-filter-shapes",
+   "source": "lane sp-dbscan-filter (2026-11-20; ~/mojolearn-evidence/briefs-20261118/ideas-rank-shared-RESULT.md list item 2: the brute distance pass is 1,638 s of the board, about 0.74 TFLOP/s against the identical GEMM's 19.5-25 on the L40S; docs/apple-fast/EXPERIMENTS.md MOJOLEARN_DBSCAN_FAST_BRUTE_EPS_FILTER row; dbscan/impl/brute_eps_filter.mojo)",
+   "kind": "driver",
+   "driver": "dbscan_shapes",
+   "shapes": [
+    {
+     "rows": 50000,
+     "features": 8
+    },
+    {
+     "rows": 50000,
+     "features": 64
+    },
+    {
+     "rows": 20000,
+     "features": 512,
+     "note": "CONTROL: one reference batch, the brute edge-free route and the arm are not taken below 46,341 rows; expect 1.00"
+    },
+    {
+     "rows": 60000,
+     "features": 512,
+     "note": "the wide shape that takes the route"
+    },
+    {
+     "rows": 200000,
+     "features": 100,
+     "note": "non-board data"
+    }
+   ],
+   "arms": [
+    "candidate",
+    "dbscan-brute-eps-filter"
+   ],
+   "vendor": "nvidia",
+   "decides": "promote B (the GEMM filter with the exact recheck) where it is faster than A at equal quality on the NVIDIA L40S; the label digest, clusters and noise fraction MUST be equal on both arms (the filter decides a pair only inside a proven error bound, the rest run the reference accumulation; native check dbscan_eps_filter_gpu); record from the PHASE plan.brute_eps_filter line of each fit: gemm_rows, probe_uncertain of pairs, filter True/False; here the digest is labels_sha256 of each case line"
   }
  ]
 }
