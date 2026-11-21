@@ -241,6 +241,18 @@ def test_a_changed_numeric_mode_resolves_the_route_again(cls):
 
 
 @pytest.mark.parametrize("cls", CLASSES)
+def test_a_saved_model_loads_on_this_installations_device(cls, tmp_path):
+    x, y = data(cls)
+    model = cls(device="cpu").fit(x, y)
+    path = str(tmp_path / "model.npz")
+    model.save(path)                             # the device is a constructor parameter, not model state
+    loaded = cls.load(path)
+    assert loaded.get_params()["device"] is None
+    assert loaded.vendor_used() == mojolearn.vendor()
+    assert answer(loaded, x).shape == (len(x),)
+
+
+@pytest.mark.parametrize("cls", CLASSES)
 def test_check_runs_both_devices_in_this_process(cls, capsys):
     x, y = data(cls)
     model = cls().fit(x, y)
