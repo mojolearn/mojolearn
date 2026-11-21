@@ -1003,12 +1003,17 @@ class PolynomialCountSketch(_XNeighbors):
     >>> Z = mojolearn.PolynomialCountSketch(n_components=64, random_state=0).fit_transform(X)
     """
 
-    def __init__(self, *, gamma=1.0, degree=2, coef0=0, n_components=100, random_state=None):
+    #: `device=None | "gpu" | "cpu"`: every operation takes its image from the estimator's binding route
+    #: (providers/python/estimator_binding_pyapi_door.mojo); the check runs both devices in this process.
+    _mojolearn_device = True
+
+    def __init__(self, *, gamma=1.0, degree=2, coef0=0, n_components=100, random_state=None, device=None):
         self.gamma = gamma
         self.degree = degree
         self.coef0 = coef0
         self.n_components = n_components
         self.random_state = random_state
+        self.device = device
 
     @_native_local_method
     def fit(self, X, y=None):
