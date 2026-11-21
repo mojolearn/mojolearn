@@ -339,3 +339,44 @@ def test_basic_block_load_state_dict_is_all_or_nothing():
     with pytest.raises(ValueError, match="num_features"):
         block.load_state_dict(other)
     assert {k: np.asarray(v).tobytes() for k, v in block.state_dict().items()} == before
+
+
+# ---- round 3: GCNConv / SAGEConv state_dict / load_state_dict (PyG names) ---
+
+def _graph_inputs():
+    rng = np.random.default_rng(3)
+    x = rng.random((6, 4), dtype=np.float32)
+    edge_index = np.array([[0, 1, 2, 3, 4, 5], [1, 2, 3, 4, 5, 0]], dtype=np.int64)
+    return x, edge_index
+
+
+def test_gcn_state_dict_uses_pyg_names_and_round_trips():
+    conv = mojolearn.GCNConv(4, 3, device="cpu")
+    sd = conv.state_dict()
+    assert list(sd) == ["bias", "lin.weight"] and sd["lin.weight"].shape == (3, 4)
+    x, edge_index = _graph_inputs()
+    other = mojolearn.GCNConv(4, 3, random_state=5, device="cpu").load_state_dict(sd)
+    assert np.asarray(other.forward(x, edge_index)).tobytes() == np.asarray(conv.forward(x, edge_index)).tobytes()
+    assert list(mojolearn.GCNConv(4, 3, bias=False, device="cpu").state_dict()) == ["lin.weight"]
+
+
+def test_sage_state_dict_uses_pyg_names_and_round_trips():
+    conv = mojolearn.SAGEConv(4, 3, project=True, device="cpu")
+    sd = conv.state_dict()
+    assert list(sd) == ["lin.weight", "lin.bias", "lin_l.weight", "lin_l.bias", "lin_r.weight"]
+    x, edge_index = _graph_inputs()
+    other = mojolearn.SAGEConv(4, 3, project=True, random_state=5, device="cpu").load_state_dict(sd)
+    assert np.asarray(other.forward(x, edge_index)).tobytes() == np.asarray(conv.forward(x, edge_index)).tobytes()
+    assert list(mojolearn.SAGEConv(4, 3, root_weight=False, bias=False, device="cpu").state_dict()) == ["lin_l.weight"]
+
+
+def test_graph_load_state_dict_is_strict_and_all_or_nothing():
+    conv = mojolearn.SAGEConv(4, 3, device="cpu")
+    before = {k: np.asarray(v).tobytes() for k, v in conv.state_dict().items()}
+    bad = mojolearn.SAGEConv(4, 3, random_state=9, device="cpu").state_dict()
+    bad["lin_r.weight"] = np.ones((3, 5), dtype=np.float32)
+    with pytest.raises(ValueError, match="wrong shape"):
+        conv.load_state_dict(bad)
+    with pytest.raises(ValueError, match="no entry"):
+        conv.load_state_dict({"lin_l.weight": bad["lin_l.weight"]})
+    assert {k: np.asarray(v).tobytes() for k, v in conv.state_dict().items()} == before
