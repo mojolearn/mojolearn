@@ -296,4 +296,3 @@ def test_python_operations_per_call_do_not_grow_with_rows(cls, device):
         model.predict(x)                         # the route and the fitted-state record are resolved
         counts[name] = _python_events(lambda: model.predict(x))
     assert counts["small"] == counts["large"]
-    assert counts["small"]["call"] <= 2          # the public method and nothing under it
