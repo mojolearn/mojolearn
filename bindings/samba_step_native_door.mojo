@@ -3,30 +3,38 @@
 
 This public execution owner accepts native built-in schedule configurations;
 arbitrary Python callbacks are refused before state mutation.
+
+UNPACK and PACK of one train step. RUN is training/samba_step_run.mojo (the
+checks, the plan, the microbatch slices, the stacked gradient, the aligned
+accumulation, the report words) and core/samba_optimizer_plan.mojo (the
+optimizer entry call): typed words, no Python object.
 """
 from core.weight_epoch import registry_epoch_bump
 from providers.python.samba_execution_pyapi_door import samba_provider_accumulated_gradients
 from providers.python.samba_resident_pyapi_door import samba_resident_provider, samba_resident_native_step
 from providers.python.neural_descriptor_pyapi_door import (
-    NeuralDescriptorProvider, neural_descriptor_execute, neural_descriptor_execute_id, neural_descriptor_provider_id,
+    NeuralDescriptorProvider, neural_descriptor_execute, neural_descriptor_provider_id,
 )
-from training.checks.optimizer_contract import microbatch_split_is_identical
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from bindings.optimizer_owner_boundary_unpack import OptimizerOwner, OptimizerOwnerLease
 from bindings.optimizer_descriptor_boundary_door import optimizer_driver
 from bindings.samba_optimizer_boundary_unpack import samba_optimizer_provider, samba_optimizer_primitives, samba_optimizer_execute, samba_optimizer_transfer
 from core.samba_optimizer_plan import SambaOptimizerPlan
-from training.optimizer_public_common import OptHyper
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
 from bindings.p3_samba_caps_door import samba_caps, SAMBA_CAP_RESIDENT_ABI, SAMBA_CAP_RESIDENT_ON, SAMBA_CAP_ACCUMULATED, SAMBA_CAP_CHUNKED
-from std.memory import unsafe_memcpy
 from bindings.generation_buffers_door import generation_initialize_binding, generation_array
 from bindings.generator_state_native_pack import generator_next
-from bindings.samba_state_native_door import samba_fields, samba_schedule_snapshot, samba_schedule_rate, samba_moment_view, samba_primitive
+from bindings.samba_state_native_door import samba_fields, samba_schedule_snapshot, samba_schedule_rate, samba_moment_view
 from bindings.samba_route_unpack import samba_route
-from core.samba_entry_table import SAMBA_PRIM_ACCUMULATE
-from training.samba_state_run import samba_optimizer_device_plan
+from training.samba_state_run import samba_optimizer_device_plan, samba_max_norm_check
+# RUN: typed pieces, no Python import.
+from training.samba_step_run import (
+    samba_step_index_check, samba_step_plan_run, samba_step_split_check, samba_registry_count_check,
+    samba_microbatch_copy_run, samba_gradient_stack_run, samba_loss_store, samba_float_read,
+    samba_accumulate_admit, samba_accumulate_run, samba_step_io_device, samba_step_io_host, samba_step_clipped,
+    samba_step_rate_reported, samba_parameter_format_check, samba_parameter_extent_check,
+)
 from core.device_plan import DevicePlan
 from bindings.samba_training_native_door import samba_ids, samba_gradients_admitted, _samba_count
 from bindings.causal_lm_construct_door import _model_f32, _model_shape
@@ -97,30 +105,36 @@ def _samba_step_plan(fields: PythonObject, opt: PythonObject, context: PythonObj
     var nk = samba_keys()
     # `schedule` is the snapshot samba_train_step admitted at its start; the
     # step never changes opt["lr_schedule"], so it is not taken a second time.
+    # UNPACK the optimizer's scalars (once per step); the checks and the plan
+    # are RUN. `max_norm` is read once (three reads until 2026-11-21).
     var step = Int(py=py_item(opt, nk[].k_t))
-    if step < 0 or step >= 2147483647:
-        raise Error("Samba: optimizer step exceeds signed 32-bit indexing")
+    samba_step_index_check(step)
     if schedule is not None:
         py_setitem(opt, nk[].k_lr, samba_schedule_rate(schedule, step + 1, context))
-    var max_norm = 0.0 if py_item(fields, nk[].k_max_norm) is None else Float64(py=py_item(fields, nk[].k_max_norm))
-    if py_item(fields, nk[].k_max_norm) is not None and not (max_norm > 0.0):
-        raise Error("Samba: max_norm must be positive or None")
+    var limit = py_item(fields, nk[].k_max_norm)
+    var given = limit is not None
+    var max_norm = 0.0
+    if given:
+        max_norm = Float64(py=limit)
+    samba_max_norm_check(given, max_norm)
     py_setitem(opt, nk[].k_t, step + 1)
     var betas = py_item(opt, nk[].k_betas)
-    var hyper = OptHyper(2, 0, Bool(py=py_get(opt, nk[].k_maximize, False)),
-        Float64(py=py_item(opt, nk[].k_lr)), Float64(py=betas[0]), Float64(py=betas[1]),
-        Float64(py=py_item(opt, nk[].k_eps)), Float64(py=py_item(opt, nk[].k_weight_decay)), 0.0, 0.0, max_norm)
-    return SambaOptimizerPlan(len(py_item(opt, nk[].k_params)), step + 1, hyper)
+    return samba_step_plan_run(len(py_item(opt, nk[].k_params)), step + 1,
+        Bool(py=py_get(opt, nk[].k_maximize, False)), Float64(py=py_item(opt, nk[].k_lr)),
+        Float64(py=betas[0]), Float64(py=betas[1]), Float64(py=py_item(opt, nk[].k_eps)),
+        Float64(py=py_item(opt, nk[].k_weight_decay)), max_norm)
 
 
 def _samba_step_finish(fields: PythonObject, opt: PythonObject, info: PythonObject, loss: PythonObject) raises -> PythonObject:
     var nk = samba_keys()
-    var ptr = Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=Int(py=info._addr))
-    py_setitem(opt, nk[].k_total_norm_, PythonObject(Float64(ptr[1])) if ptr[0] != 0.0 else PythonObject(None))
-    py_setitem(opt, nk[].k_clip_coef_, PythonObject(Float64(ptr[2])) if ptr[0] != 0.0 else PythonObject(None))
+    # PACK of the step report: info is [flag, total_norm, clip_coef].
+    var address = Int(py=info._addr)
+    var clipped = samba_step_clipped(address)
+    py_setitem(opt, nk[].k_total_norm_, PythonObject(samba_float_read(address, 1)) if clipped else PythonObject(None))
+    py_setitem(opt, nk[].k_clip_coef_, PythonObject(samba_float_read(address, 2)) if clipped else PythonObject(None))
     # `info` is borrowed from the caller for this entire function; it cannot
     # be consumed here, and the borrow retains storage through the reads.
-    py_setitem(opt, nk[].k_lr_, PythonObject(Float64(Float32(Float64(py=py_item(opt, nk[].k_lr))))))
+    py_setitem(opt, nk[].k_lr_, PythonObject(samba_step_rate_reported(Float64(py=py_item(opt, nk[].k_lr)))))
     var result = Python.dict()
     py_setitem(result, nk[].k_loss, loss)
     py_setitem(result, nk[].k_lr, py_item(opt, nk[].k_lr_))
@@ -173,7 +187,7 @@ def _samba_resident_step(fields: PythonObject, opt: PythonObject, mut record: Op
     _ = info  # keep the Python object alive through the native call above
     record.control.host_fresh = False
     record.control.pristine = False
-    var scalar = PythonObject(Float64(Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=Int(py=loss._addr))[0]))
+    var scalar = PythonObject(samba_float_read(Int(py=loss._addr), 0))
     _ = loss  # keep the Python object alive through the native call above
     _ = loss^
     return _samba_step_finish(fields, opt, info, scalar)
@@ -208,9 +222,7 @@ def _samba_parameter_pack(fields: PythonObject, opt: PythonObject, context: Pyth
             shape = value.shape
         else:
             view = py_call(bi.memoryview, value)
-            var fmt = String(view.format)
-            if fmt != "f" and fmt != "<f" and fmt != "=f" and fmt != "@f":
-                raise Error("TypeError: Samba optimizer parameters must be float32")
+            samba_parameter_format_check(String(view.format))
             if not Bool(py=view.c_contiguous) or Bool(py=view.readonly):
                 raise Error("Samba optimizer parameters must be C-contiguous and writable")
             shape = view.shape
@@ -219,8 +231,7 @@ def _samba_parameter_pack(fields: PythonObject, opt: PythonObject, context: Pyth
         var raw = py_call(view.cast, "B")
         var begin = 4 * Int(py=py_item(fields, nk[].k_offsets)[i])
         var end = 4 * Int(py=py_item(fields, nk[].k_offsets)[i + 1])
-        if len(raw) != end - begin:
-            raise Error("Samba optimizer parameter size differs from its registry")
+        samba_parameter_extent_check(len(raw), begin, end)
         original_flat = original_flat and py_type(value) is py_item(py_item(context, nk[].k_neural), nk[].k_array_class)
         if original_flat:
             original_flat = Int(py=value._addr) == Int(py=py_item(fields, nk[].k_flat)._addr) + begin
@@ -283,10 +294,7 @@ def _samba_train_step_admitted(model: PythonObject, inputs: PythonObject, target
     var b = Int(py=ids.shape[0])
     var length = Int(py=ids.shape[1])
     var a = Int(py=py_item(opt, nk[].k_accumulation_steps))
-    if a < 1 or (a & (a - 1)) != 0 or b % a != 0:
-        raise Error("Samba: batch rows must be divisible by power-of-two accumulation_steps")
-    if a > 1 and not microbatch_split_is_identical(b * length, a):
-        raise Error("Samba: MISALIGNED microbatch split; optimizer contract clause 9.2")
+    samba_step_split_check(a, b, length)
     if a == 1:
         var resident = _samba_resident_step(fields, opt, record, entries, ids, y, context, device_plan, schedule)
         if resident is not None:
@@ -310,63 +318,51 @@ def _samba_train_step_admitted(model: PythonObject, inputs: PythonObject, target
         loss = completed[0]
         gradient = completed[1]
     else:
+        # The per-call route (no resident owner, or a refused resident
+        # step): one gradient operation per aligned microbatch, stacked, then
+        # one aligned reduction. The slices, the stack and the reduction are
+        # RUN (training/samba_step_run.mojo).
         var rows = b // a
         var n = Int(py=py_item(fields, nk[].k_n_total))
         var stacked = generation_array([a, n])
         var losses = generation_array([a])
-        var loss_ptr = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=losses._addr))
-        _ = losses  # keep the Python object alive through the native call above
-        var gradient_ptr = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=stacked._addr))
-        _ = stacked  # keep the Python object alive through the native call above
+        var losses_addr = Int(py=losses._addr)
+        var stacked_addr = Int(py=stacked._addr)
+        var ids_addr = Int(py=ids._addr)
+        var y_addr = Int(py=y._addr)
+        # Serial by nature: each microbatch runs the stack's blocks, whose
+        # tape records the block door holds one operation at a time.
         for k in range(a):  # driver-loop: over aligned microbatch gradient operations
             var xpart = generation_array([rows, length], "i")
             var ypart = generation_array([rows, length], "i")
-            for which in range(2):  # driver-loop: over input and target buffer slices
-                var source = ids if which == 0 else y
-                var output = xpart if which == 0 else ypart
-                unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=output._addr)),
-                       src=Pointer[UInt8, ImmUntrackedOrigin](unsafe_from_address=Int(py=source._addr)) + k * rows * length * 4,
-                       count=rows * length * 4)
-                _ = output  # keep the Python object alive through the native call above
-                _ = source  # keep the Python object alive through the native call above
-                _ = source^
-                _ = output^
+            samba_microbatch_copy_run(Int(py=xpart._addr), Int(py=ypart._addr), ids_addr, y_addr, k, rows * length)
             var result = samba_gradients_admitted(model, xpart, ypart, PythonObject(count), stream, k * rows * length, context)
-            loss_ptr[k] = Float32(Float64(py=result[0]))
-            _ = losses  # keep the Python object alive through the native call above
+            samba_loss_store(losses_addr, k, Float64(py=result[0]))
             var gradients = result[1]
-            if len(gradients) != len(py_item(fields, nk[].k_names)):
-                raise Error("Samba: gradient registry is incomplete")
+            samba_registry_count_check(len(gradients), len(py_item(fields, nk[].k_names)))
             for j in range(len(gradients)):  # driver-loop: over the ordered parameter gradients
                 var value = gradients[j]
-                unsafe_memcpy(dest=gradient_ptr + (k * n + Int(py=py_item(fields, nk[].k_offsets)[j])) * 4,
-                       src=Pointer[UInt8, ImmUntrackedOrigin](unsafe_from_address=Int(py=value._addr)), count=Int(py=value.nbytes))
-                _ = stacked  # keep the Python object alive through the native call above
-                _ = value  # keep the Python object alive through the native call above
+                samba_gradient_stack_run(stacked_addr, k, n, Int(py=py_item(fields, nk[].k_offsets)[j]),
+                                         Int(py=value._addr), Int(py=value.nbytes))
+                _ = value  # keep the Python object alive through the copy above
             _ = gradients^
+        _ = ids  # the slices above read both by address
+        _ = y
         gradient = stacked
-        loss = PythonObject(Float64(loss_ptr[0]))
-        _ = losses  # keep the Python object alive through the native call above
+        loss = PythonObject(samba_float_read(losses_addr, 0))
         if a > 1:
             gradient = generation_array([n])
-            if provider is not None:
-                _ = neural_descriptor_execute_id(provider_id, 9, [Int(py=gradient._addr), Int(py=stacked._addr)], [n, a, b * length], [])
-            else:
-                # Primitive op 9 (the former `accumulate` entry), resolved for the admitted key.
-                _ = samba_primitive(route.primitives(),
-                    SAMBA_PRIM_ACCUMULATE, [Int(py=gradient._addr), Int(py=stacked._addr)], [n, a, b * length], [])
-            _ = gradient  # keep the Python object alive through the native call above
-            _ = stacked  # keep the Python object alive through the native call above
             var total = generation_array([1])
-            if provider is not None:
-                _ = neural_descriptor_execute_id(provider_id, 9, [Int(py=total._addr), Int(py=losses._addr)], [1, a, -1], [])
-            else:
-                _ = samba_primitive(route.primitives(),
-                    SAMBA_PRIM_ACCUMULATE, [Int(py=total._addr), Int(py=losses._addr)], [1, a, -1], [])
-            _ = total  # keep the Python object alive through the native call above
-            _ = losses  # keep the Python object alive through the native call above
-            loss = PythonObject(Float64(Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=Int(py=total._addr))[0]))
-            _ = total  # keep the Python object alive through the native call above
+            var gradient_addr = Int(py=gradient._addr)
+            var total_addr = Int(py=total._addr)
+            var primitives = route.primitives()
+            # Primitive op 9 (the former `accumulate` entry) for the gradient
+            # and the loss under ONE GIL release (two until 2026-11-21).
+            samba_accumulate_admit(provider_id)
+            with GILReleased(Python()):
+                samba_accumulate_run(primitives, provider_id, gradient_addr, stacked_addr, n, total_addr, losses_addr,
+                                     a, b * length)
+            loss = PythonObject(samba_float_read(total_addr, 0))
             _ = total^
         _ = losses^
         _ = stacked^
@@ -389,7 +385,7 @@ def _samba_train_step_admitted(model: PythonObject, inputs: PythonObject, target
         if record.control.handle < 0 or not Bool(py=py_item(context, nk[].k_optimizer_step_io)):
             raise Error("RuntimeError: Samba optimizer device parameters require their native resident owner")
         # Preserve step_device semantics and the existing upload/download mask.
-        var io = 2 if py_item(fields, nk[].k_max_norm) is None else 10
+        var io = samba_step_io_device(py_item(fields, nk[].k_max_norm) is not None)
         _ = samba_optimizer_execute(optimizer_provider, 27,
             [Int(py=info._addr), Int(py=gradient._addr), Int(py=offsets._addr),
              Int(py=initialized._addr), Int(py=info._addr)], plan, record.control.handle, io)
@@ -397,7 +393,8 @@ def _samba_train_step_admitted(model: PythonObject, inputs: PythonObject, target
         record.control.pristine = False
         record.control.gradients_device = True
     elif record.control.handle >= 0:
-        var io = 15 if plan.hyper.maximize and Bool(py=py_item(context, nk[].k_optimizer_maximize_device)) else 0
+        var io = samba_step_io_host(plan.hyper.maximize,
+            plan.hyper.maximize and Bool(py=py_item(context, nk[].k_optimizer_maximize_device)))
         _ = samba_optimizer_execute(optimizer_provider, 27 if io else 26,
             [Int(py=parameter_buffer._addr), Int(py=gradient._addr), Int(py=offsets._addr),
              Int(py=initialized._addr), Int(py=info._addr)], plan, record.control.handle, io)

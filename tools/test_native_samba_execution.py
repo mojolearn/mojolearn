@@ -86,13 +86,16 @@ def test_optimizer_dispatch_preserves_same_native_functions_and_float_conversion
         for index in range(8):
             assert f'Float32(f[{index}])' in branch
     step=(ROOT/'bindings/samba_step_native_door.mojo').read_text()
-    assert 'microbatch_split_is_identical(b * length, a)' in step
+    run=(ROOT/'training/samba_step_run.mojo').read_text()
+    assert 'std.python' not in run and 'PythonObject' not in run
+    assert 'microbatch_split_is_identical(batch * length, accumulation)' in run and 'samba_step_split_check(a, b, length)' in step
     # One optimizer provider is resolved per call (samba_optimizer_primitives) and the
     # gradient reduction executes by provider id (neural-descriptor-pins, 3ac9e932ee).
     assert 'samba_optimizer_execute(optimizer_provider, 25,' in step
     assert 'samba_optimizer_execute(optimizer_provider, 27 if io else 26,' in step
     assert 'samba_optimizer_execute(optimizer_provider, 27,' in step
-    assert 'neural_descriptor_execute_id(provider_id, 9,' in step
+    assert 'samba_accumulate_run(primitives, provider_id,' in step
+    assert run.count('neural_descriptor_record_call(native_id, 9,') == 2 and run.count('neural_descriptor_record_admit(native_id, 9)') == 2
 
 
 def test_accumulation_reuses_admitted_native_metadata_and_keeps_original_reduction():
