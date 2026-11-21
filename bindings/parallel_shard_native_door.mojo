@@ -46,6 +46,10 @@ from bindings.minmax_metadata_unpack import _flag as _minmax_flag
 from bindings.minmax_metadata_pack import minmax_range_pair
 from core.scaler_core import ScalerTransformSpec, scaler_standard_fit_core, scaler_minmax_fit_core, scaler_transform_core
 from bindings.parallel_public_result_door import parallel_public_result
+from bindings.parallel_member_device_unpack import parallel_member_says_cpu
+from core.device_route_dw_msel_parallel import (
+    MEMBER_DEVICE_CPU, MEMBER_VENDOR_UNKNOWN, member_multi_gpu_refused, member_multi_gpu_refusal,
+)
 from bindings.parallel_neighbor_worker_door import parallel_neighbor_worker, parallel_ivf_admit, neighbor_radius_rows
 from bindings.family_common_pack import family_call
 from bindings.native_process_pool_door import (
@@ -187,6 +191,22 @@ def _worker_binding(name: String) raises -> PythonObject:
     return binding
 
 
+def _member_device(fields: PythonObject, driver: String) raises:
+    """A driver takes its estimator on the GPUs in `devices=` only: a member
+    that says device='cpu' in a process with a GPU set is refused in words
+    before any partition or worker request (bindings/parallel_member_device_unpack.mojo).
+    The process's vendor word is the base image's recorded table key (0 CPU
+    only), read only for a member that says 'cpu'."""
+    if not parallel_member_says_cpu(fields):
+        return
+    var key = py_get(_t("table_keys"), PythonObject("base"))
+    var vendor: Int = MEMBER_VENDOR_UNKNOWN
+    if key is not None:
+        vendor = Int(py=key[1])
+    if member_multi_gpu_refused(MEMBER_DEVICE_CPU, vendor):
+        member_multi_gpu_refusal(driver)
+
+
 def _identical(fields: PythonObject) raises -> Bool:
     var mode = py_get(fields, PythonObject("numeric_mode"), PythonObject(None))
     return mode is None or (py_type(mode) is shard_b().str and String(mode) == "identical")
@@ -204,6 +224,7 @@ def _transform_rbf_sampler(args: PythonObject) raises -> PythonObject:
     if py_type(estimator) is not _t("rbf_class"):
         raise Error("TypeError: requires mojolearn.RBFSampler")
     var fields = py_fields(estimator)
+    _member_device(fields, "transform_rbf_sampler")
     if not _identical(fields):
         raise Error("ValueError: parallel RBFSampler requires IDENTICAL numeric mode")
     if not py_contains(fields, PythonObject("random_weights_")):
@@ -305,6 +326,7 @@ def _fit_scaler(args: PythonObject) raises -> PythonObject:
     var kind = _scaler_kind(estimator)
     var names = _scaler_stats(kind)
     var fields = py_fields(estimator)
+    _member_device(fields, "fit_scaler")
     if not _identical(fields):
         raise Error("ValueError: parallel scalers require IDENTICAL numeric mode")
     if args[4] is not None:
@@ -370,6 +392,7 @@ def _transform_scaler(args: PythonObject) raises -> PythonObject:
     if not Bool(py=py_call(b.bool, family_call(entry, estimator, PythonObject("is_fitted"), Python.tuple(), owner_context))):
         raise Error("ValueError: scaler is not fitted")
     var fields = py_fields(estimator)
+    _member_device(fields, "transform_scaler")
     var fitted_mode = py_get(fields, PythonObject("numeric_mode_"), PythonObject(None))
     if fitted_mode is None or py_type(fitted_mode) is not b.str or String(fitted_mode) != "identical":
         raise Error("ValueError: parallel scaler transforms require an IDENTICAL fit")
@@ -423,6 +446,7 @@ def _gpc_admit(estimator: PythonObject, context: PythonObject) raises -> PythonO
         raise Error("TypeError: requires mojolearn.GaussianProcessClassifier")
     classical_check_layout(estimator, context)
     var fields = py_fields(estimator)
+    _member_device(fields, "GaussianProcessClassifier")
     var mode = py_get(fields, PythonObject("numeric_mode"), PythonObject(None))
     var b = shard_b()
     if mode is not None and py_type(mode) is not b.str:
@@ -605,6 +629,7 @@ def _fit_forest(args: PythonObject) raises -> PythonObject:
     if not admitted:
         raise Error("TypeError: fit_forest requires a mojolearn RandomForest or ExtraTrees estimator")
     classical_check_layout(estimator, context)
+    _member_device(py_fields(estimator), "fit_forest")
     var tps = args[4]
     if py_type(tps) is not b.int or Int(py=tps) < 1:
         raise Error("ValueError: trees_per_shard must be a positive integer")
@@ -738,6 +763,7 @@ def _holder_init(args: PythonObject, reference: Bool) raises -> PythonObject:
     elif len(py_get(_t("query_methods"), cls, Python.tuple())) == 0:
         raise Error("TypeError: parallel queries require an exact neighbors or KernelDensity estimator")
     var fields = py_fields(estimator)
+    _member_device(fields, "reference shards" if reference else "queries")
     var nk = parallel_keys()
     if reference:
         var algorithm = py_get(fields, nk[].k_algorithm)
@@ -1240,6 +1266,7 @@ def _ivf_from_index(args: PythonObject) raises -> PythonObject:
         raise Error("TypeError: distributed IVF requires its exact connected class")
     var admitted = parallel_ivf_admit(index, PARALLEL_SHARD_BOUNDARY.get_or_create_ptr()[].tables, context)
     var fields = py_fields(index)
+    _member_device(fields, "distributed IVF")
     var nk = parallel_keys()
     var n = Int(py=py_item(fields, nk[].k_n_rows_))
     var n_lists = Int(py=py_item(fields, nk[].k_n_lists_))

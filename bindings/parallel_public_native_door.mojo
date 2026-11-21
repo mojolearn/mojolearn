@@ -10,6 +10,8 @@ from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.classical_pandas_door import classical_admit_value
 from bindings.admitted_input_unpack import admit_x
 from bindings.parallel_public_result_door import parallel_public_result
+from bindings.parallel_member_device_unpack import parallel_member_says_cpu
+from core.device_route_dw_msel_parallel import member_multi_gpu_refusal
 from bindings.native_buffer_owner_pack import native_storage_allocate
 from bindings.trees_public_forest_door import forest_effective_mode, _engine
 from core.device_plan import device_plan_logical
@@ -248,6 +250,15 @@ def parallel_public_operation(model: PythonObject, packed: PythonObject, context
     py_setitem(args, PythonObject(device_at), _devices(args[device_at]))
     classical_admit_value(args, context)
     var fields = _fields(model, py_item(meta, nk[].k_classes)[cls]) if model is not None else Python.dict()
+    # The member's own device (device wave, 2026-11-21): every driver here
+    # runs the estimator on the GPUs in `devices=` and has no host form. A
+    # member that says device='cpu' in a process with a GPU set is refused in
+    # words, before the mode checks, the input admission and any worker; it
+    # used to be run on the GPUs whatever it said. None, a class without the
+    # parameter and 'gpu' go on as before. One read with the held key.
+    if model is not None and parallel_member_says_cpu(fields):
+        if not Bool(py=py_item(meta, nk[].k_cpu_only)):
+            member_multi_gpu_refusal(String(packed[0]))
     var mode = py_get(fields, nk[].k_numeric_mode)
     var process_mode = py_item(py_item(meta, nk[].k_backend), nk[].k__DEFAULT_MODE)
     var effective = process_mode if mode is None else mode

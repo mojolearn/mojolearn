@@ -20,6 +20,7 @@ from std.sys.compile import is_defined
 from bindings.py_cpython_table import cpython_table
 from bindings.optimizer_public_words_unpack import stash_python_error
 from bindings.msel_helpers_key_unpack import msel_helpers_key
+from bindings.msel_member_device_unpack import msel_member_host_folds
 from bindings.msel_helpers_released_unpack import (
     msel_indices_overlap_i64, msel_store_alloc, msel_store_read, msel_store_free, msel_scatter_rows,
     msel_store_free_bytes,
@@ -284,11 +285,21 @@ def msel_has_c(array: PythonObject) raises -> Bool:
 
 
 def msel_device_rows_ok(estimator: PythonObject, scoring_in: PythonObject, context: PythonObject) raises -> Bool:
-    if not Bool(py=msel_estimator_plan(estimator, context)["device_rows"]):
+    var plan = msel_estimator_plan(estimator, context)
+    if not Bool(py=plan["device_rows"]):
         return False
     var multi = msel_scorers(scoring_in, context)
     if multi is None:
         _ = msel_get_scorer(scoring_in, context)
+    # The fold rows follow the member's own device (device wave, 2026-11-21):
+    # a member that says device="cpu" in a process with a GPU set takes its
+    # folds gathered on the host (the `device_rows` False form every
+    # non-opted class already takes); rows resident on the device are for
+    # members that run there. Once per cross-validation call, after the
+    # scorer refusals above (same order as before); the default member
+    # (no `device`, or None) costs one dictionary read.
+    if msel_member_host_folds(py_call(plan["fields_get"], estimator, py_type(estimator)), context):
+        return False
     return True
 
 
