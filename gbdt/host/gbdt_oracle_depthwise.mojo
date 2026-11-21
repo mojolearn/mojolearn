@@ -118,7 +118,7 @@ from std.math import exp, fma, log, sqrt
 from std.memory import bitcast
 
 from core.host_parallel import host_parallelize
-from core.host_predict_threads import HostF32Ptr
+from core.host_predict_threads import HostF32Ptr, HostU32Ptr, host_predict_chunk
 from checks.fixed_point import choose_scale
 from checks.numerics import ftz, identical_mul_add, identical_sqrt
 from gbdt.methods.cursor_rescale import rescaled_leaves
@@ -951,6 +951,37 @@ def _build_flat_tree(
     return _NsTree(nf^, nb^, nl^, nr^, weights^)
 
 
+def _ns_bins_range(
+    lo: Int,
+    hi: Int,
+    cindex: HostU32Ptr,
+    node_word: GbdtIntPtr,
+    node_shift: HostU32Ptr,
+    node_mask: HostU32Ptr,
+    node_bin: GbdtIntPtr,
+    node_left: GbdtIntPtr,
+    node_right: GbdtIntPtr,
+    bins: GbdtIntPtr,
+):
+    """`_non_symmetric_bins` for the rows `[lo, hi)`: one walk a row."""
+    for r in range(lo, hi):
+        var bin = 0
+        var node = 0
+        var stop = False
+        while not stop:
+            var feature_val = (cindex[node_word[node] + r] >> node_shift[node]) & node_mask[node]
+            if feature_val > UInt32(node_bin[node]):
+                bin += node_left[node]
+                stop = node_right[node] == 1
+                if not stop:
+                    node += node_left[node]
+            else:
+                stop = node_left[node] == 1
+                if not stop:
+                    node += 1
+        bins[r] = bin
+
+
 def _non_symmetric_bins(
     tree: _NsTree,
     layout: CompressedIndexLayout,
@@ -961,29 +992,206 @@ def _non_symmetric_bins(
     index (`add_non_symmetric_tree_doc_parallel.mojo:63-188`,
     `add_bin_values.mojo:277-320`; the walk `core/gbdt_host_predict.mojo:
     323-347` restates): shift then mask, `>` against the node's bin, a right
-    turn adds the left subtree's leaf count. No nodes: every row in bin 0."""
+    turn adds the left subtree's leaf count. No nodes: every row in bin 0.
+
+    One device thread a row: the rows run in `_gbdt_units` contiguous
+    ranges; each node's word offset, shift and mask are read off the
+    layout once per tree (they were three lookups per row and node)."""
     var n_nodes = len(tree.node_feature)
     var bins = List[Int](length=n_rows, fill=0)
     if n_nodes == 0:
         return bins^
-    for r in range(n_rows):
-        var bin = 0
-        var node = 0
-        var stop = False
-        while not stop:
-            ref cf = layout.features[tree.node_feature[node]]
-            var feature_val = (cindex[Int(cf.offset) * n_rows + r] >> cf.shift) & cf.mask
-            if feature_val > UInt32(tree.node_bin[node]):
-                bin += tree.node_left[node]
-                stop = tree.node_right[node] == 1
-                if not stop:
-                    node += tree.node_left[node]
-            else:
-                stop = tree.node_left[node] == 1
-                if not stop:
-                    node += 1
-        bins[r] = bin
+    var node_word = List[Int](length=n_nodes, fill=0)
+    var node_shift = List[UInt32](length=n_nodes, fill=UInt32(0))
+    var node_mask = List[UInt32](length=n_nodes, fill=UInt32(0))
+    for i in range(n_nodes):  # driver-loop: over the tree's nodes
+        ref cf = layout.features[tree.node_feature[i]]
+        node_word[i] = Int(cf.offset) * n_rows
+        node_shift[i] = cf.shift
+        node_mask[i] = cf.mask
+    var units = _gbdt_units(n_rows, 8 * n_rows)
+    var chunk = host_predict_chunk(n_rows, units)
+    var cindex_p = rebind[HostU32Ptr](cindex.unsafe_ptr())
+    var word_p = rebind[GbdtIntPtr](node_word.unsafe_ptr())
+    var shift_p = rebind[HostU32Ptr](node_shift.unsafe_ptr())
+    var mask_p = rebind[HostU32Ptr](node_mask.unsafe_ptr())
+    var bin_p = rebind[GbdtIntPtr](tree.node_bin.unsafe_ptr())
+    var left_p = rebind[GbdtIntPtr](tree.node_left.unsafe_ptr())
+    var right_p = rebind[GbdtIntPtr](tree.node_right.unsafe_ptr())
+    var bins_p = rebind[GbdtIntPtr](bins.unsafe_ptr())
+
+    def rows(unit: Int) {imm chunk, imm n_rows, imm cindex_p, imm word_p, imm shift_p, imm mask_p, imm bin_p, imm left_p, imm right_p, imm bins_p}:
+        _ns_bins_range(
+            unit * chunk, min(n_rows, (unit + 1) * chunk), cindex_p, word_p,
+            shift_p, mask_p, bin_p, left_p, right_p, bins_p,
+        )
+
+    host_parallelize(rows, units)
+    _ = len(cindex)
+    _ = len(node_word)
+    _ = len(node_shift)
+    _ = len(node_mask)
+    _ = len(tree.node_bin)
+    _ = len(tree.node_left)
+    _ = len(tree.node_right)
+    _ = len(bins)
     return bins^
+
+
+def _ns_project_range(
+    lo: Int,
+    hi: Int,
+    n_sel: Int,
+    cindex: HostU32Ptr,
+    t_cindex: HostU32Ptr,
+    src_word: GbdtIntPtr,
+    src_shift: HostU32Ptr,
+    src_mask: HostU32Ptr,
+    dst_word: GbdtIntPtr,
+    dst_shift: HostU32Ptr,
+):
+    for k in range(n_sel):
+        for r in range(lo, hi):
+            var value = (cindex[src_word[k] + r] >> src_shift[k]) & src_mask[k]
+            t_cindex[dst_word[k] + r] = t_cindex[dst_word[k] + r] | (value << dst_shift[k])
+
+
+def _ns_project_index(
+    cindex: List[UInt32],
+    layout: CompressedIndexLayout,
+    t_layout: CompressedIndexLayout,
+    tree_folds: List[Int],
+    n_rows: Int,
+    n_features: Int,
+) -> List[UInt32]:
+    """The tree's projected compressed index: every sampled feature's bins
+    read off the fit's index and OR-ed into the tree layout's word. The
+    features of one destination word share it, so the unit is a ROW (a
+    row's words are its own): the rows run in `_gbdt_units` contiguous
+    ranges, the sampled features in order inside."""
+    var t_cindex = List[UInt32](length=n_rows * t_layout.columns, fill=UInt32(0))
+    var src_word = List[Int]()
+    var src_shift = List[UInt32]()
+    var src_mask = List[UInt32]()
+    var dst_word = List[Int]()
+    var dst_shift = List[UInt32]()
+    for f in range(n_features):  # driver-loop: over the features, naming the sampled ones
+        if tree_folds[f] <= 0:
+            continue
+        ref src = layout.features[f]
+        ref dstf = t_layout.features[f]
+        src_word.append(Int(src.offset) * n_rows)
+        src_shift.append(src.shift)
+        src_mask.append(src.mask)
+        dst_word.append(Int(dstf.offset) * n_rows)
+        dst_shift.append(dstf.shift)
+    var n_sel = len(src_word)
+    var units = _gbdt_units(n_rows, 4 * n_rows * n_sel)
+    var chunk = host_predict_chunk(n_rows, units)
+    var cindex_p = rebind[HostU32Ptr](cindex.unsafe_ptr())
+    var t_p = rebind[HostU32Ptr](t_cindex.unsafe_ptr())
+    var sw_p = rebind[GbdtIntPtr](src_word.unsafe_ptr())
+    var ss_p = rebind[HostU32Ptr](src_shift.unsafe_ptr())
+    var sm_p = rebind[HostU32Ptr](src_mask.unsafe_ptr())
+    var dw_p = rebind[GbdtIntPtr](dst_word.unsafe_ptr())
+    var ds_p = rebind[HostU32Ptr](dst_shift.unsafe_ptr())
+
+    def rows(unit: Int) {imm chunk, imm n_rows, imm n_sel, imm cindex_p, imm t_p, imm sw_p, imm ss_p, imm sm_p, imm dw_p, imm ds_p}:
+        _ns_project_range(
+            unit * chunk, min(n_rows, (unit + 1) * chunk), n_sel, cindex_p,
+            t_p, sw_p, ss_p, sm_p, dw_p, ds_p,
+        )
+
+    host_parallelize(rows, units)
+    _ = len(cindex)
+    _ = len(src_word)
+    _ = len(src_shift)
+    _ = len(src_mask)
+    _ = len(dst_word)
+    _ = len(dst_shift)
+    _ = len(t_cindex)
+    return t_cindex^
+
+
+def _ns_count_range(
+    lo: Int, hi: Int, bins: GbdtIntPtr, n_bins: Int, counts: GbdtIntPtr,
+    base: Int,
+) -> Int:
+    """Counts the rows `[lo, hi)` per leaf into `counts[base + leaf]`;
+    returns the first row whose leaf is outside `[0, n_bins)`, or -1."""
+    var bad = -1
+    for r in range(lo, hi):
+        var b = bins[r]
+        if b < 0 or b >= n_bins:
+            if bad < 0:
+                bad = r
+        else:
+            counts[base + b] = counts[base + b] + 1
+    return bad
+
+
+def _ns_partition(
+    bins: List[Int],
+    n_rows: Int,
+    n_bins: Int,
+    mut sizes: List[Int],
+    mut offsets: List[Int],
+    mut row_index: List[Int],
+) raises:
+    """`partition_from_bins`: the STABLE counting sort of the rows by their
+    leaf, rows ascending within a leaf (integers only), and its refusal of
+    a row outside the tree's leaves (the FIRST such row in row order: the
+    tasks' ranges ascend, so the first task that saw one names it).
+
+    The unit is a row range: task `c` counts its rows per leaf; the leaf
+    offsets and each (leaf, task) start are one running sum (serial by
+    nature: a prefix sum over `leaves x tasks` counts); then task `c`
+    places its rows from its own starts. A task holds one count per leaf,
+    so the task count is also bounded by `rows / leaves`."""
+    var units = _gbdt_units(n_rows, 4 * n_rows)
+    units = max(1, min(units, n_rows // max(n_bins, 1)))
+    var chunk = host_predict_chunk(n_rows, units)
+    var starts = List[Int](length=units * n_bins, fill=0)
+    var bad = List[Int](length=units, fill=-1)
+    var bins_p = rebind[GbdtIntPtr](bins.unsafe_ptr())
+    var starts_p = rebind[GbdtIntPtr](starts.unsafe_ptr())
+    var bad_p = rebind[GbdtIntPtr](bad.unsafe_ptr())
+    var row_p = rebind[GbdtIntPtr](row_index.unsafe_ptr())
+
+    def count(unit: Int) {imm chunk, imm n_rows, imm n_bins, imm bins_p, imm starts_p, imm bad_p}:
+        bad_p[unit] = _ns_count_range(
+            min(n_rows, unit * chunk), min(n_rows, (unit + 1) * chunk), bins_p,
+            n_bins, starts_p, unit * n_bins,
+        )
+
+    host_parallelize(count, units)
+    for u in range(units):  # driver-loop: over the tasks, the first refusal in row order
+        if bad[u] >= 0:
+            raise Error(
+                "partition_from_bins: row " + String(bad[u]) + " fell in leaf "
+                + String(bins[bad[u]]) + " of " + String(n_bins)
+            )
+    var running = 0
+    for leaf in range(n_bins):  # driver-loop: over (leaf, task), the running sum
+        offsets[leaf] = running
+        for u in range(units):
+            var c = starts[u * n_bins + leaf]
+            starts[u * n_bins + leaf] = running
+            running += c
+        sizes[leaf] = running - offsets[leaf]
+
+    def place(unit: Int) {imm chunk, imm n_rows, imm n_bins, imm bins_p, imm starts_p, imm row_p}:
+        var base = unit * n_bins
+        for r in range(min(n_rows, unit * chunk), min(n_rows, (unit + 1) * chunk)):
+            var at = starts_p[base + bins_p[r]]
+            row_p[at] = r
+            starts_p[base + bins_p[r]] = at + 1
+
+    host_parallelize(place, units)
+    _ = len(bins)
+    _ = len(starts)
+    _ = len(bad)
+    _ = len(row_index)
 
 
 # ===========================================================================
@@ -1135,20 +1343,12 @@ def gbdt_host_fit_non_symmetric(
             )
             t_layout = build_layout(tree_folds, one_hot)
             t_blocks = blocks_for(t_layout, n_rows)
-            t_cindex = List[UInt32](length=n_rows * t_layout.columns, fill=UInt32(0))
-            for f in range(n_features):
-                if tree_folds[f] <= 0:
-                    continue
-                ref src = layout.features[f]
-                ref dstf = t_layout.features[f]
-                for r in range(n_rows):
-                    var value = (cindex[Int(src.offset) * n_rows + r] >> src.shift) & src.mask
-                    t_cindex[Int(dstf.offset) * n_rows + r] = (
-                        t_cindex[Int(dstf.offset) * n_rows + r] | (value << dstf.shift)
-                    )
+            t_cindex = _ns_project_index(
+                cindex, layout, t_layout, tree_folds, n_rows, n_features
+            )
             t_bf_feature = List[Int](length=t_layout.hist_cells, fill=0)
             t_bf_bin = List[Int](length=t_layout.hist_cells, fill=0)
-            for f in range(n_features):
+            for f in range(n_features):  # driver-loop: over the features and their borders (the layout)
                 ref lf = t_layout.features[f]
                 for b in range(Int(lf.folds)):
                     t_bf_feature[Int(lf.first_fold_index) + b] = f
@@ -1208,23 +1408,9 @@ def gbdt_host_fit_non_symmetric(
         var estimated: List[Float32]
         # (Sweep 2026-11-15: the folded T26 host leaf branch was removed here.)
         var sizes = List[Int](length=n_bins, fill=0)
-        for r in range(n_rows):
-            if bins[r] < 0 or bins[r] >= n_bins:
-                raise Error(
-                    "partition_from_bins: row " + String(r) + " fell in leaf "
-                    + String(bins[r]) + " of " + String(n_bins)
-                )
-            sizes[bins[r]] += 1
-        var offsets = List[Int]()
-        var running = 0
-        for i in range(n_bins):
-            offsets.append(running)
-            running += sizes[i]
-        var fill = offsets.copy()
+        var offsets = List[Int](length=n_bins, fill=0)
         var row_index = List[Int](length=n_rows, fill=0)
-        for r in range(n_rows):
-            row_index[fill[bins[r]]] = r
-            fill[bins[r]] += 1
+        _ns_partition(bins, n_rows, n_bins, sizes, offsets, row_index)
 
         # ---- the estimation task and `AppendModels` ----
         if plain_newton:

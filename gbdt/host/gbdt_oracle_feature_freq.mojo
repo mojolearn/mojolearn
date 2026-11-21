@@ -118,7 +118,11 @@ from gbdt.gpu_data.grid_policy import (
     POLICY_ONE_BYTE,
 )
 from checks.numerics import identical_div, identical_mul
+from core.host_parallel import host_parallelize
+from core.host_predict_threads import HostF32Ptr, HostU32Ptr, host_predict_chunk
 from gbdt.host.gbdt_oracle import (
+    GbdtIntPtr,
+    _gbdt_units,
     _identity_rows,
     _partition_stats_level,
     GBDT_PARTITION_CHUNKS,
@@ -265,19 +269,263 @@ def _ff_table(
         sources^, cards^, split_feature.copy(), split_bin.copy(),
         split_type.copy(), List[Int](length=entries, fill=0),
     )
-    for r in range(n_rows):
-        var key = 0
-        for i in range(len(t.sources)):
-            var f = t.sources[i]
-            var code = dense_category_code(x_colmajor[f * n_rows + r], f, r)
-            key = key * t.cards[i] + code
+    # THE COUNTS (lane gbdt-host-par): integers, exact in any grouping. Task
+    # `c` counts its contiguous row range into its own table and the tables
+    # are added after the join; a task holds one count per entry, so the
+    # task count is bounded by `rows / entries` (one task counts straight
+    # into the table). A row the serial loop would refuse (`_split_bit`'s
+    # refusals; the codes were admitted above) is reported by its task and
+    # the FIRST such row in row order is replayed through the raising
+    # functions, so the refusal is the serial loop's.
+    var units = _gbdt_units(n_rows, 8 * n_rows)
+    units = max(1, min(units, n_rows // max(entries, 1)))
+    var chunk = host_predict_chunk(n_rows, units)
+    var task_len = 0
+    if units > 1:
+        task_len = units * entries
+    var task_counts = List[Int](length=task_len, fill=0)
+    var bad = List[Int](length=units, fill=-1)
+    var table_p = rebind[GbdtIntPtr](t.counts.unsafe_ptr())
+    if units > 1:
+        table_p = rebind[GbdtIntPtr](task_counts.unsafe_ptr())
+    var bad_p = rebind[GbdtIntPtr](bad.unsafe_ptr())
+    var x_p = rebind[HostF32Ptr](x_colmajor.unsafe_ptr())
+    var flat_p = rebind[HostU32Ptr](flat.unsafe_ptr())
+    var flat_len = len(flat)
+    var src_p = rebind[GbdtIntPtr](t.sources.unsafe_ptr())
+    var card_p = rebind[GbdtIntPtr](t.cards.unsafe_ptr())
+    var sf_p = rebind[GbdtIntPtr](t.split_feature.unsafe_ptr())
+    var sb_p = rebind[GbdtIntPtr](t.split_bin.unsafe_ptr())
+    var st_p = rebind[GbdtIntPtr](t.split_type.unsafe_ptr())
+    var n_src = len(t.sources)
+    var n_split = len(t.split_feature)
+
+    def count(unit: Int) {imm chunk, imm n_rows, imm entries, imm x_p, imm flat_p, imm flat_len, imm src_p, imm card_p, imm n_src, imm sf_p, imm sb_p, imm st_p, imm n_split, imm table_p, imm bad_p}:
+        bad_p[unit] = _ff_count_range(
+            min(n_rows, unit * chunk), min(n_rows, (unit + 1) * chunk), x_p,
+            n_rows, flat_p, flat_len, src_p, card_p, n_src, sf_p, sb_p, st_p,
+            n_split, table_p, unit * entries,
+        )
+
+    host_parallelize(count, units)
+    for u in range(units):  # driver-loop: over the tasks, the first refusal in row order
+        if bad[u] >= 0:
+            _ = _ff_row_key_raising(t, x_colmajor, n_rows, flat, bad[u])
+            raise Error("split-history tensor row " + String(bad[u]) + " has no key")
+    if units > 1:
+        for u in range(units):  # driver-loop: over the tasks' count tables, added into the table
+            for k in range(entries):
+                t.counts[k] += task_counts[u * entries + k]
+    _ = len(x_colmajor)
+    _ = len(flat)
+    _ = len(task_counts)
+    _ = len(bad)
+    return t^
+
+
+def _ff_code_or_bad(value: Float32) -> Int:
+    """`dense_category_code`'s admission without the raise: the code, or -1
+    for a value it refuses (not finite, outside the UInt32 range, not an
+    exact integer)."""
+    if not isfinite(value):
+        return -1
+    if value < Float32(0.0) or value >= Float32(4294967296.0):
+        return -1
+    var code = Int(value)
+    if Float32(code) != value:
+        return -1
+    return code
+
+
+def _ff_row_key(
+    row: Int,
+    x: HostF32Ptr,
+    n_rows: Int,
+    flat: HostU32Ptr,
+    flat_len: Int,
+    sources: GbdtIntPtr,
+    cards: GbdtIntPtr,
+    n_src: Int,
+    split_feature: GbdtIntPtr,
+    split_bin: GbdtIntPtr,
+    split_type: GbdtIntPtr,
+    n_split: Int,
+) -> Int:
+    """One row's table key for a host task: `_code_key` then one
+    `_split_bit` per split, without their raises. Returns the key, -1 for
+    a category the table never saw (`_code_key`'s -1), or -2 for a row the
+    raising functions refuse (the caller replays that row through them)."""
+    var key = 0
+    for i in range(n_src):
+        var code = _ff_code_or_bad(x[sources[i] * n_rows + row])
+        if code < 0:
+            return -2
+        if code >= cards[i]:
+            return -1
+        key = key * cards[i] + code
+    for s in range(n_split):
+        var feature = split_feature[s]
+        var bin = split_bin[s]
+        if feature < 0 or bin < 0 or feature * n_rows + row >= flat_len:
+            return -2
+        var value = Int(flat[feature * n_rows + row])
+        var bit = 0
+        if split_type[s] == GBDT_FF_TAKE_BIN:
+            if value == bin:
+                bit = 1
+        elif split_type[s] == GBDT_FF_TAKE_GREATER:
+            if value > bin:
+                bit = 1
+        else:
+            return -2
+        key = 2 * key + bit
+    return key
+
+
+def _ff_row_key_raising(
+    t: _FFTable, x_colmajor: List[Float32], n_rows: Int, flat: List[UInt32],
+    row: Int,
+) raises -> Int:
+    """One row's key through the raising functions (`_code_key`, then
+    `_split_bit` per split when the key is known): the serial loops' own
+    statements, run for the first row a task reported, so the refusal and
+    its text are theirs."""
+    var key = _code_key(t, x_colmajor, n_rows, row)
+    if key >= 0:
         for s in range(len(t.split_feature)):
             key = 2 * key + _split_bit(
                 t.split_feature[s], t.split_bin[s], t.split_type[s], flat,
-                n_rows, r,
+                n_rows, row,
             )
-        t.counts[key] += 1
-    return t^
+    return key
+
+
+def _ff_count_range(
+    lo: Int,
+    hi: Int,
+    x: HostF32Ptr,
+    n_rows: Int,
+    flat: HostU32Ptr,
+    flat_len: Int,
+    sources: GbdtIntPtr,
+    cards: GbdtIntPtr,
+    n_src: Int,
+    split_feature: GbdtIntPtr,
+    split_bin: GbdtIntPtr,
+    split_type: GbdtIntPtr,
+    n_split: Int,
+    counts: GbdtIntPtr,
+    base: Int,
+) -> Int:
+    """Counts the rows `[lo, hi)` by key into `counts[base + key]`; returns
+    the first row without a key, or -1."""
+    var bad = -1
+    for row in range(lo, hi):
+        var key = _ff_row_key(
+            row, x, n_rows, flat, flat_len, sources, cards, n_src,
+            split_feature, split_bin, split_type, n_split,
+        )
+        if key < 0:
+            if bad < 0:
+                bad = row
+        else:
+            counts[base + key] = counts[base + key] + 1
+    return bad
+
+
+def _ff_values_range(
+    lo: Int,
+    hi: Int,
+    x: HostF32Ptr,
+    n_rows: Int,
+    flat: HostU32Ptr,
+    flat_len: Int,
+    sources: GbdtIntPtr,
+    cards: GbdtIntPtr,
+    n_src: Int,
+    split_feature: GbdtIntPtr,
+    split_bin: GbdtIntPtr,
+    split_type: GbdtIntPtr,
+    n_split: Int,
+    counts: GbdtIntPtr,
+    n_counts: Int,
+    values: HostF32Ptr,
+) -> Int:
+    """`_ff_values` for the rows `[lo, hi)`; returns the first row the
+    raising functions refuse, or -1."""
+    var bad = -1
+    for row in range(lo, hi):
+        var key = _ff_row_key(
+            row, x, n_rows, flat, flat_len, sources, cards, n_src,
+            split_feature, split_bin, split_type, n_split,
+        )
+        if key == -2:
+            if bad < 0:
+                bad = row
+        else:
+            var count = 0
+            if key >= 0 and key < n_counts:
+                count = counts[key]
+            values[row] = (Float32(count) + Float32(0.0)) / (
+                Float32(n_rows) + Float32(1.0)
+            )
+    return bad
+
+
+def _ff_bins_range(
+    lo: Int, hi: Int, values: HostF32Ptr, borders: HostF32Ptr, n_borders: Int,
+    bins: HostU32Ptr,
+):
+    for r in range(lo, hi):
+        var bin = 0
+        for b in range(n_borders):
+            if values[r] > borders[b]:
+                bin += 1
+        bins[r] = UInt32(bin)
+
+
+def _ff_bins_of(
+    values: List[Float32], borders: List[Float32], mut bins: List[UInt32]
+):
+    """Every value's bin, the count of borders below it (`>`): one
+    statement per row, the rows in `_gbdt_units` contiguous ranges."""
+    var n = len(values)
+    var n_borders = len(borders)
+    var units = _gbdt_units(n, n * (n_borders + 1))
+    var chunk = host_predict_chunk(n, units)
+    var values_p = rebind[HostF32Ptr](values.unsafe_ptr())
+    var borders_p = rebind[HostF32Ptr](borders.unsafe_ptr())
+    var bins_p = rebind[HostU32Ptr](bins.unsafe_ptr())
+
+    def rows(unit: Int) {imm chunk, imm n, imm n_borders, imm values_p, imm borders_p, imm bins_p}:
+        _ff_bins_range(
+            unit * chunk, min(n, (unit + 1) * chunk), values_p, borders_p,
+            n_borders, bins_p,
+        )
+
+    host_parallelize(rows, units)
+    _ = len(values)
+    _ = len(borders)
+    _ = len(bins)
+
+
+def _ff_copy_u32(
+    src: List[UInt32], count: Int, mut dst: List[UInt32], dst_offset: Int
+):
+    """`dst[dst_offset + r] = src[r]` for `count` rows (a move per row),
+    the rows in `_gbdt_units` contiguous ranges."""
+    var units = _gbdt_units(count, count)
+    var chunk = host_predict_chunk(count, units)
+    var src_p = rebind[HostU32Ptr](src.unsafe_ptr())
+    var dst_p = rebind[HostU32Ptr](dst.unsafe_ptr())
+
+    def rows(unit: Int) {imm chunk, imm count, imm dst_offset, imm src_p, imm dst_p}:
+        for r in range(unit * chunk, min(count, (unit + 1) * chunk)):
+            dst_p[dst_offset + r] = src_p[r]
+
+    host_parallelize(rows, units)
+    _ = len(src)
+    _ = len(dst)
 
 
 def _ff_values(
@@ -285,21 +533,47 @@ def _ff_values(
 ) raises -> List[Float32]:
     """`value_for_row` / `value_for_split_tensor_row` (`:106-137`,
     `:295-308`): FeatureFreq with prior 0 / 1, one Float32 division."""
+    # One statement per row (lane gbdt-host-par): the rows run in
+    # `_gbdt_units` contiguous ranges. A row the serial loop would refuse
+    # (`dense_category_code`, `_split_bit`) is reported by its task and the
+    # FIRST such row in row order is replayed through the raising
+    # functions, so the refusal is the serial loop's.
     var values = List[Float32](length=n_rows, fill=Float32(0.0))
-    for row in range(n_rows):
-        var key = _code_key(t, x_colmajor, n_rows, row)
-        if key >= 0:
-            for s in range(len(t.split_feature)):
-                key = 2 * key + _split_bit(
-                    t.split_feature[s], t.split_bin[s], t.split_type[s], flat,
-                    n_rows, row,
-                )
-        var count = 0
-        if key >= 0 and key < len(t.counts):
-            count = t.counts[key]
-        values[row] = (Float32(count) + Float32(0.0)) / (
-            Float32(n_rows) + Float32(1.0)
+    var units = _gbdt_units(n_rows, 8 * n_rows)
+    var chunk = host_predict_chunk(n_rows, units)
+    var bad = List[Int](length=units, fill=-1)
+    var bad_p = rebind[GbdtIntPtr](bad.unsafe_ptr())
+    var x_p = rebind[HostF32Ptr](x_colmajor.unsafe_ptr())
+    var flat_p = rebind[HostU32Ptr](flat.unsafe_ptr())
+    var flat_len = len(flat)
+    var src_p = rebind[GbdtIntPtr](t.sources.unsafe_ptr())
+    var card_p = rebind[GbdtIntPtr](t.cards.unsafe_ptr())
+    var sf_p = rebind[GbdtIntPtr](t.split_feature.unsafe_ptr())
+    var sb_p = rebind[GbdtIntPtr](t.split_bin.unsafe_ptr())
+    var st_p = rebind[GbdtIntPtr](t.split_type.unsafe_ptr())
+    var counts_p = rebind[GbdtIntPtr](t.counts.unsafe_ptr())
+    var n_src = len(t.sources)
+    var n_split = len(t.split_feature)
+    var n_counts = len(t.counts)
+    var values_p = rebind[HostF32Ptr](values.unsafe_ptr())
+
+    def rows(unit: Int) {imm chunk, imm n_rows, imm x_p, imm flat_p, imm flat_len, imm src_p, imm card_p, imm n_src, imm sf_p, imm sb_p, imm st_p, imm n_split, imm counts_p, imm n_counts, imm values_p, imm bad_p}:
+        bad_p[unit] = _ff_values_range(
+            min(n_rows, unit * chunk), min(n_rows, (unit + 1) * chunk), x_p,
+            n_rows, flat_p, flat_len, src_p, card_p, n_src, sf_p, sb_p, st_p,
+            n_split, counts_p, n_counts, values_p,
         )
+
+    host_parallelize(rows, units)
+    for u in range(units):  # driver-loop: over the tasks, the first refusal in row order
+        if bad[u] >= 0:
+            _ = _ff_row_key_raising(t, x_colmajor, n_rows, flat, bad[u])
+            raise Error("tensor CTR row " + String(bad[u]) + " has no key")
+    _ = len(x_colmajor)
+    _ = len(flat)
+    _ = len(bad)
+    _ = len(t.counts)
+    _ = len(values)
     return values^
 
 
@@ -326,12 +600,7 @@ def _ff_stage(
     if len(borders) > 255:
         raise Error("tensor CTR candidate exceeds one-byte fold capacity")
     var bins = List[UInt32](length=len(values), fill=UInt32(0))
-    for r in range(len(values)):
-        var bin = 0
-        for b in range(len(borders)):
-            if values[r] > borders[b]:
-                bin += 1
-        bins[r] = UInt32(bin)
+    _ff_bins_of(values, borders, bins)
     if len(borders) == 0:
         raise Error("tensor candidate has no rankable border")
     if GBDT_FF_GRID_BORDERS < len(borders):
@@ -657,6 +926,10 @@ def gbdt_feature_freq_host_fit(
         raise Error("two-level FeatureFreq fit needs rows and two sources")
     if len(x_colmajor) != n_rows * n_features or len(y) != n_rows:
         raise Error("two-level FeatureFreq input shape mismatch")
+    # SERIAL, named (admission, once per fit; lane gbdt-host-par): this
+    # scan, the source columns' dense-code validation and the numeric
+    # columns' finite / constant tests below refuse at the FIRST bad row in
+    # row order (`dense_category_code` raises) over a growing presence set
     for r in range(n_rows):
         if not isfinite(y[r]):
             raise Error("two-level FeatureFreq target is not finite")
@@ -674,8 +947,8 @@ def gbdt_feature_freq_host_fit(
     var folds = List[Int]()
     var one_hot = List[Bool]()
     var borders = List[List[Float32]]()
-    var flat = List[UInt32]()
-    for f in range(n_features):
+    var flat = List[UInt32](length=n_features * n_rows, fill=UInt32(0))
+    for f in range(n_features):  # driver-loop: over the input features (each appends its column in order)
         var col = List[UInt32]()
         var feature_borders = List[Float32]()
         if seen_source[f]:
@@ -713,16 +986,11 @@ def gbdt_feature_freq_host_fit(
                 numeric_values,
                 TBinarizationOptions(BORDER_SELECTION_UNIFORM, GBDT_FF_GRID_BORDERS),
             )
-            for r in range(n_rows):
-                var bin = 0
-                for b in range(len(feature_borders)):
-                    if numeric_values[r] > feature_borders[b]:
-                        bin += 1
-                col.append(UInt32(bin))
+            col.resize(n_rows, UInt32(0))
+            _ff_bins_of(numeric_values, feature_borders, col)
             folds.append(len(feature_borders))
             one_hot.append(False)
-        for r in range(n_rows):
-            flat.append(col[r])
+        _ff_copy_u32(col, n_rows, flat, f * n_rows)
         columns.append(col^)
         borders.append(feature_borders^)
 
@@ -783,8 +1051,8 @@ def gbdt_feature_freq_host_fit(
     # `stage_next_feature_freq_after_winner`: the flat columns extended by
     # the level-one candidate's bins, the one-split history table
     var extended = flat.copy()
-    for r in range(n_rows):
-        extended.append(staged.bins[r])
+    extended.resize(len(flat) + n_rows, UInt32(0))
+    _ff_copy_u32(staged.bins, n_rows, extended, len(flat))
     var s_feature = List[Int]()
     var s_bin = List[Int]()
     var s_type = List[Int]()
