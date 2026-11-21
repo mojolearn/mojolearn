@@ -27,7 +27,10 @@ from providers.python.estimator_lifecycle_pyapi_unpack import estimator_outside,
 from providers.python.estimator_tabular_boundary_pyapi_unpack import _refusal
 from std.python._cpython import PyObjectPtr, GILReleased
 from glm.qn_door_run import QnDoorFitResult, qn_door_fit_run, qn_door_predict_run
-from bindings.qn_boundary_unpack import qn_fit_unpack, qn_predict_unpack, qn_predict_pack
+from bindings.qn_boundary_unpack import qn_fit_unpack, qn_predict_unpack, qn_predict_pack, qn_route
+from core.device_route_dw_classical import family_vendor_word, family_mode_word
+from core.estimators_entry_table import estimators_vendor_word
+from providers.python.device_route_dw_classical_door import family_device_admit, family_route_clear
 from bindings.qn_boundary_pack import qn_fit_pack
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.optimizer_public_words_unpack import PYTHON_ERROR_PENDING, optimizer_python_error
@@ -40,7 +43,9 @@ from bindings.classical_validate_unpack import classical_check_x, classical_chec
 from bindings.classical_validate_run import classical_check_width
 from providers.python.linear_score_boundary_pack import classical_r2_score
 from bindings.native_class_admission_door import dict_keys_admitted, dict_keys_admit, class_record, class_admit
-from bindings.qn_keys_unpack import qn_keys, QN_OPN_INITIALIZE, QN_OPN_FIT, QN_OPN_PREDICT, QN_OPN_SCORE
+from bindings.qn_keys_unpack import (
+    qn_keys, QN_OPN_INITIALIZE, QN_OPN_FIT, QN_OPN_PREDICT, QN_OPN_SCORE, QN_OPN_VENDOR_USED, QN_OPN_MODE_USED,
+)
 from bindings.py_keys import py_op_code
 from bindings.py_balanced import py_item
 
@@ -182,6 +187,9 @@ def _qn_initialize(model: PythonObject, args: PythonObject, context: PythonObjec
         var value = values[name]
         if Bool(py=py_call(op.ne, py_call(b.int, value), value)) or Bool(py=py_call(op.lt, value, 1)):
             raise Error("mojolearn QNRegressor: " + name + " must be a positive integer, got " + String(py_call(b.str, value)))
+    # `device`: an unknown value, and 'gpu' on a CPU-only installation, are
+    # refused in words here, before any field changes; None reads nothing.
+    family_device_admit(py_item(values, nk[].k_device), estimators_vendor_word(String(py_item(context, nk[].k_vendor))), b)
     py_setitem(values, nk[].k_warm_start, PythonObject(False))
     var fields = py_fields(model)
     if py_item(values, nk[].k_numeric_mode) is None:
@@ -191,6 +199,9 @@ def _qn_initialize(model: PythonObject, args: PythonObject, context: PythonObjec
             native_release_admit(fields[names[i]], context)
     for i in range(len(names)):  # driver-loop: preserve verbatim public parameter values
         py_setitem(fields, names[i], values[names[i]])
+    # A new constructor run (`set_params` rebuilds through it): the next
+    # operation reads the device and the mode again.
+    family_route_clear(model)
     return PythonObject(None)
 
 
@@ -259,6 +270,13 @@ def qn_public_operation(model: PythonObject, operation: Int, operation_name: Pyt
         class_admit(mods, _QN_KNOWN_SLOT, cls, owner)
     if operation == QN_OPN_INITIALIZE:
         return _qn_initialize(model, args, context)
+    if operation == QN_OPN_VENDOR_USED or operation == QN_OPN_MODE_USED:
+        # What the estimator runs on, from its route (resolved here when it
+        # has not run yet): the compiled image's own vendor and tier words.
+        var used = qn_route(model, py_fields(model), context)
+        var word = family_vendor_word(used.route.vendor) if operation == QN_OPN_VENDOR_USED else family_mode_word(used.route.mode)
+        _ = used^
+        return PythonObject(word)
     var fitting = operation == QN_OPN_FIT
     var fields = _qn_admit(model, context, fitting)
     # The operation's name String is built only for the not-fitted message
