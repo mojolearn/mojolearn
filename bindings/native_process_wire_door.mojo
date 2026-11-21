@@ -173,11 +173,21 @@ def _wire_socket(socket: PythonObject, mut fd: Int, mut timeout: Float64) raises
 
 
 def wire_send(socket: PythonObject, kind: Int, sequence: Int, request: List[Int64], outgoing: WireOutgoing) raises:
-    """One typed frame: header and descriptor words in one write, then each
-    tensor's bytes from its exporter's storage."""
+    """One typed frame on an owned native socket (a worker's connection)."""
     var fd = -1
     var timeout = Float64(-1)
     _wire_socket(socket, fd, timeout)
+    wire_send_fd(fd, timeout, kind, sequence, request, outgoing)
+    _ = socket
+
+
+def wire_send_fd(fd: Int, timeout: Float64, kind: Int, sequence: Int, request: List[Int64], outgoing: WireOutgoing) raises:
+    """One typed frame: header and descriptor words in one write, then each
+    tensor's bytes from its exporter's storage. `fd` and `timeout` are the
+    typed pool record's (bindings/native_process_pool_run.mojo) or a
+    socket's; the caller keeps the descriptor open through the call."""
+    if fd < 0:
+        raise Error("transport: socket is closed")
     var words = wire_frame_words(kind, sequence, request, outgoing.record)
     posix_transfer(fd, PosixBytes(unsafe_from_address=Int(words.unsafe_ptr())), len(words) * 8, timeout, True)
     _ = words^
@@ -203,7 +213,6 @@ def wire_send(socket: PythonObject, kind: Int, sequence: Int, request: List[Int6
             pin.release()
             raise error
         pin.release()
-    _ = socket
 
 
 def _wire_array(fd: Int, timeout: Float64, tensor: WireTensor) raises -> PythonObject:
@@ -369,11 +378,20 @@ def _wire_byte_strings(record: WireRecord) raises -> List[Bool]:
 
 
 def wire_receive(socket: PythonObject) raises -> WireMessage:
-    """One typed frame: header, descriptor words, then each tensor's bytes
-    into its own Array store; PACK of the record once."""
+    """One typed frame from an owned native socket (a worker's connection)."""
     var fd = -1
     var timeout = Float64(-1)
     _wire_socket(socket, fd, timeout)
+    var message = wire_receive_fd(fd, timeout)
+    _ = socket
+    return message^
+
+
+def wire_receive_fd(fd: Int, timeout: Float64) raises -> WireMessage:
+    """One typed frame: header, descriptor words, then each tensor's bytes
+    into its own Array store; PACK of the record once."""
+    if fd < 0:
+        raise Error("transport: socket is closed")
     var head = List[Int64](length=WIRE_FRAME_HEADER_WORDS, fill=0)
     posix_transfer(fd, PosixBytes(unsafe_from_address=Int(head.unsafe_ptr())), WIRE_FRAME_HEADER_WORDS * 8, timeout, False)
     var header = wire_frame_header(head, WIRE_MAX_TENSOR_BYTES)
@@ -398,7 +416,6 @@ def wire_receive(socket: PythonObject) raises -> WireMessage:
             raise Error("parallel wire: unclaimed nodes or tensors at the end of the record")
     elif len(tensors) != 0:
         raise Error("parallel wire: tensors without a record")
-    _ = socket
     return WireMessage(frame.kind, frame.sequence, frame.request.copy(), value)
 
 

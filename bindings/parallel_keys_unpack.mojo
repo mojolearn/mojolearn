@@ -477,6 +477,7 @@ struct ParallelKeys(Defaultable, Movable):
     var k_random_weights_: PythonObject
     var k_rbf_rows: PythonObject
     var k_recipe: PythonObject
+    var k_record: PythonObject
     var k_reduction: PythonObject
     var k_reference_bytes: PythonObject
     var k_reference_end: PythonObject
@@ -824,6 +825,7 @@ struct ParallelKeys(Defaultable, Movable):
         self.k_random_weights_ = PythonObject(None)
         self.k_rbf_rows = PythonObject(None)
         self.k_recipe = PythonObject(None)
+        self.k_record = PythonObject(None)
         self.k_reduction = PythonObject(None)
         self.k_reference_bytes = PythonObject(None)
         self.k_reference_end = PythonObject(None)
@@ -1163,6 +1165,7 @@ def _parallel_keys_fill(nk: UnsafePointer[ParallelKeys, MutUntrackedOrigin]) rai
     nk[].k_random_weights_ = py_key("random_weights_")
     nk[].k_rbf_rows = py_key("rbf_rows")
     nk[].k_recipe = py_key("recipe")
+    nk[].k_record = py_key("record")
     nk[].k_reduction = py_key("reduction")
     nk[].k_reference_bytes = py_key("reference_bytes")
     nk[].k_reference_end = py_key("reference_end")
