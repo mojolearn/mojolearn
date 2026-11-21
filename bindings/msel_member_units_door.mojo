@@ -20,8 +20,15 @@ step with the GIL held. Here:
     own member state (`member_new`), fits, scores and frees it. With one
     worker (a GPU member: its units share one device) the fold gather itself
     is split across the host cores.
-  * Results go to typed slots per unit; the first failing unit in unit order
-    is raised after the join, as the serial order would raise it.
+  * Results go to typed slots per unit. If any unit fails, this route
+    publishes nothing and answers `ran == False`: the Python units then run
+    and raise the estimator's own exception.
+
+THE FALLBACK RULE (MEMBER-ABI-V2.md): a member mark never turns a call that
+worked into a refusal. A marked class this route cannot serve (a transformer
+or KMeans: no score; a classifier family: labels are not encoded here yet; an
+admission the family refuses; a target the linear check refuses) answers
+`ran == False` silently.
 
 WHEN IT RUNS (`msel_member_units` answers `ran == False` otherwise and the
 caller keeps its Python units): the member's class carries a member mark and
@@ -39,7 +46,7 @@ from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from bindings.classical_validate_unpack import classical_check_y, classical_estimator_name
-from bindings.member_boundary_door import member_admit
+from bindings.member_boundary_door import member_admit_serving
 from bindings.msel_common_door import msel_is_array, msel_addr, msel_index_i64
 from bindings.msel_cv_run import msel_seconds
 from bindings.msel_estimator_native_door import (
@@ -50,7 +57,7 @@ from bindings.py_balanced import py_call, py_type, py_get
 from core.host_parallel import host_parallelize
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free,
-    MEMBER_OP_FIT, MEMBER_OP_SCORE, MEMBER_CAN_FIT, MEMBER_CAN_SCORE,
+    MEMBER_OP_FIT, MEMBER_OP_SCORE, MEMBER_CAN_FIT, MEMBER_CAN_SCORE, MEMBER_CAN_CLASSIFIER,
 )
 
 #: Rows below which a fold gather is not split (a task costs more than the
@@ -243,17 +250,29 @@ def msel_member_units(base: PythonObject, candidates: PythonObject, y: PythonObj
             est = msel_native_clone(base, context)
             _ = msel_native_set_params(est, msel_clone_parameter(candidates[c], context), context)
         var fields = py_call(plan["fields_get"], est, py_type(est))
-        var owner = member_admit(est, fields, plan, member_context, b)
+        # THE FALLBACK RULE: a marked class this route cannot serve (no score:
+        # a transformer or KMeans; an admission its family refuses) takes the
+        # Python units exactly as an unmarked class does. Never a refusal here.
+        var owner = member_admit_serving(est, fields, plan, member_context, b, MEMBER_CAN_FIT | MEMBER_CAN_SCORE)
         if not owner.published:
             return scores^
-        if not owner.plan.member.can(MEMBER_CAN_FIT) or not owner.plan.member.can(MEMBER_CAN_SCORE):
+        # A classifier member reads class codes and a class count. This route
+        # hands the target as float32 words and encodes no labels yet, so a
+        # family with classifier kinds keeps the Python units.
+        if owner.plan.member.can(MEMBER_CAN_CLASSIFIER):
             return scores^
         run.plans.append(owner.plan.copy())
         _ = py_call(pins.append, est)
         _ = py_call(pins.append, owner.pins)
     # The target once, as the member's own fit door admits it (present,
     # real, one column, finite, as long as X): float32 words.
-    var target = classical_check_y(y, rows, classical_estimator_name(base), member_context)
+    # A target that check refuses (several columns, not real) is not this
+    # route's: the Python units admit or refuse it with the member's own words.
+    var target = PythonObject(None)
+    try:
+        target = classical_check_y(y, rows, classical_estimator_name(base), member_context)
+    except:
+        return scores^
     _ = py_call(pins.append, target)
     run.y = msel_addr(target)
     for f in range(n_folds):  # driver-loop: over folds (their index arrays, read once)
@@ -280,9 +299,13 @@ def msel_member_units(base: PythonObject, candidates: PythonObject, y: PythonObj
         _ = pins
         _ = x
         _ = y
-    for u in range(n_units):  # driver-loop: over units, for the first failure in unit order
+    # A unit the member refused or failed: nothing is published from this
+    # route. The Python units run the request and raise the estimator's own
+    # exception (type and words) in unit order, as before the member mark. The
+    # repeat is paid only by a failing request.
+    for u in range(n_units):  # driver-loop: over units, any failure
         if run.failed[u] != UInt8(0):
-            raise Error(run.errors[u])
+            return scores^
     scores.ran = True
     scores.test = run.test.copy()
     scores.train = run.train.copy()

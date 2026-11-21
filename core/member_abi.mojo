@@ -128,6 +128,14 @@ comptime MEMBER_CAN_IMPORTANCES = 262144     # exports MEMBER_BLOCK_FEATURE_IMPO
 comptime MEMBER_CAN_CLASSIFIER = 524288      # y is class codes; fit reads call.classes
 comptime MEMBER_CAN_MULTI_OUTPUT = 1048576   # y may have more than one column
 
+#: What a caller needs of a member, as masks for `MemberRef.has`,
+#: `member_require` and `member_admit_serving`: a predictor (classifier,
+#: regressor, clusterer with predict) or a transformer (a Pipeline step, a
+#: decomposition or scaler under a search). A caller adds the bits of what
+#: else it will ask (score, predict_proba, sample weights, index views).
+comptime MEMBER_NEEDS_PREDICTOR = 3      # MEMBER_CAN_FIT | MEMBER_CAN_PREDICT
+comptime MEMBER_NEEDS_TRANSFORMER = 33   # MEMBER_CAN_FIT | MEMBER_CAN_TRANSFORM
+
 #: Fitted-state blocks (`MEMBER_OP_EXPORT` / `MEMBER_OP_IMPORT`). The shared
 #: names mean the same in every family; a family's own blocks start at
 #: `MEMBER_BLOCK_FAMILY` and are listed in its member file's docstring.
@@ -281,7 +289,12 @@ struct MemberRef(ImplicitlyCopyable, Movable):
     var capabilities: Int
 
     def can(self, capability: Int) -> Bool:
+        """ONE capability bit is set (with a mask of several: any of them)."""
         return (self.capabilities & capability) != 0
+
+    def has(self, needs: Int) -> Bool:
+        """EVERY bit of the mask `needs` is set."""
+        return (self.capabilities & needs) == needs
 
 
 struct MemberPlan(Copyable, Movable):
@@ -402,8 +415,12 @@ def member_free(plan: MemberPlan, mut call: MemberCall):
 
 def member_require(plan: MemberPlan, capability: Int, what: String) raises:
     """UNPACK: refuse in words, before any work, a member that lacks an
-    operation the caller will ask for."""
-    if not plan.member.can(capability):
+    operation the caller will ask for (every bit of `capability`). ONLY for a
+    request that had no path before the member mark existed. A caller that
+    served this class before the mark never calls this: it falls back to
+    that path silently (`member_admit_serving`; MEMBER-ABI-V2.md, the
+    fallback rule)."""
+    if not plan.member.has(capability):
         raise Error("AttributeError: a " + member_family_name(plan.family) + " member has no " + what)
 
 

@@ -215,6 +215,26 @@ def member_admit(model: PythonObject, fields: PythonObject, plan: PythonObject, 
     return owner^
 
 
+def member_admit_serving(model: PythonObject, fields: PythonObject, plan: PythonObject, context: PythonObject,
+    b: PythonObject, needs: Int) -> MemberOwner:
+    """`member_admit` for a caller that had a path for this class before
+    its member mark: the native member when the family serves EVERY
+    capability bit of `needs` for this estimator, else an owner with
+    `published` False, and the caller takes the path an unmarked class
+    takes. Never raises: an admission the family refuses (a parameter it
+    does not take as words, class weights, a precomputed kernel, an image
+    that is not loaded) is the same silent fallback, and that path then
+    raises its own words if the request is wrong. A member mark never turns
+    a call that worked into a refusal."""
+    try:
+        var owner = member_admit(model, fields, plan, context, b)
+        if owner.published and not owner.plan.member.has(needs):
+            owner.published = False
+        return owner^
+    except:
+        return MemberOwner()
+
+
 def member_pack(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
     plan: MemberPlan, state: Int) raises:
     """PACK: write the fitted attributes of member state `state` into the
