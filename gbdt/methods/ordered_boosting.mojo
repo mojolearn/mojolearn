@@ -211,8 +211,9 @@ from gbdt.methods.oblivious_tree_fold_tasks import (
 )
 from gbdt.methods.oblivious_tree_doc_parallel_structure_searcher import (
     PointwiseTreeWorkspace,
-    fit_oblivious_tree_structure_traced,
+    fit_oblivious_tree_structure_levels,
 )
+from gbdt.methods.tree_ctr_search import TreeCtrFit
 from gbdt.models.oblivious_model import (
     TAdditiveModel,
     TObliviousTreeModel,
@@ -2367,6 +2368,10 @@ def fit_ordered(
     od_type: Int,
     od_pvalue: Float64,
     od_wait: Int,
+    # TREE CTRS (`max_ctr_complexity` above 1): the fit's `TreeCtrFit`, one
+    # entry, or empty. With it every tree is searched by the fold
+    # searcher's level driver; without it nothing below differs.
+    mut tree_ctr: List[TreeCtrFit],
     # The fit's device plan, read once at the binding entry and handed to
     # the structure searcher.
     device_plan: DevicePlan = plan_for_single(),
@@ -2454,6 +2459,28 @@ def fit_ordered(
             if p == est_p or p == skip_p:
                 cells = 1
             dep_bins.append(ctx.enqueue_create_buffer[DType.uint32](cells))
+    #: TREE CTRS: every permutation's index for the level driver's slot
+    #: writes (`pidx`, or the one index the permutations share); empty
+    #: without tree CTRs
+    var tree_idx = List[DeviceBuffer[DType.uint32]]()
+    if len(tree_ctr) > 0:
+        if dep_on:
+            # driver-loop: over the permutations
+            for p in range(perm_count):
+                tree_idx.append(pidx[p].copy())
+        else:
+            if len(tree_ctr[0].dirty_persist) != 1 or (
+                perm_count > 1 and tree_ctr[0].has_borders
+            ):
+                # a Borders combination is a statistic of the rows before
+                # each row in ONE permutation: it needs an index per
+                # permutation, which `train` builds whenever a simple CTR
+                # column depends on the permutation
+                raise Error(
+                    "ordered boosting: a tree-CTR fit over one shared index"
+                    " takes FeatureFreq combinations only"
+                )
+            tree_idx.append(cindex.copy())
     # the learn permutations the structure can be searched on (the tree
     # loop's draw range): only they need the derivative inputs below
     var searchable = learn_count - 1 if learn_count > 1 else 1
@@ -3248,10 +3275,14 @@ def fit_ordered(
         var search_idx = cindex.copy()
         if dep_on:
             search_idx = pidx[learn_p].copy()
-        var splits = fit_oblivious_tree_structure_traced(
+        # the blind per-tree search, or (tree CTRs on) its level driver:
+        # `tree_ctr` empty is `fit_oblivious_tree_structure_traced`, launch
+        # for launch
+        var splits = fit_oblivious_tree_structure_levels(
             ctx, layout, n_rows, max_depth, search_idx, sw^, sg^, sm_count,
             scale, opts.score_function, pool, trace, times,
-            tag + ".structure", opts.l2_leaf_reg,
+            tag + ".structure", tree_ctr, learn_p if dep_on else 0, tree_idx,
+            opts.l2_leaf_reg,
             score_std_dev=score_std, seed=tree_seed, one_hot=one_hot,
             folds=folds, permutation=perms[learn_p], permutation_id=learn_p,
             fold_part_off=fast_part_off, obs_scratch=fast_obs,
@@ -3542,6 +3573,7 @@ def fit_ordered(
     # queued launches
     _ = len(pidx)
     _ = len(dep_bins)
+    _ = len(tree_idx)
     _ = task_dtab^
     _ = slots^
     _ = parts^
