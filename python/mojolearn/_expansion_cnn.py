@@ -487,6 +487,9 @@ class CNNClassifier(_Layer, _CheckMixin):
     holds every minibatch's loss and `loss_curve_` each epoch's mean loss.
     `device` is None (this installation's device), "gpu" or "cpu"."""
 
+    # The member ABI (core/member_abi.mojo): family 21 (Cnn), kind 0.
+    _mojolearn_member = (21, 0)
+
     def __init__(self, input_shape, conv_channels=(8,), kernel_size=3, pool_size=2, learning_rate=0.01,
                  momentum=0.9, weight_decay=0.0, batch_size=32, max_iter=10, shuffle=True, random_state=0,
                  numeric_mode=None, optimizer="sgd", dampening=0.0, nesterov=False, betas=(0.9, 0.999), eps=1e-8, device=None):
