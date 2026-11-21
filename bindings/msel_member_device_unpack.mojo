@@ -13,7 +13,7 @@ Each read is once per public operation of the owner (one cross-validation,
 one search fit, one driver call), never per fold, candidate or row.
 """
 from std.python import PythonObject
-from bindings.native_loaded_module_door import native_loaded_module
+from bindings.family_common_unpack import family_repr
 from bindings.py_balanced import py_call, py_get, py_type
 from core.linear_route import linear_device_code, linear_device_refusal
 from core.device_route_dw_msel_parallel import (
@@ -26,12 +26,13 @@ def member_device_unpack(value: PythonObject) raises -> Int:
     device; exact `'gpu'` or `'cpu'`; anything else is refused in words."""
     if value is None:
         return MEMBER_DEVICE_INSTALL
-    var b = native_loaded_module("builtins")
-    if py_type(value) is b.str:
+    # An exact str only (no subclass, no conversion hook); the class is read
+    # off a literal, and only for a value that is not None.
+    if py_type(value) is py_type(PythonObject("")):
         var code = linear_device_code(String(value))
         if code >= 0:
             return code
-    linear_device_refusal(String(py_call(b.repr, value)))
+    linear_device_refusal(family_repr(value))
     return MEMBER_DEVICE_INSTALL
 
 
@@ -74,10 +75,10 @@ def msel_own_device_admit(value: PythonObject, context: PythonObject) raises:
     member_own_device_admit(device, msel_process_vendor(context))
 
 
-def msel_params_name_device(params: PythonObject) raises -> Bool:
+def msel_params_name_device(params: PythonObject, b: PythonObject) raises -> Bool:
     """True when one candidate's parameter dict sets a `device` (its own
-    `device`, or a nested member's `<step>__device`)."""
-    var b = native_loaded_module("builtins")
+    `device`, or a nested member's `<step>__device`). `b` is the builtins
+    module the calling door already admitted."""
     var names = py_call(b.list, params)
     for k in range(len(names)):  # driver-loop: over the parameter names of one candidate
         if py_type(names[k]) is not b.str:

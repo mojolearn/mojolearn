@@ -301,7 +301,8 @@ def msel_candidates(model: PythonObject, context: PythonObject) raises -> Python
     raise Error("TypeError: Python candidate callbacks are not supported; use GridSearchCV or RandomizedSearchCV")
 
 
-def _search_host_folds(fields: PythonObject, candidates: PythonObject, context: PythonObject) raises -> Bool:
+def _search_host_folds(fields: PythonObject, candidates: PythonObject, b: PythonObject,
+                       context: PythonObject) raises -> Bool:
     """True when a search gathers its fold rows on the host: the search's
     own `device` is `'cpu'` in a process with a GPU set, or a candidate sets
     a `device`. `fields` is the search's admitted instance dictionary; its
@@ -309,7 +310,7 @@ def _search_host_folds(fields: PythonObject, candidates: PythonObject, context: 
     if msel_member_host_folds(fields, context):
         return True
     for k in range(len(candidates)):  # driver-loop: over the candidates' parameter dicts, names only
-        if msel_params_name_device(candidates[k]):
+        if msel_params_name_device(candidates[k], b):
             return True
     return False
 
@@ -356,7 +357,7 @@ def msel_search_fit(model: PythonObject, args: PythonObject, context: PythonObje
     # live on the device. Read once per search fit, and only when the rows
     # would be resident.
     var device_rows = msel_device_rows_ok(estimator, scoring, context)
-    if device_rows and _search_host_folds(fields, candidates, context):
+    if device_rows and _search_host_folds(fields, candidates, b, context):
         device_rows = False
     var rows = MselFoldRows(xf, yf, folds, device_rows, context)
     try:
