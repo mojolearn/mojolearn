@@ -44,13 +44,11 @@ def _identities(connected):
 def _cpu_records(context):
     """The frozen records of the CPU template for `device="cpu"`: the
     owner's context with the host x_prep image as its identical binding and
-    `vendor="cpu"`. None in a CPU-only process (its own template already is
-    the CPU one); the refusal text when the host image is not built, said
-    when a `device="cpu"` estimator first runs."""
-    # glue: load the CPU image once at import and freeze its records beside the device ones
+    `vendor="cpu"`; the refusal text when the host image is not built, said
+    when a `device="cpu"` estimator first runs. `context` is a copy of the
+    owner's context as it was connected at import."""
+    # glue: load the CPU image once, at the first device="cpu" admission
     from . import _backend
-    if context["vendor"] == "cpu":
-        return None
     try:
         table = {"identical": _entries(_backend.load_host_module("_mojolearn_x_prep_host")), "fast": _FAST_ON_CPU}
     except (ImportError, AttributeError, TypeError, ValueError, RuntimeError, OSError) as error:
@@ -58,6 +56,29 @@ def _cpu_records(context):
     cpu = dict(context)
     cpu.update(vendor="cpu", scaler_bindings=table, prep_stateless_entry_identities=_identities(table))
     return tuple(cpu.items())
+
+
+def _cpu_cell(context):
+    """The one cell of the CPU template (bindings/prep_context_native_door.mojo
+    `_cpu_template_records`), a dictionary filled in place. A CPU-only process: its
+    `records` is None now (its own template already is the CPU one). A GPU
+    process: empty until the first device="cpu" admission loads the host
+    x_prep image (fx-audit 9: never at import), with `device_cpu_connect` for an
+    estimator restored without construction to connect it at its first CPU
+    route."""
+    # glue: import-time registration, once
+    if context["vendor"] == "cpu":
+        return {"records": None}
+    from ._native_family_bridge import cpu_load_later
+    cell = {}
+    snapshot = dict(context)  # the context as connected at import
+
+    def load():
+        # glue: once, at the first device="cpu" admission beside a GPU set
+        if "records" not in cell:
+            cell["records"] = _cpu_records(snapshot)
+    cpu_load_later(cell, load)
+    return cell
 
 
 def connect(kinds):
@@ -106,9 +127,9 @@ def connect(kinds):
         output, tuple(output.items()),
         tuple((key, output[key], tuple(output[key].items()))
               for key in static_names if key in output),  # glue: fixed import-time output provider maps
-        # The CPU template's records (`device="cpu"` beside a GPU set): the
+        # The CPU template's cell (`device="cpu"` beside a GPU set): the
         # fixed maps and the output context above are shared with it.
-        _cpu_records(context),
+        _cpu_cell(context),
     )
     connect_module(__name__, sys.modules[__name__], ("CONTEXT_CONNECTION",))
     return call, context

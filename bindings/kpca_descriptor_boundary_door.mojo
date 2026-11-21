@@ -23,6 +23,7 @@ from core.pca_native_api import pca_vendor_name
 from x_neighbors.descriptor_schema import XN_ABI_NAME, XN_OPERATION_COUNT
 from x_decomp.descriptor_schema import XD_ABI_NAME, XD_OPERATION_COUNT
 from bindings.py_balanced import py_call, py_type, py_get
+from providers.python.device_route_boundary_door import device_cpu_connect_late
 from bindings.native_class_admission_door import dict_keys_admitted, dict_keys_admit
 from providers.python.neural_descriptor_pyapi_door import (
     NeuralDescriptorProvider, neural_descriptor_connect_factory_once, neural_descriptor_connect_once,
@@ -49,8 +50,13 @@ comptime KPCA_PROVIDER_PINS = SharedSlot[KPCAProviderPins, "MojolearnKPCAProvide
 def _factory(context: PythonObject, table_name: String, mode: String) raises -> PythonObject:
     # `table_name` is the device table's, or the CPU image's table of a
     # `device="cpu"` route beside a device set (`*_cpu_bindings`, connected
-    # at import by python/mojolearn/_native_decomp_bridge.py).
+    # by python/mojolearn/_native_decomp_bridge.py at the first device="cpu"
+    # admission, fx-audit 9). A route that finds the CPU table missing (an
+    # estimator restored without construction) connects it here, once; a
+    # device table is always present, so this never runs on a GPU route.
     var table = py_get(context, PythonObject(table_name))
+    if table is None and table_name.endswith("_cpu_bindings") and device_cpu_connect_late(context):
+        table = py_get(context, PythonObject(table_name))
     if table is None:
         raise Error("ImportError: device='cpu' is not connected in this installation")
     if py_type(table) is not py_type(Python.dict()):

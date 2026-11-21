@@ -55,26 +55,43 @@ def connect(classes, neighbors=False, metadata=None):
                    kpca_neighbors_bindings=kpca_near, kpca_info_bindings=kpca_info,
                    kpca_decomp_bindings=kpca_decomp)
     context.update(metadata or {})
-    # glue: the CPU image of `device="cpu"`, connected once beside the device set
-    from ._native_decomp_device_bridge import connect_cpu_device, X_DECOMP_HOST
-    connect_cpu_device(context, X_DECOMP_HOST, {"nmf_native_api_v1": "nmf_cpu_bindings",
-                                                "kpca_decomp_native_api_v1": "kpca_decomp_cpu_bindings"})
-    # glue: the same CPU image in the kit's entries form (its published table
-    # key is (identical, cpu)); nothing is loaded in a CPU-only process
+    # glue: the CPU images of `device="cpu"` (x_decomp, and x_neighbors for
+    # KernelPCA), registered at import and loaded at the first device="cpu"
+    # admission beside a GPU set (fx-audit 9: `import mojolearn` on a GPU box
+    # loads no host image); an estimator restored without construction
+    # connects them at its first CPU route (bindings/decomp_kit_native_door.mojo,
+    # nmf_descriptor_boundary_door.mojo, kpca_descriptor_boundary_door.mojo).
+    # Nothing is registered in a CPU-only process.
     if context.get("vendor") not in (None, "cpu"):
-        try:
-            cpu = _kit_entries(_backend.load_host_module(X_DECOMP_HOST))
-        except (ImportError, AttributeError, TypeError, ValueError, RuntimeError, OSError) as error:
-            cpu = type(error).__name__ + ": " + str(error)
-        context["decomp_cpu_bindings"] = {"identical": cpu}
-    if neighbors:
-        connect_cpu_device(context, "_mojolearn_x_neighbors_host",
-                           {"x_neighbors_native_api_v1": "kpca_neighbors_cpu_bindings",
-                            "kpca_neighbors_native_api_v1": "kpca_info_cpu_bindings"})
+        from ._native_family_bridge import cpu_load_later
+        cpu_load_later(context, lambda: _load_cpu_images(context, neighbors))
     entry = _binding()._module.decomp_native_call
     if not isinstance(entry, BuiltinFunctionType):
         raise TypeError("the decomposition owner requires a compiled decomp_native_call")
     return entry, context
+
+
+def _load_cpu_images(context, neighbors):
+    # glue: once, at the first device="cpu" admission beside a GPU set
+    from . import _backend
+    from ._native_decomp_device_bridge import connect_cpu_device, X_DECOMP_HOST
+    from ._native_decomp_kit_bridge import _entries as _kit_entries
+    if "decomp_cpu_bindings" in context:
+        return
+    connect_cpu_device(context, X_DECOMP_HOST, {"nmf_native_api_v1": "nmf_cpu_bindings",
+                                                "kpca_decomp_native_api_v1": "kpca_decomp_cpu_bindings"})
+    # The same CPU image in the kit's entries form (its published table key
+    # is (identical, cpu)).
+    try:
+        cpu = _kit_entries(_backend.load_host_module(X_DECOMP_HOST))
+    except (ImportError, AttributeError, TypeError, ValueError, RuntimeError, OSError) as error:
+        cpu = type(error).__name__ + ": " + str(error)
+    if neighbors:
+        connect_cpu_device(context, "_mojolearn_x_neighbors_host",
+                           {"x_neighbors_native_api_v1": "kpca_neighbors_cpu_bindings",
+                            "kpca_neighbors_native_api_v1": "kpca_info_cpu_bindings"})
+    # Written last: decomp_cpu_bindings present means every table above is.
+    context["decomp_cpu_bindings"] = {"identical": cpu}
 
 
 def connect_public(classes, neighbors=False, metadata=None):

@@ -20,7 +20,7 @@ the connection context) and calls through it.
 # (`DeviceRouteOwner`). Code recoverable at 3a99eaa0dc.
 """
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_type, py_get, py_item
+from bindings.py_balanced import py_type, py_get, py_item, py_contains
 from bindings.classical_keys_unpack import classical_keys
 from core.entry_table import EntryRef, entry_ref_word
 from core.linear_entry_table import LINEAR_TABLE_X_LINEAR, LINEAR_TABLE_DECOMP, linear_table_entry
@@ -31,7 +31,7 @@ from core.device_route import (
 from core.linear_route import linear_route_resolve, linear_route_weighted
 from providers.python.device_route_boundary_door import (
     DeviceRouteOwner, device_unpack, device_request, device_route_held, device_route_keep, device_route_value,
-    device_route_refuse,
+    device_route_refuse, device_cpu_connect_late,
 )
 from providers.python.linear_entry_boundary_door import linear_entry_connection
 from providers.python.metrics_route_boundary_door import linear_route_metrics_cpu
@@ -85,12 +85,18 @@ def _linear_route_build(device: Int, ridge: Bool, mode: PythonObject,
         owner.route.device = device_installed(device, process_vendor)
         if owner.route.device == DEVICE_CPU and process_vendor != 0:
             # A GPU installation: the CPU table of the host binaries, loaded
-            # beside the device table at import
-            # (python/mojolearn/_native_classical_bridge.py connect_cpu_device).
+            # at the first device="cpu" admission (fx-audit 9: no longer at
+            # import; python/mojolearn/_native_classical_bridge.py
+            # connect_cpu_device). An estimator restored without
+            # construction connects it here, once, at its first route.
             if expected_mode != 1:
                 device_cpu_fast()
+            # The table is filled in place (one dictionary shared by the
+            # contexts copied from this one), so a miss is "not loaded yet".
             var cpu = py_get(context, "classical_cpu_bindings")
-            if cpu is None:
+            if (cpu is None or not py_contains(cpu, PythonObject(mode_name))) and device_cpu_connect_late(context):
+                cpu = py_get(context, "classical_cpu_bindings")
+            if cpu is None or not py_contains(cpu, PythonObject(mode_name)):
                 raise Error("ImportError: device='cpu' is not connected in this installation")
             entries = py_item(cpu, PythonObject(mode_name))
             cpu_beside_gpu = True
