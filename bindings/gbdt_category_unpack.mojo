@@ -23,7 +23,13 @@ map), at the boundary, before RUN:
     or an exact NumPy scalar of the loaded numpy module (its integer, bool,
     float32 / float64, str_ and bytes_ classes), whose value is read from
     the buffer it exports; anything else is refused by name. Text and bytes
-    with the same UTF-8 bytes are one category.
+    with the same UTF-8 bytes are one category;
+  * an exact pandas DataFrame or Series is read from its blocks
+    (`_pandas_frame`): numeric blocks cast in parallel, object and
+    Python-backed string columns through the same cell reader, a
+    Categorical through its codes array and its k categories (keyed once,
+    then every code mapped in parallel; code -1 is the missing category).
+    An Arrow-backed string column is refused by name.
 
 The codes are written over the categorical columns of the float block the
 fit reads. A block the door made (a cast, a transpose, the object path) is
@@ -38,13 +44,28 @@ predict.
 
 from std.memory import unsafe_memcpy, bitcast
 from std.python import Python, PythonObject
-from std.python._cpython import PyObjectPtr
+from std.python._cpython import PyObjectPtr, GILReleased
 from bindings.py_balanced import py_call, py_type, py_get
 from bindings.py_typed_call import py_call_typed
 from bindings.py_cpython_table import cpython_table, CPythonTable
 from bindings.sequential_arrays_door import sequential_address
 from bindings.cpython_borrowed_unpack import borrowed_type_word
-from bindings.classical_pandas_door import _pd_class_word
+from bindings.classical_pandas_door import (
+    _pd_class_word,
+    _pd_class,
+    _pd_fields,
+    _pd_get,
+    _pd_locations_native,
+    _pd_values_native,
+    native_pandas_exact,
+)
+from bindings.classical_keys_unpack import classical_keys
+from bindings.native_loaded_module_door import native_loaded_module
+from bindings.py_balanced import py_item
+from core.pandas_input_plan import pandas_block_count
+from core.sequential_input_plan import sequence_promote
+from core.cast_in import cast_in_kind
+from core.classical_pandas_impl import pd_scatter_numeric
 from bindings.trees_public_inputs_door import trees_builtins, trees_address
 from bindings.trees_keys_unpack import trees_keys
 from bindings.admitted_input_unpack import AdmittedX, admit_f32, admitted_vector, admitted_words
@@ -61,6 +82,8 @@ from gbdt.data.category_map import (
     category_block_columns,
     category_block_feature,
     category_apply_column,
+    category_keys_from_codes,
+    category_values_from_codes,
 )
 
 comptime _CatWordPtr = MutPointer[Int, MutUntrackedOrigin]
@@ -507,13 +530,304 @@ def _object_array(X: PythonObject, name: String, columns: List[Int], mut keys: L
     return admitted_words(matrix, block_address, n_rows, n_features, False)
 
 
+# The storage forms of a pandas column this file reads (`_PdPart.form`).
+comptime _PD_NUMERIC = 1
+comptime _PD_OBJECT = 2
+comptime _PD_CATEGORICAL = 3
+
+
+@fieldwise_init
+struct _Nd(Copyable, Movable):
+    """The metadata of one exact ndarray of pandas storage (rank 1: one
+    column; rank 2: pandas' (columns, rows) block layout)."""
+    var address: Int
+    var rows: Int
+    var cols: Int
+    var row_stride: Int
+    var col_stride: Int
+    var itemsize: Int
+    var typecode: Int
+    var kind: String
+    var native: Bool
+
+
+def _nd_meta(a: PythonObject, ndarray: PythonObject, what: String) raises -> _Nd:
+    if py_type(a) is not ndarray:
+        raise Error("TypeError: mojolearn: " + what + " is not stored in an exact NumPy array")
+    var rank = Int(py=a.ndim)
+    if rank != 1 and rank != 2:
+        raise Error("TypeError: mojolearn: " + what + " is stored in a " + String(rank) + "-D array")
+    var rows = Int(py=a.shape[rank - 1])
+    var cols = 1 if rank == 1 else Int(py=a.shape[0])
+    var row_stride = Int(py=a.strides[rank - 1])
+    var col_stride = 0 if rank == 1 else Int(py=a.strides[0])
+    return _Nd(Int(py=sequential_address(a)), rows, cols, row_stride, col_stride,
+               Int(py=a.dtype.itemsize), Int(py=a.dtype.num), String(py=a.dtype.kind),
+               Bool(py=a.dtype.isnative))
+
+
+@fieldwise_init
+struct _PdPart(Copyable, Movable):
+    """One pandas block as this file reads it: `store` is the block's
+    storage (numbers or object words) or, for a Categorical, its codes;
+    `cats` is a Categorical's categories (numbers or object words)."""
+    var form: Int
+    var store: _Nd
+    var positions: List[Int]
+    var cat_form: Int
+    var cats: _Nd
+
+
+def _class_name(cls: PythonObject) raises -> String:
+    """`module.qualname` of a class for a refusal, read by `type`'s own
+    descriptors (no metaclass hook)."""
+    var b = native_loaded_module("builtins")
+    var module = py_call(py_item(b.type.__dict__, PythonObject("__module__")).__get__, cls)
+    var qual = py_call(py_item(b.type.__dict__, PythonObject("__qualname__")).__get__, cls)
+    return String(py=module) + "." + String(py=qual)
+
+
+def _pd_text_storage(values: PythonObject, ndarray: PythonObject, what: String) raises -> _Nd:
+    """The object words of pandas' Python-backed string array (`StringArray`,
+    `StringArrayNumpySemantics`): its `NDArrayBacked._ndarray`, an object
+    array of str and pandas.NA. An Arrow-backed string array has no plain
+    buffer of cells and is refused by name; any other class too."""
+    var cls = py_type(values)
+    if cls is _pd_class("pandas.core.arrays.string_", "StringArray") or cls is _pd_class(
+            "pandas.core.arrays.string_", "StringArrayNumpySemantics"):
+        var nd = _nd_meta(_pd_get("pandas._libs.arrays", "NDArrayBacked", "_ndarray", values), ndarray, what)
+        if nd.kind != "O" or nd.cols != 1:
+            raise Error("TypeError: mojolearn: " + what + " is a pandas string array whose storage is not "
+                        + "one object column")
+        return nd^
+    if cls is _pd_class("pandas.core.arrays.string_arrow", "ArrowStringArray") or cls is _pd_class(
+            "pandas.core.arrays.string_arrow", "ArrowStringArrayNumpySemantics") or cls is _pd_class(
+            "pandas.core.arrays.arrow.array", "ArrowExtensionArray"):
+        raise Error("TypeError: mojolearn: " + what + " is an Arrow-backed pandas array (" + _class_name(cls)
+                    + "); its cells are not a plain buffer this reader can view. Pass the column as "
+                    + "object or category dtype (for example `X.astype({column: object})`), or X as a "
+                    + "NumPy array")
+    raise Error("TypeError: mojolearn: " + what + " is stored as " + _class_name(cls)
+                + "; a pandas column is admitted as NumPy numbers, NumPy objects, a Python-backed "
+                + "string array or a Categorical")
+
+
+def _pandas_frame(X: PythonObject, name: String, columns: List[Int], mut keys: List[UInt64],
+                  context: PythonObject) raises -> AdmittedX:
+    """An exact pandas DataFrame (or Series: one column) with categorical
+    columns, read from its blocks: numeric blocks cast in parallel
+    (`pd_scatter_numeric`, column-major, pandas' promotion), object and
+    Python-backed string columns cell by cell (`_object_column`), a
+    Categorical through its codes array and its categories (the k
+    categories are keyed once, then every row's code is mapped in parallel:
+    no loop over the rows' values in Python). pandas is never imported: the
+    classes are its loaded ones by exact identity and every field is read
+    through its native descriptor or instance dictionary."""
+    var b = native_loaded_module("builtins")
+    var nk = classical_keys()
+    var ndarray = py_get(context, trees_keys()[].k_ndarray)
+    var series = py_type(X) is _pd_class("pandas.core.series", "Series")
+    var manager = py_get(_pd_fields(X), nk[].k__mgr)
+    var blocks = PythonObject(None)
+    if series:
+        if py_type(manager) is not _pd_class("pandas.core.internals.managers", "SingleBlockManager"):
+            raise Error("TypeError: pandas Series requires native single-block storage")
+        blocks = py_get(_pd_fields(manager), nk[].k_blocks)
+    else:
+        if py_type(manager) is not _pd_class("pandas.core.internals.managers", "BlockManager"):
+            raise Error("TypeError: pandas DataFrame requires native block storage")
+        blocks = _pd_get("pandas._libs.internals", "BlockManager", "blocks", manager)
+    if py_type(blocks) is not b.tuple:
+        raise Error("pandas input is empty or has invalid block metadata")
+    pandas_block_count(len(blocks), series)
+    # the admitted classes, read once per call
+    var numpy_block = _pd_class("pandas.core.internals.blocks", "NumpyBlock")
+    var numeric_block = _pd_class("pandas.core.internals.blocks", "NumericBlock")
+    var object_block = _pd_class("pandas.core.internals.blocks", "ObjectBlock")
+    var extension_block = _pd_class("pandas.core.internals.blocks", "ExtensionBlock")
+    var categorical = _pd_class("pandas.core.arrays.categorical", "Categorical")
+    var categorical_dtype = _pd_class("pandas.core.dtypes.dtypes", "CategoricalDtype")
+    var index_class = _pd_class("pandas.core.indexes.base", "Index")
+    var integer_array = _pd_class("pandas.core.arrays.integer", "IntegerArray")
+    var floating_array = _pd_class("pandas.core.arrays.floating", "FloatingArray")
+    var boolean_array = _pd_class("pandas.core.arrays.boolean", "BooleanArray")
+    var parts = List[_PdPart]()
+    var owned = List[PythonObject]()
+    var n_rows = -1
+    var n_features = 0
+    # pandas' promotion of the numeric blocks (core/pandas_input_plan.mojo's
+    # rule): through float64 first when the frame's common type is object,
+    # bool with numbers, or float64
+    var common_kind = String()
+    var common_size = 0
+    var has_bool = False
+    var has_number = False
+    var objects = False
+    var none = _Nd(0, 0, 0, 0, 0, 0, 0, String(), True)
+    for k in range(len(blocks)):  # driver-loop: over native pandas storage blocks
+        var block = blocks[k]
+        var bcls = py_type(block)
+        if bcls is not numpy_block and bcls is not numeric_block and bcls is not object_block and bcls is not extension_block:
+            raise Error("TypeError: pandas requires ordinary native blocks without subclass hooks")
+        var values = _pd_get("pandas._libs.internals", "Block", "values", block)
+        var positions = List[Int](length=1, fill=0) if series else _pd_locations_native(block, context)
+        var what = name + " block " + String(k)
+        var vcls = py_type(values)
+        var form = _PD_NUMERIC
+        var cat_form = 0
+        var cats = none.copy()
+        var store: _Nd
+        if vcls is ndarray or vcls is integer_array or vcls is floating_array or vcls is boolean_array:
+            var data = values
+            if vcls is not ndarray:
+                # the nullable numbers' own admission (missing values refused there)
+                var pair = _pd_values_native(values, series, context)
+                data = pair[0]
+                objects = objects or pair[1]
+            store = _nd_meta(data, ndarray, what)
+            if store.kind == "O":
+                form = _PD_OBJECT
+                objects = True
+            elif store.kind == "b" or store.kind == "i" or store.kind == "u" or store.kind == "f":
+                sequence_promote(common_kind, common_size, store.kind, store.itemsize)
+                has_bool = has_bool or store.kind == "b"
+                has_number = has_number or store.kind != "b"
+            else:
+                raise Error("TypeError: mojolearn: " + what + " holds NumPy dtype kind '" + store.kind
+                            + "'; a pandas column is admitted as numbers, objects, strings or a Categorical")
+            owned.append(data)
+        elif vcls is categorical:
+            form = _PD_CATEGORICAL
+            objects = True
+            var codes = _pd_get("pandas._libs.arrays", "NDArrayBacked", "_ndarray", values)
+            var dtype = _pd_get("pandas._libs.arrays", "NDArrayBacked", "_dtype", values)
+            if py_type(dtype) is not categorical_dtype:
+                raise Error("TypeError: mojolearn: " + what + " is a Categorical whose dtype is not an exact "
+                            + "pandas CategoricalDtype")
+            var categories = py_get(_pd_fields(dtype), "_categories")
+            if py_type(categories) is not index_class:
+                raise Error("TypeError: mojolearn: " + what + " is a Categorical whose categories are "
+                            + "not an exact pandas Index")
+            var cat_data = py_get(_pd_fields(categories), "_data")
+            store = _nd_meta(codes, ndarray, what + " codes")
+            if store.kind != "i" or store.cols != 1 or not store.native:
+                raise Error("TypeError: mojolearn: " + what + " is a Categorical whose codes are not "
+                            + "native signed integers")
+            if py_type(cat_data) is ndarray:
+                cats = _nd_meta(cat_data, ndarray, what + " categories")
+            else:
+                cats = _pd_text_storage(cat_data, ndarray, what + " categories")
+            if cats.cols != 1:
+                raise Error("TypeError: mojolearn: " + what + " is a Categorical whose categories are not 1-D")
+            if cats.kind == "O":
+                cat_form = _PD_OBJECT
+            elif cats.kind == "b" or cats.kind == "i" or cats.kind == "u" or cats.kind == "f":
+                cat_form = _PD_NUMERIC
+            else:
+                raise Error("TypeError: mojolearn: " + what + " is a Categorical of NumPy dtype kind '"
+                            + cats.kind + "'; categories are admitted as numbers or text")
+            owned.append(values)
+            owned.append(codes)
+            owned.append(dtype)
+            owned.append(categories)
+            owned.append(cat_data)
+        else:
+            form = _PD_OBJECT
+            objects = True
+            store = _pd_text_storage(values, ndarray, what)
+            owned.append(values)
+        if store.rows < 1 or (n_rows >= 0 and store.rows != n_rows):
+            raise Error("pandas numeric block dimensions differ or are empty")
+        if len(positions) != store.cols:
+            raise Error("pandas block column positions differ from numeric storage")
+        n_rows = store.rows
+        n_features += store.cols
+        parts.append(_PdPart(form, store^, positions^, cat_form, cats^))
+    var seen = List[Bool](length=n_features, fill=False)
+    for p in range(len(parts)):  # driver-loop: over the blocks' column placements
+        for q in range(len(parts[p].positions)):  # driver-loop: over one block's columns
+            var at = parts[p].positions[q]
+            if at < 0 or at >= n_features or seen[at]:
+                raise Error("pandas block column positions overlap or exceed the matrix")
+            seen[at] = True
+    var double_round = objects or (has_bool and has_number) or (common_kind == "f" and common_size == 8)
+    var slot_of = _cat_slots(columns, n_features)
+    var matrix = admitted_vector(n_rows * n_features, "<f4", context)
+    var mp = CategoryF32Ptr(unsafe_from_address=trees_address(matrix))
+    keys.resize(len(columns) * n_rows, UInt64(0))
+    var kp = CategoryKeyPtr(unsafe_from_address=Int(keys.unsafe_ptr()))
+    var t = cpython_table()
+    var w = _CellWords()
+    var view = List[Int](length=10, fill=0)
+    var view_ptr = view.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+    try:
+        for p in range(len(parts)):  # driver-loop: over the admitted blocks (rows of numbers and codes run on every worker)
+            var part = parts[p].copy()
+            var s = part.store.copy()
+            if part.form == _PD_NUMERIC:
+                var kind = cast_in_kind(s.typecode, s.itemsize, "pandas input")
+                for col in range(s.cols):  # driver-loop: over one block's columns; each cast spans parallel row tasks
+                    var dest = part.positions[col]
+                    var column = mp + dest * n_rows
+                    with GILReleased(Python()):
+                        pd_scatter_numeric(s.address, s.itemsize, s.native, kind, s.row_stride, s.col_stride,
+                                           col, 0, n_rows, 1, double_round, column, True)
+                        if slot_of[dest] >= 0:
+                            # the same keys a numeric X's categorical column gets
+                            category_keys_from_f32(column, n_rows, kp + slot_of[dest] * n_rows)
+            elif part.form == _PD_OBJECT:
+                for col in range(s.cols):  # driver-loop: over one block's columns (cells read under the GIL)
+                    var dest = part.positions[col]
+                    _object_column(t, w, s.address + col * s.col_stride, s.row_stride, n_rows, dest,
+                                   slot_of[dest], kp, mp, view_ptr, name)
+            else:
+                var dest = part.positions[0]
+                var slot = slot_of[dest]
+                var c = part.cats.copy()
+                var k = c.rows
+                # the k categories, read once: keys for a categorical column,
+                # numbers for a numeric one (text there is refused by the reader)
+                var cat_keys = List[UInt64](length=max(k, 1), fill=UInt64(0))
+                var cat_values = List[Float32](length=max(k, 1), fill=Float32(0.0))
+                var ck = CategoryKeyPtr(unsafe_from_address=Int(cat_keys.unsafe_ptr()))
+                var cv = CategoryF32Ptr(unsafe_from_address=Int(cat_values.unsafe_ptr()))
+                if part.cat_form == _PD_OBJECT:
+                    # written as column 0 of a k-row block (`ck[r]` or `cv[r]`)
+                    _object_column(t, w, c.address, c.row_stride, k, 0, 0 if slot >= 0 else -1,
+                                   ck, cv, view_ptr, name + " column " + String(dest) + " categories")
+                else:
+                    var cat_kind = cast_in_kind(c.typecode, c.itemsize, "pandas categories")
+                    pd_scatter_numeric(c.address, c.itemsize, c.native, cat_kind, c.row_stride, 0,
+                                       0, 0, k, 1, True, cv, True)
+                    if slot >= 0:
+                        category_keys_from_f32(cv, k, ck)
+                with GILReleased(Python()):
+                    if slot >= 0:
+                        category_keys_from_codes(s.address, s.itemsize, s.row_stride, n_rows, ck, k,
+                                                 kp + slot * n_rows)
+                    else:
+                        category_values_from_codes(s.address, s.itemsize, s.row_stride, n_rows, cv, k,
+                                                   mp + dest * n_rows)
+                _ = cat_keys^
+                _ = cat_values^
+    finally:
+        _ = owned
+        _ = manager
+        _ = blocks
+        _ = X
+    _ = view^
+    _ = slot_of^
+    var block_address = trees_address(matrix)
+    return admitted_words(matrix, block_address, n_rows, n_features, False)
+
+
 def gbdt_category_admit(X: PythonObject, name: String, columns: List[Int], mut keys: List[UInt64],
                         context: PythonObject) raises -> AdmittedX:
     """X of a fit or a predict with categorical columns, column-major.
     `keys` is left empty when X is numbers (the categorical columns are then
     keyed from their Float32 words by `gbdt_category_fit` /
     `gbdt_category_apply`); it holds the categorical cells' keys when X
-    holds text or None there."""
+    holds text or None there, and for every pandas DataFrame or Series."""
     var b = trees_builtins()
     var nk = trees_keys()
     var cls = py_type(X)
@@ -536,6 +850,10 @@ def gbdt_category_admit(X: PythonObject, name: String, columns: List[Int], mut k
         var w = _CellWords()
         if len(X) != 0 and _rows_hold_text(X, columns, w, name):
             return _object_rows(X, name, columns, keys, context)
+    elif native_pandas_exact(X):
+        # a DataFrame or Series: read from its blocks here, whatever they
+        # hold (numbers too: one walk of the frame, written column-major)
+        return _pandas_frame(X, name, columns, keys, context)
     return admit_f32(X, 2, name, context, order="F", finite=False)
 
 

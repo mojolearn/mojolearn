@@ -451,6 +451,104 @@ def category_block_keys(block: CategoryKeyPtr, column: Int) -> CategoryKeyPtr:
     return block + at
 
 
+comptime _CodeI8 = MutPointer[Int8, MutUntrackedOrigin]
+comptime _CodeI16 = MutPointer[Int16, MutUntrackedOrigin]
+comptime _CodeI32 = MutPointer[Int32, MutUntrackedOrigin]
+comptime _CodeI64 = MutPointer[Int64, MutUntrackedOrigin]
+comptime _FlagPtr = MutPointer[UInt8, MutUntrackedOrigin]
+
+
+@always_inline
+def category_code_at(address: Int, itemsize: Int, stride: Int, r: Int) -> Int:
+    """Row `r` of a native-order signed integer codes array (a pandas
+    Categorical's codes: int8, int16, int32 or int64; -1 is missing)."""
+    var at = address + r * stride
+    if itemsize == 1:
+        return Int(_CodeI8(unsafe_from_address=at)[0])
+    if itemsize == 2:
+        return Int(_CodeI16(unsafe_from_address=at)[0])
+    if itemsize == 4:
+        return Int(_CodeI32(unsafe_from_address=at)[0])
+    return Int(_CodeI64(unsafe_from_address=at)[0])
+
+
+def _codes_refusal(flags: List[UInt8], units: Int) raises:
+    var bad = False
+    for u in range(units):  # driver-loop: over the tasks' flags
+        if flags[u] != 0:
+            bad = True
+    if bad:
+        raise Error("mojolearn: a pandas Categorical column holds a code outside its categories;"
+                    + " the column is corrupt")
+
+
+def category_keys_from_codes(
+    codes: Int, itemsize: Int, stride: Int, n: Int, table: CategoryKeyPtr, k: Int, dst: CategoryKeyPtr
+) raises:
+    """`dst[r] = table[code r]` for the `n` codes of a categorical column
+    whose `k` categories are keyed in `table`; code -1 is the missing key.
+    Rows split across the workers; a code outside -1 .. k-1 is refused."""
+    if itemsize != 1 and itemsize != 2 and itemsize != 4 and itemsize != 8:
+        raise Error("mojolearn: a pandas Categorical's codes are not 1, 2, 4 or 8-byte integers")
+    if n <= 0:
+        return
+    var units = max(1, host_predict_task_count_work(n, n * 2))
+    var chunk = host_predict_chunk(n, units)
+    var flags = List[UInt8](length=units, fill=UInt8(0))
+    var fp = _FlagPtr(unsafe_from_address=Int(flags.unsafe_ptr()))
+
+    def gather(unit: Int) {imm chunk, imm n, imm codes, imm itemsize, imm stride, imm table, imm k, imm dst, imm fp}:
+        var bad = False
+        for r in range(unit * chunk, min((unit + 1) * chunk, n)):
+            var code = category_code_at(codes, itemsize, stride, r)
+            if code >= 0 and code < k:
+                dst[r] = table[code]
+            else:
+                dst[r] = CATEGORY_KEY_MISSING
+                if code != -1:
+                    bad = True
+        if bad:
+            fp[unit] = UInt8(1)
+
+    host_parallelize(gather, units)
+    _codes_refusal(flags, units)
+    _ = flags^
+
+
+def category_values_from_codes(
+    codes: Int, itemsize: Int, stride: Int, n: Int, table: CategoryF32Ptr, k: Int, dst: CategoryF32Ptr
+) raises:
+    """`dst[r] = table[code r]` for a categorical column given to a numeric
+    feature (its `k` categories are numbers in `table`); code -1 is NaN.
+    Rows split across the workers; a code outside -1 .. k-1 is refused."""
+    if itemsize != 1 and itemsize != 2 and itemsize != 4 and itemsize != 8:
+        raise Error("mojolearn: a pandas Categorical's codes are not 1, 2, 4 or 8-byte integers")
+    if n <= 0:
+        return
+    var units = max(1, host_predict_task_count_work(n, n * 2))
+    var chunk = host_predict_chunk(n, units)
+    var flags = List[UInt8](length=units, fill=UInt8(0))
+    var fp = _FlagPtr(unsafe_from_address=Int(flags.unsafe_ptr()))
+    var missing = bitcast[DType.float32](UInt32(0x7FC00000))
+
+    def gather(unit: Int) {imm chunk, imm n, imm codes, imm itemsize, imm stride, imm table, imm k, imm dst, imm fp, imm missing}:
+        var bad = False
+        for r in range(unit * chunk, min((unit + 1) * chunk, n)):
+            var code = category_code_at(codes, itemsize, stride, r)
+            if code >= 0 and code < k:
+                dst[r] = table[code]
+            else:
+                dst[r] = missing
+                if code != -1:
+                    bad = True
+        if bad:
+            fp[unit] = UInt8(1)
+
+    host_parallelize(gather, units)
+    _codes_refusal(flags, units)
+    _ = flags^
+
+
 def category_apply_column(
     block: CategoryKeyPtr, column: Int, keys: CategoryKeyPtr, n: Int, dst: CategoryF32Ptr
 ):
