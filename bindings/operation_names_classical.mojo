@@ -26,7 +26,7 @@
 comptime CLASSICAL_OPN_OPERATION_CODES = 0
 comptime CLASSICAL_OPN_RESTORE_NOT_FITTED = 1
 comptime CLASSICAL_OPN_REDUCE_NOT_FITTED = 2
-comptime CLASSICAL_OPN_LINEAR_REGRESSOR_SCORE = 3
+# 3 was "linear_regressor_score" (retired 2026-11-20, lane dw-xlinear: the x_linear door's "regressor_score").
 comptime CLASSICAL_OPN_ARCHIVE_SAVE = 4
 comptime CLASSICAL_OPN_ARCHIVE_NPZ = 5
 comptime CLASSICAL_OPN_HOST_MODEL = 6
@@ -93,8 +93,6 @@ def operation_names_classical(mut names: List[String], mut leaves: List[Int]):
     leaves.append(CLASSICAL_OPN_RESTORE_NOT_FITTED)
     names.append("reduce_not_fitted")
     leaves.append(CLASSICAL_OPN_REDUCE_NOT_FITTED)
-    names.append("linear_regressor_score")
-    leaves.append(CLASSICAL_OPN_LINEAR_REGRESSOR_SCORE)
     names.append("archive_save")
     leaves.append(CLASSICAL_OPN_ARCHIVE_SAVE)
     names.append("archive_npz")

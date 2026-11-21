@@ -41,34 +41,20 @@ differs.
 """
 from core.experiment_guards_series import SERIES_GUARDS_OK
 from std.os import abort
-from std.python import Python, PythonObject
-from std.python._cpython import GILReleased
+from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
 
-from core.hostptr import f32_ptr, i32_ptr
 from checks.kernel_matrix import (
     COLUMN_CPU,
     TARGET_COLUMN,
     column_name,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from arima.host.arima_oracle import (
-    ARIMA_ORACLE_HOST_SABOTAGE,
-    arima_host_fit,
-    arima_host_refuse_unrestated,
-)
-# `arima_predict` and `arima_forecast` live in bindings/arima_host_predict.mojo
-# since 2026-09-15, shared with the inference binding
-# bindings/_mojolearn_forecast_host.mojo; `_order` (the device's own
-# `validate_order(order)`) and `_refuse_shape` are in arima/host/arima_host_entries.mojo.
-from bindings.arima_host_predict_pack import (
-    arima_forecast_binding,
-    arima_predict_binding,
-)
-# The typed fit body (lane thin-trees-metrics, 2026-10-21), moved word for
-# word out of `arima_fit_binding` with `_order` and `_refuse_shape`.
-from arima.host.arima_host_entries import arima_host_fit_into
-from arima.host.mojolearn_arima_host_run import _refuse_method
+from arima.host.arima_oracle import ARIMA_ORACLE_HOST_SABOTAGE
+# The fit, the prediction and the forecast are operations of this image's
+# published table (arima/arima_ops_host.mojo); this root registers only the
+# read-backs the host loader asks for.
+from arima.arima_ops_host import publish_arima_ops_host
 
 
 def arima_host_numeric_mode_binding() raises -> PythonObject:
@@ -124,91 +110,12 @@ def arima_vendor_binding() raises -> PythonObject:
 #: device binding built from the same defines chooses orders on the device.
 # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF, MOJOLEARN_IDN_ARIMA_EVAL_WS_OFF, MOJOLEARN_IDN_ARIMA_LLONLY_OFF, MOJOLEARN_IDN_ARIMA_ORDER_BATCH_OFF, MOJOLEARN_ARIMA_ORDER_BATCH_OFF (owned here) and MOJOLEARN_IDN_ARIMA_ORDER_DEVICE_OFF, MOJOLEARN_IDN_ARIMA_IC_DEVICE_OFF (non-owner sites) old-path terms deleted 2026-11-15 by lane/expdel2-37-series; code recoverable at 6d8c0423cf.
 # Restore: git apply experiments/removed/<DEFINE>.patch (owned) or experiments/removed/<DEFINE>.expdel2-37-series.patch (non-owner); record in docs/TOMBSTONES.md.
-comptime ARIMA_HOST_IC_F32 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-
-
-def arima_order_caps_binding() raises -> PythonObject:
-    """The device binding's `arima_order_caps` for the host column: bit 2
-    (the float32 criterion) only; no grouped search runs here."""
-    var caps = 0
-    comptime if ARIMA_HOST_IC_F32:
-        caps = 4
-    return PythonObject(caps)
-
-
 def arima_numeric_mode_binding() raises -> PythonObject:
     """The build's tier as the `NUMERIC_*` code, which `_arima_impl.py`
     cross-checks against the mode the package asked for."""
     return PythonObject(GLOBAL_NUMERIC_MODE)
 
 
-def arima_fit_binding(
-    y_addr: PythonObject,
-    exog_addr: PythonObject,
-    params_addr: PythonObject,
-    x_addr: PythonObject,
-    x0_addr: PythonObject,
-    stats_addr: PythonObject,
-    flags_addr: PythonObject,
-    params: PythonObject,
-) raises -> PythonObject:
-    """`bindings/_mojolearn_arima.mojo::arima_fit_binding`'s contract on the
-    host: the addresses are (y, exog, params, x, x0, stats, flags), `params`
-    is (batch_size, n_obs, p, d, q, P, D, Q, s, k, n_exog, method,
-    max_iterations); returns `N * batch_size`."""
-    if len(params) != 13 and len(params) != 16:
-        raise Error(
-            "arima_fit: params must contain 13 values (batch_size, n_obs, p,"
-            " d, q, P, D, Q, s, k, n_exog, method, max_iterations), or 16 with"
-            " (ic_addr, pen_aic, pen_bic), got "
-            + String(len(params))
-        )
-    var y_address = Int(py=y_addr)
-    _ = f32_ptr(y_address)
-    var exog_address = Int(py=exog_addr)
-    _ = f32_ptr(exog_address)
-    var pp = f32_ptr(Int(py=params_addr))
-    var xp = f32_ptr(Int(py=x_addr))
-    var x0p = f32_ptr(Int(py=x0_addr))
-    var sp = f32_ptr(Int(py=stats_addr))
-    var fp = i32_ptr(Int(py=flags_addr))
-    var batch_size = Int(py=params[0])
-    var n_obs = Int(py=params[1])
-    var p = Int(py=params[2])
-    var d = Int(py=params[3])
-    var q = Int(py=params[4])
-    var P = Int(py=params[5])
-    var D = Int(py=params[6])
-    var Q = Int(py=params[7])
-    var s = Int(py=params[8])
-    var k = Int(py=params[9])
-    var n_exog = Int(py=params[10])
-    var method = Int(py=params[11])
-    var max_iterations = Int(py=params[12])
-    # lane cpu3-seq (2026-10-04): AIC then BIC, `2 * batch_size` float64 at
-    # `ic_addr`, written by the fit (0 = not asked)
-    var ic_address = 0
-    var pen_aic = Float64(0.0)
-    var pen_bic = Float64(0.0)
-    if len(params) == 16:
-        ic_address = Int(py=params[13])
-        pen_aic = Float64(py=params[14])
-        pen_bic = Float64(py=params[15])
-    var written = 0
-    with GILReleased(Python()):
-        # `arima_fit_ptr_host` (`arima/estimator.mojo:361-369`), in its order.
-        _refuse_method(method)
-        written = arima_host_fit_into(
-            y_address, exog_address, pp, xp, x0p, sp, fp, batch_size, n_obs,
-            p, d, q, P, D, Q, s, k, n_exog, max_iterations, ic_address,
-            pen_aic, pen_bic,
-        )
-    return PythonObject(written)
-
-
-# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_arima_host.mojo
-# (the per-binding build) and in the merged roots tools/merged_bindings.py
-# writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_arima_host() -> PythonObject:
     comptime assert SERIES_GUARDS_OK, "invalid integrated experiment configuration (series guards)"
     try:
@@ -219,10 +126,11 @@ def build__mojolearn_arima_host() -> PythonObject:
         module.def_function[arima_host_sabotage_binding]("arima_host_sabotage")
         module.def_function[arima_vendor_binding]("arima_vendor")
         module.def_function[arima_numeric_mode_binding]("arima_numeric_mode")
-        module.def_function[arima_order_caps_binding]("arima_order_caps")
-        module.def_function[arima_fit_binding]("arima_fit")
-        module.def_function[arima_predict_binding]("arima_predict")
-        module.def_function[arima_forecast_binding]("arima_forecast")
-        return module.finalize()
+        # TOMBSTONE: dead Python exports arima_order_caps, arima_fit, arima_predict, arima_forecast (no product caller: the ARIMA and AutoARIMA owners reach these kernels through the published ARIMA operations table, core/arima_entry_table.mojo; lane dw-forecast-tail) deleted 2026-11-21; code recoverable at d8f4bf534c.
+        # Restore: git apply experiments/removed/dead_entries_arima_calls.patch
+        # The ARIMA operations table of this image (core/arima_entry_table.mojo).
+        var published_module = module.finalize()
+        publish_arima_ops_host()
+        return published_module
     except error:
         abort(String("failed to create _mojolearn_arima_host: ", error))

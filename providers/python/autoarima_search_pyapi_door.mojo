@@ -2,6 +2,7 @@
 # Complete native AutoARIMA search: exact option admission, candidate plan,
 # compiled differencing/fit/search/IC selection, grouping and finished state.
 from std.python import Python, PythonObject
+from std.python._cpython import GILReleased
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
 from bindings.py_typed_call import py_call_typed
@@ -10,8 +11,16 @@ from bindings.classical_pandas_door import classical_admit_value
 from bindings.sequential_admission_door import sequential_integer
 from bindings.sequential_arrays_door import sequential_array
 from bindings.tsa_autoarima_native_door import _new_arima
-from bindings.tsa_arima_native_door import arima_fit, _arima_entries
-from providers.python.autoarima_lifecycle_pyapi_door import _fields, _integer, _integer_object, _number, _packed, _buffer
+from bindings.tsa_arima_native_door import arima_fit_routed
+from bindings.tsa_arima_route_unpack import autoarima_route
+from bindings.tsa_hw_route_unpack import tsa_function_route
+from core.tsa_hw_run import tsa_select_d_run
+from core.arima_run import (
+    arima_fast_search_mode_run, arima_ndiffs_run, arima_order_caps_run, arima_order_search_device_run,
+    arima_order_search_fit_run, arima_order_search_run, arima_route_searches, arima_search_switches_run,
+)
+from core.arima_entry_table import ARIMA_SWITCH_ORDER_BATCH, ARIMA_SWITCH_SEARCH_REUSE
+from providers.python.autoarima_lifecycle_pyapi_door import _fields, _integer, _integer_object, _number, _packed, _buffer, _builtins
 from providers.python.array_metadata_pyapi_door import ArrayPin
 from arima.autoarima_search_run import _penalty
 from providers.python.autoarima_owner_pyapi_unpack import autoarima_commit
@@ -29,9 +38,11 @@ struct _Candidate(Copyable, Movable):
     var seasonal_q: Int
     var period: Int
     var intercept: Int
-    # Keep the already boxed ABI scalar too: the grouped kernel and IC fold
-    # share it, without a Python list lookup or second boxing per candidate.
+    # The boxed scalar the compiled IC fold (a base helper called through
+    # its Python entry) takes, boxed once per candidate; the grouped kernel
+    # reads `penalty_value`.
     var penalty: PythonObject
+    var penalty_value: Float64
 
     def __init__(out self, p: Int, q: Int, seasonal_p: Int, seasonal_q: Int,
                  period: Int, intercept: Int, penalty: Float64) raises:
@@ -42,6 +53,7 @@ struct _Candidate(Copyable, Movable):
         self.period = period
         self.intercept = intercept
         self.penalty = PythonObject(penalty)
+        self.penalty_value = penalty
 
 
 def _array(count: Int, code: Int, context: PythonObject) raises -> PythonObject:
@@ -123,11 +135,6 @@ def _options(name: String, value: PythonObject, low: Int, high: Int, context: Py
     return result^
 
 
-def _optional(entries: PythonObject, name: String) raises -> Int:
-    var value = py_get(entries, name)
-    return 0 if value is None else Int(py=py_call_typed(value))
-
-
 def _string(value: PythonObject, name: String) raises -> String:
     if py_type(value) is not py_type(PythonObject("")):
         raise Error("TypeError: AutoARIMA " + name + " requires an exact native string")
@@ -174,10 +181,17 @@ def autoarima_search(model: PythonObject, args: PythonObject, context: PythonObj
     var n_obs = y.shape[1]
     if _integer(py_item(fields, nk[].k_batch_size), context) != batch or _integer(py_item(fields, nk[].k_n_obs), context) != n_obs:
         raise Error("ValueError: AutoARIMA stored dimensions disagree with endog")
-    var dummy = _new_arima(Python.tuple(1, 0, 0), Python.tuple(0, 0, 0, 0), 1, maxiter, context)
-    var entries = _arima_entries(dummy, _fields(dummy, py_item(context, nk[].k_arima_class)), context)
-    var fast_mode = _optional(entries, "arima_fast_search_mode")
-    var caps = _optional(entries, "arima_order_caps")
+    # The AutoARIMA's one route (its device, the default numeric mode its
+    # per-group models carry) serves the whole search. Its search words are
+    # read once per search: the fast-search arms, the search capabilities
+    # and the two switches an identity trace turns off.
+    var call = autoarima_route(model, fields, context, _builtins())
+    var route = call.route
+    var device = py_get(fields, nk[].k_device)
+    var fast_mode = arima_fast_search_mode_run(route)
+    var caps = arima_order_caps_run(route)
+    var switches = arima_search_switches_run(route)
+    var py = Python()
     var device_ic = (caps & 4) != 0
     var ic_code = 0 if device_ic else 1
     var d32 = _array(batch, 2, context)
@@ -197,16 +211,34 @@ def autoarima_search(model: PythonObject, args: PythonObject, context: PythonObj
             if ds[i] != i:
                 raise Error("NotImplementedError: AutoARIMA: a d option list must be 0, 1, ..., d_max")
         if fast_mode & 32 and seasonal_d == 0:
-            var written = Int(py=py_call_typed(py_item(entries, nk[].k_arima_ndiffs_kpss), y.source.addr, classical_address(d32),
-                                              Python.list(batch, n_obs, ds[len(ds) - 1])))
+            if not arima_route_searches(route):
+                raise Error("AttributeError: the ARIMA binding has no arima_ndiffs_kpss")
+            var y_address = y.source.addr
+            var d32_address = Int(py=classical_address(d32))
+            var d_max = ds[len(ds) - 1]
+            var written = 0
+            try:
+                with GILReleased(py):
+                    written = arima_ndiffs_run(route, y_address, d32_address, batch, n_obs, d_max)
+            finally:
+                _ = d32  # keep the Python object alive through the native call above
+                _ = call.owner  # the route owner pins the image through the call
             if written != batch:
                 raise Error("RuntimeError: AutoARIMA: incomplete ndiffs output")
         else:
-            var tsa = py_item(context, nk[].k_tsa_bindings)[py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)]
-            if py_type(tsa) is py_type(PythonObject("")):
-                raise Error(String(tsa))
-            _ = py_call_typed(py_item(tsa, nk[].k_select_d), y.source.addr, classical_address(d32),
-                              Python.list(batch, n_obs, seasonal_d, period, ds[len(ds) - 1], 0.05))
+            # `select_d` on the stationarity entry of this AutoARIMA's
+            # device (the CPU table for device="cpu" beside a GPU set).
+            var tsa_call = tsa_function_route(context, route.vendor == 0, _builtins())
+            var tsa_route = tsa_call.route
+            var y_address = y.source.addr
+            var d32_address = Int(py=classical_address(d32))
+            var d_max = ds[len(ds) - 1]
+            try:
+                with GILReleased(py):
+                    _ = tsa_select_d_run(tsa_route, y_address, d32_address, batch, n_obs, seasonal_d, period, d_max, 0.05)
+            finally:
+                _ = d32  # keep the Python object alive through the native call above
+                _ = tsa_call.owner  # the route owner pins the image through the call
     var dser = _cast(d32, 2, 3, batch, context)
     var dcounts = _counts(d32, 2, batch, 3, context)
     # These options are invariant across differencing groups. Keep the native
@@ -241,8 +273,10 @@ def autoarima_search(model: PythonObject, args: PythonObject, context: PythonObj
                 ks.append(1)
         var grid = List[_Candidate]()
         var table = Python.list()
-        var packed = Python.list()
-        var pens = Python.list()
+        # The device search's plan words after its seven fixed ones, and one
+        # criterion penalty per order (typed: no Python list per search).
+        var packed = List[Int]()
+        var pens = List[Float64]()
         for p in ps:  # driver-loop: over AR candidate metadata
             for q in qs:  # driver-loop: over MA candidate metadata
                 for P in Ps:  # driver-loop: over seasonal AR candidate metadata
@@ -254,8 +288,12 @@ def autoarima_search(model: PythonObject, args: PythonObject, context: PythonObj
                             var penalty = _penalty(p + q + P + Q + k + 1, criterion, n_obs, d, seasonal_d, s)
                             var candidate = _Candidate(p, q, P, Q, s, k, penalty)
                             _ = py_call(table.append, Python.list(p, d, q, P, seasonal_d, Q, s, k))
-                            _ = py_call(packed.extend, Python.tuple(p, q, P, Q, k))
-                            _ = py_call(pens.append, candidate.penalty)
+                            packed.append(p)
+                            packed.append(q)
+                            packed.append(P)
+                            packed.append(Q)
+                            packed.append(k)
+                            pens.append(penalty)
                             grid.append(candidate^)
         var trials = len(grid)
         if trials == 0:
@@ -268,16 +306,27 @@ def autoarima_search(model: PythonObject, args: PythonObject, context: PythonObj
         # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
         var search_fit = Optional[PythonObject]()
         var chosen = False
-        if n_obs > 2 and _optional(entries, "arima_order_batch_enabled"):
+        if n_obs > 2 and (switches & ARIMA_SWITCH_ORDER_BATCH) != 0 and arima_route_searches(route):
             if caps & 1 and (plain or caps & 2):
                 var best32 = _array(count, 2, context)
                 var out = _array(count if device_ic else trials * count, 0, context)
-                var written = Int(py=py_call_typed(py_item(entries, nk[].k_arima_order_search_device), classical_address(sub),
-                                  classical_address(out), classical_address(best32), packed, pens,
-                                  Python.list(count, n_obs, d, seasonal_d, period, maxiter, 1 if device_ic else 0)))
-                # best32 is only read back on the device-IC route; keep its
-                # owner alive through the native write on every route.
-                _ = best32
+                var plan: List[Int] = [count, n_obs, d, seasonal_d, period, maxiter, 1 if device_ic else 0]
+                for word in packed:  # driver-loop: over the candidate plan words of this group
+                    plan.append(word)
+                var sub_address = Int(py=classical_address(sub))
+                var out_address = Int(py=classical_address(out))
+                var best32_address = Int(py=classical_address(best32))
+                var written = 0
+                try:
+                    with GILReleased(py):
+                        written = arima_order_search_device_run(route, sub_address, out_address, best32_address, plan, pens)
+                finally:
+                    # best32 is only read back on the device-IC route; keep its
+                    # owner alive through the native write on every route.
+                    _ = best32
+                    _ = out
+                    _ = sub
+                    _ = call.owner  # the route owner pins the image through the call
                 var expected = count if device_ic else trials * count
                 if written and written != expected:
                     raise Error("RuntimeError: AutoARIMA: incomplete grouped search output")
@@ -289,26 +338,42 @@ def autoarima_search(model: PythonObject, args: PythonObject, context: PythonObj
                     else:
                         grouped_ll = py_present(out)
             elif plain:
-                var compact = Python.list()
+                var compact: List[Int] = [count, n_obs, d, maxiter]
                 var offsets = Python.list()
                 var off = 0
                 for trial in range(trials):  # driver-loop: over candidate search plan metadata
                     ref order = grid[trial]
-                    _ = py_call(compact.extend, Python.tuple(order.p, order.q, order.intercept))
+                    compact.append(order.p)
+                    compact.append(order.q)
+                    compact.append(order.intercept)
                     _ = py_call(offsets.append, off)
                     off += count * (3 * (order.p + order.q + order.intercept + 1) + 1)
                 grouped_ll = _array(trials * count, 0, context)
                 var written = 0
-                if _optional(entries, "arima_search_reuse_enabled"):
+                var sub_address = Int(py=classical_address(sub))
+                var ll_address = Int(py=classical_address(grouped_ll.value()))
+                if (switches & ARIMA_SWITCH_SEARCH_REUSE) != 0:
                     var fitf = _array(off, 0, context)
                     var fiti = _array(2 * count * trials, 2, context)
-                    written = Int(py=py_call_typed(py_item(entries, nk[].k_arima_order_search_fit), classical_address(sub),
-                                  classical_address(grouped_ll.value()), classical_address(fitf), classical_address(fiti), compact,
-                                  Python.list(count, n_obs, d, maxiter)))
+                    var fitf_address = Int(py=classical_address(fitf))
+                    var fiti_address = Int(py=classical_address(fiti))
+                    try:
+                        with GILReleased(py):
+                            written = arima_order_search_fit_run(route, sub_address, ll_address, fitf_address,
+                                                                 fiti_address, compact)
+                    finally:
+                        _ = fitf
+                        _ = fiti
+                        _ = sub
+                        _ = call.owner  # the route owner pins the image through the call
                     search_fit = Python.tuple(fitf, fiti, offsets, count, grouped_ll.value())
                 else:
-                    written = Int(py=py_call_typed(py_item(entries, nk[].k_arima_order_search), classical_address(sub),
-                                  classical_address(grouped_ll.value()), compact, Python.list(count, n_obs, d, maxiter)))
+                    try:
+                        with GILReleased(py):
+                            written = arima_order_search_run(route, sub_address, ll_address, compact)
+                    finally:
+                        _ = sub
+                        _ = call.owner  # the route owner pins the image through the call
                 if written == 0:
                     grouped_ll = Optional[PythonObject]()
                     search_fit = Optional[PythonObject]()
@@ -330,8 +395,9 @@ def autoarima_search(model: PythonObject, args: PythonObject, context: PythonObj
                 var address = 0
                 if not grouped_ll:
                     var m = _new_arima(Python.tuple(order.p, d, order.q),
-                        Python.tuple(order.seasonal_p, seasonal_d, order.seasonal_q, order.period), order.intercept, maxiter, context)
-                    _ = arima_fit(m, Python.tuple(sub, PythonObject(None)), context)
+                        Python.tuple(order.seasonal_p, seasonal_d, order.seasonal_q, order.period), order.intercept, maxiter,
+                        device, context)
+                    _ = arima_fit_routed(m, Python.tuple(sub, PythonObject(None)), context, call)
                     var state = _fields(m, arima_class)
                     llf = _cast(py_item(state, nk[].k_llf_), 1, 0, count, context)
                     address = Int(py=classical_address(llf))
@@ -382,4 +448,5 @@ def autoarima_search(model: PythonObject, args: PythonObject, context: PythonObj
     autoarima_commit(fields, updates, context)
     _ = y
     _ = y_pin^  # the door's pin held endog through every RUN read
+    _ = call.owner  # the route owner pinned the image through every search call
     return model

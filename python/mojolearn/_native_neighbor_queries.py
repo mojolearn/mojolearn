@@ -62,6 +62,35 @@ def _routes(groups, host_names=None):
     return routes
 
 
+def _connect_devices(groups, routes):
+    """The alias rows of the modules an estimator's device route resolves to.
+
+    A query takes its image from the estimator's binding route (the shared
+    estimator door), then reads its entries from that module's captured export
+    table. The route hands back the module of `family_binding_connections`
+    (this installation's device; on a CPU-only installation the loaded host
+    module, not its facade) or, for `device="cpu"` beside a GPU set, the CPU
+    module of `family_binding_connections_cpu`. Each gets its row here, at
+    import; the CPU module gets its own captured table. Returns the family
+    owners' shared context, under which that route is resolved."""
+    from ._native_family_bridge import shared_context
+    shared = shared_context()
+    connections = shared.get("family_binding_connections", {})
+    cpu = shared.get("family_binding_connections_cpu", {})
+    for group in groups:  # glue: fixed query binding groups, at import
+        name, symbols = _SYMBOLS[group]
+        if name not in connections:
+            raise TypeError(f"neighbor queries: connect_bindings({name!r}) must run before the query connection")
+        for mode, record in connections[name].items():  # glue: the two fixed numeric-mode records of one binding name
+            module, route = record[0], routes[group].get(mode)
+            if type(module) is ModuleType and type(route) is ModuleType and id(module) not in _BINDING_ALIASES:
+                _BINDING_ALIASES[id(module)] = (module, route)
+        module = cpu.get(name, ("",))[0]
+        if type(module) is ModuleType and id(module) not in _BINDING_ALIASES:
+            _capture(module, name, symbols)
+    return shared
+
+
 def connect(classes, context, archive_context, groups):
     from ._native_classical_bridge import _layout
     from .tokenizer import _binding
@@ -70,7 +99,11 @@ def connect(classes, context, archive_context, groups):
     if type(call) is not BuiltinFunctionType or type(attribute) is not BuiltinFunctionType:
         raise TypeError("neighbor queries require compiled public entries")
     private = dict(context)
-    private.update(neighbor_query_classes={}, neighbor_query_routes=_routes(groups),
+    routes = _routes(groups)
+    # The captured tables of this installation's set are reached through the
+    # alias rows only (`_connect_devices`); the door reads no route table.
+    private.update(neighbor_query_classes={},
+                   neighbor_query_family_context=_connect_devices(groups, routes),
                    neighbor_query_binding_aliases=_BINDING_ALIASES, neighbor_query_classifier_classes={},
                    neighbor_query_host_routes={}, classical_public_layouts={}, classical_public_installed=True,
                    host_archive_finalizer_descriptor=archive_context["host_archive_context"].get("host_archive_finalizer_descriptor"))

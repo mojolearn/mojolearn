@@ -149,10 +149,32 @@ def _ann_entry(binding: PythonObject, name: String) raises -> PythonObject:
     return neural_descriptor_entry(binding, name)
 
 
-def _ann_release(fields: PythonObject, release: String) raises:
+def _ann_borrowed(minter: PythonObject, binding: PythonObject, release: String) raises -> Bool:
+    """Whether a resident handle minted by `minter` is BORROWED by the
+    estimator whose device image is `binding`: the two images are different
+    DEVICE columns (one is the CPU host image, the other a GPU image). The
+    estimator that minted the handle is then another estimator, on the other
+    device, that was handed this fitted state in memory
+    (`_check_both.on_device`: `model.check`, `verify --cross-check`) and
+    still owns it. The device column is told by the one entry only a GPU
+    image publishes: `ivf_flat_index_export` for IVF-Flat (its host image
+    keeps its own prepared index, without an export), the release entry
+    itself for the x_ann kinds (their host image keeps no resident index).
+    Two images of ONE device (identical and fast, or a module and its
+    import-time query alias) are never borrowed from each other."""
+    var marker = String("ivf_flat_index_export") if release == "ivf_flat_index_release" else release.copy()
+    return (py_get(py_fields(minter), marker) is None) != (py_get(py_fields(binding), marker) is None)
+
+
+def _ann_release(fields: PythonObject, release: String, binding: PythonObject) raises:
     """`_release_resident`: pop the held `(key, handle, binding)`, if any,
     and release it through the minting binding's `release` entry. Quiet on a
-    binding that cannot be reached any more or a handle already gone."""
+    binding that cannot be reached any more or a handle already gone.
+
+    `binding` is the image of the estimator's own device. A handle the other
+    device's image minted is borrowed (`_ann_borrowed`): this estimator
+    forgets it and builds its own, and never releases it, because its owner
+    still searches through it."""
     var cached = py_call(fields.pop, PythonObject("_resident"), PythonObject(None))
     if cached is None:
         return
@@ -168,6 +190,8 @@ def _ann_release(fields: PythonObject, release: String) raises:
         return
     if py_type(entry) is not py_type(b.len) or py_type(entry.__self__) is not py_type(b):
         raise Error("TypeError: ANN release requires a compiled module entry")
+    if py_type(binding) is py_type(b) and _ann_borrowed(cached[2], binding, release):
+        return
     try:
         _ = py_call(entry, cached[1])
     except:
@@ -252,7 +276,7 @@ def _ivf_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     # prepared registry outside `__dict__`) and what it holds.
     var stamp_mods = NativeModules()
     prepared_drop(stamp_mods, IVF_QUERY_STATE_SLOT, model)
-    _ann_release(fields, "ivf_flat_index_release")
+    _ann_release(fields, "ivf_flat_index_release", binding)
     var x = x_pin.keep
     var n = x_snapshot.shape[0]
     var dim = x_snapshot.shape[1]
@@ -365,7 +389,7 @@ def _pq_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     # `self._NAME`, the class's name in `_p`'s refusals (read off the class).
     var owner = String("IVFPQIndex")
     _ = py_call(fields.pop, PythonObject("_device_codes"), PythonObject(None))
-    _ann_release(fields, "x_ann_index_release")
+    _ann_release(fields, "x_ann_index_release", binding)
     var x = x_pin.keep
     var n = x_snapshot.shape[0]
     var dim = x_snapshot.shape[1]
@@ -475,7 +499,7 @@ def _sq_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     # stamp (and the arrays it retains) now, not at the next search.
     ann_stored_drop(model)
     var owner = String("IVFSQIndex")
-    _ann_release(fields, "x_ann_index_release")
+    _ann_release(fields, "x_ann_index_release", binding)
     var x = x_pin.keep
     var n = x_snapshot.shape[0]
     var dim = x_snapshot.shape[1]
@@ -541,7 +565,7 @@ def _rabitq_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     # stamp (and the arrays it retains) now, not at the next search.
     ann_stored_drop(model)
     var owner = String("IVFRaBitQIndex")
-    _ann_release(fields, "x_ann_index_release")
+    _ann_release(fields, "x_ann_index_release", binding)
     var x = x_pin.keep
     var n = x_snapshot.shape[0]
     var dim = x_snapshot.shape[1]
@@ -604,7 +628,7 @@ def _cagra_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     # stamp (and the arrays it retains) now, not at the next search.
     ann_stored_drop(model)
     var owner = String("CagraIndex")
-    _ann_release(fields, "x_ann_index_release")
+    _ann_release(fields, "x_ann_index_release", binding)
     var x = x_pin.keep
     var n = x_snapshot.shape[0]
     var d = x_snapshot.shape[1]

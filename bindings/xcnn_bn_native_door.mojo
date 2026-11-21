@@ -295,7 +295,7 @@ def _bn_forward_admitted(layer: PythonObject, fields: PythonObject, x: PythonObj
     var nk = xcnn_keys()
     var features = Int(py=py_item(fields, nk[].k_num_features))
     if xcnn_is_t(x, context):
-        var b = xcnn_entries(fields, context)
+        var b = xcnn_entries(layer, fields, context)
         var shape = xcnn_shape(x)
         if xcnn_on_dev(b, x, context) and xcnn_idn(b, XCNN_F_LAYER_IO) and len(shape) >= 2 and xcnn_size(shape) > 0:
             var n = shape[0]
@@ -319,7 +319,7 @@ def _bn_forward_admitted(layer: PythonObject, fields: PythonObject, x: PythonObj
     var c = dims[1]
     var hw = dims[2]
     var x3 = xcnn_reshape(a, [n, c, hw], context)
-    var b = xcnn_entries(fields, context)
+    var b = xcnn_entries(layer, fields, context)
     var y = xcnn_host_f32([n, c, hw], context)
     if xcnn_mixed(b):
         var xh = xcnn_dev_upload(layer, b, "x", x3, context)
@@ -447,7 +447,7 @@ def _bn_backward_admitted(layer: PythonObject, fields: PythonObject, gradient: P
         raise Error("RuntimeError: call forward before backward")
     var shape = _shape_words(py_item(fields, nk[].k__shape), context)
     var saved = _shape_words(py_item(fields, nk[].k__x3shape), context)
-    var entries = xcnn_entries(fields, context)
+    var entries = xcnn_entries(layer, fields, context)
     var owner = py_get(fields, nk[].k__xdev_dev)
     var xh = py_get(fields, nk[].k__xdev)
     var resident_x = xh is not None and owner is not None and py_item(_fields(owner), nk[].k_b) is py_item(entries, nk[].k_module) and xcnn_mixed(entries)

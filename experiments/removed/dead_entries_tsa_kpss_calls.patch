@@ -1,0 +1,324 @@
+diff --git a/bindings/_mojolearn_forecast_host.mojo b/bindings/_mojolearn_forecast_host.mojo
+index 0fcf91b5ac..376cf91176 100644
+--- a/bindings/_mojolearn_forecast_host.mojo
++++ b/bindings/_mojolearn_forecast_host.mojo
+@@ -51,8 +51,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+ from arima.host.arima_oracle import ARIMA_ORACLE_PREDICT_SABOTAGE
+ from arima.arima_ops_forecast_host import publish_arima_ops_forecast_host
+ from core.holtwinters_host_predict_impl import HW_PREDICT_SABOTAGE
+-from core.kpss_host_test_impl import KPSS_DECISION_SABOTAGE
+-from tsa.checks.kpss_oracle import KPSS_ORACLE_HOST_SABOTAGE
++from bindings.kpss_host_test_unpack import KPSS_DECISION_SABOTAGE, KPSS_ORACLE_HOST_SABOTAGE, kpss_test_binding, select_d_host_binding
+ from tsa.tsa_ops_forecast_host import publish_tsa_hw_ops_forecast_host
+ 
+ 
+@@ -127,8 +126,8 @@ def build__mojolearn_forecast_host() -> PythonObject:
+         # 2026-09-16). It trains no model, so it belongs on the shipped side;
+         # the `_mojolearn_tsa` route reaches it here when the reference
+         # binding, which holds holtwinters_fit, is not built.
+-        # TOMBSTONE: dead Python exports kpss_test, select_d (no product caller: the stationarity functions and AutoARIMA's search reach these kernels through the published tsa operations table, core/tsa_entry_table.mojo TSA_OP_KPSS_TEST / TSA_OP_SELECT_D; lane dw-forecast-tail) deleted 2026-11-21; code recoverable at 038b12431e.
+-        # Restore: git apply experiments/removed/dead_entries_tsa_kpss_calls.patch
++        module.def_function[kpss_test_binding]("kpss_test")
++        module.def_function[select_d_host_binding]("select_d")
+         # The Holt-Winters operations table of this inference image
+         # (core/tsa_entry_table.mojo, family TSA_TABLE_FORECAST): the explicit
+         # host class's route resolves it once per estimator.
+diff --git a/bindings/_mojolearn_tsa.mojo b/bindings/_mojolearn_tsa.mojo
+index 1c469b9d19..2047d8d968 100644
+--- a/bindings/_mojolearn_tsa.mojo
++++ b/bindings/_mojolearn_tsa.mojo
+@@ -43,14 +43,17 @@ THE GIL is released around every device call.
+ 
+ # DEVIATION 2486: shared byte-preserving host copies.
+ from core.experiment_guards_series import SERIES_GUARDS_OK
++from tsa.mojolearn_tsa_run import _f32_ptr, _i32_ptr
+ from std.os import abort
+-from std.python import PythonObject
++from std.python import Python, PythonObject
++from std.python._cpython import GILReleased
+ from std.python.bindings import PythonModuleBuilder
+ 
+ from checks.vendor import COMPILED_VENDOR
+ from checks.numerics import GLOBAL_NUMERIC_MODE
+ 
+ from holtwinters.resident_state import holtwinters_resident_count
++from tsa.estimator import kpss_test_host, select_d_host
+ from tsa.tsa_ops_device import publish_tsa_hw_ops_device
+ 
+ 
+@@ -59,6 +62,95 @@ def holtwinters_resident_count_binding() raises -> PythonObject:
+     return PythonObject(holtwinters_resident_count())
+ 
+ 
++def kpss_test_binding(
++    y_addr: PythonObject,
++    flags_addr: PythonObject,
++    stat_addr: PythonObject,
++    params: PythonObject,
++) raises -> PythonObject:
++    """`cuml.tsa.stationarity.kpss_test(y, d, D, s, pval_threshold)` (tsa/,
++    DEVIATIONS 671-672). Returns `batch_size`.
++
++    `params` is, in this exact order (mirrored in
++    `python/mojolearn/_tsa_impl.py`):
++
++        0  batch_size
++        1  n_obs
++        2  d               order of simple differencing
++        3  D               order of seasonal differencing
++        4  s               seasonal period
++        5  pval_threshold  (float)
++
++    `y_addr` reads `batch_size * n_obs` float32 with each SERIES
++    CONTIGUOUS: series `b` occupies `[b * n_obs, (b + 1) * n_obs)`. cuML's
++    `y` is `(n_obs, batch_size)` in Fortran order, which is the same flat
++    bytes; the Python wrapper does that transpose and names its cost.
++
++    `flags_addr` is written with `batch_size` int32 (1 stationary, 0 not),
++    which is cuML's return value. `stat_addr` is written with `batch_size`
++    float32 KPSS statistics, which is OURS: cuML returns the flags only.
++    """
++    if len(params) != 6:
++        raise Error(
++            "kpss_test: params must contain 6 values (batch_size, n_obs, d,"
++            " D, s, pval_threshold), got " + String(len(params))
++        )
++    var yp = _f32_ptr(Int(py=y_addr))
++    var fp = _i32_ptr(Int(py=flags_addr))
++    var sp = _f32_ptr(Int(py=stat_addr))
++    var batch_size = Int(py=params[0])
++    var n_obs = Int(py=params[1])
++    var d = Int(py=params[2])
++    var D = Int(py=params[3])
++    var s = Int(py=params[4])
++    var pval = Float32(Float64(py=params[5]))
++    var count = 0
++    with GILReleased(Python()):
++        count = kpss_test_host(yp, fp, sp, batch_size, n_obs, d, D, s, pval)
++    return PythonObject(count)
++
++
++def select_d_binding(
++    y_addr: PythonObject,
++    d_addr: PythonObject,
++    params: PythonObject,
++) raises -> PythonObject:
++    """auto_arima's "Choose the hyper-parameter d" block (tsa/). Returns
++    `batch_size`.
++
++    `params` is, in this exact order (mirrored in
++    `python/mojolearn/_tsa_impl.py`):
++
++        0  batch_size
++        1  n_obs
++        2  D               order of seasonal differencing, GIVEN not chosen
++        3  s               seasonal period
++        4  d_max           their d_options is range(0, 2 - D + 1)
++        5  pval_threshold  (float)
++
++    `y_addr` reads `batch_size * n_obs` float32 with each SERIES
++    CONTIGUOUS, the same layout `kpss_test` takes. `d_addr` is written
++    with `batch_size` int32.
++    """
++    if len(params) != 6:
++        raise Error(
++            "select_d: params must contain 6 values (batch_size, n_obs, D, s,"
++            " d_max, pval_threshold), got " + String(len(params))
++        )
++    var yp = _f32_ptr(Int(py=y_addr))
++    var dp = _i32_ptr(Int(py=d_addr))
++    var batch_size = Int(py=params[0])
++    var n_obs = Int(py=params[1])
++    var D = Int(py=params[2])
++    var s = Int(py=params[3])
++    var d_max = Int(py=params[4])
++    var pval = Float32(Float64(py=params[5]))
++    var count = 0
++    with GILReleased(Python()):
++        count = select_d_host(yp, dp, batch_size, n_obs, D, s, d_max, pval)
++    return PythonObject(count)
++
++
+ def tsa_numeric_mode_binding() raises -> PythonObject:
+     """THE BUILD'S TIER, as the `NUMERIC_*` code itself: 0 FAST, 1
+     IDENTICAL; the same read-back as `svm_numeric_mode`.
+@@ -95,8 +187,8 @@ def build__mojolearn_tsa() -> PythonObject:
+         m.def_function[holtwinters_resident_count_binding]("holtwinters_resident_count")
+         # TOMBSTONE: dead Python exports holtwinters_resident_prepare, holtwinters_resident_release, holtwinters_query_resident (no caller: the ExponentialSmoothing owner reaches the resident operations through the published Holt-Winters operations table, core/tsa_entry_table.mojo; lane dw-forecast-tail) deleted 2026-11-20; code recoverable at 3b1a75cca0.
+         # Restore: git apply experiments/removed/dead_entries_tsa_hw_resident.patch
+-        # TOMBSTONE: dead Python exports kpss_test, select_d (no product caller: the stationarity functions and AutoARIMA's search reach these kernels through the published tsa operations table, core/tsa_entry_table.mojo TSA_OP_KPSS_TEST / TSA_OP_SELECT_D; lane dw-forecast-tail) deleted 2026-11-21; code recoverable at 038b12431e.
+-        # Restore: git apply experiments/removed/dead_entries_tsa_kpss_calls.patch
++        m.def_function[kpss_test_binding]("kpss_test")
++        m.def_function[select_d_binding]("select_d")
+         # The Holt-Winters operations table (core/tsa_entry_table.mojo): the
+         # ExponentialSmoothing owner resolves it once per estimator and calls
+         # through it; published once the module is ready.
+diff --git a/bindings/_mojolearn_tsa_host.mojo b/bindings/_mojolearn_tsa_host.mojo
+index 7c6b1a491b..b8459be5a6 100644
+--- a/bindings/_mojolearn_tsa_host.mojo
++++ b/bindings/_mojolearn_tsa_host.mojo
+@@ -62,7 +62,7 @@ from holtwinters.impl.runner import (
+     holtwinters_validate_params,
+ )
+ from holtwinters.impl.tsa.holtwinters_params import seasonal_from_name
+-from core.kpss_host_test_impl import KPSS_DECISION_SABOTAGE
++from bindings.kpss_host_test_unpack import KPSS_DECISION_SABOTAGE, kpss_test_binding, select_d_host_binding
+ from tsa.checks.kpss_oracle import KPSS_ORACLE_HOST_SABOTAGE
+ from tsa.tsa_ops_host import publish_tsa_hw_ops_host
+ 
+@@ -120,8 +120,8 @@ def build__mojolearn_tsa_host() -> PythonObject:
+         # Restore: git apply experiments/removed/dead_entries_host_aliases.patch
+         # TOMBSTONE: dead Python exports holtwinters_fit, holtwinters_forecast, holtwinters_predict (no product caller: the ExponentialSmoothing owner reaches these kernels through the published Holt-Winters operations table, core/tsa_entry_table.mojo; lane dw-forecast-tail) deleted 2026-11-21; code recoverable at 8e1fedd052.
+         # Restore: git apply experiments/removed/dead_entries_tsa_hw_calls.patch
+-        # TOMBSTONE: dead Python exports kpss_test, select_d (no product caller: the stationarity functions and AutoARIMA's search reach these kernels through the published tsa operations table, core/tsa_entry_table.mojo TSA_OP_KPSS_TEST / TSA_OP_SELECT_D; lane dw-forecast-tail) deleted 2026-11-21; code recoverable at 038b12431e.
+-        # Restore: git apply experiments/removed/dead_entries_tsa_kpss_calls.patch
++        module.def_function[kpss_test_binding]("kpss_test")
++        module.def_function[select_d_host_binding]("select_d")
+         # The Holt-Winters operations table (core/tsa_entry_table.mojo): the
+         # ExponentialSmoothing owner resolves it once per estimator and calls
+         # through it; published once the module is ready.
+diff --git a/bindings/kpss_host_test_unpack.mojo b/bindings/kpss_host_test_unpack.mojo
+new file mode 100644
+index 0000000000..bfe8b1cf7d
+--- /dev/null
++++ b/bindings/kpss_host_test_unpack.mojo
+@@ -0,0 +1,139 @@
++# SPDX-License-Identifier: Apache-2.0
++# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
++"""The KPSS stationarity test on the host, shared by two bindings
++(lane/expose-inference-surface, 2026-09-16).
++
++`bindings/_mojolearn_tsa_host.mojo` (the internal reference binding, the
++Holt-Winters fit included) and `bindings/_mojolearn_forecast_host.mojo` (the
++inference binding the wheels ship, no fit) both register `kpss_test` from
++here, so the two binaries answer through the same source. Not a binding
++itself: it registers nothing, and the host surface tests glob only
++`_mojolearn_*_host.mojo`.
++
++WHY IT SHIPS. `kpss_test` does not train a model. It computes a statistic
++from the caller's own series and returns a flag and a value, so the
++saved-model inference boundary (public CPU inference, CPU training internal)
++never had a side for it to fall on, and it sat unreachable on a CPU-only
++install because the family that carried it, `tsa`, holds `holtwinters_fit`
++and so stays a source reference build. Registering it here puts the test on
++the shipped side without shipping any fit: the `_mojolearn_tsa` route already
++falls back to `_mojolearn_forecast_host` when the reference binding is not
++built (`host_surface.inference_routes()`), so `python/mojolearn/_tsa_impl.py`
++reaches this entry unchanged.
++
++The arithmetic is `tsa/checks/kpss_oracle.mojo::kpss_host_f32`, the serial
++Float32 replay, unchanged by this move.
++
++THE SABOTAGE ARM is that oracle's own `KPSS_ORACLE_HOST_SABOTAGE`, raised by
++`-D MOJOLEARN_HOST_SABOTAGE=1` (the host builds' negative control). It is
++re-exported here so both bindings' `*_host_sabotage` read-backs report it and
++a sabotage build is refused outside the gate.
++"""
++from std.python import Python, PythonObject
++from bindings.native_loaded_module_door import native_loaded_module
++from bindings.py_balanced import py_call as _balanced_call, py_type as _balanced_type
++from std.python._cpython import GILReleased
++
++from core.hostptr import f32_ptr, i32_ptr
++from tsa.checks.kpss_oracle import KPSS_ORACLE_HOST_SABOTAGE, kpss_host_f32
++from core.kpss_host_test_impl import KPSS_DECISION_SABOTAGE, _kpss_flags_host, kpss_select_d_host
++
++
++def _kpss_index(value: PythonObject) raises -> Int:
++    # An exact int is its own index: no class-name string, module lookup or
++    # Python call per scalar argument (bool and int subclasses take the
++    # checked route below, as before).
++    if _balanced_type(value) is _balanced_type(PythonObject(0)):
++        return Int(py=value)
++    var type_name = String(py=value.__class__.__name__)
++    if type_name == "bool" or type_name == "bool_":
++        raise Error("kpss host: integers expected, not booleans")
++    var operator_module = native_loaded_module("operator")
++    # operator.index through the balanced call: PythonObject.__call__ keeps one
++    # reference on each argument (bindings/py_balanced.mojo), which leaked every
++    # buffer address passed to a host entry.
++    return Int(py=_balanced_call(operator_module.index, value))
++
++
++def kpss_test_binding(
++    y_addr: PythonObject,
++    flags_addr: PythonObject,
++    stat_addr: PythonObject,
++    params: PythonObject,
++) raises -> PythonObject:
++    """`kpss_test` on the host by `kpss_host_f32`. Returns `batch_size`.
++
++    `params` is, in this exact order (the GPU binding's, mirrored in
++    `python/mojolearn/_tsa_impl.py`):
++
++        0  batch_size
++        1  n_obs
++        2  d               order of simple differencing
++        3  D               order of seasonal differencing
++        4  s               seasonal period
++        5  pval_threshold  (float)
++
++    `y_addr` reads `batch_size * n_obs` float32, each series contiguous.
++    `flags_addr` is written with `batch_size` int32 (1 stationary, 0 not),
++    `stat_addr` with `batch_size` float32 statistics."""
++    if len(params) != 6:
++        raise Error(
++            "kpss_test: params must contain 6 values (batch_size, n_obs, d,"
++            " D, s, pval_threshold), got " + String(len(params))
++        )
++    var y_address = _kpss_index(y_addr)
++    var fp = i32_ptr(_kpss_index(flags_addr))
++    var sp = f32_ptr(_kpss_index(stat_addr))
++    var batch_size = _kpss_index(params[0])
++    var n_obs = _kpss_index(params[1])
++    var d = _kpss_index(params[2])
++    var D = _kpss_index(params[3])
++    var s = _kpss_index(params[4])
++    var pval = Float32(Float64(py=params[5]))
++    with GILReleased(Python()):
++        _kpss_flags_host(y_address, batch_size, n_obs, d, D, s, pval, fp, sp)
++    return PythonObject(batch_size)
++
++
++def select_d_host_binding(
++    y_addr: PythonObject,
++    d_addr: PythonObject,
++    params: PythonObject,
++) raises -> PythonObject:
++    """auto_arima's "Choose the hyper-parameter d" on the host (lane
++    py-runtime-b; it was a Python loop over `kpss_test`'s flags in
++    `_tsa_impl.select_d`): d = the first order in 0 .. d_max - 1 whose KPSS
++    test (`_kpss_flags_host`, the words `kpss_test` writes) judges the series
++    stationary, else d_max. Orders stop once every series is decided, as the
++    Python loop did, so a later order's refusal is raised only when it is
++    reached. The same params and layout as the GPU binding's `select_d`:
++
++        0  batch_size
++        1  n_obs
++        2  D               order of seasonal differencing, GIVEN not chosen
++        3  s               seasonal period
++        4  d_max           0 <= d_max <= 2 - D
++        5  pval_threshold  (float)
++
++    `d_addr` is written with `batch_size` int32. Returns `batch_size`."""
++    if len(params) != 6:
++        raise Error(
++            "select_d: params must contain 6 values (batch_size, n_obs, D, s,"
++            " d_max, pval_threshold), got " + String(len(params))
++        )
++    var y_address = _kpss_index(y_addr)
++    var dp = i32_ptr(_kpss_index(d_addr))
++    var batch_size = _kpss_index(params[0])
++    var n_obs = _kpss_index(params[1])
++    var D = _kpss_index(params[2])
++    var s = _kpss_index(params[3])
++    var d_max = _kpss_index(params[4])
++    var pval = Float32(Float64(py=params[5]))
++    if d_max < 0 or d_max + D > 2:
++        raise Error(
++            "select_d: d_max must satisfy 0 <= d_max <= 2 - D (d_max=" + String(d_max)
++            + ", D=" + String(D) + "), refused by name"
++        )
++    with GILReleased(Python()):
++        kpss_select_d_host(y_address, batch_size, n_obs, D, s, d_max, pval, dp)
++    return PythonObject(batch_size)

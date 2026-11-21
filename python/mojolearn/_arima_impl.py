@@ -459,9 +459,12 @@ class ARIMA(NumericModeMixin):
         verbose=False,
         output_type=None,
         numeric_mode=None,
+        device=None,
     ):
+        # `device`: None (this installation's device), "gpu" or "cpu"; checked
+        # by the native constructor, read once into the estimator's route.
         return _TSA(self, "arima_initialize", (order, seasonal_order, trend, method, maxiter, verbose, output_type,
-                                               numeric_mode), _TSA_CONTEXT)
+                                               numeric_mode, device), _TSA_CONTEXT)
 
     # -- the binding, and the tier it really is -----------------------------
 

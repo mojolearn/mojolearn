@@ -462,7 +462,7 @@ def _bias_rows(bias: PythonObject, rows: Int, cols: Int, context: PythonObject) 
 def _linear_forward(lin: PythonObject, x: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_Linear.forward(x)`."""
     var fields = _linear_fields(lin, context)
-    var entries = xcnn_entries(fields, context)
+    var entries = xcnn_entries(lin, fields, context)
     var fx = _snapshot(x, "x", context)
     var shape = xcnn_shape(fx)
     var nk = xcnn_keys()
@@ -493,7 +493,7 @@ def _relu_forward(relu: PythonObject, x: PythonObject, context: PythonObject) ra
     if py_type(relu) is not py_item(context, nk[].k_xcnn_relu_class):
         raise Error("TypeError: graph projection requires a native ReLU layer")
     var fields = _fields(relu)
-    var entries = xcnn_entries(fields, context)
+    var entries = xcnn_entries(relu, fields, context)
     var fx = _snapshot(x, "x", context)
     var out = xcnn_host_f32(xcnn_shape(fx), context)
     var a_x = xcnn_ptr(fx)
@@ -704,7 +704,7 @@ def _gcn_forward_dev(layer: PythonObject, fields: PythonObject, entries: PythonO
 
 def xcnn_gcn_forward(layer: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = _graph_layer_fields(layer, context)
-    var entries = xcnn_entries(fields, context)
+    var entries = xcnn_entries(layer, fields, context)
     var x = args[0]
     var edge_index = _edge_view(args[1], context)
     var edge_weight = PythonObject(None) if args[2] is None else _snapshot(args[2], "edge_weight", context)
@@ -864,7 +864,7 @@ def _sage_forward_dev(layer: PythonObject, fields: PythonObject, entries: Python
 
 def xcnn_sage_forward(layer: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = _graph_layer_fields(layer, context)
-    var entries = xcnn_entries(fields, context)
+    var entries = xcnn_entries(layer, fields, context)
     var x = args[0]
     var edge_index = _edge_view(args[1], context)
     if xcnn_is_t(x, context):
@@ -1021,7 +1021,7 @@ def _linear_backward(lin: PythonObject, gradient: PythonObject, context: PythonO
     var dx = xcnn_host_f32(shape, context)
     var dw = xcnn_host_f32([f, d], context)
     var db = xcnn_host_f32([f], context)
-    var entries = xcnn_entries(fields, context)
+    var entries = xcnn_entries(lin, fields, context)
     var a_x = xcnn_ptr(x)
     var a_w = xcnn_ptr(w)
     var a_g = xcnn_ptr(g)
@@ -1207,7 +1207,7 @@ def _gcn_backward_dev(layer: PythonObject, fields: PythonObject, entries: Python
 
 def _gcn_backward(layer: PythonObject, gradient: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = _graph_layer_fields(layer, context)
-    var entries = xcnn_entries(fields, context)
+    var entries = xcnn_entries(layer, fields, context)
     var g = _graph_gradient(layer, gradient, context)
     if xcnn_is_t(g, context):
         if _resident_saved(fields, entries, context) and xcnn_on_dev(entries, g, context):
@@ -1358,7 +1358,7 @@ def _sage_backward_dev(layer: PythonObject, fields: PythonObject, entries: Pytho
 
 def _sage_backward(layer: PythonObject, gradient: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = _graph_layer_fields(layer, context)
-    var entries = xcnn_entries(fields, context)
+    var entries = xcnn_entries(layer, fields, context)
     var g = _graph_gradient(layer, gradient, context)
     if xcnn_is_t(g, context):
         if _resident_saved(fields, entries, context) and xcnn_on_dev(entries, g, context):

@@ -19,8 +19,10 @@ from bindings.causal_model_config_door import model_dict, model_plain, model_str
 from providers.python.borrowed_buffer_pyapi_unpack import AdmittedBorrowedBuffer, admit_native_buffer_exporter
 from core.borrowed_buffer import BorrowedBufferLayout
 from core.generation_metadata import GenerationLayerWords
-from core.entry_table import EntryRef
 from core.causal_lm_entry_table import CausalEntryKey, causal_ref, CAUSAL_TABLE_BLOCK, CAUSAL_TABLE_MAMBA
+from core.causal_layer_run import (
+    CausalLayerRoute, causal_layer_kind, CAUSAL_LAYER_TRANSFORMER, CAUSAL_LAYER_MAMBA1,
+)
 
 
 comptime _GENERATION_STATE_SLOT = "generation_state_class_fields_v1"
@@ -315,17 +317,14 @@ struct GenerationOperationSnapshot(Copyable, Movable):
     var embedding: GenerationWeightSnapshot
     var head: GenerationHeadSnapshot
     var layers: List[GenerationLayerSnapshot]
-    # The layers' CausalLM table entry (block for a CPU Transformer, mamba
-    # state for Mamba), resolved once per snapshot (a generation session
-    # holds it across every step); None where the layer run calls no table
-    # entry (a device Transformer). round2-fixes-2: the layer run read the
-    # entry key and resolved the table per layer per step (perf audit 3).
-    var layer_entry: Optional[EntryRef]
-    # The vendor word of `layer_entry`'s key (0 = the host image), read with
-    # it in `bind_layer_entry`; -1 until bound. A Mamba layer run decides its
-    # unfilled device outputs from it (hot-path audit 2026-11-13: the layer
-    # run read `entry_vendor` from the entry dict per layer per call).
-    var layer_vendor: Int
+    # The layers' route words and CausalLM table entry (block for a host
+    # Transformer, Mamba state for Mamba; none for a device Transformer),
+    # resolved once per snapshot in `bind_layer_entry` (a generation session
+    # holds it across every step); unbound until then. Lane dw-neural-models
+    # (2026-11-21): it replaces `layer_entry` / `layer_vendor` and carries
+    # the words the layer run read from the entry dictionary per layer per
+    # call (`cpu`, `block_session`, `mamba1_profile`).
+    var layer_route: CausalLayerRoute
 
     def __init__(out self, model: PythonObject, entries: PythonObject, blocks: List[PythonObject]) raises:
         self.model = model
@@ -342,21 +341,39 @@ struct GenerationOperationSnapshot(Copyable, Movable):
         self.layers = List[GenerationLayerSnapshot]()
         for i in range(len(blocks)):  # driver-loop: capture stable layer metadata once per operation
             self.layers.append(GenerationLayerSnapshot(blocks[i], self.kind, self.planes))
-        self.layer_entry = None
-        self.layer_vendor = -1
+        self.layer_route = CausalLayerRoute()
 
     def bind_layer_entry(mut self) raises:
-        """Resolve `layer_entry` once, for a snapshot that runs its layers
-        (bindings/causal_lm_public.mojo `_run_snapshot`); the engine
+        """Resolve `layer_route` once, for a snapshot that runs its layers
+        (bindings/causal_lm_public_door.mojo `_run_snapshot`); the engine
         admission never runs them and never resolves it."""
-        if self.kind != "transformer":
-            var key = CausalEntryKey(Int(py=self.entries["entry_mode"]), Int(py=self.entries["entry_vendor"]))
-            self.layer_vendor = key.vendor
-            self.layer_entry = causal_ref[CAUSAL_TABLE_MAMBA](key)
-        elif Bool(py=self.entries["cpu"]):
-            var key = CausalEntryKey(Int(py=self.entries["entry_mode"]), Int(py=self.entries["entry_vendor"]))
-            self.layer_vendor = key.vendor
-            self.layer_entry = causal_ref[CAUSAL_TABLE_BLOCK](key)
+        self.layer_route = causal_layer_route(self.kind, self.entries)
+
+
+def causal_layer_route(kind: String, entries: PythonObject) raises -> CausalLayerRoute:
+    """UNPACK of a layer's route: the words of an admitted entry dictionary
+    (`causal_lm_admit_binding`) a layer run needs, read once by the owner of
+    a block plan or a model snapshot. Reads only what the kind uses, as the
+    layer run did per call: `cpu` and (device) `block_session` for a
+    Transformer, the (tier, vendor) key for a host Transformer and for Mamba,
+    `mamba1_profile` for Mamba-1."""
+    var route = CausalLayerRoute()
+    route.kind = causal_layer_kind(kind)
+    if route.kind == CAUSAL_LAYER_TRANSFORMER:
+        route.cpu = Bool(py=entries["cpu"])
+        if route.cpu:
+            route.entry = causal_ref[CAUSAL_TABLE_BLOCK](
+                CausalEntryKey(Int(py=entries["entry_mode"]), Int(py=entries["entry_vendor"])))
+        else:
+            route.block_session = py_contains(entries, "block_session")
+    else:
+        var key = CausalEntryKey(Int(py=entries["entry_mode"]), Int(py=entries["entry_vendor"]))
+        route.device_mamba = key.vendor != 0
+        route.entry = causal_ref[CAUSAL_TABLE_MAMBA](key)
+        if route.kind == CAUSAL_LAYER_MAMBA1:
+            route.mamba1_profile = Int(py=entries["mamba1_profile"])
+    route.bound = True
+    return route^
 
 
 # This admission is an operation-state consumer of the common descriptor and

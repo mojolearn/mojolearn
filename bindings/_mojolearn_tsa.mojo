@@ -43,112 +43,20 @@ THE GIL is released around every device call.
 
 # DEVIATION 2486: shared byte-preserving host copies.
 from core.experiment_guards_series import SERIES_GUARDS_OK
-from tsa.mojolearn_tsa_run import _f32_ptr, _i32_ptr
 from std.os import abort
-from std.python import Python, PythonObject
-from std.python._cpython import GILReleased
+from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
 
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
 
 from holtwinters.resident_state import holtwinters_resident_count
-from tsa.estimator import kpss_test_host, select_d_host
 from tsa.tsa_ops_device import publish_tsa_hw_ops_device
 
 
 def holtwinters_resident_count_binding() raises -> PythonObject:
     """Live resident component sets (the tools/ lifetime check reads it)."""
     return PythonObject(holtwinters_resident_count())
-
-
-def kpss_test_binding(
-    y_addr: PythonObject,
-    flags_addr: PythonObject,
-    stat_addr: PythonObject,
-    params: PythonObject,
-) raises -> PythonObject:
-    """`cuml.tsa.stationarity.kpss_test(y, d, D, s, pval_threshold)` (tsa/,
-    DEVIATIONS 671-672). Returns `batch_size`.
-
-    `params` is, in this exact order (mirrored in
-    `python/mojolearn/_tsa_impl.py`):
-
-        0  batch_size
-        1  n_obs
-        2  d               order of simple differencing
-        3  D               order of seasonal differencing
-        4  s               seasonal period
-        5  pval_threshold  (float)
-
-    `y_addr` reads `batch_size * n_obs` float32 with each SERIES
-    CONTIGUOUS: series `b` occupies `[b * n_obs, (b + 1) * n_obs)`. cuML's
-    `y` is `(n_obs, batch_size)` in Fortran order, which is the same flat
-    bytes; the Python wrapper does that transpose and names its cost.
-
-    `flags_addr` is written with `batch_size` int32 (1 stationary, 0 not),
-    which is cuML's return value. `stat_addr` is written with `batch_size`
-    float32 KPSS statistics, which is OURS: cuML returns the flags only.
-    """
-    if len(params) != 6:
-        raise Error(
-            "kpss_test: params must contain 6 values (batch_size, n_obs, d,"
-            " D, s, pval_threshold), got " + String(len(params))
-        )
-    var yp = _f32_ptr(Int(py=y_addr))
-    var fp = _i32_ptr(Int(py=flags_addr))
-    var sp = _f32_ptr(Int(py=stat_addr))
-    var batch_size = Int(py=params[0])
-    var n_obs = Int(py=params[1])
-    var d = Int(py=params[2])
-    var D = Int(py=params[3])
-    var s = Int(py=params[4])
-    var pval = Float32(Float64(py=params[5]))
-    var count = 0
-    with GILReleased(Python()):
-        count = kpss_test_host(yp, fp, sp, batch_size, n_obs, d, D, s, pval)
-    return PythonObject(count)
-
-
-def select_d_binding(
-    y_addr: PythonObject,
-    d_addr: PythonObject,
-    params: PythonObject,
-) raises -> PythonObject:
-    """auto_arima's "Choose the hyper-parameter d" block (tsa/). Returns
-    `batch_size`.
-
-    `params` is, in this exact order (mirrored in
-    `python/mojolearn/_tsa_impl.py`):
-
-        0  batch_size
-        1  n_obs
-        2  D               order of seasonal differencing, GIVEN not chosen
-        3  s               seasonal period
-        4  d_max           their d_options is range(0, 2 - D + 1)
-        5  pval_threshold  (float)
-
-    `y_addr` reads `batch_size * n_obs` float32 with each SERIES
-    CONTIGUOUS, the same layout `kpss_test` takes. `d_addr` is written
-    with `batch_size` int32.
-    """
-    if len(params) != 6:
-        raise Error(
-            "select_d: params must contain 6 values (batch_size, n_obs, D, s,"
-            " d_max, pval_threshold), got " + String(len(params))
-        )
-    var yp = _f32_ptr(Int(py=y_addr))
-    var dp = _i32_ptr(Int(py=d_addr))
-    var batch_size = Int(py=params[0])
-    var n_obs = Int(py=params[1])
-    var D = Int(py=params[2])
-    var s = Int(py=params[3])
-    var d_max = Int(py=params[4])
-    var pval = Float32(Float64(py=params[5]))
-    var count = 0
-    with GILReleased(Python()):
-        count = select_d_host(yp, dp, batch_size, n_obs, D, s, d_max, pval)
-    return PythonObject(count)
 
 
 def tsa_numeric_mode_binding() raises -> PythonObject:
@@ -187,8 +95,8 @@ def build__mojolearn_tsa() -> PythonObject:
         m.def_function[holtwinters_resident_count_binding]("holtwinters_resident_count")
         # TOMBSTONE: dead Python exports holtwinters_resident_prepare, holtwinters_resident_release, holtwinters_query_resident (no caller: the ExponentialSmoothing owner reaches the resident operations through the published Holt-Winters operations table, core/tsa_entry_table.mojo; lane dw-forecast-tail) deleted 2026-11-20; code recoverable at 3b1a75cca0.
         # Restore: git apply experiments/removed/dead_entries_tsa_hw_resident.patch
-        m.def_function[kpss_test_binding]("kpss_test")
-        m.def_function[select_d_binding]("select_d")
+        # TOMBSTONE: dead Python exports kpss_test, select_d (no product caller: the stationarity functions and AutoARIMA's search reach these kernels through the published tsa operations table, core/tsa_entry_table.mojo TSA_OP_KPSS_TEST / TSA_OP_SELECT_D; lane dw-forecast-tail) deleted 2026-11-21; code recoverable at 038b12431e.
+        # Restore: git apply experiments/removed/dead_entries_tsa_kpss_calls.patch
         # The Holt-Winters operations table (core/tsa_entry_table.mojo): the
         # ExponentialSmoothing owner resolves it once per estimator and calls
         # through it; published once the module is ready.

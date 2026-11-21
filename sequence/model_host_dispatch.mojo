@@ -9,6 +9,8 @@ from core.native_descriptor_call import native_descriptor_report, native_descrip
 from autograd.model_descriptor import MODEL_ABI_NAME, MODEL_FIT_LABELS, NativeModelRequest, model_request_execute
 from sequence.neural_model_dispatch import PROGRAM_HOST_RUN, PROGRAM_IMPORT, PROGRAM_DEVICE_RUN, SESSION_OPEN, SESSION_CLOSE, RNN_FIT, MODEL_LABELS, MODEL_ARGMAX, NeuralModelRequest, neural_model_execute
 from sequence.neural_model_dispatch import CNN_FIT, CNN_PREDICT, CNN_OPEN
+from sequence.neural_model_dispatch import MODEL_IMPORT_PARAMS
+from sequence.model_file_dispatch import model_file_operation, model_file_execute, model_import_execute
 from sequence.cnn_classifier_program import cnn_fit_program, cnn_open_program, cnn_predict_program
 from sequence.model_outputs_host import model_output_host
 from sequence.exec import HostExec
@@ -21,6 +23,18 @@ def model_native_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: In
     try:
         if result == 0:
             raise Error("native model: null result")
+        # lane dw-autograd-seq: the Sequential model-file operations
+        # (sequence/model_file_dispatch.mojo); only the weight import takes
+        # an executor, so the other eight build none.
+        if model_file_operation(op):
+            var value = model_file_execute(op, aa, na, pp, np, ff, nf)
+            MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[0] = value
+            return 0
+        if op == MODEL_IMPORT_PARAMS:
+            var import_ex = HostExec()
+            var value = model_import_execute(import_ex, aa, na, pp, np, ff, nf)
+            MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[0] = value
+            return 0
         if op == PROGRAM_HOST_RUN:
             if nf != 0:
                 raise Error("native program: host execution takes no scalar descriptors")
