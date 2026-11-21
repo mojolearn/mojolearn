@@ -36,7 +36,7 @@ from bindings.py_attr import py_attr
 from bindings.classical_arrays_door import classical_address
 from bindings.native_process_pool_door import (
     process_pool_create, process_pool_close, process_pool_closed, process_pool_pids,
-    process_worker_connect, process_worker_next, process_worker_reply, process_worker_refuse,
+    process_worker_connect, process_worker_next, process_worker_value, process_worker_reply, process_worker_refuse,
 )
 from bindings.native_transport_door import transport_close
 from bindings.tsa_hw_native_door import (
@@ -994,7 +994,7 @@ def forecast_worker(argv: PythonObject) raises:
                 # The typed request: one decode of the frame's words (a frame
                 # without request words is refused), then the code's branch.
                 var operation = shard_request_op(Int(turn.request.unsafe_ptr()), len(turn.request) * 8)
-                process_worker_reply(socket, turn.sequence, forecast_worker_dispatch(operation, turn.value))
+                process_worker_reply(socket, turn.sequence, forecast_worker_dispatch(operation, process_worker_value(turn)))
             except error:
                 process_worker_refuse(socket, turn.sequence, String(error))
     except error:

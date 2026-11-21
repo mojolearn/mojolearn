@@ -26,7 +26,7 @@ from bindings.parallel_mlp_native_door import (
 )
 from bindings.native_process_pool_door import (
     process_pool_create, process_pool_map_typed, process_pool_close,
-    process_worker_connect, process_worker_next, process_worker_reply, process_worker_refuse,
+    process_worker_connect, process_worker_next, process_worker_value, process_worker_reply, process_worker_refuse,
     process_pool_devices,
 )
 from bindings.native_transport_door import transport_close
@@ -657,7 +657,7 @@ def neural_worker(argv: PythonObject) raises:
                 break
             try:
                 var typed = worker_request_decode(Int(turn.request.unsafe_ptr()), len(turn.request) * 8)
-                var result = neural_worker_dispatch(typed, turn.value)
+                var result = neural_worker_dispatch(typed, process_worker_value(turn))
                 process_worker_reply(socket, turn.sequence, result)
             except error:
                 process_worker_refuse(socket, turn.sequence, String(error))
