@@ -7,9 +7,11 @@ Apple fast direct fit entry, where admit answers False and the caller keeps
 the door), Binarizer (kind 2, `(35, 2)`), Normalizer (kind 3, `(35, 3)`),
 PolynomialFeatures (kind 4, `(35, 4)`), QuantileTransformer (kind 5,
 `(35, 5)`; admit answers False for a subsample below 1, which only the door
-handles), PowerTransformer (kind 6, `(35, 6)`), SimpleImputer (kind 7, `(35, 7)`).
-The family's other classes (OrdinalEncoder OneHotEncoder TargetEncoder
-IterativeImputer KBinsDiscretizer SplineTransformer) carry no mark (each
+handles), PowerTransformer (kind 6, `(35, 6)`), SimpleImputer (kind 7, `(35, 7)`),
+KBinsDiscretizer (kind 8, `(35, 8)`; admit answers False for a subsample
+or random_state that is not an integer). The family's other classes
+(OrdinalEncoder OneHotEncoder TargetEncoder IterativeImputer
+SplineTransformer) carry no mark (each
 blocker in the lane's RESULT file): a caller keeps their own doors, and admit
 refuses their kinds in words.
 
@@ -46,8 +48,10 @@ from x_prep.prep_stateless_native_run import I64P, _poly_powers
 from bindings.prep_encode_native_door import (
     enc_caps, _missing_mark as enc_missing_mark, _qselect as enc_qselect, _truth as enc_truth,
     _float as enc_float, _is_str as enc_is_str, _real_like as enc_real_like, _int_list as enc_int_list,
-    IDN_STATS_BLOCKED,
+    IDN_STATS_BLOCKED, _kbins_strategy as enc_kbins_strategy, _seed64 as enc_seed64,
 )
+from bindings.prep_stateless_native_door import _int_like as stateless_int_like
+from bindings.py_typed_call import py_call_typed
 from bindings.prep_encode_imputer_run import IMP_MEAN, IMP_MEDIAN, IMP_MOST_FREQUENT, IMP_CONSTANT
 from bindings.x_prep_native_owner_run import XprepCaps
 from bindings.scaler_route_unpack import (
@@ -69,6 +73,7 @@ from core.prep_member import (
     PREP_POLY_PARAM_COUNT, PREP_QUANTILE_PARAM_COUNT, PREP_POWER_PARAM_COUNT,
     PREP_BLOCK_EXTRA, PREP_BLOCK_ANCHOR, PREP_BLOCK_ANCHOR_KIND,
     PREP_KIND_IMPUTER, PREP_IMPUTER_PARAM_COUNT,
+    PREP_KIND_KBINS, PREP_KBINS_HEADER, PREP_KBINS_ONEHOT, PREP_KBINS_ONEHOT_DENSE, PREP_KBINS_ORDINAL,
     PREP_ROUTE_OUT, PREP_ROUTE_SCRATCH, PREP_ROUTE_RANGES, PREP_ROUTE_DEV_PUT, PREP_ROUTE_TAKE_ROWS,
 )
 from core.member_abi import (
@@ -300,6 +305,51 @@ def _imputer_admit(model: PythonObject, fields: PythonObject, context: PythonObj
     owner.plan.params = words^
 
 
+def _kbins_admit(model: PythonObject, fields: PythonObject, context: PythonObject, mut owner: MemberOwner) raises -> Bool:
+    # The encode door's `_kbins_fit` UNPACK, in its order, read once here
+    # (the door per fit). False (the caller keeps the door): a random_state
+    # or subsample that is not an integer (the door reads them only when it
+    # draws, which depends on the rows).
+    var b = native_loaded_module("builtins")
+    var encode = fields["encode"]
+    var encode_text = String(encode) if enc_is_str(encode) else String("")
+    if encode_text != "onehot" and encode_text != "onehot-dense" and encode_text != "ordinal":
+        raise Error("mojolearn: invalid encode " + stateless_repr(encode))
+    var strategy = enc_kbins_strategy(fields)
+    var mode = context["backend_fields"]["_DEFAULT_MODE"]
+    var entries = scaler_entries(model, mode, context)
+    var words = List[Float64](length=PREP_KBINS_HEADER, fill=0.0)
+    words[0] = Float64(PREP_KIND_KBINS)
+    words[1] = Float64(PREP_KBINS_ORDINAL if encode_text == "ordinal" else (
+        PREP_KBINS_ONEHOT_DENSE if encode_text == "onehot-dense" else PREP_KBINS_ONEHOT))
+    words[2] = Float64(strategy)
+    words[3] = -1.0
+    var subsample = fields["subsample"]
+    if subsample is not None:
+        if not stateless_int_like(subsample, context):
+            return False
+        words[3] = Float64(Int(py=py_call_typed(b.int, subsample)))
+        var state = fields["random_state"]
+        if state is not None and not stateless_int_like(state, context):
+            return False
+        var seed = enc_seed64(state)
+        words[4] = Float64(seed[0])
+        words[5] = Float64(seed[1])
+    words[6] = 1.0 if (stateless_fam(mode, entries) & IDN_STATS_BLOCKED) != 0 else 0.0
+    words[7] = 1.0 if xprep_r3("work") else 0.0
+    var n_bins = fields["n_bins"]
+    if stateless_int_like(n_bins, context):
+        words[9] = Float64(Int(py=py_call_typed(b.int, n_bins)))
+    else:
+        var items = py_call_typed(b.list, n_bins)
+        words[8] = Float64(len(items))
+        for i in range(len(items)):  # driver-loop: over the per-column n_bins argument
+            words.append(Float64(Int(py=py_call_typed(b.int, items[i]))))
+    _route_admit(model, entries, context, owner, enc_caps(model, entries), False)
+    owner.plan.params = words^
+    return True
+
+
 def prep_member_admit(model: PythonObject, fields: PythonObject, kind: Int, context: PythonObject,
     b: PythonObject, mut owner: MemberOwner) raises -> Bool:
     """UNPACK: fill `owner.plan.route`, `owner.plan.params` and `owner.pins`
@@ -323,6 +373,8 @@ def prep_member_admit(model: PythonObject, fields: PythonObject, kind: Int, cont
     if kind == PREP_KIND_IMPUTER:
         _imputer_admit(model, fields, context, owner)
         return True
+    if kind == PREP_KIND_KBINS:
+        return _kbins_admit(model, fields, context, owner)
     raise Error("ValueError: mojolearn: Prep member kind " + String(kind) + " is not published")
 
 
@@ -347,7 +399,7 @@ def prep_member_pack(model: PythonObject, fields: PythonObject, context: PythonO
     plan: MemberPlan, state: Int) raises:
     """PACK: write the fitted attributes of state `state` into `model`, as
     the door's fit does."""
-    if plan.kind < PREP_KIND_ROBUST or plan.kind > PREP_KIND_IMPUTER:
+    if plan.kind < PREP_KIND_ROBUST or plan.kind > PREP_KIND_KBINS:
         raise Error("ValueError: mojolearn: Prep member kind " + String(plan.kind) + " is not published")
     var call = MemberCall(plan.route, state)
     var scalars = _export(plan, call, MEMBER_BLOCK_SCALARS)
@@ -355,6 +407,9 @@ def prep_member_pack(model: PythonObject, fields: PythonObject, context: PythonO
     var d = Int(words[0])
     if plan.kind == PREP_KIND_IMPUTER:
         _pack_imputer(fields, context, plan, call, d, words[1] != 0.0)
+        return
+    if plan.kind == PREP_KIND_KBINS:
+        _pack_kbins(fields, context, plan, call, d, Int(words[1]))
         return
     if plan.kind == PREP_KIND_POLYNOMIAL or plan.kind == PREP_KIND_QUANTILE or plan.kind == PREP_KIND_POWER:
         _pack_stateless_fitted(fields, context, plan, call, d, Int(words[1]) if plan.kind != PREP_KIND_POWER else 0)
@@ -388,6 +443,54 @@ def prep_member_pack(model: PythonObject, fields: PythonObject, context: PythonO
     py_setitem(fields, "_mojolearn_fitted", True)
     if py_contains(fields, "feature_names_in_"):
         _ = py_call(fields.pop, "feature_names_in_")
+
+
+def _pack_kbins(fields: PythonObject, context: PythonObject, plan: MemberPlan, mut call: MemberCall, d: Int,
+    stride: Int) raises:
+    """The encode door's `_kbins_fit` PACK, in its order: bin_edges_ (one
+    vector of n_bins_ + 1 edges per column), n_bins_ (int64), the flat
+    `_edges` / `_ne` the door's transform reads, `_stride`."""
+    var edges = _export(plan, call, PREP_BLOCK_CENTER)
+    var counts = _export(plan, call, PREP_BLOCK_SCALE)
+    if edges.rows * edges.cols != d * stride or counts.rows * counts.cols != d:
+        raise Error("RuntimeError: mojolearn: a fitted KBinsDiscretizer block has the wrong size")
+    var output = context["output_context"]
+    var bin_edges = Python.list()
+    var n_bins_ = classical_typed(Python.tuple(d), "<i8", output)
+    var dest = I64P(unsafe_from_address=Int(py=classical_address(n_bins_)))
+    var ne = f32_ptr(counts.data)
+    for j in range(d):  # driver-loop: over the per-column edge counts (feature metadata)
+        var count = Int(ne[j])
+        _ = py_call(bin_edges.append, _vector(MemberMatrix(edges.data + 4 * j * stride, 1, count), context))
+        dest[j] = Int64(count - 1)
+        _ = n_bins_  # keep the Python object alive through the native write above
+    py_setitem(fields, "bin_edges_", bin_edges)
+    py_setitem(fields, "n_bins_", n_bins_)
+    py_setitem(fields, "_edges", _vector(edges, context))
+    py_setitem(fields, "_ne", _vector(counts, context))
+    py_setitem(fields, "_stride", stride)
+    py_setitem(fields, "numeric_mode_", context["backend_fields"]["_DEFAULT_MODE"])
+    py_setitem(fields, "n_features_in_", d)
+
+
+def _kbins_state(fields: PythonObject, context: PythonObject, plan: MemberPlan) raises -> Int:
+    # The attributes the encode door's `_kbins_transform` reads.
+    var d = _int_field(fields, "n_features_in_")
+    var stride = _int_field(fields, "_stride")
+    var scalars: List[Float64] = [Float64(d), Float64(stride)]
+    var call = member_new(plan)
+    try:
+        _import_vector(plan, call, fields["_edges"], PREP_BLOCK_CENTER, d * stride, context)
+        _import_vector(plan, call, fields["_ne"], PREP_BLOCK_SCALE, d, context)
+        call.block = MEMBER_BLOCK_SCALARS
+        call.x = MemberMatrix(Int(scalars.unsafe_ptr()), 1, len(scalars), MEMBER_F64)
+        call.flags = MEMBER_IMPORT_DONE
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+    except error:
+        member_free(plan, call)
+        raise error
+    _ = len(scalars)
+    return call.state
 
 
 def _matrix(view: MemberMatrix, rows: Int, cols: Int, context: PythonObject) raises -> PythonObject:
@@ -514,6 +617,8 @@ def prep_member_state(model: PythonObject, fields: PythonObject, context: Python
         return _fitted_state(fields, context, plan)
     if plan.kind == PREP_KIND_IMPUTER:
         return _imputer_state(fields, context, plan)
+    if plan.kind == PREP_KIND_KBINS:
+        return _kbins_state(fields, context, plan)
     if plan.kind != PREP_KIND_ROBUST and not maxabs:
         raise Error("ValueError: mojolearn: Prep member kind " + String(plan.kind) + " is not published")
     if (not py_contains(fields, "n_features_in_")

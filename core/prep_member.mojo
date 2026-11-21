@@ -84,13 +84,26 @@ MEMBER_OP_NEW parameters, SimpleImputer (Float64 words, 10): [0] kind 7,
 statistics 0 / 1 (`x_prep_idn_fam` & IDN_STATS_BLOCKED), [6] fill_value
 (constant; 0 for None), [7] keep_empty_features 0 / 1, [8] add_indicator
 0 / 1, [9] R3 work region 0 / 1. Output width = kept + indicator columns.
+MEMBER_OP_NEW parameters, KBinsDiscretizer (Float64 words, 10 + c): [0] kind
+8, [1] encode 0 'onehot', 1 'onehot-dense', 2 'ordinal', [2] strategy 0
+'uniform', 3 'kmeans', quantile by quantile_method 1 averaged_inverted_cdf,
+2 linear, 4 inverted_cdf, 5 closest_observation, 6
+interpolated_inverted_cdf, 7 hazen, 8 weibull, 9 median_unbiased, 10
+normal_unbiased, [3] subsample (-1 None), [4] / [5] the uint64 random_state
+low / high 32-bit words, [6] blocked column statistics 0 / 1, [7] R3 work
+region 0 / 1, [8] c: 0 = one n_bins for every column in [9], else c
+per-column n_bins in [10 .. 10 + c). sample_weight (MEMBER_CAN_SAMPLE_WEIGHT,
+this kind only): a dense host float32 vector, one weight per row of X (of
+the whole X with a row index). Transform: ordinal codes (features columns)
+or one-hot blocks (sum of n_bins_ columns), float32; inverse_transform: the
+bin centers (features columns).
 
 The Apple fast direct fit entry (`x_prep_maxabs_fit_direct`, opt-in
 PREP3_MAXABS) is not a member route: the admit answers False there and the
 caller keeps the door.
 
 Views: X dense row-major host float32 (NaN allowed, as the estimator allows
-it); no y (ignored), no sample weights (refused), no column index, no
+it); no y (ignored), no sample weights (refused, except KBinsDiscretizer), no column index, no
 device-home view. ROW INDEX (MEMBER_CAN_ROW_INDEX): `call.row_index` a
 dense host int32 / int64 vector of rows of the WHOLE X in `call.x` (bounds
 checked; repeats allowed); the operation reads those rows, `dst` has one
@@ -141,6 +154,10 @@ SimpleImputer:
   2 `PREP_BLOCK_SCALE` float32 features (`_fill`)
   3 `PREP_BLOCK_EXTRA` float32 kept column indices (`_keep`)
   4 `PREP_BLOCK_ANCHOR` float32 indicator column indices (`_indicator`)
+KBinsDiscretizer:
+  0 `MEMBER_BLOCK_SCALARS` float64 [n_features_in_, `_stride` (max n_bins + 1)]
+  1 `PREP_BLOCK_CENTER` float32 features x `_stride` (`_edges`, each row's first n_bins_ + 1 words used)
+  2 `PREP_BLOCK_SCALE` float32 features (`_ne`, the edge counts = n_bins_ + 1)
 
 The fitted state is OWNED here, in a process-wide store of fixed chunks (the
 linear member's store): a slot never moves once minted, the lock covers only
@@ -160,12 +177,16 @@ from x_prep.prep_stateless_native_run import (
 )
 from core.preprocessing_program import prep_program_stage as _stage
 from bindings.prep_encode_prog_run import EncProgram
+from bindings.prep_encode_kbins_run import (
+    KBinsFit, KBinsApply, KBinsInverse, kbins_fit_stage, kbins_transform_stage, kbins_inverse_stage,
+    enc_weights_stage, KB_DRAW_NONE, KB_DRAW_PLAIN, KB_DRAW_WEIGHTED,
+)
 from bindings.prep_encode_imputer_run import (
     ImputerFit, ImputerApply, imputer_fit_stage, imputer_transform_stage, IMP_CONSTANT,
 )
 from core.member_abi import (
     MemberCall, MemberMatrix, MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_I64,
-    MEMBER_CAN_SCOPE, MEMBER_CAN_ROW_INDEX,
+    MEMBER_CAN_SCOPE, MEMBER_CAN_ROW_INDEX, MEMBER_CAN_SAMPLE_WEIGHT,
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_OUTPUTS,
     MEMBER_OP_TRANSFORM, MEMBER_OP_INVERSE_TRANSFORM, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT,
     MEMBER_CAN_FIT, MEMBER_CAN_TRANSFORM, MEMBER_CAN_INVERSE_TRANSFORM, MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT,
@@ -195,6 +216,13 @@ comptime PREP_QUANTILE_PARAM_COUNT = 8
 comptime PREP_POWER_PARAM_COUNT = 8
 comptime PREP_KIND_IMPUTER = 7
 comptime PREP_IMPUTER_PARAM_COUNT = 10
+comptime PREP_KIND_KBINS = 8
+#: KBinsDiscretizer's fixed words; `words[8]` per-column n_bins words follow.
+comptime PREP_KBINS_HEADER = 10
+#: KBinsDiscretizer's encode codes.
+comptime PREP_KBINS_ONEHOT = 0
+comptime PREP_KBINS_ONEHOT_DENSE = 1
+comptime PREP_KBINS_ORDINAL = 2
 
 comptime PREP_BLOCK_CENTER = MEMBER_BLOCK_FAMILY
 comptime PREP_BLOCK_SCALE = MEMBER_BLOCK_FAMILY + 1
@@ -357,6 +385,8 @@ def _kind_name(kind: Int) -> String:
         return String("PowerTransformer")
     if kind == PREP_KIND_IMPUTER:
         return String("SimpleImputer")
+    if kind == PREP_KIND_KBINS:
+        return String("KBinsDiscretizer")
     return String("RobustScaler")
 
 
@@ -375,13 +405,13 @@ def _block_count(kind: Int) -> Int:
 
 def _scalar_count(kind: Int) -> Int:
     if (kind == PREP_KIND_MAXABS or kind == PREP_KIND_POLYNOMIAL or kind == PREP_KIND_QUANTILE
-            or kind == PREP_KIND_IMPUTER):
+            or kind == PREP_KIND_IMPUTER or kind == PREP_KIND_KBINS):
         return 2
     return 1
 
 
 def _invertible(kind: Int) -> Bool:
-    return kind == PREP_KIND_QUANTILE or kind == PREP_KIND_POWER
+    return kind == PREP_KIND_QUANTILE or kind == PREP_KIND_POWER or kind == PREP_KIND_KBINS
 
 
 def _name(slot: _Slot) -> String:
@@ -490,7 +520,8 @@ def _resident(call: _Call, words: Int, rows: Bool) raises -> Int:
     return put.store_id
 
 
-def _x_record(call: _Call, offset: Int, words: Int, mut held: PrepXHeld, inout: Bool) raises -> XprepRunInput:
+def _x_record(call: _Call, offset: Int, words: Int, mut held: PrepXHeld, inout: Bool,
+    scoped: Bool = True) raises -> XprepRunInput:
     """X as a program's input record at `offset` (`words` = the rows the
     operation reads times X's width). The door's rules
     (bindings/x_prep_native_owner_door.mojo `xprep_run_records`), from the
@@ -512,12 +543,12 @@ def _x_record(call: _Call, offset: Int, words: Int, mut held: PrepXHeld, inout: 
         var n = call[].row_index.rows
         if device and (flags & PREP_ROUTE_TAKE_ROWS) != 0:
             var indices = _fold_rows(call, held, False)
-            var source = _resident(call, base_words, True)
+            var source = _resident(call, base_words, True) if scoped else -1
             return XprepRunInput(offset, words, call[].x.data, source, source < 0, base_words, True, indices, n, d)
         _ = _fold_rows(call, held, True)
         var put_rows = (flags & PREP_ROUTE_DEV_PUT) != 0 and words >= _PUT_WORDS
         return XprepRunInput(offset, words, Int(held.gathered.unsafe_ptr()), -1, put_rows, words, False, 0, 0, 0)
-    if device:
+    if device and scoped:
         var source = _resident(call, base_words, False)
         if source >= 0:
             return XprepRunInput(offset, words, 0, source, False, 0, False, 0, 0, 0)
@@ -1161,13 +1192,21 @@ def _apply_power(slot: _Slot, call: _Call, inverse: Bool) raises:
     _ = arena^
 
 
-def _enc_run(call: _Call, mut prog: EncProgram, second: Int, output: Int) raises -> List[Float32]:
+def _enc_run(call: _Call, mut prog: EncProgram, second: Int, output: Int, scoped: Bool = True) raises -> List[Float32]:
+    """`_enc_run` with one second buffer (owner 1)."""
+    var seconds: List[Int] = [second]
+    return _enc_run(call, prog, seconds, output, scoped)
+
+
+def _enc_run(call: _Call, mut prog: EncProgram, seconds: List[Int], output: Int, scoped: Bool = True) raises -> List[Float32]:
     """The encode door's `EncProg.run_caps` over the member's own input
     records: owner 0 is the caller's X (`_x_record`: resident in the caller's
     scope, gathered by the fold's row index, or put on the device when the
-    image has the put and X is large), owner 1 the second buffer at
-    `second` (a fitted vector, or y), -1 the program's own words. `output`: the caller's buffer for the
-    program's output region (0: none). Returns the host arena."""
+    image has the put and X is large), owner k >= 1 the buffer at
+    `seconds[k - 1]` (a fitted vector, y, the weights), -1 the program's own words. `output`: the caller's buffer for the
+    program's output region (0: none). `scoped` False: a member without
+    MEMBER_CAN_SCOPE (the Select family) never reads the caller's scope or
+    pin. Returns the host arena."""
     prog.check_bound()
     var held = PrepXHeld()
     var inputs = List[XprepRunInput](capacity=len(prog.inputs))
@@ -1180,9 +1219,9 @@ def _enc_run(call: _Call, mut prog: EncProgram, second: Int, output: Int) raises
             for j in range(len(prog.inout_ranges) // 2):  # driver-loop: over the program's in-out input ranges
                 if prog.inout_ranges[2 * j] == record.offset and prog.inout_ranges[2 * j + 1] == record.offset + record.words:
                     inout = True
-            inputs.append(_x_record(call, record.offset, record.words, held, inout))
+            inputs.append(_x_record(call, record.offset, record.words, held, inout, scoped))
         else:
-            var address = record.address if record.owner < 0 else second
+            var address = record.address if record.owner < 0 else seconds[record.owner - 1]
             inputs.append(XprepRunInput(record.offset, record.words, address, -1, False, 0, False, 0, 0, 0))
     var host = prog.host
     var scratch = prog.scratch_size
@@ -1192,6 +1231,247 @@ def _enc_run(call: _Call, mut prog: EncProgram, second: Int, output: Int) raises
         prog.stage_words(), inputs, prog.inout_ranges)
     _ = held^  # the fold words X's record addresses live past the run
     return arena^
+
+
+def _iword(arena: List[Float32], offset: Int) -> Int:
+    # An int32 word a stage wrote into the arena (the door's `_iword`).
+    return Int(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(arena.unsafe_ptr()))[offset])
+
+
+def _fold_weights(call: _Call) raises -> List[Float32]:
+    """The weights of the fold's rows (`call.row_index` over the whole X's
+    weights), bounds-checked, split across the host's workers."""
+    var n = call[].row_index.rows
+    var base = call[].weights.rows
+    var out = List[Float32](length=n, fill=Float32(0))
+    var tasks = host_predict_task_count_work(n, n)
+    var chunk = host_predict_chunk(n, tasks)
+    var bad = List[Int](length=tasks, fill=0)
+    var flags = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=Int(bad.unsafe_ptr()))
+    var wide = call[].row_index.dtype == MEMBER_I64
+    var source = call[].row_index.data
+    var weights = _F32P(unsafe_from_address=call[].weights.data)
+    var into = _F32P(unsafe_from_address=Int(out.unsafe_ptr()))
+
+    def task(worker: Int) {imm chunk, imm n, imm base, imm wide, imm source, imm flags, imm weights, imm into}:
+        var begin = worker * chunk
+        var end = min(begin + chunk, n)
+        var out_of_range = 0
+        for r in range(begin, end):
+            var row = Int(MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=source)[r]) if wide else Int(
+                MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=source)[r])
+            if row < 0 or row >= base:
+                out_of_range = 1
+                continue
+            into[r] = weights[row]
+        flags[worker] = out_of_range
+
+    host_parallelize(task, tasks)
+    for w in range(tasks):  # driver-loop: over the workers' range flags
+        if bad[w] != 0:
+            raise Error("IndexError: a row index is out of range for X's " + String(base) + " rows")
+    return out^
+
+
+def _kbins_method(strategy: Int) -> String:
+    # The quantile_method a strategy code stands for (the door's `_kbins_strategy`).
+    if strategy == 1:
+        return String("averaged_inverted_cdf")
+    if strategy == 2:
+        return String("linear")
+    if strategy == 4:
+        return String("inverted_cdf")
+    if strategy == 5:
+        return String("closest_observation")
+    if strategy == 6:
+        return String("interpolated_inverted_cdf")
+    if strategy == 7:
+        return String("hazen")
+    if strategy == 8:
+        return String("weibull")
+    if strategy == 9:
+        return String("median_unbiased")
+    return String("normal_unbiased")
+
+
+def _kbins_widths(slot: _Slot) -> List[Int]:
+    # n_bins_: each column's edge count less one.
+    var widths = List[Int](capacity=len(slot[].scale))
+    for j in range(len(slot[].scale)):  # driver-loop: over the fitted per-column edge counts (feature metadata)
+        widths.append(Int(slot[].scale[j]) - 1)
+    return widths^
+
+
+def _kbins_cols(slot: _Slot) -> Int:
+    # transform's width: the codes (ordinal) or the one-hot blocks.
+    if slot[].words[1] == Float64(PREP_KBINS_ORDINAL):
+        return slot[].features
+    var total = 0
+    for j in range(len(slot[].scale)):  # driver-loop: over the fitted per-column edge counts (feature metadata)
+        total += Int(slot[].scale[j]) - 1
+    return total
+
+
+def _fit_kbins(slot: _Slot, call: _Call) raises:
+    """The encode door's `_kbins_fit` (bindings/prep_encode_native_door.mojo):
+    `_check_weights`' program on the weights when given, then
+    `kbins_fit_stage` over X (subsample drawn in the program), in the door's
+    order and words. The weights of a fold are its rows of the whole X's."""
+    var estimator = _name(slot)
+    _whole(call, estimator)
+    _dense(call[].x, "X", estimator)
+    if call[].fit_output != 0 and call[].fit_output != MEMBER_OP_TRANSFORM:
+        member_unsupported(estimator, call[].fit_output)
+    var n = _rows(call)
+    var d = call[].x.cols
+    var w = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(slot[].words.unsafe_ptr()))
+    var strat = Int(w[2])
+    var blocked = w[6] != 0.0
+    var work = w[7] != 0.0
+    var given = call[].weights.rows > 0
+    var fold_weights = List[Float32]()
+    var weights_at = 0
+    var positive = 0
+    if given:
+        if not call[].weights.dense_host(MEMBER_F32) or call[].weights.cols != 1:
+            raise Error("member ABI: a KBinsDiscretizer member reads sample_weight as a dense host float32 vector")
+        if call[].weights.rows != call[].x.rows:
+            raise Error("mojolearn: sample_weight has " + String(call[].weights.rows) + " entries; X has "
+                        + String(call[].x.rows) + " rows")
+        weights_at = call[].weights.data
+        if call[].row_index.rows > 0:
+            fold_weights = _fold_weights(call)
+            weights_at = Int(fold_weights.unsafe_ptr())
+        var check = EncProgram(work)
+        var plan = enc_weights_stage(check, 1, n, blocked)
+        var ran = _enc_run(call, check, weights_at, 0)
+        var ap = _F32P(unsafe_from_address=Int(ran.unsafe_ptr()))
+        var count = ap[plan.stats]
+        var low = ap[plan.stats + 3]
+        positive = _iword(ran, plan.positives)
+        _ = ran^
+        _ = len(check.consts_f)  # the program's own input words live past the run
+        # a NaN is not counted by col_stats
+        if Int(count) != n or low < 0:
+            raise Error("mojolearn: KBinsDiscretizer sample_weight must be nonnegative")
+        if positive == 0:
+            raise Error("mojolearn: KBinsDiscretizer sample_weight is all zero")
+    var subsample = Int(w[3])
+    var resample = subsample >= 0 and n > subsample
+    var draw = KB_DRAW_NONE
+    var draws = 0
+    if resample:
+        draws = subsample
+        # a weighted resample with replacement is drawn in the fit's program,
+        # and the edges of its rows are then unweighted
+        draw = KB_DRAW_WEIGHTED if given else KB_DRAW_PLAIN
+    var weighted = given and not resample
+    var per_column = Int(w[8])
+    var bins = List[Int](capacity=d)
+    if per_column == 0:
+        for _ in range(d):  # driver-loop: over the per-column n_bins argument
+            bins.append(Int(w[9]))
+    else:
+        for j in range(per_column):  # driver-loop: over the per-column n_bins argument
+            bins.append(Int(w[PREP_KBINS_HEADER + j]))
+    var smallest = bins[0] if len(bins) > 0 else 0
+    var nbmax = 0
+    for j in range(len(bins)):  # driver-loop: over the per-column n_bins argument
+        smallest = min(smallest, bins[j])
+        nbmax = max(nbmax, bins[j])
+    if len(bins) != d or smallest < 2:
+        raise Error("mojolearn: n_bins must be >= 2 per feature")
+    if weighted and strat != 0 and strat != 1 and strat != 3 and strat != 4:
+        raise Error("mojolearn: When fitting with strategy='quantile' and sample weights, quantile_method "
+                    + "should either be set to 'averaged_inverted_cdf' or 'inverted_cdf', got "
+                    + "quantile_method='" + _kbins_method(strat) + "' instead.")
+    var prog = EncProgram(work)
+    var request = KBinsFit(n, d, 0, strat, bins^, nbmax, draw, draws, Int(w[4]), Int(w[5]), weighted,
+                           1 if given else -1, positive, blocked)
+    var plan = kbins_fit_stage(prog, request)
+    var arena = _enc_run(call, prog, weights_at, 0)
+    _ = fold_weights^  # the fold's weights live past the run
+    _ = len(prog.consts_f)  # the program's own input words live past the run
+    var stride = nbmax + 1
+    slot[].clear()
+    slot[].center = _take(arena, plan.edges, d * stride)
+    slot[].scale = _take(arena, plan.counts, d)
+    _ = arena^
+    slot[].features = d
+    slot[].scalars = [Float64(d), Float64(stride)]
+    slot[].fitted = True
+    if call[].fit_output == MEMBER_OP_TRANSFORM:
+        _transform_kbins(slot, call)
+
+
+def _transform_kbins(slot: _Slot, call: _Call) raises:
+    """The encode door's `_kbins_transform`: `kbins_transform_stage` (the
+    codes, then the one-hot blocks), its output region straight into the
+    caller's dst when the image has one and the output is large."""
+    var cols = _kbins_cols(slot) if slot[].fitted else 0
+    _apply_begin(slot, call, cols)
+    var n = _rows(call)
+    var d = slot[].features
+    if n * cols == 0:
+        return
+    var onehot = slot[].words[1] != Float64(PREP_KBINS_ORDINAL)
+    var widths = _kbins_widths(slot) if onehot else List[Int]()
+    var prog = EncProgram(slot[].words[7] != 0.0)
+    var request = KBinsApply(n, d, 0, 1, len(slot[].center), 2, len(slot[].scale), Int(slot[].scalars[1]), onehot,
+                             widths^)
+    var result = kbins_transform_stage(prog, request, (call[].route.flags & PREP_ROUTE_OUT) != 0)
+    var seconds: List[Int] = [Int(slot[].center.unsafe_ptr()), Int(slot[].scale.unsafe_ptr())]
+    var arena = _enc_run(call, prog, seconds, call[].dst.data)
+    if prog.out_words == 0:
+        unsafe_memcpy(dest=_F32P(unsafe_from_address=call[].dst.data),
+            src=_F32P(unsafe_from_address=Int(arena.unsafe_ptr())) + result, count=n * cols)
+    _ = arena^
+    _ = len(prog.consts_f)  # the program's own input words live past the run
+
+
+def _inverse_kbins(slot: _Slot, call: _Call) raises:
+    """The encode door's `_kbins_inverse`: codes (ordinal) or one-hot blocks
+    back to the bin centers; rows naming no bin refused in the door's words
+    (the first ten)."""
+    var estimator = _name(slot)
+    if not slot[].fitted:
+        raise Error("RuntimeError: mojolearn: this " + estimator + " instance is not fitted yet")
+    _whole(call, estimator)
+    _dense(call[].x, "X", estimator)
+    _dense(call[].dst, "the output buffer", estimator)
+    var d = slot[].features
+    var n = _rows(call)
+    var cols = call[].x.cols
+    var ordinal = slot[].words[1] == Float64(PREP_KBINS_ORDINAL)
+    var why = String("hold codes that name no bin")
+    if ordinal:
+        if cols != d:
+            raise Error("mojolearn: X has " + String(cols) + " features, " + estimator + " was fitted with "
+                        + String(d))
+    else:
+        var total = _kbins_cols(slot)
+        if cols != total:
+            raise Error("mojolearn: X has " + String(cols) + " columns, expected " + String(total))
+        why = "can not be inverted because they contain all zeros"
+    if call[].dst.rows != n or call[].dst.cols != d:
+        raise Error("ValueError: the output buffer holds " + String(d) + " values per row of X")
+    if n == 0:
+        return
+    var prog = EncProgram(slot[].words[7] != 0.0)
+    var request = KBinsInverse(n, cols, 0, ordinal, _kbins_widths(slot), 1, len(slot[].center), Int(slot[].scalars[1]))
+    var plan = kbins_inverse_stage(prog, request, (call[].route.flags & PREP_ROUTE_OUT) != 0)
+    var arena = _enc_run(call, prog, Int(slot[].center.unsafe_ptr()), call[].dst.data)
+    _ = len(prog.consts_f)  # the program's own input words live past the run
+    var k = _iword(arena, plan.bad_count)
+    if k > 0:
+        var text = String("[")
+        for i in range(min(k, 10)):  # driver-loop: over at most ten reported rows
+            text += (", " if i > 0 else "") + String(_iword(arena, plan.bad_rows + i))
+        raise Error("mojolearn: samples " + text + "] " + why)
+    if prog.out_words == 0:
+        unsafe_memcpy(dest=_F32P(unsafe_from_address=call[].dst.data),
+            src=_F32P(unsafe_from_address=Int(arena.unsafe_ptr())) + plan.centers, count=n * d)
+    _ = arena^
 
 
 def _index_words(values: List[Float32]) -> List[Int]:
@@ -1353,6 +1633,11 @@ def _import(slot: _Slot, call: _Call) raises:
     elif kind == PREP_KIND_IMPUTER:
         complete = (complete and len(slot[].center) == d and len(slot[].scale) == d and len(slot[].extra) <= d
                     and len(slot[].anchor) <= d)
+    elif kind == PREP_KIND_KBINS:
+        var stride = Int(slot[].scalars[1])
+        complete = complete and stride >= 2 and len(slot[].center) == d * stride and len(slot[].scale) == d
+        for j in range(len(slot[].scale)):  # driver-loop: over the fitted per-column edge counts
+            complete = complete and Int(slot[].scale[j]) >= 2 and Int(slot[].scale[j]) <= stride
     elif kind == PREP_KIND_POWER:
         complete = (complete and len(slot[].extra) == d and len(slot[].center) == len(slot[].scale)
                     and (len(slot[].center) == 0 or len(slot[].center) == d)
@@ -1392,6 +1677,11 @@ def _outputs(call: _Call) raises:
             _poly_table(words, call[].x.cols, index, start)
             call[].out_cols = len(start) - 1
             return
+        if kind == PREP_KIND_KBINS and call[].flags == MEMBER_OP_TRANSFORM:
+            # ordinal codes keep X's width; one-hot blocks are as wide as the
+            # fitted bins (duplicate edges are dropped by the fit).
+            if call[].param_count < PREP_KBINS_HEADER or source[1] != Float64(PREP_KBINS_ORDINAL):
+                raise Error("member ABI: a one-hot KBinsDiscretizer member's output width is known after its fit")
         if kind == PREP_KIND_IMPUTER:
             # keep_empty_features without add_indicator keeps every column;
             # otherwise the width is chosen by the fit.
@@ -1411,6 +1701,9 @@ def _outputs(call: _Call) raises:
     if slot[].kind() == PREP_KIND_IMPUTER:
         call[].out_cols = len(slot[].extra) + len(slot[].anchor)
         return
+    if slot[].kind() == PREP_KIND_KBINS and call[].flags == MEMBER_OP_TRANSFORM:
+        call[].out_cols = _kbins_cols(slot)
+        return
     call[].out_cols = slot[].features
 
 
@@ -1429,6 +1722,8 @@ def _new_count(kind: Int) raises -> Int:
         return PREP_POWER_PARAM_COUNT
     if kind == PREP_KIND_IMPUTER:
         return PREP_IMPUTER_PARAM_COUNT
+    if kind == PREP_KIND_KBINS:
+        return PREP_KBINS_HEADER  # plus words[8] per-column n_bins words
     raise Error("member ABI: unknown or unpublished Prep member kind")
 
 
@@ -1440,19 +1735,25 @@ def _prep_member(operation: Int, address: Int) raises -> Int:
         var mask = (MEMBER_CAN_FIT | MEMBER_CAN_TRANSFORM | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
                     | MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE)
         if call[].state == 0:
-            return mask | MEMBER_CAN_INVERSE_TRANSFORM  # the family's union
-        # Kind-exact: only QuantileTransformer and PowerTransformer invert;
-        # no kind reads weights or a column index.
+            return mask | MEMBER_CAN_INVERSE_TRANSFORM | MEMBER_CAN_SAMPLE_WEIGHT  # the family's union
+        # Kind-exact: QuantileTransformer, PowerTransformer and
+        # KBinsDiscretizer invert; only KBinsDiscretizer reads weights; no
+        # kind reads a column index.
         var held = _Slot(unsafe_from_address=_lookup(call[].state, False))
         if _invertible(held[].kind()):
             mask |= MEMBER_CAN_INVERSE_TRANSFORM
+        if held[].kind() == PREP_KIND_KBINS:
+            mask |= MEMBER_CAN_SAMPLE_WEIGHT
         return mask
     if operation == MEMBER_OP_NEW:
         if call[].param_count < 1 or not call[].params:
             raise Error("member ABI: a Prep member takes its parameter words")
         var source = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call[].params)
         var kind = Int(source[0])
-        if Float64(kind) != source[0] or call[].param_count != _new_count(kind):
+        var expected = _new_count(kind)
+        if kind == PREP_KIND_KBINS and call[].param_count >= PREP_KBINS_HEADER and source[8] >= 0.0:
+            expected += Int(source[8])
+        if Float64(kind) != source[0] or call[].param_count != expected:
             raise Error("member ABI: a " + _kind_name(kind) + " member takes " + String(_new_count(kind))
                         + " parameter words")
         if kind == PREP_KIND_NORMALIZER and source[1] != 0.0 and source[1] != 1.0 and source[1] != 2.0:
@@ -1465,6 +1766,8 @@ def _prep_member(operation: Int, address: Int) raises -> Int:
             raise Error("member ABI: unknown PowerTransformer method code")
         if kind == PREP_KIND_IMPUTER and (source[1] < 0.0 or source[1] > 3.0):
             raise Error("member ABI: unknown SimpleImputer strategy code")
+        if kind == PREP_KIND_KBINS and (source[1] < 0.0 or source[1] > 2.0 or source[2] < 0.0 or source[2] > 10.0):
+            raise Error("member ABI: invalid KBinsDiscretizer encode or strategy code")
         var words = List[Float64](length=call[].param_count, fill=0.0)
         for index in range(call[].param_count):  # driver-loop: the parameter words
             words[index] = source[index]
@@ -1494,6 +1797,8 @@ def _prep_member(operation: Int, address: Int) raises -> Int:
             _fit_power(slot, call)
         elif kind == PREP_KIND_IMPUTER:
             _fit_imputer(slot, call)
+        elif kind == PREP_KIND_KBINS:
+            _fit_kbins(slot, call)
         else:
             _fit_robust(slot, call)
     elif operation == MEMBER_OP_TRANSFORM:
@@ -1509,12 +1814,16 @@ def _prep_member(operation: Int, address: Int) raises -> Int:
             _apply_power(slot, call, False)
         elif kind == PREP_KIND_IMPUTER:
             _transform_imputer(slot, call)
+        elif kind == PREP_KIND_KBINS:
+            _transform_kbins(slot, call)
         else:
             _transform_robust(slot, call)
     elif operation == MEMBER_OP_INVERSE_TRANSFORM and kind == PREP_KIND_QUANTILE:
         _apply_quantile(slot, call, True)
     elif operation == MEMBER_OP_INVERSE_TRANSFORM and kind == PREP_KIND_POWER:
         _apply_power(slot, call, True)
+    elif operation == MEMBER_OP_INVERSE_TRANSFORM and kind == PREP_KIND_KBINS:
+        _inverse_kbins(slot, call)
     elif operation == MEMBER_OP_EXPORT:
         _export(slot, call)
     elif operation == MEMBER_OP_IMPORT:

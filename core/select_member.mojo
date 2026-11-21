@@ -369,7 +369,7 @@ def _fit_kbest(slot: _Slot, call: _Call) raises:
     var mo = -1
     if not keep_all:
         mo = score_topk_stage(prog, score_at, 0, d, k)
-    var arena = prep_enc_run(call, prog, call[].y.data, 0)
+    var arena = prep_enc_run(call, prog, call[].y.data, 0, False)
     _ = len(prog.consts_f)  # the program's own input words live past the run
     var ap = _F32P(unsafe_from_address=Int(arena.unsafe_ptr()))
     if score == SELECT_SCORE_CHI2:
