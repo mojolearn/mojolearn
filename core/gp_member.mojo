@@ -65,6 +65,9 @@ normalize_y, alpha used, optimized, F, optimizer runs, N); 1 X_train_
 parameters (N f32); 6 its length scales (max(1, S) f32); 7 theta (F f64);
 8 the optimized free values (F f64); 9 the optimizer runs (runs x 4 f64:
 the provider's restart records). Blocks 7 to 9 are empty when not optimized.
+FIT NOTICES (`MEMBER_BLOCK_NOTICES`, by name, MEMBER_CAN_NOTICES): the regressor's
+ridge retries as one `MEMBER_NOTICE_GP_RIDGE` (starting alpha, alpha used); the
+caller raises the RuntimeWarnings (core/member_notices.mojo).
 
 SERIAL BY NATURE: one member call drives one provider request at a time
 (the optimizer's restarts and the factorization run inside the provider,
@@ -88,11 +91,12 @@ from core.member_abi import (
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_PREDICT,
     MEMBER_OP_PREDICT_STD, MEMBER_OP_PREDICT_PROBA, MEMBER_OP_OUTPUTS, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT,
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_STD, MEMBER_CAN_PREDICT_PROBA, MEMBER_CAN_CLASSIFIER,
-    MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT, MEMBER_CAN_TEST_ROWS,
-    MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
+    MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT, MEMBER_CAN_TEST_ROWS, MEMBER_CAN_NOTICES,
+    MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_BLOCK_NOTICES, MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
 )
 from core.member_families import MEMBER_FAMILY_GP
+from core.member_notices import member_notice_add, MEMBER_NOTICE_GP_RIDGE, MEMBER_NOTICE_WORDS
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.scaler_native_api import ScalerDriver, PrepProgramDriver
@@ -156,6 +160,9 @@ struct GpMemberSlot(Copyable, Movable, Defaultable):
     var runs: List[Float64]
     var run_count: Int
     var scalars: List[Float64]
+    # FIT NOTICES (core/member_notices.mojo): the regressor's ridge retries,
+    # set by `_fit`, cleared by the next fit or import.
+    var notices: List[Float64]
     # The provider's resident lease of X_train_, L_ and alpha_ (GPU route)
     # and the entry that closes it. 0: none held.
     var lease: Int
@@ -210,6 +217,7 @@ struct GpMemberSlot(Copyable, Movable, Defaultable):
         self.runs = List[Float64]()
         self.run_count = 0
         self.scalars = List[Float64]()
+        self.notices = List[Float64]()
         self.lease = 0
         self.lease_entry = entry_ref_unresolved()
         self.classes = 0
@@ -227,6 +235,7 @@ struct GpMemberSlot(Copyable, Movable, Defaultable):
 
     def clear(mut self):
         self.fitted = False
+        self.notices = List[Float64]()
         self.rows = 0
         self.cols = 0
         self.info = 0
@@ -538,11 +547,13 @@ def _fit(slot: _Slot, call: _Call) raises:
             Int(slot[].dual.unsafe_ptr()), Int(scalars.unsafe_ptr()), n, d, kernel.view(), alpha,
             (route.flags & GP_CAP_POINTER) == GP_CAP_POINTER))
         # `_gpr_fit`'s rule: a positive ridge too small for float32 is raised
-        # tenfold up to 1.0. The boundary's PACK raises the RuntimeWarning
-        # for each step (alpha used vs. the starting alpha).
+        # tenfold up to 1.0. The caller raises the RuntimeWarning for each
+        # step from the fit notice below (alpha used vs. the starting alpha).
         if info == 0 or not alpha > 0.0 or alpha >= 1.0:
             break
         alpha = min(alpha * 10.0, 1.0)
+    if alpha > params[1]:
+        member_notice_add(slot[].notices, MEMBER_NOTICE_GP_RIDGE, params[1], alpha)
     slot[].rows = n
     slot[].cols = d
     slot[].info = info
@@ -1080,7 +1091,7 @@ def _gpc(slot: _Slot) -> Bool:
 # entry's status word or here (`_query`, `_gpc_query`). Codes are integers.
 comptime _CAN_COMMON = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
     | MEMBER_CAN_TEST_ROWS)
-comptime _CAN_GPR = _CAN_COMMON | MEMBER_CAN_PREDICT_STD
+comptime _CAN_GPR = _CAN_COMMON | MEMBER_CAN_PREDICT_STD | MEMBER_CAN_NOTICES
 comptime _CAN_GPC = _CAN_COMMON | MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_CLASSIFIER
 
 
@@ -1138,6 +1149,11 @@ def _gp_member(operation: Int, address: Int) raises -> Int:
         return 0
     var slot = _Slot(unsafe_from_address=_lookup(call[].state, False))
     var classifier = _gpc(slot)
+    if operation == MEMBER_OP_EXPORT and call[].block == MEMBER_BLOCK_NOTICES and (call[].flags & MEMBER_BLOCK_BY_INDEX) == 0:
+        # FIT NOTICES, by name, either kind (the classifier's are empty).
+        call[].dst = MemberMatrix(Int(slot[].notices.unsafe_ptr()), len(slot[].notices) // MEMBER_NOTICE_WORDS,
+                                  MEMBER_NOTICE_WORDS, MEMBER_F64)
+        return 0
     if operation == MEMBER_OP_OUTPUTS:
         _gp_outputs(call, classifier, slot[].classes if slot[].classes > 0 else call[].classes)
         return 0

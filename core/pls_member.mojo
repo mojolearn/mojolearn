@@ -37,7 +37,8 @@ j 0 x mean (1 x p), 1 x std (1 x p), 2 y std (1 x q), 3 x_weights (p x c),
 7 x_rotations (p x c), 8 y_rotations (q x c), 9 x scores (n x c), 10 y scores
 (n x c), 11 the per-component iteration counts (1 x c'). An import needs
 blocks 0, 1, 2 and j 0, 1; an operation whose block was not imported
-refuses in words.
+refuses in words. FIT NOTICES (`MEMBER_BLOCK_NOTICES` by name): the door's
+"y residual is constant" UserWarning (core/member_notices.mojo).
 
 The fitted state is OWNED here, in a process-wide store of fixed chunks
 (lock only for mint, free and lookup). SERIAL BY NATURE: the store's
@@ -54,12 +55,13 @@ from core.member_abi import (
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_PREDICT,
     MEMBER_OP_TRANSFORM, MEMBER_OP_INVERSE_TRANSFORM, MEMBER_OP_OUTPUTS, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT,
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_TRANSFORM, MEMBER_CAN_INVERSE_TRANSFORM,
-    MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT, MEMBER_CAN_COEF, MEMBER_CAN_MULTI_OUTPUT,
+    MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT, MEMBER_CAN_COEF, MEMBER_CAN_MULTI_OUTPUT, MEMBER_CAN_NOTICES,
     MEMBER_BLOCK_COEF, MEMBER_BLOCK_INTERCEPT, MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX,
-    MEMBER_IMPORT_DONE,
+    MEMBER_BLOCK_NOTICES, MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
 )
 from core.member_families import MEMBER_FAMILY_PLS
+from core.member_notices import member_notice_add, MEMBER_NOTICE_PLS_RESIDUAL, MEMBER_NOTICE_WORDS
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
@@ -89,6 +91,9 @@ struct PlsMemberSlot(Copyable, Movable, Defaultable):
     var blocks: List[List[Float32]]
     var rows: List[Int]
     var cols: List[Int]
+    # FIT NOTICES (core/member_notices.mojo): "y residual is constant", set by
+    # the fit, cleared with the blocks.
+    var notices: List[Float64]
 
     def __init__(out self):
         self.generation = 0
@@ -100,6 +105,7 @@ struct PlsMemberSlot(Copyable, Movable, Defaultable):
         self.blocks = List[List[Float32]]()
         self.rows = List[Int]()
         self.cols = List[Int]()
+        self.notices = List[Float64]()
 
 
 struct PlsMemberStore(Defaultable, Movable):
@@ -132,6 +138,7 @@ def _empty_blocks(mut slot: PlsMemberSlot):
     slot.rows = List[Int](length=_BLOCKS, fill=0)
     slot.cols = List[Int](length=_BLOCKS, fill=0)
     slot.scalars = List[Float64]()
+    slot.notices = List[Float64]()
 
 
 def _mint(var words: List[Float64]) raises -> Int:
@@ -290,6 +297,9 @@ def _fit(slot: _SlotP, call: _CallP) raises:
         slot[].scalars[1] = Float64(p)
         slot[].scalars[2] = Float64(q)
         slot[].scalars[3] = Float64(n)
+        # The door's "y residual is constant at iteration k" (`pls_fit_pack`).
+        if fit.done < nc:
+            member_notice_add(slot[].notices, MEMBER_NOTICE_PLS_RESIDUAL, Float64(fit.done))
     finally:
         kit.close()
     slot[].fitted = True
@@ -453,7 +463,7 @@ def _pls_member(operation: Int, address: Int) raises -> Int:
     var call = _CallP(unsafe_from_address=address)
     if operation == MEMBER_OP_CAPABILITIES:
         return (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_TRANSFORM | MEMBER_CAN_INVERSE_TRANSFORM
-            | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_CAN_COEF | MEMBER_CAN_MULTI_OUTPUT)
+            | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_CAN_COEF | MEMBER_CAN_MULTI_OUTPUT | MEMBER_CAN_NOTICES)
     if operation == MEMBER_OP_NEW:
         _new(call)
         return 0
@@ -469,6 +479,10 @@ def _pls_member(operation: Int, address: Int) raises -> Int:
         _fit(slot, call)
     elif operation == MEMBER_OP_PREDICT or operation == MEMBER_OP_TRANSFORM or operation == MEMBER_OP_INVERSE_TRANSFORM:
         _query(slot, call, operation)
+    elif operation == MEMBER_OP_EXPORT and call[].block == MEMBER_BLOCK_NOTICES and (
+            call[].flags & MEMBER_BLOCK_BY_INDEX) == 0:
+        call[].dst = MemberMatrix(Int(slot[].notices.unsafe_ptr()), len(slot[].notices) // MEMBER_NOTICE_WORDS,
+                                  MEMBER_NOTICE_WORDS, MEMBER_F64)
     elif operation == MEMBER_OP_EXPORT:
         _export(slot, call)
     elif operation == MEMBER_OP_IMPORT:

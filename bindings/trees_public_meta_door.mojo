@@ -82,6 +82,7 @@ from bindings.trees_public_score_door import trees_r2, trees_class_codes
 from bindings.classical_labels_door import labels_accuracy, _classification_encoded as score_classification_encoded
 from bindings.member_set_door import (
     MemberSet, member_set_admit, member_set_own_block, member_set_run, member_set_pack, member_set_release,
+    member_set_notices,
     member_set_resident,
 )
 from core.member_abi import (
@@ -659,6 +660,9 @@ def _fit_units_native(clones: PythonObject, xs: PythonObject, d: Int, targets: P
         packed = True
     except:
         packed = False
+    if packed:
+        # Every member's fit notices, once the whole set is published.
+        member_set_notices(set)
     member_set_release(set)  # a failing publication leaves no state behind
     return packed
 

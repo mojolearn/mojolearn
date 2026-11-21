@@ -66,6 +66,9 @@ Fitted-state blocks (MEMBER_OP_EXPORT / MEMBER_OP_IMPORT), in index order:
     fit computed them (or they were imported): the block count is then 7
 An import needs the first six (importances optional, before the last); the
 last one carries MEMBER_IMPORT_DONE.
+FIT NOTICES (Tree, Forest: MEMBER_CAN_NOTICES): `MEMBER_BLOCK_NOTICES` by name,
+one `MEMBER_NOTICE_FOREST` with the fit's notice mask (core/member_notices.mojo);
+never in the index walk, empty after an import.
 
 The state (the five arrays, the snapshot handle) is OWNED by its slot in a
 process-wide store of fixed chunks: a slot never moves, the lock covers
@@ -101,10 +104,11 @@ from core.member_abi import (
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_PREDICT,
     MEMBER_OP_PREDICT_PROBA, MEMBER_OP_SCORE, MEMBER_OP_OUTPUTS, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT,
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA, MEMBER_CAN_SCORE, MEMBER_CAN_EXPORT,
-    MEMBER_CAN_IMPORT, MEMBER_CAN_CLASSIFIER, MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_IMPORTANCES,
+    MEMBER_CAN_IMPORT, MEMBER_CAN_CLASSIFIER, MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_IMPORTANCES, MEMBER_CAN_NOTICES,
     MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FEATURE_IMPORTANCES, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
-    member_unsupported,
+    MEMBER_BLOCK_NOTICES, member_unsupported,
 )
+from core.member_notices import member_notice_add, MEMBER_NOTICE_FOREST, MEMBER_NOTICE_WORDS
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 from std.atomic import Atomic, Ordering
 
@@ -150,6 +154,9 @@ struct ForestMemberSlot(Copyable, Movable, Defaultable):
     var scalars: List[Float64]
     #: the fitted (or imported) feature importances; empty: none
     var imp: List[Float32]
+    #: FIT NOTICES (core/member_notices.mojo): the RF layout's notice mask of
+    #: the last fit (the third metadata word); empty after an import.
+    var notices: List[Float64]
     #: the image the snapshot lives in, and the predict route words
     var key: EntryRef
     var route: Int
@@ -193,6 +200,7 @@ struct ForestMemberSlot(Copyable, Movable, Defaultable):
         self.leaves = List[Float32]()
         self.scalars = List[Float64]()
         self.imp = List[Float32]()
+        self.notices = List[Float64]()
         self.key = entry_ref_unresolved()
         self.route = FOREST_ROUTE_SEQUENTIAL
         self.labels = False
@@ -310,6 +318,7 @@ def _lookup[name: StaticString](handle: Int, release: Bool) raises -> Int:
             slot[].leaves = List[Float32]()
             slot[].scalars = List[Float64]()
             slot[].imp = List[Float32]()
+            slot[].notices = List[Float64]()
             store[].free.append(index)
         return address
     finally:
@@ -600,6 +609,11 @@ def _fit(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], estim
         slot[].outputs = sizes.outputs
         slot[].classes = classes
         _scalars(slot, sizes.meta)
+        # The RF layout's third metadata word is the `ensemble/rf_notices.mojo`
+        # mask the door's `_rf_fit_notices` reads (ExtraTrees': its depth cap).
+        slot[].notices = List[Float64]()
+        if not slot[].et and len(sizes.meta) >= 3 and sizes.meta[2] != 0:
+            member_notice_add(slot[].notices, MEMBER_NOTICE_FOREST, Float64(sizes.meta[2]))
     finally:
         xf_export_release(key, handle)
     if slot[].importances:
@@ -791,6 +805,7 @@ def _import(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], es
             raise Error("member ABI: the forest scalars block's metadata count disagrees with its length")
         slot[].scalars = List[Float64](length=count, fill=0.0)
         unsafe_memcpy(dest=slot[].scalars.unsafe_ptr(), src=source, count=count)
+        slot[].notices = List[Float64]()
     elif block != 0:
         raise Error("member ABI: a forest member has no fitted block " + String(block))
     if (call[].flags & MEMBER_IMPORT_DONE) == 0:
@@ -818,7 +833,7 @@ def _import(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], es
     slot[].fitted = True
 
 
-def _capabilities(classifier: Bool, importances: Bool, weights: Bool) -> Int:
+def _capabilities(classifier: Bool, importances: Bool, weights: Bool, notices: Bool) -> Int:
     """The bits a kind honors. `weights` False: the kind's fit refuses
     `call.weights` (the RF-layout regressor with the importance fit, the
     estimator's own refusal), so it is not advertised. No
@@ -827,8 +842,11 @@ def _capabilities(classifier: Bool, importances: Bool, weights: Bool) -> Int:
     and only images with XF_CAP_DEVICE_SCAN test it at fit; the caller's
     admission scans. No `MEMBER_CAN_DEVICE_VIEWS`: every forest predict entry
     takes a HOST address of X and uploads it itself (no entry op binds a
-    resident store id), so a device-home X is refused (`_dense`)."""
+    resident store id), so a device-home X is refused (`_dense`).
+    `notices`: the RF layout (Tree, Forest) carries its fit notices."""
     var mask = MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
+    if notices:
+        mask |= MEMBER_CAN_NOTICES
     if weights:
         mask |= MEMBER_CAN_SAMPLE_WEIGHT
     if importances:
@@ -845,12 +863,13 @@ def fm_member[name: StaticString, rf_layout: Bool](operation: Int, address: Int,
     var call = MutPointer[MemberCall, MutUntrackedOrigin](unsafe_from_address=address)
     if operation == MEMBER_OP_CAPABILITIES:
         if call[].state == 0:
-            return _capabilities(True, rf_layout, True)
+            return _capabilities(True, rf_layout, True, rf_layout)
         var known = _SlotPtr(unsafe_from_address=_lookup[name](call[].state, False))
         # Kind AND settings exact: the RF-layout regressor whose every fit
         # computes importances refuses weights (`_fit`).
         var weights = known[].classifier or known[].et or not known[].importances
-        return _capabilities(known[].classifier, known[].importances or len(known[].imp) > 0, weights)
+        return _capabilities(known[].classifier, known[].importances or len(known[].imp) > 0, weights,
+                             not known[].et)
     if operation == MEMBER_OP_NEW:
         if not call[].params:
             raise Error("member ABI: a forest member needs its parameter words")
@@ -892,6 +911,11 @@ def fm_member[name: StaticString, rf_layout: Bool](operation: Int, address: Int,
         _predict(slot, call, True, estimator)
     elif operation == MEMBER_OP_SCORE:
         _score(slot, call, estimator)
+    elif operation == MEMBER_OP_EXPORT and call[].block == MEMBER_BLOCK_NOTICES and (
+            call[].flags & MEMBER_BLOCK_BY_INDEX) == 0:
+        # FIT NOTICES, by name (never in the index walk).
+        call[].dst = MemberMatrix(Int(slot[].notices.unsafe_ptr()), len(slot[].notices) // MEMBER_NOTICE_WORDS,
+                                  MEMBER_NOTICE_WORDS, MEMBER_F64)
     elif operation == MEMBER_OP_EXPORT:
         _export(slot, call, estimator)
     elif operation == MEMBER_OP_IMPORT:

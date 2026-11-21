@@ -29,10 +29,8 @@ from bindings.family_common_pack import family_field
 from bindings.kernel_methods_boundary_pack import km_matrix, km_vector, km_nys_fit_pack, km_rbf_fit_pack
 from bindings.kernel_methods_boundary_unpack import (
     KmRoute, KmUnpacked, km_extension, km_int, km_number, km_seed, km_tuple, km_scale_gamma_admit,
-    _km_kernel_code, _km_degree, _km_real, _km_params, _km_i32_snapshot, _km_warning_location,
+    _km_kernel_code, _km_degree, _km_real, _km_params, _km_i32_snapshot,
 )
-from bindings.classical_warnings_unpack import classical_warning
-from bindings.native_loaded_module_door import native_loaded_module
 from bindings.member_owner_unpack import MemberOwner
 from bindings.py_balanced import py_call, py_type
 from core.device_route import DeviceRoute, DEVICE_CPU, DEVICE_GPU
@@ -162,16 +160,10 @@ def kernel_approx_member_pack(model: PythonObject, fields: PythonObject, context
     var sigma = s[8]
     var scale = s[9]
     if Int(s[0]) == 0:
-        # The estimator's own rule and warning (`km_nys_fit_unpack`; sklearn
-        # Nystroem.fit): admit holds no X, so RUN clamps n_components to the
-        # rows and the warning is raised here, at this boundary, once per fit.
-        # `fields` is the member's own field dictionary (the requested word).
-        if km_int(family_field(fields, "n_components"), "Nystroem.n_components") > q:
-            classical_warning("n_components > n_samples. This is not possible.\n"
-                              + "n_components was set to n_samples, which results"
-                              + " in inefficient evaluation of the full kernel.",
-                              native_loaded_module("builtins").UserWarning, context,
-                              _km_warning_location())
+        # The estimator's own rule (`km_nys_fit_unpack`; sklearn Nystroem.fit):
+        # admit holds no X, so RUN clamps n_components to the rows; its
+        # UserWarning is the state's fit notice, raised by the caller
+        # (core/member_notices.mojo), never here.
         var components = _float_array(plan, call, _B_FIRST, q, d, False, context)
         var indices_view = _export(plan, call, _B_FIRST + 1)
         var indices = km_vector(q, "<i4", context)

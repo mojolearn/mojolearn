@@ -22,6 +22,8 @@ from std.python._cpython import PyObjectPtr, GILReleased
 from std.memory import unsafe_memcpy
 from bindings.classical_validate_unpack import classical_check_y, classical_estimator_name
 from bindings.member_boundary_door import member_admit_serving, member_pack, member_pack_labeled
+from bindings.member_fit_notices_pack import member_fit_notices_raise
+from core.member_notices import member_notices_take
 from bindings.member_owner_unpack import MemberOwner
 from bindings.member_set_door import MEMBER_SET_NATIVE
 from core.member_abi import (
@@ -370,7 +372,9 @@ def _rfe_member_words(member: RfeMember, block: PythonObject, n: Int, m: Int,
     caller then runs the estimator's own doors (nothing was staged)."""
     var call = _rfe_member_fit(member, member.owner.plan, block, n, m)
     var words = PythonObject(None)
+    var notices = List[Float64]()
     try:
+        member_notices_take(member.owner.plan, call.state, notices)
         call.block = member.block
         call.flags = 0
         _ = member_call(member.owner.plan.member, MEMBER_OP_EXPORT, call)
@@ -388,6 +392,8 @@ def _rfe_member_words(member: RfeMember, block: PythonObject, n: Int, m: Int,
         unsafe_memcpy(dest=_ptr(words), src=F32P(unsafe_from_address=view.data), count=rows * m)
     finally:
         member_free(member.owner.plan, call)
+    # The round's fit notices, as the estimator's own fit of the round raised them.
+    member_fit_notices_raise(notices, member.member_context)
     return words
 
 
@@ -403,7 +409,9 @@ def _rfe_member_final(member: RfeMember, block: PythonObject, n: Int, k: Int, b:
     if member.importance_word:
         plan.params[10] = 0.0
     var call = _rfe_member_fit(member, plan, block, n, k)
+    var notices = List[Float64]()
     try:
+        member_notices_take(plan, call.state, notices)
         if member.labels is None:
             member_pack(member.template, member.fields, member.member_context, b, plan, call.state)
         else:
@@ -411,6 +419,7 @@ def _rfe_member_final(member: RfeMember, block: PythonObject, n: Int, k: Int, b:
                                 call.state, member.labels)
     finally:
         member_free(plan, call)
+    member_fit_notices_raise(notices, member.member_context)
     return member.template
 
 
