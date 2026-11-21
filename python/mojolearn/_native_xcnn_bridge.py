@@ -139,13 +139,16 @@ def _connect_cpu_device(context):
     # (bindings/xcnn_common_door.mojo `xcnn_entries`). A CPU-only
     # installation has no second set: its one set is the CPU's. An image
     # that does not load records why, and the layer that asks for it says so.
-    from . import _backend
+    # The route table is the manifest's (`host_surface.routed_modules()`, read
+    # once here): `_backend._HOST_MODULES` is read only by the CPU-only
+    # selector (tools/test_lane_select_narrowing.py).
+    from . import _backend, host_surface
     if _backend._CPU_ONLY is not None:
         return
     bindings = {}
     try:
         bindings["identical"] = _connect_mode(
-            _backend.load_host_module(_backend._HOST_MODULES["_mojolearn_x_cnn"]))  # import-time: the CPU image
+            _backend.load_host_module(host_surface.routed_modules()["_mojolearn_x_cnn"]))  # import-time: the CPU image
     except (ImportError, AttributeError, ValueError, RuntimeError, TypeError, OSError, KeyError) as error:
         bindings["identical"] = type(error).__name__ + ": " + str(error)
     context.update(xcnn_cpu_bindings=bindings)
@@ -232,7 +235,7 @@ def connect_classifier():
         return
     import os
     from types import BuiltinFunctionType
-    from . import _backend
+    from . import _backend, host_surface
     from ._buffer import _native
     labels = {}
     for mode in ("identical", "fast"):  # glue: the two numeric modes, connected once
@@ -250,7 +253,7 @@ def connect_classifier():
         # image's label provider (the image `_native_xseq_bridge` also loads;
         # one load per process), held by a CPU-route classifier's route.
         try:
-            module = _backend.load_host_module(_backend._HOST_MODULES["_mojolearn_x_sequence"])  # import-time: the CPU image
+            module = _backend.load_host_module(host_surface.routed_modules()["_mojolearn_x_sequence"])  # import-time: the CPU image
             entry = getattr(module, "model_labels")
             provider = getattr(module, "model_native_api_v1")
             if not isinstance(entry, BuiltinFunctionType) or not isinstance(provider, BuiltinFunctionType):

@@ -113,7 +113,9 @@ def test_mamba_engine_keeps_local_forward_route_report_and_counter_semantics():
     # dw-neural-models (2026-11-21): the snapshot's typed layer route replaces layer_entry / layer_vendor
     # dw-causal (2026-11-21): the owner's snapshot with this operation's block captures and profile words
     assert '_causal_layer_run_bound(mods, snapshot.layer_route, snapshot.entries, snapshot.width, b, l,' in original
-    assert 'x, state.layers[i], False,' in original
+    # dw-causal continuation 3: the layer list is read once; a layer with current owner words takes the owned run
+    assert 'x, st, False,' in original and 'var layer_states = state.layers' in original
+    assert '_causal_layer_run_owned(mods, snapshot.layer_route, snapshot.entries, snapshot.width, b, l,' in original
     assert 'call.blocks[i], call.profiles[i], call.changed[i], False)' in original
     assert 'addresses[layer.output_slot]' in native
     assert 'layer.addresses[15] = _generation_zero_workspace(layer.report_workspace, layer.report_size)' in native

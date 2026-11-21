@@ -13,6 +13,10 @@ METADATA = ROOT / "bindings/lm_corpus_metadata_door.mojo"
 SCALARS = ROOT / "bindings/lm_corpus_scalars_unpack.mojo"
 # lane rs-embedding-bytelm: the typed floating product is RUN code.
 SCALARS_RUN = ROOT / "training/lm_corpus_scalars_run.mojo"
+# lane dw-neural-models: preparation is typed RUN (files, manifests, training, encoding).
+PREPARE_RUN = ROOT / "bindings/lm_corpus_prepare_run.mojo"
+FILES_RUN = ROOT / "bindings/lm_corpus_files_run.mojo"
+JSON_VALUE = ROOT / "core/native_json_value.mojo"
 
 
 def _plain(path):
@@ -43,14 +47,22 @@ class CorpusPublicSource(unittest.TestCase):
 
     def test_preparation_owns_cache_and_existing_tokenizer_routes(self):
         source = _plain(NATIVE)
-        for entry in ("tokenizer_bpe_train_corpus(data,", "tokenizer_bpe_encode_corpus(tokenizer,",
+        for entry in ("corpus_prepare_run(request)", "corpus_tokenize_run(doc, address, len(data)",
                       "lm_batch_run(request, base, Int(py=result._addr)",
-                      "corpus_atomic_begin(final)", "corpus_atomic_commit(temporary, final)",
-                      "corpus_atomic_abort(temporary)", "corpus_hash_file(path)",
                       # pass 3 (N174): one token hash per prepare, carried to batches().
-                      '"_tokens_verified"', "_batch_verified(verified, token_file, size, manifest)",
-                      "_source_data(data, src)"):
+                      '"_tokens_verified"',
+                      "_batch_verified(verified, token_file, size, tokens_manifest_sha(manifest))"):
             self.assertIn(entry, source)
+        run = PREPARE_RUN.read_text()
+        for entry in ("bpe_train_corpus_fill(trained,", "bpe_encode_corpus_into(handle, data,",
+                      "render_ranks(trained.vocab.value())",
+                      "corpus_run_atomic_begin(final)", "corpus_run_atomic_commit(temporary, final)",
+                      "corpus_run_atomic_abort(temporary)", "corpus_run_hash_file(path, size)",
+                      "_source_data(data, have, source)", '"mojolearn.bpe-trainer.v1"'):
+            self.assertIn(entry, run)
+        for typed in (PREPARE_RUN, FILES_RUN, JSON_VALUE):
+            for forbidden in ("PythonObject", "py_call", "std.python"):
+                self.assertNotIn(forbidden, typed.read_text(), typed.name)
         for forbidden in ("Python.import_module", "tokenizer._encode_corpus", "tokenizer.identity",
                           "py_call(progress", "py_call(owner.ids", "fill(tmp)", "hashlib", "threading"):
             self.assertNotIn(forbidden, source)
@@ -58,12 +70,12 @@ class CorpusPublicSource(unittest.TestCase):
         self.assertIn("Python progress callbacks", source)
 
     def test_cache_identity_and_document_recipe_are_retained(self):
-        source = _plain(NATIVE)
+        source = PREPARE_RUN.read_text()
         for constant in ("mojolearn.byte-lm.tokens.v1", "mojolearn.byte-lm.corpus.v1",
                          "mojolearn.bpe-vocabulary.v1", "train-range-modulo.v1"):
             self.assertIn(constant, source)
-        for value in ('"-v" + String(size)', '"-f" + String(frequency)', '"-s" + String(hi - lo)',
-                      '"-d" + String(document_bytes)', '"user-" + _prefix(identity["sha256"])',
+        for value in ('"-v" + String(request.vocab_size)', '"-f" + String(request.min_frequency)',
+                      '"-s" + String(hi - lo)', '"-d" + String(request.document_bytes)', '"user-" + _prefix16(sha)',
                       'not inserted and not recognized (allow_endoftext=False)',
                       'ending at the last 0x0A at or before the limit'):
             self.assertIn(value, source)

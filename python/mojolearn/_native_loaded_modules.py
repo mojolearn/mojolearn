@@ -99,7 +99,7 @@ connect_module('operator', operator, tuple(name for name in vars(operator)  # gl
 # parses this tuple and refuses any name outside its exact allowlist.
 connect_module('math', math, ('floor', 'ceil', 'comb'))
 connect_module('itertools', itertools, tuple(name for name in vars(itertools) if not name.startswith('_')))  # glue: fixed native iterator types
-connect_module('os', os, ('stat', 'urandom', 'getcwd'))
+connect_module('os', os, ('stat', 'urandom', 'getcwd', 'strerror'))
 # The Samba checkpoint file calls (bindings/samba_checkpoint_native_unpack.mojo): one
 # exclusive create, fsync, close and rename per save, fstat per load.
 connect_module('posix', posix, ('open', 'close', 'fsync', 'rename', 'unlink', 'urandom', 'fstat',

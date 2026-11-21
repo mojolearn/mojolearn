@@ -85,7 +85,7 @@ from core.hostptr import i32_ptr
 from bindings.native_json_door import native_json_parse, native_path
 from bindings.causal_model_config_door import model_config_c
 from bindings.causal_checkpoint_door import checkpoint_c
-from bindings.causal_operation_owner_door import CausalExecutionEntries, CausalModelOwner
+from bindings.causal_operation_owner_door import CausalExecutionEntries, CausalModelOwner, CausalStateOwner
 from bindings.native_identity_type_unpack import native_identity_type
 from bindings.neural_block_public_door import NativeBlockPlan
 from bindings.lm_corpus_public_native_door import LmCorpusIteratorHandle
@@ -211,7 +211,7 @@ from providers.python.transformer_block_session_pyapi_door import transformer_bl
 from providers.python.mamba3_prefill_session_pyapi_door import mamba3_prefill_session_type
 from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider, NativeDescriptorResource, neural_descriptor_info, neural_descriptor_provider_pins, native_descriptor_resource_pins
 from providers.python.operation_lock_pyapi_door import ProviderOperationLock, operation_lock_connect, operation_lock_c
-from bindings.causal_operation_owner_door import CausalExecutionEntries, CausalModelOwner
+from bindings.causal_operation_owner_door import CausalExecutionEntries, CausalModelOwner, CausalStateOwner
 from bindings.causal_lm_public_door import (
     GenerationHandle, PreparedGenerationLayer, causal_lm_allocate_binding,
     causal_lm_reset_binding, causal_lm_forward_binding, causal_lm_stream_binding,
@@ -1203,6 +1203,7 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         _ = module.add_type[CausalExecutionEntries]("_CausalExecutionEntries")
         # causal_model_owner_build stores PythonObject(alloc=CausalModelOwner(...)).
         _ = module.add_type[CausalModelOwner]("_CausalModelOwner")
+        _ = module.add_type[CausalStateOwner]("_CausalStateOwner")
         native_identity_type(module)
         _ = module.add_type[NativeBlockPlan]("_NativeBlockPlan")
         # neural_block_owner pins PythonObject(alloc=PreparedGenerationLayer(...)).

@@ -78,12 +78,13 @@ def test_proxy_resolution_occurs_only_while_capturing_builtin_entries():
     proxy = Proxy()
     result = ns["_capture"](proxy, "test.native", ("search", "optional"))
     assert type(result) is ModuleType and vars(result)["search"] is len
-    # The capture also reads the image's neighbors table key once (76de1ab11d).
-    assert resolutions == ["search", "optional", "neighbors_native_key"]
+    # The capture also reads the image's two table keys once (76de1ab11d; the
+    # IVF-Flat operations table, lane dw-neighbors).
+    assert resolutions == ["search", "optional", "neighbors_native_key", "ivf_native_key"]
     assert "__getattr__" not in vars(result)
     assert ns["_BINDING_ALIASES"][id(proxy)] == (proxy, result)
     assert ns["_BINDING_ALIASES"][id(result)] == (result, result)
-    assert result.search([1]) == 1 and resolutions == ["search", "optional", "neighbors_native_key"]
+    assert result.search([1]) == 1 and resolutions == ["search", "optional", "neighbors_native_key", "ivf_native_key"]
 
 
 def test_python_callable_cannot_enter_native_route_table():
@@ -130,8 +131,14 @@ def test_native_owner_replaces_lazy_python_getter_and_keeps_host_classes():
         assert name in host[host.index("_connect_neighbor_host({"):]
     native = (ROOT / "bindings/neighbor_query_native_door.mojo").read_text()
     assert "Python.import_module" not in native
-    for path in ("ivf_flat_index_export", "ivf_flat_index_prepare", "ivf_flat_index_search", "ivf_flat_search"):
+    # The IVF queries call the image's operations table through the typed RUN
+    # (ivf/ivf_query_run.mojo), never an export by name.
+    for path in ("ivf_door_export", "ivf_door_prepare", "ivf_door_search", "ivf_door_extend", "ivf_ops_key"):
         assert path in native
+    for forbidden in ('"ivf_flat_index_export"', '"ivf_flat_index_prepare"', '"ivf_flat_index_search"', '"ivf_flat_search"', '"ivf_flat_extend"'):
+        assert forbidden not in native
+    run = (ROOT / "ivf/ivf_query_run.mojo").read_text()
+    assert "PythonObject" not in run and "std.python" not in run
     assert "_resident_owner" in native and "_ivf_filter" in native
 
 

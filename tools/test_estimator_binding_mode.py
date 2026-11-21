@@ -10,9 +10,15 @@ def _body(name):
 
 
 def test_model_route_reads_admitted_storage_then_delegates():
+    # Lane dw-core (2026-11-18): the door admits the instance storage once, reads the mode from it and hands the
+    # admitted fields to the estimator's route (the device record is read from the same fields on a miss); a None
+    # model still goes straight to the mode-only selector.
     source = _body('estimator_binding')
-    assert 'py_get(_fields(model), "numeric_mode")' in source
-    assert 'return estimator_binding_mode(requested, name, context, check_mode)' in source
+    assert 'var fields = _fields(model)' in source
+    assert source.count('_fields(model)') == 1
+    assert ('return _estimator_binding_routed(model, fields, py_get(fields, "numeric_mode"), name, context, '
+            'check_mode)') in source
+    assert 'return estimator_binding_mode(PythonObject(None), name, context, check_mode)' in source
     assert '.strip(' not in source
     assert 'py_fields(model)' not in source
 

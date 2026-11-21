@@ -44,6 +44,84 @@ def ivf_arrays_check_cells(a: Int, b: Int, what: String) raises:
         raise Error("ivf_flat: " + what + " exceeds 2^40 cells")
 
 
+def ivf_extent_word(v: Int, name: String) raises -> Int:
+    """A non-negative extent word within the row bound, by name (the typed
+    half of `ivf_arrays_extent`; a Boolean is refused at UNPACK)."""
+    if v < 0 or v > IVF_ARRAYS_MAX_ROWS:
+        raise Error(
+            "ivf_flat: " + name + " must be in [0, 2^31), got " + String(v)
+        )
+    return v
+
+
+def ivf_index_extent_words(n: Int, dim: Int, n_lists: Int) raises:
+    """The three extents of a built index and their two cell bounds."""
+    _ = ivf_extent_word(n, String("n"))
+    _ = ivf_extent_word(dim, String("dim"))
+    _ = ivf_extent_word(n_lists, String("n_lists"))
+    ivf_arrays_check_cells(n, dim, String("n * dim"))
+    ivf_arrays_check_cells(n_lists, dim, String("n_lists * dim"))
+
+
+def ivf_admit_index_arrays_run(
+    centers_addr: Int,
+    center_norms_addr: Int,
+    offsets_addr: Int,
+    indices_addr: Int,
+    list_data_addr: Int,
+    n_lists: Int,
+    dim: Int,
+    n: Int,
+    metric: Int,
+    partial_storage: Bool,
+    what: String,
+) raises -> IvfIndexArrays:
+    """A built index named by typed words: its extents admitted, then its
+    five buffers read and admitted (`ivf_read_index_arrays` after its two
+    list-count checks)."""
+    ivf_index_extent_words(n, dim, n_lists)
+    if n < 1 or dim < 1 or n_lists < 1:
+        raise Error(
+            what + ": n, dim and n_lists must all be at least 1, got n="
+            + String(n) + " dim=" + String(dim) + " n_lists=" + String(n_lists)
+        )
+    return ivf_read_index_arrays_run(
+        centers_addr, center_norms_addr, offsets_addr, indices_addr, list_data_addr,
+        n_lists, dim, n, metric, partial_storage,
+    )
+
+
+def ivf_search_extent_words(m: Int, k: Int, n_probes: Int) raises:
+    """`ivf_flat_search`'s m, k and n_probes, and the `m * k` cell bound."""
+    _ = ivf_extent_word(m, String("m"))
+    _ = ivf_extent_word(k, String("k"))
+    _ = ivf_extent_word(n_probes, String("n_probes"))
+    ivf_arrays_check_cells(m, k, String("m * k"))
+
+
+def ivf_extend_count_word(n_new: Int, n_rows: Int, dim: Int) raises -> Int:
+    """`ivf_flat_extend`'s `n_new`: at least one row, the extended row count
+    below 2^31 (the ids cross as int32) and `(n + n_new) * dim` below 2^40."""
+    _ = ivf_extent_word(n_new, String("n_new"))
+    if n_new < 1:
+        raise Error("ivf_flat_extend: n_new must be at least 1, got " + String(n_new))
+    if n_new > IVF_ARRAYS_MAX_ROWS - n_rows:
+        raise Error(
+            "ivf_flat_extend: n + n_new = " + String(n_rows) + " + " + String(n_new)
+            + " would carry an id past 2^31 - 1"
+        )
+    ivf_arrays_check_cells(n_rows + n_new, dim, String("(n + n_new) * dim"))
+    return n_new
+
+
+def ivf_filter_words(address: Int, n_rows: Int) raises -> List[Int32]:
+    """The optional sample filter, one int32 per ORIGINAL row id (0 removes
+    the row; DEVIATION 5863). Address 0 is no filter: an empty list."""
+    if address == 0:
+        return List[Int32]()
+    return read_i32(address, n_rows)
+
+
 def ivf_read_index_arrays_run(
     centers_addr: Int,
     center_norms_addr: Int,

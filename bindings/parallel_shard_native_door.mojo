@@ -86,7 +86,16 @@ from bindings.parallel_shard_common_door import (
     shard_store_drop,
     shard_resolve_stored,
 )
-from bindings.parallel_shard_common_run import shard_read_shift, shard_faults_take, shard_store_token, shard_faults_arm, shard_sabotage_arm
+from bindings.parallel_shard_common_run import shard_read_shift, shard_faults_take, shard_store_token, shard_faults_arm, shard_sabotage_arm, shard_width_admit, shard_batch_admit
+from bindings.parallel_shard_native_run import (
+    shard_mode_identical, shard_identical_admit, shard_fitted_admit, shard_positive_admit, shard_features_admit,
+    shard_envelope_admit, rbf_features_admit, rbf_part_admit, scaler_input_admit, scaler_weight_admit,
+    scaler_fit_mode_admit, scaler_block_admit, gpc_mode_kind_admit, gpc_mode_defaults, gpc_mode_admit,
+    gpc_labels_admit, gpc_method_admit, gpc_features_admit, gpc_rows_admit, forest_count_admit,
+    forest_offsets_admit, reference_algorithm_admit, reference_knn_admit, reference_k_admit, reference_cell_limit,
+    reference_width, reference_ids_admit, reference_merge_admit, ivf_open_admit, ivf_offsets_admit,
+    ivf_receipt_admit, ivf_queries_admit, ivf_features_admit, ivf_parts_admit, ivf_merge_admit,
+)
 from bindings.kernel_methods_native_door import _rbf_transform
 from bindings.gp_classifier_native_door import (
     gpc_validate, gpc_worker_fit, gpc_worker_latent, _gpc_binary_result, GPCFitPublication, _gpc_set_fitted, _gpc_ovr_combine,
@@ -207,7 +216,8 @@ def _member_device(fields: PythonObject, driver: String) raises:
 
 def _identical(fields: PythonObject) raises -> Bool:
     var mode = py_get(fields, PythonObject("numeric_mode"), PythonObject(None))
-    return mode is None or (py_type(mode) is shard_b().str and String(mode) == "identical")
+    var exact = mode is not None and py_type(mode) is shard_b().str
+    return shard_mode_identical(mode is not None, exact, String(mode) if exact else String(""))
 
 
 # ---------------------------------------------------------------- RBFSampler
@@ -223,20 +233,17 @@ def _transform_rbf_sampler(args: PythonObject) raises -> PythonObject:
         raise Error("TypeError: requires mojolearn.RBFSampler")
     var fields = py_fields(estimator)
     _member_device(fields, "transform_rbf_sampler")
-    if not _identical(fields):
-        raise Error("ValueError: parallel RBFSampler requires IDENTICAL numeric mode")
-    if not py_contains(fields, PythonObject("random_weights_")):
-        raise Error("ValueError: RBFSampler is not fitted")
+    shard_identical_admit(_identical(fields), "parallel RBFSampler requires IDENTICAL numeric mode")
+    shard_fitted_admit(py_contains(fields, PythonObject("random_weights_")), "RBFSampler is not fitted")
     var rps = args[3]
-    if py_type(rps) is not b.int or Int(py=rps) < 1:
-        raise Error("ValueError: rows_per_shard must be a positive int")
+    var rps_exact = py_type(rps) is b.int
+    shard_positive_admit(rps_exact, Int(py=rps) if rps_exact else 0, "rows_per_shard must be a positive int")
     var x_pin = ArrayPin()
     var x_meta = admit_family_meta(args[1], 2, "X", context, x_pin, True)
     var x = x_pin.keep
     var d = Int(py=x.shape[1])
     var nk = parallel_keys()
-    if d != Int(py=py_item(fields, nk[].k_n_features_in_)):
-        raise Error("ValueError: X has " + String(d) + " features, the fit had " + String(Int(py=py_item(fields, nk[].k_n_features_in_))))
+    rbf_features_admit(d, Int(py=py_item(fields, nk[].k_n_features_in_)))
     var rows = Int(py=x.shape[0])
     if rows == 0:
         return _rbf_transform(estimator, Python.tuple(args[4], x), context, x_meta, x_pin)
@@ -253,8 +260,8 @@ def _transform_rbf_sampler(args: PythonObject) raises -> PythonObject:
     var q = Int(py=py_item(fields, nk[].k_random_weights_).shape[1])
     for r in range(len(parts)):  # driver-loop: checks one result block per row shard
         var part = parts[r]
-        if Int(py=part.ndim) != 2 or Int(py=part.shape[1]) != q:
-            raise Error("ValueError: RBFSampler worker returned an invalid result shape")
+        var part_rank = Int(py=part.ndim)
+        rbf_part_admit(part_rank, Int(py=part.shape[1]) if part_rank == 2 else -1, q)
     return shard_join_rows(parts, rows, context)
 
 
@@ -288,12 +295,9 @@ def _scaler_input(source: PythonObject, context: PythonObject) raises -> PythonO
     var snapshot = admit_family_input(source, -1, "input", context, pin)
     var b = shard_b()
     var listed = py_type(source) is b.list or py_type(source) is b.tuple
-    if not listed and snapshot.dtype_name != "<f4":
-        raise Error("TypeError: Scaler input must have dtype float32")
-    if len(snapshot.shape) != 2 or snapshot.shape[0] == 0 or snapshot.shape[1] == 0:
-        raise Error("ValueError: Scaler requires a nonempty two-dimensional input")
-    if snapshot.shape[0] * snapshot.shape[1] > 2147483647:
-        raise Error("ValueError: Scaler exceeds the native Int32 indexing bound")
+    var input_rank = len(snapshot.shape)
+    scaler_input_admit(listed, snapshot.dtype_name, input_rank, snapshot.shape[0] if input_rank == 2 else 0,
+                       snapshot.shape[1] if input_rank == 2 else 0)
     admit_family_cast(snapshot, pin, "input", context)
     return pin.keep
 
@@ -325,10 +329,8 @@ def _fit_scaler(args: PythonObject) raises -> PythonObject:
     var names = _scaler_stats(kind)
     var fields = py_fields(estimator)
     _member_device(fields, "fit_scaler")
-    if not _identical(fields):
-        raise Error("ValueError: parallel scalers require IDENTICAL numeric mode")
-    if args[4] is not None:
-        raise Error("NotImplementedError: scalers do not implement sample_weight")
+    shard_identical_admit(_identical(fields), "parallel scalers require IDENTICAL numeric mode")
+    scaler_weight_admit(args[4] is not None)
     var data = _scaler_input(args[1], context)
     var n = Int(py=data.shape[0])
     var d = Int(py=data.shape[1])
@@ -387,13 +389,13 @@ def _transform_scaler(args: PythonObject) raises -> PythonObject:
     var names = _scaler_stats(kind)
     var entry = _t(kind + "_call")
     var owner_context = _t(kind + "_context")
-    if not Bool(py=py_call(b.bool, family_call(entry, estimator, PythonObject("is_fitted"), Python.tuple(), owner_context))):
-        raise Error("ValueError: scaler is not fitted")
+    shard_fitted_admit(Bool(py=py_call(b.bool, family_call(entry, estimator, PythonObject("is_fitted"), Python.tuple(), owner_context))),
+                       "scaler is not fitted")
     var fields = py_fields(estimator)
     _member_device(fields, "transform_scaler")
     var fitted_mode = py_get(fields, PythonObject("numeric_mode_"), PythonObject(None))
-    if fitted_mode is None or py_type(fitted_mode) is not b.str or String(fitted_mode) != "identical":
-        raise Error("ValueError: parallel scaler transforms require an IDENTICAL fit")
+    var fitted_exact = fitted_mode is not None and py_type(fitted_mode) is b.str
+    scaler_fit_mode_admit(fitted_exact, String(fitted_mode) if fitted_exact else String(""))
     var inverse = args[4]
     if py_type(inverse) is not b.bool:
         raise Error("ValueError: inverse must be a bool")
@@ -401,8 +403,7 @@ def _transform_scaler(args: PythonObject) raises -> PythonObject:
     var n = Int(py=data.shape[0])
     var d = Int(py=data.shape[1])
     var nk = parallel_keys()
-    if d != Int(py=py_item(fields, nk[].k_n_features_in_)):
-        raise Error("ValueError: input feature count differs from fit")
+    shard_features_admit(d, Int(py=py_item(fields, nk[].k_n_features_in_)))
     var ranges = shard_ranges(d, args[3], "columns_per_shard", "")
     var base = shard_state(fields, b.frozenset(), context)
     var n_devices = shard_devices(args[2])
@@ -424,8 +425,8 @@ def _transform_scaler(args: PythonObject) raises -> PythonObject:
         var lo = ranges[2 * r]
         var w = ranges[2 * r + 1] - lo
         var part = parts[r]
-        if Int(py=part.shape[0]) != n or Int(py=part.shape[1]) != w:
-            raise Error("ValueError: scaler worker returned an invalid block shape")
+        var part_rows = Int(py=part.shape[0])
+        scaler_block_admit(part_rows, Int(py=part.shape[1]) if part_rows == n else -1, n, w)
         forecast_scatter_cols(Int(py=classical_address(out)), Int(py=classical_address(part)), n, d, lo, w)
         _ = out  # keep the Python object alive through the native call above
         _ = part  # keep the Python object alive through the native call above
@@ -447,13 +448,13 @@ def _gpc_admit(estimator: PythonObject, context: PythonObject) raises -> PythonO
     _member_device(fields, "GaussianProcessClassifier")
     var mode = py_get(fields, PythonObject("numeric_mode"), PythonObject(None))
     var b = shard_b()
-    if mode is not None and py_type(mode) is not b.str:
-        raise Error("ValueError: parallel GPC requires IDENTICAL numeric mode")
-    if mode is None or String(mode) == "":
+    var own_exact = mode is not None and py_type(mode) is b.str
+    gpc_mode_kind_admit(mode is None, own_exact)
+    if gpc_mode_defaults(mode is None, String(mode) if own_exact else String("")):
         var nk = parallel_keys()
         mode = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
-    if py_type(mode) is not b.str or String(mode) != "identical":
-        raise Error("ValueError: parallel GPC requires IDENTICAL numeric mode")
+    var mode_exact = py_type(mode) is b.str
+    gpc_mode_admit(mode_exact, String(mode) if mode_exact else String(""))
     var work = shard_model(py_type(estimator), py_call(b.dict, fields))
     gpc_validate(work, context)
     return work
@@ -474,10 +475,7 @@ def _fit_gpc(args: PythonObject) raises -> PythonObject:
     var encoded = gp_encode_labels_transport(args[2], _worker_binding("_mojolearn"), context)
     var classes = encoded.classes
     var codes = encoded.codes
-    if Int(py=codes.size) != Int(py=x.shape[0]):
-        raise Error("ValueError: y length differs from X rows")
-    if len(classes) < 2:
-        raise Error("ValueError: GaussianProcessClassifier requires at least two classes")
+    gpc_labels_admit(Int(py=codes.size), Int(py=x.shape[0]), len(classes))
     var columns = b.list()
     if len(classes) == 2:
         _ = py_call(columns.append, PythonObject(1))
@@ -531,16 +529,13 @@ def _predict_gpc(args: PythonObject) raises -> PythonObject:
     var estimator = args[0]
     var work = py_fields(_gpc_admit(estimator, context))
     var method = args[3]
-    if py_type(method) is not b.str or (String(method) != "predict" and String(method) != "predict_proba"):
-        raise Error("ValueError: method must be predict or predict_proba")
+    var method_exact = py_type(method) is b.str
+    gpc_method_admit(method_exact, String(method) if method_exact else String(""))
     var fields = py_fields(estimator)
-    if not py_contains(fields, PythonObject("estimators_")):
-        raise Error("ValueError: GaussianProcessClassifier: call fit() or load() first")
+    shard_fitted_admit(py_contains(fields, PythonObject("estimators_")), "GaussianProcessClassifier: call fit() or load() first")
     var q = admit_family(args[1], 2, "X", context).array
     var nk = parallel_keys()
-    if Int(py=q.shape[1]) != Int(py=py_item(fields, nk[].k_n_features_in_)):
-        raise Error("ValueError: GaussianProcessClassifier: X has " + String(Int(py=q.shape[1])) + " features, fit saw "
-                    + String(Int(py=py_item(fields, nk[].k_n_features_in_))))
+    gpc_features_admit(Int(py=q.shape[1]), Int(py=py_item(fields, nk[].k_n_features_in_)))
     var proba_method = String(method) == "predict_proba"
     var n_classes = Int(py=py_item(fields, nk[].k_n_classes_))
     var want_proba = proba_method or n_classes > 2
@@ -571,8 +566,7 @@ def _predict_gpc(args: PythonObject) raises -> PythonObject:
                    else shard_run(requests, args[2], _CHILD))
     var n_star = Int(py=q.shape[0])
     for i in range(len(columns)):  # driver-loop: checks one result column per class
-        if Int(py=columns[i].shape[0]) != n_star:
-            raise Error("ValueError: GPC worker returned an invalid row count")
+        gpc_rows_admit(Int(py=columns[i].shape[0]), n_star)
     if n_classes == 2:
         if proba_method:
             return columns[0]
@@ -629,16 +623,15 @@ def _fit_forest(args: PythonObject) raises -> PythonObject:
     classical_check_layout(estimator, context)
     _member_device(py_fields(estimator), "fit_forest")
     var tps = args[4]
-    if py_type(tps) is not b.int or Int(py=tps) < 1:
-        raise Error("ValueError: trees_per_shard must be a positive integer")
+    var tps_exact = py_type(tps) is b.int
+    shard_positive_admit(tps_exact, Int(py=tps) if tps_exact else 0, "trees_per_shard must be a positive integer")
     var trees_context = _t("trees_context")
     var x_admitted = admit_family(args[1], 2, "X", context)
     var x = x_admitted.array
     var plan = forest_shard_prepare(estimator, x_admitted.rows, x_admitted.cols, args[2], trees_context)
     var nk = parallel_keys()
     var count = Int(py=py_item(plan.fields, nk[].k_n_estimators))
-    if count < 1:
-        raise Error("ValueError: n_estimators must be positive")
+    forest_count_admit(count)
     var ranges = shard_ranges(count, tps, "trees_per_shard", "")
     var n_devices = shard_devices(args[3])
     # N452 (lane ne2-i-j): with more tree ranges than workers, X, y and the
@@ -697,8 +690,7 @@ def _rebase_offsets(arrays: PythonObject, key: EntryRef, context: PythonObject) 
     var n_raw = 0
     for p in range(len(arrays)):  # driver-loop: one offset table per tree range
         var a = arrays[p]
-        if shard_dtype(a) != "<i4":
-            raise Error("ValueError: forest worker returned non-int32 node offsets")
+        forest_offsets_admit(shard_dtype(a))
         _ = py_call(parts.append, a)
         n_raw += Int(py=a.shape[0])
     var raw = shard_join_rows(parts, n_raw, context)
@@ -735,8 +727,7 @@ def _pool_open(devices: PythonObject) raises -> PythonObject:
 
 def _map(pool: PythonObject, requests: PythonObject) raises -> PythonObject:
     var result = shard_map(pool, requests)
-    if len(result) != len(requests):
-        raise Error("ValueError: shard workers returned an incomplete batch")
+    shard_batch_admit(len(result), len(requests))
     return result
 
 
@@ -765,10 +756,9 @@ def _holder_init(args: PythonObject, reference: Bool) raises -> PythonObject:
     var nk = parallel_keys()
     if reference:
         var algorithm = py_get(fields, nk[].k_algorithm)
-        if py_type(algorithm) is not b.str or (String(algorithm) != "auto" and String(algorithm) != "brute"):
-            raise Error("ValueError: reference sharding requires the IDENTICAL brute-force arm")
-    if not _identical(fields):
-        raise Error("ValueError: parallel neighbors require IDENTICAL numeric mode")
+        var algorithm_exact = py_type(algorithm) is b.str
+        reference_algorithm_admit(algorithm_exact, String(algorithm) if algorithm_exact else String(""))
+    shard_identical_admit(_identical(fields), "parallel neighbors require IDENTICAL numeric mode")
     if reference and args[3] is not None:
         _ = shard_ranges(0, args[3], "reference_rows_per_shard", "")
     _ = shard_ranges(0, args[4] if reference else args[3], "query_rows_per_shard" if reference else "rows_per_shard", "")
@@ -836,9 +826,8 @@ def _reference_query(args: PythonObject) raises -> PythonObject:
     var fields = py_fields(model)
     var mode = py_get(fields, PythonObject("numeric_mode"), PythonObject(None))
     var algorithm = py_get(fields, PythonObject("algorithm"), PythonObject(None))
-    if (not _identical(fields) or py_type(algorithm) is not b.str
-            or (String(algorithm) != "auto" and String(algorithm) != "brute")):
-        raise Error("ValueError: reference shards require IDENTICAL brute-force KNN")
+    var algorithm_exact = py_type(algorithm) is b.str
+    reference_knn_admit(_identical(fields), algorithm_exact, String(algorithm) if algorithm_exact else String(""))
     _ = mode
     var index = py_get(fields, PythonObject("_index"), PythonObject(None))
     if index is None:
@@ -852,28 +841,23 @@ def _reference_query(args: PythonObject) raises -> PythonObject:
             raise Error("ValueError: fit the estimator before prediction")
     var data = admit_family(args[1], 2, "X", context).array
     var d = Int(py=py_item(fields, nk[].k_n_features_in_))
-    if Int(py=data.shape[1]) != d:
-        raise Error("ValueError: input feature count differs from fit")
+    shard_features_admit(Int(py=data.shape[1]), d)
     var n = Int(py=py_item(fields, nk[].k_n_samples_fit_))
     var k_obj = py_item(fields, nk[].k_n_neighbors) if args[3] is None else args[3]
-    if py_type(k_obj) is not b.int or Int(py=k_obj) < 1 or Int(py=k_obj) > n:
-        raise Error("ValueError: n_neighbors must be an integer in [1, reference rows]")
+    var k_exact = py_type(k_obj) is b.int
+    reference_k_admit(k_exact, Int(py=k_obj) if k_exact else 0, n)
     var k = Int(py=k_obj)
     if py_type(args[4]) is not b.bool:
         raise Error("TypeError: return_distance must be a bool")
-    if n > 2147483647:
-        raise Error("ValueError: reference row count exceeds the native signed-int32 shape contract")
-    var cell_limit = 2147483647 // d
-    if cell_limit < 1:
-        raise Error("ValueError: feature count exceeds the native signed-int32 shape contract")
+    var cell_limit = reference_cell_limit(n, d)
     var devices = py_item(pool, nk[].k_devices)
     var n_devices = len(devices)
     var width_obj = py_item(holder, nk[].k_reference_rows_per_shard)
-    if width_obj is not None and (py_type(width_obj) is not b.int or Int(py=width_obj) < 1):
-        raise Error("ValueError: reference_rows_per_shard must be a positive integer")
-    var width = min(cell_limit, (n + n_devices - 1) // n_devices) if width_obj is None else Int(py=width_obj)
-    if min(width, n) > cell_limit:
-        raise Error("ValueError: reference shard exceeds the native signed-int32 cell-count contract")
+    var width_given = width_obj is not None
+    var width_exact = width_given and py_type(width_obj) is b.int
+    if width_given:
+        shard_width_admit(width_exact, Int(py=width_obj) if width_exact else 0, "reference_rows_per_shard")
+    var width = reference_width(cell_limit, n, n_devices, width_given, Int(py=width_obj) if width_given else 0)
     var ranges = shard_ranges(n, PythonObject(width), "reference_rows_per_shard", "")
     var params = b.dict()
     py_setitem(params, nk[].k_n_neighbors, k)
@@ -992,8 +976,7 @@ def _merge_candidates(parts: PythonObject, ranges: List[Int], n_queries: Int, k:
         var ids = parts[p][1]
         var ids_dtype = shard_dtype(ids)
         if ids_dtype != "<i8":
-            if ids_dtype != "<i4" and ids_dtype != "<u4":
-                raise Error("ValueError: reference shard ids require int32, uint32 or int64, got " + ids_dtype)
+            reference_ids_admit(ids_dtype)
             var wide = shard_array("<i8", py_call(b.tuple, ids.shape), Int(py=ids.size), context)
             var code = HP_I32 if ids_dtype == "<i4" else HP_U32
             _ = cast_elements(Int(py=classical_address(ids)), code, Int(py=classical_address(wide)), HP_I64,
@@ -1017,10 +1000,7 @@ def _merge_candidates(parts: PythonObject, ranges: List[Int], n_queries: Int, k:
     _ = indices  # keep the Python object alive through the native call above
     _ = keep  # keep the Python objects alive through the native call above
     _ = table  # keep the Python object alive through the native call above
-    if rc == 1:
-        raise Error("RuntimeError: reference worker returned an invalid neighbor index")
-    if rc == 2:
-        raise Error("RuntimeError: reference shards returned too few neighbors")
+    reference_merge_admit(rc)
     return Python.tuple(distances, indices)
 
 
@@ -1129,8 +1109,7 @@ def _parallel_queries(args: PythonObject) raises -> PythonObject:
         raise Error("TypeError: query method must be an ordinary string")
     if not Bool(py=py_call(py_attr(methods, "__contains__"), method)):
         raise Error("ValueError: unsupported parallel query method: " + String(py=py_call(b.str, method)))
-    if not _identical(fields):
-        raise Error("ValueError: parallel queries require IDENTICAL numeric mode")
+    shard_identical_admit(_identical(fields), "parallel queries require IDENTICAL numeric mode")
     # `getattr(estimator, '_index', getattr(estimator, '_x', None))`
     var index = PythonObject(None)
     if py_contains(fields, PythonObject("_index")):
@@ -1143,8 +1122,7 @@ def _parallel_queries(args: PythonObject) raises -> PythonObject:
     if source is None and String(method) == "radius_neighbors":
         source = index
     var data = admit_family(source, 2, "X", context).array
-    if Int(py=data.shape[1]) != Int(py=py_item(fields, nk[].k_n_features_in_)):
-        raise Error("ValueError: input feature count differs from fit")
+    shard_features_admit(Int(py=data.shape[1]), Int(py=py_item(fields, nk[].k_n_features_in_)))
     var n = Int(py=data.shape[0])
     var ranges = shard_ranges(n, py_item(holder, nk[].k_rows_per_shard), "rows_per_shard", "")
     if len(ranges) == 0:
@@ -1297,10 +1275,7 @@ def _ivf_from_index(args: PythonObject) raises -> PythonObject:
     _ = ind  # keep the Python object alive through the native call above
     _ = offs  # keep the Python object alive through the native call above
     _ = admitted  # keep the Python object alive through the native call above
-    if status == 1:
-        raise Error("ValueError: IVF original IDs must be a permutation of stored row IDs")
-    if status != 0:
-        raise Error("ValueError: invalid global IVF list offsets")
+    ivf_offsets_admit(status)
     var devices = all_devices[py_call(b.slice, PythonObject(None), PythonObject(n))]
     var pool = shard_open(devices, _CHILD)
     var obj = py_call(b.object.__new__, args[0])
@@ -1333,8 +1308,7 @@ def _ivf_from_index(args: PythonObject) raises -> PythonObject:
     try:
         var receipts = _map(pool, requests)
         for part in range(parts_count):  # driver-loop: one storage receipt per shard
-            if Int(py=receipts[part]) != Int(py=maps[part].shape[0]):
-                raise Error("ValueError: IVF storage receipts differ from shard sizes")
+            ivf_receipt_admit(Int(py=receipts[part]), Int(py=maps[part].shape[0]))
     except error:
         process_pool_close(pool)
         py_setitem(own, nk[].k__closed, True)
@@ -1350,13 +1324,10 @@ def _ivf_search(args: PythonObject) raises -> PythonObject:
     var context = _ctx()
     var own = _driver_fields(args[0], "distributed_ivf_class")
     var nk = parallel_keys()
-    if Bool(py=py_item(own, nk[].k__closed)):
-        raise Error("RuntimeError: distributed IVF index is closed")
+    ivf_open_admit(Bool(py=py_item(own, nk[].k__closed)))
     var q = admit_family(args[1], 2, "queries", context).array
-    if Int(py=q.shape[0]) < 1:
-        raise Error("ValueError: at least one query is required")
-    if Int(py=q.shape[1]) != Int(py=py_item(own, nk[].k_n_features_in_)):
-        raise Error("ValueError: query features differ from index")
+    ivf_queries_admit(Int(py=q.shape[0]))
+    ivf_features_admit(Int(py=q.shape[1]), Int(py=py_item(own, nk[].k_n_features_in_)))
     var pool = py_item(own, nk[].k__pool)
     var maps = py_item(own, nk[].k__id_maps)
     try:
@@ -1364,8 +1335,7 @@ def _ivf_search(args: PythonObject) raises -> PythonObject:
         for i in range(len(py_item(own, nk[].k_devices))):  # driver-loop: one search request per stored shard
             _ = py_call(requests.append, _native_request(nk[].k_ivf_search, Python.tuple(py_item(own, nk[].k__token), q)))
         var parts = _map(pool, requests)
-        if len(parts) != len(maps):
-            raise Error("ValueError: incomplete IVF result shards")
+        ivf_parts_admit(len(parts), len(maps))
         var m = Int(py=q.shape[0])
         var k = Int(py=py_item(own, nk[].k_n_neighbors))
         for i in range(len(parts)):  # driver-loop: checks one result shard
@@ -1397,14 +1367,7 @@ def _ivf_search(args: PythonObject) raises -> PythonObject:
         _ = result  # keep the Python object alive through the native call above
         _ = ids  # keep the Python object alive through the native call above
         _ = counts  # keep the Python object alive through the native call above
-        if status != 0:
-            if status == 1:
-                raise Error("ValueError: invalid IVF candidate count")
-            if status == 2:
-                raise Error("ValueError: invalid IVF local row id")
-            if status == 4:
-                raise Error("ValueError: NaN distance in an IVF shard result")
-            raise Error("ValueError: IVF shard merge failed")
+        ivf_merge_admit(status)
         if Int(py=py_item(own, nk[].k_metric_code_)) == 1:
             var result_addr = Int(py=classical_address(result))
             var metric = Int(py=py_item(own, nk[].k_metric_code_))
@@ -1506,8 +1469,7 @@ def shard_worker_dispatch(request: PythonObject) raises -> PythonObject:
     if len(request) == 1 and py_op_code(nk[].ops_shard_worker, request[0]) == PARALLEL_SHARD_WORKER_OPN_IDENTITY:
         return shard_identity()
     var context = _ctx()
-    if len(request) != 3:
-        raise Error("parallel shards: invalid worker request envelope")
+    shard_envelope_admit(len(request))
     var operation = py_op_code(nk[].ops_shard_worker, request[0])
     # N452 (lane ne2-i-j): a call's shared operands, stored once per worker
     if operation == PARALLEL_SHARD_WORKER_OPN_SHARD_STORE:
@@ -1630,8 +1592,7 @@ def parallel_shard_call(operation: Int, name: PythonObject, args: PythonObject) 
     if operation == PARALLEL_SHARD_OPN_IVF_INIT:
         raise Error("TypeError: use DistributedIVFIndex.from_index(index, devices=...)")
     if operation == PARALLEL_SHARD_OPN_IVF_ENTER:
-        if Bool(py=py_item(_driver_fields(args[0], "distributed_ivf_class"), nk[].k__closed)):
-            raise Error("RuntimeError: distributed IVF index is closed")
+        ivf_open_admit(Bool(py=py_item(_driver_fields(args[0], "distributed_ivf_class"), nk[].k__closed)))
         return args[0]
     if operation == PARALLEL_SHARD_OPN_REFERENCE_QUERY:
         return _reference_query(args)

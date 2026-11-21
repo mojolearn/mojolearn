@@ -216,7 +216,7 @@ def linear_svr_fit_unpack(model: PythonObject, args: PythonObject, context: Pyth
         max_iter, linesearch, memory, intercept, penalty_normalized, loss,
         strengths[0], strengths[1], tol, 0.1 * tol, svr_eps)
     var connection = linear_svc_connection(binding)
-    return LinearSvrFitUnpacked(fields, x, t, sw, weights, connection^, request, cols, intercept)
+    return LinearSvrFitUnpacked(fields, x, t, sw, weights, connection^, request^, cols, intercept)
 
 
 # ---------------------------------------------------------------- LinearSVC fit
@@ -286,7 +286,7 @@ def linear_svc_fit_unpack(model: PythonObject, args: PythonObject, context: Pyth
     var request = LinearSvcFitRequest(Int(py=classical_address(x)),
         Int(py=classical_address(codes)), sw.state.address, options.copy())
     _ = encoded
-    return LinearSvcFitUnpacked(fields, x, classes, codes, sw^, connection^, request, n_fits, n_coefs, cols, fi != 0)
+    return LinearSvcFitUnpacked(fields, x, classes, codes, sw^, connection^, request^, n_fits, n_coefs, cols, fi != 0)
 
 
 # ---------------------------------------------------------------- LinearSVC query
@@ -321,4 +321,4 @@ def linear_svc_codes_unpack(model: PythonObject, fields: PythonObject, source: P
     if n > 0:
         request = QnQueryRequest(Int(py=classical_address(x)), Int(py=classical_address(w)),
             Int(codes.unsafe_ptr()), 0, n, d, n_classes if n_classes > 2 else 1, fi != 0, False)
-    return LinearSvcCodesUnpacked(x, w, request, codes^, n)
+    return LinearSvcCodesUnpacked(x, w, request^, codes^, n)
