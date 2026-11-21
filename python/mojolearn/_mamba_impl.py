@@ -277,11 +277,11 @@ class _MambaBase(NumericModeMixin):
         return _native_neural_bridge.RUNTIME.neural_block_load_state_dict(self, state_dict, strict, _native_neural_bridge.CONTEXT)
 
     def parameters(self):
-        """The weight arrays, in :meth:`state_dict` order.
+        """An iterator over the weight arrays, in :meth:`state_dict` order.
 
         Returns
         -------
-        list of array
+        iterator of array
 
         Examples
         --------
@@ -290,11 +290,11 @@ class _MambaBase(NumericModeMixin):
         return _native_neural_bridge.RUNTIME.neural_block_parameters(self, _native_neural_bridge.CONTEXT)
 
     def named_parameters(self):
-        """The weights as ``(name, array)`` pairs, in :meth:`state_dict` order.
+        """An iterator over the weights as ``(name, array)`` pairs, in :meth:`state_dict` order.
 
         Returns
         -------
-        list of (str, array)
+        iterator of (str, array)
 
         Examples
         --------

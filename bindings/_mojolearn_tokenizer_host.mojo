@@ -1228,6 +1228,8 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(runtime_classical_unavailable_c, "causal_lm_snapshot")
         module.def_py_c_function(runtime_classical_unavailable_c, "causal_lm_resume")
         module.def_py_c_function(runtime_classical_unavailable_c, "causal_lm_parameters")
+        module.def_py_c_function(runtime_classical_unavailable_c, "causal_lm_parameter_list")
+        module.def_py_c_function(runtime_classical_unavailable_c, "causal_lm_named_parameters")
         module.def_py_c_function(runtime_classical_unavailable_c, "causal_lm_blocks")
         module.def_py_c_function(runtime_classical_unavailable_c, "causal_state_init")
         module.def_py_c_function(runtime_classical_unavailable_c, "causal_lm_repr")

@@ -660,7 +660,8 @@ def neural_block_set_params_binding(mut mods: NativeModules, block: PythonObject
 
 def neural_block_weights_binding(mut mods: NativeModules, block: PythonObject, form: Int, context: PythonObject) raises -> PythonObject:
     # form 0: `state_dict()` -> a new {name: array} over the same arrays;
-    # 1: `parameters()` -> [array, ...]; 2: `named_parameters()` -> [(name, array), ...].
+    # 1: `parameters()` -> iterator of arrays; 2: `named_parameters()` ->
+    # iterator of (name, array) pairs, as torch returns them (round 2: were lists).
     var bi = mods.module("builtins")
     var fields = neural_block_fields(mods, block, context)
     var weights = py_get(fields, "weights")
@@ -669,8 +670,8 @@ def neural_block_weights_binding(mut mods: NativeModules, block: PythonObject, f
     if form == 0:
         return py_call(bi.dict, weights)
     if form == 1:
-        return py_call(bi.list, py_call(bi.dict.values, weights))
-    return py_call(bi.list, py_call(bi.dict.items, weights))
+        return py_call(bi.iter, py_call(bi.list, py_call(bi.dict.values, weights)))
+    return py_call(bi.iter, py_call(bi.list, py_call(bi.dict.items, weights)))
 
 
 def neural_block_load_state_dict_binding(mut mods: NativeModules, block: PythonObject, state: PythonObject, strict: PythonObject,
