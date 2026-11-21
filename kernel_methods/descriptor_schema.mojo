@@ -4,34 +4,14 @@ comptime KERNEL_METHOD_ABI = "mojolearn.kernel_methods.native.v1"
 comptime KERNEL_METHOD_OPERATIONS = 17
 
 
-def kernel_method_operation(name: String) raises -> Int:
-    if name == "kernel_ridge_fit":
-        return 0
-    if name == "kernel_ridge_predict":
-        return 1
-    if name == "kernel_ridge_fit_ptr":
-        return 2
-    if name == "kernel_ridge_predict_ptr":
-        return 3
-    if name == "kernel_ridge_resident_prepare":
-        return 4
-    if name == "kernel_ridge_resident_release":
-        return 5
-    if name == "kernel_ridge_predict_resident":
-        return 6
-    if name == "nystroem_fit_transform_ptr":
-        return 7
-    if name == "nystroem_fit":
-        return 8
-    if name == "nystroem_fit_ptr":
-        return 9
-    if name == "nystroem_transform":
-        return 10
-    if name == "rbf_sampler_fit":
-        return 11
-    if name == "rbf_sampler_transform":
-        return 12
-    raise Error("kernel methods provider: unknown operation name " + name)
+# Operation ids (the by-name lookup `kernel_method_operation` is gone: the door
+# names an operation by its id, kernel_methods/native_call_run.mojo `KM_OP_*`):
+# 0 kernel_ridge_fit, 1 kernel_ridge_predict, 2 kernel_ridge_fit_ptr,
+# 3 kernel_ridge_predict_ptr, 4 kernel_ridge_resident_prepare,
+# 5 kernel_ridge_resident_release, 6 kernel_ridge_predict_resident,
+# 7 nystroem_fit_transform_ptr, 8 nystroem_fit, 9 nystroem_fit_ptr,
+# 10 nystroem_transform, 11 rbf_sampler_fit, 12 rbf_sampler_transform;
+# 13 to 16 are the metadata words and the scale-gamma limbs.
 
 
 def kernel_method_scalar_mask(operation: Int) raises -> Tuple[Int, Int]:
