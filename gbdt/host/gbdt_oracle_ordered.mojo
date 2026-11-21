@@ -1618,7 +1618,7 @@ from gbdt.metrics.sample_quantile import (
 )
 from checks.numerics import identical_log, identical_pow
 from std.math import sqrt
-from core.host_parallel import host_parallelize
+from core.host_parallel import host_nested_units, host_parallelize
 from core.host_predict_threads import (
     host_predict_chunk,
     host_predict_task_count_work,
@@ -1882,7 +1882,7 @@ def _ordered_leaf_bins(
     var vp = _OrdU32Ptr(unsafe_from_address=Int(values.unsafe_ptr()))
     var ep = _OrdU32Ptr(unsafe_from_address=Int(equal.unsafe_ptr()))
     var bp = _OrdIntPtr(unsafe_from_address=Int(bins.unsafe_ptr()))
-    var units = max(1, host_predict_task_count_work(n_rows, n_rows * slots))
+    var units = host_nested_units(host_predict_task_count_work(n_rows, n_rows * slots))
     var chunk = host_predict_chunk(n_rows, units)
 
     def rows(unit: Int) {imm chunk, imm n_rows, imm depth, imm cp, imm op, imm mp, imm vp, imm bp}:

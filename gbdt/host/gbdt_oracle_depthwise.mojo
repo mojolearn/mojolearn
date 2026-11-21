@@ -117,6 +117,8 @@ tools/identity_break.py on the two lanes is the measurement.
 from std.math import exp, fma, log, sqrt
 from std.memory import bitcast
 
+from core.host_parallel import host_parallelize
+from core.host_predict_threads import HostF32Ptr
 from checks.fixed_point import choose_scale
 from checks.numerics import ftz, identical_mul_add, identical_sqrt
 from gbdt.methods.cursor_rescale import apply_scaled_leaves_host, rescaled_leaves
@@ -133,6 +135,9 @@ from gbdt.gpu_data.grid_policy import (
 )
 from gbdt.host.gbdt_oracle import (
     _scan_histograms,
+    _gbdt_units,
+    _split_leaves,
+    GbdtIntPtr,
     _subtract_histograms,
     _partition_stats_level,
     GBDT_PARTITION_CHUNKS,
@@ -153,7 +158,6 @@ from gbdt.host.gbdt_oracle import (
     _logloss_value,
     _nan_token,
     _one_byte_block,
-    _partition_stat,
     gbdt_f32_token,
     gbdt_f64_token,
     gbdt_host_grid,
@@ -300,9 +304,9 @@ struct _NsTree(Movable):
 
 
 def _leafwise_gain(
-    hist: List[Float32],
+    hist: HostF32Ptr,
     hist_cells: Int,
-    part_stats: List[Float32],
+    part_stats: HostF32Ptr,
     leaf: Int,
     bin_feature_id: Int,
     lambda_l2: Float32,
@@ -318,7 +322,9 @@ def _leafwise_gain(
     rejection (`rejected`, the candidate is not scored), the calcer over
     (left, right) and over the parent, the Cosine normalization, the noise
     draw per feature (`advance_seed_k(seed + feature, 4)`, one normal, the
-    pinned mul-add on both scores), the zero-part rule, the gain."""
+    pinned mul-add on both scores), the zero-part rule, the gain. `hist`
+    and `part_stats` are the level's storage by pointer (a task of
+    `_score_leaves` calls this)."""
     var score = Float32(0.0)
     var denum_sqr = Float32(1e-10)
     var score_b = Float32(0.0)
@@ -394,11 +400,11 @@ def _best_split_less(
     return False
 
 
-def _score_leaf(
+def _score_leaves(
     hist: List[Float32],
     hist_cells: Int,
     part_stats: List[Float32],
-    leaf: Int,
+    visit: List[Int],
     lambda_l2: Float32,
     cosine: Bool,
     min_child_hessian: Float32,
@@ -408,45 +414,99 @@ def _score_leaf(
     bf_feature: List[Int],
     bf_bin: List[Int],
     layout: CompressedIndexLayout,
-    mut output: _NsLeaf,
+    mut leaves: List[_NsLeaf],
 ):
-    """The score kernel's records for one leaf, then the host reduce.
+    """The score kernel's records for every visited leaf, then the host
+    reduce of each.
 
-    DEVICE, per score block `bx` (`compute_scores.mojo:382-500`, `:504-550`):
-    thread `t` walks bins `bx * 256 + t + k * 256 * argmax_blocks`
-    ascending under a strict `>` from -FLOAT32_MAX, and the 256-thread tree
-    keeps the larger gain, a tie to the smaller bin. So block `bx` holds the
-    smallest bin of largest gain among the bins whose `bin // 256` is `bx`
-    modulo `argmax_blocks`, stored `ftz`, or the poison record when no gain
-    exceeded -FLOAT32_MAX.
+    DEVICE, per leaf and score block `bx` (`compute_scores.mojo:382-500`,
+    `:504-550`): thread `t` walks bins `bx * 256 + t + k * 256 *
+    argmax_blocks` ascending under a strict `>` from -FLOAT32_MAX, and the
+    256-thread tree keeps the larger gain, a tie to the smaller bin. So
+    block `bx` holds the smallest bin of largest gain among the bins whose
+    `bin // 256` is `bx` modulo `argmax_blocks`, stored `ftz`, or the poison
+    record when no gain exceeded -FLOAT32_MAX.
 
     HOST (`greedy_search_helper_depthwise.mojo:1854-1903`): blocks in order,
     poison skipped, `TBestSplitProperties(feature, clamp(bin), -gain, -gain)`
     folded through `best_split_properties_less` from the default record; the
-    fold REPLACES the leaf's record, defined or not."""
+    fold REPLACES the leaf's record, defined or not.
+
+    THE SPLIT (lane gbdt-host-par): the unit is one device block, a (leaf,
+    score block) pair: it walks its own bins ascending (the 256-bin runs
+    `q` with `q % argmax_blocks == bx`, the bins the one pass over every
+    bin kept for this block, in the same order) and owns its record. Every
+    candidate is its own sums and its own noise draw. Units go round robin
+    to `_gbdt_units` tasks over `leaves x candidates` gains; the host
+    reduce runs after the join, leaves and blocks in order."""
+    var n_visit = len(visit)
+    var items = n_visit * argmax_blocks
+    if items <= 0:
+        return
+    var blk_gain = List[Float32](length=items, fill=-GBDT_FLOAT32_MAX)
+    var blk_bin = List[Int](length=items, fill=-1)
+    var units = _gbdt_units(items, 16 * n_visit * hist_cells)
+    var hist_p = rebind[HostF32Ptr](hist.unsafe_ptr())
+    var part_p = rebind[HostF32Ptr](part_stats.unsafe_ptr())
+    var visit_p = rebind[GbdtIntPtr](visit.unsafe_ptr())
+    var feat_p = rebind[GbdtIntPtr](bf_feature.unsafe_ptr())
+    var gain_p = rebind[HostF32Ptr](blk_gain.unsafe_ptr())
+    var bin_p = rebind[GbdtIntPtr](blk_bin.unsafe_ptr())
+
+    def score_blocks(unit: Int) {imm units, imm items, imm argmax_blocks, imm hist_cells, imm lambda_l2, imm cosine, imm min_child_hessian, imm score_std_dev, imm level_seed, imm hist_p, imm part_p, imm visit_p, imm feat_p, imm gain_p, imm bin_p}:
+        var item = unit
+        while item < items:
+            var leaf = visit_p[item // argmax_blocks]
+            var bx = item % argmax_blocks
+            var best_gain = -GBDT_FLOAT32_MAX
+            var best_bin = -1
+            var run = bx * GBDT_LEAFWISE_BLOCK
+            while run < hist_cells:
+                for bf in range(run, min(hist_cells, run + GBDT_LEAFWISE_BLOCK)):
+                    var rejected = False
+                    var gain = _leafwise_gain(
+                        hist_p, hist_cells, part_p, leaf, bf, lambda_l2, cosine,
+                        min_child_hessian, score_std_dev, level_seed, feat_p[bf],
+                        rejected,
+                    )
+                    if rejected:
+                        continue
+                    if gain > best_gain:
+                        best_gain = gain
+                        best_bin = bf
+                run += argmax_blocks * GBDT_LEAFWISE_BLOCK
+            gain_p[item] = best_gain
+            bin_p[item] = best_bin
+            item += units
+
+    host_parallelize(score_blocks, units)
+    for v in range(n_visit):  # driver-loop: over the visited leaves (the host reduce)
+        _reduce_leaf_blocks(
+            blk_gain, blk_bin, v * argmax_blocks, argmax_blocks, bf_feature,
+            bf_bin, layout, leaves[visit[v]],
+        )
+
+
+def _reduce_leaf_blocks(
+    blk_gain: List[Float32],
+    blk_bin: List[Int],
+    first: Int,
+    argmax_blocks: Int,
+    bf_feature: List[Int],
+    bf_bin: List[Int],
+    layout: CompressedIndexLayout,
+    mut output: _NsLeaf,
+):
+    """The host reduce of one leaf's score-block records
+    (`blk_gain[first + bx]`, `blk_bin[first + bx]`; a bin of -1 is the
+    poison record), blocks in order (`_score_leaves`)."""
     output.reset_best()
     for bx in range(argmax_blocks):
-        var blk_gain = -GBDT_FLOAT32_MAX
-        var blk_bin = -1
-        for bf in range(hist_cells):
-            if (bf // GBDT_LEAFWISE_BLOCK) % argmax_blocks != bx:
-                continue
-            var rejected = False
-            var gain = _leafwise_gain(
-                hist, hist_cells, part_stats, leaf, bf, lambda_l2, cosine,
-                min_child_hessian, score_std_dev, level_seed, bf_feature[bf],
-                rejected,
-            )
-            if rejected:
-                continue
-            if gain > blk_gain:
-                blk_gain = gain
-                blk_bin = bf
-        if blk_bin < 0:
+        if blk_bin[first + bx] < 0:
             continue
-        var our_gain = ftz(blk_gain)
-        var feature = bf_feature[blk_bin]
-        var bin = bf_bin[blk_bin]
+        var our_gain = ftz(blk_gain[first + bx])
+        var feature = bf_feature[blk_bin[first + bx]]
+        var bin = bf_bin[blk_bin[first + bx]]
         # `TBinFeatureTable.to_split`'s clamp (`:252-257`), TakeGreater arm
         var max_bin = Int(layout.features[feature].folds) - 1
         if bin > max_bin:
@@ -644,12 +704,11 @@ def _grow_non_symmetric_tree(
             # `Random.NextUniformL()`, one draw per launch (`:1656`)
             var level_seed = level_rand.next_uniform_l()
             var noise = score_std_dev if cosine else Float32(0.0)
-            for i in range(len(visit)):
-                _score_leaf(
-                    hist, hist_cells, part_stats, visit[i], lambda_l2, cosine,
-                    params.min_child_hessian, noise, level_seed,
-                    argmax_blocks, bf_feature, bf_bin, layout, leaves[visit[i]],
-                )
+            _score_leaves(
+                hist, hist_cells, part_stats, visit, lambda_l2, cosine,
+                params.min_child_hessian, noise, level_seed,
+                argmax_blocks, bf_feature, bf_bin, layout, leaves,
+            )
             # a rejected leaf cannot become eligible later in this tree
             # (`:2001-2004`)
             if params.min_child_hessian >= Float32(0.0):
@@ -681,52 +740,33 @@ def _grow_non_symmetric_tree(
         if len(to_split) > 0:
             # ---- MakeSplit's multi-leaf arm (`:2058-2346`) ----
             var leaves_count = len(leaves)
-            var new_rows = row_index.copy()
-            var new_stats = stats.copy()
-            for i in range(len(to_split)):
+            # the split chain over every parent's range, zeros then ones
+            # (TakeGreater), `copy_histograms_kernel` (the parent into the
+            # right slot) and `update_partitions_after_split_kernel`:
+            # `_split_leaves`, the leaves' pieces across the cores
+            var right_ids = List[Int](capacity=len(to_split))
+            var l_word_base = List[Int](capacity=len(to_split))
+            var l_field = List[UInt32](capacity=len(to_split))
+            var l_value = List[UInt32](capacity=len(to_split))
+            var l_one_hot = List[Int](length=len(to_split), fill=0)
+            for i in range(len(to_split)):  # driver-loop: over the leaves to split (one descriptor each)
                 var left_id = to_split[i]
-                var right_id = leaves_count + i
                 if not leaves[left_id].best_defined:
                     raise Error("Best split is undefined for leaf " + String(left_id))
+                ref sfeat = layout.features[Int(leaves[left_id].best_feature)]
+                right_ids.append(leaves_count + i)
+                l_word_base.append(Int(sfeat.offset) * n_rows)
+                l_field.append(UInt32(sfeat.mask << sfeat.shift))
+                l_value.append(UInt32(Int(leaves[left_id].best_bin)) << sfeat.shift)
+            _split_leaves(
+                cindex, n_rows, hist_cells, 2, to_split, right_ids,
+                l_word_base, l_field, l_value, l_one_hot, row_index, stats,
+                p_off, p_sz, hist,
+            )
+            for i in range(len(to_split)):  # driver-loop: over the leaves to split (`SplitLeaf`)
+                var left_id = to_split[i]
                 var split_f = Int(leaves[left_id].best_feature)
                 var split_b = Int(leaves[left_id].best_bin)
-                ref sfeat = layout.features[split_f]
-                # the split chain over the parent's range, zeros then ones
-                var off = p_off[left_id]
-                var sz = p_sz[left_id]
-                var zeros = List[Int]()
-                var ones = List[Int]()
-                for k in range(sz):
-                    var row = row_index[off + k]
-                    var word = cindex[Int(sfeat.offset) * n_rows + row]
-                    var feature_val = word & (sfeat.mask << sfeat.shift)
-                    var value = UInt32(split_b) << sfeat.shift
-                    if feature_val > value:
-                        ones.append(k)
-                    else:
-                        zeros.append(k)
-                var dst = 0
-                for k in range(len(zeros)):
-                    var src = off + zeros[k]
-                    new_rows[off + dst] = row_index[src]
-                    new_stats[off + dst] = stats[src]
-                    new_stats[n_rows + off + dst] = stats[n_rows + src]
-                    dst += 1
-                for k in range(len(ones)):
-                    var src = off + ones[k]
-                    new_rows[off + dst] = row_index[src]
-                    new_stats[off + dst] = stats[src]
-                    new_stats[n_rows + off + dst] = stats[n_rows + src]
-                    dst += 1
-                # `copy_histograms_kernel`: the parent into the right slot
-                var src_base = left_id * 2 * hist_cells
-                var dst_base = right_id * 2 * hist_cells
-                for c in range(2 * hist_cells):
-                    hist[dst_base + c] = hist[src_base + c]
-                # `update_partitions_after_split_kernel`
-                p_sz[left_id] = len(zeros)
-                p_off[right_id] = off + len(zeros)
-                p_sz[right_id] = sz - len(zeros)
                 # `SplitLeaf` over the parent snapshot, both children
                 var parent = leaves[left_id].copy()
                 var child_type = HISTOGRAMS_ZEROES
@@ -748,8 +788,6 @@ def _grow_non_symmetric_tree(
                 leaves.append(right^)
                 parent_of[left_id] = left_id
                 parent_of.append(left_id)
-            row_index = new_rows^
-            stats = new_stats^
             # `RebuildLeavesSizes` (`:2352-2357`)
             for i in range(len(leaves)):
                 leaves[i].size = p_sz[i]
@@ -776,10 +814,13 @@ def _grow_non_symmetric_tree(
                     terminate = False
                     break
         if terminate:
+            # the leaves' weight sums, the launches across the cores
+            var leaf_weight_sums = _partition_stats_level(
+                stats, n_rows, 1, GBDT_PARTITION_CHUNKS, p_off, p_sz,
+                len(leaves),
+            )
             for i in range(len(leaves)):
-                leaf_weights_by_id.append(
-                    Float64(_partition_stat(stats, n_rows, 0, p_off[i], p_sz[i]))
-                )
+                leaf_weights_by_id.append(Float64(leaf_weight_sums[i]))
             break
 
     return _build_flat_tree(leaves, leaf_weights_by_id)
