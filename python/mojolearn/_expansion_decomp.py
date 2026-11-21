@@ -161,11 +161,27 @@ class IncrementalPCA(_Base):
     # (bindings/decomp_public_lifecycle_unpack.mojo), so `_mode` installs no wrappers.
     _mojolearn_native_public = True
 
-    _parameters = ("n_components", "whiten", "copy", "batch_size", "numeric_mode")
+    _parameters = ("n_components", "whiten", "copy", "batch_size", "numeric_mode", "device")
 
-    def __init__(self, n_components=None, *, whiten=False, copy=True, batch_size=None, numeric_mode=None):
+    # `device=None | "gpu" | "cpu"`: read once into the estimator's native route
+    # owner (bindings/decomp_device_route_door.mojo); the check runs both devices.
+    _mojolearn_device = True
+
+    def __init__(self, n_components=None, *, whiten=False, copy=True, batch_size=None, numeric_mode=None,
+                 device=None):
         self.n_components, self.whiten, self.copy = n_components, whiten, copy
-        self.batch_size, self.numeric_mode = batch_size, numeric_mode
+        self.batch_size, self.numeric_mode, self.device = batch_size, numeric_mode, device
+
+    def vendor_used(self):
+        """The backend this estimator runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the
+            compiled binary the estimator uses.
+        """
+        return _IPCA_CALL(self, "vendor_used", (), _IPCA_CONTEXT)
 
     def fit(self, X, y=None):
         """Fit the model on X in batches of ``batch_size`` rows.
