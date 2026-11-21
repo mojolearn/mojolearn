@@ -19,8 +19,6 @@ The field source of a class, first match in its ancestry:
 This module holds declarations and import-time glue only: nothing here runs
 when a model is fitted, and the read itself is one native call.
 """
-import sys
-
 #: class name -> the private instance fields that are fitted state (they
 #: decide the model's answers and no public attribute carries them).
 EXTRA_BY_NAME = {}
@@ -43,8 +41,9 @@ SKIP = {}
 REFUSED = {}
 
 #: The one connection of the `digest_` property: the property object, the
-#: compiled entry and its context. Filled in place by `connect`; read by
-#: bindings/fitted_digest_property_pack.mojo through the module registry.
+#: compiled entry and its context. Filled in place by `connect`; `_mode` puts
+#: this dictionary in its metadata context, where
+#: bindings/fitted_digest_property_pack.mojo reads it.
 CONNECTION = {"property": None, "entry": None, "context": None}
 
 
@@ -85,8 +84,3 @@ def read(model):
         entry = connect(CheckMixin)[0]
     return entry(model, "fitted_digest", (), CONNECTION["context"])
 
-
-from ._native_loaded_modules import connect_module  # noqa: E402
-
-# glue: import-time native module connection; CONNECTION is filled in place, never reassigned.
-connect_module(__name__, sys.modules[__name__], ("CONNECTION",))

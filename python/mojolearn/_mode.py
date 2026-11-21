@@ -973,6 +973,9 @@ _MODE_METADATA, _MODE_METADATA_CONTEXT = _connect_mode_metadata()
 # why device="cpu" is refused for it (_device_table.py). The same dictionary
 # object: classes defined later add their row.
 _MODE_METADATA_CONTEXT["device_cpu"] = _DEVICE_CPU_CLASSES
+# The `digest_` connection (the property object, the compiled entry and its
+# context; _digest_fields.py), for the classical layouts' native lookup.
+_MODE_METADATA_CONTEXT["digest_connection"] = _DIGEST_CONNECTION
 # The lazy CPU-image connection the same check calls on an admitted
 # device="cpu" beside a GPU set (_device_table.connect_cpu).
 from ._device_table import connect_cpu as _device_connect_cpu

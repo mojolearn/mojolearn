@@ -12,7 +12,7 @@
 # The layouts above refuse every Python property: this file admits that one
 # property object by identity and makes the same native call the recipe makes
 # (`classical_native_call(model, "fitted_digest", (), context)`), through the
-# connection python/mojolearn/_digest_fields.py holds. No Python code of the
+# connection python/mojolearn/_digest_fields.py fills (held in `_mode._MODE_METADATA_CONTEXT`). No Python code of the
 # property runs here.
 #
 # Reached only where the lookup already found a data descriptor the class
@@ -28,9 +28,12 @@ from bindings.py_balanced import py_fields, py_get, py_item
 def fitted_digest_property(member: PythonObject) raises -> PythonObject:
     """The `digest_` connection when `member` is the shared base's `digest_`
     property object, else None."""
-    var fields = py_fields(native_loaded_module("mojolearn._digest_fields"))
-    var connection = py_item(fields, PythonObject("CONNECTION"))
-    if py_get(connection, "property") is not member:
+    # The connection rides in the mode metadata context, an export the
+    # module registry already holds for `mojolearn._mode` (no new owner).
+    var fields = py_fields(native_loaded_module("mojolearn._mode"))
+    var metadata = py_item(fields, PythonObject("_MODE_METADATA_CONTEXT"))
+    var connection = py_get(metadata, "digest_connection")
+    if connection is None or py_get(connection, "property") is not member:
         return PythonObject(None)
     return connection
 
