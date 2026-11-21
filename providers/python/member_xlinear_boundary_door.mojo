@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """The member boundary of the XLinear family; RUN is core/xlinear_member.mojo.
 Published kinds: 0 PoissonRegressor, 1 GammaRegressor, 2 TweedieRegressor,
-3 HuberRegressor (`_mojolearn_member = (MEMBER_FAMILY_XLINEAR, kind)` on
+3 HuberRegressor, 4 BayesianRidge (`_mojolearn_member = (MEMBER_FAMILY_XLINEAR, kind)` on
 each class).
 
   * `xlinear_member_admit` (UNPACK, once per member): the estimator's own
@@ -30,7 +30,7 @@ from bindings.admitted_input_unpack import admit_x
 from bindings.classical_arrays_door import classical_array, classical_address
 from bindings.member_owner_unpack import MemberOwner
 from bindings.py_balanced import py_get, py_item, py_contains, py_setitem
-from bindings.x_linear_common_unpack import _truth, _ge, _float, _int, _name, _class_attr
+from bindings.x_linear_common_unpack import _truth, _ge, _float, _int, _name, _class_attr, _xl_bayes_refuse, _xl_or
 from bindings.x_linear_keys_unpack import x_linear_keys
 from bindings.x_linear_regressors_unpack import _xl_tweedie_link
 from bindings.x_linear_route_unpack import xl_route, xl_ops_require
@@ -40,7 +40,7 @@ from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free,
     MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_BLOCK_COEF, MEMBER_BLOCK_SCALARS, MEMBER_IMPORT_DONE, MEMBER_F64,
 )
-from core.xlinear_member import XL_MEMBER_HUBER, XL_MEMBER_BLOCK_OUTLIERS
+from core.xlinear_member import XL_MEMBER_HUBER, XL_MEMBER_BAYES, XL_MEMBER_BLOCK_OUTLIERS
 from core.metrics_entry_table import MetricsEntryKey, metrics_r2_entry, MR_OP_COUNT
 from providers.python.device_route_boundary_door import device_route_value
 from x_linear.door_run import LINK_IDENTITY, LINK_EXP
@@ -75,6 +75,17 @@ def _xl_huber_words(fields: PythonObject) raises -> List[Float64]:
         _float(epsilon), _float(py_item(fields, nk[].k_alpha)), _float(py_item(fields, nk[].k_tol))]
 
 
+def _xl_bayes_words(model: PythonObject, fields: PythonObject) raises -> List[Float64]:
+    """Kind 4: `xl_fit_bayes_unpack`'s refusals, then the ten words."""
+    var nk = x_linear_keys()
+    _xl_bayes_refuse(model, fields, PythonObject(False))
+    return [Float64(XL_MEMBER_BAYES), _intercept_word(fields), Float64(_int(py_item(fields, nk[].k_max_iter))),
+        _float(py_item(fields, nk[].k_tol)), _float(py_item(fields, nk[].k_alpha_1)),
+        _float(py_item(fields, nk[].k_alpha_2)), _float(py_item(fields, nk[].k_lambda_1)),
+        _float(py_item(fields, nk[].k_lambda_2)), _xl_or(py_item(fields, nk[].k_alpha_init), -1.0),
+        _xl_or(py_item(fields, nk[].k_lambda_init), -1.0)]
+
+
 def _intercept_word(fields: PythonObject) raises -> Float64:
     var nk = x_linear_keys()
     return 1.0 if _truth(py_item(fields, nk[].k_fit_intercept)) else 0.0
@@ -90,6 +101,8 @@ def xlinear_member_admit(model: PythonObject, fields: PythonObject, kind: Int, c
         words = _xl_glm_words(model, fields, kind)
     elif kind == XL_MEMBER_HUBER:
         words = _xl_huber_words(fields)
+    elif kind == XL_MEMBER_BAYES:
+        words = _xl_bayes_words(model, fields)
     else:
         raise Error("RuntimeError: mojolearn: unknown XLinear member kind " + String(kind))
     var ops = xl_route(model, fields, context, False)
@@ -162,6 +175,12 @@ def xlinear_member_pack(model: PythonObject, fields: PythonObject, context: Pyth
             _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
             py_setitem(fields, nk[].k_outliers_, _bool_list(call.dst.data, call.dst.cols))
         return
+    if kind == XL_MEMBER_BAYES:
+        py_setitem(fields, nk[].k_alpha_, PythonObject(Float64(Float32(scalars[1]))))
+        py_setitem(fields, nk[].k_lambda_, PythonObject(Float64(Float32(scalars[2]))))
+        py_setitem(fields, nk[].k_n_iter_, PythonObject(Int(scalars[3])))
+        py_setitem(fields, nk[].k_n_features_in_, PythonObject(cols))
+        return
     py_setitem(fields, nk[].k_n_iter_, PythonObject(Int(scalars[1])))
     py_setitem(fields, nk[].k_n_features_in_, PythonObject(cols))
     py_setitem(fields, nk[].k__link, PythonObject(LINK_EXP if plan.params[3] == 1.0 else LINK_IDENTITY))
@@ -190,6 +209,9 @@ def xlinear_member_state(model: PythonObject, fields: PythonObject, context: Pyt
     var scalars: List[Float64]
     if kind == XL_MEMBER_HUBER:
         scalars = [intercept, Float64(py=py_item(fields, nk[].k_scale_)), _count_word(fields, nk[].k_n_iter_)]
+    elif kind == XL_MEMBER_BAYES:
+        scalars = [intercept, Float64(py=py_item(fields, nk[].k_alpha_)), Float64(py=py_item(fields, nk[].k_lambda_)),
+            _count_word(fields, nk[].k_n_iter_)]
     else:
         scalars = [intercept, _count_word(fields, nk[].k_n_iter_)]
     var call = member_new(plan)

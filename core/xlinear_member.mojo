@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """The XLinear family as MEMBERS (core/member_abi.mojo, schema v2): the
 generalized linear regressors PoissonRegressor, GammaRegressor and
-TweedieRegressor, and HuberRegressor.
+TweedieRegressor, HuberRegressor and BayesianRidge.
 
 One entry, `xlinear_member_v2`, published by each x_linear image
 (`xlinear_member_publish`, beside its operations table). It runs the family's
@@ -14,7 +14,8 @@ it score is refused in words and the caller predicts and runs its own
 metric). No kernel is touched.
 
 Kinds (the second word of each class's `_mojolearn_member`): 0
-PoissonRegressor, 1 GammaRegressor, 2 TweedieRegressor, 3 HuberRegressor.
+PoissonRegressor, 1 GammaRegressor, 2 TweedieRegressor, 3 HuberRegressor,
+4 BayesianRidge.
 
 MEMBER_OP_NEW parameters (Float64 words; word 0 is the kind, the count is
 the kind's):
@@ -23,8 +24,11 @@ the kind's):
     Gamma 2, Tweedie its own), [5] alpha, [6] tol.
   * kind 3, 6 words: [0] 3, [1] fit_intercept, [2] max_iter, [3] epsilon,
     [4] alpha, [5] tol.
+  * kind 4, 10 words: [0] 4, [1] fit_intercept, [2] max_iter, [3] tol,
+    [4] alpha_1, [5] alpha_2, [6] lambda_1, [7] lambda_2, [8] alpha_init,
+    [9] lambda_init (-1: None).
 The estimator's own checks (solver, warm_start, alpha >= 0, Tweedie's power
-and link words, Huber's epsilon >= 1) run at the caller's admission.
+and link words, Huber's epsilon >= 1, BayesianRidge's compute_score) run at the caller's admission.
 
 Views: X dense row-major host float32; y and sample weights host float32
 vectors (one target). A device-home view, a row or column index and a nonzero
@@ -37,7 +41,7 @@ the fit, in the estimator's words.
 Fitted-state blocks (EXPORT / IMPORT), in index order:
 0 `MEMBER_BLOCK_COEF` float32 1 x features; 1 `MEMBER_BLOCK_SCALARS` float64
 in the kind's order: kinds 0..2 [intercept, n_iter]; kind 3 [intercept,
-scale, n_iter]. Kind 3 after a fit also holds 2 `XL_MEMBER_BLOCK_OUTLIERS`
+scale, n_iter]; kind 4 [intercept, alpha_, lambda_, n_iter]. Kind 3 after a fit also holds 2 `XL_MEMBER_BLOCK_OUTLIERS`
 (`MEMBER_BLOCK_FAMILY`) int32 1 x training rows, 1 for an outlier row
 (`outliers_`). An import needs COEF and SCALARS; a family block is a training
 record, optional at import (an imported state then exports two blocks).
@@ -66,13 +70,14 @@ from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 from x_linear.door_run import (
-    ALGO_GLM, ALGO_HUBER, LINK_IDENTITY, LINK_EXP, XlFitRequest, XlDecisionRequest, xl_fit_run,
+    ALGO_GLM, ALGO_HUBER, ALGO_BAYES, LINK_IDENTITY, LINK_EXP, XlFitRequest, XlDecisionRequest, xl_fit_run,
     xl_huber_fit_run, xl_decision_run, xl_r2_run, xl_lbfgs_work,
 )
 
 comptime _CHUNK = 256
 comptime _INDEX_SPAN = 16777216
 comptime XL_MEMBER_HUBER = 3
+comptime XL_MEMBER_BAYES = 4
 comptime XL_MEMBER_BLOCK_OUTLIERS = MEMBER_BLOCK_FAMILY
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _F64P = MutPointer[Float64, MutUntrackedOrigin]
@@ -86,6 +91,8 @@ def xl_member_param_count(kind: Int) -> Int:
         return 7
     if kind == XL_MEMBER_HUBER:
         return 6
+    if kind == XL_MEMBER_BAYES:
+        return 10
     return 0
 
 
@@ -93,6 +100,8 @@ def xl_member_scalar_count(kind: Int) -> Int:
     """The SCALARS block length of `kind`."""
     if kind == XL_MEMBER_HUBER:
         return 3
+    if kind == XL_MEMBER_BAYES:
+        return 4
     return 2
 
 
@@ -214,7 +223,9 @@ def _name(slot: _SlotP) -> String:
         return String("GammaRegressor")
     if kind == 2:
         return String("TweedieRegressor")
-    return String("HuberRegressor")
+    if kind == XL_MEMBER_HUBER:
+        return String("HuberRegressor")
+    return String("BayesianRidge")
 
 
 def _loss_name(slot: _SlotP) -> String:
@@ -302,6 +313,10 @@ def _fit(slot: _SlotP, call: _CallP) raises:
         slot[].flags = flags^
         slot[].fitted = True
         return
+    if kind >= XL_MEMBER_BAYES:
+        _plain_fit(slot, call, kind, p, intercept, n, d, y, y_size, has_sw)
+        _ = joined^
+        return
     # GLM: the request words of `xl_fit_glm_unpack`.
     var m = d + 1
     var ip: List[Int] = [Int(p[2]), intercept, Int(p[3]), has_sw]
@@ -315,6 +330,34 @@ def _fit(slot: _SlotP, call: _CallP) raises:
         raise Error("Some value(s) of y are out of the valid range of the loss '" + _loss_name(slot) + "'.")
     _keep_block(slot, result, d)
     slot[].scalars = [Float64(result[d]), Float64(Int(result[d + 1]))]
+    slot[].fitted = True
+
+
+def _plain_fit(slot: _SlotP, call: _CallP, kind: Int, p: List[Float64], intercept: Int, n: Int, d: Int, y: Int,
+    y_size: Int, has_sw: Int) raises:
+    """Kinds 4..: one `xl_fit_run` call with the request words of the kind's
+    `xl_fit_<kind>_unpack` (bindings/x_linear_regressors_unpack.mojo), then
+    the kind's result words into the state."""
+    var algo = ALGO_BAYES
+    var ip = List[Int]()
+    var fp = List[Float64]()
+    var n_out = 0
+    var n_fw = 0
+    var n_iw = 1
+    if kind == XL_MEMBER_BAYES:
+        ip = [Int(p[2]), intercept, has_sw]
+        fp = [p[3], p[4], p[5], p[6], p[7], p[8], p[9]]
+        n_out = d + 4
+        n_fw = 3 * d * d + 5 * d + n
+    var result = List[Float32](length=n_out, fill=0.0)
+    var request = XlFitRequest(call[].route.entry.call, algo, call[].x.data, n * d, n, d, y, y_size, ip^, fp^,
+        n_out, n_fw, n_iw, Int(result.unsafe_ptr()), False, 0, 0, 0)
+    _ = xl_fit_run(request)
+    _keep_block(slot, result, d)
+    if kind == XL_MEMBER_BAYES:
+        # [coef | intercept | alpha_ | lambda_ | n_iter]
+        slot[].scalars = [Float64(result[d]), Float64(result[d + 1]), Float64(result[d + 2]),
+            Float64(Int(result[d + 3]))]
     slot[].fitted = True
 
 
