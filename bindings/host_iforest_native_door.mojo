@@ -23,7 +23,10 @@ from bindings.host_tree_archive_keys_unpack import host_tree_archive_keys
 from bindings.py_balanced import py_item
 from std.python._cpython import GILReleased
 from core.entry_table import EntryRef
-from core.iforest_entry import IFRunRequest, IF_CAP_RESIDENT, if_entry_caps, if_entry_ref, if_entry_run
+from core.iforest_entry import (
+    IFForestRunRequest, IFForestSpans, IFRunRequest, IF_CAP_RESIDENT, if_entry_caps, if_entry_forest_run, if_entry_ref,
+    if_entry_run,
+)
 
 comptime _HOST_TOKEN_SLOT = "trees_iforest_host_resident_v1"
 
@@ -219,7 +222,7 @@ def host_iforest_run(entry: EntryRef, request: IFRunRequest) raises:
 
 def _host_resident_entries(entry: PythonObject, context: PythonObject) raises -> PythonObject:
     """The `(iforest_resident_release,)` entry of the binary that serves
-    `entry` (any fixed entry of the CPU image, `iforest_forest_run`) when
+    `entry` (the CPU image's fixed `iforest_resident_release`) when
     that binary keeps the fitted forest resident between calls
     (IF_CAP_RESIDENT of its native iforest entry); None otherwise. Read from
     the minting module's dictionary (no module __getattr__), and refused
@@ -275,14 +278,14 @@ def _host_forest_inference(model: PythonObject, fields: PythonObject, query: Pyt
                            want: Int, name: PythonObject, context: PythonObject, public: Bool) raises -> PythonObject:
     """A saved forest (`mojolearn-iforest-2`, held as `_if_forest`, no
     training matrix) scored on the CPU (lane fix-iforest-save-device-forest):
-    `iforest_forest_run` walks the same four node arrays the host export
+    IF_OP_FOREST_RUN (core/iforest_entry.mojo) walks the same four node arrays the host export
     writes, so the scores are those of the fit that saved them, on every
     column. A resident binary keeps the imported forest under a token, the
     record anchored on the held forest tuple."""
     var nk = host_tree_archive_keys()
     var forest = py_item(fields, nk[].k__if_forest)
     var unpacked = _host_forest_words(forest, context)
-    var entry = _kernel_entry("iforest_forest_run", context)
+    var entry = _kernel_entry("iforest_resident_release", context)
     if not py_contains(fields, nk[].k_max_samples_) or not py_contains(fields, nk[].k_offset_):
         raise Error("IsolationForest saved forest lacks its fitted offset_ or max_samples_")
     var out = host_archive_typed(Python.tuple(rows), "<i4" if want == 2 else "<f4", py_item(context, nk[].k_output_context))
@@ -297,11 +300,19 @@ def _host_forest_inference(model: PythonObject, fields: PythonObject, query: Pyt
         if same:
             held = Int(py=record.value()[0])
     var b = native_loaded_module("builtins")
-    var params = Python.list(PythonObject(features), PythonObject(rows), py_call(b.int, py_item(fields, nk[].k_max_samples_)),
-                             py_call(b.float, py_item(fields, nk[].k_offset_)), PythonObject(want), PythonObject(held))
+    var w = unpacked[0]
+    var out_address = Int(py=classical_address(out))
+    var request = IFForestRunRequest(
+        IFForestSpans(Int(py=w[0]), Int(py=w[1]), Int(py=w[2]), Int(py=w[3]), Int(py=w[4]), Int(py=w[5]), Int(py=w[6])),
+        Int(py=classical_address(query)), out_address if want != 2 else 0, out_address if want == 2 else 0,
+        Int(py=classical_address(info)), features, rows, Int(py=py_call(b.int, py_item(fields, nk[].k_max_samples_))),
+        Float64(py=py_call(b.float, py_item(fields, nk[].k_offset_))), want, held,
+    )
     try:
-        _ = py_call(entry, unpacked[0], classical_address(query), classical_address(out) if want != 2 else PythonObject(0),
-                    classical_address(out) if want == 2 else PythonObject(0), classical_address(info), params)
+        # The import and the scoring run with the GIL released, as inside
+        # the former Python binding `iforest_forest_run`.
+        with GILReleased(Python()):
+            _ = if_entry_forest_run(host_iforest_entry(), request)
     except error:
         var text = String(error)
         if ("NaN" in text or "Infinit" in text or "infinit" in text
@@ -356,7 +367,7 @@ def host_iforest_inference(model: PythonObject, fields: PythonObject, source: Py
     if not py_contains(fields, nk[].k__seed):
         _iforest_resolve(fields, context)
     var request = host_iforest_request(fields, count, features, rows, want)
-    var resident = _host_resident_entries(_kernel_entry("iforest_forest_run", context), context)
+    var resident = _host_resident_entries(_kernel_entry("iforest_resident_release", context), context)
     if resident is not None and not host_iforest_owned_x(fields):
         resident = PythonObject(None)
     var held = 0
