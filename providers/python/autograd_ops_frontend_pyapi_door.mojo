@@ -3,9 +3,10 @@
 # over objects unchanged; this boundary owns descriptors, options and outputs.
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
-from bindings.py_balanced import py_call, py_setattr, py_setitem, py_type, py_contains
+from bindings.py_balanced import py_call, py_item, py_setattr, py_setitem, py_type, py_contains
 from providers.python.autograd_python_errors_pyapi_pack import graph_int
 from sequence.exec_trait import Exec
+from bindings.autograd_keys_unpack import autograd_keys
 from sequence.ops import FP
 from autograd.ops_api import ops_session, ops_session_registry_token
 from autograd.optimizer_requests import OpsOptimizerExtras
@@ -162,11 +163,17 @@ def ops_session_call_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
     # retained `ops_session_call_py`: admit the public handle against the
     # native registry owner, then run the operation.
     var resource_scope: List[Int] = [ops_session_registry_token(), KIND]
-    if not _nil(fields["_id"]):
-        if py_type(fields["_id"]) is not py_type(PythonObject(0)):
+    # Held keys: `_id` was read by name four times here (a Python str built,
+    # hashed and freed each time) on every operation of a session owned by
+    # another image (the CPU image of `device="cpu"` on a GPU installation).
+    var nk = autograd_keys()
+    var handle = py_item(fields, nk[].k__id)
+    if not _nil(handle):
+        var types = program_builtin_types()
+        if py_type(handle) is not types[].int_type:
             raise Error("TypeError: Session handle must be a native integer")
-        var admitted_id = neural_descriptor_resource_handle(fields["_lifetime"], resource_scope)
-        if admitted_id == 0 or admitted_id != Int(py=fields["_id"]):
+        var admitted_id = neural_descriptor_resource_handle(py_item(fields, nk[].k__lifetime), resource_scope)
+        if admitted_id == 0 or admitted_id != Int(py=handle):
             raise Error("TypeError: Session handle differs from its native registry owner")
     return ops_session_call_admitted_py[E, KIND](session, operation, args, fields)
 
@@ -184,6 +191,9 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
 ) raises -> PythonObject:
     var name = String(operation)
     var op = _session_op_code(name)
+    # Held keys: every operation read `_id` by name twice (two Python strs
+    # built, hashed and freed); it is read once, with the held key.
+    var nk = autograd_keys()
     if op == _SOP_PROGRAM_PUBLIC:
         return ops_program_public_execute_py[E, KIND](session, fields, args)
     if op == _SOP_PROGRAM_INIT:
@@ -193,37 +203,38 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
     if op == _SOP_ENTER:
         return session
     if op == _SOP_FREE_PROGRAM:
-        if not _nil(fields["_id"]) and not _nil(args[0]._id):
-            var owner = ops_session[E, KIND](Int(py=fields["_id"]))
+        var open_id = py_item(fields, nk[].k__id)
+        if not _nil(open_id) and not _nil(args[0]._id):
+            var owner = ops_session[E, KIND](Int(py=open_id))
             owner[].program_free(Int(py=args[0]._id))
         var program = args[0]
         py_setattr(program, "_id", PythonObject(None))
         return PythonObject(None)
     if op == _SOP_CLOSE or op == _SOP_EXIT:
-        if not _nil(fields["_id"]):
+        if not _nil(py_item(fields, nk[].k__id)):
             var resource_scope: List[Int] = [ops_session_registry_token(), KIND]
-            neural_descriptor_resource_close(fields["_lifetime"], resource_scope)
-            py_setitem(fields, "_id", PythonObject(None))
+            neural_descriptor_resource_close(py_item(fields, nk[].k__lifetime), resource_scope)
+            py_setitem(fields, nk[].k__id, PythonObject(None))
         return PythonObject(False) if op == _SOP_EXIT else PythonObject(None)
     if op == _SOP_PROFILE_RESET:
         _ = ops_profile_reset_py()
         return PythonObject(None)
     if op == _SOP_PROFILE_REPORT:
         return ops_profile_report_py()
-    if _nil(fields["_id"]):
+    var sid = py_item(fields, nk[].k__id)
+    if _nil(sid):
         raise Error("ValueError: this session is closed")
-    var sid = fields["_id"]
     if op == _SOP_LOAD_PARTITIONED or op == _SOP_LOAD_DISTRIBUTED:
         return ops_owned_program_create_request_py(fields, 0, name, args)
     if op == _SOP_PROGRAM_RUN:
         if len(args) != 4:
             raise Error("TypeError: Session.run requires a Program, arrays and two flags")
         var program = program_owner_fields(args[0])
-        if program["_s"] is not session:
+        if py_item(program, nk[].k__s) is not session:
             raise Error("ValueError: Program belongs to another Session")
         if not program_numeric_scalar(args[2]) or not program_numeric_scalar(args[3]):
             raise Error("TypeError: Program flags require native boolean or numeric scalars")
-        var pid = _integer(program["_id"], "program", 1)
+        var pid = _integer(py_item(program, nk[].k__id), "program", 1)
         return ops_program_execute_py[E, KIND](sid, PythonObject(pid), sid, args[1], args[2], args[3], PythonObject(False))
     var s = ops_session[E, KIND](Int(py=sid))
     if op == _SOP_FIT or op == _SOP_FIT_IF:
@@ -259,10 +270,11 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
         return control_save_py[E, KIND](sid, args[0], args[2], args[3], args[4], args[1], opt, uint64_input(args[6], "seed"))
     if op == _SOP_LOAD_CONTROL:
         var bundle = control_load_py[E, KIND](sid, args[0])
-        py_setitem(bundle, "body", program_new_owner(session, bundle["body"]))
-        py_setitem(bundle, "condition", program_new_owner(session, bundle["condition"]))
-        if bundle["otherwise"] is not PythonObject(None):
-            py_setitem(bundle, "otherwise", program_new_owner(session, bundle["otherwise"]))
+        py_setitem(bundle, nk[].k_body, program_new_owner(session, py_item(bundle, nk[].k_body)))
+        py_setitem(bundle, nk[].k_condition, program_new_owner(session, py_item(bundle, nk[].k_condition)))
+        var else_program = py_item(bundle, nk[].k_otherwise)
+        if else_program is not PythonObject(None):
+            py_setitem(bundle, nk[].k_otherwise, program_new_owner(session, else_program))
         return bundle
     if op == _SOP_SAVE_PROGRAM:
         return ops_program_save_native_py[E, KIND](args[0], args[1])

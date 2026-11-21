@@ -10,6 +10,7 @@ from bindings.native_json_door import native_path
 from bindings.sequential_description_unpack import sequential_fields, sequential_append
 from bindings.sequential_description_pack import sequential_program, sequential_table
 from bindings.sequential_execution_pack import sequential_entries, sequential_forward
+from bindings.sequential_route_door import sequential_device_admit
 from bindings.sequential_arrays_door import sequential_array, sequential_address, sequential_descriptor, sequential_curve
 from sequence.sequential_checkpoint_run import _quote
 from bindings.sequential_keys_unpack import sequential_keys
@@ -105,12 +106,16 @@ def sequential_save(mut mods: NativeModules, model: PythonObject, path: PythonOb
 
 
 def sequential_load_checkpoint(mut mods: NativeModules, cls: PythonObject, path: PythonObject, mode: PythonObject,
-                               context: PythonObject) raises -> PythonObject:
+                               device: PythonObject, context: PythonObject) raises -> PythonObject:
     var nk = sequential_keys()
     var b = native_loaded_module("builtins")
+    # The loaded model runs on `device` (None: this installation's device),
+    # checked before the model exists, as the constructor checks it.
+    sequential_device_admit(device, context)
     var model = py_call(b.object.__new__, cls)
     var fields = sequential_fields(model)
     py_setitem(fields, nk[].k_numeric_mode, mode)
+    py_setitem(fields, nk[].k_device, device)
     py_setitem(fields, nk[].k_input_shape, PythonObject(None))
     py_setitem(fields, nk[].k__layers, Python.list())
     py_setitem(fields, nk[].k__options, PythonObject(None))

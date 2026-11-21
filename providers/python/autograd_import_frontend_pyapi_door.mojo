@@ -110,7 +110,8 @@ def _import(source: PythonObject, label: PythonObject, shapes: PythonObject,
         name = path.value() if label is None else label
     var session = native_storage_allocate(py_item(context, nk[].k_session))
     _ = _fields(session, py_item(context, nk[].k_layouts)[py_item(context, nk[].k_session)])
-    _ = ops_session_initialize_py(session, PythonObject(False), mode, py_item(context, nk[].k_connections), py_item(context, nk[].k_backend), py_item(context, nk[].k_program))
+    # The fifth slot is the session's `device` (None: this installation's device).
+    _ = ops_session_initialize_py(session, PythonObject(False), mode, py_item(context, nk[].k_connections), PythonObject(None), py_item(context, nk[].k_program))
     try:
         var fields = ops_session_fields(session)
         var lifetime = py_item(fields, nk[].k__lifetime)

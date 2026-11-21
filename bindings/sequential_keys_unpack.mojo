@@ -60,6 +60,7 @@ struct SequentialKeys(Defaultable, Movable):
     var k_ctypes_array_base: PythonObject
     var k_data: PythonObject
     var k_defaultdict_class: PythonObject
+    var k_device: PythonObject
     var k_epochs_run_: PythonObject
     var k_eps: PythonObject
     var k_f1: PythonObject
@@ -106,6 +107,7 @@ struct SequentialKeys(Defaultable, Movable):
     var k_sched: PythonObject
     var k_schedule_codes: PythonObject
     var k_sequential_class: PythonObject
+    var k_sequential_cpu_bindings: PythonObject
     var k_step_size: PythonObject
     var k_tol: PythonObject
     var k_uint64_max: PythonObject
@@ -153,6 +155,7 @@ struct SequentialKeys(Defaultable, Movable):
         self.k_ctypes_array_base = PythonObject(None)
         self.k_data = PythonObject(None)
         self.k_defaultdict_class = PythonObject(None)
+        self.k_device = PythonObject(None)
         self.k_epochs_run_ = PythonObject(None)
         self.k_eps = PythonObject(None)
         self.k_f1 = PythonObject(None)
@@ -199,6 +202,7 @@ struct SequentialKeys(Defaultable, Movable):
         self.k_sched = PythonObject(None)
         self.k_schedule_codes = PythonObject(None)
         self.k_sequential_class = PythonObject(None)
+        self.k_sequential_cpu_bindings = PythonObject(None)
         self.k_step_size = PythonObject(None)
         self.k_tol = PythonObject(None)
         self.k_uint64_max = PythonObject(None)
@@ -250,6 +254,7 @@ def _sequential_keys_fill(nk: UnsafePointer[SequentialKeys, MutUntrackedOrigin])
     nk[].k_ctypes_array_base = py_key("ctypes_array_base")
     nk[].k_data = py_key("data")
     nk[].k_defaultdict_class = py_key("defaultdict_class")
+    nk[].k_device = py_key("device")
     nk[].k_epochs_run_ = py_key("epochs_run_")
     nk[].k_eps = py_key("eps")
     nk[].k_f1 = py_key("f1")
@@ -296,6 +301,7 @@ def _sequential_keys_fill(nk: UnsafePointer[SequentialKeys, MutUntrackedOrigin])
     nk[].k_sched = py_key("sched")
     nk[].k_schedule_codes = py_key("schedule_codes")
     nk[].k_sequential_class = py_key("sequential_class")
+    nk[].k_sequential_cpu_bindings = py_key("sequential_cpu_bindings")
     nk[].k_step_size = py_key("step_size")
     nk[].k_tol = py_key("tol")
     nk[].k_uint64_max = py_key("uint64_max")

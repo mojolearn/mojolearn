@@ -31,8 +31,12 @@ def test_program_methods_do_not_resolve_mutable_instance_callables():
 
 
 def test_native_request_retains_fields_and_routes_through_session_owner():
-    source = (PROVIDERS / 'autograd_program_public_request_pyapi_pack.mojo').read_text()
-    assert source.index('program_owner_fields(owner)') < source.index('snapshot["_s"]')
+    source = plain('providers/python/autograd_program_public_request_pyapi_pack.mojo',
+                   (PROVIDERS / 'autograd_program_public_request_pyapi_pack.mojo').read_text())
+    # the owning Session is read once from the admitted Program fields and kept in the snapshot
+    assert source.index('program_owner_fields(owner)') < source.index('var owning = fields["_s"]')
+    assert 'py_setitem(snapshot, "_s", owning)' in source
+    assert 'ops_session_public_call_py[E, KIND](owning,' in source
     assert 'Python.tuple(owner, snapshot, fields, operation, args)' in source
     assert 'ops_session_public_call_py[E, KIND](' in source
     assert all(word not in source for word in ('PyObject_Call', 'PyCFunction', '._session_native', '._execute_native'))

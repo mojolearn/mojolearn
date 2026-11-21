@@ -99,8 +99,8 @@ class Sequential:
     >>> proba = clf.predict_proba(X)
     """
 
-    def __init__(self, numeric_mode=None, *, input_shape=None):
-        return _SEQUENTIAL_ENTRY(self, "construct", (numeric_mode, input_shape), _SEQUENTIAL_CONTEXT)
+    def __init__(self, numeric_mode=None, *, input_shape=None, device=None):
+        return _SEQUENTIAL_ENTRY(self, "construct", (numeric_mode, input_shape, device), _SEQUENTIAL_CONTEXT)
 
     # ------------------------------------------------------------ building
     def add(self, kind, *args, **kwargs):
@@ -264,9 +264,6 @@ class Sequential:
         return _SEQUENTIAL_ENTRY(self, "compile", (loss, optimizer, lr, momentum, nesterov, beta1, beta2, eps, weight_decay, schedule, step_size, gamma, huber_delta, tol, n_iter_no_change), _SEQUENTIAL_CONTEXT)
 
     # ------------------------------------------------------------ description
-    def _binding(self):
-        return _backend.binding("_mojolearn_x_sequence", self.numeric_mode)
-
     def _program(self, n_features, sample=None):
         return _SEQUENTIAL_ENTRY(self, "program", (n_features, sample), _SEQUENTIAL_CONTEXT)
 
@@ -465,7 +462,7 @@ class Sequential:
         return _SEQUENTIAL_ENTRY(self, "save", (path, True), _SEQUENTIAL_CONTEXT)
 
     @classmethod
-    def from_checkpoint(cls, path, numeric_mode=None):
+    def from_checkpoint(cls, path, numeric_mode=None, device=None):
         """Load a model saved with :meth:`save_checkpoint` or :meth:`export`.
 
         Parameters
@@ -489,10 +486,10 @@ class Sequential:
             The file is not a complete model checkpoint (wrong format,
             truncated or damaged).
         """
-        return _SEQUENTIAL_ENTRY(cls, "load_checkpoint", (path, numeric_mode), _SEQUENTIAL_CONTEXT)
+        return _SEQUENTIAL_ENTRY(cls, "load_checkpoint", (path, numeric_mode, device), _SEQUENTIAL_CONTEXT)
 
     @classmethod
-    def load(cls, path, numeric_mode=None):
+    def load(cls, path, numeric_mode=None, device=None):
         """Load a model saved with :meth:`export` (or :meth:`save_checkpoint`).
 
         The same as :meth:`from_checkpoint`.
@@ -502,7 +499,7 @@ class Sequential:
         >>> import mojolearn
         >>> model = mojolearn.Sequential.load("classifier.ckpt")  # doctest: +SKIP
         """
-        return _SEQUENTIAL_ENTRY(cls, "load_checkpoint", (path, numeric_mode), _SEQUENTIAL_CONTEXT)
+        return _SEQUENTIAL_ENTRY(cls, "load_checkpoint", (path, numeric_mode, device), _SEQUENTIAL_CONTEXT)
 
     def _targets(self, y, n, n_out, loss):
         return _SEQUENTIAL_ENTRY(self, "targets", (y, n, n_out, loss), _SEQUENTIAL_CONTEXT)
@@ -572,18 +569,37 @@ def _connect_sequential_bindings():
     from ._version import __version__
     selected = _backend.default_mode()
     entries = {}
+    names = ("x_sequence_vendor", "x_sequence_numeric_mode", "model_native_api_v1", "model_n_params", "model_fit", "model_predict", "model_labels", "model_gather_labels", "model_predict_labels", "model_fit_labels", "model_import_params", "model_save_checkpoint", "model_load_checkpoint", "model_checkpoint_info", "verify_digest", "verify_file_sha256", "verify_model_info", "verify_fill")
+
+    def connected(module):
+        # glue: resolve existing compiled ABI symbols at import
+        symbols = {}
+        for name in names:  # glue: resolve existing compiled ABI symbols at import
+            entry = getattr(module, name)
+            if not isinstance(entry, BuiltinFunctionType):
+                raise TypeError(f"Sequential requires a compiled {name}")
+            symbols[name] = entry
+        return symbols
+
+    errors = (ImportError, AttributeError, ValueError, RuntimeError)
     for mode in (selected, "fast" if selected == "identical" else "identical"):  # glue: connect native modes at package import
         try:
-            module = _backend.binding("_mojolearn_x_sequence", mode)
-            symbols = {}
-            for name in ("x_sequence_vendor", "x_sequence_numeric_mode", "model_native_api_v1", "model_n_params", "model_fit", "model_predict", "model_labels", "model_gather_labels", "model_predict_labels", "model_fit_labels", "model_import_params", "model_save_checkpoint", "model_load_checkpoint", "model_checkpoint_info", "verify_digest", "verify_file_sha256", "verify_model_info", "verify_fill"):  # glue: resolve existing compiled ABI symbols at import
-                entry = getattr(module, name)
-                if not isinstance(entry, BuiltinFunctionType):
-                    raise TypeError(f"Sequential requires a compiled {name}")
-                symbols[name] = entry
-            entries[mode] = symbols
-        except (ImportError, AttributeError, ValueError, RuntimeError) as error:
+            entries[mode] = connected(_backend.binding("_mojolearn_x_sequence", mode))
+        except errors as error:
             entries[mode] = type(error).__name__ + ": " + str(error)
+    # The CPU table of `device="cpu"`, connected once here beside the device
+    # table (bindings/sequential_route_door.mojo resolves a model against one
+    # of the two, once per model). In a CPU-only process the selected table
+    # already is the CPU table and nothing more is loaded. A host binary that
+    # is not built is kept as its refusal text, said when a `device="cpu"`
+    # model first runs.
+    cpu_entries = None
+    if _backend.vendor() != "cpu":
+        try:
+            cpu = connected(_backend.load_host_module("_mojolearn_x_sequence_host"))  # import-time: the CPU table of device="cpu"
+        except errors + (TypeError, OSError) as error:
+            cpu = type(error).__name__ + ": " + str(error)
+        cpu_entries = {"identical": cpu}
     class_dtypes = {key: np.dtype(value) for key, value in _CLASS_DTYPE.items()}  # glue: connect checkpoint dtype classes once at package import
     numeric_dtypes = {("uifb"[kind], size): dtype for (kind, size), dtype in class_dtypes.items()}  # glue: connect native numeric dtype metadata once at package import
     buffer_codes = {("b", 1): "b", ("i", 1): "b", ("i", 2): "h", ("i", 4): "i", ("i", 8): "q", ("u", 1): "B", ("u", 2): "H", ("u", 4): "I", ("u", 8): "Q", ("f", 2): "H", ("f", 4): "f", ("f", 8): "d"}
@@ -599,11 +615,12 @@ def _connect_sequential_bindings():
         "defaultdict_class": defaultdict, "native_default_factories": (list, tuple, dict, OrderedDict, defaultdict, bool, int, float, str, bytes, bytearray),
         "native_value_types": (type(None), str, bytes, bytearray, bool, int, float, range, np.ndarray, Array, array, PosixPath, PurePosixPath, type(iter([])), type(iter(())), type(iter(range(0))), type(reversed([]))),
         "buffer_owner_types": (type(None), bytes, bytearray, array, np.ndarray, mmap.mmap), "ctypes_array_base": ctypes.Array, "array_fields": array_fields,
-        "model_fields": ("numeric_mode", "input_shape", "_layers", "_options", "params_", "n_features_in_", "n_outputs_", "_sample_shape", "n_iter_", "loss_curve_", "_fit_state", "_imported", "_fit_loss", "_target", "_fit_batch", "_fit_shuffle", "_y_1d", "classes_", "optimizer_m_", "optimizer_v_", "_curve", "validation_loss_curve_", "epochs_run_", "best_epoch_"),
+        "model_fields": ("numeric_mode", "device", "input_shape", "_layers", "_options", "params_", "n_features_in_", "n_outputs_", "_sample_shape", "n_iter_", "loss_curve_", "_fit_state", "_imported", "_fit_loss", "_target", "_fit_batch", "_fit_shuffle", "_y_1d", "classes_", "optimizer_m_", "optimizer_v_", "_curve", "validation_loss_curve_", "epochs_run_", "best_epoch_"),
         "numeric_dtypes": numeric_dtypes, "buffer_codes": buffer_codes, "scalar_type": np.generic,
         "version": __version__, "uname": os.uname, "class_dtypes": class_dtypes,
         "loss_names": ("mse", "cross_entropy", "bce_with_logits", "huber"),
-        "bindings": entries, "backend_fields": vars(_backend), "vendor": _backend.vendor(),
+        "bindings": entries, "sequential_cpu_bindings": cpu_entries,
+        "backend_fields": vars(_backend), "vendor": _backend.vendor(),
         "ndarray": np.ndarray, "array_type": array, "array_class": Array,
         "float_types": (float, np.floating), "int_types": (int, np.integer),
         "bool_types": (bool, np.bool_), "int64_min": -(2 ** 63),
