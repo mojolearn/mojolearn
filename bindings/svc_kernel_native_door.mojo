@@ -40,13 +40,14 @@ from bindings.classical_exceptions_door import classical_require_fitted
 from bindings.classical_labels_door import labels_cast, classical_encode_labels
 from bindings.native_array_view_pack import native_array_ndarray_view
 from providers.python.estimator_lifecycle_pyapi_unpack import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
-from bindings.family_common_unpack import FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, family_repr, family_str
+from bindings.family_common_unpack import FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, family_repr
 from bindings.family_common_pack import family_call, family_array
-from core.svr_native_api import SvrFitPlan, SvrFitRequest, SvrQueryRequest
-from bindings.svr_native_boundary_unpack import svr_connection, svr_run_fit, svr_run_query, SvrResidentPin, svr_resident_pin
+from std.python._cpython import GILReleased
+from bindings.svc_kernel_svr_unpack import svr_fit_unpack, svr_query_unpack, svr_query_refused, svr_score_unpack
+from bindings.svc_kernel_svr_pack import svr_fit_pack, svr_query_output, svr_score_pack
 from bindings.svc_common_unpack import svc_builtins, svc_field, svc_has, svc_float, svc_int, svc_truthy, svc_read_f64, svc_read_f32, svc_shape_of
 from bindings.svc_common_pack import svc_prefix, svc_scalar_array, svc_decode, svc_threshold_codes, svc_argmax_rows
-from bindings.svc_common_door import svc_r2_sums, svc_accuracy_codes
+from bindings.svc_common_door import svc_accuracy_codes
 from bindings.svc_common_run import svc_round_f32
 from bindings.fitted_resident_door import fitted_resident_lease
 from bindings.device_rows_door_run import DoorRowsStore
@@ -58,7 +59,7 @@ from svm.operation_metadata import SvcOperationSettings, SVC_ABI_NAME
 from bindings.operation_names_svc import SVC_OPN_FAMILY_SVC_SVC_COEF, SVC_OPN_FAMILY_SVC_SVC_DECISION, SVC_OPN_FAMILY_SVC_SVC_FIT, SVC_OPN_FAMILY_SVC_SVC_LOG_PROBA, SVC_OPN_FAMILY_SVC_SVC_PREDICT, SVC_OPN_FAMILY_SVC_SVC_PROBA, SVC_OPN_FAMILY_SVC_SVC_SCORE, SVC_OPN_FAMILY_SVC_SVC_VALIDATE, SVC_OPN_FAMILY_SVC_SVR_COEF, SVC_OPN_FAMILY_SVC_SVR_FIT, SVC_OPN_FAMILY_SVC_SVR_PREDICT, SVC_OPN_FAMILY_SVC_SVR_SCORE, SVC_OPN_FAMILY_SVC_SVR_VALIDATE
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entry, neural_descriptor_connect, neural_descriptor_execute, neural_descriptor_info
 from bindings.svm_keys_unpack import svm_keys
-from bindings.svc_kernel_rows_unpack import _EPI_BINARY, _EPI_LOG_PROBA, _EPI_OVO, _EPI_OVR, _EPI_PROBA, _EPI_VOTES, _GLUE_FOLD, _GLUE_FOLD_FINISH, _SVC_RESIDENT_SLOT, _SVR_RESIDENT_SLOT, _addr, _entry, _gather, _gather_i32, _gather_support_columns, _pair_select, _query, _resident_entry, _svm_device_ok, _svm_fit_admit, _svm_fit_entry, _svm_fit_host_rows, _svm_fit_refuse, _svm_query, _svm_query_refuse, _svm_x_scan
+from bindings.svc_kernel_rows_unpack import _EPI_BINARY, _EPI_LOG_PROBA, _EPI_OVO, _EPI_OVR, _EPI_PROBA, _EPI_VOTES, _GLUE_FOLD, _GLUE_FOLD_FINISH, _SVC_RESIDENT_SLOT, _addr, _entry, _gather, _gather_i32, _gather_support_columns, _pair_select, _query, _resident_entry, _svm_device_ok, _svm_fit_admit, _svm_fit_entry, _svm_fit_host_rows, _svm_fit_refuse, _svm_query_refuse, _svm_x_scan
 from bindings.svc_kernel_params_unpack import _c_rows, _kernel_code, _resolve_gamma, _svm_device_gamma, _svm_validate
 
 comptime _DEV636_Y = "mojolearn SVC: y contains a non-finite value (DEVIATION 636: a NaN or inf cannot be fitted; a computed NaN carries a vendor-specific payload and cannot sit in a hashed stage)"
@@ -945,207 +946,39 @@ def _pred_count(pred: PythonObject) raises -> Int:
 
 
 def _svr_fit(model: PythonObject, args: PythonObject, context: PythonObject, native: PythonObject) raises:
-    """`SVR.fit(X, y, sample_weight)`; args = (binding, X, y, sample_weight)."""
-    var binding = args[0]
-    var fields = py_fields(model)
-    _svm_validate(model, fields, False, context)
-    # Lane a8a: the GPU binding's fit takes X on the device (a fold gathered
-    # there, host words copied once; never a host List) and tests it there;
-    # every other route tests the host words here. One wording.
-    var entry = _svm_fit_entry(binding, native)
-    var fold = DoorRowsStore.none()
-    var x_pin = ArrayPin()
-    var x_meta = _svm_fit_admit(args[1], "SVR", entry, context, fold, x_pin)
-    var nk = svm_keys()
-    py_setitem(fields, nk[].k_input_copied_,
-               PythonObject(True if fold.active() else admit_family_copied(x_meta, args[1])))
-    var x = x_pin.keep
-    var n_rows = x_meta.shape[0]
-    var n_cols = x_meta.shape[1]
-    # `_as_targets`: y refused non-finite here, in scikit-learn's wording.
-    var shape = svc_shape_of(args[2], context)
-    if len(shape) != 1:
-        raise Error("mojolearn SVR: y must be 1-D, got " + String(len(shape)) + "-D shape " + family_repr(shape))
-    var targets = admit_family(args[2], 1, "y", context, False, True,
-                               refusal="Input y contains NaN or infinity (SVR).").array
-    if Int(py=targets.shape[0]) != n_rows:
-        raise Error("mojolearn SVR: y has " + String(Int(py=targets.shape[0])) + " entries, X has " + String(n_rows) + " rows")
-    var precomputed = String(svc_field(fields, nk[].k__hp_kernel, "_hp_kernel")) == "precomputed"
-    if precomputed and n_cols != n_rows:
-        raise Error("mojolearn SVR: kernel='precomputed' needs the square n x n "
-                    + "kernel matrix as X, got " + String(n_rows) + " x " + String(n_cols))
-    var device_x = entry and not precomputed
-    if fold.active() and not device_x:
-        x_meta = _svm_fit_host_rows(args[1], context, x_pin)
-        x = x_pin.keep
-        fold = DoorRowsStore.none()
-    var gamma = 1.0
-    var scale_gamma = False
-    if device_x:
-        var resolved = _svm_device_gamma(fields, n_cols)
-        gamma = resolved[0]
-        scale_gamma = resolved[1]
-    else:
-        _svm_x_scan(x_meta, "SVR")
-        gamma = _resolve_gamma(fields, binding, x_meta, context, native)
-    var c_rows = _c_rows(binding, svc_float(svc_field(fields, nk[].k__hp_C, "_hp_C")), n_rows, args[3], PythonObject(None),
-                         PythonObject(None), "SVR", context, native)
-    var plan = SvrFitPlan(n_rows, n_cols)
-    # Capture boundary scalar references in the same field-read order as
-    # the former option list. Conversion remains after address admission.
-    var kernel = _kernel_code(fields, context)
-    var c_value = svc_field(fields, nk[].k__hp_C, "_hp_C")
-    var epsilon_value = svc_field(fields, nk[].k__hp_epsilon, "_hp_epsilon")
-    var tolerance_value = svc_field(fields, nk[].k__hp_tol, "_hp_tol")
-    var iterations_value = svc_field(fields, nk[].k__hp_max_iter, "_hp_max_iter")
-    var steps_value = svc_field(fields, nk[].k__hp_nochange_steps, "_hp_nochange_steps")
-    var k = String(svc_field(fields, nk[].k__hp_kernel, "_hp_kernel"))
-    var bounds_address = 0 if c_rows is None else Int(py=classical_address(c_rows))
-    var degree = 3
-    var coef0 = Float64(0)
-    if k == "poly" or k == "sigmoid":
-        degree = svc_int(svc_field(fields, nk[].k__hp_degree, "_hp_degree"))
-        coef0 = svc_float(svc_field(fields, nk[].k__hp_coef0, "_hp_coef0"))
-    var target_address = Int(py=classical_address(targets))
-    var connection = svr_connection(binding)
-    var c = Float64(py=c_value)
-    var epsilon = Float64(py=epsilon_value)
-    var tolerance = Float64(py=tolerance_value)
-    var max_iter = Int(py=iterations_value)
-    var nochange_steps = Int(py=steps_value)
-    var request = SvrFitRequest(x_meta.source.addr, target_address,
-        Int(plan.dual.unsafe_ptr()), Int(plan.support.unsafe_ptr()), Int(plan.vectors.unsafe_ptr()),
-        Int(plan.info.unsafe_ptr()), bounds_address, n_rows, n_cols, kernel,
-        max_iter, nochange_steps, degree,
-        fold.base_id, fold.base_rows, fold.index_id, device_x and native is None,
-        scale_gamma, native is not None, gamma, c, epsilon, tolerance, coef0)
-    svr_run_fit(connection, request, plan)
-    _ = targets
-    _ = x
-    _ = c_rows
-    var n_support = plan.count
-    if device_x and native is None:
-        # X's finite and range words and the gamma solved with (lane a8a)
-        _svm_fit_refuse(Int(plan.info[3]), Int(plan.info[4]), fold, "SVR")
-        gamma = plan.info[5]
-    py_setitem(fields, nk[].k_n_features_in_, PythonObject(n_cols))
-    py_setitem(fields, nk[].k_n_support_, PythonObject(n_support))
-    _ = targets  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    py_setitem(fields, nk[].k_n_iter_, PythonObject(Int(plan.info[2])))
-    py_setitem(fields, nk[].k_intercept_, svc_scalar_array(svc_round_f32(plan.info[0]), "<f4", context))
-    py_setitem(fields, nk[].k_support_, svc_prefix(Int(plan.support.unsafe_ptr()), n_support, Python.tuple(PythonObject(n_support)), "<i4", context))
-    _ = targets  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    py_setitem(fields, nk[].k_support_vectors_,
-               svc_prefix(Int(plan.vectors.unsafe_ptr()), n_support * n_cols, Python.tuple(PythonObject(n_support), PythonObject(n_cols)), "<f4", context))
-    _ = targets  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    py_setitem(fields, nk[].k_dual_coef_,
-               svc_prefix(Int(plan.dual.unsafe_ptr()), n_support, Python.tuple(PythonObject(1), PythonObject(n_support)), "<f4", context))
-    _ = targets  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    py_setitem(fields, nk[].k__gamma, PythonObject(gamma))
-    _ = plan
-    _ = connection
-    _ = x^
-    _ = x_meta  # retain captured storage owners through the last native use
-    _ = x_pin
-    _ = targets^
-    _ = c_rows^
+    """`SVR.fit(X, y, sample_weight)`; args = (binding, X, y, sample_weight):
+    UNPACK, one typed solve with the GIL released, PACK."""
+    var unpacked = svr_fit_unpack(model, args, context, native)
+    var count = 0
+    with GILReleased(Python()):
+        count = unpacked.connection.driver.fit(unpacked.request)
+    unpacked.plan.count = count
+    svr_fit_pack(unpacked, context)
+    # The owners of X, the targets, the bounds and the provider outlive RUN and PACK.
+    _ = unpacked
 
 
 def _svr_predict(model: PythonObject, fields: PythonObject, binding: PythonObject, source: PythonObject,
                  context: PythonObject, native: PythonObject) raises -> PythonObject:
-    """`SVR.predict`."""
-    var nk = svm_keys()
-    if not svc_has(fields, nk[].k_dual_coef_):
-        raise Error("mojolearn SVR: call fit() first")
-    var resident_entry = neural_descriptor_entry(binding, "svr_predict_resident", False) if native is None else PythonObject(None)
-    var n_support = svc_int(svc_field(fields, nk[].k_n_support_, "n_support_"))
-    var precomputed = String(svc_field(fields, nk[].k__hp_kernel, "_hp_kernel")) == "precomputed"
-    var q_meta = _svm_query(source, "SVR", context,
-                            _svm_device_ok(resident_entry, 4 if precomputed else 0, [n_support]))
-    var q = q_meta.keep
-    var d = svc_int(svc_field(fields, nk[].k_n_features_in_, "n_features_in_"))
-    if q_meta.cols != d:
-        raise Error("mojolearn SVR: X has " + String(q_meta.cols) + " features, fit saw " + String(d))
-    var n_rows = q_meta.rows
-    var out = family_array(Python.tuple(PythonObject(n_rows)), "<f4", context)
-    var dual = svc_field(fields, nk[].k_dual_coef_, "dual_coef_")
-    var sv = svc_field(fields, nk[].k_support_vectors_, "support_vectors_")
-    var n_features = d
-    var query = q
-    var query_address = q_meta.address
-    if precomputed and n_support > 0:
-        # the cross-kernel's columns at the support vectors (SVC's rule)
-        query = _gather_support_columns(binding, q_meta.address, n_rows, q_meta.cols, svc_field(fields, nk[].k_support_, "support_"), -1,
-            context, native)
-        _ = q  # keep the Python object alive through the native call above
-        query_address = _addr(query)
-        n_features = n_support
-        sv = dual
-    var bias = svc_read_f32(svc_field(fields, nk[].k_intercept_, "intercept_"), 0)
-    var kernel = _kernel_code(fields, context)
-    var gamma_value = svc_field(fields, nk[].k__gamma, "_gamma")
-    var cache_value = svc_field(fields, nk[].k__hp_cache_size, "_hp_cache_size")
-    var degree = 3
-    var coef0 = Float64(0)
-    var k = String(svc_field(fields, nk[].k__hp_kernel, "_hp_kernel"))
-    if k == "poly" or k == "sigmoid":
-        degree = svc_int(svc_field(fields, nk[].k__hp_degree, "_hp_degree"))
-        coef0 = svc_float(svc_field(fields, nk[].k__hp_coef0, "_hp_coef0"))
-    var connection = svr_connection(binding)
-    var resident = resident_entry is not None
-    var lease = SvrResidentPin(PythonObject(None), 0)
-    if resident and String(svc_field(fields, nk[].k__hp_kernel, "_hp_kernel")) != "precomputed":
-        var mirrors: List[PythonObject] = [dual, sv]
-        lease = svr_resident_pin(model, _SVR_RESIDENT_SLOT, binding, connection, mirrors)
-    var dual_address = Int(py=classical_address(dual)) if n_support > 0 else 0
-    var vector_address = Int(py=classical_address(sv)) if n_support > 0 else 0
-    var output_address = Int(py=classical_address(out))
-    var gamma = Float64(py=gamma_value)
-    var cache_mib = Float64(py=cache_value)
-    # Native List, not Array: an Array local whose address escapes only as an Int is
-    # neither initialised for nor read back from the callee in an optimized Mojo 1.2
-    # build (reproduced on the Mac, smoke-triage C01 pattern).
-    var status = List[Int32](length=2, fill=Int32(0))
-    var request = SvrQueryRequest(query_address, dual_address, vector_address, output_address,
-        Int(status.unsafe_ptr()), n_rows, n_features, n_support, kernel, degree,
-        lease.handle, 0, q_meta.store.base_id, q_meta.store.base_rows, q_meta.store.index_id,
-        bias, gamma, cache_mib, coef0)
-    svr_run_query(connection, request, resident)
-    _ = query  # keep the Python object alive through the native call above
-    _ = dual  # keep the Python object alive through the native call above
-    _ = sv  # keep the Python object alive through the native call above
-    _ = out  # keep the Python object alive through the native call above
-    if resident:
-        _svm_query_refuse(Int(status[0]), Int(status[1]), q_meta, "SVR")
-    _ = status
-    _ = lease
-    _ = connection
-    _ = query^
-    _ = q^
-    _ = q_meta^  # retain captured storage owners through the last native use
-    return out
+    """`SVR.predict`: UNPACK, one typed query with the GIL released, the
+    refusal of a query the device entry flagged, the public vector."""
+    var unpacked = svr_query_unpack(model, fields, binding, source, context, native)
+    var result = svr_query_output(unpacked.request.rows, context)
+    unpacked.request.dst = _addr(result)
+    with GILReleased(Python()):
+        _ = unpacked.connection.driver.query(unpacked.request, unpacked.resident)
+    svr_query_refused(unpacked)
+    # The owners of X, the fitted arrays, the lease and the provider outlive RUN.
+    _ = unpacked
+    return result
 
 
 def _svr_score(model: PythonObject, fields: PythonObject, binding: PythonObject, source: PythonObject, y: PythonObject,
                context: PythonObject, native: PythonObject) raises -> PythonObject:
-    """`SVR.score`: R^2, 1.0 for a perfect constant fit, 0.0 otherwise."""
+    """`SVR.score`: R^2 of the prediction against y."""
     var pred = _svr_predict(model, fields, binding, source, context, native)
-    var shape = svc_shape_of(y, context)
-    if len(shape) != 1:
-        raise Error("mojolearn SVR: y must be 1-D, got " + String(len(shape)) + "-D shape " + family_repr(shape))
-    var n = Int(py=pred.shape[0])
-    if Int(py=shape[0]) != n:
-        raise Error("mojolearn SVR: y has " + family_str(shape[0]) + " entries, X has " + String(n) + " rows")
-    var sums = svc_r2_sums(pred, y, context)
-    var ss_res = Float64(py=sums[0])
-    var ss_tot = Float64(py=sums[1])
-    if ss_tot == 0.0:
-        return PythonObject(1.0 if ss_res == 0.0 else 0.0)
-    return PythonObject(1.0 - ss_res / ss_tot)
+    svr_score_unpack(Int(py=pred.shape[0]), y, context)
+    return svr_score_pack(pred, y, context)
 
 
 def _coef_snapshot(value: PythonObject, name: String, context: PythonObject, mut pin: ArrayPin) raises -> ArrayMetadata:

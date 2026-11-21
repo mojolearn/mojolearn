@@ -4,7 +4,10 @@ import re
 from check_generation_native_boundary import audit
 
 ROOT = Path(__file__).resolve().parents[1]
-PUBLIC = (ROOT / 'bindings/svc_kernel_native_door.mojo').read_text()
+# The kernel SVM door and its UNPACK / PACK files (lane dw-svc-kernel split the door).
+PUBLIC = '\n'.join((ROOT / 'bindings' / name).read_text() for name in (
+    'svc_kernel_native_door.mojo', 'svc_kernel_params_unpack.mojo', 'svc_kernel_rows_unpack.mojo',
+    'svc_kernel_svr_unpack.mojo', 'svc_kernel_svr_pack.mojo'))
 NATIVE = (ROOT / 'svm/native_descriptor_dispatch.mojo').read_text()
 SETTINGS = (ROOT / 'svm/operation_metadata.mojo').read_text()
 
@@ -50,8 +53,10 @@ def test_common_provider_is_selected_without_new_provider_type():
     assert 'neural_descriptor_connect(factory, String(SVC_ABI_NAME), 12)' in src
     assert 'return PythonObject(None)' in src
     assert 'unavailable for this binding' in src
-    # No provider type of its own: the only struct is the door's query record (_SvmQuery, its two storage owners).
-    assert re.findall(r'^struct (\w+)', PUBLIC, re.M) == ['_SvmQuery']
+    # No provider type of its own: the only structs are the door's query record (_SvmQuery, its two storage
+    # owners) and the UNPACK records of the split operations (`*Unpacked`: the typed request and its owners).
+    structs = re.findall(r'^struct (\w+)', PUBLIC, re.M)
+    assert '_SvmQuery' in structs and all(name == '_SvmQuery' or name.endswith('Unpacked') for name in structs), structs
     assert 'neural_descriptor_info(native.downcast_value_ptr[CompiledBindingSnapshot]()[].provider)' in body('_svc_publish_dispatch')
 
 
@@ -109,9 +114,9 @@ def test_svr_uses_same_provider_and_retains_native_solver():
     assert 'svr_fit_host_borrowed(' in source and 'svr_predict_host(' in source
     assert 'if kernel != 4:' in source
     # e69fd3d769 / 7e20f47df1: SVR fit and query go through the typed native SVR boundary of the same binding.
-    assert 'svr_connection(binding)' in body('_svr_fit') and 'svr_run_fit(connection, request, plan)' in body('_svr_fit')
-    assert 'svr_connection(binding)' in body('_svr_predict') and 'svr_run_query(connection, request,' in body('_svr_predict')
-    for name in ('_svr_fit', '_svr_predict'):
+    assert 'svr_connection(binding)' in body('svr_fit_unpack') and 'unpacked.connection.driver.fit(unpacked.request)' in body('_svr_fit')
+    assert 'svr_connection(binding)' in body('svr_query_unpack') and 'unpacked.connection.driver.query(unpacked.request, unpacked.resident)' in body('_svr_predict')
+    for name in ('_svr_fit', '_svr_predict', 'svr_fit_unpack', 'svr_query_unpack'):
         assert 'family_call(' not in body(name)
     assert 'ip.unsafe_store(2, Float64(res.n_iter))' in source
     assert 'if len(params) != 9 and len(params) != 10 and len(params) != 12:' in source
@@ -140,15 +145,16 @@ def test_svm_shared_inputs_are_snapshotted_outside_pair_and_fold_loops():
         assert 'x_meta: ArrayMetadata' in src
         for repeated in ('x.shape', 'x.size', '_addr(x)', 'classical_address(x)'):
             assert repeated not in src
-    for name in ('_svc_fit', '_svr_fit'):
+    for name in ('_svc_fit', 'svr_fit_unpack'):
         src=body(name)
         assert src.count('_svm_fit_admit(args[1],') == 1
-        assert '_ = x_meta' in src
+        # the admitted X outlives the solve: named after it, or moved into the unpacked record the door holds
+        assert '_ = x_meta' in src or 'x_meta^' in src
     assert body('_svm_fit_admit').count('admit_family_meta(source,') == 1
-    for name in ('_run', '_pair_decisions', '_svr_predict'):
+    for name in ('_run', '_pair_decisions', 'svr_query_unpack'):
         # the query record (_SvmQuery) holds the admitted address, read once; kept alive past the last native use
         assert 'q_meta.address' in body(name)
-        assert '_ = q_meta^' in body(name)
+        assert 'q_meta^' in body(name)
     assert '_addr(q)' not in body('_machine')
     metadata=(ROOT/'providers/python/array_metadata_pyapi_door.mojo').read_text()
     for slot in ('_store', '_base', '_pin', '_mv'):
