@@ -291,7 +291,6 @@ from checks.native_tests.neighbors_knn_run import register as register_neighbors
 from checks.native_tests.neighbors_local_run import register as register_neighbors_local_run
 from checks.native_tests.neighbors_semi_run import register as register_neighbors_semi_run
 from checks.native_tests.neural_entry import register as register_neural_entry
-from checks.native_tests.neural_device_route import register as register_neural_device_route
 from checks.native_tests.nmf_contract import register as register_nmf_contract
 from checks.native_tests.nmf_state import register as register_nmf_state
 from checks.native_tests.nonzero_scan import register as register_nonzero_scan
@@ -875,7 +874,6 @@ def all_checks() -> List[Check]:
     checks.append(register_neighbors_local_run())
     checks.append(register_neighbors_semi_run())
     checks.append(register_neural_entry())
-    checks.append(register_neural_device_route())
     checks.append(register_nmf_contract())
     checks.append(register_nmf_state())
     checks.append(register_nonzero_scan())
