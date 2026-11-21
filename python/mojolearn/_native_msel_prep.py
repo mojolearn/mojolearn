@@ -400,6 +400,18 @@ def connect(context, register, registry):
     for basename in missing:  # glue: fixed ABI metadata connected once per binding
         # (module, name, reader) or (refusal text,): the door raises the text.
         modules[basename] = {mode: connections[basename][mode][0] for mode in ('identical', 'fast')}  # glue: two fixed modes
+    # The CPU identical module of each recipe binding beside the device one
+    # (_native_family_bridge.connect_bindings: module or refusal text): what
+    # the composed call hands a member that says device="cpu" on a GPU
+    # installation (bindings/msel_estimator_native_door.mojo). A name some
+    # other owner connected before the CPU table existed is connected here.
+    cpu_connections = _native_family_bridge.shared_context().setdefault('family_binding_connections_cpu', {})
+    late = tuple(name for name in sorted(wanted) if name not in cpu_connections)  # glue: fixed binding names
+    if late:
+        _native_family_bridge.connect_bindings(*late)
+    cpu_modules = context.setdefault('family_msel_bindings_cpu', {})
+    for basename in sorted(wanted):  # glue: fixed ABI metadata connected once per binding
+        cpu_modules.setdefault(basename, cpu_connections[basename][0])
     # (family context, metrics bindings by mode): bindings/trees_public_meta_door.mojo calls the metrics owner natively
     if trees is not None:
         trees._TREES_CONTEXT['native_meta_metrics'] = (metrics._NATIVE_CONTEXT, modules['_mojolearn_metrics'])

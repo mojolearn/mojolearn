@@ -2,6 +2,12 @@
 # The public parallel boundary owns admission, binding selection, preparation
 # and consumed-output conversion. Fixed ABI plans are connected at import;
 # no Python estimator methods, _bind hooks or public-result helpers execute.
+# UNPACK and PACK only: every refusal that is a comparison on a word or a
+# number, and the recipe / route codes, are typed in
+# bindings/parallel_public_native_run.mojo; the device indices are admitted by
+# bindings/parallel_plan_run.mojo. The member's compiled entry is reached
+# through `family_call` (a boundary call) until member families publish entry
+# tables.
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
@@ -13,7 +19,19 @@ from bindings.parallel_public_result_door import parallel_public_result
 from bindings.msel_member_device_unpack import member_says_cpu, member_multi_gpu_refusal
 from bindings.native_buffer_owner_pack import native_storage_allocate
 from bindings.trees_public_forest_door import forest_effective_mode, _engine
-from core.device_plan import device_plan_logical
+from bindings.parallel_plan_door import plan_indices
+from bindings.parallel_plan_run import PLAN_DEVICES_REFUSAL, plan_indices_admit
+from bindings.parallel_public_native_run import (
+    PUBLIC_CHECK_GRAM, PUBLIC_CHECK_KMEANS, PUBLIC_CHECK_GMM_PREDICT, PUBLIC_CHECK_POSTERIOR, PUBLIC_CHECK_IFOREST,
+    PUBLIC_CHECK_UMAP_TRANSFORM, PUBLIC_CHECK_RESAMPLE,
+    PUBLIC_ITEM_ARG, PUBLIC_ITEM_CONSTANT, PUBLIC_ITEM_MODEL, PUBLIC_ITEM_BINDING,
+    PUBLIC_MODE_DEFAULT, PUBLIC_MODE_EFFECTIVE, PUBLIC_ROUTE_DIRECT, PUBLIC_ROUTE_SHARD,
+    public_check_code, public_check_admits_x, public_item_code, public_policy_code, public_binding_mode_code,
+    public_route_code, public_identical_admit, public_gram_columns_admit, public_gram_pca_admit,
+    public_gram_weight_admit, public_kmeans_metric_admit, public_kmeans_oversampling_admit,
+    public_module_refusal_is_optional, public_predictor_route_admit, public_predictor_devices_admit,
+    public_predictor_open_admit, public_predictor_proba_admit,
+)
 from bindings.parallel_keys_unpack import (
     parallel_keys,
     PARALLEL_PREDICTOR_OPN_PREDICTOR_CLOSE,
@@ -64,18 +82,8 @@ def _devices(value: PythonObject) raises -> PythonObject:
         raise Error("TypeError: devices requires a native tuple, list or range; Python iteration hooks are unsupported")
     var devices = py_call(b.tuple, value)
     if len(devices) == 0:
-        raise Error("ValueError: devices must be distinct nonnegative integer indices")
-    # The logical-device test option (core/device_plan.mojo) admits a
-    # repeated index; nothing else about the route changes.
-    var logical = device_plan_logical()
-    for i in range(len(devices)):  # driver-loop: admitted native device indices
-        if py_type(devices[i]) is not b.int or Int(py=devices[i]) < 0:
-            raise Error("ValueError: devices must be distinct nonnegative integer indices")
-        if logical:
-            continue
-        for j in range(i):  # driver-loop: distinct selected indices
-            if Int(py=devices[i]) == Int(py=devices[j]):
-                raise Error("ValueError: devices must be distinct nonnegative integer indices")
+        raise Error(PLAN_DEVICES_REFUSAL)
+    plan_indices_admit(plan_indices(devices, b))
     return devices
 
 
@@ -105,7 +113,7 @@ def _modules(meta: PythonObject, names: PythonObject) raises -> PythonObject:
                 # mode mismatch or invalid native export must still stop the
                 # operation even if another listed module is available.
                 var error = String(module)
-                if not error.startswith("ImportError:") and not error.startswith("AttributeError:") and not error.startswith("ValueError:"):
+                if not public_module_refusal_is_optional(error):
                     raise Error(error)
             else:
                 _ = py_call(result.append, module)
@@ -144,15 +152,12 @@ def _predictor(model: PythonObject, operation: Int, args: PythonObject, context:
         classical_admit_value(Python.tuple(py_get(original, nk[].k_numeric_mode), py_get(original, nk[].k__fit_numeric_mode),
                               py_get(original, nk[].k_inference_engine)), context)
         var mode = forest_effective_mode(original, py_item(meta, nk[].k_trees_context))
-        if mode != "identical":
-            raise Error("ValueError: ParallelForestPredictor requires IDENTICAL numeric mode")
-        if _engine(original, mode) != "parallel_groves":
-            raise Error("ValueError: ParallelForestPredictor requires inference_engine='parallel_groves'")
+        # The engine is read only for an identical forest, as before.
+        public_predictor_route_admit(mode, _engine(original, mode) if mode == "identical" else String(""))
         # Constructor admission historically allows the CPU case; the query's
         # cooperative driver supplies its route refusal before GPU execution.
         var devices = _devices(args[1])
-        if len(devices) > 64:
-            raise Error("ValueError: ParallelForestPredictor supports at most 64 devices")
+        public_predictor_devices_admit(len(devices))
         # Admit the stored values consumed below before their scalar/string
         # conversion; an injected Python value must never execute its hooks.
         classical_admit_value(Python.tuple(py_item(original, nk[].k_n_features_in_), py_item(original, nk[].k__n_trees), py_item(original, nk[].k__num_outputs)), context)
@@ -200,13 +205,11 @@ def _predictor(model: PythonObject, operation: Int, args: PythonObject, context:
                 py_setitem(saved, nk[].k__resident_holder, Python.dict())
                 py_setitem(fields, nk[].k__model, PythonObject(None))
             return PythonObject(None)
-        if Bool(py=py_item(fields, nk[].k__closed)):
-            raise Error("RuntimeError: pooled forest predictor is closed")
+        public_predictor_open_admit(Bool(py=py_item(fields, nk[].k__closed)))
         if operation == PARALLEL_PREDICTOR_OPN_PREDICTOR_ENTER:
             return model
         var proba = operation == PARALLEL_PREDICTOR_OPN_PREDICTOR_PREDICT_PROBA
-        if proba and not Bool(py=py_item(fields, nk[].k__classifier)):
-            raise Error("ValueError: predict_proba requires a classifier")
+        public_predictor_proba_admit(proba, Bool(py=py_item(fields, nk[].k__classifier)))
         classical_admit_value(args, context)
         var snapshot = py_item(fields, nk[].k__model)
         var result = _run(snapshot, "forest_predict", "trees_public_forest_proba" if proba else "trees_public_forest_predict",
@@ -263,48 +266,49 @@ def parallel_public_operation(model: PythonObject, packed: PythonObject, context
     var effective = process_mode if mode is None else mode
     classical_admit_value(Python.tuple(mode, process_mode), context)
     if py_item(spec, nk[].k_mode) is not None:
-        var policy = String(py_item(spec, nk[].k_mode))
-        var selected = process_mode if policy == "default" else effective if policy == "effective" else mode
-        if selected is not None and (py_type(selected) is not b.str or String(selected) != "identical"):
-            raise Error("ValueError: parallel " + String(packed[0]) + " requires IDENTICAL numeric mode")
-    var check = String(py_item(spec, nk[].k_check)) if py_item(spec, nk[].k_check) is not None else String("")
-    if check == "gram" or check == "matrix" or check == "kmeans" or check == "gmm_predict":
+        var policy = public_policy_code(String(py_item(spec, nk[].k_mode)))
+        var selected = process_mode if policy == PUBLIC_MODE_DEFAULT else effective if policy == PUBLIC_MODE_EFFECTIVE else mode
+        if selected is not None:
+            var exact = py_type(selected) is b.str
+            public_identical_admit(True, exact, String(selected) if exact else String(""),
+                                   "parallel " + String(packed[0]) + " requires IDENTICAL numeric mode")
+    var check = public_check_code(String(py_item(spec, nk[].k_check))) if py_item(spec, nk[].k_check) is not None else public_check_code("")
+    if public_check_admits_x(check):
         var data = admit_x(args[0], 2, "X", context)
         py_setitem(args, PythonObject(0), data)
-        if check == "gram":
-            if Int(py=data.shape[1]) < 1:
-                raise Error("ValueError: parallel Gram requires at least one feature")
+        if check == PUBLIC_CHECK_GRAM:
+            public_gram_columns_admit(Int(py=data.shape[1]))
             var solver = py_get(fields, nk[].k_svd_solver)
             classical_admit_value(solver, context)
-            if cls is py_item(meta, nk[].k_pca) and py_contains(py_item(meta, nk[].k_dense_solvers), solver) and Int(py=data.shape[0]) < Int(py=data.shape[1]):
-                raise Error("ValueError: parallel full PCA currently requires the tall TSQR route")
-            if args[3] is not None and py_contains(py_item(meta, nk[].k_decompositions), cls):
-                raise Error("TypeError: fit() got an unexpected keyword argument 'sample_weight'")
-        elif check == "kmeans":
+            public_gram_pca_admit(cls is py_item(meta, nk[].k_pca) and py_contains(py_item(meta, nk[].k_dense_solvers), solver),
+                                  Int(py=data.shape[0]), Int(py=data.shape[1]))
+            public_gram_weight_admit(args[3] is not None, args[3] is not None and py_contains(py_item(meta, nk[].k_decompositions), cls))
+        elif check == PUBLIC_CHECK_KMEANS:
             var metric = py_get(fields, nk[].k_metric, PythonObject("euclidean"))
             var oversample = py_get(fields, nk[].k_oversampling_factor, PythonObject(2.0))
             classical_admit_value(Python.tuple(metric, oversample), context)
-            if py_type(metric) is not b.str or String(metric) != "euclidean":
-                raise Error("ValueError: parallel KMeans requires metric='euclidean'")
-            if Float64(py=oversample) != 2.0:
-                raise Error("ValueError: parallel KMeans requires the default oversampling_factor")
+            var exact_metric = py_type(metric) is b.str
+            public_kmeans_metric_admit(exact_metric, String(metric) if exact_metric else String(""))
+            public_kmeans_oversampling_admit(Float64(py=oversample))
             py_setitem(fields, nk[].k_numeric_mode, PythonObject("identical"))
             effective = PythonObject("identical")
-        elif check == "gmm_predict" and not py_contains(fields, nk[].k_weights_):
+        elif check == PUBLIC_CHECK_GMM_PREDICT and not py_contains(fields, nk[].k_weights_):
             raise Error("ValueError: GaussianMixture is not fitted")
-    elif check == "posterior" and py_type(args[2]) is not b.bool:
+    elif check == PUBLIC_CHECK_POSTERIOR and py_type(args[2]) is not b.bool:
         raise Error("ValueError: return_std must be bool")
-    elif check == "iforest" and args[2] is not None:
+    elif check == PUBLIC_CHECK_IFOREST and args[2] is not None:
         raise Error("NotImplementedError: IsolationForest does not support sample_weight")
-    elif check == "umap_transform":
+    elif check == PUBLIC_CHECK_UMAP_TRANSFORM:
         var transform_mode = py_get(fields, nk[].k__transform_mode)
-        if py_type(transform_mode) is not b.str or String(transform_mode) != "identical":
-            raise Error("ValueError: requires an IDENTICAL fitted UMAP")
-    elif check == "resample":
+        var exact = py_type(transform_mode) is b.str
+        public_identical_admit(True, exact, String(transform_mode) if exact else String(""), "requires an IDENTICAL fitted UMAP")
+    elif check == PUBLIC_CHECK_RESAMPLE:
         var index = Int(py=py_item(spec, nk[].k_numeric_mode_arg))
         var requested = args[index]
-        if requested is not None and (py_type(requested) is not b.str or String(requested) != "identical"):
-            raise Error("ValueError: parallel resampling requires IDENTICAL numeric mode")
+        if requested is not None:
+            var exact = py_type(requested) is b.str
+            public_identical_admit(True, exact, String(requested) if exact else String(""),
+                                   "parallel resampling requires IDENTICAL numeric mode")
     var owner_op = py_item(spec, nk[].k_operation)
     var method = py_item(spec, nk[].k_output)
     if py_item(spec, nk[].k_method_arg) is not None:
@@ -319,25 +323,25 @@ def parallel_public_operation(model: PythonObject, packed: PythonObject, context
     var recipe = py_item(spec, nk[].k_recipe)
     for i in range(len(recipe)):  # driver-loop: the fixed native owner ABI
         var item = recipe[i]
-        var kind = String(item[0])
+        var kind = public_item_code(String(item[0]))
         var value = PythonObject(None)
-        if kind == "arg":
+        if kind == PUBLIC_ITEM_ARG:
             value = args[Int(py=item[1])]
-        elif kind == "constant":
+        elif kind == PUBLIC_ITEM_CONSTANT:
             value = item[1]
-        elif kind == "model":
+        elif kind == PUBLIC_ITEM_MODEL:
             value = model
-        elif kind == "binding":
-            var route = String(item[2])
-            var selected = effective if route == "model" else process_mode if route == "default" else item[2]
+        elif kind == PUBLIC_ITEM_BINDING:
+            var route = public_binding_mode_code(String(item[2]))
+            var selected = effective if route == PUBLIC_MODE_EFFECTIVE else process_mode if route == PUBLIC_MODE_DEFAULT else item[2]
             value = _module(meta, item[1], selected)
         _ = py_call(values.append, value)
     var owner_args = py_call(b.tuple, values)
     var result = PythonObject(None)
-    var route = String(py_item(spec, nk[].k_route))
-    if route == "direct":
+    var route = public_route_code(String(py_item(spec, nk[].k_route)))
+    if route == PUBLIC_ROUTE_DIRECT:
         result = family_call(_entry(py_item(meta, nk[].k_family)), model, owner_op, owner_args, context)
-    elif route == "shard":
+    elif route == PUBLIC_ROUTE_SHARD:
         result = family_call(_entry(py_item(meta, nk[].k_shard)), owner_op, owner_args)
     else:
         # All cooperative wrappers put their device tuple in the connected

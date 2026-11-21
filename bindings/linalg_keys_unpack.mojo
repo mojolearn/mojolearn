@@ -42,7 +42,6 @@ struct LinalgKeys(Defaultable, Movable):
     var k__mojolearn_after_fit: PythonObject
     var k__mojolearn_fitted: PythonObject
     var k__native_provider: PythonObject
-    var k__native_provider_binding: PythonObject
     var k__profile_cache: PythonObject
     var k_backend_fields: PythonObject
     var k_binary: PythonObject
@@ -118,7 +117,6 @@ struct LinalgKeys(Defaultable, Movable):
         self.k__mojolearn_after_fit = PythonObject(None)
         self.k__mojolearn_fitted = PythonObject(None)
         self.k__native_provider = PythonObject(None)
-        self.k__native_provider_binding = PythonObject(None)
         self.k__profile_cache = PythonObject(None)
         self.k_backend_fields = PythonObject(None)
         self.k_binary = PythonObject(None)
@@ -170,7 +168,9 @@ struct LinalgKeys(Defaultable, Movable):
         self.k_volume = PythonObject(None)
 
 
-comptime _LINALG_KEYS = SharedSlot[LinalgKeys, "MojolearnLinalgKeysV1"]
+# V2 (lane dw-decomp, 2026-11-21): `k__native_provider_binding` removed (the door's Python-entry
+# fallback that compared it is deleted), so the layout changed.
+comptime _LINALG_KEYS = SharedSlot[LinalgKeys, "MojolearnLinalgKeysV2"]
 
 
 def _linalg_keys_fill(nk: UnsafePointer[LinalgKeys, MutUntrackedOrigin]) raises:
@@ -198,7 +198,6 @@ def _linalg_keys_fill(nk: UnsafePointer[LinalgKeys, MutUntrackedOrigin]) raises:
     nk[].k__mojolearn_after_fit = py_key("_mojolearn_after_fit")
     nk[].k__mojolearn_fitted = py_key("_mojolearn_fitted")
     nk[].k__native_provider = py_key("_native_provider")
-    nk[].k__native_provider_binding = py_key("_native_provider_binding")
     nk[].k__profile_cache = py_key("_profile_cache")
     nk[].k_backend_fields = py_key("backend_fields")
     nk[].k_binary = py_key("binary")

@@ -137,7 +137,7 @@ By plain name (text match, no import): 64 files, all collisions with unrelated g
 `autograd/`, `Counts` in `gbdt/`, `metrics/`, `neighbors/`) or comments naming the old design
 (`bindings/admitted_input_run.mojo:10-14` `AdmittedX`, `core/resample_pandas_layout.mojo:3-5` `_RPArray`,
 `bindings/prep_encode_prog_run.mojo:11` `EncProg`, `bindings/prep_classify_prog_run.mojo:9` `ClsProg`,
-`providers/python/neural_descriptor_run.mojo` `NeuralDescriptorProvider`). None is a type use.
+`core/neural_descriptor_run.mojo` `NeuralDescriptorProvider`). None is a type use.
 
 ### 2.2 Python-holding structs in boundary files, and the RUN code that receives them
 
