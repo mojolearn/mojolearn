@@ -465,6 +465,90 @@ class TransformerBlock(NumericModeMixin, _native_constructor=True):
         """
         return _native_neural_bridge.RUNTIME.neural_block_set_params(self, params, _native_neural_bridge.CONTEXT)
 
+    def state_dict(self):
+        """The block's weights as a dictionary, as in PyTorch.
+
+        Returns
+        -------
+        dict
+            ``{name: array}`` under the constructor's weight names, a new
+            dictionary over the same arrays.
+
+        Examples
+        --------
+        >>> weights = block.state_dict()
+        """
+        return _native_neural_bridge.RUNTIME.neural_block_state_dict(self, _native_neural_bridge.CONTEXT)
+
+    def load_state_dict(self, state_dict, strict=True):
+        """Rebuild the block from a complete dictionary of weights.
+
+        Every name and shape is checked before the block changes. The whole
+        set of weights is required (``strict=True``).
+
+        Parameters
+        ----------
+        state_dict : dict
+            ``{name: float32 array}`` with the names of :meth:`state_dict`.
+        strict : bool, default True
+            Must be True.
+
+        Returns
+        -------
+        self
+            The rebuilt block.
+
+        Examples
+        --------
+        >>> block = block.load_state_dict(block.state_dict())
+        """
+        return _native_neural_bridge.RUNTIME.neural_block_load_state_dict(self, state_dict, strict, _native_neural_bridge.CONTEXT)
+
+    def parameters(self):
+        """The weight arrays, in :meth:`state_dict` order.
+
+        Returns
+        -------
+        list of array
+
+        Examples
+        --------
+        >>> n = sum(p.size for p in block.parameters())
+        """
+        return _native_neural_bridge.RUNTIME.neural_block_parameters(self, _native_neural_bridge.CONTEXT)
+
+    def named_parameters(self):
+        """The weights as ``(name, array)`` pairs, in :meth:`state_dict` order.
+
+        Returns
+        -------
+        list of (str, array)
+
+        Examples
+        --------
+        >>> names = [name for name, _ in block.named_parameters()]
+        """
+        return _native_neural_bridge.RUNTIME.neural_block_named_parameters(self, _native_neural_bridge.CONTEXT)
+
+    def to(self, *args, **kwargs):
+        """Move the block to a device, with PyTorch's spelling.
+
+        ``to("cuda")``, ``to("mps")``, ``to("cpu")`` or ``to(device=...)``
+        rebuild the block on that device, as ``set_params(device=...)`` does.
+        A dtype (``torch.float32`` or ``"float32"``) is accepted; the blocks
+        run in float32 only, so any other dtype raises ``ValueError``.
+
+        Returns
+        -------
+        self
+            The block.
+
+        Examples
+        --------
+        >>> block = block.to("cpu")
+        """
+        return _native_neural_bridge.RUNTIME.neural_block_to(self, args, kwargs, _native_neural_bridge.CONTEXT)
+
     def _tail_addrs(self):
         """The eleven optional addresses in `_OPT_NAMES` order, 0 where
         absent -- the addrs tail, sent only when `_extended`."""

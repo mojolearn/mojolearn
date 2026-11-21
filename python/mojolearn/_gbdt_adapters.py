@@ -152,6 +152,19 @@ class GradientBoostingClassifier(_GBDTAdapter):
 
     All parameters are keyword-only.
 
+    The constructor also takes CatBoost, XGBoost and LightGBM names for
+    these parameters wherever the name means the same thing: for example
+    ``iterations``, ``num_boost_round`` or ``num_trees`` for
+    ``n_estimators``, ``eta`` for ``learning_rate``, ``depth`` for
+    ``max_depth``, ``reg_lambda`` or ``lambda_l2`` for ``l2_leaf_reg``,
+    ``random_seed`` or ``seed`` for ``random_state`` and
+    ``colsample_bytree`` for ``feature_fraction``. The value is stored under
+    Mojolearn's name, which ``get_params`` reports. Giving both names with
+    different values raises ``ValueError``, and so does a name whose meaning
+    differs in the other library (such as ``max_bin``,
+    ``early_stopping_rounds`` or ``gamma``); the message names the parameter
+    to use. The same names work in ``set_params``.
+
     Attributes
     ----------
     classes_ : list
@@ -265,6 +278,19 @@ class GradientBoostingRegressor(_GBDTAdapter):
 
     All parameters are keyword-only.
 
+    The constructor also takes CatBoost, XGBoost and LightGBM names for
+    these parameters wherever the name means the same thing: for example
+    ``iterations``, ``num_boost_round`` or ``num_trees`` for
+    ``n_estimators``, ``eta`` for ``learning_rate``, ``depth`` for
+    ``max_depth``, ``reg_lambda`` or ``lambda_l2`` for ``l2_leaf_reg``,
+    ``random_seed`` or ``seed`` for ``random_state`` and
+    ``colsample_bytree`` for ``feature_fraction``. The value is stored under
+    Mojolearn's name, which ``get_params`` reports. Giving both names with
+    different values raises ``ValueError``, and so does a name whose meaning
+    differs in the other library (such as ``max_bin``,
+    ``early_stopping_rounds`` or ``gamma``); the message names the parameter
+    to use. The same names work in ``set_params``.
+
     Attributes
     ----------
     n_features_in_ : int
@@ -326,6 +352,14 @@ _native_trees_bridge.register(GradientBoostingClassifier, "gbdt_adapter", trees_
     names=tuple(name for name in inspect.signature(_GBDTAdapter.__init__).parameters if name != "self"),  # glue: the adapter's constructor parameter names, once at import
 ))
 _native_trees_bridge.register(GradientBoostingRegressor, "gbdt_adapter")
+
+# CatBoost / XGBoost / LightGBM parameter names (python/mojolearn/_boosting_param_names.py),
+# one table for both adapters, built once here. The native constructor and
+# set_params read it only for a keyword that is not a parameter
+# (bindings/trees_gbdt_parameters_pack.mojo).
+from ._boosting_param_names import parameter_name_table as _parameter_name_table
+_TREES_CONTEXT['trees_gbdt_adapter_parameter_names'] = _parameter_name_table(
+    tuple(name for name in inspect.signature(_GBDTAdapter.__init__).parameters if name != "self"))  # glue: the adapter's constructor parameter names, once at import
 
 # Capture the explicit signature once; installed constructor execution is one
 # native call through the shared tree signature binder.

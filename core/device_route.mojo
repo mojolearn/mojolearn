@@ -3,6 +3,10 @@
 and the ONE route value every family shares.
 
 `device=None | "gpu" | "cpu"` is a constructor parameter of every estimator.
+PyTorch's device words name the same routes (docs/api/TORCH_CONVENTIONS.md):
+`"cuda"` and `"cuda:0"` are the GPU on Linux (CUDA or ROCm), `"mps"` and
+`"mps:0"` the GPU on macOS; elsewhere, and for any other index, they are
+refused in words (one GPU per process).
 None (the default) is this installation's device: the GPU images where the
 installation has a GPU set, else the CPU images. An explicit `"gpu"` on a
 CPU-only installation is refused in words; an unknown value is refused in
@@ -34,6 +38,7 @@ Resolution is a metadata operation with no independent numerical work to
 split; it runs at an estimator's first operation, never per row.
 """
 from core.entry_table import EntryRef, entry_ref_unresolved
+from std.sys.info import CompilationTarget
 
 comptime DEVICE_GPU = 0
 comptime DEVICE_CPU = 1
@@ -44,11 +49,23 @@ comptime DEVICE_INSTALL = 2
 
 def device_code(word: String) -> Int:
     """0 for `gpu`, 1 for `cpu`, -1 for any other spelling (exact words: the
-    constructor stores the value verbatim and nothing normalizes it)."""
+    constructor stores the value verbatim and nothing normalizes it).
+
+    PyTorch's words (lane api-torch, 2026-11-21): `cuda` / `cuda:0` are the
+    GPU route in a Linux host binding, `mps` / `mps:0` in a macOS one. The
+    split is the host binding's compile target (macOS ships only Metal GPU
+    sets, Linux only CUDA and HIP ones), so it is resolved at compile time
+    and costs nothing at run time; `device_refusal` words the mismatch."""
     if word == "gpu":
         return DEVICE_GPU
     if word == "cpu":
         return DEVICE_CPU
+    comptime if CompilationTarget.is_macos():
+        if word == "mps" or word == "mps:0":
+            return DEVICE_GPU
+    else:
+        if word == "cuda" or word == "cuda:0":
+            return DEVICE_GPU
     return -1
 
 
@@ -57,8 +74,19 @@ def device_name(code: Int) -> String:
 
 
 def device_refusal(shown: String) raises:
-    """The one refusal of an unknown device; `shown` is the value's repr."""
-    raise Error("ValueError: device must be 'gpu', 'cpu' or None, got " + shown)
+    """The one refusal of an unknown device; `shown` is the value's repr.
+    A PyTorch word this installation has no device for says why (a cold
+    path: only reached by a refused value)."""
+    var hint: String
+    comptime if CompilationTarget.is_macos():
+        hint = String("; on macOS the PyTorch name of the GPU is 'mps' (or 'mps:0')")
+    else:
+        hint = String("; on Linux the PyTorch name of the GPU is 'cuda' (or 'cuda:0'), for NVIDIA and AMD alike")
+    if (shown.startswith("'cuda:") and shown != "'cuda:0'") or (shown.startswith("'mps:") and shown != "'mps:0'"):
+        hint = String("; a model runs on its process's GPU zero only: choose the GPU with CUDA_VISIBLE_DEVICES or HIP_VISIBLE_DEVICES")
+    elif shown.startswith("device("):
+        hint = String("; pass the device's name as a string, for example device=str(torch_device)")
+    raise Error("ValueError: device must be 'gpu', 'cpu' or None, got " + shown + hint)
 
 
 def device_gpu_absent() raises:
