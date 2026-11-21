@@ -32,6 +32,17 @@ optional trailing words (the export's `len(params) > i` tests become
                               seed high[, n_components[, finite flag]]]]
                               f perplexity, early_exaggeration, learning_rate, post factor
                               -> X's finite status word (0 when the flag is absent or X is finite)
+  ANN_OP_IVF_PQ_BUILD         a 6 [x, centers, offsets, list_indices, codebooks, codes]
+                              p n, dim, n_lists, kmeans_n_iters, seed, pq_dim, pq_bits, pq_kmeans_n_iters   -> n
+  ANN_OP_IVF_PQ_BUILD_RESIDENT a 5 [x, centers, offsets, list_indices, codebooks]  p the same 8 words
+                              -> a ticket (> 0) for the built index left on the device, or 0 when the
+                              image keeps no resident fit (nothing was built: take ANN_OP_IVF_PQ_BUILD)
+  ANN_OP_IVF_PQ_REGISTER_BUILT a []  p [ticket]                                                      -> handle
+  ANN_OP_IVF_SQ_BUILD         a 7 [x, centers, offsets, list_indices, vmin, delta, codes]
+                              p n, dim, n_lists, kmeans_n_iters, seed[, train_rows_per_list]        -> n
+  ANN_OP_IVF_RABITQ_BUILD     a 7 [x, centers, offsets, list_indices, codes, norms, ips]
+                              p n, dim, n_lists, kmeans_n_iters, seed                               -> n
+  ANN_OP_CAGRA_BUILD          a 2 [x, graph_out]  p n, d, intermediate_graph_degree, graph_degree   -> n
 The t-SNE float words are rounded to Float32 by the body, the same
 `Float32(Float64(py=...))` rounding the Python export applies, so the bits
 are unchanged. The resident operations exist on the device column only (the
@@ -40,6 +51,17 @@ host binding never had them); the CPU column refuses them.
 The resident registry (x_ann/resident.mojo) is guarded by the GIL, not by a
 lock word: its owners call ANN_OP_INDEX_* with the GIL HELD, as the Python
 exports ran. The other operations are called with the GIL released.
+
+The fit operations (lane dw-neighbors, 2026-11-21: operations 10 to 15,
+appended; the bodies of the `x_ann_*_build` exports). The five builds are
+called with the GIL RELEASED. The resident IVF-PQ fit is TWO operations
+because its export had two phases: ANN_OP_IVF_PQ_BUILD_RESIDENT builds with
+the GIL released and parks the built index in the image's pending slot
+(x_ann/pending_pq.mojo, its own lock word; never the resident registry);
+ANN_OP_IVF_PQ_REGISTER_BUILT, called with the GIL HELD, takes the ticket and
+registers the index in the resident registry: its handle. So no registry
+access happens without the GIL and no build holds it. The CPU column keeps
+no resident index and refuses both.
 """
 from core.entry_table import entry_table_publish, entry_table_read
 from core.native_descriptor_abi import NativeDescriptorCall
@@ -57,7 +79,13 @@ comptime ANN_OP_IVF_RABITQ_SEARCH = 6
 comptime ANN_OP_CAGRA_SEARCH = 7
 comptime ANN_OP_FILTER_TOPK = 8
 comptime ANN_OP_TSNE_FIT = 9
-comptime ANN_OPERATION_COUNT = 10
+comptime ANN_OP_IVF_PQ_BUILD = 10
+comptime ANN_OP_IVF_PQ_BUILD_RESIDENT = 11
+comptime ANN_OP_IVF_PQ_REGISTER_BUILT = 12
+comptime ANN_OP_IVF_SQ_BUILD = 13
+comptime ANN_OP_IVF_RABITQ_BUILD = 14
+comptime ANN_OP_CAGRA_BUILD = 15
+comptime ANN_OPERATION_COUNT = 16
 
 
 def ann_ops_check_spans(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
@@ -124,6 +152,36 @@ def ann_ops_check_spans(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
         p_lo = 4
         p_hi = 9
         want_f = 4
+    elif operation == ANN_OP_IVF_PQ_BUILD:
+        a_lo = 6
+        a_hi = 6
+        p_lo = 8
+        p_hi = 8
+    elif operation == ANN_OP_IVF_PQ_BUILD_RESIDENT:
+        a_lo = 5
+        a_hi = 5
+        p_lo = 8
+        p_hi = 8
+    elif operation == ANN_OP_IVF_PQ_REGISTER_BUILT:
+        a_lo = 0
+        a_hi = 0
+        p_lo = 1
+        p_hi = 1
+    elif operation == ANN_OP_IVF_SQ_BUILD:
+        a_lo = 7
+        a_hi = 7
+        p_lo = 5
+        p_hi = 6
+    elif operation == ANN_OP_IVF_RABITQ_BUILD:
+        a_lo = 7
+        a_hi = 7
+        p_lo = 5
+        p_hi = 5
+    elif operation == ANN_OP_CAGRA_BUILD:
+        a_lo = 2
+        a_hi = 2
+        p_lo = 4
+        p_hi = 4
     else:
         raise Error("ann ops: unknown operation " + String(operation))
     if na < a_lo or na > a_hi or np < p_lo or np > p_hi or nf != want_f:
@@ -248,3 +306,27 @@ def ann_tsne_fit_call(entry: NativeDescriptorCall, x: Int, y0: Int, y_out: Int, 
     var ints: List[Int] = [n, d, max_iter, exploration, mode, seed_low, seed_high, n_components, finite_flag]
     var floats: List[Float64] = [perplexity, early_exaggeration, learning_rate, post_factor]
     return native_descriptor_call(entry, ANN_OP_TSNE_FIT, addresses, ints, floats)
+
+
+def ann_build_call(entry: NativeDescriptorCall, operation: Int, addresses: List[Int],
+                   words: List[Int]) raises -> Int:
+    """One of the fit operations that take the export's address and
+    parameter lists (ANN_OP_IVF_PQ_BUILD, ANN_OP_IVF_PQ_BUILD_RESIDENT,
+    ANN_OP_IVF_SQ_BUILD, ANN_OP_IVF_RABITQ_BUILD, ANN_OP_CAGRA_BUILD), called
+    with the GIL released. Returns n; ANN_OP_IVF_PQ_BUILD_RESIDENT returns
+    its ticket (0: the image keeps no resident fit and built nothing)."""
+    if (operation != ANN_OP_IVF_PQ_BUILD and operation != ANN_OP_IVF_PQ_BUILD_RESIDENT
+            and operation != ANN_OP_IVF_SQ_BUILD and operation != ANN_OP_IVF_RABITQ_BUILD
+            and operation != ANN_OP_CAGRA_BUILD):
+        raise Error("ann ops: " + String(operation) + " is not a build")
+    var floats = List[Float64]()
+    return native_descriptor_call(entry, operation, addresses, words, floats)
+
+
+def ann_pq_register_built_call(entry: NativeDescriptorCall, ticket: Int) raises -> Int:
+    """The resident handle of the IVF-PQ index parked under `ticket` by
+    ANN_OP_IVF_PQ_BUILD_RESIDENT. GIL held (the resident registry)."""
+    var addresses = List[Int]()
+    var ints: List[Int] = [ticket]
+    var floats = List[Float64]()
+    return native_descriptor_call(entry, ANN_OP_IVF_PQ_REGISTER_BUILT, addresses, ints, floats)
