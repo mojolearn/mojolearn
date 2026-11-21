@@ -46,7 +46,7 @@ from bindings.sequence_ops_door import (
     SEQ_ROUTE_NATIVE, seq_ops_route, seq_tensor_new, seq_tensor_release, seq_tensor_put, seq_tensor_get,
     seq_tensor_clone,
 )
-from providers.python.neural_descriptor_pyapi_door import neural_descriptor_execute
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_execute_id, neural_descriptor_provider_id
 from sequence.neural_model_dispatch import SEQ_TENSOR_FREE
 
 
@@ -140,6 +140,11 @@ def sequence_device_finalize(owner: PythonObject, values: PythonObject,
     # exact and a later attempt can retry.
     var provider = py_get(entries, "native_model_provider")
     var release = PythonObject(None)
+    var provider_id = 0
+    if provider is not None:
+        # Admission before the release: anything but the compiled provider
+        # is refused here, in words, and never called.
+        provider_id = neural_descriptor_provider_id(provider)
     if provider is None:
         if py_get(entries, "model_native_api_v1") is not None:
             # An x_sequence tensor whose image was never routed cannot have
@@ -155,10 +160,12 @@ def sequence_device_finalize(owner: PythonObject, values: PythonObject,
             var addresses = List[Int]()
             var ints: List[Int] = [Int(py=handle)]
             var floats = List[Float64]()
-            _ = neural_descriptor_execute(provider, SEQ_TENSOR_FREE, addresses, ints, floats, False)
+            _ = neural_descriptor_execute_id(provider_id, SEQ_TENSOR_FREE, addresses, ints, floats, False)
     except:
         # Keep ownership intact if release fails; a subsequent attempt can retry.
         return PythonObject(None)
+    # The id word does not retain the provider: it stays pinned to here.
+    _ = provider
     _ = py_call(context["sequence_device_setters"]["b"], owner, PythonObject(None))
     return PythonObject(None)
 
