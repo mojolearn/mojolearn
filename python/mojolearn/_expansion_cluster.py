@@ -1000,6 +1000,8 @@ class BayesianGaussianMixture(_XCluster):
     #: This class takes `device=`: the check builds its other side as the same
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
+    #: Member ABI family 25 (XCluster), kind 5 (core/xcluster_member.mojo).
+    _mojolearn_member = (25, 5)
 
     def __init__(self, *, n_components=1, covariance_type="full", tol=1e-3, reg_covar=1e-6,
                  max_iter=100, n_init=1, init_params="kmeans",

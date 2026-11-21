@@ -14,10 +14,12 @@ NearestNeighbors and RadiusNeighbors have no predict and are not members.
   * `neighbors_member_pack` (PACK): the fitted attributes the estimator's own
     fit writes (`_index`, `n_samples_fit_`, `n_features_in_`, `_y_cols`,
     `outputs_2d_`, the classifier's `_classes_list` from the native encoder,
-    a fresh resident holder). The classifier's `_y_cols` are the member's
-    class CODES and `_label_names` is None: the caller's PACK publishes the
-    labels by setting `_label_names` to its classes array (predict decodes
-    the voted codes through it, as for str labels).
+    a fresh resident holder). A classifier packed with labels
+    (`member_pack_labeled`) takes them here (`member_labels_take`): int32
+    labels become the int32 target words (as the estimator's own fit keeps
+    them, `_label_names` None); any other labels stay as `_label_names`
+    over the code targets (predict decodes the voted codes, as for str
+    labels). Without labels the targets are the codes.
   * `neighbors_member_state` (UNPACK): a member state from a fitted
     one-output estimator; the classifier's stored labels are encoded to codes
     by the native encoder (the class count is its class list's length).
@@ -27,11 +29,12 @@ and block copies); a caller runs its members in parallel.
 """
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
-from bindings.admitted_input_unpack import admit_x
+from bindings.admitted_input_unpack import admit_x, admit_c_view, admitted_dtype
 from bindings.classical_arrays_door import classical_array, classical_address
-from bindings.classical_labels_door import classical_encode_labels
+from bindings.classical_labels_door import classical_encode_labels, classical_decode_labels, labels_cast, labels_reshape
+from bindings.labels_descriptor_boundary_door import labels_scope
 from bindings.family_common_pack import family_array, family_field
-from bindings.member_owner_unpack import MemberOwner
+from bindings.member_owner_unpack import MemberOwner, member_labels_take
 from bindings.neighbors_knn_native_door import _check_refusals, knn_dist_words, knn_ops_key, knn_release
 from bindings.py_balanced import py_get, py_setitem
 from core.device_route import DeviceRoute, DEVICE_CPU, DEVICE_GPU
@@ -98,14 +101,30 @@ def neighbors_member_pack(model: PythonObject, fields: PythonObject, context: Py
     py_setitem(fields, "n_features_in_", PythonObject(cols))
     py_setitem(fields, "outputs_2d_", PythonObject(False))
     if plan.kind == 0:
-        var y32 = family_array(Python.tuple(1, rows), "<i4", context)
-        unsafe_memcpy(dest=_I32P(unsafe_from_address=Int(py=classical_address(y32))),
-            src=_I32P(unsafe_from_address=call.dst.data), count=rows)
-        py_setitem(fields, "_label_names", PythonObject(None))
-        py_setitem(fields, "_y_cols", y32)
+        # The caller's labels (member_pack_labeled), taken once: code c is labels[c].
+        var labels = member_labels_take(fields, b)
         var flat = family_array(Python.tuple(rows), "<i4", context)
-        unsafe_memcpy(dest=_I32P(unsafe_from_address=Int(py=classical_address(flat))),
+        var flat_address = Int(py=classical_address(flat))
+        unsafe_memcpy(dest=_I32P(unsafe_from_address=flat_address),
             src=_I32P(unsafe_from_address=call.dst.data), count=rows)
+        var names = PythonObject(None)
+        if labels is not None:
+            names = labels
+            var label_view = admit_c_view(labels, "classes", context)
+            if admitted_dtype(label_view, context) == "<i4":
+                # int32 labels: the estimator's own fit keeps their values as
+                # the int32 target words, `_label_names` None (_clf_fit).
+                var decoded = admit_c_view(classical_decode_labels(labels, flat, labels_scope(model, context)),
+                    "y", context)
+                labels_cast(Int(py=classical_address(decoded)), admitted_dtype(decoded, context), flat_address,
+                    "<i4", rows, context)
+                _ = decoded  # keep the Python object alive through the native call above
+                names = PythonObject(None)
+            _ = label_view
+        # Any other labels vote as their codes and predict decodes them
+        # through `_label_names`, as the estimator's own fit does for str labels.
+        py_setitem(fields, "_label_names", names)
+        py_setitem(fields, "_y_cols", labels_reshape(flat, Python.tuple(1, rows), context))
         py_setitem(fields, "_classes_list", Python.list(classical_encode_labels(flat, context).classes))
     else:
         var yc = family_array(Python.tuple(1, rows), "<f4", context)

@@ -420,7 +420,10 @@ def _scaler_member(operation: Int, address: Int) raises -> Int:
         if call[].flags != MEMBER_OP_TRANSFORM and call[].flags != MEMBER_OP_INVERSE_TRANSFORM:
             member_unsupported("scaler", call[].flags)
         if call[].state == 0:
-            raise Error("member ABI: a scaler member's output width is its fitted feature count")
+            # Asked before any state (`member_outputs`): the width of the X it
+            # will be fitted on (`x.cols`), as a fitted state answers.
+            call[].out_cols = call[].x.cols
+            return 0
         var held = _Slot(unsafe_from_address=_lookup(call[].state, False))
         if not held[].fitted:
             raise Error("NotFittedError: this " + _name(held) + " member's output width is known after its fit")

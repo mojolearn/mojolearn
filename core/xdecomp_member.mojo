@@ -642,7 +642,15 @@ def _outputs(call: _Call) raises:
 def _xdecomp_member(operation: Int, address: Int) raises -> Int:
     var call = _Call(unsafe_from_address=address)
     if operation == MEMBER_OP_CAPABILITIES:
-        return MEMBER_CAN_FIT | MEMBER_CAN_TRANSFORM | MEMBER_CAN_INVERSE_TRANSFORM | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
+        var mask = MEMBER_CAN_FIT | MEMBER_CAN_TRANSFORM | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
+        if call[].state == 0:
+            return mask | MEMBER_CAN_INVERSE_TRANSFORM  # the family's union
+        # Kind-exact (`member_kind_capabilities`): an NMF state answers inverse
+        # only when its route's image exports it (NMF_CAP_INVERSE at admit).
+        var held = _Slot(unsafe_from_address=_lookup(call[].state, False))
+        if held[].kind() != XDECOMP_KIND_NMF or (call[].route.flags & XDECOMP_ROUTE_NMF_INVERSE) != 0:
+            mask |= MEMBER_CAN_INVERSE_TRANSFORM
+        return mask
     if operation == MEMBER_OP_NEW:
         if call[].param_count < 1 or not call[].params:
             raise Error("member ABI: an XDecomp member takes its parameter words")

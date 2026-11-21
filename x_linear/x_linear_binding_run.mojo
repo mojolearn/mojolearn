@@ -8,6 +8,7 @@ from core.linear_entry_table import LinearEntryKey, linear_table_publish, LINEAR
 from core.linear_fit_types import RIDGE_FIT_ABI
 from core.linear_entry_table_ext import xl_ops_publish
 from core.xlinear_member import xlinear_member_publish
+from core.sgd_member import sgd_member_publish
 from x_linear.ridge_descriptor_device import ridge_fit_device_v1, RIDGE_FIT_DEVICE_API
 from x_linear.ops_entry_device import x_linear_ops_device_v1, XLINEAR_OPS_DEVICE_API
 from checks.vendor import COMPILED_VENDOR
@@ -29,3 +30,4 @@ def _publish_linear_entry_table() raises:
     # with no vendor (-1) publishes no member entry.
     if key.vendor >= 0:
         xlinear_member_publish(key.mode, key.vendor, Int(ops[].entries.unsafe_ptr()))
+        sgd_member_publish(key.mode, key.vendor, Int(ops[].entries.unsafe_ptr()))
