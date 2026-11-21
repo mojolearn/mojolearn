@@ -62,6 +62,7 @@ from core.member_families import (
     MEMBER_FAMILY_SEARCH,
     MEMBER_FAMILY_PIPELINE,
     MEMBER_FAMILY_TSNE,
+    MEMBER_FAMILY_FORECAST_SEQ,
 )
 from providers.python.member_linear_boundary_door import linear_member_admit, linear_member_pack, linear_member_state
 from providers.python.member_logistic_boundary_door import logistic_member_admit, logistic_member_pack, logistic_member_state
@@ -106,6 +107,7 @@ from providers.python.member_ensemble_boundary_door import ensemble_member_admit
 from providers.python.member_search_boundary_door import search_member_admit, search_member_pack, search_member_state
 from providers.python.member_pipeline_boundary_door import pipeline_member_admit, pipeline_member_pack, pipeline_member_state
 from providers.python.member_tsne_boundary_door import tsne_member_admit, tsne_member_pack, tsne_member_state
+from providers.python.member_forecast_seq_boundary_door import forecast_seq_member_admit, forecast_seq_member_pack, forecast_seq_member_state
 
 
 def member_admit(model: PythonObject, fields: PythonObject, plan: PythonObject, context: PythonObject,
@@ -208,6 +210,8 @@ def member_admit(model: PythonObject, fields: PythonObject, plan: PythonObject, 
         filled = pipeline_member_admit(model, fields, mark.kind, context, b, owner)
     elif owner.plan.family == MEMBER_FAMILY_TSNE:
         filled = tsne_member_admit(model, fields, mark.kind, context, b, owner)
+    elif owner.plan.family == MEMBER_FAMILY_FORECAST_SEQ:
+        filled = forecast_seq_member_admit(model, fields, mark.kind, context, b, owner)
     if not filled:
         return owner^
     owner.plan.member = member_resolve_family(owner.plan.family, owner.plan.route)
@@ -369,6 +373,9 @@ def member_pack(model: PythonObject, fields: PythonObject, context: PythonObject
     if plan.family == MEMBER_FAMILY_TSNE:
         tsne_member_pack(model, fields, context, b, plan, state)
         return
+    if plan.family == MEMBER_FAMILY_FORECAST_SEQ:
+        forecast_seq_member_pack(model, fields, context, b, plan, state)
+        return
     raise Error("RuntimeError: mojolearn: unknown member family number " + String(plan.family))
 
 
@@ -487,4 +494,6 @@ def member_state(model: PythonObject, fields: PythonObject, context: PythonObjec
         return pipeline_member_state(model, fields, context, b, plan)
     if plan.family == MEMBER_FAMILY_TSNE:
         return tsne_member_state(model, fields, context, b, plan)
+    if plan.family == MEMBER_FAMILY_FORECAST_SEQ:
+        return forecast_seq_member_state(model, fields, context, b, plan)
     raise Error("RuntimeError: mojolearn: unknown member family number " + String(plan.family))

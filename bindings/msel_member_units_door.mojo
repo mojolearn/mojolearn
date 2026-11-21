@@ -60,7 +60,7 @@ from bindings.native_unit_os_threads_run import native_unit_cores
 from bindings.py_balanced import py_call, py_type, py_get
 from core.host_parallel import host_parallelize
 from core.member_abi import (
-    MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free, MEMBER_I64,
+    MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free, member_kind_capabilities, MEMBER_I64,
     MEMBER_OP_FIT, MEMBER_OP_SCORE, MEMBER_CAN_FIT, MEMBER_CAN_SCORE, MEMBER_CAN_CLASSIFIER, MEMBER_CAN_ROW_INDEX,
 )
 
@@ -326,9 +326,18 @@ def msel_member_units(base: PythonObject, candidates: PythonObject, y: PythonObj
             return scores^
         # A classifier member reads class codes and a class count. This route
         # hands the target as float32 words and encodes no labels yet, so a
-        # family with classifier kinds keeps the Python units.
-        if owner.plan.member.can(MEMBER_CAN_CLASSIFIER):
-            return scores^
+        # classifier keeps the Python units. The KIND's own mask decides (the
+        # family's union would send SVR, a k-NN or forest regressor back too);
+        # the kind is the class's, so it is asked for the first candidate only.
+        if c == 0:
+            var kind_mask = 0
+            try:
+                kind_mask = member_kind_capabilities(owner.plan)
+            except:
+                return scores^
+            if ((kind_mask & MEMBER_CAN_CLASSIFIER) != 0 or (kind_mask & MEMBER_CAN_FIT) == 0
+                    or (kind_mask & MEMBER_CAN_SCORE) == 0):
+                return scores^
         run.plans.append(owner.plan.copy())
         _ = py_call(pins.append, est)
         _ = py_call(pins.append, owner.pins)

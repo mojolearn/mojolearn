@@ -74,7 +74,7 @@ FAMILIES = [
      "KBinsDiscretizer QuantileTransformer PowerTransformer Normalizer PolynomialFeatures SplineTransformer Binarizer",
      "x_prep"),
     ("SELECT", "Select", "select", "VarianceThreshold SelectKBest RFE", "x_prep"),
-    ("FORECAST", "Forecast", "forecast", "ARIMA AutoARIMA ETS Theta (the forecasters)", "arima / x_sequence"),
+    ("FORECAST", "Forecast", "forecast", "ARIMA AutoARIMA", "arima"),
     ("CHOLESKY", "Cholesky", "cholesky", "Cholesky", "cholesky"),
     ("ENSEMBLE", "Ensemble", "ensemble",
      "BaggingClassifier BaggingRegressor AdaBoostClassifier AdaBoostRegressor VotingClassifier VotingRegressor "
@@ -85,7 +85,8 @@ FAMILIES = [
     # Number 42 was SPARE0 until 2026-11-21 (nothing had published on it): TSNE lives in another image
     # than UMAP, and one family publishes from ONE image per (tier, vendor).
     ("TSNE", "Tsne", "tsne", "TSNE", "x_ann"),
-    ("SPARE1", "Spare1", None, "(unassigned)", "-"),
+    # Number 43 was SPARE1 until 2026-11-21: the forecasters of the x_sequence image (37 is the arima image).
+    ("FORECAST_SEQ", "ForecastSeq", "forecast_seq", "ETS Theta", "x_sequence"),
     ("SPARE2", "Spare2", None, "(unassigned)", "-"),
     ("SPARE3", "Spare3", None, "(unassigned)", "-"),
 ]
