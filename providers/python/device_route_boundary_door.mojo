@@ -35,7 +35,7 @@ from bindings.py_type_registry import py_type_absent, py_type_attach
 from bindings.native_owner_registry_unpack import register_native_owner_type
 from bindings.native_owner_registry_pack import borrowed_native_owner
 from bindings.py_balanced import py_call, py_type, py_get
-from bindings.py_model_records import records_get, records_put, records_drop, RECORDS_PREPARED
+from bindings.py_model_records import records_get, records_put, records_drop, records_open, RECORDS_PREPARED
 from core.device_route import (
     DeviceRoute, DEVICE_CPU, DEVICE_GPU, DEVICE_INSTALL, device_code, device_refusal, device_installed,
     device_cpu_absent,
@@ -322,6 +322,9 @@ def device_binding_keep(model: PythonObject, device: Int, name: String, check_mo
             native[].defaults.append(default_mode)
             native[].modules.append(module)
             return
+    if records_open(model) == 0:
+        # No weak reference, no record: nothing is allocated for it.
+        return
     var built = DeviceRouteOwner(device)
     built.resolved = True
     built.context = context

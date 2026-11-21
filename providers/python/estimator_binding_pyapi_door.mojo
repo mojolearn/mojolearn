@@ -2,6 +2,20 @@
 # Shared import-connected binding admission for estimator frontends. The caller
 # enters compiled code once; runtime selection reads current mode/registry data
 # and never invokes Python _bind/load_set/_ModeSet.__getattr__ callbacks.
+#
+# DEVICE-AWARE (lane dw-core, 2026-11-20). A call that names its estimator
+# (`estimator_binding(model, ...)`, `estimator_binding_routed`,
+# `estimator_arguments`) takes the compiled module from the estimator's binding
+# route (providers/python/device_route_boundary_door.mojo, slot
+# `device_bindings_v1`): resolved ONCE per estimator, binding name and mode
+# object, for the estimator's `device` (None: this installation's device;
+# "cpu" on a GPU installation: the CPU identical module of
+# `family_binding_connections_cpu`, connected at import by
+# python/mojolearn/_native_family_bridge.py `connect_bindings`). A later call
+# is one record read and pointer compares: it reads no registry dictionary,
+# builds no mode String and asks no device question. A call without an
+# estimator (`estimator_binding_mode(requested, ...)`) keeps the per-call
+# selection of the process's own set below, unchanged.
 from core.mode_answer import MODE_FAMILY_RESOLVER, answer_mode_word
 from std.python import Python, PythonObject
 from providers.python.classical_native_dispatch import CLASSICAL_NATIVE_DISPATCH
@@ -13,25 +27,126 @@ from bindings.mode_metadata_native_door import _fields
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entry
 from providers.python.x_neighbors_admission_pyapi_door import xn_admit_checked
 from core.shared_slot import SharedSlot
+from core.device_route import DEVICE_CPU, device_cpu_fast
+from providers.python.device_route_boundary_door import (
+    device_binding_held, device_binding_device, device_binding_keep,
+)
 
 
 def estimator_binding(model: PythonObject, name: String, context: PythonObject, check_mode: Bool = True) raises -> PythonObject:
     # Read ordinary instance storage with exact dictionary/key admission.
     # A Python __getattribute__ or __dict__ property is never a mode reader.
-    var requested = py_get(_fields(model), "numeric_mode") if model is not None else PythonObject(None)
-    return estimator_binding_mode(requested, name, context, check_mode)
+    if model is None:
+        return estimator_binding_mode(PythonObject(None), name, context, check_mode)
+    var fields = _fields(model)
+    return _estimator_binding_routed(model, fields, py_get(fields, "numeric_mode"), name, context, check_mode)
+
+
+def estimator_binding_routed(model: PythonObject, requested: PythonObject, name: String, context: PythonObject,
+                             check_mode: Bool = True) raises -> PythonObject:
+    # A caller that holds its estimator and an already captured mode scalar
+    # (a transform that runs in the fitted mode): the estimator's route for
+    # that mode object. `estimator_binding_mode(requested, ...)` is the form
+    # without an estimator and always selects the process's own set.
+    if model is None:
+        return estimator_binding_mode(requested, name, context, check_mode)
+    return _estimator_binding_routed(model, PythonObject(None), requested, name, context, check_mode)
+
+
+def _estimator_default_mode(requested: PythonObject, context: PythonObject) raises -> PythonObject:
+    # The process default mode object a None mode selects (the second pin of
+    # a route hit); None when the estimator names its mode.
+    var selected = PythonObject(None)
+    if requested is None:
+        selected = context["backend_fields"]["_DEFAULT_MODE"]
+    return selected
+
+
+def _estimator_binding_routed(model: PythonObject, fields: PythonObject, requested: PythonObject, name: String,
+                              context: PythonObject, check_mode: Bool) raises -> PythonObject:
+    # Hit: one record read, the context compare and per held binding (one or
+    # two) two pointer compares and a name compare. `fields` may be None (it
+    # is read on a miss only, for the one read of `device`).
+    var default_mode = _estimator_default_mode(requested, context)
+    var held = device_binding_held(model, name, check_mode, requested, default_mode, context)
+    if held is not None:
+        return held
+    var bi = native_loaded_module("builtins")
+    var selected_mode = _selected_mode(bi, requested, context)
+    var admitted = fields
+    if admitted is None:
+        admitted = _fields(model)
+    return _estimator_binding_resolve(bi, native_loaded_module("sys"), model, admitted, requested, default_mode,
+                                      selected_mode, name, context, check_mode)
+
+
+def _estimator_binding_resolve(bi: PythonObject, sys_module: PythonObject, model: PythonObject,
+                               fields: PythonObject, requested: PythonObject, default_mode: PythonObject,
+                               selected_mode: String, name: String, context: PythonObject,
+                               check_mode: Bool) raises -> PythonObject:
+    # The miss of an estimator's binding route: first operation, a new
+    # binding name, a changed mode object, a new `__init__` or `set_params`.
+    # The one read of `device`; then the module of that device, admitted
+    # exactly as the per-call selection admitted it, and kept on the route.
+    var backend = context["backend_fields"]
+    var cpu_only = backend["_CPU_ONLY"] is not None
+    var device = device_binding_device(model, fields, context, cpu_only, bi)
+    var module = PythonObject(None)
+    if device == DEVICE_CPU and not cpu_only:
+        if selected_mode != "identical":
+            device_cpu_fast()
+        module = _estimator_binding_cpu(bi, name, context, check_mode)
+    else:
+        module = _estimator_binding_selected(bi, sys_module, selected_mode, name, context, check_mode)
+    device_binding_keep(model, device, name, check_mode, requested, default_mode, context, module)
+    return module
+
+
+def _estimator_binding_cpu(bi: PythonObject, name: String, context: PythonObject, check_mode: Bool) raises -> PythonObject:
+    # `device="cpu"` on a GPU installation: the CPU identical module of this
+    # binding name, loaded once at import beside the device module
+    # (`connect_bindings`). A family without a CPU module, or whose CPU
+    # module failed to load, is refused in the words recorded at import.
+    var table = py_get(context, "family_binding_connections_cpu")
+    if table is None:
+        raise Error("ImportError: device='cpu' is not connected in this installation")
+    var record = py_get(table, name)
+    if record is None:
+        raise Error("ImportError: device='cpu' is not connected for " + name + " in this installation")
+    var first = record[0]
+    if py_type(first) is bi.str:
+        raise Error(String(first))
+    if py_type(first) is not py_type(bi):
+        raise Error("TypeError: native host binding must be an exact extension module")
+    if not check_mode:
+        return first
+    return estimator_checked_mode(first, String(record[2]), name, String("identical"))
 
 
 def estimator_binding(mut call: AdmittedCall, model: PythonObject, name: String, context: PythonObject,
                       check_mode: Bool = True) raises -> PythonObject:
     # The door's admission record: its admitted fields are the mode reader
     # and the resolved binding is kept on the record for the rest of the call.
-    var requested = PythonObject(None)
-    if model is not None:
-        if not call.fields_admitted:
-            call.admit_fields(_fields(model))
-        requested = py_get(call.fields, "numeric_mode")
-    return estimator_binding_mode(call, requested, name, context, check_mode)
+    if model is None:
+        return estimator_binding_mode(call, PythonObject(None), name, context, check_mode)
+    if not call.fields_admitted:
+        call.admit_fields(_fields(model))
+    var requested = py_get(call.fields, "numeric_mode")
+    # The mode word is still validated on every call (the record's
+    # `binding_mode_word` is the call's); the module comes from the
+    # estimator's route, so the registry is read on a route miss only.
+    var bi = call.builtins()
+    var selected_mode = _selected_mode(bi, requested, context)
+    var found = call.find_binding(name, selected_mode, check_mode)
+    if found >= 0:
+        return call.binding_at(found)
+    var default_mode = _estimator_default_mode(requested, context)
+    var module = device_binding_held(model, name, check_mode, requested, default_mode, context)
+    if module is None:
+        module = _estimator_binding_resolve(bi, call.module("sys"), model, call.fields, requested, default_mode,
+                                            selected_mode, name, context, check_mode)
+    call.remember_binding(name, selected_mode, check_mode, module)
+    return module
 
 
 def _selected_mode(bi: PythonObject, requested: PythonObject, context: PythonObject) raises -> String:
