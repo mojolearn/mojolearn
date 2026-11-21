@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """The Discriminant family as MEMBERS (core/member_abi.mojo):
 LinearDiscriminantAnalysis (kind 0) and QuadraticDiscriminantAnalysis
-(kind 1; its code is here, served once `discriminant_kind_published` names it).
+(kind 1).
 
 One entry, `discriminant_member_v2`, published by each x_prep image beside
 its program transport (`discriminant_member_publish`,
@@ -275,7 +275,7 @@ def _kind_name(kind: Int) -> String:
 
 def discriminant_kind_published(kind: Int) -> Bool:
     """The kinds this entry serves (a class is marked when its kind is here)."""
-    return kind == DA_KIND_LDA
+    return kind == DA_KIND_LDA or kind == DA_KIND_QDA
 
 
 def _family_capabilities(flags: Int) -> Int:
