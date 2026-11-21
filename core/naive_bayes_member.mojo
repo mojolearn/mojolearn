@@ -329,8 +329,13 @@ def _route_gathers(flags: Int) -> Bool:
 
 
 def _capabilities(flags: Int) -> Int:
-    # No MEMBER_CAN_TEST_ROWS: the programs do not refuse a non-finite word
-    # of X; the caller's admission tests it.
+    # No MEMBER_CAN_TEST_ROWS, for all four kinds (read 2026-11-21): the
+    # stage kernels these programs run (x_prep/stats.mojo, x_prep/blocked.mojo,
+    # x_prep/fastnb.mojo) and the transports (x_prep/transport_host.mojo,
+    # x_prep/transport_device.mojo) hold no finite test and no refusal of a
+    # NaN or infinite word of X, y or the weights; the only refusal after a
+    # run is the negative minimum of MultinomialNB / ComplementNB
+    # (`_fit_discrete`), which a NaN passes. The caller's admission tests.
     var mask = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_EXPORT
                 | MEMBER_CAN_IMPORT | MEMBER_CAN_SAMPLE_WEIGHT | MEMBER_CAN_CLASSIFIER)
     if (flags & NB_ROUTE_DEV_STORE) != 0 and (flags & NB_ROUTE_RANGES) != 0:
