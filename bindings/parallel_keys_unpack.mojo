@@ -182,7 +182,6 @@ struct ParallelKeys(Defaultable, Movable):
     var k__handle: PythonObject
     var k__head: PythonObject
     var k__head_int15: PythonObject
-    var k__id_maps: PythonObject
     var k__index: PythonObject
     var k__kernel: PythonObject
     var k__label_names: PythonObject
@@ -213,7 +212,6 @@ struct ParallelKeys(Defaultable, Movable):
     var k__resident_holder: PythonObject
     var k__session: PythonObject
     var k__shape: PythonObject
-    var k__token: PythonObject
     var k__transform_mode: PythonObject
     var k__update_pool: PythonObject
     var k__w: PythonObject
@@ -491,7 +489,6 @@ struct ParallelKeys(Defaultable, Movable):
         self.k__handle = PythonObject(None)
         self.k__head = PythonObject(None)
         self.k__head_int15 = PythonObject(None)
-        self.k__id_maps = PythonObject(None)
         self.k__index = PythonObject(None)
         self.k__kernel = PythonObject(None)
         self.k__label_names = PythonObject(None)
@@ -522,7 +519,6 @@ struct ParallelKeys(Defaultable, Movable):
         self.k__resident_holder = PythonObject(None)
         self.k__session = PythonObject(None)
         self.k__shape = PythonObject(None)
-        self.k__token = PythonObject(None)
         self.k__transform_mode = PythonObject(None)
         self.k__update_pool = PythonObject(None)
         self.k__w = PythonObject(None)
@@ -764,7 +760,9 @@ struct ParallelKeys(Defaultable, Movable):
         self.k_y_train_ = PythonObject(None)
 
 
-comptime _PARALLEL_KEYS = SharedSlot[ParallelKeys, "MojolearnParallelKeysV2", 2]
+# V3 (lane pools-frame, 2026-11-21): `k__id_maps` and `k__token` removed (the IVF holder keeps its
+# maps and token on its native owner, bindings/parallel_shard_native_door.mojo `ParallelIvfOwner`).
+comptime _PARALLEL_KEYS = SharedSlot[ParallelKeys, "MojolearnParallelKeysV3", 2]
 
 
 def _parallel_keys_fill(nk: UnsafePointer[ParallelKeys, MutUntrackedOrigin]) raises:
@@ -796,7 +794,6 @@ def _parallel_keys_fill(nk: UnsafePointer[ParallelKeys, MutUntrackedOrigin]) rai
     nk[].k__handle = py_key("_handle")
     nk[].k__head = py_key("_head")
     nk[].k__head_int15 = py_key("_head_int15")
-    nk[].k__id_maps = py_key("_id_maps")
     nk[].k__index = py_key("_index")
     nk[].k__kernel = py_key("_kernel")
     nk[].k__label_names = py_key("_label_names")
@@ -827,7 +824,6 @@ def _parallel_keys_fill(nk: UnsafePointer[ParallelKeys, MutUntrackedOrigin]) rai
     nk[].k__resident_holder = py_key("_resident_holder")
     nk[].k__session = py_key("_session")
     nk[].k__shape = py_key("_shape")
-    nk[].k__token = py_key("_token")
     nk[].k__transform_mode = py_key("_transform_mode")
     nk[].k__update_pool = py_key("_update_pool")
     nk[].k__w = py_key("_w")
