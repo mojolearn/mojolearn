@@ -5745,77 +5745,84 @@
           "value": {
             "parameter": "n_clusters"
           },
-          "source": "python/mojolearn/cluster.py:194"
+          "source": "python/mojolearn/cluster.py:198"
         },
         {
           "field": "init",
           "value": {
             "parameter": "init"
           },
-          "source": "python/mojolearn/cluster.py:194"
+          "source": "python/mojolearn/cluster.py:198"
         },
         {
           "field": "n_init",
           "value": {
             "parameter": "n_init"
           },
-          "source": "python/mojolearn/cluster.py:194"
+          "source": "python/mojolearn/cluster.py:198"
         },
         {
           "field": "max_iter",
           "value": {
             "parameter": "max_iter"
           },
-          "source": "python/mojolearn/cluster.py:194"
+          "source": "python/mojolearn/cluster.py:198"
         },
         {
           "field": "tol",
           "value": {
             "parameter": "tol"
           },
-          "source": "python/mojolearn/cluster.py:194"
+          "source": "python/mojolearn/cluster.py:198"
         },
         {
           "field": "random_state",
           "value": {
             "parameter": "random_state"
           },
-          "source": "python/mojolearn/cluster.py:194"
+          "source": "python/mojolearn/cluster.py:198"
         },
         {
           "field": "init_centroids",
           "value": {
             "parameter": "init_centroids"
           },
-          "source": "python/mojolearn/cluster.py:194"
+          "source": "python/mojolearn/cluster.py:198"
         },
         {
           "field": "metric",
           "value": {
             "parameter": "metric"
           },
-          "source": "python/mojolearn/cluster.py:194"
+          "source": "python/mojolearn/cluster.py:198"
         },
         {
           "field": "oversampling_factor",
           "value": {
             "parameter": "oversampling_factor"
           },
-          "source": "python/mojolearn/cluster.py:194"
+          "source": "python/mojolearn/cluster.py:198"
         },
         {
           "field": "numeric_mode",
           "value": {
             "parameter": "numeric_mode"
           },
-          "source": "python/mojolearn/cluster.py:194"
+          "source": "python/mojolearn/cluster.py:198"
+        },
+        {
+          "field": "device",
+          "value": {
+            "parameter": "device"
+          },
+          "source": "python/mojolearn/cluster.py:198"
         }
       ],
       "trace": [
-        "python/mojolearn/cluster.py:194"
+        "python/mojolearn/cluster.py:198"
       ],
-      "constructor": "python/mojolearn/cluster.py:194",
-      "signature_source": "def __init__(self, n_clusters=8, init='k-means++', n_init=1, max_iter=300, tol=0.0001, random_state=0, init_centroids=None, metric='euclidean', oversampling_factor=2.0, *, numeric_mode=None)",
+      "constructor": "python/mojolearn/cluster.py:198",
+      "signature_source": "def __init__(self, n_clusters=8, init='k-means++', n_init=1, max_iter=300, tol=0.0001, random_state=0, init_centroids=None, metric='euclidean', oversampling_factor=2.0, *, numeric_mode=None, device=None)",
       "parameters": [
         "n_clusters",
         "init",
@@ -5826,9 +5833,10 @@
         "init_centroids",
         "metric",
         "oversampling_factor",
-        "numeric_mode"
+        "numeric_mode",
+        "device"
       ],
-      "constructor_ast_sha256": "512f4d2f036d8c72987fa26a4a62f742d8e26b2d25a92375e3137fdeececfbae",
+      "constructor_ast_sha256": "6265e77f804528ec9a1ef7399f3c263731fb6ec9e43651a0de226ed72b385926",
       "field_order": [
         "n_clusters",
         "init",
@@ -5839,7 +5847,8 @@
         "init_centroids",
         "metric",
         "oversampling_factor",
-        "numeric_mode"
+        "numeric_mode",
+        "device"
       ],
       "final_fields": {
         "n_clusters": {
@@ -5871,6 +5880,9 @@
         },
         "numeric_mode": {
           "parameter": "numeric_mode"
+        },
+        "device": {
+          "parameter": "device"
         }
       },
       "signature_defaults": {
@@ -5883,7 +5895,8 @@
         "init_centroids": "None",
         "metric": "'euclidean'",
         "oversampling_factor": "2.0",
-        "numeric_mode": "None"
+        "numeric_mode": "None",
+        "device": "None"
       },
       "numeric_mode_injection": false,
       "module": "mojolearn.cluster",
@@ -5892,8 +5905,8 @@
         {
           "path": "python/mojolearn/cluster.py",
           "name": "__init__",
-          "line": 194,
-          "ast_sha256": "512f4d2f036d8c72987fa26a4a62f742d8e26b2d25a92375e3137fdeececfbae"
+          "line": 198,
+          "ast_sha256": "6265e77f804528ec9a1ef7399f3c263731fb6ec9e43651a0de226ed72b385926"
         }
       ],
       "constructor_ancestry": [

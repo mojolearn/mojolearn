@@ -191,6 +191,9 @@ class KMeans(_NumericModeMixin):
 
     #: This family's binding, for `NumericModeMixin._bind`.
     _BINDING = "_mojolearn"
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
     def __init__(
         self,
@@ -205,6 +208,7 @@ class KMeans(_NumericModeMixin):
         oversampling_factor=2.0,
         *,
         numeric_mode=None,
+        device=None,
     ):
         self.n_clusters = n_clusters
         self.init = init
@@ -216,6 +220,7 @@ class KMeans(_NumericModeMixin):
         self.metric = metric
         self.oversampling_factor = oversampling_factor
         self.numeric_mode = numeric_mode
+        self.device = device
 
     # A callable `init` is refused before it is called (no Python runs in
     # the fit: bindings/kmeans_native_unpack.mojo); an array `init` takes the

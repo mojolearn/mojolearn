@@ -62,6 +62,7 @@ CASES = [
          lambda **kw: mojolearn.DBSCAN(eps=2.5, min_samples=4, prediction_data=True, **kw), ("predict",)),
     Case("KernelDensity", lambda **kw: mojolearn.KernelDensity(bandwidth=1.5, **kw), ("score_samples",)),
     Case("HDBSCAN", lambda **kw: mojolearn.HDBSCAN(min_cluster_size=8, **kw), ("fit_predict",)),
+    Case("KMeans", lambda **kw: mojolearn.KMeans(n_clusters=3, random_state=0, **kw), ("predict", "transform")),
 ]
 ids = [case.name for case in CASES]
 
