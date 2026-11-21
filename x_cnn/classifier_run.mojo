@@ -13,6 +13,7 @@ call (docs/plans/PYTHON_AT_THE_BOUNDARY.md section 2.4).
 """
 from std.math import sqrt
 from x_cnn.door_run import xcnn_size
+from sequence.xseq_neural_run import XseqNeuralEntry, xseq_run_uniform
 
 #: rows per predict pass on the device (every op is per row, so the chunk
 #: never changes a word)
@@ -94,6 +95,89 @@ def cnnclf_run_conv_fan_in(channels: Int, kernel: Int) -> Int:
 def cnnclf_run_kaiming_bound(fan_in: Int) -> Float64:
     """`_kaiming_uniform`'s bound: 1 / sqrt(fan_in), correctly rounded."""
     return 1.0 / sqrt(Float64(fan_in))
+
+
+@fieldwise_init
+struct CnnClfLayout(Copyable, Movable):
+    """`_build(n_classes)`'s layer stack as typed words: per conv block its
+    width and pool flag, the head's input width, and for every learned array
+    in descriptor order (per block `weight_`, `bias_`, then the head's) its
+    shape, float count, Kaiming fan-in and layer seed."""
+    var widths: List[Int]
+    var pools: List[Int]
+    var flat: Int
+    var shapes: List[List[Int]]
+    var counts: List[Int]
+    var fan_ins: List[Int]
+    var seeds: List[Int]
+
+
+def cnnclf_run_layout(c: Int, h: Int, w: Int, kernel: Int, pool: Int, channels: List[Int], classes: Int,
+                      seed: Int) -> CnnClfLayout:
+    """The stack `_build` makes: block i is Conv2d(c_i, channels[i],
+    kernel, padding kernel // 2, seed + 101 i), ReLU, and MaxPool2d(pool)
+    when its plane holds a window; the head is Linear(flat, classes,
+    seed + 997). `seed` is `random_state` (0 when None)."""
+    var widths = List[Int]()
+    var pools = List[Int]()
+    var shapes = List[List[Int]]()
+    var counts = List[Int]()
+    var fan_ins = List[Int]()
+    var seeds = List[Int]()
+    var ch = c
+    var hh = h
+    var ww = w
+    for i in range(len(channels)):  # driver-loop: over the conv blocks (model structure)
+        var oc = channels[i]
+        var fan = cnnclf_run_conv_fan_in(ch, kernel)
+        var layer_seed = cnnclf_run_conv_seed(seed, i)
+        var weight_shape: List[Int] = [oc, ch, kernel, kernel]
+        var bias_shape: List[Int] = [oc]
+        shapes.append(weight_shape^)
+        shapes.append(bias_shape^)
+        counts.append(oc * ch * kernel * kernel)
+        counts.append(oc)
+        fan_ins.append(fan)
+        fan_ins.append(fan)
+        seeds.append(layer_seed)
+        seeds.append(layer_seed)
+        var plane = cnnclf_run_block_plane(hh, ww, kernel, pool)
+        widths.append(oc)
+        pools.append(1 if plane.pools else 0)
+        hh = plane.h
+        ww = plane.w
+        ch = oc
+    var flat = cnnclf_run_features([ch, hh, ww])
+    var head_seed = cnnclf_run_head_seed(seed)
+    var head_weight: List[Int] = [classes, flat]
+    var head_bias: List[Int] = [classes]
+    shapes.append(head_weight^)
+    shapes.append(head_bias^)
+    counts.append(classes * flat)
+    counts.append(classes)
+    fan_ins.append(flat)
+    fan_ins.append(flat)
+    seeds.append(head_seed)
+    seeds.append(head_seed)
+    return CnnClfLayout(widths^, pools^, flat, shapes^, counts^, fan_ins^, seeds^)
+
+
+def cnnclf_run_init(entry: XseqNeuralEntry, layout: CnnClfLayout, params: List[Int]) raises:
+    """The initial weights `_build` draws: every learned array (addresses
+    in descriptor order) gets float32 U(-b, b), b = 1 / sqrt(fan_in), from
+    its layer's counter-based stream (`uniform_init_f32`, MODEL_UNIFORM of
+    the model's image: the same words on the host and every device). Each
+    layer's stream starts at counter 0 of its seed; its `bias_` continues
+    where `weight_` stopped. The draws of one array run in parallel on the
+    image; the loop is over model structure."""
+    if len(params) != len(layout.counts):
+        raise Error("RuntimeError: CNNClassifier: one address per learned array")
+    var offset = 0
+    for i in range(len(layout.counts)):  # driver-loop: over the learned arrays (model structure)
+        if i % 2 == 0:
+            offset = 0  # a new layer: its own stream
+        var bound = cnnclf_run_kaiming_bound(layout.fan_ins[i])
+        offset = xseq_run_uniform(entry, params[i], layout.counts[i], UInt64(layout.seeds[i]), offset, -bound, bound)
 
 
 # ---------------------------------------------------------------- images

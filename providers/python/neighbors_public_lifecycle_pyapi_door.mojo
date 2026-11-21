@@ -7,7 +7,8 @@ from std.python import Python, PythonObject
 from bindings.admitted_family_door import admit_family_meta, admit_family_owned
 from providers.python.array_metadata_pyapi_door import ArrayPin
 from bindings.admitted_finite_wording import admitted_finite_wording
-from bindings.device_rows_door import door_is_device_rows, door_rows_store
+from bindings.device_rows_door import door_is_device_rows
+from bindings.device_rows_store_door import door_rows_store
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.mode_metadata_native_door import _fields, _fitted

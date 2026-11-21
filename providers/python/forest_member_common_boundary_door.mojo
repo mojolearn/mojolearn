@@ -11,16 +11,20 @@ these with the kind prefix its classes connect under ("dt_", "rf_", "et_").
     mode and predict engine the estimator's own fit and predict would read;
     its route (the run context of its device, `trees_route_context`, and the
     forest entry of that context's image in `route.entry`); the parameter
-    words of core/forest_member_run.mojo. Returns False, so the caller keeps
+    words of core/forest_member_run.mojo (word 10, the importance fit, left
+    at 0: a caller that reads importances sets it). Returns False, so the caller keeps
     the estimator's own doors, for what the member does not publish:
     DecisionTree splitter='random' (its inner Extra Trees forest),
     `class_weight`, `oob_score`, and the deviance criteria of a regressor
     (poisson, gamma, inverse_gaussian: their target check reads y).
   * `forest_member_pack_common` (PACK): the fitted attributes and model
-    arrays the estimator's own fit writes, from the state's blocks. The
-    caller publishes `classes_` (labels never cross the ABI).
+    arrays the estimator's own fit writes, from the state's blocks, and
+    `feature_importances_` when the state holds them (else removed, as the
+    estimator's fit removes it). The caller publishes `classes_` (labels
+    never cross the ABI).
   * `forest_member_state_common` (UNPACK): a member state from a fitted
-    estimator's five model arrays.
+    estimator's five model arrays and, when it has them, its
+    `feature_importances_`.
 
 SERIAL BY NATURE: one member's admission or publication (a few record reads
 and five block copies); a caller runs its members in parallel.
@@ -29,7 +33,7 @@ from std.memory import unsafe_memcpy, bitcast
 from std.python import Python, PythonObject
 from bindings.member_owner_unpack import MemberOwner
 from bindings.py_balanced import py_call, py_get, py_item, py_setitem, py_fields
-from bindings.admitted_input_unpack import admitted_vector, classical_view
+from bindings.admitted_input_unpack import admitted_vector, classical_view, admitted_dtype
 from bindings.classical_arrays_door import classical_address
 from bindings.trees_public_inputs_door import trees_builtins, trees_table, trees_freeze, trees_address
 from bindings.trees_route_boundary_door import trees_route_context
@@ -42,7 +46,7 @@ from core.device_route import DeviceRoute, DEVICE_CPU, DEVICE_GPU
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free,
     MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_SCALARS, MEMBER_IMPORT_DONE,
-    MEMBER_F32, MEMBER_F64, MEMBER_I32,
+    MEMBER_BLOCK_FEATURE_IMPORTANCES, MEMBER_F32, MEMBER_F64, MEMBER_I32,
 )
 
 comptime _NAMES = 5
@@ -108,7 +112,7 @@ def forest_member_admit_common(model: PythonObject, kind_word: Int, prefix: Stri
     route.entry = forest_key(native)
     owner.plan.route = route
     var slots = len(config.ints)
-    var words = List[Float64](capacity=11 + 3 * slots)
+    var words = List[Float64](capacity=12 + 3 * slots)
     words.append(0.0 if classifier else 1.0)
     words.append(1.0 if et else 0.0)
     words.append(Float64(config.criterion))
@@ -119,6 +123,7 @@ def forest_member_admit_common(model: PythonObject, kind_word: Int, prefix: Stri
     words.append(config.rows_fraction)
     words.append(1.0 if mode == "fast" else 0.0)
     words.append(1.0 if engine == "parallel_groves" else 0.0)
+    words.append(0.0)  # word 10: no importance fit unless the caller asks
     words.append(Float64(slots))
     for k in range(slots):  # driver-loop: over the configuration's parameter slots (about twenty)
         words.append(bitcast[DType.float64](Int64(config.ints[k])))
@@ -168,6 +173,17 @@ def forest_member_pack_common(model: PythonObject, context: PythonObject, plan: 
         py_setitem(fields, "max_depth_resolved_", PythonObject(meta[3]))
         py_setitem(fields, "max_features_", PythonObject(meta[4]))
         py_setitem(fields, "_n_samples_bootstrap", PythonObject(meta[5]) if meta[5] != 0 else PythonObject(None))
+    # The block count (6, or 7 with importances) of the last export.
+    if call.out_cols > 6:
+        call.block = MEMBER_BLOCK_FEATURE_IMPORTANCES
+        _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+        var width = call.dst.rows * call.dst.cols
+        var importance = admitted_vector(width, "<f4", run)
+        unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=trees_address(importance)),
+            src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=call.dst.data), count=4 * width)
+        py_setitem(fields, "feature_importances_", importance)
+    else:
+        _ = py_call(fields.pop, PythonObject("feature_importances_"), PythonObject(None))
     py_setitem(fields, "_mojolearn_fitted", True)
 
 
@@ -193,11 +209,21 @@ def forest_member_state_common(model: PythonObject, context: PythonObject, plan:
     var classes = 0 if classes_source is None else Int(py=classes_source)
     var scalars: List[Float64] = [Float64(py=py_item(fields, PythonObject("n_features_in_"))), Float64(trees),
         Float64(counts[1]), Float64(outputs), Float64(classes), 2.0, Float64(trees), Float64(outputs)]
+    var importance_source = py_get(fields, PythonObject("feature_importances_"))
+    var importance = PythonObject(None)
+    if importance_source is not None:
+        importance = classical_view(importance_source, context, "forest feature importances")
+        if admitted_dtype(importance, context) != "<f4":
+            raise Error("TypeError: mojolearn: a forest's feature_importances_ is float32")
     var call = member_new(plan)
     try:
         for i in range(_NAMES):  # driver-loop: over the five model arrays
             call.block = MEMBER_BLOCK_FAMILY + i
             call.x = MemberMatrix(addresses[i], 1, counts[i], _dtype(i))
+            _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+        if importance is not None:
+            call.block = MEMBER_BLOCK_FEATURE_IMPORTANCES
+            call.x = MemberMatrix(Int(py=classical_address(importance)), 1, Int(py=importance.size), MEMBER_F32)
             _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
         call.block = MEMBER_BLOCK_SCALARS
         call.x = MemberMatrix(Int(scalars.unsafe_ptr()), 1, len(scalars), MEMBER_F64)
@@ -207,5 +233,6 @@ def forest_member_state_common(model: PythonObject, context: PythonObject, plan:
         member_free(plan, call)
         raise error
     _ = views^
+    _ = importance
     _ = len(scalars)
     return call.state

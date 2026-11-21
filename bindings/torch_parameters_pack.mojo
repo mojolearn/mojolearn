@@ -8,28 +8,10 @@
 # call: no loop or repeated call reaches it.
 from std.python import PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.py_balanced import py_call
-from bindings.native_loaded_module_door import native_loaded_module
+from bindings.torch_parameter_form_pack import torch_parameter_form
 from bindings.causal_lm_public_door import causal_public_c
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
-
-comptime TORCH_FORM_MAPPING = 0
-comptime TORCH_FORM_PARAMETERS = 1
-comptime TORCH_FORM_NAMED_PARAMETERS = 2
-
-
-def torch_parameter_form(named: PythonObject, form: Int) raises -> PythonObject:
-    """`named` ({name: array}) as `form` asks: the mapping itself, an
-    iterator of its arrays, or an iterator of its (name, array) items."""
-    if form == TORCH_FORM_MAPPING:
-        return named
-    var b = native_loaded_module("builtins")
-    if form == TORCH_FORM_PARAMETERS:
-        return py_call(b.iter, py_call(b.list, named.values()))
-    if form == TORCH_FORM_NAMED_PARAMETERS:
-        return py_call(b.iter, py_call(b.list, named.items()))
-    raise Error("parameters: unknown result form " + String(form))
 
 
 def causal_lm_parameters_form_c[form: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:

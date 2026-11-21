@@ -3,6 +3,7 @@
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
+from bindings.torch_parameter_form_pack import torch_parameter_form
 from bindings.native_error_class import error_without_class
 from bindings.generation_buffers_door import GENERATION_BOUNDARY, generation_initialize_binding, generation_copy, generation_array, generation_array_snapshot, generation_address, py_ints
 from bindings.causal_lm_construct_door import causal_model_read_weights_binding, _causal_model_prepare_snapshot, _model_construction_set, _model_options_snapshot, _model_weights_snapshot, _model_block, _model_bindings, _model_profile, _model_quantize15
@@ -1271,7 +1272,10 @@ def parallel_causal_call(mut mods: NativeModules, operation: Int, name: PythonOb
             causal_model_publish(mods, model)
             raise error
         causal_model_publish(mods, model)
-        return result
+        # args[1] (lane api-torch round 3): the torch result form of
+        # bindings/torch_parameter_form_pack.mojo (0 the {name: array}
+        # mapping, state_dict; 1 parameters(); 2 named_parameters()).
+        return torch_parameter_form(result, Int(py=args[1]) if len(args) > 1 else 0)
     elif operation == PARALLEL_CAUSAL_OPN_BLOCK_FIELDS:
         var captured = args[2] if len(args) > 2 else _parallel_owner_snapshot(mods, args[0])
         var fields = _parallel_captured(mods, args[0], captured)
