@@ -72,7 +72,7 @@ from core.member_abi import (
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_PREDICT,
     MEMBER_OP_OUTPUTS, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT,
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT, MEMBER_CAN_MULTI_OUTPUT,
-    MEMBER_CAN_FORECAST,
+    MEMBER_CAN_FORECAST, MEMBER_GIL_DOOR,
     MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
 )
@@ -496,7 +496,14 @@ def _forecast_seq_member(operation: Int, address: Int) raises -> Int:
     if operation == MEMBER_OP_CAPABILITIES:
         if call[].state != 0:
             _ = _lookup(call[].state, False)  # every kind answers the same bits
-        return _capabilities()
+        # MEMBER_GIL_DOOR (THE GIL RULE; fx-gil-RESULT.md, round 4): one
+        # operation at a time on the public thread, the caller releasing the
+        # GIL around it as the forecast door does around the same RUN
+        # functions (`forecast_run_theta`, `forecast_run_theta_forecast`,
+        # `forecast_run_ets`); the `forecast_run_*_check_*` helpers read the
+        # call's own words; the store has its own lock. NOT
+        # `MEMBER_GIL_FREE` (the image is not traced).
+        return _capabilities() | MEMBER_GIL_DOOR
     if operation == MEMBER_OP_NEW:
         _new(call)
         return 0

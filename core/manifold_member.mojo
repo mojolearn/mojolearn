@@ -76,7 +76,7 @@ from core.member_abi import (
     MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
 )
-from core.member_abi import MEMBER_BORROWS_FIT, MEMBER_EXPORT_OWN
+from core.member_abi import MEMBER_BORROWS_FIT, MEMBER_EXPORT_OWN, MEMBER_GIL_DOOR
 from core.member_families import MEMBER_FAMILY_MANIFOLD
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
@@ -400,7 +400,13 @@ def _manifold_member(operation: Int, address: Int) raises -> Int:
         # MEMBER_BORROWS_FIT: a fitted UMAP state reads the caller's X (its
         # training rows) until an export of the rows block, or
         # MEMBER_EXPORT_OWN, copied them (LIFETIME in the module docstring).
-        return _CAPABILITIES | MEMBER_BORROWS_FIT
+        # MEMBER_GIL_DOOR (THE GIL RULE; fx-gil-RESULT.md, round 4): one
+        # operation at a time on the public thread, the caller releasing the
+        # GIL around it as the UMAP door does around the same calls
+        # (`umap_fit_call`, `umap_fit_ex_call`, `umap_transform_call`); the
+        # `umap_check_*` helpers read the call's own words; the store has
+        # its own lock. NOT `MEMBER_GIL_FREE` (the image is not traced).
+        return _CAPABILITIES | MEMBER_BORROWS_FIT | MEMBER_GIL_DOOR
     if operation == MEMBER_OP_NEW:
         if call[].param_count != MANIFOLD_PARAM_COUNT or not call[].params:
             raise Error("member ABI: a UMAP member takes twenty parameters (kind, the eleven config words, "
