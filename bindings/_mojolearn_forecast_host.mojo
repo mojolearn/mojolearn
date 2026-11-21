@@ -49,12 +49,10 @@ from checks.kernel_matrix import (
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from arima.host.arima_oracle import ARIMA_ORACLE_PREDICT_SABOTAGE
-from bindings.arima_host_predict_pack import (
-    arima_forecast_binding,
-    arima_predict_binding,
-)
+from arima.arima_ops_forecast_host import publish_arima_ops_forecast_host
 from core.holtwinters_host_predict_impl import HW_PREDICT_SABOTAGE
-from bindings.kpss_host_test_unpack import KPSS_DECISION_SABOTAGE, KPSS_ORACLE_HOST_SABOTAGE, kpss_test_binding, select_d_host_binding
+from core.kpss_host_test_impl import KPSS_DECISION_SABOTAGE
+from tsa.checks.kpss_oracle import KPSS_ORACLE_HOST_SABOTAGE
 from tsa.tsa_ops_forecast_host import publish_tsa_hw_ops_forecast_host
 
 
@@ -119,8 +117,8 @@ def build__mojolearn_forecast_host() -> PythonObject:
         module.def_function[forecast_host_sabotage_binding]("forecast_host_sabotage")
         module.def_function[arima_vendor_binding]("arima_vendor")
         module.def_function[arima_numeric_mode_binding]("arima_numeric_mode")
-        module.def_function[arima_predict_binding]("arima_predict")
-        module.def_function[arima_forecast_binding]("arima_forecast")
+        # TOMBSTONE: dead Python exports arima_predict, arima_forecast (no product caller: the ARIMA and AutoARIMA owners reach these kernels through the published ARIMA operations table, core/arima_entry_table.mojo; lane dw-forecast-tail) deleted 2026-11-21; code recoverable at d8f4bf534c.
+        # Restore: git apply experiments/removed/dead_entries_arima_calls.patch
         # TOMBSTONE: hdbscan_host_predict_sabotage and the host tsa_vendor aliases (dead native entries: the host loader reads <prefix>_sabotage / <prefix>_vendor) deleted 2026-10-26 by 2013bdd1e; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_host_aliases.patch
         # TOMBSTONE: dead Python exports holtwinters_forecast, holtwinters_predict (no product caller: the ExponentialSmoothing owner reaches these kernels through the published Holt-Winters operations table, core/tsa_entry_table.mojo; lane dw-forecast-tail) deleted 2026-11-21; code recoverable at 8e1fedd052.
@@ -129,13 +127,16 @@ def build__mojolearn_forecast_host() -> PythonObject:
         # 2026-09-16). It trains no model, so it belongs on the shipped side;
         # the `_mojolearn_tsa` route reaches it here when the reference
         # binding, which holds holtwinters_fit, is not built.
-        module.def_function[kpss_test_binding]("kpss_test")
-        module.def_function[select_d_host_binding]("select_d")
+        # TOMBSTONE: dead Python exports kpss_test, select_d (no product caller: the stationarity functions and AutoARIMA's search reach these kernels through the published tsa operations table, core/tsa_entry_table.mojo TSA_OP_KPSS_TEST / TSA_OP_SELECT_D; lane dw-forecast-tail) deleted 2026-11-21; code recoverable at 038b12431e.
+        # Restore: git apply experiments/removed/dead_entries_tsa_kpss_calls.patch
         # The Holt-Winters operations table of this inference image
         # (core/tsa_entry_table.mojo, family TSA_TABLE_FORECAST): the explicit
         # host class's route resolves it once per estimator.
         var published_module = module.finalize()
         publish_tsa_hw_ops_forecast_host()
+        # The ARIMA operations table of this image (core/arima_entry_table.mojo,
+        # family ARIMA_TABLE_FORECAST): prediction and forecast, no fit.
+        publish_arima_ops_forecast_host()
         return published_module
     except error:
         abort(String("failed to create _mojolearn_forecast_host: ", error))

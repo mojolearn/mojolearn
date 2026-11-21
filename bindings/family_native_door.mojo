@@ -6,7 +6,7 @@
 # maps their `<Class>: ` error prefixes and restores a stashed Python
 # exception unchanged.
 from providers.python.estimator_binding_pyapi_door import estimator_arguments
-from providers.python.cluster_public_lifecycle_pyapi_door import cluster_public_operation
+from providers.python.cluster_public_lifecycle_pyapi_pack import cluster_public_operation
 from std.python import PythonObject
 from bindings.py_balanced import py_type, py_get
 from bindings.family_common_pack import family_call
@@ -22,12 +22,13 @@ from bindings.gp_native_pack import gp_operation, gp_unknown_operation
 from bindings.metrics_cls_native_unpack import metrics_cls_operation, metrics_cls_unknown_operation
 from bindings.metrics_exp_native_unpack import metrics_exp_operation, metrics_exp_unknown_operation
 from bindings.cluster_fit_a_native_door import cluster_fit_a_operation, cluster_fit_a_unknown_operation
-from providers.python.hdbscan_public_lifecycle_pyapi_door import hdbscan_public_operation, hdbscan_unknown_operation
+from providers.python.hdbscan_public_lifecycle_pyapi_pack import hdbscan_public_operation, hdbscan_unknown_operation
 from providers.python.density_public_lifecycle_pyapi_pack import density_public_operation, density_unknown_operation
 from bindings.cluster_fit_b_native_unpack import cluster_fit_b_operation, cluster_fit_b_unknown_operation
 from bindings.operation_names_xc import XC_OPN_FAMILY_XC_DBSCAN_PREDICT
 from bindings.operation_names_cfb import CFB_OPN_FAMILY_XC_DBSCAN_PREDICT
-from bindings.mixture_native_door import mixture_operation, mixture_unknown_operation
+from bindings.mixture_public_native_pack import mixture_operation
+from mixture.mixture_door_run import mixture_unknown_operation
 from bindings.linalg_ops_native_unpack import linalg_ops_operation, linalg_ops_unknown_operation
 from providers.python.lowbit_weight_pyapi_door import lowbit_weight_operation, lowbit_weight_unknown_operation
 from bindings.parallel_public_native_door import parallel_public_operation

@@ -70,7 +70,7 @@ class ImportedProgram(Program):
         return _TORCH_RUN_NATIVE(self, tensors, None, False)
 
 
-def import_model(source, *, shapes=None, numeric_mode=None):
+def import_model(source, *, shapes=None, numeric_mode=None, device=None):
     """Import an exported ONNX model for native inference.
 
     In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs.
@@ -108,7 +108,7 @@ def import_model(source, *, shapes=None, numeric_mode=None):
     >>> prog = mojolearn.import_model("classifier.onnx", shapes={"input": (8, 3)})  # doctest: +SKIP
     >>> logits = prog.run([[1.0, 2.0, 3.0]] * 8)  # doctest: +SKIP
     """
-    return _IMPORT_NATIVE(source, None, shapes, numeric_mode, _IMPORT_CONTEXT)
+    return _IMPORT_NATIVE(source, None, shapes, numeric_mode, _IMPORT_CONTEXT, device, None)
 
 
 from . import _native_import_bridge  # noqa: E402

@@ -39,7 +39,7 @@ from bindings.classical_pandas_door import native_pandas_exact, native_pandas_f3
 from bindings.sequential_admission_door import _ordinary_torch
 from bindings.native_torch_admission_door import native_torch_numpy
 from bindings.sequential_inputs_door import sequential_sequence
-from bindings.arena_prog_native_door import _metrics_run_plan, _family_dictionary
+from bindings.arena_prog_native_door import _metrics_run_plan, metrics_run_plan_entries, _family_dictionary
 from bindings.arena_prog_run import MetricArenaOwner
 from core.metrics_program_plan import MetricProgramPlan
 from core.labels_accuracy_plan import label_accuracy_plan
@@ -1481,7 +1481,13 @@ def _accuracy_context(context: PythonObject) raises -> PythonObject:
 
 
 def _accuracy_run(plan: MetricProgramPlan, inputs: List[PythonObject], mode: PythonObject,
-                  context: PythonObject) raises -> MetricArenaOwner:
+                  context: PythonObject, metrics: PythonObject) raises -> MetricArenaOwner:
+    # `metrics`: None (the x_metrics image of `mode` in this process), or the
+    # connected entries of the image an estimator's device route names.
+    if metrics is not None:
+        var prog_context = _accuracy_context(context)
+        classical_connect_numpy(prog_context)
+        return metrics_run_plan_entries(plan, inputs, metrics, prog_context)
     return _metrics_run_plan(plan, inputs, mode, _accuracy_context(context))
 
 
@@ -1490,6 +1496,16 @@ def labels_accuracy(y_true: PythonObject, prediction: PythonObject, sample_weigh
     """`_expansion_metrics.accuracy_fraction(y_true, prediction,
     sample_weight, mode)`: the (weighted) matched fraction from the device
     COUNT tail."""
+    return labels_accuracy_routed(y_true, prediction, sample_weight, mode, PythonObject(None), context)
+
+
+def labels_accuracy_routed(y_true: PythonObject, prediction: PythonObject, sample_weight: PythonObject,
+                           mode: PythonObject, metrics: PythonObject, context: PythonObject) raises -> Float64:
+    """`labels_accuracy` for an estimator with a device route: `metrics` is
+    None (the x_metrics image of `mode` in this process) or the connected
+    x_metrics entries of the image the estimator's route names (the CPU image
+    of a `device="cpu"` estimator beside a device set), which then runs the
+    COUNT tail. Same admission, same codes, same program."""
     var caller = String("accuracy_score")
     _refuse_multilabel(y_true, "y_true", caller, context)
     _refuse_multilabel(prediction, "y_pred", caller, context)
@@ -1514,11 +1530,11 @@ def labels_accuracy(y_true: PythonObject, prediction: PythonObject, sample_weigh
     _ = joined^
     _ = true
     _ = pred
-    return _accuracy_codes(yt, yp, n, L, w^, mode, context)
+    return _accuracy_codes(yt, yp, n, L, w^, mode, context, metrics)
 
 
 def _accuracy_codes(yt: PythonObject, yp: PythonObject, n: Int, L: Int, var w: Optional[AdmittedX],
-                    mode: PythonObject, context: PythonObject) raises -> Float64:
+                    mode: PythonObject, context: PythonObject, metrics: PythonObject) raises -> Float64:
     """The (weighted) matched fraction of two int32 code vectors over `L`
     labels (a code outside [0, L) never matches), from the device COUNT
     tail. The hit count (unweighted) and the soft binary64 weight sums over
@@ -1542,7 +1558,7 @@ def _accuracy_codes(yt: PythonObject, yp: PythonObject, n: Int, L: Int, var w: O
         w_array = wv.array if py_type(wv.array) is py_item(context, nk[].k_array_class) else native_f32_view_array(
             wv.array, wv.address, Python.tuple(wv.rows), wv.rows, 1, py_item(context, nk[].k_array_class))
         inputs.append(w_array)
-    var arena = _accuracy_run(plan.program, inputs, mode, context)
+    var arena = _accuracy_run(plan.program, inputs, mode, context, metrics)
     var base = arena.base()
     var result_at = plan.result_offset
     _ = yt
@@ -1697,7 +1713,7 @@ def labels_score_from_codes(y_true: PythonObject, var classes: PythonObject, cod
         labels_cast(labels_address(codes), "<i8", labels_address(yp), "<i4", n, context)
         _ = codes  # keep the Python object alive through the native call above
         _ = yp  # keep the Python object alive through the native call above
-    return _accuracy_codes(yt, yp, n, len(classes), w^, mode, context)
+    return _accuracy_codes(yt, yp, n, len(classes), w^, mode, context, PythonObject(None))
 
 
 
@@ -1736,3 +1752,11 @@ def classical_accuracy(y_true: PythonObject, prediction: PythonObject, sample_we
     """`_expansion_metrics.accuracy_fraction(y_true, prediction,
     sample_weight, mode)`."""
     return labels_accuracy(y_true, prediction, sample_weight, mode, context)
+
+
+def classical_accuracy_routed(y_true: PythonObject, prediction: PythonObject, sample_weight: PythonObject,
+                              mode: PythonObject, metrics: PythonObject, context: PythonObject) raises -> Float64:
+    """`classical_accuracy` on the x_metrics image an estimator's device route
+    names (`metrics`: its connected entries; None is the process's image of
+    `mode`)."""
+    return labels_accuracy_routed(y_true, prediction, sample_weight, mode, metrics, context)

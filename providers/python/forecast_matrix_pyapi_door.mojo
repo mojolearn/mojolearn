@@ -10,7 +10,7 @@ from providers.python.arima_buffer_pyapi_door import ArimaBuffer, arima_buffer
 from providers.python.autoarima_lifecycle_pyapi_door import _integer, _number
 from providers.python.forecast_initialize_pyapi_unpack import _scalar
 from providers.python.forecast_owner_pyapi_unpack import forecast_commit
-from bindings.xseq_native_common_door import xseq_zeros, xseq_addr, xseq_f32p, xseq_first, xseq_key, xseq_glue
+from bindings.xseq_native_common_door import xseq_zeros, xseq_addr, xseq_f32p, xseq_first, xseq_route_of, xseq_glue
 from core.xseq_entry_table import XS_VAR_FIT, XS_VAR_FORECAST, XS_STL
 from core.xseq_marshal import xseq_var_blocks
 from core.admitted_input_nd import admitted_cast_nd_f32
@@ -159,8 +159,9 @@ def _var_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
         raise Error("ValueError: VAR.fit needs a matrix with 0 <= maxlags < observations")
     var mode = py_get(fields, nk[].k_numeric_mode)
     _mode(mode)
-    var route = Python.dict()
-    py_setitem(route, nk[].k_numeric_mode, mode)
+    # dw-neural-b: the estimator's one route (resolved once) holds the glue
+    # entry; the scratch dictionary built per fit to carry the mode is gone.
+    var route = xseq_route_of(model, mode, fields, context)
     var n = y.shape[0]
     var k = y.shape[1]
     var m = Int(py=PythonObject(k) * p + kt)
@@ -169,7 +170,7 @@ def _var_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     var resid = xseq_zeros(Python.tuple(n - p, k), context)
     var addresses: List[Int] = [y.address, Int(py=xseq_addr(params)), Int(py=xseq_addr(sigma)), Int(py=xseq_addr(resid))]
     var words: List[Int] = [n, k, p, kt]
-    var code = xseq_glue(xseq_key(route, context), XS_VAR_FIT, addresses, words, List[Float64]())
+    var code = xseq_glue(route.glue, XS_VAR_FIT, addresses, words, List[Float64]())
     _ = params  # keep the Python objects alive through the native call above
     _ = sigma
     _ = resid
@@ -196,11 +197,9 @@ def _var_forecast(model: PythonObject, args: PythonObject, context: PythonObject
         raise Error("ValueError: VAR forecast requires nonnegative steps and sufficient history columns/rows")
     if len(params.shape) != 2 or params.shape[0] != Int(py=PythonObject(k) * p + kt) or params.shape[1] != k:
         raise Error("ValueError: VAR fitted parameter dimensions disagree")
-    var state = Python.dict()
     var mode = py_item(fields, nk[].k__numeric_mode)
     _mode(mode)
-    py_setitem(state, nk[].k_numeric_mode, mode)
-    var key = xseq_key(state, context)
+    var key = xseq_route_of(model, mode, fields, context).glue
     var result = xseq_zeros(Python.tuple(steps, k), context)
     var history = y.address + (y.shape[0] - p) * k * 4
     var addresses: List[Int] = [history, params.address, Int(py=xseq_addr(result))]
@@ -291,8 +290,9 @@ def _stl_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     _scalar(py_item(fields, nk[].k__one), lifecycle)
     var mode = py_get(fields, nk[].k_numeric_mode)
     _mode(mode)
-    var route = Python.dict()
-    py_setitem(route, nk[].k_numeric_mode, mode)
+    # dw-neural-b: the estimator's one route (resolved once) holds the glue
+    # entry; the scratch dictionary built per fit to carry the mode is gone.
+    var route = xseq_route_of(model, mode, fields, context)
     var one = Bool(py=py_item(fields, nk[].k__one))
     var robust = Bool(py=py_item(fields, nk[].k_robust))
     var inner = (2 if robust else 5) if args[0] is None else _integer(args[0], lifecycle)
@@ -320,7 +320,7 @@ def _stl_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     plan.append(outer)
     var addresses: List[Int] = [y.address, Int(py=xseq_addr(season)), Int(py=xseq_addr(trend)), Int(py=xseq_addr(weights)),
                                 Int(py=xseq_addr(resid))]
-    _ = xseq_glue(xseq_key(route, context), XS_STL, addresses, plan, List[Float64]())
+    _ = xseq_glue(route.glue, XS_STL, addresses, plan, List[Float64]())
     _ = season  # keep the Python objects alive through the native call above
     _ = trend
     _ = weights

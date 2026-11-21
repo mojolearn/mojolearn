@@ -50,7 +50,7 @@ def test_default_dependency_inventory_allows_native_capi_in_providers(tmp_path):
 # transformer/native_session_call.mojo, `transformer_native_api_v1`) is deleted;
 # a layer's session forward is the block table's op 11 on the session handle.
 def test_session_reserved_before_gil_release_and_released_on_both_outcomes():
-    run = source("providers/python/transformer_block_session_pyapi_door.mojo").split("def transformer_block_session_run(")[1]
+    run = source("providers/python/transformer_block_session_pyapi_door.mojo").split("def transformer_block_session_run_words(")[1]
     assert run.index("NEURAL_BLOCK_RESERVE") < run.index("with GILReleased")
     assert run.count("NEURAL_BLOCK_RELEASE") == 2
     assert "except problem:" in run
@@ -65,8 +65,9 @@ def test_gpu_layer_session_uses_native_vectors():
     public = source("bindings/causal_lm_public_door.mojo")
     assert 'getenv("MOJOLEARN_GENERATION_NATIVE_SESSION")' not in public
     # the branch tests the TRANSFORMER_LEGACY_SETUP build constant since 03bcaedce0
-    branch = public.split('elif device15 or (not TRANSFORMER_LEGACY_SETUP and py_contains(e, "block_session")')[1].split("        else:\n", 1)[0]
-    assert "transformer_block_session_run(session," in branch
+    # dw-neural-models (2026-11-21): the arm tests the typed route's word and fills a typed request
+    branch = public.split('elif device15 or (not TRANSFORMER_LEGACY_SETUP and route.block_session)')[1].split("        else:\n", 1)[0]
+    assert "request.handle = transformer_block_session_handle(session)" in branch
     assert "py_ints(" not in branch
     assert "py_call(" not in branch
     assert 'not py_contains(e, "resident") or not _resident_norm_ok(model)' in public

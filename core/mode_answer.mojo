@@ -87,10 +87,10 @@ comptime MODE_FAMILY_METADATA = 1 << 20     # mode_metadata_native_door (shared:
 comptime MODE_FAMILY_MSEL = 1 << 21         # msel_scorer_native_door
 comptime MODE_FAMILY_LINALG = 1 << 22       # linalg_ops_resample_door
 comptime MODE_FAMILY_PROGRAM = 1 << 23      # arena_prog_native_door (the shared x_prep / x_metrics program runner: every classifier's accuracy score passes it)
-comptime MODE_FAMILY_MIXTURE = 1 << 24      # mixture_native_door, svm_mixture_native_door (GaussianMixture's compiled-mode check)
+comptime MODE_FAMILY_MIXTURE = 1 << 24      # mixture_public_native_unpack, svm_mixture_native_door (GaussianMixture's compiled-mode check)
 comptime MODE_FAMILY_GP = 1 << 25           # gp_common_native_pack (the GP estimators' compiled-mode check)
 comptime MODE_FAMILY_PREP = 1 << 26         # prep_classify_common_door (cls_requested_mode: the x_prep classifiers that take numeric_mode)
-comptime MODE_FAMILY_CLUSTER = 1 << 27      # cluster_fit_a_native_door `_hdbscan_mode` (HDBSCAN's compiled-mode check)
+comptime MODE_FAMILY_CLUSTER = 1 << 27      # hdbscan_fit_boundary_unpack `_hdbscan_mode` (HDBSCAN's compiled-mode check)
 comptime MODE_FAMILIES_ALL = (1 << 28) - 1
 
 # THE ONE DECISION of which families answer `fast` by the identical set where

@@ -9,11 +9,12 @@
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
-from bindings.py_typed_call import py_call_typed
 from providers.python.autograd_weight_frontend_pyapi_pack import _checkpoint, _record
 from autograd.program_io import ProgramInput
-from bindings.sequential_description_unpack import sequential_fields
-from bindings.sequential_description_pack import sequential_program, sequential_table
+from bindings.sequential_description_unpack import sequential_fields, SequentialDescription
+from bindings.sequential_description_pack import sequential_native_description
+from bindings.sequential_model_file_door import sequential_file_counts, sequential_file_import
+from providers.python.sequence_pyapi_door import py_ints
 from bindings.sequential_execution_pack import sequential_entries
 from bindings.sequential_arrays_door import sequential_array, sequential_address, sequential_input
 from bindings.py_model_records import bump_model_generation
@@ -144,14 +145,25 @@ def sequential_load_weights(mut mods: NativeModules, model: PythonObject, args: 
                 raise Error("load_state_dict: " + String(py_call(b.repr, keys[0])) + " has the wrong shape for layer " + String(first)
                             + (" (linear): expected (out_features, in_features)" if linear else " (layer_norm): expected (width,)"))
             width = Int(py=records[9 if linear else 8])
-    var program = sequential_program(mods, model, PythonObject(width), sample)
-    var table = sequential_table(model)
+    # The model description as fit and predict hand it to the same engine
+    # (the retained native program words and one scalar per layer), and the
+    # source records and names typed once (UNPACK). The count and the transfer
+    # are native descriptor calls with no Python object.
+    var description_owner = sequential_native_description(mods, model, PythonObject(width), sample)
+    var description = description_owner.downcast_value_ptr[SequentialDescription]()
+    var program = description[].program.copy()
+    var table = description[].scalars.copy()
+    _ = description_owner^
+    var record_words = py_ints(records)
+    var names_native = List[String]()
+    for k in range(len(keys)):  # driver-loop: over source tensor names
+        names_native.append(String(py=keys[k]))
     var entries = sequential_entries(model, context)
     mods.released()
-    var counts = py_call_typed(py_item(entries, nk[].k_model_n_params), program, table)
+    var sizes = sequential_file_counts(entries, program, table)
     mods.released()
-    var params = sequential_array(mods, Python.tuple(counts[0]), py_item(context, nk[].k_float32), context)
-    counts = py_call_typed(py_item(entries, nk[].k_model_import_params), program, table, records, keys, sequential_address(params))
+    var params = sequential_array(mods, Python.tuple(sizes[0]), py_item(context, nk[].k_float32), context)
+    var counts = sequential_file_import(entries, program, table, record_words, names_native, Int(py=sequential_address(params)))
     mods.released()
     # Raw addresses remain borrowed until the native transfer has completed.
     _ = owners^
@@ -159,8 +171,8 @@ def sequential_load_weights(mut mods: NativeModules, model: PythonObject, args: 
     _ = scalar_owners^
     _ = values^
     py_setitem(fields, nk[].k_params_, params)
-    py_setitem(fields, nk[].k_n_features_in_, counts[2])
-    py_setitem(fields, nk[].k_n_outputs_, counts[1])
+    py_setitem(fields, nk[].k_n_features_in_, PythonObject(counts[2]))
+    py_setitem(fields, nk[].k_n_outputs_, PythonObject(counts[1]))
     py_setitem(fields, nk[].k__sample_shape, sample)
     py_setitem(fields, nk[].k_n_iter_, 0)
     py_setitem(fields, nk[].k_loss_curve_, Python.list())

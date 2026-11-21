@@ -347,7 +347,7 @@ def johnson_lindenstrauss_min_dim(n_samples, *, eps=0.1):
 # Restore: git apply experiments/removed/dead_python_loops.patch
 
 
-class _RandomProjection(_Base):
+class _RandomProjection(_DeviceDoor, _Base):
     """sklearn `random_projection.py::BaseRandomProjection`. The matrix is
     drawn from the lane's counter-based Philox stream (x_decomp/cells.mojo
     `rand_cell`), not numpy's generator: the same `random_state` gives the
@@ -495,13 +495,17 @@ class GaussianRandomProjection(_RandomProjection):
     >>> model.transform(X).shape
     (1000, 8)
     """
-    _parameters = ("n_components", "eps", "compute_inverse_components", "random_state", "numeric_mode")
+    _device_door = "decomp"
+    _parameters = ("n_components", "eps", "compute_inverse_components", "random_state", "numeric_mode", "device")
 
     def __init__(self, n_components="auto", *, eps=0.1, compute_inverse_components=False, random_state=None,
-                 numeric_mode=None):
+                 numeric_mode=None, device=None):
+        if device is not None:
+            self._device_set(device)
         self.n_components, self.eps = n_components, eps
         self.compute_inverse_components, self.random_state = compute_inverse_components, random_state
         self.numeric_mode = numeric_mode
+        self.device = device
 
 
 # Achlioptas / Li et al.
@@ -557,14 +561,18 @@ class SparseRandomProjection(_RandomProjection):
     >>> model.transform(X).shape
     (1000, 8)
     """
+    _device_door = "decomp"
     _parameters = ("n_components", "density", "eps", "dense_output", "compute_inverse_components",
-                   "random_state", "numeric_mode")
+                   "random_state", "numeric_mode", "device")
 
     def __init__(self, n_components="auto", *, density="auto", eps=0.1, dense_output=False,
-                 compute_inverse_components=False, random_state=None, numeric_mode=None):
+                 compute_inverse_components=False, random_state=None, numeric_mode=None, device=None):
+        if device is not None:
+            self._device_set(device)
         self.n_components, self.density, self.eps, self.dense_output = n_components, density, eps, dense_output
         self.compute_inverse_components, self.random_state = compute_inverse_components, random_state
         self.numeric_mode = numeric_mode
+        self.device = device
 
 
 # ================================================================ NMF
@@ -746,7 +754,7 @@ class NMF(_DeviceDoor, _Base):
 # singular value below 10 float32 eps is clamped there, as sklearn's 'eigh'
 # solver clamps it. w_init defaults to a draw from the lane's Philox
 # stream, not numpy's. A callable `fun` is refused by name.
-class FastICA(_Base):
+class FastICA(_DeviceDoor, _Base):
     """Independent component analysis with the FastICA algorithm.
 
     Follows scikit-learn's ``FastICA``. Whitening always uses the
@@ -815,14 +823,18 @@ class FastICA(_Base):
     _mojolearn_native_public = True
 
     _parameters = ("n_components", "algorithm", "whiten", "fun", "fun_args", "max_iter", "tol", "w_init",
-                   "whiten_solver", "random_state", "numeric_mode")
+                   "whiten_solver", "random_state", "numeric_mode", "device")
+    _device_door = "decomp"
 
     def __init__(self, n_components=None, *, algorithm="parallel", whiten="unit-variance", fun="logcosh",
                  fun_args=None, max_iter=200, tol=1e-4, w_init=None, whiten_solver="svd", random_state=None,
-                 numeric_mode=None):
+                 numeric_mode=None, device=None):
+        if device is not None:
+            self._device_set(device)
         self.n_components, self.algorithm, self.whiten, self.fun = n_components, algorithm, whiten, fun
         self.fun_args, self.max_iter, self.tol, self.w_init = fun_args, max_iter, tol, w_init
         self.whiten_solver, self.random_state, self.numeric_mode = whiten_solver, random_state, numeric_mode
+        self.device = device
 
     def fit_transform(self, X, y=None):
         """Fit the model and return the estimated sources.
@@ -892,7 +904,7 @@ class FastICA(_Base):
 # one-sided Jacobi SVD of decomposition/ (the eigh of the d x d Gram when
 # n < d). svd_method='randomized' takes the same exact route (sklearn's
 # randomized SVD is an approximation of it).
-class FactorAnalysis(_Base):
+class FactorAnalysis(_DeviceDoor, _Base):
     """Factor analysis: a linear Gaussian latent variable model.
 
     Follows scikit-learn's ``FactorAnalysis``, fitted by EM. Both
@@ -955,13 +967,18 @@ class FactorAnalysis(_Base):
     _mojolearn_native_public = True
 
     _parameters = ("n_components", "tol", "copy", "max_iter", "noise_variance_init", "svd_method",
-                   "iterated_power", "rotation", "random_state", "numeric_mode")
+                   "iterated_power", "rotation", "random_state", "numeric_mode", "device")
+    _device_door = "decomp"
 
     def __init__(self, n_components=None, *, tol=1e-2, copy=True, max_iter=1000, noise_variance_init=None,
-                 svd_method="randomized", iterated_power=3, rotation=None, random_state=0, numeric_mode=None):
+                 svd_method="randomized", iterated_power=3, rotation=None, random_state=0, numeric_mode=None,
+                 device=None):
+        if device is not None:
+            self._device_set(device)
         self.n_components, self.tol, self.copy, self.max_iter = n_components, tol, copy, max_iter
         self.noise_variance_init, self.svd_method, self.iterated_power = noise_variance_init, svd_method, iterated_power
         self.rotation, self.random_state, self.numeric_mode = rotation, random_state, numeric_mode
+        self.device = device
 
     def fit(self, X, y=None):
         """Fit the model with EM.
@@ -2232,7 +2249,7 @@ class MiniBatchSparsePCA(_BaseSparsePCA):
 # mini-batches go in row order, as sklearn with no shuffle does. A
 # scipy.sparse count matrix is densified (exact); the per-document cell
 # already skips zero counts.
-class LatentDirichletAllocation(_Base):
+class LatentDirichletAllocation(_DeviceDoor, _Base):
     """Latent Dirichlet allocation topic model, fitted by variational EM.
 
     Follows scikit-learn's ``LatentDirichletAllocation``. X is a
@@ -2317,18 +2334,22 @@ class LatentDirichletAllocation(_Base):
     _parameters = ("n_components", "doc_topic_prior", "topic_word_prior", "learning_method", "learning_decay",
                    "learning_offset", "max_iter", "batch_size", "evaluate_every", "total_samples", "perp_tol",
                    "mean_change_tol", "max_doc_update_iter", "random_state", "numeric_mode",
-                   "n_jobs", "verbose")
+                   "n_jobs", "verbose", "device")
+    _device_door = "decomp"
 
     def __init__(self, n_components=10, *, doc_topic_prior=None, topic_word_prior=None, learning_method="batch",
                  learning_decay=0.7, learning_offset=10.0, max_iter=10, batch_size=128, evaluate_every=-1,
                  total_samples=1e6, perp_tol=1e-1, mean_change_tol=1e-3, max_doc_update_iter=100, n_jobs=None,
-                 verbose=0, random_state=None, numeric_mode=None):
+                 verbose=0, random_state=None, numeric_mode=None, device=None):
+        if device is not None:
+            self._device_set(device)
         self.n_components, self.doc_topic_prior, self.topic_word_prior = n_components, doc_topic_prior, topic_word_prior
         self.learning_method, self.learning_decay, self.learning_offset = learning_method, learning_decay, learning_offset
         self.max_iter, self.batch_size, self.evaluate_every = max_iter, batch_size, evaluate_every
         self.total_samples, self.perp_tol, self.mean_change_tol = total_samples, perp_tol, mean_change_tol
         self.max_doc_update_iter, self.n_jobs, self.verbose = max_doc_update_iter, n_jobs, verbose
         self.random_state, self.numeric_mode = random_state, numeric_mode
+        self.device = device
 
     def fit(self, X, y=None):
         """Fit the topic model to a document-term matrix.

@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Lazy Bagging member materialization, reusing native clone and block copies.
 from std.python import Python, PythonObject
-from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_fields, py_get, py_setitem, py_contains
 from bindings.trees_boost_admission_unpack import boost_tree_admit
 from bindings.trees_boost_admission_pack import boost_admit
@@ -19,9 +18,12 @@ from bindings.trees_keys_unpack import trees_keys
 from bindings.py_balanced import py_item
 
 
-def bagging_members(model: PythonObject) raises -> PythonObject:
+def bagging_members(model: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`estimators_` of a bag fitted as one forest: its trees as members.
+    `context` is the bag's run context (its device route), handed by the
+    trees door: the members are built where the bag was fitted. (It was the
+    connection context read from the package module by name on every call.)"""
     var nk = trees_keys()
-    var context = py_item(py_fields(native_loaded_module("mojolearn._expansion_trees")), nk[].k__TREES_CONTEXT)
     var fields = boost_admit(model, context)
     var existing = py_get(fields, nk[].k__estimators)
     if existing is not None:
@@ -59,6 +61,10 @@ def bagging_members(model: PythonObject) raises -> PythonObject:
     var width = PythonObject(outputs)
     var kind = forest_kind(base, context)
     var template = forest_get_params(base, context) if count > 0 else PythonObject(None)
+    if count > 0:
+        # A member read back runs where the bag ran it (trees_public_boost
+        # `boost_member_device`; the fit checked the base's own device).
+        py_setitem(template, nk[].k_device, py_get(fields, nk[].k_device))
     # The constructor checks run once per call (lane ne2-b-members, N049):
     # every member is a clone of the one `base` with only its random_state
     # changed, so the first member is validated (`forest_refresh`, the full

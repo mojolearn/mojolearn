@@ -47,6 +47,10 @@ from x_cnn.door_run import (
     xcnn_run_copy_f32,
 )
 from bindings.xcnn_keys_unpack import xcnn_keys
+from core.device_route import DEVICE_INSTALL, device_route_plan, device_route_admit, device_cpu_absent
+from providers.python.device_route_boundary_door import (
+    DeviceRouteOwner, device_route_held, device_route_keep, device_request, device_admit_class, device_route_clear,
+)
 
 
 # ---------------------------------------------------------------- held names and exact types
@@ -103,6 +107,10 @@ comptime XK_CEIL_MODE = 35
 comptime XK_DIVISOR = 36
 comptime XK_NDARRAY = 37
 comptime XK_ADMISSION = 38
+comptime XK_CPU_BINDINGS = 39
+comptime XK_DEVICE = 40
+comptime XK_LABEL_BINDINGS = 41
+comptime XK_CPU_LABEL_BINDINGS = 42
 
 #: index of each exact builtin type in `_XcnnNames.types`
 comptime XT_TUPLE = 0
@@ -154,7 +162,8 @@ def _xcnn_names() raises -> UnsafePointer[_XcnnNames, MutAnyOrigin]:
                      "b", "shape", "h", "_host", "_base", "numeric_mode", "numerical_profile_", "numeric_mode_",
                      "_dev", "_xshape", "_idx_host", "_idx_dev", "_idx_shape", "_layer", "_pool_cache", "output_size",
                      "kernel_size", "stride", "padding", "dilation", "count_include_pad", "ceil_mode",
-                     "divisor_override", "ndarray", "admission_context"]:
+                     "divisor_override", "ndarray", "admission_context", "xcnn_cpu_bindings", "device",
+                     "xcnn_label_bindings", "xcnn_cpu_label_bindings"]:
             g[].keys.append(PythonObject(name))
     if len(g[].types) == 0:
         g[].types.append(_xcnn_type_address(Python.tuple()))
@@ -347,10 +356,25 @@ def xcnn_numpy(context: PythonObject) raises:
         raise Error("ImportError: CNN host arrays require NumPy; install NumPy to use this operation")
 
 
-def xcnn_entries(fields: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_Layer._binding()`: the connected `_mojolearn_x_cnn` entries of the
-    layer's mode (or the process default), with the identical-mode
-    numerical-profile check; records `numeric_mode_`."""
+def xcnn_mode_entries(fields: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The connected `_mojolearn_x_cnn` entries of the mode `fields` names
+    (or the process default), on this installation's device, with the
+    identical-mode numerical-profile check; records `numeric_mode_`. For an
+    operation with no layer (`to_device(x, numeric_mode=...)`); a layer's
+    operations take `xcnn_entries`."""
+    var identical = False
+    var key = _xcnn_mode_key(fields, context, identical)
+    var entries = _xcnn_table_entries(xcnn_item(context, XK_BINDINGS), key)
+    _xcnn_mode_records(fields, entries, key, identical, context)
+    return entries
+
+
+def _xcnn_mode_key(fields: PythonObject, context: PythonObject, mut identical: Bool) raises -> PythonObject:
+    """First part of `_Layer._binding()`: the mode word admitted and
+    answered. Returns the mode object the connected entries are read by (the
+    object `numeric_mode_` holds or equals); `identical` receives whether it
+    is the identical mode. Runs when a layer's route is resolved
+    (`xcnn_entries`), never per call."""
     # fx-rows (2026-11-18): every layer call ran this. The mode text is now
     # decoded once (it was decoded three to four times), the connected
     # entries' type is an exact-type test before the `isinstance` call, and
@@ -382,14 +406,30 @@ def xcnn_entries(fields: PythonObject, context: PythonObject) raises -> PythonOb
         raise Error("numeric_mode must be fast, identical or None")
     answer_mode_object(key, text, MODE_FAMILY_XCNN)
     answer_mode_word(text, MODE_FAMILY_XCNN)
-    var entries = py_item(xcnn_item(context, XK_BINDINGS), key)
+    identical = text == "identical"
+    return key
+
+
+def _xcnn_table_entries(table: PythonObject, key: PythonObject) raises -> PythonObject:
+    """The connected entries of mode `key` in `table` (the process set
+    `xcnn_bindings`, or the CPU images beside a GPU set `xcnn_cpu_bindings`);
+    an image that did not connect raises its recorded text."""
+    var entries = py_item(table, key)
     if xcnn_exact(entries, XT_STR):
         raise Error(String(py=entries))
     if not xcnn_exact(entries, XT_DICT):
         var b = xcnn_builtins()
         if Bool(py=py_call(b.isinstance, entries, b.str)):
             raise Error(String(py=entries))
-    if text == "identical":
+    return entries
+
+
+def _xcnn_mode_records(fields: PythonObject, entries: PythonObject, key: PythonObject, identical: Bool,
+                       context: PythonObject) raises:
+    """Last part of `_Layer._binding()`: the identical-mode numerical-profile
+    check of the layer against the image `entries` it will run (the image of
+    its device), and the `numeric_mode_` record."""
+    if identical:
         # API-shell metadata only: the arithmetic version the binding names,
         # kept on the model so state persistence cannot switch versions
         var current = xcnn_item(entries, XK_PROFILE)
@@ -407,9 +447,161 @@ def xcnn_entries(fields: PythonObject, context: PythonObject) raises -> PythonOb
             # equal to `previous` otherwise (checked above): written once
             xcnn_put(fields, XK_PROFILE_REC, current)
     var recorded = xcnn_get(fields, XK_MODE_REC)
-    if recorded is not key and (recorded is None or not xcnn_exact(recorded, XT_STR) or String(py=recorded) != text):
+    if recorded is not key and (recorded is None or not xcnn_exact(recorded, XT_STR)
+                                or not Bool(py=recorded == key)):
         xcnn_put(fields, XK_MODE_REC, key)
+
+
+# The family words of a layer's route (`DeviceRoute.flags`).
+comptime _XCNN_ROUTE_PROFILED = 1
+
+
+def _xcnn_route_build(requested_device: Int, mode: PythonObject, default_mode: PythonObject,
+    layer: PythonObject, fields: PythonObject, context: PythonObject) raises -> DeviceRouteOwner:
+    """Resolve a layer's x_cnn image once: the mode answer, the device rule
+    of `core/device_route.mojo`, then the profile check and the records
+    against the image of the layer's device (every check and record the
+    per-call selection made, in the same order on this installation's
+    device). `device="cpu"` beside a GPU set takes the CPU identical image
+    the bridge loaded at import (`xcnn_cpu_bindings`): its entries carry no
+    resident glue, so the layer runs the host path by itself and a tensor
+    resident on the GPU image is "not on this device" for it and is read
+    through its own module. The owner pins the entries (`images`), the mode
+    object recorded as `numeric_mode_` (`scope`), the image's numerical
+    profile (`table`) and the sequence image of the same device and mode
+    (`cls`: the classifier's label provider, or its connection error
+    text): a hit compares the layer's two records with the first two by
+    identity. A metadata step with no independent units to split."""
+    var owner = DeviceRouteOwner(requested_device)
+    var profiled = False
+    var key = _xcnn_mode_key(fields, context, profiled)
+    var entries = _xcnn_table_entries(xcnn_item(context, XK_BINDINGS), key)
+    var word = xcnn_get(entries, XK_NATIVE_KEY)
+    # The sequence image of the same device (CNNClassifier's label sort and
+    # whole-model program): the process set's, or the CPU image's on a CPU
+    # route beside a GPU set.
+    var labels = xcnn_get(context, XK_LABEL_BINDINGS)
+    if word is not None:
+        owner.route.mode = Int(py=xcnn_at(word, 0))
+        owner.route.vendor = Int(py=xcnn_at(word, 1))
+        var plan = device_route_plan(requested_device, owner.route.vendor, owner.route.mode)
+        if plan.cpu_table:
+            var cpu = xcnn_get(context, XK_CPU_BINDINGS)
+            if cpu is None:
+                device_cpu_absent(String(py_type(layer).__name__),
+                                  "its CPU images are not connected in this installation")
+            entries = _xcnn_table_entries(cpu, key)
+            var cpu_word = xcnn_get(entries, XK_NATIVE_KEY)
+            if cpu_word is None:
+                raise Error("ImportError: mojolearn: the x_cnn binding publishes no native entry table")
+            var selected = owner.route.mode
+            owner.route.mode = Int(py=xcnn_at(cpu_word, 0))
+            owner.route.vendor = Int(py=xcnn_at(cpu_word, 1))
+            device_route_admit("CNN", plan, owner.route.mode, owner.route.vendor, selected)
+            labels = xcnn_get(context, XK_CPU_LABEL_BINDINGS)
+        owner.route.device = plan.device
+    elif requested_device != DEVICE_INSTALL:
+        raise Error("ImportError: mojolearn: the x_cnn binding publishes no native entry table")
+    _xcnn_mode_records(fields, entries, key, profiled, context)
+    var profile = PythonObject(None)
+    if profiled:
+        owner.route.flags = _XCNN_ROUTE_PROFILED
+        profile = xcnn_item(entries, XK_PROFILE)
+        # A restored layer holds an equal profile str of its own: store the
+        # image's object, so later calls compare by identity (same value).
+        if profile is not None and xcnn_get(fields, XK_PROFILE_REC) is not profile:
+            xcnn_put(fields, XK_PROFILE_REC, profile)
+    # Likewise the mode record: the object the entries were read by.
+    if xcnn_get(fields, XK_MODE_REC) is not key:
+        xcnn_put(fields, XK_MODE_REC, key)
+    owner.mode = mode
+    owner.default_mode = default_mode
+    owner.context = context
+    owner.images = entries
+    owner.scope = key
+    owner.table = profile
+    if labels is not None:
+        owner.cls = py_get(labels, key)
+    owner.resolved = True
+    return owner^
+
+
+def _xcnn_route(layer: PythonObject, fields: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The layer's resolved route owner (`DeviceRouteOwner`): held, or
+    resolved in full and stored. `fields` is the layer's instance dictionary.
+
+    A hit is the mode read, the default-mode read, one record read, three
+    pointer compares, and the identity compares of the layer's recorded
+    profile (identical mode) and `numeric_mode_` with the route's pins. A
+    miss (first operation, another mode object, a changed process default,
+    restored or replaced records, a new `__init__`) resolves in full
+    (`_xcnn_route_build`: the same refusals in the same order, the same
+    records) and stores the route. No operation reads or compares the
+    device."""
+    # dw-neural-b (2026-11-21): every layer call decoded the mode text,
+    # answered it twice, read the bindings table by it, type-tested the
+    # entries and read the image's profile. Neighboring shapes: any layer of
+    # the family, any input; nothing here is keyed on a layer kind or shape.
+    var mode = xcnn_get(fields, XK_NUMERIC_MODE)
+    var default_mode = xcnn_item(xcnn_item(context, XK_BACKEND_FIELDS), XK_DEFAULT_MODE)
+    # A mode value that is neither None nor an exact str is admitted and
+    # truth-tested at every call, as it always was: it never takes the hit.
+    if mode is None or xcnn_exact(mode, XT_STR):
+        var held = device_route_held(layer, mode, default_mode, context)
+        if held is not None:
+            var native = held.downcast_value_ptr[DeviceRouteOwner]()
+            if (xcnn_get(fields, XK_MODE_REC) is native[].scope
+                    and (native[].route.flags != _XCNN_ROUTE_PROFILED
+                         or xcnn_get(fields, XK_PROFILE_REC) is native[].table)):
+                return held
+    var device = device_request(fields, xcnn_builtins())
+    return device_route_keep(layer, _xcnn_route_build(device, mode, default_mode, layer, fields, context))
+
+
+def xcnn_entries(layer: PythonObject, fields: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`_Layer._binding()`: the connected `_mojolearn_x_cnn` entries of the
+    layer's numeric mode and device, from the layer's one route
+    (`_xcnn_route`)."""
+    var owner = _xcnn_route(layer, fields, context)
+    var entries = owner.downcast_value_ptr[DeviceRouteOwner]()[].images
+    _ = owner  # the route's pins keep the entries until the copy above is held
     return entries
+
+
+def xcnn_labels(layer: PythonObject, fields: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The sequence image of the layer's numeric mode and device (the label
+    provider CNNClassifier's fit and predict run on), its connection error
+    text, or None where none is connected; from the layer's one route, with
+    every check and record of `xcnn_entries`."""
+    var owner = _xcnn_route(layer, fields, context)
+    var labels = owner.downcast_value_ptr[DeviceRouteOwner]()[].cls
+    _ = owner  # the route's pins keep the provider until the copy above is held
+    return labels
+
+
+def xcnn_device_init(layer: PythonObject, fields: PythonObject, value: PythonObject,
+                     context: PythonObject) raises:
+    """A layer constructor's `device` (None, 'gpu' or 'cpu'): checked by the
+    shared admission where it is given, before the constructor publishes a
+    field (an unknown value, 'gpu' on a CPU-only installation, and 'cpu'
+    beside a GPU set for a class the family's table does not answer True
+    for, are refused in the shared words), then stored, and the layer's
+    route dropped (a constructor run again on a live layer resolves again).
+    The one place the value is checked; operations read it only when a route
+    is resolved. The default None is one identity compare."""
+    if value is not None:
+        device_admit_class(layer, value,
+                           py_get(xcnn_item(context, XK_BACKEND_FIELDS), PythonObject("_CPU_ONLY")) is not None,
+                           py_get(context, PythonObject("xcnn_device_cpu")), xcnn_builtins())
+    xcnn_put(fields, XK_DEVICE, value)
+    device_route_clear(layer)
+
+
+def xcnn_device_inherit(child_fields: PythonObject, parent_fields: PythonObject) raises:
+    """A child layer a composite builds without its constructor takes its
+    parent's `device` (already checked at the parent's constructor), where
+    it takes its parent's `numeric_mode`."""
+    xcnn_put(child_fields, XK_DEVICE, xcnn_get(parent_fields, XK_DEVICE))
 
 
 def xcnn_key(entries: PythonObject) raises -> XcnnEntryKey:
@@ -977,6 +1169,14 @@ def xcnn_module_entries(module: PythonObject, context: PythonObject) raises -> P
             if Bool(py=py_call(b.isinstance, entries, b.str)):
                 continue
         if xcnn_item(entries, XK_MODULE) is module:
+            return entries
+    # Only after the process set missed (nothing added for a tensor of the
+    # installation's device): the CPU image of a `device="cpu"` layer beside
+    # a GPU set.
+    var cpu = xcnn_get(context, XK_CPU_BINDINGS)
+    if cpu is not None:
+        var entries = xcnn_get(cpu, XK_IDENTICAL)
+        if entries is not None and xcnn_exact(entries, XT_DICT) and xcnn_item(entries, XK_MODULE) is module:
             return entries
     raise Error("RuntimeError: a DeviceTensor of a binding this process did not connect")
 

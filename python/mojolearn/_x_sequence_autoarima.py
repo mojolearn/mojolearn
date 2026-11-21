@@ -83,8 +83,10 @@ class AutoARIMA(ParamsMixin):
     # bindings/tsa_public_native_door.mojo), so no `_mode` class-creation wrappers are installed.
     _mojolearn_native_public = True
 
-    def __init__(self, endog):
-        _TSA(self, "autoarima_initialize", (endog,), _TSA_CONTEXT)
+    def __init__(self, endog, device=None):
+        # `device`: None (this installation's device), "gpu" or "cpu"; checked
+        # by the native constructor, read once into the estimator's route.
+        _TSA(self, "autoarima_initialize", (endog, device), _TSA_CONTEXT)
 
     def search(self, s=None, d=range(3), D=range(2), p=range(1, 4), q=range(1, 4), P=range(3), Q=range(3),
                fit_intercept="auto", ic="aicc", test="kpss", seasonal_test="seas", h=1e-8, maxiter=20,

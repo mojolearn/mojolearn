@@ -8,7 +8,7 @@
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
-from bindings.xseq_native_common_door import xseq_key, xseq_base, xseq_addr, xseq_column_i64
+from bindings.xseq_native_common_door import xseq_route_of, xseq_base, xseq_addr, xseq_column_i64
 from core.entry_table import EntryRef
 from sequence.xseq_prophet_run import (
     ProphetPredictRequest, prophet_run_days, prophet_run_features, prophet_run_parameter_count,
@@ -241,11 +241,13 @@ def prophet_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
     var b = _b()
     var original = prophet_fields(model, context)
     var fields = _state(original, context)
-    var key = xseq_key(fields, context)
+    # The model's one route (resolved once); the device is read from the
+    # model's own fields on a miss, the mode object is the one `_state` copied.
+    var nk = xseq_keys()
+    var key = xseq_route_of(model, py_get(fields, nk[].k_numeric_mode), original, context).glue
     var t_owner = PythonObject(None)
     var t = _times(args[0], context, t_owner)
     var y = prophet_source(args[1], context)
-    var nk = xseq_keys()
     var y_float64 = Bool(py=y.dtype == py_item(context, nk[].k_float64))
     var rank = Int(py=y.ndim)
     var one = rank == 1
@@ -346,7 +348,7 @@ def prophet_predict(model: PythonObject, args: PythonObject, context: PythonObje
         py_setitem(fields, stored[i], prophet_contiguous(value, False, context))
     prophet_run_check_ranks(Int(py=py_item(fields, nk[].k_params_).ndim), Int(py=py_item(fields, nk[].k_info_).ndim),
                             Int(py=py_item(fields, nk[].k_changepoints_t_).ndim))
-    var key = xseq_key(fields, context)
+    var key = xseq_route_of(model, py_get(fields, nk[].k_numeric_mode), original, context).glue
     var days = _days(args[0], key, context)[0]
     var M = len(days)
     # lane ne1-a-decomp-tsa (N032): with `prophet_predict_days` the scaled

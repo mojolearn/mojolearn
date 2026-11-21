@@ -47,8 +47,10 @@ from x_prep.prep_stateless_native_run import (
 from bindings.p3_prep_fitted_unpack import prep_fitted_vector
 from bindings.scaler_lifecycle_native_door import _entries
 from bindings.prep_entry_cache_unpack import prep_entry_word
-from bindings.x_prep_native_owner_door import xprep_storage, xprep_take, xprep_values, xprep_run
-from bindings.x_prep_native_owner_run import xprep_r3
+from bindings.x_prep_native_owner_door import xprep_storage, xprep_take, xprep_values, xprep_run_caps
+from bindings.x_prep_native_owner_run import xprep_r3, XprepCaps
+from bindings.prep_stateless_route_unpack import stateless_route_context, stateless_entries, stateless_caps
+from core.entry_table import entry_ref_unresolved
 from bindings.py_typed_call import py_call_typed
 from bindings.py_cpython_table import cpython_table
 from bindings.prep_support_native_pack import prep_support
@@ -76,6 +78,14 @@ def _kind(model: PythonObject, context: PythonObject) raises -> String:
         if kind is not None:
             return String(kind)
     raise Error("TypeError: the native prep owner does not serve this class")
+
+
+def _has_out(caps: XprepCaps, entries: PythonObject) raises -> Bool:
+    # The image's output-region capability: the estimator's route answers it
+    # (no dictionary read); a selection no route holds reads it by name.
+    if caps.held:
+        return caps.has_out
+    return py_get(entries, "x_prep_run_out") is not None
 
 
 def _name(model: PythonObject) raises -> String:
@@ -188,7 +198,8 @@ def _transform(model: PythonObject, kind: String, values: PythonObject, context:
     var fitted = fields["n_features_in_"]
     if py_type(fitted) is not native_loaded_module("builtins").int or Int(py=fitted) != d:
         raise Error("mojolearn: X has " + String(d) + " features, " + _name(model) + " was fitted with " + String(py_call(native_loaded_module("builtins").str, fitted)))
-    var entries = _entries(fields["numeric_mode_"], context)
+    var entries = stateless_entries(model, fields["numeric_mode_"], context)
+    var caps = stateless_caps(model, entries)
     var inputs = Python.list(Python.tuple(0, values))
     var program = List[Int32]()
     if kind == "binarizer":
@@ -203,7 +214,7 @@ def _transform(model: PythonObject, kind: String, values: PythonObject, context:
             raise Error("ValueError: x_prep: the program exceeds the native Int32 indexing bound")
         _stage(program, OP_BINARIZE, n * d, 0, n * d, n * d, out)
         var arena = xprep_storage(host, context)
-        xprep_run(arena, host, 0, PythonObject(None), 0, program^, inputs, entries, context)
+        xprep_run_caps(arena, host, 0, PythonObject(None), 0, program^, inputs, entries, context, caps)
         var result = xprep_take(arena[0], out, n, d, context["output_context"])
         _ = threshold^
         _ = arena^
@@ -213,14 +224,14 @@ def _transform(model: PythonObject, kind: String, values: PythonObject, context:
         var words = n * d
         # TOMBSTONE: MOJOLEARN_XPREP_FAST_OUT_OFF (NOISE: B kept large outputs as host words on a binding with an output region; A/B abn9 NVIDIA L40S, 48 cells 0.91-1.13 arm/base, median 1.00) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
         # Restore: git apply experiments/removed/MOJOLEARN_XPREP_FAST_OUT_OFF.patch; record in docs/TOMBSTONES.md.
-        var dev_out = words >= OUT_MIN_WORDS and py_get(entries, "x_prep_run_out") is not None
+        var dev_out = words >= OUT_MIN_WORDS and _has_out(caps, entries)
         var host = words + (0 if dev_out else words)
         if host + (words if dev_out else 0) > 2147483647:
             raise Error("ValueError: x_prep: the program exceeds the native Int32 indexing bound")
         var arena = xprep_storage(host, context)
         var output_store = xprep_storage(words, context) if dev_out else PythonObject(None)
         _stage(program, OP_NORMALIZE, n, 0, n, d, code, host if dev_out else words)
-        xprep_run(arena, host, 0, output_store, words if dev_out else 0, program^, inputs, entries, context, words if dev_out else 0)
+        xprep_run_caps(arena, host, 0, output_store, words if dev_out else 0, program^, inputs, entries, context, caps, words if dev_out else 0)
         var result = xprep_take(output_store[0] if dev_out else arena[0], 0 if dev_out else words, n, d, context["output_context"])
         _ = arena^
         return result
@@ -238,7 +249,7 @@ def _transform(model: PythonObject, kind: String, values: PythonObject, context:
     var transpose = fortran and words > 0
     # TOMBSTONE: MOJOLEARN_XPREP_FAST_OUT_OFF (NOISE: B kept large outputs as host words on a binding with an output region; A/B abn9 NVIDIA L40S, 48 cells 0.91-1.13 arm/base, median 1.00) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
     # Restore: git apply experiments/removed/MOJOLEARN_XPREP_FAST_OUT_OFF.patch; record in docs/TOMBSTONES.md.
-    var dev_out = transpose and words >= OUT_MIN_WORDS and py_get(entries, "x_prep_run_out") is not None
+    var dev_out = transpose and words >= OUT_MIN_WORDS and _has_out(caps, entries)
     var host = out + words + (words if transpose and not dev_out else 0)
     if host + (words if dev_out else 0) > 2147483647:
         raise Error("ValueError: x_prep: the program exceeds the native Int32 indexing bound")
@@ -250,7 +261,7 @@ def _transform(model: PythonObject, kind: String, values: PythonObject, context:
         _stage(program, OP_TRANSPOSE, words, out, n, nout, host if dev_out else fo)
     var arena = xprep_storage(host, context)
     var output_store = xprep_storage(words, context) if dev_out else PythonObject(None)
-    xprep_run(arena, host, 0, output_store, words if dev_out else 0, program^, inputs, entries, context, words if dev_out else 0)
+    xprep_run_caps(arena, host, 0, output_store, words if dev_out else 0, program^, inputs, entries, context, caps, words if dev_out else 0)
     var result = PythonObject(None)
     if transpose:
         result = _take_f(output_store[0] if dev_out else arena[0], 0 if dev_out else fo, n, nout, context)
@@ -292,7 +303,8 @@ def _variance_fit(model: PythonObject, values: PythonObject, context: PythonObje
     var n = Int(py=values[3])
     var d = Int(py=values[4])
     var mode = context["backend_fields"]["_DEFAULT_MODE"]
-    var entries = _entries(mode, context)
+    var entries = stateless_entries(model, mode, context)
+    var caps = stateless_caps(model, entries)
     var threshold = fields["threshold"]
     var layout = PrepLayout(n * d, xprep_r3("work"))
     var program = List[Int32]()
@@ -302,7 +314,7 @@ def _variance_fit(model: PythonObject, values: PythonObject, context: PythonObje
     var limit = placed[2]
     var words = _f64_input(threshold, context)
     var inputs = Python.list(Python.tuple(0, values), Python.tuple(limit, Python.tuple(0, words, PythonObject(None), 2, 1)))
-    var arena = _run_layout(program^, layout, inputs, entries, context)
+    var arena = _run_layout(program^, layout, inputs, entries, context, caps)
     py_setitem(fields, "variances_", xprep_take(arena[0], variance, d, 0, context["output_context"]))
     var base = F32P(unsafe_from_address=Int(py=arena[1]))
     var support = Python.list()
@@ -350,10 +362,8 @@ def _support_columns(mask_value: PythonObject) raises -> List[Int]:
     return keep^
 
 
-def _select_transform(model: PythonObject, values: PythonObject, context: PythonObject) raises -> PythonObject:
-    """_SelectorMixin.transform: the fitted support's columns of X, by one
-    gather_cols stage."""
-    var fields = py_fields(model)
+def _select_keep(model: PythonObject, fields: PythonObject, values: PythonObject) raises -> List[Int]:
+    """The fitted checks of a selector's transform and its kept columns."""
     if not py_contains(fields, "n_features_in_"):
         raise Error("RuntimeError: mojolearn: this " + _name(model) + " instance is not fitted yet")
     var d = Int(py=values[4])
@@ -363,17 +373,45 @@ def _select_transform(model: PythonObject, values: PythonObject, context: Python
     var keep = _support_columns(fields["_mask"])
     if len(keep) == 0:
         raise Error("mojolearn: no features were selected")
+    return keep^
+
+
+def _select_transform(model: PythonObject, values: PythonObject, context: PythonObject) raises -> PythonObject:
+    """_SelectorMixin.transform: the fitted support's columns of X, by one
+    gather_cols stage. The form of the other prep doors (their own context,
+    no stateless route): the selection is made per call, as before."""
+    var fields = py_fields(model)
+    var keep = _select_keep(model, fields, values)
     return _select_gather(fields, values, _words(keep, context), len(keep), context)
+
+
+def _select_transform_routed(model: PythonObject, values: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`_select_transform` of the stateless door: the selection and the
+    image's capabilities come from the estimator's device route."""
+    var fields = py_fields(model)
+    var keep = _select_keep(model, fields, values)
+    var entries = stateless_entries(model, fields["numeric_mode_"], context)
+    return _select_gather_run(entries, stateless_caps(model, entries), values, _words(keep, context), len(keep), context)
 
 
 def _select_gather(fields: PythonObject, values: PythonObject, columns: PythonObject, k: Int,
                    context: PythonObject) raises -> PythonObject:
     """The gather of `_select_transform` with the kept columns given as
     index words (`_words`): RFE passes the words it stored at fit
-    (`_support_words_`), so a predict reads no support mask."""
+    (`_support_words_`), so a predict reads no support mask. The form of a
+    caller that holds no estimator: the selection and the image's
+    capabilities are read here, per call."""
+    return _select_gather_run(_entries(fields["numeric_mode_"], context),
+                              XprepCaps(False, entry_ref_unresolved(), False, False, False, False),
+                              values, columns, k, context)
+
+
+def _select_gather_run(entries: PythonObject, caps: XprepCaps, values: PythonObject, columns: PythonObject, k: Int,
+                       context: PythonObject) raises -> PythonObject:
+    """One gather_cols stage over `entries`, with the image's capabilities
+    from the caller's route (`caps.held`) or read by the run."""
     var n = Int(py=values[3])
     var d = Int(py=values[4])
-    var entries = _entries(fields["numeric_mode_"], context)
     var ko = n * d
     var out = ko + k
     var host = out + n * k
@@ -383,7 +421,7 @@ def _select_gather(fields: PythonObject, values: PythonObject, columns: PythonOb
     _stage(program, OP_GATHER_COLS, n * k, 0, n, d, ko, k, out)
     var inputs = Python.list(Python.tuple(0, values), Python.tuple(ko, Python.tuple(0, columns, PythonObject(None), k, 1)))
     var arena = xprep_storage(host, context)
-    xprep_run(arena, host, 0, PythonObject(None), 0, program^, inputs, entries, context)
+    xprep_run_caps(arena, host, 0, PythonObject(None), 0, program^, inputs, entries, context, caps)
     var result = xprep_take(arena[0], out, n, k, context["output_context"])
     _ = columns  # keep the Python object alive through the native call above
     _ = arena^
@@ -391,14 +429,15 @@ def _select_gather(fields: PythonObject, values: PythonObject, columns: PythonOb
 
 
 def _run_layout(var program: List[Int32], layout: PrepLayout, inputs: PythonObject, entries: PythonObject,
-                context: PythonObject) raises -> PythonObject:
+                context: PythonObject, caps: XprepCaps) raises -> PythonObject:
     # One run of a program laid out by `PrepLayout`; returns the arena.
     if layout.host + layout.scratch > 2147483647:
         raise Error("ValueError: x_prep: the program exceeds the native Int32 indexing bound")
     _place_scratch(program, layout.host)
-    var device_scratch = layout.scratch > 0 and (py_get(entries, "x_prep_run_out") is not None or py_get(entries, "x_prep_run_scratch") is not None)
+    var device_scratch = layout.scratch > 0 and ((caps.has_out or caps.has_scratch) if caps.held else (
+        py_get(entries, "x_prep_run_out") is not None or py_get(entries, "x_prep_run_scratch") is not None))
     var arena = xprep_storage(layout.host + (0 if device_scratch else layout.scratch), context)
-    xprep_run(arena, layout.host, layout.scratch, PythonObject(None), 0, program^, inputs, entries, context)
+    xprep_run_caps(arena, layout.host, layout.scratch, PythonObject(None), 0, program^, inputs, entries, context, caps)
     return arena
 
 
@@ -423,7 +462,8 @@ def _quantile_fit(model: PythonObject, values: PythonObject, context: PythonObje
     var d = Int(py=values[4])
     var n = n_all
     var mode = context["backend_fields"]["_DEFAULT_MODE"]
-    var entries = _entries(mode, context)
+    var entries = stateless_entries(model, mode, context)
+    var caps = stateless_caps(model, entries)
     var subsample = fields["subsample"]
     var permute = subsample is not None and n_all > Int(py=py_call(b.int, subsample))
     var seed = PythonObject(None)
@@ -461,7 +501,7 @@ def _quantile_fit(model: PythonObject, values: PythonObject, context: PythonObje
     var qt = placed[3]
     var level = _vector(Float64(nq - 1), context)
     _ = py_call(inputs.append, Python.tuple(nb, Python.tuple(0, level, PythonObject(None), 1, 1)))
-    var arena = _run_layout(program^, layout, inputs, entries, context)
+    var arena = _run_layout(program^, layout, inputs, entries, context, caps)
     py_setitem(fields, "_q", xprep_take(arena[0], qo, nq * d, 0, context["output_context"]))
     py_setitem(fields, "quantiles_", xprep_take(arena[0], qt, nq, d, context["output_context"]))
     py_setitem(fields, "references_", xprep_take(arena[0], grid, nq, 0, context["output_context"]))
@@ -484,7 +524,8 @@ def _quantile_apply(model: PythonObject, values: PythonObject, inverse: Bool, co
     var fitted = fields["n_features_in_"]
     if py_type(fitted) is not native_loaded_module("builtins").int or Int(py=fitted) != d:
         raise Error("mojolearn: X has " + String(d) + " features, " + _name(model) + " was fitted with " + String(py_call(native_loaded_module("builtins").str, fitted)))
-    var entries = _entries(fields["numeric_mode_"], context)
+    var entries = stateless_entries(model, fields["numeric_mode_"], context)
+    var caps = stateless_caps(model, entries)
     var nq = Int(py=fields["n_quantiles_"])
     var quantiles = prep_fitted_vector(fields["_q"], context)  # exact fitted Array: no re-admission (p3-prep)
     var references = prep_fitted_vector(fields["references_"], context)
@@ -497,7 +538,7 @@ def _quantile_apply(model: PythonObject, values: PythonObject, inverse: Bool, co
     var out = ro + nq
     # TOMBSTONE: MOJOLEARN_XPREP_FAST_OUT_OFF (NOISE: B kept large outputs as host words on a binding with an output region; A/B abn9 NVIDIA L40S, 48 cells 0.91-1.13 arm/base, median 1.00) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
     # Restore: git apply experiments/removed/MOJOLEARN_XPREP_FAST_OUT_OFF.patch; record in docs/TOMBSTONES.md.
-    var dev_out = words >= OUT_MIN_WORDS and py_get(entries, "x_prep_run_out") is not None
+    var dev_out = words >= OUT_MIN_WORDS and _has_out(caps, entries)
     var host = out + (0 if dev_out else words)
     if host + (words if dev_out else 0) > 2147483647:
         raise Error("ValueError: x_prep: the program exceeds the native Int32 indexing bound")
@@ -508,7 +549,7 @@ def _quantile_apply(model: PythonObject, values: PythonObject, inverse: Bool, co
     _stage(program, OP_QT_INVERSE if inverse else OP_QT_APPLY, words, 0, n, d, qo, nq, ro, 1 if normal else 0, out)
     var arena = xprep_storage(host, context)
     var output_store = xprep_storage(words, context) if dev_out else PythonObject(None)
-    xprep_run(arena, host, 0, output_store, words if dev_out else 0, program^, inputs, entries, context, words if dev_out else 0)
+    xprep_run_caps(arena, host, 0, output_store, words if dev_out else 0, program^, inputs, entries, context, caps, words if dev_out else 0)
     var result = xprep_take(output_store[0] if dev_out else arena[0], 0 if dev_out else out, n, d, context["output_context"])
     _ = quantiles^
     _ = references^
@@ -545,7 +586,8 @@ def _power_fit(model: PythonObject, values: PythonObject, context: PythonObject)
     var method = 1 if String(method_name) == "box-cox" else 0
     var standardize = Bool(py=fields["standardize"])
     var mode = context["backend_fields"]["_DEFAULT_MODE"]
-    var entries = _entries(mode, context)
+    var entries = stateless_entries(model, mode, context)
+    var caps = stateless_caps(model, entries)
     var layout = PrepLayout(n * d, xprep_r3("work"))
     var program = List[Int32]()
     var host = py_get(entries, "x_prep_host_column") is not None
@@ -559,7 +601,7 @@ def _power_fit(model: PythonObject, values: PythonObject, context: PythonObject)
     var mean = placed[4]
     var scale = placed[5]
     var centered = placed[6]
-    var arena = _run_layout(program^, layout, Python.list(Python.tuple(0, values)), entries, context)
+    var arena = _run_layout(program^, layout, Python.list(Python.tuple(0, values)), entries, context, caps)
     var base = F32P(unsafe_from_address=Int(py=arena[1]))
     if method == 1:
         for j in range(d):  # driver-loop: over the per-column minima (feature metadata)
@@ -589,7 +631,8 @@ def _power_apply(model: PythonObject, values: PythonObject, inverse: Bool, conte
     var fitted = fields["n_features_in_"]
     if py_type(fitted) is not native_loaded_module("builtins").int or Int(py=fitted) != d:
         raise Error("mojolearn: X has " + String(d) + " features, " + _name(model) + " was fitted with " + String(py_call(native_loaded_module("builtins").str, fitted)))
-    var entries = _entries(fields["numeric_mode_"], context)
+    var entries = stateless_entries(model, fields["numeric_mode_"], context)
+    var caps = stateless_caps(model, entries)
     var standardize = Bool(py=fields["standardize"])
     var words = n * d
     var inputs = Python.list(Python.tuple(0, values))
@@ -613,7 +656,7 @@ def _power_apply(model: PythonObject, values: PythonObject, inverse: Bool, conte
         _ = py_call(inputs.append, Python.tuple(so, Python.tuple(0, scale, PythonObject(None), d, 1)))
     # TOMBSTONE: MOJOLEARN_XPREP_FAST_OUT_OFF (NOISE: B kept large outputs as host words on a binding with an output region; A/B abn9 NVIDIA L40S, 48 cells 0.91-1.13 arm/base, median 1.00) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
     # Restore: git apply experiments/removed/MOJOLEARN_XPREP_FAST_OUT_OFF.patch; record in docs/TOMBSTONES.md.
-    var dev_out = words >= OUT_MIN_WORDS and py_get(entries, "x_prep_run_out") is not None
+    var dev_out = words >= OUT_MIN_WORDS and _has_out(caps, entries)
     var out = host
     if not dev_out:
         host += words
@@ -639,7 +682,7 @@ def _power_apply(model: PythonObject, values: PythonObject, inverse: Bool, conte
     _stage(program, OP_PT_INVERSE if inverse else OP_PT_APPLY, words, 0, n, d, lo, Int(py=fields["_method"]), mo, so, out, ao, ko)
     var arena = xprep_storage(host, context)
     var output_store = xprep_storage(words, context) if dev_out else PythonObject(None)
-    xprep_run(arena, host, 0, output_store, words if dev_out else 0, program^, inputs, entries, context, words if dev_out else 0)
+    xprep_run_caps(arena, host, 0, output_store, words if dev_out else 0, program^, inputs, entries, context, caps, words if dev_out else 0)
     var result = xprep_take(output_store[0] if dev_out else arena[0], 0 if dev_out else out, n, d, context["output_context"])
     _ = lambdas^
     _ = mean^
@@ -663,7 +706,7 @@ def _stateless_dispatch(model: PythonObject, kind: String, operation: String, ar
         var fields = py_fields(model)
         if not py_contains(fields, "n_features_in_"):
             raise Error("RuntimeError: mojolearn: this " + _name(model) + " instance is not fitted yet")
-        var values = xprep_values(args[0], _entries(fields["numeric_mode_"], context), context)
+        var values = xprep_values(args[0], stateless_entries(model, fields["numeric_mode_"], context), context)
         result = _quantile_apply(model, values, True, context) if kind == "quantile" else _power_apply(model, values, True, context)
         _ = values^
     elif operation == "fit" or operation == "fit_transform" or operation == "transform":
@@ -673,14 +716,14 @@ def _stateless_dispatch(model: PythonObject, kind: String, operation: String, ar
             if not py_contains(fields, "n_features_in_"):
                 raise Error("RuntimeError: mojolearn: this " + _name(model) + " instance is not fitted yet")
             mode = fields["numeric_mode_"]
-        var values = xprep_values(args[0], _entries(mode, context), context)
+        var values = xprep_values(args[0], stateless_entries(model, mode, context), context)
         var selector = kind == "variance_threshold" or kind == "selector"
         if operation == "transform" and kind == "quantile":
             result = _quantile_apply(model, values, False, context)
         elif operation == "transform" and kind == "power":
             result = _power_apply(model, values, False, context)
         elif operation == "transform":
-            result = _select_transform(model, values, context) if selector else _transform(model, kind, values, context)
+            result = _select_transform_routed(model, values, context) if selector else _transform(model, kind, values, context)
         elif kind == "selector":
             raise Error("TypeError: this selector's fit is not a native stateless operation")
         else:
@@ -700,7 +743,7 @@ def _stateless_dispatch(model: PythonObject, kind: String, operation: String, ar
                 elif kind == "power":
                     result = _power_apply(model, values, False, context)
                 else:
-                    result = _select_transform(model, values, context) if selector else _transform(model, kind, values, context)
+                    result = _select_transform_routed(model, values, context) if selector else _transform(model, kind, values, context)
         _ = values^
     else:
         raise Error("unknown native stateless prep operation")
@@ -716,7 +759,13 @@ def prep_stateless_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> Py
         var model = call[0]
         var operation = String(call[1])
         var args = call[2]
-        var context = prep_operation_context(call[3])
+        # The template of the estimator's device route (resolved once per
+        # estimator; a hit is one record read and one pointer compare). The
+        # door reads no device and no process vendor.
+        # get_support reads fitted metadata only: it runs on the
+        # installation's template and reads no route, as before.
+        var context = (prep_operation_context(call[3], False) if operation == "get_support"
+                       else stateless_route_context(model, call[3], b))
         classical_connect_numpy(context)
         var kind = _kind(model, context)
         # Every public method except Normalizer's (its own lifecycle,

@@ -3,7 +3,7 @@
 # reached from bindings/family_native.mojo for every `family_cfb_*` operation.
 from std.python import Python, PythonObject
 from bindings.classical_attributes_door import classical_connect_numpy
-from bindings.cfb_dbscan_door import cfb_dbscan_operation
+from bindings.dbscan_public_native_pack import cfb_dbscan_operation
 from bindings.cfb_agglo_door import cfb_agglo_operation
 from bindings.cfb_spectral_door import cfb_spectral_operation
 from bindings.operation_names_cfb import (

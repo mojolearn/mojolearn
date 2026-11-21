@@ -13,7 +13,7 @@ from core.shared_slot import SharedSlot
 from bindings.classical_arrays_door import classical_address, classical_wrap_layout
 from bindings.native_array_storage_door import native_array_zeros
 from bindings.p3nc_fitted_freeze_unpack import fitted_is_freezable, fitted_freeze
-from bindings.dbscan_native_boundary_door import DBSCANConnection
+from bindings.dbscan_native_boundary_unpack import DBSCANConnection
 from providers.python.compiled_binding_snapshot_pyapi_door import CompiledBindingSnapshot
 from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider, neural_descriptor_connect_once
 from providers.python.hierarchy_solver_descriptor_pyapi_pack import hierarchy_solver_admit

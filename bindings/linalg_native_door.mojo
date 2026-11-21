@@ -36,6 +36,10 @@ from bindings.native_owner_lifetime_door import native_release_admit
 from bindings.linalg_keys_unpack import linalg_keys, LinalgKeys
 from bindings.py_balanced import py_item
 from bindings.mode_answer_door import fast_answers_compiled_code
+from providers.python.device_route_boundary_door import (
+    device_binding_held, device_binding_device, device_admit, device_route_clear,
+)
+from core.device_route import DEVICE_CPU
 from core.mode_answer import MODE_FAMILY_LINALG
 from bindings.operation_names_chol import (
     CHOL_OPN_FAMILY_CHOL_INITIALIZE, CHOL_OPN_FAMILY_CHOL_LOGDET, CHOL_OPN_FAMILY_CHOL_BINDING,
@@ -44,10 +48,45 @@ from bindings.operation_names_chol import (
     CHOL_OPN_FAMILY_CHOL_PAR_SOLVE)
 
 
-def _chol_binding(model: PythonObject, context: PythonObject) raises -> PythonObject:
+@fieldwise_init
+struct CholImage(Movable):
+    """The compiled image of one Cholesky estimator: the GP device image
+    (`gp`: it links every cholesky kernel; readers `gp_*`) or the linalg CPU
+    image (readers `linalg_*`), from the estimator's binding route."""
+    var module: PythonObject
+    var gp: Bool
+
+
+def _chol_image(model: PythonObject, context: PythonObject) raises -> CholImage:
+    """The estimator's image, from its binding route
+    (providers/python/device_route_boundary_door.mojo). The route holds the
+    module under the name it was resolved by: `_mojolearn_gp` on a device
+    route, `_mojolearn_linalg` on a CPU route (a CPU-only installation, or
+    `device="cpu"` beside a device set: the CPU identical module connected at
+    import, `_mojolearn_linalg_host`). A hit is one or two held-binding reads
+    (record read, name and pointer compares); the process is not asked which
+    set it is and the device is not read. A miss (first operation, a changed
+    mode object, after `__init__` or `set_params`) reads the device once,
+    picks the name from it and resolves through the shared estimator door."""
     var nk = linalg_keys()
-    var name = "_mojolearn_gp" if py_item(py_item(context, nk[].k_backend_fields), nk[].k__CPU_ONLY) is None else "_mojolearn_linalg"
-    return estimator_binding(model, name, context, False)
+    var requested = py_get(py_fields(model), nk[].k_numeric_mode)
+    var backend = py_item(context, nk[].k_backend_fields)
+    var default_mode = PythonObject(None)
+    if requested is None:
+        default_mode = py_item(backend, nk[].k__DEFAULT_MODE)
+    var held = device_binding_held(model, "_mojolearn_gp", False, requested, default_mode, context)
+    if held is not None:
+        return CholImage(held, True)
+    held = device_binding_held(model, "_mojolearn_linalg", False, requested, default_mode, context)
+    if held is not None:
+        return CholImage(held, False)
+    var cpu_only = py_item(backend, nk[].k__CPU_ONLY) is not None
+    var gp = not cpu_only
+    if gp:
+        gp = device_binding_device(model, py_fields(model), context, cpu_only,
+                                   native_loaded_module("builtins")) != DEVICE_CPU
+    var name = "_mojolearn_gp" if gp else "_mojolearn_linalg"
+    return CholImage(estimator_binding(model, name, context, False), gp)
 
 
 def _chol_field(fields: PythonObject, key: PythonObject, name: String) raises -> PythonObject:
@@ -159,6 +198,14 @@ def _chol_initialize(model: PythonObject, args: PythonObject, context: PythonObj
         mode = py_item(fields, nk[].k_numeric_mode)
     if mode is not None and py_type(mode) is not b.str:
         raise Error("ValueError: numeric_mode must be fast, identical or None")
+    # `device=None | "gpu" | "cpu"`: checked where it is given, in the shared
+    # words, before any field is published. The native reconstruction of
+    # `set_params` and the model-selection constructor pass it third.
+    var device = PythonObject(None)
+    if len(args) > 2:
+        device = args[2]
+        classical_admit_value(device, context)
+        device_admit(device, 0 if py_item(py_item(context, nk[].k_backend_fields), nk[].k__CPU_ONLY) is not None else 1, b)
     # Reinitialization must admit every released owner before publishing any
     # replacement. A user can have assigned an object with a Python finalizer
     # since the previous constructor; retaining the dictionary until this pass
@@ -170,6 +217,9 @@ def _chol_initialize(model: PythonObject, args: PythonObject, context: PythonObj
             native_release_admit(fields[names[i]], context)
     py_setitem(fields, nk[].k_jitter, jitter)
     py_setitem(fields, nk[].k_numeric_mode, mode)
+    py_setitem(fields, "device", device)
+    # A constructor run again (`set_params`) resolves the image again.
+    device_route_clear(model)
     return PythonObject(None)
 
 
@@ -185,8 +235,11 @@ def _chol_extension(model: PythonObject, binding: PythonObject, context: PythonO
         want = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
     if py_type(want) is not b.str:
         raise Error("ValueError: numeric_mode must be fast, identical or None")
-    var reader = "gp_numeric_mode" if py_item(py_item(context, nk[].k_backend_fields), nk[].k__CPU_ONLY) is None else "linalg_numeric_mode"
-    var getter = neural_descriptor_entry(binding, reader, False)
+    # The module it was handed answers which image it is: the GP image
+    # exports `gp_numeric_mode`, the linalg CPU image `linalg_numeric_mode`.
+    var getter = neural_descriptor_entry(binding, "gp_numeric_mode", False)
+    if getter is None:
+        getter = neural_descriptor_entry(binding, "linalg_numeric_mode", False)
     if getter is not None:
         var got = Int(py=family_call(getter))
         var codes = py_item(context, nk[].k_family_chol_mode_codes)
@@ -358,21 +411,30 @@ def linalg_operation(model: PythonObject, operation: Int, var args: PythonObject
                         + "), so there is no determinant to report (DEVIATION 1634)")
         return _chol_field(fields, nk[].k__logdet, "_logdet")
     if operation >= CHOL_OPN_FAMILY_CHOL_BINDING and operation <= CHOL_OPN_FAMILY_CHOL_PROFILE_JITTER:
-        var binding = _chol_extension(model, _chol_binding(model, context), context)
+        var image = _chol_image(model, context)
+        var binding = _chol_extension(model, image.module, context)
         if operation == CHOL_OPN_FAMILY_CHOL_BINDING:
             return binding
         if operation == CHOL_OPN_FAMILY_CHOL_DOOR:
-            return Python.tuple(binding, PythonObject("gp_numeric_mode" if py_item(py_item(context, nk[].k_backend_fields), nk[].k__CPU_ONLY) is None else "linalg_numeric_mode"))
+            return Python.tuple(binding, PythonObject("gp_numeric_mode" if image.gp else "linalg_numeric_mode"))
         if operation == CHOL_OPN_FAMILY_CHOL_VENDOR:
-            var name = "gp_vendor" if py_item(py_item(context, nk[].k_backend_fields), nk[].k__CPU_ONLY) is None else "linalg_host_vendor"
+            var name = "gp_vendor" if image.gp else "linalg_host_vendor"
             var getter = neural_descriptor_entry(binding, name, False)
             return PythonObject(None) if getter is None else family_call(getter)
         return PythonObject(Float64(py=family_call(neural_descriptor_entry(binding, "cholesky_profile_jitter"))))
     if len(args) > 0 and args[0] is None:
-        var values = Python.list(_chol_binding(model, context))
-        for i in range(1, len(args)):  # driver-loop: fixed public Cholesky argument slots
-            _ = py_call(values.append, args[i])
-        args = py_call(native_loaded_module("builtins").tuple, values)
+        # The public form names no binding: the estimator's image takes the
+        # first slot. Fixed public argument counts (fit and solve two, the
+        # parallel pair three): the tuple is built directly.
+        var module = _chol_image(model, context).module
+        if len(args) == 2:
+            args = Python.tuple(module, args[1])
+        elif len(args) == 3:
+            args = Python.tuple(module, args[1], args[2])
+        elif len(args) == 1:
+            args = Python.tuple(module)
+        else:
+            raise Error("TypeError: mojolearn Cholesky: an operation takes at most three arguments")
     if operation == CHOL_OPN_FAMILY_CHOL_FIT:
         var depth = estimator_fit_begin(fields)
         try:
