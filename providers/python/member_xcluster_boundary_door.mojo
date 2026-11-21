@@ -2,12 +2,15 @@
 """The member boundary of the XCluster family (x_cluster estimators). Recipe:
 MEMBER-ABI-V2.md; RUN: core/xcluster_member.mojo.
 
-Published kinds: 0 MiniBatchKMeans, 1 BisectingKMeans, 2 MeanShift
-(`_mojolearn_member = (25, kind)` on each class). Every other kind answers
-False here (OPTICS 3, AffinityPropagation 4, BayesianGaussianMixture 5: not
-published yet), as does a MiniBatchKMeans with explicit starting centers (an
-array `init`) or a MeanShift with explicit `seeds`, and the caller keeps the
-class's own doors. MeanShift's route also holds the binding's centroid-fit
+Published kinds: 0 MiniBatchKMeans, 1 BisectingKMeans, 2 MeanShift,
+4 AffinityPropagation (`_mojolearn_member = (25, kind)` on each class).
+Every other kind answers False here (OPTICS 3: the class has no predict;
+BayesianGaussianMixture 5: not published), as does a MiniBatchKMeans with
+explicit starting centers (an array `init`), a MeanShift with explicit
+`seeds`, an AffinityPropagation with affinity='precomputed' or a per-sample
+preference (words tied to the training rows), and the caller keeps the
+class's own doors. AffinityPropagation reads `affinity_fit_stage`'s
+parameters in its order and packs `affinity_fit`'s attributes. MeanShift's route also holds the binding's centroid-fit
 entry in `route.second` (`meanshift_fit_stage`'s reads: seeds, bandwidth,
 cluster_all, max_iter, bin_seeding, min_bin_freq; its pack: `meanshift_fit`'s
 cluster_centers_, labels_, bandwidth_, n_iter_, n_features_in_).
@@ -45,12 +48,15 @@ from bindings.cluster_centroid_fit_boundary_door import centroid_fit_connection
 from bindings.native_loaded_module_door import native_loaded_module
 from core.cluster_centroid_fit_api import CENTROID_FIT_COUNT
 from bindings.family_common_pack import family_array
-from bindings.family_common_unpack import family_repr, family_is_str
+from bindings.family_common_unpack import family_repr, family_is_str, family_str, family_isinstance
 from bindings.kmeans_variants_boundary_door import variants_connection
 from bindings.member_owner_unpack import MemberOwner
 from bindings.native_buffer_address_unpack import native_buffer_address
 from bindings.py_balanced import py_call, py_get
-from cluster.cluster_fit_door_run import cluster_n_init_positive, minibatch_auto_n_init, meanshift_bandwidth_refused
+from cluster.cluster_fit_door_run import (
+    cluster_n_init_positive, minibatch_auto_n_init, meanshift_bandwidth_refused, affinity_damping_refused,
+    affinity_iterations_positive,
+)
 from cluster.cluster_door_run import cluster_node_words
 from core.device_route import DeviceRoute, DEVICE_CPU, DEVICE_GPU, device_vendor_code
 from core.entry_table import EntryRef, entry_ref_word
@@ -66,6 +72,7 @@ from providers.python.estimator_binding_pyapi_door import estimator_binding
 comptime _KIND_MINIBATCH = 0
 comptime _KIND_BISECT = 1
 comptime _KIND_MEANSHIFT = 2
+comptime _KIND_AFFINITY = 4
 comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
 
 
@@ -154,6 +161,39 @@ def _meanshift_admit(model: PythonObject, context: PythonObject, mut owner: Memb
     return True
 
 
+def _affinity_admit(model: PythonObject, context: PythonObject, mut owner: MemberOwner) raises -> Bool:
+    """`affinity_fit_stage`'s reads, in its order, without X. False for
+    affinity='precomputed' or a per-sample preference."""
+    var affinity = _attr(model, "affinity")
+    if not _one_of(affinity, "euclidean", "precomputed"):
+        raise Error("affinity must be 'euclidean' or 'precomputed', got " + family_repr(affinity))
+    var damping_field = _attr(model, "damping")
+    if affinity_damping_refused(Float64(py=_float(damping_field))):
+        raise Error("damping must be in [0.5, 1), got " + family_str(damping_field))
+    affinity_iterations_positive(Int(py=_int(_attr(model, "max_iter"))))
+    affinity_iterations_positive(Int(py=_int(_attr(model, "convergence_iter"))))
+    if _eq(affinity, PythonObject("precomputed")):
+        return False
+    var mode = 0
+    var scalar = Float64(0.0)
+    var preference = _attr(model, "preference")
+    if preference is not None:
+        var builtins = native_loaded_module("builtins")
+        if not family_isinstance(preference, Python.tuple(builtins.int, builtins.float)):
+            return False
+        mode = 1
+        scalar = Float64(py=_float(preference))
+    var max_iter = Int(py=_int(_attr(model, "max_iter")))
+    var convergence = Int(py=_int(_attr(model, "convergence_iter")))
+    var seed = _seed(_attr(model, "random_state"))
+    var damping = Float64(py=_float(damping_field))
+    _variants_route(model, context, owner, True)
+    var words: List[Float64] = [Float64(_KIND_AFFINITY), damping, Float64(max_iter), Float64(convergence),
+        bitcast[DType.float64](Int64(seed)), Float64(mode), scalar]
+    owner.plan.params = words^
+    return True
+
+
 def _bisect_admit(model: PythonObject, context: PythonObject, mut owner: MemberOwner) raises:
     """`bisect_fit_stage`'s reads, in its order, without X."""
     var init = _attr(model, "init")
@@ -193,6 +233,9 @@ def xcluster_member_admit(model: PythonObject, fields: PythonObject, kind: Int, 
     if kind == _KIND_MEANSHIFT:
         classical_connect_numpy(context)
         return _meanshift_admit(model, context, owner)
+    if kind == _KIND_AFFINITY:
+        classical_connect_numpy(context)
+        return _affinity_admit(model, context, owner)
     if kind != _KIND_BISECT:
         return False
     classical_connect_numpy(context)
@@ -231,10 +274,32 @@ def xcluster_member_pack(model: PythonObject, fields: PythonObject, context: Pyt
     """PACK: write the fitted attributes of state `state` into `model`, as
     the estimator's own fit does (the same names, dtypes and shapes)."""
     var kind = Int(plan.params[0])
-    if kind != _KIND_BISECT and kind != _KIND_MINIBATCH and kind != _KIND_MEANSHIFT:
+    if kind != _KIND_BISECT and kind != _KIND_MINIBATCH and kind != _KIND_MEANSHIFT and kind != _KIND_AFFINITY:
         raise Error("RuntimeError: mojolearn: this x_cluster member kind is not published")
     classical_connect_numpy(context)
     var call = MemberCall(plan.route, state)
+    if kind == _KIND_AFFINITY:
+        _export(plan, call, MEMBER_BLOCK_FAMILY)
+        var ap_d = call.dst.cols
+        var ap_centers = _f32_array(call.dst, context)
+        _export(plan, call, MEMBER_BLOCK_FAMILY + 5)
+        var exemplars = _i32_array(call.dst, Python.tuple(call.dst.cols), context)
+        _export(plan, call, MEMBER_BLOCK_FAMILY + 1)
+        var ap_labels = _i32_array(call.dst, Python.tuple(call.dst.cols), context)
+        _export(plan, call, MEMBER_BLOCK_FAMILY + 6)
+        var matrix = _f32_array(call.dst, context)
+        _export(plan, call, MEMBER_BLOCK_FAMILY + 7)
+        var messages = _f32_shaped(call.dst, Python.tuple(call.dst.cols), context)
+        _export(plan, call, MEMBER_BLOCK_SCALARS)
+        var ap_iterations = Int(MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call.dst.data)[0])
+        _set(model, "cluster_centers_indices_", exemplars)
+        _set(model, "labels_", ap_labels)
+        _set(model, "affinity_matrix_", matrix)
+        _set(model, "message_diag_", messages)
+        _set(model, "n_iter_", PythonObject(ap_iterations))
+        _set(model, "n_features_in_", PythonObject(ap_d))
+        _set(model, "cluster_centers_", ap_centers)
+        return
     if kind == _KIND_MEANSHIFT:
         _export(plan, call, MEMBER_BLOCK_FAMILY)
         var ms_d = call.dst.cols
@@ -296,7 +361,7 @@ def _centers_state(fields: PythonObject, plan: MemberPlan, centers: PythonObject
     attributes in its SCALARS order."""
     var count = len(names)
     var scalars = List[Float64](length=count, fill=0.0)
-    for i in range(count):  # driver-loop: two or three fitted scalar attributes
+    for i in range(count):  # driver-loop: one to three fitted scalar attributes
         var value = py_get(fields, PythonObject(names[i]), PythonObject(None))
         if value is not None:
             scalars[i] = Float64(py=value)
@@ -324,7 +389,7 @@ def xcluster_member_state(model: PythonObject, fields: PythonObject, context: Py
     imported). A MiniBatchKMeans state holds its centers and
     [inertia_, n_steps_, n_iter_]. The caller frees it (`member_free`)."""
     var kind = Int(plan.params[0])
-    if kind != _KIND_BISECT and kind != _KIND_MINIBATCH and kind != _KIND_MEANSHIFT:
+    if kind != _KIND_BISECT and kind != _KIND_MINIBATCH and kind != _KIND_MEANSHIFT and kind != _KIND_AFFINITY:
         raise Error("RuntimeError: mojolearn: this x_cluster member kind is not published")
     classical_connect_numpy(context)
     var source = py_get(fields, PythonObject("cluster_centers_"), PythonObject(None))
@@ -337,6 +402,9 @@ def xcluster_member_state(model: PythonObject, fields: PythonObject, context: Py
     if kind == _KIND_MEANSHIFT:
         var ms_names: List[String] = ["bandwidth_", "n_iter_"]
         return _centers_state(fields, plan, centers, ms_names)
+    if kind == _KIND_AFFINITY:
+        var ap_names: List[String] = ["n_iter_"]
+        return _centers_state(fields, plan, centers, ap_names)
     var tree_source = py_get(fields, PythonObject("_tree_centers"), PythonObject(None))
     var node_source = py_get(fields, PythonObject("tree_nodes_"), PythonObject(None))
     if tree_source is None or node_source is None:

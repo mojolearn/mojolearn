@@ -810,6 +810,9 @@ class AffinityPropagation(_XCluster):
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
 
+    #: Member ABI family 25 (XCluster), kind 4 (core/xcluster_member.mojo).
+    _mojolearn_member = (25, 4)
+
     def __init__(self, *, damping=0.5, max_iter=200, convergence_iter=15, copy=True,
                  preference=None, affinity="euclidean", verbose=False, random_state=None, numeric_mode=None, device=None):
         return _NATIVE(self, "family_xc_initialize", (None, (damping, max_iter, convergence_iter, copy, preference, affinity, verbose, random_state, numeric_mode, device,)), _NATIVE_CONTEXT)

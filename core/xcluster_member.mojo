@@ -10,13 +10,14 @@ existing typed RUN over the entries of the `DeviceRoute` it is handed:
 (core/kmeans_variants_api.mojo `KMeansVariantsDriver`: the bisecting fit and
 tree descent, the centers queries, the resident centers), `route.flags` that
 entry's capability word (`VARIANTS_CAP_*`, read once by the caller's
-UNPACK). `route.second` (MeanShift) is the image's centroid-fit entry
+UNPACK). `route.second` (MeanShift, AffinityPropagation) is the image's centroid-fit entry
 (core/cluster_centroid_fit_api.mojo `CentroidFitDriver`). No other route
 slot is read by the kinds published here. No kernel is touched.
 
 Kinds (MEMBER_OP_NEW word [0]): 0 MiniBatchKMeans, 1 BisectingKMeans,
-2 MeanShift. Kinds 3 OPTICS, 4 AffinityPropagation, 5 BayesianGaussianMixture
-are reserved for this family and refused until published.
+2 MeanShift, 4 AffinityPropagation. Kind 3 OPTICS (the class has no
+predict: not a member) and kind 5 BayesianGaussianMixture are reserved for
+this family and refused.
 
 MEMBER_OP_NEW parameters (Float64 words):
   kind 0 MiniBatchKMeans (11 words): [0] 0, [1] n_clusters, [2] init
@@ -36,6 +37,13 @@ MEMBER_OP_NEW parameters (Float64 words):
   [5] min_bin_freq. Explicit seeds are not words: the class keeps its own
   doors for them. MeanShift takes no sample weights and has no transform or
   score (refused in words).
+  kind 4 AffinityPropagation (7 words): [0] 4, [1] damping, [2] max_iter,
+  [3] convergence_iter, [4] random_state as int64 BITS, [5] preference mode
+  (0 the median similarity, 1 a scalar), [6] the scalar preference. A
+  per-sample preference and affinity='precomputed' are not members (their
+  words are tied to the training rows): the class keeps its own doors. No
+  sample weights, no transform or score (refused in words). Predict writes
+  -1 for every row when the fit found no exemplar, as the class does.
 A clusterer, not a classifier: `y` is not read, `classes` is 0.
 
 Views: X dense row-major host float32, BORROWED for the call (never copied:
@@ -65,6 +73,11 @@ kind 0: 3 `MEMBER_BLOCK_FAMILY + 4` float32 1 x n_clusters, the counts
 (empty after an import that did not give them). An import needs 0 and 1.
 kind 2: SCALARS [bandwidth, n_iter]; centers are n_found x features. An
 import needs 0 and 1.
+kind 4: SCALARS [n_iter]; 3 `MEMBER_BLOCK_FAMILY + 5` int32 1 x k, the
+exemplar indices; 4 `MEMBER_BLOCK_FAMILY + 6` float32 rows x rows, the
+affinity matrix; 5 `MEMBER_BLOCK_FAMILY + 7` float32 1 x m, the final message
+diagonal (empty after an import). Centers may be empty (no exemplar). An
+import needs 0 and 1.
 kind 1: 3 `MEMBER_BLOCK_FAMILY + 2` float32 nodes x features, the tree
 centers; 4 `MEMBER_BLOCK_FAMILY + 3` int32 nodes x 3, the tree (left, right,
 label). An import needs blocks 0, 1, 3 and 4.
@@ -84,7 +97,10 @@ from core.kmeans_variants_api import (
     KMeansVariantsDriver, VariantsSpan, VariantsResultSlot, VariantsQueryRequest, BisectFitRequest,
     BisectPredictRequest, MiniBatchFitRequest, VARIANTS_CAP_RESIDENT, VARIANTS_CAP_DEVSCAN,
 )
-from core.cluster_centroid_fit_api import CentroidFitDriver, CentroidFitResultSlot, MeanShiftFitRequest
+from core.admitted_weights import admitted_fill
+from core.cluster_centroid_fit_api import (
+    CentroidFitDriver, CentroidFitResultSlot, MeanShiftFitRequest, AffinityFitRequest,
+)
 from core.member_abi import (
     MemberCall, MemberMatrix, MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_HOME_DEVICE,
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_PREDICT,
@@ -104,11 +120,15 @@ comptime _INDEX_SPAN = 16777216
 comptime _KIND_MINIBATCH = 0
 comptime _KIND_BISECT = 1
 comptime _KIND_MEANSHIFT = 2
+comptime _KIND_AFFINITY = 4
 comptime _BLOCK_CENTERS = MEMBER_BLOCK_FAMILY
 comptime _BLOCK_LABELS = MEMBER_BLOCK_FAMILY + 1
 comptime _BLOCK_TREE_CENTERS = MEMBER_BLOCK_FAMILY + 2
 comptime _BLOCK_TREE_NODES = MEMBER_BLOCK_FAMILY + 3
 comptime _BLOCK_COUNTS = MEMBER_BLOCK_FAMILY + 4
+comptime _BLOCK_EXEMPLARS = MEMBER_BLOCK_FAMILY + 5
+comptime _BLOCK_AFFINITY = MEMBER_BLOCK_FAMILY + 6
+comptime _BLOCK_MESSAGES = MEMBER_BLOCK_FAMILY + 7
 # The query kinds of the resident centers query (x_cluster/resident.mojo XC_RES_*).
 comptime _RES_PREDICT = 0
 comptime _RES_SCORE = 1
@@ -129,6 +149,9 @@ struct XClusterMemberSlot(Copyable, Movable, Defaultable):
     var tree_centers: List[Float32]
     var tree_nodes: List[Int32]
     var counts: List[Float32]
+    var exemplars: List[Int32]
+    var affinity: List[Float32]
+    var messages: List[Float32]
     var scalars: List[Float64]
 
     def __init__(out self):
@@ -144,6 +167,9 @@ struct XClusterMemberSlot(Copyable, Movable, Defaultable):
         self.tree_centers = List[Float32]()
         self.tree_nodes = List[Int32]()
         self.counts = List[Float32]()
+        self.exemplars = List[Int32]()
+        self.affinity = List[Float32]()
+        self.messages = List[Float32]()
         self.scalars = List[Float64]()
 
     def clear(mut self):
@@ -154,6 +180,9 @@ struct XClusterMemberSlot(Copyable, Movable, Defaultable):
         self.tree_centers = List[Float32]()
         self.tree_nodes = List[Int32]()
         self.counts = List[Float32]()
+        self.exemplars = List[Int32]()
+        self.affinity = List[Float32]()
+        self.messages = List[Float32]()
         self.scalars = List[Float64]()
 
 
@@ -184,6 +213,8 @@ def _name(kind: Int) -> String:
         return "BisectingKMeans"
     if kind == _KIND_MEANSHIFT:
         return "MeanShift"
+    if kind == _KIND_AFFINITY:
+        return "AffinityPropagation"
     return "an x_cluster estimator"
 
 
@@ -195,7 +226,14 @@ def _param_count(kind: Int) raises -> Int:
         return 8
     if kind == _KIND_MEANSHIFT:
         return 6
+    if kind == _KIND_AFFINITY:
+        return 7
     raise Error("member ABI: x_cluster member kind " + String(kind) + " is not published")
+
+
+def _fixed_k(kind: Int) -> Bool:
+    """The k-means kinds fix n_clusters (word 1); the others find theirs."""
+    return kind == _KIND_MINIBATCH or kind == _KIND_BISECT
 
 
 def _slot_address(index: Int) raises -> Int:
@@ -400,6 +438,51 @@ def _meanshift_fit(slot: _Slot, call: _Call) raises:
     _fit_done(slot, call, output, rows)
 
 
+# ---------------------------------------------------------------- AffinityPropagation
+def _affinity_fit(slot: _Slot, call: _Call) raises:
+    var kind = slot[].kind
+    _whole_x(call, kind)
+    if call[].weights.rows > 0:
+        raise Error("TypeError: AffinityPropagation takes no sample_weight")
+    var output = call[].fit_output
+    if output == MEMBER_OP_PREDICT:
+        _destination(call, call[].x.rows, 1, MEMBER_I32, "the label buffer")
+    elif output != 0:
+        member_unsupported(_name(kind), output)
+    if not call[].route.has_second:
+        raise Error("member ABI: an AffinityPropagation member's route holds no centroid-fit entry")
+    var rows = call[].x.rows
+    var cols = call[].x.cols
+    var w = slot[].words.unsafe_ptr()
+    _release_resident(slot, call)
+    slot[].clear()
+    var request = AffinityFitRequest(VariantsSpan(call[].x.data, rows * cols), VariantsSpan(0, 0), rows, cols,
+        False, Int(w[5]), Int(w[2]), Int(w[3]), Int(bitcast[DType.int64](w[4])), w[1], w[6])
+    var result = CentroidFitResultSlot()
+    CentroidFitDriver(call[].route.second.call).affinity(request, result)
+    swap(slot[].centers, result.storage[0].centers)
+    swap(slot[].labels, result.storage[0].labels)
+    swap(slot[].exemplars, result.storage[0].center_indices)
+    swap(slot[].affinity, result.storage[0].affinity)
+    swap(slot[].messages, result.storage[0].message_diagonal)
+    var scalars: List[Float64] = [Float64(result.storage[0].iterations)]
+    slot[].scalars = scalars^
+    slot[].features = cols
+    slot[].fitted = True
+    _fit_done(slot, call, output, rows)
+
+
+def _affinity_predict(slot: _Slot, call: _Call) raises:
+    """Nearest exemplar; every row -1 when the fit found none."""
+    if slot[].fitted and len(slot[].centers) == 0:
+        var rows = _query_rows(slot, call)
+        _destination(call, rows, 1, MEMBER_I32, "the label buffer")
+        admitted_fill[DType.int32](MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=call[].dst.data),
+            rows, Int32(-1))
+        return
+    _centers_query(slot, call, _RES_PREDICT)
+
+
 # ---------------------------------------------------------------- BisectingKMeans
 def _bisect_fit(slot: _Slot, call: _Call) raises:
     var kind = slot[].kind
@@ -493,6 +576,8 @@ def _centers_query(slot: _Slot, call: _Call, query: Int) raises:
 
 # ---------------------------------------------------------------- fitted blocks
 def _block_count(kind: Int) -> Int:
+    if kind == _KIND_AFFINITY:
+        return 6
     if kind == _KIND_MEANSHIFT:
         return 3
     if kind == _KIND_MINIBATCH:
@@ -501,6 +586,8 @@ def _block_count(kind: Int) -> Int:
 
 
 def _scalar_count(kind: Int) -> Int:
+    if kind == _KIND_AFFINITY:
+        return 1
     if kind == _KIND_MEANSHIFT:
         return 2
     return 3 if kind == _KIND_MINIBATCH else 1
@@ -518,6 +605,8 @@ def _block_at(kind: Int, index: Int) raises -> Int:
         return _BLOCK_LABELS
     if kind == _KIND_MINIBATCH:
         return _BLOCK_COUNTS
+    if kind == _KIND_AFFINITY:
+        return _BLOCK_EXEMPLARS if index == 3 else (_BLOCK_AFFINITY if index == 4 else _BLOCK_MESSAGES)
     if index == 3:
         return _BLOCK_TREE_CENTERS
     return _BLOCK_TREE_NODES
@@ -557,6 +646,13 @@ def _export(slot: _Slot, call: _Call) raises:
         call[].dst = _i32_view(slot[].tree_nodes, len(slot[].tree_nodes) // 3, 3)
     elif block == _BLOCK_COUNTS and kind == _KIND_MINIBATCH:
         call[].dst = _f32_view(slot[].counts, 1, len(slot[].counts))
+    elif block == _BLOCK_EXEMPLARS and kind == _KIND_AFFINITY:
+        call[].dst = _i32_view(slot[].exemplars, 1, len(slot[].exemplars))
+    elif block == _BLOCK_AFFINITY and kind == _KIND_AFFINITY:
+        var n = len(slot[].labels)
+        call[].dst = _f32_view(slot[].affinity, n, len(slot[].affinity) // n if n > 0 else 0)
+    elif block == _BLOCK_MESSAGES and kind == _KIND_AFFINITY:
+        call[].dst = _f32_view(slot[].messages, 1, len(slot[].messages))
     else:
         raise Error("member ABI: a " + _name(kind) + " member has no fitted block " + String(block))
     call[].block = block
@@ -614,14 +710,19 @@ def _import(slot: _Slot, call: _Call) raises:
         slot[].tree_nodes = _take_i32(call, "tree")
     elif block == _BLOCK_COUNTS and kind == _KIND_MINIBATCH:
         slot[].counts = _take_f32(call, "counts")
+    elif block == _BLOCK_EXEMPLARS and kind == _KIND_AFFINITY:
+        slot[].exemplars = _take_i32(call, "exemplar indices")
     elif block != 0 or (call[].flags & MEMBER_IMPORT_DONE) == 0:
         raise Error("member ABI: a " + _name(kind) + " member has no fitted block " + String(block))
     if (call[].flags & MEMBER_IMPORT_DONE) == 0:
         return
     var d = slot[].features
-    # MeanShift finds its own center count; the k-means kinds fix it.
-    var k = len(slot[].centers) // d if (kind == _KIND_MEANSHIFT and d > 0) else Int(slot[].words[1])
-    if d == 0 or k < 1 or len(slot[].centers) != k * d or len(slot[].scalars) != _scalar_count(kind):
+    # MeanShift and AffinityPropagation find their own center count (none
+    # at all for an AffinityPropagation that found no exemplar); the
+    # k-means kinds fix it.
+    var k = Int(slot[].words[1]) if _fixed_k(kind) else (len(slot[].centers) // d if d > 0 else 0)
+    var least = 0 if kind == _KIND_AFFINITY else 1
+    if d == 0 or k < least or len(slot[].centers) != k * d or len(slot[].scalars) != _scalar_count(kind):
         raise Error("member ABI: a fitted " + _name(kind) + " state needs its centers and scalars blocks")
     if kind == _KIND_BISECT and (len(slot[].tree_nodes) == 0
             or len(slot[].tree_centers) != (len(slot[].tree_nodes) // 3) * d):
@@ -632,7 +733,7 @@ def _import(slot: _Slot, call: _Call) raises:
 # ---------------------------------------------------------------- the entry
 def _capabilities(kind: Int) -> Int:
     # A state's kind, or (kind -1, state 0) the family's union.
-    if kind == _KIND_MEANSHIFT:
+    if kind == _KIND_MEANSHIFT or kind == _KIND_AFFINITY:
         return MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
     return (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_TRANSFORM | MEMBER_CAN_SCORE | MEMBER_CAN_EXPORT
         | MEMBER_CAN_IMPORT | MEMBER_CAN_SAMPLE_WEIGHT)
@@ -652,9 +753,9 @@ def _xcluster_member(operation: Int, address: Int) raises -> Int:
         var count = _param_count(kind)
         if call[].param_count != count:
             raise Error("member ABI: a " + _name(kind) + " member takes " + String(count) + " parameter words")
-        if kind != _KIND_MEANSHIFT and words[1] < 1.0:
+        if _fixed_k(kind) and words[1] < 1.0:
             raise Error("ValueError: n_clusters must be at least 1, got " + String(Int(words[1])))
-        if kind != _KIND_MEANSHIFT and words[3] < 1.0:
+        if _fixed_k(kind) and words[3] < 1.0:
             raise Error("ValueError: n_init must be at least 1, got " + String(Int(words[3])))
         call[].state = _mint(words, count)
         return 0
@@ -671,11 +772,11 @@ def _xcluster_member(operation: Int, address: Int) raises -> Int:
         var clusters = 0
         if call[].state != 0:
             var held = _Slot(unsafe_from_address=_lookup(call[].state, False))
-            if held[].kind == _KIND_MINIBATCH or held[].kind == _KIND_BISECT:
+            if _fixed_k(held[].kind):
                 clusters = Int(held[].words[1])
         elif call[].params and call[].param_count >= 2:
             var words = _Words(unsafe_from_address=call[].params)
-            if Int(words[0]) == _KIND_MINIBATCH or Int(words[0]) == _KIND_BISECT:
+            if _fixed_k(Int(words[0])):
                 clusters = Int(words[1])
         call[].out_cols = clusters if call[].flags == MEMBER_OP_TRANSFORM else 1
         call[].classes = 0
@@ -690,13 +791,17 @@ def _xcluster_member(operation: Int, address: Int) raises -> Int:
         _meanshift_fit(slot, call)
     elif operation == MEMBER_OP_PREDICT and kind == _KIND_MEANSHIFT:
         _centers_query(slot, call, _RES_PREDICT)
+    elif operation == MEMBER_OP_FIT and kind == _KIND_AFFINITY:
+        _affinity_fit(slot, call)
+    elif operation == MEMBER_OP_PREDICT and kind == _KIND_AFFINITY:
+        _affinity_predict(slot, call)
     elif operation == MEMBER_OP_FIT and kind == _KIND_BISECT:
         _bisect_fit(slot, call)
     elif operation == MEMBER_OP_PREDICT and kind == _KIND_BISECT:
         _bisect_predict(slot, call)
-    elif operation == MEMBER_OP_TRANSFORM and kind != _KIND_MEANSHIFT:
+    elif operation == MEMBER_OP_TRANSFORM and _fixed_k(kind):
         _centers_query(slot, call, _RES_TRANSFORM)
-    elif operation == MEMBER_OP_SCORE and kind != _KIND_MEANSHIFT:
+    elif operation == MEMBER_OP_SCORE and _fixed_k(kind):
         _centers_query(slot, call, _RES_SCORE)
     elif operation == MEMBER_OP_EXPORT:
         _export(slot, call)
