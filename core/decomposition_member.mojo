@@ -607,7 +607,24 @@ def _outputs(call: _Call) raises:
     transform width is known only for an integer n_components."""
     call[].classes = 0
     if call[].state == 0:
-        raise Error("member ABI: a decomposition member's output width needs its state")
+        # Asked before any state (`member_outputs`): from the parameter words and
+        # `x.cols` (the features it will be fitted on), as a state made from
+        # them would answer after such a fit.
+        if call[].param_count != DECOMP_PARAM_COUNT or not call[].params:
+            raise Error("member ABI: a decomposition member's output width needs its nine parameter words")
+        var words = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call[].params)
+        var named = String("PCA") if Int(words[0]) == DECOMP_KIND_PCA else String("TruncatedSVD")
+        var wanted = call[].flags
+        if wanted == MEMBER_OP_INVERSE_TRANSFORM:
+            call[].out_cols = call[].x.cols
+            return
+        if wanted != MEMBER_OP_TRANSFORM:
+            member_unsupported(named, wanted)
+        if Int(words[2]) == 0 and words[1] >= 0.0:
+            call[].out_cols = Int(words[1])
+            return
+        # None (min(n_samples, n_features)), a fraction or 'mle': chosen by the fit.
+        raise Error("NotFittedError: this " + named + " member's output width is known after its fit")
     var slot = _Slot(unsafe_from_address=_lookup(call[].state, False))
     var asked = call[].flags
     if asked != MEMBER_OP_TRANSFORM and asked != MEMBER_OP_INVERSE_TRANSFORM:
@@ -624,6 +641,9 @@ def _outputs(call: _Call) raises:
 def _decomposition_member(operation: Int, address: Int) raises -> Int:
     var call = _Call(unsafe_from_address=address)
     if operation == MEMBER_OP_CAPABILITIES:
+        # Kind-exact (`member_kind_capabilities`): PCA and TruncatedSVD honor the
+        # same operations on every route (both doors publish inverse_transform),
+        # so a live state's kind answers the same mask as the family.
         return MEMBER_CAN_FIT | MEMBER_CAN_TRANSFORM | MEMBER_CAN_INVERSE_TRANSFORM | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
     if operation == MEMBER_OP_NEW:
         if call[].param_count != DECOMP_PARAM_COUNT or not call[].params:

@@ -138,11 +138,20 @@ def _msel_admitted_dispatch(model: PythonObject, method: String, args: PythonObj
     # native-entry checks and keyword/output handling shared with public calls.
     var b = native_loaded_module("builtins")
     var entry = plan["entry"]
-    if entry is None or py_type(entry) is not py_type(b.len):
-        raise Error("ImportError: native cross-validation estimator binding is unavailable")
     var method_plan = py_get(plan["methods"], PythonObject(method))
     if method_plan is None:
+        # A member-only plan (python/mojolearn/_native_msel_more.py
+        # connect_members: a marked class registered from its mark, without
+        # method recipes) reached its own doors: its member could not serve
+        # this request, so it is refused in the words the class had before
+        # its mark. Read only on this refusal path, never per served call.
+        if py_get(plan, PythonObject("member_only")) is not None:
+            raise Error("RuntimeError: this built-in estimator's native cross-validation schema is pending migration")
+        if entry is None or py_type(entry) is not py_type(b.len):
+            raise Error("ImportError: native cross-validation estimator binding is unavailable")
         raise Error("AttributeError: native estimator has no " + method)
+    if entry is None or py_type(entry) is not py_type(b.len):
+        raise Error("ImportError: native cross-validation estimator binding is unavailable")
     if keywords is not None:
         # The method's keyword names, read only when keywords were passed
         # (lane ne2-b-members, N068: an empty dict and tuple were built as

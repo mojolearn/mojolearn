@@ -1169,11 +1169,12 @@ def _cls_query(slot: _SlotP, call: _CallP) raises:
 
 
 def _cls_codes(slot: _SlotP, call: _CallP, dst: Int) raises:
-    """Each row's int32 class code (`_LinearClassifierMixin.predict`)."""
+    """Each row's int32 class code (`_LinearClassifierMixin.predict`: a
+    binary score picks class 1 only when > 0, `strict`, as the own door)."""
     if call[].x.rows == 0:
         return
     xl_decision_run(XlDecisionRequest(call[].route.entry.call, XL_OP_DECISION_CODES, call[].x.data,
-        Int(slot[].block.unsafe_ptr()), dst, call[].x.rows, call[].x.cols, slot[].outputs, LINK_IDENTITY, False, 0, 1,
+        Int(slot[].block.unsafe_ptr()), dst, call[].x.rows, call[].x.cols, slot[].outputs, LINK_IDENTITY, True, 0, 1,
         0, 0))
 
 

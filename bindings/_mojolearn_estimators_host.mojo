@@ -68,6 +68,7 @@ from glm.host.linear_svc_native_host import LINEAR_SVC_HOST_API
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from core.dbscan_native_host import DBSCAN_HOST_API, DBSCANHostKernels
 from core.density_member import density_member_publish
+from core.hierarchy_member import hierarchy_member_publish
 from core.dbscan_native_api import DBSCANFitRequest
 from core.kde_native_host import KDE_HOST_API, KDEHostKernels
 from core.kde_native_api import KDEQueryRequest
@@ -1446,6 +1447,9 @@ def build__mojolearn_estimators_host() -> PythonObject:
         _publish_estimators_qn_table()
         # DBSCAN's member entry (core/density_member.mojo) beside its host kernel table.
         density_member_publish(Int(GLOBAL_NUMERIC_MODE), 0, Int(DBSCAN_HOST_API.get_or_create_ptr()[].entries.unsafe_ptr()))
+        # AgglomerativeClustering's member entry (core/hierarchy_member.mojo): its predict runs on
+        # this image's labeled-reference queries.
+        hierarchy_member_publish(Int(GLOBAL_NUMERIC_MODE), 0, Int(DBSCAN_HOST_API.get_or_create_ptr()[].entries.unsafe_ptr()))
         _publish_decomp_pca_ops(published_module)
         return published_module
     except error:

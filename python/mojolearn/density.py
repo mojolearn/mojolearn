@@ -424,6 +424,9 @@ class KernelDensity(_NumericModeMixin):
     _mojolearn_device = True
 
     _mojolearn_native_public = True
+    #: Member ABI family 27 (Density), kind 0 (core/density_member.mojo): fit,
+    #: score_samples and score (no predict).
+    _mojolearn_member = (27, 0)
 
     def __init__(
         self,

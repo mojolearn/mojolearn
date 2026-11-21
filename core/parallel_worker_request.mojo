@@ -27,6 +27,9 @@ comptime WORKER_REQUEST_HEADER_WORDS = 5
 # layer of one worker (3 flags + 1 count + 2 words per layer).
 comptime WORKER_REQUEST_MAX_WORDS = 1 << 16
 comptime WORKER_NO_HANDLE = -1
+# The operation word of the process pool's protocol probe (the echo worker,
+# bindings/native_process_pool_door.mojo): outside every model worker's codes.
+comptime WORKER_ECHO_OP = 0x4543484F  # "ECHO"
 
 # ParallelCausalLM worker operations (bindings/parallel_causal_native.mojo).
 comptime PC_CONFIGURE = 1
