@@ -11,8 +11,13 @@ _SYMBOLS = {
     "base": ("_mojolearn", ("mojolearn_numeric_mode", "knn_index_prepare", "knn_index_release")),
     "sort": ("_mojolearn_x_neighbors", ("x_neighbors_numeric_mode", "x_neighbors_native_api_v1",)),
     # The IVF queries call the image's IVF-Flat operations table (its
-    # `ivf_native_key`, captured below), not exports by name.
-    "ivf": ("_mojolearn_ivf", ("ivf_numeric_mode",)),
+    # `ivf_native_key`, captured below), not exports by name. The release and
+    # the list-data export stay captured for the two doors that still read
+    # them by name from the resident tuple's binding, which after a search is
+    # this captured table: the native finalizer
+    # (bindings/host_archive_lifetime_door.mojo) and the archive writer's
+    # device array (bindings/archive_schema_native_door.mojo).
+    "ivf": ("_mojolearn_ivf", ("ivf_numeric_mode", "ivf_flat_index_release", "ivf_flat_index_export")),
 }
 
 
