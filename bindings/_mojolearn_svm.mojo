@@ -701,10 +701,20 @@ def svr_predict_resident_binding(
     return Python.list(Int(words[0]), Int(words[1]))
 
 
-def _iforest_plan(single: Bool) raises -> DevicePlan:
-    """A member's one device (`single`, its route's: no thread or
-    environment question), else the calling thread's IsolationForest plan."""
-    if single:
+def _iforest_plan(r: IFRunRequest) raises -> DevicePlan:
+    """A member's device plan: the ids its admit read on the public thread
+    (`r.devices`, `r.device_count` > 1: exactly those devices, in rank
+    order; no thread or environment question, so a caller's worker thread
+    runs on them too), else its one device (`single`, its route's), else the
+    calling thread's IsolationForest plan (the estimator's own doors)."""
+    if r.device_count > 1 and r.devices != 0:
+        var source = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=r.devices)
+        var ids = List[Int](capacity=r.device_count)
+        for k in range(r.device_count):  # driver-loop: over the plan's ranks (at most 64)
+            ids.append(source[k])
+        var root = ids[0]
+        return DevicePlan(String(r.device_count), r.device_count, root, ids^, True)
+    if r.single:
         return plan_for_single()
     return device_plan_current("MOJOLEARN_IFOREST_DEVICE_COUNT")
 
@@ -760,7 +770,7 @@ def _iforest_run(r: IFRunRequest) raises -> Int:
     # thread-scoped plan, else MOJOLEARN_IFOREST_DEVICE_COUNT; a member's
     # request is `single`: one device, its route's); nothing below reads it
     # again (isolation_forest/multi_gpu.mojo::fit_dispatch).
-    var plan = _iforest_plan(r.single)
+    var plan = _iforest_plan(r)
     var res = IFRunOutputs()
     if r.resident:
         var key = IFResidentKey(
@@ -872,7 +882,7 @@ def _iforest_export(request: IFExportRequest) raises -> Int:
     var write = request.forest.offsets != 0
     var dst = _forest_words(request.forest)
     var ip = f64_ptr(r.info)
-    var plan = _iforest_plan(r.single)
+    var plan = _iforest_plan(r)
     # The sizes call keeps its forest in the store on every route, so the
     # copy call (same token) never fits again; a refit-per-call binary drops
     # it after the copy. At `fit` the token is the one the run just
