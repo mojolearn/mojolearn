@@ -14,7 +14,7 @@ the same order as the door's former builders, so the bits do not move. No
 Python import (tools/python_free_dirs.sh)."""
 from bindings.prep_encode_prog_run import EncProgram, enc_floats_of, enc_bad_rows_stages
 from bindings.prep_encode_cats_run import (
-    CatBlock, CatCodes, CatTable, cat_codes_stage, cat_held_codes_stage, cat_gather_stage, cat_grouping_table,
+    CatAuto, CatBlock, CatCodes, CatTable, cat_codes_stage, cat_held_codes_stage, cat_gather_stage, cat_grouping_table,
     cat_remap_stage)
 from core.preprocessing_program import prep_program_stage
 
@@ -132,3 +132,46 @@ def ordinal_inverse_stage(mut prog: EncProgram, r: OrdinalInverse) -> OrdinalInv
     var dst = cat_gather_stage(prog, codes, n, d, r.cats)
     var staged = enc_bad_rows_stages(prog, codes, n, d, -2, ORD_NONE)
     return OrdinalInversePlan(dst, staged[0], staged[1])
+
+
+# ---------------------------------------------------------------- the restricted fit's checks
+def ord_number_text(value: Float64, integral: Bool) -> String:
+    """A parameter number as the estimator prints it: an integer parameter
+    in integer digits, a float in its shortest decimal form."""
+    if integral:
+        return String(Int(value))
+    return String(value)
+
+
+def _list_words(values: List[Int]) -> String:
+    var text = String("[")
+    for i in range(len(values)):  # driver-loop: over reported column indices
+        text += (", " if i > 0 else "") + String(values[i])
+    return text + "]"
+
+
+def ordinal_auto_check(state: CatAuto, use_unknown: Bool, unknown_value: Float64, unknown_text: String,
+                       encoded_missing: Float64, missing_text: String) raises:
+    """OrdinalEncoder.fit's code checks on its fitted categories (the
+    restricted form, `CatAuto`; the door and the Prep member both call it):
+    `unknown_value` (with `use_unknown`, not NaN) must not be a code of a
+    seen category of any column, and `encoded_missing` (when a column has a
+    NaN category, not NaN) must not be one either. The texts are the
+    numbers as the caller prints them."""
+    var cards = state.cards()
+    if use_unknown and unknown_value == unknown_value:
+        for j in range(len(cards)):  # driver-loop: validates unknown_value against cardinalities
+            if 0.0 <= unknown_value and unknown_value < Float64(cards[j]):
+                raise Error("mojolearn: the used value for unknown_value " + unknown_text + " is one of the "
+                            + "values already used for encoding the seen categories.")
+    var any_missing = False
+    for j in range(len(state.missing)):  # driver-loop: over the per-column NaN slots (feature metadata)
+        any_missing = any_missing or state.missing[j] >= 0
+    if any_missing and encoded_missing == encoded_missing:
+        var bad = List[Int]()
+        for j in range(len(cards)):  # driver-loop: validates encoded_missing_value argument
+            if state.missing[j] >= 0 and 0.0 <= encoded_missing and encoded_missing < Float64(cards[j]):
+                bad.append(j)
+        if len(bad) > 0:
+            raise Error("mojolearn: encoded_missing_value (" + missing_text + ") is already "
+                        + "used to encode a known category in features: " + _list_words(bad))
