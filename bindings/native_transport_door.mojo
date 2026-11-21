@@ -142,6 +142,15 @@ def _transport_state(socket: PythonObject, require_open: Bool = True) raises -> 
     return state
 
 
+def transport_unpack(socket: PythonObject) raises -> Tuple[Int, Float64]:
+    """UNPACK for the typed frame (`transport_send_words`, `transport_receive_into`
+    in native_transport_run.mojo): the open descriptor and the timeout of an owned
+    native socket. The caller keeps `socket` pinned while RUN uses the descriptor;
+    a timeout set afterwards is not seen by RUN."""
+    var state = _transport_state(socket)
+    return (state[0], MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(state))[1])
+
+
 def transport_timeout(socket: PythonObject, seconds: Float64) raises:
     # -1 is the existing unbounded post-handshake training policy.
     if seconds != -1 and (seconds <= 0 or not isfinite(seconds)):

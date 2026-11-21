@@ -231,6 +231,7 @@ from checks.native_tests.training_small_mlp_relations import register as registe
 from checks.native_tests.affinity_preference_plan import register as register_affinity_preference_plan
 from checks.native_tests.agglo_contract import register as register_agglo_contract
 from checks.native_tests.agglo_state import register as register_agglo_state
+from checks.native_tests.transport_frame import register as register_transport_frame
 from checks.native_tests.base_helpers_entry import register as register_base_helpers_entry
 from checks.native_tests.boundary_layout import register as register_boundary_layout
 from checks.native_tests.byte_lm_entry import register as register_byte_lm_entry
@@ -815,6 +816,7 @@ def all_checks() -> List[Check]:
     checks.append(register_affinity_preference_plan())
     checks.append(register_agglo_contract())
     checks.append(register_agglo_state())
+    checks.append(register_transport_frame())
     checks.append(register_base_helpers_entry())
     checks.append(register_boundary_layout())
     checks.append(register_byte_lm_entry())
