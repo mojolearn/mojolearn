@@ -309,6 +309,10 @@ class LinearRegression(_NumericModeMixin):
     #: This family's binding, for `NumericModeMixin._bind`.
     _BINDING = "_mojolearn_estimators"
 
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
+
     #: The methods below are one call each into the compiled classical owner
     #: (bindings/classical_native_pack.mojo), connected once at import. It
     #: validates the inputs, chooses the route, runs the kernels and stores
@@ -487,6 +491,10 @@ class Ridge(_NumericModeMixin):
 
     #: This family's binding, for `NumericModeMixin._bind`.
     _BINDING = "_mojolearn_estimators"
+
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
     #: The methods below are one call each into the compiled classical owner
     #: (bindings/classical_native_pack.mojo), connected once at import. It
@@ -1109,6 +1117,10 @@ __getattr__ = _lazy_exports("linear_model")
 # of LinearRegression and Ridge (and their explicit host classes) is one call
 # into it.
 _native_classical, _CLASSICAL = _native_classical_bridge.connect_public(Ridge, LinearRegression)
+# The CPU entry family of `device="cpu"`, connected once at import beside the
+# device family: on a GPU installation both tables exist in the process and an
+# estimator's route picks one, once.
+_native_classical_bridge.connect_cpu_device(_CLASSICAL)
 
 
 # The compiled QNRegressor owner, connected once at import: fit, predict and
