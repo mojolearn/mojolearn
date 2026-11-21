@@ -56,6 +56,7 @@ from bindings.prep_classify_common_door import (
     XIn, CsrIn, PartialCodes, cls_builtins, cls_name, cls_repr, cls_str, cls_kind, cls_mode, cls_requested_mode, cls_entry,
     idn_int, classical_shared, blocked, check_fitted, check_width, cls_x2d, is_sparse, csr_input, csr_dense_x,
     float_list, given_priors, is_real, cls_float, col_stats, class_stats, cls_da_mode,
+    da_shrinkage, da_check_estimator_shrinkage, da_solver_is,
     nb_onepass, nb_counts, encode_y, partial_codes, stage_partial_codes, partial_refuse,
     IDN_NB_CSR, XB, idn_fam, IDN_CLASS_ONEPASS, gnb_refuse,
 )
@@ -1035,31 +1036,6 @@ def _cat_partial_fit(model: PythonObject, fields: PythonObject, args: PythonObje
 # ---------------------------------------------------------------- discriminant analysis
 
 
-def _shrinkage(shrinkage: PythonObject, context: PythonObject) raises -> Optional[Float64]:
-    """`_shrinkage_value`: None, -1.0 for 'auto', else the float in [0, 1]."""
-    var b = cls_builtins()
-    if shrinkage is None:
-        return None
-    if Bool(py=py_call(b.isinstance, shrinkage, b.str)):
-        if String(shrinkage) != "auto":
-            raise Error("mojolearn: invalid shrinkage " + cls_repr(shrinkage))
-        return Optional[Float64](-1.0)
-    if not is_real(shrinkage, context) or not (cls_float(shrinkage) >= 0 and cls_float(shrinkage) <= 1):
-        raise Error("mojolearn: shrinkage must be 'auto' or a float in [0, 1], got " + cls_repr(shrinkage))
-    return Optional[Float64](cls_float(shrinkage))
-
-
-def _check_estimator_shrinkage(est: PythonObject, shrinkage: PythonObject) raises:
-    if est is not None and shrinkage is not None and Bool(py=shrinkage != PythonObject(0)):
-        raise Error("mojolearn: covariance_estimator and shrinkage parameters are not None. Only one of the two can be set.")
-
-
-def _solver_is(fields: PythonObject, name: String) raises -> Bool:
-    var nk = prep_keys()
-    var solver = py_item(fields, nk[].k_solver)
-    return py_type(solver) is cls_builtins().str and String(solver) == name
-
-
 def _estimator_covs(est: PythonObject, arr: XIn, codes: PythonObject, K: Int, who: String,
                     context: PythonObject) raises -> List[Float64]:
     """A user covariance estimator would be fitted by its Python `fit` inside
@@ -1112,17 +1088,17 @@ def _lda_fit(model: PythonObject, fields: PythonObject, X: PythonObject, y: Pyth
     var nk = prep_keys()
     var b = cls_builtins()
     var solver = py_item(fields, nk[].k_solver)
-    if not (_solver_is(fields, "svd") or _solver_is(fields, "lsqr") or _solver_is(fields, "eigen")):
+    if not (da_solver_is(fields, "svd") or da_solver_is(fields, "lsqr") or da_solver_is(fields, "eigen")):
         raise Error("mojolearn: invalid solver " + cls_repr(solver))
-    if _solver_is(fields, "svd") and py_item(fields, nk[].k_shrinkage) is not None:
+    if da_solver_is(fields, "svd") and py_item(fields, nk[].k_shrinkage) is not None:
         raise Error("NotImplementedError: mojolearn: shrinkage not supported with 'svd' solver.")
     var est = py_item(fields, nk[].k_covariance_estimator)
-    if est is not None and _solver_is(fields, "svd"):
+    if est is not None and da_solver_is(fields, "svd"):
         raise Error("mojolearn: covariance estimator is not supported with svd solver. Try another solver")
-    _check_estimator_shrinkage(est, py_item(fields, nk[].k_shrinkage))
+    da_check_estimator_shrinkage(est, py_item(fields, nk[].k_shrinkage))
     var shr: Optional[Float64] = None
     if est is None:
-        shr = _shrinkage(py_item(fields, nk[].k_shrinkage), context)
+        shr = da_shrinkage(py_item(fields, nk[].k_shrinkage), context)
     var arr = cls_x2d(X, context)
     var n = arr.n
     var d = arr.d
@@ -1136,7 +1112,7 @@ def _lda_fit(model: PythonObject, fields: PythonObject, X: PythonObject, y: Pyth
         raise Error("mojolearn: n_components cannot be larger than min(n_features, n_classes - 1)")
     var mode = cls_mode(context)
     var da = cls_da_mode(mode, context)
-    if not _solver_is(fields, "svd"):
+    if not da_solver_is(fields, "svd"):
         _lda_cov_solver(model, fields, arr, codes, K, d, n, mode, da, shr, context)
         return arr^
     var tol = cls_float(py_item(fields, nk[].k_tol))
@@ -1183,7 +1159,7 @@ def _lda_cov_solver(model: PythonObject, fields: PythonObject, arr: XIn, codes: 
     var nk = prep_keys()
     var b = cls_builtins()
     var priors_given = _prior_list(fields, K, "LinearDiscriminantAnalysis", context)
-    var eigen = _solver_is(fields, "eigen")
+    var eigen = da_solver_is(fields, "eigen")
     var est = py_item(fields, nk[].k_covariance_estimator)
     if est is not None:
         # refused by name before any stage (it was refused where its
@@ -1233,11 +1209,11 @@ def _lda_transform(model: PythonObject, fields: PythonObject, arr: XIn, context:
     check_width(model, fields, arr.d)
     var n = arr.n
     var d = arr.d
-    if _solver_is(fields, "lsqr"):
+    if da_solver_is(fields, "lsqr"):
         raise Error("NotImplementedError: mojolearn: transform not implemented for 'lsqr' solver (use 'svd' or 'eigen').")
     var mc = min(Int(py=py_item(fields, nk[].k__max_components)), Int(py=py_item(fields, nk[].k__rank)))
     var mode = py_item(fields, nk[].k_numeric_mode_)
-    var eigen = _solver_is(fields, "eigen")
+    var eigen = da_solver_is(fields, "eigen")
     var xbar = _sized_attr(fields, "xbar_", d, "LinearDiscriminantAnalysis", context)
     var scal = _sized_attr(fields, "_scal_full", d * d, "LinearDiscriminantAnalysis", context)
     # C04_LDA (-D MOJOLEARN_CLASSICAL_C04_LDA): the same center_rows -> matmul arithmetic in the consumer.
@@ -1263,17 +1239,17 @@ def _qda_fit(model: PythonObject, fields: PythonObject, X: PythonObject, y: Pyth
         # (a5f9cc738, bindings/prep_lda_admission.mojo).
         raise Error("TypeError: covariance_estimator cannot invoke Python callbacks; use covariance_estimator=None and the native solver/shrinkage configuration")
     var solver = py_item(fields, nk[].k_solver)
-    if not (_solver_is(fields, "svd") or _solver_is(fields, "eigen")):
+    if not (da_solver_is(fields, "svd") or da_solver_is(fields, "eigen")):
         raise Error("mojolearn: invalid solver " + cls_repr(solver))
-    if _solver_is(fields, "svd") and py_item(fields, nk[].k_shrinkage) is not None:
+    if da_solver_is(fields, "svd") and py_item(fields, nk[].k_shrinkage) is not None:
         raise Error("NotImplementedError: mojolearn: shrinkage not supported with 'svd' solver.")
-    var shr = _shrinkage(py_item(fields, nk[].k_shrinkage), context)
+    var shr = da_shrinkage(py_item(fields, nk[].k_shrinkage), context)
     var has_shrinkage = False
     var shrinkage = 0.0
     if shr:
         has_shrinkage = True
         shrinkage = shr.value()
-    var eigen = _solver_is(fields, "eigen")
+    var eigen = da_solver_is(fields, "eigen")
     var arr = cls_x2d(X, context)
     var n = arr.n
     var d = arr.d

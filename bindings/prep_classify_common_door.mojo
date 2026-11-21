@@ -374,6 +374,35 @@ def cls_float(value: PythonObject) raises -> Float64:
     return Float64(py=py_call(cls_builtins().float, value))
 
 
+# ---------------------------------------------------------------- discriminant parameter checks
+# (the door's fit and the member admission read them: one copy)
+
+
+def da_shrinkage(shrinkage: PythonObject, context: PythonObject) raises -> Optional[Float64]:
+    """`_shrinkage_value`: None, -1.0 for 'auto', else the float in [0, 1]."""
+    var b = cls_builtins()
+    if shrinkage is None:
+        return None
+    if Bool(py=py_call(b.isinstance, shrinkage, b.str)):
+        if String(shrinkage) != "auto":
+            raise Error("mojolearn: invalid shrinkage " + cls_repr(shrinkage))
+        return Optional[Float64](-1.0)
+    if not is_real(shrinkage, context) or not (cls_float(shrinkage) >= 0 and cls_float(shrinkage) <= 1):
+        raise Error("mojolearn: shrinkage must be 'auto' or a float in [0, 1], got " + cls_repr(shrinkage))
+    return Optional[Float64](cls_float(shrinkage))
+
+
+def da_check_estimator_shrinkage(est: PythonObject, shrinkage: PythonObject) raises:
+    if est is not None and shrinkage is not None and Bool(py=shrinkage != PythonObject(0)):
+        raise Error("mojolearn: covariance_estimator and shrinkage parameters are not None. Only one of the two can be set.")
+
+
+def da_solver_is(fields: PythonObject, name: String) raises -> Bool:
+    var nk = prep_keys()
+    var solver = py_item(fields, nk[].k_solver)
+    return py_type(solver) is cls_builtins().str and String(solver) == name
+
+
 # ---------------------------------------------------------------- statistics stage groups
 
 

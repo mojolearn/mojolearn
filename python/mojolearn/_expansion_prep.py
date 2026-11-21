@@ -1484,6 +1484,10 @@ class LinearDiscriminantAnalysis(_Classifier):
     >>> lda = mojolearn.LinearDiscriminantAnalysis(n_components=2).fit(X, y)
     >>> Z = lda.transform(X)
     """
+
+    #: the meta-estimators run this class through its native member entry
+    #: (core/discriminant_member.mojo; dense X).
+    _mojolearn_member = (10, 0)
     _mojolearn_native_public = True
     _parameters = ("solver", "shrinkage", "priors", "n_components", "store_covariance", "tol",
                    "covariance_estimator", "device")
