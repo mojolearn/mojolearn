@@ -30,7 +30,10 @@ from bindings.arena_owner_door import (
 )
 from bindings.arena_resident_rows_door import arena_resident_take, arena_resident_entry
 from bindings.msel_helpers_key_unpack import msel_helpers_key
-from core.arena_state import ARENA_RESIDENTS, ArenaResidentState, arena_handle, arena_handle_word
+from core.arena_state import (
+    ARENA_RESIDENTS, ArenaResidentState, ArenaResidentEntry, ArenaStoreFree, arena_handle, arena_handle_word,
+    arena_resident_close_entries, arena_resident_release_entry,
+)
 from core.entry_table import EntryRef
 from core.msel_helpers_calls import msel_store_free
 
@@ -45,60 +48,55 @@ def _store_entry(context: PythonObject) raises -> EntryRef:
     return msel_helpers_key(inputs)
 
 
-def _free(view: ArenaOwnerView, store_id: Int) raises:
-    if store_id >= 0:
-        # The store's own refusal text is retained unchanged.
-        with GILReleased(Python()):
-            _ = msel_store_free(view.store, store_id)
+struct _ResidentStore(ArenaStoreFree):
+    # The fold store's free through the entry resolved when the owner was
+    # built, and the operation's first failure (kept with its Python error).
+    var store: EntryRef
+    var first: FirstFailure
+
+    def __init__(out self, view: ArenaOwnerView):
+        self.store = view.store
+        self.first = FirstFailure()
+
+    def free(mut self, store_id: Int) raises:
+        if store_id >= 0:
+            # The store's own refusal text is retained unchanged.
+            with GILReleased(Python()):
+                _ = msel_store_free(self.store, store_id)
+
+    def failed(mut self, error: Error) raises:
+        self.first.keep(error)
 
 
 def _close(view: ArenaOwnerView) raises:
+    # The failure order is core/arena_state.mojo `arena_resident_close_entries`
+    # (checked natively by checks/native_tests/arena_state_suite.mojo; lane
+    # fx-leftovers item 9: it was reached only through the `msel_free` test export).
     var lease = ARENA_RESIDENTS.acquire(arena_handle(view.word))
-    # Unlink everything first: no other thread finds an entry being freed.
-    var drained = lease[].drain()
-    var first = FirstFailure()
-    var kept = List[Bool](length=len(drained), fill=False)
-    for i in range(len(drained)):  # driver-loop: attempt every independent release (one small device free each)
-        try:
-            _free(view, drained[i].store_id)
-        except error:
-            first.keep(error)
-            # A failed entry stays owned for a retry.
-            try:
-                _ = lease[].publish(drained[i])
-                kept[i] = True
-            except publish_error:
-                first.keep(publish_error)
+    var store = _ResidentStore(view)
+    var drained = List[ArenaResidentEntry]()
+    var kept = arena_resident_close_entries(lease[], store, drained)
     # Owners are released here, after every free and publication.
     for i in range(len(drained)):  # driver-loop: over the drained entries' pins
         if not kept[i]:
             arena_unpin(drained[i].owner_pin)
             arena_unpin(drained[i].prepared_pin)
-    first.finish()
+    store.first.finish()
 
 
 def _release(view: ArenaOwnerView, values: PythonObject) raises:
     var lease = ARENA_RESIDENTS.acquire(arena_handle(view.word))
+    var store = _ResidentStore(view)
     # Unpublish before the GIL-releasing free. Identity is the native
     # address (CPython's id()); the entry's pin keeps it from being reused.
-    var removed = lease[].remove(Int(values._obj_ptr))
+    var removed = ArenaResidentEntry(0, 0, 0, 0, False, -2, 0, 0)
+    var kept = arena_resident_release_entry(lease[], store, Int(values._obj_ptr), removed)
     if removed.store_id == -2:
         return
-    var first = FirstFailure()
-    var kept = False
-    try:
-        _free(view, removed.store_id)
-    except error:
-        first.keep(error)
-        try:
-            _ = lease[].publish(removed)
-            kept = True
-        except publish_error:
-            first.keep(publish_error)
     if not kept:
         arena_unpin(removed.owner_pin)
         arena_unpin(removed.prepared_pin)
-    first.finish()
+    store.first.finish()
 
 
 def _initialize(model: PythonObject, context: PythonObject) raises:
