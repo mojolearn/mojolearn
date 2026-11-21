@@ -19,6 +19,8 @@ from bindings.py_optional import py_present
 from training.causal_operation_owner_run import _causal_model_runtime_names, _causal_block_runtime_names
 from bindings.causal_keys_unpack import causal_keys, CausalKeys
 from bindings.py_balanced import py_item
+from core.causal_owner import CausalModelWords
+from core.causal_layer_run import causal_layer_kind, CAUSAL_LAYER_TRANSFORMER, CAUSAL_LAYER_MAMBA1
 
 
 struct CausalFieldNames(Defaultable, Movable):
@@ -126,6 +128,96 @@ struct CausalExecutionEntries(Movable, Writable):
 
     def write_repr_to(self, mut writer: Some[Writer]):
         self.write_to(writer)
+
+
+struct CausalGenerations(Defaultable, Movable):
+    # The process counter of model owner generations (one slot for every
+    # image that holds the causal door).
+    var last: Int
+
+    def __init__(out self):
+        self.last = 0
+
+
+comptime CAUSAL_GENERATIONS = SharedSlot[CausalGenerations, "MojolearnCausalGenerationsV1"]
+
+
+struct CausalModelOwner(Movable, Writable):
+    """The native owner of one generation of a CausalLM model (lane
+    dw-causal, 2026-11-21; design: docs of the lane result, section 1.2 A).
+
+    Python-held (registered once, by the tokenizer host binding) and kept in
+    the model's prepared record (`_CAUSAL_MODEL_SLOT`), inside the template,
+    so a capture whose identity key still matches hands this same owner to
+    the operation with no added read. A changed model drops the record and
+    this owner with it; CPython's reference count is the finaliser. It owns
+    typed words only: no tensor, no Python object."""
+
+    var words: CausalModelWords
+
+    def __init__(out self, var words: CausalModelWords):
+        self.words = words^
+
+    def write_to(self, mut writer: Some[Writer]):
+        writer.write("CausalModelOwner(generation=", self.words.generation, ")")
+
+    def write_repr_to(self, mut writer: Some[Writer]):
+        self.write_to(writer)
+
+
+def causal_model_owner_build(fields: PythonObject) raises -> PythonObject:
+    """UNPACK, once per model generation: the captured model record's fixed
+    words as a `CausalModelOwner`. `fields` is the dictionary of a capture
+    (`_causal_model_capture_full`): every word read here is covered by the
+    record's identity key, so the owner holds for as long as the record
+    matches. Not on any per-call path of a stored model."""
+    var words = CausalModelWords()
+    var counter = CAUSAL_GENERATIONS.get_or_create_ptr()
+    counter[].last += 1
+    words.generation = counter[].last
+    words.kind = causal_layer_kind(String(py_item(fields, PythonObject("kind"))))
+    words.width = Int(py=py_item(fields, PythonObject("d_model")))
+    words.vocab = Int(py=py_item(fields, PythonObject("vocab_size")))
+    words.layers = len(py_item(fields, PythonObject("_blocks")))
+    var limit = py_get(fields, PythonObject("max_positions"))
+    words.limited = limit is not None
+    if words.limited:
+        words.max_positions = Int(py=limit)
+    words.norm = py_get(fields, PythonObject("_norm")) is not None
+    words.head_packed = py_get(fields, PythonObject("_head_int15")) is not None
+    var entries = py_item(fields, PythonObject("_native_entries"))
+    words.parallel = py_get(entries, PythonObject("parallel_call")) is not None
+    words.primitives = py_get(entries, PythonObject("native_primitives")) is not None
+    words.block_operations = py_get(entries, PythonObject("native_block_operations")) is not None
+    if words.kind == CAUSAL_LAYER_TRANSFORMER:
+        words.provider = words.block_operations
+    else:
+        words.provider = py_get(entries, PythonObject("native_mamba")) is not None
+    if words.kind == CAUSAL_LAYER_MAMBA1:
+        var profile = py_get(entries, PythonObject(CAUSAL_ENTRY_MAMBA1_PROFILE))
+        if profile is not None:
+            words.mamba1_profile = Int(py=profile)
+    words.resident = py_contains(entries, PythonObject(CAUSAL_ENTRY_RESIDENT))
+    var vendor = py_get(entries, PythonObject(CAUSAL_ENTRY_RESIDENT_VENDOR))
+    if vendor is not None:
+        words.resident_cuda = String(vendor) == "cuda"
+    return PythonObject(alloc=CausalModelOwner(words^))
+
+
+def causal_model_owner(mut mods: NativeModules, model: PythonObject) raises -> PythonObject:
+    """UNPACK: the native owner of a captured model: one interned-key read of
+    the capture's dictionary. A capture that carries none (a parallel model,
+    whose capture is never stored, or a model whose record could not be
+    keyed) gets one built here and kept on this capture. The caller reads
+    `handle.downcast_value_ptr[CausalModelOwner]()[].words` and keeps the
+    handle named past its last use of the words."""
+    var fields = causal_snapshot_fields(mods, model)
+    var nk = causal_keys()
+    var held = py_get(fields, nk[].k__causal_native_model)
+    if held is None:
+        held = causal_model_owner_build(fields)
+        py_setitem(fields, nk[].k__causal_native_model, held)
+    return held
 
 
 # The plain (non-callable) values the CausalLM admission writes into the
@@ -616,6 +708,18 @@ def causal_model_capture(mut mods: NativeModules, model: PythonObject, context: 
     if not unchanged:
         prepared_drop(mods, _CAUSAL_MODEL_SLOT, model)
         return result
+    # Lane dw-causal: the model's native owner is built here, once per stored
+    # record, and rides in the template: every later capture that matches
+    # this record receives it through the template update that already runs.
+    # A record whose words cannot be read keeps no owner; the operation that
+    # needs one builds it at its own position and reports there.
+    var native_owner = PythonObject(None)
+    try:
+        native_owner = causal_model_owner_build(fields)
+    except:
+        native_owner = PythonObject(None)
+    if native_owner is not None:
+        py_setitem(fields, nk[].k__causal_native_model, native_owner)
     var template = py_call(bi.dict, fields)
     for name in ["_native_block_fields", "_causal_live_fields", "_causal_original"]:  # small-loop(per-call capture slots)
         _ = py_call(template.pop, name, PythonObject(None))
