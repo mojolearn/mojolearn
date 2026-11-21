@@ -41,13 +41,23 @@ refuses in words. FIT NOTICES (`MEMBER_BLOCK_NOTICES` by name): the door's
 "y residual is constant" UserWarning (core/member_notices.mojo).
 
 The fitted state is OWNED here, in a process-wide store of fixed chunks
-(lock only for mint, free and lookup). SERIAL BY NATURE: the store's
+(lock only for mint, free and lookup). RESIDENT OPERANDS (lane fx-audit 8): on
+a GPU image a query operand's device copy (x mean, x std, y mean, coef,
+x rotations, x loadings) is uploaded at the first query that reads it and kept
+in the slot, as the door's resident record keeps it
+(bindings/pls_boundary_unpack.mojo `_fitted_matrix`), and freed at the next
+fit, import or free; it is added to each query's kit as the door adds it
+(`add_resident`: same routes, same words). After the first query: one
+acquire load per operand. SERIAL BY NATURE: the store's
 bookkeeping and the per-block driver loops; the numerical work is the
 image's own kernels.
 """
 from std.sys.info import size_of
 from std.memory import unsafe_memcpy
+from std.atomic import Atomic, Ordering
 from bindings.decomp_kit_run import DKit
+from core.entry_table import EntryRef, entry_ref_call, entry_ref_unresolved
+from x_decomp.descriptor_schema import XD_DEV_FREE
 from bindings.pls_run import PlsFitWords, pls_fit_run, pls_project, pls_rebuild, pls_predict_run
 from core.device_route import DeviceRoute
 from core.member_abi import (
@@ -94,6 +104,13 @@ struct PlsMemberSlot(Copyable, Movable, Defaultable):
     # FIT NOTICES (core/member_notices.mojo): "y residual is constant", set by
     # the fit, cleared with the blocks.
     var notices: List[Float64]
+    # RESIDENT OPERANDS (module note): per block its device copy (-1: none),
+    # the bit mask of blocks whose copy is published (acquire / release), the
+    # lock word of a first upload and the x_decomp entry that frees them.
+    var dev: List[Int]
+    var dev_ready: Int64
+    var dev_lock: Int64
+    var dev_entry: EntryRef
 
     def __init__(out self):
         self.generation = 0
@@ -106,6 +123,10 @@ struct PlsMemberSlot(Copyable, Movable, Defaultable):
         self.rows = List[Int]()
         self.cols = List[Int]()
         self.notices = List[Float64]()
+        self.dev = List[Int]()
+        self.dev_ready = 0
+        self.dev_lock = 0
+        self.dev_entry = entry_ref_unresolved()
 
 
 struct PlsMemberStore(Defaultable, Movable):
@@ -163,6 +184,8 @@ def _mint(var words: List[Float64]) raises -> Int:
         slot[].kind = Int(words[0])
         slot[].words = words^
         _empty_blocks(slot[])
+        slot[].dev = List[Int](length=_BLOCKS, fill=-1)
+        slot[].dev_ready = 0
         return slot[].generation * _INDEX_SPAN + index + 1
     finally:
         shared_slot_unlock(lock)
@@ -173,6 +196,8 @@ def _lookup(handle: Int, release: Bool) raises -> Int:
     handle is refused: never a stale read."""
     var store = _STORE.get_or_create_ptr()
     var lock = rebind[MutPointer[Int64, MutUntrackedOrigin]](store[].synchronization.unsafe_ptr())
+    var held = List[Int]()
+    var held_entry = entry_ref_unresolved()
     shared_slot_lock(lock)
     try:
         var index = handle % _INDEX_SPAN - 1
@@ -187,10 +212,42 @@ def _lookup(handle: Int, release: Bool) raises -> Int:
             slot[].fitted = False
             slot[].words = List[Float64]()
             _empty_blocks(slot[])
+            # The resident copies leave under the lock and are freed after it.
+            held = slot[].dev.copy()
+            held_entry = slot[].dev_entry
+            slot[].dev = List[Int]()
+            slot[].dev_ready = 0
+            slot[].dev_entry = entry_ref_unresolved()
             store[].free.append(index)
         return address
     finally:
         shared_slot_unlock(lock)
+        _free_device(held, held_entry)
+
+
+def _free_device(handles: List[Int], entry: EntryRef):
+    """Return resident operand copies to the x_decomp pool (best effort: a
+    failing free leaks one small buffer, never a refusal of the operation)."""
+    for i in range(len(handles)):  # driver-loop: over the fitted blocks (fifteen)
+        if handles[i] >= 0:
+            try:
+                _ = entry_ref_call(entry, XD_DEV_FREE, List[Int](), [handles[i]], List[Float64]())
+            except:
+                pass
+
+
+def _drop_device(slot: _SlotP):
+    """Free this state's resident operand copies before its blocks change (a
+    fit, an import). The state is owned by its caller there: no query runs."""
+    if Atomic.load[ordering=Ordering.ACQUIRE](
+            MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(UnsafePointer(to=slot[].dev_ready)))) == 0:
+        return
+    var handles = slot[].dev.copy()
+    var entry = slot[].dev_entry
+    slot[].dev = List[Int](length=_BLOCKS, fill=-1)
+    slot[].dev_ready = 0
+    slot[].dev_entry = entry_ref_unresolved()
+    _free_device(handles, entry)
 
 
 def _name(kind: Int) -> String:
@@ -226,10 +283,38 @@ def _keep(mut kit: DKit, slot: _SlotP, index: Int, a: Int) raises:
 
 
 def _block(mut kit: DKit, slot: _SlotP, index: Int, estimator: String) raises -> Int:
-    """A fitted block as a kit matrix borrowed in place (the slot keeps it)."""
+    """A fitted query operand. On a GPU image its device copy is the slot's
+    (uploaded at the first query that reads it: module note), added as the
+    door adds its resident record's (`add_resident`: host words first, so no
+    route or bit changes); elsewhere the host words borrowed in place."""
     if len(slot[].blocks[index]) == 0:
         raise Error("NotFittedError: this " + estimator + " member state lacks the fitted block this operation reads")
-    return kit.borrow(Int(slot[].blocks[index].unsafe_ptr()), slot[].rows[index], slot[].cols[index])
+    var address = Int(slot[].blocks[index].unsafe_ptr())
+    var rows = slot[].rows[index]
+    var cols = slot[].cols[index]
+    var n = rows * cols
+    if not kit.resident or not kit.keyed or n < 1:
+        return kit.borrow(address, rows, cols)
+    var bit = Int64(1) << Int64(index)
+    var ready = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(UnsafePointer(to=slot[].dev_ready)))
+    if (Atomic.load[ordering=Ordering.ACQUIRE](ready) & bit) == 0:
+        var lock = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(UnsafePointer(to=slot[].dev_lock)))
+        shared_slot_lock(lock)
+        try:
+            var mask = Atomic.load[ordering=Ordering.ACQUIRE](ready)
+            if (mask & bit) == 0:
+                var handle = kit.dev_alloc(n)
+                try:
+                    kit.dev_upload(handle, address, n)
+                except error:
+                    kit.dev_free(handle)
+                    raise error^
+                slot[].dev[index] = handle
+                slot[].dev_entry = kit.entry
+                Atomic.store[ordering=Ordering.RELEASE](ready, mask | bit)
+        finally:
+            shared_slot_unlock(lock)
+    return kit.add_resident(address, slot[].dev[index], rows, cols)
 
 
 def _write(mut kit: DKit, a: Int, dst: MemberMatrix, estimator: String) raises:
@@ -269,6 +354,7 @@ def _fit(slot: _SlotP, call: _CallP) raises:
         raise Error("n_components == " + String(nc) + ", while 1 <= n_components <= " + String(bound) + " is required")
     var words = PlsFitWords(nc, Int(w[2]), w[3] != 0.0, canonical, w[5] != 0.0, w[6] != 0.0, w[7])
     slot[].fitted = False
+    _drop_device(slot)
     _empty_blocks(slot[])
     var kit = _kit(call[].route)
     try:
@@ -385,6 +471,7 @@ def _import(slot: _SlotP, call: _CallP) raises:
     """Copy one fitted block in; MEMBER_IMPORT_DONE completes the state."""
     var estimator = _name(slot[].kind)
     var index = _index_of(call[].block)
+    _drop_device(slot)
     if index == 0:
         if not call[].x.dense_host(MEMBER_F64) or call[].x.rows * call[].x.cols != 4:
             raise Error("member ABI: the PLS scalars block is four host float64 words")
