@@ -3308,6 +3308,149 @@ def _apply_leaves(
     host_parallelize(rows, units)
 
 
+def apply_scaled_leaves_host(
+    mut cursor: List[Float32],
+    scaled: List[Float32],
+    row_index: List[Int],
+    offsets: List[Int],
+    sizes: List[Int],
+    n_leaves: Int,
+    dim: Int = 1,
+    plane: Int = 0,
+):
+    """The host oracles' `add_model_value_kernel`: every row of leaf `l` (its
+    partition range `row_index[offsets[l] .. + sizes[l]]`) takes
+    `cursor + scaled[l * dim + d]` in plane `d` (`d * plane + row`), one add
+    per row, the kernel's statement. One copy for the six oracles that each
+    restated it (fb11 follow-up, 2026-11-17; moved here from
+    `gbdt/methods/cursor_rescale.mojo`, which the device kernels import, so
+    that it can split across the host pool).
+
+    A row is in one leaf and takes one add per plane, so positions are the
+    units (one device thread a row): a task owns a run of positions and
+    visits each leaf's range clipped to it; `_gbdt_units` tasks."""
+    var n_rows = 0
+    for leaf in range(n_leaves):  # driver-loop: over the leaves (the partition's extent)
+        n_rows = max(n_rows, offsets[leaf] + sizes[leaf])
+    var units = _gbdt_units(n_rows, 3 * dim * n_rows)
+    var chunk = host_predict_chunk(n_rows, units)
+    var cursor_p = rebind[HostF32Ptr](cursor.unsafe_ptr())
+    var scaled_p = rebind[HostF32Ptr](scaled.unsafe_ptr())
+    var row_p = rebind[GbdtIntPtr](row_index.unsafe_ptr())
+    var off_p = rebind[GbdtIntPtr](offsets.unsafe_ptr())
+    var sz_p = rebind[GbdtIntPtr](sizes.unsafe_ptr())
+
+    def rows(unit: Int) {imm chunk, imm n_rows, imm n_leaves, imm dim, imm plane, imm cursor_p, imm scaled_p, imm row_p, imm off_p, imm sz_p}:
+        var lo = unit * chunk
+        var hi = min(lo + chunk, n_rows)
+        for leaf in range(n_leaves):
+            var first = max(off_p[leaf], lo)
+            var stop = min(off_p[leaf] + sz_p[leaf], hi)
+            for d in range(dim):
+                var v = scaled_p[leaf * dim + d]
+                for pos in range(first, stop):
+                    var at = d * plane + row_p[pos]
+                    cursor_p[at] = cursor_p[at] + v
+
+    host_parallelize(rows, units)
+    _ = len(cursor)
+    _ = len(scaled)
+    _ = len(row_index)
+    _ = len(offsets)
+    _ = len(sizes)
+
+
+def _identity_rows(mut row_index: List[Int], n_rows: Int):
+    """`row_index[r] = r` (the root partition's row order, the device's
+    `make_sequence`): one statement per row, the rows in `_gbdt_units`
+    contiguous ranges."""
+    var units = _gbdt_units(n_rows, n_rows)
+    var chunk = host_predict_chunk(n_rows, units)
+    var row_p = rebind[GbdtIntPtr](row_index.unsafe_ptr())
+
+    def rows(unit: Int) {imm chunk, imm n_rows, imm row_p}:
+        for r in range(unit * chunk, min(n_rows, (unit + 1) * chunk)):
+            row_p[r] = r
+
+    host_parallelize(rows, units)
+    _ = len(row_index)
+
+
+def _gather_rows(
+    src: List[Float32],
+    row_index: List[Int],
+    n_rows: Int,
+    mut dst: List[Float32],
+    planes: Int = 1,
+):
+    """`dst[p * n_rows + pos] = src[p * n_rows + row_index[pos]]` for every
+    position and plane (the device's `gather` by the partition's row order:
+    a move, one thread a position), the positions in `_gbdt_units`
+    contiguous ranges."""
+    var units = _gbdt_units(n_rows, 2 * planes * n_rows)
+    var chunk = host_predict_chunk(n_rows, units)
+    var src_p = rebind[HostF32Ptr](src.unsafe_ptr())
+    var row_p = rebind[GbdtIntPtr](row_index.unsafe_ptr())
+    var dst_p = rebind[HostF32Ptr](dst.unsafe_ptr())
+
+    def rows(unit: Int) {imm chunk, imm n_rows, imm planes, imm src_p, imm row_p, imm dst_p}:
+        for pos in range(unit * chunk, min(n_rows, (unit + 1) * chunk)):
+            var row = row_p[pos]
+            for p in range(planes):
+                dst_p[p * n_rows + pos] = src_p[p * n_rows + row]
+
+    host_parallelize(rows, units)
+    _ = len(src)
+    _ = len(row_index)
+    _ = len(dst)
+
+
+def _invert_rows(row_index: List[Int], n_rows: Int, mut inverse: List[Int]):
+    """`inverse[row_index[pos]] = pos` (the device's scatter of the
+    sequence by the partition's row order). `row_index` is a permutation,
+    so the writes of any position range land on distinct rows: the
+    positions run in `_gbdt_units` contiguous ranges."""
+    var units = _gbdt_units(n_rows, 2 * n_rows)
+    var chunk = host_predict_chunk(n_rows, units)
+    var row_p = rebind[GbdtIntPtr](row_index.unsafe_ptr())
+    var inv_p = rebind[GbdtIntPtr](inverse.unsafe_ptr())
+
+    def rows(unit: Int) {imm chunk, imm n_rows, imm row_p, imm inv_p}:
+        for pos in range(unit * chunk, min(n_rows, (unit + 1) * chunk)):
+            inv_p[row_p[pos]] = pos
+
+    host_parallelize(rows, units)
+    _ = len(row_index)
+    _ = len(inverse)
+
+
+def _leaf_bins(
+    offsets: List[Int], sizes: List[Int], n_rows: Int, mut bins: List[Int]
+):
+    """`fill_bins_from_partition_kernel` (`kernel_add_model_value.mojo:186-
+    204`): `bins[pos] = leaf` for every position of every leaf's range. A
+    position is in one leaf: a task owns a run of positions and writes each
+    leaf's range clipped to it; `_gbdt_units` tasks."""
+    var n_leaves = len(sizes)
+    var units = _gbdt_units(n_rows, n_rows)
+    var chunk = host_predict_chunk(n_rows, units)
+    var off_p = rebind[GbdtIntPtr](offsets.unsafe_ptr())
+    var sz_p = rebind[GbdtIntPtr](sizes.unsafe_ptr())
+    var bins_p = rebind[GbdtIntPtr](bins.unsafe_ptr())
+
+    def rows(unit: Int) {imm chunk, imm n_rows, imm n_leaves, imm off_p, imm sz_p, imm bins_p}:
+        var lo = unit * chunk
+        var hi = min(lo + chunk, n_rows)
+        for leaf in range(n_leaves):
+            for pos in range(max(off_p[leaf], lo), min(off_p[leaf] + sz_p[leaf], hi)):
+                bins_p[pos] = leaf
+
+    host_parallelize(rows, units)
+    _ = len(offsets)
+    _ = len(sizes)
+    _ = len(bins)
+
+
 # ===========================================================================
 # THE FIT
 # ===========================================================================
@@ -3417,6 +3560,28 @@ def _partition_for_model(
     _ = len(l_value)
     _ = len(l_eq)
     return _HostLeafPartition(rows^, offsets^, sizes^)
+
+
+def _partition_for_tree(
+    cindex: List[UInt32],
+    layout: CompressedIndexLayout,
+    tree_features: List[Int],
+    tree_bins: List[Int],
+    n_rows: Int,
+) raises -> _HostLeafPartition:
+    """`_partition_for_model` at the tree's own depth; a tree with no split
+    is one leaf holding the rows in their order (the pointwise fits grow
+    such trees; `_partition_for_model` refuses depth 0 as the device does)."""
+    var depth = len(tree_features)
+    if depth > 0:
+        return _partition_for_model(
+            cindex, layout, tree_features, tree_bins, depth, n_rows
+        )
+    var whole = List[Int](length=n_rows, fill=0)
+    _identity_rows(whole, n_rows)
+    return _HostLeafPartition(
+        whole^, List[Int](length=1, fill=0), List[Int](length=1, fill=n_rows)
+    )
 
 
 def gbdt_host_fit(
@@ -3888,8 +4053,7 @@ def gbdt_host_boost(
         # ---- `run_tree_layout_traced`, every level (TWIN: the loop in
         # `gbdt_oracle_rmse.mojo::gbdt_rmse_host_fit`; edit both) ----
         var row_index = List[Int](length=n_rows, fill=0)
-        for r in range(n_rows):
-            row_index[r] = r
+        _identity_rows(row_index, n_rows)
         var p_off = List[Int](length=max_leaves, fill=0)
         var p_sz = List[Int](length=max_leaves, fill=0)
         p_sz[0] = n_rows

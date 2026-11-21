@@ -14,7 +14,8 @@ from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.classical_arrays_door import classical_input, classical_address, classical_is_array, classical_is_f32, classical_cast_kind, classical_c_order, classical_wrap_array
 from bindings.classical_pandas_door import classical_admit_value, native_pandas_exact, native_pandas_f32
 from bindings.native_torch_admission_door import native_torch_numpy
-from bindings.host_archive_native_door import host_archive_check_layout, host_archive_typed, host_archive_allocate, host_archive_class_values, host_archive_gbdt_state
+from bindings.host_archive_native_door import host_archive_check_layout, host_archive_typed, host_archive_allocate, host_archive_class_values, host_archive_gbdt_state, host_archive_category_map
+from bindings.gbdt_category_unpack import gbdt_category_block_list, gbdt_category_admit, gbdt_category_apply
 from bindings.host_archive_lifetime_door import host_archive_finalize
 from bindings.native_numpy_metadata_unpack import native_numpy_dtype
 from core.scaler_fit_impl import scaler_cast
@@ -301,25 +302,77 @@ def host_tree_labels(classes: PythonObject, vote: PythonObject, context: PythonO
 
 
 def host_gbdt_predict(fields: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
+    """UNPACK of a HostGBDT predict: X admitted, then `_host_gbdt_run`.
+
+    fx-hostgbdt (2026-11-21): a model fitted with cat_features carries its
+    category map (`category_map_`, read from the file by
+    host_archive_category_map, the reader `GradientBoosting.load` uses). Its
+    X is admitted and encoded by the SAME functions GradientBoosting's
+    predict calls (bindings/trees_public_gbdt_door.mojo `_fitted_x`):
+    `gbdt_category_admit` (numbers, lists, object / U / S arrays, pandas,
+    with its refusals in words) and `gbdt_category_apply` (the map searched
+    in place; a value the fit did not see takes the unseen code). The block
+    is column-major, which both the CTR expansion and the column-major
+    predict read directly (no transpose). Before, the map was never read
+    and raw categorical input was predicted on its Float32 words (wrong
+    answers; text was refused). A model without a map: one dict read with
+    the held key more per call, otherwise the old admission unchanged."""
     var nk = host_tree_archive_keys()
-    var model_owner = fields
+    var category_map = py_get(fields, nk[].k_category_map_)
+    if category_map is not None:
+        var fitted_width = Int(py=py_item(fields, nk[].k_n_features_in_))
+        var cat_columns = gbdt_category_block_list(category_map, fitted_width)
+        var cat_keys = List[UInt64]()
+        var xc = gbdt_category_admit(source, "X", cat_columns, cat_keys, context)
+        if xc.cols != fitted_width:
+            raise Error("mojolearn: model was fitted on " + String(fitted_width) + " features, got " + String(xc.cols))
+        gbdt_category_apply(xc, cat_keys, category_map, fitted_width, context)
+        var encoded = _host_gbdt_run(fields, xc.address, xc.rows, xc.cols, False, context)
+        # Retain the encoded block (and the map) through the last native read.
+        _ = xc^
+        _ = category_map
+        return encoded
     var x = host_tree_input(source, context)
     var rows = Int(py=x.shape[0])
     var features = Int(py=x.shape[1])
     if features != Int(py=py_item(fields, nk[].k_n_features_in_)):
         raise Error("X feature count differs from the fitted GBDT model")
+    var out = _host_gbdt_run(fields, Int(py=classical_address(x)), rows, features, True, context)
+    # Retain the prepared input through the last native pointer consumer.
+    _ = x^
+    return out
+
+
+def _host_gbdt_run(fields: PythonObject, x_address: Int, rows: Int, features: Int, row_major_input: Bool,
+                   context: PythonObject) raises -> PythonObject:
+    """RUN of a HostGBDT predict over admitted float32 words at `x_address`
+    (`rows` x `features`, row-major when `row_major_input`, else
+    column-major): the CTR expansion (tree-CTR combination tables and the
+    Ordered CTR records are in the parsed model text's arrays,
+    core/host_archive_gbdt.mojo) when the model has CTR tables, then the
+    predict. The caller keeps the words alive."""
+    var nk = host_tree_archive_keys()
+    var model_owner = fields
     var a = py_item(fields, nk[].k__arrays)
     var dim = Int(py=py_item(fields, nk[].k_approx_dim_))
     var columns = Int(py=py_item(fields, nk[].k_n_model_columns_))
-    var row_major = Int(py=py_item(a, nk[].k_n_ctr_tables)) == 0 and Int(py=py_item(a, nk[].k_n_tensor_tables)) == 0
-    if not row_major:
-        var input_owner = x
-        var column = host_archive_typed(Python.tuple(rows * features), "<f4", py_item(context, nk[].k_output_context))
-        host_tree_column_copy(Int(py=classical_address(x)), rows, features, Int(py=classical_address(column)))
-        _ = input_owner^
-        var expanded = host_archive_typed(Python.tuple(rows * columns), "<f4", py_item(context, nk[].k_output_context))
+    var has_ctr = Int(py=py_item(a, nk[].k_n_ctr_tables)) != 0 or Int(py=py_item(a, nk[].k_n_tensor_tables)) != 0
+    var x = x_address
+    var x_features = features
+    var expanded = PythonObject(None)
+    if has_ctr:
+        # The expansion reads raw columns column-major: a row-major input
+        # is transposed once; a column-major one (the category block) is
+        # read where it is.
+        var column = PythonObject(None)
+        var column_address = x_address
+        if row_major_input:
+            column = host_archive_typed(Python.tuple(rows * features), "<f4", py_item(context, nk[].k_output_context))
+            column_address = Int(py=classical_address(column))
+            host_tree_column_copy(x_address, rows, features, column_address)
+        expanded = host_archive_typed(Python.tuple(rows * columns), "<f4", py_item(context, nk[].k_output_context))
         var addresses = List[Int](capacity=10)
-        addresses.append(Int(py=classical_address(column)))
+        addresses.append(column_address)
         var names = Python.tuple("ctr_ints", "ctr_floats", "tensor_ints", "tensor_floats", "ctr_counts", "border_offsets", "borders", "one_hot")
         for i in range(len(names)):  # driver-loop: fixed native CTR expansion buffers
             var array = host_tree_array(a, String(names[i]), "<f4" if i == 1 or i == 3 or i == 6 else "<i4", context)
@@ -339,8 +392,8 @@ def host_gbdt_predict(fields: PythonObject, source: PythonObject, context: Pytho
         _ = params^
         if wrote != columns:
             raise Error("RuntimeError: GBDT expansion did not write every model column")
-        x = expanded
-        features = columns
+        x = Int(py=classical_address(expanded))
+        x_features = columns
     var out = host_archive_typed(Python.tuple(rows) if dim == 1 else Python.tuple(rows, dim), "<f4", py_item(context, nk[].k_output_context))
     var names = Python.tuple("border_offsets", "borders", "fold_counts", "one_hot", "nan_treatment", "tree_offsets",
         "split_feature", "split_bin", "split_take_bin", "node_left", "node_right", "leaf_offsets", "leaves")
@@ -348,9 +401,10 @@ def host_gbdt_predict(fields: PythonObject, source: PythonObject, context: Pytho
     for i in range(len(names)):  # driver-loop: fixed native GBDT prediction buffers
         var array = host_tree_array(a, String(names[i]), "<f4" if i == 1 or i == 12 else "<i4", context)
         addresses.append(Int(py=classical_address(array)))
-    addresses.append(Int(py=classical_address(x)))
+    addresses.append(x)
     addresses.append(Int(py=classical_address(out)))
-    var params: List[Int] = [rows, features, Int(py=py_item(a, nk[].k_n_trees)), dim, 1 if Bool(py=py_item(a, nk[].k_non_symmetric)) else 0,
+    var row_major = row_major_input and not has_ctr
+    var params: List[Int] = [rows, x_features, Int(py=py_item(a, nk[].k_n_trees)), dim, 1 if Bool(py=py_item(a, nk[].k_non_symmetric)) else 0,
         Int(py=py_item(a, nk[].k_n_splits)), Int(py=py_item(a, nk[].k_n_leaf_values)), Int(py=py_item(a, nk[].k_n_borders)), 1 if row_major else 0]
     var bias = Float64(py=py_item(fields, nk[].k_bias_))
     var key = host_tree_key(context)
@@ -359,10 +413,10 @@ def host_gbdt_predict(fields: PythonObject, source: PythonObject, context: Pytho
         wrote = fh_gbdt_predict(key, addresses, params, bias)
     _ = addresses^
     _ = params^
-    # Retain both the prepared/expanded input and the parsed model arrays
-    # through the last native pointer consumer, including helper-created
-    # models that have no reference held by the Python caller.
-    _ = x^
+    # Retain the expanded input and the parsed model arrays through the
+    # last native pointer consumer, including helper-created models that
+    # have no reference held by the Python caller.
+    _ = expanded^
     _ = a^
     _ = model_owner^
     if wrote != rows:
@@ -502,6 +556,17 @@ def host_tree_initialize_gbdt(model: PythonObject, args: PythonObject, context: 
     py_setitem(fields, nk[].k_n_classes_, classes)
     py_setitem(fields, nk[].k_is_classifier, py_contains(py_item(context, nk[].k_host_archive_gbdt_classification_losses), loss))
     py_setitem(fields, nk[].k_has_proba, py_contains(py_item(context, nk[].k_host_archive_gbdt_proba_losses), loss))
+    # fx-hostgbdt: the optional category map (`GradientBoosting.category_map_`),
+    # admitted by the file loader's one reader (exact int64 words, never
+    # cast); its layout is checked against the fitted width at the first
+    # predict, as GradientBoosting checks it.
+    # The field is held only for a model with a map, so a model without
+    # one keeps its stored state (and the per-call field admission of
+    # host_tree_fields) exactly as before.
+    if len(args) > 8 and args[8] is not None:
+        var one = Python.dict()
+        py_setitem(one, nk[].k_category_map, args[8])
+        py_setitem(fields, nk[].k_category_map_, host_archive_category_map(one, context))
     py_setitem(fields, nk[].k__binding, module)
 
 
@@ -542,7 +607,15 @@ def host_tree_operation(model: PythonObject, operation: String, args: PythonObje
     if operation == "host_tree_ctr_predict":
         var restored = host_archive_allocate(py_item(context, nk[].k_host_tree_classes)[1], context)
         host_tree_initialize_gbdt(restored, Python.tuple(args[1], args[2], args[3], args[4], args[5], PythonObject(None), PythonObject(None), args[6]), context)
-        return host_gbdt_predict(sequential_fields(restored), args[0], context)
+        var restored_fields = sequential_fields(restored)
+        # fx-hostgbdt: args[7] is the GradientBoosting model's own
+        # `category_map_` (None without cat_features), already admitted at
+        # its fit or load: held as it is (no second admission), so this CPU
+        # apply encodes raw categorical input exactly as the model does.
+        # Before, the map was not passed and raw input was read as numbers.
+        if len(args) > 7 and args[7] is not None:
+            py_setitem(restored_fields, nk[].k_category_map_, args[7])
+        return host_gbdt_predict(restored_fields, args[0], context)
     if operation == "host_tree_setstate":
         host_archive_check_layout(py_type(model), context)
         if py_type(args[0]) is not native_loaded_module("builtins").dict:
@@ -567,6 +640,13 @@ def host_tree_operation(model: PythonObject, operation: String, args: PythonObje
         var hash = Sha256()
         if gbdt:
             hash.update_text(String(py_item(fields, nk[].k_model_)))
+            # fx-hostgbdt: the category map is part of the model a
+            # prediction uses (raw categorical values -> codes); a model
+            # without one hashes its text only, as before.
+            var category_map = py_get(fields, nk[].k_category_map_)
+            if category_map is not None:
+                hash.update(Int(py=classical_address(category_map)), Int(py=category_map.nbytes))
+                _ = category_map  # keep the Python object alive through the native read above
         else:
             var names = Python.tuple("_offsets", "_colid", "_quesval", "_left_child", "_leaves")
             for i in range(5):  # driver-loop: the fixed forest model hash fields

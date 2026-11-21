@@ -35,8 +35,13 @@ tools/identity_break.py on the gbdt-query-rmse lane is the measurement.
 """
 
 from checks.numerics import ftz
+from core.host_parallel import host_parallelize
+from core.host_predict_threads import HostF32Ptr, host_predict_chunk
 from gbdt.host.gbdt_oracle import (
     GBDT_MSE_BLOCK,
+    GbdtIntPtr,
+    _gbdt_units,
+    _invert_rows,
     _deterministic_sum_lanes,
     _halving_fold,
     _partition_stats_level,
@@ -48,10 +53,12 @@ comptime GBDT_QUERY_LANES = 32
 
 
 def query_offsets(group_sizes: List[Int]) -> List[Int]:
-    """Each query's first row, the pool's biased offsets at bias 0."""
+    """Each query's first row, the pool's biased offsets at bias 0.
+
+    Serial by nature: a running sum over the queries (one add each)."""
     var offsets = List[Int](capacity=len(group_sizes))
     var at = 0
-    for q in range(len(group_sizes)):
+    for q in range(len(group_sizes)):  # driver-loop: over the queries
         offsets.append(at)
         at += group_sizes[q]
     return offsets^
@@ -60,11 +67,27 @@ def query_offsets(group_sizes: List[Int]) -> List[Int]:
 def query_ids(group_sizes: List[Int], n_rows: Int) -> List[Int]:
     """`compute_group_ids_kernel`: every row of query `q` holds `q`."""
     var qids = List[Int](length=n_rows, fill=0)
-    var at = 0
-    for q in range(len(group_sizes)):
-        for k in range(group_sizes[q]):
-            qids[at + k] = q
-        at += group_sizes[q]
+    # THE SPLIT (lane gbdt-host-par): a query writes its own rows; queries
+    # go round robin to `_gbdt_units` tasks from their first rows (the
+    # running sum `query_offsets`)
+    var n_queries = len(group_sizes)
+    var offsets = query_offsets(group_sizes)
+    var units = _gbdt_units(n_queries, n_rows)
+    var off_p = rebind[GbdtIntPtr](offsets.unsafe_ptr())
+    var sz_p = rebind[GbdtIntPtr](group_sizes.unsafe_ptr())
+    var qids_p = rebind[GbdtIntPtr](qids.unsafe_ptr())
+
+    def fill(unit: Int) {imm units, imm n_queries, imm off_p, imm sz_p, imm qids_p}:
+        var q = unit
+        while q < n_queries:
+            var at = off_p[q]
+            for k in range(sz_p[q]):
+                qids_p[at + k] = q
+            q += units
+
+    host_parallelize(fill, units)
+    _ = len(offsets)
+    _ = len(group_sizes)
     return qids^
 
 
@@ -73,31 +96,50 @@ def query_means(
 ) -> List[Float32]:
     """`compute_group_means_kernel` at unit weights."""
     var means = List[Float32](length=len(group_sizes), fill=Float32(0.0))
-    for q in range(len(group_sizes)):
+    # THE SPLIT (lane gbdt-host-par): the unit is one QUERY, the kernel's
+    # block: its 32 lanes' strided sums ascending and their halving tree
+    # read the query's own rows. Queries go round robin to `_gbdt_units`
+    # tasks; a task holds the two lane lines, every lane rewritten per query.
+    var n_queries = len(group_sizes)
+    var units = _gbdt_units(n_queries, 4 * len(mse_der) + 64 * n_queries)
+    var der_p = rebind[HostF32Ptr](mse_der.unsafe_ptr())
+    var off_p = rebind[GbdtIntPtr](offsets.unsafe_ptr())
+    var sz_p = rebind[GbdtIntPtr](group_sizes.unsafe_ptr())
+    var means_p = rebind[HostF32Ptr](means.unsafe_ptr())
+
+    def query_folds(unit: Int) {imm units, imm n_queries, imm der_p, imm off_p, imm sz_p, imm means_p}:
         var line_t = List[Float32](length=GBDT_QUERY_LANES, fill=Float32(0.0))
         var line_w = List[Float32](length=GBDT_QUERY_LANES, fill=Float32(0.0))
-        var base = offsets[q]
-        var size = group_sizes[q]
-        for lane in range(GBDT_QUERY_LANES):
-            var sum_t = Float32(0.0)
-            var sum_w = Float32(0.0)
-            var i = lane
-            while i < size:
-                sum_t = sum_t + mse_der[base + i] * Float32(1.0)
-                sum_w = sum_w + Float32(1.0)
-                i += GBDT_QUERY_LANES
-            line_t[lane] = sum_t
-            line_w[lane] = sum_w
-        var step = GBDT_QUERY_LANES // 2
-        while step > 0:
-            for lane in range(step):
-                line_t[lane] = line_t[lane] + line_t[lane + step]
-                line_w[lane] = line_w[lane] + line_w[lane + step]
-            step //= 2
-        var mean = Float32(0.0)
-        if line_w[0] != Float32(0.0):
-            mean = line_t[0] / line_w[0]
-        means[q] = ftz(mean)
+        var q = unit
+        while q < n_queries:
+            var base = off_p[q]
+            var size = sz_p[q]
+            for lane in range(GBDT_QUERY_LANES):
+                var sum_t = Float32(0.0)
+                var sum_w = Float32(0.0)
+                var i = lane
+                while i < size:
+                    sum_t = sum_t + der_p[base + i] * Float32(1.0)
+                    sum_w = sum_w + Float32(1.0)
+                    i += GBDT_QUERY_LANES
+                line_t[lane] = sum_t
+                line_w[lane] = sum_w
+            var step = GBDT_QUERY_LANES // 2
+            while step > 0:
+                for lane in range(step):
+                    line_t[lane] = line_t[lane] + line_t[lane + step]
+                    line_w[lane] = line_w[lane] + line_w[lane + step]
+                step //= 2
+            var mean = Float32(0.0)
+            if line_w[0] != Float32(0.0):
+                mean = line_t[0] / line_w[0]
+            means_p[q] = ftz(mean)
+            q += units
+
+    host_parallelize(query_folds, units)
+    _ = len(mse_der)
+    _ = len(offsets)
+    _ = len(group_sizes)
     return means^
 
 
@@ -111,11 +153,26 @@ def query_residuals(
     """`query_rmse_residual_kernel`: `(p * -1) + t` in row order, `p` read at
     `inverse[i]` when the cursor is bin-ordered."""
     var mse_der = List[Float32](length=n_rows, fill=Float32(0.0))
-    for i in range(n_rows):
-        var p = cursor[inverse[i]] if has_inverse else cursor[i]
-        var v = p * Float32(-1.0)
-        v = v + targets[i]
-        mse_der[i] = v
+    # one statement per row, the rows in `_gbdt_units` contiguous ranges
+    var units = _gbdt_units(n_rows, 4 * n_rows)
+    var chunk = host_predict_chunk(n_rows, units)
+    var targets_p = rebind[HostF32Ptr](targets.unsafe_ptr())
+    var cursor_p = rebind[HostF32Ptr](cursor.unsafe_ptr())
+    # an empty `inverse` is never read (`has_inverse` guards it)
+    var inv_p = rebind[GbdtIntPtr](inverse.unsafe_ptr())
+    var der_p = rebind[HostF32Ptr](mse_der.unsafe_ptr())
+
+    def rows(unit: Int) {imm chunk, imm n_rows, imm has_inverse, imm targets_p, imm cursor_p, imm inv_p, imm der_p}:
+        for i in range(unit * chunk, min(n_rows, (unit + 1) * chunk)):
+            var p = cursor_p[inv_p[i]] if has_inverse else cursor_p[i]
+            var v = p * Float32(-1.0)
+            v = v + targets_p[i]
+            der_p[i] = v
+
+    host_parallelize(rows, units)
+    _ = len(targets)
+    _ = len(cursor)
+    _ = len(inverse)
     return mse_der^
 
 
@@ -135,26 +192,52 @@ def query_rmse_search_pass(
     var mse_der = query_residuals(targets, cursor, List[Int](), False, n_rows)
     var means = query_means(mse_der, offsets, group_sizes)
     var blocks = (n_rows + GBDT_MSE_BLOCK - 1) // GBDT_MSE_BLOCK
-    for b in range(blocks):
+    # THE SPLIT (lane gbdt-host-par), the unit of `_logloss_search_pass`:
+    # one 256-thread device block owns its rows' two planes and its three
+    # partials' halving trees; blocks go round robin to `_gbdt_units` tasks.
+    var units = _gbdt_units(blocks, 12 * n_rows)
+    var der_p = rebind[HostF32Ptr](mse_der.unsafe_ptr())
+    var means_p = rebind[HostF32Ptr](means.unsafe_ptr())
+    var qids_p = rebind[GbdtIntPtr](qids.unsafe_ptr())
+    var stats_p = rebind[HostF32Ptr](stats.unsafe_ptr())
+    var fv_p = rebind[HostF32Ptr](fv_partials.unsafe_ptr())
+    var mag_p = rebind[HostF32Ptr](mag_partials.unsafe_ptr())
+
+    def score_blocks(unit: Int) {imm units, imm blocks, imm n_rows, imm der_p, imm means_p, imm qids_p, imm stats_p, imm fv_p, imm mag_p}:
         var s_score = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
         var s_w = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
         var s_g = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
-        for t in range(GBDT_MSE_BLOCK):
-            var i = b * GBDT_MSE_BLOCK + t
-            if i < n_rows:
-                var weight = Float32(1.0)
-                var val = mse_der[i]
-                var mean = means[qids[i]]
-                var direction = val - mean
-                var der = ftz(weight * direction)
-                stats[i] = weight
-                stats[n_rows + i] = der
-                s_score[t] = -weight * (val - mean) * (val - mean)
-                s_w[t] = abs(weight)
-                s_g[t] = abs(der)
-        fv_partials[b] = _halving_fold(s_score)
-        mag_partials[2 * b] = _halving_fold(s_w)
-        mag_partials[2 * b + 1] = _halving_fold(s_g)
+        var b = unit
+        while b < blocks:
+            for t in range(GBDT_MSE_BLOCK):
+                var i = b * GBDT_MSE_BLOCK + t
+                # an out-of-range thread adds 0.0 (the slabs are reused)
+                s_score[t] = Float32(0.0)
+                s_w[t] = Float32(0.0)
+                s_g[t] = Float32(0.0)
+                if i < n_rows:
+                    var weight = Float32(1.0)
+                    var val = der_p[i]
+                    var mean = means_p[qids_p[i]]
+                    var direction = val - mean
+                    var der = ftz(weight * direction)
+                    stats_p[i] = weight
+                    stats_p[n_rows + i] = der
+                    s_score[t] = -weight * (val - mean) * (val - mean)
+                    s_w[t] = abs(weight)
+                    s_g[t] = abs(der)
+            fv_p[b] = _halving_fold(s_score)
+            mag_p[2 * b] = _halving_fold(s_w)
+            mag_p[2 * b + 1] = _halving_fold(s_g)
+            b += units
+
+    host_parallelize(score_blocks, units)
+    _ = len(mse_der)
+    _ = len(means)
+    _ = len(qids)
+    _ = len(stats)
+    _ = len(fv_partials)
+    _ = len(mag_partials)
 
 
 def query_rmse_value(
@@ -191,8 +274,7 @@ def query_rmse_eval(
     the per-leaf partition stats, the Hessian plus lambda and the host
     Float32 fold of the value partials, as `_loss_eval`."""
     var inverse = List[Int](length=n_rows, fill=0)
-    for pos in range(n_rows):
-        inverse[row_index[pos]] = pos
+    _invert_rows(row_index, n_rows, inverse)
     var offsets = query_offsets(group_sizes)
     var qids = query_ids(group_sizes, n_rows)
     var mse_der = query_residuals(targets, g_cursor, inverse, True, n_rows)
@@ -200,20 +282,42 @@ def query_rmse_eval(
     var blocks = (n_rows + GBDT_MSE_BLOCK - 1) // GBDT_MSE_BLOCK
     var stats = List[Float32](length=2 * n_rows, fill=Float32(0.0))
     var fv = List[Float32](length=blocks, fill=Float32(0.0))
-    for b in range(blocks):
+    # THE SPLIT (lane gbdt-host-par): one 256-thread device block per unit
+    # (its rows' planes land at distinct bin positions through the inverse;
+    # its score partial's halving tree), round robin to `_gbdt_units` tasks
+    var units = _gbdt_units(blocks, 12 * n_rows)
+    var der_p = rebind[HostF32Ptr](mse_der.unsafe_ptr())
+    var means_p = rebind[HostF32Ptr](means.unsafe_ptr())
+    var qids_p = rebind[GbdtIntPtr](qids.unsafe_ptr())
+    var inv_p = rebind[GbdtIntPtr](inverse.unsafe_ptr())
+    var stats_p = rebind[HostF32Ptr](stats.unsafe_ptr())
+    var fv_p = rebind[HostF32Ptr](fv.unsafe_ptr())
+
+    def score_blocks(unit: Int) {imm units, imm blocks, imm n_rows, imm der_p, imm means_p, imm qids_p, imm inv_p, imm stats_p, imm fv_p}:
         var s_score = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
-        for t in range(GBDT_MSE_BLOCK):
-            var i = b * GBDT_MSE_BLOCK + t
-            if i < n_rows:
-                var weight = Float32(1.0)
-                var val = mse_der[i]
-                var mean = means[qids[i]]
-                var direction = val - mean
-                var dst = inverse[i]
-                stats[dst] = ftz(weight * direction)
-                stats[n_rows + dst] = weight
-                s_score[t] = -weight * (val - mean) * (val - mean)
-        fv[b] = _halving_fold(s_score)
+        var b = unit
+        while b < blocks:
+            for t in range(GBDT_MSE_BLOCK):
+                var i = b * GBDT_MSE_BLOCK + t
+                # an out-of-range thread adds 0.0 (the slab is reused)
+                s_score[t] = Float32(0.0)
+                if i < n_rows:
+                    var weight = Float32(1.0)
+                    var val = der_p[i]
+                    var mean = means_p[qids_p[i]]
+                    var direction = val - mean
+                    var dst = inv_p[i]
+                    stats_p[dst] = ftz(weight * direction)
+                    stats_p[n_rows + dst] = weight
+                    s_score[t] = -weight * (val - mean) * (val - mean)
+            fv_p[b] = _halving_fold(s_score)
+            b += units
+
+    host_parallelize(score_blocks, units)
+    _ = len(mse_der)
+    _ = len(means)
+    _ = len(qids)
+    _ = len(inverse)
     gradient.clear()
     cached_der2.clear()
     # the leaves' two sums (`compute_partition_stats`): the (leaf, plane)

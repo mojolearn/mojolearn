@@ -70,12 +70,15 @@ from checks.numerics import (
     identical_pow,
     portable_log64,
 )
-from gbdt.methods.cursor_rescale import apply_scaled_leaves_host, rescaled_leaves
+from core.host_parallel import host_parallelize
+from core.host_predict_threads import HostF32Ptr, HostU32Ptr, host_predict_chunk
+from gbdt.methods.cursor_rescale import rescaled_leaves
 from gbdt.gpu_data.compressed_index_builder import build_layout
 from gbdt.gpu_data.feature_blocks import blocks_for
 from gbdt.gpu_data.grid_policy import POLICY_HALF_BYTE, POLICY_ONE_BYTE
 from gbdt.gpu_util.kernel.random_gen import next_uniform_f
 from gbdt.host.gbdt_oracle import (
+    apply_scaled_leaves_host,
     GBDT_MSE_BLOCK,
     GBDT_ORACLE_HOST_SABOTAGE,
     GbdtHostModel,
@@ -84,13 +87,23 @@ from gbdt.host.gbdt_oracle import (
     _halving_fold,
     _snap_plane,
     _partition_stats_level,
+    _pinned_partition_stats,
+    _partition_for_tree,
+    _oracle_move_to,
+    _logloss_value,
+    _gather_rows,
+    _identity_rows,
+    _leaf_bins,
+    _gbdt_units,
+    GbdtIntPtr,
+    GbdtU64Ptr,
     GBDT_PARTITION_CHUNKS,
+    GBDT_PINNED_SM,
     gbdt_host_grid,
 )
 from gbdt.host.gbdt_oracle_ordered import (
     _PwHelper,
     _ordered_tree_structure,
-    _partition_stat_n,
 )
 from gbdt.host.gbdt_oracle_rmse import GbdtRmseHostFit, gbdt_rmse_host_model_text
 from gbdt.metrics.sample_quantile import calculate_weighted_target_average
@@ -133,22 +146,164 @@ def _ce(target: Float32, val: Float32, border: Float32, weight: Float32) -> Tupl
     return (ftz(weight * direction), ftz(weight * scale), score)
 
 
-def _logloss_value(
-    targets: List[Float32], weights: List[Float32], cursor: List[Float32],
-    n: Int, border: Float32,
-) -> Float32:
-    """The score partials per 256-thread block, folded by
-    `deterministic_sum_lanes_kernel[1]`."""
-    var blocks = (n + GBDT_MSE_BLOCK - 1) // GBDT_MSE_BLOCK
-    var part = List[Float32](length=blocks, fill=Float32(0.0))
-    for b in range(blocks):
+def _pw_search_pass(
+    targets: List[Float32],
+    weights: List[Float32],
+    cursor: List[Float32],
+    n_rows: Int,
+    border: Float32,
+    mut sw: List[Float32],
+    mut sg: List[Float32],
+    mut fv_partials: List[Float32],
+):
+    """The search planes and the learn score of one tree
+    (`cross_entropy_kernel[has_border=True]` with row weights): `sw` the
+    row's weight, `sg` the flushed weighted direction, one score partial per
+    256-thread block through the halving tree.
+
+    The unit is one 256-thread device block (its rows' two planes, its own
+    partial and halving tree), as `_logloss_search_pass`; blocks go round
+    robin to `_gbdt_units` tasks."""
+    var blocks = (n_rows + GBDT_MSE_BLOCK - 1) // GBDT_MSE_BLOCK
+    var units = _gbdt_units(blocks, 16 * n_rows)
+    var targets_p = rebind[HostF32Ptr](targets.unsafe_ptr())
+    var weights_p = rebind[HostF32Ptr](weights.unsafe_ptr())
+    var cursor_p = rebind[HostF32Ptr](cursor.unsafe_ptr())
+    var sw_p = rebind[HostF32Ptr](sw.unsafe_ptr())
+    var sg_p = rebind[HostF32Ptr](sg.unsafe_ptr())
+    var fv_p = rebind[HostF32Ptr](fv_partials.unsafe_ptr())
+
+    def score_blocks(unit: Int) {imm units, imm blocks, imm n_rows, imm border, imm targets_p, imm weights_p, imm cursor_p, imm sw_p, imm sg_p, imm fv_p}:
         var slab = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
-        for t in range(GBDT_MSE_BLOCK):
-            var i = b * GBDT_MSE_BLOCK + t
-            if i < n:
-                slab[t] = _ce(targets[i], cursor[i], border, weights[i])[2]
-        part[b] = _halving_fold(slab)
-    return _deterministic_sum_lanes(part, 1, blocks)[0]
+        var b = unit
+        while b < blocks:
+            for t in range(GBDT_MSE_BLOCK):
+                var i = b * GBDT_MSE_BLOCK + t
+                # an out-of-range thread adds 0.0 (the slab is reused)
+                slab[t] = Float32(0.0)
+                if i < n_rows:
+                    var r = _ce(targets_p[i], cursor_p[i], border, weights_p[i])
+                    sw_p[i] = weights_p[i]
+                    sg_p[i] = r[0]
+                    slab[t] = r[2]
+            fv_p[b] = _halving_fold(slab)
+            b += units
+
+    host_parallelize(score_blocks, units)
+    _ = len(targets)
+    _ = len(weights)
+    _ = len(cursor)
+    _ = len(sw)
+    _ = len(sg)
+    _ = len(fv_partials)
+
+
+def _pw_bootstrap(
+    mut seeds: List[UInt64],
+    mut sw: List[Float32],
+    mut sg: List[Float32],
+    n_rows: Int,
+    boot_blocks: Int,
+    bagging_temperature: Float32,
+    mut mag_part: List[Float32],
+):
+    """`bootstrap_kernel[BAYESIAN]` over the two search planes: thread `gid`
+    of block `blk` owns seed `gid` and the rows `gid, gid + stride, ...`,
+    its draws and two magnitudes ascending in its rows, then the block's
+    halving folds.
+
+    The unit is one device block, as `_bootstrap_pass`: no block reads or
+    writes another's seeds, rows or magnitude pair. Blocks go round robin to
+    `_gbdt_units` tasks; a task holds two block slabs, every lane rewritten
+    per block."""
+    var stride = boot_blocks * GBDT_PW_BOOT_BLOCK
+    var units = _gbdt_units(boot_blocks, 16 * n_rows)
+    var seeds_p = rebind[GbdtU64Ptr](seeds.unsafe_ptr())
+    var sw_p = rebind[HostF32Ptr](sw.unsafe_ptr())
+    var sg_p = rebind[HostF32Ptr](sg.unsafe_ptr())
+    var mag_p = rebind[HostF32Ptr](mag_part.unsafe_ptr())
+
+    def block_draws(unit: Int) {imm units, imm boot_blocks, imm stride, imm n_rows, imm bagging_temperature, imm seeds_p, imm sw_p, imm sg_p, imm mag_p}:
+        var red_w = List[Float32](length=GBDT_PW_BOOT_BLOCK, fill=Float32(0.0))
+        var red_g = List[Float32](length=GBDT_PW_BOOT_BLOCK, fill=Float32(0.0))
+        var blk = unit
+        while blk < boot_blocks:
+            for tid in range(GBDT_PW_BOOT_BLOCK):
+                var gid = blk * GBDT_PW_BOOT_BLOCK + tid
+                var s = seeds_p[gid]
+                var mw = Float32(0.0)
+                var mg = Float32(0.0)
+                var i = gid
+                while i < n_rows:
+                    var draw = next_uniform_f(s)
+                    s = draw[1]
+                    var tmp = -identical_log(draw[0] + Float32(1e-20))
+                    var bw = tmp
+                    if bagging_temperature != Float32(1.0):
+                        bw = identical_pow(tmp, bagging_temperature)
+                    var wv = sw_p[i] * bw
+                    sw_p[i] = wv
+                    mw += abs(wv)
+                    var gv = sg_p[i] * bw
+                    sg_p[i] = gv
+                    var gmax = Float32(0.0)
+                    var a = abs(gv)
+                    if a > gmax:
+                        gmax = a
+                    mg += gmax
+                    i += stride
+                seeds_p[gid] = s
+                red_w[tid] = mw
+                red_g[tid] = mg
+            mag_p[2 * blk] = _halving_fold(red_w)
+            mag_p[2 * blk + 1] = _halving_fold(red_g)
+            blk += units
+
+    host_parallelize(block_draws, units)
+    _ = len(seeds)
+    _ = len(sw)
+    _ = len(sg)
+    _ = len(mag_part)
+
+
+def _pw_tree_onto_rows(
+    cindex: List[UInt32],
+    level_offsets: List[Int],
+    level_masks: List[UInt32],
+    level_values: List[UInt32],
+    leaves: List[Float32],
+    n: Int,
+    mut cursor: List[Float32],
+):
+    """One oblivious tree onto a pool's cursor (`compute_bins_kernel` then
+    `add_bin_model_value_kernel`): a row's leaf is the sum of `1 << level`
+    over the levels whose TakeGreater split it passes, then one add. A row
+    is one device thread; the rows run in `_gbdt_units` contiguous ranges."""
+    var depth = len(level_offsets)
+    var units = _gbdt_units(n, (2 + 3 * depth) * n)
+    var chunk = host_predict_chunk(n, units)
+    var cindex_p = rebind[HostU32Ptr](cindex.unsafe_ptr())
+    var off_p = rebind[GbdtIntPtr](level_offsets.unsafe_ptr())
+    var mask_p = rebind[HostU32Ptr](level_masks.unsafe_ptr())
+    var value_p = rebind[HostU32Ptr](level_values.unsafe_ptr())
+    var leaves_p = rebind[HostF32Ptr](leaves.unsafe_ptr())
+    var cursor_p = rebind[HostF32Ptr](cursor.unsafe_ptr())
+
+    def rows(unit: Int) {imm chunk, imm n, imm depth, imm cindex_p, imm off_p, imm mask_p, imm value_p, imm leaves_p, imm cursor_p}:
+        for r in range(unit * chunk, min(n, (unit + 1) * chunk)):
+            var leaf = 0
+            for level in range(depth):
+                if (cindex_p[off_p[level] + r] & mask_p[level]) > value_p[level]:
+                    leaf += 1 << level
+            cursor_p[r] = cursor_p[r] + leaves_p[leaf]
+
+    host_parallelize(rows, units)
+    _ = len(cindex)
+    _ = len(level_offsets)
+    _ = len(level_masks)
+    _ = len(level_values)
+    _ = len(leaves)
+    _ = len(cursor)
 
 
 def _estimate_logloss_leaves(
@@ -170,17 +325,22 @@ def _estimate_logloss_leaves(
     var g_target = List[Float32](length=n_rows, fill=Float32(0.0))
     var g_weight = List[Float32](length=n_rows, fill=Float32(0.0))
     var g_cursor = List[Float32](length=n_rows, fill=Float32(0.0))
-    for pos in range(n_rows):
-        g_target[pos] = targets[row_index[pos]]
-        g_weight[pos] = weights[row_index[pos]]
-        g_cursor[pos] = cursor[row_index[pos]]
+    # the gathers and the bins move values, one position a device thread:
+    # `_gbdt_units` ranges of positions each (lane gbdt-host-par)
+    _gather_rows(targets, row_index, n_rows, g_target)
+    _gather_rows(weights, row_index, n_rows, g_weight)
+    _gather_rows(cursor, row_index, n_rows, g_cursor)
     var bins = List[Int](length=n_rows, fill=0)
-    for leaf in range(n_leaves):
-        for k in range(sizes[leaf]):
-            bins[offsets[leaf] + k] = leaf
+    _leaf_bins(offsets, sizes, n_rows, bins)
+    # WeightsCpu: `compute_partition_stats` of the gathered weights at ONE
+    # stat (64 chunks), the leaves' launches across the cores
+    var weight_sums = List[Float32](length=n_leaves, fill=Float32(0.0))
+    _pinned_partition_stats(
+        g_weight, offsets, sizes, 2 * GBDT_PINNED_SM, weight_sums
+    )
     var weights_cpu = List[Float64]()
-    for leaf in range(n_leaves):
-        weights_cpu.append(Float64(_partition_stat_n(g_weight, n_rows, 0, offsets[leaf], sizes[leaf], 1)))
+    for leaf in range(n_leaves):  # driver-loop: over the leaves
+        weights_cpu.append(Float64(weight_sums[leaf]))
     var lambda_reg = Float64(l2_leaf_reg)
     comptime if GBDT_ORACLE_HOST_SABOTAGE:
         lambda_reg = lambda_reg + 1.0
@@ -196,8 +356,9 @@ def _estimate_logloss_leaves(
     var stats = List[Float32](length=2 * n_rows, fill=Float32(0.0))
     var fv = List[Float32](length=blocks, fill=Float32(0.0))
     # `move_to(zero)`: a zero shift added onto every gathered cursor row
-    for pos in range(n_rows):
-        g_cursor[pos] = g_cursor[pos] + (cur_point[bins[pos]] - current_point[bins[pos]])
+    # (`_oracle_move_to`: the Float32 shift per leaf, one add per row, the
+    # rows across the cores)
+    _oracle_move_to(cur_point, current_point, bins, g_cursor, n_rows)
     _oracle_eval_weighted(
         g_target, g_weight, g_cursor, offsets, sizes, n_rows, border,
         lambda_reg, cur_value, cur_grad, cached_der2, stats, fv,
@@ -230,13 +391,7 @@ def _estimate_logloss_leaves(
                 next_point.append(Float32(fma(step, Float64(direction[i]), Float64(cur_point[i]))))
                 if weights_cpu[i] < 1e-20:
                     next_point[i] = Float32(0.0)
-            var shift = List[Float32](length=n_leaves, fill=Float32(0.0))
-            for i in range(n_leaves):
-                shift[i] = next_point[i] - current_point[i]
-            for pos in range(n_rows):
-                g_cursor[pos] = g_cursor[pos] + shift[bins[pos]]
-            for i in range(n_leaves):
-                current_point[i] = next_point[i]
+            _oracle_move_to(next_point, current_point, bins, g_cursor, n_rows)
             _oracle_eval_weighted(
                 g_target, g_weight, g_cursor, offsets, sizes, n_rows, border,
                 lambda_reg, next_value, next_grad, cached_der2, stats, fv,
@@ -278,16 +433,37 @@ def _oracle_eval_weighted(
     """`write_value_and_first_derivatives`' single-dimensional arm with row
     weights (`pointwise_oracle.mojo:458-573`)."""
     var blocks = (n_rows + GBDT_MSE_BLOCK - 1) // GBDT_MSE_BLOCK
-    for b in range(blocks):
+    # THE SPLIT (lane gbdt-host-par), the unit of `_logloss_search_pass`:
+    # one 256-thread device block owns its rows' two estimation planes and
+    # its score partial (its own halving tree); blocks go round robin to
+    # `_gbdt_units` tasks. This pass runs once per walker evaluation.
+    var units = _gbdt_units(blocks, 16 * n_rows)
+    var target_p = rebind[HostF32Ptr](g_target.unsafe_ptr())
+    var weight_p = rebind[HostF32Ptr](g_weight.unsafe_ptr())
+    var cursor_p = rebind[HostF32Ptr](g_cursor.unsafe_ptr())
+    var stats_p = rebind[HostF32Ptr](stats.unsafe_ptr())
+    var fv_p = rebind[HostF32Ptr](fv.unsafe_ptr())
+
+    def score_blocks(unit: Int) {imm units, imm blocks, imm n_rows, imm border, imm target_p, imm weight_p, imm cursor_p, imm stats_p, imm fv_p}:
         var slab = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
-        for t in range(GBDT_MSE_BLOCK):
-            var i = b * GBDT_MSE_BLOCK + t
-            if i < n_rows:
-                var r = _ce(g_target[i], g_cursor[i], border, g_weight[i])
-                stats[i] = r[0]
-                stats[n_rows + i] = r[1]
-                slab[t] = r[2]
-        fv[b] = _halving_fold(slab)
+        var b = unit
+        while b < blocks:
+            for t in range(GBDT_MSE_BLOCK):
+                var i = b * GBDT_MSE_BLOCK + t
+                # an out-of-range thread adds 0.0 (the slab is reused)
+                slab[t] = Float32(0.0)
+                if i < n_rows:
+                    var r = _ce(target_p[i], cursor_p[i], border, weight_p[i])
+                    stats_p[i] = r[0]
+                    stats_p[n_rows + i] = r[1]
+                    slab[t] = r[2]
+            fv_p[b] = _halving_fold(slab)
+            b += units
+
+    host_parallelize(score_blocks, units)
+    _ = len(g_target)
+    _ = len(g_weight)
+    _ = len(g_cursor)
     gradient.clear()
     cached_der2.clear()
     # the leaves' two sums (`compute_partition_stats`): the (leaf, plane)
@@ -396,6 +572,8 @@ def gbdt_pointwise_host_fit(
     # ---- `create_bootstrap_seeds` ----
     var seeds = List[UInt64](length=GBDT_PW_SEED_COUNT, fill=UInt64(0))
     var sx = random_seed
+    # KEPT SERIAL: once per fit, a fixed 65536 seeds off one running
+    # counter (a few integer operations each)
     for i in range(GBDT_PW_SEED_COUNT):
         sx += UInt64(0x9E3779B97F4A7C15)
         var z = sx
@@ -420,8 +598,7 @@ def gbdt_pointwise_host_fit(
     tree_leaf_offsets.append(0)
     var model_leaves = List[Float32]()
     var doc_ids = List[Int](length=n_rows, fill=0)
-    for i in range(n_rows):
-        doc_ids[i] = i
+    _identity_rows(doc_ids, n_rows)
     var part_bounds = List[Int]()
     part_bounds.append(0)
     part_bounds.append(n_rows)
@@ -431,51 +608,13 @@ def gbdt_pointwise_host_fit(
         var sw = List[Float32](length=n_rows, fill=Float32(0.0))
         var sg = List[Float32](length=n_rows, fill=Float32(0.0))
         var fv_part = List[Float32](length=mse_blocks, fill=Float32(0.0))
-        for b in range(mse_blocks):
-            var slab = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
-            for t in range(GBDT_MSE_BLOCK):
-                var i = b * GBDT_MSE_BLOCK + t
-                if i < n_rows:
-                    var r = _ce(y[i], cursor[i], border, w[i])
-                    sw[i] = w[i]
-                    sg[i] = r[0]
-                    slab[t] = r[2]
-            fv_part[b] = _halving_fold(slab)
+        _pw_search_pass(y, w, cursor, n_rows, border, sw, sg, fv_part)
         var fv = _deterministic_sum_lanes(fv_part, 1, mse_blocks)[0]
         # ---- `bootstrap_kernel[BAYESIAN]` ----
         var mag_part = List[Float32](length=2 * boot_blocks, fill=Float32(0.0))
-        for blk in range(boot_blocks):
-            var red_w = List[Float32](length=GBDT_PW_BOOT_BLOCK, fill=Float32(0.0))
-            var red_g = List[Float32](length=GBDT_PW_BOOT_BLOCK, fill=Float32(0.0))
-            for tid in range(GBDT_PW_BOOT_BLOCK):
-                var gid = blk * GBDT_PW_BOOT_BLOCK + tid
-                var s = seeds[gid]
-                var mw = Float32(0.0)
-                var mg = Float32(0.0)
-                var i = gid
-                while i < n_rows:
-                    var draw = next_uniform_f(s)
-                    s = draw[1]
-                    var tmp = -identical_log(draw[0] + Float32(1e-20))
-                    var bw = tmp
-                    if bagging_temperature != Float32(1.0):
-                        bw = identical_pow(tmp, bagging_temperature)
-                    var wv = sw[i] * bw
-                    sw[i] = wv
-                    mw += abs(wv)
-                    var gv = sg[i] * bw
-                    sg[i] = gv
-                    var gmax = Float32(0.0)
-                    var a = abs(gv)
-                    if a > gmax:
-                        gmax = a
-                    mg += gmax
-                    i += boot_blocks * GBDT_PW_BOOT_BLOCK
-                seeds[gid] = s
-                red_w[tid] = mw
-                red_g[tid] = mg
-            mag_part[2 * blk] = _halving_fold(red_w)
-            mag_part[2 * blk + 1] = _halving_fold(red_g)
+        _pw_bootstrap(
+            seeds, sw, sg, n_rows, boot_blocks, bagging_temperature, mag_part
+        )
         var mags = _deterministic_sum_lanes(mag_part, 2, boot_blocks)
         var m0 = Float64(mags[0])
         if m0 < 0.0:
@@ -495,37 +634,27 @@ def gbdt_pointwise_host_fit(
             List[Bool](), True,
         )
         # ---- `compute_bins_for_model`, `partition_from_bins` ----
+        # (`_partition_for_model`: the rows' leaves and the stable counting
+        # sort, rows ascending within a leaf, across the cores)
         var n_leaves = 1 << len(splits)
-        var bins = List[Int](length=n_rows, fill=0)
-        for r in range(n_rows):
-            var leaf = 0
-            for level in range(len(splits)):
-                var fid = splits[level].feature
-                var mask = feat_mask[fid] << feat_shift[fid]
-                var value = UInt32(splits[level].bin) << feat_shift[fid]
-                if (cindex[feat_offset[fid] + r] & mask) > value:
-                    leaf += 1 << level
-            bins[r] = leaf
-        var sizes = List[Int](length=n_leaves, fill=0)
-        for r in range(n_rows):
-            sizes[bins[r]] += 1
-        var offsets = List[Int](length=n_leaves, fill=0)
-        var running = 0
-        for i in range(n_leaves):
-            offsets[i] = running
-            running += sizes[i]
-        var fill = offsets.copy()
-        var row_index = List[Int](length=n_rows, fill=0)
-        for r in range(n_rows):
-            row_index[fill[bins[r]]] = r
-            fill[bins[r]] += 1
+        var tree_features = List[Int]()
+        var tree_bins = List[Int]()
+        for level in range(len(splits)):  # driver-loop: over the tree's levels
+            tree_features.append(splits[level].feature)
+            tree_bins.append(splits[level].bin)
+        var partition = _partition_for_tree(
+            cindex, layout, tree_features, tree_bins, n_rows
+        )
         # ---- the estimator and `add_model_value_kernel` ----
         var estimated = _estimate_logloss_leaves(
-            y, w, cursor, row_index, offsets, sizes, n_rows, border,
-            l2_leaf_reg, leaf_iterations,
+            y, w, cursor, partition.row_index, partition.offsets,
+            partition.sizes, n_rows, border, l2_leaf_reg, leaf_iterations,
         )
         var scaled = rescaled_leaves(estimated, learning_rate)
-        apply_scaled_leaves_host(cursor, scaled, row_index, offsets, sizes, n_leaves)
+        apply_scaled_leaves_host(
+            cursor, scaled, partition.row_index, partition.offsets,
+            partition.sizes, n_leaves,
+        )
         for level in range(len(splits)):
             split_features.append(splits[level].feature)
             split_bins.append(splits[level].bin)
@@ -537,16 +666,19 @@ def gbdt_pointwise_host_fit(
         tree_leaf_offsets.append(len(model_leaves))
         # ---- the test cursor, the test loss, the detector ----
         if len(splits) > 0:
-            for r in range(n_eval):
-                var leaf = 0
-                for level in range(len(splits)):
-                    var fid = splits[level].feature
-                    var mask = feat_mask[fid] << feat_shift[fid]
-                    var value = UInt32(splits[level].bin) << feat_shift[fid]
-                    if (test_cindex[Int(layout.features[fid].offset) * n_eval + r] & mask) > value:
-                        leaf += 1 << level
-                test_cursor[r] = test_cursor[r] + tree_leaves[leaf]
-        var t_loss = -Float64(_logloss_value(eval_y, test_weights, test_cursor, n_eval, border)) / Float64(n_eval)
+            var level_offsets = List[Int]()
+            var level_masks = List[UInt32]()
+            var level_values = List[UInt32]()
+            for level in range(len(splits)):  # driver-loop: over the tree's levels
+                var fid = splits[level].feature
+                level_offsets.append(Int(layout.features[fid].offset) * n_eval)
+                level_masks.append(feat_mask[fid] << feat_shift[fid])
+                level_values.append(UInt32(splits[level].bin) << feat_shift[fid])
+            _pw_tree_onto_rows(
+                test_cindex, level_offsets, level_masks, level_values,
+                tree_leaves, n_eval, test_cursor,
+            )
+        var t_loss = -Float64(_logloss_value(eval_y, test_cursor, n_eval, border, test_weights)) / Float64(n_eval)
         test_losses.append(t_loss)
         detector.add_error(t_loss)
         if detector.is_need_stop():
@@ -556,7 +688,7 @@ def gbdt_pointwise_host_fit(
             if len(tree_split_offsets) - 1 > 1:
                 losses.append(-Float64(fv) / Float64(n_rows))
 
-    losses.append(-Float64(_logloss_value(y, w, cursor, n_rows, border)) / Float64(n_rows))
+    losses.append(-Float64(_logloss_value(y, cursor, n_rows, border, w)) / Float64(n_rows))
 
     # ---- `use_best_model`: `model.shrink(best_iter)` ----
     if want_best_model == 1 and len(test_losses) > 0:

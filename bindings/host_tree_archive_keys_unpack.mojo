@@ -156,6 +156,8 @@ struct HostTreeArchiveKeys(Defaultable, Movable):
     var k_best_iteration_: PythonObject
     var k_bias: PythonObject
     var k_bias_: PythonObject
+    var k_category_map: PythonObject
+    var k_category_map_: PythonObject
     var k_bool_types: PythonObject
     var k_bootstrap: PythonObject
     var k_breadth_first: PythonObject
@@ -636,6 +638,8 @@ struct HostTreeArchiveKeys(Defaultable, Movable):
         self.k_best_iteration_ = PythonObject(None)
         self.k_bias = PythonObject(None)
         self.k_bias_ = PythonObject(None)
+        self.k_category_map = PythonObject(None)
+        self.k_category_map_ = PythonObject(None)
         self.k_bool_types = PythonObject(None)
         self.k_bootstrap = PythonObject(None)
         self.k_breadth_first = PythonObject(None)
@@ -1120,6 +1124,8 @@ def _host_tree_archive_keys_fill(nk: UnsafePointer[HostTreeArchiveKeys, MutUntra
     nk[].k_best_iteration_ = py_key("best_iteration_")
     nk[].k_bias = py_key("bias")
     nk[].k_bias_ = py_key("bias_")
+    nk[].k_category_map = py_key("category_map")
+    nk[].k_category_map_ = py_key("category_map_")
     nk[].k_bool_types = py_key("bool_types")
     nk[].k_bootstrap = py_key("bootstrap")
     nk[].k_breadth_first = py_key("breadth_first")
