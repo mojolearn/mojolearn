@@ -16,14 +16,20 @@ from gbdt.ctrs.tree_ctr import (
     TreeCtrPlan,
     TreeCtrSplit,
     TreeCtrTensor,
+    TreeF32Any,
     TreeF32Ptr,
     TreeU32Ptr,
     TreeU8Ptr,
     tree_ctr_bins_into,
     tree_ctr_groups_host,
     tree_ctr_level_host,
+    tree_ctr_median_borders_host,
+    tree_ctr_median_from_words,
+    tree_ctr_median_pair_into,
+    tree_ctr_median_words,
     tree_ctr_uniform_borders_host,
 )
+from gbdt.grid_creator.binarization import BORDER_TYPE_MEDIAN, select_borders
 
 
 def _need(ok: Bool, what: String) raises:
@@ -203,6 +209,100 @@ def groups_and_columns() raises:
     _ = len(bins)
 
 
+def median_fixture_column(n: Int, cardinality: Int, salt: Int) -> List[Float32]:
+    """A FeatureFreq-shaped column: every row holds its category's count
+    over `n + 1`, so the column is full of ties (the case `RegularBorder`
+    exists for)."""
+    var codes = fixture_codes(n, cardinality, salt)
+    var counts = List[Int](length=cardinality, fill=0)
+    for r in range(n):
+        counts[Int(codes[r])] += 1
+    var column = List[Float32](capacity=n)
+    for r in range(n):
+        column.append(Float32(counts[Int(codes[r])]) / Float32(n + 1))
+    return column^
+
+
+def median_words_host(column: List[Float32], border_count: Int) -> List[Float32]:
+    """The Median record of a column through the gather statement the device
+    kernel runs, over a host-sorted copy."""
+    var n = len(column)
+    var ascending = column.copy()
+    for i in range(1, n):
+        var v = ascending[i]
+        var j = i - 1
+        while j >= 0 and ascending[j] > v:
+            ascending[j + 1] = ascending[j]
+            j -= 1
+        ascending[j + 1] = v
+    var words = List[Float32](
+        length=tree_ctr_median_words(border_count), fill=Float32(0.0)
+    )
+    words[0] = ascending[0]
+    words[1] = ascending[n - 1]
+    var sp = TreeF32Any(unsafe_from_address=Int(ascending.unsafe_ptr()))
+    var wp = TreeF32Any(unsafe_from_address=Int(words.unsafe_ptr()))
+    for i in range(border_count):
+        tree_ctr_median_pair_into(sp, n, border_count, i, wp, 0)
+    _ = len(ascending)
+    return words^
+
+
+def median_grid() raises:
+    """The FeatureFreq tree-CTR grid is the reference's Median: the words
+    arithmetic equals `select_borders`, and so does the host column."""
+    var n = 1531
+    # few distinct values, many distinct values, and more borders than values
+    var cards: List[Int] = [7, 211, 3]
+    var counts: List[Int] = [15, 15, 31]
+    for k in range(len(cards)):
+        var column = median_fixture_column(n, cards[k], 40 + k)
+        var want = select_borders(column.copy(), counts[k], BORDER_TYPE_MEDIAN)
+        _need(len(want) >= 1, "the fixture column is not constant")
+        var words = median_words_host(column, counts[k])
+        var got = tree_ctr_median_from_words(words, 0, counts[k])
+        _need(len(got) == len(want), "Median grid from the words: border count")
+        for i in range(len(want)):
+            _need(got[i] == want[i], "Median grid from the words: a border")
+        var host = tree_ctr_median_borders_host(
+            TreeF32Ptr(unsafe_from_address=Int(column.unsafe_ptr())), n, counts[k]
+        )
+        _need(len(host) == len(want), "Median grid on the host: border count")
+        for i in range(len(want)):
+            _need(host[i] == want[i], "Median grid on the host: a border")
+        for i in range(1, len(want)):
+            _need(want[i - 1] < want[i], "Median borders ascend")
+        _ = len(column)
+    # a record at an offset inside a level-wide buffer
+    var column = median_fixture_column(n, 19, 77)
+    var one = median_words_host(column, 15)
+    var wide = List[Float32](length=5, fill=Float32(9.0))
+    wide.extend(one.copy())
+    var at_offset = tree_ctr_median_from_words(wide, 5, 15)
+    var plain = tree_ctr_median_from_words(one, 0, 15)
+    _need(len(at_offset) == len(plain), "a record at an offset")
+    for i in range(len(plain)):
+        _need(at_offset[i] == plain[i], "a record at an offset: a border")
+    # constant column: no Median border, the single 0.5
+    var flat = List[Float32](length=9, fill=Float32(0.25))
+    var flat_words = median_words_host(flat, 15)
+    var flat_grid = tree_ctr_median_from_words(flat_words, 0, 15)
+    _need(len(flat_grid) == 1 and flat_grid[0] == Float32(0.5), "a constant column takes 0.5 (words)")
+    var flat_host = tree_ctr_median_borders_host(
+        TreeF32Ptr(unsafe_from_address=Int(flat.unsafe_ptr())), 9, 15
+    )
+    _need(len(flat_host) == 1 and flat_host[0] == Float32(0.5), "a constant column takes 0.5 (host)")
+    _ = len(flat)
+    # a short record is refused
+    var refused = False
+    try:
+        _ = tree_ctr_median_from_words(one, 1, 15)
+    except e:
+        refused = True
+    _need(refused, "a short words record is refused")
+
+
 def run_checks() raises:
     tensors()
     groups_and_columns()
+    median_grid()

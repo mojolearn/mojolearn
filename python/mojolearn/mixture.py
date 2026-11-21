@@ -135,6 +135,8 @@ class GaussianMixture(_NumericModeMixin):
     #: This class takes `device=`: the check builds its other side as the same
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
+    #: Member ABI family 26 (Mixture), kind 0 (core/mixture_member.mojo; the default fit).
+    _mojolearn_member = (26, 0)
 
     def __init__(
         self,

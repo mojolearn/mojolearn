@@ -37,7 +37,6 @@ from core.svc_score_codes import svc_score_codes_valid, svc_used_classes, svc_ga
 from core.gp_native_accuracy import GPCAccuracyProgram
 from providers.python.estimator_binding_pyapi_door import estimator_binding_routed
 from bindings.arena_prog_run import _switch
-from bindings.x_prep_native_owner_door import _resident_scope
 from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
 from x_metrics.descriptor_schema import METRICS_PROGRAM_ABI, MP_OPERATION_COUNT
 from bindings.svm_keys_unpack import svm_keys
@@ -296,12 +295,6 @@ def svc_accuracy_native(model: PythonObject, truth: PythonObject, prediction: Sv
     _ = true_codes
     _ = pred_codes
     var ranges = _switch("MOJOLEARN_ARENA_RANGES") and py_get(entries, nk[].k_x_metrics_run_ranges) is not None
-    if ranges and prediction.rows > 0:
-        # Same thread-local admission. Metrics store exports were tombstoned;
-        # connected x_metrics images have no resident cache or input uploads.
-        var scope = _resident_scope(entries, prog_context, "x_metrics")
-        if scope is not None:
-            raise Error("TypeError: x_metrics native accuracy requires its connected nonresident input ABI")
     var output_ranges = py_get(entries, nk[].k_x_metrics_run_out) is not None
     var result = Float64(0)
     try:

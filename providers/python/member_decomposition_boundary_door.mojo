@@ -47,10 +47,10 @@ from core.hostptr import f32_ptr
 from core.pca_native_api import (
     PCA_NATIVE_COUNT, PCA_CAP_EXACT, PCA_CAP_FULL, PCA_CAP_RANDOMIZED, pca_vendor_code,
 )
-from core.tsvd_native_api import TSVD_NATIVE_COUNT, TSVD_CAP_FUSED, TSVD_CAP_RANDOMIZED, TSVD_CAP_TSQR
+from core.tsvd_native_api import TSVD_NATIVE_COUNT, TSVD_CAP_FUSED, TSVD_CAP_RANDOMIZED, TSVD_CAP_TSQR, TSVD_CAP_RESIDENT
 from core.decomposition_member import (
     DECOMP_KIND_PCA, DECOMP_BLOCK_COMPONENTS, DECOMP_BLOCK_MEAN, DECOMP_BLOCK_VARIANCE, DECOMP_BLOCK_RATIO,
-    DECOMP_BLOCK_SINGULAR, DECOMP_ROUTE_FUSED, DECOMP_ROUTE_TSQR, DECOMP_ROUTE_TSQR_MISSING, DECOMP_ROUTE_RANDOMIZED,
+    DECOMP_BLOCK_SINGULAR, DECOMP_ROUTE_FUSED, DECOMP_ROUTE_TSQR, DECOMP_ROUTE_TSQR_MISSING, DECOMP_ROUTE_RANDOMIZED, DECOMP_ROUTE_RESIDENT,
 )
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free,
@@ -182,7 +182,10 @@ def _tsvd_admit(model: PythonObject, fields: PythonObject, context: PythonObject
     var route = _route_of(held, tsvd_vendor(held.connection))
     route.entry = EntryRef(tsvd_driver(held.connection).entry,
         entry_ref_word(route.mode, route.vendor, TSVD_NATIVE_COUNT))
-    var flags = DECOMP_ROUTE_FUSED if (tsvd_capabilities(held.connection) & TSVD_CAP_FUSED) != 0 else 0
+    var held_caps = tsvd_capabilities(held.connection)
+    var flags = DECOMP_ROUTE_FUSED if (held_caps & TSVD_CAP_FUSED) != 0 else 0
+    if (held_caps & TSVD_CAP_RESIDENT) != 0:
+        flags |= DECOMP_ROUTE_RESIDENT
     if extra >= 0:
         route.second = EntryRef(tsvd_driver(extra).entry, entry_ref_word(route.mode, route.vendor, TSVD_NATIVE_COUNT))
         route.has_second = True
