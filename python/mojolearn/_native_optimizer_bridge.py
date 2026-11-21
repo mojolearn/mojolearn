@@ -299,6 +299,22 @@ def connect_embedding(training, embedding_cls, archive_context):
         }, "entry_mode": int(host_module.embedding_numeric_mode()), "entry_vendor": "cpu", "entry_infer": True}
     except (ImportError, AttributeError, TypeError, ValueError, RuntimeError, NotImplementedError) as error:
         context["embedding_host_binding"] = type(error).__name__ + ": " + str(error)
+    # glue: the CPU binding a `device="cpu"` layer runs beside a GPU set
+    # (bindings/embedding_layer_native_door.mojo `_entries_resolve`): the CPU
+    # binding a CPU-only install selects (forward and backward), else the
+    # lookup binding above. Connected once at import; an unavailable one stays
+    # a refusal string.
+    if _backend._CPU_ONLY is None:
+        try:
+            cpu_module = _backend.load_host_module("_mojolearn_embedding_host")  # import-time: the CPU image of device="cpu"
+            context["embedding_cpu_binding"] = {"module": cpu_module, **{
+                name: getattr(cpu_module, name) for name in names  # glue: fixed host ABI connection at import
+                if isinstance(getattr(cpu_module, name, None), BuiltinFunctionType)
+            }, "entry_mode": int(cpu_module.embedding_numeric_mode()), "entry_vendor": "cpu"}
+        except (ImportError, AttributeError, TypeError, ValueError, RuntimeError, NotImplementedError) as error:
+            context["embedding_cpu_binding"] = context["embedding_host_binding"]
+            if not isinstance(context["embedding_cpu_binding"], dict):
+                context["embedding_cpu_binding"] = type(error).__name__ + ": " + str(error)
     context["embedding_host_names"] = names
     context["embedding_archive_context"] = archive_context.get("host_archive_context", archive_context)
     module = _binding()._module

@@ -68,6 +68,10 @@ from core.cast_in import CAST_KIND_SIGNED, CAST_KIND_UNSIGNED, CAST_KIND_FLOAT, 
 from bindings.classical_archive_read_door import classical_archive_read, _archive_string, _archive_exact
 from bindings.optimizer_public_words_unpack import optimizer_python_error
 from core.shared_slot import SharedSlot
+from core.device_route import device_route_plan
+from providers.python.device_route_boundary_door import (
+    DeviceRouteOwner, device_admit, device_request, device_route_clear, device_route_held, device_route_keep,
+)
 
 comptime _NO_PADDING = -1
 comptime _FORMAT = "mojolearn-embedding-1"
@@ -151,9 +155,53 @@ def _entries(fields: PythonObject, context: PythonObject) raises -> PythonObject
 
 
 def _entries(fields: PythonObject, context: PythonObject, model: PythonObject) raises -> PythonObject:
+    """The entries the layer runs on: the embedding binding of its device and
+    mode, connected at import. For an estimator they are held by its route
+    owner (the one `DeviceRouteOwner`, slot `device_route_v1`): a hit is the
+    mode read (and the default-mode read when it is None), one record read
+    and three pointer compares. A miss (first operation, a changed mode,
+    after `__init__` / `set_params`) reads `device` once, resolves and keeps
+    them. No operation reads or compares the device."""
+    if model is None:
+        return _entries_resolve(fields, context, model, False)
+    var mode = py_get(fields, "numeric_mode")
+    var default_mode = PythonObject(None)
+    if mode is None:
+        default_mode = context["backend"]["_DEFAULT_MODE"]
+    var held = device_route_held(model, mode, default_mode, context)
+    if held is not None:
+        var kept = held.downcast_value_ptr[DeviceRouteOwner]()[].images
+        return kept
+    var cpu_only = context["backend"]["_CPU_ONLY"] is not None
+    var explicit_host = _class_flag(py_type(model), "_HOST_INFERENCE_ONLY", context)
+    var requested = device_request(fields, _b())
+    var tier = 1
+    if not explicit_host:
+        tier = 1 if String(py=_want_mode(fields, context)) == "identical" else 0
+    # The device rule and its words (core/device_route.mojo): None is this
+    # installation's device; 'gpu' without a GPU set and 'cpu' with `fast`
+    # are refused. The explicit host class runs the CPU by class.
+    var plan = device_route_plan(requested, 0 if cpu_only else 1, tier)
+    var entries = _entries_resolve(fields, context, model, plan.cpu_table and not explicit_host)
+    var built = DeviceRouteOwner(plan.device)
+    built.route.mode = tier
+    built.route.vendor = plan.expected_vendor
+    built.mode = mode
+    built.default_mode = default_mode
+    built.context = context
+    built.images = entries
+    built.resolved = True
+    _ = device_route_keep(model, built^)
+    return entries
+
+
+def _entries_resolve(fields: PythonObject, context: PythonObject, model: PythonObject,
+                     cpu_beside_gpu: Bool) raises -> PythonObject:
     """`Embedding._extension()`: the embedding binding of the layer's mode,
     connected at import, with its compiled mode read back; for a host
-    inference class (`_HostBound`, IDENTICAL only) the lookup host binding."""
+    inference class (`_HostBound`, IDENTICAL only) the lookup host binding;
+    for `device="cpu"` beside a GPU set the CPU binding connected at import
+    (python/mojolearn/_native_optimizer_bridge.py `embedding_cpu_binding`)."""
     var b = _b()
     if model is not None and _class_flag(py_type(model), "_HOST_INFERENCE_ONLY", context):
         var saved = py_get(fields, "numeric_mode")
@@ -163,6 +211,13 @@ def _entries(fields: PythonObject, context: PythonObject, model: PythonObject) r
         if py_type(host) is b.str:
             raise Error(String(py=host))
         return host
+    if cpu_beside_gpu:
+        var cpu = py_get(context, "embedding_cpu_binding")
+        if cpu is None:
+            raise Error("ImportError: device='cpu' is not connected in this installation")
+        if py_type(cpu) is b.str:
+            raise Error("ImportError: " + String(py=cpu))
+        return cpu
     var want = _want_mode(fields, context)
     var entries = context["embedding_bindings"][want]
     if py_type(entries) is _b().str:
@@ -419,7 +474,7 @@ def _constructible(cls: PythonObject, context: PythonObject) raises:
 def _metadata(model: PythonObject, context: PythonObject) raises -> PythonObject:
     _owner(py_type(model), context)
     var fields = neural_record_fields(model, Python.tuple("num_embeddings", "embedding_dim", "padding_idx", "max_norm", "norm_type",
-        "scale_grad_by_freq", "sparse", "weight", "plan", "numeric_mode", "_table_tok", "_table_owner"))
+        "scale_grad_by_freq", "sparse", "weight", "plan", "numeric_mode", "device", "_table_tok", "_table_owner"))
     for name in ["num_embeddings", "embedding_dim", "padding_idx", "max_norm", "norm_type", "scale_grad_by_freq", "sparse", "plan", "numeric_mode", "_table_tok"]:  # driver-loop: admit scalar state before native conversion
         opt_scalar(py_get(fields, PythonObject(name)), context)
     return fields
@@ -628,6 +683,13 @@ def _integer(value: PythonObject, name: String) raises -> Int:
 
 def _initialize(model: PythonObject, values: PythonObject, context: PythonObject, prepared: PythonObject) raises -> PythonObject:
     var fields = _metadata(model, context)
+    # `device` rides last (python/mojolearn/embedding.py); a caller with the
+    # ten-value form constructs on this installation's device. Checked here,
+    # before any field is published, in the shared words.
+    var device = PythonObject(None)
+    if len(values) > 10:
+        device = values[10]
+    device_admit(device, 1 if context["backend"]["_CPU_ONLY"] is None else 0, _b())
     var v = _integer(values[0], "num_embeddings")
     var d = _integer(values[1], "embedding_dim")
     if v < 1 or d < 1:
@@ -678,6 +740,10 @@ def _initialize(model: PythonObject, values: PythonObject, context: PythonObject
     py_setitem(fields, "weight", table)
     py_setitem(fields, "plan", values[8])
     py_setitem(fields, "numeric_mode", mode)
+    py_setitem(fields, "device", device)
+    # A constructor run again and `set_params` both end here: the layer's
+    # next operation resolves its route again.
+    device_route_clear(model)
     return PythonObject(None)
 
 
@@ -688,7 +754,8 @@ def _pretrained(cls: PythonObject, values: PythonObject, context: PythonObject) 
     if len(shape) != 2:
         raise Error("ValueError: mojolearn Embedding: embeddings must be two-dimensional")
     var model = py_call(_b().object.__new__, cls)
-    _ = _initialize(model, Python.tuple(shape[0], shape[1], values[1], values[2], values[3], values[4], values[5], table, values[7], values[6]), context, table)
+    _ = _initialize(model, Python.tuple(shape[0], shape[1], values[1], values[2], values[3], values[4], values[5], table, values[7], values[6],
+                               values[8] if len(values) > 8 else PythonObject(None)), context, table)
     return model
 
 
@@ -897,6 +964,9 @@ def _load(cls: PythonObject, path: PythonObject, context: PythonObject) raises -
     _freeze(table)
     py_setitem(fields, "weight", table)
     py_setitem(fields, "numeric_mode", mode)
+    # A loaded layer runs this installation's device (`device` is a
+    # constructor parameter, not model state; `save` does not write it).
+    py_setitem(fields, "device", PythonObject(None))
     _ = meta^
     _ = weight^
     return model
@@ -924,7 +994,7 @@ def emblayer_operation(operation: Int, owner: PythonObject, values: PythonObject
         if py_type(options) is not _b().dict:
             raise Error("TypeError: Embedding settings require a native dictionary")
         var keys = py_call(_b().list, options)
-        var names = Python.tuple("num_embeddings", "embedding_dim", "padding_idx", "max_norm", "norm_type", "scale_grad_by_freq", "sparse", "weight", "plan", "numeric_mode")
+        var names = Python.tuple("num_embeddings", "embedding_dim", "padding_idx", "max_norm", "norm_type", "scale_grad_by_freq", "sparse", "weight", "plan", "numeric_mode", "device")
         for i in range(len(keys)):  # driver-loop: validate parameter keys before dictionary reads
             if py_type(keys[i]) is not _b().str or not py_contains(names, keys[i]):
                 raise Error("ValueError: unknown Embedding constructor parameter")
@@ -932,7 +1002,7 @@ def emblayer_operation(operation: Int, owner: PythonObject, values: PythonObject
             return owner
         var args = Python.list()
         for i in range(len(names)):  # driver-loop: fixed constructor configuration
-            _ = py_call(args.append, options[names[i]] if py_contains(options, names[i]) else fields[names[i]])
+            _ = py_call(args.append, options[names[i]] if py_contains(options, names[i]) else py_get(fields, names[i]))
         _ = _initialize(owner, py_call(_b().tuple, args), context, PythonObject(None))
         return owner
     if operation == OPTIMIZER_OPN_EMBLAYER_FORWARD:

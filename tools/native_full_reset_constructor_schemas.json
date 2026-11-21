@@ -15834,6 +15834,13 @@
           "source": "python/mojolearn/_expansion_ann.py:522"
         },
         {
+          "field": "device",
+          "value": {
+            "parameter": "device"
+          },
+          "source": "python/mojolearn/_expansion_ann.py:400"
+        },
+        {
           "field": "numeric_mode",
           "value": {
             "parameter": "numeric_mode"
@@ -15845,7 +15852,7 @@
         "python/mojolearn/_expansion_ann.py:522"
       ],
       "constructor": "python/mojolearn/_expansion_ann.py:522",
-      "signature_source": "def __init__(self, n_components=2, perplexity=30.0, early_exaggeration=12.0, learning_rate='auto', max_iter=1000, init='pca', random_state=0, post_exaggeration_learning_rate_factor=1.0)",
+      "signature_source": "def __init__(self, n_components=2, perplexity=30.0, early_exaggeration=12.0, learning_rate='auto', max_iter=1000, init='pca', random_state=0, post_exaggeration_learning_rate_factor=1.0, device=None)",
       "parameters": [
         "n_components",
         "perplexity",
@@ -15854,9 +15861,10 @@
         "max_iter",
         "init",
         "random_state",
-        "post_exaggeration_learning_rate_factor"
+        "post_exaggeration_learning_rate_factor",
+        "device"
       ],
-      "constructor_ast_sha256": "10cfce3ec59f9b5b58e47d61be5d08dfc1b5ac52640a27dd99d013ccb2e31645",
+      "constructor_ast_sha256": "3f6141025c39482a910379c694f2cdcc2b932e5366e09d8b06145bfad8590b69",
       "field_order": [
         "n_components",
         "perplexity",
@@ -15866,6 +15874,7 @@
         "max_iter",
         "init",
         "random_state",
+        "device",
         "numeric_mode"
       ],
       "final_fields": {
@@ -15895,6 +15904,9 @@
         },
         "numeric_mode": {
           "parameter": "numeric_mode"
+        },
+        "device": {
+          "parameter": "device"
         }
       },
       "signature_defaults": {
@@ -15905,7 +15917,8 @@
         "max_iter": "1000",
         "init": "'pca'",
         "random_state": "0",
-        "post_exaggeration_learning_rate_factor": "1.0"
+        "post_exaggeration_learning_rate_factor": "1.0",
+        "device": "None"
       },
       "numeric_mode_injection": true,
       "module": "mojolearn._expansion_ann",
@@ -15914,8 +15927,8 @@
         {
           "path": "python/mojolearn/_expansion_ann.py",
           "name": "__init__",
-          "line": 522,
-          "ast_sha256": "10cfce3ec59f9b5b58e47d61be5d08dfc1b5ac52640a27dd99d013ccb2e31645"
+          "line": 400,
+          "ast_sha256": "3f6141025c39482a910379c694f2cdcc2b932e5366e09d8b06145bfad8590b69"
         }
       ],
       "constructor_ancestry": [
@@ -16316,13 +16329,20 @@
             "parameter": "numeric_mode"
           },
           "source": "python/mojolearn/_umap_impl.py:164"
+        },
+        {
+          "field": "device",
+          "value": {
+            "parameter": "device"
+          },
+          "source": "python/mojolearn/_umap_impl.py:167"
         }
       ],
       "trace": [
         "python/mojolearn/_umap_impl.py:164"
       ],
       "constructor": "python/mojolearn/_umap_impl.py:164",
-      "signature_source": "def __init__(self, n_neighbors=15, n_components=2, *, min_dist=0.1, spread=1.0, n_epochs=None, random_state=0, set_op_mix_ratio=1.0, local_connectivity=1.0, metric='euclidean', init='spectral', learning_rate=1.0, repulsion_strength=1.0, negative_sample_rate=5, a=None, b=None, metric_kwds=None, target_n_neighbors=-1, target_metric='categorical', target_weight=0.5, densmap=False, output_metric='euclidean', numeric_mode=None)",
+      "signature_source": "def __init__(self, n_neighbors=15, n_components=2, *, min_dist=0.1, spread=1.0, n_epochs=None, random_state=0, set_op_mix_ratio=1.0, local_connectivity=1.0, metric='euclidean', init='spectral', learning_rate=1.0, repulsion_strength=1.0, negative_sample_rate=5, a=None, b=None, metric_kwds=None, target_n_neighbors=-1, target_metric='categorical', target_weight=0.5, densmap=False, output_metric='euclidean', numeric_mode=None, device=None)",
       "parameters": [
         "n_neighbors",
         "n_components",
@@ -16345,9 +16365,10 @@
         "target_weight",
         "densmap",
         "output_metric",
-        "numeric_mode"
+        "numeric_mode",
+        "device"
       ],
-      "constructor_ast_sha256": "8de543808624b926c07375716e3711d3e8465ad09abb1bcae26c9b16411706a2",
+      "constructor_ast_sha256": "b1e8cfef0db04046a34eb8ef1fd9c4b31cece72abf6ae76797c1b127774cec3b",
       "field_order": [
         "n_neighbors",
         "n_components",
@@ -16370,7 +16391,8 @@
         "target_weight",
         "densmap",
         "output_metric",
-        "numeric_mode"
+        "numeric_mode",
+        "device"
       ],
       "final_fields": {
         "n_neighbors": {
@@ -16438,6 +16460,9 @@
         },
         "numeric_mode": {
           "parameter": "numeric_mode"
+        },
+        "device": {
+          "parameter": "device"
         }
       },
       "signature_defaults": {
@@ -16462,7 +16487,8 @@
         "target_weight": "0.5",
         "densmap": "False",
         "output_metric": "'euclidean'",
-        "numeric_mode": "None"
+        "numeric_mode": "None",
+        "device": "None"
       },
       "numeric_mode_injection": false,
       "module": "mojolearn._umap_impl",
@@ -16471,8 +16497,8 @@
         {
           "path": "python/mojolearn/_umap_impl.py",
           "name": "__init__",
-          "line": 164,
-          "ast_sha256": "8de543808624b926c07375716e3711d3e8465ad09abb1bcae26c9b16411706a2"
+          "line": 167,
+          "ast_sha256": "b1e8cfef0db04046a34eb8ef1fd9c4b31cece72abf6ae76797c1b127774cec3b"
         }
       ],
       "constructor_ancestry": [
