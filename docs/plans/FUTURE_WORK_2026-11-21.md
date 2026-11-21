@@ -31,6 +31,12 @@ What Mojolearn has now: single categorical columns only (one-hot when cardinalit
 ordered CTR, `gbdt/ctrs/`), over the rows in the caller's order; permutation-dependent CTR datasets under
 `boosting_type='Ordered'` are listed NOT IMPLEMENTED (`gbdt/NOT_IMPLEMENTED.tsv`).
 
+Target: match CatBoost's categorical handling in full (Andrew, 2026-11-21), including combinations with the
+NUMERIC splits already in the tree, not only categorical x categorical. Every piece runs on the GPU and on the CPU,
+and in `identical` mode (the default) the GPU and CPU give the same bits as each other and across vendors. `fast`
+gets the same features, judged on speed and quality only. There is no `deterministic` mode: it is retired and
+`identical` replaces it (only the refusal tests for the old value remain).
+
 Work, in order:
 1. **Native category encoding at fit.** Accept arbitrary category values (strings, integers, unseen codes) and map
    them to codes in Mojo at UNPACK, with the map stored in the model and applied at predict (unseen value -> the
@@ -38,11 +44,15 @@ Work, in order:
 2. **Seeded permutation inside the fit.** The ordered CTR / ordered boosting permutation is drawn in Mojo from
    `random_state`, identical on every vendor and the host column (a counter-based generator keyed on the row
    index, not a sequential shuffle). The caller no longer shuffles; the receipt records the seed.
-3. **Feature combinations (tree CTRs, `max_ctr_complexity` > 1).** Greedy combination of the split's categorical
-   feature with the features already in the oblivious tree, combination hashes on the GPU with the existing
+3. **Feature combinations (tree CTRs, `max_ctr_complexity` > 1, CatBoost's default 4).** Greedy combination of
+   each categorical feature with the features already in the oblivious tree: the categorical features AND the
+   binarized numeric splits (each numeric split contributes its 0/1 side to the combination hash, as in CatBoost), combination hashes on the GPU with the existing
    fold (`gbdt/models/hash.mojo`), CTR tables per combination. Remove the `check()` refusal and the
    `ExperimentalTwoLevelFeatureFreq` class (tombstone) once the general route covers it.
-4. Every step: same bits on every vendor and the host column; quality compared against CatBoost on the same
+4. **Permutation-dependent CTRs under `boosting_type='Ordered'`** (`gbdt/NOT_IMPLEMENTED.tsv`), for single
+   columns and combinations.
+5. Every step: `identical` gives the same bits on the GPU and the CPU and on every vendor (fixed fold order and the
+   counter-based permutation on both devices; the CPU route is the same algorithm, never a different one); quality compared against CatBoost on the same
    explicit parameters (Race fairness); A/B on NVIDIA per the measurement rules; no tuning to a board dataset.
 
 ## 2. Held from the device=/boundary wave (2026-11-20/21)
