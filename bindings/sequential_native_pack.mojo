@@ -16,6 +16,7 @@ from bindings.sequential_weights_pack import sequential_load_weights
 from bindings.sequential_checkpoint_door import sequential_save, sequential_load_checkpoint
 from providers.python.autograd_program_arrays_pyapi_door import initialize_program_arrays
 from bindings.sequential_admission_door import sequential_admit
+from bindings.sequential_route_door import sequential_device_admit, sequential_route_clear
 from bindings.py_keys import py_op_code
 from bindings.sequential_keys_unpack import (
     sequential_keys,
@@ -57,7 +58,12 @@ def sequential_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObje
         elif operation == SEQUENTIAL_OPN_CONSTRUCT:
             var b = native_loaded_module("builtins")
             var fields = sequential_fields(model)
+            # `device` is checked where it is given, before any field changes
+            # (bindings/sequential_route_door.mojo); the default None reads nothing.
+            sequential_device_admit(args[2], context)
+            sequential_route_clear(model)
             py_setitem(fields, nk[].k_numeric_mode, args[0])
+            py_setitem(fields, nk[].k_device, args[2])
             py_setitem(fields, nk[].k_input_shape, PythonObject(None) if args[1] is None else py_call(b.tuple, _shape(mods, args[1], "input_shape", False, context)))
             py_setitem(fields, nk[].k__layers, Python.list())
             py_setitem(fields, nk[].k__options, PythonObject(None))
@@ -86,7 +92,7 @@ def sequential_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObje
         elif operation == SEQUENTIAL_OPN_SAVE:
             result = sequential_save(mods, model, args[0], Bool(py=args[1]), context)
         elif operation == SEQUENTIAL_OPN_LOAD_CHECKPOINT:
-            result = sequential_load_checkpoint(mods, model, args[0], args[1], context)
+            result = sequential_load_checkpoint(mods, model, args[0], args[1], args[2], context)
         else:
             raise Error("Sequential: unknown native operation")
         return result.steal_data()
