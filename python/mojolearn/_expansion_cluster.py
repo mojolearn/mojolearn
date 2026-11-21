@@ -984,17 +984,6 @@ class BayesianGaussianMixture(_XCluster):
                  verbose_interval=10, numeric_mode=None, device=None):
         return _NATIVE(self, "family_xc_initialize", (None, (n_components, covariance_type, tol, reg_covar, max_iter, n_init, init_params, weight_concentration_prior_type, weight_concentration_prior, mean_precision_prior, mean_prior, degrees_of_freedom_prior, covariance_prior, random_state, warm_start, verbose, verbose_interval, numeric_mode, device,)), _NATIVE_CONTEXT)
 
-    def vendor_used(self):
-        """The backend this estimator runs on.
-
-        Returns
-        -------
-        str
-            ``'metal'``, ``'cuda'`` or ``'hip'``, or ``'cpu'`` for an estimator
-            that runs on the CPU.
-        """
-        return _NATIVE(self, "family_mix_vendor_used", (), _NATIVE_CONTEXT)
-
     def fit(self, X, y=None):
         """Fit the mixture on `X`.
 
@@ -1134,10 +1123,6 @@ _native_family_bridge.tables(
 
 # Fixed binding connections belong to package setup, never a model operation.
 _native_family_bridge.connect_bindings("_mojolearn_x_cluster")
-# The CPU image of `device="cpu"`, connected once at import beside the device
-# image (providers/python/device_route_dw_neighbors_cluster_door.mojo).
-from ._native_device_bindings import connect_cpu_device as _connect_cpu_device
-_connect_cpu_device("_mojolearn_x_cluster")
 from ._native_owner_lifetime import connect_owner_context as _connect_cluster_owner_context
 _connect_cluster_owner_context(_NATIVE_CONTEXT)
 
