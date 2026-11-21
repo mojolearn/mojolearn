@@ -17,8 +17,9 @@ from bindings.arena_array_metadata_pack import arena_array_metadata
 from bindings.arena_resident_rows_door import arena_materialize
 from bindings.arena_owner_door import (
     ArenaRows, ARENA_OWNER_ROWS, arena_owner_new, arena_owner_slot, arena_pin, arena_unpin, arena_resident_view,
-    arena_rows,
+    arena_rows, arena_pinned,
 )
+from bindings.native_owner_lifetime_door import native_release_admit, native_release_weakrefs
 from bindings.arena_cache_stats_pack import arena_cache_stats
 from bindings.arena_cache_get_door import arena_cache_get
 from bindings.arena_cache_upload_door import arena_cache_id_of
@@ -29,7 +30,7 @@ from bindings.arena_resident_native_door import arena_resident_operation
 from bindings.optimizer_public_words_unpack import optimizer_python_error, PYTHON_ERROR_PENDING
 from core.arena_state import (
     ARENA_ROWS, ARENA_HANDLE_NONE, ARENA_ROWS_PIN_BASE, ARENA_ROWS_PIN_INDICES, ARENA_ROWS_PIN_RESIDENT,
-    DeviceRowsState, arena_handle_word,
+    DeviceRowsState, arena_handle_word, arena_handle,
 )
 from core.entry_table import entry_ref_unresolved
 
@@ -37,6 +38,37 @@ from core.entry_table import entry_ref_unresolved
 def _rows_view(model: PythonObject, context: PythonObject) raises -> ArenaRows:
     # UNPACK of every DeviceRows operation: the fold view, resolved once.
     return arena_rows(model, context["maxabs_rows_owner"], context["maxabs_rows_class"])
+
+
+def _rows_release_admit(model: PythonObject, base: PythonObject, indices: PythonObject,
+                        resident_owner: PythonObject, context: PythonObject) raises:
+    """Re-initializing an existing view releases its old pins when the old
+    state goes, and a release can run Python (an application finalizer or a
+    weak-reference callback). Admit every owner the replacement drops BEFORE
+    anything changes, as the instance-dictionary form did (lane fx-leftovers
+    item 7, 2026-11-21; unit C had dropped it, so Python could run inside
+    `__init__`): the old base, indices and materialized host rows through
+    `native_release_admit` unless the new view keeps the same object, and an
+    old resident store owner other than the new one through its weak
+    references (the old form admitted the bound `take` method the same way).
+    A refusal leaves the view unchanged. Once per re-initialization."""
+    var old = _rows_view(model, context)
+    var old_resident = PythonObject(None)
+    var resident_pin = 0
+    if True:
+        var lease = ARENA_ROWS.acquire(arena_handle(old.word))
+        resident_pin = lease[].pins[ARENA_ROWS_PIN_RESIDENT]
+    if resident_pin != 0:
+        old_resident = arena_pinned(resident_pin)
+    if old.base is not base and old.base is not indices:
+        native_release_admit(old.base, context)
+    if old.indices is not indices and old.indices is not base:
+        native_release_admit(old.indices, context)
+    if old.host is not None and old.host is not base and old.host is not indices:
+        native_release_admit(old.host, context)
+    if old_resident is not None and old_resident is not resident_owner:
+        native_release_weakrefs(old_resident, context)
+    _ = old^
 
 
 def _rows_initialize(model: PythonObject, args: PythonObject, context: PythonObject) raises:
@@ -79,6 +111,8 @@ def _rows_initialize(model: PythonObject, args: PythonObject, context: PythonObj
         store = gather.store
     var previous = arena_owner_slot(context["maxabs_rows_owner"], model, context["maxabs_rows_class"],
                                     context["cache_attribute_error"])
+    if previous is not None:
+        _rows_release_admit(model, args[0], args[1], resident_owner, context)
     var state = DeviceRowsState(0, first, row_words, Int(py=base["itemsize"]), dtype, trailing^, 0, rows, resident)
     state.pins[ARENA_ROWS_PIN_BASE] = arena_pin(args[0])
     state.pins[ARENA_ROWS_PIN_INDICES] = arena_pin(args[1])

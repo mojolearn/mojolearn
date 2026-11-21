@@ -30,11 +30,6 @@ def _live():
     return int(_native('msel_live')())
 
 
-def _free_behind_its_back(store_id):
-    # Test-controller fault injection: the model-selection store's own free.
-    _native('msel_free')(store_id)
-
-
 @pytest.fixture
 def owner():
     before = _live()
@@ -178,74 +173,14 @@ def test_context_exit_on_error_closes_and_propagates(owner):
     assert _live() == before
 
 
-@pytest.mark.parametrize('operation', ['close', 'reinit', 'exit'])
-def test_error_order_first_failure_all_slots_attempted_failed_retained(operation):
-    initial = _live()
-    resident = _Resident()
-    first, second = _numpy(), _numpy() + 1
-    third = np.array([3, 1], dtype='i8')
-    resident.take(first, INDICES)
-    resident._entry(second)
-    resident._entry(third, '<i8')
-    before = _live()
-    bad_first = resident._entry(first)[2]
-    bad_last = resident._entry(third, '<i8')[2]
-    assert _live() == before
-    _free_behind_its_back(bad_first)
-    _free_behind_its_back(bad_last)
-    method = {'close': resident.close, 'reinit': resident.__init__,
-              'exit': lambda: resident.__exit__(None, None, None)}[operation]
-    audit = audit_native_call(method)
-    report = audit.report()
-    # The first failure in entry order is raised in the store's words; the
-    # healthy slots between the two failures are still freed.
-    assert audit.exception is not None, report
-    assert f'msel store: id {bad_first} is not live' in str(audit.exception)
-    assert not report['python_frames'] and not report['forbidden_native_calls'], report
-    assert _live() == before - 2 - 2
-    # The two failed entries stay for a retry (a failed reinitialization keeps
-    # the old owner with them): asking again puts nothing.
-    assert resident._entry(first)[2] == bad_first and resident._entry(third, '<i8')[2] == bad_last
-    assert _live() == before - 4
-    # The destructor drops what is left (best effort: those slots are gone).
-    del resident, audit
-    gc.collect()
-    assert _live() == initial
-
-
-def test_context_exit_failure_chains_the_body_error():
-    initial = _live()
-    resident = _Resident()
-    values = _numpy()
-    resident.take(values, INDICES)
-    _free_behind_its_back(resident._entry(values)[2])
-    # A cleanup failure in __exit__ replaces the body's error, as Python's
-    # with-statement does for any failing __exit__.
-    with pytest.raises(Exception, match='is not live') as caught:
-        with resident:
-            raise KeyError('body')
-    assert not isinstance(caught.value, KeyError)
-    del resident, caught
-    gc.collect()
-    assert _live() == initial
-
-
-def test_failed_release_retains_its_owner_for_retry():
-    initial = _live()
-    resident = _Resident()
-    values = _numpy()
-    resident.take(values, INDICES)
-    sid = resident._entry(values)[2]
-    _free_behind_its_back(sid)
-    audit = audit_native_call(resident.release, values)
-    assert audit.exception is not None
-    assert not audit.report()['python_frames']
-    live = _live()
-    assert resident._entry(values)[0] is values and resident._entry(values)[2] == sid and _live() == live
-    assert audit_native_call(resident.release, INDICES).assert_native() is None
-    del resident, audit
-    gc.collect()
-    assert _live() == initial
+# Deleted (lane fx-leftovers item 9, 2026-11-21) with the `msel_free` test export they freed store slots
+# through: test_error_order_first_failure_all_slots_attempted_failed_retained (close / reinit / exit),
+# test_context_exit_failure_chains_the_body_error and test_failed_release_retains_its_owner_for_retry. The order
+# they pinned (unlink first, every slot attempted, the first failure raised, failed entries published again for a
+# retry, owners released last) is one definition, core/arena_state.mojo `arena_resident_close_entries` /
+# `arena_resident_release_entry`, checked natively by checks/native_tests/arena_state_suite.mojo
+# (resident_close_order, resident_release_order). A failing `__exit__` replacing the body's error is CPython's
+# with-statement rule.
 
 
 def test_a_subclass_attribute_hook_is_never_reached():

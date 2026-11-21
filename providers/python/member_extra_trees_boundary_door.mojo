@@ -25,7 +25,7 @@ def extra_trees_member_admit(model: PythonObject, fields: PythonObject, kind: In
 def extra_trees_member_pack(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
     plan: MemberPlan, state: Int) raises:
     """PACK: write the fitted attributes of state `state` into `model`."""
-    forest_member_pack_common(model, context, plan, state)
+    forest_member_pack_common(model, context, b, plan, state)
 
 
 def extra_trees_member_state(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,

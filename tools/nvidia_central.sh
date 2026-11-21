@@ -330,6 +330,13 @@ pick_pod() {  # the live pod with the fewest assigned lanes per GPU
     echo "$best"
 }
 
+env_kv_ok() {  # an --env K=V the box job line can carry unquoted: K upper case, V plain characters. `%` is plain
+    # (the glob star of a check filter: tools/cpu_central.sh check --filter writes `*` as `%`, the job reads it back;
+    # lane fx-leftovers item 6, 2026-11-21: `%` was missing here, so every filter with `*` was refused); `,` separates
+    # a filter's globs. `*`, spaces and quotes stay refused (the job line is word-split and globbed on the box).
+    [[ "$1" =~ ^[A-Z_][A-Z0-9_]*=[A-Za-z0-9_.,:/@+=%-]*$ ]]
+}
+
 central_submit() {  # the `submit` command (a function so tools/cpu_central.sh check runs the same code)
     lane="${1:-}"; lane_ok "$lane"; shift; n=1; cap=$NVC_CAP_MIN; note=''; results=''; persist=1; jobenv=''; preflight=1
     while [ $# -gt 0 ]; do
@@ -342,7 +349,7 @@ central_submit() {  # the `submit` command (a function so tools/cpu_central.sh c
             --no-preflight) preflight=0; shift ;;
             --env)
                 kv="${2:?--env K=V}"
-                [[ "$kv" =~ ^[A-Z_][A-Z0-9_]*=[A-Za-z0-9_.,:/@+=-]*$ ]] \
+                env_kv_ok "$kv" \
                     || die "--env $kv: K must be upper case and V plain characters (no spaces or quotes)"
                 jobenv="$jobenv $kv"; shift 2 ;;
             *) break ;;

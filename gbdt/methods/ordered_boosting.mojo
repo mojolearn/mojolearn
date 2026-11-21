@@ -2386,6 +2386,12 @@ def fit_ordered(
     ctx: DeviceContext,
     layout: CompressedIndexLayout,
     mut cindex: DeviceBuffer[DType.uint32],
+    # One compressed index per permutation when the fit has
+    # permutation-dependent CTR columns (their per-permutation dataset,
+    # `feature_parallel_dataset_builder.cpp:124-160`), `cindex` being the
+    # estimation permutation's; one entry or none when no column depends on
+    # the permutation, and then every permutation reads `cindex`.
+    perm_cindexes: List[DeviceBuffer[DType.uint32]],
     mut targets: DeviceBuffer[DType.float32],
     mut weights: DeviceBuffer[DType.float32],
     n_rows: Int,
@@ -2458,6 +2464,35 @@ def fit_ordered(
     comptime if ORD_SKIP_UNSEARCHED_PERM:
         if learn_count > 1 and not trace.enabled:
             skip_p = learn_count - 1
+    # PERMUTATION-DEPENDENT CTR COLUMNS (lane cat-ctr, 2026-11-21). A CTR
+    # column's value at a row is computed from the rows before it in ONE
+    # permutation, so each permutation has its own compressed index: the
+    # structure is searched on the learn permutation's index, every
+    # permutation's fold tasks read the tree's leaves computed from that
+    # permutation's index (`dep_bins[p]`), and the estimation task reads
+    # the estimation permutation's (`bins`). Without such a column
+    # (`dep_on` False) nothing below differs from the fit over one index.
+    if len(perm_cindexes) > 1 and len(perm_cindexes) != perm_count:
+        raise Error(
+            "ordered boosting: " + String(len(perm_cindexes))
+            + " permutation indexes for " + String(perm_count)
+            + " permutations"
+        )
+    var dep_on = perm_count > 1 and len(perm_cindexes) == perm_count
+    var pidx = List[DeviceBuffer[DType.uint32]]()
+    var dep_bins = List[DeviceBuffer[DType.uint32]]()
+    if dep_on:
+        # driver-loop: over the permutations
+        for p in range(perm_count):
+            pidx.append(perm_cindexes[p].copy())
+            # one bins buffer per learn permutation, for the whole fit; the
+            # estimation permutation's leaves are the tree's `bins`, and a
+            # skipped permutation has no reader (one-cell placeholders keep
+            # the list indexed by permutation)
+            var cells = n_rows
+            if p == est_p or p == skip_p:
+                cells = 1
+            dep_bins.append(ctx.enqueue_create_buffer[DType.uint32](cells))
     # the learn permutations the structure can be searched on (the tree
     # loop's draw range): only they need the derivative inputs below
     var searchable = learn_count - 1 if learn_count > 1 else 1
@@ -2763,7 +2798,13 @@ def fit_ordered(
         # Preserve every requested iteration via the existing batched walker
         # when the count exceeds one. Found while wiring G11/G12; source-only
         # repair, uncompiled/unverified/unmeasured.
-        fast_on = batch and opts.leaf_iterations == 1 and not trace.enabled
+        # The fused task kernel applies ONE bins buffer to every
+        # permutation's cursors, so a fit with permutation-dependent CTR
+        # columns takes the batched walker below it.
+        fast_on = (
+            batch and opts.leaf_iterations == 1 and not trace.enabled
+            and not dep_on
+        )
     var n_slots = learn_count * n_folds + 1 if batch else n_folds + 1
     for _ in range(n_slots):  # small-loop(n_slots: estimation tasks, permutations times folds): empty workspace lists per task
         est_pools.append(List[TEstimationWorkspace]())
@@ -3236,8 +3277,13 @@ def fit_ordered(
         times.end(ctx, "ord.scale")
         # 5. the structure, on the learn permutation's folds
         times.begin(ctx)
+        # the index the structure is searched on: the learn permutation's
+        # own when the fit has permutation-dependent columns
+        var search_idx = cindex.copy()
+        if dep_on:
+            search_idx = pidx[learn_p].copy()
         var splits = fit_oblivious_tree_structure_traced(
-            ctx, layout, n_rows, max_depth, cindex, sw^, sg^, sm_count,
+            ctx, layout, n_rows, max_depth, search_idx, sw^, sg^, sm_count,
             scale, opts.score_function, pool, trace, times,
             tag + ".structure", opts.l2_leaf_reg,
             score_std_dev=score_std, seed=tree_seed, one_hot=one_hot,
@@ -3258,10 +3304,28 @@ def fit_ordered(
             bins = ctx.enqueue_create_buffer[DType.uint32](n_rows)
         if len(splits) == 0:
             enqueue_fill(ctx, bins, UInt32(0))
+        elif dep_on:
+            compute_bins_for_model(
+                ctx, layout, splits, len(splits), pidx[est_p], n_rows, bins
+            )
         else:
             compute_bins_for_model(
                 ctx, layout, splits, len(splits), cindex, n_rows, bins
             )
+        if dep_on:
+            # every learn permutation's leaves from its own index: one
+            # launch per permutation, enqueued behind the estimation one
+            # driver-loop: over the permutations
+            for p in range(perm_count):
+                if p == est_p or p == skip_p:
+                    continue
+                if len(splits) == 0:
+                    enqueue_fill(ctx, dep_bins[p], UInt32(0))
+                else:
+                    compute_bins_for_model(
+                        ctx, layout, splits, len(splits), pidx[p], n_rows,
+                        dep_bins[p],
+                    )
         var n_leaves = 1 << len(splits)
         if trace.enabled:
             # lane sm120-tree-identity: the tree (feature, bin) per level and
@@ -3279,16 +3343,20 @@ def fit_ordered(
                 if p == skip_p:
                     # F: no task reads this permutation's partition
                     continue
+                # the leaves this permutation's rows fall in
+                var sort_bins = bins.copy()
+                if dep_on and p != est_p:
+                    sort_bins = dep_bins[p].copy()
                 if ord_wide:
                     # the batched estimation reads the counts on the
                     # device; the three host copies are dead under it
                     parts[p].enqueue_sort(
-                        ctx, bins, dperms[p], n_leaves, part_counts,
+                        ctx, sort_bins, dperms[p], n_leaves, part_counts,
                         part_prefix, readback=not fast_on,
                     )
                 else:
                     parts[p].enqueue_sort(
-                        ctx, bins, dperms[p], n_leaves, part_counts, part_prefix
+                        ctx, sort_bins, dperms[p], n_leaves, part_counts, part_prefix
                     )
             if not fast_on:
                 ctx.synchronize()
@@ -3386,6 +3454,10 @@ def fit_ordered(
                     if pend_of[slot] < 0:
                         continue
                     var apply_bins = bins.copy()
+                    if dep_on:
+                        # a learn permutation is never the estimation one
+                        # when there is more than one permutation
+                        apply_bins = dep_bins[lp].copy()
                     _ = _ordered_estimate_complete(
                         ctx, pend[pend_of[slot]], slots[slot], n_leaves, dperms[lp],
                         apply_bins,
@@ -3407,13 +3479,22 @@ def fit_ordered(
             if lp == skip_p:
                 # F: no reader of this permutation's cursors
                 continue
+            var task_bins = bins.copy()
+            if dep_on:
+                # the unbatched path partitions on the host from
+                # `h_tree_bins`: this permutation's leaves come home once
+                # per tree (one copy of n_rows words per learn permutation,
+                # on this path only)
+                task_bins = dep_bins[lp].copy()
+                ctx.enqueue_copy(dst_buf=h_tree_bins, src_buf=task_bins)
+                ctx.synchronize()
             for f in range(n_folds):
                 var est = folds[f].estimate_samples.right
                 comptime if ORDERED_SABOTAGE:
                     est = folds[f].quality_evaluate_samples.right
                 _ = _ordered_estimate_task(
                     ctx, est, folds[f].quality_evaluate_samples.right,
-                    n_leaves, targets, weights, dperms[lp], perms[lp], bins,
+                    n_leaves, targets, weights, dperms[lp], perms[lp], task_bins,
                     h_tree_bins, h_part_rows, cursors[lp][f], opts, sm_count,
                     est_pools[f], trace,
                     tag + ".perm." + String(lp) + ".fold." + String(f),
@@ -3422,6 +3503,10 @@ def fit_ordered(
         times.end(ctx, "ord.fold_estimates")
         times.begin(ctx)
         if not batch:
+            if dep_on:
+                # the estimation permutation's leaves back on the host
+                ctx.enqueue_copy(dst_buf=h_tree_bins, src_buf=bins)
+                ctx.synchronize()
             leaves = _ordered_estimate_task(
                 ctx, n_rows, n_rows, n_leaves, targets, weights,
                 dperms[est_p], perms[est_p], bins, h_tree_bins, h_part_rows,
@@ -3498,6 +3583,10 @@ def fit_ordered(
     walker_times.report("ordered estimate_and_apply internals")
     _ = quality^
     _ = h_tree_bins^
+    # the per-permutation indexes and leaves, held past the last tree's
+    # queued launches
+    _ = len(pidx)
+    _ = len(dep_bins)
     _ = h_part_rows^
     _ = slots^
     _ = parts^

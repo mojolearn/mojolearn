@@ -34,6 +34,7 @@ from core.device_route import (
 )
 from providers.python.device_route_boundary_door import (
     DeviceRouteOwner, device_route_held, device_route_keep, device_route_value, device_route_clear,
+    device_cpu_connect_late,
 )
 
 comptime _DECOMP_FLAG_BITS = 16
@@ -130,6 +131,11 @@ def decomp_device_admit(value: PythonObject, context: PythonObject) raises:
         return
     var device = _decomp_device_unpack(value, context)
     if device == DEVICE_CPU:
+        # The first device="cpu" admission beside a GPU set connects the
+        # family's CPU image and label scope (a context that loads them
+        # lazily holds `device_cpu_connect`; lane fx-leftovers item 4). Once:
+        # the key is cleared in place; other contexts read one None.
+        _ = device_cpu_connect_late(context)
         return
     _ = device_installed(device, _decomp_process_vendor(context))
 

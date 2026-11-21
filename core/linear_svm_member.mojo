@@ -58,7 +58,7 @@ from core.linear_svc_native_api import LinearSvcDriver, LinearSvcOptions, Linear
 from core.logistic_native_api import QnFitRequest, QnQueryRequest, QN_NATIVE_DECISION, QN_NATIVE_BINARY, QN_NATIVE_MULTICLASS
 from core.qn_single_fit import QnSingleFitPlan
 from core.member_abi import (
-    MemberCall, MemberMatrix, MEMBER_F32, MEMBER_F64, MEMBER_I32,
+    MemberCall, MemberMatrix, MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_DTYPE_UNSAID,
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_PREDICT, MEMBER_OP_DECISION,
     MEMBER_OP_SCORE, MEMBER_OP_OUTPUTS, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT,
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_DECISION, MEMBER_CAN_SCORE, MEMBER_CAN_EXPORT,
@@ -553,6 +553,9 @@ def _linear_svm_member(operation: Int, address: Int) raises -> Int:
     var call = _CallP(unsafe_from_address=address)
     if operation == MEMBER_OP_CAPABILITIES:
         if call[].state == 0:
+            # Without a state the NEW words name the kind when given.
+            if call[].params and call[].param_count == LINEAR_SVM_MEMBER_PARAMS:
+                return _capabilities(Int(_F64P(unsafe_from_address=call[].params)[0]), call[].route.has_fifth)
             return _capabilities(-1, call[].route.has_fifth)
         var asked = _SlotP(unsafe_from_address=_lookup(call[].state, False))
         return _capabilities(_kind(asked), call[].route.has_fifth)
@@ -585,11 +588,22 @@ def _linear_svm_member(operation: Int, address: Int) raises -> Int:
         elif call[].params and call[].param_count >= 1:
             asked_kind = Int(_F64P(unsafe_from_address=call[].params)[0])
             classes = call[].classes
+        var op = call[].flags
+        if op != MEMBER_OP_PREDICT and not (op == MEMBER_OP_DECISION and asked_kind != LINEAR_SVM_MEMBER_SVR):
+            # An operation the kind lacks is refused, never sized.
+            member_unsupported("a linear SVM member", op)
         call[].out_cols = 1
         call[].classes = 0
+        # LinearSVR's predict and every decision: float32; LinearSVC's
+        # predict: int32 codes.
+        call[].out_dtype = MEMBER_F32
+        if op == MEMBER_OP_PREDICT and asked_kind == LINEAR_SVM_MEMBER_SVC:
+            call[].out_dtype = MEMBER_I32
+        elif op == MEMBER_OP_PREDICT and asked_kind < 0:
+            call[].out_dtype = MEMBER_DTYPE_UNSAID  # the kind decides (codes or values)
         if asked_kind == LINEAR_SVM_MEMBER_SVC:
             call[].classes = classes
-            if call[].flags == MEMBER_OP_DECISION:
+            if op == MEMBER_OP_DECISION:
                 call[].out_cols = max(1, 1 if classes == 2 else classes)
         return 0
     var slot = _SlotP(unsafe_from_address=_lookup(call[].state, False))

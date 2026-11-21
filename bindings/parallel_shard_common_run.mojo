@@ -400,6 +400,27 @@ def shard_request_words(op: Int) -> List[Int64]:
     return WorkerRequest(op).encode()
 
 
+def shard_request_operands(op: Int, var operands: List[Int]) -> List[Int64]:
+    """The wire words of one request whose typed operands ride in the
+    request itself (an encoded `WorkerRequest` with the operation code, no
+    handle and `operands` as its words): such a request has no payload
+    record to UNPACK, send, PACK and read back."""
+    var request = WorkerRequest(op)
+    request.words = operands^
+    return request.encode()
+
+
+def shard_request_decode(address: Int, byte_count: Int) raises -> WorkerRequest:
+    """A worker's decode of its request words when an operation may carry
+    typed operands (`shard_request_operands`): the request, with its
+    operation code and operand words. A frame without request words, or one
+    naming a handle, is refused here."""
+    var request = worker_request_decode(address, byte_count)
+    if request.handle != WORKER_NO_HANDLE:
+        raise Error("parallel shards: invalid worker request envelope")
+    return request^
+
+
 def shard_request_op(address: Int, byte_count: Int) raises -> Int:
     """A worker's decode of its request words (a frame without request words
     is refused here): the operation code."""

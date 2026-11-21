@@ -465,10 +465,18 @@ def _import(slot: _SlotP, call: _CallP) raises:
     slot[].fitted = True
 
 
-def _outputs(slot: _SlotP, call: _CallP):
-    var classes = slot[].classes if slot[].fitted else call[].classes
+def _outputs(call: _CallP, classes: Int) raises:
+    """OUTPUTS with or without a state: predict one int32 code column,
+    predict_proba float32 x classes; another operation is refused."""
     call[].classes = classes
-    call[].out_cols = classes if call[].flags == MEMBER_OP_PREDICT_PROBA else 1
+    if call[].flags == MEMBER_OP_PREDICT:
+        call[].out_cols = 1
+        call[].out_dtype = MEMBER_I32
+    elif call[].flags == MEMBER_OP_PREDICT_PROBA:
+        call[].out_cols = classes
+        call[].out_dtype = MEMBER_F32
+    else:
+        member_unsupported("CNNClassifier", call[].flags)
 
 
 def _capabilities() -> Int:
@@ -518,8 +526,7 @@ def _cnn_member(operation: Int, address: Int) raises -> Int:
         return 0
     if operation == MEMBER_OP_OUTPUTS and call[].state == 0:
         # No state: answer from the words, as a state fitted on them would.
-        var classes = call[].classes
-        call[].out_cols = classes if call[].flags == MEMBER_OP_PREDICT_PROBA else 1
+        _outputs(call, call[].classes)
         return 0
     var slot = _SlotP(unsafe_from_address=_lookup(call[].state, False))
     if operation == MEMBER_OP_FREE:
@@ -537,7 +544,7 @@ def _cnn_member(operation: Int, address: Int) raises -> Int:
     elif operation == MEMBER_OP_PREDICT_PROBA:
         _predict_into(slot, call, False)
     elif operation == MEMBER_OP_OUTPUTS:
-        _outputs(slot, call)
+        _outputs(call, slot[].classes if slot[].fitted else call[].classes)
     elif operation == MEMBER_OP_EXPORT:
         _export(slot, call)
     elif operation == MEMBER_OP_IMPORT:

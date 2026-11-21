@@ -180,8 +180,9 @@ class CausalLM:
     def state_dict(self):
         """The weights as a dict from checkpoint name to array, as ``torch.nn.Module.state_dict``.
 
-        The arrays are the model's own weights (a fused checkpoint tensor is
-        returned joined, as a copy)."""
+        The arrays are copies: editing them does not change the model, and
+        taking a state dict does not slow later calls. Use `parameters()` for
+        the model's own arrays."""
         return _NATIVE.causal_lm_state_dict(self)
 
     def load_state_dict(self, state_dict):

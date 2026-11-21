@@ -8,7 +8,7 @@ from std.python._cpython import GILReleased
 from bindings.py_balanced import py_get, py_type, py_fields, py_call, py_setitem
 from bindings.classical_keys_unpack import classical_keys
 from core.device_route import DEVICE_CPU
-from providers.python.device_route_boundary_door import device_route_resolved
+from providers.python.device_route_boundary_door import device_route_resolved, device_cpu_connect_late
 from core.shared_slot import SharedSlot
 from core.hotpath_impl import HpStat
 from core.labels_native_api import (
@@ -183,7 +183,13 @@ def labels_scope(model: PythonObject, context: PythonObject) raises -> PythonObj
         return context
     var scope = py_get(context, "labels_cpu_scope")
     if scope is None:
-        return context
+        # A restored estimator (no construction ran the device admission):
+        # admit the CPU device once, then read the scope it built.
+        if not device_cpu_connect_late(context):
+            return context
+        scope = py_get(context, "labels_cpu_scope")
+        if scope is None:
+            return context
     # The scope is a copy of the context it was made from. A family context
     # that grew after the copy (a module imported later added its tables), or
     # a context derived from it (the typed context a door builds once per

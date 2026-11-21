@@ -589,11 +589,15 @@ def _check_option_refusals(mut failures: List[String]) raises:
     f.check()
     print("    both shipped configurations pass")
 
+    # feature combinations are implemented: CatBoost's own default passes,
+    # and a complexity below 1 names no fit
     var a = TCatFeatureParams.default()
     a.max_tensor_complexity = 4
-    _expect_params_refusal(
-        failures, a^, String("max_ctr_complexity=4, CatBoost's own default")
-    )
+    a.check()
+    print("    max_ctr_complexity=4, CatBoost's own default, passes")
+    var a0 = TCatFeatureParams.default()
+    a0.max_tensor_complexity = 0
+    _expect_params_refusal(failures, a0^, String("max_ctr_complexity=0"))
 
     var b = TCatFeatureParams.default()
     b.counter_calc_method = 7

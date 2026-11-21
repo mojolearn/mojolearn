@@ -58,13 +58,14 @@ from core.admitted_cast_elements import admitted_cast_elements
 from core.admitted_refusals import admitted_finite_wording
 from core.entry_table import EntryRef, entry_ref_unresolved
 from core.family_cast_impl import family_min_f32
-from core.host_finite_scan import host_all_finite_f32
+from core.host_finite_scan import host_all_finite_f32, host_all_finite_f64
 from core.hotpath_impl import HP_F32, HP_F64
 from core.member_abi import (
     MemberCall, MemberMatrix, MEMBER_F32, MEMBER_F64,
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_PREDICT,
     MEMBER_OP_OUTPUTS, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT,
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT, MEMBER_CAN_SAMPLE_WEIGHT,
+    MEMBER_CAN_TEST_ROWS,
     MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
 )
@@ -288,9 +289,15 @@ def _weights(call: _Call, rows: Int, mut held: List[Float64]) raises -> Int:
         return 0
     if call[].weights.rows != rows or call[].weights.cols != 1:
         raise Error("ValueError: sample_weight and X have different numbers of rows")
+    # The finite test of the weights (one parallel pass): with X and y
+    # tested at fit and X at predict, the member tests every row it reads.
     if call[].weights.dense_host(MEMBER_F64):
+        if not host_all_finite_f64(MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call[].weights.data), rows):
+            raise Error("ValueError: " + admitted_finite_wording(_WHERE, "sample_weight"))
         return call[].weights.data
     _dense(call[].weights, MEMBER_F32, "sample_weight")
+    if not host_all_finite_f32(_f32p(call[].weights.data), rows):
+        raise Error("ValueError: " + admitted_finite_wording(_WHERE, "sample_weight"))
     held = List[Float64](length=rows, fill=0.0)
     if admitted_cast_elements(call[].weights.data, HP_F32, Int(held.unsafe_ptr()), HP_F64, rows) != 0:
         raise Error("ValueError: a member view holds a value its element type cannot convert")
@@ -469,7 +476,10 @@ def _import(slot: _Slot, call: _Call) raises:
 def _kernel_ridge_member(operation: Int, address: Int) raises -> Int:
     var call = _Call(unsafe_from_address=address)
     if operation == MEMBER_OP_CAPABILITIES:
-        return MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_CAN_SAMPLE_WEIGHT
+        # TEST_ROWS: `_tested` X and y at fit, X at predict, `_weights` the
+        # sample weights; one parallel pass each.
+        return (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_CAN_SAMPLE_WEIGHT
+            | MEMBER_CAN_TEST_ROWS)
     if operation == MEMBER_OP_NEW:
         if call[].param_count != _PARAMS or not call[].params:
             raise Error("member ABI: a KernelRidge member takes " + String(_PARAMS) + " parameters")
@@ -485,11 +495,21 @@ def _kernel_ridge_member(operation: Int, address: Int) raises -> Int:
         _ = _lookup(call[].state, True)
         call[].state = 0
         return 0
-    var slot = _Slot(unsafe_from_address=_lookup(call[].state, False))
     if operation == MEMBER_OP_OUTPUTS:
-        call[].out_cols = slot[].targets
+        # predict: float32, one column per target (the fitted state's, else
+        # the caller's `y.cols`, item 10). Another operation is refused.
+        if call[].flags != MEMBER_OP_PREDICT:
+            member_unsupported(_WHERE, call[].flags)
+        var targets = max(1, call[].y.cols)
+        if call[].state != 0:
+            var held = _Slot(unsafe_from_address=_lookup(call[].state, False))
+            if held[].fitted:
+                targets = held[].targets
+        call[].out_cols = targets
+        call[].out_dtype = MEMBER_F32
         call[].classes = 0
         return 0
+    var slot = _Slot(unsafe_from_address=_lookup(call[].state, False))
     if operation == MEMBER_OP_FIT:
         _fit(slot, call)
     elif operation == MEMBER_OP_PREDICT:

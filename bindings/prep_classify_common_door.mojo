@@ -20,7 +20,7 @@ from bindings.classical_validate_unpack import classical_view
 from bindings.x_prep_native_inputs_door import _rows_fields, _values
 from bindings.classical_labels_door import ClassicalLabels, classical_encode_labels
 from bindings.prep_classify_prog_door import ClsProg, NONE, INT32_MAX, off_add, f32_array, i32_array
-from bindings.prep_classify_prog_run import cls_col_stats, cls_class_stats
+from bindings.prep_classify_prog_run import cls_col_stats, cls_class_stats, cls_nb_counts
 from bindings.sequential_admission_door import _one_of
 from bindings.prep_entry_cache_unpack import prep_entry_word
 from bindings.prep_keys_unpack import prep_keys
@@ -38,9 +38,6 @@ comptime OP_COL_STATS = 1
 comptime OP_CLASS_STATS = 16
 comptime OP_QDA_COV = 40
 comptime OP_LAB_LOAD = 119
-comptime OP_CSB_FOLD = 130
-comptime OP_CSB1_PART = 162
-comptime OP_CSB1_NEG = 163
 comptime OP_CSR_DENSE = 164
 comptime OP_F2_CLAMP0 = 235
 comptime OP_GB_PART = 236
@@ -480,16 +477,9 @@ def nb_onepass(mode: PythonObject, context: PythonObject) raises -> Bool:
 
 def nb_counts(mut pr: ClsProg, wo: Int, xo: Int, n: Int, d: Int, yo: Int, K: Int, cnt: Int, sums: Int,
               thr: Int, neg: Int):
-    """`_nb_counts`: the discrete naive Bayes count pass, one unit per (block, column)."""
-    var nb = (n + XB - 1) // XB
-    var ps = pr.work(nb * K * d)
-    var pc = pr.work(nb * K * d)
-    var cn = pr.work(K * d)
-    var ng = pr.work(nb * d) if neg != NONE else NONE
-    pr.stage(OP_CSB1_PART, nb * d, xo, n, d, yo, K, ps, pc, nb, wo, thr, ng)
-    pr.stage(OP_CSB_FOLD, K * d, ps, pc, nb, K, d, cn, cnt, NONE, sums, wo)
-    if neg != NONE:
-        pr.stage(OP_CSB1_NEG, d, ng, nb, d, neg)
+    """`_nb_counts`: the typed group (bindings/prep_classify_prog_run.mojo
+    `cls_nb_counts`)."""
+    cls_nb_counts(pr.program, wo, xo, n, d, yo, K, cnt, sums, thr, neg)
 
 
 # ---------------------------------------------------------------- labels

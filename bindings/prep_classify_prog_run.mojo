@@ -511,12 +511,16 @@ def _cls_borrowed_slot(mut resident: ClsResident, source: ClsBorrowed, mut kept:
     return put.store_id
 
 
-def cls_borrowed_run(plan: ClsRunPlan, program: ClsProgram, sources: List[ClsBorrowed], scope: Int) raises -> ClsBorrowedDone:
+def cls_borrowed_run(plan: ClsRunPlan, program: ClsProgram, sources: List[ClsBorrowed], scope: Int,
+                     mut kept: Int) raises -> ClsBorrowedDone:
     """UNPACK-free run of one program for a typed caller: the route words,
     the arena, the door's input choices (`cls_input_choice`; a pinned buffer
     in an active scope stays resident there, a gathered record takes its
     rows on the device out of that resident base) and `cls_prog_run`.
     `scope`: the caller's scope handle word, negative outside a scope.
+    `kept`: written with the pin token at the moment the scope's cache takes
+    a source's pin reference (left as given otherwise), so the caller knows
+    it whether this run returns or raises (the member ABI's pin rule).
     Raises the run's failure in the door's words."""
     var route = cls_run_route(plan, program)
     var resident = ClsResident()
@@ -524,7 +528,6 @@ def cls_borrowed_run(plan: ClsRunPlan, program: ClsProgram, sources: List[ClsBor
         resident = ClsResident(scope, arena_scope_floor(scope), plan.key)
     var arena = ClsArena(cls_host_words(program, route))
     var records = List[ClsRunInput](capacity=len(program.inputs))
-    var kept = 0
     var next_source = 0
     for k in range(len(program.inputs)):  # driver-loop: over the program's input records
         var record = program.inputs[k]
@@ -908,3 +911,149 @@ def cls_score_program(mut program: ClsProgram, kind: Int, xo_in: Int, n: Int, d:
     var jll = program.work(n * K) if want != 0 else program.alloc(n * K)
     cls_jll_stages(program, kind, xo, n, d, K, jll, a_words, b_words, c_words, has_threshold, threshold, cmax)
     return cls_tail_stages(program, n, d, K, jll, want, p64, pair, chk)
+
+
+# ---------------------------------------------------------------- typed discrete naive Bayes fit
+# Lane ma-pub-kernel round 6 (2026-11-21): the fit program of MultinomialNB,
+# BernoulliNB and ComplementNB (`_DiscreteNB._fit_counts`, `_prior_stages`,
+# the subclass's `_params`) was staged by the door over its Python-holding
+# `ClsProg`, the parameters read from Python objects between the stages. It
+# is typed here; the door reads the parameters once at UNPACK and builds
+# through these, as a member does. Same allocations, same stage words, same
+# order: no bit moves.
+comptime CLS_OP_CLASS_LOG_PRIOR = 30
+comptime CLS_OP_MNB_PARAMS = 31
+comptime CLS_OP_BNB_PARAMS = 32
+comptime CLS_OP_CNB_PARAMS = 33
+comptime CLS_OP_LOG = 72
+comptime CLS_OP_CSB1_NEG = 163
+
+#: the class log prior of a discrete naive Bayes fit
+comptime CLS_PRIOR_GIVEN = 0    # the checked `class_prior` list
+comptime CLS_PRIOR_FIT = 1      # `fit_prior=True`: from the class counts
+comptime CLS_PRIOR_UNIFORM = 2  # `fit_prior=False`
+
+
+def cls_nb_counts(mut program: ClsProgram, wo: Int, xo: Int, n: Int, d: Int, yo: Int, K: Int, cnt: Int, sums: Int,
+                  thr: Int, neg: Int):
+    """`_nb_counts`: the discrete naive Bayes count pass, one unit per
+    (block, column); `thr` the binarize threshold's offset and `neg` the
+    per-column minimum row (CLS_NONE: not asked)."""
+    var nb = (n + CLS_XB - 1) // CLS_XB
+    var ps = program.work(nb * K * d)
+    var pc = program.work(nb * K * d)
+    var cn = program.work(K * d)
+    var ng = program.work(nb * d) if neg != CLS_NONE else CLS_NONE
+    var part: List[Int] = [xo, n, d, yo, K, ps, pc, nb, wo, thr, ng]
+    program.stage(CLS_OP_CSB1_PART, nb * d, part)
+    var fold: List[Int] = [ps, pc, nb, K, d, cn, cnt, CLS_NONE, sums, wo]
+    program.stage(CLS_OP_CSB_FOLD, K * d, fold)
+    if neg != CLS_NONE:
+        var neg_words: List[Int] = [ng, nb, d, neg]
+        program.stage(CLS_OP_CSB1_NEG, d, neg_words)
+
+
+def cls_prior_stages(mut program: ClsProgram, prior: Int, priors: List[Float64], K: Int, cnt: Int, clp: Int):
+    """`_DiscreteNB._prior_stages`: class_log_prior_ at `clp` (`priors`: the
+    checked `class_prior` with CLS_PRIOR_GIVEN)."""
+    if prior == CLS_PRIOR_GIVEN:
+        var po = program.put_list(priors)
+        var log_words: List[Int] = [po, clp]
+        program.stage(CLS_OP_LOG, K, log_words)
+    elif prior == CLS_PRIOR_FIT:
+        var fit_words: List[Int] = [cnt, K, clp]
+        program.stage(CLS_OP_CLASS_LOG_PRIOR, K, fit_words)
+    else:
+        var ones = program.put_list(List[Float64](length=K, fill=1.0))
+        var uniform_words: List[Int] = [ones, K, clp]
+        program.stage(CLS_OP_CLASS_LOG_PRIOR, K, uniform_words)
+
+
+@fieldwise_init
+struct ClsCounts(ImplicitlyCopyable, Movable):
+    """The offsets of a discrete naive Bayes count program: the column
+    statistics of X (`st`, six rows of d; row 3 the per-column minimum that
+    MultinomialNB and ComplementNB refuse a negative word from),
+    class_count_, feature_count_, class_log_prior_."""
+    var n: Int
+    var d: Int
+    var K: Int
+    var st: Int
+    var cnt: Int
+    var fc: Int
+    var clp: Int
+
+
+def cls_dnb_counts(mut program: ClsProgram, kind: Int, xo_in: Int, n: Int, d: Int, K: Int, weighted: Bool,
+                   has_threshold: Bool, threshold: Float64, nb_onepass: Bool, blocked: Bool, prior: Int,
+                   priors: List[Float64]) -> ClsCounts:
+    """`_DiscreteNB._fit_counts`. Buffer records created here, in order: X
+    (n * d float32; none when the caller staged X at `xo_in`), the sample
+    weights (max(n, 1) float32) when `weighted`, the class codes (n int32).
+    `has_threshold`: BernoulliNB's `binarize`. `nb_onepass`: the image's
+    IDN_NB_ONEPASS bit under MOJOLEARN_XPREP_BLOCKED (`blocked`)."""
+    var xo = xo_in
+    if xo == CLS_NONE:
+        xo = cls_buffer(program, n * d)
+    var wo = cls_buffer(program, max(n, 1)) if weighted else CLS_NONE
+    var needs_min = kind == CLS_KIND_MNB or kind == CLS_KIND_CNB
+    if nb_onepass:
+        # lane idn-int-prep: one unit per (block, column) counts every class,
+        # binarizes (BernoulliNB) and flags a negative word
+        var yo1 = cls_codes(program, n)
+        var st1 = program.alloc(6 * d)
+        var cnt1 = program.alloc(K)
+        var fc1 = program.alloc(K * d)
+        var clp1 = program.alloc(K)
+        var thr = cls_scalar(program, threshold) if has_threshold else CLS_NONE
+        cls_nb_counts(program, wo, xo, n, d, yo1, K, cnt1, fc1, thr, st1 + 3 * d if needs_min else CLS_NONE)
+        cls_prior_stages(program, prior, priors, K, cnt1, clp1)
+        return ClsCounts(n, d, K, st1, cnt1, fc1, clp1)
+    if has_threshold:
+        var thr = cls_scalar(program, threshold)
+        var xb = program.work(n * d)
+        var bin_words: List[Int] = [xo, n * d, thr, xb]
+        program.stage(CLS_OP_BINARIZE, n * d, bin_words)
+        xo = xb
+    var yo = cls_codes(program, n)
+    var st = program.alloc(6 * d)
+    var cnt = program.alloc(K)
+    var fc = program.alloc(K * d)
+    var clp = program.alloc(K)
+    cls_col_stats(program, xo, n, d, st, False, blocked)
+    cls_class_stats(program, wo, K * d, xo, n, d, yo, K, cnt, CLS_NONE, CLS_NONE, fc, blocked, False)
+    cls_prior_stages(program, prior, priors, K, cnt, clp)
+    return ClsCounts(n, d, K, st, cnt, fc, clp)
+
+
+@fieldwise_init
+struct ClsDnbParams(ImplicitlyCopyable, Movable):
+    """The offsets of a discrete naive Bayes parameter stage:
+    feature_log_prob_ and, BernoulliNB only, `_w` and `_bias` (else
+    CLS_NONE)."""
+    var flp: Int
+    var w: Int
+    var bias: Int
+
+
+def cls_dnb_params(mut program: ClsProgram, kind: Int, c: ClsCounts, alpha: Float64, norm: Bool) -> ClsDnbParams:
+    """The subclass's `_params` stage over the counts `c` (`norm`:
+    ComplementNB's)."""
+    var K = c.K
+    var d = c.d
+    var a = cls_scalar(program, alpha)
+    var flp = program.alloc(K * d)
+    var w = CLS_NONE
+    var bias = CLS_NONE
+    if kind == CLS_KIND_MNB:
+        var words: List[Int] = [c.fc, K, d, a, flp]
+        program.stage(CLS_OP_MNB_PARAMS, K, words)
+    elif kind == CLS_KIND_BNB:
+        w = program.alloc(K * d)
+        bias = program.alloc(K)
+        var words: List[Int] = [c.fc, c.cnt, K, d, a, c.clp, flp, w, bias]
+        program.stage(CLS_OP_BNB_PARAMS, K, words)
+    else:
+        var words: List[Int] = [c.fc, K, d, a, 1 if norm else 0, flp]
+        program.stage(CLS_OP_CNB_PARAMS, K, words)
+    return ClsDnbParams(flp, w, bias)

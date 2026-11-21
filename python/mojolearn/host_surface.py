@@ -2017,7 +2017,8 @@ FAMILIES = (
             # fold-row gather, prediction scatter, proba column and forest
             # offset merge (bindings/msel_host_pack.mojo, the host column)
             # (msel_put and msel_take_rows deleted, arena unit E 2026-11-21: no caller)
-            "msel_free", "msel_live",
+            # (msel_free deleted, lane fx-leftovers 2026-11-21: the failure order is checked natively)
+            "msel_live",
             # lane p3 (2026-11-09): the fold store's free bytes (host column: -1)
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "unique_inverse", "arange_i64", "leave_range_i64",
