@@ -34,6 +34,7 @@ from bindings.admitted_input_unpack import register_admitted_buffer_pin
 from providers.python.linear_entry_boundary_door import register_linear_entry_owner, register_linear_entry_owner_identity, linear_entry_connect_c
 from providers.python.linear_state_boundary_door import register_linear_state_owner, register_linear_state_owner_identity
 from providers.python.device_route_boundary_door import register_device_route_owner, register_device_route_owner_identity
+from bindings.member_held_owner_unpack import register_member_held_owner
 
 comptime RUNTIME_CLASSICAL_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
@@ -140,6 +141,8 @@ def build__mojolearn_runtime_classical_host() -> PythonObject:
         # the shared estimator door in every runtime host that compiles it. Those register no types: this
         # module is loaded first and owns the type object.
         register_device_route_owner(module)
+        # The ONE held fitted member state owner (bindings/member_held_door.mojo): same rule, registered here only.
+        register_member_held_owner(module)
         module.def_py_c_function(linear_entry_connect_c, "linear_entry_connection_v1")
         module.def_function[runtime_classical_host_numeric_mode_binding]("runtime_classical_host_numeric_mode")
         module.def_function[runtime_classical_host_vendor_binding]("runtime_classical_host_vendor")

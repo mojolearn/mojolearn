@@ -100,8 +100,15 @@ def _gpc_equal(value: PythonObject, text: String) raises -> Bool:
 
 def gpc_validate(model: PythonObject, context: PythonObject) raises:
     """`GaussianProcessClassifier._validate_params`."""
+    gpc_validate_fields(py_fields(model), context)
+
+
+def gpc_validate_fields(fields: PythonObject, context: PythonObject) raises:
+    """`gpc_validate` on a field dictionary: reads the public parameters from
+    `fields` and writes the private fit settings (`_kernel`,
+    `_max_iter_predict`) into the same dictionary. The member admit passes a
+    scratch copy so the caller's template estimator is never changed."""
     var b = native_loaded_module("builtins")
-    var fields = py_fields(model)
     var kernel = family_field(fields, "kernel")
     var optimizer = family_field(fields, "optimizer")
     var n_restarts = family_field(fields, "n_restarts_optimizer")

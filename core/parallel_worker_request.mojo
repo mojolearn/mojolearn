@@ -27,6 +27,9 @@ comptime WORKER_REQUEST_HEADER_WORDS = 5
 # layer of one worker (3 flags + 1 count + 2 words per layer).
 comptime WORKER_REQUEST_MAX_WORDS = 1 << 16
 comptime WORKER_NO_HANDLE = -1
+# The operation word of the process pool's protocol probe (the echo worker,
+# bindings/native_process_pool_door.mojo): outside every model worker's codes.
+comptime WORKER_ECHO_OP = 0x4543484F  # "ECHO"
 
 # ParallelCausalLM worker operations (bindings/parallel_causal_native.mojo).
 comptime PC_CONFIGURE = 1
@@ -46,6 +49,15 @@ comptime PC_RUN_LAYERS = 14
 comptime PC_PARAMETERS = 15
 comptime PC_RUN = 16
 comptime PC_BLOCK_FIELDS = 17
+
+# The neural trainer's worker operations (bindings/parallel_neural_native_door.mojo).
+# A cached gradient request carries two words, the owner's cache epoch and
+# version; an update request carries none.
+comptime PN_MLP_GRADIENT_CACHED = 1
+comptime PN_SAMBA_GRADIENT_CACHED = 2
+comptime PN_MLP_UPDATE = 3
+comptime PN_SAMBA_UPDATE = 4
+comptime PN_GRADIENT_WORDS = 2
 
 
 struct WorkerRequest(Copyable, Movable):

@@ -68,13 +68,6 @@ comptime PARALLEL_NEURAL_OPN_CLOSE = 9
 comptime PARALLEL_NEURAL_OPN_EXIT = 10
 comptime PARALLEL_NEURAL_OPN_ENTER = 11
 
-# `neural_worker` dispatcher codes (`ops_neural_worker`).
-comptime PARALLEL_NEURAL_WORKER_OPN_MLP_GRADIENT_CACHED = 0
-comptime PARALLEL_NEURAL_WORKER_OPN_SAMBA_GRADIENT_CACHED = 1
-comptime PARALLEL_NEURAL_WORKER_OPN_MLP_GRADIENT = 2
-comptime PARALLEL_NEURAL_WORKER_OPN_SAMBA_GRADIENT = 3
-comptime PARALLEL_NEURAL_WORKER_OPN_MLP_UPDATE = 4
-comptime PARALLEL_NEURAL_WORKER_OPN_SAMBA_UPDATE = 5
 
 # `forecast` dispatcher codes (`ops_forecast`).
 comptime PARALLEL_FORECAST_OPN_INITIALIZE = 0
@@ -85,13 +78,6 @@ comptime PARALLEL_FORECAST_OPN_FORECAST_EXPONENTIAL_SMOOTHING = 4
 comptime PARALLEL_FORECAST_OPN_FIT_ARIMA = 5
 comptime PARALLEL_FORECAST_OPN_FIT_EXPONENTIAL_SMOOTHING = 6
 comptime PARALLEL_FORECAST_OPN_WORKER = 7
-
-# `forecast_worker` dispatcher codes (`ops_forecast_worker`).
-comptime PARALLEL_FORECAST_WORKER_OPN_ARIMA_PREDICT_SHARD = 0
-comptime PARALLEL_FORECAST_WORKER_OPN_HW_PREDICT_SHARD = 1
-comptime PARALLEL_FORECAST_WORKER_OPN_ARIMA_FIT_SHARD = 2
-comptime PARALLEL_FORECAST_WORKER_OPN_HW_FIT_SHARD = 3
-comptime PARALLEL_FORECAST_WORKER_OPN_IDENTITY = 4
 
 # `shard` dispatcher codes (`ops_shard`).
 comptime PARALLEL_SHARD_OPN_REGISTER = 0
@@ -118,42 +104,6 @@ comptime PARALLEL_SHARD_OPN_IVF_SEARCH = 20
 comptime PARALLEL_SHARD_OPN_IVF_CLOSE = 21
 comptime PARALLEL_SHARD_OPN_WORKER = 22
 
-# `shard_worker` dispatcher codes (`ops_shard_worker`).
-comptime PARALLEL_SHARD_WORKER_OPN_IDENTITY = 0
-comptime PARALLEL_SHARD_WORKER_OPN_SHARD_STORE = 1
-comptime PARALLEL_SHARD_WORKER_OPN_SHARD_RELEASE = 2
-comptime PARALLEL_SHARD_WORKER_OPN_RBF_ROWS = 3
-comptime PARALLEL_SHARD_WORKER_OPN_SCALER_FIT = 4
-comptime PARALLEL_SHARD_WORKER_OPN_SCALER_TRANSFORM = 5
-comptime PARALLEL_SHARD_WORKER_OPN_GPC_CLASS_FIT = 6
-comptime PARALLEL_SHARD_WORKER_OPN_GPC_CLASS_PREDICT = 7
-comptime PARALLEL_SHARD_WORKER_OPN_FOREST_FIT = 8
-comptime PARALLEL_SHARD_WORKER_OPN_REFERENCE_SHARD = 9
-comptime PARALLEL_SHARD_WORKER_OPN_REFERENCE_STORE = 10
-comptime PARALLEL_SHARD_WORKER_OPN_REFERENCE_VOTE = 11
-comptime PARALLEL_SHARD_WORKER_OPN_QUERY_STATE = 12
-comptime PARALLEL_SHARD_WORKER_OPN_RELEASE = 13
-comptime PARALLEL_SHARD_WORKER_OPN_IVF_STORE = 14
-comptime PARALLEL_SHARD_WORKER_OPN_IVF_SEARCH = 15
-comptime PARALLEL_SHARD_WORKER_OPN_REFERENCE_QUERY = 16
-comptime PARALLEL_SHARD_WORKER_OPN_QUERY_ROWS = 17
-
-# `numerical` dispatcher codes (`ops_numerical`).
-comptime PARALLEL_NUMERICAL_OPN_PY = 0
-comptime PARALLEL_NUMERICAL_OPN_ARIMA_PREDICT_SHARD = 1
-comptime PARALLEL_NUMERICAL_OPN_HW_PREDICT_SHARD = 2
-comptime PARALLEL_NUMERICAL_OPN_GPC_CLASS_FIT = 3
-comptime PARALLEL_NUMERICAL_OPN_GPC_CLASS_PREDICT = 4
-comptime PARALLEL_NUMERICAL_OPN_IVF_SEARCH = 5
-comptime PARALLEL_NUMERICAL_OPN_RBF_ROWS = 6
-comptime PARALLEL_NUMERICAL_OPN_SCALER_FIT = 7
-comptime PARALLEL_NUMERICAL_OPN_SCALER_TRANSFORM = 8
-comptime PARALLEL_NUMERICAL_OPN_FOREST_FIT = 9
-comptime PARALLEL_NUMERICAL_OPN_ARIMA_FIT_SHARD = 10
-comptime PARALLEL_NUMERICAL_OPN_HW_FIT_SHARD = 11
-comptime PARALLEL_NUMERICAL_OPN_REFERENCE_SHARD = 12
-comptime PARALLEL_NUMERICAL_OPN_REFERENCE_QUERY = 13
-comptime PARALLEL_NUMERICAL_OPN_QUERY_ROWS = 14
 
 # `causal` dispatcher codes (`ops_causal`).
 comptime PARALLEL_CAUSAL_OPN_INITIALIZE = 0
@@ -200,12 +150,8 @@ struct ParallelKeys(Defaultable, Movable):
     var ops_byte: PythonObject
     var ops_mlp: PythonObject
     var ops_neural: PythonObject
-    var ops_neural_worker: PythonObject
     var ops_forecast: PythonObject
-    var ops_forecast_worker: PythonObject
     var ops_shard: PythonObject
-    var ops_shard_worker: PythonObject
-    var ops_numerical: PythonObject
     var ops_causal: PythonObject
     var ops_predictor: PythonObject
     var ops_par_driver: PythonObject
@@ -224,7 +170,6 @@ struct ParallelKeys(Defaultable, Movable):
     var k__causal_live_fields: PythonObject
     var k__causal_original: PythonObject
     var k__classes_list: PythonObject
-    var k__classifier: PythonObject
     var k__closed: PythonObject
     var k__components_len: PythonObject
     var k__comps: PythonObject
@@ -264,7 +209,6 @@ struct ParallelKeys(Defaultable, Movable):
     var k__offsets: PythonObject
     var k__pool: PythonObject
     var k__pools: PythonObject
-    var k__public_kind: PythonObject
     var k__resident: PythonObject
     var k__resident_holder: PythonObject
     var k__session: PythonObject
@@ -281,8 +225,6 @@ struct ParallelKeys(Defaultable, Movable):
     var k_admission: PythonObject
     var k_algorithm: PythonObject
     var k_architecture: PythonObject
-    var k_arima_fit_shard: PythonObject
-    var k_arima_predict_shard: PythonObject
     var k_array_class: PythonObject
     var k_assignments: PythonObject
     var k_backend: PythonObject
@@ -348,29 +290,21 @@ struct ParallelKeys(Defaultable, Movable):
     var k_fit_executed_flag: PythonObject
     var k_flags: PythonObject
     var k_forest_classifier: PythonObject
-    var k_forest_fit: PythonObject
     var k_forests: PythonObject
     var k_full: PythonObject
     var k_generation_classes: PythonObject
-    var k_gpc_class_fit: PythonObject
-    var k_gpc_class_predict: PythonObject
     var k_handle: PythonObject
     var k_head: PythonObject
     var k_history: PythonObject
     var k_hooks: PythonObject
-    var k_hw_fit_shard: PythonObject
-    var k_hw_predict_shard: PythonObject
     var k_identical: PythonObject
     var k_identities: PythonObject
-    var k_identity: PythonObject
     var k_index: PythonObject
     var k_inference_engine: PythonObject
     var k_input_copied_: PythonObject
     var k_integer_types: PythonObject
     var k_inventory: PythonObject
     var k_ivf_class: PythonObject
-    var k_ivf_search: PythonObject
-    var k_ivf_store: PythonObject
     var k_kde_class: PythonObject
     var k_kind: PythonObject
     var k_knc_class: PythonObject
@@ -396,9 +330,7 @@ struct ParallelKeys(Defaultable, Movable):
     var k_metric: PythonObject
     var k_metric_code_: PythonObject
     var k_min_: PythonObject
-    var k_mlp_gradient_cached: PythonObject
     var k_mlp_slot: PythonObject
-    var k_mlp_update: PythonObject
     var k_mode: PythonObject
     var k_model: PythonObject
     var k_model_class: PythonObject
@@ -464,43 +396,30 @@ struct ParallelKeys(Defaultable, Movable):
     var k_provider: PythonObject
     var k_query_classes: PythonObject
     var k_query_end: PythonObject
-    var k_query_rows: PythonObject
     var k_query_rows_per_shard: PythonObject
     var k_query_start: PythonObject
-    var k_query_state: PythonObject
     var k_query_tile: PythonObject
     var k_radius: PythonObject
     var k_random_weights_: PythonObject
-    var k_rbf_rows: PythonObject
     var k_recipe: PythonObject
     var k_record: PythonObject
     var k_reduction: PythonObject
     var k_reference_bytes: PythonObject
     var k_reference_end: PythonObject
-    var k_reference_query: PythonObject
     var k_reference_rows_per_shard: PythonObject
     var k_reference_start: PythonObject
-    var k_reference_store: PythonObject
-    var k_reference_vote: PythonObject
-    var k_release: PythonObject
     var k_return_distance: PythonObject
     var k_rms_norm_forward: PythonObject
     var k_rng: PythonObject
     var k_route: PythonObject
     var k_rows_per_shard: PythonObject
-    var k_samba_gradient_cached: PythonObject
-    var k_samba_update: PythonObject
     var k_scale_: PythonObject
-    var k_scaler_fit: PythonObject
-    var k_scaler_transform: PythonObject
     var k_schema: PythonObject
     var k_seasonal_periods: PythonObject
     var k_selected_vendor: PythonObject
     var k_sha256: PythonObject
     var k_shapes: PythonObject
     var k_shard: PythonObject
-    var k_shard_release: PythonObject
-    var k_shard_store: PythonObject
     var k_sort_results: PythonObject
     var k_stages: PythonObject
     var k_start: PythonObject
@@ -541,12 +460,8 @@ struct ParallelKeys(Defaultable, Movable):
         self.ops_byte = PythonObject(None)
         self.ops_mlp = PythonObject(None)
         self.ops_neural = PythonObject(None)
-        self.ops_neural_worker = PythonObject(None)
         self.ops_forecast = PythonObject(None)
-        self.ops_forecast_worker = PythonObject(None)
         self.ops_shard = PythonObject(None)
-        self.ops_shard_worker = PythonObject(None)
-        self.ops_numerical = PythonObject(None)
         self.ops_causal = PythonObject(None)
         self.ops_predictor = PythonObject(None)
         self.ops_par_driver = PythonObject(None)
@@ -565,7 +480,6 @@ struct ParallelKeys(Defaultable, Movable):
         self.k__causal_live_fields = PythonObject(None)
         self.k__causal_original = PythonObject(None)
         self.k__classes_list = PythonObject(None)
-        self.k__classifier = PythonObject(None)
         self.k__closed = PythonObject(None)
         self.k__components_len = PythonObject(None)
         self.k__comps = PythonObject(None)
@@ -605,7 +519,6 @@ struct ParallelKeys(Defaultable, Movable):
         self.k__offsets = PythonObject(None)
         self.k__pool = PythonObject(None)
         self.k__pools = PythonObject(None)
-        self.k__public_kind = PythonObject(None)
         self.k__resident = PythonObject(None)
         self.k__resident_holder = PythonObject(None)
         self.k__session = PythonObject(None)
@@ -622,8 +535,6 @@ struct ParallelKeys(Defaultable, Movable):
         self.k_admission = PythonObject(None)
         self.k_algorithm = PythonObject(None)
         self.k_architecture = PythonObject(None)
-        self.k_arima_fit_shard = PythonObject(None)
-        self.k_arima_predict_shard = PythonObject(None)
         self.k_array_class = PythonObject(None)
         self.k_assignments = PythonObject(None)
         self.k_backend = PythonObject(None)
@@ -689,29 +600,21 @@ struct ParallelKeys(Defaultable, Movable):
         self.k_fit_executed_flag = PythonObject(None)
         self.k_flags = PythonObject(None)
         self.k_forest_classifier = PythonObject(None)
-        self.k_forest_fit = PythonObject(None)
         self.k_forests = PythonObject(None)
         self.k_full = PythonObject(None)
         self.k_generation_classes = PythonObject(None)
-        self.k_gpc_class_fit = PythonObject(None)
-        self.k_gpc_class_predict = PythonObject(None)
         self.k_handle = PythonObject(None)
         self.k_head = PythonObject(None)
         self.k_history = PythonObject(None)
         self.k_hooks = PythonObject(None)
-        self.k_hw_fit_shard = PythonObject(None)
-        self.k_hw_predict_shard = PythonObject(None)
         self.k_identical = PythonObject(None)
         self.k_identities = PythonObject(None)
-        self.k_identity = PythonObject(None)
         self.k_index = PythonObject(None)
         self.k_inference_engine = PythonObject(None)
         self.k_input_copied_ = PythonObject(None)
         self.k_integer_types = PythonObject(None)
         self.k_inventory = PythonObject(None)
         self.k_ivf_class = PythonObject(None)
-        self.k_ivf_search = PythonObject(None)
-        self.k_ivf_store = PythonObject(None)
         self.k_kde_class = PythonObject(None)
         self.k_kind = PythonObject(None)
         self.k_knc_class = PythonObject(None)
@@ -737,9 +640,7 @@ struct ParallelKeys(Defaultable, Movable):
         self.k_metric = PythonObject(None)
         self.k_metric_code_ = PythonObject(None)
         self.k_min_ = PythonObject(None)
-        self.k_mlp_gradient_cached = PythonObject(None)
         self.k_mlp_slot = PythonObject(None)
-        self.k_mlp_update = PythonObject(None)
         self.k_mode = PythonObject(None)
         self.k_model = PythonObject(None)
         self.k_model_class = PythonObject(None)
@@ -805,43 +706,30 @@ struct ParallelKeys(Defaultable, Movable):
         self.k_provider = PythonObject(None)
         self.k_query_classes = PythonObject(None)
         self.k_query_end = PythonObject(None)
-        self.k_query_rows = PythonObject(None)
         self.k_query_rows_per_shard = PythonObject(None)
         self.k_query_start = PythonObject(None)
-        self.k_query_state = PythonObject(None)
         self.k_query_tile = PythonObject(None)
         self.k_radius = PythonObject(None)
         self.k_random_weights_ = PythonObject(None)
-        self.k_rbf_rows = PythonObject(None)
         self.k_recipe = PythonObject(None)
         self.k_record = PythonObject(None)
         self.k_reduction = PythonObject(None)
         self.k_reference_bytes = PythonObject(None)
         self.k_reference_end = PythonObject(None)
-        self.k_reference_query = PythonObject(None)
         self.k_reference_rows_per_shard = PythonObject(None)
         self.k_reference_start = PythonObject(None)
-        self.k_reference_store = PythonObject(None)
-        self.k_reference_vote = PythonObject(None)
-        self.k_release = PythonObject(None)
         self.k_return_distance = PythonObject(None)
         self.k_rms_norm_forward = PythonObject(None)
         self.k_rng = PythonObject(None)
         self.k_route = PythonObject(None)
         self.k_rows_per_shard = PythonObject(None)
-        self.k_samba_gradient_cached = PythonObject(None)
-        self.k_samba_update = PythonObject(None)
         self.k_scale_ = PythonObject(None)
-        self.k_scaler_fit = PythonObject(None)
-        self.k_scaler_transform = PythonObject(None)
         self.k_schema = PythonObject(None)
         self.k_seasonal_periods = PythonObject(None)
         self.k_selected_vendor = PythonObject(None)
         self.k_sha256 = PythonObject(None)
         self.k_shapes = PythonObject(None)
         self.k_shard = PythonObject(None)
-        self.k_shard_release = PythonObject(None)
-        self.k_shard_store = PythonObject(None)
         self.k_sort_results = PythonObject(None)
         self.k_stages = PythonObject(None)
         self.k_start = PythonObject(None)
@@ -878,7 +766,7 @@ struct ParallelKeys(Defaultable, Movable):
         self.k_y_train_ = PythonObject(None)
 
 
-comptime _PARALLEL_KEYS = SharedSlot[ParallelKeys, "MojolearnParallelKeysV1"]
+comptime _PARALLEL_KEYS = SharedSlot[ParallelKeys, "MojolearnParallelKeysV2", 2]
 
 
 def _parallel_keys_fill(nk: UnsafePointer[ParallelKeys, MutUntrackedOrigin]) raises:
@@ -898,7 +786,6 @@ def _parallel_keys_fill(nk: UnsafePointer[ParallelKeys, MutUntrackedOrigin]) rai
     nk[].k__causal_live_fields = py_key("_causal_live_fields")
     nk[].k__causal_original = py_key("_causal_original")
     nk[].k__classes_list = py_key("_classes_list")
-    nk[].k__classifier = py_key("_classifier")
     nk[].k__closed = py_key("_closed")
     nk[].k__components_len = py_key("_components_len")
     nk[].k__comps = py_key("_comps")
@@ -938,7 +825,6 @@ def _parallel_keys_fill(nk: UnsafePointer[ParallelKeys, MutUntrackedOrigin]) rai
     nk[].k__offsets = py_key("_offsets")
     nk[].k__pool = py_key("_pool")
     nk[].k__pools = py_key("_pools")
-    nk[].k__public_kind = py_key("_public_kind")
     nk[].k__resident = py_key("_resident")
     nk[].k__resident_holder = py_key("_resident_holder")
     nk[].k__session = py_key("_session")
@@ -955,8 +841,6 @@ def _parallel_keys_fill(nk: UnsafePointer[ParallelKeys, MutUntrackedOrigin]) rai
     nk[].k_admission = py_key("admission")
     nk[].k_algorithm = py_key("algorithm")
     nk[].k_architecture = py_key("architecture")
-    nk[].k_arima_fit_shard = py_key("arima_fit_shard")
-    nk[].k_arima_predict_shard = py_key("arima_predict_shard")
     nk[].k_array_class = py_key("array_class")
     nk[].k_assignments = py_key("assignments")
     nk[].k_backend = py_key("backend")
@@ -1022,29 +906,21 @@ def _parallel_keys_fill(nk: UnsafePointer[ParallelKeys, MutUntrackedOrigin]) rai
     nk[].k_fit_executed_flag = py_key("fit_executed_flag")
     nk[].k_flags = py_key("flags")
     nk[].k_forest_classifier = py_key("forest_classifier")
-    nk[].k_forest_fit = py_key("forest_fit")
     nk[].k_forests = py_key("forests")
     nk[].k_full = py_key("full")
     nk[].k_generation_classes = py_key("generation_classes")
-    nk[].k_gpc_class_fit = py_key("gpc_class_fit")
-    nk[].k_gpc_class_predict = py_key("gpc_class_predict")
     nk[].k_handle = py_key("handle")
     nk[].k_head = py_key("head")
     nk[].k_history = py_key("history")
     nk[].k_hooks = py_key("hooks")
-    nk[].k_hw_fit_shard = py_key("hw_fit_shard")
-    nk[].k_hw_predict_shard = py_key("hw_predict_shard")
     nk[].k_identical = py_key("identical")
     nk[].k_identities = py_key("identities")
-    nk[].k_identity = py_key("identity")
     nk[].k_index = py_key("index")
     nk[].k_inference_engine = py_key("inference_engine")
     nk[].k_input_copied_ = py_key("input_copied_")
     nk[].k_integer_types = py_key("integer_types")
     nk[].k_inventory = py_key("inventory")
     nk[].k_ivf_class = py_key("ivf_class")
-    nk[].k_ivf_search = py_key("ivf_search")
-    nk[].k_ivf_store = py_key("ivf_store")
     nk[].k_kde_class = py_key("kde_class")
     nk[].k_kind = py_key("kind")
     nk[].k_knc_class = py_key("knc_class")
@@ -1070,9 +946,7 @@ def _parallel_keys_fill(nk: UnsafePointer[ParallelKeys, MutUntrackedOrigin]) rai
     nk[].k_metric = py_key("metric")
     nk[].k_metric_code_ = py_key("metric_code_")
     nk[].k_min_ = py_key("min_")
-    nk[].k_mlp_gradient_cached = py_key("mlp_gradient_cached")
     nk[].k_mlp_slot = py_key("mlp_slot")
-    nk[].k_mlp_update = py_key("mlp_update")
     nk[].k_mode = py_key("mode")
     nk[].k_model = py_key("model")
     nk[].k_model_class = py_key("model_class")
@@ -1138,43 +1012,30 @@ def _parallel_keys_fill(nk: UnsafePointer[ParallelKeys, MutUntrackedOrigin]) rai
     nk[].k_provider = py_key("provider")
     nk[].k_query_classes = py_key("query_classes")
     nk[].k_query_end = py_key("query_end")
-    nk[].k_query_rows = py_key("query_rows")
     nk[].k_query_rows_per_shard = py_key("query_rows_per_shard")
     nk[].k_query_start = py_key("query_start")
-    nk[].k_query_state = py_key("query_state")
     nk[].k_query_tile = py_key("query_tile")
     nk[].k_radius = py_key("radius")
     nk[].k_random_weights_ = py_key("random_weights_")
-    nk[].k_rbf_rows = py_key("rbf_rows")
     nk[].k_recipe = py_key("recipe")
     nk[].k_record = py_key("record")
     nk[].k_reduction = py_key("reduction")
     nk[].k_reference_bytes = py_key("reference_bytes")
     nk[].k_reference_end = py_key("reference_end")
-    nk[].k_reference_query = py_key("reference_query")
     nk[].k_reference_rows_per_shard = py_key("reference_rows_per_shard")
     nk[].k_reference_start = py_key("reference_start")
-    nk[].k_reference_store = py_key("reference_store")
-    nk[].k_reference_vote = py_key("reference_vote")
-    nk[].k_release = py_key("release")
     nk[].k_return_distance = py_key("return_distance")
     nk[].k_rms_norm_forward = py_key("rms_norm_forward")
     nk[].k_rng = py_key("rng")
     nk[].k_route = py_key("route")
     nk[].k_rows_per_shard = py_key("rows_per_shard")
-    nk[].k_samba_gradient_cached = py_key("samba_gradient_cached")
-    nk[].k_samba_update = py_key("samba_update")
     nk[].k_scale_ = py_key("scale_")
-    nk[].k_scaler_fit = py_key("scaler_fit")
-    nk[].k_scaler_transform = py_key("scaler_transform")
     nk[].k_schema = py_key("schema")
     nk[].k_seasonal_periods = py_key("seasonal_periods")
     nk[].k_selected_vendor = py_key("selected_vendor")
     nk[].k_sha256 = py_key("sha256")
     nk[].k_shapes = py_key("shapes")
     nk[].k_shard = py_key("shard")
-    nk[].k_shard_release = py_key("shard_release")
-    nk[].k_shard_store = py_key("shard_store")
     nk[].k_sort_results = py_key("sort_results")
     nk[].k_stages = py_key("stages")
     nk[].k_start = py_key("start")
@@ -1260,14 +1121,6 @@ def _parallel_keys_fill(nk: UnsafePointer[ParallelKeys, MutUntrackedOrigin]) rai
     py_op_add(ops_neural, "exit", PARALLEL_NEURAL_OPN_EXIT)
     py_op_add(ops_neural, "enter", PARALLEL_NEURAL_OPN_ENTER)
     nk[].ops_neural = ops_neural
-    var ops_neural_worker = Python.dict()
-    py_op_add(ops_neural_worker, "mlp_gradient_cached", PARALLEL_NEURAL_WORKER_OPN_MLP_GRADIENT_CACHED)
-    py_op_add(ops_neural_worker, "samba_gradient_cached", PARALLEL_NEURAL_WORKER_OPN_SAMBA_GRADIENT_CACHED)
-    py_op_add(ops_neural_worker, "mlp_gradient", PARALLEL_NEURAL_WORKER_OPN_MLP_GRADIENT)
-    py_op_add(ops_neural_worker, "samba_gradient", PARALLEL_NEURAL_WORKER_OPN_SAMBA_GRADIENT)
-    py_op_add(ops_neural_worker, "mlp_update", PARALLEL_NEURAL_WORKER_OPN_MLP_UPDATE)
-    py_op_add(ops_neural_worker, "samba_update", PARALLEL_NEURAL_WORKER_OPN_SAMBA_UPDATE)
-    nk[].ops_neural_worker = ops_neural_worker
     var ops_forecast = Python.dict()
     py_op_add(ops_forecast, "initialize", PARALLEL_FORECAST_OPN_INITIALIZE)
     py_op_add(ops_forecast, "predict_arima", PARALLEL_FORECAST_OPN_PREDICT_ARIMA)
@@ -1278,13 +1131,6 @@ def _parallel_keys_fill(nk: UnsafePointer[ParallelKeys, MutUntrackedOrigin]) rai
     py_op_add(ops_forecast, "fit_exponential_smoothing", PARALLEL_FORECAST_OPN_FIT_EXPONENTIAL_SMOOTHING)
     py_op_add(ops_forecast, "worker", PARALLEL_FORECAST_OPN_WORKER)
     nk[].ops_forecast = ops_forecast
-    var ops_forecast_worker = Python.dict()
-    py_op_add(ops_forecast_worker, "arima_predict_shard", PARALLEL_FORECAST_WORKER_OPN_ARIMA_PREDICT_SHARD)
-    py_op_add(ops_forecast_worker, "hw_predict_shard", PARALLEL_FORECAST_WORKER_OPN_HW_PREDICT_SHARD)
-    py_op_add(ops_forecast_worker, "arima_fit_shard", PARALLEL_FORECAST_WORKER_OPN_ARIMA_FIT_SHARD)
-    py_op_add(ops_forecast_worker, "hw_fit_shard", PARALLEL_FORECAST_WORKER_OPN_HW_FIT_SHARD)
-    py_op_add(ops_forecast_worker, "identity", PARALLEL_FORECAST_WORKER_OPN_IDENTITY)
-    nk[].ops_forecast_worker = ops_forecast_worker
     var ops_shard = Python.dict()
     py_op_add(ops_shard, "register", PARALLEL_SHARD_OPN_REGISTER)
     py_op_add(ops_shard, "transform_rbf_sampler", PARALLEL_SHARD_OPN_TRANSFORM_RBF_SAMPLER)
@@ -1310,43 +1156,6 @@ def _parallel_keys_fill(nk: UnsafePointer[ParallelKeys, MutUntrackedOrigin]) rai
     py_op_add(ops_shard, "ivf_close", PARALLEL_SHARD_OPN_IVF_CLOSE)
     py_op_add(ops_shard, "worker", PARALLEL_SHARD_OPN_WORKER)
     nk[].ops_shard = ops_shard
-    var ops_shard_worker = Python.dict()
-    py_op_add(ops_shard_worker, "identity", PARALLEL_SHARD_WORKER_OPN_IDENTITY)
-    py_op_add(ops_shard_worker, "shard_store", PARALLEL_SHARD_WORKER_OPN_SHARD_STORE)
-    py_op_add(ops_shard_worker, "shard_release", PARALLEL_SHARD_WORKER_OPN_SHARD_RELEASE)
-    py_op_add(ops_shard_worker, "rbf_rows", PARALLEL_SHARD_WORKER_OPN_RBF_ROWS)
-    py_op_add(ops_shard_worker, "scaler_fit", PARALLEL_SHARD_WORKER_OPN_SCALER_FIT)
-    py_op_add(ops_shard_worker, "scaler_transform", PARALLEL_SHARD_WORKER_OPN_SCALER_TRANSFORM)
-    py_op_add(ops_shard_worker, "gpc_class_fit", PARALLEL_SHARD_WORKER_OPN_GPC_CLASS_FIT)
-    py_op_add(ops_shard_worker, "gpc_class_predict", PARALLEL_SHARD_WORKER_OPN_GPC_CLASS_PREDICT)
-    py_op_add(ops_shard_worker, "forest_fit", PARALLEL_SHARD_WORKER_OPN_FOREST_FIT)
-    py_op_add(ops_shard_worker, "reference_shard", PARALLEL_SHARD_WORKER_OPN_REFERENCE_SHARD)
-    py_op_add(ops_shard_worker, "reference_store", PARALLEL_SHARD_WORKER_OPN_REFERENCE_STORE)
-    py_op_add(ops_shard_worker, "reference_vote", PARALLEL_SHARD_WORKER_OPN_REFERENCE_VOTE)
-    py_op_add(ops_shard_worker, "query_state", PARALLEL_SHARD_WORKER_OPN_QUERY_STATE)
-    py_op_add(ops_shard_worker, "release", PARALLEL_SHARD_WORKER_OPN_RELEASE)
-    py_op_add(ops_shard_worker, "ivf_store", PARALLEL_SHARD_WORKER_OPN_IVF_STORE)
-    py_op_add(ops_shard_worker, "ivf_search", PARALLEL_SHARD_WORKER_OPN_IVF_SEARCH)
-    py_op_add(ops_shard_worker, "reference_query", PARALLEL_SHARD_WORKER_OPN_REFERENCE_QUERY)
-    py_op_add(ops_shard_worker, "query_rows", PARALLEL_SHARD_WORKER_OPN_QUERY_ROWS)
-    nk[].ops_shard_worker = ops_shard_worker
-    var ops_numerical = Python.dict()
-    py_op_add(ops_numerical, "py", PARALLEL_NUMERICAL_OPN_PY)
-    py_op_add(ops_numerical, "arima_predict_shard", PARALLEL_NUMERICAL_OPN_ARIMA_PREDICT_SHARD)
-    py_op_add(ops_numerical, "hw_predict_shard", PARALLEL_NUMERICAL_OPN_HW_PREDICT_SHARD)
-    py_op_add(ops_numerical, "gpc_class_fit", PARALLEL_NUMERICAL_OPN_GPC_CLASS_FIT)
-    py_op_add(ops_numerical, "gpc_class_predict", PARALLEL_NUMERICAL_OPN_GPC_CLASS_PREDICT)
-    py_op_add(ops_numerical, "ivf_search", PARALLEL_NUMERICAL_OPN_IVF_SEARCH)
-    py_op_add(ops_numerical, "rbf_rows", PARALLEL_NUMERICAL_OPN_RBF_ROWS)
-    py_op_add(ops_numerical, "scaler_fit", PARALLEL_NUMERICAL_OPN_SCALER_FIT)
-    py_op_add(ops_numerical, "scaler_transform", PARALLEL_NUMERICAL_OPN_SCALER_TRANSFORM)
-    py_op_add(ops_numerical, "forest_fit", PARALLEL_NUMERICAL_OPN_FOREST_FIT)
-    py_op_add(ops_numerical, "arima_fit_shard", PARALLEL_NUMERICAL_OPN_ARIMA_FIT_SHARD)
-    py_op_add(ops_numerical, "hw_fit_shard", PARALLEL_NUMERICAL_OPN_HW_FIT_SHARD)
-    py_op_add(ops_numerical, "reference_shard", PARALLEL_NUMERICAL_OPN_REFERENCE_SHARD)
-    py_op_add(ops_numerical, "reference_query", PARALLEL_NUMERICAL_OPN_REFERENCE_QUERY)
-    py_op_add(ops_numerical, "query_rows", PARALLEL_NUMERICAL_OPN_QUERY_ROWS)
-    nk[].ops_numerical = ops_numerical
     var ops_causal = Python.dict()
     py_op_add(ops_causal, "initialize", PARALLEL_CAUSAL_OPN_INITIALIZE)
     py_op_add(ops_causal, "worker", PARALLEL_CAUSAL_OPN_WORKER)

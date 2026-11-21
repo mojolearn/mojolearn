@@ -425,31 +425,16 @@ def svc_coefficients(model):
 
 
 def iforest(model, X, want, public=True):
-    """Frozen 32011bb32 CPU isolation-forest call and saved-state readback."""
-    import array
-    x, _ = as_f32_c(X, ndim=2, name="X")
-    if x.shape[1] != model.n_features_in_:
-        raise ValueError("IsolationForest query width differs from fit")
-    train = model._x
-    out = empty((x.shape[0],), "<i4" if want == 2 else "<f4")
-    info = empty((3,), "<f8")
-    if "_seed" not in vars(model):
-        # The unchanged Python validator is a test-only reference for the
-        # candidate's new native resolution of a manually assembled model.
-        from mojolearn.tests._legacy_host_iforest_fit import parameters
-        parameters(model)
-    params = [train.shape[0], train.shape[1], x.shape[0], model._n_estimators,
-              model._max_samples_mode, model._max_samples_int, model._max_samples_frac,
-              model._max_depth, model._max_features_mode, model._max_features_int,
-              model._max_features_frac, int(bool(model._bootstrap)), model._seed,
-              int(bool(model._contamination_auto)), model._contamination, want]
-    model._bind("_mojolearn_svm").iforest_run(
-        addr_ro(train, name="train"), addr_ro(x, name="query"),
-        addr(out, name="scores") if want != 2 else 0,
-        addr(out, name="labels") if want == 2 else 0, addr(info, name="info"), params)
-    model.offset_ = array.array("f", [float(info[0])])[0]
-    model.max_samples_ = int(info[1])
-    return out if want == 2 or not public else out.astype("<f8")
+    """The reference for a host isolation-forest call. The frozen Python
+    route called the binding `iforest_run`, which is gone (the native
+    iforest entry, core/iforest_entry.mojo, has no Python form); the
+    reference is now a fresh refit of the same fitted state: `model`'s own
+    native method, which (a copy holding no resident token) fits the forest
+    again from `_x` and scores it. Equal bytes then prove the resident
+    route equals the refit; the kernel's own correctness is a native check."""
+    method = ("score_samples", "decision_function", "predict")[want]
+    out = getattr(model, method)(X)
+    return out if want == 2 or public else out.astype("<f4")
 
 
 # Frozen copies of the former _labels decode seams (deleted from the package

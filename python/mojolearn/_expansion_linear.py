@@ -326,6 +326,10 @@ class SGDClassifier(_LinearClassifierMixin, NumericModeMixin):
     verbose = 0
     n_jobs = None
 
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_SGD = 3) and core/sgd_member.mojo.
+    _mojolearn_member = (3, 2)
+
     def __init__(self, loss="hinge", *, penalty="l2", alpha=0.0001, l1_ratio=0.15,
                  fit_intercept=True, max_iter=1000, tol=1e-3, shuffle=True,
                  epsilon=0.1, random_state=None, learning_rate="optimal", eta0=0.01,
@@ -479,6 +483,10 @@ class SGDRegressor(_LinearRegressorMixin, NumericModeMixin):
     # (`cls.__new__`, bindings/host_archive_native_door.mojo) never ran __init__, and its
     # get_params reads these defaults (as `device` does).
     verbose = 0
+
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_SGD = 3) and core/sgd_member.mojo.
+    _mojolearn_member = (3, 0)
 
     def __init__(self, loss="squared_error", *, penalty="l2", alpha=0.0001, l1_ratio=0.15,
                  fit_intercept=True, max_iter=1000, tol=1e-3, shuffle=True, epsilon=0.1,
@@ -1458,6 +1466,10 @@ class Perceptron(_LinearClassifierMixin, NumericModeMixin):
 
     _BINDING = _BINDING
 
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_SGD = 3) and core/sgd_member.mojo.
+    _mojolearn_member = (3, 3)
+
     def __init__(self, *, penalty=None, alpha=0.0001, l1_ratio=0.15, fit_intercept=True, max_iter=1000,
                  tol=1e-3, shuffle=True, verbose=0, eta0=1.0, n_jobs=None, random_state=0,
                  early_stopping=False, validation_fraction=0.1, n_iter_no_change=5, class_weight=None,
@@ -1577,6 +1589,10 @@ class PassiveAggressiveClassifier(_LinearClassifierMixin, NumericModeMixin):
 
     _BINDING = _BINDING
 
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_SGD = 3) and core/sgd_member.mojo.
+    _mojolearn_member = (3, 4)
+
     def __init__(self, *, C=1.0, fit_intercept=True, max_iter=1000, tol=1e-3, early_stopping=False,
                  validation_fraction=0.1, n_iter_no_change=5, shuffle=True, verbose=0, loss="hinge",
                  n_jobs=None, random_state=None, warm_start=False, class_weight=None, average=False,
@@ -1685,6 +1701,10 @@ class PassiveAggressiveRegressor(_LinearRegressorMixin, NumericModeMixin):
     """
 
     _BINDING = _BINDING
+
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_SGD = 3) and core/sgd_member.mojo.
+    _mojolearn_member = (3, 1)
 
     def __init__(self, *, C=1.0, fit_intercept=True, max_iter=1000, tol=1e-3, early_stopping=False,
                  validation_fraction=0.1, n_iter_no_change=5, shuffle=True, verbose=0,
@@ -1797,6 +1817,10 @@ class SGDOneClassSVM(NumericModeMixin):
 
     _BINDING = _BINDING
     _estimator_type = "outlier_detector"
+
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_SGD = 3) and core/sgd_member.mojo.
+    _mojolearn_member = (3, 5)
 
     def __init__(self, nu=0.5, fit_intercept=True, max_iter=1000, tol=1e-3, shuffle=True, verbose=0,
                  random_state=None, learning_rate="optimal", eta0=0.01, power_t=0.5, warm_start=False,
@@ -2172,6 +2196,10 @@ class LassoCV(_LinearRegressorMixin, NumericModeMixin):
 
     _BINDING = _BINDING
 
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_XLINEAR = 2) and core/xlinear_member.mojo.
+    _mojolearn_member = (2, 11)
+
     def __init__(self, *, eps=1e-3, n_alphas="deprecated", alphas=100, fit_intercept=True,
                  precompute="auto", max_iter=1000, tol=1e-4, copy_X=True, cv=None, verbose=False,
                  n_jobs=None, positive=False, random_state=None, selection="cyclic", numeric_mode=None, device=None):
@@ -2289,6 +2317,10 @@ class ElasticNetCV(_LinearRegressorMixin, NumericModeMixin):
     """
 
     _BINDING = _BINDING
+
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_XLINEAR = 2) and core/xlinear_member.mojo.
+    _mojolearn_member = (2, 12)
 
     def __init__(self, *, l1_ratio=0.5, eps=1e-3, n_alphas="deprecated", alphas=100, fit_intercept=True,
                  precompute="auto", max_iter=1000, tol=1e-4, cv=None, copy_X=True, verbose=0,
@@ -2421,6 +2453,10 @@ class LogisticRegressionCV(_LinearClassifierMixin, NumericModeMixin):
 
     _BINDING = _BINDING
 
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_XLINEAR = 2) and core/xlinear_member.mojo.
+    _mojolearn_member = (2, 13)
+
     def __init__(self, *, Cs=10, fit_intercept=True, cv=None, dual=False, penalty="l2", scoring=None,
                  solver="lbfgs", tol=1e-4, max_iter=100, class_weight=None, n_jobs=None, verbose=0,
                  refit=True, intercept_scaling=1.0, random_state=None, l1_ratios=None, numeric_mode=None, device=None):
@@ -2536,6 +2572,10 @@ class IsotonicRegression(NumericModeMixin):
     _mojolearn_device = True
 
     _BINDING = _BINDING
+
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_XLINEAR = 2) and core/xlinear_member.mojo.
+    _mojolearn_member = (2, 14)
     _estimator_type = "regressor"
     # scikit-learn's IsotonicRegression tags: X is one feature, 1-D
     _sklearn_input_tags = {"one_d_array": True, "two_d_array": False}

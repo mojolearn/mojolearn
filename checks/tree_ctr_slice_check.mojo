@@ -2,6 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Focused gate for the first executable combination-CTR vertical slice."""
 
+from gbdt.models.combination_map import TCombinationCtrs
 from gbdt.models.tensor_ctr_value_table import (
     build_feature_freq_tensor_table_host,
     build_borders_split_tensor_table_host,
@@ -502,6 +503,7 @@ def run_checks() raises:
         fitted.model.copy(), fitted.fold_counts.copy(), fitted.one_hot.copy(),
         fitted.borders.copy(), fitted_nan^, List[Float64](), List[Float64](),
         0, False, 0, List[TCtrValueTable](), fitted.registry.copy(),
+        TCombinationCtrs(),
     )
     var fitted_prediction = predict_floats(ctx, fitted_model, x, 6)
     if len(fitted_prediction) != 6:
@@ -542,6 +544,7 @@ def run_checks() raises:
             weighted_fit.one_hot.copy(), weighted_fit.borders.copy(),
             oracle_nan^, List[Float64](), List[Float64](), 0, False, 0,
             List[TCtrValueTable](), weighted_fit.registry.copy(),
+            TCombinationCtrs(),
         )
         var actual = predict_floats(ctx, oracle_model, x, 6)
         var n_leaves = len(oracle_model.model.weak_models[0].leaf_values)

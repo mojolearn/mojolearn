@@ -40,15 +40,19 @@ comptime _CheckpointBytes = UnsafePointer[UInt8, MutUntrackedOrigin]
 
 
 struct ByteCheckpointWriteFailure(Movable):
-    """The file call that failed (`number` is errno; 0 when no file call failed)."""
+    """The file call that failed (`number` is errno; 0 when no file call
+    failed). `second` is the destination of a failed rename (`path` is then
+    the temporary file), empty otherwise."""
     var number: Int
     var operation: String
     var path: String
+    var second: String
 
     def __init__(out self):
         self.number = 0
         self.operation = String("")
         self.path = String("")
+        self.second = String("")
 
 
 def _checkpoint_fail(mut failure: ByteCheckpointWriteFailure, operation: String, path: String, number: Int) raises:
@@ -56,6 +60,14 @@ def _checkpoint_fail(mut failure: ByteCheckpointWriteFailure, operation: String,
     failure.operation = operation
     failure.path = path
     raise Error("OSError: Byte-LM checkpoint " + operation + " failed (errno " + String(number) + "): " + path)
+
+
+def _checkpoint_fail_read(mut failure: ByteCheckpointWriteFailure, path: String, number: Int) raises:
+    """A failed read. A directory opens read-only without complaint and
+    refuses the first read (EISDIR, 21 on Linux and macOS): that is reported
+    as the failed open it is to the caller, so the error names the file, as
+    opening a directory for reading always did."""
+    _checkpoint_fail(failure, "open" if number == 21 else "read", path, number)
 
 
 def _checkpoint_append(mut dst: List[UInt8], text: String):
@@ -85,6 +97,99 @@ def _checkpoint_put(fd: Int, address: Int, count: Int, mut failure: ByteCheckpoi
             var number = posix_errno()
             if number != 4:  # EINTR: the write is taken up again, as CPython does
                 _checkpoint_fail(failure, "write", path, number)
+
+
+def _checkpoint_cwd() -> Int:
+    """AT_FDCWD of this host."""
+    var cwd = -100
+    comptime if CompilationTarget.is_macos():
+        cwd = -2
+    return cwd
+
+
+def _checkpoint_create(path: String, mut temporary: String, mut failure: ByteCheckpointWriteFailure) raises -> Int:
+    """A fresh name beside `path`, created exclusively with mode 0600: its
+    open descriptor. `temporary` receives the name."""
+    var cwd = _checkpoint_cwd()
+    var flags = 1 | 0x40 | 0x80 | 0x80000  # O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC
+    comptime if CompilationTarget.is_macos():
+        flags = 1 | 0x200 | 0x800 | 0x1000000
+    var stamp = Int(posix_clock() * 1e9)
+    var fd = -1
+    for attempt in range(16):  # small-loop(temporary names until one is new)
+        temporary = path + ".tmp-" + String(Int(external_call["getpid", c_int]())) + "-" + String(stamp + attempt)
+        fd = Int(external_call["openat", c_int, num_fixed_args=3](c_int(cwd), temporary.as_c_string_slice().unsafe_ptr(), c_int(flags), c_int(384)))
+        if fd >= 0:
+            break
+        var number = posix_errno()
+        if number != 17 and number != 4:  # EEXIST: next name; EINTR: again
+            _checkpoint_fail(failure, "open", temporary, number)
+    if fd < 0:
+        _checkpoint_fail(failure, "open", temporary, 17)
+    return fd
+
+
+def _checkpoint_commit(fd: Int, mut opened: Bool, temporary: String, path: String,
+                       mut failure: ByteCheckpointWriteFailure) raises:
+    """fsync and close the written temporary, then one rename onto `path`.
+    `opened` is False from the close on (the caller's cleanup reads it)."""
+    var cwd = _checkpoint_cwd()
+    if external_call["fsync", c_int](c_int(fd)) != 0:
+        _checkpoint_fail(failure, "fsync", temporary, posix_errno())
+    opened = False
+    if external_call["close", c_int](c_int(fd)) != 0:
+        _checkpoint_fail(failure, "close", temporary, posix_errno())
+    if external_call["renameat", c_int](c_int(cwd), temporary.as_c_string_slice().unsafe_ptr(), c_int(cwd), path.as_c_string_slice().unsafe_ptr()) != 0:
+        # Both names, as the rename's own error carries them.
+        failure.second = path
+        _checkpoint_fail(failure, "replace", temporary, posix_errno())
+
+
+def _checkpoint_discard(fd: Int, opened: Bool, temporary: String):
+    """A failed write: close the descriptor if it is still open and remove
+    the temporary. Best effort; the first failure is the one reported."""
+    if opened:
+        _ = external_call["close", c_int](c_int(fd))
+    _ = external_call["unlinkat", c_int](c_int(_checkpoint_cwd()), temporary.as_c_string_slice().unsafe_ptr(), c_int(0))
+
+
+def byte_file_write(path: String, address: Int, count: Int, mut failure: ByteCheckpointWriteFailure) raises:
+    """Write the `count` bytes at `address` to `path`, whole or not at all:
+    a temporary beside it (exclusive, mode 0600), fsync, one rename. The
+    bounded JSON checkpoint's file write; the caller keeps the range alive.
+    Serial by nature: one ordered write through one descriptor."""
+    if path.byte_length() == 0 or path.find("\0") >= 0:
+        raise Error("Byte-LM checkpoint path is empty or contains NUL")
+    if count < 0 or (count > 0 and address == 0):
+        raise Error("Byte-LM checkpoint bytes are not a host range")
+    var temporary = String("")
+    var fd = _checkpoint_create(path, temporary, failure)
+    var opened = True
+    try:
+        var start = 0
+        while start < count:  # driver-loop: over bounded checkpoint I/O chunks
+            var size = min(BYTE_CHECKPOINT_RUN_CHUNK, count - start)
+            _checkpoint_put(fd, address + start, size, failure, temporary)
+            start += size
+        _checkpoint_commit(fd, opened, temporary, path, failure)
+    except error:
+        _checkpoint_discard(fd, opened, temporary)
+        raise error
+
+
+def byte_file_read(path: String, address: Int, limit: Int, mut failure: ByteCheckpointWriteFailure) raises -> Int:
+    """Read the first `limit` bytes of the file at `path` into `address` (the
+    caller's range of `limit` bytes): the count read, fewer than `limit` when
+    the file is shorter. The bounded JSON checkpoint's file read. Serial by
+    nature: one bounded range of one file."""
+    if limit < 0 or (limit > 0 and address == 0):
+        raise Error("Byte-LM checkpoint bytes are not a host range")
+    var fd = _checkpoint_open_read(path, failure)
+    var got = _checkpoint_pread(fd, address, limit, 0)
+    _ = external_call["close", c_int](c_int(fd))
+    if got < 0:
+        _checkpoint_fail_read(failure, path, -got)
+    return got
 
 
 def byte_checkpoint_write(var path: String, metadata_address: Int, metadata_bytes: Int,
@@ -165,25 +270,8 @@ def byte_checkpoint_write(var path: String, metadata_address: Int, metadata_byte
         for b in range(4):  # small-loop(bytes of one digest word)
             prefix.append(UInt8((Int(header_words[w]) >> (24 - 8 * b)) & 255))
 
-    # A fresh name beside the target, created exclusively with mode 0600.
-    var cwd = -100  # AT_FDCWD
-    var flags = 1 | 0x40 | 0x80 | 0x80000  # O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC
-    comptime if CompilationTarget.is_macos():
-        cwd = -2
-        flags = 1 | 0x200 | 0x800 | 0x1000000
-    var stamp = Int(posix_clock() * 1e9)
     var temporary = String("")
-    var fd = -1
-    for attempt in range(16):  # small-loop(temporary names until one is new)
-        temporary = path + ".tmp-" + String(Int(external_call["getpid", c_int]())) + "-" + String(stamp + attempt)
-        fd = Int(external_call["openat", c_int, num_fixed_args=3](c_int(cwd), temporary.as_c_string_slice().unsafe_ptr(), c_int(flags), c_int(384)))
-        if fd >= 0:
-            break
-        var number = posix_errno()
-        if number != 17 and number != 4:  # EEXIST: next name; EINTR: again
-            _checkpoint_fail(failure, "open", temporary, number)
-    if fd < 0:
-        _checkpoint_fail(failure, "open", temporary, 17)
+    var fd = _checkpoint_create(path, temporary, failure)
 
     var whole = Sha256()
     var opened = True
@@ -204,17 +292,9 @@ def byte_checkpoint_write(var path: String, metadata_address: Int, metadata_byte
             for w in range(8):  # small-loop(the eight digest words)
                 if seen[w] != digests[8 * i + w]:
                     raise Error("Byte-LM checkpoint state changed during save")
-        if external_call["fsync", c_int](c_int(fd)) != 0:
-            _checkpoint_fail(failure, "fsync", temporary, posix_errno())
-        opened = False
-        if external_call["close", c_int](c_int(fd)) != 0:
-            _checkpoint_fail(failure, "close", temporary, posix_errno())
-        if external_call["renameat", c_int](c_int(cwd), temporary.as_c_string_slice().unsafe_ptr(), c_int(cwd), path.as_c_string_slice().unsafe_ptr()) != 0:
-            _checkpoint_fail(failure, "replace", path, posix_errno())
+        _checkpoint_commit(fd, opened, temporary, path, failure)
     except error:
-        if opened:
-            _ = external_call["close", c_int](c_int(fd))
-        _ = external_call["unlinkat", c_int](c_int(cwd), temporary.as_c_string_slice().unsafe_ptr(), c_int(0))
+        _checkpoint_discard(fd, opened, temporary)
         raise error
     # Keep the byte lists the pointers above read alive to here.
     _ = len(spans)
@@ -315,7 +395,7 @@ def byte_checkpoint_read_header(path: String, mut failure: ByteCheckpointWriteFa
         var lead = List[UInt8](length=27, fill=UInt8(0))
         var got = _checkpoint_pread(fd, Int(lead.unsafe_ptr()), 27, 0)
         if got < 0:
-            _checkpoint_fail(failure, "read", path, -got)
+            _checkpoint_fail_read(failure, path, -got)
         var magic_text = String("MOJOLEARN-BYTE-LM")
         var magic = magic_text.as_bytes()
         var same = got >= 19 and Int(lead[17]) == 1 and Int(lead[18]) == 10
@@ -338,7 +418,7 @@ def byte_checkpoint_read_header(path: String, mut failure: ByteCheckpointWriteFa
         var header = List[UInt8](length=length + 32, fill=UInt8(0))
         got = _checkpoint_pread(fd, Int(header.unsafe_ptr()), length + 32, 27)
         if got < 0:
-            _checkpoint_fail(failure, "read", path, -got)
+            _checkpoint_fail_read(failure, path, -got)
         var hasher = Sha256()
         hasher.update(Int(header.unsafe_ptr()), length)
         var words = hasher.digest_words()
@@ -411,9 +491,9 @@ def byte_checkpoint_read_header(path: String, mut failure: ByteCheckpointWriteFa
             var beyond = _checkpoint_pread(fd, Int(probe.unsafe_ptr()), 1, archive.data_offset + total)
             _ = len(probe)
             if last < 0:
-                _checkpoint_fail(failure, "read", path, -last)
+                _checkpoint_fail_read(failure, path, -last)
             if beyond < 0:
-                _checkpoint_fail(failure, "read", path, -beyond)
+                _checkpoint_fail_read(failure, path, -beyond)
             archive.complete = last == 1 and beyond == 0
     except error:
         _ = external_call["close", c_int](c_int(fd))
@@ -486,7 +566,7 @@ def byte_checkpoint_read_arrays(path: String, archive: ByteCheckpointArchive, ad
     _ = len(expected)
     for i in range(4):  # small-loop(the four checkpoint arrays, refused in file order)
         if status[i] < 0:
-            _checkpoint_fail(failure, "read", path, -status[i])
+            _checkpoint_fail_read(failure, path, -status[i])
         if status[i] == 1:
             raise Error("Byte-LM checkpoint truncated array")
         if status[i] == 2:

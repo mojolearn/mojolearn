@@ -30,7 +30,7 @@ from bindings.parallel_public_native_run import (
     public_route_code, public_identical_admit, public_gram_columns_admit, public_gram_pca_admit,
     public_gram_weight_admit, public_kmeans_metric_admit, public_kmeans_oversampling_admit,
     public_module_refusal_is_optional, public_predictor_route_admit, public_predictor_devices_admit,
-    public_predictor_open_admit, public_predictor_proba_admit,
+    public_predictor_open_admit, public_predictor_proba_admit, ForestPredictorState,
 )
 from bindings.parallel_keys_unpack import (
     parallel_keys,
@@ -120,6 +120,51 @@ def _modules(meta: PythonObject, names: PythonObject) raises -> PythonObject:
     return py_call(b.tuple, result)
 
 
+struct ParallelForestOwner(Movable, Writable):
+    """One pooled forest predictor's native owner, stored once in the
+    instance dictionary as `_native`. `native` is the typed state the
+    operations decide on; the Python objects are boundary pins: the private
+    copy of the forest, the lock and the admitted device tuple. `_model`,
+    `devices` and the fitted attributes on the instance are mirrors for
+    callers; the door writes them and never reads them."""
+    var owner_id: Int
+    var native: ForestPredictorState
+    var model: PythonObject
+    var lock: PythonObject
+    var devices: PythonObject
+
+    def __init__(out self, owner_id: Int, classifier: Bool, model: PythonObject, lock: PythonObject,
+                 devices: PythonObject):
+        self.owner_id = owner_id
+        self.native = ForestPredictorState(classifier)
+        self.model = model
+        self.lock = lock
+        self.devices = devices
+
+    def write_to(self, mut writer: Some[Writer]):
+        writer.write("ParallelForestOwner(closed=", self.native.closed, ", classifier=", self.native.classifier, ")")
+
+    def write_repr_to(self, mut writer: Some[Writer]):
+        self.write_to(writer)
+
+
+# THE MEMBER ABI AND THIS DOOR (lane pools-frame, 2026-11-21; MEMBER-ABI-V2
+# "RECIPE FOR A CALLER" and its "Not covered" terms). The three `family_call`
+# sites below (`_run`: `family_par_run`; the direct route: `family_km_par_*`,
+# `family_chol_par_*`; the shard route: the shard binding's entry) are NOT
+# member calls and stay `family_call`: each runs one estimator under the
+# caller's DEVICE TUPLE (a device plan bound around the plain owners,
+# core/device_plan.mojo: rows, trailing rows and solve columns split across
+# the devices). A member carries ONE resolved route (`MemberPlan.route`,
+# `MemberCall.route`: one device, one image; bindings/member_set_door.mojo
+# and bindings/msel_member_units_door.mojo read `plans[u].route.device`), and
+# the ABI has no operation that takes a device tuple. A member FIT / PREDICT
+# here would run the estimator on one device: slower than the path it
+# replaces whenever the tuple has more than one device, and at one device it
+# adds an admit and a state to the plain owner call it would stand in for.
+# When the ABI gains a device-plan word, these sites take
+# `member_admit_serving` first and fall back to `family_call` as written.
+
 def _run(model: PythonObject, driver: PythonObject, operation: PythonObject, args: PythonObject,
           entry: PythonObject, owner: PythonObject, names: PythonObject, devices: PythonObject,
           context: PythonObject) raises -> PythonObject:
@@ -166,12 +211,14 @@ def _predictor(model: PythonObject, operation: Int, args: PythonObject, context:
         _ = py_call(saved.update, original)
         _ = py_call(saved.pop, "_resident_forest", PythonObject(None))
         py_setitem(saved, nk[].k__resident_holder, Python.dict())
-        py_setitem(fields, nk[].k__model, snapshot)
-        py_setitem(fields, nk[].k__lock, py_call(py_item(meta, nk[].k_lock_type)))
-        py_setitem(fields, nk[].k__closed, PythonObject(False))
         var classifier = py_contains(py_item(meta, nk[].k_forest_classifier), cls)
-        py_setitem(fields, nk[].k__classifier, PythonObject(classifier))
-        py_setitem(fields, nk[].k__public_kind, cls)
+        # PACK, once per predictor: the native owner, then the mirrors
+        # callers read. REMOVED from the instance: `_lock`, `_closed`,
+        # `_classifier` and `_public_kind` (the record holds the first
+        # three; nothing read the fourth).
+        py_setitem(fields, nk[].k__native, PythonObject(alloc=ParallelForestOwner(
+            Int(py=py_call(b.id, model)), classifier, snapshot, py_call(py_item(meta, nk[].k_lock_type)), devices)))
+        py_setitem(fields, nk[].k__model, snapshot)
         py_setitem(fields, nk[].k_devices, devices)
         py_setitem(fields, nk[].k_n_features_in_, PythonObject(Int(py=py_item(original, nk[].k_n_features_in_))))
         py_setitem(fields, nk[].k_n_estimators_, PythonObject(Int(py=py_item(original, nk[].k__n_trees))))
@@ -179,42 +226,49 @@ def _predictor(model: PythonObject, operation: Int, args: PythonObject, context:
             py_setitem(fields, nk[].k_classes_, py_item(original, nk[].k_classes_))
             py_setitem(fields, nk[].k_n_classes_, PythonObject(Int(py=py_item(original, nk[].k__num_outputs))))
         return PythonObject(None)
-    var lock = py_get(fields, nk[].k__lock)
-    if lock is None and (operation == PARALLEL_PREDICTOR_OPN_PREDICTOR_CLOSE or operation == PARALLEL_PREDICTOR_OPN_PREDICTOR_EXIT):
-        # A CONSTRUCTION THAT FAILED before its lock (every refusal of
-        # predictor_init above runs before `_model` and `_lock` are stored):
-        # nothing resident was built, since the pool is built on the first
-        # predict. close is safe and idempotent there; drop whatever exists
-        # (cpu-surface-defects, 2026-11-16).
-        py_setitem(fields, nk[].k__model, PythonObject(None))
-        py_setitem(fields, nk[].k__closed, PythonObject(True))
-        return PythonObject(None)
-    if py_type(lock) is not py_item(meta, nk[].k_lock_type):
-        raise Error("TypeError: ParallelForestPredictor requires its native lock")
-    if py_type(py_get(fields, nk[].k__closed)) is not b.bool or py_type(py_get(fields, nk[].k__classifier)) is not b.bool:
-        raise Error("TypeError: ParallelForestPredictor state requires native booleans")
+    var record = py_get(fields, nk[].k__native)
+    if record is None:
+        if operation == PARALLEL_PREDICTOR_OPN_PREDICTOR_CLOSE or operation == PARALLEL_PREDICTOR_OPN_PREDICTOR_EXIT:
+            # A CONSTRUCTION THAT FAILED before its owner (every refusal of
+            # predictor_init above runs before the record is stored):
+            # nothing resident was built, since the pool is built on the
+            # first predict. close is safe and idempotent there; drop
+            # whatever exists (cpu-surface-defects, 2026-11-16).
+            py_setitem(fields, nk[].k__model, PythonObject(None))
+            return PythonObject(None)
+        raise Error("RuntimeError: pooled forest predictor is not initialized")
+    var owner_id = Int(py=py_call(b.id, model))
+    try:
+        var probe = record.downcast_value_ptr[ParallelForestOwner]()
+        if probe[].owner_id != owner_id:
+            raise Error("foreign")
+    except:
+        raise Error("TypeError: ParallelForestPredictor storage does not belong to this predictor")
+    var rec = record.downcast_value_ptr[ParallelForestOwner]()
+    var lock = rec[].lock
     _ = py_call(lock.acquire)
     try:
         if operation == PARALLEL_PREDICTOR_OPN_PREDICTOR_CLOSE or operation == PARALLEL_PREDICTOR_OPN_PREDICTOR_EXIT:
-            if not Bool(py=py_item(fields, nk[].k__closed)):
-                py_setitem(fields, nk[].k__closed, PythonObject(True))
-                var snapshot = py_item(fields, nk[].k__model)
+            if not rec[].native.closed:
+                rec[].native.closed = True
+                var snapshot = rec[].model
                 var saved = _fields(snapshot, py_item(meta, nk[].k_classes)[py_type(snapshot)])
                 # Dropping the compiled TreesResident owner releases its GPU
                 # handle once; no Python weakref.finalize callback is invoked.
                 py_setitem(saved, nk[].k__resident_holder, Python.dict())
+                rec[].model = PythonObject(None)
                 py_setitem(fields, nk[].k__model, PythonObject(None))
             return PythonObject(None)
-        public_predictor_open_admit(Bool(py=py_item(fields, nk[].k__closed)))
+        public_predictor_open_admit(rec[].native.closed)
         if operation == PARALLEL_PREDICTOR_OPN_PREDICTOR_ENTER:
             return model
         var proba = operation == PARALLEL_PREDICTOR_OPN_PREDICTOR_PREDICT_PROBA
-        public_predictor_proba_admit(proba, Bool(py=py_item(fields, nk[].k__classifier)))
+        public_predictor_proba_admit(proba, rec[].native.classifier)
         classical_admit_value(args, context)
-        var snapshot = py_item(fields, nk[].k__model)
+        var snapshot = rec[].model
         var result = _run(snapshot, "forest_predict", "trees_public_forest_proba" if proba else "trees_public_forest_predict",
                           Python.tuple(args[0]), _entry(py_item(meta, nk[].k_trees_entry)), py_item(meta, nk[].k_trees_context),
-                          Python.tuple("_mojolearn_rf", "_mojolearn_trees"), py_item(fields, nk[].k_devices), context)
+                          Python.tuple("_mojolearn_rf", "_mojolearn_trees"), rec[].devices, context)
         return parallel_public_result(result, "predict_proba" if proba else "predict", py_item(py_item(meta, nk[].k_classes)[py_type(snapshot)], nk[].k_kind), context)
     finally:
         _ = py_call(lock.release)
