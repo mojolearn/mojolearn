@@ -246,7 +246,6 @@ struct XcnnKeys(Defaultable, Movable):
     var k_x: PythonObject
     var k_xcnn_array_context: PythonObject
     var k_xcnn_avgpool_class: PythonObject
-    var k_xcnn_bindings: PythonObject
     var k_xcnn_bn_class: PythonObject
     var k_xcnn_conv1d_class: PythonObject
     var k_xcnn_conv2d_class: PythonObject
@@ -409,7 +408,6 @@ struct XcnnKeys(Defaultable, Movable):
         self.k_x = PythonObject(None)
         self.k_xcnn_array_context = PythonObject(None)
         self.k_xcnn_avgpool_class = PythonObject(None)
-        self.k_xcnn_bindings = PythonObject(None)
         self.k_xcnn_bn_class = PythonObject(None)
         self.k_xcnn_conv1d_class = PythonObject(None)
         self.k_xcnn_conv2d_class = PythonObject(None)
@@ -576,7 +574,6 @@ def _xcnn_keys_fill(nk: UnsafePointer[XcnnKeys, MutUntrackedOrigin]) raises:
     nk[].k_x = py_key("x")
     nk[].k_xcnn_array_context = py_key("xcnn_array_context")
     nk[].k_xcnn_avgpool_class = py_key("xcnn_avgpool_class")
-    nk[].k_xcnn_bindings = py_key("xcnn_bindings")
     nk[].k_xcnn_bn_class = py_key("xcnn_bn_class")
     nk[].k_xcnn_conv1d_class = py_key("xcnn_conv1d_class")
     nk[].k_xcnn_conv2d_class = py_key("xcnn_conv2d_class")

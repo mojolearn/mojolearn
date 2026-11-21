@@ -727,21 +727,18 @@ def _layer_indices(layer: PythonObject, context: PythonObject) raises -> PythonO
     var nk = xcnn_keys()
     var held = py_get(d, nk[].k__idx_host)
     if held is None and py_get(d, nk[].k__idx_dev) is not None:
-        var b = xcnn_builtins()
         var shape = _pool_shape_words(py_item(d, nk[].k__idx_shape), "_idx_shape", context)
         var idx = xcnn_host_i32(shape, context)
         var dev = py_item(d, nk[].k__dev)
-        var entries = py_item(context, nk[].k_xcnn_bindings)
-        # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
-        var connected = Optional[PythonObject]()
-        var keys = Python.tuple("identical", "fast")
-        for i in range(2):  # driver-loop: over the two numeric modes
-            var e = py_get(entries, keys[i])
-            if e is not None and not Bool(py=py_call(b.isinstance, e, b.str)) and py_item(e, nk[].k_module) is py_item(_fields(dev), nk[].k_b):
-                connected = e
-        if not connected:
+        # dw-neural-b (2026-11-21): the image the resident winners live on is
+        # the resident owner's own binding; this was a second copy of the
+        # search `xcnn_module_entries` makes (two fresh strs, a tuple and an
+        # `isinstance` call per read). Same refusal text.
+        var owner = PythonObject(None)
+        try:
+            owner = xcnn_module_entries(py_item(_fields(dev), nk[].k_b), context)
+        except:
             raise Error("RuntimeError: a resident array of a binding this process did not connect")
-        var owner = connected.value()
         var handle = _pool_int(py_item(d, nk[].k__idx_dev), context)
         var key = xcnn_ref(owner)
         var dst = xcnn_ptr(idx)
