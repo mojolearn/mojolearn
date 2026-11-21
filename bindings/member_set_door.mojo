@@ -56,8 +56,8 @@ door runs and raises the estimator's own words. A kind without the bit reads
 admitted words: the caller proves the rows finite first (one host scan per
 distinct block) and takes its doors when they are not.
 
-THE PREDICT SIDE (`member_held_open` / `member_held_run` / `member_held_close`,
-or `member_predict_held` for rows already proven): one member call on the
+THE PREDICT SIDE (`member_held_open` / `member_held_run` /
+`member_held_close`): one member call on the
 fitted state the estimator holds (bindings/member_held_door.mojo), written
 into a new Array of the element type the member's OUTPUTS answers
 (`call.out_dtype`); not served = the caller's door.
@@ -675,7 +675,7 @@ def member_set_pack(mut set: MemberSet, u: Int, classes: PythonObject, b: Python
 
 def member_marked(estimator: PythonObject, context: PythonObject) -> Bool:
     """True when `estimator`'s class carries a member mark (its family may
-    serve it; `member_predict_held` still answers per call). One class-plan
+    serve it; `member_held_open` still answers per call). One class-plan
     read: a caller asks once per public operation for members of one class,
     before work only the native route needs (its finite proof of X). Never
     raises."""
@@ -848,15 +848,3 @@ def member_held_close(mut opened: MemberHeldCall):
     a kept state stays with the estimator. Never raises."""
     member_held_release(opened.held)
     opened.served = False
-
-
-def member_predict_held(member: PythonObject, x: Int, n: Int, d: Int, operation: Int, classifier: Bool,
-    width: Int, skip_trees: Bool, context: PythonObject, b: PythonObject) -> PythonObject:
-    """`member_held_open`, `member_held_run`, `member_held_close` in one call,
-    for a caller whose rows at `x` are ALREADY proven finite (its own
-    admission tested them): the member's output Array, or None when it is
-    not served (the caller's door runs). Never raises."""
-    var opened = member_held_open(member, operation, classifier, width, skip_trees, context, b)
-    var array = member_held_run(opened, x, n, d, context)
-    member_held_close(opened)
-    return array
