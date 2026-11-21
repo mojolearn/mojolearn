@@ -63,7 +63,7 @@ from bindings.cross_vendor_admission_unpack import (
 from bindings.cross_vendor_admission_pack import (
     cv_path,
 )
-from bindings.byte_checkpoint_native_door import byte_checkpoint_initialize, byte_checkpoint_save, byte_checkpoint_load
+from bindings.byte_checkpoint_native_door import byte_checkpoint_initialize, byte_checkpoint_save, byte_checkpoint_load, byte_checkpoint_raw, byte_checkpoint_validate
 from bindings.byte_checkpoint_native_run import byte_checkpoint_write, ByteCheckpointWriteFailure
 from bindings.byte_checkpoint_io_unpack import ByteCheckpointIOError
 from bindings.py_balanced import py_call, py_contains, py_fields, py_get, py_setattr, py_setitem, py_type
@@ -1010,7 +1010,12 @@ def _cross_file_error(mut io_error: ByteCheckpointIOError, failure: ByteCheckpoi
     with its filename, for the C entry to raise."""
     var bi = CROSS_VENDOR_BOUNDARY.get_or_create_ptr()[].bi
     var message = unsafe_string_from_utf8_cstr(external_call["strerror", Pointer[Int8, ImmUntrackedOrigin]](c_int(failure.number)))
-    var value = py_call(bi.OSError, failure.number, PythonObject(message), PythonObject(failure.path))
+    # The words the Python file calls gave: `open` names the temporary file;
+    # a failed write, fsync or close carries no file name. (`replace` named
+    # both files; the typed failure holds the target only.)
+    var value = py_call(bi.OSError, failure.number, PythonObject(message))
+    if failure.operation == "open" or failure.operation == "replace":
+        value = py_call(bi.OSError, failure.number, PythonObject(message), PythonObject(failure.path))
     io_error.pending = True
     io_error.has_value = True
     io_error.has_traceback = False
@@ -1019,7 +1024,7 @@ def _cross_file_error(mut io_error: ByteCheckpointIOError, failure: ByteCheckpoi
 
 
 def cross_vendor_commit(record: PythonObject, trainer: PythonObject, events: PythonObject,
-                        mut io_error: ByteCheckpointIOError) raises:
+                        witness: PythonObject, mut io_error: ByteCheckpointIOError) raises:
     """PACK the step RUN just committed: the event, the configured
     expectation's refusal, the checkpoint and the log line."""
     var c = CROSS_VENDOR_BOUNDARY.get_or_create_ptr()
@@ -1064,6 +1069,30 @@ def cross_vendor_commit(record: PythonObject, trainer: PythonObject, events: Pyt
         var metadata = py_call(bi.dict, _cross_vendor_trainer(trainer, PARALLEL_BYTE_OPN_ADMITTED_STATE))
         for key in [String("parameters"), String("m"), String("v"), String("flags")]:  # small-loop(four state keys)
             _ = py_call(metadata.pop, PythonObject(key), PythonObject(None))
+        # The archive's own admission, as `byte_checkpoint_save` ran it at
+        # every commit checkpoint: the exact field set, the schema, the
+        # `identical` mode and base profile, the parameter registry, the step
+        # words and the four arrays' kinds and sizes against that registry.
+        # The trainer's admission does not cover it (it admits every
+        # installed mode and its suffixed profile), so a state the archive
+        # refuses is refused here, before any file is opened. The digest
+        # field is the writer's own 64 hex digits (`byte_checkpoint_write`
+        # hashes the arrays once, on four host tasks); the descriptor carries
+        # a well-formed stand-in so the arrays are not hashed twice.
+        var entries = bi.list()
+        var kinds = [String("parameters"), String("m"), String("v"), String("flags")]
+        for i in range(4):  # small-loop(the four checkpoint arrays)
+            var raw = byte_checkpoint_raw(witness[kinds[i]], i == 3)
+            var descriptor = bi.dict()
+            py_setitem(descriptor, "name", PythonObject(kinds[i]))
+            py_setitem(descriptor, "dtype", PythonObject("<i4" if i == 3 else "<f4"))
+            var dims = bi.list()
+            _ = py_call(dims.append, len(raw) // 4)
+            py_setitem(descriptor, "shape", dims)
+            py_setitem(descriptor, "nbytes", PythonObject(len(raw)))
+            py_setitem(descriptor, "sha256", PythonObject("0000000000000000000000000000000000000000000000000000000000000000"))
+            _ = py_call(entries.append, descriptor)
+        _ = byte_checkpoint_validate(metadata, entries)
         var text = _transport_json(metadata)
         var filename = PythonObject("ckpt_") + py_call(PythonObject(String(step)).zfill, 8) + PythonObject(".blm")
         var path = py_call(rec[].checkpoint_dir.rstrip, "/") + PythonObject("/") + filename
@@ -1121,7 +1150,7 @@ def _cross_worker_serve(record: PythonObject, trainer_record: PythonObject, trai
             with GILReleased(py):
                 cross_worker_host_fold(rec[].native)
         elif code == CROSS_COMMIT:
-            cross_vendor_commit(record, trainer, events, io_error)
+            cross_vendor_commit(record, trainer, events, pins[0], io_error)
         with GILReleased(py):
             cross_worker_reply(rec[].native)
     _ = len(pins)
