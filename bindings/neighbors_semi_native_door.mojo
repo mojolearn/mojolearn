@@ -17,7 +17,7 @@
 # context, where the module put them at its import.
 from providers.python.x_neighbors_descriptor_pyapi_door import xn_admit_arguments, xn_execute, xn_module, xn_is_module
 from providers.python.x_neighbors_admission_pyapi_door import xn_capabilities
-from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entry, neural_descriptor_execute
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_execute
 from providers.python.compiled_binding_snapshot_pyapi_door import CompiledBindingSnapshot
 from providers.python.pcs_rng_pyapi_pack import pcs_seed, _pcs_connect
 from x_neighbors.descriptor_schema import xn_operation_id
@@ -35,7 +35,6 @@ from bindings.family_common_unpack import (
     family_is_int,
     family_is_str,
     family_isinstance,
-    family_min,
 )
 from bindings.family_common_pack import (
     family_call,
@@ -50,10 +49,14 @@ from providers.python.family_public_lifecycle_run import family_lifecycle_spec
 from providers.python.neighbors_public_lifecycle_pyapi_door import neighbors_public_end, neighbors_public_refusal
 from core.shared_slot import SharedSlot
 from neighbors.neighbors_graph_run import XnOpRequest, xn_f32_word, xn_rows_match_check
-from bindings.py_optional import py_present
+from std.python._cpython import GILReleased
+from bindings.lof_provider_unpack import LofConnection
+from neighbors.chi2_run import (
+    Achi2FitRequest, Achi2Request, Schi2FitRequest, Schi2Request, achi2_fit_run, achi2_interval_check,
+    achi2_transform_run, achi2_csr_run, schi2_fit_run, schi2_weights_run, schi2_check_run, schi2_transform_run,
+)
 from neighbors.neighbors_semi_run import (
-    xn_achi2_negative_check, xn_achi2_fit_negative, xn_achi2_width, xn_achi2_request, xn_achi2_csr_count,
-    xn_achi2_csr_fill, xn_schi2_skew_check, xn_schi2_missing_fit, xn_schi2_log_request, xn_schi2_transform_request,
+    xn_achi2_width, xn_schi2_missing_fit,
     xn_semi_knn_k, xn_semi_sqdist_request, xn_semi_knn_select_request, xn_semi_knn_sq_request,
     xn_lp_knn_graph_request, xn_lp_knn_product_request, xn_semi_matmul_request, xn_semi_rbf_request,
     xn_semi_row_normalize_request, xn_semi_row_argmax_request, xn_lp_laplacian_request, xn_lp_col_degree_request,
@@ -129,10 +132,6 @@ def _semi_x(source: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_f32(X)`: a scipy.sparse matrix densified, then
     `as_f32_c(ndim=2, name="X")`."""
     return admit_family(source, 2, "X", context, dense=True).array
-
-
-def _semi_addr(value: PythonObject) raises -> PythonObject:
-    return classical_address(value)
 
 
 def _semi_at(value: PythonObject) raises -> Int:
@@ -275,40 +274,47 @@ def _semi_seed(seed: PythonObject, context: PythonObject) raises -> PythonObject
 
 
 # ---------------------------------------------------------------- AdditiveChi2Sampler
+#
+# Door split (lane dw-neighbors-b, 2026-11-21): UNPACK reads the fields and
+# admits X into a typed request, RUN is neighbors/chi2_run.mojo (no Python
+# object; one GIL release around it), PACK publishes. The x_neighbors image
+# is reached through its native descriptor entry (`LofConnection`: the
+# family's operation-local image pin), never through a Python export.
 
 
-def _achi2_interval(fields: PythonObject) raises -> Float64:
-    """`AdditiveChi2Sampler._interval`."""
+def _achi2_interval_unpack(fields: PythonObject) raises -> Tuple[Float64, Bool]:
+    """`AdditiveChi2Sampler._interval` as (interval, valid). `valid` False:
+    no interval was given and sample_steps has no default one; RUN's
+    `achi2_interval_check` refuses it where the public method did."""
     var given = family_field(fields, "sample_interval")
     if given is not None:
-        return _semi_float(given)
+        return (_semi_float(given), True)
     var table = Python.dict()
     py_setitem(table, PythonObject(1), PythonObject(0.8))
     py_setitem(table, PythonObject(2), PythonObject(0.5))
     py_setitem(table, PythonObject(3), PythonObject(0.4))
     var steps = family_field(fields, "sample_steps")
     if not Bool(py=family_call(native_loaded_module("builtins").bool, family_call(native_loaded_module("operator").contains, table, steps))):
-        raise Error("If sample_steps is not in [1, 2, 3], you need to provide sample_interval")
-    return Float64(py=table[steps])
+        return (Float64(0.0), False)
+    return (Float64(py=table[steps]), True)
 
 
 def _achi2_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises:
     """`AdditiveChi2Sampler.fit(X)`."""
-    var b = _semi_b()
+    # UNPACK
     var fields = py_fields(model)
     var x = _semi_x(args[1], context)
-    var size = Int(py=x.size)
-    var first = -2
-    if size != 0 and (_semi_kfeat_flags(args[0], context) & 1) != 0:
-        # XN_FAST_ACHI2_DEVSCAN: the device scan; -2 is below its size gate.
-        var scan = family_call(b.getattr, args[0], PythonObject("x_neighbors_kfeat_first_negative"))
-        first = _semi_int(family_call(scan, _semi_addr(x), PythonObject(size)))
-        _ = x  # keep the Python object alive through the native call above
-    var lo = Float64(0.0)
-    if first == -2 and size != 0:
-        lo = Float64(family_min(x))
-    xn_achi2_negative_check(xn_achi2_fit_negative(first, size, lo))
-    _ = _achi2_interval(fields)
+    var count = Int(py=x.size)
+    # XN_FAST_ACHI2_DEVSCAN: the device scan; it answers -2 below its size gate.
+    var scan = count != 0 and (_semi_kfeat_flags(args[0], context) & 1) != 0
+    var request = Achi2FitRequest(_semi_at(x), count, scan)
+    var connection = LofConnection(args[0])
+    # RUN
+    with GILReleased(Python()):
+        achi2_fit_run(connection.driver, request)
+    _ = x  # keep the Python object alive through the native call above
+    # PACK
+    achi2_interval_check(_achi2_interval_unpack(fields)[1])
     py_setitem(fields, "n_features_in_", PythonObject(Int(py=x.shape[1])))
 
 
@@ -318,6 +324,7 @@ def _achi2_transform(model: PythonObject, args: PythonObject, context: PythonObj
     gives the map's nonzeros as a csr matrix, built by SciPy as before.
     `checked`: `_achi2_fit` has just refused a negative entry of this same X
     (fit_transform), so the transform's own scan is not repeated."""
+    # UNPACK
     var b = _semi_b()
     var fields = py_fields(model)
     var source = args[1]
@@ -328,17 +335,21 @@ def _achi2_transform(model: PythonObject, args: PythonObject, context: PythonObj
     var d = Int(py=x.shape[1])
     var steps = _semi_int(family_field(fields, "sample_steps"))
     var width = xn_achi2_width(d, steps)
-    var out = _semi_out_written(Python.tuple(n, width), context)
     # Perf (lane fb12-rows, 2026-11-17; algos/additive-chi2 fit_transform):
     # in fit_transform the fit's check (the device scan, or the same host
     # minimum) already refused a negative entry of this X, so the second full
-    # pass over X is skipped there. transform alone keeps it.
-    if not checked and Int(py=x.size) != 0:
-        xn_achi2_negative_check(Float64(family_min(x)) < 0.0)
-    var interval = _achi2_interval(fields)
-    _semi_op(args[0], xn_achi2_request(_semi_at(x), _semi_at(out), n, d, steps, interval))
+    # pass over X is skipped there (`checked`). transform alone keeps it.
+    var dst = _semi_out_written(Python.tuple(n, width), context)
+    var interval = _achi2_interval_unpack(fields)
+    var request = Achi2Request(_semi_at(x), _semi_at(dst), n, d, steps, interval[0], interval[1], checked, sparse)
+    var connection = LofConnection(args[0])
+    var nnz = 0
+    # RUN
+    with GILReleased(Python()):
+        nnz = achi2_transform_run(connection.driver, request)
     _ = x  # keep the Python object alive through the native call above
-    _ = out  # keep the Python object alive through the native call above
+    _ = dst  # keep the Python object alive through the native call above
+    # PACK
     if sparse:
         # p3-neighbors-cluster: the CSR arrays are built natively (count, then
         # fill: the entries SciPy's dense conversion keeps, row-major, columns
@@ -349,18 +360,20 @@ def _achi2_transform(model: PythonObject, args: PythonObject, context: PythonObj
         if sp is None:
             _ = family_call(b.__import__, PythonObject("scipy.sparse"))
             sp = native_loaded_module("sys").modules["scipy.sparse"]
-        var dense = _semi_at(out)
-        var nnz = xn_achi2_csr_count(dense, n * width)
         var data = _semi_out(Python.tuple(nnz), "<f4", context)
         var indices = _semi_out(Python.tuple(nnz), "<i4", context)
         var indptr = _semi_out(Python.tuple(n + 1), "<i4", context)
-        xn_achi2_csr_fill(dense, n, width, _semi_at(data), _semi_at(indices), _semi_at(indptr))
-        _ = out  # keep the Python object alive through the native passes above
+        var data_at = _semi_at(data)
+        var indices_at = _semi_at(indices)
+        var indptr_at = _semi_at(indptr)
+        with GILReleased(Python()):
+            achi2_csr_run(request.dst, n, width, data_at, indices_at, indptr_at)
+        _ = dst  # keep the Python object alive through the native pass above
         var keywords = Python.dict()
         py_setitem(keywords, "shape", Python.tuple(n, width))
         return family_call_kw(family_call(b.getattr, sp, PythonObject("csr_matrix")), keywords,
                               Python.tuple(data, indices, indptr))
-    return out
+    return dst
 
 
 # ---------------------------------------------------------------- SkewedChi2Sampler
@@ -374,13 +387,17 @@ def _schi2_set_weights(fields: PythonObject, w: PythonObject) raises:
 
 def _schi2_weights(fields: PythonObject, binding: PythonObject, context: PythonObject) raises -> PythonObject:
     """The `random_weights_` getter: weights made from a pending z on the
-    first read (`x_neighbors_kfeat_schi2_weights`), else the stored ones."""
+    first read (the `schi2_weights` operation), else the stored ones."""
     var b = _semi_b()
     var z = py_get(fields, PythonObject("_schi2_z"), PythonObject(None))
     if z is not None:
         var w = _semi_out(py_call(b.tuple, z.shape), "<f4", context)
-        var entry = family_call(b.getattr, xn_module(binding), PythonObject("x_neighbors_kfeat_schi2_weights"))
-        _ = family_call(entry, _semi_addr(z), _semi_addr(w), PythonObject(Int(py=z.size)))
+        var z_at = _semi_at(z)
+        var w_at = _semi_at(w)
+        var count = Int(py=z.size)
+        var connection = LofConnection(binding)
+        with GILReleased(Python()):
+            schi2_weights_run(connection.driver, z_at, w_at, count)
         _ = z  # keep the Python object alive through the native call above
         _ = w  # keep the Python object alive through the native call above
         py_setitem(fields, "_random_weights", w)
@@ -412,9 +429,9 @@ def schi2_public_set_weights(model: PythonObject, value: PythonObject) raises:
 
 
 def _schi2_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises:
-    """`SkewedChi2Sampler.fit(X)`: the weights and offsets from the device
-    counter-based draw (or the legacy-stream binding call)."""
-    var b = _semi_b()
+    """`SkewedChi2Sampler.fit(X)`: the weights and offsets from the
+    counter-based draw of the bound image (the `schi2_fit` operation)."""
+    # UNPACK
     var operator = native_loaded_module("operator")
     var fields = py_fields(model)
     var x = _semi_x(args[1], context)
@@ -422,92 +439,90 @@ def _schi2_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
     var nc = _semi_int(family_field(fields, "n_components"))
     var seed = _semi_seed(family_field(fields, "random_state"), context)
     var usable = family_is_int(seed) and d > 0 and nc > 0
-    var flags = 0
-    if usable:
-        flags = _semi_kfeat_flags(args[0], context)
     _ = py_call(fields.pop, PythonObject("_schi2_z"), PythonObject(None))
-    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
-    var fit_idn = Optional[PythonObject]()
-    if usable:
-        # Admission may return a native capability snapshot. Optional exports
-        # belong to its retained module, not the snapshot object's attributes.
-        fit_idn = py_present(neural_descriptor_entry(xn_module(args[0]), "x_neighbors_kfeat_schi2_fit_idn", False))
-    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
-    var entry = Optional[PythonObject]()
-    if Bool(fit_idn):
-        entry = py_present(fit_idn.value())
-    elif (flags & 2) != 0:
-        entry = py_present(neural_descriptor_entry(xn_module(args[0]), "x_neighbors_kfeat_schi2_fit"))
-    if Bool(entry):
-        var w = _semi_out(Python.tuple(d, nc), "<f4", context)
-        var off = _semi_out(Python.tuple(nc), "<f4", context)
-        var word = family_call(operator.and_, seed, PythonObject(0xFFFFFFFF))
-        _ = family_call(entry.value(), Python.list(word, PythonObject(d), PythonObject(nc)), _semi_addr(w), _semi_addr(off))
-        _ = w  # keep the Python object alive through the native call above
-        _ = off  # keep the Python object alive through the native call above
-        _schi2_set_weights(fields, w)
-        py_setitem(fields, "random_offset_", off)
-        py_setitem(fields, "n_features_in_", PythonObject(d))
+    if not usable:
+        xn_schi2_missing_fit(d, nc)
         return
-    xn_schi2_missing_fit(d, nc)
+    var w = _semi_out(Python.tuple(d, nc), "<f4", context)
+    var off = _semi_out(Python.tuple(nc), "<f4", context)
+    var word = Int(py=family_call(operator.and_, seed, PythonObject(0xFFFFFFFF)))
+    var request = Schi2FitRequest(word, d, nc, _semi_at(w), _semi_at(off))
+    var connection = LofConnection(args[0])
+    # RUN
+    with GILReleased(Python()):
+        schi2_fit_run(connection.driver, request)
+    _ = w  # keep the Python object alive through the native call above
+    _ = off  # keep the Python object alive through the native call above
+    # PACK
+    _schi2_set_weights(fields, w)
+    py_setitem(fields, "random_offset_", off)
+    py_setitem(fields, "n_features_in_", PythonObject(d))
 
 
 def _schi2_transform(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`SkewedChi2Sampler.transform(X)`."""
+    # UNPACK, with the entry refusal where the public method made it (before
+    # n_components and the fitted arrays are read).
     var b = _semi_b()
     var fields = py_fields(model)
     var binding = args[0]
     var x = _semi_x(args[1], context)
     var n = Int(py=x.shape[0])
     var d = Int(py=x.shape[1])
-    if Int(py=x.size) != 0:
-        var lo = Float64(family_min(x))
-        xn_schi2_skew_check(lo, _semi_float(family_field(fields, "skewedness")))
+    var count = Int(py=x.size)
+    var x_at = _semi_at(x)
+    var skew = Float64(0.0)
+    if count != 0:
+        skew = _semi_float(family_field(fields, "skewedness"))
+        with GILReleased(Python()):
+            schi2_check_run(x_at, count, skew)
     var nc = _semi_int(family_field(fields, "n_components"))
     var z = py_get(fields, PythonObject("_schi2_z"), PythonObject(None))
     var lazy = z is not None
     if not lazy:
         lazy = (_semi_kfeat_flags(binding, context) & 4) != 0
-    if lazy and _semi_eq(PythonObject(d), py_get(fields, PythonObject("n_features_in_"), PythonObject(None))):
-        # SCHI2_LAZYW: log, the pending weights, the map: one call.
-        var w: PythonObject
-        if z is not None:
+    # SCHI2_LAZYW (FAST + Apple): log, the pending weights, the map: one operation.
+    lazy = lazy and _semi_eq(PythonObject(d), py_get(fields, PythonObject("n_features_in_"), PythonObject(None)))
+    var pending = lazy and z is not None
+    var w = PythonObject(None)
+    var scratch = PythonObject(None)
+    var scratch_at = 0
+    var dst: PythonObject
+    if lazy:
+        if pending:
             w = _semi_out(Python.tuple(d, nc), "<f4", context)
         else:
             w = _schi2_weights(fields, binding, context)
-        var out = _semi_out(Python.tuple(n, nc), "<f4", context)
-        var entry = family_call(b.getattr, xn_module(binding), PythonObject("x_neighbors_kfeat_schi2_transform"))
-        var pending = 0 if z is None else 1
-        var weights_in = w if z is None else z
-        var weights_out = PythonObject(0) if z is None else _semi_addr(w)
-        var offset = family_field(fields, "random_offset_")
-        var skew = xn_f32_word(_semi_float(family_field(fields, "skewedness")))
-        _ = family_call(entry, Python.list(PythonObject(n), PythonObject(d), PythonObject(nc), PythonObject(pending)),
-                        Python.list(_semi_addr(x), _semi_addr(weights_in), weights_out, _semi_addr(offset),
-                                    _semi_addr(out)),
-                        Python.list(PythonObject(skew)))
-        _ = x  # keep the Python object alive through the native call above
-        _ = weights_in  # keep the Python object alive through the native call above
-        _ = w  # keep the Python object alive through the native call above
-        _ = offset  # keep the Python object alive through the native call above
-        _ = out  # keep the Python object alive through the native call above
-        if z is not None:
-            _schi2_set_weights(fields, w)
-        return out
-    # `_unary(X, _U_LOG, 1.0, skewedness)`, then the map.
-    var skew = _semi_float(family_field(fields, "skewedness"))
-    var lx = _semi_out(py_call(b.tuple, x.shape), "<f4", context)
-    _semi_op(binding, xn_schi2_log_request(_semi_at(x), _semi_at(lx), Int(py=x.size), skew))
-    _ = x  # keep the Python object alive through the native call above
-    var out = _semi_out(Python.tuple(n, nc), "<f4", context)
-    var w = _schi2_weights(fields, binding, context)
+        dst = _semi_out(Python.tuple(n, nc), "<f4", context)
+    else:
+        if count == 0:
+            skew = _semi_float(family_field(fields, "skewedness"))
+        # `_unary(X, _U_LOG, 1.0, skewedness)` into the scratch, then the map.
+        scratch = _semi_out(py_call(b.tuple, x.shape), "<f4", context)
+        scratch_at = _semi_at(scratch)
+        dst = _semi_out(Python.tuple(n, nc), "<f4", context)
+        w = _schi2_weights(fields, binding, context)
     var offset = family_field(fields, "random_offset_")
-    _semi_op(binding, xn_schi2_transform_request(_semi_at(lx), _semi_at(w), _semi_at(offset), _semi_at(out), n, d, nc))
-    _ = lx  # keep the Python object alive through the native call above
+    if lazy and count == 0:
+        skew = _semi_float(family_field(fields, "skewedness"))
+    var weights_at = _semi_at(z) if pending else _semi_at(w)
+    var weights_out = _semi_at(w) if pending else 0
+    var request = Schi2Request(x_at, weights_at, weights_out, _semi_at(offset), scratch_at, _semi_at(dst), n, d, nc,
+                               skew, lazy, pending)
+    var connection = LofConnection(binding)
+    # RUN
+    with GILReleased(Python()):
+        schi2_transform_run(connection.driver, request)
+    _ = x  # keep the Python object alive through the native call above
+    _ = z  # keep the Python object alive through the native call above
     _ = w  # keep the Python object alive through the native call above
+    _ = scratch  # keep the Python object alive through the native call above
     _ = offset  # keep the Python object alive through the native call above
-    _ = out  # keep the Python object alive through the native call above
-    return out
+    _ = dst  # keep the Python object alive through the native call above
+    # PACK
+    if pending:
+        _schi2_set_weights(fields, w)
+    return dst
 
 
 # ---------------------------------------------------------------- label propagation

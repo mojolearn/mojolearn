@@ -4,7 +4,10 @@
 from x_neighbors.ocsvm_init import XN_OCSVM_DEV_INIT, XN_UNIT_DEV, oci_nu_hi, oci_nu_lo
 from x_neighbors.ocsvm_dev import op_ocsvm_alpha_init, op_unit_ff, op_ocsvm_x, OCSVM_IDN_RES
 from x_neighbors.kfeat_rng import XN_IDN_SKETCH_CTR
-from x_neighbors.kfeat_dev import kfeat_pcs_draw_idn
+from x_neighbors.kfeat_dev import (
+    kfeat_pcs_draw_idn, kfeat_schi2_fit_idn, kfeat_first_negative, kfeat_schi2_weights, kfeat_schi2_transform,
+    XN_KFEAT_ANY, XN_FAST_SCHI2_LAZYW,
+)
 from x_neighbors.iter_device import op_ocsvm_labels
 # Capability bit 4: this binary carries the ocsvm_labels auxiliary operation.
 comptime XN_AUX_OCSVM_LABELS = True
@@ -128,4 +131,39 @@ def xn_aux_execute(op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises
         op_lp_dense_proba(a[0], a[1], a[2], a[3], a[4], p[0], p[1], p[2], p[3], p[4], Float32(f[0]), Float32(f[1]),
                           p[5], status)
         return 0
+    # Operations 9 to 12 (lane dw-neighbors-b, 2026-11-21): the chi2 samplers'
+    # typed RUN (neighbors/chi2_run.mojo). Each is the body of the Python
+    # export of the same owner, with that export's admission.
+    if op == 9:
+        # schi2_fit: addresses (random_weights_ d x nc, random_offset_ nc),
+        # ints (seed & 2^32 - 1, d, n_components). The device owner checks
+        # the dimensions and owns its kernel, downloads and synchronization.
+        if a[0] == 0 or a[1] == 0:
+            raise Error("x_neighbors_kfeat_schi2_fit_idn: null buffer address")
+        kfeat_schi2_fit_idn(p[0], p[1], p[2], a[0], a[1])
+        return 0
+    if op == 10:
+        # achi2_first_negative (FAST + Apple, XN_FAST_ACHI2_DEVSCAN): the
+        # first flat index with a negative entry, -1 none, -2 not scanned.
+        comptime if XN_KFEAT_ANY:
+            return kfeat_first_negative(a[0], p[0])
+        else:
+            raise Error("AttributeError: x_neighbors_kfeat_first_negative is not exported by this binding")
+    if op == 11:
+        # schi2_weights (FAST + Apple, XN_FAST_SCHI2_LAZYW): addresses
+        # (pending z, weights out), ints (count).
+        comptime if XN_FAST_SCHI2_LAZYW:
+            kfeat_schi2_weights(a[0], a[1], p[0])
+            return 0
+        else:
+            raise Error("AttributeError: x_neighbors_kfeat_schi2_weights is not exported by this binding")
+    if op == 12:
+        # schi2_lazy_transform (FAST + Apple, XN_FAST_SCHI2_LAZYW): addresses
+        # (x, weights or pending z, weights out or 0, offset, out), ints
+        # (n, d, n_components, pending), floats (skewedness as float32).
+        comptime if XN_FAST_SCHI2_LAZYW:
+            kfeat_schi2_transform(p[0], p[1], p[2], p[3], a[0], a[1], a[2], a[3], a[4], f[0])
+            return 0
+        else:
+            raise Error("AttributeError: x_neighbors_kfeat_schi2_transform is not exported by this binding")
     raise Error("x_neighbors auxiliary native ABI: unknown operation")

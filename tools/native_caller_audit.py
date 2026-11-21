@@ -137,6 +137,8 @@ FAMILIES = (
 KEEP = {
     "x_neighbors_kfeat_schi2_draw": "paused Apple fast arm (lane apple-fast-w3-kfeat, XN_FAST_SCHI2_LAZYW, opt-in): "
                                     "kept until Andrew reopens Apple fast",
+    "x_neighbors_kfeat_schi2_weights": "paused Apple fast arm (XN_FAST_SCHI2_LAZYW): the door reaches its owner through "
+                                       "descriptor operation schi2_weights (lane dw-neighbors-b); the export goes with the arm",
     "x_cluster_mbk_devscan": "paused Apple fast read-back (MiniBatchKMeans' FAST + Apple NaN/inf device scan)",
     "x_cluster_mbk_policy": "paused Apple fast read-back (MINIBATCH_FAST_DEV policies, x_cluster/minibatch_fast.mojo)",
     "x_decomp_lu_resid": "paused Apple fast arm (lane apple-fast-q-linalg, LU_QFIX)",
