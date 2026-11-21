@@ -89,6 +89,13 @@ EXTRA_BY_NAME = {
     "SkewedChi2Sampler": ("_random_weights",),
     "_LabelPropagationBase": ("_classical_raw_graph",),
     "SVGP": ("_alpha", "_C"),
+    # tree ensembles and meta-estimators (bindings/trees_public_boost_door.mojo, trees_public_meta_door.mojo,
+    # trees_gbdt_adapter_lifecycle_door.mojo). A member estimator contributes its own digest.
+    "_DARTBase": ("_bag_at", "_KIND"),
+    "RandomTreesEmbedding": ("_tree_base", "_node_col"),
+    "_StackingBase": ("_widths_", "_binary"),
+    "MultiOutputRegressor": ("_multi_ridge",),
+    "_GBDTAdapter": ("_learner_",),
 }
 
 #: Public names (ending in "_") that record how a call ran, not what was
