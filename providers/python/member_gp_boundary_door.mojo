@@ -36,7 +36,7 @@ from bindings.gp_kernel_storage_boundary import GPPackedKernel
 from bindings.gp_keys_unpack import gp_keys
 from bindings.gp_native_boundary_door import GPConnection, gp_seed_word, gp_entry_key
 from bindings.gp_normalization_boundary_unpack import GPNormalizationConnection
-from bindings.gp_regressor_native_door import _gpr_validate, _gpr_ext
+from bindings.gp_regressor_native_door import _gpr_validate, _gpr_validate_fields, _gpr_ext
 from bindings.member_owner_unpack import MemberOwner
 from bindings.metrics_native_support_door import metric_warn
 from bindings.native_loaded_module_door import native_loaded_module
@@ -73,11 +73,14 @@ def gp_member_admit(model: PythonObject, fields: PythonObject, kind: Int, contex
     if kind != 0:
         return False
     classical_connect_numpy(context)
-    # The estimator's own checks; they write its private fit settings
-    # (`_kernel`, `_alpha`, ...) exactly as its fit does first.
-    _gpr_validate(model, context)
+    # The estimator's own checks, on a SCRATCH copy of its fields: the private
+    # fit settings (`_kernel`, `_alpha`, ...) they write land in the scratch
+    # record, never in the caller's template estimator. PACK writes them into
+    # the clone it packs (`_gpr_validate` on the clone).
+    var b_mod = native_loaded_module("builtins")
+    var settings = py_call(b_mod.dict, py_fields(model))
+    _gpr_validate_fields(settings, context)
     var nk = gp_keys()
-    var settings = py_fields(model)
     var kernel = py_item(settings, nk[].k__kernel)
     var binding = estimator_binding(model, "_mojolearn_gp", context)
     var ext = _gpr_ext(model, binding, context)
@@ -103,7 +106,6 @@ def gp_member_admit(model: PythonObject, fields: PythonObject, kind: Int, contex
     var optimizer = py_item(settings, nk[].k__optimizer)
     var optimize = optimizer is not None and len(free.values) > 0
     var seed_source = py_item(settings, nk[].k__random_state)
-    var b_mod = native_loaded_module("builtins")
     var bits = gp_seed_word(family_call(b_mod.int, PythonObject(0) if seed_source is None else seed_source))
     var normalize = Bool(py=py_item(settings, nk[].k__normalize_y))
     var words = List[Float64](length=12, fill=0.0)
