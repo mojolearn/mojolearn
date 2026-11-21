@@ -17,12 +17,11 @@ from bindings.prep_native_estimator_door import (
     prep_estimator_admit, prep_estimator_has, prep_estimator_call, prep_estimator_predict_internal,
     prep_estimator_plan,
 )
-from bindings.member_boundary_door import member_admit_serving, member_state
-from bindings.member_owner_unpack import MemberOwner
+from bindings.member_held_door import MemberHeld, member_held, member_held_release
 from bindings.member_set_door import MEMBER_SET_NATIVE
 from core.member_abi import (
-    MemberCall, MemberMatrix, MemberPlan, member_call, member_free, member_outputs_of,
-    MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA, MEMBER_CAN_IMPORT,
+    MemberCall, MemberMatrix, MemberPlan, member_call, member_outputs_of,
+    MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA,
 )
 from bindings.trees_public_inputs_door import trees_table, trees_call, trees_address, trees_reshape, trees_cast
 from bindings.admitted_input_unpack import admitted_vector, admitted_unfilled, classical_view
@@ -349,42 +348,42 @@ struct _Member(Movable):
     """The explained estimator as a NATIVE MEMBER (core/member_abi.mojo) for
     one values call. `native` False: the model's class has no member entry
     that serves this call, and every chunk runs the model's own compiled
-    door (`_evaluate`), as before. True: `call.state` holds the fitted model
-    (IMPORT, once per values call) and `operation` is the member operation
-    of the explained method; each chunk is one member call with the GIL
-    released, written straight into the float32 (rows, k) Array the kernels
-    read. Released on every exit of the values call (`_member_release`)."""
+    door (`_evaluate`), as before. True: `held` is the fitted member state
+    the estimator keeps (bindings/member_held_door.mojo: imported at its
+    first use, a hit on every later call until the estimator changes) and
+    `operation` the member operation of the explained method; each chunk is
+    one member call with the GIL released, written straight into the float32
+    (rows, k) Array the kernels read. Released on every exit of the values
+    call (`_member_release`)."""
     var native: Bool
-    var owner: MemberOwner
+    var held: MemberHeld
     var call: MemberCall
     var operation: Int
 
     def __init__(out self):
         var plan = MemberPlan()
         self.native = False
-        self.owner = MemberOwner()
+        self.held = MemberHeld()
         self.call = MemberCall(plan.route)
         self.operation = MEMBER_OP_PREDICT
 
 
 def _member_release(mut em: _Member):
-    """Free the held member state. Never raises; a member that was never
-    opened is nothing to free."""
-    if em.native:
-        member_free(em.owner.plan, em.call)
-        em.native = False
-    _ = em.owner.published  # the owner's pins outlive the last member call
+    """End of the values call (or of the member's use in it): a state the
+    estimator keeps stays with it, a loose one is freed. Never raises."""
+    em.native = False
+    member_held_release(em.held)
 
 
 def _member_open(mut em: _Member, s: _State, context: PythonObject):
-    """UNPACK, once per values call: the explained model as a native member
-    when its family serves IMPORT and the explained method (predict of a
-    regressor kind, predict_proba of a classifier) and its output width is
-    the one construction recorded. Anything else (no mark, a classifier
-    explained through predict, whose member predict writes codes, an
-    admission or import the family refuses, another width) leaves `em`
-    closed: the fallback rule, the model's own door then answers or raises
-    its own words. Never raises."""
+    """UNPACK, once per values call: the explained model's held member state
+    when its family serves the explained method (predict of a regressor
+    kind, predict_proba of a classifier) and its output width is the one
+    construction recorded. Anything else (no mark, a classifier explained
+    through predict, whose member predict writes codes, an admission or
+    import the family refuses, another width) leaves `em` closed: the
+    fallback rule, the model's own door then answers or raises its own
+    words. Never raises."""
     comptime if not MEMBER_SET_NATIVE:
         return
     try:
@@ -398,22 +397,20 @@ def _member_open(mut em: _Member, s: _State, context: PythonObject):
         var member_context = plan["context"]
         var fields = py_call(plan["fields_get"], s.model, py_type(s.model))
         var operation = MEMBER_OP_PREDICT_PROBA if proba else MEMBER_OP_PREDICT
-        var needs = MEMBER_CAN_IMPORT | (MEMBER_CAN_PREDICT_PROBA if proba else MEMBER_CAN_PREDICT)
-        var owner = member_admit_serving(s.model, fields, plan, member_context, b, needs)
-        if not owner.published:
+        var held = member_held(s.model, fields, plan, member_context, b,
+                               MEMBER_CAN_PREDICT_PROBA if proba else MEMBER_CAN_PREDICT)
+        if not held.published:
             return
-        if proba:
-            owner.plan.classes = s.k
-        var call = MemberCall(owner.plan.route, member_state(s.model, fields, member_context, b, owner.plan))
+        var call = MemberCall(held.plan.route, held.state)
         var cols = -1
         try:
-            cols = member_outputs_of(owner.plan, call, operation)
+            cols = member_outputs_of(held.plan, call, operation)
         except:
             cols = -1
         if cols != s.k:
-            member_free(owner.plan, call)
+            member_held_release(held)
             return
-        em.owner = owner^
+        em.held = held^
         em.call = call^
         em.operation = operation
         em.native = True
@@ -436,7 +433,7 @@ def _member_rows(mut em: _Member, x: PythonObject, n: Int, d: Int, k: Int,
     try:
         var py = Python()
         with GILReleased(py):
-            _ = member_call(em.owner.plan.member, em.operation, em.call)
+            _ = member_call(em.held.plan.member, em.operation, em.call)
         done = True
     except:
         done = False
