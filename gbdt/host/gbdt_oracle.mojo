@@ -1079,46 +1079,116 @@ def _binarize_columns(
     borders keeps zero bits; a NaN under `AsIs` is refused, otherwise
     substituted; the bin is the count of borders the value exceeds."""
     var cindex = List[UInt32](length=n_rows * layout.columns, fill=UInt32(0))
-    for f in range(n_features):
+    # THE SPLIT (lane gbdt-host-par): features packed into one column share
+    # its words, so the unit is a ROW range (it owns its rows' words in
+    # every column); inside a range the features run in order, each over
+    # the range's rows of its own column (the column-major read). Integer
+    # work only: compares, a mask, a shift and an OR. A task cannot raise:
+    # it records the first feature (its loop's order, so its lowest) that
+    # met a NaN under `AsIs` and stops; the lowest over the tasks is the
+    # feature the one ascending pass refused.
+    var f_ids = List[Int]()
+    var f_nb = List[Int]()
+    var f_borders = List[Int]()
+    var f_as_is = List[Int]()
+    var f_sub = List[Float32]()
+    var f_base = List[Int]()
+    var f_mask = List[UInt32]()
+    var f_shift = List[UInt32]()
+    for f in range(n_features):  # driver-loop: over the features (one descriptor each)
         var nb = len(grid.borders[f])
         if nb == 0:
             continue
         ref cf = layout.features[f]
         var treat = grid.nan_treatment[f]
-        var sub = nan_substitution(treat)
-        var base = Int(cf.offset) * n_rows
-        for r in range(n_rows):
-            var v = x_colmajor[f * n_rows + r]
-            if v != v:
-                if treat == NAN_TREATMENT_AS_IS:
-                    raise Error(
-                        "There are NaNs in feature number " + String(f)
-                        + " but there were no NaNs in the learn dataset"
-                    )
-                v = sub
-            # `grid.borders[f]` is ascending.  The device kernel's answer is
-            # the number of borders STRICTLY below `v`, i.e. lower_bound(v).
-            # A linear walk used to repeat as many as 128 comparisons for
-            # every row of every host fit; binary search returns the same
-            # insertion point in ceil(log2(nb)) comparisons.  Keep the
-            # comparison written as `border < v` so signed zero and equality
-            # retain the exact `v > border` semantics above.
-            var index = UInt32(0)
-            comptime if GBDT_HOST_BINARIZE_LINEAR:
-                for b in range(nb):
-                    if v > grid.borders[f][b]:
-                        index += 1
-            else:
-                var lo = 0
-                var hi = nb
-                while lo < hi:
-                    var mid = lo + (hi - lo) // 2
-                    if grid.borders[f][mid] < v:
-                        lo = mid + 1
-                    else:
-                        hi = mid
-                index = UInt32(lo)
-            cindex[base + r] = cindex[base + r] | ((index & cf.mask) << cf.shift)
+        f_ids.append(f)
+        f_nb.append(nb)
+        f_borders.append(Int(grid.borders[f].unsafe_ptr()))
+        f_as_is.append(1 if treat == NAN_TREATMENT_AS_IS else 0)
+        f_sub.append(nan_substitution(treat))
+        f_base.append(Int(cf.offset) * n_rows)
+        f_mask.append(UInt32(cf.mask))
+        f_shift.append(UInt32(cf.shift))
+    var n_live = len(f_ids)
+    if n_live == 0 or n_rows == 0:
+        return cindex^
+    var units = _gbdt_units(n_rows, 8 * n_rows * n_live)
+    var chunk = host_predict_chunk(n_rows, units)
+    var refused = List[Int](length=units, fill=n_features)
+    var x_p = rebind[HostF32Ptr](x_colmajor.unsafe_ptr())
+    var c_p = rebind[HostU32Ptr](cindex.unsafe_ptr())
+    var ids_p = rebind[GbdtIntPtr](f_ids.unsafe_ptr())
+    var nb_p = rebind[GbdtIntPtr](f_nb.unsafe_ptr())
+    var borders_p = rebind[GbdtIntPtr](f_borders.unsafe_ptr())
+    var as_is_p = rebind[GbdtIntPtr](f_as_is.unsafe_ptr())
+    var sub_p = rebind[HostF32Ptr](f_sub.unsafe_ptr())
+    var base_p = rebind[GbdtIntPtr](f_base.unsafe_ptr())
+    var mask_p = rebind[HostU32Ptr](f_mask.unsafe_ptr())
+    var shift_p = rebind[HostU32Ptr](f_shift.unsafe_ptr())
+    var refused_p = rebind[GbdtIntPtr](refused.unsafe_ptr())
+
+    def rows(unit: Int) {imm chunk, imm n_rows, imm n_live, imm x_p, imm c_p, imm ids_p, imm nb_p, imm borders_p, imm as_is_p, imm sub_p, imm base_p, imm mask_p, imm shift_p, imm refused_p}:
+        var first = unit * chunk
+        var stop = min(n_rows, (unit + 1) * chunk)
+        for k in range(n_live):
+            var f = ids_p[k]
+            var nb = nb_p[k]
+            var borders = HostF32Ptr(unsafe_from_address=borders_p[k])
+            var as_is = as_is_p[k] != 0
+            var sub = sub_p[k]
+            var base = base_p[k]
+            var mask = mask_p[k]
+            var shift = shift_p[k]
+            for r in range(first, stop):
+                var v = x_p[f * n_rows + r]
+                if v != v:
+                    if as_is:
+                        refused_p[unit] = f
+                        return
+                    v = sub
+                # the borders of a feature are ascending.  The device
+                # kernel's answer is the number of borders STRICTLY below
+                # `v`, i.e. lower_bound(v).  A linear walk used to repeat as
+                # many as 128 comparisons for every row of every host fit;
+                # binary search returns the same insertion point in
+                # ceil(log2(nb)) comparisons.  Keep the comparison written
+                # as `border < v` so signed zero and equality retain the
+                # exact `v > border` semantics above.
+                var index = UInt32(0)
+                comptime if GBDT_HOST_BINARIZE_LINEAR:
+                    for b in range(nb):
+                        if v > borders[b]:
+                            index += 1
+                else:
+                    var lo = 0
+                    var hi = nb
+                    while lo < hi:
+                        var mid = lo + (hi - lo) // 2
+                        if borders[mid] < v:
+                            lo = mid + 1
+                        else:
+                            hi = mid
+                    index = UInt32(lo)
+                c_p[base + r] = c_p[base + r] | ((index & mask) << shift)
+
+    host_parallelize(rows, units)
+    var bad = n_features
+    for unit in range(units):  # driver-loop: over the tasks' refusals
+        if refused[unit] < bad:
+            bad = refused[unit]
+    if bad < n_features:
+        raise Error(
+            "There are NaNs in feature number " + String(bad)
+            + " but there were no NaNs in the learn dataset"
+        )
+    _ = len(f_ids)
+    _ = len(f_nb)
+    _ = len(f_borders)
+    _ = len(f_as_is)
+    _ = len(f_sub)
+    _ = len(f_base)
+    _ = len(f_mask)
+    _ = len(f_shift)
     return cindex^
 
 
@@ -3253,30 +3323,80 @@ def _partition_for_model(
         raise Error("compute_bins_for_model: depth must be positive")
     var n_leaves = 1 << depth
     var bins = List[Int](length=n_rows, fill=0)
-    for level in range(depth):
+    # THE SPLIT (lane gbdt-host-par): integers only. The unit is a row
+    # range. Task `c` writes its rows' leaves and counts them per leaf; the
+    # leaf offsets and each (leaf, task) start are one running sum, leaves
+    # ascending and tasks ascending inside a leaf; then task `c` writes its
+    # rows from its own starts. The ranges ascend in the row, so the sort
+    # stays STABLE (rows ascending within a leaf) at any task count. A task
+    # holds one count per leaf, so the count is also bounded by
+    # `rows / leaves` (a table larger than the task's rows costs more than
+    # it saves, whatever the shape).
+    var l_base = List[Int](capacity=depth)
+    var l_mask = List[UInt32](capacity=depth)
+    var l_value = List[UInt32](capacity=depth)
+    var l_eq = List[Int](capacity=depth)
+    for level in range(depth):  # driver-loop: over the tree's levels (one descriptor each)
         ref cf = layout.features[tree_features[level]]
-        var base = Int(cf.offset) * n_rows
-        var mask = cf.mask << cf.shift
-        var value = UInt32(tree_bins[level]) << cf.shift
-        var eq = cf.one_hot_feature
-        for r in range(n_rows):
-            var fv = cindex[base + r] & mask
-            var split = (fv == value) if eq else (fv > value)
-            if split:
-                bins[r] += 1 << level
+        l_base.append(Int(cf.offset) * n_rows)
+        l_mask.append(UInt32(cf.mask << cf.shift))
+        l_value.append(UInt32(tree_bins[level]) << cf.shift)
+        l_eq.append(1 if cf.one_hot_feature else 0)
+    var units = _gbdt_units(n_rows, n_rows * (depth + 4))
+    units = max(1, min(units, n_rows // n_leaves))
+    var chunk = host_predict_chunk(n_rows, units)
+    var starts = List[Int](length=units * n_leaves, fill=0)
+    var rows = List[Int](length=n_rows, fill=0)
+    var c_p = rebind[HostU32Ptr](cindex.unsafe_ptr())
+    var bins_p = rebind[GbdtIntPtr](bins.unsafe_ptr())
+    var base_p = rebind[GbdtIntPtr](l_base.unsafe_ptr())
+    var mask_p = rebind[HostU32Ptr](l_mask.unsafe_ptr())
+    var value_p = rebind[HostU32Ptr](l_value.unsafe_ptr())
+    var eq_p = rebind[GbdtIntPtr](l_eq.unsafe_ptr())
+    var starts_p = rebind[GbdtIntPtr](starts.unsafe_ptr())
+    var rows_p = rebind[GbdtIntPtr](rows.unsafe_ptr())
+
+    def leaf_of_rows(unit: Int) {imm chunk, imm n_rows, imm depth, imm n_leaves, imm c_p, imm bins_p, imm base_p, imm mask_p, imm value_p, imm eq_p, imm starts_p}:
+        var first = unit * chunk
+        var stop = min(n_rows, (unit + 1) * chunk)
+        for level in range(depth):
+            var base = base_p[level]
+            var mask = mask_p[level]
+            var value = value_p[level]
+            var eq = eq_p[level] != 0
+            for r in range(first, stop):
+                var fv = c_p[base + r] & mask
+                var split = (fv == value) if eq else (fv > value)
+                if split:
+                    bins_p[r] += 1 << level
+        for r in range(first, stop):
+            starts_p[unit * n_leaves + bins_p[r]] += 1
+
+    host_parallelize(leaf_of_rows, units)
     var sizes = List[Int](length=n_leaves, fill=0)
-    for r in range(n_rows):
-        sizes[bins[r]] += 1
     var offsets = List[Int](length=n_leaves, fill=0)
     var running = 0
-    for i in range(n_leaves):
+    for i in range(n_leaves):  # driver-loop: over the leaves (a running sum: serial by nature)
         offsets[i] = running
-        running += sizes[i]
-    var fill = offsets.copy()
-    var rows = List[Int](length=n_rows, fill=0)
-    for r in range(n_rows):
-        rows[fill[bins[r]]] = r
-        fill[bins[r]] += 1
+        for unit in range(units):
+            var count = starts[unit * n_leaves + i]
+            starts[unit * n_leaves + i] = running
+            running += count
+        sizes[i] = running - offsets[i]
+
+    def place_rows(unit: Int) {imm chunk, imm n_rows, imm n_leaves, imm bins_p, imm starts_p, imm rows_p}:
+        for r in range(unit * chunk, min(n_rows, (unit + 1) * chunk)):
+            var at = unit * n_leaves + bins_p[r]
+            rows_p[starts_p[at]] = r
+            starts_p[at] += 1
+
+    host_parallelize(place_rows, units)
+    _ = len(bins)
+    _ = len(starts)
+    _ = len(l_base)
+    _ = len(l_mask)
+    _ = len(l_value)
+    _ = len(l_eq)
     return _HostLeafPartition(rows^, offsets^, sizes^)
 
 
