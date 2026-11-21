@@ -2311,6 +2311,168 @@ def _ftz_lanes[w: Int](x: SIMD[DType.float32, w]) -> SIMD[DType.float32, w]:
     return x
 
 
+def _split_level(
+    cindex: List[UInt32],
+    word_base: Int,
+    field: UInt32,
+    value: UInt32,
+    one_hot: Bool,
+    n_rows: Int,
+    n_live: Int,
+    hist_cells: Int,
+    mut row_index: List[Int],
+    mut stats: List[Float32],
+    mut p_off: List[Int],
+    mut p_sz: List[Int],
+    mut hist: List[Float32],
+    mut ids_compute: List[Int],
+    mut sub_from: List[Int],
+    mut sub_what: List[Int],
+):
+    """The split chain of one symmetric level, every live leaf: a row goes
+    right when its feature bits (`word & field`) exceed `value`, or equal it
+    for a one-hot feature; a leaf's rows are reordered zeros then ones, each
+    side in its old order (the device's stable partition, `enqueue_post_
+    winner`), with both stat planes; `copy_histograms_kernel` copies the
+    parent's histogram into the right child's slot; `update_partitions_and_
+    plan_kernel` writes the sizes, offsets and the next level's plan.
+
+    No float is folded here: rows and stats are moved, sizes are counted.
+    THE SPLIT (lane gbdt-host-par). The unit is a PIECE, a run of at most
+    `ceil(rows / tasks)` consecutive positions of one leaf. Pass 1 counts
+    each piece's zeros; the pieces' first zero and first one slots are then
+    running sums along the leaf (a loop over pieces, at most leaves + tasks
+    of them); pass 2 moves each piece's rows to those slots, which no other
+    piece writes. A row's slot is its leaf's offset plus the zeros (or the
+    leaf's zeros plus the ones) before it, exactly the stable order. The
+    histogram copy's unit is one leaf. Task counts are `_gbdt_units`."""
+    var live_rows = 0
+    for i in range(n_live):
+        live_rows += p_sz[i]
+    var units = _gbdt_units(max(live_rows, n_live), 4 * live_rows)
+    var piece_rows = max(1, (live_rows + units - 1) // units)
+    var pc_lo = List[Int]()
+    var pc_hi = List[Int]()
+    var leaf_first = List[Int](capacity=n_live + 1)
+    for i in range(n_live):
+        leaf_first.append(len(pc_lo))
+        var off = p_off[i]
+        var sz = p_sz[i]
+        var c = 0
+        while c * piece_rows < sz:
+            pc_lo.append(off + c * piece_rows)
+            pc_hi.append(min(off + (c + 1) * piece_rows, off + sz))
+            c += 1
+    leaf_first.append(len(pc_lo))
+    var n_pieces = len(pc_lo)
+    var pc_zeros = List[Int](length=max(1, n_pieces), fill=0)
+    var pc_zero_at = List[Int](length=max(1, n_pieces), fill=0)
+    var pc_one_at = List[Int](length=max(1, n_pieces), fill=0)
+    var new_rows = row_index.copy()
+    var new_stats = stats.copy()
+    var task_units = max(1, min(units, n_pieces))
+    var lo_p = rebind[GbdtIntPtr](pc_lo.unsafe_ptr())
+    var hi_p = rebind[GbdtIntPtr](pc_hi.unsafe_ptr())
+    var zeros_p = rebind[GbdtIntPtr](pc_zeros.unsafe_ptr())
+    var zero_at_p = rebind[GbdtIntPtr](pc_zero_at.unsafe_ptr())
+    var one_at_p = rebind[GbdtIntPtr](pc_one_at.unsafe_ptr())
+    var row_p = rebind[GbdtIntPtr](row_index.unsafe_ptr())
+    var stats_p = rebind[HostF32Ptr](stats.unsafe_ptr())
+    var new_row_p = rebind[GbdtIntPtr](new_rows.unsafe_ptr())
+    var new_stats_p = rebind[HostF32Ptr](new_stats.unsafe_ptr())
+    var cindex_p = rebind[HostU32Ptr](cindex.unsafe_ptr())
+    var hist_p = rebind[HostF32Ptr](hist.unsafe_ptr())
+
+    def count_zeros(unit: Int) {imm task_units, imm n_pieces, imm word_base, imm field, imm value, imm one_hot, imm lo_p, imm hi_p, imm zeros_p, imm row_p, imm cindex_p}:
+        var piece = unit
+        while piece < n_pieces:
+            var zeros = 0
+            for pos in range(lo_p[piece], hi_p[piece]):
+                var feature_val = cindex_p[word_base + row_p[pos]] & field
+                var goes_right = feature_val > value
+                if one_hot:
+                    goes_right = feature_val == value
+                if not goes_right:
+                    zeros += 1
+            zeros_p[piece] = zeros
+            piece += task_units
+
+    host_parallelize(count_zeros, task_units)
+
+    # `update_partitions_and_plan_kernel`, and each piece's first slots
+    for i in range(n_live):  # driver-loop: over the live leaves and their pieces
+        var off = p_off[i]
+        var sz = p_sz[i]
+        var left_sz = 0
+        for piece in range(leaf_first[i], leaf_first[i + 1]):
+            left_sz += pc_zeros[piece]
+        var zero_at = off
+        var one_at = off + left_sz
+        for piece in range(leaf_first[i], leaf_first[i + 1]):
+            pc_zero_at[piece] = zero_at
+            pc_one_at[piece] = one_at
+            zero_at += pc_zeros[piece]
+            one_at += (pc_hi[piece] - pc_lo[piece]) - pc_zeros[piece]
+        var right_sz = sz - left_sz
+        p_sz[i] = left_sz
+        p_off[n_live + i] = off + left_sz
+        p_sz[n_live + i] = right_sz
+        var small = n_live + i
+        var big = i
+        if left_sz < right_sz:
+            small = i
+            big = n_live + i
+        ids_compute[i] = small
+        sub_from[i] = big
+        sub_what[i] = small
+
+    def scatter(unit: Int) {imm task_units, imm n_pieces, imm n_rows, imm word_base, imm field, imm value, imm one_hot, imm lo_p, imm hi_p, imm zero_at_p, imm one_at_p, imm row_p, imm stats_p, imm new_row_p, imm new_stats_p, imm cindex_p}:
+        var piece = unit
+        while piece < n_pieces:
+            var zero_at = zero_at_p[piece]
+            var one_at = one_at_p[piece]
+            for pos in range(lo_p[piece], hi_p[piece]):
+                var row = row_p[pos]
+                var feature_val = cindex_p[word_base + row] & field
+                var goes_right = feature_val > value
+                if one_hot:
+                    goes_right = feature_val == value
+                var slot = zero_at
+                if goes_right:
+                    slot = one_at
+                    one_at += 1
+                else:
+                    zero_at += 1
+                new_row_p[slot] = row
+                new_stats_p[slot] = stats_p[pos]
+                new_stats_p[n_rows + slot] = stats_p[n_rows + pos]
+            piece += task_units
+
+    host_parallelize(scatter, task_units)
+
+    # `copy_histograms_kernel`: parent into the right slot
+    var copy_units = _gbdt_units(n_live, 2 * n_live * hist_cells)
+
+    def copy_parent(unit: Int) {imm copy_units, imm n_live, imm hist_cells, imm hist_p}:
+        var i = unit
+        while i < n_live:
+            var src_base = i * 2 * hist_cells
+            var dst_base = (n_live + i) * 2 * hist_cells
+            for c in range(2 * hist_cells):
+                hist_p[dst_base + c] = hist_p[src_base + c]
+            i += copy_units
+
+    host_parallelize(copy_parent, copy_units)
+    # the tasks read these through pointers: named again past the joins
+    _ = len(pc_lo)
+    _ = len(pc_hi)
+    _ = len(pc_zeros)
+    _ = len(pc_zero_at)
+    _ = len(pc_one_at)
+    row_index = new_rows^
+    stats = new_stats^
+
+
 #: the SIMD width of `_cosine_gains`' candidate step
 comptime _COSINE_W = 8
 
@@ -3154,61 +3316,12 @@ def _tree_ctr_levels_host(
         # the split chain, every live leaf (`enqueue_post_winner`); a won
         # candidate's persist slot holds the candidate slot's bins
         ref sfeat = layout.features[split_f]
-        var new_rows = row_index.copy()
-        var new_stats = stats.copy()
-        for i in range(n_live):
-            var off = p_off[i]
-            var sz = p_sz[i]
-            var zeros = List[Int]()
-            var ones = List[Int]()
-            for k in range(sz):
-                var row = row_index[off + k]
-                var word = cindexes[learn_p][Int(sfeat.offset) * n_rows + row]
-                var feature_val = word & (sfeat.mask << sfeat.shift)
-                var value = UInt32(split_b) << sfeat.shift
-                var goes_right: Bool
-                if sfeat.one_hot_feature:
-                    goes_right = feature_val == value
-                else:
-                    goes_right = feature_val > value
-                if goes_right:
-                    ones.append(k)
-                else:
-                    zeros.append(k)
-            var dst = 0
-            for k in range(len(zeros)):
-                var src = off + zeros[k]
-                new_rows[off + dst] = row_index[src]
-                new_stats[off + dst] = stats[src]
-                new_stats[n_rows + off + dst] = stats[n_rows + src]
-                dst += 1
-            for k in range(len(ones)):
-                var src = off + ones[k]
-                new_rows[off + dst] = row_index[src]
-                new_stats[off + dst] = stats[src]
-                new_stats[n_rows + off + dst] = stats[n_rows + src]
-                dst += 1
-            # `copy_histograms_kernel`: parent into the right slot
-            var src_base = i * 2 * hist_cells
-            var dst_base = (n_live + i) * 2 * hist_cells
-            for c in range(2 * hist_cells):
-                hist[dst_base + c] = hist[src_base + c]
-            # `update_partitions_and_plan_kernel`
-            var left_sz = len(zeros)
-            var right_sz = sz - left_sz
-            p_sz[i] = left_sz
-            p_off[n_live + i] = off + left_sz
-            p_sz[n_live + i] = right_sz
-            var small = n_live + i
-            var big = i
-            if left_sz < right_sz:
-                small = i
-                big = n_live + i
-            ids_compute[i] = small
-            sub_from[i] = big
-            sub_what[i] = small
-        row_index = new_rows^
-        stats = new_stats^
+        _split_level(
+            cindexes[learn_p], Int(sfeat.offset) * n_rows, sfeat.mask << sfeat.shift,
+            UInt32(split_b) << sfeat.shift, sfeat.one_hot_feature, n_rows,
+            n_live, hist_cells, row_index, stats, p_off, p_sz, hist,
+            ids_compute, sub_from, sub_what,
+        )
         n_live = n_live * 2
         if depth + 1 < max_depth:
             tc.mint_level(learn_p, cindexes[learn_p])
@@ -3491,61 +3604,12 @@ def gbdt_host_boost(
             var split_f = bf_feature[bf_split] if hist_cells > 0 else 0
             var split_b = bf_bin[bf_split] if hist_cells > 0 else 0
             ref sfeat = layout.features[split_f]
-            var new_rows = row_index.copy()
-            var new_stats = stats.copy()
-            for i in range(n_live):
-                var off = p_off[i]
-                var sz = p_sz[i]
-                var zeros = List[Int]()
-                var ones = List[Int]()
-                for k in range(sz):
-                    var row = row_index[off + k]
-                    var word = cindex[Int(sfeat.offset) * n_rows + row]
-                    var feature_val = word & (sfeat.mask << sfeat.shift)
-                    var value = UInt32(split_b) << sfeat.shift
-                    var goes_right: Bool
-                    if sfeat.one_hot_feature:
-                        goes_right = feature_val == value
-                    else:
-                        goes_right = feature_val > value
-                    if goes_right:
-                        ones.append(k)
-                    else:
-                        zeros.append(k)
-                var dst = 0
-                for k in range(len(zeros)):
-                    var src = off + zeros[k]
-                    new_rows[off + dst] = row_index[src]
-                    new_stats[off + dst] = stats[src]
-                    new_stats[n_rows + off + dst] = stats[n_rows + src]
-                    dst += 1
-                for k in range(len(ones)):
-                    var src = off + ones[k]
-                    new_rows[off + dst] = row_index[src]
-                    new_stats[off + dst] = stats[src]
-                    new_stats[n_rows + off + dst] = stats[n_rows + src]
-                    dst += 1
-                # `copy_histograms_kernel`: parent into the right slot
-                var src_base = i * 2 * hist_cells
-                var dst_base = (n_live + i) * 2 * hist_cells
-                for c in range(2 * hist_cells):
-                    hist[dst_base + c] = hist[src_base + c]
-                # `update_partitions_and_plan_kernel`
-                var left_sz = len(zeros)
-                var right_sz = sz - left_sz
-                p_sz[i] = left_sz
-                p_off[n_live + i] = off + left_sz
-                p_sz[n_live + i] = right_sz
-                var small = n_live + i
-                var big = i
-                if left_sz < right_sz:
-                    small = i
-                    big = n_live + i
-                ids_compute[i] = small
-                sub_from[i] = big
-                sub_what[i] = small
-            row_index = new_rows^
-            stats = new_stats^
+            _split_level(
+                cindex, Int(sfeat.offset) * n_rows, sfeat.mask << sfeat.shift,
+                UInt32(split_b) << sfeat.shift, sfeat.one_hot_feature, n_rows,
+                n_live, hist_cells, row_index, stats, p_off, p_sz, hist,
+                ids_compute, sub_from, sub_what,
+            )
             n_live = n_live * 2
 
         # ---- the gates, post-tree, and the rollback ----

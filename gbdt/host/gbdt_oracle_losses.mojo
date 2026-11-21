@@ -115,6 +115,7 @@ from gbdt.host.gbdt_oracle_yeti import yeti_rank_eval, yeti_rank_search_pass
 from gbdt.data.yeti_rank_tasks import YetiRankTasks, yeti_rank_tasks
 from gbdt.data.permutation import TRandom
 from gbdt.host.gbdt_oracle import (
+    _split_level,
     _scan_histograms,
     _subtract_histograms,
     _partition_stats_level,
@@ -1069,59 +1070,12 @@ def gbdt_losses_host_fit(
             var split_f = bf_feature[bf_split] if hist_cells > 0 else 0
             var split_b = bf_bin[bf_split] if hist_cells > 0 else 0
             ref sfeat = layout.features[split_f]
-            var new_rows = row_index.copy()
-            var new_stats = stats.copy()
-            for i in range(n_live):
-                var off = p_off[i]
-                var sz = p_sz[i]
-                var zeros = List[Int]()
-                var ones = List[Int]()
-                for k in range(sz):
-                    var row = row_index[off + k]
-                    var word = cindex[Int(sfeat.offset) * n_rows + row]
-                    var feature_val = word & (sfeat.mask << sfeat.shift)
-                    var value = UInt32(split_b) << sfeat.shift
-                    var goes_right: Bool
-                    if sfeat.one_hot_feature:
-                        goes_right = feature_val == value
-                    else:
-                        goes_right = feature_val > value
-                    if goes_right:
-                        ones.append(k)
-                    else:
-                        zeros.append(k)
-                var dst = 0
-                for k in range(len(zeros)):
-                    var src = off + zeros[k]
-                    new_rows[off + dst] = row_index[src]
-                    new_stats[off + dst] = stats[src]
-                    new_stats[n_rows + off + dst] = stats[n_rows + src]
-                    dst += 1
-                for k in range(len(ones)):
-                    var src = off + ones[k]
-                    new_rows[off + dst] = row_index[src]
-                    new_stats[off + dst] = stats[src]
-                    new_stats[n_rows + off + dst] = stats[n_rows + src]
-                    dst += 1
-                var src_base = i * 2 * hist_cells
-                var dst_base = (n_live + i) * 2 * hist_cells
-                for c in range(2 * hist_cells):
-                    hist[dst_base + c] = hist[src_base + c]
-                var left_sz = len(zeros)
-                var right_sz = sz - left_sz
-                p_sz[i] = left_sz
-                p_off[n_live + i] = off + left_sz
-                p_sz[n_live + i] = right_sz
-                var small = n_live + i
-                var big = i
-                if left_sz < right_sz:
-                    small = i
-                    big = n_live + i
-                ids_compute[i] = small
-                sub_from[i] = big
-                sub_what[i] = small
-            row_index = new_rows^
-            stats = new_stats^
+            _split_level(
+                cindex, Int(sfeat.offset) * n_rows, sfeat.mask << sfeat.shift,
+                UInt32(split_b) << sfeat.shift, sfeat.one_hot_feature, n_rows,
+                n_live, hist_cells, row_index, stats, p_off, p_sz, hist,
+                ids_compute, sub_from, sub_what,
+            )
             n_live = n_live * 2
 
         # ---- the gates, post-tree, and the rollback ----
