@@ -46,7 +46,7 @@ def test_samba_step_repeats_when_built():
                                     intermediate=64, tie_embeddings=False, dropout=0.1)
         m = mojolearn.SambaStack(cfg, generator=mojolearn.training.Generator(1), lr=1e-3, max_norm=1.0)
         out = m.train_step(ids[:, :-1], ids[:, 1:])
-        p = m.parameters()
+        p = dict(m.named_parameters())
         return np.float64(out["loss"]).tobytes() + b"".join(np.asarray(p[k]).tobytes() for k in sorted(p))
 
     first = run()

@@ -5,8 +5,10 @@
 
 fit: the images admitted, the labels encoded (the sequence owner's label
 sort, bindings/xseq_neural_native.mojo `xseq_labels`), the layer stack built
-natively (Conv2d / ReLU / MaxPool2d blocks and the Linear head, each with the
-constructor's fields and its seeded Mojo draws), then the whole training as
+from typed RUN (x_cnn/classifier_run.mojo `cnnclf_run_layout`: the block
+planes, seeds and fan-ins; `cnnclf_run_init`: the seeded Kaiming draws on the
+model's image, GIL released), then its Conv2d / ReLU / MaxPool2d blocks and
+Linear head published as layer objects (PACK), then the whole training as
 ONE call of the x_sequence whole-model door of the model's tier (CNN_FIT,
 sequence/cnn_classifier_program.mojo): the layer stack captured as one
 program on the program executor and trained by Program.fit; the trained
@@ -23,6 +25,9 @@ TOMBSTONE: the hand CNN classifier epoch and resident predict deleted 2026-11-09
 Restore: git apply experiments/removed/X8_CNN_HAND_EPOCH.patch
 """
 from std.python import Python, PythonObject
+from std.python._cpython import GILReleased
+from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider
+from sequence.xseq_neural_run import XseqNeuralEntry
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from bindings.xcnn_common_door import xcnn_builtins, xcnn_labels, xcnn_f32, xcnn_addr, xcnn_readonly
 from bindings.xcnn_common_door import xcnn_device_init, xcnn_device_inherit
@@ -46,10 +51,9 @@ from providers.python.neural_descriptor_pyapi_door import neural_descriptor_adop
 from bindings.native_prepared_owner_unpack import prepared_get, prepared_put, prepared_drop
 from bindings.native_identity_key_door import NativeIdentityKey
 from x_cnn.classifier_run import (
-    CnnClfPlan, CnnClfFitSettings, cnnclf_run_check_input_rank, cnnclf_run_check_input_dim,
+    CnnClfPlan, CnnClfFitSettings, CnnClfLayout, cnnclf_run_layout, cnnclf_run_init, cnnclf_run_check_input_rank, cnnclf_run_check_input_dim,
     cnnclf_run_check_channels, cnnclf_run_check_setting, cnnclf_run_check_optimizer, cnnclf_run_optimizer_word,
-    cnnclf_run_check_nesterov, cnnclf_run_block_plane, cnnclf_run_conv_seed, cnnclf_run_head_seed,
-    cnnclf_run_conv_fan_in, cnnclf_run_kaiming_bound, cnnclf_run_check_rows, cnnclf_run_images,
+    cnnclf_run_check_nesterov, cnnclf_run_check_rows, cnnclf_run_images,
     cnnclf_run_features, cnnclf_run_check_labels, cnnclf_run_fit_steps, cnnclf_run_fit_addresses,
     cnnclf_run_fit_ints, cnnclf_run_fit_floats, cnnclf_run_open_addresses, cnnclf_run_open_ints,
     cnnclf_run_check_session, cnnclf_run_predict_ints,
@@ -238,17 +242,11 @@ def cnnclf_weights(model: PythonObject, context: PythonObject) raises -> PythonO
 
 # ---------------------------------------------------------------- the layers
 
-def _kaiming(mut stream: XseqStream, shape: PythonObject, fan_in: Int, context: PythonObject) raises -> PythonObject:
-    """`_kaiming_uniform(rng, shape, fan_in)`: float32 U(-b, b) draws, b =
-    1 / sqrt(fan_in) (correctly rounded), from the layer's stream."""
-    var out = _empty(shape, "float32", context)
-    var bound = cnnclf_run_kaiming_bound(fan_in)
-    stream.fill_uniform(context, xcnn_addr(out), Int(py=out.size), -bound, bound)
-    return out
-
-
-def _conv_new(c: Int, oc: Int, k: Int, seed: Int, mode: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`Conv2d(c, oc, k, padding=k // 2, random_state=seed, numeric_mode=mode)`."""
+def _conv_new(c: Int, oc: Int, k: Int, seed: Int, mode: PythonObject, weight: PythonObject, bias: PythonObject,
+              context: PythonObject) raises -> PythonObject:
+    """`Conv2d(c, oc, k, padding=k // 2, random_state=seed, numeric_mode=mode)`
+    holding the learned arrays `weight` and `bias` (drawn by
+    `cnnclf_run_init`)."""
     var nk = xcnn_keys()
     var conv = py_call(_b().object.__new__, py_item(context, nk[].k_xcnn_conv2d_class))
     var f = _fields(conv)
@@ -268,10 +266,8 @@ def _conv_new(c: Int, oc: Int, k: Int, seed: Int, mode: PythonObject, context: P
     py_setitem(f, nk[].k_random_state, seed)
     py_setitem(f, nk[].k_input_shape, PythonObject(None))
     py_setitem(f, nk[].k_numeric_mode, mode)
-    var fan_in = cnnclf_run_conv_fan_in(c, k)
-    var stream = XseqStream(PythonObject(seed), context)
-    py_setitem(f, nk[].k_weight_, _kaiming(stream, Python.tuple(oc, c, k, k), fan_in, context))
-    py_setitem(f, nk[].k_bias_, _kaiming(stream, Python.tuple(oc), fan_in, context))
+    py_setitem(f, nk[].k_weight_, weight)
+    py_setitem(f, nk[].k_bias_, bias)
     return conv
 
 
@@ -299,53 +295,73 @@ def _maxpool_new(p: Int, mode: PythonObject, context: PythonObject) raises -> Py
     return pool
 
 
-def _linear_new(d_in: Int, d_out: Int, seed: Int, mode: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_Linear(d_in, d_out, random_state=seed, numeric_mode=mode)`."""
+def _linear_new(d_in: Int, d_out: Int, mode: PythonObject, weight: PythonObject, bias: PythonObject,
+                context: PythonObject) raises -> PythonObject:
+    """`_Linear(d_in, d_out, numeric_mode=mode)` holding `weight`, `bias`."""
     var nk = xcnn_keys()
     var lin = py_call(_b().object.__new__, py_item(context, nk[].k_xcnn_linear_class))
     var f = _fields(lin)
     py_setitem(f, nk[].k_in_features, d_in)
     py_setitem(f, nk[].k_out_features, d_out)
     py_setitem(f, nk[].k_numeric_mode, mode)
-    var stream = XseqStream(PythonObject(seed), context)
-    py_setitem(f, nk[].k_weight_, _kaiming(stream, Python.tuple(d_out, d_in), d_in, context))
-    py_setitem(f, nk[].k_bias_, _kaiming(stream, Python.tuple(d_out), d_in, context))
+    py_setitem(f, nk[].k_weight_, weight)
+    py_setitem(f, nk[].k_bias_, bias)
     return lin
 
 
-def _build(fields: PythonObject, k: Int, context: PythonObject) raises:
-    """`CNNClassifier._build(n_classes)`."""
+def cnnclf_entry(provider: PythonObject) raises -> XseqNeuralEntry:
+    """UNPACK: the admitted model provider's descriptor entry and the address
+    of its retained call workspace (as bindings/xseq_neural_native_door.mojo
+    `_entry`); the caller keeps `provider` referenced through every call."""
+    var owner = provider.downcast_value_ptr[NeuralDescriptorProvider]()
+    return XseqNeuralEntry(owner[].record[0].entry, Int(owner[].record[0].workspace.unsafe_ptr()))
+
+
+def _layout(fields: PythonObject, k: Int) raises -> CnnClfLayout:
+    """UNPACK `_build(n_classes)`'s words; RUN derives the stack."""
     var b = _b()
     var nk = xcnn_keys()
     var rs = py_item(fields, nk[].k_random_state)
     var seed = 0 if rs is None else Int(py=py_call(b.int, rs))
     var shape = py_item(fields, nk[].k_input_shape)
+    var channels = py_item(fields, nk[].k_conv_channels)
+    var widths = List[Int]()
+    for i in range(len(channels)):  # driver-loop: over the conv blocks (model structure)
+        widths.append(Int(py=channels[i]))
+    return cnnclf_run_layout(Int(py=shape[0]), Int(py=shape[1]), Int(py=shape[2]),
+                             Int(py=py_item(fields, nk[].k_kernel_size)), Int(py=py_item(fields, nk[].k_pool_size)),
+                             widths, k, seed)
+
+
+def cnnclf_publish_layers(fields: PythonObject, layout: CnnClfLayout, arrays: PythonObject,
+                          context: PythonObject) raises:
+    """PACK `_build`'s layer stack from `layout` (cnnclf_run_layout) onto
+    `fields`: Conv2d / ReLU / MaxPool2d blocks and the Linear head, holding
+    the learned arrays `arrays` (descriptor order; None entries when the
+    caller assigns them next)."""
+    var nk = xcnn_keys()
+    var shape = py_item(fields, nk[].k_input_shape)
     var c = Int(py=shape[0])
-    var h = Int(py=shape[1])
-    var w = Int(py=shape[2])
     var ks = Int(py=py_item(fields, nk[].k_kernel_size))
     var ps = Int(py=py_item(fields, nk[].k_pool_size))
     var mode = py_item(fields, nk[].k_numeric_mode)
     var layers = Python.list()
     var blocks = Python.list()
-    var channels = py_item(fields, nk[].k_conv_channels)
-    for i in range(len(channels)):  # driver-loop: over the conv blocks (model structure)
-        var oc = Int(py=channels[i])
-        var conv = _conv_new(c, oc, ks, cnnclf_run_conv_seed(seed, i), mode, context)
+    for i in range(len(layout.widths)):  # driver-loop: over the conv blocks (model structure)
+        var oc = layout.widths[i]
+        var conv = _conv_new(c, oc, ks, layout.seeds[2 * i], mode, arrays[2 * i], arrays[2 * i + 1], context)
         _ = py_call(layers.append, conv)
-        var plane = cnnclf_run_block_plane(h, w, ks, ps)
         _ = py_call(layers.append, _relu_new(mode, context))
         var pool = PythonObject(None)
-        if plane.pools:
+        if layout.pools[i] != 0:
             pool = _maxpool_new(ps, mode, context)
             _ = py_call(layers.append, pool)
-        h = plane.h
-        w = plane.w
         _ = py_call(blocks.append, Python.tuple(conv, pool))
         c = oc
-    var flat = cnnclf_run_features([c, h, w])
-    py_setitem(fields, nk[].k__flat, flat)
-    py_setitem(fields, nk[].k_head_, _linear_new(flat, k, cnnclf_run_head_seed(seed), mode, context))
+    var last = 2 * len(layout.widths)
+    var k = layout.shapes[last][0]
+    py_setitem(fields, nk[].k__flat, layout.flat)
+    py_setitem(fields, nk[].k_head_, _linear_new(layout.flat, k, mode, arrays[last], arrays[last + 1], context))
     py_setitem(fields, nk[].k_layers_, layers)
     py_setitem(fields, nk[].k__blocks, blocks)
     # Every layer of the stack takes the classifier's device (checked at its
@@ -353,6 +369,33 @@ def _build(fields: PythonObject, k: Int, context: PythonObject) raises:
     xcnn_device_inherit(_fields(py_item(fields, nk[].k_head_)), fields)
     for i in range(len(layers)):  # driver-loop: over the layer list (model structure)
         xcnn_device_inherit(_fields(layers[i]), fields)
+
+
+def _build(fields: PythonObject, k: Int, provider: PythonObject, draw: Bool, context: PythonObject) raises:
+    """`CNNClassifier._build(n_classes)`: the stack's words in RUN
+    (`cnnclf_run_layout`), the learned arrays allocated here and, when
+    `draw`, their initial Kaiming words drawn in RUN (`cnnclf_run_init`,
+    GIL released) on the model's image `provider`; then the layer objects.
+    `draw` is False when the caller assigns every learned array next (adopt):
+    nothing is allocated or drawn for them."""
+    var layout = _layout(fields, k)
+    var arrays = Python.list()
+    if draw:
+        for i in range(len(layout.shapes)):  # driver-loop: over the learned arrays (model structure)
+            var dims = Python.list()
+            for j in range(len(layout.shapes[i])):  # small-loop(one array's dimensions)
+                _ = py_call(dims.append, layout.shapes[i][j])
+            _ = py_call(arrays.append, _empty(py_call(_b().tuple, dims), "float32", context))
+        var addresses = _param_addresses(arrays)
+        var entry = cnnclf_entry(provider)
+        var py = Python()
+        with GILReleased(py):
+            cnnclf_run_init(entry, layout, addresses)
+        _ = provider  # pins the entry's workspace through the call above
+    else:
+        for i in range(len(layout.shapes)):  # driver-loop: over the learned arrays (model structure)
+            _ = py_call(arrays.append, PythonObject(None))
+    cnnclf_publish_layers(fields, layout, arrays, context)
 
 
 def _params(fields: PythonObject) raises -> PythonObject:
@@ -456,7 +499,7 @@ def cnnclf_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
     # predict session now rather than at the next predict
     var drop_mods = NativeModules()
     prepared_drop(drop_mods, _PREDICT_SLOT, model)
-    _build(fields, k, context)
+    _build(fields, k, xseq_neural_provider(labels), True, context)
     var optimizer = String(py=py_item(fields, nk[].k_optimizer))
     var seed64 = XseqStream(py_item(fields, nk[].k_random_state), context).seed
     var batch = Int(py=py_item(fields, nk[].k_batch_size))
@@ -518,7 +561,7 @@ def cnnclf_adopt(model: PythonObject, args: PythonObject, context: PythonObject)
     var classes = py_item(given, nk[].k_classes_)
     var drop_mods = NativeModules()
     prepared_drop(drop_mods, _PREDICT_SLOT, model)
-    _build(fields, len(classes), context)
+    _build(fields, len(classes), PythonObject(None), False, context)
     var learned = _params(given)
     var mine = _params(fields)
     if len(learned) != len(mine):

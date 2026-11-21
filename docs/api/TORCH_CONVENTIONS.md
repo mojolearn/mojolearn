@@ -10,24 +10,12 @@ Lane `api-torch`, 2026-11-21. "Owed" rows name the native entry they need; nothi
 
 ## Device names
 
-PyTorch names a device `"cpu"`, `"cuda"`, `"cuda:0"` (also on ROCm builds of PyTorch) or `"mps"`. Mojolearn's one
-device rule is `core/device_route.mojo` (`device=None | "gpu" | "cpu"`, admitted at construction).
-
-| PyTorch word | Mojolearn | Where it is refused |
-|---|---|---|
-| `"cpu"` | the CPU route (unchanged) | fast mode beside a GPU set; a class with no CPU images (unchanged) |
-| `"cuda"`, `"cuda:0"` | the GPU route (`"gpu"`) | on macOS (no CUDA or HIP GPU there: use `"mps"` or `"gpu"`); on a CPU-only installation (the `"gpu"` refusal) |
-| `"mps"`, `"mps:0"` | the GPU route (`"gpu"`) | off macOS (no Apple GPU there: use `"cuda"` or `"gpu"`); on a CPU-only installation |
-| `"cuda:1"`, `"mps:1"`, ... | refused | one GPU per process: the process's GPU zero is the only one a model runs on; choose it with `CUDA_VISIBLE_DEVICES` / `HIP_VISIBLE_DEVICES` |
-| `torch.device(...)` objects | refused | pass `str(device)`: the constructor stores the value verbatim and only words are admitted, so no PyTorch object is read inside a call |
-| `"xpu"`, `"meta"`, `"xla"`, ... | refused | no such device |
-
-The words are decided by `device_code` (one string compare chain, at construction and at an estimator's route
-miss); the macOS/Linux split is a compile-time test of the host binding (`CompilationTarget.is_macos()`), so
-nothing is probed at run time. Every class that takes `device=` gains the words at once: estimators, `Sequential`,
-the CNN layers, the neural blocks, `SmallMLPTrainer`, the byte language-model trainers, `SambaStack`, `CausalLM`
-(through `device_code`; its own door is lane causal-doors'), decomposition and forecasting. `get_params()` returns
-the word as given.
+The device is `None`, `"gpu"` or `"cpu"` only (Andrew, 2026-11-21): `core/device_route.mojo` admits these three
+values at construction, on every class that takes `device=`, and `to(device)` takes the same two words. PyTorch's
+words (`"cuda"`, `"cuda:0"`, `"mps"`, `torch.device(...)`) are refused like any unknown value
+(`device must be 'gpu', 'cpu' or None`). Round 1 of this lane mapped them onto the GPU route; that mapping was
+deleted by Andrew's decision. The Torch adapter still reads a tensor's own device (below): that is the tensor's
+placement, not a `device=` argument.
 
 ## dtype names
 
@@ -51,10 +39,10 @@ The neural models run float32 only, in both modes; `identical` defines its bits 
 |---|---|---|
 | `state_dict()` | new | `{name: array}`, the block's weights under the constructor's names (Hugging Face names in torch's `[out, in]` layout for `TransformerBlock`); a new dict over the same arrays, as torch returns references |
 | `load_state_dict(sd)` | new | rebuilds the block from `sd` through the constructor (the `set_params(weights=sd)` path): every key and shape checked before the block changes. Returns the block, not torch's `(missing_keys, unexpected_keys)`: an incomplete or extra key set is refused, which is torch's `strict=True` |
-| `parameters()` | new | list of the weight arrays, in `state_dict` order |
-| `named_parameters()` | new | list of `(name, array)` pairs, in `state_dict` order |
-| `to(device=None, dtype=None)` | new | device word: rebuilds the block on that route (as `set_params(device=...)`); dtype: float32 only. Returns the block, like torch's in-place `Module.to` |
-| `cuda()`, `cpu()` | no | `to("cuda")` / `to("cpu")` say the same; kept to one door |
+| `parameters()` | new | iterator of the weight arrays, in `state_dict` order |
+| `named_parameters()` | new | iterator of `(name, array)` pairs, in `state_dict` order |
+| `to(device=None, dtype=None)` | new | `"gpu"` or `"cpu"`: rebuilds the block on that route (as `set_params(device=...)`); dtype: float32 only. Returns the block, like torch's in-place `Module.to` |
+| `cuda()`, `cpu()` | no | `to("gpu")` / `to("cpu")` say the same; kept to one door |
 | `train()`, `eval()`, `training` | no | the blocks have no dropout or batch statistics: forward is the same in both modes, so the flag would change nothing; `backward` is explicit |
 | `forward(x)` / `__call__` | differs | `forward(x, state=None)` exists; `__call__` is not defined (blocks are not `nn.Module`s and carry an explicit state) |
 | `zero_grad()`, `requires_grad_()` | no | no autograd: `backward(x, dy)` returns the gradients |
@@ -64,18 +52,18 @@ The neural models run float32 only, in both modes; `identical` defines its bits 
 | PyTorch | Mojolearn | Note |
 |---|---|---|
 | `load_state_dict(sd)` | yes | existing: `nn.Sequential` names (`"<i>.weight"`, `"<i>.bias"`), torch layouts, float16/bfloat16/float64 converted to float32 |
-| `state_dict()` | owed | needs a native PACK entry in `bindings/sequential_*` that returns `params_` as `nn.Sequential`-named float32 arrays in torch layout (a linear weight transposed from our `(in, out)` to torch's `(out, in)` natively); `params_` holds the flat vector today |
-| `parameters()`, `named_parameters()` | owed | the same entry (views of its arrays) |
+| `state_dict()` | new (round 2) | `{"<i>.weight"/"<i>.bias": array}` in torch's layouts, a copy: one native transfer (`MODEL_EXPORT_PARAMS`, `autograd/weight_import.mojo` `model_export_params`: params_ uploaded once, each linear weight cast through its transposed view, one download); loads back with `load_state_dict` and into `torch.nn.Sequential` |
+| `parameters()`, `named_parameters()` | new (round 2) | iterators over the same export (copies: params_ is one flat vector, not per-tensor arrays) |
 | `train()`, `eval()` | no | `fit` always trains (dropout on) and `predict` never does: the mode is the method, so a flag would have no effect |
-| `to(device)` | owed | `device=` is a constructor argument today; a rebuild entry on the sequential door is needed |
+| `to(device=None, dtype=None)` | new (round 2) | `"gpu"`/`"cpu"`: the route is forgotten and resolved on the new device at the next call (params_ is host memory on every route); dtype float32 only; returns the model |
 
 ### CNN layers (`Conv2d`, `BatchNorm2d`, `Dropout2d`, `BasicBlock`, ...)
 
 | PyTorch | Mojolearn | Note |
 |---|---|---|
 | `train(mode=True)`, `eval()` | yes | existing on `BatchNorm1d/2d`, `Dropout2d`, `BasicBlock` (native `bn_train`, `block_train`) |
-| `parameters()` | yes (`BasicBlock`) | existing native `block_parameters` |
-| `state_dict()` | owed | per-layer weights are `weight_`/`bias_` fields; a named export entry on the x_cnn door is needed |
+| `parameters()`, `named_parameters()` | yes (round 3) | `Conv2d`/`Conv1d`, `BatchNorm1d/2d`, `BasicBlock`: iterators over the trainable entries of `state_dict()` (names ending in `weight` / `bias`; running statistics and `num_batches_tracked` are buffers, as in torch), torch's order, copies (native ops `layer_parameters` / `layer_named_parameters`, `bindings/xcnn_conv_native_door.mojo` `xcnn_layer_parameters`). The old `BasicBlock.parameters()` `(layer, weight field, gradient field)` descriptors are now the private `BasicBlock._parameter_descriptors()` (op `block_parameter_descriptors`; caller `tools/identity_lanes/cnn.py`, same order, so that lane's record is unchanged) |
+| `state_dict()`, `load_state_dict()` | new (round 2) | `Conv2d`/`Conv1d` (`weight`, `bias`; Conv1d's weight torch's `(out, in // groups, k)`), `BatchNorm1d/2d` (`weight`, `bias`, `running_mean`, `running_var`, `num_batches_tracked`), `BasicBlock` (torchvision names `conv1.`, `bn1.`, `conv2.`, `bn2.`, `downsample.0/1.`): copies out; load is torch's `strict=True`, through the layer's `set_weights` admission (native ops `layer_state_dict` / `layer_load_state_dict`, `bindings/xcnn_conv_native_door.mojo`, `xcnn_bn_native_door.mojo`). A BasicBlock load is all or nothing (round 3): every name, then every sublayer's shapes are admitted and the new arrays built before any sublayer is written (`_xcnn_conv_load_prepare` / `xcnn_bn_load_prepare`, then the commits). GCNConv/SAGEConv (round 3): PyTorch Geometric's names and layouts (`GCNConv`: `bias`, `lin.weight`; `SAGEConv`: `lin.weight`/`lin.bias` with project, `lin_l.weight`, `lin_l.bias`, `lin_r.weight` with root_weight), copies out, strict load that checks every name and shape before any write (native ops `graph_state_dict` / `graph_load_state_dict`, `bindings/xcnn_graph_native_door.mojo` `xcnn_graph_state`); their `parameters()` are not added |
 
 ### Recurrent estimators (`LSTMRegressor`, `GRUClassifier`, `RNN*`)
 
@@ -89,16 +77,15 @@ The neural models run float32 only, in both modes; `identical` defines its bits 
 | PyTorch | Mojolearn | Note |
 |---|---|---|
 | `state_dict()`, `load_state_dict()` | yes | existing: the full resumable snapshot (weights, optimizer moments, step, schedule), like torch's model + optimizer state together. The byte trainer state is lane byte-state's |
-| `parameters()` (`SambaStack`, `SambaInference`) | differs | existing, returns `{name: array}`; torch returns an iterator of tensors. Changing it is a behaviour change for Andrew to decide (listed in the lane result) |
+| `parameters()`, `named_parameters()` (`SambaStack`, `SambaInference`) | yes (round 2) | iterators of arrays / `(name, array)` pairs (orchestrator decision, Andrew told; was `{name: array}`: use `dict(model.named_parameters())`) |
 | `parameters()` (`SmallMLPTrainer`, byte trainer) | differs | named `weights_` / `parameters_` (fitted-attribute style) |
 
 ### `CausalLM`
 
 | PyTorch | Mojolearn | Note |
 |---|---|---|
-| `parameters()` | differs | existing `causal_lm_parameters`, returns `{name: array}` by checkpoint name |
-| `state_dict()` / `load_state_dict()` / `named_parameters()` | owed | doors are lane causal-doors'; no existing entry returns the named weights as pairs or rebuilds from a dict |
-| `device="cuda"/"mps"` | yes | through `device_code` (no door edit) |
+| `parameters()`, `named_parameters()` | yes (round 2; `ParallelCausalLM` round 3, also `state_dict()`; its `load_state_dict` is refused in words) | iterators over the existing `causal_lm_parameters` entry (unchanged; `bindings/torch_parameters_pack.mojo` shapes its result); was `{name: array}`: use `dict(model.named_parameters())` |
+| `state_dict()` / `load_state_dict()` | new (round 3) | `state_dict()` is the `{checkpoint name: array}` mapping of the `causal_lm_parameters` entry (the model's own arrays; a fused Phi-3 tensor joined, a copy). `load_state_dict(sd)` is torch's `strict=True` (missing / unexpected keys refused in words) and all or nothing: native `causal_model_load_state_dict` (`bindings/causal_lm_construct_door.mojo`) reads the weight record from the mapping through the checkpoint reader's own plan walk (fused rows split, the weight format packed as a checkpoint load packs it), constructs a complete model of the same type with this model's plan and options, and only then gives this model its fields; it drops the prepared model record, so the model generation moves on and the checkpoint fingerprint is hashed again. Differs from torch: returns None (no `(missing_keys, unexpected_keys)`, since only strict loads exist), no `strict=False`, and arrays taken earlier keep the old values (the weights are replaced, not copied into in place). Refused while a resident generation runs |
 | `eval()` | no | inference only: there is no training mode |
 
 ### Optimizers: `SGD`, `Adam`, `AdamW`

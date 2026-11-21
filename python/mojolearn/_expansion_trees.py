@@ -194,6 +194,9 @@ class DecisionTreeClassifier(RandomForestClassifier):
     >>> model = mojolearn.DecisionTreeClassifier(max_depth=4).fit(X, y)
     >>> proba = model.predict_proba(X)
     """
+    # The member ABI mark (core/member_abi.mojo, family 13 MEMBER_FAMILY_TREE): fit and predict run native
+    # inside a meta-estimator (core/tree_member.mojo).
+    _mojolearn_member = (13, 0)
     save = _TreeSave.save
 
     def __init__(
@@ -340,6 +343,9 @@ class DecisionTreeRegressor(RandomForestRegressor):
     >>> model = mojolearn.DecisionTreeRegressor(max_depth=6).fit(X, y)
     >>> pred = model.predict(X)
     """
+    # The member ABI mark (core/member_abi.mojo, family 13 MEMBER_FAMILY_TREE): fit and predict run native
+    # inside a meta-estimator (core/tree_member.mojo).
+    _mojolearn_member = (13, 1)
     save = _TreeSave.save
 
     def __init__(
@@ -1179,6 +1185,9 @@ class DARTRegressor(_DARTBase):
     #: no Python fit-tracking or output wrappers are installed
     _mojolearn_native_public = True
     _KIND = 0
+    # The member ABI mark (core/member_abi.mojo, family 17 MEMBER_FAMILY_DART): fit and predict run native
+    # inside a meta-estimator (core/dart_member.mojo).
+    _mojolearn_member = (17, 1)
 
     def __init__(self, *, n_estimators=100, learning_rate=0.1, num_leaves=31, max_depth=-1,
                  min_child_samples=20, reg_lambda=0.0, max_bin=255, drop_rate=0.1, max_drop=50,
@@ -1303,6 +1312,9 @@ class DARTClassifier(_DARTBase):
     #: no Python fit-tracking or output wrappers are installed
     _mojolearn_native_public = True
     _KIND = 1
+    # The member ABI mark (core/member_abi.mojo, family 17 MEMBER_FAMILY_DART): fit and predict run native
+    # inside a meta-estimator (core/dart_member.mojo).
+    _mojolearn_member = (17, 0)
 
     def __init__(self, *, n_estimators=100, learning_rate=0.1, num_leaves=31, max_depth=-1,
                  min_child_samples=20, reg_lambda=0.0, max_bin=255, drop_rate=0.1, max_drop=50,

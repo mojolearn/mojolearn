@@ -3,15 +3,33 @@
 member state store (core/linear_member.mojo), without a kernel: five
 independent fixtures, one host task each (capabilities; handles; refusals,
 with every version 2 operation the linear member lacks; the fitted-state
-blocks in and out; the family table and a planned member). A fit or a prediction with numbers
-needs the family's kernel tables and belongs to the installed-wheel tests."""
+blocks in and out; the family table and a planned member), then one fixture
+per further published family (`_PUBLISHED` of them, one host task each): its
+capability mask says what its kind of estimator is and nothing it is not, a
+call without a state is refused in words, and the width of an output is
+answered without a state where the family's words decide it (KMeans). A fit
+or a prediction with numbers needs the family's kernel tables and belongs to
+the installed-wheel tests.
+
+A family joins by one row in `_published` and `_published_masks` when its
+publication merges (MEMBER-ABI-V2.md)."""
 from core.device_route import DeviceRoute
 from core.entry_table import EntryRef
 from core.host_parallel import host_parallelize
+from core.decomposition_member import decomposition_member_v2
+from core.extra_trees_member import extra_trees_member_v2
+from core.forest_member import forest_member_v2
+from core.kernel_svm_member import kernel_svm_member_v2
+from core.kmeans_member import kmeans_member_v2
 from core.linear_member import linear_member_v2
+from core.logistic_member import logistic_member_v2
+from core.neighbors_member import neighbors_member_v2
+from core.scaler_member import scaler_member_v2
+from core.tree_member import tree_member_v2
+from core.xlinear_member import xlinear_member_v2
 from core.member_abi import (
     MemberCall, MemberMatrix, MemberPlan, MemberRef, member_call, member_publish, member_resolve_family,
-    member_new, member_free, member_require,
+    member_new, member_free, member_require, member_outputs, MEMBER_NEEDS_PREDICTOR, MEMBER_NEEDS_TRANSFORMER,
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT,
     MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA, MEMBER_OP_DECISION, MEMBER_OP_OUTPUTS, MEMBER_OP_TRANSFORM,
     MEMBER_OP_INVERSE_TRANSFORM, MEMBER_OP_PARTIAL_FIT, MEMBER_OP_PREDICT_STD, MEMBER_OP_SCORE_SAMPLES,
@@ -24,7 +42,12 @@ from core.member_abi import (
 )
 from core.member_families import MEMBER_FAMILY_SPARE3, MEMBER_FAMILY_COUNT, member_family_name
 
-comptime MEMBER_ABI_FIXTURES = 5
+comptime _LINEAR_FIXTURES = 5
+#: Published families beyond linear, in `_published` order: Logistic 1,
+#: XLinear 2, Neighbors 11, Tree 13, Forest 14, ExtraTrees 15, KernelSvm 6,
+#: KMeans 24, Decomposition 31, Scaler 34.
+comptime _PUBLISHED = 10
+comptime MEMBER_ABI_FIXTURES = _LINEAR_FIXTURES + _PUBLISHED
 
 
 def require(ok: Bool, message: String) raises:
@@ -55,7 +78,76 @@ def _refused(operation: Int, mut call: MemberCall, words: String) raises:
     require(refused, "member ABI: expected a refusal holding '" + words + "'")
 
 
+def _published(which: Int) raises -> MemberRef:
+    """The member entry of published family `which` (no table: the entry
+    itself, as the linear fixtures call theirs)."""
+    if which == 0:
+        return MemberRef(EntryRef(logistic_member_v2, 0), 0)
+    if which == 1:
+        return MemberRef(EntryRef(xlinear_member_v2, 0), 0)
+    if which == 2:
+        return MemberRef(EntryRef(neighbors_member_v2, 0), 0)
+    if which == 3:
+        return MemberRef(EntryRef(tree_member_v2, 0), 0)
+    if which == 4:
+        return MemberRef(EntryRef(forest_member_v2, 0), 0)
+    if which == 5:
+        return MemberRef(EntryRef(extra_trees_member_v2, 0), 0)
+    if which == 6:
+        return MemberRef(EntryRef(kernel_svm_member_v2, 0), 0)
+    if which == 7:
+        return MemberRef(EntryRef(kmeans_member_v2, 0), 0)
+    if which == 8:
+        return MemberRef(EntryRef(decomposition_member_v2, 0), 0)
+    if which == 9:
+        return MemberRef(EntryRef(scaler_member_v2, 0), 0)
+    raise Error("member ABI: no published fixture " + String(which))
+
+
+def _published_fixture(which: Int) raises:
+    """One published family, without a kernel and without a state."""
+    var member = _published(which)
+    var probe = MemberCall(DeviceRoute(0))
+    member.capabilities = member_call(member, MEMBER_OP_CAPABILITIES, probe)
+    var name = String(which)
+    # what the family is: predictors predict, transformers transform, and
+    # the form a caller asks for (`has`: every bit) follows
+    var transformer = which == 8 or which == 9
+    if transformer:
+        require(member.has(MEMBER_NEEDS_TRANSFORMER) and not member.can(MEMBER_CAN_PREDICT)
+            and not member.has(MEMBER_NEEDS_PREDICTOR), "member ABI: published " + name + " is a transformer")
+    else:
+        require(member.has(MEMBER_NEEDS_PREDICTOR), "member ABI: published " + name + " fits and predicts")
+    var classifier = which == 0 or which == 2
+    if classifier:
+        require(member.can(MEMBER_CAN_CLASSIFIER), "member ABI: published " + name + " has classifier kinds")
+    if which == 1 or which >= 7:
+        require(not member.can(MEMBER_CAN_CLASSIFIER), "member ABI: published " + name + " has no classifier kind")
+    if which == 7:
+        require(member.can(MEMBER_CAN_TRANSFORM), "member ABI: KMeans transforms")
+    # a call without a state is refused in words, never a wild read
+    var stateless = MemberCall(DeviceRoute(0))
+    var refused = False
+    try:
+        _ = member_call(member, MEMBER_OP_TRANSFORM if transformer else MEMBER_OP_PREDICT, stateless)
+    except error:
+        refused = len(String(error)) > 0
+    require(refused, "member ABI: published " + name + " refuses a call without a state")
+    if which == 7:
+        # the width of an output before any state: KMeans' words decide it
+        var plan = MemberPlan()
+        plan.member = member
+        plan.route = DeviceRoute(0)
+        var words: List[Float64] = [5.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        plan.params = words^
+        require(member_outputs(plan, MEMBER_OP_TRANSFORM, 3, 0) == 5 and member_outputs(plan, MEMBER_OP_PREDICT, 3, 0) == 1,
+            "member ABI: KMeans answers its output widths without a state")
+
+
 def _fixture(unit: Int) raises:
+    if unit >= _LINEAR_FIXTURES:
+        _published_fixture(unit - _LINEAR_FIXTURES)
+        return
     if unit == 0:
         # capabilities and the output width
         var call = MemberCall(DeviceRoute(0))
@@ -158,6 +250,15 @@ def _fixture(unit: Int) raises:
         require(plan.member.can(MEMBER_CAN_FIT) and not plan.member.can(MEMBER_CAN_PREDICT_PROBA),
             "member ABI: the resolved entry's capability mask")
         member_require(plan, MEMBER_CAN_SCORE, "score")
+        require(plan.member.has(MEMBER_NEEDS_PREDICTOR) and not plan.member.has(MEMBER_NEEDS_TRANSFORMER)
+            and member_outputs(plan, MEMBER_OP_PREDICT, 3, 1) == 1,
+            "member ABI: a predictor plan, its width asked without a state")
+        var partly = False
+        try:
+            member_require(plan, MEMBER_CAN_FIT | MEMBER_CAN_TRANSFORM, "fit and transform")
+        except error:
+            partly = String(error).find("has no fit and transform") >= 0
+        require(partly, "member ABI: member_require tests every bit of its mask")
         var lacks = False
         try:
             member_require(plan, MEMBER_CAN_TRANSFORM, "transform")

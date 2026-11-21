@@ -24,6 +24,7 @@ from providers.python.samba_program_handle_pyapi_unpack import samba_program_han
 from bindings.neural_block_public_door import neural_block_c
 from bindings.causal_lm_construct_door import causal_model_c
 from bindings.causal_lm_public_door import causal_public_c
+from bindings.torch_parameters_pack import causal_lm_parameters_form_c
 
 comptime RUNTIME_NEURAL_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
@@ -87,6 +88,7 @@ def build__mojolearn_runtime_neural_host() -> PythonObject:
         module.def_py_c_function(causal_model_c[2], "causal_model_read_weights")
         module.def_py_c_function(causal_model_c[3], "causal_model_twin")
         module.def_py_c_function(causal_model_c[4], "causal_model_vendor_used")
+        module.def_py_c_function(causal_model_c[5], "causal_model_load_state_dict")
         module.def_py_c_function(causal_public_c[1], "causal_lm_allocate")
         module.def_py_c_function(causal_public_c[2], "causal_lm_reset")
         module.def_py_c_function(causal_public_c[3], "causal_lm_forward")
@@ -100,6 +102,10 @@ def build__mojolearn_runtime_neural_host() -> PythonObject:
         module.def_py_c_function(causal_public_c[11], "causal_lm_snapshot")
         module.def_py_c_function(causal_public_c[12], "causal_lm_resume")
         module.def_py_c_function(causal_public_c[13], "causal_lm_parameters")
+        # lane api-torch round 2: CausalLM.parameters() / named_parameters() in torch's form
+        module.def_py_c_function(causal_lm_parameters_form_c[1], "causal_lm_parameter_list")
+        module.def_py_c_function(causal_lm_parameters_form_c[2], "causal_lm_named_parameters")
+        module.def_py_c_function(causal_lm_parameters_form_c[0], "causal_lm_state_dict")
         module.def_py_c_function(causal_public_c[14], "causal_lm_blocks")
         module.def_py_c_function(causal_public_c[15], "causal_state_init")
         module.def_py_c_function(causal_public_c[16], "causal_lm_repr")

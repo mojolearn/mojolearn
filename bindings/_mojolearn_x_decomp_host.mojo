@@ -5,6 +5,7 @@ HOST ONLY: the entry points of x_decomp/api.mojo on the host executor
 (x_decomp/host.mojo), under the GPU binding's names and address contract,
 plus the family read-backs."""
 from x_decomp.publish_host_run import _publish_linear_entry_table
+from core.pls_member import pls_member_publish
 from core.experiment_guards_decomposition import DECOMPOSITION_GUARDS_OK
 from std.os import abort
 from std.python import PythonObject
@@ -185,6 +186,8 @@ def build__mojolearn_x_decomp_host() -> PythonObject:
         m.def_function[vendor_py[HostExec]]("x_decomp_vendor")
         var published_module = m.finalize()
         _publish_linear_entry_table()
+        # The member entries (core/member_abi.mojo): these estimators run as members of a meta-estimator.
+        pls_member_publish(Int(GLOBAL_NUMERIC_MODE), 0, Int(X_DECOMP_HOST_API.get_or_create_ptr()))
         return published_module
     except e:
         abort(String("failed to create _mojolearn_x_decomp_host: ", e))
