@@ -201,6 +201,7 @@ from core.decomp_factor_api import (
     RPFitRequest, RPProjectRequest, rp_fit_call, rp_project_call,
     ICAFitRequest, ICAProjectRequest, ica_fit_call, ica_project_call,
     FAFitRequest, FAQueryRequest, fa_fit_call, fa_query_call,
+    LDARequest, lda_call, LDA_REFUSAL_FIT, LDA_REFUSAL_TRANSFORM,
 )
 from core.decomp_entry_table import decomp_table_call
 from x_decomp.descriptor_schema import XD_DEV_ALLOC, XD_DEV_FREE, XD_DEV_UPLOAD
@@ -246,6 +247,8 @@ comptime XDECOMP_KIND_MBSPCA = 13
 comptime XDECOMP_MBSPCA_PARAM_COUNT = 11
 comptime XDECOMP_KIND_ENVELOPE = 14
 comptime XDECOMP_ENVELOPE_PARAM_COUNT = 6
+comptime XDECOMP_KIND_LDA = 15
+comptime XDECOMP_LDA_PARAM_COUNT = 15
 
 comptime XDECOMP_BLOCK_COMPONENTS = MEMBER_BLOCK_FAMILY
 comptime XDECOMP_BLOCK_SINGULAR = MEMBER_BLOCK_FAMILY + 1
@@ -472,6 +475,8 @@ def _kind_name(kind: Int) -> String:
         return String("MiniBatchSparsePCA")
     if kind == XDECOMP_KIND_ENVELOPE:
         return String("EllipticEnvelope")
+    if kind == XDECOMP_KIND_LDA:
+        return String("LatentDirichletAllocation")
     return String("IncrementalPCA")
 
 
@@ -1544,6 +1549,145 @@ def _mcd_width(asked: Int, mut dtype: Int) raises -> Int:
     return 0
 
 
+# ---------------------------------------------------------------- LatentDirichletAllocation
+# Kind 15: bindings/lda_native_door.mojo `lda_fit` / `lda_project` (one
+# LDARequest through the route's table, core/decomp_factor_api.mojo
+# `lda_call`). Blocks: 0 scalars [n_components_, n_features_in_, n_iter_,
+# _draw, n_batch_iter_, bound_, doc_topic_prior_, topic_word_prior_]; 1
+# components_ (n_components_ x n_features_in_); 2 exp_dirichlet_component_.
+# The door passes the fitted host words per call (its kernel stages them),
+# so the member does too; the spare output words of a query are the
+# state's own block (a query never writes them: x_decomp/lda_owner.mojo
+# 213-236), where the door allocates two fresh arrays per query.
+
+comptime _LDA_FIT = 0
+comptime _LDA_TRANSFORM = 2
+comptime _LDA_SCORE = 3
+
+
+def _lda_request(slot: _Slot, call: _Call, op: Int, comps_in: Int, exp_in: Int, comps_out: Int, exp_out: Int,
+                 dst: Int, nc: Int, fresh: Bool, total: Float64, refusal: Int, draw: Int, n_batch_iter: Int,
+                 doc: Float64, topic: Float64) -> LDARequest:
+    var w = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(slot[].words.unsafe_ptr()))
+    var online = op == _LDA_FIT and w[4] != 0.0
+    return LDARequest(op, call[].x.data, comps_in, exp_in, comps_out, exp_out, dst, call[].x.rows, call[].x.cols,
+                      nc, fresh, op == _LDA_TRANSFORM, Int(w[6]), online, Int(w[5]) if online else 1, Int(w[7]),
+                      Int(w[8]), Int(w[9]), refusal, draw, n_batch_iter, doc, topic, w[10], w[11], w[12], total,
+                      w[14])
+
+
+def _fit_lda(slot: _Slot, call: _Call) raises:
+    """`lda_fit` over the caller's X (fresh state: draw 0, n_batch_iter 1,
+    total_samples = rows); fit_output TRANSFORM = fit_transform's normalized
+    transform of the same X."""
+    var estimator = _name(slot)
+    _whole(call, estimator)
+    _dense(call[].x, "X", estimator)
+    if call[].weights.rows > 0:
+        raise Error("TypeError: a " + estimator + " member takes no sample_weight")
+    if call[].fit_output != 0 and call[].fit_output != MEMBER_OP_TRANSFORM:
+        member_unsupported(estimator, call[].fit_output)
+    slot[].clear()
+    var nc = Int(slot[].words[1])
+    var v = call[].x.cols
+    slot[].blocks.append(List[Float32](length=max(nc * v, 1), fill=Float32(0)))
+    slot[].blocks.append(List[Float32](length=max(nc * v, 1), fill=Float32(0)))
+    var spare = _address(slot, 0)
+    var request = _lda_request(slot, call, _LDA_FIT, spare, spare, _address(slot, 0), _address(slot, 1), spare, nc,
+                               True, Float64(call[].x.rows), LDA_REFUSAL_FIT, 0, 1, slot[].words[2],
+                               slot[].words[3])
+    var answer = lda_call(call[].route.entry, request)
+    var scalars = _four(nc, v, answer.iterations, answer.draw)
+    scalars.append(Float64(answer.n_batch_iter))
+    scalars.append(answer.value)
+    scalars.append(slot[].words[2])
+    scalars.append(slot[].words[3])
+    slot[].scalars = scalars^
+    slot[].count = nc
+    slot[].features = v
+    slot[].fitted = True
+    if call[].fit_output == MEMBER_OP_TRANSFORM:
+        _query_lda(slot, call, _LDA_TRANSFORM)
+
+
+def _query_lda(slot: _Slot, call: _Call, op: Int) raises:
+    """`lda_project`: transform (normalize=True, rows x n_components_)
+    or score (the approximate bound into `call.value`)."""
+    var estimator = _name(slot)
+    if not slot[].fitted:
+        raise Error("NotFittedError: this " + estimator + " member is not fitted yet")
+    _whole(call, estimator)
+    _dense(call[].x, "X", estimator)
+    var nc = slot[].count
+    var dst = _address(slot, 0)
+    if op == _LDA_TRANSFORM:
+        _dense(call[].dst, "the output buffer", estimator)
+        if call[].dst.rows != call[].x.rows or call[].dst.cols != nc:
+            raise Error("ValueError: the output buffer holds " + String(nc) + " values per row of X")
+        dst = call[].dst.data
+    elif call[].weights.rows > 0 or call[].y.rows > 0:
+        raise Error("TypeError: LatentDirichletAllocation.score takes X only (no y, no sample_weight)")
+    var spare = _address(slot, 0)
+    var request = _lda_request(slot, call, op, _address(slot, 0), _address(slot, 1), spare, spare, dst, nc, False,
+                               slot[].words[13], LDA_REFUSAL_TRANSFORM, Int(slot[].scalars[3]),
+                               Int(slot[].scalars[4]), slot[].scalars[6], slot[].scalars[7])
+    var answer = lda_call(call[].route.entry, request)
+    if op == _LDA_SCORE:
+        call[].value = answer.value
+
+
+def _export_lda(slot: _Slot, call: _Call) raises:
+    var block = call[].block
+    if (call[].flags & MEMBER_BLOCK_BY_INDEX) != 0:
+        if block < 0 or block > 2:
+            raise Error("member ABI: a LatentDirichletAllocation member has no fitted block index " + String(block))
+        block = MEMBER_BLOCK_SCALARS if block == 0 else XDECOMP_BLOCK_COMPONENTS + block - 1
+    if block == MEMBER_BLOCK_SCALARS:
+        call[].dst = MemberMatrix(Int(slot[].scalars.unsafe_ptr()), 1, len(slot[].scalars), MEMBER_F64)
+    elif block == XDECOMP_BLOCK_COMPONENTS or block == XDECOMP_BLOCK_COMPONENTS + 1:
+        call[].dst = MemberMatrix(_address(slot, block - XDECOMP_BLOCK_COMPONENTS), slot[].count, slot[].features)
+    else:
+        raise Error("member ABI: a LatentDirichletAllocation member has no fitted block " + String(block))
+    call[].block = block
+    call[].out_cols = 3
+
+
+def _import_lda(slot: _Slot, call: _Call) raises:
+    var estimator = _name(slot)
+    var block = call[].block
+    if slot[].fitted or len(slot[].blocks) != 2:
+        slot[].clear()
+        for _ in range(2):  # driver-loop: two fitted blocks
+            slot[].blocks.append(List[Float32]())
+    if block == MEMBER_BLOCK_SCALARS:
+        if not call[].x.dense_host(MEMBER_F64) or call[].x.rows * call[].x.cols != 8:
+            raise Error("member ABI: the LatentDirichletAllocation scalars block is eight host float64 words")
+        var source = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call[].x.data)
+        slot[].scalars = List[Float64](length=8, fill=0.0)
+        for index in range(8):  # driver-loop: eight fitted scalars
+            slot[].scalars[index] = source[index]
+    elif block == XDECOMP_BLOCK_COMPONENTS or block == XDECOMP_BLOCK_COMPONENTS + 1:
+        var size = call[].x.rows * call[].x.cols
+        var words = List[Float32](length=size, fill=0.0)
+        if size > 0:
+            _dense(call[].x, "a fitted block", estimator)
+            unsafe_memcpy(dest=words.unsafe_ptr(), src=_F32P(unsafe_from_address=call[].x.data), count=size)
+        slot[].blocks[block - XDECOMP_BLOCK_COMPONENTS] = words^
+    elif block != 0 or (call[].flags & MEMBER_IMPORT_DONE) == 0:
+        raise Error("member ABI: a LatentDirichletAllocation member has no fitted block " + String(block))
+    if (call[].flags & MEMBER_IMPORT_DONE) == 0:
+        return
+    if len(slot[].scalars) != 8:
+        raise Error("member ABI: a fitted LatentDirichletAllocation state needs its scalars block")
+    var nc = Int(slot[].scalars[0])
+    var v = Int(slot[].scalars[1])
+    if nc < 1 or v < 1 or len(slot[].blocks[0]) != nc * v or len(slot[].blocks[1]) != nc * v:
+        raise Error("member ABI: a fitted LatentDirichletAllocation state needs every fitted block, of the fitted sizes")
+    slot[].count = nc
+    slot[].features = v
+    slot[].fitted = True
+
+
 # ---------------------------------------------------------------- random projections
 
 
@@ -1751,6 +1895,9 @@ def _export(slot: _Slot, call: _Call) raises:
     if slot[].kind() == XDECOMP_KIND_ENVELOPE:
         _export_mcd(slot, call)
         return
+    if slot[].kind() == XDECOMP_KIND_LDA:
+        _export_lda(slot, call)
+        return
     var block = call[].block
     if (call[].flags & MEMBER_BLOCK_BY_INDEX) != 0:
         block = _block_index(block)
@@ -1792,6 +1939,9 @@ def _import(slot: _Slot, call: _Call) raises:
         return
     if slot[].kind() == XDECOMP_KIND_ENVELOPE:
         _import_mcd(slot, call)
+        return
+    if slot[].kind() == XDECOMP_KIND_LDA:
+        _import_lda(slot, call)
         return
     if slot[].fitted or len(slot[].blocks) != 6:
         slot[].clear()
@@ -1872,6 +2022,11 @@ def _outputs(call: _Call) raises:
         if kind == XDECOMP_KIND_ENVELOPE:
             call[].out_cols = _mcd_width(asked_first, call[].out_dtype)
             return
+        if kind == XDECOMP_KIND_LDA:
+            if asked_first != MEMBER_OP_TRANSFORM:
+                member_unsupported("LatentDirichletAllocation", asked_first)
+            call[].out_cols = Int(words[1])
+            return
         if asked_first == MEMBER_OP_INVERSE_TRANSFORM:
             call[].out_cols = call[].x.cols
             return
@@ -1895,6 +2050,11 @@ def _outputs(call: _Call) raises:
         return
     if slot[].kind() == XDECOMP_KIND_ENVELOPE:
         call[].out_cols = _mcd_width(asked, call[].out_dtype)
+        return
+    if slot[].kind() == XDECOMP_KIND_LDA:
+        if asked != MEMBER_OP_TRANSFORM:
+            member_unsupported(_name(slot), asked)
+        call[].out_cols = slot[].count if slot[].fitted else Int(slot[].words[1])
         return
     if _is_kit(slot[].kind()):
         var held_words = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(slot[].words.unsafe_ptr()))
@@ -1933,6 +2093,8 @@ def _xdecomp_member(operation: Int, address: Int) raises -> Int:
         var kind = held[].kind()
         if kind == XDECOMP_KIND_FA:
             return mask | MEMBER_CAN_SCORE | MEMBER_CAN_SCORE_SAMPLES
+        if kind == XDECOMP_KIND_LDA:
+            return mask | MEMBER_CAN_SCORE
         if kind == XDECOMP_KIND_ENVELOPE:
             return (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_DECISION | MEMBER_CAN_SCORE_SAMPLES
                     | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT)
@@ -1975,6 +2137,9 @@ def _xdecomp_member(operation: Int, address: Int) raises -> Int:
                 wanted = XDECOMP_MBSPCA_PARAM_COUNT
             if call[].param_count != wanted:
                 raise Error("member ABI: a " + _kind_name(kind) + " member takes " + String(wanted) + " parameters")
+        elif source[0] == Float64(XDECOMP_KIND_LDA):
+            if call[].param_count != XDECOMP_LDA_PARAM_COUNT:
+                raise Error("member ABI: a LatentDirichletAllocation member takes fifteen parameters")
         elif source[0] == Float64(XDECOMP_KIND_ENVELOPE):
             if call[].param_count != XDECOMP_ENVELOPE_PARAM_COUNT:
                 raise Error("member ABI: an EllipticEnvelope member takes six parameters")
@@ -2011,6 +2176,8 @@ def _xdecomp_member(operation: Int, address: Int) raises -> Int:
             _fit_spca(slot, call)
         elif kind == XDECOMP_KIND_ENVELOPE:
             _fit_mcd(slot, call)
+        elif kind == XDECOMP_KIND_LDA:
+            _fit_lda(slot, call)
         else:
             _fit_ipca(slot, call)
     elif kind == XDECOMP_KIND_ENVELOPE and (operation == MEMBER_OP_PREDICT or operation == MEMBER_OP_DECISION
@@ -2018,6 +2185,10 @@ def _xdecomp_member(operation: Int, address: Int) raises -> Int:
         _query_mcd(slot, call, operation)
     elif kind == XDECOMP_KIND_ENVELOPE and (operation == MEMBER_OP_TRANSFORM
             or operation == MEMBER_OP_INVERSE_TRANSFORM):
+        member_unsupported(_name(slot), operation)
+    elif kind == XDECOMP_KIND_LDA and (operation == MEMBER_OP_TRANSFORM or operation == MEMBER_OP_SCORE):
+        _query_lda(slot, call, _LDA_TRANSFORM if operation == MEMBER_OP_TRANSFORM else _LDA_SCORE)
+    elif kind == XDECOMP_KIND_LDA and operation == MEMBER_OP_INVERSE_TRANSFORM:
         member_unsupported(_name(slot), operation)
     elif kind == XDECOMP_KIND_FA and operation == MEMBER_OP_TRANSFORM:
         _query_fa(slot, call, _FA_TRANSFORM)

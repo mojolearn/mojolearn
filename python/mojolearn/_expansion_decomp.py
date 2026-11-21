@@ -2371,6 +2371,9 @@ class LatentDirichletAllocation(_DeviceDoor, _Base):
                    "n_jobs", "verbose", "device")
     _device_door = "decomp"
 
+    #: The member ABI mark (family 32 XDecomp, kind 15; core/xdecomp_member.mojo).
+    _mojolearn_member = (32, 15)
+
     def __init__(self, n_components=10, *, doc_topic_prior=None, topic_word_prior=None, learning_method="batch",
                  learning_decay=0.7, learning_offset=10.0, max_iter=10, batch_size=128, evaluate_every=-1,
                  total_samples=1e6, perp_tol=1e-1, mean_change_tol=1e-3, max_doc_update_iter=100, n_jobs=None,
