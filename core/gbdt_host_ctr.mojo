@@ -28,6 +28,13 @@ measure the lookup.
 """
 from std.sys.compile import is_defined
 
+from gbdt.models.combination_map import (
+    CombF32Ptr,
+    TCombinationCtrs,
+    TCombinationMap,
+    TCombinationMember,
+    expand_combination_columns,
+)
 from gbdt.models.ctr_value_table import TCtrValueTable, expand_raw_columns
 from gbdt.models.tensor_ctr_apply import (
     TTensorCtrApplyTable,
@@ -69,6 +76,74 @@ def _take(ints: List[Int32], mut p: Int) raises -> Int:
     var v = Int(ints[p])
     p += 1
     return v
+
+
+def _combination_section(
+    ctr_ints: List[Int32],
+    int_at: Int,
+    ctr_floats: List[Float32],
+    float_at: Int,
+    counts: List[Int32],
+) raises -> TCombinationCtrs:
+    """The tree CTRs (feature combinations) of a saved model, from the tail
+    of the CTR arrays `core/host_archive_gbdt.mojo` writes after the simple
+    CTR tables (the layout is stated there). Model structure only: maps,
+    members, tuples and tables; no row is read."""
+    var p = int_at
+    var q = float_at
+    var n_maps = _take(ctr_ints, p)
+    var n_tables = _take(ctr_ints, p)
+    if n_maps < 1 or n_tables < 1:
+        raise Error("gbdt host ctr: an empty combination section")
+    var ctrs = TCombinationCtrs()
+    # driver-loop: over the model's combination maps and their members
+    for _ in range(n_maps):
+        var n_members = _take(ctr_ints, p)
+        var groups = _take(ctr_ints, p)
+        if n_members < 1 or groups < 1:
+            raise Error("gbdt host ctr: a combination map without members or groups")
+        var members = List[TCombinationMember]()
+        for _ in range(n_members):
+            var kind = _take(ctr_ints, p)
+            var feature = _take(ctr_ints, p)
+            var value = _take(ctr_ints, p)
+            var nan_side = _take(ctr_ints, p)
+            if q < 0 or q >= len(ctr_floats):
+                raise Error("gbdt host ctr: the combination border array is short")
+            members.append(
+                TCombinationMember(kind, feature, ctr_floats[q], value, nan_side)
+            )
+            q += 1
+        var words = groups * n_members
+        if p + words > len(ctr_ints):
+            raise Error("gbdt host ctr: a combination map's tuples run past the array")
+        var tuples = List[UInt32](capacity=words)
+        # one pass over the map's tuple words (model data, not rows)
+        for w in range(words):
+            tuples.append(UInt32(Int(ctr_ints[p + w])))
+        p += words
+        ctrs.maps.append(TCombinationMap(members^, tuples^))
+    # driver-loop: over the model's combination tables
+    for _ in range(n_tables):
+        if p + CTR_INTS_PER_TABLE > len(ctr_ints) or (
+            q + CTR_FLOATS_PER_TABLE > len(ctr_floats)
+        ):
+            raise Error("gbdt host ctr: the combination table arrays are short")
+        var classes = Int(ctr_ints[p + 4])
+        ctrs.tables.append(
+            TCtrValueTable(
+                Int(ctr_ints[p]), Int(ctr_ints[p + 1]), Int(ctr_ints[p + 2]),
+                ctr_floats[q], ctr_floats[q + 1], ctr_floats[q + 2],
+                ctr_floats[q + 3], Int(ctr_ints[p + 3]), classes,
+                Int(ctr_ints[p + 5]),
+                _counts(counts, Int(ctr_ints[p + 6]), Int(ctr_ints[p + 7]), classes),
+            )
+        )
+        p += CTR_INTS_PER_TABLE
+        q += CTR_FLOATS_PER_TABLE
+    if p != len(ctr_ints):
+        raise Error("gbdt host ctr: trailing values after the combination section")
+    return ctrs^
 
 
 def gbdt_host_expand_ctr(
@@ -121,7 +196,33 @@ def gbdt_host_expand_ctr(
                     _counts(counts, Int(ctr_ints[at + 6]), Int(ctr_ints[at + 7]), classes),
                 )
             )
-        return expand_raw_columns(tables, n_columns, x_raw, n_rows)
+        var simple_ints = n_ctr_tables * CTR_INTS_PER_TABLE
+        if len(ctr_ints) == simple_ints:
+            return expand_raw_columns(tables, n_columns, x_raw, n_rows)
+        # TREE CTRS (feature combinations): the model's last columns. The
+        # simple CTRs fill the columns before them; then every tree-CTR
+        # column is its table's value at the row's derived code
+        # (`expand_combination_columns`: one code pass per map and one value
+        # pass per table, rows across the workers; an unseen combination
+        # takes the prior).
+        var ctrs = _combination_section(
+            ctr_ints, simple_ints, ctr_floats,
+            n_ctr_tables * CTR_FLOATS_PER_TABLE, counts,
+        )
+        var n_base = n_columns - len(ctrs.tables)
+        if n_base < 1 or len(x_raw) % n_rows != 0:
+            raise Error("gbdt host ctr: the combination columns do not fit the model")
+        var n_raw = len(x_raw) // n_rows
+        var out = expand_raw_columns(tables, n_base, x_raw, n_rows)
+        if len(out) != n_base * n_rows:
+            raise Error("gbdt host ctr: the simple CTR expansion wrote the wrong column count")
+        out.resize(n_columns * n_rows, Float32(0.0))
+        expand_combination_columns(
+            ctrs, CombF32Ptr(unsafe_from_address=Int(x_raw.unsafe_ptr())),
+            n_rows, n_raw, False, n_columns,
+            CombF32Ptr(unsafe_from_address=Int(out.unsafe_ptr())),
+        )
+        return out^
 
     if len(tensor_floats) < n_tensor_tables * TENSOR_FLOATS_PER_TABLE:
         raise Error("gbdt host ctr: the tensor prior array is short")

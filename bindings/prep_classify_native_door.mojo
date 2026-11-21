@@ -45,13 +45,16 @@ from bindings.admitted_input_unpack import admit_weight_words
 from bindings.x_prep_native_inputs_door import _values, _rows_fields
 from bindings.arena_cache_release_door import arena_cache_release_operation
 from bindings.prep_classify_prog_door import ClsProg, NONE, f32_array, i32_array, f32_input
-from bindings.prep_classify_prog_run import cls_class_counts
+from bindings.prep_classify_prog_run import (
+    cls_class_counts, cls_copy_block, cls_binary_difference, cls_gnb_fit_program, cls_score_program, cls_tail_stages,
+    ClsScore, CLS_KIND_GNB, CLS_KIND_MNB, CLS_KIND_BNB, CLS_KIND_CNB, CLS_KIND_CAT, CLS_KIND_LDA, CLS_KIND_QDA,
+)
 from bindings.prep_classify_common_door import (
     XIn, CsrIn, PartialCodes, cls_builtins, cls_name, cls_repr, cls_str, cls_kind, cls_mode, cls_requested_mode, cls_entry,
     idn_int, classical_shared, blocked, check_fitted, check_width, cls_x2d, is_sparse, csr_input, csr_dense_x,
     float_list, given_priors, prior_sum, is_real, cls_float, col_stats, cs, class_stats, cls_stats, qda_cov, gram,
     nb_onepass, nb_counts, encode_y, partial_codes, stage_partial_codes, partial_refuse,
-    IDN_NB_CSR, XB,
+    IDN_NB_CSR, XB, idn_fam, IDN_CLASS_ONEPASS, gnb_refuse,
 )
 from bindings.prep_keys_unpack import (
     prep_keys,
@@ -70,25 +73,19 @@ comptime I64P = MutPointer[Int64, MutUntrackedOrigin]
 # x_prep stage codes (_expansion_prep._OPS).
 comptime OP_BINARIZE = 12
 comptime OP_MATMUL = 13
-comptime OP_ROW_SOFTMAX = 14
-comptime OP_ROW_ARGMAX = 15
 comptime OP_CENTER_ROWS = 17
 comptime OP_EIGH = 18
 comptime OP_GNB_EPS = 27
 comptime OP_GNB_PARAMS = 28
-comptime OP_GNB_JLL = 29
 comptime OP_CLASS_LOG_PRIOR = 30
 comptime OP_MNB_PARAMS = 31
 comptime OP_BNB_PARAMS = 32
 comptime OP_CNB_PARAMS = 33
-comptime OP_CAT_JLL = 35
 comptime OP_LDA_PREP = 36
 comptime OP_LDA_W = 37
 comptime OP_LDA_STAGE2 = 38
 comptime OP_LDA_STAGE3 = 39
 comptime OP_QDA_PREP = 41
-comptime OP_QDA_DEC = 42
-comptime OP_GATHER_COLS = 61
 comptime OP_LOG = 72
 comptime OP_DA_SHRINK = 81
 comptime OP_DA_POOL = 82
@@ -104,7 +101,6 @@ comptime OP_CAT_HFOLD = 134
 comptime OP_COLBLOCK = 141
 comptime OP_CENTERED_MATMUL = 178
 comptime OP_P2M_RGATHER = 204
-comptime OP_Q64_SOFTMAX = 213
 # CategoricalNB's block histograms hold at most this many words (_CAT_HIST_WORDS).
 comptime CAT_HIST_WORDS = 67108864
 # What a scoring program reads back.
@@ -164,23 +160,13 @@ def _put_weights(mut pr: ClsProg, w: PythonObject) raises -> Int:
 
 
 def _copy_block(mut pr: ClsProg, src: Int, rows: Int, cols: Int, context: PythonObject) raises -> Int:
-    """`_copy_block`: a bit-for-bit copy (gather_cols over every column)."""
-    var out = pr.alloc(rows * cols)
-    var index = List[Float64]()
-    for j in range(cols):  # driver-loop: over the feature indices (model structure)
-        index.append(Float64(j))
-    var io = pr.put_list(index, context)
-    pr.stage(OP_GATHER_COLS, rows * cols, src, rows, cols, io, cols, out)
-    return out
+    """`_copy_block`: a bit-for-bit copy (the typed `cls_copy_block`)."""
+    return cls_copy_block(pr.program, src, rows, cols)
 
 
 def _binary_difference(mut pr: ClsProg, src: Int, rows: Int, K: Int, d_cols: Int, out_buf: Int, context: PythonObject) raises:
     """`_binary_difference`: the second minus the first column (or row)."""
-    var w = pr.put_list(_pm_one(), context)
-    if rows == 1:
-        pr.stage(OP_MATMUL, d_cols, w, 0, 1, src, d_cols, 1, out_buf, d_cols, 2, NONE, NONE)
-    else:
-        pr.stage(OP_MATMUL, rows, src, K, 1, w, 1, 0, out_buf, 1, 2, NONE, NONE)
+    cls_binary_difference(pr.program, src, rows, K, d_cols, out_buf)
 
 
 def _set(fields: PythonObject, name: String, value: PythonObject) raises:
@@ -190,59 +176,93 @@ def _set(fields: PythonObject, name: String, value: PythonObject) raises:
 # ---------------------------------------------------------------- scoring
 
 
-@fieldwise_init
-struct Offs(Copyable, Movable):
-    var n: Int
-    var d: Int
-    var K: Int
-    var jll: Int
-    var lp: Int
-    var pp: Int
-    var am: Int
-    var p64: Bool
+struct ScoreAttrs(Movable):
+    """UNPACK of the fitted blocks one scoring program reads: the class's
+    kind word, its blocks as admitted float32 buffers in the order the typed
+    builder creates their records (None: absent), BernoulliNB's threshold
+    and CategoricalNB's category bound."""
+    var kind: Int
+    var a: PythonObject
+    var b: PythonObject
+    var c: PythonObject
+    var has_threshold: Bool
+    var threshold: Float64
+    var cmax: Int
+
+    def __init__(out self, kind: Int):
+        self.kind = kind
+        self.a = PythonObject(None)
+        self.b = PythonObject(None)
+        self.c = PythonObject(None)
+        self.has_threshold = False
+        self.threshold = 0.0
+        self.cmax = 0
+
+    def words(self, which: Int) raises -> Int:
+        if which == 0:
+            return Int(py=self.a.size)
+        if which == 1:
+            return 0 if self.b is None else Int(py=self.b.size)
+        return 0 if self.c is None else Int(py=self.c.size)
+
+    def own(self, mut pr: ClsProg):
+        """The records' owners, in the order `cls_jll_stages` created them."""
+        pr.own(self.a)
+        if self.b is not None:
+            pr.own(self.b)
+        if self.c is not None:
+            pr.own(self.c)
 
 
-def _jll_stages(mut pr: ClsProg, kind: String, fields: PythonObject, xo_in: Int, n: Int, d: Int, out_buf: Int,
-                context: PythonObject) raises:
-    """The subclass's `_jll_stages`: its joint log likelihood stages."""
+def _attr(fields: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
+    return f32_input(fields[PythonObject(name)], context)
+
+
+def _score_attrs(kind: String, fields: PythonObject, K: Int, context: PythonObject) raises -> ScoreAttrs:
+    """The subclass's fitted blocks for its `_jll_stages`, read once per
+    scoring operation."""
     var nk = prep_keys()
-    var K = _n_classes(fields)
-    var xo = xo_in
     if kind == "gnb":
-        var th = _put_attr(pr, fields, "theta_", context)
-        var va = _put_attr(pr, fields, "var_", context)
-        var co = _put_attr(pr, fields, "_const", context)
-        pr.stage(OP_GNB_JLL, n * K, xo, n, d, th, va, co, K, out_buf)
-    elif kind == "mnb":
-        var w = _put_attr(pr, fields, "feature_log_prob_", context)
-        var b = _put_attr(pr, fields, "class_log_prior_", context)
-        pr.stage(OP_MATMUL, n * K, xo, d, 1, w, 1, d, out_buf, K, d, b, NONE)
-    elif kind == "bnb":
+        var attrs = ScoreAttrs(CLS_KIND_GNB)
+        attrs.a = _attr(fields, "theta_", context)
+        attrs.b = _attr(fields, "var_", context)
+        attrs.c = _attr(fields, "_const", context)
+        return attrs^
+    if kind == "mnb":
+        var attrs = ScoreAttrs(CLS_KIND_MNB)
+        attrs.a = _attr(fields, "feature_log_prob_", context)
+        attrs.b = _attr(fields, "class_log_prior_", context)
+        return attrs^
+    if kind == "bnb":
+        var attrs = ScoreAttrs(CLS_KIND_BNB)
         if py_item(fields, nk[].k_binarize) is not None:
-            var thr = pr.put_scalar(cls_float(py_item(fields, nk[].k_binarize)), context)
-            var xb = pr.work(n * d)
-            pr.stage(OP_BINARIZE, n * d, xo, n * d, thr, xb)
-            xo = xb
-        var w = _put_attr(pr, fields, "_w", context)
-        var b = _put_attr(pr, fields, "_bias", context)
-        pr.stage(OP_MATMUL, n * K, xo, d, 1, w, 1, d, out_buf, K, d, b, NONE)
-    elif kind == "cnb":
-        var w = _put_attr(pr, fields, "feature_log_prob_", context)
-        var b = _put_attr(pr, fields, "class_log_prior_", context) if K == 1 else NONE
-        pr.stage(OP_MATMUL, n * K, xo, d, 1, w, 1, d, out_buf, K, d, b, NONE)
-    elif kind == "cat":
-        var fo = _put_attr(pr, fields, "_flp", context)
-        var co = _put_attr(pr, fields, "class_log_prior_", context)
-        pr.stage(OP_CAT_JLL, n * K, xo, n, d, fo, K, Int(py=py_item(fields, nk[].k__cmax)), co, out_buf)
-    elif kind == "lda":
-        var c = _put_attr(pr, fields, "_coef", context)
-        var b = _put_attr(pr, fields, "_inter", context)
-        pr.stage(OP_MATMUL, n * K, xo, d, 1, c, 1, d, out_buf, K, d, b, NONE)
-    else:
-        var m = _put_attr(pr, fields, "means_", context)
-        var r = _put_attr(pr, fields, "_rot", context)
-        var lc = _put_attr(pr, fields, "_logc", context)
-        pr.stage(OP_QDA_DEC, n * K, xo, n, d, m, r, lc, K, out_buf)
+            attrs.has_threshold = True
+            attrs.threshold = cls_float(py_item(fields, nk[].k_binarize))
+        attrs.a = _attr(fields, "_w", context)
+        attrs.b = _attr(fields, "_bias", context)
+        return attrs^
+    if kind == "cnb":
+        var attrs = ScoreAttrs(CLS_KIND_CNB)
+        attrs.a = _attr(fields, "feature_log_prob_", context)
+        if K == 1:
+            attrs.b = _attr(fields, "class_log_prior_", context)
+        return attrs^
+    if kind == "cat":
+        var attrs = ScoreAttrs(CLS_KIND_CAT)
+        attrs.a = _attr(fields, "_flp", context)
+        attrs.b = _attr(fields, "class_log_prior_", context)
+        attrs.cmax = Int(py=py_item(fields, nk[].k__cmax))
+        return attrs^
+    if kind == "lda":
+        var attrs = ScoreAttrs(CLS_KIND_LDA)
+        attrs.a = _attr(fields, "_coef", context)
+        attrs.b = _attr(fields, "_inter", context)
+        return attrs^
+    var attrs = ScoreAttrs(CLS_KIND_QDA)
+    attrs.a = _attr(fields, "means_", context)
+    attrs.b = _attr(fields, "_rot", context)
+    attrs.c = _attr(fields, "_logc", context)
+    return attrs^
 
 
 def _proba64_on(mode: PythonObject, context: PythonObject) raises -> Bool:
@@ -251,29 +271,14 @@ def _proba64_on(mode: PythonObject, context: PythonObject) raises -> Bool:
 
 
 def _tail(mut pr: ClsProg, fields: PythonObject, kind: String, mode: PythonObject, n: Int, d: Int, K: Int,
-          jll: Int, want: Int, chk: Int, context: PythonObject, pair: Bool = False) raises -> Offs:
-    """`_score_tail`: softmax and argmax stages, the run, the input refusals.
-    `pair`: QuadraticDiscriminantAnalysis' two-class decision function, the
-    second score minus the first (`_binary_difference`), staged over the
-    scores in this program (its words at `am`)."""
-    var lp = pr.alloc(n * K) if (want & W_LOG) != 0 else NONE
+          jll: Int, want: Int, chk: Int, context: PythonObject) raises -> ClsScore:
+    """`_score_tail` over scores the caller staged at `jll` (the CSR
+    route): the typed tail stages, the run, the input refusals."""
     var p64 = (want & W_PROBA) != 0 and _proba64_on(mode, context)
-    var pp = pr.alloc((2 if p64 else 1) * n * K) if (want & W_PROBA) != 0 else NONE
-    var am = pr.alloc(n) if (want & W_PREDICT) != 0 else NONE
-    if p64:
-        pr.stage(OP_Q64_SOFTMAX, n, jll, n, K, pp)
-        if lp != NONE:
-            pr.stage(OP_ROW_SOFTMAX, n, jll, n, K, lp, NONE)
-    elif lp != NONE or pp != NONE:
-        pr.stage(OP_ROW_SOFTMAX, n, jll, n, K, lp, pp)
-    if am != NONE:
-        pr.stage(OP_ROW_ARGMAX, n, jll, n, K, am)
-    if pair:
-        am = pr.alloc(n)
-        _binary_difference(pr, jll, n, K, 1, am, context)
+    var o = cls_tail_stages(pr.program, n, d, K, jll, want, p64, False, chk)
     pr.run(mode, context)
     _score_refusals(pr, fields, kind, d, chk)
-    return Offs(n, d, K, jll, lp, pp, am, p64)
+    return o
 
 
 def _score_refusals(pr: ClsProg, fields: PythonObject, kind: String, d: Int, st: Int) raises:
@@ -322,28 +327,36 @@ def _csr_route_ready(context: PythonObject) raises -> Bool:
 
 
 def _base_scores(mut pr: ClsProg, model: PythonObject, fields: PythonObject, kind: String, X: PythonObject,
-                 want: Int, csr: CsrIn, has_csr: Bool, context: PythonObject, pair: Bool = False) raises -> Offs:
-    """`_Classifier._scores` (`csr`: the IDENTICAL CSR scoring's fallback)."""
+                 want: Int, csr: CsrIn, has_csr: Bool, context: PythonObject, pair: Bool = False) raises -> ClsScore:
+    """`_Classifier._scores` (`csr`: the IDENTICAL CSR scoring's fallback).
+    UNPACK: X, the fitted blocks, the image's float64-probability word. The
+    program is the typed `cls_score_program`. `pair`:
+    QuadraticDiscriminantAnalysis' two-class decision function, the second
+    score minus the first, staged over the scores in this program."""
     var nk = prep_keys()
     var mode = py_item(fields, nk[].k_numeric_mode_)
-    var xo = csr_dense_x(pr, csr, mode, context) if has_csr else -1
+    var xo = csr_dense_x(pr, csr, mode, context) if has_csr else NONE
     var n = csr.n
     var d = csr.d
-    if xo == -1:
+    var x_owner = PythonObject(None)
+    if xo == NONE:
         var arr = cls_x2d(py_call(X.toarray) if has_csr else X, context)
         check_width(model, fields, arr.d)
         n = arr.n
         d = arr.d
-        xo = pr.put(arr.value)
+        x_owner = arr.value
     var K = _n_classes(fields)
-    var chk = NONE
-    if kind == "cat":
-        chk = pr.alloc(6 * d)
-        col_stats(pr, xo, n, d, chk, False)
-    # the joint log likelihood stays on the device unless it is the answer
-    var jll = pr.work(n * K) if want != 0 else pr.alloc(n * K)
-    _jll_stages(pr, kind, fields, xo, n, d, jll, context)
-    return _tail(pr, fields, kind, mode, n, d, K, jll, want, chk, context, pair)
+    var attrs = _score_attrs(kind, fields, K, context)
+    var p64 = (want & W_PROBA) != 0 and _proba64_on(mode, context)
+    var o = cls_score_program(pr.program, attrs.kind, xo, n, d, K, attrs.words(0), attrs.words(1), attrs.words(2),
+                              want, p64, pair, attrs.kind == CLS_KIND_CAT and blocked(), attrs.has_threshold,
+                              attrs.threshold, attrs.cmax)
+    if xo == NONE:
+        pr.own(x_owner)
+    attrs.own(pr)
+    pr.run(mode, context)
+    _score_refusals(pr, fields, kind, d, o.chk)
+    return o
 
 
 def _no_csr(context: PythonObject) raises -> CsrIn:
@@ -351,7 +364,7 @@ def _no_csr(context: PythonObject) raises -> CsrIn:
 
 
 def _scores(mut pr: ClsProg, model: PythonObject, fields: PythonObject, kind: String, X: PythonObject, want: Int,
-            context: PythonObject) raises -> Offs:
+            context: PythonObject) raises -> ClsScore:
     """`_scores` with `_DiscreteNB._scores`' CSR route."""
     var nk = prep_keys()
     check_fitted(model, fields)
@@ -479,14 +492,6 @@ def _decision_function(model: PythonObject, fields: PythonObject, kind: String, 
 # ---------------------------------------------------------------- GaussianNB
 
 
-def _gnb_refuse(fields: PythonObject, context: PythonObject) raises:
-    var nk = prep_keys()
-    var vs = py_item(fields, nk[].k_var_smoothing)
-    var b = cls_builtins()
-    if py_type(vs) is b.bool or not is_real(vs, context) or not (cls_float(vs) >= 0):
-        raise Error("The 'var_smoothing' parameter of GaussianNB must be a float in the range [0.0, inf). Got " + cls_repr(vs) + " instead.")
-
-
 def _gnb_stats(mut pr: ClsProg, mode: PythonObject, wo: Int, xo: Int, n: Int, d: Int, yo: Int, K: Int, cnt: Int,
                theta: Int, var_: Int, eps: Int, vs: Int, context: PythonObject) raises:
     """`_gnb_stats`: epsilon and the class counts, means and variances."""
@@ -510,44 +515,40 @@ def _gnb_publish(pr: ClsProg, fields: PythonObject, mode: PythonObject, K: Int, 
 
 
 def _gnb_fit(model: PythonObject, fields: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """GaussianNB.fit. UNPACK: X, the class codes, the weights, the checked
+    parameters, the image's mode words. RUN: the typed fit program
+    (`cls_gnb_fit_program`) through `ClsProg.run`. PACK: `_gnb_publish`."""
     var nk = prep_keys()
-    _gnb_refuse(fields, context)
+    gnb_refuse(fields, context)
     var arr = cls_x2d(args[0], context)
     var n = arr.n
     var d = arr.d
     var codes = encode_y(model, fields, args[1], n, context)
     var K = _n_classes(fields)
     var mode = cls_requested_mode(fields, context)
+    var var_smoothing = cls_float(py_item(fields, nk[].k_var_smoothing))
+    var w = _weights(args[2], n, context)
+    var has_priors = py_item(fields, nk[].k_priors) is not None
+    var priors = List[Float64]()
+    if has_priors:
+        priors = given_priors(py_item(fields, nk[].k_priors), K, "GaussianNB", True, context)
+    var is_blocked = blocked()
+    var onepass = is_blocked and (idn_fam(mode, context) & IDN_CLASS_ONEPASS) != 0
     var pr = ClsProg(model)
-    var xo = pr.put(arr.value)
-    var yo = pr.put_codes(codes)
-    var vs = pr.put_scalar(cls_float(py_item(fields, nk[].k_var_smoothing)), context)
-    var eps = pr.alloc(1)
-    var cnt = pr.alloc(K)
-    var theta = pr.alloc(K * d)
-    var var_ = pr.alloc(K * d)
-    var prior = pr.alloc(K)
-    var cst = pr.alloc(K)
-    var wo = _put_weights(pr, _weights(args[2], n, context))
-    _gnb_stats(pr, mode, wo, xo, n, d, yo, K, cnt, theta, var_, eps, vs, context)
-    var raw = _copy_block(pr, var_, K, d, context)
-    var given = NONE
-    if py_item(fields, nk[].k_priors) is not None:
-        given = pr.put_list(given_priors(py_item(fields, nk[].k_priors), K, "GaussianNB", True, context), context)
-    elif wo != NONE:
-        # class_count_ / class_count_.sum() over the weighted counts
-        given = pr.alloc(K)
-        var scratch = pr.alloc(d)
-        pr.stage(OP_LDA_PREP, 1, cnt, theta, K, d, n, given, scratch, 2, cnt)
-    pr.stage(OP_GNB_PARAMS, K, cnt, var_, K, d, n, eps, prior, cst, 1 if given != NONE else 0, given if given != NONE else 0)
+    var o = cls_gnb_fit_program(pr.program, n, d, K, w is not None, var_smoothing, has_priors, priors, is_blocked,
+                                onepass)
+    pr.own(arr.value)
+    pr.own(codes)
+    if w is not None:
+        pr.own(w)
     pr.run(mode, context)
-    _gnb_publish(pr, fields, mode, K, d, theta, var_, cnt, prior, eps, cst, raw, context)
+    _gnb_publish(pr, fields, mode, K, d, o.theta, o.var_, o.cnt, o.prior, o.eps, o.cst, o.raw, context)
     return model
 
 
 def _gnb_partial_fit(model: PythonObject, fields: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     var nk = prep_keys()
-    _gnb_refuse(fields, context)
+    gnb_refuse(fields, context)
     var arr = cls_x2d(args[0], context)
     var n = arr.n
     var d = arr.d

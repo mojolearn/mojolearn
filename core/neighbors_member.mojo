@@ -34,7 +34,9 @@ float32 column; predict writes float32 rows x 1. One output only (no
 MEMBER_CAN_MULTI_OUTPUT). The caller's UNPACK admits X and y (finite,
 shapes) as for every member; the member tests no word again. OUTPUTS with
 no state answers from the NEW words: predict_proba `call.classes` columns
-(the classifier), predict `max(1, y.cols)`. Score is not
+(the classifier), predict `max(1, y.cols)`; `out_dtype` int32 for the
+classifier's predict, float32 otherwise. MEMBER_CAN_TEST_ROWS is clear (no
+finite test in the RUN). Score is not
 published: the caller predicts and runs its own metric.
 
 Fitted-state blocks (MEMBER_OP_EXPORT / MEMBER_OP_IMPORT), in index order:
@@ -564,6 +566,20 @@ def _import(slot: _SlotPtr, call: _CallPtr) raises:
     slot[].fitted = True
 
 
+def _out_dtype(regressor: Bool, asked: Int) -> Int:
+    """The element type of `dst` for the asked operation: the classifier's
+    predict writes int32 codes, every other output float32."""
+    if not regressor and asked == MEMBER_OP_PREDICT:
+        return MEMBER_I32
+    return MEMBER_F32
+
+
+# MEMBER_CAN_TEST_ROWS: none: bit clear. The k-NN RUN makes no finite test of
+# X or y: `knn_check_metric_input` (neighbors/neighbors_knn_run.mojo:285)
+# refuses only negative X for jensenshannon, and the search entries return
+# no status. The caller's admission makes the finite scan.
+
+
 def _neighbors_member(operation: Int, address: Int) raises -> Int:
     var call = _CallPtr(unsafe_from_address=address)
     comptime _REGRESSOR = MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
@@ -602,11 +618,13 @@ def _neighbors_member(operation: Int, address: Int) raises -> Int:
                 raise Error("member ABI: KNeighborsRegressor has no predict_proba")
             call[].classes = 0
         call[].out_cols = call[].classes if call[].flags == MEMBER_OP_PREDICT_PROBA else max(1, call[].y.cols)
+        call[].out_dtype = _out_dtype(words[0] == 1.0, call[].flags)
         return 0
     var slot = _SlotPtr(unsafe_from_address=_lookup(call[].state, False))
     if operation == MEMBER_OP_OUTPUTS:
         call[].classes = 0 if slot[].regressor else (slot[].classes if slot[].fitted else call[].classes)
         call[].out_cols = call[].classes if call[].flags == MEMBER_OP_PREDICT_PROBA else 1
+        call[].out_dtype = _out_dtype(slot[].regressor, call[].flags)
         return 0
     if operation == MEMBER_OP_FIT:
         _fit(slot, call)
