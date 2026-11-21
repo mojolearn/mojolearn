@@ -58,7 +58,8 @@ device-home view, no sparse X (the estimator's CSR route stays its door's).
 
 `call.row_index` (`MEMBER_CAN_ROW_INDEX`, answered only on a route that can
 gather: NB_ROUTE_RANGES and NB_ROUTE_TAKE_ROWS with device scratch): host
-int64 row numbers; X is then the WHOLE base and its rows are taken on the
+int64 row numbers, or int32 (a meta-estimator's draws: widened once per call
+in chunks across the host's cores, `nb_wide_index`); X is then the WHOLE base and its rows are taken on the
 device (the door's DeviceRows gather); y and the weights are the base's
 columns, read through the index. `call.scope` / `call.pin`
 (`MEMBER_CAN_SCOPE`, answered on a route with NB_ROUTE_DEV_STORE and
@@ -114,6 +115,7 @@ from core.member_families import MEMBER_FAMILY_NAIVE_BAYES
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
+from core.host_parallel import host_widen_index_i64
 
 comptime NB_KIND_GAUSSIAN = 0
 comptime NB_KIND_MULTINOMIAL = 1  # the scoring program's CLS_KIND_MNB
@@ -360,6 +362,21 @@ struct _Rows(ImplicitlyCopyable, Movable):
         self.index = index
 
 
+def nb_wide_index(call: _Call, mut wide: List[Int64]) -> Bool:
+    """A dense host int32 row index (a meta-estimator's draws, bagging's)
+    widened into `wide` as the int64 row numbers every kind reads, the
+    call's view pointed at it: one pass in chunks across the host's cores.
+    True when the caller must restore `call.row_index` after the operation;
+    any other index is left for `_rows` to read or refuse."""
+    var index = call[].row_index
+    if index.rows <= 0 or index.cols != 1 or not index.dense_host(MEMBER_I32):
+        return False
+    wide = List[Int64](unsafe_uninit_length=index.rows)
+    host_widen_index_i64(index.data, Int(wide.unsafe_ptr()), index.rows)
+    call[].row_index = MemberMatrix(Int(wide.unsafe_ptr()), index.rows, 1, MEMBER_I64)
+    return True
+
+
 def _rows(call: _Call, estimator: String) raises -> _Rows:
     if call[].column_index.rows > 0:
         raise Error("TypeError: a " + estimator + " member reads every column (no column index)")
@@ -370,7 +387,7 @@ def _rows(call: _Call, estimator: String) raises -> _Rows:
     if call[].row_index.rows == 0:
         return _Rows(base_rows, d, base_rows, 0)
     if not call[].row_index.dense_host(MEMBER_I64) or call[].row_index.cols != 1:
-        raise Error("TypeError: a " + estimator + " member reads its row index as one host int64 column")
+        raise Error("TypeError: a " + estimator + " member reads its row index as one host int32 or int64 column")
     if not _route_gathers(call[].route.flags):
         raise Error("TypeError: a " + estimator + " member takes a row index only on a device that gathers rows")
     return _Rows(call[].row_index.rows, d, base_rows, call[].row_index.data)
@@ -873,19 +890,29 @@ def _naive_bayes_member(operation: Int, address: Int) raises -> Int:
         _outputs(call)
         return 0
     var slot = _Slot(unsafe_from_address=_lookup(call[].state, False))
-    if operation == MEMBER_OP_FIT:
-        if slot[].kind() == NB_KIND_GAUSSIAN:
-            _fit_gaussian(slot, call)
+    # A host int32 row index (a meta-estimator's draws): widened once to the
+    # int64 row numbers every kind reads, the caller's view restored after.
+    var given = call[].row_index
+    var wide = List[Int64]()
+    var widened = nb_wide_index(call, wide)
+    try:
+        if operation == MEMBER_OP_FIT:
+            if slot[].kind() == NB_KIND_GAUSSIAN:
+                _fit_gaussian(slot, call)
+            else:
+                _fit_discrete(slot, call)
+        elif operation == MEMBER_OP_PREDICT or operation == MEMBER_OP_PREDICT_PROBA:
+            _score(slot, call, operation)
+        elif operation == MEMBER_OP_EXPORT:
+            _export(slot, call)
+        elif operation == MEMBER_OP_IMPORT:
+            _import(slot, call)
         else:
-            _fit_discrete(slot, call)
-    elif operation == MEMBER_OP_PREDICT or operation == MEMBER_OP_PREDICT_PROBA:
-        _score(slot, call, operation)
-    elif operation == MEMBER_OP_EXPORT:
-        _export(slot, call)
-    elif operation == MEMBER_OP_IMPORT:
-        _import(slot, call)
-    else:
-        member_unsupported(_kind_name(slot[].kind()), operation)
+            member_unsupported(_kind_name(slot[].kind()), operation)
+    finally:
+        if widened:
+            call[].row_index = given
+    _ = wide^
     return 0
 
 
