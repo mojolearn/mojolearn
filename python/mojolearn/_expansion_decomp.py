@@ -3226,13 +3226,18 @@ class AlternatingLeastSquares(_Base):
     _mojolearn_native_public = True
 
     _parameters = ("factors", "regularization", "alpha", "iterations", "use_cg", "cg_steps",
-                   "calculate_training_loss", "random_state", "numeric_mode")
+                   "calculate_training_loss", "random_state", "numeric_mode", "device")
+
+    # Takes `device=`: the x_decomp entries of fit, recommend and similar_items
+    # are the estimator's (bindings/als_native_door.mojo).
+    _mojolearn_device = True
 
     def __init__(self, factors=100, regularization=0.01, alpha=1.0, iterations=15, use_cg=False,
-                 calculate_training_loss=False, random_state=None, numeric_mode=None, cg_steps=3):
+                 calculate_training_loss=False, random_state=None, numeric_mode=None, cg_steps=3, device=None):
         self.factors, self.regularization, self.alpha, self.iterations = factors, regularization, alpha, iterations
         self.use_cg, self.calculate_training_loss = use_cg, calculate_training_loss
         self.random_state, self.numeric_mode, self.cg_steps = random_state, numeric_mode, cg_steps
+        self.device = device
 
     # fit, recommend and similar_items are one call each into the native
     # AlternatingLeastSquares owner (bindings/als_native_door.mojo).
