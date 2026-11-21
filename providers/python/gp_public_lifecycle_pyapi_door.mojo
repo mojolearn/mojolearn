@@ -449,9 +449,9 @@ def gp_public_operation(model: PythonObject, operation: Int, args: PythonObject,
     prepared.binding(gp_route_item(routed, GP_ROUTE_BINDING))
     if double_binding and prepared[1] is None:
         prepared.set(1, gp_route_item(routed, GP_ROUTE_BASE))
-    if operation == GP_OPN_FAMILY_GP_GPR_SCORE:
+    if scoring:
         # A CPU route in a GPU installation scores on the CPU metrics image:
-        # its R^2 program factory rides behind (binding, X, y). Every other
+        # its program factory rides behind the public arguments. Every other
         # route holds none and scores on the process's metrics table.
         var cpu_metrics = gp_route_item(routed, GP_ROUTE_METRICS)
         if cpu_metrics is not None:
