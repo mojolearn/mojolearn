@@ -185,6 +185,7 @@ def _connect_cpu_device(context, with_solver):
     scope.pop("classical_metric_vendor", None)
     # device="cpu" is identical only: both mode words name the CPU identical tables.
     scope.update(vendor="cpu", classical_metrics={"identical": x_metrics, "fast": x_metrics},
+                 labels_base_binding=False,  # the label steps of this scope run the host kernels (label door: the context decides)
                  labels_bindings={"identical": {"_mojolearn_metrics": r2}, "fast": {"_mojolearn_metrics": r2}})
     context.update(xl_cpu_bindings={"identical": linear}, cd_solver_cpu=cd, xl_cpu_scope=scope)
 

@@ -647,6 +647,26 @@ struct EtHostForest(ForestImage):
     def strict_release(handle: Int) raises:
         forest_strict_release_host_native[False](handle)
 
+    @staticmethod
+    def session_open(x: Int, rows: Int, cols: Int, row_major: Bool, share_tables: Bool) raises -> Int:
+        raise Error("RuntimeError: the extra-trees host binding has no forest data session")
+
+    @staticmethod
+    def session_close(handle: Int) raises:
+        raise Error("RuntimeError: the extra-trees host binding has no forest data session")
+
+    @staticmethod
+    def fit_session(classifier: Bool, args: ForestFitArgs) raises -> Int:
+        raise Error("RuntimeError: the extra-trees host binding has no forest data session")
+
+    @staticmethod
+    def ada_open(handle: Int, w: Int, y: Int, cw: Int, n: Int, k: Int) raises:
+        raise Error("RuntimeError: the extra-trees host binding has no AdaBoost device rounds")
+
+    @staticmethod
+    def fit_ada_round(classifier: Bool, args: ForestFitArgs) raises -> Int:
+        raise Error("RuntimeError: the extra-trees host binding has no AdaBoost device rounds")
+
 
 def et_host_forest_entry_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
     ff: Int, nf: Int, result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:

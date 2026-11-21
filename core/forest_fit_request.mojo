@@ -8,7 +8,8 @@ and a float view of equal length (with a flag byte per position for a value
 that has no integer or no float reading, so a read of a missing view refuses
 as the former `Int(py=)` / `Float64(py=)` did), the split criterion and the
 trailing words (row weights, global tree-ID start, OOB / score / importance
-outputs, the largest weight, a DART session and class).
+outputs, the largest weight, a DART or data session and class, an AdaBoost
+round's words).
 
 THE ABI (`FOREST_ENTRY_ABI`, one `abi("C")` entry per forest image,
 published in `core/forest_entry_table.mojo`; descriptor shape of
@@ -46,6 +47,28 @@ published in `core/forest_entry_table.mojo`; descriptor shape of
   XF_STRICT_PREPARE   as XF_RESIDENT_PREPARE without `ordered` (host images).
   XF_STRICT_PREDICT   as XF_RESIDENT_PREDICT.
   XF_STRICT_RELEASE   ints [handle].
+  XF_SESSION_OPEN     addrs [x]; ints [rows, cols, row_major, share_tables]:
+                      X (float32) kept in the image for the member fits of
+                      one ensemble (XF_CAP_SESSION); returns the session
+                      handle. A non-finite cell is refused in the image's
+                      words.
+  XF_SESSION_CLOSE    ints [handle].
+  XF_FIT_SESSION      addrs XF_FIT_WORDS with `session`; a member fit on the
+                      session's X. Classifier (shape bit 0): y = int32 class
+                      codes, `weights` = float32 row weights (required).
+                      Regressor: x = int32 row ids of the session's X
+                      (params[0] of them, repeats allowed), y = their float32
+                      targets. Returns an export handle as XF_FIT.
+  XF_ADA_OPEN         addrs [w (float64 start weights), y (int32 codes when
+                      k >= 2, float32 targets when k = 0), cw (float32
+                      class_weight rows or 0)]; ints [session, n, k]: an
+                      AdaBoost fit's state kept on the session's device
+                      (XF_CAP_ADA).
+  XF_FIT_ADA_ROUND    addrs XF_FIT_WORDS with `session` and the round words
+                      (`stats`: float64[4] = [status, alpha, error, total];
+                      `rate`, `last`; the regressor's `round_seed`, `round`,
+                      `loss`): one SAMME (classifier) or AdaBoost.R2 round
+                      on the device. Returns the member's export handle.
 
 The caller owns every buffer until the synchronous call returns.
 """
@@ -70,7 +93,12 @@ comptime XF_RESIDENT_RELEASE = 13
 comptime XF_STRICT_PREPARE = 14
 comptime XF_STRICT_PREDICT = 15
 comptime XF_STRICT_RELEASE = 16
-comptime XF_OP_COUNT = 17
+comptime XF_SESSION_OPEN = 17
+comptime XF_SESSION_CLOSE = 18
+comptime XF_FIT_SESSION = 19
+comptime XF_ADA_OPEN = 20
+comptime XF_FIT_ADA_ROUND = 21
+comptime XF_OP_COUNT = 22
 
 #: capability bits (XF_CAPS)
 comptime XF_CAP_DEVICE_SCAN = 1      # the fits refuse a non-finite X cell on the device
@@ -79,6 +107,8 @@ comptime XF_CAP_FUSED_LABELS = 4      # IDENTICAL resident fused labels (T38)
 comptime XF_CAP_RESIDENT_LABELS = 8   # XF_RESIDENT_LABELS is served
 comptime XF_CAP_STRICT = 16           # the host strict snapshot (XF_STRICT_*)
 comptime XF_CAP_DART = 32             # XF_FIT_DART is served
+comptime XF_CAP_SESSION = 64          # XF_SESSION_* and XF_FIT_SESSION are served
+comptime XF_CAP_ADA = 128             # XF_ADA_OPEN and XF_FIT_ADA_ROUND are served
 
 #: XF_FIT request words: addrs[k]
 comptime XF_W_X = 0
@@ -94,7 +124,14 @@ comptime XF_W_IMPORTANCE = 9
 comptime XF_W_WEIGHT_MAX = 10  # the Float64 bits of the largest weight
 comptime XF_W_SESSION = 11
 comptime XF_W_CLS = 12
-comptime XF_FIT_WORDS = 13
+#: the AdaBoost round words (XF_FIT_ADA_ROUND; 0 in every other fit)
+comptime XF_W_STATS = 13       # float64[4]: [status, alpha, error, total]
+comptime XF_W_RATE = 14        # the Float64 bits of the learning rate
+comptime XF_W_LAST = 15        # 1: the fit's last round
+comptime XF_W_ROUND_SEED = 16  # AdaBoost.R2: the ensemble's seed,
+comptime XF_W_ROUND = 17       # the round (the draw's stream)
+comptime XF_W_LOSS = 18        # and the loss code
+comptime XF_FIT_WORDS = 19
 
 #: the params slot holding the fit's tree count in both layouts (the RF
 #: list of `_RandomForestBase._fit_params` and the ET list of
@@ -130,6 +167,12 @@ struct ForestFitArgs(Movable, Sized):
     var weight_max: Float64
     var session: Int
     var cls: Int
+    var stats: Int
+    var rate: Float64
+    var last: Int
+    var round_seed: Int
+    var round: Int
+    var loss: Int
 
     def __init__(out self, x: Int, y: Int, var ints: List[Int], var floats: List[Float64], var bad: List[UInt8],
                  criterion: Int) raises:
@@ -149,6 +192,12 @@ struct ForestFitArgs(Movable, Sized):
         self.weight_max = 0.0
         self.session = 0
         self.cls = 0
+        self.stats = 0
+        self.rate = 0.0
+        self.last = 0
+        self.round_seed = 0
+        self.round = 0
+        self.loss = 0
 
     def __len__(self) -> Int:
         return len(self.ints)
@@ -206,6 +255,12 @@ def forest_fit_words(args: ForestFitArgs, shape: Int) -> List[Int]:
     words[XF_W_WEIGHT_MAX] = forest_f64_word(args.weight_max)
     words[XF_W_SESSION] = args.session
     words[XF_W_CLS] = args.cls
+    words[XF_W_STATS] = args.stats
+    words[XF_W_RATE] = forest_f64_word(args.rate)
+    words[XF_W_LAST] = args.last
+    words[XF_W_ROUND_SEED] = args.round_seed
+    words[XF_W_ROUND] = args.round
+    words[XF_W_LOSS] = args.loss
     return words^
 
 
@@ -234,6 +289,12 @@ def forest_fit_args_at(aa: Int, na: Int, pp: Int, np: Int, ff: Int) raises -> Fo
     args.weight_max = forest_word_f64(a[XF_W_WEIGHT_MAX])
     args.session = a[XF_W_SESSION]
     args.cls = a[XF_W_CLS]
+    args.stats = a[XF_W_STATS]
+    args.rate = forest_word_f64(a[XF_W_RATE])
+    args.last = a[XF_W_LAST]
+    args.round_seed = a[XF_W_ROUND_SEED]
+    args.round = a[XF_W_ROUND]
+    args.loss = a[XF_W_LOSS]
     return args^
 
 

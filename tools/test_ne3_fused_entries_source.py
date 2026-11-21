@@ -26,7 +26,7 @@ def test_extra_operations_are_appended_and_generated():
     for path, expected in generated(ROOT).items():
         assert _read(path) == expected, path
     schema = _read('x_neighbors/descriptor_schema.mojo')
-    assert 'comptime XN_OPERATION_COUNT = 87' in schema
+    assert 'comptime XN_OPERATION_COUNT = 91' in schema
     for name, counts, aux, _, _ in NEW:
         assert f'if name == "{name}":\n        return {78 + aux}\n' in schema
 
@@ -67,7 +67,11 @@ def test_fused_doors_keep_the_op_chain_fallback():
     assert 'request.distance_labels(connection.driver, code_address, euclidean)' in local
     assert 'inputs.request.score_labels(connection.driver, code_address)' in local
     semi = _read('bindings/neighbors_semi_native_door.mojo')
-    assert '_lp_dense_available(binding)' in semi and 'xn_semi_row_normalize_request(' in semi
+    # LabelPropagation: the fused query when the image carries it, the operation chain otherwise
+    # (typed RUN, neighbors/label_propagation_run.mojo).
+    assert '_lp_dense_available(binding)' in semi and 'lp_query_run(connection.driver, request)' in semi
+    chain = _read('neighbors/label_propagation_run.mojo')
+    assert 'if lp_query_fused(request):' in chain and 'xn_semi_row_normalize_request(' in chain
     cluster = _read('bindings/mcls_cluster_door.mojo')
     assert '"homogeneity_completeness_v_measure", False' in cluster and '"v_measure_score"' in cluster
     for path in ('bindings/_mojolearn_metrics.mojo', 'bindings/_mojolearn_metrics_host.mojo'):
@@ -86,8 +90,8 @@ def test_svc_score_compares_codes():
     # The door switches on leaf codes (lane bw2-svm): read its by-name form.
     svc = plain('bindings/svc_kernel_native_door.mojo', _read('bindings/svc_kernel_native_door.mojo'))
     body = svc[svc.index('if operation == "family_svc_svc_score":'):]
-    body = body[:body.index('if operation == "family_svc_svr_fit":')]
-    assert '_svc_predict_codes(' in body and 'svc_decode' not in body
+    body = body[:body.index('if operation == "family_svc_svr_predict":')]
+    assert 'SVC_QUERY_CODES' in body and 'svc_decode' not in body
 
 
 def test_host_lp_resident_loop_runs_the_door_ops():

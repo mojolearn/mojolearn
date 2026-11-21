@@ -11,7 +11,10 @@ check (bindings/mode_metadata_native_door.mojo, operation `device_admit`)
 reads this table and refuses every other class in words, so nothing ever runs
 on a device its caller did not name.
 
-The table is GENERATED, one row per class, when the class is defined:
+The table is GENERATED from the classes themselves, one row per class: at
+the class statement for a `NumericModeMixin` subclass, and for every other
+class that takes `device=` by `record_loaded` in the package's connection
+pass (no base class is needed to be in the table):
   * a class that declares `_mojolearn_device = True` runs on both devices
     (its family's door resolves through the route: the estimator's own entry
     route, or the shared estimator door once every device question of the
@@ -54,6 +57,42 @@ def answer(cls):
 def record(cls):
     # glue: one row per estimator class, at its class statement
     CPU_CLASSES[cls] = answer(cls)
+
+
+_SWEPT = set()
+
+
+def record_loaded(package):
+    """Give a row to EVERY class of the loaded package modules that takes
+    `device=`, whatever its base: a class that declares `_mojolearn_device`,
+    or an estimator (`get_params`) whose constructor signature names
+    `device`. The class statement hook of `NumericModeMixin` records its own
+    subclasses; the prep `_PrepBase`, the decomp `_Base`, the sequence
+    models and every other base without that hook get their row here, from
+    the class itself. Called by the connection pass after the constructor
+    installers (the installed signature is the one read); a class is looked
+    at once."""
+    # glue: class connection, once per class, never product execution
+    import inspect
+    import sys
+    prefix = package + "."
+    for name, module in tuple(sys.modules.items()):  # glue: the loaded package modules
+        if module is None or not name.startswith(prefix) or name.startswith(prefix + "tests"):
+            continue
+        for cls in tuple(vars(module).values()):  # glue: the classes a module defines
+            if not isinstance(cls, type) or cls in _SWEPT or cls.__module__ != name:
+                continue
+            _SWEPT.add(cls)
+            if cls in CPU_CLASSES:
+                continue
+            takes = getattr(cls, "_mojolearn_device", False) is True
+            if not takes and cls.__init__ is not object.__init__ and hasattr(cls, "get_params"):
+                try:
+                    takes = "device" in inspect.signature(cls.__init__).parameters
+                except (TypeError, ValueError):
+                    takes = False
+            if takes:
+                record(cls)
 
 
 def connect_context(context):

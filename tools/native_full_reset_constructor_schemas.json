@@ -14447,56 +14447,63 @@
           "value": {
             "parameter": "n_inducing"
           },
-          "source": "python/mojolearn/_expansion_neighbors.py:2331"
+          "source": "python/mojolearn/_expansion_neighbors.py:2121"
         },
         {
           "field": "inducing_points",
           "value": {
             "parameter": "inducing_points"
           },
-          "source": "python/mojolearn/_expansion_neighbors.py:2331"
+          "source": "python/mojolearn/_expansion_neighbors.py:2121"
         },
         {
           "field": "kernel_variance",
           "value": {
             "parameter": "kernel_variance"
           },
-          "source": "python/mojolearn/_expansion_neighbors.py:2331"
+          "source": "python/mojolearn/_expansion_neighbors.py:2121"
         },
         {
           "field": "lengthscale",
           "value": {
             "parameter": "lengthscale"
           },
-          "source": "python/mojolearn/_expansion_neighbors.py:2331"
+          "source": "python/mojolearn/_expansion_neighbors.py:2121"
         },
         {
           "field": "noise_variance",
           "value": {
             "parameter": "noise_variance"
           },
-          "source": "python/mojolearn/_expansion_neighbors.py:2331"
+          "source": "python/mojolearn/_expansion_neighbors.py:2121"
         },
         {
           "field": "jitter",
           "value": {
             "parameter": "jitter"
           },
-          "source": "python/mojolearn/_expansion_neighbors.py:2331"
+          "source": "python/mojolearn/_expansion_neighbors.py:2121"
         },
         {
           "field": "numeric_mode",
           "value": {
             "parameter": "numeric_mode"
           },
-          "source": "python/mojolearn/_expansion_neighbors.py:2331"
+          "source": "python/mojolearn/_expansion_neighbors.py:2121"
+        },
+        {
+          "field": "device",
+          "value": {
+            "parameter": "device"
+          },
+          "source": "python/mojolearn/_expansion_neighbors.py:2121"
         }
       ],
       "trace": [
-        "python/mojolearn/_expansion_neighbors.py:2331"
+        "python/mojolearn/_expansion_neighbors.py:2121"
       ],
-      "constructor": "python/mojolearn/_expansion_neighbors.py:2331",
-      "signature_source": "def __init__(self, n_inducing=32, *, inducing_points=None, kernel_variance=1.0, lengthscale=1.0, noise_variance=1.0, jitter=1e-06, numeric_mode=None)",
+      "constructor": "python/mojolearn/_expansion_neighbors.py:2121",
+      "signature_source": "def __init__(self, n_inducing=32, *, inducing_points=None, kernel_variance=1.0, lengthscale=1.0, noise_variance=1.0, jitter=1e-06, numeric_mode=None, device=None)",
       "parameters": [
         "n_inducing",
         "inducing_points",
@@ -14504,9 +14511,10 @@
         "lengthscale",
         "noise_variance",
         "jitter",
-        "numeric_mode"
+        "numeric_mode",
+        "device"
       ],
-      "constructor_ast_sha256": "99f342df75fb554aa48ea5074622ef9265caabf92ce6feb277a82f6998deb5a8",
+      "constructor_ast_sha256": "f1dfeb53aa4e356105e96ae46ecbee19b778cd0158b0d49a34495e6e9dd8fc7c",
       "field_order": [
         "n_inducing",
         "inducing_points",
@@ -14514,6 +14522,7 @@
         "lengthscale",
         "noise_variance",
         "jitter",
+        "device",
         "numeric_mode"
       ],
       "final_fields": {
@@ -14535,6 +14544,9 @@
         "jitter": {
           "parameter": "jitter"
         },
+        "device": {
+          "parameter": "device"
+        },
         "numeric_mode": {
           "parameter": "numeric_mode"
         }
@@ -14546,7 +14558,8 @@
         "lengthscale": "1.0",
         "noise_variance": "1.0",
         "jitter": "1e-06",
-        "numeric_mode": "None"
+        "numeric_mode": "None",
+        "device": "None"
       },
       "numeric_mode_injection": false,
       "module": "mojolearn._expansion_neighbors",
@@ -14555,8 +14568,8 @@
         {
           "path": "python/mojolearn/_expansion_neighbors.py",
           "name": "__init__",
-          "line": 2331,
-          "ast_sha256": "99f342df75fb554aa48ea5074622ef9265caabf92ce6feb277a82f6998deb5a8"
+          "line": 2121,
+          "ast_sha256": "f1dfeb53aa4e356105e96ae46ecbee19b778cd0158b0d49a34495e6e9dd8fc7c"
         }
       ],
       "constructor_ancestry": [

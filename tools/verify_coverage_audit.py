@@ -1446,8 +1446,8 @@ _ARM_DECISIONS_20261024 = [
     "`resample_gather_narrow` out (RESAMPLE_GPU_GATHER is fast or the opt-in C11 define, the narrow gather fast), so "
     "the entries return their not-taken flag and no identical lane can move; the resample fit's arithmetic carries "
     "`coverage-core-resample_impl`. The patch and manifest row are removed; the entries are fault n/a.",
-    "- `coverage-svm-scale_gamma` (fixed arm, new fault): svc reaches `scale_gamma_limbs` (bindings/svc_kernel_native_door.mojo "
-    "`_resolve_gamma`), but flipping limb 0's lowest bit is 2^-149 of S1, below the once-rounded gamma. The fault now "
+    "- `coverage-svm-scale_gamma` (fixed arm, new fault): svc reaches `scale_gamma_limbs` (svm/svc_kernel_fit_run.mojo "
+    "`svc_gamma_run`), but flipping limb 0's lowest bit is 2^-149 of S1, below the once-rounded gamma. The fault now "
     "feeds a wrong cell to the exact sums (cell 0 replaced by cell 1 on the device, counted twice on the host). "
     "The re-proof was MISSED again: svc uses the package default gamma='auto'. New lane `svc-gamma-scale` "
     "(SVC and SVR with gamma='scale', the path above) is the arm's expected lane; the arm builds the svm bindings only.",
@@ -2333,8 +2333,7 @@ SABOTAGE_NA_ENTRIES = {
         "x_trees_tree_shap_cache_release", "causal_lm_session_create", "causal_lm_session_close",
         "forest_release_gpu", "moe_weights_free", "x_trees_dart_open", "x_trees_dart_close",
         "x_trees_tree_shap_cache_release",
-        "msel_alloc", "msel_free", "x_prep_dev_free", "seq_tensor_alloc",
-        "rf_data_session_open", "rf_data_session_close")},
+        "msel_alloc", "msel_free", "x_prep_dev_free", "seq_tensor_alloc")},
     **{e: _METADATA for e in (
         "byte_lm_arithmetic_suffix", "byte_lm_host_arithmetic_suffix", "byte_lm_profile", "byte_lm_step_glue_arm",
         "cholesky_profile_jitter", "bpe_n_vocab", "bpe_max_token_bytes", "x_prep_dev_live",

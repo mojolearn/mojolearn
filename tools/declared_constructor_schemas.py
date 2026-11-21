@@ -8,7 +8,9 @@ Static analysis only: nothing is imported. A constructor qualifies when its
 resolved `__init__` body is a docstring plus assignments whose targets are
 `self.<field>` (or a tuple of them) and whose values are constructor parameter
 names or literal constants (or a matching tuple of them). Anything else
-(calls, super(), arithmetic, conditionals, *args/**kwargs) keeps the class out.
+(calls, super(), arithmetic, conditionals, *args/**kwargs) keeps the class out,
+except the one device check `if device is not None: self._device_set(device)`,
+which the compiled constructor performs itself.
 None of these families is a NumericModeMixin, so there is no wrapper rule.
 
   python3 tools/declared_constructor_schemas.py            # print the schema literal
@@ -74,29 +76,18 @@ def _bind_super(call, base_init, value_of):
     return bound
 
 
-# THE DEVICE ADMISSION (2026-11-21, lane fx-wave-tooltests). A declared class
-# that takes `device=` may check it before writing fields, in the form the
-# decomposition `_DeviceDoor` classes use. The native constructor that replaces
-# the source one does the same check itself before any field is written (the
-# connector's `device_admit`, bindings/full_reset_constructor_native_door.mojo
-# `_construct`), so this one statement is not a write event. Anything else
-# conditional still keeps the class out.
-_DEVICE_ADMISSION = "if device is not None:\n    self._device_set(device)"
-# A device mixin's `set_params` that checks `device` and then hands every
-# keyword to the family's declared setter (`_DeviceDoor.set_params`): the
-# family setter still owns the assignment.
-_DEVICE_SETTER = ("if 'device' in params:\n    self._device_set(params['device'])\n"
-                  "return super().set_params(**params)")
-
-
-def _device_setter(cls):
-    method = _defines(cls, "set_params")
-    if method is None:
+def _device_admission(statement, params):
+    """True for exactly `if device is not None: self._device_set(device)`
+    where `device` is a constructor parameter passed through unchanged."""
+    if not isinstance(statement, ast.If) or statement.orelse or len(statement.body) != 1:
         return False
-    body = list(method.body)
-    if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant):
-        body = body[1:]
-    return "\n".join(ast.unparse(n) for n in body) == _DEVICE_SETTER
+    if isinstance(params, dict):
+        if params.get("device") != ("parameter", "device"):
+            return False
+    elif "device" not in params:
+        return False
+    return (ast.unparse(statement.test) == "device is not None"
+            and ast.unparse(statement.body[0]) == "self._device_set(device)")
 
 
 def _events(init, params, base=None):
@@ -128,8 +119,6 @@ def _events(init, params, base=None):
     if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant) and isinstance(body[0].value.value, str):
         body = body[1:]
     for statement in body:
-        if isinstance(statement, ast.If) and "device" in params and ast.unparse(statement) == _DEVICE_ADMISSION:
-            continue
         call = statement.value if isinstance(statement, ast.Expr) else None
         if (isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute) and call.func.attr == "__init__"
                 and isinstance(call.func.value, ast.Call) and isinstance(call.func.value.func, ast.Name)
@@ -145,6 +134,14 @@ def _events(init, params, base=None):
             if inner is None:
                 return None, reason
             events.extend(inner)
+            continue
+        if _device_admission(statement, params):
+            # `if device is not None: self._device_set(device)`: the source
+            # form of the device check. The compiled constructor makes that
+            # check itself for a plan that names `device` (shared words,
+            # before any field is written, route dropped:
+            # bindings/full_reset_constructor_native_door.mojo `_construct`),
+            # so the statement adds no write event.
             continue
         if not isinstance(statement, ast.Assign) or len(statement.targets) != 1:
             return None, f"line {statement.lineno}: not a single field assignment"
@@ -165,6 +162,12 @@ def _events(init, params, base=None):
     return tuple(events), None
 
 
+# Mixins whose `set_params` checks one keyword in compiled code and then calls
+# `super().set_params(**params)`: the class's setter is still the declared
+# assignment of its family base, so its constructor keeps its row.
+SETTER_MIXINS = ("_DeviceDoor",)
+
+
 def _candidates(index):
     for modname, basename in FAMILIES:
         mod = index.mod(modname)
@@ -175,7 +178,8 @@ def _candidates(index):
             if not target or target[0] != "class":
                 continue
             cls = target[1]
-            owner = next((c for c in index.mro(cls) if _defines(c, "set_params") and not _device_setter(c)), None)
+            owner = next((c for c in index.mro(cls)
+                          if _defines(c, "set_params") and c.name not in SETTER_MIXINS), None)
             if owner is not base or _defines(owner, "set_params") is not setter:
                 continue
             yield modname, name, cls

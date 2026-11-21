@@ -226,12 +226,14 @@ from checks.native_tests.gbdt_feature_freq_experimental import register as regis
 from checks.native_tests.gbdt_host_archive_text import register as register_gbdt_host_archive_text
 # lane tests-to-mojo-neural (2026-11-15)
 from checks.native_tests.generator_draw import register as register_generator_draw
+from checks.native_tests.lm_corpus_prepare import register as register_lm_corpus_prepare
 from checks.native_tests.training_small_mlp_relations import register as register_training_small_mlp_relations
 # lane checks-register (2026-11-16): the standalone main() checks no CI job ran, now registered
 from checks.native_tests.affinity_preference_plan import register as register_affinity_preference_plan
 from checks.native_tests.agglo_contract import register as register_agglo_contract
 from checks.native_tests.agglo_state import register as register_agglo_state
 from checks.native_tests.transport_frame import register as register_transport_frame
+from checks.native_tests.member_abi import register as register_member_abi
 from checks.native_tests.base_helpers_entry import register as register_base_helpers_entry
 from checks.native_tests.boundary_layout import register as register_boundary_layout
 from checks.native_tests.byte_lm_entry import register as register_byte_lm_entry
@@ -262,6 +264,7 @@ from checks.native_tests.kmeans_variants_contract import register as register_km
 from checks.native_tests.kmeans_variants_lease import register as register_kmeans_variants_lease
 from checks.native_tests.parallel_byte_session import register as register_parallel_byte_session
 from checks.native_tests.cross_vendor_run import register as register_cross_vendor_run
+from checks.native_tests.cross_vendor_loopback import register as register_cross_vendor_loopback
 from checks.native_tests.kpca_contract import register as register_kpca_contract
 from checks.native_tests.kpca_state import register as register_kpca_state
 from checks.native_tests.label_score_keys_stress import register as register_label_score_keys_stress
@@ -554,6 +557,7 @@ from checks.native_tests.hierarchy_linkage_host_check import register as registe
 from checks.native_tests.holtwinters_hw_estimate_check import register as register_holtwinters_hw_estimate_check
 from checks.native_tests.holtwinters_hw_predict_ptr_check import register as register_holtwinters_hw_predict_ptr_check
 from checks.native_tests.ivf_ivf_large_k_check import register as register_ivf_ivf_large_k_check
+from checks.native_tests.ivf_ops_table import register as register_ivf_ops_table
 from checks.native_tests.kde_reused_workspace_check import register as register_kde_reused_workspace_check
 from checks.native_tests.kernel_methods_nystroem_basis_sort_check import register as register_kernel_methods_nystroem_basis_sort_check
 from checks.native_tests.mamba_mamba3_increment_tile_check import register as register_mamba_mamba3_increment_tile_check
@@ -604,6 +608,7 @@ from checks.native_tests.xtrees_zero_cover_check import register as register_xtr
 from checks.native_tests.tsa_hw_route import register as register_tsa_hw_route
 from checks.native_tests.tsa_arima_route import register as register_tsa_arima_route
 from checks.native_tests.causal_owner import register as register_causal_owner
+from checks.native_tests.small_mlp_run import register as register_small_mlp_run
 
 def all_checks() -> List[Check]:
     var checks = List[Check]()
@@ -815,12 +820,14 @@ def all_checks() -> List[Check]:
     checks.append(register_gbdt_host_archive_text())
     # lane tests-to-mojo-neural (2026-11-15)
     checks.append(register_generator_draw())
+    checks.append(register_lm_corpus_prepare())
     checks.append(register_training_small_mlp_relations())
     # lane checks-register (2026-11-16)
     checks.append(register_affinity_preference_plan())
     checks.append(register_agglo_contract())
     checks.append(register_agglo_state())
     checks.append(register_transport_frame())
+    checks.append(register_member_abi())
     checks.append(register_base_helpers_entry())
     checks.append(register_boundary_layout())
     checks.append(register_byte_lm_entry())
@@ -851,6 +858,7 @@ def all_checks() -> List[Check]:
     checks.append(register_kmeans_variants_lease())
     checks.append(register_parallel_byte_session())
     checks.append(register_cross_vendor_run())
+    checks.append(register_cross_vendor_loopback())
     checks.append(register_kpca_contract())
     checks.append(register_kpca_state())
     checks.append(register_label_score_keys_stress())
@@ -882,6 +890,7 @@ def all_checks() -> List[Check]:
     checks.append(register_neighbors_local_run())
     checks.append(register_neighbors_semi_run())
     checks.append(register_neighbors_split_run())
+    checks.append(register_ivf_ops_table())
     checks.append(register_neural_entry())
     checks.append(register_nmf_contract())
     checks.append(register_nmf_state())
@@ -1190,4 +1199,5 @@ def all_checks() -> List[Check]:
     checks.append(register_tsa_hw_route())
     checks.append(register_tsa_arima_route())
     checks.append(register_causal_owner())
+    checks.append(register_small_mlp_run())
     return checks^

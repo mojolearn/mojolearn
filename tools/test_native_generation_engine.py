@@ -103,7 +103,7 @@ def test_mamba_engine_keeps_local_forward_route_report_and_counter_semantics():
     public=text('bindings/causal_lm_public_door.mojo')
     # f6e85dffcb: the route is decided once per forward and the resident verdict is passed down
     # dw-causal (2026-11-21): the route decision reads the model owner's typed words
-    assert 'return _run_engine(mods, words, model, ids, state, verdict == 0)' in public
+    assert 'return _run_engine(mods, words, held, model, ids, state, verdict == 0)' in public
     assert 'if not causal_engine_candidate(words):' in public
     # 1ce1204524 (row N199): the head writes straight into the caller's result Array
     assert 'owner.native.forward_to(address, length, out_address, owner.native.batch * length * owner.native.vocab)' in public
@@ -111,12 +111,16 @@ def test_mamba_engine_keeps_local_forward_route_report_and_counter_semantics():
     original=public.split('def _run_snapshot(')[1].split('\ndef ')[0]
     # the original per-layer route (stateful, not a step); fe44134875 dropped the deleted mamba_workspace argument
     # dw-neural-models (2026-11-21): the snapshot's typed layer route replaces layer_entry / layer_vendor
-    assert '_causal_layer_run_prepared(mods, snapshot.layer_route, snapshot.entries, snapshot.width, b, l,' in original
-    assert 'x, state.layers[i], False)' in original
+    # dw-causal (2026-11-21): the owner's snapshot with this operation's block captures and profile words
+    assert '_causal_layer_run_bound(mods, snapshot.layer_route, snapshot.entries, snapshot.width, b, l,' in original
+    # dw-causal continuation 3: the layer list is read once; a layer with current owner words takes the owned run
+    assert 'x, st, False,' in original and 'var layer_states = state.layers' in original
+    assert '_causal_layer_run_owned(mods, snapshot.layer_route, snapshot.entries, snapshot.width, b, l,' in original
+    assert 'call.blocks[i], call.profiles[i], call.changed[i], False)' in original
     assert 'addresses[layer.output_slot]' in native
     assert 'layer.addresses[15] = _generation_zero_workspace(layer.report_workspace, layer.report_size)' in native
     assert 'layer.cached + length if kind == 1 else result' in native
     provider=text('providers/python/generation_metadata_pyapi_door.mojo')
     assert 'native_layer.floats = [layer.words.dt_low, layer.words.dt_high]' in provider
     assert '"absolute_position" if self.native.layers[i].kind == 1 else "buffered_tokens"' in provider
-    assert 'py_setitem(self.snapshot.layers[i].block, "h_last_", report)' in provider
+    assert 'py_setitem(self.call.blocks[i], "h_last_", report)' in provider

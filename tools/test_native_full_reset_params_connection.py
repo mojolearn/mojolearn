@@ -123,7 +123,8 @@ def test_install_preserves_78_signatures_defaults_and_one_call_boundary():
             assert current.parameters[name].kind is parameter.kind
             assert current.parameters[name].default is parameter.default
         plan = ns['_CONTEXT']['plans'][cls]
-        assert plan['device_admit'] is bool(added)
+        # Checked for every class that takes the parameter (also one that names it itself, default None).
+        assert plan['device_admit'] is (bool(added) or signature.parameters['device'].default is None)
         if added:
             assert current.parameters['device'].kind is inspect.Parameter.KEYWORD_ONLY
             assert current.parameters['device'].default is None and plan['defaults']['device'] is None

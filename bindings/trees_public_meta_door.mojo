@@ -107,7 +107,8 @@ from bindings.base_helpers_released_unpack import (
     base_check_indices_i64, base_bincount_i64, base_reduce_stat_int, base_equal_elements,
 )
 from core.linear_entry_table import LinearEntryKey
-from core.linear_multi_calls import ridge_multi_ref, ridge_multi_available, rm_col_sums, rm_means_finish, rm_center, rm_fit, rm_predict
+from core.linear_multi_calls import ridge_multi_ref, ridge_multi_available, rm_predict
+from bindings.trees_meta_ridge_run import RidgeMultiFit, ridge_multi_fit_run
 from bindings.py_optional import py_or_none
 from xtrees.glue_calls import (
     xt_accumulate, xt_accumulate_cols, xt_accumulate_onehot, xt_scatter, xt_device_folds, xt_transpose_f64,
@@ -136,6 +137,42 @@ comptime _I64P = MutPointer[Int64, MutUntrackedOrigin]
 
 
 comptime _META_KIND_SLOT = "trees_meta_kind_v1"
+
+
+# ------------------------------------------------------------ member calls
+# THE member call of the meta door (lane dw-trees-boost, 2026-11-21). A member
+# of a meta-estimator is an estimator of any connected family: its fit and
+# its predictions are that family's public operations, reached through the
+# preprocessing door's estimator call. Every such call of this file passes
+# through `meta_member_call` (21 sites: 17 method calls, 4 internal float32
+# predicts), so the one shared member interface (core/, the shared-files
+# lane: a member's device, its run context and its typed operations) replaces
+# these three bodies and nothing else here. Until it exists a member runs
+# where ITS OWN stored `device` says, which is why no meta class carries the
+# `_mojolearn_device` marker: a device="cpu" meta-estimator must not report
+# cpu while its members run on the GPU.
+# Nothing is added to a call: each overload is the former call expression.
+
+
+@always_inline
+def meta_member_call(member: PythonObject, method: String, args: PythonObject,
+                     context: PythonObject) raises -> PythonObject:
+    """`member.<method>(*args)` of a connected estimator."""
+    return prep_estimator_call(member, method, args, context)
+
+
+@always_inline
+def meta_member_call(member: PythonObject, method: String, args: PythonObject, context: PythonObject,
+                     keywords: PythonObject) raises -> PythonObject:
+    """`member.<method>(*args, **keywords)` (the member fits)."""
+    return prep_estimator_call(member, method, args, context, keywords)
+
+
+@always_inline
+def meta_member_call(member: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """A regressor member's internal float32 predict
+    (`prep_estimator_predict_internal`)."""
+    return prep_estimator_predict_internal(member, args, context)
 
 
 def meta_kind(model: PythonObject, context: PythonObject) raises -> String:
@@ -484,7 +521,7 @@ def _member_label_codes(member: PythonObject, Xa: PythonObject, context: PythonO
     Every other member predicts through its compiled plan as before."""
     if _forest_classifier_member(member, context):
         return _member_codes(member, Xa, context)
-    return _i32_vec(prep_estimator_call(member, "predict", Python.tuple(Xa), context), "codes", context)
+    return _i32_vec(meta_member_call(member, "predict", Python.tuple(Xa), context), "codes", context)
 
 
 def _fit_member(member: PythonObject, X: PythonObject, y: PythonObject, weights: PythonObject,
@@ -493,7 +530,7 @@ def _fit_member(member: PythonObject, X: PythonObject, y: PythonObject, weights:
     if weights is not None:
         var nk = trees_keys()
         py_setitem(keywords, nk[].k_sample_weight, weights)
-    _ = prep_estimator_call(member, "fit", Python.tuple(X, y), context, keywords)
+    _ = meta_member_call(member, "fit", Python.tuple(X, y), context, keywords)
 
 
 def _takes_weights(est: PythonObject, context: PythonObject) raises -> Bool:
@@ -815,7 +852,7 @@ def _voting_soft(model: PythonObject, xt: PythonObject, Xa: PythonObject, contex
     var floats: List[Float64] = [Float64(n), Float64(k)]
     for i in range(len(members)):  # driver-loop: over members
         var e = members[i]
-        var xa = admit_f32(prep_estimator_call(e, "predict_proba", Python.tuple(Xa), context), 2,
+        var xa = admit_f32(meta_member_call(e, "predict_proba", Python.tuple(Xa), context), 2,
                            "sub-estimator output", context, finite=False)
         var cols = _sub_cols(e, context)
         keep.append(xa.array)
@@ -887,12 +924,12 @@ def _voting_transform(model: PythonObject, X: PythonObject, classifier: Bool, co
         var e = members[j]
         if soft:
             var p = _zeros(n * k, context)
-            _acc_cols_w(xt, p, prep_estimator_call(e, "predict_proba", Python.tuple(Xa), context), _sub_cols(e, context), n, k, 1.0, context)
+            _acc_cols_w(xt, p, meta_member_call(e, "predict_proba", Python.tuple(Xa), context), _sub_cols(e, context), n, k, 1.0, context)
             var blk = admit_f32(trees_reshape(p, Python.tuple(n, k), context), 2, "p", context, finite=False)
             _ = _place(xt, out, n, width, blk.view(), rows, j * k)
             _ = blk^
         else:
-            var blk = _out2d(prep_estimator_predict_internal(e, Python.tuple(Xa), context), n, context)
+            var blk = _out2d(meta_member_call(e, Python.tuple(Xa), context), n, context)
             _ = _place(xt, out, n, width, blk.view(), rows, j)
             _ = blk^
     return trees_reshape(out, Python.tuple(n, width), context)
@@ -921,7 +958,7 @@ def _voting_regress(model: PythonObject, X: PythonObject, context: PythonObject)
         raise Error("weights has " + String(len(w)) + " entries, there are " + String(m) + " estimators")
     var acc = _zeros(n, context)
     for i in range(m):  # driver-loop: over members
-        _acc_w(xt, acc, prep_estimator_predict_internal(members[i], Python.tuple(Xa), context), n, Float64(py=w[i]), context)
+        _acc_w(xt, acc, meta_member_call(members[i], Python.tuple(Xa), context), n, Float64(py=w[i]), context)
     _scale(xt, acc, _fsum(w, context))
     return acc
 
@@ -955,8 +992,8 @@ def _stack_method(model: PythonObject, est: PythonObject, classifier: Bool, cont
 def _stack_out(xt: PythonObject, est: PythonObject, method: String, Xs: PythonObject, n: Int, binary: Bool,
                context: PythonObject) raises -> PythonObject:
     """`_StackingBase._out`: a binary predict_proba keeps its second column."""
-    var out = (prep_estimator_predict_internal(est, Python.tuple(Xs), context) if method == "predict"
-               else prep_estimator_call(est, method, Python.tuple(Xs), context))
+    var out = (meta_member_call(est, Python.tuple(Xs), context) if method == "predict"
+               else meta_member_call(est, method, Python.tuple(Xs), context))
     if method == "predict_proba" and binary:
         var p = _out2d(out, n, context)
         var col = _one_col(xt, p.view(), 1, context)
@@ -1157,7 +1194,7 @@ def _stacking_predict(model: PythonObject, X: PythonObject, classifier: Bool, co
     var final_ = _attr(model, nk[].k_final_estimator_, PythonObject(None))
     var Xm = _stacking_meta32(model, X, context)
     if not classifier:
-        return prep_estimator_call(final_, "predict", Python.tuple(Xm), context)
+        return meta_member_call(final_, "predict", Python.tuple(Xm), context)
     return trees_decode_labels(_attr(model, nk[].k_classes_, PythonObject(None)), _member_label_codes(final_, Xm, context),
                                context)
 
@@ -1178,7 +1215,7 @@ def _stacking_predict_proba(model: PythonObject, X: PythonObject, context: Pytho
     var n = _rows(Xm)
     var xt = _xt(py_fields(model), context)
     var acc = _class_zero(xt, n * k, context)
-    _acc_cols_w(xt, acc, prep_estimator_call(final_, "predict_proba", Python.tuple(Xm), context), _sub_cols(final_, context), n, k, 1.0, context)
+    _acc_cols_w(xt, acc, meta_member_call(final_, "predict_proba", Python.tuple(Xm), context), _sub_cols(final_, context), n, k, 1.0, context)
     return trees_reshape(acc, Python.tuple(n, k), context)
 
 
@@ -1207,7 +1244,7 @@ def _ridge_multi_entry(model: PythonObject, est: PythonObject, sample_weight: Py
     var plain = py_type(est) is ridge
     if plain:
         # Ridge checks its parameters at fit; this route skips Ridge.fit.
-        _ = prep_estimator_call(est, "validate_params", Python.tuple(), context)
+        _ = meta_member_call(est, "validate_params", Python.tuple(), context)
     if sample_weight is not None or not plain or _truthy(_attr(est, nk[].k_normalize, PythonObject(False))):
         return PythonObject(None)
     # The one-program ridge runs on the process's device table. A member
@@ -1239,58 +1276,51 @@ def _multioutput_ridge_fit(model: PythonObject, table: PythonObject, Xa: PythonO
                            context: PythonObject) raises -> PythonObject:
     """`MultiOutputRegressor._fit_ridge_multi`: every target in one ridge
     program (glm/impl/ridge_multi.mojo)."""
+    # UNPACK: the dimensions, the member's two parameters, the image's entry
+    # and the buffers RUN writes (allocated here, published in PACK).
     var n = _rows(Xa)
     var d = _cols(Xa)
     var m = _cols(Ya)
     var nk = trees_keys()
     var est = _attr(model, nk[].k_estimator, PythonObject(None))
     var intercept = _truthy(_attr(est, nk[].k_fit_intercept, PythonObject(True)))
+    # the member's alpha as Python's float() reads it
+    var alpha = Float64(py=py_call_typed(trees_builtins().float, _attr(est, nk[].k_alpha, PythonObject(1.0))))
     var key = ridge_multi_ref(_estimators_key(table))  # resolved once for the fit
-    var xm: PythonObject
-    var work_x = Xa
-    if intercept:
-        # `_column_means(b, Xa, None)` (`_means`: lm_col_sums, lm_means_finish)
-        # then `_center` (lm_center), through the ridge multi table.
-        var sums = _zeros(d, context)
-        var xa_addr = trees_address(Xa)
-        var sums_addr = trees_address(sums)
-        with GILReleased(Python()):  # the former ridge exports released it (lane perf-audit-20261111)
-            rm_col_sums(key, xa_addr, sums_addr, n, d)
-        var m64 = _zeros(d, context)
-        xm = admitted_vector(d, "<f4", context)
-        var m64_addr = trees_address(m64)
-        var xm_addr = trees_address(xm)
-        with GILReleased(Python()):
-            rm_means_finish(key, sums_addr, m64_addr, xm_addr, d, n, False, 0.0)
-        _ = m64  # keep the store alive through the native call above
-        _ = sums  # keep the store alive through the native calls above
-        work_x = admitted_array(Python.tuple(n, d), "<f4", context)
-        var work_addr = trees_address(work_x)
-        with GILReleased(Python()):
-            rm_center(key, xa_addr, xm_addr, work_addr, n, d)
-        _ = work_x  # keep the store alive through the native call above
-        _ = Xa  # keep the store alive through the native calls above
-    else:
-        xm = admitted_vector(d, "<f4", context)
+    var request = RidgeMultiFit(trees_address(Xa), trees_address(Ya), n, d, m, alpha, intercept)
+    var xm = admitted_vector(d, "<f4", context)
     var coef = admitted_vector(m * d, "<f4", context)
     var ymean = admitted_vector(m, "<f4", context)
     var icpt32 = admitted_vector(m, "<f4", context)
-    # UNPACK: the member's alpha as Python's float() reads it.
-    var alpha = Float64(py=py_call_typed(trees_builtins().float, _attr(est, nk[].k_alpha, PythonObject(1.0))))
-    var fit_x = trees_address(work_x)
-    var fit_y = trees_address(Ya)
-    var fit_coef = trees_address(coef)
-    var fit_ymean = trees_address(ymean)
-    var fit_xm = trees_address(xm) if intercept else 0
-    var fit_icpt = trees_address(icpt32) if intercept else 0
-    with GILReleased(Python()):  # the device ridge program over every target (data-sized)
-        rm_fit(key, fit_x, fit_y, fit_coef, fit_ymean, n, d, m, alpha, intercept, fit_xm, fit_icpt)
-    _ = xm  # keep the store alive through the native call above
-    _ = Ya  # keep the store alive through the native call above
-    _ = icpt32  # keep the Python object alive through the native call above
-    _ = ymean  # keep the Python object alive through the native call above
-    _ = coef  # keep the Python object alive through the native call above
-    _ = work_x  # keep the Python object alive through the native call above
+    request.x_mean = trees_address(xm)
+    request.coef = trees_address(coef)
+    request.y_mean = trees_address(ymean)
+    request.icpt = trees_address(icpt32)
+    # the centering scratch, only with an intercept (`_column_means`, `_center`)
+    var sums = PythonObject(None)
+    var m64 = PythonObject(None)
+    var work_x = PythonObject(None)
+    if intercept:
+        sums = _zeros(d, context)
+        m64 = _zeros(d, context)
+        work_x = admitted_array(Python.tuple(n, d), "<f4", context)
+        request.sums = trees_address(sums)
+        request.means64 = trees_address(m64)
+        request.work = trees_address(work_x)
+    # RUN: the image's four programs on plain values, the GIL released once
+    # for all of them (it was released and retaken around each)
+    with GILReleased(Python()):
+        ridge_multi_fit_run(key, request)
+    _ = sums  # keep the stores alive through the native calls above
+    _ = m64
+    _ = work_x
+    _ = xm
+    _ = Xa
+    _ = Ya
+    _ = icpt32
+    _ = ymean
+    _ = coef
+    # PACK: one fitted ridge per output column and the batched state
     var fitted = Python.list()
     var ym = _F32P(unsafe_from_address=trees_address(ymean))
     _ = ymean  # keep the Python object alive through the native call above
@@ -1384,7 +1414,7 @@ def _multioutput_regressor_predict(model: PythonObject, X: PythonObject, context
     # member per call. The widening is exact, so the placed values (and
     # bits) are the same.
     for j in range(m):  # driver-loop: over members
-        var blk = _out2d(prep_estimator_predict_internal(members[j], Python.tuple(Xa), context), n, context)
+        var blk = _out2d(meta_member_call(members[j], Python.tuple(Xa), context), n, context)
         _ = _place(xt, out, n, m, blk.view(), rows, j)
         _ = blk^
     return trees_reshape(out, Python.tuple(n, m), context)
@@ -1616,7 +1646,7 @@ def _multioutput_classifier_proba(model: PythonObject, X: PythonObject, context:
     for j in range(len(members)):  # driver-loop: over members
         var k = len(classes[j])
         var acc = _zeros(n * k, context)
-        _acc_cols_w(xt, acc, prep_estimator_call(members[j], "predict_proba", Python.tuple(Xa), context), _sub_cols(members[j], context), n, k, 1.0, context)
+        _acc_cols_w(xt, acc, meta_member_call(members[j], "predict_proba", Python.tuple(Xa), context), _sub_cols(members[j], context), n, k, 1.0, context)
         _ = py_call(out.append, trees_reshape(acc, Python.tuple(n, k), context))
     return out
 
@@ -1784,7 +1814,7 @@ def _proba_positive(xt: PythonObject, e: PythonObject, Xa: PythonObject, context
     """`OneVsRestClassifier._proba_positive`: predict_proba's column for
     code 1 (zeros when the member never saw it), float32 (n,)."""
     var n = _rows(Xa)
-    var p = _out2d(prep_estimator_call(e, "predict_proba", Python.tuple(Xa), context), n, context)
+    var p = _out2d(meta_member_call(e, "predict_proba", Python.tuple(Xa), context), n, context)
     var at = _index_of_one(e, context)
     if at < 0:
         _ = p^
@@ -1798,7 +1828,7 @@ def _positive(xt: PythonObject, e: PythonObject, Xa: PythonObject, context: Pyth
     """`OneVsRestClassifier._positive`: decision_function when the member
     has one, else predict_proba's column for code 1."""
     if prep_estimator_has(e, "decision_function", context):
-        return _f32_array(prep_estimator_call(e, "decision_function", Python.tuple(Xa), context), 1, "score", context)
+        return _f32_array(meta_member_call(e, "decision_function", Python.tuple(Xa), context), 1, "score", context)
     return _proba_positive(xt, e, Xa, context)
 
 
@@ -1820,7 +1850,7 @@ def _ovr_fused(xt: PythonObject, members: PythonObject, Xa: PythonObject, n: Int
         var bc: Int
         var at: Int
         if decision and prep_estimator_has(e, "decision_function", context):
-            var score = _f32_array(prep_estimator_call(e, "decision_function", Python.tuple(Xa), context), 1, "score", context)
+            var score = _f32_array(meta_member_call(e, "decision_function", Python.tuple(Xa), context), 1, "score", context)
             var blk = _out2d(score, n, context)
             keep.append(blk.array)
             addrs.append(blk.address)
@@ -1828,7 +1858,7 @@ def _ovr_fused(xt: PythonObject, members: PythonObject, Xa: PythonObject, n: Int
             at = 0
             _ = blk^
         else:
-            var p = _out2d(prep_estimator_call(e, "predict_proba", Python.tuple(Xa), context), n, context)
+            var p = _out2d(meta_member_call(e, "predict_proba", Python.tuple(Xa), context), n, context)
             at = _index_of_one(e, context)
             keep.append(p.array)
             addrs.append(p.address)
@@ -1926,9 +1956,9 @@ def _cal_scores(model: PythonObject, xt: PythonObject, e: PythonObject, Xa: Pyth
     var k = len(_attr(model, nk[].k_classes_, Python.list()))
     var out: PythonObject
     if prep_estimator_has(e, "decision_function", context):
-        out = prep_estimator_call(e, "decision_function", Python.tuple(Xa), context)
+        out = meta_member_call(e, "decision_function", Python.tuple(Xa), context)
     else:
-        out = prep_estimator_call(e, "predict_proba", Python.tuple(Xa), context)
+        out = meta_member_call(e, "predict_proba", Python.tuple(Xa), context)
     var blk = _out2d(out, n, context)
     var glue = _xr(xt)
     if k == 2:
@@ -2376,9 +2406,9 @@ def _calibrated_fused(model: PythonObject, xt: PythonObject, pairs: PythonObject
         var cals = pairs[i][1]
         var out: PythonObject
         if prep_estimator_has(e, "decision_function", context):
-            out = prep_estimator_call(e, "decision_function", Python.tuple(Xa), context)
+            out = meta_member_call(e, "decision_function", Python.tuple(Xa), context)
         else:
-            out = prep_estimator_call(e, "predict_proba", Python.tuple(Xa), context)
+            out = meta_member_call(e, "predict_proba", Python.tuple(Xa), context)
         var blk = _out2d(out, n, context)
         keep.append(blk.array)
         var at = 0

@@ -231,8 +231,10 @@ def test_meta_owners_do_not_call_member_methods_or_python_constructors():
     assert 'native_estimator_defaults' in source
     # The entry is connected when the family loads (b6aa87e41d), not in __init__.
     assert 'native_estimator_entry=selection._NATIVE' in (PACKAGE / '_families.py').read_text()
-    linear = (ROOT / 'bindings/x_linear_native_door.mojo').read_text()
+    # The cross-validated linear fits' UNPACK (lane dw-xlinear): the splitter runs natively there.
+    linear = (ROOT / 'bindings/x_linear_cv_unpack.mojo').read_text()
     assert 'py_call(cv.split' not in linear
+    assert 'py_call(cv.split' not in (ROOT / 'bindings/x_linear_native_door.mojo').read_text()
     assert 'prep_native_split(cv, x_source, y_source, context)' in linear
 
 

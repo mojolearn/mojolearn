@@ -7,6 +7,10 @@ refused values, the refusal wording, plan fields and buffer contents.
 Independent fixtures run across the host's cores.
 """
 from core.host_parallel import host_parallelize
+from neighbors.knn_imputer_run import (
+    ImpFitRequest, ImpTransformRequest, imp_selects, imp_selected_columns, imp_result_columns, imp_i32_words,
+    imp_scratch_f32,
+)
 from neighbors.neighbors_local_run import (
     LOF_RESULT_SCORES, LOF_RESULT_DECISION, LOF_RESULT_LABELS, LOF_AUTO_OFFSET,
     local_check_n_neighbors, local_copy_f32, local_write_i32,
@@ -18,7 +22,7 @@ from neighbors.neighbors_local_run import (
     imp_colmiss_length, imp_read_count, imp_fit_columns, imp_check_features, imp_cells_operation, imp_keep_plan,
 )
 
-comptime NEIGHBORS_LOCAL_RUN_FIXTURES = 22
+comptime NEIGHBORS_LOCAL_RUN_FIXTURES = 23
 
 
 def require(ok: Bool, message: String) raises:
@@ -205,11 +209,37 @@ def fixture(unit: Int) raises:
         local_copy_f32(Int(dst.unsafe_ptr()), Int(src.unsafe_ptr()), 3)
         _ = src
         require(dst[0] == 1.0 and dst[1] == -2.5 and dst[2] == 3.25, "float32 copy")
-    else:
+    elif unit == 21:
         var values: List[Int] = [4, 0, 9]
         var dst = List[Int32](length=3, fill=0)
         local_write_i32(values, Int(dst.unsafe_ptr()))
         require(dst[0] == 4 and dst[1] == 0 and dst[2] == 9, "int32 words")
+    else:
+        # KNNImputer RUN (neighbors/knn_imputer_run.mojo): the request, the
+        # column step's decision and the public result's width
+        var fit = ImpFitRequest(1, 0, 3, 4, 0.0, True)
+        require(fit.x == 1 and fit.masked == 0 and fit.rows == 3 and fit.features == 4 and fit.lean, "fit request")
+        var request = ImpTransformRequest(1, 2, 3, 5, 6, 4, 2, True, True, 0.5, False, False, True)
+        require(request.x == 1 and request.fit_x == 2 and request.dst == 3 and request.rows == 5
+                and request.fit_rows == 6 and request.features == 4 and request.neighbors == 2 and request.distance
+                and request.mask and request.missing == 0.5 and not request.uncompact and not request.old_items
+                and request.keep_empty, "transform request")
+        var present: List[Bool] = [True, False, True, True]
+        var plan = imp_keep_plan(present)
+        require(imp_selects(5, 4, True, plan) and not imp_selects(0, 4, True, plan), "empty columns are zeroed")
+        require(imp_selects(5, 4, False, plan) and imp_selects(0, 4, False, plan), "empty columns are dropped")
+        require(imp_selected_columns(4, True, plan) == 4 and imp_selected_columns(4, False, plan) == 3,
+                "selected columns")
+        require(imp_result_columns(4, False, plan, 2) == 5 and imp_result_columns(4, True, plan, 0) == 4,
+                "result columns")
+        var every: List[Bool] = [True, True]
+        var whole = imp_keep_plan(every)
+        require(not imp_selects(5, 2, True, whole) and not imp_selects(5, 2, False, whole), "no column step")
+        var words = imp_i32_words(plan.keep)
+        require(len(words) == 3 and words[0] == 0 and words[1] == 2 and words[2] == 3, "kept columns as int32")
+        var none = List[Int]()
+        require(len(imp_i32_words(none)) == 1 and len(imp_scratch_f32(0)) == 1 and len(imp_scratch_f32(6)) == 6,
+                "an empty span still has an address")
 
 
 def run_checks() raises:

@@ -111,7 +111,6 @@ struct SambaKeys(Defaultable, Movable):
     var k_dtype: PythonObject
     var k_entries: PythonObject
     var k_eps: PythonObject
-    var k_exact_schedule: PythonObject
     var k_exp_avg: PythonObject
     var k_exp_avg_sq: PythonObject
     var k_experiment_profile: PythonObject
@@ -253,7 +252,6 @@ struct SambaKeys(Defaultable, Movable):
         self.k_dtype = PythonObject(None)
         self.k_entries = PythonObject(None)
         self.k_eps = PythonObject(None)
-        self.k_exact_schedule = PythonObject(None)
         self.k_exp_avg = PythonObject(None)
         self.k_exp_avg_sq = PythonObject(None)
         self.k_experiment_profile = PythonObject(None)
@@ -399,7 +397,6 @@ def _samba_keys_fill(nk: UnsafePointer[SambaKeys, MutUntrackedOrigin]) raises:
     nk[].k_dtype = py_key("dtype")
     nk[].k_entries = py_key("entries")
     nk[].k_eps = py_key("eps")
-    nk[].k_exact_schedule = py_key("exact_schedule")
     nk[].k_exp_avg = py_key("exp_avg")
     nk[].k_exp_avg_sq = py_key("exp_avg_sq")
     nk[].k_experiment_profile = py_key("experiment_profile")

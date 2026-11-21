@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Typed label route and dispatch (RUN): the process route word (0 unconnected,
-1 device, 2 host), the connected device driver, and the device-or-host call of
+"""Typed label route and dispatch (RUN): the process route word of the device
+provider (0 unconnected, 1 device; a host caller is named by its context in
+the door and holds no route), the connected device driver, and the device-or-host call of
 each label kernel. The door (`bindings/labels_descriptor_boundary_door.mojo`)
 admits the provider image, keeps its pin and releases the GIL around these
 calls."""
@@ -29,10 +30,6 @@ comptime _LABELS_ROUTE = SharedSlot[_LabelsRoute, "MojolearnLabelsProviderV5", 5
 
 def labels_route_state() raises -> Int:
     return _LABELS_ROUTE.get_or_create_ptr()[].state
-
-
-def labels_route_host() raises:
-    _LABELS_ROUTE.get_or_create_ptr()[].state = 2
 
 
 def labels_route_check(driver: LabelsNativeDriver) raises:

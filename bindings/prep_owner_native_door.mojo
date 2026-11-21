@@ -122,8 +122,25 @@ def prep_owner_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObje
                 lifecycle_complete(model, operation, PythonObject(None), False, run)
                 result = lifecycle_result(model, operation, result, "", run)
         elif kind == "iterative_imputer":
-            var prepared = composition_before(model, kind, op, operation, args, context)
-            result = prep_iterimp_call(model, op, operation, prepared, context)
+            if op < 0 and operation == "vendor_used":
+                # the image of this estimator's device route, read back (a
+                # name outside the operation table: one integer test on a
+                # data operation)
+                return prep_route_vendor_used(model, context).steal_data()
+            # The connected context of this estimator's device route (one
+            # record read and one pointer compare; resolved once per
+            # estimator). Every program of the operation, the initial
+            # SimpleImputer included, selects its image from it; a member
+            # estimator runs on its own `device`. Nothing below reads `device`.
+            var run = prep_route_context(model, context)
+            if run is not context:
+                # the CPU context beside a device set: its own NumPy cells
+                classical_connect_numpy(run)
+            var prepared = composition_before(model, kind, op, operation, args, run)
+            result = prep_iterimp_call(model, op, operation, prepared, run)
+            if op == PREP_OPN_FIT or op == PREP_OPN_FIT_TRANSFORM:
+                composition_after_fit(model, args[0], run)
+            return parallel_public_result(result, operation, PythonObject(None), run).steal_data()
         elif kind == "rfe":
             var prepared = composition_before(model, kind, op, operation, args, context)
             result = prep_rfe_call(model, op, operation, prepared, context)
@@ -135,7 +152,7 @@ def prep_owner_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObje
             result = prep_encode_scores_call(operation, args, context)
         else:
             raise Error("unknown native prep operation")
-        if kind == "rfe" or kind == "iterative_imputer":
+        if kind == "rfe":
             if op == PREP_OPN_FIT or op == PREP_OPN_FIT_TRANSFORM:
                 composition_after_fit(model, args[0], context)
             result = parallel_public_result(result, operation, PythonObject(None), context)

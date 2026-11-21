@@ -163,13 +163,13 @@ def kpca_fit(model: PythonObject, source: PythonObject, context: PythonObject) r
     var gamma_value = _field(fields, "gamma")
     var gamma = _f32_scalar(1.0 / Float64(x.cols) if gamma_value is None else _float(gamma_value, context))
     py_setitem(fields, "_gamma", PythonObject(gamma))
-    var route = _kpca_route(model, fields, context)
-    var near = route.connection
-    var decomp = route.extra
+    var device_route = _kpca_route(model, fields, context)
+    var near = device_route.connection
+    var decomp = device_route.extra
     if decomp < 0:
         # The eigensolver image did not connect at resolution: say why, in
         # the words and at the stage the per-call connection said it.
-        decomp = _kpca_decomp_refused(route, context)
+        decomp = _kpca_decomp_refused(device_route, context)
     var requested_value = _field(fields, "n_components")
     var requested = -1 if requested_value is None else _int(requested_value, context)
     var auto = _name(_field(fields, "eigen_solver"), "auto", context)

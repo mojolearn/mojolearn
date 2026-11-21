@@ -7,7 +7,8 @@ and the decoding of their info words.
 estimator's fields and the inputs, allocates the public arrays, calls these
 checks at the point the public method made them (so the refusal order and
 wording are unchanged) and hands each request to the bound x_neighbors
-binary. Nothing here imports Python.
+binary. Nothing here imports Python. The chi2 samplers' requests and their
+calls are neighbors/chi2_run.mojo; their checks stay here.
 """
 from core.p3nc_scan import p3nc_dense_nnz_f32, p3nc_dense_to_csr_f32
 from neighbors.neighbors_graph_run import XnOpRequest, xn_f32_word, xn_i32_word, xn_double_words
@@ -40,10 +41,6 @@ def xn_achi2_width(d: Int, steps: Int) -> Int:
     return d * (2 * steps - 1)
 
 
-def xn_achi2_request(x: Int, dst: Int, n: Int, d: Int, steps: Int, interval: Float64) -> XnOpRequest:
-    return XnOpRequest("achi2", [x, dst], [n, d, steps], [xn_f32_word(interval)])
-
-
 def xn_achi2_csr_count(dense: Int, count: Int) -> Int:
     """The entries SciPy's dense-to-CSR conversion keeps (NaN counts, -0.0
     does not)."""
@@ -71,15 +68,6 @@ def xn_schi2_missing_fit(d: Int, nc: Int) raises:
         raise Error("mojolearn SkewedChi2Sampler: X needs at least one feature and n_components >= 1")
     raise Error("NotImplementedError: mojolearn SkewedChi2Sampler: this binary lacks x_neighbors_kfeat_schi2_fit_idn "
                 + "(rebuild without -D MOJOLEARN_IDN_XN_SKETCH_CTR_OFF)")
-
-
-def xn_schi2_log_request(x: Int, dst: Int, size: Int, skewedness: Float64) -> XnOpRequest:
-    """`_unary(X, _U_LOG, 1.0, skewedness)`."""
-    return XnOpRequest("unary", [x, dst], [size, XN_SEMI_U_LOG], [1.0, xn_f32_word(skewedness)])
-
-
-def xn_schi2_transform_request(lx: Int, w: Int, offset: Int, dst: Int, n: Int, d: Int, nc: Int) -> XnOpRequest:
-    return XnOpRequest("skew_transform", [lx, w, offset, dst], [n, d, nc], List[Float64]())
 
 
 # ---------------------------------------------------------------- label propagation ops

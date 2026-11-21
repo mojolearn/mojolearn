@@ -57,7 +57,7 @@ from bindings.operation_names_trees import (
     TREES_FIRST_LATE, TREES_END_PUBLIC_IFOREST, TREES_END_PUBLIC_FOREST, TREES_END_PUBLIC_GBDT_ADAPTER,
     TREES_END_PUBLIC_GBDT_MODEL, TREES_END_PUBLIC_META, TREES_END_EXPLAINER, TREES_FIRST_IFOREST, TREES_END_IFOREST,
     TREES_FIRST_PUBLIC_BOOST, TREES_END_PUBLIC_BOOST, TREES_FIRST_BOOST, TREES_END_BOOST, TREES_FIRST_GBDT,
-    TREES_END_GBDT, TREES_FIRST_META, TREES_END_META,
+    TREES_END_GBDT, TREES_FIRST_META, TREES_END_META, TREES_OPN_TREES_EXPLAINER_INIT,
 )
 
 
@@ -96,7 +96,15 @@ def trees_public_operation(model: PythonObject, operation: Int, name: String, ar
     # The estimator's route (bindings/trees_route_boundary_door.mojo): the
     # context this operation runs in names the device table set or the CPU
     # table set. One record read; no operation reads the device.
-    context = trees_route_context(model, context)
+    if operation == TREES_OPN_TREES_EXPLAINER_INIT:
+        # TreeExplainer takes no device of its own: it prepares its SHAP
+        # state in (and later computes with the entries of) the table set
+        # its MODEL runs on, the wrapped model's run context. An argument
+        # that is no estimator keeps the connection context and is refused
+        # by the explainer's own admission.
+        context = trees_route_context(args[0] if len(args) > 0 else model, context)
+    else:
+        context = trees_route_context(model, context)
     # Connect a loaded NumPy's native types (ndarray inputs, pandas
     # storage); outputs stay mojolearn Arrays.
     classical_connect_numpy(context)

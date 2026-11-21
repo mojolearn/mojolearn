@@ -481,7 +481,7 @@ def pls_transform_unpack(mut door: DecompDoor, mut kit: DKit, args: PythonObject
         o.b_mean = _fitted_row(door, kit, fields, "_y_mean", context)
         o.b_std = _fitted_row(door, kit, fields, "_y_std", context)
         o.b_basis = _fitted_matrix(door, kit, fields, "y_rotations_", context)
-    return o
+    return o^
 
 
 def pls_inverse_unpack(mut door: DecompDoor, mut kit: DKit, args: PythonObject, y: PythonObject,
@@ -499,7 +499,7 @@ def pls_inverse_unpack(mut door: DecompDoor, mut kit: DKit, args: PythonObject, 
         o.b_basis = _fitted_matrix(door, kit, fields, "y_loadings_", context)
         o.b_std = _fitted_row(door, kit, fields, "_y_std", context)
         o.b_mean = _fitted_row(door, kit, fields, "_y_mean", context)
-    return o
+    return o^
 
 
 def pls_predict_unpack(mut door: DecompDoor, mut kit: DKit, args: PythonObject,
@@ -511,7 +511,7 @@ def pls_predict_unpack(mut door: DecompDoor, mut kit: DKit, args: PythonObject,
     o.a_mean = _fitted_row(door, kit, fields, "_x_mean", context)
     o.a_basis = _fitted_matrix(door, kit, fields, "coef_", context)
     o.b_mean = _fitted_row(door, kit, fields, "_y_mean", context)
-    return o
+    return o^
 
 
 def pls_check_fitted(model: PythonObject, fields: PythonObject) raises:

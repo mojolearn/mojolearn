@@ -2,9 +2,11 @@
 """Native cases for the linear expansion door's Python-free RUN pieces
 (x_linear/door_run.mojo): the fit request words, the [coef | intercept]
 block, the joins, slices and part concatenation, the seed halves, the
-L-BFGS work size and the SGD class-weight parameters. Analytic answers over
+L-BFGS work size, the SGD class-weight parameters, the ridge result layout
+and the row-weight refusals of the class-weight step. Analytic answers over
 Mojo buffers; independent fixtures run through the shared host worker pool.
-The operations-entry calls (xl_run_call / xl_run_fit / xl_run_fit_fold) need
+The operations-entry calls (xl_run_fit / xl_run_fit_fold, the class-weight
+step, the RidgeCV runs and their R^2 entry) need
 a published x_linear table and are covered by checks/native_tests/x_linear_ops_*;
 the cv split RUNs (xl_cv_fold_ids_run / xl_cv_roles_run) need the base helper
 table and are covered with the installed wheel's linear CV cases."""
@@ -12,9 +14,10 @@ from core.host_parallel import host_parallelize
 from x_linear.door_run import (
     xl_run_fit_ints, xl_run_word, xl_run_copy, xl_run_join, xl_run_parts, xl_parts_total, xl_block_dims,
     xl_run_block, xl_seed_halves, xl_lbfgs_work, xl_sgd_class_floats, xl_run_status_refuse, xl_cv_roles_limit,
+    xl_class_prep_none, xl_ridge_out, xl_ridge_singular, xl_row_weights_check,
 )
 
-comptime XL_DOOR_FIXTURES = 11
+comptime XL_DOOR_FIXTURES = 13
 
 
 def require(ok: Bool, message: String) raises:
@@ -135,6 +138,42 @@ def roles_limit_fixture() raises:
             + "to 16,777,215 rows", "roles limit text changed: " + text)
 
 
+def ridge_layout_fixture() raises:
+    # coef (d), intercept, alpha, score, the grid's scores, status
+    require(xl_ridge_out(3, 1) == 8, "ridge result words changed for one alpha")
+    require(xl_ridge_out(3, 4) == 11, "ridge result words changed for a grid")
+    var words = List[Float32](length=11, fill=0.0)
+    require(not xl_ridge_singular(Int(words.unsafe_ptr()), 3, 4), "a clear status read as singular")
+    words[10] = 2.0
+    require(xl_ridge_singular(Int(words.unsafe_ptr()), 3, 4), "status 2 of a grid fit was not read")
+    require(not xl_ridge_singular(Int(words.unsafe_ptr()), 3, 1), "the one-alpha status word moved")
+    words[7] = 2.0
+    require(xl_ridge_singular(Int(words.unsafe_ptr()), 3, 1), "status 2 of a one-alpha fit was not read")
+    require(not xl_class_prep_none().active, "the empty class-weight step is active")
+    _ = words^
+
+
+def row_weights_fixture() raises:
+    var weights: List[Float32] = [0.5, 0.0, 2.0]
+    xl_row_weights_check(Int(weights.unsafe_ptr()), 3)
+    var zeros = List[Float32](length=3, fill=0.0)
+    var text = String("")
+    try:
+        xl_row_weights_check(Int(zeros.unsafe_ptr()), 3)
+    except error:
+        text = String(error)
+    require(text == "Sample weights must contain at least one non-zero number.", "all-zero refusal changed: " + text)
+    weights[1] = Float32(0.0) / Float32(0.0)
+    text = String("")
+    try:
+        xl_row_weights_check(Int(weights.unsafe_ptr()), 3)
+    except error:
+        text = String(error)
+    require(text == "Input sample_weight contains NaN or infinity.", "finite refusal changed: " + text)
+    _ = weights^
+    _ = zeros^
+
+
 def fixture(index: Int) raises:
     if index == 0:
         fit_ints_fixture()
@@ -156,6 +195,10 @@ def fixture(index: Int) raises:
         class_floats_fixture(3)
     elif index == 9:
         status_fixture()
+    elif index == 10:
+        ridge_layout_fixture()
+    elif index == 11:
+        row_weights_fixture()
     else:
         roles_limit_fixture()
 

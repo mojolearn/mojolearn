@@ -19,6 +19,11 @@ State, checkpoint and schedule validation are native; the Python copies
 `SmallMLPTrainer._binding` are gone too (lane py-lm-neural, 2026-11-14): the
 native owner's admission (`_view`, the batch and shape refusals in
 `small_mlp_native_door.mojo`) is the one refusal path.
+
+`device=` is read once, at construction or restore, into the trainer's route
+(the compiled program and training entries of that device); no method reads
+it again. The CPU identical images are connected beside a GPU set at import
+(`_connect_cpu_device`).
 """
 import os
 
@@ -39,10 +44,10 @@ class SmallMLPTrainer:
     The model is ``Linear(8, 16) -> ReLU -> Linear(16, 3)``. Pass `weight1` (16, 8),
     `bias1` (16,), `weight2` (3, 16) and `bias2` (3,) as float32 buffers (NumPy arrays or
     `mojolearn.Array`); parameters and inputs are copied. Each batch has 1 to 256 rows
-    of 8 features, with labels 0, 1 or 2. All arithmetic runs on the GPU in the numeric
-    mode selected for the process (identical by default); there is no CPU fallback, and
-    a state saved under one mode loads only under the same mode. Every array returned is
-    a `mojolearn.Array`.
+    of 8 features, with labels 0, 1 or 2. All arithmetic runs on the trainer's device in
+    the numeric mode selected for the process (identical by default), and a state saved
+    under one mode loads only under the same mode. Every array returned is a
+    `mojolearn.Array`.
 
     A step either completes or leaves the state unchanged. No clipping, dropout, mixed
     precision, automatic differentiation or other layer shapes are supported.
@@ -65,6 +70,9 @@ class SmallMLPTrainer:
         AdamW epsilon.
     weight_decay : float, default 0.01
         AdamW decoupled weight decay.
+    device : None, 'gpu' or 'cpu', default None
+        Where the trainer runs. None is this installation's device. 'cpu' runs in
+        identical mode and returns the same bits as the GPU.
 
     Examples
     --------
@@ -84,10 +92,15 @@ class SmallMLPTrainer:
     # route and builds the result. The object holds only `_handle`; native admission reads it from passive
     # instance storage and balanced calls retain no extra owner references.
 
+    #: The trainer runs on both devices; its route is resolved at construction.
+    _mojolearn_device = True
+    #: A trainer built without its constructor runs on this installation's device.
+    device = None
+
     def __init__(self, weight1, bias1, weight2, bias2, *, data_schedule,
-                 lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0.01):
+                 lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0.01, device=None):
         return _NATIVE('owner_create', (self, (weight1, bias1, weight2, bias2, data_schedule,
-                                              lr, betas, eps, weight_decay)))
+                                              lr, betas, eps, weight_decay, device)))
 
     def __del__(self):
         return _NATIVE('owner_close', (self,))
@@ -182,9 +195,12 @@ class SmallMLPTrainer:
         return _NATIVE('owner_save_checkpoint', (self, path))
 
     @classmethod
-    def from_checkpoint(cls, path):
-        """Restore a trainer from `save_checkpoint` output, after checking its schema, size and hash."""
-        return _NATIVE('from_checkpoint', (cls, path))
+    def from_checkpoint(cls, path, *, device=None):
+        """Restore a trainer from `save_checkpoint` output, after checking its schema, size and hash.
+
+        `device` is None, 'gpu' or 'cpu', as in the constructor.
+        """
+        return _NATIVE('from_checkpoint', (cls, path, device))
 
 
 #: The compiled training entries the native owner calls, resolved once at import.
@@ -193,36 +209,65 @@ _TRAINING_ENTRIES = (
 )
 
 
+def _image_entries(mode, training, sequence):
+    # glue: once per image pair at import: the compiled ABI symbols the native
+    # owner calls. `training` and `sequence` are zero-argument loaders.
+    from types import BuiltinFunctionType
+    module = training()
+    entries = {'mode': mode}
+    for name in _TRAINING_ENTRIES:  # glue: resolve existing compiled ABI symbols at import
+        try:
+            entry = getattr(module, name)
+        except Exception:
+            continue
+        if isinstance(entry, BuiltinFunctionType):
+            entries[name] = entry
+    if 'training_numeric_mode' not in entries:
+        raise ImportError('SmallMLPTrainer requires a compiled training binding')
+    try:
+        # the trainer's captured program (autograd/small_mlp_program.mojo);
+        # loading the image publishes its program entry in the native table
+        program = sequence().small_mlp_program
+        if isinstance(program, BuiltinFunctionType):
+            entries['small_mlp_program'] = program
+    except Exception:
+        pass
+    return entries
+
+
+def _connect_cpu_device():
+    # glue: `device="cpu"` beside a GPU set: the CPU identical training and
+    # sequence images, loaded once at import; a trainer's route holds their
+    # entries (bindings/small_mlp_native_door.mojo `_route_build`). A CPU-only
+    # installation has no second set: its one set is the CPU's. An image that
+    # does not load records why, and the trainer that asks for it says so.
+    if _backend._CPU_ONLY is not None:
+        return None
+    try:
+        entries = _image_entries(
+            'identical',
+            lambda: _backend.load_host_module(_backend._HOST_MODULES['_mojolearn_training']),  # import-time: the CPU image
+            lambda: _backend.load_host_module(_backend._HOST_MODULES['_mojolearn_x_sequence']))  # import-time: the CPU image
+    except Exception as error:
+        entries = type(error).__name__ + ': ' + str(error)
+    return {'identical': entries}
+
+
 def _connect():
     # ABI connection at module import only; no trainer operation calls it.
-    from types import BuiltinFunctionType
     from ._native_classical_bridge import _state_context
     _backend.default_mode()  # fixes the process mode the native owner reads
     modes = {}
     for mode in ('identical', 'fast'):  # glue: connect native modes at package import
         try:
-            training = _backend.binding('_mojolearn_training', mode)
-            entries = {'mode': mode}
-            for name in _TRAINING_ENTRIES:  # glue: resolve existing compiled ABI symbols at import
-                try:
-                    entry = getattr(training, name)
-                except Exception:
-                    continue
-                if isinstance(entry, BuiltinFunctionType):
-                    entries[name] = entry
-            if 'training_numeric_mode' not in entries:
-                raise ImportError('SmallMLPTrainer requires a compiled training binding')
-            try:
-                # the trainer's captured program (autograd/small_mlp_program.mojo)
-                program = _backend.binding('_mojolearn_x_sequence', mode).small_mlp_program
-                if isinstance(program, BuiltinFunctionType):
-                    entries['small_mlp_program'] = program
-            except Exception:
-                pass
-            modes[mode] = entries
+            modes[mode] = _image_entries(
+                mode,
+                lambda: _backend.binding('_mojolearn_training', mode),
+                lambda: _backend.binding('_mojolearn_x_sequence', mode))
         except Exception as error:
             modes[mode] = type(error).__name__ + ': ' + str(error)
     return dict(trainer=SmallMLPTrainer, trainer_finalizer=vars(SmallMLPTrainer)["__del__"], array=Array, modes=modes,
+                modes_cpu=_connect_cpu_device(), cpu_only=_backend._CPU_ONLY is not None,
                 backend=vars(_backend), environ=os.environ._data, admission=_state_context())
 
 

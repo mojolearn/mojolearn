@@ -6,7 +6,7 @@ from bindings.native_loaded_module_door import NativeModules
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
-from bindings.py_balanced import py_call, py_setitem
+from bindings.py_balanced import py_call, py_setitem, py_item
 
 
 from bindings.sequential_description_unpack import sequential_fields, sequential_append

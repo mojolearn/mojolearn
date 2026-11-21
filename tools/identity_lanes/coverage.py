@@ -1477,7 +1477,7 @@ def _(ml, X, yc, yr, Xh=None):
 def _(ml, X, yc, yr, Xh=None):
     """SVC and SVR with gamma='scale' (the package default is 'auto', so
     the svc and svr lanes never take it): SVC.fit -> the SVC owner's
-    `_resolve_gamma` (bindings/svc_kernel_native_door.mojo) -> the svm binding's
+    `svc_gamma_run` (svm/svc_kernel_fit_run.mojo) -> the svm binding's
     `scale_gamma_limbs` (svm/impl/scale_gamma_device.mojo on a GPU column,
     svm/host/scale_gamma_host.mojo on the host column) -> the once-rounded
     exact 1 / (n_features * X.var()). SVR.fit takes the same door. Parts: the

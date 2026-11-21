@@ -10,7 +10,7 @@ from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.host_inference_scalars_door import host_inference_scalar
 from bindings.native_owner_lifetime_door import native_release_admit
 from bindings.mode_metadata_native_door import _truth
-from bindings.svc_kernel_native_door import _svm_validate
+from bindings.svc_kernel_params_unpack import _svm_validate
 from bindings.operation_names_svc import SVC_OPN_FAMILY_SVC_PUBLIC_SVC_SETSTATE, SVC_OPN_FAMILY_SVC_PUBLIC_SVR_SETSTATE
 
 
