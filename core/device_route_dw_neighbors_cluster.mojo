@@ -65,7 +65,7 @@ def family_route_cpu_unconnected(name: String) raises:
 
 
 @fieldwise_init
-struct FamilyDeviceRoute(Copyable, Movable):
+struct BindingDeviceRoute(Copyable, Movable):
     """What one estimator's request resolved to.
 
     `requested` is the constructor value's code (LINEAR_DEVICE_GPU, _CPU or
@@ -81,11 +81,11 @@ struct FamilyDeviceRoute(Copyable, Movable):
     var mode: Int
 
 
-def family_route_unresolved() -> FamilyDeviceRoute:
-    return FamilyDeviceRoute(LINEAR_DEVICE_INSTALL, -1, False, -1)
+def family_route_unresolved() -> BindingDeviceRoute:
+    return BindingDeviceRoute(LINEAR_DEVICE_INSTALL, -1, False, -1)
 
 
-def family_route_plan(requested: Int, process_cpu_only: Bool, mode: Int) raises -> FamilyDeviceRoute:
+def family_route_plan(requested: Int, process_cpu_only: Bool, mode: Int) raises -> BindingDeviceRoute:
     """Resolve a request in a process that is CPU only or holds a GPU set.
 
     None is the installation's device; an explicit `'gpu'` in a CPU-only
@@ -95,10 +95,10 @@ def family_route_plan(requested: Int, process_cpu_only: Bool, mode: Int) raises 
     var host_table = device == LINEAR_DEVICE_CPU and not process_cpu_only
     if host_table and mode != 1:
         family_route_cpu_fast_refusal()
-    return FamilyDeviceRoute(requested, device, host_table, mode)
+    return BindingDeviceRoute(requested, device, host_table, mode)
 
 
-def family_route_vendor_is_cpu(route: FamilyDeviceRoute) -> Bool:
+def family_route_vendor_is_cpu(route: BindingDeviceRoute) -> Bool:
     """True when the route's images are CPU images (`vendor_used` answers
     `cpu` without asking an image)."""
     return route.device == LINEAR_DEVICE_CPU

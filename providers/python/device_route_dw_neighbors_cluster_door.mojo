@@ -7,7 +7,7 @@ neighbors, density; lane dw-neighbors-cluster, 2026-11-20).
 `device="cpu"` is a constructor parameter. Its value is stored as given,
 checked when it is given (`family_route_device_admit`: constructor,
 `set_params`) and read ONCE, at the estimator's first operation, into a
-`FamilyRouteOwner` kept in the weak model-record table (read again only when
+`BindingRouteOwner` kept in the weak model-record table (read again only when
 the stored `device` object is replaced). The owner holds, per
 binding slot (core/device_route_dw_neighbors_cluster.mojo), the image that
 answers: the device image of the selected tier, or the CPU identical image
@@ -50,17 +50,17 @@ from core.linear_route import (
     LINEAR_DEVICE_INSTALL, linear_device_code, linear_device_refusal, linear_device_installed,
 )
 from core.device_route_dw_neighbors_cluster import (
-    FamilyDeviceRoute, FAMILY_ROUTE_SLOT_COUNT, family_route_binding_name, family_route_plan,
+    BindingDeviceRoute, FAMILY_ROUTE_SLOT_COUNT, family_route_binding_name, family_route_plan,
     family_route_cpu_unconnected, family_route_vendor_is_cpu,
 )
 from providers.python.estimator_binding_pyapi_door import (
     _selected_mode, estimator_binding_mode, estimator_checked_mode,
 )
 
-comptime _FAMILY_ROUTE_SLOT = "family_device_route_v1"
+comptime _FAMILY_ROUTE_SLOT = "binding_device_route_v1"
 
 
-struct FamilyRouteKeys(Defaultable, Movable):
+struct BindingRouteKeys(Defaultable, Movable):
     # Immutable interface names only: no model, state or user data
     # (the form of bindings/cluster_keys_unpack.mojo).
     var ready: Bool
@@ -83,10 +83,10 @@ struct FamilyRouteKeys(Defaultable, Movable):
         self.k_family_cpu_binding_connections = PythonObject(None)
 
 
-comptime _FAMILY_ROUTE_KEYS = SharedSlot[FamilyRouteKeys, "MojolearnFamilyRouteKeysV1"]
+comptime _FAMILY_ROUTE_KEYS = SharedSlot[BindingRouteKeys, "MojolearnBindingRouteKeysV1"]
 
 
-def _family_route_keys_fill(nk: UnsafePointer[FamilyRouteKeys, MutUntrackedOrigin]) raises:
+def _family_route_keys_fill(nk: UnsafePointer[BindingRouteKeys, MutUntrackedOrigin]) raises:
     # Once per process. `ready` is set last, so a fill that raised is run
     # again whole by the next call.
     nk[].k_numeric_mode = py_key("numeric_mode")
@@ -100,7 +100,7 @@ def _family_route_keys_fill(nk: UnsafePointer[FamilyRouteKeys, MutUntrackedOrigi
 
 
 @always_inline
-def family_route_keys() raises -> UnsafePointer[FamilyRouteKeys, MutUntrackedOrigin]:
+def family_route_keys() raises -> UnsafePointer[BindingRouteKeys, MutUntrackedOrigin]:
     """The route door's keys: one slot fetch and one flag test."""
     var nk = _FAMILY_ROUTE_KEYS.get_or_create_ptr()
     if not nk[].ready:
@@ -115,8 +115,8 @@ def _route_builtins() raises -> PythonObject:
     return mods.module("builtins")
 
 
-struct FamilyRouteOwner(Movable, Writable):
-    var route: FamilyDeviceRoute
+struct BindingRouteOwner(Movable, Writable):
+    var route: BindingDeviceRoute
     # The objects the route was resolved for. Held, so their addresses stay
     # theirs while this owner lives; a call compares identities only.
     var mode: PythonObject
@@ -129,7 +129,7 @@ struct FamilyRouteOwner(Movable, Writable):
     var modules: List[PythonObject]
     var checked: List[Bool]
 
-    def __init__(out self, var route: FamilyDeviceRoute, mode: PythonObject, default_mode: PythonObject,
+    def __init__(out self, var route: BindingDeviceRoute, mode: PythonObject, default_mode: PythonObject,
                  context: PythonObject, device: PythonObject):
         self.route = route^
         self.mode = mode
@@ -144,18 +144,18 @@ struct FamilyRouteOwner(Movable, Writable):
             self.checked.append(False)
 
     def write_to(self, mut writer: Some[Writer]):
-        writer.write("FamilyRouteOwner(device=", self.route.device, ", host_table=", self.route.host_table, ")")
+        writer.write("BindingRouteOwner(device=", self.route.device, ", host_table=", self.route.host_table, ")")
 
     def write_repr_to(self, mut writer: Some[Writer]):
         self.write_to(writer)
 
 
-def family_route_owner_pins(value: Int, index: Int) abi("C") -> Int:
+def binding_route_owner_pins(value: Int, index: Int) abi("C") -> Int:
     if not value or index < -1 or index >= 4 + FAMILY_ROUTE_SLOT_COUNT:
         return -1
     try:
         var owner = borrowed_native_owner(value)
-        var native = owner.downcast_value_ptr[FamilyRouteOwner]()
+        var native = owner.downcast_value_ptr[BindingRouteOwner]()
         var result = 4 + FAMILY_ROUTE_SLOT_COUNT
         if index == 0:
             result = Int(native[].mode._obj_ptr)
@@ -173,22 +173,22 @@ def family_route_owner_pins(value: Int, index: Int) abi("C") -> Int:
         return -1
 
 
-def register_family_route_owner(mut module: PythonModuleBuilder) raises:
+def register_binding_route_owner(mut module: PythonModuleBuilder) raises:
     var existing = PythonObject(None)
     try:
-        existing = lookup_py_type_object[FamilyRouteOwner]()
+        existing = lookup_py_type_object[BindingRouteOwner]()
     except error:
         if not py_type_absent(error):
             raise error
-        _ = module.add_type[FamilyRouteOwner]("_FamilyRouteOwner")
+        _ = module.add_type[BindingRouteOwner]("_BindingRouteOwner")
         return
-    py_type_attach(module.module, "_FamilyRouteOwner", existing)
+    py_type_attach(module.module, "_BindingRouteOwner", existing)
 
 
-def register_family_route_owner_identity(published: PythonObject) raises:
+def register_binding_route_owner_identity(published: PythonObject) raises:
     # After PythonModuleBuilder.finalize() only: Mojo 1.2 creates the type
     # object in finalize() (bindings/native_owner_registry.mojo).
-    register_native_owner_type[FamilyRouteOwner](published, family_route_owner_pins)
+    register_native_owner_type[BindingRouteOwner](published, binding_route_owner_pins)
 
 
 def _family_route_cpu_only(context: PythonObject) raises -> Bool:
@@ -233,7 +233,7 @@ def family_route_clear(model: PythonObject) raises:
 
 
 def _family_route_build(device: PythonObject, mode: PythonObject, default_mode: PythonObject,
-                        context: PythonObject) raises -> FamilyRouteOwner:
+                        context: PythonObject) raises -> BindingRouteOwner:
     var b = _route_builtins()
     # The one decode of `device`. None, and an instance without the field
     # (unpickled from an older version, or loaded from a file), run this
@@ -241,14 +241,14 @@ def _family_route_build(device: PythonObject, mode: PythonObject, default_mode: 
     var requested = family_route_device_unpack(device, b)
     var word = _selected_mode(b, mode, context)
     var plan = family_route_plan(requested, _family_route_cpu_only(context), 1 if word == "identical" else 0)
-    return FamilyRouteOwner(plan^, mode, default_mode, context, device)
+    return BindingRouteOwner(plan^, mode, default_mode, context, device)
 
 
 def _family_route_slot(owner: PythonObject, slot: Int, check_mode: Bool) raises -> PythonObject:
     """Resolve one binding slot of a held route (the first time the
     estimator asks for it, or the first time it asks with the compiled-mode
     read-back) and keep it on the owner."""
-    var native = owner.downcast_value_ptr[FamilyRouteOwner]()
+    var native = owner.downcast_value_ptr[BindingRouteOwner]()
     var name = family_route_binding_name(slot)
     var context = native[].context
     var module = PythonObject(None)
@@ -279,7 +279,7 @@ def _family_route_slot(owner: PythonObject, slot: Int, check_mode: Bool) raises 
         # resolution, run once per estimator and slot.
         var selected = native[].mode
         module = estimator_binding_mode(selected, name, context, check_mode)
-    native = owner.downcast_value_ptr[FamilyRouteOwner]()
+    native = owner.downcast_value_ptr[BindingRouteOwner]()
     native[].modules[slot] = module
     native[].checked[slot] = check_mode
     return module
@@ -299,7 +299,7 @@ def family_route_owner(model: PythonObject, context: PythonObject) raises -> Pyt
     var device = py_get(fields, nk[].k_device)
     var owner = records_get(RECORDS_PREPARED, model, _FAMILY_ROUTE_SLOT)
     if owner is not None:
-        var native = owner.downcast_value_ptr[FamilyRouteOwner]()
+        var native = owner.downcast_value_ptr[BindingRouteOwner]()
         if (native[].mode is mode and native[].default_mode is default_mode and native[].context is context
                 and native[].device is device):
             return owner
@@ -313,7 +313,7 @@ def family_route_owner(model: PythonObject, context: PythonObject) raises -> Pyt
 def family_route_owner_binding(owner: PythonObject, slot: Int, check_mode: Bool = True) raises -> PythonObject:
     """The image of `slot` on a route owner this operation already read: one
     list read on a hit."""
-    var native = owner.downcast_value_ptr[FamilyRouteOwner]()
+    var native = owner.downcast_value_ptr[BindingRouteOwner]()
     var held = native[].modules[slot]
     if held is not None and (native[].checked[slot] or not check_mode):
         return held
@@ -332,7 +332,7 @@ def family_route_vendor_used(model: PythonObject, context: PythonObject) raises 
     route runs the CPU images, else the vendor word of this process's GPU
     set. Resolves the route on first use, with its refusals."""
     var owner = family_route_owner(model, context)
-    var cpu = family_route_vendor_is_cpu(owner.downcast_value_ptr[FamilyRouteOwner]()[].route)
+    var cpu = family_route_vendor_is_cpu(owner.downcast_value_ptr[BindingRouteOwner]()[].route)
     # The owner is named past the read through its pointer (a local is freed
     # at its last named use).
     _ = owner
