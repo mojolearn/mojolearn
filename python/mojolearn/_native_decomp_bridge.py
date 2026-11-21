@@ -2,16 +2,6 @@
 """Import-time connection for the native owner of the decomposition
 expansion's estimators (bindings/decomp_native_door.mojo)."""
 
-#: The compiled decomp drivers the owners call (a build without one refuses
-#: that operation by name).
-ENTRY_NAMES = ("x_decomp_ica_fit", "x_decomp_ica_project",
-               "x_decomp_fa_fit", "x_decomp_fa_query", "x_decomp_lda_owner",
-               "x_decomp_rp_fit", "x_decomp_rp_project",
-               # the pool entries a resident fitted matrix is held through
-               # (GPU bindings only; bindings/rp_native_door.mojo, lane
-               # ne1-a-decomp-resident): a build without them uploads per call
-               "x_decomp_dev_alloc", "x_decomp_dev_upload", "x_decomp_dev_free", "x_decomp_dev_ew")
-
 
 def connect(classes, neighbors=False, metadata=None):
     # glue: connect the compiled decomp drivers once, before any operation;
@@ -22,6 +12,7 @@ def connect(classes, neighbors=False, metadata=None):
     from .linear_model import LinearRegression, Ridge
     from ._native_classical_bridge import connect as connect_classical, _numpy_free_context
     from .tokenizer import _binding
+    from ._native_decomp_kit_bridge import _entries as _kit_entries
 
     _, shared = connect_classical(Ridge, LinearRegression)
     context = dict(shared)
@@ -34,15 +25,11 @@ def connect(classes, neighbors=False, metadata=None):
     for mode in (selected, "fast" if selected == "identical" else "identical"):  # glue: fixed numeric-mode ABI connection
         try:
             binding = _backend.binding("_mojolearn_x_decomp", mode)
-            entries = {}
-            for name in ENTRY_NAMES:  # glue: retain checked compiled decomp symbols
-                try:
-                    entry = getattr(binding, name)
-                except (AttributeError, ImportError):
-                    continue
-                if isinstance(entry, BuiltinFunctionType):
-                    entries[name] = entry
-            decomp[mode] = entries
+            # FastICA, FactorAnalysis, LatentDirichletAllocation and the random
+            # projections run through the image's published operations table:
+            # the kit's entries form (its table key and the pool entries a
+            # resident fitted matrix is held through), no per-function map.
+            decomp[mode] = _kit_entries(binding)
             # NMF runs through one typed descriptor, with no per-function map.
             factory = getattr(binding, "nmf_native_api_v1", None)
             nmf[mode] = factory if isinstance(factory, BuiltinFunctionType) else None
@@ -64,7 +51,7 @@ def connect(classes, neighbors=False, metadata=None):
                 kpca_info[mode] = kpca_near[mode]
     # Fitted arrays and results are mojolearn Arrays, as `_M.out` made them.
     context["output_context"] = _numpy_free_context()
-    context.update(decomp_classes=dict(classes), decomp_entries=decomp, nmf_bindings=nmf,
+    context.update(decomp_classes=dict(classes), decomp_bindings=decomp, nmf_bindings=nmf,
                    kpca_neighbors_bindings=kpca_near, kpca_info_bindings=kpca_info,
                    kpca_decomp_bindings=kpca_decomp)
     context.update(metadata or {})
@@ -72,6 +59,14 @@ def connect(classes, neighbors=False, metadata=None):
     from ._native_decomp_device_bridge import connect_cpu_device, X_DECOMP_HOST
     connect_cpu_device(context, X_DECOMP_HOST, {"nmf_native_api_v1": "nmf_cpu_bindings",
                                                 "kpca_decomp_native_api_v1": "kpca_decomp_cpu_bindings"})
+    # glue: the same CPU image in the kit's entries form (its published table
+    # key is (identical, cpu)); nothing is loaded in a CPU-only process
+    if context.get("vendor") not in (None, "cpu"):
+        try:
+            cpu = _kit_entries(_backend.load_host_module(X_DECOMP_HOST))
+        except (ImportError, AttributeError, TypeError, ValueError, RuntimeError, OSError) as error:
+            cpu = type(error).__name__ + ": " + str(error)
+        context["decomp_cpu_bindings"] = {"identical": cpu}
     if neighbors:
         connect_cpu_device(context, "_mojolearn_x_neighbors_host",
                            {"x_neighbors_native_api_v1": "kpca_neighbors_cpu_bindings",

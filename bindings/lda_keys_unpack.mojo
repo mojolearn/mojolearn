@@ -39,7 +39,6 @@ struct LdaKeys(Defaultable, Movable):
     var k_topic_word_prior: PythonObject
     var k_topic_word_prior_: PythonObject
     var k_total_samples: PythonObject
-    var k_x_decomp_lda_owner: PythonObject
 
     def __init__(out self):
         self.ready = False
@@ -68,10 +67,10 @@ struct LdaKeys(Defaultable, Movable):
         self.k_topic_word_prior = PythonObject(None)
         self.k_topic_word_prior_ = PythonObject(None)
         self.k_total_samples = PythonObject(None)
-        self.k_x_decomp_lda_owner = PythonObject(None)
 
 
-comptime _LDA_KEYS = SharedSlot[LdaKeys, "MojolearnLdaKeysV1"]
+# V2: the driver entry name key went (the driver is a table operation, lane dw-decomp).
+comptime _LDA_KEYS = SharedSlot[LdaKeys, "MojolearnLdaKeysV2", 2]
 
 
 def _lda_keys_fill(nk: UnsafePointer[LdaKeys, MutUntrackedOrigin]) raises:
@@ -101,7 +100,6 @@ def _lda_keys_fill(nk: UnsafePointer[LdaKeys, MutUntrackedOrigin]) raises:
     nk[].k_topic_word_prior = py_key("topic_word_prior")
     nk[].k_topic_word_prior_ = py_key("topic_word_prior_")
     nk[].k_total_samples = py_key("total_samples")
-    nk[].k_x_decomp_lda_owner = py_key("x_decomp_lda_owner")
     var ops = Python.dict()
     nk[].ops = ops
     nk[].ready = True

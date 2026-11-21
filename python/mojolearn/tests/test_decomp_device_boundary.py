@@ -212,3 +212,100 @@ def test_python_events_per_call_do_not_grow_with_rows(cls):
             sys.setprofile(None)
         counts.append(events[0])
     assert counts[0] == counts[1], counts
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Fit-level rows of the lane's other classes (the construction, refusal, set_params, clone and pickle rows of every
+# class that takes `device=` are in test_device_parameter.py). Each row: a name, a factory taking the device keywords,
+# and the outputs compared across devices after a fit (fitted arrays by name, then one query on the fitted model).
+def _fit_rows():
+    from mojolearn import (
+        DictionaryLearning, EllipticEnvelope, FactorAnalysis, FastICA, GaussianRandomProjection, KernelPCA,
+        LatentDirichletAllocation, MinCovDet, MiniBatchDictionaryLearning, MiniBatchSparsePCA, PolynomialCountSketch,
+        SparseCoder, SparsePCA, SparseRandomProjection,
+    )
+    atoms = np.random.default_rng(11).random((5, 8), dtype=np.float32)
+    transform = lambda model, x: model.transform(x)  # noqa: E731
+    return [
+        ("FastICA", lambda **kw: FastICA(n_components=3, random_state=0, max_iter=50, **kw),
+         ("components_", "mixing_", "mean_", "whitening_"), transform),
+        ("FactorAnalysis", lambda **kw: FactorAnalysis(n_components=3, max_iter=20, **kw),
+         ("components_", "noise_variance_", "mean_"), transform),
+        ("LatentDirichletAllocation", lambda **kw: LatentDirichletAllocation(n_components=3, max_iter=3,
+                                                                              random_state=0, **kw),
+         ("components_", "exp_dirichlet_component_"), transform),
+        ("GaussianRandomProjection", lambda **kw: GaussianRandomProjection(n_components=3, random_state=0, **kw),
+         ("components_",), transform),
+        ("SparseRandomProjection", lambda **kw: SparseRandomProjection(n_components=3, random_state=0, **kw),
+         ("components_",), transform),
+        ("MinCovDet", lambda **kw: MinCovDet(random_state=0, **kw),
+         ("location_", "covariance_", "support_", "dist_"), lambda model, x: model.mahalanobis(x)),
+        ("EllipticEnvelope", lambda **kw: EllipticEnvelope(random_state=0, **kw),
+         ("location_", "covariance_", "support_", "dist_"), lambda model, x: model.decision_function(x)),
+        ("DictionaryLearning", lambda **kw: DictionaryLearning(n_components=3, max_iter=5, random_state=0, **kw),
+         ("components_",), transform),
+        ("MiniBatchDictionaryLearning", lambda **kw: MiniBatchDictionaryLearning(n_components=3, max_iter=3,
+                                                                                  random_state=0, **kw),
+         ("components_",), transform),
+        ("SparsePCA", lambda **kw: SparsePCA(n_components=3, max_iter=5, random_state=0, **kw),
+         ("components_", "mean_"), transform),
+        ("MiniBatchSparsePCA", lambda **kw: MiniBatchSparsePCA(n_components=3, max_iter=3, random_state=0, **kw),
+         ("components_", "mean_"), transform),
+        ("SparseCoder", lambda **kw: SparseCoder(atoms, transform_n_nonzero_coefs=2, **kw), (), transform),
+        ("KernelPCA", lambda **kw: KernelPCA(n_components=3, kernel="rbf", **kw),
+         ("eigenvalues_", "eigenvectors_"), transform),
+        ("PolynomialCountSketch", lambda **kw: PolynomialCountSketch(n_components=16, random_state=0, **kw),
+         (), transform),
+    ]
+
+
+FIT_ROWS = _fit_rows()
+FIT_IDS = [row[0] for row in FIT_ROWS]
+
+
+def _fit_outputs(row, x, **device):
+    _, factory, names, query = row
+    model = factory(**device).fit(x)
+    arrays = {name: np.asarray(getattr(model, name)).tobytes() for name in names}
+    arrays["query"] = np.asarray(query(model, x)).tobytes()
+    return model, arrays
+
+
+@pytest.mark.parametrize("row", FIT_ROWS, ids=FIT_IDS)
+def test_fit_row_default_device_is_this_installations_device(row):
+    model, arrays = _fit_outputs(row, data())
+    assert model.get_params()["device"] is None
+    assert model.vendor_used() == mojolearn.vendor()
+    assert len(arrays["query"]) > 0
+
+
+@pytest.mark.parametrize("row", FIT_ROWS, ids=FIT_IDS)
+def test_fit_row_explicit_cpu_always_runs(row):
+    model, arrays = _fit_outputs(row, data(), device="cpu")
+    assert model.get_params()["device"] == "cpu" and model.vendor_used() == "cpu"
+    assert len(arrays["query"]) > 0
+
+
+@two_devices
+@pytest.mark.parametrize("row", FIT_ROWS, ids=FIT_IDS)
+def test_fit_row_cpu_device_returns_the_gpu_bits_in_identical_mode(row):
+    x = data()
+    gpu, left = _fit_outputs(row, x, device="gpu", numeric_mode="identical")
+    cpu, right = _fit_outputs(row, x, device="cpu", numeric_mode="identical")
+    assert gpu.vendor_used() != "cpu" and cpu.vendor_used() == "cpu"
+    assert left.keys() == right.keys()
+    for name in left:
+        assert left[name] == right[name], (row[0], name)
+
+
+@two_devices
+@pytest.mark.parametrize("row", FIT_ROWS, ids=FIT_IDS)
+def test_fit_row_a_changed_device_resolves_again(row):
+    x = data()
+    model, first = _fit_outputs(row, x)
+    assert model.vendor_used() != "cpu"
+    model.set_params(device="cpu")
+    assert model.vendor_used() == "cpu"                       # the fitted model now answers on the CPU image
+    assert np.asarray(row[3](model, x)).tobytes() == first["query"]
+    model.set_params(device=None)
+    assert model.vendor_used() == mojolearn.vendor()
