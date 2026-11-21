@@ -20,7 +20,7 @@ ROUTE SLOTS (filled by providers/python/member_mlp_boundary_door.mojo):
   * `third` (`has_third`): the R^2 entry of the metrics image of the route's
     device (regressor score). Without it a score is refused in words.
 
-MEMBER_OP_NEW parameters (Float64 words, `20 + H` of them):
+MEMBER_OP_NEW parameters (Float64 words, `21 + H` of them):
   [0] kind (0 MLPRegressor, 1 MLPClassifier); [1] activation (0 identity,
   1 logistic, 2 tanh, 3 relu); [2] solver (0 adam, 1 sgd); [3] learning_rate
   (0 constant, 1 invscaling, 2 adaptive); [4] learning_rate_init; [5] beta_1;
@@ -28,9 +28,11 @@ MEMBER_OP_NEW parameters (Float64 words, `20 + H` of them):
   [12] nesterovs_momentum (0 / 1); [13] shuffle (0 / 1); [14] batch_size
   (0 = "auto", else the integer); [15] max_iter; [16] n_iter_no_change;
   [17] seed, low 32 bits; [18] seed, high 32 bits (the 64-bit word of the
-  estimator's seeded stream: `random_state`, or one OS-entropy draw made by
-  the caller's UNPACK when it is None); [19] H, the hidden layer count;
-  [20 .. 20 + H) the hidden layer widths.
+  estimator's seeded stream for an integer `random_state`); [19] H, the
+  hidden layer count; [20] fresh seed (1: `random_state` is None, so every
+  FIT draws its own eight bytes of OS entropy, as the estimator's own fit
+  does, and words 17 and 18 are not read; 0: the seed words);
+  [21 .. 21 + H) the hidden layer widths.
 
 VIEWS: X dense row-major host float32. Regressor: y host float32, rows x
 outputs (multi-output allowed). Classifier: y host int32 class codes
@@ -72,6 +74,7 @@ forward pass are the image's own parallel kernels.
 """
 from std.sys.info import size_of
 from std.memory import unsafe_memcpy
+from std.ffi import external_call
 from core.device_route import DeviceRoute
 from core.metrics_entry_table import MR_R2, MR_R2_WEIGHTED
 from core.native_descriptor_call import native_descriptor_call
@@ -99,7 +102,7 @@ from sequence.xseq_score_run import xseq_run_vector_finite, xseq_run_weights_che
 
 comptime _CHUNK = 256
 comptime _INDEX_SPAN = 16777216
-comptime _FIXED_WORDS = 20
+comptime _FIXED_WORDS = 21
 comptime _SCALAR_WORDS = 8
 comptime _BLOCK_PARAMS = MEMBER_BLOCK_FAMILY
 comptime _BLOCK_SIZES = MEMBER_BLOCK_FAMILY + 1
@@ -269,6 +272,20 @@ def _output_entry(route: DeviceRoute) -> XseqNeuralEntry:
     return XseqNeuralEntry(route.second.call, route.second.word)
 
 
+def _entropy_seed() raises -> UInt64:
+    """One 64-bit seed from eight bytes of OS entropy (`getentropy`, the
+    source `os.urandom` reads), little-endian as the estimator's own
+    `XseqStream` decodes `os.urandom(8)`. Thread-safe: no shared state."""
+    var raw = List[UInt8](length=8, fill=0)
+    var status = external_call["getentropy", Int32](raw.unsafe_ptr(), Int(8))
+    if status != 0:
+        raise Error("RuntimeError: OS entropy must return eight bytes")
+    var seed = UInt64(0)
+    for i in range(8):  # small-loop(one seed word from native entropy)
+        seed |= UInt64(raw[i]) << UInt64(8 * i)
+    return seed
+
+
 def _name_params(slot: _SlotP):
     """A new resident-block token for the slot's current `params`."""
     slot[].stamp += 1
@@ -326,7 +343,13 @@ def _fit(slot: _SlotP, call: _CallP) raises:
     var base = Int(slot[].params.unsafe_ptr())
     # The estimator's seeded stream: Glorot-uniform per layer straight into
     # the flat block the fit trains, then one derived seed for the shuffle.
-    var seed = UInt64(Int(w[17])) | (UInt64(Int(w[18])) << 32)
+    var seed: UInt64
+    if w[20] != 0.0:
+        # random_state=None: a fresh seed at every fit, so every fold or
+        # candidate of a caller starts from its own weights.
+        seed = _entropy_seed()
+    else:
+        seed = UInt64(Int(w[17])) | (UInt64(Int(w[18])) << 32)
     var offset = xseq_run_mlp_glorot(_output_entry(route), base, sizes, w[1] == 1.0, seed, 0)
     var shuffle_seed = Int(xseq_stream_child_seed(seed, offset) % UInt64(2147483647))
     var batch = min(200, rows) if w[14] == 0.0 else max(1, min(Int(w[14]), rows))
@@ -559,15 +582,17 @@ def _capabilities(classifier: Bool) -> Int:
 
 def _new(call: _CallP) raises:
     if call[].param_count < _FIXED_WORDS or not call[].params:
-        raise Error("member ABI: an MLP member takes at least twenty parameters")
+        raise Error("member ABI: an MLP member takes at least twenty-one parameters")
     var w = _F64P(unsafe_from_address=call[].params)
     var layers = Int(w[19])
     if layers < 0 or call[].param_count != _FIXED_WORDS + layers:
-        raise Error("member ABI: an MLP member takes 20 + (hidden layer count) parameters")
+        raise Error("member ABI: an MLP member takes 21 + (hidden layer count) parameters")
     if w[0] != 0.0 and w[0] != 1.0:
         raise Error("member ABI: unknown MLP member kind")
     if w[1] < 0.0 or w[1] > 3.0 or w[2] < 0.0 or w[2] > 1.0 or w[3] < 0.0 or w[3] > 2.0:
         raise Error("member ABI: an MLP member's activation, solver or learning-rate code is out of range")
+    if w[20] != 0.0 and w[20] != 1.0:
+        raise Error("member ABI: an MLP member's fresh-seed word is 0 or 1")
     if w[14] < 0.0 or w[16] < 1.0:
         raise Error("member ABI: an MLP member's batch_size or n_iter_no_change word is out of range")
     xseq_run_mlp_scalars_check(w[4], w[15], w[10])
