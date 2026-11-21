@@ -171,22 +171,33 @@ def _layouts(unit: Int) raises:
                    _c_words(2 * columns, 8))
 
 
-def _pooled_prepare() raises:
-    """The save path's pooled `prepare` linearizes a column-major member in
-    the list it was given (the C-order bytes are at `source` after it)."""
+def _pooled_prepare(unit: Int) raises:
+    """`prepare` linearizes a column-major member in place (the C-order
+    bytes are at `source` after it): unit 0 the save path's pooled
+    `archive_prepare` over owned bytes, 1 the same over borrowed bytes,
+    2 a serial `prepare` of owned bytes, 3 a serial `prepare` of borrowed
+    bytes."""
     var c_bytes = _c_words(6, 4)
     var shape: List[Int] = [2, 3]
     var strides: List[Int] = [4, 8]
     var f_bytes = _strided_bytes(4, shape, strides, 24, 0, c_bytes)
+    var borrowed = unit == 1 or unit == 3
+    var source = Int(f_bytes.unsafe_ptr()) if borrowed else 0
+    var owned = List[UInt8]() if borrowed else f_bytes.copy()
     var members = List[NativeArchiveMember]()
-    members.append(NativeArchiveMember("coef_", "<f4", shape^, strides^, 0, 24, 4, f_bytes^))
+    members.append(NativeArchiveMember("coef_", "<f4", shape^, strides^, source, 24, 4, owned^))
     members.append(archive_owned("intercept_", "<f4", [1], 4, _c_words(1, 4)))
-    _ = archive_prepare(members)
+    var what = String("pooled, owned") if unit == 0 else (String("pooled, borrowed") if unit == 1 else (
+        String("serial, owned") if unit == 2 else String("serial, borrowed")))
+    if unit < 2:
+        _ = archive_prepare(members)
+    else:
+        members[0].prepare()
     var at = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=members[0].source)
     for i in range(24):
-        _require(at[i] == c_bytes[i], "a pooled prepare leaves the C-order bytes in the member")
+        _require(at[i] == c_bytes[i], "prepare (" + what + ") leaves the C-order bytes in the member")
     _ = members
-
+    _ = f_bytes
 
 def _chunk_digest(mut dst: List[UInt8], address: Int, count: Int):
     var hasher = Sha256()
@@ -236,7 +247,7 @@ def _by_hand() raises:
 
 
 def run_checks() raises:
-    comptime FIXTURES = 15
+    comptime FIXTURES = 18
     var failures = 0
     for unit in range(FIXTURES):  # serial: every fixture splits across the host pool itself (module docstring)
         try:
@@ -251,7 +262,7 @@ def run_checks() raises:
             elif unit < 14:
                 _layouts(unit - 9)
             else:
-                _pooled_prepare()
+                _pooled_prepare(unit - 14)
         except problem:
             print("FAIL fitted_digest fixture", unit, String(problem))
             failures += 1
