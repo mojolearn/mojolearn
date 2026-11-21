@@ -169,8 +169,30 @@ class IncrementalPCA(_Base):
 
     def __init__(self, n_components=None, *, whiten=False, copy=True, batch_size=None, numeric_mode=None,
                  device=None):
+        # glue: a given device is checked in compiled code before any field is stored
+        if device is not None:
+            _IPCA_CALL(self, "device_set", (device,), _IPCA_CONTEXT)
         self.n_components, self.whiten, self.copy = n_components, whiten, copy
         self.batch_size, self.numeric_mode, self.device = batch_size, numeric_mode, device
+
+    def set_params(self, **params):
+        """Set constructor parameters by keyword.
+
+        Raises
+        ------
+        ValueError
+            If a keyword is not a parameter of this estimator, or ``device``
+            is not ``None``, ``"gpu"`` or ``"cpu"``.
+
+        Returns
+        -------
+        self
+        """
+        # glue: a given device is checked in compiled code before anything
+        # changes, and the estimator's native route is dropped
+        if "device" in params:
+            _IPCA_CALL(self, "device_set", (params["device"],), _IPCA_CONTEXT)
+        return _Base.set_params(self, **params)
 
     def vendor_used(self):
         """The backend this estimator runs on.
@@ -631,11 +653,33 @@ class NMF(_Base):
     def __init__(self, n_components="auto", *, init=None, solver="cd", beta_loss="frobenius", tol=1e-4,
                  max_iter=200, random_state=None, alpha_W=0.0, alpha_H="same", l1_ratio=0.0, verbose=0,
                  shuffle=False, numeric_mode=None, device=None):
+        # glue: a given device is checked in compiled code before any field is stored
+        if device is not None:
+            _DECOMP_CALL(self, "device_set", (device,), _DECOMP_CONTEXT)
         self.n_components, self.init, self.solver, self.beta_loss = n_components, init, solver, beta_loss
         self.tol, self.max_iter, self.random_state = tol, max_iter, random_state
         self.alpha_W, self.alpha_H, self.l1_ratio = alpha_W, alpha_H, l1_ratio
         self.verbose, self.shuffle, self.numeric_mode = verbose, shuffle, numeric_mode
         self.device = device
+
+    def set_params(self, **params):
+        """Set constructor parameters by keyword.
+
+        Raises
+        ------
+        ValueError
+            If a keyword is not a parameter of this estimator, or ``device``
+            is not ``None``, ``"gpu"`` or ``"cpu"``.
+
+        Returns
+        -------
+        self
+        """
+        # glue: a given device is checked in compiled code before anything
+        # changes, and the estimator's native route is dropped
+        if "device" in params:
+            _DECOMP_CALL(self, "device_set", (params["device"],), _DECOMP_CONTEXT)
+        return _Base.set_params(self, **params)
 
     def vendor_used(self):
         """The backend this estimator runs on.

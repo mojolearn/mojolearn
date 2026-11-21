@@ -21,10 +21,9 @@ from providers.python.neural_descriptor_pyapi_door import (
 )
 from bindings.pca_keys_unpack import pca_keys
 from bindings.py_balanced import py_item
-from core.device_route_dw_decomp import DecompRoute, decomp_route_cpu_identical
 from bindings.decomp_device_route_door import (
     decomp_route_hit, decomp_route_keep, decomp_route_resolve_device, decomp_route_on_cpu_image,
-    decomp_route_expected_vendor,
+    decomp_route_expected_vendor, DecompRoute,
 )
 
 
@@ -85,22 +84,22 @@ def pca_route(model: PythonObject, fields: PythonObject, mode: PythonObject, con
     """The estimator's resolved route (bindings/decomp_device_route_door.mojo):
     the connection of the device image or of the CPU image. `mode` is the
     estimator's numeric mode object (the process default object when None)
-    and `fields` holds its `device`. A hit is one `device` read, one record
+    and `fields` holds its `device` (read on a miss only). A hit is one record
     read and three pointer compares; a miss (the estimator's first operation,
     a changed mode or device object) reads the binding table, connects and
     stores the route. Replaces the per-call `pca_connection(mode, context)`."""
     var nk = pca_keys()
-    var hit = decomp_route_hit(model, fields, mode, context)
+    var hit = decomp_route_hit(model, mode, context)
     if hit.found:
         return hit.route
     var name = pca_mode_name(mode)
     # The one read of `device`: None is this installation's device; a `cpu`
     # route of a GPU installation reads the CPU image's table
     # (python/mojolearn/_native_decomp_device_bridge.py), identical only.
-    var device = decomp_route_resolve_device(hit.device, context)
+    var tier = 1 if name == "identical" else 0
+    var device = decomp_route_resolve_device(fields, tier, context)
     var bindings = PythonObject(None)
     if decomp_route_on_cpu_image(device, context):
-        decomp_route_cpu_identical(name == "identical")
         bindings = py_get(context, nk[].k_pca_cpu_bindings)
         if bindings is None:
             raise Error("ImportError: device='cpu' is not connected in this installation")
@@ -110,9 +109,8 @@ def pca_route(model: PythonObject, fields: PythonObject, mode: PythonObject, con
     if factory is None:
         raise Error("NotImplementedError: mojolearn PCA: this build of _mojolearn_estimators does not export "
                     + "pca_native_api_v1; rebuild it with bindings/build_estimators.sh")
-    var tier = 1 if name == "identical" else 0
     var route = DecompRoute(device, _pca_connect(factory, decomp_route_expected_vendor(device, context), tier), tier)
-    decomp_route_keep(model, route, mode, hit.device, context, factory)
+    decomp_route_keep(model, route, mode, context, factory)
     return route
 
 

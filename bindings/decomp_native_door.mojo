@@ -27,6 +27,7 @@ from x_decomp.decomp_public_lifecycle_run import decomp_public_method
 from bindings.public_lifecycle_owner_door import lifecycle_end
 from bindings.nmf_native_door import nmf_fit, nmf_fit_transform, nmf_inverse_transform, nmf_transform
 from bindings.nmf_descriptor_boundary_door import nmf_route_vendor
+from bindings.decomp_device_route_door import decomp_device_admit, decomp_route_clear
 
 
 comptime _DECOMP_FAMILY_SLOT = "decomp_family_class_v1"
@@ -91,6 +92,14 @@ def _kpca_public(model: PythonObject, operation: String, args: PythonObject,
 def _decomp_dispatch(model: PythonObject, family: String, operation: String, args: PythonObject,
                      context: PythonObject) raises -> PythonObject:
     var result = PythonObject(None)
+    if operation == "device_set":
+        # The constructor and `set_params` of a class with a Python
+        # constructor: the device is checked where it is given (shared words,
+        # refused before the estimator changes) and the estimator's route is
+        # dropped, so its next operation reads the device once.
+        decomp_device_admit(args[0], context)
+        decomp_route_clear(model)
+        return result
     if family == "FastICA":
         if operation == "fit":
             result = ica_fit(model, args[0], False, context)

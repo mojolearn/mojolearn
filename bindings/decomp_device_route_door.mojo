@@ -1,50 +1,43 @@
 # SPDX-License-Identifier: Apache-2.0
-"""UNPACK of a decomposition estimator's `device` into its native route owner.
+"""The decomposition families' resolver glue over the ONE device route.
 
-`device=None` (default: this installation's device), `device="gpu"` or
-`device="cpu"` is a constructor parameter of the decomposition estimators,
-with the rule and the words of the Ridge pilot (core/linear_route.mojo). The
-value is stored as given and read ONCE, at the estimator's first operation,
-into a `DecompRouteOwner` kept in the weak model-record table. The owner holds
-the resolved route (core/device_route_dw_decomp.mojo): the device and the
-family's typed connection index of the device image or of the CPU image.
-Every later operation reads the owner and calls through its connection.
+The rule and its words are core/device_route.mojo; the owner is
+`DeviceRouteOwner` (providers/python/device_route_boundary_door.mojo, slot
+`device_route_v1`). This file defines no owner, no rule and no refusal text.
 
-What a call compares (pointer identities against the owner's pins, no value
-is read): the estimator's mode object, its `device` object and the connected
-context. The decomposition classes with a plain Python constructor and the
-shared `set_params` have no native step at which an owner could be dropped,
-so the `device` object is one of the compared identities: a `set_params`,
-a `clone`, an unpickled estimator or a directly assigned `device` or
-`numeric_mode` resolves again at its next operation. The compare replaces,
-per call, the family's former selection: the mode word's strip/lower, the
-binding table read and its key admission, the factory's provider lookup and
-the vendor String build and compare.
+A decomposition family reaches its compiled image through a typed connection
+record (x_decomp/*_descriptor_boundary_run.mojo: the driver, compiled mode,
+vendor and capabilities of one image), named by an index. The family's
+resolver stores that index in the route's `flags` word (`decomp_route_keep`):
+bits 0..15 the connection, bits 16..31 a second connection plus one (0: none).
+`DecompRoute` is the view of those words a door reads.
+
+THE RULE as these doors apply it: the device is checked where it is given (the
+constructor, `set_params`) and read ONCE, when the estimator's route is
+resolved (its first operation after construction, `set_params` or a changed
+numeric mode). No public call reads or compares the device: a hit is one
+record read and three pointer compares (mode object, the None default pin,
+context).
 
 The image of a resolved connection is pinned for the life of the process by
 the family's provider pins (bindings/py_provider_pins.mojo), so a route by
-value is safe to call through after the owner is gone.
-
-Family-local form of providers/python/linear_route_boundary_door.mojo (the
-pilot's owner, which holds the linear family's four entries). SHARED CHANGE
-WANTED: one route owner for every family, holding a family-typed payload.
+value is safe to call through.
 """
 from std.python import Python, PythonObject
-from std.python.bindings import PythonModuleBuilder, lookup_py_type_object
 from bindings.decomp_scalar_admission_unpack import decomp_scalar_repr
-from bindings.py_type_registry import py_type_absent, py_type_attach
-from bindings.py_balanced import py_call, py_get, py_item, py_type
+from bindings.py_balanced import py_get, py_item, py_type
 from bindings.py_keys import py_key
-from bindings.py_model_records import records_get, records_put, records_drop, RECORDS_PREPARED
 from core.shared_slot import SharedSlot
-from core.linear_route import (
-    LINEAR_DEVICE_CPU, LINEAR_DEVICE_INSTALL, linear_device_code, linear_device_refusal,
+from core.device_route import (
+    DEVICE_CPU, DEVICE_GPU, DEVICE_INSTALL, device_code, device_refusal, device_installed,
+    device_route_plan, device_vendor_code,
 )
-from core.device_route_dw_decomp import (
-    DecompRoute, decomp_route_device, decomp_route_cpu_image, decomp_route_vendor,
+from providers.python.device_route_boundary_door import (
+    DeviceRouteOwner, device_route_held, device_route_keep, device_route_value, device_route_clear,
 )
 
-comptime _DECOMP_ROUTE_SLOT = "decomp_route_v1"
+comptime _DECOMP_FLAG_BITS = 16
+comptime _DECOMP_FLAG_MASK = 65535
 
 
 struct DecompRouteKeys(Defaultable, Movable):
@@ -72,113 +65,93 @@ def _decomp_route_keys_fill(rk: UnsafePointer[DecompRouteKeys, MutUntrackedOrigi
 
 @always_inline
 def decomp_route_keys() raises -> UnsafePointer[DecompRouteKeys, MutUntrackedOrigin]:
-    """The route's held keys: one slot fetch and one flag test."""
+    """The resolver's held keys: one slot fetch and one flag test."""
     var rk = _DECOMP_ROUTE_KEYS.get_or_create_ptr()
     if not rk[].ready:
         _decomp_route_keys_fill(rk)
     return rk
 
 
-struct DecompRouteOwner(Movable, Writable):
-    var route: DecompRoute
-    var resolved: Bool
-    # The objects the route was resolved for. Held, so their addresses stay
-    # theirs while this owner lives; a call compares identities only.
-    var mode: PythonObject
-    var device: PythonObject
-    var context: PythonObject
-    # The compiled factory (or entry table) the connection was made from.
-    var images: PythonObject
+struct DecompRoute(ImplicitlyCopyable, Movable):
+    """A door's view of one estimator's route: the resolved device
+    (DEVICE_GPU or DEVICE_CPU), the family's typed connection index, the
+    selected tier (1 identical, 0 fast) and a second connection of the same
+    family where it has one (-1 otherwise)."""
+    var device: Int
+    var connection: Int
+    var mode: Int
+    var extra: Int
 
-    def __init__(out self, route: DecompRoute, mode: PythonObject, device: PythonObject,
-        context: PythonObject, images: PythonObject):
-        self.route = route
-        self.resolved = True
-        self.mode = mode
+    def __init__(out self):
+        self.device = DEVICE_GPU
+        self.connection = -1
+        self.mode = -1
+        self.extra = -1
+
+    def __init__(out self, device: Int, connection: Int, mode: Int, extra: Int = -1):
         self.device = device
-        self.context = context
-        self.images = images
-
-    def write_to(self, mut writer: Some[Writer]):
-        writer.write("DecompRouteOwner(device=", self.route.device, ", connection=", self.route.connection, ")")
-
-    def write_repr_to(self, mut writer: Some[Writer]):
-        self.write_to(writer)
-
-
-def register_decomp_route_owner(mut module: PythonModuleBuilder) raises:
-    """Register the owner's Python type in the ONE binding that allocates it
-    (bindings/_mojolearn_runtime_decomp_host.mojo). A second initialization of
-    that image attaches the existing type object."""
-    var existing: PythonObject
-    try:
-        existing = lookup_py_type_object[DecompRouteOwner]()
-    except error:
-        if not py_type_absent(error):
-            raise error
-        _ = module.add_type[DecompRouteOwner]("_DecompRouteOwner")
-        return
-    py_type_attach(module.module, "_DecompRouteOwner", existing)
-
-
-def decomp_device_unpack(value: PythonObject, context: PythonObject) raises -> Int:
-    """The device code of a constructor value: None (this installation's
-    device), or exact `'gpu'` or `'cpu'`. Anything else is refused in the
-    pilot's words (core/linear_route.mojo), before any state changes. The
-    refused value is shown by the decomposition doors' scalar repr
-    (bindings/decomp_scalar_admission_unpack.mojo): an admitted native scalar
-    only, never a user object's `__repr__`."""
-    if value is None:
-        return LINEAR_DEVICE_INSTALL
-    if py_type(value) is py_type(PythonObject("")):
-        var code = linear_device_code(String(value))
-        if code >= 0:
-            return code
-    linear_device_refusal(decomp_scalar_repr(value, context))
-    return LINEAR_DEVICE_INSTALL
-
-
-def decomp_device_admit(value: PythonObject, context: PythonObject) raises:
-    """Check a device where it is given to a native constructor or a native
-    `set_params`: an unknown value, and an explicit `'gpu'` in a CPU-only
-    process, are refused in words before the estimator changes. The default
-    None is one identity compare and reads nothing."""
-    if value is None:
-        return
-    var device = decomp_device_unpack(value, context)
-    if device == LINEAR_DEVICE_CPU:
-        return
-    var rk = decomp_route_keys()
-    _ = decomp_route_device(device, String(py_item(context, rk[].k_vendor)))
+        self.connection = connection
+        self.mode = mode
+        self.extra = extra
 
 
 @fieldwise_init
 struct DecompRouteHit(Movable):
-    """The per-call read. `found`: `route` is the estimator's resolved route.
-    Otherwise `device` is the estimator's `device` object as stored (None
-    when the field is absent), for the one resolution that follows."""
+    """The per-call read: `found` says `route` is the estimator's resolved route."""
     var found: Bool
     var route: DecompRoute
-    var device: PythonObject
 
 
-def decomp_route_hit(model: PythonObject, fields: PythonObject, mode: PythonObject,
-    context: PythonObject) raises -> DecompRouteHit:
-    """The estimator's route for this operation: one held-key read of
-    `device`, one record read and three pointer compares. `mode` is the mode
-    object the family selects by (its `numeric_mode_`, or its `numeric_mode`
-    with the process default when that is None)."""
+def _decomp_process_vendor(context: PythonObject) raises -> Int:
     var rk = decomp_route_keys()
-    var device = py_get(fields, rk[].k_device)
-    var owner = records_get(RECORDS_PREPARED, model, _DECOMP_ROUTE_SLOT)
-    if owner is not None:
-        var native = owner.downcast_value_ptr[DecompRouteOwner]()
-        if (native[].resolved and native[].mode is mode and native[].device is device
-                and native[].context is context):
-            var route = native[].route
-            _ = owner  # the downcast owner stays alive through its final native read
-            return DecompRouteHit(True, route, device)
-    return DecompRouteHit(False, DecompRoute(), device)
+    return device_vendor_code(String(py_item(context, rk[].k_vendor)))
+
+
+def _decomp_device_unpack(value: PythonObject, context: PythonObject) raises -> Int:
+    """The device code of a stored value, with the shared words
+    (core/device_route.mojo). The refused value is shown by the
+    decomposition doors' scalar repr: an admitted native scalar only."""
+    if value is None:
+        return DEVICE_INSTALL
+    if py_type(value) is py_type(PythonObject("")):
+        var code = device_code(String(value))
+        if code >= 0:
+            return code
+    device_refusal(decomp_scalar_repr(value, context))
+    return DEVICE_INSTALL
+
+
+def decomp_device_admit(value: PythonObject, context: PythonObject) raises:
+    """Check a device where it is given (a constructor, `set_params`): an
+    unknown value, and an explicit `'gpu'` in a CPU-only process, are refused
+    in the shared words before the estimator changes. The default None is
+    one identity compare and reads nothing."""
+    if value is None:
+        return
+    var device = _decomp_device_unpack(value, context)
+    if device == DEVICE_CPU:
+        return
+    _ = device_installed(device, _decomp_process_vendor(context))
+
+
+def decomp_route_clear(model: PythonObject) raises:
+    """Forget the estimator's routes (a constructor, `set_params`): its next
+    operation reads the device and the mode again."""
+    device_route_clear(model)
+
+
+def decomp_route_hit(model: PythonObject, mode: PythonObject, context: PythonObject) raises -> DecompRouteHit:
+    """The estimator's route for this operation: one record read and three
+    pointer compares. `mode` is the mode object the family selects by (its
+    `numeric_mode_`, or its `numeric_mode` with the process default object
+    when that is None). The device is not read."""
+    var owner = device_route_held(model, mode, PythonObject(None), context)
+    if owner is None:
+        return DecompRouteHit(False, DecompRoute())
+    var route = device_route_value(owner)
+    _ = owner  # the owner stays alive through its final native read
+    return DecompRouteHit(True, DecompRoute(route.device, route.flags & _DECOMP_FLAG_MASK, route.mode,
+        ((route.flags >> _DECOMP_FLAG_BITS) & _DECOMP_FLAG_MASK) - 1))
 
 
 def decomp_route_mode(fields: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -193,36 +166,47 @@ def decomp_route_mode(fields: PythonObject, context: PythonObject) raises -> Pyt
     return mode
 
 
-def decomp_route_resolve_device(device: PythonObject, context: PythonObject) raises -> Int:
-    """The device a stored `device` object runs on in this process (miss path
-    only): None is this installation's device, an explicit `'gpu'` in a
-    CPU-only process and an unknown value are refused in words."""
+def decomp_route_resolve_device(fields: PythonObject, tier: Int, context: PythonObject) raises -> Int:
+    """THE one read of an estimator's `device` (a route miss): the device its
+    request runs on in this process for the selected `tier` (1 identical, 0
+    fast), by the shared plan. None, and an instance without the field, run
+    this installation's device; an explicit `'gpu'` in a CPU-only process, an
+    unknown value (an instance that got here without its constructor's
+    check) and `'cpu'` with `fast` beside a device set are refused in the
+    shared words."""
     var rk = decomp_route_keys()
-    return decomp_route_device(decomp_device_unpack(device, context), String(py_item(context, rk[].k_vendor)))
+    var request = _decomp_device_unpack(py_get(fields, rk[].k_device), context)
+    return device_route_plan(request, _decomp_process_vendor(context), tier).device
 
 
 def decomp_route_on_cpu_image(device: Int, context: PythonObject) raises -> Bool:
     """True when a route on `device` reads the family's CPU table (the host
-    image loaded beside the device set), miss path only."""
-    var rk = decomp_route_keys()
-    return decomp_route_cpu_image(device, String(py_item(context, rk[].k_vendor)))
+    image loaded beside the device set). Miss path only."""
+    return device == DEVICE_CPU and _decomp_process_vendor(context) != 0
 
 
 def decomp_route_expected_vendor(device: Int, context: PythonObject) raises -> String:
-    """The vendor word the route's compiled image must report (miss path)."""
+    """The vendor word the route's compiled image must report. Miss path only."""
+    if device == DEVICE_CPU:
+        return String("cpu")
     var rk = decomp_route_keys()
-    return decomp_route_vendor(device, String(py_item(context, rk[].k_vendor)))
+    return String(py_item(context, rk[].k_vendor))
 
 
-def decomp_route_keep(model: PythonObject, route: DecompRoute, mode: PythonObject, device: PythonObject,
-    context: PythonObject, images: PythonObject) raises:
-    """Store a resolved route for the estimator (miss path: one owner
-    allocation). An estimator that takes no weak reference keeps no owner and
-    resolves at every operation (records_put stores nothing)."""
-    var fresh = PythonObject(alloc=DecompRouteOwner(route, mode, device, context, images))
-    _ = records_put(RECORDS_PREPARED, model, _DECOMP_ROUTE_SLOT, fresh)
-
-
-def decomp_route_clear(model: PythonObject) raises:
-    """Forget the estimator's route (a native `__init__` or `set_params`)."""
-    records_drop(RECORDS_PREPARED, model, _DECOMP_ROUTE_SLOT)
+def decomp_route_keep(model: PythonObject, route: DecompRoute, mode: PythonObject, context: PythonObject,
+    images: PythonObject) raises:
+    """Store a resolved route in the estimator's `DeviceRouteOwner` (miss
+    path: one owner allocation). The connection indices go into the route's
+    family `flags` word; `images` is the compiled factory (or factories) the
+    connection was made from."""
+    if route.connection < 0 or route.connection >= _DECOMP_FLAG_MASK or route.extra + 1 >= _DECOMP_FLAG_MASK:
+        raise Error("RuntimeError: decomposition connection index does not fit the route word")
+    var built = DeviceRouteOwner(route.device)
+    built.route.mode = route.mode
+    built.route.vendor = 0 if route.device == DEVICE_CPU else _decomp_process_vendor(context)
+    built.route.flags = route.connection | ((route.extra + 1) << _DECOMP_FLAG_BITS)
+    built.resolved = True
+    built.mode = mode
+    built.context = context
+    built.images = images
+    _ = device_route_keep(model, built^)
