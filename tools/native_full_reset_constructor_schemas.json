@@ -3962,77 +3962,84 @@
           "value": {
             "parameter": "kernel"
           },
-          "source": "python/mojolearn/_gpc_impl.py:266"
+          "source": "python/mojolearn/_gpc_impl.py:254"
         },
         {
           "field": "optimizer",
           "value": {
             "parameter": "optimizer"
           },
-          "source": "python/mojolearn/_gpc_impl.py:266"
+          "source": "python/mojolearn/_gpc_impl.py:254"
         },
         {
           "field": "n_restarts_optimizer",
           "value": {
             "parameter": "n_restarts_optimizer"
           },
-          "source": "python/mojolearn/_gpc_impl.py:266"
+          "source": "python/mojolearn/_gpc_impl.py:254"
         },
         {
           "field": "max_iter_predict",
           "value": {
             "parameter": "max_iter_predict"
           },
-          "source": "python/mojolearn/_gpc_impl.py:266"
+          "source": "python/mojolearn/_gpc_impl.py:254"
         },
         {
           "field": "warm_start",
           "value": {
             "parameter": "warm_start"
           },
-          "source": "python/mojolearn/_gpc_impl.py:266"
+          "source": "python/mojolearn/_gpc_impl.py:254"
         },
         {
           "field": "copy_X_train",
           "value": {
             "parameter": "copy_X_train"
           },
-          "source": "python/mojolearn/_gpc_impl.py:266"
+          "source": "python/mojolearn/_gpc_impl.py:254"
         },
         {
           "field": "random_state",
           "value": {
             "parameter": "random_state"
           },
-          "source": "python/mojolearn/_gpc_impl.py:266"
+          "source": "python/mojolearn/_gpc_impl.py:254"
         },
         {
           "field": "multi_class",
           "value": {
             "parameter": "multi_class"
           },
-          "source": "python/mojolearn/_gpc_impl.py:266"
+          "source": "python/mojolearn/_gpc_impl.py:254"
         },
         {
           "field": "n_jobs",
           "value": {
             "parameter": "n_jobs"
           },
-          "source": "python/mojolearn/_gpc_impl.py:266"
+          "source": "python/mojolearn/_gpc_impl.py:254"
         },
         {
           "field": "numeric_mode",
           "value": {
             "parameter": "numeric_mode"
           },
-          "source": "python/mojolearn/_gpc_impl.py:266"
+          "source": "python/mojolearn/_gpc_impl.py:254"
+        },
+        {
+          "field": "device",
+          "value": {
+            "parameter": "device"
+          },
+          "source": "python/mojolearn/_gpc_impl.py:254"
         }
       ],
       "trace": [
-        "python/mojolearn/_gpc_impl.py:266"
+        "python/mojolearn/_gpc_impl.py:254"
       ],
-      "constructor": "python/mojolearn/_gpc_impl.py:266",
-      "signature_source": "def __init__(self, kernel=None, *, optimizer=None, n_restarts_optimizer=0, max_iter_predict=100, warm_start=False, copy_X_train=True, random_state=None, multi_class='one_vs_rest', n_jobs=None, numeric_mode=None)",
+      "constructor": "python/mojolearn/_gpc_impl.py:254",
+      "signature_source": "def __init__(self, kernel=None, *, optimizer=None, n_restarts_optimizer=0, max_iter_predict=100, warm_start=False, copy_X_train=True, random_state=None, multi_class='one_vs_rest', n_jobs=None, numeric_mode=None, device=None)",
       "parameters": [
         "kernel",
         "optimizer",
@@ -4043,9 +4050,10 @@
         "random_state",
         "multi_class",
         "n_jobs",
-        "numeric_mode"
+        "numeric_mode",
+        "device"
       ],
-      "constructor_ast_sha256": "d49cb0fe788c502a27670fdddcec1730b63e42815c5919cf7db1a0f982481406",
+      "constructor_ast_sha256": "0e082d29f882f9b080b896f13766f5a9fe73f7cfaad1bf2c98ef0bc819fa9845",
       "field_order": [
         "kernel",
         "optimizer",
@@ -4056,7 +4064,8 @@
         "random_state",
         "multi_class",
         "n_jobs",
-        "numeric_mode"
+        "numeric_mode",
+        "device"
       ],
       "final_fields": {
         "kernel": {
@@ -4088,6 +4097,9 @@
         },
         "numeric_mode": {
           "parameter": "numeric_mode"
+        },
+        "device": {
+          "parameter": "device"
         }
       },
       "signature_defaults": {
@@ -4100,7 +4112,8 @@
         "random_state": "None",
         "multi_class": "'one_vs_rest'",
         "n_jobs": "None",
-        "numeric_mode": "None"
+        "numeric_mode": "None",
+        "device": "None"
       },
       "numeric_mode_injection": false,
       "module": "mojolearn._gpc_impl",
@@ -4109,8 +4122,8 @@
         {
           "path": "python/mojolearn/_gpc_impl.py",
           "name": "__init__",
-          "line": 266,
-          "ast_sha256": "d49cb0fe788c502a27670fdddcec1730b63e42815c5919cf7db1a0f982481406"
+          "line": 254,
+          "ast_sha256": "0e082d29f882f9b080b896f13766f5a9fe73f7cfaad1bf2c98ef0bc819fa9845"
         }
       ],
       "constructor_ancestry": [
@@ -4170,70 +4183,77 @@
           "value": {
             "parameter": "kernel"
           },
-          "source": "python/mojolearn/_gp_impl.py:651"
+          "source": "python/mojolearn/_gp_impl.py:578"
         },
         {
           "field": "alpha",
           "value": {
             "parameter": "alpha"
           },
-          "source": "python/mojolearn/_gp_impl.py:651"
+          "source": "python/mojolearn/_gp_impl.py:578"
         },
         {
           "field": "optimizer",
           "value": {
             "parameter": "optimizer"
           },
-          "source": "python/mojolearn/_gp_impl.py:651"
+          "source": "python/mojolearn/_gp_impl.py:578"
         },
         {
           "field": "n_restarts_optimizer",
           "value": {
             "parameter": "n_restarts_optimizer"
           },
-          "source": "python/mojolearn/_gp_impl.py:651"
+          "source": "python/mojolearn/_gp_impl.py:578"
         },
         {
           "field": "normalize_y",
           "value": {
             "parameter": "normalize_y"
           },
-          "source": "python/mojolearn/_gp_impl.py:651"
+          "source": "python/mojolearn/_gp_impl.py:578"
         },
         {
           "field": "copy_X_train",
           "value": {
             "parameter": "copy_X_train"
           },
-          "source": "python/mojolearn/_gp_impl.py:651"
+          "source": "python/mojolearn/_gp_impl.py:578"
         },
         {
           "field": "n_targets",
           "value": {
             "parameter": "n_targets"
           },
-          "source": "python/mojolearn/_gp_impl.py:651"
+          "source": "python/mojolearn/_gp_impl.py:578"
         },
         {
           "field": "random_state",
           "value": {
             "parameter": "random_state"
           },
-          "source": "python/mojolearn/_gp_impl.py:651"
+          "source": "python/mojolearn/_gp_impl.py:578"
         },
         {
           "field": "numeric_mode",
           "value": {
             "parameter": "numeric_mode"
           },
-          "source": "python/mojolearn/_gp_impl.py:651"
+          "source": "python/mojolearn/_gp_impl.py:578"
+        },
+        {
+          "field": "device",
+          "value": {
+            "parameter": "device"
+          },
+          "source": "python/mojolearn/_gp_impl.py:578"
         }
       ],
       "trace": [
-        "python/mojolearn/_gp_impl.py:651"
+        "python/mojolearn/_gp_impl.py:578"
       ],
-      "constructor": "python/mojolearn/_gp_impl.py:651",
-      "signature_source": "def __init__(self, kernel=None, *, alpha=2.0 ** (-20), optimizer=None, n_restarts_optimizer=0, normalize_y=False, copy_X_train=True, n_targets=None, random_state=None, numeric_mode=None)",
+      "constructor": "python/mojolearn/_gp_impl.py:578",
+      "signature_source": "def __init__(self, kernel=None, *, alpha=2.0 ** (-20), optimizer=None, n_restarts_optimizer=0, normalize_y=False, copy_X_train=True, n_targets=None, random_state=None, numeric_mode=None, device=None)",
       "parameters": [
         "kernel",
         "alpha",
@@ -4243,9 +4263,10 @@
         "copy_X_train",
         "n_targets",
         "random_state",
-        "numeric_mode"
+        "numeric_mode",
+        "device"
       ],
-      "constructor_ast_sha256": "f6c684b22168dae23a129ddab980db57c9a7e5f05974991ce69b060abea946a0",
+      "constructor_ast_sha256": "560a6f10cb895714d39b29a914c0bf013774ce96011e197a28c1f2e69338617a",
       "field_order": [
         "kernel",
         "alpha",
@@ -4255,7 +4276,8 @@
         "copy_X_train",
         "n_targets",
         "random_state",
-        "numeric_mode"
+        "numeric_mode",
+        "device"
       ],
       "final_fields": {
         "kernel": {
@@ -4284,6 +4306,9 @@
         },
         "numeric_mode": {
           "parameter": "numeric_mode"
+        },
+        "device": {
+          "parameter": "device"
         }
       },
       "signature_defaults": {
@@ -4295,7 +4320,8 @@
         "copy_X_train": "True",
         "n_targets": "None",
         "random_state": "None",
-        "numeric_mode": "None"
+        "numeric_mode": "None",
+        "device": "None"
       },
       "numeric_mode_injection": false,
       "module": "mojolearn._gp_impl",
@@ -4304,8 +4330,8 @@
         {
           "path": "python/mojolearn/_gp_impl.py",
           "name": "__init__",
-          "line": 651,
-          "ast_sha256": "f6c684b22168dae23a129ddab980db57c9a7e5f05974991ce69b060abea946a0"
+          "line": 578,
+          "ast_sha256": "560a6f10cb895714d39b29a914c0bf013774ce96011e197a28c1f2e69338617a"
         }
       ],
       "constructor_ancestry": [

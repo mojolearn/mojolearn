@@ -1814,6 +1814,9 @@ def host_archive_gpr(cls: PythonObject, arrays: PythonObject, path: PythonObject
     py_setitem(fields, nk[].k_n_targets, PythonObject(None))
     py_setitem(fields, nk[].k_random_state, PythonObject(None))
     py_setitem(fields, nk[].k_numeric_mode, PythonObject(None))
+    # A loaded model runs this installation's device (`device` is a
+    # constructor parameter, not model state; `save` does not write it).
+    py_setitem(fields, "device", PythonObject(None))
     py_setitem(fields, nk[].k__kernel, kernel)
     py_setitem(fields, nk[].k__alpha, alpha)
     py_setitem(fields, nk[].k__optimizer, PythonObject(None))
@@ -1926,6 +1929,9 @@ def host_archive_gpc(cls: PythonObject, arrays: PythonObject, path: PythonObject
     py_setitem(fields, nk[].k_multi_class, "one_vs_rest")
     py_setitem(fields, nk[].k_n_jobs, PythonObject(None))
     py_setitem(fields, nk[].k_numeric_mode, mode)
+    # A loaded model runs this installation's device (`device` is a
+    # constructor parameter, not model state; `save` does not write it).
+    py_setitem(fields, "device", PythonObject(None))
     py_setitem(fields, nk[].k__kernel, kernel)
     py_setitem(fields, nk[].k__max_iter_predict, max_iter)
     var x = _archive_exact(arrays, "x", "<f4", context)

@@ -97,6 +97,12 @@ struct GpKeys(Defaultable, Movable):
     var k_sym: PythonObject
     var k_vendor: PythonObject
     var k_y_train_: PythonObject
+    var k__CPU_ONLY: PythonObject
+    var k_device: PythonObject
+    var k_gp_cpu_bindings: PythonObject
+    var k__mojolearn_gp: PythonObject
+    var k__mojolearn: PythonObject
+    var k_metrics: PythonObject
 
     def __init__(out self):
         self.ready = False
@@ -183,6 +189,12 @@ struct GpKeys(Defaultable, Movable):
         self.k_sym = PythonObject(None)
         self.k_vendor = PythonObject(None)
         self.k_y_train_ = PythonObject(None)
+        self.k__CPU_ONLY = PythonObject(None)
+        self.k_device = PythonObject(None)
+        self.k_gp_cpu_bindings = PythonObject(None)
+        self.k__mojolearn_gp = PythonObject(None)
+        self.k__mojolearn = PythonObject(None)
+        self.k_metrics = PythonObject(None)
 
 
 comptime _GP_KEYS = SharedSlot[GpKeys, "MojolearnGpKeysV1"]
@@ -273,6 +285,12 @@ def _gp_keys_fill(nk: UnsafePointer[GpKeys, MutUntrackedOrigin]) raises:
     nk[].k_sym = py_key("sym")
     nk[].k_vendor = py_key("vendor")
     nk[].k_y_train_ = py_key("y_train_")
+    nk[].k__CPU_ONLY = py_key("_CPU_ONLY")
+    nk[].k_device = py_key("device")
+    nk[].k_gp_cpu_bindings = py_key("gp_cpu_bindings")
+    nk[].k__mojolearn_gp = py_key("_mojolearn_gp")
+    nk[].k__mojolearn = py_key("_mojolearn")
+    nk[].k_metrics = py_key("metrics")
     var ops = Python.dict()
     nk[].ops = ops
     nk[].ready = True

@@ -261,6 +261,7 @@ def connect(ridge_class, linear_class=None):
 #: host (fit and predict entries), the x_linear host (Ridge's weighted solve)
 #: and the decomposition host (LinearRegression's TSQR).
 _CPU_DEVICE_HOSTS = ("_mojolearn_estimators_host", "_mojolearn_x_linear_host", "_mojolearn_x_decomp_host")
+_CPU_DEVICE_METRICS_HOST = "_mojolearn_x_metrics_host"
 
 
 def connect_cpu_device(context):
@@ -288,6 +289,12 @@ def connect_cpu_device(context):
             cpu["decomp"] = _decomp_cells(_backend.load_host_module(decomp))
         except errors as error:
             cpu["decomp"] = type(error).__name__ + ": " + str(error)
+        # `score` of a device="cpu" estimator runs its R^2 program on the CPU
+        # metrics table (providers/python/metrics_route_boundary_door.mojo).
+        try:
+            cpu["metrics"] = _native_table_cells(_backend.load_host_module(_CPU_DEVICE_METRICS_HOST), "x_metrics")
+        except errors as error:
+            cpu["metrics"] = type(error).__name__ + ": " + str(error)
     except errors as error:
         cpu = type(error).__name__ + ": " + str(error)
     context["classical_cpu_bindings"] = {"identical": cpu}

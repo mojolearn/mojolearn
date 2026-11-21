@@ -806,7 +806,12 @@ def gp_classifier_operation(model: PythonObject, operation: Int, args: GPArgumen
         if n_truth != n_pred:
             raise Error("mojolearn GaussianProcessClassifier: y has " + String(n_truth) + " entries for "
                         + String(n_pred) + " rows")
-        var result = gpc_score_result(args[3], pred, context)
+        # A CPU route in a GPU installation hands its CPU metrics factory
+        # behind (binding, base binding, X, y); every other caller passes four.
+        var cpu_metrics = PythonObject(None)
+        if len(args) > 4:
+            cpu_metrics = args[4]
+        var result = gpc_score_result(args[3], pred, cpu_metrics, context)
         _ = prediction
         _ = pred
         return PythonObject(result)
