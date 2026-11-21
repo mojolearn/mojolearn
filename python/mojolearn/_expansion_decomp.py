@@ -837,6 +837,8 @@ class FastICA(_DeviceDoor, _Base):
     _parameters = ("n_components", "algorithm", "whiten", "fun", "fun_args", "max_iter", "tol", "w_init",
                    "whiten_solver", "random_state", "numeric_mode", "device")
     _device_door = "decomp"
+    #: The member ABI mark (family 32 XDecomp, kind 7; core/xdecomp_member.mojo).
+    _mojolearn_member = (32, 7)
 
     def __init__(self, n_components=None, *, algorithm="parallel", whiten="unit-variance", fun="logcosh",
                  fun_args=None, max_iter=200, tol=1e-4, w_init=None, whiten_solver="svd", random_state=None,

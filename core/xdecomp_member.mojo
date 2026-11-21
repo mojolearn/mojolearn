@@ -29,6 +29,24 @@ MEMBER_OP_NEW parameters, random projections (6):
       (Sparse only; 0 for Gaussian)
   [4] compute_inverse_components 0 / 1
   [5] seed: random_state & 0xFFFFFFFF, 0 for None
+FastICA (kind 7; bindings/ica_native_unpack.mojo `ica_fit` / `ica_project`,
+the same x_decomp table entry): MEMBER_OP_NEW parameters (9):
+  [0] kind 7   [1] n_components: -1 None, else the count (min(count, rows,
+  features) when whitening; ignored without whitening, as the door)
+  [2] whiten: 0 False, 1 'unit-variance', 2 'arbitrary-variance'
+  [3] algorithm: 0 'parallel', 1 'deflation'   [4] fun: 0 logcosh, 1 exp, 2 cube
+  [5] alpha (fun_args['alpha'], 1.0 by default)   [6] max_iter   [7] tol
+  [8] seed: random_state & 0xFFFFFFFF, 0 for None (a given w_init is not a
+      member: admission answers False and the caller keeps the door)
+Blocks: 0 scalars float64 [n_components_, n_features_in_, n_iter_, whiten
+code, cols (n_features_in_ when whitening, else n_components_)]; 1
+components_ (n_components_ x cols); 2 mixing_ (cols x n_components_); 3
+whitening_ (n_components_ x n_features_in_, whitening only); 4 mean_ (1 x
+n_features_in_, whitening only). `fit_output = MEMBER_OP_TRANSFORM` writes
+the sources (rows x n_components_) into `dst` in the fit call. No
+MEMBER_CAN_TEST_ROWS: x_decomp/ica_owner.mojo makes no finite test (the
+door's `decomp_input` admission does).
+
 Random projection blocks: 0 `MEMBER_BLOCK_SCALARS` float64 [n_components_,
 n_features_in_, density_ (0 Gaussian), inverse 0 / 1]; 1
 `XDECOMP_BLOCK_COMPONENTS` float32 n_components_ x n_features_in_
@@ -126,13 +144,16 @@ from core.nmf_native_api import (
 )
 from core.admitted_refusals import admitted_finite_refuse
 from std.math import sqrt
-from core.decomp_factor_api import RPFitRequest, RPProjectRequest, rp_fit_call, rp_project_call
+from core.decomp_factor_api import (
+    RPFitRequest, RPProjectRequest, rp_fit_call, rp_project_call,
+    ICAFitRequest, ICAProjectRequest, ica_fit_call, ica_project_call,
+)
 from core.decomp_entry_table import decomp_table_call
 from x_decomp.descriptor_schema import XD_DEV_ALLOC, XD_DEV_FREE, XD_DEV_UPLOAD
 from x_decomp.jl_run import _cube_rounded, _pinned_log
 from x_decomp.nmf import NmfArgs
 from x_decomp.nmf_owner import NMF_INIT_RANDOM, NMF_INIT_NNDSVDA, NMF_INIT_NNDSVDAR, NMF_TRANSFORM
-from x_decomp.decomp_owner_common_run import decomp_gemm_check
+from x_decomp.decomp_owner_common_run import decomp_gemm_check, decomp_min_samples
 from core.member_families import MEMBER_FAMILY_XDECOMP
 from core.entry_table import EntryRef, entry_ref_unresolved
 from core.native_descriptor_abi import NativeDescriptorError
@@ -146,6 +167,8 @@ comptime XDECOMP_NMF_PARAM_COUNT = 12
 comptime XDECOMP_KIND_GRP = 5
 comptime XDECOMP_KIND_SRP = 6
 comptime XDECOMP_RP_PARAM_COUNT = 6
+comptime XDECOMP_KIND_ICA = 7
+comptime XDECOMP_ICA_PARAM_COUNT = 9
 
 comptime XDECOMP_BLOCK_COMPONENTS = MEMBER_BLOCK_FAMILY
 comptime XDECOMP_BLOCK_SINGULAR = MEMBER_BLOCK_FAMILY + 1
@@ -163,6 +186,7 @@ comptime XDECOMP_ROUTE_POOL = 4
 comptime _IPCA_SCALARS = 5
 comptime _NMF_SCALARS = 4
 comptime _RP_SCALARS = 4
+comptime _ICA_SCALARS = 5
 comptime _HANDLES = 5
 comptime _CHUNK = 256
 comptime _INDEX_SPAN = 16777216
@@ -338,6 +362,8 @@ def _kind_name(kind: Int) -> String:
         return String("GaussianRandomProjection")
     if kind == XDECOMP_KIND_SRP:
         return String("SparseRandomProjection")
+    if kind == XDECOMP_KIND_ICA:
+        return String("FastICA")
     return String("IncrementalPCA")
 
 
@@ -588,6 +614,148 @@ def _import_nmf(slot: _Slot, call: _Call) raises:
     slot[].fitted = True
 
 
+# ---------------------------------------------------------------- FastICA
+
+
+def _fit_ica(slot: _Slot, call: _Call) raises:
+    """bindings/ica_native_unpack.mojo `ica_fit` (`FastICA._fit`): one
+    ICAFitRequest through the route's operations table; with
+    `fit_output = MEMBER_OP_TRANSFORM` the sources go to `dst` in the fit
+    call (the door's `project`)."""
+    var estimator = _name(slot)
+    _whole(call, estimator)
+    _dense(call[].x, "X", estimator)
+    if call[].weights.rows > 0:
+        raise Error("TypeError: a " + estimator + " member takes no sample_weight")
+    if call[].fit_output != 0 and call[].fit_output != MEMBER_OP_TRANSFORM:
+        member_unsupported(estimator, call[].fit_output)
+    var n = call[].x.rows
+    var d = call[].x.cols
+    decomp_min_samples(n, d, "FastICA")
+    var code = Int(slot[].words[2])
+    var smaller = min(n, d)
+    var nc = smaller
+    if code != 0 and slot[].words[1] >= -0.5:
+        nc = min(Int(slot[].words[1]), smaller)
+    if nc < 0:
+        raise Error("ValueError: negative dimensions are not allowed")
+    var cols = d if code != 0 else nc
+    var project = call[].fit_output == MEMBER_OP_TRANSFORM
+    var sources = 0
+    if project:
+        _dense(call[].dst, "the output buffer", estimator)
+        if call[].dst.rows != n or call[].dst.cols != nc:
+            raise Error("ValueError: the output buffer holds n_components values per row of X")
+        sources = call[].dst.data
+    slot[].clear()
+    # components, mixing, whitening, mean: the door's four output arrays.
+    slot[].blocks.append(List[Float32](length=max(nc * cols, 1), fill=Float32(0)))
+    slot[].blocks.append(List[Float32](length=max(cols * nc, 1), fill=Float32(0)))
+    slot[].blocks.append(List[Float32](length=(nc * d) if code != 0 else 0, fill=Float32(0)))
+    slot[].blocks.append(List[Float32](length=d if code != 0 else 0, fill=Float32(0)))
+    var spare = _address(slot, 0)
+    var request = ICAFitRequest(call[].x.data, 0, spare, _address(slot, 1),
+        _address(slot, 2) if code != 0 else spare, _address(slot, 3) if code != 0 else spare,
+        sources if project else spare,
+        n, d, nc, code, Int(slot[].words[8]), Int(slot[].words[3]), Int(slot[].words[4]),
+        Int(slot[].words[6]), project, slot[].words[5], slot[].words[7])
+    var iterations = ica_fit_call(call[].route.entry, request)
+    slot[].count = nc
+    slot[].features = d
+    slot[].scalars = [Float64(nc), Float64(d), Float64(iterations), Float64(code), Float64(cols)]
+    slot[].fitted = True
+
+
+def _query_ica(slot: _Slot, call: _Call, inverse: Bool) raises:
+    """`ica_project`: transform (X - mean_) components_^T, inverse_transform
+    X mixing_^T (+ mean_), with the door's inner-dimension refusal."""
+    var estimator = _name(slot)
+    if not slot[].fitted:
+        raise Error("NotFittedError: this " + estimator + " member is not fitted yet")
+    _whole(call, estimator)
+    _dense(call[].x, "X", estimator)
+    _dense(call[].dst, "the output buffer", estimator)
+    var rows = call[].x.rows
+    var width = call[].x.cols
+    var nc = slot[].count
+    var cols = Int(slot[].scalars[4])
+    var whiten = slot[].scalars[3] != 0.0
+    # components_ is nc x cols, mixing_ cols x nc.
+    var matrix_rows = cols if inverse else nc
+    decomp_gemm_check(width, nc if inverse else cols)
+    if call[].dst.rows != rows or call[].dst.cols != matrix_rows:
+        raise Error("ValueError: the output buffer holds " + String(matrix_rows) + " values per row of X")
+    var matrix = _address(slot, 1 if inverse else 0)
+    var request = ICAProjectRequest(call[].x.data, matrix, _address(slot, 3) if whiten else matrix,
+        call[].dst.data, inverse, rows, width, matrix_rows, whiten)
+    ica_project_call(call[].route.entry, request)
+
+
+def _export_ica(slot: _Slot, call: _Call) raises:
+    var block = call[].block
+    if (call[].flags & MEMBER_BLOCK_BY_INDEX) != 0:
+        if block < 0 or block > 4:
+            raise Error("member ABI: a FastICA member has no fitted block index " + String(block))
+        block = MEMBER_BLOCK_SCALARS if block == 0 else XDECOMP_BLOCK_COMPONENTS + block - 1
+    var nc = slot[].count
+    var d = slot[].features
+    var cols = Int(slot[].scalars[4])
+    var whiten = slot[].scalars[3] != 0.0
+    if block == MEMBER_BLOCK_SCALARS:
+        call[].dst = MemberMatrix(Int(slot[].scalars.unsafe_ptr()), 1, len(slot[].scalars), MEMBER_F64)
+    elif block == XDECOMP_BLOCK_COMPONENTS:
+        call[].dst = MemberMatrix(_address(slot, 0), nc, cols)
+    elif block == XDECOMP_BLOCK_COMPONENTS + 1:
+        call[].dst = MemberMatrix(_address(slot, 1), cols, nc)
+    elif block == XDECOMP_BLOCK_COMPONENTS + 2 and whiten and len(slot[].blocks[2]) == nc * d:
+        call[].dst = MemberMatrix(_address(slot, 2), nc, d)
+    elif block == XDECOMP_BLOCK_COMPONENTS + 3 and whiten:
+        call[].dst = MemberMatrix(_address(slot, 3), 1, d)
+    else:
+        raise Error("member ABI: a FastICA member has no fitted block " + String(block))
+    call[].block = block
+    call[].out_cols = 5
+
+
+def _import_ica(slot: _Slot, call: _Call) raises:
+    var estimator = _name(slot)
+    var block = call[].block
+    if slot[].fitted or len(slot[].blocks) != 4:
+        slot[].clear()
+        for _ in range(4):  # driver-loop: four fitted blocks
+            slot[].blocks.append(List[Float32]())
+    if block == MEMBER_BLOCK_SCALARS:
+        if not call[].x.dense_host(MEMBER_F64) or call[].x.rows * call[].x.cols != _ICA_SCALARS:
+            raise Error("member ABI: the FastICA scalars block is five host float64 words")
+        var source = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call[].x.data)
+        slot[].scalars = List[Float64](length=_ICA_SCALARS, fill=0.0)
+        for index in range(_ICA_SCALARS):  # driver-loop: five fitted scalars
+            slot[].scalars[index] = source[index]
+    elif block >= XDECOMP_BLOCK_COMPONENTS and block <= XDECOMP_BLOCK_COMPONENTS + 3:
+        var size = call[].x.rows * call[].x.cols
+        var words = List[Float32](length=size, fill=0.0)
+        if size > 0:
+            _dense(call[].x, "a fitted block", estimator)
+            unsafe_memcpy(dest=words.unsafe_ptr(), src=_F32P(unsafe_from_address=call[].x.data), count=size)
+        slot[].blocks[block - XDECOMP_BLOCK_COMPONENTS] = words^
+    elif block != 0 or (call[].flags & MEMBER_IMPORT_DONE) == 0:
+        raise Error("member ABI: a FastICA member has no fitted block " + String(block))
+    if (call[].flags & MEMBER_IMPORT_DONE) == 0:
+        return
+    if len(slot[].scalars) != _ICA_SCALARS:
+        raise Error("member ABI: a fitted FastICA state needs its scalars block")
+    var nc = Int(slot[].scalars[0])
+    var d = Int(slot[].scalars[1])
+    var cols = Int(slot[].scalars[4])
+    var whiten = slot[].scalars[3] != 0.0
+    if (nc < 1 or d < 1 or cols < 1 or len(slot[].blocks[0]) != nc * cols or len(slot[].blocks[1]) != cols * nc
+            or (whiten and len(slot[].blocks[3]) != d)):
+        raise Error("member ABI: a fitted FastICA state needs every fitted block, of the fitted sizes")
+    slot[].count = nc
+    slot[].features = d
+    slot[].fitted = True
+
+
 # ---------------------------------------------------------------- random projections
 
 
@@ -783,6 +951,9 @@ def _export(slot: _Slot, call: _Call) raises:
     if _is_rp(slot[].kind()):
         _export_rp(slot, call)
         return
+    if slot[].kind() == XDECOMP_KIND_ICA:
+        _export_ica(slot, call)
+        return
     var block = call[].block
     if (call[].flags & MEMBER_BLOCK_BY_INDEX) != 0:
         block = _block_index(block)
@@ -812,6 +983,9 @@ def _import(slot: _Slot, call: _Call) raises:
         return
     if _is_rp(slot[].kind()):
         _import_rp(slot, call)
+        return
+    if slot[].kind() == XDECOMP_KIND_ICA:
+        _import_ica(slot, call)
         return
     if slot[].fitted or len(slot[].blocks) != 6:
         slot[].clear()
@@ -848,6 +1022,16 @@ def _import(slot: _Slot, call: _Call) raises:
     slot[].fitted = True
 
 
+def _ica_width(requested: Float64, whiten: Float64, features: Int) raises -> Int:
+    """FastICA's transform width before a fit: min(n_components, n_features)
+    when whitening with an integer n_components (a fit on fewer rows than
+    that is narrower: the fit refuses the buffer then); otherwise the width
+    is min(rows, n_features), chosen by the fit."""
+    if whiten != 0.0 and requested >= 0.0 and features > 0:
+        return min(Int(requested), features)
+    raise Error("NotFittedError: a FastICA member with this n_components or whiten knows its output width after its fit")
+
+
 def _outputs(call: _Call) raises:
     """`call.out_cols` of transform / inverse_transform. Before a fit the
     transform width is known only for an integer n_components."""
@@ -866,6 +1050,9 @@ def _outputs(call: _Call) raises:
             return
         if asked_first != MEMBER_OP_TRANSFORM:
             member_unsupported(_kind_name(kind), asked_first)
+        if kind == XDECOMP_KIND_ICA:
+            call[].out_cols = _ica_width(words[1], words[2], call[].x.cols)
+            return
         if words[1] >= 0.0:
             call[].out_cols = Int(words[1])
             return
@@ -883,6 +1070,9 @@ def _outputs(call: _Call) raises:
         return
     if asked == MEMBER_OP_INVERSE_TRANSFORM and slot[].kind() == XDECOMP_KIND_NMF:
         raise Error("NotFittedError: this NMF member's output width is known after its fit")
+    if asked == MEMBER_OP_TRANSFORM and slot[].kind() == XDECOMP_KIND_ICA:
+        call[].out_cols = _ica_width(slot[].words[1], slot[].words[2], call[].x.cols)
+        return
     if asked == MEMBER_OP_TRANSFORM and slot[].words[1] >= 0.0:
         call[].out_cols = Int(slot[].words[1])
         return
@@ -920,6 +1110,9 @@ def _xdecomp_member(operation: Int, address: Int) raises -> Int:
         elif source[0] == Float64(XDECOMP_KIND_GRP) or source[0] == Float64(XDECOMP_KIND_SRP):
             if call[].param_count != XDECOMP_RP_PARAM_COUNT:
                 raise Error("member ABI: a random projection member takes six parameters")
+        elif source[0] == Float64(XDECOMP_KIND_ICA):
+            if call[].param_count != XDECOMP_ICA_PARAM_COUNT:
+                raise Error("member ABI: a FastICA member takes nine parameters")
         else:
             raise Error("member ABI: unknown or unpublished XDecomp member kind")
         var words = List[Float64](length=call[].param_count, fill=0.0)
@@ -941,6 +1134,8 @@ def _xdecomp_member(operation: Int, address: Int) raises -> Int:
             _fit_nmf(slot, call)
         elif _is_rp(kind):
             _fit_rp(slot, call)
+        elif kind == XDECOMP_KIND_ICA:
+            _fit_ica(slot, call)
         else:
             _fit_ipca(slot, call)
     elif operation == MEMBER_OP_TRANSFORM or operation == MEMBER_OP_INVERSE_TRANSFORM:
@@ -949,6 +1144,8 @@ def _xdecomp_member(operation: Int, address: Int) raises -> Int:
             _query_nmf(slot, call, inverse)
         elif _is_rp(kind):
             _query_rp(slot, call, inverse)
+        elif kind == XDECOMP_KIND_ICA:
+            _query_ica(slot, call, inverse)
         else:
             _query(slot, call, inverse)
     elif operation == MEMBER_OP_EXPORT:
