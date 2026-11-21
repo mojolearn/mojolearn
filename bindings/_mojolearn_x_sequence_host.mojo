@@ -40,6 +40,7 @@ from sequence.xseq_glue_host import publish_x_sequence_host, XSEQ_HOST_OWNER
 from core.mlp_member import mlp_member_publish
 from core.cnn_member import cnn_member_publish
 from core.sequence_member import sequence_member_publish
+from core.forecast_seq_member import forecast_seq_member_publish
 from providers.python.autograd_program_pyapi_door import ops_program_execute_py, ops_program_inspect_py, ops_program_fit_native_py, ops_imported_run_py
 from providers.python.autograd_program_control_pyapi_pack import ops_program_control_py
 from providers.python.autograd_torch_program_pyapi_door import ops_torch_program_run_py
@@ -618,6 +619,7 @@ def build__mojolearn_x_sequence_host() -> PythonObject:
         mlp_member_publish(Int(GLOBAL_NUMERIC_MODE), 0, Int(XSEQ_HOST_OWNER.get_or_create_ptr()))
         cnn_member_publish(Int(GLOBAL_NUMERIC_MODE), 0, Int(XSEQ_HOST_OWNER.get_or_create_ptr()))
         sequence_member_publish(Int(GLOBAL_NUMERIC_MODE), 0, Int(XSEQ_HOST_OWNER.get_or_create_ptr()))
+        forecast_seq_member_publish(Int(GLOBAL_NUMERIC_MODE), 0, Int(XSEQ_HOST_OWNER.get_or_create_ptr()))
         # Neural-blocks entry table (core/neural_entry_table.mojo): SmallMLPTrainer's
         # program; the Python entry remains for its other callers and the boundary tests.
         publish_neural_small_mlp_host()
