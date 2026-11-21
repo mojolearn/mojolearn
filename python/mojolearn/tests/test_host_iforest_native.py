@@ -235,15 +235,7 @@ def test_iforest_query_protocol_and_saved_object_buffer_refuse_hooks(tmp_path):
     assert touched == []
 
 
-def test_iforest_fixed_numerical_entry_refuses_python_callback(tmp_path, monkeypatch):
-    model = _model(tmp_path)
-    touched = []
-    def callback(*args):
-        touched.append("run")
-        return 0
-    monkeypatch.setitem(host._CLASSICAL["host_inference_context"]["host_inference_entries"], "iforest_run", callback)
-    _refused(audit_native_call(model.predict, [[1., 2.]]), TypeError)
-    assert touched == []
+# TOMBSTONE: test_iforest_fixed_numerical_entry_refuses_python_callback (a Python callback put in place of the `iforest_run` entry) deleted 2026-11-21 by lane/ma-pub-trees: the doors call the native iforest entry (core/iforest_entry.mojo), there is no Python entry left to replace; recoverable at b7d83c52a9.
 
 
 def test_iforest_subclass_native_attributes_finalizer_and_outputs(tmp_path):

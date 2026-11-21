@@ -56,6 +56,8 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from svm.host.native_descriptor_dispatch import SVC_HOST_NATIVE_API
 from core.kernel_svm_member import kernel_svm_member_publish
+from core.native_descriptor_abi import NativeDescriptorError
+from core.iforest_entry import IFImage, IFRunRequest, IF_CAP_RESIDENT, if_entry_dispatch, if_entry_publish
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from svm.host.svr_native_host import SVR_HOST_API
 
@@ -480,20 +482,14 @@ def svr_predict_binding(
     return PythonObject(n_rows)
 
 
-def iforest_run_binding(
-    train_addr: PythonObject,
-    query_addr: PythonObject,
-    out_f32_addr: PythonObject,
-    out_i32_addr: PythonObject,
-    info_addr: PythonObject,
-    params: PythonObject,
-) raises -> PythonObject:
+def _iforest_run(r: IFRunRequest) raises -> Int:
     """`IsolationForest.fit` plus ONE of `score_samples`,
-    `decision_function` or `predict`, in one call, on the host: the GPU
-    binding's contract (`bindings/_mojolearn_svm.mojo::iforest_run_binding`,
-    the 16-slot params list, `want` selecting the output buffer, the three
-    float64 info slots), DEVIATION 874's fit-on-every-call kept so the
-    identity surface is the GPU's.
+    `decision_function` or `predict`, in one call, on the host, over the
+    typed request of core/iforest_entry.mojo (the GPU image's contract, the
+    former Python binding `iforest_run`'s words), DEVIATION 874's
+    fit-on-every-call kept on the refit form so the identity surface is the
+    GPU's. Runs with the GIL released (the caller's); the host resident
+    store's take and put hold the store's own lock.
 
     THE FIT AND SCORE ARE `isolation_forest/checks/if_oracle.mojo`'s
     (`oracle_fit`, `oracle_path_lengths`, `oracle_scores`), the second
@@ -509,97 +505,79 @@ def iforest_run_binding(
     -(paper > Float32(-offset_) ? 1 : -1)`, `offset_` the contamination
     quantile through `percentile_linear_host` over the training scores or -0.5.
 
-    `IDN_IF_RESIDENT` (lane perf-trees-misc, 2026-11-05): the GPU binding's
-    resident form on the host. A binary whose `iforest_resident()` is 1
-    takes SEVENTEEN params (slot 16 the token: 0 fits a fresh forest and
-    keeps it; a live token with an equal key scores with NO fit) and FOUR
-    info slots (slot 3 the token after the call). Before it the public owner
-    (`bindings/trees_public_iforest.mojo::_run`) found no `iforest_resident`
-    here and the CPU column refit the whole forest on every scoring call.
-    Sixteen params is the refit-per-call form, unchanged.
-
-    Lane fix-iforest-double-fit (2026-11-13): EVERY binary takes the
-    seventeen-param form. A refit-per-call binary (`-D
-    MOJOLEARN_IDN_IF_RESIDENT_OFF`) receives it only from `fit` (token 0):
-    that fit's forest stays in the store just long enough for
-    `iforest_forest_export` to read it out, which drops it. Before it that
-    binary fitted twice per `fit` (here, then again inside the export). Its
-    scoring calls still send sixteen params and refit per call.
+    `IDN_IF_RESIDENT` (lane perf-trees-misc, 2026-11-05): the resident form
+    on the host (`resident`, `token` 0 fits a fresh forest and keeps it; a
+    live token with an equal key scores with NO fit; FOUR info slots, the
+    token last). Lane fix-iforest-double-fit (2026-11-13): `fit` always sends
+    the resident form, so a refit-per-call binary keeps that forest until
+    `iforest_forest_export` reads it out.
     """
-    var resident = len(params) == 17
-    if len(params) != 16 and not resident:
-        raise Error(
-            "iforest_run: params must contain 16 values, got " + String(len(params))
-        )
-    var train_address = _index(train_addr)
-    var query_address = _index(query_addr)
-    var ip = f64_ptr(_index(info_addr))
-    var n_train = _index(params[0])
-    var n_features = _index(params[1])
-    var n_query = _index(params[2])
-    var n_estimators = _index(params[3])
-    var max_samples_mode = _index(params[4])
-    var max_samples_int = _index(params[5])
-    var max_samples_frac = Float64(py=params[6])
-    var max_depth = _index(params[7])
-    var max_features_mode = _index(params[8])
-    var max_features_int = _index(params[9])
-    var max_features_frac = Float64(py=params[10])
-    var bootstrap = _index(params[11]) != 0
-    var random_state = _index(params[12])
-    var contamination_auto = _index(params[13]) != 0
-    var contamination = Float64(py=params[14])
-    var want = _index(params[15])
-    if n_train <= 0 or n_features <= 0 or n_query <= 0:
+    var want = r.want
+    if r.n_train <= 0 or r.n_features <= 0 or r.n_query <= 0:
         raise Error("iforest_run: n_train, n_features and n_query must all be positive")
+    var ip = f64_ptr(r.info)
     var out_f32_address = 0
     var out_i32_address = 0
     if want == IF_WANT_PREDICT:
-        out_i32_address = _index(out_i32_addr)
+        out_i32_address = r.out_i32
     else:
-        out_f32_address = _index(out_f32_addr)
+        out_f32_address = r.out_f32
     var run = IForestHostRun(List[Float32](), List[Int32](), Float64(-0.5), 0)
-    if resident:
-        # The take and the put run under the GIL; the fit (on a miss) and
-        # the scoring run with it released, on an entry no other thread
-        # can reach while it is out of the store.
-        var token = _index(params[16])
+    if r.resident:
         var key = IFResidentKey(
-            train_address, n_train, n_features, n_estimators, max_samples_mode,
-            max_samples_int, max_samples_frac, max_depth, max_features_mode,
-            max_features_int, max_features_frac, bootstrap, random_state,
-            contamination_auto, contamination,
+            r.train, r.n_train, r.n_features, r.n_estimators, r.max_samples_mode,
+            r.max_samples_int, r.max_samples_frac, r.max_depth, r.max_features_mode,
+            r.max_features_int, r.max_features_frac, r.bootstrap, r.random_state,
+            r.contamination_auto, r.contamination,
         )
-        var held = if_host_resident_take(token, key)
+        var held = if_host_resident_take(r.token, key)
         var new_token = 0
         if len(held) == 0:
             new_token = if_host_resident_new_token()
         try:
-            with GILReleased(Python()):
-                run = iforest_run_host_resident(
-                    held, key, new_token, query_address, n_query, want,
-                )
+            run = iforest_run_host_resident(held, key, new_token, r.query, r.n_query, want)
         except e:
             # Keep a caller-owned forest after a refused query; a new
-            # token has not reached Python yet, so it is not cached.
+            # token has not reached the caller, so it is not cached.
             if new_token == 0:
                 if_host_resident_put(held)
             raise e
         var held_token = held[0].token
         if_host_resident_put(held)
         iforest_host_resident_outputs_run(
-            run, want, out_i32_address, out_f32_address, n_query, n_features, held_token, ip
+            run, want, out_i32_address, out_f32_address, r.n_query, r.n_features, held_token, ip
         )
-        return PythonObject(n_query)
-    with GILReleased(Python()):
-        run = iforest_run_host(
-            train_address, query_address, n_train, n_features, n_query, n_estimators,
-            max_samples_mode, max_samples_int, max_samples_frac, max_depth,
-            max_features_mode, max_features_int, max_features_frac, bootstrap,
-            random_state, contamination_auto, contamination, want,
-        )
-    iforest_host_outputs_run(run, want, out_i32_address, out_f32_address, n_query, n_features, ip)
-    return PythonObject(n_query)
+        return r.n_query
+    run = iforest_run_host(
+        r.train, r.query, r.n_train, r.n_features, r.n_query, r.n_estimators,
+        r.max_samples_mode, r.max_samples_int, r.max_samples_frac, r.max_depth,
+        r.max_features_mode, r.max_features_int, r.max_features_frac, r.bootstrap,
+        r.random_state, r.contamination_auto, r.contamination, want,
+    )
+    iforest_host_outputs_run(run, want, out_i32_address, out_f32_address, r.n_query, r.n_features, ip)
+    return r.n_query
+
+
+struct _SvmHostIForestImage(IFImage):
+    @staticmethod
+    def caps() -> Int:
+        # The host binary has no float64 score route and no device scan.
+        comptime if IDN_IF_RESIDENT:
+            return IF_CAP_RESIDENT
+        return 0
+
+    @staticmethod
+    def run(request: IFRunRequest) raises -> Int:
+        return _iforest_run(request)
+
+
+def svm_host_iforest_entry_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
+                              result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
+    """This image's iforest entry (core/iforest_entry.mojo), CPU vendor 0."""
+    return if_entry_dispatch[_SvmHostIForestImage](operation, aa, na, pp, np, ff, nf, result, context, sink)
+
+
+# TOMBSTONE: iforest_run (the Python-argument binding; the IsolationForest doors now call the native iforest entry, core/iforest_entry.mojo) deleted 2026-11-21 by lane/ma-pub-trees; code recoverable at b7d83c52a9.
 
 
 def iforest_resident_binding() raises -> PythonObject:
@@ -783,7 +761,6 @@ def build__mojolearn_svm_host() -> PythonObject:
         # Restore: git apply experiments/removed/dead_entries_svm.patch
         module.def_function[svr_fit_binding]("svr_fit")
         module.def_function[svr_predict_binding]("svr_predict")
-        module.def_function[iforest_run_binding]("iforest_run")
         module.def_function[iforest_resident_binding]("iforest_resident")
         module.def_function[iforest_resident_release_binding]("iforest_resident_release")
         module.def_function[iforest_forest_export_binding]("iforest_forest_export")
@@ -795,6 +772,8 @@ def build__mojolearn_svm_host() -> PythonObject:
         # The family's member entry (core/member_abi.mojo): SVC and SVR run
         # as members of a meta-estimator through it (CPU, vendor 0).
         kernel_svm_member_publish(GLOBAL_NUMERIC_MODE, 0, Int(SVC_HOST_NATIVE_API.get_or_create_ptr()))
+        # The IsolationForest entry (core/iforest_entry.mojo), CPU vendor 0.
+        if_entry_publish["MojolearnSvmHostIForestEntryOwnerV1"](Int(GLOBAL_NUMERIC_MODE), 0, svm_host_iforest_entry_v1)
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_svm_host: ", error))
