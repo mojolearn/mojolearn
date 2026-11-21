@@ -10,6 +10,7 @@ it did before; the bodies are moved unchanged, so the bits are unchanged
 from core.linear_entry_table import LinearEntryKey, linear_table_publish, LINEAR_TABLE_ESTIMATORS
 from core.linear_fit_types import LINEAR_FIT_ABI, LINEAR_FIT_OPERATION_COUNT
 from core.linear_member import linear_member_publish
+from core.decomposition_member import decomposition_member_publish
 from core.linear_boundary_types import LINEAR_PREDICT_ABI
 from glm.linear_fit_device import linear_fit_device_v1, LINEAR_FIT_DEVICE_API
 from glm.linear_predict_device import linear_predict_device_v1
@@ -90,6 +91,9 @@ def _publish_linear_entry_table() raises:
     # The family's member entry (core/member_abi.mojo): Ridge and
     # LinearRegression run as members of a meta-estimator through it.
     linear_member_publish(key.mode, key.vendor, Int(api[].entries.unsafe_ptr()))
+    # PCA and TruncatedSVD members (core/decomposition_member.mojo): they call the
+    # PCA / TruncatedSVD entries their route carries, never a table.
+    decomposition_member_publish(key.mode, key.vendor, Int(api[].entries.unsafe_ptr()))
 
 
 def _publish_estimators_qn_table() raises:
