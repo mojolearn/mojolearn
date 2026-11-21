@@ -308,3 +308,23 @@ def test_basic_block_state_dict_uses_torchvision_names():
     assert "conv1.weight" in sd and "bn2.running_var" in sd and "conv1.bias" not in sd
     again = mojolearn.BasicBlock(4, 4, random_state=1, device="cpu").load_state_dict(sd)
     assert {k: np.asarray(v).tobytes() for k, v in again.state_dict().items()} == {k: np.asarray(v).tobytes() for k, v in sd.items()}
+
+
+# ---- round 3: torch-form parameters() on the CNN layers ----------------------
+
+def test_basic_block_parameters_follow_torch():
+    block = mojolearn.BasicBlock(2, 4, stride=2, device="cpu")
+    named = list(block.named_parameters())
+    names = [name for name, _ in named]
+    assert names == ["conv1.weight", "bn1.weight", "bn1.bias", "conv2.weight", "bn2.weight", "bn2.bias",
+                     "downsample.0.weight", "downsample.1.weight", "downsample.1.bias"]
+    sd = block.state_dict()
+    assert all(np.asarray(v).tobytes() == np.asarray(sd[k]).tobytes() for k, v in named)
+    assert len(list(block.parameters())) == len(names)
+    # The (layer, weight attribute, gradient attribute) descriptors stay private.
+    assert len(block._parameter_descriptors()) == len(names)
+
+
+def test_conv_and_batchnorm_parameters_exclude_buffers():
+    assert [n for n, _ in mojolearn.Conv2d(3, 4, 3, device="cpu").named_parameters()] == ["weight", "bias"]
+    assert [n for n, _ in mojolearn.BatchNorm2d(4, device="cpu").named_parameters()] == ["weight", "bias"]

@@ -263,6 +263,14 @@ class Conv2d(_Layer):
         """
         return _XCNN(self, "layer_state_dict", (), _XCNN_CONTEXT)
 
+    def parameters(self):
+        """An iterator over the trainable arrays (``weight``, ``bias``), as ``torch.nn.Module.parameters``."""
+        return _XCNN(self, "layer_parameters", (), _XCNN_CONTEXT)
+
+    def named_parameters(self):
+        """An iterator over ``(name, array)`` pairs with PyTorch's names; copies, as :meth:`state_dict` returns."""
+        return _XCNN(self, "layer_named_parameters", (), _XCNN_CONTEXT)
+
     def load_state_dict(self, state_dict):
         """Load parameters named as :meth:`state_dict` names them.
 
@@ -563,6 +571,14 @@ class BatchNorm2d(_Layer):
         """
         return _XCNN(self, "layer_state_dict", (), _XCNN_CONTEXT)
 
+    def parameters(self):
+        """An iterator over the trainable arrays (``weight``, ``bias``), as ``torch.nn.Module.parameters``."""
+        return _XCNN(self, "layer_parameters", (), _XCNN_CONTEXT)
+
+    def named_parameters(self):
+        """An iterator over ``(name, array)`` pairs with PyTorch's names; copies, as :meth:`state_dict` returns."""
+        return _XCNN(self, "layer_named_parameters", (), _XCNN_CONTEXT)
+
     def load_state_dict(self, state_dict):
         """Load parameters named as :meth:`state_dict` names them.
 
@@ -733,8 +749,8 @@ class BasicBlock(_Layer):
     """torchvision.models.resnet.BasicBlock: conv3x3(stride) -> BN -> ReLU ->
     conv3x3 -> BN, plus the identity (or conv1x1(stride) -> BN when the
     shape changes), then ReLU. Convolutions carry no bias, as torchvision's.
-    `forward` / `backward` over (N, C, H, W); `parameters()` lists
-    (layer, weight attr, grad attr) for an optimizer."""
+    `forward` / `backward` over (N, C, H, W); `parameters()` and
+    `named_parameters()` follow PyTorch."""
     expansion = 1
     _device_io = True
 
@@ -768,7 +784,24 @@ class BasicBlock(_Layer):
         return _XCNN(self, "block_backward", (grad_out,), _XCNN_CONTEXT)
 
     def parameters(self):
-        return _XCNN(self, "block_parameters", (), _XCNN_CONTEXT)
+        """An iterator over the trainable arrays, as ``torch.nn.Module.parameters``.
+
+        The order and the arrays are those of :meth:`named_parameters`."""
+        return _XCNN(self, "layer_parameters", (), _XCNN_CONTEXT)
+
+    def named_parameters(self):
+        """An iterator over ``(name, array)`` pairs of the trainable arrays.
+
+        The names are torchvision's (``conv1.weight``, ``bn1.weight``,
+        ``bn1.bias``, ...); the running statistics are buffers, not
+        parameters. The arrays are copies, as :meth:`state_dict` returns."""
+        return _XCNN(self, "layer_named_parameters", (), _XCNN_CONTEXT)
+
+    def _parameter_descriptors(self):
+        # (layer, weight attribute, gradient attribute) per trainable array,
+        # in named_parameters order: what a training loop over the
+        # sublayers' gradients reads (tools/identity_lanes/cnn.py).
+        return _XCNN(self, "block_parameter_descriptors", (), _XCNN_CONTEXT)
 
     def state_dict(self):
         """The layer's parameters by PyTorch's names, as copies.

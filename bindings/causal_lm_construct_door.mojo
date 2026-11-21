@@ -1188,6 +1188,9 @@ def causal_model_load_state_dict_binding(mut mods: NativeModules, model: PythonO
         raise Error("CausalLM: the model was not constructed")
     if Bool(py=py_get(fields, "_resident_busy", PythonObject(False))):
         raise Error("CausalLM.load_state_dict: the model is generating; load after the generation ends")
+    var entries = py_get(fields, nk[].k__native_entries)
+    if entries is not None and py_get(entries, "parallel_call") is not None:
+        raise Error("NotImplementedError: ParallelCausalLM.load_state_dict: a layer-partitioned model is loaded from a checkpoint; load the state dict into a CausalLM")
     var plan = model_plan_snapshot(mods, input_plan)
     var options = Python.tuple(py_item(fields, nk[].k_weight_format), py_item(fields, nk[].k_max_positions),
                                py_item(fields, nk[].k_device), py_item(fields, nk[].k_numeric_profile))

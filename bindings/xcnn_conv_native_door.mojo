@@ -46,6 +46,7 @@ from bindings.xcnn_keys_unpack import (
 )
 from bindings.py_balanced import py_item
 from bindings.xcnn_common_door import xcnn_state_mapping
+from bindings.torch_parameter_form_pack import torch_parameter_form
 
 
 def _set(fields: PythonObject, name: String, value: PythonObject) raises:
@@ -1545,6 +1546,24 @@ def xcnn_block_state(block: PythonObject, load: Bool, args: PythonObject, contex
         var one = Python.tuple(parts[i])
         _ = xcnn_bn_state(layers[i], True, one, context) if i % 2 == 1 else xcnn_conv_state(layers[i], True, one, context)
     return block
+
+
+def xcnn_layer_parameters(layer: PythonObject, form: Int, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """torch's `parameters()` (form 1) / `named_parameters()` (form 2) of a
+    Conv, BatchNorm or BasicBlock layer (lane api-torch round 3): the
+    trainable entries of its `state_dict()` (names ending in `weight` or
+    `bias`; the running statistics and `num_batches_tracked` are buffers in
+    torch, not parameters), in `state_dict` order, which is torch's order.
+    Copies, as `state_dict()`'s are. Cold API call."""
+    var state = xcnn_layer_state(layer, False, args, context)
+    var b = xcnn_builtins()
+    var named = b.dict()
+    var keys = py_call(b.list, state.keys())
+    for k in range(len(keys)):  # driver-loop: over the layer's state names
+        var name = String(keys[k])
+        if name == "weight" or name == "bias" or name.endswith(".weight") or name.endswith(".bias"):
+            py_setitem(named, keys[k], state[keys[k]])
+    return torch_parameter_form(named, form)
 
 
 def xcnn_layer_state(layer: PythonObject, load: Bool, args: PythonObject, context: PythonObject) raises -> PythonObject:

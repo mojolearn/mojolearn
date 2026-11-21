@@ -225,7 +225,7 @@ def test_native_owners_match_independent_blocks_and_continue_states(tmp_path, mo
                 logits = block_reference(plain, Array.from_buffer(next_ids[:, None]), greedy_state, step=True)
         want = np.concatenate((np.asarray(ids), np.stack(continuations, axis=1)), axis=1)
         bits(checked(split.generate, ids, 4), want)
-        actual_params = checked(split.parameters)
+        actual_params = checked(split.state_dict)
         expected_params = dict(plain.named_parameters())
         assert set(actual_params) == set(expected_params)
         for key in actual_params:
@@ -266,7 +266,7 @@ def test_packed_checkpoint_weights_keep_native_owner_semantics(tmp_path, monkeyp
     with actual_owner(tmp_path, monkeypatch, root, weight_format=weight_format) as split:
         bits(checked(split.forward, ids), block_reference(plain, ids))
         assert all(block.weight_format == weight_format for block in split.blocks)
-        for key, value in checked(split.parameters).items():
+        for key, value in checked(split.state_dict).items():
             bits(value, dict(plain.named_parameters())[key])
 
 
@@ -348,7 +348,7 @@ def test_invalid_restore_releases_new_states_preserves_live_stream(tmp_path, mon
         bits(checked(stream.read, 10), checked(replay.read, 10))
         refused(split.stream, ValueError, 'seed', ids, 3, greedy=False)
         # Native metadata and process identity remain usable after refusals.
-        assert checked(split.parameters)
+        assert checked(split.state_dict)
 
 
 def test_uniform_sampling_stream_chunks_and_eos_match_generate(tmp_path, monkeypatch):
