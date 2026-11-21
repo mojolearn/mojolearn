@@ -245,7 +245,12 @@ check)
     jenv=(); cap=$NVC_CAP_MIN
     while [ $# -gt 0 ]; do
         case "$1" in
-            --filter) f="${2:?--filter GLOBS}"; jenv+=(--env "NC_FILTER=${f//\*/%}"); shift 2 ;;
+            --filter)
+                # comma separated globs over check names; `*` travels as `%` (tools/ops/native_checks_report.py
+                # `select` reads it back). Checked here with the submit's own rule, before any box is touched.
+                f="${2:?--filter GLOBS}"; f="NC_FILTER=${f//\*/%}"
+                env_kv_ok "$f" || die "--filter ${2}: globs of letters, digits and _ . , : / @ + = - * only (no spaces or quotes)"
+                jenv+=(--env "$f"); shift 2 ;;
             --timeout) [[ "${2:-}" =~ ^[1-9][0-9]*$ ]] || die "--timeout S"; jenv+=(--env "NC_TIMEOUT=$2"); shift 2 ;;
             --cap) [[ "${2:-}" =~ ^[1-9][0-9]*$ ]] || die "--cap MIN"; cap=$2; shift 2 ;;
             *) die "check <sha> [parse|native|tools|all] [--filter GLOBS] [--cap MIN] [--timeout S]: unexpected '$1'" ;;

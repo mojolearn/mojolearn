@@ -16,6 +16,7 @@ from training.byte_lm_binding_impl import (ByteLMSession,
 from training.byte_lm_session_ops import BYTE_LM_NEURAL_CTX
 from training.byte_lm_config import ByteConfig
 from training.checks.optimizer_contract import OptimizerConfig
+from training.byte_lm_optimizer_bits import optimizer_config_bits_equal
 from training.checks.train_loop import download_f32
 from training.byte_lm import (ByteTrainer, byte_train_step, byte_eval_loss,
     byte_validate_state, byte_validate_device_state, byte_validate_optimizer, byte_validate_tokens)
@@ -108,12 +109,7 @@ def byte_lm_run_native(addr: List[Int], action: Int, completed: Int, cfg: Optimi
             if session.trainer.value().completed_steps != completed:
                 raise Error("byte LM: resident completed-step mismatch")
             var prior_cfg = session.trainer.value().optimizer.copy()
-            if (prior_cfg.kind != cfg.kind or prior_cfg.nesterov != cfg.nesterov
-                or bitcast[DType.uint32](prior_cfg.lr) != bitcast[DType.uint32](cfg.lr) or bitcast[DType.uint32](prior_cfg.beta1) != bitcast[DType.uint32](cfg.beta1)
-                or bitcast[DType.uint32](prior_cfg.beta2) != bitcast[DType.uint32](cfg.beta2) or bitcast[DType.uint32](prior_cfg.eps) != bitcast[DType.uint32](cfg.eps)
-                or bitcast[DType.uint32](prior_cfg.weight_decay) != bitcast[DType.uint32](cfg.weight_decay)
-                or bitcast[DType.uint32](prior_cfg.momentum) != bitcast[DType.uint32](cfg.momentum) or bitcast[DType.uint32](prior_cfg.dampening) != bitcast[DType.uint32](cfg.dampening)
-                or bitcast[DType.uint32](prior_cfg.max_norm) != bitcast[DType.uint32](cfg.max_norm)):
+            if not optimizer_config_bits_equal(prior_cfg, cfg):
                 raise Error("byte LM: resident optimizer mismatch")
             _require_same_bits(ctx, initial_p, session.trainer.value().buffers.param, n)
             _require_same_bits(ctx, initial_m, session.trainer.value().buffers.m_state, n)

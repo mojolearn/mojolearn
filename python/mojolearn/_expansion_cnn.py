@@ -900,6 +900,14 @@ class GCNConv(_Layer):
         """
         return _XCNN(self, "graph_state_dict", (False,), _XCNN_CONTEXT)
 
+    def parameters(self):
+        """An iterator over the trainable arrays, in :meth:`state_dict` order, as ``torch.nn.Module.parameters``; copies."""
+        return _XCNN(self, "graph_parameters", (False,), _XCNN_CONTEXT)
+
+    def named_parameters(self):
+        """An iterator over ``(name, array)`` pairs with PyTorch Geometric's names; copies, as :meth:`state_dict` returns."""
+        return _XCNN(self, "graph_named_parameters", (False,), _XCNN_CONTEXT)
+
     def load_state_dict(self, state_dict):
         """Load tensors named as :meth:`state_dict` names them.
 
@@ -988,6 +996,14 @@ class SAGEConv(_Layer):
             ``lin_l.weight``, ``lin_l.bias`` (``bias=True``), ``lin_r.weight`` (``root_weight=True``) and, with ``project=True``, ``lin.weight``, ``lin.bias``.
         """
         return _XCNN(self, "graph_state_dict", (True,), _XCNN_CONTEXT)
+
+    def parameters(self):
+        """An iterator over the trainable arrays, in :meth:`state_dict` order, as ``torch.nn.Module.parameters``; copies."""
+        return _XCNN(self, "graph_parameters", (True,), _XCNN_CONTEXT)
+
+    def named_parameters(self):
+        """An iterator over ``(name, array)`` pairs with PyTorch Geometric's names; copies, as :meth:`state_dict` returns."""
+        return _XCNN(self, "graph_named_parameters", (True,), _XCNN_CONTEXT)
 
     def load_state_dict(self, state_dict):
         """Load tensors named as :meth:`state_dict` names them.
