@@ -33,6 +33,7 @@ struct NmfKeys(Defaultable, Movable):
     var k_n_iter_: PythonObject
     var k_ndarray: PythonObject
     var k_nmf_bindings: PythonObject
+    var k_nmf_cpu_bindings: PythonObject
     var k_output_context: PythonObject
     var k_random_state: PythonObject
     var k_reconstruction_err_: PythonObject
@@ -62,6 +63,7 @@ struct NmfKeys(Defaultable, Movable):
         self.k_n_iter_ = PythonObject(None)
         self.k_ndarray = PythonObject(None)
         self.k_nmf_bindings = PythonObject(None)
+        self.k_nmf_cpu_bindings = PythonObject(None)
         self.k_output_context = PythonObject(None)
         self.k_random_state = PythonObject(None)
         self.k_reconstruction_err_ = PythonObject(None)
@@ -95,6 +97,7 @@ def _nmf_keys_fill(nk: UnsafePointer[NmfKeys, MutUntrackedOrigin]) raises:
     nk[].k_n_iter_ = py_key("n_iter_")
     nk[].k_ndarray = py_key("ndarray")
     nk[].k_nmf_bindings = py_key("nmf_bindings")
+    nk[].k_nmf_cpu_bindings = py_key("nmf_cpu_bindings")
     nk[].k_output_context = py_key("output_context")
     nk[].k_random_state = py_key("random_state")
     nk[].k_reconstruction_err_ = py_key("reconstruction_err_")
