@@ -14,7 +14,7 @@ first imported, after the package, so both may rely on every module existing:
                                import `_classical_host` INSIDE it and subclass
                                its `_HostBound`; never import it at module level
 """
-from . import _device_table, _native_xcnn_bridge
+from . import _device_table, _digest_fields, _native_xcnn_bridge
 # `check(X)` (the GPU-versus-CPU check as a call): the one shared method every
 # other estimator inherits through _mode.PublicOutputsMixin. _mode is core
 # (loaded with the package), so this import loads nothing new.
@@ -72,6 +72,9 @@ class _Layer:
 # `BatchNorm2d._res_bn/_backward_res/_backward_dev` and `BasicBlock._conv_back_dev/_backward_chain`
 # (dead copies of bindings/xcnn_conv_native_door.mojo, xcnn_bn_native.mojo and xcnn_classifier_native.mojo;
 # lane pyout-metrics-cnn) deleted 2026-11-11; code recoverable at 6f82d0255d.
+
+# `digest_` of a layered model enters its layer objects (python/mojolearn/_digest_fields.py).
+_digest_fields.layer(_Layer)
 
 
 class _Dev:

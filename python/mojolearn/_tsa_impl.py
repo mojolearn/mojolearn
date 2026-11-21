@@ -71,6 +71,7 @@ import os
 import sys
 
 from . import _native_archive_bridge
+from ._digest_fields import read as _digest_read
 
 # The one-series component read (`_one_series`, `_component`, `_named`) is
 # native: bindings/tsa_hw_native_door.mojo `hw_component` (lane pyout-small-families).
@@ -706,6 +707,22 @@ class ExponentialSmoothing:
         return _TSA(self, "hw_score", (index,), _TSA_CONTEXT)
 
     _LAZY_COMPONENTS = ("level_", "trend_", "season_")
+
+    @property
+    def digest_(self):
+        """The hash of this fitted model, as one lower-case hex string.
+
+        It covers the fitted state a saved model holds (the members `save`
+        writes). In `identical` mode the same model fitted on the same series
+        has the same `digest_` on every supported device. It is computed each
+        time it is read.
+
+        Raises
+        ------
+        AttributeError
+            If the model is not fitted, or runs in `fast` mode (Apple only).
+        """
+        return _digest_read(self)
 
     def __getattr__(self, name):
         # only reached when normal lookup fails: a component not built yet

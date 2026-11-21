@@ -1904,14 +1904,10 @@ def train(
     # index is built per permutation, and `fit_ordered` searches each tree
     # on its learn permutation's index and applies it to every
     # permutation's folds through that permutation's own index.
-    if ordered_ctr_column and len(tree_configs) > 0:
-        # the level-synchronized tree-CTR driver is the Plain greedy
-        # searcher's; the Ordered fold searcher does not mint combinations
-        raise Error(
-            "max_ctr_complexity above 1 (feature combinations) with"
-            " boosting_type='Ordered' is not implemented; use"
-            " boosting_type='Plain' or max_ctr_complexity=1"
-        )
+    # Feature combinations (`max_ctr_complexity` above 1) under Ordered are
+    # minted by the fold searcher's level driver
+    # (`fit_oblivious_tree_structure_levels`) over the same per-permutation
+    # indexes.
     #: the block size of the CTR estimation orders: the fold permutation
     #: block of an Ordered fit, 1 otherwise
     var ctr_order_block = 1
@@ -3120,93 +3116,6 @@ def train(
         approx_dim, 1 + approx_dim, max_depth,
     )
 
-    # ---- ORDERED BOOSTING (lane/catboost-parity) ----------------------
-    # Everything above -- borders, the compressed index, the targets and
-    # weights, the loss and its leaf estimator, the bootstrap -- is shared
-    # with the Plain fit; the loop is `fit_ordered`.
-    if ordered:
-        if tree_on:
-            # the layout holds tree-CTR slots only the Plain level driver
-            # fills (refused above by name wherever the categorical walk
-            # could say so; this is the same refusal for every walk)
-            raise Error(
-                "max_ctr_complexity above 1 (feature combinations) with"
-                " boosting_type='Ordered' is not implemented; use"
-                " boosting_type='Plain' or max_ctr_complexity=1"
-            )
-        var o_model = TAdditiveModel()
-        var o_start = Float64(0.0)
-        if bfa:
-            # `StartingPoint = CalcOptimumConstApprox(...)`
-            # (`dynamic_boosting.h:563-573`), the plain fit's own device
-            # helper (gbdt/metrics/optimal_const_device.mojo)
-            o_start = optimum_const_approx_device(
-                ctx, objective, targets, weights, True, n_rows,
-                Float64(loss_desc.get_alpha()),
-            )
-            o_model.bias = o_start
-        var o_opts = OrderedBoostingOptions(
-            objective,
-            loss_desc.kernel_alpha(),
-            loss_desc.get_alpha(),
-            loss_desc.get_logloss_border(),
-            estimation.method,
-            estimation.iterations,
-            score_function,
-            learning_rate,
-            resolved_l2,
-            random_strength,
-            random_seed,
-            boot_kind,
-            boot_param,
-            DEFAULT_PERMUTATION_COUNT if permutation_count == -1
-            else permutation_count,
-            fold_len_multiplier,
-            ordered_permutation_block_size(n_rows, fold_permutation_block),
-            ORDERED_MIN_FOLD_SIZE,
-            Float32(o_start),
-        )
-        var o_layout = build_layout(fold_counts, column_one_hot)
-        var o_out = fit_ordered(
-            ctx, o_layout, cindex, cindexes, targets, weights, n_rows, n_estimators,
-            max_depth, device_multiprocessor_count(ctx),
-            column_one_hot, o_opts, o_model, trace, test_arm,
-            od_kind, od_pvalue, od_wait,
-            device_plan=device_plan,
-        )
-        # `ShrinkToBestIteration`, the Plain fit's own block below
-        if want_best_model == 1 and len(o_out.test_losses) > 0:
-            var o_min_best = -1
-            var o_min_err = Float64(0.0)
-            for i in range(len(o_out.test_losses)):  # small-loop(test_losses: boosting iterations): argmin over the per-tree loss list the fit returned
-                if i + 1 < best_model_min_trees:
-                    continue
-                if o_min_best < 0 or o_out.test_losses[i] < o_min_err:
-                    o_min_err = o_out.test_losses[i]
-                    o_min_best = i
-            var o_best_iter = o_min_best + 1
-            if 0 < o_best_iter and o_best_iter < o_model.size():
-                o_model.shrink(o_best_iter)
-        host_times.stop_host("train_ordered_fit", t_phase)
-        host_times.stop_host("train_total", t_train)
-        host_times.report()
-        return TrainedModel(
-            o_model^,
-            fold_counts^,
-            column_one_hot^,
-            borders^,
-            column_nan_treatment^,
-            o_out.learn_losses.copy(),
-            o_out.test_losses.copy(),
-            o_out.best_iteration,
-            o_out.stopped_early,
-            ctr_column_count,
-            ctr_tables^,
-            TTensorCtrRegistry(len(fold_counts)),
-            TCombinationCtrs(),
-        )
-
-
     # TREE CTRS: the fit's state (`TreeCtrFit`), one entry when on.
     var tree_fit = List[TreeCtrFit]()
     if tree_on:
@@ -3267,6 +3176,93 @@ def train(
                 target_classes_count, perm_count, eval_rows, n_features,
                 d_eval_x^, tree_test_cindex^,
             )
+        )
+
+    # ---- ORDERED BOOSTING (lane/catboost-parity) ----------------------
+    # Everything above -- borders, the compressed index, the targets and
+    # weights, the loss and its leaf estimator, the bootstrap -- is shared
+    # with the Plain fit; the loop is `fit_ordered`.
+    if ordered:
+        var o_model = TAdditiveModel()
+        var o_start = Float64(0.0)
+        if bfa:
+            # `StartingPoint = CalcOptimumConstApprox(...)`
+            # (`dynamic_boosting.h:563-573`), the plain fit's own device
+            # helper (gbdt/metrics/optimal_const_device.mojo)
+            o_start = optimum_const_approx_device(
+                ctx, objective, targets, weights, True, n_rows,
+                Float64(loss_desc.get_alpha()),
+            )
+            o_model.bias = o_start
+        var o_opts = OrderedBoostingOptions(
+            objective,
+            loss_desc.kernel_alpha(),
+            loss_desc.get_alpha(),
+            loss_desc.get_logloss_border(),
+            estimation.method,
+            estimation.iterations,
+            score_function,
+            learning_rate,
+            resolved_l2,
+            random_strength,
+            random_seed,
+            boot_kind,
+            boot_param,
+            DEFAULT_PERMUTATION_COUNT if permutation_count == -1
+            else permutation_count,
+            fold_len_multiplier,
+            ordered_permutation_block_size(n_rows, fold_permutation_block),
+            ORDERED_MIN_FOLD_SIZE,
+            Float32(o_start),
+        )
+        var o_layout = build_layout(fold_counts, column_one_hot)
+        var o_out = fit_ordered(
+            ctx, o_layout, cindex, cindexes, targets, weights, n_rows, n_estimators,
+            max_depth, device_multiprocessor_count(ctx),
+            column_one_hot, o_opts, o_model, trace, test_arm,
+            od_kind, od_pvalue, od_wait, tree_fit,
+            device_plan=device_plan,
+        )
+        # `ShrinkToBestIteration`, the Plain fit's own block below
+        if want_best_model == 1 and len(o_out.test_losses) > 0:
+            var o_min_best = -1
+            var o_min_err = Float64(0.0)
+            for i in range(len(o_out.test_losses)):  # small-loop(test_losses: boosting iterations): argmin over the per-tree loss list the fit returned
+                if i + 1 < best_model_min_trees:
+                    continue
+                if o_min_best < 0 or o_out.test_losses[i] < o_min_err:
+                    o_min_err = o_out.test_losses[i]
+                    o_min_best = i
+            var o_best_iter = o_min_best + 1
+            if 0 < o_best_iter and o_best_iter < o_model.size():
+                o_model.shrink(o_best_iter)
+        # TREE CTRS: the model's columns and the renumbered splits, as the
+        # Plain fit's tail below
+        var o_combinations = TCombinationCtrs()
+        if tree_on:
+            var o_chosen = tree_fit.pop()
+            o_combinations = _tree_ctr_model_tail(
+                o_chosen, o_model, n_base_columns, fold_counts,
+                column_one_hot, borders, column_nan_treatment,
+            )
+            _ = o_chosen^  # the fit's resident buffers, before the context's
+        host_times.stop_host("train_ordered_fit", t_phase)
+        host_times.stop_host("train_total", t_train)
+        host_times.report()
+        return TrainedModel(
+            o_model^,
+            fold_counts^,
+            column_one_hot^,
+            borders^,
+            column_nan_treatment^,
+            o_out.learn_losses.copy(),
+            o_out.test_losses.copy(),
+            o_out.best_iteration,
+            o_out.stopped_early,
+            ctr_column_count,
+            ctr_tables^,
+            TTensorCtrRegistry(len(fold_counts)),
+            o_combinations^,
         )
 
     host_times.stop_host("train_pre_fit", t_phase)
@@ -3363,29 +3359,10 @@ def train(
     var model_combinations = TCombinationCtrs()
     if tree_on:
         var chosen = fit_result.tree_ctr.pop()
-        var section = chosen.assemble()
-        chosen.rewrite_model(model, section.column_of)
-        var m_folds = List[Int]()
-        var m_one_hot = List[Bool]()
-        var m_borders = List[List[Float32]]()
-        var m_nan = List[Int]()
-        # driver-loop: over the base columns
-        for c in range(n_base_columns):
-            m_folds.append(fold_counts[c])
-            m_one_hot.append(column_one_hot[c])
-            m_borders.append(borders[c].copy())
-            m_nan.append(column_nan_treatment[c])
-        # driver-loop: over the chosen combination columns (model structure)
-        for i in range(len(section.borders)):
-            m_folds.append(len(section.borders[i]))
-            m_one_hot.append(False)
-            m_borders.append(section.borders[i].copy())
-            m_nan.append(NAN_TREATMENT_AS_IS)
-        fold_counts = m_folds^
-        column_one_hot = m_one_hot^
-        borders = m_borders^
-        column_nan_treatment = m_nan^
-        model_combinations = section.ctrs.copy()
+        model_combinations = _tree_ctr_model_tail(
+            chosen, model, n_base_columns, fold_counts, column_one_hot,
+            borders, column_nan_treatment,
+        )
         _ = chosen^  # the fit's resident buffers, before the context's
 
     host_times.stop_host("train_post_fit", t_phase)
@@ -3406,6 +3383,45 @@ def train(
         TTensorCtrRegistry(len(fold_counts)),
         model_combinations^,
     )
+
+
+def _tree_ctr_model_tail(
+    chosen: TreeCtrFit,
+    mut model: TAdditiveModel,
+    n_base_columns: Int,
+    mut fold_counts: List[Int],
+    mut column_one_hot: List[Bool],
+    mut borders: List[List[Float32]],
+    mut column_nan_treatment: List[Int],
+) raises -> TCombinationCtrs:
+    """The tail of a fit with tree CTRs, Plain or Ordered: the trees'
+    persist-slot splits renumbered to the model's combination columns, and
+    the four column lists cut to the base columns followed by one column per
+    chosen combination (the layout's slots do not reach the model). Returns
+    the model's combination section."""
+    var section = chosen.assemble()
+    chosen.rewrite_model(model, section.column_of)
+    var m_folds = List[Int]()
+    var m_one_hot = List[Bool]()
+    var m_borders = List[List[Float32]]()
+    var m_nan = List[Int]()
+    # driver-loop: over the base columns
+    for c in range(n_base_columns):
+        m_folds.append(fold_counts[c])
+        m_one_hot.append(column_one_hot[c])
+        m_borders.append(borders[c].copy())
+        m_nan.append(column_nan_treatment[c])
+    # driver-loop: over the chosen combination columns (model structure)
+    for i in range(len(section.borders)):
+        m_folds.append(len(section.borders[i]))
+        m_one_hot.append(False)
+        m_borders.append(section.borders[i].copy())
+        m_nan.append(NAN_TREATMENT_AS_IS)
+    fold_counts = m_folds^
+    column_one_hot = m_one_hot^
+    borders = m_borders^
+    column_nan_treatment = m_nan^
+    return section.ctrs.copy()
 
 
 def _upload_ctr_column(

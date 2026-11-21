@@ -69,6 +69,7 @@ from core.member_abi import (
     MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
 )
+from core.member_abi import MEMBER_BORROWS_FIT, MEMBER_EXPORT_OWN
 from core.member_families import MEMBER_FAMILY_KERNEL_RIDGE
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report, native_descriptor_leased_call
@@ -395,12 +396,29 @@ def _predict(slot: _Slot, call: _Call) raises:
     _ = _run(route.entry.call, plain)
 
 
+def _own_fit(slot: _Slot):
+    """THE LIFETIME RULE (MEMBER_EXPORT_OWN): copy the borrowed X_fit_ into
+    the state, once (one memcpy); the state reads its own words from then
+    on. A resident device handle holds a copy of the same words and stays."""
+    var count = slot[].rows * slot[].cols
+    if slot[].x_fit == 0 or (slot[].x_fit == Int(slot[].x_owned.unsafe_ptr()) and len(slot[].x_owned) == count):
+        return
+    var owned = List[Float32](length=count, fill=Float32(0))
+    if count > 0:
+        unsafe_memcpy(dest=owned.unsafe_ptr(), src=_f32p(slot[].x_fit), count=count)
+    slot[].x_owned = owned^
+    slot[].x_fit = Int(slot[].x_owned.unsafe_ptr())
+
+
 def _export(slot: _Slot, call: _Call) raises:
     """A view of one fitted block. X_fit_ is the caller's fit view (or the
     imported words); the rest is owned here. Valid until this state's next
     fit, import or free."""
     if not slot[].fitted:
         raise Error("NotFittedError: this KernelRidge member is not fitted yet")
+    if (call[].flags & MEMBER_EXPORT_OWN) != 0:
+        _own_fit(slot)
+        return
     var block = call[].block
     if (call[].flags & MEMBER_BLOCK_BY_INDEX) != 0:
         if block < 0 or block >= _BLOCKS:
@@ -478,8 +496,11 @@ def _kernel_ridge_member(operation: Int, address: Int) raises -> Int:
     if operation == MEMBER_OP_CAPABILITIES:
         # TEST_ROWS: `_tested` X and y at fit, X at predict, `_weights` the
         # sample weights; one parallel pass each.
+        # MEMBER_BORROWS_FIT: the fitted state reads the caller's fit X as
+        # X_fit_ at every predict and its export hands those words back
+        # themselves; MEMBER_EXPORT_OWN (`_own_fit`) or an import owns them.
         return (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_CAN_SAMPLE_WEIGHT
-            | MEMBER_CAN_TEST_ROWS)
+            | MEMBER_CAN_TEST_ROWS | MEMBER_BORROWS_FIT)
     if operation == MEMBER_OP_NEW:
         if call[].param_count != _PARAMS or not call[].params:
             raise Error("member ABI: a KernelRidge member takes " + String(_PARAMS) + " parameters")

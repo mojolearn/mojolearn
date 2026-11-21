@@ -231,6 +231,22 @@ def test_causal_lm_state_dict_is_named_parameters(tmp_path, family):
     assert sorted(sd) == sorted(dict(model.named_parameters()))
 
 
+@pytest.mark.parametrize("family", FAMILIES)
+def test_causal_lm_digest_is_the_hash_of_the_weights_as_they_are(tmp_path, family):
+    config, tensors = family_fixture(family, False)
+    _write_checkpoint(str(tmp_path), config, tensors)
+    model = CausalLM.load(tmp_path, device="cpu", numeric_profile="fp32_v1")
+    first = model.digest_
+    assert isinstance(first, str) and len(first) == 64 and first == first.lower()
+    # The same checkpoint loaded again has the same digest; nothing is stored on the model.
+    assert CausalLM.load(tmp_path, device="cpu", numeric_profile="fp32_v1").digest_ == first
+    assert "digest_" not in getattr(model, "__dict__", {})
+    # An in-place write into a weight changes the next read (it is hashed at every read).
+    weight = next(iter(model.parameters()))
+    np.asarray(weight)[...] = 0
+    assert model.digest_ != first
+
+
 def test_causal_lm_state_dict_is_copies_and_keeps_the_model_unexposed(tmp_path):
     config, tensors = family_fixture("llama", False)
     _write_checkpoint(str(tmp_path), config, tensors)

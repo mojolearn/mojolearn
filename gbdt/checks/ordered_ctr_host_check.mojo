@@ -28,7 +28,16 @@ Checked, host against device:
   * Logloss with the learn rows as the eval set: the text, the held-out
     losses;
   * one permutation (one index, learn and estimation the same order);
-  * the host refuses a one-hot column under Ordered by name.
+  * a one-hot column (two categories) under Ordered: the same text and losses;
+  * FEATURE COMBINATIONS (`max_ctr_complexity` 2) on a second fixture whose
+    target is a function of the PAIR (a, b), so no single column explains
+    it: four permutations (Logloss, with and without an eval set; RMSE)
+    and one permutation. The device fit must have chosen a combination
+    (else the fixture no longer exercises tree CTRs), the texts are the
+    same bytes (the `combination` records included) and the loss curves
+    the same bits. A level driver that kept the parent's histogram cells,
+    left a won slot's stale column in the fold-order index, or took
+    another permutation's ordered statistic gives another tree.
 
 The suite needs a GPU for the device arm; the host arm runs on the calling
 host. Serial by nature: pairs of fits, each pair compared whole.
@@ -97,6 +106,27 @@ def _fixture(binary_second: Bool) -> Tuple[List[Float32], List[Float32]]:
     return (x^, y^)
 
 
+def _fixture_pair() -> Tuple[List[Float32], List[Float32]]:
+    """The combination fixture: categorical a and b (ten categories each,
+    every pair present `OH_REPEATS` times), numeric c, and a 0/1 target
+    that is a function of the pair (a, b) with a numeric exception."""
+    var x = List[Float32](capacity=OH_FEATURES * OH_ROWS)
+    var y = List[Float32](capacity=OH_ROWS)
+    for r in range(OH_ROWS):
+        x.append(Float32(r % OH_CATS))
+    for r in range(OH_ROWS):
+        x.append(Float32((r // OH_CATS) % OH_CATS))
+    for r in range(OH_ROWS):
+        x.append(Float32((r * 37) % 101) * Float32(0.25))
+    for r in range(OH_ROWS):
+        var a = r % OH_CATS
+        var b = (r // OH_CATS) % OH_CATS
+        var c = (r * 37) % 101
+        var one = (2 * a + 3 * b) % 5 == 0 or c > 90
+        y.append(Float32(1.0) if one else Float32(0.0))
+    return (x^, y^)
+
+
 def _device_fit(
     ctx: DeviceContext,
     x: List[Float32],
@@ -104,8 +134,13 @@ def _device_fit(
     loss: String,
     permutations: Int,
     with_eval: Bool,
+    complexity: Int,
 ) raises -> TrainedModel:
     var params = List[TCatFeatureParams]()
+    if complexity > 1:
+        var cp = TCatFeatureParams.default()
+        cp.max_tensor_complexity = complexity
+        params.append(cp^)
     var flags = List[Bool](length=OH_FEATURES, fill=True)
     flags[2] = False
     var eval_x = List[Float32]()
@@ -140,6 +175,7 @@ def _host_fit(
     logloss: Bool,
     permutations: Int,
     with_eval: Bool,
+    complexity: Int,
 ) raises -> GbdtOrderedHostFit:
     # the slots as `_gbdt_fit_ordered_arm` resolves them for this fit
     # (`gbdt/mojolearn_gbdt_host_run.mojo`): the border 0.5, Newton leaves
@@ -176,7 +212,7 @@ def _host_fit(
     var flags = List[UInt32](length=OH_FEATURES, fill=UInt32(1))
     flags[2] = UInt32(0)
     return gbdt_ordered_host_fit(
-        x, y, OH_ROWS, OH_FEATURES, p, hloss, opts, ev, flags
+        x, y, OH_ROWS, OH_FEATURES, p, hloss, opts, ev, flags, complexity
     )
 
 
@@ -240,15 +276,15 @@ def check_ordered_ctr_host() raises:
     var x = data[0].copy()
     var y = data[1].copy()
 
-    var dev_ll = _device_fit(ctx, x, y, String("Logloss"), 4, False)
+    var dev_ll = _device_fit(ctx, x, y, String("Logloss"), 4, False, 1)
     _need(dev_ll.ctr_column_count > 0, "the device model holds no CTR column")
-    var host_ll = _host_fit(x, y, True, 4, False)
+    var host_ll = _host_fit(x, y, True, 4, False, 1)
     _same_text(model_text(dev_ll), host_ll.text, "Logloss, four permutations")
     _same_losses(dev_ll.losses, host_ll.losses, "Logloss learn loss")
     print("  Logloss, four permutations: same text, same learn losses")
 
-    var dev_rmse = _device_fit(ctx, x, y, String("RMSE"), 4, False)
-    var host_rmse = _host_fit(x, y, False, 4, False)
+    var dev_rmse = _device_fit(ctx, x, y, String("RMSE"), 4, False, 1)
+    var host_rmse = _host_fit(x, y, False, 4, False, 1)
     _need(
         host_rmse.text.find("\nbias ") >= 0,
         "the RMSE host text carries no bias record",
@@ -257,29 +293,87 @@ def check_ordered_ctr_host() raises:
     _same_losses(dev_rmse.losses, host_rmse.losses, "RMSE learn loss")
     print("  RMSE, four permutations: same text (bias included)")
 
-    var dev_ev = _device_fit(ctx, x, y, String("Logloss"), 4, True)
-    var host_ev = _host_fit(x, y, True, 4, True)
+    var dev_ev = _device_fit(ctx, x, y, String("Logloss"), 4, True, 1)
+    var host_ev = _host_fit(x, y, True, 4, True, 1)
     _same_text(model_text(dev_ev), host_ev.text, "Logloss with an eval set")
     _same_losses(dev_ev.test_losses, host_ev.test_losses, "held-out loss")
     print("  Logloss with an eval set: same text, same held-out losses")
 
-    var dev_one = _device_fit(ctx, x, y, String("Logloss"), 1, False)
-    var host_one = _host_fit(x, y, True, 1, False)
+    var dev_one = _device_fit(ctx, x, y, String("Logloss"), 1, False, 1)
+    var host_one = _host_fit(x, y, True, 1, False, 1)
     _same_text(model_text(dev_one), host_one.text, "one permutation")
     print("  one permutation: same text")
 
+    # a one-hot column (b has two categories): the host fold searcher's
+    # take-bin arm against the device's, the same text and losses
     var binary = _fixture(True)
-    var message = String("")
-    try:
-        _ = _host_fit(binary[0], binary[1], True, 4, False)
-    except error:
-        message = String(error)
-    _need(message != "", "a one-hot column under Ordered was not refused")
+    var bx = binary[0].copy()
+    var by = binary[1].copy()
+    var dev_oh = _device_fit(ctx, bx, by, String("Logloss"), 4, True, 1)
+    var host_oh = _host_fit(bx, by, True, 4, True, 1)
     _need(
-        message.find("one-hot column") >= 0,
-        "a one-hot column was refused in other words: " + message,
+        host_oh.text.find(" one_hot 1") >= 0,
+        "the host text of the one-hot fit names no one-hot feature",
     )
-    print("  a one-hot column under Ordered is refused by name on the host")
+    _same_text(model_text(dev_oh), host_oh.text, "a one-hot column, Logloss")
+    _same_losses(dev_oh.losses, host_oh.losses, "one-hot learn loss")
+    _same_losses(dev_oh.test_losses, host_oh.test_losses, "one-hot held-out loss")
+    var dev_oh_rmse = _device_fit(ctx, bx, by, String("RMSE"), 4, False, 1)
+    var host_oh_rmse = _host_fit(bx, by, False, 4, False, 1)
+    _same_text(model_text(dev_oh_rmse), host_oh_rmse.text, "a one-hot column, RMSE")
+    print("  a one-hot column under Ordered: same text, same losses")
+
+    # FEATURE COMBINATIONS under Ordered: the fold searcher's level driver
+    # on the device against the host's
+    var pair = _fixture_pair()
+    var px = pair[0].copy()
+    var py = pair[1].copy()
+    var dev_tc = _device_fit(ctx, px, py, String("Logloss"), 4, False, 2)
+    _need(
+        not dev_tc.combination_ctrs.is_empty(),
+        "the device Ordered fit at complexity 2 chose no combination (the"
+        " fixture no longer exercises tree CTRs)",
+    )
+    var host_tc = _host_fit(px, py, True, 4, False, 2)
+    _need(
+        host_tc.text.find("combination") >= 0,
+        "the host text at complexity 2 carries no combination record",
+    )
+    _same_text(model_text(dev_tc), host_tc.text, "combinations, Logloss")
+    _same_losses(dev_tc.losses, host_tc.losses, "combinations learn loss")
+    var dev_tc1 = _device_fit(ctx, px, py, String("Logloss"), 4, False, 1)
+    _need(
+        model_text(dev_tc) != model_text(dev_tc1),
+        "complexity 2 gave the complexity 1 model",
+    )
+    print("  combinations, Logloss, four permutations: same text, same losses")
+
+    var dev_tc_ev = _device_fit(ctx, px, py, String("Logloss"), 4, True, 2)
+    var host_tc_ev = _host_fit(px, py, True, 4, True, 2)
+    _same_text(
+        model_text(dev_tc_ev), host_tc_ev.text, "combinations with an eval set"
+    )
+    _same_losses(
+        dev_tc_ev.test_losses, host_tc_ev.test_losses,
+        "combinations held-out loss",
+    )
+    print("  combinations with an eval set: same text, same held-out losses")
+
+    var dev_tc_rmse = _device_fit(ctx, px, py, String("RMSE"), 4, False, 2)
+    var host_tc_rmse = _host_fit(px, py, False, 4, False, 2)
+    _same_text(model_text(dev_tc_rmse), host_tc_rmse.text, "combinations, RMSE")
+    _same_losses(
+        dev_tc_rmse.losses, host_tc_rmse.losses, "combinations RMSE learn loss"
+    )
+    print("  combinations, RMSE: same text, same losses")
+
+    var dev_tc_one = _device_fit(ctx, px, py, String("Logloss"), 1, False, 2)
+    var host_tc_one = _host_fit(px, py, True, 1, False, 2)
+    _same_text(
+        model_text(dev_tc_one), host_tc_one.text,
+        "combinations, one permutation",
+    )
+    print("  combinations, one permutation: same text")
 
 
 def run_checks() raises:
