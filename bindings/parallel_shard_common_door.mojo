@@ -28,7 +28,8 @@ UNPACK and PACK only: the partition, the device-index admission, the idle
 pool rule, the batch checks, the transport negative control's decision and
 the block copies of the join are typed, in
 bindings/parallel_shard_common_run.mojo. The pool, its requests and the
-trace records are Python values of the process pool door (codec frames).
+trace records are typed (the pool record of the process pool door,
+`ShardTraceRecord`); requests and replies are typed frames.
 """
 from std.ffi import external_call
 from std.python import Python, PythonObject
@@ -36,7 +37,9 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
 from bindings.py_attr import py_attr
 from bindings.classical_arrays_door import classical_address
 from bindings.native_loaded_module_door import native_loaded_module
-from bindings.native_process_pool_door import process_pool_create, process_pool_map, process_pool_close, PROCESS_BOUNDARY
+from bindings.native_process_pool_door import (
+    process_pool_create, process_pool_map, process_pool_close, process_pool_closed, process_pool_pids, PROCESS_BOUNDARY,
+)
 from bindings.native_worker_inventory_door import native_worker_inventory, native_require_worker_inventory
 from bindings.tsa_hw_native_door import tsa_array
 from core.shared_slot import SharedSlot
@@ -48,6 +51,7 @@ from bindings.parallel_shard_common_run import (
     shard_store_token,
     shard_item,
     SHARD_DEVICE_NOT_AN_INDEX, SHARD_TRACE_RECORDS, SHARD_IDLE_FORGET, SHARD_IDLE_REUSE,
+    ShardTraceRecord, shard_trace_find,
     shard_width_admit, shard_bounds, shard_indices_admit, shard_stored_index_admit, shard_idle_action,
     shard_batch_admit, shard_stores_admit, shard_fault_action, shard_rows_admit, shard_block_copy,
     shard_join_block, shard_join_complete,
@@ -89,17 +93,25 @@ def shard_devices(devices: PythonObject) raises -> Int:
 
 struct ShardTrace(Defaultable, Movable):
     # The fault counter is typed RUN state (bindings/parallel_shard_common_run.mojo).
-    var records: PythonObject
+    # The records are typed too (lane pools-frame, 2026-11-21: they were a
+    # Python list of dictionaries, one new dictionary per served request).
+    # `inventories[i]` is the boundary pin of record i: the identity replies
+    # of its workers, Python values `shard_trace_take` hands back as they came.
+    var records: List[ShardTraceRecord]
+    var inventories: List[PythonObject]
+    var next_id: Int
 
     def __init__(out self):
-        self.records = PythonObject(None)
+        self.records = List[ShardTraceRecord]()
+        self.inventories = List[PythonObject]()
+        self.next_id = 1
 
 
 #: Every pool the sharded drivers started in this process since the last
 #: `shard_trace_take`: its devices and its workers' own driver inventories
 #: (the record the verifier's two-device witness reads,
 #: python/mojolearn/_verify_par.py). Bounded: the oldest records go first.
-comptime SHARD_TRACE = SharedSlot[ShardTrace, "MojolearnParallelShardTraceV2", 2]
+comptime SHARD_TRACE = SharedSlot[ShardTrace, "MojolearnParallelShardTraceV3", 3]
 
 
 struct ShardIdle(Defaultable, Movable):
@@ -213,8 +225,9 @@ def _shard_admit(pool: PythonObject, devices: PythonObject) raises -> PythonObje
         _ = py_call(requests.append, Python.tuple(nk[].k_identity))
     var identities = process_pool_map(pool, requests)
     var pids = b.list()
-    for i in range(len(py_item(pool, nk[].k_workers))):  # driver-loop: over the spawned workers
-        _ = py_call(pids.append, py_item(py_item(pool, nk[].k_workers)[i], nk[].k_pid))
+    var pid_words = process_pool_pids(pool)
+    for i in range(len(pid_words)):  # driver-loop: over the spawned workers
+        _ = py_call(pids.append, PythonObject(pid_words[i]))
     var p = PROCESS_BOUNDARY.get_or_create_ptr()
     try:
         native_require_worker_inventory(identities, p[].vendor, pids, Int(external_call["getpid", Int32]()))
@@ -222,25 +235,46 @@ def _shard_admit(pool: PythonObject, devices: PythonObject) raises -> PythonObje
         process_pool_close(pool)
         raise error^
     var t = SHARD_TRACE.get_or_create_ptr()
-    if t[].records is None:
-        t[].records = b.list()
-    var record = b.dict()
-    py_setitem(record, nk[].k_devices, py_call(b.list, devices))
-    py_setitem(record, nk[].k_inventory, identities)
-    py_setitem(record, nk[].k_calls, b.list())
-    py_setitem(pool, nk[].k_trace_record, record)
-    _ = py_call(t[].records.append, record)
+    var device_words = List[Int]()
+    for i in range(len(devices)):  # small-loop(the pool's admitted devices)
+        device_words.append(Int(py=devices[i]))
+    var id = t[].next_id
+    t[].next_id = id + 1
+    t[].records.append(ShardTraceRecord(id, device_words^))
+    t[].inventories.append(identities)
+    py_setitem(pool, nk[].k_trace_record, PythonObject(id))
     if len(t[].records) > SHARD_TRACE_RECORDS:
-        _ = py_call(t[].records.pop, 0)
+        _ = t[].records.pop(0)
+        _ = t[].inventories.pop(0)
     return pool
 
 
 def shard_trace_take() raises -> PythonObject:
-    """The pools recorded since the last take, and an empty trace."""
+    """The pools recorded since the last take, and an empty trace. PACK: one
+    mapping per pool (`devices`, `inventory`, `calls` of `pid` and
+    `operation`), the form the verifier's receipt reads."""
+    var b = shard_b()
+    var nk = parallel_keys()
     var t = SHARD_TRACE.get_or_create_ptr()
-    var out = t[].records
-    t[].records = shard_b().list()
-    return shard_b().list() if out is None else out
+    var out = b.list()
+    for r in range(len(t[].records)):  # driver-loop: over the recorded pools
+        var record = b.dict()
+        var devices = b.list()
+        for i in range(len(t[].records[r].devices)):  # small-loop(one pool's devices)
+            _ = py_call(devices.append, PythonObject(t[].records[r].devices[i]))
+        var calls = b.list()
+        for i in range(len(t[].records[r].pids)):  # driver-loop: over the requests one pool served
+            var call = b.dict()
+            py_setitem(call, nk[].k_pid, PythonObject(t[].records[r].pids[i]))
+            py_setitem(call, nk[].k_operation, PythonObject(t[].records[r].operations[i]))
+            _ = py_call(calls.append, call)
+        py_setitem(record, nk[].k_devices, devices)
+        py_setitem(record, nk[].k_inventory, t[].inventories[r])
+        py_setitem(record, nk[].k_calls, calls)
+        _ = py_call(out.append, record)
+    t[].records.clear()
+    t[].inventories.clear()
+    return out
 
 def _operation(request: PythonObject) raises -> String:
     var name = String(request[0])
@@ -273,15 +307,18 @@ def shard_map(pool: PythonObject, requests: PythonObject) raises -> PythonObject
     one slot read, no environment."""
     var b = shard_b()
     var results = process_pool_map(pool, requests)
-    var record = py_get(pool, PythonObject("trace_record"), PythonObject(None))
     var nk = parallel_keys()
-    var workers = py_item(pool, nk[].k_workers)
-    if record is not None and len(workers) > 0:
-        for i in range(len(requests)):  # driver-loop: one trace entry per request
-            var call = b.dict()
-            py_setitem(call, nk[].k_pid, py_item(workers[i % len(workers)], nk[].k_pid))
-            py_setitem(call, nk[].k_operation, _operation(requests[i]))
-            _ = py_call(py_item(record, nk[].k_calls).append, call)
+    var traced = py_get(pool, nk[].k_trace_record, PythonObject(None))
+    var workers = process_pool_pids(pool)
+    if traced is not None and py_type(traced) is b.int and len(workers) > 0:
+        var t = SHARD_TRACE.get_or_create_ptr()
+        var at = shard_trace_find(t[].records, Int(py=traced))
+        if at >= 0:
+            # Two words per request into the typed record (it was a new
+            # dictionary per request).
+            for i in range(len(requests)):  # driver-loop: one trace entry per request
+                t[].records[at].pids.append(workers[i % len(workers)])
+                t[].records[at].operations.append(_operation(requests[i]))
     var fault = shard_fault_action(len(results), len(requests),
                                    len(results) > 1 and len(requests) > 0 and _numerical(requests[0], nk))
     if fault != SHARD_FAULT_NONE:
@@ -311,8 +348,8 @@ def _shard_acquire(devices: PythonObject, child: String) raises -> PythonObject:
     if held is not None:
         var owned = Int(py=held[2]) == pid
         var action = shard_idle_action(Int(py=held[2]), pid, owned and Bool(py=held[1] == environ),
-                                       owned and Bool(py=py_item(held[0], nk[].k_closed)),
-                                       len(py_item(held[0], nk[].k_workers)) if owned else 0, len(devices))
+                                       owned and process_pool_closed(held[0]),
+                                       len(process_pool_pids(held[0])) if owned else 0, len(devices))
         if action == SHARD_IDLE_FORGET:
             # Inherited across os.fork: the pool's workers and sockets belong
             # to the parent process. Drop the record without closing (a close
@@ -397,7 +434,7 @@ def shard_run_stored(payload: PythonObject, token: String, requests: PythonObjec
     var acquired = _shard_acquire(devices, child)
     var pool = acquired[0]
     var nk = parallel_keys()
-    var workers = len(py_item(pool, nk[].k_workers))
+    var workers = len(process_pool_pids(pool))
     var results = PythonObject(None)
     try:
         var stores = b.list()

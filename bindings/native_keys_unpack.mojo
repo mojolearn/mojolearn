@@ -107,7 +107,6 @@ struct NativeKeys(Defaultable, Movable):
     var k_cooperative: PythonObject
     var k_cpu: PythonObject
     var k_data_ptr: PythonObject
-    var k_description_bytes: PythonObject
     var k_detach: PythonObject
     var k_device: PythonObject
     var k_devices: PythonObject
@@ -160,11 +159,11 @@ struct NativeKeys(Defaultable, Movable):
     var k_pid: PythonObject
     var k_ppid: PythonObject
     var k_readonly: PythonObject
+    var k_record: PythonObject
     var k_scalar_types: PythonObject
     var k_sequence: PythonObject
     var k_shape: PythonObject
     var k_size: PythonObject
-    var k_socket: PythonObject
     var k_start_seconds: PythonObject
     var k_str: PythonObject
     var k_stride: PythonObject
@@ -176,7 +175,6 @@ struct NativeKeys(Defaultable, Movable):
     var k_trees_real_type: PythonObject
     var k_tuple: PythonObject
     var k_type: PythonObject
-    var k_typed: PythonObject
     var k_uuid: PythonObject
     var k_value: PythonObject
     var k_vendor: PythonObject
@@ -250,7 +248,6 @@ struct NativeKeys(Defaultable, Movable):
         self.k_cooperative = PythonObject(None)
         self.k_cpu = PythonObject(None)
         self.k_data_ptr = PythonObject(None)
-        self.k_description_bytes = PythonObject(None)
         self.k_detach = PythonObject(None)
         self.k_device = PythonObject(None)
         self.k_devices = PythonObject(None)
@@ -303,11 +300,11 @@ struct NativeKeys(Defaultable, Movable):
         self.k_pid = PythonObject(None)
         self.k_ppid = PythonObject(None)
         self.k_readonly = PythonObject(None)
+        self.k_record = PythonObject(None)
         self.k_scalar_types = PythonObject(None)
         self.k_sequence = PythonObject(None)
         self.k_shape = PythonObject(None)
         self.k_size = PythonObject(None)
-        self.k_socket = PythonObject(None)
         self.k_start_seconds = PythonObject(None)
         self.k_str = PythonObject(None)
         self.k_stride = PythonObject(None)
@@ -319,7 +316,6 @@ struct NativeKeys(Defaultable, Movable):
         self.k_trees_real_type = PythonObject(None)
         self.k_tuple = PythonObject(None)
         self.k_type = PythonObject(None)
-        self.k_typed = PythonObject(None)
         self.k_uuid = PythonObject(None)
         self.k_value = PythonObject(None)
         self.k_vendor = PythonObject(None)
@@ -395,7 +391,6 @@ def _native_keys_fill(nk: UnsafePointer[NativeKeys, MutUntrackedOrigin]) raises:
     nk[].k_cooperative = py_key("cooperative")
     nk[].k_cpu = py_key("cpu")
     nk[].k_data_ptr = py_key("data_ptr")
-    nk[].k_description_bytes = py_key("description_bytes")
     nk[].k_detach = py_key("detach")
     nk[].k_device = py_key("device")
     nk[].k_devices = py_key("devices")
@@ -448,11 +443,11 @@ def _native_keys_fill(nk: UnsafePointer[NativeKeys, MutUntrackedOrigin]) raises:
     nk[].k_pid = py_key("pid")
     nk[].k_ppid = py_key("ppid")
     nk[].k_readonly = py_key("readonly")
+    nk[].k_record = py_key("record")
     nk[].k_scalar_types = py_key("scalar_types")
     nk[].k_sequence = py_key("sequence")
     nk[].k_shape = py_key("shape")
     nk[].k_size = py_key("size")
-    nk[].k_socket = py_key("socket")
     nk[].k_start_seconds = py_key("start_seconds")
     nk[].k_str = py_key("str")
     nk[].k_stride = py_key("stride")
@@ -464,7 +459,6 @@ def _native_keys_fill(nk: UnsafePointer[NativeKeys, MutUntrackedOrigin]) raises:
     nk[].k_trees_real_type = py_key("trees_real_type")
     nk[].k_tuple = py_key("tuple")
     nk[].k_type = py_key("type")
-    nk[].k_typed = py_key("typed")
     nk[].k_uuid = py_key("uuid")
     nk[].k_value = py_key("value")
     nk[].k_vendor = py_key("vendor")

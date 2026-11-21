@@ -11,6 +11,64 @@ lookup tables to the context at its own import."""
 
 _ENTRY = None
 _CONTEXT = None
+# Set by the first `device="cpu"` estimator beside a GPU set
+# (`connect_cpu`); the host images load then, never at import.
+_CPU_WANTED = False
+_CPU_DONE = False
+# Other family contexts whose CPU label scope waits for the same moment
+# (`cpu_scope_later`): the decomposition kit's (EllipticEnvelope).
+_CPU_LATER = []
+
+
+def cpu_scope_later(context):
+    """Build `context`'s CPU label scope (_native_labels_bridge `cpu_scope`)
+    at the first device="cpu" admission beside a GPU set, or now when that
+    already happened: a family context connected at import that should not
+    load the host label images at import."""
+    # glue: import-time registration, once per family context
+    if _CPU_DONE:
+        from ._native_labels_bridge import cpu_scope
+        cpu_scope(context)
+    else:
+        _CPU_LATER.append(context)
+
+
+def _connect_cpu(context):
+    # glue: once per process, at the first construction or set_params of a
+    # device="cpu" estimator beside a GPU set (never at import, never per
+    # call). The CPU metrics connection every family's device route shares
+    # (providers/python/metrics_route_boundary_door.mojo
+    # `device_route_metrics_cpu`): the R^2 / accuracy programs of a
+    # device="cpu" estimator's score. The label steps of a device="cpu"
+    # classifier of any shared-context family (SVC, neighbors,
+    # semi-supervised, GP) run the host label kernels
+    # (bindings/labels_descriptor_boundary_door.mojo `labels_scope`). Later
+    # `tables()` imports grow this context; the scope is copied again at the
+    # first label step after that.
+    context["metrics_cpu_cells"] = _cpu_metrics_cells()
+    from ._native_labels_bridge import cpu_scope
+    cpu_scope(context)
+
+
+def connect_cpu():
+    """Connect the host label and metrics images to the shared family
+    context: called by the compiled device check
+    (providers/python/device_route_boundary_door.mojo `device_admit_class`)
+    when an estimator is given `device="cpu"` beside a GPU set. Once per
+    process; later calls return at the first flag."""
+    # glue: lazy connection of the CPU route's images, once
+    global _CPU_WANTED, _CPU_DONE
+    if _CPU_DONE:
+        return None
+    _CPU_WANTED = True
+    if _CONTEXT is not None:
+        _connect_cpu(_CONTEXT)
+    _CPU_DONE = True
+    from ._native_labels_bridge import cpu_scope
+    for context in _CPU_LATER:  # glue: once, over the registered family contexts (at most a few)
+        cpu_scope(context)
+    _CPU_LATER.clear()
+    return None
 
 
 def _connect_context_module():
@@ -48,19 +106,9 @@ def shared_context():
                        classifier_labels_class=ClassLabels,
                        classifier_labels_namespace=dict(vars(ClassLabels)),
                        classifier_labels_mro=type.__dict__["__mro__"].__get__(ClassLabels))
-        # The CPU metrics connection every family's device route shares
-        # (providers/python/metrics_route_boundary_door.mojo
-        # `device_route_metrics_cpu`): on a GPU installation, the R^2 /
-        # accuracy programs of a device="cpu" estimator's score.
-        context["metrics_cpu_cells"] = _cpu_metrics_cells()
-        # The label steps of a device="cpu" classifier of any shared-context
-        # family (SVC, neighbors, semi-supervised, GP) run the host label
-        # kernels (bindings/labels_descriptor_boundary_door.mojo
-        # `labels_scope`). Later `tables()` imports grow this context; the
-        # scope is copied again at the first label step after that.
-        from ._native_labels_bridge import cpu_scope
-        cpu_scope(context)
         _CONTEXT = context
+        if _CPU_WANTED:
+            _connect_cpu(context)
         _connect_context_module()
     return _CONTEXT
 

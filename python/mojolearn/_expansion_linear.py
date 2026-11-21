@@ -264,7 +264,7 @@ class SGDClassifier(_LinearClassifierMixin, NumericModeMixin):
         Non-negative seed for shuffling. None means seed 0.
     learning_rate : {'constant', 'optimal', 'invscaling', 'adaptive'}, default 'optimal'
         Step-size schedule.
-    eta0 : float, default 0.0
+    eta0 : float, default 0.01
         Initial step size; must be > 0 for 'constant', 'invscaling' and 'adaptive'.
     power_t : float, default 0.5
         Exponent of the 'invscaling' schedule.
@@ -283,6 +283,11 @@ class SGDClassifier(_LinearClassifierMixin, NumericModeMixin):
         (``n_samples // 256``, at least 1, at most 4096), 0 runs per-sample
         SGD. A positive batch size takes the mean of its rows' gradients each
         step.
+    verbose : int, default 0
+        Accepted for scikit-learn compatibility; ignored. Nothing is printed.
+    n_jobs : int or None, default None
+        Accepted for scikit-learn compatibility; ignored. The work runs on the
+        device, not in host worker processes.
     numeric_mode : str or None, default None
         Numeric mode for this model (``'identical'``
         or ``'fast'``, which runs on Apple GPUs only); None uses the process
@@ -315,11 +320,18 @@ class SGDClassifier(_LinearClassifierMixin, NumericModeMixin):
 
     _BINDING = _BINDING
 
+    # scikit-learn's no-op keywords, at the class too: a model the archive door loads
+    # (`cls.__new__`, bindings/host_archive_native_door.mojo) never ran __init__, and its
+    # get_params reads these defaults (as `device` does).
+    verbose = 0
+    n_jobs = None
+
     def __init__(self, loss="hinge", *, penalty="l2", alpha=0.0001, l1_ratio=0.15,
                  fit_intercept=True, max_iter=1000, tol=1e-3, shuffle=True,
-                 epsilon=0.1, random_state=None, learning_rate="optimal", eta0=0.0,
+                 epsilon=0.1, random_state=None, learning_rate="optimal", eta0=0.01,
                  power_t=0.5, early_stopping=False, n_iter_no_change=5,
-                 class_weight=None, average=False, warm_start=False, batch_size="auto", numeric_mode=None, device=None):
+                 class_weight=None, average=False, warm_start=False, batch_size="auto", verbose=0,
+                 n_jobs=None, numeric_mode=None, device=None):
         self.loss, self.penalty, self.alpha, self.l1_ratio = loss, penalty, alpha, l1_ratio
         self.fit_intercept, self.max_iter, self.tol, self.shuffle = fit_intercept, max_iter, tol, shuffle
         self.epsilon, self.random_state, self.learning_rate = epsilon, random_state, learning_rate
@@ -327,6 +339,7 @@ class SGDClassifier(_LinearClassifierMixin, NumericModeMixin):
         self.n_iter_no_change, self.class_weight, self.average = n_iter_no_change, class_weight, average
         self.warm_start = warm_start
         self.batch_size = batch_size
+        self.verbose, self.n_jobs = verbose, n_jobs
         self.numeric_mode = numeric_mode
         self.device = device
 
@@ -430,6 +443,8 @@ class SGDRegressor(_LinearRegressorMixin, NumericModeMixin):
     batch_size : 'auto' or int, default 'auto'
         Rows per minibatch step; 'auto' is ``n_samples // 256`` (at least 1,
         at most 4096), 0 runs per-sample SGD.
+    verbose : int, default 0
+        Accepted for scikit-learn compatibility; ignored. Nothing is printed.
     numeric_mode : str or None, default None
         Numeric mode for this model (``'identical'``
         or ``'fast'``, which runs on Apple GPUs only); None uses the process
@@ -460,16 +475,23 @@ class SGDRegressor(_LinearRegressorMixin, NumericModeMixin):
 
     _BINDING = _BINDING
 
+    # scikit-learn's no-op keywords, at the class too: a model the archive door loads
+    # (`cls.__new__`, bindings/host_archive_native_door.mojo) never ran __init__, and its
+    # get_params reads these defaults (as `device` does).
+    verbose = 0
+
     def __init__(self, loss="squared_error", *, penalty="l2", alpha=0.0001, l1_ratio=0.15,
                  fit_intercept=True, max_iter=1000, tol=1e-3, shuffle=True, epsilon=0.1,
                  random_state=None, learning_rate="invscaling", eta0=0.01, power_t=0.25,
-                 early_stopping=False, n_iter_no_change=5, average=False, warm_start=False, batch_size="auto", numeric_mode=None, device=None):
+                 early_stopping=False, n_iter_no_change=5, average=False, warm_start=False, batch_size="auto", verbose=0,
+                 numeric_mode=None, device=None):
         self.loss, self.penalty, self.alpha, self.l1_ratio = loss, penalty, alpha, l1_ratio
         self.fit_intercept, self.max_iter, self.tol, self.shuffle = fit_intercept, max_iter, tol, shuffle
         self.epsilon, self.random_state, self.learning_rate = epsilon, random_state, learning_rate
         self.eta0, self.power_t, self.early_stopping = eta0, power_t, early_stopping
         self.n_iter_no_change, self.average, self.warm_start = n_iter_no_change, average, warm_start
         self.batch_size = batch_size
+        self.verbose = verbose
         self.numeric_mode = numeric_mode
         self.device = device
 
@@ -1694,7 +1716,7 @@ class SGDOneClassSVM(NumericModeMixin):
         Non-negative seed for shuffling. None means seed 0.
     learning_rate : {'constant', 'optimal', 'invscaling', 'adaptive'}, default 'optimal'
         Step-size schedule.
-    eta0 : float, default 0.0
+    eta0 : float, default 0.01
         Initial step size; must be > 0 for 'constant', 'invscaling' and 'adaptive'.
     power_t : float, default 0.5
         Exponent of the 'invscaling' schedule.
@@ -1741,7 +1763,7 @@ class SGDOneClassSVM(NumericModeMixin):
     _estimator_type = "outlier_detector"
 
     def __init__(self, nu=0.5, fit_intercept=True, max_iter=1000, tol=1e-3, shuffle=True, verbose=0,
-                 random_state=None, learning_rate="optimal", eta0=0.0, power_t=0.5, warm_start=False,
+                 random_state=None, learning_rate="optimal", eta0=0.01, power_t=0.5, warm_start=False,
                  average=False, batch_size=None, *, numeric_mode=None):
         # batch_size=None (fix-l1-linear, from lane/neural-pass139): "auto".
         # IDENTICAL builds fit the fixed-order minibatch at 4096 (the mean

@@ -75,7 +75,10 @@ def connect(context, package):
                              methods=methods, forest=forest, mro=mro, hooks=hooks,
                              fields_get=descriptor.__get__, protected=protected, classifier=getattr(cls, '_estimator_type', None) == 'classifier',
                              estimator_type=getattr(cls, '_estimator_type', None),
-                             device_rows=bool(getattr(cls, '_mojolearn_device_rows', False)))
+                             device_rows=bool(getattr(cls, '_mojolearn_device_rows', False)),
+                             # The class's OWN member mark (core/member_abi.mojo), never an
+                             # inherited one: a subclass publishes for itself or keeps its doors.
+                             member=fields[0].get('_mojolearn_member'))
         return True
 
     # Each recipe contains argument positions or fixed values. Native code

@@ -214,7 +214,8 @@ def _reset(model: PythonObject, params: PythonObject, context: PythonObject, dep
         # The new `device` is refused in the shared words before the
         # estimator changes (the constructor door's check, same table).
         device_admit_class(model, values["device"], py_get(context["backend_fields"], "_CPU_ONLY") is not None,
-                           py_get(context, "device_cpu"), b)
+                           py_get(context, "device_cpu"), b,
+                               py_get(context, "device_cpu_connect"))
     # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
     var replacement = Optional[PythonObject]()
     var fresh: PythonObject

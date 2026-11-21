@@ -1,19 +1,30 @@
 # SPDX-License-Identifier: Apache-2.0
 """The member ABI (core/member_abi.mojo) and the lifetime of the linear
-member state store (core/linear_member.mojo), without a kernel: three
-independent fixtures, one host task each. A fit or a prediction with numbers
+member state store (core/linear_member.mojo), without a kernel: five
+independent fixtures, one host task each (capabilities; handles; refusals,
+with every version 2 operation the linear member lacks; the fitted-state
+blocks in and out; the family table and a planned member). A fit or a prediction with numbers
 needs the family's kernel tables and belongs to the installed-wheel tests."""
 from core.device_route import DeviceRoute
 from core.entry_table import EntryRef
 from core.host_parallel import host_parallelize
-from core.linear_member import linear_member_v1
+from core.linear_member import linear_member_v2
 from core.member_abi import (
-    MemberCall, MemberMatrix, MemberRef, member_call, MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE,
-    MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA, MEMBER_OP_OUTPUTS, MEMBER_CAN_FIT, MEMBER_CAN_PREDICT,
-    MEMBER_CAN_SCORE, MEMBER_CAN_PREDICT_PROBA,
+    MemberCall, MemberMatrix, MemberPlan, MemberRef, member_call, member_publish, member_resolve_family,
+    member_new, member_free, member_require,
+    MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT,
+    MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA, MEMBER_OP_DECISION, MEMBER_OP_OUTPUTS, MEMBER_OP_TRANSFORM,
+    MEMBER_OP_INVERSE_TRANSFORM, MEMBER_OP_PARTIAL_FIT, MEMBER_OP_PREDICT_STD, MEMBER_OP_SCORE_SAMPLES,
+    MEMBER_OP_EXPORT, MEMBER_OP_IMPORT,
+    MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_SCORE, MEMBER_CAN_PREDICT_PROBA, MEMBER_CAN_EXPORT,
+    MEMBER_CAN_IMPORT, MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_COEF, MEMBER_CAN_TRANSFORM,
+    MEMBER_CAN_WEIGHTED_SCORE, MEMBER_CAN_DEVICE_VIEWS, MEMBER_CAN_CLASSIFIER,
+    MEMBER_BLOCK_COEF, MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
+    MEMBER_F32, MEMBER_F64, MEMBER_HOME_DEVICE,
 )
+from core.member_families import MEMBER_FAMILY_SPARE3, MEMBER_FAMILY_COUNT, member_family_name
 
-comptime MEMBER_ABI_FIXTURES = 3
+comptime MEMBER_ABI_FIXTURES = 5
 
 
 def require(ok: Bool, message: String) raises:
@@ -22,7 +33,7 @@ def require(ok: Bool, message: String) raises:
 
 
 def _member() -> MemberRef:
-    return MemberRef(EntryRef(linear_member_v1, 0), 0)
+    return MemberRef(EntryRef(linear_member_v2, 0), 0)
 
 
 def _new(kind: Float64, alpha: Float64) raises -> Int:
@@ -49,10 +60,23 @@ def _fixture(unit: Int) raises:
         # capabilities and the output width
         var call = MemberCall(DeviceRoute(0))
         var mask = member_call(_member(), MEMBER_OP_CAPABILITIES, call)
-        require(mask == (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_SCORE), "member ABI: linear capability mask")
-        require((mask & MEMBER_CAN_PREDICT_PROBA) == 0, "member ABI: a regressor has no predict_proba")
+        require(mask == (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_SCORE | MEMBER_CAN_EXPORT
+            | MEMBER_CAN_IMPORT | MEMBER_CAN_SAMPLE_WEIGHT | MEMBER_CAN_COEF), "member ABI: linear capability mask")
+        require((mask & (MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_TRANSFORM | MEMBER_CAN_WEIGHTED_SCORE
+            | MEMBER_CAN_DEVICE_VIEWS | MEMBER_CAN_CLASSIFIER)) == 0,
+            "member ABI: a linear regressor has no predict_proba, transform, weighted score, device views or classes")
+        call.classes = 7
         _ = member_call(_member(), MEMBER_OP_OUTPUTS, call)
-        require(call.out_cols == 1, "member ABI: one output column")
+        require(call.out_cols == 1 and call.classes == 0, "member ABI: one output column, no classes")
+        # a contiguous fold of a host view is a view: no copy
+        var view = MemberMatrix(4096, 10, 3)
+        var fold = view.rows_from(2, 5)
+        require(fold.data == 4096 + 2 * 3 * 4 and fold.rows == 5 and fold.cols == 3 and fold.dense_host(MEMBER_F32),
+            "member ABI: a host fold view")
+        view.home = MEMBER_HOME_DEVICE
+        fold = view.rows_from(2, 5)
+        require(fold.data == 4096 and fold.offset == 2 and not fold.dense_host(MEMBER_F32),
+            "member ABI: a device fold view moves its offset")
     elif unit == 1:
         # two live states are two handles; a released handle is refused, never read
         var first = _new(1.0, 0.5)
@@ -69,6 +93,93 @@ def _fixture(unit: Int) raises:
         _ = member_call(_member(), MEMBER_OP_FREE, other)
         var last = MemberCall(DeviceRoute(0), third)
         _ = member_call(_member(), MEMBER_OP_FREE, last)
+    elif unit == 3:
+        # fitted-state blocks: import three, read them back as views of the state, release
+        var handle = _new(1.0, 0.25)
+        var coef: List[Float32] = [1.5, -2.0, 0.5]
+        var mean: List[Float32] = [0.1, 0.2, 0.3]
+        var scalars: List[Float64] = [4.0, 9.0]
+        var call = MemberCall(DeviceRoute(0), handle)
+        _refused(MEMBER_OP_EXPORT, call, "not fitted yet")
+        call.block = MEMBER_BLOCK_COEF
+        call.x = MemberMatrix(Int(coef.unsafe_ptr()), 1, 3)
+        _ = member_call(_member(), MEMBER_OP_IMPORT, call)
+        call.block = MEMBER_BLOCK_FAMILY
+        call.x = MemberMatrix(Int(mean.unsafe_ptr()), 1, 3)
+        _ = member_call(_member(), MEMBER_OP_IMPORT, call)
+        _refused(MEMBER_OP_EXPORT, call, "not fitted yet")
+        call.block = MEMBER_BLOCK_SCALARS
+        call.x = MemberMatrix(Int(scalars.unsafe_ptr()), 1, 2, MEMBER_F64)
+        call.flags = MEMBER_IMPORT_DONE
+        _ = member_call(_member(), MEMBER_OP_IMPORT, call)
+        call.flags = 0
+        call.block = MEMBER_BLOCK_COEF
+        _ = member_call(_member(), MEMBER_OP_EXPORT, call)
+        require(call.out_cols == 3 and call.dst.rows == 1 and call.dst.cols == 3 and call.dst.dense_host(MEMBER_F32),
+            "member ABI: the coefficient block's shape")
+        require(call.dst.data != Int(coef.unsafe_ptr()), "member ABI: an import copies; the state owns its blocks")
+        var back = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=call.dst.data)
+        require(back[0] == 1.5 and back[1] == -2.0 and back[2] == 0.5, "member ABI: the coefficient block's words")
+        call.flags = MEMBER_BLOCK_BY_INDEX
+        call.block = 1
+        _ = member_call(_member(), MEMBER_OP_EXPORT, call)
+        require(call.block == MEMBER_BLOCK_SCALARS and call.dst.dense_host(MEMBER_F64) and call.dst.cols == 2,
+            "member ABI: block 1 is the scalars")
+        var words = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call.dst.data)
+        require(words[0] == 4.0 and words[1] == 9.0, "member ABI: the scalars block's words")
+        call.block = 2
+        _ = member_call(_member(), MEMBER_OP_EXPORT, call)
+        require(call.block == MEMBER_BLOCK_FAMILY and call.dst.cols == 3, "member ABI: block 2 is the column means")
+        call.block = 3
+        _refused(MEMBER_OP_EXPORT, call, "three fitted blocks")
+        call.flags = 0
+        call.block = 999
+        _refused(MEMBER_OP_IMPORT, call, "no fitted block")
+        _ = len(coef)
+        _ = len(mean)
+        _ = len(scalars)
+        _ = member_call(_member(), MEMBER_OP_FREE, call)
+    elif unit == 4:
+        # the family table: publish in a spare family's CPU identical slot, resolve by number, plan a member
+        require(member_family_name(MEMBER_FAMILY_SPARE3) == "Spare3" and member_family_name(MEMBER_FAMILY_COUNT) == "unknown",
+            "member ABI: family names")
+        var anchor: List[Int] = [1]
+        member_publish[MEMBER_FAMILY_SPARE3](1, 0, Int(anchor.unsafe_ptr()), linear_member_v2)
+        member_publish[MEMBER_FAMILY_SPARE3](1, 0, Int(anchor.unsafe_ptr()), linear_member_v2)
+        var route = DeviceRoute(0)
+        route.mode = 1
+        route.vendor = 0
+        var plan = MemberPlan()
+        plan.family = MEMBER_FAMILY_SPARE3
+        plan.member = member_resolve_family(plan.family, route)
+        plan.route = route
+        var ridge_words: List[Float64] = [1.0, 1.0, 0.5]
+        plan.params = ridge_words^
+        require(plan.member.can(MEMBER_CAN_FIT) and not plan.member.can(MEMBER_CAN_PREDICT_PROBA),
+            "member ABI: the resolved entry's capability mask")
+        member_require(plan, MEMBER_CAN_SCORE, "score")
+        var lacks = False
+        try:
+            member_require(plan, MEMBER_CAN_TRANSFORM, "transform")
+        except error:
+            lacks = String(error).find("has no transform") >= 0
+        require(lacks, "member ABI: a missing capability is refused at admission")
+        var call = member_new(plan)
+        require(call.state != 0, "member ABI: a planned member mints a state")
+        var first = call.state
+        member_free(plan, call)
+        require(call.state == 0, "member ABI: member_free clears the handle")
+        member_free(plan, call)
+        var stale = MemberCall(route, first)
+        _refused(MEMBER_OP_FREE, stale, "released or never created")
+        route.vendor = 3
+        var absent = False
+        try:
+            _ = member_resolve_family(plan.family, route)
+        except error:
+            absent = String(error).find("not published") >= 0
+        require(absent, "member ABI: an image that published nothing is refused at resolution")
+        _ = len(anchor)
     else:
         # refusals in words: bad parameters, an unfitted predict, an operation the family lacks
         var bad = MemberCall(DeviceRoute(0))
@@ -80,6 +191,22 @@ def _fixture(unit: Int) raises:
         call.dst = MemberMatrix(Int(storage.unsafe_ptr()) + 8, 1, 1)
         _refused(MEMBER_OP_PREDICT, call, "call fit before predict")
         _refused(MEMBER_OP_PREDICT_PROBA, call, "has no predict_proba")
+        _refused(MEMBER_OP_DECISION, call, "has no decision_function")
+        _refused(MEMBER_OP_TRANSFORM, call, "has no transform")
+        _refused(MEMBER_OP_INVERSE_TRANSFORM, call, "has no inverse_transform")
+        _refused(MEMBER_OP_PARTIAL_FIT, call, "has no partial_fit")
+        _refused(MEMBER_OP_PREDICT_STD, call, "has no predict_std")
+        _refused(MEMBER_OP_SCORE_SAMPLES, call, "has no score_samples")
+        # a selection or an output the linear member does not read is refused before any kernel
+        var picks: List[Int] = [0]
+        call.row_index = MemberMatrix(Int(picks.unsafe_ptr()), 1, 1)
+        _refused(MEMBER_OP_FIT, call, "no row or column index")
+        _refused(MEMBER_OP_PREDICT, call, "no row or column index")
+        call.row_index = MemberMatrix()
+        call.fit_output = MEMBER_OP_TRANSFORM
+        _refused(MEMBER_OP_FIT, call, "has no transform")
+        call.fit_output = 0
+        _ = len(picks)
         _ = len(storage)
         _ = member_call(_member(), MEMBER_OP_FREE, call)
 

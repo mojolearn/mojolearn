@@ -31,36 +31,108 @@ float spans. Results come back in the `MemberCall` (`state`, `value`,
 capability mask for `MEMBER_OP_CAPABILITIES`. A refusal is the entry's error
 text, raised by `member_call` in the caller.
 
+VERSION 2 (2026-11-21; MEMBER-ABI-V2.md is the recipe). One ABI for every
+family: the family numbers and their table slots are in
+core/member_families.mojo (generated; no family edits this file).
+  * CLASSIFIERS: the caller encodes the labels once; `y` holds the codes
+    0 .. classes-1 (any element type the family documents) and
+    `call.classes` the class count at `MEMBER_OP_FIT`. The state keeps the
+    count; `MEMBER_OP_OUTPUTS` answers the width of every output. The labels
+    themselves never cross: they stay with the caller's PACK.
+  * FITTED STATE AS BLOCKS (`MEMBER_OP_EXPORT` / `MEMBER_OP_IMPORT`): a
+    fitted state is a short list of typed host blocks with integer names
+    (`MEMBER_BLOCK_*`, family blocks from `MEMBER_BLOCK_FAMILY`). Export
+    hands out a VIEW of a block the state owns (no copy, valid until the
+    state's next fit, import or free); import copies a block in. The
+    family's PACK builds the Python estimator from the views, its UNPACK
+    feeds a fitted estimator in; `coef_` and `feature_importances_` for
+    recursive elimination and the explainers are the same export.
+  * TRANSFORMERS: `MEMBER_OP_TRANSFORM` / `MEMBER_OP_INVERSE_TRANSFORM`;
+    `call.fit_output` on a fit writes that operation's output for the training
+    rows in the same call (fit_transform, fit_predict).
+  * WEIGHTS: `call.weights` on a fit needs `MEMBER_CAN_SAMPLE_WEIGHT`, on a
+    score `MEMBER_CAN_WEIGHTED_SCORE`. Without the second the caller predicts
+    and runs its own weighted metric; a member never ignores a weight.
+  * WHERE THE WORDS LIVE: a view is host words, or (`MEMBER_HOME_DEVICE`) a
+    resident store of the route's device; `call.row_index` /
+    `call.column_index` select rows and columns of X (and the rows of y and
+    the weights) without a copy. Each needs its capability bit; without it
+    the caller hands over a gathered host view.
+  * `MEMBER_OP_CAPABILITIES` with a live `call.state` answers for that
+    state's kind (a regressor of a family with classifiers has no
+    predict_proba); with `state == 0` it answers the family's union.
+
 SERIAL BY NATURE: publication and resolution are metadata operations with no
 independent units. The member operations themselves are the family's RUN and
 parallel inside as that family is; a caller runs independent members (folds,
 candidates, bagged members) on its own workers, one `MemberCall` per worker.
 """
-from core.device_route import DeviceRoute
-from core.entry_table import EntryRef, entry_table_publish, entry_table_resolve, entry_ref_call
+from core.device_route import DeviceRoute, DEVICE_CPU
+from core.entry_table import EntryRef, entry_ref_call, entry_ref_unresolved
+from core.member_families import (
+    MEMBER_ABI, MEMBER_OPERATION_COUNT, MEMBER_FAMILY_COUNT, member_table, member_table_resolve, member_family_name,
+)
 from core.native_descriptor_abi import NativeDescriptorCall
 
-#: The schema of a member entry. Bump with `MEMBER_CALL_LAYOUT` on any change
-#: of `MemberCall`, `MemberMatrix`, `DeviceRoute` or the operation codes.
-comptime MEMBER_ABI = "mojolearn.member.v1"
-comptime MEMBER_CALL_LAYOUT = 1
+#: The layout of `MemberCall` / `MemberMatrix`. Bump it, and the schema
+#: `MEMBER_ABI` (core/member_families.mojo), on any change of `MemberCall`,
+#: `MemberMatrix`, `DeviceRoute` or the operation codes.
+comptime MEMBER_CALL_LAYOUT = 2
 
-comptime MEMBER_OP_CAPABILITIES = 0  # result word: the mask of MEMBER_CAN_* this family's member answers
-comptime MEMBER_OP_NEW = 1           # params -> call.state (an unfitted member state)
-comptime MEMBER_OP_FREE = 2          # call.state is released; a later use is refused
-comptime MEMBER_OP_FIT = 3           # x, y, weights (rows 0: none) -> the state is fitted
-comptime MEMBER_OP_PREDICT = 4       # x -> dst
-comptime MEMBER_OP_PREDICT_PROBA = 5 # x -> dst (rows x classes)
-comptime MEMBER_OP_DECISION = 6      # x -> dst
-comptime MEMBER_OP_SCORE = 7         # x, y, weights -> call.value (the family's default score)
-comptime MEMBER_OP_OUTPUTS = 8       # call.flags = MEMBER_OP_* asked -> call.out_cols (columns of dst per row)
-comptime MEMBER_OPERATION_COUNT = 9
+comptime MEMBER_OP_CAPABILITIES = 0       # result word: the mask of MEMBER_CAN_* (of call.state's kind, or the family's union)
+comptime MEMBER_OP_NEW = 1                # params -> call.state (an unfitted member state)
+comptime MEMBER_OP_FREE = 2               # call.state is released; a later use is refused
+comptime MEMBER_OP_FIT = 3                # x, y, weights (rows 0: none), classes -> the state is fitted; call.fit_output: also dst
+comptime MEMBER_OP_PREDICT = 4            # x -> dst
+comptime MEMBER_OP_PREDICT_PROBA = 5      # x -> dst (rows x classes)
+comptime MEMBER_OP_DECISION = 6           # x -> dst
+comptime MEMBER_OP_SCORE = 7              # x, y, weights -> call.value (the family's default score)
+comptime MEMBER_OP_OUTPUTS = 8            # call.flags = MEMBER_OP_* asked -> call.out_cols (columns of dst per row), call.classes
+comptime MEMBER_OP_TRANSFORM = 9          # x -> dst
+comptime MEMBER_OP_INVERSE_TRANSFORM = 10 # x -> dst
+comptime MEMBER_OP_PARTIAL_FIT = 11       # x, y, weights, classes -> the state has seen one more batch
+comptime MEMBER_OP_PREDICT_STD = 12       # x -> dst (the predictive standard deviation, one column)
+comptime MEMBER_OP_SCORE_SAMPLES = 13     # x -> dst (one value per row)
+comptime MEMBER_OP_EXPORT = 14            # call.block -> call.dst = a view the state owns; call.out_cols = its block count
+comptime MEMBER_OP_IMPORT = 15            # call.block, call.x = its words -> copied in; MEMBER_IMPORT_DONE: the state is fitted
 
 comptime MEMBER_CAN_FIT = 1
 comptime MEMBER_CAN_PREDICT = 2
 comptime MEMBER_CAN_PREDICT_PROBA = 4
 comptime MEMBER_CAN_DECISION = 8
 comptime MEMBER_CAN_SCORE = 16
+comptime MEMBER_CAN_TRANSFORM = 32
+comptime MEMBER_CAN_INVERSE_TRANSFORM = 64
+comptime MEMBER_CAN_PARTIAL_FIT = 128
+comptime MEMBER_CAN_PREDICT_STD = 256
+comptime MEMBER_CAN_SCORE_SAMPLES = 512
+comptime MEMBER_CAN_EXPORT = 1024
+comptime MEMBER_CAN_IMPORT = 2048
+comptime MEMBER_CAN_SAMPLE_WEIGHT = 4096     # fit reads call.weights
+comptime MEMBER_CAN_WEIGHTED_SCORE = 8192    # score reads call.weights
+comptime MEMBER_CAN_DEVICE_VIEWS = 16384     # reads and writes MEMBER_HOME_DEVICE views of its route's device
+comptime MEMBER_CAN_ROW_INDEX = 32768        # reads call.row_index
+comptime MEMBER_CAN_COLUMN_INDEX = 65536     # reads call.column_index
+comptime MEMBER_CAN_COEF = 131072            # exports MEMBER_BLOCK_COEF
+comptime MEMBER_CAN_IMPORTANCES = 262144     # exports MEMBER_BLOCK_FEATURE_IMPORTANCES
+comptime MEMBER_CAN_CLASSIFIER = 524288      # y is class codes; fit reads call.classes
+comptime MEMBER_CAN_MULTI_OUTPUT = 1048576   # y may have more than one column
+
+#: Fitted-state blocks (`MEMBER_OP_EXPORT` / `MEMBER_OP_IMPORT`). The shared
+#: names mean the same in every family; a family's own blocks start at
+#: `MEMBER_BLOCK_FAMILY` and are listed in its member file's docstring.
+comptime MEMBER_BLOCK_COEF = 1                 # float32, outputs (or classes, or 1) x features
+comptime MEMBER_BLOCK_INTERCEPT = 2            # float32, 1 x outputs (or classes, or 1)
+comptime MEMBER_BLOCK_FEATURE_IMPORTANCES = 3  # float32, 1 x features
+comptime MEMBER_BLOCK_SCALARS = 4              # float64 words in the family's documented order
+comptime MEMBER_BLOCK_FAMILY = 64
+
+#: `call.flags` of MEMBER_OP_EXPORT: `call.block` is an index 0 .. count-1
+#: (the block's name comes back in `call.block`), for a PACK that walks them.
+comptime MEMBER_BLOCK_BY_INDEX = 1
+#: `call.flags` of MEMBER_OP_IMPORT: this was the last block; check the
+#: state is complete and mark it fitted (`call.classes` = its class count).
+comptime MEMBER_IMPORT_DONE = 2
 
 #: Element types of a `MemberMatrix`.
 comptime MEMBER_F32 = 0
@@ -68,26 +140,26 @@ comptime MEMBER_F64 = 1
 comptime MEMBER_I32 = 2
 comptime MEMBER_I64 = 3
 
-#: Where a view's words live: host memory, or a device-rows handle of the
-#: route's device (bindings/device_rows_door.mojo; `data` is then the handle).
+#: Where a view's words live. HOST: `data` is an address. DEVICE: `data` is
+#: the id of a resident store of the route's device holding `rows` x `cols`
+#: elements row-major (the base an arena or a DeviceRows fold already holds,
+#: bindings/device_rows_door.mojo); `offset` is its first row. A device-home
+#: index view (`row_index`) is the store of the fold's int64 row numbers: the
+#: member gathers on the device.
 comptime MEMBER_HOME_HOST = 0
 comptime MEMBER_HOME_DEVICE = 1
-
-#: Families with a member table. A new family takes the next number and adds
-#: its eight slot names to `member_publish` and `member_resolve` below: the
-#: tier and the vendor are part of the slot name (plan section 2.5).
-comptime MEMBER_FAMILY_LINEAR = 0
-comptime MEMBER_FAMILY_COUNT = 1
 
 
 struct MemberMatrix(ImplicitlyCopyable, Movable):
     """A typed matrix view: `rows` x `cols` elements of `dtype`, row `i`
-    starting `i * stride` elements after `data` (`stride == cols` for a dense
-    row-major matrix; a vector is `cols == 1`). `rows == 0` is "not given"."""
+    starting `(offset + i) * stride` elements after `data` (`stride == cols`
+    for a dense row-major matrix; a vector is `cols == 1`). `rows == 0` is
+    "not given"."""
     var data: Int
     var rows: Int
     var cols: Int
     var stride: Int
+    var offset: Int
     var dtype: Int
     var home: Int
 
@@ -96,6 +168,7 @@ struct MemberMatrix(ImplicitlyCopyable, Movable):
         self.rows = 0
         self.cols = 0
         self.stride = 0
+        self.offset = 0
         self.dtype = MEMBER_F32
         self.home = MEMBER_HOME_HOST
 
@@ -104,6 +177,7 @@ struct MemberMatrix(ImplicitlyCopyable, Movable):
         self.rows = rows
         self.cols = cols
         self.stride = cols
+        self.offset = 0
         self.dtype = dtype
         self.home = MEMBER_HOME_HOST
 
@@ -111,9 +185,25 @@ struct MemberMatrix(ImplicitlyCopyable, Movable):
         return self.rows > 0 and self.data != 0
 
     def dense_host(self, dtype: Int) -> Bool:
-        """A dense row-major host view of `dtype` (what a host kernel reads
-        by address without a gather)."""
-        return self.given() and self.home == MEMBER_HOME_HOST and self.dtype == dtype and self.stride == self.cols
+        """A dense row-major host view of `dtype` starting at `data` (what a
+        host kernel reads by address without a gather)."""
+        return (self.given() and self.home == MEMBER_HOME_HOST and self.dtype == dtype
+            and self.stride == self.cols and self.offset == 0)
+
+    def element_bytes(self) -> Int:
+        return 4 if (self.dtype == MEMBER_F32 or self.dtype == MEMBER_I32) else 8
+
+    def rows_from(self, first: Int, count: Int) -> Self:
+        """Rows `first .. first + count` of a HOST view as a view (a
+        contiguous fold: no copy). A device view moves `offset` instead."""
+        var part = self
+        part.rows = count
+        if self.home == MEMBER_HOME_HOST:
+            part.data = self.data + (self.offset + first) * self.stride * self.element_bytes()
+            part.offset = 0
+        else:
+            part.offset = self.offset + first
+        return part
 
 
 struct MemberCall(Movable):
@@ -126,11 +216,23 @@ struct MemberCall(Movable):
     var y: MemberMatrix
     var weights: MemberMatrix
     var dst: MemberMatrix
+    # Optional selections of X (and of the rows of y and the weights): int32
+    # or int64 numbers, in the order the member must see them, repeats
+    # allowed (a bootstrap). Not given: every row / column.
+    var row_index: MemberMatrix
+    var column_index: MemberMatrix
     # MEMBER_OP_NEW: the member's hyperparameters as Float64 words, in the
     # order the family documents beside its entry (address, count).
     var params: Int
     var param_count: Int
     var flags: Int
+    # MEMBER_OP_FIT: 0, or the MEMBER_OP_* (predict, transform, ...) whose
+    # output for the training rows the fit also writes to `dst`.
+    var fit_output: Int
+    # MEMBER_OP_EXPORT / MEMBER_OP_IMPORT: the block's name (or index).
+    var block: Int
+    # Classifier: the class count (given at fit / import; answered by outputs).
+    var classes: Int
     # Results.
     var value: Float64
     var out_cols: Int
@@ -143,11 +245,21 @@ struct MemberCall(Movable):
         self.y = MemberMatrix()
         self.weights = MemberMatrix()
         self.dst = MemberMatrix()
+        self.row_index = MemberMatrix()
+        self.column_index = MemberMatrix()
         self.params = 0
         self.param_count = 0
         self.flags = 0
+        self.fit_output = 0
+        self.block = 0
+        self.classes = 0
         self.value = 0.0
         self.out_cols = 0
+
+    def on_cpu(self) -> Bool:
+        """The member's RESOLVED device is the CPU (its route says so; no
+        `device` field is read)."""
+        return self.route.device == DEVICE_CPU
 
 
 @fieldwise_init
@@ -162,9 +274,26 @@ struct MemberRef(ImplicitlyCopyable, Movable):
         return (self.capabilities & capability) != 0
 
 
-def _member_key_check(mode: Int, vendor: Int) raises:
-    if mode < 0 or mode > 1 or vendor < 0 or vendor > 3:
-        raise Error("member table: invalid tier/vendor key")
+struct MemberPlan(Copyable, Movable):
+    """Everything typed a caller's RUN needs to make members of one
+    estimator: the family and its kind word, the resolved entry, the
+    member's route and its hyperparameter words. Built once per member by
+    the caller's UNPACK (bindings/member_boundary_door.mojo `member_admit`);
+    workers read it and build their own `MemberCall` (`member_new`)."""
+    var family: Int
+    var kind: Int
+    var member: MemberRef
+    var route: DeviceRoute
+    var params: List[Float64]
+    var classes: Int
+
+    def __init__(out self):
+        self.family = -1
+        self.kind = 0
+        self.member = MemberRef(entry_ref_unresolved(), 0)
+        self.route = DeviceRoute(0)
+        self.params = List[Float64]()
+        self.classes = 0
 
 
 def member_publish[family: Int](mode: Int, vendor: Int, publisher: Int, entry: NativeDescriptorCall) raises:
@@ -173,63 +302,7 @@ def member_publish[family: Int](mode: Int, vendor: Int, publisher: Int, entry: N
     image's module initialization, after its kernel tables are published;
     `publisher` is any stable nonzero address of the image."""
     comptime assert family >= 0 and family < MEMBER_FAMILY_COUNT, "unknown member family"
-    _member_key_check(mode, vendor)
-    var schemas: List[String] = [String(MEMBER_ABI)]
-    var operations: List[Int] = [MEMBER_OPERATION_COUNT]
-    var entries: List[NativeDescriptorCall] = [entry]
-    if vendor == 0 and mode == 1:
-        comptime NAME = ("MojolearnMemberLinearIdenticalCPUV1")
-        entry_table_publish[NAME](mode, vendor, publisher, schemas, operations, entries)
-    elif vendor == 0:
-        comptime NAME = ("MojolearnMemberLinearFastCPUV1")
-        entry_table_publish[NAME](mode, vendor, publisher, schemas, operations, entries)
-    elif vendor == 1 and mode == 1:
-        comptime NAME = ("MojolearnMemberLinearIdenticalMetalV1")
-        entry_table_publish[NAME](mode, vendor, publisher, schemas, operations, entries)
-    elif vendor == 1:
-        comptime NAME = ("MojolearnMemberLinearFastMetalV1")
-        entry_table_publish[NAME](mode, vendor, publisher, schemas, operations, entries)
-    elif vendor == 2 and mode == 1:
-        comptime NAME = ("MojolearnMemberLinearIdenticalCUDAV1")
-        entry_table_publish[NAME](mode, vendor, publisher, schemas, operations, entries)
-    elif vendor == 2:
-        comptime NAME = ("MojolearnMemberLinearFastCUDAV1")
-        entry_table_publish[NAME](mode, vendor, publisher, schemas, operations, entries)
-    elif mode == 1:
-        comptime NAME = ("MojolearnMemberLinearIdenticalHIPV1")
-        entry_table_publish[NAME](mode, vendor, publisher, schemas, operations, entries)
-    else:
-        comptime NAME = ("MojolearnMemberLinearFastHIPV1")
-        entry_table_publish[NAME](mode, vendor, publisher, schemas, operations, entries)
-
-
-def _member_entry[family: Int](mode: Int, vendor: Int) raises -> EntryRef:
-    comptime assert family >= 0 and family < MEMBER_FAMILY_COUNT, "unknown member family"
-    _member_key_check(mode, vendor)
-    var schema = String(MEMBER_ABI)
-    if vendor == 0 and mode == 1:
-        comptime NAME = ("MojolearnMemberLinearIdenticalCPUV1")
-        return entry_table_resolve[NAME](mode, vendor, 0, schema, MEMBER_OPERATION_COUNT)
-    if vendor == 0:
-        comptime NAME = ("MojolearnMemberLinearFastCPUV1")
-        return entry_table_resolve[NAME](mode, vendor, 0, schema, MEMBER_OPERATION_COUNT)
-    if vendor == 1 and mode == 1:
-        comptime NAME = ("MojolearnMemberLinearIdenticalMetalV1")
-        return entry_table_resolve[NAME](mode, vendor, 0, schema, MEMBER_OPERATION_COUNT)
-    if vendor == 1:
-        comptime NAME = ("MojolearnMemberLinearFastMetalV1")
-        return entry_table_resolve[NAME](mode, vendor, 0, schema, MEMBER_OPERATION_COUNT)
-    if vendor == 2 and mode == 1:
-        comptime NAME = ("MojolearnMemberLinearIdenticalCUDAV1")
-        return entry_table_resolve[NAME](mode, vendor, 0, schema, MEMBER_OPERATION_COUNT)
-    if vendor == 2:
-        comptime NAME = ("MojolearnMemberLinearFastCUDAV1")
-        return entry_table_resolve[NAME](mode, vendor, 0, schema, MEMBER_OPERATION_COUNT)
-    if mode == 1:
-        comptime NAME = ("MojolearnMemberLinearIdenticalHIPV1")
-        return entry_table_resolve[NAME](mode, vendor, 0, schema, MEMBER_OPERATION_COUNT)
-    comptime NAME = ("MojolearnMemberLinearFastHIPV1")
-    return entry_table_resolve[NAME](mode, vendor, 0, schema, MEMBER_OPERATION_COUNT)
+    _ = member_table[family, 1](mode, vendor, publisher, entry)
 
 
 def member_call(member: MemberRef, operation: Int, mut call: MemberCall) raises -> Int:
@@ -248,11 +321,50 @@ def member_resolve[family: Int](route: DeviceRoute) raises -> MemberRef:
     `vendor` words), read ONCE per member by the caller's UNPACK, with its
     capability mask. Every refusal of the table (the family's image is not
     loaded, the ABI differs) happens here, never at call time."""
-    var entry = _member_entry[family](route.mode, route.vendor)
+    var entry = member_table[family, 0](route.mode, route.vendor, 0, entry_ref_unresolved().call)
     var probe = MemberCall(route)
     var member = MemberRef(entry, 0)
     member.capabilities = member_call(member, MEMBER_OP_CAPABILITIES, probe)
     return member
+
+
+def member_resolve_family(family: Int, route: DeviceRoute) raises -> MemberRef:
+    """`member_resolve` for a family number read at run time from the
+    member's class (bindings/member_boundary_door.mojo)."""
+    var entry = member_table_resolve(family, route.mode, route.vendor, entry_ref_unresolved().call)
+    var probe = MemberCall(route)
+    var member = MemberRef(entry, 0)
+    member.capabilities = member_call(member, MEMBER_OP_CAPABILITIES, probe)
+    return member
+
+
+def member_new(plan: MemberPlan) raises -> MemberCall:
+    """A worker's own call holding a new unfitted state of the planned
+    member. The worker frees it with `member_free` on every path."""
+    var call = MemberCall(plan.route)
+    call.params = Int(plan.params.unsafe_ptr())
+    call.param_count = len(plan.params)
+    call.classes = plan.classes
+    _ = member_call(plan.member, MEMBER_OP_NEW, call)
+    return call^
+
+
+def member_free(plan: MemberPlan, mut call: MemberCall):
+    """Release the call's state. Never raises: a worker calls it on its
+    error path too, and a state that was never minted is nothing to free."""
+    if call.state == 0:
+        return
+    try:
+        _ = member_call(plan.member, MEMBER_OP_FREE, call)
+    except:
+        call.state = 0
+
+
+def member_require(plan: MemberPlan, capability: Int, what: String) raises:
+    """UNPACK: refuse in words, before any work, a member that lacks an
+    operation the caller will ask for."""
+    if not plan.member.can(capability):
+        raise Error("AttributeError: a " + member_family_name(plan.family) + " member has no " + what)
 
 
 def member_call_from_spans(operation: Int, aa: Int, na: Int, np: Int, nf: Int) raises -> Int:
@@ -275,5 +387,12 @@ def member_unsupported(family: String, operation: Int) raises:
         String("predict") if operation == MEMBER_OP_PREDICT else (
         String("predict_proba") if operation == MEMBER_OP_PREDICT_PROBA else (
         String("decision_function") if operation == MEMBER_OP_DECISION else (
-        String("score") if operation == MEMBER_OP_SCORE else String("operation ") + String(operation)))))
+        String("score") if operation == MEMBER_OP_SCORE else (
+        String("transform") if operation == MEMBER_OP_TRANSFORM else (
+        String("inverse_transform") if operation == MEMBER_OP_INVERSE_TRANSFORM else (
+        String("partial_fit") if operation == MEMBER_OP_PARTIAL_FIT else (
+        String("predict_std") if operation == MEMBER_OP_PREDICT_STD else (
+        String("score_samples") if operation == MEMBER_OP_SCORE_SAMPLES else (
+        String("fitted-state export") if operation == MEMBER_OP_EXPORT else (
+        String("fitted-state import") if operation == MEMBER_OP_IMPORT else String("operation ") + String(operation))))))))))))
     raise Error("AttributeError: a " + family + " member has no " + name)

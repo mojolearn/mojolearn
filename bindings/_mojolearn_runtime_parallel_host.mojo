@@ -24,6 +24,7 @@ from bindings.small_mlp_native_door import small_mlp_c, small_mlp_finalize_c
 from bindings.parallel_causal_native_door import parallel_causal_c, RemoteStateLifetime
 from std.python.bindings import lookup_py_type_object
 from bindings.py_type_registry import py_type_absent, py_type_attach
+from bindings.native_process_pool_type_door import register_process_pool_owner
 
 comptime RUNTIME_PARALLEL_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
@@ -70,6 +71,8 @@ def build__mojolearn_runtime_parallel_host() -> PythonObject:
     comptime assert NEURAL_GUARDS_OK, "invalid integrated experiment configuration (neural guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_runtime_parallel_host")
+        # The process pool's record type (bindings/native_process_pool_type_door.mojo).
+        register_process_pool_owner(module)
         # The transport boundary these entries reach, set up as the tokenizer host does
         # (the same values; the tokenizer host initializes it first in one process).
         transport_initialize()

@@ -16,9 +16,9 @@ Two parts:
    a `GridSearchCV`.
 2. FITTING (opt-in, `MOJOLEARN_RUN_SKLEARN_CHECKS=1`, needs a device or CPU
    training binding): a `GridSearchCV` over a `Pipeline` and scikit-learn's
-   `cross_val_score` actually run, and scikit-learn's `parametrize_with_checks`
-   runs over every estimator that carries a scikit-learn class name, with the
-   short expected-failure list below.
+   `cross_val_score` actually run. scikit-learn's `parametrize_with_checks`
+   over every twin runs in tests/api/test_sklearn_estimator_checks.py, with
+   the instances (`_make`) and the expected-failure lists defined here.
 """
 
 import importlib
@@ -563,22 +563,6 @@ def _expected_failed_checks(estimator):
     return out
 
 
-def _checked_estimators():
-    # MOJOLEARN_SKLEARN_CHECKS_ONLY=Name[,Name]: exact class names, so a runner can
-    # give each estimator its own process (tools/sklearn_checks_per_estimator.sh).
-    only = os.environ.get("MOJOLEARN_SKLEARN_CHECKS_ONLY")
-    only = set(only.split(",")) if only else None
-    out = []
-    for name in SHARED_NAMES:
-        if name in FLOAT32_ONLY or (only is not None and name not in only):
-            continue
-        try:
-            out.append(_make(name))
-        except Exception:  # reported by test_params_clone_and_tags
-            continue
-    return out
-
-
 #: SparseCoder's dictionary is fixed, so the width of X is set by it. For a
 #: check whose X has another width, scikit-learn checks its own SparseCoder
 #: with a dictionary of that width (instance_generator.py,
@@ -629,13 +613,5 @@ def _instance_for_check(estimator, check):
     return est
 
 
-if RUN_FITS:
-    from sklearn.utils.estimator_checks import parametrize_with_checks
-
-    @parametrize_with_checks(_checked_estimators(), expected_failed_checks=_expected_failed_checks)
-    def test_scikit_learn_estimator_checks(estimator, check):
-        check(_instance_for_check(estimator, check))
-else:
-    @pytest.mark.skip(reason=FIT_REASON)
-    def test_scikit_learn_estimator_checks():
-        pass
+# scikit-learn's parametrize_with_checks over every twin of docs/api/sklearn_twins.json runs in
+# tests/api/test_sklearn_estimator_checks.py, with the instances and expected failures above.
