@@ -4,7 +4,7 @@
 from bindings.native_array_storage_door import native_array_empty, native_array_zeros
 from bindings.native_loaded_module_door import native_loaded_module
 from std.os import getenv
-from bindings.x_prep_native_owner_run import xprep_r3, XprepInput, XprepRunInput, XprepRoute, xprep_execute, xprep_release
+from bindings.x_prep_native_owner_run import xprep_r3, XprepInput, XprepRunInput, XprepRoute, XprepCaps, xprep_execute, xprep_release
 from std.time import perf_counter_ns
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_setattr
@@ -20,7 +20,7 @@ from bindings.p3_array_arena_records_unpack import (
 
 from std.python._cpython import GILReleased
 from bindings.prep_entry_cache_unpack import prep_entry_word, prep_entry_text
-from core.entry_table import EntryRef
+from core.entry_table import EntryRef, entry_ref_unresolved
 from core.prep_entry_table import PrepEntryKey, xp_transport_ref, xp_transport_call
 from x_prep.transport_abi import (
     XP_DEV_PUT, XP_DEV_FREE, xp_vendor_word,
@@ -375,11 +375,28 @@ def xprep_drop_resident(values: List[PythonObject], entries: PythonObject, conte
         return "resident in-out drop: "+String(error)
 
 
+def xprep_caps(entries: PythonObject) raises -> XprepCaps:
+    """The run capabilities of an entry dictionary, read by name and through
+    the table (the per-run reads of a caller that holds no device route)."""
+    return XprepCaps(True, xprep_key(entries), py_get(entries,"x_prep_run_out") is not None,
+                     py_get(entries,"x_prep_run_scratch") is not None, py_get(entries,"x_prep_run_ranges") is not None,
+                     py_get(entries,"x_prep_dev_put") is not None and py_get(entries,"x_prep_dev_free") is not None)
+
+
 def xprep_run(storage: PythonObject, host: Int, scratch: Int, output: PythonObject, out_words: Int,
               var program: List[Int32], inputs: PythonObject, entries: PythonObject, context: PythonObject,
               logical_output: Int = 0, inout_ranges: List[Int] = List[Int]()) raises:
     """`xprep_run_records` of a Python input list: each item is
     `(offset, (kind, value, indices, rows, cols))` (the stateless owners)."""
+    xprep_run_caps(storage, host, scratch, output, out_words, program^, inputs, entries, context,
+                   XprepCaps(False, entry_ref_unresolved(), False, False, False, False), logical_output, inout_ranges)
+
+
+def xprep_run_caps(storage: PythonObject, host: Int, scratch: Int, output: PythonObject, out_words: Int,
+                   var program: List[Int32], inputs: PythonObject, entries: PythonObject, context: PythonObject,
+                   caps: XprepCaps, logical_output: Int = 0, inout_ranges: List[Int] = List[Int]()) raises:
+    """`xprep_run` with the image's capabilities already resolved by the
+    caller's device route (`caps.held`), or read here once (not held)."""
     var records = List[XprepInput](capacity=len(inputs))
     var owners = List[PythonObject](capacity=len(inputs))
     for k in range(len(inputs)):  # driver-loop: over the program's input records
@@ -387,13 +404,23 @@ def xprep_run(storage: PythonObject, host: Int, scratch: Int, output: PythonObje
         records.append(XprepInput(Int(py=inputs[k][0]), Int(py=record[3]) * Int(py=record[4]), 0, k))
         owners.append(record)
     xprep_run_records(storage, host, scratch, output, out_words, program^, records, owners, entries, context,
-                      logical_output, inout_ranges)
+                      logical_output, inout_ranges, caps if caps.held else xprep_caps(entries))
 
 
 def xprep_run_records(storage: PythonObject, host: Int, scratch: Int, output: PythonObject, out_words: Int,
                       var program: List[Int32], records: List[XprepInput], owners: List[PythonObject],
                       entries: PythonObject, context: PythonObject,
                       logical_output: Int, inout_ranges: List[Int]) raises:
+    """The run of a caller that holds no device route: the image's
+    capabilities are read from `entries` here, once per run."""
+    xprep_run_records(storage, host, scratch, output, out_words, program^, records, owners, entries, context,
+                      logical_output, inout_ranges, xprep_caps(entries))
+
+
+def xprep_run_records(storage: PythonObject, host: Int, scratch: Int, output: PythonObject, out_words: Int,
+                      var program: List[Int32], records: List[XprepInput], owners: List[PythonObject],
+                      entries: PythonObject, context: PythonObject,
+                      logical_output: Int, inout_ranges: List[Int], caps: XprepCaps) raises:
     """One x_prep program run (lane encprog-typed, 2026-11-12: UNPACK, typed
     RUN, then cleanup). UNPACK resolves each input once: its buffer address,
     its resident cache slot, its DeviceRows fields, and the selected image's
@@ -409,11 +436,15 @@ def xprep_run_records(storage: PythonObject, host: Int, scratch: Int, output: Py
     var kernel_start = start
     var arena = Int(py=storage[1])
     var op = 0 if out_words == 0 else Int(py=output[1])
-    var has_out = py_get(entries,"x_prep_run_out") is not None
-    var device_scratch = scratch > 0 and (has_out or py_get(entries,"x_prep_run_scratch") is not None)
-    var ranges = xprep_ranges(entries,scratch)
-    # The transport entry, resolved once per run (lane entry-table-zero-alloc).
-    var key = xprep_key(entries)
+    # The image's capabilities and its transport entry: resolved once per
+    # estimator by the caller's device route, or once per run by `xprep_caps`
+    # (the same reads this function made by name). The run-time switch
+    # MOJOLEARN_ARENA_RANGES is still read here, per run.
+    var has_out = caps.has_out
+    var device_scratch = scratch > 0 and (has_out or caps.has_scratch)
+    var ranges = ((scratch == 0 or has_out or caps.has_scratch)
+                  and String(getenv("MOJOLEARN_ARENA_RANGES","1").strip()) != "0" and caps.has_ranges)
+    var key = caps.key
     # Each input can own at most a direct base and a gathered selection.
     # Reserve before acquisition so recording a successful put/take cannot
     # allocate and strand a slot on List growth failure.
@@ -433,7 +464,7 @@ def xprep_run_records(storage: PythonObject, host: Int, scratch: Int, output: Py
     var inout_values = List[PythonObject]()
     # TOMBSTONE: MOJOLEARN_XPREP_FAST_DIRECT_OFF (B arm loses: host-arena staging of large inputs; A/B abn9 NVIDIA L40S, 48 cells 0.96-17.38 arm/base, median 1.75, 34 slower) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
     # Restore: git apply experiments/removed/MOJOLEARN_XPREP_FAST_DIRECT_OFF.patch; record in docs/TOMBSTONES.md.
-    var dev_put_on = py_get(entries,"x_prep_dev_put") is not None and py_get(entries,"x_prep_dev_free") is not None
+    var dev_put_on = caps.dev_put
     try:
         # UNPACK
         for k in range(len(records)):  # driver-loop: over the program's input records

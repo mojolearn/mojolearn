@@ -307,7 +307,7 @@ def _search_host_folds(fields: PythonObject, candidates: PythonObject, b: Python
     own `device` is `'cpu'` in a process with a GPU set, or a candidate sets
     a `device`. `fields` is the search's admitted instance dictionary; its
     `device` reads through the same rule as a member's."""
-    if msel_member_host_folds(fields, context):
+    if msel_member_host_folds(fields, b, context):
         return True
     for k in range(len(candidates)):  # driver-loop: over the candidates' parameter dicts, names only
         if msel_params_name_device(candidates[k], b):

@@ -130,10 +130,9 @@ def svc_mode(fields: PythonObject) raises -> PythonObject:
     return py_get(fields, nk[].k_numeric_mode, PythonObject(None))
 
 
-def svc_binding(name: String, mode: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_backend.binding(name, mode)`: binding acquisition."""
-    var nk = svm_keys()
-    return family_call(py_item(py_item(context, nk[].k_backend_fields), nk[].k_binding), PythonObject(name), mode)
+# TOMBSTONE: `svc_binding` (`_backend.binding(name, mode)` called from the door: a Python call that selected the
+# PROCESS set; no caller was left) deleted 2026-11-21 by lane dw-classical. Bindings come from the estimator's
+# binding route (providers/python/estimator_binding_pyapi_door.mojo). Code recoverable at ea4e2e9a45.
 
 
 def svc_zero_division(float_division: Bool) raises:

@@ -10,6 +10,11 @@
 # Python, is bindings/decomp_kit_run.mojo (DKit).
 from core.mode_answer import MODE_FAMILY_DECOMP_KIT, answer_mode_word
 from std.python import Python, PythonObject
+from bindings.decomp_device_route_door import (
+    decomp_route_table_hit, decomp_route_keep_table, decomp_route_resolve_device, decomp_route_on_cpu_image,
+    decomp_device_admit, decomp_route_clear, decomp_route_mode,
+)
+from core.device_route import device_vendor_word
 from core.resident_upload_count import RUC_DECOMP_KIT, resident_upload_note
 from bindings.py_cpython_table import cpython_table
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
@@ -19,7 +24,7 @@ from bindings.py_model_records import records_open, model_generation
 from bindings.p3nc_fitted_freeze_unpack import fitted_is_freezable_any, fitted_freeze_any
 from std.memory import unsafe_memcpy
 from providers.python.array_metadata_pyapi_door import ArrayMetadata, ArrayPin
-from bindings.py_balanced import py_call, py_get, py_type, py_contains, py_setitem, py_setattr
+from bindings.py_balanced import py_call, py_get, py_type, py_contains, py_setitem, py_setattr, py_fields
 from bindings.classical_arrays_door import classical_typed, classical_address, classical_kind
 from bindings.classical_arrays_door import classical_wrap_layout
 from bindings.native_array_storage_door import native_array_unfilled
@@ -130,6 +135,79 @@ def decomp_entries(mode_value: PythonObject, context: PythonObject) raises -> Py
     if py_type(entries) is b.str:
         raise Error(String(py=entries))
     return entries
+
+
+def decomp_entries_routed(model: PythonObject, fields: PythonObject, mode_value: PythonObject,
+                          context: PythonObject) raises -> PythonObject:
+    """The connected x_decomp entries of an ESTIMATOR: of the device image, or
+    of the CPU image for `device="cpu"` beside a device set (identical
+    only), resolved once per estimator into its device route
+    (providers/python/device_route_boundary_door.mojo; glue in
+    bindings/decomp_device_route_door.mojo). `fields` is the estimator's
+    instance dictionary, `mode_value` the mode it selects by (its
+    `numeric_mode_` or `numeric_mode`; None is the process default).
+
+    A hit is one record read and three pointer compares: no mode String, no
+    strip/lower, no table read, and the device is not read. A miss (the
+    estimator's first operation after construction, `set_params` or a changed
+    mode) runs the admission of `decomp_entries` below, reads the device once
+    and stores the table. Same refusals, same words.
+
+    `decomp_entries(mode, context)` stays for the callers with no estimator
+    (the dense linear algebra functions): they run this installation's set."""
+    var mode = decomp_mode(mode_value, context)
+    var held = decomp_route_table_hit(model, mode, context)
+    if held is not None:
+        return held
+    if py_type(mode) is not py_type(PythonObject("")):
+        raise Error("numeric_mode must be fast, identical or None")
+    var name = String(py=mode)
+    if name != "identical" and name != "fast":
+        name = String(py=py_call(py_call(mode.strip).lower))
+    if name != "identical" and name != "fast":
+        raise Error("numeric_mode must be fast, identical or None")
+    answer_mode_word(name, MODE_FAMILY_DECOMP_KIT)
+    var tier = 1 if name == "identical" else 0
+    var device = decomp_route_resolve_device(fields, tier, context)
+    var entries = PythonObject(None)
+    if decomp_route_on_cpu_image(device, context):
+        # The CPU image loaded beside the device set at import
+        # (python/mojolearn/_native_decomp_kit_bridge.py `decomp_cpu_bindings`).
+        var cpu = py_get(context, "decomp_cpu_bindings")
+        if cpu is None:
+            raise Error("ImportError: device='cpu' is not connected in this installation")
+        entries = cpu[name]
+    else:
+        entries = context["decomp_bindings"][name]
+    if py_type(entries) is py_type(PythonObject("")):
+        raise Error(String(py=entries))
+    decomp_route_keep_table(model, device, tier, mode, context, entries)
+    return entries
+
+
+def decomp_entries_vendor(entries: PythonObject) raises -> String:
+    """`vendor_used` of a kit estimator: the vendor word of the image its
+    entries table names (its published table key), `cpu` for the CPU image."""
+    var key = py_get(entries, "x_decomp_native_key")
+    if key is None:
+        raise Error("ImportError: mojolearn: the x_decomp binding publishes no native entry table")
+    return device_vendor_word(Int(py=key[1]))
+
+
+def decomp_kit_device_operation(model: PythonObject, set_device: Bool, args: PythonObject,
+                                context: PythonObject) raises -> PythonObject:
+    """The two device operations every kit door serves the same way.
+    `device_set` (the constructor and `set_params` of a class with a Python
+    constructor): the device is checked where it is given, in the shared
+    words, before the estimator changes, and its route is dropped.
+    `vendor_used`: the vendor of the image the estimator's route names."""
+    if set_device:
+        decomp_device_admit(args[0], context)
+        decomp_route_clear(model)
+        return PythonObject(None)
+    var fields = py_fields(model)
+    return PythonObject(decomp_entries_vendor(
+        decomp_entries_routed(model, fields, decomp_route_mode(fields, context), context)))
 
 
 def decomp_input(source: PythonObject, name: String, context: PythonObject,
