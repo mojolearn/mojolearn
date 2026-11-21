@@ -1345,7 +1345,8 @@ def encode_auto_categories(model: PythonObject, fields: PythonObject, state: Cat
         _ = py_call(size_list.append, PythonObject(state.sizes[j]))
     var record = Python.tuple(categories, py_call(b.tuple, categories), block, state.kmax, py_call(b.tuple, size_list),
                               _floats(_to_floats(state.sizes), context), words)
-    prepared_put(NativeModules(), _CAT_SLOT, model, record if frozen else PythonObject(None))
+    var mods = NativeModules()
+    prepared_put(mods, _CAT_SLOT, model, record if frozen else PythonObject(None))
     py_setitem(fields, "_missing", _int_list(state.missing))
     py_setitem(fields, "_infrequent", PythonObject(None))
     py_setitem(fields, "_grouping", PythonObject(None))
