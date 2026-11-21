@@ -63,8 +63,10 @@ def _dbscan_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
     var binding = args[0]
     var source = args[1]
     var weights_source = args[2]
-    # UNPACK: the settings, typed.
-    var settings = dbscan_fit_settings(fields, context)
+    # UNPACK: the settings, typed. The builtins module is resolved once
+    # per fit, as it was, and handed to the three UNPACK steps.
+    var b = native_loaded_module("builtins")
+    var settings = dbscan_fit_settings(fields, b, context)
     var metric = settings.metric
     var nk = cluster_keys()
     # args[3] (present and True) marks `source` as the X the public door
@@ -74,7 +76,7 @@ def _dbscan_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
     # snapshot and no second finite pass over it (perf3-cluster-gp-gate;
     # perf2-cluster row 24: one extra full pass + one admission per fit).
     # Any other caller keeps the full admission below.
-    var admitted = dbscan_fit_marker(args)
+    var admitted = dbscan_fit_marker(args, b)
     var x = source if admitted else admit_family(source, 2, "X", context).array
     py_setitem(fields, nk[].k_input_copied_, PythonObject(not (x is source)))
     var n = Int(py=x.shape[0])
@@ -83,7 +85,7 @@ def _dbscan_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
     dbscan_check_x(x_address, n, d, admitted, metric)
     _ = x  # keep the Python object alive through the native checks above
     var labels = dbscan_array(List[Int](length=1, fill=n), "<i4", context)
-    var budget = dbscan_fit_budget(fields, context)
+    var budget = dbscan_fit_budget(fields, b, context)
     # sample_weight: `0` is the binding's `sample_weight == nullptr`. The
     # weights are held until after the call (their address is in flight).
     var w = PythonObject(None)

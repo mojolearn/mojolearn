@@ -67,6 +67,11 @@ from bindings.kmeans_owner_boundary_door import (
 )
 
 from bindings.kmeans_native_unpack import (
+    _INIT_ARRAY,
+    KMeansFitInit,
+    KMeansFitScalars,
+    kmeans_fit_init,
+    kmeans_fit_scalars,
     _HOLDER,
     _KMEANS_EST,
     _kmeans_admitted,
@@ -82,7 +87,6 @@ from bindings.cluster_keys_unpack import cluster_keys
 from bindings.py_balanced import py_item
 
 
-comptime _INIT_ARRAY = 2
 def _kmeans_held(model: PythonObject, fields: PythonObject, binding: PythonObject,
                  centers: PythonObject, k: Int, d: Int, connection: Int) raises -> PythonObject:
     var owner = py_get(fields, _HOLDER, PythonObject(None))
@@ -122,43 +126,12 @@ def _kmeans_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     var source = args[1]
     var sample_weight = args[2]
     var fields = py_fields(model)
-    var k_obj = family_field(fields, "n_clusters")
-    var init = family_field(fields, "init")
-    var init_centroids = family_field(fields, "init_centroids")
-    var init_code: Int
     var nk = cluster_keys()
-    if _kmeans_is_name(init, context):
-        var inits = py_item(context, nk[].k_family_kmeans_inits)
-        if not py_contains(inits, init):
-            raise Error("mojolearn: init must be one of " + family_repr(py_call(b.sorted, inits))
-                        + ", got " + family_repr(init))
-        init_code = Int(py=inits[init])
-    elif Bool(py=py_call(b.callable, init)):
-        # Refused before it is called: a Python init would run Python code
-        # inside the fit. PyCallable_Check through builtins.callable runs no
-        # user code.
-        raise Error("TypeError: Python init callbacks are not accepted; pass explicit initial centers "
-                    + "(an array of shape (n_clusters, n_features)) or use 'k-means++' or 'random'")
-    elif py_type(init) is b.int:
-        init_code = Int(py=family_call(b.int, init))
-    else:
-        if (py_type(init) is not b.bool
-                and cpython_table()[].PyType_IsSubtype(py_type(init)._obj_ptr, b.int._obj_ptr) != 0):
-            raise Error("TypeError: scalar model state requires native values without Python conversion hooks")
-        init_code = _INIT_ARRAY
-        init_centroids = init
-    var metric_code = _kmeans_metric(fields, context)
-    var factor = family_field(fields, "oversampling_factor")
-    var factor_type = py_type(factor)
-    var factor_admitted = factor_type is b.int or factor_type is b.float
-    if not factor_admitted and py_get(context, nk[].k_ndarray) is not None:
-        factor_admitted = factor_type is py_item(context, nk[].k_float64).type
-    if not factor_admitted:
-        # Use the canonical type getset directly; a custom metaclass can
-        # override __name__ even through type.__getattribute__.
-        var name = String(py_call(py_item(b.type.__dict__, nk[].k___name__).__get__, factor_type))
-        raise Error("TypeError: mojolearn: oversampling_factor must be a float, got " + name)
-    var oversampling = family_call(b.float, factor)
+    # UNPACK, first stage: init, metric and oversampling, typed.
+    var settings = kmeans_fit_init(fields, b, context)
+    var k_obj = settings.clusters
+    var init_code = settings.init_code
+    var metric_code = settings.metric_code
     var x = _kmeans_x(source, context)
     var connection = kmeans_connection(binding)
     var capabilities = kmeans_capabilities(connection)
@@ -173,13 +146,13 @@ def _kmeans_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     var k = Int(py=family_call(b.int, k_obj))
     var centers = family_array(Python.tuple(k, d), "<f4", context)
     if init_code == _INIT_ARRAY:
-        if init_centroids is None:
+        if settings.init_centroids is None:
             raise Error("mojolearn: init='array' needs init_centroids")
         # The one admission path in its two steps: the rank and emptiness
         # refusals on the metadata, the shape refusal, then the cast (or the
         # borrow) with the finiteness verdict (family_view deleted).
         var pin = ArrayPin()
-        var snapshot = admit_family_input(init_centroids, 2, "init_centroids", context, pin)
+        var snapshot = admit_family_input(settings.init_centroids, 2, "init_centroids", context, pin)
         if snapshot.shape[0] != k or snapshot.shape[1] != d:
             raise Error("mojolearn: init_centroids must be (" + family_str(k_obj) + ", " + String(d)
                         + "), got " + family_repr(array_python_shape(snapshot)))
@@ -204,36 +177,24 @@ def _kmeans_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     if sample_weight is not None:
         weights = admit_family_weights_array(sample_weight, n, True, context)
         n_weights = n
-    # Retain the original scalar admission order, then discard the former
-    # Python parameter list before RUN. Host integer slots keep index semantics.
-    var max_iter = family_field(fields, "max_iter")
-    var tolerance = family_field(fields, "tol")
-    _kmeans_conversion_scalar(tolerance, context)
-    tolerance = family_call(b.float, tolerance)
-    var seed = family_field(fields, "random_state")
-    _kmeans_conversion_scalar(seed, context)
-    seed = family_call(b.int, seed)
-    var n_init = family_field(fields, "n_init")
     # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
     var distances = Optional[PythonObject]()
     var joint = transform and not fold_fit and (capabilities & KMEANS_CAP_JOINT) != 0
     if joint:
         distances = family_array(Python.tuple(n, k), "<f4", context)
-    var host = (capabilities & KMEANS_CAP_HOST) != 0
-    var native_clusters = kmeans_integer(k_obj, host, context)
-    var native_iterations = kmeans_integer(max_iter, host, context)
-    var native_tolerance = Float64(py=tolerance)
-    var native_seed = kmeans_integer(seed, host, context)
-    var native_restarts = kmeans_integer(n_init, host, context)
-    var native_oversampling = Float64(py=oversampling)
+    # UNPACK, second stage: the scalar settings in their original admission
+    # order, narrowed to machine words (host integer slots keep index
+    # semantics). The joint distances were allocated between the reads and
+    # the narrowing; they are allocated first now (no refusal depends on it).
+    var scalars = kmeans_fit_scalars(fields, k_obj, (capabilities & KMEANS_CAP_HOST) != 0, b, context)
     var fold = KMeansFoldStore()
     if fold_fit:
         fold = KMeansFoldStore(x.store.base_id, x.store.base_rows, x.store.index_id)
     var request = KMeansFitRequest(x.address, Int(py=classical_address(centers)),
         Int(py=classical_address(labels)), 0 if fold_fit else Int(py=classical_address(weights)),
         Int(py=classical_address(distances.value())) if joint else 0,
-        n, d, native_clusters, n_weights, native_iterations, native_seed, native_restarts,
-        init_code, metric_code, not x.finite, native_tolerance, native_oversampling, fold)
+        n, d, scalars.clusters, n_weights, scalars.iterations, scalars.seed, scalars.restarts,
+        init_code, metric_code, not x.finite, scalars.tolerance, settings.oversampling, fold)
     var result = kmeans_run_fit(connection, request)
     _ = labels
     _ = centers

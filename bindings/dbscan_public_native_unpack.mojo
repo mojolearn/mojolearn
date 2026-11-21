@@ -69,10 +69,10 @@ struct DBSCANFitSettings(Copyable, Movable):
     var cap: Int
 
 
-def dbscan_fit_settings(fields: PythonObject, context: PythonObject) raises -> DBSCANFitSettings:
+def dbscan_fit_settings(fields: PythonObject, b: PythonObject, context: PythonObject) raises -> DBSCANFitSettings:
     """prediction_data, metric, algorithm, eps, min_samples and
-    max_iterations, each refused in the public order and wording."""
-    var b = native_loaded_module("builtins")
+    max_iterations, each refused in the public order and wording. `b`: the
+    builtins module the operator resolved once for the call."""
     var nk = cluster_keys()
     var prediction_data = family_field(fields, "prediction_data")
     if py_type(prediction_data) is not b.bool:
@@ -128,17 +128,16 @@ def dbscan_fit_settings(fields: PythonObject, context: PythonObject) raises -> D
     return DBSCANFitSettings(predicting, metric, method, eps, min_samples, cap)
 
 
-def dbscan_fit_marker(args: PythonObject) raises -> Bool:
+def dbscan_fit_marker(args: PythonObject, b: PythonObject) raises -> Bool:
     """args[3] (present and True) marks X as the one the public door
     already admitted with classical_check_x."""
-    if len(args) > 3 and py_type(args[3]) is not native_loaded_module("builtins").bool:
+    if len(args) > 3 and py_type(args[3]) is not b.bool:
         raise Error("TypeError: DBSCAN admission marker requires an exact bool")
     return len(args) > 3 and Bool(py=args[3])
 
 
-def dbscan_fit_budget(fields: PythonObject, context: PythonObject) raises -> Int:
+def dbscan_fit_budget(fields: PythonObject, b: PythonObject, context: PythonObject) raises -> Int:
     """max_mbytes_per_batch (0: the provider's own budget)."""
-    var b = native_loaded_module("builtins")
     var budget_attr = family_field(fields, "max_mbytes_per_batch")
     host_inference_scalar(budget_attr, context, True)
     var budget = 0 if budget_attr is None else Int(py=family_call(b.int, budget_attr))
