@@ -521,12 +521,17 @@ def _neural_train(owner: PythonObject, record: PythonObject, supplied: PythonObj
         # the committed step as a delta the workers replay: the ordered-sum
         # gradient and the generator state the update read. The requests
         # that carried the list have been answered, so it is extended in
-        # place (the per-step list copy is gone).
+        # place (the per-step list copy is gone). The committed digest is
+        # taken BEFORE the delta is appended (lane fx-audit, audit-neural
+        # finding 2): a raise in the snapshot or digest then leaves no delta
+        # for a step that never committed, so no worker replays it; the
+        # append, the trim and the commit after it do not fail on a live list.
+        var committed = _state_digest(_neural_snapshot(record))
         var history = rec[].history
         _ = py_call(history.append, Python.tuple(neural_step_version(rec[].native), updated[1], next_rng))
         for _ in range(neural_history_excess(len(history))):  # driver-loop: over retained committed steps beyond the bound (at most one)
             _ = py_call(history.pop, 0)
-        neural_step_commit(rec[].native, _state_digest(_neural_snapshot(record)))
+        neural_step_commit(rec[].native, committed)
         var result = b[].bi.dict()
         py_setitem(result, nk[].k_losses, py_call(b[].bi.tuple, losses))
         py_setitem(result, nk[].k_completed_steps, updated[2])

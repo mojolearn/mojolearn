@@ -14,7 +14,7 @@ from bindings.operation_names_mcls import (
 )
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type
-from providers.python.estimator_binding_pyapi_door import estimator_binding_mode, estimator_binding_routed
+from providers.python.estimator_binding_pyapi_door import estimator_binding_mode
 
 
 def metric_binding_arguments(operation: Int, args: PythonObject,
@@ -37,29 +37,3 @@ def metric_binding_arguments(operation: Int, args: PythonObject,
         _ = py_call(values.append, args[i])
     return py_call(py_type(Python.tuple()), values)
 
-
-
-def metric_binding_arguments(model: PythonObject, operation: Int, args: PythonObject,
-                             context: PythonObject) raises -> PythonObject:
-    # The same selection for a metric an ESTIMATOR runs (its `score`, a
-    # scorer of model selection): the metrics module of the estimator's
-    # device, from its binding route (a `device="cpu"` estimator on a GPU
-    # installation scores on the CPU metrics module). `model` None is the
-    # free-function form above.
-    if model is None:
-        return metric_binding_arguments(operation, args, context)
-    if operation == MCLS_OPN_FAMILY_MCLS_LOG_LOSS or operation == MCLS_OPN_FAMILY_MCLS_ACCURACY_FRACTION:
-        return args
-    if len(args) == 0 or args[0] is not None:
-        return args
-    var mode = PythonObject(None)
-    if (operation == MCLS_OPN_FAMILY_MCLS_ACCURACY or operation == MCLS_OPN_FAMILY_MCLS_R2
-            or operation == MCLS_OPN_FAMILY_MCLS_REGRESSION_ERROR or operation == MCLS_OPN_FAMILY_MCLS_ROC_AUC
-            or operation == MCLS_OPN_FAMILY_MCLS_PR_CURVE or operation == MCLS_OPN_FAMILY_MCLS_CONFUSION
-            or operation == MCLS_OPN_FAMILY_MCLS_PRF):
-        mode = args[len(args) - 1]
-    var binding = estimator_binding_routed(model, mode, "_mojolearn_metrics", context)
-    var values = Python.list(binding)
-    for i in range(1, len(args)):  # driver-loop: fixed public metric arguments
-        _ = py_call(values.append, args[i])
-    return py_call(py_type(Python.tuple()), values)

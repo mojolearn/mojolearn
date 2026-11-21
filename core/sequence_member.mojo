@@ -57,9 +57,10 @@ as the estimator's own predict record does; FREE posts the owner's death.
 
 The fitted state is OWNED here, in a process-wide store of fixed chunks: a
 slot never moves once minted; the store's lock covers only mint, free and
-the handle lookup. SERIAL BY NATURE: the store's bookkeeping and the
-narrowing of int64 codes to int32 (one word per row, memory-bound). The
-draws, the training and the forward are the image's own parallel kernels.
+the handle lookup. SERIAL BY NATURE: the store's bookkeeping. The
+narrowing of int64 codes to int32 is split across the host pool
+(`host_narrow_codes_i32`). The draws, the training and the forward are the
+image's own parallel kernels.
 """
 from std.sys.info import size_of
 from std.memory import unsafe_memcpy
@@ -75,6 +76,7 @@ from core.member_abi import (
     member_publish, member_call_from_spans, member_unsupported,
 )
 from core.member_families import MEMBER_FAMILY_SEQUENCE
+from core.host_parallel import host_narrow_codes_i32
 from core.mlp_member import _entropy_seed
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
@@ -362,9 +364,8 @@ def _predict(slot: _SlotP, call: _CallP) raises:
     _forward(slot, call, Int(scores.unsafe_ptr()))
     var codes = List[Int64](length=rows, fill=0)
     xseq_run_argmax(_output_entry(call), Int(scores.unsafe_ptr()), Int(codes.unsafe_ptr()), rows, outputs)
-    var out = _I32P(unsafe_from_address=call[].dst.data)
-    for i in range(rows):  # native result publication: one class code per row (see SERIAL BY NATURE)
-        out[i] = Int32(codes[i])
+    # Narrowed across the host pool (lane fx-audit, audit-neural finding 1).
+    host_narrow_codes_i32(Int(codes.unsafe_ptr()), call[].dst.data, rows)
     _ = scores^
     _ = codes^
 
