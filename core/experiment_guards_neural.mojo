@@ -1198,6 +1198,13 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_FAST_S17_TAIL_TREE_OFF.patch; record in docs/TOMBSTONES.md.
     comptime assert not is_defined["MOJOLEARN_MAMBA3_FAST_S17_TAIL_TREE_OFF"](), "removed 2026-11-20 (lane/fx-verdicts5, A/B round 3 NVIDIA L40S, wheel 28a780604c, job nvc-ab-20261120T063324Z-c630ad, one run per arm; old path, promotion confirmed twice: driver SambaStack.train_step with the serial chain 1.48, 1.89, 1.32): the serial S17 chunk-end chain; see docs/TOMBSTONES.md"
     # ---- end lane fx-verdicts5
+    # ---- lane fx-verdicts6 (2026-11-20): verdicts of A/B abf2 (NVIDIA L40S host 79f003b8e8ae, wheel e41b5148b24d, job nvc-ab-20261120T224801Z-458a59)
+    # MOJOLEARN_GEMM_FAST_MATRIX_UNITS=<kind> (gemm/fast_matrix_units.mojo, checks/mode_policy.mojo): kind 3 (every neural-dispatch caller) is the default route of a fast-rows build on NVIDIA and AMD; the tiers are deleted (TOMBSTONE beside the route constant, experiments/removed/MOJOLEARN_GEMM_FAST_MATRIX_UNITS.tiers.patch). The old opt-in name is refused so a stale build line does not silently mean a tier.
+    comptime assert not is_defined["MOJOLEARN_GEMM_FAST_MATRIX_UNITS"](), "promoted 2026-11-20 (lane/fx-verdicts6, A/B abf2 NVIDIA L40S, wheel e41b5148b24d, job nvc-ab-20261120T224801Z-458a59, one run per arm, arm fast-matrix-units-tf32-all: 12 of 13 cells faster, 0 slower, median 0.93, mlp fit 0.96-0.97, lm-train-step 0.82, quality equal): the matrix-units route is the default of a fast build (-D MOJOLEARN_MODE_FAST_ROWS) on NVIDIA and AMD and has no tiers (value 1, median 0.96, is deleted); drop the define, or build the old exact route with -D MOJOLEARN_GEMM_FAST_MATRIX_UNITS_OFF"
+    # TOMBSTONE: MOJOLEARN_GEMM_FAST_BF16_UNITS (DOMINATED, A/B abf2 NVIDIA L40S, wheel e41b5148b24d, job nvc-ab-20261120T224801Z-458a59, one run per arm: median 0.96 but mlp-clf/taxi infer 8.49 -> 15.82 ms, 1.86, gemm max_rel_err 2.2e-3; slower than the TF32 route on every cell) deleted 2026-11-20 by lane/fx-verdicts6; code recoverable at 06d1e8ff34.
+    # Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_BF16_UNITS.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_GEMM_FAST_BF16_UNITS"](), "removed 2026-11-20 (lane/fx-verdicts6, A/B abf2 NVIDIA L40S, wheel e41b5148b24d, job nvc-ab-20261120T224801Z-458a59, one run per arm; DOMINATED: median 0.96 but mlp-clf/taxi infer 8.49 -> 15.82 ms, 1.86, gemm max_rel_err 2.2e-3; slower than the TF32 route on every cell): the bf16 matrix-unit products of a fast build; the TF32 matrix-units route is the default; see docs/TOMBSTONES.md"
+    # ---- end lane fx-verdicts6
     return True
 
 
