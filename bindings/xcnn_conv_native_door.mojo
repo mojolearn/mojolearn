@@ -21,6 +21,7 @@ from bindings.xcnn_common_door import (
     xcnn_dev_upload, xcnn_download, xcnn_slice_f32, xcnn_put_f32, xcnn_readonly, xcnn_writable_copy,
     xcnn_device_init, xcnn_device_inherit,
 )
+from bindings.xcnn_bn_native_door import xcnn_bn_state, xcnn_bn_load_prepare, xcnn_bn_load_commit
 from bindings.xcnn_bn_native_door import xcnn_bn_forward_dev, xcnn_bn_forward, xcnn_bn_layers, xcnn_bn_backward, xcnn_bn_backward_dev, _bn_admit
 from x_cnn.conv_run import (
     ConvGeom, conv_run_check_config, conv_run_pad_code, conv_run_check_padding_mode, conv_run_text_pads,
@@ -44,6 +45,8 @@ from bindings.xcnn_keys_unpack import (
     XCNN_OPN_CONV_UNPIN, XCNN_OPN_CONV_WEIGHT1D,
 )
 from bindings.py_balanced import py_item
+from bindings.xcnn_common_door import xcnn_state_mapping
+from bindings.torch_parameter_form_pack import torch_parameter_form
 
 
 def _set(fields: PythonObject, name: String, value: PythonObject) raises:
@@ -214,8 +217,11 @@ def _conv_init(layer: PythonObject, args: PythonObject, one: Bool, context: Pyth
 
 
 def _conv_set_weights(layer: PythonObject, fields: PythonObject, args: PythonObject, one: Bool,
-                      context: PythonObject) raises -> PythonObject:
+                      context: PythonObject, prepare_only: Bool = False) raises -> PythonObject:
     # `fields`: the layer's fields, already admitted once by `xcnn_conv_layers`.
+    # `prepare_only` (lane api-torch round 3, BasicBlock's all-or-nothing
+    # load): admit and build the new arrays, write nothing, and return
+    # `(layer, fields, weight, bias)` for `_conv_weights_commit`.
     var k = _pair(fields, "kernel_size")
     var nk = xcnn_keys()
     var outc = Int(py=py_item(fields, nk[].k_out_channels))
@@ -236,11 +242,21 @@ def _conv_set_weights(layer: PythonObject, fields: PythonObject, args: PythonObj
         new_b = xcnn_slice_f32(b, 0, outc, context)
     elif not _truth(py_item(fields, nk[].k_bias)):
         new_b = _zeros([outc], context)
+    if prepare_only:
+        return Python.tuple(layer, fields, new_w, new_b)
+    _conv_weights_commit(layer, fields, new_w, new_b, context)
+    return layer
+
+
+def _conv_weights_commit(layer: PythonObject, fields: PythonObject, new_w: PythonObject, new_b: PythonObject,
+                         context: PythonObject) raises:
+    # The write half of `_conv_set_weights`: the admitted arrays into the
+    # layer's fields, then the device pins refreshed.
+    var nk = xcnn_keys()
     _set(fields, "weight_", new_w)
     _set(fields, "bias_", new_b)
     if py_get(fields, nk[].k__pins) is not None:
         _pin_weights(layer, fields, xcnn_entries(layer, fields, context), context)
-    return layer
 
 
 def _conv_gradient(fields: PythonObject, weight: Bool, context: PythonObject) raises -> PythonObject:
@@ -1464,3 +1480,136 @@ def xcnn_conv_layers(layer: PythonObject, operation: Int, name: PythonObject, ar
     if operation == XCNN_OPN_CONV_TRANSFORM:
         return _flat_rows(xcnn_conv_forward(layer, fields, _rows(fields, args[0], True, context), context), context)
     raise Error("RuntimeError: unknown CNN layer operation " + String(py=name))
+
+
+# ---------------------------------------------------------------- state_dict (lane api-torch round 2)
+# Conv2d / Conv1d / BatchNorm / BasicBlock `state_dict()` and
+# `load_state_dict(sd)` with torch's names and layouts (Conv1d's weight is
+# torch's (out, in // groups, k); the layer keeps it as (out, in, 1, k)).
+# state_dict returns copies; load_state_dict goes through the layer's own
+# set_weights admission. Cold API calls: no loop or repeated call reaches them.
+
+def xcnn_conv_state(layer: PythonObject, load: Bool, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    if load:
+        _xcnn_conv_load_commit(_xcnn_conv_load_prepare(layer, args[0], context), context)
+        return layer
+    var nk = xcnn_keys()
+    var b = xcnn_builtins()
+    var one = Bool(py=py_call(b.issubclass, py_type(layer), py_item(context, nk[].k_xcnn_conv1d_class)))
+    var fields = _conv_admit(layer, context)
+    var has_bias = _truth(py_item(fields, nk[].k_bias))
+    var result = b.dict()
+    var w = xcnn_f32(py_item(fields, nk[].k_weight_), "weight_", context)
+    var shape = xcnn_shape(w)
+    if one:
+        shape = [shape[0], shape[1], shape[3]]
+    py_setitem(result, "weight", xcnn_reshape(xcnn_slice_f32(w, 0, xcnn_size(shape), context), shape, context))
+    if has_bias:
+        var bias = xcnn_f32(py_item(fields, nk[].k_bias_), "bias_", context)
+        py_setitem(result, "bias", xcnn_slice_f32(bias, 0, xcnn_size(xcnn_shape(bias)), context))
+    return result
+
+
+def _xcnn_conv_load_prepare(layer: PythonObject, state: PythonObject, context: PythonObject) raises -> PythonObject:
+    # The admission half of Conv `load_state_dict`: names, shapes and the new
+    # arrays, nothing written (`_conv_set_weights` with `prepare_only`).
+    var nk = xcnn_keys()
+    var b = xcnn_builtins()
+    var one = Bool(py=py_call(b.issubclass, py_type(layer), py_item(context, nk[].k_xcnn_conv1d_class)))
+    var fields = _conv_admit(layer, context)
+    var has_bias = _truth(py_item(fields, nk[].k_bias))
+    var names: List[String] = ["weight"]
+    if has_bias:
+        names.append("bias")
+    var sd = xcnn_state_mapping(state, names, "Conv")
+    var bias_value = sd["bias"] if has_bias else PythonObject(None)
+    return _conv_set_weights(layer, fields, Python.tuple(sd["weight"], bias_value), one, context, True)
+
+
+def _xcnn_conv_load_commit(prepared: PythonObject, context: PythonObject) raises:
+    _conv_weights_commit(prepared[0], prepared[1], prepared[2], prepared[3], context)
+
+
+def xcnn_block_state(block: PythonObject, load: Bool, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    # torchvision's BasicBlock names: conv1, bn1, conv2, bn2, downsample.0, downsample.1.
+    var nk = xcnn_keys()
+    var b = xcnn_builtins()
+    var fields = _block_fields(block, context)
+    var prefixes: List[String] = ["conv1.", "bn1.", "conv2.", "bn2."]
+    var layers = Python.list(py_item(fields, nk[].k_conv1), py_item(fields, nk[].k_bn1), py_item(fields, nk[].k_conv2), py_item(fields, nk[].k_bn2))
+    var ds = py_item(fields, nk[].k_downsample)
+    if ds is not None:
+        prefixes.append("downsample.0.")
+        prefixes.append("downsample.1.")
+        _ = py_call(layers.append, ds[0])
+        _ = py_call(layers.append, ds[1])
+    if not load:
+        var result = b.dict()
+        for i in range(len(prefixes)):  # driver-loop: over the block's sublayers
+            var part = xcnn_bn_state(layers[i], False, args, context) if i % 2 == 1 else xcnn_conv_state(layers[i], False, args, context)
+            var keys = py_call(b.list, part.keys())
+            for k in range(len(keys)):  # driver-loop: over one sublayer's names
+                py_setitem(result, PythonObject(prefixes[i] + String(keys[k])), part[keys[k]])
+        return result
+    var sd = args[0]
+    if py_type(sd) is not b.dict:
+        raise Error("TypeError: BasicBlock.load_state_dict requires a dict of name to array")
+    var keys = py_call(b.list, sd.keys())
+    var parts = List[PythonObject]()
+    for i in range(len(prefixes)):  # driver-loop: over the block's sublayers
+        parts.append(b.dict())
+    for k in range(len(keys)):  # driver-loop: over the given names, each matched to one sublayer
+        if py_type(keys[k]) is not b.str:
+            raise Error("TypeError: BasicBlock.load_state_dict: names must be strings")
+        var name = String(keys[k])
+        var matched = False
+        for i in range(len(prefixes)):  # small-loop(at most 6 sublayers): name routing, no data
+            if name.startswith(prefixes[i]):
+                py_setitem(parts[i], PythonObject(String(name.removeprefix(prefixes[i]))), sd[keys[k]])
+                matched = True
+                break
+        if not matched:
+            raise Error("ValueError: BasicBlock.load_state_dict: unexpected key '" + name + "'")
+    # All or nothing (lane api-torch round 3): every sublayer's names and
+    # shapes are admitted and its new arrays built first; only then is any
+    # sublayer written (before, a wrong shape in a later sublayer left the
+    # earlier ones loaded).
+    var prepared = List[PythonObject]()
+    for i in range(len(prefixes)):  # driver-loop: over the block's sublayers (admission, no write)
+        prepared.append(xcnn_bn_load_prepare(layers[i], parts[i], context) if i % 2 == 1 else _xcnn_conv_load_prepare(layers[i], parts[i], context))
+    for i in range(len(prefixes)):  # driver-loop: over the block's sublayers (writes)
+        if i % 2 == 1:
+            xcnn_bn_load_commit(prepared[i])
+        else:
+            _xcnn_conv_load_commit(prepared[i], context)
+    return block
+
+
+def xcnn_layer_parameters(layer: PythonObject, form: Int, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """torch's `parameters()` (form 1) / `named_parameters()` (form 2) of a
+    Conv, BatchNorm or BasicBlock layer (lane api-torch round 3): the
+    trainable entries of its `state_dict()` (names ending in `weight` or
+    `bias`; the running statistics and `num_batches_tracked` are buffers in
+    torch, not parameters), in `state_dict` order, which is torch's order.
+    Copies, as `state_dict()`'s are. Cold API call."""
+    var state = xcnn_layer_state(layer, False, args, context)
+    var b = xcnn_builtins()
+    var named = b.dict()
+    var keys = py_call(b.list, state.keys())
+    for k in range(len(keys)):  # driver-loop: over the layer's state names
+        var name = String(keys[k])
+        if name == "weight" or name == "bias" or name.endswith(".weight") or name.endswith(".bias"):
+            py_setitem(named, keys[k], state[keys[k]])
+    return torch_parameter_form(named, form)
+
+
+def xcnn_layer_state(layer: PythonObject, load: Bool, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = xcnn_keys()
+    var b = xcnn_builtins()
+    var cls = py_type(layer)
+    if Bool(py=py_call(b.issubclass, cls, py_item(context, nk[].k_xcnn_bn_class))):
+        return xcnn_bn_state(layer, load, args, context)
+    if Bool(py=py_call(b.issubclass, cls, py_item(context, nk[].k_xcnn_conv2d_class))):
+        return xcnn_conv_state(layer, load, args, context)
+    # BasicBlock (its admission refuses any other class)
+    return xcnn_block_state(layer, load, args, context)

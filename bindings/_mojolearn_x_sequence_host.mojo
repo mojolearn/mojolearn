@@ -36,7 +36,8 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from sequence.opt_entry_host import publish_seq_opt_host_entries
 from sequence.exec import HostExec
 from sequence.ops import SEQUENCE_HOST_SABOTAGE
-from sequence.xseq_glue_host import publish_x_sequence_host
+from sequence.xseq_glue_host import publish_x_sequence_host, XSEQ_HOST_OWNER
+from core.mlp_member import mlp_member_publish
 from providers.python.autograd_program_pyapi_door import ops_program_execute_py, ops_program_inspect_py, ops_program_fit_native_py, ops_imported_run_py
 from providers.python.autograd_program_control_pyapi_pack import ops_program_control_py
 from providers.python.autograd_torch_program_pyapi_door import ops_torch_program_run_py
@@ -611,6 +612,8 @@ def build__mojolearn_x_sequence_host() -> PythonObject:
         # sequence table (core/xseq_entry_table.mojo) for the sequence owner
         # (bindings/xseq_*_native.mojo); their former Python entries are gone.
         publish_x_sequence_host()
+        # The member entries (core/member_abi.mojo): these estimators run as members of a meta-estimator.
+        mlp_member_publish(Int(GLOBAL_NUMERIC_MODE), 0, Int(XSEQ_HOST_OWNER.get_or_create_ptr()))
         # Neural-blocks entry table (core/neural_entry_table.mojo): SmallMLPTrainer's
         # program; the Python entry remains for its other callers and the boundary tests.
         publish_neural_small_mlp_host()

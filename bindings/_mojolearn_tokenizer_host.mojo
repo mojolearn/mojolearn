@@ -1188,6 +1188,7 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(runtime_classical_unavailable_c, "causal_model_read_weights")
         module.def_py_c_function(runtime_classical_unavailable_c, "causal_model_twin")
         module.def_py_c_function(runtime_classical_unavailable_c, "causal_model_vendor_used")
+        module.def_py_c_function(runtime_classical_unavailable_c, "causal_model_load_state_dict")
         _ = module.add_type[GenerationHandle]("_GenerationHandle")
         # The Transformer block session owner (core/transformer_block_session.mojo)
         # the neural doors keep on a block; it replaces the generation session
@@ -1231,6 +1232,9 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(runtime_classical_unavailable_c, "causal_lm_snapshot")
         module.def_py_c_function(runtime_classical_unavailable_c, "causal_lm_resume")
         module.def_py_c_function(runtime_classical_unavailable_c, "causal_lm_parameters")
+        module.def_py_c_function(runtime_classical_unavailable_c, "causal_lm_parameter_list")
+        module.def_py_c_function(runtime_classical_unavailable_c, "causal_lm_named_parameters")
+        module.def_py_c_function(runtime_classical_unavailable_c, "causal_lm_state_dict")
         module.def_py_c_function(runtime_classical_unavailable_c, "causal_lm_blocks")
         module.def_py_c_function(runtime_classical_unavailable_c, "causal_state_init")
         module.def_py_c_function(runtime_classical_unavailable_c, "causal_lm_repr")
