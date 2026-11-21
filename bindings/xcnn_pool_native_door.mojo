@@ -141,7 +141,7 @@ def xcnn_maxpool_forward(model: PythonObject, x: PythonObject, context: PythonOb
     var fields = _fields(mods, model)
     if xcnn_is_t(x, context):
         # x, the output and the winners resident
-        var entries = xcnn_entries(fields, context)
+        var entries = xcnn_entries(model, fields, context)
         var xs = xcnn_shape(x)
         pool_run_check_nchw(xs, "MaxPool2d")
         var x_word = xcnn_dev_word(entries, x, context)
@@ -151,7 +151,7 @@ def xcnn_maxpool_forward(model: PythonObject, x: PythonObject, context: PythonOb
     var a = xcnn_f32(x, "x", context)
     var xs = xcnn_shape(a)
     pool_run_check_nchw(xs, "MaxPool2d")
-    var entries = xcnn_entries(fields, context)
+    var entries = xcnn_entries(model, fields, context)
     var prm = _pool_words(fields, xs, context)
     var shape = pool_run_out_words(prm, xs)
     var out = xcnn_host_f32(shape, context)
@@ -265,7 +265,7 @@ def xcnn_avgpool_forward(model: PythonObject, x: PythonObject, context: PythonOb
     var fields = _fields(model)
     if xcnn_is_t(x, context):
         # x and the output resident
-        var entries = xcnn_entries(fields, context)
+        var entries = xcnn_entries(model, fields, context)
         var xs = xcnn_shape(x)
         pool_run_check_nchw(xs, "AvgPool2d")
         var x_word = xcnn_dev_word(entries, x, context)
@@ -275,7 +275,7 @@ def xcnn_avgpool_forward(model: PythonObject, x: PythonObject, context: PythonOb
     var a = xcnn_f32(x, "x", context)
     var xs = xcnn_shape(a)
     pool_run_check_nchw(xs, "AvgPool2d")
-    var entries = xcnn_entries(fields, context)
+    var entries = xcnn_entries(model, fields, context)
     var prm = _pool_words(fields, xs, context)
     var out = xcnn_host_f32(pool_run_out_words(prm, xs), context)
     var key = xcnn_ref(entries)
@@ -306,7 +306,7 @@ def xcnn_pool_forward(model: PythonObject, x: PythonObject, context: PythonObjec
         var x4: List[Int] = [s[0], s[1], 1, s[2]]
         var mods = NativeModules()
         var fields = _fields(mods, model)
-        var entries = xcnn_entries(fields, context)
+        var entries = xcnn_entries(model, fields, context)
         var x_word = xcnn_dev_word(entries, x, context)
         if x_word != 0:
             # lane fb15-sync-counts (2026-11-18): x of this binding runs the
@@ -468,7 +468,7 @@ def _pool_backward2d(model: PythonObject, source: PythonObject, context: PythonO
         raise Error("RuntimeError: pool backward requires forward first")
     var shape = _pool_shape_words(saved, "_xshape", context)
     pool_run_check_saved(shape)
-    var entries = xcnn_entries(fields, context)
+    var entries = xcnn_entries(model, fields, context)
     var prm = _pool_words(fields, shape, context)   # one read of the settings serves the shape and every launch
     var expected = pool_run_out_words(prm, shape)
     var maxed = _is(model, "xcnn_maxpool_class", context)
@@ -604,7 +604,7 @@ def xcnn_dropout_forward(model: PythonObject, x: PythonObject, context: PythonOb
     var training = _pool_bool(py_item(fields, nk[].k_training), context)
     var probability = _dropout_probability(py_item(fields, nk[].k_p), context)
     if xcnn_is_t(x, context):
-        var bt = xcnn_entries(fields, context)
+        var bt = xcnn_entries(model, fields, context)
         var xs = xcnn_shape(x)
         # fx-maxpool (2026-11-19): x is admitted once (`xcnn_dev_word`: the
         # verdict `xcnn_on_dev` gave, with the handle word; the class test
@@ -644,7 +644,7 @@ def xcnn_dropout_forward(model: PythonObject, x: PythonObject, context: PythonOb
     var prm = _dropout_words(fields, probability, s4[0], s4[1], s4[2] * s4[3], context)
     var x4 = xcnn_reshape(a, s4, context)
     var y = xcnn_host_f32(s4, context)
-    var entries = xcnn_entries(fields, context)
+    var entries = xcnn_entries(model, fields, context)
     if xcnn_mixed(entries):
         var h = xcnn_dev_get(model, entries, "mask", xcnn_size(s4), context)
         var key = xcnn_ref(entries)
@@ -763,7 +763,7 @@ def xcnn_adaptive_forward(model: PythonObject, x: PythonObject, context: PythonO
     # before its launch, and every other branch admits as before.
     var mods = NativeModules()
     var fields = _fields(mods, model)
-    var entries = xcnn_entries(fields, context)
+    var entries = xcnn_entries(model, fields, context)
     var m = xcnn_idn(entries, XCNN_F_ADAPT)
     var maxed = _adaptive_max(model, context)
     var xt = xcnn_is_t(x, context)
@@ -918,7 +918,7 @@ def xcnn_dropout_backward(model: PythonObject, source: PythonObject, context: Py
     var host = py_get(fields, nk[].k__mask_host)
     var handle = py_get(fields, nk[].k__mask_dev)
     if xcnn_is_t(source, context):
-        var entries = xcnn_entries(fields, context)
+        var entries = xcnn_entries(model, fields, context)
         var shape = xcnn_shape(source)
         if xcnn_on_dev(entries, source, context) and xcnn_idn(entries, XCNN_F_LAYER_IO):
             if host is None and handle is None:
@@ -940,7 +940,7 @@ def xcnn_dropout_backward(model: PythonObject, source: PythonObject, context: Py
     var shape = xcnn_shape(g)
     var count = xcnn_size(shape)
     var out = xcnn_host_f32(shape, context)
-    var entries = xcnn_entries(fields, context)
+    var entries = xcnn_entries(model, fields, context)
     var dev = py_get(fields, nk[].k__dev)
     if handle is not None and xcnn_mixed(entries) and dev is not None and py_item(_fields(dev), nk[].k_b) is py_item(entries, nk[].k_module):
         pool_run_check_count(count, xcnn_size(_pool_shape_words(py_item(fields, nk[].k__mask_shape), "_mask_shape", context)))
@@ -1062,7 +1062,7 @@ def xcnn_adaptive_backward(model: PythonObject, source: PythonObject, context: P
     var output = _adaptive_output(fields, context)
     var expected: List[Int] = [shape[0], shape[1], output[0], output[1]]
     var maxed = _adaptive_max(model, context)
-    var entries = xcnn_entries(fields, context)
+    var entries = xcnn_entries(model, fields, context)
     var mixed = xcnn_idn(entries, XCNN_F_ADAPT)
     var tensor = xcnn_is_t(source, context)
     if tensor and mixed and not xcnn_on_dev(entries, source, context):
@@ -1129,7 +1129,7 @@ def xcnn_pool_layers(model: PythonObject, operation: Int, name: PythonObject, ar
         return xcnn_adaptive_backward(model, xcnn_at(args, 0), context)
     if operation == XCNN_OPN_ADAPTIVE_DEVICE_IO:
         try:
-            return PythonObject(xcnn_resident(xcnn_entries(_fields(model), context), context))
+            return PythonObject(xcnn_resident(xcnn_entries(model, _fields(model), context), context))
         except:
             return PythonObject(False)
     if operation == XCNN_OPN_POOL_INIT:
