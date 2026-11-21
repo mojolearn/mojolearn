@@ -610,7 +610,23 @@ struct _IFResidentStore(Defaultable, Movable):
     var synchronization: List[Int64]
     """[0] the store's lock word (lane ma-pub-trees unit 3): the native
     iforest entry (core/iforest_entry.mojo) runs with the GIL released, so
-    the GIL no longer orders the take, the put, the token and the release."""
+    the GIL no longer orders the take, the put, the token and the release.
+
+    LOCK DISCIPLINE (lane ma-pub-trees round 4, checked at every caller in
+    bindings/_mojolearn_svm.mojo and core/isolation_forest_member.mojo):
+    the lock is held ONLY inside `if_resident_new_token` (mint),
+    `if_resident_take` (the one lookup, which REMOVES the entry),
+    `if_resident_put` (the insert after the run) and `if_resident_release`
+    (free). A fit, an import, a score and every kernel launch run on the
+    taken entry with the lock released (the entry is out of the store, so
+    no other thread can reach it), and evicted or stale entries are freed
+    after the unlock. One public operation (fit, score_samples,
+    decision_function, predict, a member call) takes its entry ONCE. The
+    one exception is `save()` / pickle of a fitted estimator: IF_OP_EXPORT
+    is called twice (the sizes, then the copy into storage of exactly that
+    size, which only the caller can allocate), one take each; it is reached
+    from no loop, and the forest stays resident between the two so the
+    second call never fits (core/iforest_entry.mojo)."""
     var entries: List[IFResidentEntry]
     var next: Int
     var nonce: Int
