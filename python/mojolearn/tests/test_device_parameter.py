@@ -69,6 +69,44 @@ def test_the_table_is_not_empty():
     assert all(answer is True or isinstance(answer, str) for answer in _device_table.CPU_CLASSES.values())
 
 
+def _package_classes():
+    # every class the package defines, found from `object` down: independent of the table's own derivation
+    _load_every_family()
+    found, todo = set(), list(object.__subclasses__())
+    while todo:
+        cls = todo.pop()
+        if cls in found:
+            continue
+        found.add(cls)
+        todo.extend(type.__subclasses__(cls))
+    return sorted((cls for cls in found
+                   if cls.__module__.startswith("mojolearn.") and not cls.__module__.startswith("mojolearn.tests")),
+                  key=lambda cls: cls.__module__ + "." + cls.__qualname__)
+
+
+def test_every_marked_class_is_in_the_table_whatever_its_base():
+    # `_mojolearn_device = True` is the class's own statement that it runs on both devices: the compiled
+    # constructor check reads the TABLE, so a marked class without a row would be refused `device="cpu"`.
+    missing = [cls.__module__ + "." + cls.__qualname__ for cls in _package_classes()
+               if getattr(cls, "_mojolearn_device", False) is True and _device_table.CPU_CLASSES.get(cls) is not True]
+    assert not missing, f"marked classes without a True row in the device table: {missing}"
+
+
+def test_every_estimator_that_takes_device_is_in_the_table_whatever_its_base():
+    missing = []
+    for cls in _package_classes():
+        if cls.__init__ is object.__init__ or not hasattr(cls, "get_params") or cls in _device_table.CPU_CLASSES:
+            continue
+        try:
+            parameters = inspect.signature(cls.__init__).parameters
+        except (TypeError, ValueError):
+            continue
+        if "device" in parameters and cls.__module__ in __import__("sys").modules and \
+                vars(__import__("sys").modules[cls.__module__]).get(cls.__name__) is cls:
+            missing.append(cls.__module__ + "." + cls.__qualname__)
+    assert not missing, f"estimator classes that take device= without a row in the device table: {missing}"
+
+
 def test_the_report_lists_every_class_of_the_table():
     rows = _mode.device_report()
     assert len(rows) == len(_device_table.CPU_CLASSES)
@@ -130,6 +168,36 @@ def test_set_params_checks_the_device_before_the_estimator_changes(cls, answer, 
     assert est.set_params(device=ok) is est
     assert est.get_params(deep=False)["device"] == ok
     assert est.set_params(device=None).get_params(deep=False)["device"] is None
+
+
+@pytest.mark.parametrize("cls, answer, required", [row for row in CLASSES if row.values[2]])
+@pytest.mark.parametrize("bad", ["tpu", 0])
+def test_a_class_with_required_arguments_refuses_a_bad_device_too(cls, answer, required, bad):
+    # No class that takes device= is left unchecked: the classes the tests above skip (their constructor needs
+    # arguments this file cannot invent) must still refuse a bad device at construction, whatever the other
+    # arguments are, because the device is checked before any field is written.
+    placeholders = {name: None for name in required}
+    with pytest.raises((ValueError, TypeError), match="device"):
+        cls(device=bad, **placeholders)
+
+
+def test_every_public_class_that_takes_device_is_exercised():
+    # the parametrized cases above are the wave's proof that a bad device raises at construction and at
+    # set_params for EVERY class: a public estimator that takes device=None and is not among them fails here
+    covered = {row.values[0] for row in CLASSES}
+    missing = []
+    for cls in _package_classes():
+        if cls.__name__.startswith("_") or getattr(cls, "_HOST_INFERENCE_ONLY", False):
+            continue
+        if cls.__init__ is object.__init__ or not hasattr(cls, "get_params"):
+            continue
+        try:
+            parameters = inspect.signature(cls.__init__).parameters
+        except (TypeError, ValueError):
+            continue
+        if "device" in parameters and parameters["device"].default is None and cls not in covered:
+            missing.append(cls.__module__ + "." + cls.__qualname__)
+    assert not missing, f"classes that take device= and are not exercised by this file: {missing}"
 
 
 @pytest.mark.parametrize("cls, answer, required", CLASSES)

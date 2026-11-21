@@ -27,7 +27,6 @@ objective-change tolerance is ``0.1 * tol``. This follows cuML's
 """
 
 from ._mode import NumericModeMixin as _NumericModeMixin
-from ._mode import _MODE_METADATA, _MODE_METADATA_CONTEXT, _OBJECT_GET  # the shared device admission
 from . import _native_family_bridge
 from ._svm_impl import SVC, SVR
 from .linear_model import _QN_LOSS_SVC_L1, _QN_LOSS_SVC_L2, _QN_LOSS_SVR_L1, _QN_LOSS_SVR_L2
@@ -161,20 +160,12 @@ class LinearSVC(_LinearSVMBase):
     def __init__(self, *, penalty="l2", loss="squared_hinge", C=1.0,
                  fit_intercept=True, penalized_intercept=False,
                  class_weight=None, tol=1e-4, max_iter=1000,
-                 linesearch_max_iter=100, lbfgs_memory=5, multi_class="ovr", numeric_mode=None, device=None):
-        # `device` is checked in compiled code where it is given, before any
-        # field changes (the shared `device_admit` of the mode-metadata door,
-        # as `_mode._device_wrapper` calls it): None on a new instance calls
-        # nothing; a constructor run again (`set_params`) drops the route.
-        again = "device" in _OBJECT_GET(self, "__dict__")
-        if device is not None or again:
-            _MODE_METADATA(self, "device_admit", _MODE_METADATA_CONTEXT, device)
+                 linesearch_max_iter=100, lbfgs_memory=5, multi_class="ovr", numeric_mode=None):
         self._init_common(penalty, loss, C, fit_intercept, penalized_intercept,
                           tol, max_iter, linesearch_max_iter, lbfgs_memory)
         self.class_weight = class_weight
         self.multi_class = multi_class
         self.numeric_mode = numeric_mode
-        self.device = device
 
     def fit(self, X, y, sample_weight=None):
         """Fit the classifier.
@@ -338,19 +329,11 @@ class LinearSVR(_LinearSVMBase):
     def __init__(self, *, epsilon=0.0, penalty="l1", loss="epsilon_insensitive",
                  C=1.0, fit_intercept=True, penalized_intercept=False,
                  tol=1e-4, max_iter=1000, linesearch_max_iter=100,
-                 lbfgs_memory=5, numeric_mode=None, device=None):
-        # `device` is checked in compiled code where it is given, before any
-        # field changes (the shared `device_admit` of the mode-metadata door,
-        # as `_mode._device_wrapper` calls it): None on a new instance calls
-        # nothing; a constructor run again (`set_params`) drops the route.
-        again = "device" in _OBJECT_GET(self, "__dict__")
-        if device is not None or again:
-            _MODE_METADATA(self, "device_admit", _MODE_METADATA_CONTEXT, device)
+                 lbfgs_memory=5, numeric_mode=None):
         self._init_common(penalty, loss, C, fit_intercept, penalized_intercept,
                           tol, max_iter, linesearch_max_iter, lbfgs_memory)
         self.epsilon = epsilon
         self.numeric_mode = numeric_mode
-        self.device = device
 
     def fit(self, X, y, sample_weight=None):
         """Fit the regressor.
@@ -424,24 +407,3 @@ __all__ += _SKLEARN_LAYOUT["svm"]
 _native_family_bridge.connect_bindings("_mojolearn_estimators", "_mojolearn_x_trees", "_mojolearn_x_metrics")
 
 
-def _connect_cpu_metrics(context):
-    # glue: import-time connection of the CPU identical metrics image a
-    # device="cpu" LinearSVC scores on beside a GPU set (the accuracy COUNT
-    # program of bindings/svc_score_boundary_door.mojo takes the x_metrics
-    # module of the estimator's binding route). The host surface routes no
-    # CPU module for `_mojolearn_x_metrics`, so `connect_bindings` recorded a
-    # refusal for it; the image is the one the linear and GP families load by
-    # name. A CPU-only process connects nothing: its own set is the CPU one.
-    from . import _backend
-    if _backend._CPU_ONLY is not None:
-        return
-    basename = "_mojolearn_x_metrics_host"
-    table = context["family_binding_connections_cpu"]
-    try:
-        module = _backend.load_host_module(basename)  # import-time: the CPU module beside the device module, never a GPU fallback
-        table["_mojolearn_x_metrics"] = (module, module.__name__, _backend._host_prefix(basename) + "_numeric_mode")
-    except (ImportError, AttributeError, ValueError, RuntimeError, TypeError, OSError) as error:
-        table["_mojolearn_x_metrics"] = (type(error).__name__ + ": " + str(error),)
-
-
-_connect_cpu_metrics(_NATIVE_CONTEXT)

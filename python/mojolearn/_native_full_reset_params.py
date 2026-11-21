@@ -168,7 +168,7 @@ _EVENTS = {
     'IVFPQIndex': (('n_lists', 'parameter', 'n_lists', False), ('n_probes', 'parameter', 'n_probes', False), ('pq_dim', 'parameter', 'pq_dim', False), ('pq_bits', 'parameter', 'pq_bits', False), ('n_neighbors', 'parameter', 'n_neighbors', False), ('kmeans_n_iters', 'parameter', 'kmeans_n_iters', False), ('pq_kmeans_n_iters', 'parameter', 'pq_kmeans_n_iters', False), ('random_state', 'parameter', 'random_state', False), ('device', 'parameter', 'device', False), ('numeric_mode', 'parameter', 'numeric_mode', True)),
     'IVFRaBitQIndex': (('n_lists', 'parameter', 'n_lists', False), ('n_probes', 'parameter', 'n_probes', False), ('n_neighbors', 'parameter', 'n_neighbors', False), ('kmeans_n_iters', 'parameter', 'kmeans_n_iters', False), ('random_state', 'parameter', 'random_state', False), ('device', 'parameter', 'device', False), ('numeric_mode', 'parameter', 'numeric_mode', True)),
     'IVFSQIndex': (('n_lists', 'parameter', 'n_lists', False), ('n_probes', 'parameter', 'n_probes', False), ('n_neighbors', 'parameter', 'n_neighbors', False), ('kmeans_n_iters', 'parameter', 'kmeans_n_iters', False), ('random_state', 'parameter', 'random_state', False), ('max_train_points_per_cluster', 'parameter', 'max_train_points_per_cluster', False), ('device', 'parameter', 'device', False), ('numeric_mode', 'parameter', 'numeric_mode', True)),
-    'IsolationForest': (('n_estimators', 'parameter', 'n_estimators', False), ('max_samples', 'parameter', 'max_samples', False), ('max_depth', 'parameter', 'max_depth', False), ('max_features', 'parameter', 'max_features', False), ('bootstrap', 'parameter', 'bootstrap', False), ('contamination', 'parameter', 'contamination', False), ('random_state', 'parameter', 'random_state', False), ('warm_start', 'parameter', 'warm_start', False), ('n_jobs', 'parameter', 'n_jobs', False), ('verbose', 'parameter', 'verbose', False), ('output_type', 'parameter', 'output_type', False), ('device', 'parameter', 'device', False), ('numeric_mode', 'parameter', 'numeric_mode', True)),
+    'IsolationForest': (('n_estimators', 'parameter', 'n_estimators', False), ('max_samples', 'parameter', 'max_samples', False), ('max_depth', 'parameter', 'max_depth', False), ('max_features', 'parameter', 'max_features', False), ('bootstrap', 'parameter', 'bootstrap', False), ('contamination', 'parameter', 'contamination', False), ('random_state', 'parameter', 'random_state', False), ('warm_start', 'parameter', 'warm_start', False), ('n_jobs', 'parameter', 'n_jobs', False), ('verbose', 'parameter', 'verbose', False), ('output_type', 'parameter', 'output_type', False), ('numeric_mode', 'parameter', 'numeric_mode', True)),
     'IsotonicRegression': (('y_min', 'parameter', 'y_min', False), ('y_max', 'parameter', 'y_max', False), ('increasing', 'parameter', 'increasing', False), ('out_of_bounds', 'parameter', 'out_of_bounds', False), ('numeric_mode', 'parameter', 'numeric_mode', False)),
     'KMeans': (('n_clusters', 'parameter', 'n_clusters', False), ('init', 'parameter', 'init', False), ('n_init', 'parameter', 'n_init', False), ('max_iter', 'parameter', 'max_iter', False), ('tol', 'parameter', 'tol', False), ('random_state', 'parameter', 'random_state', False), ('init_centroids', 'parameter', 'init_centroids', False), ('metric', 'parameter', 'metric', False), ('oversampling_factor', 'parameter', 'oversampling_factor', False), ('numeric_mode', 'parameter', 'numeric_mode', False), ('device', 'parameter', 'device', False)),
     'KNNImputer': (('missing_values', 'parameter', 'missing_values', False), ('n_neighbors', 'parameter', 'n_neighbors', False), ('weights', 'parameter', 'weights', False), ('metric', 'parameter', 'metric', False), ('copy', 'parameter', 'copy', False), ('add_indicator', 'parameter', 'add_indicator', False), ('keep_empty_features', 'parameter', 'keep_empty_features', False), ('device', 'parameter', 'device', False), ('numeric_mode', 'parameter', 'numeric_mode', True)),
@@ -278,7 +278,8 @@ def _install(classes):
         # before anything changes (`plan['device_admit']`,
         # bindings/full_reset_constructor_native_door.mojo `_construct`,
         # bindings/full_reset_params_native_door.mojo `_reset`). A class whose
-        # own constructor names `device` (its family wrote it) is left as is.
+        # own constructor names `device` keeps its own parameter and write event
+        # and gets the same compiled check.
         device_added = 'device' not in signature.parameters
         if device_added:
             signature = signature.replace(parameters=tuple(signature.parameters.values()) + (
@@ -310,7 +311,12 @@ def _install(classes):
         if device_added:
             kwonly += ('device',)
         _CONTEXT['plans'][cls] = dict(names=names, events=events, signature=signature,
-            device_admit=device_added,
+            # Checked for EVERY class that takes the parameter, whether this
+            # installer added it or the class's own constructor names it (a
+            # class that named it was left unchecked until round 4). Only an
+            # older keyword of another meaning (a default that is not None)
+            # stays out.
+            device_admit=device_added or signature.parameters['device'].default is None,
             defaults={p.name: p.default for p in parameters if p.default is not p.empty},  # glue: exact default reference identities
             class_name=cls.__name__,
             validation_kind='umap' if cls.__name__ == 'UMAP' else None,

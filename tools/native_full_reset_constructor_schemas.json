@@ -5442,98 +5442,91 @@
           "value": {
             "parameter": "n_estimators"
           },
-          "source": "python/mojolearn/_iforest_impl.py:169"
+          "source": "python/mojolearn/_iforest_impl.py:171"
         },
         {
           "field": "max_samples",
           "value": {
             "parameter": "max_samples"
           },
-          "source": "python/mojolearn/_iforest_impl.py:169"
+          "source": "python/mojolearn/_iforest_impl.py:171"
         },
         {
           "field": "max_depth",
           "value": {
             "parameter": "max_depth"
           },
-          "source": "python/mojolearn/_iforest_impl.py:169"
+          "source": "python/mojolearn/_iforest_impl.py:171"
         },
         {
           "field": "max_features",
           "value": {
             "parameter": "max_features"
           },
-          "source": "python/mojolearn/_iforest_impl.py:169"
+          "source": "python/mojolearn/_iforest_impl.py:171"
         },
         {
           "field": "bootstrap",
           "value": {
             "parameter": "bootstrap"
           },
-          "source": "python/mojolearn/_iforest_impl.py:169"
+          "source": "python/mojolearn/_iforest_impl.py:171"
         },
         {
           "field": "contamination",
           "value": {
             "parameter": "contamination"
           },
-          "source": "python/mojolearn/_iforest_impl.py:169"
+          "source": "python/mojolearn/_iforest_impl.py:171"
         },
         {
           "field": "random_state",
           "value": {
             "parameter": "random_state"
           },
-          "source": "python/mojolearn/_iforest_impl.py:169"
+          "source": "python/mojolearn/_iforest_impl.py:171"
         },
         {
           "field": "warm_start",
           "value": {
             "parameter": "warm_start"
           },
-          "source": "python/mojolearn/_iforest_impl.py:169"
+          "source": "python/mojolearn/_iforest_impl.py:171"
         },
         {
           "field": "n_jobs",
           "value": {
             "parameter": "n_jobs"
           },
-          "source": "python/mojolearn/_iforest_impl.py:169"
+          "source": "python/mojolearn/_iforest_impl.py:171"
         },
         {
           "field": "verbose",
           "value": {
             "parameter": "verbose"
           },
-          "source": "python/mojolearn/_iforest_impl.py:169"
+          "source": "python/mojolearn/_iforest_impl.py:171"
         },
         {
           "field": "output_type",
           "value": {
             "parameter": "output_type"
           },
-          "source": "python/mojolearn/_iforest_impl.py:169"
-        },
-        {
-          "field": "device",
-          "value": {
-            "parameter": "device"
-          },
-          "source": "python/mojolearn/_iforest_impl.py:169"
+          "source": "python/mojolearn/_iforest_impl.py:171"
         },
         {
           "field": "numeric_mode",
           "value": {
             "parameter": "numeric_mode"
           },
-          "source": "NumericModeMixin after python/mojolearn/_iforest_impl.py:169"
+          "source": "NumericModeMixin after python/mojolearn/_iforest_impl.py:171"
         }
       ],
       "trace": [
-        "python/mojolearn/_iforest_impl.py:169"
+        "python/mojolearn/_iforest_impl.py:171"
       ],
-      "constructor": "python/mojolearn/_iforest_impl.py:169",
-      "signature_source": "def __init__(self, *, n_estimators=100, max_samples='auto', max_depth=None, max_features=1.0, bootstrap=False, contamination='auto', random_state=None, warm_start=False, n_jobs=None, verbose=False, output_type=None, device=None)",
+      "constructor": "python/mojolearn/_iforest_impl.py:171",
+      "signature_source": "def __init__(self, *, n_estimators=100, max_samples='auto', max_depth=None, max_features=1.0, bootstrap=False, contamination='auto', random_state=None, warm_start=False, n_jobs=None, verbose=False, output_type=None)",
       "parameters": [
         "n_estimators",
         "max_samples",
@@ -5545,10 +5538,9 @@
         "warm_start",
         "n_jobs",
         "verbose",
-        "output_type",
-        "device"
+        "output_type"
       ],
-      "constructor_ast_sha256": "0648c8643157b50e184ac6e225341b378af15a2088dcfef0fc55e22abf748cb8",
+      "constructor_ast_sha256": "b92f10680b13a126c3eb238e96e946017f954d7999a5373dde902da95d357adb",
       "field_order": [
         "n_estimators",
         "max_samples",
@@ -5561,7 +5553,6 @@
         "n_jobs",
         "verbose",
         "output_type",
-        "device",
         "numeric_mode"
       ],
       "final_fields": {
@@ -5598,9 +5589,6 @@
         "output_type": {
           "parameter": "output_type"
         },
-        "device": {
-          "parameter": "device"
-        },
         "numeric_mode": {
           "parameter": "numeric_mode"
         }
@@ -5616,8 +5604,7 @@
         "warm_start": "False",
         "n_jobs": "None",
         "verbose": "False",
-        "output_type": "None",
-        "device": "None"
+        "output_type": "None"
       },
       "numeric_mode_injection": true,
       "module": "mojolearn._iforest_impl",
@@ -5626,8 +5613,8 @@
         {
           "path": "python/mojolearn/_iforest_impl.py",
           "name": "__init__",
-          "line": 169,
-          "ast_sha256": "0648c8643157b50e184ac6e225341b378af15a2088dcfef0fc55e22abf748cb8"
+          "line": 171,
+          "ast_sha256": "b92f10680b13a126c3eb238e96e946017f954d7999a5373dde902da95d357adb"
         }
       ],
       "constructor_ancestry": [

@@ -459,6 +459,22 @@ def _moved(value, device, fitted):
     return value
 
 
+def _stays(value, device):
+    """True when nothing in `value` has to move for it to run on `device`:
+    the reading twin of `_moved` (same one-level walk), which builds nothing."""
+    if takes_device(value):
+        try:
+            params = value.get_params(deep=False)
+        except Exception:
+            return True  # its own twin hook decides; nothing to read here
+        return (params.get("device") or "gpu") == device and all(_stays(item, device) for item in params.values())
+    if type(value) in (list, tuple):
+        return all(_stays(item, device) for item in value)
+    if type(value) is dict:
+        return all(_stays(item, device) for item in value.values())
+    return True
+
+
 def on_device(est, device, fitted=True):
     """The same estimator on `device` ('gpu' or 'cpu'): `est` itself when it
     already runs there, else a twin of its class on that device. With
@@ -505,7 +521,14 @@ def on_device(est, device, fitted=True):
     else:
         current = _raw_fields(est).get("device")
     if (current or "gpu") == device:
-        return est
+        # Already there, unless a member is not: a device="cpu" search or
+        # meta-estimator that holds a GPU member (or a fitted member on the
+        # other device) is rebuilt with its members moved, so the check never
+        # compares one device to itself through a member.
+        if build is not None or (all(_stays(value, device) for value in params.values())
+                                 and (not fitted or all(_stays(value, device) for key, value in _raw_fields(est).items()
+                                                        if key not in params))):
+            return est
     try:
         if build is None:
             params = {key: _moved(value, device, False) for key, value in params.items()}
@@ -539,6 +562,16 @@ def on_device(est, device, fitted=True):
         for key, value in state.items():
             if key not in keep:
                 target[key] = _moved(value, device, True)
+        # A resident index handle handed over with the state was minted by
+        # `est`'s image and stays `est`'s: the twin BORROWS it. The mark names
+        # that exact handle and binding, so the native finalizer
+        # (bindings/host_archive_lifetime_door.mojo) never releases it for a
+        # twin collected before its first operation; a handle the twin mints
+        # later is another handle and is released as usual.
+        for held in [state.get("_resident")] + [value.get("index") for value in state.values() if type(value) is dict]:
+            if type(held) is tuple and len(held) == 3 and type(held[1]) is int:
+                target["_mojolearn_resident_borrowed"] = (held[1], held[2])
+                break
     return twin
 
 
@@ -612,7 +645,11 @@ def _route_of(est):
     try:
         device = est.get_params(deep=False).get("device")
     except Exception:
-        device = None
+        # A model without get_params (Sequential): the field its constructor wrote.
+        try:
+            device = _raw_fields(est).get("device")
+        except Exception:
+            device = None
     return dict(device=device, vendor_used=used)
 
 
