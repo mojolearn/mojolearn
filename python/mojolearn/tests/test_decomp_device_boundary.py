@@ -309,3 +309,37 @@ def test_fit_row_a_changed_device_resolves_again(row):
     assert np.asarray(row[3](model, x)).tobytes() == first["query"]
     model.set_params(device=None)
     assert model.vendor_used() == mojolearn.vendor()
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Cholesky: its image comes from the estimator's binding route (the GP device image, or the linalg CPU image).
+def _spd(n=48, seed=3):
+    m = np.random.default_rng(seed).random((n, n), dtype=np.float32)
+    return (m @ m.T + n * np.eye(n, dtype=np.float32)).astype(np.float32)
+
+
+def test_cholesky_default_and_explicit_cpu_devices():
+    from mojolearn import Cholesky
+    a, b = _spd(), np.ones(48, dtype=np.float32)
+    model = Cholesky(jitter=0.0).fit(a)
+    assert model.get_params()["device"] is None and model.vendor_used() == mojolearn.vendor()
+    cpu = Cholesky(jitter=0.0, device="cpu").fit(a)
+    assert cpu.get_params()["device"] == "cpu" and cpu.vendor_used() == "cpu"
+    assert np.asarray(cpu.solve(b)).shape == (48,)
+    with pytest.raises(ValueError, match="device must be 'gpu', 'cpu' or None, got"):
+        Cholesky(device="tpu")
+    with pytest.raises(ValueError, match="device must be 'gpu', 'cpu' or None, got"):
+        model.set_params(device="tpu")
+
+
+@two_devices
+def test_cholesky_cpu_device_returns_the_gpu_bits_in_identical_mode():
+    from mojolearn import Cholesky
+    a, b = _spd(), np.ones(48, dtype=np.float32)
+    gpu = Cholesky(jitter=0.0, numeric_mode="identical", device="gpu").fit(a)
+    cpu = Cholesky(jitter=0.0, numeric_mode="identical", device="cpu").fit(a)
+    assert gpu.vendor_used() != "cpu" and cpu.vendor_used() == "cpu"
+    assert np.asarray(gpu.L_).tobytes() == np.asarray(cpu.L_).tobytes()
+    assert np.asarray(gpu.solve(b)).tobytes() == np.asarray(cpu.solve(b)).tobytes()
+    gpu.set_params(device="cpu")                               # the constructor runs again: the route is dropped
+    assert gpu.vendor_used() == "cpu"
