@@ -4,7 +4,11 @@ from core.mode_answer import MODE_FAMILY_NEURAL, answer_mode_word
 from bindings.mode_answer_door import answer_mode_object
 from std.python import PythonObject
 from bindings.py_balanced import py_call, py_type
-from bindings.py_typed_call import py_call_typed
+from bindings.optimizer_descriptor_boundary_door import optimizer_native_mode
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_connect_factory_once, neural_descriptor_execute
+from training.optimizer_native_api import OPTIMIZER_NATIVE_ABI, OPT_NATIVE_COUNT, OPT_NATIVE_VENDOR
+from training.optimizer_native_extra import TRAINING_VENDOR_NONE
+from core.device_route import device_vendor_word
 from bindings.optimizer_keys_unpack import optimizer_keys
 from bindings.optimizer_keys_unpack import OPTIMIZER_OPN_TRAINING_NUMERIC_MODE
 from bindings.py_balanced import py_item
@@ -30,16 +34,19 @@ def training_metadata(operation: Int, mode: PythonObject, context: PythonObject)
     if py_type(entries) is types[0]:
         # Import-time binding failures retain their original category/message.
         raise Error(String(entries))
-    if py_type(entries) is not types[3] or len(entries) != 2:
+    # lane dw-autograd-seq (2026-11-21): the record is the image's compiled
+    # native table factory (`optimizer_native_api_v1`), connected once per
+    # factory. The tier is the table's own OPT_NATIVE_MODE answer, read when
+    # the image was connected; the vendor is one OPT_NATIVE_VENDOR call.
+    # Before: the image's `training_numeric_mode` / `training_vendor` Python
+    # entries, called per read. Both still answer from the called binary's
+    # constants, never from a directory or a requested label.
+    if py_type(entries) is not types[3] or len(entries) != 1:
         raise Error("TypeError: training metadata requires its connected compiled entries")
-    if py_type(entries[0]) is not types[2] or py_type(entries[1]) is not types[2]:
+    if py_type(entries[0]) is not types[2]:
         raise Error("TypeError: training metadata requires its connected compiled entries")
-    # These two existing exports read only their build's constants. Recheck
-    # the called binary, rather than trusting directory or requested labels.
-    var code = py_call_typed(entries[0])
-    if py_type(code) is not types[1]:
-        raise Error("TypeError: training numeric mode must be a native integer")
-    var numeric = Int(py=code)
+    var provider = neural_descriptor_connect_factory_once(entries[0], String(OPTIMIZER_NATIVE_ABI), OPT_NATIVE_COUNT)
+    var numeric = optimizer_native_mode(provider)
     var compiled = String("identical") if numeric == 1 else String("fast") if numeric == 0 else String("unknown")
     if compiled != requested:
         if py_item(py_item(context, nk[].k_backend), nk[].k__CPU_ONLY) is not None:
@@ -47,7 +54,7 @@ def training_metadata(operation: Int, mode: PythonObject, context: PythonObject)
         raise Error("RuntimeError: mojolearn: _mojolearn_training was compiled for " + compiled + ", but this call requested " + requested + "; rebuild the " + requested + " binding")
     if operation == OPTIMIZER_OPN_TRAINING_NUMERIC_MODE:
         return PythonObject(compiled)
-    var vendor = py_call_typed(entries[1])
-    if py_type(vendor) is not types[0]:
-        raise Error("TypeError: training vendor must be a native string")
-    return vendor
+    var vendor = neural_descriptor_execute(provider, OPT_NATIVE_VENDOR, List[Int](), List[Int](), List[Float64](), False)
+    if vendor == TRAINING_VENDOR_NONE:
+        return PythonObject("none")
+    return PythonObject(device_vendor_word(vendor))

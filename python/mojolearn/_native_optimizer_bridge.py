@@ -37,7 +37,9 @@ def connect(training):
             # glue: metadata is available independently of optional training
             # kernels; retain its actual compiled entries once at import.
             try:
-                metadata_entries = tuple(getattr(binding, name) for name in ("training_numeric_mode", "training_vendor"))  # glue: fixed compiled metadata exports
+                # glue: the image's native table factory; its tier and vendor are read through the table
+                # (bindings/training_metadata_native_pack.mojo), not through per-read Python entries
+                metadata_entries = tuple(getattr(binding, name) for name in ("optimizer_native_api_v1",))  # glue: fixed compiled metadata export
                 if any(type(entry) is not BuiltinFunctionType for entry in metadata_entries):  # glue: admit only native metadata entry points
                     raise TypeError("training metadata requires compiled native entries")
                 metadata_bindings[mode] = metadata_entries
@@ -188,7 +190,10 @@ def connect_sequence_device(training, device):
                 "adafactor_resident_open", "adafactor_resident_step", "adafactor_resident_step_dev",
                 "lamb_resident_open", "lamb_resident_step", "lamb_resident_step_dev",
                 "layer_norm", "layer_norm_dev", "layer_norm_dev_alloc", "moe_forward", "moe_backward", "moe_forward_dev",
-                "moe_forward_dev_alloc", "moe_weights_put", "moe_weights_free")
+                "moe_forward_dev_alloc", "moe_weights_put", "moe_weights_free",
+                # the whole-model descriptor: the sequence layer and resident-tensor operations run on it
+                # (bindings/sequence_ops_door.mojo); the fourteen entry names above are no longer read by a door
+                "model_native_api_v1")
     for mode in ("identical", "fast"):  # glue: connect supported sequence numeric-mode ABI symbols at import
         try:
             binding = _backend.binding("_mojolearn_x_sequence", mode)

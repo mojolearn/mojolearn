@@ -3,7 +3,13 @@
 # imports). Public libc ABI on the supported LP64 Linux and Darwin hosts; the
 # calls that release the GIL around a blocking libc call (sleep, poll,
 # getaddrinfo, posix_spawnp, waitpid) and their callers stay in the door file.
-from std.ffi import c_int, c_uint, external_call
+# The readiness wait and the byte transfer (`posix_ready_run`,
+# `posix_transfer_run`) are here and touch no interpreter state: a RUN caller
+# enters them with the GIL already released by its door; the boundary forms
+# `posix_ready` / `posix_transfer` (native_posix_transport_unpack.mojo) release
+# it around them.
+from std.ffi import c_int, c_uint, c_size_t, external_call
+from std.math import ceil
 from std.sys.info import CompilationTarget
 
 comptime PosixBytes = MutPointer[UInt8, MutUntrackedOrigin]
@@ -79,3 +85,59 @@ def posix_socket_prepare(fd: Int) raises:
 def posix_terminate(pid: Int, signal: Int) raises:
     if external_call["kill", c_int](c_int(pid), c_int(signal)) != 0:
         posix_failure("kill", posix_errno())
+
+
+def posix_ready_run(fd: Int, writing: Bool, deadline: Float64) raises:
+    """Wait until `fd` is readable (or writable), or raise at `deadline`
+    (negative: no deadline). Native storage and libc only."""
+    # pollfd is {int fd; short events; short revents} on both public ABIs.
+    var words = Array[Int32, 2](fill=Int32(0))
+    words[0] = Int32(fd)
+    var shorts = MutPointer[Int16, MutUntrackedOrigin](unsafe_from_address=Int(words.unsafe_ptr()))
+    shorts[2] = Int16(4 if writing else 1)  # POLLOUT / POLLIN
+    while True:  # driver-loop: bounded native readiness wait
+        var milliseconds = -1
+        if deadline >= 0:
+            var remaining = deadline - posix_clock()
+            if remaining <= 0:
+                raise Error("transport: operation timed out")
+            milliseconds = Int(min(ceil(remaining * 1000.0), 2147483647.0))
+        shorts[3] = 0
+        var status = c_int(0)
+        comptime if CompilationTarget.is_macos():
+            status = external_call["poll", c_int](words.unsafe_ptr(), c_uint(1), c_int(milliseconds))
+        else:
+            status = external_call["poll", c_int](words.unsafe_ptr(), c_size_t(1), c_int(milliseconds))
+        var number = posix_errno()
+        if status > 0:
+            if (shorts[3] & 32) != 0:  # POLLNVAL
+                raise Error("transport: invalid socket descriptor")
+            return  # read/write/getsockopt reports EOF and other socket errors.
+        if status == 0:
+            raise Error("transport: operation timed out")
+        posix_failure("poll", number)
+
+
+def posix_transfer_run(fd: Int, pointer: PosixBytes, count: Int, timeout: Float64, writing: Bool) raises:
+    """Send or receive exactly `count` bytes at `pointer` on the nonblocking
+    socket `fd`. The caller keeps the bytes alive and unmoved until it returns."""
+    var offset = 0
+    var deadline = posix_deadline(timeout)
+    while offset < count:  # driver-loop: retain owner until every byte transfers
+        posix_ready_run(fd, writing, deadline)
+        var done = Int(0)
+        if writing:
+            var flags = 0
+            comptime if CompilationTarget.is_linux():
+                flags = 0x4000  # MSG_NOSIGNAL
+            done = external_call["send", Int](c_int(fd), pointer + offset, c_size_t(count - offset), c_int(flags))
+        else:
+            done = external_call["recv", Int](c_int(fd), pointer + offset, c_size_t(count - offset), c_int(0))
+        if done > 0:
+            offset += done
+        elif done == 0:
+            raise Error("transport: peer closed the connection")
+        else:
+            var number = posix_errno()
+            if not posix_again(number):
+                posix_failure("send" if writing else "receive", number)

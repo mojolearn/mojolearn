@@ -4,6 +4,10 @@
 The fixed architecture and arithmetic entries are the existing supported MLP.
 This module owns admission, snapshots and kernel sequences; it introduces no
 new numerical kernels or topology-dependent reduction order.
+
+UNPACK and PACK only: the state's range and shape rules and the two kernel
+sequences (the ordered fold, the optimizer step) are typed, in
+bindings/parallel_mlp_native_run.mojo and core/parallel_mlp_native_impl.mojo.
 """
 from std.python import Python, PythonObject
 from core.parallel_mlp_native_impl import mlp_check_finite, mlp_check_optimizer_state, mlp_targets_into
@@ -25,12 +29,12 @@ from bindings.small_mlp_native_door import (
 from bindings.small_mlp_keys_unpack import SMALL_MLP_OPN_LOAD_STATE_DICT, SMALL_MLP_OPN_STATE_DICT
 from core.shared_slot import SharedSlot
 from std.python._cpython import GILReleased
-from core.entry_table import EntryRef, entry_ref_call, entry_ref_unresolved
-from core.samba_entry_table import (
-    SambaEntryKey, samba_ref, samba_vendor_word, SAMBA_TABLE_TRAINING, SAMBA_PRIM_ACCUMULATE,
-    SAMBA_PRIM_OPTIMIZER_STEP,
+from core.entry_table import EntryRef, entry_ref_unresolved
+from core.samba_entry_table import SambaEntryKey, samba_ref, samba_vendor_word, SAMBA_TABLE_TRAINING
+from bindings.parallel_mlp_native_run import (
+    _mlp_names, _mlp_dims, mlp_schema_admit, mlp_config_admit, mlp_optimizer_kind_admit, mlp_batch_admit,
+    mlp_targets_admit, mlp_registry_extent, mlp_ordered_fold, mlp_step_admit, mlp_optimizer_step, mlp_update_admit,
 )
-from bindings.parallel_mlp_native_run import _mlp_names, _mlp_dims
 from bindings.parallel_keys_unpack import (
     parallel_keys,
     PARALLEL_MLP_OPN_APPLY,
@@ -158,19 +162,20 @@ def mlp_validate_state(state: PythonObject) raises -> PythonObject:
     for name in names:  # small-loop(the fixed MLP field-name words)
         _ = py_call(name_list.append, name)
     var nk = parallel_keys()
-    if String(py_item(state, nk[].k_schema)) != "mojolearn.small-mlp-trainer.v1" or String(py_item(state, nk[].k_numeric_mode)) != "identical" or Bool(py=py_item(state, nk[].k_architecture) != py_ints([8, 16, 3])) or Bool(py=py_item(state, nk[].k_parameter_order) != name_list):
-        raise Error("SmallMLPTrainer state schema/architecture/mode/order mismatch")
+    mlp_schema_admit(String(py_item(state, nk[].k_schema)), String(py_item(state, nk[].k_numeric_mode)),
+                     not Bool(py=py_item(state, nk[].k_architecture) != py_ints([8, 16, 3])),
+                     not Bool(py=py_item(state, nk[].k_parameter_order) != name_list))
     _mlp_fields(py_item(state, nk[].k_weights), "weight1|bias1|weight2|bias2")
     _mlp_fields(py_item(state, nk[].k_optimizer), "kind|step|m|v|flags")
     _mlp_fields(py_item(state, nk[].k_config), "lr|beta1|beta2|eps|weight_decay")
     var config = bi.dict()
     for name in [String("lr"), String("beta1"), String("beta2"), String("eps"), String("weight_decay")]:  # small-loop(the five optimizer config words)
         py_setitem(config, name, Float64(_parallel_float(py_item(state, nk[].k_config)[name], name)))
-    if Float64(py=py_item(config, nk[].k_lr)) <= 0 or Float64(py=py_item(config, nk[].k_eps)) <= 0 or Float64(py=py_item(config, nk[].k_weight_decay)) < 0 or Float64(py=py_item(config, nk[].k_beta1)) < 0 or Float64(py=py_item(config, nk[].k_beta1)) >= 1 or Float64(py=py_item(config, nk[].k_beta2)) < 0 or Float64(py=py_item(config, nk[].k_beta2)) >= 1:
-        raise Error("SmallMLPTrainer optimizer configuration outside admitted range")
+    mlp_config_admit(Float64(py=py_item(config, nk[].k_lr)), Float64(py=py_item(config, nk[].k_beta1)),
+                     Float64(py=py_item(config, nk[].k_beta2)), Float64(py=py_item(config, nk[].k_eps)),
+                     Float64(py=py_item(config, nk[].k_weight_decay)))
     var old = py_item(state, nk[].k_optimizer)
-    if String(py_item(old, nk[].k_kind)) != "AdamW":
-        raise Error("SmallMLPTrainer state optimizer mismatch")
+    mlp_optimizer_kind_admit(String(py_item(old, nk[].k_kind)))
     var optimizer = bi.dict()
     py_setitem(optimizer, nk[].k_kind, "AdamW")
     py_setitem(optimizer, nk[].k_step, _parallel_int(py_item(old, nk[].k_step), 0, 2147483647, "SmallMLPTrainer step", False))
@@ -219,8 +224,8 @@ def mlp_batch(value: PythonObject) raises -> PythonObject:
     var bi = PARALLEL_MLP_BOUNDARY.get_or_create_ptr()[].bi
     var view = _parallel_view(value)
     var shape = value.shape if py_type(value) is GENERATION_BOUNDARY.get_or_create_ptr()[].array_cls else view.shape
-    if len(shape) != 2 or Int(py=shape[1]) != 8 or Int(py=shape[0]) < 1 or Int(py=shape[0]) > 256:
-        raise Error("SmallMLPTrainer X must have shape (batch, 8), batch in [1,256]")
+    var matrix = len(shape) == 2
+    mlp_batch_admit(len(shape), Int(py=shape[0]) if matrix else 0, Int(py=shape[1]) if matrix else 0)
     return _parallel_array(value, [Int(py=shape[0]), 8])
 
 
@@ -229,15 +234,11 @@ def mlp_targets(value: PythonObject, rows: Int) raises -> PythonObject:
     var view = _parallel_view(value)
     var shape = value.shape if py_type(value) is g[].array_cls else view.shape
     var fmt = String(py_call(view.format.lstrip, "=@<"))
-    if len(shape) != 1 or Int(py=shape[0]) != rows:
-        raise Error("SmallMLPTrainer targets must match batch rows")
-    if fmt != "b" and fmt != "B" and fmt != "h" and fmt != "H" and fmt != "i" and fmt != "I" and fmt != "l" and fmt != "L" and fmt != "q" and fmt != "Q":
-        raise Error("TypeError: SmallMLPTrainer targets must be a native integer array")
+    var signed = mlp_targets_admit(len(shape), Int(py=shape[0]) if len(shape) == 1 else -1, rows, fmt)
     var packed = py_call(g[].arrays, fmt)
     var item = Int(py=packed.itemsize)
     var output = generation_array([rows], "i")
     var ids = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=output._addr))
-    var signed = fmt == "b" or fmt == "h" or fmt == "i" or fmt == "l" or fmt == "q"
     # A native-order C-contiguous export whose item size matches the packing
     # array's is already the packed buffer tobytes + frombytes would build:
     # widen from it in place while the export is held. Other layouts keep the
@@ -334,15 +335,9 @@ def neural_ordered_sum(parts: PythonObject) raises -> PythonObject:
         var view = _parallel_view(first[j])
         var shape = first[j].shape if py_type(first[j]) is GENERATION_BOUNDARY.get_or_create_ptr()[].array_cls else view.shape
         var axes = List[Int]()
-        var n = 1
         for axis in range(len(shape)):  # small-loop(gradient shape dimension words)
-            var dimension = Int(py=shape[axis])
-            if dimension < 0 or (dimension != 0 and n > 2147483647 // dimension):
-                raise Error("gradient registry exceeds signed 32-bit kernel indexing")
-            axes.append(dimension)
-            n *= dimension
-        if count > 2147483647 - n:
-            raise Error("gradient registry exceeds signed 32-bit kernel indexing")
+            axes.append(Int(py=shape[axis]))
+        var n = mlp_registry_extent(axes, count)
         count += n
         counts.append(n)
         # Ordered addition historically admits nonfinite float32 inputs; the
@@ -386,11 +381,7 @@ def neural_ordered_sum(parts: PythonObject) raises -> PythonObject:
     # shard); the fold order and every pair add are unchanged.
     var primitives = _mlp_primitives()
     with GILReleased(Python()):
-        for shard in range(1, n_shards):  # driver-loop: over fixed ascending logical gradient shard order
-            var addresses: Array[Int, 2] = [base + 4 * shard * count, base + 4 * (shard - 1) * count]
-            var ints: Array[Int, 3] = [count, 2, -1]
-            var floats: Array[Float64, 0] = []
-            _ = entry_ref_call(primitives, SAMBA_PRIM_ACCUMULATE, addresses, ints, floats)
+        mlp_ordered_fold(primitives, base, count, n_shards)
     _ = stacked  # keep the Python owner alive through the native calls above
     var source = Pointer[UInt32, ImmUntrackedOrigin](unsafe_from_address=base) + (n_shards - 1) * count
     offset = 0
@@ -424,10 +415,7 @@ def mlp_apply_from_state(state: PythonObject, gradients: PythonObject) raises ->
     var next = mlp_validate_state(state)
     var nk = parallel_keys()
     var step = Int(py=py_item(py_item(next, nk[].k_optimizer), nk[].k_step))
-    if step == 2147483647:
-        raise Error("SmallMLPTrainer step exceeds its supported range")
-    if len(gradients) != 4:
-        raise Error("SmallMLPTrainer requires exactly four parameter gradients")
+    mlp_step_admit(step, len(gradients))
     var params = generation_array([195])
     var grads = generation_array([195])
     var offsets = generation_array([5], "i")
@@ -449,24 +437,20 @@ def mlp_apply_from_state(state: PythonObject, gradients: PythonObject) raises ->
         _ = value^
     op[4] = Int32(offset)
     var cfg = py_item(next, nk[].k_config)
-    # Primitive op 25 (the former `optimizer_step` entry's words): ints
-    # [J, kind, t, nesterov, maximize], floats [lr, beta1, beta2, eps,
-    # weight_decay, momentum, dampening, max_norm]; the same AdamW plan as
-    # the former 13-word Python list (momentum, dampening, max_norm and
-    # maximize 0), the same Float64 -> Float32 narrowing in the callee.
-    var ints: Array[Int, 5] = [4, 2, step + 1, 0, 0]
-    var floats: Array[Float64, 8] = [Float64(py=py_item(cfg, nk[].k_lr)), Float64(py=py_item(cfg, nk[].k_beta1)), Float64(py=py_item(cfg, nk[].k_beta2)),
-        Float64(py=py_item(cfg, nk[].k_eps)), Float64(py=py_item(cfg, nk[].k_weight_decay)), 0.0, 0.0, 0.0]
     var saved = py_item(next, nk[].k_optimizer)
     var addresses: Array[Int, 7] = [Int(py=params._addr), Int(py=grads._addr), Int(py=py_item(saved, nk[].k_m)._addr),
         Int(py=py_item(saved, nk[].k_v)._addr), Int(py=offsets._addr), Int(py=py_item(saved, nk[].k_flags)._addr), Int(py=info._addr)]
     var primitives = _mlp_primitives()
     var written = 0
+    var lr = Float64(py=py_item(cfg, nk[].k_lr))
+    var beta1 = Float64(py=py_item(cfg, nk[].k_beta1))
+    var beta2 = Float64(py=py_item(cfg, nk[].k_beta2))
+    var eps = Float64(py=py_item(cfg, nk[].k_eps))
+    var weight_decay = Float64(py=py_item(cfg, nk[].k_weight_decay))
     with GILReleased(Python()):
-        written = entry_ref_call(primitives, SAMBA_PRIM_OPTIMIZER_STEP, addresses, ints, floats)
+        written = mlp_optimizer_step(primitives, addresses, step, lr, beta1, beta2, eps, weight_decay)
     _ = saved  # the moment and flag owners stay alive through the native call above
-    if written != 195:
-        raise Error("RuntimeError: SmallMLPTrainer update returned incomplete state")
+    mlp_update_admit(written)
     _mlp_finite(params, "updated parameter")
     _mlp_finite(py_item(saved, nk[].k_m), "first moment")
     _mlp_finite(py_item(saved, nk[].k_v), "second moment")

@@ -6,12 +6,12 @@
 # corresponding public system headers, not interpreter or compiler layouts.
 from std.ffi import c_int, c_uint, c_size_t, external_call
 from std.sys.info import CompilationTarget
-from std.math import ceil, isfinite
+from std.math import isfinite
 from std.python import Python
 
 from bindings.native_posix_transport_run import (
     PosixBytes, PosixWords, posix_errno, posix_failure, posix_clock, posix_close, posix_again,
-    posix_deadline, posix_socket_prepare, posix_terminate,
+    posix_deadline, posix_socket_prepare, posix_terminate, posix_ready_run, posix_transfer_run,
 )
 
 
@@ -35,40 +35,18 @@ def posix_sleep(seconds: Float64) raises:
 
 
 def posix_ready(fd: Int, writing: Bool, deadline: Float64) raises:
-    # pollfd is {int fd; short events; short revents} on both public ABIs.
-    var words = Array[Int32, 2](fill=Int32(0))
-    words[0] = Int32(fd)
-    var shorts = MutPointer[Int16, MutUntrackedOrigin](unsafe_from_address=Int(words.unsafe_ptr()))
-    shorts[2] = Int16(4 if writing else 1)  # POLLOUT / POLLIN
-    while True:  # driver-loop: bounded native readiness wait
-        var milliseconds = -1
-        if deadline >= 0:
-            var remaining = deadline - posix_clock()
-            if remaining <= 0:
-                raise Error("transport: operation timed out")
-            milliseconds = Int(min(ceil(remaining * 1000.0), 2147483647.0))
-        shorts[3] = 0
-        # Match the existing native socket GIL release while the OS waits.
-        # Resolve both public C entries before release; the released section
-        # touches only native storage and libc, never Python objects.
-        ref cpy = Python().cpython()
-        var release = cpy.lib.get_function[PosixBytes]("PyEval_SaveThread")
-        var restore = cpy.lib.get_function[NoneType]("PyEval_RestoreThread")
-        var thread = release()
-        var status = c_int(0)
-        comptime if CompilationTarget.is_macos():
-            status = external_call["poll", c_int](words.unsafe_ptr(), c_uint(1), c_int(milliseconds))
-        else:
-            status = external_call["poll", c_int](words.unsafe_ptr(), c_size_t(1), c_int(milliseconds))
-        var number = posix_errno()
+    # Match the existing native socket GIL release while the OS waits. Both
+    # public C entries are resolved before the release; the released section
+    # (`posix_ready_run`) touches only native storage and libc, never Python
+    # objects, and its errors are native values raised after the restore.
+    ref cpy = Python().cpython()
+    var release = cpy.lib.get_function[PosixBytes]("PyEval_SaveThread")
+    var restore = cpy.lib.get_function[NoneType]("PyEval_RestoreThread")
+    var thread = release()
+    try:
+        posix_ready_run(fd, writing, deadline)
+    finally:
         restore(thread)
-        if status > 0:
-            if (shorts[3] & 32) != 0:  # POLLNVAL
-                raise Error("transport: invalid socket descriptor")
-            return  # read/write/getsockopt reports EOF and other socket errors.
-        if status == 0:
-            raise Error("transport: operation timed out")
-        posix_failure("poll", number)
 
 
 def posix_resolve(var host: String, port: Int, passive: Bool) raises -> Int:
@@ -194,26 +172,17 @@ def posix_accept(fd: Int, timeout: Float64) raises -> Int:
 
 
 def posix_transfer(fd: Int, pointer: PosixBytes, count: Int, timeout: Float64, writing: Bool) raises:
-    var offset = 0
-    var deadline = posix_deadline(timeout)
-    while offset < count:  # driver-loop: retain owner until every byte transfers
-        posix_ready(fd, writing, deadline)
-        var done = Int(0)
-        if writing:
-            var flags = 0
-            comptime if CompilationTarget.is_linux():
-                flags = 0x4000  # MSG_NOSIGNAL
-            done = external_call["send", Int](c_int(fd), pointer + offset, c_size_t(count - offset), c_int(flags))
-        else:
-            done = external_call["recv", Int](c_int(fd), pointer + offset, c_size_t(count - offset), c_int(0))
-        if done > 0:
-            offset += done
-        elif done == 0:
-            raise Error("transport: peer closed the connection")
-        else:
-            var number = posix_errno()
-            if not posix_again(number):
-                posix_failure("send" if writing else "receive", number)
+    # One GIL release for the whole transfer (it was one per readiness wait):
+    # the caller holds the buffer export or owns the fresh bytearray, so the
+    # bytes stay valid and unmoved; `posix_transfer_run` reads no Python object.
+    ref cpy = Python().cpython()
+    var release = cpy.lib.get_function[PosixBytes]("PyEval_SaveThread")
+    var restore = cpy.lib.get_function[NoneType]("PyEval_RestoreThread")
+    var thread = release()
+    try:
+        posix_transfer_run(fd, pointer, count, timeout, writing)
+    finally:
+        restore(thread)
 
 
 def posix_spawn(var executable: String, var argv: List[String], var environment: List[String]) raises -> Int:

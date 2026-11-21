@@ -79,28 +79,58 @@ struct _ContextTemplate(Defaultable, Movable):
     # array_storage_slots, buffer_codes, prep_stateless_kinds,
     # warning_category_slots) are shared read-only tables that no operation
     # writes. The templates never leave this module.
+    # `cpu_context` is the template of an estimator with `device="cpu"` on a
+    # GPU installation: the same records with the host x_prep image as the
+    # identical binding and `vendor="cpu"`, frozen at import as the
+    # connection's seventh member and built here once, at the first such
+    # operation. It shares the output template and the fixed maps' records.
     var connection: PythonObject
     var context: PythonObject
     var output: PythonObject
+    var cpu_context: PythonObject
 
     def __init__(out self):
         self.connection = PythonObject(None)
         self.context = PythonObject(None)
         self.output = PythonObject(None)
+        self.cpu_context = PythonObject(None)
 
 
-comptime _CONTEXT_TEMPLATE = SharedSlot[_ContextTemplate, "MojolearnPrepOperationContextTemplateV2"]
+comptime _CONTEXT_TEMPLATE = SharedSlot[_ContextTemplate, "MojolearnPrepOperationContextTemplateV3"]
 
 
-def prep_operation_context(source: PythonObject) raises -> PythonObject:
-    var nk = prep_keys()
+def _connection(source: PythonObject, b: PythonObject) raises -> PythonObject:
     # native_loaded_module verifies the bridge module and the exact immutable
     # CONNECTION export captured at import. Replacing a context's own alleged
     # identity table cannot authorize callbacks or new descriptor references.
-    var b = native_loaded_module("builtins")
     var connection = native_loaded_module("mojolearn._native_prep_stateless_bridge").CONTEXT_CONNECTION
-    if py_type(connection) is not b.tuple or len(connection) != 6 or source is not connection[0]:
+    if py_type(connection) is not b.tuple or len(connection) != 7 or source is not connection[0]:
         raise Error("TypeError: preprocessing requires its originally connected native provider context")
+    return connection
+
+
+def prep_cpu_connected(source: PythonObject, b: PythonObject) raises -> Bool:
+    """True when this installation holds a CPU template beside its own (a GPU
+    installation whose host x_prep image loaded at import). False in a
+    CPU-only process: its own template already is the CPU one. A host image
+    that is not built is refused here in its import words. Read once per
+    estimator, when its device route is resolved; never per call. `b` is
+    the caller's admitted builtins module."""
+    var records = _connection(source, b)[6]
+    if records is None:
+        return False
+    if py_type(records) is b.str:
+        raise Error("ImportError: " + String(records))
+    return True
+
+
+def prep_operation_context(source: PythonObject, cpu: Bool) raises -> PythonObject:
+    """The operation's own context, copied from the template of the device
+    the estimator's route names (`cpu`: the caller's route, resolved once per
+    estimator; this function reads no device)."""
+    var nk = prep_keys()
+    var b = native_loaded_module("builtins")
+    var connection = _connection(source, b)
     var g = _CONTEXT_TEMPLATE.get_or_create_ptr()
     if g[].connection is not connection or g[].context is None:
         var built = _copy_records(connection[1], b)
@@ -109,8 +139,22 @@ def prep_operation_context(source: PythonObject) raises -> PythonObject:
         _fixed_maps(built_output, connection[5], b)
         g[].context = built
         g[].output = built_output
+        g[].cpu_context = PythonObject(None)
         g[].connection = connection
-    var context = py_call(b.dict, g[].context)
+    var template = g[].context
+    if cpu:
+        if g[].cpu_context is None:
+            var records = connection[6]
+            if py_type(records) is b.str:
+                raise Error("ImportError: " + String(records))
+            if records is not None:
+                var built_cpu = _copy_records(records, b)
+                _fixed_maps(built_cpu, connection[2], b)
+                g[].cpu_context = built_cpu
+        # None still: a CPU-only process, whose own template is the CPU one.
+        if g[].cpu_context is not None:
+            template = g[].cpu_context
+    var context = py_call(b.dict, template)
     var output = py_call(b.dict, g[].output)
     # The process mode is mutable process data: the backend namespace (a
     # small module dict) is copied in C before a readback or input

@@ -19,8 +19,7 @@ Not split across cores: one call is one descriptor call into the GPU session,
 which runs its own devices in parallel.
 """
 from std.memory import bitcast
-from core.native_descriptor_abi import NativeDescriptorCall
-from core.native_descriptor_call import native_descriptor_leased_call
+from core.neural_descriptor_run import neural_descriptor_record_execute
 
 
 # The byte-LM schedule descriptor ABI (bindings/_mojolearn_byte_lm.mojo).
@@ -50,16 +49,12 @@ comptime PARALLEL_SCALAR_COUNT = 8
 
 
 struct ParallelByteSession(Movable):
-    """One trainer's typed state. `entry` holds the schedule descriptor
-    table's entry (empty: the installed binding has no cooperative GPU
-    session), `workspace` the address of the provider record's retained call
-    workspace, `calls` the address of its `operations` per-operation call
-    counts. The door unpacked the three from the connected provider once and
-    keeps that provider pinned for as long as this lives."""
-    var entry: List[NativeDescriptorCall]
-    var workspace: Int
-    var calls: Int
-    var operations: Int
+    """One trainer's typed state. `provider` is the id of the schedule
+    descriptor table's typed record (core/neural_descriptor_run.mojo); 0: the
+    installed binding has no cooperative GPU session. The door unpacked it
+    from the connected provider once and keeps that provider pinned for as
+    long as this lives."""
+    var provider: Int
     var handle: Int
     var schedule: Int
     var closed: Bool
@@ -79,14 +74,10 @@ struct ParallelByteSession(Movable):
     var nesterov: Bool
     var scalars: List[Float64]
 
-    def __init__(out self, var entry: List[NativeDescriptorCall], workspace: Int, calls: Int, operations: Int,
-                 schedule: Int, pool_optimizer: Bool, var devices: List[Int],
+    def __init__(out self, provider: Int, schedule: Int, pool_optimizer: Bool, var devices: List[Int],
                  logical_shards: Int, var dims: List[Int], n_total: Int, n_tensors: Int, completed: Int,
                  kind: Int, nesterov: Bool, var scalars: List[Float64]):
-        self.entry = entry^
-        self.workspace = workspace
-        self.calls = calls
-        self.operations = operations
+        self.provider = provider
         self.handle = 0
         self.schedule = schedule
         self.closed = False
@@ -114,13 +105,11 @@ def parallel_session_execute(session: ParallelByteSession, op: Int, addresses: L
     var words: List[Int] = [session.handle]
     for value in addresses:  # driver-loop: over addresses: the operation's admitted buffer descriptors
         words.append(value)
-    # The provider record's admission and count (the body of
-    # neural_descriptor_record_admit), then its leased call: a handle exists
-    # only for a connected table, so `entry` holds its one entry here.
-    if op < 0 or op >= session.operations or len(session.entry) != 1:
+    # A handle exists only for a connected table. The record admits the
+    # operation, counts it and makes the leased call.
+    if session.provider == 0:
         raise Error("neural native ABI: unknown operation")
-    MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=session.calls)[op] += 1
-    return native_descriptor_leased_call(session.entry[0], session.workspace, op, words, ints, floats)
+    return neural_descriptor_record_execute(session.provider, op, words, ints, floats)
 
 
 def parallel_session_schedule_name(session: ParallelByteSession) -> String:
@@ -186,7 +175,7 @@ def parallel_session_require_split(session: ParallelByteSession, entry: String) 
         raise Error(entry + " requires ParallelByteLanguageModelTrainer")
     if session.pool_optimizer or len(session.devices) != 1:
         raise Error(entry + " requires devices=(d,) and pool_optimizer=False")
-    if len(session.entry) == 0:
+    if session.provider == 0:
         raise Error("RuntimeError: installed byte-LM binding lacks " + entry)
 
 

@@ -45,7 +45,7 @@ from core.device_route import DEVICE_CPU, DEVICE_GPU
 from core.gp_entry_table import gp_table_resolve
 from core.gp_native_api import GP_CAPABILITIES, GPDriver
 from providers.python.estimator_lifecycle_pyapi_unpack import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
-from providers.python.cluster_public_lifecycle_pyapi_door import _refusal
+from providers.python.estimator_tabular_boundary_pyapi_unpack import _refusal
 from bindings.py_optional import py_present
 from bindings.gp_keys_unpack import gp_keys
 from bindings.operation_names_gp import (

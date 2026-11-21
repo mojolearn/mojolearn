@@ -5,10 +5,15 @@ from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorErr
 from core.shared_slot import SharedSlot
 from training.host.optimizer_kernels import HostOptKernels
 from training.optimizer_native_api import OPTIMIZER_NATIVE_ABI, optimizer_native_dispatch
+from training.optimizer_native_extra import optimizer_extra_operation
+from training.host.optimizer_native_extra import optimizer_extra_host
 
 
 def optimizer_host_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
     ff: Int, nf: Int, result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
+    # the public training operations that are not optimizer steps (lane dw-autograd-seq)
+    if optimizer_extra_operation(operation):
+        return optimizer_extra_host(operation, aa, na, pp, np, ff, nf, result, context, sink)
     return optimizer_native_dispatch[HostOptKernels](operation, aa, na, pp, np, ff, nf, result, context, sink)
 
 

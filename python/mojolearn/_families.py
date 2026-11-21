@@ -73,7 +73,7 @@ EXPANSION_DOORS = (
 #:   after the block modules finish keeps the connection at family import
 #:   without the neural_inference -> _transformer_impl -> models cycle.
 #: - `mixture` -> `_expansion_cluster`: `family_mix_ctypes`, `family_mix_inits`
-#:   (BayesianGaussianMixture, bindings/mixture_native_door.mojo:658).
+#:   (BayesianGaussianMixture, bindings/mixture_public_native_pack.mojo:658).
 #: - `neighbors` -> `_expansion_neighbors`: `host_archive_neighbor_metrics`,
 #:   `host_archive_unsupported_metrics`, `family_xn_radius_attributes` (the k-NN
 #:   metric resolution of LOF / label propagation, bindings/neighbors_knn_native_door.mojo:550);
