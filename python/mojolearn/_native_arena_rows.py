@@ -71,47 +71,19 @@ def connect():
                    cache_namespace_class=SimpleNamespace,
                    cache_namespace_getattribute=SimpleNamespace.__getattribute__,
                    cache_local_type=type(_arena_io._LOCAL),
-                   cache_local_getattribute=type(_arena_io._LOCAL).__getattribute__,
-                   cache_attribute_error=AttributeError,
-                   cache_hash_types=(type(None), bool, int, float, complex, str, bytes))
+                   cache_attribute_error=AttributeError)
     # glue: fixed scalar metadata/warning connection; no optional NumPy import
     scalar_context = dict(modules=sys.modules, module_type=ModuleType,
                           training_scalar_warnings=connect_warnings(),
                           training_scalar_locations={"cache_get": (_arena_io.DeviceCache.get.__code__.co_filename,
                                                                     _arena_io.DeviceCache.get.__code__.co_firstlineno,
                                                                     _arena_io.__name__)})
-    # glue: retain the actual supported word-store entries once at package
-    # connection; the CPU facade legitimately has no resident device store.
-    # Do not admit arbitrary builtin callables by their type alone.
-    store_routes = []
-    live_entries = []
-    for module_name, prefix in (("_mojolearn_x_prep", "x_prep"),):  # glue: fixed import-time resident-store ABI
-        for mode in ("identical", "fast"):  # glue: fixed supported numeric-mode connections
-            try:
-                module = _backend.binding(module_name, mode)
-                put, free = getattr(module, prefix + "_dev_put"), getattr(module, prefix + "_dev_free")
-            except (AttributeError, ImportError, ValueError):
-                continue
-            if type(put) is not BuiltinFunctionType or type(free) is not BuiltinFunctionType:
-                raise TypeError("DeviceCache requires compiled native resident-store entries")
-            store_routes.append((put, free))
-            live = getattr(module, prefix + "_dev_live", None)
-            if live is not None:
-                if type(live) is not BuiltinFunctionType:
-                    raise TypeError("DeviceCache requires a compiled native live-slot entry")
-                live_entries.append(live)
+    # The cache's store (put / free / live) is the x_prep transport entry of
+    # the binding a DeviceCache is built on, resolved natively at its
+    # construction; no store builtin is connected here.
     context.update(cache_scalar_context=scalar_context,
-                   cache_store_routes=tuple(store_routes), cache_live_entries=tuple(live_entries),
-                   cache_object_setattr=object.__setattr__,
-                   cache_runtime_error=runtime_error,
-                   cache_counter_types=(type(None), float, complex, str, bytes, bytearray,
-                                        list, tuple, dict, set, frozenset, range),
-                   cache_entry_types=(bool, int, float, complex, str, bytes, bytearray,
-                                      list, tuple, dict, set, frozenset, range),
                    cache_type_flags=vars(type)["__flags__"].__get__,
                    cache_primitive_bases=(int, float, complex, str, bytes, bytearray),
-                   cache_key_descriptor=vars(_arena_io.DeviceCache)["_key"],
-                   cache_key_function=_arena_io.DeviceCache._key,
                    cache_little_endian=sys.byteorder == "little",
                    cache_deprecation_warning=DeprecationWarning,
                    cache_integer_types=(type(None), bool, int, float, complex, str, bytes,
@@ -145,7 +117,17 @@ def connect():
     # resident scope, thread-local). A foreign fold container is
     # materialized natively by the model-selection input owner, connected
     # as arena_msel_input_context by _native_msel_inputs.connect.
+    # Their state is native: each class keeps one slot (the bound member
+    # descriptor entries below read and write it without the instance).
     context.update(cache_class=_arena_io.DeviceCache, cache_scope_class=_arena_io._Scope,
+                   cache_resident_class=_arena_io.resident,
+                   cache_owner_get=vars(_arena_io.DeviceCache)['_owner'].__get__,
+                   cache_owner_set=vars(_arena_io.DeviceCache)['_owner'].__set__,
+                   cache_scope_owner_get=vars(_arena_io._Scope)['_owner'].__get__,
+                   cache_scope_owner_set=vars(_arena_io._Scope)['_owner'].__set__,
+                   cache_resident_floor_get=vars(_arena_io.resident)['min_words'].__get__,
+                   cache_resident_scope_get=vars(_arena_io.resident)['_scope'].__get__,
+                   cache_resident_scope_set=vars(_arena_io.resident)['_scope'].__set__,
                    cache_local=_arena_io._LOCAL, cache_object_new=object.__new__)
     _arena_io._ROWS_CALL = call
     _arena_io._ROWS_CONTEXT = context

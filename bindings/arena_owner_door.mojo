@@ -2,11 +2,13 @@
 """The Python-registered native owner of an arena state (lane arena,
 2026-11-21).
 
-A Python arena class (`model_selection._Resident`; `DeviceRows`,
-`DeviceCache` and the resident scope follow) keeps ONE slot holding an
+A Python arena class (`model_selection._Resident`, `DeviceRows`,
+`DeviceCache`, the resident scope `_Scope`) keeps ONE slot holding an
 `ArenaOwner`: the kind of state, its handle word in the kind's registry
-(`core/arena_state.mojo`) and, for the resident store owner, the
-model-selection helper entry resolved once at construction. The state is
+(`core/arena_state.mojo`) and the device-store entry resolved once at
+construction (the model-selection helper entry of a resident store owner,
+the x_prep transport entry of a cache; a scope resolves each cache's entry
+from the cache's route). The state is
 released when CPython frees the owner (its Mojo destructor), never by a
 Python `__del__`.
 
@@ -36,12 +38,15 @@ from bindings.py_type_registry import py_type_absent
 from core.arena_state import (
     ARENA_RESIDENTS, ARENA_ROWS, ARENA_ROWS_PIN_BASE, ARENA_ROWS_PIN_INDICES, ARENA_ROWS_PIN_HOST, arena_handle,
 )
+from bindings.arena_cache_run import arena_cache_finalize, arena_scope_finalize
 from core.entry_table import EntryRef
 from core.msel_helpers_calls import msel_store_free
 
 #: The kinds of state an owner holds (one registry each).
 comptime ARENA_OWNER_RESIDENT = 1
 comptime ARENA_OWNER_ROWS = 2
+comptime ARENA_OWNER_CACHE = 3
+comptime ARENA_OWNER_SCOPE = 4
 
 
 def arena_pin(value: PythonObject) -> Int:
@@ -129,6 +134,16 @@ struct ArenaOwner(Movable, Writable):
                 _rows_finalize(self.word)
             except error:
                 pass
+        elif self.word >= 0 and self.kind == ARENA_OWNER_CACHE:
+            # Frees, then the release, then the sources' pins (a source's own
+            # finalizer runs after every native step).
+            var pins = arena_cache_finalize(self.word, self.store)
+            for i in range(len(pins)):  # driver-loop: over the pins of the entries the cache still held
+                arena_unpin(pins[i])
+        elif self.word >= 0 and self.kind == ARENA_OWNER_SCOPE:
+            var pins = arena_scope_finalize(self.word)
+            for i in range(len(pins)):  # driver-loop: over the pins of the entries the scope's caches still held
+                arena_unpin(pins[i])
 
 
 @fieldwise_init
@@ -186,6 +201,22 @@ def arena_owner_slot(getter: PythonObject, model: PythonObject, cls: PythonObjec
         var failure = stash_python_error()
         raise failure^
     return PythonObject(from_owned=result)
+
+
+def arena_owner_held(getter: PythonObject, model: PythonObject, cls: PythonObject, kind: Int,
+                     what: String) raises -> ArenaOwnerView:
+    """The owner of `kind` in `model`'s slot, resolved once for the public
+    operation: one C slot read, one downcast. An unset slot or a foreign
+    object refuses in words naming `what`."""
+    ref cpy = Python().cpython()
+    var args = Python.tuple(model, cls)
+    var result = cpy.PyObject_Call(getter._obj_ptr, args._obj_ptr, PyObjectPtr())
+    _ = args
+    if not result:
+        cpython_table()[].PyErr_Clear()
+        raise Error("TypeError: " + what + " holds no native state: it was never initialized, or it is not the connected class")
+    var owner = PythonObject(from_owned=result)
+    return arena_owner_view(owner, kind)
 
 
 def arena_resident_view(model: PythonObject, context: PythonObject) raises -> ArenaOwnerView:

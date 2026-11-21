@@ -30,7 +30,7 @@ from bindings.optimizer_public_words_unpack import optimizer_python_error, stash
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.classical_arrays_door import classical_address
 from bindings.x_prep_native_owner_run import xprep_r3
-from bindings.x_prep_native_owner_door import xprep_address, _resident, _cached_slot, _resident_scope, _resident_cache, _cache_state, _cached_slot_in
+from bindings.x_prep_native_owner_door import xprep_address, XprepResident, xprep_resident_none, xprep_resident_of
 from bindings.x_prep_native_inputs_door import _values, _rows_fields, _dense_values
 from bindings.x_prep_native_owner_door import xprep_drop_resident
 from bindings.native_loaded_module_door import native_loaded_module, native_namespace_string_keys
@@ -161,7 +161,7 @@ def _is_rows(value: PythonObject, context: PythonObject) raises -> Bool:
 
 
 def _rows_gather(value: PythonObject, entries: PythonObject, prefix: String, mut owned: List[Int],
-                 context: PythonObject) raises -> Int:
+                 mut resident: XprepResident, context: PythonObject) raises -> Int:
     # The store slot of a DeviceRows' rows gathered on the device out of its
     # base, put once through the active resident() scope (any size) or
     # directly into a slot this run owns (`_arena_io.rows_slot`).
@@ -172,10 +172,10 @@ def _rows_gather(value: PythonObject, entries: PythonObject, prefix: String, mut
     if n < 1:
         return -1
     var d = fold.row_words
-    var cache = _resident(entries, 0, True, context, prefix)
     var base_slot = -1
-    if cache is not None:
-        base_slot = _cached_slot(cache, base, entries, context, prefix)
+    if resident.active():
+        # the run's resident scope keeps a DeviceRows base at any size
+        base_slot = resident.slot(base, Int(py=classical_address(base)), Int(py=base.size))
     else:
         base_slot = Int(py=_entry_call(entries[PythonObject(prefix + "_dev_put")],
                                        Python.tuple(classical_address(base), base.size)))
@@ -277,15 +277,12 @@ def _prep_run_impl(prog: PythonObject, mode: PythonObject, context: PythonObject
     var out = PythonObject(None)
     var nst = 0
     var t_in = 0
-    # Per run, not per input (perf3-prep-shared, the helpers perf2-prep added
-    # for xprep_run): the resident scope admission and the resident cache's
-    # state admission are read once, at the first input that needs them,
-    # with the same checks and refusals `_resident` / `_cached_slot` ran per
-    # input. Within one run only this runner inserts native keys.
-    # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
-    # The scope's presence is the read-once flag (its value may itself be None).
-    var scope = Optional[PythonObject]()
-    var cache_state = Optional[PythonObject]()
+    # Per run, not per input: the thread's resident scope is resolved once,
+    # at the first input that could be kept resident (the thread-local, one
+    # slot read, the scope's floor); its cache on this image's store is
+    # created and leased once, at the first input that is kept.
+    var resident = xprep_resident_none()
+    var resident_read = False
     # In-out inputs a stage rewrites on the host (p3-array-arena, hazard D):
     # after the run their resident device copies (taken by an earlier run in
     # the same scope) are stale and are dropped.
@@ -309,17 +306,18 @@ def _prep_run_impl(prog: PythonObject, mode: PythonObject, context: PythonObject
                 # device-rows input (lane cpu4-misc): the fold's rows gathered
                 # on the device; a binding without the gather copies host rows
                 if ranges and _can_gather(entries, "x_prep"):
-                    src = _rows_gather(value, entries, "x_prep", owned, context)
+                    if not resident_read:
+                        resident = xprep_resident_of(entries, context)
+                        resident_read = True
+                    src = _rows_gather(value, entries, "x_prep", owned, resident, context)
                 if src < 0:
                     value = _values(value, context, True)
             if src < 0 and ranges and not is_inout:
-                if not scope:
-                    scope = _resident_scope(entries, context, "x_prep")
-                if scope.value() is not None and size >= Int(py=scope.value()[0]):
-                    if not cache_state:
-                        var cache = _resident_cache(entries, scope.value()[1], context, "x_prep")
-                        cache_state = _cache_state(cache, entries, context, "x_prep")
-                    src = _cached_slot_in(cache_state.value(), value, entries, "x_prep")
+                if not resident_read:
+                    resident = xprep_resident_of(entries, context)
+                    resident_read = True
+                if resident.keeps(False, size):
+                    src = resident.slot(value, Int(py=classical_address(value)), size)
                 elif direct_ok and size >= PREP_DIRECT_MIN_WORDS:
                     # TOMBSTONE: lane fg-knn-nb G3 (MOJOLEARN_XPREP_NO_SLOT_HOP, x_prep_run_ranges_host host spans) deleted 2026-10-09
                     # (lane postmerge-act-2): slower on the average, gaussian-nb istella NV 1.25x / AMD 1.00x, taxi 1.02x / 1.03x
@@ -397,7 +395,7 @@ def _prep_run_impl(prog: PythonObject, mode: PythonObject, context: PythonObject
             _ = _entry_call(entries["x_prep_run"], Python.tuple(base, host_words, pa, nst))
     except error:
         var cleanup = _release(owned, entries, "x_prep")
-        var dropped = xprep_drop_resident(inout_values, entries, context, "x_prep")
+        var dropped = xprep_drop_resident(inout_values, entries, context)
         if dropped.byte_length() > 0:
             cleanup += ("" if cleanup.byte_length() == 0 else "; ") + dropped
         if cleanup.byte_length() > 0:
@@ -405,7 +403,7 @@ def _prep_run_impl(prog: PythonObject, mode: PythonObject, context: PythonObject
             raise Error("RuntimeError: x_prep operation failed: " + String(error) + "; cleanup also failed: " + cleanup)
         raise error
     var cleanup = _release(owned, entries, "x_prep")
-    var dropped = xprep_drop_resident(inout_values, entries, context, "x_prep")
+    var dropped = xprep_drop_resident(inout_values, entries, context)
     if dropped.byte_length() > 0:
         cleanup += ("" if cleanup.byte_length() == 0 else "; ") + dropped
     if cleanup.byte_length() > 0:
@@ -464,7 +462,6 @@ def metrics_run_plan_entries(plan: MetricProgramPlan, inputs: List[PythonObject]
         raise Error("ValueError: x_metrics: the program's inputs do not match its layout")
     var held = List[PythonObject](capacity=len(inputs))
     var records = List[MetricProgramInput](capacity=len(plan.input_offsets))
-    var scope_checked = False
     var next_buffer = 0
     for k in range(len(plan.input_offsets)):  # driver-loop: over the program's input records
         if plan.input_consts[k] >= 0:
@@ -479,12 +476,6 @@ def metrics_run_plan_entries(plan: MetricProgramPlan, inputs: List[PythonObject]
             continue
         if _is_rows(value, context):
             value = _values(value, context, True)
-        if ranges and not scope_checked:
-            # The thread's resident scope keeps its admission checks; an
-            # x_metrics image has no resident store, so no scope applies.
-            scope_checked = True
-            if _resident_scope(entries, context, "x_metrics") is not None:
-                raise Error("RuntimeError: arena family x_metrics has no resident store")
         records.append(MetricProgramInput(plan.input_offsets[k], Int(py=classical_address(value)), size_k))
         held.append(value)
     var arena = MetricArenaOwner(0)

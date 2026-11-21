@@ -45,7 +45,7 @@ def connect(kinds, prog_context):
     from types import BuiltinFunctionType
     from . import _backend
     from . import _arena_io
-    from ._arena_io import DeviceRows, DeviceCache, _Scope, _LOCAL
+    from ._arena_io import DeviceRows, _Scope, _LOCAL
     from ._native_classical_bridge import _state_context, _numpy_free_context
     from ._native_labels_bridge import label_context
     from .tokenizer import _binding
@@ -67,8 +67,7 @@ def connect(kinds, prog_context):
     # The owner reads the process mode from _backend's namespace.
     _backend.default_mode()
     context.update(arena_mmap=mmap.mmap, arena_local=_LOCAL,
-                   arena_scope_class=_Scope, arena_cache_class=DeviceCache,
-                   arena_scope_dict=vars(_Scope)['__dict__'], arena_cache_dict=vars(DeviceCache)['__dict__'],
+                   arena_scope_class=_Scope, arena_scope_owner=vars(_Scope)['_owner'].__get__,
                    maxabs_rows_class=DeviceRows, maxabs_rows_owner=vars(DeviceRows)['_owner'].__get__, maxabs_gather_rows=gather,
                    classical_getframe=sys._getframe, cls_kinds=dict(kinds), cls_bindings=connected,
                    prog_context=prog_context, real_type=REAL_TYPES, integral_type=INTEGRAL_TYPES,

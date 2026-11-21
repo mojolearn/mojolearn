@@ -20,8 +20,8 @@ Three pieces every arena family shares:
    byte length; the cache holds the owner, so the address cannot be reused
    while the entry lives), and FREED DETERMINISTICALLY (`release`, `close`,
    or the end of the `with` block; never left to the garbage collector).
-   A binding opts in by exporting `<prefix>_dev_put(addr, n_words) -> id`,
-   `<prefix>_dev_free(id)` and `<prefix>_dev_live()`.
+   The store is the x_prep binding's (its native transport entry: put,
+   free, gather rows and the live slot count).
 
        with mojolearn._arena_io.resident():
            for params in grid:          # every x_metrics / x_prep program in
@@ -34,9 +34,9 @@ Three pieces every arena family shares:
    any device copy of the same buffer when the run ends, and model
    selection, which opens the scope on the caller's behalf, hands the
    runner an owned snapshot of X, never the caller's own buffer. The native runner creates the
-   scope's per-binding caches. A family binding with its own state
-   (optimizer moments, LM weights, an index) uses `DeviceCache` directly:
-   `cache = DeviceCache(binding, "x_foo")`, `cache.id_of(arr)`,
+   scope's per-binding caches. A caller that manages its own copies uses
+   `DeviceCache` directly on the x_prep binding's store:
+   `cache = DeviceCache(binding, "x_prep")`, `cache.id_of(arr)`,
    `cache.close()`.
 
 3. DEVICE-ROWS INPUT (`DeviceRows`; lane cpu4-misc): a fold view of a host
@@ -62,13 +62,28 @@ __all__ = ["DeviceCache", "DeviceRows", "resident", "RESIDENT_MIN_WORDS"]
 RESIDENT_MIN_WORDS = 1 << 16
 
 
+def _cache_attribute(name):
+    # glue: one read-only counter of the native cache state (one binding call)
+    def read(self):
+        return _ROWS_CALL(self, "cache_attribute", (name,), _ROWS_CONTEXT)
+    read.__name__ = name
+    return property(read)
+
+
 class DeviceCache:
     """Device copies of host buffers in one binding's store, by identity.
 
     `id_of(arr)` uploads `arr` (a C-contiguous Array of 4-byte items, or
     anything with `_addr`, `size` and `itemsize`) the first time and
     returns the same id while the entry lives. `release(arr)` frees one
-    entry, `close()` all of them; both free on the device at once."""
+    entry, `close()` all of them; both free on the device at once.
+    `hits` and `uploads` count the lookups served from the device and the
+    uploads made; both are read-only."""
+
+    __slots__ = ("_owner",)
+
+    hits = _cache_attribute("hits")
+    uploads = _cache_attribute("uploads")
 
     def __init__(self, binding, prefix):
         return _ROWS_CALL(self, "cache_init", (binding, prefix), _ROWS_CONTEXT)
@@ -76,12 +91,6 @@ class DeviceCache:
     @staticmethod
     def supports(binding, prefix):
         return _ROWS_CALL(None, "cache_supports", (binding, prefix), _ROWS_CONTEXT)
-
-    @staticmethod
-    def _key(arr):
-        if getattr(arr, "itemsize", 4) != 4:
-            raise ValueError("DeviceCache: a store slot holds 4-byte words")
-        return (int(arr._addr), int(arr.size))
 
     def id_of(self, arr):
         return _ROWS_CALL(self, "cache_id_of", (arr,), _ROWS_CONTEXT)
@@ -111,9 +120,10 @@ class DeviceCache:
 
 
 class _Scope:
+    __slots__ = ("_owner",)
+
     def __init__(self, min_words):
-        self.min_words = min_words
-        self.caches = {}
+        _ROWS_CALL(self, "scope_init", (min_words,), _ROWS_CONTEXT)
 
     def close(self):
         return _ROWS_CALL(self, "scope_close", (), _ROWS_CONTEXT)
@@ -127,6 +137,8 @@ class resident:
     this thread) keep its big inputs on the device, keyed by identity, and
     frees every device copy when the block ends. Nested blocks share the
     outermost one's copies. `min_words` overrides RESIDENT_MIN_WORDS."""
+
+    __slots__ = ("min_words", "_scope")
 
     def __init__(self, min_words=None):
         self.min_words = RESIDENT_MIN_WORDS if min_words is None else int(min_words)

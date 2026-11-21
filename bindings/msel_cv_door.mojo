@@ -434,9 +434,9 @@ struct MselFoldRows(Movable):
             # size floor); no other program input is kept across folds
             var scope = native_storage_allocate(family_call(msel_b().getattr, context["family_msel_arena_io"],
                                                             PythonObject("resident")))
-            py_setattr(scope, "min_words", PythonObject(1 << 62))
-            py_setattr(scope, "_scope", PythonObject(None))
-            _ = _arena_rows_call(scope, "scope_enter", Python.tuple(), context)
+            # the floor goes to the native scope state with the enter call;
+            # no Python attribute of the `resident` object is written
+            _ = _arena_rows_call(scope, "scope_enter", Python.tuple(PythonObject(1 << 62)), context)
             self.scope = scope
             # perf2-msel: the DeviceRows class and the resident store's bound
             # `take` are read once per fold set, not once per fold side. The

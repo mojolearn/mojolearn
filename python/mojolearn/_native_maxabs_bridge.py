@@ -29,7 +29,7 @@ def connect(scaler_class):
     import mmap
     from types import BuiltinFunctionType, MethodType
     from . import _backend
-    from ._arena_io import DeviceRows, DeviceCache, _Scope, _LOCAL
+    from ._arena_io import DeviceRows, _Scope, _LOCAL
     from ._native_classical_bridge import _state_context, _numpy_free_context, _layout
     from .tokenizer import _binding
 
@@ -48,8 +48,7 @@ def connect(scaler_class):
     if any(not isinstance(entry, BuiltinFunctionType) for entry in (call, attribute, gather, finite32, finite64)):  # glue: fixed native ABI identity
         raise TypeError("MaxAbsScaler requires compiled lifecycle, attribute and row-gather entries")
     context.update(arena_mmap=mmap.mmap, arena_local=_LOCAL,
-                   arena_scope_class=_Scope, arena_cache_class=DeviceCache,
-                   arena_scope_dict=vars(_Scope)['__dict__'], arena_cache_dict=vars(DeviceCache)['__dict__'],
+                   arena_scope_class=_Scope, arena_scope_owner=vars(_Scope)['_owner'].__get__,
                    scaler_bindings=connected, scaler_class=scaler_class, scaler_host_contexts={},
                    maxabs_rows_class=DeviceRows, maxabs_rows_owner=vars(DeviceRows)['_owner'].__get__, maxabs_gather_rows=gather,
                    maxabs_finite_f32=finite32, maxabs_finite_f64=finite64, classical_getframe=sys._getframe)

@@ -140,8 +140,8 @@ def arena_rows_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObje
         var context = call[3]
         var result = PythonObject(None)
         var cache_release_op = (operation == "cache_init" or operation == "cache_release" or operation == "cache_close"
-            or operation == "cache_exit" or operation == "scope_enter" or operation == "scope_exit" or operation == "scope_close")
-        if operation == "cache_len" or operation == "resident_stats":
+            or operation == "cache_exit" or operation == "scope_init" or operation == "scope_enter" or operation == "scope_exit" or operation == "scope_close")
+        if operation == "cache_len" or operation == "resident_stats" or operation == "cache_attribute":
             result = arena_cache_stats(model,operation,args,context)
         elif operation == "cache_get":
             result = arena_cache_get(model,args,context)
@@ -167,7 +167,7 @@ def arena_rows_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObje
         elif operation == "len":
             var counted = _rows_view(model,context)
             result = PythonObject(counted.rows)
-        elif not cache_release_op and operation != "cache_len" and operation != "resident_stats" and operation != "cache_get" and operation != "cache_id_of" and operation != "cache_enter" and operation != "cache_live" and operation != "cache_supports":
+        elif not cache_release_op and operation != "cache_len" and operation != "resident_stats" and operation != "cache_attribute" and operation != "cache_get" and operation != "cache_id_of" and operation != "cache_enter" and operation != "cache_live" and operation != "cache_supports":
             raise Error("ValueError: unknown native DeviceRows metadata operation")
         return result.steal_data()
     except error:

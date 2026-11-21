@@ -29,7 +29,7 @@ def connect(scaler_class, qselect):
     from types import BuiltinFunctionType, MethodType
     from . import _backend
     import mmap
-    from ._arena_io import DeviceRows, DeviceCache, _Scope, _LOCAL
+    from ._arena_io import DeviceRows, _Scope, _LOCAL
     from ._native_classical_bridge import _state_context, _numpy_free_context, _layout
     from .tokenizer import _binding
 
@@ -48,8 +48,7 @@ def connect(scaler_class, qselect):
     if any(not isinstance(entry, BuiltinFunctionType) for entry in (call, attribute, gather, finite32, finite64)):  # glue: fixed native ABI identity
         raise TypeError("RobustScaler requires compiled lifecycle, attribute and row-gather entries")
     context.update(arena_mmap=mmap.mmap, arena_local=_LOCAL,
-                   arena_scope_class=_Scope, arena_cache_class=DeviceCache,
-                   arena_scope_dict=vars(_Scope)['__dict__'], arena_cache_dict=vars(DeviceCache)['__dict__'],
+                   arena_scope_class=_Scope, arena_scope_owner=vars(_Scope)['_owner'].__get__,
                    robust_qselect=qselect, robust_method_type=MethodType,
                    robust_fit_method=scaler_class.fit, robust_transform_method=scaler_class.transform,
                    scaler_bindings=connected, scaler_class=scaler_class, scaler_host_contexts={},
