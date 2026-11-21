@@ -23,10 +23,10 @@ from bindings.parallel_plan_run import (
 )
 
 
-def plan_indices(devices: PythonObject) raises -> List[Int]:
+def plan_indices(devices: PythonObject, b: PythonObject) raises -> List[Int]:
     """UNPACK: an exact tuple of exact ints as typed indices (a value that
-    is not an exact int is refused in the devices words)."""
-    var b = native_loaded_module("builtins")
+    is not an exact int is refused in the devices words). `b` is the
+    builtins module the caller already holds."""
     var indices = List[Int](capacity=len(devices))
     for i in range(len(devices)):  # driver-loop: over the selected device indices
         if py_type(devices[i]) is not b.int:
@@ -49,7 +49,7 @@ def plan_devices(value: PythonObject, operation: String, cooperative: Bool,
     var devices = py_call(b.tuple, value)
     if len(devices) == 0:
         raise Error(PLAN_DEVICES_REFUSAL)
-    var indices = plan_indices(devices)
+    var indices = plan_indices(devices, b)
     plan_indices_admit(indices)
     plan_vendor_admit(indices, String(py_get(context, PythonObject("vendor"), PythonObject("cpu"))), operation, cooperative)
     return devices

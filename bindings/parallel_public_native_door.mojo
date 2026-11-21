@@ -83,7 +83,7 @@ def _devices(value: PythonObject) raises -> PythonObject:
     var devices = py_call(b.tuple, value)
     if len(devices) == 0:
         raise Error(PLAN_DEVICES_REFUSAL)
-    plan_indices_admit(plan_indices(devices))
+    plan_indices_admit(plan_indices(devices, b))
     return devices
 
 
