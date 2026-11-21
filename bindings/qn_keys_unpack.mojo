@@ -13,6 +13,8 @@ comptime QN_OPN_INITIALIZE = 0
 comptime QN_OPN_FIT = 1
 comptime QN_OPN_PREDICT = 2
 comptime QN_OPN_SCORE = 3
+comptime QN_OPN_VENDOR_USED = 4
+comptime QN_OPN_MODE_USED = 5
 
 
 struct QnKeys(Defaultable, Movable):
@@ -28,6 +30,7 @@ struct QnKeys(Defaultable, Movable):
     var k_backend_fields: PythonObject
     var k_classical_metrics: PythonObject
     var k_coef_: PythonObject
+    var k_device: PythonObject
     var k_delta: PythonObject
     var k_fit_intercept: PythonObject
     var k_input_copied_: PythonObject
@@ -47,6 +50,7 @@ struct QnKeys(Defaultable, Movable):
     var k_output_context: PythonObject
     var k_penalty_normalized: PythonObject
     var k_qn_bindings: PythonObject
+    var k_qn_cpu_bindings: PythonObject
     var k_qn_fold_key: PythonObject
     var k_qn_losses: PythonObject
     var k_qn_metric_admitted: PythonObject
@@ -69,6 +73,7 @@ struct QnKeys(Defaultable, Movable):
         self.k_backend_fields = PythonObject(None)
         self.k_classical_metrics = PythonObject(None)
         self.k_coef_ = PythonObject(None)
+        self.k_device = PythonObject(None)
         self.k_delta = PythonObject(None)
         self.k_fit_intercept = PythonObject(None)
         self.k_input_copied_ = PythonObject(None)
@@ -88,6 +93,7 @@ struct QnKeys(Defaultable, Movable):
         self.k_output_context = PythonObject(None)
         self.k_penalty_normalized = PythonObject(None)
         self.k_qn_bindings = PythonObject(None)
+        self.k_qn_cpu_bindings = PythonObject(None)
         self.k_qn_fold_key = PythonObject(None)
         self.k_qn_losses = PythonObject(None)
         self.k_qn_metric_admitted = PythonObject(None)
@@ -114,6 +120,7 @@ def _qn_keys_fill(nk: UnsafePointer[QnKeys, MutUntrackedOrigin]) raises:
     nk[].k_backend_fields = py_key("backend_fields")
     nk[].k_classical_metrics = py_key("classical_metrics")
     nk[].k_coef_ = py_key("coef_")
+    nk[].k_device = py_key("device")
     nk[].k_delta = py_key("delta")
     nk[].k_fit_intercept = py_key("fit_intercept")
     nk[].k_input_copied_ = py_key("input_copied_")
@@ -133,6 +140,7 @@ def _qn_keys_fill(nk: UnsafePointer[QnKeys, MutUntrackedOrigin]) raises:
     nk[].k_output_context = py_key("output_context")
     nk[].k_penalty_normalized = py_key("penalty_normalized")
     nk[].k_qn_bindings = py_key("qn_bindings")
+    nk[].k_qn_cpu_bindings = py_key("qn_cpu_bindings")
     nk[].k_qn_fold_key = py_key("qn_fold_key")
     nk[].k_qn_losses = py_key("qn_losses")
     nk[].k_qn_metric_admitted = py_key("qn_metric_admitted")
@@ -147,6 +155,8 @@ def _qn_keys_fill(nk: UnsafePointer[QnKeys, MutUntrackedOrigin]) raises:
     py_op_add(ops, "fit", QN_OPN_FIT)
     py_op_add(ops, "predict", QN_OPN_PREDICT)
     py_op_add(ops, "score", QN_OPN_SCORE)
+    py_op_add(ops, "vendor_used", QN_OPN_VENDOR_USED)
+    py_op_add(ops, "numeric_mode_used", QN_OPN_MODE_USED)
     nk[].ops = ops
     nk[].ready = True
 
