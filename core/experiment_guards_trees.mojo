@@ -668,6 +668,14 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_GBDT_FAST_RADIX8.patch; record in docs/TOMBSTONES.md.
     comptime assert not is_defined["MOJOLEARN_GBDT_FAST_RADIX8"](), "removed 2026-11-19 (lane/fx-verdicts4, A/B round 2 NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T154232Z-0642a5, one run per arm, digests equal): the GBDT low-bit sorts on eight-bit digits were arm/base 0.965-1.03 over ten fits (lossguide faster, symmetric and multiclass slower; noise); code at 8f3f639b13, experiments/removed/MOJOLEARN_GBDT_FAST_RADIX8.patch"
     # ---- end lane fx-verdicts4
+    # ---- lane fx-verdicts7 (2026-11-21): verdicts of A/B abn9 (NVIDIA L40S host 79f003b8e8ae, wheel 3880db30a6af, job nvc-ab-20261121T003518Z-d38466)
+    # TOMBSTONE: MOJOLEARN_TREES_FAST_HR2_BAGGING_MEMBERS (LOSER, A/B abn9 NVIDIA L40S, wheel 3880db30a6af, job nvc-ab-20261121T003518Z-d38466, one run per arm: bagging-clf and bagging-reg on istella and taxi, 8 cells 3.84-13.71 arm/base, 0 faster) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
+    # Restore: git apply experiments/removed/MOJOLEARN_TREES_FAST_HR2_BAGGING_MEMBERS.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_TREES_FAST_HR2_BAGGING_MEMBERS"](), "removed 2026-11-21 (lane/fx-verdicts7, A/B abn9 NVIDIA L40S, wheel 3880db30a6af, job nvc-ab-20261121T003518Z-d38466, one run per arm; LOSER: bagging-clf and bagging-reg on istella and taxi, 8 cells 3.84-13.71 arm/base, 0 faster): the per-member fit loop for a bag the forest fit admits is gone; a bag of best-splitter trees is one forest fit. Remove -D MOJOLEARN_TREES_FAST_HR2_BAGGING_MEMBERS; see docs/TOMBSTONES.md."
+    # TOMBSTONE: MOJOLEARN_TREES_FAST_ADABOOST_REENCODE (NOISE, A/B abn9 NVIDIA L40S, wheel 3880db30a6af, job nvc-ab-20261121T003518Z-d38466, one run per arm: adaboost-clf on istella and taxi, 4 cells 0.98-1.04 arm/base) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
+    # Restore: git apply experiments/removed/MOJOLEARN_TREES_FAST_ADABOOST_REENCODE.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_TREES_FAST_ADABOOST_REENCODE"](), "removed 2026-11-21 (lane/fx-verdicts7, A/B abn9 NVIDIA L40S, wheel 3880db30a6af, job nvc-ab-20261121T003518Z-d38466, one run per arm; NOISE: adaboost-clf on istella and taxi, 4 cells 0.98-1.04 arm/base): the label re-encode per member is gone; the labels are encoded once per fit. Remove -D MOJOLEARN_TREES_FAST_ADABOOST_REENCODE; see docs/TOMBSTONES.md."
+    # ---- end lane fx-verdicts7
     return True
 
 

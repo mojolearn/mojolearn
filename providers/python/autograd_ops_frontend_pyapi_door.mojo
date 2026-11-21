@@ -2,7 +2,6 @@
 # Native normalization for the existing Session API. Public wrappers hand
 # over objects unchanged; this boundary owns descriptors, options and outputs.
 from std.python import Python, PythonObject
-from std.sys import is_defined
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_setattr, py_setitem, py_type, py_contains
 from providers.python.autograd_python_errors_pyapi_pack import graph_int
@@ -24,7 +23,7 @@ from sequence.ops import CELL_LSTM, CELL_GRU, CELL_RNN_TANH
 from autograd.block_step_ops import OPS_ATTN_STEP
 from autograd.program_io import ProgramInput
 from core.cast_in import CastIn
-from providers.python.autograd_program_arrays_pyapi_door import output_array, output_array_unfilled, is_integer_input, uint64_input, program_admit_value, program_numeric_scalar, program_builtin_types
+from providers.python.autograd_program_arrays_pyapi_door import output_array_unfilled, is_integer_input, uint64_input, program_admit_value, program_numeric_scalar, program_builtin_types
 from providers.python.autograd_pyapi_door import program_info, ops_profile_reset_py, ops_profile_report_py
 from providers.python.autograd_model_checkpoint_pyapi_unpack import ops_load_program_py
 from providers.python.autograd_model_checkpoint_pyapi_pack import ops_save_state_py, ops_load_state_py
@@ -138,14 +137,11 @@ def _tuple_ints(xs: List[Int]) raises -> PythonObject:
 
 
 
-# The restore lane's B-arm switch (owed row restore-executor-session-call),
-# extended here: under -D MOJOLEARN_SESSION_CALL_DESCRIPTOR a session
-# read-back also keeps its former zero-filled result array. Same download
-# and same values either way: no bit change.
 # TOMBSTONE: MOJOLEARN_SESSION_CALL_DESCRIPTOR (unmeasured B arm: every Session call through the descriptor; EXP:2395 RESTORED the direct typed call as default) deleted 2026-11-15 by lane/expdel2-08-base; code recoverable at 8fe6eaaa01.
 # Restore: git apply experiments/removed/MOJOLEARN_SESSION_CALL_DESCRIPTOR.patch; record in docs/TOMBSTONES.md.
 # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
-comptime SESSION_CALL_DESCRIPTOR = is_defined["MOJOLEARN_SESSION_CALL_DESCRIPTOR"]()
+# TOMBSTONE: MOJOLEARN_SESSION_CALL_DESCRIPTOR (B arm loses: every same-image Session call through the descriptor, zero-filled read-back arrays; A/B abn9 NVIDIA L40S, ops-session-step 2.63 -> 2.93 ms 1.11, program-run 1.00 arm/base) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
+# Restore: git apply experiments/removed/MOJOLEARN_SESSION_CALL_DESCRIPTOR.fx-verdicts7.patch; record in docs/TOMBSTONES.md.
 
 
 def _program_initialize(mut out: PythonObject, session: PythonObject, info: PythonObject) raises:
@@ -181,10 +177,8 @@ def ops_session_call_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
 # (`autograd_session_public_request_pyapi_pack.mojo`) admits it from the
 # resource it already holds, so a Session call no longer reads `_lifetime`,
 # builds the scope list and walks the resource words a second time per op
-# (about 30 calls per ops-session-step round). Under
-# -D MOJOLEARN_SESSION_CALL_DESCRIPTOR (B arm, owed row
-# restore-executor-session-call) every call enters through
-# `ops_session_call_fields_py` above, exactly as before.
+# (about 30 calls per ops-session-step round). A call from another image
+# enters through `ops_session_call_fields_py` above, as before.
 def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
     session: PythonObject, operation: PythonObject, args: PythonObject, fields: PythonObject,
 ) raises -> PythonObject:
@@ -301,31 +295,22 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
         # TOMBSTONE: MOJOLEARN_SESSION_CALL_DESCRIPTOR (unmeasured B arm: every Session call through the descriptor; EXP:2395 RESTORED the direct typed call as default) deleted 2026-11-15 by lane/expdel2-08-base; code recoverable at 8fe6eaaa01.
         # Restore: git apply experiments/removed/MOJOLEARN_SESSION_CALL_DESCRIPTOR.patch; record in docs/TOMBSTONES.md.
         # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
-        comptime if SESSION_CALL_DESCRIPTOR:
-            # B arm (owed row restore-executor-session-call): a zero-filled
-            # bytearray and the address read from `__array_interface__`.
-            var out = output_array(s[].shape_nd(handle))
-            var dst = FP(unsafe_from_address=Int(py=out.__array_interface__["data"][0]))
-            if op == _SOP_NUMPY:
-                s[].download(handle, dst)
-            else:
-                s[].gradient_into(handle, dst)
-            return out
+        # TOMBSTONE: MOJOLEARN_SESSION_CALL_DESCRIPTOR (B arm loses: every same-image Session call through the descriptor, zero-filled read-back arrays; A/B abn9 NVIDIA L40S, ops-session-step 2.63 -> 2.93 ms 1.11, program-run 1.00 arm/base) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
+        # Restore: git apply experiments/removed/MOJOLEARN_SESSION_CALL_DESCRIPTOR.fx-verdicts7.patch; record in docs/TOMBSTONES.md.
+        # Lane fix-executor-session-rows (2026-11-13): the download writes
+        # every element (rows x cols floats of this tensor), so the result
+        # is made over UNINITIALIZED storage with its address in hand, as
+        # 0.8.55's `np.empty` + `ops_download` and as Program.run's fixed
+        # route (no zero fill of a bytearray, no `__array_interface__` dict
+        # per read-back; ops-session-step reads eight arrays per round).
+        var made = output_array_unfilled(s[].shape_nd(handle))
+        var array = made[0]
+        var dst = FP(unsafe_from_address=made[1])
+        if op == _SOP_NUMPY:
+            s[].download(handle, dst)
         else:
-            # Lane fix-executor-session-rows (2026-11-13): the download writes
-            # every element (rows x cols floats of this tensor), so the result
-            # is made over UNINITIALIZED storage with its address in hand, as
-            # 0.8.55's `np.empty` + `ops_download` and as Program.run's fixed
-            # route (no zero fill of a bytearray, no `__array_interface__` dict
-            # per read-back; ops-session-step reads eight arrays per round).
-            var made = output_array_unfilled(s[].shape_nd(handle))
-            var array = made[0]
-            var dst = FP(unsafe_from_address=made[1])
-            if op == _SOP_NUMPY:
-                s[].download(handle, dst)
-            else:
-                s[].gradient_into(handle, dst)
-            return array
+            s[].gradient_into(handle, dst)
+        return array
     if op == _SOP_SCALAR:
         return PythonObject(Float64(s[].scalar(_int(args[0], "handle", 1))))
     if op == _SOP_CAPTURE:

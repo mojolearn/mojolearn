@@ -44,9 +44,9 @@ version-level change at most (identity lane `samba`).
 Route (lane restore-samba-resident-forward, 2026-11-13): the stateless
 `SambaStack.forward` runs the restored resident forward
 (training/samba_resident.mojo `samba_resident_forward`, the measured winner);
-this program serves it only under -D MOJOLEARN_SAMBA_PROGRAM_FORWARD, the B
-arm of the owed samba-forward A/B. The stateful forward, the step and the
-decode session stay here.
+this program serves it only for a stack the resident route does not take (an
+image without the resident route, or a dropout stack). The stateful forward,
+the step and the decode session stay here.
 
 Weights: the caller's flat registry is the truth (`SambaStack.parameters()`
 are read-only views of it since lane x56d: callers cannot edit it in place,

@@ -3,8 +3,7 @@
 from std.memory import ArcPointer
 from core.linear_model_state import LinearModelState, linear_state_predict_request
 from core.linear_boundary_run import linear_predict_run
-from core.linear_boundary_types import LINEAR_PREDICT_ABI
-from core.linear_entry_table import LinearEntryKey, LINEAR_TABLE_ESTIMATORS, linear_table_entry
+from core.native_descriptor_abi import NativeDescriptorCall
 from core.state_registry import StateRegistry, StateHandle
 
 # The state contains admitted host descriptors, including on a GPU execution
@@ -13,14 +12,15 @@ from core.state_registry import StateRegistry, StateHandle
 comptime LINEAR_STATES = StateRegistry[LinearModelState, "MojolearnLinearModelStatesV1"]
 
 
-def linear_lease_predict(key: LinearEntryKey, lease: ArcPointer[LinearModelState],
+def linear_lease_predict(entry: NativeDescriptorCall, lease: ArcPointer[LinearModelState],
     x: Int, dst: Int, rows: Int, cols: Int, wide: Bool, estimator: String, test_x: Bool = False) raises -> Int:
-    """Predict through the leased state; the entry's result word (1: the
-    deferred finite test of X found a NaN or an infinity, see
-    `linear_predict_run`)."""
+    """Predict through the leased state and the estimator's resolved
+    prediction entry (core/linear_route.mojo: the device table's or the CPU
+    table's, read once per estimator; this call reads no table slot). The
+    entry's result word (1: the deferred finite test of X found a NaN or an
+    infinity, see `linear_predict_run`)."""
     var request = linear_state_predict_request(lease[], x, dst, rows, cols, wide, estimator)
     request.test_x = test_x
-    var entry = linear_table_entry[LINEAR_TABLE_ESTIMATORS](key, 1, String(LINEAR_PREDICT_ABI), 1)
     var status = 0
     try:
         status = linear_predict_run(entry, request)

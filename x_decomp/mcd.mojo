@@ -122,12 +122,42 @@ comptime IDN_MCD_CHOL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined[
 # 60 launches before its wait and was never run on Metal); there the old name MOJOLEARN_MCD_FAST_LOCKSTEP still
 # opts in, for the owed smoke. The words are the same in either order, so the columns agree whichever runs.
 # Not timed: the neighbouring shape and the non-board dataset named above.
+#
+# EVERY WIDTH since lane sp-mcd-wide (2026-11-20; NOT MEASURED, owed row mcd-wide-lockstep): the bound above
+# ("up to XD_EIGH_ONE_BLOCK_N columns") is gone on the NVIDIA and AMD columns, so narrow and wide inputs take one
+# path and the serial candidate loop is no longer the wide default there (it is the -D MOJOLEARN_MCD_FAST_LOCKSTEP_OFF
+# build and the Apple column only). Cause: above the bound a 220-column fit still ran its ~560 candidates one at a
+# time, each first solve and each C-step a wait of its own (round 3 above: istella 1.000). What a wide round does
+# (x_decomp/kit_device.mojo `DMcd._ls_eigh`): each candidate's eigen solve takes `DevExec.eigh_into`'s own route,
+# the tridiagonal solve where that route tries it, all candidates enqueued and their refusal words read at ONE
+# wait, then the Jacobi for the refused ones (a singular covariance) or, below the tridiagonal route's first
+# size, for all: ONE batched launch, a block a candidate, when the batch is large enough for that to pay
+# (x_decomp/device.mojo `eigh_batch_one_block_pays`: a cost rule of n and the batch), else the per-round
+# multi-block Jacobi one candidate after another, as before. `select_init_best` takes its candidates' first
+# solves the same way and keeps its C-steps serial (products over every row of X).
+# Batch: candidates take their C-steps together in batches sized from the device's FREE memory and d
+# (`DMcd._ls_batch`: min(T, free floats / 2 // (8 d d + 256 d + 16))), never from a column constant.
+# Bits: unchanged by construction on every column. (1) Candidates are independent and a trial's draws are numbered
+# in trial order whatever the batch. (2) Each candidate's solve is the route the batch of one takes: the same
+# tridiagonal launches on a copy of the same covariance, the same refusal test, the same tail. (3) The batched
+# one-block Jacobi's cells, pair order, convergence fold and decision are the multi-block solver's
+# (x_decomp/rr_batch.mojo's module note; lane perf-decomp-eigh measured its speed, not its words). (4) The kept
+# candidates are ordered by the same (det, candidate number) key, per batch and then over the batches' kept ones.
+# One difference a user can see: an unconverged batched Jacobi raises at the round's wait with the kit's
+# message ("N solve(s) did not converge"), where the multi-block solver raised its own at once.
+# Expected (reasoning, not measured): istella-like fits (hundreds of columns, singular subset covariances) lose
+# most of the per-candidate Jacobi time of the merged stage (50 refused solves as one launch) and ~560 waits;
+# time the board rows with a neighbouring shape (100,000 x 64 and 300,000 x 16 random float32, 5 percent
+# outliers) and a non-board dataset (covtype's 10 continuous columns; all 54 columns for a singular wide case).
 comptime MCD_LOCKSTEP = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not is_defined["MOJOLEARN_MCD_FAST_LOCKSTEP_OFF"]()
     and (not TARGET_HAS_APPLE_GPU or is_defined["MOJOLEARN_MCD_FAST_LOCKSTEP"]())
     and not IDN_MCD_CHOL
 )
+#: the lockstep above the one-block bound: NVIDIA and AMD. The Apple opt-in stays at or below the bound (a wide
+#: round enqueues thousands of launches a candidate before its wait; never run on Metal).
+comptime MCD_LOCKSTEP_WIDE = MCD_LOCKSTEP and not TARGET_HAS_APPLE_GPU
 
 #: `_expansion_decomp._F32_EPS` and the `logs` floor `_slogdet` passes
 comptime _F32_EPS: Float64 = 1.1920928955078125e-07

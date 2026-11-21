@@ -12,15 +12,14 @@ from providers.python.linear_parameter_boundary_unpack import linear_ridge_param
 from bindings.classical_validate_unpack import classical_check_x_snapshot, classical_check_y, classical_check_weights_input, classical_estimator_name
 from bindings.py_balanced import py_setitem
 from bindings.sequential_description_unpack import sequential_fields
-from core.linear_fit_types import LINEAR_FIT_ABI, LINEAR_FIT_OPERATION_COUNT, RIDGE_FIT_ABI, LinearFitRequest, LinearFitResult
+from core.linear_fit_types import LinearFitRequest, LinearFitResult
 from core.linear_fit_run import linear_ridge_run
 from providers.python.linear_state_boundary_door import linear_state_publish
-from providers.python.linear_entry_boundary_door import linear_entry_connection
-from core.linear_entry_table import LINEAR_TABLE_ESTIMATORS, LINEAR_TABLE_X_LINEAR, linear_table_entry
+from core.linear_route import LinearRoute
 
 
 def classical_ridge_fit(model: PythonObject, args: PythonObject,
-    entries: PythonObject, context: PythonObject) raises -> PythonObject:
+    route: LinearRoute, pins: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = sequential_fields(model)
     classical_fit_replacements_admit(fields, True, context)
     var alpha_source = fields["alpha"]
@@ -42,13 +41,13 @@ def classical_ridge_fit(model: PythonObject, args: PythonObject,
         0 if weights is None else Int(py=classical_address(weights)),
         Int(py=classical_address(coef)), Int(py=classical_address(mean)), rows, cols,
         intercept, alpha)
-    var connection = linear_entry_connection(entries)
-    var key = connection.key.copy()
-    var entry = linear_table_entry[LINEAR_TABLE_ESTIMATORS](key, 0, String(LINEAR_FIT_ABI), LINEAR_FIT_OPERATION_COUNT)
-    var weighted_connection = linear_entry_connection(entries, LINEAR_TABLE_X_LINEAR, True)
-    if weighted_connection.key.mode != key.mode or weighted_connection.key.vendor != key.vendor:
+    # The estimator's resolved entries (core/linear_route.mojo): the device
+    # table's or the CPU table's, read once per estimator. This fit admits no
+    # connection owner and reads no table slot.
+    if not route.has_weighted:
         raise Error("native Ridge weighted execution key differs")
-    var weighted_entry = linear_table_entry[LINEAR_TABLE_X_LINEAR](weighted_connection.key, 0, String(RIDGE_FIT_ABI), 1)
+    var entry = route.fit.call
+    var weighted_entry = route.weighted.call
     var result = LinearFitResult()
     var py = Python()
     try:
@@ -61,9 +60,7 @@ def classical_ridge_fit(model: PythonObject, args: PythonObject,
         _ = weights
         _ = coef
         _ = mean
-        _ = entries
-        _ = connection
-        _ = weighted_connection
+        _ = pins
     py_setitem(fields, "coef_", coef)
     py_setitem(fields, "intercept_", result.intercept)
     py_setitem(fields, "_x_mean", mean)

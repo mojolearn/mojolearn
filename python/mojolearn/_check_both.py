@@ -41,6 +41,13 @@ no activity lines at all.
 process, the CPU side in a child process started with `MOJOLEARN_VENDOR=cpu`
 (`python -m mojolearn._check_both DIRECTORY`, `child_main` below), for the
 estimators whose fitted model cannot be handed to the CPU side.
+
+AN ESTIMATOR THAT TAKES `device=` (`takes_device`: Ridge and LinearRegression
+so far) needs neither a saved file nor a child process. Its two sides are the
+same estimator constructed on each device in this process (`on_device`): the
+fitted-model form hands the fitted attributes to the other device's estimator
+in memory, and `fit_both` fits one estimator per device here. The side record
+names the route under `route`.
 """
 import hashlib
 import json
@@ -411,11 +418,61 @@ def save_form(est):
     return None
 
 
+def takes_device(est):
+    """True when the estimator's class takes `device=` (it declares
+    `_mojolearn_device`): its other side is the same estimator on the other
+    device, in this process. The explicit host classes (`host_model`) are the
+    CPU side already and are not."""
+    cls = type(est)
+    return bool(getattr(cls, "_mojolearn_device", False)) and not getattr(cls, "_HOST_INFERENCE_ONLY", False)
+
+
+def on_device(est, device, fitted=True):
+    """The same estimator on `device` ('gpu' or 'cpu'): `est` itself when it
+    already runs there, else a new estimator of its class with its constructor
+    parameters and `device=device`. With `fitted`, the new estimator is handed
+    the fitted attributes of `est` (the same objects, in memory), so both
+    answer from one fitted model.
+
+    `device=None` on `est` is the installation's device. The check runs only
+    where the installation has a GPU (a CPU-only one is refused before this),
+    so None is the GPU here."""
+    name = type(est).__name__
+    try:
+        params = dict(est.get_params(deep=False))
+    except TypeError:
+        params = dict(est.get_params())
+    if "device" not in params:
+        raise NotChecked(f"{name} declares device= but get_params does not return it")
+    if (params["device"] or "gpu") == device:
+        return est
+    params["device"] = device
+    try:
+        twin = type(est)(**params)
+    except Exception as exc:
+        raise NotChecked(f"{name}(device={device!r}) cannot be built here: "
+                         f"{type(exc).__name__}: {exc}"[:400]) from exc
+    if fitted:
+        # the instance dictionary is the estimator's state; object's own
+        # lookup reads it without the estimator's attribute door
+        state = object.__getattribute__(est, "__dict__")
+        target = object.__getattribute__(twin, "__dict__")
+        for key, value in state.items():
+            if key not in params:
+                target[key] = value
+    return twin
+
+
 def to_cpu(ml, est, directory, name="model", form=None):
-    """The fitted model on the CPU side: save it and load the file with
-    `mojolearn.host_model`. This is the state transfer between the sides; an
-    estimator with no save, or a file `host_model` does not serve, cannot
-    cross and raises NotChecked with the reason. Returns `(cpu model, path)`."""
+    """The fitted model on the CPU side. For an estimator that takes
+    `device=`: the same estimator constructed with `device="cpu"` and handed
+    the fitted attributes in memory (no file; the returned path is None).
+    For every other estimator: save it and load the file with
+    `mojolearn.host_model`; an estimator with no save, or a file `host_model`
+    does not serve, cannot cross and raises NotChecked with the reason.
+    Returns `(cpu model, path)`."""
+    if takes_device(est):
+        return on_device(est, "cpu"), None
     form = form or save_form(est)
     if form is None:
         raise NotChecked(f"{type(est).__name__} has no save, so the CPU side has nothing to load")
@@ -463,6 +520,34 @@ def _cpu_answered(ml, cpu):
         if not (activity.get("host_splits") or activity.get("host_entries")):
             loaded -= 1
     return loaded > 0
+
+
+def _route_of(est):
+    """What the estimator itself says it runs on: its `device` parameter as
+    given (None: this installation's device) and the vendor of the compiled
+    binary it uses (`vendor_used`)."""
+    try:
+        used = est.vendor_used()
+    except Exception as exc:
+        used = f"unknown ({type(exc).__name__})"
+    try:
+        device = est.get_params(deep=False).get("device")
+    except Exception:
+        device = None
+    return dict(device=device, vendor_used=used)
+
+
+def _require_two_devices(ml, gpu, cpu):
+    """Refuse a check whose two sides ran on one device: the CPU side must
+    report the CPU binary and the GPU side must not, and a CPU binary must be
+    loaded. Otherwise the comparison would compare a thing to itself."""
+    g, c = gpu["route"]["vendor_used"], cpu["route"]["vendor_used"]
+    if c != "cpu" or g == "cpu":
+        raise NotChecked(f"the two sides did not run on two devices (gpu side: {g}, cpu side: {c}); "
+                         "this would compare a thing to itself")
+    if not _cpu_answered(ml, cpu):
+        raise NotChecked("no CPU binary is loaded after the CPU side ran, so which binary answered "
+                         "cannot be established; this would compare a thing to itself")
 
 
 def _timed_fit_and_call(est, fit, method, X, walls):
@@ -643,6 +728,9 @@ def check_estimator(ml, est, X, method=None, fit=None, saved=None, describe_devi
     if fit_both and fit is None:
         result.update(reason="fit_both needs the fit arguments: there is nothing to fit on each side")
         return result
+    device = takes_device(est)
+    if device:
+        result["transfer"] = "device"
     try:
         walls = {}
         if fit_both:
@@ -652,9 +740,39 @@ def check_estimator(ml, est, X, method=None, fit=None, saved=None, describe_devi
             if rows > FIT_BOTH_WARN_ROWS:
                 result["warning"] = (f"fitting {rows:,} rows on the CPU as well; this can take long. "
                                      "max_rows (--fit-rows) fits both sides on the first rows only")
-            gpu, gpu_arrays = run_side("gpu", lambda: _timed_fit_and_call(est, fit, method, X, walls), ml=ml)
-            gpu.update(wall_s=walls["call"], fit_wall_s=walls["fit"])
-            cpu, cpu_arrays = _cpu_side_in_child(spec, method, fit, X, spawn)
+            if device:
+                # one estimator per device, both fitted in this process
+                gpu_est, cpu_est = on_device(est, "gpu", fitted=False), on_device(est, "cpu", fitted=False)
+                gpu, gpu_arrays = run_side("gpu", lambda: _timed_fit_and_call(gpu_est, fit, method, X, walls),
+                                           ml=ml)
+                gpu.update(wall_s=walls["call"], fit_wall_s=walls["fit"], route=_route_of(gpu_est))
+                cpu_walls = {}
+                cpu, cpu_arrays = run_side("cpu", lambda: _timed_fit_and_call(cpu_est, fit, method, X, cpu_walls),
+                                           ml=ml)
+                cpu.update(wall_s=cpu_walls["call"], fit_wall_s=cpu_walls["fit"], route=_route_of(cpu_est))
+                _require_two_devices(ml, gpu, cpu)
+                cpu.update(side_environment(ml, "cpu", cpu_model=cpu_model))
+            else:
+                gpu, gpu_arrays = run_side("gpu", lambda: _timed_fit_and_call(est, fit, method, X, walls), ml=ml)
+                gpu.update(wall_s=walls["call"], fit_wall_s=walls["fit"])
+                cpu, cpu_arrays = _cpu_side_in_child(spec, method, fit, X, spawn)
+        elif device:
+            # the fitted-model form of an estimator that takes device=: the
+            # fitted attributes are handed to the same estimator on the other
+            # device, in memory; no file and no host_model
+            if fit is not None:
+                started = time.perf_counter()
+                est.fit(*fit)
+                walls["fit"] = round(time.perf_counter() - started, 6)
+            gpu_est, cpu_est = on_device(est, "gpu"), on_device(est, "cpu")
+            gpu, gpu_arrays = run_side("gpu", lambda: getattr(gpu_est, method)(X), ml=ml)
+            gpu["route"] = _route_of(gpu_est)
+            if fit is not None:
+                gpu["fit_wall_s"] = walls["fit"]
+            cpu, cpu_arrays = run_side("cpu", lambda: getattr(cpu_est, method)(X), ml=ml)
+            cpu["route"] = _route_of(cpu_est)
+            _require_two_devices(ml, gpu, cpu)
+            cpu.update(side_environment(ml, "cpu", cpu_model=cpu_model))
         else:
             # the fit, when asked for, is not part of the compared call: the
             # activity record and the wall time are the method's on both sides
@@ -704,6 +822,11 @@ def environment_lines(env):
         threads = (f"MOJOLEARN_CPU_THREADS={setting}" if setting else
                    f"MOJOLEARN_CPU_THREADS unset, {env.get('cpus_available')} CPUs available")
         lines.append(f"  device    {env.get('device')} ({threads})")
+    route = env.get("route")
+    if route:
+        given = route.get("device")
+        shown = "device=None (this installation's device)" if given is None else f"device={given!r}"
+        lines.append(f"  route     {shown} in this process, binary vendor {route.get('vendor_used')}")
     lines.append(f"  wheel     mojolearn {env.get('version')}, {env.get('mode')} mode")
     lines.append(f"  binaries  {where} ({binaries.get('loaded', 0)} loaded)")
     return lines
@@ -788,10 +911,16 @@ def format_check(result):
     if result.get("form") == "fit-both":
         rows = (f" on the first {result['fit_rows']:,} of {result['fit_rows_given']:,} rows"
                 if result.get("fit_rows") != result.get("fit_rows_given") else "")
-        lines += [f"Fitted on each side{rows}: on the GPU in this process, on the CPU in a child process "
-                  "(MOJOLEARN_VENDOR=cpu). Each side answers from its own fitted model.", ""]
+        where = ("one estimator per device (this installation's GPU, device='cpu'), both in this process"
+                 if result.get("transfer") == "device" else
+                 "on the GPU in this process, on the CPU in a child process (MOJOLEARN_VENDOR=cpu)")
+        lines += [f"Fitted on each side{rows}: {where}. Each side answers from its own fitted model.", ""]
         if result.get("warning"):
             lines += ["WARNING: " + result["warning"], ""]
+    elif result.get("transfer") == "device":
+        lines += [("Fitted on the given estimator; " if result.get("fitted_here") else "") +
+                  "The same estimator was constructed on each device (this installation's GPU, device='cpu') in this "
+                  "process and both answer from the one fitted model.", ""]
     elif result.get("fitted_here"):
         lines += ["Fitted on the GPU; the fitted model was saved and loaded on the CPU.", ""]
     for side in SIDES:

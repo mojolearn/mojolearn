@@ -16,7 +16,7 @@ from x_prep.prims import (
 )
 from x_prep.eigh import eigh_unit
 from x_prep.target import (
-    te_global_unit, te_enc_unit, te_apply_unit, te_bucket_unit, te_gather_unit,
+    te_global_unit, te_enc_unit, te_apply_unit, te_gather_unit,
     te_hist_unit, te_hsum_unit, te_hstart_unit, te_hscatter_unit,
 )
 from x_prep.kbins import kbins_edges_unit, kbins_codes_unit, kbins_inverse_unit, kbins_gw_unit, kbins_wq_unit, kbins_wkm_unit
@@ -308,8 +308,7 @@ def run_unit[OP: Int](t: Int, f: FP, q: IP):
         pt_fold_unit(t, f, q)
     comptime if OP == 107:
         ii_rowabs_unit(t, f, q)
-    comptime if OP == 108:
-        te_bucket_unit(t, f, q)
+    # op 108 (te_bucket) is retired: TOMBSTONE in x_prep/target.mojo (MOJOLEARN_XPREP_FAST_TE_PBUCKET_OFF).
     comptime if OP == 109:
         pt_log_unit(t, f, q)
     comptime if OP == 110:

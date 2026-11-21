@@ -66,6 +66,7 @@ from x_decomp.device import (
     xd_ctx,
     XD_FAST_SVD_ONE_BLOCK,
     XD_EIGH_ONE_BLOCK_N,
+    eigh_batch_one_block_pays,
 )
 from x_decomp.qr_bounded import QRB_CELLS
 from x_decomp.kit import (
@@ -84,7 +85,7 @@ from cholesky.checks.trsm import CHOL_SOLVE_TPB, trsm_lower
 from core.identity_trace import IdentityTrace
 from x_decomp.jacobi_par import pj_identity_kernel
 from x_decomp.mcd import IDN_MCD_CHOL
-from x_decomp.mcd import MCD_LOCKSTEP
+from x_decomp.mcd import MCD_LOCKSTEP, MCD_LOCKSTEP_WIDE
 from x_decomp.mcd import Est, _key, _F32_EPS, _FLT_MIN, _neg_inf, _order_by_det, _pos_inf, _write, argsort_values, smallest_sorted
 from x_decomp.mcd_fast import MCD_DEVICE_CSTEPS, fast_mcd_fast
 from x_decomp.resident import pool_buffer, _pool_buf_view, _ptr, pool_alloc, pool_free
@@ -1370,6 +1371,17 @@ def _ls_view(A: DMat, B: DMat, which: Int, row0: Int, rows: Int) -> DMat:
     return DMat(rows_of=B, row0=row0, rows=rows)
 
 
+def _ls_applies(d: Int) -> Bool:
+    """Whether a `select_*` call of d columns takes the lockstep
+    (MCD_LOCKSTEP). Every width on the NVIDIA and AMD columns (lane
+    sp-mcd-wide: `DMcd._ls_eigh` runs `eigh_into`'s route at any d). The
+    Apple opt-in keeps the one-block bound: a wide round enqueues thousands
+    of launches a candidate before its wait and was never run on Metal."""
+    comptime if MCD_LOCKSTEP_WIDE:
+        return d >= 1
+    return d >= 1 and d <= XD_EIGH_ONE_BLOCK_N
+
+
 # ---- MinCovDet's fast_mcd on the resident kit (x_decomp/mcd.mojo's search)
 struct DMcd:
     var k: DKit
@@ -1571,6 +1583,20 @@ struct DMcd:
         final distances are owed to `finish` (lane mcd-per-step-cost)."""
         comptime if IDN_MCD_CHOL:
             return self.c_step_chol(X, h, n_iter, has_init, loc0, cov0)
+        if has_init:
+            var P0 = self.pinvh(cov0)
+            return self.c_step_from(X, h, n_iter, True, loc0, P0)
+        # no initial estimate: `c_step_from` reads neither operand
+        return self.c_step_from(X, h, n_iter, False, loc0, cov0)
+
+    def c_step_from(
+        mut self, X: DMat, h: Int, n_iter: Int, has_init: Bool, loc0: DMat, P0: DMat
+    ) raises -> DEst:
+        """`c_step` from the initial estimate's precision P0 = pinvh(cov0)
+        (read only when `has_init`): `c_step`'s statements after that solve,
+        in its order. Split out (lane sp-mcd-wide, 2026-11-20) so that
+        `select_init_best` can take every candidate's first solve in one
+        batch (`_ls_eigh`) and run the rest of each C-step as before."""
         var iters = n_iter
         var dist = DMat(0, 1)
         var sel: DMat
@@ -1580,7 +1606,6 @@ struct DMcd:
             var r = self.k.rand(1, X.r, self.seed, 1000 + self.draws, 0)
             sel = self.k.smallest_dev(r, h)
         else:
-            var P0 = self.pinvh(cov0)
             var d0 = self.mahal(X, loc0, P0)
             sel = self.k.smallest_dev(d0, h)
             dist = d0^
@@ -1643,35 +1668,196 @@ struct DMcd:
         )
         return self.k.mm(self.k.ew2(OP_MUL, vd, inv), vd, False, True)
 
+    def _ls_batch(self, T: Int, d: Int) raises -> Int:
+        """How many of T candidates of d columns take their C-steps together
+        (MCD_LOCKSTEP), from the device's FREE memory now:
+
+            batch = min(T, max(1, (free_bytes / 4 / 2) // (8 d d + 256 d + 16)))
+
+        A candidate's own floats while its batch runs: two (location,
+        covariance) arenas (2 d d + 2 d), the round's stacked copy and its
+        eigenvectors (2 d d + d), and up to four d x d of solver work (the
+        tridiagonal solve's work copy and vectors, the Jacobi's rotated copy
+        and vectors) with the tridiagonal panels and vectors (about 256 d)
+        and the status words: 8 d d + 256 d + 16. Half of the free memory
+        is left for ONE C-step's row-sized temporaries (centred rows,
+        products, the selection scratch): they return to the pool as soon
+        as their launches are enqueued and the next candidate reuses them,
+        so they do not grow with the batch. No width or row constant: a
+        narrow input's batch is every candidate, a wide one's is what fits."""
+        var mem = self.k.ctx.get_memory_info()
+        var free_floats = Int(mem[0]) // 4
+        var per = 8 * d * d + 256 * d + 16
+        return max(1, min(T, (free_floats // 2) // per))
+
     def _ls_eigh(mut self, DA: DMat, m: Int, d: Int, W: DMat, V: DMat) raises:
-        """The one-block Jacobi of the m stacked d x d problems in DA
-        (consumed) into W and V, ENQUEUED as one launch, a block a problem
-        (MCD_LOCKSTEP; `DKit.eigh_deferred`'s route with a batch of m: the
-        same kernel and words a problem). Its status word is read at the
-        kit's next sync, where an unconverged solve raises."""
-        var da = self.k._sub(DA)
-        var dw = self.k._sub(W)
-        var dv = self.k._sub(V)
-        var status = DevExec._eigh_batch_enq(self.k.ctx, da, m, d, dw, dv)
-        self.k.eig_status.append(status^)
-        _ = da^
-        _ = dw^
-        _ = dv^
+        """`DKit.eigh_deferred`'s solve of the m stacked d x d problems in
+        DA (consumed) into W (m x d, ascending) and V (m * d x d), every
+        problem on the route and with the words the batch of one takes
+        (MCD_LOCKSTEP):
+
+        - up to XD_EIGH_ONE_BLOCK_N columns ONE enqueued launch of the
+          one-block Jacobi, a block a problem (`DevExec._eigh_batch_enq`);
+          its status word is read at the kit's next sync, where an
+          unconverged solve raises;
+        - above it `DevExec.eigh_into`'s route a problem (lane sp-mcd-wide,
+          2026-11-20; was the serial candidate loop): where that route tries
+          the tridiagonal solve first (`DevExec.eigh_td_tried`), every
+          problem's solve is enqueued and their refusal words are read at
+          ONE wait; an accepted problem's tail (sign flip, ascending order,
+          unscale) is enqueued into its rows of W and V. The Jacobi then
+          solves the refused problems, or every problem where the
+          tridiagonal solve is not tried: as one batched launch, a block a
+          problem, when `eigh_batch_one_block_pays`, otherwise one after
+          another on the per-round multi-block route (`_eigh_jacobi_dev`).
+          The batched kernel's cells, order and convergence rule are the
+          multi-block solver's (x_decomp/rr_batch.mojo), so the words are
+          the same whichever runs."""
+        var jac = List[Int]()
+        if DevExec.eigh_td_tried(d):
+            var zs = List[DeviceBuffer[DType.float32]]()
+            var ts = List[DeviceBuffer[DType.float32]]()
+            var fs = List[DeviceBuffer[DType.float32]]()
+            var infos = List[DeviceBuffer[DType.float32]]()
+            var info = List[Float32](length=4 * m, fill=Float32(0))
+            for a in range(m):  # driver-loop: over the round's candidates (one tridiagonal solve each, enqueued)
+                var da = self.k._sub(DMat(rows_of=DA, row0=a * d, rows=d))
+                var dz = self.k.ctx.enqueue_create_buffer[DType.float32](d * d)
+                var dt = self.k.ctx.enqueue_create_buffer[DType.float32](d)
+                var di = self.k.ctx.enqueue_create_buffer[DType.float32](4)
+                var df = DevExec._eigh_td_start_dev(self.k.ctx, da, d, dz, dt, di)
+                self.k.ctx.enqueue_copy(
+                    dst_ptr=F32Ptr(unsafe_from_address=Int(info.unsafe_ptr()) + 16 * a), src_buf=di
+                )
+                _ = da^
+                zs.append(dz^)
+                ts.append(dt^)
+                fs.append(df^)
+                infos.append(di^)
+            self.k.sync()
+            for a in range(m):  # driver-loop: over the round's candidates (one refusal word each)
+                if info[4 * a + 2] != Float32(0.0):
+                    jac.append(a)
+                    continue
+                var dz = zs[a]
+                var dt = ts[a]
+                var df = fs[a]
+                var dw = self.k._sub(DMat(rows_of=W, row0=a, rows=1))
+                var dv = self.k._sub(DMat(rows_of=V, row0=a * d, rows=d))
+                DevExec._eigh_td_finish_dev(self.k.ctx, dz, dt, df, dw, dv, d)
+                _ = dz^
+                _ = dt^
+                _ = df^
+                _ = dw^
+                _ = dv^
+            # the solves' buffers and the host words outlive the wait and every tail (Mojo frees at the last NAMED use)
+            _ = info^
+            _ = infos^
+            _ = zs^
+            _ = ts^
+            _ = fs^
+        else:
+            for a in range(m):  # driver-loop: over the round's candidates (every one is the Jacobi's)
+                jac.append(a)
+        var r = len(jac)
+        if r == 0:
+            return
+        if not eigh_batch_one_block_pays(r, d):
+            for i in range(r):  # driver-loop: over the Jacobi's problems (too few for a block each to pay; one after another)
+                var a = jac[i]
+                var da = self.k.ctx.enqueue_create_buffer[DType.float32](d * d)
+                self.k.ctx.enqueue_copy(dst_buf=da, src_buf=self.k._sub(DMat(rows_of=DA, row0=a * d, rows=d)))
+                var dw = self.k._sub(DMat(rows_of=W, row0=a, rows=1))
+                var dv = self.k._sub(DMat(rows_of=V, row0=a * d, rows=d))
+                DevExec._eigh_jacobi_dev(self.k.ctx, da, dw, dv, d)
+                _ = da^
+                _ = dw^
+                _ = dv^
+            return
+        if r == m:
+            # every problem: DA, W and V are the batch as they stand
+            var da = self.k._sub(DA)
+            var dw = self.k._sub(W)
+            var dv = self.k._sub(V)
+            var status = DevExec._eigh_batch_enq(self.k.ctx, da, m, d, dw, dv)
+            self.k.eig_status.append(status^)
+            _ = da^
+            _ = dw^
+            _ = dv^
+            return
+        # the refused problems packed side by side, solved as one batch, their rows copied back
+        var JA = DMat(r * d, d)
+        var JW = DMat(r, d)
+        var JV = DMat(r * d, d)
+        for i in range(r):  # driver-loop: over the Jacobi's problems (one device copy each)
+            self.k.put(DMat(rows_of=JA, row0=i * d, rows=d), DMat(rows_of=DA, row0=jac[i] * d, rows=d))
+        var ja = self.k._sub(JA)
+        var jw = self.k._sub(JW)
+        var jv = self.k._sub(JV)
+        var jstatus = DevExec._eigh_batch_enq(self.k.ctx, ja, r, d, jw, jv)
+        self.k.eig_status.append(jstatus^)
+        _ = ja^
+        _ = jw^
+        _ = jv^
+        for i in range(r):  # driver-loop: over the Jacobi's problems (two device copies each)
+            self.k.put(DMat(rows_of=W, row0=jac[i], rows=1), DMat(rows_of=JW, row0=i, rows=1))
+            self.k.put(DMat(rows_of=V, row0=jac[i] * d, rows=d), DMat(rows_of=JV, row0=i * d, rows=d))
+        _ = JA^
+        _ = JW^
+        _ = JV^
 
     def select_lockstep(
         mut self, X: DMat, h: Int, trials: Int, keep: Int, n_iter: Int, has_init: Bool, inits: DCands,
         mut output: DCands,
     ) raises:
         """`select_random` (has_init False) or `select_init` (True) with the
-        candidates taking each C-step together (MCD_LOCKSTEP, x_decomp/mcd.mojo):
+        candidates taking each C-step together (MCD_LOCKSTEP, x_decomp/mcd.mojo),
+        in batches of `_ls_batch` candidates (every candidate at once when
+        they fit the device's free memory), the `keep` best in
+        `_order_by_det`'s order appended to `output`. Candidates are
+        independent and a trial's draw is numbered in trial order, so the
+        batch size changes no word; the order over all candidates is the
+        order over each batch's `keep` best, by the same (det, index) key."""
+        var B = self._ls_batch(trials, X.c)
+        var no_idx = List[Int]()
+        if B >= trials:
+            self._ls_chunk(X, h, 0, trials, keep, n_iter, has_init, inits, output, no_idx)
+            return
+        var chunks = (trials + B - 1) // B
+        var kept = DCands(chunks * keep, X.c)
+        var gidx = List[Int]()
+        var t0 = 0
+        while t0 < trials:  # driver-loop: over candidate batches (the free-memory bound)
+            var cnt = min(B, trials - t0)
+            self._ls_chunk(X, h, t0, cnt, keep, n_iter, has_init, inits, kept, gidx)
+            t0 += cnt
+        var keys = List[UInt64](capacity=len(gidx))
+        for i in range(len(gidx)):  # small-loop(gidx: kept candidates of every batch): one log determinant each
+            keys.append(_key(Float32(kept.det[i]), gidx[i]))
+        sort(keys)
+        for a in range(min(keep, len(keys))):  # small-loop(keep: kept candidates): two device copies a kept candidate
+            var gj = Int(keys[a] & UInt64(0xFFFFFFFF))
+            var pos = 0
+            for i in range(len(gidx)):  # small-loop(gidx: as above): the slot of candidate gj
+                if gidx[i] == gj:
+                    pos = i
+            output.push(self.k, kept.loc(pos), kept.cov(pos), kept.det[pos])
+        _ = kept^
+
+    def _ls_chunk(
+        mut self, X: DMat, h: Int, t0: Int, trials: Int, keep: Int, n_iter: Int, has_init: Bool, inits: DCands,
+        mut output: DCands, mut gidx: List[Int],
+    ) raises:
+        """One batch of `select_lockstep`: candidates t0 .. t0 + trials - 1
+        (`inits` rows when has_init), its `keep` best appended to `output`
+        and their candidate numbers to `gidx`.
         `c_step`'s statements for every candidate, in its order, on the same
         operands; only the order of launches across candidates and the waits
-        change (one wait a round for every candidate's log determinant, one
-        batched Jacobi launch a round). A candidate's current and previous
+        change (one wait a round for every candidate's log determinant, the
+        round's eigen solves together: `_ls_eigh`). A candidate's current and previous
         (location, covariance) sit in two arenas and swap by index; nothing
         else of a candidate outlives its step (the callers read only the
-        kept candidates' location, covariance and log determinant). For
-        1 <= d <= XD_EIGH_ONE_BLOCK_N (the callers test it)."""
+        kept candidates' location, covariance and log determinant)."""
         var d = X.c
         var T = trials
         var cap = max(T, 1)
@@ -1696,7 +1882,7 @@ struct DMcd:
         var D0 = DMat(cap * d, d)
         if has_init and T > 0:
             for t in range(T):  # driver-loop: over the C-step candidates (one device copy each)
-                self.k.put(DMat(rows_of=D0, row0=t * d, rows=d), inits.cov(t))
+                self.k.put(DMat(rows_of=D0, row0=t * d, rows=d), inits.cov(t0 + t))
             self._ls_eigh(D0, T, d, W0, V0)
         for t in range(T):  # driver-loop: over the C-step candidates (each one's first step, enqueued)
             var sel: DMat
@@ -1707,7 +1893,7 @@ struct DMcd:
                 sel = self.k.smallest_dev(r, h)
             else:
                 var P0 = self._ls_pinv(W0, V0, t, d)
-                var d0 = self.mahal(X, inits.loc(t), P0)
+                var d0 = self.mahal(X, inits.loc(t0 + t), P0)
                 sel = self.k.smallest_dev(d0, h)
             var Xs = self.k.gather_dev(X, sel)
             var loc = self.k.colmean(Xs)
@@ -1800,6 +1986,7 @@ struct DMcd:
         for a in range(len(top)):  # small-loop(top: kept candidates): two device copies a kept candidate
             var j = top[a]
             output.push(self.k, _ls_view(LA, LB, side[j], j, 1), _ls_view(CA, CB, side[j], j * d, d), dets[j])
+            gidx.append(t0 + j)
         # the arenas outlive every view of them (Mojo frees a value at its last NAMED use)
         _ = LA^
         _ = CA^
@@ -1816,7 +2003,7 @@ struct DMcd:
         `_order_by_det`'s order) appended to `output`. The later stages read
         only a kept candidate's location and covariance."""
         comptime if MCD_LOCKSTEP:
-            if X.c >= 1 and X.c <= XD_EIGH_ONE_BLOCK_N:
+            if _ls_applies(X.c):
                 var no_inits = DCands(1, X.c)
                 self.select_lockstep(X, h, trials, keep, n_iter, False, no_inits, output)
                 return
@@ -1836,7 +2023,7 @@ struct DMcd:
         """`select_candidates` from initial estimates, the `keep` best
         locations and covariances appended to `output` (packed, as above)."""
         comptime if MCD_LOCKSTEP:
-            if X.c >= 1 and X.c <= XD_EIGH_ONE_BLOCK_N:
+            if _ls_applies(X.c):
                 self.select_lockstep(X, h, inits.count(), keep, n_iter, True, inits, output)
                 return
         var tr = DCands(inits.count(), X.c)
@@ -1855,12 +2042,49 @@ struct DMcd:
         (det, j) candidate kept whole (support rows and, when `want_dist`,
         its final distances, computed for it alone by `finish`), every
         other one released as soon as it loses. A NaN determinant is
-        refused after every C-step ran, as `_order_by_det` refused it."""
+        refused after every C-step ran, as `_order_by_det` refused it.
+
+        MCD_LOCKSTEP (lane sp-mcd-wide, 2026-11-20): the candidates' FIRST
+        solves, pinvh(cov0) of every initial estimate, are taken together
+        (`_ls_eigh`, in batches of `_ls_batch`), then each candidate runs
+        the rest of its C-step as before (`c_step_from`). The same solves on
+        the same operands, so the same words. The C-steps themselves stay
+        one candidate after another here: each keeps its support rows and
+        distances whole, and its launches are products over every row of X,
+        which fill the device by themselves."""
         var best = Optional[DEst]()
         var best_key = UInt64(0)
         var nan_seen = False
-        for t in range(inits.count()):  # small-loop(inits: C-step candidates): one enqueued C-step per kept candidate
-            var e = self.c_step(X, h, n_iter, True, inits.loc(t), inits.cov(t))
+        var T = inits.count()
+        var d = X.c
+        var ls = False
+        var B = 1
+        comptime if MCD_LOCKSTEP:
+            ls = _ls_applies(d) and T > 0
+            if ls:
+                B = self._ls_batch(T, d)
+        # the first solves of candidates base .. base + have - 1 (ls only)
+        var W0 = DMat(0, 0)
+        var V0 = DMat(0, 0)
+        var base = 0
+        var have = 0
+        for t in range(T):  # small-loop(inits: C-step candidates): one enqueued C-step per kept candidate
+            var e: DEst
+            if ls:
+                if t >= base + have:
+                    base = t
+                    have = min(B, T - t)
+                    var D0 = DMat(have * d, d)
+                    W0 = DMat(have, d)
+                    V0 = DMat(have * d, d)
+                    for a in range(have):  # driver-loop: over the batch's candidates (one device copy each)
+                        self.k.put(DMat(rows_of=D0, row0=a * d, rows=d), inits.cov(base + a))
+                    self._ls_eigh(D0, have, d, W0, V0)
+                    _ = D0^
+                var P0 = self._ls_pinv(W0, V0, t - base, d)
+                e = self.c_step_from(X, h, n_iter, True, inits.loc(t), P0)
+            else:
+                e = self.c_step(X, h, n_iter, True, inits.loc(t), inits.cov(t))
             var f = Float32(e.det)
             if f != f:
                 nan_seen = True
@@ -1869,6 +2093,9 @@ struct DMcd:
             if not best or key < best_key:
                 best_key = key
                 best = Optional(e^)
+        # the batch's solves outlive every view of them (Mojo frees a value at its last NAMED use)
+        _ = W0^
+        _ = V0^
         if nan_seen:
             raise Error("x_decomp MinCovDet: a NaN distance or draw has no order (refused)")
         if not best:

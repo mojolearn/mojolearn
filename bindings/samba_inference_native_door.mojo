@@ -41,7 +41,6 @@ from bindings.samba_admission_door import samba_admit_model_fields
 from training.samba_inference_run import _m3_shapes, _m3_names, _samba_host_ref
 # The stateless forward's route (lane restore-samba-resident-forward): the
 # resident forward by default, the stack program under the B-arm define.
-from training.neural_identical_experiments import IDN_SAMBA_PROGRAM_FORWARD
 from providers.python.samba_resident_pyapi_door import samba_resident_native_forward
 
 
@@ -540,21 +539,21 @@ def samba_forward(model: PythonObject, inputs: PythonObject, state: PythonObject
         # 5.3 ms (0.44x), AMD 8.8 -> 5.8 ms (0.66x); 0.8.55 paper column
         # NVIDIA 4.60 / AMD 6.10 ms. Lane x6 (2026-11-09) put every call on
         # the stack program without a measurement (candidate 4c2340386abc:
-        # NVIDIA 10.54 ms, MI325X 8.36 ms). -D MOJOLEARN_SAMBA_PROGRAM_FORWARD
-        # is the program B arm of the owed A/B. The stateful forward and the
+        # NVIDIA 10.54 ms, MI325X 8.36 ms). The stateful forward and the
         # step stay on the program (the resident session holds no carried
         # state); an image without the resident route (op 24 == 0) or a
         # dropout stack falls through to the program as well.
         # The route taken is recorded on the model (`_samba_forward_route`)
-        # so the A/B can prove which arm ran: 0.8.66 measured 10.58 ms while
-        # the resident forward still existed, and whether it was selected
+        # so a measurement can prove which route ran: 0.8.66 measured 10.58 ms
+        # while the resident forward still existed, and whether it was selected
         # there was never established.
         # TOMBSTONE: MOJOLEARN_SAMBA_PROGRAM_FORWARD (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-02-base; code recoverable at 7dd7ac668d.
         # Restore: git apply experiments/removed/MOJOLEARN_SAMBA_PROGRAM_FORWARD.expdel2-02-base.patch; record in docs/TOMBSTONES.md.
         # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
-        comptime if not IDN_SAMBA_PROGRAM_FORWARD:
-            if state is None:
-                output = samba_resident_native_forward(fields, config, entries, ids)
+        # TOMBSTONE: MOJOLEARN_SAMBA_PROGRAM_FORWARD (NOISE: B ran the stateless SambaStack.forward on SambaStackProgram; A/B abn9 NVIDIA L40S, samba-forward 4.55 -> 4.55 ms, 1.00 arm/base) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
+        # Restore: git apply experiments/removed/MOJOLEARN_SAMBA_PROGRAM_FORWARD.fx-verdicts7.patch; record in docs/TOMBSTONES.md.
+        if state is None:
+            output = samba_resident_native_forward(fields, config, entries, ids)
         if output is None:
             output = _samba_program_call(model, fields, config, key, ids, state, context)
             if state is None:

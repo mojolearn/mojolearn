@@ -114,6 +114,14 @@ PYSPY_ENV = "MOJOLEARN_BENCH_PYSPY"
 CALLGRIND_ENV = "MOJOLEARN_BENCH_CALLGRIND"
 PROFILE_SECONDS_ENV = "MOJOLEARN_BENCH_PROFILE_SECONDS"
 PROFILE_MAX_CALLS_ENV = "MOJOLEARN_BENCH_PROFILE_MAX_CALLS"
+#: ONE-CALL PROFILE (lane fx-profile-big-rows, 2026-11-20; CALL PROFILE RUNS ONLY, a board never sets it): for rows
+#: whose one call takes minutes (lle, isomap, dbscan istella: 250-1,000 s), `1` makes the forced phase's run ONE call
+#: in all, with the window around that FIRST scored call (range_open_one), and no warmup round (first_round,
+#: fit_warmup_skipped): one call per tool instead of warmup + first call + window. The call carries what a first call
+#: carries (module load, driver JIT cache, pool growth); the report sets its wall beside the stored board time. The
+#: window's open is also written at the open (`open-mark`, with the wall clock), so a run the job kills at its cap
+#: still says when the window opened. Fit or infer phases of the algos, classical and tree drivers.
+PROFILE_ONE_CALL_ENV = "MOJOLEARN_BENCH_PROFILE_ONE_CALL"
 #: the marker paths a window's open and close `stat` (they never exist; strace shows the failed call)
 STRACE_MARK_OPEN = "/callprof-window-open"
 STRACE_MARK_CLOSE = "/callprof-window-close"
@@ -302,6 +310,10 @@ def range_open(n_calls, phase=None, environ=None):
         _mark(STRACE_MARK_OPEN)
         rec = {"event": "open", "phase": phase, "calls": int(n_calls) - 1, "pid": os.getpid(), "perf": perf,
                "pyspy": spy is not None, "pyspy_error": spy_err, "shim": _shim_counts(env)}
+        if one_call(env):     # a capped one-call run is killed inside its call: the open must already be on disk
+            import time as _t
+            _window_line(env, {"event": "open-mark", "phase": phase, "calls": rec["calls"], "pid": rec["pid"],
+                               "t_unix": _t.time(), "pyspy": rec["pyspy"], "pyspy_error": spy_err})
         rec["callgrind"] = _callgrind(env, "open")          # last before the clock: nothing of the above collected
         parts["window"] = (env, rec, spy, time.perf_counter_ns())
     if parts["nvtx"] is not None:
@@ -332,19 +344,45 @@ def range_close():
         _window_line(env, end)
 
 
+def one_call(environ=None):
+    """True in a ONE-CALL call profile run (PROFILE_ONE_CALL_ENV `1`, with a forced count and a window or an NVTX
+    range to open). Never on a board (the variables are unset)."""
+    env = os.environ if environ is None else environ
+    return (env.get(PROFILE_ONE_CALL_ENV) or "").strip() == "1" and \
+        bool((env.get(FORCE_CALLS_ENV) or "").strip()) and \
+        bool((env.get(PROFILE_WINDOW_ENV) or "").strip() or (env.get(NVTX_RANGE_ENV) or "").strip())
+
+
+def first_round(environ=None):
+    """The first round a race driver sends: 1 in a one-call run (no warmup round), else 0 (the excluded warmup)."""
+    return 1 if one_call(environ) else 0
+
+
+def range_open_one(phase, environ=None):
+    """ONE-CALL run only: open the window around the FIRST scored call of `phase` when it is the forced phase (the
+    callers call it before that call's clock starts and range_close after it stops); False otherwise (no-op)."""
+    env = os.environ if environ is None else environ
+    if not one_call(env):
+        return False
+    return range_open(2, phase, env)      # the window counts n - 1 calls: this one
+
+
 def fit_warmup_skipped(environ=None):
     """True in an attribution run whose forced phase is an inference (FORCE_CALLS_PHASE_ENV `infer...`): the fit
     only builds the model the timed inference calls use, so its excluded warmup fit is skipped (a 15-minute fit
-    would otherwise run twice per run). Never on a board (the variables are unset)."""
+    would otherwise run twice per run); and in a one-call run (one_call: no warmup at all). Never on a board (the
+    variables are unset)."""
     env = os.environ if environ is None else environ
-    return bool((env.get(FORCE_CALLS_ENV) or "").strip()) and \
-        (env.get(FORCE_CALLS_PHASE_ENV) or "").strip().startswith("infer")
+    return (bool((env.get(FORCE_CALLS_ENV) or "").strip()) and
+            (env.get(FORCE_CALLS_PHASE_ENV) or "").strip().startswith("infer")) or one_call(env)
 
 
 def profile_calls(forced, first_ms, environ=None):
     """A forced run's call count: `forced`, raised in a call profile run (PROFILE_SECONDS_ENV) to the calls that fill
     that many seconds at the first scored call's time, capped by PROFILE_MAX_CALLS_ENV (default 100000)."""
     env = os.environ if environ is None else environ
+    if one_call(env):
+        return 1          # one call in all: the window holds the first scored call (range_open_one)
     raw = (env.get(PROFILE_SECONDS_ENV) or "").strip()
     try:
         secs = float(raw) if raw else 0.0

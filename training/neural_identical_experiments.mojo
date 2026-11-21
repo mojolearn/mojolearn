@@ -8,7 +8,6 @@ this revision. Full-workload NVIDIA/AMD A/B and host/Apple identity remain
 required before any promotion. The unmeasured arms were deleted 2026-11-15
 (expdel2-32-neural); the names stay as constants for their importers.
 """
-from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella term; owner another lane) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 311b50e05c.
@@ -135,17 +134,15 @@ comptime IDN_SAMBA_RESIDENT_STEP = _ENABLED
 # per-op route (grid ge123e6f9); the 0.8.55 paper column (NVIDIA L40S 4.60 ms,
 # AMD MI300X 6.10 ms) ran it. Lane x6 replaced it with SambaStackProgram on
 # 2026-11-09 without a measurement; candidate 4c2340386abc measured that
-# program at NVIDIA 10.54 ms (2.29x), MI325X 8.36 ms (1.48x). -D
-# MOJOLEARN_SAMBA_PROGRAM_FORWARD selects the program for the stateless
-# forward: the B arm of the owed A/B (samba-forward A vs B, NVIDIA and AMD;
-# bench/results/paper_compare/owed-pre0867.json). Read by the public door
-# (bindings/samba_inference_native_door.mojo), so the binding that compiles the
-# door takes the define. Not keyed on _ENABLED: it picks a route, the resident
-# image's own op 24 (IDN_SAMBA_RESIDENT_STEP) still decides availability.
+# program at NVIDIA 10.54 ms (2.29x), MI325X 8.36 ms (1.48x). The program
+# B arm of the stateless forward is deleted (A/B abn9, second tombstone
+# below); the resident image's own op 24 (IDN_SAMBA_RESIDENT_STEP) still
+# decides availability, and the program serves a stack without it.
 # TOMBSTONE: MOJOLEARN_SAMBA_PROGRAM_FORWARD (opt-in B arm of the owed samba-forward A/B, EXP:2399 pending; the measured resident forward stays the default) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 311b50e05c.
 # Restore: git apply experiments/removed/MOJOLEARN_SAMBA_PROGRAM_FORWARD.patch
 # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
-comptime IDN_SAMBA_PROGRAM_FORWARD = is_defined["MOJOLEARN_SAMBA_PROGRAM_FORWARD"]()
+# TOMBSTONE: MOJOLEARN_SAMBA_PROGRAM_FORWARD (NOISE: B ran the stateless SambaStack.forward on SambaStackProgram; A/B abn9 NVIDIA L40S, samba-forward 4.55 -> 4.55 ms, 1.00 arm/base) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
+# Restore: git apply experiments/removed/MOJOLEARN_SAMBA_PROGRAM_FORWARD.fx-verdicts7.patch; record in docs/TOMBSTONES.md.
 # attn_stash=recompute for the Samba training step only (lane grid-act-4,
 # 2026-10-08, IDENTICAL grid ge123e6f9, one run per arm, stash -> recompute
 # ms): samba-train-step NV 96.0 -> 79.5, AMD 147.2 -> 145.7 (0.905x) but

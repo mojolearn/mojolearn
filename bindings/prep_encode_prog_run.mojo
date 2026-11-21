@@ -79,8 +79,7 @@ struct EncProgram(Movable):
 
     def output(mut self, words: Int, region: Bool) raises -> Int:
         """`_Prog.output`: below OUT_MIN_WORDS, or when the door found no
-        output region on the binding (`region` False: the host column, or
-        -D MOJOLEARN_XPREP_FAST_OUT_OFF), the output is host words."""
+        output region on the binding (`region` False: the host column), the output is host words."""
         if words < OUT_MIN_WORDS or not region:
             return self.alloc(words)
         if self.out_words > 0:

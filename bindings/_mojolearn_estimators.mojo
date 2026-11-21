@@ -50,7 +50,7 @@ from core.py2mojo_linear import py2mojo_linear_flags
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
 
-from glm.linear_route_controls import OLS_FAST_NORMAL_EQ, RIDGE_FAST_RESIDENT
+from glm.linear_route_controls import RIDGE_FAST_RESIDENT
 
 from max.gpu.host import DeviceContext
 from core.neural_context import process_ctx
@@ -82,17 +82,10 @@ from decomposition.tsvd_resident_state import (
 )
 from glm.estimator import (
     ols_fit_host,
-    ols_fit_resident_host,
     ridge_fit_host,
-    ridge_fit_resident_host,
 )
-from glm.impl.gram_solve import linear_gram_fit_host
-from core.gram_multi_gpu import gram_plan_current
-from experiments.classical_identical_ideas.linear_controls import LINEAR_GRAM_SOLVE
 from decomposition.impl.linalg.detail.svd_full import pca_full_validate
-from glm.impl.center_device import col_sums_pair_device, scale_rows_device
-from glm.impl.ols_prep_device import ols_prep_device
-from glm.impl.lm_finish import lm_intercept
+from glm.impl.center_device import scale_rows_device
 from decomposition.impl.pca_owner import pca_randomized_owned
 from decomposition.pca_ops_entry_device import PCA_OPS_DEVICE_API, pca_ops_device_v1, pca_fit_owned_device_run
 from core.decomp_entry_table_pca import pca_ops_publish
@@ -627,66 +620,12 @@ def ols_fit_binding(
     return PythonObject(0)
 
 
-def ols_normal_eq_default_binding() raises -> PythonObject:
-    """True when this build routes LinearRegression.fit to the normal
-    equations by default (`OLS_FAST_NORMAL_EQ`, lane apple-fast-olsne)."""
-    return PythonObject(OLS_FAST_NORMAL_EQ)
-
-
-def ols_fit_resident_binding(
-    x_addr: PythonObject,
-    y_addr: PythonObject,
-    coef_addr: PythonObject,
-    mu_addr: PythonObject,
-    ymean_addr: PythonObject,
-    params: PythonObject,
-) raises -> PythonObject:
-    """Lane apple-fast-olsne: the unweighted normal-equations fit with X
-    and y uploaded once (glm/estimator.mojo `ols_fit_resident_host`).
-    params: n_rows, n_features, center (0/1). With center, mu (float32
-    [n_features]) and ymean (float64 [1]) are written. Returns 0."""
-    comptime if not OLS_FAST_NORMAL_EQ:
-        raise Error("ols_fit_resident: only the FAST Apple build (OLS_FAST_NORMAL_EQ) has this route")
-    if len(params) != 3:
-        raise Error("ols_fit_resident: params must contain n_rows, n_features, center")
-    var xp = _f32_ptr(Int(py=x_addr))
-    var yp = _f32_ptr(Int(py=y_addr))
-    var wp = _f32_ptr(Int(py=coef_addr))
-    var mp = _f32_ptr(Int(py=mu_addr))
-    var ymp = _f64_ptr(Int(py=ymean_addr))
-    var nr = Int(py=params[0])
-    var nf = Int(py=params[1])
-    var center = Int(py=params[2]) != 0
-    if nr <= 0 or nf <= 0:
-        raise Error("ols_fit_resident: n_rows and n_features must be positive")
-    with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        ols_fit_resident_host(ctx, xp, yp, wp, mp, ymp, nr, nf, center)
-        ctx.synchronize()
-    return PythonObject(0)
 # TOMBSTONE: MOJOLEARN_OLS_FAST_DEVICE_CENTER (DROPPED-semantics) deleted 2026-10-03 by dd83da010; code recoverable at dd83da010^.
 # Restore: git apply experiments/removed/MOJOLEARN_OLS_FAST_DEVICE_CENTER.patch; record in docs/TOMBSTONES.md.
 
 
-def lm_classical_stats_binding() raises -> PythonObject:
-    # TOMBSTONE: MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-01-base; code recoverable at d61f68e1ea.
-    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR.expdel2-01-base.patch
-    return PythonObject(0)
-
-
-def lm_col_sums_pair_binding(x: PythonObject, y: PythonObject, sx: PythonObject, sy: PythonObject, params: PythonObject) raises -> PythonObject:
-    if len(params) != 2:
-        raise Error("lm_col_sums_pair: params must contain rows, cols")
-    var xa = Int(py=x)
-    var ya = Int(py=y)
-    var sxa = Int(py=sx)
-    var sya = Int(py=sy)
-    var rows = Int(py=params[0])
-    var cols = Int(py=params[1])
-    with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        col_sums_pair_device(ctx, xa, ya, sxa, sya, rows, cols)
-    return PythonObject(0)
+# TOMBSTONE: MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-01-base; code recoverable at d61f68e1ea.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR.expdel2-01-base.patch
 
 
 def lm_col_sums_binding(x_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -723,21 +662,6 @@ def lm_means_finish_binding(
         return PythonObject(0)
     lm_means_finish_run(Int(py=sums_addr), Int(py=mean64_addr), Int(py=mean32_addr), nc, nr, weighted, t)
     return PythonObject(0)
-
-
-def lm_intercept_binding(
-    xmean_addr: PythonObject, coef_addr: PythonObject, params: PythonObject, y_mean: PythonObject,
-) raises -> PythonObject:
-    """Lane py-runtime: y_mean - math.fsum(xmean_j * coef_j) over float32
-    xmean and coef (glm/impl/lm_finish.mojo; it was Python's
-    `_set_intercept`). params: cols. Returns the binary64 intercept."""
-    if len(params) != 1:
-        raise Error("lm_intercept: params must contain cols")
-    var nc = Int(py=params[0])
-    var ym = Float64(py=y_mean)
-    if nc <= 0:
-        return PythonObject(ym - 0.0)
-    return PythonObject(lm_intercept(_f32_ptr(Int(py=xmean_addr)), _f32_ptr(Int(py=coef_addr)), nc, ym))
 
 
 def pca_fit_owned_binding(
@@ -838,33 +762,6 @@ def pca_fit_randomized_binding(
     return PythonObject(noise)
 
 
-def lm_ols_prep_binding(addresses: PythonObject, params: PythonObject) raises -> PythonObject:
-    """LinearRegression / Ridge general-route preparation in one call:
-    addresses = [x, y, w (0: none), work_x, work_y, xmean64, xmean32,
-    ymean64, ymean32]; params = [rows, cols, intercept, means_mode (0
-    separate, 1 paired, 2 weighted)]. work_x / work_y receive X and y
-    centered by their means (with intercept) and row-scaled by sqrt(w)
-    (with weights); the means are written with intercept. Returns 0."""
-    # ne2-g-linear (N403): one crossing for what was up to fourteen.
-    if len(addresses) != 9 or len(params) != 4:
-        raise Error("lm_ols_prep: 9 addresses (x, y, w, work_x, work_y, xm64, xm32, ym64, ym32) and "
-                    "params rows, cols, intercept, means_mode required")
-    var a = List[Int](capacity=9)
-    for i in range(9):  # driver-loop: over the nine fixed address slots of the call
-        a.append(Int(py=addresses[i]))
-    var rows = Int(py=params[0])
-    var cols = Int(py=params[1])
-    var intercept = Int(py=params[2]) != 0
-    var mode = Int(py=params[3])
-    for i in range(9):  # driver-loop: over the nine fixed address slots of the call
-        if a[i] == 0 and i != 2 and (intercept or i < 5):
-            raise Error("lm_ols_prep: null buffer address")
-    with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        ols_prep_device(ctx, a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], rows, cols, intercept, mode)
-    return PythonObject(0)
-
-
 def lm_center_binding(x_addr: PythonObject, mu_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
     """Lane hr-small-passes: out = x - mu per column in float32 on the
     device, subnormals flushed. params: rows, cols. Returns 0."""
@@ -952,22 +849,6 @@ def ols_predict_binding(
     return PythonObject(0)
 
 
-def ols_predict_wide_binding(
-    x_addr: PythonObject, coef_addr: PythonObject, out_addr: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """Legacy address door; shares the typed prediction implementation."""
-    if len(params) != 3:
-        raise Error("ols_predict_wide: params must contain n_rows, n_features, intercept")
-    var xp = _f32_ptr(Int(py=x_addr))
-    var cp = _f32_ptr(Int(py=coef_addr))
-    var dst = _f64_ptr(Int(py=out_addr))
-    var request = LinearPredictRequest(Int(xp), Int(cp), Int(dst),
-        Int(py=params[0]), Int(py=params[1]), Float64(py=params[2]), True)
-    with GILReleased(Python()):
-        _ = linear_predict_device(request)
-    return PythonObject(0)
-
-
 def ridge_fit_binding(
     x_addr: PythonObject,
     y_addr: PythonObject,
@@ -991,58 +872,8 @@ def ridge_fit_binding(
     return PythonObject(0)
 
 
-def linear_gram_solve_default_binding() raises -> PythonObject:
-    """True when this build has MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE
-    (lane/classical-structural): LinearRegression.fit and Ridge.fit try the
-    resident centered-Gram fit `linear_gram_fit` first."""
-    return PythonObject(LINEAR_GRAM_SOLVE)
-
-
-def linear_gram_fit_binding(
-    x_addr: PythonObject,
-    y_addr: PythonObject,
-    coef_addr: PythonObject,
-    mu_addr: PythonObject,
-    ymean_addr: PythonObject,
-    params: PythonObject,
-) raises -> PythonObject:
-    """MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE (glm/impl/gram_solve.mojo): OLS
-    (alpha 0) or Ridge (alpha > 0) by the resident centered Gram and the
-    IDENTICAL Cholesky, X and y uploaded once. params: n_rows, n_features,
-    alpha, center (0/1). Returns 0 with coef (and, with center, mu float32
-    [n_features] and ymean float64 [1]) written, or 1 with nothing written
-    when the Gram is not trusted: the caller then runs its incumbent route."""
-    # TOMBSTONE: MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF (old path; the Gram solve is the recorded winner, EXP:2015) deleted 2026-11-15 by lane/expdel2-01-base; code recoverable at 501c279651.
-    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF.expdel2-01-base.patch
-    comptime if not LINEAR_GRAM_SOLVE:
-        raise Error("linear_gram_fit: this build lacks the route (FAST)")
-    if len(params) != 4:
-        raise Error("linear_gram_fit: params must contain n_rows, n_features, alpha, center")
-    var xp = _f32_ptr(Int(py=x_addr))
-    var yp = _f32_ptr(Int(py=y_addr))
-    var wp = _f32_ptr(Int(py=coef_addr))
-    var mp = _f32_ptr(Int(py=mu_addr))
-    var ymp = _f64_ptr(Int(py=ymean_addr))
-    var nr = Int(py=params[0])
-    var nf = Int(py=params[1])
-    var alpha = Float32(Float64(py=params[2]))
-    var center = Int(py=params[3]) != 0
-    if nr <= 0 or nf <= 0:
-        raise Error("linear_gram_fit: n_rows and n_features must be positive")
-    if alpha > Float32(0.0) and nf == 1:
-        # Ridge at one column selects ridgeSVD in the incumbent (refused by
-        # name there); the same answer here: the caller's route decides.
-        return PythonObject(1)
-    var status = 1
-    # The Gram family's device plan, read once at this entry
-    # (docs/plans/MULTI_GPU_ENCAPSULATION_20261103.md); one device unless a
-    # parallel driver (`fit_gram_estimator(..., devices=...)`) bound one.
-    var plan = gram_plan_current()
-    with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        status = linear_gram_fit_host(plan, ctx, xp, yp, wp, mp, ymp, nr, nf, alpha, center)
-        ctx.synchronize()
-    return PythonObject(status)
+# TOMBSTONE: MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF (old path; the Gram solve is the recorded winner, EXP:2015) deleted 2026-11-15 by lane/expdel2-01-base; code recoverable at 501c279651.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF.expdel2-01-base.patch
 
 
 def ridge_resident_default_binding() raises -> PythonObject:
@@ -1051,40 +882,8 @@ def ridge_resident_default_binding() raises -> PythonObject:
     return PythonObject(RIDGE_FAST_RESIDENT)
 
 
-def ridge_fit_resident_binding(
-    x_addr: PythonObject,
-    y_addr: PythonObject,
-    coef_addr: PythonObject,
-    mu_addr: PythonObject,
-    ymean_addr: PythonObject,
-    params: PythonObject,
-) raises -> PythonObject:
-    """Lane apple-fast-ridgespeed: Ridge's fit with X and y uploaded once
-    (glm/estimator.mojo `ridge_fit_resident_host`). params: n_rows,
-    n_features, alpha, center (0/1). With center, mu (float32 [n_features])
-    and ymean (float64 [1]) are written. Returns 0."""
-    # TOMBSTONE: MOJOLEARN_RIDGE_RESIDENT_OFF (old path of the FAST Apple resident Ridge fit, EXP:247 KEPT; NVIDIA/AMD never owed: FAST is Apple only) deleted 2026-11-15 by lane/expdel2-01-base; code recoverable at 76bf633f92.
-    # Restore: git apply experiments/removed/MOJOLEARN_RIDGE_RESIDENT_OFF.expdel2-01-base.patch
-    comptime if not RIDGE_FAST_RESIDENT:
-        raise Error("ridge_fit_resident: only the FAST Apple build has this route")
-    if len(params) != 4:
-        raise Error("ridge_fit_resident: params must contain n_rows, n_features, alpha, center")
-    var xp = _f32_ptr(Int(py=x_addr))
-    var yp = _f32_ptr(Int(py=y_addr))
-    var wp = _f32_ptr(Int(py=coef_addr))
-    var mp = _f32_ptr(Int(py=mu_addr))
-    var ymp = _f64_ptr(Int(py=ymean_addr))
-    var nr = Int(py=params[0])
-    var nf = Int(py=params[1])
-    var alpha = Float32(Float64(py=params[2]))
-    var center = Int(py=params[3]) != 0
-    if nr <= 0 or nf <= 0:
-        raise Error("ridge_fit_resident: n_rows and n_features must be positive")
-    with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        ridge_fit_resident_host(ctx, xp, yp, wp, mp, ymp, nr, nf, alpha, center)
-        ctx.synchronize()
-    return PythonObject(0)
+# TOMBSTONE: MOJOLEARN_RIDGE_RESIDENT_OFF (old path of the FAST Apple resident Ridge fit, EXP:247 KEPT; NVIDIA/AMD never owed: FAST is Apple only) deleted 2026-11-15 by lane/expdel2-01-base; code recoverable at 76bf633f92.
+# Restore: git apply experiments/removed/MOJOLEARN_RIDGE_RESIDENT_OFF.expdel2-01-base.patch
 
 
 # TOMBSTONE: ridge_fit_multi / ridge_predict_multi Python exports (no live caller: MultiOutputRegressor's
@@ -1481,20 +1280,16 @@ def build__mojolearn_estimators() -> PythonObject:
         m.def_function[tsvd_transform_resident_binding]("tsvd_transform_resident")
         m.def_function[tsvd_inverse_transform_resident_binding]("tsvd_inverse_transform_resident")
         m.def_function[ols_fit_binding]("ols_fit")
-        m.def_function[ols_fit_resident_binding]("ols_fit_resident")
-        m.def_function[ols_normal_eq_default_binding]("ols_normal_eq_default")
+        # TOMBSTONE: dead Python exports linear_gram_fit, linear_gram_solve_default, lm_classical_stats, lm_col_sums_pair, lm_intercept, lm_ols_prep, ols_fit_resident, ols_normal_eq_default, ols_predict_wide, ridge_fit_resident (no caller: the linear owner reaches these routes through the published native entry table, core/linear_entry_table.mojo; their last retention, the classical connection cells, went with lane pilot-ridge-device) deleted 2026-11-20 by lane pilot-ridge-device; code recoverable at 7051aa1897.
+        # Restore: git apply experiments/removed/dead_entries_estimators_linear_cells.patch
         m.def_function[lm_col_sums_binding]("lm_col_sums")
-        m.def_function[lm_classical_stats_binding]("lm_classical_stats")
-        m.def_function[lm_col_sums_pair_binding]("lm_col_sums_pair")
         m.def_function[lm_means_finish_binding]("lm_means_finish")
-        m.def_function[lm_intercept_binding]("lm_intercept")
         # TOMBSTONE: estimators_py2mojo_cluster, pca_rank_finish, pca_fast_pool_on (dead native entries: constant probes nothing reads; pca_rank_finish runs inside the PCA owners) deleted 2026-10-26 by 65f812332; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_estimators.patch
         m.def_function[pca_fit_owned_binding]("pca_fit_owned")
         m.def_function[pca_fit_randomized_binding]("pca_fit_randomized")
         m.def_function[lm_center_binding]("lm_center")
         m.def_function[lm_scale_rows_binding]("lm_scale_rows")
-        m.def_function[lm_ols_prep_binding]("lm_ols_prep")
         m.def_function[linear_predict_native_api_v1_binding]("linear_predict_native_api_v1")
         m.def_function[pca_native_api_v1_binding]("pca_native_api_v1")
         m.def_function[kde_native_api_v1_binding]("kde_native_api_v1")
@@ -1505,12 +1300,8 @@ def build__mojolearn_estimators() -> PythonObject:
         m.def_function[linear_fit_native_api_v1_binding]("linear_fit_native_api_v1")
         m.def_function[ols_predict_binding]("ols_predict")
         m.def_function[qn_proba_binding]("qn_proba")
-        m.def_function[ols_predict_wide_binding]("ols_predict_wide")
         m.def_function[ridge_fit_binding]("ridge_fit")
-        m.def_function[ridge_fit_resident_binding]("ridge_fit_resident")
         m.def_function[ridge_resident_default_binding]("ridge_resident_default")
-        m.def_function[linear_gram_fit_binding]("linear_gram_fit")
-        m.def_function[linear_gram_solve_default_binding]("linear_gram_solve_default")
         # TOMBSTONE: ridge_fit_multi / ridge_predict_multi registrations deleted 2026-11-11 by lane
         # calltable-base-helpers (see above); code recoverable at 17b0a91b04.
         m.def_function[qn_decision_function_binding]("qn_decision_function")

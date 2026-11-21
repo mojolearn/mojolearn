@@ -309,6 +309,10 @@ class LinearRegression(_NumericModeMixin):
     #: This family's binding, for `NumericModeMixin._bind`.
     _BINDING = "_mojolearn_estimators"
 
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
+
     #: The methods below are one call each into the compiled classical owner
     #: (bindings/classical_native_pack.mojo), connected once at import. It
     #: validates the inputs, chooses the route, runs the kernels and stores
@@ -321,8 +325,8 @@ class LinearRegression(_NumericModeMixin):
         super().__init_subclass__(**kw)
         _native_classical_bridge.register_subclass(cls, globals().get("_CLASSICAL"))
 
-    def __init__(self, *, fit_intercept=True, numeric_mode=None):
-        _native_classical(self, "initialize", (fit_intercept, numeric_mode), _CLASSICAL)
+    def __init__(self, *, fit_intercept=True, numeric_mode=None, device=None):
+        _native_classical(self, "initialize", (fit_intercept, numeric_mode, device), _CLASSICAL)
 
     def fit(self, X, y, sample_weight=None):
         """Fit the linear model.
@@ -488,6 +492,10 @@ class Ridge(_NumericModeMixin):
     #: This family's binding, for `NumericModeMixin._bind`.
     _BINDING = "_mojolearn_estimators"
 
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
+
     #: The methods below are one call each into the compiled classical owner
     #: (bindings/classical_native_pack.mojo), connected once at import. It
     #: validates the inputs, chooses the route, runs the kernels and stores
@@ -501,9 +509,12 @@ class Ridge(_NumericModeMixin):
         _native_classical_bridge.register_subclass(cls, globals().get("_CLASSICAL"))
 
     def __init__(self, *, alpha=1.0, solver="auto", fit_intercept=True,
-                 normalize=False, numeric_mode=None):
+                 normalize=False, numeric_mode=None, device=None):
         # Stored verbatim (scikit-learn's convention); fit checks them.
-        _native_classical(self, "initialize", (alpha, solver, fit_intercept, normalize, numeric_mode), _CLASSICAL)
+        # `device` alone is checked here: an unknown value, and 'gpu' on an
+        # installation without a GPU set, are refused in words. None is this
+        # installation's device.
+        _native_classical(self, "initialize", (alpha, solver, fit_intercept, normalize, numeric_mode, device), _CLASSICAL)
 
     def _validate_params(self):
         """The constructor checks fit runs, for routes that fit Ridge's
@@ -1108,6 +1119,10 @@ __getattr__ = _lazy_exports("linear_model")
 # of LinearRegression and Ridge (and their explicit host classes) is one call
 # into it.
 _native_classical, _CLASSICAL = _native_classical_bridge.connect_public(Ridge, LinearRegression)
+# The CPU entry family of `device="cpu"`, connected once at import beside the
+# device family: on a GPU installation both tables exist in the process and an
+# estimator's route picks one, once.
+_native_classical_bridge.connect_cpu_device(_CLASSICAL)
 
 
 # The compiled QNRegressor owner, connected once at import: fit, predict and

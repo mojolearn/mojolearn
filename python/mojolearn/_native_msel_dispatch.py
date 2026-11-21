@@ -73,8 +73,8 @@ def connect(context, package):
     arg = lambda at: ('arg', at)
     const = lambda value: ('constant', value)
     for cls, names, fit in (() if linear_model is None else (  # glue: two native linear schemas
-            (linear_model.LinearRegression, ('fit_intercept', 'numeric_mode'), 'ols_fit'),
-            (linear_model.Ridge, ('alpha', 'solver', 'fit_intercept', 'normalize', 'numeric_mode'), 'ridge_fit'))):
+            (linear_model.LinearRegression, ('fit_intercept', 'numeric_mode', 'device'), 'ols_fit'),
+            (linear_model.Ridge, ('alpha', 'solver', 'fit_intercept', 'normalize', 'numeric_mode', 'device'), 'ridge_fit'))):
         register(cls, linear_model._native_classical, linear_model._CLASSICAL, names, 'initialize', {
             'fit': (fit, (arg(0), arg(1), const(None))),
             'predict': ('predict_public', (arg(0),)),

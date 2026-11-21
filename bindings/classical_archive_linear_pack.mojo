@@ -33,6 +33,11 @@ def archive_linear_pack(cls: PythonObject, plan: NativeLinearArchivePlan,
     var nk = classical_keys()
     py_setitem(fields, nk[].k_fit_intercept, plan.fit_intercept)
     py_setitem(fields, nk[].k_numeric_mode, PythonObject(plan.mode))
+    # `device` is a constructor parameter, not model state: the file does not
+    # carry it. A loaded model takes the default, None (this installation's
+    # device); the explicit Host* classes (mojolearn.host_model) run on the
+    # CPU by class.
+    py_setitem(fields, "device", PythonObject(None))
     py_setitem(fields, nk[].k_coef_, coefficients)
     py_setitem(fields, nk[].k_intercept_, plan.intercept)
     py_setitem(fields, nk[].k_n_features_in_, plan.features)

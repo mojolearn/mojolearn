@@ -65,19 +65,27 @@ def linear_vendor_name(code: Int) raises -> String:
 
 
 def linear_parameter_names(ridge: Bool) -> List[String]:
+    # Sorted, as scikit-learn's get_params returns them.
     if ridge:
-        return ["alpha", "fit_intercept", "normalize", "numeric_mode", "solver"]
-    return ["fit_intercept", "numeric_mode"]
+        return ["alpha", "device", "fit_intercept", "normalize", "numeric_mode", "solver"]
+    return ["device", "fit_intercept", "numeric_mode"]
 
 
 def linear_constructor_names(ridge: Bool) -> List[String]:
+    # Constructor order; `device` is the last argument of both constructors
+    # (`linear_constructor_device` is its index).
     if ridge:
-        return ["alpha", "solver", "fit_intercept", "normalize", "numeric_mode"]
-    return ["fit_intercept", "numeric_mode"]
+        return ["alpha", "solver", "fit_intercept", "normalize", "numeric_mode", "device"]
+    return ["fit_intercept", "numeric_mode", "device"]
+
+
+def linear_constructor_device(ridge: Bool) -> Int:
+    """The index of `device` among the constructor arguments."""
+    return 5 if ridge else 2
 
 
 def linear_constructor_check(count: Int, ridge: Bool) raises:
-    if count != (5 if ridge else 2):
+    if count != (6 if ridge else 3):
         raise Error("TypeError: native linear constructor requires its complete configuration")
 
 
@@ -98,7 +106,7 @@ def linear_parameter_index(key: String, ridge: Bool) -> Int:
 def linear_parameter_refusal(key: String, index: Int, shown: String,
     estimator: String, ridge: Bool) raises:
     if index < 0:
-        var valid = "['alpha', 'fit_intercept', 'normalize', 'numeric_mode', 'solver']" if ridge else "['fit_intercept', 'numeric_mode']"
+        var valid = "['alpha', 'device', 'fit_intercept', 'normalize', 'numeric_mode', 'solver']" if ridge else "['device', 'fit_intercept', 'numeric_mode']"
         raise Error("Invalid parameter " + shown + " for estimator " + estimator + ". Valid parameters are: " + valid + ".")
     if key.find("__") >= 0:
         raise Error("AttributeError: scalar parameter has no set_params")

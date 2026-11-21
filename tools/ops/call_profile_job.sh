@@ -47,14 +47,31 @@
 # chain: two apt-gets at once fail on the dpkg lock, which is what lost strace on the 2026-11-17 run); the
 # post-processing of every row and tool runs at once over the allocated cores. job/cores.log: busy cores of total.
 #
+# LONG ROWS (lane fx-profile-big-rows, 2026-11-20): a rows-file line with `ms=<stored board ms>` of at least 10 s
+# (tools/ops/call_profile_rows_big.tsv: lle, isomap, dbscan, ... at 16-1,050 s a call) is profiled in ONE call per
+# pass: MOJOLEARN_BENCH_PROFILE_ONE_CALL=1 (tools/bench_board_small_rows.py one_call: no warmup round, the window
+# around the first scored call), py-spy at CP_PYSPY_LONG_RATE (20 Hz), no time pass (the shim pass's wall stands for
+# it) and no callgrind. Each pass runs under the row's cap (`cap=`, else 2 x its stored seconds + 300 s): at the cap
+# the job SIGINTs py-spy and nsys so they write what they collected, then kills the pass's whole process tree (the
+# race drivers run in their own sessions) and writes run.capped; the report marks the row CAPPED (exit 8), never a
+# silent timeout. The driver's own round ceiling is set above the cap (--race-round-seconds), so the job's cap fires
+# first. The plan prints the estimate (stored ms x passes, and the sum of the caps) before any row runs:
+#
+#   tools/nvidia_central.sh submit measure --cap 210 --results box-out/callprof-big \
+#       --env CP_ROWS_FILE=tools/ops/call_profile_rows_big.tsv --env CP_PASSES=pyspy,nsys,shim \
+#       --env CP_REPORT_TOP=15 --env CP_MANIFEST=<results dir>/job/wheel-manifest-candidate.json \
+#       tools/ops/call_profile_job.sh
+#
 # Pod minutes: `python3 tools/ops/call_profile.py estimate [--rows-file F]`, printed at the plan phase (target < 30).
 # Knobs: CP_ROWS_FILE, CP_ROWS (comma list of row names), CP_PASSES (default time,pyspy,nsys,shim,callgrind), CP_PARTS
 # (default tools,plan,install,run,post,report; the report reads whatever the results dir holds), CP_<PASS>_SECONDS,
-# CP_PYSPY_RATE (250), CP_PERF_FREQ (999), CP_CALLGRIND_CALLS (300), CP_CALLGRIND_GB (6), CP_CALLGRIND_TIMEOUT (1800 s),
+# CP_PYSPY_RATE (250), CP_PYSPY_LONG_RATE (20, long rows), CP_CAP_GRACE_S (600: what py-spy and nsys get to write
+# after a cap), CP_REPORT_TOP (40 frames per top table), CP_KERNEL_REGEX (`.`: the GPU kernels nsys names), CP_PERF_FREQ (999), CP_CALLGRIND_CALLS (300), CP_CALLGRIND_GB (6), CP_CALLGRIND_TIMEOUT (1800 s),
 # CP_MANIFEST (the candidate's wheel-manifest json; default: the newest sibling results dir's
 # job/wheel-manifest-candidate.json: used to install the venv when it is missing), PC_CACHE_ROOT, PC_DATA_ROOT,
 # PC_GPU_TOKEN (L40S), PC_ALLOW_HW_DIFF. EXIT: 0 every row has its wall, its nsys counts and at least one
-# function-level source (py-spy, callgrind, the shim or perf); 6 a row lacks one; 7 a row lacks a wall time; 2 refused
+# function-level source (py-spy, callgrind, the shim or perf); 6 a row lacks one; 7 a row lacks a wall time; 8 a row
+# hit its cap (CAPPED, reported with what was collected); 2 refused
 # to start, 3 wrong box, 4 no venv, 5 no plan, 124 terminated. Tests: tools/test_call_profile.py.
 set -uo pipefail
 JOB_NAME=call-profile
@@ -73,6 +90,7 @@ cp_preflight() {   # results dir, tree: PREFLIGHT lines; 0 when the job would st
     local parts=",${CP_PARTS:-tools,plan,install,run,post,report},"
     local apy="${PC_CACHE_ROOT:-/root/pc-cache}/venv-candidate/bin/python" py=${CP_PYTHON:-python3}
     rows=${CP_ROWS_FILE:-$tree/tools/ops/call_profile_rows.tsv}
+    [ -e "$rows" ] || [ "${rows#/}" != "$rows" ] || rows=$tree/$rows      # a relative CP_ROWS_FILE names a tree file
     if [ -s "$rows" ]; then echo "PREFLIGHT ok rows file $rows"
     else echo "PREFLIGHT FAIL no rows file $rows (CP_ROWS_FILE)"; fails=$(( fails + 1 )); fi
     man=${CP_MANIFEST:-}
@@ -142,6 +160,7 @@ CACHE_ROOT=${PC_CACHE_ROOT:-/root/pc-cache}
 TOKEN=${PC_GPU_TOKEN:-L40S}
 RECIPES="$TREE/bench/results/paper_compare/recipes-$V.json"
 ROWS_FILE=${CP_ROWS_FILE:-$TREE/tools/ops/call_profile_rows.tsv}
+[ "${ROWS_FILE#/}" != "$ROWS_FILE" ] || ROWS_FILE=$TREE/$ROWS_FILE     # a relative CP_ROWS_FILE names a tree file
 IFS=',' read -r -a PASSES <<< "${CP_PASSES:-time,pyspy,nsys,shim,callgrind}"
 PARTS=",${CP_PARTS:-tools,plan,install,run,post,report},"
 part() { [[ "$PARTS" == *",$1,"* ]]; }
@@ -153,6 +172,8 @@ declare -A SECS=([time]=${CP_TIME_SECONDS:-3} [pyspy]=${CP_PYSPY_SECONDS:-10} [p
 has_pass() { [[ " ${PASSES[*]} " == *" $1 "* ]]; }
 FREQ=${CP_PERF_FREQ:-999}
 RATE=${CP_PYSPY_RATE:-250}
+LONG_RATE=${CP_PYSPY_LONG_RATE:-20}
+CAP_GRACE=${CP_CAP_GRACE_S:-600}
 CG_CALLS=${CP_CALLGRIND_CALLS:-300}
 RANGE=attr-calls     # the NVTX range name: tools/ops/attribution_report.py nsys reads the window under this name
 VENV="$CACHE_ROOT/venv-candidate"
@@ -353,19 +374,73 @@ say "symbols: $(awk -F'\t' 'NR>1 {n++; if ($2=="STRIPPED") s++} END {printf "%d 
 # ---- run (GPU, serial; then the callgrind passes of every row at once) ---------------------------------------------
 # one pass of one row: the forced scored run of the row's phase with its window, under the pass's tool. A pass whose
 # tool this pod cannot run writes run.skipped (not an error: the report needs one function-level source per row).
-run_pass() {   # row, race id, phase, pass
-    local row=$1 rid=$2 ph=$3 pass=$4 d="$RES/rows/$1/$4" t0=$SECONDS rc err cache="$CACHE_ROOT/c1"
+tree_pids() {   # pid: the pid and every descendant (by parent pid: the race drivers and py-spy run in own sessions)
+    local all kids k
+    all=$(ps -e -o pid=,ppid= 2> /dev/null)
+    kids=$1
+    local out=$1 next
+    while [ -n "$kids" ]; do
+        next=
+        for k in $kids; do
+            next="$next $(awk -v p="$k" '$2 == p {print $1}' <<< "$all")"
+        done
+        kids=$(echo $next)
+        [ -n "$kids" ] && out="$out $kids"
+    done
+    echo "$out"
+}
+cap_stop() {   # pid, pass dir, pass, cap s: stop a pass at its cap and keep what its tools collected
+    local pid=$1 d=$2 pass=$3 cap=$4 pids p n
+    pids=$(tree_pids "$pid")
+    # py-spy writes its raw file on SIGINT; nsys stops its capture, ends the app and writes its report on SIGINT
+    for p in $pids; do
+        [ "$(cat "/proc/$p/comm" 2> /dev/null)" = py-spy ] && kill -INT "$p" 2> /dev/null
+    done
+    [ "$pass" = nsys ] && kill -INT "$pid" 2> /dev/null
+    n=0
+    while [ $n -lt "$CAP_GRACE" ]; do
+        local live=0
+        for p in $pids; do
+            case "$(cat "/proc/$p/comm" 2> /dev/null)" in py-spy|nsys) kill -0 "$p" 2> /dev/null && live=1 ;; esac
+        done
+        [ "$pass" = nsys ] && kill -0 "$pid" 2> /dev/null && live=1
+        [ $live = 0 ] && break
+        sleep 5; n=$(( n + 5 ))
+    done
+    pids="$pids $(tree_pids "$pid")"
+    for p in $pids; do kill -TERM "$p" 2> /dev/null; done
+    sleep 20
+    for p in $pids; do kill -KILL "$p" 2> /dev/null; done
+    printf '{"cap_s": %d, "elapsed_s": %d, "t_capped_unix": %s, "grace_s": %d, "killed": "%s"}\n' "$cap" \
+        "$(( SECONDS - ${PASS_T0:-$SECONDS} ))" "$(date +%s)" "$n" "$(echo $pids | tr ' ' ',')" > "$d/run.capped"
+}
+run_pass() {   # row, race id, phase, pass, cap s (0: none), long (1: one call per pass)
+    local row=$1 rid=$2 ph=$3 pass=$4 cap=${5:-0} long=${6:-0} d="$RES/rows/$1/$4" t0=$SECONDS rc err cache="$CACHE_ROOT/c1"
     rm -rf "$d"; mkdir -p "$d"
     echo "$rid" > "$d/ids"
     local envs=(MOJOLEARN_BENCH_FORCE_CALLS=20 MOJOLEARN_BENCH_FORCE_CALLS_PHASE="$ph"
                 MOJOLEARN_BENCH_PROFILE_WINDOW="$d/window.jsonl" MOJOLEARN_BENCH_PROFILE_SECONDS="${SECS[$pass]}")
+    local rate=$RATE extra=()
+    if [ "$long" = 1 ]; then
+        # one call per pass: no warmup, the window around the first scored call (bench_board_small_rows one_call)
+        envs=(MOJOLEARN_BENCH_FORCE_CALLS=1 MOJOLEARN_BENCH_FORCE_CALLS_PHASE="$ph" MOJOLEARN_BENCH_PROFILE_ONE_CALL=1
+              MOJOLEARN_BENCH_PROFILE_WINDOW="$d/window.jsonl")
+        rate=$LONG_RATE
+    fi
+    if [ "$cap" -gt 0 ]; then
+        # the driver's own round ceiling sits above the job's cap, so the cap (and its CAPPED record) fires first
+        printf '{"round_seconds": {"%s": %d}}\n' "$rid" $(( cap + CAP_GRACE + 600 )) > "$d/round-seconds.json"
+        extra=(--race-round-seconds "$d/round-seconds.json")
+    fi
     local pre=()
     skip() { echo "$1" > "$d/run.skipped"; say "run $row $pass SKIPPED: $1"; }
     case $pass in
-        time) ;;
+        time)
+            [ "$long" = 1 ] && { skip "long row: one call per tool; the shim pass's wall stands for the time pass"; return 0; } ;;
         pyspy)     # the harness attaches py-spy to the race process at the window's open and stops it at the close
             [ -n "$PYSPY" ] || { skip "py-spy absent (logs/pip-pyspy.log)"; return 0; }
-            envs+=(MOJOLEARN_BENCH_PYSPY="$PYSPY,$d/pyspy.raw,$RATE") ;;
+            envs+=(MOJOLEARN_BENCH_PYSPY="$PYSPY,$d/pyspy.raw,$rate")
+            echo "$rate" > "$d/rate" ;;
         perf)      # perf outside, enabled and disabled by the harness through the FIFO: only the window's samples
             [ -n "$PERF_OK" ] || { skip "perf events refused here (job/tools.txt)"; return 0; }
             mkfifo "$d/ctl" "$d/ack"
@@ -382,6 +457,7 @@ run_pass() {   # row, race id, phase, pass
             [ -n "$SHIM_SO" ] || { skip "timing shim did not build (logs/cc-callprof_shim.log)"; return 0; }
             envs+=(MOJOLEARN_BENCH_CALLPROF_SHIM="$SHIM_SO" LD_PRELOAD="$SHIM_SO") ;;
         callgrind) # every process of the race under valgrind's core; instrumented only inside the window
+            [ "$long" = 1 ] && { skip "long row: no callgrind (one call of minutes runs about 50x longer under it)"; return 0; }
             [ -n "$VALGRIND" ] && [ -n "$CG_SO" ] || { skip "valgrind or its callgrind window absent (job/tools.txt)"; return 0; }
             cache="$CACHE_ROOT/c-cg/$row"     # rows run at once: no shared cache directory
             envs+=(MOJOLEARN_BENCH_CALLGRIND="$CG_SO" MOJOLEARN_BENCH_PROFILE_MAX_CALLS="$CG_CALLS")
@@ -395,14 +471,36 @@ run_pass() {   # row, race id, phase, pass
     esac
     local which=(--mojolearn-version "$WHEEL")
     [ -f "$MAN" ] && which=(--wheel-manifest "$MAN")
-    ${pre[@]+"${pre[@]}"} env "${envs[@]}" "$PY" tools/bench_board.py "${COMMON[@]}" --python-env "$APY" --skip-install \
-        "${which[@]}" --cache "$cache" \
-        --race-ids @"$d/ids" --no-smoke-gate \
-        --guarded-smoke-override-reason "call profile job: diagnostic run of a board row this pod's earlier job smoked" \
-        --out "$d/board" > "$d/run.log" 2>&1 < /dev/null
-    rc=$?
+    local cmd=(${pre[@]+"${pre[@]}"} env "${envs[@]}" "$PY" tools/bench_board.py "${COMMON[@]}" --python-env "$APY"
+               --skip-install "${which[@]}" --cache "$cache" ${extra[@]+"${extra[@]}"}
+               --race-ids @"$d/ids" --no-smoke-gate
+               --guarded-smoke-override-reason "call profile job: diagnostic run of a board row this pod's earlier job smoked"
+               --out "$d/board")
+    if [ "$cap" -gt 0 ]; then
+        # under the row's cap, polled every 5 s, in its own session with SIGINT back at its default: bash starts a
+        # background job with SIGINT ignored, which every child inherits, and py-spy and nsys write their output on
+        # SIGINT (cap_stop)
+        PASS_T0=$SECONDS
+        "$PY" -c 'import os, signal, sys
+signal.signal(signal.SIGINT, signal.SIG_DFL)
+os.setsid()
+os.execvp(sys.argv[1], sys.argv[1:])' "${cmd[@]}" > "$d/run.log" 2>&1 < /dev/null &
+        local pid=$!
+        while kill -0 "$pid" 2> /dev/null && [ $(( SECONDS - PASS_T0 )) -lt "$cap" ]; do sleep 5; done
+        if kill -0 "$pid" 2> /dev/null; then
+            say "run $row $pass CAPPED at $cap s: stopping its tools so they write what they collected"
+            cap_stop "$pid" "$d" "$pass" "$cap"
+        fi
+        wait "$pid"; rc=$?
+        [ -f "$d/run.capped" ] && rc=8
+    else
+        "${cmd[@]}" > "$d/run.log" 2>&1 < /dev/null
+        rc=$?
+    fi
     rm -rf "$d/board/work" "$d/board/evidence" "$d/ctl" "$d/ack"
-    if [ $rc -ne 0 ]; then
+    if [ -f "$d/run.capped" ]; then
+        echo "CAPPED at $cap s (run.capped): the pass was stopped; its tools' output so far is kept" > "$d/run.error"
+    elif [ $rc -ne 0 ]; then
         err=$($PY tools/ops/attribution_report.py error --out "$d/board" --log "$d/run.log" 2>&1 | head -n 1)
         [ "$pass" = callgrind ] && err="valgrind: $(grep -h -m 3 -E '^==[0-9]+== [A-Z]|valgrind:|Fatal|unhandled' "$d"/valgrind.*.log 2> /dev/null | tr '\n' ' ' | head -c 300) $err"
         echo "$err" > "$d/run.error"
@@ -424,11 +522,11 @@ if part run; then
     phase run
     rc=0
     CG_ROWS=()
-    while IFS=$'\t' read -r row rid ph; do
+    while IFS=$'\t' read -r row rid ph cap long; do
         row_wanted "$row" || continue
         for pass in "${PASSES[@]}"; do
-            [ "$pass" = callgrind ] && { CG_ROWS+=("$row"$'\t'"$rid"$'\t'"$ph"); continue; }
-            run_pass "$row" "$rid" "$ph" "$pass"; r=$?; [ $r -gt $rc ] && rc=$r
+            [ "$pass" = callgrind ] && [ "${long:-0}" != 1 ] && { CG_ROWS+=("$row"$'\t'"$rid"$'\t'"$ph"); continue; }
+            run_pass "$row" "$rid" "$ph" "$pass" "${cap:-0}" "${long:-0}"; r=$?; [ $r -gt $rc ] && rc=$r
         done
     done < "$RES/plan/runs.tsv"
     if [ ${#CG_ROWS[@]} -gt 0 ]; then
@@ -457,7 +555,7 @@ post_one() {   # row dir, phase, pass: the parsed json of one pass (the raw data
     case $pass in
         pyspy)
             [ -f "$p/pyspy.raw" ] || return 0
-            $PY tools/ops/call_profile.py pyspy --raw "$p/pyspy.raw" --window "$p/window.jsonl" --rate "$RATE" \
+            $PY tools/ops/call_profile.py pyspy --raw "$p/pyspy.raw" --window "$p/window.jsonl" --rate "$(cat "$p/rate" 2> /dev/null || echo "$RATE")" \
                 --out "$p/pyspy.json" > "$p/post.log" 2>&1 ;;
         callgrind)
             ls "$p"/callgrind.out.* > /dev/null 2>&1 || return 0
@@ -478,6 +576,7 @@ post_one() {   # row dir, phase, pass: the parsed json of one pass (the raw data
             local calls; calls=$($PY -c 'import json,sys; print(json.load(sys.stdin)["calls"])' \
                 < <($PY tools/ops/call_profile.py window --window "$p/window.jsonl"))
             $PY tools/ops/attribution_report.py nsys --prefix "$p/nsys" --calls "${calls:-1}" --out "$p/nsys.json" \
+                --kernel-regex "${CP_KERNEL_REGEX:-.}" \
                 > "$p/post.log" 2>&1 ;;
         strace)
             [ -f "$p/strace.txt" ] || return 0
@@ -489,14 +588,14 @@ post_one() {   # row dir, phase, pass: the parsed json of one pass (the raw data
 if part post; then
     phase post
     : > "$RES/plan/post.todo"
-    while IFS=$'\t' read -r row _ ph; do
+    while IFS=$'\t' read -r row _ ph _; do
         row_wanted "$row" || continue
         for pass in pyspy callgrind perf nsys strace; do
             [ -d "$RES/rows/$row/$pass" ] && printf '%s %s %s\n' "$RES/rows/$row" "$ph" "$pass" >> "$RES/plan/post.todo"
         done
     done < "$RES/plan/runs.tsv"
     export -f post_one
-    export NSYS PERF PY RATE
+    export NSYS PERF PY RATE CP_KERNEL_REGEX
     # one worker per (row, pass) up to the allocated cores: perf script's unwinding is the long one (one core each)
     xargs -P "$NCORES" -n 3 bash -c 'post_one "$0" "$1" "$2"' < "$RES/plan/post.todo"
     rc=$?
@@ -508,11 +607,11 @@ fi
 if part report; then
     phase report
     $PY tools/ops/call_profile.py report --res "$RES" --rows-file "$RES/plan/rows.tsv" --vendor "$V" --wheel "$WHEEL" \
-        --host "${HOST_ID:-?}" --tools "$(tr '\n' ';' < "$J/tools.txt" | head -c 400)" \
+        --host "${HOST_ID:-?}" --tools "$(tr '\n' ';' < "$J/tools.txt" | head -c 400)" --top "${CP_REPORT_TOP:-40}" \
         > "$RES/logs/report.log" 2>&1
     rc=$?
-    grep -E '^(CALL-PROFILE|SUMMARY) ' "$RES/logs/report.log" | while read -r ln; do say "$ln"; done
-    say "report rc=$rc -> CALL-PROFILE-$V.md$( case $rc in 0|6|7) ;; *) echo "; report failed: $(tail -n 1 "$RES/logs/report.log")" ;; esac)"
+    grep -E '^(CALL-PROFILE|SUMMARY|LARGEST) ' "$RES/logs/report.log" | while read -r ln; do say "$ln"; done
+    say "report rc=$rc -> CALL-PROFILE-$V.md$( case $rc in 0|6|7|8) ;; *) echo "; report failed: $(tail -n 1 "$RES/logs/report.log")" ;; esac)"
     REPORT_RC=$rc
     phase_end $rc
 fi
