@@ -6,7 +6,6 @@
 # Python `_Prog` built) and runs it through the shared transport
 # (bindings/x_prep_native_owner.mojo `xprep_run`). fit_transform converts X once
 # and runs the one transform program.
-from std.sys.compile import is_defined
 from std.memory import unsafe_memcpy, bitcast
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
@@ -212,7 +211,9 @@ def _transform(model: PythonObject, kind: String, values: PythonObject, context:
     if kind == "normalizer":
         var code = _norm_code(fields)
         var words = n * d
-        var dev_out = words >= OUT_MIN_WORDS and py_get(entries, "x_prep_run_out") is not None and not is_defined["MOJOLEARN_XPREP_FAST_OUT_OFF"]()
+        # TOMBSTONE: MOJOLEARN_XPREP_FAST_OUT_OFF (NOISE: B kept large outputs as host words on a binding with an output region; A/B abn9 NVIDIA L40S, 48 cells 0.91-1.13 arm/base, median 1.00) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
+        # Restore: git apply experiments/removed/MOJOLEARN_XPREP_FAST_OUT_OFF.patch; record in docs/TOMBSTONES.md.
+        var dev_out = words >= OUT_MIN_WORDS and py_get(entries, "x_prep_run_out") is not None
         var host = words + (0 if dev_out else words)
         if host + (words if dev_out else 0) > 2147483647:
             raise Error("ValueError: x_prep: the program exceeds the native Int32 indexing bound")
@@ -235,7 +236,9 @@ def _transform(model: PythonObject, kind: String, values: PythonObject, context:
     var words = n * nout
     var fortran = String(fields["order"]) == "F"
     var transpose = fortran and words > 0
-    var dev_out = transpose and words >= OUT_MIN_WORDS and py_get(entries, "x_prep_run_out") is not None and not is_defined["MOJOLEARN_XPREP_FAST_OUT_OFF"]()
+    # TOMBSTONE: MOJOLEARN_XPREP_FAST_OUT_OFF (NOISE: B kept large outputs as host words on a binding with an output region; A/B abn9 NVIDIA L40S, 48 cells 0.91-1.13 arm/base, median 1.00) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
+    # Restore: git apply experiments/removed/MOJOLEARN_XPREP_FAST_OUT_OFF.patch; record in docs/TOMBSTONES.md.
+    var dev_out = transpose and words >= OUT_MIN_WORDS and py_get(entries, "x_prep_run_out") is not None
     var host = out + words + (words if transpose and not dev_out else 0)
     if host + (words if dev_out else 0) > 2147483647:
         raise Error("ValueError: x_prep: the program exceeds the native Int32 indexing bound")
@@ -492,7 +495,9 @@ def _quantile_apply(model: PythonObject, values: PythonObject, inverse: Bool, co
     var qo = words
     var ro = qo + nq * d
     var out = ro + nq
-    var dev_out = words >= OUT_MIN_WORDS and py_get(entries, "x_prep_run_out") is not None and not is_defined["MOJOLEARN_XPREP_FAST_OUT_OFF"]()
+    # TOMBSTONE: MOJOLEARN_XPREP_FAST_OUT_OFF (NOISE: B kept large outputs as host words on a binding with an output region; A/B abn9 NVIDIA L40S, 48 cells 0.91-1.13 arm/base, median 1.00) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
+    # Restore: git apply experiments/removed/MOJOLEARN_XPREP_FAST_OUT_OFF.patch; record in docs/TOMBSTONES.md.
+    var dev_out = words >= OUT_MIN_WORDS and py_get(entries, "x_prep_run_out") is not None
     var host = out + (0 if dev_out else words)
     if host + (words if dev_out else 0) > 2147483647:
         raise Error("ValueError: x_prep: the program exceeds the native Int32 indexing bound")
@@ -606,7 +611,9 @@ def _power_apply(model: PythonObject, values: PythonObject, inverse: Bool, conte
         host += d
         _ = py_call(inputs.append, Python.tuple(mo, Python.tuple(0, mean, PythonObject(None), d, 1)))
         _ = py_call(inputs.append, Python.tuple(so, Python.tuple(0, scale, PythonObject(None), d, 1)))
-    var dev_out = words >= OUT_MIN_WORDS and py_get(entries, "x_prep_run_out") is not None and not is_defined["MOJOLEARN_XPREP_FAST_OUT_OFF"]()
+    # TOMBSTONE: MOJOLEARN_XPREP_FAST_OUT_OFF (NOISE: B kept large outputs as host words on a binding with an output region; A/B abn9 NVIDIA L40S, 48 cells 0.91-1.13 arm/base, median 1.00) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
+    # Restore: git apply experiments/removed/MOJOLEARN_XPREP_FAST_OUT_OFF.patch; record in docs/TOMBSTONES.md.
+    var dev_out = words >= OUT_MIN_WORDS and py_get(entries, "x_prep_run_out") is not None
     var out = host
     if not dev_out:
         host += words

@@ -2,7 +2,6 @@
 # Normalizer operations own their complete previously decorated public calls.
 # The PACK half of the former `bindings/prep_normalizer_lifecycle.mojo` (fence-flip-2 split, 2026-11-12);
 # the UNPACK half is `bindings/prep_normalizer_lifecycle_unpack.mojo`.
-from std.sys.compile import is_defined
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module, native_namespace_string_keys
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
@@ -213,7 +212,9 @@ def _normalizer_apply(values: PythonObject, n: Int, d: Int, code: Int,
     # Same normalization stage, arena operands, large-output rule and native
     # transport as the preexisting _transform branch. No model math moves.
     var words = n * d
-    var dev_out = words >= 134217728 and py_get(entries, "x_prep_run_out") is not None and not is_defined["MOJOLEARN_XPREP_FAST_OUT_OFF"]()
+    # TOMBSTONE: MOJOLEARN_XPREP_FAST_OUT_OFF (NOISE: B kept large outputs as host words on a binding with an output region; A/B abn9 NVIDIA L40S, 48 cells 0.91-1.13 arm/base, median 1.00) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
+    # Restore: git apply experiments/removed/MOJOLEARN_XPREP_FAST_OUT_OFF.patch; record in docs/TOMBSTONES.md.
+    var dev_out = words >= 134217728 and py_get(entries, "x_prep_run_out") is not None
     var host = words + (0 if dev_out else words)
     if host + (words if dev_out else 0) > 2147483647:
         raise Error("ValueError: x_prep: the program exceeds the native Int32 indexing bound")

@@ -15,7 +15,6 @@
 # step: the same entries are called with the same words, so no bit moves.
 from bindings.mode_answer_door import answer_mode_object
 from core.mode_answer import MODE_FAMILY_PROGRAM
-from std.sys.compile import is_defined
 from bindings.native_array_storage_door import native_array_zeros
 from std.memory import unsafe_memcpy
 from core.metrics_program_plan import MetricProgramPlan
@@ -48,7 +47,7 @@ comptime INT32_MAX = 2147483647
 # (lane prep-apple3 `mapped`); _expansion_prep._MAP_MIN_WORDS.
 comptime PREP_MAP_MIN_WORDS = 262144
 # x_prep: an input of at least this many words goes up from its own buffer
-# into a slot freed after the run (on unless -D MOJOLEARN_XPREP_FAST_DIRECT_OFF);
+# into a slot freed after the run;
 # _expansion_prep._DIRECT_MIN_WORDS.
 comptime PREP_DIRECT_MIN_WORDS = 1048576
 # Words of one stage record: op, total and _PARAMS (14) parameters.
@@ -245,7 +244,9 @@ def _prep_run_impl(prog: PythonObject, mode: PythonObject, context: PythonObject
     var on = 0 if fields["out_size"] is None else _int(fields["out_size"], context)
     var out_code = String(fields["_out_code"])
     var has_out = py_get(entries, "x_prep_run_out") is not None
-    var dev_out = has_out and on > 0 and not is_defined["MOJOLEARN_XPREP_FAST_OUT_OFF"]()
+    # TOMBSTONE: MOJOLEARN_XPREP_FAST_OUT_OFF (NOISE: B kept large outputs as host words on a binding with an output region; A/B abn9 NVIDIA L40S, 48 cells 0.91-1.13 arm/base, median 1.00) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
+    # Restore: git apply experiments/removed/MOJOLEARN_XPREP_FAST_OUT_OFF.patch; record in docs/TOMBSTONES.md.
+    var dev_out = has_out and on > 0
     var has_scratch_entry = sc > 0 and not has_out and py_get(entries, "x_prep_run_scratch") is not None
     var dev_scratch = sc > 0 and (has_out or has_scratch_entry)
     if H + sc + on > INT32_MAX:
@@ -260,8 +261,9 @@ def _prep_run_impl(prog: PythonObject, mode: PythonObject, context: PythonObject
     var base = Int(py=arena[1])
     var t_alloc = Int(perf_counter_ns()) if profile else 0
     var ranges = (dev_scratch or sc == 0) and _switch("MOJOLEARN_ARENA_RANGES") and py_get(entries, "x_prep_run_ranges") is not None
-    var direct_ok = (py_get(entries, "x_prep_dev_put") is not None and py_get(entries, "x_prep_dev_free") is not None
-                     and not is_defined["MOJOLEARN_XPREP_FAST_DIRECT_OFF"]())
+    # TOMBSTONE: MOJOLEARN_XPREP_FAST_DIRECT_OFF (B arm loses: host-arena staging of large inputs; A/B abn9 NVIDIA L40S, 48 cells 0.96-17.38 arm/base, median 1.75, 34 slower) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
+    # Restore: git apply experiments/removed/MOJOLEARN_XPREP_FAST_DIRECT_OFF.patch; record in docs/TOMBSTONES.md.
+    var direct_ok = py_get(entries, "x_prep_dev_put") is not None and py_get(entries, "x_prep_dev_free") is not None
     var inout_pairs = List[Int]()
     var inout = fields["_inout"]
     for k in range(len(inout)):  # driver-loop: over the program's in-out input ranges

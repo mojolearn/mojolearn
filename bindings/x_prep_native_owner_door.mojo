@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native owner for the established _Prog transport contract. Arithmetic and
 # stream synchronization remain in the same x_prep exported implementations.
-from std.sys.compile import is_defined
 from bindings.native_array_storage_door import native_array_empty, native_array_zeros
 from bindings.native_loaded_module_door import native_loaded_module
 from std.os import getenv
@@ -423,7 +422,7 @@ def xprep_run_records(storage: PythonObject, host: Int, scratch: Int, output: Py
     # Per run, not per input (perf2-prep): the resident scope admission
     # (thread-local key walk, scope class layout), the resident cache's state
     # admission (class layout, entries, every stored key) and the direct-put
-    # switch are read once, at the first input that needs them; the checks
+    # entries are read once, at the first input that needs them; the checks
     # and refusals are the ones `_resident` / `_cached_slot` ran per input.
     # Inside one run only this owner touches the thread's scope and inserts
     # native (address, size) keys.
@@ -432,7 +431,8 @@ def xprep_run_records(storage: PythonObject, host: Int, scratch: Int, output: Py
     var scope = Optional[PythonObject]()
     var cache_state = Optional[PythonObject]()
     var inout_values = List[PythonObject]()
-    var direct_on = not is_defined["MOJOLEARN_XPREP_FAST_DIRECT_OFF"]()
+    # TOMBSTONE: MOJOLEARN_XPREP_FAST_DIRECT_OFF (B arm loses: host-arena staging of large inputs; A/B abn9 NVIDIA L40S, 48 cells 0.96-17.38 arm/base, median 1.75, 34 slower) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
+    # Restore: git apply experiments/removed/MOJOLEARN_XPREP_FAST_DIRECT_OFF.patch; record in docs/TOMBSTONES.md.
     var dev_put_on = py_get(entries,"x_prep_dev_put") is not None and py_get(entries,"x_prep_dev_free") is not None
     try:
         # UNPACK
@@ -477,7 +477,7 @@ def xprep_run_records(storage: PythonObject, host: Int, scratch: Int, output: Py
                         var cache = _resident_cache(entries,scope.value()[1],context)
                         cache_state = _cache_state(cache,entries,context)
                     source = _cached_slot_in(cache_state.value(),value,entries,"x_prep",extent)
-                elif dev_put_on and (rows or (words >= 1048576 and direct_on)):
+                elif dev_put_on and (rows or words >= 1048576):
                     put = True
                     put_words = extent
                 if rows:
