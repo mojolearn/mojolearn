@@ -533,6 +533,11 @@ def xcnn_bn_state(layer: PythonObject, load: Bool, args: PythonObject, context: 
     `running_var`, `num_batches_tracked` (track_running_stats). state_dict
     returns copies; load_state_dict checks every name and size before any
     field changes. Cold API call."""
+    if load:
+        # The load replaces the running statistics (and drops the device
+        # copy), so nothing is synchronised from the device first.
+        xcnn_bn_load_commit(xcnn_bn_load_prepare(layer, args[0], context))
+        return layer
     var nk = xcnn_keys()
     var fields = _bn_admit(layer, context)
     _sync_running(fields, context)
@@ -546,29 +551,56 @@ def xcnn_bn_state(layer: PythonObject, load: Bool, args: PythonObject, context: 
         arrays.append("running_mean")
         arrays.append("running_var")
     var b = xcnn_builtins()
-    if not load:
-        var result = b.dict()
-        for k in range(len(arrays)):  # driver-loop: over the layer's named state arrays
-            var held = xcnn_f32(py_get(fields, PythonObject(arrays[k] + "_")), arrays[k] + "_", context)
-            py_setitem(result, PythonObject(arrays[k]), xcnn_slice_f32(held, 0, count, context))
-        if track:
-            py_setitem(result, "num_batches_tracked", PythonObject(Int(py=py_item(fields, nk[].k_num_batches_tracked_))))
-        return result
+    var result = b.dict()
+    for k in range(len(arrays)):  # driver-loop: over the layer's named state arrays
+        var held = xcnn_f32(py_get(fields, PythonObject(arrays[k] + "_")), arrays[k] + "_", context)
+        py_setitem(result, PythonObject(arrays[k]), xcnn_slice_f32(held, 0, count, context))
+    if track:
+        py_setitem(result, "num_batches_tracked", PythonObject(Int(py=py_item(fields, nk[].k_num_batches_tracked_))))
+    return result
+
+
+def xcnn_bn_load_prepare(layer: PythonObject, state: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The admission half of BatchNorm `load_state_dict` (lane api-torch
+    round 3): every name, size and count checked and the new arrays made,
+    nothing written. Returns `(fields, {field: value})` for
+    `xcnn_bn_load_commit`; BasicBlock prepares every sublayer before it
+    commits any. Cold API call."""
+    var nk = xcnn_keys()
+    var fields = _bn_admit(layer, context)
+    var count = Int(py=py_item(fields, nk[].k_num_features))
+    var arrays = List[String]()
+    if _truth(py_item(fields, nk[].k_affine)):
+        arrays.append("weight")
+        arrays.append("bias")
+    var track = _truth(py_item(fields, nk[].k_track_running_stats))
+    if track:
+        arrays.append("running_mean")
+        arrays.append("running_var")
     var names = arrays.copy()
     if track:
         names.append("num_batches_tracked")
-    var sd = xcnn_state_mapping(args[0], names, "BatchNorm")
-    var values = List[PythonObject]()
+    var sd = xcnn_state_mapping(state, names, "BatchNorm")
+    var b = xcnn_builtins()
+    var values = b.dict()
     for k in range(len(arrays)):  # driver-loop: over the layer's named state arrays (checked before any write)
         var given = xcnn_f32(sd[PythonObject(arrays[k])], arrays[k], context)
         if xcnn_size(xcnn_shape(given)) != count:
             raise Error("ValueError: BatchNorm.load_state_dict: '" + arrays[k] + "' must hold num_features ("
                         + String(count) + ") values")
-        values.append(xcnn_slice_f32(given, 0, count, context))
-    var tracked = Int(py=sd["num_batches_tracked"]) if track else 0
-    for k in range(len(arrays)):  # driver-loop: over the checked state arrays
-        _set(fields, arrays[k] + "_", values[k])
+        py_setitem(values, PythonObject(arrays[k] + "_"), xcnn_slice_f32(given, 0, count, context))
     if track:
-        _set(fields, "num_batches_tracked_", PythonObject(tracked))
-        _set(fields, "_run_dev", PythonObject(None))
-    return layer
+        py_setitem(values, "num_batches_tracked_", PythonObject(Int(py=sd["num_batches_tracked"])))
+        py_setitem(values, "_run_dev", PythonObject(None))
+        # The device copy is dropped, so nothing is left to read back.
+        py_setitem(values, "_run_stale", PythonObject(False))
+    return Python.tuple(fields, values)
+
+
+def xcnn_bn_load_commit(prepared: PythonObject) raises:
+    """The write half: the prepared values into the layer's fields."""
+    var fields = prepared[0]
+    var values = prepared[1]
+    var keys = py_call(xcnn_builtins().list, values.keys())
+    for k in range(len(keys)):  # driver-loop: over the checked state fields
+        _set(fields, String(keys[k]), values[keys[k]])

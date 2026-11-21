@@ -1,13 +1,20 @@
 # SPDX-License-Identifier: Apache-2.0
 # Read-only public DeviceCache lookup. Store mutation/lifecycle remain separate.
+#
+# Lane arena (2026-11-21): the cache is one native `DeviceCacheState`
+# (`core/arena_state.mojo`, `ARENA_CACHES`) behind the owner object in the
+# instance's `_owner` slot. UNPACK here is the slot read (`arena_cache_view`)
+# and the admission of the caller's buffer metadata (`arena_cache_key`); the
+# lookup is a typed read of the state. The instance dictionary, its entries
+# dictionary and the `_key` callback admission are gone.
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
-from bindings.arena_cache_stats_unpack import _mapping, _string_keys, _admit_entry_keys
+from bindings.arena_cache_stats_unpack import _mapping
 from bindings.arena_cache_stats_pack import _attribute
+from bindings.arena_owner_door import ArenaOwnerView, ARENA_OWNER_CACHE, arena_owner_held
 from bindings.optimizer_public_words_unpack import stash_python_error
-from bindings.py_cpython_table import cpython_table
-from bindings.p3_array_arena_records_unpack import P3_CACHE_KEY_LAYOUT, p3_layout_admitted, p3_layout_admit
+from core.arena_state import ARENA_CACHES, arena_handle
 from bindings.training_scalar_native_door import training_scalar_warning, training_void_bytes
 from bindings.native_numpy_metadata_pack import native_numpy_type, native_numpy_module_fields
 from bindings.native_scalar_decode_unpack import native_scalar_buffer
@@ -259,56 +266,36 @@ def _integer(value: PythonObject, context: PythonObject, depth: Int = 0) raises 
     raise Error("TypeError: cache integer metadata requires native scalar values without Python conversion hooks")
 
 
-def arena_cache_key(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
-    # The old method resolved self._key. Its ordinary fixed implementation is
-    # now native; a subclass callback must be refused rather than ignored.
-    # p3-array-arena: the class's key contract is admitted once per class
-    # state (type watcher), not walked on every key read.
-    var model_class = py_type(model)
-    if not p3_layout_admitted(P3_CACHE_KEY_LAYOUT, model_class, context["cache_key_descriptor"]):
-        var ancestry = py_call(context["cache_type_mro"],model_class)
-        for i in range(len(ancestry)):  # driver-loop: admit the existing cache-key contract before reading caller metadata
-            var mapping = _mapping(ancestry[i],context)
-            if py_contains(mapping,"_key"):
-                if mapping["_key"] is not context["cache_key_descriptor"]:
-                    raise Error("TypeError: DeviceCache cannot invoke a custom key callback")
-                break
-        p3_layout_admit(P3_CACHE_KEY_LAYOUT, model_class, context["cache_key_descriptor"])
-    var fields_pointer = cpython_table()[].PyObject_GenericGetDict(model._obj_ptr,PyObjectPtr())
-    if not fields_pointer:
-        var failure = stash_python_error()
-        raise failure^
-    var fields = PythonObject(from_owned=fields_pointer)
-    _string_keys(fields,context)
-    if py_contains(fields,"_key") and fields["_key"] is not context["cache_key_function"]:
-        raise Error("TypeError: DeviceCache cannot invoke an instance key callback")
+@fieldwise_init
+struct ArenaCacheKey(ImplicitlyCopyable, Movable):
+    """A buffer's identity in a cache: its host address and its 4-byte word
+    count."""
+    var address: Int
+    var words: Int
+
+
+def arena_cache_view(model: PythonObject, context: PythonObject) raises -> ArenaOwnerView:
+    """UNPACK of every DeviceCache operation: the native owner in the
+    instance's `_owner` slot (one C slot read, one downcast)."""
+    return arena_owner_held(context["cache_owner_get"], model, context["cache_class"], ARENA_OWNER_CACHE, "DeviceCache")
+
+
+def arena_cache_key(source: PythonObject, context: PythonObject) raises -> ArenaCacheKey:
+    # UNPACK: the caller's buffer metadata (`itemsize`, `_addr`, `size`) is
+    # admitted natively; no key callback of a subclass exists or can run.
     if not _itemsize_four(_attribute(source,"itemsize",PythonObject(4),False,context),context):
         raise Error("ValueError: DeviceCache: a store slot holds 4-byte words")
     var address = _integer(_attribute(source,"_addr",PythonObject(None),True,context),context)
     var size = _integer(_attribute(source,"size",PythonObject(None),True,context),context)
-    return py_call(context["arena_native_types"]["tuple"],Python.list(address,size))
+    return ArenaCacheKey(Int(py=address), Int(py=size))
 
 
 def arena_cache_get(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = context["arena_native_types"]
-    var entries = _attribute(model,"_entries",PythonObject(None),True,context)
-    if py_type(entries) is not b["dict"]:
-        raise Error("TypeError: DeviceCache entries require a native dictionary")
-    var key = arena_cache_key(model,args[0],context)
-    # Prevent resident dictionary equality from dispatching to custom stored
-    # keys: one in-place native walk, no key list (published keys pass on type
-    # identity alone).
-    _admit_entry_keys(entries,context)
-    var entry = py_get(entries,key)
-    if entry is None:
+    var view = arena_cache_view(model, context)
+    var key = arena_cache_key(args[0], context)
+    # RUN: one typed lookup; `get` counts no hit.
+    var lease = ARENA_CACHES.acquire(arena_handle(view.word))
+    var found = lease[].find(key.address, key.words, False)
+    if found < 0:
         return PythonObject(None)
-    if py_type(entry) is not b["tuple"] and py_type(entry) is not b["list"]:
-        raise Error("TypeError: DeviceCache entries require native slot/owner sequences")
-    ref cpy = Python().cpython()
-    var index = PythonObject(0)
-    var pointer = cpy.lib.get_function[PyObjectPtr]("PyObject_GetItem")(entry._obj_ptr,index._obj_ptr)
-    _ = index^
-    if not pointer:
-        var failure = stash_python_error()
-        raise failure^
-    return PythonObject(from_owned=pointer)
+    return PythonObject(found)

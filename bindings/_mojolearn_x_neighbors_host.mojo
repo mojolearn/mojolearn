@@ -23,6 +23,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from checks.numerics import GLOBAL_NUMERIC_MODE
+from core.xneighbors_member import xneighbors_member_publish
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from x_neighbors.host_ops import op_softmax64
 from x_neighbors.proba64_nc import NC_PROBA64
@@ -1255,6 +1256,10 @@ def build__mojolearn_x_neighbors_host() -> PythonObject:
         # Restore: git apply experiments/removed/MOJOLEARN_IDN_XN_SKETCH_CTR_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
         m.def_function[kfeat_schi2_fit_idn_host_binding]("x_neighbors_kfeat_schi2_fit_idn")
         m.def_function[kfeat_pcs_draw_idn_host_binding]("x_neighbors_kfeat_pcs_draw_idn")
+        # The XNeighbors member entry (core/xneighbors_member.mojo), beside its
+        # x_neighbors native operations table.
+        xneighbors_member_publish(Int(GLOBAL_NUMERIC_MODE), 0,
+            Int(XN_NATIVE_API.get_or_create_ptr()[].entries.unsafe_ptr()))
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_neighbors_host: ", e))

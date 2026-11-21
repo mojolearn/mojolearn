@@ -14,9 +14,8 @@ from bindings.arena_array_metadata_pack import arena_array_metadata
 from bindings.classical_arrays_door import _store_code
 from bindings.optimizer_public_words_unpack import stash_python_error
 from core.array_helpers_impl import strided_copy_bytes
-from bindings.native_loaded_module_door import native_namespace_string_keys
 from bindings.p3_array_arena_records_unpack import (
-    P3_ARRAY_LAYOUT, P3_RESIDENT_LAYOUT, p3_layout_admitted, p3_layout_admit,
+    P3_ARRAY_LAYOUT, p3_layout_admitted, p3_layout_admit,
     p3_numpy_scalar_classes, p3_numpy_dtype_class,
 )
 
@@ -511,28 +510,7 @@ def _prepare(value: PythonObject, context: PythonObject, snapshot: Bool = False)
     return _numpy_copy(value,view,kind,item,context)
 
 
-def _resident_fields(owner: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = context["arena_native_types"]
-    if py_type(owner) is not context["arena_resident_class"]:
-        raise Error("TypeError: native row materialization requires the ordinary model-selection resident owner")
-    var cls = context["arena_resident_class"]
-    # p3-array-arena: the class half is admitted once per class state.
-    if not p3_layout_admitted(P3_RESIDENT_LAYOUT, cls, context["arena_resident_dict"]):
-        var ancestry = py_call(b["type"].__dict__["__mro__"].__get__,cls)
-        if len(ancestry) != 2 or ancestry[1] is not b["object"]:
-            raise Error("TypeError: native row materialization requires the ordinary resident layout")
-        var mapping = py_call(b["type"].__dict__["__dict__"].__get__,cls)
-        var keys = py_call(b["list"],mapping)
-        for i in range(len(keys)):  # driver-loop: class keys precede lifetime/descriptor lookup
-            if py_type(keys[i]) is not b["str"]:
-                raise Error("TypeError: resident metadata requires native string keys")
-        if py_get(mapping,"__dict__") is not context["arena_resident_dict"] or py_get(mapping,"__del__") is not None or py_get(mapping,"__getattribute__") is not None:
-            raise Error("TypeError: native row materialization cannot invoke resident owner hooks")
-        p3_layout_admit(P3_RESIDENT_LAYOUT, cls, context["arena_resident_dict"])
-    var fields = py_call(context["arena_resident_dict"].__get__,owner,cls)
-    # Instance keys: one native dictionary walk, no key list.
-    if py_type(fields) is not b["dict"] or not native_namespace_string_keys(fields._obj_ptr, b["str"]):
-        raise Error("TypeError: resident metadata requires native string keys")
-    if fields["_put"] is not context["arena_msel_put"] or fields["_free"] is not context["arena_msel_free"] or fields["_take"] is not context["arena_msel_take_rows"]:
-        raise Error("TypeError: native row materialization requires its connected native resident entries")
-    return fields
+# Lane arena (2026-11-21): `_resident_fields` (the instance dictionary read of
+# model_selection._Resident and its class-layout record P3_RESIDENT_LAYOUT)
+# was removed from here: the resident state is native
+# (bindings/arena_owner_door.mojo `arena_resident_view`).

@@ -20,7 +20,7 @@ ROUTE SLOTS (filled by providers/python/member_mlp_boundary_door.mojo):
   * `third` (`has_third`): the R^2 entry of the metrics image of the route's
     device (regressor score). Without it a score is refused in words.
 
-MEMBER_OP_NEW parameters (Float64 words, `20 + H` of them):
+MEMBER_OP_NEW parameters (Float64 words, `21 + H` of them):
   [0] kind (0 MLPRegressor, 1 MLPClassifier); [1] activation (0 identity,
   1 logistic, 2 tanh, 3 relu); [2] solver (0 adam, 1 sgd); [3] learning_rate
   (0 constant, 1 invscaling, 2 adaptive); [4] learning_rate_init; [5] beta_1;
@@ -28,9 +28,11 @@ MEMBER_OP_NEW parameters (Float64 words, `20 + H` of them):
   [12] nesterovs_momentum (0 / 1); [13] shuffle (0 / 1); [14] batch_size
   (0 = "auto", else the integer); [15] max_iter; [16] n_iter_no_change;
   [17] seed, low 32 bits; [18] seed, high 32 bits (the 64-bit word of the
-  estimator's seeded stream: `random_state`, or one OS-entropy draw made by
-  the caller's UNPACK when it is None); [19] H, the hidden layer count;
-  [20 .. 20 + H) the hidden layer widths.
+  estimator's seeded stream for an integer `random_state`); [19] H, the
+  hidden layer count; [20] fresh seed (1: `random_state` is None, so every
+  FIT draws its own eight bytes of OS entropy, as the estimator's own fit
+  does, and words 17 and 18 are not read; 0: the seed words);
+  [21 .. 21 + H) the hidden layer widths.
 
 VIEWS: X dense row-major host float32. Regressor: y host float32, rows x
 outputs (multi-output allowed). Classifier: y host int32 class codes
@@ -52,7 +54,15 @@ FITTED-STATE BLOCKS, in index order:
   2 `MEMBER_BLOCK_FAMILY + 1` float64 1 x L: the layer widths (input,
     hidden..., output);
   3 `MEMBER_BLOCK_FAMILY + 2` float32 1 x n_iter: the loss curve.
-An import needs blocks 0 .. 2; the curve is optional.
+An import needs blocks 0 .. 2; the curve is optional. An exported block is
+read-only: the parameter block may be resident on the device (below).
+
+RESIDENT WEIGHTS: every predict, predict_proba and score names the fitted
+block (owner = the state's slot address, token = a new number at each fit or
+import), so a GPU route uploads it on the first call only and keeps it
+resident across calls (sequence/perf3_seq_resident.mojo), as the estimator's
+own predict door keeps its packed block; a refit or an import names a new
+block, and FREE posts the owner's death so the device copy is freed.
 
 The fitted state is OWNED here, in a process-wide store of fixed chunks: a
 slot never moves once minted, so a fit or predict runs on its slot without
@@ -64,6 +74,7 @@ forward pass are the image's own parallel kernels.
 """
 from std.sys.info import size_of
 from std.memory import unsafe_memcpy
+from std.ffi import external_call
 from core.device_route import DeviceRoute
 from core.metrics_entry_table import MR_R2, MR_R2_WEIGHTED
 from core.native_descriptor_call import native_descriptor_call
@@ -80,6 +91,7 @@ from core.member_families import MEMBER_FAMILY_MLP
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
+from sequence.perf3_seq_resident_words import seq_resident_owner_died
 from sequence.xseq_native_common_run import xseq_stream_child_seed
 from sequence.xseq_neural_run import (
     XseqNeuralEntry, XseqMlpFitRequest, XseqMlpPredictRequest, xseq_run_mlp_sizes, xseq_run_mlp_param_count,
@@ -90,7 +102,7 @@ from sequence.xseq_score_run import xseq_run_vector_finite, xseq_run_weights_che
 
 comptime _CHUNK = 256
 comptime _INDEX_SPAN = 16777216
-comptime _FIXED_WORDS = 20
+comptime _FIXED_WORDS = 21
 comptime _SCALAR_WORDS = 8
 comptime _BLOCK_PARAMS = MEMBER_BLOCK_FAMILY
 comptime _BLOCK_SIZES = MEMBER_BLOCK_FAMILY + 1
@@ -99,6 +111,10 @@ comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _F64P = MutPointer[Float64, MutUntrackedOrigin]
 comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
 comptime _I64P = MutPointer[Int64, MutUntrackedOrigin]
+# Resident-block tokens of member states sit above every token the class
+# doors mint (`seq_resident_token`, a counter from 1), so a member's (owner,
+# token) never names a door's block even if an owner word were reused.
+comptime _TOKEN_BASE = 1 << 40
 
 
 struct MlpMemberSlot(Copyable, Movable, Defaultable):
@@ -115,6 +131,15 @@ struct MlpMemberSlot(Copyable, Movable, Defaultable):
     var curve: List[Float32]
     var scalars: List[Float64]
     var widths: List[Float64]
+    # The device-resident fitted block (sequence/perf3_seq_resident.mojo):
+    # the owner word is this slot's address, `token` names the current
+    # `params` (0: none yet). `stamp` counts every params change of this
+    # slot address across generations (never reset), so a refit, an import
+    # or a reuse of the slot names a new block. `named`: a predict named the
+    # block, so FREE posts the owner's death to drop its device copy.
+    var stamp: Int
+    var token: Int
+    var named: Bool
 
     def __init__(out self):
         self.generation = 0
@@ -128,6 +153,9 @@ struct MlpMemberSlot(Copyable, Movable, Defaultable):
         self.curve = List[Float32]()
         self.scalars = List[Float64]()
         self.widths = List[Float64]()
+        self.stamp = 0
+        self.token = 0
+        self.named = False
 
 
 struct MlpMemberStore(Defaultable, Movable):
@@ -208,6 +236,12 @@ def _lookup(handle: Int, release: Bool) raises -> Int:
             slot[].curve = List[Float32]()
             slot[].scalars = List[Float64]()
             slot[].widths = List[Float64]()
+            slot[].token = 0
+            if slot[].named:
+                # The device store frees this owner's resident block at its
+                # next call, before any lookup (non-raising).
+                slot[].named = False
+                seq_resident_owner_died(address)
             store[].free.append(index)
         return address
     finally:
@@ -236,6 +270,26 @@ def _model_entry(route: DeviceRoute) -> XseqNeuralEntry:
 
 def _output_entry(route: DeviceRoute) -> XseqNeuralEntry:
     return XseqNeuralEntry(route.second.call, route.second.word)
+
+
+def _entropy_seed() raises -> UInt64:
+    """One 64-bit seed from eight bytes of OS entropy (`getentropy`, the
+    source `os.urandom` reads), little-endian as the estimator's own
+    `XseqStream` decodes `os.urandom(8)`. Thread-safe: no shared state."""
+    var raw = List[UInt8](length=8, fill=0)
+    var status = external_call["getentropy", Int32](raw.unsafe_ptr(), Int(8))
+    if status != 0:
+        raise Error("RuntimeError: OS entropy must return eight bytes")
+    var seed = UInt64(0)
+    for i in range(8):  # small-loop(one seed word from native entropy)
+        seed |= UInt64(raw[i]) << UInt64(8 * i)
+    return seed
+
+
+def _name_params(slot: _SlotP):
+    """A new resident-block token for the slot's current `params`."""
+    slot[].stamp += 1
+    slot[].token = _TOKEN_BASE + slot[].stamp
 
 
 def _fit(slot: _SlotP, call: _CallP) raises:
@@ -283,12 +337,19 @@ def _fit(slot: _SlotP, call: _CallP) raises:
     var total = xseq_run_mlp_param_count(sizes)
     var max_iter = Int(w[15])
     slot[].fitted = False
+    slot[].token = 0
     slot[].params = List[Float32](length=total, fill=0.0)
     slot[].curve = List[Float32](length=max_iter, fill=0.0)
     var base = Int(slot[].params.unsafe_ptr())
     # The estimator's seeded stream: Glorot-uniform per layer straight into
     # the flat block the fit trains, then one derived seed for the shuffle.
-    var seed = UInt64(Int(w[17])) | (UInt64(Int(w[18])) << 32)
+    var seed: UInt64
+    if w[20] != 0.0:
+        # random_state=None: a fresh seed at every fit, so every fold or
+        # candidate of a caller starts from its own weights.
+        seed = _entropy_seed()
+    else:
+        seed = UInt64(Int(w[17])) | (UInt64(Int(w[18])) << 32)
     var offset = xseq_run_mlp_glorot(_output_entry(route), base, sizes, w[1] == 1.0, seed, 0)
     var shuffle_seed = Int(xseq_stream_child_seed(seed, offset) % UInt64(2147483647))
     var batch = min(200, rows) if w[14] == 0.0 else max(1, min(Int(w[14]), rows))
@@ -314,6 +375,7 @@ def _fit(slot: _SlotP, call: _CallP) raises:
     for l in range(len(sizes)):  # driver-loop: over network layers
         slot[].widths[l] = Float64(sizes[l])
     slot[].sizes = sizes^
+    _name_params(slot)
     slot[].fitted = True
 
 
@@ -331,8 +393,13 @@ def _forward(slot: _SlotP, call: _CallP, proba2: Bool, width: Int, dst: Int) rai
     for l in range(1, len(slot[].sizes) - 1):  # driver-loop: over hidden layer widths
         hidden.append(slot[].sizes[l])
     var w = _F64P(unsafe_from_address=Int(slot[].words.unsafe_ptr()))
+    # The fitted block is named (owner = this slot, token = its params): a
+    # GPU route keeps it resident across calls, uploading it on the first
+    # predict only, as the estimator's own predict door does; a host
+    # executor ignores the three words.
+    slot[].named = True
     var request = XseqMlpPredictRequest(call[].x.rows, features, Int(slot[].scalars[5]), Int(w[1]),
-        Int(slot[].scalars[4]), hidden^, proba2, width, len(slot[].params), 0, 0)
+        Int(slot[].scalars[4]), hidden^, proba2, width, len(slot[].params), Int(slot), slot[].token)
     xseq_run_mlp_predict(_model_entry(call[].route), request, call[].x.data, Int(slot[].params.unsafe_ptr()), dst)
 
 
@@ -452,6 +519,7 @@ def _import(slot: _SlotP, call: _CallP) raises:
         unsafe_memcpy(dest=words.unsafe_ptr(), src=_F32P(unsafe_from_address=call[].x.data), count=count)
         slot[].fitted = False
         if block == _BLOCK_PARAMS:
+            slot[].token = 0
             slot[].params = words^
         else:
             slot[].curve = words^
@@ -488,6 +556,7 @@ def _import(slot: _SlotP, call: _CallP) raises:
         if Int(slot[].scalars[6]) < 2:
             raise Error("member ABI: a fitted MLPClassifier state needs its class count")
     slot[].sizes = sizes^
+    _name_params(slot)
     slot[].fitted = True
 
 
@@ -513,15 +582,17 @@ def _capabilities(classifier: Bool) -> Int:
 
 def _new(call: _CallP) raises:
     if call[].param_count < _FIXED_WORDS or not call[].params:
-        raise Error("member ABI: an MLP member takes at least twenty parameters")
+        raise Error("member ABI: an MLP member takes at least twenty-one parameters")
     var w = _F64P(unsafe_from_address=call[].params)
     var layers = Int(w[19])
     if layers < 0 or call[].param_count != _FIXED_WORDS + layers:
-        raise Error("member ABI: an MLP member takes 20 + (hidden layer count) parameters")
+        raise Error("member ABI: an MLP member takes 21 + (hidden layer count) parameters")
     if w[0] != 0.0 and w[0] != 1.0:
         raise Error("member ABI: unknown MLP member kind")
     if w[1] < 0.0 or w[1] > 3.0 or w[2] < 0.0 or w[2] > 1.0 or w[3] < 0.0 or w[3] > 2.0:
         raise Error("member ABI: an MLP member's activation, solver or learning-rate code is out of range")
+    if w[20] != 0.0 and w[20] != 1.0:
+        raise Error("member ABI: an MLP member's fresh-seed word is 0 or 1")
     if w[14] < 0.0 or w[16] < 1.0:
         raise Error("member ABI: an MLP member's batch_size or n_iter_no_change word is out of range")
     xseq_run_mlp_scalars_check(w[4], w[15], w[10])

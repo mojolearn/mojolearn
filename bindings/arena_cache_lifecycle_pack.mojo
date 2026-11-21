@@ -1,12 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native public cache lifecycle operations. Allocation, release and resident
 # scope cleanup are separate callers; this entry owns only the named operation.
-from std.python import Python, PythonObject
-from std.python._cpython import PyObjectPtr
-from bindings.py_balanced import py_type
-from bindings.optimizer_public_words_unpack import stash_python_error
-from bindings.arena_cache_stats_pack import _attribute
-from bindings.arena_cache_upload_door import _native_call
+#
+# Lane arena (2026-11-21): `live` is one call through the cache's own store
+# entry (`XP_DEV_LIVE` of the x_prep transport, resolved when the cache was
+# built); the `_live` builtin and its identity table are gone.
+from std.python import PythonObject
+from bindings.arena_owner_door import ARENA_OWNER_CACHE, arena_owner_held
+from bindings.arena_cache_run import arena_cache_live
 
 
 def arena_cache_lifecycle(model: PythonObject, operation: String,
@@ -15,33 +16,9 @@ def arena_cache_lifecycle(model: PythonObject, operation: String,
         # Context entry has always returned self without inspecting fields.
         return model
     if operation == "cache_live":
-        var missing = Python.list()
-        var entry = _attribute(model,"_live",missing,False,context)
-        if entry is missing:
-            # Admission above ruled out attribute hooks. Let the native slot
-            # preserve its exact missing/unset attribute exception text.
-            ref cpy = Python().cpython()
-            var name = PythonObject("_live")
-            var pointer = cpy.lib.get_function[PyObjectPtr]("PyObject_GenericGetAttr")(
-                model._obj_ptr,name._obj_ptr)
-            _ = name^
-            if not pointer:
-                var failure = stash_python_error()
-                raise failure^
-            entry = PythonObject(from_owned=pointer)
-        if entry is None:
-            return PythonObject(None)
-        var entries = context["cache_live_entries"]
-        var admitted = False
-        for i in range(len(entries)):  # driver-loop: fixed import-connected resident-store counters
-            admitted = admitted or entry is entries[i]
-        if not admitted:
-            raise Error("TypeError: DeviceCache.live requires a connected native resident-store counter; Python callbacks cannot execute")
-        # Both connected counter entries return an owned Python integer and
-        # read the same DeviceStore.live used before. They do not release the
-        # GIL, run NumPy, or call application protocols; no conversion is owed.
-        var result = _native_call(entry,Python.tuple())
-        if py_type(result) is not context["arena_native_types"]["int"]:
-            raise Error("TypeError: native resident-store counter returned a non-integer")
-        return result
+        var view = arena_owner_held(context["cache_owner_get"], model, context["cache_class"], ARENA_OWNER_CACHE,
+                                    "DeviceCache")
+        # The store's live slot count: a counter read, the interpreter lock
+        # stays held as it did around the builtin.
+        return PythonObject(arena_cache_live(view.store))
     raise Error("ValueError: unknown native cache lifecycle operation")

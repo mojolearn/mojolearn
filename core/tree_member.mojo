@@ -24,7 +24,7 @@ def tree_member_v2(operation: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, 
     result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
     """The member entry of DecisionTreeClassifier and DecisionTreeRegressor (splitter='best') (schema `MEMBER_ABI`)."""
     try:
-        var word = fm_member[_STORE_NAME](operation, member_call_from_spans(operation, aa, na, np, nf), "DecisionTree")
+        var word = fm_member[_STORE_NAME, True](operation, member_call_from_spans(operation, aa, na, np, nf), "DecisionTree")
         if result:
             MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[] = word
         return 0

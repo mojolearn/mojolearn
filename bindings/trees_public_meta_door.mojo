@@ -2539,9 +2539,8 @@ def _calibrated_fit(model: PythonObject, X: PythonObject, y: PythonObject, conte
             # size floor), as in MselFoldRows
             var opened = native_storage_allocate(family_call(b.getattr, py_item(mctx, nk[].k_family_msel_arena_io),
                                                              PythonObject("resident")))
-            py_setattr(opened, "min_words", PythonObject(1 << 62))
-            py_setattr(opened, "_scope", PythonObject(None))
-            _ = _cal_rows_call(opened, "scope_enter", Python.tuple(), mctx)
+            # the floor goes to the native scope state with the enter call
+            _ = _cal_rows_call(opened, "scope_enter", Python.tuple(PythonObject(1 << 62)), mctx)
             scope = opened
             units.rows_class = family_call(b.getattr, py_item(mctx, nk[].k_family_msel_arena_io), PythonObject("DeviceRows"))
             units.rows_take = family_call(b.getattr, res, PythonObject("take"))
