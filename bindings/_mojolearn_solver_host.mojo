@@ -56,6 +56,7 @@ from bindings.py_balanced import py_call as _balanced_call
 from bindings.py_balanced import py_type as _balanced_type
 from core.mojolearn_solver_host_impl import linkage_fit_host_into, cd_predict_host_into, cd_fit_host_into
 from core.solver_entry_table import SolverEntryKey, solver_ops_publish
+from core.cd_member import cd_member_publish
 from solver.ops_entry_host import SOLVER_OPS_HOST_API, solver_ops_host_v1
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
@@ -303,6 +304,8 @@ def _publish_solver_ops() raises:
     # the Python tests and tools that call the binding directly.
     var api = SOLVER_OPS_HOST_API.get_or_create_ptr()
     solver_ops_publish(SolverEntryKey(Int(GLOBAL_NUMERIC_MODE), 0), Int(api[].entries.unsafe_ptr()), solver_ops_host_v1)
+    # The Cd family's member entry (core/cd_member.mojo), beside the table.
+    cd_member_publish(Int(GLOBAL_NUMERIC_MODE), 0, Int(api[].entries.unsafe_ptr()))
 
 
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_solver_host.mojo
