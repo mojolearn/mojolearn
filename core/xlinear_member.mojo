@@ -125,7 +125,7 @@ from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from core.linear_entry_table_ext import XL_OP_DECISION, XL_OP_DECISION_CODES, XL_OP_DECISION_ROWS
 from core.member_abi import (
-    MemberCall, MemberMatrix, MEMBER_F32, MEMBER_F64, MEMBER_I32,
+    MemberCall, MemberMatrix, MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_DTYPE_UNSAID,
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_PREDICT,
     MEMBER_OP_SCORE, MEMBER_OP_OUTPUTS, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_OP_DECISION,
     MEMBER_OP_PREDICT_PROBA, MEMBER_OP_TRANSFORM, MEMBER_CAN_PREDICT_PROBA, MEMBER_CAN_TRANSFORM,
@@ -1328,12 +1328,26 @@ def _cls_import(slot: _SlotP, call: _CallP) raises:
 def _xlinear_member(operation: Int, address: Int) raises -> Int:
     var call = _CallP(unsafe_from_address=address)
     if operation == MEMBER_OP_CAPABILITIES:
+        # A live state answers for its kind and settings; without one the
+        # NEW words do when given (kind-exact, item 17), else the union.
         if call[].state == 0:
-            return _capabilities(-1)
+            if not call[].params or call[].param_count < 1:
+                return _capabilities(-1)
+            var words = _F64P(unsafe_from_address=call[].params)
+            var named = Int(words[0])
+            var union = _capabilities(named)
+            if named == XL_MEMBER_RIDGE_CV and call[].param_count >= 4 and words[3] != 0.0:
+                union &= ~MEMBER_CAN_SAMPLE_WEIGHT  # the k-fold path is unweighted
+            return union
         var asked = _SlotP(unsafe_from_address=_lookup(call[].state, False))
         var bits = _capabilities(_kind(asked))
         if _kind(asked) == XL_MEMBER_RIDGE_CV and asked[].params[3] != 0.0:
             bits &= ~MEMBER_CAN_SAMPLE_WEIGHT  # the k-fold path is unweighted
+        if not _classifier(_kind(asked)) and not call[].route.has_fifth:
+            # A regressor's score is the metrics image's R^2 entry: without it
+            # on the route the score would be refused at RUN, so it is not
+            # advertised (the caller predicts and runs its own metric).
+            bits &= ~MEMBER_CAN_SCORE
         return bits
     if operation == MEMBER_OP_NEW:
         if not call[].params or call[].param_count < 1:
@@ -1374,14 +1388,31 @@ def _xlinear_member(operation: Int, address: Int) raises -> Int:
         elif call[].params and call[].param_count >= 1:
             asked_kind = Int(_F64P(unsafe_from_address=call[].params)[0])
             classes = call[].classes
+        var op = call[].flags
+        if asked_kind >= 0:
+            # An operation the kind lacks is refused, never sized.
+            var can = _capabilities(asked_kind)
+            var served = ((op == MEMBER_OP_PREDICT and (can & MEMBER_CAN_PREDICT) != 0)
+                or (op == MEMBER_OP_DECISION and (can & MEMBER_CAN_DECISION) != 0)
+                or (op == MEMBER_OP_PREDICT_PROBA and (can & MEMBER_CAN_PREDICT_PROBA) != 0)
+                or (op == MEMBER_OP_TRANSFORM and (can & MEMBER_CAN_TRANSFORM) != 0))
+            if not served:
+                member_unsupported("an x_linear member of kind " + String(asked_kind), op)
         call[].out_cols = 1
         call[].classes = 0
+        # Regressors and IsotonicRegression's transform: float32; a
+        # classifier's predict: int32 codes; its decision and proba: float32.
+        call[].out_dtype = MEMBER_F32
         if asked_kind >= 0 and _classifier(asked_kind):
             call[].classes = classes
-            if call[].flags == MEMBER_OP_DECISION:
+            if op == MEMBER_OP_PREDICT:
+                call[].out_dtype = MEMBER_I32
+            elif op == MEMBER_OP_DECISION:
                 call[].out_cols = max(1, 1 if classes == 2 else classes)
-            elif call[].flags == MEMBER_OP_PREDICT_PROBA:
+            elif op == MEMBER_OP_PREDICT_PROBA:
                 call[].out_cols = max(1, classes)
+        elif asked_kind < 0 and op == MEMBER_OP_PREDICT:
+            call[].out_dtype = MEMBER_DTYPE_UNSAID  # the kind decides (codes or values)
         return 0
     var slot = _SlotP(unsafe_from_address=_lookup(call[].state, False))
     if _classifier(_kind(slot)):
