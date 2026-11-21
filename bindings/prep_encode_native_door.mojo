@@ -40,6 +40,9 @@ from bindings.prep_encode_prog_run import (
 from bindings.prep_encode_imputer_run import (
     ImputerFit, ImputerApply, IMP_MEAN, IMP_MEDIAN, IMP_MOST_FREQUENT, IMP_CONSTANT,
     imputer_fit_stage, imputer_transform_stage)
+from bindings.prep_encode_kbins_run import (
+    KBinsFit, KBinsApply, KBinsInverse, KB_DRAW_NONE, KB_DRAW_PLAIN, KB_DRAW_WEIGHTED,
+    enc_weights_stage, kbins_fit_stage, kbins_transform_stage, kbins_inverse_stage, enc_seed_words, enc_prefix)
 from bindings.x_prep_native_owner_run import xprep_r3, XprepCaps
 from bindings.public_lifecycle_owner_door import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result
 from bindings.classical_validate_unpack import classical_estimator_name
@@ -104,18 +107,14 @@ comptime CLS_BLOCK_WORDS = 67108864
 comptime OP_ONEHOT = 9
 comptime OP_WHERE_NEG = 19
 comptime OP_TE_APPLY = 22
-comptime OP_KBINS_EDGES = 25
-comptime OP_KBINS_CODES = 26
 comptime OP_BLOCK_ARGMAX = 76
 comptime OP_ORD_INVERSE = 77
 comptime OP_CAT_GATHER = 78
 comptime OP_WHERE_CODE = 79
-comptime OP_KBINS_INVERSE = 80
 comptime OP_CODE_COUNTS = 88
 comptime OP_REMAP_CODES = 89
 comptime OP_KBINS_GW = 96
 comptime OP_KBINS_WQ = 97
-comptime OP_KBINS_WKM = 98
 comptime OP_UNIQ_COUNT = 120
 comptime OP_UNIQ_SCAN = 121
 comptime OP_UNIQ_WRITE = 122
@@ -130,11 +129,7 @@ comptime OP_PRES_WRITE = 160
 comptime OP_CAT_PACK = 161
 comptime OP_UNIQUE_INVERSE = 177
 comptime OP_RGATHER = 204
-comptime OP_SMROWS = 205
 comptime OP_TRANSPOSE = 209
-comptime OP_WBLK = 230
-comptime OP_WSCAN = 231
-comptime OP_WDRAW = 232
 comptime OP_INF_M0 = 249
 comptime OP_INF_M1 = 250
 comptime OP_INF_MAP = 251
@@ -387,10 +382,7 @@ def _seed64(value: PythonObject) raises -> Tuple[Int, Int]:
 
 def _seed_words(lo: Int, hi: Int) -> List[Int]:
     # `_seed_words` / `put_ints`: the words as signed int32.
-    var words = List[Int]()
-    words.append(lo - (1 << 32) if lo >= (1 << 31) else lo)
-    words.append(hi - (1 << 32) if hi >= (1 << 31) else hi)
-    return words^
+    return enc_seed_words(lo, hi)
 
 
 # ---------------------------------------------------------------- shared checks
@@ -641,25 +633,26 @@ def _kbins_strategy(fields: PythonObject) raises -> Int:
     raise Error("mojolearn: invalid strategy " + _repr(strategy))
 
 
-def _check_weights(source: PythonObject, n: Int, who: String, context: PythonObject) raises -> Tuple[PythonObject, Int]:
+def _check_weights(source: PythonObject, n: Int, who: String, mode: PythonObject, entries: PythonObject,
+                   caps: XprepCaps, context: PythonObject) raises -> Tuple[PythonObject, Int]:
     """`_check_weights`: sample_weight as float32 words (nonnegative, length
     n) and its count of positive entries, from one device program
-    (col_stats for the count and minimum, p2m_sel for the positives)."""
+    (bindings/prep_encode_kbins_run.mojo `enc_weights_stage`) on the image
+    and capabilities of the estimator's operation (`entries`, `caps`: read
+    once by the caller)."""
+    # UNPACK
     var w = _input(source, 1, False, context)
     if Int(py=w.size) != n:
         raise Error("mojolearn: sample_weight has " + String(Int(py=w.size)) + " entries; X has " + String(n) + " rows")
-    var mode = _default_mode(context)
-    var entries = _entries(mode, context)
     var p = EncProg()
-    var wo = p.put(w, n)
-    var st = p.alloc(6)
-    _cs(p, mode, entries, wo, n, 1, st, False)
-    var rows = p.alloc(n)
-    var pos = enc_sel(p.prog, wo, n, 1, 1, rows)
-    var ran = p.run(entries, context)
-    var count = _word(ran, st)
-    var low = _word(ran, st + 3)
-    var m = _iword(ran, pos)
+    var owner = p.own(w, n)
+    # RUN
+    var plan = enc_weights_stage(p.prog, owner, n, (_fam(mode, entries) & IDN_STATS_BLOCKED) != 0)
+    var ran = p.run_caps(entries, context, caps)
+    # PACK
+    var count = _word(ran, plan.stats)
+    var low = _word(ran, plan.stats + 3)
+    var m = _iword(ran, plan.positives)
     # a NaN is not counted by col_stats
     if Int(count) != n or low < 0:
         raise Error("mojolearn: " + who + " sample_weight must be nonnegative")
@@ -684,6 +677,8 @@ def _kbins_finite(values: PythonObject) raises:
 
 
 def _kbins_fit(model: PythonObject, values: PythonObject, weight_source: PythonObject, context: PythonObject) raises:
+    # UNPACK: the parameters, read once into the typed request; the route's
+    # image and capabilities; X and the weights as owners of the program.
     var b = native_loaded_module("builtins")
     var operator = native_loaded_module("operator")
     var fields = py_fields(model)
@@ -695,30 +690,31 @@ def _kbins_fit(model: PythonObject, values: PythonObject, weight_source: PythonO
     _kbins_finite(values)
     var n = Int(py=values[3])
     var d = Int(py=values[4])
-    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
-    var w = Optional[PythonObject]()
-    var wl = 0
-    if weight_source is not None:
-        var checked = _check_weights(weight_source, n, "KBinsDiscretizer", context)
-        w = py_present(checked[0])
-        wl = checked[1]
+    var mode = _default_mode(context)
+    var entries = scaler_entries(model, mode, context)
+    var caps = enc_caps(model, entries)
+    var weights = PythonObject(None)
+    var given = weight_source is not None
+    var positive = 0
+    if given:
+        var checked = _check_weights(weight_source, n, "KBinsDiscretizer", mode, entries, caps, context)
+        weights = checked[0]
+        positive = checked[1]
     var subsample = fields["subsample"]
     var resample = subsample is not None and Bool(py=py_call(operator.gt, PythonObject(n), subsample))
-    var weighted_draw = resample and Bool(w)
-    var plain_draw = resample and not w
+    var draw = KB_DRAW_NONE
     var draws = 0
     var seed_lo = 0
     var seed_hi = 0
-    var wsub = PythonObject(None)
     if resample:
         var seed = _seed64(fields["random_state"])
         seed_lo = seed[0]
         seed_hi = seed[1]
         draws = Int(py=py_call_typed(b.int, subsample))
-    if weighted_draw:
-        # the weighted resample with replacement is drawn in the fit's program
-        wsub = w.value()
-        w = Optional[PythonObject]()
+        # a weighted resample with replacement is drawn in the fit's program,
+        # and the edges of its rows are then unweighted
+        draw = KB_DRAW_WEIGHTED if given else KB_DRAW_PLAIN
+    var weighted = given and not resample
     var nb = List[Int]()
     var n_bins = fields["n_bins"]
     if _int_like(n_bins, context):
@@ -736,98 +732,21 @@ def _kbins_fit(model: PythonObject, values: PythonObject, weight_source: PythonO
         nbmax = max(nbmax, nb[i])
     if len(nb) != d or smallest < 2:
         raise Error("mojolearn: n_bins must be >= 2 per feature")
-    var weighted = Bool(w)
     if weighted and strat != 0 and strat != 1 and strat != 3 and strat != 4:
         raise Error("mojolearn: When fitting with strategy='quantile' and sample weights, quantile_method "
                     + "should either be set to 'averaged_inverted_cdf' or 'inverted_cdf', got "
                     + "quantile_method='" + _str_text(fields["quantile_method"]) + "' instead.")
-    var mode = _default_mode(context)
-    var entries = scaler_entries(model, mode, context)
     var p = EncProg()
-    var xo = p.put_x(values)
-    var x_orig = xo
-    if weighted_draw:
-        var nbk = (n + ROW_BLOCK - 1) // ROW_BLOCK
-        var wo = p.put(wsub, n)
-        var bs = p.work(nbk)
-        var bp = p.work(nbk)
-        var ro = p.alloc(draws)
-        var xs = p.alloc(draws * d)
-        _stage(p.prog.program, OP_WBLK, nbk, wo, n, bs)
-        _stage(p.prog.program, OP_WSCAN, 1, bs, nbk, bp)
-        var seed_at = p.put_ints(_seed_words(seed_lo, seed_hi), context)
-        _ = seed_lo  # keep the Python object alive through the native call above
-        _stage(p.prog.program, OP_WDRAW, draws, wo, n, bs, bp, nbk, seed_at, ro)
-        _ = seed_lo  # keep the Python object alive through the native call above
-        _stage(p.prog.program, OP_RGATHER, draws * d, xo, d, ro, xs)
-        xo = xs
-        n = draws
-    elif plain_draw:
-        var so_seed = p.put_ints(_seed_words(seed_lo, seed_hi), context)
-        _ = seed_lo  # keep the Python object alive through the native call above
-        var ro = p.alloc(draws)
-        var xs = p.alloc(draws * d)
-        _stage(p.prog.program, OP_SMROWS, draws, so_seed, n, ro)
-        _ = seed_lo  # keep the Python object alive through the native call above
-        _stage(p.prog.program, OP_RGATHER, draws * d, xo, d, ro, xs)
-        xo = xs
-        n = draws
-    var so = p.work(n * d) if not weighted else p.alloc(n * d)
-    var st = p.alloc(6 * d)
-    var nbo = p.put_floats(_to_floats(nb), context)
-    var edges = p.alloc(d * (nbmax + 1))
-    var ne = p.alloc(d)
-    var lab = p.alloc(n * d) if strat == 3 else 0
-    var cen = p.alloc(d * nbmax) if strat == 3 else 0
-    _cs(p, mode, entries, xo, n, d, st)
-    if not weighted:
-        _stage(p.prog.program, OP_SORT_COLS, d, xo, n, d, so, 0)
-        _stage(p.prog.program, OP_KBINS_EDGES, d, so, n, d, nbo, nbmax, strat, st, edges, ne, lab, cen)
-    else:
-        # The weights go up once for every stage that reads them, and the
-        # weighted groups read the X input already in the arena (the Python
-        # put both a second time; the same words).
-        var wo = -1
-        var stw = st
-        if strat == 0 or strat == 3:
-            # the min / max over the rows of nonzero weight
-            stw = p.alloc(6 * d)
-            var m = wl
-            if m < n:
-                wo = p.put(w.value(), n)
-                var ro = p.alloc(n)
-                _ = enc_sel(p.prog, wo, n, 1, 1, ro)
-                var xz = p.alloc(m * d)
-                _stage(p.prog.program, OP_RGATHER, m * d, xo, d, ro, xz)
-                _cs(p, mode, entries, xz, m, d, stw)
-            else:
-                stw = st
-        if strat == 0:
-            _stage(p.prog.program, OP_KBINS_EDGES, d, so, n, d, nbo, nbmax, 0, stw, edges, ne, 0, 0)
-        else:
-            # `_weighted_groups`: every column's distinct values and summed weights
-            var gs = p.work(n * d)
-            var ug = p.alloc(2 * n * d)
-            var ucnt = p.alloc(d)
-            var codes = p.alloc(n * d)
-            _stage(p.prog.program, OP_SORT_COLS, d, x_orig, n, d, gs, 1)
-            _stage(p.prog.program, OP_UNIQUE_COLS, d, gs, n, d, ug, ucnt)
-            _stage(p.prog.program, OP_LOOKUP, n * d, x_orig, n, d, ug, n, ucnt, codes)
-            if wo < 0:
-                wo = p.put(w.value(), n)
-            _stage(p.prog.program, OP_KBINS_GW, d, codes, n, d, wo, ug + n * d)
-            if strat == 3:
-                _stage(p.prog.program, OP_KBINS_WKM, d, ug, n, d, ucnt, nbo, nbmax, st, stw, edges, cen, lab)
-            else:
-                # `_weighted_levels`: the percent levels i * (100 / b) (c2_grid KIND 0)
-                var stride = nbmax + 1
-                var lv = p.alloc(d * stride)
-                var grid_nb = p.put_floats(_to_floats(nb), context)
-                _stage(p.prog.program, OP_GRID, d * stride, grid_nb, stride, 0, lv)
-                var wq_nb = p.put_floats(_to_floats(nb), context)
-                _stage(p.prog.program, OP_KBINS_WQ, d, ug, n, d, ucnt, wq_nb, nbmax, lv, 1 if strat == 1 else 0, edges)
-            _stage(p.prog.program, OP_KBINS_EDGES, d, so, n, d, nbo, nbmax, 11, stw, edges, ne, 0, 0)
-    var ran = p.run(entries, context, model)
+    var x = p.own_x(values)
+    var w = p.own(weights, n) if given else NONE
+    var request = KBinsFit(n, d, x, strat, nb^, nbmax, draw, draws, seed_lo, seed_hi, weighted, w, positive,
+                           (_fam(mode, entries) & IDN_STATS_BLOCKED) != 0)
+    # RUN: the typed stages (bindings/prep_encode_kbins_run.mojo), then the typed run.
+    var plan = kbins_fit_stage(p.prog, request)
+    var ran = p.run_caps(entries, context, caps)
+    # PACK: the per-column edges and bin counts.
+    var edges = plan.edges
+    var ne = plan.counts
     var output = context["output_context"]
     var bin_edges = Python.list()
     var n_bins_ = classical_typed(Python.tuple(d), "<i8", output)
@@ -845,101 +764,88 @@ def _kbins_fit(model: PythonObject, values: PythonObject, weight_source: PythonO
     py_setitem(fields, "_stride", nbmax + 1)
     py_setitem(fields, "numeric_mode_", mode)
     py_setitem(fields, "n_features_in_", d)
-    _ = w^
-    _ = wsub^
+    _ = weights^
     _ = ran^
 
 
 def _prefix(widths: List[Int]) -> List[Float64]:
     # [sum(widths[:j]) for j in range(d)]
-    var out = List[Float64]()
-    var total = 0
-    for j in range(len(widths)):  # driver-loop: over per-column block widths
-        out.append(Float64(total))
-        total += widths[j]
-    return out^
+    return enc_prefix(widths)
 
 
 def _kbins_transform(model: PythonObject, values: PythonObject, context: PythonObject) raises -> PythonObject:
+    # UNPACK: the fitted fields, read once into the typed request; X and the
+    # fitted edge vectors as owners of the program.
     var fields = py_fields(model)
     var n = Int(py=values[3])
     var d = Int(py=values[4])
     _check_width(model, d)
     _kbins_finite(values)
     var entries = scaler_entries(model, fields["numeric_mode_"], context)
+    var caps = enc_caps(model, entries)
     var stride = Int(py=fields["_stride"])
-    var p = EncProg()
-    var xo = p.put_x(values)
-    var eo = p.put_fitted(model, "_edges", fields["_edges"], context)
-    var no = p.put_fitted(model, "_ne", fields["_ne"], context)
-    var codes = p.alloc(n * d)
-    _stage(p.prog.program, OP_KBINS_CODES, n * d, xo, n, d, eo, stride, no, codes)
+    var edges = _fitted_flat(model, "_edges", fields["_edges"], context)
+    var counts = _fitted_flat(model, "_ne", fields["_ne"], context)
+    var edges_words = Int(py=edges[2])
+    var counts_words = Int(py=counts[2])
     var encode = fields["encode"]
-    if _is_str(encode) and String(encode) == "ordinal":
-        var ran = p.run(entries, context, model)
-        return _take2(ran, codes, n, d, context)
-    var widths = _i64_values(fields["n_bins_"], context)
-    var W = 0
-    for j in range(len(widths)):  # driver-loop: over the fitted per-column bin counts
-        W += widths[j]
-    var so = p.put_floats(_prefix(widths), context)
-    var out = p.output(n * W, entries)
-    _stage(p.prog.program, OP_ONEHOT, n * d, codes, n, d, so, NONE, W, out)
-    var ran = p.run(entries, context, model)
-    return _take2(ran, out, n, W, context)
+    var onehot = not (_is_str(encode) and String(encode) == "ordinal")
+    var widths = List[Int]()
+    var cols = d
+    if onehot:
+        widths = _i64_values(fields["n_bins_"], context)
+        cols = 0
+        for j in range(len(widths)):  # driver-loop: over the fitted per-column bin counts
+            cols += widths[j]
+    var p = EncProg()
+    var x = p.own_x(values)
+    var edges_owner = p.own(edges[1], edges_words)
+    var counts_owner = p.own(counts[1], counts_words)
+    var request = KBinsApply(n, d, x, edges_owner, edges_words, counts_owner, counts_words, stride, onehot, widths^)
+    # RUN: the typed stages, then the typed run.
+    var result = kbins_transform_stage(p.prog, request, caps.has_out)
+    var ran = p.run_caps(entries, context, caps)
+    # PACK
+    return _take2(ran, result, n, cols, context)
 
 
 def _kbins_inverse(model: PythonObject, values: PythonObject, context: PythonObject) raises -> PythonObject:
+    # UNPACK: the fitted fields, read once into the typed request; X and the
+    # fitted edges as owners of the program.
     var fields = py_fields(model)
     var widths = _i64_values(fields["n_bins_"], context)
     var d = len(widths)
     var n = Int(py=values[3])
     var cols = Int(py=values[4])
     var entries = scaler_entries(model, fields["numeric_mode_"], context)
-    var p = EncProg()
-    var codes = 0
-    var bad_code = 0
-    var why = String()
+    var caps = enc_caps(model, entries)
     var encode = fields["encode"]
-    if _is_str(encode) and String(encode) == "ordinal":
+    var ordinal = _is_str(encode) and String(encode) == "ordinal"
+    var why = String("hold codes that name no bin")
+    if ordinal:
         _check_width(model, cols)
-        var xo = p.put_x(values)
-        codes = p.alloc(n * d)
-        var unknown = List[Float64]()
-        for _ in range(d):  # driver-loop: over the per-column missing slots
-            unknown.append(-1.0)
-        var zeros = List[Float64]()
-        zeros.append(0.0)
-        var mo = p.put_floats(unknown, context)
-        var eo = p.put_floats(zeros, context)
-        var uo = p.put_floats(zeros, context)
-        var wo = p.put_floats(_to_floats(widths), context)
-        _stage(p.prog.program, OP_ORD_INVERSE, n * d, xo, n, d, mo, eo, 0, uo, wo, codes)
-        bad_code = -2
-        why = "hold codes that name no bin"
     else:
-        var W = 0
+        var total = 0
         for j in range(d):  # driver-loop: over the fitted per-column bin counts
-            W += widths[j]
-        if cols != W:
-            raise Error("mojolearn: X has " + String(cols) + " columns, expected " + String(W))
-        # `_block_argmax`
-        var xo = p.put_x(values)
-        var so = p.put_floats(_prefix(widths), context)
-        var wo = p.put_floats(_to_floats(widths), context)
-        codes = p.alloc(n * d)
-        _stage(p.prog.program, OP_BLOCK_ARGMAX, n * d, xo, n, W, d, so, wo, NONE, 1, codes)
-        bad_code = -1
+            total += widths[j]
+        if cols != total:
+            raise Error("mojolearn: X has " + String(cols) + " columns, expected " + String(total))
         why = "can not be inverted because they contain all zeros"
-    var out = p.output(n * d, entries)
-    var eo2 = p.put_fitted(model, "_edges", fields["_edges"], context)
-    _stage(p.prog.program, OP_KBINS_INVERSE, n * d, codes, n, d, eo2, Int(py=fields["_stride"]), out)
-    var staged = enc_bad_rows_stages(p.prog, codes, n, d, bad_code, NONE)
-    var ran = p.run(entries, context, model)
-    var bad = _bad_rows(ran, staged, 10)
+    var edges = _fitted_flat(model, "_edges", fields["_edges"], context)
+    var edges_words = Int(py=edges[2])
+    var stride = Int(py=fields["_stride"])
+    var p = EncProg()
+    var x = p.own_x(values)
+    var edges_owner = p.own(edges[1], edges_words)
+    var request = KBinsInverse(n, cols, x, ordinal, widths^, edges_owner, edges_words, stride)
+    # RUN: the typed stages, then the typed run.
+    var plan = kbins_inverse_stage(p.prog, request, caps.has_out)
+    var ran = p.run_caps(entries, context, caps)
+    # PACK: the refusal's first rows, or the bin centers.
+    var bad = _bad_rows(ran, (plan.bad_rows, plan.bad_count), 10)
     if len(bad) > 0:
         raise Error("mojolearn: samples " + _list_text(bad) + " " + why)
-    return _take2(ran, out, n, d, context)
+    return _take2(ran, plan.centers, n, d, context)
 
 
 # ---------------------------------------------------------------- categories
@@ -2116,11 +2022,14 @@ def _spline_fit(model: PythonObject, values: PythonObject, weight_source: Python
     if n < 2:
         raise Error("Found array with " + String(n) + " sample(s) (shape=(" + String(n) + ", " + String(d)
                     + ")) while a minimum of 2 is required by SplineTransformer.")
+    var mode = _default_mode(context)
+    var entries = scaler_entries(model, mode, context)
+    var caps = enc_caps(model, entries)
     var w = PythonObject(None)
     var wl = 0
     var weighted = weight_source is not None
     if weighted:
-        var checked = _check_weights(weight_source, n, "SplineTransformer", context)
+        var checked = _check_weights(weight_source, n, "SplineTransformer", mode, entries, caps, context)
         w = checked[0]
         wl = checked[1]
     var knots_arg = fields["knots"]
@@ -2158,8 +2067,6 @@ def _spline_fit(model: PythonObject, values: PythonObject, weight_source: Python
     if periodic and nk <= k:
         raise Error("mojolearn: Periodic splines require degree < n_knots. Got n_knots=" + String(nk) + " and "
                     + "degree=" + String(k) + ".")
-    var mode = _default_mode(context)
-    var entries = scaler_entries(model, mode, context)
     var p = EncProg()
     var xo = p.put_x(values)
     var sorts = not given and knot_kind == "quantile" and not weighted
