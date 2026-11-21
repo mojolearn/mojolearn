@@ -41,6 +41,8 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 # The typed bodies (lane thin-trees-metrics, 2026-10-21).
 from mixture.gmm_entries import _gmm_sample_run
 from checks.vendor import COMPILED_VENDOR
+from core.device_route import device_vendor_code
+from core.mixture_member import mixture_member_publish
 from mixture.estimator import GaussianMixtureModel
 from mixture.mixture_binding_run import rebuild_model_run
 
@@ -152,6 +154,9 @@ def build__mojolearn_mixture() -> PythonObject:
         # Restore: git apply experiments/removed/dead_entries_gmm_python.patch
         m.def_function[gmm_sample_binding]("gmm_sample")
         m.def_function[mixture_native_api_v1_binding]("mixture_native_api_v1")
-        return m.finalize()
+        var published_module = m.finalize()
+        # The GaussianMixture member entry (core/mixture_member.mojo) beside its kernel table.
+        mixture_member_publish(Int(GLOBAL_NUMERIC_MODE), device_vendor_code(String(COMPILED_VENDOR)), Int(GMM_NATIVE_DEVICE_API.get_or_create_ptr()[].entries.unsafe_ptr()))
+        return published_module
     except e:
         abort(String("failed to create _mojolearn_mixture: ", e))
