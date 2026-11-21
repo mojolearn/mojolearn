@@ -9,6 +9,8 @@ across the host's cores.
 """
 from core.host_parallel import host_parallelize
 from neighbors.neighbors_graph_run import XnOpRequest
+from neighbors.label_propagation_run import LpFitRequest, LpFitOutcome, LpQueryRequest, lp_query_fused
+from neighbors.xn_request_run import xn_scratch_f32, xn_scratch_i32
 from neighbors.chi2_run import (
     Achi2FitRequest, Achi2Request, Schi2FitRequest, Schi2Request, achi2_interval_check, chi2_minimum,
     schi2_check_run,
@@ -23,7 +25,7 @@ from neighbors.neighbors_semi_run import (
     xn_lp_iterations, xn_lp_dense_proba_request,
 )
 
-comptime NEIGHBORS_SEMI_RUN_FIXTURES = 10
+comptime NEIGHBORS_SEMI_RUN_FIXTURES = 11
 
 
 def require(ok: Bool, message: String) raises:
@@ -193,12 +195,41 @@ def fixture(unit: Int) raises:
         var info: List[Int32] = [17, 0]
         require(xn_lp_iterations(Int(info.unsafe_ptr())) == 17, "iterations")
         _ = info
-    else:
+    elif unit == 9:
         require(same(xn_lp_dense_proba_request(1, 2, 3, 4, 5, 6, 7, 8, 9, 2, True, 11, 0.1), "lp_dense_proba",
                      [1, 2, 3, 4, 5], [6, 7, 8, 9, 2, 1, 11], [Float64(Float32(0.1)), 0.0]),
                 "dense proba request")
         require(xn_lp_dense_proba_request(1, 2, 3, 4, 5, 6, 7, 8, 9, 2, False, 11, 0.1).p[5] == 0,
                 "proba wants no codes")
+    else:
+        # label propagation RUN (neighbors/label_propagation_run.mojo): the
+        # requests, the outcome's defaults, when the one-session query serves,
+        # and the scratch an empty span still gets
+        var fit = LpFitRequest(1, 2, 3, 4, 5, 6, 7, 8, True, False, 0, 2, 0.5, False, 0.25, 0.75, 1e-3, 30, False,
+                               True)
+        require(fit.x == 1 and fit.codes == 2 and fit.final == 3 and fit.labels == 4 and fit.rows == 5
+                and fit.features == 6 and fit.classes == 7 and fit.marker == 8 and fit.spreading and not fit.knn
+                and fit.neighbors == 0 and fit.kind == 2 and fit.gamma == 0.5 and not fit.raw
+                and fit.weight == 0.25 and fit.alpha == 0.75 and fit.tol == 1e-3 and fit.max_iter == 30
+                and not fit.unfused and fit.old_items, "fit request")
+        var outcome = LpFitOutcome()
+        require(outcome.status == 0 and outcome.iterations == 0, "fit outcome default")
+        var query = LpQueryRequest(1, 2, 3, 4, 0, 5, 6, 7, 8, False, 0, 2, 0.5, True, False, False, False)
+        require(query.q == 1 and query.fit_x == 2 and query.distributions == 3 and query.dst == 4
+                and query.labels == 0 and query.rows == 5 and query.fit_rows == 6 and query.features == 7
+                and query.classes == 8 and not query.knn and query.kind == 2 and query.fused
+                and not query.want_labels, "query request")
+        require(lp_query_fused(query), "rbf with the fused operation and no empty side")
+        query.knn = True
+        require(not lp_query_fused(query), "the kNN graph takes the operation chain")
+        query.knn = False
+        query.rows = 0
+        require(not lp_query_fused(query), "an empty side takes the operation chain")
+        query.rows = 5
+        query.fused = False
+        require(not lp_query_fused(query), "an image without the fused operation takes the chain")
+        require(len(xn_scratch_f32(0)) == 1 and len(xn_scratch_i32(0)) == 1 and len(xn_scratch_f32(6)) == 6
+                and len(xn_scratch_i32(3)) == 3, "an empty span still has an address")
 
 
 def run_checks() raises:

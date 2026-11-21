@@ -6,21 +6,17 @@
 # and order, so the bits do not move.
 #
 # The shell hands over the binding `_bind()` resolved (the x_neighbors
-# binding of the model's numeric mode) and the method's arguments. Every
-# primitive is the binding's `xn_<name>(addresses, ints, floats)` entry the
-# Python `_XNeighbors._op` called, with the same lists in the same order;
-# the outputs are zero-filled mojolearn Arrays as `_buffer.empty` /
-# `_lazy_out._empty_out` made them (the opt-in MOJOLEARN_XN_LAZY_OUT
-# anonymous-map backing is a memory placement only: the same zeros, the
-# same bits). Import-time switches the Python module read once
+# binding of the model's numeric mode) and the method's arguments. Each
+# operation is UNPACK (this file: Python reads, admission, the published
+# arrays), RUN (neighbors/chi2_run.mojo, neighbors/label_propagation_run.mojo:
+# typed requests on the image's native descriptor entry, no Python object,
+# the GIL released once) and PACK (this file: refusals of deferred status
+# words, publication). Import-time switches the Python module read once
 # (MOJOLEARN_XN_OLD_ITEMS, MOJOLEARN_XN_UNFUSED_KNN) are read from the
 # context, where the module put them at its import.
-from providers.python.x_neighbors_descriptor_pyapi_door import xn_admit_arguments, xn_execute, xn_module, xn_is_module
+from providers.python.x_neighbors_descriptor_pyapi_door import xn_admit_arguments, xn_module, xn_is_module
 from providers.python.x_neighbors_admission_pyapi_door import xn_capabilities
-from providers.python.neural_descriptor_pyapi_door import neural_descriptor_execute
-from providers.python.compiled_binding_snapshot_pyapi_door import CompiledBindingSnapshot
 from providers.python.pcs_rng_pyapi_pack import pcs_seed, _pcs_connect
-from x_neighbors.descriptor_schema import xn_operation_id
 from std.python import Python, PythonObject
 from bindings.admitted_family_door import admit_family
 from bindings.admitted_input_unpack import admitted_finite_refuse
@@ -48,7 +44,7 @@ from providers.python.family_public_lifecycle_pyapi_door import family_lifecycle
 from providers.python.family_public_lifecycle_run import family_lifecycle_spec
 from providers.python.neighbors_public_lifecycle_pyapi_door import neighbors_public_end, neighbors_public_refusal
 from core.shared_slot import SharedSlot
-from neighbors.neighbors_graph_run import XnOpRequest, xn_f32_word, xn_rows_match_check
+from neighbors.neighbors_graph_run import xn_f32_word, xn_rows_match_check
 from std.python._cpython import GILReleased
 from bindings.lof_provider_unpack import LofConnection
 from neighbors.chi2_run import (
@@ -56,19 +52,9 @@ from neighbors.chi2_run import (
     achi2_transform_run, achi2_csr_run, schi2_fit_run, schi2_weights_run, schi2_check_run, schi2_transform_run,
 )
 from neighbors.neighbors_semi_run import (
-    xn_achi2_width, xn_schi2_missing_fit,
-    xn_semi_knn_k, xn_semi_sqdist_request, xn_semi_knn_select_request, xn_semi_knn_sq_request,
-    xn_lp_knn_graph_request, xn_lp_knn_product_request, xn_semi_matmul_request, xn_semi_rbf_request,
-    xn_semi_row_normalize_request, xn_semi_row_argmax_request, xn_lp_laplacian_request, xn_lp_col_degree_request,
-    xn_lp_laplacian_deg_request, xn_lp_alpha_check, xn_lp_static_weight, xn_lp_labels_request,
-    xn_lp_clamp_request, xn_lp_mode, xn_lp_iterate_knn_request, xn_lp_iterate_request, xn_lp_iterations,
-    xn_lp_dense_proba_request,
+    xn_achi2_width, xn_schi2_missing_fit, xn_semi_knn_k, xn_lp_alpha_check, xn_lp_static_weight,
 )
-
-# The typed checks, the operation requests (their word order and float32
-# rounding) and the info-word decoding are RUN in
-# neighbors/neighbors_semi_run.mojo; this file is UNPACK/PACK: Python reads,
-# admission, array allocation, publication and the binding calls.
+from neighbors.label_propagation_run import LpFitRequest, LpFitOutcome, LpQueryRequest, lp_fit_run, lp_query_run
 
 
 # ---------------------------------------------------------------- shared steps
@@ -136,36 +122,6 @@ def _semi_x(source: PythonObject, context: PythonObject) raises -> PythonObject:
 
 def _semi_at(value: PythonObject) raises -> Int:
     return Int(py=classical_address(value))
-
-
-def _semi_py_ints(values: List[Int]) raises -> PythonObject:
-    var result = Python.list()
-    var append = result.append  # resolved once, not per word
-    for value in values:  # driver-loop: over (named operation's fixed integer schema)
-        _ = py_call(append, PythonObject(value))
-    return result
-
-
-def _semi_py_floats(values: List[Float64]) raises -> PythonObject:
-    var result = Python.list()
-    var append = result.append  # resolved once, not per word
-    for value in values:  # driver-loop: over (named operation's fixed scalar schema)
-        _ = py_call(append, PythonObject(value))
-    return result
-
-
-def _semi_op(binding: PythonObject, request: XnOpRequest) raises:
-    """`_XNeighbors._op` of a RUN request. A compiled-binding snapshot's
-    native descriptor provider takes the typed words (the call `xn_execute`
-    makes for it, with its GIL release and call count); a loaded module's
-    `xn_<name>` export takes them as Python lists."""
-    if xn_is_module(binding):
-        xn_execute(binding, request.name, _semi_py_ints(request.a), _semi_py_ints(request.p),
-                   _semi_py_floats(request.f))
-        return
-    var snapshot = binding.downcast_value_ptr[CompiledBindingSnapshot]()
-    _ = neural_descriptor_execute(snapshot[].provider, xn_operation_id(request.name), request.a, request.p,
-                                  request.f)
 
 
 def _semi_numeric_mode_used(binding: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -526,109 +482,12 @@ def _schi2_transform(model: PythonObject, args: PythonObject, context: PythonObj
 
 
 # ---------------------------------------------------------------- label propagation
-
-
-def _semi_knn_idx(binding: PythonObject, q: PythonObject, r: PythonObject, k: Int,
-                  context: PythonObject, status: Int) raises -> PythonObject:
-    """`_XNeighbors._knn_sq(Q, R, k, False)`'s indices: the fused
-    `knn_sq_tiled` (`knn_sq` under MOJOLEARN_XN_OLD_ITEMS), or `sqdist` then
-    `knn_select` under MOJOLEARN_XN_UNFUSED_KNN. `status` (lane
-    a8b-device-x-neighbors-rest): the host address of Q's finite status word,
-    answered by the first op's status slot."""
-    var n = Int(py=q.shape[0])
-    var d = Int(py=q.shape[1])
-    var m = Int(py=r.shape[0])
-    if _semi_truth(context["family_xn_semi_unfused_knn"]):
-        var dmat = _semi_out(Python.tuple(n, m), "<f4", context)
-        _semi_op(binding, xn_semi_sqdist_request(_semi_at(q), _semi_at(r), _semi_at(dmat), n, m, d, status))
-        _ = q  # keep the Python object alive through the native call above
-        _ = r  # keep the Python object alive through the native call above
-        var dist = _semi_out(Python.tuple(n, k), "<f4", context)
-        var idx = _semi_out(Python.tuple(n, k), "<i4", context)
-        _semi_op(binding, xn_semi_knn_select_request(_semi_at(dmat), _semi_at(dist), _semi_at(idx), n, m, k))
-        _ = dmat  # keep the Python object alive through the native call above
-        _ = dist  # keep the Python object alive through the native call above
-        return idx
-    var dist = _semi_out(Python.tuple(n, k), "<f4", context)
-    var idx = _semi_out(Python.tuple(n, k), "<i4", context)
-    var old_items = _semi_truth(context["family_svc_xn_old_items"])
-    _semi_op(binding, xn_semi_knn_sq_request(old_items, _semi_at(q), _semi_at(r), _semi_at(dist), _semi_at(idx),
-                                             n, m, d, k, status))
-    _ = q  # keep the Python object alive through the native call above
-    _ = r  # keep the Python object alive through the native call above
-    _ = dist  # keep the Python object alive through the native call above
-    return idx
-
-
-def _lp_compact(binding: PythonObject, idx: PythonObject, n_reference: Int, variant: Int,
-                context: PythonObject) raises -> PythonObject:
-    """`_compact_graph`: (cols, vals) of the compact kNN graph."""
-    var n = Int(py=idx.shape[0])
-    var k = Int(py=idx.shape[1])
-    var cols = _semi_out(Python.tuple(n, k), "<i4", context)
-    var vals = _semi_out(Python.tuple(n, k), "<f4", context)
-    _semi_op(binding, xn_lp_knn_graph_request(_semi_at(idx), _semi_at(cols), _semi_at(vals), n, n_reference, k,
-                                              variant))
-    _ = idx  # keep the Python object alive through the native call above
-    _ = cols  # keep the Python object alive through the native call above
-    _ = vals  # keep the Python object alive through the native call above
-    return Python.tuple(cols, vals)
-
-
-def _lp_knn_product(binding: PythonObject, graph: PythonObject, m: Int, labels: PythonObject,
-                    context: PythonObject) raises -> PythonObject:
-    """`_graph_product` over the compact graph (`lp_knn_product`)."""
-    var cols = graph[0]
-    var vals = graph[1]
-    var n = Int(py=cols.shape[0])
-    var k = Int(py=cols.shape[1])
-    var c = Int(py=labels.shape[1])
-    var out = _semi_out(Python.tuple(n, c), "<f4", context)
-    _semi_op(binding, xn_lp_knn_product_request(_semi_at(cols), _semi_at(vals), _semi_at(labels), _semi_at(out),
-                                                n, m, k, c))
-    _ = cols  # keep the Python object alive through the native call above
-    _ = vals  # keep the Python object alive through the native call above
-    _ = labels  # keep the Python object alive through the native call above
-    return out
-
-
-def _semi_matmul(binding: PythonObject, a: PythonObject, bm: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_XNeighbors._matmul(A, B)`."""
-    var n = Int(py=a.shape[0])
-    var k = Int(py=a.shape[1])
-    var m = Int(py=bm.shape[1])
-    var out = _semi_out(Python.tuple(n, m), "<f4", context)
-    _semi_op(binding, xn_semi_matmul_request(_semi_at(a), _semi_at(bm), _semi_at(out), n, k, m))
-    _ = a  # keep the Python object alive through the native call above
-    _ = bm  # keep the Python object alive through the native call above
-    return out
-
-
-def _semi_rbf(binding: PythonObject, a: PythonObject, bq: PythonObject, gamma: PythonObject,
-              context: PythonObject, status: Int) raises -> PythonObject:
-    """`_XNeighbors._kernel(A, B, "rbf", gamma, 0.0, 0)`; `status`: A's
-    finite status word from the kernel op's status slot (0 not asked)."""
-    var n = Int(py=a.shape[0])
-    var d = Int(py=a.shape[1])
-    var m = Int(py=bq.shape[0])
-    var out = _semi_out(Python.tuple(n, m), "<f4", context)
-    var kind = context["family_svc_xn_kernels"]["rbf"]
-    var g = _semi_float(gamma)
-    var kind_code = _semi_int(kind)
-    _semi_op(binding, xn_semi_rbf_request(_semi_at(a), _semi_at(bq), _semi_at(out), n, m, d, kind_code, status, g))
-    _ = a  # keep the Python object alive through the native call above
-    _ = bq  # keep the Python object alive through the native call above
-    return out
-
-
-def _semi_row_normalize(binding: PythonObject, p: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`row_normalize` of a 2-D float32 matrix into a new one."""
-    var b = _semi_b()
-    var out = _semi_out(py_call(b.tuple, p.shape), "<f4", context)
-    _semi_op(binding, xn_semi_row_normalize_request(_semi_at(p), _semi_at(out), Int(py=p.shape[0]),
-                                                    Int(py=p.shape[1])))
-    _ = p  # keep the Python object alive through the native call above
-    return out
+#
+# Door split (lane dw-neighbors-b, 2026-11-21): UNPACK reads the fields,
+# admits X and y and allocates the published arrays; RUN is
+# neighbors/label_propagation_run.mojo (no Python object; one GIL release
+# around it; every intermediate is its native scratch); PACK refuses a
+# non-finite X and publishes.
 
 
 def _semi_class_at(classes: PythonObject, is_list: Bool, i: Int) raises -> PythonObject:
@@ -670,19 +529,6 @@ def _semi_class_array(classes: PythonObject, codes: PythonObject, context: Pytho
     return classical_decode_labels(classes, codes, context)
 
 
-def _semi_argmax_labels(binding: PythonObject, classes: PythonObject, m: PythonObject,
-                        context: PythonObject) raises -> PythonObject:
-    """`_argmax_labels`: each row's first maximum (`row_argmax`), decoded."""
-    var n = Int(py=m.shape[0])
-    var c = Int(py=m.shape[1])
-    var codes = _semi_out(Python.tuple(n), "<i4", context)
-    if n > 0:
-        _semi_op(binding, xn_semi_row_argmax_request(_semi_at(m), _semi_at(codes), n, c))
-        _ = m  # keep the Python object alive through the native call above
-        _ = codes  # keep the Python object alive through the native call above
-    return _semi_class_array(classes, codes, context)
-
-
 def _lp_alpha_f32(fields: PythonObject, spreading: Bool) raises -> Float64:
     """`_f32_scalar(self.alpha)` for spreading, 0.0 for propagation."""
     if not spreading:
@@ -690,58 +536,10 @@ def _lp_alpha_f32(fields: PythonObject, spreading: Bool) raises -> Float64:
     return xn_f32_word(_semi_float(family_field(fields, "alpha")))
 
 
-def _lp_build_graph(model: PythonObject, fields: PythonObject, binding: PythonObject, x: PythonObject,
-                    spreading: Bool, context: PythonObject, status: Int) raises -> PythonObject:
-    """`_build_graph` of the dense kernel: the RBF affinity, then
-    LabelPropagation's row normalization or LabelSpreading's normalized
-    Laplacian (the raw affinity under the classical-normalization switch)."""
-    var b = _semi_b()
-    var kernel = family_field(fields, "kernel")
-    if not _semi_eq(kernel, PythonObject("rbf")):
-        # 'knn' never reaches here (fit takes the compact graph first).
-        raise Error("NotImplementedError: " + String(py_type(model).__name__) + ": kernel=" + family_repr(kernel)
-                    + " is not implemented ('rbf' or 'knn')")
-    var a = _semi_rbf(binding, x, x, family_field(fields, "gamma"), context, status)
-    # Lane a8b-device-x-neighbors-rest: X's finite status, read with the
-    # affinity the kernel op downloaded, refused before the graph is used.
-    admitted_finite_refuse(Int(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=status)[0]),
-                           String(py_type(model).__name__))
-    var flag = family_call(b.getattr, xn_module(binding), PythonObject("x_neighbors_classical_graph_normalization"), PythonObject(None))
-    var raw = flag is not None and _semi_truth(family_call(flag))
-    py_setitem(fields, "_classical_raw_graph", PythonObject(raw))
-    if raw:
-        return a
-    if not spreading:
-        return _semi_row_normalize(binding, a, context)
-    var n = Int(py=a.shape[0])
-    var g = _semi_out(Python.tuple(n, n), "<f4", context)
-    if _semi_truth(context["family_svc_xn_old_items"]):
-        _semi_op(binding, xn_lp_laplacian_request(_semi_at(a), _semi_at(g), n))
-    else:
-        var deg = _semi_out(Python.tuple(n), "<f4", context)
-        _semi_op(binding, xn_lp_col_degree_request(_semi_at(a), _semi_at(deg), n))
-        _semi_op(binding, xn_lp_laplacian_deg_request(_semi_at(a), _semi_at(deg), _semi_at(g), n))
-        _ = deg  # keep the Python object alive through the native calls above
-    _ = a  # keep the Python object alive through the native calls above
-    return g
-
-
-def _lp_finish(fields: PythonObject, binding: PythonObject, x: PythonObject, classes: PythonObject,
-               ld: PythonObject, n_iter: Int, context: PythonObject) raises:
-    """`_finish_fit`: the final row normalization and the fitted state, set
-    in the Python method's order."""
-    var final = _semi_row_normalize(binding, ld, context)
-    py_setitem(fields, "X_", x)
-    py_setitem(fields, "classes_", classes)
-    py_setitem(fields, "label_distributions_", final)
-    py_setitem(fields, "n_iter_", PythonObject(n_iter))
-    py_setitem(fields, "transduction_", _semi_argmax_labels(binding, classes, final, context))
-    py_setitem(fields, "n_features_in_", PythonObject(Int(py=x.shape[1])))
-
-
 def _lp_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises:
     """`_LabelPropagationBase.fit(X, y)` (and `LabelSpreading.fit`'s alpha
     refusal first)."""
+    # UNPACK, with the refusals and the field reads in the public method's order
     var b = _semi_b()
     var binding = args[0]
     var fields = py_fields(model)
@@ -751,6 +549,7 @@ def _lp_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
         xn_lp_alpha_check(_semi_float(family_field(fields, "alpha")))
     var x = _semi_x(args[1], context)
     var n = Int(py=x.shape[0])
+    var d = Int(py=x.shape[1])
     var encoded = classical_encode_labels(args[2], context)
     var allc = encoded.classes
     var codes = encoded.codes
@@ -766,73 +565,65 @@ def _lp_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
         if i != skip:
             _ = py_call(classes.append, allc[i])
     var nc = len(classes)
-    var ld = _semi_out(Python.tuple(n, nc), "<f4", context)
-    var ys = _semi_out(Python.tuple(n, nc), "<f4", context)
-    var unlabeled = _semi_out(Python.tuple(n), "<i4", context)
-    var a = Float64(1.0)
+    var marker = skip if skip >= 0 else len(allc)
+    var weight = Float64(1.0)
     if spreading:
-        a = xn_lp_static_weight(_semi_float(family_field(fields, "alpha")))
-    if n != 0 and nc != 0:
-        var marker = skip if skip >= 0 else len(allc)
-        _semi_op(binding, xn_lp_labels_request(_semi_at(codes), _semi_at(ld), _semi_at(ys), _semi_at(unlabeled), n, nc,
-                                               marker, a))
-        _ = codes  # keep the Python object alive through the native call above
-    var knn = _semi_eq(family_field(fields, "kernel"), PythonObject("knn"))
-    var graph = PythonObject(None)
-    var dense = PythonObject(None)
-    # Lane a8b-device-x-neighbors-rest: X's finite test rides behind the
-    # upload of the graph's first op (the public admission deferred it).
-    var status = List[Int32](length=1, fill=Int32(0))
+        weight = xn_lp_static_weight(_semi_float(family_field(fields, "alpha")))
+    var kernel = family_field(fields, "kernel")
+    var knn = _semi_eq(kernel, PythonObject("knn"))
+    var k = 0
+    var kind = 0
+    var gamma = Float64(0.0)
+    var raw = False
+    var unfused = False
+    var old_items = False
     if knn:
-        var k = xn_semi_knn_k(_semi_int(family_field(fields, "n_neighbors")), n)
-        var idx = _semi_knn_idx(binding, x, x, k, context, Int(status.unsafe_ptr()))
-        admitted_finite_refuse(Int(status[0]), String(py_type(model).__name__))
-        graph = _lp_compact(binding, idx, n, 1 if spreading else 0, context)
+        k = xn_semi_knn_k(_semi_int(family_field(fields, "n_neighbors")), n)
+        unfused = _semi_truth(context["family_xn_semi_unfused_knn"])
+        if not unfused:
+            old_items = _semi_truth(context["family_svc_xn_old_items"])
     else:
-        dense = _lp_build_graph(model, fields, binding, x, spreading, context, Int(status.unsafe_ptr()))
-    _ = status^
-    var ystatic = ys
-    if not spreading:
-        # propagation's static rows: `lp_clamp` with ld as both inputs.
-        ystatic = _semi_out(Python.tuple(n, nc), "<f4", context)
-        _semi_op(binding, xn_lp_clamp_request(_semi_at(ld), _semi_at(unlabeled), _semi_at(ystatic), n, nc))
-    if knn:
-        # The kNN-graph loop as one resident op (`lp_iterate_knn`), on every
-        # binding (lane n4-mds-labelprop-nmf-loops, 2026-11-09).
-        # TOMBSTONE: label-propagation compact-graph binding loop (REFACTORED: lp_iterate_knn on every vendor and tier) deleted 2026-11-09 by lane/n4-mds-labelprop-nmf-loops; code recoverable at f59d913b0b.
-        # Restore: git apply -3 experiments/removed/N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch; record in docs/TOMBSTONES.md.
-        var cols = graph[0]
-        var vals = graph[1]
-        var info = _semi_out(Python.tuple(2), "<i4", context)
-        var tol = _semi_float(family_field(fields, "tol"))
-        var max_iter = _semi_int(family_field(fields, "max_iter"))
-        var alpha_f = _lp_alpha_f32(fields, spreading)
-        _semi_op(binding, xn_lp_iterate_knn_request(_semi_at(cols), _semi_at(vals), _semi_at(ld), _semi_at(ystatic),
-                                                    _semi_at(unlabeled), _semi_at(info), n, Int(py=cols.shape[1]),
-                                                    nc, max_iter, spreading, tol, alpha_f))
-        _ = cols  # keep the Python object alive through the native call above
-        _ = vals  # keep the Python object alive through the native call above
-        _ = ystatic  # keep the Python object alive through the native call above
-        _ = unlabeled  # keep the Python object alive through the native call above
-        var resident_iter = xn_lp_iterations(_semi_at(info))
-        _ = info  # keep the Python object alive through the read above
-        _lp_finish(fields, binding, x, classes, ld, resident_iter, context)
-        return
-    # The dense loop as one resident op (`lp_iterate`).
-    var info = _semi_out(Python.tuple(2), "<i4", context)
+        if not _semi_eq(kernel, PythonObject("rbf")):
+            raise Error("NotImplementedError: " + String(py_type(model).__name__) + ": kernel=" + family_repr(kernel)
+                        + " is not implemented ('rbf' or 'knn')")
+        var kind_word = context["family_svc_xn_kernels"]["rbf"]
+        gamma = _semi_float(family_field(fields, "gamma"))
+        kind = _semi_int(kind_word)
+        # LabelPropagation's row normalization or LabelSpreading's normalized
+        # Laplacian; the raw affinity under the image's classical-normalization switch.
+        var flag = family_call(b.getattr, xn_module(binding), PythonObject("x_neighbors_classical_graph_normalization"), PythonObject(None))
+        raw = flag is not None and _semi_truth(family_call(flag))
+        if spreading and not raw:
+            old_items = _semi_truth(context["family_svc_xn_old_items"])
     var tol = _semi_float(family_field(fields, "tol"))
     var max_iter = _semi_int(family_field(fields, "max_iter"))
-    var mode = xn_lp_mode(spreading, _semi_truth(py_get(fields, PythonObject("_classical_raw_graph"),
-                                                        PythonObject(False))))
-    var alpha_f = _lp_alpha_f32(fields, spreading)
-    _semi_op(binding, xn_lp_iterate_request(_semi_at(dense), _semi_at(ld), _semi_at(ystatic), _semi_at(unlabeled),
-                                            _semi_at(info), n, nc, max_iter, mode, tol, alpha_f))
-    _ = dense  # keep the Python object alive through the native call above
-    _ = ystatic  # keep the Python object alive through the native call above
-    _ = unlabeled  # keep the Python object alive through the native call above
-    var dense_iter = xn_lp_iterations(_semi_at(info))
-    _ = info  # keep the Python object alive through the read above
-    _lp_finish(fields, binding, x, classes, ld, dense_iter, context)
+    var alpha = _lp_alpha_f32(fields, spreading)
+    var final = _semi_out(Python.tuple(n, nc), "<f4", context)
+    var labels = _semi_out(Python.tuple(n), "<i4", context)
+    var request = LpFitRequest(_semi_at(x), _semi_at(codes), _semi_at(final), _semi_at(labels), n, d, nc, marker,
+                               spreading, knn, k, kind, gamma, raw, weight, alpha, tol, max_iter, unfused, old_items)
+    var connection = LofConnection(binding)
+    var outcome = LpFitOutcome()
+    # RUN
+    with GILReleased(Python()):
+        outcome = lp_fit_run(connection.driver, request)
+    _ = x  # keep the Python object alive through the native call above
+    _ = codes  # keep the Python object alive through the native call above
+    _ = final  # keep the Python object alive through the native call above
+    _ = labels  # keep the Python object alive through the native call above
+    # PACK: X's finite status (read behind the upload of the graph's first
+    # operation) is refused before anything is published; then the fitted
+    # state in the Python method's order.
+    if outcome.status != 0:
+        admitted_finite_refuse(outcome.status, String(py_type(model).__name__))
+    if not knn:
+        py_setitem(fields, "_classical_raw_graph", PythonObject(raw))
+    py_setitem(fields, "X_", x)
+    py_setitem(fields, "classes_", classes)
+    py_setitem(fields, "label_distributions_", final)
+    py_setitem(fields, "n_iter_", PythonObject(outcome.iterations))
+    py_setitem(fields, "transduction_", _semi_class_array(classes, labels, context))
+    py_setitem(fields, "n_features_in_", PythonObject(d))
 
 
 def _lp_dense_available(binding: PythonObject) raises -> Bool:
@@ -844,85 +635,73 @@ def _lp_dense_available(binding: PythonObject) raises -> Bool:
     return (xn_capabilities(binding) & 64) != 0
 
 
-def _lp_dense_fused(model: PythonObject, binding: PythonObject, source: PythonObject, want_codes: Bool,
-                    context: PythonObject) raises -> PythonObject:
-    """kernel='rbf' predict_proba (float32 (nq, C)) or predict codes (int32
-    (nq,)) through `lp_dense_proba` (lane ne3-g-svc-gp-neighbors, N324): the
-    kernel matrix, the product and the normalization stay on the device;
-    the same kind, gamma and coef0 words `_semi_rbf` passes."""
+def _lp_query(model: PythonObject, binding: PythonObject, source: PythonObject, want_labels: Bool,
+              context: PythonObject) raises -> PythonObject:
+    """predict_proba's float32 (nq, C) Array, or predict's int32 (nq,) class
+    codes: kernel='rbf' through `lp_dense_proba` when the image carries it
+    (lane ne3-g-svc-gp-neighbors, N324), else the operation chain."""
+    # UNPACK
     var fields = py_fields(model)
+    var knn = _semi_eq(family_field(fields, "kernel"), PythonObject("knn"))
+    var fused = not knn and _lp_dense_available(binding)
     var q = _semi_x(source, context)
     var xfit = family_field(fields, "X_")
-    var dist = family_field(fields, "label_distributions_")
     var nq = Int(py=q.shape[0])
     var n = Int(py=xfit.shape[0])
+    var k = 0
+    var kind = 0
+    var gamma = Float64(0.0)
+    var unfused = False
+    var old_items = False
+    if knn:
+        k = xn_semi_knn_k(_semi_int(family_field(fields, "n_neighbors")), n)
+        unfused = _semi_truth(context["family_xn_semi_unfused_knn"])
+        if not unfused:
+            old_items = _semi_truth(context["family_svc_xn_old_items"])
+    else:
+        var kind_word = context["family_svc_xn_kernels"]["rbf"]
+        gamma = _semi_float(family_field(fields, "gamma"))
+        kind = _semi_int(kind_word)
+    var dist = family_field(fields, "label_distributions_")
     var c = Int(py=dist.shape[1])
-    if nq == 0 or n == 0 or c == 0:
-        return PythonObject(None)  # an empty side: the caller takes the op chain
-    # The unused output is a one-word placeholder (the descriptor refuses a
-    # null address).
-    var proba = _semi_out(Python.tuple(1 if want_codes else nq, 1 if want_codes else c), "<f4", context)
-    var codes = _semi_out(Python.tuple(nq if want_codes else 1), "<i4", context)
-    var kind = context["family_svc_xn_kernels"]["rbf"]
-    var g = _semi_float(family_field(fields, "gamma"))
-    # Lane a8b-device-x-neighbors-rest: the queries' finite test behind the
-    # session's upload (its status slot).
-    var status = List[Int32](length=1, fill=Int32(0))
-    var d = Int(py=q.shape[1])
-    var kind_code = _semi_int(kind)
-    _semi_op(binding, xn_lp_dense_proba_request(_semi_at(q), _semi_at(xfit), _semi_at(dist), _semi_at(proba),
-                                                _semi_at(codes), nq, n, d, c, kind_code, want_codes,
-                                                Int(status.unsafe_ptr()), g))
-    admitted_finite_refuse(Int(status[0]), String(py_type(model).__name__))
-    _ = status^
+    var result: PythonObject
+    var dst = 0
+    var labels = 0
+    if want_labels:
+        result = _semi_out(Python.tuple(nq), "<i4", context)
+        labels = _semi_at(result)
+    else:
+        result = _semi_out(Python.tuple(nq, c), "<f4", context)
+        dst = _semi_at(result)
+    var request = LpQueryRequest(_semi_at(q), _semi_at(xfit), _semi_at(dist), dst, labels, nq, n,
+                                 Int(py=q.shape[1]), c, knn, k, kind, gamma, fused, want_labels, unfused, old_items)
+    var connection = LofConnection(binding)
+    var status = 0
+    # RUN
+    with GILReleased(Python()):
+        status = lp_query_run(connection.driver, request)
     _ = q  # keep the Python object alive through the native call above
     _ = xfit  # keep the Python object alive through the native call above
     _ = dist  # keep the Python object alive through the native call above
-    _ = codes  # keep the Python object alive through the native call above
-    return codes if want_codes else proba
+    _ = result  # keep the Python object alive through the native call above
+    # PACK: the queries' finite status, read behind the first operation's upload
+    if status != 0:
+        admitted_finite_refuse(status, String(py_type(model).__name__))
+    return result
 
 
 def _lp_proba(model: PythonObject, binding: PythonObject, source: PythonObject,
               context: PythonObject) raises -> PythonObject:
     """`_LabelPropagationBase.predict_proba(X)`."""
-    var fields = py_fields(model)
-    var knn = _semi_eq(family_field(fields, "kernel"), PythonObject("knn"))
-    if not knn and _lp_dense_available(binding):
-        var fused = _lp_dense_fused(model, binding, source, False, context)
-        if fused is not None:
-            return fused
-    var q = _semi_x(source, context)
-    var xfit = family_field(fields, "X_")
-    var n = Int(py=xfit.shape[0])
-    var p: PythonObject
-    # Lane a8b-device-x-neighbors-rest: the queries' finite test behind the
-    # first op's upload (its status slot).
-    var status = List[Int32](length=1, fill=Int32(0))
-    if knn:
-        var k = xn_semi_knn_k(_semi_int(family_field(fields, "n_neighbors")), n)
-        var idx = _semi_knn_idx(binding, q, xfit, k, context, Int(status.unsafe_ptr()))
-        admitted_finite_refuse(Int(status[0]), String(py_type(model).__name__))
-        var graph = _lp_compact(binding, idx, n, 2, context)
-        p = _lp_knn_product(binding, graph, n, family_field(fields, "label_distributions_"), context)
-    else:
-        var w = _semi_rbf(binding, q, xfit, family_field(fields, "gamma"), context, Int(status.unsafe_ptr()))
-        admitted_finite_refuse(Int(status[0]), String(py_type(model).__name__))
-        p = _semi_matmul(binding, w, family_field(fields, "label_distributions_"), context)
-    _ = status^
-    return _semi_row_normalize(binding, p, context)
+    return _lp_query(model, binding, source, False, context)
 
 
 def _lp_predict(model: PythonObject, binding: PythonObject, source: PythonObject,
                 context: PythonObject) raises -> PythonObject:
-    """`_LabelPropagationBase.predict(X)`."""
-    var fields = py_fields(model)
-    if not _semi_eq(family_field(fields, "kernel"), PythonObject("knn")) and _lp_dense_available(binding):
-        # Only the nq codes come back (N324); the decode is `_argmax_labels`'.
-        var codes = _lp_dense_fused(model, binding, source, True, context)
-        if codes is not None:
-            return _semi_class_array(family_field(fields, "classes_"), codes, context)
-    var proba = _lp_proba(model, binding, source, context)
-    return _semi_argmax_labels(binding, family_field(py_fields(model), "classes_"), proba, context)
+    """`_LabelPropagationBase.predict(X)`: only the class codes come back;
+    the decode is `_argmax_labels`'."""
+    var codes = _lp_query(model, binding, source, True, context)
+    return _semi_class_array(family_field(py_fields(model), "classes_"), codes, context)
 
 
 # ---------------------------------------------------------------- dispatch
