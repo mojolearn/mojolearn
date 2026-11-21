@@ -68,10 +68,15 @@ the Python units' member doors refuse it. y is admitted finite either way
 (`classical_check_y`, or the label encode).
 
 RESPONSE ELEMENT TYPE: the member's own OUTPUTS answer
-(`member_output_dtype`, once per operation at UNPACK). The placed buffers
-are int32 codes and float32 values; a member that writes another type
-(int64 codes, float64 probabilities) answers `ran == False` BEFORE any fit
-is spent, where its first response call used to refuse after the fits.
+(`member_output_dtype`, once per operation at UNPACK), and every buffer is
+placed in THAT type, so the worker's words are the result with no cast or
+copy pass and no precision change: a classifier's predict as int32 codes
+(the unit's own typed list) or int64 codes (an int64 Array), decoded to
+labels at PACK by the one encode's classes; values, probabilities and
+decision scores as a float32 or a float64 Array, which is the prediction
+object itself. A member that does not say its type is read as int32 codes /
+float32 values (as before the word existed). Any other answer (a float
+code, an integer score) is `ran == False` BEFORE any fit is spent.
 
 WHEN IT RUNS (`msel_member_units` answers `ran == False` otherwise and the
 caller keeps its Python units): the member's class carries a member mark and
@@ -83,18 +88,39 @@ tests those before calling).
 
 RESPONSES (`responses` not empty: a named scorer, or cross_val_predict). A
 unit then fits and, instead of the member's own score, writes
-`MEMBER_OP_PREDICT` / `MEMBER_OP_PREDICT_PROBA` of its test rows (and of its
-train rows when train scores are asked) into buffers placed at UNPACK: one
-float32 Array per (unit, side, response), sized from `member_outputs` before
-any state exists, which the unit's worker fills with the GIL released (no
-copy afterwards); a classifier's predict writes int32 codes into the unit's
-own typed list and PACK decodes them to labels with the classes of the one
-encode (`labels_decode_i32_codes`). `scores.outputs[(unit * sides + side) *
+`MEMBER_OP_PREDICT` / `MEMBER_OP_PREDICT_PROBA` / `MEMBER_OP_DECISION` (a
+classifier's `decision_function`) of its test rows (and of its train rows
+when train scores are asked) into buffers placed at UNPACK: one buffer per
+(unit, side, response) in the member's own element type (above), sized from
+`member_outputs` before any state exists, which the unit's worker fills with
+the GIL released (no copy afterwards); a classifier's predict writes codes
+and PACK decodes them to labels with the classes of the one encode. `scores.outputs[(unit * sides + side) *
 len(responses) + k]` is the prediction object (side 0 test, 1 train). The
 CALLER runs its metric over them (bindings/msel_cv_door.mojo): this file
 knows no scorer. Served only where the width is the plain one: predict one
-column, predict_proba one column per class; anything else takes the Python
-units.
+column, predict_proba one column per class, decision_function one column
+(the estimator's 1-D margin) or, with more than two classes, one column per
+class; anything else (a one-vs-one decision, a two-column binary decision)
+takes the Python units, because the shape the estimator's own method returns
+is then not the member's columns.
+
+THE RESIDENT SCOPE (MEMBER-ABI-V2.md item 27, THE PIN RULE at
+core/member_abi.mojo `MemberCall.pin`). For a member KIND with
+`MEMBER_CAN_SCOPE` the calling thread's scope is read ONCE per operation at
+UNPACK (`member_scope_word`; a kind without the bit costs nothing). Inside
+`resident()`: every unit's calls carry the scope word, and X's own object is
+pinned once per offering call (`member_pin_take`: fit, plus each score or
+response call of each side), so the member keeps X on the device across the
+units, where it used to put a fold per call. A kind that also reads row
+numbers gets EVERY side, a run of rows included, as the whole X plus the
+fold's index: one resident base for all folds, each fold gathered on the
+device (a view of a run would be a second resident range per fold). A kind
+without row numbers offers the pin for its view sides only; a side gathered
+into the unit's own buffer never carries a pin. After the units joined the
+references no cache took are returned (`member_pin_return`). OUTSIDE
+`resident()`: no scope, no pin; the member puts X per call exactly as its own
+door does outside a scope. A scope read that raises (a thread-local holding
+something else) answers `ran == False`: the Python units' doors refuse it.
 
 A SEARCH'S REFIT (`msel_member_refit`): the same route with one candidate
 and one unit whose train side is all of X (a view), fit only; the fitted
@@ -120,8 +146,9 @@ from std.python._cpython import GILReleased
 from bindings.classical_validate_unpack import classical_check_y, classical_estimator_name
 from bindings.member_boundary_door import member_admit_serving, member_pack, member_pack_labeled
 from bindings.member_held_door import member_held_adopt
+from bindings.member_scope_door import member_scope_word, member_pin_take, member_pin_return
 from bindings.classifier_public_lifecycle_door import _public_labels
-from bindings.classical_labels_door import labels_decode_i32_codes
+from bindings.classical_labels_door import labels_decode_i32_codes, labels_decode_labels
 from bindings.family_common_pack import family_array
 from bindings.msel_common_door import msel_is_array, msel_addr, msel_index_i64, msel_encode
 from bindings.msel_cv_run import msel_seconds
@@ -139,6 +166,8 @@ from core.member_abi import (
     MEMBER_F32, MEMBER_I32, MEMBER_CAN_EXPORT, member_outputs, member_output_dtype, MEMBER_CAN_TEST_ROWS,
     MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA,
     MEMBER_OP_FIT, MEMBER_OP_SCORE, MEMBER_CAN_FIT, MEMBER_CAN_SCORE, MEMBER_CAN_CLASSIFIER, MEMBER_CAN_ROW_INDEX,
+    MEMBER_CAN_SCOPE, MEMBER_SCOPE_NONE, member_pin_settle,
+    MEMBER_OP_DECISION, MEMBER_CAN_DECISION, MEMBER_F64,
 )
 
 #: Rows below which a fold gather is not split (a task costs more than the
@@ -230,6 +259,14 @@ struct MselMemberRun(Movable):
     var fit_failed: List[UInt8]
     # A search's refit: one unit that fits on every row and runs nothing else.
     var fit_only: Bool
+    # THE RESIDENT SCOPE (module note): the caller's scope handle word
+    # (MEMBER_SCOPE_NONE: none), the pin token of X's own object (0: nothing
+    # is offered), whether every side goes as the whole X plus row numbers,
+    # and per unit the offered references a cache took.
+    var scope: Int
+    var pin: Int
+    var index_all: Bool
+    var taken: List[Int]
 
     def __init__(out self, x: Int, y: Int, rows: Int, cols: Int, n_folds: Int, n_units: Int, workers: Int,
         return_train: Bool, keep: Bool):
@@ -241,6 +278,10 @@ struct MselMemberRun(Movable):
         self.codes = List[List[Int32]]()
         self.tolerate = False
         self.fit_only = False
+        self.scope = MEMBER_SCOPE_NONE
+        self.pin = 0
+        self.index_all = False
+        self.taken = List[Int](length=n_units, fill=0)
         self.fit_failed = List[UInt8](length=n_units, fill=UInt8(0))
         self.plans = List[MemberPlan]()
         self.folds = List[Int]()
@@ -374,17 +415,32 @@ def _side_set(run: MutPointer[MselMemberRun, MutUntrackedOrigin], mode: Int, sta
         call.y = MemberMatrix(gathered_y, count, 1, y_dtype)
 
 
-def _respond(run: MutPointer[MselMemberRun, MutUntrackedOrigin], u: Int, side: Int, count: Int,
+def _offered(run: MutPointer[MselMemberRun, MutUntrackedOrigin], u: Int, op: Int, offer: Int,
+    mut call: MemberCall) raises:
+    """One member call of unit `u` over the side the call points at, offering
+    the pin token `offer` (0: the side is the unit's own gathered buffer, or
+    the run has no scope). The member's answer about the reference is read
+    whether the call returns or raises (THE PIN RULE)."""
+    call.pin = offer
+    if offer == 0:
+        _ = member_call(run[].plans[u // run[].n_folds].member, op, call)
+        return
+    try:
+        _ = member_call(run[].plans[u // run[].n_folds].member, op, call)
+    finally:
+        run[].taken[u] += member_pin_settle(call)
+
+
+def _respond(run: MutPointer[MselMemberRun, MutUntrackedOrigin], u: Int, side: Int, count: Int, offer: Int,
     mut call: MemberCall) raises:
     """Write every asked response of the side the call points at into the
     unit's placed buffers (RESPONSES, module note). The fitted state reads
     x (and row_index) as `_side_set` left them."""
     var n_ops = len(run[].ops)
-    var c = u // run[].n_folds
     var at = (u * run[].sides + side) * n_ops
     for k in range(n_ops):  # driver-loop: over the request's responses (at most two)
         call.dst = MemberMatrix(run[].dst[at + k], count, run[].widths[k], run[].words[k])
-        _ = member_call(run[].plans[c].member, run[].ops[k], call)
+        _offered(run, u, run[].ops[k], offer, call)
     call.dst = MemberMatrix()
 
 
@@ -400,6 +456,14 @@ def _msel_member_unit(run: MutPointer[MselMemberRun, MutUntrackedOrigin], u: Int
     var indexed = run[].plans[c].member.can(MEMBER_CAN_ROW_INDEX)
     var train_mode = _side_mode(run[].starts[2 * f], indexed)
     var test_mode = _side_mode(run[].starts[2 * f + 1], indexed)
+    if run[].index_all and indexed and not run[].fit_only:
+        # In the caller's resident scope every side is the whole X plus the
+        # fold's row numbers: one resident base for all folds (module note).
+        train_mode = 1
+        test_mode = 1
+    # A side gathered into this unit's own buffer never carries the pin.
+    var train_offer = run[].pin if train_mode != 2 else 0
+    var test_offer = run[].pin if test_mode != 2 else 0
     var t0 = msel_seconds()
     # X IS NOT COPIED PER FOLD when the side is a run of rows (a view) or the
     # member reads row numbers. Only a scattered side of a family without
@@ -419,18 +483,20 @@ def _msel_member_unit(run: MutPointer[MselMemberRun, MutUntrackedOrigin], u: Int
         _gather(run[].x, test_index, test_rows, cols, Int(x_test.unsafe_ptr()), split)
         _gather(run[].y, test_index, test_rows, 1, Int(y_test.unsafe_ptr()), split)
     var call = member_new(run[].plans[c])
+    call.scope = run[].scope
+    call.pin = 0
     var kept = False
     try:
         _side_set(run, train_mode, run[].starts[2 * f], train_index, train_rows, Int(x_train.unsafe_ptr()),
                   Int(y_train.unsafe_ptr()), call)
         if run[].tolerate:
             try:
-                _ = member_call(run[].plans[c].member, MEMBER_OP_FIT, call)
+                _offered(run, u, MEMBER_OP_FIT, train_offer, call)
             except error:
                 run[].errors[u] = String(error)
                 run[].fit_failed[u] = UInt8(1)
         else:
-            _ = member_call(run[].plans[c].member, MEMBER_OP_FIT, call)
+            _offered(run, u, MEMBER_OP_FIT, train_offer, call)
         var t1 = msel_seconds()
         if run[].fit_failed[u] != UInt8(0):
             run[].fit_time[u] = t1 - t0
@@ -444,18 +510,18 @@ def _msel_member_unit(run: MutPointer[MselMemberRun, MutUntrackedOrigin], u: Int
         _side_set(run, test_mode, run[].starts[2 * f + 1], test_index, test_rows, Int(x_test.unsafe_ptr()),
                   Int(y_test.unsafe_ptr()), call)
         if n_ops == 0:
-            _ = member_call(run[].plans[c].member, MEMBER_OP_SCORE, call)
+            _offered(run, u, MEMBER_OP_SCORE, test_offer, call)
             run[].test[u] = call.value
         else:
-            _respond(run, u, 0, test_rows, call)
+            _respond(run, u, 0, test_rows, test_offer, call)
         if run[].return_train:
             _side_set(run, train_mode, run[].starts[2 * f], train_index, train_rows, Int(x_train.unsafe_ptr()),
                       Int(y_train.unsafe_ptr()), call)
             if n_ops == 0:
-                _ = member_call(run[].plans[c].member, MEMBER_OP_SCORE, call)
+                _offered(run, u, MEMBER_OP_SCORE, train_offer, call)
                 run[].train[u] = call.value
             else:
-                _respond(run, u, 1, train_rows, call)
+                _respond(run, u, 1, train_rows, train_offer, call)
         run[].fit_time[u] = t1 - t0
         run[].score_time[u] = msel_seconds() - t1
         if run[].keep:
@@ -570,6 +636,8 @@ def _member_units(base: PythonObject, candidates: PythonObject, y: PythonObject,
     var pins = Python.list()
     var classifier = False
     var tests_rows = False
+    var scope = MEMBER_SCOPE_NONE
+    var index_all = False
     var run = MselMemberRun(msel_addr(x), 0, rows, cols, n_folds, n_units, workers, return_train, keep)
     # Per candidate: its estimator and its admission's pins (PACK reads them).
     var members = Python.list()
@@ -583,6 +651,8 @@ def _member_units(base: PythonObject, candidates: PythonObject, y: PythonObject,
             asked = asked | MEMBER_CAN_PREDICT
         elif responses[k] == MEMBER_OP_PREDICT_PROBA:
             asked = asked | MEMBER_CAN_PREDICT_PROBA
+        elif responses[k] == MEMBER_OP_DECISION:
+            asked = asked | MEMBER_CAN_DECISION
         else:
             return scores^
     var needs = asked
@@ -614,6 +684,15 @@ def _member_units(base: PythonObject, candidates: PythonObject, y: PythonObject,
                 return scores^
             classifier = (kind_mask & MEMBER_CAN_CLASSIFIER) != 0
             tests_rows = (kind_mask & MEMBER_CAN_TEST_ROWS) != 0
+            if (kind_mask & MEMBER_CAN_SCOPE) != 0:
+                # THE RESIDENT SCOPE (module note): read once per operation,
+                # only for a kind that can keep X resident. A read that
+                # raises is the Python units' doors' to refuse.
+                try:
+                    scope = member_scope_word(context["family_msel_rows_context"])
+                except:
+                    return scores^
+                index_all = scope >= 0 and (kind_mask & MEMBER_CAN_ROW_INDEX) != 0
         run.plans.append(owner.plan.copy())
         _ = py_call(members.append, est)
         _ = py_call(member_pins.append, owner.pins)
@@ -709,11 +788,21 @@ def _member_units(base: PythonObject, candidates: PythonObject, y: PythonObject,
                     return scores^
                 if responses[k] == MEMBER_OP_PREDICT and width != 1:
                     return scores^
-                # The element type is the member's own answer; one that does
-                # not say it is read as the placed type (as before the word
-                # existed). Any other type is the Python units' (module note).
-                var placed = MEMBER_I32 if coded else MEMBER_F32
-                if member_output_dtype(run.plans[0], responses[k], cols, 1, placed) != placed:
+                # decision_function: the 1-D margin, or one column per class
+                # with more than two classes (module note, RESPONSES).
+                if responses[k] == MEMBER_OP_DECISION and (not classifier or not (
+                        width == 1 or (run.classes > 2 and width == run.classes))):
+                    return scores^
+                # The element type is the member's own answer and the buffer
+                # is placed in it (module note); one that does not say it is
+                # read as int32 codes / float32 values, as before the word
+                # existed. Codes are integers, everything else floats.
+                var placed = member_output_dtype(run.plans[0], responses[k], cols, 1,
+                                                 MEMBER_I32 if coded else MEMBER_F32)
+                if coded:
+                    if placed != MEMBER_I32 and placed != MEMBER_I64:
+                        return scores^
+                elif placed != MEMBER_F32 and placed != MEMBER_F64:
                     return scores^
                 run.ops.append(responses[k])
                 run.widths.append(width)
@@ -728,9 +817,16 @@ def _member_units(base: PythonObject, candidates: PythonObject, y: PythonObject,
                             _ = py_call(outputs.append, PythonObject(None))
                             run.dst.append(0)
                         else:
+                            # int64 codes, float32 or float64 words: an Array
+                            # of that type, written in place by the worker.
                             run.codes.append(List[Int32]())
                             var shape = Python.tuple(count) if run.widths[k] == 1 else Python.tuple(count, run.widths[k])
-                            var placed = family_array(shape, "<f4", context)
+                            var typestr = "<f4"
+                            if run.words[k] == MEMBER_F64:
+                                typestr = "<f8"
+                            elif run.words[k] == MEMBER_I64:
+                                typestr = "<i8"
+                            var placed = family_array(shape, typestr, context)
                             _ = py_call(outputs.append, placed)
                             run.dst.append(msel_addr(placed) if count > 0 else 0)
             # The code lists' words are addressed once every list is in place.
@@ -740,6 +836,15 @@ def _member_units(base: PythonObject, candidates: PythonObject, y: PythonObject,
         except:
             return scores^
     run.tolerate = tolerate
+    # THE PIN RULE: one reference on X's own object per member call that can
+    # offer it (the fit, then one score or each response per side), taken
+    # here with the interpreter held; what no cache took comes back below.
+    var offers = 0
+    if scope >= 0:
+        offers = n_units * (1 + (0 if fit_only else run.sides * max(n_ops, 1)))
+        run.scope = scope
+        run.index_all = index_all
+        run.pin = member_pin_take(x, offers)
     var address = Int(UnsafePointer(to=run))
     var lanes = workers
 
@@ -767,6 +872,12 @@ def _member_units(base: PythonObject, candidates: PythonObject, y: PythonObject,
             if lanes > 0:
                 host_parallelize(_lane, lanes)
     finally:
+        if run.pin != 0:
+            var took = 0
+            for u in range(n_units):  # driver-loop: over units, the references their caches took
+                took += run.taken[u]
+            member_pin_return(run.pin, offers - took)
+            run.pin = 0
         _ = pins
         _ = members
         _ = member_pins
@@ -827,8 +938,12 @@ def _member_units(base: PythonObject, candidates: PythonObject, y: PythonObject,
         # GIL held; the estimator's own predict made the same decode per unit.
         try:
             for i in range(len(run.codes)):  # driver-loop: over the placed code buffers
-                if run.words[i - (i // n_ops) * n_ops] == MEMBER_I32:
+                var word = run.words[i - (i // n_ops) * n_ops]
+                if word == MEMBER_I32:
                     py_setitem(outputs, PythonObject(i), labels_decode_i32_codes(classes, run.codes[i], member_context))
+                elif word == MEMBER_I64:
+                    # the worker's int64 code Array, read in place by the decode
+                    py_setitem(outputs, PythonObject(i), labels_decode_labels(classes, outputs[i], member_context))
         except:
             _free_kept(run)
             return scores^

@@ -126,9 +126,9 @@ on such a route, the whole X (a fold's base at any size, a plain X from the
 scope's floor up) is kept resident in the caller's scope cache: one scope
 read, one cache lease and one typed lookup per operation, as the door.
 When the cache publishes X it keeps `call.pin` as the entry's pin (one
-reference the scope drops at its close) and the call answers
-`call.value = 1.0`; otherwise `call.value = 0.0` and the pin stays the
-caller's. A caller hands `pin` only for X's own buffer, never for a
+reference the scope drops at its close) and the member writes
+`call.pin_kept` nonzero at that moment (THE PIN RULE, core/member_abi.mojo
+`MemberCall.pin`); otherwise it stays 0 and the pin stays the caller's. A caller hands `pin` only for X's own buffer, never for a
 gathered fold. `call.fit_output = MEMBER_OP_TRANSFORM` writes the
 training rows' transform to `dst` (rows x features): in the fit's own
 program when rows * features < 2^27 (the door's fused fit_transform), else
@@ -532,9 +532,9 @@ def _resident(call: _Call, words: Int, rows: Bool) raises -> Int:
     """The store id of X's resident copy in the caller's scope (found, or put
     once and published with `call.pin` as the entry's pin), -1 when the call
     keeps nothing resident: no scope, nothing pinned, or below the scope's
-    floor (a row-gathered base at any size, as the door). `call.value` = 1
-    when the cache KEPT `call.pin` (the scope drops that reference at its
-    close); 0 left as is otherwise (found, lost a race, or not kept)."""
+    floor (a row-gathered base at any size, as the door). `call.pin_kept`
+    = 1 when the cache KEPT `call.pin` (the scope drops that reference at its
+    close); left as is otherwise (found, lost a race, or not kept)."""
     if call[].scope < 0 or call[].pin == 0:
         return -1
     if not rows and words < arena_scope_floor(call[].scope):
@@ -543,7 +543,7 @@ def _resident(call: _Call, words: Int, rows: Bool) raises -> Int:
     var cache = arena_scope_cache(call[].scope, store, "x_prep")
     var put = arena_cache_find_or_put(cache, store, call[].x.data, words, call[].pin)
     if put.pinned:
-        call[].value = 1.0
+        call[].pin_kept = 1
     return put.store_id
 
 
@@ -1993,8 +1993,6 @@ def _prep_member(operation: Int, address: Int) raises -> Int:
         return 0
     var slot = _Slot(unsafe_from_address=_lookup(call[].state, False))
     var kind = slot[].kind()
-    if operation == MEMBER_OP_FIT or operation == MEMBER_OP_TRANSFORM or operation == MEMBER_OP_INVERSE_TRANSFORM:
-        call[].value = 0.0  # 1 when the caller's scope kept `call.pin` (`_resident`)
     if operation == MEMBER_OP_FIT:
         if kind == PREP_KIND_BINARIZER or kind == PREP_KIND_NORMALIZER:
             _fit_stateless(slot, call)
