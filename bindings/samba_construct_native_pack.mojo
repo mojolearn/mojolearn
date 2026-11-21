@@ -1,10 +1,17 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Native Samba registry, explicit-weight and seeded constructor ownership."""
+"""Native Samba registry, explicit-weight and seeded constructor ownership.
+
+The seeded initialization is split: UNPACK and PACK here
+(`_samba_initialize_parameters`), RUN in training/samba_construct_run.mojo
+(typed words, no Python). The rest of the constructor publishes Python
+fields and owners (the stack's state is its public field set) and holds no
+computation of its own."""
 from core.weight_epoch import registry_epoch_bump
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
-from core.samba_construct_native_impl import samba_fill_ones
-from std.math import sqrt
+from std.python._cpython import GILReleased
+# RUN: the typed initializer, no Python import.
+from training.samba_construct_run import samba_initialize_run
 from std.memory import unsafe_memcpy
 from std.sys import is_defined
 # The same build define as training/optimizer_public_common.mojo
@@ -13,10 +20,9 @@ from std.sys import is_defined
 comptime OPT_LAZY_MOMENTS = not is_defined["MOJOLEARN_OPT_LAZY_MOMENTS_OFF"]()
 from bindings.generation_buffers_door import generation_initialize_binding, generation_array
 from bindings.generator_state_native_unpack import generator_fields
-from bindings.generator_state_native_pack import generator_init, generator_validate, generator_next
-from bindings.samba_state_native_door import samba_fields, samba_view, _samba_registry, samba_build_blocks, samba_schedule_snapshot, samba_primitive
+from bindings.generator_state_native_pack import generator_init, generator_validate
+from bindings.samba_state_native_door import samba_fields, samba_view, _samba_registry, samba_build_blocks, samba_schedule_snapshot
 from bindings.samba_route_unpack import samba_route_process, samba_device_admit
-from core.samba_entry_table import SAMBA_PRIM_NEURAL_RNG
 from bindings.causal_lm_construct_door import _model_f32, _model_shape
 from bindings.py_balanced import py_call, py_setitem, py_setattr, py_get
 from bindings.py_model_records import bump_model_generation
@@ -66,55 +72,51 @@ def samba_parameters(model: PythonObject) raises -> PythonObject:
 
 
 def _samba_initialize_parameters(model: PythonObject, context: PythonObject) raises:
+    # UNPACK: the generator's seed and stream counter, the primitive entry
+    # and each registry tensor's address, size, rank and second dimension.
     var fields = samba_fields(model)
     var generator = fields["generator"]
     var rng = generator_fields(generator)
     _ = generator_validate(rng["seed"], rng["counter"])
-    # The RNG below calls the training image's primitive entry (op 6, the
-    # former `neural_rng` Python entry), admitted for the GENERATOR's mode
-    # word as before. The stack's device was admitted by `samba_construct`
-    # before any field: on every installation a constructed stack runs this
+    # The RNG runs on the training image's primitive entry (op 6, the former
+    # `neural_rng` Python entry), admitted for the GENERATOR's mode word as
+    # before. The stack's device was admitted by `samba_construct` before any
+    # field: on every installation a constructed stack runs this
     # installation's device, so the process route is the stack's route.
     var primitives = samba_route_process(rng["numeric_mode"], context).primitives()
     var seed = rng["seed"]
     var low = Int(py=seed & PythonObject(0xffffffff))
     var high = Int(py=(seed >> PythonObject(32)) & PythonObject(0xffffffff))
-    # Keep the legacy float64 sequence (including sqrt(5), then gain), rather
-    # than simplifying the bound algebraically. Both supported host baselines
-    # use correctly rounded hardware sqrt, as portable_math.c does.
-    var a = sqrt(Float64(5.0))
-    var square = a * a
-    var gain = sqrt(Float64(2.0) / (Float64(1.0) + square))
+    var counter = Int(py=rng["counter"])
     var unused = generation_array([1])
-    for i in range(len(fields["names"])):  # driver-loop: over initializer calls in the saved registry order
-        var name = String(fields["names"][i])
-        var output = fields["arrays"][fields["names"][i]]
-        var kind = 0
-        var first = Float32(0.0)
-        var second = Float32(0.0)
-        var random = True
-        if name == "embed.weight" or name == "lm_head.weight":
-            kind = 1
-            second = Float32(0.02)
-        elif name.endswith(".weight") and len(output.shape) == 2:
-            var bound = gain * sqrt(Float64(3.0) / Float64(Int(py=output.shape[1])))
-            first = Float32(-bound)
-            var high_bound = Float32(bound)
-            second = Float32(Float64(high_bound) - Float64(first))
-        elif name.endswith(".dt_bias"):
-            first = -4.0
-            second = 2.0
-        else:
-            random = False
-            var dst = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=output._addr))
-            samba_fill_ones(dst, Int(py=output.size))
-        if random:
-            var stream = generator_next(generator)
-            _ = samba_primitive(primitives, SAMBA_PRIM_NEURAL_RNG, [Int(py=output._addr), Int(py=unused._addr)],
-                [Int(py=output.size), 0, low, high, Int(py=stream), kind], [Float64(first), Float64(second)])
-            _ = output  # the parameter owner stays alive through the native call above
+    var names = List[String]()
+    var addresses = List[Int]()
+    var sizes = List[Int]()
+    var ranks = List[Int]()
+    var columns = List[Int]()
+    var arrays = fields["arrays"]
+    for i in range(len(fields["names"])):  # driver-loop: over the saved registry order (model structure)
+        var output = arrays[fields["names"][i]]
+        var rank = len(output.shape)
+        names.append(String(fields["names"][i]))
+        addresses.append(Int(py=output._addr))
+        sizes.append(Int(py=output.size))
+        ranks.append(rank)
+        columns.append(Int(py=output.shape[1]) if rank == 2 else 0)
+    # RUN (training/samba_construct_run.mojo): typed words only, one GIL
+    # release for the whole registry (it was one release per tensor).
+    var drawn = 0
+    try:
+        with GILReleased(Python()):
+            samba_initialize_run(primitives, names, addresses, sizes, ranks, columns, low, high, counter,
+                Int(py=unused._addr), drawn)
+    finally:
+        # PACK: the streams consumed, also when a launch was refused (each
+        # draw advanced the counter before its launch, as before).
+        if drawn > 0:
+            py_setitem(rng, "counter", PythonObject(counter + drawn))
+    _ = arrays  # the parameter owners stay alive through the native call above
     _ = unused^
-
 
 
 def samba_construct(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
