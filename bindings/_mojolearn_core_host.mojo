@@ -177,6 +177,7 @@ from checks.mode_policy import mode_policy_mask
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.neighbors_entry_table import NeighborsEntryKey, neighbors_ops_publish
 from neighbors.ops_entry_host import NEIGHBORS_OPS_HOST_API, neighbors_ops_host_v1
+from core.neighbors_member import neighbors_member_publish
 from bindings.py_balanced import py_setattr, py_setitem
 from core.activity_record import ACTIVITY_KIND_LAUNCH
 from core.launch_log import activity_begin, activity_end
@@ -1054,6 +1055,8 @@ def _publish_neighbors_ops(module: PythonObject) raises:
     var api = NEIGHBORS_OPS_HOST_API.get_or_create_ptr()
     neighbors_ops_publish(NeighborsEntryKey(Int(GLOBAL_NUMERIC_MODE), 0), Int(api[].entries.unsafe_ptr()),
                           neighbors_ops_host_v1)
+    # The k-NN member entry (core/neighbors_member.mojo), CPU column.
+    neighbors_member_publish(Int(GLOBAL_NUMERIC_MODE), 0, Int(api[].entries.unsafe_ptr()))
     py_setattr(module, "neighbors_native_key", Python.tuple(PythonObject(Int(GLOBAL_NUMERIC_MODE)), PythonObject(0)))
 
 

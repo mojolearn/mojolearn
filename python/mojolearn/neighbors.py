@@ -438,6 +438,9 @@ class KNeighborsClassifier(NearestNeighbors):
     #: scikit-learn's estimator kind: `cross_val_score` stratifies a
     #: classifier's default folds, as scikit-learn's does.
     _estimator_type = "classifier"
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_NEIGHBORS = 11) and core/neighbors_member.mojo.
+    _mojolearn_member = (11, 0)
 
     def __init__(
         self,
@@ -657,6 +660,9 @@ class KNeighborsRegressor(NearestNeighbors):
     #: scikit-learn's estimator kind: `cross_val_score` stratifies a
     #: classifier's default folds, as scikit-learn's does.
     _estimator_type = "regressor"
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_NEIGHBORS = 11) and core/neighbors_member.mojo.
+    _mojolearn_member = (11, 1)
 
     def __init__(
         self,
