@@ -31,6 +31,10 @@ from core.xseq_marshal import xseq_column_copy_f32, xseq_column_copy_i64
 from sequence.xseq_native_common_run import xseq_stream_child_seed
 from bindings.xseq_keys_unpack import xseq_keys
 from bindings.py_balanced import py_item
+from core.device_route import device_mode_code, device_route_plan, device_route_admit
+from providers.python.device_route_boundary_door import (
+    DeviceRouteOwner, device_route_held, device_route_keep, device_request,
+)
 
 comptime XF32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime XI32P = MutPointer[Int32, MutUntrackedOrigin]
@@ -102,22 +106,114 @@ def xseq_glue(entry: EntryRef, operation: Int, addresses: List[Int], ints: List[
     return result
 
 
-def xseq_entries(fields: PythonObject, context: PythonObject) raises -> PythonObject:
-    """The compiled `_mojolearn_x_sequence` entries of the model's mode,
-    connected at import (the recurrent/MLP doors' whole-model capsule); the
-    connection error of that mode otherwise."""
-    var b = native_loaded_module("builtins")
-    var mode = xseq_mode(fields, context)
-    var nk = xseq_keys()
-    var entries = py_item(context, nk[].k_xseq_bindings)[mode]
-    if py_type(entries) is b.str:
-        raise Error(String(py=entries))
-    # The compiled-mode check reads the key the bridge recorded at import;
-    # it replaced the per-table `x_sequence_numeric_mode` Python call and the
-    # `_xseq_numeric_mode_checked` memo that cached it (lane calltable-xseq).
-    _ = _xseq_key_of(mode, context)
-    return entries
+# TOMBSTONE: `xseq_entries` and `xseq_output_provider` (the per-call entry selection of the recurrent
+# and MLP doors: the mode word built and compared, the `xseq_bindings` read by that word, the key tuple
+# read and converted, at every fit, predict and score, and the default-mode read of each output helper)
+# deleted 2026-11-21 by lane dw-neural-b; the estimator's route owner holds the resolved entries
+# (`xseq_route`). Code recoverable at 5d94a5ad5d.
 
+
+@fieldwise_init
+struct XseqRoute(Movable):
+    """One operation's route of a recurrent or MLP estimator: the compiled
+    `_mojolearn_x_sequence` entries of its device and numeric mode, the
+    entries its output helpers (weight draws, row argmax, thresholds, the
+    curve minimum) run on, the metrics record of the same device, and the
+    owner whose pins keep those images loaded until the operation returns."""
+    var entries: PythonObject
+    var output: PythonObject
+    var metrics: PythonObject
+    # The tier of the resolved image (1 identical, 0 fast), and whether this
+    # is a CPU route beside a GPU set (an explicit `device="cpu"` there).
+    var mode: Int
+    var cpu_table: Bool
+    var owner: PythonObject
+
+
+def _xseq_route_build(requested_device: Int, mode_field: PythonObject, default_mode: PythonObject,
+    fields: PythonObject, context: PythonObject, b: PythonObject) raises -> DeviceRouteOwner:
+    """Resolve an estimator's sequence images once: its numeric mode (None:
+    the process mode), its device (None: this installation's), the entries
+    and the table key of the image those select (the bridge recorded both at
+    import), checked against the selected tier and vendor. Runs at an
+    estimator's first operation, after a changed mode and after a new
+    `__init__` or `set_params`; never per call. A metadata step with no
+    independent units to split."""
+    var nk = xseq_keys()
+    var owner = DeviceRouteOwner(requested_device)
+    var mode = xseq_mode(fields, context)
+    var mode_code = device_mode_code(String(py=mode))
+    # The process image of that mode: its vendor word is this process's
+    # device (0: a CPU-only installation), and its connection error or
+    # other-mode refusal is raised here in the words it always had.
+    var key = _xseq_key_of(mode, context)
+    var plan = device_route_plan(requested_device, key.vendor, mode_code)
+    var entries = PythonObject(None)
+    var output = PythonObject(None)
+    var metrics = PythonObject(None)
+    if plan.cpu_table:
+        # A GPU installation running `device="cpu"`: the CPU identical
+        # images loaded beside the device images at import
+        # (python/mojolearn/_native_xseq_bridge.py).
+        var cpu = py_get(context, PythonObject("xseq_cpu_bindings"))
+        var cpu_keys = py_get(context, PythonObject("xseq_cpu_native_keys"))
+        if cpu is None or cpu_keys is None:
+            raise Error("ImportError: device='cpu' is not connected in this installation")
+        entries = py_item(cpu, mode)
+        if py_type(entries) is b.str:
+            raise Error(String(py=entries))
+        var cpu_key = py_item(cpu_keys, mode)
+        owner.route.mode = Int(py=cpu_key[0])
+        owner.route.vendor = Int(py=cpu_key[1])
+        device_route_admit("sequence", plan, owner.route.mode, owner.route.vendor, mode_code)
+        # The output helpers of a CPU route run on the CPU image too:
+        # nothing of this estimator runs on a device its caller did not name.
+        output = entries
+        var cpu_metrics = py_get(context, PythonObject("xseq_cpu_metrics"))
+        if cpu_metrics is not None:
+            metrics = py_item(cpu_metrics, mode)
+    else:
+        var bindings = py_item(context, nk[].k_xseq_bindings)
+        entries = py_item(bindings, mode)
+        if py_type(entries) is b.str:
+            raise Error(String(py=entries))
+        owner.route.mode = key.mode
+        owner.route.vendor = key.vendor
+        # The output helpers keep their image: the process default mode's,
+        # whatever the estimator's own numeric_mode is.
+        output = py_item(bindings, default_mode)
+        metrics = py_item(py_item(context, nk[].k_xseq_metrics), mode)
+    owner.route.device = plan.device
+    owner.route.flags = 1 if plan.cpu_table else 0
+    owner.mode = mode_field
+    owner.default_mode = default_mode
+    owner.context = context
+    owner.images = entries
+    owner.scope = output
+    owner.table = metrics
+    owner.resolved = True
+    return owner^
+
+
+def xseq_route(model: PythonObject, fields: PythonObject, context: PythonObject) raises -> XseqRoute:
+    """The estimator's route for this operation. A hit is the mode read, the
+    default-mode read, one record read and three pointer compares; a miss
+    (first operation, a changed mode object, a new `__init__` or
+    `set_params`) resolves and stores it. No operation reads or compares the
+    device."""
+    var nk = xseq_keys()
+    var mode = py_get(fields, nk[].k_numeric_mode)
+    var default_mode = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
+    var owner = device_route_held(model, mode, default_mode, context)
+    if owner is None:
+        var b = native_loaded_module("builtins")
+        var device = device_request(fields, b)
+        owner = device_route_keep(model, _xseq_route_build(device, mode, default_mode, fields, context, b))
+    var native = owner.downcast_value_ptr[DeviceRouteOwner]()
+    var entries = native[].images
+    var output = native[].scope
+    var metrics = native[].table
+    return XseqRoute(entries, output, metrics, native[].route.mode, native[].route.flags == 1, owner)
 
 
 def xseq_neural_provider(entries: PythonObject) raises -> PythonObject:
@@ -127,13 +223,6 @@ def xseq_neural_provider(entries: PythonObject) raises -> PythonObject:
         py_item(entries, nk[].k_model_native_api_v1), String(MODEL_ABI_NAME), MODEL_OPERATION_COUNT)
     py_setitem(entries, nk[].k_native_model_provider, provider)
     return provider
-
-
-def xseq_output_provider(context: PythonObject) raises -> PythonObject:
-    var nk = xseq_keys()
-    # Preserve the old base-helper route: default mode, independent of a
-    # particular estimator's optional numeric_mode override.
-    return xseq_neural_provider(py_item(context, nk[].k_xseq_bindings)[py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)])
 
 
 def xseq_base(context: PythonObject, name: String) raises -> PythonObject:
