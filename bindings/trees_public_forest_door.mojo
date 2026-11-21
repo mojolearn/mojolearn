@@ -72,7 +72,7 @@ from bindings.py_model_records import model_identity_key, model_generation
 from bindings.p3nc_fitted_freeze_unpack import fitted_freeze
 from bindings.metrics_native_support_door import metric_is_integral, metric_warning_location
 from bindings.classical_warnings_unpack import classical_warning
-from ensemble.rf_notices import rf_notice_text
+from bindings.rf_fit_notices_pack import rf_fit_notices_word
 from xtrees.trees_forest_run import (
     _refuse, _family, _classifier, _y_rows_check,
     ForestFit, ForestHandle, FOREST_MODEL_FIELDS, forest_export_selection, forest_export_counts, forest_export_dtype,
@@ -1066,10 +1066,7 @@ def _rf_fit_notices(meta: PythonObject, context: PythonObject) raises:
     binding without the word has none to report."""
     if len(meta) < 3:
         return
-    var codes = forest_fit_notice_codes(Int(py=meta[2]))
-    for i in range(len(codes)):  # driver-loop: over fixed call structure, small-loop(codes): at most the three fit notice bits (PACK)
-        classical_warning(rf_notice_text(codes[i]), trees_builtins().UserWarning, context,
-                          metric_warning_location(2), "UserWarning")
+    rf_fit_notices_word(Int(py=meta[2]), context)
 
 
 def rf_fit(model: PythonObject, args: PythonObject, kind: String, context: PythonObject) raises -> PythonObject:
