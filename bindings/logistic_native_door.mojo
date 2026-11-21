@@ -49,8 +49,9 @@ from bindings.logistic_config_boundary_unpack import (
 )
 from bindings.logistic_descriptor_boundary_door import logistic_run_fold_fit, logistic_run_fold_query
 from providers.python.logistic_route_boundary_door import (
-    LogisticRouteCall, logistic_route_held, logistic_route_context, logistic_route_call, logistic_route_clear,
-    logistic_route_xtrees, logistic_route_fit, logistic_route_query,
+    LogisticRouteCall, logistic_route_held, logistic_route_context, logistic_route_current, logistic_route_resolve,
+    logistic_route_of, logistic_route_clear, logistic_route_xtrees, logistic_route_fit, logistic_route_query,
+    logistic_device_admit,
 )
 from bindings.classical_attributes_door import classical_connect_numpy, classical_getattribute
 from bindings.classical_pandas_door import classical_admit_value
@@ -100,8 +101,22 @@ def _name(model: PythonObject) raises -> String:
 # `_host_mode_value`, `_entries`, `_entries_value`: per public call the numeric-mode word build and its
 # normalisation, the `lr_bindings` / `lr_x_trees` reads by mode word, the explicit-host-class question, the
 # provider admission and connection scan, the compiled-tier compare; replaced by the estimator's route owner,
-# resolved once, providers/python/logistic_route_boundary_door.mojo `logistic_route_call`) deleted 2026-11-20 by
+# resolved once, providers/python/logistic_route_boundary_door.mojo `logistic_route_resolve`) deleted 2026-11-20 by
 # lane dev2-logistic-device; code recoverable at 5c252f1573.
+
+
+def _route(model: PythonObject, fields: PythonObject, held: PythonObject, base: PythonObject,
+           context: PythonObject) raises -> LogisticRouteCall:
+    """The estimator's route for this operation. A hit (`held` is the owner
+    resolved for this connection context, class and numeric mode) is two
+    pointer compares and a copy of the route's words. A miss (first
+    operation, a changed numeric mode, an instance built without its
+    constructor) resolves and stores it; the builtins module is read on a
+    miss only."""
+    if logistic_route_current(held, fields, context):
+        return logistic_route_of(held)
+    var fresh = logistic_route_resolve(model, fields, base, context, _builtins())
+    return logistic_route_of(fresh)
 
 
 def _class_constant(model: PythonObject, fields: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
@@ -553,9 +568,18 @@ def logistic_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObject
         context = lda_native_context(context)
         var result = PythonObject(None)
         if operation == LOGISTIC_OPN_INITIALIZE:
-            # `device` is checked inside (bindings/logistic_admission_pack.mojo).
-            # No owner is allocated here; a reused instance (`__init__` called
-            # again) forgets its route.
+            # `device` (the last constructor argument) is checked where it is
+            # given: an unknown value, and 'gpu' on a CPU-only installation,
+            # are refused in words before any field changes. The default None
+            # is one identity compare and reads nothing more. No owner is
+            # allocated here; a reused instance (`__init__` called again)
+            # forgets its route. A wrong argument count is refused inside.
+            var constructor = py_item(context, nk[].k_lr_constructor_parameters)
+            if len(args) == len(constructor):
+                var device = args[len(constructor) - 1]
+                if device is not None:
+                    classical_admit_value(device, context)
+                    logistic_device_admit(device, context, _builtins())
             result = logistic_initialize(model, args, context)
             logistic_route_clear(model)
             return result.steal_data()
@@ -590,7 +614,7 @@ def logistic_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObject
         if reporting:
             # What the estimator runs on, in the words its resolved image
             # reported (fitted or not).
-            var report = logistic_route_call(model, fields, held, base, routed_context)
+            var report = _route(model, fields, held, base, routed_context)
             if operation == LOGISTIC_OPN_VENDOR_USED:
                 result = PythonObject(linear_vendor_name(report.route.vendor))
             else:
@@ -618,7 +642,7 @@ def logistic_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObject
         # `device` and numeric mode, the device image or the CPU image), read
         # here by identity compares. fit and every query below call through
         # it; none of them tests the device.
-        var routed = logistic_route_call(model, fields, held, base, routed_context)
+        var routed = _route(model, fields, held, base, routed_context)
         if operation == LOGISTIC_OPN_FIT:
             var target = classifier_label_list(args[1], context)
             lda_native_labels(target, context, True, "LogisticRegression")

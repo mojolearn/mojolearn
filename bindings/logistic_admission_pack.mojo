@@ -35,13 +35,6 @@ def logistic_initialize(model: PythonObject, args: PythonObject, context: Python
         raise Error("TypeError: native LogisticRegression requires its full constructor configuration")
     for i in range(len(names)):  # driver-loop: refusal before publishing any constructor parameters
         _parameter(names[i], args[i], context, True)
-    # `device` (the last constructor argument) is checked where it is given:
-    # an unknown value, and 'gpu' on a CPU-only installation, are refused in
-    # words before any field changes. The default None is one identity
-    # compare and reads nothing.
-    var device = args[len(names) - 1]
-    if device is not None:
-        logistic_device_admit(device, context, native_loaded_module("builtins"))
     for i in range(len(names)):  # driver-loop: retain all prior constructor owners until complete release admission
         var name = names[i]
         var replacing = String(name) != "numeric_mode" or args[i] is not None or not py_contains(fields, name)

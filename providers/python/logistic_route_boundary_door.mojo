@@ -35,7 +35,6 @@ from std.python.bindings import PythonModuleBuilder, lookup_py_type_object
 from bindings.py_type_registry import py_type_absent, py_type_attach
 from bindings.native_owner_registry_unpack import register_native_owner_type
 from bindings.native_owner_registry_pack import borrowed_native_owner
-from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_item
 from bindings.py_model_records import records_get, records_put, records_drop, RECORDS_PREPARED
 from bindings.logistic_keys_unpack import logistic_keys
@@ -258,33 +257,47 @@ struct LogisticRouteCall(Movable):
     var owner: PythonObject
 
 
-def logistic_route_call(model: PythonObject, fields: PythonObject, held: PythonObject, base: PythonObject,
-    context: PythonObject) raises -> LogisticRouteCall:
-    """The estimator's route for this operation. `held` is what
-    `logistic_route_held` answered for this call (None: no owner for this
-    context and class). A hit is two more pointer compares; a miss (first
-    operation, a changed numeric mode, an instance built without its
-    constructor) resolves and stores it; the builtins module is read on a
-    miss only."""
+def logistic_route_current(held: PythonObject, fields: PythonObject, context: PythonObject) raises -> Bool:
+    """True when `held` (what `logistic_route_held` answered for this call)
+    is the route of the estimator's numeric mode as it stands: the mode
+    object and, when that is None, the process default mode object, compared
+    by identity. False for None, a changed mode or a changed default."""
+    if held is None:
+        return False
+    var nk = logistic_keys()
+    var mode = py_get(fields, nk[].k_numeric_mode)
+    var native = held.downcast_value_ptr[LogisticRouteOwner]()
+    if native[].mode is not mode:
+        return False
+    if mode is not None:
+        return native[].default_mode is None
+    return native[].default_mode is py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
+
+
+def logistic_route_resolve(model: PythonObject, fields: PythonObject, base: PythonObject,
+    context: PythonObject, b: PythonObject) raises -> PythonObject:
+    """Resolve and store the estimator's route (first operation, a changed
+    numeric mode, an instance built without its constructor): the one read
+    of `device`. `b` is the builtins module the calling door admitted."""
     var nk = logistic_keys()
     var mode = py_get(fields, nk[].k_numeric_mode)
     var default_mode = PythonObject(None)
     if mode is None:
         default_mode = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
-    if held is not None:
-        var native = held.downcast_value_ptr[LogisticRouteOwner]()
-        if native[].mode is mode and native[].default_mode is default_mode:
-            return LogisticRouteCall(native[].route.copy(), held)
-    # The one read of `device`. None, and an instance without the field
-    # (built without its constructor, loaded, unpickled from an older
-    # version), run this installation's device.
-    var b = native_loaded_module("builtins")
+    # None, and an instance without the field (built without its
+    # constructor, loaded, unpickled from an older version), run this
+    # installation's device.
     var device = linear_device_unpack(py_get(fields, "device"), b)
     var fresh = PythonObject(alloc=_logistic_route_build(model, device, mode, default_mode, base, context, b))
     # An estimator that takes no weak reference keeps no owner: it resolves
     # at every operation (records_put answers False and stores nothing).
     _ = records_put(RECORDS_PREPARED, model, _LOGISTIC_ROUTE_SLOT, fresh)
-    return LogisticRouteCall(fresh.downcast_value_ptr[LogisticRouteOwner]()[].route.copy(), fresh)
+    return fresh
+
+
+def logistic_route_of(owner: PythonObject) raises -> LogisticRouteCall:
+    """One operation's route out of its owner (by value; the owner rides along)."""
+    return LogisticRouteCall(owner.downcast_value_ptr[LogisticRouteOwner]()[].route.copy(), owner)
 
 
 def logistic_route_fit(routed: LogisticRouteCall, request: QnFitRequest) raises -> Int:
