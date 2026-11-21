@@ -34,9 +34,24 @@ an image without the resident route, which refits per call) refits from it,
 so the caller keeps X alive until FREE, exactly as the estimator keeps the
 caller's float32 X as `_x`. FREE drops the resident forest (IF_OP_RELEASE).
 
-No fitted-state blocks yet: EXPORT / IMPORT are not published (the forest's
-node arrays leave the image through `iforest_forest_export`, still a
-Python-argument binding), so the class carries no member mark.
+DEVICE PLAN: every run is `single` (IF_P_SINGLE): one device, the route's
+(the caller's admit resolved it from the estimator's tier). The member asks
+no thread plan and no environment variable.
+
+FITTED-STATE BLOCKS (EXPORT / IMPORT, index order):
+  0 MEMBER_BLOCK_SCALARS float64 1 x 3: offset_, max_samples_, n_features_in_;
+  1 MEMBER_BLOCK_FAMILY + 0 int32 1 x (trees + 1): offsets (tree t's first node);
+  2 MEMBER_BLOCK_FAMILY + 1 int32 1 x nodes: feature (< 0 marks a leaf);
+  3 MEMBER_BLOCK_FAMILY + 2 float32 1 x nodes: threshold (a leaf's path length);
+  4 MEMBER_BLOCK_FAMILY + 3 int32 1 x nodes: left (tree-local node ids);
+  5 MEMBER_BLOCK_FAMILY + 4 int32 1 x nodes: right.
+The compact saved form of isolation_forest/forest_io.mojo (`save()`'s
+`_if_forest`). EXPORT of a fitted state reads it out of the image once
+(IF_OP_EXPORT, the resident forest the scores use) into lists the slot
+owns; the views stay valid until the state's next fit, import or free.
+IMPORT copies the five arrays in; an imported state scores through
+IF_OP_FOREST_RUN (uploaded once, then resident under its own token): the
+same kernels as a fitted one, so the same bits.
 
 The member state lives in a process-wide store of fixed chunks: a slot never
 moves once minted, so a call runs on its slot without the store's lock; the
@@ -45,16 +60,20 @@ image entry is thread-safe (its resident store holds its own lock), so a
 caller runs one handle per worker. Serial by nature here: the store's
 bookkeeping.
 """
+from std.memory import unsafe_memcpy
 from std.sys.info import size_of
 from core.entry_table import EntryRef, entry_ref_unresolved
 from core.iforest_entry import (
-    IFRunRequest, IF_CAP_RESIDENT, IF_CAP_SCORES_F64, if_entry_caps, if_entry_release, if_entry_run,
+    IFForestRunRequest, IFForestSpans, IFRunRequest, IF_CAP_RESIDENT, IF_CAP_SCORES_F64, IF_EXPORT_INFO,
+    if_entry_caps, if_entry_export, if_entry_forest_run, if_entry_release, if_entry_run,
 )
 from core.member_abi import (
     MemberCall, MemberMatrix, MEMBER_F32, MEMBER_F64, MEMBER_I32,
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_PREDICT,
-    MEMBER_OP_DECISION, MEMBER_OP_SCORE_SAMPLES, MEMBER_OP_OUTPUTS,
+    MEMBER_OP_DECISION, MEMBER_OP_SCORE_SAMPLES, MEMBER_OP_OUTPUTS, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT,
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_DECISION, MEMBER_CAN_SCORE_SAMPLES,
+    MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT,
+    MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
 )
 from core.member_families import MEMBER_FAMILY_ISOLATION_FOREST
@@ -69,7 +88,38 @@ comptime _WANT_SCORE_SAMPLES = 0
 comptime _WANT_DECISION = 1
 comptime _WANT_PREDICT = 2
 comptime _WANT_WIDE_BASE = 3
-comptime _CAPS = MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_DECISION | MEMBER_CAN_SCORE_SAMPLES
+comptime _CAPS = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_DECISION | MEMBER_CAN_SCORE_SAMPLES
+                  | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT)
+comptime _BLOCKS = 6
+comptime _B_OFFSETS = MEMBER_BLOCK_FAMILY
+comptime _B_FEATURE = MEMBER_BLOCK_FAMILY + 1
+comptime _B_THRESHOLD = MEMBER_BLOCK_FAMILY + 2
+comptime _B_LEFT = MEMBER_BLOCK_FAMILY + 3
+comptime _B_RIGHT = MEMBER_BLOCK_FAMILY + 4
+
+
+struct IsolationForestMemberForest(Copyable, Defaultable, Movable):
+    """The compact forest a state exported or imported (the slot owns it)."""
+
+    var scalars: List[Float64]
+    var offsets: List[Int32]
+    var feature: List[Int32]
+    var threshold: List[Float32]
+    var left: List[Int32]
+    var right: List[Int32]
+
+    def __init__(out self):
+        self.scalars = List[Float64]()
+        self.offsets = List[Int32]()
+        self.feature = List[Int32]()
+        self.threshold = List[Float32]()
+        self.left = List[Int32]()
+        self.right = List[Int32]()
+
+    def spans(self) -> IFForestSpans:
+        return IFForestSpans(Int(self.offsets.unsafe_ptr()), Int(self.feature.unsafe_ptr()),
+                             Int(self.threshold.unsafe_ptr()), Int(self.left.unsafe_ptr()),
+                             Int(self.right.unsafe_ptr()), len(self.offsets) - 1, len(self.feature))
 
 
 struct IsolationForestMemberSlot(Copyable, Defaultable, Movable):
@@ -90,6 +140,10 @@ struct IsolationForestMemberSlot(Copyable, Defaultable, Movable):
     var max_samples: Int
     var info: List[Float64]
     var scratch: List[Float32]
+    var imported: Bool
+    """True: the state holds a saved forest (IMPORT), no training view."""
+    var forest: IsolationForestMemberForest
+    """The compact forest (IMPORT's copy, or EXPORT's read-out; empty until then)."""
 
     def __init__(out self):
         self.generation = 0
@@ -105,8 +159,10 @@ struct IsolationForestMemberSlot(Copyable, Defaultable, Movable):
         self.n_features = 0
         self.offset = -0.5
         self.max_samples = 0
-        self.info = List[Float64](length=4, fill=0.0)
+        self.info = List[Float64](length=IF_EXPORT_INFO, fill=0.0)
         self.scratch = List[Float32](length=1, fill=0.0)
+        self.imported = False
+        self.forest = IsolationForestMemberForest()
 
 
 struct IsolationForestMemberStore(Defaultable, Movable):
@@ -154,6 +210,7 @@ def _mint(words: IFRunRequest) raises -> Int:
         slot[].words = words.copy()
         slot[].entry = entry_ref_unresolved()
         slot[].fitted = False
+        slot[].imported = False
         slot[].token = 0
         slot[].train = 0
         return slot[].generation * _INDEX_SPAN + index + 1
@@ -161,11 +218,12 @@ def _mint(words: IFRunRequest) raises -> Int:
         shared_slot_unlock(lock)
 
 
-def _lookup(handle: Int, release: Bool, mut token: Int, mut entry: EntryRef) raises -> Int:
+def _lookup(handle: Int, release: Bool, mut token: Int, mut entry: EntryRef,
+            mut dropped: IsolationForestMemberForest) raises -> Int:
     """The slot address of a live handle. A released handle, a handle of
     another store or a made-up integer is refused: never a stale read. On
-    release, `token` / `entry` receive the resident forest to drop (after
-    the lock)."""
+    release, `token` / `entry` receive the resident forest to drop and
+    `dropped` the slot's compact forest (both freed after the lock)."""
     var store = _STORE.get_or_create_ptr()
     var lock = rebind[MutPointer[Int64, MutUntrackedOrigin]](store[].synchronization.unsafe_ptr())
     shared_slot_lock(lock)
@@ -184,6 +242,8 @@ def _lookup(handle: Int, release: Bool, mut token: Int, mut entry: EntryRef) rai
             slot[].fitted = False
             slot[].token = 0
             slot[].train = 0
+            slot[].imported = False
+            swap(slot[].forest, dropped)
             store[].free.append(index)
         return address
     finally:
@@ -234,9 +294,22 @@ def _run(slot: MutPointer[IsolationForestMemberSlot, MutUntrackedOrigin], entry:
     r.info = Int(slot[].info.unsafe_ptr())
     r.resident = slot[].resident
     r.token = 0 if fresh else slot[].token
+    r.single = True  # the route's one device; no thread plan, no environment
     _ = if_entry_run(entry, r)
     slot[].offset = slot[].info[0]
     slot[].max_samples = Int(slot[].info[1])
+    if slot[].resident:
+        slot[].token = Int(slot[].info[3])
+
+
+def _forest_run(slot: MutPointer[IsolationForestMemberSlot, MutUntrackedOrigin], query: Int, n_query: Int,
+                want: Int, out_f32: Int, out_i32: Int) raises:
+    """One score of an IMPORTED state (IF_OP_FOREST_RUN): the forest the
+    slot owns, uploaded on the first call and resident under its token."""
+    var r = IFForestRunRequest(slot[].forest.spans(), query, out_f32, out_i32, Int(slot[].info.unsafe_ptr()),
+                               slot[].n_features, n_query, slot[].max_samples, slot[].offset, want,
+                               slot[].token if slot[].resident else 0)
+    _ = if_entry_forest_run(slot[].entry, r)
     if slot[].resident:
         slot[].token = Int(slot[].info[3])
 
@@ -255,6 +328,8 @@ def _fit(slot: MutPointer[IsolationForestMemberSlot, MutUntrackedOrigin],
     if slot[].fitted and slot[].resident and slot[].token != 0:
         if_entry_release(slot[].entry, slot[].token)
     slot[].fitted = False
+    slot[].imported = False
+    slot[].forest = IsolationForestMemberForest()  # a previous EXPORT's read-out or IMPORT's forest
     slot[].entry = entry
     slot[].resident = (caps & IF_CAP_RESIDENT) != 0
     slot[].wide = slot[].resident and (caps & IF_CAP_SCORES_F64) != 0
@@ -286,8 +361,154 @@ def _query(slot: MutPointer[IsolationForestMemberSlot, MutUntrackedOrigin],
         raise Error("ValueError: X has " + String(call[].x.cols) + " features, but this " + _NAME
                     + " member was fitted with " + String(slot[].n_features))
     var want = _want(slot, operation, call[].dst, call[].x.rows)
-    _run(slot, slot[].entry, call[].x.data, call[].x.rows, want,
-         call[].dst.data if want != _WANT_PREDICT else 0, call[].dst.data if want == _WANT_PREDICT else 0, False)
+    var out_f32 = call[].dst.data if want != _WANT_PREDICT else 0
+    var out_i32 = call[].dst.data if want == _WANT_PREDICT else 0
+    if slot[].imported:
+        _forest_run(slot, call[].x.data, call[].x.rows, want, out_f32, out_i32)
+    else:
+        _run(slot, slot[].entry, call[].x.data, call[].x.rows, want, out_f32, out_i32, False)
+
+
+def _read_out(slot: MutPointer[IsolationForestMemberSlot, MutUntrackedOrigin]) raises:
+    """A FITTED state's compact forest into the slot's lists, once
+    (IF_OP_EXPORT: the sizes, then the copy into lists of exactly that size;
+    the resident forest the scores use, refit from the borrowed training
+    view only if the store evicted it)."""
+    if len(slot[].forest.offsets) > 0:
+        return
+    var r = slot[].words.copy()
+    r.train = slot[].train
+    r.n_train = slot[].n_train
+    r.n_features = slot[].n_features
+    r.info = Int(slot[].info.unsafe_ptr())
+    r.token = slot[].token
+    r.single = True
+    _ = if_entry_export(slot[].entry, r, IFForestSpans(0, 0, 0, 0, 0, 0, 0))
+    var trees = Int(slot[].info[4])
+    var total = Int(slot[].info[5])
+    r.token = Int(slot[].info[3])
+    var forest = IsolationForestMemberForest()
+    forest.offsets = List[Int32](length=trees + 1, fill=Int32(0))
+    forest.feature = List[Int32](length=total, fill=Int32(0))
+    forest.threshold = List[Float32](length=total, fill=Float32(0))
+    forest.left = List[Int32](length=total, fill=Int32(0))
+    forest.right = List[Int32](length=total, fill=Int32(0))
+    _ = if_entry_export(slot[].entry, r, forest.spans())
+    if slot[].resident:
+        slot[].token = Int(slot[].info[3])
+    slot[].offset = slot[].info[0]
+    slot[].max_samples = Int(slot[].info[1])
+    forest.scalars = [slot[].offset, Float64(slot[].max_samples), Float64(slot[].n_features)]
+    slot[].forest = forest^
+
+
+def _view(forest: IsolationForestMemberForest, block: Int) raises -> MemberMatrix:
+    if block == MEMBER_BLOCK_SCALARS:
+        return MemberMatrix(Int(forest.scalars.unsafe_ptr()), 1, len(forest.scalars), MEMBER_F64)
+    if block == _B_OFFSETS:
+        return MemberMatrix(Int(forest.offsets.unsafe_ptr()), 1, len(forest.offsets), MEMBER_I32)
+    if block == _B_FEATURE:
+        return MemberMatrix(Int(forest.feature.unsafe_ptr()), 1, len(forest.feature), MEMBER_I32)
+    if block == _B_THRESHOLD:
+        return MemberMatrix(Int(forest.threshold.unsafe_ptr()), 1, len(forest.threshold), MEMBER_F32)
+    if block == _B_LEFT:
+        return MemberMatrix(Int(forest.left.unsafe_ptr()), 1, len(forest.left), MEMBER_I32)
+    if block == _B_RIGHT:
+        return MemberMatrix(Int(forest.right.unsafe_ptr()), 1, len(forest.right), MEMBER_I32)
+    raise Error("member ABI: an " + _NAME + " member has no fitted block " + String(block))
+
+
+def _export(slot: MutPointer[IsolationForestMemberSlot, MutUntrackedOrigin],
+            call: MutPointer[MemberCall, MutUntrackedOrigin]) raises:
+    """A view of one fitted block; the slot owns the words until its next
+    fit, import or free."""
+    if not slot[].fitted:
+        raise Error("NotFittedError: this " + _NAME + " member is not fitted yet")
+    if not slot[].imported:
+        _read_out(slot)
+    var block = call[].block
+    if (call[].flags & MEMBER_BLOCK_BY_INDEX) != 0:
+        if block < 0 or block >= _BLOCKS:
+            raise Error("member ABI: an " + _NAME + " member has " + String(_BLOCKS) + " fitted blocks")
+        block = MEMBER_BLOCK_SCALARS if block == 0 else MEMBER_BLOCK_FAMILY + block - 1
+    call[].dst = _view(slot[].forest, block)
+    call[].block = block
+    call[].out_cols = _BLOCKS
+
+
+def _words_in(view: MemberMatrix, dtype: Int, what: String) raises -> Int:
+    """The element count of a dense host block of `dtype`."""
+    if not view.dense_host(dtype) or view.rows != 1 or view.cols < 1:
+        raise Error("member ABI: the " + _NAME + " " + what + " block is one dense host row")
+    return view.cols
+
+
+def _copy_i32(view: MemberMatrix, what: String) raises -> List[Int32]:
+    var count = _words_in(view, MEMBER_I32, what)
+    var words = List[Int32](length=count, fill=Int32(0))
+    unsafe_memcpy(dest=words.unsafe_ptr(), src=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=view.data),
+                  count=count)
+    return words^
+
+
+def _import(slot: MutPointer[IsolationForestMemberSlot, MutUntrackedOrigin],
+            call: MutPointer[MemberCall, MutUntrackedOrigin]) raises:
+    """Copy one fitted block in; MEMBER_IMPORT_DONE checks the forest is
+    whole and marks the state fitted (an imported state: no training view)."""
+    var block = call[].block
+    if slot[].fitted or not slot[].imported:
+        # The first block of an import into a fitted (or imported) state:
+        # drop what it left resident, so a new forest whose lists reuse the
+        # old addresses can never match the old resident key.
+        if slot[].fitted and slot[].resident and slot[].token != 0:
+            if_entry_release(slot[].entry, slot[].token)
+        slot[].fitted = False
+        slot[].imported = True
+        slot[].token = 0
+        slot[].train = 0
+        slot[].n_train = 0
+        slot[].forest = IsolationForestMemberForest()
+    if block == MEMBER_BLOCK_SCALARS:
+        var count = _words_in(call[].x, MEMBER_F64, "scalars")
+        if count != 3:
+            raise Error("member ABI: the " + _NAME + " scalars block is three float64 words")
+        var w = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call[].x.data)
+        slot[].forest.scalars = [w[0], w[1], w[2]]
+    elif block == _B_OFFSETS:
+        slot[].forest.offsets = _copy_i32(call[].x, "offsets")
+    elif block == _B_FEATURE:
+        slot[].forest.feature = _copy_i32(call[].x, "feature")
+    elif block == _B_THRESHOLD:
+        var count = _words_in(call[].x, MEMBER_F32, "threshold")
+        var words = List[Float32](length=count, fill=Float32(0))
+        unsafe_memcpy(dest=words.unsafe_ptr(),
+                      src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=call[].x.data), count=count)
+        slot[].forest.threshold = words^
+    elif block == _B_LEFT:
+        slot[].forest.left = _copy_i32(call[].x, "left")
+    elif block == _B_RIGHT:
+        slot[].forest.right = _copy_i32(call[].x, "right")
+    elif block != 0 or (call[].flags & MEMBER_IMPORT_DONE) == 0:
+        raise Error("member ABI: an " + _NAME + " member has no fitted block " + String(block))
+    if (call[].flags & MEMBER_IMPORT_DONE) == 0:
+        return
+    var total = len(slot[].forest.feature)
+    if (len(slot[].forest.scalars) != 3 or len(slot[].forest.offsets) < 2 or total < 1
+            or len(slot[].forest.threshold) != total or len(slot[].forest.left) != total
+            or len(slot[].forest.right) != total):
+        raise Error("member ABI: a fitted " + _NAME + " state needs its scalars and five forest blocks of matching lengths")
+    var n_features = Int(slot[].forest.scalars[2])
+    if n_features < 1:
+        raise Error("member ABI: the " + _NAME + " scalars block names no features")
+    var entry = call[].route.entry
+    var caps = if_entry_caps(entry)
+    slot[].entry = entry
+    slot[].resident = (caps & IF_CAP_RESIDENT) != 0
+    slot[].wide = slot[].resident and (caps & IF_CAP_SCORES_F64) != 0
+    slot[].offset = slot[].forest.scalars[0]
+    slot[].max_samples = Int(slot[].forest.scalars[1])
+    slot[].n_features = n_features
+    slot[].fitted = True
 
 
 def _new(call: MutPointer[MemberCall, MutUntrackedOrigin]) raises:
@@ -330,19 +551,26 @@ def _isolation_forest_member(operation: Int, address: Int) raises -> Int:
     if operation == MEMBER_OP_FREE:
         var token = 0
         var entry = entry_ref_unresolved()
-        _ = _lookup(call[].state, True, token, entry)
+        var dropped = IsolationForestMemberForest()
+        _ = _lookup(call[].state, True, token, entry, dropped)
         call[].state = 0
         if token != 0:
             if_entry_release(entry, token)
+        _ = dropped^  # the slot's compact forest, freed after the lock
         return 0
     var token = 0
     var entry = entry_ref_unresolved()
+    var unused = IsolationForestMemberForest()
     var slot = MutPointer[IsolationForestMemberSlot, MutUntrackedOrigin](
-        unsafe_from_address=_lookup(call[].state, False, token, entry))
+        unsafe_from_address=_lookup(call[].state, False, token, entry, unused))
     if operation == MEMBER_OP_FIT:
         _fit(slot, call)
     elif operation == MEMBER_OP_PREDICT or operation == MEMBER_OP_DECISION or operation == MEMBER_OP_SCORE_SAMPLES:
         _query(slot, call, operation)
+    elif operation == MEMBER_OP_EXPORT:
+        _export(slot, call)
+    elif operation == MEMBER_OP_IMPORT:
+        _import(slot, call)
     else:
         member_unsupported(_NAME, operation)
     return 0

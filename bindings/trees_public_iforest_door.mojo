@@ -811,13 +811,17 @@ def iforest_operation(model: PythonObject, operation: String, args: PythonObject
 def iforest_member_words(model: PythonObject, fields: PythonObject, context: PythonObject) raises -> List[Float64]:
     """UNPACK for the member admit (providers/python/
     member_isolation_forest_boundary_door.mojo): the estimator's own
-    parameter checks (`iforest_validate`, its words and refusals), then the
-    thirteen NEW words of core/isolation_forest_member.mojo, then two more:
-    the tier and vendor of the svm image the bridge connected for the
-    estimator's tier (its `svm_native_key`)."""
-    iforest_validate(model, fields, context)
-    var r = _request(model, fields, 0, 0, 0, 0, context)
-    var svm = trees_table(context, _mode(fields, context), "_mojolearn_svm")
+    parameter checks (`iforest_validate`, its words and refusals) on a
+    SCRATCH copy of the instance dictionary (the admit never writes the
+    caller's unfitted template), then the thirteen NEW words of
+    core/isolation_forest_member.mojo, then two more: the tier and vendor of
+    the svm image the bridge connected for the estimator's tier (its
+    `svm_native_key`). One dictionary copy per admit (once per member
+    estimator at a caller's UNPACK, never per fold)."""
+    var scratch = py_call(trees_builtins().dict, fields)
+    iforest_validate(model, scratch, context)
+    var r = _request(model, scratch, 0, 0, 0, 0, context)
+    var svm = trees_table(context, _mode(scratch, context), "_mojolearn_svm")
     var key = py_get(svm, trees_keys()[].k_svm_native_key)
     if key is None:
         raise Error("ImportError: mojolearn: the svm binding publishes no native iforest entry")
@@ -827,4 +831,26 @@ def iforest_member_words(model: PythonObject, fields: PythonObject, context: Pyt
         1.0 if r.bootstrap else 0.0, Float64(r.random_state), 1.0 if r.contamination_auto else 0.0,
         r.contamination, Float64(Int(py=key[0])), Float64(Int(py=key[1])),
     ]
+    _ = scratch
     return words^
+
+
+def iforest_member_pack_fields(model: PythonObject, fields: PythonObject, forest: PythonObject, offset: Float64,
+                               max_samples: Int, n_features: Int, context: PythonObject) raises:
+    """PACK for the member (providers/python/member_isolation_forest_boundary_door.mojo):
+    the fitted attributes a LOADED estimator holds (`host_archive_public_iforest`'s
+    fields): the resolved knobs (`iforest_validate`, on this estimator, the
+    caller's clone), the saved forest `_if_forest` (five Arrays), `offset_`
+    (the float32 offset as a float, as the fit door writes it),
+    `max_samples_` and `n_features_in_`; no training matrix and no resident
+    record (the first score uploads the forest, as after a load)."""
+    _ = iforest_forest_words(forest, context)  # the saved-forest refusals, once
+    iforest_validate(model, fields, context)
+    _release(model, fields)
+    var nk = trees_keys()
+    if py_contains(fields, nk[].k__x):
+        _ = py_call(fields.pop, "_x", PythonObject(None))
+    py_setitem(fields, _FOREST_FIELD, forest)
+    py_setitem(fields, nk[].k_n_features_in_, PythonObject(n_features))
+    py_setitem(fields, nk[].k_offset_, PythonObject(Float64(Float32(offset))))
+    py_setitem(fields, nk[].k_max_samples_, PythonObject(max_samples))
