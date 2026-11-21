@@ -19,17 +19,25 @@ seconds at the first scored call's time:
     callgrind  `valgrind --tool=callgrind --instr-atstart=no --collect-atstart=no`, instrumentation and collection on
                for the window only (tools/ops/call_profile_cg.c): exact instructions per call by function
     strace     `strace -f -ttt -T` cut to the window by the marker stats: syscalls per call (opt-in)
+LONG ROWS (lane fx-profile-big-rows, 2026-11-20): a rows-file line may carry `ms=<stored board ms>` and `cap=<s>`. A
+row of LONG_ROW_MS or more is profiled in ONE call per pass (no warmup; the window around the first scored call;
+tools/bench_board_small_rows.py one_call), with no time pass and no callgrind, each pass under the row's cap; a pass the
+job stops at its cap leaves run.capped and the row is reported CAPPED (exit 8) with what its tools collected. The
+report adds, per long row: stored ms beside the one call's wall, GPU kernel / CUDA API (of it sync) / host ms, launches,
+syncs, H2D/D2H MB, the top GPU kernels, and one LARGEST COST line (tools/ops/call_profile_rows_big.tsv).
 Subcommands (each prints one line; the job keeps their files):
-    rows       --rows-file F --out-dir D      D/runs.tsv (row, race id, phase) and D/ids.txt (the races to plan)
-    estimate   --rows-file F [--passes ...]   pod minutes per row and in all (printed by the job's plan phase)
+    rows       --rows-file F --out-dir D      D/runs.tsv (row, race id, phase, cap s or 0, long 1/0) and D/ids.txt
+    estimate   --rows-file F [--passes ...]   pod minutes per row and in all (printed by the job's plan phase); for
+                                              long rows also stored ms x passes and the sum of the caps
     window     --window W                     calls and wall of a pass's window (JSON)
     perf       --script S --window W --out J --folded F      folded stacks and the top self/inclusive frames
     pyspy      --raw C --window W --out J [--rate R]         the same from py-spy's raw stacks (main thread)
     callgrind  --dir D --window W --out J                    instructions per call by function, self and inclusive
     strace     --trace T --window W --out J                  syscalls per call in the window
-    report     --res R [--rows-file F]        CALL-PROFILE-<vendor>.md and .json; exit 0 every row has its wall, nsys
-                                              counts and one function-level source (py-spy, perf, callgrind or the
-                                              shim), 6 a row lacks one of those, 7 a row lacks a wall time
+    report     --res R [--rows-file F] [--top N]   CALL-PROFILE-<vendor>.md and .json; exit 0 every row has its wall,
+                                              nsys counts and one function-level source (py-spy, perf, callgrind or the
+                                              shim), 6 a row lacks one of those, 7 a row lacks a wall time, 8 a row hit
+                                              its cap (CAPPED)
 """
 import argparse
 import collections
