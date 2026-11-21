@@ -198,7 +198,6 @@ from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
 )
 from gbdt.methods.leaves_estimation.doc_parallel_leaves_estimator import (
     compute_bins_for_model,
-    LeafPartition,
 )
 from gbdt.methods.ordered_fast_switches import ORD_ALL, ord_all_on
 from gbdt.trees_identical_switches import (
@@ -1523,62 +1522,12 @@ struct _PermPartition(Movable):
         )
 
 
-def _partition_from_host_bins(
-    ctx: DeviceContext,
-    tree_bins: HostBuffer[DType.uint32],
-    permutation: List[UInt32],
-    n_rows: Int,
-    n_leaves: Int,
-    h_rows: HostBuffer[DType.uint32],
-) raises -> LeafPartition:
-    """`partition_from_bins` (`doc_parallel_leaves_estimator.mojo`,
-    DEVIATION 90) over the permutation's prefix `[0, n_rows)` of a tree's
-    bins that are ALREADY ON THE HOST: row `i`'s leaf is
-    `tree_bins[permutation[i]]`, exactly the value `_ordered_gather_kernel`
-    writes to the gathered bins buffer that function would download, and
-    the same STABLE counting sort over it, so the partition is the same
-    list of integers.
-
-    Why: that function downloads the gathered bins and drains twice per
-    call, and an Ordered tree calls it once per (learn permutation, fold)
-    plus once for the estimation permutation -- 28 calls on a default fit
-    of fewer than 500 rows, all reading ONE tree's bins. The fit now
-    downloads those bins once per tree and partitions every task here.
-
-    `h_rows` is the caller's staging (at least `n_rows` long); its upload
-    is enqueued and NOT drained here, so the caller keeps it alive until
-    its task's tail drain."""
-    if n_leaves <= 0:
-        raise Error("partition_from_bins: n_leaves must be positive")
-    var sizes = List[Int]()
-    for _ in range(n_leaves):
-        sizes.append(0)
-    var bins_p = tree_bins.unsafe_ptr()
-    for r in range(n_rows):
-        var b = Int(bins_p.unsafe_load(Int(permutation[r])))
-        if b < 0 or b >= n_leaves:
-            raise Error(
-                "partition_from_bins: row " + String(r) + " fell in leaf "
-                + String(b) + " of " + String(n_leaves)
-            )
-        sizes[b] += 1
-
-    var offsets = List[Int]()
-    var running = 0
-    for i in range(n_leaves):
-        offsets.append(running)
-        running += sizes[i]
-
-    var fill = offsets.copy()
-    var rows_p = h_rows.unsafe_ptr()
-    for r in range(n_rows):
-        var b = Int(bins_p.unsafe_load(Int(permutation[r])))
-        rows_p.unsafe_store(fill[b], UInt32(r))
-        fill[b] += 1
-
-    var row_index = ctx.enqueue_create_buffer[DType.uint32](n_rows)
-    ctx.enqueue_copy(dst_buf=row_index, src_ptr=h_rows.unsafe_ptr())
-    return LeafPartition(row_index^, offsets^, sizes^)
+# `_partition_from_host_bins` (the unbatched task's host counting sort over
+# a per-tree host copy of the bins: two serial host passes over each task's
+# prefix) is gone, lane cat-ctr 2026-11-21: the unbatched task reads the
+# same stable partition off its permutation's `_PermPartition`, as the
+# batched tasks do. Same integers (sizes, offsets, row order), no host copy
+# of the bins. Recoverable at 5f9db7c709.
 
 
 def _ordered_estimate_task(
@@ -1589,10 +1538,10 @@ def _ordered_estimate_task(
     mut y: DeviceBuffer[DType.float32],
     mut weights: DeviceBuffer[DType.float32],
     mut permutation: DeviceBuffer[DType.uint32],
-    host_permutation: List[UInt32],
+    mut part: _PermPartition,
+    mut htab: HostBuffer[DType.uint32],
+    mut dtab: DeviceBuffer[DType.uint32],
     mut bins: DeviceBuffer[DType.uint32],
-    tree_bins: HostBuffer[DType.uint32],
-    h_rows: HostBuffer[DType.uint32],
     mut cursor: DeviceBuffer[DType.float32],
     opts: OrderedBoostingOptions,
     sm_count: Int,
@@ -1607,7 +1556,14 @@ def _ordered_estimate_task(
     `:431-444`): estimate on permutation positions `[0, estimate_size)` at the
     cursor, add `leaf * rate` to cursor positions `[0, apply_size)`.
     The estimator (`_estimate_and_apply`) moves a PRIVATE gathered copy of the
-    cursor (its walker's `MoveTo`), never the real one."""
+    cursor (its walker's `MoveTo`), never the real one.
+
+    The task's partition is `part`'s (this permutation's device counting
+    sort of the tree's leaves, sorted and settled by the caller for this
+    tree): the snapshot at `estimate_size`, its row order written on the
+    device. `htab` and `dtab` are the caller's leaf-table staging (three
+    words a leaf at the fit's leaf capacity), shared by the tasks: each
+    drains at its tail."""
     if estimate_size < 1 or estimate_size > apply_size:
         raise Error("ordered estimation requires 0 < prefix <= cursor size")
     est_times.begin(ctx)
@@ -1623,16 +1579,19 @@ def _ordered_estimate_task(
     )
     est_times.end(ctx, "est.gather")
     est_times.begin(ctx)
-    var part = _partition_from_host_bins(
-        ctx, tree_bins, host_permutation, estimate_size, n_leaves, h_rows
+    var sizes = List[Int]()
+    var offsets = List[Int]()
+    var row_index = ctx.enqueue_create_buffer[DType.uint32](estimate_size)
+    part.task_partition(
+        ctx, estimate_size, n_leaves, htab, dtab, row_index, sizes, offsets
     )
     est_times.end(ctx, "est.partition")
     var leaves = List[Float32]()
     var not_pd = 0
     est_times.begin(ctx)
     _estimate_and_apply(
-        ctx, estimate_size, 1, n_leaves, part.sizes, part.offsets,
-        part.row_index, gy, gw, True, gc, opts.objective,
+        ctx, estimate_size, 1, n_leaves, sizes, offsets,
+        row_index, gy, gw, True, gc, opts.objective,
         opts.kernel_alpha, opts.estimator_alpha, opts.logloss_border,
         opts.l2_leaf_reg, sm_count, opts.leaf_method, 0,
         opts.leaf_iterations, opts.learning_rate, leaves, not_pd,
@@ -1658,6 +1617,8 @@ def _ordered_estimate_task(
     _ = gy^
     _ = gw^
     _ = gc^
+    # the partition's row order, read by the estimator's launches above
+    _ = row_index^
     return leaves^
 
 
@@ -2763,10 +2724,15 @@ def fit_ordered(
     # Plain fit already makes of its one slot, under the same contract
     # (every cell a task reads is written by that task's gathers; the
     # previous task's consumers drained at its tail).
-    # the per-tree host copy of the bins and the partition's upload staging
-    # (every task drains at its tail, so one staging buffer serves them all)
-    var h_tree_bins = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
-    var h_part_rows = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
+    # the unbatched tasks' leaf-table staging (`_PermPartition.
+    # task_partition`): every task drains at its tail, so one pair serves
+    # them all
+    var task_htab = ctx.enqueue_create_host_buffer[DType.uint32](
+        3 * (1 << max_depth)
+    )
+    var task_dtab = ctx.enqueue_create_buffer[DType.uint32](
+        3 * (1 << max_depth)
+    )
     var est_pools = List[List[TEstimationWorkspace]]()
     #
     # THE BATCHED ESTIMATION (`estimate_can_batch`: a single-dimensional
@@ -2821,29 +2787,29 @@ def fit_ordered(
                     est = folds[f].quality_evaluate_samples.right
                 slots.append(_OrderedSlot(ctx, arena, est, 1 << max_depth))
         slots.append(_OrderedSlot(ctx, arena, n_rows, 1 << max_depth))
-    # the batch's partitions, one per permutation a task reads
+    # the tasks' partitions, one per permutation a task reads
     # (`_PermPartition`): the learn permutations at every fold's estimate
     # prefix, and the estimation permutation at every row. With one
     # permutation the two are the same list and one partition serves both.
+    # The batched and the unbatched estimation both read them.
     var parts = List[_PermPartition]()
-    if batch:
-        for p in range(perm_count):
-            if p == skip_p:
-                # F: a one-row partition keeps the index; never sorted
-                parts.append(_PermPartition(ctx, arena, [1], 1))
-                continue
-            var bounds = List[Int]()
-            if p < learn_count:
-                for f in range(n_folds):  # small-loop(n_folds: the fold plan, a handful): fold prefixes per permutation
-                    var est = folds[f].estimate_samples.right
-                    comptime if ORDERED_SABOTAGE:
-                        est = folds[f].quality_evaluate_samples.right
-                    bounds.append(est)
-            if p == est_p:
-                bounds.append(n_rows)
-            parts.append(
-                _PermPartition(ctx, arena, bounds^, 1 << max_depth)
-            )
+    for p in range(perm_count):
+        if p == skip_p:
+            # F: a one-row partition keeps the index; never sorted
+            parts.append(_PermPartition(ctx, arena, [1], 1))
+            continue
+        var bounds = List[Int]()
+        if p < learn_count:
+            for f in range(n_folds):  # small-loop(n_folds: the fold plan, a handful): fold prefixes per permutation
+                var est = folds[f].estimate_samples.right
+                comptime if ORDERED_SABOTAGE:
+                    est = folds[f].quality_evaluate_samples.right
+                bounds.append(est)
+        if p == est_p:
+            bounds.append(n_rows)
+        parts.append(
+            _PermPartition(ctx, arena, bounds^, 1 << max_depth)
+        )
     comptime if ORDERED_BATCH_EST:
         if fast_on:
             _ord_fast_init_tasks(
@@ -2851,8 +2817,8 @@ def fit_ordered(
                 1 << max_depth, fast_task_k, fast_est_off, fast_est_k,
                 fast_partials, fast_leaves, fast_est_view, fast_h_leaves,
             )
-    var part_counts = arena.device[DType.uint32](ctx, ORDERED_PART_CELLS if batch else 1)
-    var part_prefix = arena.device[DType.uint32](ctx, ORDERED_PART_CELLS if batch else 1)
+    var part_counts = arena.device[DType.uint32](ctx, ORDERED_PART_CELLS)
+    var part_prefix = arena.device[DType.uint32](ctx, ORDERED_PART_CELLS)
     var losses = List[Float64]()
     var fv_blocks = (n_rows + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
     var fv_part = ctx.enqueue_create_buffer[DType.float32](fv_blocks)
@@ -3336,47 +3302,44 @@ def fit_ordered(
                 split_words.append(splits[si].bin_idx)
             trace.record_list_i32(tag + ".splits", split_words)
             trace.record_device(ctx, tag + ".bins", bins, count=n_rows)
-        if batch:
-            # one device counting sort per permutation (`_PermPartition`),
-            # one drain for all of them, their counts home
-            for p in range(perm_count):
-                if p == skip_p:
-                    # F: no task reads this permutation's partition
-                    continue
-                # the leaves this permutation's rows fall in
-                var sort_bins = bins.copy()
-                if dep_on and p != est_p:
-                    sort_bins = dep_bins[p].copy()
-                if ord_wide:
-                    # the batched estimation reads the counts on the
-                    # device; the three host copies are dead under it
-                    parts[p].enqueue_sort(
-                        ctx, sort_bins, dperms[p], n_leaves, part_counts,
-                        part_prefix, readback=not fast_on,
-                    )
-                else:
-                    parts[p].enqueue_sort(
-                        ctx, sort_bins, dperms[p], n_leaves, part_counts, part_prefix
-                    )
-            if not fast_on:
-                ctx.synchronize()
-                for p in range(perm_count):  # small-loop(perm_count: permutations, a handful): settle orchestration per permutation
-                    if p != skip_p:
-                        parts[p].settle(n_leaves)
-            if trace.enabled:
-                # lane sm120-tree-identity: each permutation's per-leaf row
-                # counts, the estimation's partition (an empty leaf is a 0).
-                for p in range(perm_count):  # small-loop(perm_count: permutations, a handful): trace records per permutation
-                    if p != skip_p:
-                        trace.record_device(
-                            ctx, tag + ".perm." + String(p) + ".leaf_counts",
-                            parts[p].d_tot, count=n_leaves,
-                        )
-        else:
-            # the tree's bins on the host ONCE, for every task's partition
-            # (`_partition_from_host_bins`)
-            ctx.enqueue_copy(dst_buf=h_tree_bins, src_buf=bins)
+        # one device counting sort per permutation (`_PermPartition`), one
+        # drain for all of them, their counts home. The batched and the
+        # unbatched tasks both read these partitions: the tree's bins stay
+        # on the device.
+        # driver-loop: over the permutations
+        for p in range(perm_count):
+            if p == skip_p:
+                # F: no task reads this permutation's partition
+                continue
+            # the leaves this permutation's rows fall in
+            var sort_bins = bins.copy()
+            if dep_on and p != est_p:
+                sort_bins = dep_bins[p].copy()
+            if ord_wide:
+                # the batched estimation reads the counts on the
+                # device; the three host copies are dead under it
+                parts[p].enqueue_sort(
+                    ctx, sort_bins, dperms[p], n_leaves, part_counts,
+                    part_prefix, readback=not fast_on,
+                )
+            else:
+                parts[p].enqueue_sort(
+                    ctx, sort_bins, dperms[p], n_leaves, part_counts, part_prefix
+                )
+        if not fast_on:
             ctx.synchronize()
+            for p in range(perm_count):  # small-loop(perm_count: permutations, a handful): settle orchestration per permutation
+                if p != skip_p:
+                    parts[p].settle(n_leaves)
+        if trace.enabled and batch:
+            # lane sm120-tree-identity: each permutation's per-leaf row
+            # counts, the estimation's partition (an empty leaf is a 0).
+            for p in range(perm_count):  # small-loop(perm_count: permutations, a handful): trace records per permutation
+                if p != skip_p:
+                    trace.record_device(
+                        ctx, tag + ".perm." + String(p) + ".leaf_counts",
+                        parts[p].d_tot, count=n_leaves,
+                    )
 
         times.end(ctx, "ord.bins")
         # 6. the fold models, then the estimation model
@@ -3481,21 +3444,17 @@ def fit_ordered(
                 continue
             var task_bins = bins.copy()
             if dep_on:
-                # the unbatched path partitions on the host from
-                # `h_tree_bins`: this permutation's leaves come home once
-                # per tree (one copy of n_rows words per learn permutation,
-                # on this path only)
+                # this permutation's own leaves, on the device
                 task_bins = dep_bins[lp].copy()
-                ctx.enqueue_copy(dst_buf=h_tree_bins, src_buf=task_bins)
-                ctx.synchronize()
             for f in range(n_folds):
                 var est = folds[f].estimate_samples.right
                 comptime if ORDERED_SABOTAGE:
                     est = folds[f].quality_evaluate_samples.right
                 _ = _ordered_estimate_task(
                     ctx, est, folds[f].quality_evaluate_samples.right,
-                    n_leaves, targets, weights, dperms[lp], perms[lp], task_bins,
-                    h_tree_bins, h_part_rows, cursors[lp][f], opts, sm_count,
+                    n_leaves, targets, weights, dperms[lp], parts[lp],
+                    task_htab, task_dtab, task_bins, cursors[lp][f], opts,
+                    sm_count,
                     est_pools[f], trace,
                     tag + ".perm." + String(lp) + ".fold." + String(f),
                     est_times, walker_times,
@@ -3503,13 +3462,9 @@ def fit_ordered(
         times.end(ctx, "ord.fold_estimates")
         times.begin(ctx)
         if not batch:
-            if dep_on:
-                # the estimation permutation's leaves back on the host
-                ctx.enqueue_copy(dst_buf=h_tree_bins, src_buf=bins)
-                ctx.synchronize()
             leaves = _ordered_estimate_task(
                 ctx, n_rows, n_rows, n_leaves, targets, weights,
-                dperms[est_p], perms[est_p], bins, h_tree_bins, h_part_rows,
+                dperms[est_p], parts[est_p], task_htab, task_dtab, bins,
                 est_cursor, opts, sm_count, est_pools[n_folds], trace,
                 tag + ".estimation", est_times, walker_times,
             )
@@ -3582,12 +3537,12 @@ def fit_ordered(
     est_times.report("ordered estimation tasks")
     walker_times.report("ordered estimate_and_apply internals")
     _ = quality^
-    _ = h_tree_bins^
+    _ = task_htab^
     # the per-permutation indexes and leaves, held past the last tree's
     # queued launches
     _ = len(pidx)
     _ = len(dep_bins)
-    _ = h_part_rows^
+    _ = task_dtab^
     _ = slots^
     _ = parts^
     _ = fast_cat^

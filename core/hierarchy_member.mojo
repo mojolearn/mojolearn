@@ -79,6 +79,7 @@ from core.member_abi import (
     MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
 )
+from core.member_abi import MEMBER_BORROWS_FIT, MEMBER_EXPORT_OWN
 from core.member_families import MEMBER_FAMILY_HIERARCHY
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
@@ -339,6 +340,10 @@ def _export(slot: _Slot, call: _Call) raises:
     until this state's next fit, import or free."""
     if not slot[].fitted:
         raise Error("NotFittedError: this AgglomerativeClustering member is not fitted yet")
+    if (call[].flags & MEMBER_EXPORT_OWN) != 0:
+        # THE LIFETIME RULE: the training rows, once; no view is answered.
+        _own_refs(slot)
+        return
     var block = call[].block
     if (call[].flags & MEMBER_BLOCK_BY_INDEX) != 0:
         if block < 0 or block > 3:
@@ -415,7 +420,10 @@ def _hierarchy_member(operation: Int, address: Int) raises -> Int:
     if operation == MEMBER_OP_CAPABILITIES:
         # No MEMBER_CAN_TEST_ROWS: X is admitted finite by the caller (the
         # solver and labeled-reference entries do not test it).
-        return MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
+        # MEMBER_BORROWS_FIT: a fitted state reads the caller's X (its
+        # training rows) until an export of the rows block, or
+        # MEMBER_EXPORT_OWN, copied them.
+        return MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_BORROWS_FIT
     if operation == MEMBER_OP_NEW:
         if not call[].params or call[].param_count != 3:
             raise Error("member ABI: an AgglomerativeClustering member takes three parameter words (kind,"

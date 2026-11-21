@@ -95,6 +95,7 @@ from core.member_abi import (
     MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_BLOCK_NOTICES, MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
 )
+from core.member_abi import MEMBER_BORROWS_FIT, MEMBER_EXPORT_OWN
 from core.member_families import MEMBER_FAMILY_GP
 from core.member_notices import member_notice_add, MEMBER_NOTICE_GP_RIDGE, MEMBER_NOTICE_WORDS
 from core.native_descriptor_abi import NativeDescriptorError
@@ -630,12 +631,43 @@ def _query(slot: _Slot, call: _Call, want_std: Bool) raises:
     _ = clamped^
 
 
+def _own_views(slot: _Slot):
+    """THE LIFETIME RULE (MEMBER_EXPORT_OWN): copy the borrowed X_train_
+    (and the regressor's borrowed y_train_) into the state, once; the state
+    reads its own words from then on. A device lease opened over the
+    borrowed words is closed: the next resident query opens one over the
+    state's own (one upload, only for a state that is kept past its fit
+    buffers). Two copies of independent blocks, each one memcpy."""
+    var moved = False
+    var count = slot[].rows * slot[].cols
+    if slot[].x_fit != 0 and (slot[].x_fit != Int(slot[].x_owned.unsafe_ptr()) or len(slot[].x_owned) != count):
+        var owned = List[Float32](length=count, fill=Float32(0))
+        if count > 0:
+            unsafe_memcpy(dest=owned.unsafe_ptr(), src=_f32p(slot[].x_fit), count=count)
+        slot[].x_owned = owned^
+        slot[].x_fit = Int(slot[].x_owned.unsafe_ptr())
+        moved = True
+    var n = slot[].rows
+    if slot[].y_fit != 0 and (slot[].y_fit != Int(slot[].y_owned.unsafe_ptr()) or len(slot[].y_owned) != n):
+        var kept = List[Float32](length=n, fill=Float32(0))
+        if n > 0:
+            unsafe_memcpy(dest=kept.unsafe_ptr(), src=_f32p(slot[].y_fit), count=n)
+        slot[].y_owned = kept^
+        slot[].y_fit = Int(slot[].y_owned.unsafe_ptr())
+        moved = True
+    if moved:
+        _drop_lease(slot)
+
+
 def _export(slot: _Slot, call: _Call) raises:
     """A view of one fitted block. X_train_ (and y_train_ without
     normalize_y) is the caller's fit view or the imported words; the rest is
     owned here. Valid until this state's next fit, import or free."""
     if not slot[].fitted:
         raise Error("NotFittedError: this GaussianProcessRegressor member is not fitted yet")
+    if (call[].flags & MEMBER_EXPORT_OWN) != 0:
+        _own_views(slot)
+        return
     var block = call[].block
     if (call[].flags & MEMBER_BLOCK_BY_INDEX) != 0:
         if block < 0 or block >= _BLOCKS:
@@ -970,6 +1002,10 @@ def _gpc_export(slot: _Slot, call: _Call) raises:
     view or the imported words. Valid until the next fit, import or free."""
     if not slot[].fitted:
         raise Error("NotFittedError: this GaussianProcessClassifier member is not fitted yet")
+    if (call[].flags & MEMBER_EXPORT_OWN) != 0:
+        # The classifier borrows X_train_ only (its 0 / 1 targets are owned).
+        _own_views(slot)
+        return
     var block = call[].block
     if (call[].flags & MEMBER_BLOCK_BY_INDEX) != 0:
         block = _gpc_block(block)
@@ -1091,8 +1127,17 @@ def _gpc(slot: _Slot) -> Bool:
 # entry's status word or here (`_query`, `_gpc_query`). Codes are integers.
 comptime _CAN_COMMON = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
     | MEMBER_CAN_TEST_ROWS)
+<<<<<<< HEAD
 comptime _CAN_GPR = _CAN_COMMON | MEMBER_CAN_PREDICT_STD | MEMBER_CAN_NOTICES
 comptime _CAN_GPC = _CAN_COMMON | MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_CLASSIFIER
+=======
+# MEMBER_BORROWS_FIT (both kinds): the fitted state reads the caller's fit X
+# (and the regressor's y without normalize_y) at every query, and its export
+# hands those words back themselves; only MEMBER_EXPORT_OWN (`_own_views`) or
+# an import makes the state own them (LIFETIME in the module docstring).
+comptime _CAN_GPR = _CAN_COMMON | MEMBER_CAN_PREDICT_STD | MEMBER_BORROWS_FIT
+comptime _CAN_GPC = _CAN_COMMON | MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_CLASSIFIER | MEMBER_BORROWS_FIT
+>>>>>>> origin/preinteg/wave2-20261113
 
 
 def _gp_outputs(call: _Call, classifier: Bool, classes: Int) raises:

@@ -493,10 +493,9 @@ class CheckMixin:
 
         The digest covers the fitted state that decides the model's answers:
         the class name and every fitted array and value, by name, type, shape
-        and bytes. It is computed the first time it is read, not during
-        `fit`, and read again after another `fit` or `set_params` it is
-        computed again. A meta-estimator's digest includes the digests of its
-        fitted members.
+        and bytes. It is computed each time it is read, from the model as it
+        is at that moment, and never during `fit`. A meta-estimator's digest
+        includes the digests of its fitted members.
 
         Raises
         ------

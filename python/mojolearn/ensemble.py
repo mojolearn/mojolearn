@@ -662,8 +662,9 @@ class GradientBoosting(_NumericModeMixin):
         Bayesian (including the default) or no bootstrap raises ``ValueError``.
     cat_features : sequence of int, optional
         Column indices of the categorical features. A categorical column may
-        hold any values: integers, other numbers, text or ``None`` (pass text
-        in a list of rows or a NumPy object array). The values are mapped to
+        hold any values: integers, other numbers, text, bytes or ``None``
+        (pass text in a list of rows or in a NumPy object, string or bytes
+        array). The values are mapped to
         categories during ``fit``; the mapping is kept with the model, saved
         and loaded with it, and applied by ``predict``. A value that was not
         seen during ``fit`` is treated as an unknown category. As in

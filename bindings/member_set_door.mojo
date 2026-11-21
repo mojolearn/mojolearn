@@ -101,7 +101,7 @@ from core.member_abi import (
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA, MEMBER_CAN_DECISION,
     MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_CLASSIFIER,
     MEMBER_CAN_ROW_INDEX, MEMBER_CAN_COLUMN_INDEX, MEMBER_CAN_TEST_ROWS,
-    MEMBER_CAN_SCOPE, MEMBER_SCOPE_NONE, member_pin_settle,
+    MEMBER_CAN_SCOPE, MEMBER_SCOPE_NONE, member_pin_settle, MEMBER_BORROWS_FIT,
 )
 from core.member_families import MEMBER_FAMILY_TREE, MEMBER_FAMILY_FOREST, MEMBER_FAMILY_EXTRA_TREES
 from core.member_notices import member_notices_take
@@ -162,9 +162,24 @@ struct MemberSetRun(Movable):
     # (0: none; the worker writes 0 when the member's cache took it).
     var scope: Int
     var pin_tokens: List[Int]
+<<<<<<< HEAD
     # Per member, the fit notices `member_set_pack` took from its state
     # (empty: none), raised by `member_set_notices`.
     var notices: List[List[Float64]]
+=======
+    # THE LIFETIME RULE (MEMBER-ABI-V2.md item 34): every buffer handed to a
+    # member's FIT stays valid until its state is freed or has been exported.
+    # Every state of a set waits for PACK, so the drawn block a worker gathers
+    # for a member whose KIND borrows its fit buffers (`borrows[u]`,
+    # MEMBER_BORROWS_FIT) is the RUN's: `part_x[u]`, `part_y[u]`, `part_w[u]`,
+    # emptied by `member_set_pack` once that state is freed or owns its rows
+    # (and by `member_set_release`). A kind that owns its state gathers into
+    # the worker's own buffers, freed when its fit returns, as before.
+    var borrows: List[UInt8]
+    var part_x: List[List[Float32]]
+    var part_y: List[List[Int32]]
+    var part_w: List[List[Float32]]
+>>>>>>> origin/preinteg/wave2-20261113
 
     def __init__(out self, x: Int, rows: Int, cols: Int, y_dtype: Int, index_dtype: Int):
         self.plans = List[MemberPlan]()
@@ -188,7 +203,22 @@ struct MemberSetRun(Movable):
         self.tests = List[UInt8]()
         self.scope = MEMBER_SCOPE_NONE
         self.pin_tokens = List[Int]()
+<<<<<<< HEAD
         self.notices = List[List[Float64]]()
+=======
+        self.borrows = List[UInt8]()
+        self.part_x = List[List[Float32]]()
+        self.part_y = List[List[Int32]]()
+        self.part_w = List[List[Float32]]()
+
+    def part_free(mut self, u: Int):
+        """Member `u`'s held gathered block is no longer read (its state was
+        freed, or owns its rows)."""
+        if len(self.part_x[u]) > 0 or len(self.part_y[u]) > 0:
+            self.part_x[u] = List[Float32]()
+            self.part_y[u] = List[Int32]()
+            self.part_w[u] = List[Float32]()
+>>>>>>> origin/preinteg/wave2-20261113
 
 
 struct MemberSet(Movable):
@@ -273,8 +303,11 @@ def member_set_admit(mut set: MemberSet, estimator: PythonObject, target: Int, w
     # earlier member of the same family, kind and route (clones of one
     # estimator: the member before it), else asked once. A family whose union
     # mask lacks the bit is never asked (no state is minted for the answer).
+    # THE LIFETIME RULE: whether this member's KIND keeps a pointer into its
+    # fit buffers (MEMBER_BORROWS_FIT), answered with the same one question.
     var tests = UInt8(0)
-    if owner.plan.member.can(MEMBER_CAN_TEST_ROWS):
+    var borrows = UInt8(0)
+    if owner.plan.member.can(MEMBER_CAN_TEST_ROWS | MEMBER_BORROWS_FIT):
         var asked = False
         var v = len(set.run.plans) - 1
         while v >= 0:  # driver-loop: over the members admitted before (one compare when they are clones)
@@ -283,15 +316,22 @@ def member_set_admit(mut set: MemberSet, estimator: PythonObject, target: Int, w
                     and set.run.plans[v].route.vendor == owner.plan.route.vendor
                     and set.run.plans[v].route.mode == owner.plan.route.mode):
                 tests = set.run.tests[v]
+                borrows = set.run.borrows[v]
                 asked = True
                 break
             v -= 1
         if not asked:
             try:
-                if (member_kind_capabilities(owner.plan) & MEMBER_CAN_TEST_ROWS) != 0:
+                var kind_mask = member_kind_capabilities(owner.plan)
+                if (kind_mask & MEMBER_CAN_TEST_ROWS) != 0:
                     tests = UInt8(1)
+                if (kind_mask & MEMBER_BORROWS_FIT) != 0:
+                    borrows = UInt8(1)
             except:
+                # No answer: the caller scans the rows, and the gathered
+                # block is held as for a borrowing kind (the safe reading).
                 tests = UInt8(0)
+                borrows = UInt8(1)
     set.run.tests.append(tests)
     set.run.plans.append(owner.plan.copy())
     set.run.targets.append(target)
@@ -307,7 +347,14 @@ def member_set_admit(mut set: MemberSet, estimator: PythonObject, target: Int, w
     set.run.errors.append(String(""))
     set.run.uncovered.append(UInt8(0))
     set.run.pin_tokens.append(0)
+<<<<<<< HEAD
     set.run.notices.append(List[Float64]())
+=======
+    set.run.borrows.append(borrows)
+    set.run.part_x.append(List[Float32]())
+    set.run.part_y.append(List[Int32]())
+    set.run.part_w.append(List[Float32]())
+>>>>>>> origin/preinteg/wave2-20261113
     _ = py_call(set.sources.append, PythonObject(None))
     _ = py_call(set.estimators.append, estimator)
     _ = py_call(set.contexts.append, member_context)
@@ -322,8 +369,11 @@ def member_set_own_block(mut set: MemberSet, x: Int, rows: Int):
     """UNPACK: the member admitted last reads its own float32 C-order X
     block (`rows` x the set's columns, at address `x`; its target and
     weights addresses then hold `rows` values) and not the set's X: a cv
-    fold's gathered rows, shared read-only by that fold's members. The
-    caller keeps the block alive through `member_set_run`."""
+    fold's gathered rows, shared read-only by that fold's members. THE
+    LIFETIME RULE: the caller keeps the block (and every target, weight and
+    draw address it gave `member_set_admit`) alive until the LAST
+    `member_set_pack` / `member_set_release` of the set has returned: a
+    member that borrows its fit buffers reads them again at its export."""
     var last = len(set.run.own_x) - 1
     if last < 0:
         return
@@ -571,6 +621,9 @@ def _member_set_unit(address: Int, u: Int) raises:
     var x_part = List[Float32]()
     var y_part = List[Int32]()
     var w_part = List[Float32]()
+    # THE LIFETIME RULE: a borrowing kind's gathered block is the run's (its
+    # state reads it again at PACK); this unit's own slots, no other worker's.
+    var hold = run[].borrows[u] != UInt8(0)
     var call = member_new(run[].plans[u])
     call.scope = run[].scope
     call.pin = 0
@@ -593,16 +646,28 @@ def _member_set_unit(address: Int, u: Int) raises:
         elif drawn:
             var n = row_count if row_count > 0 else rows
             var width = column_count if column_count > 0 else cols
-            x_part = List[Float32](length=n * width, fill=0.0)
-            y_part = List[Int32](length=n, fill=Int32(0))
+            var x_at = 0
+            var y_at = 0
             var w_address = 0
-            if run[].weights[u] != 0:
-                w_part = List[Float32](length=n, fill=0.0)
-                w_address = Int(w_part.unsafe_ptr())
-            _set_gather(address, u, n, width, Int(x_part.unsafe_ptr()), Int(y_part.unsafe_ptr()), w_address,
-                run[].workers <= 1)
-            call.x = MemberMatrix(Int(x_part.unsafe_ptr()), n, width)
-            call.y = MemberMatrix(Int(y_part.unsafe_ptr()), n, 1, run[].y_dtype)
+            if hold:
+                run[].part_x[u] = List[Float32](length=n * width, fill=0.0)
+                run[].part_y[u] = List[Int32](length=n, fill=Int32(0))
+                x_at = Int(run[].part_x[u].unsafe_ptr())
+                y_at = Int(run[].part_y[u].unsafe_ptr())
+                if run[].weights[u] != 0:
+                    run[].part_w[u] = List[Float32](length=n, fill=0.0)
+                    w_address = Int(run[].part_w[u].unsafe_ptr())
+            else:
+                x_part = List[Float32](length=n * width, fill=0.0)
+                y_part = List[Int32](length=n, fill=Int32(0))
+                x_at = Int(x_part.unsafe_ptr())
+                y_at = Int(y_part.unsafe_ptr())
+                if run[].weights[u] != 0:
+                    w_part = List[Float32](length=n, fill=0.0)
+                    w_address = Int(w_part.unsafe_ptr())
+            _set_gather(address, u, n, width, x_at, y_at, w_address, run[].workers <= 1)
+            call.x = MemberMatrix(x_at, n, width)
+            call.y = MemberMatrix(y_at, n, 1, run[].y_dtype)
             if w_address != 0:
                 call.weights = MemberMatrix(w_address, n, 1)
         call.pin = offer
@@ -619,6 +684,7 @@ def _member_set_unit(address: Int, u: Int) raises:
     finally:
         if not done:
             member_free(run[].plans[u], call)
+            run[].part_free(u)
         # Integer addresses carry no lifetime: the gathered block lives to here.
         _ = len(x_part)
         _ = len(y_part)
@@ -648,6 +714,8 @@ def member_set_release(mut set: MemberSet):
             var call = MemberCall(set.run.plans[u].route, set.run.states[u])
             member_free(set.run.plans[u], call)
             set.run.states[u] = 0
+        # After the state: nothing reads the held block any more.
+        set.run.part_free(u)
 
 
 def member_set_run(mut set: MemberSet) raises:
@@ -739,6 +807,7 @@ def member_set_pack(mut set: MemberSet, u: Int, classes: PythonObject, b: Python
         var failed = MemberCall(set.run.plans[u].route, set.run.states[u])
         member_free(set.run.plans[u], failed)
         set.run.states[u] = 0
+        set.run.part_free(u)
         raise error^
     # `adopt`: the fitted state stays with the estimator as its held member
     # state (bindings/member_held_door.mojo), so the caller's predict side
@@ -763,6 +832,9 @@ def member_set_pack(mut set: MemberSet, u: Int, classes: PythonObject, b: Python
         var call = MemberCall(set.run.plans[u].route, set.run.states[u])
         member_free(set.run.plans[u], call)
     set.run.states[u] = 0
+    # THE LIFETIME RULE: the state is freed, or adopted (`member_held_adopt`
+    # made a borrowing kind own its rows first): the held block goes now.
+    set.run.part_free(u)
     return estimator
 
 
