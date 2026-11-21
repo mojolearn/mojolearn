@@ -140,6 +140,11 @@ LAYERS = []
 #: class name -> why it has no digest yet, in words a user reads.
 REFUSED_BY_NAME = {}
 
+#: class name -> what is hashed, for a class whose digest is its own compiled
+#: walk and not the shared one (documentation for the generated page; the
+#: walk itself is named in the row).
+OWN_WALK_BY_NAME = {}
+
 #: The tables the compiled walk reads, keyed by class (filled by `declare`).
 EXTRA = {}
 REFUSED = {}

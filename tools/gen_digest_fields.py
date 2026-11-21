@@ -165,14 +165,14 @@ def schema_members(steps, conditional=False):
 
 
 def tables():
-    """EXTRA_BY_NAME, REFUSED_BY_NAME and NOT_STATE of `_digest_fields.py`, as written there."""
+    """EXTRA_BY_NAME, REFUSED_BY_NAME, NOT_STATE and OWN_WALK_BY_NAME of `_digest_fields.py`, as written there."""
     tree = ast.parse((PACKAGE / "_digest_fields.py").read_text())
     found = {}
     for node in tree.body:
         if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
-            if node.targets[0].id in ("EXTRA_BY_NAME", "REFUSED_BY_NAME", "NOT_STATE"):
+            if node.targets[0].id in ("EXTRA_BY_NAME", "REFUSED_BY_NAME", "NOT_STATE", "OWN_WALK_BY_NAME"):
                 found[node.targets[0].id] = ast.literal_eval(node.value)
-    return found["EXTRA_BY_NAME"], found["REFUSED_BY_NAME"], found["NOT_STATE"]
+    return found["EXTRA_BY_NAME"], found["REFUSED_BY_NAME"], found["NOT_STATE"], found["OWN_WALK_BY_NAME"]
 
 
 def public_names():
@@ -189,6 +189,35 @@ def public_names():
     return sorted({name for name in names if isinstance(name, str) and name[:1].isupper()})
 
 
+def exported(path):
+    """The capitalised names a module lists in `__all__` (`__all__ = [...]` and `__all__ += [...]`)."""
+    names = []
+    for node in ast.parse(path.read_text()).body:
+        value = None
+        if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+            if node.targets[0].id == "__all__":
+                value = node.value
+        elif isinstance(node, ast.AugAssign) and isinstance(node.target, ast.Name) and node.target.id == "__all__":
+            value = node.value
+        if isinstance(value, (ast.List, ast.Tuple)):
+            names.extend(e.value for e in value.elts if isinstance(e, ast.Constant) and isinstance(e.value, str))
+    return sorted({name for name in names if name[:1].isupper()})
+
+
+def submodule_names(top):
+    """(shown name, class name) of the classes that are public only under a submodule
+    (`mojolearn.model_selection.GridSearchCV`, `mojolearn.models.CausalLM`): the `__all__` of every public
+    module file and of the `models` package, without the names the package itself exports."""
+    modules = [(p.stem, p) for p in sorted(PACKAGE.glob("*.py")) if not p.name.startswith("_")]
+    modules.append(("models", PACKAGE / "models" / "__init__.py"))
+    found = {}
+    for module, path in modules:
+        for name in exported(path):
+            if name not in top:
+                found.setdefault(name, f"{module}.{name}")     # the first module in name order shows it
+    return sorted((shown, name) for name, shown in found.items())
+
+
 def sources():
     """The package's source files, without its tests."""
     files = [p for p in sorted(PACKAGE.glob("*.py"))] + [p for p in sorted((PACKAGE / "models").glob("*.py"))]
@@ -196,7 +225,7 @@ def sources():
 
 
 def rows(jobs):
-    extra, refused, _ = tables()
+    extra, refused, _, own = tables()
     files = sources()
     if jobs == 1:
         parsed = [parse(path) for path in files]
@@ -224,7 +253,8 @@ def rows(jobs):
             ancestry(base, seen)
 
     out = []
-    for name in public_names():
+    top = public_names()
+    for shown, name in [(name, name) for name in top] + submodule_names(set(top)):
         if name not in classes:
             continue
         line = []
@@ -232,12 +262,17 @@ def rows(jobs):
         if not any(classes[c][2] for c in line):
             continue                                    # not an estimator (no `fit` anywhere in its ancestry)
         if BASE not in line and not any(classes[c][1] for c in line):
-            out.append((name, "no `digest_`", "the class is not on the shared estimator base"))
+            out.append((shown, "no `digest_`", "the class is not on the shared estimator base"))
             continue
         reason = next((refused[c] for c in line if c in refused), None)
         if reason is not None:
-            out.append((name, "not yet", reason))
+            out.append((shown, "not yet", reason))
             continue
+        walk = next((own[c] for c in line if c in own), None)
+        if walk is not None:
+            out.append((shown, "own walk", walk))
+            continue
+        name = shown
         source = "digest schema"
         listed = next((digest_schemas[c] for c in line if c in digest_schemas), None)
         if listed is None:
@@ -256,7 +291,7 @@ def rows(jobs):
 
 
 def render(table):
-    _, _, not_state = tables()
+    _, _, not_state, _ = tables()
     lines = [
         "# What `digest_` hashes",
         "",
@@ -273,6 +308,10 @@ def render(table):
         "  does not carry still has a digest).",
         "- **public fitted attributes**: every stored attribute whose name ends in `_` and does not start with `_`,",
         "  value not None, plus the private fitted fields listed (a listed name the model does not hold is passed over).",
+        "- **own walk**: the class is hashed by its own compiled walk, described in the row.",
+        "- A class shown as `module.Class` is public under that submodule only (`mojolearn.module.Class`).",
+        "- A CPU twin of a class (a `Host*` class, what `host_model` loads) is hashed as that class: same name, same",
+        "  fields, same digest.",
         "- Public names no class hashes (they record how a call ran, not what was fitted): "
         + ", ".join(f"`{n}`" for n in not_state) + ".",
         "",

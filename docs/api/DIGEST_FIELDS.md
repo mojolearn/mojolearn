@@ -13,6 +13,10 @@ arrays. Nothing is kept between reads: the digest is hashed from the model as it
   does not carry still has a digest).
 - **public fitted attributes**: every stored attribute whose name ends in `_` and does not start with `_`,
   value not None, plus the private fitted fields listed (a listed name the model does not hold is passed over).
+- **own walk**: the class is hashed by its own compiled walk, described in the row.
+- A class shown as `module.Class` is public under that submodule only (`mojolearn.module.Class`).
+- A CPU twin of a class (a `Host*` class, what `host_model` loads) is hashed as that class: same name, same
+  fields, same digest.
 - Public names no class hashes (they record how a call ran, not what was fitted): `input_copied_`, `fortran_copied_`, `last_shards_`, `used_query_tile_`, `n_candidate_distances_`, `grad_weight_`, `grad_bias_`, `scorer_`.
 
 | Class | Source | Fields |
@@ -211,3 +215,6 @@ arrays. Nothing is kept between reads: the digest is hashed from the model as it
 | `VarianceThreshold` | public fitted attributes | every public fitted attribute; plus `_mask` |
 | `VotingClassifier` | public fitted attributes | every public fitted attribute |
 | `VotingRegressor` | public fitted attributes | every public fitted attribute |
+| `model_selection.GridSearchCV` | public fitted attributes | every public fitted attribute |
+| `model_selection.RandomizedSearchCV` | public fitted attributes | every public fitted attribute |
+| `ops.Program` | no `digest_` | the class is not on the shared estimator base |
