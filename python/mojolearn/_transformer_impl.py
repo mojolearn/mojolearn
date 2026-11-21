@@ -399,6 +399,9 @@ class TransformerBlock(NumericModeMixin, _native_constructor=True):
     #: The block takes `device=`; its check runs the same block on the other
     #: device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
+    #: No fitted state to hand to the twin: the weights are constructor data,
+    #: so the twin `check` builds from the parameters is the whole block.
+    _mojolearn_device_state = None
     _mojolearn_readback_plan = False  # vendor_used / numeric_mode_used answer from the block's device route (_native_mode_metadata.connect_classes builds no plan)
 
     def vendor_used(self):

@@ -51,7 +51,7 @@ from core.causal_layer_run import CausalLayerRoute
 from providers.python.generation_metadata_pyapi_door import causal_layer_route
 from core.device_route import DEVICE_CPU, DEVICE_GPU, device_name, device_route_plan, device_cpu_absent
 from providers.python.device_route_boundary_door import (
-    DeviceRouteOwner, device_unpack, device_route_keep, device_route_owner, device_route_value,
+    DeviceRouteOwner, device_unpack, device_route_keep,
 )
 from core.neural_entry_table import (
     NeuralEntryKey, neural_entry_vendor, neural_entry_call, neural_ref,
@@ -486,29 +486,6 @@ def _neural_route_publish(block: PythonObject, route: PythonObject, context: Pyt
     _ = device_route_keep(block, owner^)
 
 
-def _neural_device_reconcile(mut mods: NativeModules, block: PythonObject, live: PythonObject, context: PythonObject) raises:
-    # Owner record miss only, and no read of the `device` parameter: the
-    # block's route owner (written at construction) is compared with the
-    # plan word of its fields. They differ only when the fields were handed
-    # over from the same block on the other device (`check` copies every
-    # non-parameter field into the twin it constructed); the block is then
-    # rebuilt from its own constructor parameters, as `set_params` rebuilds
-    # it. Cost at a miss: one record read and a word compare.
-    var bi = mods.module("builtins")
-    var route = py_get(live, "_native_route")
-    if py_type(route) is not bi.str:
-        return
-    var held = device_route_owner(block)
-    if held is None:
-        # No owner (a block built by a whole model, or one that takes no
-        # weak reference): its fields are its own.
-        return
-    if device_name(device_route_value(held).device) == String(route):
-        return
-    _ = bump_model_generation(block)
-    _neural_block_rebuild(mods, block, live, bi.dict(), context)
-
-
 def neural_block_owner(mut mods: NativeModules, block: PythonObject, context: PythonObject) raises -> PythonObject:
     # The parallel worker keeps its existing owner ABI at one-time layer
     # construction. Repeated standalone execution uses the native plan below.
@@ -542,7 +519,9 @@ def neural_block_execution(mut mods: NativeModules, block: PythonObject, context
             py_setitem(fields, "_arithmetic_profile_mode", want_mode)
             py_setitem(fields, "_arithmetic_profile_changed", record[5])
         return NativeBlockExecution(record[1], fields)
-    _neural_device_reconcile(mods, block, live, context)
+    # (lane fx-audit 22) No device reconcile here: `check` builds a block's
+    # twin from its constructor parameters (`_mojolearn_device_state = None`),
+    # so no block's fields come from the same block on the other device.
     var key = PythonObject(None)
     var binding_key = PythonObject(None)
     var uses_default = False

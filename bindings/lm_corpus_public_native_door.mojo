@@ -8,7 +8,7 @@ no Python) / PACK (the public records). The metadata read-backs
 nothing: they are UNPACK of stored fields and PACK of a dictionary or text.
 """
 from std.python import Python, PythonObject
-from std.python._cpython import PyObjectPtr
+from std.python._cpython import PyObjectPtr, GILReleased
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.native_error_class import error_without_class
@@ -20,7 +20,8 @@ from bindings.lm_corpus_metadata_door import (corpus_context, corpus_connect, co
 from bindings.lm_corpus_files_door import corpus_path, corpus_path_object, corpus_bytes_object, corpus_os_error_pending
 from bindings.lm_corpus_files_run import (CORPUS_OS_ERROR, corpus_env_lm_cache, corpus_run_expand, corpus_run_normalize,
     corpus_run_join, corpus_run_file_size)
-from bindings.lm_corpus_prepare_run import (TOKENS_SCHEMA, SCHEDULE, CorpusRange, CorpusPrepareRequest, TokensManifest,
+from bindings.lm_corpus_prepare_run import (TOKENS_SCHEMA, SCHEDULE, CorpusRange, CorpusPrepareRequest, CorpusPrepared,
+    TokensManifest,
     corpus_prepare_run, corpus_tokenize_run, tokens_manifest_read, tokens_manifest_sha, tokens_manifest_digest,
     tokens_manifest_payload, tokens_manifest_range)
 from bindings.tokenizer_public_native_door import (tokenizer_bpe_export, tokenizer_bpe_for, tokenizer_bpe_identity,
@@ -136,6 +137,14 @@ def _corpus_init(value: PythonObject, directory: PythonObject, ranks: PythonObje
     return PythonObject(None)
 
 
+def _prepare_released(request: CorpusPrepareRequest) raises -> CorpusPrepared:
+    # RUN of `prepare` with the GIL released: BPE training and the whole-corpus
+    # encode touch no Python object (bindings/lm_corpus_prepare_run.mojo).
+    var py = Python()
+    with GILReleased(py):
+        return corpus_prepare_run(request)
+
+
 def _prepare(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var nk = lm_keys()
     # UNPACK
@@ -160,8 +169,9 @@ def _prepare(args: PythonObject, context: PythonObject) raises -> PythonObject:
         request.user_ranks = String(py=exported[0])
         request.user_count = Int(py=exported[1])
         request.user_source = String(py=exported[2])
-    # RUN: files, hashing, training and encoding; no Python object.
-    var prepared = corpus_prepare_run(request)
+    # RUN: files, hashing, training and encoding; no Python object, so the
+    # GIL is released for the whole preparation (lane fx-audit 22).
+    var prepared = _prepare_released(request)
     # PACK
     var result = corpus_new(py_item(context, nk[].k_corpus_class))
     _corpus_publish(result, prepared.tokens_dir, prepared.ranks, prepared.manifest, context)
