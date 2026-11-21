@@ -105,6 +105,11 @@ struct TreesKeys(Defaultable, Movable):
     var k_depth_cap_bound_: PythonObject
     var k_device: PythonObject
     var k_device_rows: PythonObject
+    var k_device_fit_cpu: PythonObject
+    var k_device_cpu_bindings: PythonObject
+    var k_device_cpu_context: PythonObject
+    var k_device_cpu_size: PythonObject
+    var k_device_vendor: PythonObject
     var k_dim: PythonObject
     var k_estimator: PythonObject
     var k_family_msel_arena_io: PythonObject
@@ -381,6 +386,11 @@ struct TreesKeys(Defaultable, Movable):
         self.k_depth_cap_bound_ = PythonObject(None)
         self.k_device = PythonObject(None)
         self.k_device_rows = PythonObject(None)
+        self.k_device_fit_cpu = PythonObject(None)
+        self.k_device_cpu_bindings = PythonObject(None)
+        self.k_device_cpu_context = PythonObject(None)
+        self.k_device_cpu_size = PythonObject(None)
+        self.k_device_vendor = PythonObject(None)
         self.k_dim = PythonObject(None)
         self.k_estimator = PythonObject(None)
         self.k_family_msel_arena_io = PythonObject(None)
@@ -661,6 +671,12 @@ def _trees_keys_fill(nk: UnsafePointer[TreesKeys, MutUntrackedOrigin]) raises:
     nk[].k_depth_cap_bound_ = py_key("depth_cap_bound_")
     nk[].k_device = py_key("device")
     nk[].k_device_rows = py_key("device_rows")
+    # The estimator's device route (bindings/trees_route_boundary_door.mojo).
+    nk[].k_device_fit_cpu = py_key("_mojolearn_fit_cpu")
+    nk[].k_device_cpu_bindings = py_key("trees_cpu_bindings")
+    nk[].k_device_cpu_context = py_key("trees_cpu_context")
+    nk[].k_device_cpu_size = py_key("trees_cpu_context_size")
+    nk[].k_device_vendor = py_key("vendor")
     nk[].k_dim = py_key("dim")
     nk[].k_estimator = py_key("estimator")
     nk[].k_family_msel_arena_io = py_key("family_msel_arena_io")

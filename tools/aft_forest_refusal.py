@@ -21,7 +21,7 @@ cases = [
 for name, cls, y in cases:
     if not name.startswith(only):
         continue
-    m = cls(n_estimators=4, max_depth=6, random_state=0, device="gpu")
+    m = cls(n_estimators=4, max_depth=6, random_state=0)  # device=None: this installation's device
     for order in ("C", "F"):
         for bad in (np.nan, np.inf, -np.inf):
             xb = np.array(x, order=order, copy=True)

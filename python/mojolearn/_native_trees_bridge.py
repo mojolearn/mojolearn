@@ -201,8 +201,67 @@ def connect():
     context['trees_state_releases'] = tuple(table[name] for table in tables  # glue: native forest/GBDT/IsolationForest resident release identities, once at connection
                                            for name in ('forest_release_gpu', 'gbdt_resident_release', 'iforest_resident_release')  # glue: existing compiled release ABIs
                                            if name in table)
+    connect_cpu_device(context)
     _ENTRY, _CONTEXT = entry, context
     return _ENTRY, _CONTEXT
+
+
+#: `device="cpu"` in a numeric mode the CPU has no build of.
+_CPU_FAST_REFUSAL = ("ValueError: device='cpu' runs in identical mode only; "
+                     "numeric_mode='fast' is for Apple GPUs")
+
+
+def connect_cpu_device(context):
+    """Connect the CPU table set of `device="cpu"` once, at connection, beside
+    the device table set (`context["trees_bindings"]`).
+
+    On a GPU installation the host image of every tree binding is loaded and
+    its entries kept under `context["trees_cpu_bindings"]`, in the shape of
+    `trees_bindings`: exactly the tables a CPU-only installation connects.
+    The compiled owner runs a `device="cpu"` estimator's operations on this
+    set (bindings/trees_route_boundary_door.mojo). In a CPU-only process the
+    selected set already is the CPU set and nothing is loaded. A host image
+    that is not built is kept as its refusal text, said by the first
+    operation that needs one of its entries."""
+    # glue: load the CPU images once and retain their entry tables
+    from . import _backend, host_surface
+    if context.get("vendor") == "cpu":
+        return
+    routed = host_surface.routed_modules()
+    per_mode = {}
+    for name in _TREE_BINDINGS:  # glue: the fixed tree binding names
+        try:
+            basename = routed.get(name)
+            if basename is None:
+                raise ImportError(f"mojolearn: {name} has no CPU build, so device='cpu' cannot run it")
+            per_mode[name] = _entries(_backend.load_host_module(basename))
+        except Exception as error:  # noqa: BLE001 - recorded, raised at the first call
+            per_mode[name] = _refusal(error)
+        if name == "_mojolearn_estimators" and isinstance(per_mode[name], dict):
+            _estimators_native_key(per_mode[name])
+        if name in _NATIVE_KEYED and isinstance(per_mode[name], dict):
+            _native_key(per_mode[name], name)
+    context["trees_cpu_bindings"] = {
+        "identical": per_mode,
+        "fast": {name: _CPU_FAST_REFUSAL for name in _TREE_BINDINGS},  # glue: the fixed tree binding names
+    }
+    # The CPU images' entry tables and resident releases join the device
+    # set's: fitted state of either set is admitted and released by identity.
+    tables = tuple(table for table in per_mode.values() if type(table) is dict)  # glue: exclude import-time refusal strings
+    context['trees_state_retained'] = context['trees_state_retained'] + tables
+    context['trees_state_releases'] = context['trees_state_releases'] + tuple(
+        table[name] for table in tables  # glue: the CPU images' resident release identities, once at connection
+        for name in ('forest_release_gpu', 'gbdt_resident_release', 'iforest_resident_release')  # glue: existing compiled release ABIs
+        if name in table)
+
+
+def device_vendor_used(self):
+    """The vendor of the compiled binaries this estimator's operations run
+    on: ``'cpu'`` for ``device='cpu'``, otherwise this installation's GPU
+    vendor (``'cuda'``, ``'hip'`` or ``'metal'``; ``'cpu'`` on a CPU-only
+    installation)."""
+    entry, context = connect()
+    return entry(self, "trees_device_vendor_used", (), context)
 
 
 def bindings(name=None):
