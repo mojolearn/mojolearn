@@ -285,6 +285,14 @@ def _install(classes):
                 inspect.Parameter('device', inspect.Parameter.KEYWORD_ONLY, default=None),))
             parameters = tuple(signature.parameters.values())[1:]
             events = events + (('device', 'parameter', 'device', False),)
+            # A model that never ran this constructor (loaded from a file by
+            # the archive door, unpickled from an older version) reads
+            # device=None, this installation's device: the parameter reader
+            # and the route's one read fall back to the class default
+            # (bindings/params_metadata_native_door.mojo `_value`), so no
+            # loader has to write the field.
+            if 'device' not in vars(cls):
+                cls.device = None
         names = tuple(p.name for p in parameters)  # glue: exact parameter metadata, borrowed defaults
         if any(kind == 'parameter' and value not in names for _, kind, value, _ in events):  # glue: refuse stale constructor schemas
             raise TypeError('field-only setter schema differs from its constructor signature')

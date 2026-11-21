@@ -303,6 +303,22 @@ def device_binding_device(model: PythonObject, fields: PythonObject, context: Py
     return device_installed(device_request(fields, b), 0 if cpu_only else 1)
 
 
+def device_route_resolved(model: PythonObject) raises -> Int:
+    """The device an estimator's route resolved to (DEVICE_GPU or
+    DEVICE_CPU): its entry route's, else its binding route's; -1 when it
+    holds neither yet. Two record reads at most; for metadata answers
+    (`vendor_used`), never for a public operation's path."""
+    var owner = records_get(RECORDS_PREPARED, model, DEVICE_ROUTE_SLOT)
+    if owner is not None:
+        var native = owner.downcast_value_ptr[DeviceRouteOwner]()
+        if native[].resolved:
+            return native[].route.device
+    var bound = records_get(RECORDS_PREPARED, model, DEVICE_BINDINGS_SLOT)
+    if bound is not None:
+        return bound.downcast_value_ptr[DeviceRouteOwner]()[].route.device
+    return -1
+
+
 def device_binding_resolved(model: PythonObject, context: PythonObject) raises -> Int:
     """The device the estimator's binding route resolved to for this context
     (DEVICE_GPU or DEVICE_CPU), or -1 when the estimator holds no binding
