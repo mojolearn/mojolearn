@@ -42,11 +42,12 @@ from bindings.prep_encode_imputer_run import (
     imputer_fit_stage, imputer_transform_stage)
 from bindings.prep_encode_kbins_run import (
     KBinsFit, KBinsApply, KBinsInverse, KB_DRAW_NONE, KB_DRAW_PLAIN, KB_DRAW_WEIGHTED,
-    enc_weights_stage, kbins_fit_stage, kbins_transform_stage, kbins_inverse_stage, enc_seed_words, enc_prefix)
+    enc_weights_stage, kbins_fit_stage, kbins_transform_stage, kbins_inverse_stage, enc_seed_words)
 from bindings.prep_encode_cats_run import (
     CatFit, CatFitPlan, CatBlock, InfrequentFit, CAT_FIT_UNIQUE, CAT_FIT_SCAN, CAT_FIT_PACK_SORT,
-    CAT_FIT_PACK_PRESENT, CAT_FIT_INVERSE, cat_fit_stage, cat_codes_stage, cat_gather_stage, cat_grouping_table,
-    cat_grouped_sizes, cat_list_max, cat_infrequent_stage)
+    CAT_FIT_PACK_PRESENT, CAT_FIT_INVERSE, cat_fit_stage, cat_codes_stage, cat_grouped_sizes, cat_infrequent_stage)
+from bindings.prep_encode_onehot_run import (
+    OneHotApply, OneHotInverse, onehot_transform_stage, onehot_inverse_stage)
 from bindings.prep_encode_ordinal_run import (
     OrdinalApply, OrdinalInverse, ordinal_transform_stage, ordinal_inverse_stage)
 from bindings.x_prep_native_owner_run import xprep_r3, XprepCaps
@@ -70,7 +71,6 @@ comptime OP_COL_STATS = 1
 comptime OP_QUANTILE = 2
 comptime OP_UNIQUE_COLS = 5
 comptime OP_LOOKUP = 7
-comptime OP_COUNT_NEG = 8
 comptime OP_I2F = 10
 comptime OP_CLASS_STATS = 16
 comptime OP_TE_GLOBAL = 20
@@ -110,10 +110,7 @@ comptime IDN_CLASS_ONEPASS = 2
 comptime IDN_SELECT_BLOCKED = 4
 # `_CLS_BLOCK_WORDS`: the most partial words a blocked class_stats keeps.
 comptime CLS_BLOCK_WORDS = 67108864
-comptime OP_ONEHOT = 9
 comptime OP_TE_APPLY = 22
-comptime OP_BLOCK_ARGMAX = 76
-comptime OP_REMAP_CODES = 89
 comptime OP_KBINS_GW = 96
 comptime OP_KBINS_WQ = 97
 comptime OP_COLB_PART = 124
@@ -753,11 +750,6 @@ def _kbins_fit(model: PythonObject, values: PythonObject, weight_source: PythonO
     _ = ran^
 
 
-def _prefix(widths: List[Int]) -> List[Float64]:
-    # [sum(widths[:j]) for j in range(d)]
-    return enc_prefix(widths)
-
-
 def _kbins_transform(model: PythonObject, values: PythonObject, context: PythonObject) raises -> PythonObject:
     # UNPACK: the fitted fields, read once into the typed request; X and the
     # fitted edge vectors as owners of the program.
@@ -1342,28 +1334,6 @@ def _fit_infrequent(model: PythonObject, values: PythonObject, entries: PythonOb
     _ = ran^
 
 
-def _list_max(values: List[Int]) -> Int:
-    return cat_list_max(values)
-
-
-def _grouping_table(mut p: EncProg, grouping: PythonObject, inverse: Bool, context: PythonObject) raises -> Tuple[Int, Int, Int]:
-    # `_grouping_table`: UNPACK of the fitted grouping lists, then the typed
-    # table (bindings/prep_encode_cats_run.mojo `cat_grouping_table`).
-    var table = cat_grouping_table(p.prog, _group_lists(grouping), inverse)
-    return (table.map, table.stride, table.lens)
-
-
-def _remap(mut p: EncProg, codes: Int, n: Int, d: Int, table: Tuple[Int, Int, Int], neg: Int) -> Int:
-    var out = p.alloc(n * d)
-    _stage(p.prog.program, OP_REMAP_CODES, n * d, codes, n * d, d, table[0], table[1], table[2], neg, out)
-    return out
-
-
-def _gather_categories(mut p: EncProg, codes: Int, n: Int, d: Int, categories: PythonObject, context: PythonObject,
-                       owner: PythonObject) raises -> Int:
-    return cat_gather_stage(p.prog, codes, n, d, _cat_block(p, _category_record(owner, categories, context), False))
-
-
 def _scalar(mut p: EncProg, value: Float64, context: PythonObject) raises -> Int:
     var words = List[Float64]()
     words.append(value)
@@ -1537,11 +1507,9 @@ def _grouped_sizes(fields: PythonObject, owner: PythonObject, context: PythonObj
     # With an `owner` (a fitted model), the sizes come from its category record.
     var sizes = _sizes(fields["categories_"]) if owner is None else _record_sizes(_category_record(owner, fields["categories_"], context))
     var groups = fields["_grouping"]
-    if groups is not None:
-        for j in range(len(sizes)):  # driver-loop: per-column grouped category counts
-            if groups[j] is not None:
-                sizes[j] = _list_max(_index_list(groups[j])) + 1
-    return sizes^
+    if groups is None:
+        return sizes^
+    return cat_grouped_sizes(sizes, _group_lists(groups))
 
 
 def _set_drop_idx(model: PythonObject, context: PythonObject) raises:
@@ -1714,55 +1682,52 @@ def _onehot_caller_location() raises -> PythonObject:
 def _onehot_transform(model: PythonObject, values: PythonObject, inverse: PythonObject, context: PythonObject) raises -> PythonObject:
     """OneHotEncoder `_transform_encoded`: lookup (or the C08 fit's inverse),
     the grouping remap with the unknown slots, and onehot."""
+    # UNPACK: the parameters and fitted fields, read once into the typed
+    # request; X (or the fit's inverse) and the category block as owners.
     var b = native_loaded_module("builtins")
     var fields = py_fields(model)
     var n = Int(py=values[3])
     var d = Int(py=values[4])
     var entries = scaler_entries(model, fields["numeric_mode_"], context)
+    var caps = enc_caps(model, entries)
+    var record = _category_record(model, fields["categories_"], context)
+    var grouping = fields["_grouping"]
+    var grouped = grouping is not None
+    var groups = List[List[Int]]()
+    var sizes = _record_sizes(record)
+    if grouped:
+        groups = _group_lists(grouping)
+        sizes = cat_grouped_sizes(sizes, groups)
     var drops = _onehot_drops(fields)
-    var widths = _onehot_widths_of(_grouped_sizes(fields, model, context), drops)
-    var W = 0
+    var widths = _onehot_widths_of(sizes, drops)
+    var total = 0
     for j in range(len(widths)):  # driver-loop: total one-hot output width
-        W += widths[j]
+        total += widths[j]
     var handle = fields["handle_unknown"]
     var handle_text = String(handle) if _is_str(handle) else String("")
     var p = EncProg()
-    var codes = 0
-    var neg = 0
-    if inverse is None:
-        var staged = _codes(p, values, fields["categories_"], context, False, model)
-        codes = staged[0]
-        neg = staged[1]
+    var from_inverse = inverse is not None
+    var x = NONE
+    var held = NONE
+    var block = CatBlock(NONE, 0, 0, NONE, 0)
+    if from_inverse:
+        held = p.own(inverse, Int(py=inverse.size))
     else:
-        codes = p.put_array2(inverse)
-        neg = p.alloc(d)
-        _stage(p.prog.program, OP_COUNT_NEG, d, codes, n, d, neg)
-    var groups = fields["_grouping"]
-    if groups is not None:
-        # `_unknown_to`: the grouped code an unknown value takes
-        var unk = NONE
-        if handle_text == "infrequent_if_exist" or handle_text == "warn":
-            var slots = List[Int]()
-            for j in range(len(groups)):  # driver-loop: per-column infrequent slot
-                slots.append(-1 if groups[j] is None else _list_max(_index_list(groups[j])))
-            var table = _grouping_table(p, groups, False, context)
-            unk = p.put_floats(_to_floats(slots), context)
-            codes = _remap(p, codes, n, d, table, unk)
-        else:
-            var table = _grouping_table(p, groups, False, context)
-            codes = _remap(p, codes, n, d, table, NONE)
-    var so = p.put_floats(_prefix(widths), context)
-    var do = p.put_floats(_to_floats(drops), context)
-    var out = p.output(n * W, entries)
-    _stage(p.prog.program, OP_ONEHOT, n * d, codes, n, d, so, do, W, out)
-    var ran = p.run(entries, context, model)
+        x = p.own_x(values)
+        block = _cat_block(p, record, True)
+    var request = OneHotApply(n, d, x, block.copy(), from_inverse, held, grouped, groups^,
+                              handle_text == "infrequent_if_exist" or handle_text == "warn", widths^, drops^)
+    # RUN: the typed stages (bindings/prep_encode_onehot_run.mojo), then the typed run.
+    var plan = onehot_transform_stage(p.prog, request, caps.has_out)
+    var ran = p.run_caps(entries, context, caps)
+    # PACK
     var dropping = fields["drop"] is not None
     if handle_text == "error":
-        var bad = _unknown_columns(ran, neg, d)
+        var bad = _unknown_columns(ran, plan.unknown, d)
         if len(bad) > 0:
             raise Error("mojolearn: OneHotEncoder found unknown categories in column(s) " + _list_text(bad) + " during transform")
     elif handle_text == "warn" or (dropping and (handle_text == "ignore" or handle_text == "infrequent_if_exist")):
-        var bad = _unknown_columns(ran, neg, d)
+        var bad = _unknown_columns(ran, plan.unknown, d)
         if len(bad) > 0:
             var where = String("encoded as the infrequent category") if handle_text != "ignore" else String("encoded as all zeros")
             # TOMBSTONE: P1_ONEHOT_WARN_IN_NATIVE (removed: warnings.warn through Python inside the native transform; filters and any showwarning hook ran in the operation) deleted 2026-11-09 by lane p1-python-callbacks-worst; code recoverable at e68654a757.
@@ -1774,38 +1739,35 @@ def _onehot_transform(model: PythonObject, values: PythonObject, inverse: Python
             classical_warning("Found unknown categories in columns " + _list_text(bad)
                               + " during transform. These unknown categories will be " + where + ".",
                               b.UserWarning, context, _onehot_caller_location(), "UserWarning")
-    return _take2(ran, out, n, W, context)
+    return _take2(ran, plan.encoded, n, total, context)
 
 
 def _onehot_inverse(model: PythonObject, values: PythonObject, context: PythonObject) raises -> PythonObject:
     """OneHotEncoder.inverse_transform: block_argmax, the inverse grouping
     remap, cat_gather and the strict bad-row compaction."""
+    # UNPACK: the parameters and fitted fields, read once into the typed
+    # request; X and the category block as owners.
     var fields = py_fields(model)
+    var record = _category_record(model, fields["categories_"], context)
+    var grouping = fields["_grouping"]
+    var grouped = grouping is not None
+    var groups = List[List[Int]]()
+    var sizes = _record_sizes(record)
+    if grouped:
+        groups = _group_lists(grouping)
+        sizes = cat_grouped_sizes(sizes, groups)
     var drops = _onehot_drops(fields)
-    var widths = _onehot_widths_of(_grouped_sizes(fields, model, context), drops)
+    var widths = _onehot_widths_of(sizes, drops)
     var n = Int(py=values[3])
     var cols = Int(py=values[4])
     var d = len(widths)
-    var W = 0
+    var total = 0
     for j in range(d):  # driver-loop: over the per-column block widths
-        W += widths[j]
-    if cols != W:
-        raise Error("mojolearn: X has " + String(cols) + " columns, expected " + String(W))
+        total += widths[j]
+    if cols != total:
+        raise Error("mojolearn: X has " + String(cols) + " columns, expected " + String(total))
     var entries = scaler_entries(model, fields["numeric_mode_"], context)
-    var p = EncProg()
-    # `_block_argmax`
-    var xo = p.put_x(values)
-    var so = p.put_floats(_prefix(widths), context)
-    var wo = p.put_floats(_to_floats(widths), context)
-    var dro = p.put_floats(_to_floats(drops), context)
-    var codes = p.alloc(n * d)
-    _stage(p.prog.program, OP_BLOCK_ARGMAX, n * d, xo, n, W, d, so, wo, dro, 1, codes)
-    var grouped = codes
-    var groups = fields["_grouping"]
-    if groups is not None:
-        var table = _grouping_table(p, groups, True, context)
-        codes = _remap(p, codes, n, d, table, NONE)
-    var out = _gather_categories(p, codes, n, d, fields["categories_"], context, model)
+    var caps = enc_caps(model, entries)
     # an all-zero block is unknown (NaN) under 'ignore', and under
     # 'infrequent_if_exist' / 'warn' for a column with no infrequent
     # category; anywhere else it cannot be inverted
@@ -1816,14 +1778,19 @@ def _onehot_inverse(model: PythonObject, values: PythonObject, context: PythonOb
     for j in range(d):  # driver-loop: over the per-column strictness flags
         var hard = handle_text == "error" or (handle_text != "ignore" and infrequent is not None and infrequent[j] is not None)
         strict.append(1.0 if hard else 0.0)
-    var sto = p.put_floats(strict, context)
-    var staged = enc_bad_rows_stages(p.prog, grouped, n, d, -1, sto)
-    var ran = p.run(entries, context, model)
-    var bad = _bad_rows(ran, staged, 10)
+    var p = EncProg()
+    var x = p.own_x(values)
+    var block = _cat_block(p, record, False)
+    var request = OneHotInverse(n, x, block.copy(), widths^, drops^, grouped, groups^, strict^)
+    # RUN: the typed stages, then the typed run.
+    var plan = onehot_inverse_stage(p.prog, request)
+    var ran = p.run_caps(entries, context, caps)
+    # PACK: the refusal's first rows, or the category values.
+    var bad = _bad_rows(ran, (plan.bad_rows, plan.bad_count), 10)
     if len(bad) > 0:
         raise Error("mojolearn: samples " + _list_text(bad) + " can not be inverted when drop=None and "
                     + "handle_unknown='error' because they contain all zeros")
-    return _take2(ran, out, n, d, context)
+    return _take2(ran, plan.values, n, d, context)
 
 
 # ---------------------------------------------------------------- TargetEncoder
