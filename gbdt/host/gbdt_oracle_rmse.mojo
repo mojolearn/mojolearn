@@ -95,6 +95,7 @@ from gbdt.gpu_data.grid_policy import (
     POLICY_ONE_BYTE,
 )
 from gbdt.host.gbdt_oracle import (
+    _identity_rows,
     _split_level,
     _scan_histograms,
     _subtract_histograms,
@@ -376,8 +377,7 @@ def gbdt_rmse_host_fit(
         # ---- `run_tree_layout_traced`, every level (TWIN of the loop in
         # `gbdt_oracle.mojo::gbdt_host_fit`) ----
         var row_index = List[Int](length=n_rows, fill=0)
-        for r in range(n_rows):
-            row_index[r] = r
+        _identity_rows(row_index, n_rows)
         var p_off = List[Int](length=max_leaves, fill=0)
         var p_sz = List[Int](length=max_leaves, fill=0)
         p_sz[0] = n_rows

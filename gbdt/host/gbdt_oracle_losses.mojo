@@ -117,6 +117,7 @@ from gbdt.host.gbdt_oracle_yeti import yeti_rank_eval, yeti_rank_search_pass
 from gbdt.data.yeti_rank_tasks import YetiRankTasks, yeti_rank_tasks
 from gbdt.data.permutation import TRandom
 from gbdt.host.gbdt_oracle import (
+    _identity_rows,
     _split_level,
     _scan_histograms,
     _subtract_histograms,
@@ -1061,8 +1062,7 @@ def gbdt_losses_host_fit(
         # ---- `run_tree_layout_traced`, every level (TWIN: the loop in
         # `gbdt_oracle.mojo::gbdt_host_fit`; edit both) ----
         var row_index = List[Int](length=n_rows, fill=0)
-        for r in range(n_rows):
-            row_index[r] = r
+        _identity_rows(row_index, n_rows)
         var p_off = List[Int](length=max_leaves, fill=0)
         var p_sz = List[Int](length=max_leaves, fill=0)
         p_sz[0] = n_rows

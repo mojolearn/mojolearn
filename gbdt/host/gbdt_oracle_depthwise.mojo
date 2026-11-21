@@ -134,6 +134,7 @@ from gbdt.gpu_data.grid_policy import (
     POLICY_ONE_BYTE,
 )
 from gbdt.host.gbdt_oracle import (
+    _identity_rows,
     _scan_histograms,
     _gbdt_units,
     _split_leaves,
@@ -585,8 +586,7 @@ def _grow_non_symmetric_tree(
 
     # ---- CreateInitialSubsets (`:1057-1100`) ----
     var row_index = List[Int](length=n_rows, fill=0)
-    for r in range(n_rows):
-        row_index[r] = r
+    _identity_rows(row_index, n_rows)
     var p_off = List[Int](length=max_leaves, fill=0)
     var p_sz = List[Int](length=max_leaves, fill=0)
     p_sz[0] = n_rows

@@ -3308,6 +3308,78 @@ def _apply_leaves(
     host_parallelize(rows, units)
 
 
+def _identity_rows(mut row_index: List[Int], n_rows: Int):
+    """`row_index[r] = r` (the root partition's row order, the device's
+    `make_sequence`): one statement per row, the rows in `_gbdt_units`
+    contiguous ranges."""
+    var units = _gbdt_units(n_rows, n_rows)
+    var chunk = host_predict_chunk(n_rows, units)
+    var row_p = rebind[GbdtIntPtr](row_index.unsafe_ptr())
+
+    def rows(unit: Int) {imm chunk, imm n_rows, imm row_p}:
+        for r in range(unit * chunk, min(n_rows, (unit + 1) * chunk)):
+            row_p[r] = r
+
+    host_parallelize(rows, units)
+    _ = len(row_index)
+
+
+def _gather_rows(
+    src: List[Float32],
+    row_index: List[Int],
+    n_rows: Int,
+    mut dst: List[Float32],
+    planes: Int = 1,
+):
+    """`dst[p * n_rows + pos] = src[p * n_rows + row_index[pos]]` for every
+    position and plane (the device's `gather` by the partition's row order:
+    a move, one thread a position), the positions in `_gbdt_units`
+    contiguous ranges."""
+    var units = _gbdt_units(n_rows, 2 * planes * n_rows)
+    var chunk = host_predict_chunk(n_rows, units)
+    var src_p = rebind[HostF32Ptr](src.unsafe_ptr())
+    var row_p = rebind[GbdtIntPtr](row_index.unsafe_ptr())
+    var dst_p = rebind[HostF32Ptr](dst.unsafe_ptr())
+
+    def rows(unit: Int) {imm chunk, imm n_rows, imm planes, imm src_p, imm row_p, imm dst_p}:
+        for pos in range(unit * chunk, min(n_rows, (unit + 1) * chunk)):
+            var row = row_p[pos]
+            for p in range(planes):
+                dst_p[p * n_rows + pos] = src_p[p * n_rows + row]
+
+    host_parallelize(rows, units)
+    _ = len(src)
+    _ = len(row_index)
+    _ = len(dst)
+
+
+def _leaf_bins(
+    offsets: List[Int], sizes: List[Int], n_rows: Int, mut bins: List[Int]
+):
+    """`fill_bins_from_partition_kernel` (`kernel_add_model_value.mojo:186-
+    204`): `bins[pos] = leaf` for every position of every leaf's range. A
+    position is in one leaf: a task owns a run of positions and writes each
+    leaf's range clipped to it; `_gbdt_units` tasks."""
+    var n_leaves = len(sizes)
+    var units = _gbdt_units(n_rows, n_rows)
+    var chunk = host_predict_chunk(n_rows, units)
+    var off_p = rebind[GbdtIntPtr](offsets.unsafe_ptr())
+    var sz_p = rebind[GbdtIntPtr](sizes.unsafe_ptr())
+    var bins_p = rebind[GbdtIntPtr](bins.unsafe_ptr())
+
+    def rows(unit: Int) {imm chunk, imm n_rows, imm n_leaves, imm off_p, imm sz_p, imm bins_p}:
+        var lo = unit * chunk
+        var hi = min(lo + chunk, n_rows)
+        for leaf in range(n_leaves):
+            for pos in range(max(off_p[leaf], lo), min(off_p[leaf] + sz_p[leaf], hi)):
+                bins_p[pos] = leaf
+
+    host_parallelize(rows, units)
+    _ = len(offsets)
+    _ = len(sizes)
+    _ = len(bins)
+
+
 # ===========================================================================
 # THE FIT
 # ===========================================================================
@@ -3888,8 +3960,7 @@ def gbdt_host_boost(
         # ---- `run_tree_layout_traced`, every level (TWIN: the loop in
         # `gbdt_oracle_rmse.mojo::gbdt_rmse_host_fit`; edit both) ----
         var row_index = List[Int](length=n_rows, fill=0)
-        for r in range(n_rows):
-            row_index[r] = r
+        _identity_rows(row_index, n_rows)
         var p_off = List[Int](length=max_leaves, fill=0)
         var p_sz = List[Int](length=max_leaves, fill=0)
         p_sz[0] = n_rows
