@@ -2352,12 +2352,11 @@ FAMILIES = (
         classes=("ExponentialSmoothing", "kpss_test", "select_d"),
         display="Holt-Winters",
         host_modules=("holtwinters/host/hw_oracle.mojo", "tsa/checks/kpss_oracle.mojo",
-                      "holtwinters/host/hw_predict.mojo", "bindings/holtwinters_host_predict_door.mojo",
+                      "holtwinters/host/hw_predict.mojo", "bindings/holtwinters_host_predict_run.mojo",
                       "bindings/kpss_host_test_unpack.mojo"),
         exports=(
             "tsa_host_numeric_mode", "tsa_host_vendor", "tsa_host_column",
-            "tsa_host_sabotage", "holtwinters_fit",
-            "holtwinters_forecast", "holtwinters_predict", "kpss_test",
+            "tsa_host_sabotage", "kpss_test",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "select_d",
         ),
@@ -3362,7 +3361,7 @@ FAMILIES = (
         # takes when it is not (`_backend._HOST_INFERENCE_MODULES`), which is
         # an installed CPU-only wheel. lane/inference-holtwinters (2026-09-15)
         # adds saved Holt-Winters models the same way: holtwinters_forecast
-        # and holtwinters_predict from bindings/holtwinters_host_predict_door.mojo,
+        # and holtwinters_predict from bindings/holtwinters_host_predict_run.mojo,
         # the source the reference tsa binding registers them from, and the
         # `_mojolearn_tsa` route when that binding is not built.
         family="forecast",
@@ -3380,13 +3379,12 @@ FAMILIES = (
                  " exogenous regressors, and Holt-Winters"
                  " forecasts and in-sample one-step predictions, additive and multiplicative"),
         host_modules=("arima/host/arima_oracle.mojo", "bindings/arima_host_predict_pack.mojo",
-                      "holtwinters/host/hw_predict.mojo", "bindings/holtwinters_host_predict_door.mojo",
+                      "holtwinters/host/hw_predict.mojo", "bindings/holtwinters_host_predict_run.mojo",
                       "tsa/checks/kpss_oracle.mojo", "bindings/kpss_host_test_unpack.mojo"),
         exports=(
             "forecast_host_numeric_mode", "forecast_host_vendor", "forecast_host_column",
             "forecast_host_sabotage", "arima_vendor", "arima_numeric_mode",
-            "arima_predict", "arima_forecast", "holtwinters_forecast",
-            "holtwinters_predict", "kpss_test",
+            "arima_predict", "arima_forecast", "kpss_test",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "select_d",
         ),
