@@ -78,6 +78,10 @@ FAMILIES = [
 ]
 
 
+# the three estimators whose random draws continue from call to call: their digest changes with use, by decision
+ADVANCES = ("IterativeImputer", "LatentDirichletAllocation", "MinCovDet")
+
+
 def fitted(cls, params, target, data, device=None):
     kw = dict(params)
     if device is not None:
@@ -112,6 +116,14 @@ for name, params, target in FAMILIES:
             problems.append("a second fit on the same data differs")
         if fitted(cls, params, target, X2).digest_ == g:
             problems.append("a fit on changed data has the same digest (the digest does not see the fitted state)")
+        for method in ("predict", "transform"):          # using the model does not change what it is
+            if hasattr(m, method):
+                try:
+                    getattr(m, method)(X)
+                except Exception:
+                    pass
+        if name not in ADVANCES and m.digest_ != g:
+            problems.append("a predict / transform call changed the digest (a cache or a call record is hashed)")
         m.fit(*((X2,) if target is None else (X2, y if target == "r" else c)))
         if m.digest_ == g:
             problems.append("the digest was not dropped by a refit")

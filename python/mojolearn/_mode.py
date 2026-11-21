@@ -495,7 +495,12 @@ class CheckMixin:
         the class name and every fitted array and value, by name, type, shape
         and bytes. It is computed each time it is read, from the model as it
         is at that moment, and never during `fit`. A meta-estimator's digest
-        includes the digests of its fitted members.
+        includes the digests of its fitted members. A model loaded from a
+        saved file has the digest of the model that was saved. For
+        `IterativeImputer` with ``sample_posterior=True``,
+        `LatentDirichletAllocation` and `MinCovDet`, whose random draws
+        continue from one call to the next, the digest changes as the model
+        is used.
 
         Raises
         ------
