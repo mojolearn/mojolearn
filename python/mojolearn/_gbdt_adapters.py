@@ -152,6 +152,19 @@ class GradientBoostingClassifier(_GBDTAdapter):
 
     All parameters are keyword-only.
 
+    The constructor also takes CatBoost, XGBoost and LightGBM names for
+    these parameters wherever the name means the same thing: for example
+    ``iterations``, ``num_boost_round`` or ``num_trees`` for
+    ``n_estimators``, ``eta`` for ``learning_rate``, ``depth`` for
+    ``max_depth``, ``reg_lambda`` or ``lambda_l2`` for ``l2_leaf_reg``,
+    ``random_seed`` or ``seed`` for ``random_state`` and
+    ``colsample_bytree`` for ``feature_fraction``. The value is stored under
+    Mojolearn's name, which ``get_params`` reports. Giving both names with
+    different values raises ``ValueError``, and so does a name whose meaning
+    differs in the other library (such as ``max_bin``,
+    ``early_stopping_rounds`` or ``gamma``); the message names the parameter
+    to use. The same names work in ``set_params``.
+
     Attributes
     ----------
     classes_ : list
@@ -264,6 +277,19 @@ class GradientBoostingRegressor(_GBDTAdapter):
         requires a GPU installation. Other values raise ``ValueError``.
 
     All parameters are keyword-only.
+
+    The constructor also takes CatBoost, XGBoost and LightGBM names for
+    these parameters wherever the name means the same thing: for example
+    ``iterations``, ``num_boost_round`` or ``num_trees`` for
+    ``n_estimators``, ``eta`` for ``learning_rate``, ``depth`` for
+    ``max_depth``, ``reg_lambda`` or ``lambda_l2`` for ``l2_leaf_reg``,
+    ``random_seed`` or ``seed`` for ``random_state`` and
+    ``colsample_bytree`` for ``feature_fraction``. The value is stored under
+    Mojolearn's name, which ``get_params`` reports. Giving both names with
+    different values raises ``ValueError``, and so does a name whose meaning
+    differs in the other library (such as ``max_bin``,
+    ``early_stopping_rounds`` or ``gamma``); the message names the parameter
+    to use. The same names work in ``set_params``.
 
     Attributes
     ----------

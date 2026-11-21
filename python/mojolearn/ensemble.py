@@ -791,6 +791,20 @@ class GradientBoosting(_NumericModeMixin):
         Where the model is fitted and predicts. None uses this
         installation's device, ``"cpu"`` runs on the CPU and ``"gpu"``
         requires a GPU installation. Other values raise ``ValueError``.
+    **aliases
+        CatBoost, XGBoost and LightGBM names for the parameters above, where
+        the name means the same thing: for example ``iterations``,
+        ``num_boost_round`` or ``num_trees`` for ``n_estimators``, ``eta`` for
+        ``learning_rate``, ``depth`` for ``max_depth``, ``reg_lambda`` or
+        ``lambda_l2`` for ``l2_leaf_reg``, ``random_seed`` or ``seed`` for
+        ``random_state``, ``colsample_bytree`` for ``feature_fraction``,
+        ``loss_function`` or ``objective`` for ``loss`` and
+        ``categorical_feature`` for ``cat_features``. The value is stored under
+        Mojolearn's name, which ``get_params`` reports. Giving both names with
+        different values raises ``ValueError``, and so does a name whose
+        meaning differs in the other library (such as ``max_bin``,
+        ``early_stopping_rounds`` or ``gamma``); the message names the
+        parameter to use. The same names work in ``set_params``.
 
     Attributes
     ----------
