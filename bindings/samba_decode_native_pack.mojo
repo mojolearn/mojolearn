@@ -21,7 +21,6 @@ out to the caller's state, as the device arm's export does.
 from std.python import Python, PythonObject
 from bindings.samba_keys_unpack import samba_keys
 from bindings.py_balanced import py_item
-from std.memory import unsafe_memcpy
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type
 from bindings.generation_buffers_door import generation_initialize_binding, generation_array
@@ -35,6 +34,8 @@ from core.samba_entry_table_programs import (
     SAMBA_PROGRAM_DECODE_STEP, SAMBA_PROGRAM_DECODE_TOKENS, SAMBA_PROGRAM_DECODE_EXPORT, SAMBA_PROGRAM_DECODE_LOAD,
 )
 from bindings.samba_admission_door import samba_admit_value
+# RUN: typed pieces, no Python import.
+from training.samba_decode_run import samba_decode_request_addresses
 
 
 from bindings.samba_decode_native_unpack import (
@@ -62,9 +63,8 @@ def samba_decode_sync(session: PythonObject, context: PythonObject) raises -> Py
     var copies = List[PythonObject]()
     var words = samba_state_words(model, state, what, keep, copies)
     var cursors = List[Int](length=len(words[1]), fill=0)
-    var addresses: List[Int] = [Int(cursors.unsafe_ptr())]
-    for i in range(len(words[0])):  # driver-loop: over the state's piece addresses (per layer)
-        addresses.append(words[0][i])
+    # RUN: the export request, allocated once at its size.
+    var addresses = samba_decode_request_addresses(Int(cursors.unsafe_ptr()), words[0])
     var capacity: List[Int] = [len(cursors)]
     _ = samba_program_call(handle, SAMBA_PROGRAM_DECODE_EXPORT, addresses, capacity)
     _writeback(copies)
