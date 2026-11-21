@@ -130,7 +130,7 @@ def samba_construct(model: PythonObject, args: PythonObject, context: PythonObje
     var mode = args[10]
     # The device, checked before any field is published (shared words); the
     # mode and vendor admission of the connected binding follows it.
-    samba_device_admit(args[11], mode, context)
+    samba_device_admit(args[11], context)
     _ = samba_route_process(mode, context)
     var accumulation = Int(py=py_call(bi.int, args[9]))
     if accumulation < 1 or (accumulation & (accumulation - 1)) != 0:

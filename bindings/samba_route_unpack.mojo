@@ -98,16 +98,16 @@ def samba_process_vendor(context: PythonObject) raises -> Int:
     return word
 
 
-def _samba_cpu_refuse(plan_cpu_table: Bool) raises:
+def _samba_cpu_refuse(requested: Int, vendor: Int) raises:
     """A GPU installation asked for `device="cpu"`. The stack's training
     primitives have a host image, but its blocks' backward has none loaded
     beside the GPU set, so the whole class is refused (the one sentence)."""
-    if plan_cpu_table:
+    if requested == DEVICE_CPU and vendor != 0:
         device_cpu_absent(String("SambaStack"),
             String("the host training images of its blocks are not loaded beside the GPU set in this installation"))
 
 
-def samba_device_admit(value: PythonObject, mode: PythonObject, context: PythonObject) raises:
+def samba_device_admit(value: PythonObject, context: PythonObject) raises:
     """Check a `device` value where it is given (the constructor, a restore),
     before any field is published or any file is read: an unknown value, an
     explicit `'gpu'` on a CPU-only installation and an explicit `'cpu'` on a
@@ -118,10 +118,7 @@ def samba_device_admit(value: PythonObject, mode: PythonObject, context: PythonO
     var b = native_loaded_module("builtins")
     var vendor = samba_process_vendor(context)
     device_admit(value, vendor, b)
-    var nk = samba_keys()
-    var text = String(py_item(context, nk[].k_mode) if mode is None else mode)
-    answer_mode_word(text, MODE_FAMILY_NEURAL)
-    _samba_cpu_refuse(device_route_plan(device_unpack(value, b), vendor, 1 if text == "identical" else 0).cpu_table)
+    _samba_cpu_refuse(device_unpack(value, b), vendor)
 
 
 def _samba_route_build(requested: Int, mode: PythonObject, context: PythonObject) raises -> DeviceRouteOwner:
@@ -139,8 +136,8 @@ def _samba_route_build(requested: Int, mode: PythonObject, context: PythonObject
     answer_mode_word(text, MODE_FAMILY_NEURAL)
     var want = 1 if text == "identical" else 0
     var vendor = samba_process_vendor(context)
+    _samba_cpu_refuse(requested, vendor)
     var plan = device_route_plan(requested, vendor, want)
-    _samba_cpu_refuse(plan.cpu_table)
     if text != String(connected):
         raise Error("Samba: requested numeric mode differs from the connected native mode")
     # The binding's numeric mode and vendor words are fixed per compiled

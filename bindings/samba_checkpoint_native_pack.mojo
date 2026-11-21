@@ -215,11 +215,8 @@ def samba_checkpoint_read(value: PythonObject, context: PythonObject) raises -> 
 def samba_checkpoint_load(cls: PythonObject, path: PythonObject, mode: PythonObject, device: PythonObject,
     context: PythonObject) raises -> PythonObject:
     var nk = samba_keys()
-    # The device is refused before the file is read (a given mode decides the
-    # tier of the rule; without one the saved mode is checked again, with the
-    # state, by `samba_from_state`).
-    if mode is not None:
-        samba_device_admit(device, mode, context)
+    # The device is refused before the file is read.
+    samba_device_admit(device, context)
     var state = samba_checkpoint_read(path, context)
     if mode is not None:
         py_setitem(state, nk[].k_numeric_mode, mode)

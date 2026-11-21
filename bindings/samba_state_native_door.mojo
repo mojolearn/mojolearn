@@ -426,7 +426,7 @@ def samba_from_state(state: PythonObject, cls: PythonObject, device: PythonObjec
     installation's device). The device is refused before the state is
     validated; the stack's route is resolved once, by `samba_build_blocks`."""
     var nk = samba_keys()
-    samba_device_admit(device, py_item(state, nk[].k_numeric_mode), context)
+    samba_device_admit(device, context)
     var checked = samba_validate_state(state, context)
     var bi = native_loaded_module("builtins")
     var model = py_call(bi.object.__new__, cls)
