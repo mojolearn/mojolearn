@@ -7,7 +7,8 @@ neighbors, density; lane dw-neighbors-cluster, 2026-11-20).
 `device="cpu"` is a constructor parameter. Its value is stored as given,
 checked when it is given (`family_route_device_admit`: constructor,
 `set_params`) and read ONCE, at the estimator's first operation, into a
-`FamilyRouteOwner` kept in the weak model-record table. The owner holds, per
+`FamilyRouteOwner` kept in the weak model-record table (read again only when
+the stored `device` object is replaced). The owner holds, per
 binding slot (core/device_route_dw_neighbors_cluster.mojo), the image that
 answers: the device image of the selected tier, or the CPU identical image
 connected at import (python/mojolearn/_native_device_bindings.py). Every
@@ -17,8 +18,15 @@ mode String or compiled-mode read-back.
 What a call still compares, as the pilot's owner does
 (providers/python/linear_route_boundary_door.mojo): the estimator's
 `numeric_mode` object and, when that is None, the process default mode
-object, and the connection context (three pointer compares). A changed mode
-resolves again; `set_params` and a new `__init__` drop the owner.
+object, and the connection context (three pointer compares), plus the stored
+`device` object (one held-key read of the instance dictionary and a fourth
+pointer compare). The fourth compare is here, and not in the pilot, because
+the constructor and `set_params` of these families run in the shared
+full-reset doors (bindings/full_reset_constructor_native_door.mojo,
+full_reset_params_native_door.mojo), which this lane does not edit and which
+therefore cannot drop the owner: a replaced `device` (or mode) object is how
+the owner learns of a new `__init__`, a `set_params` or a direct assignment.
+`family_route_clear` is there for a door that owns its constructor.
 
 The owner replaces, for a family that calls `family_route_binding`, the
 per-call `estimator_binding` (providers/python/estimator_binding_pyapi_door.mojo):
@@ -107,6 +115,7 @@ struct FamilyRouteOwner(Movable, Writable):
     var mode: PythonObject
     var default_mode: PythonObject
     var context: PythonObject
+    var device: PythonObject
     # Per binding slot: the image that answers (None until the estimator
     # first asks for that slot), and whether its compiled mode was read back.
     # The images stay loaded while a call runs with the GIL released.
@@ -114,11 +123,12 @@ struct FamilyRouteOwner(Movable, Writable):
     var checked: List[Bool]
 
     def __init__(out self, var route: FamilyDeviceRoute, mode: PythonObject, default_mode: PythonObject,
-                 context: PythonObject):
+                 context: PythonObject, device: PythonObject):
         self.route = route^
         self.mode = mode
         self.default_mode = default_mode
         self.context = context
+        self.device = device
         self.modules = List[PythonObject]()
         self.checked = List[Bool]()
         for slot in range(FAMILY_ROUTE_SLOT_COUNT):  # small-loop(binding slots): a fixed handful per owner, never data
@@ -134,20 +144,22 @@ struct FamilyRouteOwner(Movable, Writable):
 
 
 def family_route_owner_pins(value: Int, index: Int) abi("C") -> Int:
-    if not value or index < -1 or index >= 3 + FAMILY_ROUTE_SLOT_COUNT:
+    if not value or index < -1 or index >= 4 + FAMILY_ROUTE_SLOT_COUNT:
         return -1
     try:
         var owner = borrowed_native_owner(value)
         var native = owner.downcast_value_ptr[FamilyRouteOwner]()
-        var result = 3 + FAMILY_ROUTE_SLOT_COUNT
+        var result = 4 + FAMILY_ROUTE_SLOT_COUNT
         if index == 0:
             result = Int(native[].mode._obj_ptr)
         elif index == 1:
             result = Int(native[].default_mode._obj_ptr)
         elif index == 2:
             result = Int(native[].context._obj_ptr)
-        elif index >= 3:
-            result = Int(native[].modules[index - 3]._obj_ptr)
+        elif index == 3:
+            result = Int(native[].device._obj_ptr)
+        elif index >= 4:
+            result = Int(native[].modules[index - 4]._obj_ptr)
         _ = owner
         return result
     except:
@@ -213,17 +225,16 @@ def family_route_clear(model: PythonObject) raises:
     records_drop(RECORDS_PREPARED, model, _FAMILY_ROUTE_SLOT)
 
 
-def _family_route_build(fields: PythonObject, mode: PythonObject, default_mode: PythonObject,
+def _family_route_build(device: PythonObject, mode: PythonObject, default_mode: PythonObject,
                         context: PythonObject) raises -> FamilyRouteOwner:
-    var nk = family_route_keys()
     var b = native_loaded_module("builtins")
-    # The one read of `device`. None, and an instance without the field
+    # The one decode of `device`. None, and an instance without the field
     # (unpickled from an older version, or loaded from a file), run this
     # installation's device.
-    var requested = family_route_device_unpack(py_get(fields, nk[].k_device), b)
+    var requested = family_route_device_unpack(device, b)
     var word = _selected_mode(b, mode, context)
     var plan = family_route_plan(requested, _family_route_cpu_only(context), 1 if word == "identical" else 0)
-    return FamilyRouteOwner(plan^, mode, default_mode, context)
+    return FamilyRouteOwner(plan^, mode, default_mode, context, device)
 
 
 def _family_route_slot(owner: PythonObject, slot: Int, check_mode: Bool) raises -> PythonObject:
@@ -269,21 +280,23 @@ def _family_route_slot(owner: PythonObject, slot: Int, check_mode: Bool) raises 
 
 def family_route_owner(model: PythonObject, context: PythonObject) raises -> PythonObject:
     """The estimator's route owner for this operation. A hit is one record
-    read and three pointer compares; a miss (first operation, a changed
-    numeric mode, an instance built without its constructor) reads the
-    device, resolves and stores it."""
+    read and four pointer compares; a miss (first operation, a changed
+    numeric mode or device object, an instance built without its
+    constructor) decodes the device, resolves and stores it."""
     var nk = family_route_keys()
     var fields = _fields(model)
     var mode = py_get(fields, nk[].k_numeric_mode)
     var default_mode = PythonObject(None)
     if mode is None:
         default_mode = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
+    var device = py_get(fields, nk[].k_device)
     var owner = records_get(RECORDS_PREPARED, model, _FAMILY_ROUTE_SLOT)
     if owner is not None:
         var native = owner.downcast_value_ptr[FamilyRouteOwner]()
-        if native[].mode is mode and native[].default_mode is default_mode and native[].context is context:
+        if (native[].mode is mode and native[].default_mode is default_mode and native[].context is context
+                and native[].device is device):
             return owner
-    var fresh = PythonObject(alloc=_family_route_build(fields, mode, default_mode, context))
+    var fresh = PythonObject(alloc=_family_route_build(device, mode, default_mode, context))
     # An estimator that takes no weak reference keeps no owner: it resolves
     # at every operation (records_put answers False and stores nothing).
     _ = records_put(RECORDS_PREPARED, model, _FAMILY_ROUTE_SLOT, fresh)

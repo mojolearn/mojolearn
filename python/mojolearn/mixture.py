@@ -132,6 +132,9 @@ class GaussianMixture(_NumericModeMixin):
 
     _mojolearn_native_public = True
     _BINDING = "_mojolearn_mixture"
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
     def __init__(
         self,
@@ -147,9 +150,9 @@ class GaussianMixture(_NumericModeMixin):
         means_init=None,
         weights_init=None,
         precisions_init=None,
-        *, numeric_mode=None,
+        *, numeric_mode=None, device=None,
     ):
-        return _NATIVE(self, "family_mix_gmm_public_initialize", (n_components, covariance_type, tol, reg_covar, max_iter, init_params, random_state, n_init, warm_start, means_init, weights_init, precisions_init, numeric_mode,), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_mix_gmm_public_initialize", (n_components, covariance_type, tol, reg_covar, max_iter, init_params, random_state, n_init, warm_start, means_init, weights_init, precisions_init, numeric_mode, device,), _NATIVE_CONTEXT)
 
     # EM runs one shot on the device (`gaussian_mixture_fit`). Option parity
     # (2026-09-27, lane/algos-cluster): any option this binding does not carry
@@ -158,6 +161,17 @@ class GaussianMixture(_NumericModeMixin):
     # The default fit is untouched and keeps its recorded bits.
     def _extension(self):
         return _NATIVE(self, "family_mix_gmm_public_binding", (), _NATIVE_CONTEXT)
+
+    def vendor_used(self):
+        """The backend this estimator runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'`` or ``'hip'``, or ``'cpu'`` for an estimator
+            that runs on the CPU.
+        """
+        return _NATIVE(self, "family_mix_gmm_public_vendor_used", (), _NATIVE_CONTEXT)
 
     def fit(self, X, y=None):
         """Fit the mixture to `X` by expectation-maximization.
@@ -412,6 +426,11 @@ __all__ += _SKLEARN_LAYOUT["mixture"]
 from ._native_owner_lifetime import connect_owner_context as _connect_gmm_owner_context
 _connect_gmm_owner_context(_NATIVE_CONTEXT)
 _native_family_bridge.connect_bindings("_mojolearn_mixture", "_mojolearn_x_cluster")
+# The CPU images of `device="cpu"`, connected once at import beside the device
+# images: on a GPU installation both exist in the process and an estimator's
+# route holds one of them (providers/python/device_route_dw_neighbors_cluster_door.mojo).
+from ._native_device_bindings import connect_cpu_device as _connect_cpu_device
+_connect_cpu_device("_mojolearn_mixture", "_mojolearn_x_cluster")
 _native_family_bridge.tables(
     gmm_public_class=GaussianMixture,
     gmm_retained_cluster_bindings=[],

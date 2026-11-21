@@ -3689,98 +3689,105 @@
           "value": {
             "parameter": "n_components"
           },
-          "source": "python/mojolearn/mixture.py:136"
+          "source": "python/mojolearn/mixture.py:139"
         },
         {
           "field": "covariance_type",
           "value": {
             "parameter": "covariance_type"
           },
-          "source": "python/mojolearn/mixture.py:136"
+          "source": "python/mojolearn/mixture.py:139"
         },
         {
           "field": "tol",
           "value": {
             "parameter": "tol"
           },
-          "source": "python/mojolearn/mixture.py:136"
+          "source": "python/mojolearn/mixture.py:139"
         },
         {
           "field": "reg_covar",
           "value": {
             "parameter": "reg_covar"
           },
-          "source": "python/mojolearn/mixture.py:136"
+          "source": "python/mojolearn/mixture.py:139"
         },
         {
           "field": "max_iter",
           "value": {
             "parameter": "max_iter"
           },
-          "source": "python/mojolearn/mixture.py:136"
+          "source": "python/mojolearn/mixture.py:139"
         },
         {
           "field": "init_params",
           "value": {
             "parameter": "init_params"
           },
-          "source": "python/mojolearn/mixture.py:136"
+          "source": "python/mojolearn/mixture.py:139"
         },
         {
           "field": "random_state",
           "value": {
             "parameter": "random_state"
           },
-          "source": "python/mojolearn/mixture.py:136"
+          "source": "python/mojolearn/mixture.py:139"
         },
         {
           "field": "n_init",
           "value": {
             "parameter": "n_init"
           },
-          "source": "python/mojolearn/mixture.py:136"
+          "source": "python/mojolearn/mixture.py:139"
         },
         {
           "field": "warm_start",
           "value": {
             "parameter": "warm_start"
           },
-          "source": "python/mojolearn/mixture.py:136"
+          "source": "python/mojolearn/mixture.py:139"
         },
         {
           "field": "means_init",
           "value": {
             "parameter": "means_init"
           },
-          "source": "python/mojolearn/mixture.py:136"
+          "source": "python/mojolearn/mixture.py:139"
         },
         {
           "field": "weights_init",
           "value": {
             "parameter": "weights_init"
           },
-          "source": "python/mojolearn/mixture.py:136"
+          "source": "python/mojolearn/mixture.py:139"
         },
         {
           "field": "precisions_init",
           "value": {
             "parameter": "precisions_init"
           },
-          "source": "python/mojolearn/mixture.py:136"
+          "source": "python/mojolearn/mixture.py:139"
         },
         {
           "field": "numeric_mode",
           "value": {
             "parameter": "numeric_mode"
           },
-          "source": "NumericModeMixin rule kept by native family_mix_gmm_public_initialize at python/mojolearn/mixture.py:136"
+          "source": "NumericModeMixin rule kept by native family_mix_gmm_public_initialize at python/mojolearn/mixture.py:139"
+        },
+        {
+          "field": "device",
+          "value": {
+            "parameter": "device"
+          },
+          "source": "python/mojolearn/mixture.py:139"
         }
       ],
       "trace": [
-        "python/mojolearn/mixture.py:136"
+        "python/mojolearn/mixture.py:139"
       ],
-      "constructor": "python/mojolearn/mixture.py:136",
-      "signature_source": "def __init__(self, n_components=1, covariance_type='full', tol=0.001, reg_covar=1e-06, max_iter=100, init_params='kmeans', random_state=0, n_init=1, warm_start=False, means_init=None, weights_init=None, precisions_init=None, *, numeric_mode=None)",
+      "constructor": "python/mojolearn/mixture.py:139",
+      "signature_source": "def __init__(self, n_components=1, covariance_type='full', tol=0.001, reg_covar=1e-06, max_iter=100, init_params='kmeans', random_state=0, n_init=1, warm_start=False, means_init=None, weights_init=None, precisions_init=None, *, numeric_mode=None, device=None)",
       "parameters": [
         "n_components",
         "covariance_type",
@@ -3794,9 +3801,10 @@
         "means_init",
         "weights_init",
         "precisions_init",
-        "numeric_mode"
+        "numeric_mode",
+        "device"
       ],
-      "constructor_ast_sha256": "1b85036a1a9f00efc54e53d5b9384e5a99af5cd81ab1a81a571d20a3f6db8c6a",
+      "constructor_ast_sha256": "4b6fa07c7ef5e73000d640dc4a1c3dbd440bda4dbbb9059d0f2d97fbff7f9dcb",
       "field_order": [
         "n_components",
         "covariance_type",
@@ -3810,7 +3818,8 @@
         "means_init",
         "weights_init",
         "precisions_init",
-        "numeric_mode"
+        "numeric_mode",
+        "device"
       ],
       "final_fields": {
         "n_components": {
@@ -3851,6 +3860,9 @@
         },
         "numeric_mode": {
           "parameter": "numeric_mode"
+        },
+        "device": {
+          "parameter": "device"
         }
       },
       "signature_defaults": {
@@ -3866,7 +3878,8 @@
         "means_init": "None",
         "weights_init": "None",
         "precisions_init": "None",
-        "numeric_mode": "None"
+        "numeric_mode": "None",
+        "device": "None"
       },
       "numeric_mode_injection": false,
       "module": "mojolearn.mixture",
@@ -3875,8 +3888,8 @@
         {
           "path": "python/mojolearn/mixture.py",
           "name": "__init__",
-          "line": 136,
-          "ast_sha256": "1b85036a1a9f00efc54e53d5b9384e5a99af5cd81ab1a81a571d20a3f6db8c6a"
+          "line": 139,
+          "ast_sha256": "4b6fa07c7ef5e73000d640dc4a1c3dbd440bda4dbbb9059d0f2d97fbff7f9dcb"
         }
       ],
       "constructor_ancestry": [

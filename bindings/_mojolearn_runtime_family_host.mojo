@@ -30,6 +30,7 @@ from bindings.dbscan_native_boundary_door import DBSCANReferenceOwner, DBSCANHol
 from bindings.native_owner_registry_unpack import register_native_owner_type
 from bindings.agglo_native_boundary_door import AggloReferenceOwner, AggloHolder, agglo_reference_owner_pins, agglo_holder_pins
 from bindings.kde_admission_boundary_unpack import KDEAdmissionOwner
+from providers.python.device_route_dw_neighbors_cluster_door import register_family_route_owner, register_family_route_owner_identity
 
 comptime RUNTIME_FAMILY_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
@@ -246,6 +247,7 @@ def build__mojolearn_runtime_family_host() -> PythonObject:
         register_DBSCANHolder(module)
         register_AggloReferenceOwner(module)
         register_AggloHolder(module)
+        register_family_route_owner(module)
         module.def_py_c_function(classical_family_c, "family_native_call")
         module.def_py_c_function(host_svr_attribute_c, "host_svr_attribute_call")
         module.def_py_c_function(host_svc_attribute_c, "host_svc_attribute_call")
@@ -262,6 +264,7 @@ def build__mojolearn_runtime_family_host() -> PythonObject:
         register_native_owner_type[DBSCANHolder](published, dbscan_holder_pins)
         register_native_owner_type[AggloReferenceOwner](published, agglo_reference_owner_pins)
         register_native_owner_type[AggloHolder](published, agglo_holder_pins)
+        register_family_route_owner_identity(published)
         return published
     except error:
         abort(String("failed to create _mojolearn_runtime_family_host: ", error))

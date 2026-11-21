@@ -55,7 +55,12 @@ from bindings.host_inference_scalars_door import host_inference_scalar
 from bindings.native_owner_lifetime_door import native_release_admit
 from bindings.native_array_view_pack import native_array_ndarray_view
 from bindings.svm_mixture_native_door import svm_mixture_operation
-from providers.python.estimator_binding_pyapi_door import estimator_binding, _estimator_mode_word
+from providers.python.estimator_binding_pyapi_door import _estimator_mode_word
+from providers.python.device_route_dw_neighbors_cluster_door import (
+    family_route_owner, family_route_owner_binding, family_route_binding, family_route_vendor_used,
+    family_route_device_admit, family_route_clear,
+)
+from core.device_route_dw_neighbors_cluster import FAMILY_ROUTE_MIXTURE, FAMILY_ROUTE_X_CLUSTER
 from bindings.cluster_side_records_unpack import (
     cluster_is_subclass,
     cluster_refuse_fit_callbacks,
@@ -94,6 +99,7 @@ from bindings.operation_names_mix import (
     MIX_OPN_FAMILY_MIX_GMM_PUBLIC_SCORE_SAMPLES, MIX_OPN_FAMILY_MIX_GMM_PUBLIC_PREDICT_PROBA, MIX_OPN_FAMILY_MIX_GMM_PUBLIC_PREDICT,
     MIX_OPN_FAMILY_MIX_GMM_PUBLIC_BIC, MIX_OPN_FAMILY_MIX_GMM_PUBLIC_AIC, MIX_OPN_FAMILY_MIX_GMM_PUBLIC_SCORE,
     MIX_OPN_FAMILY_MIX_GMM_PUBLIC_INITIALIZE, MIX_OPN_FAMILY_MIX_GMM_PUBLIC_BINDING, MIX_OPN_FAMILY_MIX_GMM_PUBLIC_SAMPLE,
+    MIX_OPN_FAMILY_MIX_GMM_PUBLIC_VENDOR_USED,
 )
 from bindings.operation_names_svm import SVM_OPN_FAMILY_SVM_GMM_SAMPLE
 from bindings.svm_keys_unpack import svm_keys
@@ -802,7 +808,10 @@ def _gmm_ext_score(model: PythonObject, x: PythonObject, context: PythonObject) 
     var nk = svm_keys()
     var aux = _aux(Python.list(_any_f32(means, "aux", context), _any_f32(py_item(ext, nk[].k_pchol), "aux", context),
                                _any_f32(py_item(ext, nk[].k_consts), "aux", context)))
-    return _bgmm_score_call(py_item(ext, nk[].k_binding), x, aux, n, d, k, 3)
+    # The image of the estimator's route (its device and mode), not the one
+    # the fit stored in `_ext`: a model handed to an estimator on the other
+    # device (`model.check`) is scored by that estimator's own image.
+    return _bgmm_score_call(family_route_binding(model, FAMILY_ROUTE_X_CLUSTER, context), x, aux, n, d, k, 3)
 
 
 def _gmm_bic_aic(model: PythonObject, binding: PythonObject, source: PythonObject,
@@ -1169,8 +1178,15 @@ def _gmm_public_initialize(model: PythonObject, values: PythonObject, context: P
     if py_type(names) is not b.tuple or py_type(values) is not b.tuple:
         raise Error("TypeError: GaussianMixture requires its connected constructor tuples")
     var fields = py_fields(model)
-    if len(values) != len(names):
+    # `device` is the constructor's last value. It is not one of the
+    # parameters every operation admits again (`gmm_public_parameters`): an
+    # instance without the field runs this installation's device.
+    var count = len(names)
+    if len(values) != count + 1:
         raise Error("TypeError: GaussianMixture constructor metadata differs")
+    var device = values[count]
+    # Refused in words before any field changes.
+    family_route_device_admit(device, context)
     var replacements = Python.list()
     for i in range(len(names)):  # driver-loop: fixed public constructor parameter schema
         if py_type(names[i]) is not b.str:
@@ -1183,6 +1199,8 @@ def _gmm_public_initialize(model: PythonObject, values: PythonObject, context: P
         _ = py_call(replacements.append, value)
     for i in range(len(names)):  # driver-loop: publish only after every replaced owner passed admission
         py_setitem(fields, names[i], replacements[i])
+    py_setitem(fields, PythonObject("device"), device)
+    family_route_clear(model)
     return PythonObject(None)
 
 
@@ -1336,6 +1354,9 @@ def _gmm_public_operation(model: PythonObject, operation: Int, args: PythonObjec
         raise Error("TypeError: GaussianMixture requires its connected native class")
     if operation == MIX_OPN_FAMILY_MIX_GMM_PUBLIC_INITIALIZE:
         return _gmm_public_initialize(model, args, context)
+    if operation == MIX_OPN_FAMILY_MIX_GMM_PUBLIC_VENDOR_USED:
+        # The estimator's own route (fitted or not): `cpu` for the CPU images.
+        return family_route_vendor_used(model, context)
     var fitting = operation == MIX_OPN_FAMILY_MIX_GMM_PUBLIC_FIT or operation == MIX_OPN_FAMILY_MIX_GMM_PUBLIC_FIT_PREDICT
     # The queries that read the fitted model and an admitted X.
     var query = (operation == MIX_OPN_FAMILY_MIX_GMM_PUBLIC_PREDICT
@@ -1350,7 +1371,14 @@ def _gmm_public_operation(model: PythonObject, operation: Int, args: PythonObjec
         # A fit replaces the fitted state: release the old records now.
         cluster_record_drop(_GMM_ADMIT_SLOT, model)
         cluster_record_drop(_GMM_OPERANDS_SLOT, model)
-    var binding = estimator_binding(model, "_mojolearn_mixture", context, False)
+    # The estimator's device route: one record read and four pointer compares
+    # on a hit (providers/python/device_route_dw_neighbors_cluster_door.mojo).
+    # TOMBSTONE-NOTE: the per-call `estimator_binding(model, "_mojolearn_mixture", ...)`
+    # and `estimator_binding(model, "_mojolearn_x_cluster", ...)` of this door
+    # (mode String, offerings and connections reads, the process `_CPU_ONLY`
+    # question, the live registry read) run once per estimator, at resolution.
+    var route = family_route_owner(model, context)
+    var binding = family_route_owner_binding(route, FAMILY_ROUTE_MIXTURE, False)
     if operation == MIX_OPN_FAMILY_MIX_GMM_PUBLIC_BINDING:
         _check_mode(binding, model, context)
         return binding
@@ -1376,7 +1404,7 @@ def _gmm_public_operation(model: PythonObject, operation: Int, args: PythonObjec
         estimator_feature_check(model, fields, source, context)
     var prepared = PythonObject(None)
     if fitting:
-        var cluster_binding = estimator_binding(model, "_mojolearn_x_cluster", context)
+        var cluster_binding = family_route_owner_binding(route, FAMILY_ROUTE_X_CLUSTER)
         # The admission probe names the entry the fit calls (the typed BGMM
         # transport; the door no longer calls x_cluster_call).
         _ = neural_descriptor_entry(cluster_binding, "bgmm_native_api_v1")
