@@ -15,6 +15,22 @@ _CONTEXT = None
 # (`connect_cpu`); the host images load then, never at import.
 _CPU_WANTED = False
 _CPU_DONE = False
+# Other family contexts whose CPU label scope waits for the same moment
+# (`cpu_scope_later`): the decomposition kit's (EllipticEnvelope).
+_CPU_LATER = []
+
+
+def cpu_scope_later(context):
+    """Build `context`'s CPU label scope (_native_labels_bridge `cpu_scope`)
+    at the first device="cpu" admission beside a GPU set, or now when that
+    already happened: a family context connected at import that should not
+    load the host label images at import."""
+    # glue: import-time registration, once per family context
+    if _CPU_DONE:
+        from ._native_labels_bridge import cpu_scope
+        cpu_scope(context)
+    else:
+        _CPU_LATER.append(context)
 
 
 def _connect_cpu(context):
@@ -29,8 +45,6 @@ def _connect_cpu(context):
     # (bindings/labels_descriptor_boundary_door.mojo `labels_scope`). Later
     # `tables()` imports grow this context; the scope is copied again at the
     # first label step after that.
-    global _CPU_DONE
-    _CPU_DONE = True
     context["metrics_cpu_cells"] = _cpu_metrics_cells()
     from ._native_labels_bridge import cpu_scope
     cpu_scope(context)
@@ -43,12 +57,17 @@ def connect_cpu():
     when an estimator is given `device="cpu"` beside a GPU set. Once per
     process; later calls return at the first flag."""
     # glue: lazy connection of the CPU route's images, once
-    global _CPU_WANTED
+    global _CPU_WANTED, _CPU_DONE
     if _CPU_DONE:
         return None
     _CPU_WANTED = True
     if _CONTEXT is not None:
         _connect_cpu(_CONTEXT)
+    _CPU_DONE = True
+    from ._native_labels_bridge import cpu_scope
+    for context in _CPU_LATER:  # glue: once, over the registered family contexts (at most a few)
+        cpu_scope(context)
+    _CPU_LATER.clear()
     return None
 
 
