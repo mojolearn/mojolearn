@@ -57,9 +57,9 @@ WHAT IS MIRRORED, IN THE ORDER THE FIT REACHES IT
          `replace_active_cindex` sets `cindex_changed_since_histogram`, so no
          subtraction runs), the symmetric oracle's `_half_byte_block` and
          `_one_byte_block`; `scan_histograms_kernel`; `compute_partition_
-         stats` at the pinned 32 chunks (`_partition_stat`).
+         stats` at the pinned 32 chunks (`_partition_stats_level`).
        - `enqueue_score`: `compute_optimal_splits_kernel[COSINE]` with no
-         noise, skip all zero and feature weight 1 (`_cosine_gain`), the
+         noise, skip all zero and feature weight 1 (`_cosine_gains`), the
          block argmax and `resolve_and_pack_kernel` (largest gain, ties to
          the smaller bin-feature).
        - `accept_symmetric_level_winner` (`:3835-3880`): the sentinel raise,
@@ -125,11 +125,13 @@ from gbdt.host.gbdt_oracle import (
     GBDT_FLOAT32_MAX,
     GBDT_ORACLE_HOST_SABOTAGE,
     GBDT_SENTINEL,
-    _cosine_gain,
+    _cosine_gains,
+    _gain_winner,
+    _scan_histograms,
+    _split_leaves,
     _binary_block,
     _half_byte_block,
     _one_byte_block,
-    _partition_stat,
     gbdt_f32_token,
 )
 from gbdt.digest.city import city_hash_64
@@ -554,31 +556,24 @@ def _ff_level(
             )
         block_first_bin += total
 
-    # `scan_histograms_kernel` over the computed leaves
-    for j in range(n_live):
-        for z in range(2):
-            for f in range(n_features):
-                ref cf = layout.features[f]
-                var folds = Int(cf.folds)
-                if cf.one_hot_feature or folds <= 1:
-                    continue
-                var base = j * 2 * hist_cells + z * hist_cells + Int(cf.first_fold_index)
-                var running = Float32(0.0)
-                for i in range(folds):
-                    running = ftz(running + hist[base + i])
-                    hist[base + i] = running
+    # `scan_histograms_kernel` over the computed leaves (every live leaf)
+    _scan_histograms(hist, hist_cells, 2, compute, layout, n_features)
 
     var part_stats = _partition_stats_level(
         stats, n_rows, 2, GBDT_PARTITION_CHUNKS, p_off, p_sz, n_live
     )
 
+    # the score (no noise: the std dev is zero, so the features' draws are
+    # never read) and the device winner, candidates across the cores
+    var no_features = List[Int]()
+    var gains = _cosine_gains(
+        hist, hist_cells, part_stats, n_live, l2_leaf_reg,
+        Float32(0.0), UInt64(0), no_features,
+    )
+    var best_bin = _gain_winner(gains, hist_cells)
     var best_gain = -GBDT_FLOAT32_MAX
-    var best_bin = GBDT_SENTINEL
-    for bf in range(hist_cells):
-        var gain = _cosine_gain(hist, hist_cells, part_stats, n_live, bf, l2_leaf_reg)
-        if gain > best_gain:
-            best_gain = gain
-            best_bin = UInt32(bf)
+    if best_bin != GBDT_SENTINEL:
+        best_gain = gains[Int(best_bin)]
     var best_score = ftz(best_gain) if best_bin != GBDT_SENTINEL else ftz(-GBDT_FLOAT32_MAX)
 
     # `accept_symmetric_level_winner` (`greedy_search_helper.mojo:3835-3880`)
@@ -623,46 +618,22 @@ def _ff_level(
 
     # `enqueue_post_winner`: split flags, the stable partition, the reorder
     # of rows and both stat planes, the partition update
-    var new_rows = row_index.copy()
-    var new_stats = stats.copy()
-    for i in range(n_live):
-        var off = p_off[i]
-        var sz = p_sz[i]
-        var zeros = List[Int]()
-        var ones = List[Int]()
-        for k in range(sz):
-            var row = row_index[off + k]
-            var word = words[Int(sfeat.offset) * n_rows + row]
-            var feature_val = word & (sfeat.mask << sfeat.shift)
-            var value = UInt32(fbin) << sfeat.shift
-            var goes_right: Bool
-            if sfeat.one_hot_feature:
-                goes_right = feature_val == value
-            else:
-                goes_right = feature_val > value
-            if goes_right:
-                ones.append(k)
-            else:
-                zeros.append(k)
-        var dst = 0
-        for k in range(len(zeros)):
-            var src = off + zeros[k]
-            new_rows[off + dst] = row_index[src]
-            new_stats[off + dst] = stats[src]
-            new_stats[n_rows + off + dst] = stats[n_rows + src]
-            dst += 1
-        for k in range(len(ones)):
-            var src = off + ones[k]
-            new_rows[off + dst] = row_index[src]
-            new_stats[off + dst] = stats[src]
-            new_stats[n_rows + off + dst] = stats[n_rows + src]
-            dst += 1
-        var left_sz = len(zeros)
-        p_sz[i] = left_sz
-        p_off[n_live + i] = off + left_sz
-        p_sz[n_live + i] = sz - left_sz
-    row_index = new_rows^
-    stats = new_stats^
+    # (`_split_leaves`, the leaves' pieces across the cores; this fit builds
+    # every live leaf's histogram each level, so no parent copy)
+    var left_ids = List[Int](capacity=n_live)
+    var right_ids = List[Int](capacity=n_live)
+    for i in range(n_live):  # driver-loop: over the live leaves (one descriptor each)
+        left_ids.append(i)
+        right_ids.append(n_live + i)
+    var l_word_base = List[Int](length=n_live, fill=Int(sfeat.offset) * n_rows)
+    var l_field = List[UInt32](length=n_live, fill=UInt32(sfeat.mask << sfeat.shift))
+    var l_value = List[UInt32](length=n_live, fill=UInt32(fbin) << sfeat.shift)
+    var l_one_hot = List[Int](length=n_live, fill=1 if sfeat.one_hot_feature else 0)
+    _split_leaves(
+        words, n_rows, hist_cells, 2, left_ids, right_ids, l_word_base,
+        l_field, l_value, l_one_hot, row_index, stats, p_off, p_sz, hist,
+        False,
+    )
 
 
 # ===========================================================================

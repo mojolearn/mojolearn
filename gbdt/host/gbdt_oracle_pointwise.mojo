@@ -83,7 +83,8 @@ from gbdt.host.gbdt_oracle import (
     _deterministic_sum_lanes,
     _halving_fold,
     _snap_plane,
-    _partition_stat,
+    _partition_stats_level,
+    GBDT_PARTITION_CHUNKS,
     gbdt_host_grid,
 )
 from gbdt.host.gbdt_oracle_ordered import (
@@ -289,9 +290,14 @@ def _oracle_eval_weighted(
         fv[b] = _halving_fold(slab)
     gradient.clear()
     cached_der2.clear()
+    # the leaves' two sums (`compute_partition_stats`): the (leaf, plane)
+    # launches across the cores (lane gbdt-host-par)
+    var leaf_sums = _partition_stats_level(
+        stats, n_rows, 2, GBDT_PARTITION_CHUNKS, offsets, sizes, len(sizes)
+    )
     for leaf in range(len(sizes)):
-        gradient.append(Float64(_partition_stat(stats, n_rows, 0, offsets[leaf], sizes[leaf])))
-        cached_der2.append(Float64(_partition_stat(stats, n_rows, 1, offsets[leaf], sizes[leaf])) + lambda_reg)
+        gradient.append(Float64(leaf_sums[2 * leaf]))
+        cached_der2.append(Float64(leaf_sums[2 * leaf + 1]) + lambda_reg)
     # lane cpu4-gbdt: the oracle's value fold is the device's
     # `deterministic_sum_lanes_kernel[1]` order (was an ascending chain)
     value = Float64(_deterministic_sum_lanes(fv, 1, blocks)[0])

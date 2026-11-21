@@ -75,6 +75,8 @@ from checks.numerics import (
     identical_mul_add,
     identical_sqrt,
 )
+from core.host_parallel import host_parallelize
+from core.host_predict_threads import HostF32Ptr, host_predict_chunk
 from gbdt.methods.cursor_rescale import apply_scaled_leaves_host, rescaled_leaves
 from gbdt.gpu_data.compressed_index_builder import (
     CompressedIndexLayout,
@@ -107,6 +109,13 @@ from gbdt.host.gbdt_oracle import (
     _one_byte_block_n,
     _halving_fold,
     _pinned_partition_stat,
+    GbdtIntPtr,
+    _gain_winner,
+    _gbdt_units,
+    _partition_stats_level,
+    _scan_histograms,
+    _split_level,
+    _subtract_histograms,
     gbdt_f32_token,
     gbdt_f64_token,
     gbdt_host_grid,
@@ -307,10 +316,10 @@ def _multi_pass(
 
 
 def _cosine_gain_n(
-    hist: List[Float32],
+    hist: HostF32Ptr,
     hist_cells: Int,
     stat_count: Int,
-    part_stats: List[Float32],
+    part_stats: HostF32Ptr,
     n_live: Int,
     bin_feature_id: Int,
     lambda_l2: Float32,
@@ -322,7 +331,9 @@ def _cosine_gain_n(
     """One bin-feature of `compute_optimal_splits_kernel[COSINE]`
     (`compute_scores.mojo:140-224`) at `stat_count` planes: the per-class
     `AddLeaf`s, the running totals, the multiclass optimization terms, the
-    sqrt normalization, per-feature noise, feature weight 1.0."""
+    sqrt normalization, per-feature noise, feature weight 1.0. `hist` and
+    `part_stats` are the level's storage by pointer (a task of
+    `_cosine_gains_n` calls this)."""
     var score = Float32(0.0)
     var denum_sqr = Float32(1e-10)
     for i in range(n_live):
@@ -356,6 +367,46 @@ def _cosine_gain_n(
         final_score = ftz(identical_mul_add(neg_draw, score_std_dev, final_score))
         score_before = ftz(identical_mul_add(neg_draw, score_std_dev, score_before))
     return ftz(ftz(final_score - score_before) * Float32(1.0))
+
+
+def _cosine_gains_n(
+    hist: List[Float32],
+    hist_cells: Int,
+    stat_count: Int,
+    part_stats: List[Float32],
+    n_live: Int,
+    lambda_l2: Float32,
+    multiclass_optimization: Bool,
+    score_std_dev: Float32,
+    level_seed: UInt64,
+    bf_feature: List[Int],
+) -> List[Float32]:
+    """`compute_optimal_splits_kernel[COSINE]` at `stat_count` planes over
+    every bin-feature of a level: `gains[bf] = _cosine_gain_n(bf)`.
+
+    THE SPLIT (lane gbdt-host-par): the unit is one candidate, the device
+    thread: its leaves in dense order, its planes in order, its own noise
+    draw (a function of the level seed and its feature). No candidate reads
+    another's sums, so the candidates run in `_gbdt_units` contiguous
+    ranges over `candidates x leaves x planes` AddLeaf pairs."""
+    var gains = List[Float32](length=hist_cells, fill=Float32(0.0))
+    var units = _gbdt_units(hist_cells, 8 * hist_cells * n_live * stat_count)
+    var chunk = host_predict_chunk(hist_cells, units)
+    var hist_p = rebind[HostF32Ptr](hist.unsafe_ptr())
+    var part_p = rebind[HostF32Ptr](part_stats.unsafe_ptr())
+    var feat_p = rebind[GbdtIntPtr](bf_feature.unsafe_ptr())
+    var gains_p = rebind[HostF32Ptr](gains.unsafe_ptr())
+
+    def candidates(unit: Int) {imm chunk, imm hist_cells, imm stat_count, imm n_live, imm lambda_l2, imm multiclass_optimization, imm score_std_dev, imm level_seed, imm hist_p, imm part_p, imm feat_p, imm gains_p}:
+        for bf in range(unit * chunk, min(hist_cells, (unit + 1) * chunk)):
+            gains_p[bf] = _cosine_gain_n(
+                hist_p, hist_cells, stat_count, part_p, n_live, bf,
+                lambda_l2, multiclass_optimization,
+                score_std_dev, level_seed, feat_p[bf],
+            )
+
+    host_parallelize(candidates, units)
+    return gains^
 
 
 # ===========================================================================
@@ -747,54 +798,30 @@ def gbdt_multi_host_fit(
                     )
                 block_first_bin += total
 
-            for j in range(len(compute)):
-                var slot = compute[j]
-                for z in range(stat_count):
-                    for f in range(n_features):
-                        ref cf = layout.features[f]
-                        var folds = Int(cf.folds)
-                        if cf.one_hot_feature or folds <= 1:
-                            continue
-                        var base = (
-                            slot * stat_count * hist_cells + z * hist_cells
-                            + Int(cf.first_fold_index)
-                        )
-                        var running = Float32(0.0)
-                        for i in range(folds):
-                            running = ftz(running + hist[base + i])
-                            hist[base + i] = running
+            # `scan_histograms_kernel` over the computed leaves, every plane
+            _scan_histograms(hist, hist_cells, stat_count, compute, layout, n_features)
 
+            # `substract_histograms_kernel`: the larger sibling, in place
             if planned and half > 0:
-                for j in range(half):
-                    var from_slot = sub_from[j]
-                    var what_slot = sub_what[j]
-                    for z in range(stat_count):
-                        var from_base = from_slot * stat_count * hist_cells + z * hist_cells
-                        var what_base = what_slot * stat_count * hist_cells + z * hist_cells
-                        for bf in range(hist_cells):
-                            var new_val = ftz(hist[from_base + bf] - hist[what_base + bf])
-                            if z == 0:
-                                new_val = max(new_val, Float32(0.0))
-                            hist[from_base + bf] = new_val
+                _subtract_histograms(hist, hist_cells, sub_from, sub_what, half, stat_count)
 
-            var part_stats = List[Float32](length=stat_count * n_live, fill=Float32(0.0))
-            for i in range(n_live):
-                for s in range(stat_count):
-                    part_stats[stat_count * i + s] = _partition_stat_n(
-                        stats, n_rows, s, p_off[i], p_sz[i], stat_count
-                    )
+            # `compute_partition_stats` over the live leaves, at the chunk
+            # count of `stat_count` planes (`_partition_stat_n`'s)
+            var part_stats = _partition_stats_level(
+                stats, n_rows, stat_count,
+                max((2 * GBDT_PINNED_SM + stat_count - 1) // stat_count, 1),
+                p_off, p_sz, n_live,
+            )
 
+            # the score and the device winner
+            var gains = _cosine_gains_n(
+                hist, hist_cells, stat_count, part_stats, n_live,
+                params.l2_leaf_reg, is_mc, score_std_dev, level_seed, bf_feature,
+            )
+            var best_bin = _gain_winner(gains, hist_cells)
             var best_gain = -GBDT_FLOAT32_MAX
-            var best_bin = GBDT_SENTINEL
-            for bf in range(hist_cells):
-                var gain = _cosine_gain_n(
-                    hist, hist_cells, stat_count, part_stats, n_live, bf,
-                    params.l2_leaf_reg, is_mc,
-                    score_std_dev, level_seed, bf_feature[bf],
-                )
-                if gain > best_gain:
-                    best_gain = gain
-                    best_bin = UInt32(bf)
+            if best_bin != GBDT_SENTINEL:
+                best_gain = gains[Int(best_bin)]
             if best_bin != GBDT_SENTINEL:
                 winners_score.append(ftz(best_gain))
             else:
@@ -807,59 +834,13 @@ def gbdt_multi_host_fit(
             var split_f = bf_feature[bf_split] if hist_cells > 0 else 0
             var split_b = bf_bin[bf_split] if hist_cells > 0 else 0
             ref sfeat = layout.features[split_f]
-            var new_rows = row_index.copy()
-            var new_stats = stats.copy()
-            for i in range(n_live):
-                var off = p_off[i]
-                var sz = p_sz[i]
-                var zeros = List[Int]()
-                var ones = List[Int]()
-                for k in range(sz):
-                    var row = row_index[off + k]
-                    var word = cindex[Int(sfeat.offset) * n_rows + row]
-                    var feature_val = word & (sfeat.mask << sfeat.shift)
-                    var value = UInt32(split_b) << sfeat.shift
-                    var goes_right: Bool
-                    if sfeat.one_hot_feature:
-                        goes_right = feature_val == value
-                    else:
-                        goes_right = feature_val > value
-                    if goes_right:
-                        ones.append(k)
-                    else:
-                        zeros.append(k)
-                var dst = 0
-                for k in range(len(zeros)):
-                    var src = off + zeros[k]
-                    new_rows[off + dst] = row_index[src]
-                    for s in range(stat_count):
-                        new_stats[s * n_rows + off + dst] = stats[s * n_rows + src]
-                    dst += 1
-                for k in range(len(ones)):
-                    var src = off + ones[k]
-                    new_rows[off + dst] = row_index[src]
-                    for s in range(stat_count):
-                        new_stats[s * n_rows + off + dst] = stats[s * n_rows + src]
-                    dst += 1
-                var src_base = i * stat_count * hist_cells
-                var dst_base = (n_live + i) * stat_count * hist_cells
-                for c in range(stat_count * hist_cells):
-                    hist[dst_base + c] = hist[src_base + c]
-                var left_sz = len(zeros)
-                var right_sz = sz - left_sz
-                p_sz[i] = left_sz
-                p_off[n_live + i] = off + left_sz
-                p_sz[n_live + i] = right_sz
-                var small = n_live + i
-                var big = i
-                if left_sz < right_sz:
-                    small = i
-                    big = n_live + i
-                ids_compute[i] = small
-                sub_from[i] = big
-                sub_what[i] = small
-            row_index = new_rows^
-            stats = new_stats^
+            # the split chain, every live leaf, every plane
+            _split_level(
+                cindex, Int(sfeat.offset) * n_rows, sfeat.mask << sfeat.shift,
+                UInt32(split_b) << sfeat.shift, sfeat.one_hot_feature, n_rows,
+                n_live, hist_cells, row_index, stats, p_off, p_sz, hist,
+                ids_compute, sub_from, sub_what, stat_count,
+            )
             n_live = n_live * 2
 
         var tree_features = List[Int]()

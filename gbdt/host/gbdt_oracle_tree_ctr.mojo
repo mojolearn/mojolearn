@@ -52,7 +52,11 @@ it and writes the model.
 """
 
 from std.builtin.sort import sort
-from core.host_parallel import host_parallelize
+from core.host_parallel import (
+    host_nested_units,
+    host_parallelize,
+    host_parallelize_items,
+)
 from core.host_predict_threads import (
     host_predict_chunk,
     host_predict_task_count_work,
@@ -118,7 +122,7 @@ def _slot_write(
     """Per row, one feature's bits of its compressed-index word replaced by
     `bins[row]` (`tree_slot_write_kernel`). One row owns one word, so the
     tasks never meet; the neighbouring features of the word are kept."""
-    var units = max(1, host_predict_task_count_work(n_rows, n_rows))
+    var units = host_nested_units(host_predict_task_count_work(n_rows, n_rows))
     var chunk = host_predict_chunk(n_rows, units)
     var field = mask << shift
 
@@ -135,7 +139,7 @@ def _slot_clear(
     cindex: TreeU32Ptr, base: Int, mask: UInt32, shift: UInt32, n_rows: Int
 ):
     """Per row, one feature's bits set to bin 0 (`tree_slot_clear_kernel`)."""
-    var units = max(1, host_predict_task_count_work(n_rows, n_rows))
+    var units = host_nested_units(host_predict_task_count_work(n_rows, n_rows))
     var chunk = host_predict_chunk(n_rows, units)
     var field = mask << shift
 
@@ -159,7 +163,7 @@ def _slot_copy(
 ):
     """Per row, one feature's bin read off one index and written into a
     feature of the same or another index (`tree_slot_copy_kernel`)."""
-    var units = max(1, host_predict_task_count_work(n_rows, n_rows))
+    var units = host_nested_units(host_predict_task_count_work(n_rows, n_rows))
     var chunk = host_predict_chunk(n_rows, units)
     var field = dst_mask << dst_shift
 
@@ -186,7 +190,7 @@ def _split_bits(
     """Per row, the 0/1 side of one binary split read off the compressed
     index (`tree_split_bits_kernel`): `bin == split bin` for a one-hot
     split, `bin > split bin` otherwise."""
-    var units = max(1, host_predict_task_count_work(n_rows, n_rows))
+    var units = host_nested_units(host_predict_task_count_work(n_rows, n_rows))
     var chunk = host_predict_chunk(n_rows, units)
 
     def rows(unit: Int) {imm chunk, imm n_rows, imm cindex, imm base, imm mask, imm shift, imm bin, imm take_bin, imm dst}:
@@ -252,7 +256,7 @@ def _level_words(
                 tree_ctr_median_pair_into(sa, n_rows, want, i, wp, base)
             _ = len(sorted)
 
-    host_parallelize(one, n_columns)
+    host_parallelize_items(one, n_columns)
     _ = len(asked)
     _ = len(words)
 
@@ -275,7 +279,7 @@ def _group_tally(
     together stay within four words per row."""
     var width = 1 + (classes if with_histogram else 0)
     var per_task = max(n_groups, 1) * width
-    var units = max(1, host_predict_task_count_work(n_rows, n_rows))
+    var units = host_nested_units(host_predict_task_count_work(n_rows, n_rows))
     var cap = max(1, (4 * n_rows) // per_task)
     if units > cap:
         units = cap
@@ -304,7 +308,7 @@ def _group_tally(
     var hp = cp
     if with_histogram:
         hp = TreeIntPtr(unsafe_from_address=Int(histogram.unsafe_ptr()))
-    var g_units = max(1, host_predict_task_count_work(n_groups, units * per_task))
+    var g_units = host_nested_units(host_predict_task_count_work(n_groups, units * per_task))
     var g_chunk = host_predict_chunk(n_groups, g_units)
 
     def merge(unit: Int) {imm g_chunk, imm n_groups, imm units, imm per_task, imm width, imm sp, imm cp, imm hp, imm classes, imm with_histogram}:
@@ -904,7 +908,7 @@ struct GbdtTreeCtrHost(Movable):
                     jp, j_count, op[i], bt, n, num, den, param, fp + i * n
                 )
 
-            host_parallelize(ordered, n_re)
+            host_parallelize_items(ordered, n_re)
             var bins = List[UInt32](length=n, fill=UInt32(0))
             # driver-loop: over the recomputed permutations
             for i in range(n_re):

@@ -111,13 +111,12 @@ from gbdt.host.gbdt_oracle import (
     _bootstrap_pass,
     _choose_scale_from_magnitudes,
     _snap_gradients,
-    _cosine_gain,
     _cosine_gains,
+    _gain_winner,
     _deterministic_sum_lanes,
     _half_byte_block,
     _halving_fold,
     _one_byte_block,
-    _partition_stat,
     _target_std_dev,
     gbdt_bootstrap_seeds,
     gbdt_f64_token,
@@ -443,17 +442,14 @@ def gbdt_rmse_host_fit(
             )
 
             # the score and the device winner
-            var best_gain = -GBDT_FLOAT32_MAX
-            var best_bin = GBDT_SENTINEL
             var gains = _cosine_gains(
                 hist, hist_cells, part_stats, n_live, params.l2_leaf_reg,
                 score_std_dev, level_seed, bf_feature,
             )
-            for bf in range(hist_cells):
-                var gain = gains[bf]
-                if gain > best_gain:
-                    best_gain = gain
-                    best_bin = UInt32(bf)
+            var best_bin = _gain_winner(gains, hist_cells)
+            var best_gain = -GBDT_FLOAT32_MAX
+            if best_bin != GBDT_SENTINEL:
+                best_gain = gains[Int(best_bin)]
             if best_bin != GBDT_SENTINEL:
                 winners_score.append(ftz(best_gain))
             else:
@@ -529,10 +525,14 @@ def gbdt_rmse_host_fit(
         # over the reordered stats planes, the searcher's leaf values, the
         # cursor update ----
         var leaf_values = List[Float32](length=n_live, fill=Float32(0.0))
+        # the (leaf, plane) launches across the cores (lane gbdt-host-par)
+        var leaf_sums = _partition_stats_level(
+            stats, n_rows, 2, GBDT_PARTITION_CHUNKS, offsets, sizes, n_live
+        )
         for i in range(n_live):
-            var w = _partition_stat(stats, n_rows, 0, offsets[i], sizes[i])
-            var g = _partition_stat(stats, n_rows, 1, offsets[i], sizes[i])
-            leaf_values[i] = _rmse_leaf_value(w, g, params.l2_leaf_reg)
+            leaf_values[i] = _rmse_leaf_value(
+                leaf_sums[2 * i], leaf_sums[2 * i + 1], params.l2_leaf_reg
+            )
         var scaled = rescaled_leaves(leaf_values, lr)
         apply_scaled_leaves_host(cursor, scaled, row_index, offsets, sizes, n_live)
 

@@ -39,7 +39,8 @@ from gbdt.host.gbdt_oracle import (
     GBDT_MSE_BLOCK,
     _deterministic_sum_lanes,
     _halving_fold,
-    _partition_stat,
+    _partition_stats_level,
+    GBDT_PARTITION_CHUNKS,
 )
 
 #: `QUERY_HELPER_BLOCK_SIZE` and `QUERY_LANES` (`query_helper.mojo`)
@@ -215,14 +216,14 @@ def query_rmse_eval(
         fv[b] = _halving_fold(s_score)
     gradient.clear()
     cached_der2.clear()
+    # the leaves' two sums (`compute_partition_stats`): the (leaf, plane)
+    # launches across the cores (lane gbdt-host-par)
+    var leaf_sums = _partition_stats_level(
+        stats, n_rows, 2, GBDT_PARTITION_CHUNKS, offsets_leaf, sizes_leaf, len(sizes_leaf)
+    )
     for leaf in range(len(sizes_leaf)):
-        gradient.append(
-            Float64(_partition_stat(stats, n_rows, 0, offsets_leaf[leaf], sizes_leaf[leaf]))
-        )
-        cached_der2.append(
-            Float64(_partition_stat(stats, n_rows, 1, offsets_leaf[leaf], sizes_leaf[leaf]))
-            + lambda_reg
-        )
+        gradient.append(Float64(leaf_sums[2 * leaf]))
+        cached_der2.append(Float64(leaf_sums[2 * leaf + 1]) + lambda_reg)
     # lane cpu4-gbdt: the oracle's value fold is the device's
     # `deterministic_sum_lanes_kernel[1]` order (was an ascending chain)
     value = Float64(_deterministic_sum_lanes(fv, 1, blocks)[0])
