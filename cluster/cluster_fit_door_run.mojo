@@ -9,7 +9,8 @@
 # core/kmeans_variants_api.mojo, core/cluster_centroid_fit_api.mojo and
 # core/optics_fit_api.mojo; this file builds their requests. Every
 # iteration, batch, bisection and seed loop runs inside the entry.
-from core.kmeans_variants_api import VariantsSpan, BisectFitRequest, MiniBatchFitRequest
+from core.kmeans_variants_api import VariantsSpan, BisectFitRequest, MiniBatchFitRequest, MiniBatchPartialRequest
+from core.kmeans_variants_plan import MiniBatchStreamState
 from std.math import isinf
 from core.cluster_centroid_fit_api import MeanShiftFitRequest, AffinityFitRequest
 from core.optics_fit_api import OpticsMetric, OpticsFitRequest
@@ -45,6 +46,53 @@ def minibatch_fit_request(source: VariantsSpan, auxiliary: VariantsSpan, n: Int,
     return MiniBatchFitRequest(source, auxiliary, n, d, k, max_iter, batch_size, max_no_improvement, init_size,
                                n_init, has_init, seed, not has_init and init_random, has_weights, scan_input,
                                tolerance, reassignment_ratio)
+
+
+def minibatch_partial_batch(batch_size: Int, n: Int) -> Int:
+    """The effective batch of a first `partial_fit`: no more than X's rows."""
+    return min(batch_size, n)
+
+
+def minibatch_partial_init_size(explicit: Bool, init_size: Int, batch: Int, k: Int, n: Int) -> Int:
+    """The init sample of a first `partial_fit`: the given `init_size`, or
+    three batches; three per cluster when that is under `k`; no more than
+    X's rows."""
+    var size = init_size if explicit else 3 * batch
+    if size < k:
+        size = 3 * k
+    return min(size, n)
+
+
+def minibatch_seed_high(seed: Int) -> Int:
+    """The random stream's high word of a 63-bit seed."""
+    return seed >> 32
+
+
+def minibatch_seed_low(seed: Int) -> Int:
+    return seed & 0xFFFFFFFF
+
+
+def minibatch_partial_request(source: VariantsSpan, auxiliary: VariantsSpan, n: Int, d: Int, k: Int,
+                              first: Bool, state: MiniBatchStreamState, has_weights: Bool,
+                              reassignment_ratio: Float64) -> MiniBatchPartialRequest:
+    """One `partial_fit` step's typed request (core/kmeans_variants_api.mojo
+    `minibatch_partial` lays out its words). `auxiliary` holds the explicit
+    initial centers (first step) or the centers and counts (later steps),
+    then the sample weights."""
+    return MiniBatchPartialRequest(source, auxiliary, n, d, k, first, state.init_mode, state.init_size,
+                                   state.batch_size, state.since_reassignment, state.state_hi, state.state_lo,
+                                   has_weights, reassignment_ratio)
+
+
+# ------------------------------------------------------------------ door
+def cluster_fit_a_unknown_operation(operation: String) raises:
+    """A `family_cfa_*` name the operation table does not hold (the shells
+    pass table names only): the text the name chain raised."""
+    raise Error("RuntimeError: unknown family operation " + operation)
+
+
+def cluster_fit_unknown_code(operation: Int) raises:
+    raise Error("RuntimeError: unknown family operation code " + String(operation))
 
 
 # --------------------------------------------------------- BisectingKMeans

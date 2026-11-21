@@ -28,6 +28,7 @@ from bindings.family_common_unpack import (
 from bindings.family_common_pack import family_call
 from bindings.py_cluster_resident import CRES_X_CLUSTER, cres_forget
 from core.kmeans_variants_api import VariantsSpan, VariantsResultSlot, VARIANTS_CAP_DEVSCAN
+from core.kmeans_variants_plan import MiniBatchStreamState
 from core.cluster_centroid_fit_api import CentroidFitResultSlot
 from core.optics_fit_api import OpticsMetric, OpticsFitResultSlot
 from core.affinity_preference_plan import AffinityPreferencePlan
@@ -41,7 +42,8 @@ from bindings.kmeans_variants_boundary_door import (
 from bindings.cluster_pending_error_unpack import _pending_text, _drop_pending
 from cluster.cluster_fit_door_run import (
     cluster_rows_cover, cluster_n_init_positive, bisect_fit_request,
-    minibatch_auto_n_init, minibatch_fit_request,
+    minibatch_auto_n_init, minibatch_fit_request, minibatch_partial_batch, minibatch_partial_init_size,
+    minibatch_seed_high, minibatch_seed_low, minibatch_partial_request,
     meanshift_seed_features, meanshift_bandwidth_refused, meanshift_fit_request,
     optics_minkowski_refused, optics_minkowski_metric, optics_euclidean_metric, optics_eps_refused,
     optics_xi_range, optics_precomputed_square, optics_fit_request,
@@ -581,3 +583,127 @@ def minibatch_fit_call(connection: KMeansVariantsConnection, stage: MiniBatchFit
         _ = stage.x
         _ = stage.init
         _ = stage.weights
+
+
+@fieldwise_init
+struct MiniBatchPartial(Movable):
+    """One `MiniBatchKMeans.partial_fit(X, sample_weight)` step as typed
+    values. `x` is the admitted float32 X; `auxiliary` owns the centers,
+    counts and weights as float32 words; `parts` are their arrays, pinned
+    through the step; `state` is the carried random stream and reassignment
+    counter."""
+    var x: PythonObject
+    var parts: List[PythonObject]
+    var auxiliary: VariantsAuxiliaryPins
+    var n: Int
+    var d: Int
+    var k: Int
+    var first: Bool
+    var state: MiniBatchStreamState
+    var has_weights: Bool
+    var reassignment_ratio: Float64
+
+
+def minibatch_partial_stage(model: PythonObject, source: PythonObject, sample_weight: PythonObject,
+                            context: PythonObject) raises -> MiniBatchPartial:
+    """The reads of `partial_fit`, in its order. The stream state a first
+    step (or the first step after `fit`) starts from is written to the model
+    between the reads, where the Python method wrote it."""
+    var x = _f32(source, "X", context)
+    var n = Int(py=x.shape[0])
+    var d = Int(py=x.shape[1])
+    var k = Int(py=_int(_attr(model, "n_clusters")))
+    var first = _attr_or_none(model, "cluster_centers_") is None
+    if not first and not Bool(py=family_call(native_loaded_module("builtins").hasattr, model,
+                                             PythonObject("_partial_state"))):
+        # a model from fit(): continue from its centers and counts, as sklearn
+        var n0 = minibatch_partial_batch(Int(py=_int(_attr(model, "batch_size"))), n)
+        _set(model, "_partial_batch", PythonObject(n0))
+        _set(model, "_partial_init", Python.tuple(PythonObject(0), PythonObject(0)))
+        var seed0 = _seed(_attr(model, "random_state"))
+        _set(model, "_partial_state",
+             Python.tuple(Python.tuple(PythonObject(minibatch_seed_high(seed0)),
+                                       PythonObject(minibatch_seed_low(seed0))), PythonObject(0)))
+    if not first:
+        var fitted = _attr(model, "n_features_in_")
+        if _truthy(family_call(native_loaded_module("operator").ne, PythonObject(d), fitted)):
+            raise Error("X has " + String(d) + " features, MiniBatchKMeans was fitted with " + family_str(fitted))
+    var parts = List[PythonObject]()
+    var mode = PythonObject(0)
+    var init_size = PythonObject(0)
+    var batch = PythonObject(0)
+    var state0 = PythonObject(0)
+    var state1 = PythonObject(0)
+    var since = PythonObject(0)
+    if first:
+        cluster_rows_cover(k, n)
+        var batch_eff = minibatch_partial_batch(Int(py=_int(_attr(model, "batch_size"))), n)
+        var size_field = _attr(model, "init_size")
+        var explicit = size_field is not None
+        var size = minibatch_partial_init_size(explicit, Int(py=_int(size_field)) if explicit else 0,
+                                               batch_eff, k, n)
+        var init = _attr(model, "init")
+        var code: Int
+        if family_is_str(init):
+            if not _one_of(init, "k-means++", "random"):
+                raise Error("init must be 'k-means++', 'random' or an array, got " + family_repr(init))
+            code = 0 if _eq(init, PythonObject("k-means++")) else 1
+        else:
+            parts.append(_init_array(init, k, d, context))
+            code = 2
+        var seed = _seed(_attr(model, "random_state"))
+        state0 = PythonObject(minibatch_seed_high(seed))
+        state1 = PythonObject(minibatch_seed_low(seed))
+        since = PythonObject(0)
+        mode = PythonObject(code)
+        init_size = PythonObject(size)
+        batch = PythonObject(batch_eff)
+        _set(model, "_partial_batch", batch)
+        _set(model, "_partial_init", Python.tuple(mode, init_size))
+        _set(model, "n_steps_", PythonObject(0))
+    else:
+        var pinit = _attr(model, "_partial_init")
+        mode = pinit[0]
+        init_size = pinit[1]
+        batch = _attr(model, "_partial_batch")
+        var pstate = _attr(model, "_partial_state")
+        var words = pstate[0]
+        since = pstate[1]
+        state0 = words[0]
+        state1 = words[1]
+        parts.append(_attr(model, "cluster_centers_"))
+        parts.append(_attr(model, "counts_"))
+    parts.append(_weights(sample_weight, n, context))
+    # Builtin int admission keeps the old order; native narrowing remains
+    # after auxiliary/float preparation, as in the former compiled binding.
+    var init_mode_word = _int(mode)
+    var init_size_word = _int(init_size)
+    var batch_word = _int(batch)
+    var since_word = _int(since)
+    var hi_word = _int(state0)
+    var lo_word = _int(state1)
+    var auxiliary = VariantsAuxiliaryPins(parts, context)
+    var ratio = _float(_attr(model, "reassignment_ratio"))
+    var state = MiniBatchStreamState(Int(py=init_mode_word), Int(py=init_size_word), Int(py=batch_word),
+        Int(py=since_word), Int(py=hi_word), Int(py=lo_word))
+    return MiniBatchPartial(x=x, parts=parts^, auxiliary=auxiliary^, n=n, d=d, k=k, first=first,
+                            state=state.copy(), has_weights=sample_weight is not None,
+                            reassignment_ratio=Float64(py=ratio))
+
+
+def minibatch_partial_call(binding: PythonObject, stage: MiniBatchPartial,
+                           mut result: VariantsResultSlot) raises:
+    """One mini-batch step on the typed transport, the GIL released around
+    it."""
+    var connection = variants_connection(binding)
+    var source_span = variants_span(stage.x)
+    var request = minibatch_partial_request(source_span, stage.auxiliary.plan.span(), stage.n, stage.d,
+        stage.k, stage.first, stage.state, stage.has_weights, stage.reassignment_ratio)
+    try:
+        with GILReleased(Python()):
+            connection.driver.minibatch_partial(request, result)
+    finally:
+        _ = connection.provider
+        _ = len(stage.auxiliary.owners)  # the auxiliary words and their arrays outlive the entry
+        _ = len(stage.parts)
+        _ = stage.x
