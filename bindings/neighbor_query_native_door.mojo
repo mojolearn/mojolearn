@@ -520,7 +520,7 @@ def _ivf_snapshot_resident(fields: PythonObject, binding: PythonObject,
         if _ivf_key_equal(stored, probe):
             return cached[1]
     _ivf_snapshot_materialize(fields, snapshots, pins, fitted, context)
-    _ann_release(fields, "ivf_flat_index_release")
+    _ann_release(fields, "ivf_flat_index_release", binding)
     # p3-neighbors-cluster (hazard class A): the resident key holds identity,
     # address and shape, never values, so the fitted arrays are made read-only
     # when the device copy is taken (bindings/p3nc_fitted_freeze.mojo). A
@@ -596,7 +596,7 @@ def _ivf_extend(model: PythonObject, kind: PythonObject, args: PythonObject, con
     var indices = family_array(Python.tuple(total), "<i4", context)
     var data = family_array(Python.tuple(total, dim), "<f4", context)
     var labels = family_array(Python.tuple(m), "<i4", context)
-    _ann_release(fields, "ivf_flat_index_release")
+    _ann_release(fields, "ivf_flat_index_release", binding)
     # Existing compiled IVF algorithm and address order; no arithmetic changes.
     _ = family_call(entry, Python.list(centers.source.addr, norms.source.addr,
         old_offsets.source.addr, old_indices.source.addr, old_data.source.addr, x.source.addr,
