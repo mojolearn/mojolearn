@@ -1153,6 +1153,10 @@ class Lars(_LinearRegressorMixin, NumericModeMixin):
 
     _BINDING = _BINDING
 
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_XLINEAR = 2) and core/xlinear_member.mojo.
+    _mojolearn_member = (2, 6)
+
     def __init__(self, *, fit_intercept=True, verbose=False, precompute="auto", n_nonzero_coefs=500,
                  eps=2.220446049250313e-16, copy_X=True, fit_path=True, jitter=None, random_state=None, numeric_mode=None, device=None):
         self.fit_intercept, self.verbose, self.precompute = fit_intercept, verbose, precompute

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """The XLinear family as MEMBERS (core/member_abi.mojo, schema v2): the
 generalized linear regressors PoissonRegressor, GammaRegressor and
-TweedieRegressor, HuberRegressor, BayesianRidge and ARDRegression.
+TweedieRegressor, HuberRegressor, BayesianRidge, ARDRegression and Lars.
 
 One entry, `xlinear_member_v2`, published by each x_linear image
 (`xlinear_member_publish`, beside its operations table). It runs the family's
@@ -15,7 +15,7 @@ metric). No kernel is touched.
 
 Kinds (the second word of each class's `_mojolearn_member`): 0
 PoissonRegressor, 1 GammaRegressor, 2 TweedieRegressor, 3 HuberRegressor,
-4 BayesianRidge, 5 ARDRegression.
+4 BayesianRidge, 5 ARDRegression, 6 Lars.
 
 MEMBER_OP_NEW parameters (Float64 words; word 0 is the kind, the count is
 the kind's):
@@ -29,11 +29,13 @@ the kind's):
     [9] lambda_init (-1: None).
   * kind 5, 9 words: [0] 5, [1] fit_intercept, [2] max_iter, [3] tol,
     [4] alpha_1, [5] alpha_2, [6] lambda_1, [7] lambda_2, [8] threshold_lambda.
+  * kind 6, 4 words: [0] 6, [1] fit_intercept, [2] n_nonzero_coefs,
+    [3] positive (0 / 1).
 The estimator's own checks (solver, warm_start, alpha >= 0, Tweedie's power
-and link words, Huber's epsilon >= 1, BayesianRidge's compute_score) run at the caller's admission.
+and link words, Huber's epsilon >= 1, BayesianRidge's compute_score, Lars' jitter) run at the caller's admission.
 
 Views: X dense row-major host float32; y and sample weights host float32
-vectors (one target); kind 5 takes no sample weights (a given weight is
+vectors (one target); kinds 5 and 6 take no sample weights (a given weight is
 refused in words; MEMBER_OP_CAPABILITIES of its state says so). A device-home view, a row or column index and a nonzero
 `fit_output` are refused in words. PREDICT writes the prediction as float32,
 rows x 1: link(X @ coef + intercept) for kinds 0..2, X @ coef + intercept
@@ -45,7 +47,9 @@ Fitted-state blocks (EXPORT / IMPORT), in index order:
 0 `MEMBER_BLOCK_COEF` float32 1 x features; 1 `MEMBER_BLOCK_SCALARS` float64
 in the kind's order: kinds 0..2 [intercept, n_iter]; kind 3 [intercept,
 scale, n_iter]; kind 4 [intercept, alpha_, lambda_, n_iter]; kind 5 [intercept, alpha_,
-n_iter]. Kind 5 also holds 2 `XL_MEMBER_BLOCK_LAMBDA` (`MEMBER_BLOCK_FAMILY` +
+n_iter]; kind 6 [intercept, n_iter, alpha_]. Kind 6 after a fit also holds
+2 `XL_MEMBER_BLOCK_ACTIVE` (`MEMBER_BLOCK_FAMILY` + 2) int32 1 x active
+features (`active_`, in the order the path took them). Kind 5 also holds 2 `XL_MEMBER_BLOCK_LAMBDA` (`MEMBER_BLOCK_FAMILY` +
 1) float32 1 x features (`lambda_`). Kind 3 after a fit also holds 2 `XL_MEMBER_BLOCK_OUTLIERS`
 (`MEMBER_BLOCK_FAMILY`) int32 1 x training rows, 1 for an outlier row
 (`outliers_`). An import needs COEF and SCALARS; a family block is a training
@@ -75,7 +79,7 @@ from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 from x_linear.door_run import (
-    ALGO_GLM, ALGO_HUBER, ALGO_BAYES, ALGO_ARD, LINK_IDENTITY, LINK_EXP, XlFitRequest, XlDecisionRequest, xl_fit_run,
+    ALGO_GLM, ALGO_HUBER, ALGO_BAYES, ALGO_ARD, ALGO_LARS, LINK_IDENTITY, LINK_EXP, XlFitRequest, XlDecisionRequest, xl_fit_run,
     xl_huber_fit_run, xl_decision_run, xl_r2_run, xl_lbfgs_work,
 )
 
@@ -84,7 +88,9 @@ comptime _INDEX_SPAN = 16777216
 comptime XL_MEMBER_HUBER = 3
 comptime XL_MEMBER_BAYES = 4
 comptime XL_MEMBER_ARD = 5
+comptime XL_MEMBER_LARS = 6
 comptime XL_MEMBER_BLOCK_LAMBDA = MEMBER_BLOCK_FAMILY + 1
+comptime XL_MEMBER_BLOCK_ACTIVE = MEMBER_BLOCK_FAMILY + 2
 comptime XL_MEMBER_BLOCK_OUTLIERS = MEMBER_BLOCK_FAMILY
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _F64P = MutPointer[Float64, MutUntrackedOrigin]
@@ -102,6 +108,8 @@ def xl_member_param_count(kind: Int) -> Int:
         return 10
     if kind == XL_MEMBER_ARD:
         return 9
+    if kind == XL_MEMBER_LARS:
+        return 4
     return 0
 
 
@@ -111,7 +119,7 @@ def xl_member_scalar_count(kind: Int) -> Int:
         return 3
     if kind == XL_MEMBER_BAYES:
         return 4
-    if kind == XL_MEMBER_ARD:
+    if kind == XL_MEMBER_ARD or kind == XL_MEMBER_LARS:
         return 3
     return 2
 
@@ -131,6 +139,10 @@ struct XLinearMemberSlot(Copyable, Movable, Defaultable):
     var outliers: List[Int32]
     # A per-feature fitted record of the kind (ARDRegression's lambda_).
     var record: List[Float32]
+    # The active feature indices of a LARS path (`active_`).
+    var active: List[Int32]
+    # True after a fit (the training records are held), False after an import.
+    var trained: Bool
 
     def __init__(out self):
         self.generation = 0
@@ -143,6 +155,8 @@ struct XLinearMemberSlot(Copyable, Movable, Defaultable):
         self.flags = List[UInt8]()
         self.outliers = List[Int32]()
         self.record = List[Float32]()
+        self.active = List[Int32]()
+        self.trained = False
 
     def forget(mut self):
         self.fitted = False
@@ -152,6 +166,8 @@ struct XLinearMemberSlot(Copyable, Movable, Defaultable):
         self.flags = List[UInt8]()
         self.outliers = List[Int32]()
         self.record = List[Float32]()
+        self.active = List[Int32]()
+        self.trained = False
 
 
 struct XLinearMemberStore(Defaultable, Movable):
@@ -242,7 +258,9 @@ def _name(slot: _SlotP) -> String:
         return String("HuberRegressor")
     if kind == XL_MEMBER_BAYES:
         return String("BayesianRidge")
-    return String("ARDRegression")
+    if kind == XL_MEMBER_ARD:
+        return String("ARDRegression")
+    return String("Lars")
 
 
 def _loss_name(slot: _SlotP) -> String:
@@ -263,7 +281,7 @@ def _capabilities(kind: Int) -> Int:
 
 def _weighted(kind: Int) -> Bool:
     """Whether `kind`'s fit takes sample weights (kind -1: some kind does)."""
-    return kind != XL_MEMBER_ARD
+    return kind != XL_MEMBER_ARD and kind != XL_MEMBER_LARS
 
 
 def _dense(view: MemberMatrix, what: String, estimator: String) raises:
@@ -384,6 +402,14 @@ def _plain_fit(slot: _SlotP, call: _CallP, kind: Int, p: List[Float64], intercep
         n_out = 2 * d + 4
         n_fw = 3 * d * d + 4 * d + n
         n_iw = 2 * d
+    elif kind == XL_MEMBER_LARS:
+        # `xl_fit_lars_unpack`: [n_nonzero_coefs, fit_intercept, lasso 0, positive], [alpha_min 0]
+        algo = ALGO_LARS
+        ip = [Int(p[2]), intercept, 0, Int(p[3])]
+        fp = [0.0]
+        n_out = 2 * d + 4
+        n_fw = 2 * d * d + 8 * d
+        n_iw = 2 * d
     var result = List[Float32](length=n_out, fill=0.0)
     var request = XlFitRequest(call[].route.entry.call, algo, call[].x.data, n * d, n, d, y, y_size, ip^, fp^,
         n_out, n_fw, n_iw, Int(result.unsafe_ptr()), False, 0, 0, 0)
@@ -398,6 +424,14 @@ def _plain_fit(slot: _SlotP, call: _CallP, kind: Int, p: List[Float64], intercep
         slot[].scalars = [Float64(result[d]), Float64(result[d + 1]), Float64(Int(result[2 * d + 2]))]
         slot[].record = List[Float32](length=d, fill=0.0)
         unsafe_memcpy(dest=slot[].record.unsafe_ptr(), src=result.unsafe_ptr() + d + 2, count=d)
+    else:
+        # LARS: [coef | intercept | n_iter | alpha_ | k | k active indices]
+        slot[].scalars = [Float64(result[d]), Float64(Int(result[d + 1])), Float64(result[d + 2])]
+        var k = max(Int(result[d + 3]), 0)
+        slot[].active = List[Int32](length=k, fill=0)
+        for i in range(k):  # driver-loop: over the active features (model structure)
+            slot[].active[i] = Int32(Int(result[d + 4 + i]))
+    slot[].trained = True
     slot[].fitted = True
 
 
@@ -470,6 +504,8 @@ def _family_block(slot: _SlotP) -> Int:
         return XL_MEMBER_BLOCK_OUTLIERS
     if _kind(slot) == XL_MEMBER_ARD and len(slot[].record) > 0:
         return XL_MEMBER_BLOCK_LAMBDA
+    if _kind(slot) == XL_MEMBER_LARS and slot[].trained:
+        return XL_MEMBER_BLOCK_ACTIVE
     return 0
 
 
@@ -494,6 +530,8 @@ def _export(slot: _SlotP, call: _CallP) raises:
         call[].dst = MemberMatrix(Int(slot[].outliers.unsafe_ptr()), 1, len(slot[].outliers), MEMBER_I32)
     elif block != 0 and block == family and family == XL_MEMBER_BLOCK_LAMBDA:
         call[].dst = MemberMatrix(Int(slot[].record.unsafe_ptr()), 1, len(slot[].record))
+    elif block != 0 and block == family and family == XL_MEMBER_BLOCK_ACTIVE:
+        call[].dst = MemberMatrix(Int(slot[].active.unsafe_ptr()), 1, len(slot[].active), MEMBER_I32)
     else:
         raise Error("member ABI: this " + _name(slot) + " member state holds no fitted block " + String(block))
     call[].block = block
