@@ -350,6 +350,14 @@ def _msel_hold_rows_of(x: PythonObject, rows: PythonObject) raises:
 #: board's two rows writes its test rows (digests equal). Old path behind _OFF until one more measurement.
 comptime MSEL_LC_TEST_REUSE = not is_defined["MOJOLEARN_MSEL_FAST_LC_TEST_REUSE_OFF"]()
 
+#: Units over native members (bindings/msel_member_units_door.mojo; lane ma-core, 2026-11-21, the member ABI
+#: rollout of the boundary wave): DEFAULT ON for a member whose family published its member entry.
+#: `-D MOJOLEARN_MSEL_MEMBER_UNITS_OFF` runs every member through the Python units again: the B arm of the owed
+#: same-pod A/B (cross_validate / GridSearchCV of Ridge and LinearRegression, a neighbouring shape and one
+#: non-board dataset). NOT MEASURED YET: the Python units stay until that A/B is recorded, then they are deleted
+#: for published families with the four tombstone parts.
+comptime MSEL_MEMBER_UNITS = not is_defined["MOJOLEARN_MSEL_MEMBER_UNITS_OFF"]()
+
 
 struct MselFoldRows(Movable):
     """`_FoldRows`: each fold's rows of X (and y) for the fits that share
@@ -976,23 +984,24 @@ def msel_cv_units(base: PythonObject, candidates: PythonObject, y: PythonObject,
     threads."""
     var run = MselUnitRun(base, candidates, y, rows, scoring, return_train, return_estimator, error_score, method, context)
     var workers = msel_unit_workers(jobs, run.n_units, context)
-    # A member whose family published its member entry (core/member_abi.mojo)
-    # runs its units without a Python estimator: admitted once per candidate,
-    # then typed calls with the GIL released (bindings/msel_member_units_door.mojo).
-    # Asked only for the request that route runs: default scoring, errors
-    # raised, no estimator asked back, a host fold set that gathers per unit.
-    # Any other member, and any other request, keeps the units below.
-    if (method is None and scoring is None and run.raise_errors and not return_estimator and not rows.dev
-            and len(rows.ranges) == 0 and not rows.reuse_test):
-        var member_y = rows.y if y is None else y
-        var native = msel_member_units(base, candidates, member_y, rows.x, rows.folds, return_train, workers,
-                                       context, msel_b())
-        if native.ran:
-            run.test = native.test.copy()
-            run.train = native.train.copy()
-            run.fit_time = native.fit_time.copy()
-            run.score_time = native.score_time.copy()
-            return run^
+    comptime if MSEL_MEMBER_UNITS:
+        # A member whose family published its member entry (core/member_abi.mojo)
+        # runs its units without a Python estimator: admitted once per candidate,
+        # then typed calls with the GIL released (bindings/msel_member_units_door.mojo).
+        # Asked only for the request that route runs: default scoring, errors
+        # raised, no estimator asked back, a host fold set that gathers per unit.
+        # Any other member, and any other request, keeps the units below.
+        if (method is None and scoring is None and run.raise_errors and not return_estimator and not rows.dev
+                and len(rows.ranges) == 0 and not rows.reuse_test):
+            var member_y = rows.y if y is None else y
+            var native = msel_member_units(base, candidates, member_y, rows.x, rows.folds, return_train, workers,
+                                           context, msel_b())
+            if native.ran:
+                run.test = native.test.copy()
+                run.train = native.train.copy()
+                run.fit_time = native.fit_time.copy()
+                run.score_time = native.score_time.copy()
+                return run^
     if workers <= 1 or run.n_units <= 1:
         run.drain()
         run.reraise()
