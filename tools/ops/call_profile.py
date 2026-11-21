@@ -22,7 +22,8 @@ seconds at the first scored call's time:
 LONG ROWS (lane fx-profile-big-rows, 2026-11-20): a rows-file line may carry `ms=<stored board ms>` and `cap=<s>`. A
 row of LONG_ROW_MS or more is profiled in ONE call per pass (no warmup; the window around the first scored call;
 tools/bench_board_small_rows.py one_call), with no time pass and no callgrind, each pass under the row's cap; a pass the
-job stops at its cap leaves run.capped and the row is reported CAPPED (exit 8) with what its tools collected. The
+job stops at its cap leaves run.capped and the row is reported CAPPED with what its tools collected
+(exit 0: a capped pass is a reported state, never a report failure; nvc1-0005, 2026-11-20, lost its job to exit 8). The
 report adds, per long row: stored ms beside the one call's wall, GPU kernel / CUDA API (of it sync) / host ms, launches,
 syncs, H2D/D2H MB, the top GPU kernels, and one LARGEST COST line (tools/ops/call_profile_rows_big.tsv).
 Subcommands (each prints one line; the job keeps their files):
@@ -36,8 +37,8 @@ Subcommands (each prints one line; the job keeps their files):
     strace     --trace T --window W --out J                  syscalls per call in the window
     report     --res R [--rows-file F] [--top N]   CALL-PROFILE-<vendor>.md and .json; exit 0 every row has its wall,
                                               nsys counts and one function-level source (py-spy, perf, callgrind or the
-                                              shim), 6 a row lacks one of those, 7 a row lacks a wall time, 8 a row hit
-                                              its cap (CAPPED)
+                                              shim), 6 a row lacks one of those, 7 a row lacks a wall time; a row that
+                                              hit its cap is CAPPED in the report, exit 0
 """
 import argparse
 import collections
@@ -115,7 +116,6 @@ CAP_FACTOR, CAP_PAD_S = 2.0, 300.0
 #: a call that runs kernels for minutes; nsys traces every CUDA API call
 LONG_CALL_SLOWDOWN = {"time": 1.0, "pyspy": 1.05, "perf": 1.2, "nsys": 1.3, "shim": 1.05, "callgrind": 50.0,
                       "strace": 1.5}
-EXIT_CAPPED = 8
 
 
 class Row(object):
@@ -985,8 +985,9 @@ def cmd_report(a):
         rec["function_sources"] = function_sources(rec)
         doc["rows"].append(rec)
         if rec.get("capped"):
-            # a pass stopped at the row's cap: reported with what it collected (never a silent timeout)
-            code = max(code, EXIT_CAPPED)
+            # a pass stopped at the row's cap: reported with what it collected (never a silent timeout). Not an
+            # exit code (lane fx-small, 2026-11-21): nvc1-0005's exit 8 made the job a failure though the report
+            # was whole; the CAPPED status and SUMMARY line carry it.
             why = "CAPPED (%s at %s s)" % (",".join(rec["capped"].get("passes") or []),
                                            _f(rec["capped"].get("cap_s"), 0))
         elif rec["wall_ms_per_call"] is None:

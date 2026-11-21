@@ -53,6 +53,13 @@ def shared_context():
         # `device_route_metrics_cpu`): on a GPU installation, the R^2 /
         # accuracy programs of a device="cpu" estimator's score.
         context["metrics_cpu_cells"] = _cpu_metrics_cells()
+        # The label steps of a device="cpu" classifier of any shared-context
+        # family (SVC, neighbors, semi-supervised, GP) run the host label
+        # kernels (bindings/labels_descriptor_boundary_door.mojo
+        # `labels_scope`). Later `tables()` imports grow this context; the
+        # scope is copied again at the first label step after that.
+        from ._native_labels_bridge import cpu_scope
+        cpu_scope(context)
         _CONTEXT = context
         _connect_context_module()
     return _CONTEXT

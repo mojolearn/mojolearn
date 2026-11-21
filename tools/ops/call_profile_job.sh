@@ -53,7 +53,7 @@
 # around the first scored call), py-spy at CP_PYSPY_LONG_RATE (20 Hz), no time pass (the shim pass's wall stands for
 # it) and no callgrind. Each pass runs under the row's cap (`cap=`, else 2 x its stored seconds + 300 s): at the cap
 # the job SIGINTs py-spy and nsys so they write what they collected, then kills the pass's whole process tree (the
-# race drivers run in their own sessions) and writes run.capped; the report marks the row CAPPED (exit 8), never a
+# race drivers run in their own sessions) and writes run.capped; the report marks the row CAPPED (exit 0), never a
 # silent timeout. The driver's own round ceiling is set above the cap (--race-round-seconds), so the job's cap fires
 # first. The plan prints the estimate (stored ms x passes, and the sum of the caps) before any row runs:
 #
@@ -70,8 +70,8 @@
 # CP_MANIFEST (the candidate's wheel-manifest json; default: the newest sibling results dir's
 # job/wheel-manifest-candidate.json: used to install the venv when it is missing), PC_CACHE_ROOT, PC_DATA_ROOT,
 # PC_GPU_TOKEN (L40S), PC_ALLOW_HW_DIFF. EXIT: 0 every row has its wall, its nsys counts and at least one
-# function-level source (py-spy, callgrind, the shim or perf); 6 a row lacks one; 7 a row lacks a wall time; 8 a row
-# hit its cap (CAPPED, reported with what was collected); 2 refused
+# function-level source (py-spy, callgrind, the shim or perf); 6 a row lacks one; 7 a row lacks a wall time (a row
+# that hit its cap is CAPPED in the report, exit 0); 2 refused
 # to start, 3 wrong box, 4 no venv, 5 no plan, 124 terminated. Tests: tools/test_call_profile.py.
 set -uo pipefail
 JOB_NAME=call-profile
@@ -611,7 +611,7 @@ if part report; then
         > "$RES/logs/report.log" 2>&1
     rc=$?
     grep -E '^(CALL-PROFILE|SUMMARY|LARGEST) ' "$RES/logs/report.log" | while read -r ln; do say "$ln"; done
-    say "report rc=$rc -> CALL-PROFILE-$V.md$( case $rc in 0|6|7|8) ;; *) echo "; report failed: $(tail -n 1 "$RES/logs/report.log")" ;; esac)"
+    say "report rc=$rc -> CALL-PROFILE-$V.md$( case $rc in 0|6|7) ;; *) echo "; report failed: $(tail -n 1 "$RES/logs/report.log")" ;; esac)"
     REPORT_RC=$rc
     phase_end $rc
 fi

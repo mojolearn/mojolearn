@@ -5,7 +5,7 @@ The route word, the typed driver and the device-or-host dispatch are in
 `bindings/labels_descriptor_boundary_run.mojo`."""
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
-from bindings.py_balanced import py_get, py_type, py_fields
+from bindings.py_balanced import py_get, py_type, py_fields, py_call, py_setitem
 from bindings.classical_keys_unpack import classical_keys
 from core.device_route import DEVICE_CPU
 from providers.python.device_route_boundary_door import device_route_resolved
@@ -80,18 +80,6 @@ def _labels_pin(context: PythonObject) raises -> _LabelsPin:
         return _LabelsPin(PythonObject(None), Optional[LabelsNativeDriver]())
     _ = _labels_route(context)
     return _LabelsPin(_LABELS_PROVIDER_PIN.get_or_create_ptr()[].provider, labels_route_driver())
-
-
-def _labels_pin_on(host: Bool, context: PythonObject) raises -> _LabelsPin:
-    """The pin of a caller that holds its estimator's device route: `host`
-    True (the route resolved to the CPU: `device="cpu"` beside a GPU set, or
-    a CPU-only process) runs the host kernels of this image and reads
-    neither the process route word nor the provider; `host` False is the
-    process route (`_labels_pin`). The caller read its device once, into its
-    route owner; nothing here reads or compares a device."""
-    if host:
-        return _LabelsPin(PythonObject(None), Optional[LabelsNativeDriver]())
-    return _labels_pin(context)
 
 
 def labels_prepare_targets(context: PythonObject, y_addr: Int, y_code: Int, n: Int,
@@ -196,81 +184,29 @@ def labels_scope(model: PythonObject, context: PythonObject) raises -> PythonObj
     var scope = py_get(context, "labels_cpu_scope")
     if scope is None:
         return context
-    return scope
+    # The scope is a copy of the context it was made from. A family context
+    # that grew after the copy (a module imported later added its tables), or
+    # a context derived from it (the typed context a door builds once per
+    # connected context, which carries the base's scope key), is copied
+    # again, once per growth or derivation: the CPU branch only; two
+    # dictionary reads, one pointer compare and one length read otherwise.
+    var size = len(context)
+    var source = py_get(scope, "labels_cpu_source")
+    var held = py_get(scope, "labels_cpu_source_size")
+    if source is context and held is not None and Int(py=held) == size:
+        return scope
+    var entries = py_get(context, "labels_cpu_entries")
+    if entries is None:
+        return scope
+    var fresh = py_call(context.copy)
+    _ = py_call(fresh.pop, PythonObject("labels_cpu_scope"), PythonObject(None))
+    _ = py_call(fresh.update, entries)
+    py_setitem(fresh, PythonObject("labels_cpu_source"), context)
+    py_setitem(fresh, PythonObject("labels_cpu_source_size"), PythonObject(size))
+    py_setitem(context, PythonObject("labels_cpu_scope"), fresh)
+    return fresh
 
 
-# ---------------------------------------------------------------- routed forms
-# The same six label steps for a caller that holds its estimator's device
-# route (providers/python/device_route_boundary_door.mojo): `host` is the
-# route's answer (`route.device == DEVICE_CPU`), resolved once per estimator.
-# The typed requests, the RUN functions and the kernels are the ones above.
-
-
-def labels_prepare_targets_on(host: Bool, context: PythonObject, y_addr: Int, y_code: Int, n: Int,
-    classes_addr: Int, codes_addr: Int, w_addr: Int, w_code: Int, w_flags: Int) raises -> Int:
-    var request = LabelsPrepareRequest(y_addr, classes_addr, codes_addr, w_addr, y_code, n, w_code, w_flags)
-    var pin = _labels_pin_on(host, context)
-    var driver = pin.driver.copy()
-    try:
-        with GILReleased(Python()):
-            return labels_prepare_run(driver^, request)
-    finally:
-        _ = pin
-
-
-def labels_reduce_stat_on(host: Bool, context: PythonObject, addr: Int, code: Int, n: Int, what: Int) raises -> HpStat:
-    var request = LabelsReduceRequest(addr, code, n, what)
-    var pin = _labels_pin_on(host, context)
-    var driver = pin.driver.copy()
-    try:
-        with GILReleased(Python()):
-            return labels_reduce_run(driver^, request)
-    finally:
-        _ = pin
-
-
-def labels_threshold_on(host: Bool, context: PythonObject, request: LabelsThresholdRequest) raises -> Int:
-    var pin = _labels_pin_on(host, context)
-    var driver = pin.driver.copy()
-    try:
-        with GILReleased(Python()):
-            return labels_threshold_run(driver^, request)
-    finally:
-        _ = pin
-
-
-def labels_argmax_rows_on(host: Bool, context: PythonObject, wide: Bool, scores_addr: Int, rows: Int, cols: Int,
-    dst_addr: Int) raises:
-    var request = LabelsArgmaxRequest(scores_addr, dst_addr, rows, cols)
-    var pin = _labels_pin_on(host, context)
-    var driver = pin.driver.copy()
-    try:
-        with GILReleased(Python()):
-            labels_argmax_run(driver^, wide, request)
-    finally:
-        _ = pin
-
-
-def labels_gather_on(host: Bool, context: PythonObject, kind: Int, table_addr: Int, n_table: Int,
-    codes_addr: Int, n: Int, dst_addr: Int) raises:
-    var native_kind = kind if kind == 0 or kind == 1 else 2
-    var request = LabelsGatherRequest(table_addr, codes_addr, dst_addr, n_table, n)
-    var pin = _labels_pin_on(host, context)
-    var driver = pin.driver.copy()
-    try:
-        with GILReleased(Python()):
-            labels_gather_run(driver^, native_kind, request)
-    finally:
-        _ = pin
-
-
-def labels_class_ratio_f64_on(host: Bool, context: PythonObject, counts_addr: Int, k: Int, n: Int,
-    mode: Int, out_addr: Int) raises -> Int:
-    var request = LabelsRatioRequest(counts_addr, out_addr, k, n, mode)
-    var pin = _labels_pin_on(host, context)
-    var driver = pin.driver.copy()
-    try:
-        with GILReleased(Python()):
-            return labels_ratio_run(driver^, request)
-    finally:
-        _ = pin
+# The routed forms `labels_*_on(host, ...)` of the six steps (lane dw-prep, never
+# called) were deleted 2026-11-21 by lane label-steps: a classifier routes its
+# label steps by the context it hands them (`labels_scope` above).

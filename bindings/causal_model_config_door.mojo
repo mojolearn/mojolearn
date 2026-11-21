@@ -14,6 +14,11 @@ from bindings.native_class_admission_door import class_record, class_admit
 from core.shared_slot import SharedSlot
 from bindings.causal_keys_unpack import causal_keys
 from bindings.py_balanced import py_item
+from bindings.causal_model_config_run import (
+    CausalConfigValue, CausalConfigRequest, CausalConfigPlan, CausalConfigTables, CausalFixedField, CausalLayerEntry,
+    causal_config_plan, causal_layer_weights, causal_checkpoint_names,
+    CONFIG_NULL, CONFIG_BOOL, CONFIG_INT, CONFIG_FLOAT, CONFIG_STR, CONFIG_OTHER,
+)
 
 
 comptime _RECORD_FIELDS_SLOT = "causal_model_record_fields"
@@ -21,9 +26,12 @@ comptime _RECORD_FIELDS_SLOT = "causal_model_record_fields"
 
 struct ModelConfigConnection(Defaultable, Movable):
     var context: PythonObject
+    # The layer tables and byte-LM fixed fields, typed once at connect for RUN.
+    var tables: CausalConfigTables
 
     def __init__(out self):
         self.context = PythonObject(None)
+        self.tables = CausalConfigTables()
 
 
 comptime MODEL_CONFIG_CONNECTION = SharedSlot[ModelConfigConnection, "MojolearnModelConfigConnectionV1"]
@@ -210,8 +218,18 @@ def model_config_connect(mut mods: NativeModules, context: PythonObject) raises 
         if py_type(cls) is not bi.type:
             raise Error("TypeError: model connection requires ordinary classes")
         py_setitem(copy, PythonObject(name), cls)
-    for name in [String("defaults"), String("llama_layer"), String("qkv_bias"), String("qk_norm"), String("mamba1_layer"), String("mamba2_layer"), String("byte_layer"), String("byte_fixed")]:  # small-loop(static option matrix data)
-        py_setitem(copy, PythonObject(name), model_plain(mods, native_instance_item(context, PythonObject(name))))
+    py_setitem(copy, PythonObject("defaults"), model_plain(mods, native_instance_item(context, PythonObject("defaults"))))
+    # The layer tables and the byte-LM fixed fields are read only by the
+    # planner's RUN: typed here once, never kept as Python copies.
+    var tables = CausalConfigTables()
+    var table_names = [String("llama_layer"), String("qkv_bias"), String("qk_norm"), String("mamba1_layer"), String("mamba2_layer"), String("byte_layer")]
+    for t in range(len(table_names)):  # small-loop(the six static layer tables, CONFIG_TABLE_* order)
+        tables.tables[t] = causal_layer_map_unpack(mods, model_plain(mods, native_instance_item(context, PythonObject(table_names[t]))))
+    var fixed = model_plain(mods, native_instance_item(context, PythonObject("byte_fixed")))
+    model_dict(mods, fixed)
+    var fixed_names = py_call(bi.list, fixed.keys())
+    for i in range(len(fixed_names)):  # small-loop(the fixed byte-LM config fields)
+        tables.byte_fixed.append(CausalFixedField(String(fixed_names[i]), _config_value(mods, fixed, fixed_names[i])))
     var nk = causal_keys()
     # Family rows retain their historical function identity as public metadata;
     # planning dispatch below never calls those functions.
@@ -223,6 +241,7 @@ def model_config_connect(mut mods: NativeModules, context: PythonObject) raises 
     if state[].context is not None:
         raise Error("TypeError: model configuration is already connected")
     state[].context = copy
+    state[].tables = tables^
     return PythonObject(None)
 
 
@@ -307,32 +326,47 @@ def model_plan_init_binding(mut mods: NativeModules, plan: PythonObject, input: 
     return PythonObject(None)
 
 
-def _model_layer_weights(mut mods: NativeModules, fields: PythonObject, layer: Int) raises -> PythonObject:
-    var nk = causal_keys()
-    var entries = model_plain(mods, native_instance_item(fields, nk[].k__layer_map))
-    return _model_layer_weights_plain(mods, entries, layer)
-
-
-def _model_layer_weights_plain(mut mods: NativeModules, entries: PythonObject, layer: Int) raises -> PythonObject:
-    # `entries` is an already captured (model_plain) layer map.
+def causal_layer_map_unpack(mut mods: NativeModules, entries: PythonObject) raises -> List[CausalLayerEntry]:
+    """UNPACK: an already captured (model_plain) layer map as typed entries."""
     model_sequence(mods, entries)
-    var out = Python.list()
-    for j in range(len(entries)):  # driver-loop: expand admitted checkpoint names for one model layer
+    var result = List[CausalLayerEntry](capacity=len(entries))
+    for j in range(len(entries)):  # driver-loop: admit each layer map entry once
         var entry = entries[j]
         model_sequence(mods, entry)
         if len(entry) != 3:
             raise Error("ValueError: model layer map requires name, checkpoint name and row slice")
         var key = model_string(mods, entry[0])
-        var name = model_string(mods, entry[1]).replace("{i}", String(layer))
+        var name = model_string(mods, entry[1])
         var rows = entry[2]
+        var begin = 0
+        var end = 0
         if rows is not None:
             model_sequence(mods, rows)
             if len(rows) != 2:
                 raise Error("ValueError: model weight row slice requires two offsets")
-            _ = model_integer(mods, rows[0])
-            _ = model_integer(mods, rows[1])
-        _ = py_call(out.append, Python.tuple(key, name, rows))
+            begin = model_integer(mods, rows[0])
+            end = model_integer(mods, rows[1])
+        result.append(CausalLayerEntry(key^, name^, rows is not None, begin, end))
+    return result^
+
+
+def causal_layer_map_pack(entries: List[CausalLayerEntry]) raises -> PythonObject:
+    """PACK: typed layer entries as the plan's list of `(key, name, rows_or_None)` tuples."""
+    var out = Python.list()
+    for ref entry in entries:  # driver-loop: publish each layer map entry
+        var rows = Python.tuple(PythonObject(entry.begin), PythonObject(entry.end)) if entry.has_rows else PythonObject(None)
+        _ = py_call(out.append, Python.tuple(PythonObject(entry.key), PythonObject(entry.name), rows))
     return out
+
+
+def causal_plan_layer_map(mut mods: NativeModules, fields: PythonObject) raises -> List[CausalLayerEntry]:
+    """UNPACK: the plan fields' layer map, captured and typed once."""
+    var nk = causal_keys()
+    return causal_layer_map_unpack(mods, model_plain(mods, native_instance_item(fields, nk[].k__layer_map)))
+
+
+def _model_layer_weights(mut mods: NativeModules, fields: PythonObject, layer: Int) raises -> PythonObject:
+    return causal_layer_map_pack(causal_layer_weights(causal_plan_layer_map(mods, fields), layer))
 
 
 def model_layer_weights_binding(mut mods: NativeModules, plan: PythonObject, layer: PythonObject) raises -> PythonObject:
@@ -340,28 +374,23 @@ def model_layer_weights_binding(mut mods: NativeModules, plan: PythonObject, lay
 
 
 def model_checkpoint_names_snapshot(mut mods: NativeModules, fields: PythonObject) raises -> PythonObject:
+    # UNPACK: the three outer names, the layer count and the layer map, read
+    # once; RUN: `causal_checkpoint_names` (typed dedupe in insertion order);
+    # PACK: the list of names.
     model_dict(mods, fields)
-    var names = Python.list()
+    var outer = List[String]()
     for field in [String("embed_name"), String("norm_name"), String("head_name")]:  # small-loop(three outer checkpoint weight names)
         var name = native_instance_item(fields, PythonObject(field))
         if name is not None:
-            _ = model_string(mods, name)
-            _ = py_call(names.append, name)
+            outer.append(model_string(mods, name))
     var nk = causal_keys()
     var layers = model_integer(mods, native_instance_item(fields, nk[].k_n_layers))
-    # Capture the mutable layer map once for the whole enumeration.
-    # Expand every layer from this one captured copy (no deep copy per layer)
-    # and de-duplicate through a set (exact strs) instead of a list scan.
-    var captured_map = model_plain(mods, native_instance_item(fields, nk[].k__layer_map))
-    var seen = py_call(mods.module("builtins").set, names)
-    for i in range(layers):  # driver-loop: enumerate complete model checkpoint names
-        var layer = _model_layer_weights_plain(mods, captured_map, i)
-        for j in range(len(layer)):  # driver-loop: deduplicate native checkpoint names in insertion order
-            var name = layer[j][1]
-            if not py_contains(seen, name):
-                _ = py_call(seen.add, name)
-                _ = py_call(names.append, name)
-    return names
+    var entries = causal_plan_layer_map(mods, fields)
+    var names = causal_checkpoint_names(outer, entries, layers)
+    var out = Python.list()
+    for ref name in names:  # driver-loop: publish the plan's checkpoint names
+        _ = py_call(out.append, PythonObject(name))
+    return out
 
 
 def model_checkpoint_names_binding(mut mods: NativeModules, plan: PythonObject) raises -> PythonObject:
@@ -388,218 +417,125 @@ def model_config_repr(mut mods: NativeModules, value: PythonObject, plan_value: 
     return PythonObject("ModelPlan(" + String(py_call(bi.repr, PythonObject(mt))) + ", kind=" + String(py_call(bi.repr, PythonObject(kind))) + ", layers=" + String(layers) + ", d_model=" + String(dm) + ", vocab=" + String(vocab) + ")")
 
 
-def _config_int(mut mods: NativeModules, data: PythonObject, field: String, default: PythonObject, required: Bool = True) raises -> PythonObject:
-    var v = py_get(data, field, default)
-    var bi = mods.module("builtins")
-    if v is None and not required:
-        return v
+def _config_value(mut mods: NativeModules, data: PythonObject, key: PythonObject) raises -> CausalConfigValue:
+    # UNPACK of one captured (model_plain) configuration field: exact JSON
+    # type, value and Python truth. Plain values carry no Python hooks.
+    if not py_contains(data, key):
+        return CausalConfigValue()
+    var v = native_instance_item(data, key)
     if v is None:
-        raise Error("model config: " + field + ": the field is required and the config lacks it")
-    if py_type(v) is not bi.int:
-        raise Error("model config: " + field + ": an integer is required")
-    return v
+        return CausalConfigValue(CONFIG_NULL, 0, 0.0, String(), False)
+    var bi = mods.module("builtins")
+    var cls = py_type(v)
+    if cls is bi.bool:
+        var b = Bool(py=v)
+        return CausalConfigValue(CONFIG_BOOL, Int(b), Float64(Int(b)), String(), b)
+    if cls is bi.int:
+        var i = Int(py=v)
+        return CausalConfigValue(CONFIG_INT, i, Float64(i), String(), i != 0)
+    if cls is bi.float:
+        var f = Float64(py=v)
+        return CausalConfigValue(CONFIG_FLOAT, 0, f, String(), f != 0)
+    if cls is bi.str:
+        var s = String(v)
+        var truthy = s.byte_length() > 0
+        return CausalConfigValue(CONFIG_STR, 0, 0.0, s^, truthy)
+    return CausalConfigValue(CONFIG_OTHER, 0, 0.0, String(), Bool(py=v))
 
 
-def _config_int(mut mods: NativeModules, data: PythonObject, field: String) raises -> PythonObject:
-    return _config_int(mods, data, field, PythonObject(None), True)
+def _config_request(mut mods: NativeModules, source: PythonObject, data: PythonObject, mt: String, byte_lm: Bool) raises -> CausalConfigRequest:
+    # UNPACK: every field the planner consumes, read once from `source`
+    # (the configuration, or the byte-LM format's renamed HF view).
+    var r = CausalConfigRequest()
+    r.model_type = mt
+    r.byte_lm = byte_lm
+    var names = [String("num_local_experts"), String("num_experts"), String("num_experts_per_tok"), String("n_routed_experts"),
+                 String("rope_scaling"), String("rope_type"), String("hidden_act"), String("use_sliding_window"),
+                 String("hidden_size"), String("num_attention_heads"), String("num_key_value_heads"), String("head_dim"),
+                 String("intermediate_size"), String("num_hidden_layers"), String("vocab_size"), String("rms_norm_eps"),
+                 String("rope_theta"), String("sliding_window"), String("attention_bias"), String("mlp_bias"),
+                 String("attention_dropout"), String("tie_word_embeddings"), String("max_position_embeddings"),
+                 String("state_size"), String("conv_kernel"), String("expand"), String("use_bias"), String("use_conv_bias"),
+                 String("n_groups"), String("chunk_size"), String("rms_norm"), String("norm_before_gate"), String("num_heads"),
+                 String("time_step_rank"), String("layer_norm_epsilon"), String("original_max_position_embeddings"),
+                 String("attn_logit_softcapping"), String("final_logit_softcapping"), String("query_pre_attn_scalar")]
+    for ref name in names:  # small-loop(the fixed consumed configuration field names)
+        r.fields[name] = _config_value(mods, source, PythonObject(name))
+    var nk = causal_keys()
+    r.hidden_activation_key = py_contains(data, nk[].k_hidden_activation)
+    var types = py_get(source, nk[].k_layer_types)
+    if types is not None:
+        r.layer_kinds = len(py_call(mods.module("builtins").set, types))
+    if mt == "mamba2":
+        var limit = py_get(source, nk[].k_time_step_limit)
+        if limit is not None:
+            var bi = mods.module("builtins")
+            r.dt_limit_given = True
+            r.dt_lo = Float64(py=py_call(bi.float, limit[0]))
+            r.dt_hi = Float64(py=py_call(bi.float, limit[1]))
+    if byte_lm:
+        ref tables = MODEL_CONFIG_CONNECTION.get_or_create_ptr()[].tables
+        for ref fixed in tables.byte_fixed:  # small-loop(the fixed byte-LM config fields)
+            r.fixed_got[fixed.name] = _config_value(mods, data, PythonObject(fixed.name))
+    return r^
 
 
-def _config_refuse(mut mods: NativeModules, data: PythonObject, field: String, why: String) raises:
+def _config_refusal(mut mods: NativeModules, source: PythonObject, plan: CausalConfigPlan) raises -> Error:
+    # PACK of a refusal by name: the message quotes the field's Python repr.
     var bi = mods.module("builtins")
     var nk = causal_keys()
-    raise Error("model_type " + String(py_call(bi.repr, py_get(data, nk[].k_model_type, PythonObject("mojolearn-byte-lm")))) + ": " + field + "=" + String(py_call(bi.repr, py_get(data, field))) + " is not honored: " + why)
+    var why = plan.refuse_why
+    if plan.refuse_suffix_field.byte_length() > 0:
+        why += String(py_call(bi.repr, py_get(source, plan.refuse_suffix_field))) + ")"
+    return Error("model_type " + String(py_call(bi.repr, py_get(source, nk[].k_model_type, PythonObject("mojolearn-byte-lm")))) + ": " + plan.refuse_field + "=" + String(py_call(bi.repr, py_get(source, plan.refuse_field))) + " is not honored: " + why)
 
 
-def _config_number(mut mods: NativeModules, data: PythonObject, field: String, default: Float64) raises -> PythonObject:
-    var v = py_get(data, field, PythonObject(default))
+def _config_plan_fields(mut mods: NativeModules, plan: CausalConfigPlan, context: PythonObject) raises -> PythonObject:
+    # PACK: the plan words as the ModelPlan fields (same keys, same order).
     var bi = mods.module("builtins")
-    if py_type(v) is not bi.int and py_type(v) is not bi.float:
-        raise Error("model config: " + field + " requires a number")
-    return py_call(bi.float, v)
-
-
-def _config_fixed(mut mods: NativeModules, data: PythonObject, names: List[String], values: List[Int]) raises:
-    for i in range(len(names)):  # small-loop(fixed config field words)
-        var got = py_get(data, names[i], PythonObject(values[i]))
-        if not Bool(py=got == PythonObject(values[i])):
-            _config_refuse(mods, data, names[i], "fixed at " + String(values[i]))
-
-
-def _config_transformer(mut mods: NativeModules, data: PythonObject, mt: String, context: PythonObject) raises -> PythonObject:
-    var bi = mods.module("builtins")
-    for field in [String("num_local_experts"), String("num_experts"), String("num_experts_per_tok"), String("n_routed_experts")]:  # small-loop(the four mixture-of-experts field names)
-        var v = py_get(data, field)
-        if v is not None and not Bool(py=v == PythonObject(0)) and not Bool(py=v == PythonObject(1)):
-            _config_refuse(mods, data, field, "mixture of experts")
     var nk = causal_keys()
-    if py_get(data, nk[].k_rope_scaling) is not None:
-        _config_refuse(mods, data, "rope_scaling", "rope type default only")
-    var rt = py_get(data, nk[].k_rope_type, PythonObject("default"))
-    if rt is not None and String(rt) != "default":
-        _config_refuse(mods, data, "rope_type", "default only")
-    var act = String(py_get(data, nk[].k_hidden_act, PythonObject("silu")))
-    if act != "silu" and act != "swish":
-        _config_refuse(mods, data, "hidden_act", "requires silu/swish SwiGLU")
-    if Bool(py=py_get(data, nk[].k_use_sliding_window, PythonObject(False))):
-        _config_refuse(mods, data, "use_sliding_window", "sliding-window-alternating layers (max_window_layers=" + String(py_call(bi.repr, py_get(data, nk[].k_max_window_layers))) + ")")
-    var types = py_get(data, nk[].k_layer_types)
-    if types is not None and len(py_call(bi.set, types)) > 1:
-        raise Error("model config: layer_types requests alternating attention kinds")
-    var dm = Int(py=_config_int(mods, data, "hidden_size"))
-    var nh = Int(py=_config_int(mods, data, "num_attention_heads"))
-    var n_kv = Int(py=_config_int(mods, data, "num_key_value_heads", PythonObject(nh)))
-    if dm < 1 or nh < 1 or n_kv < 1:
-        raise Error("model config: hidden_size and attention head counts must be positive")
-    var hd_field = _config_int(mods, data, "head_dim", PythonObject(None), False)
-    var hd = dm // nh if hd_field is None else Int(py=hd_field)
-    if nh * hd != dm:
-        raise Error("model config: head_dim * num_attention_heads must equal hidden_size")
-    if nh % n_kv != 0:
-        _config_refuse(mods, data, "num_key_value_heads", "num_attention_heads is not a multiple of it (must divide num_attention_heads)")
-    if hd % 2 != 0:
-        raise Error("model config: head_dim must be even")
-    var inter = _config_int(mods, data, "intermediate_size")
-    var layers = _config_int(mods, data, "num_hidden_layers")
-    var vocab = _config_int(mods, data, "vocab_size")
-    var eps = _config_number(mods, data, "rms_norm_eps", 1e-6)
-    var theta = _config_number(mods, data, "rope_theta", 10000.0)
-    var window = py_get(data, nk[].k_sliding_window)
-    if window is None:
-        window = PythonObject(0)
-    if py_type(window) is not bi.int or Int(py=window) < 0:
-        raise Error("model config: sliding_window requires an integer width or null")
-    var bias = Bool(py=py_get(data, nk[].k_attention_bias, PythonObject(mt == "qwen2")))
-    var mlp_bias = Bool(py=py_get(data, nk[].k_mlp_bias, PythonObject(False)))
-    var dropout = py_get(data, nk[].k_attention_dropout, PythonObject(0.0))
-    if dropout is not None and Float64(py=dropout) != 0:
-        raise Error("model config: attention_dropout must be zero: inference has no dropout")
-    var tied = Bool(py=py_get(data, nk[].k_tie_word_embeddings, PythonObject(False)))
-    var maxpos = _config_int(mods, data, "max_position_embeddings", PythonObject(8192))
-    var options = py_call(bi.dict, py_item(context, nk[].k_defaults))
-    py_setitem(options, nk[].k_n_kv_heads, PythonObject(n_kv) if n_kv != nh else PythonObject(None))
-    py_setitem(options, nk[].k_head_dim, PythonObject(hd) if hd != dm // nh else PythonObject(None))
-    py_setitem(options, nk[].k_window, window)
-    py_setitem(options, nk[].k_rope_theta, theta)
-    py_setitem(options, nk[].k_norm_eps, eps)
-    py_setitem(options, nk[].k_qkv_bias, PythonObject(bias))
-    py_setitem(options, nk[].k_o_bias, PythonObject(False))
-    py_setitem(options, nk[].k_mlp_bias, PythonObject(mlp_bias))
-    py_setitem(options, nk[].k_qk_norm, PythonObject(mt == "qwen3"))
-    var layer_map = py_call(bi.list, py_item(context, nk[].k_llama_layer))
-    if bias:
-        _ = py_call(layer_map.extend, py_item(context, nk[].k_qkv_bias))
-    if mt == "qwen3":
-        _ = py_call(layer_map.extend, py_item(context, nk[].k_qk_norm))
     var fields = bi.dict()
-    py_setitem(fields, nk[].k_kind, PythonObject("transformer"))
-    py_setitem(fields, nk[].k_n_layers, layers)
-    py_setitem(fields, nk[].k_d_model, PythonObject(dm))
-    py_setitem(fields, nk[].k_n_heads, PythonObject(nh))
-    py_setitem(fields, nk[].k_n_kv_heads, PythonObject(n_kv))
-    py_setitem(fields, nk[].k_head_dim, PythonObject(hd))
-    py_setitem(fields, nk[].k_intermediate, inter)
-    py_setitem(fields, nk[].k_vocab_size, vocab)
-    py_setitem(fields, nk[].k_tie_embeddings, PythonObject(tied))
-    py_setitem(fields, nk[].k_norm_eps, eps)
-    py_setitem(fields, nk[].k_max_position_embeddings, maxpos)
-    py_setitem(fields, nk[].k_block_options, options)
-    py_setitem(fields, nk[].k_block_kwargs, bi.dict())
-    py_setitem(fields, nk[].k__layer_map, layer_map)
-    py_setitem(fields, nk[].k_embed_name, PythonObject("model.embed_tokens.weight"))
-    py_setitem(fields, nk[].k_norm_name, PythonObject("model.norm.weight"))
-    py_setitem(fields, nk[].k_head_name, PythonObject(None) if tied else PythonObject("lm_head.weight"))
-    return fields
-
-
-def _config_mamba(mut mods: NativeModules, data: PythonObject, mt: String, context: PythonObject) raises -> PythonObject:
-    var bi = mods.module("builtins")
-    var dm = Int(py=_config_int(mods, data, "hidden_size"))
-    var layers = _config_int(mods, data, "num_hidden_layers")
-    var vocab = _config_int(mods, data, "vocab_size")
-    var two = mt == "mamba2"
-    _config_fixed(mods, data, ["state_size", "conv_kernel", "expand", "use_bias", "use_conv_bias"],
-                  [128 if two else 16, 4, 2, 0, 1])
+    py_setitem(fields, nk[].k_kind, PythonObject(plan.kind))
+    py_setitem(fields, nk[].k_n_layers, PythonObject(plan.n_layers))
+    py_setitem(fields, nk[].k_d_model, PythonObject(plan.d_model))
     var kwargs = bi.dict()
-    var nk = causal_keys()
-    if two:
-        _config_fixed(mods, data, ["head_dim", "n_groups", "chunk_size", "rms_norm"], [64, 1, 256, 1])
-        if Bool(py=py_get(data, nk[].k_norm_before_gate, PythonObject(False))):
-            raise Error("model config: norm_before_gate must be false")
-        if dm % 32 != 0:
-            _config_refuse(mods, data, "hidden_size", "must be a multiple of 32")
-        var nh = py_get(data, nk[].k_num_heads)
-        if nh is not None and not Bool(py=nh == PythonObject(2 * dm // 64)):
-            raise Error("model config: num_heads must equal expand*hidden_size/head_dim")
-        var limit = py_get(data, nk[].k_time_step_limit)
-        var bounds = bi.list()
-        if limit is None:
-            _ = py_call(bounds.append, 0.0)
-            _ = py_call(bounds.append, py_call(bi.float, "inf"))
-        else:
-            _ = py_call(bounds.append, py_call(bi.float, limit[0]))
-            _ = py_call(bounds.append, py_call(bi.float, limit[1]))
-        py_setitem(kwargs, nk[].k_dt_limit, py_call(bi.tuple, bounds))
-    else:
-        var rank = py_get(data, nk[].k_time_step_rank, PythonObject("auto"))
-        if not Bool(py=rank == PythonObject("auto")) and not Bool(py=rank == PythonObject((dm + 15) // 16)):
-            raise Error("model config: time_step_rank must be auto or ceil(hidden_size/16)")
-        if String(py_get(data, nk[].k_hidden_act, PythonObject("silu"))) != "silu":
-            raise Error("model config: hidden_act requires silu")
-    var eps = _config_number(mods, data, "layer_norm_epsilon", 1e-5)
-    if Float64(py=eps) != 1e-5:
-        _config_refuse(mods, data, "layer_norm_epsilon", "fixed at 1e-5")
-    var tied = Bool(py=py_get(data, nk[].k_tie_word_embeddings, PythonObject(True)))
-    var fields = bi.dict()
-    py_setitem(fields, nk[].k_kind, PythonObject("mamba2" if two else "mamba1"))
-    py_setitem(fields, nk[].k_n_layers, layers)
-    py_setitem(fields, nk[].k_d_model, PythonObject(dm))
-    py_setitem(fields, nk[].k_vocab_size, vocab)
-    py_setitem(fields, nk[].k_tie_embeddings, PythonObject(tied))
-    py_setitem(fields, nk[].k_norm_eps, eps)
-    py_setitem(fields, nk[].k_max_position_embeddings, PythonObject(None))
-    py_setitem(fields, nk[].k_block_options, bi.dict())
+    var options = bi.dict()
+    if plan.transformer:
+        py_setitem(fields, nk[].k_n_heads, PythonObject(plan.n_heads))
+        py_setitem(fields, nk[].k_n_kv_heads, PythonObject(plan.n_kv_heads))
+        py_setitem(fields, nk[].k_head_dim, PythonObject(plan.head_dim))
+        py_setitem(fields, nk[].k_intermediate, PythonObject(plan.intermediate))
+        options = py_call(bi.dict, py_item(context, nk[].k_defaults))
+        py_setitem(options, nk[].k_n_kv_heads, PythonObject(plan.opt_n_kv_heads) if plan.opt_n_kv_heads >= 0 else PythonObject(None))
+        py_setitem(options, nk[].k_head_dim, PythonObject(plan.opt_head_dim) if plan.opt_head_dim >= 0 else PythonObject(None))
+        py_setitem(options, nk[].k_window, PythonObject(plan.window))
+        py_setitem(options, nk[].k_rope_theta, PythonObject(plan.rope_theta))
+        py_setitem(options, nk[].k_norm_eps, PythonObject(plan.norm_eps))
+        py_setitem(options, nk[].k_qkv_bias, PythonObject(plan.qkv_bias))
+        py_setitem(options, nk[].k_o_bias, PythonObject(False))
+        py_setitem(options, nk[].k_mlp_bias, PythonObject(plan.mlp_bias))
+        py_setitem(options, nk[].k_qk_norm, PythonObject(plan.qk_norm))
+    elif plan.has_dt_limit:
+        py_setitem(kwargs, nk[].k_dt_limit, Python.tuple(PythonObject(plan.dt_lo), PythonObject(plan.dt_hi)))
+    py_setitem(fields, nk[].k_vocab_size, PythonObject(plan.vocab_size))
+    py_setitem(fields, nk[].k_tie_embeddings, PythonObject(plan.tied))
+    py_setitem(fields, nk[].k_norm_eps, PythonObject(plan.norm_eps))
+    py_setitem(fields, nk[].k_max_position_embeddings, PythonObject(plan.max_positions) if plan.transformer else PythonObject(None))
+    py_setitem(fields, nk[].k_block_options, options)
     py_setitem(fields, nk[].k_block_kwargs, kwargs)
-    py_setitem(fields, nk[].k__layer_map, py_call(bi.list, context["mamba2_layer" if two else "mamba1_layer"]))
-    py_setitem(fields, nk[].k_embed_name, PythonObject("backbone.embeddings.weight"))
-    py_setitem(fields, nk[].k_norm_name, PythonObject("backbone.norm_f.weight"))
-    py_setitem(fields, nk[].k_head_name, PythonObject(None) if tied else PythonObject("lm_head.weight"))
+    py_setitem(fields, nk[].k__layer_map, causal_layer_map_pack(plan.layer_map))
+    py_setitem(fields, nk[].k_embed_name, PythonObject(plan.embed_name))
+    py_setitem(fields, nk[].k_norm_name, PythonObject(plan.norm_name) if plan.has_norm_name else PythonObject(None))
+    py_setitem(fields, nk[].k_head_name, PythonObject(plan.head_name) if plan.has_head_name else PythonObject(None))
     return fields
-
-
-def _config_phi3(mut mods: NativeModules, mut fields: PythonObject, data: PythonObject) raises:
-    var bi = mods.module("builtins")
-    var nk = causal_keys()
-    var original = py_get(data, nk[].k_original_max_position_embeddings)
-    if original is not None and not Bool(py=original == py_item(fields, nk[].k_max_position_embeddings)):
-        raise Error("model config: original_max_position_embeddings requests longrope extended context")
-    var qr = Int(py=py_item(fields, nk[].k_n_heads)) * Int(py=py_item(fields, nk[].k_head_dim))
-    var kr = Int(py=py_item(fields, nk[].k_n_kv_heads)) * Int(py=py_item(fields, nk[].k_head_dim))
-    var it = Int(py=py_item(fields, nk[].k_intermediate))
-    var layers = py_item(fields, nk[].k__layer_map)
-    var mapped = bi.list()
-    for i in range(len(layers)):  # driver-loop: over model layer descriptors
-        var item = py_call(bi.list, layers[i])
-        var key = String(item[0])
-        var begin = -1
-        var end = -1
-        if key == "q_proj.weight" or key == "k_proj.weight" or key == "v_proj.weight":
-            py_setitem(item, 1, PythonObject("model.layers.{i}.self_attn.qkv_proj.weight"))
-            begin = 0 if key == "q_proj.weight" else (qr if key == "k_proj.weight" else qr + kr)
-            end = qr if key == "q_proj.weight" else (qr + kr if key == "k_proj.weight" else qr + 2 * kr)
-        elif key == "gate_proj.weight" or key == "up_proj.weight":
-            py_setitem(item, 1, PythonObject("model.layers.{i}.mlp.gate_up_proj.weight"))
-            begin = 0 if key == "gate_proj.weight" else it
-            end = it if key == "gate_proj.weight" else 2 * it
-        if begin >= 0:
-            var bounds = bi.list()
-            _ = py_call(bounds.append, begin)
-            _ = py_call(bounds.append, end)
-            py_setitem(item, 2, py_call(bi.tuple, bounds))
-        _ = py_call(mapped.append, py_call(bi.tuple, item))
-    py_setitem(fields, nk[].k__layer_map, mapped)
 
 
 def model_plan_for_binding(mut mods: NativeModules, input: PythonObject, supplied_context: PythonObject) raises -> PythonObject:
+    # UNPACK: the configuration record, its model_type and family row, and the
+    # consumed fields (`_config_request`). RUN: `causal_config_plan`
+    # (bindings/causal_model_config_run.mojo), typed. PACK: the ModelPlan.
+    # The GIL is held through RUN: it is a few dozen comparisons once per
+    # model construction, less than a release / reacquire pair.
     var bi = mods.module("builtins")
     var context = _model_context()
     var config = input
@@ -618,46 +554,30 @@ def model_plan_for_binding(mut mods: NativeModules, input: PythonObject, supplie
     var row = py_item(context, nk[].k_byte_row) if byte_lm else py_get(py_item(context, nk[].k_families), mt)
     if row is None:
         raise Error("model_type '" + mt + "' is not in the option matrix")
-    if mt == "gemma2":
-        for field in [String("attn_logit_softcapping"), String("final_logit_softcapping"), String("query_pre_attn_scalar")]:  # small-loop(the three fixed gemma2 field names)
-            if py_get(data, field) is not None:
-                _config_refuse(mods, data, field, "unsupported for gemma2")
-    if mt == "gemma" or mt == "gemma2":
-        var field = "hidden_activation" if py_contains(data, nk[].k_hidden_activation) else "hidden_act"
-        _config_refuse(mods, data, field, "unsupported GeGLU, RMSNorm offset and embedding scale")
-    var fields = PythonObject(None)
+    var source = data
     if byte_lm:
-        var fixed = py_item(context, nk[].k_byte_fixed)
-        var names = py_call(bi.list, fixed)
-        for i in range(len(names)):  # small-loop(the fixed byte-LM config fields)
-            var name = names[i]
-            if py_contains(data, name) and not Bool(py=data[name] == fixed[name]):
-                raise Error("model config: byte-LM " + String(name) + " differs from required value")
-        var hf = bi.dict()
+        # The byte-LM format's fields under their HF names (the planner and
+        # its refusal messages read this view).
+        source = bi.dict()
         var targets = [String("hidden_size"), String("num_attention_heads"), String("num_key_value_heads"), String("head_dim"), String("intermediate_size"), String("num_hidden_layers"), String("vocab_size"), String("rms_norm_eps"), String("rope_theta"), String("max_position_embeddings")]
         var sources = [String("d_model"), String("n_heads"), String("n_kv"), String("head_dim"), String("intermediate"), String("n_layers"), String("vocab_size"), String("rms_norm_eps"), String("rope_theta"), String("max_position_embeddings")]
         for i in range(len(targets)):  # small-loop(the fixed config field mapping)
             var v = py_get(data, sources[i])
             if v is not None:
-                py_setitem(hf, targets[i], v)
-        py_setitem(hf, nk[].k_tie_word_embeddings, PythonObject(False))
-        fields = _config_transformer(mods, hf, mt, context)
-        py_setitem(fields, nk[].k__layer_map, py_call(bi.list, py_item(context, nk[].k_byte_layer)))
-        py_setitem(fields, nk[].k_embed_name, PythonObject("embed"))
-        py_setitem(fields, nk[].k_norm_name, PythonObject(None))
-        py_setitem(fields, nk[].k_head_name, PythonObject("lm_head"))
-    elif mt == "mamba" or mt == "mamba2":
-        fields = _config_mamba(mods, data, mt, context)
-    else:
-        fields = _config_transformer(mods, data, mt, context)
-        if mt == "phi3":
-            _config_phi3(mods, fields, data)
+                py_setitem(source, targets[i], v)
+        py_setitem(source, nk[].k_tie_word_embeddings, PythonObject(False))
+    var request = _config_request(mods, source, data, mt, byte_lm)
+    ref tables = MODEL_CONFIG_CONNECTION.get_or_create_ptr()[].tables
+    var plan = causal_config_plan(request, tables)
+    if plan.refused:
+        raise _config_refusal(mods, source, plan)
+    var fields = _config_plan_fields(mods, plan, context)
     py_setitem(fields, nk[].k_model_type, PythonObject(mt))
     py_setitem(fields, nk[].k_config, config)
     py_setitem(fields, nk[].k_family, row)
-    var plan = py_call(bi.object.__new__, py_item(context, nk[].k_plan_class))
-    _ = model_plan_init_binding(mods, plan, fields)
-    return plan
+    var result = py_call(bi.object.__new__, py_item(context, nk[].k_plan_class))
+    _ = model_plan_init_binding(mods, result, fields)
+    return result
 
 
 def model_config_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:

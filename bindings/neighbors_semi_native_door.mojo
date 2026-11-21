@@ -19,6 +19,7 @@ from providers.python.x_neighbors_admission_pyapi_door import xn_capabilities
 from providers.python.pcs_rng_pyapi_pack import pcs_seed, _pcs_connect
 from std.python import Python, PythonObject
 from bindings.admitted_family_door import admit_family
+from bindings.labels_descriptor_boundary_door import labels_scope
 from bindings.admitted_input_unpack import admitted_finite_refuse
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
@@ -550,7 +551,9 @@ def _lp_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
     var x = _semi_x(args[1], context)
     var n = Int(py=x.shape[0])
     var d = Int(py=x.shape[1])
-    var encoded = classical_encode_labels(args[2], context)
+    # The label steps run on the estimator's device (labels_scope), read once.
+    var label_context = labels_scope(model, context)
+    var encoded = classical_encode_labels(args[2], label_context)
     var allc = encoded.classes
     var codes = encoded.codes
     xn_rows_match_check(Int(py=codes.size), n)
@@ -626,7 +629,7 @@ def _lp_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
     py_setitem(fields, "classes_", classes)
     py_setitem(fields, "label_distributions_", final)
     py_setitem(fields, "n_iter_", PythonObject(outcome.iterations))
-    py_setitem(fields, "transduction_", _semi_class_array(classes, labels, context))
+    py_setitem(fields, "transduction_", _semi_class_array(classes, labels, label_context))
     py_setitem(fields, "n_features_in_", PythonObject(d))
 
 
@@ -705,7 +708,7 @@ def _lp_predict(model: PythonObject, binding: PythonObject, source: PythonObject
     """`_LabelPropagationBase.predict(X)`: only the class codes come back;
     the decode is `_argmax_labels`'."""
     var codes = _lp_query(model, binding, source, True, context)
-    return _semi_class_array(family_field(py_fields(model), "classes_"), codes, context)
+    return _semi_class_array(family_field(py_fields(model), "classes_"), codes, labels_scope(model, context))
 
 
 # ---------------------------------------------------------------- dispatch
@@ -740,7 +743,7 @@ def _neighbors_semi_operation_route(model: PythonObject, operation: String, var 
         return _lp_predict(model, args[0], args[1], context)
     if operation == "family_xn_semi_lp_score":
         var prediction = _lp_predict(model, args[0], args[1], context)
-        return PythonObject(classical_accuracy(args[2], prediction, args[3], PythonObject(None), context))
+        return PythonObject(classical_accuracy(args[2], prediction, args[3], PythonObject(None), labels_scope(model, context)))
     raise Error("RuntimeError: unknown neighbors operation " + operation)
 
 
