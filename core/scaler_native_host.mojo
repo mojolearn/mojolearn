@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Adapters to existing scaler kernels, preserving the provider image."""
-from core.scaler_native_api import ScalerNativeKernels, ScalerFitRequest, ScalerTransformRequest, MinMaxFitRequest, MinMaxTransformRequest
+from core.scaler_native_api import ScalerNativeKernels, ScalerFitRequest, ScalerTransformRequest, MinMaxFitRequest, MinMaxTransformRequest, ScalerFitTransformRequest
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.mojolearn_preprocessing_host_impl import load, ptr, validate_standard, standard_fit_host_into, standard_transform_host_into
 from core.mojolearn_preprocessing_host_impl import validate_dimensions, minmax_fit_host_into, minmax_transform_host_into
@@ -64,3 +64,13 @@ struct ScalerHostKernels(ScalerNativeKernels):
         _ = scale
         _ = offset
         return 1
+
+    # The host column has no combined export (the doors run fit then
+    # transform there): 0, nothing written, the caller's two-step route.
+    @staticmethod
+    def standard_fit_transform(r: ScalerFitTransformRequest) raises -> Int:
+        return 0
+
+    @staticmethod
+    def minmax_fit_transform(r: ScalerFitTransformRequest) raises -> Int:
+        return 0

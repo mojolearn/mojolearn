@@ -21,7 +21,6 @@ struct XPrepKeys(Defaultable, Movable):
     var k___getattribute__: PythonObject
     var k___mro__: PythonObject
     var k__data: PythonObject
-    var k__host: PythonObject
     var k__mgr: PythonObject
     var k__mv: PythonObject
     var k_array_class: PythonObject
@@ -32,7 +31,7 @@ struct XPrepKeys(Defaultable, Movable):
     var k_indices: PythonObject
     var k_maxabs_gather_rows: PythonObject
     var k_maxabs_rows_class: PythonObject
-    var k_maxabs_rows_dict: PythonObject
+    var k_maxabs_rows_owner: PythonObject
     var k_ndarray: PythonObject
     var k_order: PythonObject
     var k_output_context: PythonObject
@@ -49,7 +48,6 @@ struct XPrepKeys(Defaultable, Movable):
         self.k___getattribute__ = PythonObject(None)
         self.k___mro__ = PythonObject(None)
         self.k__data = PythonObject(None)
-        self.k__host = PythonObject(None)
         self.k__mgr = PythonObject(None)
         self.k__mv = PythonObject(None)
         self.k_array_class = PythonObject(None)
@@ -60,7 +58,7 @@ struct XPrepKeys(Defaultable, Movable):
         self.k_indices = PythonObject(None)
         self.k_maxabs_gather_rows = PythonObject(None)
         self.k_maxabs_rows_class = PythonObject(None)
-        self.k_maxabs_rows_dict = PythonObject(None)
+        self.k_maxabs_rows_owner = PythonObject(None)
         self.k_ndarray = PythonObject(None)
         self.k_order = PythonObject(None)
         self.k_output_context = PythonObject(None)
@@ -81,7 +79,6 @@ def _x_prep_keys_fill(nk: UnsafePointer[XPrepKeys, MutUntrackedOrigin]) raises:
     nk[].k___getattribute__ = py_key("__getattribute__")
     nk[].k___mro__ = py_key("__mro__")
     nk[].k__data = py_key("_data")
-    nk[].k__host = py_key("_host")
     nk[].k__mgr = py_key("_mgr")
     nk[].k__mv = py_key("_mv")
     nk[].k_array_class = py_key("array_class")
@@ -92,7 +89,7 @@ def _x_prep_keys_fill(nk: UnsafePointer[XPrepKeys, MutUntrackedOrigin]) raises:
     nk[].k_indices = py_key("indices")
     nk[].k_maxabs_gather_rows = py_key("maxabs_gather_rows")
     nk[].k_maxabs_rows_class = py_key("maxabs_rows_class")
-    nk[].k_maxabs_rows_dict = py_key("maxabs_rows_dict")
+    nk[].k_maxabs_rows_owner = py_key("maxabs_rows_owner")
     nk[].k_ndarray = py_key("ndarray")
     nk[].k_order = py_key("order")
     nk[].k_output_context = py_key("output_context")

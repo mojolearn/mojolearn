@@ -17,22 +17,26 @@ class Array:
 
 
 class Rows:
-    pass
+    __slots__ = ('_owner',)
 
 
 class Scope:
-    pass
+    __slots__ = ('_owner',)
+
+
+class ResidentScope:
+    __slots__ = ('min_words', '_scope')
 
 
 class Resident:
+    __slots__ = ('_owner',)
+
     def take(self):
         raise AssertionError("import-time metadata must never call take")
 
 
 class Cache:
-    @staticmethod
-    def _key(value):
-        raise AssertionError("import metadata must never call key")
+    __slots__ = ('_owner',)
 
     def get(self, value):
         raise AssertionError("import metadata must never call get")
@@ -45,6 +49,7 @@ def connect(native_entry=len, store_binding=None, backend_fields=None):
     arena.DeviceRows = Rows
     arena.DeviceCache = Cache
     arena._Scope = Scope
+    arena.resident = ResidentScope
     arena._LOCAL = threading.local()
     selection = ModuleType('mojolearn.model_selection')
     selection._Resident = Resident
@@ -160,40 +165,40 @@ class NativeWeakrefConnectionTests(unittest.TestCase):
                 self.assertEqual(failure, "DeviceCache requires the immutable native ImportError builtin")
         self.assertEqual(touched, [])
 
-    def test_cache_live_retains_connected_native_counter(self):
-        binding = SimpleNamespace(x_prep_dev_put=len, x_prep_dev_free=abs,
-                                  x_prep_dev_live=hash)
-        context = connect(store_binding=binding)
-        self.assertEqual(context["cache_live_entries"], (hash, hash))
-
-    def test_cache_live_refuses_import_time_python_counter(self):
+    def test_cache_state_is_native_no_store_builtin_is_connected(self):
+        # The cache's store is the x_prep transport entry resolved natively
+        # when a DeviceCache is built; the connection reads no put / free /
+        # live builtin and keeps no Python counter or entry type table.
         touched = []
         def foreign():
             touched.append("counter")
             return 0
         binding = SimpleNamespace(x_prep_dev_put=len, x_prep_dev_free=abs,
                                   x_prep_dev_live=foreign)
-        with self.assertRaisesRegex(TypeError, "compiled native live-slot entry"):
-            connect(store_binding=binding)
+        context = connect(store_binding=binding)
         self.assertEqual(touched, [])
+        for name in ('cache_store_routes', 'cache_live_entries', 'cache_object_setattr', 'cache_runtime_error',
+                     'cache_counter_types', 'cache_entry_types', 'cache_key_descriptor', 'cache_key_function',
+                     'cache_local_getattribute', 'cache_hash_types'):
+            self.assertNotIn(name, context)
 
-    def test_cpu_cache_upload_retains_empty_store_registry_and_native_setter(self):
+    def test_cache_scope_and_resident_slots_are_connected(self):
         context = connect()
-        self.assertEqual(context['cache_store_routes'], ())
-        self.assertEqual(context['cache_live_entries'], ())
-        self.assertIs(context['cache_object_setattr'], object.__setattr__)
-        self.assertIs(context['cache_runtime_error'], RuntimeError)
-        self.assertEqual(context['cache_counter_types'],
-                         (type(None), float, complex, str, bytes, bytearray,
-                          list, tuple, dict, set, frozenset, range))
-        self.assertEqual(context['cache_entry_types'],
-                         (bool, int, float, complex, str, bytes, bytearray,
-                          list, tuple, dict, set, frozenset, range))
+        self.assertIs(context['cache_class'], Cache)
+        self.assertIs(context['cache_scope_class'], Scope)
+        self.assertIs(context['cache_resident_class'], ResidentScope)
+        for name, cls, slot in (('cache_owner', Cache, '_owner'), ('cache_scope_owner', Scope, '_owner'),
+                                ('cache_resident_scope', ResidentScope, '_scope'),
+                                ('arena_resident_owner', Resident, '_owner'), ('maxabs_rows_owner', Rows, '_owner')):
+            self.assertIs(type(vars(cls)[slot]), MemberDescriptorType)
+            if name != 'maxabs_rows_owner':
+                self.assertIs(context[name + '_get'].__self__, vars(cls)[slot])
+            self.assertIs(context[name + '_set'].__self__, vars(cls)[slot])
+        self.assertIs(context['maxabs_rows_owner'].__self__, vars(Rows)['_owner'])
+        self.assertIs(context['cache_resident_floor_get'].__self__, vars(ResidentScope)['min_words'])
 
     def test_cache_lookup_retains_key_and_scalar_metadata_without_calling_it(self):
         context = connect()
-        self.assertIs(context['cache_key_descriptor'], vars(Cache)['_key'])
-        self.assertIs(context['cache_key_function'], Cache._key)
         self.assertEqual(context['cache_integer_types'],
                          (type(None), bool, int, float, complex, str, bytes, bytearray, list, tuple, dict, set, frozenset))
         self.assertIs(context['cache_scalar_context']['modules'], sys.modules)
@@ -208,8 +213,6 @@ class NativeWeakrefConnectionTests(unittest.TestCase):
         self.assertIs(context['cache_namespace_getattribute'], SimpleNamespace.__getattribute__)
         self.assertIs(context['cache_member_type'], MemberDescriptorType)
         self.assertIs(context['cache_local_type'], type(threading.local()))
-        self.assertIs(context['cache_local_getattribute'], type(threading.local()).__getattribute__)
-        self.assertEqual(context['cache_hash_types'], (type(None), bool, int, float, complex, str, bytes))
 
     def test_owner_release_retains_native_constructor_and_scalar_identities(self):
         context = connect()
@@ -223,15 +226,19 @@ class NativeWeakrefConnectionTests(unittest.TestCase):
     def test_native_resident_entries_are_connected_without_calling_python_take(self):
         context = connect()
         self.assertIs(context['arena_resident_take'], Resident.take)
-        self.assertTrue(all(context[key] is len for key in
-                            ('arena_msel_put', 'arena_msel_free', 'arena_msel_take_rows', 'arena_cast')))
+        # The fold store (put / take_rows / free) is the model-selection
+        # helper table's native entry: no store builtin is connected.
+        self.assertIs(context['arena_cast'], len)
+        for name in ('arena_msel_put', 'arena_msel_free', 'arena_msel_take_rows', 'arena_resident_dict',
+                     'maxabs_rows_dict'):
+            self.assertNotIn(name, context)
         self.assertIs(type(context['arena_half_copy_canonical']), bool)
 
     def test_python_resident_entry_is_refused_before_invocation(self):
         calls = []
         def forbidden(*args):
             calls.append(True)
-        with self.assertRaisesRegex(TypeError, 'compiled resident and cast entries'):
+        with self.assertRaisesRegex(TypeError, 'DeviceRows requires its compiled'):
             connect(forbidden)
         self.assertEqual(calls, [])
 

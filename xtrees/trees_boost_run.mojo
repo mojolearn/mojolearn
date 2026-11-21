@@ -26,15 +26,15 @@ def boost_ada_session_choice(mode: String, switches: Int) -> String:
     return "exact"
 
 
-def boost_bagging_validate(oob_score: Bool, bootstrap: Bool, warm_start: Bool, n_jobs_set: Bool,
-                           verbose: Bool) raises:
+def boost_bagging_validate(oob_score: Bool, bootstrap: Bool, warm_start: Bool, verbose: Bool) raises:
     """`_BaggingBase._validate_params`' flag refusals."""
     if oob_score and not bootstrap:
         raise Error("Out of bag estimation only available if bootstrap=True")
     if warm_start:
         trees_refuse("warm_start=True", "there is no incremental fit here.")
-    if n_jobs_set:
-        trees_refuse("n_jobs", "the sub-fits run one after another on the device.")
+    # TOMBSTONE: the n_jobs refusal ("the sub-fits run one after another on the device") deleted 2026-11-21 by
+    # lane ma-callers round 2: published members fit in parallel waves and n_jobs bounds their workers.
+    # Restore: git revert of that commit (a refusal, not an experiment arm).
     if verbose:
         trees_refuse("verbose", "nothing logs per estimator.")
 

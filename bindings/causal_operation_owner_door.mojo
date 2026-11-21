@@ -612,6 +612,14 @@ def _causal_model_capture_full(mut mods: NativeModules, model: PythonObject, con
 comptime _CAUSAL_MODEL_SLOT = "causal_model_capture_v1"
 
 
+def causal_model_record_drop(mut mods: NativeModules, model: PythonObject) raises:
+    """Drop the model's prepared record and the model owner it carries
+    (`load_state_dict`, lane api-torch round 3): the next operation captures
+    the model again and builds a new owner, so the generation moves on and the
+    checkpoint fingerprint is hashed again from the weights it then holds."""
+    prepared_drop(mods, _CAUSAL_MODEL_SLOT, model)
+
+
 def _causal_model_names() raises -> PythonObject:
     var names = CAUSAL_FIELD_NAMES.get_or_create_ptr()
     if names[].model is None:

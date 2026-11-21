@@ -65,9 +65,11 @@ from core.member_abi import MEMBER_F32, MEMBER_I32
 from xtrees.trees_forest_run import ForestFit, trees_check_features, forest_export_dtype
 from core.forest_fit_request import ForestFitArgs
 from bindings.trees_dart_rounds_run import (
-    DartRoundPlan, dart_round_admit, dart_rounds_run, dart_member_into, DART_M_OFF_N, DART_M_NODES,
+    DartRoundPlan, DartRounds, DartWords, dart_starts, dart_round_plan,
+    dart_round_admit, dart_rounds_run, dart_member_into, DART_M_OFF_N, DART_M_NODES,
     DART_M_LEAF_N, DART_M_VAL_N, DART_M_COLS, DART_M_TREES, DART_M_OUTPUTS,
 )
+from bindings.native_unit_threads_unpack import native_unit_jobs
 from xtrees.trees_boost_run import (
     _sub_seed, _dart_thr,
     boost_ada_session_choice, boost_bagging_validate, boost_check_n_estimators, boost_check_learning_rate,
@@ -794,7 +796,10 @@ def _bagging_validate(fields: PythonObject, context: PythonObject) raises:
     """`_BaggingBase._validate_params`."""
     var oob = _truthy(fields["oob_score"])
     boost_bagging_validate(oob, oob and _truthy(fields["bootstrap"]), _truthy(fields["warm_start"]),
-                           fields["n_jobs"] is not None, _truthy(fields["verbose"]))
+                           _truthy(fields["verbose"]))
+    # n_jobs is the worker bound of the member fits (None and -1: every core):
+    # published members fit in parallel waves (`_bagging_fit_bags`).
+    _ = native_unit_jobs(fields["n_jobs"], "Bagging")
     boost_check_n_estimators(Int(py=_int(fields["n_estimators"])))
     _ = _seed(fields["random_state"], context)
 
@@ -943,8 +948,10 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
     if sw:
         w_address = sw.value().address
     var native = count > 0
+    var jobs = native_unit_jobs(fields["n_jobs"], "Bagging")
     while native and done < count:  # driver-loop: over the waves of member estimators
         var set = MemberSet(x.address, n, d, MEMBER_I32 if classifier else MEMBER_F32, MEMBER_I32)
+        set.run.cap = jobs
         var wave_rows = Python.list()
         var wave_cols = Python.list()
         var width = 1
@@ -967,7 +974,18 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
         if not native:
             # Nothing of this wave ran: its members are fitted by the loop below.
             break
-        member_set_run(set)
+        # A member that refuses its fit publishes nothing: this wave and the
+        # rest are fitted by the loop below (same draws, same seeds), whose
+        # fit door raises the estimator's own words if the request is wrong.
+        var ran = False
+        try:
+            member_set_run(set)   # a failing member releases every state
+            ran = True
+        except:
+            ran = False
+        if not ran:
+            native = False
+            break
         _ = x  # keep the admitted X alive through the member fits above
         _ = y_all
         _ = sample_weight
@@ -1799,120 +1817,59 @@ def _dart_first_member(fields: PythonObject, max_depth: PythonObject, seed: Int,
     return Python.tuple(tree, py_call(trees_builtins().dict, tf))
 
 
-def _dart_boost(model: PythonObject, fields: PythonObject, x: AdmittedXView, y32: AdmittedXView, K: Int, kind: Int,
-                context: PythonObject) raises -> PythonObject:
-    """`_DARTBase._boost`: UNPACK into `DartRoundPlan`, the typed round loop
-    (`dart_rounds_run`), then PACK of the members, coefficients and weights."""
-    var n = x.rows
-    var d = x.cols
-    var xt = _xt(fields, context)
-    var seed = _seed(fields["random_state"], context)
-    var drop_seed = _seed(fields["drop_seed"], context)
-    var inits = Python.list()
-    var starts = List[Float64]()
-    var glue = _xr(xt)
-    if kind == 0 or kind == 1:
-        # `_trees_fsum_f32(b, y32) / n`: the exact sum, refused when not finite
-        var sum_out = admitted_vector(1, "<f8", context)
-        var sum_flags = admitted_vector(8, "<i4", context)
-        _ = xt_exact_sum(glue, y32.address, trees_address(sum_out), trees_address(sum_flags), y32.rows, 0)
-        _ = sum_flags  # keep the Python object alive through the native call above
-        _ = sum_out  # keep the Python object alive through the native call above
-        if _i32_word(sum_flags, 0) != 0 or _i32_word(sum_flags, 1) != 0 or _i32_word(sum_flags, 2) != 0:
-            raise Error("Input y contains NaN or infinity.")
-        var mean = _f64_word(sum_out, 0) / Float64(n)
-        if kind == 0:
-            starts.append(mean)
-        else:
-            if not (0.0 < mean and mean < 1.0):
-                raise Error("y must hold both classes")
-            var log_word: List[Float64] = [0.0]
-            _ = xt_log64(glue, Int(log_word.unsafe_ptr()), mean / (1.0 - mean))
-            starts.append(log_word[0])
-            _ = log_word
-    else:
-        var cnt = admitted_vector(K, "<i4", context)
-        _ = xt_class_counts(glue, y32.address, trees_address(cnt), n, K)
-        _ = cnt  # keep the Python object alive through the native call above
-        var priors = admitted_vector(K, "<f8", context)
-        _ = xt_class_priors(glue, trees_address(cnt), trees_address(priors), n, K)
-        _ = priors  # keep the Python object alive through the native call above
-        _ = cnt  # keep the Python object alive through the native call above
-        for c in range(K):  # driver-loop: over the K class starts
-            starts.append(_f64_word(priors, c))
-    for c in range(len(starts)):  # driver-loop: over the K class starts (PACK)
-        _ = py_call(inits.append, _F(starts[c]))
-    py_setitem(fields, "init_score_", inits[0] if K == 1 else inits)
-    var lr = Float64(py=_float(fields["learning_rate"]))
-    var l1 = Float64(py=_float(fields["reg_alpha"]))
-    var mds = Float64(py=_float(fields["max_delta_step"]))
-    var lam = Float64(py=_float(fields["reg_lambda"]))
-    py_setitem(fields, "n_classes_", _P(K))
-    var trees = Python.list()
-    var tree_values = Python.list()
-    py_setitem(fields, "trees_", trees)
-    py_setitem(fields, "tree_values_", tree_values)
-    py_setitem(fields, "tree_coefs_", Python.list())
-    py_setitem(fields, "tree_weights_", Python.list())
-    py_setitem(fields, "_bag_at", PythonObject(None))
-    var depth_param = fields["max_depth"]
-    var max_depth = PythonObject(None) if depth_param is None or Int(py=_int(depth_param)) <= 0 else _int(depth_param)
-    # TOMBSTONE: A8C_BOOST_HOST_FINITE_SCAN (removed: superseded by the open's device test) deleted 2026-11-09 by aef0ae764d; code recoverable at aef0ae764d^.
-    # Restore: git apply experiments/removed/A8C_BOOST_HOST_FINITE_SCAN.patch
-    # (the DART door's host finite scan of X; `x_trees_dart_open` tests the X it uploads, xtrees/dart_device.mojo,
-    # the host column in xtrees/dart_host.mojo, and the refusal is mapped to TREES_NONFINITE at the open in
-    # bindings/trees_dart_rounds_run.mojo)
-    # `_dart_device`: the round's entries and the leaf-value cap. Resolved
-    # once for the whole fit (lane entry-table-zero-alloc).
-    var dart = xd_ref(_xk(xt))
-    var n_iters = Int(py=_int(fields["n_estimators"]))
-    var node_cap = 2 * Int(py=_int(fields["num_leaves"])) - 1
-    dart_round_admit(dart, n_iters, K, node_cap)
-    var skip_thr = _dart_thr(Float64(py=_float(fields["skip_drop"])))
-    var uniform = 1 if _truthy(fields["uniform_drop"]) else 0
-    var xgb = 1 if _truthy(fields["xgboost_dart_mode"]) else 0
-    var max_drop = Int(py=_int(fields["max_drop"]))
-    var drop_rate_f = Float64(py=_float(fields["drop_rate"]))
-    # `_dart_bag` / `_dart_cols`' settings, read once per fit (the door read
-    # them every round and member; the values cannot change inside a fit).
+def dart_words(fields: PythonObject, context: PythonObject) raises -> DartWords:
+    """UNPACK: the estimator's DART settings (`DartWords`), read once with
+    the checks `_DARTBase._boost` applies to them. The Dart member's
+    admission (providers/python/member_dart_boundary_door.mojo) reads the
+    same words."""
     var freq = Int(py=_int(fields["subsample_freq"]))
     var frac = Float64(py=_float(fields["subsample"]))
     var bag = freq > 0 and frac < 1.0
     var bag_seed = _seed(fields["bagging_seed"], context) if bag else 0
     var col_frac = Float64(py=_float(fields["colsample_bytree"]))
-    var col_count = 0
     var col_seed = 0
+    var col_seed_refusal = String("")
     if col_frac < 1.0:
-        var cnt = max(Int(py=_int(_F(Float64(d) * col_frac + 0.5))), min(1, d))
-        if cnt < d:
-            col_count = cnt
+        # Read where the fit samples columns (the count needs d): an invalid
+        # seed is refused by that fit, in `_seed`'s words.
+        try:
             col_seed = _seed(fields["feature_fraction_seed"], context)
-    # The first member, validated once, and its fit request (UNPACK); the
-    # rows, columns and seed slots are rewritten per member in RUN.
+        except error:
+            col_seed_refusal = String(error)
+    return DartWords(
+        n_iters=Int(py=_int(fields["n_estimators"])), node_cap=2 * Int(py=_int(fields["num_leaves"])) - 1,
+        skip_thr=_dart_thr(Float64(py=_float(fields["skip_drop"]))),
+        uniform=1 if _truthy(fields["uniform_drop"]) else 0, xgb=1 if _truthy(fields["xgboost_dart_mode"]) else 0,
+        max_drop=Int(py=_int(fields["max_drop"])), drop_rate=Float64(py=_float(fields["drop_rate"])),
+        lr=Float64(py=_float(fields["learning_rate"])), lam=Float64(py=_float(fields["reg_lambda"])),
+        l1=Float64(py=_float(fields["reg_alpha"])), mds=Float64(py=_float(fields["max_delta_step"])),
+        bag=bag, bag_freq=freq, bag_frac=frac, bag_seed=bag_seed, col_frac=col_frac, col_seed=col_seed,
+        col_seed_refusal=col_seed_refusal, seed=_seed(fields["random_state"], context),
+        drop_seed=_seed(fields["drop_seed"], context))
+
+
+def dart_max_depth(fields: PythonObject) raises -> PythonObject:
+    """The members' `max_depth`: None for a nonpositive or absent depth."""
+    var depth_param = fields["max_depth"]
+    return PythonObject(None) if depth_param is None or Int(py=_int(depth_param)) <= 0 else _int(depth_param)
+
+
+def dart_pack_rounds(model: PythonObject, fields: PythonObject, rounds: DartRounds, starts: List[Float64], K: Int,
+                     d: Int, first: PythonObject, first_fields: PythonObject, seed: Int,
+                     context: PythonObject) raises:
+    """PACK of a DART fit: `init_score_`, `n_classes_`, the `trees_`
+    members in tree order (member 0 is `first`, the others hold
+    `first_fields` with their own seed), each with its five model Arrays,
+    its dimensions and its leaf values, and the tree coefficients and
+    weights. The door's fit and the Dart member's PACK both call this."""
+    var inits = Python.list()
+    for c in range(len(starts)):  # driver-loop: over the K class starts (PACK)
+        _ = py_call(inits.append, _F(starts[c]))
+    py_setitem(fields, "init_score_", inits[0] if K == 1 else inits)
+    py_setitem(fields, "n_classes_", _P(K))
     var cls = context["trees_rf_regressor"]
-    var first = PythonObject(None)
-    var first_fields = PythonObject(None)
-    var forest = dart  # replaced below when a member is fitted
-    var request = ForestFitArgs(0, 0, List[Int](), List[Float64](), List[UInt8](), -1)
-    if n_iters * K > 0:
-        var built = _dart_first_member(fields, max_depth, seed, context)
-        first = built[0]
-        first_fields = built[1]
-        var tf = py_fields(first)
-        var rf = trees_table(context, String(tf["_fit_numeric_mode"]), "_mojolearn_rf")
-        forest = forest_key(rf)
-        # The typed request filled slot by slot (`forest_fit_request`): no
-        # 16-slot Python list is built and read back. Once per fit; the X, y
-        # and trailing words stay 0, as the list form left them.
-        request = forest_fit_request(tf, tf["_cfg"], "rf_regressor", n, d, 0, 0, 0, ForestFit(False), rf, context)
-    var plan = DartRoundPlan(
-        dart=dart, glue_key=_xk(xt), forest=forest, x=x.address, y=y32.address, inits=starts^, n=n, d=d, k=K,
-        kind=kind, n_iters=n_iters, node_cap=node_cap, drop_seed=drop_seed, skip_thr=skip_thr, uniform=uniform,
-        xgb=xgb, max_drop=max_drop, drop_rate=drop_rate_f, lr=lr, lam=lam, l1=l1, mds=mds, bag=bag, bag_freq=freq,
-        bag_frac=frac, bag_seed=bag_seed, col_count=col_count, col_seed=col_seed, seed=seed)
-    var rounds = dart_rounds_run(plan, request^)
-    # PACK: the members in tree order, each with its five model Arrays, its
-    # dimensions and its leaf values (the arrays the round added).
+    var trees = Python.list()
+    var tree_values = Python.list()
     for j in range(rounds.count()):  # driver-loop: over the fitted member trees (PACK, once per fit)
         var tree = first if j == 0 else _member_like(cls, first_fields, _sub_seed(seed, j))
         var counts: List[Int] = [rounds.word(j, DART_M_OFF_N), rounds.word(j, DART_M_NODES),
@@ -1938,6 +1895,8 @@ def _dart_boost(model: PythonObject, fields: PythonObject, x: AdmittedXView, y32
         _member_store(tree, arrays, rounds.word(j, DART_M_COLS))
         _ = py_call(trees.append, tree)
         _ = py_call(tree_values.append, values)
+    py_setitem(fields, "trees_", trees)
+    py_setitem(fields, "tree_values_", tree_values)
     var coefs = Python.list()
     for i in range(len(rounds.coefs)):  # driver-loop: over the tree coefficients (trees-sized, PACK)
         _ = py_call(coefs.append, _F(rounds.coefs[i]))
@@ -1948,6 +1907,63 @@ def _dart_boost(model: PythonObject, fields: PythonObject, x: AdmittedXView, y32
     py_setitem(fields, "tree_weights_", weights)
     py_setitem(fields, "_bag_at", PythonObject(None))
     py_setitem(fields, "n_features_in_", _P(d))
+
+
+def dart_first_request(fields: PythonObject, seed: Int, context: PythonObject) raises -> PythonObject:
+    """The first member (validated once, `_dart_first_member`) and its rf
+    binding: `(member, fields copy, rf binding)`."""
+    var built = _dart_first_member(fields, dart_max_depth(fields), seed, context)
+    var tf = py_fields(built[0])
+    var rf = trees_table(context, String(tf["_fit_numeric_mode"]), "_mojolearn_rf")
+    return Python.tuple(built[0], built[1], rf)
+
+
+def _dart_boost(model: PythonObject, fields: PythonObject, x: AdmittedXView, y32: AdmittedXView, K: Int, kind: Int,
+                context: PythonObject) raises -> PythonObject:
+    """`_DARTBase._boost`: UNPACK into `DartRoundPlan` (`dart_words`,
+    `dart_starts`, `dart_round_plan`), the typed round loop
+    (`dart_rounds_run`), then PACK (`dart_pack_rounds`)."""
+    var n = x.rows
+    var d = x.cols
+    var xt = _xt(fields, context)
+    var words = dart_words(fields, context)
+    var glue = _xr(xt)
+    var starts = dart_starts(glue, y32.address, y32.rows, K, kind)
+    # A failed fit leaves no previous fit's trees behind (as before).
+    py_setitem(fields, "trees_", Python.list())
+    py_setitem(fields, "tree_values_", Python.list())
+    py_setitem(fields, "tree_coefs_", Python.list())
+    py_setitem(fields, "tree_weights_", Python.list())
+    py_setitem(fields, "_bag_at", PythonObject(None))
+    # TOMBSTONE: A8C_BOOST_HOST_FINITE_SCAN (removed: superseded by the open's device test) deleted 2026-11-09 by aef0ae764d; code recoverable at aef0ae764d^.
+    # Restore: git apply experiments/removed/A8C_BOOST_HOST_FINITE_SCAN.patch
+    # (the DART door's host finite scan of X; `x_trees_dart_open` tests the X it uploads, xtrees/dart_device.mojo,
+    # the host column in xtrees/dart_host.mojo, and the refusal is mapped to TREES_NONFINITE at the open in
+    # bindings/trees_dart_rounds_run.mojo)
+    # `_dart_device`: the round's entries and the leaf-value cap. Resolved
+    # once for the whole fit (lane entry-table-zero-alloc).
+    var dart = xd_ref(_xk(xt))
+    dart_round_admit(dart, words.n_iters, K, words.node_cap)
+    # The first member, validated once, and its fit request (UNPACK); the
+    # rows, columns and seed slots are rewritten per member in RUN.
+    var first = PythonObject(None)
+    var first_fields = PythonObject(None)
+    var forest = dart  # replaced below when a member is fitted
+    var request = ForestFitArgs(0, 0, List[Int](), List[Float64](), List[UInt8](), -1)
+    if words.n_iters * K > 0:
+        var built = dart_first_request(fields, words.seed, context)
+        first = built[0]
+        first_fields = built[1]
+        var tf = py_fields(first)
+        forest = forest_key(built[2])
+        # The typed request filled slot by slot (`forest_fit_request`): no
+        # 16-slot Python list is built and read back. Once per fit; the X, y
+        # and trailing words stay 0, as the list form left them.
+        request = forest_fit_request(tf, tf["_cfg"], "rf_regressor", n, d, 0, 0, 0, ForestFit(False), built[2],
+                                     context)
+    var plan = dart_round_plan(words, dart, _xk(xt), forest, x.address, y32.address, starts.copy(), n, d, K, kind)
+    var rounds = dart_rounds_run(plan, request^)
+    dart_pack_rounds(model, fields, rounds, starts, K, d, first, first_fields, words.seed, context)
     return model
 
 

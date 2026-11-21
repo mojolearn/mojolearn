@@ -10,7 +10,7 @@ from bindings.parallel_neural_native_run import (
     neural_cache_arrived_admit, neural_checkpoint_admit, neural_restore_operation, neural_envelope_admit,
     neural_gradient_admit,
     NeuralTrainerState, neural_step_admit, neural_step_withdraw, neural_step_begin, neural_step_version, neural_step_commit,
-    neural_history_excess,
+    neural_history_excess, neural_gradient_words, neural_update_words, neural_gradient_words_admit,
 )
 from core.parallel_neural_native_impl import samba_ids_into
 from std.python._cpython import PyObjectPtr
@@ -19,13 +19,13 @@ from bindings.native_error_class import error_without_class
 from bindings.generation_buffers_door import GENERATION_BOUNDARY, generation_array, generation_copy
 from bindings.parallel_byte_native_door import _parallel_int, _parallel_view
 from bindings.parallel_mlp_native_door import (
-    mlp_snapshot, mlp_from_state, mlp_publish, mlp_gradients_from_state, mlp_validate_state,
+    mlp_snapshot, mlp_from_state, mlp_publish, mlp_validate_state,
     mlp_gradients_open, mlp_gradients_close, mlp_gradients_on,
     mlp_apply_from_state, mlp_batch, mlp_targets, neural_ordered_sum,
     neural_cooperative_admit,
 )
 from bindings.native_process_pool_door import (
-    process_pool_create, process_pool_map, process_pool_close,
+    process_pool_create, process_pool_map_typed, process_pool_close,
     process_worker_connect, process_worker_next, process_worker_reply, process_worker_refuse,
     process_pool_devices,
 )
@@ -50,12 +50,10 @@ from bindings.parallel_keys_unpack import (
     PARALLEL_NEURAL_OPN_RESTORE,
     PARALLEL_NEURAL_OPN_TRAIN,
     PARALLEL_NEURAL_OPN_WORKER,
-    PARALLEL_NEURAL_WORKER_OPN_MLP_GRADIENT,
-    PARALLEL_NEURAL_WORKER_OPN_MLP_GRADIENT_CACHED,
-    PARALLEL_NEURAL_WORKER_OPN_MLP_UPDATE,
-    PARALLEL_NEURAL_WORKER_OPN_SAMBA_GRADIENT,
-    PARALLEL_NEURAL_WORKER_OPN_SAMBA_GRADIENT_CACHED,
-    PARALLEL_NEURAL_WORKER_OPN_SAMBA_UPDATE,
+)
+from core.parallel_worker_request import (
+    WorkerRequest, worker_request_decode,
+    PN_MLP_GRADIENT_CACHED, PN_SAMBA_GRADIENT_CACHED, PN_MLP_UPDATE, PN_SAMBA_UPDATE,
 )
 from bindings.py_keys import py_op_code
 from bindings.py_balanced import py_item
@@ -301,10 +299,12 @@ def _neural_ids(value: PythonObject) raises -> PythonObject:
     return out
 
 
-def _neural_request(operation: PythonObject, state: PythonObject, args: PythonObject) raises -> PythonObject:
+def _neural_request(state: PythonObject, args: PythonObject) raises -> PythonObject:
+    """One request's payload: the model slot and the arguments. The
+    operation (and, for a gradient, the cache epoch and version) are the
+    typed request's words (`neural_gradient_words`, `neural_update_words`)."""
     var bi = PARALLEL_NEURAL_BOUNDARY.get_or_create_ptr()[].bi
     var request = bi.list()
-    _ = py_call(request.append, operation)
     _ = py_call(request.append, state)
     _ = py_call(request.append, args)
     return py_call(bi.tuple, request)
@@ -374,22 +374,20 @@ def _state_digest(state: PythonObject) raises -> String:
 
 
 def _cache_header(record: PythonObject, snapshot: PythonObject, full: Bool) raises -> PythonObject:
-    """The request's model slot: the full state with the owner's epoch and
-    version (the worker keeps it), or only the epoch, the version and the
-    last committed step deltas (the worker brings its resident copy up to
-    the version by applying them)."""
+    """The request's model slot: the full state (the worker keeps it), or
+    the last committed step deltas (the worker brings its resident copy up
+    to the request's version by applying them). The owner's epoch and
+    version are the typed request's two words, not fields here."""
     var b = PARALLEL_NEURAL_BOUNDARY.get_or_create_ptr()
     var rec = record.downcast_value_ptr[ParallelNeuralOwner]()
     var header = b[].bi.dict()
     var nk = parallel_keys()
-    py_setitem(header, nk[].k_epoch, PythonObject(rec[].native.cache_epoch))
-    py_setitem(header, nk[].k_version, PythonObject(rec[].native.cache_version))
     py_setitem(header, nk[].k_full, snapshot if full else PythonObject(None))
     py_setitem(header, nk[].k_history, b[].bi.list() if full else rec[].history)
     return header
 
 
-def _worker_model(header: PythonObject, samba: Bool) raises -> PythonObject:
+def _worker_model(header: PythonObject, samba: Bool, epoch: Int, version: Int) raises -> PythonObject:
     """The worker's resident state (and, for Samba, its resident model) at
     the header's version: replaced by a full state, else advanced by the
     step deltas. A worker that cannot reach the version refuses with the
@@ -401,15 +399,15 @@ def _worker_model(header: PythonObject, samba: Bool) raises -> PythonObject:
     var nk = parallel_keys()
     var full = py_item(header, nk[].k_full)
     if full is not None:
-        py_setitem(cache, nk[].k_epoch, py_item(header, nk[].k_epoch))
-        py_setitem(cache, nk[].k_version, py_item(header, nk[].k_version))
+        py_setitem(cache, nk[].k_epoch, PythonObject(epoch))
+        py_setitem(cache, nk[].k_version, PythonObject(version))
         py_setitem(cache, nk[].k_state, full)
         py_setitem(cache, nk[].k_model, _neural_samba("from_state", _neural_values(full)) if samba else PythonObject(None))
         return cache
     var resident = py_get(cache, nk[].k_state) is not None
-    var same_epoch = resident and Bool(py=py_item(cache, nk[].k_epoch) == py_item(header, nk[].k_epoch))
+    var same_epoch = resident and Int(py=py_item(cache, nk[].k_epoch)) == epoch
     var have = Int(py=py_item(cache, nk[].k_version)) if same_epoch else 0
-    var want = Int(py=py_item(header, nk[].k_version)) if same_epoch else 0
+    var want = version if same_epoch else 0
     neural_cache_reach_admit(resident, same_epoch, have, want)
     var history = py_item(header, nk[].k_history)
     for i in range(len(history)):  # driver-loop: over committed step deltas in version order
@@ -439,13 +437,12 @@ def _worker_model(header: PythonObject, samba: Bool) raises -> PythonObject:
     return cache
 
 
-def _neural_requests(samba: Bool, header: PythonObject, shard_args: PythonObject) raises -> PythonObject:
+def _neural_requests(header: PythonObject, shard_args: PythonObject) raises -> PythonObject:
+    """The payloads of one gradient wave, one per logical shard."""
     var b = PARALLEL_NEURAL_BOUNDARY.get_or_create_ptr()
     var requests = b[].bi.list()
-    var nk = parallel_keys()
-    var operation = nk[].k_samba_gradient_cached if samba else nk[].k_mlp_gradient_cached
     for i in range(len(shard_args)):  # driver-loop: over logical training shards in immutable reduction order
-        _ = py_call(requests.append, _neural_request(operation, header, shard_args[i]))
+        _ = py_call(requests.append, _neural_request(header, shard_args[i]))
     return requests
 
 
@@ -498,11 +495,13 @@ def _neural_train(owner: PythonObject, record: PythonObject, supplied: PythonObj
             rec[].history = b[].bi.list()
         var results = PythonObject(None)
         try:
-            results = process_pool_map(rec[].pool, _neural_requests(samba, _cache_header(record, snapshot, not cached), shard_args))
+            results = process_pool_map_typed(rec[].pool, neural_gradient_words(samba, rec[].native, len(shard_args)),
+                                             _neural_requests(_cache_header(record, snapshot, not cached), shard_args))
         except error:
             if not neural_resend_full(cached, String(error)):
                 raise error
-            results = process_pool_map(rec[].pool, _neural_requests(samba, _cache_header(record, snapshot, True), shard_args))
+            results = process_pool_map_typed(rec[].pool, neural_gradient_words(samba, rec[].native, len(shard_args)),
+                                             _neural_requests(_cache_header(record, snapshot, True), shard_args))
         var losses = b[].bi.list()
         var parts = b[].bi.list()
         for i in range(len(results)):  # driver-loop: over returned logical shard loss/gradient records
@@ -513,8 +512,8 @@ def _neural_train(owner: PythonObject, record: PythonObject, supplied: PythonObj
             update_state = py_call(b[].bi.dict, snapshot)
             py_setitem(update_state, nk[].k_rng, next_rng)
         var update_requests = b[].bi.list()
-        _ = py_call(update_requests.append, _neural_request(nk[].k_samba_update if samba else nk[].k_mlp_update, update_state, parts))
-        var updated = process_pool_map(rec[].update_pool, update_requests)[0]
+        _ = py_call(update_requests.append, _neural_request(update_state, parts))
+        var updated = process_pool_map_typed(rec[].update_pool, neural_update_words(samba), update_requests)[0]
         _neural_publish(record, updated[0])
         rec[].gradients = updated[1]
         # the committed step as a delta the workers replay: the ordered-sum
@@ -588,19 +587,25 @@ def _neural_close(record: PythonObject) raises:
         raise Error(failure)
 
 
-def neural_worker_dispatch(request: PythonObject) raises -> PythonObject:
+def neural_worker_dispatch(request: WorkerRequest, payload: PythonObject) raises -> PythonObject:
+    """One worker request: `request` is the typed operation (and, for a
+    gradient, the owner's cache epoch and version); `payload` is the pair
+    (model slot, arguments). REMOVED: the operation string in the payload
+    and its table lookup, and the uncached `mlp_gradient` / `samba_gradient`
+    operations, which no owner sent."""
     var b = PARALLEL_NEURAL_BOUNDARY.get_or_create_ptr()
-    neural_envelope_admit(len(request))
+    neural_envelope_admit(len(payload))
     var nk = parallel_keys()
-    var operation = py_op_code(nk[].ops_neural_worker, request[0])
-    var state = request[1]
-    var args = request[2]
-    if operation == PARALLEL_NEURAL_WORKER_OPN_MLP_GRADIENT_CACHED:
+    var operation = request.op
+    var state = payload[0]
+    var args = payload[1]
+    if operation == PN_MLP_GRADIENT_CACHED:
+        neural_gradient_words_admit(request)
         # The worker's resident state is replaced (never edited in place) when
         # a full state or a committed delta arrives: validate each resident
         # state object once and open ONE gradient slot over it (the
         # SmallMLPTrainer program, weights uploaded once) for every shard.
-        var cache = _worker_model(state, False)
+        var cache = _worker_model(state, False, request.words[0], request.words[1])
         var resident = py_item(cache, nk[].k_state)
         var slot = py_get(cache, nk[].k_mlp_slot)
         if slot is None or py_get(cache, nk[].k_checked_of) is not resident:
@@ -612,8 +617,9 @@ def neural_worker_dispatch(request: PythonObject) raises -> PythonObject:
             py_setitem(cache, nk[].k_mlp_slot, slot)
             py_setitem(cache, nk[].k_checked_of, resident)
         return mlp_gradients_on(Int(py=slot), args[0], args[1])
-    if operation == PARALLEL_NEURAL_WORKER_OPN_SAMBA_GRADIENT_CACHED:
-        var cache = _worker_model(state, True)
+    if operation == PN_SAMBA_GRADIENT_CACHED:
+        neural_gradient_words_admit(request)
+        var cache = _worker_model(state, True, request.words[0], request.words[1])
         var values = _neural_values(py_item(cache, nk[].k_model))
         _ = py_call(values.append, args[0])
         _ = py_call(values.append, args[1])
@@ -621,20 +627,13 @@ def neural_worker_dispatch(request: PythonObject) raises -> PythonObject:
         _ = py_call(values.append, args[2])
         _ = py_call(values.append, args[3])
         return _neural_samba("model_gradients", values)
-    if operation == PARALLEL_NEURAL_WORKER_OPN_MLP_GRADIENT:
-        return mlp_gradients_from_state(state, args[0], args[1])
-    if operation == PARALLEL_NEURAL_WORKER_OPN_SAMBA_GRADIENT:
-        var values = _neural_values(state)
-        for i in range(len(args)):  # driver-loop: over the compiled Samba gradient operation envelope
-            _ = py_call(values.append, args[i])
-        return _neural_samba("gradients", values)
-    if operation != PARALLEL_NEURAL_WORKER_OPN_MLP_UPDATE and operation != PARALLEL_NEURAL_WORKER_OPN_SAMBA_UPDATE:
+    if operation != PN_MLP_UPDATE and operation != PN_SAMBA_UPDATE:
         raise Error("parallel neural: unsupported worker operation")
     neural_cooperative_admit()
     var grads = neural_ordered_sum(args)
     var updated = PythonObject(None)
     var step = 0
-    if operation == PARALLEL_NEURAL_WORKER_OPN_MLP_UPDATE:
+    if operation == PN_MLP_UPDATE:
         updated = mlp_apply_from_state(state, grads)
         step = Int(py=py_item(py_item(updated, nk[].k_optimizer), nk[].k_step))
     else:
@@ -657,7 +656,8 @@ def neural_worker(argv: PythonObject) raises:
             if not turn.open:
                 break
             try:
-                var result = neural_worker_dispatch(turn.value)
+                var typed = worker_request_decode(Int(turn.request.unsafe_ptr()), len(turn.request) * 8)
+                var result = neural_worker_dispatch(typed, turn.value)
                 process_worker_reply(socket, turn.sequence, result)
             except error:
                 process_worker_refuse(socket, turn.sequence, String(error))

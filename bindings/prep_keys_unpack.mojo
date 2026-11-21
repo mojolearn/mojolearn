@@ -66,7 +66,6 @@ struct PrepKeys(Defaultable, Movable):
     var k__range: PythonObject
     var k__rank: PythonObject
     var k__rng: PythonObject
-    var k__scope: PythonObject
     var k__shape: PythonObject
     var k__support_k_: PythonObject
     var k__support_mask_: PythonObject
@@ -124,7 +123,6 @@ struct PrepKeys(Defaultable, Movable):
     var k_methods: PythonObject
     var k_min_categories: PythonObject
     var k_min_value: PythonObject
-    var k_min_words: PythonObject
     var k_missing_values: PythonObject
     var k_modules: PythonObject
     var k_multi_output: PythonObject
@@ -206,7 +204,6 @@ struct PrepKeys(Defaultable, Movable):
         self.k__range = PythonObject(None)
         self.k__rank = PythonObject(None)
         self.k__rng = PythonObject(None)
-        self.k__scope = PythonObject(None)
         self.k__shape = PythonObject(None)
         self.k__support_k_ = PythonObject(None)
         self.k__support_mask_ = PythonObject(None)
@@ -264,7 +261,6 @@ struct PrepKeys(Defaultable, Movable):
         self.k_methods = PythonObject(None)
         self.k_min_categories = PythonObject(None)
         self.k_min_value = PythonObject(None)
-        self.k_min_words = PythonObject(None)
         self.k_missing_values = PythonObject(None)
         self.k_modules = PythonObject(None)
         self.k_multi_output = PythonObject(None)
@@ -350,7 +346,6 @@ def _prep_keys_fill(nk: UnsafePointer[PrepKeys, MutUntrackedOrigin]) raises:
     nk[].k__range = py_key("_range")
     nk[].k__rank = py_key("_rank")
     nk[].k__rng = py_key("_rng")
-    nk[].k__scope = py_key("_scope")
     nk[].k__shape = py_key("_shape")
     nk[].k__support_k_ = py_key("_support_k_")
     nk[].k__support_mask_ = py_key("_support_mask_")
@@ -408,7 +403,6 @@ def _prep_keys_fill(nk: UnsafePointer[PrepKeys, MutUntrackedOrigin]) raises:
     nk[].k_methods = py_key("methods")
     nk[].k_min_categories = py_key("min_categories")
     nk[].k_min_value = py_key("min_value")
-    nk[].k_min_words = py_key("min_words")
     nk[].k_missing_values = py_key("missing_values")
     nk[].k_modules = py_key("modules")
     nk[].k_multi_output = py_key("multi_output")
