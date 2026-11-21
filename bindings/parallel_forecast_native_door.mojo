@@ -23,13 +23,13 @@ calls its native fit / predict (`arima_predict`, `hw_predict`, `arima_fit`,
 entry table; the frames are the codec's.
 """
 from std.python import Python, PythonObject
-from bindings.native_loaded_module_door import native_loaded_module
+from bindings.native_loaded_module_door import native_loaded_module, native_interpreter_finalizing
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_fields, py_contains
 from std.ffi import external_call
-from bindings.native_prepared_owner_unpack import prepared_key_fields, prepared_key_same
+from bindings.native_prepared_owner_unpack import prepared_key_fields, prepared_key_same, prepared_get, prepared_put
 from bindings.native_loaded_module_door import NativeModules
 from bindings.msel_member_device_unpack import member_says_cpu, member_multi_gpu_refusal
 from bindings.py_attr import py_attr
@@ -39,7 +39,9 @@ from bindings.native_process_pool_door import (
     process_worker_connect, process_worker_next, process_worker_reply, process_worker_refuse,
 )
 from bindings.native_transport_door import transport_close
-from bindings.tsa_hw_native_door import tsa_array, hw_predict, hw_fit, _check_dims, _set_fitted, _commit
+from bindings.tsa_hw_native_door import (
+    tsa_array, tsa_array_unfilled, hw_predict, hw_fit, _check_dims, _set_fitted, _commit,
+)
 from bindings.tsa_admission_door import tsa_hw_fields
 from bindings.tsa_arima_native_door import arima_predict, arima_fit, _series_major
 from bindings.parallel_shard_common_door import (
@@ -57,6 +59,7 @@ from bindings.parallel_shard_common_door import (
     shard_identity,
     ShardWave,
     shard_wave,
+    SHARD_IDLE,
 )
 from bindings.parallel_shard_common_run import (
     shard_read_shift, shard_width_admit, shard_bounds, shard_indices_admit, shard_block_copy, SHARD_DEVICE_NOT_AN_INDEX,
@@ -97,23 +100,23 @@ struct ForecastGeneration(Movable):
     (a "generation"), for one kind (ARIMA or exponential smoothing).
 
     In the coordinating process: `token` names the generation the workers of
-    the pool with process ids `pids` hold ("" for none), `width` is its
-    series-per-shard word, and `key` pins the estimator and the fitted
-    objects the generation was cut from, compared by identity. A predict
-    whose key, width and pool processes match sends no fitted state: each
-    worker answers from the models it built once. A refit, a replaced
-    attribute, another estimator, another shard width or other worker
-    processes store a new generation, which replaces the old one on every
-    worker.
+    the pool with process ids `pids` hold ("" for none) and `width` is its
+    series-per-shard word. Nothing of the estimator is held here: the
+    generation's key (the fitted objects it was cut from, compared by
+    identity) is the estimator's own prepared record (`_GENERATION_SLOT`),
+    which the registry drops when the estimator is freed; the record's
+    `ForecastGenerationLifetime` then asks the workers to drop their models.
+    `orphaned` says that request is still owed (the pool was in use when the
+    estimator was freed); the next call of this door sends it.
 
     In a worker process: `token` and `models` (a list, one model per shard
     this worker answers, built once at the store) are the generation it
-    holds; `key`, `pids` and `width` are unused there."""
+    holds; `pids`, `width` and `orphaned` are unused there."""
     var token: String
     var issued: Int
     var width: Int
     var pids: List[Int]
-    var key: PythonObject
+    var orphaned: Bool
     var models: PythonObject
 
     def __init__(out self):
@@ -121,8 +124,39 @@ struct ForecastGeneration(Movable):
         self.issued = 0
         self.width = 0
         self.pids = List[Int]()
-        self.key = PythonObject(None)
+        self.orphaned = False
         self.models = PythonObject(None)
+
+
+struct ForecastGenerationLifetime(Movable, Writable):
+    """Held by an estimator's generation record (`_GENERATION_SLOT`), so it
+    is freed with the estimator, at a refit's or another shard width's new
+    store, or when the record is replaced. Freed while its generation is
+    still the one the workers hold, it asks them to drop their models
+    (`_generation_released`); a replaced generation needs nothing (the new
+    store replaced the workers' models). A finalizer is its own operation
+    and stays quiet: a closed or lost pool has no worker state left."""
+    var kind: Int
+    var token: String
+
+    def __init__(out self, kind: Int, var token: String):
+        self.kind = kind
+        self.token = token^
+
+    def write_to(self, mut writer: Some[Writer]):
+        writer.write("_ForecastGenerationLifetime(kind=", self.kind, ")")
+
+    def write_repr_to(self, mut writer: Some[Writer]):
+        self.write_to(writer)
+
+    def __deinit__(deinit self):
+        try:
+            # At interpreter shutdown the workers end with their sockets;
+            # nothing is asked (no loaded-module read is safe then).
+            if not native_interpreter_finalizing():
+                _generation_released(self.kind, self.token)
+        except:
+            pass
 
 
 struct ParallelForecastBoundary(Defaultable, Movable):
@@ -144,8 +178,18 @@ struct ParallelForecastBoundary(Defaultable, Movable):
         self.hw_generation = ForecastGeneration()
 
 
-# V2 (lane pools-frame, 2026-11-21): the two predict generations.
-comptime PARALLEL_FORECAST_BOUNDARY = SharedSlot[ParallelForecastBoundary, "MojolearnParallelForecastOwnerV2"]
+# V2 (lane pools-frame, 2026-11-21): the two predict generations. V3 (same
+# lane, round 7): a generation pins nothing of the estimator (its key is the
+# estimator's prepared record) and carries `orphaned`.
+comptime PARALLEL_FORECAST_BOUNDARY = SharedSlot[ParallelForecastBoundary, "MojolearnParallelForecastOwnerV3"]
+
+#: The prepared-registry slot of an estimator's generation record,
+#: `(token, key, lifetime)`: `key` is the flat list of the objects the
+#: generation was cut from (None when a fitted array could not be sealed: no
+#: claim, the next predict stores again), `lifetime` a
+#: `ForecastGenerationLifetime`. The registry holds the estimator weakly and
+#: drops the record when it is freed; the record never holds the estimator.
+comptime _GENERATION_SLOT = "parallel_forecast_generation_v1"
 
 #: The generation kinds a store request names.
 comptime _GENERATION_ARIMA = 0
@@ -197,11 +241,11 @@ def _devices(devices: PythonObject) raises:
     shard_indices_admit(indices)
 
 
-def _generation_same(generation: ForecastGeneration, key: PythonObject, width: Int, pool: PythonObject) raises -> Bool:
-    """Whether the workers of `pool` hold the generation cut from `key`:
-    the same worker processes, the same shard width, and every key object
-    the same object (identity only; nothing is hashed or compared by value)."""
-    if len(generation.token) == 0 or generation.width != width or generation.key is None or process_pool_closed(pool):
+def _generation_same(generation: ForecastGeneration, token: String, width: Int, pool: PythonObject) raises -> Bool:
+    """Whether the workers of `pool` hold the generation `token` (the token
+    of the estimator's own record, whose key the caller compared): the same
+    worker processes and the same shard width."""
+    if len(generation.token) == 0 or generation.token != token or generation.width != width or process_pool_closed(pool):
         return False
     var pids = process_pool_pids(pool)
     if len(pids) == 0 or len(pids) != len(generation.pids):
@@ -209,27 +253,175 @@ def _generation_same(generation: ForecastGeneration, key: PythonObject, width: I
     for i in range(len(pids)):  # small-loop(the pool's worker processes)
         if pids[i] != generation.pids[i]:
             return False
-    return prepared_key_same(generation.key, key)
+    return True
 
 
-def _generation_store(mut generation: ForecastGeneration, kind: Int, key: PythonObject, width: Int,
+def _generation_frozen(value: PythonObject, context: PythonObject) raises -> Bool:
+    """A sealed fitted array is still read-only: one type compare and one
+    slot read, once per array per public predict. An Array whose flag was
+    turned off since the seal is not trusted: the caller seals a new copy of
+    its present words and stores a new generation."""
+    var array_class = py_get(context, parallel_keys()[].k_array_class)
+    return array_class is not None and py_type(value) is array_class and Bool(py=value._readonly)
+
+
+def _generation_seal(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    """A private read-only copy of fitted Array `value` (same shape, float32,
+    C order), or None when `value` is not an exact Array that owns C-ordered
+    float32 storage (a caller-assigned ndarray, a view): then no generation
+    is claimed. The copy is born read-only, so no writable NumPy view of it
+    can exist: `est.params_[...] = v` and `np.asarray(est.params_)[...] = v`
+    raise the read-only error. The caller that puts the copy in the
+    estimator's field marks `value` read-only too (it is no longer the
+    estimator's field: a write through an older reference raises instead of
+    being silently ignored). One copy of the array's bytes per sealed
+    estimator, never per predict."""
+    var array_class = py_get(context, parallel_keys()[].k_array_class)
+    if array_class is None or py_type(value) is not array_class:
+        return PythonObject(None)
+    if value._base is not None or String(py=value.dtype) != "<f4" or String(py=value.order) != "C":
+        return PythonObject(None)
+    var count = Int(py=value.size)
+    var sealed = tsa_array_unfilled("f", "<f4", value.shape, count, 4, context)
+    if count > 0:
+        shard_block_copy(Int(py=classical_address(sealed)), Int(py=classical_address(value)), count * 4)
+    _ = value  # keep the Python object alive through the native call above
+    py_setattr(sealed, "_readonly", PythonObject(True))
+    return sealed
+
+
+def _generation_ours(record: PythonObject, key: PythonObject) raises -> Bool:
+    """The estimator's record was cut from exactly these objects (identity
+    only; nothing is hashed or compared by value)."""
+    return record is not None and record[1] is not None and prepared_key_same(record[1], key)
+
+
+def _generation_claim(estimator: PythonObject, kind: Int, token: String, key: PythonObject) raises -> PythonObject:
+    """Record the stored generation on the estimator (replacing its older
+    record, whose lifetime sees another token and asks nothing). Returns the
+    lifetime: the caller keeps it past `_shard_keep`, so for an estimator
+    that takes no weak reference (nothing recorded) it ends after the call,
+    with the pool idle, and the workers drop the models then."""
+    var lifetime = PythonObject(alloc=ForecastGenerationLifetime(kind, token.copy()))
+    var mods = NativeModules()
+    prepared_put(mods, _GENERATION_SLOT, estimator, Python.tuple(PythonObject(token), key, lifetime))
+    return lifetime
+
+
+def _generation_released(kind: Int, token: String) raises:
+    """An estimator's generation record ended. When it is still the
+    generation the workers hold, the coordinator's claim is cleared and the
+    workers are asked to drop the models."""
+    var f = PARALLEL_FORECAST_BOUNDARY.get_or_create_ptr()
+    if kind == _GENERATION_ARIMA:
+        if len(token) == 0 or f[].arima_generation.token != token:
+            return
+        f[].arima_generation.token = String()
+        f[].arima_generation.orphaned = True
+    else:
+        if len(token) == 0 or f[].hw_generation.token != token:
+            return
+        f[].hw_generation.token = String()
+        f[].hw_generation.orphaned = True
+    _generation_sweep()
+
+
+def _generation_idle(pids: List[Int]) raises -> Int:
+    """The idle forecast pool of this process whose workers are `pids`, as
+    its index in the idle list, or -1 (in use by a running call, closed or
+    never kept)."""
+    var pid = Int(external_call["getpid", Int32]())
+    var idle = SHARD_IDLE.get_or_create_ptr()
+    for i in range(len(idle[].pools)):  # small-loop(the idle pools of this process: a few)
+        if idle[].pools[i].pid != pid or idle[].pools[i].child != _CHILD:
+            continue
+        if process_pool_closed(idle[].pools[i].pool):
+            continue
+        var held = process_pool_pids(idle[].pools[i].pool)
+        if len(held) != len(pids) or len(held) == 0:
+            continue
+        var same = True
+        for j in range(len(held)):  # small-loop(the pool's worker processes)
+            if held[j] != pids[j]:
+                same = False
+                break
+        if same:
+            return i
+    return -1
+
+
+def _generation_drop(kind: Int, pids: List[Int]) raises -> Bool:
+    """Ask the workers `pids` to drop their generation of `kind`: one store
+    of no states under the empty token per worker (the store's own
+    replacement). True when the request is settled: sent, or the pool is
+    gone (its workers ended with it). False when the pool is in use by a
+    running call: the request stays owed. The pool leaves the idle list for
+    the wave, so no other call takes it meanwhile; a failed wave closes it."""
+    if len(pids) == 0:
+        return True
+    var at = _generation_idle(pids)
+    if at < 0:
+        # In use by a running call of this door (it is kept again at that
+        # call's end), or closed: a closed pool is not seen again under
+        # these process ids, and the next store clears `orphaned`.
+        return False
+    var idle = SHARD_IDLE.get_or_create_ptr()
+    var taken = idle[].pools.pop(at)
+    var pool = taken.pool
+    try:
+        var b = _b()
+        var held = Python.tuple(PythonObject(kind), PythonObject(""))
+        var drops = shard_wave()
+        for j in range(len(pids)):  # driver-loop: one drop per worker
+            drops.add(PARALLEL_FORECAST_WORKER_OPN_GENERATION_STORE, held, b.list())
+        var dropped = shard_map(pool, drops)
+        shard_batch_admit(len(dropped), len(pids))
+    except:
+        try:
+            process_pool_close(pool)
+        except:
+            pass
+        return True
+    _shard_keep(taken^)
+    return True
+
+
+def _generation_sweep() raises:
+    """Send the drops still owed (`orphaned`). Two flag reads when none is."""
+    var f = PARALLEL_FORECAST_BOUNDARY.get_or_create_ptr()
+    if f[].arima_generation.orphaned:
+        var pids = f[].arima_generation.pids.copy()
+        var settled = _generation_drop(_GENERATION_ARIMA, pids)
+        # The slot is read again: a wave releases the GIL.
+        f = PARALLEL_FORECAST_BOUNDARY.get_or_create_ptr()
+        if settled and len(f[].arima_generation.token) == 0:
+            f[].arima_generation.orphaned = False
+    if f[].hw_generation.orphaned:
+        var pids = f[].hw_generation.pids.copy()
+        var settled = _generation_drop(_GENERATION_HW, pids)
+        f = PARALLEL_FORECAST_BOUNDARY.get_or_create_ptr()
+        if settled and len(f[].hw_generation.token) == 0:
+            f[].hw_generation.orphaned = False
+
+
+def _generation_store(mut generation: ForecastGeneration, kind: Int, width: Int,
                       states: PythonObject, pool: PythonObject, workers: Int) raises -> String:
     """Store a new generation on the workers of `pool`: worker j receives,
     once, the states of the shards it answers (r = j mod workers, the order
     of `shard_map`'s waves) and builds their models. The claim is recorded
-    only after every worker stored; a failed store leaves none."""
+    only after every worker stored; a failed store leaves none. Workers
+    beyond the shard count get a store of no states, so none keeps an older
+    generation of this kind."""
     var b = _b()
     generation.token = String()
-    generation.key = PythonObject(None)
     generation.issued += 1
     var token = (String("fg-") + String(kind) + "-" + String(Int(external_call["getpid", Int32]())) + "-"
                  + String(generation.issued))
     var shards = len(states)
-    var count = min(workers, shards)
-    if count > 0:
+    if workers > 0:
         var held = Python.tuple(PythonObject(kind), PythonObject(token))
         var stores = shard_wave()
-        for j in range(count):  # driver-loop: one generation store per worker
+        for j in range(workers):  # driver-loop: one generation store per worker
             var mine = b.list()
             var r = j
             while r < shards:  # driver-loop: the shards worker j answers
@@ -237,10 +429,10 @@ def _generation_store(mut generation: ForecastGeneration, kind: Int, key: Python
                 r += workers
             stores.add(PARALLEL_FORECAST_WORKER_OPN_GENERATION_STORE, held, mine)
         var stored = shard_map(pool, stores)
-        shard_batch_admit(len(stored), count)
+        shard_batch_admit(len(stored), workers)
     generation.width = width
     generation.pids = process_pool_pids(pool)
-    generation.key = key
+    generation.orphaned = False
     generation.token = token.copy()
     return token
 
@@ -257,16 +449,6 @@ def _generation_predict(op: Int, token: String, shards: Int, workers: Int, start
     var parts = shard_map(pool, requests)
     shard_batch_admit(len(parts), shards)
     return parts
-
-
-def _generation_freeze(value: PythonObject, context: PythonObject) raises:
-    """A fitted Array a generation was cut from is made read-only (the
-    Array's own `_readonly` flag): an in-place write raises, where it would
-    leave the workers' copy stale; a replaced attribute or a refit is seen
-    by the key."""
-    var array_class = py_get(context, parallel_keys()[].k_array_class)
-    if array_class is not None and py_type(value) is array_class:
-        py_setattr(value, "_readonly", PythonObject(True))
 
 
 def _generation_model(generation: ForecastGeneration, state: PythonObject) raises -> PythonObject:
@@ -293,6 +475,17 @@ def _rows(source: PythonObject, lo: Int, hi: Int, width: Int, context: PythonObj
 
 
 # ---------------------------------------------------------------- ARIMA
+
+def _arima_key(fields: PythonObject, keep: PythonObject, y: PythonObject, params: PythonObject) raises -> PythonObject:
+    """The ARIMA generation key: the scalar fields a shard's predict reads
+    (None for an absent one) and the two fitted arrays, by identity."""
+    var key = _b().list()
+    for k in range(len(keep)):  # small-loop(the scalar fields a shard's predict reads)
+        _ = py_call(key.append, py_get(fields, keep[k]))
+    _ = py_call(key.append, y)
+    _ = py_call(key.append, params)
+    return key
+
 
 def _predict_arima(estimator: PythonObject, start_obj: PythonObject, end_obj: PythonObject, exog: PythonObject,
                    devices: PythonObject, sps: PythonObject) raises -> PythonObject:
@@ -321,22 +514,45 @@ def _predict_arima(estimator: PythonObject, start_obj: PythonObject, end_obj: Py
     var shards = len(ranges) // 2
     var workers = len(py_call(b.tuple, devices))
     var shard_width = ranges[1] - ranges[0] if shards > 0 else 0
-    # The generation key: the estimator and every object a shard's state is
-    # cut from, by identity (once per public call; no row is read).
-    var key = b.list()
-    _ = py_call(key.append, estimator)
-    for k in range(len(keep)):  # small-loop(the scalar fields a shard's predict reads)
-        _ = py_call(key.append, py_get(fields, keep[k]))
-    _ = py_call(key.append, py_item(fields, nk[].k__y))
-    _ = py_call(key.append, py_item(fields, nk[].k_params_))
+    # The generation key: every object a shard's state is cut from, by
+    # identity (once per public call; no row is read). The estimator itself
+    # is the registry's weak key, never a key item.
+    var y = py_item(fields, nk[].k__y)
+    var params = py_item(fields, nk[].k_params_)
+    var key = _arima_key(fields, keep, y, params)
+    var mods = NativeModules()
+    var record = prepared_get(mods, _GENERATION_SLOT, estimator)
+    # Sealed by an earlier store of this estimator and still read-only: one
+    # identity pass over the key and one flag read per array.
+    var ours = (_generation_ours(record, key) and _generation_frozen(y, context)
+                and _generation_frozen(params, context))
     var acquired = _shard_acquire(devices, _CHILD)
     var pool = acquired.pool
     var parts = PythonObject(None)
+    var lifetime = PythonObject(None)
     try:
         var token = String()
-        if _generation_same(f[].arima_generation, key, shard_width, pool):
+        if ours and _generation_same(f[].arima_generation, String(py=record[0]), shard_width, pool):
             token = f[].arima_generation.token.copy()
         else:
+            var claimed = ours
+            if not ours:
+                # Seal: the estimator's two fitted arrays become private
+                # read-only copies (never the objects a caller may hold a
+                # writable view of), and the key names them. An array that
+                # cannot be sealed leaves no claim: the next predict stores
+                # again from its words of that moment.
+                var sealed_y = _generation_seal(y, context)
+                var sealed_params = _generation_seal(params, context)
+                if sealed_y is not None and sealed_params is not None:
+                    py_setitem(fields, nk[].k__y, sealed_y)
+                    py_setitem(fields, nk[].k_params_, sealed_params)
+                    py_setattr(y, "_readonly", PythonObject(True))
+                    py_setattr(params, "_readonly", PythonObject(True))
+                    y = sealed_y
+                    params = sealed_params
+                    key = _arima_key(fields, keep, y, params)
+                    claimed = True
             var states = b.list()
             for r in range(shards):  # driver-loop: one stored state per device shard
                 var lo = ranges[2 * r]
@@ -347,20 +563,26 @@ def _predict_arima(estimator: PythonObject, start_obj: PythonObject, end_obj: Py
                     if py_contains(fields, keep[k]):
                         py_setitem(state, keep[k], fields[keep[k]])
                 py_setitem(state, nk[].k_batch_size_, hi - lo)
-                py_setitem(state, nk[].k__y, _rows(py_item(fields, nk[].k__y), lo, hi, n_obs, context))
-                py_setitem(state, nk[].k_params_, _rows(py_item(fields, nk[].k_params_), lo, hi, complexity, context))
+                py_setitem(state, nk[].k__y, _rows(y, lo, hi, n_obs, context))
+                py_setitem(state, nk[].k_params_, _rows(params, lo, hi, complexity, context))
                 _ = py_call(states.append, state)
-            _generation_freeze(py_item(fields, nk[].k__y), context)
-            _generation_freeze(py_item(fields, nk[].k_params_), context)
-            token = _generation_store(f[].arima_generation, _GENERATION_ARIMA, key, shard_width, states, pool, workers)
+            token = _generation_store(f[].arima_generation, _GENERATION_ARIMA, shard_width, states, pool, workers)
+            var claim = PythonObject(None)
+            if claimed:
+                claim = key
+            lifetime = _generation_claim(estimator, _GENERATION_ARIMA, token, claim)
         parts = _generation_predict(PARALLEL_FORECAST_WORKER_OPN_ARIMA_PREDICT_SHARD, token, shards, workers,
                                     start, end, pool)
     except error:
         # A failed call leaves no claim: the pool closes (its workers and their models end with it).
+        f = PARALLEL_FORECAST_BOUNDARY.get_or_create_ptr()
         f[].arima_generation.token = String()
         process_pool_close(pool)
         raise error^
     _shard_keep(acquired^)
+    # An unrecorded lifetime (an estimator that takes no weak reference)
+    # ends here, with the pool idle: the workers drop the models then.
+    _ = lifetime
     var width = end - start
     var result = tsa_array("f", "<f4", Python.tuple(batch, width), batch * width, 4, context)
     for r in range(len(ranges) // 2):  # driver-loop: places one result buffer per device shard
@@ -428,22 +650,38 @@ def _predict_hw(estimator: PythonObject, start_obj: PythonObject, end_obj: Pytho
     var shards = len(ranges) // 2
     var workers = len(py_call(b.tuple, devices))
     var shard_width = ranges[1] - ranges[0] if shards > 0 else 0
-    # The generation key: the estimator and every field of its instance
+    # The generation key: every field of the estimator's instance
     # dictionary, names and values by identity (once per public call; the
     # carried-field walk and the shard cuts below run only for a new
-    # generation).
+    # generation). The estimator itself is the registry's weak key, never a
+    # key item.
     var mods = NativeModules()
     var key = b.list()
-    _ = py_call(key.append, estimator)
     prepared_key_fields(mods, key, fields, List[String]())
+    var record = prepared_get(mods, _GENERATION_SLOT, estimator)
+    var ours = _generation_ours(record, key) and _generation_frozen(comps, context)
     var acquired = _shard_acquire(devices, _CHILD)
     var pool = acquired.pool
     var parts = PythonObject(None)
+    var lifetime = PythonObject(None)
     try:
         var token = String()
-        if _generation_same(f[].hw_generation, key, shard_width, pool):
+        if ours and _generation_same(f[].hw_generation, String(py=record[0]), shard_width, pool):
             token = f[].hw_generation.token.copy()
         else:
+            var claimed = ours
+            if not ours:
+                # Seal (see `_predict_arima`): the packed components become a
+                # private read-only copy and the key is walked again over the
+                # fields as they now stand (once per sealed estimator).
+                var sealed = _generation_seal(comps, context)
+                if sealed is not None:
+                    py_setitem(fields, nk[].k__comps, sealed)
+                    py_setattr(comps, "_readonly", PythonObject(True))
+                    comps = sealed
+                    key = b.list()
+                    prepared_key_fields(mods, key, fields, List[String]())
+                    claimed = True
             var base = shard_state(fields, drop, context)
             var states = b.list()
             for r in range(shards):  # driver-loop: one stored state per device shard
@@ -462,16 +700,22 @@ def _predict_hw(estimator: PythonObject, start_obj: PythonObject, end_obj: Pytho
                 _ = comps  # keep the Python object alive through the native call above
                 py_setitem(state, nk[].k__comps, part)
                 _ = py_call(states.append, state)
-            _generation_freeze(comps, context)
-            token = _generation_store(f[].hw_generation, _GENERATION_HW, key, shard_width, states, pool, workers)
+            token = _generation_store(f[].hw_generation, _GENERATION_HW, shard_width, states, pool, workers)
+            var claim = PythonObject(None)
+            if claimed:
+                claim = key
+            lifetime = _generation_claim(estimator, _GENERATION_HW, token, claim)
         parts = _generation_predict(PARALLEL_FORECAST_WORKER_OPN_HW_PREDICT_SHARD, token, shards, workers,
                                     start, end, pool)
     except error:
         # A failed call leaves no claim: the pool closes (its workers and their models end with it).
+        f = PARALLEL_FORECAST_BOUNDARY.get_or_create_ptr()
         f[].hw_generation.token = String()
         process_pool_close(pool)
         raise error^
     _shard_keep(acquired^)
+    # An unrecorded lifetime ends here, with the pool idle (see `_predict_arima`).
+    _ = lifetime
     var width = end - start
     var result = tsa_array("f", "<f4", Python.tuple(width * batch), width * batch, 4, context)
     for r in range(len(ranges) // 2):  # driver-loop: places one result buffer per device shard
@@ -705,12 +949,16 @@ def forecast_worker_dispatch(operation: Int, request: PythonObject) raises -> Py
                 _ = py_call(models.append, shard_model(f[].hw_cls, args[i]))
         # The slot is read again: building a model can run a collection.
         f = PARALLEL_FORECAST_BOUNDARY.get_or_create_ptr()
+        # A store of no states (the empty token: the coordinator's drop, or a
+        # worker beyond the shard count) leaves this worker holding nothing
+        # of the kind.
+        var held = models if len(models) > 0 else PythonObject(None)
         if kind == _GENERATION_ARIMA:
             f[].arima_generation.token = String(state[1])
-            f[].arima_generation.models = models
+            f[].arima_generation.models = held
         else:
             f[].hw_generation.token = String(state[1])
-            f[].hw_generation.models = models
+            f[].hw_generation.models = held
         return PythonObject(len(models))
     if operation == PARALLEL_FORECAST_WORKER_OPN_ARIMA_PREDICT_SHARD:
         # The model this worker built at the generation's store (it was one
@@ -766,6 +1014,10 @@ def parallel_forecast_call(operation: Int, name: PythonObject, args: PythonObjec
         f[].hw_context = args[3]
         f[].backend = args[4]
         return PythonObject(None)
+    if operation != PARALLEL_FORECAST_OPN_WORKER and (f[].arima_generation.orphaned or f[].hw_generation.orphaned):
+        # A drop still owed to the workers of a freed estimator (two flag
+        # reads per public call when none is).
+        _generation_sweep()
     if operation == PARALLEL_FORECAST_OPN_PREDICT_ARIMA:
         return _predict_arima(args[0], args[1], args[2], args[3], args[4], args[5])
     if operation == PARALLEL_FORECAST_OPN_FORECAST_ARIMA:
