@@ -52,6 +52,7 @@ from core.member_abi import (
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_PREDICT,
     MEMBER_OP_SCORE, MEMBER_OP_OUTPUTS, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT,
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_SCORE, MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT,
+    MEMBER_GIL_FREE,
     MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_COEF,
     MEMBER_BLOCK_COEF, MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
@@ -174,8 +175,16 @@ def _name(slot: _SlotP) -> String:
 
 
 def _capabilities() -> Int:
+    # MEMBER_GIL_FREE (THE GIL RULE, core/member_abi.mojo; the trace is in
+    # fx-gil-RESULT.md, round 4): the store has its own lock; FIT and PREDICT
+    # are one call of the solver operations entry (`cd_fit`, `cd_predict`) on
+    # per-call buffers and the solver's process context (its own lock at
+    # first creation); SCORE is that prediction and the metrics R^2 entry,
+    # host arithmetic over the two vectors. No entry touches CPython or the
+    # GIL and none reaches a process-wide table. On a GPU route the callers
+    # run one worker.
     return (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_SCORE | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
-        | MEMBER_CAN_SAMPLE_WEIGHT | MEMBER_CAN_COEF)
+        | MEMBER_CAN_SAMPLE_WEIGHT | MEMBER_CAN_COEF | MEMBER_GIL_FREE)
 
 
 def _dense(view: MemberMatrix, what: String, estimator: String) raises:
