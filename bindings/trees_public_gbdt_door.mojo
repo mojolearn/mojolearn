@@ -48,9 +48,13 @@ from bindings.trees_public_inputs_door import (
 from bindings.trees_public_inputs_run import trees_finite_f32
 from bindings.admitted_input_unpack import AdmittedX, admit_f32, admit_ids, admitted_array, admitted_vector
 from bindings.py_optional import py_present
-from gbdt.trees_gbdt_run import (
-    gbdt_known_vendor, gbdt_remember_vendor, gbdt_known_mode, gbdt_mode_of_code, gbdt_mode_checked, gbdt_text_has_ctr,
-    _type_or_value,
+from gbdt.trees_gbdt_run import gbdt_mode_checked, gbdt_text_has_ctr, _type_or_value
+from bindings.py_cpython_table import cpython_table
+from core.trees_entry_table import TreesEntryKey
+from core.entry_table import EntryRef, entry_ref_vendor, entry_ref_mode
+from gbdt.fit_calls import (
+    xg_ref, xg_resident, xg_predict, xg_predict_multi, xg_binary, xg_sigmoid_pair, xg_resident_prepare,
+    xg_resident_predict,
 )
 from bindings.trees_keys_unpack import trees_keys
 from bindings.py_balanced import py_item
@@ -61,6 +65,7 @@ comptime _PREDICT_RAW = 0
 comptime _PREDICT_SOFTMAX = 1
 comptime _PREDICT_SIGMOID = 2
 comptime _PREDICT_SIGMOID_PAIR = 3
+comptime _PREDICT_CLASSES_BINARY = 4
 comptime _PREDICT_CLASSES_PINNED = 5
 comptime _PREDICT_CLASSES_OVA = 6
 
@@ -98,18 +103,35 @@ def gbdt_table(fields: PythonObject, context: PythonObject) raises -> PythonObje
     return trees_table(context, gbdt_mode(fields, context), "_mojolearn_gbdt")
 
 
-def gbdt_vendor(table: PythonObject) raises -> String:
-    """`ensemble._binding_vendor`: the binding's vendor answer, or ''."""
-    var entry = trees_entry(table, "gbdt_vendor")
-    if entry is None:
-        return ""
-    var key = Int(entry._obj_ptr)
-    var known = gbdt_known_vendor(key)
-    if known:
-        return known.value()
-    var answer = String(py_call(trees_builtins().str, py_call_typed(entry)))
-    gbdt_remember_vendor(key, answer)
-    return answer
+def gbdt_entry_of(table: PythonObject) raises -> EntryRef:
+    """The gbdt entry, resolved once per operation (lane
+    entry-table-zero-alloc), of the image this table connected (the bridge
+    records it at import as `gbdt_native_key`): the fits, the predicts, the
+    probes and the model dimension run through that image's published
+    native entry (gbdt/fit_calls.mojo), not through Python entries. The
+    ref carries the image's vendor word (`entry_ref_vendor`, 0 = the host
+    image) and its compiled tier (`entry_ref_mode`, 0 = fast), both checked
+    against the publication when it is resolved: no door asks the binary
+    for either again."""
+    var nk = trees_keys()
+    var key = py_get(table, nk[].k_gbdt_native_key)
+    if key is None:
+        raise Error("ImportError: mojolearn: the gbdt binding publishes no native entry table")
+    return xg_ref(TreesEntryKey(Int(py=key[0]), Int(py=key[1])))
+
+
+def _text_span(text: PythonObject, mut nbytes: Int) raises -> Int:
+    """UNPACK of the model text: the address and byte count of the UTF-8
+    bytes CPython holds in the str (no copy; the image copies them once, as
+    its Python entry did). The span lives as long as `text`, which the
+    caller keeps named past the native call."""
+    var size = 0
+    var address = cpython_table()[].PyUnicode_AsUTF8AndSize(text._obj_ptr, Int(MutPointer(to=size)))
+    if address == 0:
+        cpython_table()[].PyErr_Clear()
+        raise Error("TypeError: mojolearn: model_ must be a str")
+    nbytes = size
+    return address
 
 
 def gbdt_has_ctr(text: PythonObject) raises -> Bool:
@@ -167,15 +189,14 @@ def _int(value: PythonObject) raises -> Int:
 # -------------------------------------------------------- resident model
 
 
-def gbdt_resident(fields: PythonObject, table: PythonObject) raises -> Int:
+def gbdt_resident(fields: PythonObject, table: PythonObject, entry: EntryRef) raises -> Int:
     """`GradientBoosting._resident_handle`: the handle of the device copy of
     `model_`, prepared on the first call and reused while the binding and
-    the text bytes are the same; -1 where the binding has no
-    `gbdt_resident_prepare` (the per-call parse runs). The holder tuple
+    the text bytes are the same; -1 where the image holds no resident model
+    (the host image: the per-call parse runs). The holder tuple
     (lifetime, binding, text, handle) releases the copy when it is
     dropped."""
-    var prepare = trees_entry(table, "gbdt_resident_prepare")
-    if prepare is None:
+    if not xg_resident(entry):
         return -1
     var nk = trees_keys()
     var text = py_item(fields, nk[].k_model_)
@@ -185,11 +206,53 @@ def gbdt_resident(fields: PythonObject, table: PythonObject) raises -> Int:
             return Int(py=cached[3])
     # A different text or binding: dropping the holder releases its copy.
     _ = py_call(fields.pop, "_resident", PythonObject(None))
-    var handle = _int(py_call_typed(prepare, text))
+    var nbytes = 0
+    var address = _text_span(text, nbytes)
+    var handle = xg_resident_prepare(entry, address, nbytes)
+    _ = text  # the str owns the bytes the image read above
+    # The lifetime owner (bindings/trees_lifetime_door.mojo, shared with the
+    # forests) releases through the image's Python release entry.
     var release = trees_entry(table, "gbdt_resident_release")
     var lifetime = trees_resident_new(release, handle)
     py_setitem(fields, nk[].k__resident, Python.tuple(lifetime, table, text, PythonObject(handle)))
     return handle
+
+
+struct GbdtApply(Movable):
+    """One predict as UNPACK leaves it. RUN (`gbdt_apply_run`,
+    `gbdt_apply_single`) reads the plain words only; `held_x` and
+    `held_text` own what `x` and `text` address until PACK returns.
+
+    Fields:
+        entry: the native entry of the gbdt image of the estimator's run
+            context.
+        handle: the image's resident model, or -1: the per-call parse of
+            `text` runs.
+        text, text_bytes: the model text's UTF-8 span (per-call parse only).
+        x, rows, row_major: the admitted float32 block (column-major, or
+            C-order for a resident model that takes it as it is).
+    """
+    var entry: EntryRef
+    var handle: Int
+    var text: Int
+    var text_bytes: Int
+    var x: Int
+    var rows: Int
+    var row_major: Bool
+    var held_x: AdmittedX
+    var held_text: PythonObject
+
+    def __init__(out self, entry: EntryRef, handle: Int, text: Int, text_bytes: Int, var held_x: AdmittedX,
+                 held_text: PythonObject):
+        self.entry = entry
+        self.handle = handle
+        self.text = text
+        self.text_bytes = text_bytes
+        self.x = held_x.address
+        self.rows = held_x.rows
+        self.row_major = held_x.c_order
+        self.held_x = held_x^
+        self.held_text = held_text
 
 
 def _fitted_x(fields: PythonObject, X: PythonObject, layout: Bool, before: String, context: PythonObject) raises -> AdmittedX:
@@ -205,64 +268,73 @@ def _fitted_x(fields: PythonObject, X: PythonObject, layout: Bool, before: Strin
     return x^
 
 
-def _resident_call(table: PythonObject, handle: Int, x: AdmittedX, out_buf: PythonObject, mode: Int) raises -> Int:
-    var entry = trees_need(table, "gbdt_resident_predict", "mojolearn: this gbdt binding has no gbdt_resident_predict")
-    return _int(py_call_typed(entry, PythonObject(handle), PythonObject(x.address), PythonObject(trees_address(out_buf)),
-                              Python.list(PythonObject(x.rows), PythonObject(mode), PythonObject(1 if x.c_order else 0))))
+def gbdt_apply_unpack(fields: PythonObject, X: PythonObject, entry: EntryRef, handle: Int,
+                      context: PythonObject) raises -> GbdtApply:
+    """UNPACK of a predict: the fitted check, X admitted in the layout the
+    image takes (either order for a resident model, column-major for the
+    per-call parse), the fitted width, and for the per-call parse the model
+    text's span."""
+    var x = _fitted_x(fields, X, handle >= 0, "predict()", context)
+    if handle >= 0:
+        return GbdtApply(entry, handle, 0, 0, x^, PythonObject(None))
+    var nk = trees_keys()
+    var text = py_item(fields, nk[].k_model_)
+    var nbytes = 0
+    var address = _text_span(text, nbytes)
+    return GbdtApply(entry, handle, address, nbytes, x^, text)
+
+
+def gbdt_apply_run(call: GbdtApply, mode: Int, dst: Int) raises -> Int:
+    """RUN of a predict in `mode` into the caller's block at `dst`: the
+    resident model, or the per-call parse of a multi-output model. Plain
+    words through the image's native entry (the image releases the GIL
+    around its work). Returns the width written per row."""
+    if call.handle >= 0:
+        return xg_resident_predict(call.entry, call.handle, call.x, call.rows, dst, mode, call.row_major)
+    return xg_predict_multi(call.entry, call.text, call.text_bytes, call.x, call.rows, dst, mode)
+
+
+def gbdt_apply_single(call: GbdtApply, dst: Int) raises -> Int:
+    """RUN of the per-call parse of a one-dimensional model: raw scores,
+    the rows written."""
+    return xg_predict(call.entry, call.text, call.text_bytes, call.x, call.rows, dst)
 
 
 # --------------------------------------------------------------- predict
 
 
 def gbdt_predict(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`GradientBoosting.predict`: raw float32 scores."""
+    """`GradientBoosting.predict`: raw float32 scores. UNPACK
+    (`gbdt_apply_unpack`), RUN (`gbdt_apply_run` / `gbdt_apply_single`),
+    PACK (the output array's shape)."""
     var fields = py_fields(model)
     var nk = trees_keys()
     var text = _field(fields, model, nk[].k_model_, "model_")
     if text is None:
         raise Error("RuntimeError: mojolearn: predict() before fit()")
     var table = gbdt_table(fields, context)
-    if gbdt_vendor(table) == "cpu" and gbdt_has_ctr(text):
+    var entry = gbdt_entry_of(table)
+    if entry_ref_vendor(entry) == 0 and gbdt_has_ctr(text):
         # The CPU restatement of a CTR model's apply (`HostGBDT`).
         var args = Python.tuple(X, py_item(fields, nk[].k_loss), text, py_item(fields, nk[].k_n_features_in_), py_item(fields, nk[].k_approx_dim_),
                                 py_item(fields, nk[].k_n_classes_), py_type(model).__name__)
         return host_tree_operation(PythonObject(None), "host_tree_ctr_predict", args, gbdt_host_tree_context(context))
     var dim = _int(py_item(fields, nk[].k_approx_dim_))
-    var handle = gbdt_resident(fields, table)
-    if handle >= 0:
-        var x = _fitted_x(fields, X, True, "predict()", context)
-        var out = admitted_vector(x.rows * dim, "<f4", context)
-        var width = _resident_call(table, handle, x, out, _PREDICT_RAW)
-        if width != dim:
-            raise Error("RuntimeError: mojolearn: predict wrote width " + String(width) + ", expected " + String(dim))
-        if dim == 1:
-            return out
-        return trees_reshape(out, Python.tuple(x.rows, width), context)
-    var x = _fitted_x(fields, X, False, "predict()", context)
-    if dim > 1:
-        var out = admitted_vector(x.rows * dim, "<f4", context)
-        var width = _int(py_call_typed(trees_need(table, "gbdt_predict_multi", "mojolearn: this gbdt binding has no gbdt_predict_multi"),
-                                       text, PythonObject(x.address), PythonObject(trees_address(out)),
-                                       Python.list(PythonObject(x.rows), PythonObject(_PREDICT_RAW))))
+    var call = gbdt_apply_unpack(fields, X, entry, gbdt_resident(fields, table, entry), context)
+    var out = admitted_vector(call.rows * dim, "<f4", context)
+    if call.handle < 0 and dim == 1:
+        var wrote = gbdt_apply_single(call, trees_address(out))
         _ = out  # keep the Python object alive through the native call above
-        _ = x  # keep the Python object alive through the native call above
-        if width != dim:
-            raise Error("RuntimeError: mojolearn: predict wrote width " + String(width) + ", expected " + String(dim))
-            _ = out  # keep the Python object alive through the native call above
-            _ = x  # keep the Python object alive through the native call above
-        _ = out  # keep the Python object alive through the native calls above
-        _ = x  # keep the Python object alive through the native calls above
-        return trees_reshape(out, Python.tuple(x.rows, width), context)
-    var out = admitted_vector(x.rows, "<f4", context)
-    var wrote = _int(py_call_typed(trees_need(table, "gbdt_predict", "mojolearn: this gbdt binding has no gbdt_predict"),
-                                   text, PythonObject(x.address), PythonObject(trees_address(out)), Python.list(PythonObject(x.rows))))
+        if wrote != call.rows:
+            raise Error("RuntimeError: mojolearn: predict wrote " + String(wrote) + " of " + String(call.rows) + " rows")
+        return out
+    var width = gbdt_apply_run(call, _PREDICT_RAW, trees_address(out))
     _ = out  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    if wrote != x.rows:
-        raise Error("RuntimeError: mojolearn: predict wrote " + String(wrote) + " of " + String(x.rows) + " rows")
-        _ = out  # keep the Python object alive through the native call above
-    _ = out  # keep the Python object alive through the native calls above
-    return out
+    if width != dim:
+        raise Error("RuntimeError: mojolearn: predict wrote width " + String(width) + ", expected " + String(dim))
+    if dim == 1:
+        return out
+    return trees_reshape(out, Python.tuple(call.rows, width), context)
 
 
 def _is_multi_output(loss: PythonObject) raises -> Bool:
@@ -285,28 +357,15 @@ def gbdt_predict_proba(model: PythonObject, X: PythonObject, context: PythonObje
             raise Error("RuntimeError: mojolearn: predict_proba() before fit()")
         var mode = _PREDICT_SIGMOID if Bool(py=loss == PythonObject("MultiClassOneVsAll")) else _PREDICT_SOFTMAX
         var table = gbdt_table(fields, context)
+        var entry = gbdt_entry_of(table)
         var classes = _int(py_item(fields, nk[].k_n_classes_))
-        var handle = gbdt_resident(fields, table)
-        var width = 0
-        var rows = 0
-        var out = PythonObject(None)
-        if handle >= 0:
-            var x = _fitted_x(fields, X, True, "predict()", context)
-            rows = x.rows
-            out = admitted_vector(rows * classes, "<f4", context)
-            width = _resident_call(table, handle, x, out, mode)
-        else:
-            var x = _fitted_x(fields, X, False, "predict()", context)
-            rows = x.rows
-            out = admitted_vector(rows * classes, "<f4", context)
-            width = _int(py_call_typed(trees_need(table, "gbdt_predict_multi", "mojolearn: this gbdt binding has no gbdt_predict_multi"),
-                                       py_item(fields, nk[].k_model_), PythonObject(x.address), PythonObject(trees_address(out)),
-                                       Python.list(PythonObject(rows), PythonObject(mode))))
-            _ = x  # keep the Python object alive through the native call above
-            _ = out  # keep the Python object alive through the native call above
+        var call = gbdt_apply_unpack(fields, X, entry, gbdt_resident(fields, table, entry), context)
+        var out = admitted_vector(call.rows * classes, "<f4", context)
+        var width = gbdt_apply_run(call, mode, trees_address(out))
+        _ = out  # keep the Python object alive through the native call above
         if width != classes:
             raise Error("RuntimeError: mojolearn: predict_proba wrote width " + String(width) + ", expected " + String(classes))
-        return trees_reshape(out, Python.tuple(rows, width), context)
+        return trees_reshape(out, Python.tuple(call.rows, width), context)
     if not _is_binary(loss):
         raise Error("mojolearn: predict_proba is defined for Logloss, "
                     + "CrossEntropy, MultiClass and MultiClassOneVsAll; this model was fitted with "
@@ -315,11 +374,13 @@ def gbdt_predict_proba(model: PythonObject, X: PythonObject, context: PythonObje
     if _field(fields, model, nk[].k_model_, "model_") is None:
         raise Error("RuntimeError: mojolearn: predict_proba() before fit()")
     var table = gbdt_table(fields, context)
-    var handle = gbdt_resident(fields, table)
+    var entry = gbdt_entry_of(table)
+    var handle = gbdt_resident(fields, table, entry)
     if handle >= 0:
-        var x = _fitted_x(fields, X, True, "predict()", context)
-        var out = admitted_array(Python.tuple(x.rows, 2), "<f8", context)
-        var width = _resident_call(table, handle, x, out, _PREDICT_SIGMOID_PAIR)
+        var call = gbdt_apply_unpack(fields, X, entry, handle, context)
+        var out = admitted_array(Python.tuple(call.rows, 2), "<f8", context)
+        var width = gbdt_apply_run(call, _PREDICT_SIGMOID_PAIR, trees_address(out))
+        _ = out  # keep the Python object alive through the native call above
         if width != 2:
             raise Error("RuntimeError: mojolearn: predict_proba wrote width " + String(width) + ", expected 2")
         return out
@@ -329,33 +390,13 @@ def gbdt_predict_proba(model: PythonObject, X: PythonObject, context: PythonObje
     trees_cast(trees_address(raw32), "<f4", trees_address(raw), "<f8", Int(py=raw32.size), context)
     _ = raw  # keep the Python object alive through the native call above
     _ = raw32  # keep the Python object alive through the native call above
-    var pair = trees_entry(table, "gbdt_sigmoid_pair")
-    if pair is None:
-        raise Error("RuntimeError: mojolearn: this gbdt binding predates gbdt_sigmoid_pair; rebuild it")
     var out = admitted_array(Python.tuple(n, 2), "<f8", context)
-    var wrote = _int(py_call_typed(pair, PythonObject(trees_address(raw)), PythonObject(trees_address(out)), PythonObject(n)))
+    var wrote = xg_sigmoid_pair(entry, trees_address(raw), trees_address(out), n)
     _ = out  # keep the Python object alive through the native call above
     _ = raw  # keep the Python object alive through the native call above
     if wrote != n:
         raise Error("RuntimeError: mojolearn: gbdt_sigmoid_pair wrote " + String(wrote) + " of " + String(n) + " rows")
-        _ = out  # keep the Python object alive through the native call above
-        _ = raw  # keep the Python object alive through the native call above
-    _ = out  # keep the Python object alive through the native calls above
-    _ = raw  # keep the Python object alive through the native calls above
     return out
-
-
-def _numeric_mode_used(table: PythonObject) raises -> String:
-    """`numeric_mode_used()`: the binary's compiled mode."""
-    var getter = trees_entry(table, "gbdt_numeric_mode")
-    if getter is None:
-        raise Error("RuntimeError: mojolearn: _mojolearn_gbdt has no gbdt_numeric_mode")
-    # The binary's compiled mode, asked once per binary (see gbdt/trees_gbdt_run.mojo GbdtBinaryFacts).
-    var key = Int(getter._obj_ptr)
-    var known = gbdt_known_mode(key)
-    if known:
-        return known.value()
-    return gbdt_mode_of_code(key, _int(py_call_typed(getter)))
 
 
 def _argmax_rows(scores: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -384,35 +425,32 @@ def gbdt_predict_classes(model: PythonObject, X: PythonObject, context: PythonOb
         raise Error("mojolearn: predict_classes needs a classification loss; "
                     + "this model was fitted with " + _repr(loss) + ".")
     var table = gbdt_table(fields, context)
-    if _numeric_mode_used(table) == "fast":
+    var entry = gbdt_entry_of(table)
+    if entry_ref_mode(entry) == 0:
+        # A fast image (`numeric_mode_used()` == "fast": the tier word of
+        # the resolved entry).
         if _is_binary(loss):
-            var direct = trees_entry(table, "gbdt_resident_binary_classes")
-            if direct is not None:
-                var handle = gbdt_resident(fields, table)
-                if handle >= 0:
-                    var x = _fitted_x(fields, X, True, "predict()", context)
-                    var out = admitted_vector(x.rows, "<i8", context)
-                    var wrote = _int(py_call_typed(direct, PythonObject(handle), PythonObject(x.address),
-                                                   PythonObject(trees_address(out)),
-                                                   Python.list(PythonObject(x.rows), PythonObject(1 if x.c_order else 0))))
-                    _ = x  # keep the Python object alive through the native call above
-                    _ = out  # keep the Python object alive through the native call above
-                    if wrote != x.rows:
-                        raise Error("RuntimeError: mojolearn: predict_classes wrote " + String(wrote) + " of "
-                                    + String(x.rows) + " rows")
-                        _ = out  # keep the Python object alive through the native call above
-                        _ = x  # keep the Python object alive through the native call above
-                    _ = out  # keep the Python object alive through the native calls above
-                    return out
+            var handle = gbdt_resident(fields, table, entry)
+            if handle >= 0:
+                var call = gbdt_apply_unpack(fields, X, entry, handle, context)
+                var out = admitted_vector(call.rows, "<i8", context)
+                if call.rows <= 0:
+                    raise Error("invalid resident binary class prediction row count")
+                var width = gbdt_apply_run(call, _PREDICT_CLASSES_BINARY, trees_address(out))
+                _ = out  # keep the Python object alive through the native call above
+                if width != 1:
+                    raise Error("resident binary class prediction returned an invalid width")
+                return out
         elif _int(py_item(fields, nk[].k_n_classes_)) <= 3 and Bool(py=_field(fields, model, nk[].k_grow_policy, "grow_policy") == PythonObject("SymmetricTree")):
             if py_item(fields, nk[].k_model_) is None:
                 raise Error("RuntimeError: mojolearn: predict_proba() before fit()")
-            var handle = gbdt_resident(fields, table)
+            var handle = gbdt_resident(fields, table, entry)
             if handle >= 0:
-                var x = _fitted_x(fields, X, True, "predict()", context)
-                var out = admitted_vector(x.rows, "<i8", context)
+                var call = gbdt_apply_unpack(fields, X, entry, handle, context)
+                var out = admitted_vector(call.rows, "<i8", context)
                 var mode = _PREDICT_CLASSES_PINNED if Bool(py=loss == PythonObject("MultiClass")) else _PREDICT_CLASSES_OVA
-                var width = _resident_call(table, handle, x, out, mode)
+                var width = gbdt_apply_run(call, mode, trees_address(out))
+                _ = out  # keep the Python object alive through the native call above
                 if width != 1:
                     raise Error("RuntimeError: mojolearn: predict_classes wrote width " + String(width) + ", expected 1")
                 return out
@@ -459,20 +497,11 @@ def _adapter_binary(model: PythonObject, X: PythonObject, probabilities: Bool, c
     _ = margins  # keep the Python object alive through the native calls above
     var n = Int(py=margins.size)
     var table = trees_table(context, String(mode) if mode is not None else gbdt_mode(fields, context), "_mojolearn_gbdt")
-    var output = PythonObject(None)
-    var wrote = 0
-    if probabilities:
-        output = admitted_array(Python.tuple(n, 2), "<f4", context)
-        wrote = _int(py_call_typed(trees_need(table, "gbdt_binary_probabilities", "mojolearn: this gbdt binding has no gbdt_binary_probabilities"),
-                                   PythonObject(trees_address(margins)), PythonObject(trees_address(output)), Python.list(PythonObject(n))))
-        _ = output  # keep the Python object alive through the native call above
-        _ = margins  # keep the Python object alive through the native call above
-    else:
-        output = admitted_vector(n, "<i4", context)
-        wrote = _int(py_call_typed(trees_need(table, "gbdt_binary_classes", "mojolearn: this gbdt binding has no gbdt_binary_classes"),
-                                   PythonObject(trees_address(margins)), PythonObject(trees_address(output)), Python.list(PythonObject(n))))
-        _ = output  # keep the Python object alive through the native call above
-        _ = margins  # keep the Python object alive through the native call above
+    var entry = gbdt_entry_of(table)
+    var output = admitted_array(Python.tuple(n, 2), "<f4", context) if probabilities else admitted_vector(n, "<i4", context)
+    var wrote = xg_binary(entry, probabilities, trees_address(margins), trees_address(output), n)
+    _ = output  # keep the Python object alive through the native call above
+    _ = margins  # keep the Python object alive through the native call above
     if wrote != (2 * n if probabilities else n):
         raise Error("RuntimeError: GBDT binary output returned an unexpected row count")
     return output

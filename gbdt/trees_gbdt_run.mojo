@@ -9,59 +9,14 @@ Lane doorsplit-trees (2026-11-11): moved from the door. Each function is a
 per-call scalar decision or a small per-process cache; there is no
 independent work to split across cores.
 """
-from core.shared_slot import SharedSlot
 
 
-struct GbdtBinaryFacts(Defaultable, Movable):
-    """Compile-time answers of a loaded GBDT binary (its vendor and numeric
-    mode), keyed on the address of the compiled entry that gives them. The
-    entries are bound functions a connected binding table holds for the
-    life of the process (an extension module is never unloaded), so the
-    address names one binary. p3-trees: every predict called the compiled
-    entry (and str()) again for the same constant."""
-    var vendor: Dict[Int, String]
-    var mode: Dict[Int, String]
-
-    def __init__(out self):
-        self.vendor = Dict[Int, String]()
-        self.mode = Dict[Int, String]()
-
-
-comptime GBDT_BINARY_FACTS = SharedSlot[GbdtBinaryFacts, "MojolearnTreesGbdtBinaryFactsV1"]
-
-
-def gbdt_known_vendor(key: Int) raises -> Optional[String]:
-    """The vendor answer cached for the binary whose entry is at `key`."""
-    var facts = GBDT_BINARY_FACTS.get_or_create_ptr()
-    if key in facts[].vendor:
-        return Optional(facts[].vendor[key])
-    return None
-
-
-def gbdt_remember_vendor(key: Int, answer: String) raises:
-    var facts = GBDT_BINARY_FACTS.get_or_create_ptr()
-    facts[].vendor[key] = answer
-
-
-def gbdt_known_mode(key: Int) raises -> Optional[String]:
-    """The numeric mode cached for the binary whose entry is at `key`."""
-    var facts = GBDT_BINARY_FACTS.get_or_create_ptr()
-    if key in facts[].mode:
-        return Optional(facts[].mode[key])
-    return None
-
-
-def gbdt_mode_of_code(key: Int, code: Int) raises -> String:
-    """`numeric_mode_used()`'s answer from the binary's mode word, cached
-    for that binary; an unknown word refuses."""
-    var facts = GBDT_BINARY_FACTS.get_or_create_ptr()
-    if code == 0:
-        facts[].mode[key] = "fast"
-        return "fast"
-    if code == 1:
-        facts[].mode[key] = "identical"
-        return "identical"
-    raise Error("RuntimeError: mojolearn: _mojolearn_gbdt returned unknown numeric mode " + String(code))
+# The per-binary vendor and numeric-mode cache (`GbdtBinaryFacts`,
+# `gbdt_known_vendor` / `gbdt_remember_vendor` / `gbdt_known_mode` /
+# `gbdt_mode_of_code`) is gone (lane dw-trees-boost, 2026-11-21): the GBDT
+# door reads both words from the resolved native entry of the image
+# (`entry_ref_vendor`, `entry_ref_mode`, core/entry_table.mojo), so no door
+# calls the binary's `gbdt_vendor` / `gbdt_numeric_mode` Python entries.
 
 
 def gbdt_mode_checked(clean: String) raises -> String:

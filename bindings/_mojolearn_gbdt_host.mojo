@@ -212,25 +212,12 @@ def gbdt_fit_native(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     return outcome^
 
 
-def gbdt_predict_binding(
-    model: PythonObject,
-    x_addr: PythonObject,
-    out_addr: PythonObject,
-    params: PythonObject,
-) raises -> PythonObject:
-    """`gbdt_predict_binding` (`bindings/_mojolearn_gbdt.mojo:410-439`): RAW
-    approxes for a one-dimensional model, `params` is `[n_rows]`, the
-    feature count comes from the model, returns rows written."""
-    if len(params) != 1:
-        raise Error(
-            "gbdt_predict: params must hold [n_rows], got "
-            + String(len(params))
-        )
-    var text = String(py=model)
-    var x_address = Int(py=x_addr)
-    var op = f32_ptr(Int(py=out_addr))
+def gbdt_predict_native(text: String, x_address: Int, n_rows: Int, out_address: Int) raises -> Int:
+    """XG_PREDICT (the GPU image's `gbdt_predict_native`): RAW approxes for
+    a one-dimensional model, the feature count comes from the model,
+    returns rows written."""
+    var op = f32_ptr(out_address)
     _ = f32_ptr(x_address)
-    var n_rows = Int(py=params[0])
     if n_rows <= 0:
         raise Error("gbdt_predict: n_rows must be positive")
     var m = _parse_model(text)
@@ -245,36 +232,25 @@ def gbdt_predict_binding(
     var n_trees = len(m.tree_offsets) - 1
     with GILReleased(Python()):
         gbdt_host_predict_into(m^, x_address, n_rows, n_features, n_trees, op)
-    return PythonObject(n_rows)
+    return n_rows
 
 
-def gbdt_predict_multi_binding(
-    model: PythonObject,
-    x_addr: PythonObject,
-    out_addr: PythonObject,
-    params: PythonObject,
-) raises -> PythonObject:
-    """`gbdt_predict_multi_binding` (`bindings/_mojolearn_gbdt.mojo:453-485`)
-    over `gbdt/estimator.mojo::gbdt_predict_multi`: `params` is
-    `[n_rows, mode]`, mode 0 RAW (`dim` columns), 1 SOFTMAX (`dim + 1`,
-    `gbdt/train.mojo::multiclass_probabilities`), 2 SIGMOID (`dim`,
-    `one_vs_all_probabilities`), both transforms in double through
-    `identical_exp64`, row-major out. Returns the width written."""
-    if len(params) != 2:
-        raise Error(
-            "gbdt_predict_multi: params must hold [n_rows,"
-            " as_probabilities], got " + String(len(params))
-        )
-    var text = String(py=model)
-    var x_address = Int(py=x_addr)
-    var op = f32_ptr(Int(py=out_addr))
+def gbdt_predict_multi_native(text: String, x_address: Int, n_rows: Int, out_address: Int, mode: Int) raises -> Int:
+    """XG_PREDICT_MULTI (the GPU image's `gbdt_predict_multi_native`) over
+    `gbdt/estimator.mojo::gbdt_predict_multi`: mode 0 RAW (`dim` columns),
+    1 SOFTMAX (`dim + 1`, `gbdt/train.mojo::multiclass_probabilities`),
+    2 SIGMOID (`dim`, `one_vs_all_probabilities`), both transforms in
+    double through `identical_exp64`, row-major. Returns the width written."""
+    var op = f32_ptr(out_address)
     _ = f32_ptr(x_address)
-    var n_rows = Int(py=params[0])
-    var mode = Int(py=params[1])
     var width: Int
     with GILReleased(Python()):
         width = gbdt_predict_multi_run(text, x_address, n_rows, mode, op)
-    return PythonObject(width)
+    return width
+
+
+# TOMBSTONE: gbdt_predict, gbdt_predict_multi, gbdt_sigmoid_pair, gbdt_binary_probabilities, gbdt_binary_classes (Python entries of this image: no caller left, the GBDT door calls the typed operations XG_PREDICT, XG_PREDICT_MULTI, XG_SIGMOID_PAIR, XG_BINARY of this image's native entry; host walks unchanged) deleted 2026-11-21 by lane/dw-trees-boost; code recoverable at 5544c66aae.
+# Restore: git apply experiments/removed/dead_entries_gbdt_predict_calls.patch
 
 
 def gbdt_model_dim_binding(model: PythonObject) raises -> PythonObject:
@@ -362,43 +338,33 @@ def gbdt_fit_ordered_rmse_binding(
 # Restore: git apply experiments/removed/gbdt_sigmoid.patch
 
 
-def gbdt_sigmoid_pair_binding(
-    raw_addr: PythonObject, out_addr: PythonObject, n: PythonObject
-) raises -> PythonObject:
-    """`gbdt_sigmoid_pair_binding` (`bindings/_mojolearn_gbdt.mojo`, DEVIATION
-    2902), its body: `out[2 * i] = 1 - p`, `out[2 * i + 1] = p` with `p`
+def gbdt_sigmoid_pair_native(raw_address: Int, out_address: Int, count: Int) raises -> Int:
+    """XG_SIGMOID_PAIR (the GPU image's `gbdt_sigmoid_pair_native`, DEVIATION
+    2902), its body: `dst[2 * i] = 1 - p`, `dst[2 * i + 1] = p` with `p`
     exactly `1 / (1 + identical_exp64(-raw))`, `n` rows, both buffers float64. The
     `1.0 - p` is the one IEEE double subtraction the Python layer computed
     per row. Under the forest walk's sabotage define
     (`MOJOLEARN_FOREST_HOST_SABOTAGE`, the lane's negative control) the two
     columns are written swapped."""
-    var rp = f64_ptr(Int(py=raw_addr))
-    var op = f64_ptr(Int(py=out_addr))
-    var count = Int(py=n)
+    var rp = f64_ptr(raw_address)
+    var op = f64_ptr(out_address)
     if count < 0:
         raise Error("gbdt_sigmoid_pair: n must be non-negative")
     gbdt_host_sigmoid_pair_into(rp, op, count)
-    return PythonObject(count)
+    return count
 
 
-def gbdt_binary_prediction_binding[probabilities: Bool, dtype: DType](
-    raw_addr: PythonObject, out_addr: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """`gbdt_binary_prediction_binding` (`bindings/_mojolearn_gbdt.mojo:
-    107-130`), the GradientBoostingClassifier adapter's two transforms, with
-    the same checks in the same words. The body is
-    `gbdt/binary_prediction.mojo::binary_prediction_kernel` restated per
-    element on the host: the probability pair
+def _gbdt_binary_native[probabilities: Bool, dtype: DType](raw_address: Int, address: Int, n: Int) raises -> Int:
+    """The GradientBoostingClassifier adapter's two transforms (the GPU
+    image's `gbdt_binary_native`), with the same checks in the same words.
+    The body is `gbdt/binary_prediction.mojo::binary_prediction_kernel`
+    restated per element on the host: the probability pair
     `[ftz(1 - p), p]` with `p = ftz(identical_sigmoid(ftz(margin)))`, and the
     class code from the margin's sign and magnitude bits (strict raw > 0,
     so a positive subnormal margin is class one on every column)."""
-    if len(params) != 1:
-        raise Error("binary prediction: params must contain n")
-    var n = Int(py=params[0])
     if n <= 0 or n > 2147483647:
         raise Error("binary prediction: positive n<=Int32.max required")
-    var rp = f32_ptr(Int(py=raw_addr))
-    var address = Int(py=out_addr)
+    var rp = f32_ptr(raw_address)
     if address == 0:
         raise Error("binary prediction: null output")
     var op = MutPointer[Scalar[dtype], MutUntrackedOrigin](unsafe_from_address=address)
@@ -406,21 +372,14 @@ def gbdt_binary_prediction_binding[probabilities: Bool, dtype: DType](
     var count = 2 * n if probabilities else n
     with GILReleased(Python()):
         gbdt_host_binary_prediction_into[probabilities, dtype](rp, op, n)
-    return PythonObject(count)
+    return count
 
 
-def gbdt_binary_probabilities_binding(
-    raw_addr: PythonObject, out_addr: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """`[1 - p, p]` per margin, Float32 (see `gbdt_binary_prediction_binding`)."""
-    return gbdt_binary_prediction_binding[True, DType.float32](raw_addr, out_addr, params)
-
-
-def gbdt_binary_classes_binding(
-    raw_addr: PythonObject, out_addr: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """The Int32 class code per margin (see `gbdt_binary_prediction_binding`)."""
-    return gbdt_binary_prediction_binding[False, DType.int32](raw_addr, out_addr, params)
+def gbdt_binary_native(probabilities: Bool, raw_address: Int, address: Int, n: Int) raises -> Int:
+    """XG_BINARY: `[1 - p, p]` per margin, Float32, or the Int32 class code."""
+    if probabilities:
+        return _gbdt_binary_native[True, DType.float32](raw_address, address, n)
+    return _gbdt_binary_native[False, DType.int32](raw_address, address, n)
 
 
 # ---- The image's native gbdt entry (lane calltable-gbdt-forest-dart,
@@ -442,6 +401,35 @@ struct _GbdtHostImage(GbdtImage):
     @staticmethod
     def model_dim(text: String) raises -> Int:
         return _parse_model(text).dim
+
+    @staticmethod
+    def predict(text: String, x: Int, n_rows: Int, dst: Int) raises -> Int:
+        return gbdt_predict_native(text, x, n_rows, dst)
+
+    @staticmethod
+    def predict_multi(text: String, x: Int, n_rows: Int, dst: Int, mode: Int) raises -> Int:
+        return gbdt_predict_multi_native(text, x, n_rows, dst, mode)
+
+    @staticmethod
+    def binary(probabilities: Bool, raw: Int, dst: Int, n: Int) raises -> Int:
+        return gbdt_binary_native(probabilities, raw, dst, n)
+
+    @staticmethod
+    def sigmoid_pair(raw: Int, dst: Int, n: Int) raises -> Int:
+        return gbdt_sigmoid_pair_native(raw, dst, n)
+
+    # The host image holds no device-resident model: the per-call parse runs.
+    @staticmethod
+    def resident() -> Bool:
+        return False
+
+    @staticmethod
+    def resident_prepare(text: String) raises -> Int:
+        raise Error("AttributeError: mojolearn: this gbdt binding has no gbdt_resident_prepare")
+
+    @staticmethod
+    def resident_predict(handle: Int, x: Int, n_rows: Int, dst: Int, mode: Int, row_major: Bool) raises -> Int:
+        raise Error("AttributeError: mojolearn: this gbdt binding has no gbdt_resident_predict")
 
 
 def gbdt_host_entry_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
@@ -467,14 +455,9 @@ def build__mojolearn_gbdt_host() -> PythonObject:
         module.def_function[gbdt_numeric_mode_binding]("gbdt_numeric_mode")
         module.def_function[gbdt_mode_policy_mask_binding]("gbdt_mode_policy_mask")
         module.def_function[gbdt_fit_binding]("gbdt_fit")
-        module.def_function[gbdt_predict_binding]("gbdt_predict")
-        module.def_function[gbdt_predict_multi_binding]("gbdt_predict_multi")
         module.def_function[gbdt_model_dim_binding]("gbdt_model_dim")
         # TOMBSTONE: gbdt_sigmoid (dead native entry: no live caller) deleted 2026-10-26 by 7c1201602; code recoverable at 485ba9cc1.
         # Restore: git apply experiments/removed/gbdt_sigmoid.patch
-        module.def_function[gbdt_sigmoid_pair_binding]("gbdt_sigmoid_pair")
-        module.def_function[gbdt_binary_probabilities_binding]("gbdt_binary_probabilities")
-        module.def_function[gbdt_binary_classes_binding]("gbdt_binary_classes")
         module.def_function[gbdt_fit_two_level_feature_freq_binding]("gbdt_fit_two_level_feature_freq")
         module.def_function[gbdt_fit_ordered_rmse_binding]("gbdt_fit_ordered_rmse")
         return module.finalize()

@@ -20,6 +20,8 @@ from gbdt.fit_request import (
     GbdtFitArgs, GbdtFitOutcome, GBDT_ENTRY_ABI, XG_OP_COUNT, XG_CAPS, XG_NUMERIC_MODE, XG_FIT, XG_FIT_ROWMAJOR,
     XG_OUTCOME_SIZES, XG_OUTCOME_COPY, XG_OUTCOME_FREE, XG_MODEL_DIM, XG_CAP_ROW_MAJOR, gbdt_outcome_box,
     gbdt_outcome_sizes, gbdt_outcome_copy, gbdt_outcome_free, gbdt_string_at,
+    XG_PREDICT, XG_PREDICT_MULTI, XG_BINARY, XG_SIGMOID_PAIR, XG_RESIDENT_PREPARE, XG_RESIDENT_PREDICT,
+    XG_CAP_RESIDENT,
 )
 
 
@@ -34,6 +36,37 @@ trait GbdtImage:
 
     @staticmethod
     def model_dim(text: String) raises -> Int:
+        ...
+
+    # The predict operations (lane dw-trees-boost, 2026-11-21). Addresses are
+    # the caller's buffers as plain words; each method releases the GIL
+    # around its own work.
+    @staticmethod
+    def predict(text: String, x: Int, n_rows: Int, dst: Int) raises -> Int:
+        ...
+
+    @staticmethod
+    def predict_multi(text: String, x: Int, n_rows: Int, dst: Int, mode: Int) raises -> Int:
+        ...
+
+    @staticmethod
+    def binary(probabilities: Bool, raw: Int, dst: Int, n: Int) raises -> Int:
+        ...
+
+    @staticmethod
+    def sigmoid_pair(raw: Int, dst: Int, n: Int) raises -> Int:
+        ...
+
+    @staticmethod
+    def resident() -> Bool:
+        ...
+
+    @staticmethod
+    def resident_prepare(text: String) raises -> Int:
+        ...
+
+    @staticmethod
+    def resident_predict(handle: Int, x: Int, n_rows: Int, dst: Int, mode: Int, row_major: Bool) raises -> Int:
         ...
 
 
@@ -67,9 +100,43 @@ def _fit_args(aa: Int, na: Int, pp: Int, np: Int, ff: Int) raises -> GbdtFitArgs
                        ints^, floats^, bad^, strs^)
 
 
+def _int(pp: Int, k: Int) -> Int:
+    return MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=pp)[k]
+
+
+def _spans(what: StaticString, na: Int, need_a: Int, np: Int, need_p: Int) raises:
+    if na != need_a or np != need_p:
+        raise Error(String(what) + ": needs " + String(need_a) + " addresses and " + String(need_p)
+                    + " parameters, got " + String(na) + " and " + String(np))
+
+
+def _run_predict[I: GbdtImage](op: Int, aa: Int, na: Int, pp: Int, np: Int) raises -> Int:
+    """The predict operations: the request words read, the image's method."""
+    if op == XG_PREDICT:
+        _spans("gbdt_predict", na, 3, np, 2)
+        return I.predict(gbdt_string_at(_addr(aa, 0), _int(pp, 0)), _addr(aa, 1), _int(pp, 1), _addr(aa, 2))
+    if op == XG_PREDICT_MULTI:
+        _spans("gbdt_predict_multi", na, 3, np, 3)
+        return I.predict_multi(gbdt_string_at(_addr(aa, 0), _int(pp, 0)), _addr(aa, 1), _int(pp, 1), _addr(aa, 2),
+                               _int(pp, 2))
+    if op == XG_BINARY:
+        _spans("binary prediction", na, 2, np, 2)
+        return I.binary(_int(pp, 1) != 0, _addr(aa, 0), _addr(aa, 1), _int(pp, 0))
+    if op == XG_SIGMOID_PAIR:
+        _spans("gbdt_sigmoid_pair", na, 2, np, 1)
+        return I.sigmoid_pair(_addr(aa, 0), _addr(aa, 1), _int(pp, 0))
+    if op == XG_RESIDENT_PREPARE:
+        _spans("gbdt_resident_prepare", na, 1, np, 1)
+        return I.resident_prepare(gbdt_string_at(_addr(aa, 0), _int(pp, 0)))
+    _spans("gbdt_resident_predict", na, 2, np, 4)
+    return I.resident_predict(_int(pp, 0), _addr(aa, 0), _int(pp, 1), _addr(aa, 1), _int(pp, 2), _int(pp, 3) != 0)
+
+
 def _run[I: GbdtImage](op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int) raises -> Int:
     if op == XG_CAPS:
-        return XG_CAP_ROW_MAJOR if I.row_major() else 0
+        return (XG_CAP_ROW_MAJOR if I.row_major() else 0) | (XG_CAP_RESIDENT if I.resident() else 0)
+    if op >= XG_PREDICT and op <= XG_RESIDENT_PREDICT:
+        return _run_predict[I](op, aa, na, pp, np)
     if op == XG_NUMERIC_MODE:
         return Int(GLOBAL_NUMERIC_MODE)
     if op == XG_FIT or op == XG_FIT_ROWMAJOR:
