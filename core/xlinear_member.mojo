@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """The XLinear family as MEMBERS (core/member_abi.mojo, schema v2): the
 generalized linear regressors PoissonRegressor, GammaRegressor and
-TweedieRegressor, HuberRegressor, BayesianRidge, ARDRegression and Lars.
+TweedieRegressor, HuberRegressor, BayesianRidge, ARDRegression, Lars and LassoLars.
 
 One entry, `xlinear_member_v2`, published by each x_linear image
 (`xlinear_member_publish`, beside its operations table). It runs the family's
@@ -15,7 +15,7 @@ metric). No kernel is touched.
 
 Kinds (the second word of each class's `_mojolearn_member`): 0
 PoissonRegressor, 1 GammaRegressor, 2 TweedieRegressor, 3 HuberRegressor,
-4 BayesianRidge, 5 ARDRegression, 6 Lars.
+4 BayesianRidge, 5 ARDRegression, 6 Lars, 7 LassoLars.
 
 MEMBER_OP_NEW parameters (Float64 words; word 0 is the kind, the count is
 the kind's):
@@ -31,11 +31,13 @@ the kind's):
     [4] alpha_1, [5] alpha_2, [6] lambda_1, [7] lambda_2, [8] threshold_lambda.
   * kind 6, 4 words: [0] 6, [1] fit_intercept, [2] n_nonzero_coefs,
     [3] positive (0 / 1).
+  * kind 7, 5 words: [0] 7, [1] fit_intercept, [2] max_iter, [3] positive,
+    [4] alpha.
 The estimator's own checks (solver, warm_start, alpha >= 0, Tweedie's power
-and link words, Huber's epsilon >= 1, BayesianRidge's compute_score, Lars' jitter) run at the caller's admission.
+and link words, Huber's epsilon >= 1, BayesianRidge's compute_score, Lars' jitter, LassoLars' alpha >= 0) run at the caller's admission.
 
 Views: X dense row-major host float32; y and sample weights host float32
-vectors (one target); kinds 5 and 6 take no sample weights (a given weight is
+vectors (one target); kinds 5..7 take no sample weights (a given weight is
 refused in words; MEMBER_OP_CAPABILITIES of its state says so). A device-home view, a row or column index and a nonzero
 `fit_output` are refused in words. PREDICT writes the prediction as float32,
 rows x 1: link(X @ coef + intercept) for kinds 0..2, X @ coef + intercept
@@ -47,7 +49,7 @@ Fitted-state blocks (EXPORT / IMPORT), in index order:
 0 `MEMBER_BLOCK_COEF` float32 1 x features; 1 `MEMBER_BLOCK_SCALARS` float64
 in the kind's order: kinds 0..2 [intercept, n_iter]; kind 3 [intercept,
 scale, n_iter]; kind 4 [intercept, alpha_, lambda_, n_iter]; kind 5 [intercept, alpha_,
-n_iter]; kind 6 [intercept, n_iter, alpha_]. Kind 6 after a fit also holds
+n_iter]; kinds 6, 7 [intercept, n_iter, alpha_]. Kinds 6, 7 after a fit also holds
 2 `XL_MEMBER_BLOCK_ACTIVE` (`MEMBER_BLOCK_FAMILY` + 2) int32 1 x active
 features (`active_`, in the order the path took them). Kind 5 also holds 2 `XL_MEMBER_BLOCK_LAMBDA` (`MEMBER_BLOCK_FAMILY` +
 1) float32 1 x features (`lambda_`). Kind 3 after a fit also holds 2 `XL_MEMBER_BLOCK_OUTLIERS`
@@ -89,6 +91,7 @@ comptime XL_MEMBER_HUBER = 3
 comptime XL_MEMBER_BAYES = 4
 comptime XL_MEMBER_ARD = 5
 comptime XL_MEMBER_LARS = 6
+comptime XL_MEMBER_LASSO_LARS = 7
 comptime XL_MEMBER_BLOCK_LAMBDA = MEMBER_BLOCK_FAMILY + 1
 comptime XL_MEMBER_BLOCK_ACTIVE = MEMBER_BLOCK_FAMILY + 2
 comptime XL_MEMBER_BLOCK_OUTLIERS = MEMBER_BLOCK_FAMILY
@@ -110,7 +113,13 @@ def xl_member_param_count(kind: Int) -> Int:
         return 9
     if kind == XL_MEMBER_LARS:
         return 4
+    if kind == XL_MEMBER_LASSO_LARS:
+        return 5
     return 0
+
+
+def _lars(kind: Int) -> Bool:
+    return kind == XL_MEMBER_LARS or kind == XL_MEMBER_LASSO_LARS
 
 
 def xl_member_scalar_count(kind: Int) -> Int:
@@ -119,7 +128,7 @@ def xl_member_scalar_count(kind: Int) -> Int:
         return 3
     if kind == XL_MEMBER_BAYES:
         return 4
-    if kind == XL_MEMBER_ARD or kind == XL_MEMBER_LARS:
+    if kind == XL_MEMBER_ARD or _lars(kind):
         return 3
     return 2
 
@@ -260,7 +269,9 @@ def _name(slot: _SlotP) -> String:
         return String("BayesianRidge")
     if kind == XL_MEMBER_ARD:
         return String("ARDRegression")
-    return String("Lars")
+    if kind == XL_MEMBER_LARS:
+        return String("Lars")
+    return String("LassoLars")
 
 
 def _loss_name(slot: _SlotP) -> String:
@@ -281,7 +292,7 @@ def _capabilities(kind: Int) -> Int:
 
 def _weighted(kind: Int) -> Bool:
     """Whether `kind`'s fit takes sample weights (kind -1: some kind does)."""
-    return kind != XL_MEMBER_ARD and kind != XL_MEMBER_LARS
+    return kind != XL_MEMBER_ARD and not _lars(kind)
 
 
 def _dense(view: MemberMatrix, what: String, estimator: String) raises:
@@ -402,12 +413,16 @@ def _plain_fit(slot: _SlotP, call: _CallP, kind: Int, p: List[Float64], intercep
         n_out = 2 * d + 4
         n_fw = 3 * d * d + 4 * d + n
         n_iw = 2 * d
-    elif kind == XL_MEMBER_LARS:
+    elif _lars(kind):
         # `xl_fit_lars_unpack`: [n_nonzero_coefs, fit_intercept, lasso 0, positive], [alpha_min 0]
         algo = ALGO_LARS
         ip = [Int(p[2]), intercept, 0, Int(p[3])]
         fp = [0.0]
         n_out = 2 * d + 4
+        if kind == XL_MEMBER_LASSO_LARS:
+            # [max_iter, fit_intercept, lasso 1, positive], [alpha]
+            ip = [Int(p[2]), intercept, 1, Int(p[3])]
+            fp = [p[4]]
         n_fw = 2 * d * d + 8 * d
         n_iw = 2 * d
     var result = List[Float32](length=n_out, fill=0.0)
@@ -504,7 +519,7 @@ def _family_block(slot: _SlotP) -> Int:
         return XL_MEMBER_BLOCK_OUTLIERS
     if _kind(slot) == XL_MEMBER_ARD and len(slot[].record) > 0:
         return XL_MEMBER_BLOCK_LAMBDA
-    if _kind(slot) == XL_MEMBER_LARS and slot[].trained:
+    if _lars(_kind(slot)) and slot[].trained:
         return XL_MEMBER_BLOCK_ACTIVE
     return 0
 

@@ -1245,6 +1245,10 @@ class LassoLars(_LinearRegressorMixin, NumericModeMixin):
 
     _BINDING = _BINDING
 
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_XLINEAR = 2) and core/xlinear_member.mojo.
+    _mojolearn_member = (2, 7)
+
     def __init__(self, alpha=1.0, *, fit_intercept=True, verbose=False, precompute="auto", max_iter=500,
                  eps=2.220446049250313e-16, copy_X=True, fit_path=True, positive=False, jitter=None,
                  random_state=None, numeric_mode=None, device=None):

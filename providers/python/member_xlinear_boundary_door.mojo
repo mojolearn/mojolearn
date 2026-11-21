@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """The member boundary of the XLinear family; RUN is core/xlinear_member.mojo.
 Published kinds: 0 PoissonRegressor, 1 GammaRegressor, 2 TweedieRegressor,
-3 HuberRegressor, 4 BayesianRidge, 5 ARDRegression, 6 Lars (`_mojolearn_member = (MEMBER_FAMILY_XLINEAR, kind)` on
+3 HuberRegressor, 4 BayesianRidge, 5 ARDRegression, 6 Lars, 7 LassoLars (`_mojolearn_member = (MEMBER_FAMILY_XLINEAR, kind)` on
 each class).
 
   * `xlinear_member_admit` (UNPACK, once per member): the estimator's own
@@ -42,7 +42,7 @@ from core.member_abi import (
     MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_BLOCK_COEF, MEMBER_BLOCK_SCALARS, MEMBER_IMPORT_DONE, MEMBER_F64,
 )
 from core.xlinear_member import (
-    XL_MEMBER_HUBER, XL_MEMBER_BAYES, XL_MEMBER_ARD, XL_MEMBER_LARS, XL_MEMBER_BLOCK_OUTLIERS, XL_MEMBER_BLOCK_LAMBDA,
+    XL_MEMBER_HUBER, XL_MEMBER_BAYES, XL_MEMBER_ARD, XL_MEMBER_LARS, XL_MEMBER_LASSO_LARS, XL_MEMBER_BLOCK_OUTLIERS, XL_MEMBER_BLOCK_LAMBDA,
     XL_MEMBER_BLOCK_ACTIVE,
 )
 from core.metrics_entry_table import MetricsEntryKey, metrics_r2_entry, MR_OP_COUNT
@@ -101,15 +101,25 @@ def _xl_ard_words(model: PythonObject, fields: PythonObject) raises -> List[Floa
         _float(py_item(fields, nk[].k_lambda_2)), _float(py_item(fields, nk[].k_threshold_lambda))]
 
 
-def _xl_lars_words(model: PythonObject, fields: PythonObject) raises -> List[Float64]:
-    """Kind 6: `xl_fit_lars_unpack`'s refusals, then the four words."""
+def _xl_lars_words(model: PythonObject, fields: PythonObject, lasso: Bool) raises -> List[Float64]:
+    """Kinds 6, 7: `xl_fit_lars_unpack`'s refusals, then the four (Lars)
+    or five (LassoLars) words."""
     var nk = x_linear_keys()
     var name = _name(model)
-    var limit = py_item(fields, nk[].k_n_nonzero_coefs)
+    var limit: PythonObject
+    if lasso:
+        if not _ge(py_item(fields, nk[].k_alpha), PythonObject(0)):
+            raise Error("mojolearn LassoLars: alpha must be >= 0")
+        limit = py_item(fields, nk[].k_max_iter)
+    else:
+        limit = py_item(fields, nk[].k_n_nonzero_coefs)
     if _attr(model, "jitter", PythonObject(None)) is not None:
         raise Error("mojolearn " + name + ": jitter is not implemented")
-    return [Float64(XL_MEMBER_LARS), _intercept_word(fields), Float64(_int(limit)),
-        1.0 if _truth(_attr(model, "positive", PythonObject(False))) else 0.0]
+    var words: List[Float64] = [Float64(XL_MEMBER_LASSO_LARS if lasso else XL_MEMBER_LARS), _intercept_word(fields),
+        Float64(_int(limit)), 1.0 if _truth(_attr(model, "positive", PythonObject(False))) else 0.0]
+    if lasso:
+        words.append(_float(py_item(fields, nk[].k_alpha)))
+    return words^
 
 
 def _intercept_word(fields: PythonObject) raises -> Float64:
@@ -131,8 +141,8 @@ def xlinear_member_admit(model: PythonObject, fields: PythonObject, kind: Int, c
         words = _xl_bayes_words(model, fields)
     elif kind == XL_MEMBER_ARD:
         words = _xl_ard_words(model, fields)
-    elif kind == XL_MEMBER_LARS:
-        words = _xl_lars_words(model, fields)
+    elif kind == XL_MEMBER_LARS or kind == XL_MEMBER_LASSO_LARS:
+        words = _xl_lars_words(model, fields, kind == XL_MEMBER_LASSO_LARS)
     else:
         raise Error("RuntimeError: mojolearn: unknown XLinear member kind " + String(kind))
     var ops = xl_route(model, fields, context, False)
@@ -223,7 +233,7 @@ def xlinear_member_pack(model: PythonObject, fields: PythonObject, context: Pyth
                 count=call.dst.cols)
             py_setitem(fields, nk[].k_lambda_, lam)
         return
-    if kind == XL_MEMBER_LARS:
+    if kind == XL_MEMBER_LARS or kind == XL_MEMBER_LASSO_LARS:
         py_setitem(fields, nk[].k_n_iter_, PythonObject(Int(scalars[1])))
         py_setitem(fields, nk[].k_alpha_, PythonObject(Float64(Float32(scalars[2]))))
         if blocks > 2:
@@ -269,7 +279,7 @@ def xlinear_member_state(model: PythonObject, fields: PythonObject, context: Pyt
             _count_word(fields, nk[].k_n_iter_)]
     elif kind == XL_MEMBER_ARD:
         scalars = [intercept, Float64(py=py_item(fields, nk[].k_alpha_)), _count_word(fields, nk[].k_n_iter_)]
-    elif kind == XL_MEMBER_LARS:
+    elif kind == XL_MEMBER_LARS or kind == XL_MEMBER_LASSO_LARS:
         scalars = [intercept, _count_word(fields, nk[].k_n_iter_), Float64(py=py_item(fields, nk[].k_alpha_))]
     else:
         scalars = [intercept, _count_word(fields, nk[].k_n_iter_)]
