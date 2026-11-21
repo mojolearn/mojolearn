@@ -18,7 +18,10 @@ from core.linear_entry_table import LinearEntryKey, LINEAR_TABLE_ESTIMATORS, lin
 from core.linear_fit_types import LINEAR_FIT_ABI, LINEAR_FIT_OPERATION_COUNT
 from core.linear_model_state import LinearModelState
 from core.linear_registry import LINEAR_STATES, linear_lease_predict
-from core.linear_route import LinearRoute, LINEAR_DEVICE_CPU, LINEAR_DEVICE_GPU, linear_route_resolve
+from core.linear_route import (
+    LinearRoute, LINEAR_DEVICE_CPU, LINEAR_DEVICE_GPU, LINEAR_DEVICE_INSTALL,
+    linear_device_code, linear_device_installed, linear_route_resolve,
+)
 from glm.host.linear_fit_native import LINEAR_FIT_HOST_API, linear_fit_host_v1
 from glm.host.linear_predict_native import linear_predict_host_v1
 
@@ -39,6 +42,29 @@ def model_state(address: Int) -> LinearModelState:
     state.has_coef = True
     state.fitted = True
     return state^
+
+
+def device_rules() raises:
+    # `device=None` is the installation's device; an explicit gpu without a
+    # GPU set is refused in words that name the CPU; cpu always runs.
+    require(linear_device_code("gpu") == LINEAR_DEVICE_GPU and linear_device_code("cpu") == LINEAR_DEVICE_CPU
+        and linear_device_code("GPU") < 0 and linear_device_code("") < 0, "device words are not exact")
+    require(linear_device_installed(LINEAR_DEVICE_INSTALL, 0) == LINEAR_DEVICE_CPU,
+        "the default device of a CPU-only process is not the CPU")
+    for vendor in range(1, 4):  # the three GPU vendor words
+        require(linear_device_installed(LINEAR_DEVICE_INSTALL, vendor) == LINEAR_DEVICE_GPU,
+            "the default device of a GPU process is not the GPU")
+        require(linear_device_installed(LINEAR_DEVICE_GPU, vendor) == LINEAR_DEVICE_GPU
+            and linear_device_installed(LINEAR_DEVICE_CPU, vendor) == LINEAR_DEVICE_CPU,
+            "an explicit device did not keep its word on a GPU process")
+    require(linear_device_installed(LINEAR_DEVICE_CPU, 0) == LINEAR_DEVICE_CPU, "cpu did not run on a CPU-only process")
+    var refused = False
+    try:
+        _ = linear_device_installed(LINEAR_DEVICE_GPU, 0)
+    except problem:
+        require(String(problem).find("device='cpu'") >= 0, "the gpu refusal does not name device='cpu'")
+        refused = True
+    require(refused, "an explicit gpu ran on a CPU-only process")
 
 
 def missing_before_publication() raises:
@@ -138,6 +164,7 @@ def fixture(wide: Bool) raises:
 
 
 def run_checks() raises:
+    device_rules()
     missing_before_publication()
     # Same native publication, schema, endpoint order and publisher identity
     # as _mojolearn_estimators_host initialization, with no Python import.

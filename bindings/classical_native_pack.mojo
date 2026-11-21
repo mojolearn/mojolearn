@@ -31,7 +31,7 @@ from bindings.classical_caller_unpack import classical_caller_outside
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
 from bindings.admitted_call_door import AdmittedCall
 from core.linear_metadata import linear_vendor_name, linear_constructor_check, linear_constructor_device
-from providers.python.linear_route_boundary_door import linear_route_call, linear_route_clear, linear_device_unpack
+from providers.python.linear_route_boundary_door import linear_route_call, linear_route_clear, linear_device_admit
 from bindings.classical_keys_unpack import classical_keys
 from bindings.operation_names_classical import (
     CLASSICAL_TREES_FIRST, CLASSICAL_LEAF_TREES_DOOR, CLASSICAL_LEAF_FAMILY_DOOR,
@@ -236,16 +236,18 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
         classical_admit_fields(call.modules, call.fields, py_item(context, nk[].k_classical_fields), context)
         var result = PythonObject(None)
         if operation == CLASSICAL_OPN_INITIALIZE:
-            # `device` is checked where it is given: an unknown value is
-            # refused in words before any field is published. It is stored
+            # `device` is checked where it is given: an unknown value, and an
+            # explicit 'gpu' in a CPU-only process, are refused in words
+            # before any field is published. The default None (this
+            # installation's device) is one identity compare. It is stored
             # verbatim like every constructor parameter and read once, by the
             # estimator's first operation, into its route owner
-            # (providers/python/linear_route_boundary_door.mojo). A construction
-            # costs, more than before: one type compare, the three-byte word
-            # compare, and one lookup of the estimator's address in the model
-            # record table (the route clear below). No owner is allocated here.
+            # (providers/python/linear_route_boundary_door.mojo). A default
+            # construction costs, more than before: that compare and one
+            # lookup of the estimator's address in the model record table
+            # (the route clear below). No owner is allocated here.
             linear_constructor_check(len(args), ridge)
-            _ = linear_device_unpack(args[linear_constructor_device(ridge)], b)
+            linear_device_admit(args[linear_constructor_device(ridge)], context, b)
             result = classical_initialize(model, args, ridge, context)
             # A constructor run again on a live estimator: its next operation
             # reads the device and the mode again.
@@ -264,7 +266,7 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
                 # A new device is refused in words before the estimator changes.
                 var device_key = PythonObject("device")
                 if py_contains(args[0], device_key):
-                    _ = linear_device_unpack(py_item(args[0], device_key), b)
+                    linear_device_admit(py_item(args[0], device_key), context, b)
             result = classical_set_params(model, args[0], ridge, context)
             # The device or the numeric mode may have changed: the next
             # operation resolves the route again.

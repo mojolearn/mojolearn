@@ -3,7 +3,10 @@
 
 `device="gpu"` and `device="cpu"` name two published entry tables of the same
 family (core/linear_entry_table.mojo): the device table of the selected
-vendor and tier, and the CPU identical table. A route is resolved ONCE per
+vendor and tier, and the CPU identical table. `device=None` (the default) is
+this installation's device: the GPU table where the installation has a GPU
+set, else the CPU table; it is decided at resolution and the route holds the
+device it resolved to. A route is resolved ONCE per
 estimator (providers/python/linear_route_boundary_door.mojo) and holds the
 resolved thin C entries; every later fit, predict and score calls through
 them. No public operation tests the device, reads a table slot, builds a
@@ -24,6 +27,9 @@ from core.native_descriptor_call import native_descriptor_call
 
 comptime LINEAR_DEVICE_GPU = 0
 comptime LINEAR_DEVICE_CPU = 1
+# The request `device=None`: this installation's device. Never a route's
+# device: resolution replaces it by LINEAR_DEVICE_GPU or LINEAR_DEVICE_CPU.
+comptime LINEAR_DEVICE_INSTALL = 2
 
 
 def linear_device_code(word: String) -> Int:
@@ -42,7 +48,24 @@ def linear_device_name(code: Int) -> String:
 
 def linear_device_refusal(shown: String) raises:
     """The one refusal of an unknown device; `shown` is the value's repr."""
-    raise Error("ValueError: device must be 'gpu' or 'cpu', got " + shown)
+    raise Error("ValueError: device must be 'gpu', 'cpu' or None, got " + shown)
+
+
+def linear_device_gpu_absent() raises:
+    """The one refusal of an explicit `device="gpu"` where no GPU set exists."""
+    raise Error("ValueError: device='gpu' needs a GPU build of mojolearn, and this installation is CPU only. "
+        + "Use device='cpu', or leave device=None to run on this installation's device")
+
+
+def linear_device_installed(device: Int, process_vendor: Int) raises -> Int:
+    """The device a request runs on in a process whose selected vendor word
+    is `process_vendor` (0 CPU only): None is the installation's device, an
+    explicit `gpu` without a GPU set is refused, `cpu` always runs."""
+    if device == LINEAR_DEVICE_INSTALL:
+        return LINEAR_DEVICE_CPU if process_vendor == 0 else LINEAR_DEVICE_GPU
+    if device == LINEAR_DEVICE_GPU and process_vendor == 0:
+        linear_device_gpu_absent()
+    return device
 
 
 struct LinearRoute(ImplicitlyCopyable, Movable):

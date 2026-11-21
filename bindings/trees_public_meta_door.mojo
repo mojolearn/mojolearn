@@ -1214,7 +1214,8 @@ def _ridge_multi_entry(model: PythonObject, est: PythonObject, sample_weight: Py
     # constructed with device="cpu" keeps its own route: each output is then
     # fitted by the member's fit, through the classical owner's CPU table
     # (lane pilot-ridge-device; read once per fit, never per row).
-    if String(_attr(est, PythonObject("device"), PythonObject("gpu"))) != "gpu":
+    var member_device = _attr(est, PythonObject("device"), PythonObject(None))
+    if member_device is not None and String(member_device) == "cpu":
         return PythonObject(None)
     try:
         var table = trees_table(context, _mode(py_fields(est), context), "_mojolearn_estimators")

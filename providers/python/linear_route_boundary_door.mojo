@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 """UNPACK of an estimator's device and numeric mode into its native route owner.
 
-`device="gpu"` (default) or `device="cpu"` is a constructor parameter of Ridge
-and LinearRegression. Its value is checked when it is given (constructor,
+`device=None` (default: this installation's device), `device="gpu"` or
+`device="cpu"` is a constructor parameter of Ridge and LinearRegression. Its
+value is stored as given, checked when it is given (constructor,
 `set_params`) and read ONCE, at the estimator's first operation, into a
 `LinearRouteOwner` kept in the weak model-record table. The owner holds the
 resolved entries of the device table or of the CPU table (core/linear_route.mojo)
@@ -33,8 +34,8 @@ from core.entry_table import EntryRef, entry_ref_word
 from core.linear_entry_table import LINEAR_TABLE_X_LINEAR, LINEAR_TABLE_DECOMP, linear_table_entry
 from core.linear_metadata import linear_mode_name, linear_vendor_code
 from core.linear_route import (
-    LinearRoute, LINEAR_DEVICE_GPU, LINEAR_DEVICE_CPU, linear_device_code, linear_device_refusal,
-    linear_route_resolve, linear_route_weighted,
+    LinearRoute, LINEAR_DEVICE_CPU, LINEAR_DEVICE_INSTALL, linear_device_code, linear_device_refusal,
+    linear_device_installed, linear_route_resolve, linear_route_weighted,
 )
 from providers.python.linear_entry_boundary_door import linear_entry_connection
 from x_decomp.descriptor_schema import XD_ABI_NAME, XD_OPERATION_COUNT
@@ -112,15 +113,33 @@ def register_linear_route_owner_identity(published: PythonObject) raises:
 
 
 def linear_device_unpack(value: PythonObject, b: PythonObject) raises -> Int:
-    """The device code of a constructor value: exact `'gpu'` or `'cpu'`.
-    Anything else is refused in words, before any state changes. `b` is the
-    builtins module the calling door already admitted."""
+    """The device code of a constructor value: None (this installation's
+    device), or exact `'gpu'` or `'cpu'`. Anything else is refused in words,
+    before any state changes. `b` is the builtins module the calling door
+    already admitted."""
+    if value is None:
+        return LINEAR_DEVICE_INSTALL
     if py_type(value) is b.str:
         var code = linear_device_code(String(value))
         if code >= 0:
             return code
     linear_device_refusal(String(py_call(b.repr, value)))
-    return LINEAR_DEVICE_GPU
+    return LINEAR_DEVICE_INSTALL
+
+
+def linear_device_admit(value: PythonObject, context: PythonObject, b: PythonObject) raises:
+    """Check a device where it is given (constructor, `set_params`): an
+    unknown value, and an explicit `'gpu'` in a CPU-only process, are refused
+    in words before the estimator changes. The default None reads nothing
+    here. The explicit Host* classes run on the CPU by class and take any
+    admitted value."""
+    var device = linear_device_unpack(value, b)
+    if device == LINEAR_DEVICE_INSTALL or device == LINEAR_DEVICE_CPU:
+        return
+    var nk = classical_keys()
+    if Bool(py=py_get(context, nk[].k_classical_explicit_cpu, False)):
+        return
+    _ = linear_device_installed(device, linear_vendor_code(String(py_item(context, nk[].k_vendor))))
 
 
 def linear_route_clear(model: PythonObject) raises:
@@ -154,7 +173,11 @@ def _linear_route_build(device: Int, ridge: Bool, mode: PythonObject,
         var mode_name = linear_mode_name(String(selected))
         expected_mode = 1 if mode_name == "identical" else 0
         var process_vendor = linear_vendor_code(String(py_item(context, nk[].k_vendor)))
-        if device == LINEAR_DEVICE_CPU and process_vendor != 0:
+        # None is this installation's device; an explicit 'gpu' in a CPU-only
+        # process is refused in words (an instance that reached here without
+        # its constructor's check: unpickled, or its field assigned).
+        owner.route.device = linear_device_installed(device, process_vendor)
+        if owner.route.device == LINEAR_DEVICE_CPU and process_vendor != 0:
             # A GPU installation: the CPU table of the host binaries, loaded
             # beside the device table at import
             # (python/mojolearn/_native_classical_bridge.py connect_cpu_device).
@@ -165,14 +188,9 @@ def _linear_route_build(device: Int, ridge: Bool, mode: PythonObject,
                 raise Error("ImportError: device='cpu' is not connected in this installation")
             entries = py_item(cpu, PythonObject(mode_name))
         else:
-            # DECISION OWED (lane pilot-ridge-device): in a CPU-only process
-            # only the CPU table exists and the default `device="gpu"` keeps
-            # running on it, as every default-constructed estimator, the CPU
-            # verification column and the CPU-only wheels do today. The plan
-            # (docs/plans/PYTHON_AT_THE_BOUNDARY.md section 10.3) refuses
-            # `device="gpu"` there in words; that refusal is one line here
-            # (`device == LINEAR_DEVICE_GPU and process_vendor == 0`) once the
-            # default for CPU-only installs is decided.
+            # The process's own table: the GPU table for a GPU request, the
+            # CPU table in a CPU-only process (where every request that got
+            # here resolved to the CPU).
             entries = py_item(py_item(context, nk[].k_classical_bindings), PythonObject(mode_name))
             expected_vendor = process_vendor
     if py_type(entries) is b.str:
@@ -240,12 +258,9 @@ def linear_route_call(model: PythonObject, fields: PythonObject, ridge: Bool,
         if (native[].resolved and native[].mode is mode and native[].default_mode is default_mode
                 and native[].context is context):
             return LinearRouteCall(native[].route, owner)
-    # The one read of `device`. An instance without the field (built without
-    # its constructor) runs the default.
-    var device = LINEAR_DEVICE_GPU
-    var given = py_get(fields, "device")
-    if given is not None:
-        device = linear_device_unpack(given, b)
+    # The one read of `device`. None, and an instance without the field
+    # (built without its constructor), run this installation's device.
+    var device = linear_device_unpack(py_get(fields, "device"), b)
     var fresh = PythonObject(alloc=_linear_route_build(device, ridge, mode, default_mode, context, b))
     # An estimator that takes no weak reference keeps no owner: it resolves
     # at every operation (records_put answers False and stores nothing).

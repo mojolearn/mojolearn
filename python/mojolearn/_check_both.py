@@ -432,7 +432,11 @@ def on_device(est, device, fitted=True):
     already runs there, else a new estimator of its class with its constructor
     parameters and `device=device`. With `fitted`, the new estimator is handed
     the fitted attributes of `est` (the same objects, in memory), so both
-    answer from one fitted model."""
+    answer from one fitted model.
+
+    `device=None` on `est` is the installation's device. The check runs only
+    where the installation has a GPU (a CPU-only one is refused before this),
+    so None is the GPU here."""
     name = type(est).__name__
     try:
         params = dict(est.get_params(deep=False))
@@ -440,7 +444,7 @@ def on_device(est, device, fitted=True):
         params = dict(est.get_params())
     if "device" not in params:
         raise NotChecked(f"{name} declares device= but get_params does not return it")
-    if params["device"] == device:
+    if (params["device"] or "gpu") == device:
         return est
     params["device"] = device
     try:
@@ -519,8 +523,9 @@ def _cpu_answered(ml, cpu):
 
 
 def _route_of(est):
-    """What the estimator itself says it runs on: its `device` parameter and
-    the vendor of the compiled binary it uses (`vendor_used`)."""
+    """What the estimator itself says it runs on: its `device` parameter as
+    given (None: this installation's device) and the vendor of the compiled
+    binary it uses (`vendor_used`)."""
     try:
         used = est.vendor_used()
     except Exception as exc:
@@ -819,7 +824,9 @@ def environment_lines(env):
         lines.append(f"  device    {env.get('device')} ({threads})")
     route = env.get("route")
     if route:
-        lines.append(f"  route     device={route.get('device')!r} in this process, binary vendor {route.get('vendor_used')}")
+        given = route.get("device")
+        shown = "device=None (this installation's device)" if given is None else f"device={given!r}"
+        lines.append(f"  route     {shown} in this process, binary vendor {route.get('vendor_used')}")
     lines.append(f"  wheel     mojolearn {env.get('version')}, {env.get('mode')} mode")
     lines.append(f"  binaries  {where} ({binaries.get('loaded', 0)} loaded)")
     return lines
@@ -904,7 +911,7 @@ def format_check(result):
     if result.get("form") == "fit-both":
         rows = (f" on the first {result['fit_rows']:,} of {result['fit_rows_given']:,} rows"
                 if result.get("fit_rows") != result.get("fit_rows_given") else "")
-        where = ("one estimator per device (device='gpu', device='cpu'), both in this process"
+        where = ("one estimator per device (this installation's GPU, device='cpu'), both in this process"
                  if result.get("transfer") == "device" else
                  "on the GPU in this process, on the CPU in a child process (MOJOLEARN_VENDOR=cpu)")
         lines += [f"Fitted on each side{rows}: {where}. Each side answers from its own fitted model.", ""]
@@ -912,7 +919,7 @@ def format_check(result):
             lines += ["WARNING: " + result["warning"], ""]
     elif result.get("transfer") == "device":
         lines += [("Fitted on the given estimator; " if result.get("fitted_here") else "") +
-                  "The same estimator was constructed on each device (device='gpu', device='cpu') in this "
+                  "The same estimator was constructed on each device (this installation's GPU, device='cpu') in this "
                   "process and both answer from the one fitted model.", ""]
     elif result.get("fitted_here"):
         lines += ["Fitted on the GPU; the fitted model was saved and loaded on the CPU.", ""]

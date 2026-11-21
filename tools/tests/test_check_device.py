@@ -31,9 +31,9 @@ class DeviceModel:
     nudge_cpu = None    # an element index the CPU answer moves by one ULP
     one_device = False  # both devices report the GPU binary
 
-    def __init__(self, *, alpha=1.0, device="gpu"):
-        if device not in ("gpu", "cpu"):
-            raise ValueError(f"device must be 'gpu' or 'cpu', got {device!r}")
+    def __init__(self, *, alpha=1.0, device=None):
+        if device not in (None, "gpu", "cpu"):
+            raise ValueError(f"device must be 'gpu', 'cpu' or None, got {device!r}")
         self.alpha, self.device, self.fits = alpha, device, 0
         DeviceModel.built.append(device)
 
@@ -41,7 +41,7 @@ class DeviceModel:
         return dict(alpha=self.alpha, device=self.device)
 
     def vendor_used(self):
-        return "cuda" if self.device == "gpu" or DeviceModel.one_device else "cpu"
+        return "cuda" if self.device != "cpu" or DeviceModel.one_device else "cpu"
 
     def fit(self, X, y):
         self.fits += 1
@@ -99,16 +99,18 @@ def test_takes_device_is_the_class_marker_and_not_the_explicit_host_class():
     setup()
     assert cb.takes_device(DeviceModel())
     assert not cb.takes_device(HostDeviceModel())
-    assert not cb.takes_device(SimpleNamespace(device="gpu"))
+    assert not cb.takes_device(SimpleNamespace(device=None))
 
 
 def test_on_device_returns_the_estimator_itself_on_its_own_device_and_a_twin_with_its_fitted_state_on_the_other():
     X, y = setup()
     est = DeviceModel(alpha=0.25).fit(X, y)
-    assert cb.on_device(est, "gpu") is est
+    assert cb.on_device(est, "gpu") is est                           # None is the installation's GPU here
+    explicit = DeviceModel(alpha=0.25, device="gpu")
+    assert cb.on_device(explicit, "gpu") is explicit
     twin = cb.on_device(est, "cpu")
     assert type(twin) is DeviceModel and twin is not est
-    assert twin.get_params() == dict(alpha=0.25, device="cpu") and est.get_params()["device"] == "gpu"
+    assert twin.get_params() == dict(alpha=0.25, device="cpu") and est.get_params()["device"] is None
     assert twin.coef_ is est.coef_ and twin.n_features_in_ == 3      # the same fitted objects, in memory
     bare = cb.on_device(est, "cpu", fitted=False)
     assert not hasattr(bare, "coef_")
@@ -119,13 +121,13 @@ def test_fitted_model_form_runs_the_same_class_on_both_devices_in_this_process(t
     est = DeviceModel().fit(X, y)
     result = cb.check_estimator(install(tmp_path), est, X, spawn=no_child, **LABELS)
     assert result["ran"] and result["transfer"] == "device" and result["form"] == "fitted-model"
-    assert DeviceModel.built == ["gpu", "cpu"]                       # the given estimator, then its CPU twin
+    assert DeviceModel.built == [None, "cpu"]                        # the given estimator, then its CPU twin
     gpu, cpu = result["sides"]["gpu"], result["sides"]["cpu"]
-    assert gpu["route"] == dict(device="gpu", vendor_used="cuda")
+    assert gpu["route"] == dict(device=None, vendor_used="cuda")
     assert cpu["route"] == dict(device="cpu", vendor_used="cpu")
     assert result["verdict"]["match"] and gpu["outputs"][0]["sha256"] == cpu["outputs"][0]["sha256"]
     text = cb.format_check(result)
-    assert "route     device='gpu' in this process, binary vendor cuda" in text
+    assert "route     device=None (this installation's device) in this process, binary vendor cuda" in text
     assert "route     device='cpu' in this process, binary vendor cpu" in text
     assert "constructed on each device" in text and "saved and loaded" not in text
     assert text.splitlines()[-1].startswith("MATCH")
@@ -145,7 +147,7 @@ def test_fit_argument_fits_the_given_estimator_once_and_both_devices_answer_from
     est = DeviceModel()
     result = cb.check_estimator(install(tmp_path), est, X, fit=(X, y), spawn=no_child, **LABELS)
     assert result["ran"] and result["fitted_here"] and est.fits == 1
-    assert DeviceModel.built == ["gpu", "cpu"] and result["verdict"]["match"]
+    assert DeviceModel.built == [None, "cpu"] and result["verdict"]["match"]
     assert "fit_wall_s" in result["sides"]["gpu"]
 
 
@@ -154,12 +156,12 @@ def test_fit_both_fits_one_estimator_per_device_in_this_process_and_starts_no_ch
     est = DeviceModel()
     result = cb.check_estimator(install(tmp_path), est, X, fit=(X, y), fit_both=True, spawn=no_child, **LABELS)
     assert result["ran"] and result["form"] == "fit-both" and result["transfer"] == "device"
-    assert est.fits == 1 and DeviceModel.built == ["gpu", "cpu"]
+    assert est.fits == 1 and DeviceModel.built == [None, "cpu"]
     for side in ("gpu", "cpu"):
         assert "fit_wall_s" in result["sides"][side] and "process_wall_s" not in result["sides"][side]
     assert result["verdict"]["match"]
     text = cb.format_check(result)
-    assert "one estimator per device (device='gpu', device='cpu'), both in this process" in text
+    assert "one estimator per device (this installation's GPU, device='cpu'), both in this process" in text
     assert "child process" not in text
 
 
