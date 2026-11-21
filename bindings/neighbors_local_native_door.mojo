@@ -47,12 +47,14 @@ from bindings.classical_labels_door import (
 from bindings.labels_descriptor_boundary_door import labels_class_ratio_f64
 from bindings.nearest_centroid_provider_unpack import NcConnection
 from bindings.lof_provider_unpack import LofConnection
-from core.lof_plan import LofLabelsPlan, lof_f32_address, lof_offset
+from neighbors.lof_run import (
+    LofFitRequest, LofFitOutcome, LofQueryRequest, lof_fit_run, lof_fit_labels_run, lof_query_run,
+)
 from neighbors.neighbors_local_run import (
-    LOF_RESULT_SCORES, LOF_RESULT_DECISION, LOF_RESULT_LABELS, LOF_AUTO_OFFSET,
+    LOF_RESULT_SCORES, LOF_RESULT_DECISION, LOF_RESULT_LABELS,
     local_check_n_neighbors, local_copy_f32, local_write_i32,
     lof_refuse_metric, lof_refuse_metric_params, lof_check_contamination, lof_check_fit_rows,
-    lof_fit_neighbors, lof_plan, lof_refuse_fit_predict_novelty, lof_check_novelty,
+    lof_fit_neighbors, lof_refuse_fit_predict_novelty, lof_check_novelty,
     nc_refuse_metric, nc_check_label_rows, nc_check_classes, nc_check_priors_ndim, nc_check_priors_size,
     nc_check_variance, nc_refuse_decision_metric,
     imp_refuse_missing_values, imp_refuse_metric, imp_refuse_weights, imp_round_f32, imp_cells_length,
@@ -270,147 +272,144 @@ def _lof_check(fields: PythonObject, context: PythonObject) raises:
     local_check_n_neighbors(Int(py=family_call(b.int, family_field(fields, "n_neighbors"))))
 
 
-def _lof_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> LofConnection:
-    """Public admission/publication around the staged native fit plan."""
+# LocalOutlierFactor is UNPACK / RUN / PACK. UNPACK (`_lof_fit_unpack`,
+# `_lof_query_unpack`) reads every public value once into a typed request of
+# neighbors/lof_run.mojo and keeps the Python owners as pins. RUN is that
+# module (no Python import), entered once with the GIL released. PACK
+# publishes the arrays UNPACK allocated and turns the finite word into the
+# public refusal.
+
+
+struct _LofFitOperands(Movable):
+    # Boundary owners only: lifetime pins of the storage the request addresses.
+    var x: PythonObject
+    var distances: PythonObject
+    var densities: PythonObject
+    var scores: PythonObject
+    var request: LofFitRequest
+
+    def __init__(out self, x: PythonObject, distances: PythonObject, densities: PythonObject,
+                 scores: PythonObject, request: LofFitRequest):
+        self.x = x
+        self.distances = distances
+        self.densities = densities
+        self.scores = scores
+        self.request = request.copy()
+
+
+def _lof_fit_unpack(fields: PythonObject, source: PythonObject, context: PythonObject) raises -> _LofFitOperands:
+    """UNPACK of LocalOutlierFactor.fit: checked parameters, the rows and
+    the three result arrays."""
     var b = _b()
-    var fields = py_fields(model)
     _lof_check(fields, context)
-    var binding = args[0]
-    var x = _f32(args[1], context)
+    var x = _f32(source, context)
     var n = _rows(x)
     var d = _cols(x)
     lof_check_fit_rows(n, d)
     var k = lof_fit_neighbors(Int(py=family_call(b.int, family_field(fields, "n_neighbors"))), n)
     var unfused = _flag(context, "unfused_knn")
     var old_items = _flag(context, "old_items") if not unfused else False
-    var plan = lof_plan(n, n, d, k, True, unfused, old_items)
-    var connection = LofConnection(binding)
-    var x_address = Int(py=classical_address(x))
-    var dist = PythonObject(None)
-    var lrd = PythonObject(None)
-    var score = PythonObject(None)
-    try:
-        var status = 0
-        with GILReleased(Python()):
-            status = plan.select(connection.driver, x_address, x_address)
-        dist = admitted_storage_native([n, k], "<f4", context, as_array=True)
-        var dist_address = Int(py=classical_address(dist))
-        with GILReleased(Python()):
-            plan.roots(connection.driver, dist_address)
-        admitted_finite_refuse(status, String(py_type(model).__name__))
-        lrd = admitted_storage_native([n], "<f4", context, as_array=True)
-        var lrd_address = Int(py=classical_address(lrd))
-        with GILReleased(Python()):
-            plan.density(connection.driver, dist_address, dist_address, lrd_address, n)
-        score = admitted_storage_native([n], "<f4", context, as_array=True)
-        var score_address = Int(py=classical_address(score))
-        with GILReleased(Python()):
-            plan.score(connection.driver, lrd_address, lrd_address, score_address, n)
-        py_setitem(fields, "_fit_X", x)
-        py_setitem(fields, "_fit_dist", dist)
-        py_setitem(fields, "_lrd", lrd)
-        py_setitem(fields, "n_neighbors_", _i(k))
-        py_setitem(fields, "n_features_in_", _i(d))
-        py_setitem(fields, "n_samples_fit_", _i(n))
-        py_setitem(fields, "negative_outlier_factor_", score)
-        var contamination = family_field(fields, "contamination")
-        if _eq(contamination, PythonObject("auto")):
-            py_setitem(fields, "offset_", PythonObject(LOF_AUTO_OFFSET))
-        else:
-            var c = Float64(py=family_call(b.float, contamination))
-            var value = Float64(0)
-            with GILReleased(Python()):
-                value = lof_offset(connection.driver, score_address, n, c)
-            py_setitem(fields, "offset_", PythonObject(value))
-    finally:
-        # Native integer addresses do not retain the owners or compiled image.
-        # Pins cover success, native refusal, and exception unwinding.
-        _ = plan
-        _ = connection
-        _ = x
-        _ = dist
-        _ = lrd
-        _ = score
-    return connection^
+    var contamination = family_field(fields, "contamination")
+    var auto = _eq(contamination, PythonObject("auto"))
+    var c = 0.0 if auto else Float64(py=family_call(b.float, contamination))
+    var request = LofFitRequest(Int(py=classical_address(x)), n, d, k, unfused, old_items, auto, c)
+    var dist = admitted_storage_native([n, k], "<f4", context, as_array=True)
+    var lrd = admitted_storage_native([n], "<f4", context, as_array=True)
+    var score = admitted_storage_native([n], "<f4", context, as_array=True)
+    request.distances = Int(py=classical_address(dist))
+    request.densities = Int(py=classical_address(lrd))
+    request.scores = Int(py=classical_address(score))
+    return _LofFitOperands(x, dist, lrd, score, request)
+
+
+def _lof_fit_pack(model: PythonObject, fields: PythonObject, call: _LofFitOperands,
+                  outcome: LofFitOutcome) raises:
+    """PACK of LocalOutlierFactor.fit: the finite refusal, else the fitted
+    fields in their published order."""
+    if outcome.status != 0:
+        admitted_finite_refuse(outcome.status, String(py_type(model).__name__))
+    py_setitem(fields, "_fit_X", call.x)
+    py_setitem(fields, "_fit_dist", call.distances)
+    py_setitem(fields, "_lrd", call.densities)
+    py_setitem(fields, "n_neighbors_", _i(call.request.neighbors))
+    py_setitem(fields, "n_features_in_", _i(call.request.features))
+    py_setitem(fields, "n_samples_fit_", _i(call.request.rows))
+    py_setitem(fields, "negative_outlier_factor_", call.scores)
+    py_setitem(fields, "offset_", PythonObject(outcome.offset))
+
+
+def _lof_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises:
+    """LocalOutlierFactor.fit: UNPACK, one typed RUN with the GIL released, PACK."""
+    var fields = py_fields(model)
+    var call = _lof_fit_unpack(fields, args[1], context)
+    var connection = LofConnection(args[0])
+    var outcome = LofFitOutcome()
+    with GILReleased(Python()):
+        outcome = lof_fit_run(connection.driver, call.request)
+    _lof_fit_pack(model, fields, call, outcome)
+    _ = connection^
+    _ = call^  # the rows and result arrays outlive every kernel above
 
 
 def _lof_fit_predict(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = py_fields(model)
     if _truth(family_field(fields, "novelty")):
         lof_refuse_fit_predict_novelty()
-    var connection = _lof_fit(model, args, context)
-    var off = family_field(fields, "offset_")
-    var score = family_field(fields, "negative_outlier_factor_")
-    var size = _size(score)
-    var labels = LofLabelsPlan(size)
-    var result = PythonObject(None)
-    try:
-        if size != 0:
-            var score_address = Int(py=classical_address(score))
-            var threshold = Float64(py=family_call(_b().float, off))
-            with GILReleased(Python()):
-                labels.classify(connection.driver, score_address, 0, threshold)
-        result = admitted_storage_native([size], "<i8", context, as_array=True)
-        var result_address = Int(py=classical_address(result))
-        with GILReleased(Python()):
-            labels.write_i64(result_address)
-        return result
-    finally:
-        _ = labels
-        _ = connection
-        _ = score
-        _ = result
+    var call = _lof_fit_unpack(fields, args[1], context)
+    var connection = LofConnection(args[0])
+    var rows = call.request.rows
+    var result = admitted_storage_native([rows], "<i8", context, as_array=True)
+    var result_address = Int(py=classical_address(result))
+    var outcome = LofFitOutcome()
+    with GILReleased(Python()):
+        outcome = lof_fit_run(connection.driver, call.request)
+        if outcome.status == 0:
+            lof_fit_labels_run(connection.driver, call.request.scores, rows, outcome.offset, result_address)
+    _lof_fit_pack(model, fields, call, outcome)
+    _ = connection^
+    _ = call^
+    return result
 
 
 def _lof_novelty(fields: PythonObject, what: String) raises:
     lof_check_novelty(_truth(family_field(fields, "novelty")), what)
 
 
-def _lof_query(binding: PythonObject, fields: PythonObject, source: PythonObject,
-               context: PythonObject, name: String, result_kind: Int) raises -> PythonObject:
-    """Unpack staged public state, run native query, pack its requested result.
+struct _LofQueryOperands(Movable):
+    # Boundary owners only: lifetime pins of the storage the request addresses.
+    var query: PythonObject
+    var fit_x: PythonObject
+    var fit_distances: PythonObject
+    var fit_densities: PythonObject
+    var result: PythonObject
+    var request: LofQueryRequest
 
-    result_kind is LOF_RESULT_SCORES, LOF_RESULT_DECISION or LOF_RESULT_LABELS. Private scores and
-    decisions never cross Python; fitted fields retain their old read stages.
-    """
+    def __init__(out self, query: PythonObject, fit_x: PythonObject, fit_distances: PythonObject,
+                 fit_densities: PythonObject, result: PythonObject, request: LofQueryRequest):
+        self.query = query
+        self.fit_x = fit_x
+        self.fit_distances = fit_distances
+        self.fit_densities = fit_densities
+        self.result = result
+        self.request = request.copy()
+
+
+def _lof_query_unpack(fields: PythonObject, source: PythonObject, context: PythonObject,
+                      result_kind: Int) raises -> _LofQueryOperands:
+    """UNPACK of a LocalOutlierFactor query: the rows, the fitted arrays,
+    the negated offset (decisions and labels only) and the result array."""
     var q = _f32(source, context)
     var k = _int_word(family_field(fields, "n_neighbors_"))
     var nf = _int_word(family_field(fields, "n_samples_fit_"))
     var fit_x = family_field(fields, "_fit_X")
     var nq = _rows(q)
-    var features = _cols(q)
-    var reference_rows = _rows(fit_x)
     var unfused = _flag(context, "unfused_knn")
     var old_items = _flag(context, "old_items") if not unfused else False
-    var plan = lof_plan(nq, reference_rows, features, k, False, unfused, old_items)
-    var connection = LofConnection(binding)
-    var query_address = Int(py=classical_address(q))
-    var fit_address = Int(py=classical_address(fit_x))
-    var fit_dist = PythonObject(None)
-    var fit_lrd = PythonObject(None)
-    var result = PythonObject(None)
-    try:
-        var status = 0
-        with GILReleased(Python()):
-            status = plan.query_neighbors(connection.driver, query_address, fit_address)
-        admitted_finite_refuse(status, name)
-        fit_dist = family_field(fields, "_fit_dist")
-        fit_lrd = family_field(fields, "_lrd")
-        var fit_dist_address = Int(py=classical_address(fit_dist))
-        with GILReleased(Python()):
-            plan.query_density(connection.driver, fit_dist_address, nf)
-        if result_kind == LOF_RESULT_SCORES:
-            result = admitted_storage_native([nq], "<f4", context, as_array=True)
-            var fit_lrd_address = Int(py=classical_address(fit_lrd))
-            var result_address = Int(py=classical_address(result))
-            with GILReleased(Python()):
-                plan.score(connection.driver, fit_lrd_address, lof_f32_address(plan.densities), result_address, nf)
-            return result
-        var fit_lrd_address = Int(py=classical_address(fit_lrd))
-        with GILReleased(Python()):
-            plan.query_score(connection.driver, fit_lrd_address, nf)
+    var fit_dist = family_field(fields, "_fit_dist")
+    var fit_lrd = family_field(fields, "_lrd")
+    var shift = Float64(0)
+    if result_kind != LOF_RESULT_SCORES:
         var offset = family_field(fields, "offset_")
-        var shift: Float64
         if py_type(offset) is _b().float:
             shift = -Float64(py=offset)
         else:
@@ -418,33 +417,30 @@ def _lof_query(binding: PythonObject, fields: PythonObject, source: PythonObject
             # (including unsigned wrap/refusal) before Float64 conversion.
             var op = native_loaded_module("operator")
             shift = Float64(py=family_call(_b().float, family_call(op.neg, offset)))
-        if result_kind == LOF_RESULT_DECISION:
-            result = admitted_storage_native([nq], "<f4", context, as_array=True)
-            var result_address = Int(py=classical_address(result))
-            with GILReleased(Python()):
-                plan.decision(connection.driver, result_address, shift)
-            return result
-        with GILReleased(Python()):
-            plan.query_decision(connection.driver, shift)
-        var labels = LofLabelsPlan(nq)
-        try:
-            with GILReleased(Python()):
-                labels.classify(connection.driver, lof_f32_address(plan.decisions), 1, 0.0)
-            result = admitted_storage_native([nq], "<i8", context, as_array=True)
-            var result_address = Int(py=classical_address(result))
-            with GILReleased(Python()):
-                labels.write_i64(result_address)
-            return result
-        finally:
-            _ = labels
-    finally:
-        _ = connection
-        _ = plan
-        _ = q
-        _ = fit_x
-        _ = fit_dist
-        _ = fit_lrd
-        _ = result
+    var request = LofQueryRequest(Int(py=classical_address(q)), Int(py=classical_address(fit_x)),
+        Int(py=classical_address(fit_dist)), Int(py=classical_address(fit_lrd)), nq, _rows(fit_x), _cols(q),
+        k, nf, unfused, old_items, result_kind, shift)
+    var result = admitted_storage_native([nq], "<i8" if result_kind == LOF_RESULT_LABELS else "<f4",
+                                         context, as_array=True)
+    request.dst = Int(py=classical_address(result))
+    return _LofQueryOperands(q, fit_x, fit_dist, fit_lrd, result, request)
+
+
+def _lof_query(binding: PythonObject, fields: PythonObject, source: PythonObject,
+               context: PythonObject, name: String, result_kind: Int) raises -> PythonObject:
+    """A LocalOutlierFactor query: UNPACK, one typed RUN with the GIL
+    released, PACK. result_kind is LOF_RESULT_SCORES, LOF_RESULT_DECISION or
+    LOF_RESULT_LABELS; private scores and decisions never cross Python."""
+    var call = _lof_query_unpack(fields, source, context, result_kind)
+    var connection = LofConnection(binding)
+    var status = 0
+    with GILReleased(Python()):
+        status = lof_query_run(connection.driver, call.request)
+    admitted_finite_refuse(status, name)
+    var result = call.result
+    _ = connection^
+    _ = call^  # the query rows and fitted arrays outlive every kernel above
+    return result
 
 
 def _lof_score_samples(binding: PythonObject, fields: PythonObject, source: PythonObject,
@@ -911,7 +907,7 @@ def _neighbors_local_operation(model: PythonObject, operation: String, var args:
             classical_admit_value(args[i], context)
     args = xn_admit_arguments(args, context)
     if operation == "family_xn_loc_lof_fit":
-        _ = _lof_fit(model, args, context)
+        _lof_fit(model, args, context)
         return model
     if operation == "family_xn_loc_lof_fit_predict":
         return _lof_fit_predict(model, args, context)
