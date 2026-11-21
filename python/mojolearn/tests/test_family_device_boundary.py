@@ -77,6 +77,8 @@ CASES = [
      ("coef_", "intercept_"), ("predict", "decision_function")),
     ("xl-logistic-cv", LogisticRegressionCV, dict(Cs=3, cv=3, max_iter=50), classification,
      ("coef_", "intercept_"), ("predict", "decision_function")),
+    ("svgp", mojolearn.SVGP, dict(n_inducing=8, lengthscale=0.5, noise_variance=0.1), regression,
+     ("Z_", "q_mu_", "q_sqrt_"), ("predict",)),
 ]
 IDS = [case[0] for case in CASES]
 case = pytest.mark.parametrize("spec", CASES, ids=IDS)

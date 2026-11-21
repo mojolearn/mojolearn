@@ -17,10 +17,7 @@
 # shells' `empty` / `_empty_out`, zero-filled: every element is written by
 # the kernel). MOJOLEARN_XN_LAZY_OUT (an opt-in memory-map A/B arm for
 # outputs of 64 MB or more, same zeros and the same bits) is not consulted.
-from providers.python.x_neighbors_descriptor_pyapi_door import xn_admit_arguments, xn_execute, xn_is_module
-from providers.python.neural_descriptor_pyapi_door import neural_descriptor_execute
-from providers.python.compiled_binding_snapshot_pyapi_door import CompiledBindingSnapshot
-from x_neighbors.descriptor_schema import xn_operation_id
+from providers.python.x_neighbors_descriptor_pyapi_door import xn_admit_arguments
 from std.python import Python, PythonObject
 from bindings.admitted_family_door import admit_family
 from bindings.native_loaded_module_door import native_loaded_module
@@ -36,12 +33,10 @@ from bindings.neighbors_ann_native_door import ann_keep_array
 from bindings.mcls_cluster_door import mcls_cluster_operation
 from bindings.operation_names_mcls import MCLS_OPN_FAMILY_MCLS_R2
 from neighbors.neighbors_graph_run import (
-    XnOpRequest, xn_rows_match_check, xn_graph_square_check, xn_graph_triples_check, xn_graph_weights_check,
+    xn_rows_match_check, xn_graph_square_check, xn_graph_triples_check, xn_graph_weights_check,
     xn_graph_merge_triples, xn_graph_merged_copy, xn_graph_dense_counts, xn_graph_dense_fill, xn_graph_csr_check,
     xn_unit_length_check, xn_unit_missing, xn_pagerank_converged_check, xn_svgp_zero_denominator, xn_svgp_gamma,
-    xn_svgp_even_rows, xn_take_rows_request, xn_svgp_fit_request, xn_svgp_fit_decode, xn_svgp_definite_check,
-    xn_svgp_predict_request, xn_kernel_rbf_request, xn_unary_scale_request, xn_unary_shift_request,
-    xn_matmul_request, xn_svgp_var_request,
+    xn_svgp_definite_check,
 )
 from providers.python.estimator_binding_pyapi_door import estimator_binding, estimator_binding_mode
 from providers.python.family_public_lifecycle_pyapi_door import family_lifecycle_begin, family_lifecycle_finish
@@ -50,15 +45,21 @@ from providers.python.neighbors_public_lifecycle_pyapi_door import neighbors_pub
 from bindings.py_optional import py_or_none, py_present
 from std.python._cpython import GILReleased
 from bindings.lof_provider_unpack import LofConnection
+from neighbors.svgp_run import (
+    SVGP_VARIANCE_NONE, SVGP_VARIANCE_LATENT, SVGP_VARIANCE_NOISY, SvgpFitRequest, SvgpQueryRequest, svgp_fit_run,
+    svgp_query_run,
+)
 from neighbors.graph_fit_run import (
     XN_CAPABILITY_UNIT, PageRankRequest, ComponentsRequest, LouvainRequest, LouvainOutcome, xn_capabilities_run,
     pagerank_fit_run, components_run, louvain_fit_run,
 )
 
-# The typed checks, the operation requests (their word order and float32
-# rounding) and the info-word decoding are RUN in
-# neighbors/neighbors_graph_run.mojo; this file is UNPACK/PACK: Python reads,
-# admission, array allocation, publication and the binding call.
+# Each operation is UNPACK (this file: Python reads, admission, the published
+# arrays), RUN (neighbors/graph_fit_run.mojo, neighbors/svgp_run.mojo: typed
+# requests on the image's native descriptor entry, no Python object, the GIL
+# released once) and PACK (this file: publication). The typed checks, the
+# operation requests and the info-word decoding are
+# neighbors/neighbors_graph_run.mojo's.
 
 
 # ---------------------------------------------------------------- glue
@@ -108,36 +109,6 @@ def _addr(array: PythonObject) raises -> Int:
 def _float_of(model: PythonObject, name: String) raises -> Float64:
     """`float(model.<name>)`."""
     return _float(_attr(model, name))
-
-
-def _py_ints(values: List[Int]) raises -> PythonObject:
-    var result = Python.list()
-    var append = result.append  # resolved once, not per word
-    for value in values:  # driver-loop: over (named operation's fixed integer schema)
-        _ = py_call(append, PythonObject(value))
-    return result
-
-
-def _py_floats(values: List[Float64]) raises -> PythonObject:
-    var result = Python.list()
-    var append = result.append  # resolved once, not per word
-    for value in values:  # driver-loop: over (named operation's fixed scalar schema)
-        _ = py_call(append, PythonObject(value))
-    return result
-
-
-def _op(binding: PythonObject, request: XnOpRequest) raises:
-    """`_XNeighbors._op(name, bufs, ints, floats)` of a RUN request. A
-    compiled-binding snapshot's native descriptor provider takes the typed
-    words (the call `xn_execute` makes for it, with its GIL release and call
-    count); a loaded module's `xn_<name>` export takes them as Python lists,
-    the entry looked up as `getattr` looked it up."""
-    if xn_is_module(binding):
-        xn_execute(binding, request.name, _py_ints(request.a), _py_ints(request.p), _py_floats(request.f))
-        return
-    var snapshot = binding.downcast_value_ptr[CompiledBindingSnapshot]()
-    _ = neural_descriptor_execute(snapshot[].provider, xn_operation_id(request.name), request.a, request.p,
-                                  request.f)
 
 
 def _adjacency(source: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -528,6 +499,12 @@ def _louvain_fit(model: PythonObject, args: PythonObject, context: PythonObject)
 
 
 # ---------------------------------------------------------------- SVGP
+#
+# Door split (lane dw-neighbors-b, 2026-11-21): UNPACK reads the fields,
+# admits X, y and the caller's inducing points and allocates the published
+# arrays; RUN is neighbors/svgp_run.mojo (no Python object; one GIL release
+# around it); PACK publishes. The kernel helper (`_k(Q, Z_)`: the rbf kernel,
+# then the kernel variance scale) is RUN's, on the estimator's image.
 
 
 def _svgp_gamma(model: PythonObject) raises -> Float64:
@@ -545,6 +522,7 @@ def _svgp_gamma(model: PythonObject) raises -> Float64:
 
 def _svgp_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises:
     """`SVGP.fit(X, y)`."""
+    # UNPACK
     classical_connect_numpy(context)
     var b = _b()
     var binding = args[0]
@@ -556,7 +534,8 @@ def _svgp_fit(model: PythonObject, args: PythonObject, context: PythonObject) ra
     xn_rows_match_check(Int(py=yv.shape[0]), n)
     var inducing = _attr(model, "inducing_points")
     var z: PythonObject
-    if inducing is not None:
+    var pick_rows = inducing is None
+    if not pick_rows:
         z = ann_keep_array(inducing, admit_family(inducing, 2, "inducing_points", context, dense=True).array, context)
     else:
         var m_obj = family_call(b.min, _int(_attr(model, "n_inducing")), PythonObject(n))
@@ -564,37 +543,31 @@ def _svgp_fit(model: PythonObject, args: PythonObject, context: PythonObject) ra
             # `as_i32_c` of the empty row list.
             raise Error("mojolearn: rows is empty, shape (0,): Found array with 0 sample(s) (shape=(0,)) "
                         + "while a minimum of 1 is required.")
-        var m = Int(py=m_obj)
-        var rows = family_array(Python.tuple(m), "<i4", context)
-        xn_svgp_even_rows(_addr(rows), n, m)
-        _ = rows  # keep the Python object alive through the native call above
-        z = family_array(Python.tuple(m, d), "<f4", context)
-        _op(binding, xn_take_rows_request(_addr(x), _addr(rows), _addr(z), m, d, n))
-        _ = x  # keep the Python object alive through the native call above
-        _ = rows  # keep the Python object alive through the native call above
-        _ = z  # keep the Python object alive through the native call above
+        z = family_array(Python.tuple(Int(py=m_obj), d), "<f4", context)
     var mz = Int(py=z.shape[0])
     var alpha = family_array(Python.tuple(mz), "<f4", context)
     var c = family_array(Python.tuple(mz, mz), "<f4", context)
     var qmu = family_array(Python.tuple(mz), "<f4", context)
     var qsqrt = family_array(Python.tuple(mz, mz), "<f4", context)
-    var info = family_array(Python.tuple(2), "<f4", context)
     var gamma = _svgp_gamma(model)
     var kernel_variance = _float_of(model, "kernel_variance")
     var noise_variance = _float_of(model, "noise_variance")
     var jitter = _float_of(model, "jitter")
-    _op(binding, xn_svgp_fit_request(_addr(x), _addr(z), _addr(yv), _addr(alpha), _addr(c), _addr(qmu), _addr(qsqrt),
-                                     _addr(info), n, mz, d, gamma, kernel_variance, noise_variance, jitter))
+    var request = SvgpFitRequest(_addr(x), _addr(yv), _addr(z), _addr(alpha), _addr(c), _addr(qmu), _addr(qsqrt),
+                                 n, mz, d, pick_rows, gamma, kernel_variance, noise_variance, jitter)
+    var connection = LofConnection(binding)
+    var fitted = (Float64(0.0), False)
+    # RUN
+    with GILReleased(Python()):
+        fitted = svgp_fit_run(connection.driver, request)
     _ = x  # keep the Python object alive through the native call above
-    _ = z  # keep the Python object alive through the native call above
     _ = yv  # keep the Python object alive through the native call above
+    _ = z  # keep the Python object alive through the native call above
     _ = alpha  # keep the Python object alive through the native call above
     _ = c  # keep the Python object alive through the native call above
     _ = qmu  # keep the Python object alive through the native call above
     _ = qsqrt  # keep the Python object alive through the native call above
-    var fitted = xn_svgp_fit_decode(_addr(info))
-    _ = info  # keep the Python object alive through the read above
-    var elbo = fitted[0]
+    # PACK
     py_setitem(fields, "precision_", PythonObject("float-float"))
     xn_svgp_definite_check(fitted[1])
     py_setitem(fields, "Z_", z)
@@ -602,31 +575,16 @@ def _svgp_fit(model: PythonObject, args: PythonObject, context: PythonObject) ra
     py_setitem(fields, "_C", c)
     py_setitem(fields, "q_mu_", qmu)
     py_setitem(fields, "q_sqrt_", qsqrt)
-    py_setitem(fields, "elbo_", PythonObject(elbo))
+    py_setitem(fields, "elbo_", PythonObject(fitted[0]))
     py_setitem(fields, "n_features_in_", PythonObject(d))
 
 
-def _svgp_predict(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`SVGP.predict(X)`: the mean of `predict_f(X)` (its variance is computed
-    as `predict_f` computed it)."""
-    return _svgp_predict_f(model, args, context)[0]
-
-
-def _svgp_predict_y(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`SVGP.predict_y(X)`: `predict_f`'s mean, and its variance plus
-    `noise_variance` (`_unary(var, _U_IDENTITY, 1.0, f32(noise_variance))`)."""
-    var latent = _svgp_predict_f(model, args, context)
-    var var_ = latent[1]
-    var size = Int(py=var_.size)
-    var out = family_array(Python.tuple(size), "<f4", context)
-    _op(args[0], xn_unary_shift_request(_addr(var_), _addr(out), size, _float_of(model, "noise_variance")))
-    _ = var_  # keep the Python object alive through the native call above
-    _ = out  # keep the Python object alive through the native call above
-    return Python.tuple(latent[0], out)
-
-
-def _svgp_predict_f(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`SVGP.predict_f(X)`: (mean, var) of the latent function."""
+def _svgp_query(model: PythonObject, args: PythonObject, kind: Int,
+                context: PythonObject) raises -> PythonObject:
+    """The mean (SVGP_VARIANCE_NONE: the variance is computed as `predict_f`
+    computed it and dropped), or `(mean, variance)`: the latent function's,
+    or with `noise_variance` added (`predict_y`)."""
+    # UNPACK
     classical_connect_numpy(context)
     var binding = args[0]
     var q = admit_family(args[1], 2, "X", context, dense=True).array
@@ -637,46 +595,49 @@ def _svgp_predict_f(model: PythonObject, args: PythonObject, context: PythonObje
     var old_items = _truth(context["family_svc_xn_old_items"])
     var alpha = _attr(model, "_alpha")
     var c = _attr(model, "_C")
-    if not old_items and nq != 0:
-        # the fused chain: Ksu, the mean and the variance per row tile
-        # (`xn_svgp_predict`)
-        var mean = family_array(Python.tuple(nq), "<f4", context)
-        var var_ = family_array(Python.tuple(nq), "<f4", context)
-        var gamma = _svgp_gamma(model)
-        var kernel_variance = _float_of(model, "kernel_variance")
-        _op(binding, xn_svgp_predict_request(_addr(q), _addr(z), _addr(alpha), _addr(c), _addr(mean), _addr(var_),
-                                             nq, m, d, gamma, kernel_variance))
-        _ = q  # keep the Python object alive through the native call above
-        _ = z  # keep the Python object alive through the native call above
-        _ = alpha  # keep the Python object alive through the native call above
-        _ = c  # keep the Python object alive through the native call above
-        _ = var_  # keep the Python object alive through the native call above
-        _ = mean  # keep the Python object alive through the native call above
-        return Python.tuple(mean, var_)
-    # `_k(Q, Z_)`: the rbf kernel, then the kernel variance scale.
-    var g = _svgp_gamma(model)
-    var k = family_array(Python.tuple(nq, m), "<f4", context)
-    _op(binding, xn_kernel_rbf_request(_addr(q), _addr(z), _addr(k), nq, m, d, g))
+    var gamma = _svgp_gamma(model)
+    var kernel_variance = _float_of(model, "kernel_variance")
+    var noise_variance = Float64(0.0)
+    if kind == SVGP_VARIANCE_NOISY:
+        noise_variance = _float_of(model, "noise_variance")
+    var mean = family_array(Python.tuple(nq), "<f4", context)
+    var variance = PythonObject(None)
+    var variance_at = 0
+    if kind != SVGP_VARIANCE_NONE:
+        variance = family_array(Python.tuple(nq), "<f4", context)
+        variance_at = _addr(variance)
+    var request = SvgpQueryRequest(_addr(q), _addr(z), _addr(alpha), _addr(c), _addr(mean), variance_at, nq, m, d,
+                                   gamma, kernel_variance, noise_variance, kind, old_items)
+    var connection = LofConnection(binding)
+    # RUN
+    with GILReleased(Python()):
+        svgp_query_run(connection.driver, request)
     _ = q  # keep the Python object alive through the native call above
     _ = z  # keep the Python object alive through the native call above
-    _ = k  # keep the Python object alive through the native call above
-    var ksu = family_array(Python.tuple(nq, m), "<f4", context)
-    _op(binding, xn_unary_scale_request(_addr(k), _addr(ksu), nq * m, _float_of(model, "kernel_variance")))
-    _ = k  # keep the Python object alive through the native call above
-    _ = ksu  # keep the Python object alive through the native call above
-    # `matmul(Ksu, alpha.reshape((M, 1))).reshape((nq,))`: an (nq, 1) product
-    # written into the (nq,) vector it is reshaped to.
-    var mean = family_array(Python.tuple(nq), "<f4", context)
-    _op(binding, xn_matmul_request(_addr(ksu), _addr(alpha), _addr(mean), nq, m, 1))
-    _ = ksu  # keep the Python object alive through the native call above
     _ = alpha  # keep the Python object alive through the native call above
-    _ = mean  # keep the Python object alive through the native call above
-    var var_ = family_array(Python.tuple(nq), "<f4", context)
-    _op(binding, xn_svgp_var_request(_addr(ksu), _addr(c), _addr(var_), nq, m, _float_of(model, "kernel_variance")))
-    _ = ksu  # keep the Python object alive through the native call above
     _ = c  # keep the Python object alive through the native call above
-    _ = var_  # keep the Python object alive through the native call above
-    return Python.tuple(mean, var_)
+    _ = mean  # keep the Python object alive through the native call above
+    _ = variance  # keep the Python object alive through the native call above
+    # PACK
+    if kind == SVGP_VARIANCE_NONE:
+        return mean
+    return Python.tuple(mean, variance)
+
+
+def _svgp_predict(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`SVGP.predict(X)`: the mean of `predict_f(X)`."""
+    return _svgp_query(model, args, SVGP_VARIANCE_NONE, context)
+
+
+def _svgp_predict_y(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`SVGP.predict_y(X)`: `predict_f`'s mean, and its variance plus
+    `noise_variance`."""
+    return _svgp_query(model, args, SVGP_VARIANCE_NOISY, context)
+
+
+def _svgp_predict_f(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`SVGP.predict_f(X)`: (mean, var) of the latent function."""
+    return _svgp_query(model, args, SVGP_VARIANCE_LATENT, context)
 
 
 def _svgp_score(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:

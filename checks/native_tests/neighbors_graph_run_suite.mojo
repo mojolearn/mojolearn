@@ -9,6 +9,9 @@ Independent fixtures run across the host's cores.
 """
 from std.math import isinf
 from core.host_parallel import host_parallelize
+from neighbors.svgp_run import (
+    SVGP_VARIANCE_NONE, SVGP_VARIANCE_LATENT, SVGP_VARIANCE_NOISY, SvgpFitRequest, SvgpQueryRequest,
+)
 from neighbors.graph_fit_run import (
     XN_CAPABILITY_UNIT, PageRankRequest, ComponentsRequest, LouvainRequest, LouvainOutcome,
 )
@@ -26,7 +29,7 @@ from neighbors.neighbors_graph_run import (
     xn_unary_scale_request, xn_unary_shift_request, xn_matmul_request, xn_svgp_var_request,
 )
 
-comptime NEIGHBORS_GRAPH_RUN_FIXTURES = 18
+comptime NEIGHBORS_GRAPH_RUN_FIXTURES = 19
 
 
 def require(ok: Bool, message: String) raises:
@@ -330,6 +333,19 @@ def fixture(unit: Int) raises:
         require(outcome.communities == 0 and outcome.modularity == 0.0 and outcome.levels == 0.0,
                 "louvain outcome default")
         require(XN_CAPABILITY_UNIT == 4, "the unit_ff capability bit")
+    elif unit == 18:
+        # SVGP RUN (neighbors/svgp_run.mojo): the requests and the variance kinds
+        var fit = SvgpFitRequest(1, 2, 3, 4, 5, 6, 7, 100, 8, 4, True, 0.5, 1.0, 0.1, 1e-6)
+        require(fit.x == 1 and fit.y == 2 and fit.z == 3 and fit.alpha == 4 and fit.c == 5 and fit.qmu == 6
+                and fit.qsqrt == 7 and fit.n == 100 and fit.m == 8 and fit.d == 4 and fit.pick_rows
+                and fit.gamma == 0.5 and fit.kernel_variance == 1.0 and fit.noise_variance == 0.1
+                and fit.jitter == 1e-6, "svgp fit request")
+        var query = SvgpQueryRequest(1, 2, 3, 4, 5, 0, 10, 8, 4, 0.5, 1.0, 0.0, SVGP_VARIANCE_NONE, False)
+        require(query.q == 1 and query.z == 2 and query.alpha == 3 and query.c == 4 and query.mean == 5
+                and query.variance == 0 and query.nq == 10 and query.m == 8 and query.d == 4
+                and query.kind == SVGP_VARIANCE_NONE and not query.old_items, "svgp query request")
+        require(SVGP_VARIANCE_NONE == 0 and SVGP_VARIANCE_LATENT == 1 and SVGP_VARIANCE_NOISY == 2,
+                "variance kinds")
     else:
         require(same(xn_svgp_predict_request(1, 2, 3, 4, 5, 6, 7, 8, 9, 0.1, 0.2), "svgp_predict",
                      [1, 2, 3, 4, 5, 6], [7, 8, 9],
