@@ -2259,6 +2259,44 @@ def _subtract_histograms(
     host_parallelize(subtract, units)
 
 
+def _gain_winner(gains: List[Float32], count: Int) -> UInt32:
+    """The device winner over `count` candidate gains: the FIRST candidate
+    whose gain is strictly above every earlier one and above -FLT_MAX, or
+    `GBDT_SENTINEL` when none is (a NaN gain never wins: its compare is
+    false). The caller reads the winner's gain at the returned index.
+
+    THE SPLIT (lane gbdt-host-par): the candidates in `_gbdt_units`
+    contiguous ranges, each task its own range's first maximum; the ranges'
+    winners are then compared ascending in the range with the same strict
+    `>`, so an equal gain in a later range never replaces an earlier one and
+    the winner is the one ascending pass's. Compares only, no fold."""
+    var units = _gbdt_units(count, count)
+    var chunk = (count + units - 1) // units
+    var task_bin = List[UInt32](length=units, fill=GBDT_SENTINEL)
+    var gp = rebind[HostF32Ptr](gains.unsafe_ptr())
+    var bp = rebind[HostU32Ptr](task_bin.unsafe_ptr())
+
+    def scan(unit: Int) {imm chunk, imm count, imm gp, imm bp}:
+        var best_gain = -GBDT_FLOAT32_MAX
+        var best_bin = GBDT_SENTINEL
+        for bf in range(unit * chunk, min(count, (unit + 1) * chunk)):
+            var gain = gp[bf]
+            if gain > best_gain:
+                best_gain = gain
+                best_bin = UInt32(bf)
+        bp[unit] = best_bin
+
+    host_parallelize(scan, units)
+    var best_gain = -GBDT_FLOAT32_MAX
+    var best_bin = GBDT_SENTINEL
+    for unit in range(units):  # driver-loop: over the tasks' winners, ascending
+        var bin = task_bin[unit]
+        if bin != GBDT_SENTINEL and gains[Int(bin)] > best_gain:
+            best_gain = gains[Int(bin)]
+            best_bin = bin
+    return best_bin
+
+
 def _add_leaf_cosine(
     sum: Float32,
     weight: Float32,
@@ -3377,17 +3415,14 @@ def _tree_ctr_levels_host(
         )
 
         # the score and the device winner
-        var best_gain = -GBDT_FLOAT32_MAX
-        var best_bin = GBDT_SENTINEL
         var gains = _cosine_gains(
             hist, hist_cells, part_stats, n_live, l2_leaf_reg,
             score_std_dev, level_seed, bf_feature,
         )
-        for bf in range(hist_cells):
-            var gain = gains[bf]
-            if gain > best_gain:
-                best_gain = gain
-                best_bin = UInt32(bf)
+        var best_bin = _gain_winner(gains, hist_cells)
+        var best_gain = -GBDT_FLOAT32_MAX
+        if best_bin != GBDT_SENTINEL:
+            best_gain = gains[Int(best_bin)]
 
         # ---- the gates (`accept_symmetric_level_winner`), this level ----
         if best_bin == GBDT_SENTINEL or Int(best_bin) >= hist_cells:
@@ -3687,17 +3722,14 @@ def gbdt_host_boost(
             )
 
             # the score and the device winner
-            var best_gain = -GBDT_FLOAT32_MAX
-            var best_bin = GBDT_SENTINEL
             var gains = _cosine_gains(
                 hist, hist_cells, part_stats, n_live, params.l2_leaf_reg,
                 score_std_dev, level_seed, bf_feature,
             )
-            for bf in range(hist_cells):
-                var gain = gains[bf]
-                if gain > best_gain:
-                    best_gain = gain
-                    best_bin = UInt32(bf)
+            var best_bin = _gain_winner(gains, hist_cells)
+            var best_gain = -GBDT_FLOAT32_MAX
+            if best_bin != GBDT_SENTINEL:
+                best_gain = gains[Int(best_bin)]
             if best_bin != GBDT_SENTINEL:
                 winners_score.append(ftz(best_gain))
             else:
