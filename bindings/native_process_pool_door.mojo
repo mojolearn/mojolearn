@@ -478,7 +478,14 @@ def process_pool_start(pool: PythonObject) raises:
     if p[].vendor == "cpu" and cooperative and len(rec[].native.devices) != 1:
         raise Error("NotImplementedError: cooperative neural updates across multiple CPU devices have no host implementation")
     # UNPACK of the caller's configuration, once per start.
-    var child_module = String(py_item(pool, nk[].k_module))
+    # The dictionary is the caller's own (no operation copies it first), so
+    # both entries are admitted here, where they are read: the module word
+    # by exact type before its text is taken, the overrides by
+    # `_process_environment`.
+    var module_word = py_item(pool, nk[].k_module)
+    if py_type(module_word) is not bi.str:
+        raise Error("TypeError: process: worker module requires an exact string")
+    var child_module = String(module_word)
     var overrides = py_get(pool, nk[].k_environment)
     var devices = bi.list()
     for i in range(len(rec[].native.devices)):  # small-loop(the pool's selected devices)

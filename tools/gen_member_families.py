@@ -74,7 +74,7 @@ FAMILIES = [
      "KBinsDiscretizer QuantileTransformer PowerTransformer Normalizer PolynomialFeatures SplineTransformer Binarizer",
      "x_prep"),
     ("SELECT", "Select", "select", "VarianceThreshold SelectKBest RFE", "x_prep"),
-    ("FORECAST", "Forecast", "forecast", "ARIMA AutoARIMA ETS Theta (the forecasters)", "arima / x_sequence"),
+    ("FORECAST", "Forecast", "forecast", "ARIMA AutoARIMA", "arima"),
     ("CHOLESKY", "Cholesky", "cholesky", "Cholesky", "cholesky"),
     ("ENSEMBLE", "Ensemble", "ensemble",
      "BaggingClassifier BaggingRegressor AdaBoostClassifier AdaBoostRegressor VotingClassifier VotingRegressor "
@@ -85,7 +85,8 @@ FAMILIES = [
     # Number 42 was SPARE0 until 2026-11-21 (nothing had published on it): TSNE lives in another image
     # than UMAP, and one family publishes from ONE image per (tier, vendor).
     ("TSNE", "Tsne", "tsne", "TSNE", "x_ann"),
-    ("SPARE1", "Spare1", None, "(unassigned)", "-"),
+    # Number 43 was SPARE1 until 2026-11-21: the forecasters of the x_sequence image (37 is the arima image).
+    ("FORECAST_SEQ", "ForecastSeq", "forecast_seq", "ETS Theta", "x_sequence"),
     ("SPARE2", "Spare2", None, "(unassigned)", "-"),
     ("SPARE3", "Spare3", None, "(unassigned)", "-"),
 ]
@@ -257,6 +258,26 @@ def member_admit(model: PythonObject, fields: PythonObject, plan: PythonObject, 
     owner.plan.member = member_resolve_family(owner.plan.family, owner.plan.route)
     owner.published = True
     return owner^
+
+
+def member_admit_serving(model: PythonObject, fields: PythonObject, plan: PythonObject, context: PythonObject,
+    b: PythonObject, needs: Int) -> MemberOwner:
+    """`member_admit` for a caller that had a path for this class before
+    its member mark: the native member when the family serves EVERY
+    capability bit of `needs` for this estimator, else an owner with
+    `published` False, and the caller takes the path an unmarked class
+    takes. Never raises: an admission the family refuses (a parameter it
+    does not take as words, class weights, a precomputed kernel, an image
+    that is not loaded) is the same silent fallback, and that path then
+    raises its own words if the request is wrong. A member mark never turns
+    a call that worked into a refusal."""
+    try:
+        var owner = member_admit(model, fields, plan, context, b)
+        if owner.published and not owner.plan.member.has(needs):
+            owner.published = False
+        return owner^
+    except:
+        return MemberOwner()
 
 
 def member_pack(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,

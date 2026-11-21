@@ -214,6 +214,62 @@ def test_causal_lm_parameters_are_torch_iterators(tmp_path):
     assert len(arrays) == len(named)
 
 
+# ---- round 3: CausalLM state_dict / load_state_dict ---------------------------
+
+def _causal_logits(model):
+    ids = np.array([[1, 2, 3, 4]], dtype=np.int32)
+    return np.asarray(model.forward(ids)).tobytes()
+
+
+@pytest.mark.parametrize("family", FAMILIES)
+def test_causal_lm_state_dict_is_named_parameters(tmp_path, family):
+    config, tensors = family_fixture(family, False)
+    _write_checkpoint(str(tmp_path), config, tensors)
+    model = CausalLM.load(tmp_path, device="cpu", numeric_profile="fp32_v1")
+    sd = model.state_dict()
+    assert isinstance(sd, dict)
+    assert sorted(sd) == sorted(dict(model.named_parameters()))
+
+
+@pytest.mark.parametrize("family", FAMILIES)
+def test_causal_lm_load_state_dict_round_trips_and_moves_the_weights(tmp_path, family):
+    config, tensors = family_fixture(family, False)
+    _write_checkpoint(str(tmp_path), config, tensors)
+    model = CausalLM.load(tmp_path, device="cpu", numeric_profile="fp32_v1")
+    before = _causal_logits(model)
+    sd = {k: np.array(np.asarray(v), dtype=np.float32) for k, v in model.state_dict().items()}
+    assert model.load_state_dict(sd) is None
+    assert _causal_logits(model) == before
+    name = sorted(sd)[0]
+    sd[name] = sd[name] * np.float32(0.5)
+    model.load_state_dict(sd)
+    assert np.asarray(model.state_dict()[name]).tobytes() == sd[name].tobytes()
+    # The same weights from a checkpoint give the same bits.
+    fresh = CausalLM.load(tmp_path, device="cpu", numeric_profile="fp32_v1")
+    fresh.load_state_dict(sd)
+    assert _causal_logits(fresh) == _causal_logits(model)
+
+
+def test_causal_lm_load_state_dict_is_strict_and_all_or_nothing(tmp_path):
+    config, tensors = family_fixture("llama", False)
+    _write_checkpoint(str(tmp_path), config, tensors)
+    model = CausalLM.load(tmp_path, device="cpu", numeric_profile="fp32_v1")
+    before = _causal_logits(model)
+    sd = {k: np.array(np.asarray(v), dtype=np.float32) for k, v in model.state_dict().items()}
+    name = sorted(sd)[0]
+    with pytest.raises(ValueError, match="missing key"):
+        model.load_state_dict({k: v for k, v in sd.items() if k != name})
+    with pytest.raises(ValueError, match="unexpected key"):
+        model.load_state_dict({**sd, "extra.weight": sd[name]})
+    bad = dict(sd)
+    bad[name] = np.zeros((1, 1), dtype=np.float32)
+    with pytest.raises((ValueError, TypeError)):
+        model.load_state_dict(bad)
+    with pytest.raises(TypeError):
+        model.load_state_dict(list(sd.items()))
+    assert _causal_logits(model) == before
+
+
 # ---- round 2: CNN layer state_dict / load_state_dict --------------------------
 
 def test_conv_state_dict_round_trips_and_matches_torch_names():
@@ -252,3 +308,75 @@ def test_basic_block_state_dict_uses_torchvision_names():
     assert "conv1.weight" in sd and "bn2.running_var" in sd and "conv1.bias" not in sd
     again = mojolearn.BasicBlock(4, 4, random_state=1, device="cpu").load_state_dict(sd)
     assert {k: np.asarray(v).tobytes() for k, v in again.state_dict().items()} == {k: np.asarray(v).tobytes() for k, v in sd.items()}
+
+
+# ---- round 3: torch-form parameters() on the CNN layers ----------------------
+
+def test_basic_block_parameters_follow_torch():
+    block = mojolearn.BasicBlock(2, 4, stride=2, device="cpu")
+    named = list(block.named_parameters())
+    names = [name for name, _ in named]
+    assert names == ["conv1.weight", "bn1.weight", "bn1.bias", "conv2.weight", "bn2.weight", "bn2.bias",
+                     "downsample.0.weight", "downsample.1.weight", "downsample.1.bias"]
+    sd = block.state_dict()
+    assert all(np.asarray(v).tobytes() == np.asarray(sd[k]).tobytes() for k, v in named)
+    assert len(list(block.parameters())) == len(names)
+    # The (layer, weight attribute, gradient attribute) descriptors stay private.
+    assert len(block._parameter_descriptors()) == len(names)
+
+
+def test_conv_and_batchnorm_parameters_exclude_buffers():
+    assert [n for n, _ in mojolearn.Conv2d(3, 4, 3, device="cpu").named_parameters()] == ["weight", "bias"]
+    assert [n for n, _ in mojolearn.BatchNorm2d(4, device="cpu").named_parameters()] == ["weight", "bias"]
+
+
+def test_basic_block_load_state_dict_is_all_or_nothing():
+    block = mojolearn.BasicBlock(4, 4, device="cpu")
+    before = {k: np.asarray(v).tobytes() for k, v in block.state_dict().items()}
+    other = mojolearn.BasicBlock(4, 4, random_state=1, device="cpu").state_dict()
+    # A wrong shape in the LAST sublayer: no earlier sublayer may change.
+    other["bn2.weight"] = np.ones(3, dtype=np.float32)
+    with pytest.raises(ValueError, match="num_features"):
+        block.load_state_dict(other)
+    assert {k: np.asarray(v).tobytes() for k, v in block.state_dict().items()} == before
+
+
+# ---- round 3: GCNConv / SAGEConv state_dict / load_state_dict (PyG names) ---
+
+def _graph_inputs():
+    rng = np.random.default_rng(3)
+    x = rng.random((6, 4), dtype=np.float32)
+    edge_index = np.array([[0, 1, 2, 3, 4, 5], [1, 2, 3, 4, 5, 0]], dtype=np.int64)
+    return x, edge_index
+
+
+def test_gcn_state_dict_uses_pyg_names_and_round_trips():
+    conv = mojolearn.GCNConv(4, 3, device="cpu")
+    sd = conv.state_dict()
+    assert list(sd) == ["bias", "lin.weight"] and sd["lin.weight"].shape == (3, 4)
+    x, edge_index = _graph_inputs()
+    other = mojolearn.GCNConv(4, 3, random_state=5, device="cpu").load_state_dict(sd)
+    assert np.asarray(other.forward(x, edge_index)).tobytes() == np.asarray(conv.forward(x, edge_index)).tobytes()
+    assert list(mojolearn.GCNConv(4, 3, bias=False, device="cpu").state_dict()) == ["lin.weight"]
+
+
+def test_sage_state_dict_uses_pyg_names_and_round_trips():
+    conv = mojolearn.SAGEConv(4, 3, project=True, device="cpu")
+    sd = conv.state_dict()
+    assert list(sd) == ["lin.weight", "lin.bias", "lin_l.weight", "lin_l.bias", "lin_r.weight"]
+    x, edge_index = _graph_inputs()
+    other = mojolearn.SAGEConv(4, 3, project=True, random_state=5, device="cpu").load_state_dict(sd)
+    assert np.asarray(other.forward(x, edge_index)).tobytes() == np.asarray(conv.forward(x, edge_index)).tobytes()
+    assert list(mojolearn.SAGEConv(4, 3, root_weight=False, bias=False, device="cpu").state_dict()) == ["lin_l.weight"]
+
+
+def test_graph_load_state_dict_is_strict_and_all_or_nothing():
+    conv = mojolearn.SAGEConv(4, 3, device="cpu")
+    before = {k: np.asarray(v).tobytes() for k, v in conv.state_dict().items()}
+    bad = mojolearn.SAGEConv(4, 3, random_state=9, device="cpu").state_dict()
+    bad["lin_r.weight"] = np.ones((3, 5), dtype=np.float32)
+    with pytest.raises(ValueError, match="wrong shape"):
+        conv.load_state_dict(bad)
+    with pytest.raises(ValueError, match="no entry"):
+        conv.load_state_dict({"lin_l.weight": bad["lin_l.weight"]})
+    assert {k: np.asarray(v).tobytes() for k, v in conv.state_dict().items()} == before

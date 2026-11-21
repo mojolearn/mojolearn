@@ -177,6 +177,22 @@ class CausalLM:
         """
         return _NATIVE.causal_lm_named_parameters(self)
 
+    def state_dict(self):
+        """The weights as a dict from checkpoint name to array, as ``torch.nn.Module.state_dict``.
+
+        The arrays are the model's own weights (a fused checkpoint tensor is
+        returned joined, as a copy)."""
+        return _NATIVE.causal_lm_state_dict(self)
+
+    def load_state_dict(self, state_dict):
+        """Replace the weights with ``state_dict``, a dict from checkpoint name to array.
+
+        The names must be exactly those of `state_dict()` and every array must
+        have the shape of the weight it replaces. The load is all or nothing: a
+        refused load leaves the model unchanged. Arrays taken earlier from
+        `state_dict()` or `parameters()` keep the previous values."""
+        return _NATIVE.causal_model_load_state_dict(self, state_dict, _NATIVE_CONTEXT)
+
     def _run(self, ids, state, step, what):
         return _NATIVE.causal_lm_forward(self, ids, state, step)
 

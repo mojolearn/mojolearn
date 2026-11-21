@@ -18,7 +18,17 @@
 # on the encode owner's transport (bindings/prep_encode_native_door.mojo `EncProg`).
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
-from std.python._cpython import PyObjectPtr
+from std.python._cpython import PyObjectPtr, GILReleased
+from std.memory import unsafe_memcpy
+from bindings.classical_validate_unpack import classical_check_y, classical_estimator_name
+from bindings.member_boundary_door import member_admit, member_pack
+from bindings.member_owner_unpack import MemberOwner
+from bindings.member_set_door import MEMBER_SET_NATIVE
+from core.member_abi import (
+    MemberCall, MemberMatrix, member_call, member_new, member_free,
+    MEMBER_OP_FIT, MEMBER_OP_EXPORT, MEMBER_CAN_FIT, MEMBER_CAN_EXPORT, MEMBER_CAN_COEF, MEMBER_CAN_IMPORTANCES,
+    MEMBER_BLOCK_COEF, MEMBER_BLOCK_FEATURE_IMPORTANCES, MEMBER_F32,
+)
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.optimizer_public_words_unpack import stash_python_error
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
@@ -44,7 +54,8 @@ from bindings.prep_classify_common_door import cls_x2d, cls_mode, XIn
 from bindings.prep_classify_native_door import resident_enter_min, _resident_exit
 from bindings.py_optional import py_or_none, py_present
 from bindings.prep_native_estimator_door import (
-    prep_estimator_admit, prep_estimator_has, prep_estimator_clone, prep_estimator_call, prep_estimator_attribute)
+    prep_estimator_admit, prep_estimator_has, prep_estimator_clone, prep_estimator_call, prep_estimator_attribute,
+    prep_estimator_plan)
 from bindings.prep_keys_unpack import (
     prep_keys,
     PREP_OPN_DECISION_FUNCTION, PREP_OPN_FIT, PREP_OPN_FIT_TRANSFORM, PREP_OPN_GET_SUPPORT,
@@ -153,15 +164,26 @@ def _importance_keys(mut pr: ClsProg, est: PythonObject, m: Int, getter: PythonO
         coef = py_present(prep_estimator_attribute(est, getter, context))
     else:
         coef = py_present(prep_estimator_attribute(est, PythonObject("coef_"), context))
-    var key = pr.work(2 * m)
     if not coef and auto:
         var imp = prep_estimator_attribute(est, PythonObject("feature_importances_"), context)
         if imp is None:
             raise Error("mojolearn: RFE needs an estimator with coef_ or feature_importances_")
-        var got = _score_words(imp, m, context)
+        return _keys_of(pr, imp, False, m, context, cc)
+    return _keys_of(pr, py_or_none(coef), True, m, context, cc)
+
+
+def _keys_of(mut pr: ClsProg, values: PythonObject, squared: Bool, m: Int, context: PythonObject,
+             cc: PythonObject) raises -> Int:
+    """The ordered keys (c2_key64) of m column importances: `values` as
+    given, or (`squared`: a coefficient block, 1-D or rows x m) squared and
+    summed over its rows on the device. Returns the keys' offset."""
+    var key = pr.work(2 * m)
+    if not squared:
+        var got = _score_words(values, m, context)
         var wo = pr.put_words(got[0])
         pr.stage(OP_C2_KEY64, m, wo, got[1], key)
         return key
+    var coef = py_present(values)
     # `as_f32_c(coef, ndim=None)` then `rows, d = (1, len) if 1-D else shape`
     var raw = classical_input(py_or_none(coef), cc, "coef_")
     var nd = Int(py=raw.ndim)
@@ -184,6 +206,151 @@ def _importance_keys(mut pr: ClsProg, est: PythonObject, m: Int, getter: PythonO
     pr.stage(OP_SQSUM_COLS, d, co, rows, d, out)
     pr.stage(OP_C2_KEY64, d, out, 0, key)
     return key
+
+
+# ---------------------------------------------------------------- RFE over a native member
+struct RfeMember(Movable):
+    """RFE's hold on its estimator as a NATIVE MEMBER (core/member_abi.mojo),
+    built once per fit (`_rfe_member`). `native` False: the estimator's
+    family has not published a member entry RFE can use, and the rounds keep
+    the estimator's own doors (`_fit_clone`, `prep_estimator_attribute`).
+    True: `owner.plan` makes one member state per round; `template` is the
+    one clone PACK writes the final fit into; `y` is the admitted float32
+    target every round reads by address; `block` names the fitted block the
+    importances come from and `squared` whether it is squared and summed."""
+    var native: Bool
+    var owner: MemberOwner
+    var template: PythonObject
+    var fields: PythonObject
+    var member_context: PythonObject
+    var y: PythonObject
+    var y_address: Int
+    var block: Int
+    var squared: Bool
+
+    def __init__(out self):
+        self.native = False
+        self.owner = MemberOwner()
+        self.template = PythonObject(None)
+        self.fields = PythonObject(None)
+        self.member_context = PythonObject(None)
+        self.y = PythonObject(None)
+        self.y_address = 0
+        self.block = 0
+        self.squared = False
+
+
+def _rfe_member(estimator: PythonObject, y: PythonObject, n: Int, g: PythonObject, fit_params: PythonObject,
+                context: PythonObject, b: PythonObject) raises -> RfeMember:
+    """UNPACK, once per RFE fit: admit the estimator as a native member when
+    its class is a published REGRESSOR member that exports the block the
+    importance getter names ('auto': coef, else feature importances as
+    given; 'coef_' / 'feature_importances_': that block, squared, as the
+    attribute path squares it), with no fit parameters. Classifier members
+    keep their own doors (their labels and `classes_` are the door's);
+    dotted getter paths too."""
+    var member = RfeMember()
+    comptime if not MEMBER_SET_NATIVE:
+        return member^
+    if len(fit_params) != 0:
+        return member^
+    var getter = String(g)
+    var auto = getter == "auto"
+    if not auto and getter != "coef_" and getter != "feature_importances_":
+        return member^
+    var plan = prep_estimator_plan(estimator, context)
+    if plan is None:
+        return member^
+    if py_get(plan, "member") is None or Bool(py=plan["classifier"]):
+        return member^
+    var template = prep_estimator_clone(estimator, context)
+    var member_context = plan["context"]
+    var fields = py_call(plan["fields_get"], template, py_type(template))
+    var owner = member_admit(template, fields, plan, member_context, b)
+    if not owner.published:
+        return member^
+    if not owner.plan.member.can(MEMBER_CAN_FIT) or not owner.plan.member.can(MEMBER_CAN_EXPORT):
+        return member^
+    if getter != "feature_importances_" and owner.plan.member.can(MEMBER_CAN_COEF):
+        member.block = MEMBER_BLOCK_COEF
+        member.squared = True
+    elif getter != "coef_" and owner.plan.member.can(MEMBER_CAN_IMPORTANCES):
+        member.block = MEMBER_BLOCK_FEATURE_IMPORTANCES
+        member.squared = not auto
+    else:
+        return member^
+    # The target once, as a regressor member's fit door admits it (present,
+    # real, one column, finite, as long as X). A target that admission
+    # refuses keeps the member's own door, which refuses it in its own words.
+    try:
+        member.y = classical_check_y(y, n, classical_estimator_name(estimator), member_context)
+    except:
+        return member^
+    member.y_address = Int(py=classical_address(member.y))
+    member.owner = owner^
+    member.template = template
+    member.fields = fields
+    member.member_context = member_context
+    member.native = True
+    return member^
+
+
+def _rfe_member_fit(member: RfeMember, block: PythonObject, n: Int, k: Int) raises -> MemberCall:
+    """One member state fitted on the round's (n, k) float32 host block, the
+    GIL released for the fit. The caller frees it (`member_free`)."""
+    var call = member_new(member.owner.plan)
+    var done = False
+    try:
+        call.x = MemberMatrix(Int(py=classical_address(block)), n, k)
+        call.y = MemberMatrix(member.y_address, n, 1)
+        var py = Python()
+        with GILReleased(py):
+            _ = member_call(member.owner.plan.member, MEMBER_OP_FIT, call)
+        done = True
+    finally:
+        if not done:
+            member_free(member.owner.plan, call)
+        _ = block  # keep the Python objects alive through the native call above
+        _ = member.y
+    return call^
+
+
+def _rfe_member_keys(mut pr: ClsProg, member: RfeMember, block: PythonObject, n: Int, m: Int,
+                     context: PythonObject, cc: PythonObject) raises -> Int:
+    """A round over a native member: fit a new state on the block, read its
+    importance block by EXPORT (a view of words the state owns; no Python
+    attribute), stage the ordered keys as `_importance_keys` stages them and
+    release the state. Returns the keys' offset."""
+    var call = _rfe_member_fit(member, block, n, m)
+    var words = PythonObject(None)
+    try:
+        call.block = member.block
+        call.flags = 0
+        _ = member_call(member.owner.plan.member, MEMBER_OP_EXPORT, call)
+        var view = call.dst
+        if not view.dense_host(MEMBER_F32) or view.rows * view.cols != m:
+            raise Error("mojolearn: RFE importances have " + String(view.rows * view.cols) + " words, expected "
+                        + String(m))
+        # m words (one per surviving column), copied once into the Array the
+        # round's program puts; the view dies with the state below.
+        words = f32_array(m, cc)
+        unsafe_memcpy(dest=_ptr(words), src=F32P(unsafe_from_address=view.data), count=m)
+    finally:
+        member_free(member.owner.plan, call)
+    return _keys_of(pr, words, member.squared, m, context, cc)
+
+
+def _rfe_member_final(member: RfeMember, block: PythonObject, n: Int, k: Int, b: PythonObject) raises -> PythonObject:
+    """The final estimator over a native member: fitted on the selected
+    block, its state written into the clone (`member_pack`: the attributes
+    its own fit writes, so RFE's predict / score / transform read it as
+    before) and released."""
+    var call = _rfe_member_fit(member, block, n, k)
+    try:
+        member_pack(member.template, member.fields, member.member_context, b, member.owner.plan, call.state)
+    finally:
+        member_free(member.owner.plan, call)
+    return member.template
 
 
 def _fit_params(args: PythonObject) raises -> PythonObject:
@@ -325,13 +492,22 @@ def _rfe_rounds(model: PythonObject, fields: PythonObject, estimator: PythonObje
     var feat = pr0.get_i32(first[0], d, cc)
     var block = pr0.get(first[1], n, d, cc)
     var nsup = d
+    # The estimator as a native member (admitted once for the whole fit) when
+    # its family has published what RFE reads; else its own doors per round.
+    # The rounds are serial by nature: a round's block is chosen from the
+    # previous round's importances.
+    var member = _rfe_member(estimator, y, n, g, fit_params, context, b)
     while nsup > nsel:  # driver-loop: over elimination rounds
-        _rfe_hold_block(block, hold, mark, cc)
-        var est = _fit_clone(estimator, block, y, fit_params, context)
         var drop = min(step, nsup - nsel)
         var k = nsup - drop
         var pr = ClsProg()
-        var key = _importance_keys(pr, est, nsup, g, context, cc)
+        var key = 0
+        if member.native and classical_is_array(block, cc):
+            key = _rfe_member_keys(pr, member, block, n, nsup, context, cc)
+        else:
+            _rfe_hold_block(block, hold, mark, cc)
+            var est = _fit_clone(estimator, block, y, fit_params, context)
+            key = _importance_keys(pr, est, nsup, g, context, cc)
         var sup = pr.put(support, True)
         var rk = pr.put(ranking, True)
         var fo = pr.put_words(feat)
@@ -344,8 +520,13 @@ def _rfe_rounds(model: PythonObject, fields: PythonObject, estimator: PythonObje
         feat = pr.get_i32(nxt[0], k, cc)
         block = pr.get(nxt[1], n, k, cc)
         nsup = k
-    _rfe_hold_block(block, hold, mark, cc)
-    var final = _fit_clone(estimator, block, y, fit_params, context)
+    var final = PythonObject(None)
+    if member.native and classical_is_array(block, cc):
+        final = _rfe_member_final(member, block, n, nsup, b)
+    else:
+        _rfe_hold_block(block, hold, mark, cc)
+        final = _fit_clone(estimator, block, y, fit_params, context)
+    _ = member.native  # the member's pins outlive every member call above
     var mask_list = Python.list()
     var kept = List[Int]()
     var fs = _ptr(support)
