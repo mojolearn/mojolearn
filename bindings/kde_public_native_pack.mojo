@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
-# One native call per public method (lane native-neighbors-20261024):
-# KernelDensity `fit`, `score_samples` and `score` (python/mojolearn/density.py).
-# Each `family_xn_kde_*` operation validates, prepares, runs the family's
-# compiled kernels and returns, with the former Python method's refusals,
-# operations and order. Numerical kernels and their defaults stay unchanged:
+# KernelDensity's public operations: the operator of `fit`, `score_samples`
+# and `score` (UNPACK -> RUN -> PACK) and the PACK half: the owned snapshot
+# copies of the fitted set, the fitted-field publication, the resident fit
+# handle and the returned scores. One native call per public method (lane
+# native-neighbors-20261024), with the former Python method's refusals,
+# operations and order; numerical kernels and their defaults unchanged:
 #
 #   fit            `_release_resident_fit`, `as_f32_dense_c(X)` (and its
 #                  `input_copied_` flag), the finiteness refusal, the
@@ -17,11 +18,11 @@
 #                  resident-score descriptors; `score` is
 #                  the binding's fixed-order total (`want_total`).
 #
-# The shell hands over the binding `_bind("_mojolearn_estimators")` resolved
-# for the model's numeric mode. ReferenceShardedNeighbors (also routed to
-# this prefix by the lane's skeleton) is not served here: its dispatch is the
-# Python `DevicePool` (python/mojolearn/_parallel_pool.py), whose workers run
-# Python handlers.
+# UNPACK is bindings/kde_public_native_unpack.mojo; RUN is
+# neighbors/neighbors_kde_run.mojo (typed keys, requests and refusals) with
+# the typed provider calls of core/kde_native_api.mojo. The image is the
+# estimator's binding route (`estimator_arguments`). (This file and the
+# UNPACK file were the single door bindings/neighbors_kde_native_door.mojo.)
 from providers.python.estimator_binding_pyapi_door import estimator_arguments
 from providers.python.neighbors_public_lifecycle_pyapi_door import neighbors_public_begin, neighbors_public_end, neighbors_public_finish, neighbors_public_refusal
 from std.python import PythonObject
@@ -62,95 +63,9 @@ from bindings.host_sparse_native_door import host_sparse_format, host_sparse_den
 from bindings.admitted_input_unpack import admitted_finite_refuse
 from bindings.admitted_finite_wording import admitted_finite_wording
 from bindings.p3nc_fitted_freeze_unpack import fitted_freeze
-
-
-comptime _KDE_STATE_SLOT = "neighbors_kde_state_v2"
-
-
-def _kde_admit_state(model: PythonObject, context: PythonObject, fitting: Bool = False) raises:
-    classical_check_layout(model, context)
-    var fields = py_fields(model)
-    lifecycle_admit_fields(fields)
-    var names: List[String] = ["bandwidth", "algorithm", "kernel", "metric", "atol", "rtol", "breadth_first",
-                               "leaf_size", "n_features_in_", "n_samples_fit_"]
-    var arrays: List[String] = ["_x", "_w"]
-    var hit = kde_admission_hit(model, PythonObject(None), False, _KDE_STATE_SLOT, context)
-    if not hit:
-        for i in range(len(names)):  # small-loop(fixed KDE settings and fitted metadata)
-            var value = py_get(fields, names[i])
-            if value is not None:
-                host_inference_scalar(value, context, True)
-        var params = py_get(fields, "metric_params")
-        if params is not None:
-            if py_type(params) is not native_loaded_module("builtins").dict:
-                raise Error("TypeError: KernelDensity metric_params must be an exact native dictionary")
-            classical_admit_value(params, context)
-            var values = py_call(native_loaded_module("builtins").tuple, params.values())
-            for i in range(len(values)):  # driver-loop: admitted metric-parameter scalar values
-                host_inference_scalar(values[i], context)
-        for i in range(len(arrays)):  # small-loop(fitted KDE buffer owners)
-            var value = py_get(fields, arrays[i])
-            if value is not None:
-                classical_admit_value(value, context)
-    if fitting:
-        kde_admission_drop(model, _KDE_STATE_SLOT)
-        return
-    if not hit:
-        kde_admission_remember(model, PythonObject(None), False, _KDE_STATE_SLOT, context)
-
-
-def _kde_sparse_f32(source: PythonObject, format: String) raises -> Bool:
-    """Whether `source.toarray()` is already float32 (the matrix's own
-    dtype, read from its stored fields as `host_sparse_dense` reads it)."""
-    var fields = _sparse_fields(source)
-    var dtype = fields["dtype"] if (format == "dok" or format == "lil") else fields["data"].dtype
-    return String(dtype.kind) == "f" and Int(py=dtype.itemsize) == 4
-
-
-def _kde_borrowed(source: PythonObject, x: PythonObject, context: PythonObject) raises -> Bool:
-    """`_materialize` borrowed `source` and the cast kept it: the converted
-    array reads the source's own memory (an Array, or a contiguous buffer
-    export); a list, a strided export or a cast is a copy."""
-    var b = native_loaded_module("builtins")
-    if py_type(source) is b.list or py_type(source) is b.tuple:
-        return False
-    var address = Int(py=classical_address(x))
-    if py_type(source) is context["array_class"]:
-        return address == Int(py=classical_address(source))
-    try:
-        # The exporter's own data address (classical_address: an ndarray's,
-        # or a buffer export's first element).
-        return Int(py=classical_address(source)) == address
-    except:
-        return False
-
-
-@fieldwise_init
-struct KDEDense(Movable):
-    var array: PythonObject
-    var copied: Bool
-
-
-def _kde_dense(source: PythonObject, context: PythonObject) raises -> KDEDense:
-    """`_buffer.as_f32_dense_c(source, ndim=2, name="X")`: typed array/copy metadata.
-    A scipy.sparse matrix is densified exactly first (`toarray()`), and
-    `copied` is the conversion's flag for the dense array it was handed, as
-    `as_f32_c(obj.toarray())` reported it: a copy unless the matrix holds
-    float32 (`toarray()` keeps its dtype)."""
-    var sparse = host_sparse_format(source)
-    if sparse.byte_length() > 0:
-        if not py_contains(context, PythonObject("output_context")):
-            py_setitem(context, "output_context", context)
-        var dense = admit_family(host_sparse_dense(source, sparse, context), 2, "X", context, False, True,
-                                 refusal=admitted_finite_wording("KernelDensity", "X"), defer_finite=True).array
-        return KDEDense(dense, not _kde_sparse_f32(source, sparse))
-    # Lane a7b-device-x-neighbors: a cast X is refused from the cast's own
-    # verdict; a borrowed one by the fit's copy (`_kde_copy_finite`) or the
-    # score entry's status word.
-    var x = admit_family(source, 2, "X", context, False, True,
-                         refusal=admitted_finite_wording("KernelDensity", "X"), defer_finite=True).array
-    var copied = not _kde_borrowed(source, x, context)
-    return KDEDense(x, copied)
+from bindings.kde_public_native_unpack import (
+    KDEDense, _kde_admit_state, _kde_dense, _kde_validate, _kde_text,
+)
 
 
 def _kde_copy(value: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -183,57 +98,6 @@ def _kde_copy_finite(value: PythonObject, context: PythonObject) raises -> Pytho
     return result
 
 
-def _kde_validate(fields: PythonObject, context: PythonObject) raises:
-    """`KernelDensity._validate_params`: the constructor checks, in the
-    Python method's order and wording."""
-    var b = native_loaded_module("builtins")
-    var bandwidth = family_field(fields, "bandwidth")
-    var algorithm = family_field(fields, "algorithm")
-    var kernel = family_field(fields, "kernel")
-    var metric = family_field(fields, "metric")
-    var atol = family_field(fields, "atol")
-    var rtol = family_field(fields, "rtol")
-    var breadth_first = family_field(fields, "breadth_first")
-    var leaf_size = family_field(fields, "leaf_size")
-    var metric_params = family_field(fields, "metric_params")
-    if family_is_str(bandwidth):
-        kde_refuse_bandwidth_name(family_str(bandwidth))
-    var width = family_call(b.float, bandwidth)
-    if not kde_bandwidth_positive(Float64(py=width)):
-        kde_refuse_bandwidth(family_repr(width))
-    if algorithm is not None and not decomp_name_admitted(algorithm, "auto"):
-        kde_refuse_algorithm(decomp_scalar_repr(algorithm, context))
-    var knobs = not decomp_equal_admitted(atol, PythonObject(0))
-    if not knobs:
-        knobs = not decomp_equal_admitted(rtol, PythonObject(0))
-    if not knobs:
-        knobs = not decomp_truth(breadth_first, context)
-    if not knobs:
-        knobs = not decomp_equal_admitted(leaf_size, PythonObject(KDE_DEFAULT_LEAF_SIZE))
-    if knobs:
-        kde_refuse_tree_knobs()
-    if not family_is_str(kernel) or not family_is_str(metric):
-        kde_refuse_names()
-    if decomp_truth(metric_params, context):
-        kde_check_metric_params_count(len(metric_params))
-        var values = py_call(b.tuple, metric_params.values())
-        var p = family_call(b.float, values[0])
-        if not kde_minkowski_supported(Float64(py=p)):
-            kde_refuse_minkowski(_kde_params_repr(metric_params, context), family_repr(p))
-
-
-def _kde_params_repr(params: PythonObject, context: PythonObject) raises -> String:
-    # Do not enter NumPy arrayprint through a dict's element repr. Exact
-    # primitive scalar diagnostics retain their usual representation.
-    var pairs = py_call(native_loaded_module("builtins").tuple, params.items())
-    var result = String("{")
-    for i in range(len(pairs)):  # driver-loop: diagnostic parameter metadata only
-        if i:
-            result += ", "
-        result += decomp_scalar_repr(pairs[i][0], context) + ": " + decomp_scalar_repr(pairs[i][1], context)
-    return result + "}"
-
-
 def _kde_release(fields: PythonObject) raises:
     lifecycle_admit_fields(fields)
     var cached = py_get(fields, "_resident")
@@ -243,14 +107,6 @@ def _kde_release(fields: PythonObject) raises:
         # In-flight queries retain their own pin until native work completes.
         py_setitem(fields, "_resident", PythonObject(None))
     _ = cached
-
-
-def _kde_text(value: PythonObject, context: PythonObject) raises -> String:
-    if py_type(value) is py_get(context, "ndarray"):
-        # Such a value is not a supported kernel/metric name. Avoid the
-        # process-wide Python NumPy formatter on its diagnostic route.
-        return decomp_scalar_repr(value, context)
-    return family_str(value)
 
 
 @fieldwise_init
