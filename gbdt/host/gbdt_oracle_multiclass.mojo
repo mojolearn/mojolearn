@@ -77,7 +77,7 @@ from checks.numerics import (
 )
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import HostF32Ptr, host_predict_chunk
-from gbdt.methods.cursor_rescale import apply_scaled_leaves_host, rescaled_leaves
+from gbdt.methods.cursor_rescale import rescaled_leaves
 from gbdt.gpu_data.compressed_index_builder import (
     CompressedIndexLayout,
     build_layout,
@@ -89,6 +89,8 @@ from gbdt.gpu_data.grid_policy import (
     POLICY_ONE_BYTE,
 )
 from gbdt.host.gbdt_oracle import (
+    apply_scaled_leaves_host,
+    _identity_rows,
     GBDT_FLOAT32_MAX,
     GBDT_MSE_BLOCK,
     GBDT_ORACLE_HOST_SABOTAGE,
@@ -108,7 +110,7 @@ from gbdt.host.gbdt_oracle import (
     _half_byte_block_n,
     _one_byte_block_n,
     _halving_fold,
-    _pinned_partition_stat,
+    _pinned_partition_stats,
     GbdtIntPtr,
     _gain_winner,
     _gbdt_units,
@@ -151,19 +153,11 @@ struct GbdtHostMultiModel(Movable):
         return len(self.tree_split_offsets) - 1
 
 
-def _partition_stat_n(
-    stats: List[Float32], line_size: Int, stat_id: Int, offset: Int,
-    size: Int, n_stats: Int,
-) -> Float32:
-    """`compute_partition_stats` for one (leaf, stat) at `n_stats` planes
-    (`partitions_reduce.mojo`): `(2 * 32 + n_stats - 1) // n_stats` chunks,
-    phase 1 striding each 512-thread block, phase 2 folding the partials."""
-    var max_chunks = (2 * GBDT_PINNED_SM + n_stats - 1) // n_stats
-    if max_chunks < 1:
-        max_chunks = 1
-    return _pinned_partition_stat(
-        stats, stat_id * line_size + offset, size, max_chunks
-    )
+def _stat_chunks(n_stats: Int) -> Int:
+    """The chunk count of `compute_partition_stats` at `n_stats` planes
+    (`partitions_reduce.mojo`): `(2 * 32 + n_stats - 1) // n_stats`, at
+    least one."""
+    return max((2 * GBDT_PINNED_SM + n_stats - 1) // n_stats, 1)
 
 
 # ===========================================================================
@@ -199,114 +193,140 @@ def _multi_pass(
     var dim = eff if objective == GBDT_OBJ_MULTICLASS else num_classes
     var plane_base = 1 if search else 0
     var blocks = (n_rows + GBDT_MSE_BLOCK - 1) // GBDT_MSE_BLOCK
-    for b in range(blocks):
+    # THE SPLIT (lane gbdt-host-par), the unit of `_logloss_search_pass`:
+    # one 256-thread device block owns its rows' planes and its partials,
+    # and its halving trees are the kernel's (a thread's class loops run in
+    # the kernel's order inside it). Blocks go round robin to `_gbdt_units`
+    # tasks; a task holds three block slabs, every lane rewritten per block.
+    var units = _gbdt_units(blocks, 16 * num_classes * n_rows)
+    var targets_p = rebind[HostF32Ptr](targets.unsafe_ptr())
+    # an empty `weights` is never read (`has_weights` guards it)
+    var weights_p = rebind[HostF32Ptr](weights.unsafe_ptr())
+    var cursor_p = rebind[HostF32Ptr](cursor.unsafe_ptr())
+    var der_p = rebind[HostF32Ptr](der.unsafe_ptr())
+    var fv_p = rebind[HostF32Ptr](fv_partials.unsafe_ptr())
+    # without `compute_mags` the magnitude partials are never written
+    var mag_p = rebind[HostF32Ptr](mag_partials.unsafe_ptr())
+
+    def score_blocks(unit: Int) {imm units, imm blocks, imm n_rows, imm objective, imm num_classes, imm eff, imm plane_base, imm has_weights, imm search, imm compute_mags, imm targets_p, imm weights_p, imm cursor_p, imm der_p, imm fv_p, imm mag_p}:
         var s_score = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
         var s_w = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
         var s_g = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
-        for t in range(GBDT_MSE_BLOCK):
-            var idx = b * GBDT_MSE_BLOCK + t
-            var in_range = idx < n_rows
-            var weight = Float32(1.0)
-            if has_weights and in_range:
-                weight = weights[idx]
-            var tmp_score = Float32(0.0)
-            var mag_der = Float32(0.0)
-            var mag_weight = Float32(0.0)
-            if objective == GBDT_OBJ_MULTICLASS:
-                var target_class = 0
-                if in_range:
-                    target_class = Int(targets[idx])
-                var mx = Float32(0.0)
-                if in_range:
-                    for k in range(eff):
-                        var v = cursor[k * n_rows + idx]
-                        if v > mx:
-                            mx = v
-                var tmp = Float32(0.0)
-                if in_range and target_class < eff:
-                    tmp = cursor[target_class * n_rows + idx]
-                var class_approx = tmp - mx
-                var se = Float32(0.0)
-                if in_range:
-                    for k in range(eff):
-                        se += identical_exp(cursor[k * n_rows + idx] - mx)
-                se += identical_exp(Float32(0.0) - mx)
-                if in_range:
-                    if search:
-                        der[idx] = weight
-                    var max_abs_der = Float32(0.0)
-                    for k in range(eff):
-                        var pk = identical_exp(cursor[k * n_rows + idx] - mx) / se
-                        var indicator = Float32(1.0) if target_class == k else Float32(0.0)
-                        var d = weight * (indicator - pk)
-                        der[(plane_base + k) * n_rows + idx] = d
-                        var ad = abs(d)
-                        if ad > max_abs_der:
-                            max_abs_der = ad
-                    mag_der += max_abs_der
-                    mag_weight += abs(weight)
-                var log_denum = identical_log(se)
-                if in_range:
-                    # one rounding, as the default (contract=fast) build fused it
-                    tmp_score = identical_mul_add(weight, class_approx - log_denum, tmp_score)
-            elif objective == GBDT_OBJ_MULTIRMSE:
-                # `multi_rmse_val_and_first_der_kernel[1, search]`: the
-                # target is `num_classes` dim-major planes; dimension
-                # OUTSIDE, the one element inside; the score is the negated
-                # per-thread `fma` accumulation
-                if search and in_range:
-                    der[idx] = weight
-                    mag_weight += abs(weight)
-                var max_abs = Float32(0.0)
-                var sum_dim_errors = Float32(0.0)
-                for d in range(num_classes):
+        var b = unit
+        while b < blocks:
+            for t in range(GBDT_MSE_BLOCK):
+                var idx = b * GBDT_MSE_BLOCK + t
+                var in_range = idx < n_rows
+                var weight = Float32(1.0)
+                if has_weights and in_range:
+                    weight = weights_p[idx]
+                var tmp_score = Float32(0.0)
+                var mag_der = Float32(0.0)
+                var mag_weight = Float32(0.0)
+                if objective == GBDT_OBJ_MULTICLASS:
+                    var target_class = 0
                     if in_range:
-                        var target = targets[d * n_rows + idx]
-                        var approx = cursor[d * n_rows + idx]
-                        var diff = target - approx
-                        sum_dim_errors = fma(diff * diff, weight, sum_dim_errors)
-                        var dd = diff * weight
-                        der[(plane_base + d) * n_rows + idx] = dd
-                        var ad = abs(dd)
-                        if ad > max_abs:
-                            max_abs = ad
-                mag_der += max_abs
-                tmp_score = -sum_dim_errors
-            else:
-                var target_class = 0
-                if in_range:
-                    target_class = Int(targets[idx])
-                if search and in_range:
-                    der[idx] = weight
-                    mag_weight += abs(weight)
-                var max_abs = Float32(0.0)
-                for clazz in range(num_classes):
-                    var val = Float32(0.0)
+                        target_class = Int(targets_p[idx])
+                    var mx = Float32(0.0)
                     if in_range:
-                        val = cursor[clazz * n_rows + idx]
-                    var exp_val = identical_exp(val)
-                    var p = _clip_prob(exp_val / (Float32(1.0) + exp_val))
-                    var c = Float32(1.0) if target_class == clazz else Float32(0.0)
-                    var direction = c - p
+                        for k in range(eff):
+                            var v = cursor_p[k * n_rows + idx]
+                            if v > mx:
+                                mx = v
+                    var tmp = Float32(0.0)
+                    if in_range and target_class < eff:
+                        tmp = cursor_p[target_class * n_rows + idx]
+                    var class_approx = tmp - mx
+                    var se = Float32(0.0)
                     if in_range:
-                        var d = weight * direction
-                        der[(plane_base + clazz) * n_rows + idx] = d
-                        var ad = abs(d)
-                        if ad > max_abs:
-                            max_abs = ad
-                    var log_term = val
-                    if isfinite(exp_val):
-                        log_term = identical_log(Float32(1.0) + exp_val)
+                        for k in range(eff):
+                            se += identical_exp(cursor_p[k * n_rows + idx] - mx)
+                    se += identical_exp(Float32(0.0) - mx)
                     if in_range:
-                        tmp_score += weight * (c * val - log_term) / Float32(num_classes)
-                mag_der += max_abs
-            s_score[t] = tmp_score
-            s_w[t] = mag_weight
-            s_g[t] = mag_der
-        fv_partials[b] = _halving_fold(s_score)
-        if compute_mags:
-            mag_partials[2 * b] = _halving_fold(s_w)
-            mag_partials[2 * b + 1] = _halving_fold(s_g)
+                        if search:
+                            der_p[idx] = weight
+                        var max_abs_der = Float32(0.0)
+                        for k in range(eff):
+                            var pk = identical_exp(cursor_p[k * n_rows + idx] - mx) / se
+                            var indicator = Float32(1.0) if target_class == k else Float32(0.0)
+                            var d = weight * (indicator - pk)
+                            der_p[(plane_base + k) * n_rows + idx] = d
+                            var ad = abs(d)
+                            if ad > max_abs_der:
+                                max_abs_der = ad
+                        mag_der += max_abs_der
+                        mag_weight += abs(weight)
+                    var log_denum = identical_log(se)
+                    if in_range:
+                        # one rounding, as the default (contract=fast) build fused it
+                        tmp_score = identical_mul_add(weight, class_approx - log_denum, tmp_score)
+                elif objective == GBDT_OBJ_MULTIRMSE:
+                    # `multi_rmse_val_and_first_der_kernel[1, search]`: the
+                    # target is `num_classes` dim-major planes; dimension
+                    # OUTSIDE, the one element inside; the score is the negated
+                    # per-thread `fma` accumulation
+                    if search and in_range:
+                        der_p[idx] = weight
+                        mag_weight += abs(weight)
+                    var max_abs = Float32(0.0)
+                    var sum_dim_errors = Float32(0.0)
+                    for d in range(num_classes):
+                        if in_range:
+                            var target = targets_p[d * n_rows + idx]
+                            var approx = cursor_p[d * n_rows + idx]
+                            var diff = target - approx
+                            sum_dim_errors = fma(diff * diff, weight, sum_dim_errors)
+                            var dd = diff * weight
+                            der_p[(plane_base + d) * n_rows + idx] = dd
+                            var ad = abs(dd)
+                            if ad > max_abs:
+                                max_abs = ad
+                    mag_der += max_abs
+                    tmp_score = -sum_dim_errors
+                else:
+                    var target_class = 0
+                    if in_range:
+                        target_class = Int(targets_p[idx])
+                    if search and in_range:
+                        der_p[idx] = weight
+                        mag_weight += abs(weight)
+                    var max_abs = Float32(0.0)
+                    for clazz in range(num_classes):
+                        var val = Float32(0.0)
+                        if in_range:
+                            val = cursor_p[clazz * n_rows + idx]
+                        var exp_val = identical_exp(val)
+                        var p = _clip_prob(exp_val / (Float32(1.0) + exp_val))
+                        var c = Float32(1.0) if target_class == clazz else Float32(0.0)
+                        var direction = c - p
+                        if in_range:
+                            var d = weight * direction
+                            der_p[(plane_base + clazz) * n_rows + idx] = d
+                            var ad = abs(d)
+                            if ad > max_abs:
+                                max_abs = ad
+                        var log_term = val
+                        if isfinite(exp_val):
+                            log_term = identical_log(Float32(1.0) + exp_val)
+                        if in_range:
+                            tmp_score += weight * (c * val - log_term) / Float32(num_classes)
+                    mag_der += max_abs
+                s_score[t] = tmp_score
+                s_w[t] = mag_weight
+                s_g[t] = mag_der
+            fv_p[b] = _halving_fold(s_score)
+            if compute_mags:
+                mag_p[2 * b] = _halving_fold(s_w)
+                mag_p[2 * b + 1] = _halving_fold(s_g)
+            b += units
+
+    host_parallelize(score_blocks, units)
+    _ = len(targets)
+    _ = len(weights)
+    _ = len(cursor)
+    _ = len(der)
+    _ = len(fv_partials)
+    _ = len(mag_partials)
     _ = dim
 
 
@@ -444,34 +464,68 @@ def _estimate_multi(
     var g_target = List[Float32](length=target_planes * n_rows, fill=Float32(0.0))
     var g_weights = List[Float32](length=n_rows, fill=Float32(0.0))
     var g_cursor = List[Float32](length=cursor_dim * n_rows, fill=Float32(0.0))
-    for pos in range(n_rows):
-        for t in range(target_planes):
-            g_target[t * n_rows + pos] = targets[t * n_rows + row_index[pos]]
-        if has_weights:
-            g_weights[pos] = weights[row_index[pos]]
-        for k in range(cursor_dim):
-            g_cursor[k * n_rows + pos] = cursor[k * n_rows + row_index[pos]]
+    # `move_to(zeros)`: the shift is 0.0 per (bin, dim), added per row
+    var bins = List[Int](length=n_rows, fill=0)
+    var shift = List[Float32](length=n_leaves * cursor_dim, fill=Float32(0.0))
+    # THE SPLIT (lane gbdt-host-par): the gathers, the bins and the shift
+    # are one statement per (position, plane), a device thread a position:
+    # a task owns a run of positions (a leaf's range clipped to it)
+    var g_units = _gbdt_units(n_rows, (2 + target_planes + 3 * cursor_dim) * n_rows)
+    var g_chunk = host_predict_chunk(n_rows, g_units)
+    var targets_p = rebind[HostF32Ptr](targets.unsafe_ptr())
+    # an empty `weights` is never read (`has_weights` guards it)
+    var weights_p = rebind[HostF32Ptr](weights.unsafe_ptr())
+    var cursor_p = rebind[HostF32Ptr](cursor.unsafe_ptr())
+    var row_p = rebind[GbdtIntPtr](row_index.unsafe_ptr())
+    var off_p = rebind[GbdtIntPtr](offsets.unsafe_ptr())
+    var sz_p = rebind[GbdtIntPtr](sizes.unsafe_ptr())
+    var gt_p = rebind[HostF32Ptr](g_target.unsafe_ptr())
+    var gw_p = rebind[HostF32Ptr](g_weights.unsafe_ptr())
+    var gc_p = rebind[HostF32Ptr](g_cursor.unsafe_ptr())
+    var bins_p = rebind[GbdtIntPtr](bins.unsafe_ptr())
+    var shift_p = rebind[HostF32Ptr](shift.unsafe_ptr())
+
+    def gather(unit: Int) {imm g_chunk, imm n_rows, imm n_leaves, imm target_planes, imm cursor_dim, imm has_weights, imm targets_p, imm weights_p, imm cursor_p, imm row_p, imm off_p, imm sz_p, imm gt_p, imm gw_p, imm gc_p, imm bins_p, imm shift_p}:
+        var lo = unit * g_chunk
+        var hi = min(lo + g_chunk, n_rows)
+        for pos in range(lo, hi):
+            var row = row_p[pos]
+            for t in range(target_planes):
+                gt_p[t * n_rows + pos] = targets_p[t * n_rows + row]
+            if has_weights:
+                gw_p[pos] = weights_p[row]
+            for k in range(cursor_dim):
+                gc_p[k * n_rows + pos] = cursor_p[k * n_rows + row]
+        for leaf in range(n_leaves):
+            for pos in range(max(off_p[leaf], lo), min(off_p[leaf] + sz_p[leaf], hi)):
+                bins_p[pos] = leaf
+        for pos in range(lo, hi):
+            for d in range(cursor_dim):
+                gc_p[d * n_rows + pos] = gc_p[d * n_rows + pos] + shift_p[bins_p[pos] * cursor_dim + d]
+
+    host_parallelize(gather, g_units)
+    _ = len(targets)
+    _ = len(weights)
+    _ = len(cursor)
+    _ = len(row_index)
+    _ = len(bins)
+    _ = len(shift)
     var weights_cpu = List[Float64]()
-    for leaf in range(n_leaves):
-        if has_weights:
-            weights_cpu.append(
-                Float64(_partition_stat_n(g_weights, n_rows, 0, offsets[leaf], sizes[leaf], 1))
-            )
-        else:
+    if has_weights:
+        # `compute_partition_stats` of the gathered weights at ONE stat (64
+        # chunks), the leaves' launches across the cores
+        var weight_sums = List[Float32](length=n_leaves, fill=Float32(0.0))
+        _pinned_partition_stats(
+            g_weights, offsets, sizes, 2 * GBDT_PINNED_SM, weight_sums
+        )
+        for leaf in range(n_leaves):  # driver-loop: over the leaves
+            weights_cpu.append(Float64(weight_sums[leaf]))
+    else:
+        for leaf in range(n_leaves):  # driver-loop: over the leaves
             weights_cpu.append(Float64(sizes[leaf]))
     var lambda_reg = Float64(l2_leaf_reg)
     comptime if GBDT_ORACLE_HOST_SABOTAGE:
         lambda_reg = lambda_reg + 1.0
-
-    # `move_to(zeros)`: the shift is 0.0 per (bin, dim), added per row
-    var bins = List[Int](length=n_rows, fill=0)
-    for leaf in range(n_leaves):
-        for k in range(sizes[leaf]):
-            bins[offsets[leaf] + k] = leaf
-    var shift = List[Float32](length=n_leaves * cursor_dim, fill=Float32(0.0))
-    for pos in range(n_rows):
-        for d in range(cursor_dim):
-            g_cursor[d * n_rows + pos] = g_cursor[d * n_rows + pos] + shift[bins[pos] * cursor_dim + d]
 
     # `write_value_and_first_derivatives`' multi-dimensional arm
     var der = List[Float32](length=sbd * n_rows, fill=Float32(0.0))
@@ -482,12 +536,14 @@ def _estimate_multi(
         objective, num_classes, g_target, g_weights, has_weights, g_cursor,
         n_rows, False, False, der, fv_part, mag_dummy,
     )
+    # the (leaf, dim) sums: `compute_partition_stats` at `cursor_dim` planes
+    # (`_stat_chunks`), the launches across the cores
+    var der_sums = _partition_stats_level(
+        der, n_rows, cursor_dim, _stat_chunks(cursor_dim), offsets, sizes, n_leaves
+    )
     var der_at_point = List[Float64]()
-    for leaf in range(n_leaves):
-        for d in range(cursor_dim):
-            der_at_point.append(
-                Float64(_partition_stat_n(der, n_rows, d, offsets[leaf], sizes[leaf], cursor_dim))
-            )
+    for i in range(n_leaves * cursor_dim):  # driver-loop: over (leaf, dim)
+        der_at_point.append(Float64(der_sums[i]))
     var gradient = List[Float64](length=n_leaves * sbd, fill=Float64(0.0))
     if not is_mc:
         for i in range(n_leaves * cursor_dim):
@@ -513,47 +569,66 @@ def _estimate_multi(
             var column_count = row + 1
             var der2 = List[Float32](length=sbd * n_rows, fill=Float32(0.0))
             var eff = num_classes - 1
-            for idx in range(n_rows):
-                if is_mrmse:
-                    # `multi_rmse_second_der_kernel`: zeros left of the
-                    # diagonal, the weight on it
+            # THE SPLIT (lane gbdt-host-par): one Hessian row is one device
+            # launch, a thread a data row writing its own `row + 1` plane
+            # elements (the class loops in the kernel's order inside it);
+            # the data rows run in `_gbdt_units` contiguous ranges
+            var h_units = _gbdt_units(n_rows, 24 * num_classes * n_rows)
+            var h_chunk = host_predict_chunk(n_rows, h_units)
+            var der2_p = rebind[HostF32Ptr](der2.unsafe_ptr())
+
+            def second_rows(unit: Int) {imm h_chunk, imm n_rows, imm row, imm eff, imm is_mrmse, imm has_weights, imm gw_p, imm gc_p, imm der2_p}:
+                for idx in range(unit * h_chunk, min(n_rows, (unit + 1) * h_chunk)):
+                    if is_mrmse:
+                        # `multi_rmse_second_der_kernel`: zeros left of the
+                        # diagonal, the weight on it
+                        for k in range(row):
+                            der2_p[k * n_rows + idx] = Float32(0.0)
+                        der2_p[row * n_rows + idx] = (
+                            gw_p[idx] if has_weights else Float32(1.0)
+                        )
+                        continue
+                    var mx = Float32(0.0)
+                    for k in range(eff):
+                        var v = gc_p[k * n_rows + idx]
+                        if v > mx:
+                            mx = v
+                    var se = Float32(0.0)
+                    for k in range(eff):
+                        se += identical_exp(gc_p[k * n_rows + idx] - mx)
+                    se += identical_exp(Float32(0.0) - mx)
+                    var weight = gw_p[idx] if has_weights else Float32(1.0)
+                    var p_row: Float32
+                    if row < eff:
+                        p_row = identical_exp(gc_p[row * n_rows + idx] - mx) / se
+                    else:
+                        p_row = identical_exp(-mx) / se
                     for k in range(row):
-                        der2[k * n_rows + idx] = Float32(0.0)
-                    der2[row * n_rows + idx] = (
-                        g_weights[idx] if has_weights else Float32(1.0)
-                    )
-                    continue
-                var mx = Float32(0.0)
-                for k in range(eff):
-                    var v = g_cursor[k * n_rows + idx]
-                    if v > mx:
-                        mx = v
-                var se = Float32(0.0)
-                for k in range(eff):
-                    se += identical_exp(g_cursor[k * n_rows + idx] - mx)
-                se += identical_exp(Float32(0.0) - mx)
-                var weight = g_weights[idx] if has_weights else Float32(1.0)
-                var p_row: Float32
-                if row < eff:
-                    p_row = identical_exp(g_cursor[row * n_rows + idx] - mx) / se
-                else:
-                    p_row = identical_exp(-mx) / se
-                for k in range(row):
-                    var pk = identical_exp(g_cursor[k * n_rows + idx] - mx) / se
-                    der2[k * n_rows + idx] = -weight * pk * p_row
-                der2[row * n_rows + idx] = weight * (Float32(1.0) - p_row) * p_row
-            for bin in range(n_leaves):
+                        var pk = identical_exp(gc_p[k * n_rows + idx] - mx) / se
+                        der2_p[k * n_rows + idx] = -weight * pk * p_row
+                    der2_p[row * n_rows + idx] = weight * (Float32(1.0) - p_row) * p_row
+
+            host_parallelize(second_rows, h_units)
+            # the (leaf, column) sums at `column_count` planes, the launches
+            # across the cores
+            var row_sums = _partition_stats_level(
+                der2, n_rows, column_count, _stat_chunks(column_count),
+                offsets, sizes, n_leaves,
+            )
+            for bin in range(n_leaves):  # driver-loop: over (leaf, column)
                 var base = bin * matrix_size
                 for col in range(column_count):
-                    var val = Float64(
-                        _partition_stat_n(der2, n_rows, col, offsets[bin], sizes[bin], column_count)
-                    )
+                    var val = Float64(row_sums[bin * column_count + col])
                     if col == row:
                         second_der[base + row * hbs + row] = val + lambda_reg
                     else:
                         second_der[base + row * hbs + col] = val
                         second_der[base + col * hbs + row] = val
-        for block_id in range(n_leaves):
+        # KEPT SERIAL: one `hbs x hbs` Cholesky solve per leaf. The solver
+        # raises (a task of a host split cannot), and a tree's leaves times
+        # `hbs^3` is below one task's work at any class count the planes
+        # above can hold.
+        for block_id in range(n_leaves):  # driver-loop: over the leaves
             var sigma = List[Float64]()
             for i in range(hbs * hbs):
                 sigma.append(second_der[block_id * hbs * hbs + i])
@@ -565,25 +640,38 @@ def _estimate_multi(
                 direction[block_id * hbs + i] = Float32(solution[i])
     else:
         var der2 = List[Float32](length=cursor_dim * n_rows, fill=Float32(0.0))
-        for clazz in range(num_classes):
-            for idx in range(n_rows):
-                var weight = g_weights[idx] if has_weights else Float32(1.0)
-                var val = g_cursor[clazz * n_rows + idx]
-                var exp_val = identical_exp(val)
-                var p = _clip_prob(exp_val / (Float32(1.0) + exp_val))
-                der2[clazz * n_rows + idx] = weight * p * (Float32(1.0) - p)
+        # THE SPLIT (lane gbdt-host-par): one statement per (class, row),
+        # the rows in `_gbdt_units` contiguous ranges
+        var d_units = _gbdt_units(n_rows, 16 * num_classes * n_rows)
+        var d_chunk = host_predict_chunk(n_rows, d_units)
+        var der2_p = rebind[HostF32Ptr](der2.unsafe_ptr())
+
+        def diagonal_rows(unit: Int) {imm d_chunk, imm n_rows, imm num_classes, imm has_weights, imm gw_p, imm gc_p, imm der2_p}:
+            for clazz in range(num_classes):
+                for idx in range(unit * d_chunk, min(n_rows, (unit + 1) * d_chunk)):
+                    var weight = gw_p[idx] if has_weights else Float32(1.0)
+                    var val = gc_p[clazz * n_rows + idx]
+                    var exp_val = identical_exp(val)
+                    var p = _clip_prob(exp_val / (Float32(1.0) + exp_val))
+                    der2_p[clazz * n_rows + idx] = weight * p * (Float32(1.0) - p)
+
+        host_parallelize(diagonal_rows, d_units)
         comptime EPS_1E20F = Float64(Float32(1e-20))
-        for bin in range(n_leaves):
+        var diag_sums = _partition_stats_level(
+            der2, n_rows, cursor_dim, _stat_chunks(cursor_dim), offsets, sizes, n_leaves
+        )
+        for bin in range(n_leaves):  # driver-loop: over (leaf, dim)
             for d in range(cursor_dim):
-                var h = Float64(
-                    _partition_stat_n(der2, n_rows, d, offsets[bin], sizes[bin], cursor_dim)
-                ) + lambda_reg
+                var h = Float64(diag_sums[bin * cursor_dim + d]) + lambda_reg
                 var g = gradient[bin * sbd + d]
                 if h > 0:
                     direction[bin * sbd + d] = Float32(g / (h + EPS_1E20F))
                 else:
                     direction[bin * sbd + d] = Float32(0.0)
 
+    # the gathered planes the Hessian tasks read through pointers live to here
+    _ = len(g_cursor)
+    _ = len(g_weights)
     # `_move(cur_point, direction, 1.0)`, `regularize`, `make_estimation_result`
     var point = List[Float32](length=n_leaves * sbd, fill=Float32(0.0))
     for i in range(n_leaves * sbd):
@@ -746,8 +834,7 @@ def gbdt_multi_host_fit(
         # ---- `run_tree_layout_traced` at `stat_count` planes (TWIN of the
         # loop in `gbdt_oracle.mojo::gbdt_host_fit`) ----
         var row_index = List[Int](length=n_rows, fill=0)
-        for r in range(n_rows):
-            row_index[r] = r
+        _identity_rows(row_index, n_rows)
         var p_off = List[Int](length=max_leaves, fill=0)
         var p_sz = List[Int](length=max_leaves, fill=0)
         p_sz[0] = n_rows
@@ -806,10 +893,10 @@ def gbdt_multi_host_fit(
                 _subtract_histograms(hist, hist_cells, sub_from, sub_what, half, stat_count)
 
             # `compute_partition_stats` over the live leaves, at the chunk
-            # count of `stat_count` planes (`_partition_stat_n`'s)
+            # count of `stat_count` planes (`_stat_chunks`)
             var part_stats = _partition_stats_level(
                 stats, n_rows, stat_count,
-                max((2 * GBDT_PINNED_SM + stat_count - 1) // stat_count, 1),
+                _stat_chunks(stat_count),
                 p_off, p_sz, n_live,
             )
 

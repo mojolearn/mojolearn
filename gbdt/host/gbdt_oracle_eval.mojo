@@ -69,6 +69,13 @@ IDENTITY IS NOT CORRECTNESS. What a matching column shows is that this
 spelling and the device's compute the same bits, not that either computes the
 held-out curve a reader would call right.
 """
+from core.host_parallel import host_nested_units, host_parallelize
+from core.host_predict_threads import (
+    HostF32Ptr,
+    HostU32Ptr,
+    host_predict_chunk,
+    host_predict_task_count_work,
+)
 from std.sys.compile import is_defined
 from std.memory import bitcast
 
@@ -125,6 +132,18 @@ struct GbdtHostEvalFit(Movable):
     var stopped_early: Bool
 
 
+#: A host task's view of a `List[Int]`.
+comptime _EvalIntPtr = MutPointer[Int, MutUntrackedOrigin]
+
+
+def _eval_units(items: Int, work: Int) -> Int:
+    """The task count of a split over `items` rows of `work` operations:
+    the host GBDT fit's rule (`gbdt/host/gbdt_oracle.mojo::_gbdt_units`,
+    restated because that module imports this one): one task per core over
+    the work, ONE while another host region is open (the nested rule)."""
+    return host_nested_units(host_predict_task_count_work(items, work))
+
+
 def gbdt_eval_want_best_model(want: Int, y: List[Float32], n_rows: Int) -> Int:
     """`UpdateUseBestModel` (`options_helper.cpp:100-113`): unset is True
     when there IS a held-out set and its target is not constant, and their
@@ -135,6 +154,8 @@ def gbdt_eval_want_best_model(want: Int, y: List[Float32], n_rows: Int) -> Int:
         return want
     if n_rows <= 0:
         return 0
+    # KEPT SERIAL: once per fit, a compare per row, leaving at the first
+    # row that differs
     for r in range(1, n_rows):
         if y[r] != y[0]:
             return 1
@@ -168,23 +189,48 @@ def gbdt_eval_test_bins(
     column and GREATER on an ordered one, the level's bit OR-ed in."""
     var bins = List[Int](length=n_eval if n_eval > 0 else 1, fill=0)
     var depth = len(split_features)
-    for r in range(n_eval):
-        var leaf = 0
-        for level in range(depth):
-            var fid = split_features[level]
-            var mask = feat_mask[fid] << feat_shift[fid]
-            var value = UInt32(split_bins[level]) << feat_shift[fid]
-            var feature_val = (
-                test_cindex[Int(feat_offset[fid]) * n_eval + r] & mask
-            )
-            var goes_right: Bool
-            if feat_one_hot[fid]:
-                goes_right = feature_val == value
-            else:
-                goes_right = feature_val > value
-            if goes_right:
-                leaf += 1 << level
-        bins[r] = leaf
+    # THE SPLIT (lane gbdt-host-par): a row is one device thread (integer
+    # compares and ORs); the rows run in `_gbdt_units` contiguous ranges
+    # over one descriptor per level, formed once per tree.
+    var l_base = List[Int](capacity=depth)
+    var l_mask = List[UInt32](capacity=depth)
+    var l_value = List[UInt32](capacity=depth)
+    var l_eq = List[Int](capacity=depth)
+    for level in range(depth):  # driver-loop: over the tree's levels (one descriptor each)
+        var fid = split_features[level]
+        l_base.append(Int(feat_offset[fid]) * n_eval)
+        l_mask.append(feat_mask[fid] << feat_shift[fid])
+        l_value.append(UInt32(split_bins[level]) << feat_shift[fid])
+        l_eq.append(1 if feat_one_hot[fid] else 0)
+    var units = _eval_units(n_eval, (2 + 3 * depth) * n_eval)
+    var chunk = host_predict_chunk(n_eval, units)
+    var c_p = rebind[HostU32Ptr](test_cindex.unsafe_ptr())
+    var base_p = rebind[_EvalIntPtr](l_base.unsafe_ptr())
+    var mask_p = rebind[HostU32Ptr](l_mask.unsafe_ptr())
+    var value_p = rebind[HostU32Ptr](l_value.unsafe_ptr())
+    var eq_p = rebind[_EvalIntPtr](l_eq.unsafe_ptr())
+    var bins_p = rebind[_EvalIntPtr](bins.unsafe_ptr())
+
+    def rows(unit: Int) {imm chunk, imm n_eval, imm depth, imm c_p, imm base_p, imm mask_p, imm value_p, imm eq_p, imm bins_p}:
+        for r in range(unit * chunk, min(n_eval, (unit + 1) * chunk)):
+            var leaf = 0
+            for level in range(depth):
+                var feature_val = c_p[base_p[level] + r] & mask_p[level]
+                var goes_right: Bool
+                if eq_p[level] != 0:
+                    goes_right = feature_val == value_p[level]
+                else:
+                    goes_right = feature_val > value_p[level]
+                if goes_right:
+                    leaf += 1 << level
+            bins_p[r] = leaf
+
+    host_parallelize(rows, units)
+    _ = len(test_cindex)
+    _ = len(l_base)
+    _ = len(l_mask)
+    _ = len(l_value)
+    _ = len(l_eq)
     return bins^
 
 
@@ -201,11 +247,27 @@ def gbdt_eval_add_tree(
     compiler contracted `cursor + leaf * rate` into one fma, one rounding
     where the device kernel rounds the stored product first -- measured on
     the M4, 258 of 800 held-out rows one ulp apart after the first tree."""
-    for r in range(len(bins)):
-        var v = values[bins[r]]
-        comptime if GBDT_EVAL_HOST_SABOTAGE:
-            v = bitcast[DType.float32](bitcast[DType.uint32](v) + UInt32(1))
-        cursor[r] = cursor[r] + v
+    # one add per row (a device thread a row), the rows in `_gbdt_units`
+    # contiguous ranges; the task adds a STORED value read through a
+    # pointer, so there is no product here for a compiler to contract
+    var n = len(bins)
+    var units = _eval_units(n, 3 * n)
+    var chunk = host_predict_chunk(n, units)
+    var cursor_p = rebind[HostF32Ptr](cursor.unsafe_ptr())
+    var bins_p = rebind[_EvalIntPtr](bins.unsafe_ptr())
+    var values_p = rebind[HostF32Ptr](values.unsafe_ptr())
+
+    def rows(unit: Int) {imm chunk, imm n, imm cursor_p, imm bins_p, imm values_p}:
+        for r in range(unit * chunk, min(n, (unit + 1) * chunk)):
+            var v = values_p[bins_p[r]]
+            comptime if GBDT_EVAL_HOST_SABOTAGE:
+                v = bitcast[DType.float32](bitcast[DType.uint32](v) + UInt32(1))
+            cursor_p[r] = cursor_p[r] + v
+
+    host_parallelize(rows, units)
+    _ = len(cursor)
+    _ = len(bins)
+    _ = len(values)
 
 
 def gbdt_eval_shrink_point(

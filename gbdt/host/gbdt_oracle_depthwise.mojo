@@ -121,7 +121,7 @@ from core.host_parallel import host_parallelize
 from core.host_predict_threads import HostF32Ptr
 from checks.fixed_point import choose_scale
 from checks.numerics import ftz, identical_mul_add, identical_sqrt
-from gbdt.methods.cursor_rescale import apply_scaled_leaves_host, rescaled_leaves
+from gbdt.methods.cursor_rescale import rescaled_leaves
 from gbdt.data.permutation import TRandom
 from gbdt.gpu_data.compressed_index_builder import (
     CompressedIndexLayout,
@@ -134,6 +134,8 @@ from gbdt.gpu_data.grid_policy import (
     POLICY_ONE_BYTE,
 )
 from gbdt.host.gbdt_oracle import (
+    apply_scaled_leaves_host,
+    _identity_rows,
     _scan_histograms,
     _gbdt_units,
     _split_leaves,
@@ -585,8 +587,7 @@ def _grow_non_symmetric_tree(
 
     # ---- CreateInitialSubsets (`:1057-1100`) ----
     var row_index = List[Int](length=n_rows, fill=0)
-    for r in range(n_rows):
-        row_index[r] = r
+    _identity_rows(row_index, n_rows)
     var p_off = List[Int](length=max_leaves, fill=0)
     var p_sz = List[Int](length=max_leaves, fill=0)
     p_sz[0] = n_rows

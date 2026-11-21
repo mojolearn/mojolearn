@@ -118,7 +118,12 @@ from gbdt.host.gbdt_oracle import (
     _halving_fold_live,
     _snap_plane,
     _hist2_dither,
-    _pinned_partition_stat,
+    GbdtIntPtr,
+    GbdtU64Ptr,
+    _gather_rows,
+    _gbdt_units,
+    _partition_stats_level,
+    _pinned_partition_stats,
     _hist2_quantize,
     gbdt_host_grid,
     gbdt_host_model_text,
@@ -1243,18 +1248,6 @@ def _record_less(
 # ===========================================================================
 
 
-def _partition_stat_n(
-    stats: List[Float32], line_size: Int, stat_id: Int, offset: Int, size: Int,
-    n_stats: Int,
-) -> Float32:
-    """`compute_partition_stats` for one (leaf, stat) at
-    `partition_stats_chunks(32, n_stats)` chunks (`partitions_reduce.mojo`)."""
-    var max_chunks = (2 * GBDT_ORD_PINNED_SM + n_stats - 1) // n_stats
-    return _pinned_partition_stat(
-        stats, stat_id * line_size + offset, size, max_chunks
-    )
-
-
 def _ordered_estimate_and_apply(
     estimate_size: Int,
     apply_size: Int,
@@ -1270,73 +1263,58 @@ def _ordered_estimate_and_apply(
     """`ordered_estimate_and_apply` (`dynamic_boosting.mojo:104-156`)."""
     if estimate_size < 1 or estimate_size > apply_size:
         raise Error("ordered estimation requires 0 < prefix <= cursor size")
+    # THE SPLITS (lane gbdt-host-par; the helpers are below, with the
+    # host pool's imports): every step is the device launch it names, its
+    # unit a position range, a (sum, 512-thread chunk) or a leaf.
     var gy = List[Float32](length=estimate_size, fill=Float32(0.0))
     var gw = List[Float32](length=estimate_size, fill=Float32(0.0))
     var gc = List[Float32](length=estimate_size, fill=Float32(0.0))
     var gb = List[Int](length=estimate_size, fill=0)
-    for i in range(estimate_size):
-        var row = permutation[i]
-        gy[i] = y[row]
-        gw[i] = w[row]
-        gc[i] = cursor[i]
-        gb[i] = bins[row]
+    _ord_prefix_gather(y, w, True, permutation, bins, cursor, estimate_size, gy, gw, gc, gb)
     # `partition_from_bins`: the stable counting sort
     var sizes = List[Int](length=n_leaves, fill=0)
-    for r in range(estimate_size):
-        sizes[gb[r]] += 1
     var offsets = List[Int](length=n_leaves, fill=0)
-    var running = 0
-    for i in range(n_leaves):
-        offsets[i] = running
-        running += sizes[i]
-    var fill = offsets.copy()
     var row_index = List[Int](length=estimate_size, fill=0)
-    for r in range(estimate_size):
-        row_index[fill[gb[r]]] = r
-        fill[gb[r]] += 1
+    _ord_counting_sort(gb, estimate_size, n_leaves, sizes, offsets, row_index)
     # `_estimate_and_apply`: the gathers into leaf order
     var n = estimate_size
     var t_target = List[Float32](length=n, fill=Float32(0.0))
     var t_weight = List[Float32](length=n, fill=Float32(0.0))
     var t_cursor = List[Float32](length=n, fill=Float32(0.0))
-    for pos in range(n):
-        t_target[pos] = gy[row_index[pos]]
-        t_weight[pos] = gw[row_index[pos]]
-        t_cursor[pos] = gc[row_index[pos]]
+    _gather_rows(gy, row_index, n, t_target)
+    _gather_rows(gw, row_index, n, t_weight)
+    _gather_rows(gc, row_index, n, t_cursor)
     # `make_bin_optimized_oracle`: WeightsCpu from the one-stat reduce
-    var weights_cpu = List[Float64]()
-    for leaf in range(n_leaves):
-        weights_cpu.append(Float64(_partition_stat_n(t_weight, n, 0, offsets[leaf], sizes[leaf], 1)))
+    # (`partition_stats_chunks(32, 1)` = 64 chunks)
+    var weight_sums = List[Float32](length=n_leaves, fill=Float32(0.0))
+    _pinned_partition_stats(
+        t_weight, offsets, sizes, 2 * GBDT_ORD_PINNED_SM, weight_sums
+    )
     var lambda_reg = Float64(l2)
     comptime if GBDT_ORACLE_HOST_SABOTAGE:
         lambda_reg = lambda_reg + 1.0
-    # `move_to(zero)`: `add_bin_model_value_kernel` adds 0.0 to every row
-    for pos in range(n):
-        t_cursor[pos] = t_cursor[pos] + Float32(0.0)
-    # `pointwise_target_kernel[RMSE, estimation=True]`
+    # `move_to(zero)` (`add_bin_model_value_kernel` adds 0.0 to every row),
+    # then `pointwise_target_kernel[RMSE, estimation=True]`
     var stats = List[Float32](length=2 * n, fill=Float32(0.0))
-    for pos in range(n):
-        var weight = t_weight[pos]
-        stats[pos] = ftz(weight * (t_target[pos] - t_cursor[pos]))
-        stats[n + pos] = ftz(weight * Float32(1.0))
+    _ord_rmse_planes(t_target, t_weight, n, t_cursor, stats)
     comptime EPS_1E20F = Float64(Float32(1e-20))
+    # the (leaf, plane) sums at two planes (`partition_stats_chunks(32, 2)`)
+    var leaf_sums = _partition_stats_level(
+        stats, n, 2, (2 * GBDT_ORD_PINNED_SM + 1) // 2, offsets, sizes, n_leaves
+    )
     var leaves = List[Float32]()
-    for leaf in range(n_leaves):
-        var g = Float64(_partition_stat_n(stats, n, 0, offsets[leaf], sizes[leaf], 2))
-        var h = Float64(_partition_stat_n(stats, n, 1, offsets[leaf], sizes[leaf], 2)) + lambda_reg
+    for leaf in range(n_leaves):  # driver-loop: over the leaves
+        var g = Float64(leaf_sums[2 * leaf])
+        var h = Float64(leaf_sums[2 * leaf + 1]) + lambda_reg
         var direction = Float32(0.0)
         if h > 0:
             direction = Float32(g / (h + EPS_1E20F))
         var moved = Float32(Float64(Float32(0.0)) + 1.0 * Float64(direction))
-        if weights_cpu[leaf] < 1e-20:
+        if Float64(weight_sums[leaf]) < 1e-20:
             moved = Float32(0.0)
         leaves.append(moved)
     # `_ordered_apply_kernel` over every apply position
-    for i in range(apply_size):
-        var leaf = bins[permutation[i]]
-        # ONE fma, as 0.8.19 computed it (the old pin fused `leaf * rate`
-        # into this add); dynamic_boosting.mojo's kernel says why (lane/pinned-mul-contract-free)
-        cursor[i] = identical_mul_add(leaves[leaf], rate, cursor[i])
+    _ord_apply_leaves(leaves, bins, permutation, rate, apply_size, cursor)
     return leaves^
 
 
@@ -1620,6 +1598,7 @@ from checks.numerics import identical_log, identical_pow
 from std.math import sqrt
 from core.host_parallel import host_nested_units, host_parallelize
 from core.host_predict_threads import (
+    HostF32Ptr,
     host_predict_chunk,
     host_predict_task_count_work,
 )
@@ -1741,31 +1720,51 @@ def _ordered_bootstrap_draws(
         blocks = 1
     var stride = blocks * GBDT_ORD_BOOT_BLOCK
     var draws = List[Float32](length=total, fill=Float32(1.0))
-    for gid in range(stride):
-        var s = seeds[gid]
-        var i = gid
-        while i < total:
-            var bw: Float32
-            if kind == GBDT_ORD_BOOT_BAYESIAN:
-                var d = next_uniform_f(s)
-                s = d[1]
-                var tmp = -identical_log(d[0] + Float32(1e-20))
-                bw = tmp
-                if param != Float32(1.0):
-                    bw = identical_pow(tmp, param)
-            elif kind == GBDT_ORD_BOOT_BERNOULLI:
-                var d = next_uniform_f(s)
-                s = d[1]
-                bw = Float32(1.0) if d[0] < param else Float32(0.0)
-            elif kind == GBDT_ORD_BOOT_POISSON:
-                var d = next_poisson_f(s, param)
-                s = d[1]
-                bw = d[0]
-            else:
-                raise Error("ordered host: bootstrap kind " + String(kind))
-            draws[i] = draws[i] * bw
-            i += stride
-        seeds[gid] = s
+    if (
+        total > 0
+        and kind != GBDT_ORD_BOOT_BAYESIAN
+        and kind != GBDT_ORD_BOOT_BERNOULLI
+        and kind != GBDT_ORD_BOOT_POISSON
+    ):
+        # the walk's refusal, raised before the launch (a task cannot raise)
+        raise Error("ordered host: bootstrap kind " + String(kind))
+    # THE SPLIT (lane gbdt-host-par): the unit is one device THREAD: it
+    # owns seed `gid` and the rows `gid, gid + stride, ...`, its draws
+    # ascending in its rows. No thread reads another's seed or rows (and
+    # there is no fold here), so the threads run in `_gbdt_units`
+    # contiguous ranges.
+    var units = _gbdt_units(stride, 8 * total)
+    var chunk = host_predict_chunk(stride, units)
+    var seeds_p = rebind[GbdtU64Ptr](seeds.unsafe_ptr())
+    var draws_p = rebind[HostF32Ptr](draws.unsafe_ptr())
+
+    def thread_draws(unit: Int) {imm chunk, imm stride, imm total, imm kind, imm param, imm seeds_p, imm draws_p}:
+        for gid in range(unit * chunk, min(stride, (unit + 1) * chunk)):
+            var s = seeds_p[gid]
+            var i = gid
+            while i < total:
+                var bw: Float32
+                if kind == GBDT_ORD_BOOT_BAYESIAN:
+                    var d = next_uniform_f(s)
+                    s = d[1]
+                    var tmp = -identical_log(d[0] + Float32(1e-20))
+                    bw = tmp
+                    if param != Float32(1.0):
+                        bw = identical_pow(tmp, param)
+                elif kind == GBDT_ORD_BOOT_BERNOULLI:
+                    var d = next_uniform_f(s)
+                    s = d[1]
+                    bw = Float32(1.0) if d[0] < param else Float32(0.0)
+                else:
+                    var d = next_poisson_f(s, param)
+                    s = d[1]
+                    bw = d[0]
+                draws_p[i] = draws_p[i] * bw
+                i += stride
+            seeds_p[gid] = s
+
+    host_parallelize(thread_draws, units)
+    _ = len(seeds)
     return draws^
 
 
@@ -1788,36 +1787,196 @@ def _ordered_task_host(
     `[0, apply_size)`."""
     if estimate_size < 1 or estimate_size > apply_size:
         raise Error("ordered estimation requires 0 < prefix <= cursor size")
+    # THE SPLITS (lane gbdt-host-par): the prefix gather per position
+    # range, the stable counting sort per row range, the apply per position
     var gy = List[Float32](length=estimate_size, fill=Float32(0.0))
+    # no weights on this arm: the two empty lists are never read
+    var no_w = List[Float32]()
+    var gw = List[Float32]()
     var gc = List[Float32](length=estimate_size, fill=Float32(0.0))
     var gb = List[Int](length=estimate_size, fill=0)
-    for i in range(estimate_size):
-        var row = permutation[i]
-        gy[i] = y[row]
-        gc[i] = cursor[i]
-        gb[i] = bins[row]
+    _ord_prefix_gather(y, no_w, False, permutation, bins, cursor, estimate_size, gy, gw, gc, gb)
     var sizes = List[Int](length=n_leaves, fill=0)
-    for r in range(estimate_size):
-        sizes[gb[r]] += 1
     var offsets = List[Int](length=n_leaves, fill=0)
-    var running = 0
-    for i in range(n_leaves):
-        offsets[i] = running
-        running += sizes[i]
-    var fill = offsets.copy()
     var row_index = List[Int](length=estimate_size, fill=0)
-    for r in range(estimate_size):
-        row_index[fill[gb[r]]] = r
-        fill[gb[r]] += 1
+    _ord_counting_sort(gb, estimate_size, n_leaves, sizes, offsets, row_index)
     var leaves = _estimate_leaves_for_loss(
         loss, gy, gc, row_index, offsets, sizes, estimate_size, l2
     )
-    for i in range(apply_size):
-        var leaf = bins[permutation[i]]
-        # ONE fma, as 0.8.19 computed it (the old pin fused `leaf * rate`
-        # into this add); dynamic_boosting.mojo's kernel says why (lane/pinned-mul-contract-free)
-        cursor[i] = identical_mul_add(leaves[leaf], rate, cursor[i])
+    _ord_apply_leaves(leaves, bins, permutation, rate, apply_size, cursor)
     return leaves^
+
+
+def _ord_prefix_gather(
+    y: List[Float32],
+    w: List[Float32],
+    has_w: Bool,
+    permutation: List[Int],
+    bins: List[Int],
+    cursor: List[Float32],
+    n: Int,
+    mut gy: List[Float32],
+    mut gw: List[Float32],
+    mut gc: List[Float32],
+    mut gb: List[Int],
+):
+    """The ordered estimation's prefix gather in permutation order: target,
+    weight (under `has_w`; otherwise `w` and `gw` are never read) and leaf
+    by the row, the cursor by the position. A move per position (one device
+    thread each), the positions in `_gbdt_units` contiguous ranges."""
+    var units = _gbdt_units(n, 5 * n)
+    var chunk = host_predict_chunk(n, units)
+    var y_p = rebind[HostF32Ptr](y.unsafe_ptr())
+    var w_p = rebind[HostF32Ptr](w.unsafe_ptr())
+    var perm_p = rebind[GbdtIntPtr](permutation.unsafe_ptr())
+    var bins_p = rebind[GbdtIntPtr](bins.unsafe_ptr())
+    var cursor_p = rebind[HostF32Ptr](cursor.unsafe_ptr())
+    var gy_p = rebind[HostF32Ptr](gy.unsafe_ptr())
+    var gw_p = rebind[HostF32Ptr](gw.unsafe_ptr())
+    var gc_p = rebind[HostF32Ptr](gc.unsafe_ptr())
+    var gb_p = rebind[GbdtIntPtr](gb.unsafe_ptr())
+
+    def rows(unit: Int) {imm chunk, imm n, imm has_w, imm y_p, imm w_p, imm perm_p, imm bins_p, imm cursor_p, imm gy_p, imm gw_p, imm gc_p, imm gb_p}:
+        for i in range(unit * chunk, min(n, (unit + 1) * chunk)):
+            var row = perm_p[i]
+            gy_p[i] = y_p[row]
+            if has_w:
+                gw_p[i] = w_p[row]
+            gc_p[i] = cursor_p[i]
+            gb_p[i] = bins_p[row]
+
+    host_parallelize(rows, units)
+    _ = len(y)
+    _ = len(w)
+    _ = len(permutation)
+    _ = len(bins)
+    _ = len(cursor)
+    _ = len(gy)
+    _ = len(gw)
+    _ = len(gc)
+    _ = len(gb)
+
+
+def _ord_counting_sort(
+    gb: List[Int],
+    n: Int,
+    n_leaves: Int,
+    mut sizes: List[Int],
+    mut offsets: List[Int],
+    mut row_index: List[Int],
+):
+    """`partition_from_bins`: the STABLE counting sort of `n` positions by
+    their leaf `gb`, positions ascending within a leaf (integers only).
+
+    The unit is a position range, as `_partition_for_model`: task `c`
+    counts its positions per leaf; the leaf offsets and each (leaf, task)
+    start are one running sum, leaves ascending and tasks ascending inside
+    a leaf (serial by nature: a prefix sum over `leaves x tasks` counts);
+    then task `c` places its positions from its own starts. The ranges
+    ascend, so the order within a leaf is the serial sort's at any task
+    count. A task holds one count per leaf, so the count is also bounded by
+    `n / leaves`."""
+    var units = _gbdt_units(n, 4 * n)
+    units = max(1, min(units, n // max(n_leaves, 1)))
+    var chunk = host_predict_chunk(n, units)
+    var starts = List[Int](length=units * n_leaves, fill=0)
+    var gb_p = rebind[GbdtIntPtr](gb.unsafe_ptr())
+    var starts_p = rebind[GbdtIntPtr](starts.unsafe_ptr())
+    var row_p = rebind[GbdtIntPtr](row_index.unsafe_ptr())
+
+    def count(unit: Int) {imm chunk, imm n, imm n_leaves, imm gb_p, imm starts_p}:
+        var base = unit * n_leaves
+        for r in range(unit * chunk, min(n, (unit + 1) * chunk)):
+            var k = base + gb_p[r]
+            starts_p[k] = starts_p[k] + 1
+
+    host_parallelize(count, units)
+    var running = 0
+    for leaf in range(n_leaves):  # driver-loop: over (leaf, task), the running sum
+        offsets[leaf] = running
+        for u in range(units):
+            var c = starts[u * n_leaves + leaf]
+            starts[u * n_leaves + leaf] = running
+            running += c
+        sizes[leaf] = running - offsets[leaf]
+
+    def place(unit: Int) {imm chunk, imm n, imm n_leaves, imm gb_p, imm starts_p, imm row_p}:
+        var base = unit * n_leaves
+        for r in range(unit * chunk, min(n, (unit + 1) * chunk)):
+            var at = starts_p[base + gb_p[r]]
+            row_p[at] = r
+            starts_p[base + gb_p[r]] = at + 1
+
+    host_parallelize(place, units)
+    _ = len(gb)
+    _ = len(starts)
+    _ = len(row_index)
+
+
+def _ord_rmse_planes(
+    t_target: List[Float32],
+    t_weight: List[Float32],
+    n: Int,
+    mut t_cursor: List[Float32],
+    mut stats: List[Float32],
+):
+    """`move_to(zero)` (`cursor + 0.0`, stored) then
+    `pointwise_target_kernel[RMSE, estimation=True]`'s two planes,
+    `ftz(w * (t - cursor))` and `ftz(w * 1)`: two statements per position
+    in the device's order, the positions in `_gbdt_units` ranges."""
+    var units = _gbdt_units(n, 6 * n)
+    var chunk = host_predict_chunk(n, units)
+    var target_p = rebind[HostF32Ptr](t_target.unsafe_ptr())
+    var weight_p = rebind[HostF32Ptr](t_weight.unsafe_ptr())
+    var cursor_p = rebind[HostF32Ptr](t_cursor.unsafe_ptr())
+    var stats_p = rebind[HostF32Ptr](stats.unsafe_ptr())
+
+    def rows(unit: Int) {imm chunk, imm n, imm target_p, imm weight_p, imm cursor_p, imm stats_p}:
+        for pos in range(unit * chunk, min(n, (unit + 1) * chunk)):
+            var moved = cursor_p[pos] + Float32(0.0)
+            cursor_p[pos] = moved
+            var weight = weight_p[pos]
+            stats_p[pos] = ftz(weight * (target_p[pos] - moved))
+            stats_p[n + pos] = ftz(weight * Float32(1.0))
+
+    host_parallelize(rows, units)
+    _ = len(t_target)
+    _ = len(t_weight)
+    _ = len(t_cursor)
+    _ = len(stats)
+
+
+def _ord_apply_leaves(
+    leaves: List[Float32],
+    bins: List[Int],
+    permutation: List[Int],
+    rate: Float32,
+    apply_size: Int,
+    mut cursor: List[Float32],
+):
+    """`_ordered_apply_kernel` over `[0, apply_size)`: position `i` takes
+    `identical_mul_add(leaves[bins[permutation[i]]], rate, cursor[i])`, ONE
+    fma, as 0.8.19 computed it (the old pin fused `leaf * rate` into this
+    add); dynamic_boosting.mojo's kernel says why
+    (lane/pinned-mul-contract-free). One device thread a position, the
+    positions in `_gbdt_units` contiguous ranges."""
+    var units = _gbdt_units(apply_size, 4 * apply_size)
+    var chunk = host_predict_chunk(apply_size, units)
+    var leaves_p = rebind[HostF32Ptr](leaves.unsafe_ptr())
+    var bins_p = rebind[GbdtIntPtr](bins.unsafe_ptr())
+    var perm_p = rebind[GbdtIntPtr](permutation.unsafe_ptr())
+    var cursor_p = rebind[HostF32Ptr](cursor.unsafe_ptr())
+
+    def rows(unit: Int) {imm chunk, imm apply_size, imm rate, imm leaves_p, imm bins_p, imm perm_p, imm cursor_p}:
+        for i in range(unit * chunk, min(apply_size, (unit + 1) * chunk)):
+            var leaf = bins_p[perm_p[i]]
+            cursor_p[i] = identical_mul_add(leaves_p[leaf], rate, cursor_p[i])
+
+    host_parallelize(rows, units)
+    _ = len(leaves)
+    _ = len(bins)
+    _ = len(permutation)
+    _ = len(cursor)
 
 
 @no_inline
@@ -1829,9 +1988,26 @@ def _add_tree_values(
     BEARING: inlined, the host compiler contracted `cursor + leaf * rate`
     into one fma, one rounding where the device kernel rounds the stored
     product first -- measured on the M4, 258 of 800 held-out rows one ulp
-    apart after the first tree (lane/catboost-parity)."""
-    for r in range(len(bins)):
-        cursor[r] = cursor[r] + values[bins[r]]
+    apart after the first tree (lane/catboost-parity).
+
+    One add per row (a device thread a row), the rows in `_gbdt_units`
+    contiguous ranges; a task adds a STORED value read through a pointer,
+    so there is no product here for a compiler to contract."""
+    var n = len(bins)
+    var units = _gbdt_units(n, 3 * n)
+    var chunk = host_predict_chunk(n, units)
+    var cursor_p = rebind[HostF32Ptr](cursor.unsafe_ptr())
+    var bins_p = rebind[GbdtIntPtr](bins.unsafe_ptr())
+    var values_p = rebind[HostF32Ptr](values.unsafe_ptr())
+
+    def rows(unit: Int) {imm chunk, imm n, imm cursor_p, imm bins_p, imm values_p}:
+        for r in range(unit * chunk, min(n, (unit + 1) * chunk)):
+            cursor_p[r] = cursor_p[r] + values_p[bins_p[r]]
+
+    host_parallelize(rows, units)
+    _ = len(cursor)
+    _ = len(bins)
+    _ = len(values)
 
 
 comptime _OrdIntPtr = MutPointer[Int, MutUntrackedOrigin]

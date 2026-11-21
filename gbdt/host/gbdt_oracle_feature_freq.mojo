@@ -119,6 +119,7 @@ from gbdt.gpu_data.grid_policy import (
 )
 from checks.numerics import identical_div, identical_mul
 from gbdt.host.gbdt_oracle import (
+    _identity_rows,
     _partition_stats_level,
     GBDT_PARTITION_CHUNKS,
     _halving_fold,
@@ -768,8 +769,7 @@ def gbdt_feature_freq_host_fit(
 
     # ---- 4. the two synchronized levels ----
     var row_index = List[Int](length=n_rows, fill=0)
-    for r in range(n_rows):
-        row_index[r] = r
+    _identity_rows(row_index, n_rows)
     var p_off = List[Int](length=4, fill=0)
     var p_sz = List[Int](length=4, fill=0)
     p_sz[0] = n_rows
