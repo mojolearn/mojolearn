@@ -13,23 +13,129 @@ The field source of a class, first match in its ancestry:
 2. A connected save schema (`_native_archive_bridge.register`): the members
    `save` writes.
 3. Otherwise: every public fitted attribute (an instance field whose name ends
-   in "_" and does not start with "_", value not None), plus the private
-   fields in `EXTRA`.
+   in "_" and does not start with "_", value not None, name not in
+   `NOT_STATE`), plus the private fields in `EXTRA`.
 
 This module holds declarations and import-time glue only: nothing here runs
 when a model is fitted, and the read itself is one native call.
 """
 #: class name -> the private instance fields that are fitted state (they
 #: decide the model's answers and no public attribute carries them).
-EXTRA_BY_NAME = {}
+#: A name the model does not hold is passed over, so a base class may list
+#: the union of its subclasses' fields. Listed here: state `fit` writes that
+#: `predict` / `transform` reads. Not listed: device handles, pins, lifecycle
+#: flags and caches written by a later call (they are not fitted state, and a
+#: handle differs per device).
+EXTRA_BY_NAME = {
+    # preprocessing: encoders, imputers, discretizers (bindings/prep_encode_native_door.mojo)
+    "SimpleImputer": ("_fill", "_keep", "_indicator"),
+    "KBinsDiscretizer": ("_edges", "_ne", "_stride"),
+    "OrdinalEncoder": ("_missing", "_infrequent", "_grouping"),
+    "OneHotEncoder": ("_infrequent", "_grouping", "_drop_after"),
+    "SplineTransformer": ("_knots", "_lo", "_hi", "_nk", "_k"),
+    "TargetEncoder": ("_T", "_cmax", "_enc", "_meta"),
+    "_SelectorMixin": ("_mask",),
+    # the imputer's generator word and posterior step advance with each sampled transform:
+    # they decide the next transform's answers, so they are state.
+    "IterativeImputer": ("_keep", "_indicator", "_bounds_k", "_posterior", "_rng", "_post_step"),
+    # stateless-fit transformers (bindings/prep_stateless_native_door.mojo)
+    "PolynomialFeatures": ("_poly_index", "_poly_start"),
+    "QuantileTransformer": ("_q",),
+    "PowerTransformer": ("_pt_anchor", "_pt_anchor_kind", "_mean", "_scale", "_method"),
+    # label encoders (bindings/prep_labels_native_door.mojo)
+    "LabelEncoder": ("_classes", "_cats"),
+    "LabelBinarizer": ("_classes", "_cats"),
+    "MultiLabelBinarizer": ("_classes", "_cats", "_given"),
+    # naive Bayes and discriminant analysis (bindings/prep_classify_native_door.mojo)
+    "GaussianNB": ("_const", "_raw_var"),
+    "_DiscreteNB": ("_w", "_bias", "_cc", "_flp", "_cmax"),
+    "LinearDiscriminantAnalysis": ("_coef", "_inter", "_rank", "_scal_full", "_max_components"),
+    "QuadraticDiscriminantAnalysis": ("_rot", "_logc"),
+    # linear models: the centering of the fit (providers/python/linear_fit_boundary_unpack.mojo)
+    "LinearRegression": ("_x_mean", "_y_mean"),
+    "Ridge": ("_x_mean", "_y_mean"),
+    # the stacked weights predict reads (bindings/qn_boundary_pack.mojo, bindings/svc_linear_boundary_pack.mojo)
+    "QNRegressor": ("_w",),
+    "_LinearSVMBase": ("_w",),
+    # the link the GLM predict applies (bindings/x_linear_regressors_pack.mojo)
+    "_GLMBase": ("_link",),
+    # kernel methods: the kernel's parameters and seed as fitted (bindings/kernel_methods_boundary_pack.mojo)
+    "KernelRidge": ("_kernel_params", "_squeeze"),
+    "Nystroem": ("_kernel_params",),
+    "RBFSampler": ("_params",),
+    # decomposition and manifold (bindings/ica_native_unpack.mojo, rp_native_door.mojo, pls_boundary_pack.mojo,
+    # lda_native_door.mojo, mani_decomp_native_door.mojo, mcd_native_door.mojo)
+    "FastICA": ("_whiten",),
+    "_RandomProjection": ("_rp_components",),
+    "_PLS": ("_x_mean", "_x_std", "_y_mean", "_y_std", "_x_scores", "_y_scores", "_predict_1d"),
+    # the draw counter advances with each fit / partial_fit and seeds the next transform
+    "LatentDirichletAllocation": ("_seed", "_draw"),
+    "Isomap": ("_kind", "_pw", "_k_col", "_k_all", "_fit_X", "_knn", "_iso_v_m_"),
+    "LocallyLinearEmbedding": ("_fit_X", "_knn"),
+    "MDS": ("_norm",),
+    "ClassicalMDS": ("_norm",),
+    "MinCovDet": ("_precision", "_seed", "_draws"),
+    # clustering (bindings/cluster_fit_public_native_pack.mojo, providers/python/member_xcluster_boundary_door.mojo)
+    "BisectingKMeans": ("_tree_centers",),
+    "BayesianGaussianMixture": ("_full_pchol", "_log_consts", "_score_words"),
+    # neighbors, outliers, kernel maps, semi-supervised, sparse GP (bindings/neighbors_*_native_door.mojo,
+    # kpca_native_door.mojo, svc_ocsvm_boundary_pack.mojo). KernelPCA's `_fit_alphas` is a cache the
+    # first transform fills: not fitted state.
+    "LocalOutlierFactor": ("_fit_X", "_fit_dist", "_lrd"),
+    "NearestCentroid": ("_codes_classes",),
+    "KNNImputer": ("_fit_X", "_valid", "_miss_cols"),
+    "OneClassSVM": ("_gamma",),
+    "KernelPCA": ("_gamma", "_fit_X", "_fit_cols", "_fit_all"),
+    "SkewedChi2Sampler": ("_random_weights",),
+    "_LabelPropagationBase": ("_classical_raw_graph",),
+    "SVGP": ("_alpha", "_C"),
+    # tree ensembles and meta-estimators (bindings/trees_public_boost_door.mojo, trees_public_meta_door.mojo,
+    # trees_gbdt_adapter_lifecycle_door.mojo). A member estimator contributes its own digest.
+    "_DARTBase": ("_bag_at", "_KIND"),
+    "RandomTreesEmbedding": ("_tree_base", "_node_col"),
+    "_StackingBase": ("_widths_", "_binary"),
+    "MultiOutputRegressor": ("_multi_ridge",),
+    "_GBDTAdapter": ("_learner_",),
+    # forecasting (bindings/xseq_forecast_native_door.mojo, xseq_prophet_native_door.mojo,
+    # tsa_autoarima_native_door.mojo): the training series a forecast extends. `_fitted_h` and `_last` are
+    # per-horizon caches a later predict fills: not fitted state.
+    "AutoTheta": ("_one", "_y"),
+    "_Croston": ("_one", "_y"),
+    "ETS": ("_one", "_y", "_season"),
+    "GARCH": ("_one", "_y", "_fc"),
+    "ProphetForecaster": ("_one", "_nh", "_K"),
+    "AutoARIMA": ("_fitted",),
+    "_BaseMLP": ("_y_1d",),
+    # bagging: the members as one forest (`_batched` = (forest, the unfitted base)) or as a member list
+    # (`_estimators`), and each member's out-of-bag rows (bindings/trees_public_boost_door.mojo)
+    "_BaggingBase": ("_batched", "_estimators", "_oob_rows"),
+    # recurrent models: the weights are the public flat block `params_` (bindings/xseq_neural_native_door.mojo)
+    "_RecurrentBase": ("_y_1d",),
+    # Sequential: the weights are the public flat block `params_`; the layer list decides what they mean
+    # (bindings/sequential_description_unpack.mojo: one tuple of codes and sizes per layer)
+    "Sequential": ("_layers", "_sample_shape"),
+    # CNNClassifier: `layers_` and `head_` are layer objects, entered by the walk (LAYERS)
+    "CNNClassifier": ("_flat",),
+}
+
+#: Public names (ending in "_") that record how a call ran, not what was
+#: fitted: whether the input was copied on the way in, which shards or which
+#: query tile the last call used. They differ with the input's container or
+#: the machine while the fitted model is the same, so no class hashes them.
+NOT_STATE = ("input_copied_", "fortran_copied_", "last_shards_", "used_query_tile_", "n_candidate_distances_",
+             # a layer's gradient buffers of the last training step
+             "grad_weight_", "grad_bias_",
+             # a search's resolved scorer object: a setting (`scoring`), not a fitted value
+             "scorer_")
+
+#: Base classes of layer objects a layered model keeps in its fitted fields
+#: (`CNNClassifier.layers_`, `head_`). The walk enters such an object: its
+#: class name, then its own public learned fields (`weight_`, `bias_`, ...).
+#: Filled by `layer` when the layer module is imported.
+LAYERS = []
 
 #: class name -> why it has no digest yet, in words a user reads.
-REFUSED_BY_NAME = {
-    "_BaggingBase": "its fitted members are held as one forest by the trees owner, which the digest does not read yet",
-    "_RecurrentBase": "its fitted weights are held by the recurrent owner (state_dict), which the digest does not read yet",
-    "Sequential": "its layers hold the fitted weights, and the digest does not walk layers yet",
-    "CNNClassifier": "its layers hold the fitted weights, and the digest does not walk layers yet",
-}
+REFUSED_BY_NAME = {}
 
 #: The tables the compiled walk reads, keyed by class (filled by `declare`).
 EXTRA = {}
@@ -53,6 +159,13 @@ def declare(cls):
         REFUSED[cls] = REFUSED_BY_NAME[name]
 
 
+def layer(cls):
+    """Declare `cls` a base class of layer objects (called once, where the
+    layer classes are defined)."""
+    if cls not in LAYERS:
+        LAYERS.append(cls)
+
+
 def connect(base):
     """Connect the compiled digest entry once: `(entry, context)`. `base` is
     the shared estimator base whose `digest_` property this serves. On an
@@ -63,7 +176,8 @@ def connect(base):
     from ._native_archive_bridge import connect as connect_archive
     entry, context = connect_archive()
     if "archive_unavailable" not in context:
-        context.update(digest_base=base, digest_extra=EXTRA, digest_refused=REFUSED)
+        context.update(digest_base=base, digest_extra=EXTRA, digest_refused=REFUSED, digest_skip=NOT_STATE,
+                       digest_layers=LAYERS)
         CONNECTION["entry"] = entry
     CONNECTION["context"] = context
     return entry, context
