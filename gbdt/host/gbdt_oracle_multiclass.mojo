@@ -77,7 +77,7 @@ from checks.numerics import (
 )
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import HostF32Ptr, host_predict_chunk
-from gbdt.methods.cursor_rescale import apply_scaled_leaves_host, rescaled_leaves
+from gbdt.methods.cursor_rescale import rescaled_leaves
 from gbdt.gpu_data.compressed_index_builder import (
     CompressedIndexLayout,
     build_layout,
@@ -89,6 +89,7 @@ from gbdt.gpu_data.grid_policy import (
     POLICY_ONE_BYTE,
 )
 from gbdt.host.gbdt_oracle import (
+    apply_scaled_leaves_host,
     _identity_rows,
     GBDT_FLOAT32_MAX,
     GBDT_MSE_BLOCK,

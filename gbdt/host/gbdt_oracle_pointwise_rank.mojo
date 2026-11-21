@@ -17,7 +17,7 @@
 from std.math import exp, fma, isfinite, log, sqrt
 
 from checks.numerics import ftz, identical_mul_add
-from gbdt.methods.cursor_rescale import apply_scaled_leaves_host, rescaled_leaves
+from gbdt.methods.cursor_rescale import rescaled_leaves
 from gbdt.data.pairs import (
     IDN_PAIRLOGIT_GROUP,
     PairList,
@@ -29,6 +29,7 @@ from gbdt.data.yeti_rank_tasks import YetiRankTasks, yeti_rank_tasks
 from gbdt.gpu_data.compressed_index_builder import build_layout
 from gbdt.gpu_data.feature_blocks import blocks_for
 from gbdt.host.gbdt_oracle import (
+    apply_scaled_leaves_host,
     GBDT_MSE_BLOCK,
     GbdtHostModel,
     GbdtHostParams,

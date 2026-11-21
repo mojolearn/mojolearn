@@ -3308,6 +3308,58 @@ def _apply_leaves(
     host_parallelize(rows, units)
 
 
+def apply_scaled_leaves_host(
+    mut cursor: List[Float32],
+    scaled: List[Float32],
+    row_index: List[Int],
+    offsets: List[Int],
+    sizes: List[Int],
+    n_leaves: Int,
+    dim: Int = 1,
+    plane: Int = 0,
+):
+    """The host oracles' `add_model_value_kernel`: every row of leaf `l` (its
+    partition range `row_index[offsets[l] .. + sizes[l]]`) takes
+    `cursor + scaled[l * dim + d]` in plane `d` (`d * plane + row`), one add
+    per row, the kernel's statement. One copy for the six oracles that each
+    restated it (fb11 follow-up, 2026-11-17; moved here from
+    `gbdt/methods/cursor_rescale.mojo`, which the device kernels import, so
+    that it can split across the host pool).
+
+    A row is in one leaf and takes one add per plane, so positions are the
+    units (one device thread a row): a task owns a run of positions and
+    visits each leaf's range clipped to it; `_gbdt_units` tasks."""
+    var n_rows = 0
+    for leaf in range(n_leaves):  # driver-loop: over the leaves (the partition's extent)
+        n_rows = max(n_rows, offsets[leaf] + sizes[leaf])
+    var units = _gbdt_units(n_rows, 3 * dim * n_rows)
+    var chunk = host_predict_chunk(n_rows, units)
+    var cursor_p = rebind[HostF32Ptr](cursor.unsafe_ptr())
+    var scaled_p = rebind[HostF32Ptr](scaled.unsafe_ptr())
+    var row_p = rebind[GbdtIntPtr](row_index.unsafe_ptr())
+    var off_p = rebind[GbdtIntPtr](offsets.unsafe_ptr())
+    var sz_p = rebind[GbdtIntPtr](sizes.unsafe_ptr())
+
+    def rows(unit: Int) {imm chunk, imm n_rows, imm n_leaves, imm dim, imm plane, imm cursor_p, imm scaled_p, imm row_p, imm off_p, imm sz_p}:
+        var lo = unit * chunk
+        var hi = min(lo + chunk, n_rows)
+        for leaf in range(n_leaves):
+            var first = max(off_p[leaf], lo)
+            var stop = min(off_p[leaf] + sz_p[leaf], hi)
+            for d in range(dim):
+                var v = scaled_p[leaf * dim + d]
+                for pos in range(first, stop):
+                    var at = d * plane + row_p[pos]
+                    cursor_p[at] = cursor_p[at] + v
+
+    host_parallelize(rows, units)
+    _ = len(cursor)
+    _ = len(scaled)
+    _ = len(row_index)
+    _ = len(offsets)
+    _ = len(sizes)
+
+
 def _identity_rows(mut row_index: List[Int], n_rows: Int):
     """`row_index[r] = r` (the root partition's row order, the device's
     `make_sequence`): one statement per row, the rows in `_gbdt_units`

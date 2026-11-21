@@ -84,7 +84,7 @@ tools/identity_break.py on the gbdt-rmse lane is the measurement.
 from std.math import exp, fma, log
 from std.memory import bitcast
 from checks.numerics import ftz
-from gbdt.methods.cursor_rescale import apply_scaled_leaves_host, rescaled_leaves
+from gbdt.methods.cursor_rescale import rescaled_leaves
 from gbdt.data.permutation import TRandom
 from gbdt.metrics.sample_quantile import calculate_weighted_target_average
 from gbdt.gpu_data.compressed_index_builder import build_layout
@@ -95,6 +95,7 @@ from gbdt.gpu_data.grid_policy import (
     POLICY_ONE_BYTE,
 )
 from gbdt.host.gbdt_oracle import (
+    apply_scaled_leaves_host,
     _identity_rows,
     _split_level,
     _scan_histograms,

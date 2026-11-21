@@ -85,7 +85,7 @@ from checks.numerics import (
 )
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import HostF32Ptr, host_predict_chunk
-from gbdt.methods.cursor_rescale import apply_scaled_leaves_host, rescaled_leaves
+from gbdt.methods.cursor_rescale import rescaled_leaves
 from gbdt.gpu_data.compressed_index_builder import build_layout
 from gbdt.gpu_data.feature_blocks import blocks_for
 from gbdt.gpu_data.grid_policy import (
@@ -117,6 +117,7 @@ from gbdt.host.gbdt_oracle_yeti import yeti_rank_eval, yeti_rank_search_pass
 from gbdt.data.yeti_rank_tasks import YetiRankTasks, yeti_rank_tasks
 from gbdt.data.permutation import TRandom
 from gbdt.host.gbdt_oracle import (
+    apply_scaled_leaves_host,
     _identity_rows,
     _split_level,
     _scan_histograms,

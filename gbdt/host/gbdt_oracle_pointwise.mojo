@@ -72,12 +72,13 @@ from checks.numerics import (
 )
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import HostF32Ptr, HostU32Ptr, host_predict_chunk
-from gbdt.methods.cursor_rescale import apply_scaled_leaves_host, rescaled_leaves
+from gbdt.methods.cursor_rescale import rescaled_leaves
 from gbdt.gpu_data.compressed_index_builder import build_layout
 from gbdt.gpu_data.feature_blocks import blocks_for
 from gbdt.gpu_data.grid_policy import POLICY_HALF_BYTE, POLICY_ONE_BYTE
 from gbdt.gpu_util.kernel.random_gen import next_uniform_f
 from gbdt.host.gbdt_oracle import (
+    apply_scaled_leaves_host,
     GBDT_MSE_BLOCK,
     GBDT_ORACLE_HOST_SABOTAGE,
     GbdtHostModel,
