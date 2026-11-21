@@ -82,6 +82,11 @@ class AutoARIMA(ParamsMixin):
     # lifecycle (fit bookkeeping and the NotFittedError of predict in
     # bindings/tsa_public_native_door.mojo), so no `_mode` class-creation wrappers are installed.
     _mojolearn_native_public = True
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`),
+    #: by the default form: `get_params` returns `endog` and `device`, and the
+    #: fitted fields are instance fields whose member ARIMA models move with it.
+    _mojolearn_device = True
 
     def __init__(self, endog, device=None):
         # `device`: None (this installation's device), "gpu" or "cpu"; checked
