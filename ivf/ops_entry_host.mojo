@@ -143,4 +143,4 @@ def publish_ivf_ops_search_host() raises -> IvfEntryKey:
     var key = IvfEntryKey(Int(GLOBAL_NUMERIC_MODE), 0, IVF_IMAGE_SEARCH)
     var api = IVF_OPS_SEARCH_HOST_API.get_or_create_ptr()
     ivf_ops_publish(key, Int(api[].entries.unsafe_ptr()), ivf_ops_search_host_v1)
-    return key
+    return key^

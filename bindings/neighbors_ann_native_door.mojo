@@ -348,7 +348,7 @@ def _ivf_fit(model: PythonObject, args: PythonObject, context: PythonObject,
             x_snapshot.source.addr,
             IvfIndexSpans(Int(py=classical_address(centers)), Int(py=classical_address(norms)),
                           Int(py=classical_address(offsets)), Int(py=classical_address(indices)), 0),
-            words, iters_word, seed_word)))
+            words^, iters_word, seed_word)))
         _ = x_snapshot  # retain the captured storage owners through native execution
         _ = x_pin
         _ = centers  # keep the Python object alive through the native call above
@@ -388,7 +388,7 @@ def _ivf_fit(model: PythonObject, args: PythonObject, context: PythonObject,
         IvfIndexSpans(Int(py=classical_address(centers)), Int(py=classical_address(norms)),
                       Int(py=classical_address(offsets)), Int(py=classical_address(indices)),
                       Int(py=classical_address(data))),
-        words, iters_word, seed_word))
+        words^, iters_word, seed_word))
     _ = x_snapshot  # retain the captured storage owners through native execution
     _ = x_pin
     _ = centers  # keep the Python object alive through the native call above
