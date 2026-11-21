@@ -13,4 +13,5 @@ _module = _binding()._module
 _native_parallel_neural = _module.parallel_neural_call
 _native_parallel_neural('initialize', (ParallelNeuralTrainer, SmallMLPTrainer, SambaStack,
                                      _module.samba_native_call, CONTEXT,
-                                     _connect_admission(CONTEXT, ParallelNeuralTrainer, SmallMLPTrainer)))
+                                     _connect_admission(CONTEXT, ParallelNeuralTrainer, SmallMLPTrainer,
+                                                        _module._ProcessPoolOwner)))

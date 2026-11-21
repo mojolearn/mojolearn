@@ -25,6 +25,8 @@ comptime NATIVE_PROCESS_OPN_MAP = 2
 comptime NATIVE_PROCESS_OPN_CLOSE = 3
 comptime NATIVE_PROCESS_OPN_WORKER_ECHO = 4
 comptime NATIVE_PROCESS_OPN_ENVIRONMENT = 5
+comptime NATIVE_PROCESS_OPN_MIRROR = 6
+comptime NATIVE_PROCESS_OPN_MODULE = 7
 # `transport` dispatcher codes (`ops_transport`).
 comptime NATIVE_TRANSPORT_OPN_INITIALIZE = 0
 comptime NATIVE_TRANSPORT_OPN_IDNA = 1
@@ -478,6 +480,8 @@ def _native_keys_fill(nk: UnsafePointer[NativeKeys, MutUntrackedOrigin]) raises:
     py_op_add(ops_process, "close", NATIVE_PROCESS_OPN_CLOSE)
     py_op_add(ops_process, "worker_echo", NATIVE_PROCESS_OPN_WORKER_ECHO)
     py_op_add(ops_process, "environment", NATIVE_PROCESS_OPN_ENVIRONMENT)
+    py_op_add(ops_process, "mirror", NATIVE_PROCESS_OPN_MIRROR)
+    py_op_add(ops_process, "module", NATIVE_PROCESS_OPN_MODULE)
     nk[].ops_process = ops_process
     var ops_transport = Python.dict()
     py_op_add(ops_transport, "initialize", NATIVE_TRANSPORT_OPN_INITIALIZE)

@@ -23,7 +23,7 @@ from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.native_codec_door import codec_initialize
 from bindings.native_process_pool_door import (
-    process_initialize, process_pool_create, process_pool_start, process_pool_map_typed, process_pool_close,
+    process_initialize, process_pool_create, process_pool_start, process_pool_map_typed, process_pool_close, process_pool_environment_set,
     process_worker_connect, process_worker_next, process_worker_value, process_worker_reply, process_worker_refuse, WorkerTurn,
     process_pool_pids,
 )
@@ -282,7 +282,7 @@ def msel_parallel_score(args: PythonObject, capture: Bool, context: PythonObject
     var pool = process_pool_create(devices, False, "mojolearn._native_parallel_cv_worker")
     var environment = Python.dict()
     py_setitem(environment, nk[].k_MOJOLEARN_NATIVE_CV_NUMPY, "1" if msel_wire_needs_numpy(model) or msel_wire_needs_numpy(scorer) else "0")
-    py_setitem(pool, nk[].k_environment, environment)
+    process_pool_environment_set(pool, environment)
     var scores = List[Float64]()
     var captures = Python.list()
     try:

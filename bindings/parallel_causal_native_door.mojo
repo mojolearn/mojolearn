@@ -17,7 +17,7 @@ from bindings.causal_checkpoint_door import checkpoint_open_binding, checkpoint_
 from bindings.causal_exception_unpack import causal_borrowed_item, causal_set_exception
 from bindings.native_json_door import native_path, native_path_exists
 from bindings.native_process_pool_door import (
-    process_pool_create, process_pool_start, process_pool_request, process_pool_close, process_worker_connect,
+    process_pool_create, process_pool_start, process_pool_request, process_pool_close, process_worker_connect, process_pool_admit,
     process_pool_pids,
 )
 from bindings.native_process_wire_door import WireOutgoing, wire_unpack, wire_append, wire_key, wire_text, wire_send, wire_receive
@@ -229,16 +229,13 @@ def _causal_serving(owner: PythonObject) raises -> Bool:
 
 
 def _parallel_pool_admit(mut mods: NativeModules, pool: PythonObject) raises:
-    """The pool's state is its native record
-    (bindings/native_process_pool_door.mojo), which the pool door checks on
-    every call. The dictionary around it carries the record, the spawn
-    configuration (which the pool door admits where it reads it, at the
-    start) and a published mirror no operation reads; an operation therefore
-    uses the model's own dictionary. The per-operation copy of the mirror
-    and its publication back after every request are gone."""
-    model_dict(mods, pool)
-    var nk = parallel_keys()
-    if py_get(pool, nk[].k_record) is None:
+    """The pool handle is the pool door's native owner
+    (bindings/native_process_pool_door.mojo `ProcessPoolOwner`): admitted by
+    its exact native type. REMOVED 2026-11-21 (lane pools-frame): the exact
+    dict test of the handle and the lookup of its `record` entry."""
+    try:
+        process_pool_admit(pool)
+    except:
         raise Error("TypeError: parallel routing has an inconsistent process owner")
 
 
