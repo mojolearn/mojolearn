@@ -2,8 +2,6 @@
 """Native codec for the existing streamed byte-LM archive, including raw words."""
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
-from std.ffi import c_int, external_call
-from core.native_string import unsafe_string_from_utf8_cstr
 from bindings.byte_checkpoint_native_run import (
     ByteCheckpointArchive, ByteCheckpointWriteFailure, byte_checkpoint_read_header, byte_checkpoint_read_arrays,
     byte_checkpoint_write,
@@ -15,7 +13,7 @@ from bindings.native_json_door import native_json_parse
 from bindings.native_transport_door import _transport_json, transport_initialize
 from bindings.parallel_byte_native_door import PARALLEL_BYTE_BOUNDARY, _parallel_shape
 from bindings.generation_buffers_door import GENERATION_BOUNDARY, generation_array
-from bindings.byte_checkpoint_io_unpack import ByteCheckpointIOError
+from bindings.byte_checkpoint_io_unpack import ByteCheckpointIOError, byte_io_file_error
 from bindings.py_balanced import py_call, py_contains, py_setitem, py_type
 from bindings.py_typed_call import py_call_typed
 from core.shared_slot import SharedSlot
@@ -191,24 +189,9 @@ def byte_checkpoint_save(path: PythonObject, state: PythonObject, mut failure: B
 
 def byte_checkpoint_file_error(mut io_error: ByteCheckpointIOError, failure: ByteCheckpointWriteFailure) raises:
     """PACK a failed typed file call as the exact OSError subclass of its
-    errno, with its filename, for the C entry to raise."""
-    var bi = BYTE_CHECKPOINT_BOUNDARY.get_or_create_ptr()[].bi
-    var message = unsafe_string_from_utf8_cstr(external_call["strerror", Pointer[Int8, ImmUntrackedOrigin]](c_int(failure.number)))
-    # The words the Python file calls gave: `open` names the file (the
-    # temporary one of a write; a directory given to a read); `replace`
-    # names both files; a failed read, write, fsync or close carries no file
-    # name.
-    var value = py_call(bi.OSError, failure.number, PythonObject(message))
-    if failure.operation == "open":
-        value = py_call(bi.OSError, failure.number, PythonObject(message), PythonObject(failure.path))
-    elif failure.operation == "replace":
-        value = py_call(bi.OSError, failure.number, PythonObject(message), PythonObject(failure.path),
-                        PythonObject(None), PythonObject(failure.second))
-    io_error.pending = True
-    io_error.has_value = True
-    io_error.has_traceback = False
-    io_error.kind = py_type(value)
-    io_error.value = value
+    errno, with its filename, for the C entry to raise (`byte_io_file_error`)."""
+    byte_io_file_error(io_error, BYTE_CHECKPOINT_BOUNDARY.get_or_create_ptr()[].bi.OSError, failure.number,
+                       failure.operation, failure.path, failure.second)
 
 
 def byte_checkpoint_load(path: PythonObject, mut failure: ByteCheckpointIOError) raises -> PythonObject:
