@@ -295,7 +295,8 @@ def byte_lm_host_inference_checkpoint(mut mods: NativeModules, cls: PythonObject
     # integrity, mode/profile, tensor registry, optimizer, cursor and schedule.
     var state_context = context["byte_lm_checkpoint_context"]
     classical_connect_numpy(state_context)
-    var state = _validated_state(mods, source, state_context, _tier_process(mods, state_context))
+    var tier = _tier_process(mods, state_context)
+    var state = _validated_state(mods, source, state_context, tier)
     var shape = _host_shape_from_state(state, context)
     mods.released()
     var result = native_storage_allocate(cls)

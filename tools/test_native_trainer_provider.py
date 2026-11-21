@@ -75,7 +75,7 @@ def test_training_constructors_share_admission_helpers():
         assert 'training_f32_scalar(' in src
         assert 'training_schedule_json(' in src
     construct=byte.split('def byte_lm_construct(')[1].split('def byte_lm_logits(')[0]
-    assert construct.index('_load_snapshot(mods, shape, context, _tier(mods, trainer, context))') < construct.index('training_f32_owned(')
+    assert construct.index('_load_snapshot(mods, shape, context, tier)') < construct.index('training_f32_owned(')
     assert 'training_f32_owned(' in construct
     copy=(ROOT/'core/training_input_copy.mojo').read_text()
     assert 'std.python' not in copy and 'PythonObject' not in copy

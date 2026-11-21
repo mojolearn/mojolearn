@@ -397,7 +397,8 @@ def _load_snapshot(mut mods: NativeModules, shape: _Shape, context: PythonObject
 
 
 def _load(mut mods: NativeModules, shape: _Shape, context: PythonObject) raises -> PythonObject:
-    var snapshot = _load_snapshot(mods, shape, context, _tier_process(mods, context))
+    var tier = _tier_process(mods, context)
+    var snapshot = _load_snapshot(mods, shape, context, tier)
     return snapshot[0]
 
 
@@ -931,7 +932,8 @@ def byte_lm_construct(mut mods: NativeModules, trainer: PythonObject, args: Pyth
     # allocation; a host-only glue binary must not impose its own numeric mode.
     py_setitem(py_fields(trainer), "device", args[9])
     device_route_clear(trainer)
-    var loaded = _load_snapshot(mods, shape, context, _tier(mods, trainer, context))
+    var tier = _tier(mods, trainer, context)
+    var loaded = _load_snapshot(mods, shape, context, tier)
     var names = shape.names()
     var shapes = shape.shapes()
     var total = shape.n_total()
@@ -1032,7 +1034,11 @@ def _validated_state(mut mods: NativeModules, source: PythonObject, context: Pyt
     if py_type(mode) is not bi.str or (String(py=mode) != "identical" and String(py=mode) != "fast"):
         raise Error("ValueError: Byte-LM state profile/registry/mode mismatch")
     # The state's own tier word selects among the images of the route's device.
-    var binding = tier.bindings[mode]
+    var binding = py_get(tier.bindings, mode)
+    if binding is None:
+        # the route's device has no image of the state's tier (a `fast`
+        # state on a CPU route)
+        raise Error("ValueError: Byte-LM state profile/registry/mode mismatch")
     if py_type(binding) is bi.str:
         raise Error("ImportError: " + String(py=binding))
     var suffix = _glue_text(byte_lm_glue_ref(_native_key(mode, tier.vendors)), BG_SUFFIX)
@@ -1113,7 +1119,8 @@ def byte_lm_load_state(mut mods: NativeModules, trainer: PythonObject, args: Pyt
     _ = py_call(lock.acquire)
     mods.released()
     try:
-        var replacement = _validated_state(mods, args[0], context, _tier(mods, trainer, context))
+        var tier = _tier(mods, trainer, context)
+        var replacement = _validated_state(mods, args[0], context, tier)
         var session = fields["_native_session"]
         _forget(mods, fields, context)
         if session is not None:

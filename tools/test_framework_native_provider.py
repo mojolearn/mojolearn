@@ -174,7 +174,7 @@ def test_host_checkpoint_reuses_native_codec_and_full_state_validator():
     assert '_decode_checkpoint' not in body
     native = (ROOT / 'bindings/byte_lm_host_trainer_native_door.mojo').read_text()
     assert 'byte_json_payload(byte_json_read(args[0], io_error))' in native
-    assert '_validated_state(mods, source, state_context, _tier_process(mods, state_context))' in native
+    assert '_validated_state(mods, source, state_context, tier)' in native
     assert 'if io_error.pending:' in native and 'return io_error^.restore()' in native
 
 
