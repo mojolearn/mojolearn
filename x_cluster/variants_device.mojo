@@ -32,7 +32,7 @@ struct VariantsDeviceBackend(KMeansVariantsBackend):
                      nodes: Int, node_count: Int, rows: Int, features: Int) raises -> List[Int32]:
         # The query rows go up straight from the caller's words (put_addr,
         # synchronised): no host List copy of the whole block first (lane
-        # fb2-neighbors). The caller (bindings/cluster_native_door.mojo)
+        # fb2-neighbors). The caller (bindings/cluster_public_native_pack.mojo)
         # keeps X alive through this call. Same words uploaded, same labels.
         var c = read_f32(centers, center_count) if center_count > 0 else List[Float32]()
         var tree = read_i32(nodes, node_count) if node_count > 0 else List[Int32]()
