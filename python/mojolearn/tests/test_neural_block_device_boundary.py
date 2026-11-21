@@ -206,5 +206,6 @@ def test_check_runs_the_block_on_both_devices_in_this_process(tmp_path, family, 
     assert result["ran"], result.get("reason")
     assert result["transfer"] == "device"
     assert result["verdict"]["verdict"] == "MATCH"
-    routes = [side["route"]["vendor_used"] for side in result["sides"]]
-    assert routes == [mojolearn.vendor(), "cpu"]
+    sides = result["sides"]
+    assert sides["gpu"]["route"]["vendor_used"] == mojolearn.vendor()
+    assert sides["cpu"]["route"]["vendor_used"] == "cpu"
