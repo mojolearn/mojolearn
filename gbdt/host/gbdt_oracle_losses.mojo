@@ -115,6 +115,10 @@ from gbdt.host.gbdt_oracle_yeti import yeti_rank_eval, yeti_rank_search_pass
 from gbdt.data.yeti_rank_tasks import YetiRankTasks, yeti_rank_tasks
 from gbdt.data.permutation import TRandom
 from gbdt.host.gbdt_oracle import (
+    _scan_histograms,
+    _subtract_histograms,
+    _partition_stats_level,
+    GBDT_PARTITION_CHUNKS,
     GBDT_BOOT_BAYESIAN,
     GBDT_BOOT_BERNOULLI,
     GBDT_BOOT_BLOCK,
@@ -1033,40 +1037,14 @@ def gbdt_losses_host_fit(
                     )
                 block_first_bin += total
 
-            for j in range(len(compute)):
-                var slot = compute[j]
-                for z in range(2):
-                    for f in range(n_features):
-                        ref cf = layout.features[f]
-                        var folds = Int(cf.folds)
-                        if cf.one_hot_feature or folds <= 1:
-                            continue
-                        var base = (
-                            slot * 2 * hist_cells + z * hist_cells
-                            + Int(cf.first_fold_index)
-                        )
-                        var running = Float32(0.0)
-                        for i in range(folds):
-                            running = ftz(running + hist[base + i])
-                            hist[base + i] = running
+            _scan_histograms(hist, hist_cells, 2, compute, layout, n_features)
 
             if planned and half > 0:
-                for j in range(half):
-                    var from_slot = sub_from[j]
-                    var what_slot = sub_what[j]
-                    for z in range(2):
-                        var from_base = from_slot * 2 * hist_cells + z * hist_cells
-                        var what_base = what_slot * 2 * hist_cells + z * hist_cells
-                        for bf in range(hist_cells):
-                            var new_val = ftz(hist[from_base + bf] - hist[what_base + bf])
-                            if z == 0:
-                                new_val = max(new_val, Float32(0.0))
-                            hist[from_base + bf] = new_val
+                _subtract_histograms(hist, hist_cells, sub_from, sub_what, half)
 
-            var part_stats = List[Float32](length=2 * n_live, fill=Float32(0.0))
-            for i in range(n_live):
-                part_stats[2 * i] = _partition_stat(stats, n_rows, 0, p_off[i], p_sz[i])
-                part_stats[2 * i + 1] = _partition_stat(stats, n_rows, 1, p_off[i], p_sz[i])
+            var part_stats = _partition_stats_level(
+                stats, n_rows, 2, GBDT_PARTITION_CHUNKS, p_off, p_sz, n_live
+            )
 
             var best_gain = -GBDT_FLOAT32_MAX
             var best_bin = GBDT_SENTINEL
