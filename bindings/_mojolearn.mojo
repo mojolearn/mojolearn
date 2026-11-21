@@ -192,6 +192,8 @@ from bindings.labels_legacy_boundary_unpack import labels_legacy_prepare, labels
 from bindings.labels_legacy_boundary_pack import labels_legacy_unique
 
 from checks.vendor import COMPILED_VENDOR
+from core.device_route import device_vendor_code
+from core.kmeans_member import kmeans_member_publish
 from core.base_helpers_device import publish_base_helpers_device
 
 from max.gpu.host import DeviceContext
@@ -2003,6 +2005,8 @@ def build__mojolearn() -> PythonObject:
         # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
         var published_module = m.finalize()
         _publish_qn_fold_table()
+        # The KMeans member entry (core/kmeans_member.mojo) beside its kernel table.
+        kmeans_member_publish(Int(GLOBAL_NUMERIC_MODE), device_vendor_code(String(COMPILED_VENDOR)), Int(KMEANS_NATIVE_TABLE.get_or_create_ptr()[].entries.unsafe_ptr()))
         _publish_neighbors_ops(published_module)
         # The base helper table (core/base_entry_table.mojo): the same
         # helpers for native callers in other extension modules.

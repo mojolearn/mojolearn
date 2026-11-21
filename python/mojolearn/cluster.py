@@ -188,6 +188,9 @@ class KMeans(_NumericModeMixin):
     _mojolearn_native_public = True
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _estimator_type = "clusterer"
+    #: Native member mark (family MEMBER_FAMILY_KMEANS = 24, kind 0): a
+    #: meta-estimator runs this class through core/kmeans_member.mojo.
+    _mojolearn_member = (24, 0)
 
     #: This family's binding, for `NumericModeMixin._bind`.
     _BINDING = "_mojolearn"
