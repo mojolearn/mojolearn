@@ -18,7 +18,7 @@ from bindings.admitted_finite_wording import admitted_finite_wording
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
 from bindings.native_prepared_owner_unpack import prepared_drop
 from bindings.native_buffer_owner_pack import native_storage_allocate, native_buffer_view
-from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem, py_setattr
+from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_setattr
 from bindings.classical_arrays_door import classical_address, classical_is_array
 from bindings.classical_attributes_door import classical_connect_numpy, classical_check_layout
 from bindings.classical_validate_unpack import classical_view, classical_refuse_sparse, classical_estimator_name
