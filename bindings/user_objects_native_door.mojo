@@ -250,7 +250,8 @@ def _take(env: _Env, values: PythonObject, address: Int, count: Int, width: Int)
         var i = _index_at(address, k, width)
         var j = i + n if i < 0 else i
         if j < 0 or j >= n:
-            raise _refusal("IndexError", "list index out of range")
+            var refusal_253 = _refusal("IndexError", "list index out of range")
+            raise refusal_253^
         _list_put(result, k, _item_at(values, kind, j))
     return result
 
@@ -518,8 +519,9 @@ def _nested_into(env: _Env, obj: PythonObject, array_type: PythonObject, out_buf
     for i in range(1, n):  # api-bound-loop: a ragged user list walked through its items' own __len__ protocol (recursive leaves)
         var shape = _nested_into(env, _item_at(seq, SEQ_LIST, i), array_type, out_buf)
         if not env.eq(shape, first):
-            raise _refusal("ValueError", "mojolearn: nested sequence is not rectangular (" + env.text(shape)
+            var refusal_521 = _refusal("ValueError", "mojolearn: nested sequence is not rectangular (" + env.text(shape)
                            + " vs " + env.text(first) + ")")
+            raise refusal_521^
     return py_call(env.op.add, Python.tuple(PythonObject(n)), first)
 
 
@@ -552,15 +554,17 @@ def _pairs(env: _Env, rows: PythonObject, weights: PythonObject, n_rows: Int) ra
     for i in range(n):  # list-input: user pairs (Python index pairs) read once by user_objects_c (pairs): borrowed items, exact int by class word, one PyLong_AsLongLongAndOverflow
         var pair = _item_at(rows, kind, i)
         if len(pair) != 2:
-            raise _refusal("ValueError", "mojolearn: Length of pairs[" + String(i) + "] isn't equal to 2.")
+            var refusal_555 = _refusal("ValueError", "mojolearn: Length of pairs[" + String(i) + "] isn't equal to 2.")
+            raise refusal_555^
         var pair_kind = _seq_kind(env, pair)
         for j in range(2):  # driver-loop: over the two rows of a pair
             var index = _item_at(pair, pair_kind, j)
             var exact_int = borrowed_type_word(index._obj_ptr) == env.int_word
             if not exact_int and (not env.isinstance(index, env.integral) or env.isinstance(index, env.b.bool)):
-                raise _refusal("ValueError", "mojolearn: Invalid pairs[" + String(i) + "][" + String(j) + "] = '"
+                var refusal_561 = _refusal("ValueError", "mojolearn: Invalid pairs[" + String(i) + "][" + String(j) + "] = '"
                                + env.text(index) + "' value type=" + env.text(py_type(index))
                                + ": must be an integer.")
+                raise refusal_561^
             var x = index if exact_int else py_call(env.b.int, index)
             overflow[0] = 0
             var word = t[].PyLong_AsLongLongAndOverflow(x._obj_ptr, Int(overflow.unsafe_ptr()))
@@ -569,13 +573,15 @@ def _pairs(env: _Env, rows: PythonObject, weights: PythonObject, n_rows: Int) ra
                 raise pending^
             # An int beyond int64 is outside the rows too (the former `<` said so).
             if overflow[0] != 0 or word < 0 or Int(word) >= n_rows:
-                raise _refusal("ValueError", "mojolearn: pairs[" + String(i) + "][" + String(j) + "] = "
+                var refusal_572 = _refusal("ValueError", "mojolearn: pairs[" + String(i) + "][" + String(j) + "] = "
                                + env.text(x) + " is outside the " + String(n_rows) + " rows")
+                raise refusal_572^
             fw[2 * i + j] = word
             _ = flat  # keep the Python object alive through the native call above
         if fw[2 * i] == fw[2 * i + 1]:
-            raise _refusal("ValueError", "mojolearn: pairs[" + String(i) + "] pairs row " + String(fw[2 * i])
+            var refusal_577 = _refusal("ValueError", "mojolearn: pairs[" + String(i) + "] pairs row " + String(fw[2 * i])
                            + " with itself")
+            raise refusal_577^
             _ = flat  # keep the Python object alive through the native call above
         _ = flat  # keep the Python object alive through the native calls above
     var wout = env.store("d", n, 8)
@@ -587,8 +593,9 @@ def _pairs(env: _Env, rows: PythonObject, weights: PythonObject, n_rows: Int) ra
             _ = wout  # keep the Python object alive through the native call above
         return Python.tuple(flat, wout)
     if len(weights) != n:
-        raise _refusal("ValueError", "mojolearn: len(pairs_weight) = " + String(len(weights))
+        var refusal_590 = _refusal("ValueError", "mojolearn: len(pairs_weight) = " + String(len(weights))
                        + " is not equal to len(pairs) = " + String(n) + " ")
+        raise refusal_590^
     _ = overflow
     var weight_kind = _seq_kind(env, weights)
     for i in range(n):  # list-input: user pairs_weight objects read once by user_objects_c (pairs): borrowed item, exact float/int/bool by class word, one PyFloat_AsDouble
@@ -601,8 +608,9 @@ def _pairs(env: _Env, rows: PythonObject, weights: PythonObject, n_rows: Int) ra
             x = _float_word(env, w)
             ok = x - x == 0.0 and x >= 0.0
         if not ok:
-            raise _refusal("ValueError", "mojolearn: pairs_weight[" + String(i)
+            var refusal_604 = _refusal("ValueError", "mojolearn: pairs_weight[" + String(i)
                            + "] must be a finite nonnegative number")
+            raise refusal_604^
         ww[i] = x
         _ = wout  # keep the Python object alive through the native call above
     return Python.tuple(flat, wout)

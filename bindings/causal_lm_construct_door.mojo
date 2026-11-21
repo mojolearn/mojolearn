@@ -589,7 +589,8 @@ def _model_block(mut mods: NativeModules, weights: PythonObject, input_plan: Pyt
             req.optional_present[i] = py_contains(w, optional_names[i])
         var words = causal_transformer_block(req)
         if words.refusal != CAUSAL_BLOCK_OK:
-            raise _model_block_refusal(mods, words, options, req.scaling_kind, optional_names)
+            var refusal_592 = _model_block_refusal(mods, words, options, req.scaling_kind, optional_names)
+            raise refusal_592^
         gated = words.gated
         _ = py_call(fields.update, options)
         py_setitem(fields, nk[].k_d_model, PythonObject(dm))

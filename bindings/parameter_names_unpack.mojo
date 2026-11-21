@@ -70,7 +70,8 @@ def resolve_parameter_names(keywords: PythonObject, table: PythonObject) raises 
         var value = keywords[name]
         if py_contains(resolved, canonical):
             if not same_parameter_value(resolved[canonical], value, bi):
-                raise given_twice(canonical, given_as[canonical], name)
+                var refusal_73 = given_twice(canonical, given_as[canonical], name)
+                raise refusal_73^
             continue
         py_setitem(resolved, canonical, value)
         py_setitem(given_as, canonical, name)

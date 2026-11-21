@@ -570,7 +570,8 @@ def model_plan_for_binding(mut mods: NativeModules, input: PythonObject, supplie
     ref tables = MODEL_CONFIG_CONNECTION.get_or_create_ptr()[].tables
     var plan = causal_config_plan(request, tables)
     if plan.refused:
-        raise _config_refusal(mods, source, plan)
+        var refusal_573 = _config_refusal(mods, source, plan)
+        raise refusal_573^
     var fields = _config_plan_fields(mods, plan, context)
     py_setitem(fields, nk[].k_model_type, PythonObject(mt))
     py_setitem(fields, nk[].k_config, config)

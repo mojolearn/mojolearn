@@ -51,10 +51,12 @@ def gbdt_resolve_arguments(args: PythonObject, table: PythonObject) raises -> Py
         var current = values[index]
         if py_contains(given_as, canonical):
             if not same_parameter_value(current, value, bi):
-                raise given_twice(canonical, given_as[canonical], name)
+                var refusal_54 = given_twice(canonical, given_as[canonical], name)
+                raise refusal_54^
             continue
         if not same_parameter_value(current, row[3], bi) and not same_parameter_value(current, value, bi):
-            raise given_twice(canonical, canonical, name)
+            var refusal_57 = given_twice(canonical, canonical, name)
+            raise refusal_57^
         py_setitem(values, PythonObject(index), value)
         py_setitem(given_as, canonical, name)
     return py_call(bi.tuple, values)
