@@ -26,6 +26,7 @@ from core.entry_table import EntryRef, entry_ref_call
 from core.scaler_native_api import (
     ScalerFitRequest, ScalerTransformRequest, MinMaxFitRequest, MinMaxTransformRequest,
     SCALER_OP_FIT, SCALER_OP_TRANSFORM, SCALER_OP_MINMAX_FIT, SCALER_OP_MINMAX_TRANSFORM,
+    SCALER_OP_STANDARD_FIT_TRANSFORM, SCALER_OP_MINMAX_FIT_TRANSFORM,
 )
 from core.preprocessing_program import prep_program_stage as _stage
 from core.scaler_fit_impl import (
@@ -101,6 +102,23 @@ struct ScalerTableCalls(ScalerCalls, ImplicitlyCopyable, Movable):
         var p: Array[Int, 5] = [r.rows, r.features, Int(r.inverse), Int(r.clip), Int(r.direct)]
         var f: Array[Float64, 2] = [Float64(r.lower), Float64(r.upper)]
         return entry_ref_call(self.scaler, SCALER_OP_MINMAX_TRANSFORM, a, p, f)
+
+    # The combined fit_transform (one upload of X), on this struct only: the
+    # doors call the same exports through their Python entries. 1 both
+    # written, 0 nothing written (the two-step route), -1 transform overflow.
+    def standard_fit_transform(self, x: Int, stats: Int, dst: Int, n: Int, d: Int, with_mean: Bool,
+                               with_std: Bool) raises -> Int:
+        var a: Array[Int, 3] = [x, stats, dst]
+        var p: Array[Int, 4] = [n, d, Int(with_mean), Int(with_std)]
+        var f: Array[Float64, 0] = []
+        return entry_ref_call(self.scaler, SCALER_OP_STANDARD_FIT_TRANSFORM, a, p, f)
+
+    def minmax_fit_transform(self, x: Int, stats: Int, dst: Int, n: Int, d: Int, lower: Float32, upper: Float32,
+                             clip: Bool) raises -> Int:
+        var a: Array[Int, 3] = [x, stats, dst]
+        var p: Array[Int, 3] = [n, d, Int(clip)]
+        var f: Array[Float64, 2] = [Float64(lower), Float64(upper)]
+        return entry_ref_call(self.scaler, SCALER_OP_MINMAX_FIT_TRANSFORM, a, p, f)
 
     def run(self, arena: Int, words: Int, program: Int, stages: Int) raises:
         var a: Array[Int, 2] = [arena, program]

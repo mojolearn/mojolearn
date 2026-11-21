@@ -263,6 +263,14 @@ class Conv2d(_Layer):
         """
         return _XCNN(self, "layer_state_dict", (), _XCNN_CONTEXT)
 
+    def parameters(self):
+        """An iterator over the trainable arrays (``weight``, ``bias``), as ``torch.nn.Module.parameters``."""
+        return _XCNN(self, "layer_parameters", (), _XCNN_CONTEXT)
+
+    def named_parameters(self):
+        """An iterator over ``(name, array)`` pairs with PyTorch's names; copies, as :meth:`state_dict` returns."""
+        return _XCNN(self, "layer_named_parameters", (), _XCNN_CONTEXT)
+
     def load_state_dict(self, state_dict):
         """Load parameters named as :meth:`state_dict` names them.
 
@@ -487,6 +495,9 @@ class CNNClassifier(_Layer, _CheckMixin):
     holds every minibatch's loss and `loss_curve_` each epoch's mean loss.
     `device` is None (this installation's device), "gpu" or "cpu"."""
 
+    # The member ABI (core/member_abi.mojo): family 21 (Cnn), kind 0.
+    _mojolearn_member = (21, 0)
+
     def __init__(self, input_shape, conv_channels=(8,), kernel_size=3, pool_size=2, learning_rate=0.01,
                  momentum=0.9, weight_decay=0.0, batch_size=32, max_iter=10, shuffle=True, random_state=0,
                  numeric_mode=None, optimizer="sgd", dampening=0.0, nesterov=False, betas=(0.9, 0.999), eps=1e-8, device=None):
@@ -562,6 +573,14 @@ class BatchNorm2d(_Layer):
             The names and layouts ``torch.nn.BatchNorm2d`` uses.
         """
         return _XCNN(self, "layer_state_dict", (), _XCNN_CONTEXT)
+
+    def parameters(self):
+        """An iterator over the trainable arrays (``weight``, ``bias``), as ``torch.nn.Module.parameters``."""
+        return _XCNN(self, "layer_parameters", (), _XCNN_CONTEXT)
+
+    def named_parameters(self):
+        """An iterator over ``(name, array)`` pairs with PyTorch's names; copies, as :meth:`state_dict` returns."""
+        return _XCNN(self, "layer_named_parameters", (), _XCNN_CONTEXT)
 
     def load_state_dict(self, state_dict):
         """Load parameters named as :meth:`state_dict` names them.
@@ -733,8 +752,8 @@ class BasicBlock(_Layer):
     """torchvision.models.resnet.BasicBlock: conv3x3(stride) -> BN -> ReLU ->
     conv3x3 -> BN, plus the identity (or conv1x1(stride) -> BN when the
     shape changes), then ReLU. Convolutions carry no bias, as torchvision's.
-    `forward` / `backward` over (N, C, H, W); `parameters()` lists
-    (layer, weight attr, grad attr) for an optimizer."""
+    `forward` / `backward` over (N, C, H, W); `parameters()` and
+    `named_parameters()` follow PyTorch."""
     expansion = 1
     _device_io = True
 
@@ -768,7 +787,24 @@ class BasicBlock(_Layer):
         return _XCNN(self, "block_backward", (grad_out,), _XCNN_CONTEXT)
 
     def parameters(self):
-        return _XCNN(self, "block_parameters", (), _XCNN_CONTEXT)
+        """An iterator over the trainable arrays, as ``torch.nn.Module.parameters``.
+
+        The order and the arrays are those of :meth:`named_parameters`."""
+        return _XCNN(self, "layer_parameters", (), _XCNN_CONTEXT)
+
+    def named_parameters(self):
+        """An iterator over ``(name, array)`` pairs of the trainable arrays.
+
+        The names are torchvision's (``conv1.weight``, ``bn1.weight``,
+        ``bn1.bias``, ...); the running statistics are buffers, not
+        parameters. The arrays are copies, as :meth:`state_dict` returns."""
+        return _XCNN(self, "layer_named_parameters", (), _XCNN_CONTEXT)
+
+    def _parameter_descriptors(self):
+        # (layer, weight attribute, gradient attribute) per trainable array,
+        # in named_parameters order: what a training loop over the
+        # sublayers' gradients reads (tools/identity_lanes/cnn.py).
+        return _XCNN(self, "block_parameter_descriptors", (), _XCNN_CONTEXT)
 
     def state_dict(self):
         """The layer's parameters by PyTorch's names, as copies.
@@ -854,6 +890,28 @@ class GCNConv(_Layer):
     def backward(self, grad_out):
         return _XCNN(self, "gcn_backward", (grad_out,), _XCNN_CONTEXT)
 
+    def state_dict(self):
+        """The layer's tensors by PyTorch Geometric's names, as copies.
+
+        Returns
+        -------
+        dict of str to ndarray
+            ``lin.weight`` ``(out_channels, in_channels)`` and, with ``bias=True``, ``bias``.
+        """
+        return _XCNN(self, "graph_state_dict", (False,), _XCNN_CONTEXT)
+
+    def load_state_dict(self, state_dict):
+        """Load tensors named as :meth:`state_dict` names them.
+
+        Every name the layer has must be given and no other (PyTorch's
+        ``strict=True``); every shape is checked before the layer changes.
+
+        Returns
+        -------
+        self
+        """
+        return _XCNN(self, "graph_load_state_dict", (False, state_dict), _XCNN_CONTEXT)
+
     # fx-audit-fixes (2026-11-18): the forward reads `cached` only at a graph
     # cache miss (the cached key carries it), so setting it drops the cache
     # natively and the next forward keys the graph under the new setting.
@@ -920,6 +978,28 @@ class SAGEConv(_Layer):
 
     def backward(self, grad_out):
         return _XCNN(self, "sage_backward", (grad_out,), _XCNN_CONTEXT)
+
+    def state_dict(self):
+        """The layer's tensors by PyTorch Geometric's names, as copies.
+
+        Returns
+        -------
+        dict of str to ndarray
+            ``lin_l.weight``, ``lin_l.bias`` (``bias=True``), ``lin_r.weight`` (``root_weight=True``) and, with ``project=True``, ``lin.weight``, ``lin.bias``.
+        """
+        return _XCNN(self, "graph_state_dict", (True,), _XCNN_CONTEXT)
+
+    def load_state_dict(self, state_dict):
+        """Load tensors named as :meth:`state_dict` names them.
+
+        Every name the layer has must be given and no other (PyTorch's
+        ``strict=True``); every shape is checked before the layer changes.
+
+        Returns
+        -------
+        self
+        """
+        return _XCNN(self, "graph_load_state_dict", (True, state_dict), _XCNN_CONTEXT)
 
     # fx-audit-fixes (2026-11-18): the forward reads `cached` only at a graph
     # cache miss (the cached key carries it), so setting it drops the cache

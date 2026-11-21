@@ -22,6 +22,8 @@ from providers.python.neural_descriptor_pyapi_door import neural_descriptor_caps
 from core.hostptr import f32_ptr
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
+from core.device_route import device_vendor_code
+from core.xcluster_member import xcluster_member_publish
 from x_cluster.device_execution import cluster_device_execute
 from x_cluster.minibatch_ptr import MBK_DEVSCAN_ANY
 from x_cluster.out import ClusterOut
@@ -145,6 +147,9 @@ def build__mojolearn_x_cluster() -> PythonObject:
         m.def_function[centers_count_binding]("x_cluster_centers_count")
         # TOMBSTONE: x_cluster_py2mojo (dead native entry: a constant A/B probe nothing reads) deleted 2026-10-26 by 15b81c461; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_cluster.patch
-        return m.finalize()
+        var published_module = m.finalize()
+        # The x_cluster member entry (core/xcluster_member.mojo) beside its variants kernel table.
+        xcluster_member_publish(Int(GLOBAL_NUMERIC_MODE), device_vendor_code(String(COMPILED_VENDOR)), Int(KMEANS_VARIANTS_DEVICE_API.get_or_create_ptr()[].entries.unsafe_ptr()))
+        return published_module
     except e:
         abort(String("failed to create _mojolearn_x_cluster: ", e))

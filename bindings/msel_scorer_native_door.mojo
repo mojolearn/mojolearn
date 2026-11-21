@@ -422,12 +422,9 @@ def msel_scorer_call(scorer: PythonObject, estimator: PythonObject, x: PythonObj
     return PythonObject(msel_scorer_value(scorer, estimator, x, y, sample_weight, memo, context, prepared))
 
 
-def msel_scorer_value(scorer: PythonObject, estimator: PythonObject, x: PythonObject, y: PythonObject,
-                     sample_weight: PythonObject, memo: PythonObject, context: PythonObject,
-                      mut prepared: MselMetricPrepared) raises -> Float64:
-    var b = native_loaded_module("builtins")
-    var fields = msel_scorer_fields(scorer, context)
-    var model = msel_estimator_plan(estimator, context)
+def _scorer_response(fields: PythonObject, model: PythonObject, b: PythonObject) raises -> PythonObject:
+    """The response method a scorer reads off an estimator of plan `model`:
+    the first of its preference order the class has."""
     var methods = fields["_response_method"]
     if py_type(methods) is b.str:
         methods = Python.tuple(methods)
@@ -443,7 +440,39 @@ def msel_scorer_value(scorer: PythonObject, estimator: PythonObject, x: PythonOb
             break
     if not found_method:
         raise Error("AttributeError: native estimator has none of the requested scorer response methods")
-    var method = found_method.value()
+    return found_method.value()
+
+
+def msel_scorer_response(scorer: PythonObject, model: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The response method name `scorer` reads off an estimator whose checked
+    plan is `model` (model selection's native member units ask it once per
+    scorer of an operation, to know which member output to place)."""
+    return _scorer_response(msel_scorer_fields(scorer, context), model, native_loaded_module("builtins"))
+
+
+def msel_scorer_predicted(scorer: PythonObject, estimator: PythonObject, model: PythonObject, method: PythonObject,
+                          predicted: PythonObject, y: PythonObject, memo: PythonObject, context: PythonObject,
+                          mut prepared: MselMetricPrepared) raises -> Float64:
+    """`scorer`'s value for a response already computed: `predicted` is the
+    `method` output of `estimator` (plan `model`) on the rows of `y`. The
+    metric half of `msel_scorer_value`, for a caller whose predictions were
+    written by a native member (bindings/msel_member_units_door.mojo)."""
+    var b = native_loaded_module("builtins")
+    var fields = msel_scorer_fields(scorer, context)
+    if memo is not None:
+        if py_type(memo) is not b.dict:
+            raise Error("TypeError: native scorer prediction cache must be an exact dict")
+        msel_admit(memo, context)
+    return _scorer_metric(fields, estimator, model, method, predicted, y, PythonObject(None), memo, context, prepared, b)
+
+
+def msel_scorer_value(scorer: PythonObject, estimator: PythonObject, x: PythonObject, y: PythonObject,
+                     sample_weight: PythonObject, memo: PythonObject, context: PythonObject,
+                      mut prepared: MselMetricPrepared) raises -> Float64:
+    var b = native_loaded_module("builtins")
+    var fields = msel_scorer_fields(scorer, context)
+    var model = msel_estimator_plan(estimator, context)
+    var method = _scorer_response(fields, model, b)
     if memo is not None:
         if py_type(memo) is not b.dict:
             raise Error("TypeError: native scorer prediction cache must be an exact dict")
@@ -456,6 +485,15 @@ def msel_scorer_value(scorer: PythonObject, estimator: PythonObject, x: PythonOb
         predicted = msel_planned_call(estimator, model, String(method), Python.tuple(x), context, True)
         if memo is not None:
             py_setitem(memo, method, predicted)
+    return _scorer_metric(fields, estimator, model, method, predicted, y, sample_weight, memo, context, prepared, b)
+
+
+def _scorer_metric(fields: PythonObject, estimator: PythonObject, model: PythonObject, method: PythonObject,
+                   predicted_in: PythonObject, y: PythonObject, sample_weight: PythonObject, memo: PythonObject,
+                   context: PythonObject, mut prepared: MselMetricPrepared, b: PythonObject) raises -> Float64:
+    """The metric of one scorer over a computed response (the binary
+    probability column, the keyword options, the sign)."""
+    var predicted = predicted_in
     var name = fields["_name"]
     if name is not None and py_type(name) is not b.str:
         raise Error("TypeError: native scorer name must be an exact string")

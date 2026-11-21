@@ -205,12 +205,10 @@ def cls_x2d(source: PythonObject, context: PythonObject) raises -> XIn:
     var n = 0
     var d = 0
     if py_type(source) is py_item(context, nk[].k_maxabs_rows_class):
-        var fields = _rows_fields(source, context)
-        var dtype = py_item(fields, nk[].k_dtype)
-        var shape = py_item(fields, nk[].k_shape)
-        if py_type(dtype) is b.str and String(dtype) == "<f4" and py_type(shape) is b.tuple and len(shape) == 2:
-            n = Int(py=shape[0])
-            d = Int(py=shape[1])
+        var fold = _rows_fields(source, context)
+        if fold.dtype == "<f4" and len(fold.trailing) == 1:
+            n = fold.rows
+            d = fold.trailing[0]
         else:
             # the host rows and the usual conversion (DeviceRows.materialize)
             value = _values(source, context, True)

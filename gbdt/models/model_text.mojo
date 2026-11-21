@@ -61,12 +61,22 @@ tolerance on the model.
     trees <n_trees>
     losses <n_losses>
     ctr_columns <n>                        (only when n is non-zero)
-    feature <f> folds <k> one_hot <0|1> type <float|cat|ctr>
+    feature <f> folds <k> one_hot <0|1> type <float|cat|ctr|tree_ctr>
             nan <as_is|as_false|as_true> borders <n> <tok>...
     ctr_table <column> source <f> type <name> prior_num <tok> prior_denom <tok>
               shift <tok> scale <tok> denom <int> classes <int>
               target_border <int> entries <n>
     ctr_entry <column> <category> <count> [<count> ...]
+    combination ... / combination_member ... / combination_group ...
+                                           (the combination maps of the tree
+                                           CTRs: `gbdt/models/combination_map.mojo`,
+                                           `TCombinationMapReader`)
+    combination_table <column> source <map ordinal> ...   (the `ctr_table`
+                                           fields; its entries are `ctr_entry`
+                                           records, one per group of the map.
+                                           Tree-CTR columns are the model's
+                                           LAST columns, typed `tree_ctr`, and
+                                           are not counted in `ctr_columns`)
     tree <t> depth <d> dim <k> weights <0|1>
     split <t> <level> <feature_id> <bin_idx>
     split <t> <level> <feature_id> <bin_idx> split_type take_bin
@@ -192,6 +202,11 @@ from std.memory import bitcast
 from gbdt.models.ctr_value_table import (
     TCtrValueTable,
     ctr_type_from_name,
+)
+from gbdt.models.combination_map import (
+    TCombinationCtrs,
+    TCombinationMapReader,
+    combination_maps_text,
 )
 from gbdt.models.tensor_ctr_value_table import (
     TFeatureFreqTensorTable,
@@ -371,6 +386,53 @@ def parse_f64(tok: String) raises -> Float64:
 # ---------------------------------------------------------------------------
 
 
+def _ctr_table_records(
+    keyword: String, f: Int, tab: TCtrValueTable
+) raises -> String:
+    """One table's header record under `keyword` (`ctr_table`, or
+    `combination_table` for a tree CTR) and its `ctr_entry` records, for
+    model column `f`."""
+    var out = String("")
+    # the TARGET-CLASS AXIS of their blob. 0 on a FeatureFreq table,
+    # where their own `TargetClassesCount` default stands; on a Borders
+    # table it is the width of every `ctr_entry` record.
+    var classes = tab.target_classes_count
+    var per_entry = classes if classes > 0 else 1
+    if classes < 0:
+        raise Error(
+            "a CTR table for column " + String(f)
+            + " declares a negative target class count"
+        )
+    if len(tab.counts) % per_entry != 0:
+        raise Error(
+            "the CTR table for column " + String(f) + " carries "
+            + String(len(tab.counts)) + " counts, which is not a whole"
+            " number of " + String(per_entry) + "-class histograms"
+        )
+    var entries = len(tab.counts) // per_entry
+    out += (
+        keyword + " " + String(f)
+        + " source " + String(tab.source_feature)
+        + " type " + ctr_type_name(tab.ctr_type)
+        + " prior_num " + f32_token(tab.prior_num)
+        + " prior_denom " + f32_token(tab.prior_denom)
+        + " shift " + f32_token(tab.shift)
+        + " scale " + f32_token(tab.scale)
+        + " denom " + String(tab.counter_denominator)
+        + " classes " + String(classes)
+        + " target_border " + String(tab.target_border_idx)
+        + " entries " + String(entries) + "\n"
+    )
+    for c in range(entries):
+        var line = (
+            String("ctr_entry ") + String(f) + " " + String(c)
+        )
+        for k in range(per_entry):
+            line += " " + String(tab.counts[c * per_entry + k])
+        out += line + "\n"
+    return out^
+
+
 def model_text(tm: TrainedModel) raises -> String:
     """The whole file as one String. Split out from `save_model` so a check
     can look at the bytes without touching the filesystem."""
@@ -452,6 +514,16 @@ def model_text(tm: TrainedModel) raises -> String:
         if table_of_column[c] != -1:
             raise Error("two CTR tables name column " + String(c))
         table_of_column[c] = i
+    # the tree-CTR columns (feature combinations): the model's last columns
+    var n_comb = len(tm.combination_ctrs.tables)
+    if n_comb != 0:
+        if len(tm.tensor_ctr_registry.features) != 0:
+            raise Error(
+                "a model carries either a tensor CTR registry or combination"
+                " maps, never both"
+            )
+        tm.combination_ctrs.check(n_features, n_features)
+    var first_comb = n_features - n_comb
 
     for f in range(n_features):
         var is_one_hot = len(tm.one_hot) != 0 and tm.one_hot[f]
@@ -467,6 +539,13 @@ def model_text(tm: TrainedModel) raises -> String:
             if is_one_hot:
                 raise Error("a tensor CTR feature cannot be one-hot")
             kind = String("tensor_ctr")
+        elif f >= first_comb:
+            if is_one_hot or table_of_column[f] >= 0:
+                raise Error(
+                    "tree-CTR column " + String(f) + " is also flagged"
+                    " one-hot or carries a simple CTR table"
+                )
+            kind = String("tree_ctr")
         elif table_of_column[f] >= 0:
             if is_one_hot:
                 raise Error(
@@ -495,44 +574,17 @@ def model_text(tm: TrainedModel) raises -> String:
         var ti = table_of_column[f]
         if ti < 0:
             continue
-        ref tab = tm.ctr_tables[ti]
-        # the TARGET-CLASS AXIS of their blob. 0 on a FeatureFreq table,
-        # where their own `TargetClassesCount` default stands; on a Borders
-        # table it is the width of every `ctr_entry` record.
-        var classes = tab.target_classes_count
-        var per_entry = classes if classes > 0 else 1
-        if classes < 0:
-            raise Error(
-                "a CTR table for column " + String(f)
-                + " declares a negative target class count"
+        out += _ctr_table_records(String("ctr_table"), f, tm.ctr_tables[ti])
+    # the tree CTRs: the maps, then one table per tree-CTR column in column
+    # order. A model without them writes nothing here, so its file is
+    # byte-identical to what this format wrote before they existed.
+    if n_comb != 0:
+        out += combination_maps_text(tm.combination_ctrs.maps)
+        for i in range(n_comb):
+            out += _ctr_table_records(
+                String("combination_table"), first_comb + i,
+                tm.combination_ctrs.tables[i],
             )
-        if len(tab.counts) % per_entry != 0:
-            raise Error(
-                "the CTR table for column " + String(f) + " carries "
-                + String(len(tab.counts)) + " counts, which is not a whole"
-                " number of " + String(per_entry) + "-class histograms"
-            )
-        var entries = len(tab.counts) // per_entry
-        out += (
-            String("ctr_table ") + String(f)
-            + " source " + String(tab.source_feature)
-            + " type " + ctr_type_name(tab.ctr_type)
-            + " prior_num " + f32_token(tab.prior_num)
-            + " prior_denom " + f32_token(tab.prior_denom)
-            + " shift " + f32_token(tab.shift)
-            + " scale " + f32_token(tab.scale)
-            + " denom " + String(tab.counter_denominator)
-            + " classes " + String(classes)
-            + " target_border " + String(tab.target_border_idx)
-            + " entries " + String(entries) + "\n"
-        )
-        for c in range(entries):
-            var line = (
-                String("ctr_entry ") + String(f) + " " + String(c)
-            )
-            for k in range(per_entry):
-                line += " " + String(tab.counts[c * per_entry + k])
-            out += line + "\n"
 
     # ---- the NON-SYMMETRIC shape (DEVIATION 259) ----
     for t in range(
@@ -755,6 +807,9 @@ def load_model_text(text: String) raises -> TrainedModel:
     var ctr_declared = List[Int]()
     var ctr_entries_seen = List[Int]()
     var ctr_counts = List[List[Int]]()
+    # the tree CTRs: True for a table read from a `combination_table` record
+    var ctr_is_combination = List[Bool]()
+    var combination_reader = TCombinationMapReader()
     var tensor_registry_first = -1
     var tensor_registry_declared = 0
     var tensor_tables = List[TFeatureFreqTensorTable]()
@@ -850,10 +905,11 @@ def load_model_text(text: String) raises -> TrainedModel:
                     and t[7] != String("cat")
                     and t[7] != String("ctr")
                     and t[7] != String("tensor_ctr")
+                    and t[7] != String("tree_ctr")
                 ):
                     raise Error(
                         "feature " + String(t[1]) + " has type '" + t[7]
-                        + "'. This reader knows float, cat and ctr, and"
+                        + "'. This reader knows float, cat, ctr and tree_ctr, and"
                         " REFUSES a type it does not understand rather than"
                         " guessing at the predicate it implies"
                     )
@@ -883,7 +939,29 @@ def load_model_text(text: String) raises -> TrainedModel:
                     bs.append(parse_f32(t[12 + i]))
                 borders.append(bs^)
                 features_seen += 1
-            elif kind == String("ctr_table"):
+            elif (
+                kind == String("combination")
+                or kind == String("combination_member")
+                or kind == String("combination_group")
+            ):
+                if features_seen != n_features or trees_seen != 0:
+                    raise Error(
+                        "a `" + kind + "` record belongs between the feature"
+                        " block and the first `tree`"
+                    )
+                _ = combination_reader.feed(t)
+            elif kind == String("ctr_table") or kind == String(
+                "combination_table"
+            ):
+                var is_combination = kind == String("combination_table")
+                if not is_combination and len(ctr_is_combination) != 0 and (
+                    ctr_is_combination[len(ctr_is_combination) - 1]
+                ):
+                    raise Error(
+                        "a `ctr_table` after a `combination_table`: the"
+                        " tree-CTR columns are the model's last columns"
+                    )
+                ctr_is_combination.append(is_combination)
                 if features_seen != n_features:
                     raise Error(
                         "a `ctr_table` before the feature block ended: "
@@ -1296,6 +1374,7 @@ def load_model_text(text: String) raises -> TrainedModel:
             )
 
     # ---- the CTR half, checked as a whole because it is cross-referenced
+    var combination_tables = List[TCtrValueTable]()
     for k in range(len(ctr_columns)):
         if ctr_entries_seen[k] != ctr_declared[k]:
             raise Error(
@@ -1316,12 +1395,32 @@ def load_model_text(text: String) raises -> TrainedModel:
                 + String(ctr_declared[k] * per_entry)
                 + " counts and carries " + String(len(ctr_counts[k]))
             )
-        if feature_kinds[ctr_columns[k]] != String("ctr"):
+        var want_kind = String("ctr")
+        if ctr_is_combination[k]:
+            want_kind = String("tree_ctr")
+        if feature_kinds[ctr_columns[k]] != want_kind:
             raise Error(
-                "column " + String(ctr_columns[k]) + " carries a CTR table"
-                " and its `feature` record says type '"
+                "column " + String(ctr_columns[k]) + " carries a "
+                + want_kind + " table and its `feature` record says type '"
                 + feature_kinds[ctr_columns[k]] + "'"
             )
+        if ctr_is_combination[k]:
+            combination_tables.append(
+                TCtrValueTable(
+                    ctr_columns[k],
+                    ctr_sources[k],
+                    ctr_types[k],
+                    ctr_prior_num[k],
+                    ctr_prior_denom[k],
+                    ctr_shift[k],
+                    ctr_scale[k],
+                    ctr_denom[k],
+                    ctr_classes[k],
+                    ctr_border_idx[k],
+                    ctr_counts[k].copy(),
+                )
+            )
+            continue
         ctr_tables.append(
             TCtrValueTable(
                 ctr_columns[k],
@@ -1338,15 +1437,19 @@ def load_model_text(text: String) raises -> TrainedModel:
             )
         )
     for f in range(features_seen):
-        if feature_kinds[f] == String("ctr"):
+        # a table under the wrong keyword was refused above, so a column
+        # found here is found under its own kind
+        if feature_kinds[f] == String("ctr") or feature_kinds[f] == String(
+            "tree_ctr"
+        ):
             var found = False
             for k in range(len(ctr_columns)):
                 if ctr_columns[k] == f:
                     found = True
             if not found:
                 raise Error(
-                    "column " + String(f) + " says type ctr and no"
-                    " `ctr_table` record names it. A CTR column without its"
+                    "column " + String(f) + " says type " + feature_kinds[f]
+                    + " and no table record names it. A CTR column without its"
                     " table cannot score a raw row"
                 )
     # `ctr_columns` in the header is the SAFETY count and it is older than
@@ -1360,6 +1463,35 @@ def load_model_text(text: String) raises -> TrainedModel:
             + " CTR columns and the file carries " + String(len(ctr_tables))
             + " CTR tables"
         )
+
+    # the tree CTRs: the maps and their tables, checked as one section (the
+    # tables fill the model's last columns in order, every table names a map
+    # of its own group count). The raw input width is not in the text; the
+    # members' features are checked against it where the model is applied.
+    var combination_ctrs = TCombinationCtrs()
+    combination_ctrs.maps = combination_reader.finish()
+    combination_ctrs.tables = combination_tables^
+    if len(combination_ctrs.maps) != 0 or len(combination_ctrs.tables) != 0:
+        if tensor_registry_first >= 0:
+            raise Error(
+                "a model carries either a tensor CTR registry or combination"
+                " maps, never both"
+            )
+        # driver-loop: over the model's combination maps (model structure)
+        var widest = 0
+        for i in range(len(combination_ctrs.maps)):
+            widest = max(widest, combination_ctrs.maps[i].max_feature())
+        combination_ctrs.check(widest + 1, n_features)
+        # driver-loop: over the model's combination maps: every map is used
+        for i in range(len(combination_ctrs.maps)):
+            var used = False
+            for k in range(len(combination_ctrs.tables)):
+                if combination_ctrs.tables[k].source_feature == i:
+                    used = True
+            if not used:
+                raise Error(
+                    "combination " + String(i) + " has no `combination_table`"
+                )
 
     # their `CB_ENSURE(dataSet.IsOneHot(split.FeatureId))` for a TakeBin
     # split and `CB_ENSURE(!dataSet.IsOneHot(...))` for the other arm
@@ -1446,7 +1578,7 @@ def load_model_text(text: String) raises -> TrainedModel:
     return TrainedModel(
         model^, fold_counts^, one_hot^, borders^, nan_treatment^, losses^,
         List[Float64](), -1, False, ctr_column_count,
-        ctr_tables^, tensor_registry^,
+        ctr_tables^, tensor_registry^, combination_ctrs^,
     )
 
 

@@ -68,7 +68,7 @@ def connect(kinds):
     import mmap
     from types import BuiltinFunctionType
     from . import _backend
-    from ._arena_io import DeviceRows, DeviceCache, _Scope, _LOCAL
+    from ._arena_io import DeviceRows, _Scope, _LOCAL
     from ._native_classical_bridge import _state_context, _numpy_free_context
     from .tokenizer import _binding
     from ._native_loaded_modules import connect_module
@@ -88,10 +88,9 @@ def connect(kinds):
     # The owners read the process mode from _backend's namespace.
     _backend.default_mode()
     context.update(arena_mmap=mmap.mmap, arena_local=_LOCAL,
-                   arena_scope_class=_Scope, arena_cache_class=DeviceCache,
-                   arena_scope_dict=vars(_Scope)['__dict__'], arena_cache_dict=vars(DeviceCache)['__dict__'],
+                   arena_scope_class=_Scope, arena_scope_owner=vars(_Scope)['_owner'].__get__,
                    scaler_bindings=connected, scaler_host_contexts={},
-                   maxabs_rows_class=DeviceRows, maxabs_rows_dict=vars(DeviceRows)['__dict__'], maxabs_gather_rows=gather,
+                   maxabs_rows_class=DeviceRows, maxabs_rows_owner=vars(DeviceRows)['_owner'].__get__, maxabs_gather_rows=gather,
                    classical_getframe=sys._getframe, prep_stateless_kinds=dict(kinds))
     context["prep_stateless_entry_identities"] = _identities(connected)
     # glue: freeze native class/descriptor references and fixed mapping contents

@@ -21,8 +21,7 @@ from bindings.arena_prog_native_door import _family_entries, _store, _is_rows, _
 from bindings.arena_prog_run import _switch
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.x_prep_native_owner_door import (
-    xprep_key, _resident, _cached_slot, _resident_scope, _resident_cache, _cache_state, _cached_slot_in,
-    xprep_drop_resident,
+    xprep_key, xprep_resident, xprep_resident_none, xprep_drop_resident,
 )
 from bindings.x_prep_native_inputs_door import _values, _rows_fields, _dense_values
 from bindings.prep_classify_prog_run import (
@@ -215,9 +214,11 @@ struct ClsProg(Movable):
         var records = List[ClsRunInput](capacity=len(self.program.inputs))
         var held = List[PythonObject](capacity=2 * len(self.program.inputs))
         var inout_values = List[PythonObject]()
-        # Read once per run, at the first input that needs them (perf3-prep-shared).
-        var scope = Optional[PythonObject]()
-        var cache_state = Optional[PythonObject]()
+        # The thread's resident scope, resolved once per run at the first
+        # input that could be kept resident; its cache is leased at the
+        # first input that is.
+        var resident = xprep_resident_none()
+        var resident_read = False
         for k in range(len(self.program.inputs)):  # driver-loop: over the program's input records
             var record = self.program.inputs[k]
             if record.words == 0:
@@ -240,18 +241,21 @@ struct ClsProg(Movable):
                 # device-rows input (lane cpu4-misc): the fold's rows gathered
                 # on the device; a binding without the gather copies host rows
                 if gather_ok:
-                    var fields = _rows_fields(value, pc)
-                    var rows_base = _dense_values(fields["base"], pc)
-                    var indices = fields["indices"]
-                    n_indices = Int(py=indices.size)
+                    var fold = _rows_fields(value, pc)
+                    var rows_base = _dense_values(fold.base, pc)
+                    var indices = fold.indices
+                    n_indices = fold.rows
                     if n_indices >= 1:
                         gathered = True
-                        row_words = Int(py=fields["row_words"])
-                        var cache = _resident(entries, 0, True, pc, "x_prep")
-                        if cache is not None:
-                            base_slot = _cached_slot(cache, rows_base, entries, pc, "x_prep")
+                        row_words = fold.row_words
                         base_address = Int(py=classical_address(rows_base))
                         base_words = Int(py=rows_base.size)
+                        if not resident_read:
+                            resident = xprep_resident(pc, key, direct_ok)
+                            resident_read = True
+                        if resident.active():
+                            # the scope keeps a DeviceRows base at any size
+                            base_slot = resident.slot(rows_base, base_address, base_words)
                         indices_address = Int(py=classical_address(indices))
                         held.append(rows_base)
                         held.append(indices)
@@ -260,13 +264,12 @@ struct ClsProg(Movable):
             var source = -1
             var direct = False
             if not gathered and ranges and not record.in_out:
-                if not scope:
-                    scope = _resident_scope(entries, pc, "x_prep")
-                if scope.value() is not None and record.words >= Int(py=scope.value()[0]):
-                    if not cache_state:
-                        var cache = _resident_cache(entries, scope.value()[1], pc, "x_prep")
-                        cache_state = _cache_state(cache, entries, pc, "x_prep")
-                    source = _cached_slot_in(cache_state.value(), value, entries, "x_prep")
+                if not resident_read:
+                    resident = xprep_resident(pc, key, direct_ok)
+                    resident_read = True
+                if resident.keeps(False, record.words):
+                    # the buffer's identity is (address, value.size), as before
+                    source = resident.slot(value, Int(py=classical_address(value)), Int(py=value.size))
                 elif direct_ok and record.words >= PREP_DIRECT_MIN_WORDS:
                     direct = True
             var address = 0 if gathered or source >= 0 else Int(py=classical_address(value))
@@ -283,7 +286,7 @@ struct ClsProg(Movable):
             var cleanup = String()
             with GILReleased(Python()):
                 cleanup = cls_prog_release(key, owned)
-            var dropped = xprep_drop_resident(inout_values, entries, pc, "x_prep")
+            var dropped = xprep_drop_resident(inout_values, entries, pc)
             if dropped.byte_length() > 0:
                 cleanup += ("" if cleanup.byte_length() == 0 else "; ") + dropped
             if cleanup.byte_length() > 0:
@@ -293,7 +296,7 @@ struct ClsProg(Movable):
         var cleanup = String()
         with GILReleased(Python()):
             cleanup = cls_prog_release(key, owned)
-        var dropped = xprep_drop_resident(inout_values, entries, pc, "x_prep")
+        var dropped = xprep_drop_resident(inout_values, entries, pc)
         if dropped.byte_length() > 0:
             cleanup += ("" if cleanup.byte_length() == 0 else "; ") + dropped
         if cleanup.byte_length() > 0:

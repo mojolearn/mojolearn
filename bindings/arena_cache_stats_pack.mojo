@@ -9,12 +9,14 @@ from bindings.optimizer_public_words_unpack import stash_python_error
 from bindings.sequence_dtype_native_door import sequence_dtype_create
 from bindings.py_cpython_table import cpython_table
 from bindings.native_loaded_module_door import native_namespace_string_keys, native_mapping_string_keys
-from bindings.p3_array_arena_records_unpack import P3_STATS_LAYOUT, p3_layout_admitted, p3_layout_admit, P3_DICT_CACHE_KEYS, p3_dict_admitted, p3_dict_admit
+from bindings.p3_array_arena_records_unpack import P3_STATS_LAYOUT, p3_layout_admitted, p3_layout_admit
+from bindings.arena_owner_door import ARENA_OWNER_CACHE, arena_owner_held
+from bindings.arena_scope_door import arena_scope_object, arena_scope_word
+from bindings.arena_cache_run import arena_scope_stats
+from core.arena_state import ARENA_CACHES, arena_handle
 
 
 from bindings.arena_cache_stats_unpack import (
-    HashKeyTypes,
-    _hash_key,
     _mapping,
     _string_keys,
 )
@@ -113,47 +115,35 @@ def _attribute(value: PythonObject, name: PythonObject, default: PythonObject,
 
 def arena_cache_stats(model: PythonObject, operation: String, args: PythonObject,
                         context: PythonObject) raises -> PythonObject:
+    # Lane arena (2026-11-21): reads of the native cache and scope states.
     var b = context["arena_native_types"]
     if operation == "resident_stats":
-        if py_type(model) is not context["cache_local_type"]:
-            raise Error("TypeError: resident statistics require the native thread-local owner")
-        var mapping = _mapping(context["cache_local_type"],context)
-        if py_get(mapping,"__getattribute__") is not context["cache_local_getattribute"]:
-            raise Error("TypeError: resident thread-local attribute entry has changed")
-        var fields = py_call(context["cache_local_getattribute"],model,"__dict__")
-        if py_type(fields) is not b["dict"]:
-            raise Error("TypeError: resident thread-local fields require a native dictionary")
-        _string_keys(fields,context)
-        var scope = py_get(fields,"scope")
+        # {prefix: (uploads, hits)} of the calling thread's scope, in the
+        # order its caches were created, or None outside a scope.
+        var scope = arena_scope_object(model, context["cache_local_type"], b["str"])
         if scope is None:
             return PythonObject(None)
-        var caches = _attribute(scope,"caches",PythonObject(None),True,context)
-        if py_type(caches) is not b["dict"]:
-            raise Error("TypeError: resident cache registry requires a native dictionary")
-        var pairs = py_call(b["list"],py_call(caches.items))
+        var counts = arena_scope_stats(arena_scope_word(scope, context["cache_scope_owner_get"],
+                                                        context["cache_scope_class"]))
         var result = Python.dict()
-        var key_types = HashKeyTypes(context)
-        for i in range(len(pairs)):  # driver-loop: materialize current-thread counters in registry order
-            var pair = pairs[i]
-            var key = pair[0]
-            var entry = pair[1]
-            if (py_type(key) is not b["tuple"] and py_type(key) is not b["list"]) or (py_type(entry) is not b["tuple"] and py_type(entry) is not b["list"]):
-                raise Error("TypeError: resident cache registry requires native key/entry pairs")
-            for pair_value in [key,entry]:  # driver-loop: preserve the ordinary two-field unpacking failure contract
-                var count = len(pair_value)
-                if count < 2:
-                    raise Error("ValueError: not enough values to unpack (expected 2, got " + String(count) + ")")
-                if count > 2:
-                    raise Error("ValueError: too many values to unpack (expected 2)")
-            var prefix = key[1]
-            _hash_key(prefix,context,key_types)
-            var uploads = _attribute(entry[0],"uploads",PythonObject(None),True,context)
-            var hits = _attribute(entry[0],"hits",PythonObject(None),True,context)
-            py_setitem(result,prefix,py_call(b["tuple"],Python.list(uploads,hits)))
+        for i in range(len(counts)):  # driver-loop: over the scope's caches (one per binding family and mode)
+            py_setitem(result, PythonObject(counts[i].prefix),
+                       Python.tuple(PythonObject(counts[i].uploads), PythonObject(counts[i].hits)))
         return result
-    var entries = _attribute(model,"_entries",PythonObject(None),True,context)
-    if py_type(entries) is not b["dict"]:
-        raise Error("TypeError: DeviceCache entries require a native dictionary")
+    var view = arena_owner_held(context["cache_owner_get"], model, context["cache_class"], ARENA_OWNER_CACHE,
+                                "DeviceCache")
+    var lease = ARENA_CACHES.acquire(arena_handle(view.word))
     if operation == "cache_len":
-        return PythonObject(len(entries))
+        return PythonObject(lease[].live)
+    if operation == "cache_attribute":
+        # The read-only public counters: native integers.
+        var name = args[0]
+        if py_type(name) is not b["str"]:
+            raise Error("TypeError: DeviceCache attribute names are native strings")
+        var which = String(py=name)
+        if which == "hits":
+            return PythonObject(lease[].hits)
+        if which == "uploads":
+            return PythonObject(lease[].uploads)
+        raise Error("AttributeError: 'DeviceCache' object has no attribute '" + which + "'")
     raise Error("ValueError: unknown native cache-statistics operation")

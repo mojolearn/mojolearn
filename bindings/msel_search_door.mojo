@@ -55,6 +55,7 @@ from bindings.msel_search_stats_run import (
     msel_row_means, msel_row_stds, msel_score_column, msel_rank_scores, msel_rank_best, msel_pvalue,
 )
 from bindings.family_common_unpack import FAMILY_I32P
+from bindings.msel_member_units_door import msel_member_refit
 from bindings.msel_cv_door import (
     msel_clone,
     msel_cv_folds,
@@ -64,6 +65,7 @@ from bindings.msel_cv_door import (
     msel_device_rows_ok,
     msel_unit_jobs,
     msel_cv_units,
+    MSEL_MEMBER_UNITS,
     msel_scorers,
     MselFoldRows,
     MselScores,
@@ -355,10 +357,21 @@ def msel_search_fit(model: PythonObject, args: PythonObject, context: PythonObje
         best_params = candidates[best_index]
         py_setitem(updates, "best_params_", best_params)
     if not refit_false:
-        var best = msel_clone(estimator, False, context)
-        _set_params(best, best_params, context)
         var xa = msel_materialize(x_in, "X", context)
-        msel_fit(best, xa, y_in, context)
+        # A member whose family published its member entry is refitted over
+        # it (bindings/msel_member_units_door.mojo `msel_member_refit`: typed
+        # fit on a view of X with the GIL released, then the family's pack; the
+        # best estimator HOLDS its fitted member state). None: any other
+        # member, data or failing fit takes the estimator's own fit door below,
+        # as before (the fallback rule; a failing fit raises its own words).
+        var best = PythonObject(None)
+        comptime if MSEL_MEMBER_UNITS:
+            if best_params is not None and yf is not None:
+                best = msel_member_refit(estimator, best_params, yf, xa, context, b)
+        if best is None:
+            best = msel_clone(estimator, False, context)
+            _set_params(best, best_params, context)
+            msel_fit(best, xa, y_in, context)
         py_setitem(updates, "best_estimator_", best)
         py_setitem(updates, "scorer_", msel_get_scorer(scoring_in, context) if multi is None else multi)
     msel_search_update(fields, updates, context)

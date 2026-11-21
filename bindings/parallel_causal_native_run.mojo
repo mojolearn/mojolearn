@@ -73,6 +73,47 @@ def causal_lost_admit(failed: Bool) raises:
         raise Error("RuntimeError: ParallelCausalLM worker state was lost; reload the model")
 
 
+struct CausalRegistryState(Movable):
+    """The typed state of one model's worker registry: the device of each
+    layer, the distinct devices in first-appearance order (a device's
+    position is its worker's index in the pool), and the two lifecycle
+    words. Built once at construction; the operations read it instead of
+    re-admitting and copying the model's fields."""
+    var layer_devices: List[Int]
+    var workers: List[Int]
+    var closed: Bool
+    var failed: Bool
+
+    def __init__(out self, layer_devices: List[Int]):
+        self.layer_devices = layer_devices.copy()
+        self.workers = List[Int]()
+        self.closed = False
+        self.failed = False
+        for i in range(len(layer_devices)):  # driver-loop: stable first-appearance physical worker ordering
+            var seen = False
+            for j in range(len(self.workers)):  # small-loop(the distinct devices met so far)
+                if self.workers[j] == layer_devices[i]:
+                    seen = True
+                    break
+            if not seen:
+                self.workers.append(layer_devices[i])
+
+
+def causal_registry_usable(state: CausalRegistryState) raises:
+    """A closed model or a lost worker state is a RuntimeError on every
+    public call. One check so the calls cannot disagree."""
+    causal_closed_admit(state.closed)
+    causal_lost_admit(state.failed)
+
+
+def causal_registry_worker(state: CausalRegistryState, device: Int) raises -> Int:
+    """The pool index of the worker that owns `device`."""
+    for j in range(len(state.workers)):  # small-loop(the model's distinct devices)
+        if state.workers[j] == device:
+            return j
+    raise Error("KeyError: " + String(device))
+
+
 def causal_layer_format_admit(reported: String, requested: String) raises:
     if reported != requested:
         raise Error("ParallelCausalLM: layer reports a different weight_format than requested")

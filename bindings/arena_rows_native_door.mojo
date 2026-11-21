@@ -1,14 +1,24 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native ownership of DeviceRows metadata, without invoking buffer protocols.
+#
+# Lane arena (2026-11-21): a DeviceRows is one native `DeviceRowsState`
+# (`core/arena_state.mojo`, `ARENA_ROWS`) behind the one owner object in the
+# instance's `_owner` slot (`bindings/arena_owner_door.mojo`). Every reader in
+# every binding resolves it with `arena_rows`; the instance dictionary, its
+# class admission and the "store_ids" operation (a door's call back through
+# Python) are gone. The public attributes are read-only reads of the state.
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
-from bindings.py_balanced import py_call, py_type, py_get, py_setitem
+from bindings.py_balanced import py_call, py_type
 from bindings.native_error_class import error_without_class
 from bindings.classical_attributes_door import classical_connect_numpy
-from bindings.native_owner_lifetime_door import native_release_admit, native_release_weakrefs
 from bindings.arena_array_metadata_pack import arena_array_metadata
-from bindings.arena_resident_rows_door import arena_materialize, arena_rows_store_ids
+from bindings.arena_resident_rows_door import arena_materialize
+from bindings.arena_owner_door import (
+    ArenaRows, ARENA_OWNER_ROWS, arena_owner_new, arena_owner_slot, arena_pin, arena_unpin, arena_resident_view,
+    arena_rows,
+)
 from bindings.arena_cache_stats_pack import arena_cache_stats
 from bindings.arena_cache_get_door import arena_cache_get
 from bindings.arena_cache_upload_door import arena_cache_id_of
@@ -17,80 +27,108 @@ from bindings.arena_cache_binding_pack import arena_cache_supports
 from bindings.arena_cache_release_door import arena_cache_release_operation
 from bindings.arena_resident_native_door import arena_resident_operation
 from bindings.optimizer_public_words_unpack import optimizer_python_error, PYTHON_ERROR_PENDING
-from bindings.native_loaded_module_door import native_namespace_string_keys
-from bindings.p3_array_arena_records_unpack import P3_ROWS_LAYOUT, p3_layout_admitted, p3_layout_admit
+from core.arena_state import (
+    ARENA_ROWS, ARENA_HANDLE_NONE, ARENA_ROWS_PIN_BASE, ARENA_ROWS_PIN_INDICES, ARENA_ROWS_PIN_RESIDENT,
+    DeviceRowsState, arena_handle_word,
+)
+from core.entry_table import entry_ref_unresolved
 
 
-def _rows_metadata_fields(value: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = context["arena_native_types"]
-    var cls = py_type(value)
-    if py_type(cls) is not b["type"]:
-        raise Error("TypeError: DeviceRows requires a native metadata class")
-    var expected = context["maxabs_rows_class"]
-    var descriptor = context["maxabs_rows_dict"]
-    # p3-array-arena: the class rows are admitted once per class state (type
-    # watcher; a modification of the class or any ancestor re-runs it).
-    if not p3_layout_admitted(P3_ROWS_LAYOUT, cls, descriptor):
-        var ancestry = py_call(b["type"].__dict__["__mro__"].__get__,cls)
-        if len(ancestry) < 2 or ancestry[len(ancestry)-2] is not expected or ancestry[len(ancestry)-1] is not b["object"]:
-            raise Error("TypeError: DeviceRows requires its ordinary class or a subclass without mixed-in protocols")
-        for i in range(len(ancestry)-1):  # driver-loop: admit ordinary subclass layouts without invoking their descriptors
-            var mapping = py_call(b["type"].__dict__["__dict__"].__get__,ancestry[i])
-            var keys = py_call(b["list"],mapping)
-            for j in range(len(keys)):  # driver-loop: class keys precede lookup that could invoke application equality
-                if py_type(keys[j]) is not b["str"]:
-                    raise Error("TypeError: DeviceRows class keys must be native strings")
-            if py_get(mapping,"__del__") is not None or py_get(mapping,"__getattribute__") is not None:
-                raise Error("TypeError: DeviceRows cannot invoke attribute or lifecycle hooks")
-            var dictionary = py_get(mapping,"__dict__")
-            if dictionary is not None and dictionary is not descriptor:
-                raise Error("TypeError: DeviceRows requires its native dictionary descriptor")
-        p3_layout_admit(P3_ROWS_LAYOUT, cls, descriptor)
-    var fields = py_call(descriptor.__get__,value,expected)
-    if py_type(fields) is not b["dict"]:
-        raise Error("TypeError: DeviceRows requires a native metadata dictionary")
-    # Instance keys: one native dictionary walk, no key list.
-    if not native_namespace_string_keys(fields._obj_ptr, b["str"]):
-        raise Error("TypeError: DeviceRows metadata keys must be native strings")
-    return fields
+def _rows_view(model: PythonObject, context: PythonObject) raises -> ArenaRows:
+    # UNPACK of every DeviceRows operation: the fold view, resolved once.
+    return arena_rows(model, context["maxabs_rows_owner"], context["maxabs_rows_class"])
 
 
 def _rows_initialize(model: PythonObject, args: PythonObject, context: PythonObject) raises:
-    var fields = _rows_metadata_fields(model,context)
+    # UNPACK: the base and index metadata and the resident store owner behind
+    # `take`. RUN: the typed state, inserted once. PACK: the one owner object
+    # in the instance's `_owner` slot. Runs once per fold view.
     var base = arena_array_metadata(args[0],context)
     var indices = arena_array_metadata(args[1],context)
     var base_shape = base["shape"]
     if len(base_shape) == 0:
         raise Error("IndexError: tuple index out of range")
-    var shape = Python.list(indices["size"])
-    var size = Int(py=indices["size"])
+    var rows = Int(py=indices["size"])
+    var size = rows
+    var trailing = List[Int]()
     for i in range(1,len(base_shape)):  # driver-loop: shape of the selected rows, preserving all trailing dimensions
         var extent = Int(py=base_shape[i])
         if size > 0 and extent > 9223372036854775807//size:
             raise Error("ValueError: DeviceRows shape exceeds native indexing bounds")
         size *= extent
-        _ = py_call(shape.append,base_shape[i])
+        trailing.append(extent)
     var first = Int(py=base_shape[0])
-    # Keep the existing opaque take field without invoking it. Its explicit
-    # materialization operation owns callback admission separately.
-    var proposed = Python.dict(base=args[0],indices=args[1],_take=args[2],_host=PythonObject(None),
-        shape=py_call(context["arena_native_types"]["tuple"],shape),dtype=base["dtype"],
-        itemsize=base["itemsize"],ndim=base["ndim"],size=size,
-        row_words=Int(py=base["size"])//first if first != 0 else 0)
-    var names = py_call(context["arena_native_types"]["list"],proposed)
-    for i in range(len(names)):  # driver-loop: admit every replaced owner before the first state mutation
-        var previous = py_get(fields,names[i])
-        var replacement = proposed[names[i]]
-        if previous is replacement:
-            continue
-        if py_type(previous) is context["owner_method_class"] and py_type(replacement) is context["owner_method_class"] and previous.__func__ is replacement.__func__ and previous.__self__ is replacement.__self__:
-            # Renewed access to the same ordinary bound method retains both
-            # owners. Only the old method object's weak references can run.
-            native_release_weakrefs(previous,context)
-        else:
-            native_release_admit(previous,context)
-    for i in range(len(names)):  # driver-loop: publish native constructor metadata after lifetime admission succeeds
-        py_setitem(fields,names[i],proposed[names[i]])
+    var row_words = 0
+    if first != 0:
+        row_words = Int(py=base["size"])//first
+    var dtype = String()
+    var named = base["dtype"]
+    if py_type(named) is context["arena_native_types"]["str"]:
+        dtype = String(py=named)
+    # The gather owner: only the bound `model_selection._Resident.take` is
+    # admitted (its native store entry is copied here, once); any other
+    # `take` is never invoked and `materialize` refuses it in words.
+    var take = args[2]
+    var resident = ARENA_HANDLE_NONE
+    var store = entry_ref_unresolved()
+    var resident_owner = PythonObject(None)
+    if py_type(take) is context["owner_method_class"] and take.__func__ is context["arena_resident_take"]:
+        resident_owner = take.__self__
+        var gather = arena_resident_view(resident_owner, context)
+        resident = gather.word
+        store = gather.store
+    var previous = arena_owner_slot(context["maxabs_rows_owner"], model, context["maxabs_rows_class"],
+                                    context["cache_attribute_error"])
+    var state = DeviceRowsState(0, first, row_words, Int(py=base["itemsize"]), dtype, trailing^, 0, rows, resident)
+    state.pins[ARENA_ROWS_PIN_BASE] = arena_pin(args[0])
+    state.pins[ARENA_ROWS_PIN_INDICES] = arena_pin(args[1])
+    if resident_owner is not None:
+        state.pins[ARENA_ROWS_PIN_RESIDENT] = arena_pin(resident_owner)
+    var pins = state.pins.copy()
+    var word = ARENA_HANDLE_NONE
+    try:
+        word = arena_handle_word(ARENA_ROWS.insert(state^))
+    except error:
+        for i in range(len(pins)):  # driver-loop: over the pins of a state that was never inserted
+            arena_unpin(pins[i])
+        raise error^
+    # From here the owner object releases the state when CPython frees it.
+    var owner = arena_owner_new(ARENA_OWNER_ROWS, word, store)
+    _ = py_call(context["maxabs_rows_owner_set"], model, owner)
+    # A reinitialized instance frees its previous view here.
+    _ = previous^
+
+
+def _rows_attribute(model: PythonObject, name: PythonObject, context: PythonObject) raises -> PythonObject:
+    # PACK of the read-only public attributes: reads of the native state.
+    var b = context["arena_native_types"]
+    if py_type(name) is not b["str"]:
+        raise Error("TypeError: DeviceRows attribute names are native strings")
+    var which = String(py=name)
+    var view = _rows_view(model, context)
+    if which == "base":
+        return view.base
+    if which == "indices":
+        return view.indices
+    if which == "shape":
+        var shape = Python.list(PythonObject(view.rows))
+        for i in range(len(view.trailing)):  # driver-loop: over the base's trailing dimensions
+            _ = py_call(shape.append, PythonObject(view.trailing[i]))
+        var extents = py_call(b["tuple"], shape)
+        return extents
+    if which == "dtype":
+        # The base's own dtype object (a string for an Array).
+        var named = arena_array_metadata(view.base, context)["dtype"]
+        return named
+    if which == "ndim":
+        return PythonObject(1 + len(view.trailing))
+    if which == "size":
+        return PythonObject(view.rows * view.row_words)
+    if which == "itemsize":
+        return PythonObject(view.itemsize)
+    if which == "row_words":
+        return PythonObject(view.row_words)
+    raise Error("AttributeError: 'DeviceRows' object has no attribute '" + which + "'")
 
 
 def arena_rows_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
@@ -102,8 +140,8 @@ def arena_rows_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObje
         var context = call[3]
         var result = PythonObject(None)
         var cache_release_op = (operation == "cache_init" or operation == "cache_release" or operation == "cache_close"
-            or operation == "cache_exit" or operation == "scope_enter" or operation == "scope_exit" or operation == "scope_close")
-        if operation == "cache_len" or operation == "resident_stats":
+            or operation == "cache_exit" or operation == "scope_init" or operation == "scope_enter" or operation == "scope_exit" or operation == "scope_close")
+        if operation == "cache_len" or operation == "resident_stats" or operation == "cache_attribute":
             result = arena_cache_stats(model,operation,args,context)
         elif operation == "cache_get":
             result = arena_cache_get(model,args,context)
@@ -122,17 +160,14 @@ def arena_rows_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObje
         elif operation == "init":
             _rows_initialize(model,args,context)
         elif operation == "materialize":
-            result = arena_materialize(_rows_metadata_fields(model,context),context)
-        elif operation == "store_ids":
-            # lane a6: the fold's resident store ids for a device kernel entry
-            result = arena_rows_store_ids(_rows_metadata_fields(model,context),context)
+            var fold = _rows_view(model,context)
+            result = arena_materialize(fold,context)
+        elif operation == "attribute":
+            result = _rows_attribute(model,args[0],context)
         elif operation == "len":
-            var shape = _rows_metadata_fields(model,context)["shape"]
-            var b = context["arena_native_types"]
-            if py_type(shape) is not b["tuple"] or len(shape) == 0 or py_type(shape[0]) is not b["int"]:
-                raise Error("TypeError: DeviceRows length requires native shape metadata")
-            result = shape[0]
-        elif not cache_release_op and operation != "cache_len" and operation != "resident_stats" and operation != "cache_get" and operation != "cache_id_of" and operation != "cache_enter" and operation != "cache_live" and operation != "cache_supports":
+            var counted = _rows_view(model,context)
+            result = PythonObject(counted.rows)
+        elif not cache_release_op and operation != "cache_len" and operation != "resident_stats" and operation != "cache_attribute" and operation != "cache_get" and operation != "cache_id_of" and operation != "cache_enter" and operation != "cache_live" and operation != "cache_supports":
             raise Error("ValueError: unknown native DeviceRows metadata operation")
         return result.steal_data()
     except error:
