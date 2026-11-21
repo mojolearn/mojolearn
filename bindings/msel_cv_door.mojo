@@ -989,14 +989,17 @@ def msel_cv_units(base: PythonObject, candidates: PythonObject, y: PythonObject,
         # runs its units without a Python estimator: admitted once per candidate,
         # then typed calls with the GIL released (bindings/msel_member_units_door.mojo).
         # Asked only for the request that route runs: default scoring, errors
-        # raised, no estimator asked back, a host fold set that gathers per unit.
+        # raised, a host fold set that gathers per unit. Fitted estimators
+        # asked back are packed from the units' member states.
         # Any other member, and any other request, keeps the units below.
-        if (method is None and scoring is None and run.raise_errors and not return_estimator and not rows.dev
+        if (method is None and scoring is None and run.raise_errors and not rows.dev
                 and len(rows.ranges) == 0 and not rows.reuse_test):
             var member_y = rows.y if y is None else y
-            var native = msel_member_units(base, candidates, member_y, rows.x, rows.folds, return_train, workers,
-                                           context, msel_b())
+            var native = msel_member_units(base, candidates, member_y, rows.x, rows.folds, return_train,
+                                           return_estimator, workers, context, msel_b())
             if native.ran:
+                if return_estimator:
+                    run.estimators = native.estimators
                 run.test = native.test.copy()
                 run.train = native.train.copy()
                 run.fit_time = native.fit_time.copy()
