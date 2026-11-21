@@ -1363,25 +1363,12 @@ def _resident_publish_profile(blk: PythonObject, state: PythonObject) raises:
         py_setattr(state, "arithmetic_profile", profile)
 
 
-def _resident_forward_ok(mut mods: NativeModules, model: PythonObject, state: PythonObject) raises -> Bool:
-    var blocks = List[PythonObject]()
-    return _resident_forward_ok(mods, model, state, blocks)
-
-
-def _resident_forward_ok(mut mods: NativeModules, model: PythonObject, state: PythonObject,
+def _resident_forward_ok(mut mods: NativeModules, words: CausalModelWords, model: PythonObject, state: PythonObject,
                          mut blocks: List[PythonObject]) raises -> Bool:
     """Whether `forward` runs as the one resident program
     (`causal_lm_session_forward`): a transformer stack with a norm, the
     resident entries, a head the resident session takes, matching arithmetic
     profile metadata and no layer state held by a decode session."""
-    var model_held = causal_model_owner(mods, model)
-    var ok = _resident_forward_ok(mods, model_held.downcast_value_ptr[CausalModelOwner]()[].words, model, state, blocks)
-    _ = model_held
-    return ok
-
-
-def _resident_forward_ok(mut mods: NativeModules, words: CausalModelWords, model: PythonObject, state: PythonObject,
-                         mut blocks: List[PythonObject]) raises -> Bool:
     # The model half of the admission is typed (`causal_resident_candidate`:
     # the kind, the final norm, the resident entries and the packed head's
     # vendor, read before from the model record and its entry registry on
