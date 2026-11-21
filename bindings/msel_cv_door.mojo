@@ -1001,7 +1001,8 @@ def _msel_member_route(mut run: MselUnitRun, mut rows: MselFoldRows, y: PythonOb
     THE FALLBACK RULE, a member mark never turns a working call into a
     refusal, so nothing in here raises for a request those units serve).
 
-    Asked for a host fold set that gathers per unit, with errors raised.
+    Asked for a host fold set that gathers per unit. `error_score`: 'raise',
+    or a number (a unit whose fit fails on its data takes it; see the door).
     DEFAULT SCORING: the member's own score per unit. A NAMED SCORER (one, or
     several by name): each scorer's response method is read once per
     operation; the units write `predict` / `predict_proba` of their test rows
@@ -1015,8 +1016,17 @@ def _msel_member_route(mut run: MselUnitRun, mut rows: MselFoldRows, y: PythonOb
     A scorer that reads decision_function keeps the Python units.
     CROSS_VAL_PREDICT (`run.method`): `predict` / `predict_proba` of each
     fold's test rows, placed the same way; no metric runs."""
-    if not run.raise_errors or rows.dev or len(rows.ranges) != 0 or rows.reuse_test:
+    if rows.dev or len(rows.ranges) != 0 or rows.reuse_test:
         return False
+    # A numeric error_score: a unit whose FIT failed takes the value in
+    # every score (the Python unit's rule: only the fit is forgiven).
+    var tolerate = not run.raise_errors
+    var failed_value = 0.0
+    if tolerate:
+        try:
+            failed_value = msel_error_value(run.error_score)
+        except:
+            return False
     var b = msel_b()
     var responses = List[Int]()
     # Per scorer: the index of its response in `responses`, and its method name.
@@ -1056,7 +1066,7 @@ def _msel_member_route(mut run: MselUnitRun, mut rows: MselFoldRows, y: PythonOb
             return False
     var member_y = rows.y if run.y is None else run.y
     var native = msel_member_units(run.base, run.candidates, member_y, rows.x, rows.folds, run.return_train,
-                                   run.return_estimator, workers, context, b, responses)
+                                   run.return_estimator, workers, context, b, responses, tolerate)
     if not native.ran:
         return False
     var n_ops = len(responses)
@@ -1090,6 +1100,8 @@ def _msel_member_route(mut run: MselUnitRun, mut rows: MselFoldRows, y: PythonOb
             for u in range(run.n_units):  # driver-loop: over units (metric entries, GIL held)
                 var c = u // run.n_folds
                 var f = u - c * run.n_folds
+                if tolerate and native.fit_failed[u] != UInt8(0):
+                    continue
                 var t0 = msel_seconds()
                 for side in range(native.sides):  # driver-loop: test side, then train side when asked
                     var memo = PythonObject(None)
@@ -1115,6 +1127,13 @@ def _msel_member_route(mut run: MselUnitRun, mut rows: MselFoldRows, y: PythonOb
     else:
         run.test = native.test.copy()
         run.train = native.train.copy()
+    if tolerate:
+        for u in range(run.n_units):  # driver-loop: over units (a failed fit's scores are the given value)
+            if native.fit_failed[u] != UInt8(0):
+                for k in range(run.n_keys):  # driver-loop: over scorer names
+                    run.test[u * run.n_keys + k] = failed_value
+                    if run.return_train:
+                        run.train[u * run.n_keys + k] = failed_value
     if run.return_estimator:
         run.estimators = native.estimators
     run.fit_time = native.fit_time.copy()

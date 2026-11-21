@@ -26,7 +26,10 @@ step with the GIL held. Here:
     fits, scores and frees it.
   * Results go to typed slots per unit. If any unit fails, this route
     publishes nothing and answers `ran == False`: the Python units then run
-    and raise the estimator's own exception.
+    and raise the estimator's own exception. With a numeric `error_score`
+    (`tolerate`) a unit whose FIT fails on its data is reported instead and
+    the caller writes the value, as the Python unit's failing fit did; a
+    failure after the fit still publishes nothing.
 
 THE FALLBACK RULE (MEMBER-ABI-V2.md): a member mark never turns a call that
 worked into a refusal. A marked class this route cannot serve (a transformer
@@ -130,6 +133,9 @@ struct MselMemberScores(Movable):
     # (unit * sides + side) * responses + k; an empty list without responses.
     var outputs: PythonObject
     var sides: Int
+    # `tolerate`: 1 for a unit whose FIT failed (the caller writes its
+    # `error_score` into that unit's scores); empty otherwise.
+    var fit_failed: List[UInt8]
     # Per candidate: the estimator its units were admitted from (the caller's
     # metric reads its device once per scorer template).
     var members: PythonObject
@@ -139,6 +145,7 @@ struct MselMemberScores(Movable):
         self.estimators = PythonObject(None)
         self.outputs = Python.list()
         self.sides = 1
+        self.fit_failed = List[UInt8]()
         self.members = Python.list()
         self.test = List[Float64]()
         self.train = List[Float64]()
@@ -190,6 +197,10 @@ struct MselMemberRun(Movable):
     var sides: Int
     var dst: List[Int]
     var codes: List[List[Int32]]
+    # A numeric `error_score`: a unit whose FIT fails records it here and
+    # runs nothing more; the other units are unaffected.
+    var tolerate: Bool
+    var fit_failed: List[UInt8]
 
     def __init__(out self, x: Int, y: Int, rows: Int, cols: Int, n_folds: Int, n_units: Int, workers: Int,
         return_train: Bool, keep: Bool):
@@ -199,6 +210,8 @@ struct MselMemberRun(Movable):
         self.sides = 2 if return_train else 1
         self.dst = List[Int]()
         self.codes = List[List[Int32]]()
+        self.tolerate = False
+        self.fit_failed = List[UInt8](length=n_units, fill=UInt8(0))
         self.plans = List[MemberPlan]()
         self.folds = List[Int]()
         self.starts = List[Int](length=2 * n_folds, fill=-1)
@@ -380,8 +393,18 @@ def _msel_member_unit(run: MutPointer[MselMemberRun, MutUntrackedOrigin], u: Int
     try:
         _side_set(run, train_mode, run[].starts[2 * f], train_index, train_rows, Int(x_train.unsafe_ptr()),
                   Int(y_train.unsafe_ptr()), call)
-        _ = member_call(run[].plans[c].member, MEMBER_OP_FIT, call)
+        if run[].tolerate:
+            try:
+                _ = member_call(run[].plans[c].member, MEMBER_OP_FIT, call)
+            except error:
+                run[].errors[u] = String(error)
+                run[].fit_failed[u] = UInt8(1)
+        else:
+            _ = member_call(run[].plans[c].member, MEMBER_OP_FIT, call)
         var t1 = msel_seconds()
+        if run[].fit_failed[u] != UInt8(0):
+            run[].fit_time[u] = t1 - t0
+            return
         var n_ops = len(run[].ops)
         _side_set(run, test_mode, run[].starts[2 * f + 1], test_index, test_rows, Int(x_test.unsafe_ptr()),
                   Int(y_test.unsafe_ptr()), call)
@@ -454,7 +477,7 @@ def _whole_classes(classes: PythonObject, b: PythonObject) raises -> Bool:
 
 def msel_member_units(base: PythonObject, candidates: PythonObject, y: PythonObject, x: PythonObject,
     folds: PythonObject, return_train: Bool, keep: Bool, workers_in: Int, context: PythonObject,
-    b: PythonObject, responses: List[Int]) raises -> MselMemberScores:
+    b: PythonObject, responses: List[Int], tolerate: Bool) raises -> MselMemberScores:
     """Run every (candidate, fold) unit over native members, or answer
     `ran == False` having changed nothing when this member, data or request
     is not one this route runs (module note). `keep`: one fitted estimator
@@ -462,7 +485,9 @@ def msel_member_units(base: PythonObject, candidates: PythonObject, y: PythonObj
     context, `b` the builtins module, `workers_in` the caller's worker bound.
     `responses`: empty = the member's own score per unit; else the
     `MEMBER_OP_PREDICT` / `MEMBER_OP_PREDICT_PROBA` outputs the caller scores
-    or returns (`scores.outputs`)."""
+    or returns (`scores.outputs`). `tolerate` (a numeric `error_score`): a
+    unit whose FIT fails is reported in `scores.fit_failed` and the others
+    still publish; without it any failing unit publishes nothing."""
     var scores = MselMemberScores()
     var plan = msel_estimator_plan(base, context)
     if py_get(plan, "member") is None or y is None:
@@ -617,6 +642,7 @@ def msel_member_units(base: PythonObject, candidates: PythonObject, y: PythonObj
                     run.dst[i] = Int(run.codes[i].unsafe_ptr())
         except:
             return scores^
+    run.tolerate = tolerate
     var address = Int(UnsafePointer(to=run))
     var lanes = workers
 
@@ -659,6 +685,18 @@ def msel_member_units(base: PythonObject, candidates: PythonObject, y: PythonObj
         if run.failed[u] != UInt8(0):
             _free_kept(run)
             return scores^
+        # A FIT that failed under a numeric error_score takes that value at
+        # the caller, as the Python unit's failing fit did. NOT when the words
+        # are a refusal of this route and not of the data (an operation or
+        # view the member does not publish, a missing image): the estimator's
+        # own fit may well succeed, so the Python units run the request. Nor
+        # when fitted estimators are asked back (the Python unit hands back
+        # its unfitted clone).
+        if run.fit_failed[u] != UInt8(0):
+            if (keep or run.errors[u].startswith("NotImplementedError") or run.errors[u].startswith("ImportError")
+                    or run.errors[u].startswith("member ABI")):
+                _free_kept(run)
+                return scores^
     if keep:
         # PACK: one fitted Python estimator per unit (module note). A pack the
         # family refuses publishes nothing: the Python units run the request.
@@ -697,6 +735,8 @@ def msel_member_units(base: PythonObject, candidates: PythonObject, y: PythonObj
     scores.outputs = outputs
     scores.sides = run.sides
     scores.members = members
+    if tolerate:
+        scores.fit_failed = run.fit_failed.copy()
     scores.ran = True
     scores.test = run.test.copy()
     scores.train = run.train.copy()
