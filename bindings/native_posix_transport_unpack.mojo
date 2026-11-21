@@ -15,14 +15,14 @@ from bindings.native_posix_transport_run import (
 )
 
 
-def _gil_release() -> PosixBytes:
+def _gil_release() raises -> PosixBytes:
     # The one place this file asks CPython for the GIL release entry: every
     # blocking libc call below brackets itself with this pair.
     ref cpy = Python().cpython()
     return cpy.lib.get_function[PosixBytes]("PyEval_SaveThread")()
 
 
-def _gil_restore(thread: PosixBytes):
+def _gil_restore(thread: PosixBytes) raises:
     ref cpy = Python().cpython()
     cpy.lib.get_function[NoneType]("PyEval_RestoreThread")(thread)
 
