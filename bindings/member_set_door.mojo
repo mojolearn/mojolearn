@@ -38,6 +38,7 @@ gather itself is split across the host cores.
 """
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
+from std.sys.compile import is_defined
 from std.python._cpython import GILReleased
 from bindings.member_boundary_door import member_admit, member_pack
 from bindings.native_unit_os_threads_run import native_unit_cores
@@ -51,6 +52,12 @@ from core.member_abi import (
     MEMBER_CAN_FIT, MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_CLASSIFIER,
     MEMBER_CAN_ROW_INDEX, MEMBER_CAN_COLUMN_INDEX,
 )
+
+#: Default ON. `-D MOJOLEARN_MEMBER_SET_OFF` makes `member_set_admit` answer
+#: False for every member, so every caller keeps its own member loop: the B
+#: arm of the owed A/B (docs/apple-fast/EXPERIMENTS.md). Not measured yet;
+#: the callers' loops stay until it is, and for unpublished families.
+comptime MEMBER_SET_NATIVE = not is_defined["MOJOLEARN_MEMBER_SET_OFF"]()
 
 #: Words below which a gather is not split (a task costs more than the
 #: copy); a cost rule over any shape.
@@ -131,6 +138,8 @@ def member_set_admit(mut set: MemberSet, estimator: PythonObject, target: Int, w
     `context` is the caller's context (it holds the model-selection plans),
     `b` the builtins module. `classes`: the class count of code targets, 0
     for a regressor."""
+    comptime if not MEMBER_SET_NATIVE:
+        return False
     var plan = prep_estimator_plan(estimator, context)
     if plan is None:
         return False
@@ -176,6 +185,17 @@ def member_set_workers(set: MemberSet) -> Int:
         if set.run.plans[u].route.device != DEVICE_CPU:
             return 1
     return max(min(native_unit_cores(), count), 1)
+
+
+def member_set_width(set: MemberSet) -> Int:
+    """How many members a caller that fits in waves puts in one set: the
+    host cores when every member admitted so far runs on the CPU, else one.
+    A wave bounds what is held at once (the draws and the gathered blocks of
+    one wave) to the worker count."""
+    for u in range(len(set.run.plans)):  # driver-loop: over the members (their resolved routes)
+        if set.run.plans[u].route.device != DEVICE_CPU:
+            return 1
+    return max(native_unit_cores(), 1)
 
 
 @always_inline
