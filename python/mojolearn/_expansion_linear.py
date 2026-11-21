@@ -2051,6 +2051,10 @@ class RidgeCV(_LinearRegressorMixin, NumericModeMixin):
 
     _BINDING = _BINDING
 
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_XLINEAR = 2) and core/xlinear_member.mojo.
+    _mojolearn_member = (2, 10)
+
     def __init__(self, alphas=(0.1, 1.0, 10.0), *, fit_intercept=True, scoring=None, cv=None,
                  gcv_mode=None, store_cv_results=False, alpha_per_target=False, numeric_mode=None, device=None):
         self.alphas, self.fit_intercept, self.scoring, self.cv = alphas, fit_intercept, scoring, cv

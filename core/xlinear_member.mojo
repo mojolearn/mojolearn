@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """The XLinear family as MEMBERS (core/member_abi.mojo, schema v2): the
 generalized linear regressors PoissonRegressor, GammaRegressor and
-TweedieRegressor, HuberRegressor, BayesianRidge, ARDRegression, Lars, LassoLars and QuantileRegressor; and the classifier
+TweedieRegressor, HuberRegressor, BayesianRidge, ARDRegression, Lars, LassoLars, QuantileRegressor and RidgeCV; and the classifier
 RidgeClassifier.
 
 One entry, `xlinear_member_v2`, published by each x_linear image
@@ -16,7 +16,7 @@ metric). No kernel is touched.
 
 Kinds (the second word of each class's `_mojolearn_member`): 0
 PoissonRegressor, 1 GammaRegressor, 2 TweedieRegressor, 3 HuberRegressor,
-4 BayesianRidge, 5 ARDRegression, 6 Lars, 7 LassoLars, 8 QuantileRegressor, 9 RidgeClassifier.
+4 BayesianRidge, 5 ARDRegression, 6 Lars, 7 LassoLars, 8 QuantileRegressor, 9 RidgeClassifier, 10 RidgeCV.
 
 MEMBER_OP_NEW parameters (Float64 words; word 0 is the kind, the count is
 the kind's):
@@ -37,6 +37,12 @@ the kind's):
   * kind 8, 6 words: [0] 8, [1] fit_intercept, [2] max_iter, [3] quantile,
     [4] alpha, [5] tol.
   * kind 9, 3 words: [0] 9, [1] fit_intercept, [2] alpha.
+  * kind 10, 5 + A words: [0] 10, [1] fit_intercept, [2] store_cv_results,
+    [3] folds (0: cv=None, the one fit over the grid; else an integer cv,
+    `_fit_kfold`), [4] A, [5 ..] the A alphas. An integer cv runs the k-fold
+    path only (unweighted, at least two rows a fold; otherwise refused in
+    words: the estimator's own split path makes its folds in Python). A
+    splitter object for cv is not admitted.
 The estimator's own checks (solver, warm_start, alpha >= 0, Tweedie's power
 and link words, Huber's epsilon >= 1, BayesianRidge's compute_score, Lars' jitter, LassoLars' alpha >= 0, the quantile in (0, 1), RidgeClassifier's positive and solver words; an
 instance with class_weight set is not admitted: class weights are keyed by
@@ -63,7 +69,9 @@ Regressor fitted-state blocks (EXPORT / IMPORT), in index order:
 0 `MEMBER_BLOCK_COEF` float32 1 x features; 1 `MEMBER_BLOCK_SCALARS` float64
 in the kind's order: kinds 0..2 [intercept, n_iter]; kind 3 [intercept,
 scale, n_iter]; kind 4 [intercept, alpha_, lambda_, n_iter]; kind 5 [intercept, alpha_,
-n_iter]; kinds 6, 7 [intercept, n_iter, alpha_]. Kinds 6, 7 after a fit also holds
+n_iter]; kinds 6, 7 [intercept, n_iter, alpha_]; kind 10 [intercept, alpha_,
+best_score_] (with store_cv_results also 2 `XL_MEMBER_BLOCK_CV_RESULTS`,
+`MEMBER_BLOCK_FAMILY` + 3, float32 1 x A). Kinds 6, 7 after a fit also holds
 2 `XL_MEMBER_BLOCK_ACTIVE` (`MEMBER_BLOCK_FAMILY` + 2) int32 1 x active
 features (`active_`, in the order the path took them). Kind 5 also holds 2 `XL_MEMBER_BLOCK_LAMBDA` (`MEMBER_BLOCK_FAMILY` +
 1) float32 1 x features (`lambda_`). Kind 3 after a fit also holds 2 `XL_MEMBER_BLOCK_OUTLIERS`
@@ -96,7 +104,8 @@ from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 from x_linear.door_run import (
     ALGO_GLM, ALGO_HUBER, ALGO_BAYES, ALGO_ARD, ALGO_LARS, ALGO_QUANTILE, LINK_IDENTITY, LINK_EXP,
-    ALGO_RIDGE, xl_run_block, XlFitRequest, XlDecisionRequest, xl_fit_run, xl_huber_fit_run, xl_decision_run, xl_r2_run, xl_lbfgs_work,
+    ALGO_RIDGE, xl_run_block, XlRidgeCvRequest, xl_ridge_out, xl_ridge_singular, xl_ridge_cv_plain_run,
+    xl_ridge_cv_kfold_run, XlFitRequest, XlDecisionRequest, xl_fit_run, xl_huber_fit_run, xl_decision_run, xl_r2_run, xl_lbfgs_work,
 )
 
 comptime _CHUNK = 256
@@ -108,6 +117,8 @@ comptime XL_MEMBER_LARS = 6
 comptime XL_MEMBER_LASSO_LARS = 7
 comptime XL_MEMBER_QUANTILE = 8
 comptime XL_MEMBER_RIDGE_CLASSIFIER = 9
+comptime XL_MEMBER_RIDGE_CV = 10
+comptime XL_MEMBER_BLOCK_CV_RESULTS = MEMBER_BLOCK_FAMILY + 3
 comptime XL_MEMBER_BLOCK_LAMBDA = MEMBER_BLOCK_FAMILY + 1
 comptime XL_MEMBER_BLOCK_ACTIVE = MEMBER_BLOCK_FAMILY + 2
 comptime XL_MEMBER_BLOCK_OUTLIERS = MEMBER_BLOCK_FAMILY
@@ -135,6 +146,8 @@ def xl_member_param_count(kind: Int) -> Int:
         return 6
     if kind == XL_MEMBER_RIDGE_CLASSIFIER:
         return 3
+    if kind == XL_MEMBER_RIDGE_CV:
+        return 5  # + the A alphas (word 4)
     return 0
 
 
@@ -148,7 +161,7 @@ def xl_member_scalar_count(kind: Int) -> Int:
         return 3
     if kind == XL_MEMBER_BAYES:
         return 4
-    if kind == XL_MEMBER_ARD or _lars(kind):
+    if kind == XL_MEMBER_ARD or _lars(kind) or kind == XL_MEMBER_RIDGE_CV:
         return 3
     return 2
 
@@ -304,6 +317,8 @@ def _name(slot: _SlotP) -> String:
         return String("LassoLars")
     if kind == XL_MEMBER_QUANTILE:
         return String("QuantileRegressor")
+    if kind == XL_MEMBER_RIDGE_CV:
+        return String("RidgeCV")
     return String("RidgeClassifier")
 
 
@@ -407,6 +422,10 @@ def _fit(slot: _SlotP, call: _CallP) raises:
         slot[].flags = flags^
         slot[].fitted = True
         return
+    if kind == XL_MEMBER_RIDGE_CV:
+        _ridge_cv_fit(slot, call, p, intercept, n, d, y, has_sw)
+        _ = joined^
+        return
     if kind >= XL_MEMBER_BAYES:
         _plain_fit(slot, call, kind, p, intercept, n, d, y, y_size, has_sw)
         _ = joined^
@@ -424,6 +443,58 @@ def _fit(slot: _SlotP, call: _CallP) raises:
         raise Error("Some value(s) of y are out of the valid range of the loss '" + _loss_name(slot) + "'.")
     _keep_block(slot, result, d)
     slot[].scalars = [Float64(result[d]), Float64(Int(result[d + 1]))]
+    slot[].fitted = True
+
+
+def _ridge_cv_fit(slot: _SlotP, call: _CallP, p: List[Float64], intercept: Int, n: Int, d: Int, y: Int,
+    has_sw: Int) raises:
+    """RidgeCV.fit: cv=None (`xl_ridge_cv_plain_run`, the grid in one fit) or
+    an integer cv (`xl_ridge_cv_kfold_run`), the request words of
+    bindings/x_linear_cv_unpack.mojo `xl_fit_ridge_cv_unpack`."""
+    var grid = Int(p[4])
+    var alphas = List[Float64](length=grid, fill=0.0)
+    for i in range(grid):  # driver-loop: over the alpha grid
+        alphas[i] = p[5 + i]
+    var folds = Int(p[3])
+    var store = p[2] != 0.0
+    var none = entry_ref_unresolved()
+    if folds == 0:
+        var result = List[Float32](length=xl_ridge_out(d, grid), fill=0.0)
+        var plain = XlRidgeCvRequest(call[].route.entry.call, call[].x.data, n, d, y, has_sw == 1, intercept == 1,
+            alphas^, Int(result.unsafe_ptr()), 0, 0, 0, 0, none.call, none)
+        xl_ridge_cv_plain_run(plain)
+        if xl_ridge_singular(Int(result.unsafe_ptr()), d, grid):
+            raise Error("mojolearn RidgeCV: X'X + alpha I is singular even in float-float (alpha="
+                + String(Float64(result[d + 1])) + "); rescale X or use a larger alpha")
+        _keep_block(slot, result, d)
+        slot[].scalars = [Float64(result[d]), Float64(result[d + 1]), Float64(result[d + 2])]
+        if store:
+            slot[].record = List[Float32](length=grid, fill=0.0)
+            unsafe_memcpy(dest=slot[].record.unsafe_ptr(), src=result.unsafe_ptr() + d + 3, count=grid)
+        slot[].trained = True
+        slot[].fitted = True
+        return
+    if has_sw == 1:
+        raise Error("NotImplementedError: mojolearn: a RidgeCV member with an integer cv runs the unweighted "
+            + "k-fold path; a weighted fit is not published")
+    if not (2 <= folds and folds <= n):
+        raise Error("mojolearn RidgeCV: cv must be in [2, n_samples]")
+    if n // folds < 2:
+        raise Error("NotImplementedError: mojolearn: a RidgeCV member with an integer cv needs at least two rows "
+            + "a fold")
+    var scores = List[Float32](length=grid, fill=0.0)
+    var result = List[Float32](length=xl_ridge_out(d, 1), fill=0.0)
+    var chosen = alphas.copy()
+    var kfold = XlRidgeCvRequest(call[].route.entry.call, call[].x.data, n, d, y, False, intercept == 1, alphas^,
+        Int(result.unsafe_ptr()), folds, Int(scores.unsafe_ptr()), 0, 0, none.call, none)
+    var best = xl_ridge_cv_kfold_run(kfold)
+    if xl_ridge_singular(Int(result.unsafe_ptr()), d, 1):
+        raise Error("mojolearn RidgeCV: X'X + alpha I is singular even in float-float (alpha="
+            + String(Float64(result[d + 1])) + "); rescale X or use a larger alpha")
+    _keep_block(slot, result, d)
+    # alpha_ is the user's own value; best_score_ that alpha's k-fold score
+    slot[].scalars = [Float64(result[d]), chosen[best], Float64(scores[best])]
+    slot[].trained = True
     slot[].fitted = True
 
 
@@ -571,6 +642,8 @@ def _family_block(slot: _SlotP) -> Int:
         return XL_MEMBER_BLOCK_LAMBDA
     if _lars(_kind(slot)) and slot[].trained:
         return XL_MEMBER_BLOCK_ACTIVE
+    if _kind(slot) == XL_MEMBER_RIDGE_CV and len(slot[].record) > 0:
+        return XL_MEMBER_BLOCK_CV_RESULTS
     return 0
 
 
@@ -593,7 +666,7 @@ def _export(slot: _SlotP, call: _CallP) raises:
     elif block != 0 and block == family and family == XL_MEMBER_BLOCK_OUTLIERS:
         _outlier_words(slot)
         call[].dst = MemberMatrix(Int(slot[].outliers.unsafe_ptr()), 1, len(slot[].outliers), MEMBER_I32)
-    elif block != 0 and block == family and family == XL_MEMBER_BLOCK_LAMBDA:
+    elif block != 0 and block == family and (family == XL_MEMBER_BLOCK_LAMBDA or family == XL_MEMBER_BLOCK_CV_RESULTS):
         call[].dst = MemberMatrix(Int(slot[].record.unsafe_ptr()), 1, len(slot[].record))
     elif block != 0 and block == family and family == XL_MEMBER_BLOCK_ACTIVE:
         call[].dst = MemberMatrix(Int(slot[].active.unsafe_ptr()), 1, len(slot[].active), MEMBER_I32)
@@ -831,13 +904,19 @@ def _xlinear_member(operation: Int, address: Int) raises -> Int:
     if operation == MEMBER_OP_CAPABILITIES:
         if call[].state == 0:
             return _capabilities(-1)
-        return _capabilities(_kind(_SlotP(unsafe_from_address=_lookup(call[].state, False))))
+        var asked = _SlotP(unsafe_from_address=_lookup(call[].state, False))
+        var bits = _capabilities(_kind(asked))
+        if _kind(asked) == XL_MEMBER_RIDGE_CV and asked[].params[3] != 0.0:
+            bits &= ~MEMBER_CAN_SAMPLE_WEIGHT  # the k-fold path is unweighted
+        return bits
     if operation == MEMBER_OP_NEW:
         if not call[].params or call[].param_count < 1:
             raise Error("member ABI: an x_linear member takes its kind as parameter word 0")
         var words = _F64P(unsafe_from_address=call[].params)
         var kind = Int(words[0])
         var count = xl_member_param_count(kind)
+        if kind == XL_MEMBER_RIDGE_CV and call[].param_count >= 5:
+            count = 5 + Int(words[4])
         if Float64(kind) != words[0] or count == 0:
             raise Error("member ABI: unknown x_linear member kind")
         if call[].param_count != count:

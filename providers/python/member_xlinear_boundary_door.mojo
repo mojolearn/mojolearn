@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """The member boundary of the XLinear family; RUN is core/xlinear_member.mojo.
 Published kinds: 0 PoissonRegressor, 1 GammaRegressor, 2 TweedieRegressor,
-3 HuberRegressor, 4 BayesianRidge, 5 ARDRegression, 6 Lars, 7 LassoLars, 8 QuantileRegressor, 9 RidgeClassifier (`_mojolearn_member = (MEMBER_FAMILY_XLINEAR, kind)` on
+3 HuberRegressor, 4 BayesianRidge, 5 ARDRegression, 6 Lars, 7 LassoLars, 8 QuantileRegressor, 9 RidgeClassifier, 10 RidgeCV (`_mojolearn_member = (MEMBER_FAMILY_XLINEAR, kind)` on
 each class).
 
   * `xlinear_member_admit` (UNPACK, once per member): the estimator's own
@@ -30,10 +30,12 @@ from bindings.admitted_input_unpack import admit_x
 from bindings.classical_arrays_door import classical_array, classical_address
 from bindings.member_owner_unpack import MemberOwner
 from bindings.py_lists import py_list_int
+from bindings.py_balanced import py_call
 from bindings.py_balanced import py_get, py_item, py_contains, py_setitem
-from bindings.x_linear_common_unpack import _truth, _ge, _float, _int, _name, _class_attr, _attr, _lt, _xl_bayes_refuse, _xl_or
+from bindings.x_linear_common_unpack import _truth, _ge, _float, _int, _name, _class_attr, _attr, _lt, _b, _xl_bayes_refuse, _xl_or
 from bindings.x_linear_keys_unpack import x_linear_keys
 from bindings.x_linear_regressors_unpack import _xl_tweedie_link
+from bindings.x_linear_cv_unpack import _xl_is_int_cv
 from bindings.x_linear_route_unpack import xl_route, xl_ops_require
 from core.entry_table import EntryRef, entry_ref_word
 from core.hostptr import f32_ptr
@@ -42,7 +44,8 @@ from core.member_abi import (
     MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_BLOCK_COEF, MEMBER_BLOCK_INTERCEPT, MEMBER_BLOCK_SCALARS, MEMBER_IMPORT_DONE, MEMBER_F64,
 )
 from core.xlinear_member import (
-    XL_MEMBER_HUBER, XL_MEMBER_BAYES, XL_MEMBER_ARD, XL_MEMBER_LARS, XL_MEMBER_LASSO_LARS, XL_MEMBER_QUANTILE, XL_MEMBER_RIDGE_CLASSIFIER, XL_MEMBER_BLOCK_OUTLIERS, XL_MEMBER_BLOCK_LAMBDA,
+    XL_MEMBER_HUBER, XL_MEMBER_BAYES, XL_MEMBER_ARD, XL_MEMBER_LARS, XL_MEMBER_LASSO_LARS, XL_MEMBER_QUANTILE, XL_MEMBER_RIDGE_CLASSIFIER, XL_MEMBER_RIDGE_CV, XL_MEMBER_BLOCK_CV_RESULTS,
+    XL_MEMBER_BLOCK_OUTLIERS, XL_MEMBER_BLOCK_LAMBDA,
     XL_MEMBER_BLOCK_ACTIVE,
 )
 from core.metrics_entry_table import MetricsEntryKey, metrics_r2_entry, MR_OP_COUNT
@@ -149,6 +152,40 @@ def _xl_ridge_classifier_words(model: PythonObject, fields: PythonObject) raises
     return [Float64(XL_MEMBER_RIDGE_CLASSIFIER), _intercept_word(fields), _float(alpha)]
 
 
+def _xl_ridge_cv_words(fields: PythonObject, context: PythonObject, mut admitted: Bool) raises -> List[Float64]:
+    """Kind 10: `xl_fit_ridge_cv_unpack`'s refusals, then 5 + A words.
+    `admitted` is False for a splitter object as cv (its folds are made in
+    Python by the estimator's own split path)."""
+    var nk = x_linear_keys()
+    var b = _b()
+    if py_item(fields, nk[].k_scoring) is not None or _truth(py_item(fields, nk[].k_alpha_per_target)):
+        raise Error("mojolearn RidgeCV: only scoring=None, alpha_per_target=False are implemented")
+    var given = py_item(fields, nk[].k_alphas)
+    var listed = given if Bool(py=py_call(b.hasattr, given, PythonObject("__len__"))) else Python.list(given)
+    var floats = py_call(b.list, py_call(b.map, b.float, listed))
+    var grid = len(floats)
+    var words: List[Float64] = [Float64(XL_MEMBER_RIDGE_CV), _intercept_word(fields),
+        1.0 if _truth(py_item(fields, nk[].k_store_cv_results)) else 0.0, 0.0, Float64(grid)]
+    var refuse = grid == 0
+    for i in range(grid):  # driver-loop: over the alpha grid
+        var alpha = Float64(py=floats[i])
+        refuse = refuse or not (alpha > 0)
+        words.append(alpha)
+    if refuse:
+        raise Error("mojolearn RidgeCV: alphas must be positive")
+    var cv = py_item(fields, nk[].k_cv)
+    admitted = True
+    if cv is None:
+        return words^
+    if not _xl_is_int_cv(cv, context):
+        admitted = False
+        return words^
+    if _truth(py_item(fields, nk[].k_store_cv_results)):
+        raise Error("cv!=None and store_cv_results=True are incompatible")
+    words[3] = Float64(_int(cv))
+    return words^
+
+
 def _intercept_word(fields: PythonObject) raises -> Float64:
     var nk = x_linear_keys()
     return 1.0 if _truth(py_item(fields, nk[].k_fit_intercept)) else 0.0
@@ -178,6 +215,11 @@ def xlinear_member_admit(model: PythonObject, fields: PythonObject, kind: Int, c
         if py_item(fields, nk[].k_class_weight) is not None:
             return False
         words = _xl_ridge_classifier_words(model, fields)
+    elif kind == XL_MEMBER_RIDGE_CV:
+        var admitted = True
+        words = _xl_ridge_cv_words(fields, context, admitted)
+        if not admitted:
+            return False
     else:
         raise Error("RuntimeError: mojolearn: unknown XLinear member kind " + String(kind))
     var ops = xl_route(model, fields, context, False)
@@ -284,6 +326,18 @@ def xlinear_member_pack(model: PythonObject, fields: PythonObject, context: Pyth
                 count=call.dst.cols)
             py_setitem(fields, nk[].k_lambda_, lam)
         return
+    if kind == XL_MEMBER_RIDGE_CV:
+        py_setitem(fields, nk[].k_alpha_, PythonObject(scalars[1]))
+        py_setitem(fields, nk[].k_best_score_, PythonObject(scalars[2]))
+        if blocks > 2:
+            call.block = XL_MEMBER_BLOCK_CV_RESULTS
+            _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+            var table = classical_array(call.dst.cols, 0, context)
+            unsafe_memcpy(dest=f32_ptr(Int(py=classical_address(table))), src=f32_ptr(call.dst.data),
+                count=call.dst.cols)
+            py_setitem(fields, nk[].k_cv_results_, table)
+        py_setitem(fields, nk[].k_n_features_in_, PythonObject(cols))
+        return
     if kind == XL_MEMBER_LARS or kind == XL_MEMBER_LASSO_LARS:
         py_setitem(fields, nk[].k_n_iter_, PythonObject(Int(scalars[1])))
         py_setitem(fields, nk[].k_alpha_, PythonObject(Float64(Float32(scalars[2]))))
@@ -334,6 +388,10 @@ def xlinear_member_state(model: PythonObject, fields: PythonObject, context: Pyt
             _count_word(fields, nk[].k_n_iter_)]
     elif kind == XL_MEMBER_ARD:
         scalars = [intercept, Float64(py=py_item(fields, nk[].k_alpha_)), _count_word(fields, nk[].k_n_iter_)]
+    elif kind == XL_MEMBER_RIDGE_CV:
+        var best = py_get(fields, nk[].k_best_score_)
+        scalars = [intercept, Float64(py=py_item(fields, nk[].k_alpha_)),
+            0.0 if best is None else Float64(py=best)]
     elif kind == XL_MEMBER_LARS or kind == XL_MEMBER_LASSO_LARS:
         scalars = [intercept, _count_word(fields, nk[].k_n_iter_), Float64(py=py_item(fields, nk[].k_alpha_))]
     else:
