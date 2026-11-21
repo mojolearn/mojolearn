@@ -46,7 +46,7 @@ from bindings.label_input_sources_unpack import labels_list_integer_storage
 from bindings.label_input_sources_pack import labels_series_values
 from bindings.py_optional import py_present
 from bindings.msel_common_door import (
-    msel_b, msel_missed, msel_catch, msel_is_bool,
+    msel_b, msel_missed, msel_catch, msel_is_bool, msel_warn,
     msel_is_integral, msel_is_int_arg, msel_is_real, msel_int, msel_op, msel_cmp, msel_materialize,
     msel_try_materialize, msel_flatten, msel_encode, msel_labels_list, msel_n_samples, msel_is_array, msel_addr, msel_admit,
     msel_numeric_vector, msel_new, msel_read_i64, msel_arange, msel_range_index, msel_index_copy,
@@ -543,6 +543,18 @@ def msel_stratified_split(y: PythonObject, k: Int, shuffle: Bool, random_state: 
     var pin = msel_split_route(context, not (k <= 256 and msel_fold_rows_fits(view.n, k)), True, True)
     var route = pin.route
     var plan = MselSplitPlan()
+    if shuffle and seed.bad:
+        # The refusal of an unusable random_state, in its old place: after
+        # the class-size refusal and after the "least populated class"
+        # warning. The plan is made without a draw (it raises the size
+        # refusal and records the warning), the warning is issued, then the
+        # seed is refused. Only this refusal path pays for the extra plan.
+        with GILReleased(Python()):
+            plan = msel_plan_stratified(route, view, form, k, False, seed)
+        if plan.warned:
+            msel_warn(plan.warning, msel_b().UserWarning, context)
+        _ = labels  # the codes stay alive through the plan above
+        raise Error(msel_seed_refusal())
     with GILReleased(Python()):
         plan = msel_plan_stratified(route, view, form, k, shuffle, seed)
     var pairs = msel_split_finish(pin, plan, context)
@@ -600,9 +612,22 @@ def msel_time_series_split(sp: MselSplitter, x: PythonObject, context: PythonObj
     var ts = msel_int(ts_field) if has_ts else 0
     var gap = msel_int(sp.field("gap", context))
     var max_train_field = sp.field("max_train_size", context)
-    var max_train = msel_int(max_train_field) if msel_truth(max_train_field) else 0
+    # `max_train_size` was read at the first split, so its own refusal (a
+    # value with no truth or integer form) follows the fold-count refusals
+    # and is not raised at all for a splitter that makes no split. Same
+    # order here: an unreadable value is set aside, the plan raises its
+    # refusals, and only a plan with a split reads the value again to raise
+    # its error. The usual value costs nothing more than the one read.
+    var max_train = 0
+    var unread = False
+    try:
+        max_train = msel_int(max_train_field) if msel_truth(max_train_field) else 0
+    except:
+        unread = True
     var pin = msel_split_route(context, False, False, False)
     var plan = msel_plan_time_series(n, k, ts, has_ts, gap, max_train)
+    if unread and plan.splits() > 0:
+        max_train = msel_int(max_train_field) if msel_truth(max_train_field) else 0
     return msel_split_finish(pin, plan, context)
 
 
