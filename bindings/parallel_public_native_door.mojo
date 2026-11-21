@@ -164,6 +164,25 @@ struct ParallelForestOwner(Movable, Writable):
 # adds an admit and a state to the plain owner call it would stand in for.
 # When the ABI gains a device-plan word, these sites take
 # `member_admit_serving` first and fall back to `family_call` as written.
+#
+# STATE 2026-11-21, after lane ma-core's round 5 (MEMBER-ABI-V2 items 24 to
+# 30): the word exists (`MemberPlan.devices`, handed to every call as
+# `MemberCall.devices` / `device_count`, core/member_abi.mojo), and it is the
+# word these sites need. They still stay `family_call`, for two reasons a
+# caller cannot work around:
+# 1. No capability bit says a kind's FIT / PREDICT splits its work over
+#    `call.devices`. A member that ignores the words runs on the one device
+#    of `route`; this door cannot tell the two apart, so it cannot choose
+#    between the member and the fallback.
+# 2. No member entry reads `call.devices` yet (the only reader of the words
+#    in the tree is `member_call_of`).
+# Needed from ma-core: a bit (`MEMBER_CAN_DEVICE_PLAN`: the entry splits over
+# `call.devices` exactly as its family's plain owner does under the bound
+# plan, same bits). Needed from the family lanes: the KMeans and Cholesky
+# multi-device owners (`family_km_par_*`, `family_chol_par_*`) and the
+# cooperative `family_par_run` families set it. With both, each site becomes
+# `member_admit_serving` under the bound plan, the bit test, the member
+# call, else `family_call` as written.
 
 def _run(model: PythonObject, driver: PythonObject, operation: PythonObject, args: PythonObject,
           entry: PythonObject, owner: PythonObject, names: PythonObject, devices: PythonObject,

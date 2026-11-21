@@ -86,7 +86,9 @@ from bindings.member_set_door import (
 from core.member_abi import (
     MEMBER_F32, MEMBER_I32, MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA, MEMBER_OP_DECISION,
 )
-from bindings.member_set_door import MEMBER_SET_NATIVE, member_predict_held
+from bindings.member_set_door import (
+    MEMBER_SET_NATIVE, member_set_tests, member_held_open, member_held_run, member_held_close,
+)
 from bindings.prep_native_estimator_door import (
     prep_estimator_admit, prep_estimator_clone, prep_estimator_call, prep_estimator_has,
     prep_estimator_plan, prep_native_context, prep_native_split, prep_estimator_predict_internal,
@@ -352,7 +354,7 @@ comptime _MEMBER_CODES_SLOT = "trees_meta_member_codes_v1"
 
 def _member_class_codes(member: PythonObject, context: PythonObject) raises -> PythonObject:
     """`(classes_, listed classes, int32 code Array, index of 1 or -1,
-    classes are 0..k-1, native element types)` of a
+    classes are 0..k-1)` of a
     fitted member, kept per member in the native side table (lane
     perf2-trees, 2026-11-06: every soft-vote, stacking, multi-output and
     calibrated predict rebuilt the int32 Array, one `int()` per class plus an
@@ -385,16 +387,13 @@ def _member_class_codes(member: PythonObject, context: PythonObject) raises -> P
             at = i
             break
     # [4]: the classes are 0 .. k-1 in order (a member's code is the
-    # ensemble's code). [5]: the element type the member's native entry wrote
-    # for predict, predict_proba and decision_function (`_member_native`; -1
-    # not known yet), written in place when learned.
+    # ensemble's code).
     var identity = True
     for i in range(len(subs)):  # driver-loop: over the member's fitted classes
         if Int(py=subs[i]) != i:
             identity = False
             break
-    var record = Python.tuple(classes, py_call(b.list, listed), array, PythonObject(at), PythonObject(identity),
-                              Python.list(PythonObject(-1), PythonObject(-1), PythonObject(-1)))
+    var record = Python.tuple(classes, py_call(b.list, listed), array, PythonObject(at), PythonObject(identity))
     _ = trees_side_put(_MEMBER_CODES_SLOT, member, record)
     return record
 
@@ -607,19 +606,30 @@ def _fit_units_native(clones: PythonObject, xs: PythonObject, d: Int, targets: P
         if not member_set_admit(set, clones[i], trees_address(targets[i]), w_address, 0, 0, 0, 0, classes, context, b):
             return False
         member_set_own_block(set, trees_address(xs[i]), Int(py=xs[i].shape[0]))
-    # The member entries read admitted words. X is held with its finite test
+    # WHO REFUSES A NON-FINITE X OR y. X is held with its finite test
     # deferred to the member doors (`_hold_deferred`), which this route does
-    # not run: each distinct X block and float target is proven here (a held
-    # block's recorded verdict, else one scan). Not finite: the door loop,
-    # whose first door refuses in the estimator's own words.
-    for i in range(m):  # driver-loop: over the units (one verdict per distinct block)
-        if (i == 0 or not (xs[i] is xs[i - 1])) and not _x_finite(xs[i], d):
-            return False
-        if float_targets and (i == 0 or not (targets[i] is targets[i - 1])):
+    # not run. A member whose kind tests its rows (`member_set_tests`,
+    # MEMBER_CAN_TEST_ROWS) refuses them in its own fit, from the pass its
+    # kernel already makes: nothing is scanned here for it, its refusal fails
+    # the set and the door loop raises the estimator's own words. For every
+    # other member each distinct X block and float target it reads is proven
+    # here (a held block's recorded verdict, else one host scan). Not finite:
+    # the door loop, whose first door refuses in the estimator's own words.
+    var proved_x = PythonObject(None)
+    var proved_y = PythonObject(None)
+    for i in range(m):  # driver-loop: over the units (one verdict per distinct block a non-testing member reads)
+        if member_set_tests(set, i):
+            continue
+        if not (xs[i] is proved_x):
+            if not _x_finite(xs[i], d):
+                return False
+            proved_x = xs[i]
+        if float_targets and not (targets[i] is proved_y):
             var finite_y = trees_finite_f32(trees_address(targets[i]), Int(py=targets[i].shape[0]))
             _ = targets  # keep the Python objects alive through the scan above
             if not finite_y:
                 return False
+            proved_y = targets[i]
     var fitted = False
     try:
         member_set_run(set)   # a failing unit releases every state
@@ -697,7 +707,7 @@ def _member_native(member: PythonObject, X: PythonObject, operation: Int, classi
                    context: PythonObject) -> PythonObject:
     """A fitted member's `operation` (MEMBER_OP_PREDICT, _PREDICT_PROBA,
     _DECISION) over X through the member state it holds
-    (bindings/member_set_door.mojo `member_predict_held`: a hit after the
+    (bindings/member_set_door.mojo `member_held_open`: a hit after the
     first use, and the state a native fit left with it; one member call, the
     GIL released, written into a new Array), or None when it is not served
     and the caller runs the member's own door (the fallback rule). Never
@@ -710,13 +720,21 @@ def _member_native(member: PythonObject, X: PythonObject, operation: Int, classi
     member's code is then the ensemble's code, the value its door's decoded
     label had); predict_proba = (n, its class count) columns in its class
     order, as its door's; decision_function = (n,) for one column, else
-    (n, columns).
+    (n, columns). The element type is the one the member's OUTPUTS answers.
+
+    A NON-FINITE X: a member whose kind tests its rows (MEMBER_CAN_TEST_ROWS)
+    refuses it in its own kernel pass (no host scan here), the call answers
+    None and the member's door raises the estimator's words. For any other
+    member X's finite verdict is read first (`_x_finite`: the held block's
+    recorded verdict, else one host scan, then held); not finite = None and
+    the door refuses it.
 
     NOT SERVED HERE, by rule: a class without a member mark; a tree, forest
     or extra-trees member (its door predicts from the one device copy of X
     this door stages for all of them, bindings/trees_staged_input_door.mojo;
-    a member call would upload X once per member); a non-finite X (the
-    door refuses it). Once per member per public operation."""
+    a member call would upload X once per member, and its route is not known
+    before the hold's import; its fitted state is not kept at the native
+    fit either). Once per member per public operation."""
     comptime if not MEMBER_SET_NATIVE:
         return PythonObject(None)
     try:
@@ -728,29 +746,25 @@ def _member_native(member: PythonObject, X: PythonObject, operation: Int, classi
         if n <= 0 or d <= 0 or String(py=X.dtype) != "<f4" or String(py=X.order) != "C":
             return PythonObject(None)
         var width = 0
-        var known = MEMBER_F32
-        var slot = 0
-        var record = PythonObject(None)
         if classifier:
-            record = _member_class_codes(member, context)
+            var record = _member_class_codes(member, context)
             if operation == MEMBER_OP_PREDICT:
                 if not Bool(py=record[4]):
                     return PythonObject(None)
                 width = 1
             elif operation == MEMBER_OP_PREDICT_PROBA:
-                slot = 1
                 width = len(record[1])
-            else:
-                slot = 2
-            known = Int(py=record[5][slot])
-        if not _x_finite(X, d):
-            return PythonObject(None)
-        var out = member_predict_held(member, trees_address(X), n, d, operation, classifier, width, known, True,
-                                      context, trees_builtins())
+        var opened = member_held_open(member, operation, classifier, width, True, context,
+                                      trees_builtins())
+        var result = PythonObject(None)
+        try:
+            if opened.served and (opened.tests or _x_finite(X, d)):
+                result = member_held_run(opened, trees_address(X), n, d, context)
+        except:
+            result = PythonObject(None)
+        member_held_close(opened)
         _ = X  # the rows are read through the whole member call
-        if classifier and out.dtype != known:
-            py_setitem(record[5], PythonObject(slot), PythonObject(out.dtype))
-        return out.array
+        return result
     except:
         return PythonObject(None)
 
