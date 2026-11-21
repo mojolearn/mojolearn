@@ -132,6 +132,10 @@ from gbdt.gpu_data.grid_policy import (
     POLICY_ONE_BYTE,
 )
 from gbdt.host.gbdt_oracle import (
+    _scan_histograms,
+    _subtract_histograms,
+    _partition_stats_level,
+    GBDT_PARTITION_CHUNKS,
     _bootstrap_pass,
     _snap_gradients,
     _target_std_dev,
@@ -597,35 +601,19 @@ def _grow_non_symmetric_tree(
                     )
                 block_first_bin += total
             # `scan_histograms_kernel` over the built set (`:1485-1500`)
-            for j in range(len(compute)):
-                var slot = compute[j]
-                for z in range(2):
-                    for f in range(n_features):
-                        ref cf = layout.features[f]
-                        var folds = Int(cf.folds)
-                        if cf.one_hot_feature or folds <= 1:
-                            continue
-                        var base = (
-                            slot * 2 * hist_cells + z * hist_cells
-                            + Int(cf.first_fold_index)
-                        )
-                        var running = Float32(0.0)
-                        for i in range(folds):
-                            running = ftz(running + hist[base + i])
-                            hist[base + i] = running
+            _scan_histograms(hist, hist_cells, 2, compute, layout, n_features)
 
         # `substract_histograms_kernel` over the pairs (`:1507-1556`)
+        # (a pair's larger sibling is written by that pair alone, and no
+        # pair reads a slot another pair writes: the pairs are independent)
+        var pair_from = List[Int](capacity=len(plan.subtract_from))
+        var pair_what = List[Int](capacity=len(plan.subtract_from))
         for j in range(len(plan.subtract_from)):
-            var from_slot = Int(plan.subtract_from[j])
-            var what_slot = Int(plan.subtract_what[j])
-            for z in range(2):
-                var from_base = from_slot * 2 * hist_cells + z * hist_cells
-                var what_base = what_slot * 2 * hist_cells + z * hist_cells
-                for bf in range(hist_cells):
-                    var new_val = ftz(hist[from_base + bf] - hist[what_base + bf])
-                    if z == 0:
-                        new_val = max(new_val, Float32(0.0))
-                    hist[from_base + bf] = new_val
+            pair_from.append(Int(plan.subtract_from[j]))
+            pair_what.append(Int(plan.subtract_what[j]))
+        _subtract_histograms(
+            hist, hist_cells, pair_from, pair_what, len(pair_from)
+        )
 
         # `allUpdatedLeaves` (`:1562-1566`)
         var updated = plan.updated_ids()
@@ -641,9 +629,12 @@ def _grow_non_symmetric_tree(
                 visit.append(i)
         if len(visit) > 0:
             # the partition stats, every leaf (`:1617-1652`)
-            for i in range(len(leaves)):
-                part_stats[2 * i] = _partition_stat(stats, n_rows, 0, p_off[i], p_sz[i])
-                part_stats[2 * i + 1] = _partition_stat(stats, n_rows, 1, p_off[i], p_sz[i])
+            var level_stats = _partition_stats_level(
+                stats, n_rows, 2, GBDT_PARTITION_CHUNKS, p_off, p_sz,
+                len(leaves),
+            )
+            for i in range(2 * len(leaves)):
+                part_stats[i] = level_stats[i]
             if lossguide and len(visit) > 2:
                 raise Error(
                     "Lossguide scored " + String(len(visit))

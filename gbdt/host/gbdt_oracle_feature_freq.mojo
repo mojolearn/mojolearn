@@ -119,6 +119,8 @@ from gbdt.gpu_data.grid_policy import (
 )
 from checks.numerics import identical_div, identical_mul
 from gbdt.host.gbdt_oracle import (
+    _partition_stats_level,
+    GBDT_PARTITION_CHUNKS,
     _halving_fold,
     GBDT_FLOAT32_MAX,
     GBDT_ORACLE_HOST_SABOTAGE,
@@ -566,10 +568,9 @@ def _ff_level(
                     running = ftz(running + hist[base + i])
                     hist[base + i] = running
 
-    var part_stats = List[Float32](length=2 * n_live, fill=Float32(0.0))
-    for i in range(n_live):
-        part_stats[2 * i] = _partition_stat(stats, n_rows, 0, p_off[i], p_sz[i])
-        part_stats[2 * i + 1] = _partition_stat(stats, n_rows, 1, p_off[i], p_sz[i])
+    var part_stats = _partition_stats_level(
+        stats, n_rows, 2, GBDT_PARTITION_CHUNKS, p_off, p_sz, n_live
+    )
 
     var best_gain = -GBDT_FLOAT32_MAX
     var best_bin = GBDT_SENTINEL
