@@ -167,7 +167,7 @@ def _published_fixture(which: Int) raises:
     try:
         _ = member_call(member, MEMBER_OP_TRANSFORM if transformer else MEMBER_OP_PREDICT, stateless)
     except error:
-        refused = len(String(error)) > 0
+        refused = String(error).byte_length() > 0
     require(refused, "member ABI: published " + name + " refuses a call without a state")
     if which == 7:
         # the width of an output before any state: KMeans' words decide it
@@ -246,7 +246,7 @@ def _refuses(member: MemberRef, words: List[Float64], operation: Int, what: Stri
     try:
         _ = _ask(member, words, operation, 4, 1, 3)
     except error:
-        refused = len(String(error)) > 0
+        refused = String(error).byte_length() > 0
     require(refused, "member ABI: " + what + " refuses to size an operation it lacks")
 
 
@@ -704,7 +704,7 @@ def _sweep_b_fixture(which: Int) raises:
     try:
         _ = member_call(member, MEMBER_OP_PREDICT, stateless)
     except error:
-        refused = len(String(error)) > 0
+        refused = String(error).byte_length() > 0
     require(refused, "member ABI: " + name + " refuses a call without a state")
     if which == 0:
         # DART: kind word 0 classifier (codes int32, proba float64), 1 regressor
