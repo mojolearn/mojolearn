@@ -40,27 +40,14 @@ def connect_host(host_ridge_class, host_linear_class, helpers):
     # glue: connect the existing explicit Host* CPU ABI once at setup;
     # `helpers` is the CPU (decomposition, x_linear) binary pair
     # `_classical_host._host_fit_helpers` loads.
-    from types import BuiltinFunctionType
-
     entry, context = connect(host_ridge_class, host_linear_class)
     owner = object.__new__(host_ridge_class)
     object.__setattr__(owner, "numeric_mode", "identical")
     module = host_ridge_class._bind(owner, "_mojolearn_estimators")
+    # TOMBSTONE: the retained Python-callable CPU cells (`ols_predict`, `ols_fit`, `ridge_fit`, the `lm_*` helpers,
+    # `py2mojo_rows` and ten optional ones; no reader: the owner calls the published native table through the
+    # connection owner below) deleted 2026-11-20 by lane pilot-ridge-device; code recoverable at bc0418b70a.
     cpu = _native_table_cells(module, "estimators")
-    names = ("estimators_vendor", "estimators_numeric_mode", "ols_predict",
-             "ols_fit", "ridge_fit", "lm_col_sums", "lm_means_finish",
-             "lm_center", "lm_intercept", "lm_scale_rows", "py2mojo_rows")
-    optional = ("linear_gram_fit", "linear_gram_solve_default", "ridge_fit_resident",
-                "ridge_resident_default", "lm_classical_stats", "lm_col_sums_pair",
-                "ols_fit_resident", "ols_normal_eq_default", "ols_predict_wide",
-                "lm_ols_prep")
-    for name in names + optional:  # glue: retain verified compiled CPU symbols at connection
-        function = getattr(module, name, None)
-        if function is None and name in optional:
-            continue
-        if not isinstance(function, BuiltinFunctionType):
-            raise TypeError(f"explicit host model requires compiled {name}")
-        cpu[name] = function
     if module.estimators_vendor() != "cpu" or module.estimators_numeric_mode() != 1:
         raise RuntimeError("explicit host model requires the CPU identical binary")
     # The TSQR and x_linear helpers are the CPU binaries too: the device
@@ -228,25 +215,11 @@ def connect(ridge_class, linear_class=None):
         try:
             estimator = _backend.binding("_mojolearn_estimators", mode)
             linear = _backend.binding("_mojolearn_x_linear", mode)
+            # TOMBSTONE: the retained Python-callable cells of the estimators binding (`ridge_fit`, `ols_fit`,
+            # `ols_predict`, the `lm_*` helpers, `py2mojo_rows` and ten optional ones; no reader: fit, predict and
+            # score call the published native table through the connection owner, resolved once per estimator)
+            # deleted 2026-11-20 by lane pilot-ridge-device; code recoverable at bc0418b70a.
             entries = _native_table_cells(estimator, "estimators")
-            required = ("estimators_vendor", "estimators_numeric_mode", "lm_col_sums",
-                        "lm_means_finish", "lm_center", "lm_intercept", "ridge_fit", "ols_predict")
-            optional = ("linear_gram_fit", "linear_gram_solve_default", "ridge_fit_resident",
-                        "ridge_resident_default", "lm_classical_stats", "lm_col_sums_pair",
-                        "ols_fit_resident", "ols_normal_eq_default", "ols_predict_wide",
-                "lm_ols_prep")
-            if linear_class is not None:
-                required += ("ols_fit", "lm_scale_rows", "py2mojo_rows")
-            for name in required + optional:  # glue: retain raw native symbols at setup only
-                try:
-                    entry = getattr(estimator, name)
-                except (AttributeError, ImportError):
-                    if name in required:
-                        raise
-                    continue
-                if not isinstance(entry, BuiltinFunctionType):
-                    raise TypeError(f"classical owner requires compiled {name}")
-                entries[name] = entry
             weighted = _native_table_cells(linear, "x_linear")
             entries["_native_weighted_connection"] = weighted["_native_entry_connection"]
             if linear_class is not None:
