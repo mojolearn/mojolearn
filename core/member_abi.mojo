@@ -141,6 +141,16 @@ comptime MEMBER_CAN_STEPS = 2097152          # reads x.steps: each row of X is s
 comptime MEMBER_CAN_FORECAST = 4194304       # fits a series in y; predict without x writes dst.rows steps ahead
 comptime MEMBER_CAN_TEST_ROWS = 8388608      # its entry refuses non-finite X / y / weights itself: the caller makes no finite scan
 comptime MEMBER_CAN_SCOPE = 16777216         # reads call.scope / call.pin: keeps a pinned host X resident in the caller's scope
+#: KIND-EXACT and route-exact (answered with `call.state != 0`). Every FIT /
+#: PREDICT / TRANSFORM this kind publishes on this route splits its work over
+#: `call.devices[0 .. device_count)` exactly as the family's plain owner does
+#: under the same bound device plan (core/device_plan.mojo): same split, same
+#: order, same bits. With `device_count == 0` it runs on the one device of
+#: `route`, as every member does. A kind that ignores `call.devices` never
+#: sets it. A caller holding a device tuple of more than one device hands a
+#: member only a kind with this bit (else its plain owner call, as before);
+#: with one device the bit is not asked at all.
+comptime MEMBER_CAN_DEVICE_PLAN = 33554432   # splits over call.devices as its plain owner does under the bound plan
 
 #: `call.out_dtype` after MEMBER_OP_OUTPUTS: the member did not say.
 comptime MEMBER_DTYPE_UNSAID = -1
