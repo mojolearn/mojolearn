@@ -134,6 +134,7 @@ from gbdt.gpu_util.kernel.transform import (
 )
 from gbdt.methods.pointwise_optimization_subsets import GATHER_NO_MASK
 from gbdt.methods.dynamic_boosting_folds import TFold
+from gbdt.methods.tree_ctr_search import TreeCtrFit
 from gbdt.methods.ordered_fast_switches import ORD_ALL, ORD_DOC_ID_STORAGE
 from gbdt.trees_identical_switches import (
     T22,
@@ -401,6 +402,19 @@ def _dd2(n: Int) -> String:
     return String(n)
 
 
+def winner_feature_store_kernel(
+    winners_ids: MutPointer[UInt32, MutAnyOrigin],
+    at: Int32,
+    feature: UInt32,
+):
+    """One thread: word `at` of the winner records takes `feature` (the
+    level driver's rewrite of a won candidate slot to the persist column the
+    gate walk compares later levels against)."""
+    if Int(block_idx.x) != 0 or Int(thread_idx.x) != 0:
+        return
+    winners_ids.unsafe_store(Int(at), feature)
+
+
 def fit_oblivious_tree_structure_traced(
     ctx: DeviceContext,
     layout: CompressedIndexLayout,
@@ -416,6 +430,79 @@ def fit_oblivious_tree_structure_traced(
     mut trace: IdentityTrace,
     mut times: StageTimes,
     tree_tag: String,
+    l2_leaf_reg: Float32 = Float32(3.0),
+    score_std_dev: Float32 = Float32(0.0),
+    seed: UInt64 = 0,
+    one_hot: List[Bool] = List[Bool](),
+    bootstrapped_observations: Bool = False,
+    folds: List[TFold] = List[TFold](),
+    permutation: List[UInt32] = List[UInt32](),
+    permutation_id: Int = -1,
+    fold_part_off: List[DeviceBuffer[DType.uint32]] = List[
+        DeviceBuffer[DType.uint32]
+    ](),
+    obs_scratch: List[DeviceBuffer[DType.uint32]] = List[
+        DeviceBuffer[DType.uint32]
+    ](),
+    ord_wide: Bool = False,
+    std_scale_word: List[DeviceBuffer[DType.float32]] = List[
+        DeviceBuffer[DType.float32]
+    ](),
+    device_plan: DevicePlan = plan_for_single(),
+    enqueue_only: Bool = False,
+    gate: Optional[DeviceBuffer[DType.int32]] = None,
+) raises -> List[TBinarySplit]:
+    """The fold searcher without tree CTRs: `fit_oblivious_tree_structure_levels`
+    with no tree-CTR state, which is its blind level loop and one drain per
+    tree, launch for launch. The arguments are documented there."""
+    var no_tree_ctr = List[TreeCtrFit]()
+    var no_indexes = List[DeviceBuffer[DType.uint32]]()
+    return fit_oblivious_tree_structure_levels(
+        ctx, layout, n_rows, max_depth, cindex, weights^, weighted_target^,
+        sm_count, fixed_scale, score_function, pool, trace, times, tree_tag,
+        no_tree_ctr, 0, no_indexes,
+        l2_leaf_reg=l2_leaf_reg,
+        score_std_dev=score_std_dev,
+        seed=seed,
+        one_hot=one_hot,
+        bootstrapped_observations=bootstrapped_observations,
+        folds=folds,
+        permutation=permutation,
+        permutation_id=permutation_id,
+        fold_part_off=fold_part_off,
+        obs_scratch=obs_scratch,
+        ord_wide=ord_wide,
+        std_scale_word=std_scale_word,
+        device_plan=device_plan,
+        enqueue_only=enqueue_only,
+        gate=gate,
+    )
+
+
+def fit_oblivious_tree_structure_levels(
+    ctx: DeviceContext,
+    layout: CompressedIndexLayout,
+    n_rows: Int,
+    max_depth: Int,
+    mut cindex: DeviceBuffer[DType.uint32],
+    var weights: DeviceBuffer[DType.float32],
+    var weighted_target: DeviceBuffer[DType.float32],
+    sm_count: Int,
+    fixed_scale: Float32,
+    score_function: Int,
+    mut pool: List[PointwiseTreeWorkspace],
+    mut trace: IdentityTrace,
+    mut times: StageTimes,
+    tree_tag: String,
+    # TREE CTRS UNDER ORDERED (lane cat-ctr, 2026-11-21). Empty: the blind
+    # level loop and the one drain per tree below, nothing else. One entry
+    # (the fit's `TreeCtrFit`): the LEVEL DRIVER, see the docstring.
+    # `tree_p` is the index of `cindex` in `tree_cindexes`, which holds
+    # every permutation's compressed index (one entry when the permutations
+    # share one).
+    mut tree_ctr: List[TreeCtrFit],
+    tree_p: Int,
+    tree_cindexes: List[DeviceBuffer[DType.uint32]],
     l2_leaf_reg: Float32 = Float32(3.0),
     score_std_dev: Float32 = Float32(0.0),
     seed: UInt64 = 0,
@@ -458,6 +545,34 @@ def fit_oblivious_tree_structure_traced(
     `permutation_id` (fold arm only): a caller id for `permutation`, fixed
     for the span of `pool`; with it the fold doc ids are built once per id
     and kept in the pool. -1 builds them every call.
+
+    THE LEVEL DRIVER (`tree_ctr` holds the fit's `TreeCtrFit`; fold arm
+    only, never `enqueue_only`). Feature combinations are minted from the
+    splits already in the tree, so a level's candidates exist only after
+    the level before it is read. The same launches as the blind loop, level
+    for level (gather, histograms, scores, winner, partition), with these
+    differences and no others:
+
+      * `TreeCtrFit.begin_tree` clears the slots an earlier tree left on
+        this index before anything reads it;
+      * every level's histograms are built from scratch over a zeroed
+        buffer (no subtraction from the parent: a candidate slot holds
+        another column after each mint, and the host column builds the same
+        levels the same way, so the Float32 cells agree);
+      * the gate walk runs after each level over the levels so far and its
+        record is read home: ONE drain per level. A kept level goes through
+        `TreeCtrFit.take_winner` (a won candidate slot becomes the tree's
+        next persist column on every permutation's index; the winner record
+        is rewritten to that column so the walk's repeat test compares
+        columns, not slots) and `TreeCtrFit.mint_level` (the next level's
+        candidates on this index);
+      * the fold-order index is one buffer held in the `TreeCtrFit` and
+        gathered again after every slot write (the per-permutation cache
+        is neither read nor filled).
+
+    The level loop is serial by nature (a level's candidates depend on the
+    split before it); everything inside a level is a device launch over all
+    documents and all candidates.
 
     `ord_wide`, `fold_part_off` and `obs_scratch` (the Apple FAST Ordered
     bundle, `ORD_ALL`; read only when it is compiled in and the caller
@@ -529,6 +644,22 @@ def fit_oblivious_tree_structure_traced(
                 "permutation must be empty (identity) or have one entry"
                 " per row"
             )
+
+    var level_driver = len(tree_ctr) > 0
+    if level_driver:
+        if fold_count < 2 or enqueue_only:
+            raise Error(
+                "the tree-CTR level driver of the fold searcher needs folds"
+                " and a drained search"
+            )
+        if tree_p < 0 or tree_p >= len(tree_cindexes):
+            raise Error("tree CTR tree: the learn permutation has no index")
+        if len(tree_cindexes) != len(tree_ctr[0].dirty_persist):
+            raise Error("tree CTR tree: one index per permutation of the fit")
+        # the slots an earlier tree left on this index, before the
+        # fold-order gather below reads it
+        tree_ctr[0].begin_tree(ctx, tree_p, cindex)
+        tree_ctr[0].learn_changed = False
 
     var fold_order = False
     comptime if ORD_ALL:
@@ -738,6 +869,28 @@ def fit_oblivious_tree_structure_traced(
     var d_fold_cindex: DeviceBuffer[DType.uint32]
     if sym_pooled_dummies:
         d_fold_cindex = pool[0].d_best_ids.copy()
+    elif level_driver and fold_order:
+        # the level driver's own fold-order index: the slots change every
+        # level, so it is one buffer for the fit, gathered here and again
+        # after every slot write; the per-permutation cache stays unused
+        var n_cols_lv = _cindex_columns(layout)
+        if len(tree_ctr[0].d_fold_index) == 0:
+            tree_ctr[0].d_fold_index.append(
+                ctx.enqueue_create_buffer[DType.uint32](
+                    max(n_cols_lv * doc_count, 1)
+                )
+            )
+        d_fold_cindex = tree_ctr[0].d_fold_index[0].copy()
+        ctx.enqueue_function[fold_cindex_gather_kernel](
+            cindex.unsafe_ptr(),
+            d_doc_ids.unsafe_ptr(),
+            d_fold_cindex.unsafe_ptr(),
+            Int32(n_rows),
+            Int32(doc_count),
+            Int32(n_cols_lv),
+            grid_dim=max((n_cols_lv * doc_count + 255) // 256, 1),
+            block_dim=256,
+        )
     elif fold_order and cached >= 0 and cached < len(pool[0].fold_cindex):
         d_fold_cindex = pool[0].fold_cindex[cached].copy()
     elif fold_order:
@@ -849,6 +1002,14 @@ def fit_oblivious_tree_structure_traced(
                 GATHER_NO_MASK,
             )
             docs = d_observations.copy()
+        if level_driver and depth > 0:
+            # every level from scratch: the parent's cells of a slot are
+            # another column's after a mint. `reset_for_tree` is the zero
+            # fill a from-scratch build needs (its writeback adds onto the
+            # buffer) and puts the plan back at "build from scratch", which
+            # `plan` then takes at this depth with every partition. The
+            # host column zeroes and rebuilds the same levels.
+            calcer.reset_for_tree(ctx)
         var dither_ids = Optional[MutPointer[UInt32, MutAnyOrigin]]()
         comptime if ORD_DOC_ID_STORAGE:
             if fold_order:dither_ids = d_doc_ids.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
@@ -1103,6 +1264,85 @@ def fit_oblivious_tree_structure_traced(
                 ctx, tree_tag + ".depth" + _dd2(depth) + ".indices",
                 subsets.indices, count=min(subsets.doc_count, len(subsets.indices)),
             )
+
+        if level_driver:
+            # ---- THE LEVEL DRIVER: this level's gates, read home -------
+            # The walk over levels 0..depth (earlier winners already name
+            # their persist columns), then the one drain of the level. The
+            # partition above already ran on the winner; when the level is
+            # not kept the tree ends here and nothing reads the subsets
+            # again (the next tree resets them), as in the blind loop.
+            times.begin(ctx)
+            tree_op_gate_walk(
+                ctx, pool[0].d_gate_open, pool[0].d_winners_ids,
+                pool[0].d_feat_table, depth + 1, pool[0].d_structure,
+            )
+            ctx.enqueue_copy(
+                dst_buf=pool[0].h_structure, src_buf=pool[0].d_structure
+            )
+            ctx.synchronize()
+            times.end(ctx, "pw.drain")
+            var hl = pool[0].h_structure.unsafe_ptr()
+            var level_status = Int(hl.unsafe_load(TREE_STRUCT_STATUS))
+            if level_status > 0:
+                raise Error(
+                    "best split is undefined at depth "
+                    + String(level_status - 1)
+                    + ": every candidate scored non-finite. Theirs raises the"
+                    " same way (`:122`)."
+                )
+            if Int(hl.unsafe_load(TREE_STRUCT_DEPTH)) < depth + 1:
+                # `HasSplit`: the level repeats a split of the tree
+                break
+            var level_at = TREE_STRUCT_SPLITS + TREE_STRUCT_SPLIT_WORDS * depth
+            var raw_feature = hl.unsafe_load(level_at)
+            structure.append(
+                TBinarySplit(
+                    raw_feature,
+                    hl.unsafe_load(level_at + 1),
+                    hl.unsafe_load(level_at + 2),
+                )
+            )
+            if not tree_ctr[0].take_winner(ctx, tree_p, tree_cindexes, structure):
+                # the winner sits on a slot that holds no column: no split
+                _ = structure.pop()
+                break
+            var kept_feature = structure[depth].feature_id
+            if kept_feature != raw_feature:
+                # a won candidate slot: later levels' repeat test compares
+                # against the persist column it became
+                ctx.enqueue_function[winner_feature_store_kernel](  # small-launch(one thread, one word): the level's winner record
+                    pool[0].d_winners_ids.unsafe_ptr(),
+                    Int32(2 * depth),
+                    UInt32(Int(kept_feature)),
+                    grid_dim=(1, 1, 1),
+                    block_dim=(1, 1, 1),
+                )
+            if depth + 1 < max_depth:
+                tree_ctr[0].mint_level(ctx, tree_p, cindex)
+                if fold_order:
+                    # the slots just written, into the fold-order index:
+                    # one launch over every column
+                    var n_cols_re = _cindex_columns(layout)
+                    ctx.enqueue_function[fold_cindex_gather_kernel](
+                        cindex.unsafe_ptr(),
+                        d_doc_ids.unsafe_ptr(),
+                        d_fold_cindex.unsafe_ptr(),
+                        Int32(n_rows),
+                        Int32(doc_count),
+                        Int32(n_cols_re),
+                        grid_dim=max((n_cols_re * doc_count + 255) // 256, 1),
+                        block_dim=256,
+                    )
+            tree_ctr[0].learn_changed = False
+
+    if level_driver:
+        # every level was drained and gated above; the queue may still hold
+        # the last winner's slot writes, which read buffers the fit owns
+        tree_ctr[0].end_tree()
+        _ = d_doc_ids^
+        _ = d_observations^
+        return structure^
 
     # ---- THE ONE DRAIN OF THE TREE (DEVIATION 207) -------------------
     # Their per-level `ReadOptimalSplit`, folded into one: the winner
