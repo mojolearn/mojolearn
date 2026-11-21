@@ -7,6 +7,7 @@ import os
 from ._optional_numpy import require_numpy
 np = require_numpy('_x_sequence_model')
 from . import _backend
+from ._mode import CheckMixin as _CheckMixin
 
 # Description codes (autograd/model.mojo LAYER_*, LOSS_*, ...).
 _LAYER = {"linear": 1, "relu": 2, "sigmoid": 3, "tanh": 4, "softmax": 5,
@@ -25,7 +26,7 @@ _CLASS_DTYPE = {(0, 1): "u1", (0, 2): "u2", (0, 4): "u4", (0, 8): "u8",
                 (2, 2): "f2", (2, 4): "f4", (2, 8): "f8", (3, 1): "?"}
 
 
-class Sequential:
+class Sequential(_CheckMixin):
     """A feed-forward model built layer by layer and trained on the GPU.
 
     Add layers with :meth:`add` (or the shortcuts :meth:`linear`,
@@ -507,6 +508,50 @@ class Sequential:
     # ------------------------------------------------------------ prediction
     def _forward(self, X, transform, width=None):
         return _SEQUENTIAL_ENTRY(self, "forward", (X, transform, width), _SEQUENTIAL_CONTEXT)
+
+    def vendor_used(self):
+        """The accelerator API of the compiled binary this model runs on.
+
+        Returns
+        -------
+        str
+            ``'cpu'`` for a ``device="cpu"`` model, otherwise this
+            installation's vendor (``'metal'``, ``'cuda'``, ``'hip'`` or
+            ``'cpu'``).
+        """
+        return _SEQUENTIAL_ENTRY(self, "vendor_used", (), _SEQUENTIAL_CONTEXT)
+
+    # `model.check(X)` (`_mode.CheckMixin`) answers X with this fitted model
+    # on the GPU and on the CPU in one process. The two hooks below are what
+    # the check needs from a class without `get_params` (`_check_both.on_device`);
+    # only the check calls them, never fit or predict.
+    _mojolearn_device = True
+
+    def _mojolearn_device_twin(self, device):
+        # glue (check only): the same unfitted model on `device`: the
+        # constructor's arguments, then the layer list and the compile
+        # options as the constructor's caller built them. The lists are the
+        # twin's own, so adding a layer to one model never reaches the other.
+        fields = object.__getattribute__(self, "__dict__")
+        twin = type(self)(fields.get("numeric_mode"), input_shape=fields.get("input_shape"), device=device)
+        target = object.__getattribute__(twin, "__dict__")
+        for name in ("_layers", "_options"):  # glue: two description fields, not data
+            value = fields.get(name)
+            target[name] = type(value)(value) if type(value) in (list, dict) else value
+        return twin
+
+    def _mojolearn_device_state(self, twin, device):
+        # glue (check only): hand the fitted state to the twin in memory. It
+        # is every field but the three constructor arguments and the two
+        # description fields the twin already holds: host arrays and scalars
+        # (the parameters, the fit metadata, the optimizer state), shared,
+        # not copied. The device route is not a field: the twin resolves its
+        # own at its first operation.
+        fields = object.__getattribute__(self, "__dict__")
+        target = object.__getattribute__(twin, "__dict__")
+        for name, value in fields.items():  # glue: over the model's fields, not data
+            if name not in ("numeric_mode", "device", "input_shape", "_layers", "_options"):
+                target[name] = value
 
     def predict(self, X):
         """Predict with the fitted model.

@@ -11,6 +11,8 @@ from sequence.neural_model_dispatch import PROGRAM_HOST_RUN, PROGRAM_IMPORT, PRO
 from sequence.neural_model_dispatch import CNN_FIT, CNN_PREDICT, CNN_OPEN
 from sequence.neural_model_dispatch import MODEL_IMPORT_PARAMS
 from sequence.model_file_dispatch import model_file_operation, model_file_execute, model_import_execute
+from sequence.sequence_ops_dispatch import sequence_ops_operation
+from sequence.sequence_ops_device_dispatch import sequence_ops_device_execute
 from sequence.cnn_classifier_program import cnn_fit_program, cnn_open_program, cnn_predict_program
 from autograd.cnn_block_op import CNN_FUSED_OPS
 from x_cnn.device import cnn_ctx
@@ -52,6 +54,12 @@ def model_native_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: In
         if op == MODEL_IMPORT_PARAMS:
             var import_ex = DeviceExec()
             var value = model_import_execute(import_ex, aa, na, pp, np, ff, nf)
+            MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[0] = value
+            return 0
+        # lane dw-autograd-seq: the sequence layer and resident-tensor
+        # operations (sequence/sequence_ops_device_dispatch.mojo).
+        if sequence_ops_operation(op):
+            var value = sequence_ops_device_execute(op, aa, na, pp, np, ff, nf)
             MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[0] = value
             return 0
         if op == PROGRAM_HOST_RUN:

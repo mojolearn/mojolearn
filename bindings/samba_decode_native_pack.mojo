@@ -26,9 +26,9 @@ from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type
 from bindings.generation_buffers_door import generation_initialize_binding, generation_array
 from bindings.causal_lm_public_door import _mutable, _writeback
-from bindings.samba_state_native_door import samba_fields, samba_entries, samba_entry_key
+from bindings.samba_state_native_door import samba_fields
 from bindings.samba_inference_native_door import (
-    _samba_inference_ids, samba_forward, samba_program_arm, samba_program_words, samba_program_open_owner,
+    _samba_inference_ids, samba_forward, samba_program_words, samba_program_open_owner,
     samba_program_call, samba_state_words, samba_set_cursors,
 )
 from core.samba_entry_table_programs import (

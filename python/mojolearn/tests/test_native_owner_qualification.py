@@ -59,8 +59,7 @@ def test_resident_disabled_io_refuses_natively_without_modifying_buffers():
     assert (params.tobytes(), gradients.tobytes()) == before
 
 
-@pytest.mark.parametrize("entry", ["seq_tensor_upload", "seq_tensor_copy"])
-def test_failed_native_sequence_transfer_releases_allocated_handle(monkeypatch, entry):
+def test_failed_native_sequence_transfer_releases_allocated_handle(monkeypatch):
     from mojolearn._x_sequence_device import SequenceDeviceTensor, _SEQ_CONTEXT, to_device
     source = np.arange(15, dtype="f4").reshape(5, 3)
     owner = to_device(source, numeric_mode="identical")
@@ -71,13 +70,14 @@ def test_failed_native_sequence_transfer_releases_allocated_handle(monkeypatch, 
     # handle is distinct from the destination allocation under test.
     probe = binding.seq_tensor_alloc(source.size, 0)
     binding.seq_tensor_free(probe)
-    entries = _SEQ_CONTEXT["sequence_bindings"]["identical"]
     with monkeypatch.context() as patch:
-        # Native arity failure before input access, not a Python callback.
-        patch.setitem(entries, entry, len)
-        error = (_refused_native(to_device, source, numeric_mode="identical")
-                 if entry == "seq_tensor_upload" else _refused_native(owner.copy))
-        assert "len() takes exactly one argument" in str(error)
+        # A native refusal after the destination was allocated (the source
+        # handle is not open), not a Python callback. The tensor operations
+        # run on the image's native descriptor, so no entry is replaced; the
+        # upload has no refusal that can be provoked after its allocation.
+        patch.setattr(owner, "h", 1 << 40)
+        error = _refused_native(owner.copy)
+        assert "is not open" in str(error)
     output = np.empty(source.size, dtype="f4")
     with pytest.raises(Exception, match="not open"):
         binding.seq_tensor_download(probe, output.ctypes.data, source.size)

@@ -33,8 +33,39 @@ THE ABI (`GBDT_ENTRY_ABI`, one `abi("C")` entry per gbdt image, published in
   XG_OUTCOME_FREE   addrs [outcome].
   XG_MODEL_DIM      addrs [text]; params [text bytes]; returns the model's
                     approx dimension.
+  XG_PREDICT        addrs [text, x, dst]; params [text bytes, n_rows]: raw
+                    approxes of a one-dimensional model, x column-major
+                    float32, dst float32 n_rows. Returns the rows written.
+  XG_PREDICT_MULTI  addrs [text, x, dst]; params [text bytes, n_rows, mode]
+                    (mode 0 RAW, 1 SOFTMAX, 2 SIGMOID), dst float32 row-major.
+                    Returns the width written per row.
+  XG_BINARY         addrs [raw, dst]; params [n, probabilities]: the
+                    adapters' binary transforms of n float32 margins, the
+                    float32 pair [1 - p, p] (probabilities 1, dst 2 n) or the
+                    int32 class code (0, dst n). Returns the values written.
+  XG_SIGMOID_PAIR   addrs [raw, dst]; params [n]: float64 raw scores to the
+                    float64 pair [1 - p, p]. Returns n.
+  XG_RESIDENT_PREPARE  addrs [text]; params [text bytes]: parse, pack and
+                    upload the model once; returns the handle of the image's
+                    registry entry (released by the image's
+                    `gbdt_resident_release`). Images with XG_CAP_RESIDENT only.
+  XG_RESIDENT_PREDICT  addrs [x, dst]; params [handle, n_rows, mode,
+                    row_major] (modes 0..2 as XG_PREDICT_MULTI, 3 the float64
+                    sigmoid pair, 4..6 int64 class codes). Returns the width
+                    written per row. Images with XG_CAP_RESIDENT only.
+  XG_ORDERED_FIT    addrs [x, y, weights, permutation]; ints [n_rows,
+                    n_features, n_weights, n_permutation, n_estimators,
+                    max_depth, border_count, 0, 0]; floats [7] learning_rate,
+                    [8] l2_leaf_reg. The OrderedRMSE fit; returns an outcome
+                    handle whose text is the model (no curves).
+  XG_FEATURE_FREQ_FIT  addrs [x, y, weights, sources]; ints [n_rows,
+                    n_features, n_weights, n_sources, 0, 0, random_seed];
+                    floats [4] learning_rate, [5] l2_leaf_reg. The two-level
+                    FeatureFreq fit; returns an outcome handle likewise.
 
-The caller owns every buffer until the synchronous call returns.
+An image method that computes releases the GIL around its work itself (the
+caller holds it); the caller owns every buffer until the synchronous call
+returns.
 """
 from std.memory import alloc, unsafe_memcpy
 
@@ -48,9 +79,19 @@ comptime XG_OUTCOME_SIZES = 4
 comptime XG_OUTCOME_COPY = 5
 comptime XG_OUTCOME_FREE = 6
 comptime XG_MODEL_DIM = 7
-comptime XG_OP_COUNT = 8
+comptime XG_PREDICT = 8
+comptime XG_PREDICT_MULTI = 9
+comptime XG_BINARY = 10
+comptime XG_SIGMOID_PAIR = 11
+comptime XG_RESIDENT_PREPARE = 12
+comptime XG_RESIDENT_PREDICT = 13
+comptime XG_ORDERED_FIT = 14
+comptime XG_FEATURE_FREQ_FIT = 15
+comptime XG_OP_COUNT = 16
 
 comptime XG_CAP_ROW_MAJOR = 1
+#: the image holds device-resident parsed models (XG_RESIDENT_*)
+comptime XG_CAP_RESIDENT = 2
 
 #: flag bits of `GbdtFitArgs.bad`
 comptime GBDT_ARG_NO_INT = 1
