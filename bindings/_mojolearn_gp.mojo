@@ -86,6 +86,7 @@ from bindings.native_owner_registry_unpack import register_native_owner_type
 from bindings.native_owner_registry_run import native_owner_no_pins
 from core.gp_native_provider import GPProviderAPI
 from core.gp_entry_table import GPEntryKey, GP_COLUMN_DEVICE, gp_entry_vendor, gp_table_publish
+from core.gp_member import gp_member_publish
 from bindings.py_balanced import py_setattr
 from core.gp_native_device import GPDeviceKernels
 from core.shared_slot import SharedSlot
@@ -1540,6 +1541,11 @@ def build__mojolearn_gp() -> PythonObject:
         var published = m.finalize()
         register_native_owner_type[GpResidentLease](published, native_owner_no_pins)
         _publish_gp_table(published)
+        # The family's member entry (core/gp_member.mojo). A build with no GPU
+        # vendor ("none") publishes nothing.
+        var member_vendor = gp_entry_vendor(COMPILED_VENDOR)
+        if member_vendor > 0:
+            gp_member_publish(Int(GLOBAL_NUMERIC_MODE), member_vendor, Int(GP_DEVICE_NATIVE_API.get_or_create_ptr()))
         return published
     except e:
         abort(String("failed to create _mojolearn_gp: ", e))

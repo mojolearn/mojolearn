@@ -51,6 +51,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
 from core.device_route import device_vendor_code
 from core.density_member import density_member_publish
+from core.hierarchy_member import hierarchy_member_publish
 
 from glm.linear_route_controls import RIDGE_FAST_RESIDENT
 
@@ -1318,6 +1319,9 @@ def build__mojolearn_estimators() -> PythonObject:
         _publish_estimators_qn_table()
         # DBSCAN's member entry (core/density_member.mojo) beside its kernel table.
         density_member_publish(Int(GLOBAL_NUMERIC_MODE), device_vendor_code(String(COMPILED_VENDOR)), Int(DBSCAN_DEVICE_API.get_or_create_ptr()[].entries.unsafe_ptr()))
+        # AgglomerativeClustering's member entry (core/hierarchy_member.mojo): its predict runs on
+        # this image's labeled-reference queries.
+        hierarchy_member_publish(Int(GLOBAL_NUMERIC_MODE), device_vendor_code(String(COMPILED_VENDOR)), Int(DBSCAN_DEVICE_API.get_or_create_ptr()[].entries.unsafe_ptr()))
         # The ridge multi table (core/linear_entry_table_multi.mojo).
         publish_ridge_multi()
         _publish_decomp_pca_ops(published_module)

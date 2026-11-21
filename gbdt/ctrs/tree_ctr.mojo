@@ -61,6 +61,8 @@ from core.host_predict_threads import (
 )
 from gbdt.ctrs.ctr import CTR_BORDERS, CTR_FEATURE_FREQ, TCtrConfig
 from gbdt.ctrs.ctr_binarization import uniform_borders_from_range
+from checks.numerics import ftz
+from gbdt.grid_creator.binarization import BORDER_TYPE_MEDIAN, select_borders
 
 #: what a search-layout column contributes to the tree's tensor when a
 #: split lands on it
@@ -73,6 +75,12 @@ comptime TreeU32Ptr = MutPointer[UInt32, MutUntrackedOrigin]
 comptime TreeU64Ptr = MutPointer[UInt64, MutUntrackedOrigin]
 comptime TreeF32Ptr = MutPointer[Float32, MutUntrackedOrigin]
 comptime TreeU8Ptr = MutPointer[UInt8, MutUntrackedOrigin]
+#: the pointer the Median order-statistics statement reads and writes: a
+#: device kernel's argument type, and a host list's address in the checks
+comptime TreeF32Any = MutPointer[Float32, MutAnyOrigin]
+#: words ahead of the per-border pairs in a Median words record: the
+#: column's minimum and maximum
+comptime TREE_MEDIAN_HEAD = 2
 
 
 @fieldwise_init
@@ -510,7 +518,8 @@ def tree_ctr_level_host(
 def tree_ctr_uniform_borders_host(
     values: TreeF32Ptr, n_rows: Int, border_count: Int
 ) -> List[Float32]:
-    """A tree-CTR column's grid: Uniform over the column's extremes
+    """A Borders tree-CTR column's grid (the FeatureFreq ones take
+    `tree_ctr_median_borders_host`): Uniform over the column's extremes
     (`uniform_borders_from_range`, the arithmetic the device build feeds
     with its reduced extremes), a constant column taking the single 0.5."""
     var lo = values[0]
@@ -522,6 +531,133 @@ def tree_ctr_uniform_borders_host(
         if v > hi:
             hi = v
     var borders = uniform_borders_from_range(lo, hi, border_count)
+    if len(borders) == 0:
+        borders.append(Float32(0.5))
+    return borders^
+
+
+# ===========================================================================
+# THE MEDIAN GRID (the FeatureFreq tree CTRs; the Borders ones are Uniform)
+# ===========================================================================
+#
+# The reference binarizes a FeatureFreq tree CTR with Median borders
+# (`gbdt/ctrs/ctr_binarization.mojo`). `select_borders(values, count,
+# BORDER_TYPE_MEDIAN)` is the statement (`GenerateMedianBorders` +
+# `RegularBorder` + `SetQuantization`), and it reads only ORDER STATISTICS of
+# the column: the minimum, the maximum and, for border i, the value at
+# quantile rank `(i + 1) * n // (count + 1)` and the value just below that
+# value's first occurrence. Order statistics do not depend on how the column
+# was sorted or reduced, so the device takes them from one exact radix sort
+# of the column and a gather of `2 + 2 * count` words
+# (`tree_ctr_device.launch_tree_median_words`), the host column from
+# `select_borders` itself, and both arrive at the same borders on every
+# vendor. `tree_ctr_median_from_words` is the arithmetic over the gathered
+# words; `gbdt/checks/tree_ctr_check.mojo` holds it to `select_borders`.
+
+
+def tree_ctr_median_words(border_count: Int) -> Int:
+    """Words in one column's Median record: minimum, maximum, then per
+    border the value at its rank and the value below that value's first
+    occurrence."""
+    return TREE_MEDIAN_HEAD + 2 * max(border_count, 0)
+
+
+@always_inline
+def tree_ctr_median_pair_into(
+    sorted: TreeF32Any,
+    n: Int,
+    border_count: Int,
+    i: Int,
+    words: TreeF32Any,
+    base: Int,
+):
+    """Border `i`'s pair of the record at `words[base:]`, from the column
+    sorted ascending (`n` >= 1 values, no NaN). The ONE statement of the
+    gather: the device kernel runs it one thread per border, the checks run
+    it on the host. Comparisons and integer arithmetic only."""
+    var rank = (i + 1) * n // (border_count + 1)
+    if rank > n - 1:
+        rank = n - 1
+    var at_rank = sorted.unsafe_load(rank)
+    # `LowerBound`: the first index holding a value >= at_rank
+    var lo = 0
+    var hi = n
+    while lo < hi:
+        var mid = lo + (hi - lo) // 2
+        if sorted.unsafe_load(mid) < at_rank:
+            lo = mid + 1
+        else:
+            hi = mid
+    var below = at_rank
+    if lo > 0:
+        below = sorted.unsafe_load(lo - 1)
+    words.unsafe_store(base + TREE_MEDIAN_HEAD + 2 * i, at_rank)
+    words.unsafe_store(base + TREE_MEDIAN_HEAD + 2 * i + 1, below)
+
+
+def tree_ctr_median_from_words(
+    words: List[Float32], base: Int, border_count: Int
+) raises -> List[Float32]:
+    """The Median grid of one column from its record at `words[base:]`
+    (`tree_ctr_median_words(border_count)` words): `select_borders(column,
+    border_count, BORDER_TYPE_MEDIAN)`, a constant column taking the single
+    0.5 as the Uniform grid does. Every word is flushed as `select_borders`
+    flushes its input; flushing is monotone, so the flushed words are the
+    order statistics of the flushed column."""
+    if border_count < 0 or base < 0 or (
+        base + tree_ctr_median_words(border_count) > len(words)
+    ):
+        raise Error("tree CTR Median grid: the words record is short")
+    var raw = List[Float32]()
+    var lowest = ftz(words[base])
+    var highest = ftz(words[base + 1])
+    if lowest != highest:
+        # driver-loop: over the borders of one grid
+        for i in range(border_count):  # small-loop(border_count: borders of one CTR grid, at most 255): one grid's arithmetic
+            var at_rank = ftz(words[base + TREE_MEDIAN_HEAD + 2 * i])
+            if at_rank == lowest:
+                continue
+            # `RegularBorder`: the value is present and is not the first, so
+            # neither edge arm is reachable
+            var below = ftz(words[base + TREE_MEDIAN_HEAD + 2 * i + 1])
+            var border = ftz(ftz(at_rank + below) * Float32(0.5))
+            if border == at_rank:
+                border = below
+            raw.append(border)
+    # `SetQuantization`: -0.0 -> +0.0, ascending, duplicates merged. The
+    # ranks ascend, so `raw` already does; the insertion pass keeps that an
+    # outcome and not an assumption.
+    for i in range(len(raw)):  # small-loop(raw: borders of one CTR grid, at most 255): one grid's arithmetic
+        if raw[i] == Float32(0.0):
+            raw[i] = Float32(0.0)
+    for i in range(1, len(raw)):  # small-loop(raw: borders of one CTR grid, at most 255): one grid's arithmetic
+        var v = raw[i]
+        var j = i - 1
+        while j >= 0 and raw[j] > v:
+            raw[j + 1] = raw[j]
+            j -= 1
+        raw[j + 1] = v
+    var borders = List[Float32]()
+    for i in range(len(raw)):  # small-loop(raw: borders of one CTR grid, at most 255): one grid's arithmetic
+        if i == 0 or raw[i] != raw[i - 1]:
+            borders.append(raw[i])
+    if len(borders) == 0:
+        borders.append(Float32(0.5))
+    return borders^
+
+
+def tree_ctr_median_borders_host(
+    values: TreeF32Ptr, n_rows: Int, border_count: Int
+) raises -> List[Float32]:
+    """A FeatureFreq tree-CTR column's grid on the host column: the
+    reference's Median borders (`select_borders`), a constant column taking
+    the single 0.5. One sort of the column, serial by nature inside one
+    column; the caller runs the candidates of a level as the parallel units
+    (`tree_ctr_level_host`'s plan)."""
+    var column = List[Float32](capacity=max(n_rows, 1))
+    for r in range(n_rows):
+        column.append(values[r])
+    var borders = select_borders(column^, border_count, BORDER_TYPE_MEDIAN)
     if len(borders) == 0:
         borders.append(Float32(0.5))
     return borders^

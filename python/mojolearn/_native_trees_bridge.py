@@ -85,6 +85,9 @@ _NATIVE_KEYED = {
     "_mojolearn_gbdt": ("gbdt_numeric_mode", "gbdt_vendor", "gbdt_native_key"),
     "_mojolearn_rf": ("rf_numeric_mode", "rf_vendor", "rf_native_key"),
     "_mojolearn_trees": ("trees_numeric_mode", "trees_vendor", "trees_native_key"),
+    # IsolationForest's native entry (core/iforest_entry.mojo), published by
+    # the svm image of the tier (`_mojolearn_svm_host` on the CPU column).
+    "_mojolearn_svm": ("svm_numeric_mode", "svm_vendor", "svm_native_key"),
 }
 
 

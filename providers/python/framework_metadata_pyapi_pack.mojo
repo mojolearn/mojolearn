@@ -3,14 +3,19 @@
 # Framework package loading remains import-time setup. Public helpers enter this
 # common native boundary without Python path/configuration callbacks.
 from std.python import Python, PythonObject
-from std.python._cpython import PyObjectPtr
+from std.python._cpython import PyObjectPtr, GILReleased
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.native_json_door import native_path_exists, native_json_parse
-from bindings.byte_checkpoint_io_unpack import ByteCheckpointIOError
-from bindings.byte_checkpoint_io_pack import byte_checkpoint_io
+from bindings.byte_checkpoint_io_unpack import ByteCheckpointIOError, byte_io_file_error
+from bindings.byte_checkpoint_native_run import ByteCheckpointWriteFailure, byte_file_read
+from bindings.py_cpython_table import cpython_table
 from bindings.native_buffer_owner_pack import native_storage_allocate
 from bindings.optimizer_public_words_unpack import stash_python_error
+
+
+#: The bound of the adapter manifest read (adapters.json is a few kilobytes).
+comptime FRAMEWORK_MANIFEST_LIMIT = 1048576
 
 
 def _framework_series(value: PythonObject, string_type: PythonObject) raises -> PythonObject:
@@ -116,17 +121,31 @@ def framework_metadata_operation(operation: PythonObject, args: PythonObject,
         if py_contains(cache, "manifest"):
             return cache["manifest"]
         var path = _directory(context) + PythonObject("/adapters.json")
-        var stream = byte_checkpoint_io(io_error, bi.open, [path, PythonObject("rb")])
-        var raw = PythonObject(None)
+        # The typed bounded read (bindings/byte_checkpoint_native_run.mojo
+        # `byte_file_read`), the GIL released; once per process (the cache
+        # above). REMOVED: the Python `open` / `read` / `close` calls. A
+        # manifest is a few kilobytes; the bound keeps the read one range.
+        var target = String(py=path)
+        var file_failure = ByteCheckpointWriteFailure()
+        var data = List[UInt8](length=FRAMEWORK_MANIFEST_LIMIT + 1, fill=UInt8(0))
+        var got = 0
+        var py = Python()
         try:
-            raw = byte_checkpoint_io(io_error, stream.read, List[PythonObject]())
+            with GILReleased(py):
+                got = byte_file_read(target, Int(data.unsafe_ptr()), FRAMEWORK_MANIFEST_LIMIT + 1, file_failure)
         except error:
-            try:
-                _ = byte_checkpoint_io(io_error, stream.close, List[PythonObject]())
-            except:
-                pass
+            if file_failure.number != 0:
+                byte_io_file_error(io_error, bi.OSError, file_failure.number, file_failure.operation,
+                                   file_failure.path, file_failure.second)
             raise error
-        _ = byte_checkpoint_io(io_error, stream.close, List[PythonObject]())
+        if got > FRAMEWORK_MANIFEST_LIMIT:
+            raise Error("ImportError: mojolearn: " + target + " exceeds the adapter manifest bound; reinstall mojolearn")
+        var raw_ptr = cpython_table()[].PyBytes_FromStringAndSize(Int(data.unsafe_ptr()), got)
+        _ = len(data)  # the bytes read stay alive through the copy above
+        if not raw_ptr:
+            var problem = stash_python_error()
+            raise problem^
+        var raw = PythonObject(from_owned=raw_ptr)
         var doc = native_json_parse(raw)
         if (py_type(doc) is not bi.dict or not Bool(py=py_get(doc, "schema") == context["schema"])
                 or not Bool(py=py_get(doc, "abi") == context["abi"])):

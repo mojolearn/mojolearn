@@ -53,6 +53,7 @@ from std.math import sqrt
 from max.gpu.host import DeviceContext
 
 from gbdt.models.ctr_value_table import TCtrValueTable
+from gbdt.models.combination_map import TCombinationCtrs
 from gbdt.models.tensor_ctr_value_table import TTensorCtrRegistry
 from gbdt.models.oblivious_model import (
     BIN_SPLIT_TAKE_GREATER,
@@ -215,7 +216,8 @@ def check_catboost_apply(ctx: DeviceContext) raises:
         model^, fold_counts^, one_hot^, borders^, nan_treatment^,
         List[Float64](),
         List[Float64](), -1, False, 0,
-        List[TCtrValueTable](), TTensorCtrRegistry(len(fold_counts))
+        List[TCtrValueTable](), TTensorCtrRegistry(len(fold_counts)),
+        TCombinationCtrs(),
     )
     var ours = predict_floats(ctx, tm, x_colmajor, rows)
     if len(ours) != rows:

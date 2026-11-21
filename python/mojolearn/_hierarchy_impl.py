@@ -212,6 +212,9 @@ class AgglomerativeClustering(ParamsMixin):
     #: This class takes `device=`: the check builds its other side as the same
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
+    #: Member ABI family 29 (Hierarchy), kind 0 (core/hierarchy_member.mojo):
+    #: the prediction_data=True single-linkage euclidean form on the solver route.
+    _mojolearn_member = (29, 0)
 
     def _mojolearn_device_state(self, twin, device):
         # The fitted attributes go to the twin as they are. The resident

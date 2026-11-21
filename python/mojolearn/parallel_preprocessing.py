@@ -29,9 +29,11 @@ from ._native_parallel_shard import _native_parallel_shard
 # the plain native one in a worker process.
 # The shard worker fits and transforms each block through the typed scaler
 # cores (lane scaler-typed-core): `standard_fit` is no longer registered.
-_shard.register(standard_class=_prep.StandardScaler, standard_call=_prep._STANDARD_CALL,
+# The fitted test of `transform_scaler` reads the instance fields in the door:
+# the scalers' call entries are no longer registered.
+_shard.register(standard_class=_prep.StandardScaler,
                 standard_context=_prep._STANDARD_CONTEXT,
-                minmax_class=_prep.MinMaxScaler, minmax_call=_prep._MINMAX_CALL,
+                minmax_class=_prep.MinMaxScaler,
                 minmax_context=_prep._MINMAX_CONTEXT)
 
 def fit_scaler(estimator, X, *, devices=(0,), columns_per_shard=16, sample_weight=None):

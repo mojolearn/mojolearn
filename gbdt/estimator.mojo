@@ -77,6 +77,7 @@ from gbdt.methods.doc_parallel_boosting import (
     fit_two_level_feature_freq_tree,
     model_approx_dim,
 )
+from gbdt.models.combination_map import TCombinationCtrs
 from gbdt.models.tensor_ctr_value_table import (
     device_bins_for_borders,
     device_float_extremes,
@@ -259,6 +260,7 @@ def gbdt_fit_two_level_feature_freq(
         fitted.model.copy(), fitted.fold_counts.copy(), fitted.one_hot.copy(),
         fitted.borders.copy(), nan_treatment^, List[Float64](), List[Float64](),
         0, False, 0, List[TCtrValueTable](), fitted.registry.copy(),
+        TCombinationCtrs(),
     )
     return model_text(trained)
 

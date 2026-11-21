@@ -39,7 +39,7 @@ from bindings.py_attr import py_attr
 from bindings.classical_arrays_door import classical_address
 from bindings.classical_attributes_door import classical_connect_numpy, classical_check_layout
 from bindings.classifier_public_lifecycle_door import classifier_after_fit
-from bindings.scaler_lifecycle_native_door import _public_result, _entries, scaler_standard_rows
+from bindings.scaler_lifecycle_native_door import _public_result, _entries, scaler_standard_rows, _fitted as scaler_fitted
 from bindings.scaler_native_door import scaler_door_calls, scaler_standard_publish, _bool as _scaler_bool
 from bindings.minmax_native_door import minmax_rows, minmax_fit_publish, _configuration as minmax_configuration
 from bindings.minmax_metadata_unpack import _flag as _minmax_flag
@@ -48,10 +48,9 @@ from core.scaler_core import ScalerTransformSpec, scaler_standard_fit_core, scal
 from bindings.parallel_public_result_door import parallel_public_result
 from bindings.msel_member_device_unpack import member_says_cpu, member_multi_gpu_refusal
 from bindings.parallel_neighbor_worker_door import parallel_neighbor_worker, parallel_ivf_admit, neighbor_radius_rows
-from bindings.family_common_pack import family_call
 from bindings.native_process_pool_door import (
     process_worker_connect, process_worker_next, process_worker_reply, process_worker_refuse,
-    process_pool_create, process_pool_map, process_pool_close, process_pool_closed, process_pool_pids, process_pool_devices,
+    process_pool_create, process_pool_close, process_pool_closed, process_pool_pids, process_pool_devices,
 )
 from bindings.native_transport_door import transport_close
 from core.entry_table import EntryRef
@@ -85,6 +84,29 @@ from bindings.parallel_shard_common_door import (
     shard_store_put,
     shard_store_drop,
     shard_resolve_stored,
+    ShardWave,
+    shard_wave,
+)
+from bindings.parallel_shard_common_run import (
+    shard_request_op,
+    PARALLEL_SHARD_WORKER_OPN_FOREST_FIT,
+    PARALLEL_SHARD_WORKER_OPN_GPC_CLASS_FIT,
+    PARALLEL_SHARD_WORKER_OPN_GPC_CLASS_PREDICT,
+    PARALLEL_SHARD_WORKER_OPN_IDENTITY,
+    PARALLEL_SHARD_WORKER_OPN_IVF_SEARCH,
+    PARALLEL_SHARD_WORKER_OPN_IVF_STORE,
+    PARALLEL_SHARD_WORKER_OPN_QUERY_ROWS,
+    PARALLEL_SHARD_WORKER_OPN_QUERY_STATE,
+    PARALLEL_SHARD_WORKER_OPN_RBF_ROWS,
+    PARALLEL_SHARD_WORKER_OPN_REFERENCE_QUERY,
+    PARALLEL_SHARD_WORKER_OPN_REFERENCE_SHARD,
+    PARALLEL_SHARD_WORKER_OPN_REFERENCE_STORE,
+    PARALLEL_SHARD_WORKER_OPN_REFERENCE_VOTE,
+    PARALLEL_SHARD_WORKER_OPN_RELEASE,
+    PARALLEL_SHARD_WORKER_OPN_SCALER_FIT,
+    PARALLEL_SHARD_WORKER_OPN_SCALER_TRANSFORM,
+    PARALLEL_SHARD_WORKER_OPN_SHARD_RELEASE,
+    PARALLEL_SHARD_WORKER_OPN_SHARD_STORE,
 )
 from bindings.parallel_shard_common_run import shard_read_shift, shard_faults_take, shard_store_token, shard_faults_arm, shard_sabotage_arm, shard_width_admit, shard_batch_admit
 from bindings.parallel_shard_native_run import (
@@ -131,16 +153,6 @@ from bindings.parallel_keys_unpack import (
     PARALLEL_SHARD_OPN_TRANSFORM_RBF_SAMPLER,
     PARALLEL_SHARD_OPN_TRANSFORM_SCALER,
     PARALLEL_SHARD_OPN_WORKER,
-    PARALLEL_SHARD_WORKER_OPN_FOREST_FIT,
-    PARALLEL_SHARD_WORKER_OPN_GPC_CLASS_FIT,
-    PARALLEL_SHARD_WORKER_OPN_GPC_CLASS_PREDICT,
-    PARALLEL_SHARD_WORKER_OPN_IDENTITY,
-    PARALLEL_SHARD_WORKER_OPN_RBF_ROWS,
-    PARALLEL_SHARD_WORKER_OPN_REFERENCE_SHARD,
-    PARALLEL_SHARD_WORKER_OPN_SCALER_FIT,
-    PARALLEL_SHARD_WORKER_OPN_SCALER_TRANSFORM,
-    PARALLEL_SHARD_WORKER_OPN_SHARD_RELEASE,
-    PARALLEL_SHARD_WORKER_OPN_SHARD_STORE,
 )
 from bindings.py_keys import py_op_code
 from bindings.py_balanced import py_item
@@ -250,12 +262,12 @@ def _transform_rbf_sampler(args: PythonObject) raises -> PythonObject:
     var n_devices = shard_devices(args[2])
     var ranges = shard_ranges(rows, rps, "rows_per_shard", "")
     var state = shard_state(fields, b.frozenset(Python.list("_resident_holder")), context)
-    var requests = b.list()
+    var requests = shard_wave()
     for r in range(len(ranges) // 2):  # driver-loop: one worker request per row block
         var lo = ranges[2 * r]
         var hi = ranges[2 * r + 1]
         var shift = shard_read_shift(r, lo, n_devices)
-        _ = py_call(requests.append, Python.tuple(nk[].k_rbf_rows, state, Python.tuple(shard_rows(x, lo - shift, hi - shift, context))))
+        requests.add(PARALLEL_SHARD_WORKER_OPN_RBF_ROWS, state, Python.tuple(shard_rows(x, lo - shift, hi - shift, context)))
     var parts = shard_run(requests, args[2], _CHILD)
     var q = Int(py=py_item(fields, nk[].k_random_weights_).shape[1])
     for r in range(len(parts)):  # driver-loop: checks one result block per row shard
@@ -343,13 +355,13 @@ def _fit_scaler(args: PythonObject) raises -> PythonObject:
     else:
         init = Python.list(py_item(fields, nk[].k_copy), py_item(fields, nk[].k_with_mean), py_item(fields, nk[].k_with_std), "identical")
     var n_devices = shard_devices(args[2])
-    var requests = b.list()
+    var requests = shard_wave()
     for r in range(len(ranges) // 2):  # driver-loop: one worker request per column block
         var lo = ranges[2 * r]
         var hi = ranges[2 * r + 1]
         var shift = shard_read_shift(r, lo, n_devices)
-        _ = py_call(requests.append, Python.tuple(nk[].k_scaler_fit, Python.tuple(kind, py_call(b.tuple, init)),
-                                                  Python.tuple(_columns(data, lo - shift, hi - shift, context))))
+        requests.add(PARALLEL_SHARD_WORKER_OPN_SCALER_FIT, Python.tuple(kind, py_call(b.tuple, init)),
+                                                  Python.tuple(_columns(data, lo - shift, hi - shift, context)))
     var parts = shard_run(requests, args[2], _CHILD)
     var merged = b.dict()
     for k in range(len(names)):  # small-loop(the scaler's per-column statistics)
@@ -387,11 +399,18 @@ def _transform_scaler(args: PythonObject) raises -> PythonObject:
     var estimator = args[0]
     var kind = _scaler_kind(estimator)
     var names = _scaler_stats(kind)
-    var entry = _t(kind + "_call")
-    var owner_context = _t(kind + "_context")
-    shard_fitted_admit(Bool(py=py_call(b.bool, family_call(entry, estimator, PythonObject("is_fitted"), Python.tuple(), owner_context))),
-                       "scaler is not fitted")
+    # The fitted test is the scalers' own (`_fitted`: `scale_` and
+    # `numeric_mode_` in the instance fields), read here on the fields this
+    # door reads next. REMOVED: the `family_call(entry, estimator,
+    # "is_fitted", ...)` crossing through the scaler binding's Python entry
+    # (an argument tuple, the entry's dispatch and a `bool` call per
+    # transform) and the registered `standard_call` / `minmax_call` entries.
+    # NOT a member ABI call: a held member state (`member_held`) would IMPORT
+    # the fitted arrays to answer one flag, and the column shards below run
+    # under the driver's device tuple, which a member's one route cannot
+    # carry (MEMBER-ABI-V2 "Not covered" terms).
     var fields = py_fields(estimator)
+    shard_fitted_admit(scaler_fitted(fields), "scaler is not fitted")
     _member_device(fields, "transform_scaler")
     var fitted_mode = py_get(fields, PythonObject("numeric_mode_"), PythonObject(None))
     var fitted_exact = fitted_mode is not None and py_type(fitted_mode) is b.str
@@ -407,7 +426,7 @@ def _transform_scaler(args: PythonObject) raises -> PythonObject:
     var ranges = shard_ranges(d, args[3], "columns_per_shard", "")
     var base = shard_state(fields, b.frozenset(), context)
     var n_devices = shard_devices(args[2])
-    var requests = b.list()
+    var requests = shard_wave()
     for r in range(len(ranges) // 2):  # driver-loop: one worker request per column block
         var lo = ranges[2 * r]
         var hi = ranges[2 * r + 1]
@@ -417,8 +436,8 @@ def _transform_scaler(args: PythonObject) raises -> PythonObject:
             var value = fields[names[k]]
             py_setitem(part, names[k], PythonObject(None) if value is None else shard_rows(value, lo, hi, context))
         var shift = shard_read_shift(r, lo, n_devices)
-        _ = py_call(requests.append, Python.tuple(nk[].k_scaler_transform, Python.tuple(kind, part),
-                                                  Python.tuple(_columns(data, lo - shift, hi - shift, context), inverse)))
+        requests.add(PARALLEL_SHARD_WORKER_OPN_SCALER_TRANSFORM, Python.tuple(kind, part),
+                                                  Python.tuple(_columns(data, lo - shift, hi - shift, context), inverse))
     var parts = shard_run(requests, args[2], _CHILD)
     var out = shard_array("<f4", Python.tuple(n, d), n * d, context)
     for r in range(len(ranges) // 2):  # driver-loop: places one column block
@@ -493,15 +512,15 @@ def _fit_gpc(args: PythonObject) raises -> PythonObject:
     # codes go to each worker once (`shard_run_stored`), not once per column
     var stored = len(columns) > n_devices
     var token = shard_store_token() if stored else String("")
-    var requests = b.list()
+    var requests = shard_wave()
     for i in range(len(columns)):  # driver-loop: one worker request per class column
         if stored:
-            _ = py_call(requests.append, Python.tuple(nk[].k_gpc_class_fit, Python.tuple(carried, max_iter),
+            requests.add(PARALLEL_SHARD_WORKER_OPN_GPC_CLASS_FIT, Python.tuple(carried, max_iter),
                                                       Python.tuple(shard_stored_ref(token, 0), shard_stored_ref(token, 1),
-                                                                   columns[i])))
+                                                                   columns[i]))
         else:
-            _ = py_call(requests.append, Python.tuple(nk[].k_gpc_class_fit, Python.tuple(carried, max_iter),
-                                                      Python.tuple(x, codes, columns[i])))
+            requests.add(PARALLEL_SHARD_WORKER_OPN_GPC_CLASS_FIT, Python.tuple(carried, max_iter),
+                                                      Python.tuple(x, codes, columns[i]))
     var parts = (shard_run_stored(Python.tuple(x, codes), token, requests, args[3], _CHILD) if stored
                  else shard_run(requests, args[3], _CHILD))
     var fits = GPCFitPublication(len(parts))
@@ -552,16 +571,15 @@ def _predict_gpc(args: PythonObject) raises -> PythonObject:
     # and the query rows go to each worker once (`shard_run_stored`)
     var stored = len(fits) > n_devices
     var token = shard_store_token() if stored else String("")
-    var requests = b.list()
+    var requests = shard_wave()
     for i in range(len(fits)):  # driver-loop: one worker request per fitted class
         var fit_state = shard_state(py_fields(fits[i]), b.frozenset(), context)
         if stored:
-            _ = py_call(requests.append, Python.tuple("gpc_class_predict",
-                                                      Python.tuple(carried, shard_stored_ref(token, 0), fit_state),
-                                                      Python.tuple(shard_stored_ref(token, 1), want_proba, out_kind)))
+            requests.add(PARALLEL_SHARD_WORKER_OPN_GPC_CLASS_PREDICT, Python.tuple(carried, shard_stored_ref(token, 0), fit_state),
+                                                      Python.tuple(shard_stored_ref(token, 1), want_proba, out_kind))
         else:
-            _ = py_call(requests.append, Python.tuple(nk[].k_gpc_class_predict, Python.tuple(carried, py_item(fields, nk[].k_X_train_), fit_state),
-                                                      Python.tuple(q, want_proba, out_kind)))
+            requests.add(PARALLEL_SHARD_WORKER_OPN_GPC_CLASS_PREDICT, Python.tuple(carried, py_item(fields, nk[].k_X_train_), fit_state),
+                                                      Python.tuple(q, want_proba, out_kind))
     var columns = (shard_run_stored(Python.tuple(py_item(fields, nk[].k_X_train_), q), token, requests, args[2], _CHILD) if stored
                    else shard_run(requests, args[2], _CHILD))
     var n_star = Int(py=q.shape[0])
@@ -640,19 +658,19 @@ def _fit_forest(args: PythonObject) raises -> PythonObject:
     var token = shard_store_token() if stored else String("")
     var weighted = plan.weights is not None
     var payload = Python.tuple(x, plan.y, plan.weights) if weighted else Python.tuple(x, plan.y)
-    var requests = b.list()
+    var requests = shard_wave()
     for r in range(len(ranges) // 2):  # driver-loop: one worker request per tree range
         var lo = ranges[2 * r]
         var hi = ranges[2 * r + 1]
         var shift = shard_read_shift(r, lo, n_devices)
         if stored:
             var w_ref = shard_stored_ref(token, 2) if weighted else PythonObject(None)
-            _ = py_call(requests.append, Python.tuple(nk[].k_forest_fit, plan.state,
+            requests.add(PARALLEL_SHARD_WORKER_OPN_FOREST_FIT, plan.state,
                                                       Python.tuple(shard_stored_ref(token, 0), shard_stored_ref(token, 1),
-                                                                   w_ref, lo - shift, hi - lo)))
+                                                                   w_ref, lo - shift, hi - lo))
         else:
-            _ = py_call(requests.append, Python.tuple(nk[].k_forest_fit, plan.state,
-                                                      Python.tuple(x, plan.y, plan.weights, lo - shift, hi - lo)))
+            requests.add(PARALLEL_SHARD_WORKER_OPN_FOREST_FIT, plan.state,
+                                                      Python.tuple(x, plan.y, plan.weights, lo - shift, hi - lo))
     var parts = (shard_run_stored(payload, token, requests, args[3], _CHILD) if stored
                  else shard_run(requests, args[3], _CHILD))
     var merged = b.dict()
@@ -725,14 +743,10 @@ def _pool_open(devices: PythonObject) raises -> PythonObject:
     return shard_open(devices, _CHILD)
 
 
-def _map(pool: PythonObject, requests: PythonObject) raises -> PythonObject:
+def _map(pool: PythonObject, requests: ShardWave) raises -> PythonObject:
     var result = shard_map(pool, requests)
-    shard_batch_admit(len(result), len(requests))
+    shard_batch_admit(len(result), requests.count())
     return result
-
-
-def _native_request(name: PythonObject, args: PythonObject) raises -> PythonObject:
-    return Python.tuple(name, PythonObject(None), args)
 
 
 def _driver_fields(obj: PythonObject, class_key: String) raises -> PythonObject:
@@ -902,9 +916,9 @@ def _reference_query(args: PythonObject) raises -> PythonObject:
     try:
         var store_wave = 0
         while store_wave < n_ranges:  # driver-loop: over waves of len(devices) reference blocks
-            var stores = b.list()
+            var stores = shard_wave()
             for r in range(store_wave, min(store_wave + n_devices, n_ranges)):  # driver-loop: one store per reference block
-                _ = py_call(stores.append, _native_request(nk[].k_reference_store, Python.tuple(tokens[r], params, blocks[r])))
+                stores.add(PARALLEL_SHARD_WORKER_OPN_REFERENCE_STORE, PythonObject(None), Python.tuple(tokens[r], params, blocks[r]))
             _ = _map(pool, stores)
             store_wave += n_devices
         while first < rows:  # driver-loop: over the query row blocks
@@ -913,12 +927,12 @@ def _reference_query(args: PythonObject) raises -> PythonObject:
             var parts = b.list()
             var wave = 0
             while wave < n_ranges:  # driver-loop: over waves of len(devices) reference blocks
-                var requests = b.list()
+                var requests = shard_wave()
                 for r in range(wave, min(wave + n_devices, n_ranges)):  # driver-loop: one request per reference block
                     var start = ranges[2 * r]
                     var stop = ranges[2 * r + 1]
-                    _ = py_call(requests.append, _native_request(nk[].k_reference_query, Python.tuple(
-                        tokens[r], query, min(k, stop - start))))
+                    requests.add(PARALLEL_SHARD_WORKER_OPN_REFERENCE_QUERY, PythonObject(None), Python.tuple(
+                        tokens[r], query, min(k, stop - start)))
                 _ = py_call(parts.extend, _map(pool, requests))
                 wave += n_devices
 
@@ -933,8 +947,9 @@ def _reference_query(args: PythonObject) raises -> PythonObject:
                 _ = wide  # keep the Python object alive through the native call above
                 output = Python.tuple(merged[0], wide) if Bool(py=args[4]) else wide
             else:
-                var vote = Python.list(_native_request(nk[].k_reference_vote, Python.tuple(cls.__name__, vote_state, merged[0],
-                                                                                   merged[1], method)))
+                var vote = shard_wave()
+                vote.add(PARALLEL_SHARD_WORKER_OPN_REFERENCE_VOTE, PythonObject(None),
+                         Python.tuple(cls.__name__, vote_state, merged[0], merged[1], method))
                 output = _map(pool, vote)[0]
             _ = py_call(outputs.append, output)
             for r in range(n_ranges):  # driver-loop: one diagnostic record per reference block
@@ -1014,9 +1029,9 @@ def _release_reference(pool: PythonObject, tokens: PythonObject, workers: Int) r
     try:
         var wave = 0
         while wave < len(tokens):  # driver-loop: over waves of len(devices) stored blocks
-            var releases = b.list()
+            var releases = shard_wave()
             for r in range(wave, min(wave + workers, len(tokens))):  # driver-loop: one release per stored block
-                _ = py_call(releases.append, _native_request(nk[].k_release, Python.tuple(tokens[r])))
+                releases.add(PARALLEL_SHARD_WORKER_OPN_RELEASE, PythonObject(None), Python.tuple(tokens[r]))
             _ = _map(pool, releases)
             wave += workers
     except:
@@ -1051,9 +1066,9 @@ def _release_query_state(pool: PythonObject, token: String, name: PythonObject, 
     if process_pool_closed(pool):
         return
     var b = shard_b()
-    var releases = b.list()
+    var releases = shard_wave()
     for i in range(workers):  # driver-loop: one release request per worker
-        _ = py_call(releases.append, _native_request(nk[].k_query_state, Python.tuple(token, name, PythonObject(None))))
+        releases.add(PARALLEL_SHARD_WORKER_OPN_QUERY_STATE, PythonObject(None), Python.tuple(token, name, PythonObject(None)))
     try:
         _ = _map(pool, releases)
     except:
@@ -1183,22 +1198,22 @@ def _parallel_queries(args: PythonObject) raises -> PythonObject:
         _freeze_carried(state, context, 0)
         if index_object is not None:
             py_setitem(state, nk[].k__index, shard_rows(index_object, 0, Int(py=index_object.shape[0]), context))
-        var stores = b.list()
+        var stores = shard_wave()
         for i in range(workers):  # driver-loop: one snapshot request per worker
-            _ = py_call(stores.append, _native_request(nk[].k_query_state, Python.tuple(token, name, state)))
+            stores.add(PARALLEL_SHARD_WORKER_OPN_QUERY_STATE, PythonObject(None), Python.tuple(token, name, state))
         _ = _map(pool, stores)
         # The pool starts its workers on the first map: record their IDs now.
         prepared_put(mods, _QUERY_RESIDENT_SLOT, driver, Python.tuple(token, pool, _pool_pids(pool), key, name))
     var results = PythonObject(None)
     var n_devices = workers
     try:
-        var requests = b.list()
+        var requests = shard_wave()
         for r in range(len(ranges) // 2):  # driver-loop: one worker request per query row block
             var lo = ranges[2 * r]
             var hi = ranges[2 * r + 1]
             var shift = shard_read_shift(r, lo, n_devices)
-            _ = py_call(requests.append, _native_request(nk[].k_query_rows, Python.tuple(
-                token, shard_rows(data, lo - shift, hi - shift, context), method, args[3])))
+            requests.add(PARALLEL_SHARD_WORKER_OPN_QUERY_ROWS, PythonObject(None), Python.tuple(
+                token, shard_rows(data, lo - shift, hi - shift, context), method, args[3]))
         results = _map(pool, requests)
     except error:
         # A failed query leaves no resident claim: release the snapshot (as
@@ -1289,7 +1304,7 @@ def _ivf_from_index(args: PythonObject) raises -> PythonObject:
     var token = String("ivf-") + String(external_call["getpid", Int32]()) + "-" + String(Int(py=py_call(b.id, obj)))
     py_setitem(own, nk[].k__token, token)
     var maps = b.list()
-    var requests = b.list()
+    var requests = shard_wave()
     var base = shard_state(fields, b.frozenset(Python.list("_resident", "_resident_holder", "list_data_",
                                                            "list_indices_", "list_offsets_", "n_rows_")), context)
     py_setitem(base, nk[].k_numeric_mode, "identical")
@@ -1302,7 +1317,7 @@ def _ivf_from_index(args: PythonObject) raises -> PythonObject:
         py_setitem(state, nk[].k_list_indices_, shard_rows(local_all, lo, hi, context))
         py_setitem(state, nk[].k_list_data_, shard_rows(py_item(fields, nk[].k_list_data_), lo, hi, context))
         _ = py_call(maps.append, shard_rows(map_all, lo, hi, context))
-        _ = py_call(requests.append, _native_request(nk[].k_ivf_store, Python.tuple(token, state)))
+        requests.add(PARALLEL_SHARD_WORKER_OPN_IVF_STORE, PythonObject(None), Python.tuple(token, state))
     py_setitem(own, nk[].k__id_maps, maps)
     try:
         var receipts = _map(pool, requests)
@@ -1330,9 +1345,9 @@ def _ivf_search(args: PythonObject) raises -> PythonObject:
     var pool = py_item(own, nk[].k__pool)
     var maps = py_item(own, nk[].k__id_maps)
     try:
-        var requests = b.list()
+        var requests = shard_wave()
         for i in range(len(py_item(own, nk[].k_devices))):  # driver-loop: one search request per stored shard
-            _ = py_call(requests.append, _native_request(nk[].k_ivf_search, Python.tuple(py_item(own, nk[].k__token), q)))
+            requests.add(PARALLEL_SHARD_WORKER_OPN_IVF_SEARCH, PythonObject(None), Python.tuple(py_item(own, nk[].k__token), q))
         var parts = _map(pool, requests)
         ivf_parts_admit(len(parts), len(maps))
         var m = Int(py=q.shape[0])
@@ -1460,23 +1475,23 @@ def _scaler_worker(operation: Int, state: PythonObject, args: PythonObject, cont
 
 # ---------------------------------------------------------------- the worker
 
-def shard_worker_dispatch(request: PythonObject) raises -> PythonObject:
+def shard_worker_dispatch(operation: Int, request: PythonObject) raises -> PythonObject:
     """One shard: its model rebuilt natively from the state record, then the
-    plain native owner."""
+    plain native owner. `operation` is the decoded request word (a
+    `PARALLEL_SHARD_WORKER_OPN_*` code); `request` is the payload record
+    `(state, args)` (None for the identity request)."""
     var b = shard_b()
-    var nk = parallel_keys()
-    if len(request) == 1 and py_op_code(nk[].ops_shard_worker, request[0]) == PARALLEL_SHARD_WORKER_OPN_IDENTITY:
+    if operation == PARALLEL_SHARD_WORKER_OPN_IDENTITY:
         return shard_identity()
     var context = _ctx()
-    shard_envelope_admit(len(request))
-    var operation = py_op_code(nk[].ops_shard_worker, request[0])
+    shard_envelope_admit(py_type(request) is b.tuple, len(request) if py_type(request) is b.tuple else 0)
     # N452 (lane ne2-i-j): a call's shared operands, stored once per worker
     if operation == PARALLEL_SHARD_WORKER_OPN_SHARD_STORE:
-        return shard_store_put(request[1], request[2])
+        return shard_store_put(request[0], request[1])
     if operation == PARALLEL_SHARD_WORKER_OPN_SHARD_RELEASE:
-        return shard_store_drop(request[1])
-    var state = shard_resolve_stored(request[1])
-    var args = shard_resolve_stored(request[2])
+        return shard_store_drop(request[0])
+    var state = shard_resolve_stored(request[0])
+    var args = shard_resolve_stored(request[1])
     if operation == PARALLEL_SHARD_WORKER_OPN_RBF_ROWS:
         var model = shard_model(_t("rbf_class"), state)
         var rows_pin = ArrayPin()
@@ -1503,9 +1518,9 @@ def shard_worker_dispatch(request: PythonObject) raises -> PythonObject:
         return forest_shard_fit(state, args, _t("trees_context"))
     # The neighbor shard operations are the last codes of the worker table
     # (reference_shard .. query_rows): one range test.
-    if operation >= PARALLEL_SHARD_WORKER_OPN_REFERENCE_SHARD:
+    if operation >= PARALLEL_SHARD_WORKER_OPN_REFERENCE_SHARD and operation <= PARALLEL_SHARD_WORKER_OPN_QUERY_ROWS:
         return parallel_neighbor_worker(operation, args, PARALLEL_SHARD_BOUNDARY.get_or_create_ptr()[].tables, context)
-    raise Error("parallel shards: unsupported worker operation " + String(request[0]))
+    raise Error("parallel shards: unsupported worker operation " + String(operation))
 
 
 def shard_worker(argv: PythonObject) raises:
@@ -1516,7 +1531,10 @@ def shard_worker(argv: PythonObject) raises:
             if not turn.open:
                 break
             try:
-                process_worker_reply(socket, turn.sequence, shard_worker_dispatch(turn.value))
+                # The typed request: one decode of the frame's words (a frame
+                # without request words is refused), then the code's branch.
+                var operation = shard_request_op(Int(turn.request.unsafe_ptr()), len(turn.request) * 8)
+                process_worker_reply(socket, turn.sequence, shard_worker_dispatch(operation, turn.value))
             except error:
                 process_worker_refuse(socket, turn.sequence, String(error))
     except error:
