@@ -88,9 +88,6 @@ from gbdt.gpu_data.grid_policy import (
 )
 from gbdt.host.gbdt_oracle import (
     GBDT_FLOAT32_MAX,
-    GBDT_HB_LANES,
-    GBDT_HB_BLOCK,
-    GBDT_HB_LOAD,
     GBDT_MSE_BLOCK,
     GBDT_ORACLE_HOST_SABOTAGE,
     GBDT_PINNED_SM,
@@ -106,11 +103,10 @@ from gbdt.host.gbdt_oracle import (
     _choose_scale_from_magnitudes,
     _deterministic_sum_lanes,
     _binary_block_n,
-    _half_byte_one_block,
+    _half_byte_block_n,
+    _one_byte_block_n,
     _halving_fold,
     _pinned_partition_stat,
-    _hist2_dither,
-    _hist2_quantize,
     gbdt_f32_token,
     gbdt_f64_token,
     gbdt_host_grid,
@@ -308,139 +304,6 @@ def _multi_pass(
 # ===========================================================================
 # THE HISTOGRAMS AT `stat_count` PLANES
 # ===========================================================================
-
-
-def _one_byte_block_n(
-    blk: PolicyBlock,
-    block_first_bin: Int,
-    hist_cells: Int,
-    stat_count: Int,
-    compute_ids: List[Int],
-    p_off: List[Int],
-    p_sz: List[Int],
-    row_index: List[Int],
-    stats: List[Float32],
-    cindex: List[UInt32],
-    layout: CompressedIndexLayout,
-    n_rows: Int,
-    fixed_scale: Float32,
-    mut hist: List[Float32],
-):
-    """`gbdt_oracle.mojo::_one_byte_block` at `stat_count` planes: every
-    (row, stat) quantized with the row position's dither and summed in Int32
-    per (stat, feature, bin), whichever kernel (the pair ladder or the odd
-    prelude) covers the plane; the fixed bridge writes the cells."""
-    var n_f = blk.count()
-    var total = 0
-    for k in range(n_f):
-        total += Int(blk.folds[k])
-    for j in range(len(compute_ids)):
-        var slot = compute_ids[j]
-        var off = p_off[slot]
-        var sz = p_sz[slot]
-        var acc = List[Int32](length=stat_count * total, fill=Int32(0))
-        var q = List[Int32](length=stat_count, fill=Int32(0))
-        for pos in range(off, off + sz):
-            var row = row_index[pos]
-            var u = _hist2_dither(pos)
-            for s in range(stat_count):
-                q[s] = _hist2_quantize(stats[s * n_rows + pos], fixed_scale, u)
-            for k in range(n_f):
-                ref cf = layout.features[blk.feature_ids[k]]
-                var word = cindex[Int(cf.offset) * n_rows + row]
-                var bin = Int((word >> cf.shift) & cf.mask)
-                if bin < Int(blk.folds[k]):
-                    var at = Int(blk.fold_offset[k]) + bin
-                    for s in range(stat_count):
-                        acc[s * total + at] = acc[s * total + at] + q[s]
-        for z in range(stat_count):
-            for c in range(total):
-                var qq = acc[z * total + c]
-                var val = Float32(0.0)
-                if qq != Int32(0):
-                    val = ftz(Float32(Int(qq)) / fixed_scale)
-                hist[slot * stat_count * hist_cells + z * hist_cells + block_first_bin + c] = val
-
-
-def _half_byte_block_n(
-    blk: PolicyBlock,
-    block_first_bin: Int,
-    hist_cells: Int,
-    stat_count: Int,
-    compute_ids: List[Int],
-    depth: Int,
-    p_off: List[Int],
-    p_sz: List[Int],
-    row_index: List[Int],
-    stats: List[Float32],
-    cindex: List[UInt32],
-    n_rows: Int,
-    fixed_scale: Float32,
-    mut hist: List[Float32],
-):
-    """`gbdt_oracle.mojo::_half_byte_block` at `stat_count` planes: the
-    replication base is `groups * n_compute * stat_count`
-    (`replication_for`), every plane its own grid z."""
-    var n_f = blk.count()
-    var n_compute = len(compute_ids)
-    var groups = (n_f + 7) // 8
-    var max_active_blocks = 2 * GBDT_PINNED_SM
-    if depth > 0:
-        max_active_blocks = 2 * max_active_blocks
-    var base_count = groups * n_compute * stat_count
-    if base_count < 1:
-        base_count = 1
-    var replicas = (max_active_blocks + base_count - 1) // base_count
-    if replicas < 1:
-        replicas = 1
-    var min_docs_per_block = GBDT_HB_LANES * 1 * GBDT_HB_LOAD * (
-        GBDT_HB_BLOCK // GBDT_HB_LANES
-    )
-    for j in range(n_compute):
-        var slot = compute_ids[j]
-        var p_offset = p_off[slot]
-        var p_size = p_sz[slot]
-        var active_block_count = (p_size + min_docs_per_block - 1) // min_docs_per_block
-        if active_block_count > replicas:
-            active_block_count = replicas
-        for z in range(stat_count):
-            for g in range(groups):
-                var feature_offset = g * 8
-                var f_count = n_f - feature_offset
-                if f_count > 8:
-                    f_count = 8
-                var column = blk.first_column + g
-                var vals = List[Float32](
-                    length=128 * active_block_count, fill=Float32(0.0)
-                )
-                for lb in range(active_block_count):
-                    var stage2 = _half_byte_one_block(
-                        lb, active_block_count, p_offset, p_size, z, column,
-                        row_index, stats, cindex, n_rows,
-                    )
-                    for t in range(128):
-                        vals[lb * 128 + t] = stage2[t]
-                for fid in range(f_count):
-                    var folds = Int(blk.folds[feature_offset + fid])
-                    var fold_off = Int(blk.fold_offset[feature_offset + fid])
-                    for fold in range(folds):
-                        var cell = Float32(0.0)
-                        if active_block_count == 1:
-                            var v = vals[fid + 8 * fold]
-                            if abs(v) > Float32(1e-20):
-                                cell = v
-                        elif active_block_count > 1:
-                            var q = Int32(0)
-                            for lb in range(active_block_count):
-                                var v = vals[lb * 128 + fid + 8 * fold]
-                                if abs(v) > Float32(1e-20):
-                                    q = q + Int32(v * fixed_scale)
-                            if q != Int32(0):
-                                cell = ftz(Float32(Int(q)) / fixed_scale)
-                        hist[
-                            slot * stat_count * hist_cells + z * hist_cells
-                            + block_first_bin + fold_off + fold
-                        ] = cell
 
 
 def _cosine_gain_n(
