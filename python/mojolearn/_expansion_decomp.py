@@ -1867,6 +1867,9 @@ class DictionaryLearning(_SparseCoding):
                    "positive_code", "positive_dict", "transform_max_iter", "numeric_mode",
                    "callback", "code_init", "dict_init", "n_jobs", "verbose", "device")
 
+    #: The member ABI mark (family 32 XDecomp, kind 9; core/xdecomp_member.mojo).
+    _mojolearn_member = (32, 9)
+
     def __init__(self, n_components=None, *, alpha=1, max_iter=1000, tol=1e-8, fit_algorithm="lars",
                  transform_algorithm="omp", transform_n_nonzero_coefs=None, transform_alpha=None, n_jobs=None,
                  code_init=None, dict_init=None, callback=None, verbose=False, split_sign=False, random_state=None,
@@ -1995,6 +1998,9 @@ class MiniBatchDictionaryLearning(_SparseCoding):
                    "random_state", "positive_code", "positive_dict", "transform_max_iter", "tol",
                    "max_no_improvement", "numeric_mode",
                    "callback", "dict_init", "n_jobs", "verbose", "device")
+
+    #: The member ABI mark (family 32 XDecomp, kind 10; core/xdecomp_member.mojo).
+    _mojolearn_member = (32, 10)
 
     def __init__(self, n_components=None, *, alpha=1, max_iter=1000, fit_algorithm="lars", n_jobs=None,
                  batch_size=256, shuffle=True, dict_init=None, transform_algorithm="omp",
@@ -2176,6 +2182,9 @@ class SparsePCA(_BaseSparsePCA):
                    "numeric_mode",
                    "U_init", "V_init", "n_jobs", "verbose", "device")
 
+    #: The member ABI mark (family 32 XDecomp, kind 12; core/xdecomp_member.mojo).
+    _mojolearn_member = (32, 12)
+
     def __init__(self, n_components=None, *, alpha=1, ridge_alpha=0.01, max_iter=1000, tol=1e-8, method="lars",
                  n_jobs=None, U_init=None, V_init=None, verbose=False, random_state=None, numeric_mode=None, device=None):
         if device is not None:
@@ -2246,6 +2255,9 @@ class MiniBatchSparsePCA(_BaseSparsePCA):
     _parameters = ("n_components", "alpha", "ridge_alpha", "max_iter", "batch_size", "shuffle", "method",
                    "random_state", "tol", "max_no_improvement", "numeric_mode",
                    "callback", "n_jobs", "verbose", "device")
+
+    #: The member ABI mark (family 32 XDecomp, kind 13; core/xdecomp_member.mojo).
+    _mojolearn_member = (32, 13)
 
     def __init__(self, n_components=None, *, alpha=1, ridge_alpha=0.01, max_iter=1000, callback=None,
                  batch_size=3, verbose=False, shuffle=True, n_jobs=None, method="lars", random_state=None,
@@ -2358,6 +2370,9 @@ class LatentDirichletAllocation(_DeviceDoor, _Base):
                    "mean_change_tol", "max_doc_update_iter", "random_state", "numeric_mode",
                    "n_jobs", "verbose", "device")
     _device_door = "decomp"
+
+    #: The member ABI mark (family 32 XDecomp, kind 15; core/xdecomp_member.mojo).
+    _mojolearn_member = (32, 15)
 
     def __init__(self, n_components=10, *, doc_topic_prior=None, topic_word_prior=None, learning_method="batch",
                  learning_decay=0.7, learning_offset=10.0, max_iter=10, batch_size=128, evaluate_every=-1,
@@ -3177,6 +3192,9 @@ class EllipticEnvelope(MinCovDet):
     _parameters = ("store_precision", "assume_centered", "support_fraction", "contamination", "random_state",
                    "numeric_mode", "device")
 
+    #: The member ABI mark (family 32 XDecomp, kind 14; core/xdecomp_member.mojo).
+    _mojolearn_member = (32, 14)
+
     def __init__(self, *, store_precision=True, assume_centered=False, support_fraction=None, contamination=0.1,
                  random_state=None, numeric_mode=None, device=None):
         super().__init__(store_precision=store_precision, assume_centered=assume_centered,
@@ -3487,6 +3505,9 @@ class SparseCoder(_SparseCoding):
     _parameters = ("dictionary", "transform_algorithm", "transform_n_nonzero_coefs", "transform_alpha",
                    "split_sign", "positive_code", "transform_max_iter", "numeric_mode",
                    "n_jobs", "device")
+
+    #: The member ABI mark (family 32 XDecomp, kind 11; core/xdecomp_member.mojo).
+    _mojolearn_member = (32, 11)
 
     def __init__(self, dictionary, *, transform_algorithm="omp", transform_n_nonzero_coefs=None, transform_alpha=None,
                  split_sign=False, n_jobs=None, positive_code=False, transform_max_iter=1000, numeric_mode=None, device=None):
