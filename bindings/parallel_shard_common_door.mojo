@@ -61,7 +61,7 @@ from bindings.parallel_shard_common_run import (
     shard_width_admit, shard_bounds, shard_indices_admit, shard_stored_index_admit, shard_idle_action,
     shard_batch_admit, shard_stores_admit, shard_fault_action, shard_rows_admit, shard_block_copy,
     shard_join_block, shard_join_complete,
-    shard_worker_op_name, shard_worker_op_numerical, shard_request_words,
+    shard_worker_op_name, shard_worker_op_numerical, shard_request_words, shard_request_operands,
     PARALLEL_SHARD_WORKER_OPN_IDENTITY, PARALLEL_SHARD_WORKER_OPN_SHARD_STORE, PARALLEL_SHARD_WORKER_OPN_SHARD_RELEASE,
 )
 from bindings.parallel_keys_unpack import parallel_keys
@@ -93,6 +93,14 @@ struct ShardWave(Movable):
         self.ops.append(op)
         self.words.append(shard_request_words(op))
         _ = py_call(self.payloads.append, Python.tuple(state, args))
+
+    def add_operands(mut self, op: Int, var operands: List[Int], payload: PythonObject) raises:
+        """One request whose typed operands ride in the request words
+        (`shard_request_operands`); `payload` is the record that still
+        travels with it (None for none)."""
+        self.ops.append(op)
+        self.words.append(shard_request_operands(op, operands^))
+        _ = py_call(self.payloads.append, payload)
 
     def add_plain(mut self, op: Int) raises:
         """One request without operands (the identity round)."""

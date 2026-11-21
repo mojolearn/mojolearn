@@ -385,6 +385,32 @@ def hw_predict(model: PythonObject, args: PythonObject, context: PythonObject) r
         raise Error("ValueError: " + _HW + "need 0 <= start < end (start=" + String(start) + ", end=" + String(end) + ")")
     if index is not None and (Int(py=index) < 0 or Int(py=index) >= b):
         raise Error("IndexError: " + _HW + "index input: " + String(Int(py=index)) + " outside of range [0, " + String(b) + ")")
+    return hw_predict_fields(model, fields, n, b, start, end, index, context)
+
+
+def hw_predict_span(model: PythonObject, start: Int, end: Int, context: PythonObject) raises -> PythonObject:
+    """`predict(start, end)` over every series on typed span words: the
+    parallel forecast worker's request (lane pools-frame, 2026-11-21: it
+    built an argument tuple of Python integers per request for `hw_predict`
+    to read back). The same field admission, refusals and query as
+    `hw_predict` with `index=None`."""
+    var nk = tsa_keys()
+    var fields = _query_fields(model, context)
+    if not Bool(py=py_item(fields, nk[].k_fit_executed_flag)):
+        raise Error("ValueError: " + _HW + "fit() the model before predict()")
+    var n = Int(py=py_item(fields, nk[].k_n))
+    var b = Int(py=py_item(fields, nk[].k_ts_num))
+    if start < 0 or end <= start:
+        raise Error("ValueError: " + _HW + "need 0 <= start < end (start=" + String(start) + ", end=" + String(end) + ")")
+    return hw_predict_fields(model, fields, n, b, start, end, PythonObject(None), context)
+
+
+def hw_predict_fields(model: PythonObject, fields: PythonObject, n: Int, b: Int, start: Int, end: Int,
+                      index: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The predict query on admitted fields and typed span words (`fields`
+    is the model's admitted instance storage; `n`, `b` its fitted length and
+    series count, read once by the caller; `index` is admitted)."""
+    var nk = tsa_keys()
     var call = _hw_route(model, fields, context)
     var route = call.route
     var period = Int(py=py_item(fields, nk[].k_seasonal_periods))

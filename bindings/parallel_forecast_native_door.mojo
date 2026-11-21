@@ -17,10 +17,11 @@ compiled entries on the same words, so no bit moves.
 UNPACK and PACK only: the span, step, index and mode refusals, the shard
 bounds and the block copies are typed, in
 bindings/parallel_forecast_native_run.mojo and
-bindings/parallel_shard_common_run.mojo. The worker rebuilds the member and
-calls its native fit / predict (`arima_predict`, `hw_predict`, `arima_fit`,
-`hw_fit`: boundary calls of the TSA family) until that family publishes an
-entry table; the frames are the codec's.
+bindings/parallel_shard_common_run.mojo. A worker builds the member once
+per generation and answers a predict request from its typed words through
+the family's typed-span queries (`arima_predict_span`, `hw_predict_span`);
+the fits call the family's `arima_fit` / `hw_fit` on a rebuilt member until
+that family publishes an entry table; the frames are the codec's.
 """
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module, native_interpreter_finalizing
@@ -37,13 +38,14 @@ from bindings.classical_arrays_door import classical_address
 from bindings.native_process_pool_door import (
     process_pool_create, process_pool_close, process_pool_closed, process_pool_pids,
     process_worker_connect, process_worker_next, process_worker_value, process_worker_reply, process_worker_refuse,
+    WorkerTurn,
 )
 from bindings.native_transport_door import transport_close
 from bindings.tsa_hw_native_door import (
-    tsa_array, tsa_array_unfilled, hw_predict, hw_fit, _check_dims, _set_fitted, _commit,
+    tsa_array, tsa_array_unfilled, hw_predict_span, hw_fit, _check_dims, _set_fitted, _commit,
 )
 from bindings.tsa_admission_door import tsa_hw_fields
-from bindings.tsa_arima_native_door import arima_predict, arima_fit, _series_major
+from bindings.tsa_arima_native_door import arima_predict_span, arima_fit, _series_major
 from bindings.parallel_shard_common_door import (
     shard_ranges,
     shard_devices,
@@ -63,7 +65,7 @@ from bindings.parallel_shard_common_door import (
 )
 from bindings.parallel_shard_common_run import (
     shard_read_shift, shard_width_admit, shard_bounds, shard_indices_admit, shard_block_copy, SHARD_DEVICE_NOT_AN_INDEX,
-    shard_request_op, shard_batch_admit,
+    shard_request_decode, shard_batch_admit,
     PARALLEL_SHARD_WORKER_OPN_IDENTITY,
     PARALLEL_FORECAST_WORKER_OPN_GENERATION_STORE,
     PARALLEL_FORECAST_WORKER_OPN_ARIMA_FIT_SHARD,
@@ -109,10 +111,15 @@ struct ForecastGeneration(Movable):
     `orphaned` says that request is still owed (the pool was in use when the
     estimator was freed); the next call of this door sends it.
 
-    In a worker process: `token` and `models` (a list, one model per shard
-    this worker answers, built once at the store) are the generation it
-    holds; `pids`, `width` and `orphaned` are unused there."""
+    A generation's name on the wire is two words, never a string: `owner`
+    (the coordinating process id) and `issued` (its store counter there).
+
+    In a worker process: `owner`, `issued` and `models` (a list, one model
+    per shard this worker answers, built once at the store; None for none)
+    are the generation it holds; `token`, `pids`, `width` and `orphaned` are
+    unused there."""
     var token: String
+    var owner: Int
     var issued: Int
     var width: Int
     var pids: List[Int]
@@ -121,6 +128,7 @@ struct ForecastGeneration(Movable):
 
     def __init__(out self):
         self.token = String()
+        self.owner = 0
         self.issued = 0
         self.width = 0
         self.pids = List[Int]()
@@ -370,10 +378,11 @@ def _generation_drop(kind: Int, pids: List[Int]) raises -> Bool:
     var pool = taken.pool
     try:
         var b = _b()
-        var held = Python.tuple(PythonObject(kind), PythonObject(""))
         var drops = shard_wave()
         for j in range(len(pids)):  # driver-loop: one drop per worker
-            drops.add(PARALLEL_FORECAST_WORKER_OPN_GENERATION_STORE, held, b.list())
+            # owner 0, issued 0: no generation has that name
+            var named: List[Int] = [kind, 0, 0]
+            drops.add_operands(PARALLEL_FORECAST_WORKER_OPN_GENERATION_STORE, named^, b.list())
         var dropped = shard_map(pool, drops)
         shard_batch_admit(len(dropped), len(pids))
     except:
@@ -404,22 +413,28 @@ def _generation_sweep() raises:
             f[].hw_generation.orphaned = False
 
 
+def _generation_token(kind: Int, issued: Int) -> String:
+    """The coordinator's own name of a generation (the estimator record's
+    word; it never travels)."""
+    return String("fg-") + String(kind) + "-" + String(Int(external_call["getpid", Int32]())) + "-" + String(issued)
+
+
 def _generation_store(mut generation: ForecastGeneration, kind: Int, width: Int,
-                      states: PythonObject, pool: PythonObject, workers: Int) raises -> String:
+                      states: PythonObject, pool: PythonObject, workers: Int) raises -> Int:
     """Store a new generation on the workers of `pool`: worker j receives,
     once, the states of the shards it answers (r = j mod workers, the order
     of `shard_map`'s waves) and builds their models. The claim is recorded
     only after every worker stored; a failed store leaves none. Workers
     beyond the shard count get a store of no states, so none keeps an older
-    generation of this kind."""
+    generation of this kind. Returns the generation's `issued` word."""
     var b = _b()
     generation.token = String()
     generation.issued += 1
-    var token = (String("fg-") + String(kind) + "-" + String(Int(external_call["getpid", Int32]())) + "-"
-                 + String(generation.issued))
+    var issued = generation.issued
+    var owner = Int(external_call["getpid", Int32]())
+    generation.owner = owner
     var shards = len(states)
     if workers > 0:
-        var held = Python.tuple(PythonObject(kind), PythonObject(token))
         var stores = shard_wave()
         for j in range(workers):  # driver-loop: one generation store per worker
             var mine = b.list()
@@ -427,38 +442,46 @@ def _generation_store(mut generation: ForecastGeneration, kind: Int, width: Int,
             while r < shards:  # driver-loop: the shards worker j answers
                 _ = py_call(mine.append, states[r])
                 r += workers
-            stores.add(PARALLEL_FORECAST_WORKER_OPN_GENERATION_STORE, held, mine)
+            # The generation's name rides in the request words; the payload
+            # is the list of states alone.
+            var named: List[Int] = [kind, owner, issued]
+            stores.add_operands(PARALLEL_FORECAST_WORKER_OPN_GENERATION_STORE, named^, mine)
         var stored = shard_map(pool, stores)
         shard_batch_admit(len(stored), workers)
     generation.width = width
     generation.pids = process_pool_pids(pool)
     generation.orphaned = False
-    generation.token = token.copy()
-    return token
+    generation.token = _generation_token(kind, issued)
+    return issued
 
 
-def _generation_predict(op: Int, token: String, shards: Int, workers: Int, start: Int, end: Int,
+def _generation_predict(op: Int, issued: Int, shards: Int, workers: Int, start: Int, end: Int,
                         pool: PythonObject) raises -> PythonObject:
-    """One predict request per shard, naming the worker's held model by
-    (token, slot): shard r is slot r // workers of worker r mod workers."""
+    """One predict request per shard, typed whole: the request words name
+    the generation (`owner`, `issued`), the worker's held model (shard r is
+    slot r // workers of worker r mod workers) and the span. No payload
+    record travels (it was the tuple `((token, slot), (start, end))` built
+    per shard, UNPACKed, sent, PACKed by the worker and read back)."""
     var requests = shard_wave()
-    var name = PythonObject(token)
-    var span = Python.tuple(start, end)
+    var owner = Int(external_call["getpid", Int32]())
     for r in range(shards):  # driver-loop: one worker request per device shard
-        requests.add(op, Python.tuple(name, PythonObject(r // workers)), span)
+        var operands: List[Int] = [owner, issued, r // workers, start, end]
+        requests.add_operands(op, operands^, PythonObject(None))
     var parts = shard_map(pool, requests)
     shard_batch_admit(len(parts), shards)
     return parts
 
 
-def _generation_model(generation: ForecastGeneration, state: PythonObject) raises -> PythonObject:
-    """A worker's held model for a predict request's `(token, slot)`."""
-    var b = _b()
-    if py_type(state) is not b.tuple or len(state) != 2:
-        raise Error("parallel forecasting: a predict request names a held model")
-    if generation.models is None or String(state[0]) != generation.token:
+def _generation_model(generation: ForecastGeneration, operands: List[Int]) raises -> PythonObject:
+    """A worker's held model for a predict request's typed operands
+    `[owner, issued, slot, start, end]`: three word compares and one list
+    read (it was a tuple test, a String built from the token and compared,
+    and an integer conversion per request)."""
+    if len(operands) != 5:
+        raise Error("parallel forecasting: a predict request names a held model and a span")
+    if generation.models is None or operands[0] != generation.owner or operands[1] != generation.issued:
         raise Error("parallel forecasting: this worker does not hold the requested fitted state")
-    var slot = Int(py=state[1])
+    var slot = operands[2]
     if slot < 0 or slot >= len(generation.models):
         raise Error("parallel forecasting: this worker holds no model for the requested shard")
     return generation.models[slot]
@@ -531,10 +554,11 @@ def _predict_arima(estimator: PythonObject, start_obj: PythonObject, end_obj: Py
     var parts = PythonObject(None)
     var lifetime = PythonObject(None)
     try:
-        var token = String()
-        if ours and _generation_same(f[].arima_generation, String(py=record[0]), shard_width, pool):
-            token = f[].arima_generation.token.copy()
-        else:
+        # The generation's wire name, read in the same step as its check (or
+        # returned by this call's own store): a predict never names a
+        # generation another call stored meanwhile.
+        var issued = f[].arima_generation.issued
+        if not (ours and _generation_same(f[].arima_generation, String(py=record[0]), shard_width, pool)):
             var claimed = ours
             if not ours:
                 # Seal: the estimator's two fitted arrays become private
@@ -566,12 +590,13 @@ def _predict_arima(estimator: PythonObject, start_obj: PythonObject, end_obj: Py
                 py_setitem(state, nk[].k__y, _rows(y, lo, hi, n_obs, context))
                 py_setitem(state, nk[].k_params_, _rows(params, lo, hi, complexity, context))
                 _ = py_call(states.append, state)
-            token = _generation_store(f[].arima_generation, _GENERATION_ARIMA, shard_width, states, pool, workers)
+            issued = _generation_store(f[].arima_generation, _GENERATION_ARIMA, shard_width, states, pool, workers)
+            var token = _generation_token(_GENERATION_ARIMA, issued)
             var claim = PythonObject(None)
             if claimed:
                 claim = key
             lifetime = _generation_claim(estimator, _GENERATION_ARIMA, token, claim)
-        parts = _generation_predict(PARALLEL_FORECAST_WORKER_OPN_ARIMA_PREDICT_SHARD, token, shards, workers,
+        parts = _generation_predict(PARALLEL_FORECAST_WORKER_OPN_ARIMA_PREDICT_SHARD, issued, shards, workers,
                                     start, end, pool)
     except error:
         # A failed call leaves no claim: the pool closes (its workers and their models end with it).
@@ -665,10 +690,11 @@ def _predict_hw(estimator: PythonObject, start_obj: PythonObject, end_obj: Pytho
     var parts = PythonObject(None)
     var lifetime = PythonObject(None)
     try:
-        var token = String()
-        if ours and _generation_same(f[].hw_generation, String(py=record[0]), shard_width, pool):
-            token = f[].hw_generation.token.copy()
-        else:
+        # The generation's wire name, read in the same step as its check (or
+        # returned by this call's own store): a predict never names a
+        # generation another call stored meanwhile.
+        var issued = f[].hw_generation.issued
+        if not (ours and _generation_same(f[].hw_generation, String(py=record[0]), shard_width, pool)):
             var claimed = ours
             if not ours:
                 # Seal (see `_predict_arima`): the packed components become a
@@ -700,12 +726,13 @@ def _predict_hw(estimator: PythonObject, start_obj: PythonObject, end_obj: Pytho
                 _ = comps  # keep the Python object alive through the native call above
                 py_setitem(state, nk[].k__comps, part)
                 _ = py_call(states.append, state)
-            token = _generation_store(f[].hw_generation, _GENERATION_HW, shard_width, states, pool, workers)
+            issued = _generation_store(f[].hw_generation, _GENERATION_HW, shard_width, states, pool, workers)
+            var token = _generation_token(_GENERATION_HW, issued)
             var claim = PythonObject(None)
             if claimed:
                 claim = key
             lifetime = _generation_claim(estimator, _GENERATION_HW, token, claim)
-        parts = _generation_predict(PARALLEL_FORECAST_WORKER_OPN_HW_PREDICT_SHARD, token, shards, workers,
+        parts = _generation_predict(PARALLEL_FORECAST_WORKER_OPN_HW_PREDICT_SHARD, issued, shards, workers,
                                     start, end, pool)
     except error:
         # A failed call leaves no claim: the pool closes (its workers and their models end with it).
@@ -916,58 +943,60 @@ def _fitted_record(model: PythonObject, names: PythonObject) raises -> PythonObj
 
 # ---------------------------------------------------------------- the worker
 
-def forecast_worker_dispatch(operation: Int, request: PythonObject) raises -> PythonObject:
-    """One shard: the model rebuilt natively from its state record, then the
-    native predict over (start, end). `operation` is the decoded request
-    word (the identity code or a `PARALLEL_FORECAST_WORKER_OPN_*` code);
-    `request` is the payload record `(state, args)` (None for identity)."""
+def _worker_generation_store(operands: List[Int], states: PythonObject) raises -> PythonObject:
+    """A worker's store of a generation: `operands` is its typed name
+    `[kind, owner, issued]`, `states` the list of the states of the shards
+    this worker answers. The models are built here, once per generation; the
+    kind's previous generation (and whatever the plain owners held for its
+    models) is dropped by the replacement. A store of no states (the
+    coordinator's drop, or a worker beyond the shard count) leaves this
+    worker holding nothing of the kind."""
     var f = PARALLEL_FORECAST_BOUNDARY.get_or_create_ptr()
     var b = _b()
     var nk = parallel_keys()
+    if len(operands) != 3 or py_type(states) is not b.list:
+        raise Error("parallel forecasting: a generation store carries its name and a list of states")
+    var kind = operands[0]
+    if kind != _GENERATION_ARIMA and kind != _GENERATION_HW:
+        raise Error("parallel forecasting: unknown generation kind")
+    var models = b.list()
+    for i in range(len(states)):  # driver-loop: one model per shard this worker answers
+        if kind == _GENERATION_ARIMA:
+            var built = shard_model(f[].arima_cls, states[i])
+            py_setitem(py_fields(built), nk[].k__exog, PythonObject(None))
+            _ = py_call(models.append, built)
+        else:
+            _ = py_call(models.append, shard_model(f[].hw_cls, states[i]))
+    var held = PythonObject(None)
+    if len(models) > 0:
+        held = models
+    # The slot is read again: building a model can run a collection.
+    f = PARALLEL_FORECAST_BOUNDARY.get_or_create_ptr()
+    if kind == _GENERATION_ARIMA:
+        f[].arima_generation.owner = operands[1]
+        f[].arima_generation.issued = operands[2]
+        f[].arima_generation.models = held
+    else:
+        f[].hw_generation.owner = operands[1]
+        f[].hw_generation.issued = operands[2]
+        f[].hw_generation.models = held
+    return PythonObject(len(models))
+
+
+def forecast_worker_dispatch(operation: Int, request: PythonObject) raises -> PythonObject:
+    """One fit shard: the model rebuilt natively from its state record, then
+    the native fit. `operation` is the decoded request word (the identity
+    code or a `PARALLEL_FORECAST_WORKER_OPN_*_FIT_SHARD` code); `request` is
+    the payload record `(state, args)` (None for identity). The predict and
+    generation-store requests are typed and never come here
+    (`forecast_worker`)."""
+    var f = PARALLEL_FORECAST_BOUNDARY.get_or_create_ptr()
+    var b = _b()
     if operation == PARALLEL_SHARD_WORKER_OPN_IDENTITY:
         return shard_identity()
     forecast_envelope_admit(py_type(request) is b.tuple, len(request) if py_type(request) is b.tuple else 0)
     var state = request[0]
     var args = request[1]
-    if operation == PARALLEL_FORECAST_WORKER_OPN_GENERATION_STORE:
-        # `state` is (kind, token), `args` the states of the shards this
-        # worker answers. The models are built here, once per generation;
-        # the kind's previous generation (and whatever the plain owners held
-        # for its models) is dropped by the replacement.
-        if py_type(state) is not b.tuple or len(state) != 2 or py_type(args) is not b.list:
-            raise Error("parallel forecasting: a generation store carries (kind, token) and a list of states")
-        var kind = Int(py=state[0])
-        if kind != _GENERATION_ARIMA and kind != _GENERATION_HW:
-            raise Error("parallel forecasting: unknown generation kind")
-        var models = b.list()
-        for i in range(len(args)):  # driver-loop: one model per shard this worker answers
-            if kind == _GENERATION_ARIMA:
-                var built = shard_model(f[].arima_cls, args[i])
-                py_setitem(py_fields(built), nk[].k__exog, PythonObject(None))
-                _ = py_call(models.append, built)
-            else:
-                _ = py_call(models.append, shard_model(f[].hw_cls, args[i]))
-        # The slot is read again: building a model can run a collection.
-        f = PARALLEL_FORECAST_BOUNDARY.get_or_create_ptr()
-        # A store of no states (the empty token: the coordinator's drop, or a
-        # worker beyond the shard count) leaves this worker holding nothing
-        # of the kind.
-        var held = models if len(models) > 0 else PythonObject(None)
-        if kind == _GENERATION_ARIMA:
-            f[].arima_generation.token = String(state[1])
-            f[].arima_generation.models = held
-        else:
-            f[].hw_generation.token = String(state[1])
-            f[].hw_generation.models = held
-        return PythonObject(len(models))
-    if operation == PARALLEL_FORECAST_WORKER_OPN_ARIMA_PREDICT_SHARD:
-        # The model this worker built at the generation's store (it was one
-        # model, and with it one resident device copy, per request).
-        var model = _generation_model(f[].arima_generation, state)
-        return arima_predict(model, Python.tuple(args[0], args[1], PythonObject(None)), f[].arima_context)
-    if operation == PARALLEL_FORECAST_WORKER_OPN_HW_PREDICT_SHARD:
-        var model = _generation_model(f[].hw_generation, state)
-        return hw_predict(model, Python.tuple(args[0], args[1], PythonObject(None)), f[].hw_context)
     if operation == PARALLEL_FORECAST_WORKER_OPN_ARIMA_FIT_SHARD:
         var model = shard_model(f[].arima_cls, state)
         _ = arima_fit(model, Python.tuple(args[0], PythonObject(None)), f[].arima_context)
@@ -983,6 +1012,30 @@ def forecast_worker_dispatch(operation: Int, request: PythonObject) raises -> Py
     raise Error("parallel forecasting: unsupported worker operation")
 
 
+def _worker_turn(turn: WorkerTurn) raises -> PythonObject:
+    """One request's result. The typed request: one decode of the frame's
+    words (a frame without request words is refused), then the code's
+    branch. A predict reads its operands from the request words alone: no
+    record is PACKed and no Python value is built before the plain owner's
+    typed-span query (its result Array is the reply's one tensor). A
+    generation store PACKs its states (the models are Python objects the
+    plain owners read); a fit PACKs its `(state, args)` record."""
+    var request = shard_request_decode(Int(turn.request.unsafe_ptr()), len(turn.request) * 8)
+    var f = PARALLEL_FORECAST_BOUNDARY.get_or_create_ptr()
+    if request.op == PARALLEL_FORECAST_WORKER_OPN_ARIMA_PREDICT_SHARD:
+        # The model this worker built at the generation's store.
+        var model = _generation_model(f[].arima_generation, request.words)
+        return arima_predict_span(model, request.words[3], request.words[4], f[].arima_context)
+    if request.op == PARALLEL_FORECAST_WORKER_OPN_HW_PREDICT_SHARD:
+        var model = _generation_model(f[].hw_generation, request.words)
+        return hw_predict_span(model, request.words[3], request.words[4], f[].hw_context)
+    if request.op == PARALLEL_FORECAST_WORKER_OPN_GENERATION_STORE:
+        return _worker_generation_store(request.words, process_worker_value(turn))
+    if len(request.words) != 0:
+        raise Error("parallel shards: invalid worker request envelope")
+    return forecast_worker_dispatch(request.op, process_worker_value(turn))
+
+
 def forecast_worker(argv: PythonObject) raises:
     var socket = process_worker_connect(argv)
     try:
@@ -991,10 +1044,7 @@ def forecast_worker(argv: PythonObject) raises:
             if not turn.open:
                 break
             try:
-                # The typed request: one decode of the frame's words (a frame
-                # without request words is refused), then the code's branch.
-                var operation = shard_request_op(Int(turn.request.unsafe_ptr()), len(turn.request) * 8)
-                process_worker_reply(socket, turn.sequence, forecast_worker_dispatch(operation, process_worker_value(turn)))
+                process_worker_reply(socket, turn.sequence, _worker_turn(turn))
             except error:
                 process_worker_refuse(socket, turn.sequence, String(error))
     except error:
