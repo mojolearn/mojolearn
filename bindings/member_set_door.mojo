@@ -22,7 +22,10 @@ state through Python objects. Here:
   * PACK (`member_set_pack`, GIL held): the fitted state is written into the
     member's Python estimator (`member_pack`: the attributes its own fit
     writes, so the caller's predict paths and `estimators_` read it as
-    before) and the state is released.
+    before) and the state is released. Its FIT NOTICES (core/member_notices.mojo)
+    are taken there and raised by `member_set_notices`, which the caller calls
+    once its whole publication succeeded (a fallback to its own loop, whose
+    doors raise them, then raises nothing twice).
 
 ALL OR NOTHING: a caller admits every member first; when one is not a native
 member (`member_set_admit` answers False) nothing has run and the caller
@@ -81,6 +84,7 @@ from std.sys.compile import is_defined
 from std.python._cpython import GILReleased
 from bindings.member_boundary_door import member_admit_serving, member_pack, member_pack_labeled
 from bindings.member_held_door import MemberHeld, member_held, member_held_release, member_held_adopt
+from bindings.member_fit_notices_pack import member_fit_notices_raise
 from bindings.admitted_input_unpack import admitted_unfilled
 from bindings.native_unit_os_threads_run import native_unit_cores
 from bindings.prep_native_estimator_door import prep_estimator_plan
@@ -100,6 +104,7 @@ from core.member_abi import (
     MEMBER_CAN_SCOPE, MEMBER_SCOPE_NONE, member_pin_settle, MEMBER_BORROWS_FIT,
 )
 from core.member_families import MEMBER_FAMILY_TREE, MEMBER_FAMILY_FOREST, MEMBER_FAMILY_EXTRA_TREES
+from core.member_notices import member_notices_take
 
 #: Default ON. `-D MOJOLEARN_MEMBER_SET_OFF` makes `member_set_admit` answer
 #: False for every member, so every caller keeps its own member loop: the B
@@ -169,6 +174,9 @@ struct MemberSetRun(Movable):
     var part_x: List[List[Float32]]
     var part_y: List[List[Int32]]
     var part_w: List[List[Float32]]
+    # Per member, the fit notices `member_set_pack` took from its state
+    # (empty: none), raised by `member_set_notices`.
+    var notices: List[List[Float64]]
 
     def __init__(out self, x: Int, rows: Int, cols: Int, y_dtype: Int, index_dtype: Int):
         self.plans = List[MemberPlan]()
@@ -192,6 +200,7 @@ struct MemberSetRun(Movable):
         self.tests = List[UInt8]()
         self.scope = MEMBER_SCOPE_NONE
         self.pin_tokens = List[Int]()
+        self.notices = List[List[Float64]]()
         self.borrows = List[UInt8]()
         self.part_x = List[List[Float32]]()
         self.part_y = List[List[Int32]]()
@@ -332,6 +341,7 @@ def member_set_admit(mut set: MemberSet, estimator: PythonObject, target: Int, w
     set.run.errors.append(String(""))
     set.run.uncovered.append(UInt8(0))
     set.run.pin_tokens.append(0)
+    set.run.notices.append(List[Float64]())
     set.run.borrows.append(borrows)
     set.run.part_x.append(List[Float32]())
     set.run.part_y.append(List[Int32]())
@@ -778,6 +788,8 @@ def member_set_pack(mut set: MemberSet, u: Int, classes: PythonObject, b: Python
     var member_context = set.contexts[u]
     var fields = set.fields[u]
     try:
+        set.run.notices[u].clear()
+        member_notices_take(set.run.plans[u], set.run.states[u], set.run.notices[u])
         if classes is None:
             member_pack(estimator, fields, member_context, b, set.run.plans[u], set.run.states[u])
         else:
@@ -815,6 +827,17 @@ def member_set_pack(mut set: MemberSet, u: Int, classes: PythonObject, b: Python
     # made a borrowing kind own its rows first): the held block goes now.
     set.run.part_free(u)
     return estimator
+
+
+def member_set_notices(mut set: MemberSet) raises:
+    """PACK: every packed member's fit notices, in member order, with its own
+    context, as each member's own fit door raised them (GIL held). The caller
+    calls it once its publication loop succeeded; a second call raises
+    nothing."""
+    for u in range(len(set.run.notices)):  # driver-loop: over the members (a few warnings each)
+        if len(set.run.notices[u]) > 0:
+            member_fit_notices_raise(set.run.notices[u], set.contexts[u])
+            set.run.notices[u].clear()
 
 
 def member_marked(estimator: PythonObject, context: PythonObject) -> Bool:

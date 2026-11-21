@@ -20,8 +20,8 @@ entry presence words, the resident cache slots, DeviceRows fields) in UNPACK
 and releases the GIL around this call. No bit moves.
 """
 from std.memory import unsafe_memcpy, ArcPointer
-from std.ffi import external_call, c_size_t
 from core.entry_table import EntryRef
+from core.host_zero_arena import HostZeroArena
 from core.prep_entry_table import xp_transport_call
 from x_prep.transport_abi import XP_RUN, XP_RUN_SCRATCH, XP_RUN_OUT, XP_RUN_RANGES, XP_DEV_PUT, XP_DEV_FREE, XP_DEV_TAKE_ROWS
 from bindings.arena_prog_run import _add_input, _merge_pairs, _pad, _switch
@@ -448,28 +448,8 @@ def cls_prog_run(plan: ClsRunPlan, program: ClsProgram, records: List[ClsRunInpu
 # A caller without Python owners (a member): its buffers are borrowed
 # addresses in record order, the arena is native, the resident scope is the
 # handle word its own caller read at UNPACK.
-comptime _ClsBytes = MutPointer[UInt8, MutUntrackedOrigin]
-
-
-struct ClsArena(Movable):
-    """max(words, 1) zeroed float32 words for one run. libc `calloc`: a
-    large block is fresh zero pages the system maps on first touch, as the
-    door's anonymous mapping, so arena words a run never touches on the host
-    (an input that went up from its own buffer, device scratch) cost nothing."""
-    var address: Int
-
-    def __init__(out self, words: Int) raises:
-        var raw = external_call["calloc", Optional[_ClsBytes]](c_size_t(max(words, 1)), c_size_t(4))
-        if not raw:
-            raise Error("MemoryError: x_prep: the program arena could not be allocated")
-        self.address = Int(raw.value())
-
-    def __del__(deinit self):
-        if self.address:
-            external_call["free", NoneType](_ClsBytes(unsafe_from_address=self.address))
-
-    def f32(self, offset: Int) -> CLS_F32P:
-        return CLS_F32P(unsafe_from_address=self.address + 4 * offset)
+# The typed caller's arena is the members' one (core/host_zero_arena.mojo).
+comptime ClsArena = HostZeroArena
 
 
 @fieldwise_init

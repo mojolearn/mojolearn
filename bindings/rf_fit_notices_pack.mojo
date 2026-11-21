@@ -2,10 +2,10 @@
 """PACK of a RandomForest / DecisionTree fit's notices (the third export
 metadata word, an `ensemble/rf_notices.mojo` bit mask) as Python
 UserWarnings, in the order the fit reached them. One function, read by the
-estimator's own fit door (`trees_public_forest_door._rf_fit_notices`), the
-forest member PACK (`forest_member_pack_common`) and the model-selection
-member units (`msel_member_units_door`), so every route raises the same
-words in the same category (lane fx-audit, audit-trees F1).
+estimator's own fit door (`trees_public_forest_door._rf_fit_notices`) and
+by the member fit notice raiser (bindings/member_fit_notices_pack.mojo,
+`MEMBER_NOTICE_FOREST`), so every route raises the same words in the same
+category (lane fx-audit, audit-trees F1).
 
 SERIAL BY NATURE: at most three warnings per fit, GIL held."""
 from std.python import PythonObject

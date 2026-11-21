@@ -85,8 +85,6 @@ struct CausalKeys(Defaultable, Movable):
     var k_block_classes: PythonObject
     var k_block_kwargs: PythonObject
     var k_block_options: PythonObject
-    var k_byte_fixed: PythonObject
-    var k_byte_layer: PythonObject
     var k_byte_row: PythonObject
     var k_checkpoint_class: PythonObject
     var k_checkpoint_context: PythonObject
@@ -128,7 +126,6 @@ struct CausalKeys(Defaultable, Movable):
     var k_layer_types: PythonObject
     var k_layers: PythonObject
     var k_linalg: PythonObject
-    var k_llama_layer: PythonObject
     var k_low_freq_factor: PythonObject
     var k_max_position_embeddings: PythonObject
     var k_max_positions: PythonObject
@@ -260,8 +257,6 @@ struct CausalKeys(Defaultable, Movable):
         self.k_block_classes = PythonObject(None)
         self.k_block_kwargs = PythonObject(None)
         self.k_block_options = PythonObject(None)
-        self.k_byte_fixed = PythonObject(None)
-        self.k_byte_layer = PythonObject(None)
         self.k_byte_row = PythonObject(None)
         self.k_checkpoint_class = PythonObject(None)
         self.k_checkpoint_context = PythonObject(None)
@@ -303,7 +298,6 @@ struct CausalKeys(Defaultable, Movable):
         self.k_layer_types = PythonObject(None)
         self.k_layers = PythonObject(None)
         self.k_linalg = PythonObject(None)
-        self.k_llama_layer = PythonObject(None)
         self.k_low_freq_factor = PythonObject(None)
         self.k_max_position_embeddings = PythonObject(None)
         self.k_max_positions = PythonObject(None)
@@ -439,8 +433,6 @@ def _causal_keys_fill(nk: UnsafePointer[CausalKeys, MutUntrackedOrigin]) raises:
     nk[].k_block_classes = py_key("block_classes")
     nk[].k_block_kwargs = py_key("block_kwargs")
     nk[].k_block_options = py_key("block_options")
-    nk[].k_byte_fixed = py_key("byte_fixed")
-    nk[].k_byte_layer = py_key("byte_layer")
     nk[].k_byte_row = py_key("byte_row")
     nk[].k_checkpoint_class = py_key("checkpoint_class")
     nk[].k_checkpoint_context = py_key("checkpoint_context")
@@ -482,7 +474,6 @@ def _causal_keys_fill(nk: UnsafePointer[CausalKeys, MutUntrackedOrigin]) raises:
     nk[].k_layer_types = py_key("layer_types")
     nk[].k_layers = py_key("layers")
     nk[].k_linalg = py_key("linalg")
-    nk[].k_llama_layer = py_key("llama_layer")
     nk[].k_low_freq_factor = py_key("low_freq_factor")
     nk[].k_max_position_embeddings = py_key("max_position_embeddings")
     nk[].k_max_positions = py_key("max_positions")

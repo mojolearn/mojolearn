@@ -82,7 +82,7 @@ def _linear_svc_fit(model: PythonObject, args: PythonObject, context: PythonObje
 
 
 def _linear_svc_prediction(model: PythonObject, source: PythonObject,
-                        context: PythonObject) raises -> LinearSvcPrediction:
+                        context: PythonObject, label_context: PythonObject) raises -> LinearSvcPrediction:
     var fields = py_fields(model)
     var nk = svm_keys()
     if svc_has(fields, nk[].k_classes_):
@@ -109,17 +109,18 @@ def _linear_svc_prediction(model: PythonObject, source: PythonObject,
             return LinearSvcPrediction(classes, codes^)
         if not svc_has(fields, nk[].k__w):
             raise Error("mojolearn LinearSVC: call fit first")
-        return _linear_svc_decided(model, connection, classes, k, source, context)
+        return _linear_svc_decided(model, connection, classes, k, source, context, label_context)
     if not svc_has(fields, nk[].k__w):
         raise Error("mojolearn LinearSVC: call fit first")
     var classes = svc_field(fields, nk[].k_classes_, "classes_")
     var k = len(classes)
     var connection = linear_svc_route(model, fields, context)
-    return _linear_svc_decided(model, connection, classes, k, source, context)
+    return _linear_svc_decided(model, connection, classes, k, source, context, label_context)
 
 
 def _linear_svc_decided(model: PythonObject, connection: LinearSvcConnection, classes: PythonObject, k: Int,
-                        source: PythonObject, context: PythonObject) raises -> LinearSvcPrediction:
+                        source: PythonObject, context: PythonObject,
+                        label_context: PythonObject) raises -> LinearSvcPrediction:
     """The decision-score fallback: scores, then the native threshold (two
     classes) or argmax over them."""
     var scores = _qn_scores_native(model, connection, source, 1 if k == 2 else k, context)
@@ -128,8 +129,8 @@ def _linear_svc_decided(model: PythonObject, connection: LinearSvcConnection, cl
         # the old argmax boundary then refused its missing second dimension.
         raise Error("IndexError: tuple index out of range")
     var codes = List[Int64](length=scores.rows, fill=0)
-    # The label steps run on the estimator's device (labels_scope), once.
-    var label_context = labels_scope(model, context)
+    # The label steps run on the estimator's device (`label_context`: the
+    # operation's one labels_scope read).
     if k == 2:
         if scores.rows > 0:
             _ = labels_threshold(label_context, LabelsThresholdRequest(Int(scores.values.unsafe_ptr()),
@@ -157,9 +158,12 @@ def svc_linear_operation(model: PythonObject, operation: Int, args: PythonObject
         _linear_svc_fit(model, args, context)
         return model
     if operation == SVC_OPN_FAMILY_SVC_LINEAR_SVC_PREDICT:
-        var prediction = _linear_svc_prediction(model, args[1], context)
-        return linear_svc_predict_pack(model, prediction, labels_scope(model, context))
+        # One label scope read per operation (the fallback and the decode).
+        var scope = labels_scope(model, context)
+        var prediction = _linear_svc_prediction(model, args[1], context, scope)
+        return linear_svc_predict_pack(model, prediction, scope)
     if operation == SVC_OPN_FAMILY_SVC_LINEAR_SVC_SCORE:
-        var prediction = _linear_svc_prediction(model, args[1], context)
-        return linear_svc_score_pack(model, prediction, args[2], context)
+        var scope = labels_scope(model, context)
+        var prediction = _linear_svc_prediction(model, args[1], context, scope)
+        return linear_svc_score_pack(model, prediction, args[2], context, scope)
     raise Error("RuntimeError: unknown linear SVM operation " + String(operation))

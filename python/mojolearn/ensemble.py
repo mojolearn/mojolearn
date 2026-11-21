@@ -662,9 +662,14 @@ class GradientBoosting(_NumericModeMixin):
         Bayesian (including the default) or no bootstrap raises ``ValueError``.
     cat_features : sequence of int, optional
         Column indices of the categorical features. A categorical column may
-        hold any values: integers, other numbers, text, bytes or ``None``
-        (pass text in a list of rows or in a NumPy object, string or bytes
-        array). The values are mapped to
+        hold any values: integers, other numbers, text, bytes, ``None`` or
+        ``pandas.NA`` (pass text in a list of rows, a NumPy object, string or
+        bytes array, or a pandas DataFrame whose categorical columns have
+        ``object``, Python-backed ``string`` or ``category`` dtype). In a
+        NumPy string or bytes array the other columns must hold numbers
+        written as text, such as ``'1.5'``. Arrow-backed pandas string
+        columns are not accepted; convert them with
+        ``X.astype({column: object})``. The values are mapped to
         categories during ``fit``; the mapping is kept with the model, saved
         and loaded with it, and applied by ``predict``. A value that was not
         seen during ``fit`` is treated as an unknown category. As in
@@ -859,6 +864,8 @@ class GradientBoosting(_NumericModeMixin):
     >>> proba = model.predict_proba(X)
     """
 
+    #: A member of a meta-estimator (core/gbdt_member.mojo: family 16, kind 1).
+    _mojolearn_member = (16, 1)
     #: This family's binding, for `NumericModeMixin._bind`.
     _BINDING = "_mojolearn_gbdt"
 

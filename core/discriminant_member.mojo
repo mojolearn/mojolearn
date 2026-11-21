@@ -86,6 +86,7 @@ from bindings.prep_classify_prog_run import (
 from core.naive_bayes_member import (
     NB_ROUTE_RANGES, NB_ROUTE_DEV_STORE, NB_ROUTE_PROBA64,
     _Rows, _rows, _x_source, _plain, _copy_out, _fit_views, _fit_shape, _run_plan, _route_gathers,
+    nb_wide_index,
 )
 from core.member_abi import (
     MemberCall, MemberMatrix, MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_I64,
@@ -753,22 +754,32 @@ def _discriminant_member(operation: Int, address: Int) raises -> Int:
         _outputs(call)
         return 0
     var slot = _Slot(unsafe_from_address=_lookup(call[].state, False))
-    if operation == MEMBER_OP_FIT:
-        if slot[].kind() == DA_KIND_LDA:
-            _fit_lda(slot, call)
+    # A host int32 row index: widened once (core/naive_bayes_member.mojo
+    # `nb_wide_index`), the caller's view restored after.
+    var given = call[].row_index
+    var wide = List[Int64]()
+    var widened = nb_wide_index(call, wide)
+    try:
+        if operation == MEMBER_OP_FIT:
+            if slot[].kind() == DA_KIND_LDA:
+                _fit_lda(slot, call)
+            else:
+                _fit_qda(slot, call)
+        elif (operation == MEMBER_OP_PREDICT or operation == MEMBER_OP_PREDICT_PROBA
+                or operation == MEMBER_OP_DECISION):
+            _score(slot, call, operation)
+        elif operation == MEMBER_OP_TRANSFORM:
+            _transform(slot, call)
+        elif operation == MEMBER_OP_EXPORT:
+            _export(slot, call)
+        elif operation == MEMBER_OP_IMPORT:
+            _import(slot, call)
         else:
-            _fit_qda(slot, call)
-    elif (operation == MEMBER_OP_PREDICT or operation == MEMBER_OP_PREDICT_PROBA
-            or operation == MEMBER_OP_DECISION):
-        _score(slot, call, operation)
-    elif operation == MEMBER_OP_TRANSFORM:
-        _transform(slot, call)
-    elif operation == MEMBER_OP_EXPORT:
-        _export(slot, call)
-    elif operation == MEMBER_OP_IMPORT:
-        _import(slot, call)
-    else:
-        member_unsupported(_kind_name(slot[].kind()), operation)
+            member_unsupported(_kind_name(slot[].kind()), operation)
+    finally:
+        if widened:
+            call[].row_index = given
+    _ = wide^
     return 0
 
 

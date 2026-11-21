@@ -62,6 +62,7 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
 from checks.vendor import COMPILED_VENDOR
+from core.gbdt_member import GbdtMemberImage, gbdt_member_publish_image
 from gbdt.gpu_data.sym_feat_switches import GBDT_QUANT_DEVICE
 from gbdt.binary_prediction import binary_prediction_device, sigmoid_f64_device
 
@@ -473,6 +474,23 @@ def gbdt_fit_ordered_rmse_native(
 # ---- The image's native gbdt entry (lane calltable-gbdt-forest-dart,
 # 2026-11-11; ABI gbdt/fit_request.mojo, table core/gbdt_entry_table.mojo):
 # the GBDT doors fit, probe and read the model dimension through it instead
+
+struct _GbdtMemberGpuImage(GbdtMemberImage):
+    """The Gbdt member's resident-model release in this image (the registry
+    step of `gbdt_resident_release_binding`, under the same lock word, with
+    no interpreter: a member call runs without the GIL)."""
+
+    @staticmethod
+    def release(handle: Int) raises:
+        var word = _gbdt_lock_word()
+        _gbdt_lock(word)
+        try:
+            gbdt_resident_release(handle)
+        except error:
+            _gbdt_unlock(word)
+            raise error^
+        _gbdt_unlock(word)
+
 # of the Python entries above, which remain for the unconverted Python
 # callers (python/mojolearn/ensemble*.py) and only UNPACK and PACK.
 struct _GbdtGpuImage(GbdtImage):
@@ -552,6 +570,8 @@ def build__mojolearn_gbdt() -> PythonObject:
         var m = PythonModuleBuilder("_mojolearn_gbdt")
         # The native gbdt entry (core/gbdt_entry_table.mojo) under this image's key.
         gbdt_entry_publish["MojolearnGbdtEntryOwnerGpuV1"](COMPILED_VENDOR, gbdt_gpu_entry_v1)
+        # The Gbdt member (core/gbdt_member.mojo), after the gbdt entry.
+        gbdt_member_publish_image[_GbdtMemberGpuImage](COMPILED_VENDOR)
         m.def_function[device_plan_enter_binding]("device_plan_enter")
         m.def_function[device_plan_exit_binding]("device_plan_exit")
         m.def_function[device_plan_log_binding]("device_plan_log")

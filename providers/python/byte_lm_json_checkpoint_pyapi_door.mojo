@@ -105,7 +105,10 @@ def byte_json_read(path: PythonObject, mut failure: ByteCheckpointIOError) raise
     is the exact OSError subclass of its errno (`byte_checkpoint_file_error`)."""
     var target = String(cv_path(path))
     var file_failure = ByteCheckpointWriteFailure()
-    var data = List[UInt8](length=BYTE_JSON_LIMIT + 1, fill=UInt8(0))
+    # Uninitialised (lane fx-audit 22): the read writes the words it returns
+    # and only those `got` bytes are copied out, so no 2 MiB zero pass runs
+    # per restore and pages past the file are never touched.
+    var data = List[UInt8](unsafe_uninit_length=BYTE_JSON_LIMIT + 1)
     var got = 0
     var py = Python()
     try:
@@ -132,18 +135,21 @@ def byte_json_write(path: PythonObject, encoded: PythonObject, mut failure: Byte
     var target = String(cv_path(path))
     var file_failure = ByteCheckpointWriteFailure()
     var pin = AdmittedBorrowedBuffer(encoded)
-    var layout = pin.layout.value().copy()
-    var total = layout.count * layout.itemsize
-    if not layout.contiguous():
-        raise Error("Byte-LM checkpoint bytes must be contiguous")
-    var address = layout.address
-    var py = Python()
     try:
-        with GILReleased(py):
-            byte_file_write(target, address, total, file_failure)
-    except error:
-        if file_failure.number != 0:
-            byte_checkpoint_file_error(failure, file_failure)
-        raise error
-    # The export pinned the written bytes to here.
-    pin.release()
+        var layout = pin.layout.value().copy()
+        var total = layout.count * layout.itemsize
+        if not layout.contiguous():
+            raise Error("Byte-LM checkpoint bytes must be contiguous")
+        var address = layout.address
+        var py = Python()
+        try:
+            with GILReleased(py):
+                byte_file_write(target, address, total, file_failure)
+        except error:
+            if file_failure.number != 0:
+                byte_checkpoint_file_error(failure, file_failure)
+            raise error
+    finally:
+        # The export pinned the written bytes to here, on every path (a failed
+        # write too: lane fx-audit 22).
+        pin.release()

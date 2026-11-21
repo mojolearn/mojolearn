@@ -486,24 +486,26 @@ def _fit_svc(slot: _Slot, call: _Call) raises:
             unsafe_memcpy(dest=support.unsafe_ptr(), src=result.solved.support.unsafe_ptr(), count=n_sv)
             unsafe_memcpy(dest=slot[].vectors.unsafe_ptr(), src=result.solved.vectors.unsafe_ptr(), count=n_sv * cols)
         var bias = _round_f32(result.solved.info[0])
-        slot[].machines.append(SvcPairFit(0, 1, n_sv, cols, dual^, slot[].vectors.copy(), support^, bias,
+        # ONE copy of the support rows (lane fx-audit 31): the machine owns
+        # them; the public blocks of a one-machine state are its views.
+        var vectors = List[Float32]()
+        swap(vectors, slot[].vectors)
+        slot[].machines.append(SvcPairFit(0, 1, n_sv, cols, dual^, vectors^, support^, bias,
             Int(result.solved.info[2])))
         slot[].label0 = _round_f32(result.solved.info[3])
         slot[].label1 = _round_f32(result.solved.info[4])
-        _binary_layout(slot, False)
+        _binary_layout(slot)
     slot[].fitted = True
     _ = labels^
     _ = held^
 
 
-def _binary_layout(slot: _Slot, vectors: Bool):
-    """The public layout of one machine (binary SVC, SVR): its own arrays,
-    copied field by field (no copy of the whole machine). `vectors` False:
-    support_vectors_ is already in place (the binary SVC fit writes it)."""
-    slot[].support = slot[].machines[0].support.copy()
-    if vectors:
-        slot[].vectors = slot[].machines[0].vectors.copy()
-    slot[].dual = slot[].machines[0].dual.copy()
+def _binary_layout(slot: _Slot):
+    """The public layout of one machine (binary SVC, SVR). Its support,
+    support rows and duals are NOT copied (lane fx-audit 31: they were kept
+    twice): `_block_view` exports the machine's own arrays as support_,
+    support_vectors_ and dual_coef_; only the small per-machine words are
+    written here."""
     slot[].n_support = List[Int32](length=1, fill=Int32(slot[].machines[0].supports))
     slot[].intercept = List[Float32](length=1, fill=Float32(slot[].machines[0].bias))
     slot[].n_iter = List[Int32](length=1, fill=Int32(slot[].machines[0].n_iter))
@@ -563,7 +565,7 @@ def _fit_svr(slot: _Slot, call: _Call) raises:
         Int(plan.info[2])))
     slot[].features = cols
     slot[].gamma = gamma
-    _binary_layout(slot, True)
+    _binary_layout(slot)
     slot[].fitted = True
     _ = bounds^
     _ = held^
@@ -828,7 +830,13 @@ def _score(slot: _Slot, call: _Call) raises:
 def _block_view(slot: _Slot, block: Int) raises -> MemberMatrix:
     var k = slot[].classes
     var machines = len(slot[].machines)
-    var total = len(slot[].support)
+    # A one-machine state (binary SVC, SVR) holds its public arrays only in
+    # the machine (`_binary_layout`); a multiclass state in the slot.
+    var single = machines == 1 and len(slot[].support) == 0
+    var total = slot[].machines[0].supports if single else len(slot[].support)
+    if single and len(slot[].machines[0].support) != total and (block == _B_SUPPORT or block == _B_VECTORS
+                                                                   or block == _B_DUAL):
+        raise Error("member ABI: this kernel SVM state holds no support_ for its machine")
     if block == MEMBER_BLOCK_SCALARS:
         slot[].scalars = List[Float64](length=_SCALARS, fill=0.0)
         slot[].scalars[0] = slot[].params[0]
@@ -844,12 +852,13 @@ def _block_view(slot: _Slot, block: Int) raises -> MemberMatrix:
     if block == MEMBER_BLOCK_INTERCEPT:
         return MemberMatrix(_f32(slot[].intercept), 1, len(slot[].intercept))
     if block == _B_SUPPORT:
-        return MemberMatrix(_i32(slot[].support), 1, total, MEMBER_I32)
+        return MemberMatrix(_i32(slot[].machines[0].support) if single else _i32(slot[].support), 1, total, MEMBER_I32)
     if block == _B_VECTORS:
-        return MemberMatrix(_f32(slot[].vectors), total, slot[].features)
+        return MemberMatrix(_f32(slot[].machines[0].vectors) if single else _f32(slot[].vectors), total,
+                            slot[].features)
     if block == _B_DUAL:
         var dual_rows = k - 1 if k > 2 else 1
-        return MemberMatrix(_f32(slot[].dual), dual_rows, total)
+        return MemberMatrix(_f32(slot[].machines[0].dual) if single else _f32(slot[].dual), dual_rows, total)
     if block == _B_N_SUPPORT:
         return MemberMatrix(_i32(slot[].n_support), 1, len(slot[].n_support), MEMBER_I32)
     if block == _B_N_ITER:
@@ -993,8 +1002,16 @@ def _import(slot: _Slot, call: _Call) raises:
     var k = slot[].classes
     if _svc(slot) and slot[].probability and len(slot[].prob) != k * (k - 1):
         raise Error("member ABI: a probability SVC state needs its sigmoid parameters block")
-    if len(slot[].machines) == 1 and len(slot[].support) == 0:
-        _binary_layout(slot, len(slot[].vectors) == 0)
+    if len(slot[].machines) == 1:
+        # ONE copy: the machine's arrays are the public ones; public blocks
+        # imported beside them are dropped (a machine without its support
+        # takes the imported support_ instead).
+        if len(slot[].machines[0].support) == 0:
+            swap(slot[].machines[0].support, slot[].support)
+        slot[].support = List[Int32]()
+        slot[].vectors = List[Float32]()
+        slot[].dual = List[Float32]()
+        _binary_layout(slot)
     slot[].fitted = True
 
 

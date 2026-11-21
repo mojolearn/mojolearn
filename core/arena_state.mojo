@@ -469,10 +469,12 @@ def arena_resident_close_entries[F: ArenaStoreFree](
             store.free(drained[i].store_id)
         except error:
             store.failed(error)
-            # A failed entry stays owned for a retry.
+            # A failed entry stays owned for a retry, unless another thread
+            # published the same owner meanwhile: its entry is kept, so this
+            # one's pins are released by the caller (lane fx-audit 28).
             try:
-                _ = state.publish(drained[i])
-                kept[i] = True
+                var held = state.publish(drained[i])
+                kept[i] = held.store_id == drained[i].store_id
             except publish_error:
                 store.failed(publish_error)
     return kept^
@@ -493,8 +495,10 @@ def arena_resident_release_entry[F: ArenaStoreFree](
     except error:
         store.failed(error)
         try:
-            _ = state.publish(removed)
-            return True
+            # Kept only when this entry is the one published (another thread
+            # may have published the same owner meanwhile: lane fx-audit 28).
+            var held = state.publish(removed)
+            return held.store_id == removed.store_id
         except publish_error:
             store.failed(publish_error)
     return False

@@ -43,7 +43,6 @@ from bindings.trees_public_forest_door import (
     forest_kind, forest_get_params, forest_config, forest_capture_mode, forest_prediction_engine, forest_key,
     forest_refresh, _rf_derive, _et_derive,
 )
-from bindings.rf_fit_notices_pack import rf_fit_notices_word
 from bindings.forest_config_run import forest_target_need, FOREST_TARGET_ANY, FOREST_FEATURES_REFUSED
 from core.device_route import DeviceRoute, DEVICE_CPU, DEVICE_GPU
 from core.member_abi import (
@@ -142,9 +141,9 @@ def forest_member_pack_common(model: PythonObject, context: PythonObject, b: Pyt
     """PACK: write the fitted attributes of state `state` into `model`, as
     the estimator's own fit does (the refreshed configuration, the fit mode,
     the five frozen model arrays, the dimensions and a classifier's
-    `classes_`) and, for a RandomForest / DecisionTree state, the fit's
-    notices (UserWarnings, once per member, as the estimator's own fit
-    raises them)."""
+    `classes_`). A RandomForest / DecisionTree fit's notices are the
+    state's fit notices, raised by the caller (core/member_notices.mojo),
+    never here."""
     var run = trees_route_context(model, context)
     var kind = forest_kind(model, run)
     # Taken before `forest_refresh` clears the instance dictionary.
@@ -178,11 +177,8 @@ def forest_member_pack_common(model: PythonObject, context: PythonObject, b: Pyt
         py_setitem(fields, "n_classes_", PythonObject(classes))
         if labels is not None:
             py_setitem(fields, "classes_", labels)
-    # The fit notices (lane fx-audit, audit-trees F1): the RF / DT layout's
-    # third metadata word is the `ensemble/rf_notices.mojo` bit mask the
-    # door's `_rf_fit_notices` reads; ET's third word is its depth cap.
-    if _family_of(kind) == "rf" and len(meta) >= 3:
-        rf_fit_notices_word(meta[2], context)
+    # ET's third metadata word is its depth cap (the RF / DT layout's is the
+    # fit notice mask, carried by the state: core/member_notices.mojo).
     if _family_of(kind) == "et" and len(meta) >= 6:
         py_setitem(fields, "depth_cap_bound_", PythonObject(meta[2] != 0))
         py_setitem(fields, "max_depth_resolved_", PythonObject(meta[3]))

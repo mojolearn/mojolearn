@@ -278,3 +278,21 @@ def host_narrow_codes_i32(src_address: Int, dst_address: Int, count: Int):
             dst[i] = Int32(src[i])
 
     host_parallelize(task, units)
+
+
+def host_widen_index_i64(src_address: Int, dst_address: Int, count: Int):
+    """Widen `count` int32 row numbers at `src_address` into int64 at
+    `dst_address`, split across the host pool in chunks of
+    `HOST_NARROW_CHUNK` words, as `host_narrow_codes_i32` (lane fx-audit 10:
+    a meta-estimator's int32 draws handed to a member that reads int64 row
+    numbers). Exact."""
+    var units = (count + HOST_NARROW_CHUNK - 1) // HOST_NARROW_CHUNK
+
+    def task(unit: Int) {imm src_address, imm dst_address, imm count}:
+        var src = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=src_address)
+        var dst = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=dst_address)
+        var stop = min(count, (unit + 1) * HOST_NARROW_CHUNK)
+        for i in range(unit * HOST_NARROW_CHUNK, stop):  # native data loop (one host-pool chunk of row numbers, not a driver loop)
+            dst[i] = Int64(src[i])
+
+    host_parallelize(task, units)

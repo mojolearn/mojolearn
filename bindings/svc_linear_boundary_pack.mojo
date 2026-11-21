@@ -19,7 +19,6 @@ from core.linear_svc_native_api import LinearSvcFitPlan, linear_svc_pack
 from core.qn_single_fit import QnSingleFitPlan
 from bindings.svc_common_pack import svc_decode
 from bindings.svc_common_door import svc_r2_sums
-from bindings.labels_descriptor_boundary_door import labels_scope
 from bindings.svc_score_boundary_door import svc_decode_score, svc_accuracy_native
 from bindings.svm_keys_unpack import svm_keys
 
@@ -95,12 +94,12 @@ def linear_svc_predict_pack(model: PythonObject, prediction: LinearSvcPrediction
 
 
 def linear_svc_score_pack(model: PythonObject, prediction: LinearSvcPrediction, truth: PythonObject,
-                          context: PythonObject) raises -> PythonObject:
+                          context: PythonObject, label_context: PythonObject) raises -> PythonObject:
     """Accuracy of the predicted class codes against `truth`, counted on the
     metrics image of the estimator's device."""
-    # The label steps run on the estimator's device (labels_scope), read once;
-    # `context` stays the family context its binding route compares.
-    var label_context = labels_scope(model, context)
+    # `label_context`: the operation's one labels_scope read (the label steps
+    # run on the estimator's device); `context` stays the family context its
+    # binding route compares.
     var decoded = svc_decode_score(model, prediction.classes, prediction.codes, label_context)
     return PythonObject(svc_accuracy_native(model, truth, decoded, context, label_context))
 

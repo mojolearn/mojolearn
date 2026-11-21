@@ -59,8 +59,10 @@ An import needs all ten; the last one carries MEMBER_IMPORT_DONE.
 The state is OWNED by its slot in a process-wide store of fixed chunks
 (lock for mint, free and lookup only). The predict words (per-tree
 addresses into the slot's arenas) and, on a resident image, the kept device
-forest are built once at the end of a fit or import and released at the
-next fit, import or free. SERIAL BY NATURE: the rounds (round t reads round
+forest are built once: the words at the end of a fit or import, the device
+forest at the first predict / predict_proba / decision / score of the state
+(as the door), so a state only fitted and packed uploads nothing; both are
+released at the next fit, import or free. SERIAL BY NATURE: the rounds (round t reads round
 t-1's trees); the per-row work runs inside the images. Parallel: the class
 code cast and the accuracy count split rows over the host workers.
 """
@@ -94,6 +96,7 @@ from core.member_families import MEMBER_FAMILY_DART
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
+from std.atomic import Atomic, Ordering
 
 comptime _STORE_NAME: StaticString = "MojolearnDartMemberStoreV2"
 comptime _ESTIMATOR = "DART"
@@ -156,6 +159,12 @@ struct DartMemberSlot(Copyable, Movable, Defaultable):
     var dart: EntryRef
     var glue: EntryRef
     var snapshot: Int
+    # The kept device forest is uploaded at the first predict of the fitted
+    # state (lane fx-audit 27), as the door's `_dart_resident_predict`:
+    # `prepared` (acquire / release) says it was decided, `prepare_lock`
+    # serializes concurrent first predicts.
+    var prepared: Int64
+    var prepare_lock: Int64
 
     def __init__(out self):
         self.generation = 0
@@ -198,6 +207,8 @@ struct DartMemberSlot(Copyable, Movable, Defaultable):
         self.dart = entry_ref_unresolved()
         self.glue = entry_ref_unresolved()
         self.snapshot = 0
+        self.prepared = 0
+        self.prepare_lock = 0
 
 
 struct DartMemberStore(Defaultable, Movable):
@@ -325,7 +336,9 @@ def _lookup(handle: Int, release: Bool) raises -> Int:
 
 
 def _release_snapshot(slot: _SlotPtr):
-    """The kept device forest back to its image (non-raising)."""
+    """The kept device forest back to its image (non-raising); the next
+    predict decides it again."""
+    slot[].prepared = 0
     if slot[].snapshot == 0:
         return
     var handle = slot[].snapshot
@@ -403,8 +416,9 @@ def _count_equal(left: Int, right: Int, rows: Int) -> Int:
 def _prepare(slot: _SlotPtr, dart: EntryRef, glue: EntryRef) raises:
     """The predict words of the fitted members (`_dart_forest`: per tree the
     address of its colid / quesval / left_child from its first node, of its
-    leaf values, its node count and its coefficient) and, on a resident
-    image, the kept device forest. Once per fit or import."""
+    leaf values, its node count and its coefficient). Once per fit or
+    import; the kept device forest waits for the first predict
+    (`_ensure_snapshot`)."""
     slot[].dart = dart
     slot[].glue = glue
     slot[].x_members = List[Float64](length=len(slot[].members), fill=0.0)
@@ -441,13 +455,32 @@ def _prepare(slot: _SlotPtr, dart: EntryRef, glue: EntryRef) raises:
         slot[].p_vals[i] = Int64(values + 4 * slot[].members[base + DART_M_VAL_START])
         slot[].p_sizes[i] = Int64(Int(slot[].offsets[off + 1]) - lo)
         slot[].p_coefs[i] = slot[].coefs[i]
-    if (xd_caps(dart) & XD_CAP_RESIDENT) != 0:
-        var made: List[Int] = [0, 0]
-        slot[].snapshot = xd_forest_prepare(dart, Int(slot[].p_cols.unsafe_ptr()), Int(slot[].p_ques.unsafe_ptr()),
-            Int(slot[].p_lefts.unsafe_ptr()), Int(slot[].p_vals.unsafe_ptr()), Int(slot[].p_sizes.unsafe_ptr()),
-            Int(slot[].p_coefs.unsafe_ptr()), Int(slot[].starts.unsafe_ptr()), Int(made.unsafe_ptr()),
-            slot[].features, slot[].k, trees)
-        _ = len(made)
+    # Called after `_release_snapshot`, the state owned by its fitting or
+    # importing caller (no predict runs concurrently).
+    slot[].prepared = 0
+
+
+def _ensure_snapshot(slot: _SlotPtr) raises:
+    """On a resident image, the kept device forest of the fitted state,
+    uploaded at its first predict (the door's `_dart_resident_predict`).
+    After the first call: one acquire load."""
+    var flag = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(UnsafePointer(to=slot[].prepared)))
+    if Atomic.load[ordering=Ordering.ACQUIRE](flag) != 0:
+        return
+    var lock = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(UnsafePointer(to=slot[].prepare_lock)))
+    shared_slot_lock(lock)
+    try:
+        if Atomic.load[ordering=Ordering.ACQUIRE](flag) == 0:
+            if (xd_caps(slot[].dart) & XD_CAP_RESIDENT) != 0:
+                var made: List[Int] = [0, 0]
+                slot[].snapshot = xd_forest_prepare(slot[].dart, Int(slot[].p_cols.unsafe_ptr()),
+                    Int(slot[].p_ques.unsafe_ptr()), Int(slot[].p_lefts.unsafe_ptr()), Int(slot[].p_vals.unsafe_ptr()),
+                    Int(slot[].p_sizes.unsafe_ptr()), Int(slot[].p_coefs.unsafe_ptr()),
+                    Int(slot[].starts.unsafe_ptr()), Int(made.unsafe_ptr()), slot[].features, slot[].k, slot[].trees)
+                _ = len(made)
+            Atomic.store[ordering=Ordering.RELEASE](flag, Int64(1))
+    finally:
+        shared_slot_unlock(lock)
 
 
 def _fit(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin]) raises:
@@ -544,6 +577,7 @@ def _raw(slot: _SlotPtr, x: MemberMatrix, dst: Int) raises:
     var n = x.rows
     if n == 0:
         return
+    _ensure_snapshot(slot)
     if slot[].snapshot != 0:
         _ = xd_forest_predict(slot[].dart, slot[].snapshot, x.data, dst, n, x.cols, slot[].k)
         return
