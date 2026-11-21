@@ -101,6 +101,18 @@ def shared_slot_lock(word: MutPointer[Int64, MutUntrackedOrigin]):
 
 
 @always_inline
+def shared_slot_try_lock(word: MutPointer[Int64, MutUntrackedOrigin]) -> Bool:
+    """One attempt at the lock word: True when this thread now holds it.
+    For a holder that keeps the word across long work (a busy mark): the
+    other thread refuses in words and never spins on it."""
+    var expected = Int64(0)
+    return Atomic.compare_exchange[
+        success_ordering=Ordering.SEQUENTIAL,
+        failure_ordering=Ordering.RELAXED,
+    ](word, expected, Int64(1))
+
+
+@always_inline
 def shared_slot_unlock(word: MutPointer[Int64, MutUntrackedOrigin]):
     """Release a lock word taken by `shared_slot_lock`."""
     Atomic.store[ordering=Ordering.RELEASE](word, Int64(0))

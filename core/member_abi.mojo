@@ -212,6 +212,22 @@ comptime MEMBER_BORROWS_FIT = 67108864       # the fitted state reads its FIT bu
 #: member class at UNPACK, or of the held state); a family whose union lacks
 #: it is not asked. A caller that does not read it must take the second mode.
 comptime MEMBER_GIL_FREE = 268435456         # 2^28: safe on parallel workers with no GIL (traced; own locks)
+#: THE SERIAL MODE THAT RELEASES AS THE DOOR DOES (lane fx-gil round 3;
+#: kind-exact, appended, layout unchanged). A kind WITHOUT `MEMBER_GIL_FREE`
+#: is called one member operation at a time on the public thread, never on a
+#: worker. With `MEMBER_GIL_DOOR` the caller RELEASES the GIL around each of
+#: those calls (other Python threads run during the fit), which is what the
+#: family's own door does around the same work; without it the caller holds
+#: the GIL through the call. A publisher sets it only when (1) no member
+#: operation of the kind touches CPython, (2) every RUN function a member
+#: operation calls is one the family's door calls inside its own GIL
+#: release (so two Python threads already run it at once, and against the
+#: door's GIL-held steps), and (3) what the member adds around those calls
+#: (its state store) has its own lock. It claims nothing about workers: the
+#: kind stays serial until its trace earns `MEMBER_GIL_FREE`. A caller that
+#: does not read it holds the GIL (the safe reading). Per family:
+#: fx-gil-RESULT.md, "serial mode".
+comptime MEMBER_GIL_DOOR = 536870912         # 2^29: serial on the public thread, GIL released by the caller as by the door
 
 #: `call.out_dtype` after MEMBER_OP_OUTPUTS: the member did not say.
 comptime MEMBER_DTYPE_UNSAID = -1

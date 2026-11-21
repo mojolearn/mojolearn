@@ -237,8 +237,12 @@ def _rf_fit[CLASSIFIER: Bool, ROWMAJOR: Bool](params: ForestFitArgs) raises -> I
     below). Returns the export handle (lane calltable-forest: every fit is
     kept in RF_HOST_EXPORTS; `_rf_handle_py` reads the diagnostic lists)."""
     var forest: RfHostForest
-    with GILReleased(Python()):
+    if params.gil_free:
+        # a member's worker: no GIL to release (core/forest_entry.mojo)
         forest = _rf_fit_forest[CLASSIFIER, ROWMAJOR](params)
+    else:
+        with GILReleased(Python()):
+            forest = _rf_fit_forest[CLASSIFIER, ROWMAJOR](params)
     return _retain_rf_handle(forest^)
 
 
@@ -523,11 +527,13 @@ def _rf_regressor_fit_dart(params: ForestFitArgs) raises -> Int:
         var c = params.cls
         var rows_a = params.x
         var cols_a = params.y
+        # held for this member fit (the registry's lock word covers the
+        # lookup only; lane fx-gil)
         var dreg = DART_HOST_SESSIONS.get_or_create_ptr()
-        var di = dreg[].find(hid)
-        var n = dreg[].sessions[di].n
-        var d = dreg[].sessions[di].d
-        var k = dreg[].sessions[di].k
+        var dsess = dreg[].lease(hid)
+        var n = dsess[].n
+        var d = dsess[].d
+        var k = dsess[].k
         if c < 0 or c >= k:
             raise Error(entry + ": class out of range")
         if n_rows <= 0 or n_cols <= 0:
@@ -545,14 +551,20 @@ def _rf_regressor_fit_dart(params: ForestFitArgs) raises -> Int:
         var y = List[Float32]()
         rf_host_dart_member_xy(
             entry, rows_a, cols_a, n_rows, n_cols, n, d, c,
-            dreg[].sessions[di].x_addr, dreg[].sessions[di].target, x, y,
+            dsess[].x_addr, dsess[].target, x, y,
         )
         var y_address = Int(y.unsafe_ptr())
         var forest: RfHostForest
-        with GILReleased(Python()):
+        if params.gil_free:
+            # a member's worker: no GIL to release (core/forest_entry.mojo)
             forest = _rf_fit_colmajor[False](
                 x^, y_address, n_rows, n_cols, 0, p, List[Float32](), 0
             )
+        else:
+            with GILReleased(Python()):
+                forest = _rf_fit_colmajor[False](
+                    x^, y_address, n_rows, n_cols, 0, p, List[Float32](), 0
+                )
         # y is read through its address inside the fit: keep it alive past it
         _ = y^
         return _retain_rf_handle(forest^)
@@ -591,14 +603,18 @@ def rf_forest_export_release_binding(handle: PythonObject) raises -> PythonObjec
 
 
 def _rf_predict_native(model: List[Int], x_address: Int, out_addr: Int, n_rows: Int, n_cols: Int, n_trees: Int,
-                       num_outputs: Int, classifier: Bool) raises -> Int:
+                       num_outputs: Int, classifier: Bool, free: Bool = False) raises -> Int:
     """`rf_predict_proba` / `rf_predict_reg`'s contract (XF_PREDICT): ROW-major
     `x`, returns rows written. The walk is `core/forest_host_predict.mojo`'s,
     which rebuilds the trees from the five arrays and refuses a malformed
     node instead of reading past it; `n_nodes` is read off the offsets."""
     var written = 0
-    with GILReleased(Python()):
+    if free:
+        # a member's worker: no GIL to release (core/forest_entry.mojo)
         written = _rf_predict_walk(model, x_address, out_addr, n_rows, n_cols, n_trees, num_outputs, classifier)
+    else:
+        with GILReleased(Python()):
+            written = _rf_predict_walk(model, x_address, out_addr, n_rows, n_cols, n_trees, num_outputs, classifier)
     return written
 
 
@@ -725,8 +741,8 @@ struct RfHostForestImage(ForestImage):
 
     @staticmethod
     def predict(model: List[Int], x: Int, out_addr: Int, rows: Int, cols: Int, trees: Int, outputs: Int,
-                regression: Bool) raises -> Int:
-        return _rf_predict_native(model, x, out_addr, rows, cols, trees, outputs, not regression)
+                regression: Bool, free: Bool) raises -> Int:
+        return _rf_predict_native(model, x, out_addr, rows, cols, trees, outputs, not regression, free)
 
     @staticmethod
     def resident_prepare(model: List[Int], features: Int, trees: Int, outputs: Int, ordered: Int) raises -> Int:
@@ -749,8 +765,9 @@ struct RfHostForestImage(ForestImage):
         return forest_strict_prepare_host_native[True](model, features, trees, outputs)
 
     @staticmethod
-    def strict_predict(handle: Int, x: Int, out_addr: Int, rows: Int, cols: Int, outputs: Int) raises -> Int:
-        return forest_strict_predict_host_native[True](handle, x, out_addr, rows, cols, outputs)
+    def strict_predict(handle: Int, x: Int, out_addr: Int, rows: Int, cols: Int, outputs: Int,
+                       free: Bool) raises -> Int:
+        return forest_strict_predict_host_native[True](handle, x, out_addr, rows, cols, outputs, free)
 
     @staticmethod
     def strict_release(handle: Int) raises:

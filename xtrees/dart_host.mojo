@@ -18,8 +18,8 @@ from xtrees.dart_units import (
     dart_apply_unit, dart_leaf_sum_unit, dart_leaf_sum_rows_unit, dart_newton_unit, dart_add_unit, U64P,
     dart_predict_unit,
 )
-from std.memory import bitcast
-from core.shared_slot import SharedSlot
+from std.memory import bitcast, ArcPointer
+from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 from core.host_finite_scan import host_all_finite_f32
 from ensemble.nan_refusal import RF_NONFINITE_REFUSAL
 
@@ -93,21 +93,60 @@ struct DartHostSession(Movable):
 
 
 struct DartHostRegistry(Defaultable, Movable):
-    var sessions: List[DartHostSession]
+    """The open host DART sessions. `lock` guards the list and `next_id` for one list step
+    (mint, keep, lease, retire); an operation holds its entry by a copy of
+    the `ArcPointer` and launches with no lock, so nothing here relies on
+    the GIL (lane fx-gil, 2026-11-21: a bare List another thread's open
+    could reallocate under a running round)."""
+    var lock: List[Int64]
+    var sessions: List[ArcPointer[DartHostSession]]
     var next_id: Int
 
     def __init__(out self):
-        self.sessions = List[DartHostSession]()
+        self.lock = List[Int64](length=1, fill=Int64(0))
+        self.sessions = List[ArcPointer[DartHostSession]]()
         self.next_id = 1
 
-    def find(self, id: Int) raises -> Int:
-        for i in range(len(self.sessions)):
-            if self.sessions[i].id == id:
-                return i
-        raise Error("x_trees dart: unknown or closed session handle")
+    def mint(mut self) -> Int:
+        var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](self.lock.unsafe_ptr())
+        shared_slot_lock(word)
+        var id = self.next_id
+        self.next_id += 1
+        shared_slot_unlock(word)
+        return id
+
+    def keep(mut self, entry: ArcPointer[DartHostSession]):
+        var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](self.lock.unsafe_ptr())
+        shared_slot_lock(word)
+        self.sessions.append(entry.copy())
+        shared_slot_unlock(word)
+
+    def lease(mut self, id: Int) raises -> ArcPointer[DartHostSession]:
+        var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](self.lock.unsafe_ptr())
+        shared_slot_lock(word)
+        try:
+            for i in range(len(self.sessions)):  # small-loop(live handles): a handle lookup over live fits
+                if self.sessions[i][].id == id:
+                    return self.sessions[i].copy()
+            raise Error("x_trees dart: unknown or closed session handle")
+        finally:
+            shared_slot_unlock(word)
+
+    def retire(mut self, id: Int) raises -> ArcPointer[DartHostSession]:
+        """The entry leaves the registry; it is freed when the caller and
+        every operation still holding it let go."""
+        var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](self.lock.unsafe_ptr())
+        shared_slot_lock(word)
+        try:
+            for i in range(len(self.sessions)):  # small-loop(live handles): a handle lookup over live fits
+                if self.sessions[i][].id == id:
+                    return self.sessions.pop(i)
+            raise Error("x_trees dart: unknown or closed session handle")
+        finally:
+            shared_slot_unlock(word)
 
 
-comptime DART_HOST_SESSIONS = SharedSlot[DartHostRegistry, "MojolearnXTreesDartHostSessionsV1"]
+comptime DART_HOST_SESSIONS = SharedSlot[DartHostRegistry, "MojolearnXTreesDartHostSessionsV2", 2]
 
 
 def dart_open(
@@ -126,16 +165,15 @@ def dart_open(
             raise Error("x_trees dart_open: " + RF_NONFINITE_REFUSAL)
         var n_chunks = (n + DART_CHUNK - 1) // DART_CHUNK
         var reg = DART_HOST_SESSIONS.get_or_create_ptr()
-        var id = reg[].next_id
-        reg[].next_id += 1
-        reg[].sessions.append(DartHostSession(id, n, d, k, kind, cap_iters, node_cap, n_chunks, x_addr))
-        var idx = reg[].find(id)
+        var id = reg[].mint()
+        var sess = ArcPointer[DartHostSession](DartHostSession(id, n, d, k, kind, cap_iters, node_cap, n_chunks, x_addr))
+        reg[].keep(sess)
         var ysrc = F32P(unsafe_from_address=y_addr)
-        var yp = _hf(reg[].sessions[idx].y)
+        var yp = _hf(sess[].y)
         for i in range(n):
             yp[i] = ysrc[i]
         var inits = F32P(unsafe_from_address=inits_addr)
-        var sp = _hf(reg[].sessions[idx].score)
+        var sp = _hf(sess[].score)
         for e in range(k * n):
             dart_init_unit(e, n, inits, sp)
         return id
@@ -154,9 +192,9 @@ def dart_step(
     to the caller."""
     comptime if DART_HOST:
         var reg = DART_HOST_SESSIONS.get_or_create_ptr()
-        var idx = reg[].find(id)
-        var n = reg[].sessions[idx].n
-        var k = reg[].sessions[idx].k
+        var sess = reg[].lease(id)
+        var n = sess[].n
+        var k = sess[].k
         # box-run-2-dart-host (2026-10-05): cpu4-forest (820fd9928) moved the
         # device protocol to "targets stay in the session's target plane"
         # (xtrees/dart_device.mojo dart_step: `targets` must be empty) and the
@@ -164,9 +202,9 @@ def dart_step(
         # and raised. Same protocol here: `targets` must be empty (kept in
         # the signature only), the K planes stay in this session for
         # `rf_regressor_fit_dart_export` (bindings/_mojolearn_rf_host.mojo).
-        if t < 0 or t > reg[].sessions[idx].cap_iters or len(targets) != 0:
+        if t < 0 or t > sess[].cap_iters or len(targets) != 0:
             raise Error("x_trees dart_step: iteration count or targets out of range")
-        var flags = _hi(reg[].sessions[idx].flags)
+        var flags = _hi(sess[].flags)
         var coef = F32P(unsafe_from_address=coef_addr)
         if t > 0:
             var thr = I64P(unsafe_from_address=thr_addr)
@@ -174,16 +212,16 @@ def dart_step(
             var skip = (draw(base, 0) >> 11) < UInt64(skip_thr)
             for e in range(t):
                 dart_drop_unit(e, base, skip, thr, flags)
-        var nodes = _hu16(reg[].sessions[idx].nodes)
-        var values = _hf(reg[].sessions[idx].values)
-        var cached = _hf(reg[].sessions[idx].cached)
-        var y = _hf(reg[].sessions[idx].y)
-        var score = _hf(reg[].sessions[idx].score)
-        var dsum = _hf(reg[].sessions[idx].dsum)
-        var target = _hf(reg[].sessions[idx].target)
-        var h = _hf(reg[].sessions[idx].h)
-        var kind = Int32(reg[].sessions[idx].kind)
-        var node_cap = reg[].sessions[idx].node_cap
+        var nodes = _hu16(sess[].nodes)
+        var values = _hf(sess[].values)
+        var cached = _hf(sess[].cached)
+        var y = _hf(sess[].y)
+        var score = _hf(sess[].score)
+        var dsum = _hf(sess[].dsum)
+        var target = _hf(sess[].target)
+        var h = _hf(sess[].h)
+        var kind = Int32(sess[].kind)
+        var node_cap = sess[].node_cap
         for i in range(n):
             dart_row_unit(i, n, k, t, kind, node_cap, flags, coef, nodes, values, y, score, dsum, target, h, cached)
         if t > 0:
@@ -191,7 +229,7 @@ def dart_step(
             for e in range(t):
                 fo[e] = flags[e]
         var bo = I32P(unsafe_from_address=bad_out)
-        var bad = _hi(reg[].sessions[idx].bad)
+        var bad = _hi(sess[].bad)
         bo[0] = bad[0]
     else:
         raise Error("x_trees dart_step: built without the host DART round (MOJOLEARN_IDN_DART_DEVICE_OFF)")
@@ -208,13 +246,13 @@ def dart_add(
     `dart_leaf_sum_rows_unit`, the same units in the same order)."""
     comptime if DART_HOST:
         var reg = DART_HOST_SESSIONS.get_or_create_ptr()
-        var idx = reg[].find(id)
-        var n = reg[].sessions[idx].n
-        var k = reg[].sessions[idx].k
-        var d = reg[].sessions[idx].d
-        var node_cap = reg[].sessions[idx].node_cap
-        var n_chunks = reg[].sessions[idx].n_chunks
-        if j < 0 or j >= reg[].sessions[idx].cap_iters * k or c < 0 or c >= k:
+        var sess = reg[].lease(id)
+        var n = sess[].n
+        var k = sess[].k
+        var d = sess[].d
+        var node_cap = sess[].node_cap
+        var n_chunks = sess[].n_chunks
+        if j < 0 or j >= sess[].cap_iters * k or c < 0 or c >= k:
             raise Error("x_trees dart_add: tree or class index out of range")
         if n_nodes < 1 or n_nodes > node_cap or lo < 0:
             raise Error("x_trees dart_add: a tree with more nodes than 2 * num_leaves - 1")
@@ -223,16 +261,16 @@ def dart_add(
         var colid = I32P(unsafe_from_address=colid_addr + 4 * lo)
         var quesval = F32P(unsafe_from_address=quesval_addr + 4 * lo)
         var left = I32P(unsafe_from_address=left_addr + 4 * lo)
-        var x = F32P(unsafe_from_address=reg[].sessions[idx].x_addr)
-        var nodes = _hu16(reg[].sessions[idx].nodes)
-        var bad = _hi(reg[].sessions[idx].bad)
-        var target = _hf(reg[].sessions[idx].target)
-        var h = _hf(reg[].sessions[idx].h)
-        var part = _hf(reg[].sessions[idx].part)
-        var values = _hf(reg[].sessions[idx].values)
-        var cached = _hf(reg[].sessions[idx].cached)
-        var dsum = _hf(reg[].sessions[idx].dsum)
-        var score = _hf(reg[].sessions[idx].score)
+        var x = F32P(unsafe_from_address=sess[].x_addr)
+        var nodes = _hu16(sess[].nodes)
+        var bad = _hi(sess[].bad)
+        var target = _hf(sess[].target)
+        var h = _hf(sess[].h)
+        var part = _hf(sess[].part)
+        var values = _hf(sess[].values)
+        var cached = _hf(sess[].cached)
+        var dsum = _hf(sess[].dsum)
+        var score = _hf(sess[].score)
         var row_off = j * n
         var class_off = c * n
         var voff = j * node_cap
@@ -261,12 +299,13 @@ def dart_close(id: Int, bad_out: Int) raises:
     """Write the bad word and free the session."""
     comptime if DART_HOST:
         var reg = DART_HOST_SESSIONS.get_or_create_ptr()
-        var idx = reg[].find(id)
+        var sess = reg[].lease(id)
         var bo = I32P(unsafe_from_address=bad_out)
-        var bad = _hi(reg[].sessions[idx].bad)
+        var bad = _hi(sess[].bad)
         bo[0] = bad[0]
-        var gone = reg[].sessions.pop(idx)
+        var gone = reg[].retire(id)
         _ = gone^
+        _ = sess^
     else:
         raise Error("x_trees dart_close: built without the host DART round (MOJOLEARN_IDN_DART_DEVICE_OFF)")
 

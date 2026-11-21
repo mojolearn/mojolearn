@@ -48,19 +48,22 @@ def forest_strict_prepare_host_binding[RF_INPUT: Bool](
 
 
 def forest_strict_predict_host_native[RF_INPUT: Bool](
-    handle: Int, x_address: Int, out_addr: Int, rows: Int, features: Int, outputs: Int,
+    handle: Int, x_address: Int, out_addr: Int, rows: Int, features: Int, outputs: Int, free: Bool = False,
 ) raises -> Int:
     """The sequential vote over the kept trees (XF_STRICT_PREDICT):
     `rows * outputs` float32 values into `out`, exactly what `rf_predict_*` /
-    `et_predict` write. The caller holds the GIL; the walk releases it.
-    The door of the two RUN halves in core/forest_host_strict_run.mojo: the
-    checks run holding the GIL (it serializes the registry), the walk runs
-    with it released, as before the split."""
+    `et_predict` write. A door holds the GIL, released around the walk; a
+    member's worker holds none (`free`). The two RUN halves are in
+    core/forest_host_strict_run.mojo; the registry has its own lock word."""
     var trees = forest_strict_predict_host_check[RF_INPUT](handle, rows, features, outputs)
     if rows == 0:
         return 0
-    with GILReleased(Python()):
+    if free:
+        # a member's worker: no GIL to release (core/forest_entry.mojo)
         forest_strict_predict_host_walk[RF_INPUT](handle, x_address, out_addr, rows, features, trees, outputs)
+    else:
+        with GILReleased(Python()):
+            forest_strict_predict_host_walk[RF_INPUT](handle, x_address, out_addr, rows, features, trees, outputs)
     return rows
 
 

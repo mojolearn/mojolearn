@@ -194,8 +194,12 @@ def _rf_classifier_fit[ROWMAJOR: Bool = False](params: ForestFitArgs) raises -> 
     var bt = StageTimes()
     var t_bind = bt.start()
     var forest: RandomForestMetaData[DT, CLT]
-    with GILReleased(Python()):
+    if params.gil_free:
+        # a member's worker: no GIL to release (core/forest_entry.mojo)
         forest = _rf_classifier_fit_forest[ROWMAJOR](params, bt)
+    else:
+        with GILReleased(Python()):
+            forest = _rf_classifier_fit_forest[ROWMAJOR](params, bt)
     return _rf_keep_forest(forest, bt, t_bind)
 
 
@@ -380,11 +384,13 @@ def _rf_regressor_fit_dart(params: ForestFitArgs) raises -> Int:
     var c = params.cls
     var rows_a = params.x
     var cols_a = params.y
+    # The session is held for this member fit by its own reference (the
+    # registry's lock word covers the lookup only; lane fx-gil).
     var dreg = DART_SESSIONS.get_or_create_ptr()
-    var di = dreg[].find(hid)
-    var n = dreg[].sessions[di].n
-    var d = dreg[].sessions[di].d
-    var k = dreg[].sessions[di].k
+    var dsess = dreg[].lease(hid)
+    var n = dsess[].n
+    var d = dsess[].d
+    var k = dsess[].k
     if c < 0 or c >= k:
         raise Error("rf_regressor_fit_dart: class out of range")
     if n_rows <= 0 or n_cols <= 0:
@@ -402,13 +408,19 @@ def _rf_regressor_fit_dart(params: ForestFitArgs) raises -> Int:
     # member fit runs with the GIL released. Take the session's buffer
     # HANDLES (reference counted; the device memory is shared) under the GIL
     # and never index the registry inside the released block.
-    var dart_x = dreg[].sessions[di].x.copy()
-    var dart_target = dreg[].sessions[di].target.copy()
+    var dart_x = dsess[].x.copy()
+    var dart_target = dsess[].target.copy()
     var forest: RandomForestMetaData[DT, RLT]
-    with GILReleased(Python()):
+    if params.gil_free:
+        # a member's worker: no GIL to release (core/forest_entry.mojo)
         forest = _rf_dart_member_forest(
             dart_x, dart_target, rows_a, cols_a, n_rows, n_cols, n, d, c, rf_params,
         )
+    else:
+        with GILReleased(Python()):
+            forest = _rf_dart_member_forest(
+                dart_x, dart_target, rows_a, cols_a, n_rows, n_cols, n, d, c, rf_params,
+            )
     var export_trees = forest.trees^
     forest.trees = RFExportTrees()
     return _retain_rf_handle(export_trees^, forest.notices)
@@ -689,8 +701,11 @@ def _rf_regressor_fit[ROWMAJOR: Bool = False](params: ForestFitArgs) raises -> I
     var bt = StageTimes()
     var t_bind = bt.start()
     var forest: RandomForestMetaData[DT, RLT]
-    with GILReleased(Python()):
+    if params.gil_free:
         forest = _rf_regressor_fit_forest[ROWMAJOR](params, bt)
+    else:
+        with GILReleased(Python()):
+            forest = _rf_regressor_fit_forest[ROWMAJOR](params, bt)
     return _rf_keep_forest(forest, bt, t_bind)
 
 
@@ -830,7 +845,7 @@ struct RfGpuForest(ForestImage):
 
     @staticmethod
     def predict(model: List[Int], x: Int, out_addr: Int, rows: Int, cols: Int, trees: Int, outputs: Int,
-                regression: Bool) raises -> Int:
+                regression: Bool, free: Bool) raises -> Int:
         return _rf_predict_native(model, x, out_addr, rows, cols, trees, outputs, regression)
 
     @staticmethod
@@ -854,7 +869,8 @@ struct RfGpuForest(ForestImage):
         raise Error("RuntimeError: rebuild the forest host binding")
 
     @staticmethod
-    def strict_predict(handle: Int, x: Int, out_addr: Int, rows: Int, cols: Int, outputs: Int) raises -> Int:
+    def strict_predict(handle: Int, x: Int, out_addr: Int, rows: Int, cols: Int, outputs: Int,
+                       free: Bool) raises -> Int:
         raise Error("RuntimeError: rebuild the forest host binding")
 
     @staticmethod

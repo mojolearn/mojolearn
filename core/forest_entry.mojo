@@ -15,6 +15,7 @@ independent numerical work to split.
 """
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
+from core.entry_table import entry_op_plain, entry_op_gil_free
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot
 from core.trees_entry_table import TreesEntryKey
@@ -66,7 +67,9 @@ trait ForestImage:
 
     @staticmethod
     def predict(model: List[Int], x: Int, out_addr: Int, rows: Int, cols: Int, trees: Int, outputs: Int,
-                regression: Bool) raises -> Int:
+                regression: Bool, free: Bool) raises -> Int:
+        """`free`: the caller holds no GIL (see `forest_entry_dispatch`); an
+        image that releases around its walk runs it bare."""
         ...
 
     @staticmethod
@@ -90,7 +93,8 @@ trait ForestImage:
         ...
 
     @staticmethod
-    def strict_predict(handle: Int, x: Int, out_addr: Int, rows: Int, cols: Int, outputs: Int) raises -> Int:
+    def strict_predict(handle: Int, x: Int, out_addr: Int, rows: Int, cols: Int, outputs: Int,
+                       free: Bool) raises -> Int:
         ...
 
     @staticmethod
@@ -141,7 +145,12 @@ def _need(na: Int, np: Int, want_a: Int, want_p: Int, what: String) raises:
         raise Error(what + ": needs " + String(want_a) + " addresses and " + String(want_p) + " integers")
 
 
-def _run[I: ForestImage](op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int) raises -> Int:
+def _run[I: ForestImage](op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, free: Bool) raises -> Int:
+    if free and (op == XF_FIT_SESSION or op == XF_FIT_ADA_ROUND or op == XF_SESSION_OPEN
+                 or op == XF_SESSION_CLOSE or op == XF_ADA_OPEN):
+        # The data sessions and the AdaBoost rounds are the doors' own: their
+        # registries are serialized by the GIL and their fits release it.
+        raise Error("forest entry: a data session operation needs the caller to hold the GIL")
     var p = _words(pp, np)
     if op == XF_CAPS:
         return I.caps()
@@ -151,6 +160,7 @@ def _run[I: ForestImage](op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int) r
         return I.dt_default_bins()
     if op == XF_FIT or op == XF_FIT_DART or op == XF_FIT_SESSION or op == XF_FIT_ADA_ROUND:
         var args = forest_fit_args_at(aa, na, pp, np, ff)
+        args.gil_free = free
         if op == XF_FIT_DART:
             return I.fit_dart(args)
         var shape = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=aa)[XF_W_SHAPE]
@@ -188,7 +198,7 @@ def _run[I: ForestImage](op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int) r
         return 0
     if op == XF_PREDICT:
         _need(na, np, 7, 5, "forest predict")
-        return I.predict(_sub(a, 0, 5), a[5], a[6], p[0], p[1], p[2], p[3], p[4] != 0)
+        return I.predict(_sub(a, 0, 5), a[5], a[6], p[0], p[1], p[2], p[3], p[4] != 0, free)
     if op == XF_RESIDENT_PREPARE:
         _need(na, np, 5, 4, "forest_prepare_gpu")
         return I.resident_prepare(a, p[0], p[1], p[2], p[3])
@@ -198,7 +208,7 @@ def _run[I: ForestImage](op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int) r
             return I.resident_predict(a[0], a[1], a[2], p[0], p[1], p[2])
         if op == XF_RESIDENT_LABELS:
             return I.resident_labels(a[0], a[1], a[2], p[0], p[1], p[2])
-        return I.strict_predict(a[0], a[1], a[2], p[0], p[1], p[2])
+        return I.strict_predict(a[0], a[1], a[2], p[0], p[1], p[2], free)
     if op == XF_RESIDENT_RELEASE or op == XF_STRICT_RELEASE:
         # ints [handle]: the shape bindings/trees_resident_table_run.mojo's
         # native release calls with
@@ -214,18 +224,30 @@ def _run[I: ForestImage](op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int) r
     raise Error("forest entry: unknown operation " + String(op))
 
 
-def forest_entry_dispatch[I: ForestImage](operation: Int, aa: Int, na: Int, pp: Int, np: Int,
+def forest_entry_dispatch[I: ForestImage](operation_word: Int, aa: Int, na: Int, pp: Int, np: Int,
     ff: Int, nf: Int, result: Int, context: Int, sink: NativeDescriptorError) -> Int:
     """The body of a forest image's `abi("C")` entry: span admission, the
-    operation, the count to result, a refusal to sink."""
+    operation, the count to result, a refusal to sink.
+
+    THE GIL (lane fx-gil, core/entry_table.mojo): an operation word carrying
+    `ENTRY_OP_GIL_FREE` comes from a caller that holds no GIL (a member's
+    worker). The image's fits, host walk and strict walk then run their one
+    body bare (`ForestFitArgs.gil_free`, the `free` word of `predict` /
+    `strict_predict`); without the bit they release around that same body,
+    as their doors need. Nothing else in an image touches the GIL, and no
+    registry an operation reaches relies on it (each has its own lock word:
+    core/forest_export_run.mojo, core/forest_inference_model.mojo,
+    core/forest_host_groves.mojo, core/forest_host_strict_run.mojo)."""
     try:
+        var free = entry_op_gil_free(operation_word)
+        var operation = entry_op_plain(operation_word)
         if operation < 0 or operation >= XF_OP_COUNT:
             raise Error("forest entry: unknown operation " + String(operation))
         if na < 0 or np < 0 or np != nf or not result:
             raise Error("forest entry: invalid request spans")
         if (na > 0 and not aa) or (np > 0 and (not pp or not ff)):
             raise Error("forest entry: null request span")
-        var value = _run[I](operation, aa, na, pp, np, ff)
+        var value = _run[I](operation, aa, na, pp, np, ff, free)
         MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[] = value
         return 0
     except problem:

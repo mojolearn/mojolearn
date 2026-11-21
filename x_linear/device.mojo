@@ -101,7 +101,7 @@ from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from checks.kernel_matrix import TARGET_COLUMN, lib_smem_page_fits_for
-from core.shared_slot import SharedSlot
+from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 from core.resident_upload_count import RUC_ISOTONIC, RUC_X_LINEAR, resident_upload_note
 
 
@@ -109,21 +109,31 @@ struct _LinearContext(Defaultable, Movable):
     """The slot `linear_ctx` fills on first use; one per numeric tier so a
     FAST and an IDENTICAL .so in one process never share it."""
     var ctx: Optional[DeviceContext]
+    #: Lane fx-gil (2026-11-21): the first creation was serialized by the
+    #: GIL, which a door releases around its kernels and a member's worker
+    #: never holds. Held for the test, the creation and the handle copy.
+    var ctx_lock: List[Int64]
 
     def __init__(out self):
         self.ctx = Optional[DeviceContext]()
+        self.ctx_lock = List[Int64](length=1, fill=Int64(0))
 
 
-comptime _CTX_NAME = "MojolearnXLinearContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXLinearContextFastV3"
-comptime X_LINEAR_CONTEXT = SharedSlot[_LinearContext, _CTX_NAME]
+comptime _CTX_NAME = "MojolearnXLinearContextIdenticalV4" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXLinearContextFastV4"
+comptime X_LINEAR_CONTEXT = SharedSlot[_LinearContext, _CTX_NAME, 2]
 
 
 def linear_ctx() raises -> DeviceContext:
     """The shared context, created on first use."""
     var slot = X_LINEAR_CONTEXT.get_or_create_ptr()
-    if not slot[].ctx:
-        slot[].ctx = DeviceContext()
-    return slot[].ctx.value().copy()
+    var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](slot[].ctx_lock.unsafe_ptr())
+    shared_slot_lock(word)
+    try:
+        if not slot[].ctx:
+            slot[].ctx = DeviceContext()
+        return slot[].ctx.value().copy()
+    finally:
+        shared_slot_unlock(word)
 
 
 #: FAST on Apple (lane/apple-fast-bayes, 2026-10-02): BayesianRidge's Gram

@@ -4,12 +4,15 @@
 nvForest26.08 cef3a50d caches an owning inference model; cuML26.08
 randomforest_common.pyx:675-693 retains that model across predictions.
 FOREST-RESIDENT-1: explicit monotonically increasing registry IDs replace the
-Cython owning-object boundary. Python holds the GIL across these operations.
+Cython owning-object boundary. No call here relies on the GIL (lane fx-gil,
+2026-11-21): the registry and the workspace pool each have a lock word held
+for one dictionary or list step, never across a launch; a prediction holds
+its snapshot by an `ArcPointer` and a workspace of its own for the call.
 Snapshots own model buffers and a context; release drops buffers before context.
 Only input validation/upload and result readback recur per prediction.
 """
 from std.sys.compile import is_defined
-from std.memory import bitcast
+from std.memory import bitcast, ArcPointer
 from std.time import perf_counter_ns
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_APPLE, COLUMN_NVIDIA, COLUMN_AMD
@@ -27,7 +30,7 @@ from core.admitted_finite_status import enqueue_finite_status
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T38_FUSED_LABELS.expdel2-04-base.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_TREES_T37_WORKSPACE (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 9d8b51b0a6.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T37_WORKSPACE.expdel2-04-base.patch; record in docs/TOMBSTONES.md.
-from core.shared_slot import SharedSlot
+from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_try_lock, shared_slot_unlock
 
 
 #: The resident path checks its input and output for non-finite values on
@@ -48,8 +51,16 @@ comptime FOREST_PROFILE = is_defined["MOJOLEARN_FOREST_PROFILE"]()
 #: context and an X-sized device workspace per snapshot. AdaBoost keeps 50
 #: one-tree members alive: on istella (1,000,000 x 220, 880 MB) the 0.8.34
 #: NVIDIA board held 47 X-sized workspaces, 41 GB, and the next fit ran the
-#: L40S out of memory. Calls are synchronous under the GIL, so one workspace
-#: serves every snapshot; same kernels, same launches, no bit moves.
+#: L40S out of memory. One workspace serves every snapshot while calls come
+#: one at a time (the doors, which hold the GIL); same kernels, same
+#: launches, no bit moves.
+#: Lane fx-gil (2026-11-21): the registry keeps a POOL of such workspaces
+#: (`ForestIOPool`). A prediction takes an idle one for the length of its
+#: call and puts it back; a second prediction running at the same moment (a
+#: member on another worker, no GIL) finds none idle and gets its own. Calls
+#: one at a time therefore still share one workspace (the 41 GB case is
+#: unchanged); W predictions at once hold W. The pool's lock word is held
+#: for the list step only.
 # TOMBSTONE: MOJOLEARN_FOREST_PER_MODEL_IO (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at c9c333f2d7.
 # Restore: git apply experiments/removed/MOJOLEARN_FOREST_PER_MODEL_IO.patch; record in docs/TOMBSTONES.md.
 def forest_ordered_resident_policy[
@@ -108,8 +119,16 @@ struct ForestIOWorkspace(Defaultable, Movable):
     #: 50 uploads of the same rows). Same kernels, same inputs: no bit moves.
     var staged_addr: Int
     var staged_len: Int
+    #: The two-word finite status and its pinned host pair of the call that
+    #: holds this workspace (lane fx-gil: they were the snapshot's, which two
+    #: predictions of one snapshot at once would share). Created at the
+    #: workspace's first prediction and kept across resizes.
+    var status_dev: Optional[DeviceBuffer[DType.int32]]
+    var status_host: Optional[HostBuffer[DType.int32]]
 
     def __init__(out self):
+        self.status_dev = Optional[DeviceBuffer[DType.int32]]()
+        self.status_host = Optional[HostBuffer[DType.int32]]()
         self.input = Optional[DeviceBuffer[DType.float32]]()
         self.output = Optional[DeviceBuffer[DType.float32]]()
         self.label = Optional[DeviceBuffer[DType.int32]]()
@@ -128,6 +147,13 @@ struct ForestIOWorkspace(Defaultable, Movable):
         self.label_len = 0
         self.staged_addr = 0
         self.staged_len = 0
+
+    def ensure_status(mut self, ctx: DeviceContext) raises:
+        """The held status pair, created once per workspace."""
+        if self.status_dev and self.status_host:
+            return
+        self.status_dev = ctx.enqueue_create_buffer[DType.int32](2)
+        self.status_host = ctx.enqueue_create_host_buffer[DType.int32](2)
 
     def _input_fits(self, n_in: Int) -> Bool:
         return self.input_len == n_in
@@ -206,8 +232,65 @@ struct ForestIOWorkspace(Defaultable, Movable):
         self.label_len = rows
 
 
-comptime RF_IO = SharedSlot[ForestIOWorkspace, ("MojolearnRFResidentIOIdenticalV1" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnRFResidentIOFastV1")]
-comptime ET_IO = SharedSlot[ForestIOWorkspace, ("MojolearnETResidentIOIdenticalV1" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnETResidentIOFastV1")]
+struct ForestIOPool(Defaultable, Movable):
+    """The idle workspaces of one registry. `take` hands the most recently
+    returned one to a call (so calls one at a time reuse one workspace and
+    find the rows an ensemble staged), or a new one when none is idle;
+    `give` returns it. The lock word guards the list step only: no device
+    call, no allocation of a buffer and no launch happens under it."""
+    var lock: List[Int64]
+    var idle: List[ArcPointer[ForestIOWorkspace]]
+
+    def __init__(out self):
+        self.lock = List[Int64](length=1, fill=Int64(0))
+        self.idle = List[ArcPointer[ForestIOWorkspace]]()
+
+    def take(mut self) raises -> ArcPointer[ForestIOWorkspace]:
+        var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](self.lock.unsafe_ptr())
+        shared_slot_lock(word)
+        try:
+            if len(self.idle) > 0:
+                return self.idle.pop()
+        finally:
+            shared_slot_unlock(word)
+        return ArcPointer[ForestIOWorkspace](ForestIOWorkspace())
+
+    def give(mut self, io: ArcPointer[ForestIOWorkspace]) raises:
+        var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](self.lock.unsafe_ptr())
+        shared_slot_lock(word)
+        try:
+            self.idle.append(io.copy())
+        finally:
+            shared_slot_unlock(word)
+
+    def unstage(mut self) raises:
+        """Drop the staged mark of every idle workspace. One held by a
+        running call drops its own mark when its rows differ."""
+        var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](self.lock.unsafe_ptr())
+        shared_slot_lock(word)
+        try:
+            for i in range(len(self.idle)):  # driver-loop: over the idle workspaces (at most one per concurrent call)
+                self.idle[i][].unstage()
+        finally:
+            shared_slot_unlock(word)
+
+    def drop(mut self) raises:
+        """Free every idle workspace (the registry's last snapshot left).
+        The buffers are destroyed after the lock word is released."""
+        var gone = List[ArcPointer[ForestIOWorkspace]]()
+        var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](self.lock.unsafe_ptr())
+        shared_slot_lock(word)
+        try:
+            while len(self.idle) > 0:  # driver-loop: over the idle workspaces
+                gone.append(self.idle.pop())
+        finally:
+            shared_slot_unlock(word)
+        _ = len(gone)
+
+
+# V2 (lane fx-gil): the slot holds a pool, not one workspace.
+comptime RF_IO = SharedSlot[ForestIOPool, ("MojolearnRFResidentIOIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnRFResidentIOFastV2"), 2]
+comptime ET_IO = SharedSlot[ForestIOPool, ("MojolearnETResidentIOIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnETResidentIOFastV2"), 2]
 comptime RF_CTX_SLOT = (
     "MojolearnRFResidentContextIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else
     "MojolearnRFResidentContextFastV3")
@@ -245,8 +328,15 @@ struct ResidentForest(Movable):
     #: IDENTICAL `auto` keeps the sequential bits on a resident snapshot.
     var ordered: Bool
     #: True: `ctx` is the registry's process context and the I/O workspace
-    #: is the registry's `ForestIOWorkspace`.
+    #: is one taken from the registry's `ForestIOPool` for the call.
     var shared: Bool
+    #: The busy mark of the paths that still write this snapshot's own
+    #: per-call state (the device pool of several GPUs, the snapshot's own
+    #: workspace and status pair): one call at a time; a second call of the
+    #: SAME snapshot from another thread is refused in words, never made to
+    #: wait across a launch. The shared path (one device, the product's
+    #: route) writes nothing of the snapshot and does not take it.
+    var busy: List[Int64]
 
     def __init__(out self, offsets: List[Int32], columns: List[Int32],
         thresholds: List[Float32], left: List[Int32], leaves: List[Float32],
@@ -254,6 +344,7 @@ struct ResidentForest(Movable):
         shared_ctx: Optional[DeviceContext] = None) raises:
         var empty = List[Float32]()
         self.shared = False
+        self.busy = List[Int64](length=1, fill=Int64(0))
         # constant-time shape checks here; the per-node checks run on the
         # device with the upload (`forest_pack_device` / `forest_validate_device`)
         _forest_shape_checks(offsets, columns, thresholds, left, leaves, empty, 0, features, outputs)
@@ -385,9 +476,13 @@ struct ResidentForest(Movable):
             return List[Float32]()
         if self.pool:
             var result = List[Float32](length=rows * outputs, fill=Float32(0.0))
-            self.pool.value().predict_into[RF_INPUT](
-                rebind[MutPointer[Float32, MutAnyOrigin]](x.unsafe_ptr()),
-                result.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), rows)
+            var word = self._enter()
+            try:
+                self.pool.value().predict_into[RF_INPUT](
+                    rebind[MutPointer[Float32, MutAnyOrigin]](x.unsafe_ptr()),
+                    result.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), rows)
+            finally:
+                shared_slot_unlock(word)
             _ = len(x)
             return result^
         var dx = self.ctx.value().enqueue_create_buffer[DType.float32](len(x))
@@ -429,7 +524,7 @@ struct ResidentForest(Movable):
         x: MutPointer[Float32, MutAnyOrigin], output: MutPointer[Float32, MutAnyOrigin],
         rows: Int, features: Int, outputs: Int,
         reuse_io: Bool = False) raises:
-        """Borrowed synchronous I/O; caller retains buffers and holds the GIL.
+        """Borrowed synchronous I/O; the caller retains its buffers until return.
 
         nvForest26.08 forest_model.hpp:284-308 wraps borrowed I/O pointers.
         Here host input still uploads, but no intermediate host Lists are made.
@@ -443,25 +538,53 @@ struct ResidentForest(Movable):
             raise Error("resident forest prediction dimensions exceed Int32")
         if rows == 0:
             return
+        if reuse_io and self.shared and not self.pool:
+            # Nothing of the snapshot is written here: the workspace and the
+            # status pair are the call's own (taken from the pool), so two
+            # predictions of one snapshot may run at once.
+            var slot = RF_IO.get_or_create_ptr()
+            comptime if not RF_INPUT:
+                slot = ET_IO.get_or_create_ptr()
+            var io = slot[].take()
+            try:
+                io[].ensure_status(self.ctx.value())
+                io[].prepare(self.ctx.value(), rows * features, rows * outputs)
+                var uploaded = io[].is_staged(Int(x), rows * features)
+                if not uploaded:
+                    # Other rows overwrite the input buffer: nothing stays staged.
+                    io[].unstage()
+                _predict_into_buffers[RF_INPUT](self.ctx.value(), self.offsets.value(),
+                    self.columns.value(), self.thresholds.value(), self.left.value(),
+                    self.leaves.value(), x, output, rows, features, outputs, self.trees,
+                    io[].input.value(), io[].output.value(), x, False,
+                    self.ordered, uploaded, io[].status_dev.value(), io[].status_host.value())
+            finally:
+                slot[].give(io)
+            return
+        var word = self._enter()
+        try:
+            self._predict_into_own[RF_INPUT](x, output, rows, features, outputs, reuse_io)
+        finally:
+            shared_slot_unlock(word)
+
+    def _enter(mut self) raises -> MutPointer[Int64, MutUntrackedOrigin]:
+        """Take this snapshot's busy mark for a call that writes its own
+        per-call state; the caller releases the returned word."""
+        var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](self.busy.unsafe_ptr())
+        if not shared_slot_try_lock(word):
+            raise Error("resident forest snapshot is in a prediction on another thread")
+        return word
+
+    def _predict_into_own[RF_INPUT: Bool](mut self,
+        x: MutPointer[Float32, MutAnyOrigin], output: MutPointer[Float32, MutAnyOrigin],
+        rows: Int, features: Int, outputs: Int, reuse_io: Bool) raises:
+        """`predict_into` on the snapshot's own state (several devices, or a
+        snapshot outside a registry); the caller holds the busy mark."""
         if self.pool:
             self.pool.value().predict_into[RF_INPUT](x, output, rows)
             return
         self._ensure_status()
-        if reuse_io and self.shared:
-            var io = RF_IO.get_or_create_ptr()
-            comptime if not RF_INPUT:
-                io = ET_IO.get_or_create_ptr()
-            io[].prepare(self.ctx.value(), rows * features, rows * outputs)
-            var uploaded = io[].is_staged(Int(x), rows * features)
-            if not uploaded:
-                # Other rows overwrite the input buffer: nothing stays staged.
-                io[].unstage()
-            _predict_into_buffers[RF_INPUT](self.ctx.value(), self.offsets.value(),
-                self.columns.value(), self.thresholds.value(), self.left.value(),
-                self.leaves.value(), x, output, rows, features, outputs, self.trees,
-                io[].input.value(), io[].output.value(), x, False,
-                self.ordered, uploaded, self.status_dev.value(), self.status_host.value())
-        elif reuse_io:
+        if reuse_io:
             self.prepare_workspace(rows)
             _predict_into_buffers[RF_INPUT](self.ctx.value(), self.offsets.value(),
                 self.columns.value(), self.thresholds.value(), self.left.value(),
@@ -497,7 +620,7 @@ struct ResidentForest(Movable):
         # parallel_groves selects reuse after the September 10 large-data gate:
         # CUDA IDENTICAL RF/HIGGS throughput 21.485 -> 21.094 ms/call;
         # ET/HIGGS single calls 25.926 -> 24.510 ms. See forest_io_reuse results.
-        # Calls are synchronous and the binding holds the GIL throughout.
+        # One call at a time per snapshot (the busy mark, `_enter`).
         if self.workspace_rows == rows:
             return
         self.input_workspace = None
@@ -552,47 +675,68 @@ struct ResidentForest(Movable):
         if rows < 0 or rows > 2147483647 // features or rows > 2147483647 // outputs:
             raise Error("resident forest prediction dimensions exceed Int32")
         if self.pool:
-            self.pool.value().predict_labels_into[RF_INPUT](x, output, rows)
+            var pooled = self._enter()
+            try:
+                self.pool.value().predict_labels_into[RF_INPUT](x, output, rows)
+            finally:
+                shared_slot_unlock(pooled)
             return
         if rows == 0:
             return
         if self.shared:
-            var io = RF_IO.get_or_create_ptr()
+            # The call's own workspace (see `predict_into`); `_labels_on`
+            # reads the snapshot and writes only what it is handed.
+            var slot = RF_IO.get_or_create_ptr()
             comptime if not RF_INPUT:
-                io = ET_IO.get_or_create_ptr()
-            io[].prepare(self.ctx.value(), rows * features, rows * outputs)
-            io[].prepare_label(self.ctx.value(), rows)
-            var uploaded = io[].is_staged(Int(x), rows * features)
-            if not uploaded:
-                # Other rows overwrite the input buffer: nothing stays staged.
-                io[].unstage()
+                slot = ET_IO.get_or_create_ptr()
+            var io = slot[].take()
             try:
-                self._labels_on[RF_INPUT](io[].input.value(), io[].output.value(),
-                                          io[].label.value(), x, output, rows, features, outputs, uploaded)
-            except e:
-                self.ctx.value().synchronize()
-                raise e
+                io[].prepare(self.ctx.value(), rows * features, rows * outputs)
+                io[].prepare_label(self.ctx.value(), rows)
+                var uploaded = io[].is_staged(Int(x), rows * features)
+                if not uploaded:
+                    # Other rows overwrite the input buffer: nothing stays staged.
+                    io[].unstage()
+                try:
+                    self._labels_on[RF_INPUT](io[].input.value(), io[].output.value(),
+                                              io[].label.value(), x, output, rows, features, outputs, uploaded)
+                except e:
+                    self.ctx.value().synchronize()
+                    raise e
+            finally:
+                slot[].give(io)
         else:
-            self.prepare_workspace(rows)
-            if not self.label_workspace:
-                self.label_workspace = self.ctx.value().enqueue_create_buffer[DType.int32](rows)
-            # Move the three workspaces out while the model borrows its other
-            # buffers. Restore ownership after the synchronous operation on both
-            # paths; no second mutable borrow through self reaches _labels_on.
-            var dx = self.input_workspace.take()
-            var dout = self.output_workspace.take()
-            var dlab = self.label_workspace.take()
+            var word = self._enter()
             try:
-                self._labels_on[RF_INPUT](dx, dout, dlab, x, output, rows, features, outputs)
-            except e:
-                self.ctx.value().synchronize()
-                self.input_workspace = dx^
-                self.output_workspace = dout^
-                self.label_workspace = dlab^
-                raise e
+                self._labels_own[RF_INPUT](x, output, rows, features, outputs)
+            finally:
+                shared_slot_unlock(word)
+
+    def _labels_own[RF_INPUT: Bool](mut self,
+        x: MutPointer[Float32, MutAnyOrigin], output: MutPointer[Int32, MutAnyOrigin],
+        rows: Int, features: Int, outputs: Int) raises:
+        """`predict_labels` on the snapshot's own workspace; the caller
+        holds the busy mark."""
+        self.prepare_workspace(rows)
+        if not self.label_workspace:
+            self.label_workspace = self.ctx.value().enqueue_create_buffer[DType.int32](rows)
+        # Move the three workspaces out while the model borrows its other
+        # buffers. Restore ownership after the synchronous operation on both
+        # paths; no second mutable borrow through self reaches _labels_on.
+        var dx = self.input_workspace.take()
+        var dout = self.output_workspace.take()
+        var dlab = self.label_workspace.take()
+        try:
+            self._labels_on[RF_INPUT](dx, dout, dlab, x, output, rows, features, outputs)
+        except e:
+            self.ctx.value().synchronize()
             self.input_workspace = dx^
             self.output_workspace = dout^
             self.label_workspace = dlab^
+            raise e
+        self.input_workspace = dx^
+        self.output_workspace = dout^
+        self.label_workspace = dlab^
 
 
 def _predict_into_buffers[RF_INPUT: Bool](ctx: DeviceContext,
@@ -682,17 +826,42 @@ def _predict_into_buffers[RF_INPUT: Bool](ctx: DeviceContext,
 
 
 struct ForestRegistry(Defaultable, Movable):
-    var entries: Dict[Int, ResidentForest]
+    """The live snapshots of one family. `lock` guards `entries` and
+    `next_id` for one dictionary step (insert, lookup, pop); a call holds
+    its snapshot by a copy of the `ArcPointer`, so a release on another
+    thread retires the handle at once and the snapshot's buffers go when
+    the last running call returns. No launch, upload or allocation of a
+    device buffer happens under the lock."""
+    var lock: List[Int64]
+    var entries: Dict[Int, ArcPointer[ResidentForest]]
     var next_id: Int
 
     def __init__(out self):
-        self.entries = Dict[Int, ResidentForest]()
+        self.lock = List[Int64](length=1, fill=Int64(0))
+        self.entries = Dict[Int, ArcPointer[ResidentForest]]()
         self.next_id = 1
 
 
 # One registry per RF_INPUT specialization avoids RF/ET policy confusion.
-comptime RF_REGISTRY = SharedSlot[ForestRegistry, ("MojolearnRFResidentForestIdenticalV1" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnRFResidentForestFastV1")]
-comptime ET_REGISTRY = SharedSlot[ForestRegistry, ("MojolearnETResidentForestIdenticalV1" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnETResidentForestFastV1")]
+# V2 (lane fx-gil): the lock word and the shared-ownership entries.
+comptime RF_REGISTRY = SharedSlot[ForestRegistry, ("MojolearnRFResidentForestIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnRFResidentForestFastV2"), 2]
+comptime ET_REGISTRY = SharedSlot[ForestRegistry, ("MojolearnETResidentForestIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnETResidentForestFastV2"), 2]
+
+
+def _resident_lease[RF_INPUT: Bool](handle: Int) raises -> ArcPointer[ResidentForest]:
+    """The snapshot of `handle`, held for the caller's call (one lookup
+    under the registry's lock word; the prediction runs with no lock)."""
+    var state = RF_REGISTRY.get_or_create_ptr()
+    comptime if not RF_INPUT:
+        state = ET_REGISTRY.get_or_create_ptr()
+    var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](state[].lock.unsafe_ptr())
+    shared_slot_lock(word)
+    try:
+        if handle not in state[].entries:
+            raise Error("unknown or released resident forest handle")
+        return state[].entries[handle].copy()
+    finally:
+        shared_slot_unlock(word)
 
 
 def resident_prepare[RF_INPUT: Bool](offsets: List[Int32], columns: List[Int32],
@@ -706,64 +875,71 @@ def resident_prepare[RF_INPUT: Bool](offsets: List[Int32], columns: List[Int32],
         shared = process_ctx[RF_CTX_SLOT]()
     else:
         shared = process_ctx[ET_CTX_SLOT]()
-    var model = ResidentForest(offsets, columns, thresholds, left, leaves, features, outputs,
-                               ordered, shared)
-    if state[].next_id == 9223372036854775807:
-        model.close()
+    # The upload and the device checks run before the lock word is taken.
+    var model = ArcPointer[ResidentForest](
+        ResidentForest(offsets, columns, thresholds, left, leaves, features, outputs, ordered, shared))
+    var handle = 0
+    var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](state[].lock.unsafe_ptr())
+    shared_slot_lock(word)
+    try:
+        if state[].next_id != 9223372036854775807:
+            handle = state[].next_id
+            state[].next_id += 1
+            state[].entries[handle] = model.copy()
+    finally:
+        shared_slot_unlock(word)
+    if handle == 0:
+        model[].close()
         raise Error("resident forest handle space exhausted")
-    var handle = state[].next_id
-    state[].next_id += 1
-    state[].entries[handle] = model^
     return handle
 
 
 def resident_predict[RF_INPUT: Bool](handle: Int, x: List[Float32], rows: Int,
     features: Int, outputs: Int) raises -> List[Float32]:
-    var state = RF_REGISTRY.get_or_create_ptr()
-    comptime if not RF_INPUT:
-        state = ET_REGISTRY.get_or_create_ptr()
-    if handle not in state[].entries:
-        raise Error("unknown or released resident forest handle")
-    return state[].entries[handle].predict[RF_INPUT](x, rows, features, outputs)
+    var lease = _resident_lease[RF_INPUT](handle)
+    return lease[].predict[RF_INPUT](x, rows, features, outputs)
 
 
 def resident_release[RF_INPUT: Bool](handle: Int) raises:
     var state = RF_REGISTRY.get_or_create_ptr()
     comptime if not RF_INPUT:
         state = ET_REGISTRY.get_or_create_ptr()
-    if handle not in state[].entries:
-        raise Error("unknown or released resident forest handle")
-    state[].entries[handle].close()
-    var released = state[].entries.pop(handle)
-    _ = released^
-    if len(state[].entries) == 0:
-        # the registry's last snapshot: the shared workspace goes with it
+    var retired = Optional[ArcPointer[ResidentForest]]()
+    var last = False
+    var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](state[].lock.unsafe_ptr())
+    shared_slot_lock(word)
+    try:
+        if handle not in state[].entries:
+            raise Error("unknown or released resident forest handle")
+        retired = state[].entries.pop(handle)
+        last = len(state[].entries) == 0
+    finally:
+        shared_slot_unlock(word)
+    # The snapshot's buffers go here, or when the last call that still holds
+    # it returns (`ResidentForest.__deinit__`: operands, drain, context: the
+    # order `close` keeps). Lane fx-gil: `close()` ran here under the GIL;
+    # it cannot while another thread may be predicting on the snapshot.
+    _ = retired^
+    if last:
+        # the registry's last snapshot: the idle workspaces go with it
         var io = RF_IO.get_or_create_ptr()
         comptime if not RF_INPUT:
             io = ET_IO.get_or_create_ptr()
-        io[].release()
+        io[].drop()
 
 
 def resident_predict_into[RF_INPUT: Bool](handle: Int,
     x: MutPointer[Float32, MutAnyOrigin], output: MutPointer[Float32, MutAnyOrigin],
     rows: Int, features: Int, outputs: Int, reuse_io: Bool = False) raises:
-    var state = RF_REGISTRY.get_or_create_ptr()
-    comptime if not RF_INPUT:
-        state = ET_REGISTRY.get_or_create_ptr()
-    if handle not in state[].entries:
-        raise Error("unknown or released resident forest handle")
-    state[].entries[handle].predict_into[RF_INPUT](x, output, rows, features, outputs, reuse_io)
+    var lease = _resident_lease[RF_INPUT](handle)
+    lease[].predict_into[RF_INPUT](x, output, rows, features, outputs, reuse_io)
 
 
 def resident_predict_labels[RF_INPUT: Bool](handle: Int,
     x: MutPointer[Float32, MutAnyOrigin], output: MutPointer[Int32, MutAnyOrigin],
     rows: Int, features: Int, outputs: Int) raises:
-    var state = RF_REGISTRY.get_or_create_ptr()
-    comptime if not RF_INPUT:
-        state = ET_REGISTRY.get_or_create_ptr()
-    if handle not in state[].entries:
-        raise Error("unknown or released resident forest handle")
-    state[].entries[handle].predict_labels[RF_INPUT](x, output, rows, features, outputs)
+    var lease = _resident_lease[RF_INPUT](handle)
+    lease[].predict_labels[RF_INPUT](x, output, rows, features, outputs)
 
 
 def resident_stage_input[RF_INPUT: Bool](x: MutPointer[Float32, MutAnyOrigin], n: Int) raises -> Bool:
@@ -777,21 +953,33 @@ def resident_stage_input[RF_INPUT: Bool](x: MutPointer[Float32, MutAnyOrigin], n
     var state = RF_REGISTRY.get_or_create_ptr()
     comptime if not RF_INPUT:
         state = ET_REGISTRY.get_or_create_ptr()
-    if len(state[].entries) == 0:
+    var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](state[].lock.unsafe_ptr())
+    shared_slot_lock(word)
+    var live = len(state[].entries)
+    shared_slot_unlock(word)
+    if live == 0:
         return False
-    var io = RF_IO.get_or_create_ptr()
+    var slot = RF_IO.get_or_create_ptr()
     comptime if not RF_INPUT:
-        io = ET_IO.get_or_create_ptr()
-    # The context every shared snapshot of this registry runs on.
-    comptime if RF_INPUT:
-        return io[].stage_input(process_ctx[RF_CTX_SLOT](), x, n)
-    else:
-        return io[].stage_input(process_ctx[ET_CTX_SLOT](), x, n)
+        slot = ET_IO.get_or_create_ptr()
+    # The rows are staged in one workspace, returned to the pool as its most
+    # recent: the member predictions that follow on this thread take it.
+    var io = slot[].take()
+    var staged = False
+    try:
+        # The context every shared snapshot of this registry runs on.
+        comptime if RF_INPUT:
+            staged = io[].stage_input(process_ctx[RF_CTX_SLOT](), x, n)
+        else:
+            staged = io[].stage_input(process_ctx[ET_CTX_SLOT](), x, n)
+    finally:
+        slot[].give(io)
+    return staged
 
 
 def resident_unstage_input[RF_INPUT: Bool]() raises:
     """Drop the staged-input mark; the buffer stays for the next call."""
-    var io = RF_IO.get_or_create_ptr()
+    var slot = RF_IO.get_or_create_ptr()
     comptime if not RF_INPUT:
-        io = ET_IO.get_or_create_ptr()
-    io[].unstage()
+        slot = ET_IO.get_or_create_ptr()
+    slot[].unstage()

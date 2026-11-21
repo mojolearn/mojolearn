@@ -30,7 +30,7 @@ from xtrees.shap_tab import U64P, shap_tab_rank_unit, shap_tab_need_unit, shap_t
 from core.apple_fast_tree_experiments import (
     AFT_P07, AFT_P08, AFT_P09, AFT_SHAP_FOLD_ITEMS,
 )
-from core.shared_slot import SharedSlot
+from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 
 comptime TPB = 64 if AFT_P08 else 128
 # TOMBSTONE: MOJOLEARN_AFCL_T11 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at 40d673a2f6.
@@ -123,20 +123,30 @@ struct _ShapContext(Defaultable, Movable):
     """ONE process-lifetime DeviceContext (the x_ann/x_metrics pattern: a
     context per call exhausts Metal's per-process command queues)."""
     var ctx: Optional[DeviceContext]
+    #: Lane fx-gil (2026-11-21): the first creation was serialized by the
+    #: GIL, which a door releases around its kernels and a member's worker
+    #: never holds. Held for the test, the creation and the handle copy.
+    var ctx_lock: List[Int64]
 
     def __init__(out self):
         self.ctx = Optional[DeviceContext]()
+        self.ctx_lock = List[Int64](length=1, fill=Int64(0))
 
 
-comptime _CTX_NAME = "MojolearnXTreesShapContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXTreesShapContextFastV3"
-comptime X_TREES_SHAP_CONTEXT = SharedSlot[_ShapContext, _CTX_NAME]
+comptime _CTX_NAME = "MojolearnXTreesShapContextIdenticalV4" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXTreesShapContextFastV4"
+comptime X_TREES_SHAP_CONTEXT = SharedSlot[_ShapContext, _CTX_NAME, 2]
 
 
 def _ctx() raises -> DeviceContext:
     var slot = X_TREES_SHAP_CONTEXT.get_or_create_ptr()
-    if not slot[].ctx:
-        slot[].ctx = DeviceContext()
-    return slot[].ctx.value().copy()
+    var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](slot[].ctx_lock.unsafe_ptr())
+    shared_slot_lock(word)
+    try:
+        if not slot[].ctx:
+            slot[].ctx = DeviceContext()
+        return slot[].ctx.value().copy()
+    finally:
+        shared_slot_unlock(word)
 
 
 @always_inline

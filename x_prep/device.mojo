@@ -153,7 +153,7 @@ from x_prep.da_par import (
     lda3_scal_kernel, lda3_tmp_kernel, lda3_inter_kernel, lda3_coef_kernel, lda3_dot_kernel, qda_prep_scal_kernel,
     qda_prep_rot_kernel, qda_dec_tile_kernel,
 )
-from core.shared_slot import SharedSlot
+from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 
 
 def _da_blocks(t: Int) -> Int:
@@ -281,21 +281,31 @@ struct _PrepContext(Defaultable, Movable):
     inside it. One slot per numeric tier, so a FAST and an IDENTICAL .so in
     one process never share it. Context lifetime moves no bit."""
     var ctx: Optional[DeviceContext]
+    #: Lane fx-gil (2026-11-21): the first creation was serialized by the
+    #: GIL, which a door releases around its kernels and a member's worker
+    #: never holds. Held for the test, the creation and the handle copy.
+    var ctx_lock: List[Int64]
 
     def __init__(out self):
         self.ctx = Optional[DeviceContext]()
+        self.ctx_lock = List[Int64](length=1, fill=Int64(0))
 
 
-comptime _CTX_NAME = "MojolearnXPrepContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXPrepContextFastV3"
-comptime X_PREP_CONTEXT = SharedSlot[_PrepContext, _CTX_NAME]
+comptime _CTX_NAME = "MojolearnXPrepContextIdenticalV4" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXPrepContextFastV4"
+comptime X_PREP_CONTEXT = SharedSlot[_PrepContext, _CTX_NAME, 2]
 
 
 def x_prep_ctx() raises -> DeviceContext:
     """The shared context, created on first use."""
     var slot = X_PREP_CONTEXT.get_or_create_ptr()
-    if not slot[].ctx:
-        slot[].ctx = DeviceContext()
-    return slot[].ctx.value().copy()
+    var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](slot[].ctx_lock.unsafe_ptr())
+    shared_slot_lock(word)
+    try:
+        if not slot[].ctx:
+            slot[].ctx = DeviceContext()
+        return slot[].ctx.value().copy()
+    finally:
+        shared_slot_unlock(word)
 
 
 #: The binding's resident input store (core/device_store.mojo; lane

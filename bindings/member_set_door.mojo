@@ -107,6 +107,7 @@ from core.member_abi import (
     MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_CLASSIFIER,
     MEMBER_CAN_ROW_INDEX, MEMBER_CAN_COLUMN_INDEX, MEMBER_CAN_TEST_ROWS,
     MEMBER_CAN_SCOPE, MEMBER_SCOPE_NONE, member_pin_settle, MEMBER_BORROWS_FIT, MEMBER_GIL_FREE,
+    MEMBER_GIL_DOOR,
 )
 from core.member_families import MEMBER_FAMILY_TREE, MEMBER_FAMILY_FOREST, MEMBER_FAMILY_EXTRA_TREES
 from core.member_notices import member_notices_take
@@ -179,7 +180,8 @@ struct MemberSetRun(Movable):
     # THE GIL RULE: per member, 1 when its KIND has `MEMBER_GIL_FREE` (asked
     # with the same one question as `tests` and `borrows`); `parallel`: those
     # members' numbers, the units of the workers' lanes. Every other member
-    # is fitted on the public thread with the GIL held.
+    # is fitted on the public thread, one at a time: 2 (`MEMBER_GIL_DOOR`)
+    # with the GIL released around its turn, 0 with the GIL held.
     var gil_free: List[UInt8]
     var parallel: List[Int]
     var part_x: List[List[Float32]]
@@ -317,7 +319,7 @@ def member_set_admit(mut set: MemberSet, estimator: PythonObject, target: Int, w
     var tests = UInt8(0)
     var borrows = UInt8(0)
     var gil_free = UInt8(0)
-    if owner.plan.member.can(MEMBER_CAN_TEST_ROWS | MEMBER_BORROWS_FIT | MEMBER_GIL_FREE):
+    if owner.plan.member.can(MEMBER_CAN_TEST_ROWS | MEMBER_BORROWS_FIT | MEMBER_GIL_FREE | MEMBER_GIL_DOOR):
         var asked = False
         var v = len(set.run.plans) - 1
         while v >= 0:  # driver-loop: over the members admitted before (one compare when they are clones)
@@ -340,6 +342,10 @@ def member_set_admit(mut set: MemberSet, estimator: PythonObject, target: Int, w
                     borrows = UInt8(1)
                 if (kind_mask & MEMBER_GIL_FREE) != 0:
                     gil_free = UInt8(1)
+                elif (kind_mask & MEMBER_GIL_DOOR) != 0:
+                    # serial on the public thread, the GIL released around
+                    # the member's turn as its own door releases it
+                    gil_free = UInt8(2)
             except:
                 # No answer: the caller scans the rows, the gathered block is
                 # held as for a borrowing kind and the member is fitted on the
@@ -451,7 +457,7 @@ def member_set_workers(set: MemberSet) -> Int:
         return 1
     var free = 0
     for u in range(len(set.run.gil_free)):  # driver-loop: over the members (one flag each)
-        if set.run.gil_free[u] != UInt8(0):
+        if set.run.gil_free[u] == UInt8(1):
             free += 1
     return max(min(_set_cores(set), free), 1)
 
@@ -741,10 +747,18 @@ def _member_set_held_turns(address: Int):
     records its words; the others still run."""
     var run = MutPointer[MemberSetRun, MutUntrackedOrigin](unsafe_from_address=address)
     for u in range(len(run[].plans)):  # driver-loop: over the members whose kind lacks MEMBER_GIL_FREE
-        if run[].gil_free[u] != UInt8(0):
+        if run[].gil_free[u] == UInt8(1):
             continue
         try:
-            _member_set_unit(address, u, True)
+            if run[].gil_free[u] == UInt8(2):
+                # MEMBER_GIL_DOOR: still this thread, still one member at a
+                # time; other Python threads run during the fit, as during
+                # the family's own door. The unit touches no CPython (it is
+                # the workers' unit).
+                with GILReleased(Python()):
+                    _member_set_unit(address, u, True)
+            else:
+                _member_set_unit(address, u, True)
         except error:
             run[].errors[u] = String(error)
             run[].failed[u] = UInt8(1)
@@ -780,7 +794,7 @@ def member_set_run(mut set: MemberSet) raises:
     set.run.workers = member_set_workers(set)
     set.run.parallel.clear()
     for u in range(count):  # driver-loop: over the members (the workers' units)
-        if set.run.gil_free[u] != UInt8(0):
+        if set.run.gil_free[u] == UInt8(1):
             set.run.parallel.append(u)
     var turns = len(set.run.parallel) < count
     set.run.cover_units.clear()
@@ -1007,10 +1021,13 @@ def _member_held_open(mut opened: MemberHeldCall, member: PythonObject, operatio
     # Kind-exact, asked of the held state (no state is minted); a family
     # whose union mask lacks the bit is not asked.
     # THE GIL RULE: the same answer says whether the call may run released.
-    if opened.held.plan.member.can(MEMBER_CAN_TEST_ROWS | MEMBER_GIL_FREE):
+    if opened.held.plan.member.can(MEMBER_CAN_TEST_ROWS | MEMBER_GIL_FREE | MEMBER_GIL_DOOR):
         var kind_mask = member_call(opened.held.plan.member, MEMBER_OP_CAPABILITIES, call)
         opened.tests = (kind_mask & MEMBER_CAN_TEST_ROWS) != 0
-        opened.gil_free = (kind_mask & MEMBER_GIL_FREE) != 0
+        # One call on this thread either way: released for a kind that may
+        # run with no GIL, and for a kind whose door releases around the
+        # same work (MEMBER_GIL_DOOR).
+        opened.gil_free = (kind_mask & (MEMBER_GIL_FREE | MEMBER_GIL_DOOR)) != 0
     opened.host = opened.held.plan.route.device == DEVICE_CPU
     opened.cols = cols
     opened.dtype = dtype

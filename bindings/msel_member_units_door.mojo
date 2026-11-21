@@ -170,7 +170,7 @@ from core.host_finite_scan import host_all_finite_f32
 from core.host_parallel import host_parallelize
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free, member_kind_capabilities, MEMBER_I64,
-    MEMBER_BORROWS_FIT, MEMBER_GIL_FREE,
+    MEMBER_BORROWS_FIT, MEMBER_GIL_FREE, MEMBER_GIL_DOOR,
     MEMBER_F32, MEMBER_I32, MEMBER_CAN_EXPORT, member_outputs, member_output_dtype, MEMBER_CAN_TEST_ROWS,
     MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA,
     MEMBER_OP_FIT, MEMBER_OP_SCORE, MEMBER_CAN_FIT, MEMBER_CAN_SCORE, MEMBER_CAN_CLASSIFIER, MEMBER_CAN_ROW_INDEX,
@@ -289,6 +289,10 @@ struct MselMemberRun(Movable):
     # workers with no GIL). False: every unit runs on the public thread with
     # the GIL held, one at a time (`workers` is then 1).
     var gil_free: Bool
+    # MEMBER_GIL_DOOR (a kind without `gil_free`): its units still run one at
+    # a time on the public thread, with the GIL released around them as the
+    # family's own door releases it.
+    var gil_door: Bool
     var held_x: List[List[Float32]]
     var held_y: List[List[Float32]]
     # Per unit, the FIT NOTICES of its fitted state (core/member_notices.mojo;
@@ -312,6 +316,7 @@ struct MselMemberRun(Movable):
         self.taken = List[Int](length=n_units, fill=0)
         self.borrows = False
         self.gil_free = False
+        self.gil_door = False
         self.held_x = List[List[Float32]]()
         self.held_y = List[List[Float32]]()
         self.notices = List[List[Float64]](length=n_units, fill=List[Float64]())
@@ -747,6 +752,7 @@ def _member_units(base: PythonObject, candidates: PythonObject, y: PythonObject,
             # THE GIL RULE: a kind without the bit runs its units on this
             # thread with the GIL held, one at a time (below).
             run.gil_free = (kind_mask & MEMBER_GIL_FREE) != 0
+            run.gil_door = not run.gil_free and (kind_mask & MEMBER_GIL_DOOR) != 0
             if not run.gil_free:
                 workers = 1
                 run.workers = 1
@@ -937,10 +943,14 @@ def _member_units(base: PythonObject, candidates: PythonObject, y: PythonObject,
                 lanes = 0
             if lanes > 0 and run.gil_free:
                 host_parallelize(_lane, lanes)
+            elif lanes > 0 and run.gil_door:
+                # MEMBER_GIL_DOOR: one at a time on this thread, the GIL
+                # released as the family's own door releases it.
+                _msel_member_lane(address, 0)
         # GIL held again: the units of a kind that may not run without it,
         # one at a time on this thread. SERIAL BY RULE (THE GIL RULE), not by
         # nature: the kind becomes parallel when its trace earns the bit.
-        if lanes > 0 and not run.gil_free:
+        if lanes > 0 and not run.gil_free and not run.gil_door:
             _msel_member_lane(address, 0)
     finally:
         if run.pin != 0:

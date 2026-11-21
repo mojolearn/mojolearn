@@ -53,7 +53,7 @@ from core.member_abi import (
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_PREDICT,
     MEMBER_OP_SCORE, MEMBER_OP_OUTPUTS, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT,
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_SCORE, MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT,
-    MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_COEF,
+    MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_COEF, MEMBER_GIL_DOOR,
     MEMBER_BLOCK_COEF, MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
 )
@@ -327,8 +327,15 @@ def _score(slot: MutPointer[LinearMemberSlot, MutUntrackedOrigin], call: MutPoin
 def _linear_member(operation: Int, address: Int) raises -> Int:
     var call = MutPointer[MemberCall, MutUntrackedOrigin](unsafe_from_address=address)
     if operation == MEMBER_OP_CAPABILITIES:
+        # MEMBER_GIL_DOOR (core/member_abi.mojo): FIT, PREDICT and SCORE call
+        # `linear_ridge_run` / `linear_ols_run`, `linear_predict_run` and
+        # `linear_score_run`, the functions the estimator's own doors call
+        # inside their GIL release (providers/python/linear_fit_, linear_ols_,
+        # linear_predict_, linear_score_boundary_unpack.mojo); the store has
+        # its own lock. NOT `MEMBER_GIL_FREE`: the images behind the route
+        # are not traced for parallel workers (fx-gil-RESULT.md).
         return (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_SCORE | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
-            | MEMBER_CAN_SAMPLE_WEIGHT | MEMBER_CAN_COEF)
+            | MEMBER_CAN_SAMPLE_WEIGHT | MEMBER_CAN_COEF | MEMBER_GIL_DOOR)
     if operation == MEMBER_OP_NEW:
         if call[].param_count != 3 or not call[].params:
             raise Error("member ABI: a linear member takes three parameters (kind, fit_intercept, alpha)")

@@ -14,7 +14,7 @@ Python bodies it replaces.
 from core.mode_answer import MODE_FAMILY_XCNN, answer_mode_word
 from bindings.mode_answer_door import answer_mode_object
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_fields, py_contains, py_item
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_fields, py_contains, py_item, _is_exact_dict
 from bindings.py_cpython_table import cpython_table, CPythonTable
 from std.python._cpython import GILReleased, PyObjectPtr
 from core.shared_slot import SharedSlot
@@ -50,7 +50,7 @@ from bindings.xcnn_keys_unpack import xcnn_keys
 from core.device_route import DEVICE_INSTALL, device_route_plan, device_route_admit, device_cpu_absent
 from providers.python.device_route_boundary_door import (
     DeviceRouteOwner, device_route_held, device_route_keep, device_request, device_admit_class, device_route_clear,
-    device_cpu_connect_late,
+    device_cpu_connect_late, device_route_record, device_owner_current,
 )
 
 
@@ -562,7 +562,54 @@ def _xcnn_route(layer: PythonObject, fields: PythonObject, context: PythonObject
                          or xcnn_get(fields, XK_PROFILE_REC) is native[].table)):
                 return held
     var device = device_request(fields, xcnn_builtins())
+    # lane fx-device-attr round 2: a container's children copied its
+    # `device` at construction (`xcnn_device_inherit`). A route resolved
+    # anew for another device than the held one (a direct
+    # `container.device = ...`, or a first operation) hands the word to the
+    # children here, on the container's miss and before its children run in
+    # the same operation; each child's own route stamp then sees the write
+    # (the process count of `device` writes moved, its `device` is another
+    # object) and resolves on the new device. A miss for a mode or context
+    # change (the held route still current) walks nothing. Nothing is read
+    # per layer on a hit, in the container or in its children.
+    var previous = device_route_record(layer)
+    if previous is None or not device_owner_current(layer, previous):
+        _xcnn_children_follow(fields)
     return device_route_keep(layer, _xcnn_route_build(device, mode, default_mode, layer, fields, context))
+
+
+def _xcnn_child_follow(child: PythonObject, device: PythonObject) raises:
+    """One child layer takes its container's `device` object, written only
+    where it holds another (an equal write would move the process count of
+    `device` writes for nothing)."""
+    if child is None:
+        return
+    var child_fields = py_fields(child)
+    if not _is_exact_dict(child_fields):
+        return
+    if xcnn_get(child_fields, XK_DEVICE) is not device:
+        xcnn_put(child_fields, XK_DEVICE, device)
+
+
+def _xcnn_children_follow(fields: PythonObject) raises:
+    """The child layers the family's containers build (CNNClassifier's head
+    and layer list, BasicBlock's convolutions, norms, activations and
+    downsample pair, the graph layers' linear parts and activation, the
+    adaptive pool's cached inner pool) take the container's `device`, as
+    `xcnn_device_inherit` gave it at construction. A container's route miss
+    only; a layer that is no container finds none of these fields."""
+    var device = xcnn_get(fields, XK_DEVICE)
+    for name in [String("head_"), String("conv1"), String("bn1"), String("relu1"), String("conv2"),  # small-loop(the fixed child-layer fields of the family's containers)
+                 String("bn2"), String("relu2"), String("lin"), String("lin_l"), String("_relu_p")]:
+        _xcnn_child_follow(py_get(fields, PythonObject(name)), device)
+    for name in [String("layers_"), String("downsample")]:  # small-loop(the two child-layer list fields)
+        var items = py_get(fields, PythonObject(name))
+        if items is not None and (xcnn_exact(items, XT_LIST) or xcnn_exact(items, XT_TUPLE)):
+            for i in range(len(items)):  # driver-loop: over the container's layer list (model structure)
+                _xcnn_child_follow(items[i], device)
+    var cache = xcnn_get(fields, XK_POOL_CACHE)
+    if cache is not None and xcnn_exact(cache, XT_TUPLE) and len(cache) == 2:
+        _xcnn_child_follow(cache[1], device)
 
 
 def xcnn_entries(layer: PythonObject, fields: PythonObject, context: PythonObject) raises -> PythonObject:

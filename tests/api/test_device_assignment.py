@@ -151,3 +151,169 @@ def test_assignment_before_the_first_operation_is_the_constructor_value():
     model.device = "cpu"
     _fit(model, "r").predict(X)
     assert model.vendor_used() == "cpu"
+
+
+# ---- neural blocks (lane fx-device-attr round 2) ------------------------------------------------------------------
+# A standalone block routes by its `_native_route` word. A direct `block.device = ...` reaches the next forward,
+# backward, decode session and pickle through the block's route stamp.
+
+BLOCK_FAMILIES = ["llama", "mamba", "mamba2"]
+TWO_DEVICES = mojolearn.vendor() != "cpu"
+
+
+def _block_inputs(tmp_path, family):
+    """The GPU block class of `family`, its weights, its keyword arguments and an input (as test_torch_conventions)."""
+    from mojolearn._causal_lm_fixtures import family_fixture, _write_checkpoint
+    from mojolearn.models import CausalLM, causal_lm
+    config, tensors = family_fixture(family, False)
+    _write_checkpoint(str(tmp_path), config, tensors)
+    model = CausalLM.load(tmp_path, device="cpu", numeric_profile="fp32_v1")
+    old = model.blocks[0]
+    weights = dict(zip(old._W_NAMES, old._w))
+    kwargs = {}
+    if model.kind == "transformer":
+        for name, value in zip(causal_lm._NATIVE_CONTEXT["optional_names"], old._wopt):
+            if value is not None:
+                weights[name] = value
+        kwargs = dict(model.plan.block_options, n_heads=model.plan.n_heads, numeric_profile="fp32_v1")
+    elif model.kind == "mamba2":
+        kwargs = dict(model.plan.block_kwargs)
+    cls = causal_lm._NATIVE_CONTEXT["block_classes"]["gpu"][model.kind]
+    x = np.random.default_rng(7).normal(size=(2, 4, model.d_model)).astype("f4") * np.float32(0.05)
+    return cls, weights, kwargs, x
+
+
+@pytest.mark.parametrize("family", BLOCK_FAMILIES)
+def test_a_block_assigned_cpu_runs_its_next_forward_on_the_cpu(tmp_path, family):
+    cls, weights, kwargs, x = _block_inputs(tmp_path, family)
+    expected = np.asarray(cls(weights, device="cpu", **kwargs).forward(x))
+    block = cls(weights, **kwargs)
+    block.forward(x)
+    block.device = "cpu"
+    after = np.asarray(block.forward(x))
+    assert block._native_route == "cpu" and block.vendor_used() == "cpu"
+    assert block.get_params()["device"] == "cpu"
+    assert after.tobytes() == expected.tobytes()
+
+
+@pytest.mark.parametrize("family", BLOCK_FAMILIES)
+def test_a_block_assigned_back_to_none_returns_to_the_installation_device(tmp_path, family):
+    cls, weights, kwargs, x = _block_inputs(tmp_path, family)
+    block = cls(weights, device="cpu", **kwargs)
+    block.forward(x)
+    block.device = None
+    block.forward(x)
+    assert block._native_route == ("gpu" if TWO_DEVICES else "cpu")
+
+
+@pytest.mark.parametrize("family", BLOCK_FAMILIES)
+def test_a_bad_block_device_is_refused_in_words_and_the_block_runs_again(tmp_path, family):
+    cls, weights, kwargs, x = _block_inputs(tmp_path, family)
+    block = cls(weights, device="cpu", **kwargs)
+    expected = np.asarray(block.forward(x))
+    for bad in ("cuda", "CPU", 0):
+        block.device = bad
+        with pytest.raises(ValueError, match="device must be 'gpu', 'cpu' or None"):
+            block.forward(x)
+    block.device = "cpu"
+    assert np.asarray(block.forward(x)).tobytes() == expected.tobytes()
+
+
+@pytest.mark.parametrize("family", BLOCK_FAMILIES)
+def test_a_block_assignment_reaches_backward(tmp_path, family):
+    cls, weights, kwargs, x = _block_inputs(tmp_path, family)
+    twin = cls(weights, device="cpu", **kwargs)
+    grad = np.ones_like(np.asarray(twin.forward(x)))
+    expected = twin.backward(x, grad)
+    block = cls(weights, **kwargs)
+    block.forward(x)
+    block.backward(x, grad)
+    block.device = "cpu"
+    got = block.backward(x, grad)
+    assert block._native_route == "cpu"
+    first = lambda value: value[0] if isinstance(value, tuple) else value
+    assert np.asarray(first(got)).tobytes() == np.asarray(first(expected)).tobytes()
+
+
+def test_a_pickled_block_carries_the_assigned_route(tmp_path):
+    import pickle
+    cls, weights, kwargs, x = _block_inputs(tmp_path, "llama")
+    block = cls(weights, **kwargs)
+    block.forward(x)
+    block.device = "cpu"
+    restored = pickle.loads(pickle.dumps(block))
+    assert restored.device == "cpu" and restored._native_route == "cpu"
+
+
+def test_an_unchanged_same_word_keeps_the_block(tmp_path):
+    cls, weights, kwargs, x = _block_inputs(tmp_path, "llama")
+    block = cls(weights, device="cpu", **kwargs)
+    block.forward(x)
+    held = block._w
+    block.device = "c" + "pu"  # an equal word, another object: the same route, no rebuild
+    block.forward(x)
+    assert block._native_route == "cpu" and block._w is held
+
+
+# ---- CNN containers (lane fx-device-attr round 2) -----------------------------------------------------------------
+# A container's children copy its `device` at construction; an assignment on the container reaches them at its next
+# operation.
+
+def _images(rows=4, channels=3, side=8, seed=3):
+    return np.random.default_rng(seed).random((rows, channels, side, side), dtype=np.float32)
+
+
+def _labeled(rows=48, side=8, seed=7):
+    x = np.random.default_rng(seed).random((rows, 1, side, side), dtype=np.float32)
+    return x, (x.mean(axis=(1, 2, 3)) > np.float32(0.5)).astype(np.int64)
+
+
+CNN_CLASSIFIER = dict(conv_channels=(4,), kernel_size=3, pool_size=2, batch_size=16, max_iter=2, random_state=3)
+
+
+def test_a_basic_block_assignment_reaches_its_children():
+    expected = np.asarray(mojolearn.BasicBlock(3, 4, stride=2, random_state=1, device="cpu").forward(_images()))
+    block = mojolearn.BasicBlock(3, 4, stride=2, random_state=1)
+    block.forward(_images())
+    block.device = "cpu"
+    after = np.asarray(block.forward(_images()))
+    children = [block.conv1, block.bn1, block.relu1, block.conv2, block.bn2, block.relu2, *block.downsample]
+    assert all(child.device == "cpu" for child in children)
+    assert after.tobytes() == expected.tobytes()
+
+
+def test_a_basic_block_assigned_before_its_first_forward_hands_the_word_down():
+    block = mojolearn.BasicBlock(3, 4, random_state=1)
+    block.device = "cpu"
+    block.forward(_images())
+    assert all(child.device == "cpu" for child in (block.conv1, block.bn1, block.relu1, block.conv2, block.bn2, block.relu2))
+
+
+def test_a_classifier_assignment_reaches_its_layers():
+    x, y = _labeled()
+    expected = np.asarray(mojolearn.CNNClassifier((1, 8, 8), device="cpu", **CNN_CLASSIFIER).fit(x, y).predict(x))
+    model = mojolearn.CNNClassifier((1, 8, 8), **CNN_CLASSIFIER).fit(x, y)
+    model.predict(x)
+    model.device = "cpu"
+    after = np.asarray(model.predict(x))
+    assert model.head_.device == "cpu" and all(member.device == "cpu" for member in model.layers_)
+    assert model.vendor_used() == "cpu"
+    assert after.tobytes() == expected.tobytes()
+
+
+def test_a_bad_classifier_device_is_refused_and_leaves_the_layers():
+    x, y = _labeled()
+    model = mojolearn.CNNClassifier((1, 8, 8), device="cpu", **CNN_CLASSIFIER).fit(x, y)
+    model.device = "tpu"
+    with pytest.raises(ValueError, match="device must be 'gpu', 'cpu' or None"):
+        model.predict(x)
+    assert model.head_.device == "cpu" and all(member.device == "cpu" for member in model.layers_)
+
+
+def test_an_adaptive_pool_assignment_reaches_its_cached_inner_pool():
+    pool = mojolearn.AdaptiveAvgPool2d(2)
+    expected = np.asarray(mojolearn.AdaptiveAvgPool2d(2, device="cpu").forward(_images()))
+    pool.forward(_images())
+    pool.device = "cpu"
+    assert np.asarray(pool.forward(_images())).tobytes() == expected.tobytes()
+    assert vars(pool)["_pool_cache"][1].device == "cpu"

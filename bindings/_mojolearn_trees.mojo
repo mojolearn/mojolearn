@@ -223,8 +223,12 @@ def _et_classifier_fit[ROWMAJOR: Bool = False](params: ForestFitArgs) raises -> 
     var times = StageTimes()
     var total_start = 0
     var result: FitResult
-    with GILReleased(Python()):
+    if params.gil_free:
+        # a member's worker: no GIL to release (core/forest_entry.mojo)
         result = _et_classifier_fit_run[ROWMAJOR](params, times, total_start)
+    else:
+        with GILReleased(Python()):
+            result = _et_classifier_fit_run[ROWMAJOR](params, times, total_start)
     var stamp = times.start()
     var output = _retain_et_handle(result^)
     times.stop_host("boundary_export_handle", stamp)
@@ -239,8 +243,11 @@ def _et_regressor_fit[ROWMAJOR: Bool = False](params: ForestFitArgs) raises -> I
     var times = StageTimes()
     var total_start = 0
     var result: FitResult
-    with GILReleased(Python()):
+    if params.gil_free:
         result = _et_regressor_fit_run[ROWMAJOR](params, times, total_start)
+    else:
+        with GILReleased(Python()):
+            result = _et_regressor_fit_run[ROWMAJOR](params, times, total_start)
     var stamp = times.start()
     var output = _retain_et_handle(result^)
     times.stop_host("boundary_export_handle", stamp)
@@ -431,7 +438,7 @@ struct EtGpuForest(ForestImage):
 
     @staticmethod
     def predict(model: List[Int], x: Int, out_addr: Int, rows: Int, cols: Int, trees: Int, outputs: Int,
-                regression: Bool) raises -> Int:
+                regression: Bool, free: Bool) raises -> Int:
         return et_predict_native(model, x, out_addr, rows, cols, trees, outputs)
 
     @staticmethod
@@ -455,7 +462,8 @@ struct EtGpuForest(ForestImage):
         raise Error("RuntimeError: rebuild the forest host binding")
 
     @staticmethod
-    def strict_predict(handle: Int, x: Int, out_addr: Int, rows: Int, cols: Int, outputs: Int) raises -> Int:
+    def strict_predict(handle: Int, x: Int, out_addr: Int, rows: Int, cols: Int, outputs: Int,
+                       free: Bool) raises -> Int:
         raise Error("RuntimeError: rebuild the forest host binding")
 
     @staticmethod

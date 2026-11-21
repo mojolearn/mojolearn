@@ -69,7 +69,7 @@ code cast and the accuracy count split rows over the host workers.
 from std.sys.info import size_of
 from std.memory import unsafe_memcpy, bitcast
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from core.entry_table import EntryRef, entry_ref_unresolved
+from core.entry_table import EntryRef, entry_ref_unresolved, entry_ref_gil_free
 from core.trees_entry_table import TreesEntryKey
 from core.forest_fit_request import ForestFitArgs
 from bindings.forest_config_run import ForestConfig, forest_request
@@ -87,7 +87,7 @@ from core.member_abi import (
     MemberCall, MemberMatrix, MEMBER_F32, MEMBER_F64, MEMBER_I32,
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_PREDICT,
     MEMBER_OP_PREDICT_PROBA, MEMBER_OP_DECISION, MEMBER_OP_SCORE, MEMBER_OP_OUTPUTS, MEMBER_OP_EXPORT,
-    MEMBER_OP_IMPORT, MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA, MEMBER_CAN_DECISION,
+    MEMBER_GIL_FREE, MEMBER_OP_IMPORT, MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA, MEMBER_CAN_DECISION,
     MEMBER_CAN_SCORE, MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT, MEMBER_CAN_CLASSIFIER,
     MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
@@ -512,7 +512,11 @@ def _fit(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin]) raise
     _clear(slot)
     var dart = call[].route.entry
     var glue = call[].route.second
-    var forest = call[].route.third
+    # THE GIL RULE: the rf image's forest entry releases the GIL around a
+    # member fit for its door; marked, it runs the fit bare
+    # (core/forest_entry.mojo). The x_trees DART and glue entries never
+    # touch the GIL and are not marked.
+    var forest = entry_ref_gil_free(call[].route.third)
     var glue_key = TreesEntryKey(call[].route.mode, call[].route.vendor)
     # The DART fit reads float32 targets / class codes; the cast lives until the run returns.
     var codes = List[Float32]()
@@ -819,7 +823,12 @@ def _capabilities(classifier: Bool) -> Int:
     `dart_starts`, but the predict ops (XD_PREDICT, XD_FOREST_PREDICT) do
     not test X, and a fit of zero trees opens no session. No sample weight:
     the estimator's fit takes none."""
-    var mask = MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_DECISION | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
+    # MEMBER_GIL_FREE (THE GIL RULE): both kinds traced (fx-gil-RESULT.md,
+    # "DART: HAS the bit"): the x_trees entries never touch the GIL, the
+    # member trees' forest entry is marked, and the session, kept-forest and
+    # member-store registries each have their own lock word.
+    var mask = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_DECISION | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
+                | MEMBER_GIL_FREE)
     if classifier:
         mask |= MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_SCORE | MEMBER_CAN_CLASSIFIER
     return mask

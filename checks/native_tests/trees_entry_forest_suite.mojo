@@ -103,7 +103,7 @@ struct _ProbeForest(ForestImage):
 
     @staticmethod
     def predict(model: List[Int], x: Int, out_addr: Int, rows: Int, cols: Int, trees: Int, outputs: Int,
-                regression: Bool) raises -> Int:
+                regression: Bool, free: Bool) raises -> Int:
         _word(out_addr, 0, model[0] + model[1] + model[2] + model[3] + model[4] + x + cols + trees + outputs
               + (1000 if regression else 0))
         return rows
@@ -132,7 +132,8 @@ struct _ProbeForest(ForestImage):
         return model[0] * features + trees * outputs
 
     @staticmethod
-    def strict_predict(handle: Int, x: Int, out_addr: Int, rows: Int, cols: Int, outputs: Int) raises -> Int:
+    def strict_predict(handle: Int, x: Int, out_addr: Int, rows: Int, cols: Int, outputs: Int,
+                       free: Bool) raises -> Int:
         _word(out_addr, 0, handle * 2 + x)
         return rows + cols + outputs
 

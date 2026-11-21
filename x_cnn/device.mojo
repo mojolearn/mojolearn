@@ -78,7 +78,7 @@ from x_cnn.ops import (
 )
 # lane fam2-neural (2026-10-04): the device loss fold
 from x_cnn.ops import IDN_XENT_DEV_FOLD, LOSS_FOLD_BLOCK, blk_fold_at, fold_plan
-from core.shared_slot import SharedSlot
+from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 
 comptime TPB = 256
 # Neural 2026-10-06 source-only experiment controls. Every new control is
@@ -172,6 +172,10 @@ struct _CnnContext(Defaultable, Movable):
     one slot per numeric tier so a FAST and an IDENTICAL .so in one process
     never share it."""
     var ctx: Optional[DeviceContext]
+    #: Lane fx-gil (2026-11-21): the first creation was serialized by the
+    #: GIL, which a door releases around its kernels and a member's worker
+    #: never holds. Held for the test, the creation and the handle copy.
+    var ctx_lock: List[Int64]
     #: The workspace (DEVIATION 5718): one cached device buffer per slot,
     #: grown on demand and kept for the process.
     var ws: List[DeviceBuffer[DType.float32]]
@@ -197,6 +201,7 @@ struct _CnnContext(Defaultable, Movable):
 
     def __init__(out self):
         self.ctx = Optional[DeviceContext]()
+        self.ctx_lock = List[Int64](length=1, fill=Int64(0))
         self.ws = List[DeviceBuffer[DType.float32]]()
         self.res = List[DeviceBuffer[DType.float32]]()
         self.tuned = List[Int]()
@@ -212,16 +217,21 @@ struct _CnnContext(Defaultable, Movable):
 #: one pool per binding and tier like the context.
 comptime _XCNN_STAGE_POOL = "MojolearnDownloadStagesXCnnIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnDownloadStagesXCnnFastV1"
 # lane fb15-sync-counts: V4 / layout version 2 (the parameter-block cache fields)
-comptime _CTX_NAME = "MojolearnXCnnContextIdenticalV4" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXCnnContextFastV4"
-comptime X_CNN_CONTEXT = SharedSlot[_CnnContext, _CTX_NAME, 2]
+comptime _CTX_NAME = "MojolearnXCnnContextIdenticalV5" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXCnnContextFastV5"
+comptime X_CNN_CONTEXT = SharedSlot[_CnnContext, _CTX_NAME, 3]
 
 
 def cnn_ctx() raises -> DeviceContext:
     """The shared context, created on first use."""
     var slot = X_CNN_CONTEXT.get_or_create_ptr()
-    if not slot[].ctx:
-        slot[].ctx = DeviceContext()
-    return slot[].ctx.value().copy()
+    var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](slot[].ctx_lock.unsafe_ptr())
+    shared_slot_lock(word)
+    try:
+        if not slot[].ctx:
+            slot[].ctx = DeviceContext()
+        return slot[].ctx.value().copy()
+    finally:
+        shared_slot_unlock(word)
 
 
 def elem_kernel[f: ElemFn](a: FP, b: FP, c: FP, d: FP, q: IP, p: IP, total: Int32):

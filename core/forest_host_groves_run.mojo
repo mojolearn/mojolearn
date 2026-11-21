@@ -12,10 +12,10 @@ from core.forest_host_groves_binding_impl import (
 from core.shared_slot import SharedSlot
 
 
-comptime RF_GROVE_REGISTRY = SharedSlot[HostGroveRegistry, "MojolearnRFResidentForestHostV1"]
+comptime RF_GROVE_REGISTRY = SharedSlot[HostGroveRegistry, "MojolearnRFResidentForestHostV2", 2]
 
 
-comptime ET_GROVE_REGISTRY = SharedSlot[HostGroveRegistry, "MojolearnETResidentForestHostV1"]
+comptime ET_GROVE_REGISTRY = SharedSlot[HostGroveRegistry, "MojolearnETResidentForestHostV2", 2]
 
 
 def forest_prepare_host_native[RF_INPUT: Bool](model: List[Int], features: Int, trees: Int, outputs: Int,
@@ -49,9 +49,10 @@ def forest_predict_resident_host_native[RF_INPUT: Bool](
     var state = RF_GROVE_REGISTRY.get_or_create_ptr()
     comptime if not RF_INPUT:
         state = ET_GROVE_REGISTRY.get_or_create_ptr()
-    if handle not in state[].entries:
+    var lease = state[].lease(handle)
+    if not lease:
         raise Error("unknown or released resident forest handle")
-    state[].entries[handle].predict_into[RF_INPUT](xp, op, rows, features, outputs)
+    lease.value()[].predict_into[RF_INPUT](xp, op, rows, features, outputs)
     return rows
 
 

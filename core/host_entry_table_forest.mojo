@@ -41,13 +41,13 @@ comptime FAMILY_RF = 0
 comptime FAMILY_ET = 1
 
 # The host grove registries of the forest host binding, named apart from the
-# rf and trees host families' ("MojolearnRFResidentForestHostV1",
-# "MojolearnETResidentForestHostV1" in bindings/forest_host_groves_binding.mojo),
+# rf and trees host families' ("MojolearnRFResidentForestHostV2",
+# "MojolearnETResidentForestHostV2" in core/forest_host_groves_run.mojo),
 # so two host bindings loaded into one process never share a handle space.
 # (Moved unchanged from bindings/_mojolearn_forest_host.mojo: same names,
 # same layout, so the handle space is the one the Python exports used.)
-comptime RF_GROVES = SharedSlot[HostGroveRegistry, "MojolearnForestHostRFGrovesV1"]
-comptime ET_GROVES = SharedSlot[HostGroveRegistry, "MojolearnForestHostETGrovesV1"]
+comptime RF_GROVES = SharedSlot[HostGroveRegistry, "MojolearnForestHostRFGrovesV2", 2]
+comptime ET_GROVES = SharedSlot[HostGroveRegistry, "MojolearnForestHostETGrovesV2", 2]
 #: Rows per call, so `n_rows * n_cols` stays far from any Int edge.
 comptime FOREST_HOST_MAX_ROWS = 1073741824
 
@@ -124,12 +124,14 @@ def forest_host_groves_predict_run(handle: Int, x_addr: Int, out_addr: Int,
     var state = RF_GROVES.get_or_create_ptr()
     if family == FAMILY_ET:
         state = ET_GROVES.get_or_create_ptr()
-    if id not in state[].entries:
+    # held for this walk (the registry's lock word covers the lookup only)
+    var lease = state[].lease(id)
+    if not lease:
         raise Error(entry + ": unknown or released host grove forest handle")
     if family == FAMILY_RF:
-        state[].entries[id].predict_into[True](xp, op, n_rows, n_cols, num_outputs)
+        lease.value()[].predict_into[True](xp, op, n_rows, n_cols, num_outputs)
     else:
-        state[].entries[id].predict_into[False](xp, op, n_rows, n_cols, num_outputs)
+        lease.value()[].predict_into[False](xp, op, n_rows, n_cols, num_outputs)
     return n_rows
 
 

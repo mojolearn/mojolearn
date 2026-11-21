@@ -30,7 +30,7 @@ from bindings.generation_buffers_door import (
 )
 from bindings.causal_lm_public_door import _native_function, _native_has_entry, _mutable, _writeback
 from bindings.causal_lm_construct_door import _model_bindings, _model_block
-from bindings.neural_block_public_door import neural_training_entries, neural_training_selection, _neural_input, _neural_input_rows, _neural_lengths, _neural_int_words, neural_block_snapshot_prepared
+from bindings.neural_block_public_door import neural_training_entries, neural_training_selection, _neural_input, _neural_input_rows, _neural_lengths, _neural_int_words, neural_block_snapshot_prepared, neural_block_route_reconcile
 from bindings.neural_block_admission_door import neural_block_fields, neural_block_snapshot, admit_block_f32, BLOCK_OPERATION, neural_array_snapshot, neural_native_scalar
 from bindings.mode_metadata_native_door import _fields, _class_fields
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
@@ -1262,6 +1262,9 @@ def mamba_native_call(mut mods: NativeModules, operation: String, values: Python
     if operation == "session_init":
         _ = _mamba_session_fields(mods, values[0], context, False)
         var fields = neural_block_fields(mods, values[1], context)
+        # lane fx-device-attr round 2: a session opens on the block's route
+        # as assigned (`block.device = ...`); one record read per open.
+        neural_block_route_reconcile(mods, values[1], fields, context)
     elif operation == "set_input_states":
         _ = _mamba_state_fields(mods, values[0], "mamba3", context, False)
     elif operation.startswith("session_") and operation != "session_open" and operation != "session_info":
@@ -1298,6 +1301,11 @@ def mamba_native_call(mut mods: NativeModules, operation: String, values: Python
         if (operation != "forward_public" and operation != "step_public"
                 and operation != "forward" and operation != "step"):
             var fields = neural_block_fields(mods, values[0], context)
+            if operation == "install_owned":
+                # lane fx-device-attr round 2: the owned weights go to the
+                # route of the block's `device` as assigned; one record read
+                # per install (a training-session start, not a step).
+                neural_block_route_reconcile(mods, values[0], fields, context)
             var kind = String(fields["_native_kind"])
             if operation == "allocate":
                 _mamba_scalar(mods, values[1], "batch_size", context)

@@ -15,7 +15,7 @@ from x_metrics.plan import Plan, plan_program, is_user_op, OP_SORT_MERGE
 from x_metrics.par import sort_merge_path_unit, merge_path_chunks
 from core.arena_io import check_in_ranges, check_out_ranges, upload_ranges, download_ranges
 from core.device_store import DeviceStore
-from core.shared_slot import SharedSlot
+from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 
 #: x_metrics program profile: `-D MOJOLEARN_XMETRICS_PROFILE` builds drain and
 #: print per stage; default builds compile it out. Before (lane
@@ -32,20 +32,29 @@ struct _MetricsContext(Defaultable, Movable):
     queues, and a cross-validation loop scores thousands of times). One slot
     per numeric tier, so a FAST and an IDENTICAL .so never share it."""
     var ctx: Optional[DeviceContext]
+    #: Lane fx-gil (2026-11-21): the first creation was serialized by the
+    #: GIL; a member's worker holds none.
+    var lock: List[Int64]
 
     def __init__(out self):
         self.ctx = Optional[DeviceContext]()
+        self.lock = List[Int64](length=1, fill=Int64(0))
 
 
-comptime _CTX_NAME = "MojolearnXMetricsContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXMetricsContextFastV3"
-comptime X_METRICS_CONTEXT = SharedSlot[_MetricsContext, _CTX_NAME]
+comptime _CTX_NAME = "MojolearnXMetricsContextIdenticalV4" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXMetricsContextFastV4"
+comptime X_METRICS_CONTEXT = SharedSlot[_MetricsContext, _CTX_NAME, 2]
 
 
 def metrics_ctx() raises -> DeviceContext:
     var slot = X_METRICS_CONTEXT.get_or_create_ptr()
-    if not slot[].ctx:
-        slot[].ctx = DeviceContext()
-    return slot[].ctx.value().copy()
+    var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](slot[].lock.unsafe_ptr())
+    shared_slot_lock(word)
+    try:
+        if not slot[].ctx:
+            slot[].ctx = DeviceContext()
+        return slot[].ctx.value().copy()
+    finally:
+        shared_slot_unlock(word)
 
 
 #: The binding's resident input store (core/device_store.mojo; lane
