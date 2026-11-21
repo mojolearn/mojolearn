@@ -586,8 +586,21 @@ def _gbdt_fit_ordered_arm(
         _refuse_ordered_host("sample_weight")
     if n_class_weights != 0:
         _refuse_ordered_host("class_weights")
-    if n_flags != 0:
-        _refuse_ordered_host("cat_features or one_hot_features")
+    # CATEGORICAL COLUMNS (lane cat-ctr, 2026-11-21): the Ordered oracle
+    # takes the flags and builds single-column CTRs over its fold
+    # permutations, as `train` does. What stays refused, by name: an
+    # estimation permutation that is not the last and feature combinations
+    # (`train`'s own two refusals, its words), and a one-hot column (the
+    # oracle's refusal: its fold searcher scores `bin >` splits only).
+    var ctr_permutation_id = params.i(29)
+    var max_ctr_complexity = params.i(34)
+    if max_ctr_complexity < 1:
+        raise Error(
+            "max_ctr_complexity must be at least 1; got "
+            + String(max_ctr_complexity)
+        )
+    if n_flags != 0 and n_flags != n_features:
+        raise Error("cat flags must be one per feature")
     # the detector as `gbdt_fit` resolves it, through the same host function
     # (`load_overfitting_detector_options`, their `Load`)
     var use_best_model = params.i(23)
@@ -690,6 +703,13 @@ def _gbdt_fit_ordered_arm(
     var perm_count = permutation_count if permutation_count != -1 else 4
     if perm_count < 1:
         raise Error("Permutation count should be positive (boosting_options.cpp:67)")
+    if n_flags != 0 and ctr_permutation_id != -1 and ctr_permutation_id != perm_count - 1:
+        raise Error(
+            "ctr_estimation_permutation_id " + String(ctr_permutation_id)
+            + " with boosting_type='Ordered': an Ordered fit estimates on"
+            " its last permutation (" + String(perm_count - 1)
+            + "); leave it unset"
+        )
     # `AdjustBoostFromAverageDefaultValue`: unset is True for RMSE, MAE,
     # Quantile and MAPE (`gbdt/train.mojo`)
     var bfa = boost_from_average == 1 or (
@@ -727,13 +747,28 @@ def _gbdt_fit_ordered_arm(
         ex^, ey^, n_eval_rows, od_kind, od.auto_stop_p_value,
         od.iterations_wait, want_best, best_model_min_trees,
     )
-    var fit = gbdt_ordered_host_fit(x, y, n_rows, n_features, p, hloss, opts, ev)
+    var flags = List[UInt32]()
+    if n_flags != 0:
+        flags = gbdt_host_load_u32(u32_ptr(flags_address), n_flags)
+        # `train` refuses feature combinations when an Ordered fit has a
+        # CTR-bearing column (one pass over the categorical columns, once
+        # per fit, as the Plain arm's own dispatch)
+        if max_ctr_complexity > 1 and gbdt_has_ctr_columns(
+            gbdt_ctr_column_kinds(flags, x, n_rows, n_features)
+        ):
+            raise Error(
+                "max_ctr_complexity above 1 (feature combinations) with"
+                " boosting_type='Ordered' is not implemented; use"
+                " boosting_type='Plain' or max_ctr_complexity=1"
+            )
+    var fit = gbdt_ordered_host_fit(
+        x, y, n_rows, n_features, p, hloss, opts, ev, flags
+    )
     text = fit.text
     losses = fit.losses.copy()
     test_losses = fit.test_losses.copy()
     best = fit.best_iteration
     stopped = fit.stopped_early
-    _ = flags_address
     return GbdtFitOutcome(text^, best, stopped, losses^, test_losses^)
 
 

@@ -8,13 +8,18 @@ process cleanup and request ordering. No pickle or Python worker loop is used.
 State (lane pools-frame, 2026-11-21). A pool's state is a typed record
 (`ProcessPoolRecord`, bindings/native_process_pool_run.mojo: devices, worker
 process ids, socket descriptors, sequence, closed) held by one native owner,
-`ProcessPoolOwner`, stored in the pool dictionary under `record`. Every
-operation reads the record, through one dictionary read per operation (a
-start, a map, an addressed request, a close), never per frame. The
-dictionary's other entries are of two kinds: `module` and `environment` are a
-caller's configuration, UNPACKed when the workers are spawned; `devices`,
-`cooperative`, `workers`, `closed` and `timing` are a mirror this door
-publishes at a start and at a close for readers and never reads back.
+`ProcessPoolOwner`, and the owner IS the pool handle: `process_pool_create`
+returns it and every operation takes it and reads the record through one
+exact-type downcast (no dictionary, no key lookup). The owner also holds the
+caller's configuration (`module`, typed; `environment`, a pin UNPACKed when
+the workers are spawned) and `mirror`, a dictionary this door publishes at a
+start and at a close for readers (`devices`, `cooperative`, `workers`,
+`closed`, `timing`; the `mirror` operation returns it) and never reads back,
+except the close's own `timing` entry. The mirror never holds the owner, so
+there is no reference cycle: a dropped pool drops its socket capsules.
+REMOVED 2026-11-21 (lane pools-frame, final round): the pool dictionary as
+the handle (`record`, `module`, `environment` entries and one dictionary
+read of `record` per operation).
 REMOVED 2026-11-21 (lane pools-frame): the `sequence` mirror entry (a Python
 int built and stored into the dictionary after every map and every addressed
 request; nothing read it) and the shard doors' `trace_record` entry (now the
@@ -62,27 +67,36 @@ from core.parallel_worker_request import WorkerRequest, WORKER_ECHO_OP
 from bindings.native_keys_unpack import native_keys
 from bindings.native_keys_unpack import (
     NATIVE_PROCESS_OPN_INITIALIZE, NATIVE_PROCESS_OPN_CREATE, NATIVE_PROCESS_OPN_MAP, NATIVE_PROCESS_OPN_CLOSE, NATIVE_PROCESS_OPN_WORKER_ECHO, NATIVE_PROCESS_OPN_ENVIRONMENT,
+    NATIVE_PROCESS_OPN_MIRROR, NATIVE_PROCESS_OPN_MODULE,
 )
 from bindings.py_keys import py_op_code
-from bindings.py_balanced import py_item
 
 
 struct ProcessPoolOwner(Movable, Writable):
-    """One pool's native owner, stored once in the pool dictionary as
-    `record`. `native` is the typed state every operation works on. The Python
-    objects here are boundary pins only, one per started worker in spawn
-    order: the socket capsule that owns the worker's descriptor (dropping the
-    pool drops the capsule, which closes the descriptor, so an abandoned
-    pool's workers still see their connection close) and the worker's
-    admitted hello, kept for the published mirror."""
+    """One pool's native owner: the pool handle itself. `native` is the typed
+    state every operation works on and `module` the worker module spawned at
+    a start. The Python objects here are boundary pins only. One per started
+    worker in spawn order: the socket capsule that owns the worker's
+    descriptor (dropping the pool drops the capsule, which closes the
+    descriptor, so an abandoned pool's workers still see their connection
+    close) and the worker's admitted hello, kept for the published mirror.
+    `environment` is the caller's worker environment overrides (None for
+    none), admitted when the workers are spawned. `mirror` is the published
+    dictionary for readers; it never holds this owner (no cycle)."""
     var native: ProcessPoolRecord
     var sockets: List[PythonObject]
     var identities: List[PythonObject]
+    var module: String
+    var environment: PythonObject
+    var mirror: PythonObject
 
-    def __init__(out self, var native: ProcessPoolRecord):
+    def __init__(out self, var native: ProcessPoolRecord, var module: String, mirror: PythonObject):
         self.native = native^
         self.sockets = List[PythonObject]()
         self.identities = List[PythonObject]()
+        self.module = module^
+        self.environment = PythonObject(None)
+        self.mirror = mirror
 
     def write_to(self, mut writer: Some[Writer]):
         writer.write("ProcessPoolOwner(workers=", len(self.native.pids), ", closed=", self.native.closed, ")")
@@ -219,28 +233,61 @@ def process_pool_create(devices: PythonObject, cooperative: Bool, child_module: 
             raise Error("process: devices must be distinct nonnegative integer indices")
         _ = py_call(seen.add, selected[i])
         words.append(Int(py=selected[i]))
-    var result = bi.dict()
+    var mirror = bi.dict()
     var nk = native_keys()
     var native = ProcessPoolRecord(words^, cooperative)
-    # The record's Python type is registered by every binding that builds this
-    # door (bindings/native_process_pool_type_door.mojo).
-    py_setitem(result, nk[].k_record, PythonObject(alloc=ProcessPoolOwner(native^)))
-    # Configuration a caller may still set before the first request.
-    py_setitem(result, nk[].k_module, child_module)
     # The published mirror.
-    py_setitem(result, nk[].k_devices, selected)
-    py_setitem(result, nk[].k_cooperative, cooperative)
-    py_setitem(result, nk[].k_workers, bi.list())
-    py_setitem(result, nk[].k_closed, False)
-    return result
+    py_setitem(mirror, nk[].k_devices, selected)
+    py_setitem(mirror, nk[].k_cooperative, cooperative)
+    py_setitem(mirror, nk[].k_workers, bi.list())
+    py_setitem(mirror, nk[].k_closed, False)
+    # The owner's Python type is registered by every binding that builds this
+    # door (bindings/native_process_pool_type_door.mojo).
+    return PythonObject(alloc=ProcessPoolOwner(native^, child_module.copy(), mirror))
+
+
+def process_pool_admit(pool: PythonObject) raises:
+    """Refuses anything but a pool handle this door created (exact native
+    type; no dictionary or attribute of `pool` is read)."""
+    try:
+        _ = pool.downcast_value_ptr[ProcessPoolOwner]()
+    except:
+        raise Error("TypeError: process: a native process pool is required")
+
+
+def process_pool_mirror(pool: PythonObject) raises -> PythonObject:
+    """PACK for readers: the published mirror (`devices`, `cooperative`,
+    `workers`, `closed`, `timing` once a start was attempted). The same
+    dictionary object on every call; this door rewrites its entries at a
+    start and at a close."""
+    process_pool_admit(pool)
+    var mirror = pool.downcast_value_ptr[ProcessPoolOwner]()[].mirror
+    return mirror
+
+
+def process_pool_module_set(pool: PythonObject, module: PythonObject) raises:
+    """UNPACK of a caller's worker module, read by the next start."""
+    process_pool_admit(pool)
+    if py_type(module) is not PROCESS_BOUNDARY.get_or_create_ptr()[].bi.str:
+        raise Error("TypeError: process: worker module requires an exact string")
+    var word = String(module)
+    if word == "":
+        raise Error("process: nonempty devices and child module are required")
+    pool.downcast_value_ptr[ProcessPoolOwner]()[].module = word^
+
+
+def process_pool_environment_set(pool: PythonObject, environment: PythonObject) raises:
+    """Pins a caller's worker environment overrides for the next start, which
+    admits them (`_process_environment`: an exact dict of the one supported
+    setup flag)."""
+    pool.downcast_value_ptr[ProcessPoolOwner]()[].environment = environment
 
 
 def _pool_publish(pool: PythonObject) raises:
     """PACK: the mirror of the record (`workers`, `closed`)."""
     var bi = PROCESS_BOUNDARY.get_or_create_ptr()[].bi
     var nk = native_keys()
-    var record = py_item(pool, nk[].k_record)
-    var rec = record.downcast_value_ptr[ProcessPoolOwner]()
+    var rec = pool.downcast_value_ptr[ProcessPoolOwner]()
     var workers = bi.list()
     for i in range(len(rec[].native.pids)):  # driver-loop: over the pool's workers, one mirror entry each
         var group = bi.list()
@@ -255,9 +302,8 @@ def _pool_publish(pool: PythonObject) raises:
         if rec[].identities[i] is not None:
             py_setitem(worker, nk[].k_identity, rec[].identities[i])
         _ = py_call(workers.append, worker)
-    py_setitem(pool, nk[].k_workers, workers)
-    py_setitem(pool, nk[].k_closed, PythonObject(rec[].native.closed))
-    _ = record
+    py_setitem(rec[].mirror, nk[].k_workers, workers)
+    py_setitem(rec[].mirror, nk[].k_closed, PythonObject(rec[].native.closed))
 
 
 def _pool_abandon(pool: PythonObject, message: String, what: String) raises:
@@ -269,52 +315,39 @@ def _pool_abandon(pool: PythonObject, message: String, what: String) raises:
     except cleanup_error:
         raise Error("RuntimeError: native process " + what + " failed: " + message + "; cleanup also failed: " + String(cleanup_error))
     var nk = native_keys()
-    var record = py_item(pool, nk[].k_record)
-    var rec = record.downcast_value_ptr[ProcessPoolOwner]()
+    var rec = pool.downcast_value_ptr[ProcessPoolOwner]()
     rec[].native.closed = False
-    py_setitem(pool, nk[].k_closed, False)
-    _ = record
+    py_setitem(rec[].mirror, nk[].k_closed, False)
 
 
 def process_pool_closed(pool: PythonObject) raises -> Bool:
     """Whether `pool` was closed, from its record."""
-    var record = py_item(pool, native_keys()[].k_record)
-    var rec = record.downcast_value_ptr[ProcessPoolOwner]()
-    var closed = rec[].native.closed
-    _ = record
+    var closed = pool.downcast_value_ptr[ProcessPoolOwner]()[].native.closed
     return closed
 
 
 def process_pool_trace(pool: PythonObject) raises -> Int:
     """The id of the shard trace record the pool's requests go to (0: none)."""
-    var record = py_item(pool, native_keys()[].k_record)
-    var trace = record.downcast_value_ptr[ProcessPoolOwner]()[].native.trace
-    _ = record
+    var trace = pool.downcast_value_ptr[ProcessPoolOwner]()[].native.trace
     return trace
 
 
 def process_pool_trace_set(pool: PythonObject, trace: Int) raises:
     """Names the shard trace record of the pool's next requests."""
-    var record = py_item(pool, native_keys()[].k_record)
-    record.downcast_value_ptr[ProcessPoolOwner]()[].native.trace = trace
-    _ = record
+    pool.downcast_value_ptr[ProcessPoolOwner]()[].native.trace = trace
 
 
 def process_pool_devices(pool: PythonObject) raises -> List[Int]:
     """The pool's selected physical devices, in the order given at creation."""
-    var record = py_item(pool, native_keys()[].k_record)
-    var rec = record.downcast_value_ptr[ProcessPoolOwner]()
+    var rec = pool.downcast_value_ptr[ProcessPoolOwner]()
     var devices = rec[].native.devices.copy()
-    _ = record
     return devices^
 
 
 def process_pool_pids(pool: PythonObject) raises -> List[Int]:
     """The process ids of the pool's started workers, in worker order."""
-    var record = py_item(pool, native_keys()[].k_record)
-    var rec = record.downcast_value_ptr[ProcessPoolOwner]()
+    var rec = pool.downcast_value_ptr[ProcessPoolOwner]()
     var pids = rec[].native.pids.copy()
-    _ = record
     return pids^
 
 
@@ -397,8 +430,7 @@ def process_pool_close(pool: PythonObject) raises:
 def _process_pool_close(pool: PythonObject, abort: Bool) raises:
     var nk = native_keys()
     var bi = PROCESS_BOUNDARY.get_or_create_ptr()[].bi
-    var record = py_item(pool, nk[].k_record)
-    var rec = record.downcast_value_ptr[ProcessPoolOwner]()
+    var rec = pool.downcast_value_ptr[ProcessPoolOwner]()
     # The worker set leaves the record before any socket or process call, so
     # a failure below cannot leave a half-closed worker addressable.
     var pids = rec[].native.pids.copy()
@@ -458,11 +490,12 @@ def _process_pool_close(pool: PythonObject, abort: Bool) raises:
     _pool_publish(pool)
     # Seconds from the close request to each worker's reap, and the signal
     # its reap needed (0: none, 15: SIGTERM, 9: SIGKILL).
-    var timing = py_get(pool, nk[].k_timing, PythonObject(None))
+    # The mirror is a reader's dictionary: its `timing` entry is admitted by
+    # exact type before it is written.
+    var timing = py_get(rec[].mirror, nk[].k_timing, PythonObject(None))
     if timing is not None and py_type(timing) is bi.dict and len(pids) > 0:
         py_setitem(timing, nk[].k_close_seconds, close_seconds)
         py_setitem(timing, nk[].k_close_signal, close_signal)
-    _ = record
     if failure != "":
         raise Error(failure)
 
@@ -481,15 +514,14 @@ def _pool_timing(pool: PythonObject, seconds: List[Float64]) raises:
             _ = py_call(started.append, PythonObject(None))
     var timing = bi.dict()
     py_setitem(timing, nk[].k_start_seconds, started)
-    py_setitem(pool, nk[].k_timing, timing)
+    py_setitem(pool.downcast_value_ptr[ProcessPoolOwner]()[].mirror, nk[].k_timing, timing)
 
 
 def process_pool_start(pool: PythonObject) raises:
     var p = PROCESS_BOUNDARY.get_or_create_ptr()
     var bi = p[].bi
     var nk = native_keys()
-    var record = py_item(pool, nk[].k_record)
-    var rec = record.downcast_value_ptr[ProcessPoolOwner]()
+    var rec = pool.downcast_value_ptr[ProcessPoolOwner]()
     if rec[].native.closed:
         raise Error("process: pool is closed")
     if rec[].native.started():
@@ -498,16 +530,11 @@ def process_pool_start(pool: PythonObject) raises:
     var groups = rec[].native.width()
     if p[].vendor == "cpu" and cooperative and len(rec[].native.devices) != 1:
         raise Error("NotImplementedError: cooperative neural updates across multiple CPU devices have no host implementation")
-    # UNPACK of the caller's configuration, once per start.
-    # The dictionary is the caller's own (no operation copies it first), so
-    # both entries are admitted here, where they are read: the module word
-    # by exact type before its text is taken, the overrides by
-    # `_process_environment`.
-    var module_word = py_item(pool, nk[].k_module)
-    if py_type(module_word) is not bi.str:
-        raise Error("TypeError: process: worker module requires an exact string")
-    var child_module = String(module_word)
-    var overrides = py_get(pool, nk[].k_environment)
+    # The caller's configuration, once per start: the module is the owner's
+    # typed word (admitted at creation or by `process_pool_module_set`); the
+    # environment overrides are admitted by `_process_environment`.
+    var child_module = rec[].module.copy()
+    var overrides = rec[].environment
     var devices = bi.list()
     for i in range(len(rec[].native.devices)):  # small-loop(the pool's selected devices)
         _ = py_call(devices.append, PythonObject(rec[].native.devices[i]))
@@ -587,7 +614,6 @@ def process_pool_start(pool: PythonObject) raises:
     transport_close(server)
     _pool_timing(pool, seconds)
     _pool_publish(pool)
-    _ = record
 
 
 def process_pool_map_replies(pool: PythonObject, words: List[List[Int64]], inputs: PythonObject) raises -> List[WireReply]:
@@ -614,10 +640,8 @@ def process_pool_map_replies(pool: PythonObject, words: List[List[Int64]], input
     var outgoing = List[WireOutgoing](capacity=total)
     for i in range(total):  # driver-loop: over the requests of one map (UNPACK, before any worker is addressed)
         outgoing.append(wire_unpack(inputs[i]))
-    var nk = native_keys()
-    var record = py_item(pool, nk[].k_record)
-    var rec = record.downcast_value_ptr[ProcessPoolOwner]()
-    # One record read per map: a started open pool is not looked up again by
+    var rec = pool.downcast_value_ptr[ProcessPoolOwner]()
+    # One downcast per map: a started open pool is not looked up again by
     # a start (the start refuses a closed pool and returns on a started one).
     if rec[].native.closed or not rec[].native.started():
         process_pool_start(pool)
@@ -652,7 +676,6 @@ def process_pool_map_replies(pool: PythonObject, words: List[List[Int64]], input
     except error:
         _pool_abandon(pool, String(error), "request")
         raise error
-    _ = record
     _ = outgoing^
     return replies^
 
@@ -683,9 +706,7 @@ def process_pool_request(pool: PythonObject, worker_index: Int, request: List[In
     # layer owners require an addressed request. A reported model error
     # preserves the living worker; a transport/protocol failure tears down the
     # pool because remote state ownership can no longer be trusted.
-    var nk = native_keys()
-    var record = py_item(pool, nk[].k_record)
-    var rec = record.downcast_value_ptr[ProcessPoolOwner]()
+    var rec = pool.downcast_value_ptr[ProcessPoolOwner]()
     pool_index_admit(rec[].native.width(), worker_index)
     if rec[].native.closed or not rec[].native.started():
         process_pool_start(pool)
@@ -705,7 +726,6 @@ def process_pool_request(pool: PythonObject, worker_index: Int, request: List[In
     except error:
         _pool_abandon(pool, String(error), "request")
         raise error
-    _ = record
     if failed:
         raise Error("RuntimeError: native model worker failed: " + String(value))
     return value
@@ -837,9 +857,15 @@ def process_call(operation: Int, name: PythonObject, args: PythonObject) raises 
         var echoes = List[List[Int64]]()
         for i in range(len(values)):  # driver-loop: one echo request word list per probe value
             echoes.append(echo.copy())
+        process_pool_admit(args[0])
         return process_pool_map_typed(args[0], echoes, values)
     elif operation == NATIVE_PROCESS_OPN_CLOSE:
+        process_pool_admit(args[0])
         process_pool_close(args[0])
+    elif operation == NATIVE_PROCESS_OPN_MIRROR:
+        return process_pool_mirror(args[0])
+    elif operation == NATIVE_PROCESS_OPN_MODULE:
+        process_pool_module_set(args[0], args[1])
     elif operation == NATIVE_PROCESS_OPN_WORKER_ECHO:
         process_echo_worker(args)
     elif operation == NATIVE_PROCESS_OPN_ENVIRONMENT:

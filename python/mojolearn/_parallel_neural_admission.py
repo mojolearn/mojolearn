@@ -2,7 +2,7 @@
 """Import-time native record admission for parallel training boundaries."""
 
 
-def connect(context, owner_cls, model_cls):
+def connect(context, owner_cls, model_cls, pool_cls):
     # ABI setup only. Public operations pass this completed native record;
     # no product operation calls this Python function.
     import _socket
@@ -33,7 +33,9 @@ def connect(context, owner_cls, model_cls):
     # _socket.socket. A capsule has no Python-level hooks, and the transport
     # validates the capsule name before every use. _socket.CAPI is a capsule,
     # so its type is the exact CPython capsule type on every supported Python.
-    admission['opaque_types'] = source['opaque_types'] + (type(_socket.CAPI),)
+    # A process pool handle is the pool's native owner object: a compiled type
+    # with no Python-level hooks, no dictionary and no attributes.
+    admission['opaque_types'] = source['opaque_types'] + (type(_socket.CAPI), pool_cls)
     admission['scalar_types'] = source['scalar_types'] + (range,)
     connected = dict(context)
     connected['admission'] = admission

@@ -251,6 +251,16 @@ def _xl_words(value: PythonObject, name: String, context: PythonObject) raises -
     return admit_f32(value, -1, name, context, finite=False)
 
 
+def xl_intercept_words(intercept: PythonObject) raises -> Int:
+    """k of `_xl_block` (`xl_block_dims`: one class row per intercept word)
+    read from the fitted `intercept_` alone, before any admission: a Python
+    number is one word, an array its `size`. A regressor's score refuses
+    k != 1 with this before it predicts (lane fx-audit)."""
+    if py_type(intercept) is _b().float or py_type(intercept) is _b().int:
+        return 1
+    return Int(py=intercept.size)
+
+
 def _xl_block(coef: PythonObject, intercept: PythonObject, context: PythonObject) raises -> Tuple[PythonObject, Int]:
     """`_coef_block(coef, intercept)`: [coef row | intercept] per class as
     one float32 vector of k rows of d + 1 words (byte copies)."""

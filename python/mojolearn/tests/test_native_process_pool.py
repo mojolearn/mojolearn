@@ -19,6 +19,12 @@ def call(operation, args):
     return _native_process(operation, args)
 
 
+def pool_mirror(pool):
+    # The pool handle is a native owner; its published mirror (devices,
+    # cooperative, workers, closed, timing) is read through the process door.
+    return _native_process("mirror", (pool,))
+
+
 def checked(operation, args):
     audit = audit_native_call(call, operation, args)
     audit.assert_native()
@@ -75,10 +81,10 @@ def test_real_worker_keeps_imported_vendor_after_environment_changes(monkeypatch
     pool = checked("create", ((0,), False, "mojolearn._native_process"))
     try:
         assert checked("map", (pool, ["vendor-pinned"])) == ["vendor-pinned"]
-        assert pool["workers"][0]["identity"]["vendor"] == vendor
+        assert pool_mirror(pool)["workers"][0]["identity"]["vendor"] == vendor
     finally:
         checked("close", (pool,))
-    assert pool["workers"] == []
+    assert pool_mirror(pool)["workers"] == []
 
 
 @pytest.mark.parametrize("missing_vendor", [False, True])
@@ -116,16 +122,16 @@ with socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=10) as so
         assert "child vendor differs" in str(audit.exception)
         for key in ("python_frames", "forbidden_native_calls", "wrapper_work", "unobserved_existing_threads"):
             assert not audit.report()[key], audit.report()
-        assert pool["workers"] == [] and pool["closed"] is False
+        assert pool_mirror(pool)["workers"] == [] and pool_mirror(pool)["closed"] is False
         child = json.loads(record.read_text())
         assert child["received_kind"] in (None, "close"), child
         with pytest.raises(ChildProcessError):
             os.waitpid(child["pid"], os.WNOHANG)
         # A rejected handshake cannot leave the pool poisoned or old replies
         # queued; its ordinary installed child can start and serve fresh work.
-        pool["module"] = "mojolearn._native_process"
+        checked("module", (pool, "mojolearn._native_process"))
         assert checked("map", (pool, ["recovered"])) == ["recovered"]
-        assert pool["workers"][0]["identity"]["vendor"] == _backend.vendor()
+        assert pool_mirror(pool)["workers"][0]["identity"]["vendor"] == _backend.vendor()
     finally:
         checked("close", (pool,))
 
@@ -160,17 +166,17 @@ audit.assert_native()
             assert result.shape == (3, 4)
             np.testing.assert_array_equal(np.asarray(result).view(np.uint32), arrays[i].view(np.uint32))
             assert payload == b"\x00\xff" + bytes([i])
-        pids = [worker["pid"] for worker in pool["workers"]]
+        pids = [worker["pid"] for worker in pool_mirror(pool)["workers"]]
         assert len(set(pids)) == len(devices)
         assert all(pid != os.getpid() for pid in pids)
-        assert [worker["identity"]["pid"] for worker in pool["workers"]] == pids
+        assert [worker["identity"]["pid"] for worker in pool_mirror(pool)["workers"]] == pids
         # A later wave reuses the same physical processes and continues the
         # response sequence; this checks lifecycle, not just one encode/decode.
         assert checked("map", (pool, ["last", 17])) == ["last", 17]
-        assert [worker["pid"] for worker in pool["workers"]] == pids
+        assert [worker["pid"] for worker in pool_mirror(pool)["workers"]] == pids
     finally:
         checked("close", (pool,))
-    assert pool["workers"] == []
+    assert pool_mirror(pool)["workers"] == []
     for pid in pids:
         with pytest.raises(ChildProcessError):
             os.waitpid(pid, os.WNOHANG)
@@ -198,7 +204,7 @@ def test_cpu_cooperative_multidevice_refusal_has_no_children():
     try:
         with pytest.raises(NotImplementedError, match="multiple CPU devices"):
             call("map", (pool, [1]))
-        assert pool["workers"] == []
+        assert pool_mirror(pool)["workers"] == []
     finally:
         checked("close", (pool,))
 
@@ -286,7 +292,7 @@ def test_interrupted_wave_does_not_drain_hung_peers_and_reaps_children(tmp_path)
         assert elapsed < 7, elapsed
         pids = [int(path.name) for path in Path(os.environ['MOJOLEARN_TEST_READY']).iterdir()]
         assert len(pids) == 2, pids  # Both requests were in flight, not just startup.
-        assert pool['workers'] == [], pool
+        assert pool_mirror(pool)['workers'] == [], pool_mirror(pool)
         for pid in pids:
             try:
                 os.waitpid(pid, os.WNOHANG)

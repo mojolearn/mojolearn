@@ -136,7 +136,6 @@
       "parallel_neighbors_reference",
       "parallel_preprocessing",
       "preprocessing",
-      "reproduce",
       "resample",
       "runtime_report",
       "select_d",
@@ -7241,15 +7240,6 @@
       "source": "python/mojolearn/_expansion_ann.py",
       "canonical_algorithm": "mojolearn.refine",
       "symbol_origin": "mojolearn._expansion_ann.refine"
-    },
-    {
-      "algorithm": "mojolearn.reproduce",
-      "status": "not_algorithm",
-      "cases": [],
-      "reason": "Verification tool: fits the estimator a receipt records on the user's data and compares hashes with the receipt; not a numerical algorithm.",
-      "source": "python/mojolearn/__init__.py",
-      "canonical_algorithm": "mojolearn.reproduce",
-      "symbol_origin": "mojolearn._reproduce.reproduce"
     },
     {
       "algorithm": "mojolearn.resample",

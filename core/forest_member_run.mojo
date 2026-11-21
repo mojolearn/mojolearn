@@ -70,9 +70,12 @@ last one carries MEMBER_IMPORT_DONE.
 The state (the five arrays, the snapshot handle) is OWNED by its slot in a
 process-wide store of fixed chunks: a slot never moves, the lock covers
 mint, free and the handle lookup only. Members are independent: a caller
-runs them on its own workers, one handle each. The snapshot is prepared once
-at the end of a fit or import (never lazily, so concurrent predicts of one
-state never race on it) and released at the next fit, import or free.
+runs them on its own workers, one handle each. The snapshot is prepared once,
+at the first predict / predict_proba / score after a fit or import, as the
+estimator's own predict door does (a state only fitted and published or
+freed uploads nothing); concurrent first predicts of one state build it
+once under the slot's own lock word (`_ensure_prepared`). It is released at
+the next fit, import or free.
 Parallel: the ET classifier's code cast, the column-major copy, the largest
 weight, the argmax of the votes and the accuracy count split rows over the
 host workers. Serial by nature: the
@@ -103,6 +106,7 @@ from core.member_abi import (
     member_unsupported,
 )
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
+from std.atomic import Atomic, Ordering
 
 comptime _CHUNK = 256
 comptime _INDEX_SPAN = 16777216
@@ -152,6 +156,12 @@ struct ForestMemberSlot(Copyable, Movable, Defaultable):
     var labels: Bool
     var snapshot: Int
     var release_op: Int
+    #: 1 once the predict route words and snapshot above are built for the
+    #: current fit or import (lazily, at the first predict / score; lane
+    #: fx-audit, audit-trees F2), read with acquire; `prepare_lock` is the
+    #: slot's own lock word for that one build
+    var prepared: Int64
+    var prepare_lock: Int64
 
     def __init__(out self):
         self.generation = 0
@@ -188,6 +198,8 @@ struct ForestMemberSlot(Copyable, Movable, Defaultable):
         self.labels = False
         self.snapshot = 0
         self.release_op = 0
+        self.prepared = 0
+        self.prepare_lock = 0
 
 
 struct ForestMemberStore(Defaultable, Movable):
@@ -265,6 +277,7 @@ def _mint[name: StaticString](words: _F64P, count: Int) raises -> Int:
         slot[].fitted = False
         slot[].imp = List[Float32]()
         slot[].snapshot = 0
+        slot[].prepared = 0
         return slot[].generation * _INDEX_SPAN + index + 1
     finally:
         shared_slot_unlock(lock)
@@ -453,6 +466,38 @@ def _prepare(slot: _SlotPtr, key: EntryRef) raises:
         slot[].release_op = XF_RESIDENT_RELEASE
 
 
+def _unprepared(slot: _SlotPtr, key: EntryRef):
+    # A new fit or import: the route words wait for the first predict on
+    # `key` (`_ensure_prepared`). Called after `_release_snapshot`, with the
+    # state owned by the fitting caller (no predict runs concurrently).
+    slot[].key = key
+    slot[].route = FOREST_ROUTE_SEQUENTIAL
+    slot[].labels = False
+    slot[].prepared = 0
+
+
+def _ensure_prepared(slot: _SlotPtr) raises:
+    """The predict route and snapshot of the fitted state, built at its
+    first predict / predict_proba / score (as the estimator's own predict
+    door builds it, bindings/forest_predict_run.mojo), never at fit: a state
+    only fitted and published or freed (bagging on a device route, RFE steps,
+    freed stacking fits) uploads nothing. After the first call: one acquire
+    load. Concurrent first predicts on one state build it once (the slot's
+    own lock word)."""
+    var flag = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(UnsafePointer(to=slot[].prepared)))
+    if Atomic.load[ordering=Ordering.ACQUIRE](flag) != 0:
+        return
+    var lock = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(UnsafePointer(to=slot[].prepare_lock)))
+    shared_slot_lock(lock)
+    try:
+        if Atomic.load[ordering=Ordering.ACQUIRE](flag) == 0:
+            var key = slot[].key  # a copy: `_prepare` writes the slot's own word
+            _prepare(slot, key)
+            Atomic.store[ordering=Ordering.RELEASE](flag, Int64(1))
+    finally:
+        shared_slot_unlock(lock)
+
+
 def _scalars(slot: _SlotPtr, meta: List[Int]):
     slot[].scalars = List[Float64](length=6 + len(meta), fill=0.0)
     slot[].scalars[0] = Float64(slot[].features)
@@ -559,7 +604,7 @@ def _fit(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], estim
         xf_export_release(key, handle)
     if slot[].importances:
         slot[].imp = imp^
-    _prepare(slot, key)
+    _unprepared(slot, key)
     slot[].fitted = True
 
 
@@ -578,6 +623,7 @@ def _width(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], est
 
 def _vote(slot: _SlotPtr, x: MemberMatrix, dst: Int) raises:
     """The rows' votes or values (flat float32 at `dst`) on the state's route."""
+    _ensure_prepared(slot)
     var wrote = 0
     if slot[].route == FOREST_ROUTE_SEQUENTIAL:
         var model: List[Int] = [Int(slot[].offsets.unsafe_ptr()), Int(slot[].colid.unsafe_ptr()),
@@ -597,6 +643,7 @@ def _vote(slot: _SlotPtr, x: MemberMatrix, dst: Int) raises:
 def _codes(slot: _SlotPtr, x: MemberMatrix, dst: Int) raises:
     """A classifier's int32 class codes at `dst`: the resident fused labels
     where the image serves them, else the first-max argmax of the vote."""
+    _ensure_prepared(slot)
     if slot[].labels:
         var wrote = xf_resident_labels(slot[].key, slot[].snapshot, x.data, dst, x.rows, x.cols, slot[].outputs)
         if wrote != x.rows:
@@ -767,7 +814,7 @@ def _import(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], es
         raise Error("member ABI: a forest classifier's class count differs from its outputs")
     if len(slot[].imp) > 0 and len(slot[].imp) != slot[].features:
         raise Error("member ABI: the forest feature importances block holds one word per feature")
-    _prepare(slot, call[].route.entry)
+    _unprepared(slot, call[].route.entry)
     slot[].fitted = True
 
 

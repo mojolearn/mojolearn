@@ -1992,9 +1992,6 @@ FAMILIES = (
             # lane fx-verify-trace: the activity record's switch and read-back
             # (verification tooling; core/activity_record.mojo)
             "activity_begin", "activity_end",
-            # lane feat-reproduce: the native digest of a saved model file (the
-            # fitted-state hash of a receipt; verification tooling)
-            "state_file_sha256",
             "knn_search", "knn_classify", "knn_regress", "kmeans_fit", "kmeans_predict", "kmeans_transform",
             "kmeans_native_api_v1",
             "radius_neighbors_count", "radius_neighbors_fill", "rbc_knn_search", "transpose_f32",

@@ -146,6 +146,7 @@ from std.python._cpython import GILReleased
 from bindings.classical_validate_unpack import classical_check_y, classical_estimator_name
 from bindings.member_boundary_door import member_admit_serving, member_pack, member_pack_labeled
 from bindings.member_held_door import member_held_adopt
+from bindings.rf_fit_notices_pack import rf_fit_notices_word
 from bindings.member_scope_door import member_scope_word, member_pin_take, member_pin_return
 from bindings.classifier_public_lifecycle_door import _public_labels
 from bindings.classical_labels_door import labels_decode_i32_codes, labels_decode_labels
@@ -167,8 +168,9 @@ from core.member_abi import (
     MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA,
     MEMBER_OP_FIT, MEMBER_OP_SCORE, MEMBER_CAN_FIT, MEMBER_CAN_SCORE, MEMBER_CAN_CLASSIFIER, MEMBER_CAN_ROW_INDEX,
     MEMBER_CAN_SCOPE, MEMBER_SCOPE_NONE, member_pin_settle,
-    MEMBER_OP_DECISION, MEMBER_CAN_DECISION, MEMBER_F64,
+    MEMBER_OP_DECISION, MEMBER_CAN_DECISION, MEMBER_F64, MEMBER_OP_EXPORT, MEMBER_BLOCK_SCALARS,
 )
+from core.member_families import MEMBER_FAMILY_TREE, MEMBER_FAMILY_FOREST
 
 #: Rows below which a fold gather is not split (a task costs more than the
 #: copy); a cost rule over any shape.
@@ -267,6 +269,11 @@ struct MselMemberRun(Movable):
     var pin: Int
     var index_all: Bool
     var taken: List[Int]
+    # Per unit, a RandomForest / DecisionTree fit's notice word
+    # (`ensemble/rf_notices.mojo` bits; 0: none) when the unit freed its
+    # state, raised as UserWarnings at PACK after the join (lane fx-audit,
+    # audit-trees F1). A kept state's notices are raised by the family PACK.
+    var notices: List[Int]
 
     def __init__(out self, x: Int, y: Int, rows: Int, cols: Int, n_folds: Int, n_units: Int, workers: Int,
         return_train: Bool, keep: Bool):
@@ -282,6 +289,7 @@ struct MselMemberRun(Movable):
         self.pin = 0
         self.index_all = False
         self.taken = List[Int](length=n_units, fill=0)
+        self.notices = List[Int](length=n_units, fill=0)
         self.fit_failed = List[UInt8](length=n_units, fill=UInt8(0))
         self.plans = List[MemberPlan]()
         self.folds = List[Int]()
@@ -444,6 +452,23 @@ def _respond(run: MutPointer[MselMemberRun, MutUntrackedOrigin], u: Int, side: I
     call.dst = MemberMatrix()
 
 
+def _unit_fit_notices(plan: MemberPlan, state: Int) raises -> Int:
+    # A Tree / Forest state's notice word: the third export metadata word
+    # of the scalars block (`core/forest_member_run.mojo` block 5, a host
+    # view of the slot's words; no copy, no device read). Other families,
+    # and Extra Trees (whose third word is its depth cap), have none.
+    if plan.family != MEMBER_FAMILY_TREE and plan.family != MEMBER_FAMILY_FOREST:
+        return 0
+    var call = MemberCall(plan.route, state)
+    call.block = MEMBER_BLOCK_SCALARS
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    var scalars = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call.dst.data)
+    var count = call.dst.rows * call.dst.cols
+    if count < 9 or Int(scalars[5]) < 3:
+        return 0
+    return Int(scalars[8])
+
+
 def _msel_member_unit(run: MutPointer[MselMemberRun, MutUntrackedOrigin], u: Int) raises:
     var c = u // run[].n_folds
     var f = u - c * run[].n_folds
@@ -506,6 +531,8 @@ def _msel_member_unit(run: MutPointer[MselMemberRun, MutUntrackedOrigin], u: Int
             run[].states[u] = call.state
             kept = True
             return
+        if not run[].keep:
+            run[].notices[u] = _unit_fit_notices(run[].plans[c], call.state)
         var n_ops = len(run[].ops)
         _side_set(run, test_mode, run[].starts[2 * f + 1], test_index, test_rows, Int(x_test.unsafe_ptr()),
                   Int(y_test.unsafe_ptr()), call)
@@ -906,6 +933,10 @@ def _member_units(base: PythonObject, candidates: PythonObject, y: PythonObject,
                     or run.errors[u].startswith("member ABI")):
                 _free_kept(run)
                 return scores^
+    # PACK: the fit notices of the units that freed their state, in unit
+    # order, as each unit's own fit door raised them (GIL held).
+    for u in range(n_units):  # driver-loop: over units (at most three warnings each)
+        rf_fit_notices_word(run.notices[u], member_context)
     if keep:
         # PACK: one fitted Python estimator per unit (module note). A pack the
         # family refuses publishes nothing: the Python units run the request.

@@ -67,10 +67,10 @@ block, and FREE posts the owner's death so the device copy is freed.
 The fitted state is OWNED here, in a process-wide store of fixed chunks: a
 slot never moves once minted, so a fit or predict runs on its slot without
 the store's lock; the lock covers only mint, free and the handle lookup.
-SERIAL BY NATURE: the store's bookkeeping, the per-layer driver loops, and
-the narrowing of the predicted int64 codes to int32 (one word per row,
-memory-bound, below the cost of a worker launch). The training and the
-forward pass are the image's own parallel kernels.
+SERIAL BY NATURE: the store's bookkeeping and the per-layer driver loops.
+The narrowing of the predicted int64 codes to int32 is split across the
+host pool (`host_narrow_codes_i32`). The training and the forward pass are
+the image's own parallel kernels.
 """
 from std.sys.info import size_of
 from std.memory import unsafe_memcpy
@@ -90,6 +90,7 @@ from core.member_abi import (
 from core.member_families import MEMBER_FAMILY_MLP
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
+from core.host_parallel import host_narrow_codes_i32
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 from sequence.perf3_seq_resident_words import seq_resident_owner_died
 from sequence.xseq_native_common_run import xseq_stream_child_seed
@@ -109,7 +110,6 @@ comptime _BLOCK_SIZES = MEMBER_BLOCK_FAMILY + 1
 comptime _BLOCK_CURVE = MEMBER_BLOCK_FAMILY + 2
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _F64P = MutPointer[Float64, MutUntrackedOrigin]
-comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
 comptime _I64P = MutPointer[Int64, MutUntrackedOrigin]
 # Resident-block tokens of member states sit above every token the class
 # doors mint (`seq_resident_token`, a counter from 1), so a member's (owner,
@@ -425,9 +425,8 @@ def _predict(slot: _SlotP, call: _CallP) raises:
     else:
         xseq_run_argmax(_output_entry(call[].route), Int(scores.unsafe_ptr()), Int(codes.unsafe_ptr()), rows,
             outputs)
-    var out = _I32P(unsafe_from_address=call[].dst.data)
-    for i in range(rows):  # native result publication: one class code per row (see SERIAL BY NATURE)
-        out[i] = Int32(codes[i])
+    # Narrowed across the host pool (lane fx-audit, audit-neural finding 1).
+    host_narrow_codes_i32(Int(codes.unsafe_ptr()), call[].dst.data, rows)
     _ = scores^
     _ = codes^
 

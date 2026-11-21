@@ -28,7 +28,7 @@
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr, GILReleased
 from bindings.x_linear_route_unpack import XLinearOps, xl_route, xl_route_host, xl_device_admit, xl_route_drop
-from bindings.x_linear_common_unpack import _b, _truth, _name, _xl_scope
+from bindings.x_linear_common_unpack import _b, _truth, _name, _xl_scope, xl_intercept_words
 from x_linear.door_run import xl_cd_fit_run, xl_cd_predict_run
 from bindings.x_linear_cd_unpack import xl_cd_fit_unpack, xl_cd_predict_unpack, xl_cd_host_prediction_unpack
 from bindings.x_linear_cd_pack import xl_cd_fit_pack, xl_cd_predict_pack
@@ -260,9 +260,14 @@ def xl_regressor_score(model: PythonObject, args: PythonObject, entries: XLinear
     var compute_score = py_get(fields, nk[].k_compute_score)
     if compute_score is not None and _truth(compute_score):
         raise Error("mojolearn " + name + ": compute_score is not implemented")
-    var prediction = xl_regressor_predict(model, Python.tuple(args[0]), entries, context)
-    if len(prediction.shape) != 1:
+    # A multi-output model is refused BEFORE the prediction, as the old score
+    # did (lane fx-audit, audit-classical minor 3): the prediction is one
+    # column exactly when the fitted block has one class row (k = the
+    # intercept's words, `xl_block_dims`; the predict squeezes k == 1).
+    var intercept = py_get(fields, nk[].k_intercept_)
+    if intercept is not None and xl_intercept_words(intercept) != 1:
         raise Error("mojolearn " + name + ": a regressor's score needs one output column")
+    var prediction = xl_regressor_predict(model, Python.tuple(args[0]), entries, context)
     # The targets as one float32 vector (float64 targets are cast, as the
     # score always cast them); R^2 refuses a NaN or infinity in either.
     var target = admit_f32(args[1], 1, "y", context, finite=False)
