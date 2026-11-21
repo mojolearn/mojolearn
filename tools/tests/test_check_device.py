@@ -2,7 +2,8 @@
 """The check of an estimator that takes `device=` (python/mojolearn/_check_both.py), at the Python boundary.
 
 No binding and no GPU: the module is loaded by path and `mojolearn` is a stub. The estimator is a stub that takes
-`device=` the way Ridge and LinearRegression do (`_mojolearn_device`, `get_params`, `vendor_used`). What is held here:
+`device=` the way Ridge, LinearRegression and LogisticRegression do (`_mojolearn_device`, `get_params`, `vendor_used`;
+the classifier stub adds a label table and probabilities). What is held here:
 both sides are the same class constructed on each device in THIS process; no file is saved, `host_model` is never
 called and no child process is started; the report names both routes; the check can still fail (one element, one ULP);
 and a check whose two sides ran on one device is refused instead of comparing a thing to itself.
@@ -205,3 +206,110 @@ def test_to_cpu_is_the_one_state_transfer_verify_cross_check_calls(tmp_path):
     host, path = cb.to_cpu(install(tmp_path), est, str(tmp_path), name="ridge", form=("save", ".npz"))
     assert path is None and host.get_params()["device"] == "cpu" and host.coef_ is est.coef_
     assert not list(tmp_path.glob("*.npz"))
+
+
+class DeviceClassifier:
+    """A two-device classifier stub in LogisticRegression's shape: a sorted label table (`classes_`, a list), a
+    weight block, `predict` returning labels and `predict_proba` returning float64 probabilities."""
+    _mojolearn_device = True
+    numeric_mode = "identical"
+    built = []
+    nudge_cpu = None    # (row, column) of one probability the CPU answer moves by one ULP
+    flip_cpu = None     # a row whose CPU label is the other class
+
+    def __init__(self, *, C=1.0, class_weight=None, device=None):
+        if device not in (None, "gpu", "cpu"):
+            raise ValueError(f"device must be 'gpu', 'cpu' or None, got {device!r}")
+        self.C, self.class_weight, self.device = C, class_weight, device
+        DeviceClassifier.built.append(device)
+
+    def get_params(self, deep=True):
+        return dict(C=self.C, class_weight=self.class_weight, device=self.device)
+
+    def vendor_used(self):
+        return "cpu" if self.device == "cpu" else "cuda"
+
+    def fit(self, X, y, sample_weight=None):
+        self.classes_ = sorted(set(y.tolist()))
+        weight = np.ones(len(X)) if sample_weight is None else np.asarray(sample_weight, dtype=np.float64)
+        means = [np.average(X[y == label], axis=0, weights=weight[y == label]) for label in self.classes_]
+        self._w = np.asarray(means, dtype=np.float32)
+        self.n_features_in_ = X.shape[1]
+        return self
+
+    def predict_proba(self, X):
+        scores = -((X[:, None, :].astype(np.float64) - self._w[None, :, :]) ** 2).sum(axis=2)
+        p = np.exp(scores - scores.max(axis=1, keepdims=True))
+        p /= p.sum(axis=1, keepdims=True)
+        if self.device == "cpu" and DeviceClassifier.nudge_cpu is not None:
+            p[DeviceClassifier.nudge_cpu] = np.nextafter(p[DeviceClassifier.nudge_cpu], np.inf)
+        return p
+
+    def predict(self, X):
+        codes = self.predict_proba(X).argmax(axis=1)
+        labels = np.asarray(self.classes_, dtype=np.int64)[codes]
+        if self.device == "cpu" and DeviceClassifier.flip_cpu is not None:
+            row = DeviceClassifier.flip_cpu
+            labels[row] = next(label for label in self.classes_ if label != labels[row])
+        return labels
+
+    def save(self, path):
+        raise AssertionError("an estimator that takes device= must not be saved to reach the CPU")
+
+
+def classifier_setup(classes=2, nudge=None, flip=None):
+    DeviceClassifier.built = []
+    DeviceClassifier.nudge_cpu = nudge
+    DeviceClassifier.flip_cpu = flip
+    rng = np.random.default_rng(23)
+    X = rng.random((60, 4), dtype=np.float32)
+    y = (np.arange(60) % classes).astype(np.int64) * 3 + 1       # labels 1, 4, 7, ...: not their own codes
+    X += (y[:, None] / 3.0).astype(np.float32)
+    return X, y
+
+
+def test_classifier_labels_and_probabilities_are_checked_on_both_devices_in_this_process(tmp_path):
+    for classes in (2, 4):
+        X, y = classifier_setup(classes)
+        est = DeviceClassifier(class_weight="balanced").fit(X, y, np.linspace(0.5, 2.0, len(X)))
+        for method in (None, "predict_proba"):
+            DeviceClassifier.built = []
+            result = cb.check_estimator(install(tmp_path), est, X, method=method, spawn=no_child, **LABELS)
+            assert result["ran"] and result["transfer"] == "device" and result["method"] == (method or "predict")
+            assert DeviceClassifier.built == ["cpu"]                 # the CPU twin; the given estimator is the GPU side
+            assert result["sides"]["cpu"]["route"] == dict(device="cpu", vendor_used="cpu")
+            assert result["verdict"]["match"]
+            shape = [len(X)] if method is None else [len(X), classes]
+            assert list(result["sides"]["gpu"]["outputs"][0]["shape"]) == shape
+
+
+def test_the_cpu_twin_of_a_classifier_answers_from_the_same_label_table_and_weights(tmp_path):
+    X, y = classifier_setup(4)
+    est = DeviceClassifier(C=0.5, class_weight={1: 2.0}).fit(X, y)
+    twin = cb.on_device(est, "cpu")
+    assert twin.get_params() == dict(C=0.5, class_weight={1: 2.0}, device="cpu")
+    assert twin.classes_ is est.classes_ and twin._w is est._w
+    assert twin.classes_ == [1, 4, 7, 10]
+
+
+def test_the_classifier_check_can_fail_on_one_probability_and_on_one_label(tmp_path):
+    X, y = classifier_setup(4, nudge=(7, 2))
+    est = DeviceClassifier().fit(X, y)
+    result = cb.check_estimator(install(tmp_path), est, X, method="predict_proba", spawn=no_child, **LABELS)
+    assert result["ran"] and not result["verdict"]["match"]
+    assert list(result["verdict"]["first"]["index"]) == [7, 2]
+    X, y = classifier_setup(2, flip=11)
+    est = DeviceClassifier().fit(X, y)
+    result = cb.check_estimator(install(tmp_path), est, X, spawn=no_child, **LABELS)
+    assert result["ran"] and not result["verdict"]["match"]
+    assert list(result["verdict"]["first"]["index"]) == [11]
+
+
+def test_classifier_fit_both_fits_one_estimator_per_device_with_the_same_weights(tmp_path):
+    X, y = classifier_setup(4)
+    est = DeviceClassifier(class_weight="balanced")
+    weight = np.linspace(0.5, 2.0, len(X))
+    result = cb.check_estimator(install(tmp_path), est, X, method="predict_proba", fit=(X, y, weight),
+                                fit_both=True, spawn=no_child, **LABELS)
+    assert result["ran"] and result["form"] == "fit-both" and result["transfer"] == "device"
+    assert DeviceClassifier.built == [None, "cpu"] and result["verdict"]["match"]     # the given estimator, its twin

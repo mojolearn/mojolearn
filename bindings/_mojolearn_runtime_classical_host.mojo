@@ -34,6 +34,7 @@ from bindings.admitted_input_unpack import register_admitted_buffer_pin
 from providers.python.linear_entry_boundary_door import register_linear_entry_owner, register_linear_entry_owner_identity, linear_entry_connect_c
 from providers.python.linear_state_boundary_door import register_linear_state_owner, register_linear_state_owner_identity
 from providers.python.linear_route_boundary_door import register_linear_route_owner, register_linear_route_owner_identity
+from providers.python.logistic_route_boundary_door import register_logistic_route_owner, register_logistic_route_owner_identity
 from providers.python.device_route_dw_classical_door import register_family_route_owner, register_family_route_owner_identity
 
 comptime RUNTIME_CLASSICAL_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
@@ -138,6 +139,9 @@ def build__mojolearn_runtime_classical_host() -> PythonObject:
         register_linear_state_owner(module)
         # The per-estimator device route owner (device="gpu" | "cpu"), allocated by classical_native_call.
         register_linear_route_owner(module)
+        # LogisticRegression's device route owner, allocated by logistic_native_call (the runtime linear host,
+        # which registers no types: this module is loaded first and owns the type object).
+        register_logistic_route_owner(module)
         register_family_route_owner(module)  # the route owner of the dw-classical families (QNRegressor, ...), allocated by their doors
         module.def_py_c_function(linear_entry_connect_c, "linear_entry_connection_v1")
         module.def_function[runtime_classical_host_numeric_mode_binding]("runtime_classical_host_numeric_mode")
@@ -152,6 +156,7 @@ def build__mojolearn_runtime_classical_host() -> PythonObject:
         register_linear_entry_owner_identity(published)
         register_linear_state_owner_identity(published)
         register_linear_route_owner_identity(published)
+        register_logistic_route_owner_identity(published)
         register_family_route_owner_identity(published)
         return published
     except error:
