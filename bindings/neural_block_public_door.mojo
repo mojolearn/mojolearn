@@ -52,6 +52,7 @@ from providers.python.generation_metadata_pyapi_door import causal_layer_route
 from core.device_route import DEVICE_CPU, DEVICE_GPU, device_name, device_route_plan, device_cpu_absent
 from providers.python.device_route_boundary_door import (
     DeviceRouteOwner, device_unpack, device_route_keep,
+    device_route_stale, device_owner_current, device_route_record,
 )
 from core.neural_entry_table import (
     NeuralEntryKey, neural_entry_vendor, neural_entry_call, neural_ref,
@@ -486,6 +487,32 @@ def _neural_route_publish(block: PythonObject, route: PythonObject, context: Pyt
     _ = device_route_keep(block, owner^)
 
 
+def neural_block_route_reconcile(mut mods: NativeModules, block: PythonObject, live: PythonObject, context: PythonObject) raises:
+    # lane fx-device-attr round 2: `block.device = ...` assigned directly
+    # after construction. The block's published route owner holds the stamp
+    # of round 1 (the process count of `device` writes and the `device`
+    # object the route was resolved for); a stale owner means `_native_route`
+    # was resolved for another device. The new word is resolved by the one
+    # rule (`_neural_block_route`: a bad value is refused in words there and
+    # the live block is left as it was); the same route restamps the owner,
+    # another rebuilds the block through its constructor exactly as
+    # `set_params(device=...)` does. `live` is the block's instance
+    # dictionary: a rebuild replaces its contents in place. Called at a
+    # door's own record miss, at session open and at serialization; never on
+    # a per-operation hit. A block a whole model built holds no owner of its
+    # own: never stale here (it runs on the model's route).
+    if not device_route_stale(block):
+        return
+    var route = _neural_block_route(mods, block, String(live["_native_kind"]), py_get(live, "device"),
+        py_get(live, "numeric_mode"), context)
+    if route == String(live["_native_route"]):
+        _neural_route_publish(block, live["_native_route"], context)
+        return
+    # As `set_params`: every stamped record of the block misses from here on.
+    _ = bump_model_generation(block)
+    _neural_block_rebuild(mods, block, live, mods.module("builtins").dict(), context)
+
+
 def neural_block_owner(mut mods: NativeModules, block: PythonObject, context: PythonObject) raises -> PythonObject:
     # The parallel worker keeps its existing owner ABI at one-time layer
     # construction. Repeated standalone execution uses the native plan below.
@@ -522,6 +549,12 @@ def neural_block_execution(mut mods: NativeModules, block: PythonObject, context
     # (lane fx-audit 22) No device reconcile here: `check` builds a block's
     # twin from its constructor parameters (`_mojolearn_device_state = None`),
     # so no block's fields come from the same block on the other device.
+    # (lane fx-device-attr round 2) A direct `block.device = ...` reaches
+    # this miss: the owner record's key holds the identity of every instance
+    # field, `device` included, so the hit above never runs a stale route and
+    # needs no added read. Here the route is brought up to the assigned word
+    # (rebuilt in place, or a bad value refused) before the plan is built.
+    neural_block_route_reconcile(mods, block, live, context)
     var key = PythonObject(None)
     var binding_key = PythonObject(None)
     var uses_default = False
@@ -1467,12 +1500,23 @@ def neural_block_snapshot_prepared(mut mods: NativeModules, block: PythonObject,
             hit = _neural_snapshot_matches(mods, record[0], block, live, context)
         except:
             hit = False
+    # (lane fx-device-attr round 2) The snapshot key holds the weight words
+    # only, not `device`: the record keeps the block's route owner (record[2],
+    # taken at the miss below) and a hit compares that owner's stamp with the
+    # process count of `device` writes (two word loads; `device` is read only
+    # when the count moved). Before: record[0..1] read, no device check. Now:
+    # one more list item and that compare. A stale owner is a miss.
+    if hit:
+        var held = record[2]
+        if held is not None and not device_owner_current(block, held):
+            hit = False
     if hit:
         var fields = py_call(bi.dict, live)
         _ = py_call(fields.update, record[1])
         py_setitem(fields, "_neural_live_fields", live)
         py_setitem(fields, "_neural_weight_names", neural_block_weight_names(mods, block))
         return fields
+    neural_block_route_reconcile(mods, block, live, context)
     var key = PythonObject(None)
     try:
         var native = NativeIdentityKey(mods)
@@ -1494,7 +1538,10 @@ def neural_block_snapshot_prepared(mut mods: NativeModules, block: PythonObject,
         except:
             reusable = False
     if reusable:
-        prepared_put(mods, _NEURAL_SNAPSHOT_SLOT, block, Python.list(key, _neural_derived_words(mods, snapshot)))
+        # The route owner as held now (fresh after the reconcile above; None
+        # for a block a whole model built, which holds none).
+        prepared_put(mods, _NEURAL_SNAPSHOT_SLOT, block, Python.list(key, _neural_derived_words(mods, snapshot),
+            device_route_record(block)))
     else:
         prepared_drop(mods, _NEURAL_SNAPSHOT_SLOT, block)
     return snapshot
@@ -1737,6 +1784,10 @@ def neural_block_getstate_binding(mut mods: NativeModules, block: PythonObject, 
     # Python _extension helper. Only ordinary model state crosses the boundary.
     var bi = mods.module("builtins")
     var fields = neural_block_fields(mods, block, context)
+    # lane fx-device-attr round 2: a pickled block carries the route of its
+    # `device` as assigned; a restore stamps what it reads back, so a stale
+    # pair saved here would never be seen again. One record read per save.
+    neural_block_route_reconcile(mods, block, fields, context)
     var mode = py_get(fields, "numeric_mode")
     neural_plain_value(mods, mode, 0, context)
     if mode is None:

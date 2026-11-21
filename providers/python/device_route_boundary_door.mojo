@@ -354,6 +354,43 @@ def device_route_owner(model: PythonObject) raises -> PythonObject:
     return owner
 
 
+def device_owner_current(model: PythonObject, owner: PythonObject) raises -> Bool:
+    """True when the held route `owner` of `model` was resolved for the
+    `device` object the estimator holds now. The compare of the owner's
+    stamp with the process count of `device` writes (two word loads); only
+    when the count moved, one read of `device` (the same object restamps the
+    owner). For a door that holds the owner in a record it already reads per
+    operation (the neural block snapshot record, lane fx-device-attr round
+    2), so the check adds no lookup there."""
+    var native = owner.downcast_value_ptr[DeviceRouteOwner]()
+    if native[].guard == _DEVICE_GUARD_NONE:
+        return True
+    if native[].guard == _DEVICE_GUARD_COUNT:
+        if MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=native[].watch)[0] == native[].stamp:
+            return True
+    return _device_route_reread(model, owner)
+
+
+def device_route_record(model: PythonObject) raises -> PythonObject:
+    """The estimator's entry-route owner as held, fresh or not, or None: one
+    record read. For a door that keeps the owner inside its own per-block
+    record at that record's miss (never per operation)."""
+    return records_get(RECORDS_PREPARED, model, DEVICE_ROUTE_SLOT)
+
+
+def device_route_stale(model: PythonObject) raises -> Bool:
+    """True when the estimator holds an entry route resolved for another
+    `device` than the one it holds now (`model.device = ...` assigned
+    directly). False when it holds no route (nothing was resolved for it, as
+    for a block a whole model built). One record read and the stamp compare:
+    for a door's own record miss, session open or serialization, never a
+    per-operation hit."""
+    var owner = records_get(RECORDS_PREPARED, model, DEVICE_ROUTE_SLOT)
+    if owner is None:
+        return False
+    return not device_owner_current(model, owner)
+
+
 def device_route_held(model: PythonObject, mode: PythonObject, default_mode: PythonObject,
     context: PythonObject) raises -> PythonObject:
     """The estimator's resolved route owner for this operation, or None on a

@@ -14,7 +14,8 @@ from bindings.generation_buffers_door import generation_initialize_binding, gene
 from bindings.causal_lm_construct_door import _model_shape
 from std.sys.compile import is_defined
 from bindings.native_loaded_module_door import NativeModules
-from bindings.neural_block_public_door import _neural_input, _neural_input_rows
+from bindings.neural_block_public_door import _neural_input, _neural_input_rows, neural_block_route_reconcile
+from providers.python.device_route_boundary_door import device_route_stale
 from bindings.neural_block_admission_door import neural_record_fields, neural_block_fields, neural_block_snapshot, neural_array_snapshot, neural_metadata_snapshot, neural_string_keys
 from bindings.transformer_public_native_door import _transformer_fields, _transformer_state_words, _transformer_configuration, _transformer_same_words
 from providers.python.borrowed_buffer_pyapi_unpack import AdmittedBorrowedBuffer, admit_native_buffer_exporter
@@ -786,6 +787,12 @@ def _transformer_decode_run_rows(hobj: PythonObject, px: Int, batch: Int, length
 def transformer_decode_init(session: PythonObject, block: PythonObject, state: PythonObject, context: PythonObject) raises -> PythonObject:
     var bi = native_loaded_module("builtins")
     var values = _transformer_decode_fields(session, context)
+    # lane fx-device-attr round 2: a session opens on the block's route as
+    # assigned (`block.device = ...`). One record read per open; the block's
+    # fields are admitted a second time only when the route is stale.
+    if device_route_stale(block):
+        var mods = NativeModules()
+        neural_block_route_reconcile(mods, block, neural_block_fields(mods, block, context), context)
     var fields = _transformer_decode_block(block, context, True)
     var binding = _transformer_decode_binding(fields, context)
     _transformer_decode_weights(fields)
