@@ -140,7 +140,7 @@ def trees_public_operation(model: PythonObject, operation: Int, name: String, ar
     if operation >= TREES_FIRST_IFOREST and operation < TREES_END_IFOREST:
         return iforest_operation(model, name, args, context)
     if operation == TREES_OPN_TREES_BAGGING_MEMBERS:
-        return bagging_members(model)
+        return bagging_members(model, context)
     if operation == TREES_OPN_TREES_BAGGING_MEMBERS_SET:
         return bagging_members_set(model, args[0], context)
     if operation >= TREES_FIRST_PUBLIC_BOOST and operation < TREES_END_PUBLIC_BOOST:

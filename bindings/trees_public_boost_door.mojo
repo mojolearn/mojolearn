@@ -447,6 +447,28 @@ def _require_tree(base: PythonObject, owner: String, context: PythonObject) rais
                     + "those members. Refused by name rather than accepted and ignored.")
 
 
+def boost_member_device(fields: PythonObject, base: PythonObject, owner: String) raises -> PythonObject:
+    """The `device` every member of an ensemble stores: the ensemble's own
+    stored value, so a member read back (`estimators_`) runs where the
+    ensemble ran it. The members' operations run in the ensemble's run
+    context (its device route, bindings/trees_route_boundary_door.mojo);
+    nothing here selects a table. A member estimator given with its own
+    explicit `device` that is not the ensemble's value is refused in words,
+    never run on a device its caller did not name. Once per ensemble fit:
+    two field reads and one pointer compare when both are the default."""
+    var device = py_get(fields, "device")
+    var own = py_get(py_fields(base), "device")
+    if own is not None and own is not device:
+        var same = False
+        if device is not None:
+            same = String(own) == String(device)
+        if not same:
+            raise Error(owner + ": estimator has device=" + _repr(own) + " but the ensemble has device="
+                        + _repr(device) + "; the members run on the ensemble's device. Set device on the "
+                        + "ensemble and leave the member's device None.")
+    return device
+
+
 def _new_member(cls: PythonObject, settings: PythonObject, context: PythonObject) raises -> PythonObject:
     """`cls(**settings)` of a connected tree class: the state its
     constructor stores (every parameter, its default unless set, and the
@@ -789,7 +811,8 @@ def _bagging_batched_ok(fields: PythonObject, base: PythonObject, n_rows: Int, n
 
 
 def _bagging_fit_batched(model: PythonObject, fields: PythonObject, xa: PythonObject, d: Int, y: PythonObject,
-                         base: PythonObject, n_rows: Int, n: Int, seed: Int, context: PythonObject) raises:
+                         base: PythonObject, n_rows: Int, n: Int, seed: Int, device: PythonObject,
+                         context: PythonObject) raises:
     """`_BaggingBase._fit_batched`: the members as one forest fit."""
     var bf = py_fields(base)
     var classifier = _is_class(base, "trees_dt_classifier", context)
@@ -810,6 +833,7 @@ def _bagging_fit_batched(model: PythonObject, fields: PythonObject, xa: PythonOb
     else:
         py_setitem(common, "n_bins", _dt_tier_bins(bf, trees_table(context, _member_mode(base, context), "_mojolearn_rf")))
     py_setitem(common, "numeric_mode", py_get(bf, "numeric_mode"))
+    py_setitem(common, "device", device)
     var forest = PythonObject(None)
     if classifier:
         py_setitem(common, "class_weight", bf["class_weight"])
@@ -855,8 +879,9 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
         base = _new_member(context["trees_dt_classifier" if classifier else "trees_dt_regressor"], Python.dict(), context)
     var owner = "BaggingClassifier" if classifier else "BaggingRegressor"
     _require_tree(base, owner, context)
+    var device = boost_member_device(fields, base, owner)
     if _bagging_batched_ok(fields, base, n_rows, n, n_feat, d, sample_weight, context):
-        _bagging_fit_batched(model, fields, xa, d, y_all, base, n_rows, n, seed, context)
+        _bagging_fit_batched(model, fields, xa, d, y_all, base, n_rows, n, seed, device, context)
         return
     var sw: Optional[AdmittedX] = None
     if sample_weight is not None:
@@ -876,6 +901,7 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
     var all_cols = n_feat == d and not bootstrap_features
     var count = Int(py=_int(fields["n_estimators"]))
     var template = forest_get_params(base, context) if count > 0 else Python.dict()
+    py_setitem(template, "device", device)
     for k in range(count):  # driver-loop: over the member estimators
         var rows = _arange(xt, n, context) if all_rows else _indices(xt, n, n_rows, bootstrap, seed, 2 * k, context)
         var cols = _arange(xt, d, context) if all_cols else _indices(xt, d, n_feat, bootstrap_features, seed, 2 * k + 1, context)
@@ -1292,6 +1318,7 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
             py_setitem(settings, "max_depth", _P(1))
             base = _new_member(context["trees_dt_classifier"], settings, context)
         _require_tree(base, "AdaBoostClassifier", context)
+        var device = boost_member_device(fields, base, "AdaBoostClassifier")
         var w = _normalized_weights(xt, args[2], n, context)
         var stats = admitted_vector(4, "<f8", context)
         py_setitem(fields, "estimators_", members)
@@ -1317,6 +1344,7 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
             xcm = cm^
         var is_dt = Bool(py=py_call(trees_builtins().isinstance, base, context["trees_dt_classifier"]))
         var template = forest_get_params(base, context) if m > 0 else Python.dict()
+        py_setitem(template, "device", device)
         # Every round's member predicts the same training X: staged on the
         # device once, after the first member is fitted (trees_stage_rounds).
         var rounds_staged = Python.list()
@@ -1402,6 +1430,7 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
         py_setitem(settings, "max_depth", _P(3))
         base = _new_member(context["trees_dt_regressor"], settings, context)
     _require_tree(base, "AdaBoostRegressor", context)
+    var device = boost_member_device(fields, base, "AdaBoostRegressor")
     var w = _normalized_weights(xt, args[2], n, context)
     var stats = admitted_vector(4, "<f8", context)
     var cols = _arange(xt, d, context)
@@ -1428,6 +1457,7 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
     # per fit (lane ne2-b-members, N064): every round re-read the unchanged
     # base's parameters (`_clone`) and the session fit re-ran forest_refresh.
     var template = forest_get_params(base, context) if m > 0 else Python.dict()
+    py_setitem(template, "device", device)
     var memo = Python.list()
     var base_kind = forest_kind(base, context) if session.handle > 0 else String("")
     # lane n5-prophet-adaboost-loops: the session members' rounds run on the

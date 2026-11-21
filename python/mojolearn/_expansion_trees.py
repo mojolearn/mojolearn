@@ -51,11 +51,9 @@ _TREES, _TREES_CONTEXT = _native_trees_bridge.connect()
 # table (bindings/native_operation_codes.mojo), read once at import.
 from ._native_ops import codes as _operation_codes  # noqa: E402
 _OP = _operation_codes()
-import sys as _native_module_sys
-from ._native_loaded_modules import connect_module as _connect_native_module
-# Bagging member publication uses this owner after the module's lazy import;
-# subsequent class installation extends its existing tables in place.
-_connect_native_module(__name__, _native_module_sys.modules[__name__], ('_TREES_CONTEXT',))
+# Bagging member publication (`estimators_`) takes the bag's run context from the
+# trees door (bindings/trees_bagging_members_native_pack.mojo); this module is no
+# longer registered for a by-name read of `_TREES_CONTEXT`.
 
 __all__ = [
     "DecisionTreeClassifier",
@@ -474,6 +472,13 @@ class _TreesEnsembleBase(NumericModeMixin):
 # warm_start is refused by name. oob_score (`_set_oob_score` :1000 / :1310)
 # sums each member's output on the rows it never drew, in member order.
 class _BaggingBase(_TreesEnsembleBase):
+    #: Takes `device=`: every operation runs in the estimator's run context (its
+    #: device route, bindings/trees_route_boundary_door.mojo) and the members
+    #: follow the ensemble's device; the check builds the other side as the
+    #: same estimator on the other device, in this process.
+    _mojolearn_device = True
+    vendor_used = _native_trees_bridge.device_vendor_used
+
     def __init__(self, estimator, n_estimators, max_samples, max_features, bootstrap,
                  bootstrap_features, oob_score, warm_start, n_jobs, random_state, verbose):
         # Stored as given; `_validate_params` checks them at fit (scikit-learn's convention).
@@ -610,6 +615,11 @@ class BaggingClassifier(_BaggingBase):
         Numeric mode for this estimator. None uses the process default (see
         ``mojolearn.set_numeric_mode``). ``"fast"`` applies on Apple GPUs
         only.
+    device : {None, "gpu", "cpu"}, default=None
+        Where the ensemble and its members are fitted and predict. None uses
+        this installation's device, ``"cpu"`` runs on the CPU and ``"gpu"``
+        requires a GPU installation. Other values raise ``ValueError``. A
+        member estimator's own ``device`` must be None or the same value.
 
     Attributes
     ----------
@@ -730,6 +740,11 @@ class BaggingRegressor(_BaggingBase):
         Numeric mode for this estimator. None uses the process default (see
         ``mojolearn.set_numeric_mode``). ``"fast"`` applies on Apple GPUs
         only.
+    device : {None, "gpu", "cpu"}, default=None
+        Where the ensemble and its members are fitted and predict. None uses
+        this installation's device, ``"cpu"`` runs on the CPU and ``"gpu"``
+        requires a GPU installation. Other values raise ``ValueError``. A
+        member estimator's own ``device`` must be None or the same value.
 
     Attributes
     ----------
@@ -800,6 +815,13 @@ class BaggingRegressor(_BaggingBase):
 # (`samme_step`, `r2_step`, `weighted_median`); R2's weighted bootstrap is the
 # lane's counter RNG, not numpy's `choice`.
 class _AdaBoostBase(_TreesEnsembleBase):
+    #: Takes `device=`: every operation runs in the estimator's run context (its
+    #: device route, bindings/trees_route_boundary_door.mojo) and the members
+    #: follow the ensemble's device; the check builds the other side as the
+    #: same estimator on the other device, in this process.
+    _mojolearn_device = True
+    vendor_used = _native_trees_bridge.device_vendor_used
+
     def __init__(self, estimator, n_estimators, learning_rate, random_state):
         # Stored as given; `_validate_params` checks them at fit (scikit-learn's convention).
         self.estimator = estimator
@@ -839,6 +861,11 @@ class AdaBoostClassifier(_AdaBoostBase):
         Numeric mode for this estimator. None uses the process default (see
         ``mojolearn.set_numeric_mode``). ``"fast"`` applies on Apple GPUs
         only.
+    device : {None, "gpu", "cpu"}, default=None
+        Where the ensemble and its members are fitted and predict. None uses
+        this installation's device, ``"cpu"`` runs on the CPU and ``"gpu"``
+        requires a GPU installation. Other values raise ``ValueError``. A
+        member estimator's own ``device`` must be None or the same value.
 
     Attributes
     ----------
@@ -953,6 +980,11 @@ class AdaBoostRegressor(_AdaBoostBase):
         Numeric mode for this estimator. None uses the process default (see
         ``mojolearn.set_numeric_mode``). ``"fast"`` applies on Apple GPUs
         only.
+    device : {None, "gpu", "cpu"}, default=None
+        Where the ensemble and its members are fitted and predict. None uses
+        this installation's device, ``"cpu"`` runs on the CPU and ``"gpu"``
+        requires a GPU installation. Other values raise ``ValueError``. A
+        member estimator's own ``device`` must be None or the same value.
 
     Attributes
     ----------
