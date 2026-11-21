@@ -52,7 +52,8 @@ def test_python_export_is_replaced_by_explicit_artifact_admission():
 
 def test_import_and_cleanup_use_the_same_session_provider():
     source = (ROOT / 'providers/python/autograd_import_frontend_pyapi_door.mojo').read_text()
-    body = source.split('def _import(')[1].split('def ops_import_model_c(')[0]
+    # the last `def _import(` is the body; the one before it is the no-device overload
+    body = source.split('def _import(')[-1].split('def ops_import_model_c(')[0]
     assert 'neural_descriptor_execute(owner[].provider, PROGRAM_IMPORT,' in body
     assert 'py_call(entries["onnx_import' not in body
     assert 'py_call(entries["onnx_buffers"]' not in body
