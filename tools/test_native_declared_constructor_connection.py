@@ -62,9 +62,9 @@ def test_committed_schemas_are_exactly_the_source_derivation():
     events = ast.literal_eval(literal('_EVENTS'))
     assert events == {name: row['events'] for name, row in SCHEMAS.items()}
     listed = list(ast.literal_eval(literal('_CLASS_SOURCES')))
-    assert sorted(listed) == sorted(SCHEMAS) and len(listed) == 50
-    # Only LabelEncoder (object's own constructor) stays outside.
-    assert REFUSED == {'LabelEncoder': 'no source constructor'}
+    assert sorted(listed) == sorted(SCHEMAS) and len(listed) == 51
+    # LabelEncoder takes `device=` (2026-11-21), so every declared class has a source constructor.
+    assert REFUSED == {}
     # The resample results left this connector: each constructor is one call
     # to the resample owner's native result initializer.
     source = ast.parse((ROOT / 'python/mojolearn/resample.py').read_text())
@@ -100,7 +100,7 @@ def test_install_replaces_each_constructor_with_one_native_call():
         marker = object()
         made = cls(marker, k=marker) if plan['positional'] else cls(k=marker)
         assert calls[-1][0] is made and calls[-1][3] is ns['_CONTEXT'] and calls[-1][4] is cls
-    assert len(calls) == 50
+    assert len(calls) == 51
 
 
 def test_connect_pins_storage_hooks_and_the_declared_release_context():

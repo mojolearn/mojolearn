@@ -20,7 +20,7 @@ from bindings.optimizer_public_words_unpack import PYTHON_ERROR_PENDING, optimiz
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.classical_attributes_door import classical_connect_numpy
-from bindings.classical_labels_door import classical_accuracy, labels_shape_of
+from bindings.classical_labels_door import classical_accuracy_routed, labels_shape_of
 from bindings.admitted_input_unpack import classical_view
 from bindings.classical_arrays_door import classical_address, classical_wrap_array
 from bindings.admitted_input_unpack import admit_x
@@ -254,8 +254,19 @@ def elliptic_score(model: PythonObject, args: PythonObject, envelope: Bool, cont
             raise Error("mojolearn: sample_weight must be 1-D, got " + String(Int(py=view.ndim)) + "-D")
         if Int(py=view.shape[0]) != n:
             raise Error("sample_weight and X have different numbers of rows")
+    # The accuracy step runs on the estimator's device: the entries its route
+    # names (the predict above resolved them; this is a route hit) hold the
+    # CPU metrics image when they are the CPU image beside a device set
+    # (python/mojolearn/_native_decomp_kit_bridge.py `x_metrics_entries`);
+    # the device image's entries hold none and the process's metrics image of
+    # the fitted mode runs. No device read, no vendor compare.
+    var fields = py_fields(model)
+    var mode = py_item(fields, nk[].k_numeric_mode_)
+    var metrics = py_get(decomp_entries_routed(model, fields, mode, context), "x_metrics_entries")
+    if metrics is not None and py_type(metrics) is py_type(PythonObject("")):
+        raise Error(String(py=metrics))
     try:
-        return PythonObject(classical_accuracy(y, prediction, sample_weight, py_item(py_fields(model), nk[].k_numeric_mode_), context))
+        return PythonObject(classical_accuracy_routed(y, prediction, sample_weight, mode, metrics, context))
     except error:
         if String(error).startswith("ZeroDivisionError"):
             raise Error("ZeroDivisionError: Weights sum to zero, can't be normalized")

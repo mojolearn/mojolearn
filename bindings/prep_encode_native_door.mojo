@@ -29,12 +29,18 @@ from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.classical_arrays_door import classical_address, classical_typed, classical_wrap_array, classical_c_order
 from bindings.scaler_native_door import _ptr, _input
 from core.preprocessing_program import prep_program_stage as _stage
-from bindings.scaler_lifecycle_native_door import _entries
+from bindings.scaler_lifecycle_native_door import _entries, scaler_entries
+from bindings.prep_owner_route_unpack import (
+    prep_route_context, prep_route_caps, prep_route_refuse_cpu_table, prep_route_vendor_used)
 from bindings.prep_entry_cache_unpack import prep_entry_word, prep_entry_text
-from bindings.x_prep_native_owner_door import xprep_storage, xprep_take, xprep_values, xprep_run_records
+from bindings.x_prep_native_owner_door import xprep_storage, xprep_take, xprep_values, xprep_run_records, xprep_caps
 from bindings.prep_encode_prog_run import (
-    EncProgram, OUT_MIN_WORDS, OUT_MARK, enc_sel, enc_bad_rows_stages, enc_assign_fold_i64, enc_check_train_i64)
-from bindings.x_prep_native_owner_run import xprep_r3
+    EncProgram, OUT_MIN_WORDS, OUT_MARK, enc_sel, enc_bad_rows_stages, enc_assign_fold_i64, enc_check_train_i64,
+    enc_label_chunk, enc_col_stats, enc_mark_missing)
+from bindings.prep_encode_imputer_run import (
+    ImputerFit, ImputerApply, IMP_MEAN, IMP_MEDIAN, IMP_MOST_FREQUENT, IMP_CONSTANT,
+    imputer_fit_stage, imputer_transform_stage)
+from bindings.x_prep_native_owner_run import xprep_r3, XprepCaps
 from bindings.public_lifecycle_owner_door import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result
 from bindings.classical_validate_unpack import classical_estimator_name
 from core.host_finite_scan import host_all_finite_f32
@@ -54,7 +60,6 @@ comptime OP_SORT_COLS = 0
 comptime OP_COL_STATS = 1
 comptime OP_QUANTILE = 2
 comptime OP_UNIQUE_COLS = 5
-comptime OP_MODE_COLS = 6
 comptime OP_LOOKUP = 7
 comptime OP_COUNT_NEG = 8
 comptime OP_I2F = 10
@@ -99,11 +104,8 @@ comptime CLS_BLOCK_WORDS = 67108864
 comptime OP_ONEHOT = 9
 comptime OP_WHERE_NEG = 19
 comptime OP_TE_APPLY = 22
-comptime OP_MARK_MISSING = 23
-comptime OP_FILL = 24
 comptime OP_KBINS_EDGES = 25
 comptime OP_KBINS_CODES = 26
-comptime OP_NAN_MASK = 60
 comptime OP_BLOCK_ARGMAX = 76
 comptime OP_ORD_INVERSE = 77
 comptime OP_CAT_GATHER = 78
@@ -119,11 +121,8 @@ comptime OP_UNIQ_SCAN = 121
 comptime OP_UNIQ_WRITE = 122
 comptime OP_COLB_PART = 124
 comptime OP_COLB_FOLD = 125
-comptime OP_COLB_SS = 126
-comptime OP_COLB_VAR = 127
 comptime OP_SPLINE_KNOTS = 49
 comptime OP_SPLINE_APPLY = 50
-comptime OP_HCAT = 140
 comptime OP_CAT_ZERO = 157
 comptime OP_CAT_PRESENT = 158
 comptime OP_PRES_COUNT = 159
@@ -139,7 +138,6 @@ comptime OP_WDRAW = 232
 comptime OP_INF_M0 = 249
 comptime OP_INF_M1 = 250
 comptime OP_INF_MAP = 251
-comptime OP_IMP_STATS = 252
 comptime OP_GRID = 263
 # `_NONE`: a stage's "no operand" word.
 comptime NONE = -1
@@ -199,6 +197,20 @@ struct EncProg(Movable):
             return self.prog.alloc(words)
         return self._record(Python.tuple(0, value, PythonObject(None), words, 1), words)
 
+    def own(mut self, value: PythonObject, words: Int) raises -> Int:
+        """UNPACK of a caller buffer for a typed stage builder: the float32
+        (or int32-word) contiguous buffer `value` of `words` words becomes
+        an owner of this program, held for the run. Returns its owner index;
+        the builder records it (`enc_input`, bindings/prep_encode_prog_run.mojo)
+        where `put` recorded it, so the arena layout is the builder's."""
+        self.owners.append(Python.tuple(0, value, PythonObject(None), words, 1))
+        return len(self.owners) - 1
+
+    def own_x(mut self, values: PythonObject) -> Int:
+        # `own` of X as `xprep_values` converted it (host words or device rows).
+        self.owners.append(values)
+        return len(self.owners) - 1
+
     def put_inout(mut self, value: PythonObject, words: Int) raises -> Int:
         # `_Prog.put(arr, inout=True)`: a stage rewrites these words and the
         # caller reads them after the run, so they come back from the device.
@@ -239,16 +251,40 @@ struct EncProg(Movable):
         """`_Prog.run`: the output region (when there is one) past the host
         arena and the scratch, then the scratch past the host arena; returns
         (arena, output store)."""
+        return self.run_caps(entries, context, xprep_caps(entries))
+
+    def run(mut self, entries: PythonObject, context: PythonObject, model: PythonObject) raises -> PythonObject:
+        """`run` of an estimator's operation: the image's capabilities and
+        its transport entry come from the estimator's device route (one
+        record read, one pointer compare) when it holds this selection, in
+        place of the by-name reads of `xprep_caps`; read as before otherwise."""
+        var caps = prep_route_caps(model, entries)
+        return self.run_caps(entries, context, caps if caps.held else xprep_caps(entries))
+
+    def run_caps(mut self, entries: PythonObject, context: PythonObject, caps: XprepCaps) raises -> PythonObject:
         self.prog.check_bound()
         var host = self.prog.host
         var scratch = self.prog.scratch_size
         var out_words = self.prog.out_words
-        var device_scratch = scratch > 0 and (py_get(entries, "x_prep_run_out") is not None or py_get(entries, "x_prep_run_scratch") is not None)
+        var device_scratch = scratch > 0 and (caps.has_out or caps.has_scratch)
         var arena = xprep_storage(host + (0 if device_scratch else scratch), context)
         var store = xprep_storage(out_words, context) if out_words > 0 else PythonObject(None)
         xprep_run_records(arena, host, scratch, store, out_words, self.prog.stage_words(), self.prog.inputs,
-                          self.owners, entries, context, out_words, self.prog.inout_ranges)
+                          self.owners, entries, context, out_words, self.prog.inout_ranges, caps)
         return Python.tuple(arena, store)
+
+
+def enc_caps(model: PythonObject, entries: PythonObject) raises -> XprepCaps:
+    """The run capabilities of an estimator's operation, once per operation
+    at UNPACK: from its device route when the route holds this selection
+    (one record read, one pointer compare), else read from `entries` by name
+    (`xprep_caps`). These are the reads `EncProg.run(entries, context, model)`
+    makes; an operation that takes them here runs with `run_caps`, and its
+    typed stage builder gets `has_out` as the plain `region` value."""
+    var caps = prep_route_caps(model, entries)
+    if caps.held:
+        return caps
+    return xprep_caps(entries)
 
 
 def _fitted_flat(owner: PythonObject, name: String, value: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -324,21 +360,11 @@ def _list_text(values: List[Int]) -> String:
 
 # ---------------------------------------------------------------- shared stages
 def _cs(mut p: EncProg, mode: PythonObject, entries: PythonObject, xo: Int, n: Int, d: Int, out_buf: Int, variance: Bool = True) raises:
-    """`_cs`: col_stats' six rows of d at `out`, in x_prep/blocked.mojo's
-    blocked order under IDN_STATS_BLOCKED (IDENTICAL), else one thread per
-    column; variance False skips the blocked variance pass."""
-    var blocked = String(getenv("MOJOLEARN_XPREP_BLOCKED", "1").strip()) != "0"
-    if blocked and (_fam(mode, entries) & IDN_STATS_BLOCKED) != 0:
-        var nb = (n + ROW_BLOCK - 1) // ROW_BLOCK
-        var part = p.work(5 * nb * d)
-        _stage(p.prog.program, OP_COLB_PART, nb * d, xo, n, d, part, nb)
-        _stage(p.prog.program, OP_COLB_FOLD, d, part, nb, d, out_buf)
-        if variance:
-            var ss = p.work(nb * d)
-            _stage(p.prog.program, OP_COLB_SS, nb * d, xo, n, d, out_buf, ss, nb)
-            _stage(p.prog.program, OP_COLB_VAR, d, ss, nb, d, out_buf)
-    else:
-        _stage(p.prog.program, OP_COL_STATS, d, xo, n, d, out_buf)
+    """`_cs`: col_stats' six rows of d at `out`. UNPACK of the image's
+    family word (IDN_STATS_BLOCKED, IDENTICAL), then the typed stages
+    (bindings/prep_encode_prog_run.mojo `enc_col_stats`, which reads the
+    MOJOLEARN_XPREP_BLOCKED run-time switch)."""
+    enc_col_stats(p.prog, (_fam(mode, entries) & IDN_STATS_BLOCKED) != 0, xo, n, d, out_buf, variance)
 
 
 def _bad_rows(ran: PythonObject, staged: Tuple[Int, Int], limit: Int) raises -> List[Int]:
@@ -442,17 +468,20 @@ def _default_mode(context: PythonObject) raises -> PythonObject:
 
 
 # ---------------------------------------------------------------- SimpleImputer
+def _missing_mark(missing: PythonObject) raises -> Tuple[Bool, Float64]:
+    # UNPACK of `missing_values`: (a numeric value is marked NaN, the value);
+    # nothing is marked for None or NaN.
+    if missing is None or _is_nan_value(missing):
+        return (False, 0.0)
+    return (True, _float(missing))
+
+
 def _mark_missing(mut p: EncProg, xo: Int, count: Int, missing: PythonObject, context: PythonObject) raises -> Int:
     """`_mark_missing`: a numeric missing_values marked NaN (mark_missing);
-    the input itself when missing_values is None or NaN."""
-    if missing is None or _is_nan_value(missing):
-        return xo
-    var words = List[Float64]()
-    words.append(_float(missing))
-    var value = p.put_floats(words, context)
-    var out = p.alloc(count)
-    _stage(p.prog.program, OP_MARK_MISSING, count, xo, count, value, out)
-    return out
+    the input itself when missing_values is None or NaN. UNPACK of the
+    value, then the typed stage (`enc_mark_missing`)."""
+    var mark = _missing_mark(missing)
+    return enc_mark_missing(p.prog, xo, count, mark[0], mark[1])
 
 
 def _qselect(mode: PythonObject, entries: PythonObject, context: PythonObject) raises -> Bool:
@@ -469,82 +498,63 @@ def _qselect(mode: PythonObject, entries: PythonObject, context: PythonObject) r
 
 
 def _imputer_fit(model: PythonObject, values: PythonObject, context: PythonObject) raises:
+    # UNPACK: the parameters, read once into the typed request; the route's
+    # image, its capabilities and its switches; X as an owner of the program.
     var fields = py_fields(model)
-    var strategy = fields["strategy"]
+    var strategy_field = fields["strategy"]
     # A callable strategy would be user Python code run per column in fit; it
     # is refused with every other value that is not one of the four names.
-    var name = String(strategy) if _is_str(strategy) else String("")
-    if name != "mean" and name != "median" and name != "most_frequent" and name != "constant":
-        raise Error("mojolearn: SimpleImputer strategy " + _repr(strategy) + " is not valid")
-    var konst = name == "constant"
+    var name = String(strategy_field) if _is_str(strategy_field) else String("")
+    var strategy = IMP_MEAN
+    if name == "median":
+        strategy = IMP_MEDIAN
+    elif name == "most_frequent":
+        strategy = IMP_MOST_FREQUENT
+    elif name == "constant":
+        strategy = IMP_CONSTANT
+    elif name != "mean":
+        raise Error("mojolearn: SimpleImputer strategy " + _repr(strategy_field) + " is not valid")
+    var konst = strategy == IMP_CONSTANT
     var fill_value = fields["fill_value"]
     if konst and fill_value is not None and not _real_like(fill_value, context):
         raise Error("TypeError: mojolearn: SimpleImputer fill_value must be numeric")
     var n = Int(py=values[3])
     var d = Int(py=values[4])
     var mode = _default_mode(context)
-    var entries = _entries(mode, context)
+    var entries = scaler_entries(model, mode, context)
+    var caps = enc_caps(model, entries)
+    var mark = _missing_mark(fields["missing_values"])
+    var keep_empty = _truth(fields["keep_empty_features"])
+    var add_indicator = _truth(fields["add_indicator"])
+    var fill = 0.0
+    if konst and fill_value is not None:
+        fill = _float(fill_value)
     var p = EncProg()
-    var x_in = p.put_x(values)
-    var xo = _mark_missing(p, x_in, n * d, fields["missing_values"], context)
-    # only the median and the mode read the sorted columns (`imputer_nosort`);
-    # the median by radix select needs no sort (`_prep2_qselect`)
-    var ordered = name == "median" or name == "most_frequent"
-    var qsel = name == "median" and _qselect(mode, entries, context)
-    var sorts = (ordered or not xprep_r3("imputer_nosort")) and not qsel
-    var so = 0
-    if sorts:
-        so = p.work(n * d) if ordered else p.alloc(n * d)
-    var st = p.alloc(6 * d)
-    var med = p.alloc(d)
-    var mf = p.alloc(d)
-    var halves = List[Float64]()
-    halves.append(0.5)
-    var half = p.put_floats(halves, context)
-    if sorts:
-        _stage(p.prog.program, OP_SORT_COLS, d, xo, n, d, so, 0)
-    _cs(p, mode, entries, xo, n, d, st, False)
-    if name == "median" and qsel:
-        _stage(p.prog.program, OP_QUANTILE, d, xo, n, d, half, 1, med, st, 1)
-    elif name == "median":
-        _stage(p.prog.program, OP_QUANTILE, d, so, n, d, half, 1, med, st)
-    if name == "most_frequent":
-        _stage(p.prog.program, OP_MODE_COLS, d, so, n, d, mf, NONE)
-    var src = 0
-    var fv = NONE
-    if konst:
-        var fills = List[Float64]()
-        fills.append(Float64(0.0) if fill_value is None else _float(fill_value))
-        fv = p.put_floats(fills, context)
-    if konst or name == "mean":
-        src = st + d
-    elif name == "median":
-        src = med
-    else:
-        src = mf
-    var so2 = p.alloc(d)
-    var fo2 = p.alloc(d)
-    _stage(p.prog.program, OP_IMP_STATS, d, st, src, d, 1 if _truth(fields["keep_empty_features"]) else 0, 1 if konst else 0, fv, so2, fo2)
-    var ran = p.run(entries, context)
+    var request = ImputerFit(n, d, p.own_x(values), mark[0], mark[1], strategy,
+                             strategy == IMP_MEDIAN and _qselect(mode, entries, context),
+                             (_fam(mode, entries) & IDN_STATS_BLOCKED) != 0, fill, keep_empty)
+    # RUN: the typed stages (bindings/prep_encode_imputer_run.mojo), then the typed run.
+    var plan = imputer_fit_stage(p.prog, request)
+    var ran = p.run_caps(entries, context, caps)
+    # PACK: the statistics, the kept and the indicator columns.
     var counts = List[Int]()
     var any_empty = False
     for j in range(d):  # driver-loop: over the per-column non-missing counts (feature metadata)
-        counts.append(Int(_word(ran, st + j)))
+        counts.append(Int(_word(ran, plan.stats + j)))
         any_empty = any_empty or counts[j] == 0
-    var keep_empty = _truth(fields["keep_empty_features"])
     var keep = List[Int]()
     var indicator = List[Int]()
     if konst or any_empty:
-        py_setitem(fields, "statistics_", _take1(ran, so2, d, context))
-        py_setitem(fields, "_fill", _take1(ran, fo2, d, context))
+        py_setitem(fields, "statistics_", _take1(ran, plan.statistics, d, context))
+        py_setitem(fields, "_fill", _take1(ran, plan.fill, d, context))
     else:
-        var statistics = _take1(ran, src, d, context)
+        var statistics = _take1(ran, plan.source, d, context)
         py_setitem(fields, "statistics_", statistics)
         py_setitem(fields, "_fill", statistics)
     for j in range(d):  # driver-loop: over the kept columns (feature metadata)
         if keep_empty or counts[j] != 0:
             keep.append(j)
-    if _truth(fields["add_indicator"]):
+    if add_indicator:
         for j in range(d):  # driver-loop: over the indicator columns (feature metadata)
             if counts[j] < n:
                 indicator.append(j)
@@ -573,33 +583,29 @@ def _to_floats(values: List[Int]) -> List[Float64]:
 
 
 def _imputer_transform(model: PythonObject, values: PythonObject, context: PythonObject) raises -> PythonObject:
+    # UNPACK: the fitted fields, read once into the typed request; X and the
+    # fitted fill vector as owners of the program.
     var fields = py_fields(model)
     var n = Int(py=values[3])
     var d = Int(py=values[4])
     _check_width(model, d)
-    var entries = _entries(fields["numeric_mode_"], context)
+    var entries = scaler_entries(model, fields["numeric_mode_"], context)
+    var caps = enc_caps(model, entries)
     var keep = _index_list(fields["_keep"])
     var indicator = _index_list(fields["_indicator"])
-    var dout = len(keep)
+    var cols = len(keep) + len(indicator)
+    var mark = _missing_mark(fields["missing_values"])
+    var fill = _fitted_flat(model, "_fill", fields["_fill"], context)
+    var fill_words = Int(py=fill[2])
     var p = EncProg()
-    var x_in = p.put_x(values)
-    var xo = _mark_missing(p, x_in, n * d, fields["missing_values"], context)
-    var so = p.put_fitted(model, "_fill", fields["_fill"], context)
-    var ko = p.put_floats(_to_floats(keep), context)
-    var out = p.alloc(n * dout)
-    _stage(p.prog.program, OP_FILL, n * dout, xo, n, d, so, out, ko, dout)
-    var m = len(indicator)
-    var hc = 0
-    if m > 0:
-        var io = p.put_floats(_to_floats(indicator), context)
-        var mo = p.alloc(n * m)
-        _stage(p.prog.program, OP_NAN_MASK, n * m, xo, n, d, io, m, mo)
-        hc = p.output(n * (dout + m), entries)
-        _stage(p.prog.program, OP_HCAT, n * (dout + m), out, dout, mo, m, hc)
-    var ran = p.run(entries, context)
-    if m == 0:
-        return _take2(ran, out, n, dout, context)
-    return _take2(ran, hc, n, dout + m, context)
+    var x = p.own_x(values)
+    var fill_owner = p.own(fill[1], fill_words)
+    var request = ImputerApply(n, d, x, mark[0], mark[1], fill_owner, fill_words, keep^, indicator^)
+    # RUN: the typed stages, then the typed run.
+    var out = imputer_transform_stage(p.prog, request, caps.has_out)
+    var ran = p.run_caps(entries, context, caps)
+    # PACK
+    return _take2(ran, out, n, cols, context)
 
 
 # ---------------------------------------------------------------- KBinsDiscretizer
@@ -736,7 +742,7 @@ def _kbins_fit(model: PythonObject, values: PythonObject, weight_source: PythonO
                     + "should either be set to 'averaged_inverted_cdf' or 'inverted_cdf', got "
                     + "quantile_method='" + _str_text(fields["quantile_method"]) + "' instead.")
     var mode = _default_mode(context)
-    var entries = _entries(mode, context)
+    var entries = scaler_entries(model, mode, context)
     var p = EncProg()
     var xo = p.put_x(values)
     var x_orig = xo
@@ -821,7 +827,7 @@ def _kbins_fit(model: PythonObject, values: PythonObject, weight_source: PythonO
                 var wq_nb = p.put_floats(_to_floats(nb), context)
                 _stage(p.prog.program, OP_KBINS_WQ, d, ug, n, d, ucnt, wq_nb, nbmax, lv, 1 if strat == 1 else 0, edges)
             _stage(p.prog.program, OP_KBINS_EDGES, d, so, n, d, nbo, nbmax, 11, stw, edges, ne, 0, 0)
-    var ran = p.run(entries, context)
+    var ran = p.run(entries, context, model)
     var output = context["output_context"]
     var bin_edges = Python.list()
     var n_bins_ = classical_typed(Python.tuple(d), "<i8", output)
@@ -860,7 +866,7 @@ def _kbins_transform(model: PythonObject, values: PythonObject, context: PythonO
     var d = Int(py=values[4])
     _check_width(model, d)
     _kbins_finite(values)
-    var entries = _entries(fields["numeric_mode_"], context)
+    var entries = scaler_entries(model, fields["numeric_mode_"], context)
     var stride = Int(py=fields["_stride"])
     var p = EncProg()
     var xo = p.put_x(values)
@@ -870,7 +876,7 @@ def _kbins_transform(model: PythonObject, values: PythonObject, context: PythonO
     _stage(p.prog.program, OP_KBINS_CODES, n * d, xo, n, d, eo, stride, no, codes)
     var encode = fields["encode"]
     if _is_str(encode) and String(encode) == "ordinal":
-        var ran = p.run(entries, context)
+        var ran = p.run(entries, context, model)
         return _take2(ran, codes, n, d, context)
     var widths = _i64_values(fields["n_bins_"], context)
     var W = 0
@@ -879,7 +885,7 @@ def _kbins_transform(model: PythonObject, values: PythonObject, context: PythonO
     var so = p.put_floats(_prefix(widths), context)
     var out = p.output(n * W, entries)
     _stage(p.prog.program, OP_ONEHOT, n * d, codes, n, d, so, NONE, W, out)
-    var ran = p.run(entries, context)
+    var ran = p.run(entries, context, model)
     return _take2(ran, out, n, W, context)
 
 
@@ -889,7 +895,7 @@ def _kbins_inverse(model: PythonObject, values: PythonObject, context: PythonObj
     var d = len(widths)
     var n = Int(py=values[3])
     var cols = Int(py=values[4])
-    var entries = _entries(fields["numeric_mode_"], context)
+    var entries = scaler_entries(model, fields["numeric_mode_"], context)
     var p = EncProg()
     var codes = 0
     var bad_code = 0
@@ -929,7 +935,7 @@ def _kbins_inverse(model: PythonObject, values: PythonObject, context: PythonObj
     var eo2 = p.put_fitted(model, "_edges", fields["_edges"], context)
     _stage(p.prog.program, OP_KBINS_INVERSE, n * d, codes, n, d, eo2, Int(py=fields["_stride"]), out)
     var staged = enc_bad_rows_stages(p.prog, codes, n, d, bad_code, NONE)
-    var ran = p.run(entries, context)
+    var ran = p.run(entries, context, model)
     var bad = _bad_rows(ran, staged, 10)
     if len(bad) > 0:
         raise Error("mojolearn: samples " + _list_text(bad) + " " + why)
@@ -950,14 +956,10 @@ def _cls2_cat(mode: PythonObject, entries: PythonObject) raises -> Int:
 
 
 def _label_chunk(n: Int) -> Int:
-    # `_label_chunk`: max(1024, isqrt(n) + 1) by integer Newton steps.
-    var r = n
-    if n > 1:
-        var y = (r + 1) // 2
-        while y < r:  # driver-loop: over integer Newton steps of a row count
-            r = y
-            y = (y + n // y) // 2
-    return max(1024, r + 1)
+    # The rule is `enc_label_chunk` (bindings/prep_encode_prog_run.mojo, where
+    # the typed stage builders read it); this name stays for the doors that
+    # import it from here.
+    return enc_label_chunk(n)
 
 
 def _uniq_scans(mut p: EncProg, base: Int, rows: Int, d: Int, stride: Int, counts: Int, out_buf: Int, presence: Bool):
@@ -1431,7 +1433,7 @@ def _fit_infrequent(model: PythonObject, values: PythonObject, mode: PythonObjec
     _stage(p.prog.program, OP_INF_M0, d * kmax, cnt, kc, kmax, _infrequent_threshold(n, fields["min_frequency"], context), m0)
     _stage(p.prog.program, OP_INF_M1, d * kmax, cnt, kc, kmax, m0, maxc, m1)
     _stage(p.prog.program, OP_INF_MAP, d * kmax, kc, kmax, m1, mp)
-    var ran = p.run(entries, context)
+    var ran = p.run(entries, context, model)
     var infrequent = Python.list()
     var grouping = Python.list()
     var categories = Python.list()
@@ -1545,7 +1547,7 @@ def _ordinal_fit(model: PythonObject, values: PythonObject, capture: Bool, conte
         raise Error("TypeError: mojolearn: encoded_missing_value must be a number (or NaN)")
     var d = Int(py=values[4])
     var mode = _default_mode(context)
-    var entries = _entries(mode, context)
+    var entries = scaler_entries(model, mode, context)
     var auto = _is_str(fields["categories"]) and String(fields["categories"]) == "auto"
     var inverse = PythonObject(None)
     if capture and auto:
@@ -1601,7 +1603,7 @@ def _ordinal_transform(model: PythonObject, values: PythonObject, inverse: Pytho
     var fields = py_fields(model)
     var n = Int(py=values[3])
     var d = Int(py=values[4])
-    var entries = _entries(fields["numeric_mode_"], context)
+    var entries = scaler_entries(model, fields["numeric_mode_"], context)
     var p = EncProg()
     var codes = 0
     var neg = 0
@@ -1634,7 +1636,7 @@ def _ordinal_transform(model: PythonObject, values: PythonObject, inverse: Pytho
         var mo = p.put_floats(_to_floats(missing), context)
         var eo = _scalar(p, _float(fields["encoded_missing_value"]), context)
         _stage(p.prog.program, OP_WHERE_CODE, n * d, codes, n, d, mo, eo, src, out)
-    var ran = p.run(entries, context)
+    var ran = p.run(entries, context, model)
     if handle_text == "error":
         var bad = _unknown_columns(ran, neg, d)
         if len(bad) > 0:
@@ -1649,7 +1651,7 @@ def _ordinal_inverse(model: PythonObject, values: PythonObject, context: PythonO
     var n = Int(py=values[3])
     var d = Int(py=values[4])
     _check_width(model, d)
-    var entries = _entries(fields["numeric_mode_"], context)
+    var entries = scaler_entries(model, fields["numeric_mode_"], context)
     var cats = fields["categories_"]
     var handle = fields["handle_unknown"]
     var encoded = _is_str(handle) and String(handle) == "use_encoded_value"
@@ -1675,7 +1677,7 @@ def _ordinal_inverse(model: PythonObject, values: PythonObject, context: PythonO
         codes = _remap(p, codes, n, d, back, NONE)
     var out = _gather_categories(p, codes, n, d, cats, context, model)
     var staged = enc_bad_rows_stages(p.prog, codes, n, d, -2, NONE)
-    var ran = p.run(entries, context)
+    var ran = p.run(entries, context, model)
     var bad = _bad_rows(ran, staged, 10)
     if len(bad) > 0:
         raise Error("mojolearn: rows " + _list_text(bad) + " hold codes that name no category")
@@ -1810,7 +1812,7 @@ def _onehot_fit(model: PythonObject, values: PythonObject, capture: Bool, contex
                     + "per feature")
     var d = Int(py=values[4])
     var mode = _default_mode(context)
-    var entries = _entries(mode, context)
+    var entries = scaler_entries(model, mode, context)
     var auto = _is_str(fields["categories"]) and String(fields["categories"]) == "auto"
     var inverse = PythonObject(None)
     if capture and auto:
@@ -1867,7 +1869,7 @@ def _onehot_transform(model: PythonObject, values: PythonObject, inverse: Python
     var fields = py_fields(model)
     var n = Int(py=values[3])
     var d = Int(py=values[4])
-    var entries = _entries(fields["numeric_mode_"], context)
+    var entries = scaler_entries(model, fields["numeric_mode_"], context)
     var drops = _onehot_drops(fields)
     var widths = _onehot_widths_of(_grouped_sizes(fields, model, context), drops)
     var W = 0
@@ -1904,7 +1906,7 @@ def _onehot_transform(model: PythonObject, values: PythonObject, inverse: Python
     var do = p.put_floats(_to_floats(drops), context)
     var out = p.output(n * W, entries)
     _stage(p.prog.program, OP_ONEHOT, n * d, codes, n, d, so, do, W, out)
-    var ran = p.run(entries, context)
+    var ran = p.run(entries, context, model)
     var dropping = fields["drop"] is not None
     if handle_text == "error":
         var bad = _unknown_columns(ran, neg, d)
@@ -1940,7 +1942,7 @@ def _onehot_inverse(model: PythonObject, values: PythonObject, context: PythonOb
         W += widths[j]
     if cols != W:
         raise Error("mojolearn: X has " + String(cols) + " columns, expected " + String(W))
-    var entries = _entries(fields["numeric_mode_"], context)
+    var entries = scaler_entries(model, fields["numeric_mode_"], context)
     var p = EncProg()
     # `_block_argmax`
     var xo = p.put_x(values)
@@ -1967,7 +1969,7 @@ def _onehot_inverse(model: PythonObject, values: PythonObject, context: PythonOb
         strict.append(1.0 if hard else 0.0)
     var sto = p.put_floats(strict, context)
     var staged = enc_bad_rows_stages(p.prog, grouped, n, d, -1, sto)
-    var ran = p.run(entries, context)
+    var ran = p.run(entries, context, model)
     var bad = _bad_rows(ran, staged, 10)
     if len(bad) > 0:
         raise Error("mojolearn: samples " + _list_text(bad) + " can not be inverted when drop=None and "
@@ -1991,7 +1993,7 @@ def _target_transform(model: PythonObject, values: PythonObject, context: Python
     var d = Int(py=values[4])
     _check_width(model, d)
     var mode = fields["numeric_mode_"]
-    var entries = _entries(mode, context)
+    var entries = scaler_entries(model, mode, context)
     var T = Int(py=fields["_T"])
     var cmax = Int(py=fields["_cmax"])
     var p = EncProg()
@@ -2000,7 +2002,7 @@ def _target_transform(model: PythonObject, values: PythonObject, context: Python
     var meta = p.put_fitted(model, "_meta", fields["_meta"], context)
     var out = p.output(n * d * T, entries)
     _stage(p.prog.program, OP_TE_APPLY, n * d * T, codes, n, d, T, NONE, enc, cmax, meta, 0, out)
-    var ran = p.run(entries, context)
+    var ran = p.run(entries, context, model)
     return _take2(ran, out, n, d * T, context)
 
 
@@ -2157,7 +2159,7 @@ def _spline_fit(model: PythonObject, values: PythonObject, weight_source: Python
         raise Error("mojolearn: Periodic splines require degree < n_knots. Got n_knots=" + String(nk) + " and "
                     + "degree=" + String(k) + ".")
     var mode = _default_mode(context)
-    var entries = _entries(mode, context)
+    var entries = scaler_entries(model, mode, context)
     var p = EncProg()
     var xo = p.put_x(values)
     var sorts = not given and knot_kind == "quantile" and not weighted
@@ -2232,7 +2234,7 @@ def _spline_fit(model: PythonObject, values: PythonObject, weight_source: Python
     if fuse:
         out = p.output(n * W, entries)
         _stage(p.prog.program, OP_SPLINE_APPLY, n * d, xo, n, d, knots, nk, k, extrap, W, 1 if bias else 0, out)
-    var ran = p.run(entries, context)
+    var ran = p.run(entries, context, model)
     _no_nan(fields, ran, st, d, n)
     var output = context["output_context"]
     py_setitem(fields, "_knots", _take1(ran, knots, d * wd, context))
@@ -2266,7 +2268,7 @@ def _spline_transform(model: PythonObject, values: PythonObject, context: Python
     var d = Int(py=values[4])
     _check_width(model, d)
     var mode = fields["numeric_mode_"]
-    var entries = _entries(mode, context)
+    var entries = scaler_entries(model, mode, context)
     var W = Int(py=fields["n_features_out_"])
     var extrap = _extrapolation(fields["extrapolation"])
     var fortran = _is_str(fields["order"]) and String(fields["order"]) == "F"
@@ -2290,7 +2292,7 @@ def _spline_transform(model: PythonObject, values: PythonObject, context: Python
     if transposed:
         fo = p.output(n * W, entries)
         _stage(p.prog.program, OP_TRANSPOSE, n * W, out, n, W, fo)
-    var ran = p.run(entries, context)
+    var ran = p.run(entries, context, model)
     if check:
         _no_nan(fields, ran, st, d, n)
     if extrap_error:
@@ -2559,7 +2561,7 @@ def _target_run(model: PythonObject, values: PythonObject, info: TargetInfo, fol
     if info.size * T != n * T:
         raise Error("mojolearn: X and y have different numbers of rows")
     var mode = _default_mode(context)
-    var entries = _entries(mode, context)
+    var entries = scaler_entries(model, mode, context)
     var auto = _is_str(fields["categories"]) and String(fields["categories"]) == "auto"
     # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
     var inverse = Optional[PythonObject]()
@@ -2652,7 +2654,7 @@ def _target_run(model: PythonObject, values: PythonObject, info: TargetInfo, fol
     if apply:
         out = p.output(n * d * T, entries)
         _stage(p.prog.program, OP_TE_APPLY, n * d * T, codes, n, d, T, fo, enc, cmax, meta, F, out)
-    var ran = p.run(entries, context)
+    var ran = p.run(entries, context, model)
     if flag >= 0 and _word(ran, flag) != 0:
         raise Error("mojolearn: n_splits=" + String(F) + " cannot be greater than the number of members in "
                     + "each class")
@@ -2958,7 +2960,7 @@ def _select_fit(model: PythonObject, x: PythonObject, values: PythonObject, y: P
     var fields = py_fields(model)
     var d = Int(py=values[4])
     var mode = _default_mode(context)
-    var entries = _entries(mode, context)
+    var entries = scaler_entries(model, mode, context)
     var score_func = fields["score_func"]
     var builtin = py_get(context["prep_encode_scores"], score_func)
     if builtin is None:
@@ -2990,7 +2992,7 @@ def _select_fit(model: PythonObject, x: PythonObject, values: PythonObject, y: P
             mo = p.alloc(d)
             _stage(p.prog.program, OP_KEY64, d, score_at, 0, key)
             _stage(p.prog.program, OP_TOPK, d, key, d, k, mo)
-        var ran = p.run(entries, context)
+        var ran = p.run(entries, context, model)
         if name == "chi2":
             for j in range(d):  # driver-loop: over the per-column minima (feature metadata)
                 if _word(ran, offs[2] + 3 * d + j) < 0:
@@ -3007,6 +3009,12 @@ def _select_fit(model: PythonObject, x: PythonObject, values: PythonObject, y: P
         # `score_func(X, y)`: mutual_info_*(X, y) with its defaults
         # (discrete_features='auto', n_neighbors=3, random_state=None), the
         # operation the public function passes to the same entry.
+        # The mutual-information functions run on the classifier owner's
+        # arena context, which has no device route yet: an estimator on the
+        # CPU beside a device set is refused in the shared words (one record
+        # read), never scored on the device its caller did not name.
+        prep_route_refuse_cpu_table(model, classical_estimator_name(model),
+                                    String("its mutual information score functions are not connected to device= yet"))
         var entry = context["prep_encode_entry"]
         if py_type(entry) is not py_type(b.len):
             raise Error("ImportError: mojolearn: the encode owner's entry is unavailable")
@@ -3030,7 +3038,7 @@ def _select_fit(model: PythonObject, x: PythonObject, values: PythonObject, y: P
             _ = scores  # keep the Python object alive through the native call above
             var mo = _topk_stages(p, got[0], got[1], d, k)
             _ = scores  # keep the Python object alive through the native call above
-            var ran = p.run(entries, context)
+            var ran = p.run(entries, context, model)
             mask = _topk_from(ran, mo, d)
     if keep_all:
         mask = Python.list()
@@ -3227,7 +3235,7 @@ def _encode_dispatch(model: PythonObject, kind: String, operation: String, args:
     if (operation == "fit" or operation == "fit_transform") and kind == "target":
         # TargetEncoder: fit(X, y); fit_transform(X, y, splits or None)
         _target_check(py_fields(model), context)
-        var values = xprep_values(args[0], _entries(_default_mode(context), context), context)
+        var values = xprep_values(args[0], scaler_entries(model, _default_mode(context), context), context)
         if operation == "fit":
             _target_fit(model, values, args[1], context)
             result = model
@@ -3244,7 +3252,7 @@ def _encode_dispatch(model: PythonObject, kind: String, operation: String, args:
         _ = values^
     elif (operation == "fit" or operation == "fit_transform") and kind == "select_kbest":
         # SelectKBest: fit(X, y); fit_transform(X, y) keeps the support's columns
-        var values = xprep_values(args[0], _entries(_default_mode(context), context), context)
+        var values = xprep_values(args[0], scaler_entries(model, _default_mode(context), context), context)
         var x = args[0] if Int(py=values[0]) == 1 else values[1]
         _select_fit(model, x, values, args[1], context)
         result = model
@@ -3262,7 +3270,7 @@ def _encode_dispatch(model: PythonObject, kind: String, operation: String, args:
             _no_fit_params(model, args)
         _precheck(model, kind, context)
         var mode = _default_mode(context)
-        var entries = _entries(mode, context)
+        var entries = scaler_entries(model, mode, context)
         var values = xprep_values(args[0], entries, context)
         # The C08 fit_transform (OneHotEncoder bit 2, OrdinalEncoder bit
         # 4, categories='auto'): the fit's inverse is the transform's codes.
@@ -3289,7 +3297,7 @@ def _encode_dispatch(model: PythonObject, kind: String, operation: String, args:
         _ = values^
     elif operation == "transform" or operation == "inverse_transform":
         _fitted(model)
-        var values = xprep_values(args[0], _entries(py_fields(model)["numeric_mode_"], context), context)
+        var values = xprep_values(args[0], scaler_entries(model, py_fields(model)["numeric_mode_"], context), context)
         if operation == "transform":
             result = _transform(model, kind, values, PythonObject(None), context)
         elif kind == "kbins":
@@ -3312,13 +3320,21 @@ def prep_encode_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObj
         var model = call[0]
         var operation = String(call[1])
         var args = call[2]
-        var context = call[3]
+        var root = call[3]
+        var kind = _kind(model, root)
+        # The connected context of this estimator's device route (one record
+        # read and one pointer compare; the route is resolved once per
+        # estimator, bindings/prep_owner_route_unpack.mojo). No operation
+        # below reads or compares `device`.
+        var context = prep_route_context(model, root)
         classical_connect_numpy(context)
-        var kind = _kind(model, context)
         # The public fit/transform methods run the former `_mode` wrappers'
         # lifecycle (bindings/public_lifecycle_owner.mojo) around the owner.
         if not (operation == "fit" or operation == "fit_transform" or operation == "transform"
                 or operation == "inverse_transform"):
+            if operation == "vendor_used":
+                # the image of this estimator's device route, read back
+                return prep_route_vendor_used(model, root).steal_data()
             return _encode_dispatch(model, kind, operation, args, context).steal_data()
         var depth = lifecycle_begin(model, operation, args[0], True, False, True, context)
         var result = PythonObject(None)

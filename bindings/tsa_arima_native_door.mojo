@@ -9,25 +9,25 @@ native call each, through `tsa_native_call` (bindings/tsa_public_native.mojo):
     predict  `_check_fitted`, the width refusal, `_future_exog`'s three
              checks in cuML's order and words, one `arima_predict`
 
-The numerical entry selection and argument layout are preserved. Compilation
-does not establish runtime behavior or within-release bitwise identity.
-A host inference class (`HostARIMA`) reads its loaded forecast host binding
-from the module table.
+UNPACK and PACK only: every kernel call goes through RUN
+(core/arima_run.mojo) on the estimator's route
+(bindings/tsa_arima_route_unpack.mojo: the device is read once into the
+route owner; no call here reads or compares it), with the GIL released. The
+argument layout is preserved. Compilation does not establish runtime
+behavior or within-release bitwise identity. AutoARIMA's doors pass their
+own route (`arima_fit_routed`), so a per-group model resolves none.
 """
-from bindings.mode_answer_door import answer_mode_object
-from core.mode_answer import MODE_FAMILY_TSA, fast_is_answered_by_identical
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
+from std.python._cpython import GILReleased
 from arima.tsa_arima_run import _penalties
-from bindings.native_loaded_module_door import native_loaded_module, _loaded_fields, NativeModules
-from bindings.native_class_admission_door import class_record, class_admit
-from bindings.mode_metadata_native_door import _fields, _class_fields, _truth
+from bindings.native_loaded_module_door import native_loaded_module, NativeModules
+from bindings.mode_metadata_native_door import _fields
 from providers.python.arima_lifecycle_pyapi_door import arima_order
 from providers.python.autoarima_lifecycle_pyapi_door import _buffer, _packed, _integer, _integer_object
 from providers.python.arima_buffer_pyapi_door import ArimaBuffer, arima_buffer
 from providers.python.forecast_owner_pyapi_unpack import forecast_commit
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
-from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays_door import classical_input, classical_address, classical_cast_kind
 from bindings.classical_pandas_door import classical_admit_value
 from bindings.tsa_hw_native_door import tsa_array
@@ -39,17 +39,23 @@ from bindings.tsa_arima_resident_unpack import (
     arima_resident_hit,
     arima_resident_call,
 )
+from bindings.tsa_hw_route_unpack import tsa_hw_resident_handle
 from bindings.tsa_arima_resident_pack import (
     ARIMA_RESIDENT_SLOT,
     arima_resident_mint,
 )
 from arima.tsa_arima_resident_run import arima_resident_words
+from bindings.tsa_arima_route_unpack import arima_route
+from bindings.tsa_hw_route_unpack import TsaHwCall
+from core.arima_run import (
+    arima_fit_run, arima_forecast_run, arima_ic_run, arima_predict_run, arima_route_fits, arima_route_has_ic,
+)
+from core.device_route import DeviceRoute, DEVICE_INSTALL
 from bindings.tsa_keys_unpack import tsa_keys
 from bindings.py_balanced import py_item
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _A = "mojolearn ARIMA: "
-comptime _HOST_ONLY_SLOT = "tsa_arima_host_only_v1"
 
 
 def _b() raises -> PythonObject:
@@ -63,81 +69,6 @@ def _repr(value: PythonObject) raises -> String:
 
 def _shape_tuple(value: PythonObject) raises -> PythonObject:
     return py_call(_b().tuple, value.shape)
-
-
-def _arima_entries(model: PythonObject, fields: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`ARIMA._extension()`: the `_mojolearn_arima` entries of the model's
-    tier with the binary's own mode read back; a host inference class's
-    loaded forecast host binding."""
-    var nk = tsa_keys()
-    var b = _b()
-    var cls = py_type(model)
-    # p3-cnn-sequence-tsa: the class flag is kept per class under the type
-    # watcher (an edit of the class or an ancestor misses)
-    var mods = NativeModules()
-    var kept = class_record(mods, _HOST_ONLY_SLOT, cls)
-    var host_only = False
-    if kept is not None:
-        host_only = Bool(py=kept)
-    else:
-        var ancestry = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, cls)
-        for i in range(len(ancestry)):  # driver-loop: native MRO metadata, never class lookup protocols
-            var namespace = _class_fields(ancestry[i])
-            if py_contains(namespace, nk[].k__HOST_INFERENCE_ONLY):
-                host_only = _truth(py_item(namespace, nk[].k__HOST_INFERENCE_ONLY))
-                break
-        class_admit(mods, _HOST_ONLY_SLOT, cls, PythonObject(host_only))
-    if host_only:
-        var saved = py_get(fields, nk[].k_numeric_mode)
-        # lane fx-fast-mask: a model saved under `fast` where the identical set
-        # answered it (TSA) holds identical state; the host runs it.
-        if saved is not None and (py_type(saved) is not b.str or (String(py=saved) != "identical" and not (
-                String(py=saved) == "fast" and fast_is_answered_by_identical(MODE_FAMILY_TSA)))):
-            raise Error("ValueError: mojolearn: " + String("ARIMA")
-                        + " runs IDENTICAL only on the host; this model was saved " + _repr(saved))
-        var module = py_get(py_item(context, nk[].k_modules), py_item(context, nk[].k_hw_host_module))
-        if module is None:
-            raise Error("RuntimeError: mojolearn: the host " + String("ARIMA")
-                        + " has no loaded forecast binding; load the model with its own load()")
-        var module_fields = _loaded_fields(module)
-        var host = b.dict()
-        var names = py_item(context, nk[].k_arima_entry_names)
-        for i in range(len(names)):  # driver-loop: over the fixed host entry names
-            var entry = py_get(module_fields, names[i])
-            if entry is not None:
-                if py_type(entry) is not py_type(b.len):
-                    raise Error("TypeError: host ARIMA entries must be compiled native functions")
-                py_setitem(host, names[i], entry)
-        return host
-    var mode = py_get(fields, nk[].k_numeric_mode)
-    if mode is None:
-        mode = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
-    if py_type(mode) is not b.str:
-        raise Error("ValueError: numeric_mode must be fast, identical or None")
-    var want = mode
-    var text = String(py=mode)
-    if text != "identical" and text != "fast":  # exact modes skip two Python calls
-        want = py_call(py_call(mode.strip).lower)
-    var want_word = String(py=want)
-    if want_word != "identical" and want_word != "fast":
-        raise Error("ValueError: numeric_mode must be fast, identical or None")
-    answer_mode_object(want, want_word, MODE_FAMILY_TSA)
-    var entries = py_item(context, nk[].k_arima_bindings)[want]
-    if py_type(entries) is b.str:
-        raise Error(String(py=entries))
-    if py_contains(entries, nk[].k_arima_numeric_mode):
-        var got = Int(py=py_call_typed(py_item(entries, nk[].k_arima_numeric_mode)))
-        if got != (1 if String(py=want) == "identical" else 0):
-            raise Error("RuntimeError: " + _A + "numeric_mode=" + _repr(want) + " was requested but "
-                        + String(py=py_item(entries, nk[].k_module_name)) + " reports compile-time mode code " + String(got)
-                        + "; the binary and the directory it sits in disagree, rebuild it")
-    return entries
-
-
-def _entry(entries: PythonObject, name: String) raises -> PythonObject:
-    if not py_contains(entries, name):
-        raise Error("AttributeError: the ARIMA binding has no " + name)
-    return entries[name]
 
 
 def _copy_series(source: ArimaBuffer, shape: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -239,6 +170,18 @@ def _copy_block(source: PythonObject, offset: Int, count: Int, code: String, typ
 
 
 def arima_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`ARIMA.fit` on the model's own route."""
+    return _arima_fit(model, args, context, False, DeviceRoute(DEVICE_INSTALL), PythonObject(None))
+
+
+def arima_fit_routed(model: PythonObject, args: PythonObject, context: PythonObject, call: TsaHwCall) raises -> PythonObject:
+    """`ARIMA.fit` of an AutoARIMA per-group model on its AutoARIMA's route
+    (the caller keeps `call` named through this)."""
+    return _arima_fit(model, args, context, True, call.route, call.owner)
+
+
+def _arima_fit(model: PythonObject, args: PythonObject, context: PythonObject, routed: Bool,
+               given_route: DeviceRoute, given_owner: PythonObject) raises -> PythonObject:
     var nk = tsa_keys()
     var fields = _fields(model)
     var series = _series_major(args[0], context)
@@ -261,7 +204,7 @@ def arima_fit(model: PythonObject, args: PythonObject, context: PythonObject) ra
     var method = py_item(fields, nk[].k_method)
     if py_type(method) is not _b().str:
         raise Error("TypeError: ARIMA method requires an exact string")
-    var maxiter = _integer_object(py_item(fields, nk[].k_maxiter), context)
+    var maxiter = _integer(py_item(fields, nk[].k_maxiter), context)
     var big_n = order[0] + order[2] + order[3] + order[5] + k + n_exog + 1
     var total = batch * big_n
     var params = tsa_array("f", "<f4", Python.tuple(batch, big_n), total, 4, context)
@@ -271,65 +214,75 @@ def arima_fit(model: PythonObject, args: PythonObject, context: PythonObject) ra
     var flags = tsa_array("i", "<i4", Python.tuple(2 * batch), 2 * batch, 4, context)
     var ics = tsa_array("d", "<f8", Python.tuple(2 * batch), 2 * batch, 8, context)
     var pens = _penalties(order, big_n, n_obs)
-    var entries = _arima_entries(model, fields, context)
-    var plan = Python.list(batch, n_obs, order[0], order[1], order[2], order[3], order[4], order[5], order[6], k,
-                           n_exog, py_item(context, nk[].k_arima_methods)[method], maxiter,
-                           classical_address(ics), pens[0], pens[1])
-    _ = ics  # keep the Python object alive through the native call above
-    var written = Int(py=py_call_typed(_entry(entries, "arima_fit"), classical_address(arr), classical_address(ex),
-                                       classical_address(params), classical_address(x), classical_address(x0),
-                                       classical_address(stats), classical_address(flags), plan))
-    _ = ex  # keep the Python object alive through the native call above
-    _ = arr  # keep the Python object alive through the native call above
-    _ = x0  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    _ = params  # keep the Python object alive through the native call above
-    _ = ics  # keep the Python object alive through the native call above
-    _ = flags  # keep the Python object alive through the native call above
-    _ = stats  # keep the Python object alive through the native call above
-    if written != total:
-        raise Error("RuntimeError: " + _A + "the fit wrote " + String(written) + " parameters, batch_size * N is "
-                    + String(total) + "; this side and arima/estimator.mojo disagree about ARIMAOrder.complexity()")
-        _ = flags  # keep the Python object alive through the native call above
-        _ = stats  # keep the Python object alive through the native call above
+    var call = TsaHwCall(given_route, given_owner)
+    if not routed:
+        call = arima_route(model, fields, context, _b())
+    var route = call.route
+    if not arima_route_fits(route):
+        raise Error("AttributeError: the ARIMA binding has no arima_fit")
+    var method_code = Int(py=py_item(context, nk[].k_arima_methods)[method])
+    var arr_address = Int(py=classical_address(arr))
+    var ex_address = Int(py=classical_address(ex))
+    var params_address = Int(py=classical_address(params))
+    var x_address = Int(py=classical_address(x))
+    var x0_address = Int(py=classical_address(x0))
+    var stats_address = Int(py=classical_address(stats))
+    var flags_address = Int(py=classical_address(flags))
+    var ics_address = Int(py=classical_address(ics))
+    var written = 0
+    var py = Python()
+    try:
+        with GILReleased(py):
+            written = arima_fit_run(route, arr_address, ex_address, params_address, x_address, x0_address,
+                                    stats_address, flags_address, ics_address, batch, n_obs, order, k, n_exog,
+                                    method_code, maxiter, pens[0], pens[1])
+    finally:
+        _ = ex  # keep the Python object alive through the native call above
+        _ = arr  # keep the Python object alive through the native call above
         _ = x0  # keep the Python object alive through the native call above
         _ = x  # keep the Python object alive through the native call above
         _ = params  # keep the Python object alive through the native call above
-        _ = ex  # keep the Python object alive through the native call above
-        _ = arr  # keep the Python object alive through the native call above
-    _ = flags  # keep the Python object alive through the native calls above
-    _ = stats  # keep the Python object alive through the native calls above
-    _ = x0  # keep the Python object alive through the native calls above
-    _ = x  # keep the Python object alive through the native calls above
-    _ = params  # keep the Python object alive through the native calls above
-    _ = ex  # keep the Python object alive through the native calls above
-    _ = arr  # keep the Python object alive through the native calls above
+        _ = ics  # keep the Python object alive through the native call above
+        _ = flags  # keep the Python object alive through the native call above
+        _ = stats  # keep the Python object alive through the native call above
+        _ = call.owner  # the route owner pins the image through the call
+    if written != total:
+        raise Error("RuntimeError: " + _A + "the fit wrote " + String(written) + " parameters, batch_size * N is "
+                    + String(total) + "; this side and arima/estimator.mojo disagree about ARIMAOrder.complexity()")
     _adopt(model, fields, arr, Bool(py=series[3]), y_ndim, batch, n_obs, ex, n_exog, big_n, params, x, x0, stats,
-           flags, ics, context)
+           flags, ics, context, route, call.owner)
     return model
 
 
 def _adopt(model: PythonObject, fields: PythonObject, arr: PythonObject, copied: Bool, y_ndim: Int, batch: Int,
            n_obs: Int, ex: PythonObject, n_exog: Int, big_n: Int, params: PythonObject, x: PythonObject,
            x0: PythonObject, stats: PythonObject, flags: PythonObject, ics_in: PythonObject,
-           context: PythonObject) raises:
+           context: PythonObject, route: DeviceRoute, route_owner: PythonObject) raises:
     """`ARIMA._adopt_fit`: the fitted state from the fit's output buffers;
     without the fit's criteria (`ics_in` None: an AutoARIMA search block)
-    the plain fit's device kernel over the adopted log-likelihood row."""
+    the plain fit's device kernel over the adopted log-likelihood row, on
+    `route` (`route_owner` pins its image through that call)."""
     var nk = tsa_keys()
     var ics = ics_in
     if ics is None:
         ics = tsa_array("d", "<f8", Python.tuple(2 * batch), 2 * batch, 8, context)
         var pens = _penalties(_order(fields, context), big_n, n_obs)
-        var entries = _arima_entries(model, fields, context)
-        var written = Int(py=py_call_typed(_entry(entries, "arima_ic_from_loglike"), classical_address(stats),
-                                           classical_address(ics), Python.list(batch, pens[0], pens[1])))
-        _ = ics  # keep the Python object alive through the native call above
+        if not arima_route_has_ic(route):
+            raise Error("AttributeError: the ARIMA binding has no arima_ic_from_loglike")
+        var stats_address = Int(py=classical_address(stats))
+        var ics_address = Int(py=classical_address(ics))
+        var written = 0
+        var py = Python()
+        try:
+            with GILReleased(py):
+                written = arima_ic_run(route, stats_address, ics_address, batch, pens[0], pens[1])
+        finally:
+            _ = ics  # keep the Python object alive through the native call above
+            _ = stats  # keep the Python object alive through the native call above
+            _ = route_owner  # the route owner pins the image through the call
         if written != batch:
             raise Error("RuntimeError: " + _A + "the criterion kernel wrote " + String(written)
                         + " series, batch_size is " + String(batch))
-            _ = ics  # keep the Python object alive through the native call above
-        _ = ics  # keep the Python object alive through the native calls above
     var updates = Python.dict()
     py_setitem(updates, nk[].k_input_copied_, copied)
     py_setitem(updates, nk[].k_batch_size_, batch)
@@ -356,65 +309,12 @@ def _adopt(model: PythonObject, fields: PythonObject, arr: PythonObject, copied:
     forecast_commit(fields, updates, py_item(context, nk[].k_tsa_owner_context))
 
 
-def _gather_block(src: PythonObject, offset: Int, width: Int, nrows: Int, local: PythonObject, dst_addr: Int,
-                  context: PythonObject) raises:
-    """`_gather_block`: dst rows = src[offset:].reshape(nrows, width)[local],
-    the base binding's byte gather of 4-byte rows."""
-    var nk = tsa_keys()
-    if len(local):
-        var item = Int(py=src.itemsize)
-        _ = py_call(py_item(context, nk[].k_base_gather_rows_bytes), Int(py=classical_address(src)) + item * offset, dst_addr,
-                    classical_address(local), nrows, len(local), item * width)
-
-
-def arima_adopt(model: PythonObject, y: PythonObject, reuse: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_adopt_search_fit(m, y, *reuse)`: `m` fitted from the AutoARIMA
-    search's fit block for the group positions `local`."""
-    var nk = tsa_keys()
-    var fields = _fields(model)
-    var search_fit = reuse[0]
-    var trial = Int(py=reuse[1])
-    var local = reuse[2]
-    var fit_f32 = search_fit[0]
-    var fit_i32 = search_fit[1]
-    var off = Int(py=search_fit[2][trial])
-    var nb = Int(py=search_fit[3])
-    var grouped_ll = search_fit[4]
-    var series = _series_major(y, context)
-    var arr = series[0]
-    var b = Int(py=series[1])
-    var n_obs = Int(py=series[2])
-    var big_n = Int(py=py_item(fields, nk[].k_complexity_))
-    var params = tsa_array("f", "<f4", Python.tuple(b, big_n), b * big_n, 4, context)
-    var x = tsa_array("f", "<f4", Python.tuple(b, big_n), b * big_n, 4, context)
-    var x0 = tsa_array("f", "<f4", Python.tuple(b, big_n), b * big_n, 4, context)
-    var stats = tsa_array("f", "<f4", Python.tuple(2 * b), 2 * b, 4, context)
-    var flags = tsa_array("i", "<i4", Python.tuple(2 * b), 2 * b, 4, context)
-    _gather_block(fit_f32, off, big_n, nb, local, Int(py=classical_address(params)), context)
-    _ = params  # keep the Python object alive through the native call above
-    _gather_block(fit_f32, off + nb * big_n, big_n, nb, local, Int(py=classical_address(x)), context)
-    _ = x  # keep the Python object alive through the native call above
-    _gather_block(fit_f32, off + 2 * nb * big_n, big_n, nb, local, Int(py=classical_address(x0)), context)
-    _ = x0  # keep the Python object alive through the native call above
-    var sa = Int(py=classical_address(stats))
-    _ = stats  # keep the Python object alive through the native call above
-    var fa = Int(py=classical_address(flags))
-    _ = flags  # keep the Python object alive through the native call above
-    _gather_block(grouped_ll, trial * nb, 1, nb, local, sa, context)
-    _ = stats  # keep the Python object alive through the native call above
-    _gather_block(fit_f32, off + 3 * nb * big_n, 1, nb, local, sa + 4 * b, context)
-    _ = stats  # keep the Python object alive through the native call above
-    _gather_block(fit_i32, 2 * nb * trial, 1, nb, local, fa, context)
-    _ = flags  # keep the Python object alive through the native call above
-    _gather_block(fit_i32, 2 * nb * trial + nb, 1, nb, local, fa + 4 * b, context)
-    _ = flags  # keep the Python object alive through the native call above
-    _adopt(model, fields, arr, Bool(py=series[3]), 2, b, n_obs, _no_exog(context), 0, big_n, params, x, x0, stats,
-           flags, PythonObject(None), context)
-    return model
-
-
 def arima_predict(model: PythonObject, args: PythonObject, context: PythonObject, forecast: Bool = False) raises -> PythonObject:
     var nk = tsa_keys()
+    # The route is resolved where the former entry selection ran: after the
+    # argument and fitted-state refusals, once per call.
+    var call = TsaHwCall(DeviceRoute(DEVICE_INSTALL), PythonObject(None))
+    var routed = False
     var fields = _fields(model)
     if not py_contains(fields, nk[].k_params_):
         raise Error("ValueError: " + _A + "call fit() before " + ("forecast" if forecast else "predict"))
@@ -446,8 +346,9 @@ def arima_predict(model: PythonObject, args: PythonObject, context: PythonObject
         # and checked against these words when it was minted and are frozen
         # since, so a hit skips their admission and upload; only the future
         # regressors are admitted (the same checks, the same words).
-        var hit_entries = _arima_entries(model, fields, context)
-        var hit = arima_resident_hit(record, fields, hit_entries, words)
+        call = arima_route(model, fields, context, _b())
+        routed = True
+        var hit = arima_resident_hit(record, fields, call, words)
         if hit >= 0:
             var fut = PythonObject(None)
             var fut_addr = 0
@@ -468,8 +369,9 @@ def arima_predict(model: PythonObject, args: PythonObject, context: PythonObject
             if fut_addr == 0:
                 # an unread future pointer must still be a live address
                 fut_addr = Int(py=classical_address(out))
-            arima_resident_call(hit_entries, hit, fut_addr, out, start, end, width, forecast)
-            _ = record  # the record (and its capsule) outlive the query
+            arima_resident_call(call, hit, fut_addr, Int(py=classical_address(out)), start, end, width, forecast)
+            _ = out  # keep the Python object alive through the native call above
+            _ = record  # the record (and its lifetime owner) outlive the query
             _ = fut_owner
             _ = fut
             return out
@@ -497,28 +399,41 @@ def arima_predict(model: PythonObject, args: PythonObject, context: PythonObject
             future_owner = arima_buffer(future, "prepared future exog", context, True)
             future_addr = future_owner.address
     var result = tsa_array("f", "<f4", Python.tuple(batch, width), Int(py=PythonObject(batch) * width), 4, context)
-    var entries = _arima_entries(model, fields, context)
-    var minted = arima_resident_mint(model, fields, entries, words, y.address, ex_addr, params.address)
+    if not routed:
+        call = arima_route(model, fields, context, _b())
+    var result_address = Int(py=classical_address(result))
+    var minted = arima_resident_mint(model, fields, call, words, y.address, ex_addr, params.address)
     if minted is not None:
-        arima_resident_call(entries, Int(py=minted[5]), future_addr, result, start, end, width, forecast)
-        _ = minted  # the record (and its capsule) outlive the query
+        arima_resident_call(call, tsa_hw_resident_handle(minted[3]), future_addr, result_address, start, end, width,
+                            forecast)
+        _ = result  # keep the Python object alive through the native call above
+        _ = minted  # the record (and its lifetime owner) outlive the query
         _ = y
         _ = params
         _ = ex_owner
         _ = future_owner
         _ = future
         return result
-    var plan = Python.list(batch, n_obs, width) if forecast else Python.list(batch, n_obs, start, end)
-    for i in range(len(order)):  # driver-loop: seven admitted ARIMA order words
-        _ = py_call(plan.append, order[i])
-    _ = py_call(plan.extend, Python.tuple(k, n_exog, 0) if forecast else Python.tuple(k, n_exog))
-    _ = py_call_typed(_entry(entries, "arima_forecast" if forecast else "arima_predict"), y.address, ex_addr,
-                      future_addr, params.address, classical_address(result), plan)
-    _ = y
-    _ = params
-    _ = ex_owner
-    _ = future_owner
-    _ = future
+    var route = call.route
+    var y_address = y.address
+    var params_address = params.address
+    var py = Python()
+    try:
+        with GILReleased(py):
+            if forecast:
+                _ = arima_forecast_run(route, y_address, ex_addr, future_addr, params_address, result_address,
+                                       batch, n_obs, width, order, k, n_exog)
+            else:
+                _ = arima_predict_run(route, y_address, ex_addr, future_addr, params_address, result_address,
+                                      batch, n_obs, start, end, order, k, n_exog)
+    finally:
+        _ = result  # keep the Python object alive through the native call above
+        _ = y
+        _ = params
+        _ = ex_owner
+        _ = future_owner
+        _ = future
+        _ = call.owner  # the route owner pins the image through the call
     return result
 
 

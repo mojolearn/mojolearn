@@ -554,10 +554,13 @@ class OrdinalEncoder(_PrepBase):
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _sklearn_input_tags = {"allow_nan": True, "categorical": True}
     _parameters = ("categories", "dtype", "handle_unknown", "unknown_value", "encoded_missing_value",
-                   "min_frequency", "max_categories")
+                   "min_frequency", "max_categories", "device")
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
     def __init__(self, *, categories="auto", dtype=None, handle_unknown="error", unknown_value=None,
-                 encoded_missing_value=float("nan"), min_frequency=None, max_categories=None):
+                 encoded_missing_value=float("nan"), min_frequency=None, max_categories=None, device=None):
         self.categories = categories
         self.dtype = dtype
         self.handle_unknown = handle_unknown
@@ -565,6 +568,18 @@ class OrdinalEncoder(_PrepBase):
         self.encoded_missing_value = encoded_missing_value
         self.min_frequency = min_frequency
         self.max_categories = max_categories
+        self.device = device
+
+    def vendor_used(self):
+        """The backend this estimator runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the compiled
+            binary the estimator uses.
+        """
+        return _ENCODE_CALL(self, "vendor_used", (), _ENCODE_CONTEXT)
 
     def fit(self, X, y=None):
         return _ENCODE_CALL(self, "fit", (X, y), _ENCODE_CONTEXT)
@@ -642,10 +657,13 @@ class OneHotEncoder(_PrepBase):
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _sklearn_input_tags = {"allow_nan": True, "categorical": True}
     _parameters = ("categories", "drop", "sparse_output", "dtype", "handle_unknown", "min_frequency",
-                   "max_categories", "feature_name_combiner")
+                   "max_categories", "feature_name_combiner", "device")
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
     def __init__(self, *, categories="auto", drop=None, sparse_output=True, dtype=None, handle_unknown="error",
-                 min_frequency=None, max_categories=None, feature_name_combiner="concat"):
+                 min_frequency=None, max_categories=None, feature_name_combiner="concat", device=None):
         self.categories = categories
         self.drop = drop
         self.sparse_output = sparse_output
@@ -654,6 +672,18 @@ class OneHotEncoder(_PrepBase):
         self.min_frequency = min_frequency
         self.max_categories = max_categories
         self.feature_name_combiner = feature_name_combiner
+        self.device = device
+
+    def vendor_used(self):
+        """The backend this estimator runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the compiled
+            binary the estimator uses.
+        """
+        return _ENCODE_CALL(self, "vendor_used", (), _ENCODE_CONTEXT)
 
     def fit(self, X, y=None):
         return _ENCODE_CALL(self, "fit", (X, y), _ENCODE_CONTEXT)
@@ -738,16 +768,31 @@ class TargetEncoder(_PrepBase):
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _sklearn_input_tags = {"allow_nan": True, "categorical": True}
     _sklearn_target_tags = {"required": True}
-    _parameters = ("categories", "target_type", "smooth", "cv", "shuffle", "random_state")
+    _parameters = ("categories", "target_type", "smooth", "cv", "shuffle", "random_state", "device")
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
     def __init__(self, categories="auto", target_type="auto", smooth="auto", cv=5, shuffle=True,
-                 random_state=None):
+                 random_state=None, device=None):
         self.categories = categories
         self.target_type = target_type
         self.smooth = smooth
         self.cv = cv
         self.shuffle = shuffle
         self.random_state = random_state
+        self.device = device
+
+    def vendor_used(self):
+        """The backend this estimator runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the compiled
+            binary the estimator uses.
+        """
+        return _ENCODE_CALL(self, "vendor_used", (), _ENCODE_CONTEXT)
 
     def fit(self, X, y):
         return _ENCODE_CALL(self, "fit", (X, y), _ENCODE_CONTEXT)
@@ -818,16 +863,32 @@ class SimpleImputer(_PrepBase):
     _mojolearn_native_public = True
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _sklearn_input_tags = {"allow_nan": True}
-    _parameters = ("missing_values", "strategy", "fill_value", "copy", "add_indicator", "keep_empty_features")
+    _parameters = ("missing_values", "strategy", "fill_value", "copy", "add_indicator", "keep_empty_features",
+                   "device")
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
     def __init__(self, *, missing_values=float("nan"), strategy="mean", fill_value=None, copy=True,
-                 add_indicator=False, keep_empty_features=False):
+                 add_indicator=False, keep_empty_features=False, device=None):
         self.missing_values = missing_values
         self.strategy = strategy
         self.fill_value = fill_value
         self.copy = copy
         self.add_indicator = add_indicator
         self.keep_empty_features = keep_empty_features
+        self.device = device
+
+    def vendor_used(self):
+        """The backend this estimator runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the compiled
+            binary the estimator uses.
+        """
+        return _ENCODE_CALL(self, "vendor_used", (), _ENCODE_CONTEXT)
 
     def fit(self, X, y=None):
         return _ENCODE_CALL(self, "fit", (X, y), _ENCODE_CONTEXT)
@@ -901,10 +962,13 @@ class KBinsDiscretizer(_PrepBase):
     # One native call per public method; the native owner runs the whole
     # lifecycle (bindings/public_lifecycle_owner_door.mojo), so no `_mode` wrappers.
     _mojolearn_native_public = True
-    _parameters = ("n_bins", "encode", "strategy", "quantile_method", "dtype", "subsample", "random_state")
+    _parameters = ("n_bins", "encode", "strategy", "quantile_method", "dtype", "subsample", "random_state", "device")
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
     def __init__(self, n_bins=5, *, encode="onehot", strategy="quantile", quantile_method="averaged_inverted_cdf",
-                 dtype=None, subsample=200_000, random_state=None):
+                 dtype=None, subsample=200_000, random_state=None, device=None):
         self.n_bins = n_bins
         self.encode = encode
         self.strategy = strategy
@@ -912,6 +976,18 @@ class KBinsDiscretizer(_PrepBase):
         self.dtype = dtype
         self.subsample = subsample
         self.random_state = random_state
+        self.device = device
+
+    def vendor_used(self):
+        """The backend this estimator runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the compiled
+            binary the estimator uses.
+        """
+        return _ENCODE_CALL(self, "vendor_used", (), _ENCODE_CONTEXT)
 
     def fit(self, X, y=None, sample_weight=None):
         return _ENCODE_CALL(self, "fit", (X, y, sample_weight), _ENCODE_CONTEXT)
@@ -1101,12 +1177,16 @@ class GaussianNB(_Classifier):
     >>> model = mojolearn.GaussianNB().fit(X, y)
     >>> model.predict(X[:5])
     """
-    _parameters = ("priors", "var_smoothing", "numeric_mode")
+    _parameters = ("priors", "var_smoothing", "numeric_mode", "device")
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
-    def __init__(self, *, priors=None, var_smoothing=1e-9, numeric_mode=None):
+    def __init__(self, *, priors=None, var_smoothing=1e-9, numeric_mode=None, device=None):
         self.priors = priors
         self.var_smoothing = var_smoothing
         self.numeric_mode = numeric_mode
+        self.device = device
 
     def fit(self, X, y, sample_weight=None):
         return _CLS_CALL(self, "fit", (X, y, sample_weight), _CLS_CONTEXT)
@@ -1217,15 +1297,19 @@ class MultinomialNB(_DiscreteNB):
     """
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _sklearn_input_tags = {"positive_only": True}
-    _parameters = ("alpha", "force_alpha", "fit_prior", "class_prior")
+    _parameters = ("alpha", "force_alpha", "fit_prior", "class_prior", "device")
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
     _csr_ok = True
     _needs_min = True
 
-    def __init__(self, *, alpha=1.0, force_alpha=True, fit_prior=True, class_prior=None):
+    def __init__(self, *, alpha=1.0, force_alpha=True, fit_prior=True, class_prior=None, device=None):
         self.alpha = alpha
         self.force_alpha = force_alpha
         self.fit_prior = fit_prior
         self.class_prior = class_prior
+        self.device = device
 
 
 class BernoulliNB(_DiscreteNB):
@@ -1278,14 +1362,18 @@ class BernoulliNB(_DiscreteNB):
     >>> y = rng.integers(0, 2, 1000)
     >>> model = mojolearn.BernoulliNB().fit(X, y)
     """
-    _parameters = ("alpha", "force_alpha", "binarize", "fit_prior", "class_prior")
+    _parameters = ("alpha", "force_alpha", "binarize", "fit_prior", "class_prior", "device")
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
-    def __init__(self, *, alpha=1.0, force_alpha=True, binarize=0.0, fit_prior=True, class_prior=None):
+    def __init__(self, *, alpha=1.0, force_alpha=True, binarize=0.0, fit_prior=True, class_prior=None, device=None):
         self.alpha = alpha
         self.force_alpha = force_alpha
         self.binarize = binarize
         self.fit_prior = fit_prior
         self.class_prior = class_prior
+        self.device = device
 
 
 # ---------------------------------------------------------------- discriminant analysis
@@ -1373,12 +1461,15 @@ class LinearDiscriminantAnalysis(_Classifier):
     """
     _mojolearn_native_public = True
     _parameters = ("solver", "shrinkage", "priors", "n_components", "store_covariance", "tol",
-                   "covariance_estimator")
+                   "covariance_estimator", "device")
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
     def __init__(self, solver="svd", shrinkage=None, priors=None, n_components=None, store_covariance=False,
-                 tol=1e-4, covariance_estimator=None):
+                 tol=1e-4, covariance_estimator=None, device=None):
         return _CLS_CALL(self, "initialize", (solver, shrinkage, priors, n_components, store_covariance,
-                                             tol, covariance_estimator), _CLS_CONTEXT)
+                                             tol, covariance_estimator, device), _CLS_CONTEXT)
 
     def get_params(self, deep=True):
         """Return the constructor parameters as a dict.
@@ -1509,10 +1600,14 @@ class QuadraticDiscriminantAnalysis(_Classifier):
     >>> y = rng.integers(0, 2, 1000)
     >>> model = mojolearn.QuadraticDiscriminantAnalysis().fit(X, y)
     """
-    _parameters = ("solver", "shrinkage", "priors", "reg_param", "store_covariance", "tol", "covariance_estimator")
+    _parameters = ("solver", "shrinkage", "priors", "reg_param", "store_covariance", "tol", "covariance_estimator",
+                   "device")
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
     def __init__(self, *, solver="svd", shrinkage=None, priors=None, reg_param=0.0, store_covariance=False,
-                 tol=1e-4, covariance_estimator=None):
+                 tol=1e-4, covariance_estimator=None, device=None):
         self.solver = solver
         self.shrinkage = shrinkage
         self.priors = priors
@@ -1520,6 +1615,7 @@ class QuadraticDiscriminantAnalysis(_Classifier):
         self.store_covariance = store_covariance
         self.tol = tol
         self.covariance_estimator = covariance_estimator
+        self.device = device
 
     def fit(self, X, y):
         return _CLS_CALL(self, "fit", (X, y), _CLS_CONTEXT)
@@ -1601,16 +1697,20 @@ class QuantileTransformer(_PrepBase):
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _sklearn_input_tags = {"allow_nan": True}
     _parameters = ("n_quantiles", "output_distribution", "ignore_implicit_zeros", "subsample", "random_state",
-                   "copy")
+                   "copy", "device")
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
     def __init__(self, *, n_quantiles=1000, output_distribution="uniform", ignore_implicit_zeros=False,
-                 subsample=10_000, random_state=None, copy=True):
+                 subsample=10_000, random_state=None, copy=True, device=None):
         self.n_quantiles = n_quantiles
         self.output_distribution = output_distribution
         self.ignore_implicit_zeros = ignore_implicit_zeros
         self.subsample = subsample
         self.random_state = random_state
         self.copy = copy
+        self.device = device
 
     def fit(self, X, y=None):
         return _STATELESS_CALL(self, "fit", (X, y), _STATELESS_CONTEXT)
@@ -1669,12 +1769,16 @@ class PowerTransformer(_PrepBase):
     _mojolearn_native_public = True
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _sklearn_input_tags = {"allow_nan": True}
-    _parameters = ("method", "standardize", "copy")
+    _parameters = ("method", "standardize", "copy", "device")
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
-    def __init__(self, method="yeo-johnson", *, standardize=True, copy=True):
+    def __init__(self, method="yeo-johnson", *, standardize=True, copy=True, device=None):
         self.method = method
         self.standardize = standardize
         self.copy = copy
+        self.device = device
 
     def fit(self, X, y=None):
         return _STATELESS_CALL(self, "fit", (X, y), _STATELESS_CONTEXT)
@@ -1781,13 +1885,17 @@ class PolynomialFeatures(_PrepBase):
     # One native call per public method; the native owner runs the whole
     # lifecycle (bindings/public_lifecycle_owner_door.mojo), so no `_mode` wrappers.
     _mojolearn_native_public = True
-    _parameters = ("degree", "interaction_only", "include_bias", "order")
+    _parameters = ("degree", "interaction_only", "include_bias", "order", "device")
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
-    def __init__(self, degree=2, *, interaction_only=False, include_bias=True, order="C"):
+    def __init__(self, degree=2, *, interaction_only=False, include_bias=True, order="C", device=None):
         self.degree = degree
         self.interaction_only = interaction_only
         self.include_bias = include_bias
         self.order = order
+        self.device = device
 
     def fit(self, X, y=None):
         return _STATELESS_CALL(self, "fit", (X, y), _STATELESS_CONTEXT)
@@ -1852,11 +1960,14 @@ class SplineTransformer(_PrepBase):
     # lifecycle (bindings/public_lifecycle_owner_door.mojo), so no `_mode` wrappers.
     _mojolearn_native_public = True
     _parameters = ("n_knots", "degree", "knots", "extrapolation", "include_bias", "order", "handle_missing",
-                   "sparse_output")
+                   "sparse_output", "device")
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
     _EXTRAP = {"constant": 0, "continue": 1, "error": 1, "linear": 2, "periodic": 3}
 
     def __init__(self, n_knots=5, degree=3, *, knots="uniform", extrapolation="constant", include_bias=True,
-                 order="C", handle_missing="error", sparse_output=False):
+                 order="C", handle_missing="error", sparse_output=False, device=None):
         self.n_knots = n_knots
         self.degree = degree
         self.knots = knots
@@ -1865,6 +1976,18 @@ class SplineTransformer(_PrepBase):
         self.order = order
         self.handle_missing = handle_missing
         self.sparse_output = sparse_output
+        self.device = device
+
+    def vendor_used(self):
+        """The backend this estimator runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the compiled
+            binary the estimator uses.
+        """
+        return _ENCODE_CALL(self, "vendor_used", (), _ENCODE_CONTEXT)
 
 
     #: handle_missing='zeros' takes NaN (its rows' spline features are 0): a
@@ -1920,11 +2043,15 @@ class Binarizer(_PrepBase):
     # One native call per public method; the native owner runs the whole
     # lifecycle (bindings/public_lifecycle_owner_door.mojo), so no `_mode` wrappers.
     _mojolearn_native_public = True
-    _parameters = ("threshold", "copy")
+    _parameters = ("threshold", "copy", "device")
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
-    def __init__(self, *, threshold=0.0, copy=True):
+    def __init__(self, *, threshold=0.0, copy=True, device=None):
         self.threshold = threshold
         self.copy = copy
+        self.device = device
 
     def fit(self, X, y=None):
         return _STATELESS_CALL(self, "fit", (X, y), _STATELESS_CONTEXT)
@@ -1968,7 +2095,24 @@ class LabelEncoder(_PrepBase):
     # scikit-learn tags: transforms a 1-D label vector, not an X matrix
     _sklearn_input_tags = {"one_d_array": True, "two_d_array": False}
     _sklearn_target_tags = {"one_d_labels": True}
-    _parameters = ()
+    _parameters = ("device",)
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
+
+    def __init__(self, *, device=None):
+        self.device = device
+
+    def vendor_used(self):
+        """The backend this estimator runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the compiled
+            binary the estimator uses.
+        """
+        return _ENCODE_CALL(self, "vendor_used", (), _ENCODE_CONTEXT)
 
     def fit(self, y):
         return _ENCODE_CALL(self, "fit", (y,), _ENCODE_CONTEXT)
@@ -2034,12 +2178,27 @@ class LabelBinarizer(_PrepBase):
     # scikit-learn tags: transforms a 1-D label vector, not an X matrix
     _sklearn_input_tags = {"one_d_array": True, "two_d_array": False}
     _sklearn_target_tags = {"one_d_labels": True}
-    _parameters = ("neg_label", "pos_label", "sparse_output")
+    _parameters = ("neg_label", "pos_label", "sparse_output", "device")
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
-    def __init__(self, *, neg_label=0, pos_label=1, sparse_output=False):
+    def __init__(self, *, neg_label=0, pos_label=1, sparse_output=False, device=None):
         self.neg_label = neg_label
         self.pos_label = pos_label
         self.sparse_output = sparse_output
+        self.device = device
+
+    def vendor_used(self):
+        """The backend this estimator runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the compiled
+            binary the estimator uses.
+        """
+        return _ENCODE_CALL(self, "vendor_used", (), _ENCODE_CONTEXT)
 
     def fit(self, y):
         return _ENCODE_CALL(self, "fit", (y,), _ENCODE_CONTEXT)
@@ -2096,11 +2255,26 @@ class MultiLabelBinarizer(_PrepBase):
     # scikit-learn tags: transforms label collections, not an X matrix
     _sklearn_input_tags = {"two_d_array": False}
     _sklearn_target_tags = {"two_d_labels": True}
-    _parameters = ("classes", "sparse_output")
+    _parameters = ("classes", "sparse_output", "device")
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
-    def __init__(self, *, classes=None, sparse_output=False):
+    def __init__(self, *, classes=None, sparse_output=False, device=None):
         self.classes = classes
         self.sparse_output = sparse_output
+        self.device = device
+
+    def vendor_used(self):
+        """The backend this estimator runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the compiled
+            binary the estimator uses.
+        """
+        return _ENCODE_CALL(self, "vendor_used", (), _ENCODE_CONTEXT)
 
     def fit(self, y):
         return _ENCODE_CALL(self, "fit", (y,), _ENCODE_CONTEXT)
@@ -2317,10 +2491,14 @@ class VarianceThreshold(_SelectorMixin):
     """
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _sklearn_input_tags = {"allow_nan": True}
-    _parameters = ("threshold",)
+    _parameters = ("threshold", "device")
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
-    def __init__(self, threshold=0.0):
+    def __init__(self, threshold=0.0, device=None):
         self.threshold = threshold
+        self.device = device
 
     def fit(self, X, y=None):
         return _STATELESS_CALL(self, "fit", (X, y), _STATELESS_CONTEXT)
@@ -2793,16 +2971,20 @@ class ComplementNB(_DiscreteNB):
     """
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _sklearn_input_tags = {"positive_only": True}
-    _parameters = ("alpha", "force_alpha", "fit_prior", "class_prior", "norm")
+    _parameters = ("alpha", "force_alpha", "fit_prior", "class_prior", "norm", "device")
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
     _csr_ok = True
     _needs_min = True
 
-    def __init__(self, *, alpha=1.0, force_alpha=True, fit_prior=True, class_prior=None, norm=False):
+    def __init__(self, *, alpha=1.0, force_alpha=True, fit_prior=True, class_prior=None, norm=False, device=None):
         self.alpha = alpha
         self.force_alpha = force_alpha
         self.fit_prior = fit_prior
         self.class_prior = class_prior
         self.norm = norm
+        self.device = device
 
 
 # partial_fit keeps n_categories_ as the accumulated counts' width; sklearn
@@ -2864,14 +3046,19 @@ class CategoricalNB(_DiscreteNB):
     """
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _sklearn_input_tags = {"positive_only": True, "categorical": True}
-    _parameters = ("alpha", "force_alpha", "fit_prior", "class_prior", "min_categories")
+    _parameters = ("alpha", "force_alpha", "fit_prior", "class_prior", "min_categories", "device")
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
-    def __init__(self, *, alpha=1.0, force_alpha=True, fit_prior=True, class_prior=None, min_categories=None):
+    def __init__(self, *, alpha=1.0, force_alpha=True, fit_prior=True, class_prior=None, min_categories=None,
+                 device=None):
         self.alpha = alpha
         self.force_alpha = force_alpha
         self.fit_prior = fit_prior
         self.class_prior = class_prior
         self.min_categories = min_categories
+        self.device = device
 
     def fit(self, X, y, sample_weight=None):
         return _CLS_CALL(self, "fit", (X, y, sample_weight), _CLS_CONTEXT)

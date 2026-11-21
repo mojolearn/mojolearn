@@ -198,3 +198,20 @@ def test_check_compares_the_same_estimator_on_both_devices_in_this_process(spec,
     assert result["sides"]["gpu"]["route"]["vendor_used"] != "cpu"
     assert result["sides"]["cpu"]["route"]["vendor_used"] == "cpu"
     assert result["verdict"]["match"]
+
+
+@two_devices
+@pytest.mark.parametrize("cls", ["CrostonClassic", "CrostonOptimized", "CrostonSBA"])
+def test_croston_runs_on_its_device_and_returns_the_same_bits(cls):
+    if mojolearn.numeric_mode() != "identical":
+        pytest.skip("bits are promised in identical mode only")
+    rng = np.random.default_rng(11)
+    y = (rng.random((4, 64), dtype=np.float32) * (rng.random((4, 64)) > 0.6)).astype(np.float32)
+    kind = getattr(mojolearn, cls)
+    cpu = kind(numeric_mode="identical", device="cpu").fit(y)
+    gpu = kind(numeric_mode="identical").fit(y)
+    assert cpu.get_params()["device"] == "cpu" and gpu.get_params()["device"] is None
+    assert np.asarray(cpu.mean_).tobytes() == np.asarray(gpu.mean_).tobytes()
+    for _ in range(2):                                         # interleaved calls: each keeps its own route
+        assert np.asarray(cpu.predict(3)).tobytes() == np.asarray(gpu.predict(3)).tobytes()
+    assert kind(device="cpu").set_params(device=None).get_params()["device"] is None

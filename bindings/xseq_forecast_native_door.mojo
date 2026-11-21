@@ -37,9 +37,9 @@ from providers.python.forecast_owner_pyapi_unpack import forecast_commit
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.xseq_native_common_door import (
-    XF32P, XI64P, xseq_key, xseq_base, xseq_input, xseq_refuse_f64, xseq_zeros, xseq_addr, xseq_f32p,
+    XF32P, XI64P, xseq_route, xseq_base, xseq_input, xseq_refuse_f64, xseq_zeros, xseq_addr, xseq_f32p,
     xseq_reshape, xseq_copy, xseq_item, xseq_first, xseq_column_f32, xseq_column_i64, xseq_mean_dict, xseq_int,
-    xseq_float, xseq_truth, xseq_mode,
+    xseq_float, xseq_truth,
 )
 from core.xseq_marshal import xseq_var_blocks
 from sequence.xseq_forecast_run import (
@@ -205,12 +205,16 @@ def _theta_predict(model: PythonObject, fields: PythonObject, args: PythonObject
     # the same fitted series returns the stored answer. p3-cnn-sequence-tsa:
     # the key holds the RESOLVED mode (which also names the binding), so a
     # change of the process default between two predicts recomputes.
+    # dw-neural-b: that word and the glue entry come from the estimator's one
+    # route (resolved once; `route.word` also names the device), where two
+    # mode resolutions and a table read ran per predict.
+    var route = xseq_route(model, fields, context)
     var key = Python.tuple(h, py_item(fields, nk[].k_season_length), py_item(fields, nk[].k_decomposition_type), chosen,
-                           py_item(fields, nk[].k_initial_smoothed), py_item(fields, nk[].k_alpha), py_item(fields, nk[].k_theta), xseq_mode(fields, context))
+                           py_item(fields, nk[].k_initial_smoothed), py_item(fields, nk[].k_alpha), py_item(fields, nk[].k_theta), route.word)
     var cached = py_get(fields, nk[].k__fitted_h)
     _cache_record(cached, context)
     var fit_key = Python.tuple(py_item(fields, nk[].k_season_length), py_item(fields, nk[].k_decomposition_type), chosen,
-                               py_item(fields, nk[].k_initial_smoothed), py_item(fields, nk[].k_alpha), py_item(fields, nk[].k_theta), xseq_mode(fields, context))
+                               py_item(fields, nk[].k_initial_smoothed), py_item(fields, nk[].k_alpha), py_item(fields, nk[].k_theta), route.word)
     var mods = NativeModules()
     var fitted = prepared_get(mods, _THETA_FIT_SLOT, model)
     var forecast: PythonObject
@@ -233,7 +237,7 @@ def _theta_predict(model: PythonObject, fields: PythonObject, args: PythonObject
         # The table key is `entry_key`: `key` stays the stored-forecast cache
         # key stored in `_fitted_h` below (the former inner `var key` of the
         # table key shadowed it there).
-        var entry_key = xseq_key(fields, context)
+        var entry_key = route.glue
         var captured = _stored_buffer(py_item(fields, nk[].k__y), "Theta observations", 2, context)
         var y = captured.keep
         var batch = captured.shape[0]
@@ -256,7 +260,7 @@ def _theta_predict(model: PythonObject, fields: PythonObject, args: PythonObject
         _store(fields, nk[].k__fitted_h, Python.tuple(key, xseq_copy(forecast), xseq_copy(info), py_call(b.list, names)))
     else:
         # `entry_key`, not `key`: see the forecast-only branch above.
-        var entry_key = xseq_key(fields, context)
+        var entry_key = route.glue
         if not py_contains(fields, nk[].k__y):
             raise Error("AttributeError: Theta: call fit before predict")
         var captured = _stored_buffer(py_item(fields, nk[].k__y), "Theta observations", 2, context)
@@ -340,7 +344,7 @@ def _croston_fit(model: PythonObject, fields: PythonObject, args: PythonObject, 
     var n = Int(py=series[3])
     var mean = xseq_zeros(Python.tuple(batch), context)
     _store(fields, nk[].k_mean_, mean)
-    var key = xseq_key(fields, context)
+    var key = xseq_route(model, fields, context).glue
     var y_addr = Int(py=series[4])
     var mean_addr = Int(py=xseq_addr(mean))
     var variant = Int(py=_croston_variant(model, context))
@@ -366,7 +370,7 @@ def _croston_predict(model: PythonObject, fields: PythonObject, args: PythonObje
     var forecast = xseq_zeros(Python.tuple(batch, h), context)
     # every row its series' mean (`croston_forecast`)
     if h:
-        var key = xseq_key(fields, context)
+        var key = xseq_route(model, fields, context).glue
         var mean_addr = captured.address
         var forecast_addr = Int(py=xseq_addr(forecast))
         var py = Python()
@@ -457,7 +461,8 @@ def _ets_predict(model: PythonObject, fields: PythonObject, args: PythonObject, 
     # the fit runs inside the forecast call; a repeat of the same call on
     # the same fitted series returns the stored answer (key: the resolved
     # mode, which also names the binding; p3-cnn-sequence-tsa)
-    var key = Python.tuple(py_call(b.tuple, ip), py_call(b.tuple, fp), xseq_mode(fields, context))
+    var route = xseq_route(model, fields, context)
+    var key = Python.tuple(py_call(b.tuple, ip), py_call(b.tuple, fp), route.word)
     var last = py_get(fields, nk[].k__last)
     _cache_record(last, context)
     var forecast: PythonObject
@@ -475,7 +480,7 @@ def _ets_predict(model: PythonObject, fields: PythonObject, args: PythonObject, 
         var forecast_addr = Int(py=xseq_addr(forecast))
         var info_addr = Int(py=xseq_addr(info))
         var states_addr = Int(py=xseq_addr(states))
-        var entry_key = xseq_key(fields, context)
+        var entry_key = route.glue
         var py = Python()
         with GILReleased(py):
             forecast_run_ets(entry_key, y_addr, forecast_addr, info_addr, states_addr, words, floats)
@@ -527,7 +532,7 @@ def _garch_fit(model: PythonObject, fields: PythonObject, args: PythonObject, co
     var info_addr = Int(py=xseq_addr(info))
     var sigma_addr = Int(py=xseq_addr(sigma))
     var forecast_addr = Int(py=xseq_addr(forecast))
-    var entry_key = xseq_key(fields, context)
+    var entry_key = xseq_route(model, fields, context).glue
     var py = Python()
     with GILReleased(py):
         forecast_run_garch(entry_key, y_addr, params_addr, info_addr, sigma_addr, forecast_addr, words)

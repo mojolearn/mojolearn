@@ -68,7 +68,7 @@ def connect(context, register, registry):
             methods = {
                 'fit': (fit, (arg(0), arg(1)) + ((keyword('sample_weight'),) if weighted else ())),
                 'predict': ('classifier_predict' if classifier else 'regressor_predict', (arg(0),)),
-                'score': ('classifier_score' if classifier else 'linear_regressor_score', (arg(0), arg(1))),
+                'score': ('classifier_score' if classifier else 'regressor_score', (arg(0), arg(1))),
             }
             if classifier:
                 methods['decision_function'] = ('decision_function', (arg(0),))
@@ -76,7 +76,6 @@ def connect(context, register, registry):
                 methods['predict_proba'] = ('sgd_predict_proba' if name == 'SGDClassifier' else 'lrcv_predict_proba', (arg(0),))
             plan = add(getattr(linear, name), linear._XL_CALL, linear._XL_CONTEXT, methods)
             if not classifier:
-                plan['method_entries'] = {'score': (linear._LINEAR_SCORE, linear._LINEAR_SCORE_CONTEXT)}
                 # A compiled caller that reads float32 words (an explainer, a meta
                 # estimator, a native scorer) takes the kernel's float32 output, as
                 # Ridge and LinearRegression's 'predict_score'; the public predict
@@ -401,6 +400,18 @@ def connect(context, register, registry):
     for basename in missing:  # glue: fixed ABI metadata connected once per binding
         # (module, name, reader) or (refusal text,): the door raises the text.
         modules[basename] = {mode: connections[basename][mode][0] for mode in ('identical', 'fast')}  # glue: two fixed modes
+    # The CPU identical module of each recipe binding beside the device one
+    # (_native_family_bridge.connect_bindings: module or refusal text): what
+    # the composed call hands a member that says device="cpu" on a GPU
+    # installation (bindings/msel_estimator_native_door.mojo). A name some
+    # other owner connected before the CPU table existed is connected here.
+    cpu_connections = _native_family_bridge.shared_context().setdefault('family_binding_connections_cpu', {})
+    late = tuple(name for name in sorted(wanted) if name not in cpu_connections)  # glue: fixed binding names
+    if late:
+        _native_family_bridge.connect_bindings(*late)
+    cpu_modules = context.setdefault('family_msel_bindings_cpu', {})
+    for basename in sorted(wanted):  # glue: fixed ABI metadata connected once per binding
+        cpu_modules.setdefault(basename, cpu_connections[basename][0])
     # (family context, metrics bindings by mode): bindings/trees_public_meta_door.mojo calls the metrics owner natively
     if trees is not None:
         trees._TREES_CONTEXT['native_meta_metrics'] = (metrics._NATIVE_CONTEXT, modules['_mojolearn_metrics'])

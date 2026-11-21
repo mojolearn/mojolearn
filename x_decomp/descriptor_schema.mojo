@@ -128,8 +128,22 @@ comptime XD_DEV_ORDER_SMALL = 71  # i: [x, dst, n]
 # (`x_decomp_tsqr_q`, `x_decomp_r_signs`), appended.
 comptime XD_TSQR_Q = 72           # a: [c, q] i: [m, n, k]   (k == 0 releases the kept factorization only)
 comptime XD_R_SIGNS = 73          # a: [r, c] i: [n]
+# lane dw-decomp (2026-11-21): the FastICA, FactorAnalysis,
+# LatentDirichletAllocation and random projection drivers their native doors
+# (bindings/{ica,fa,lda,rp}_native_*.mojo) called as Python entries of the
+# binding module (`x_decomp_ica_fit`, ..., `x_decomp_rp_project`: one boxed
+# parameter list and one float list per call), appended. Typed requests and
+# their packing: core/decomp_factor_api.mojo; bodies:
+# x_decomp/descriptor_factor_ops.mojo (both images, one generic body).
+comptime XD_ICA_FIT = 74          # a: [x, w_init (0: drawn), components, mixing, whitening, mean, sources] i: [n, d, nc, whiten, seed, algorithm, fun, max_iter, project] f: [alpha, tol] -> n_iter
+comptime XD_ICA_PROJECT = 75      # a: [x, matrix, mean, dst] i: [inverse, n, width, rows, whiten]
+comptime XD_FA_FIT = 76           # a: [x, psi0, components, noise, mean, loglike(f64)] i: [n, d, nc, max_iter, rotation] f: [tol] -> n_iter
+comptime XD_FA_QUERY = 77         # a: [x, components, noise, mean, dst, value out(f64)] i: [op, n, d, nc]
+comptime XD_LDA = 78              # a: [x, comps in, exp in, comps out, exp out, dst, draw inout(int64), n_batch_iter inout(int64), value out(f64)] i: [op, n, v, nc, fresh, flag, max_iter, online, batch_size, max_doc_update_iter, seed, evaluate_every, refusal (0 fit, 1 partial_fit, 2 transform)] f: [doc prior, topic prior, offset, decay, mean_change_tol, total samples, perp_tol] -> n_iter
+comptime XD_RP_FIT = 79           # a: [x, components, inverse] i: [n, d, kc, sparse, seed, inverse, fused_ok] f: [density] -> first non-finite index or -1
+comptime XD_RP_PROJECT = 80       # a: [x, matrix, dst] i: [m, d, rows, tiled (0 plain, 1 tiled, 2 tiled and X untested), matrix pool id (-1: none)] -> 1 when X was flagged non-finite
 # lane entangled-mkit (2026-11-12): the manifold kit's operations 120 ..
-# XD_MANI_OPERATION_END - 1 (above every operation here, 0 .. 73) (x_decomp/descriptor_mani_schema.mojo).
+# XD_MANI_OPERATION_END - 1 (above every operation here, 0 .. 80) (x_decomp/descriptor_mani_schema.mojo).
 comptime XD_OPERATION_COUNT = XD_MANI_OPERATION_END
 
 comptime XD_CAP_HOST = 1       # the host-address operations
@@ -274,6 +288,20 @@ def xd_schema(op: Int) raises -> Tuple[Int, Int, Int]:
         return (2, 3, 0)
     if op == XD_R_SIGNS:
         return (2, 1, 0)
+    if op == XD_ICA_FIT:
+        return (7, 9, 2)
+    if op == XD_ICA_PROJECT:
+        return (4, 5, 0)
+    if op == XD_FA_FIT:
+        return (6, 5, 1)
+    if op == XD_FA_QUERY:
+        return (6, 4, 0)
+    if op == XD_LDA:
+        return (9, 13, 7)
+    if op == XD_RP_FIT:
+        return (3, 7, 1)
+    if op == XD_RP_PROJECT:
+        return (3, 5, 0)
     if xd_is_mani_op(op):
         return xd_mani_schema(op)
     raise Error("x_decomp native ABI: unknown operation " + String(op))

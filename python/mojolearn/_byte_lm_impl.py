@@ -263,6 +263,10 @@ class SmallByteLanguageModelTrainer:
         gradients (``flat_gradients`` and ``gradients``) from every step.
         None means ``"lean"``, or ``"full"`` when ``resident=False`` is given.
         ``"lean"`` cannot be combined with ``resident=False``.
+    device : {"gpu", "cpu"} or None, default None
+        Where the trainer runs. None uses this installation's device.
+        ``"cpu"`` runs the CPU implementation in ``identical`` mode;
+        ``"gpu"`` requires a GPU build.
 
     Attributes
     ----------
@@ -284,10 +288,14 @@ class SmallByteLanguageModelTrainer:
     >>> loss = trainer.train_step(ids)["loss"]
     """
 
+    #: The trainer's images come from its own device route
+    #: (bindings/byte_lm_trainer_native_door.mojo `_tier`).
+    _mojolearn_device = True
+
     def __init__(self, parameters, *, data_schedule, lr=1e-3, betas=(.9, .999),
-                 eps=1e-8, weight_decay=.01, shape=None, resident=None, step_result=None):
+                 eps=1e-8, weight_decay=.01, shape=None, resident=None, step_result=None, device=None):
         _LM_TRAINER(self, "construct", (parameters, data_schedule, lr, betas, eps,
-                    weight_decay, shape, resident, step_result), _LM_TRAINER_CONTEXT)
+                    weight_decay, shape, resident, step_result, device), _LM_TRAINER_CONTEXT)
 
     @property
     def data_schedule(self):
@@ -702,7 +710,7 @@ class SmallByteLanguageModelTrainer:
         return _LM_TRAINER(self, "export_checkpoint_binary", (path,), _LM_TRAINER_CONTEXT)
 
     @classmethod
-    def from_checkpoint_binary(cls, path, *, resident=None):
+    def from_checkpoint_binary(cls, path, *, resident=None, device=None):
         """Restore a trainer from :meth:`export_checkpoint_binary`.
 
         The whole file is verified (header and per-array digests, exact size)
@@ -715,15 +723,17 @@ class SmallByteLanguageModelTrainer:
             The checkpoint file.
         resident : bool or None, default None
             As for the constructor.
+        device : {"gpu", "cpu"} or None, default None
+            As for the constructor.
 
         Returns
         -------
         LanguageModelTrainer
         """
-        return _LM_TRAINER(cls, "from_checkpoint_binary", (path, resident), _LM_TRAINER_CONTEXT)
+        return _LM_TRAINER(cls, "from_checkpoint_binary", (path, resident, device), _LM_TRAINER_CONTEXT)
 
     @classmethod
-    def from_checkpoint(cls, path, *, resident=None):
+    def from_checkpoint(cls, path, *, resident=None, device=None):
         """Restore a trainer from a JSON checkpoint written by :meth:`export_checkpoint`.
 
         Parameters
@@ -732,15 +742,17 @@ class SmallByteLanguageModelTrainer:
             The checkpoint file.
         resident : bool or None, default None
             As for the constructor.
+        device : {"gpu", "cpu"} or None, default None
+            As for the constructor.
 
         Returns
         -------
         LanguageModelTrainer
         """
-        return _LM_TRAINER(cls, "from_checkpoint", (path, resident), _LM_TRAINER_CONTEXT)
+        return _LM_TRAINER(cls, "from_checkpoint", (path, resident, device), _LM_TRAINER_CONTEXT)
 
     @classmethod
-    def from_checkpoint_bytes(cls, encoded, *, resident=None):
+    def from_checkpoint_bytes(cls, encoded, *, resident=None, device=None):
         """Restore a trainer from the bytes of a JSON checkpoint.
 
         Runs the same checks as :meth:`from_checkpoint` without opening a file.
@@ -752,12 +764,14 @@ class SmallByteLanguageModelTrainer:
             first).
         resident : bool or None, default None
             As for the constructor.
+        device : {"gpu", "cpu"} or None, default None
+            As for the constructor.
 
         Returns
         -------
         LanguageModelTrainer
         """
-        return _LM_TRAINER(cls, "from_checkpoint_bytes", (encoded, resident), _LM_TRAINER_CONTEXT)
+        return _LM_TRAINER(cls, "from_checkpoint_bytes", (encoded, resident, device), _LM_TRAINER_CONTEXT)
 
 
 def _connect_trainer():
@@ -791,6 +805,18 @@ def _connect_trainer():
             bindings[mode] = _backend.binding(_EXTENSION, mode)
         except (ImportError, AttributeError, ValueError, RuntimeError, TypeError, OSError) as error:
             bindings[mode] = type(error).__name__ + ": " + str(error)
+    if _backend._CPU_ONLY is None:
+        # glue: `device="cpu"` beside a GPU set: the CPU identical image of the
+        # trainer, loaded once at import; a trainer's route holds it
+        # (bindings/byte_lm_trainer_native_door.mojo `_tier_build`). A CPU-only
+        # installation has no second set. An image that does not load records
+        # why, and the trainer that asks for it says so.
+        from . import _byte_lm_trainer_host
+        try:
+            cpu_bindings = {'identical': _byte_lm_trainer_host.binding()}  # import-time: the CPU image
+        except (ImportError, AttributeError, ValueError, RuntimeError, TypeError, OSError, KeyError) as error:
+            cpu_bindings = {'identical': type(error).__name__ + ": " + str(error)}
+        context.update(byte_lm_cpu_bindings=cpu_bindings, byte_lm_cpu_vendors=('cpu',))
     context.update(byte_lm_bindings=bindings,
                    byte_lm_vendors=('cpu',) if _backend._CPU_ONLY is not None else ('cuda', 'hip', 'metal'),
                    byte_lm_profile=PROFILE, byte_lm_logits_pool=_LogitsPool, backend=vars(_backend))

@@ -103,6 +103,21 @@ def scaler_route_clear(model: PythonObject) raises:
     device_route_clear(model)
 
 
+def _scaler_cpu_sync(cpu: PythonObject, context: PythonObject, b: PythonObject) raises:
+    """Copy into the CPU context the keys its source context gained after
+    import (another family connecting to the owner's context): the CPU
+    context names every key of its source, so the sizes alone say whether
+    anything is missing. In place: estimators already resolved to the CPU
+    context see the keys too. Its own values (the CPU entries, the vendor)
+    are kept. Once per estimator resolution; two C-level dictionary updates
+    when something is missing, one size compare otherwise."""
+    if len(cpu) >= len(context):
+        return
+    var merged = py_call(b.dict, context)
+    _ = py_call(merged.update, cpu)
+    _ = py_call(cpu.update, merged)
+
+
 def _scaler_route_build(model: PythonObject, context: PythonObject) raises -> DeviceRouteOwner:
     var b = context["prep_builtins"]
     var owner = DeviceRouteOwner(DEVICE_GPU)
@@ -124,6 +139,7 @@ def _scaler_route_build(model: PythonObject, context: PythonObject) raises -> De
                 raise Error("ImportError: device='cpu' is not connected in this installation")
             if py_type(cpu) is b.str:
                 raise Error("ImportError: " + String(cpu))
+            _scaler_cpu_sync(cpu, context, b)
             owner.route.flags = SCALER_ROUTE_CPU_TABLE
             owner.scope = cpu
         else:

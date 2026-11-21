@@ -11,6 +11,8 @@ from bindings.trees_constructor_native_unpack import tree_store_parameters
 from bindings.trees_constructor_native_pack import tree_constructor_values
 from bindings.trees_keys_unpack import trees_keys
 from bindings.py_balanced import py_item
+from bindings.trees_route_boundary_door import trees_device_admit
+from providers.python.device_route_boundary_door import device_route_clear
 
 
 def gbdt_adapter_construct(model: PythonObject, args: PythonObject,
@@ -21,9 +23,14 @@ def gbdt_adapter_construct(model: PythonObject, args: PythonObject,
     if fields is not prepared[0]:
         raise Error("TypeError: native GBDT constructor requires stable instance storage")
     var values = prepared[1]
+    # `device` is checked where it is given, in the shared words, before any
+    # field is published (None is one identity compare).
+    trees_device_admit(py_get(values, nk[].k_device), context)
     # Calling __init__ again stores all supplied/default parameters but keeps
     # existing non-parameter state, just as the former field-only constructor.
     tree_store_parameters(fields, values, context, False)
+    # The next operation reads the device once and resolves the route again.
+    device_route_clear(model)
     return PythonObject(None)
 
 
@@ -47,6 +54,8 @@ def gbdt_adapter_set_params(model: PythonObject, values: PythonObject,
             _ = py_call(unknown.append, keys[i])
     if len(unknown):
         raise Error("Invalid " + String(py_type(model).__name__) + " parameters: " + String(py_call(b.repr, py_call(b.sorted, unknown))))
+    # `device` is checked where it is given, before any field changes.
+    trees_device_admit(py_get(values, nk[].k_device), context)
     _ = py_call(replacement.update, values)
     if _resolved(py_type(model), "__new__", PythonObject(None)) is not b.object.__new__:
         raise Error("TypeError: native GBDT parameter reset cannot invoke a custom allocator")
@@ -60,4 +69,5 @@ def gbdt_adapter_set_params(model: PythonObject, values: PythonObject,
     # Reconstruction is parameter-only: changing even an identical parameter
     # resets learned state, while retaining every selected parameter by identity.
     tree_store_parameters(fields, replacement, context, True)
+    device_route_clear(model)
     return model

@@ -3,26 +3,34 @@
 # (dispatched by bindings/decomp_native.mojo): fit's checks (the target
 # dimension from johnson_lindenstrauss_min_dim's native bound, the density),
 # X converted once, then one compiled driver (x_decomp/rp_owner.mojo:
-# x_decomp_rp_fit / x_decomp_rp_project, the kit steps and switch routes the
-# Python shell took, the same entries, streams and order, so the same bits),
-# and the fitted matrix stored where the `components_` property reads it.
+# rp_fit_run / rp_project_run, the kit steps and switch routes the Python
+# shell took, the same streams and order, so the same bits), and the fitted
+# matrix stored where the `components_` property reads it.
+# UNPACK reads the estimator's fields and arrays into one typed request
+# (core/decomp_factor_api.mojo); RUN is one call through the operations table
+# of the estimator's image (`decomp_entries_routed`: the device image, or the
+# CPU image for `device="cpu"`), the GIL released; PACK stores the fitted
+# fields. No Python parameter list and no Python-callable driver entry.
 from std.math import sqrt
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_type, py_fields, py_setitem, py_contains
-from bindings.py_typed_call import py_call_typed
+from std.python._cpython import GILReleased
 from bindings.classical_arrays_door import classical_address
 from bindings.admitted_input_unpack import admit_x
 from bindings.host_sparse_native_door import host_sparse_format
 from bindings.decomp_inputs_unpack import decomp_input, decomp_admit
 from core.admitted_refusals import admitted_finite_refuse
 from bindings.decomp_owner_common_unpack import (
-    decomp_attr, decomp_check, decomp_entries, decomp_eq, decomp_f32, decomp_float, decomp_int,
+    decomp_attr, decomp_check, decomp_eq, decomp_f32, decomp_float, decomp_int,
     decomp_lt, decomp_le, decomp_seed, decomp_set_mode,
 )
+from core.decomp_factor_api import RPFitRequest, RPProjectRequest, rp_fit_call, rp_project_call
 from x_decomp.decomp_owner_common_run import decomp_gemm_check
 from bindings.jl_native_pack import jl_min_dim
-from bindings.decomp_kit_native_door import decomp_resident_cached, decomp_resident_operand, decomp_resident_drop
+from bindings.decomp_kit_native_door import (
+    decomp_resident_cached, decomp_resident_operand, decomp_resident_drop, decomp_entries_routed, decomp_entries_ref,
+)
 
 
 def _str(value: PythonObject) raises -> String:
@@ -40,7 +48,8 @@ def rp_fit(model: PythonObject, source: PythonObject, sparse: Bool, context: Pyt
     # A new fitted matrix replaces the old: its device copies go now (N350).
     decomp_resident_drop(model)
     decomp_set_mode(fields, context)
-    var entries = decomp_entries(model, fields, Python.tuple("x_decomp_rp_fit"), context)
+    var entry = decomp_entries_ref(
+        decomp_entries_routed(model, fields, decomp_attr(model, fields, "numeric_mode_"), context))
     var sparse_input = host_sparse_format(source).byte_length() > 0
     var name = String(py_type(model).__name__)
     var x = decomp_input(source, name, context)
@@ -73,18 +82,18 @@ def rp_fit(model: PythonObject, source: PythonObject, sparse: Bool, context: Pyt
     var inverse = Bool(py=fields["compute_inverse_components"])
     var components = decomp_f32(Python.tuple(kc, d), context)
     var inverse_m = decomp_f32(Python.tuple(d, kc), context) if inverse else PythonObject(None)
-    var bad = Int(py=py_call_typed(entries["x_decomp_rp_fit"], Python.list(
-        classical_address(x), n, d, kc, 1 if sparse else 0, seed, 1 if inverse else 0,
-        1 if (not auto and not inverse and not sparse_input) else 0, classical_address(components),
-        classical_address(inverse_m) if inverse else classical_address(components)), Python.list(density)))
+    var request = RPFitRequest(
+        Int(py=classical_address(x)), Int(py=classical_address(components)),
+        Int(py=classical_address(inverse_m)) if inverse else Int(py=classical_address(components)),
+        n, d, kc, sparse, seed, inverse, not auto and not inverse and not sparse_input, density)
+    var bad = -1
+    with GILReleased(Python()):
+        bad = rp_fit_call(entry, request)
     _ = x  # keep the Python object alive through the native call above
     _ = inverse_m  # keep the Python object alive through the native call above
     _ = components  # keep the Python object alive through the native call above
     if bad >= 0:
         raise Error("X: input must be finite; NaN/inf are unsupported")
-    _ = inverse_m  # keep the Python object alive through the native calls above
-    _ = components  # keep the Python object alive through the native calls above
-    _ = x  # keep the Python object alive through the native calls above
     if sparse:
         py_setitem(fields, "density_", PythonObject(density))
     py_setitem(fields, "n_components_", PythonObject(kc))
@@ -131,7 +140,8 @@ def rp_project(model: PythonObject, fields: PythonObject, source: PythonObject, 
     borrowed X without its host finite scan; the native call tests it (the
     tiled projection's device flag, or one host scan where the tile does not
     run) and a non-finite X is refused here in the admission's wording."""
-    var entries = decomp_entries(model, fields, Python.tuple("x_decomp_rp_project"), context)
+    var entries = decomp_entries_routed(model, fields, decomp_attr(model, fields, "numeric_mode_"), context)
+    var entry = decomp_entries_ref(entries)
     var m = Int(py=x.shape[0])
     var width = Int(py=x.shape[1])
     var matrix: PythonObject
@@ -159,12 +169,7 @@ def rp_project(model: PythonObject, fields: PythonObject, source: PythonObject, 
     var rows = Int(py=matrix.shape[0])
     var out = decomp_f32(Python.tuple(m, rows), context)
     var tiled = not inverse and host_sparse_format(source).byte_length() == 0
-    # Word 5: 0 = the plain product; 1 = the tiled projection of an X the
-    # admission tested; 2 = the tiled projection of an X nothing tested yet.
-    var params = Python.list(
-        classical_address(x), m, width, classical_address(matrix), rows,
-        (2 if unchecked else 1) if tiled else 0, classical_address(out))
-    # The device copy of the fitted matrix (word 7, GPU bindings only; lane
+    # The device copy of the fitted matrix (its pool id, GPU bindings only; lane
     # ne1-a-decomp-resident, N350): uploaded at the first projection of a
     # fitted state and kept in the model's resident record
     # (bindings/decomp_kit_native.mojo `decomp_resident_*`: the model, its
@@ -175,9 +180,18 @@ def rp_project(model: PythonObject, fields: PythonObject, source: PythonObject, 
     var held = hit
     if held is None and matrix is stored:
         held = decomp_resident_operand(model, entries, stored, name, rows, Int(py=matrix.shape[1]))
+    # tiled: 0 = the plain product; 1 = the tiled projection of an X the
+    # admission tested; 2 = the tiled projection of an X nothing tested yet.
+    var pool = -1
     if held is not None:
-        _ = py_call(params.append, held[5])
-    var flagged = Int(py=py_call_typed(entries["x_decomp_rp_project"], params))
+        pool = Int(py=held[5])
+    var request = RPProjectRequest(
+        Int(py=classical_address(x)), Int(py=classical_address(matrix)), Int(py=classical_address(out)),
+        m, width, rows, (2 if unchecked else 1) if tiled else 0, pool)
+    var flagged = 0
+    with GILReleased(Python()):
+        flagged = rp_project_call(entry, request)
+    _ = x  # keep the Python object alive through the native call above
     _ = held  # the resident entry (and its device buffer) outlives the native call above
     _ = out  # keep the Python object alive through the native call above
     _ = matrix^

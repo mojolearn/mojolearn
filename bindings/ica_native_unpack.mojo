@@ -1,20 +1,31 @@
 # SPDX-License-Identifier: Apache-2.0
 # FastICA's native operations (dispatched by bindings/decomp_native.mojo):
 # the parameter checks `_fit` / `_solve` made, X converted once, then one
-# compiled driver (x_decomp/ica_owner.mojo: x_decomp_ica_fit / _project, the
-# kit steps the Python shell sequenced, the same entries, operands and order,
-# so the same bits), and the fitted attributes stored as the shell stored them.
+# compiled driver (x_decomp/ica_owner.mojo: ica_fit_run / ica_project_run, the
+# kit steps the Python shell sequenced, the same operands and order, so the
+# same bits), and the fitted attributes stored as the shell stored them.
+# UNPACK reads the estimator's fields and arrays into one typed request
+# (core/decomp_factor_api.mojo); RUN is one call through the operations table
+# of the estimator's image (`decomp_entries_routed`: the device image, or the
+# CPU image for `device="cpu"`), the GIL released; PACK stores the fitted
+# fields. No Python parameter list and no Python-callable driver entry.
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_type, py_fields, py_setitem, py_contains
-from bindings.py_typed_call import py_call_typed
+from std.python._cpython import GILReleased
 from bindings.classical_arrays_door import classical_address
 from bindings.admitted_input_unpack import admit_x
 from bindings.decomp_inputs_unpack import decomp_input
 from bindings.decomp_owner_common_unpack import (
-    decomp_attr, decomp_check, decomp_entries, decomp_eq, decomp_f32, decomp_float, decomp_int,
+    decomp_attr, decomp_check, decomp_eq, decomp_f32, decomp_float, decomp_int,
     decomp_le, decomp_repr, decomp_seed, decomp_set_mode,
 )
+from bindings.decomp_kit_native_door import decomp_entries_routed, decomp_entries_ref
+from core.decomp_factor_api import ICAFitRequest, ICAProjectRequest, ica_fit_call, ica_project_call
+
+
+def _address(array: PythonObject) raises -> Int:
+    return Int(py=classical_address(array))
 from x_decomp.decomp_owner_common_run import decomp_gemm_check, decomp_min_samples
 
 
@@ -34,7 +45,8 @@ def ica_fit(model: PythonObject, source: PythonObject, project: Bool, context: P
     var b = native_loaded_module("builtins")
     var fields = py_fields(model)
     decomp_set_mode(fields, context)
-    var entries = decomp_entries(model, fields, Python.tuple("x_decomp_ica_fit"), context)
+    var entry = decomp_entries_ref(
+        decomp_entries_routed(model, fields, decomp_attr(model, fields, "numeric_mode_"), context))
     var x = decomp_input(source, "FastICA", context)
     var n = Int(py=x.shape[0])
     var d = Int(py=x.shape[1])
@@ -81,23 +93,16 @@ def ica_fit(model: PythonObject, source: PythonObject, project: Bool, context: P
     var whitening = decomp_f32(Python.tuple(nc, d), context) if code != 0 else PythonObject(None)
     var mean = decomp_f32(Python.tuple(d), context) if code != 0 else PythonObject(None)
     var sources = decomp_f32(Python.tuple(n, nc), context) if project else PythonObject(None)
-    var spare = classical_address(components)
-    _ = components  # keep the Python object alive through the native call above
-    var params = Python.list(
-        classical_address(x), n, d, nc, code, classical_address(winit.value()) if Bool(winit) else PythonObject(0), seed,
-        0 if decomp_eq(algorithm, PythonObject("parallel")) else 1, fun_code, decomp_int(fields["max_iter"]),
-        1 if project else 0, classical_address(components), classical_address(mixing),
-        classical_address(whitening) if code != 0 else spare, classical_address(mean) if code != 0 else spare,
-        classical_address(sources) if project else spare)
-    _ = winit  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    _ = mixing  # keep the Python object alive through the native call above
-    _ = mean  # keep the Python object alive through the native call above
-    _ = whitening  # keep the Python object alive through the native call above
-    _ = sources  # keep the Python object alive through the native call above
-    _ = components  # keep the Python object alive through the native call above
-    var it = py_call_typed(entries["x_decomp_ica_fit"], params,
-                           Python.list(decomp_float(alpha), decomp_float(fields["tol"])))
+    var spare = _address(components)
+    var request = ICAFitRequest(
+        _address(x), _address(winit.value()) if Bool(winit) else 0, spare, _address(mixing),
+        _address(whitening) if code != 0 else spare, _address(mean) if code != 0 else spare,
+        _address(sources) if project else spare,
+        n, d, nc, code, seed, 0 if decomp_eq(algorithm, PythonObject("parallel")) else 1, fun_code,
+        decomp_int(fields["max_iter"]), project, decomp_float(alpha), decomp_float(fields["tol"]))
+    var it = 0
+    with GILReleased(Python()):
+        it = ica_fit_call(entry, request)
     _ = sources  # keep the Python object alive through the native call above
     _ = mean  # keep the Python object alive through the native call above
     _ = whitening  # keep the Python object alive through the native call above
@@ -105,7 +110,7 @@ def ica_fit(model: PythonObject, source: PythonObject, project: Bool, context: P
     _ = components  # keep the Python object alive through the native call above
     _ = winit  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
-    py_setitem(fields, "n_iter_", PythonObject(Int(py=it)))
+    py_setitem(fields, "n_iter_", PythonObject(it))
     if code != 0:
         py_setitem(fields, "whitening_", whitening)
         py_setitem(fields, "mean_", mean)
@@ -122,7 +127,8 @@ def ica_project(model: PythonObject, source: PythonObject, inverse: Bool, contex
     """transform: (X - mean_) components_^T; inverse_transform: X mixing_^T (+ mean_)."""
     var fields = py_fields(model)
     decomp_check(model, fields, "components_")
-    var entries = decomp_entries(model, fields, Python.tuple("x_decomp_ica_project"), context)
+    var entry = decomp_entries_ref(
+        decomp_entries_routed(model, fields, decomp_attr(model, fields, "numeric_mode_"), context))
     var x = decomp_input(source, "FastICA", context)
     var n = Int(py=x.shape[0])
     var width = Int(py=x.shape[1])
@@ -133,9 +139,10 @@ def ica_project(model: PythonObject, source: PythonObject, inverse: Bool, contex
     var whiten = Bool(py=decomp_attr(model, fields, "_whiten"))
     var mean = admit_x(decomp_attr(model, fields, "mean_"), 1, "mean_", context) if whiten else matrix
     var out = decomp_f32(Python.tuple(n, rows), context)
-    _ = py_call_typed(entries["x_decomp_ica_project"], Python.list(
-        1 if inverse else 0, classical_address(x), n, width, classical_address(matrix), rows,
-        classical_address(mean), 1 if whiten else 0, classical_address(out)))
+    var request = ICAProjectRequest(_address(x), _address(matrix), _address(mean), _address(out),
+                                    inverse, n, width, rows, whiten)
+    with GILReleased(Python()):
+        ica_project_call(entry, request)
     _ = matrix  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above

@@ -3,7 +3,7 @@
 # No unwrapping of arbitrary Python functions, extension layouts or signatures.
 # The Python pins (module, capsule, factory) live here; the typed record they
 # keep valid (table entry, ABI name, call counts, workspace) and every call on
-# it live in providers/python/neural_descriptor_run.mojo, reached by the
+# it live in core/neural_descriptor_run.mojo, reached by the
 # provider id word (`neural_descriptor_provider_id`).
 from std.ffi import c_int
 from std.collections import Dict
@@ -17,7 +17,7 @@ from bindings.py_cpython_table import cpython_table
 from bindings.native_class_admission_door import dict_keys_admitted, dict_keys_admit, class_watch_ready
 from core.native_descriptor_abi import NativeDescriptorCall
 from core.shared_slot import SharedSlot
-from providers.python.neural_descriptor_run import (
+from core.neural_descriptor_run import (
     NeuralDescriptorRecord, neural_descriptor_record_admit,
     neural_descriptor_record_call, neural_descriptor_reserved_begin, neural_descriptor_reserved_operation,
     neural_descriptor_reserved_end, neural_descriptor_admitted_find, neural_descriptor_admitted_store,
