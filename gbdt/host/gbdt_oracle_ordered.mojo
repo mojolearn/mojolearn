@@ -109,6 +109,12 @@ from gbdt.gpu_util.kernel.random_gen import (
     next_poisson_f,
     next_uniform_f,
 )
+from core.host_parallel import host_nested_units, host_parallelize
+from core.host_predict_threads import (
+    HostF32Ptr,
+    host_predict_chunk,
+    host_predict_task_count_work,
+)
 from gbdt.host.gbdt_oracle import (
     GBDT_HOST_BINARY_SABOTAGE,
     GBDT_ORACLE_HOST_SABOTAGE,
@@ -118,9 +124,11 @@ from gbdt.host.gbdt_oracle import (
     _halving_fold_live,
     _snap_plane,
     _hist2_dither,
+    GbdtI32Ptr,
     GbdtIntPtr,
     GbdtU64Ptr,
     _gather_rows,
+    _identity_rows,
     _gbdt_units,
     _partition_stats_level,
     _pinned_partition_stats,
@@ -210,24 +218,68 @@ def _ordered_folds(n: Int, growth_rate: Float64, min_fold_size: Int) raises -> L
 # ===========================================================================
 
 
-def _partition_update_sum(values: List[Float32], offset: Int, size: Int) -> Float32:
+def _partition_update_lanes(
+    values: HostF32Ptr, offset: Int, size: Int, lane_lo: Int, lane_hi: Int,
+    slab: HostF32Ptr,
+):
+    """`_compute_sum[1024]` (`pointwise_scores.mojo:578-628`) for the lanes
+    `[lane_lo, lane_hi)` of one part: lane `tid` is the Float32 chain of
+    `values[offset + tid + k * 1024]`, `k` ascending, from +0.0. SERIAL BY
+    NATURE inside a lane (one device thread's strided chain); the lanes are
+    independent."""
+    for tid in range(lane_lo, lane_hi):
+        var acc = Float32(0.0)
+        var i = tid
+        while i < size:
+            acc += values[offset + i]
+            i += GBDT_ORD_WIDE_BLOCK
+        slab[tid] = acc
+
+
+def _partition_update_sum(
+    values: HostF32Ptr, offset: Int, size: Int, mut slab: List[Float32]
+) -> Float32:
     """`_compute_sum[1024]` per thread then `_block_reduce_sum[1024]`
-    (`pointwise_scores.mojo:578-628`, `:1408-1443`)."""
+    (`pointwise_scores.mojo:578-628`, `:1408-1443`) for one part, on the
+    calling thread: the unit of `_update_subsets_stats`'s per-part split.
+    `slab` is the caller's 1024-lane scratch."""
     if size <= 0:
         return Float32(0.0)
     var live = min(size, GBDT_ORD_WIDE_BLOCK)
     var p = 1
     while p < live:
         p <<= 1
-    var slab = List[Float32](length=p, fill=Float32(0.0))
-    for tid in range(p):
-        var s = Float32(0.0)
-        var i = tid
-        while i < size:
-            s += values[offset + i]
-            i += GBDT_ORD_WIDE_BLOCK
-        slab[tid] = s
+    _partition_update_lanes(
+        values, offset, size, 0, p, rebind[HostF32Ptr](slab.unsafe_ptr())
+    )
     # lanes past `size` hold +0.0 (`_halving_fold_live`)
+    return _halving_fold_live(slab, live, GBDT_ORD_WIDE_BLOCK)
+
+
+def _partition_update_sum_wide(
+    values: HostF32Ptr, offset: Int, size: Int, mut slab: List[Float32]
+) -> Float32:
+    """`_partition_update_sum` for a part that holds a large share of the
+    rows: the 1024 lanes (independent strided chains, one device thread
+    each) run in `_gbdt_units` contiguous lane ranges, and the halving fold
+    runs after the join over the same slab. The same adds in the same
+    order as the one-thread form at any task count."""
+    if size <= 0:
+        return Float32(0.0)
+    var live = min(size, GBDT_ORD_WIDE_BLOCK)
+    var p = 1
+    while p < live:
+        p <<= 1
+    var units = _gbdt_units(p, 2 * size)
+    var chunk = host_predict_chunk(p, units)
+    var slab_p = rebind[HostF32Ptr](slab.unsafe_ptr())
+
+    def lanes(unit: Int) {imm chunk, imm p, imm values, imm offset, imm size, imm slab_p}:
+        _partition_update_lanes(
+            values, offset, size, unit * chunk, min(p, (unit + 1) * chunk), slab_p
+        )
+
+    host_parallelize(lanes, units)
     return _halving_fold_live(slab, live, GBDT_ORD_WIDE_BLOCK)
 
 
@@ -242,30 +294,133 @@ struct _OrdSubsets(Movable):
     var g_target: List[Float32]
 
 
+def _ord_lower_bound(bins: TreeU32Ptr, n: Int, key: Int) -> Int:
+    """The first position of the sorted `bins[0:n]` whose value is at or
+    above `key` (integers only)."""
+    var lo = 0
+    var hi = n
+    while lo < hi:
+        var mid = (lo + hi) // 2
+        if Int(bins[mid]) < key:
+            lo = mid + 1
+        else:
+            hi = mid
+    return lo
+
+
+def _ord_part_bounds_range(
+    bins: TreeU32Ptr, n: Int, part_lo: Int, part_hi: Int,
+    p_off: GbdtIntPtr, p_sz: GbdtIntPtr,
+):
+    """`update_partition_offsets_kernel` / `update_partition_sizes_kernel`
+    for the parts `[part_lo, part_hi)`: a lower bound per part on the
+    bin-sorted documents (one device thread a part)."""
+    for b in range(part_lo, part_hi):
+        var first = _ord_lower_bound(bins, n, b)
+        p_off[b] = first
+        p_sz[b] = _ord_lower_bound(bins, n, b + 1) - first
+
+
+def _ord_part_sums_stride(
+    first: Int, step: Int, part_count: Int, wide_from: Int,
+    g_weight: HostF32Ptr, g_target: HostF32Ptr,
+    p_off: GbdtIntPtr, p_sz: GbdtIntPtr, part_stats: HostF32Ptr,
+):
+    """The partition update of the parts `first, first + step, ...` whose
+    size is below `wide_from` (the wide ones are summed by
+    `_partition_update_sum_wide`): one 1024-lane scratch per call."""
+    var slab = List[Float32](length=GBDT_ORD_WIDE_BLOCK, fill=Float32(0.0))
+    var b = first
+    while b < part_count:
+        var sz = p_sz[b]
+        if sz < wide_from:
+            part_stats[3 * b] = _partition_update_sum(g_weight, p_off[b], sz, slab)
+            part_stats[3 * b + 1] = _partition_update_sum(g_target, p_off[b], sz, slab)
+            part_stats[3 * b + 2] = Float32(sz)
+        b += step
+
+
 @no_inline
 def _update_subsets_stats(
     mut s: _OrdSubsets, part_count: Int, sw: List[Float32], sg: List[Float32]
 ):
     """`update_subsets_stats`: the offsets and sizes of the sorted bins
     (`update_partition_offsets_kernel`, `update_partition_sizes_kernel`, a
-    lower bound per part), the two gathers, the partition update."""
+    lower bound per part), the two gathers, the partition update.
+
+    THE UNITS (lane gbdt-host-par). Offsets and sizes: one PART (two binary
+    searches on the sorted bins; integers). Gathers: one position (a move),
+    in contiguous ranges. Partition update: one PART, whose two sums are
+    its own 1024 strided lanes and halving fold (`partition_update_kernel`,
+    one block a part); the parts go round robin over the tasks, because
+    the sizes are skewed (the fold parts double, a split's children are
+    uneven). A part holding a quarter of the documents or more would leave
+    its task with that quarter, so such a part (at most four) is summed
+    with its LANES across the tasks instead (`_partition_update_sum_wide`).
+    Every sum's adds and their order are the device block's at any task
+    count; every task count comes from `_gbdt_units` (the nested rule)."""
     var doc_count = len(s.bins)
-    var at = 0
-    for b in range(part_count):
-        while at < doc_count and Int(s.bins[at]) < b:
-            at += 1
-        s.p_off[b] = at
-        var end = at
-        while end < doc_count and Int(s.bins[end]) == b:
-            end += 1
-        s.p_sz[b] = end - at
-    for i in range(doc_count):
-        s.g_weight[i] = sw[s.indices[i]]
-        s.g_target[i] = sg[s.indices[i]]
-    for b in range(part_count):
-        s.part_stats[3 * b] = _partition_update_sum(s.g_weight, s.p_off[b], s.p_sz[b])
-        s.part_stats[3 * b + 1] = _partition_update_sum(s.g_target, s.p_off[b], s.p_sz[b])
-        s.part_stats[3 * b + 2] = Float32(s.p_sz[b])
+    var bins_p = _u32_ptr(s.bins)
+    var off_p = rebind[GbdtIntPtr](s.p_off.unsafe_ptr())
+    var sz_p = rebind[GbdtIntPtr](s.p_sz.unsafe_ptr())
+    var idx_p = rebind[GbdtIntPtr](s.indices.unsafe_ptr())
+    var sw_p = rebind[HostF32Ptr](sw.unsafe_ptr())
+    var sg_p = rebind[HostF32Ptr](sg.unsafe_ptr())
+    var gw_p = rebind[HostF32Ptr](s.g_weight.unsafe_ptr())
+    var gt_p = rebind[HostF32Ptr](s.g_target.unsafe_ptr())
+    var stats_p = rebind[HostF32Ptr](s.part_stats.unsafe_ptr())
+
+    var b_units = _gbdt_units(part_count, 48 * part_count)
+    var b_chunk = host_predict_chunk(part_count, b_units)
+
+    def bounds(unit: Int) {imm b_chunk, imm part_count, imm doc_count, imm bins_p, imm off_p, imm sz_p}:
+        _ord_part_bounds_range(
+            bins_p, doc_count, unit * b_chunk,
+            min(part_count, (unit + 1) * b_chunk), off_p, sz_p,
+        )
+
+    host_parallelize(bounds, b_units)
+
+    var g_units = _gbdt_units(doc_count, 4 * doc_count)
+    var g_chunk = host_predict_chunk(doc_count, g_units)
+
+    def gather(unit: Int) {imm g_chunk, imm doc_count, imm idx_p, imm sw_p, imm sg_p, imm gw_p, imm gt_p}:
+        for i in range(unit * g_chunk, min(doc_count, (unit + 1) * g_chunk)):
+            var row = idx_p[i]
+            gw_p[i] = sw_p[row]
+            gt_p[i] = sg_p[row]
+
+    host_parallelize(gather, g_units)
+
+    var s_units = _gbdt_units(part_count, 2 * doc_count)
+    # a part is wide when it holds a quarter of the documents or more and
+    # the per-part split has more than one task to starve
+    var wide_from = doc_count + 1
+    if s_units > 1:
+        wide_from = max((doc_count + 3) // 4, 1)
+        var slab = List[Float32](length=GBDT_ORD_WIDE_BLOCK, fill=Float32(0.0))
+        for b in range(part_count):  # driver-loop: over the parts, the wide ones' lanes split inside
+            var sz = s.p_sz[b]
+            if sz >= wide_from:
+                s.part_stats[3 * b] = _partition_update_sum_wide(gw_p, s.p_off[b], sz, slab)
+                s.part_stats[3 * b + 1] = _partition_update_sum_wide(gt_p, s.p_off[b], sz, slab)
+                s.part_stats[3 * b + 2] = Float32(sz)
+
+    def sums(unit: Int) {imm s_units, imm part_count, imm wide_from, imm gw_p, imm gt_p, imm off_p, imm sz_p, imm stats_p}:
+        _ord_part_sums_stride(
+            unit, s_units, part_count, wide_from, gw_p, gt_p, off_p, sz_p, stats_p
+        )
+
+    host_parallelize(sums, s_units)
+    _ = len(s.bins)
+    _ = len(s.p_off)
+    _ = len(s.p_sz)
+    _ = len(s.indices)
+    _ = len(s.g_weight)
+    _ = len(s.g_target)
+    _ = len(s.part_stats)
+    _ = len(sw)
+    _ = len(sg)
 
 
 # ===========================================================================
@@ -541,6 +696,765 @@ def _pw_binary_cells(
     return cells^
 
 
+# ===========================================================================
+# THE LEVEL'S SPLITS (lane gbdt-host-par): every stage of
+# `_ordered_tree_structure_levels` as ordinary range functions, launched
+# over `_gbdt_units` tasks (the nested rule: one task inside a member's or
+# a permutation's pool task).
+# ===========================================================================
+
+
+def _pw_zero_dirty(mut hz: _PwHelper):
+    """Every slot the helper wrote since its histogram was last all +0.0,
+    back to +0.0 (the device's `reset_for_tree`). The unit is one written
+    SLOT (its own cells); the flags are cleared after the join."""
+    var line2 = hz.hist_line * 2
+    var n = len(hz.dirty)
+    var units = _gbdt_units(n, n * line2)
+    var chunk = host_predict_chunk(n, units)
+    var hist_p = rebind[HostF32Ptr](hz.hist.unsafe_ptr())
+    var dirty_p = rebind[GbdtIntPtr](hz.dirty.unsafe_ptr())
+
+    def slots(unit: Int) {imm chunk, imm n, imm line2, imm hist_p, imm dirty_p}:
+        for k in range(unit * chunk, min(n, (unit + 1) * chunk)):
+            var base = dirty_p[k] * line2
+            for c in range(base, base + line2):
+                hist_p[c] = Float32(0.0)
+
+    host_parallelize(slots, units)
+    for k in range(n):  # driver-loop: over the written slots, their flags
+        hz.dirty_flag[hz.dirty[k]] = False
+    hz.dirty.clear()
+    _ = len(hz.hist)
+
+
+def _ord_initial_bins_range(
+    lo: Int, hi: Int, bounds: GbdtIntPtr, fold_count: Int, bins: TreeU32Ptr
+):
+    for p in range(fold_count):
+        for i in range(max(lo, bounds[p]), min(hi, bounds[p + 1])):
+            bins[i] = UInt32(p)
+
+
+def _ord_initial_bins(part_bounds: List[Int], fold_count: Int, mut bins: List[UInt32]):
+    """`write_fold_based_initial_bins`: part `p` over its concatenated
+    range. One statement per position (a position is in one part): a task
+    owns a run of positions and writes each part's range clipped to it."""
+    var n = len(bins)
+    var units = _gbdt_units(n, n)
+    var chunk = host_predict_chunk(n, units)
+    var bounds_p = rebind[GbdtIntPtr](part_bounds.unsafe_ptr())
+    var bins_p = _u32_ptr(bins)
+
+    def rows(unit: Int) {imm chunk, imm n, imm fold_count, imm bounds_p, imm bins_p}:
+        _ord_initial_bins_range(
+            unit * chunk, min(n, (unit + 1) * chunk), bounds_p, fold_count, bins_p
+        )
+
+    host_parallelize(rows, units)
+    _ = len(part_bounds)
+    _ = len(bins)
+
+
+def _ord_gather_docs(doc_ids: List[Int], indices: List[Int], mut docs: List[Int]):
+    """`docs[i] = doc_ids[indices[i]]`, the level's document order (a move
+    per position), the positions in `_gbdt_units` contiguous ranges."""
+    var n = len(docs)
+    var units = _gbdt_units(n, 2 * n)
+    var chunk = host_predict_chunk(n, units)
+    var ids_p = rebind[GbdtIntPtr](doc_ids.unsafe_ptr())
+    var idx_p = rebind[GbdtIntPtr](indices.unsafe_ptr())
+    var docs_p = rebind[GbdtIntPtr](docs.unsafe_ptr())
+
+    def rows(unit: Int) {imm chunk, imm n, imm ids_p, imm idx_p, imm docs_p}:
+        for i in range(unit * chunk, min(n, (unit + 1) * chunk)):
+            docs_p[i] = ids_p[idx_p[i]]
+
+    host_parallelize(rows, units)
+    _ = len(doc_ids)
+    _ = len(indices)
+    _ = len(docs)
+
+
+def _ord_hist_piece(
+    policy: Int,
+    group: Int,
+    lo: Int,
+    hi: Int,
+    n_feat: Int,
+    fixed_scale: Float32,
+    cindex: TreeU32Ptr,
+    docs: GbdtIntPtr,
+    g_weight: HostF32Ptr,
+    g_target: HostF32Ptr,
+    offsets: GbdtIntPtr,
+    folds: GbdtIntPtr,
+    first: GbdtIntPtr,
+    mut acc: List[Int32],
+    mut reached: List[Bool],
+    mut reached_list: List[Int],
+):
+    """The fixed-point histogram adds of the positions `[lo, hi)` of one
+    slot into `acc` (two Int32 cells a bin-feature), the cells reached
+    filed in `reached_list`. INTEGER sums: `hist2_quantize(stat, scale,
+    hist2_dither(doc id))` per row, added in any order and any grouping
+    (the device adds them with atomics), so a slot's rows may be cut
+    anywhere and the pieces added afterwards."""
+    if policy == POLICY_ONE_BYTE:
+        # the 8-bit fixed-point kernel: Int32 sums, the dither keyed on the
+        # document id
+        for pos in range(lo, hi):
+            var row = docs[pos]
+            var u = _hist2_dither(row)
+            var qw = _hist2_quantize(g_weight[pos], fixed_scale, u)
+            var qt = _hist2_quantize(g_target[pos], fixed_scale, u)
+            var f_base = 0
+            while f_base < n_feat:
+                var ci = cindex[offsets[f_base] + row]
+                var f_count = min(group, n_feat - f_base)
+                for j in range(f_count):
+                    var bin = Int((ci >> UInt32(24 - 8 * j)) & UInt32(255))
+                    if bin < folds[f_base + j]:
+                        var at = (first[f_base + j] + bin) * 2
+                        if not reached[at // 2]:
+                            reached[at // 2] = True
+                            reached_list.append(at)
+                        acc[at] = acc[at] + qw
+                        acc[at + 1] = acc[at + 1] + qt
+                f_base += group
+    else:
+        # lane/neural-pass124: the half-byte and binary kernels in fixed
+        # point (`PointHistHalfByteInt`): the Int32 sum of
+        # `hist2_quantize(stat, scale, hist2_dither(doc id))` per cell, any
+        # order. A half-byte feature's cell is its 4-bit value's (filed
+        # when below its fold count); a binary feature's one cell takes the
+        # rows whose bit `3 - (j & 3)` of nibble `j / 4` is clear
+        # (`pw_hb_binary_sum_int`).
+        var is_bin = policy == POLICY_BINARY
+        for pos in range(lo, hi):
+            var row = docs[pos]
+            var u = _hist2_dither(row)
+            var qw = _hist2_quantize(g_weight[pos], fixed_scale, u)
+            var qt = _hist2_quantize(g_target[pos], fixed_scale, u)
+            var f_base = 0
+            while f_base < n_feat:
+                var ci = cindex[offsets[f_base] + row]
+                var f_count = min(group, n_feat - f_base)
+                for j in range(f_count):
+                    var at: Int
+                    if is_bin:
+                        var v = Int((ci >> UInt32(28 - 4 * (j // 4))) & UInt32(15))
+                        var f_mask = 1 << (3 - (j & 3))
+                        if (v & f_mask) != 0:
+                            continue
+                        if GBDT_HOST_BINARY_SABOTAGE and v == 0:
+                            continue
+                        at = first[f_base + j] * 2
+                    else:
+                        var bin = Int((ci >> UInt32(28 - 4 * j)) & UInt32(15))
+                        if bin >= folds[f_base + j]:
+                            continue
+                        at = (first[f_base + j] + bin) * 2
+                    if not reached[at // 2]:
+                        reached[at // 2] = True
+                        reached_list.append(at)
+                    acc[at] = acc[at] + qw
+                    acc[at + 1] = acc[at + 1] + qt
+                f_base += group
+
+
+def _ord_hist_cells(
+    acc: GbdtI32Ptr, acc_base: Int, cells: Int, fixed_scale: Float32,
+    dst: HostF32Ptr, dst_base: Int,
+):
+    """The slot's write-back from its Int32 sums: `Float32(Int(q)) / scale`
+    when its magnitude exceeds 1e-20 (a cell no row reaches, or whose sum
+    is 0, is not written and keeps the slot's +0.0)."""
+    for c in range(cells):
+        var val = Float32(Int(acc[acc_base + c])) / fixed_scale
+        if abs(val) > Float32(1e-20):
+            dst[dst_base + c] = val
+
+
+def _ord_hist_task(
+    unit: Int,
+    chunk: Int,
+    total: Int,
+    n_seg: Int,
+    line2: Int,
+    policy: Int,
+    group: Int,
+    n_feat: Int,
+    fixed_scale: Float32,
+    cindex: TreeU32Ptr,
+    docs: GbdtIntPtr,
+    g_weight: HostF32Ptr,
+    g_target: HostF32Ptr,
+    offsets: GbdtIntPtr,
+    folds: GbdtIntPtr,
+    first: GbdtIntPtr,
+    seg_slot: GbdtIntPtr,
+    seg_off: GbdtIntPtr,
+    seg_at: GbdtIntPtr,
+    hist: HostF32Ptr,
+    partial: GbdtI32Ptr,
+    piece_seg: GbdtIntPtr,
+):
+    """One task of `_ord_hist_level`: the run `[unit * chunk, (unit + 1) *
+    chunk)` of the level's rows, the computed slots laid end to end
+    (`seg_at`). A slot wholly inside the run is converted and written here
+    (the task owns the slot's cells). A slot the run cuts leaves its Int32
+    piece in the task's plane `2 * unit` (the run's first slot) or
+    `2 * unit + 1` (its last), named in `piece_seg`, for the join."""
+    var lo = unit * chunk
+    var hi = min(total, (unit + 1) * chunk)
+    if lo >= hi:
+        return
+    var acc = List[Int32](length=line2, fill=Int32(0))
+    var reached = List[Bool](length=line2 // 2, fill=False)
+    var reached_list = List[Int](capacity=line2 // 2)
+    var seg = 0
+    while seg < n_seg and seg_at[seg + 1] <= lo:
+        seg += 1
+    var at = lo
+    while at < hi and seg < n_seg:
+        var seg_lo = seg_at[seg]
+        var seg_hi = seg_at[seg + 1]
+        var stop = min(hi, seg_hi)
+        var off = seg_off[seg]
+        _ord_hist_piece(
+            policy, group, off + (at - seg_lo), off + (stop - seg_lo), n_feat,
+            fixed_scale, cindex, docs, g_weight, g_target, offsets, folds,
+            first, acc, reached, reached_list,
+        )
+        if at == seg_lo and stop == seg_hi:
+            # the whole slot: only the reached cells are converted, then
+            # cleared for the next slot
+            var base = seg_slot[seg] * line2
+            for k in range(len(reached_list)):
+                var c0 = reached_list[k]
+                for c in range(c0, c0 + 2):
+                    var val = Float32(Int(acc[c])) / fixed_scale
+                    if abs(val) > Float32(1e-20):
+                        hist[base + c] = val
+                    acc[c] = Int32(0)
+                reached[c0 // 2] = False
+        else:
+            var which = 2 * unit
+            if at != lo:
+                which = 2 * unit + 1
+            piece_seg[which] = seg
+            var pbase = which * line2
+            for k in range(len(reached_list)):
+                var c0 = reached_list[k]
+                partial[pbase + c0] = acc[c0]
+                partial[pbase + c0 + 1] = acc[c0 + 1]
+                acc[c0] = Int32(0)
+                acc[c0 + 1] = Int32(0)
+                reached[c0 // 2] = False
+        reached_list.clear()
+        at = stop
+        seg += 1
+
+
+def _ord_hist_level(
+    mut hp: _PwHelper,
+    cindex: TreeU32Ptr,
+    docs: List[Int],
+    g_weight: List[Float32],
+    g_target: List[Float32],
+    seg_slot: List[Int],
+    seg_off: List[Int],
+    seg_at: List[Int],
+    fixed_scale: Float32,
+):
+    """`compute_hist2` for one helper at one level: every computed slot
+    `seg_slot[k]` from its rows `[seg_off[k], seg_off[k] + size)`, the
+    sizes as the running `seg_at` (one more entry than slots).
+
+    THE UNIT IS A RUN OF ROWS. The slots are skewed (the fold parts double
+    and a level computes the smaller child), so the level's rows, slot
+    after slot, are cut into `_gbdt_units` equal runs. Every cell is an
+    Int32 sum of per-row quantized stats, exact in any order and grouping
+    (`_ord_hist_piece`), so a slot cut between tasks is the integer sum of
+    its pieces, added after the join in task order and converted once with
+    the expression a whole slot uses. The join's merge is serial over at
+    most two planes a task (work in tasks x cells, never rows)."""
+    var n_seg = len(seg_slot)
+    if n_seg == 0:
+        return
+    var total = seg_at[n_seg]
+    var n_feat = len(hp.gids)
+    var line2 = hp.hist_line * 2
+    var policy = hp.policy
+    var group = 8 if policy == POLICY_HALF_BYTE else (
+        32 if policy == POLICY_BINARY else 4
+    )
+    var units = _gbdt_units(total, total * (n_feat + 4))
+    var chunk = host_predict_chunk(total, units)
+    var planes = 0
+    if units > 1:
+        planes = 2 * units
+    var partial = List[Int32](length=planes * line2, fill=Int32(0))
+    var piece_seg = List[Int](length=2 * units, fill=-1)
+    var docs_p = rebind[GbdtIntPtr](docs.unsafe_ptr())
+    var gw_p = rebind[HostF32Ptr](g_weight.unsafe_ptr())
+    var gt_p = rebind[HostF32Ptr](g_target.unsafe_ptr())
+    var offs_p = rebind[GbdtIntPtr](hp.offsets.unsafe_ptr())
+    var folds_p = rebind[GbdtIntPtr](hp.folds.unsafe_ptr())
+    var first_p = rebind[GbdtIntPtr](hp.first.unsafe_ptr())
+    var slot_p = rebind[GbdtIntPtr](seg_slot.unsafe_ptr())
+    var off_p = rebind[GbdtIntPtr](seg_off.unsafe_ptr())
+    var at_p = rebind[GbdtIntPtr](seg_at.unsafe_ptr())
+    var hist_p = rebind[HostF32Ptr](hp.hist.unsafe_ptr())
+    var partial_p = rebind[GbdtI32Ptr](partial.unsafe_ptr())
+    var piece_p = rebind[GbdtIntPtr](piece_seg.unsafe_ptr())
+
+    def runs(unit: Int) {imm chunk, imm total, imm n_seg, imm line2, imm policy, imm group, imm n_feat, imm fixed_scale, imm cindex, imm docs_p, imm gw_p, imm gt_p, imm offs_p, imm folds_p, imm first_p, imm slot_p, imm off_p, imm at_p, imm hist_p, imm partial_p, imm piece_p}:
+        _ord_hist_task(
+            unit, chunk, total, n_seg, line2, policy, group, n_feat,
+            fixed_scale, cindex, docs_p, gw_p, gt_p, offs_p, folds_p, first_p,
+            slot_p, off_p, at_p, hist_p, partial_p, piece_p,
+        )
+
+    host_parallelize(runs, units)
+    # the cut slots: a slot's pieces are neighbours in (task, first / last)
+    # order, because the runs ascend
+    if units > 1:
+        var cur_seg = -1
+        var cur_base = 0
+        for k in range(2 * units):  # driver-loop: over the cut slots' pieces, at most two a task
+            var seg = piece_seg[k]
+            if seg < 0:
+                continue
+            if seg == cur_seg:
+                for c in range(line2):
+                    partial[cur_base + c] = partial[cur_base + c] + partial[k * line2 + c]
+            else:
+                if cur_seg >= 0:
+                    _ord_hist_cells(
+                        partial_p, cur_base, line2, fixed_scale, hist_p,
+                        seg_slot[cur_seg] * line2,
+                    )
+                cur_seg = seg
+                cur_base = k * line2
+        if cur_seg >= 0:
+            _ord_hist_cells(
+                partial_p, cur_base, line2, fixed_scale, hist_p,
+                seg_slot[cur_seg] * line2,
+            )
+    _ = len(docs)
+    _ = len(g_weight)
+    _ = len(g_target)
+    _ = len(seg_slot)
+    _ = len(seg_off)
+    _ = len(seg_at)
+    _ = len(partial)
+    _ = len(piece_seg)
+    _ = len(hp.hist)
+    _ = len(hp.offsets)
+    _ = len(hp.folds)
+    _ = len(hp.first)
+
+
+def _ord_scan_range(
+    u_lo: Int,
+    u_hi: Int,
+    n_scan: Int,
+    hist_line: Int,
+    hist: HostF32Ptr,
+    seg_slot: GbdtIntPtr,
+    scan_first: GbdtIntPtr,
+    scan_folds: GbdtIntPtr,
+):
+    """`scan_pointwise_histograms_kernel` for the (slot, feature) units
+    `[u_lo, u_hi)`: the plain Float32 prefix over a feature's bins, per
+    stat. SERIAL BY NATURE inside one (slot, feature, stat): a running
+    sum, each cell the one before plus its own."""
+    for u in range(u_lo, u_hi):
+        var seg = u // n_scan
+        var k = u - seg * n_scan
+        var sbase = (seg_slot[seg] * hist_line + scan_first[k]) * 2
+        var n_bins = scan_folds[k]
+        for st in range(2):
+            var running = Float32(0.0)
+            for b in range(n_bins):
+                var at = sbase + b * 2 + st
+                running += hist[at]
+                hist[at] = running
+
+
+def _ord_scan_level(
+    mut hp: _PwHelper,
+    seg_slot: List[Int],
+    have_one_hot: Bool,
+    one_hot_of: List[Bool],
+):
+    """The scan over the level's computed slots. A slot is first written at
+    the level that computes it (leaves [ny, 2ny), leaf 0 at depth 0), so
+    one whose partition is empty is still all +0.0 and is not in
+    `seg_slot`. The unit is one (slot, feature): its two prefix sums are
+    its own cells; a feature with one fold or less has no prefix, and a
+    one-hot feature keeps its per-bin cells."""
+    var n_seg = len(seg_slot)
+    var scan_first = List[Int]()
+    var scan_folds = List[Int]()
+    for f in range(len(hp.gids)):  # driver-loop: over the helper's features, naming those scanned
+        if hp.folds[f] <= 1:
+            continue
+        if have_one_hot and one_hot_of[hp.gids[f]]:
+            continue
+        scan_first.append(hp.first[f])
+        scan_folds.append(hp.folds[f])
+    var n_scan = len(scan_first)
+    var total = n_seg * n_scan
+    if total == 0:
+        return
+    var hist_line = hp.hist_line
+    var units = _gbdt_units(total, 2 * n_seg * hist_line)
+    var chunk = host_predict_chunk(total, units)
+    var hist_p = rebind[HostF32Ptr](hp.hist.unsafe_ptr())
+    var slot_p = rebind[GbdtIntPtr](seg_slot.unsafe_ptr())
+    var first_p = rebind[GbdtIntPtr](scan_first.unsafe_ptr())
+    var folds_p = rebind[GbdtIntPtr](scan_folds.unsafe_ptr())
+
+    def scan(unit: Int) {imm chunk, imm total, imm n_scan, imm hist_line, imm hist_p, imm slot_p, imm first_p, imm folds_p}:
+        _ord_scan_range(
+            unit * chunk, min(total, (unit + 1) * chunk), n_scan, hist_line,
+            hist_p, slot_p, first_p, folds_p,
+        )
+
+    host_parallelize(scan, units)
+    _ = len(hp.hist)
+    _ = len(seg_slot)
+    _ = len(scan_first)
+    _ = len(scan_folds)
+
+
+def _ord_subtract_range(
+    c_lo: Int,
+    c_hi: Int,
+    line2: Int,
+    hist: HostF32Ptr,
+    pair_l: GbdtIntPtr,
+    pair_r: GbdtIntPtr,
+    pair_left: GbdtIntPtr,
+):
+    """`update_pointwise_histograms_kernel` for the cells `[c_lo, c_hi)` of
+    the level's (parent, computed child) pairs laid end to end: one
+    subtraction and two stores per cell, each cell its own."""
+    comptime SW = 8
+    var at = c_lo
+    while at < c_hi:
+        var pair = at // line2
+        var c = at - pair * line2
+        var stop = min(line2, c + (c_hi - at))
+        var lslot = pair_l[pair] * line2
+        var rslot = pair_r[pair] * line2
+        var is_left = pair_left[pair] != 0
+        var c0 = c
+        while c0 + SW <= stop:
+            var calc = hist.unsafe_load[width=SW](rslot + c0)
+            var comp = hist.unsafe_load[width=SW](lslot + c0) - calc
+            hist.unsafe_store(lslot + c0, calc if is_left else comp)
+            hist.unsafe_store(rslot + c0, comp if is_left else calc)
+            c0 += SW
+        for cc in range(c0, stop):
+            var calc = hist[rslot + cc]
+            var comp = hist[lslot + cc] - calc
+            hist[lslot + cc] = calc if is_left else comp
+            hist[rslot + cc] = comp if is_left else calc
+        at += stop - c
+
+
+def _ord_subtract_level(
+    mut hp: _PwHelper,
+    pair_l: List[Int],
+    pair_r: List[Int],
+    pair_left: List[Int],
+):
+    """The subtraction on a partial pass: for every (left slot, right slot)
+    pair with a row, the computed child (filed under the right slot) and
+    the parent less it, stored on the sides `pair_left` names. Cell by
+    cell, so the pairs' cells run in `_gbdt_units` contiguous ranges."""
+    var n_pairs = len(pair_l)
+    var line2 = hp.hist_line * 2
+    var total = n_pairs * line2
+    if total == 0:
+        return
+    var units = _gbdt_units(total, 3 * total)
+    var chunk = host_predict_chunk(total, units)
+    var hist_p = rebind[HostF32Ptr](hp.hist.unsafe_ptr())
+    var l_p = rebind[GbdtIntPtr](pair_l.unsafe_ptr())
+    var r_p = rebind[GbdtIntPtr](pair_r.unsafe_ptr())
+    var left_p = rebind[GbdtIntPtr](pair_left.unsafe_ptr())
+
+    def cells(unit: Int) {imm chunk, imm total, imm line2, imm hist_p, imm l_p, imm r_p, imm left_p}:
+        _ord_subtract_range(
+            unit * chunk, min(total, (unit + 1) * chunk), line2, hist_p, l_p,
+            r_p, left_p,
+        )
+
+    host_parallelize(cells, units)
+    _ = len(hp.hist)
+    _ = len(pair_l)
+    _ = len(pair_r)
+    _ = len(pair_left)
+
+
+def _ord_score_blocks(
+    blk_lo: Int,
+    blk_hi: Int,
+    blocks: Int,
+    hist_line: Int,
+    plain_l2: Bool,
+    part_count: Int,
+    l2: Float32,
+    score_before: Float32,
+    part_stats: HostF32Ptr,
+    hist: HostF32Ptr,
+    c_noisy: HostF32Ptr,
+    c_gain: HostF32Ptr,
+    blk_score: HostF32Ptr,
+    blk_gain: HostF32Ptr,
+    blk_index: GbdtIntPtr,
+):
+    """The score blocks `[blk_lo, blk_hi)` of one helper: each of a block's
+    128 threads takes its strided candidates' strict argmin, then the
+    128-lane halving argmin (`_block_argmin_and_store`); the block's
+    record lands in `blk_*[blk]`. A block reads the candidates and writes
+    only its own record."""
+    var t_score = List[Float32](length=GBDT_ORD_SCORE_BLOCK, fill=Float32(0.0))
+    var t_gain = List[Float32](length=GBDT_ORD_SCORE_BLOCK, fill=Float32(0.0))
+    var t_index = List[Int](length=GBDT_ORD_SCORE_BLOCK, fill=0)
+    for blk in range(blk_lo, blk_hi):
+        for tid in range(GBDT_ORD_SCORE_BLOCK):
+            var th_score = GBDT_ORD_FLOAT32_MAX
+            var th_gain = GBDT_ORD_FLOAT32_MAX
+            var th_index = 0
+            var i = blk * GBDT_ORD_SCORE_BLOCK
+            while i < hist_line:
+                if i + tid >= hist_line:
+                    break
+                var b = i + tid
+                if plain_l2:
+                    # `TL2ScoreCalcer`: Score = 0, per leaf both sides'
+                    # `(-sum * sum) / (weight + lambda)` when the weight
+                    # exceeds 1e-20, no normalization
+                    var l2score = Float32(0.0)
+                    for leaf in range(part_count):
+                        var pw = part_stats[3 * leaf]
+                        var psum = part_stats[3 * leaf + 1]
+                        var hb = 2 * b + hist_line * leaf * 2
+                        var wl = hist[hb]
+                        var sl = hist[hb + 1]
+                        var wr = max(pw - wl, Float32(0.0))
+                        var sr = psum - sl
+                        if wl > Float32(1e-20):
+                            l2score += (-sl * sl) / (wl + l2)
+                        if wr > Float32(1e-20):
+                            l2score += (-sr * sr) / (wr + l2)
+                    l2score *= Float32(1.0)
+                    var l2gain = l2score - score_before
+                    l2gain *= Float32(1.0)
+                    if l2gain < th_gain:
+                        th_score = l2score
+                        th_gain = l2gain
+                        th_index = b
+                    i += GBDT_ORD_SCORE_BLOCK * blocks
+                    continue
+                var noisy = c_noisy[b]
+                var gain = c_gain[b]
+                if gain < th_gain:
+                    th_score = noisy
+                    th_gain = gain
+                    th_index = b
+                i += GBDT_ORD_SCORE_BLOCK * blocks
+            t_score[tid] = th_score
+            t_gain[tid] = th_gain
+            t_index[tid] = th_index
+        var step = GBDT_ORD_SCORE_BLOCK >> 1
+        while step > 0:
+            for tid in range(step):
+                var take = t_gain[tid] > t_gain[tid + step]
+                if t_gain[tid] == t_gain[tid + step] and t_index[tid] > t_index[tid + step]:
+                    take = True
+                if take:
+                    t_score[tid] = t_score[tid + step]
+                    t_index[tid] = t_index[tid + step]
+                    t_gain[tid] = t_gain[tid + step]
+            step >>= 1
+        blk_score[blk] = t_score[0]
+        blk_gain[blk] = t_gain[0]
+        blk_index[blk] = t_index[0]
+
+
+def _ord_block_records(
+    hp: _PwHelper,
+    part_stats: List[Float32],
+    blocks: Int,
+    plain_l2: Bool,
+    part_count: Int,
+    l2: Float32,
+    score_before: Float32,
+    c_noisy: List[Float32],
+    c_gain: List[Float32],
+    mut blk_score: List[Float32],
+    mut blk_gain: List[Float32],
+    mut blk_index: List[Int],
+):
+    """Every score block's record for one helper (`_ord_score_blocks`), the
+    blocks in `_gbdt_units` contiguous ranges. The caller folds the records
+    in block order (`_record_less`, challenger first)."""
+    var hist_line = hp.hist_line
+    var work = 2 * hist_line
+    if plain_l2:
+        work = 8 * hist_line * part_count
+    var units = _gbdt_units(blocks, work)
+    var chunk = host_predict_chunk(blocks, units)
+    var stats_p = rebind[HostF32Ptr](part_stats.unsafe_ptr())
+    var hist_p = rebind[HostF32Ptr](hp.hist.unsafe_ptr())
+    var noisy_p = rebind[HostF32Ptr](c_noisy.unsafe_ptr())
+    var gain_p = rebind[HostF32Ptr](c_gain.unsafe_ptr())
+    var bs_p = rebind[HostF32Ptr](blk_score.unsafe_ptr())
+    var bg_p = rebind[HostF32Ptr](blk_gain.unsafe_ptr())
+    var bi_p = rebind[GbdtIntPtr](blk_index.unsafe_ptr())
+
+    def score_blocks(unit: Int) {imm chunk, imm blocks, imm hist_line, imm plain_l2, imm part_count, imm l2, imm score_before, imm stats_p, imm hist_p, imm noisy_p, imm gain_p, imm bs_p, imm bg_p, imm bi_p}:
+        _ord_score_blocks(
+            unit * chunk, min(blocks, (unit + 1) * chunk), blocks, hist_line,
+            plain_l2, part_count, l2, score_before, stats_p, hist_p, noisy_p,
+            gain_p, bs_p, bg_p, bi_p,
+        )
+
+    host_parallelize(score_blocks, units)
+    _ = len(part_stats)
+    _ = len(hp.hist)
+    _ = len(c_noisy)
+    _ = len(c_gain)
+    _ = len(blk_score)
+    _ = len(blk_gain)
+    _ = len(blk_index)
+
+
+def _ord_mark_range(
+    lo: Int,
+    hi: Int,
+    cindex: TreeU32Ptr,
+    word_offset: Int,
+    docs: GbdtIntPtr,
+    mask: UInt32,
+    value: UInt32,
+    take_bin: Bool,
+    bit: UInt32,
+    bins: TreeU32Ptr,
+) -> Int:
+    """`split_subsets_from_desc`'s bit for the positions `[lo, hi)`: OR-ed
+    in where the row goes right (`feature > value`, or `feature == value`
+    on the take-bin arm, the rows of the split's category). Returns the
+    count of positions that stay left."""
+    var zeros = 0
+    for i in range(lo, hi):
+        var feature_val = cindex[word_offset + docs[i]] & mask
+        var right = feature_val > value
+        if take_bin:
+            right = feature_val == value
+        if right:
+            bins[i] = bins[i] | bit
+        if (bins[i] & bit) == UInt32(0):
+            zeros += 1
+    return zeros
+
+
+def _ord_place_range(
+    lo: Int,
+    hi: Int,
+    bit: UInt32,
+    bins: TreeU32Ptr,
+    indices: GbdtIntPtr,
+    zero_at: Int,
+    one_at: Int,
+    new_bins: TreeU32Ptr,
+    new_indices: GbdtIntPtr,
+):
+    """The stable one-bit radix placement of the positions `[lo, hi)`: the
+    left ones from `zero_at`, the right ones from `one_at`, both ascending."""
+    var z = zero_at
+    var o = one_at
+    for i in range(lo, hi):
+        var v = bins[i]
+        if (v & bit) == UInt32(0):
+            new_bins[z] = v
+            new_indices[z] = indices[i]
+            z += 1
+        else:
+            new_bins[o] = v
+            new_indices[o] = indices[i]
+            o += 1
+
+
+def _ord_split_subsets(
+    mut s: _OrdSubsets,
+    cindex: TreeU32Ptr,
+    word_offset: Int,
+    docs: List[Int],
+    mask: UInt32,
+    value: UInt32,
+    take_bin: Bool,
+    bit: UInt32,
+):
+    """`split_subsets_from_desc`: the split's bit OR-ed into every
+    position's bin, then the STABLE one-bit radix sort of the bins and the
+    indices (integers and moves only).
+
+    The unit is a position range: task `c` marks its positions and counts
+    those that stay left; the tasks' left starts are one running sum over
+    the tasks (serial by nature: a prefix sum over `tasks` counts) and a
+    task's right start is the total left plus the right ones before it;
+    then task `c` places its positions from its own two starts. The ranges
+    ascend, so the order on each side is the serial sort's at any task
+    count."""
+    var n = len(s.bins)
+    var units = _gbdt_units(n, 8 * n)
+    var chunk = host_predict_chunk(n, units)
+    var zero_at = List[Int](length=units + 1, fill=0)
+    var new_bins = List[UInt32](length=n, fill=UInt32(0))
+    var new_indices = List[Int](length=n, fill=0)
+    var docs_p = rebind[GbdtIntPtr](docs.unsafe_ptr())
+    var bins_p = _u32_ptr(s.bins)
+    var idx_p = rebind[GbdtIntPtr](s.indices.unsafe_ptr())
+    var zero_p = rebind[GbdtIntPtr](zero_at.unsafe_ptr())
+    var nb_p = _u32_ptr(new_bins)
+    var ni_p = rebind[GbdtIntPtr](new_indices.unsafe_ptr())
+
+    def mark(unit: Int) {imm chunk, imm n, imm cindex, imm word_offset, imm docs_p, imm mask, imm value, imm take_bin, imm bit, imm bins_p, imm zero_p}:
+        zero_p[unit] = _ord_mark_range(
+            min(n, unit * chunk), min(n, (unit + 1) * chunk), cindex,
+            word_offset, docs_p, mask, value, take_bin, bit, bins_p,
+        )
+
+    host_parallelize(mark, units)
+    var running = 0
+    for u in range(units):  # driver-loop: over the tasks, the running count of left positions
+        var count = zero_at[u]
+        zero_at[u] = running
+        running += count
+    var total_zeros = running
+
+    def place(unit: Int) {imm chunk, imm n, imm bit, imm total_zeros, imm bins_p, imm idx_p, imm zero_p, imm nb_p, imm ni_p}:
+        var lo = min(n, unit * chunk)
+        _ord_place_range(
+            lo, min(n, (unit + 1) * chunk), bit, bins_p, idx_p, zero_p[unit],
+            total_zeros + lo - zero_p[unit], nb_p, ni_p,
+        )
+
+    host_parallelize(place, units)
+    _ = len(docs)
+    _ = len(zero_at)
+    s.bins = new_bins^
+    s.indices = new_indices^
+
+
 def _ordered_tree_structure(
     cindex: List[UInt32],
     mut helpers: List[_PwHelper],
@@ -657,15 +1571,12 @@ def _ordered_tree_structure_levels(
         List[Float32](length=doc_count, fill=Float32(0.0)),
         List[Float32](length=doc_count, fill=Float32(0.0)),
     )
-    for i in range(doc_count):
-        s.indices[i] = i
+    _identity_rows(s.indices, doc_count)
     # `write_fold_based_initial_bins`: part p over its concatenated range
-    for p in range(fold_count):
-        for i in range(part_bounds[p], part_bounds[p + 1]):
-            s.bins[i] = UInt32(p)
+    _ord_initial_bins(part_bounds, fold_count, s.bins)
     _update_subsets_stats(s, 1 << fold_bits, sw, sg)
 
-    for h in range(len(helpers)):
+    for h in range(len(helpers)):  # driver-loop: over the policy helpers
         # every slot starts the tree at +0.0: a fresh plane the first time,
         # then only the slots the previous tree wrote are zeroed again
         ref hz = helpers[h]
@@ -676,35 +1587,65 @@ def _ordered_tree_structure_levels(
             hz.dirty = List[Int]()
             hz.dirty_flag = List[Bool](length=slots, fill=False)
         else:
-            for k in range(len(hz.dirty)):
-                var slot = hz.dirty[k]
-                for c in range(slot * line2, (slot + 1) * line2):
-                    hz.hist[c] = Float32(0.0)
-                hz.dirty_flag[slot] = False
-            hz.dirty.clear()
+            _pw_zero_dirty(hz)
     var structure = List[_OrdSplit]()
     var score_before = Float32(0.0)
     var docs = List[Int](length=doc_count, fill=0)
     var level_rand = TRandom(seed)
-    for depth in range(max_depth):
+    # the level's computed slots (their rows laid end to end in `seg_at`)
+    # and, on a partial pass, its (left slot, right slot, computed-is-left)
+    # pairs: the same for every helper
+    var seg_slot = List[Int]()
+    var seg_off = List[Int]()
+    var seg_at = List[Int]()
+    var pair_l = List[Int]()
+    var pair_r = List[Int]()
+    var pair_left = List[Int]()
+    for depth in range(max_depth):  # driver-loop: over the tree's levels (a level reads the split before it)
         var global_seed = level_rand.next_uniform_l()
-        for i in range(doc_count):
-            docs[i] = doc_ids[s.indices[i]]
+        _ord_gather_docs(doc_ids, s.indices, docs)
         var part_count = 1 << depth
         var full_pass = depth == 0 or level_driver
         if level_driver and depth > 0:
             # the device's per-level `reset_for_tree`: every slot back to
             # +0.0 before a from-scratch level
-            for h in range(len(helpers)):
+            for h in range(len(helpers)):  # driver-loop: over the policy helpers
                 ref hl = helpers[h]
-                var line2_l = hl.hist_line * 2
-                for k in range(len(hl.dirty)):
-                    var slot_l = hl.dirty[k]
-                    for c in range(slot_l * line2_l, (slot_l + 1) * line2_l):
-                        hl.hist[c] = Float32(0.0)
-                    hl.dirty_flag[slot_l] = False
-                hl.dirty.clear()
+                _pw_zero_dirty(hl)
         var ny = part_count if full_pass else part_count // 2
+        seg_slot.clear()
+        seg_off.clear()
+        seg_at.clear()
+        pair_l.clear()
+        pair_r.clear()
+        pair_left.clear()
+        var seg_rows = 0
+        for y in range(ny):  # driver-loop: over the level's (leaf, fold) slots
+            for z in range(fold_count):
+                var data_part: Int
+                var hist_slot: Int
+                if full_pass:
+                    data_part = y * stripe + z
+                    hist_slot = y * fold_count + z
+                else:
+                    var left = y * stripe + z
+                    var right = (y | ny) * stripe + z
+                    data_part = left if s.p_sz[left] < s.p_sz[right] else right
+                    hist_slot = (y | ny) * fold_count + z
+                    # an empty parent's slot and its computed child are
+                    # all +0.0 (by induction from the fresh slots), and
+                    # +0.0 - +0.0 is +0.0: nothing to subtract
+                    if s.p_sz[left] != 0 or s.p_sz[right] != 0:
+                        pair_l.append(y * fold_count + z)
+                        pair_r.append(hist_slot)
+                        pair_left.append(1 if s.p_sz[left] < s.p_sz[right] else 0)
+                if s.p_sz[data_part] == 0:
+                    continue
+                seg_slot.append(hist_slot)
+                seg_off.append(s.p_off[data_part])
+                seg_at.append(seg_rows)
+                seg_rows += s.p_sz[data_part]
+        seg_at.append(seg_rows)
         var best_fid = GBDT_ORD_SENTINEL
         var best_bin = UInt32(0)
         var best_score = GBDT_ORD_FLOAT32_MAX
@@ -713,181 +1654,26 @@ def _ordered_tree_structure_levels(
         # (`pointwise_scores_calcer.mojo`): helper i scores with the i-th
         # draw of `TRandom(level seed)`
         var helper_rand = TRandom(global_seed)
-        for h in range(len(helpers)):
+        for h in range(len(helpers)):  # driver-loop: over the policy helpers (their seeds are one generator's draws in order)
             ref hp = helpers[h]
             var helper_seed = helper_rand.next_uniform_l()
             var hist_line = hp.hist_line
             var n_feat = len(hp.gids)
-            var group = 8 if hp.policy == POLICY_HALF_BYTE else (
-                32 if hp.policy == POLICY_BINARY else 4
-            )
-            var acc = List[Int32](length=hist_line * 2, fill=Int32(0))
-            var reached = List[Bool](length=hist_line, fill=False)
-            var reached_list = List[Int](capacity=hist_line)
             # ---- the histograms (`compute_hist2`) ----
-            for y in range(ny):
-                for z in range(fold_count):
-                    var data_part: Int
-                    var hist_slot: Int
-                    if full_pass:
-                        data_part = y * stripe + z
-                        hist_slot = y * fold_count + z
-                    else:
-                        var left = y * stripe + z
-                        var right = (y | ny) * stripe + z
-                        data_part = left if s.p_sz[left] < s.p_sz[right] else right
-                        hist_slot = (y | ny) * fold_count + z
-                    var off = s.p_off[data_part]
-                    var sz = s.p_sz[data_part]
-                    if sz == 0:
-                        continue
-                    hp.mark(hist_slot)
-                    var base = hist_slot * hist_line * 2
-                    if hp.policy == POLICY_ONE_BYTE:
-                        # the 8-bit fixed-point kernel: Int32 sums, the
-                        # dither keyed on the document id. A cell no row
-                        # reaches sums to 0 and is not written (`|0| >
-                        # 1e-20` is false), so only the reached cells are
-                        # converted, then cleared for the next slot.
-                        for pos in range(off, off + sz):
-                            var row = docs[pos]
-                            var u = _hist2_dither(row)
-                            var qw = _hist2_quantize(s.g_weight[pos], fixed_scale, u)
-                            var qt = _hist2_quantize(s.g_target[pos], fixed_scale, u)
-                            var f_base = 0
-                            while f_base < n_feat:
-                                var ci = cindex[hp.offsets[f_base] + row]
-                                var f_count = min(group, n_feat - f_base)
-                                for j in range(f_count):
-                                    var bin = Int((ci >> UInt32(24 - 8 * j)) & UInt32(255))
-                                    if bin < hp.folds[f_base + j]:
-                                        var at = (hp.first[f_base + j] + bin) * 2
-                                        if not reached[at // 2]:
-                                            reached[at // 2] = True
-                                            reached_list.append(at)
-                                        acc[at] = acc[at] + qw
-                                        acc[at + 1] = acc[at + 1] + qt
-                                f_base += group
-                        for k in range(len(reached_list)):
-                            var at = reached_list[k]
-                            for c in range(at, at + 2):
-                                var val = Float32(Int(acc[c])) / fixed_scale
-                                if abs(val) > Float32(1e-20):
-                                    hp.hist[base + c] = val
-                                acc[c] = Int32(0)
-                            reached[at // 2] = False
-                        reached_list.clear()
-                    else:
-                        # lane/neural-pass124: the half-byte and binary
-                        # kernels in fixed point (`PointHistHalfByteInt`):
-                        # the Int32 sum of `hist2_quantize(stat, scale,
-                        # hist2_dither(doc id))` per cell, any order. A
-                        # half-byte feature's cell is its 4-bit value's
-                        # (filed when below its fold count); a binary
-                        # feature's one cell takes the rows whose bit
-                        # `3 - (j & 3)` of nibble `j / 4` is clear
-                        # (`pw_hb_binary_sum_int`). Converted and guarded
-                        # once, as the one-byte branch above.
-                        var is_bin = hp.policy == POLICY_BINARY
-                        for pos in range(off, off + sz):
-                            var row = docs[pos]
-                            var u = _hist2_dither(row)
-                            var qw = _hist2_quantize(s.g_weight[pos], fixed_scale, u)
-                            var qt = _hist2_quantize(s.g_target[pos], fixed_scale, u)
-                            var f_base = 0
-                            while f_base < n_feat:
-                                var ci = cindex[hp.offsets[f_base] + row]
-                                var f_count = min(group, n_feat - f_base)
-                                for j in range(f_count):
-                                    var at: Int
-                                    if is_bin:
-                                        var v = Int((ci >> UInt32(28 - 4 * (j // 4))) & UInt32(15))
-                                        var f_mask = 1 << (3 - (j & 3))
-                                        if (v & f_mask) != 0:
-                                            continue
-                                        if GBDT_HOST_BINARY_SABOTAGE and v == 0:
-                                            continue
-                                        at = hp.first[f_base + j] * 2
-                                    else:
-                                        var bin = Int((ci >> UInt32(28 - 4 * j)) & UInt32(15))
-                                        if bin >= hp.folds[f_base + j]:
-                                            continue
-                                        at = (hp.first[f_base + j] + bin) * 2
-                                    if not reached[at // 2]:
-                                        reached[at // 2] = True
-                                        reached_list.append(at)
-                                    acc[at] = acc[at] + qw
-                                    acc[at + 1] = acc[at + 1] + qt
-                                f_base += group
-                        for k in range(len(reached_list)):
-                            var at = reached_list[k]
-                            for c in range(at, at + 2):
-                                var val = Float32(Int(acc[c])) / fixed_scale
-                                if abs(val) > Float32(1e-20):
-                                    hp.hist[base + c] = val
-                                acc[c] = Int32(0)
-                            reached[at // 2] = False
-                        reached_list.clear()
+            for k in range(len(seg_slot)):  # driver-loop: over the computed slots, their marks
+                hp.mark(seg_slot[k])
+            _ord_hist_level(
+                hp, cindex, docs, s.g_weight, s.g_target, seg_slot, seg_off,
+                seg_at, fixed_scale,
+            )
             # ---- the scan over the computed slots ----
-            for y in range(ny):
-                for z in range(fold_count):
-                    var slot = (y * fold_count + z) if full_pass else ((y | ny) * fold_count + z)
-                    # a slot is first written at the level that computes
-                    # it (leaves [ny, 2ny) here, leaf 0 at depth 0), so one
-                    # whose partition is empty is still all +0.0 and its
-                    # scan writes +0.0 over +0.0
-                    var data_part: Int
-                    if full_pass:
-                        data_part = y * stripe + z
-                    else:
-                        var left = y * stripe + z
-                        var right = (y | ny) * stripe + z
-                        data_part = left if s.p_sz[left] < s.p_sz[right] else right
-                    if s.p_sz[data_part] == 0:
-                        continue
-                    for f in range(n_feat):
-                        if hp.folds[f] <= 1:
-                            continue
-                        # a one-hot feature keeps its per-bin cells
-                        if have_one_hot and one_hot_of[hp.gids[f]]:
-                            continue
-                        var sbase = (slot * hist_line + hp.first[f]) * 2
-                        for st in range(2):
-                            var running = Float32(0.0)
-                            for b in range(hp.folds[f]):
-                                var at = sbase + b * 2 + st
-                                running += hp.hist[at]
-                                hp.hist[at] = running
+            _ord_scan_level(hp, seg_slot, have_one_hot, one_hot_of)
             # ---- the subtraction on a partial pass ----
             if not full_pass:
-                for y in range(ny):
-                    for z in range(fold_count):
-                        var left_part = y * stripe + z
-                        var right_part = (y | ny) * stripe + z
-                        # an empty parent's slot and its computed child are
-                        # all +0.0 (by induction from the fresh slots), and
-                        # +0.0 - +0.0 is +0.0: nothing to write
-                        if s.p_sz[left_part] == 0 and s.p_sz[right_part] == 0:
-                            continue
-                        var is_left = s.p_sz[left_part] < s.p_sz[right_part]
-                        hp.mark(y * fold_count + z)
-                        hp.mark((y | ny) * fold_count + z)
-                        var lslot = (y * fold_count + z) * hist_line * 2
-                        var rslot = ((y | ny) * fold_count + z) * hist_line * 2
-                        var hq = hp.hist.unsafe_ptr()
-                        comptime SW = 8
-                        var c0 = 0
-                        while c0 + SW <= hist_line * 2:
-                            var calc = hq.unsafe_load[width=SW](rslot + c0)
-                            var comp = hq.unsafe_load[width=SW](lslot + c0) - calc
-                            hq.unsafe_store(lslot + c0, calc if is_left else comp)
-                            hq.unsafe_store(rslot + c0, comp if is_left else calc)
-                            c0 += SW
-                        for c in range(c0, hist_line * 2):
-                            var calc = hp.hist[rslot + c]
-                            var comp = hp.hist[lslot + c] - calc
-                            hp.hist[lslot + c] = calc if is_left else comp
-                            hp.hist[rslot + c] = comp if is_left else calc
+                for k in range(len(pair_l)):  # driver-loop: over the level's slot pairs, their marks
+                    hp.mark(pair_l[k])
+                    hp.mark(pair_r[k])
+                _ord_subtract_level(hp, pair_l, pair_r, pair_left)
 
             # ---- the dynamic cosine score and the block argmins ----
             var blocks = (hist_line + GBDT_ORD_SCORE_BLOCK - 1) // GBDT_ORD_SCORE_BLOCK
@@ -897,7 +1683,7 @@ def _ordered_tree_structure_levels(
                 blocks = 1
             var bf_feature = List[Int](length=hist_line, fill=0)
             var bf_bin = List[Int](length=hist_line, fill=0)
-            for f in range(n_feat):
+            for f in range(n_feat):  # driver-loop: over the helper's features and their borders (the layout)
                 for b in range(hp.folds[f]):
                     bf_feature[hp.first[f] + b] = hp.gids[f]
                     bf_bin[hp.first[f] + b] = b
@@ -905,12 +1691,9 @@ def _ordered_tree_structure_levels(
             var loc_bin = UInt32(0)
             var loc_score = GBDT_ORD_FLOAT32_MAX
             var loc_gain = GBDT_ORD_FLOAT32_MAX
-            var t_score = List[Float32](length=GBDT_ORD_SCORE_BLOCK, fill=Float32(0.0))
-            var t_gain = List[Float32](length=GBDT_ORD_SCORE_BLOCK, fill=Float32(0.0))
-            var t_index = List[Int](length=GBDT_ORD_SCORE_BLOCK, fill=0)
-            # the dynamic cosine score of every candidate, (leaf, fold pair)
-            # outer and the candidate inner: each candidate's own adds run
-            # in the kernel's (leaf, fold) order, the same expressions
+            # the score of every candidate (each candidate's own adds run
+            # in the kernel's (leaf, fold) order, the same expressions),
+            # the candidates across the tasks
             var c_noisy = List[Float32]()
             var c_gain = List[Float32]()
             if plain_cosine:
@@ -924,73 +1707,24 @@ def _ordered_tree_structure_levels(
                     score_std_dev, helper_seed, bf_feature, score_before,
                     c_gain,
                 )
-            for blk in range(blocks):
-                for tid in range(GBDT_ORD_SCORE_BLOCK):
-                    var th_score = GBDT_ORD_FLOAT32_MAX
-                    var th_gain = GBDT_ORD_FLOAT32_MAX
-                    var th_index = 0
-                    var i = blk * GBDT_ORD_SCORE_BLOCK
-                    while i < hist_line:
-                        if i + tid >= hist_line:
-                            break
-                        var b = i + tid
-                        if plain_l2:
-                            # `TL2ScoreCalcer`: Score = 0, per leaf both
-                            # sides' `(-sum * sum) / (weight + lambda)` when
-                            # the weight exceeds 1e-20, no normalization
-                            var l2score = Float32(0.0)
-                            for leaf in range(part_count):
-                                var pw = s.part_stats[3 * leaf]
-                                var psum = s.part_stats[3 * leaf + 1]
-                                var hb = 2 * b + hist_line * leaf * 2
-                                var wl = hp.hist[hb]
-                                var sl = hp.hist[hb + 1]
-                                var wr = max(pw - wl, Float32(0.0))
-                                var sr = psum - sl
-                                if wl > Float32(1e-20):
-                                    l2score += (-sl * sl) / (wl + l2)
-                                if wr > Float32(1e-20):
-                                    l2score += (-sr * sr) / (wr + l2)
-                            l2score *= Float32(1.0)
-                            var l2gain = l2score - score_before
-                            l2gain *= Float32(1.0)
-                            if l2gain < th_gain:
-                                th_score = l2score
-                                th_gain = l2gain
-                                th_index = b
-                            i += GBDT_ORD_SCORE_BLOCK * blocks
-                            continue
-                        var noisy = c_noisy[b]
-                        var gain = c_gain[b]
-                        if gain < th_gain:
-                            th_score = noisy
-                            th_gain = gain
-                            th_index = b
-                        i += GBDT_ORD_SCORE_BLOCK * blocks
-                    t_score[tid] = th_score
-                    t_gain[tid] = th_gain
-                    t_index[tid] = th_index
-                var step = GBDT_ORD_SCORE_BLOCK >> 1
-                while step > 0:
-                    for tid in range(step):
-                        var take = t_gain[tid] > t_gain[tid + step]
-                        if t_gain[tid] == t_gain[tid + step] and t_index[tid] > t_index[tid + step]:
-                            take = True
-                        if take:
-                            t_score[tid] = t_score[tid + step]
-                            t_index[tid] = t_index[tid + step]
-                            t_gain[tid] = t_gain[tid + step]
-                    step >>= 1
+            var blk_score = List[Float32](length=blocks, fill=GBDT_ORD_FLOAT32_MAX)
+            var blk_gain = List[Float32](length=blocks, fill=GBDT_ORD_FLOAT32_MAX)
+            var blk_index = List[Int](length=blocks, fill=0)
+            _ord_block_records(
+                hp, s.part_stats, blocks, plain_l2, part_count, l2,
+                score_before, c_noisy, c_gain, blk_score, blk_gain, blk_index,
+            )
+            for blk in range(blocks):  # driver-loop: over the helper's score blocks, the record fold in block order
                 var c_fid = UInt32(0)
                 var c_bin = UInt32(0)
-                if t_index[0] < hist_line:
-                    c_fid = UInt32(bf_feature[t_index[0]])
-                    c_bin = UInt32(bf_bin[t_index[0]])
-                if _record_less(t_gain[0], c_fid, c_bin, loc_gain, loc_fid, loc_bin):
+                if blk_index[blk] < hist_line:
+                    c_fid = UInt32(bf_feature[blk_index[blk]])
+                    c_bin = UInt32(bf_bin[blk_index[blk]])
+                if _record_less(blk_gain[blk], c_fid, c_bin, loc_gain, loc_fid, loc_bin):
                     loc_fid = c_fid
                     loc_bin = c_bin
-                    loc_score = t_score[0]
-                    loc_gain = t_gain[0]
+                    loc_score = blk_score[blk]
+                    loc_gain = blk_gain[blk]
             # `pw_fold_winner_kernel`: the helper's record into the incumbent
             if _record_less(loc_gain, loc_fid, loc_bin, best_gain, best_fid, best_bin):
                 best_fid = loc_fid
@@ -1008,7 +1742,7 @@ def _ordered_tree_structure_levels(
         score_before = best_score
         var fid = Int(best_fid)
         var seen = False
-        for i in range(len(structure)):
+        for i in range(len(structure)):  # driver-loop: over the tree's splits so far
             if structure[i].feature == fid and structure[i].bin == Int(best_bin):
                 seen = True
         if seen:
@@ -1027,29 +1761,14 @@ def _ordered_tree_structure_levels(
         var bit = UInt32(1) << UInt32(depth + fold_bits)
         var value = best_bin << shift_of[fid]
         var mask = mask_of[fid] << shift_of[fid]
-        if have_one_hot and one_hot_of[fid]:
-            # take-bin: the rows of the split's category go right
-            for i in range(doc_count):
-                var feature_val = cindex[word_offset_of[fid] + docs[i]] & mask
-                if feature_val == value:
-                    s.bins[i] = s.bins[i] | bit
-        else:
-            for i in range(doc_count):
-                var feature_val = cindex[word_offset_of[fid] + docs[i]] & mask
-                if feature_val > value:
-                    s.bins[i] = s.bins[i] | bit
-        var new_bins = List[UInt32](capacity=doc_count)
-        var new_indices = List[Int](capacity=doc_count)
-        for i in range(doc_count):
-            if (s.bins[i] & bit) == UInt32(0):
-                new_bins.append(s.bins[i])
-                new_indices.append(s.indices[i])
-        for i in range(doc_count):
-            if (s.bins[i] & bit) != UInt32(0):
-                new_bins.append(s.bins[i])
-                new_indices.append(s.indices[i])
-        s.bins = new_bins^
-        s.indices = new_indices^
+        # take-bin (a one-hot feature): the rows of the split's category go
+        # right; else the rows above the border
+        var take_bin = False
+        if have_one_hot:
+            take_bin = one_hot_of[fid]
+        _ord_split_subsets(
+            s, cindex, word_offset_of[fid], docs, mask, value, take_bin, bit
+        )
         _update_subsets_stats(s, 1 << (depth + 1 + fold_bits), sw, sg)
         if level_driver:
             # the next level's candidates on the search index (the
@@ -1059,6 +1778,49 @@ def _ordered_tree_structure_levels(
     if level_driver:
         tree_ctr[0].end_tree()
     return structure^
+
+
+def _plain_cosine_range(
+    b_lo: Int,
+    b_hi: Int,
+    hist_line: Int,
+    hist: HostF32Ptr,
+    part_stats: HostF32Ptr,
+    part_count: Int,
+    l2: Float32,
+    score_std_dev: Float32,
+    helper_seed: UInt64,
+    bf_feature: GbdtIntPtr,
+    score_before: Float32,
+    scores: HostF32Ptr,
+    gains: HostF32Ptr,
+):
+    """`_plain_cosine_candidates` for the candidates `[b_lo, b_hi)`: each
+    candidate's fma chain over the leaves in leaf order is its own."""
+    for b in range(b_lo, b_hi):
+        var score = Float32(0)
+        var denum = Float32(1e-10)
+        for leaf in range(part_count):
+            var base = hist_line * leaf * 2 + 2 * b
+            var wl = hist[base]
+            var sl = hist[base + 1]
+            var wr = max(part_stats[3 * leaf] - wl, Float32(0))
+            var sr = part_stats[3 * leaf + 1] - sl
+            var ml = sl / (wl + l2) if wl > Float32(0) else Float32(0)
+            score = identical_mul_add(sl, ml, score)
+            denum = identical_mul_add(wl * ml, ml, denum)
+            var mr = sr / (wr + l2) if wr > Float32(0) else Float32(0)
+            score = identical_mul_add(sr, mr, score)
+            denum = identical_mul_add(wr * mr, mr, denum)
+        var res = GBDT_ORD_FLOAT32_MAX
+        if denum > Float32(1e-15):
+            res = -score / identical_sqrt(denum)
+        if score_std_dev != Float32(0):
+            var seed = advance_seed_k(helper_seed + UInt64(bf_feature[b]), 4)
+            var draw = next_normal_f(seed)
+            res = identical_mul_add(draw[0], score_std_dev, res)
+        scores[b] = res
+        gains[b] = identical_mul_add(res, Float32(1), -score_before)
 
 
 def _plain_cosine_candidates(
@@ -1072,65 +1834,65 @@ def _plain_cosine_candidates(
     score_before: Float32,
     mut gain_out: List[Float32],
 ) -> List[Float32]:
-    """Score a plain single-fold histogram with Cosine or NewtonCosine."""
+    """Score a plain single-fold histogram with Cosine or NewtonCosine. The
+    unit is one CANDIDATE (its own chain over the leaves, its own draw),
+    the candidates in `_gbdt_units` contiguous ranges."""
     # pointwise_scores.mojo::ScoreCalcer: 1e-10 starts DenumSqr for the
     # single-fold calcer; the ordered dynamic kernel instead starts 1e-20.
     # normalize is False on the public fit. Left then right leaf terms and
     # the feature-based normal draw follow the native GPU calcer exactly.
-    var scores = List[Float32](length=hp.hist_line, fill=Float32(0))
-    gain_out = List[Float32](length=hp.hist_line, fill=Float32(0))
-    for b in range(hp.hist_line):
-        var score = Float32(0)
-        var denum = Float32(1e-10)
-        for leaf in range(part_count):
-            var base = hp.hist_line * leaf * 2 + 2 * b
-            var wl = hp.hist[base]
-            var sl = hp.hist[base + 1]
-            var wr = max(part_stats[3 * leaf] - wl, Float32(0))
-            var sr = part_stats[3 * leaf + 1] - sl
-            var ml = sl / (wl + l2) if wl > Float32(0) else Float32(0)
-            score = identical_mul_add(sl, ml, score)
-            denum = identical_mul_add(wl * ml, ml, denum)
-            var mr = sr / (wr + l2) if wr > Float32(0) else Float32(0)
-            score = identical_mul_add(sr, mr, score)
-            denum = identical_mul_add(wr * mr, mr, denum)
-        var out = GBDT_ORD_FLOAT32_MAX
-        if denum > Float32(1e-15):
-            out = -score / identical_sqrt(denum)
-        if score_std_dev != Float32(0):
-            var seed = advance_seed_k(helper_seed + UInt64(bf_feature[b]), 4)
-            var draw = next_normal_f(seed)
-            out = identical_mul_add(draw[0], score_std_dev, out)
-        scores[b] = out
-        gain_out[b] = identical_mul_add(out, Float32(1), -score_before)
+    var hist_line = hp.hist_line
+    var scores = List[Float32](length=hist_line, fill=Float32(0))
+    gain_out = List[Float32](length=hist_line, fill=Float32(0))
+    var units = _gbdt_units(hist_line, 12 * hist_line * part_count)
+    var chunk = host_predict_chunk(hist_line, units)
+    var hist_p = rebind[HostF32Ptr](hp.hist.unsafe_ptr())
+    var stats_p = rebind[HostF32Ptr](part_stats.unsafe_ptr())
+    var bf_p = rebind[GbdtIntPtr](bf_feature.unsafe_ptr())
+    var scores_p = rebind[HostF32Ptr](scores.unsafe_ptr())
+    var gains_p = rebind[HostF32Ptr](gain_out.unsafe_ptr())
+
+    def candidates(unit: Int) {imm chunk, imm hist_line, imm hist_p, imm stats_p, imm part_count, imm l2, imm score_std_dev, imm helper_seed, imm bf_p, imm score_before, imm scores_p, imm gains_p}:
+        _plain_cosine_range(
+            unit * chunk, min(hist_line, (unit + 1) * chunk), hist_line,
+            hist_p, stats_p, part_count, l2, score_std_dev, helper_seed, bf_p,
+            score_before, scores_p, gains_p,
+        )
+
+    host_parallelize(candidates, units)
+    _ = len(hp.hist)
+    _ = len(part_stats)
+    _ = len(bf_feature)
+    _ = len(gain_out)
+    _ = len(scores)
     return scores^
 
 
 @no_inline
-def _dynamic_cosine_candidates(
-    hp: _PwHelper,
-    part_stats: List[Float32],
+def _dynamic_cosine_range(
+    b_lo: Int,
+    b_hi: Int,
+    hist_line: Int,
+    hptr: HostF32Ptr,
+    part_stats: HostF32Ptr,
     part_count: Int,
     fold_count: Int,
     stripe: Int,
     l2: Float32,
     score_std_dev: Float32,
     helper_seed: UInt64,
-    bf_feature: List[Int],
+    bf_feature: GbdtIntPtr,
     score_before: Float32,
-    mut gain_out: List[Float32],
-) -> List[Float32]:
-    """`find_optimal_split_cosine_kernel`'s per-candidate score (the
-    (estimate, test) fold pairs, `denum_sqr` from 1e-20), its noise and its
-    gain, for every candidate of the helper at once: returns the noisy
-    scores and fills `gain_out`. Each candidate accumulates over (leaf,
-    fold pair) in the kernel's order with the kernel's expressions; only
-    the loop nest is turned so a (leaf, fold pair)'s two histogram lines are
-    read once, front to back. The noise draw depends on the candidate's
-    feature only, so it is drawn once per feature."""
-    var hist_line = hp.hist_line
-    var score = List[Float32](length=hist_line, fill=Float32(0.0))
-    var denum = List[Float32](length=hist_line, fill=Float32(1e-20))
+    sptr: HostF32Ptr,
+    dptr: HostF32Ptr,
+    noisy_out: HostF32Ptr,
+    gain_out: HostF32Ptr,
+):
+    """`_dynamic_cosine_candidates` for the candidates `[b_lo, b_hi)`: the
+    (leaf, fold pair) nest outside, the range's candidates inside, eight
+    to a step and the rest one by one (the two forms are the same
+    operations lane by lane, so where a range ends moves no bit)."""
+    comptime W = 8
     for leaf in range(part_count):
         var fold = 0
         while fold < fold_count:
@@ -1142,12 +1904,8 @@ def _dynamic_cosine_candidates(
             var pts = part_stats[3 * test_off + 1]
             var h_learn = hist_line * (leaf * fold_count + fold) * 2
             var h_test = hist_line * (leaf * fold_count + fold + 1) * 2
-            var hptr = hp.hist.unsafe_ptr()
-            var sptr = score.unsafe_ptr()
-            var dptr = denum.unsafe_ptr()
-            comptime W = 8
-            var vb = 0
-            while vb + W <= hist_line:
+            var vb = b_lo
+            while vb + W <= b_hi:
                 # W candidates per step, lane k is candidate vb + k: the
                 # scalar loop below, lane by lane (each `x += a * b` one fma,
                 # written out rather than left to the compiler's contraction)
@@ -1173,17 +1931,17 @@ def _dynamic_cosine_candidates(
                 sptr.unsafe_store(vb, sc)
                 dptr.unsafe_store(vb, dn)
                 vb += W
-            for b in range(vb, hist_line):
+            for b in range(vb, b_hi):
                 var current = 2 * b
-                var sc = score[b]
-                var dn = denum[b]
-                var wel = hp.hist[current + h_learn]
+                var sc = sptr[b]
+                var dn = dptr[b]
+                var wel = hptr[current + h_learn]
                 var wer = max(plw - wel, Float32(0.0))
-                var sel = hp.hist[current + h_learn + 1]
+                var sel = hptr[current + h_learn + 1]
                 var ser = pls - sel
-                var wtl = hp.hist[current + h_test]
+                var wtl = hptr[current + h_test]
                 var wtr = max(ptw - wtl, Float32(0.0))
-                var stl = hp.hist[current + h_test + 1]
+                var stl = hptr[current + h_test + 1]
                 var sum_tr = pts - stl
                 var mu_l = Float32(0.0)
                 if wel > Float32(0.0):
@@ -1197,16 +1955,14 @@ def _dynamic_cosine_candidates(
                     mu_r = ser / (wer + l2)
                 sc = identical_mul_add(sum_tr, mu_r, sc)
                 dn = identical_mul_add(wtr * mu_r, mu_r, dn)
-                score[b] = sc
-                denum[b] = dn
+                sptr[b] = sc
+                dptr[b] = dn
             fold += 2
-    var noisy_out = List[Float32](length=hist_line, fill=Float32(0.0))
-    gain_out = List[Float32](length=hist_line, fill=Float32(0.0))
     var last_feature = -1
     var last_draw = Float32(0.0)
-    for b in range(hist_line):
-        var sc = score[b]
-        var denum_sqr = denum[b]
+    for b in range(b_lo, b_hi):
+        var sc = sptr[b]
+        var denum_sqr = dptr[b]
         if denum_sqr > Float32(1e-15):
             sc = -sc / identical_sqrt(denum_sqr)
         else:
@@ -1223,6 +1979,65 @@ def _dynamic_cosine_candidates(
             noisy = identical_mul_add(last_draw, score_std_dev, noisy)
         noisy_out[b] = noisy
         gain_out[b] = (noisy - score_before) * Float32(1.0)
+
+
+def _dynamic_cosine_candidates(
+    hp: _PwHelper,
+    part_stats: List[Float32],
+    part_count: Int,
+    fold_count: Int,
+    stripe: Int,
+    l2: Float32,
+    score_std_dev: Float32,
+    helper_seed: UInt64,
+    bf_feature: List[Int],
+    score_before: Float32,
+    mut gain_out: List[Float32],
+) -> List[Float32]:
+    """`find_optimal_split_cosine_kernel`'s per-candidate score (the
+    (estimate, test) fold pairs, `denum_sqr` from 1e-20), its noise and its
+    gain, for every candidate of the helper at once: returns the noisy
+    scores and fills `gain_out`. Each candidate accumulates over (leaf,
+    fold pair) in the kernel's order with the kernel's expressions; only
+    the loop nest is turned so a (leaf, fold pair)'s two histogram lines are
+    read front to back. The noise draw depends on the candidate's feature
+    only, so it is drawn once per feature run.
+
+    The unit is one CANDIDATE (one device thread's strided share of the
+    score block): its chain over (leaf, fold pair) and its draw are its
+    own, so the candidates run in `_gbdt_units` contiguous ranges
+    (`_dynamic_cosine_range`)."""
+    var hist_line = hp.hist_line
+    var score = List[Float32](length=hist_line, fill=Float32(0.0))
+    var denum = List[Float32](length=hist_line, fill=Float32(1e-20))
+    var noisy_out = List[Float32](length=hist_line, fill=Float32(0.0))
+    gain_out = List[Float32](length=hist_line, fill=Float32(0.0))
+    var units = _gbdt_units(hist_line, 8 * hist_line * part_count * max(fold_count, 1))
+    var chunk = host_predict_chunk(hist_line, units)
+    var hist_p = rebind[HostF32Ptr](hp.hist.unsafe_ptr())
+    var stats_p = rebind[HostF32Ptr](part_stats.unsafe_ptr())
+    var bf_p = rebind[GbdtIntPtr](bf_feature.unsafe_ptr())
+    var score_p = rebind[HostF32Ptr](score.unsafe_ptr())
+    var denum_p = rebind[HostF32Ptr](denum.unsafe_ptr())
+    var noisy_p = rebind[HostF32Ptr](noisy_out.unsafe_ptr())
+    var gains_p = rebind[HostF32Ptr](gain_out.unsafe_ptr())
+
+    def candidates(unit: Int) {imm chunk, imm hist_line, imm hist_p, imm stats_p, imm part_count, imm fold_count, imm stripe, imm l2, imm score_std_dev, imm helper_seed, imm bf_p, imm score_before, imm score_p, imm denum_p, imm noisy_p, imm gains_p}:
+        _dynamic_cosine_range(
+            unit * chunk, min(hist_line, (unit + 1) * chunk), hist_line,
+            hist_p, stats_p, part_count, fold_count, stripe, l2,
+            score_std_dev, helper_seed, bf_p, score_before, score_p, denum_p,
+            noisy_p, gains_p,
+        )
+
+    host_parallelize(candidates, units)
+    _ = len(hp.hist)
+    _ = len(part_stats)
+    _ = len(bf_feature)
+    _ = len(score)
+    _ = len(denum)
+    _ = len(gain_out)
+    _ = len(noisy_out)
     return noisy_out^
 
 
@@ -1596,12 +2411,6 @@ from gbdt.metrics.sample_quantile import (
 )
 from checks.numerics import identical_log, identical_pow
 from std.math import sqrt
-from core.host_parallel import host_nested_units, host_parallelize
-from core.host_predict_threads import (
-    HostF32Ptr,
-    host_predict_chunk,
-    host_predict_task_count_work,
-)
 from gbdt.host.gbdt_oracle_ctr import (
     gbdt_ctr_host_model_text_of,
     gbdt_ctr_host_prelude,
