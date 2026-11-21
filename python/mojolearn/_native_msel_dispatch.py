@@ -60,6 +60,16 @@ def connect(context, package):
             raise TypeError('native CV requires an ordinary native instance dictionary')
         hooks = tuple((base, name, row.get(name)) for base, row in zip(mro, fields)  # glue: retain method/layout identities once
                       for name in protected + class_fields)  # glue: fixed import-time method identity inventory
+        # The member's own device travels with it (device wave): a class that
+        # takes `device=` (it declares `_mojolearn_device`, the pilot's
+        # marker) has `device` as its LAST constructor parameter, so every
+        # clone, candidate and worker copy built from this schema carries the
+        # member's device unchanged. A recipe that already names it is kept;
+        # a class without the marker has no such parameter and its members
+        # read as device=None (bindings/msel_member_device_unpack.mojo).
+        parameters = tuple(parameters)
+        if getattr(cls, '_mojolearn_device', False) and 'device' not in parameters:
+            parameters += ('device',)
         registry[cls] = dict(entry=entry if type(entry) is BuiltinFunctionType else None,
                              context=owner_context, parameters=tuple(parameters), init=init,
                              methods=methods, forest=forest, mro=mro, hooks=hooks,

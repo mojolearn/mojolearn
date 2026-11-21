@@ -1445,9 +1445,12 @@ class _BaseSearch:
     _estimator_type = None
 
     def __init__(self, estimator, *, scoring=None, n_jobs=None, refit=True, cv=None, verbose=0,
-                 pre_dispatch='2*n_jobs', error_score=float('nan'), return_train_score=False):
+                 pre_dispatch='2*n_jobs', error_score=float('nan'), return_train_score=False, device=None):
+        # `device` is the search's own (its fold rows); it is the last
+        # constructor argument and is checked natively before anything is
+        # stored. A member estimator keeps its own `device`.
         return _NATIVE(self, "family_msel_search_init", (estimator, scoring, n_jobs, refit, cv, verbose,
-                       pre_dispatch, error_score, return_train_score), _NATIVE_CONTEXT)
+                       pre_dispatch, error_score, return_train_score, device), _NATIVE_CONTEXT)
 
     @property
     def _estimator_type(self):
@@ -1599,9 +1602,9 @@ class GridSearchCV(_BaseSearch):
     """
 
     def __init__(self, estimator, param_grid, *, scoring=None, n_jobs=None, refit=True, cv=None, verbose=0,
-                 pre_dispatch='2*n_jobs', error_score=float('nan'), return_train_score=False):
+                 pre_dispatch='2*n_jobs', error_score=float('nan'), return_train_score=False, device=None):
         return _NATIVE(self, "family_msel_search_init", (estimator, param_grid, scoring, n_jobs, refit, cv,
-                       verbose, pre_dispatch, error_score, return_train_score), _NATIVE_CONTEXT)
+                       verbose, pre_dispatch, error_score, return_train_score, device), _NATIVE_CONTEXT)
 
     def _candidates(self):
         return ParameterGrid(self.param_grid)
@@ -1665,10 +1668,10 @@ class RandomizedSearchCV(_BaseSearch):
 
     def __init__(self, estimator, param_distributions, *, n_iter=10, scoring=None, n_jobs=None, refit=True,
                  cv=None, verbose=0, pre_dispatch='2*n_jobs', random_state=None, error_score=float('nan'),
-                 return_train_score=False):
+                 return_train_score=False, device=None):
         return _NATIVE(self, "family_msel_search_init", (estimator, param_distributions, n_iter, scoring,
                        n_jobs, refit, cv, verbose, pre_dispatch, random_state, error_score,
-                       return_train_score), _NATIVE_CONTEXT)
+                       return_train_score, device), _NATIVE_CONTEXT)
 
     def _candidates(self):
         return ParameterSampler(self.param_distributions, self.n_iter, random_state=self.random_state)
