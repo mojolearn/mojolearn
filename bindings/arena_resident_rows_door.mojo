@@ -14,11 +14,14 @@
 from std.memory import ArcPointer
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
-from bindings.py_balanced import py_call, py_type, py_get, py_setitem
+from bindings.py_balanced import py_call, py_type, py_get
 from bindings.arena_materialize_native_door import (
     _prepare, _prepared_info, _cast, _slot, _empty, _empty_unfilled,
 )
-from bindings.arena_owner_door import ArenaOwnerView, arena_pin, arena_pinned, arena_unpin, arena_resident_view
+from bindings.arena_owner_door import (
+    ArenaOwnerView, ArenaRows, arena_pin, arena_pinned, arena_unpin, arena_rows_publish_host,
+)
+from bindings.device_rows_door_run import DoorRowsStore
 from bindings.msel_inputs_unpack import msel_input
 from core.arena_state import ARENA_RESIDENTS, ArenaResidentState, ArenaResidentEntry, arena_handle
 from core.msel_helpers_calls import msel_store_put, msel_store_free, msel_store_take_rows
@@ -155,37 +158,33 @@ def arena_resident_entry(view: ArenaOwnerView, values: PythonObject, indices: Bo
     return result
 
 
-def arena_materialize(fields: PythonObject, context: PythonObject) raises -> PythonObject:
-    var cached = fields["_host"]
-    if cached is not None:
+def arena_materialize(rows: ArenaRows, context: PythonObject) raises -> PythonObject:
+    # DeviceRows.materialize: the fold's host rows, gathered at most once by
+    # its resident store owner and kept by the fold's native state.
+    if rows.host is not None:
+        var cached = rows.host
         return cached
-    var take = fields["_take"]
-    if py_type(take) is not context["owner_method_class"] or take.__func__ is not context["arena_resident_take"]:
-        raise Error("TypeError: DeviceRows.materialize requires model_selection._Resident.take; Python gather callbacks cannot execute")
-    var owner = take.__self__
-    var output = arena_resident_take(arena_resident_view(owner,context),fields["base"],fields["indices"],context)
-    py_setitem(fields,"_host",output)
-    return output
+    var view = rows.resident_view()
+    var output = arena_resident_take(view, rows.base, rows.indices, context)
+    var kept = arena_rows_publish_host(rows.word, output, Int(py=_slot(output,"_addr",context)))
+    return kept
 
 
-def arena_rows_store_ids(fields: PythonObject, context: PythonObject) raises -> PythonObject:
-    """(base store id, base rows, row bytes, index store id, rows) of a
-    DeviceRows: the resident store entries of its base and of its int64
-    indices in model selection's store (`_Resident._entry`, each put ONCE
-    per owner and kept for the fold set), so a device kernel entry gathers
-    the fold out of the resident base with no host word read (lane a6:
-    family and classical entries accept a device X; the arena runner's
-    `_rows_gather` is the model). No download and no host gather."""
-    var take = fields["_take"]
-    if py_type(take) is not context["owner_method_class"] or take.__func__ is not context["arena_resident_take"]:
-        raise Error("TypeError: DeviceRows store ids require model_selection._Resident.take; Python gather callbacks cannot execute")
-    var view = arena_resident_view(take.__self__, context)
+def arena_rows_store(rows: ArenaRows, context: PythonObject) raises -> DoorRowsStore:
+    """The resident store ids of a fold view: the entries of its base and of
+    its int64 indices in model selection's store (each put ONCE per owner and
+    kept for the fold set), so a device kernel entry gathers the fold out of
+    the resident base with no host word read. `context` is the rows context
+    (`_arena_io._ROWS_CONTEXT`). No download and no host gather; one lease
+    of the resident state for the operation."""
+    var view = rows.resident_view()
     var lease = ARENA_RESIDENTS.acquire(arena_handle(view.word))
-    var base = _entry_info(fields["base"], lease, view, False, context)
-    var index = _entry_info(fields["indices"], lease, view, True, context)
-    var base_shape = base.info["shape"]
-    var n = Int(py=base_shape[0])
-    var row_bytes = Int(py=base.info["nbytes"]) // n if n else 0
-    var ids = Python.tuple(PythonObject(base.entry.store_id), PythonObject(n), PythonObject(row_bytes),
-                           PythonObject(index.entry.store_id), index.info["size"])
-    return ids
+    var base = _entry_info(rows.base, lease, view, False, context)
+    var index = _entry_info(rows.indices, lease, view, True, context)
+    var n = base.entry.rows
+    var row_bytes = 0
+    if n:
+        row_bytes = base.entry.nbytes // n
+    if row_bytes % 4 != 0:
+        raise Error("TypeError: DeviceRows requires a float32 base")
+    return DoorRowsStore(base.entry.store_id, n, row_bytes // 4, index.entry.store_id, Int(py=index.info["size"]))

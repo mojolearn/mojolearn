@@ -65,7 +65,7 @@ def connect(kinds, qselect, scores, owner_kinds=None, owner_classes=None):
                    arena_scope_class=_Scope, arena_cache_class=DeviceCache,
                    arena_scope_dict=vars(_Scope)['__dict__'], arena_cache_dict=vars(DeviceCache)['__dict__'],
                    scaler_bindings=connected, scaler_host_contexts={},
-                   maxabs_rows_class=DeviceRows, maxabs_rows_dict=vars(DeviceRows)['__dict__'], maxabs_gather_rows=gather,
+                   maxabs_rows_class=DeviceRows, maxabs_rows_owner=vars(DeviceRows)['_owner'].__get__, maxabs_gather_rows=gather,
                    # Shared composition target validation preserves both widths.
                    maxabs_finite_f32=finite32, maxabs_finite_f64=finite64,
                    classical_getframe=sys._getframe, prep_encode_kinds=dict(kinds),

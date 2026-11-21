@@ -240,13 +240,13 @@ struct ClsProg(Movable):
                 # device-rows input (lane cpu4-misc): the fold's rows gathered
                 # on the device; a binding without the gather copies host rows
                 if gather_ok:
-                    var fields = _rows_fields(value, pc)
-                    var rows_base = _dense_values(fields["base"], pc)
-                    var indices = fields["indices"]
-                    n_indices = Int(py=indices.size)
+                    var fold = _rows_fields(value, pc)
+                    var rows_base = _dense_values(fold.base, pc)
+                    var indices = fold.indices
+                    n_indices = fold.rows
                     if n_indices >= 1:
                         gathered = True
-                        row_words = Int(py=fields["row_words"])
+                        row_words = fold.row_words
                         var cache = _resident(entries, 0, True, pc, "x_prep")
                         if cache is not None:
                             base_slot = _cached_slot(cache, rows_base, entries, pc, "x_prep")

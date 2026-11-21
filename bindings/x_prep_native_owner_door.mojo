@@ -143,13 +143,12 @@ def xprep_values(source: PythonObject, entries: PythonObject, context: PythonObj
     # (kind, native buffer/base, indices, rows, columns). Row handles remain
     # on device when the existing ranges/store ABI is available.
     if py_type(source) is context["maxabs_rows_class"]:
-        var fields = _rows_fields(source,context)
-        var dtype = fields["dtype"]
-        if py_type(dtype) is not native_loaded_module("builtins").str:
+        var fold = _rows_fields(source,context)
+        if fold.dtype == "":
             raise Error("TypeError: native row selection requires native dtype metadata")
-        if String(dtype) == "<f4" and xprep_ranges(entries,1) and py_get(entries,"x_prep_dev_take_rows") is not None and py_get(entries,"x_prep_dev_put") is not None and py_get(entries,"x_prep_dev_free") is not None:
-            var base = _dense_values(fields["base"],context)
-            var indices = fields["indices"]
+        if fold.dtype == "<f4" and xprep_ranges(entries,1) and py_get(entries,"x_prep_dev_take_rows") is not None and py_get(entries,"x_prep_dev_put") is not None and py_get(entries,"x_prep_dev_free") is not None:
+            var base = _dense_values(fold.base,context)
+            var indices = fold.indices
             sequential_admit_value(indices,context)
             if not classical_is_array(indices,context) or String(indices.dtype) != "<i8" or Int(py=indices.ndim) != 1 or not classical_c_order(indices,context):
                 raise Error("TypeError: native row selection requires a contiguous int64 index buffer")

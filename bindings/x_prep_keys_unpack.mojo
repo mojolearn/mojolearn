@@ -32,7 +32,7 @@ struct XPrepKeys(Defaultable, Movable):
     var k_indices: PythonObject
     var k_maxabs_gather_rows: PythonObject
     var k_maxabs_rows_class: PythonObject
-    var k_maxabs_rows_dict: PythonObject
+    var k_maxabs_rows_owner: PythonObject
     var k_ndarray: PythonObject
     var k_order: PythonObject
     var k_output_context: PythonObject
@@ -60,7 +60,7 @@ struct XPrepKeys(Defaultable, Movable):
         self.k_indices = PythonObject(None)
         self.k_maxabs_gather_rows = PythonObject(None)
         self.k_maxabs_rows_class = PythonObject(None)
-        self.k_maxabs_rows_dict = PythonObject(None)
+        self.k_maxabs_rows_owner = PythonObject(None)
         self.k_ndarray = PythonObject(None)
         self.k_order = PythonObject(None)
         self.k_output_context = PythonObject(None)
@@ -92,7 +92,7 @@ def _x_prep_keys_fill(nk: UnsafePointer[XPrepKeys, MutUntrackedOrigin]) raises:
     nk[].k_indices = py_key("indices")
     nk[].k_maxabs_gather_rows = py_key("maxabs_gather_rows")
     nk[].k_maxabs_rows_class = py_key("maxabs_rows_class")
-    nk[].k_maxabs_rows_dict = py_key("maxabs_rows_dict")
+    nk[].k_maxabs_rows_owner = py_key("maxabs_rows_owner")
     nk[].k_ndarray = py_key("ndarray")
     nk[].k_order = py_key("order")
     nk[].k_output_context = py_key("output_context")

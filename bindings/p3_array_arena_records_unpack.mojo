@@ -42,13 +42,13 @@ from bindings.p3_array_arena_records_run import P3NumpyClasses, P3DictRecords
 comptime P3_ARRAY_LAYOUT = 1          # arena_materialize_native._array_layout
 # Kind 2 retired (lane arena, 2026-11-21): the resident class-layout record; its state is native.
 comptime P3_CACHE_LAYOUT = 3          # x_prep_native_owner._cache_layout
-comptime P3_ROWS_LAYOUT = 4           # DeviceRows class (x_prep_native_inputs / arena_rows_native)
+# Kind 4 retired (lane arena, 2026-11-21): the DeviceRows class-layout record; its state is native.
 # Kind 5 retired (lane arena, 2026-11-21): the resident class admission; its state is native.
 comptime P3_CACHE_KEY_LAYOUT = 6      # arena_cache_get.arena_cache_key model class
 # Kind 7 retired: the former from-buffer-only check did not stamp slot values.
 comptime P3_ARRAY_DOOR_LAYOUT = 8     # array_native._admit
 comptime P3_STATS_LAYOUT = 9          # arena_cache_stats class walks
-comptime P3_ROWS_EXACT_LAYOUT = 10    # x_prep_native_inputs._rows_fields (exact DeviceRows class)
+# Kind 10 retired (lane arena, 2026-11-21): the exact DeviceRows class admission; its state is native.
 comptime P3_SETATTR_LAYOUT = 11       # arena_cache_upload._counter_next setter hooks
 comptime P3_NATIVE_ARRAY_STORAGE_LAYOUT = 12  # shared native Array storage/slot admission
 

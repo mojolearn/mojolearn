@@ -23,19 +23,24 @@
 #
 # The connected names (import-time glue, `_native_msel_dispatch.connect`, into
 # every owner context model selection calls): `door_rows_class`
-# (`_arena_io.DeviceRows`), `door_rows_context` (`_arena_io._ROWS_CONTEXT`)
-# and `door_rows_call` (`_arena_io._ROWS_CALL`, lane a6: `door_rows_store`
-# reads the fold's resident store ids through it, the "store_ids" operation
-# of bindings/arena_rows_native.mojo).
+# (`_arena_io.DeviceRows`) and `door_rows_context` (`_arena_io._ROWS_CONTEXT`).
+#
+# Lane arena (2026-11-21): the fold view is the native `DeviceRowsState`
+# (`bindings/arena_owner_door.mojo` `arena_rows`: one slot read and one lease
+# per door call), not the instance dictionary. The fold's resident store ids
+# (`door_rows_store`, `door_rows_store_of`) moved to
+# `bindings/device_rows_store_door.mojo`, which reads the resident state
+# natively; the call back through Python (`door_rows_call`, "store_ids") is
+# gone. They live in their own module because the resident entry door imports
+# this one through the classical input doors.
 #
 # Numerics: none. The rows a DeviceRows names are the rows model selection's
 # host path gathers (the same device gather, the same order), so a fit or a
 # score through this door gets the same bytes as through a host Array.
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_get
+from bindings.py_balanced import py_type, py_get
 from bindings.admitted_finite_wording import door_rows_refuse
-from bindings.device_rows_door_run import DoorRowsStore
-from core.device_route import DEVICE_CPU
+from bindings.arena_owner_door import ArenaRows, arena_rows
 
 
 def door_is_device_rows(value: PythonObject, context: PythonObject) raises -> Bool:
@@ -47,17 +52,6 @@ def door_is_device_rows(value: PythonObject, context: PythonObject) raises -> Bo
     return py_type(value) is cls
 
 
-def _door_rows_fields(value: PythonObject, context: PythonObject) raises -> PythonObject:
-    # The instance dictionary through the class's own `__dict__` descriptor,
-    # as the DeviceRows owner reads it (bindings/arena_rows_native.mojo); the
-    # exact class check above means no attribute hook can run.
-    var rows_context = context["door_rows_context"]
-    var fields = py_call(rows_context["maxabs_rows_dict"].__get__, value, context["door_rows_class"])
-    if py_type(fields) is not rows_context["arena_native_types"]["dict"]:
-        raise Error("TypeError: DeviceRows requires a native metadata dictionary")
-    return fields
-
-
 struct DoorRows(Movable):
     """A DeviceRows resolved at a door without reading a host word of its
     rows: the base Array, the int64 index Array, the number of rows and the
@@ -67,16 +61,20 @@ struct DoorRows(Movable):
     var indices: PythonObject
     var rows: Int
     var row_words: Int
+    #: The whole fold view (the resident store owner included), kept so the
+    #: store ids are resolved without a second read of the instance.
+    var view: ArenaRows
 
     def __init__(out self, value: PythonObject, context: PythonObject) raises:
         if not door_is_device_rows(value, context):
             raise Error("TypeError: a DeviceRows door requires the connected DeviceRows class")
-        var fields = _door_rows_fields(value, context)
+        var view = arena_rows(value, context["door_rows_context"]["maxabs_rows_owner"], context["door_rows_class"])
         self.source = value
-        self.base = fields["base"]
-        self.indices = fields["indices"]
-        self.rows = Int(py=self.indices.size)
-        self.row_words = Int(py=fields["row_words"])
+        self.base = view.base
+        self.indices = view.indices
+        self.rows = view.rows
+        self.row_words = view.row_words
+        self.view = view^
 
 
 # TOMBSTONE: door_rows_host and door_x (the DeviceRows materialize for host-address
@@ -84,31 +82,3 @@ struct DoorRows(Movable):
 # R13) deleted 2026-11-08 by lane a5-admit-core-followup; code recoverable at f7d10d2b09.
 # Restore: experiments/removed/A5_DOOR_ROWS_HOST.patch. admit_x / admit_rows_host
 # (bindings/admitted_input_unpack.mojo) read a DeviceRows without the round trip.
-
-
-def door_rows_store(value: PythonObject, context: PythonObject) raises -> DoorRowsStore:
-    """The resident store ids of a DeviceRows (the base and the indices put
-    once per fold set by its model-selection owner). `DoorRowsStore.none()`
-    for a context without the store connection (a door outside model
-    selection), so the caller gathers on the host instead."""
-    var call = py_get(context, PythonObject("door_rows_call"))
-    if call is None or not door_is_device_rows(value, context):
-        return DoorRowsStore.none()
-    var ids = py_call(call, value, PythonObject("store_ids"), Python.tuple(), context["door_rows_context"])
-    var row_bytes = Int(py=ids[2])
-    if row_bytes % 4 != 0:
-        raise Error("TypeError: DeviceRows requires a float32 base")
-    return DoorRowsStore(Int(py=ids[0]), Int(py=ids[1]), row_bytes // 4, Int(py=ids[3]), Int(py=ids[4]))
-
-
-def door_rows_store_routed(route_device: Int, value: PythonObject, context: PythonObject) raises -> DoorRowsStore:
-    """`door_rows_store` for an estimator with a device route: a CPU-route
-    estimator (`route_device == DEVICE_CPU`, the device its route RESOLVED
-    to, never the parameter) reads no device store. `DoorRowsStore.none()`
-    sends its door to the host gather (`admit_x`: a parallel gather out of
-    the fold's host base, never a download and never a device launch), so a
-    `device="cpu"` member of a cross-validation on a GPU installation runs
-    its fold on the CPU. A device route keeps the resident store."""
-    if route_device == DEVICE_CPU:
-        return DoorRowsStore.none()
-    return door_rows_store(value, context)

@@ -46,6 +46,9 @@ def rows_state() raises:
     var lease = ARENA_ROWS.acquire(arena_handle(word))
     require(lease[].ndim() == 3 and lease[].size() == 24 and lease[].row_bytes() == 24, "rows extents")
     require(lease[].host_address == 0 and lease[].resident == ARENA_HANDLE_NONE, "rows defaults")
+    require(lease[].host_pin() == 0, "no host rows before the publication")
+    require(lease[].publish_host(12288, 77) == 77 and lease[].host_address == 12288, "the first host publication is kept")
+    require(lease[].publish_host(16384, 78) == 77 and lease[].host_address == 12288, "a second host publication keeps the first")
     ARENA_ROWS.release(arena_handle(word))
     var refused = False
     try:

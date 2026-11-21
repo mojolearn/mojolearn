@@ -91,7 +91,7 @@ def connect(kinds):
                    arena_scope_class=_Scope, arena_cache_class=DeviceCache,
                    arena_scope_dict=vars(_Scope)['__dict__'], arena_cache_dict=vars(DeviceCache)['__dict__'],
                    scaler_bindings=connected, scaler_host_contexts={},
-                   maxabs_rows_class=DeviceRows, maxabs_rows_dict=vars(DeviceRows)['__dict__'], maxabs_gather_rows=gather,
+                   maxabs_rows_class=DeviceRows, maxabs_rows_owner=vars(DeviceRows)['_owner'].__get__, maxabs_gather_rows=gather,
                    classical_getframe=sys._getframe, prep_stateless_kinds=dict(kinds))
     context["prep_stateless_entry_identities"] = _identities(connected)
     # glue: freeze native class/descriptor references and fixed mapping contents

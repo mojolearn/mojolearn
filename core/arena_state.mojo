@@ -64,9 +64,25 @@ struct ArenaStateLock(Movable):
         shared_slot_unlock(rebind[MutPointer[Int64, MutUntrackedOrigin]](self.word.unsafe_ptr()))
 
 
+#: Positions of a `DeviceRowsState`'s pin tokens: the base, the index Array,
+#: the resident store owner that gathers the fold (0 without one) and the
+#: materialized host rows (0 until they were published).
+comptime ARENA_ROWS_PIN_BASE = 0
+comptime ARENA_ROWS_PIN_INDICES = 1
+comptime ARENA_ROWS_PIN_RESIDENT = 2
+comptime ARENA_ROWS_PIN_HOST = 3
+comptime ARENA_ROWS_PINS = 4
+
+
 struct DeviceRowsState(Movable):
     """A fold view: rows `index_address[0 .. rows)` (int64) of a host base of
-    `base_rows` rows, `row_words` items of `base_itemsize` bytes per row."""
+    `base_rows` rows, `row_words` items of `base_itemsize` bytes per row.
+
+    The view is immutable after construction except for the one publication
+    of its host rows (`publish_host`), which the boundary serializes (it is
+    made with the interpreter lock held), so the state carries no lock word.
+    `base_address` / `index_address` are 0 while the boundary's doors admit
+    the pinned objects themselves (their admission reads the address)."""
     var base_address: Int
     var base_rows: Int
     var row_words: Int
@@ -97,7 +113,7 @@ struct DeviceRowsState(Movable):
         self.rows = rows
         self.resident = resident
         self.host_address = 0
-        self.pins = List[Int]()
+        self.pins = List[Int](length=ARENA_ROWS_PINS, fill=0)
 
     def ndim(self) -> Int:
         return 1 + len(self.trailing)
@@ -108,6 +124,20 @@ struct DeviceRowsState(Movable):
 
     def row_bytes(self) -> Int:
         return self.row_words * self.base_itemsize
+
+    def host_pin(self) -> Int:
+        """The pin token of the materialized host rows, 0 before they exist."""
+        return self.pins[ARENA_ROWS_PIN_HOST]
+
+    def publish_host(mut self, address: Int, pin: Int) -> Int:
+        """Record the fold's host rows (`materialize` runs at most once).
+        Returns the pin kept: `pin`, or the one published first, in which
+        case the caller drops its own."""
+        if self.pins[ARENA_ROWS_PIN_HOST] != 0:
+            return self.pins[ARENA_ROWS_PIN_HOST]
+        self.pins[ARENA_ROWS_PIN_HOST] = pin
+        self.host_address = address
+        return pin
 
 
 @fieldwise_init

@@ -62,7 +62,8 @@ def connect():
                    arena_resident_take=vars(model_selection._Resident)['take'],
                    arena_cast=entries['cast'],
                    maxabs_rows_class=_arena_io.DeviceRows,
-                   maxabs_rows_dict=vars(_arena_io.DeviceRows)["__dict__"])
+                   maxabs_rows_owner=vars(_arena_io.DeviceRows)['_owner'].__get__,
+                   maxabs_rows_owner_set=vars(_arena_io.DeviceRows)['_owner'].__set__)
     # glue: retain ordinary metadata and native TLS access identities at import
     context.update(cache_type_mro=vars(type)["__mro__"].__get__,
                    cache_type_dict=vars(type)["__dict__"].__get__,

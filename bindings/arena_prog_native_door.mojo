@@ -165,13 +165,13 @@ def _rows_gather(value: PythonObject, entries: PythonObject, prefix: String, mut
     # The store slot of a DeviceRows' rows gathered on the device out of its
     # base, put once through the active resident() scope (any size) or
     # directly into a slot this run owns (`_arena_io.rows_slot`).
-    var fields = _rows_fields(value, context)
-    var base = _dense_values(fields["base"], context)
-    var indices = fields["indices"]
-    var n = Int(py=indices.size)
+    var fold = _rows_fields(value, context)
+    var base = _dense_values(fold.base, context)
+    var indices = fold.indices
+    var n = fold.rows
     if n < 1:
         return -1
-    var d = Int(py=fields["row_words"])
+    var d = fold.row_words
     var cache = _resident(entries, 0, True, context, prefix)
     var base_slot = -1
     if cache is not None:

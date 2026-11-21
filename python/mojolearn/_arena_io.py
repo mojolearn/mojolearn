@@ -144,16 +144,40 @@ class resident:
         return _ROWS_CALL(_LOCAL, "resident_stats", (), _ROWS_CONTEXT)
 
 
+def _rows_attribute(name):
+    # glue: one read-only attribute of the native fold view (one binding call)
+    def read(self):
+        return _ROWS_CALL(self, "attribute", (name,), _ROWS_CONTEXT)
+    read.__name__ = name
+    return property(read)
+
+
 class DeviceRows:
     """Rows `indices` (a C-contiguous int64 Array) of `base` (a float32
-    C-contiguous 2-D Array): a fold's X with no host gather. shape, dtype,
-    ndim, size and len are known without the data. `materialize()` gives
-    the rows as a host Array through `take(base, indices)` (model_selection's
-    resident device gather) for a route that needs host words; it is called
-    at most once."""
+    C-contiguous 2-D Array): a fold's X with no host gather. `base`,
+    `indices`, `shape`, `dtype`, `ndim`, `size`, `itemsize`, `row_words` and
+    len are known without the data and are read-only. `materialize()` gives
+    the rows as a host Array through `take` (the bound `take` of
+    model_selection's resident device gather) for a route that needs host
+    words; the gather runs at most once."""
+
+    __slots__ = ("_owner",)
+
+    base = _rows_attribute("base")
+    indices = _rows_attribute("indices")
+    shape = _rows_attribute("shape")
+    dtype = _rows_attribute("dtype")
+    ndim = _rows_attribute("ndim")
+    size = _rows_attribute("size")
+    itemsize = _rows_attribute("itemsize")
+    row_words = _rows_attribute("row_words")
 
     def __init__(self, base, indices, take):
         _ROWS_CALL(self, "init", (base, indices, take), _ROWS_CONTEXT)
+
+    def __setattr__(self, name, value):
+        raise AttributeError("DeviceRows is a read-only view of its base and indices: "
+                             f"cannot assign {name!r}; build a new DeviceRows instead")
 
     def __len__(self):
         return _ROWS_CALL(self, "len", (), _ROWS_CONTEXT)

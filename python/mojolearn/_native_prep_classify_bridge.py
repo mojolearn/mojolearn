@@ -69,7 +69,7 @@ def connect(kinds, prog_context):
     context.update(arena_mmap=mmap.mmap, arena_local=_LOCAL,
                    arena_scope_class=_Scope, arena_cache_class=DeviceCache,
                    arena_scope_dict=vars(_Scope)['__dict__'], arena_cache_dict=vars(DeviceCache)['__dict__'],
-                   maxabs_rows_class=DeviceRows, maxabs_rows_dict=vars(DeviceRows)['__dict__'], maxabs_gather_rows=gather,
+                   maxabs_rows_class=DeviceRows, maxabs_rows_owner=vars(DeviceRows)['_owner'].__get__, maxabs_gather_rows=gather,
                    classical_getframe=sys._getframe, cls_kinds=dict(kinds), cls_bindings=connected,
                    prog_context=prog_context, real_type=REAL_TYPES, integral_type=INTEGRAL_TYPES,
                    resident_class=_arena_io.resident, resident_min_words=_arena_io.RESIDENT_MIN_WORDS,

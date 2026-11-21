@@ -16,10 +16,13 @@ Every other image reads an owner through `arena_owner_view`: Mojo keeps one
 Python type object per Mojo type per interpreter, so the downcast admits the
 exact class from any image.
 
-A door reads the slot ONCE per public operation (`arena_resident_view`): one
-C slot read through the class's own member descriptor (no instance
-dictionary, no attribute hook of a subclass can run), one downcast, two
-words copied. Nothing here is reached per row, per batch or per token, so
+A door reads the slot ONCE per public operation (`arena_resident_view`,
+`arena_rows`): one C slot read through the class's own member descriptor (no
+instance dictionary, no attribute hook of a subclass can run), one downcast,
+two words copied. `arena_rows` then takes ONE lease of the fold's
+`DeviceRowsState` and copies what a door needs (`ArenaRows`): the pinned base
+and index objects, the extents and the resident store owner that gathers the
+fold. Nothing here is reached per row, per batch or per token, so
 there is no independent work to split across cores.
 """
 from std.python import Python, PythonObject
@@ -30,12 +33,15 @@ from bindings.optimizer_public_words_unpack import stash_python_error
 from bindings.py_balanced import py_setattr
 from bindings.py_cpython_table import cpython_table
 from bindings.py_type_registry import py_type_absent
-from core.arena_state import ARENA_RESIDENTS, arena_handle
+from core.arena_state import (
+    ARENA_RESIDENTS, ARENA_ROWS, ARENA_ROWS_PIN_BASE, ARENA_ROWS_PIN_INDICES, ARENA_ROWS_PIN_HOST, arena_handle,
+)
 from core.entry_table import EntryRef
 from core.msel_helpers_calls import msel_store_free
 
 #: The kinds of state an owner holds (one registry each).
 comptime ARENA_OWNER_RESIDENT = 1
+comptime ARENA_OWNER_ROWS = 2
 
 
 def arena_pin(value: PythonObject) -> Int:
@@ -81,6 +87,18 @@ def _resident_finalize(word: Int, store: EntryRef) raises:
         arena_unpin(drained[i].prepared_pin)
 
 
+def _rows_finalize(word: Int) raises:
+    """Release a fold view's state and drop its pins (the base, the indices,
+    the resident store owner, the host rows). No device call: a fold's store
+    entries belong to its resident owner."""
+    var handle = arena_handle(word)
+    var lease = ARENA_ROWS.acquire(handle)
+    var pins = lease[].pins.copy()
+    ARENA_ROWS.release(handle)
+    for i in range(len(pins)):  # driver-loop: over the four pins of one fold view
+        arena_unpin(pins[i])
+
+
 struct ArenaOwner(Movable, Writable):
     """The one object a Python arena class holds: `kind`, the handle `word`
     of its state and the device-store entry resolved at construction."""
@@ -104,6 +122,11 @@ struct ArenaOwner(Movable, Writable):
         if self.word >= 0 and self.kind == ARENA_OWNER_RESIDENT:
             try:
                 _resident_finalize(self.word, self.store)
+            except error:
+                pass
+        elif self.word >= 0 and self.kind == ARENA_OWNER_ROWS:
+            try:
+                _rows_finalize(self.word)
             except error:
                 pass
 
@@ -171,3 +194,93 @@ def arena_resident_view(model: PythonObject, context: PythonObject) raises -> Ar
     var owner = arena_owner_slot(context["arena_resident_owner_get"], model, context["arena_resident_class"],
                                  context["cache_attribute_error"])
     return arena_owner_view(owner, ARENA_OWNER_RESIDENT)
+
+
+struct ArenaRows(Movable):
+    """A `DeviceRows` resolved for one public operation: the pinned base and
+    int64 index objects (new references), the host rows when they were
+    materialized (else None), the extents, and the resident store owner
+    that gathers the fold (`resident` < 0 for a fold without one; `store`
+    is then unresolved)."""
+    var word: Int
+    var store: EntryRef
+    var resident: Int
+    var base: PythonObject
+    var indices: PythonObject
+    var host: PythonObject
+    var rows: Int
+    var base_rows: Int
+    var row_words: Int
+    var itemsize: Int
+    #: The base's dtype string, empty when the base names its dtype with
+    #: another object (an ndarray's `numpy.dtype`).
+    var dtype: String
+    var trailing: List[Int]
+
+    def __init__(out self, view: ArenaOwnerView) raises:
+        var lease = ARENA_ROWS.acquire(arena_handle(view.word))
+        var base = arena_pinned(lease[].pins[ARENA_ROWS_PIN_BASE])
+        var indices = arena_pinned(lease[].pins[ARENA_ROWS_PIN_INDICES])
+        var host = PythonObject(None)
+        if lease[].host_pin() != 0:
+            host = arena_pinned(lease[].host_pin())
+        self.word = view.word
+        self.store = view.store
+        self.resident = lease[].resident
+        self.base = base
+        self.indices = indices
+        self.host = host
+        self.rows = lease[].rows
+        self.base_rows = lease[].base_rows
+        self.row_words = lease[].row_words
+        self.itemsize = lease[].base_itemsize
+        self.dtype = lease[].base_dtype
+        self.trailing = lease[].trailing.copy()
+
+    def resident_view(self) raises -> ArenaOwnerView:
+        """The resident store owner of the fold, or the refusal of a fold
+        built without `model_selection._Resident.take`."""
+        if self.resident < 0:
+            raise Error("TypeError: DeviceRows requires model_selection._Resident.take; Python gather callbacks cannot execute")
+        return ArenaOwnerView(self.resident, self.store)
+
+
+def _rows_owner(model: PythonObject, getter: PythonObject, cls: PythonObject) raises -> ArenaOwnerView:
+    # `getter` is the bound `__get__` of DeviceRows' own `_owner` member
+    # descriptor: a C slot read that admits `model` as an instance of `cls`.
+    ref cpy = Python().cpython()
+    var args = Python.tuple(model, cls)
+    var result = cpy.PyObject_Call(getter._obj_ptr, args._obj_ptr, PyObjectPtr())
+    _ = args
+    if not result:
+        cpython_table()[].PyErr_Clear()
+        raise Error("TypeError: DeviceRows holds no native rows state: it was never initialized, or it is not the connected DeviceRows class")
+    var owner = PythonObject(from_owned=result)
+    return arena_owner_view(owner, ARENA_OWNER_ROWS)
+
+
+def arena_rows(model: PythonObject, getter: PythonObject, cls: PythonObject) raises -> ArenaRows:
+    """The fold view of a `DeviceRows`, resolved once for the public
+    operation: one slot read, one downcast, one lease of its state."""
+    return ArenaRows(_rows_owner(model, getter, cls))
+
+
+def arena_rows_host_taken(model: PythonObject, getter: PythonObject, cls: PythonObject) raises -> Bool:
+    """Whether a route has already taken the fold's host rows."""
+    var view = _rows_owner(model, getter, cls)
+    var lease = ARENA_ROWS.acquire(arena_handle(view.word))
+    return lease[].host_pin() != 0
+
+
+def arena_rows_publish_host(word: Int, host: PythonObject, address: Int) raises -> PythonObject:
+    """Publish the fold's host rows and return the rows kept: `host`, or the
+    ones another thread published first (its own are then dropped). Called
+    with the interpreter lock held."""
+    var lease = ARENA_ROWS.acquire(arena_handle(word))
+    var pin = arena_pin(host)
+    var kept = lease[].publish_host(address, pin)
+    if kept != pin:
+        var first = arena_pinned(kept)
+        arena_unpin(pin)
+        return first
+    return host
