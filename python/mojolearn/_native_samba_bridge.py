@@ -121,9 +121,6 @@ def connect(config_cls, model_cls, training, neural, state_cls, session_cls=None
         if not isinstance(entry, BuiltinFunctionType):
             raise TypeError(f"Samba native execution requires a compiled {name}")
         entries[name] = entry
-    exact_schedule = training._lr_native("lr_schedule_exact")  # cpu-route: connects the existing exact host-scalar learning-rate entry at import; native owner evaluates one scalar per step
-    if not isinstance(exact_schedule, BuiltinFunctionType):
-        raise TypeError("Samba schedule requires a compiled exact schedule entry")
     core = {}
     for name in ("equal_elements", "reduce_stat", "all_finite_f32"):  # glue: connect existing native input admission entries at import
         entry = _buffer._native(name)
@@ -154,7 +151,7 @@ def connect(config_cls, model_cls, training, neural, state_cls, session_cls=None
         "optimizer_class": training.AdamW,
         "optimizer_step_io": "optimizer_resident_step_io" in entries,
         "optimizer_maximize_device": "optimizer_maximize_dev" in entries,
-        "generator_class": training.Generator, "exact_schedule": exact_schedule,
+        "generator_class": training.Generator,
         # A restored schedule is built by the optimizer owner's native
         # `schedule_setstate` (dictionary fill, admission, one block bind).
         "schedule_native": training._OPT_NATIVE, "schedule_context": training._OPT_CONTEXT,
