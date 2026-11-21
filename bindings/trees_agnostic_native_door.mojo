@@ -8,12 +8,21 @@
 # A Python callable model is refused: native code never calls back into it.
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
+from std.python._cpython import GILReleased
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.mode_metadata_native_door import _fields, _class_fields
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.classical_attributes_door import classical_check_layout
 from bindings.prep_native_estimator_door import (
     prep_estimator_admit, prep_estimator_has, prep_estimator_call, prep_estimator_predict_internal,
+    prep_estimator_plan,
+)
+from bindings.member_boundary_door import member_admit_serving, member_state
+from bindings.member_owner_unpack import MemberOwner
+from bindings.member_set_door import MEMBER_SET_NATIVE
+from core.member_abi import (
+    MemberCall, MemberMatrix, MemberPlan, member_call, member_free, member_outputs_of,
+    MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA, MEMBER_CAN_IMPORT,
 )
 from bindings.trees_public_inputs_door import trees_table, trees_call, trees_address, trees_reshape, trees_cast
 from bindings.admitted_input_unpack import admitted_vector, admitted_unfilled, classical_view
@@ -335,15 +344,141 @@ def _rows(x_source: PythonObject, s: _State, name: String, context: PythonObject
     return x
 
 
-def _model_rows(s: _State, syn: PythonObject, rows: Int, context: PythonObject) raises -> PythonObject:
+# ---------------------------------------------------------------- the explained model as a native member
+struct _Member(Movable):
+    """The explained estimator as a NATIVE MEMBER (core/member_abi.mojo) for
+    one values call. `native` False: the model's class has no member entry
+    that serves this call, and every chunk runs the model's own compiled
+    door (`_evaluate`), as before. True: `call.state` holds the fitted model
+    (IMPORT, once per values call) and `operation` is the member operation
+    of the explained method; each chunk is one member call with the GIL
+    released, written straight into the float32 (rows, k) Array the kernels
+    read. Released on every exit of the values call (`_member_release`)."""
+    var native: Bool
+    var owner: MemberOwner
+    var call: MemberCall
+    var operation: Int
+
+    def __init__(out self):
+        var plan = MemberPlan()
+        self.native = False
+        self.owner = MemberOwner()
+        self.call = MemberCall(plan.route)
+        self.operation = MEMBER_OP_PREDICT
+
+
+def _member_release(mut em: _Member):
+    """Free the held member state. Never raises; a member that was never
+    opened is nothing to free."""
+    if em.native:
+        member_free(em.owner.plan, em.call)
+        em.native = False
+    _ = em.owner.published  # the owner's pins outlive the last member call
+
+
+def _member_open(mut em: _Member, s: _State, context: PythonObject):
+    """UNPACK, once per values call: the explained model as a native member
+    when its family serves IMPORT and the explained method (predict of a
+    regressor kind, predict_proba of a classifier) and its output width is
+    the one construction recorded. Anything else (no mark, a classifier
+    explained through predict, whose member predict writes codes, an
+    admission or import the family refuses, another width) leaves `em`
+    closed: the fallback rule, the model's own door then answers or raises
+    its own words. Never raises."""
+    comptime if not MEMBER_SET_NATIVE:
+        return
+    try:
+        var plan = prep_estimator_plan(s.model, context)
+        if plan is None or py_get(plan, "member") is None:
+            return
+        var proba = s.method == "predict_proba"
+        if not proba and Bool(py=plan["classifier"]):
+            return
+        var b = _b()
+        var member_context = plan["context"]
+        var fields = py_call(plan["fields_get"], s.model, py_type(s.model))
+        var operation = MEMBER_OP_PREDICT_PROBA if proba else MEMBER_OP_PREDICT
+        var needs = MEMBER_CAN_IMPORT | (MEMBER_CAN_PREDICT_PROBA if proba else MEMBER_CAN_PREDICT)
+        var owner = member_admit_serving(s.model, fields, plan, member_context, b, needs)
+        if not owner.published:
+            return
+        if proba:
+            owner.plan.classes = s.k
+        var call = MemberCall(owner.plan.route, member_state(s.model, fields, member_context, b, owner.plan))
+        var cols = -1
+        try:
+            cols = member_outputs_of(owner.plan, call, operation)
+        except:
+            cols = -1
+        if cols != s.k:
+            member_free(owner.plan, call)
+            return
+        em.owner = owner^
+        em.call = call^
+        em.operation = operation
+        em.native = True
+    except:
+        return
+
+
+def _member_rows(mut em: _Member, x: PythonObject, n: Int, d: Int, k: Int,
+                 context: PythonObject) raises -> PythonObject:
+    """The member on rows x (an (n, d) float32 C-order Array this door built)
+    as a float32 (n, k) Array: one member call, the GIL released, the output
+    written in place (no output admission, no cast, no snapshot). None when
+    the member refuses the call: the member is released and the caller runs
+    the model's own door for this and every later chunk."""
+    # Unfilled: the member writes every cell of dst before anything reads it.
+    var dst = admitted_unfilled([n * k], "<f4", context)
+    em.call.x = MemberMatrix(trees_address(x), n, d)
+    em.call.dst = MemberMatrix(dst.addr, n, k)
+    var done = False
+    try:
+        var py = Python()
+        with GILReleased(py):
+            _ = member_call(em.owner.plan.member, em.operation, em.call)
+        done = True
+    except:
+        done = False
+    _ = x  # the rows are read through the whole member call
+    if not done:
+        _member_release(em)
+        return PythonObject(None)
+    return trees_reshape(dst.keep, Python.tuple(n, k), context)
+
+
+def _model_out(mut em: _Member, s: _State, x: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
+    """The explained model on rows x as a float32 (n, k) Array: through the
+    held native member when one is open, else the model's compiled door."""
+    if em.native and n > 0:
+        var out = _member_rows(em, x, n, s.d, s.k, context)
+        if out is not None:
+            return out
+    return _evaluate(s.model, s.method, x, n, context)
+
+
+def _model_rows(mut em: _Member, s: _State, syn: PythonObject, rows: Int, context: PythonObject) raises -> PythonObject:
     """The model on a chunk's synthetic matrix: float32 (rows, k)."""
-    var out = _evaluate(s.model, s.method, trees_reshape(syn, Python.tuple(rows, s.d), context), rows, context)
+    var out = _model_out(em, s, trees_reshape(syn, Python.tuple(rows, s.d), context), rows, context)
     if Int(py=out.shape[1]) != s.k:
         raise Error("ValueError: the explained model output width changed after construction")
     return out
 
 
 def _kernel_values(fields: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """KernelExplainer values; the member state opened inside is released on
+    every exit."""
+    var em = _Member()
+    var result = PythonObject(None)
+    try:
+        result = _kernel_values_over(fields, args, context, em)
+    finally:
+        _member_release(em)
+    return result
+
+
+def _kernel_values_over(fields: PythonObject, args: PythonObject, context: PythonObject,
+                        mut em: _Member) raises -> PythonObject:
     var name = String("KernelExplainer")
     var nsamples = args[1]
     var l1 = args[2]
@@ -390,7 +525,11 @@ def _kernel_values(fields: PythonObject, args: PythonObject, context: PythonObje
     var phi = admitted_vector(max(n * d * k, 1), "<f8", context)
     if n == 0:
         return _shape(phi, 0, d, k, context)
-    var fx = _evaluate(s.model, s.method, x, n, context)   # the explained rows, one model call
+    # A forest evaluated on the device needs the model once (fx): no member
+    # state is imported for it. Every other route calls the model per chunk.
+    if s.dev is None:
+        _member_open(em, s, context)
+    var fx = _model_out(em, s, x, n, context)   # the explained rows, one model call
     if Int(py=fx.shape[1]) != k:
         raise Error("ValueError: the explained model output width changed after construction")
     var x0 = trees_address(x)
@@ -419,7 +558,7 @@ def _kernel_values(fields: PythonObject, args: PythonObject, context: PythonObje
                 syn = Optional[PythonObject](admitted_vector(rows * m * nb * d, "<f4", context))
             _ = _call(s.table, "x_trees_kshap_synth", Python.list(PythonObject(x0 + 4 * r0 * d), PythonObject(bg0), taddr,
                       PythonObject(trees_address(syn.value())), _ints(rows, nb, d, nfixed, m, nfull, L, npaired, r0, s.seed, wbits)))
-            var out = _model_rows(s, syn.value(), rows * m * nb, context)
+            var out = _model_rows(em, s, syn.value(), rows * m * nb, context)
             _ = _call(s.table, "x_trees_kshap_means", Python.list(PythonObject(trees_address(out)),
                       PythonObject(e0 + 8 * r0 * m * k), _ints(rows, nb, m, k, link_word)))
             _ = out
@@ -467,7 +606,7 @@ def _kernel_values(fields: PythonObject, args: PythonObject, context: PythonObje
                     _ = _call(s.table, "x_trees_kshap_synth", Python.list(PythonObject(x0 + 4 * r0 * d), PythonObject(bg0), taddr,
                               PythonObject(trees_address(syn.value())),
                               _ints(rows, nb, d, nfixed, m, nfull, L, npaired, r0, s.seed, wbits)))
-                    out = _model_rows(s, syn.value(), rows * m * nb, context)
+                    out = _model_rows(em, s, syn.value(), rows * m * nb, context)
                     y_addr = trees_address(out)
                     if not reuse:
                         syn = Optional[PythonObject]()
@@ -547,6 +686,19 @@ def _linear_block(s: _State, context: PythonObject) raises -> PythonObject:
 
 
 def _permutation_values(fields: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """PermutationExplainer values; the member state opened inside is
+    released on every exit."""
+    var em = _Member()
+    var result = PythonObject(None)
+    try:
+        result = _permutation_values_over(fields, args, context, em)
+    finally:
+        _member_release(em)
+    return result
+
+
+def _permutation_values_over(fields: PythonObject, args: PythonObject, context: PythonObject,
+                             mut em: _Member) raises -> PythonObject:
     var name = String("PermutationExplainer")
     var b = _b()
     var s = _state(fields, name, context)
@@ -598,6 +750,9 @@ def _permutation_values(fields: PythonObject, args: PythonObject, context: Pytho
         _ = wb
         _ = x
         return _shape(phi, n, d, k, context)
+    # Past the device forest and the resident linear routes (neither calls
+    # the model per chunk): the explained model as a native member.
+    _member_open(em, s, context)
     var bits = _switches(s.table)
     var fast = s.mode == "fast"
     var idn_pool = (bits & _AGN_IDN_SYN_POOL) != 0
@@ -628,7 +783,7 @@ def _permutation_values(fields: PythonObject, args: PythonObject, context: Pytho
             if nv * d > 0:
                 unsafe_memcpy(dest=dst, src=src, count=nv * d)  # one block copy, not one per element
             _ = syn  # keep the source alive through the copy above
-            var out = _model_rows(s, front, nv, context)
+            var out = _model_rows(em, s, front, nv, context)
             _ = front
             _ = _call(s.table, "x_trees_pshap_dvalues", Python.list(PythonObject(x0 + 4 * r0 * d), PythonObject(bg0),
                       PythonObject(trees_address(out)), PythonObject(p0 + 8 * r0 * d * k), PythonObject(t0),
@@ -650,7 +805,7 @@ def _permutation_values(fields: PythonObject, args: PythonObject, context: Pytho
                 syn = Optional[PythonObject](admitted_vector(rows * mm * nb * d, "<f4", context))
             _ = _call(s.table, "x_trees_pshap_synth", Python.list(PythonObject(x0 + 4 * r0 * d), PythonObject(bg0),
                       PythonObject(trees_address(syn.value())), _ints(rows, nb, d, npm, r0, s.seed)))
-            var out = _model_rows(s, syn.value(), rows * mm * nb, context)
+            var out = _model_rows(em, s, syn.value(), rows * mm * nb, context)
             if not reuse:
                 syn = Optional[PythonObject]()
             _ = _call(s.table, "x_trees_pshap_values", Python.list(PythonObject(trees_address(out)),
