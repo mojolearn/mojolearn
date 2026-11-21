@@ -3,6 +3,7 @@
 operation names, the dtype item table, and the process counters (injected transport faults and
 store tokens). The Python pool and trace records stay in `bindings/parallel_shard_common_door.mojo`."""
 from std.ffi import external_call
+from std.memory import unsafe_memcpy
 from std.os import getenv
 from core.shared_slot import SharedSlot
 
@@ -143,3 +144,120 @@ def shard_item(dtype: String) raises -> Tuple[String, Int]:
     if dtype == "|u1" or dtype == "<u1":
         return (String("B"), 1)
     raise Error("ValueError: shard arrays require float32, float64, int32, int64, uint32 or uint8, got " + dtype)
+
+
+# ------------------------------------------------- typed partition and join
+# (lane dw-parallel-arena, 2026-11-21) The shard bounds, the device-index
+# admission, the idle-pool rule, the batch checks, the transport negative
+# control's decision and the block copies of the join, over typed values.
+# `bindings/parallel_shard_common_door.mojo` unpacks into these and packs.
+
+#: UNPACK hands a device index that is not an exact int as this value: it is
+#: refused in the words of a negative index.
+comptime SHARD_DEVICE_NOT_AN_INDEX = -1
+#: The trace keeps this many pool records; the oldest go first.
+comptime SHARD_TRACE_RECORDS = 256
+
+# What `shard_run` does with the idle pool it found (`shard_idle_action`).
+comptime SHARD_IDLE_FORGET = 0   # inherited across fork: drop the record, close nothing
+comptime SHARD_IDLE_REUSE = 1    # re-admit its workers and use it
+comptime SHARD_IDLE_CLOSE = 2    # close it; a fresh pool is opened
+
+
+def shard_width_admit(exact: Bool, width: Int, name: String) raises:
+    """`exact`: the width is an exact int."""
+    if not exact or width < 1:
+        raise Error("ValueError: " + name + " must be a positive integer")
+
+
+def shard_bounds(count: Int, width: Int, empty_message: String) raises -> List[Int]:
+    """The shard bounds [lo0, hi0, lo1, hi1, ...] of `range(0, count, width)`
+    with `min(start + width, count)` ends, for an admitted `width`."""
+    if count < 1 and empty_message != "":
+        raise Error("ValueError: " + empty_message)
+    var bounds = List[Int]()
+    var i = 0
+    while i < count:  # driver-loop: over the shard boundaries for the device pool
+        bounds.append(i)
+        bounds.append(min(i + width, count))
+        i += width
+    return bounds^
+
+
+def shard_indices_admit(devices: List[Int]) raises:
+    """`DevicePool`'s admission of the device list, in its words: at least
+    one index, none negative, none repeated."""
+    if len(devices) == 0:
+        raise Error("ValueError: devices must be distinct nonnegative integer indices")
+    for i in range(len(devices)):  # small-loop(admitted device indices)
+        if devices[i] < 0:
+            raise Error("ValueError: devices must be distinct nonnegative integer indices")
+        for j in range(i):  # small-loop(earlier device indices)
+            if devices[j] == devices[i]:
+                raise Error("ValueError: devices must be distinct nonnegative integer indices")
+
+
+def shard_stored_index_admit(index: Int, operands: Int) raises:
+    if index < 0 or index >= operands:
+        raise Error("parallel shards: a stored operand index is out of range")
+
+
+def shard_idle_action(owner_pid: Int, pid: Int, same_environment: Bool, closed: Bool, workers: Int,
+                      devices: Int) -> Int:
+    """An idle pool is reused only by the process that started it, for an
+    unchanged parent environment, while open and with one worker per device.
+    `same_environment`, `closed` and `workers` are read only for a pool this
+    process owns."""
+    if owner_pid != pid:
+        return SHARD_IDLE_FORGET
+    if same_environment and not closed and workers == devices:
+        return SHARD_IDLE_REUSE
+    return SHARD_IDLE_CLOSE
+
+
+def shard_batch_admit(results: Int, requests: Int) raises:
+    if results != requests:
+        raise Error("ValueError: shard workers returned an incomplete batch")
+
+
+def shard_stores_admit(stored: Int, workers: Int) raises:
+    if stored != workers:
+        raise Error("ValueError: shard workers did not store the call's operands")
+
+
+def shard_fault_action(results: Int, requests: Int, numerical: Bool) raises -> Int:
+    """The transport fault to inject into this batch (SHARD_FAULT_*): the
+    armed one, once per take window, for a numerical batch of more than one
+    result. `numerical` is read only for such a batch."""
+    if results <= 1 or requests <= 0 or not numerical:
+        return SHARD_FAULT_NONE
+    var fault = shard_transport_fault()
+    if fault != SHARD_FAULT_NONE and shard_fault_mark():
+        return fault
+    return SHARD_FAULT_NONE
+
+
+def shard_rows_admit(lo: Int, hi: Int, rows: Int) raises:
+    if lo < 0 or hi > rows or hi < lo:
+        raise Error("ValueError: shard rows outside the source")
+
+
+def shard_block_copy(dst: Int, src: Int, bytes: Int):
+    """`bytes` bytes from `src` to `dst` (one shard's block, back to back:
+    one transfer, as before)."""
+    if bytes > 0:
+        unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=dst),
+                      src=Pointer[UInt8, ImmUntrackedOrigin](unsafe_from_address=src), count=bytes)
+
+
+def shard_join_block(same_dtype: Bool, cursor: Int, rows: Int, total: Int) raises:
+    """A shard's block of `rows` rows joins at row `cursor` of `total`."""
+    if not same_dtype:
+        raise Error("ValueError: shard workers returned different dtypes")
+    if cursor + rows > total:
+        raise Error("ValueError: shard workers returned too many rows")
+
+
+def shard_join_complete(cursor: Int, total: Int) raises:
+    if cursor != total:
+        raise Error("ValueError: shard workers returned an incomplete result")
