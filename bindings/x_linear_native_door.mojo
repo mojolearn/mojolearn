@@ -22,21 +22,20 @@ from std.ffi import c_int, c_long
 from std.math import isinf
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr, GILReleased
-from core.linear_entry_table_ext import XL_OP_DECISION_ROWS, XL_OP_HUBER_OUT, XL_OP_SPEARMAN, XL_OP_BEST_ALPHA
+from core.linear_entry_table_ext import XL_OP_DECISION_ROWS, XL_OP_HUBER_OUT, XL_OP_BEST_ALPHA
 from x_linear.door_run import (
     ALGO_SGD, ALGO_GLM, ALGO_HUBER, ALGO_BAYES, ALGO_ARD, ALGO_LARS, ALGO_QUANTILE, ALGO_RIDGE, ALGO_ENETCV,
-    ALGO_LOGCV, ALGO_ISOTONIC, ALGO_ISOTONIC_PREDICT, ALGO_RIDGE_KFOLD, LINK_IDENTITY, LINK_EXP, xl_run_parts,
-    xl_parts_total, xl_seed_halves, xl_lbfgs_work, xl_sgd_class_floats, XlSplitWords, xl_cv_fold_ids_run,
-    xl_cv_roles_limit, xl_cv_roles_run,
+    ALGO_LOGCV, ALGO_RIDGE_KFOLD, LINK_IDENTITY, LINK_EXP, xl_run_parts, xl_parts_total, xl_seed_halves,
+    xl_lbfgs_work, xl_sgd_class_floats, XlSplitWords, xl_cv_fold_ids_run, xl_cv_roles_limit, xl_cv_roles_run,
 )
 from bindings.x_linear_route_unpack import (
     XLinearOps, xl_route, xl_route_host, xl_ops_require, xl_device_admit, xl_route_drop,
 )
 from bindings.x_linear_common_unpack import (
     _b, _op, _truth, _float, _int, _repr, _str, _gt, _ge, _lt, _le, _eq, _isinstance, _is_int, _name, _class_attr,
-    _attr, _sorted_repr, _xl_scope, _xl_call, _xl_word, _xl_float, _xl_count, _xl_slice, _xl_join, _xl_matrix,
-    _xl_vector, _xl_column, _xl_words, _xl_block, _xl_decision, _xl_run, _xl_fold_matrix, _xl_run_x,
-    _xl_with_weights, _xl_owned, _xl_reals, _xl_class_prep,
+    _attr, _sorted_repr, _xl_scope, _xl_call, _xl_word, _xl_float, _xl_count, _xl_slice, _xl_matrix, _xl_vector,
+    _xl_block, _xl_decision, _xl_run, _xl_fold_matrix, _xl_run_x, _xl_with_weights, _xl_owned, _xl_reals,
+    _xl_class_prep,
 )
 from x_linear.door_run import xl_cd_fit_run, xl_cd_predict_run
 from bindings.x_linear_cd_unpack import xl_cd_fit_unpack, xl_cd_predict_unpack, xl_cd_host_prediction_unpack
@@ -47,6 +46,12 @@ from bindings.x_linear_infer_unpack import (
     xl_predict_proba_unpack, xl_one_class_unpack,
 )
 from bindings.x_linear_infer_pack import xl_scores_pack, xl_classifier_predict_pack, xl_one_class_predict_pack
+from x_linear.door_run import xl_isotonic_fit_run
+from bindings.x_linear_common_unpack import xl_fit_released, _xl_or
+from bindings.x_linear_isotonic_unpack import (
+    xl_isotonic_fit_unpack, xl_isotonic_transform_unpack, xl_isotonic_refit_transform_unpack,
+)
+from bindings.x_linear_isotonic_pack import xl_isotonic_fit_pack, xl_isotonic_transform_pack
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.optimizer_public_words_unpack import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.native_error_class import error_without_class
@@ -59,8 +64,6 @@ from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.classical_attributes_door import _type_mro
 from bindings.mode_metadata_native_door import _class_fields
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
-from bindings.native_prepared_owner_unpack import prepared_get, prepared_put
-from core.host_bytes_equal import host_bytes_equal
 from bindings.native_class_admission_door import class_record, class_admit
 from bindings.py_lists import py_list_int
 from bindings.classical_exceptions_door import classical_require_fitted
@@ -599,10 +602,6 @@ def xl_regressor_score(model: PythonObject, args: PythonObject, entries: XLinear
     return PythonObject(result)
 
 
-def _xl_or(value: PythonObject, default: Float64) raises -> Float64:
-    return default if value is None else _float(value)
-
-
 def xl_fit_bayes(model: PythonObject, args: PythonObject, entries: XLinearOps, context: PythonObject) raises -> PythonObject:
     """BayesianRidge.fit(X, y, sample_weight)."""
     var nk = x_linear_keys()
@@ -921,187 +920,29 @@ def xl_fit_ridge_classifier(model: PythonObject, args: PythonObject, entries: XL
 # -------------------------------------------------------------- isotonic
 
 
-def _xl_isotonic_fit(model: PythonObject, fields: PythonObject, entries: XLinearOps, x: AdmittedXView,
-                     y_source: PythonObject, sample_weight: PythonObject, context: PythonObject) raises:
-    """IsotonicRegression.fit over the column already read: the binding
-    sorts the positive-weight rows by (x, y, row) and pools them."""
-    var nk = x_linear_keys()
-    var n = x.rows
-    var y = _xl_vector(y_source, n, context)
-    var increasing = py_item(fields, nk[].k_increasing)
-    var rising = False
-    if _eq(increasing, PythonObject("auto")):
-        # the sign of Spearman's rho, exact, in the binding
-        var sign = _xl_call(entries, XL_OP_SPEARMAN, [x.address, y.address], [n], List[Float64]())
-        _ = y  # keep the Python object alive through the native call above
-        rising = sign >= 0
-        _ = y  # keep the Python object alive through the native call above
-    else:
-        rising = _truth(increasing)
-    py_setitem(fields, nk[].k_increasing_, PythonObject(rising))
-    var has_w = 0
-    var yy = _xl_with_weights(y, sample_weight, n, has_w, context)
-    var y_min = py_item(fields, nk[].k_y_min)
-    var y_max = py_item(fields, nk[].k_y_max)
-    var ip: List[Int] = [1 if rising else 0, 0 if y_min is None else 1, 0 if y_max is None else 1, has_w]
-    var fp: List[Float64] = [_xl_or(y_min, 0.0), _xl_or(y_max, 0.0)]
-    var out = _xl_run(entries, ALGO_ISOTONIC, x.address, n, n, 1, yy.address, yy.rows, ip, fp,
-                      3 + 2 * n, 6 * n, 3 * n, context)
-    _ = yy  # keep the Python object alive through the native call above
-    var k = _xl_count(out, 0)
-    _ = yy  # keep the Python object alive through the native call above
-    py_setitem(fields, nk[].k_X_min_, _xl_float(out, 1))
-    _ = yy  # keep the Python object alive through the native call above
-    py_setitem(fields, nk[].k_X_max_, _xl_float(out, 2))
-    _ = yy  # keep the Python object alive through the native call above
-    py_setitem(fields, nk[].k_X_thresholds_, _xl_slice(out, 3, k, Python.tuple(k), context))
-    _ = yy  # keep the Python object alive through the native call above
-    py_setitem(fields, nk[].k_y_thresholds_, _xl_slice(out, 3 + n, k, Python.tuple(k), context))
-    _ = yy  # keep the Python object alive through the native call above
-    py_setitem(fields, nk[].k_n_features_in_, PythonObject(1))
-    _ = y^
-    _ = yy^
-
-
-def _xl_isotonic_check(fields: PythonObject) raises:
-    var nk = x_linear_keys()
-    if not py_contains(Python.tuple("nan", "clip", "raise"), py_item(fields, nk[].k_out_of_bounds)):
-        raise Error("mojolearn IsotonicRegression: out_of_bounds must be 'nan', 'clip' or 'raise'")
-
-
-#: The joined isotonic knots of a fitted model (lane fx-rows-rest,
-#: 2026-11-18): one prepared-registry record per model (outside its
-#: __dict__, dropped with the model), the tuple
-#:   (X_thresholds_ object, y_thresholds_ object, joined float32 Array,
-#:    knots per array, X words address, y words address, joined address)
-comptime _XL_ISO_KNOTS_SLOT = "x_linear_isotonic_knots_v1"
-
-
-def _xl_own_f32(value: PythonObject, address: Int, count: Int, context: PythonObject) raises -> Bool:
-    """`value` is an exact mojolearn float32 Array of `count` words whose
-    own words sit at `address` (its slots read natively; no method runs)."""
-    var nk = x_linear_keys()
-    if py_type(value) is not py_item(context, nk[].k_array_class):
-        return False
-    var b = _b()
-    var dtype = array_slot_once(value, "dtype", context)
-    var size = array_slot_once(value, "size", context)
-    var addr = array_slot_once(value, "_addr", context)
-    if py_type(dtype) is not b.str or py_type(size) is not b.int or py_type(addr) is not b.int:
-        return False
-    return String(py=dtype) == "<f4" and Int(py=size) == count and Int(py=addr) == address
-
-
-def _xl_isotonic_knots(model: PythonObject, fields: PythonObject,
-                       context: PythonObject) raises -> Tuple[PythonObject, Int, Int, Int]:
-    """The joined knots [X_thresholds_ | y_thresholds_] of a fitted
-    IsotonicRegression: (float32 Array, knots k, its address, its words).
-
-    Every predict admitted both fitted arrays again and joined them into a
-    new Array (two admissions through the NumPy view, an allocation and two
-    copies: about 50 us of a 0.34 ms predict of 100,000 queries, call
-    profile nvc-prof-20261118T175049Z-49fb08). The joined Array is now kept
-    in the model's record and served while it is provably the join this
-    call would build: the two stored attributes are the SAME objects
-    (a replaced X_thresholds_ / y_thresholds_ misses), each is still an
-    exact float32 Array of the same length at the same address, and its
-    words are bitwise equal to the kept copy (an in-place edit through any
-    view misses; the compare reads the 2 k knot words once, across the
-    host's cores, where the join copied them). A miss runs the old path and
-    replaces the record; arrays the door would cast or copy (another dtype,
-    a caller's ndarray) are never recorded. Same words to the kernel: no bit
-    moves. Nothing is frozen and no user-visible attribute changes."""
-    var nk = x_linear_keys()
-    var xs = py_item(fields, nk[].k_X_thresholds_)
-    var ys = py_item(fields, nk[].k_y_thresholds_)
-    var mods = NativeModules()
-    var held = prepared_get(mods, _XL_ISO_KNOTS_SLOT, model)
-    if held is not None and held[0] is xs and held[1] is ys:
-        var count = Int(py=held[3])
-        var xa = Int(py=held[4])
-        var ya = Int(py=held[5])
-        if _xl_own_f32(xs, xa, count, context) and _xl_own_f32(ys, ya, count, context):
-            var joined = held[2]
-            var joined_at = Int(py=held[6])
-            var same = (host_bytes_equal(joined_at, xa, 4 * count)
-                        and host_bytes_equal(joined_at + 4 * count, ya, 4 * count))
-            _ = xs  # keep the Python object alive through the compare above
-            _ = ys  # keep the Python object alive through the compare above
-            if same:
-                return (joined, count, joined_at, 2 * count)
-    var xt = _xl_words(xs, "X_thresholds_", context)
-    var yt = _xl_words(ys, "y_thresholds_", context)
-    var k = len(xs)
-    var x_count = xt.rows * xt.cols
-    var y_count = yt.rows * yt.cols
-    var thr = _xl_join(xt.address, x_count, yt.address, y_count, context)
-    var base = labels_address(thr)
-    if (k > 0 and x_count == k and y_count == k and _xl_own_f32(xs, xt.address, k, context)
-            and _xl_own_f32(ys, yt.address, k, context)):
-        # Nothing is stored for a model that takes no weak reference.
-        prepared_put(mods, _XL_ISO_KNOTS_SLOT, model,
-                     Python.tuple(xs, ys, thr, PythonObject(k), PythonObject(xt.address), PythonObject(yt.address),
-                                  PythonObject(base)))
-    _ = yt  # keep the Python object alive through the native call above
-    _ = xt  # keep the Python object alive through the native call above
-    return (thr, k, base, x_count + y_count)
-
-
-def _xl_isotonic_transform(model: PythonObject, fields: PythonObject, entries: XLinearOps, t: AdmittedXView,
-                           context: PythonObject) raises -> PythonObject:
-    """IsotonicRegression.transform over the column already read: the
-    joined thresholds (the model's record, `_xl_isotonic_knots`), the
-    interp1d-linear predict on the binding; out_of_bounds='raise' is the
-    flag word after the predictions."""
-    var nk = x_linear_keys()
-    var n = t.rows
-    var knots = _xl_isotonic_knots(model, fields, context)
-    var thr = knots[0]
-    var k = knots[1]
-    var oob_mode = py_item(fields, nk[].k_out_of_bounds)
-    var raise_oob = _eq(oob_mode, PythonObject("raise"))
-    var oob = 2 if raise_oob else (1 if _eq(oob_mode, PythonObject("clip")) else 0)
-    var ip: List[Int] = [k, oob]
-    var fp: List[Float64] = [_float(py_item(fields, nk[].k_X_min_)), _float(py_item(fields, nk[].k_X_max_))]
-    # Both bindings write every prediction word (host `isotonic_predict`,
-    # one query per team slot; device `_iso_predict_grid`, one thread per
-    # query): only the out-of-bounds word at [n] starts as zero (the host
-    # column ORs into it).
-    var out = _xl_run(entries, ALGO_ISOTONIC_PREDICT, t.address, n, n, 1, knots[2], knots[3],
-                      ip, fp, n + 1 if raise_oob else n, 1, 1, context, written=n)
-    _ = thr  # keep the Python object alive through the native call above
-    _ = thr^
-    if raise_oob:
-        if _xl_word(out, n) != 0:
-            raise Error("A value in x_new is below/above the interpolation range.")
-        return _xl_slice(out, 0, n, Python.tuple(n), context)
-    return out
-
-
 def xl_isotonic(model: PythonObject, operation: Int, args: PythonObject, entries: XLinearOps, context: PythonObject) raises -> PythonObject:
-    """IsotonicRegression.fit / fit_transform / transform / predict."""
-    var nk = x_linear_keys()
-    var fields = py_fields(model)
+    """IsotonicRegression.fit / fit_transform / transform / predict: UNPACK
+    (bindings/x_linear_isotonic_unpack.mojo), RUN (x_linear/door_run.mojo,
+    GIL released), PACK (bindings/x_linear_isotonic_pack.mojo).
+    fit_transform is the fit's three steps, then the transform's over the
+    column the fit already converted."""
     if operation == X_LINEAR_OPN_ISOTONIC_FIT or operation == X_LINEAR_OPN_ISOTONIC_FIT_TRANSFORM:
-        _xl_isotonic_check(fields)
-        xl_ops_require(entries)
-        var x = _xl_column(args[0], "X", context)
-        _xl_isotonic_fit(model, fields, entries, x.view(), args[1], args[2], context)
+        var fields = py_fields(model)
+        var fitting = xl_isotonic_fit_unpack(model, fields, args, entries, context)
+        var rising = False
+        var py = Python()
+        with GILReleased(py):
+            rising = xl_isotonic_fit_run(fitting.fit.request, fitting.auto, fitting.targets)
+        xl_isotonic_fit_pack(fields, fitting, rising, context)
         if operation == X_LINEAR_OPN_ISOTONIC_FIT:
-            _ = x^
             return model
-        # `self.fit(X, y, sample_weight).transform(X)`: the column this call
-        # already converted
-        var out = _xl_isotonic_transform(model, fields, entries, x.view(), context)
-        _ = x^
-        return out
-    if not py_contains(fields, nk[].k_X_thresholds_):
-        raise Error("RuntimeError: mojolearn IsotonicRegression: call fit first")
-    xl_ops_require(entries)
-    var t = _xl_column(args[0], "T", context)
-    var out = _xl_isotonic_transform(model, fields, entries, t.view(), context)
-    _ = t^
-    return out
+        var again = xl_isotonic_refit_transform_unpack(model, fields, fitting, entries, context)
+        xl_fit_released(again.fit, model)
+        return xl_isotonic_transform_pack(again, context)
+    var call = xl_isotonic_transform_unpack(model, args[0], entries, context)
+    xl_fit_released(call.fit, model)
+    return xl_isotonic_transform_pack(call, context)
+
 
 
 # ------------------------------------------------- Lasso / ElasticNet (cd)

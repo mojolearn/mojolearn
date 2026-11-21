@@ -14,7 +14,7 @@ from core.linear_entry_table_ext import (
     XL_OP_FLAGS, XL_OP_DECISION, XL_OP_DECISION_CODES, XL_OP_DECISION_ROWS, XL_OP_CLASS_PREP, XL_HAS_FIT_FOLD,
 )
 from x_linear.door_run import (
-    XlDecisionRequest, xl_decision_run, xl_run_call, xl_run_fit, xl_run_fit_fold, xl_run_status_refuse,
+    XlDecisionRequest, xl_decision_run, XlFitRequest, xl_fit_run, xl_run_call, xl_run_fit, xl_run_fit_fold, xl_run_status_refuse,
     xl_run_word, xl_run_copy, xl_run_join, xl_block_dims, xl_run_block,
 )
 from bindings.x_linear_route_unpack import XLinearOps
@@ -434,6 +434,85 @@ def _xl_run_x(model: PythonObject, ops: XLinearOps, algo: Int, x: AdmittedXView,
     return out
 
 
+struct XlFit(Movable):
+    """One admitted fit call: the typed request RUN reads
+    (x_linear/door_run.mojo `xl_fit_run`) and the objects whose words it
+    addresses, kept alive until PACK returns: X (None for a device fold or
+    when the caller keeps it), the targets, the one zero word a fit without
+    targets reads, and the flat float32 result."""
+    var request: XlFitRequest
+    var x: PythonObject
+    var y: PythonObject
+    var zero: PythonObject
+    var result: PythonObject
+
+    def __init__(out self, var request: XlFitRequest, var x: PythonObject, var y: PythonObject,
+                 var zero: PythonObject, var result: PythonObject):
+        self.request = request^
+        self.x = x^
+        self.y = y^
+        self.zero = zero^
+        self.result = result^
+
+
+def xl_fit_build(ops: XLinearOps, algo: Int, x_addr: Int, x_size: Int, n: Int, d: Int, x_keep: PythonObject,
+                 y_addr: Int, y_size: Int, y_keep: PythonObject, var ip: List[Int], var fp: List[Float64],
+                 n_out: Int, n_fw: Int, n_iw: Int, context: PythonObject, written: Int = 0) raises -> XlFit:
+    """UNPACK of one XL_OP_FIT call from host words: the result vector and
+    the typed request. The targets are `y_size` 32-bit words at `y_addr`
+    (`y_keep` owns them); `y_size` 0 is no targets (one zero word, as
+    `zeros((1,))`). `written`: the leading result words the entry writes in
+    full on every binding (host and device); those are left unfilled and
+    only the words after them start as zeros. 0 (the default) zero-fills
+    the whole result (fx-rows, 2026-11-18: see `_xl_run`)."""
+    var result: PythonObject
+    if written > 0 and written <= n_out:
+        result = admitted_storage_native([n_out], "<f4", context, as_array=True)
+        var tail = _F32P(unsafe_from_address=labels_address(result))
+        for i in range(written, n_out):  # small-loop(the status words after the written prefix)
+            tail[i] = Float32(0)
+    else:
+        result = admitted_vector(n_out, "<f4", context)
+    var zero = PythonObject(None)
+    if y_size <= 0:
+        zero = admitted_vector(1, "<f4", context)
+    var ya = y_addr if y_size > 0 else labels_address(zero)
+    var request = XlFitRequest(ops.entry, algo, x_addr, x_size, n, d, ya, y_size, ip^, fp^, n_out, n_fw, n_iw,
+                               labels_address(result), False, 0, 0, 0)
+    return XlFit(request^, x_keep, y_keep, zero, result)
+
+
+def xl_fit_build_x(ops: XLinearOps, algo: Int, x: AdmittedXView, x_keep: PythonObject, y_addr: Int, y_size: Int,
+                   y_keep: PythonObject, var ip: List[Int], var fp: List[Float64], n_out: Int, n_fw: Int,
+                   n_iw: Int, context: PythonObject) raises -> XlFit:
+    """`xl_fit_build` over an admitted X: a device-resident fold
+    (`x.store`) is fitted by XL_OP_FIT_FOLD on rows gathered on the device
+    (no host gather, no upload of X); any other X by XL_OP_FIT from its
+    host words."""
+    if not x.store.active():
+        return xl_fit_build(ops, algo, x.address, x.rows * x.cols, x.rows, x.cols, x_keep, y_addr, y_size, y_keep,
+                            ip^, fp^, n_out, n_fw, n_iw, context)
+    var result = admitted_vector(n_out, "<f4", context)
+    var zero = admitted_vector(1, "<f4", context)
+    var ya = y_addr if y_size > 0 else labels_address(zero)
+    var request = XlFitRequest(ops.entry, algo, 0, x.rows * x.cols, x.rows, x.cols, ya, y_size, ip^, fp^, n_out,
+                               n_fw, n_iw, labels_address(result), True, x.store.base_id, x.store.base_rows,
+                               x.store.index_id)
+    return XlFit(request^, x_keep, y_keep, zero, result)
+
+
+def xl_fit_released(call: XlFit, model: PythonObject) raises:
+    """RUN of one fit request with the GIL released; then the refusal of a
+    device fold on its status words (a host fit has none)."""
+    var words: Tuple[Int, Int] = (0, 0)
+    var py = Python()
+    with GILReleased(py):
+        words = xl_fit_run(call.request)
+    if call.request.fold:
+        door_rows_refuse(words[0], words[1], _name(model), call.request.base_rows)
+
+
+
 def _xl_with_weights(y: AdmittedX, sample_weight: PythonObject, n: Int, mut has_sw: Int,
                      context: PythonObject) raises -> AdmittedX:
     """`_with_weights(yv, sample_weight, n)`: the targets then the checked
@@ -514,3 +593,7 @@ def _xl_bayes_refuse(model: PythonObject, fields: PythonObject, return_std: Pyth
         raise Error("mojolearn " + name + ": compute_score is not implemented")
     if _truth(return_std):
         raise Error("mojolearn " + name + ": predict(return_std=True) is not implemented")
+
+
+def _xl_or(value: PythonObject, default: Float64) raises -> Float64:
+    return default if value is None else _float(value)

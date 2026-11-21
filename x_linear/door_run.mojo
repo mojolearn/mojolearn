@@ -11,7 +11,7 @@ from std.memory import unsafe_memcpy
 from core.native_descriptor_abi import NativeDescriptorCall
 from core.native_descriptor_call import native_descriptor_call
 from core.linear_entry_table_ext import (
-    XL_OP_FIT, XL_OP_FIT_FOLD, XL_OP_DECISION, XL_OP_DECISION_CODES, XL_OP_DECISION_ROWS,
+    XL_OP_FIT, XL_OP_FIT_FOLD, XL_OP_DECISION, XL_OP_DECISION_CODES, XL_OP_DECISION_ROWS, XL_OP_SPEARMAN,
 )
 from core.solver_entry_table import solver_cd_fit_call, solver_cd_predict_call
 from core.admitted_refusals import admitted_finite_refuse
@@ -393,3 +393,89 @@ def xl_decision_run(request: XlDecisionRequest) raises:
         ints.append(request.link)
     ints.append(request.status)
     _ = native_descriptor_call(request.entry, request.operation, addresses, ints, List[Float64]())
+
+
+# ------------------------------------------------------------------ fits
+# RUN of the fit operations: one typed request per XL_OP_FIT /
+# XL_OP_FIT_FOLD call (UNPACK: bindings/x_linear_common_unpack.mojo
+# `xl_fit_build` and each group's bindings/x_linear_<group>_unpack.mojo).
+
+
+struct XlFitRequest(Movable):
+    """One fit call of the x_linear operations entry: the route `algo`, X
+    as `x_size` float32 words at `x` (n rows of d), the `y_size` 32-bit
+    target words at `y`, the route's integer and float hyperparameters and
+    the `n_out` float32 result words at `dst` (`n_fw` / `n_iw`: the float
+    and int work words). `fold`: X is a model-selection fold resident on
+    the device (`base_id`, `base_rows`, `index_id`; no host words)."""
+    var entry: NativeDescriptorCall
+    var algo: Int
+    var x: Int
+    var x_size: Int
+    var n: Int
+    var d: Int
+    var y: Int
+    var y_size: Int
+    var ip: List[Int]
+    var fp: List[Float64]
+    var n_out: Int
+    var n_fw: Int
+    var n_iw: Int
+    var dst: Int
+    var fold: Bool
+    var base_id: Int
+    var base_rows: Int
+    var index_id: Int
+
+    def __init__(out self, entry: NativeDescriptorCall, algo: Int, x: Int, x_size: Int, n: Int, d: Int, y: Int,
+                 y_size: Int, var ip: List[Int], var fp: List[Float64], n_out: Int, n_fw: Int, n_iw: Int, dst: Int,
+                 fold: Bool, base_id: Int, base_rows: Int, index_id: Int):
+        self.entry = entry
+        self.algo = algo
+        self.x = x
+        self.x_size = x_size
+        self.n = n
+        self.d = d
+        self.y = y
+        self.y_size = y_size
+        self.ip = ip^
+        self.fp = fp^
+        self.n_out = n_out
+        self.n_fw = n_fw
+        self.n_iw = n_iw
+        self.dst = dst
+        self.fold = fold
+        self.base_id = base_id
+        self.base_rows = base_rows
+        self.index_id = index_id
+
+
+def xl_fit_run(request: XlFitRequest) raises -> Tuple[Int, Int]:
+    """One fit call into `request.dst`. Returns a device fold's (finite,
+    range) status words, (0, 0) for a fit from host words."""
+    if request.fold:
+        return xl_run_fit_fold(request.entry, request.algo, request.base_id, request.base_rows, request.index_id,
+                               request.n, request.d, request.y, request.y_size, request.ip, request.fp,
+                               request.n_out, request.n_fw, request.n_iw, request.dst)
+    _ = xl_run_fit(request.entry, request.algo, request.x, request.x_size, request.n, request.d, request.y,
+                   request.y_size, request.ip, request.fp, request.n_out, request.n_fw, request.n_iw, request.dst)
+    return (0, 0)
+
+
+def xl_isotonic_fit_run(request: XlFitRequest, auto: Bool, targets: Int) raises -> Bool:
+    """IsotonicRegression.fit: the direction, then the one fit call. With
+    increasing='auto' the direction is the sign of Spearman's rho of the
+    column at `request.x` and the `request.n` targets at `targets`, exact,
+    on the binding (XL_OP_SPEARMAN); it is the fit's first Int word.
+    Returns True for increasing."""
+    if not auto:
+        _ = xl_fit_run(request)
+        return request.ip[0] != 0
+    var columns: List[Int] = [request.x, targets]
+    var count: List[Int] = [request.n]
+    var sign = native_descriptor_call(request.entry, XL_OP_SPEARMAN, columns, count, List[Float64]())
+    var ip = request.ip.copy()
+    ip[0] = 1 if sign >= 0 else 0
+    _ = xl_run_fit(request.entry, request.algo, request.x, request.x_size, request.n, request.d, request.y,
+                   request.y_size, ip, request.fp, request.n_out, request.n_fw, request.n_iw, request.dst)
+    return sign >= 0
