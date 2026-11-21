@@ -11,10 +11,8 @@ x_neighbors door uses). No kernel is touched.
 
 Kinds (MEMBER_OP_NEW word 0): 0 NearestCentroid, 1 LocalOutlierFactor,
 2 OneClassSVM, 3 KernelPCA, 4 PolynomialCountSketch, 5 AdditiveChi2Sampler,
-6 SkewedChi2Sampler, 9 KNNImputer (7 LabelPropagation and 8 LabelSpreading
-are reserved: not members, see the boundary).
-The other classes of the family are not published yet
-(MEMBER-ABI-V2.md family 12). OUTPUTS with no state answers from the kind
+6 SkewedChi2Sampler, 9 KNNImputer, 10 SVGP (7 LabelPropagation and 8
+LabelSpreading are reserved: not members, see the boundary). OUTPUTS with no state answers from the kind
 word and `call.classes` (NearestCentroid: proba `classes`, decision 1 for two
 classes else `classes`, predict 1; the outlier detectors: 1 column).
 
@@ -165,6 +163,22 @@ fit int32 1 x features (0 / 1), 66 the columns missing at fit int32 1 x count
 masked (as the estimator keeps the user's array), else the slot owns the
 masked copy (the door allocates the same new array).
 
+SVGP (kind 10, a regressor). RUN: neighbors/svgp_run.mojo `svgp_fit_run`
+(the inducing rows: n_inducing evenly spaced rows of X; then the variational
+fit) and `svgp_query_run` (the mean), over the x_neighbors entry, as
+bindings/neighbors_graph_native_door.mojo `_svgp_fit` / `_svgp_query` run
+them. Caller-given inducing points are not a member (admit answers False).
+MEMBER_OP_NEW parameters (count 7): [0] kind 10, [1] n_inducing, [2] gamma
+(`_svgp_gamma`: 1 / (2 lengthscale^2)), [3] kernel_variance, [4]
+noise_variance, [5] jitter, [6] the old-items switch
+(`family_svc_xn_old_items`). Views: X float32 rows x features, y float32
+rows x 1 (host, dense; no weights, index or device view). PREDICT writes the
+mean, float32 rows x 1. Score is not published (the caller predicts and runs
+its own metric). Blocks: 64 Z float32 m x features, 65 alpha float32 1 x m,
+66 C float32 m x m, 67 q_mu float32 1 x m, 68 q_sqrt float32 m x m, 69
+scalars float64 1 x 2 (elbo, features). A fit reads X and y only during the
+call.
+
 LIFETIME: a NearestCentroid fit reads X and y only during the call (its
 fitted state is the centroids it computes); nothing of X is kept or copied.
 A LocalOutlierFactor fit BORROWS X as its fitted rows, as the estimator's
@@ -232,6 +246,8 @@ from neighbors.neighbors_local_run import (
     nc_check_classes, nc_check_priors_size, nc_check_variance, nc_refuse_decision_metric,
     ImpKeepPlan, imp_keep_plan, imp_check_features,
 )
+from neighbors.svgp_run import SVGP_VARIANCE_NONE, SvgpFitRequest, SvgpQueryRequest, svgp_fit_run, svgp_query_run
+from neighbors.neighbors_graph_run import xn_rows_match_check, xn_svgp_definite_check
 from neighbors.knn_imputer_run import ImpFitRequest, ImpTransformRequest, imp_fit_run, imp_transform_run, imp_result_columns
 
 comptime _CHUNK = 256
@@ -246,7 +262,8 @@ comptime XNEIGHBORS_KIND_SCHI2 = 6
 comptime XNEIGHBORS_KIND_LABEL_PROPAGATION = 7   # reserved: not a member (the unlabeled marker; boundary)
 comptime XNEIGHBORS_KIND_LABEL_SPREADING = 8     # reserved: not a member (the unlabeled marker; boundary)
 comptime XNEIGHBORS_KIND_IMPUTER = 9
-comptime XNEIGHBORS_KIND_COUNT = 10
+comptime XNEIGHBORS_KIND_SVGP = 10
+comptime XNEIGHBORS_KIND_COUNT = 11
 comptime NC_BLOCK_CENTROIDS = MEMBER_BLOCK_FAMILY
 comptime NC_BLOCK_STD = MEMBER_BLOCK_FAMILY + 1
 comptime NC_BLOCK_DEVIATIONS = MEMBER_BLOCK_FAMILY + 2
@@ -282,6 +299,13 @@ comptime IM_BLOCK_ROWS = MEMBER_BLOCK_FAMILY
 comptime IM_BLOCK_VALID = MEMBER_BLOCK_FAMILY + 1
 comptime IM_BLOCK_MISSING = MEMBER_BLOCK_FAMILY + 2
 comptime _IM_BLOCKS = 3
+comptime SV_BLOCK_Z = MEMBER_BLOCK_FAMILY
+comptime SV_BLOCK_ALPHA = MEMBER_BLOCK_FAMILY + 1
+comptime SV_BLOCK_C = MEMBER_BLOCK_FAMILY + 2
+comptime SV_BLOCK_QMU = MEMBER_BLOCK_FAMILY + 3
+comptime SV_BLOCK_QSQRT = MEMBER_BLOCK_FAMILY + 4
+comptime SV_BLOCK_SCALARS = MEMBER_BLOCK_FAMILY + 5
+comptime _SV_BLOCKS = 6
 #: OneClassSVM gamma words (MEMBER_OP_NEW word 5).
 comptime OC_GAMMA_VALUE = 0
 comptime OC_GAMMA_SCALE = 1
@@ -411,6 +435,21 @@ struct XNeighborsMemberSlot(Copyable, Movable, Defaultable):
     var im_miss: List[Int]
     var im_miss32: List[Int32]
     var im_plan: ImpKeepPlan
+    # SVGP words (kind 10) and its fitted arrays (m inducing rows).
+    var sv_inducing: Int
+    var sv_gamma: Float64
+    var sv_kernel_variance: Float64
+    var sv_noise_variance: Float64
+    var sv_jitter: Float64
+    var sv_old_items: Bool
+    var sv_m: Int
+    var sv_elbo: Float64
+    var sv_z: List[Float32]
+    var sv_alpha: List[Float32]
+    var sv_c: List[Float32]
+    var sv_qmu: List[Float32]
+    var sv_qsqrt: List[Float32]
+    var sv_scalars: List[Float64]
 
     def __init__(out self):
         self.generation = 0
@@ -516,6 +555,20 @@ struct XNeighborsMemberSlot(Copyable, Movable, Defaultable):
         self.im_miss = List[Int]()
         self.im_miss32 = List[Int32]()
         self.im_plan = ImpKeepPlan(List[Int](), List[Int](), True)
+        self.sv_inducing = 100
+        self.sv_gamma = 0.5
+        self.sv_kernel_variance = 1.0
+        self.sv_noise_variance = 1.0
+        self.sv_jitter = 0.0
+        self.sv_old_items = False
+        self.sv_m = 0
+        self.sv_elbo = 0.0
+        self.sv_z = List[Float32]()
+        self.sv_alpha = List[Float32]()
+        self.sv_c = List[Float32]()
+        self.sv_qmu = List[Float32]()
+        self.sv_qsqrt = List[Float32]()
+        self.sv_scalars = List[Float64](length=2, fill=0.0)
 
 
 struct XNeighborsMemberStore(Defaultable, Movable):
@@ -576,6 +629,11 @@ def _clear(slot: _SlotPtr):
     slot[].im_miss = List[Int]()
     slot[].im_miss32 = List[Int32]()
     slot[].im_plan = ImpKeepPlan(List[Int](), List[Int](), True)
+    slot[].sv_z = List[Float32]()
+    slot[].sv_alpha = List[Float32]()
+    slot[].sv_c = List[Float32]()
+    slot[].sv_qmu = List[Float32]()
+    slot[].sv_qsqrt = List[Float32]()
 
 
 def _mint(words: _F64P, count: Int) raises -> Int:
@@ -656,6 +714,13 @@ def _mint(words: _F64P, count: Int) raises -> Int:
             slot[].im_uncompact = words[7] != 0.0
             slot[].im_old_items = (words[8] != 0.0) and not slot[].im_uncompact
             slot[].im_lean = words[9] != 0.0
+        elif slot[].kind == XNEIGHBORS_KIND_SVGP:
+            slot[].sv_inducing = Int(words[1])
+            slot[].sv_gamma = words[2]
+            slot[].sv_kernel_variance = words[3]
+            slot[].sv_noise_variance = words[4]
+            slot[].sv_jitter = words[5]
+            slot[].sv_old_items = words[6] != 0.0
         else:
             slot[].k = Int(words[1])
             slot[].novelty = words[2] != 0.0
@@ -706,6 +771,8 @@ def _name(slot: _SlotPtr) -> String:
         return String("SkewedChi2Sampler")
     if slot[].kind == XNEIGHBORS_KIND_IMPUTER:
         return String("KNNImputer")
+    if slot[].kind == XNEIGHBORS_KIND_SVGP:
+        return String("SVGP")
     return String("LocalOutlierFactor")
 
 
@@ -1946,6 +2013,139 @@ def _im_import(slot: _SlotPtr, call: _CallPtr) raises:
     slot[].fitted = True
 
 
+# ------------------------------------------------------------ SVGP
+
+
+def _sv_fit(slot: _SlotPtr, call: _CallPtr) raises:
+    """`SVGP.fit(X, y)` (bindings/neighbors_graph_native_door.mojo
+    `_svgp_fit`) with the inducing rows taken from X: m = min(n_inducing,
+    rows) evenly spaced rows, then the variational fit; the definite check
+    after the RUN, as the door's PACK makes it."""
+    var estimator = _name(slot)
+    _whole(call, estimator)
+    if call[].fit_output != 0:
+        member_unsupported(estimator, call[].fit_output)
+    if call[].weights.rows > 0:
+        raise Error("TypeError: a " + estimator + " member fits no sample_weight")
+    _dense(call[].x, MEMBER_F32, "X", estimator)
+    _dense(call[].y, MEMBER_F32, "y", estimator)
+    var rows = call[].x.rows
+    var features = call[].x.cols
+    if call[].y.cols != 1:
+        raise Error("ValueError: an SVGP member fits one target column")
+    xn_rows_match_check(call[].y.rows, rows)
+    var m = min(slot[].sv_inducing, rows)
+    if m <= 0:
+        raise Error("mojolearn: rows is empty, shape (0,): Found array with 0 sample(s) (shape=(0,)) "
+            + "while a minimum of 1 is required.")
+    slot[].fitted = False
+    slot[].sv_z = List[Float32](length=max(m * features, 1), fill=Float32(0.0))
+    slot[].sv_alpha = List[Float32](length=m, fill=Float32(0.0))
+    slot[].sv_c = List[Float32](length=m * m, fill=Float32(0.0))
+    slot[].sv_qmu = List[Float32](length=m, fill=Float32(0.0))
+    slot[].sv_qsqrt = List[Float32](length=m * m, fill=Float32(0.0))
+    var fitted = svgp_fit_run(XnDriver(call[].route.entry.call), SvgpFitRequest(call[].x.data, call[].y.data,
+        Int(slot[].sv_z.unsafe_ptr()), Int(slot[].sv_alpha.unsafe_ptr()), Int(slot[].sv_c.unsafe_ptr()),
+        Int(slot[].sv_qmu.unsafe_ptr()), Int(slot[].sv_qsqrt.unsafe_ptr()), rows, m, features, True,
+        slot[].sv_gamma, slot[].sv_kernel_variance, slot[].sv_noise_variance, slot[].sv_jitter))
+    xn_svgp_definite_check(fitted[1])
+    slot[].sv_m = m
+    slot[].sv_elbo = fitted[0]
+    slot[].rows = rows
+    slot[].features = features
+    slot[].fitted = True
+
+
+def _sv_predict(slot: _SlotPtr, call: _CallPtr) raises:
+    """`SVGP.predict(X)`: the mean (`_svgp_query`, SVGP_VARIANCE_NONE)."""
+    var estimator = _name(slot)
+    if not slot[].fitted:
+        raise Error("NotFittedError: mojolearn: call fit before predict")
+    _whole(call, estimator)
+    _dense(call[].x, MEMBER_F32, "X", estimator)
+    var rows = call[].x.rows
+    if call[].x.cols != slot[].features:
+        raise Error("ValueError: X has " + String(call[].x.cols) + " features, but SVGP is expecting "
+            + String(slot[].features) + " features as input.")
+    _dense(call[].dst, MEMBER_F32, "the prediction buffer", estimator)
+    if call[].dst.rows != rows or call[].dst.cols != 1:
+        raise Error("ValueError: the prediction buffer holds one column per row of X")
+    svgp_query_run(XnDriver(call[].route.entry.call), SvgpQueryRequest(call[].x.data, Int(slot[].sv_z.unsafe_ptr()),
+        Int(slot[].sv_alpha.unsafe_ptr()), Int(slot[].sv_c.unsafe_ptr()), call[].dst.data, 0, rows, slot[].sv_m,
+        slot[].features, slot[].sv_gamma, slot[].sv_kernel_variance, 0.0, SVGP_VARIANCE_NONE, slot[].sv_old_items))
+
+
+def _sv_export(slot: _SlotPtr, call: _CallPtr) raises:
+    if not slot[].fitted:
+        raise Error("NotFittedError: this SVGP member is not fitted yet")
+    var block = call[].block
+    if (call[].flags & MEMBER_BLOCK_BY_INDEX) != 0:
+        if block < 0 or block >= _SV_BLOCKS:
+            raise Error("member ABI: an SVGP member has six fitted blocks")
+        block = SV_BLOCK_Z + block
+    var m = slot[].sv_m
+    if block == SV_BLOCK_Z:
+        call[].dst = MemberMatrix(Int(slot[].sv_z.unsafe_ptr()), m, slot[].features)
+    elif block == SV_BLOCK_ALPHA:
+        call[].dst = MemberMatrix(Int(slot[].sv_alpha.unsafe_ptr()), 1, m)
+    elif block == SV_BLOCK_C:
+        call[].dst = MemberMatrix(Int(slot[].sv_c.unsafe_ptr()), m, m)
+    elif block == SV_BLOCK_QMU:
+        call[].dst = MemberMatrix(Int(slot[].sv_qmu.unsafe_ptr()), 1, m)
+    elif block == SV_BLOCK_QSQRT:
+        call[].dst = MemberMatrix(Int(slot[].sv_qsqrt.unsafe_ptr()), m, m)
+    elif block == SV_BLOCK_SCALARS:
+        slot[].sv_scalars[0] = slot[].sv_elbo
+        slot[].sv_scalars[1] = Float64(slot[].features)
+        call[].dst = MemberMatrix(Int(slot[].sv_scalars.unsafe_ptr()), 1, 2, MEMBER_F64)
+    else:
+        raise Error("member ABI: an SVGP member has no fitted block " + String(block))
+    call[].block = block
+    call[].out_cols = _SV_BLOCKS
+
+
+def _sv_import(slot: _SlotPtr, call: _CallPtr) raises:
+    """Copy one fitted block in; MEMBER_IMPORT_DONE completes the state (Z,
+    alpha, C and the scalars are required; q_mu / q_sqrt only round-trip)."""
+    var estimator = _name(slot)
+    var block = call[].block
+    var count = call[].x.rows * call[].x.cols
+    if block == SV_BLOCK_SCALARS:
+        _dense(call[].x, MEMBER_F64, "the SVGP scalars", estimator)
+        if count != 2:
+            raise Error("member ABI: the SVGP scalars are two float64 words (elbo, features)")
+        slot[].fitted = False
+        var words = _F64P(unsafe_from_address=call[].x.data)
+        slot[].sv_elbo = words[0]
+        slot[].features = Int(words[1])
+    elif block >= SV_BLOCK_Z and block <= SV_BLOCK_QSQRT:
+        _dense(call[].x, MEMBER_F32, "a fitted SVGP array", estimator)
+        slot[].fitted = False
+        var words = List[Float32](length=max(count, 1), fill=Float32(0.0))
+        if count > 0:
+            unsafe_memcpy(dest=words.unsafe_ptr(), src=_F32P(unsafe_from_address=call[].x.data), count=count)
+        if block == SV_BLOCK_Z:
+            slot[].sv_z = words^
+            slot[].sv_m = call[].x.rows
+        elif block == SV_BLOCK_ALPHA:
+            slot[].sv_alpha = words^
+        elif block == SV_BLOCK_C:
+            slot[].sv_c = words^
+        elif block == SV_BLOCK_QMU:
+            slot[].sv_qmu = words^
+        else:
+            slot[].sv_qsqrt = words^
+    elif block != 0 or (call[].flags & MEMBER_IMPORT_DONE) == 0:
+        raise Error("member ABI: an SVGP member has no fitted block " + String(block))
+    if (call[].flags & MEMBER_IMPORT_DONE) == 0:
+        return
+    var m = slot[].sv_m
+    if (m < 1 or slot[].features < 1 or len(slot[].sv_z) < m * slot[].features or len(slot[].sv_alpha) < m
+            or len(slot[].sv_c) < m * m):
+        raise Error("member ABI: an SVGP import needs Z_, _alpha, _C and the scalars of one fit")
+    slot[].fitted = True
+
+
 # ------------------------------------------------------------ dispatch
 
 
@@ -1959,6 +2159,7 @@ comptime _LOF_NOVELTY = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_DECISI
 comptime _LOF_OUTLIER = MEMBER_CAN_FIT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT   # fit_predict: FIT + fit_output
 comptime _KERNEL_PCA = MEMBER_CAN_FIT | MEMBER_CAN_TRANSFORM | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
 comptime _TRANSFORMER = _KERNEL_PCA   # fit, transform, export, import (fit_output TRANSFORM)
+comptime _SVGP = MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
 comptime _OCSVM = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_DECISION | MEMBER_CAN_SCORE_SAMPLES
     | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT)
 
@@ -1968,6 +2169,8 @@ def _capabilities(slot: _SlotPtr) -> Int:
         return _LOF_NOVELTY if slot[].novelty else _LOF_OUTLIER
     if slot[].kind == XNEIGHBORS_KIND_OCSVM:
         return _OCSVM
+    if slot[].kind == XNEIGHBORS_KIND_SVGP:
+        return _SVGP
     if (slot[].kind == XNEIGHBORS_KIND_KERNEL_PCA or slot[].kind == XNEIGHBORS_KIND_PCS
             or slot[].kind == XNEIGHBORS_KIND_ACHI2 or slot[].kind == XNEIGHBORS_KIND_SCHI2
             or slot[].kind == XNEIGHBORS_KIND_IMPUTER):
@@ -2020,6 +2223,10 @@ def _new(call: _CallPtr) raises:
             raise Error("member ABI: a KNNImputer member takes ten parameters (kind, n_neighbors, distance, "
                 + "mask, missing value, keep_empty_features, add_indicator, uncompact, old_items, lean)")
         local_check_n_neighbors(Int(words[1]))
+    elif kind == XNEIGHBORS_KIND_SVGP:
+        if call[].param_count != 7:
+            raise Error("member ABI: an SVGP member takes seven parameters (kind, n_inducing, gamma, "
+                + "kernel_variance, noise_variance, jitter, old_items)")
     elif kind == XNEIGHBORS_KIND_LABEL_PROPAGATION or kind == XNEIGHBORS_KIND_LABEL_SPREADING:
         raise Error("member ABI: LabelPropagation and LabelSpreading are not XNeighbors members")
     else:
@@ -2053,7 +2260,7 @@ def _xneighbors_member(operation: Int, address: Int) raises -> Int:
     var call = _CallPtr(unsafe_from_address=address)
     if operation == MEMBER_OP_CAPABILITIES:
         if call[].state == 0:
-            return _NC_EUCLIDEAN | _LOF_NOVELTY | _OCSVM | _TRANSFORMER
+            return _NC_EUCLIDEAN | _LOF_NOVELTY | _OCSVM | _TRANSFORMER | _SVGP
         return _capabilities(_SlotPtr(unsafe_from_address=_lookup(call[].state, False)))
     if operation == MEMBER_OP_NEW:
         _new(call)
@@ -2128,6 +2335,18 @@ def _xneighbors_member(operation: Int, address: Int) raises -> Int:
             call[].out_cols = _im_width(slot, 1) if slot[].fitted else call[].x.cols
             return 0
         _outputs(slot[].kind, slot[].classes if slot[].fitted else call[].classes, call)
+        return 0
+    if slot[].kind == XNEIGHBORS_KIND_SVGP:
+        if operation == MEMBER_OP_FIT:
+            _sv_fit(slot, call)
+        elif operation == MEMBER_OP_PREDICT:
+            _sv_predict(slot, call)
+        elif operation == MEMBER_OP_EXPORT:
+            _sv_export(slot, call)
+        elif operation == MEMBER_OP_IMPORT:
+            _sv_import(slot, call)
+        else:
+            member_unsupported(_name(slot), operation)
         return 0
     if slot[].kind == XNEIGHBORS_KIND_IMPUTER:
         if operation == MEMBER_OP_FIT:

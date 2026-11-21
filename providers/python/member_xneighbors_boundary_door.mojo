@@ -3,7 +3,7 @@
 core/xneighbors_member.mojo). Published: NearestCentroid (kind 0),
 LocalOutlierFactor (kind 1), OneClassSVM (kind 2), KernelPCA (kind 3),
 PolynomialCountSketch (kind 4), AdditiveChi2Sampler (kind 5), SkewedChi2Sampler (kind 6).
-KNNImputer (kind 9). Not yet published (admit refuses with the kind): SVGP.
+KNNImputer (kind 9), SVGP (kind 10).
 NOT MEMBERS: LabelPropagation, LabelSpreading (kinds 7, 8 reserved): their y
 carries the unlabeled marker -1, which the member ABI's class codes cannot
 name (a caller encodes -1 as an ordinary class; the codes-to-labels map
@@ -52,6 +52,9 @@ at FIT.
     image's lean fit probe; an n_neighbors the door refuses only at transform
     (after its fit) answers False; pack = `_imp_fit`'s fields (`_valid`,
     `_miss_cols`, `_fit_X` as a new Array, `n_features_in_`).
+    SVGP: admit = the door's words (`_svgp_gamma`, the variances, jitter,
+    n_inducing, `family_svc_xn_old_items`); caller-given inducing_points
+    answer False (the door keeps them); pack = `_svgp_fit`'s fields.
   * `xneighbors_member_state` (UNPACK): a member state from a fitted
     estimator's arrays (NearestCentroid: the class count is `class_prior_`'s
     length).
@@ -83,6 +86,7 @@ from bindings.pcs_native_boundary_unpack import pcs_seed_unpack
 from bindings.pcs_native_boundary_pack import pcs_array
 from bindings.neighbors_semi_native_door import _achi2_interval_unpack, _semi_kfeat_flags
 from bindings.family_common_unpack import family_is_int
+from bindings.neighbors_graph_native_door import _svgp_gamma, _float_of as _graph_float_of
 from core.pcs_native_api import pcs_options
 from bindings.kpca_native_door import (
     _kpca_route, _kpca_decomp_refused, _field as _kp_field, _int as _kp_int, _float as _kp_float,
@@ -115,6 +119,7 @@ from core.xneighbors_member import (
     XNEIGHBORS_KIND_PCS, PC_BLOCK_INDEX_HASH, PC_BLOCK_BIT_HASH, PC_BLOCK_FEATURES,
     XNEIGHBORS_KIND_ACHI2, AC_BLOCK_FEATURES, XNEIGHBORS_KIND_SCHI2, SC_BLOCK_WEIGHTS, SC_BLOCK_OFFSET,
     XNEIGHBORS_KIND_IMPUTER, IM_BLOCK_ROWS, IM_BLOCK_VALID, IM_BLOCK_MISSING,
+    XNEIGHBORS_KIND_SVGP, SV_BLOCK_Z, SV_BLOCK_ALPHA, SV_BLOCK_C, SV_BLOCK_QMU, SV_BLOCK_QSQRT, SV_BLOCK_SCALARS,
     KP_BLOCK_ROWS, KP_BLOCK_VALUES, KP_BLOCK_VECTORS, KP_BLOCK_COLUMNS, KP_BLOCK_TOTAL, KP_BLOCK_GAMMA,
     OC_BLOCK_VECTORS, OC_BLOCK_DUAL, OC_BLOCK_SUPPORT, OC_BLOCK_SCALARS, OC_GAMMA_VALUE, OC_GAMMA_SCALE, OC_GAMMA_AUTO,
     NC_BLOCK_CENTROIDS, NC_BLOCK_STD, NC_BLOCK_DEVIATIONS, NC_BLOCK_PRIOR,
@@ -443,6 +448,29 @@ def _imputer_admit(model: PythonObject, fields: PythonObject, context: PythonObj
     return True
 
 
+def _svgp_admit(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
+    mut owner: MemberOwner) raises -> Bool:
+    """`_svgp_fit` / `_svgp_query`'s words, read with the door's own helpers:
+    n_inducing (`int`), gamma (`_svgp_gamma`, with its zero-lengthscale
+    refusal), kernel_variance, noise_variance, jitter, and the old-items arm
+    of the shared family context. False: caller-given inducing_points (the
+    door admits them per fit), or an image that publishes no member entry."""
+    if family_field(fields, "inducing_points") is not None:
+        return False
+    var inducing = Int(py=py_call(b.int, family_field(fields, "n_inducing")))
+    var gamma = _svgp_gamma(model)
+    var kernel_variance = _graph_float_of(model, "kernel_variance")
+    var noise_variance = _graph_float_of(model, "noise_variance")
+    var jitter = _graph_float_of(model, "jitter")
+    var old_items = 1.0 if Bool(py=py_call(b.bool, _family_context()["family_svc_xn_old_items"])) else 0.0
+    if not _route(model, context, b, owner):
+        return False
+    var words: List[Float64] = [Float64(XNEIGHBORS_KIND_SVGP), Float64(inducing), gamma, kernel_variance,
+        noise_variance, jitter, old_items]
+    owner.plan.params = words^
+    return True
+
+
 def xneighbors_member_admit(model: PythonObject, fields: PythonObject, kind: Int, context: PythonObject,
     b: PythonObject, mut owner: MemberOwner) raises -> Bool:
     """UNPACK: fill `owner.plan.route`, `owner.plan.params` and `owner.pins`
@@ -459,6 +487,8 @@ def xneighbors_member_admit(model: PythonObject, fields: PythonObject, kind: Int
         return _schi2_admit(model, fields, context, b, owner)
     if kind == XNEIGHBORS_KIND_IMPUTER:
         return _imputer_admit(model, fields, context, b, owner)
+    if kind == XNEIGHBORS_KIND_SVGP:
+        return _svgp_admit(model, fields, context, b, owner)
     if kind != XNEIGHBORS_KIND_NEAREST_CENTROID and kind != XNEIGHBORS_KIND_LOF:
         raise Error("ValueError: mojolearn: XNeighbors member kind " + String(kind) + " is not published")
     if kind == XNEIGHBORS_KIND_LOF:
@@ -1026,6 +1056,90 @@ def _imputer_state(fields: PythonObject, context: PythonObject, plan: MemberPlan
     return call.state
 
 
+def _svgp_pack(fields: PythonObject, context: PythonObject, plan: MemberPlan, state: Int) raises:
+    """`_svgp_fit`'s fields: precision_, Z_, _alpha, _C, q_mu_, q_sqrt_,
+    elbo_, n_features_in_."""
+    var call = MemberCall(plan.route, state)
+    call.block = SV_BLOCK_SCALARS
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    var elbo = _F64P(unsafe_from_address=call.dst.data)[0]
+    var features = Int(_F64P(unsafe_from_address=call.dst.data)[1])
+    call.block = SV_BLOCK_Z
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    var z = _publish_block(call, "<f4", context, 4, False)
+    call.block = SV_BLOCK_ALPHA
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    var alpha = _publish_block(call, "<f4", context, 4, True)
+    call.block = SV_BLOCK_C
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    var c = _publish_block(call, "<f4", context, 4, False)
+    call.block = SV_BLOCK_QMU
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    var qmu = _publish_block(call, "<f4", context, 4, True)
+    call.block = SV_BLOCK_QSQRT
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    var qsqrt = _publish_block(call, "<f4", context, 4, False)
+    py_setitem(fields, "precision_", PythonObject("float-float"))
+    py_setitem(fields, "Z_", z)
+    py_setitem(fields, "_alpha", alpha)
+    py_setitem(fields, "_C", c)
+    py_setitem(fields, "q_mu_", qmu)
+    py_setitem(fields, "q_sqrt_", qsqrt)
+    py_setitem(fields, "elbo_", PythonObject(elbo))
+    py_setitem(fields, "n_features_in_", PythonObject(features))
+
+
+def _svgp_state(fields: PythonObject, context: PythonObject, b: PythonObject, plan: MemberPlan) raises -> Int:
+    """A state from Z_, _alpha, _C (q_mu_ / q_sqrt_ when present), elbo_ and
+    n_features_in_."""
+    var z = _f32_block(fields, "Z_", 2, context)
+    var alpha = _f32_block(fields, "_alpha", 1, context)
+    var c = _f32_block(fields, "_C", 2, context)
+    var elbo_source = py_get(fields, PythonObject("elbo_"))
+    var features_source = py_get(fields, PythonObject("n_features_in_"))
+    if elbo_source is None or features_source is None:
+        raise Error("NotFittedError: this member is not fitted yet")
+    var scalars: List[Float64] = [Float64(py=py_call(b.float, elbo_source)),
+        Float64(Int(py=py_call(b.int, features_source)))]
+    var qmu = PythonObject(None)
+    var qsqrt = PythonObject(None)
+    if py_get(fields, PythonObject("q_mu_")) is not None and py_get(fields, PythonObject("q_sqrt_")) is not None:
+        qmu = _f32_block(fields, "q_mu_", 1, context)
+        qsqrt = _f32_block(fields, "q_sqrt_", 2, context)
+    var call = member_new(plan)
+    try:
+        call.block = SV_BLOCK_Z
+        call.x = MemberMatrix(Int(py=classical_address(z)), Int(py=z.shape[0]), Int(py=z.shape[1]))
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+        call.block = SV_BLOCK_ALPHA
+        call.x = MemberMatrix(Int(py=classical_address(alpha)), 1, Int(py=alpha.size))
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+        call.block = SV_BLOCK_C
+        call.x = MemberMatrix(Int(py=classical_address(c)), Int(py=c.shape[0]), Int(py=c.shape[1]))
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+        if qmu is not None:
+            call.block = SV_BLOCK_QMU
+            call.x = MemberMatrix(Int(py=classical_address(qmu)), 1, Int(py=qmu.size))
+            _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+            call.block = SV_BLOCK_QSQRT
+            call.x = MemberMatrix(Int(py=classical_address(qsqrt)), Int(py=qsqrt.shape[0]), Int(py=qsqrt.shape[1]))
+            _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+        call.block = SV_BLOCK_SCALARS
+        call.x = MemberMatrix(Int(scalars.unsafe_ptr()), 1, 2, MEMBER_F64)
+        call.flags = MEMBER_IMPORT_DONE
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+    except error:
+        member_free(plan, call)
+        raise error
+    _ = z
+    _ = alpha
+    _ = c
+    _ = qmu
+    _ = qsqrt
+    _ = scalars^
+    return call.state
+
+
 def xneighbors_member_pack(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
     plan: MemberPlan, state: Int) raises:
     """PACK: write the fitted attributes of state `state` into `model`, as
@@ -1044,6 +1158,8 @@ def xneighbors_member_pack(model: PythonObject, fields: PythonObject, context: P
         _schi2_pack(fields, context, plan, state)
     elif plan.kind == XNEIGHBORS_KIND_IMPUTER:
         _imputer_pack(fields, context, plan, state)
+    elif plan.kind == XNEIGHBORS_KIND_SVGP:
+        _svgp_pack(fields, context, plan, state)
     else:
         _nc_pack(fields, context, b, plan, state)
 
@@ -1066,4 +1182,6 @@ def xneighbors_member_state(model: PythonObject, fields: PythonObject, context: 
         return _schi2_state(fields, context, plan)
     if plan.kind == XNEIGHBORS_KIND_IMPUTER:
         return _imputer_state(fields, context, plan)
+    if plan.kind == XNEIGHBORS_KIND_SVGP:
+        return _svgp_state(fields, context, b, plan)
     return _nc_state(fields, context, plan)

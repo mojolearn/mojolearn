@@ -2146,6 +2146,10 @@ class SVGP(_XNeighbors):
     #: estimator's device route, and the check builds its other side as the same
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
+
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_XNEIGHBORS = 12) and core/xneighbors_member.mojo.
+    _mojolearn_member = (12, 10)
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _estimator_type = "regressor"
 
