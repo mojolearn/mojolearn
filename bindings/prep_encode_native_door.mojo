@@ -2455,7 +2455,7 @@ def _pearson(mut p: EncProg, values: PythonObject, y: PythonObject, mode: Python
     var request = ScorePearson(n, d, x, held, center, force_finite, (_fam(mode, entries) & IDN_SELECT_BLOCKED) != 0)
     var plan = score_pearson_stage(p.prog, request)
     _ = target^
-    return plan
+    return plan^
 
 
 def _score_words(scores: PythonObject, d: Int, context: PythonObject) raises -> Tuple[PythonObject, Int]:

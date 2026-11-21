@@ -53,7 +53,7 @@ def ivf_ops_key(binding: PythonObject) raises -> IvfEntryKey:
     if key.vendor < 0:
         raise Error("ImportError: mojolearn IVFIndex: the IVF binding publishes no native operations table;"
                     + " rebuild it with bash bindings/build_ivf.sh")
-    return key
+    return key^
 
 
 def ivf_door_build(key: IvfEntryKey, request: IvfBuildRequest) raises -> Int:
