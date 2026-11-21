@@ -104,7 +104,13 @@ def resident_entries() raises:
     require(kept.store_id == 5, "a second put of one owner keeps the first")
     _ = lease[].publish(ArenaResidentEntry(901, 8192, 0, 0, True, -1, 0, 0))
     require(lease[].find(901).store_id == -1 and lease[].find(901).indices, "an empty index buffer has no store id")
-    require(len(lease[].drain()) == 2 and lease[].find(900).store_id == -2, "drain empties the owner")
+    _ = lease[].publish(ArenaResidentEntry(902, 12288, 8, 1, False, 7, 0, 0))
+    require(lease[].remove(900).store_id == 5 and lease[].find(900).store_id == -2, "remove unlinks one owner")
+    require(lease[].find(902).store_id == 7 and lease[].find(901).store_id == -1, "the others keep their entries")
+    require(lease[].remove(900).store_id == -2, "a removed owner is absent")
+    _ = lease[].publish(ArenaResidentEntry(900, 4096, 80, 10, False, 9, 0, 0))
+    require(lease[].find(900).store_id == 9, "a removed owner can be put again")
+    require(len(lease[].drain()) == 3 and lease[].find(900).store_id == -2, "drain empties the owner")
     ARENA_RESIDENTS.release(arena_handle(word))
 
 

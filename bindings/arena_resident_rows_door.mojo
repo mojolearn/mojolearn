@@ -4,36 +4,67 @@
 # owner (arena_materialize_native) and the model-selection input owner
 # (msel_inputs, which itself imports arena_materialize_native), so foreign
 # containers reach the native materializer without an import cycle.
+#
+# Lane arena (2026-11-21): the entries are the native resident state
+# (`core/arena_state.mojo` `ARENA_RESIDENTS`), found by the input's identity
+# and published after the upload; the fold store is called through the
+# owner's resolved helper entry (`core/msel_helpers_calls.mojo`) with the
+# GIL released, as its Python exports did. The state lease is taken ONCE per
+# public operation and passed down; nothing here runs per row.
+from std.memory import ArcPointer
 from std.python import Python, PythonObject
+from std.python._cpython import GILReleased
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.arena_materialize_native_door import (
-    _native_call, _prepare, _prepared_info, _cast, _slot, _empty, _empty_unfilled, _resident_fields,
+    _prepare, _prepared_info, _cast, _slot, _empty, _empty_unfilled,
 )
+from bindings.arena_owner_door import ArenaOwnerView, arena_pin, arena_pinned, arena_unpin, arena_resident_view
 from bindings.msel_inputs_unpack import msel_input
-from bindings.p3_array_arena_records_unpack import P3_DICT_INT_IDS, p3_dict_admitted, p3_dict_admit
+from core.arena_state import ARENA_RESIDENTS, ArenaResidentState, ArenaResidentEntry, arena_handle
+from core.msel_helpers_calls import msel_store_put, msel_store_free, msel_store_take_rows
 
 
-def _entry(values: PythonObject, entries: PythonObject, indices: Bool, context: PythonObject) raises -> PythonObject:
-    return _entry_info(values,entries,indices,context)[0]
+@fieldwise_init
+struct ResidentHit(Movable):
+    """An input's resident entry and the admitted metadata of its prepared
+    Array (admitted ONCE per call, p3-array-arena)."""
+    var entry: ArenaResidentEntry
+    var info: PythonObject
 
 
-def _entry_info(values: PythonObject, entries: PythonObject, indices: Bool, context: PythonObject) raises -> PythonObject:
-    # (entry, prepared info): the entry's Array admitted ONCE per call
-    # (p3-array-arena; `take` re-ran `_prepared_info` on both entries).
-    var b = context["arena_native_types"]
+def _discard(entry: ArenaResidentEntry, view: ArenaOwnerView):
+    # An upload that was not published: free its id and drop its pins. The
+    # primary failure (or the entry another thread published) is what the
+    # caller reports; a refused cleanup does not replace it.
+    if entry.store_id >= 0:
+        try:
+            _ = msel_store_free(view.store, entry.store_id)
+        except cleanup_error:
+            pass
+    arena_unpin(entry.owner_pin)
+    arena_unpin(entry.prepared_pin)
+
+
+def _publish(lease: ArcPointer[ArenaResidentState], entry: ArenaResidentEntry,
+             view: ArenaOwnerView) raises -> ArenaResidentEntry:
+    try:
+        return lease[].publish(entry)
+    except error:
+        _discard(entry, view)
+        raise error^
+
+
+def _entry_info(values: PythonObject, lease: ArcPointer[ArenaResidentState], view: ArenaOwnerView,
+                indices: Bool, context: PythonObject) raises -> ResidentHit:
     # The object's identity (CPython's id()) read from its native address:
-    # calling builtins.id raises a `builtins.id` audit event per lookup.
-    var key = PythonObject(Int(values._obj_ptr))
-    var hit = py_get(entries,key)
-    if hit is not None:
-        if py_type(hit) is not b["tuple"] or len(hit) != 3:
-            raise Error("TypeError: native resident entries require their native owner tuple")
-        if hit[0] is values:
-            var info = _prepared_info(hit[1],context)
-            if py_type(hit[2]) is not b["int"]:
-                raise Error("TypeError: native resident entries require an integer store id")
-            return Python.tuple(hit,info)
-        raise Error("TypeError: resident identity entry does not retain its original input")
+    # calling builtins.id raises a `builtins.id` audit event per lookup. The
+    # entry pins the object, so its address cannot be reused while it lives.
+    var key = Int(values._obj_ptr)
+    var found = lease[].find(key)
+    if found.store_id != -2:
+        var held = arena_pinned(found.prepared_pin)
+        var held_info = _prepared_info(held, context)
+        return ResidentHit(found^, held_info)
     var source = values
     if py_type(values) is not context["array_class"] and py_type(values) is not py_get(context,"ndarray"):
         # A foreign container (pandas, Arrow-backed pandas, list, tuple,
@@ -48,61 +79,40 @@ def _entry_info(values: PythonObject, entries: PythonObject, indices: Bool, cont
     var array = _prepare(source,context)
     if indices and String(_slot(array,"dtype",context)) != "<i8":
         array = _cast(array,"<i8",context)
-    var sid = -1
     var prepared = _prepared_info(array,context)
     var nbytes = Int(py=prepared["nbytes"])
+    var address = Int(py=prepared["address"])
+    var shape = prepared["shape"]
+    var rows = 0
+    if len(shape):
+        rows = Int(py=shape[0])
+    var sid = -1
     if nbytes:
-        sid = Int(py=_native_call(context["arena_msel_put"],Python.tuple(prepared["address"],nbytes)))
-    try:
-        var result = Python.tuple(values,array,sid)
-        var admitted = p3_dict_admitted(P3_DICT_INT_IDS, entries)
-        py_setitem(entries,key,result)
-        if admitted:
-            # Only this owner's native int identity key went in since the walk.
-            p3_dict_admit(P3_DICT_INT_IDS, entries)
-        return Python.tuple(result,prepared)
-    except error:
-        if sid >= 0:
-            # Publication failed after allocation. Free the unpublished id,
-            # preserving the primary failure if the backend also refuses
-            # cleanup; do not overwrite the shared pending-exception receipt.
-            try:
-                _ = py_call(context["arena_msel_free"],sid)
-            except cleanup_error:
-                pass
-        raise error^
+        with GILReleased(Python()):
+            sid = msel_store_put(view.store, address, nbytes)
+    var entry = ArenaResidentEntry(key, address, nbytes, rows, indices, sid, arena_pin(values), arena_pin(array))
+    var kept = _publish(lease, entry, view)
+    if kept.prepared_pin != entry.prepared_pin:
+        # Another thread put the same input while the GIL was released for
+        # this upload: its entry is the resident one, ours is freed.
+        _discard(entry, view)
+        var other = arena_pinned(kept.prepared_pin)
+        var other_info = _prepared_info(other, context)
+        return ResidentHit(kept^, other_info)
+    _ = array
+    return ResidentHit(kept^, prepared)
 
 
-def _admit_keys(entries: PythonObject, context: PythonObject) raises:
-    # Every key an exact int before a keyed lookup (no application __eq__).
-    # p3-array-arena: walked only when the dictionary changed since its last
-    # full admission (dictionary watcher, Python >= 3.12); this owner's own
-    # int insertions re-admit it.
-    if p3_dict_admitted(P3_DICT_INT_IDS, entries):
-        return
-    var b = context["arena_native_types"]
-    var keys = py_call(b["list"],entries)
-    for i in range(len(keys)):  # driver-loop: identity-keyed cache lookups must not invoke application equality
-        if py_type(keys[i]) is not b["int"]:
-            raise Error("TypeError: resident entries require native identity keys")
-    p3_dict_admit(P3_DICT_INT_IDS, entries)
-
-
-def arena_resident_take(fields: PythonObject, values: PythonObject, indices_value: PythonObject,
+def arena_resident_take(view: ArenaOwnerView, values: PythonObject, indices_value: PythonObject,
                         context: PythonObject) raises -> PythonObject:
     # _Resident.take: rows `indices_value` of `values`, gathered on the device
     # out of the resident store entries (each put once per owner).
-    var entries = fields["_entries"]
+    var lease = ARENA_RESIDENTS.acquire(arena_handle(view.word))
     var b = context["arena_native_types"]
-    if py_type(entries) is not b["dict"]:
-        raise Error("TypeError: resident entries require a native dictionary")
-    _admit_keys(entries,context)
-    var base_pair = _entry_info(values,entries,False,context)
-    var index_pair = _entry_info(indices_value,entries,True,context)
-    var base_entry = base_pair[0]
-    var index_entry = index_pair[0]
-    var array = base_pair[1]
-    var indices = index_pair[1]
+    var base = _entry_info(values,lease,view,False,context)
+    var index = _entry_info(indices_value,lease,view,True,context)
+    var array = base.info
+    var indices = index.info
     var shape = Python.list(indices["size"])
     var base_shape = array["shape"]
     for i in range(1,len(base_shape)):  # driver-loop: generic row shape preserves all trailing dimensions
@@ -123,21 +133,26 @@ def arena_resident_take(fields: PythonObject, values: PythonObject, indices_valu
     else:
         output = _empty(py_call(b["tuple"],shape),String(array["dtype"]),context)
     var row_bytes = Int(py=array["nbytes"])//n if n else 0
-    if Int(py=indices["size"]) and row_bytes:
-        _ = _native_call(context["arena_msel_take_rows"],Python.tuple(base_entry[2],n,row_bytes,index_entry[2],indices["size"],_slot(output,"_addr",context)))
+    var count = Int(py=indices["size"])
+    if count and row_bytes:
+        var dst = Int(py=_slot(output,"_addr",context))
+        var base_id = base.entry.store_id
+        var index_id = index.entry.store_id
+        with GILReleased(Python()):
+            _ = msel_store_take_rows(view.store, base_id, n, row_bytes, index_id, count, dst)
     return output
 
 
-def arena_resident_entry(fields: PythonObject, values: PythonObject, indices: Bool,
+def arena_resident_entry(view: ArenaOwnerView, values: PythonObject, indices: Bool,
                          context: PythonObject) raises -> PythonObject:
     # _Resident._entry: the (owner, prepared Array, store id) entry of
     # `values`, put once; `indices` casts to the int64 index layout.
-    var entries = fields["_entries"]
-    var b = context["arena_native_types"]
-    if py_type(entries) is not b["dict"]:
-        raise Error("TypeError: resident entries require a native dictionary")
-    _admit_keys(entries,context)
-    return _entry(values,entries,indices,context)
+    var lease = ARENA_RESIDENTS.acquire(arena_handle(view.word))
+    var hit = _entry_info(values,lease,view,indices,context)
+    var owner = arena_pinned(hit.entry.owner_pin)
+    var prepared = arena_pinned(hit.entry.prepared_pin)
+    var result = Python.tuple(owner, prepared, PythonObject(hit.entry.store_id))
+    return result
 
 
 def arena_materialize(fields: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -148,7 +163,7 @@ def arena_materialize(fields: PythonObject, context: PythonObject) raises -> Pyt
     if py_type(take) is not context["owner_method_class"] or take.__func__ is not context["arena_resident_take"]:
         raise Error("TypeError: DeviceRows.materialize requires model_selection._Resident.take; Python gather callbacks cannot execute")
     var owner = take.__self__
-    var output = arena_resident_take(_resident_fields(owner,context),fields["base"],fields["indices"],context)
+    var output = arena_resident_take(arena_resident_view(owner,context),fields["base"],fields["indices"],context)
     py_setitem(fields,"_host",output)
     return output
 
@@ -164,16 +179,13 @@ def arena_rows_store_ids(fields: PythonObject, context: PythonObject) raises -> 
     var take = fields["_take"]
     if py_type(take) is not context["owner_method_class"] or take.__func__ is not context["arena_resident_take"]:
         raise Error("TypeError: DeviceRows store ids require model_selection._Resident.take; Python gather callbacks cannot execute")
-    var owner_fields = _resident_fields(take.__self__, context)
-    var entries = owner_fields["_entries"]
-    var b = context["arena_native_types"]
-    if py_type(entries) is not b["dict"]:
-        raise Error("TypeError: resident entries require a native dictionary")
-    _admit_keys(entries, context)
-    var base_pair = _entry_info(fields["base"], entries, False, context)
-    var index_pair = _entry_info(fields["indices"], entries, True, context)
-    var base_shape = base_pair[1]["shape"]
+    var view = arena_resident_view(take.__self__, context)
+    var lease = ARENA_RESIDENTS.acquire(arena_handle(view.word))
+    var base = _entry_info(fields["base"], lease, view, False, context)
+    var index = _entry_info(fields["indices"], lease, view, True, context)
+    var base_shape = base.info["shape"]
     var n = Int(py=base_shape[0])
-    var row_bytes = Int(py=base_pair[1]["nbytes"]) // n if n else 0
-    return Python.tuple(base_pair[0][2], PythonObject(n), PythonObject(row_bytes), index_pair[0][2],
-                        index_pair[1]["size"])
+    var row_bytes = Int(py=base.info["nbytes"]) // n if n else 0
+    var ids = Python.tuple(PythonObject(base.entry.store_id), PythonObject(n), PythonObject(row_bytes),
+                           PythonObject(index.entry.store_id), index.info["size"])
+    return ids

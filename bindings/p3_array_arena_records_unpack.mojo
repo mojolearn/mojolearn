@@ -40,10 +40,10 @@ from bindings.p3_array_arena_records_run import P3NumpyClasses, P3DictRecords
 
 # Admission kinds: one per distinct check, so one class can carry several.
 comptime P3_ARRAY_LAYOUT = 1          # arena_materialize_native._array_layout
-comptime P3_RESIDENT_LAYOUT = 2       # arena_materialize_native._resident_fields (class half)
+# Kind 2 retired (lane arena, 2026-11-21): the resident class-layout record; its state is native.
 comptime P3_CACHE_LAYOUT = 3          # x_prep_native_owner._cache_layout
 comptime P3_ROWS_LAYOUT = 4           # DeviceRows class (x_prep_native_inputs / arena_rows_native)
-comptime P3_RESIDENT_NATIVE = 5       # arena_resident_native class admission
+# Kind 5 retired (lane arena, 2026-11-21): the resident class admission; its state is native.
 comptime P3_CACHE_KEY_LAYOUT = 6      # arena_cache_get.arena_cache_key model class
 # Kind 7 retired: the former from-buffer-only check did not stamp slot values.
 comptime P3_ARRAY_DOOR_LAYOUT = 8     # array_native._admit

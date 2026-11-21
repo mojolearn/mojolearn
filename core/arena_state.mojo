@@ -328,6 +328,27 @@ struct ArenaResidentState(Movable):
             self.lock.release()
         return kept^
 
+    def remove(mut self, owner: Int) raises -> ArenaResidentEntry:
+        """Unlink the entry of `owner` and return it for the caller to free
+        and unpin outside the lock; `store_id` -2 when it was never put."""
+        self.lock.acquire()
+        var removed = ArenaResidentEntry(owner, 0, 0, 0, False, -2, 0, 0)
+        try:
+            if owner in self.by_owner:
+                var index = self.by_owner[owner]
+                removed = self.entries[index].copy()
+                var last = len(self.entries) - 1
+                if index != last:
+                    # The last entry takes the vacated index.
+                    var moved = self.entries[last].copy()
+                    self.by_owner[moved.owner] = index
+                    self.entries[index] = moved.copy()
+                _ = self.entries.pop()
+                _ = self.by_owner.pop(owner)
+        finally:
+            self.lock.release()
+        return removed^
+
     def drain(mut self) raises -> List[ArenaResidentEntry]:
         """Unlink every entry and return them for the caller to free and
         unpin outside the lock."""
