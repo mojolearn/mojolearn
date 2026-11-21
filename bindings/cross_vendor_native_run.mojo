@@ -215,8 +215,10 @@ def _cross_nap(seconds: Float64):
     var whole = Int64(seconds)
     request[0] = whole
     request[1] = Int64((seconds - Float64(whole)) * 1e9)
-    _ = external_call["nanosleep", c_int](request.unsafe_ptr(), request.unsafe_ptr())
+    var remaining = List[Int64](length=2, fill=Int64(0))
+    _ = external_call["nanosleep", c_int](request.unsafe_ptr(), remaining.unsafe_ptr())
     _ = len(request)
+    _ = len(remaining)
 
 
 def cross_ready_wait(cell_address: Int, unlimited: Bool, timeout: Float64) raises -> Bool:
@@ -654,7 +656,7 @@ struct CrossWorkerState(Movable):
         self.commit_checkpoint = False
 
 
-def cross_worker_begin(mut w: CrossWorkerState, n: Int, nt: Int, var snapshot: List[Int]):
+def cross_worker_begin(mut w: CrossWorkerState, n: Int, nt: Int, var snapshot: List[Int]) raises:
     """The buffers of one run: the frame header, one received payload, this
     worker's shard gradients (also the gathered reply's payload, in place)
     and the folded total. Allocated once per run, not per step."""

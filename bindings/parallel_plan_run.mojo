@@ -52,7 +52,7 @@ def plan_vendor_admit(devices: List[Int], vendor: String, operation: String, coo
         raise Error(PLAN_VENDOR_REFUSAL)
 
 
-def plan_mode_admitted(word: String, family: Int) -> Bool:
+def plan_mode_admitted(word: String, family: Int) raises -> Bool:
     """The drivers' `numeric_mode not in (None, 'identical')` rule for a mode
     word: `identical` passes; `fast` passes where the identical set answers
     it for the driver's door `family` (core/mode_answer.mojo; lane
