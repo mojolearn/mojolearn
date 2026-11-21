@@ -179,6 +179,9 @@ class KernelRidge(_KernelMethodBase):
 
     _WHERE = "KernelRidge"
 
+    # Member ABI family 7 (KernelRidge), kind 0: core/kernel_ridge_member.mojo.
+    _mojolearn_member = (7, 0)
+
     def __init__(self, alpha=1.0, kernel="linear", gamma=None, degree=3, coef0=1.0):
         self.alpha = alpha
         self.kernel = kernel
