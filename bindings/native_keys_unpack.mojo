@@ -161,7 +161,6 @@ struct NativeKeys(Defaultable, Movable):
     var k_readonly: PythonObject
     var k_record: PythonObject
     var k_scalar_types: PythonObject
-    var k_sequence: PythonObject
     var k_shape: PythonObject
     var k_size: PythonObject
     var k_start_seconds: PythonObject
@@ -302,7 +301,6 @@ struct NativeKeys(Defaultable, Movable):
         self.k_readonly = PythonObject(None)
         self.k_record = PythonObject(None)
         self.k_scalar_types = PythonObject(None)
-        self.k_sequence = PythonObject(None)
         self.k_shape = PythonObject(None)
         self.k_size = PythonObject(None)
         self.k_start_seconds = PythonObject(None)
@@ -445,7 +443,6 @@ def _native_keys_fill(nk: UnsafePointer[NativeKeys, MutUntrackedOrigin]) raises:
     nk[].k_readonly = py_key("readonly")
     nk[].k_record = py_key("record")
     nk[].k_scalar_types = py_key("scalar_types")
-    nk[].k_sequence = py_key("sequence")
     nk[].k_shape = py_key("shape")
     nk[].k_size = py_key("size")
     nk[].k_start_seconds = py_key("start_seconds")

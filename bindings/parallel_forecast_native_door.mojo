@@ -501,19 +501,13 @@ def forecast_worker_dispatch(operation: Int, request: PythonObject) raises -> Py
     var state = request[0]
     var args = request[1]
     if operation == PARALLEL_FORECAST_WORKER_OPN_ARIMA_PREDICT_SHARD:
-        var model = py_call(b.object.__new__, f[].arima_cls)
-        var fields = py_fields(model)
-        var keys = py_call(b.list, state)
-        for k in range(len(keys)):  # driver-loop: over the shard's state record fields
-            py_setitem(fields, keys[k], state[keys[k]])
-        py_setitem(fields, nk[].k__exog, PythonObject(None))
+        # One instance-dictionary update (`shard_model`); it was a key list
+        # and one read and one store per state field.
+        var model = shard_model(f[].arima_cls, state)
+        py_setitem(py_fields(model), nk[].k__exog, PythonObject(None))
         return arima_predict(model, Python.tuple(args[0], args[1], PythonObject(None)), f[].arima_context)
     if operation == PARALLEL_FORECAST_WORKER_OPN_HW_PREDICT_SHARD:
-        var model = py_call(b.object.__new__, f[].hw_cls)
-        var fields = py_fields(model)
-        var keys = py_call(b.list, state)
-        for k in range(len(keys)):  # driver-loop: over the shard's state record fields
-            py_setitem(fields, keys[k], state[keys[k]])
+        var model = shard_model(f[].hw_cls, state)
         return hw_predict(model, Python.tuple(args[0], args[1], PythonObject(None)), f[].hw_context)
     if operation == PARALLEL_FORECAST_WORKER_OPN_ARIMA_FIT_SHARD:
         var model = shard_model(f[].arima_cls, state)

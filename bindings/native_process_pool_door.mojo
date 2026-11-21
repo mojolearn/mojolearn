@@ -9,10 +9,16 @@ State (lane pools-frame, 2026-11-21). A pool's state is a typed record
 (`ProcessPoolRecord`, bindings/native_process_pool_run.mojo: devices, worker
 process ids, socket descriptors, sequence, closed) held by one native owner,
 `ProcessPoolOwner`, stored in the pool dictionary under `record`. Every
-operation reads the record. The dictionary's other entries are of two kinds:
-`module` and `environment` are a caller's configuration, UNPACKed when the
-workers are spawned; `devices`, `cooperative`, `workers`, `closed`, `sequence`
-and `timing` are a mirror this door publishes for readers and never reads back.
+operation reads the record, through one dictionary read per operation (a
+start, a map, an addressed request, a close), never per frame. The
+dictionary's other entries are of two kinds: `module` and `environment` are a
+caller's configuration, UNPACKed when the workers are spawned; `devices`,
+`cooperative`, `workers`, `closed` and `timing` are a mirror this door
+publishes at a start and at a close for readers and never reads back.
+REMOVED 2026-11-21 (lane pools-frame): the `sequence` mirror entry (a Python
+int built and stored into the dictionary after every map and every addressed
+request; nothing read it) and the shard doors' `trace_record` entry (now the
+record's `trace` word, `process_pool_trace`).
 
 Wire. Every request and reply is one typed frame
 (bindings/native_process_wire_door.mojo, core/parallel_worker_frame.mojo).
@@ -43,7 +49,8 @@ from bindings.native_transport_door import (
 )
 from bindings.native_transport_run import transport_terminate, transport_clock
 from bindings.native_process_wire_door import (
-    WireOutgoing, wire_send, wire_receive, wire_send_fd, wire_receive_fd, wire_unpack, wire_text,
+    WireOutgoing, WireReply, wire_send, wire_receive, wire_send_fd, wire_receive_fd, wire_receive_typed_fd,
+    wire_reply_pack, wire_unpack, wire_text,
 )
 from core.parallel_worker_frame import WIRE_REQUEST, WIRE_RESULT, WIRE_ERROR, WIRE_CLOSE
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type
@@ -225,12 +232,11 @@ def process_pool_create(devices: PythonObject, cooperative: Bool, child_module: 
     py_setitem(result, nk[].k_cooperative, cooperative)
     py_setitem(result, nk[].k_workers, bi.list())
     py_setitem(result, nk[].k_closed, False)
-    py_setitem(result, nk[].k_sequence, 0)
     return result
 
 
 def _pool_publish(pool: PythonObject) raises:
-    """PACK: the mirror of the record (`workers`, `closed`, `sequence`)."""
+    """PACK: the mirror of the record (`workers`, `closed`)."""
     var bi = PROCESS_BOUNDARY.get_or_create_ptr()[].bi
     var nk = native_keys()
     var record = py_item(pool, nk[].k_record)
@@ -251,7 +257,6 @@ def _pool_publish(pool: PythonObject) raises:
         _ = py_call(workers.append, worker)
     py_setitem(pool, nk[].k_workers, workers)
     py_setitem(pool, nk[].k_closed, PythonObject(rec[].native.closed))
-    py_setitem(pool, nk[].k_sequence, PythonObject(rec[].native.sequence))
     _ = record
 
 
@@ -278,6 +283,21 @@ def process_pool_closed(pool: PythonObject) raises -> Bool:
     var closed = rec[].native.closed
     _ = record
     return closed
+
+
+def process_pool_trace(pool: PythonObject) raises -> Int:
+    """The id of the shard trace record the pool's requests go to (0: none)."""
+    var record = py_item(pool, native_keys()[].k_record)
+    var trace = record.downcast_value_ptr[ProcessPoolOwner]()[].native.trace
+    _ = record
+    return trace
+
+
+def process_pool_trace_set(pool: PythonObject, trace: Int) raises:
+    """Names the shard trace record of the pool's next requests."""
+    var record = py_item(pool, native_keys()[].k_record)
+    record.downcast_value_ptr[ProcessPoolOwner]()[].native.trace = trace
+    _ = record
 
 
 def process_pool_devices(pool: PythonObject) raises -> List[Int]:
@@ -570,39 +590,55 @@ def process_pool_start(pool: PythonObject) raises:
     _ = record
 
 
-def _process_pool_wave(pool: PythonObject, inputs: PythonObject, words: List[List[Int64]]) raises -> PythonObject:
+def process_pool_map_replies(pool: PythonObject, words: List[List[Int64]], inputs: PythonObject) raises -> List[WireReply]:
     """Ordered request waves over the pool's workers: request `i` of a wave
     goes to worker `i` as one typed frame (its request words `words[i]` and
-    the record UNPACKed from `inputs[i]`), then the replies are read in
-    request order. Every worker of a wave has its request before the first
-    reply is awaited, so the workers compute at the same time."""
-    var bi = PROCESS_BOUNDARY.get_or_create_ptr()[].bi
+    the record of `inputs[i]`), then the replies are read in request order.
+    Every worker of a wave has its request before the first reply is
+    awaited, so the workers compute at the same time.
+
+    UNPACK is whole before the first frame is written: every request's
+    record, once per map. A wave then writes typed frames and collects typed
+    replies (`WireReply`: the record and the stores its tensors were read
+    into), which are returned as they are: PACK is the caller's, once, after
+    the last reply of the map (`process_pool_map_typed`), or never for a
+    caller that keeps the records typed (the shard trace's inventories).
+    `inputs` is an exact list. Until 2026-11-21 each request was UNPACKed between two sends of its wave
+    and each reply PACKed (its Arrays, its containers, the list append)
+    before the next worker's reply was read."""
+    if py_type(inputs) is not PROCESS_BOUNDARY.get_or_create_ptr()[].bi.list:
+        raise Error("process: typed request payloads require an exact list")
     var total = len(inputs)
     if len(words) != total:
         raise Error("process: typed request words differ from their payloads")
-    process_pool_start(pool)
+    var outgoing = List[WireOutgoing](capacity=total)
+    for i in range(total):  # driver-loop: over the requests of one map (UNPACK, before any worker is addressed)
+        outgoing.append(wire_unpack(inputs[i]))
     var nk = native_keys()
     var record = py_item(pool, nk[].k_record)
     var rec = record.downcast_value_ptr[ProcessPoolOwner]()
+    # One record read per map: a started open pool is not looked up again by
+    # a start (the start refuses a closed pool and returns on a started one).
+    if rec[].native.closed or not rec[].native.started():
+        process_pool_start(pool)
     # The descriptors are copied out once per map: no reference into the
     # record is held across a socket wait.
     var fds = rec[].native.fds.copy()
     var sequence = rec[].native.sequence
-    var result = bi.list()
+    var replies = List[WireReply](capacity=total)
     var offset = 0
     try:
         while offset < total:  # driver-loop: over logical request waves across physical worker groups
             var width = pool_wave_width(len(fds), total - offset)
             for i in range(width):  # driver-loop: over independent requests launched before consuming wave results
-                var outgoing = wire_unpack(inputs[offset + i])
-                wire_send_fd(fds[i], -1.0, WIRE_REQUEST, sequence + i, words[offset + i], outgoing)
+                wire_send_fd(fds[i], -1.0, WIRE_REQUEST, sequence + i, words[offset + i], outgoing[offset + i])
             var failure = String()
             for i in range(width):  # driver-loop: over worker replies in fixed logical request order
                 try:
-                    var reply = wire_receive_fd(fds[i], -1.0)
+                    var reply = wire_receive_typed_fd(fds[i], -1.0)
                     if pool_reply_failed(reply.kind, reply.sequence, sequence + i, False):
-                        raise Error("RuntimeError: native model worker failed: " + String(reply.value))
-                    _ = py_call(result.append, reply.value)
+                        raise Error("RuntimeError: native model worker failed: " + reply.text())
+                    replies.append(reply^)
                 except error:
                     if String(error).startswith("InterruptedError:"):
                         raise error  # Cancel instead of draining unbounded peer replies.
@@ -616,10 +652,9 @@ def _process_pool_wave(pool: PythonObject, inputs: PythonObject, words: List[Lis
     except error:
         _pool_abandon(pool, String(error), "request")
         raise error
-    # The mirror's sequence, once per map (the record has it per wave).
-    py_setitem(pool, nk[].k_sequence, PythonObject(sequence))
     _ = record
-    return result
+    _ = outgoing^
+    return replies^
 
 
 # Removed (lane pools-frame, 2026-11-21): the untyped `process_pool_map`
@@ -633,9 +668,12 @@ def process_pool_map_typed(pool: PythonObject, words: List[List[Int64]], payload
     """One reply per request, in request order: `words[i]` is one encoded
     `WorkerRequest` (core/parallel_worker_request.mojo) and `payloads[i]` the
     value that rides with it (None for none). `payloads` is an exact list."""
-    if py_type(payloads) is not PROCESS_BOUNDARY.get_or_create_ptr()[].bi.list:
-        raise Error("process: typed request payloads require an exact list")
-    return _process_pool_wave(pool, payloads, words)
+    var replies = process_pool_map_replies(pool, words, payloads)
+    # PACK of the map, once: every reply is read and no worker is waited on.
+    var result = PROCESS_BOUNDARY.get_or_create_ptr()[].bi.list()
+    for i in range(len(replies)):  # driver-loop: over the collected replies of one map (PACK)
+        _ = py_call(result.append, wire_reply_pack(replies[i]))
+    return result
 
 
 def process_pool_request(pool: PythonObject, worker_index: Int, request: List[Int64], outgoing: WireOutgoing) raises -> PythonObject:
@@ -649,7 +687,8 @@ def process_pool_request(pool: PythonObject, worker_index: Int, request: List[In
     var record = py_item(pool, nk[].k_record)
     var rec = record.downcast_value_ptr[ProcessPoolOwner]()
     pool_index_admit(rec[].native.width(), worker_index)
-    process_pool_start(pool)
+    if rec[].native.closed or not rec[].native.started():
+        process_pool_start(pool)
     if worker_index >= len(rec[].native.fds):
         # Only workers whose reap failed are left (a close that could not finish).
         raise Error("transport: socket is closed")
@@ -663,7 +702,6 @@ def process_pool_request(pool: PythonObject, worker_index: Int, request: List[In
         failed = pool_reply_failed(reply.kind, reply.sequence, sequence, True)
         value = reply.value
         rec[].native.sequence = sequence + 1
-        py_setitem(pool, nk[].k_sequence, PythonObject(sequence + 1))
     except error:
         _pool_abandon(pool, String(error), "request")
         raise error
