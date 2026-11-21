@@ -61,6 +61,9 @@ from bindings.label_list_words_unpack import label_store_address
 from bindings.label_list_words_pack import label_list_store
 from core.label_words_impl import id_words_coded, group_runs_scan, group_sizes_store_u32, label_codes_i32_to_int
 from gbdt.trees_gbdt_run import gbdt_text_has_ctr
+from bindings.gbdt_category_unpack import (
+    gbdt_category_columns, gbdt_category_admit, gbdt_category_fit, gbdt_category_apply,
+)
 from gbdt.trees_gbdt_fit_run import (
     _sabotaged, _pair_end_range,
     GbdtOrderedFacts, GbdtSearchFacts, GBDT_F32_MAX, gbdt_nan, gbdt_auto_rate, gbdt_check_ordered_options,
@@ -778,9 +781,13 @@ def _flags(fields: PythonObject, model: PythonObject, n_features: Int, context: 
 
 
 def _eval_set(eval_set: PythonObject, fields: PythonObject, model: PythonObject, n_features: Int,
+              cat_columns: List[Int], category_map: PythonObject,
               context: PythonObject) raises -> PythonObject:
     """`GradientBoosting._eval_arrays`: (X_eval column-major, y_eval, rows)
-    as (keep_x, x_addr, keep_y, y_addr, rows), or None."""
+    as (keep_x, x_addr, keep_y, y_addr, rows), or None. With a category map
+    (a fit with `cat_features`), the held-out categorical columns are
+    admitted like the fit's and encoded through the fit's map; a value the
+    fit did not see takes the unseen code."""
     var b = _b()
     if eval_set is None:
         return PythonObject(None)
@@ -800,12 +807,19 @@ def _eval_set(eval_set: PythonObject, fields: PythonObject, model: PythonObject,
         raise Error("mojolearn: eval_set must be (X_eval, y_eval)")
     if len(items) != 2:
         raise Error("mojolearn: eval_set must be (X_eval, y_eval)")
-    var xe = admit_f32(items[0], 2, "eval_set X", context, order="F", finite=False)
+    var xe: AdmittedX
+    var eval_keys = List[UInt64]()
+    if category_map is None:
+        xe = admit_f32(items[0], 2, "eval_set X", context, order="F", finite=False)
+    else:
+        xe = gbdt_category_admit(items[0], "eval_set X", cat_columns, eval_keys, context)
     if xe.cols != n_features:
         raise Error("mojolearn: eval_set X has " + String(xe.cols) + " features "
                     + "for a fit on " + String(n_features))
     if xe.rows == 0:
         raise Error("mojolearn: eval_set X has no rows")
+    if category_map is not None:
+        gbdt_category_apply(xe, eval_keys, category_map, n_features, context)
     var ye = admit_f32(items[1], 1, "eval_set y", context, finite=False)
     if ye.rows != xe.rows:
         raise Error("mojolearn: eval_set y has " + String(ye.rows) + " values for "
@@ -976,8 +990,16 @@ def gbdt_fit_unpack(model: PythonObject, args: PythonObject, context: PythonObje
     except:
         row_major_ok = False
     var x: AdmittedX
+    # lane cat-ctr: the cat_features columns may hold any values (numbers
+    # that are not dense codes, text, None); they are admitted here and
+    # encoded to dense codes below, once `_flags` has checked the indices.
+    var cat_columns = List[Int]()
+    var cat_keys = List[UInt64]()
     if not _truthy(cat) and not _truthy(hot) and row_major_ok:
         x = trees_forest_x(X, "X", context)
+    elif _truthy(cat):
+        cat_columns = gbdt_category_columns(cat)
+        x = gbdt_category_admit(X, "X", cat_columns, cat_keys, context)
     else:
         # 0.8.66 regression C3 (gbdt-rank-pairlogit fit 1.24x): this fit
         # reads only x's address during the call and drops x at its end, so
@@ -1050,6 +1072,12 @@ def gbdt_fit_unpack(model: PythonObject, args: PythonObject, context: PythonObje
     var flags = _flags(fields, model, n_features, context)
     var n_flags = 0 if flags is None else n_features
     var flags_holder = flags if flags is not None else admitted_vector(1, "<u4", context)
+    # The category map of this fit (None with no cat_features): the dense
+    # codes replace the categorical columns of the block the fit reads. The
+    # caller's own array is never written (a borrowed X is copied once).
+    var category_map = PythonObject(None)
+    if len(cat_columns) != 0:
+        category_map = gbdt_category_fit(x, cat_columns, cat_keys, context)
     var w_addr = x.address
     var n_weights = 0
     var weights: Optional[AdmittedX] = None
@@ -1057,7 +1085,7 @@ def gbdt_fit_unpack(model: PythonObject, args: PythonObject, context: PythonObje
         weights = admit_weight_words(sample_weight, n_rows, context)
         w_addr = weights.value().address
         n_weights = n_rows
-    var held = _eval_set(eval_set, fields, model, n_features, context)
+    var held = _eval_set(eval_set, fields, model, n_features, cat_columns, category_map, context)
     var n_eval_rows = 0 if held is None else Int(py=held[4])
     if n_eval_rows and multi_output:
         var found = _codes(Int(py=held[3]), n_eval_rows, context)
@@ -1160,7 +1188,7 @@ def gbdt_fit_unpack(model: PythonObject, args: PythonObject, context: PythonObje
     elif _eq(loss, "MultiClassOneVsAll"):
         classes = GBDT_CLASSES_DIM
     var row_major = x.c_order
-    var pins = Python.tuple(flags_holder, held, group_holder, pair_holders)
+    var pins = Python.tuple(flags_holder, held, group_holder, pair_holders, category_map)
     return GbdtFitCall(gkey, row_major, fit_args^, n_features, n_eval_rows, classes, x^, ya^, weights^, pins)
 
 
@@ -1179,6 +1207,7 @@ def gbdt_fit_pack(model: PythonObject, call: GbdtFitCall, outcome: GbdtFitOutcom
     py_setitem(fields, nk[].k_loss_curve_, _f64_curve(outcome.learn, context))
     py_setitem(fields, nk[].k_test_loss_curve_, _f64_curve(outcome.test, context) if call.n_eval_rows else PythonObject(None))
     py_setitem(fields, nk[].k_n_features_in_, PythonObject(call.n_features))
+    py_setitem(fields, nk[].k_category_map_, call.pins[4])
     var width = PythonObject(dim)
     if dim == GBDT_DIM_FROM_ARCHIVE:
         width = py_call_typed(_b().int, py_item(host_archive_gbdt_state(text, context), nk[].k_dim))
@@ -1500,6 +1529,7 @@ def _gbdt_store(model: PythonObject, args: PythonObject, context: PythonObject) 
         Python.tuple("stopped_early_", PythonObject(None)), Python.tuple("learning_rate_", PythonObject(None)),
         Python.tuple("boosting_type_", PythonObject(None)), Python.tuple("n_features_in_", PythonObject(None)),
         Python.tuple("approx_dim_", PythonObject(None)), Python.tuple("n_classes_", PythonObject(None)),
+        Python.tuple("category_map_", PythonObject(None)),
     )
     for i in range(len(stored)):  # driver-loop: over the constructor's stored fields
         py_setitem(fields, stored[i][0], stored[i][1])

@@ -658,7 +658,12 @@ class GradientBoosting(_NumericModeMixin):
         Read by Bernoulli and Poisson only (default 0.66). Passing it with
         Bayesian (including the default) or no bootstrap raises ``ValueError``.
     cat_features : sequence of int, optional
-        Column indices holding dense category codes ``0..k-1``. As in
+        Column indices of the categorical features. A categorical column may
+        hold any values: integers, other numbers, text or ``None`` (pass text
+        in a list of rows or a NumPy object array). The values are mapped to
+        categories during ``fit``; the mapping is kept with the model, saved
+        and loaded with it, and applied by ``predict``. A value that was not
+        seen during ``fit`` is treated as an unknown category. As in
         CatBoost, each column is one-hot encoded when its cardinality is small
         and otherwise uses target statistics (CTRs). CTRs are computed over
         the rows in the order you pass them; CatBoost shuffles the pool first
@@ -1169,6 +1174,8 @@ _native_archive_bridge.register(GradientBoosting, _MODEL_FORMAT, (
                     ("none", "n_classes_", -1), ("none", "best_iteration_", -1),
                     ("bool", "stopped_early_"))),
     ("f8", "bias", (("float", "bias_"),)),
+    # The category map of a fit with cat_features (int64 words); absent otherwise.
+    ("when_set", "category_map_", (("array", "category_map", "category_map_"),)),
 ), host_archive_gbdt_bindings=_native_trees_bridge.bindings("_mojolearn_gbdt"))
 
 # The fixed option tables `fit` reads natively (bindings/trees_public_gbdt_fit_door.mojo).
