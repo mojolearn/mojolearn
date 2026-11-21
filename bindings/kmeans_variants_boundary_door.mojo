@@ -69,6 +69,17 @@ struct VariantsAuxiliaryPins(Movable):
                     raise Error("ValueError: cluster auxiliary size exceeds native storage")
                 total += count
                 self.owners.append(owner)
+        if len(self.owners) == 1:
+            # One part (MiniBatchKMeans' weights alone, or its starting
+            # centers alone; a partial fit's first-call init array): the
+            # entry reads the admitted array's own words, pinned in
+            # `owners` through the call. The old code allocated `total`
+            # floats and copied this one part into them on every fit /
+            # partial_fit call (no loop above the call: once per public
+            # operation, n words for the weights).
+            self.plan = VariantsAuxiliary(borrowed=variants_span(self.owners[0]))
+            _ = self.owners
+            return
         # The old helper admitted every part, allocated the destination, then
         # read source addresses. Preserve that refusal/allocation sequence.
         self.plan = VariantsAuxiliary(total)

@@ -148,6 +148,23 @@ struct ParallelForestOwner(Movable, Writable):
         self.write_to(writer)
 
 
+# THE MEMBER ABI AND THIS DOOR (lane pools-frame, 2026-11-21; MEMBER-ABI-V2
+# "RECIPE FOR A CALLER" and its "Not covered" terms). The three `family_call`
+# sites below (`_run`: `family_par_run`; the direct route: `family_km_par_*`,
+# `family_chol_par_*`; the shard route: the shard binding's entry) are NOT
+# member calls and stay `family_call`: each runs one estimator under the
+# caller's DEVICE TUPLE (a device plan bound around the plain owners,
+# core/device_plan.mojo: rows, trailing rows and solve columns split across
+# the devices). A member carries ONE resolved route (`MemberPlan.route`,
+# `MemberCall.route`: one device, one image; bindings/member_set_door.mojo
+# and bindings/msel_member_units_door.mojo read `plans[u].route.device`), and
+# the ABI has no operation that takes a device tuple. A member FIT / PREDICT
+# here would run the estimator on one device: slower than the path it
+# replaces whenever the tuple has more than one device, and at one device it
+# adds an admit and a state to the plain owner call it would stand in for.
+# When the ABI gains a device-plan word, these sites take
+# `member_admit_serving` first and fall back to `family_call` as written.
+
 def _run(model: PythonObject, driver: PythonObject, operation: PythonObject, args: PythonObject,
           entry: PythonObject, owner: PythonObject, names: PythonObject, devices: PythonObject,
           context: PythonObject) raises -> PythonObject:

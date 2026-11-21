@@ -135,7 +135,7 @@ struct TreesKeys(Defaultable, Movable):
     var k_grow_policy_codes: PythonObject
     var k_host_tree_context: PythonObject
     var k_iforest_resident_release: PythonObject
-    var k_iforest_run: PythonObject
+    var k_svm_native_key: PythonObject
     var k_inference_engine: PythonObject
     var k_inference_engine_: PythonObject
     var k_init_names: PythonObject
@@ -416,7 +416,7 @@ struct TreesKeys(Defaultable, Movable):
         self.k_grow_policy_codes = PythonObject(None)
         self.k_host_tree_context = PythonObject(None)
         self.k_iforest_resident_release = PythonObject(None)
-        self.k_iforest_run = PythonObject(None)
+        self.k_svm_native_key = PythonObject(None)
         self.k_inference_engine = PythonObject(None)
         self.k_inference_engine_ = PythonObject(None)
         self.k_init_names = PythonObject(None)
@@ -702,7 +702,7 @@ def _trees_keys_fill(nk: UnsafePointer[TreesKeys, MutUntrackedOrigin]) raises:
     nk[].k_grow_policy_codes = py_key("grow_policy_codes")
     nk[].k_host_tree_context = py_key("host_tree_context")
     nk[].k_iforest_resident_release = py_key("iforest_resident_release")
-    nk[].k_iforest_run = py_key("iforest_run")
+    nk[].k_svm_native_key = py_key("svm_native_key")
     nk[].k_inference_engine = py_key("inference_engine")
     nk[].k_inference_engine_ = py_key("inference_engine_")
     nk[].k_init_names = py_key("init_names")

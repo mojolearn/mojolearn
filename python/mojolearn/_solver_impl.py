@@ -229,6 +229,10 @@ class ElasticNet(ParamsMixin):
     # gives the class `device=` and checks it (lane dw-core).
     _mojolearn_device = True
 
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_CD = 4) and core/cd_member.mojo.
+    _mojolearn_member = (4, 0)
+
     def __init__(self, alpha=1.0, *, l1_ratio=0.5, fit_intercept=True,
                  max_iter=1000, tol=1e-3, solver="auto", selection="cyclic",
                  precompute=False, copy_X=True, warm_start=False,
@@ -414,6 +418,10 @@ class Lasso(ElasticNet):
     >>> model = mojolearn.Lasso(alpha=0.01).fit(X, y)
     >>> pred = model.predict(X)
     """
+
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_CD = 4) and core/cd_member.mojo.
+    _mojolearn_member = (4, 1)
 
     def __init__(self, alpha=1.0, *, fit_intercept=True, max_iter=1000,
                  tol=1e-3, solver="auto", selection="cyclic",

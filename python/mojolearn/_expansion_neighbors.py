@@ -681,6 +681,9 @@ class OneClassSVM(_XNeighbors):
     _mojolearn_native_public = True
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _estimator_type = "outlier_detector"
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_XNEIGHBORS = 12) and core/xneighbors_member.mojo.
+    _mojolearn_member = (12, 2)
 
     def __init__(self, *, kernel="rbf", degree=3, gamma="scale", coef0=0.0, tol=1e-3, nu=0.5,
                  shrinking=True, cache_size=200, verbose=False, max_iter=-1, numeric_mode=None):
@@ -867,6 +870,9 @@ class KernelPCA(_XNeighbors):
     #: the estimator's native route (bindings/kpca_native_door.mojo); the check
     #: runs the same estimator on the other device, in this process.
     _mojolearn_device = True
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_XNEIGHBORS = 12) and core/xneighbors_member.mojo.
+    _mojolearn_member = (12, 3)
 
     def __init__(self, n_components=None, *, kernel="linear", gamma=None, degree=3, coef0=1,
                  kernel_params=None, alpha=1.0, fit_inverse_transform=False, eigen_solver="auto",
@@ -1024,6 +1030,11 @@ class PolynomialCountSketch(_XNeighbors):
     #: (providers/python/estimator_binding_pyapi_door.mojo); the check runs both devices in this process.
     _mojolearn_device = True
 
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_XNEIGHBORS = 12) and core/xneighbors_member.mojo.
+    # An int random_state only (a RandomState or None keeps the estimator's own doors).
+    _mojolearn_member = (12, 4)
+
     def __init__(self, *, gamma=1.0, degree=2, coef0=0, n_components=100, random_state=None):
         self.gamma = gamma
         self.degree = degree
@@ -1150,6 +1161,10 @@ class AdditiveChi2Sampler(_XNeighbors):
     #: estimator's device route, and the check builds its other side as the same
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
+
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_XNEIGHBORS = 12) and core/xneighbors_member.mojo.
+    _mojolearn_member = (12, 5)
 
     def __init__(self, *, sample_steps=2, sample_interval=None, numeric_mode=None, device=None):
         self.sample_steps = sample_steps
@@ -2233,6 +2248,9 @@ from . import _native_decomp_bridge  # noqa: E402
 _KPCA_CALL, _KPCA_CONTEXT = _native_decomp_bridge.connect_public(
     {"KernelPCA": KernelPCA}, neighbors=True,
     metadata={"kpca_kernels": dict(_KERNELS), "kpca_old_items": _OLD_ITEMS})
+# The same context, for KernelPCA's member boundary (providers/python/member_xneighbors_boundary_door.mojo
+# `_kpca_context`): a member reads the tables and switches the estimator's own doors read.
+_native_family_bridge.tables(family_xn_kpca_context=_KPCA_CONTEXT)
 
 # Import connection; selected public operations admit the live native binding.
 _native_family_bridge.connect_bindings("_mojolearn_x_neighbors", "_mojolearn_metrics")

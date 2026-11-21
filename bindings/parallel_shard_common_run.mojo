@@ -6,6 +6,7 @@ from std.ffi import external_call
 from std.memory import unsafe_memcpy
 from std.os import getenv
 from core.shared_slot import SharedSlot
+from core.parallel_worker_request import WorkerRequest, worker_request_decode, WORKER_NO_HANDLE
 
 
 #: `ShardCounters.transport_fault` values: the transport negative control
@@ -162,17 +163,18 @@ comptime SHARD_TRACE_RECORDS = 256
 struct ShardTraceRecord(Copyable, Movable):
     """One started pool in the trace: its id (the pool dictionary's
     `trace_record` word), its devices and, per request it served, the
-    worker's process id and the operation's name."""
+    worker's process id and the operation's code (`shard_worker_op_name`
+    gives its name at the take)."""
     var id: Int
     var devices: List[Int]
     var pids: List[Int]
-    var operations: List[String]
+    var operations: List[Int]
 
     def __init__(out self, id: Int, var devices: List[Int]):
         self.id = id
         self.devices = devices^
         self.pids = List[Int]()
-        self.operations = List[String]()
+        self.operations = List[Int]()
 
 
 def shard_trace_find(records: List[ShardTraceRecord], id: Int) -> Int:
@@ -288,3 +290,116 @@ def shard_join_block(same_dtype: Bool, cursor: Int, rows: Int, total: Int) raise
 def shard_join_complete(cursor: Int, total: Int) raises:
     if cursor != total:
         raise Error("ValueError: shard workers returned an incomplete result")
+
+
+# ------------------------------------------------- the workers' operations
+# One code space for every worker a shard pool starts (the shard worker of
+# bindings/parallel_shard_native_door.mojo, with the neighbor operations of
+# bindings/parallel_neighbor_worker_door.mojo, and the forecast worker of
+# bindings/parallel_forecast_native_door.mojo). A request travels as one
+# encoded `WorkerRequest` whose `op` is one of these codes
+# (`shard_request_words`); its payload tuple `(state, args)` rides beside it.
+# The workers dispatch on the decoded word: no operation name is sent, looked
+# up or compared. The neighbor operations stay the last shard codes (one
+# range test in the shard worker).
+comptime PARALLEL_SHARD_WORKER_OPN_IDENTITY = 0
+comptime PARALLEL_SHARD_WORKER_OPN_SHARD_STORE = 1
+comptime PARALLEL_SHARD_WORKER_OPN_SHARD_RELEASE = 2
+comptime PARALLEL_SHARD_WORKER_OPN_RBF_ROWS = 3
+comptime PARALLEL_SHARD_WORKER_OPN_SCALER_FIT = 4
+comptime PARALLEL_SHARD_WORKER_OPN_SCALER_TRANSFORM = 5
+comptime PARALLEL_SHARD_WORKER_OPN_GPC_CLASS_FIT = 6
+comptime PARALLEL_SHARD_WORKER_OPN_GPC_CLASS_PREDICT = 7
+comptime PARALLEL_SHARD_WORKER_OPN_FOREST_FIT = 8
+comptime PARALLEL_SHARD_WORKER_OPN_REFERENCE_SHARD = 9
+comptime PARALLEL_SHARD_WORKER_OPN_REFERENCE_STORE = 10
+comptime PARALLEL_SHARD_WORKER_OPN_REFERENCE_VOTE = 11
+comptime PARALLEL_SHARD_WORKER_OPN_QUERY_STATE = 12
+comptime PARALLEL_SHARD_WORKER_OPN_RELEASE = 13
+comptime PARALLEL_SHARD_WORKER_OPN_IVF_STORE = 14
+comptime PARALLEL_SHARD_WORKER_OPN_IVF_SEARCH = 15
+comptime PARALLEL_SHARD_WORKER_OPN_REFERENCE_QUERY = 16
+comptime PARALLEL_SHARD_WORKER_OPN_QUERY_ROWS = 17
+# The forecast worker's operations; its identity request is the shard one.
+comptime PARALLEL_FORECAST_WORKER_OPN_ARIMA_PREDICT_SHARD = 32
+comptime PARALLEL_FORECAST_WORKER_OPN_HW_PREDICT_SHARD = 33
+comptime PARALLEL_FORECAST_WORKER_OPN_ARIMA_FIT_SHARD = 34
+comptime PARALLEL_FORECAST_WORKER_OPN_HW_FIT_SHARD = 35
+
+
+def shard_worker_op_name(op: Int) -> String:
+    """The operation's name in the trace (`shard_trace_take`): the word the
+    request used to carry, read by the verifier's receipt."""
+    if op == PARALLEL_SHARD_WORKER_OPN_IDENTITY:
+        return "identity"
+    if op == PARALLEL_SHARD_WORKER_OPN_SHARD_STORE:
+        return "shard_store"
+    if op == PARALLEL_SHARD_WORKER_OPN_SHARD_RELEASE:
+        return "shard_release"
+    if op == PARALLEL_SHARD_WORKER_OPN_RBF_ROWS:
+        return "rbf_rows"
+    if op == PARALLEL_SHARD_WORKER_OPN_SCALER_FIT:
+        return "scaler_fit"
+    if op == PARALLEL_SHARD_WORKER_OPN_SCALER_TRANSFORM:
+        return "scaler_transform"
+    if op == PARALLEL_SHARD_WORKER_OPN_GPC_CLASS_FIT:
+        return "gpc_class_fit"
+    if op == PARALLEL_SHARD_WORKER_OPN_GPC_CLASS_PREDICT:
+        return "gpc_class_predict"
+    if op == PARALLEL_SHARD_WORKER_OPN_FOREST_FIT:
+        return "forest_fit"
+    if op == PARALLEL_SHARD_WORKER_OPN_REFERENCE_SHARD:
+        return "reference_shard"
+    if op == PARALLEL_SHARD_WORKER_OPN_REFERENCE_STORE:
+        return "reference_store"
+    if op == PARALLEL_SHARD_WORKER_OPN_REFERENCE_VOTE:
+        return "reference_vote"
+    if op == PARALLEL_SHARD_WORKER_OPN_QUERY_STATE:
+        return "query_state"
+    if op == PARALLEL_SHARD_WORKER_OPN_RELEASE:
+        return "release"
+    if op == PARALLEL_SHARD_WORKER_OPN_IVF_STORE:
+        return "ivf_store"
+    if op == PARALLEL_SHARD_WORKER_OPN_IVF_SEARCH:
+        return "ivf_search"
+    if op == PARALLEL_SHARD_WORKER_OPN_REFERENCE_QUERY:
+        return "reference_query"
+    if op == PARALLEL_SHARD_WORKER_OPN_QUERY_ROWS:
+        return "query_rows"
+    if op == PARALLEL_FORECAST_WORKER_OPN_ARIMA_PREDICT_SHARD:
+        return "arima_predict_shard"
+    if op == PARALLEL_FORECAST_WORKER_OPN_HW_PREDICT_SHARD:
+        return "hw_predict_shard"
+    if op == PARALLEL_FORECAST_WORKER_OPN_ARIMA_FIT_SHARD:
+        return "arima_fit_shard"
+    if op == PARALLEL_FORECAST_WORKER_OPN_HW_FIT_SHARD:
+        return "hw_fit_shard"
+    return "unknown"
+
+
+def shard_worker_op_numerical(op: Int) -> Bool:
+    """True for an operation whose result is numerical (the batches the
+    transport negative control of `shard_map` may alter): every operation
+    but the identity round and the store / release / state bookkeeping."""
+    if op >= PARALLEL_FORECAST_WORKER_OPN_ARIMA_PREDICT_SHARD:
+        return op <= PARALLEL_FORECAST_WORKER_OPN_HW_FIT_SHARD
+    if op >= PARALLEL_SHARD_WORKER_OPN_RBF_ROWS and op <= PARALLEL_SHARD_WORKER_OPN_REFERENCE_SHARD:
+        return True
+    return (op == PARALLEL_SHARD_WORKER_OPN_IVF_SEARCH or op == PARALLEL_SHARD_WORKER_OPN_REFERENCE_QUERY
+            or op == PARALLEL_SHARD_WORKER_OPN_QUERY_ROWS)
+
+
+def shard_request_words(op: Int) -> List[Int64]:
+    """The wire words of one shard request: an encoded `WorkerRequest` with
+    the operation code and no handle or words (the operands ride in the
+    payload record)."""
+    return WorkerRequest(op).encode()
+
+
+def shard_request_op(address: Int, byte_count: Int) raises -> Int:
+    """A worker's decode of its request words (a frame without request words
+    is refused here): the operation code."""
+    var request = worker_request_decode(address, byte_count)
+    if request.handle != WORKER_NO_HANDLE or len(request.words) != 0:
+        raise Error("parallel shards: invalid worker request envelope")
+    return request.op

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""DBSCAN as a MEMBER (core/member_abi.mojo, MEMBER-ABI-V2.md).
+"""DBSCAN and KernelDensity as MEMBERS (core/member_abi.mojo, MEMBER-ABI-V2.md).
 
 One entry, `density_member_v2`, published by each estimators image beside
 its DBSCAN kernel table (`density_member_publish`): the device image
@@ -9,14 +9,38 @@ family's existing typed RUN (`DBSCANNativeDriver`, core/dbscan_native_api.mojo:
 fit, core count, core gather, the core-row queries and their resident copy)
 over the DBSCAN entry of the `DeviceRoute` it is handed: `route.entry` is the
 image's `dbscan_native_api_v1` entry, `route.flags` that entry's capability
-word (`DBSCAN_CAP_*`, read once by the caller's UNPACK). No other route slot
-is read. No kernel is touched.
+word (`DBSCAN_CAP_*`, read once by the caller's UNPACK). For KernelDensity
+`route.entry` is the image's `kde_native_api_v1` entry (core/kde_native_api.mojo
+`KDENativeDriver`: prepare / release / query / resident query, the requests
+of neighbors/neighbors_kde_run.mojo) and `route.flags` its `KDE_CAP_*` word.
+No other route slot is read. No kernel is touched.
 
 Kinds (MEMBER_OP_NEW word [0]): 1 DBSCAN with prediction_data=True (the
-class has `predict` only then). Kind 0 KernelDensity is reserved and refused
-(the class has no predict).
+class has `predict` only then); 0 KernelDensity (fit, score_samples, score:
+no predict; a grid search over its bandwidth scores it).
 
-MEMBER_OP_NEW parameters (Float64 words, 7): [0] 1, [1] eps, [2] min_samples,
+KernelDensity NEW parameters (Float64 words, 4): [0] 0, [1] bandwidth (a
+float; a rule name is the class's own refusal), [2] kernel (0 'gaussian',
+1 'tophat', 2 'epanechnikov', 3 'exponential', 4 'linear', 5 'cosine'),
+[3] metric (0 'euclidean', 1 'l2', 2 'sqeuclidean', 3 'l1', 4 'cityblock',
+5 'manhattan', 6 'chebyshev', 7 'cosine', 8 'minkowski' with no
+metric_params). The names are built once at NEW and handed to the entry by
+name, as the class's door hands them. KernelDensity is LAZY: fit BORROWS X
+and the sample weights (no copy: the class's own fit copies X into `_x` on
+every fit), so THE CALLER KEEPS X AND THE WEIGHTS ALIVE AND UNCHANGED UNTIL
+THIS STATE IS FREED OR REFITTED (the member ABI's view lifetime); the first
+MEMBER_OP_EXPORT of the training block copies X (and the weights) into the
+state once, and the state reads its own copy from then on. Weights are
+checked as the class checks them (finite, none negative, one positive).
+score_samples writes float32 log densities (rows x 1); score sets
+`call.value` to their sum, folded by the entry (the class's `score`). A
+state on a KDE_CAP_RESIDENT image uploads its training set once (first
+query) and releases it at refit, import or free. Blocks by index: 0
+`MEMBER_BLOCK_FAMILY + 4` float32 rows x features, the training rows;
+1 `MEMBER_BLOCK_FAMILY + 5` float32 1 x rows, the weights (empty: none);
+2 `MEMBER_BLOCK_SCALARS` float64 [rows, features]. An import needs 0 and 2.
+
+DBSCAN MEMBER_OP_NEW parameters (Float64 words, 7): [0] 1, [1] eps, [2] min_samples,
 [3] metric code (the estimator's `dbscan_metric_code`; 'precomputed' is not a
 member: its words are tied to the training rows), [4] algorithm code
 (`dbscan_method_code`), [5] max_iterations (0 for None), [6]
@@ -54,6 +78,13 @@ fit, import or free. Serial by nature here: the store's bookkeeping.
 from std.memory import unsafe_memcpy
 from std.sys.info import size_of
 from cluster.dbscan_door_run import dbscan_fit_request, dbscan_core_request
+from core.admitted_input import admitted_check_weights_f32
+from core.admitted_refusals import admitted_finite_refuse
+from core.host_finite_scan import host_all_finite_f32
+from core.kde_native_api import KDENativeDriver, KDE_CAP_RESIDENT
+from neighbors.neighbors_kde_run import (
+    kde_fit_key, kde_prepare_request, kde_query_request, kde_resident_query, kde_refuse_unfitted, kde_refuse_features,
+)
 from core.dbscan_native_api import (
     DBSCANNativeDriver, DBSCANFitWorkspace, DBSCANGatherRequest, DBSCANReferenceRequest, DBSCANQueryRequest,
     DBSCANResidentQuery, DBSCAN_CAP_RESIDENT, dbscan_empty_labels,
@@ -61,8 +92,9 @@ from core.dbscan_native_api import (
 from core.member_abi import (
     MemberCall, MemberMatrix, MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_HOME_DEVICE,
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_PREDICT,
-    MEMBER_OP_OUTPUTS, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT,
+    MEMBER_OP_OUTPUTS, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_OP_SCORE, MEMBER_OP_SCORE_SAMPLES,
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT, MEMBER_CAN_SAMPLE_WEIGHT,
+    MEMBER_CAN_SCORE, MEMBER_CAN_SCORE_SAMPLES,
     MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
 )
@@ -75,6 +107,10 @@ comptime _CHUNK = 256
 comptime _INDEX_SPAN = 16777216
 comptime _EST = "DBSCAN"
 comptime _KIND_DBSCAN = 1
+comptime _KIND_KDE = 0
+comptime _BLOCK_TRAIN = MEMBER_BLOCK_FAMILY + 4
+comptime _BLOCK_WEIGHTS = MEMBER_BLOCK_FAMILY + 5
+comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _BLOCK_LABELS = MEMBER_BLOCK_FAMILY
 comptime _BLOCK_INDICES = MEMBER_BLOCK_FAMILY + 1
 comptime _BLOCK_COMPONENTS = MEMBER_BLOCK_FAMILY + 2
@@ -85,6 +121,18 @@ comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
 struct DensityMemberSlot(Copyable, Movable, Defaultable):
     var generation: Int
     var live: Bool
+    var kind: Int
+    # KernelDensity: its words, the names built once at NEW, the training
+    # rows and weights (borrowed addresses after a fit, else the state's own
+    # copies below; 0: none) and their counts.
+    var bandwidth: Float64
+    var kernel: String
+    var kde_metric: String
+    var train: Int
+    var weights: Int
+    var rows: Int
+    var train_owned: List[Float32]
+    var weights_owned: List[Float32]
     var eps: Float64
     var min_samples: Int
     var metric: Int
@@ -104,6 +152,15 @@ struct DensityMemberSlot(Copyable, Movable, Defaultable):
     def __init__(out self):
         self.generation = 0
         self.live = False
+        self.kind = -1
+        self.bandwidth = 0.0
+        self.kernel = String("")
+        self.kde_metric = String("")
+        self.train = 0
+        self.weights = 0
+        self.rows = 0
+        self.train_owned = List[Float32]()
+        self.weights_owned = List[Float32]()
         self.eps = 0.0
         self.min_samples = 0
         self.metric = 0
@@ -122,6 +179,11 @@ struct DensityMemberSlot(Copyable, Movable, Defaultable):
     def clear(mut self):
         self.fitted = False
         self.features = 0
+        self.train = 0
+        self.weights = 0
+        self.rows = 0
+        self.train_owned = List[Float32]()
+        self.weights_owned = List[Float32]()
         self.labels = List[Int32]()
         self.indices = List[Int32]()
         self.components = List[Float32]()
@@ -174,12 +236,18 @@ def _mint(words: _Words) raises -> Int:
         var slot = _Slot(unsafe_from_address=_slot_address(index))
         slot[].generation += 1
         slot[].live = True
-        slot[].eps = words[1]
-        slot[].min_samples = Int(words[2])
-        slot[].metric = Int(words[3])
-        slot[].method = Int(words[4])
-        slot[].cap = Int(words[5])
-        slot[].budget = Int(words[6])
+        slot[].kind = Int(words[0])
+        if slot[].kind == _KIND_KDE:
+            slot[].bandwidth = words[1]
+            slot[].kernel = _kde_kernel_name(Int(words[2]))
+            slot[].kde_metric = _kde_metric_name(Int(words[3]))
+        else:
+            slot[].eps = words[1]
+            slot[].min_samples = Int(words[2])
+            slot[].metric = Int(words[3])
+            slot[].method = Int(words[4])
+            slot[].cap = Int(words[5])
+            slot[].budget = Int(words[6])
         slot[].clear()
         slot[].handle = -1
         return slot[].generation * _INDEX_SPAN + index + 1
@@ -215,22 +283,40 @@ def _driver(call: _Call) -> DBSCANNativeDriver:
     return DBSCANNativeDriver(call[].route.entry.call)
 
 
+def _kde_kernel_name(code: Int) raises -> String:
+    var names: List[String] = ["gaussian", "tophat", "epanechnikov", "exponential", "linear", "cosine"]
+    if code < 0 or code >= len(names):
+        raise Error("member ABI: KernelDensity kernel code " + String(code) + " is not one of 0 .. 5")
+    return names[code]
+
+
+def _kde_metric_name(code: Int) raises -> String:
+    var names: List[String] = ["euclidean", "l2", "sqeuclidean", "l1", "cityblock", "manhattan", "chebyshev",
+        "cosine", "minkowski"]
+    if code < 0 or code >= len(names):
+        raise Error("member ABI: KernelDensity metric code " + String(code) + " is not one of 0 .. 8")
+    return names[code]
+
+
 def _release_resident(slot: _Slot, call: _Call) raises:
-    """Release the slot's resident core rows, before a new fit or import and
-    at free."""
+    """Release the slot's resident copy (DBSCAN core rows, KernelDensity
+    training set), before a new fit or import and at free."""
     if slot[].handle < 0:
         return
     var handle = slot[].handle
     slot[].handle = -1
+    if slot[].kind == _KIND_KDE:
+        KDENativeDriver(call[].route.entry.call).release(handle)
+        return
     _ = _driver(call).release(handle)
 
 
-def _whole_x(call: _Call) raises:
+def _whole_x(call: _Call, what: String = _EST) raises:
     if call[].row_index.rows > 0 or call[].column_index.rows > 0:
-        raise Error("TypeError: a DBSCAN member reads no row or column index"
+        raise Error("TypeError: a " + what + " member reads no row or column index"
             + " (a fold is handed over as gathered host words)")
     if call[].x.home == MEMBER_HOME_DEVICE or not call[].x.dense_host(MEMBER_F32):
-        raise Error("TypeError: a DBSCAN member reads X as a dense host float32 view")
+        raise Error("TypeError: a " + what + " member reads X as a dense host float32 view")
 
 
 def _labels_out(call: _Call, rows: Int) raises:
@@ -310,6 +396,163 @@ def _predict(slot: _Slot, call: _Call) raises:
         Int(slot[].core_labels.unsafe_ptr()), call[].x.data, call[].dst.data, Int(chosen.unsafe_ptr()), m,
         queries, d, slot[].metric, True, slot[].eps))
     _ = chosen^
+
+
+# ---------------------------------------------------------------- KernelDensity
+def _kde_fit(slot: _Slot, call: _Call) raises:
+    """`KernelDensity.fit`: the weights checks, then the training set is the
+    borrowed view (no copy)."""
+    _whole_x(call, "KernelDensity")
+    if call[].fit_output != 0:
+        member_unsupported("KernelDensity", call[].fit_output)
+    var rows = call[].x.rows
+    var d = call[].x.cols
+    var weights = 0
+    if call[].weights.rows > 0:
+        if not call[].weights.dense_host(MEMBER_F32):
+            raise Error("TypeError: a KernelDensity member reads sample_weight as a dense host float32 view")
+        if call[].weights.rows * call[].weights.cols != rows:
+            raise Error("sample_weight.shape == (" + String(call[].weights.rows * call[].weights.cols)
+                + ",), expected (" + String(rows) + ",)!")
+        var w = _F32P(unsafe_from_address=call[].weights.data)
+        if not host_all_finite_f32(w, rows):
+            raise Error("Input sample_weight contains NaN or infinity.")
+        # The class's parallel sign test (a vector weight is not written).
+        if not admitted_check_weights_f32(w, w, rows, False):
+            raise Error("Sample weights must contain at least one non-zero number.")
+        weights = call[].weights.data
+    _release_resident(slot, call)
+    slot[].clear()
+    slot[].train = call[].x.data
+    slot[].weights = weights
+    slot[].rows = rows
+    slot[].features = d
+    var scalars: List[Float64] = [Float64(rows), Float64(d)]
+    slot[].scalars = scalars^
+    slot[].fitted = True
+
+
+def _kde_scores(slot: _Slot, call: _Call, want_total: Bool) raises:
+    """`KernelDensity._scores`: the resident training set of a
+    KDE_CAP_RESIDENT image (prepared once per fitted state), else the direct
+    query over the state's training rows."""
+    if not slot[].fitted:
+        kde_refuse_unfitted()
+    _whole_x(call, "KernelDensity")
+    var d = slot[].features
+    if call[].x.cols != d:
+        kde_refuse_features(String(call[].x.cols), String(d))
+    var queries = call[].x.rows
+    var scratch = List[Float32]()
+    var dst = 0
+    if want_total:
+        if call[].weights.rows > 0:
+            raise Error("TypeError: the score of a KernelDensity member counts every row once (no sample_weight)")
+        # The entry writes the per-row scores beside the total (the class's
+        # door allocates the same buffer per call).
+        scratch = List[Float32](length=queries, fill=0.0)
+        dst = Int(scratch.unsafe_ptr()) if queries > 0 else 0
+    else:
+        if not call[].dst.dense_host(MEMBER_F32):
+            raise Error("TypeError: a KernelDensity member writes score_samples as a dense host float32 view")
+        if call[].dst.rows != queries or call[].dst.cols != 1:
+            raise Error("ValueError: the score buffer holds " + String(queries) + " x 1 values")
+        dst = call[].dst.data
+    var driver = KDENativeDriver(call[].route.entry.call)
+    var has_weights = slot[].weights != 0
+    if slot[].handle < 0 and (call[].route.flags & KDE_CAP_RESIDENT) != 0:
+        var key = kde_fit_key(slot[].train, slot[].rows, d, slot[].weights, slot[].kernel, slot[].kde_metric,
+            slot[].bandwidth)
+        slot[].handle = driver.prepare(kde_prepare_request(key, has_weights))
+    var total = Float64(0)
+    if slot[].handle >= 0:
+        var status = List[Int32](length=1, fill=Int32(0))
+        total = driver.resident(kde_resident_query(slot[].handle, call[].x.data, dst, Int(status.unsafe_ptr()),
+            queries, d, slot[].bandwidth, want_total, slot[].kernel, slot[].kde_metric))
+        admitted_finite_refuse(Int(status[0]), "KernelDensity")
+        _ = status^
+    else:
+        total = driver.query(kde_query_request(slot[].train, call[].x.data, slot[].weights, dst, slot[].rows,
+            queries, d, slot[].bandwidth, has_weights, want_total, slot[].kernel, slot[].kde_metric))
+    _ = scratch^
+    if want_total:
+        call[].value = total
+
+
+def _kde_own(slot: _Slot):
+    """Copy the borrowed training rows and weights into the state, once
+    (the class's fit snapshot); the state reads its own copies from then on.
+    A resident copy holds the same words and stays."""
+    var count = slot[].rows * slot[].features
+    if slot[].train != 0 and slot[].train != Int(slot[].train_owned.unsafe_ptr()):
+        slot[].train_owned = List[Float32](length=count, fill=0.0)
+        if count > 0:
+            unsafe_memcpy(dest=slot[].train_owned.unsafe_ptr(), src=_F32P(unsafe_from_address=slot[].train),
+                count=count)
+        slot[].train = Int(slot[].train_owned.unsafe_ptr()) if count > 0 else 0
+    if slot[].weights != 0 and slot[].weights != Int(slot[].weights_owned.unsafe_ptr()):
+        slot[].weights_owned = List[Float32](length=slot[].rows, fill=0.0)
+        unsafe_memcpy(dest=slot[].weights_owned.unsafe_ptr(), src=_F32P(unsafe_from_address=slot[].weights),
+            count=slot[].rows)
+        slot[].weights = Int(slot[].weights_owned.unsafe_ptr())
+
+
+def _kde_export(slot: _Slot, call: _Call) raises:
+    if not slot[].fitted:
+        raise Error("NotFittedError: this KernelDensity member is not fitted yet")
+    var block = call[].block
+    if (call[].flags & MEMBER_BLOCK_BY_INDEX) != 0:
+        if block < 0 or block > 2:
+            raise Error("member ABI: a KernelDensity member has three fitted blocks")
+        block = MEMBER_BLOCK_SCALARS if block == 2 else (_BLOCK_TRAIN if block == 0 else _BLOCK_WEIGHTS)
+    _kde_own(slot)
+    if block == _BLOCK_TRAIN:
+        call[].dst = MemberMatrix(slot[].train, slot[].rows if slot[].train != 0 else 0, slot[].features)
+    elif block == _BLOCK_WEIGHTS:
+        call[].dst = MemberMatrix(slot[].weights, 1 if slot[].weights != 0 else 0,
+            slot[].rows if slot[].weights != 0 else 0)
+    elif block == MEMBER_BLOCK_SCALARS:
+        call[].dst = MemberMatrix(Int(slot[].scalars.unsafe_ptr()), 1, 2, MEMBER_F64)
+    else:
+        raise Error("member ABI: a KernelDensity member has no fitted block " + String(block))
+    call[].block = block
+    call[].out_cols = 3
+
+
+def _kde_import(slot: _Slot, call: _Call) raises:
+    var block = call[].block
+    if block != 0 or (call[].flags & MEMBER_IMPORT_DONE) == 0:
+        _release_resident(slot, call)
+        slot[].fitted = False
+    var count = call[].x.rows * call[].x.cols
+    if block == _BLOCK_TRAIN or block == _BLOCK_WEIGHTS:
+        if count > 0 and not call[].x.dense_host(MEMBER_F32):
+            raise Error("member ABI: the KernelDensity blocks are dense host float32 matrices")
+        var values = List[Float32](length=count, fill=0.0)
+        if count > 0:
+            unsafe_memcpy(dest=values.unsafe_ptr(), src=_F32P(unsafe_from_address=call[].x.data), count=count)
+        if block == _BLOCK_TRAIN:
+            slot[].train_owned = values^
+            slot[].train = Int(slot[].train_owned.unsafe_ptr()) if count > 0 else 0
+            slot[].rows = call[].x.rows
+            slot[].features = call[].x.cols
+        else:
+            slot[].weights_owned = values^
+            slot[].weights = Int(slot[].weights_owned.unsafe_ptr()) if count > 0 else 0
+    elif block == MEMBER_BLOCK_SCALARS:
+        if not call[].x.dense_host(MEMBER_F64) or count != 2:
+            raise Error("member ABI: the KernelDensity scalars block is two host float64 words (rows, features)")
+        var source = _Words(unsafe_from_address=call[].x.data)
+        var scalars: List[Float64] = [source[0], source[1]]
+        slot[].scalars = scalars^
+    elif block != 0 or (call[].flags & MEMBER_IMPORT_DONE) == 0:
+        raise Error("member ABI: a KernelDensity member has no fitted block " + String(block))
+    if (call[].flags & MEMBER_IMPORT_DONE) == 0:
+        return
+    if (slot[].train == 0 or slot[].rows <= 0 or slot[].features <= 0 or len(slot[].scalars) != 2
+            or (slot[].weights != 0 and len(slot[].weights_owned) != slot[].rows)):
+        raise Error("member ABI: a fitted KernelDensity state needs its training rows and scalars blocks")
+    slot[].fitted = True
 
 
 def _i32_view(values: List[Int32]) -> MemberMatrix:
@@ -396,14 +639,30 @@ def _import(slot: _Slot, call: _Call) raises:
 def _density_member(operation: Int, address: Int) raises -> Int:
     var call = _Call(unsafe_from_address=address)
     if operation == MEMBER_OP_CAPABILITIES:
-        return MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_CAN_SAMPLE_WEIGHT
+        var dbscan = MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_CAN_SAMPLE_WEIGHT
+        var kde = (MEMBER_CAN_FIT | MEMBER_CAN_SCORE_SAMPLES | MEMBER_CAN_SCORE | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
+            | MEMBER_CAN_SAMPLE_WEIGHT)
+        if call[].state != 0:
+            var kind = _Slot(unsafe_from_address=_lookup(call[].state, False))[].kind
+            return kde if kind == _KIND_KDE else dbscan
+        return dbscan | kde
     if operation == MEMBER_OP_NEW:
-        if not call[].params or call[].param_count != 7:
-            raise Error("member ABI: a DBSCAN member takes seven parameter words (kind, eps, min_samples, metric,"
-                + " algorithm, max_iterations, max_mbytes_per_batch)")
+        if not call[].params or call[].param_count < 1:
+            raise Error("member ABI: a density member's first parameter word is its kind")
         var words = _Words(unsafe_from_address=call[].params)
-        if Int(words[0]) != _KIND_DBSCAN:
-            raise Error("member ABI: density member kind " + String(Int(words[0])) + " is not published")
+        var kind = Int(words[0])
+        if kind == _KIND_KDE:
+            if call[].param_count != 4:
+                raise Error("member ABI: a KernelDensity member takes four parameter words (kind, bandwidth,"
+                    + " kernel, metric)")
+            if not (words[1] > 0.0):
+                raise Error("ValueError: bandwidth must be positive, got " + String(words[1]))
+        elif kind == _KIND_DBSCAN:
+            if call[].param_count != 7:
+                raise Error("member ABI: a DBSCAN member takes seven parameter words (kind, eps, min_samples,"
+                    + " metric, algorithm, max_iterations, max_mbytes_per_batch)")
+        else:
+            raise Error("member ABI: density member kind " + String(kind) + " is not published")
         call[].state = _mint(words)
         return 0
     if operation == MEMBER_OP_FREE:
@@ -419,6 +678,20 @@ def _density_member(operation: Int, address: Int) raises -> Int:
         call[].classes = 0
         return 0
     var slot = _Slot(unsafe_from_address=_lookup(call[].state, False))
+    if slot[].kind == _KIND_KDE:
+        if operation == MEMBER_OP_FIT:
+            _kde_fit(slot, call)
+        elif operation == MEMBER_OP_SCORE_SAMPLES:
+            _kde_scores(slot, call, False)
+        elif operation == MEMBER_OP_SCORE:
+            _kde_scores(slot, call, True)
+        elif operation == MEMBER_OP_EXPORT:
+            _kde_export(slot, call)
+        elif operation == MEMBER_OP_IMPORT:
+            _kde_import(slot, call)
+        else:
+            member_unsupported("KernelDensity", operation)
+        return 0
     if operation == MEMBER_OP_FIT:
         _fit(slot, call)
     elif operation == MEMBER_OP_PREDICT:

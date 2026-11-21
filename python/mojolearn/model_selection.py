@@ -75,10 +75,11 @@ _MSEL_CODE = {'<f4': 0, '<f8': 1, '<i4': 2, '<i8': 3, '<u4': 4, '<u1': 5}
 class _Resident:
     """Device-resident copies of the buffers a cross-validation reuses (lane
     cpu2-l4-modelsel, re-audit L4): X, y and every fold's index Array are put
-    ONCE into the base binding's model-selection store (`msel_put`,
-    core/msel_device.mojo), and each fold's rows for each candidate are one
-    device gather out of them (`msel_take_rows`), downloaded straight into
-    the Array the estimator is handed. There is no host gather: the host
+    ONCE into the base binding's model-selection store (core/msel_device.mojo,
+    through the native model-selection helper table,
+    core/msel_entry_table.mojo), and each fold's rows for each candidate are
+    one device gather out of them, downloaded straight into the Array the
+    estimator is handed. There is no host gather: the host
     column is the core host binding's `msel_*` on a CPU-only install.
 
     Keyed by object identity (the entry holds the object, so its id cannot

@@ -11,7 +11,7 @@ The old Python driver (`_parallel_pool.DevicePool` plus pickle) did the same
 in Python; here the partition, the request records, the native local
 process pool (bindings/native_process_pool_door.mojo: one process per device, the
 visibility mask narrowed to it, every device count 1) and the join are
-native. The wave order is the old pool's: `process_pool_map` sends waves of
+native. The wave order is the old pool's: `process_pool_map_typed` sends waves of
 `len(devices)` requests and hands wave position j to worker j, so shard i
 runs on rank i % len(devices), as `DevicePool.map` did.
 
@@ -29,7 +29,10 @@ pool rule, the batch checks, the transport negative control's decision and
 the block copies of the join are typed, in
 bindings/parallel_shard_common_run.mojo. The pool, its requests and the
 trace records are typed (the pool record of the process pool door,
-`ShardTraceRecord`); requests and replies are typed frames.
+`ShardTraceRecord`); requests and replies are typed frames, and a request
+is an operation word (`ShardWave`, the codes of
+bindings/parallel_shard_common_run.mojo) beside its payload record: no
+operation name is sent or looked up.
 """
 from std.ffi import external_call
 from std.python import Python, PythonObject
@@ -38,7 +41,7 @@ from bindings.py_attr import py_attr
 from bindings.classical_arrays_door import classical_address
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.native_process_pool_door import (
-    process_pool_create, process_pool_map, process_pool_close, process_pool_closed, process_pool_pids, PROCESS_BOUNDARY,
+    process_pool_create, process_pool_map_typed, process_pool_close, process_pool_closed, process_pool_pids, PROCESS_BOUNDARY,
 )
 from bindings.native_worker_inventory_door import native_worker_inventory, native_require_worker_inventory
 from bindings.tsa_hw_native_door import tsa_array
@@ -55,18 +58,52 @@ from bindings.parallel_shard_common_run import (
     shard_width_admit, shard_bounds, shard_indices_admit, shard_stored_index_admit, shard_idle_action,
     shard_batch_admit, shard_stores_admit, shard_fault_action, shard_rows_admit, shard_block_copy,
     shard_join_block, shard_join_complete,
+    shard_worker_op_name, shard_worker_op_numerical, shard_request_words,
+    PARALLEL_SHARD_WORKER_OPN_IDENTITY, PARALLEL_SHARD_WORKER_OPN_SHARD_STORE, PARALLEL_SHARD_WORKER_OPN_SHARD_RELEASE,
 )
-from bindings.parallel_keys_unpack import (
-    parallel_keys,
-    ParallelKeys,
-    PARALLEL_NUMERICAL_OPN_PY,
-)
-from bindings.py_keys import py_op_code
+from bindings.parallel_keys_unpack import parallel_keys
 from bindings.py_balanced import py_item
 
 
 def shard_b() raises -> PythonObject:
     return native_loaded_module("builtins")
+
+
+struct ShardWave(Movable):
+    """The requests of one `shard_run` / `shard_map` call, typed: request i
+    is the operation code `ops[i]`, its wire words `words[i]` (one encoded
+    `WorkerRequest`) and its payload record `payloads[i]`, the tuple
+    `(state, args)` the worker reads (None for a request without operands).
+    The drivers build one with `shard_wave()` and `add`; the operation never
+    travels or is compared as a name."""
+    var ops: List[Int]
+    var words: List[List[Int64]]
+    var payloads: PythonObject
+
+    def __init__(out self, payloads: PythonObject):
+        self.ops = List[Int]()
+        self.words = List[List[Int64]]()
+        self.payloads = payloads
+
+    def add(mut self, op: Int, state: PythonObject, args: PythonObject) raises:
+        """One request: `op` (a worker operation code) on `(state, args)`."""
+        self.ops.append(op)
+        self.words.append(shard_request_words(op))
+        _ = py_call(self.payloads.append, Python.tuple(state, args))
+
+    def add_plain(mut self, op: Int) raises:
+        """One request without operands (the identity round)."""
+        self.ops.append(op)
+        self.words.append(shard_request_words(op))
+        _ = py_call(self.payloads.append, PythonObject(None))
+
+    def count(self) -> Int:
+        return len(self.ops)
+
+
+def shard_wave() raises -> ShardWave:
+    """An empty request wave (its payload list is an exact list)."""
+    return ShardWave(shard_b().list())
 
 
 def shard_ranges(count: Int, width: PythonObject, name: String, empty_message: String) raises -> List[Int]:
@@ -111,7 +148,7 @@ struct ShardTrace(Defaultable, Movable):
 #: `shard_trace_take`: its devices and its workers' own driver inventories
 #: (the record the verifier's two-device witness reads,
 #: python/mojolearn/_verify_par.py). Bounded: the oldest records go first.
-comptime SHARD_TRACE = SharedSlot[ShardTrace, "MojolearnParallelShardTraceV3", 3]
+comptime SHARD_TRACE = SharedSlot[ShardTrace, "MojolearnParallelShardTraceV4", 4]
 
 
 struct ShardIdle(Defaultable, Movable):
@@ -220,10 +257,10 @@ def _shard_admit(pool: PythonObject, devices: PythonObject) raises -> PythonObje
     new trace record. The pool is closed on a refusal."""
     var b = shard_b()
     var nk = parallel_keys()
-    var requests = b.list()
+    var asks = shard_wave()
     for i in range(len(devices)):  # driver-loop: one identity request per worker
-        _ = py_call(requests.append, Python.tuple(nk[].k_identity))
-    var identities = process_pool_map(pool, requests)
+        asks.add_plain(PARALLEL_SHARD_WORKER_OPN_IDENTITY)
+    var identities = process_pool_map_typed(pool, asks.words, asks.payloads)
     var pids = b.list()
     var pid_words = process_pool_pids(pool)
     for i in range(len(pid_words)):  # driver-loop: over the spawned workers
@@ -266,7 +303,7 @@ def shard_trace_take() raises -> PythonObject:
         for i in range(len(t[].records[r].pids)):  # driver-loop: over the requests one pool served
             var call = b.dict()
             py_setitem(call, nk[].k_pid, PythonObject(t[].records[r].pids[i]))
-            py_setitem(call, nk[].k_operation, PythonObject(t[].records[r].operations[i]))
+            py_setitem(call, nk[].k_operation, PythonObject(shard_worker_op_name(t[].records[r].operations[i])))
             _ = py_call(calls.append, call)
         py_setitem(record, nk[].k_devices, devices)
         py_setitem(record, nk[].k_inventory, t[].inventories[r])
@@ -276,26 +313,9 @@ def shard_trace_take() raises -> PythonObject:
     t[].inventories.clear()
     return out
 
-def _operation(request: PythonObject) raises -> String:
-    var name = String(request[0])
-    if name == "py":
-        return String(request[1])
-    return name
-
-def _numerical(request: PythonObject, nk: UnsafePointer[ParallelKeys, MutUntrackedOrigin]) raises -> Bool:
-    """True for a numerical shard request (the transport negative control's
-    batches): its operation, or the operation a `("py", name, ...)` request
-    names, is one of the numerical codes of the table. One lookup of the
-    request's own str (two for a "py" request); no String is built."""
-    var code = py_op_code(nk[].ops_numerical, request[0])
-    if code == PARALLEL_NUMERICAL_OPN_PY:
-        code = py_op_code(nk[].ops_numerical, request[1])
-    return code > PARALLEL_NUMERICAL_OPN_PY
-
-
-def shard_map(pool: PythonObject, requests: PythonObject) raises -> PythonObject:
-    """`process_pool_map(pool, requests)`, with every request's worker and
-    operation added to the pool's trace record.
+def shard_map(pool: PythonObject, wave: ShardWave) raises -> PythonObject:
+    """`process_pool_map_typed` of the wave's requests, with every request's
+    worker and operation code added to the pool's trace record.
 
     THE TRANSPORT NEGATIVE CONTROL (python/mojolearn/_verify_distributed.py):
     armed by `_native_parallel_shard('faults_arm', ('drop_result',))` or
@@ -306,7 +326,8 @@ def shard_map(pool: PythonObject, requests: PythonObject) raises -> PythonObject
     with MOJOLEARN_HOST_ALLOW_SABOTAGE=1, two getenv per numerical batch; now
     one slot read, no environment."""
     var b = shard_b()
-    var results = process_pool_map(pool, requests)
+    var results = process_pool_map_typed(pool, wave.words, wave.payloads)
+    var requests = wave.count()
     var nk = parallel_keys()
     var traced = py_get(pool, nk[].k_trace_record, PythonObject(None))
     var workers = process_pool_pids(pool)
@@ -315,12 +336,12 @@ def shard_map(pool: PythonObject, requests: PythonObject) raises -> PythonObject
         var at = shard_trace_find(t[].records, Int(py=traced))
         if at >= 0:
             # Two words per request into the typed record (it was a new
-            # dictionary per request).
-            for i in range(len(requests)):  # driver-loop: one trace entry per request
+            # dictionary per request, then a name String per request).
+            for i in range(requests):  # driver-loop: one trace entry per request
                 t[].records[at].pids.append(workers[i % len(workers)])
-                t[].records[at].operations.append(_operation(requests[i]))
-    var fault = shard_fault_action(len(results), len(requests),
-                                   len(results) > 1 and len(requests) > 0 and _numerical(requests[0], nk))
+                t[].records[at].operations.append(wave.ops[i])
+    var fault = shard_fault_action(len(results), requests,
+                                   len(results) > 1 and requests > 0 and shard_worker_op_numerical(wave.ops[0]))
     if fault != SHARD_FAULT_NONE:
         var altered = py_call(b.list, results)
         if fault == SHARD_FAULT_DROP_RESULT:
@@ -388,7 +409,7 @@ def _shard_keep(acquired: PythonObject) raises:
     py_setitem(idle[].pools, key, Python.list(acquired[0], acquired[2], PythonObject(pid)))
 
 
-def shard_run(requests: PythonObject, devices: PythonObject, child: String) raises -> PythonObject:
+def shard_run(requests: ShardWave, devices: PythonObject, child: String) raises -> PythonObject:
     """The workers' results in request order (waves of len(devices), wave
     position j on worker j). A pool whose call succeeded is kept idle for the
     next call with the same child, devices and environment (`SHARD_IDLE`);
@@ -401,9 +422,9 @@ def shard_run(requests: PythonObject, devices: PythonObject, child: String) rais
     except error:
         process_pool_close(reused)
         raise error^
-    if len(results) != len(requests):
+    if len(results) != requests.count():
         process_pool_close(reused)
-    shard_batch_admit(len(results), len(requests))
+    shard_batch_admit(len(results), requests.count())
     _shard_keep(acquired)
     return results
 
@@ -417,7 +438,7 @@ def shard_stored_ref(token: String, index: Int) raises -> PythonObject:
     `shard_run_stored` stored under `token` on every worker."""
     return Python.tuple(PythonObject(SHARD_STORED_MARK), PythonObject(token), PythonObject(index))
 
-def shard_run_stored(payload: PythonObject, token: String, requests: PythonObject, devices: PythonObject,
+def shard_run_stored(payload: PythonObject, token: String, requests: ShardWave, devices: PythonObject,
                      child: String) raises -> PythonObject:
     """`shard_run` with the call's shared operands sent ONCE per worker
     (lane ne2-i-j, 2026-11-07, plan row N452). `payload` (a tuple: X, labels,
@@ -437,16 +458,17 @@ def shard_run_stored(payload: PythonObject, token: String, requests: PythonObjec
     var workers = len(process_pool_pids(pool))
     var results = PythonObject(None)
     try:
-        var stores = b.list()
-        var releases = b.list()
+        var stores = shard_wave()
+        var releases = shard_wave()
+        var held = PythonObject(token)
         for i in range(workers):  # driver-loop: one store and one release per worker
-            _ = py_call(stores.append, Python.tuple(nk[].k_shard_store, PythonObject(token), payload))
-            _ = py_call(releases.append, Python.tuple(nk[].k_shard_release, PythonObject(token), PythonObject(None)))
-        var stored = process_pool_map(pool, stores)
+            stores.add(PARALLEL_SHARD_WORKER_OPN_SHARD_STORE, held, payload)
+            releases.add(PARALLEL_SHARD_WORKER_OPN_SHARD_RELEASE, held, PythonObject(None))
+        var stored = process_pool_map_typed(pool, stores.words, stores.payloads)
         shard_stores_admit(len(stored), workers)
         results = shard_map(pool, requests)
-        shard_batch_admit(len(results), len(requests))
-        _ = process_pool_map(pool, releases)
+        shard_batch_admit(len(results), requests.count())
+        _ = process_pool_map_typed(pool, releases.words, releases.payloads)
     except error:
         process_pool_close(pool)
         raise error^
