@@ -26,9 +26,9 @@ LabelPropagation LabelSpreading KNNImputer SVGP.
   * `xneighbors_member_state` (UNPACK): a member state from a fitted
     estimator's arrays (NearestCentroid: the class count is `class_prior_`'s
     length).
-  The LocalOutlierFactor A/B arms (`unfused_knn`, `old_items`) are read from
-  the caller's context's `family_xn_loc_flags` when it carries them, else
-  their default (off).
+  The LocalOutlierFactor A/B arms (`unfused_knn`, `old_items`) are read
+  where the estimator's own door reads them: `family_xn_loc_flags` of the
+  shared family context (`_native_family_bridge._CONTEXT`), never defaulted.
 
 SERIAL BY NATURE: one member's admission or publication (a few record reads
 and four block copies); a caller runs its members in parallel.
@@ -42,7 +42,8 @@ from bindings.family_common_pack import family_field
 from bindings.member_owner_unpack import MemberOwner, member_labels_take
 from bindings.nearest_centroid_provider_unpack import NcConnection
 from bindings.neighbors_local_native_door import _lof_check
-from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type
+from bindings.native_loaded_module_door import native_loaded_module
+from bindings.py_balanced import py_call, py_contains, py_fields, py_get, py_setitem, py_type
 from core.device_route import DeviceRoute, DEVICE_CPU, DEVICE_GPU, device_vendor_code
 from core.entry_table import EntryRef, entry_ref_word
 from core.member_abi import (
@@ -96,10 +97,21 @@ def _route(model: PythonObject, context: PythonObject, b: PythonObject, mut owne
     return True
 
 
-def _context_flag(context: PythonObject, name: String) raises -> Float64:
-    var flags = py_get(context, PythonObject("family_xn_loc_flags"), PythonObject(None))
+def _loc_flags() raises -> PythonObject:
+    """The LocalOutlierFactor A/B arms exactly where the estimator's own door
+    reads them (bindings/neighbors_local_native_door.mojo `_flag`): the
+    `family_xn_loc_flags` table of the shared family context every
+    x_neighbors door is called with (`_native_family_bridge._CONTEXT`, filled
+    at `_expansion_neighbors` import). Never a default: a missing table is
+    the same KeyError the door raises, so the caller falls back."""
+    var family = py_fields(native_loaded_module("mojolearn._native_family_bridge"))["_CONTEXT"]
+    var flags = py_get(family, PythonObject("family_xn_loc_flags"), PythonObject(None))
     if flags is None:
-        return 0.0
+        raise Error("KeyError: 'family_xn_loc_flags'")
+    return flags
+
+
+def _flag_word(flags: PythonObject, name: String) raises -> Float64:
     return 1.0 if Bool(py=flags[PythonObject(name)]) else 0.0
 
 
@@ -108,11 +120,12 @@ def _lof_admit(fields: PythonObject, context: PythonObject, b: PythonObject, mut
     _lof_check(fields, context)
     var contamination = family_field(fields, "contamination")
     var auto = py_type(contamination) is b.str and String(contamination) == "auto"
+    var flags = _loc_flags()
     var words: List[Float64] = [Float64(XNEIGHBORS_KIND_LOF),
         Float64(Int(py=py_call(b.int, family_field(fields, "n_neighbors")))),
         1.0 if Bool(py=py_call(b.bool, family_field(fields, "novelty"))) else 0.0,
         1.0 if auto else 0.0, 0.0 if auto else Float64(py=py_call(b.float, contamination)),
-        _context_flag(context, "unfused_knn"), _context_flag(context, "old_items")]
+        _flag_word(flags, "unfused_knn"), _flag_word(flags, "old_items")]
     owner.plan.params = words^
 
 
